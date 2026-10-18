@@ -286,6 +286,9 @@ pub fn stack(ui: &mut Ui, add: impl FnOnce(&mut Ui)) {
     ui.allocate_ui_with_layout(vec2(0.0, RIBBON_BUTTON_H), egui::Layout::top_down(egui::Align::Min), |ui| {
         ui.spacing_mut().item_spacing.y = 1.0;
         ui.spacing_mut().interact_size.y = 19.0;
+        // The column is as wide as its widest line: a label never wraps in it (from a width of
+        // nothing, it would go one letter a line).
+        ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
         add(ui);
     });
 }

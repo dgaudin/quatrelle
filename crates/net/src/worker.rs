@@ -981,9 +981,9 @@ impl Worker {
         let paths: Vec<String> = self.folders.iter().filter(|f| f.selectable).map(|f| f.path.clone()).collect();
         for path in paths {
             self.drain(rx);
-            // Opened messages jump the queue.
-            let urgent: Vec<Job> = self.queue.iter().filter(|j| matches!(j, Job::FetchBody { .. })).cloned().collect();
-            self.queue.retain(|j| !matches!(j, Job::FetchBody { .. }));
+            // What someone is waiting on jumps the queue: an opened message, automatic replies.
+            let urgent: Vec<Job> = self.queue.iter().filter(|j| jumps_queue(j)).cloned().collect();
+            self.queue.retain(|j| !jumps_queue(j));
             for j in urgent {
                 self.handle(j);
             }
@@ -1664,9 +1664,25 @@ pub fn apply_remote<S: std::io::Read + std::io::Write>(c: &mut Client<S>, op: &O
     }
 }
 
+/// Jobs someone is looking at a spinner for, done between two folders of a full sync rather
+/// than after it (the first sync of a large Exchange mailbox can take many minutes): one quick
+/// request each.
+fn jumps_queue(j: &Job) -> bool {
+    matches!(j, Job::FetchBody { .. } | Job::GetVacation { .. } | Job::SetVacation { .. })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Automatic replies are answered between two folders of a long first sync, not after it
+    /// (File › Info said "Checking with the server…" all the while).
+    #[test]
+    fn automatic_replies_jump_the_full_syncs_queue() {
+        assert!(jumps_queue(&Job::GetVacation { account: "a".into() }));
+        assert!(jumps_queue(&Job::SetVacation { account: "a".into(), vacation: Default::default() }));
+        assert!(!jumps_queue(&Job::SyncDav { account: "a".into() }));
+    }
 
     #[test]
     fn memory_credentials() {
