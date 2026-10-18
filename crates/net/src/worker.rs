@@ -379,6 +379,13 @@ impl Pool {
             job @ (Job::GetVacation { .. } | Job::SetVacation { .. }) if self.configs.get(job.account()).is_some_and(|c| c.ews.is_some()) => {
                 self.ews_vacation(job);
             }
+            // Mail written on Exchange (EWS) goes at once, on a connection of its own, rather than
+            // after the sync the account's worker may spend minutes on.
+            Job::Send { account, id, raw, from, recipients, sent_folder }
+                if self.workers.contains_key(&account) && self.configs.get(&account).is_some_and(|c| c.ews.is_some()) =>
+            {
+                self.ews_send(account, id, raw, from, recipients, sent_folder);
+            }
             Job::Apply { account, op } if !self.workers.contains_key(&account) => {
                 // Offline: change the cache now and keep the change for the next connection.
                 match self.store.apply_op(&account, &op) {
@@ -438,6 +445,43 @@ impl Pool {
         });
         if let Err(e) = spawned {
             self.sink.emit(Event::Vacation { account, vacation: None, error: Some(e.to_string()) });
+        }
+    }
+
+    /// Send a message from an Exchange account on a thread; Exchange files the copy in Sent
+    /// Items, which the account's worker looks at next. One that can't go yet waits in the
+    /// Outbox, as the worker keeps it.
+    fn ews_send(&self, account: String, id: u64, raw: Vec<u8>, from: String, recipients: Vec<String>, sent_folder: Option<String>) {
+        let Some(acc) = self.configs.get(&account).cloned() else { return };
+        let Some(pw) = self.creds.get(&acc) else {
+            self.sink.emit(Event::SendFailed { account, id, error: "the account needs its password".into() });
+            return;
+        };
+        let (sink, store) = (self.sink.clone(), self.store.clone());
+        let worker = self.workers.get(&account).map(|h| h.tx.clone());
+        let who = account.clone();
+        let spawned = std::thread::Builder::new().name(format!("send-{account}")).spawn(move || {
+            let sent = ews_client(&acc, &pw, &store).and_then(|c| crate::ews::send(&c, &raw, &recipients));
+            match sent {
+                Ok(()) => {
+                    sink.emit(Event::Sent { account: account.clone(), id });
+                    if let (Some(tx), Some(folder)) = (worker, sent_folder) {
+                        let _ = tx.send(Job::SyncFolder { account, folder });
+                    }
+                }
+                Err(e) if e.is_retryable() => {
+                    let item =
+                        OutboxItem { id, from, recipients, sent_folder, queued: now(), attempts: 1, error: Some(e.to_string()), not_before: 0 };
+                    match store.outbox_add(&account, &item, &raw) {
+                        Ok(()) => sink.emit(Event::Queued { account, id, error: e.to_string() }),
+                        Err(se) => sink.emit(Event::SendFailed { account, id, error: format!("{e} (and the Outbox couldn't keep it: {se})") }),
+                    }
+                }
+                Err(e) => sink.emit(Event::SendFailed { account, id, error: e.to_string() }),
+            }
+        });
+        if let Err(e) = spawned {
+            self.sink.emit(Event::SendFailed { account: who, id, error: e.to_string() });
         }
     }
 
