@@ -8,7 +8,10 @@ MailCraft ships no third-party assets: the interface icons are drawn in code
 installed system font when one is found. Builds made with `CRAFT_FONTS_DIR` (the releases) embed
 the fonts listed in [storytold/craft-fonts](https://github.com/storytold/craft-fonts)' `ATTRIBUTION.md`
 (SIL Open Font License 1.1); none are in this repository, and each one's licence is shown on the
-About page. The app icon files in `assets/app-icon/`
+About page. On Linux, the title bar drawn under GNOME's Wayland session (winit's
+`wayland-csd-adwaita`, from [sctk-adwaita](https://github.com/PolyMeilex/sctk-adwaita), MIT)
+writes the title in the desktop's title-bar font, found with `fc-match`; only when there is none
+does it fall back to the Cantarell Regular that crate embeds (SIL Open Font License 1.1). The app icon files in `assets/app-icon/`
 are rendered by `cargo xtask icons` from MailCraft's own drawing in `xtask/src/icons.rs`.
 
 | Path | Author | Source | Licence |

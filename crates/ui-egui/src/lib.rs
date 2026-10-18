@@ -191,6 +191,11 @@ pub trait Services {
     fn take_picked(&mut self) -> Vec<(String, String, Vec<u8>)> {
         Vec::new()
     }
+    /// The desktop's light or dark style and accent colour, as last read (called every frame,
+    /// so reading them belongs on another thread). The default says nothing.
+    fn system_style(&self) -> theme::SystemStyle {
+        theme::SystemStyle::default()
+    }
 }
 
 /// Services for tests: a fixed clock, no dialogs.
@@ -234,6 +239,7 @@ pub enum Action {
     /// Search every folder for this (shown in the box, with the Search tab).
     Search(String),
     SetDark(Option<bool>),
+    SetSystemAccent(bool),
     /// Print the open message (as a PDF opened in the system's viewer).
     Print,
     /// Save the open message as a PDF, or as its `.eml` source.
@@ -344,6 +350,10 @@ pub struct UiState {
     pub pending_move: Option<PathBuf>,
     /// `None` follows the system.
     pub dark: Option<bool>,
+    /// The accent colour is the desktop's (when it has one) rather than MailCraft's.
+    pub system_accent: bool,
+    /// The light or dark style last asked of the window's title bar (`None` inside: the system's).
+    window_theme: Option<Option<bool>>,
     pub tab: RibbonTab,
     pub search_text: String,
     focus_search: bool,
@@ -462,6 +472,8 @@ impl MailApp {
                 data_folder,
                 pending_move,
                 dark: None,
+                system_accent: true,
+                window_theme: None,
                 tab: RibbonTab::Home,
                 search_text: String::new(),
                 focus_search: false,
@@ -634,10 +646,23 @@ impl MailApp {
         {
             self.ui.search_text = q.clone();
         }
-        let dark = self.ui.dark.unwrap_or_else(|| ctx.system_theme() == Some(egui::Theme::Dark));
-        if dark != self.ui.tokens.dark || ctx.global_style().visuals.panel_fill != self.ui.tokens.surface {
-            self.ui.tokens = Tokens::for_dark(dark);
+        let system = self.services.system_style();
+        let dark = self.ui.dark.or(system.dark).unwrap_or_else(|| ctx.system_theme() == Some(egui::Theme::Dark));
+        let tokens = Tokens::for_dark(dark).with_accent(system.accent.filter(|_| self.ui.system_accent));
+        if dark != self.ui.tokens.dark || tokens.accent != self.ui.tokens.accent || ctx.global_style().visuals.panel_fill != self.ui.tokens.surface {
+            self.ui.tokens = tokens;
             theme::apply(&ctx, &self.ui.tokens);
+        }
+        // The title bar the system draws goes light or dark with the window: the system's
+        // when following it, else the one chosen.
+        if self.ui.window_theme != Some(self.ui.dark) {
+            self.ui.window_theme = Some(self.ui.dark);
+            let theme = match self.ui.dark {
+                Some(true) => egui::SystemTheme::Dark,
+                Some(false) => egui::SystemTheme::Light,
+                None => egui::SystemTheme::SystemDefault,
+            };
+            ctx.send_viewport_cmd(egui::ViewportCommand::SetTheme(theme));
         }
         self.shortcuts(&ctx);
 
@@ -1155,6 +1180,7 @@ impl MailApp {
                 }
             },
             Action::SetDark(d) => self.ui.dark = d,
+            Action::SetSystemAccent(on) => self.ui.system_accent = on,
             Action::SetLanguage(l) => self.ui.language = l,
             Action::OpenUrl(url) => self.open_link(&url),
             Action::SignInAgain(id) => self.sign_in_again(&id),
@@ -2098,7 +2124,7 @@ impl MailApp {
 
     /// Preferences and theme for the app to save.
     pub fn saved_state(&self) -> Value {
-        json!({ "prefs": self.session.prefs, "dark": self.ui.dark, "language": self.ui.language, "windows": self.ui.places, "peopleView": self.ui.people_view, "peopleList": self.ui.people_list })
+        json!({ "prefs": self.session.prefs, "dark": self.ui.dark, "systemAccent": self.ui.system_accent, "language": self.ui.language, "windows": self.ui.places, "peopleView": self.ui.people_view, "peopleList": self.ui.people_list })
     }
 
     pub fn restore_state(&mut self, v: &Value) {
@@ -2118,6 +2144,7 @@ impl MailApp {
             }
         }
         self.ui.dark = v.get("dark").and_then(Value::as_bool);
+        self.ui.system_accent = v.get("systemAccent").and_then(Value::as_bool).unwrap_or(true);
         if let Some(pv) = v.get("peopleView").and_then(|w| serde_json::from_value(w.clone()).ok()) {
             self.ui.people_view = pv;
         }

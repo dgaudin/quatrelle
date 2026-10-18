@@ -129,4 +129,9 @@ local-first, media-aware v1); the fuller request is
   it (a pane per calendar), an editor's rights on someone's Exchange calendar read as Exchange
   gives them, public folder content routed to the mailbox holding it, HTML on the clipboard pasted
   with its look and signatures kept formatted, Select Names opening with the address book chosen.
+- **2026-10-18** — The window follows the desktop: under GNOME's Wayland session a title bar like
+  the desktop's own (title, minimize, maximize and close where GNOME puts them, light or dark)
+  instead of winit's bare grey frame; light or dark read from the desktop's settings on Linux
+  (winit doesn't say there), the desktop's accent colour (Windows, macOS, GNOME and KDE) as an
+  option on by default, and the desktop's interface font on Linux.
 

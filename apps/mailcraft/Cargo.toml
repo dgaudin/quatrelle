@@ -50,6 +50,12 @@ keyring = { version = "3.6", default-features = false, features = ["async-secret
 # Dragging attachments out under X11 (XDND), in safe Rust; and the window's id for it.
 x11rb = "0.13"
 raw-window-handle = "0.6"
+# GNOME's compositor leaves the title bar to the app: without this, winit draws a bare grey
+# frame; with it, a title bar like the desktop's own (title, buttons, light and dark). Where
+# the window manager draws title bars (KDE, X11), it still does.
+winit = { version = "0.30", default-features = false, features = ["wayland-csd-adwaita"] }
+# The desktop's light or dark style and accent colour (the XDG settings portal).
+zbus = { version = "5", default-features = false, features = ["blocking-api", "async-io"] }
 
 [target.'cfg(all(unix, not(target_os = "macos")))'.dev-dependencies]
 # The drag test plays the user on a virtual X server (Xvfb).

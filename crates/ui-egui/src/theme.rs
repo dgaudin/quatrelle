@@ -84,6 +84,39 @@ impl Tokens {
     pub fn for_dark(dark: bool) -> Tokens {
         if dark { Tokens::dark() } else { Tokens::light() }
     }
+
+    /// These tokens in another accent colour (the desktop's), its selection and hover tints
+    /// worked out from it. A colour too light or too dark to read on the panes (a yellow on
+    /// white) is darkened or lightened until it does; `None` keeps MailCraft's own.
+    pub fn with_accent(self, accent: Option<Color32>) -> Tokens {
+        let Some(c) = accent else { return self };
+        let surface = rgb(self.surface);
+        let towards = if self.dark { [255, 255, 255] } else { [0, 0, 0] };
+        let mut a = rgb(c);
+        for _ in 0..12 {
+            if contrast(a, surface) >= 4.5 {
+                break;
+            }
+            a = mix(a, towards, 0.15);
+        }
+        let on_accent =
+            if contrast([255, 255, 255], a) >= contrast([0x10, 0x14, 0x18], a) { Color32::WHITE } else { Color32::from_rgb(0x10, 0x14, 0x18) };
+        let (soft, row) = if self.dark { (0.24, 0.11) } else { (0.19, 0.095) };
+        let tint = |k: f32| {
+            let m = mix(surface, a, k);
+            Color32::from_rgb(m[0], m[1], m[2])
+        };
+        Tokens { accent: Color32::from_rgb(a[0], a[1], a[2]), on_accent, accent_soft: tint(soft), hover_row: tint(row), ..self }
+    }
+}
+
+/// What the desktop says of its own style, for the UI to follow.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct SystemStyle {
+    /// Dark or light, when the desktop says and the window system doesn't tell egui (Linux).
+    pub dark: Option<bool>,
+    /// The accent colour chosen in the desktop's settings.
+    pub accent: Option<Color32>,
 }
 
 /// Avatar colours, picked by a hash of the address so a sender always gets the same one.
@@ -203,6 +236,13 @@ fn contrast(a: [u8; 3], b: [u8; 3]) -> f32 {
 
 fn rgb(c: Color32) -> [u8; 3] {
     [c.r(), c.g(), c.b()]
+}
+
+/// `a` moved `k` (0…1) of the way towards `b`.
+fn mix(a: [u8; 3], b: [u8; 3], k: f32) -> [u8; 3] {
+    let k = k.clamp(0.0, 1.0);
+    let ch = |x: u8, y: u8| (f32::from(x) + (f32::from(y) - f32::from(x)) * k).round().clamp(0.0, 255.0) as u8;
+    [ch(a[0], b[0]), ch(a[1], b[1]), ch(a[2], b[2])]
 }
 
 /// How saturated a colour is (0 grey … 1 pure).
@@ -326,4 +366,31 @@ pub fn bold(size: f32) -> egui::FontId {
 
 pub fn regular(size: f32) -> egui::FontId {
     egui::FontId::proportional(size)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_system_accent_stays_readable() {
+        // None: MailCraft's own colours, untouched.
+        let own = Tokens::light().with_accent(None);
+        assert_eq!((own.accent, own.accent_soft, own.hover_row), (Tokens::light().accent, Tokens::light().accent_soft, Tokens::light().hover_row));
+        // Windows' blue reads on white as it is.
+        let blue = Color32::from_rgb(0x00, 0x78, 0xD4);
+        assert_eq!(Tokens::light().with_accent(Some(blue)).accent, blue);
+        for dark in [false, true] {
+            let base = Tokens::for_dark(dark);
+            // A yellow, a pale grey, a deep navy and pure black, on light and dark panes.
+            for c in [[0xFF, 0xC6, 0x00], [0xEE, 0xEE, 0xEE], [0x10, 0x18, 0x60], [0, 0, 0], [255, 255, 255]] {
+                let t = base.with_accent(Some(Color32::from_rgb(c[0], c[1], c[2])));
+                assert!(contrast(rgb(t.accent), rgb(t.surface)) >= 4.5, "{c:?} dark={dark}: {:?}", t.accent);
+                assert!(contrast(rgb(t.on_accent), rgb(t.accent)) >= 4.5, "{c:?} dark={dark}: on {:?}", t.accent);
+                // The tints sit between the pane and the accent, the selection the stronger.
+                assert!(contrast(rgb(t.accent_soft), rgb(t.surface)) >= contrast(rgb(t.hover_row), rgb(t.surface)));
+                assert_ne!(t.accent_soft, t.surface);
+            }
+        }
+    }
 }

@@ -456,6 +456,10 @@ fn options(s: &Session, st: &UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
                 }
             }
         });
+        let mut accent = st.system_accent;
+        if ui.checkbox(&mut accent, tl!("Use the system's accent colour")).changed() {
+            acts.push(Action::SetSystemAccent(accent));
+        }
         ui.horizontal(|ui| {
             ui.label(tl!("Language"));
             let language = st.language.as_str();

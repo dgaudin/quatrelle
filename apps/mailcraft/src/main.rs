@@ -25,6 +25,7 @@ use mailcraft_ui_egui::{Backend, MailApp, Services, VideoFrame};
 /// Passwords in the system keychain (Windows Credential Manager, macOS Keychain, Secret Service).
 struct Keychain;
 
+mod appearance;
 #[cfg(windows)]
 mod toast;
 mod video;
@@ -74,9 +75,14 @@ struct Desktop {
     base: Option<PathBuf>,
     /// How a move carried out at this start went (told once).
     moved: Option<Result<PathBuf, String>>,
+    /// The desktop's light or dark style and accent colour, kept up to date.
+    style: appearance::Watch,
 }
 
 impl Services for Desktop {
+    fn system_style(&self) -> mailcraft_ui_egui::theme::SystemStyle {
+        self.style.get()
+    }
     fn clock(&self) -> (i64, i32) {
         let now = chrono::Local::now();
         (now.timestamp(), now.offset().local_minus_utc())
@@ -320,6 +326,13 @@ fn system_fonts() -> (Option<Vec<u8>>, Option<Vec<u8>>) {
     } else if cfg!(target_os = "macos") {
         &[("/System/Library/Fonts/Supplemental/Arial.ttf", "/System/Library/Fonts/Supplemental/Arial Bold.ttf")]
     } else {
+        // The desktop's own interface font, when it has a bold of its own.
+        #[cfg(all(unix, not(target_os = "macos")))]
+        if let Some((r, b)) = appearance::desktop_font_files()
+            && let (Ok(reg), Ok(bold)) = (std::fs::read(r), std::fs::read(b))
+        {
+            return (Some(reg), Some(bold));
+        }
         &[
             ("/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf", "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf"),
             ("/usr/share/fonts/noto/NotoSans-Regular.ttf", "/usr/share/fonts/noto/NotoSans-Bold.ttf"),
@@ -512,7 +525,9 @@ fn main() -> eframe::Result {
                 }
                 None => Box::new(mailcraft_ui_egui::NullBackend),
             };
-            let mut app = MailApp::new(session, backend, Box::new(Desktop { data: desktop_data, base, moved, ..Default::default() }));
+            let ctx = cc.egui_ctx.clone();
+            let style = appearance::Watch::start(move || ctx.request_repaint());
+            let mut app = MailApp::new(session, backend, Box::new(Desktop { data: desktop_data, base, moved, style, ..Default::default() }));
             if sample {
                 app.ui.title_base = "MailCraft – Sample mailbox".into();
             }
