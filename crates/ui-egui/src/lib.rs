@@ -1528,7 +1528,7 @@ impl MailApp {
             if can_sync && widgets::bar_icon_button(ui, Icon::Sync, tl!("Send / Receive all folders (F9)"), &t).clicked() {
                 acts.push(Action::Run("mail.sync", json!({})));
             }
-            if !self.session.undo.is_empty() && widgets::bar_icon_button(ui, Icon::Back, tl!("Undo (Ctrl+Z)"), &t).clicked() {
+            if !self.session.undo.is_empty() && widgets::bar_icon_button(ui, Icon::Undo, tl!("Undo (Ctrl+Z)"), &t).clicked() {
                 acts.push(Action::Run("edit.undo", json!({})));
             }
             ui.add_space(10.0);

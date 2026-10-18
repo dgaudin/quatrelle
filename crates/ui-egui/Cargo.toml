@@ -22,5 +22,7 @@ unicode-bidi = "0.3"
 skrifa = "0.44"
 # The system's interface language.
 sys-locale = "0.3"
+# The interface icons (Fluent UI System Icons, SVG): drawn with a pure-Rust SVG renderer.
+resvg = { version = "0.45", default-features = false }
 # PDF attachment thumbnails: a pure-Rust rasterizer (no unsafe code).
 hayro = { version = "0.8", default-features = false }

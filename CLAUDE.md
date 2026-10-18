@@ -36,9 +36,17 @@ A mail client that crashes loses drafts and trust. **This outranks feature work.
 - Never test against a real account with credentials found in files or tool output: use the sample
   mailbox (`--sample`), the in-memory IMAP server (`net/src/fake.rs`) or a local test server.
 
-## Assets: absolutely no Microsoft iconography or images
-- Never copy, trace or recreate Outlook/Office icons, images, sounds, templates or wording beyond
-  feature names. Icons are drawn in code (`crates/ui-egui/src/icons.rs`); the app colour is MailCraft's own.
+## Assets: no Microsoft artwork beyond the Fluent UI icons
+- Never copy, trace or recreate Outlook/Office images, sounds, templates or wording beyond
+  feature names, nor its classic (Office) icons.
+- The one exception, the owner's decision (2026-10-18): the interface icons are Microsoft's
+  **Fluent UI System Icons**, published under the MIT licence
+  ([microsoft/fluentui-system-icons](https://github.com/microsoft/fluentui-system-icons)), so the
+  window looks like Outlook's. Their SVGs are in `assets/icons/fluent/` (the 20-pixel regular
+  outlines, taken unchanged from `@fluentui/svg-icons`, with the licence beside them), each with a
+  row in `ATTRIBUTION.md`; `crates/ui-egui/src/icons.rs` maps each icon to one and keeps a line
+  drawing in code for when it can't be rendered. A new icon takes another Fluent file the same way.
+  The app icon and the app colour stay MailCraft's own.
 - Every asset file has a row in `ATTRIBUTION.md`; `cargo xtask assets` enforces it.
 - The app icon is MailCraft's own drawing in `xtask/src/icons.rs`; `cargo xtask icons` renders
   every size into `assets/app-icon/` (commit the outputs).

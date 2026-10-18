@@ -55,7 +55,8 @@
 - **Never crash.** No `unwrap`/`expect`/`panic` outside tests, hostile-input caps in the IMAP
   parser, a test that runs every command with junk parameters, and `Session::run` catches any panic.
 - **Open.** MIT OR Apache-2.0, clean-room: built from the RFCs and public behaviour, every asset
-  original (icons are drawn in code).
+  original but the interface icons, Microsoft's MIT-licensed Fluent UI System Icons
+  ([ATTRIBUTION.md](ATTRIBUTION.md)).
 
 ## What works today
 
