@@ -142,4 +142,7 @@ local-first, media-aware v1); the fuller request is
   Fluent UI icons (MIT, the owner's choice), a ribbon of large buttons in named groups, the
   modules down the window's edge, and the message list as a table with sortable columns
   (automatically when the reading pane is at the bottom or off, or chosen in View).
+- **2026-10-18** — The To-Do bar beside the mail (the month, the coming week's appointments), the
+  calendar's Work week view, day headings, two months and calendar groups as Outlook's, the
+  ribbon folding to its tabs (Ctrl+F1), and folder names without icons.
 

@@ -73,7 +73,9 @@ fn row(
     drop_ok: bool,
     draggable: bool,
 ) -> egui::Response {
-    let h = 30.0;
+    // Plain names, no icons, as Outlook's folder pane.
+    let _ = icon;
+    let h = 26.0;
     let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), h), if draggable { Sense::click_and_drag() } else { Sense::click() });
     let hovering_drop = drop_ok && (resp.dnd_hover_payload::<DragKeys>().is_some() || resp.dnd_hover_payload::<DragFolder>().is_some());
     let fill = if hovering_drop {
@@ -91,13 +93,11 @@ fn row(
         ui.painter().rect_filled(bar, 2.0, t.accent);
     }
     let x = rect.min.x + 10.0 + depth as f32 * 14.0;
-    let ir = egui::Rect::from_min_size(egui::pos2(x, rect.center().y - 8.0), vec2(16.0, 16.0));
-    icons::paint(ui.painter(), ir, icon, if selected { t.accent } else { t.dim });
     let font = if unread > 0 || selected { theme::bold(13.5) } else { theme::regular(13.5) };
     let text_right = rect.max.x - if unread > 0 { 40.0 } else { 8.0 };
-    let galley = ui.painter().layout(tl!(label).to_string(), font, t.text, (text_right - x - 24.0).max(10.0));
+    let galley = ui.painter().layout(tl!(label).to_string(), font, t.text, (text_right - x - 6.0).max(10.0));
     let gy = rect.center().y - galley.size().y / 2.0;
-    ui.painter().with_clip_rect(egui::Rect::from_x_y_ranges(x..=text_right, rect.y_range())).galley(egui::pos2(x + 24.0, gy), galley, t.text);
+    ui.painter().with_clip_rect(egui::Rect::from_x_y_ranges(x..=text_right, rect.y_range())).galley(egui::pos2(x + 6.0, gy), galley, t.text);
     if unread > 0 {
         ui.painter().text(
             egui::pos2(rect.max.x - 10.0, rect.center().y),

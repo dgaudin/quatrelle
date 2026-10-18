@@ -352,6 +352,8 @@ pub struct UiState {
     pub dark: Option<bool>,
     /// The accent colour is the desktop's (when it has one) rather than MailCraft's.
     pub system_accent: bool,
+    /// The ribbon folded away to its tabs (Ctrl+F1, or its ⌃), as Outlook's.
+    pub ribbon_collapsed: bool,
     /// The light or dark style last asked of the window's title bar (`None` inside: the system's).
     window_theme: Option<Option<bool>>,
     pub tab: RibbonTab,
@@ -473,6 +475,7 @@ impl MailApp {
                 pending_move,
                 dark: None,
                 system_accent: true,
+                ribbon_collapsed: false,
                 window_theme: None,
                 tab: RibbonTab::Home,
                 search_text: String::new(),
@@ -1435,6 +1438,10 @@ impl MailApp {
             }
             return;
         }
+        // Fold the ribbon away, or back (Outlook's Ctrl+F1).
+        if ctx.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, Key::F1)) {
+            self.ui.ribbon_collapsed = !self.ui.ribbon_collapsed;
+        }
         let typing = ctx.text_edit_focused();
         let pressed: Vec<(Key, egui::Modifiers)> = ctx.input(|i| {
             i.events
@@ -1678,9 +1685,24 @@ impl MailApp {
                 }
                 if r.clicked() {
                     self.ui.tab = tab;
+                    // A tab clicked while the ribbon is folded away brings it back.
+                    self.ui.ribbon_collapsed = false;
                 }
             }
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                let (icon, tip) = if self.ui.ribbon_collapsed {
+                    (Icon::ChevronDown, "Show the ribbon (Ctrl+F1)")
+                } else {
+                    (Icon::ChevronUp, "Collapse the ribbon (Ctrl+F1)")
+                };
+                if widgets::tiny_icon_button(ui, icon, tip, &t).clicked() {
+                    self.ui.ribbon_collapsed = !self.ui.ribbon_collapsed;
+                }
+            });
         });
+        if self.ui.ribbon_collapsed {
+            return;
+        }
         ui.add_space(2.0);
         let enabled = |id: &str| s.registry().get(id).is_some_and(|c| (c.enabled)(s).is_none());
         if s.module != Module::Mail {
@@ -2200,7 +2222,7 @@ impl MailApp {
 
     /// Preferences and theme for the app to save.
     pub fn saved_state(&self) -> Value {
-        json!({ "prefs": self.session.prefs, "dark": self.ui.dark, "systemAccent": self.ui.system_accent, "language": self.ui.language, "windows": self.ui.places, "peopleView": self.ui.people_view, "peopleList": self.ui.people_list })
+        json!({ "prefs": self.session.prefs, "dark": self.ui.dark, "systemAccent": self.ui.system_accent, "ribbonCollapsed": self.ui.ribbon_collapsed, "language": self.ui.language, "windows": self.ui.places, "peopleView": self.ui.people_view, "peopleList": self.ui.people_list })
     }
 
     pub fn restore_state(&mut self, v: &Value) {
@@ -2221,6 +2243,7 @@ impl MailApp {
         }
         self.ui.dark = v.get("dark").and_then(Value::as_bool);
         self.ui.system_accent = v.get("systemAccent").and_then(Value::as_bool).unwrap_or(true);
+        self.ui.ribbon_collapsed = v.get("ribbonCollapsed").and_then(Value::as_bool).unwrap_or(false);
         if let Some(pv) = v.get("peopleView").and_then(|w| serde_json::from_value(w.clone()).ok()) {
             self.ui.people_view = pv;
         }

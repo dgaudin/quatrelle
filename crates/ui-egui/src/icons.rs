@@ -33,6 +33,7 @@ pub enum Icon {
     Moon,
     Close,
     ChevronDown,
+    ChevronUp,
     ChevronRight,
     ChevronLeft,
     Star,
@@ -157,6 +158,7 @@ fn svg(icon: Icon) -> &'static str {
         Icon::Moon => f!("weather_moon"),
         Icon::Close => f!("dismiss"),
         Icon::ChevronDown => f!("chevron_down"),
+        Icon::ChevronUp => f!("chevron_up"),
         Icon::ChevronRight => f!("chevron_right"),
         Icon::ChevronLeft => f!("chevron_left"),
         Icon::Star => f!("star"),
@@ -365,6 +367,7 @@ fn drawn(p: &Painter, rect: Rect, icon: Icon, color: Color32) {
             pen.line(&[(12.5, 3.5), (3.5, 12.5)]);
         }
         Icon::ChevronDown => pen.line(&[(4.0, 6.0), (8.0, 10.0), (12.0, 6.0)]),
+        Icon::ChevronUp => pen.line(&[(4.0, 10.0), (8.0, 6.0), (12.0, 10.0)]),
         Icon::ChevronRight => pen.line(&[(6.0, 4.0), (10.0, 8.0), (6.0, 12.0)]),
         Icon::ChevronLeft => pen.line(&[(10.0, 4.0), (6.0, 8.0), (10.0, 12.0)]),
         Icon::Star => {
@@ -611,6 +614,7 @@ mod tests {
             Moon,
             Close,
             ChevronDown,
+            ChevronUp,
             ChevronRight,
             ChevronLeft,
             Star,
