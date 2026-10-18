@@ -26,6 +26,7 @@ use mailcraft_ui_egui::{Backend, MailApp, Services, VideoFrame};
 struct Keychain;
 
 mod appearance;
+mod logfile;
 #[cfg(windows)]
 mod toast;
 mod video;
@@ -461,6 +462,9 @@ fn main() -> eframe::Result {
     let files =
         (!sample).then(|| root.as_ref().map(|r| base.as_deref().map_or_else(|| r.join(location::FILES_FOLDER), location::files_dir))).flatten();
 
+    if let Some(path) = logfile::start(root.as_deref()) {
+        log::info!("{} — log in {}", version_line(), path.display());
+    }
     let (now, offset) = Desktop::default().clock();
     let store = root.as_ref().and_then(|r| {
         let opened = match &files {
