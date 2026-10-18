@@ -167,6 +167,129 @@ pub fn pill_button(ui: &mut Ui, icon: Icon, label: &str, t: &Tokens) -> Response
     resp
 }
 
+/// How tall the ribbon's buttons are (a group's name goes under them).
+pub const RIBBON_BUTTON_H: f32 = 68.0;
+/// The space for a group's name under its buttons.
+const GROUP_NAME_H: f32 = 16.0;
+
+/// A ribbon button as Outlook's: a large icon with its name under it (on two lines when long),
+/// greyed out when it can't be used.
+pub fn big_button(ui: &mut Ui, icon: Icon, label: &str, t: &Tokens, enabled: bool) -> Response {
+    big(ui, icon, label, t, if enabled { Big::Plain } else { Big::Off })
+}
+
+/// A ribbon button that stays lit while it's on.
+pub fn big_toggle(ui: &mut Ui, icon: Icon, label: &str, t: &Tokens, on: bool) -> Response {
+    big(ui, icon, label, t, if on { Big::On } else { Big::Plain })
+}
+
+/// The ribbon's first button (New mail, New event…): its icon in the app colour.
+pub fn big_accent(ui: &mut Ui, icon: Icon, label: &str, t: &Tokens, enabled: bool) -> Response {
+    big(ui, icon, label, t, if enabled { Big::Accent } else { Big::Off })
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum Big {
+    Plain,
+    On,
+    Accent,
+    Off,
+}
+
+fn big(ui: &mut Ui, icon: Icon, label: &str, t: &Tokens, kind: Big) -> Response {
+    let label = tl!(label);
+    let enabled = kind != Big::Off;
+    let text = if enabled { t.text } else { t.faint };
+    // Long names break between words onto a second line, as Outlook's do.
+    let mut galley = ui.painter().layout(label.to_string(), theme::regular(12.5), text, 76.0);
+    // Two lines at most: a longer name makes the button wider instead.
+    if galley.rows.len() > 2 {
+        galley = ui.painter().layout(label.to_string(), theme::regular(12.5), text, 128.0);
+    }
+    let w = (galley.size().x + 14.0).max(46.0);
+    let (rect, resp) = ui.allocate_exact_size(vec2(w, RIBBON_BUTTON_H), if enabled { Sense::click() } else { Sense::hover() });
+    let pressed = enabled && resp.is_pointer_button_down_on();
+    if kind == Big::On {
+        ui.painter().rect(rect, 4.0, t.accent_soft, Stroke::new(1.0, t.accent.gamma_multiply(0.5)), egui::StrokeKind::Inside);
+    } else if enabled && (resp.hovered() || pressed) {
+        ui.painter().rect_filled(rect, 4.0, if pressed { t.accent_soft } else { t.hover });
+    }
+    let ir = egui::Rect::from_center_size(egui::pos2(rect.center().x, rect.min.y + 18.0), vec2(26.0, 26.0));
+    let icon_color = match kind {
+        Big::Off => t.faint,
+        Big::Accent => t.accent,
+        _ => t.text,
+    };
+    icons::paint(ui.painter(), ir, icon, icon_color);
+    let at = egui::pos2(rect.center().x - galley.size().x / 2.0, rect.min.y + 35.0);
+    ui.painter().galley_with_override_text_color(at, galley, text);
+    resp
+}
+
+/// The ▾ beside a ribbon button, for its menu of more choices: as tall as the button, the
+/// arrow level with its name.
+pub fn big_more(ui: &mut Ui, tip: &str, t: &Tokens) -> Response {
+    let (rect, resp) = ui.allocate_exact_size(vec2(16.0, RIBBON_BUTTON_H), Sense::click());
+    if resp.hovered() {
+        ui.painter().rect_filled(rect, 4.0, t.hover);
+    }
+    let ir = egui::Rect::from_center_size(egui::pos2(rect.center().x, rect.min.y + 42.0), vec2(12.0, 12.0));
+    icons::paint(ui.painter(), ir, Icon::ChevronDown, if resp.hovered() { t.text } else { t.dim });
+    resp.on_hover_text(tl!(tip))
+}
+
+/// The ribbon's groups, laid out left to right: each ends with its name centred under its buttons
+/// and a line after it, as Outlook's ribbon names its groups (New, Delete, Respond…).
+pub struct Groups {
+    start: f32,
+    top: f32,
+}
+
+impl Groups {
+    /// Start the first group where the ribbon's row starts.
+    pub fn new(ui: &Ui) -> Groups {
+        Groups { start: ui.cursor().min.x, top: ui.cursor().min.y }
+    }
+
+    /// End the group begun last, named `name`, and start the next one after a line.
+    pub fn end(&mut self, ui: &mut Ui, t: &Tokens, name: &str) {
+        self.name(ui, t, name);
+        ui.add_space(3.0);
+        let (r, _) = ui.allocate_exact_size(vec2(1.0, RIBBON_BUTTON_H + GROUP_NAME_H - 6.0), Sense::hover());
+        ui.painter().rect_filled(r, 0.0, t.border);
+        ui.add_space(3.0);
+        self.start = ui.cursor().min.x;
+    }
+
+    /// End the last group, named `name`.
+    pub fn last(&mut self, ui: &mut Ui, t: &Tokens, name: &str) {
+        self.name(ui, t, name);
+    }
+
+    fn name(&mut self, ui: &mut Ui, t: &Tokens, name: &str) {
+        let galley = ui.painter().layout_no_wrap(tl!(name).to_string(), theme::regular(11.5), t.dim);
+        // A name wider than its buttons widens the group.
+        let span = ui.cursor().min.x - self.start;
+        if span < galley.size().x + 8.0 {
+            ui.add_space(galley.size().x + 8.0 - span);
+        }
+        let right = ui.cursor().min.x;
+        let at = egui::pos2((self.start + right - galley.size().x) / 2.0, self.top + RIBBON_BUTTON_H + 2.0);
+        ui.painter().galley_with_override_text_color(at, galley, t.dim);
+        // Keep the row tall enough for the names.
+        ui.allocate_exact_size(vec2(0.0, RIBBON_BUTTON_H + GROUP_NAME_H), Sense::hover());
+    }
+}
+
+/// Small ribbon items stacked in a column (up to three), as Outlook stacks its small buttons.
+pub fn stack(ui: &mut Ui, add: impl FnOnce(&mut Ui)) {
+    ui.allocate_ui_with_layout(vec2(0.0, RIBBON_BUTTON_H), egui::Layout::top_down(egui::Align::Min), |ui| {
+        ui.spacing_mut().item_spacing.y = 1.0;
+        ui.spacing_mut().interact_size.y = 19.0;
+        add(ui);
+    });
+}
+
 pub fn group_sep(ui: &mut Ui, t: &Tokens) {
     ui.add_space(4.0);
     let (r, _) = ui.allocate_exact_size(vec2(1.0, 26.0), Sense::hover());

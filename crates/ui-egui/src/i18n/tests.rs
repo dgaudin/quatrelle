@@ -21,7 +21,13 @@ pub(crate) fn interface_strings() -> BTreeSet<String> {
         include_str!("../notes.rs"),
     ];
     // (prefix, which string literals after it are interface text)
-    let prefixes: [(&str, &[usize]); 20] = [
+    let prefixes: [(&str, &[usize]); 26] = [
+        ("big_button(ui, Icon::", &[0]),
+        ("big_toggle(ui, Icon::", &[0]),
+        ("big_accent(ui, Icon::", &[0]),
+        ("big_more(ui, ", &[0]),
+        ("groups.end(ui, &t, ", &[0]),
+        ("groups.last(ui, &t, ", &[0]),
         ("tl!(", &[0]),
         ("tf!(", &[0]),
         ("tool_button(ui, Icon::", &[0]),
