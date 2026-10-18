@@ -519,7 +519,8 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
             out.events.push(StoredEvent { calendar: CALENDAR.into(), href, etag, event, dirty: false });
         }
     }
-    let mut calendars = vec![CalendarInfo { id: CALENDAR.into(), name: "Calendar".into(), color: 0, read_only: false, ctag: String::new() }];
+    let mut calendars =
+        vec![CalendarInfo { id: CALENDAR.into(), name: "Calendar".into(), color: 0, read_only: false, ctag: String::new(), group: String::new() }];
     out.synced_calendars.push(CALENDAR.into());
     // Other people's calendars opened here: their mailbox's calendar folder (the delegate
     // permissions they gave decide whether it can be read, and whether changed).
@@ -548,6 +549,7 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
             color: u8::try_from((n + 1) % 8).unwrap_or(0),
             read_only: !can_edit,
             ctag: String::new(),
+            group: String::new(),
         });
     }
     out.calendars = Some(calendars);
@@ -602,6 +604,7 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
                             color: u8::try_from((n + 3) % 8).unwrap_or(0),
                             read_only: true,
                             ctag: String::new(),
+                            group: String::new(),
                         });
                     }
                     out.synced_calendars.push(key);

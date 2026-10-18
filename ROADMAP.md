@@ -145,4 +145,8 @@ local-first, media-aware v1); the fuller request is
 - **2026-10-18** — The To-Do bar beside the mail (the month, the coming week's appointments), the
   calendar's Work week view, day headings, two months and calendar groups as Outlook's, the
   ribbon folding to its tabs (Ctrl+F1), and folder names without icons.
+- **2026-10-18** — Shared and delegated mailboxes open in an Exchange or Microsoft 365 account
+  (Graph and EWS), under a folder named after them, with their calendar; mail deleted there
+  goes to their own Deleted Items. Microsoft 365's calendar groups (My Calendars, a team's)
+  come in as Outlook lists them, colleagues' calendars kept in them included.
 

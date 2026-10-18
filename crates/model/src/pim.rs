@@ -26,6 +26,10 @@ pub struct CalendarInfo {
     /// The collection's version at the last sync (`getctag` / sync token).
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub ctag: String,
+    /// The group it's listed in, as the server keeps the user's calendar groups (Outlook's My
+    /// Calendars, a team's, People's Calendars); empty: the account's own.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub group: String,
 }
 
 /// An event with where it lives.
@@ -202,7 +206,14 @@ impl Pim {
     /// Make sure there is somewhere to put events and people.
     pub fn ensure_defaults(&mut self) {
         if self.calendars.is_empty() {
-            self.calendars.push(CalendarInfo { id: LOCAL.into(), name: "Calendar".into(), color: 0, read_only: false, ctag: String::new() });
+            self.calendars.push(CalendarInfo {
+                id: LOCAL.into(),
+                name: "Calendar".into(),
+                color: 0,
+                read_only: false,
+                ctag: String::new(),
+                group: String::new(),
+            });
         }
         if self.books.is_empty() {
             self.books.push(BookInfo { id: LOCAL.into(), name: "Contacts".into(), read_only: false, ctag: String::new() });

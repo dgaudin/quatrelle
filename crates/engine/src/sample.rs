@@ -693,7 +693,14 @@ pub fn sample_pim(now: i64, offset: i64) -> mailcraft_model::pim::Pim {
     ];
     let mut p = Pim::default();
     p.ensure_defaults();
-    p.calendars.push(mailcraft_model::pim::CalendarInfo { id: STUDIO_CALENDAR.into(), name: "Studio".into(), color: 3, ..Default::default() });
+    // In a group of its own, as a team's calendars are kept in Outlook.
+    p.calendars.push(mailcraft_model::pim::CalendarInfo {
+        id: STUDIO_CALENDAR.into(),
+        name: "Studio".into(),
+        color: 3,
+        group: "Studio team".into(),
+        ..Default::default()
+    });
     p.events = events
         .into_iter()
         .map(|event| StoredEvent { calendar: LOCAL.into(), event, ..Default::default() })

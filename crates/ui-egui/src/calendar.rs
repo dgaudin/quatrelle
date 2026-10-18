@@ -68,20 +68,33 @@ pub fn nav(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
         months(s, st, ui, acts);
         ui.add_space(8.0);
         let several = s.pim.values().map(|p| p.calendars.len()).sum::<usize>() > 1;
-        // The calendars in groups, as Outlook's: this user's own, then those others share.
-        let mut mine = Vec::new();
+        // The calendars in groups, as Outlook's: this user's own, the groups kept on the server
+        // (a team's…), then those opened by their owner's address.
+        let mut groups: Vec<(String, Vec<_>)> = vec![(tl!("My calendars").to_string(), Vec::new())];
         let mut shared = Vec::new();
         for a in &s.accounts {
             let Some(p) = s.pim.get(&a.config.id) else { continue };
             for c in &p.calendars {
-                if c.id.starts_with("shared:") { &mut shared } else { &mut mine }.push((a, c));
+                if c.id.starts_with("shared:") {
+                    shared.push((a, c));
+                } else if c.group.is_empty() {
+                    if let Some((_, list)) = groups.first_mut() {
+                        list.push((a, c));
+                    }
+                } else {
+                    match groups.iter_mut().find(|(g, _)| *g == c.group) {
+                        Some((_, list)) => list.push((a, c)),
+                        None => groups.push((c.group.clone(), vec![(a, c)])),
+                    }
+                }
             }
         }
-        for (title, list) in [("My calendars", &mine), ("Shared calendars", &shared)] {
+        groups.push((tl!("Shared calendars").to_string(), shared));
+        for (title, list) in &groups {
             if list.is_empty() {
                 continue;
             }
-            egui::CollapsingHeader::new(RichText::new(tl!(title)).font(theme::bold(13.0)).color(t.text))
+            egui::CollapsingHeader::new(RichText::new(title).font(theme::bold(13.0)).color(t.text))
                 .id_salt(("calendar-group", title))
                 .default_open(true)
                 .show(ui, |ui| {

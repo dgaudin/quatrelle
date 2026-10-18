@@ -521,6 +521,7 @@ pub fn sync(dav: &Dav, email: &str, imap_host: &str, pim: &Pim, now: i64) -> Res
                 color: known.map_or(u8::try_from(n % 8).unwrap_or(0), |k| k.color),
                 read_only: c.writable == Some(false),
                 ctag: ctag.clone(),
+                group: String::new(),
             };
             let pushed_here = out.pushed_events.iter().any(|e| e.calendar == c.href);
             if !ctag.is_empty() && known.is_some_and(|k| k.ctag == ctag) && !pushed_here {

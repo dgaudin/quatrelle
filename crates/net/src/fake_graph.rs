@@ -62,6 +62,10 @@ pub struct Data {
     pub shared: Vec<String>,
     /// Whose mailbox the request being answered is about (`None`: `/me`).
     ctx: Option<String>,
+    /// The user's calendar groups: (id, name, the calendars in it).
+    pub groups: Vec<(String, String, Vec<String>)>,
+    /// Calendars shared with the user and kept only in a group: (id, name, owner, may edit).
+    pub group_calendars: Vec<(String, String, String, bool)>,
     late: Vec<(std::time::Instant, Vec<u8>)>,
     next: u32,
 }
@@ -380,7 +384,36 @@ impl Data {
                 ok(json!({}))
             }
             ("GET", ["me", "calendars"]) => {
-                let list: Vec<Value> = self.calendars.iter().map(|(id, name)| json!({"id": id, "name": name, "canEdit": true})).collect();
+                let list: Vec<Value> = self
+                    .calendars
+                    .iter()
+                    .enumerate()
+                    .map(|(i, (id, name))| json!({"id": id, "name": name, "canEdit": true, "isDefaultCalendar": i == 0}))
+                    .collect();
+                ok(json!({ "value": list }))
+            }
+            ("GET", ["me", "calendarGroups"]) => {
+                let list: Vec<Value> = self.groups.iter().map(|(id, name, _)| json!({"id": id, "name": name})).collect();
+                ok(json!({ "value": list }))
+            }
+            ("GET", ["me", "calendarGroups", gid, "calendars"]) => {
+                let Some((_, _, ids)) = self.groups.iter().find(|(g, _, _)| g == gid) else { return not_found() };
+                let list: Vec<Value> = ids
+                    .iter()
+                    .filter_map(|id| match self.calendars.iter().find(|(c, _)| c == id) {
+                        Some((c, name)) => Some(json!({"id": c, "name": name, "canEdit": true})),
+                        None => self.group_calendars.iter().find(|(c, _, _, _)| c == id).map(|(c, name, owner, edit)| {
+                            json!({"id": c, "name": name, "canEdit": edit, "owner": {"name": owner, "address": format!("{}@contoso.example", owner.to_lowercase())}})
+                        }),
+                    })
+                    .collect();
+                ok(json!({ "value": list }))
+            }
+            ("GET", ["me", "calendarGroups", gid, "calendars", cal, "events"]) => {
+                if !self.groups.iter().any(|(g, _, ids)| g == gid && ids.iter().any(|c| c == cal)) {
+                    return not_found();
+                }
+                let list: Vec<Value> = self.events.iter().filter(|e| e["calendar"] == *cal).cloned().collect();
                 ok(json!({ "value": list }))
             }
             ("GET", ["me", "calendars", cal, "events"]) => {
@@ -827,6 +860,32 @@ mod tests {
         pool.submit(Job::Apply { account: "a1".into(), op: Op::Move { keys: vec![key], to: "support@contoso.example/Deleted Items".into() } });
         eventually("in their Deleted Items", || data.lock().unwrap().message(&ticket).is_some_and(|m| m.folder == their_trash));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn calendar_groups_come_in_as_outlook_keeps_them() {
+        use mailcraft_model::pim::Pim;
+        let mut d = Data::default();
+        d.folder("Inbox", None, Some("inbox"));
+        d.calendars.push(("CAL1".into(), "Calendar".into()));
+        d.calendars.push(("CAL2".into(), "Birthdays".into()));
+        // My Calendars holds the account's own; a team's holds a colleague's, shared with it.
+        d.groups.push(("G1".into(), "My Calendars".into(), vec!["CAL1".into(), "CAL2".into()]));
+        d.groups.push(("G2".into(), "Team: Stéphane".into(), vec!["SC1".into()]));
+        d.group_calendars.push(("SC1".into(), "Calendar".into(), "Emilien".into(), false));
+        d.events.push(json!({"id": "E9", "calendar": "SC1", "iCalUId": "plan", "subject": "Planning",
+            "start": {"dateTime": "2026-10-19T09:30:00.0000000"}, "end": {"dateTime": "2026-10-19T10:30:00.0000000"}}));
+        let server = serve(d);
+        let c = crate::graph::Client::connect(&server.base, TOKEN).unwrap();
+        let sync = crate::graph_pim::sync(&c, &Pim::default(), 1_792_000_000).unwrap();
+        assert!(sync.errors.is_empty(), "{:?}", sync.errors);
+        let cals = sync.calendars.unwrap();
+        let own = cals.iter().find(|x| x.id == "CAL1").unwrap();
+        assert_eq!((own.group.as_str(), own.read_only), ("", false), "My Calendars is the account's own");
+        let theirs = cals.iter().find(|x| x.id == "SC1").unwrap();
+        assert_eq!((theirs.name.as_str(), theirs.group.as_str(), theirs.read_only), ("Emilien", "Team: Stéphane", true));
+        assert!(sync.events.iter().any(|e| e.calendar == "SC1" && e.event.summary == "Planning"), "its events, read inside its group");
+        assert!(sync.synced_calendars.contains(&"SC1".to_string()));
     }
 
     #[test]

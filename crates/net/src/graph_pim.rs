@@ -298,7 +298,7 @@ fn owner_path(calendar: &str) -> String {
 pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
     let mut out = DavSync { caldav_home: Some("graph".into()), carddav_home: Some("graph".into()), checked: now, ..Default::default() };
     // The calendars.
-    let cals = c.all("/me/calendars?$top=100&$select=id,name,canEdit,hexColor", 200)?;
+    let cals = c.all("/me/calendars?$top=100&$select=id,name,canEdit,hexColor,isDefaultCalendar", 200)?;
     let calendars: Vec<CalendarInfo> = cals
         .iter()
         .enumerate()
@@ -310,10 +310,57 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
                 color: u8::try_from(i % 8).unwrap_or(0),
                 read_only: !v.get("canEdit").and_then(Value::as_bool).unwrap_or(true),
                 ctag: String::new(),
+                group: String::new(),
             })
         })
         .collect();
     let default_cal = calendars.iter().find(|x| !x.read_only).map(|x| x.id.clone());
+    let own_default = cals.iter().find(|v| v.get("isDefaultCalendar").and_then(Value::as_bool) == Some(true)).map(|v| s(v, "id"));
+    // The groups the user keeps in Outlook (My Calendars, a team's, People's Calendars): each
+    // calendar is listed under its group, and one shared with the user and kept only in a
+    // group (a colleague's, added to a team's) comes in with its events. Where each calendar's
+    // events are read: `/me/calendars/…`, or inside its group.
+    let mut calendars = calendars;
+    let mut events_at: Vec<(String, String)> = calendars.iter().map(|x| (x.id.clone(), format!("/me/calendars/{}/events", seg(&x.id)))).collect();
+    for g in c.all("/me/calendarGroups?$top=50&$select=id,name", 50).unwrap_or_default() {
+        let (gid, gname) = (s(&g, "id"), s(&g, "name"));
+        if gid.is_empty() {
+            continue;
+        }
+        let list = match c.all(&format!("/me/calendarGroups/{}/calendars?$top=100&$select=id,name,canEdit,owner", seg(&gid)), 200) {
+            Ok(list) => list,
+            Err(e) => {
+                out.errors.push(format!("{gname}: {e}"));
+                continue;
+            }
+        };
+        // The group holding the account's own calendar is its My Calendars: listed as its own.
+        let mine = list.iter().any(|v| own_default.as_deref() == Some(s(v, "id").as_str()));
+        let group = if mine { String::new() } else { gname.clone() };
+        for v in &list {
+            let id = s(v, "id");
+            if id.is_empty() {
+                continue;
+            }
+            let n = calendars.len();
+            match calendars.iter_mut().find(|x| x.id == id) {
+                Some(x) => x.group = group.clone(),
+                None if n < 200 => {
+                    let owner = v.get("owner").map(|o| s(o, "name")).filter(|n| !n.is_empty());
+                    calendars.push(CalendarInfo {
+                        id: id.clone(),
+                        name: owner.unwrap_or_else(|| s(v, "name")),
+                        color: u8::try_from(n % 8).unwrap_or(0),
+                        read_only: !v.get("canEdit").and_then(Value::as_bool).unwrap_or(false),
+                        ctag: String::new(),
+                        group: group.clone(),
+                    });
+                    events_at.push((id.clone(), format!("/me/calendarGroups/{}/calendars/{}/events", seg(&gid), seg(&id))));
+                }
+                None => {}
+            }
+        }
+    }
     // What changed here goes first.
     for t in &pim.deleted {
         let path = if t.href.starts_with("contact:") {
@@ -374,18 +421,25 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
         }
     }
     // Then everything, read again.
-    for cal in &calendars {
-        let list = c.all(&format!("/me/calendars/{}/events?$top=100&$select={EVENT_FIELDS}", seg(&cal.id)), MAX_ITEMS)?;
+    for (id, at) in &events_at {
+        // The account's own fail the sync; one in a group that won't open says why.
+        let list = match c.all(&format!("{at}?$top=100&$select={EVENT_FIELDS}"), MAX_ITEMS) {
+            Ok(list) => list,
+            Err(e) if at.starts_with("/me/calendarGroups/") => {
+                out.errors.push(format!("{}: {e}", calendars.iter().find(|x| x.id == *id).map_or("a calendar", |x| x.name.as_str())));
+                continue;
+            }
+            Err(e) => return Err(e),
+        };
         for v in &list {
             if let Some(event) = event_of(v) {
-                out.events.push(StoredEvent { calendar: cal.id.clone(), href: s(v, "id"), etag: s(v, "changeKey"), event, dirty: false });
+                out.events.push(StoredEvent { calendar: id.clone(), href: s(v, "id"), etag: s(v, "changeKey"), event, dirty: false });
             }
         }
-        out.synced_calendars.push(cal.id.clone());
+        out.synced_calendars.push(id.clone());
     }
     // Other people's calendars opened here, by their address: editable where their owner let this
     // account edit them (Calendars.ReadWrite.Shared), read-only otherwise.
-    let mut calendars = calendars;
     for email in &pim.shared {
         let id = mailcraft_model::pim::shared_calendar_id(email);
         let n = calendars.len();
@@ -407,6 +461,7 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
             color: u8::try_from(n % 8).unwrap_or(0),
             read_only: can_edit != Some(true),
             ctag: String::new(),
+            group: String::new(),
         });
     }
     out.calendars = Some(calendars);
