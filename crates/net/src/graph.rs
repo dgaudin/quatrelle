@@ -48,6 +48,11 @@ pub struct Client {
     auth: String,
 }
 
+/// Where a mailbox is in Graph: this account's (`/me`), or another opened in it.
+fn who(owner: Option<&str>) -> String {
+    owner.map_or_else(|| "/me".to_string(), |o| format!("/users/{}", seg(o)))
+}
+
 /// Turn an HTTP failure into the error the worker knows how to handle.
 fn check(resp: &Response) -> Result<()> {
     status_error(resp.status, &resp.body)
@@ -193,6 +198,53 @@ impl Client {
     /// The mail folders, with roles for the well-known ones; the Outbox and Exchange's own
     /// bookkeeping folders are left out.
     pub fn mailboxes(&self) -> Result<Vec<Mailbox>> {
+        self.mailboxes_of(None)
+    }
+
+    /// Another mailbox opened in the account (a shared mailbox, or someone's who made this
+    /// account a delegate): a folder named after its address, its mail folders under it. A
+    /// delegate who may only open some folders gets those of the usual ones it can.
+    pub fn shared_mailbox(&self, owner: &str) -> Result<Vec<Mailbox>> {
+        let me = who(Some(owner));
+        let root = self.get(&format!("{me}/mailFolders/msgfolderroot?$select=id")).ok().and_then(|v| v.get("id")?.as_str().map(str::to_string));
+        let mut out = match self.mailboxes_of(Some(owner)) {
+            Ok(list) => list,
+            Err(e) => {
+                let mut some = Vec::new();
+                for (name, role) in [("inbox", FolderRole::Inbox), ("sentitems", FolderRole::Sent), ("drafts", FolderRole::Drafts)] {
+                    if let Ok(f) = self.get(&format!("{me}/mailFolders/{name}?$select={FOLDER_FIELDS}")) {
+                        let count = |k: &str| f.get(k).and_then(Value::as_u64).and_then(|n| u32::try_from(n).ok()).unwrap_or(0);
+                        let Some(id) = f.get("id").and_then(Value::as_str).map(str::to_string) else { continue };
+                        some.push(Mailbox {
+                            name: f.get("displayName").and_then(Value::as_str).unwrap_or(name).chars().take(255).collect(),
+                            parent: None,
+                            role,
+                            total: count("totalItemCount"),
+                            unread: count("unreadItemCount"),
+                            id,
+                        });
+                    }
+                }
+                if some.is_empty() {
+                    return Err(e);
+                }
+                some
+            }
+        };
+        let root = root.unwrap_or_else(|| format!("root:{owner}"));
+        let ids: Vec<String> = out.iter().map(|m| m.id.clone()).collect();
+        for m in &mut out {
+            if m.parent.as_ref().is_none_or(|p| !ids.contains(p)) {
+                m.parent = Some(root.clone());
+            }
+        }
+        out.insert(0, Mailbox { id: root, name: owner.to_string(), parent: None, role: FolderRole::Other, total: 0, unread: 0 });
+        Ok(out)
+    }
+
+    /// The mail folders of a mailbox (`owner`: another one opened in the account).
+    fn mailboxes_of(&self, owner: Option<&str>) -> Result<Vec<Mailbox>> {
+        let me = who(owner);
         let roles = [
             ("inbox", FolderRole::Inbox),
             ("drafts", FolderRole::Drafts),
@@ -203,7 +255,7 @@ impl Client {
         ];
         let hidden = ["outbox", "conversationhistory", "syncissues", "recoverableitemsdeletions"];
         let wk: Vec<(&str, String, Option<Value>)> =
-            roles.iter().map(|(n, _)| *n).chain(hidden).map(|n| ("GET", format!("/me/mailFolders/{n}?$select=id"), None)).collect();
+            roles.iter().map(|(n, _)| *n).chain(hidden).map(|n| ("GET", format!("{me}/mailFolders/{n}?$select=id"), None)).collect();
         let ids: Vec<Option<String>> = self
             .batch(&wk)?
             .into_iter()
@@ -213,14 +265,14 @@ impl Client {
         let skip: Vec<String> = ids.iter().skip(roles.len()).flatten().cloned().collect();
 
         let mut out: Vec<Mailbox> = Vec::new();
-        let mut pending: Vec<Value> = self.all(&format!("/me/mailFolders?$top=100&$select={FOLDER_FIELDS}"), MAX_FOLDERS)?;
+        let mut pending: Vec<Value> = self.all(&format!("{me}/mailFolders?$top=100&$select={FOLDER_FIELDS}"), MAX_FOLDERS)?;
         while let Some(f) = pending.pop() {
             let Some(id) = f.get("id").and_then(Value::as_str).map(str::to_string) else { continue };
             if skip.contains(&id) || out.iter().any(|m| m.id == id) || out.len() >= MAX_FOLDERS {
                 continue;
             }
             if f.get("childFolderCount").and_then(Value::as_u64).unwrap_or(0) > 0 {
-                pending.extend(self.all(&format!("/me/mailFolders/{}/childFolders?$top=100&$select={FOLDER_FIELDS}", seg(&id)), MAX_FOLDERS)?);
+                pending.extend(self.all(&format!("{me}/mailFolders/{}/childFolders?$top=100&$select={FOLDER_FIELDS}", seg(&id)), MAX_FOLDERS)?);
             }
             let count = |k: &str| f.get(k).and_then(Value::as_u64).and_then(|n| u32::try_from(n).ok()).unwrap_or(0);
             out.push(Mailbox {
@@ -236,31 +288,33 @@ impl Client {
     }
 
     /// The newest `limit` messages of a folder with their flags, and its (total, unread).
-    fn newest(&self, folder: &str, limit: usize) -> Result<(Vec<(String, Flags)>, (u32, u32))> {
+    fn newest(&self, folder: &str, limit: usize, owner: Option<&str>) -> Result<(Vec<(String, Flags)>, (u32, u32))> {
+        let me = who(owner);
         let list = self.all(
             &format!(
-                "/me/mailFolders/{}/messages?$top={}&$orderby=receivedDateTime%20desc&$select=id,isRead,isDraft,flag",
+                "{me}/mailFolders/{}/messages?$top={}&$orderby=receivedDateTime%20desc&$select=id,isRead,isDraft,flag",
                 seg(folder),
                 limit.clamp(1, 1000)
             ),
             limit.min(100_000),
         )?;
         let ids = list.iter().filter_map(|m| Some((m.get("id")?.as_str()?.to_string(), flags(m)))).collect();
-        let f = self.get(&format!("/me/mailFolders/{}?$select=totalItemCount,unreadItemCount", seg(folder)))?;
+        let f = self.get(&format!("{me}/mailFolders/{}?$select=totalItemCount,unreadItemCount", seg(folder)))?;
         let count = |k: &str| f.get(k).and_then(Value::as_u64).and_then(|n| u32::try_from(n).ok()).unwrap_or(0);
         Ok((ids, (count("totalItemCount"), count("unreadItemCount"))))
     }
 
     /// Messages' details, for the list.
-    fn headers(&self, ids: &[String]) -> Result<Vec<Value>> {
+    fn headers(&self, ids: &[String], owner: Option<&str>) -> Result<Vec<Value>> {
+        let me = who(owner);
         let reqs: Vec<(&str, String, Option<Value>)> =
-            ids.iter().map(|id| ("GET", format!("/me/messages/{}?$select={HEADER_FIELDS}&{VOTING_EXPAND}", seg(id)), None)).collect();
+            ids.iter().map(|id| ("GET", format!("{me}/messages/{}?$select={HEADER_FIELDS}&{VOTING_EXPAND}", seg(id)), None)).collect();
         Ok(self.batch(&reqs)?.into_iter().filter(|(s, _)| *s == 200).map(|(_, b)| b).collect())
     }
 
     /// A message's MIME source.
-    pub fn download(&self, id: &str) -> Result<Vec<u8>> {
-        let r = Request::get(&format!("{}/me/messages/{}/$value", self.base, seg(id)), MAX_MIME)
+    pub fn download(&self, id: &str, owner: Option<&str>) -> Result<Vec<u8>> {
+        let r = Request::get(&format!("{}{}/messages/{}/$value", self.base, who(owner), seg(id)), MAX_MIME)
             .header("Authorization", &self.auth)
             .header("Prefer", "IdType=\"ImmutableId\"");
         let resp = http::send(&r)?;
@@ -270,13 +324,14 @@ impl Client {
 
     /// A message from its MIME source, as a draft (Graph files it in Drafts), moved to `folder`
     /// when that's somewhere else. Its id.
-    pub fn import(&self, raw: &[u8], folder: Option<&str>) -> Result<String> {
-        let v = self.send_raw("POST", "/me/messages", "text/plain", crate::imap::base64(raw).into_bytes())?;
+    pub fn import(&self, raw: &[u8], folder: Option<&str>, owner: Option<&str>) -> Result<String> {
+        let me = who(owner);
+        let v = self.send_raw("POST", &format!("{me}/messages"), "text/plain", crate::imap::base64(raw).into_bytes())?;
         let id = v.get("id").and_then(Value::as_str).ok_or_else(|| NetError::Protocol("Graph: the message wasn't made".into()))?.to_string();
         if let Some(f) = folder {
             let parent = v.get("parentFolderId").and_then(Value::as_str).unwrap_or_default();
             if parent != f {
-                let moved = self.post(&format!("/me/messages/{}/move", seg(&id)), &json!({"destinationId": f}))?;
+                let moved = self.post(&format!("{me}/messages/{}/move", seg(&id)), &json!({"destinationId": f}))?;
                 return Ok(moved.get("id").and_then(Value::as_str).unwrap_or(&id).to_string());
             }
         }
@@ -286,16 +341,17 @@ impl Client {
     /// Answer a message's voting buttons with `choice`: a reply to it (so it stays in the
     /// conversation), its subject the choice's, carrying the choice (`PidLidVerbResponse`) for the
     /// sender's mail client to count; Exchange files the copy in Sent Items.
-    pub fn vote(&self, id: &str, choice: &str, subject: &str) -> Result<()> {
-        let reply = self.post(&format!("/me/messages/{}/createReply", seg(id)), &json!({}))?;
+    pub fn vote(&self, id: &str, choice: &str, subject: &str, owner: Option<&str>) -> Result<()> {
+        let me = who(owner);
+        let reply = self.post(&format!("{me}/messages/{}/createReply", seg(id)), &json!({}))?;
         let rid = reply.get("id").and_then(Value::as_str).ok_or_else(|| NetError::Protocol("Graph: the reply wasn't made".into()))?.to_string();
         let change = json!({
             "subject": voting::response_subject(choice, subject),
             "singleValueExtendedProperties": [{"id": VERB_RESPONSE_ID, "value": choice}],
         });
         let bytes = serde_json::to_vec(&change).map_err(|e| NetError::Protocol(e.to_string()))?;
-        self.send_raw("PATCH", &format!("/me/messages/{}", seg(&rid)), "application/json", bytes)?;
-        self.send_raw("POST", &format!("/me/messages/{}/send", seg(&rid)), "application/json", Vec::new()).map(drop).map_err(|e| match e {
+        self.send_raw("PATCH", &format!("{me}/messages/{}", seg(&rid)), "application/json", bytes)?;
+        self.send_raw("POST", &format!("{me}/messages/{}/send", seg(&rid)), "application/json", Vec::new()).map(drop).map_err(|e| match e {
             NetError::No(m) | NetError::Bad(m) => NetError::Smtp(m),
             e => e,
         })
@@ -364,13 +420,14 @@ impl Client {
     }
 
     /// Delete every message in a folder, a batch at a time.
-    fn empty(&self, folder: &str) -> Result<()> {
+    fn empty(&self, folder: &str, owner: Option<&str>) -> Result<()> {
+        let me = who(owner);
         for _ in 0..1000 {
-            let ids = self.all(&format!("/me/mailFolders/{}/messages?$top=100&$select=id", seg(folder)), 100)?;
+            let ids = self.all(&format!("{me}/mailFolders/{}/messages?$top=100&$select=id", seg(folder)), 100)?;
             let reqs: Vec<(&str, String, Option<Value>)> = ids
                 .iter()
                 .filter_map(|m| m.get("id").and_then(Value::as_str))
-                .map(|id| ("DELETE", format!("/me/messages/{}", seg(id)), None))
+                .map(|id| ("DELETE", format!("{me}/messages/{}", seg(id)), None))
                 .collect();
             if reqs.is_empty() {
                 return Ok(());
@@ -447,16 +504,34 @@ fn header_block(m: &Value) -> Vec<u8> {
 }
 
 /// Refresh the folder list (and the folder ids behind it).
-pub fn list_folders(c: &Client, st: &mut State, account: &str) -> Result<Vec<Folder>> {
-    let found = jmap::folders(account, &c.mailboxes()?);
+pub fn list_folders(c: &Client, st: &mut State, account: &str, shared: &[String]) -> Result<Vec<Folder>> {
+    let mut boxes = c.mailboxes()?;
+    // Other mailboxes opened here, each under a folder named after it. One this account can't
+    // open (no right to it, or gone) is left out; the others still list.
+    let mut owner_of_box: HashMap<String, String> = HashMap::new();
+    for owner in shared {
+        match c.shared_mailbox(owner) {
+            Ok(theirs) => {
+                for b in &theirs {
+                    owner_of_box.insert(b.id.clone(), owner.clone());
+                }
+                boxes.extend(theirs);
+            }
+            Err(e) => log::warn!("{owner}'s mailbox: {e}"),
+        }
+    }
+    let found = jmap::folders(account, &boxes);
     st.mailboxes = found.iter().map(|(f, id)| (f.path.clone(), id.clone())).collect();
+    st.owners = found.iter().filter_map(|(f, id)| Some((f.path.clone(), owner_of_box.get(id)?.clone()))).collect();
     Ok(found.into_iter().map(|(f, _)| f).collect())
 }
 
 /// Bring one folder's cache up to date.
 pub fn sync_folder(c: &Client, st: &mut State, store: &Store, account: &str, folder: &str, opts: &SyncOptions) -> Result<SyncReport> {
     let id = st.mailbox(folder)?.to_string();
-    let (newest, (total, unread)) = c.newest(&id, opts.window)?;
+    let owner = st.owner(folder).map(str::to_string);
+    let owner = owner.as_deref();
+    let (newest, (total, unread)) = c.newest(&id, opts.window, owner)?;
     let mut fs = store.load_folder(account, folder)?;
     let mut report = SyncReport::default();
     if fs.validity != VALIDITY && (fs.validity != 0 || !fs.messages.is_empty()) {
@@ -486,7 +561,7 @@ pub fn sync_folder(c: &Client, st: &mut State, store: &Store, account: &str, fol
         }
     }
     let missing: Vec<String> = newest.iter().filter(|(id, _)| fs.find(st.number(id)).is_none()).map(|(id, _)| id.clone()).collect();
-    for m in c.headers(&missing)? {
+    for m in c.headers(&missing, owner)? {
         let Some(id) = m.get("id").and_then(Value::as_str) else { continue };
         let key = MessageKey { account: account.to_string(), folder: folder.to_string(), validity: VALIDITY, uid: st.number(id) };
         if fs.find(key.uid).is_some() {
@@ -522,7 +597,7 @@ fn prefetch(c: &Client, st: &State, store: &Store, account: &str, folder: &str, 
         return Ok(());
     }
     for (n, id) in &wanted {
-        let raw = c.download(id)?;
+        let raw = c.download(id, st.owner(folder))?;
         if raw.len() > usize::try_from(opts.prefetch_max_bytes).unwrap_or(usize::MAX) {
             continue;
         }
@@ -540,7 +615,7 @@ pub fn fetch_body(c: &Client, st: &State, store: &Store, key: &MessageKey) -> Re
         return Ok(raw);
     }
     let id = st.id(key.uid).filter(|_| key.validity == VALIDITY).ok_or_else(|| NetError::No("the message is no longer on the server".into()))?;
-    let raw = c.download(id)?;
+    let raw = c.download(id, st.owner(&key.folder))?;
     store.write_body(key, &raw)?;
     let mut fs = store.load_folder(&key.account, &key.folder)?;
     if let Some(m) = fs.find_mut(key.uid) {
@@ -564,17 +639,19 @@ fn voting_choices(m: &Value) -> Vec<String> {
 /// Vote on a message (see [`Client::vote`]).
 pub fn vote(c: &Client, st: &State, key: &MessageKey, choice: &str, subject: &str) -> Result<()> {
     let id = st.id(key.uid).filter(|_| key.validity == VALIDITY).ok_or_else(|| NetError::No("the message is no longer on the server".into()))?;
-    c.vote(id, choice, subject)
+    c.vote(id, choice, subject, st.owner(&key.folder))
 }
 
 /// Apply one change on the server.
 pub fn apply_remote(c: &Client, st: &State, op: &Op) -> Result<()> {
+    // Each message by its id, in its own mailbox (another one opened here is under `/users`).
     let ids = |keys: &[MessageKey]| -> Vec<(String, String)> {
         keys.iter().filter(|k| k.validity == VALIDITY).filter_map(|k| Some((st.id(k.uid)?.to_string(), k.folder.clone()))).collect()
     };
+    let at = |folder: &str| who(st.owner(folder));
     let patch_all = |keys: &[MessageKey], patch: Value| -> Result<()> {
         let reqs: Vec<(&str, String, Option<Value>)> =
-            ids(keys).into_iter().map(|(id, _)| ("PATCH", format!("/me/messages/{}", seg(&id)), Some(patch.clone()))).collect();
+            ids(keys).into_iter().map(|(id, f)| ("PATCH", format!("{}/messages/{}", at(&f), seg(&id)), Some(patch.clone()))).collect();
         c.batch_ok(&reqs)
     };
     match op {
@@ -587,19 +664,20 @@ pub fn apply_remote(c: &Client, st: &State, op: &Op) -> Result<()> {
             let reqs: Vec<(&str, String, Option<Value>)> = ids(keys)
                 .into_iter()
                 .filter(|(_, from)| from != to)
-                .map(|(id, _)| ("POST", format!("/me/messages/{}/move", seg(&id)), Some(json!({"destinationId": dest}))))
+                .map(|(id, f)| ("POST", format!("{}/messages/{}/move", at(&f), seg(&id)), Some(json!({"destinationId": dest}))))
                 .collect();
             c.batch_ok(&reqs)
         }
         Op::Expunge { keys } => {
             let reqs: Vec<(&str, String, Option<Value>)> =
-                ids(keys).into_iter().map(|(id, _)| ("DELETE", format!("/me/messages/{}", seg(&id)), None)).collect();
+                ids(keys).into_iter().map(|(id, f)| ("DELETE", format!("{}/messages/{}", at(&f), seg(&id)), None)).collect();
             c.batch_ok(&reqs)
         }
         Op::CreateFolder { path } => {
             let (parent, name) = split_path(st, path)?;
-            let at = parent.map_or_else(|| "/me/mailFolders".to_string(), |p| format!("/me/mailFolders/{}/childFolders", seg(&p)));
-            c.post(&at, &json!({"displayName": name})).map(|_| ())
+            let me = at(path);
+            let url = parent.map_or_else(|| format!("{me}/mailFolders"), |p| format!("{me}/mailFolders/{}/childFolders", seg(&p)));
+            c.post(&url, &json!({"displayName": name})).map(|_| ())
         }
         Op::RenameFolder { from, to } => {
             let id = st.mailbox(from)?.to_string();
@@ -608,17 +686,17 @@ pub fn apply_remote(c: &Client, st: &State, op: &Op) -> Result<()> {
             let mut id = id;
             if parent != old_parent {
                 let dest = parent.clone().unwrap_or_else(|| "msgfolderroot".into());
-                let moved = c.post(&format!("/me/mailFolders/{}/move", seg(&id)), &json!({"destinationId": dest}))?;
+                let moved = c.post(&format!("{}/mailFolders/{}/move", at(from), seg(&id)), &json!({"destinationId": dest}))?;
                 id = moved.get("id").and_then(Value::as_str).unwrap_or(&id).to_string();
             }
             let body = serde_json::to_vec(&json!({"displayName": name})).map_err(|e| NetError::Protocol(e.to_string()))?;
-            c.send_raw("PATCH", &format!("/me/mailFolders/{}", seg(&id)), "application/json", body).map(|_| ())
+            c.send_raw("PATCH", &format!("{}/mailFolders/{}", at(from), seg(&id)), "application/json", body).map(|_| ())
         }
         Op::DeleteFolder { path } => {
             let id = st.mailbox(path)?.to_string();
-            c.send_raw("DELETE", &format!("/me/mailFolders/{}", seg(&id)), "application/json", Vec::new()).map(|_| ())
+            c.send_raw("DELETE", &format!("{}/mailFolders/{}", at(path), seg(&id)), "application/json", Vec::new()).map(|_| ())
         }
-        Op::EmptyFolder { path } => c.empty(st.mailbox(path)?),
+        Op::EmptyFolder { path } => c.empty(st.mailbox(path)?, st.owner(path)),
     }
 }
 
@@ -632,7 +710,7 @@ fn split_path(st: &State, path: &str) -> Result<(Option<String>, String)> {
 
 /// Store a draft in a folder.
 pub fn append(c: &Client, st: &State, folder: &str, raw: &[u8]) -> Result<String> {
-    c.import(raw, Some(st.mailbox(folder)?))
+    c.import(raw, Some(st.mailbox(folder)?), st.owner(folder))
 }
 
 /// Send a message. The MIME source names the recipients for Exchange, so anyone only on the

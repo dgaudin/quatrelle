@@ -2279,3 +2279,61 @@ fn the_work_week_is_monday_to_friday() {
     assert_eq!(r["mode"], "workWeek");
     done(s);
 }
+
+#[test]
+fn another_mailbox_opens_in_an_exchange_account_with_its_own_deleted_items() {
+    use mailcraft_model::{AccountConfig, Folder};
+    let mut s = Session::open(Some(temp("shared-mailbox")), mailcraft_model::dates::Clock::new(NOW, 0));
+    // Not without an Exchange account.
+    assert!(s.run("account.openMailbox", &json!({"email": "support@contoso.example"})).is_err());
+    let config = AccountConfig {
+        name: "Riley".into(),
+        email: "riley@contoso.example".into(),
+        username: "riley".into(),
+        ews: Some("https://mail.contoso.example/EWS/Exchange.asmx".into()),
+        ..Default::default()
+    };
+    let id = s.add_account(config, Some("pw".into())).unwrap();
+    s.take_jobs();
+    for bad in ["not an address", "riley@contoso.example"] {
+        assert!(s.run("account.openMailbox", &json!({"email": bad})).is_err(), "{bad}");
+    }
+    s.run("account.openMailbox", &json!({"email": "Support@Contoso.example"})).unwrap();
+    assert_eq!(s.account(&id).unwrap().config.shared_mailboxes, ["support@contoso.example"]);
+    let jobs = s.take_jobs();
+    assert!(jobs.iter().any(|j| matches!(j, Job::Start { account, .. } if account.shared_mailboxes == ["support@contoso.example"])), "{jobs:?}");
+    assert!(s.pim.get(&id).is_some_and(|p| p.shared.contains(&"support@contoso.example".to_string())), "its calendar opens too");
+    // Its folders come under it; deleting there goes to its own Deleted Items.
+    let f = |path: &str, role: FolderRole| Folder {
+        account: id.clone(),
+        path: path.into(),
+        delimiter: Some('/'),
+        role,
+        selectable: true,
+        unread: 0,
+        total: 0,
+    };
+    let folders = vec![
+        f("INBOX", FolderRole::Inbox),
+        f("Deleted Items", FolderRole::Trash),
+        f("support@contoso.example", FolderRole::Other),
+        f("support@contoso.example/Inbox", FolderRole::Inbox),
+        f("support@contoso.example/Deleted Items", FolderRole::Trash),
+    ];
+    s.apply(Event::Folders { account: id.clone(), folders });
+    let a = s.account(&id).unwrap();
+    assert_eq!(a.folder(FolderRole::Inbox).unwrap().path, "INBOX", "this account's own Inbox");
+    assert_eq!(a.folder(FolderRole::Trash).unwrap().path, "Deleted Items");
+    assert_eq!(a.folder_beside("support@contoso.example/Inbox", FolderRole::Trash).unwrap().path, "support@contoso.example/Deleted Items");
+    assert_eq!(a.folder_beside("INBOX", FolderRole::Trash).unwrap().path, "Deleted Items");
+    // Closed: its folders and calendar go.
+    s.run("account.closeMailbox", &json!({"email": "support@contoso.example"})).unwrap();
+    let a = s.account(&id).unwrap();
+    assert!(a.config.shared_mailboxes.is_empty());
+    assert!(a.folders.iter().all(|f| !f.path.starts_with("support@")));
+    assert!(s.pim.get(&id).is_none_or(|p| p.shared.is_empty()));
+    assert!(s.run("account.closeMailbox", &json!({"email": "support@contoso.example"})).is_err());
+    if let Some(st) = &s.store {
+        let _ = std::fs::remove_dir_all(st.root());
+    }
+}

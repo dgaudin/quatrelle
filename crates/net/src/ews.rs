@@ -552,6 +552,73 @@ impl Client {
 
     /// The account's mail folders, with their roles and counts.
     pub fn mailboxes(&self) -> Result<Vec<Mailbox>> {
+        let mut out = self.mailboxes_of(None)?;
+        // Exchange's public folders, under a folder of their own (a server without them, or
+        // one that won't show them, just has none).
+        match self.public_folders() {
+            Ok(pf) => out.extend(pf),
+            Err(e) => log::info!("no public folders: {e}"),
+        }
+        Ok(out)
+    }
+
+    /// Another mailbox opened in the account (a shared mailbox, or someone's who made this
+    /// account a delegate): a folder named after its address, its mail folders under it. A
+    /// delegate who may only open some folders gets those of the usual ones it can.
+    pub fn shared_mailbox(&self, owner: &str) -> Result<Vec<Mailbox>> {
+        let mut out = match self.mailboxes_of(Some(owner)) {
+            Ok(list) => list,
+            Err(e) => {
+                let mut some = Vec::new();
+                for (name, role) in [("inbox", FolderRole::Inbox), ("sentitems", FolderRole::Sent), ("drafts", FolderRole::Drafts)] {
+                    let Ok(m) = self.call_one(&format!(
+                        "<m:GetFolder><m:FolderShape><t:BaseShape>IdOnly</t:BaseShape><t:AdditionalProperties>\
+                         <t:FieldURI FieldURI=\"folder:DisplayName\"/><t:FieldURI FieldURI=\"folder:TotalCount\"/>\
+                         <t:FieldURI FieldURI=\"folder:UnreadCount\"/></t:AdditionalProperties></m:FolderShape>\
+                         <m:FolderIds>{}</m:FolderIds></m:GetFolder>",
+                        distinguished(name, Some(owner))
+                    )) else {
+                        continue;
+                    };
+                    let Some(f) = m.find("Folder") else { continue };
+                    let Some(id) = f.child("FolderId").and_then(|i| i.attr("Id")).map(str::to_string) else { continue };
+                    let count = |k: &str| f.text_of(k).and_then(|v| v.trim().parse::<u32>().ok()).unwrap_or(0);
+                    some.push(Mailbox {
+                        name: f.text_of("DisplayName").unwrap_or(name).chars().take(255).collect(),
+                        parent: None,
+                        role,
+                        total: count("TotalCount"),
+                        unread: count("UnreadCount"),
+                        id,
+                    });
+                }
+                if some.is_empty() {
+                    return Err(e);
+                }
+                some
+            }
+        };
+        let root = self
+            .call_one(&format!(
+                "<m:GetFolder><m:FolderShape><t:BaseShape>IdOnly</t:BaseShape></m:FolderShape><m:FolderIds>{}</m:FolderIds></m:GetFolder>",
+                distinguished("msgfolderroot", Some(owner))
+            ))
+            .ok()
+            .and_then(|m| m.find("FolderId").and_then(|f| f.attr("Id")).map(str::to_string))
+            .unwrap_or_else(|| format!("root:{owner}"));
+        let ids: Vec<String> = out.iter().map(|m| m.id.clone()).collect();
+        for m in &mut out {
+            if m.parent.as_ref().is_none_or(|p| !ids.contains(p)) {
+                m.parent = Some(root.clone());
+            }
+        }
+        out.insert(0, Mailbox { id: root, name: owner.to_string(), parent: None, role: FolderRole::Other, total: 0, unread: 0 });
+        Ok(out)
+    }
+
+    /// A mailbox's mail folders (`owner`: another one opened in the account), with roles for
+    /// the well-known ones.
+    fn mailboxes_of(&self, owner: Option<&str>) -> Result<Vec<Mailbox>> {
         let roles = [
             ("inbox", FolderRole::Inbox),
             ("drafts", FolderRole::Drafts),
@@ -561,7 +628,7 @@ impl Client {
             ("archive", FolderRole::Archive),
         ];
         let hidden = ["msgfolderroot", "outbox", "conversationhistory", "syncissues"];
-        let ids: String = roles.iter().map(|(n, _)| *n).chain(hidden).map(|n| format!("<t:DistinguishedFolderId Id=\"{n}\"/>")).collect();
+        let ids: String = roles.iter().map(|(n, _)| *n).chain(hidden).map(|n| distinguished(n, owner)).collect();
         let doc = self.call(&format!(
             "<m:GetFolder><m:FolderShape><t:BaseShape>IdOnly</t:BaseShape></m:FolderShape><m:FolderIds>{ids}</m:FolderIds></m:GetFolder>"
         ))?;
@@ -583,7 +650,8 @@ impl Client {
                  <t:FieldURI FieldURI=\"folder:TotalCount\"/><t:FieldURI FieldURI=\"folder:UnreadCount\"/>\
                  <t:FieldURI FieldURI=\"folder:FolderClass\"/></t:AdditionalProperties></m:FolderShape>\
                  <m:IndexedPageFolderView MaxEntriesReturned=\"500\" Offset=\"{offset}\" BasePoint=\"Beginning\"/>\
-                 <m:ParentFolderIds><t:DistinguishedFolderId Id=\"msgfolderroot\"/></m:ParentFolderIds></m:FindFolder>"
+                 <m:ParentFolderIds>{}</m:ParentFolderIds></m:FindFolder>",
+                distinguished("msgfolderroot", owner)
             ))?;
             let Some(m) = messages(&doc).first().map(|m| (*m).clone()) else { break };
             check_message(&m)?;
@@ -617,12 +685,6 @@ impl Client {
         // Folders under a hidden one go too.
         let ids: Vec<String> = out.iter().map(|m| m.id.clone()).collect();
         out.retain(|m| m.parent.as_ref().is_none_or(|p| ids.contains(p)));
-        // Exchange's public folders, under a folder of their own (a server without them, or
-        // one that won't show them, just has none).
-        match self.public_folders() {
-            Ok(pf) => out.extend(pf),
-            Err(e) => log::info!("no public folders: {e}"),
-        }
         Ok(out)
     }
 
@@ -1044,6 +1106,18 @@ pub fn autodiscover(email: &str, user: &str, password: &str, base: Option<&str>)
     Err(NetError::No("Autodiscover sent MailCraft round in circles".into()))
 }
 
+/// A well-known folder (`inbox`, `msgfolderroot`…) of this account's mailbox, or of another one
+/// opened in it.
+fn distinguished(name: &str, owner: Option<&str>) -> String {
+    match owner {
+        Some(o) => format!(
+            "<t:DistinguishedFolderId Id=\"{name}\"><t:Mailbox><t:EmailAddress>{}</t:EmailAddress></t:Mailbox></t:DistinguishedFolderId>",
+            esc(o)
+        ),
+        None => format!("<t:DistinguishedFolderId Id=\"{name}\"/>"),
+    }
+}
+
 /// The read, flag and draft state, asked for with every item.
 const FLAG_FIELDS: &str = "<t:FieldURI FieldURI=\"message:IsRead\"/>\
 <t:ExtendedFieldURI PropertyTag=\"0x1090\" PropertyType=\"Integer\"/>\
@@ -1134,8 +1208,18 @@ fn mime_word(s: &str) -> String {
 }
 
 /// Refresh the folder list (and the folder ids behind it).
-pub fn list_folders(c: &Client, st: &mut State, account: &str) -> Result<Vec<Folder>> {
-    let found = jmap::folders(account, &c.mailboxes()?);
+pub fn list_folders(c: &Client, st: &mut State, account: &str, shared: &[String]) -> Result<Vec<Folder>> {
+    let mut boxes = c.mailboxes()?;
+    // Other mailboxes opened here, each under a folder named after it; one this account can't
+    // open is left out, and the others still list. (EWS ids name their mailbox, so the rest
+    // works on them as on this account's own.)
+    for owner in shared {
+        match c.shared_mailbox(owner) {
+            Ok(theirs) => boxes.extend(theirs),
+            Err(e) => log::warn!("{owner}'s mailbox: {e}"),
+        }
+    }
+    let found = jmap::folders(account, &boxes);
     st.mailboxes = found.iter().map(|(f, id)| (f.path.clone(), id.clone())).collect();
     Ok(found.into_iter().map(|(f, _)| f).collect())
 }

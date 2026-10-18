@@ -590,7 +590,9 @@ pub fn folders(account: &str, boxes: &[Mailbox]) -> Vec<(Folder, String)> {
             if parts.len() >= MAX_DEPTH {
                 break;
             }
-            parts.push(if m.role == FolderRole::Inbox { INBOX.to_string() } else { utf7::encode(&m.name.replace('/', "∕")) });
+            // The account's own Inbox is `INBOX`; another mailbox's (under a folder) keeps its name.
+            let own_inbox = m.role == FolderRole::Inbox && m.parent.as_deref().and_then(|p| by_id.get(p)).is_none();
+            parts.push(if own_inbox { INBOX.to_string() } else { utf7::encode(&m.name.replace('/', "∕")) });
             cur = m.parent.as_deref().and_then(|p| by_id.get(p).copied()).filter(|p| p.id != b.id);
         }
         parts.reverse();
@@ -616,11 +618,22 @@ pub struct State {
     ids: HashMap<String, u32>,
     #[serde(default)]
     pub mailboxes: BTreeMap<String, String>,
+    /// The folders of other mailboxes opened in the account: folder path → the mailbox's
+    /// address (Microsoft Graph reaches them under `/users/<address>`).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub owners: BTreeMap<String, String>,
     #[serde(skip)]
     numbers: HashMap<u32, String>,
 }
 
 const STATE_DOC: &str = "jmap.json";
+
+impl State {
+    /// Whose mailbox a folder is in, when it's another one opened in the account.
+    pub fn owner(&self, path: &str) -> Option<&str> {
+        self.owners.get(path).map(String::as_str)
+    }
+}
 
 impl State {
     pub fn load(store: &Store, account: &str) -> State {

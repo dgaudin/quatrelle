@@ -655,6 +655,15 @@ pub fn registry() -> Registry {
             s.create_card(account.as_deref(), card)
         })
         .when(has_reading),
+        CommandSpec::new("account.openMailbox", "Open another mailbox", "Folder pane › Account", |s, v| {
+            s.open_shared_mailbox(p::str(v, "account"), p::req_str(v, "email")?, p::bool(v, "calendar").unwrap_or(true))
+        })
+        .params(r#"{"email": string (a shared mailbox, or someone's who made you a delegate), "account"?: string (an Exchange or Microsoft 365 account), "calendar"?: bool (its calendar too; default true)}"#)
+        .when(|s| if s.accounts.iter().any(|a| a.config.graph.is_some() || a.config.ews.is_some()) { None } else { Some("add an Exchange or Microsoft 365 account first") }),
+        CommandSpec::new("account.closeMailbox", "Close another mailbox", "Folder pane › Account", |s, v| {
+            s.close_shared_mailbox(p::str(v, "account"), p::req_str(v, "email")?)
+        })
+        .params(r#"{"email": string, "account"?: string}"#),
         CommandSpec::new("calendar.openShared", "Open shared calendar", "Calendar", |s, v| s.open_shared_calendar(p::str(v, "account"), p::req_str(v, "email")?))
             .params(r#"{"email": string (whose calendar), "account"?: string (an Exchange account; else the first)}"#),
         CommandSpec::new("calendar.closeShared", "Close shared calendar", "Calendar", |s, v| s.close_shared_calendar(p::req_str(v, "email")?))
@@ -1448,6 +1457,7 @@ fn add_account(s: &mut Session, v: &Value) -> CmdResult {
         },
         pop_delete_with_trash: p::bool(v, "popDeleteWithTrash").unwrap_or(false),
         oauth_user: None,
+        shared_mailboxes: Vec::new(),
     };
     if let Some(o) = &config.oauth
         && !s.oauth_available.contains(o)

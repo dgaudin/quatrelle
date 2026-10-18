@@ -506,6 +506,14 @@ pub enum Dialog {
         name: String,
         for_good: bool,
     },
+    /// Open another mailbox in an Exchange account: a shared one, or someone's who made this
+    /// account a delegate (Outlook's Open Other Mailbox).
+    OpenSharedMailbox {
+        account: String,
+        email: String,
+        calendar: bool,
+        error: Option<String>,
+    },
     /// Open someone else's calendar by their address (Outlook's Open Calendar).
     OpenSharedCalendar {
         email: String,
@@ -905,7 +913,7 @@ impl Dialog {
             Dialog::Event(f) => f.error = Some(e),
             Dialog::Contact(f) => f.error = Some(e),
             Dialog::Vacation(f) => f.error = Some(e),
-            Dialog::OpenSharedCalendar { error, .. } => *error = Some(e),
+            Dialog::OpenSharedCalendar { error, .. } | Dialog::OpenSharedMailbox { error, .. } => *error = Some(e),
             _ => {}
         }
     }
@@ -2022,6 +2030,37 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Act
             !cancel
         }
         Dialog::EditAccount(f) => edit_account(ui, f, t, acts),
+        Dialog::OpenSharedMailbox { account, email, calendar, error } => {
+            ui.set_width(440.0);
+            title(ui, t, "Open another mailbox");
+            ui.add(
+                egui::Label::new(
+                    RichText::new(tl!(
+                        "A shared mailbox, or someone's who made you a delegate: its folders open under this account, as far as Exchange lets you in."
+                    ))
+                    .color(t.dim),
+                )
+                .wrap(),
+            );
+            ui.add_space(8.0);
+            let r = ui.add(egui::TextEdit::singleline(email).hint_text("support@example.com").desired_width(f32::INFINITY));
+            if ui.memory(|m| m.focused().is_none()) {
+                r.request_focus();
+            }
+            ui.add_space(4.0);
+            ui.checkbox(calendar, tl!("Open its calendar too"));
+            if let Some(e) = error {
+                ui.add_space(4.0);
+                ui.label(RichText::new(e.as_str()).color(t.danger).small());
+            }
+            let enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+            let ready = email.contains('@');
+            let (ok, cancel) = buttons(ui, t, "Open", ready);
+            if (ok || enter) && ready {
+                acts.push(Action::Submit("account.openMailbox", json!({"account": account, "email": email.trim(), "calendar": *calendar})));
+            }
+            !cancel
+        }
         Dialog::OpenSharedCalendar { email, error } => {
             ui.set_width(420.0);
             title(ui, t, "Open a shared calendar");

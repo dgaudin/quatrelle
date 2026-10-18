@@ -121,6 +121,10 @@ pub struct AccountConfig {
     /// differs from `email`: an alias, or another account picked on the sign-in page.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub oauth_user: Option<String>,
+    /// Other mailboxes opened in this account (Exchange: a shared mailbox, or someone's who
+    /// made this account a delegate), by address: each lists under a folder named after it.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub shared_mailboxes: Vec<String>,
 }
 
 /// The EWS address of an account whose Exchange server Autodiscover finds when it connects.
@@ -167,6 +171,18 @@ pub fn microsoft_password_account(a: &AccountConfig) -> bool {
 }
 
 impl AccountConfig {
+    /// Whose mailbox a folder is in, when it's another one opened here (`None`: this account's
+    /// own): its top folder is named after the mailbox's address.
+    pub fn folder_owner(&self, path: &str) -> Option<&str> {
+        self.shared_mailboxes
+            .iter()
+            .find(|m| {
+                path.eq_ignore_ascii_case(m)
+                    || path.get(..m.len()).is_some_and(|p| p.eq_ignore_ascii_case(m)) && path.get(m.len()..).is_some_and(|r| r.starts_with('/'))
+            })
+            .map(String::as_str)
+    }
+
     /// Server settings guessed from an address, the way most hosts are laid out (`mail.<domain>`,
     /// IMAPS 993, SMTPS 465). The account dialog shows them for the user to correct.
     pub fn guess(email: &str) -> AccountConfig {
@@ -205,6 +221,7 @@ impl AccountConfig {
             pop_keep_days: None,
             pop_delete_with_trash: false,
             oauth_user: None,
+            shared_mailboxes: Vec::new(),
         }
     }
 
@@ -407,14 +424,26 @@ pub fn sort_folders(folders: &mut [Folder]) {
             Some(d) => f.path.split(d).map(|p| utf7::decode(p).to_lowercase()).collect(),
             None => vec![utf7::decode(&f.path).to_lowercase()],
         };
-        // A special folder keeps its own place; another goes where its top folder is.
-        let role = if f.role == FolderRole::Other {
-            let top = f.delimiter.and_then(|d| f.path.split(d).next()).unwrap_or(&f.path);
-            roles.get(top).copied().unwrap_or(FolderRole::Other)
-        } else {
-            f.role
+        // A special folder keeps its own place; another goes where its top folder is. Inside
+        // another mailbox opened here, its special folders come first, in their usual order, and
+        // what's in each stays under it.
+        let top = f.delimiter.and_then(|d| f.path.split(d).next()).unwrap_or(&f.path);
+        let top_role = roles.get(top).copied().unwrap_or(FolderRole::Other);
+        // Another mailbox's top folder is named after its address.
+        let in_other = top.len() < f.path.len() && top_role == FolderRole::Other && top.contains('@');
+        let role = if f.role == FolderRole::Other || in_other { top_role } else { f.role };
+        let inner = match (in_other, f.delimiter) {
+            (true, Some(d)) => {
+                let second: String = f.path.split(d).take(2).collect::<Vec<_>>().join(&d.to_string());
+                match roles.get(&second).copied().unwrap_or(FolderRole::Other) {
+                    FolderRole::Other => 6,
+                    r => r.rank(),
+                }
+            }
+            _ => 0,
         };
-        (if role == FolderRole::Other { 6 } else { role.rank() }, parts)
+        let first = parts.first().cloned().unwrap_or_default();
+        (if role == FolderRole::Other { 6 } else { role.rank() }, first, inner, parts)
     });
 }
 
@@ -688,6 +717,49 @@ mod tests {
         let mut work = AccountConfig::guess("zoe@contoso.example");
         work.imap.host = "outlook.office365.com".into();
         assert!(microsoft_password_account(&work));
+    }
+
+    #[test]
+    fn another_mailboxs_folders_stay_under_it() {
+        let f = |path: &str, role: FolderRole| Folder {
+            account: "a".into(),
+            path: path.into(),
+            delimiter: Some('/'),
+            role,
+            selectable: true,
+            unread: 0,
+            total: 0,
+        };
+        let mut list = vec![
+            f("support@contoso.example/Projects", FolderRole::Other),
+            f("Archive", FolderRole::Archive),
+            f("support@contoso.example/Sent Items", FolderRole::Sent),
+            f("support@contoso.example/Inbox/Escalated", FolderRole::Other),
+            f("support@contoso.example", FolderRole::Other),
+            f("support@contoso.example/Inbox", FolderRole::Inbox),
+            f("INBOX", FolderRole::Inbox),
+            f("Projects", FolderRole::Other),
+        ];
+        sort_folders(&mut list);
+        let paths: Vec<&str> = list.iter().map(|f| f.path.as_str()).collect();
+        assert_eq!(
+            paths,
+            [
+                "INBOX",
+                "Archive",
+                "Projects",
+                "support@contoso.example",
+                "support@contoso.example/Inbox",
+                "support@contoso.example/Inbox/Escalated",
+                "support@contoso.example/Sent Items",
+                "support@contoso.example/Projects",
+            ]
+        );
+        let config = AccountConfig { shared_mailboxes: vec!["support@contoso.example".into()], ..Default::default() };
+        assert_eq!(config.folder_owner("support@contoso.example/Inbox"), Some("support@contoso.example"));
+        assert_eq!(config.folder_owner("SUPPORT@contoso.example"), Some("support@contoso.example"));
+        assert_eq!(config.folder_owner("support@contoso.examples/Inbox"), None);
+        assert_eq!(config.folder_owner("INBOX"), None);
     }
 
     #[test]

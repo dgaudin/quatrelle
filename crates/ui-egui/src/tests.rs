@@ -189,6 +189,12 @@ pub(crate) fn tour() {
                 size: 20_480,
             },
             Dialog::OpenSharedCalendar { email: "ana@contoso.example".into(), error: Some("no access".into()) },
+            Dialog::OpenSharedMailbox {
+                account: "a1".into(),
+                email: "support@contoso.example".into(),
+                calendar: true,
+                error: Some("no access".into()),
+            },
             Dialog::RemoveAccount { account: "sample".into(), email: "x".into() },
             Dialog::MailboxClosed {
                 account: "sample".into(),

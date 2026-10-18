@@ -57,6 +57,11 @@ pub struct Data {
     /// Other people whose calendars are shared with this account: (address, may edit). Their
     /// events have `calendar` = `user:<address>`.
     pub others: Vec<(String, bool)>,
+    /// Other mailboxes this account may open (shared, or as a delegate), reached under
+    /// `/users/<address>`; their folders hang under `root-<address>`.
+    pub shared: Vec<String>,
+    /// Whose mailbox the request being answered is about (`None`: `/me`).
+    ctx: Option<String>,
     late: Vec<(std::time::Instant, Vec<u8>)>,
     next: u32,
 }
@@ -65,6 +70,29 @@ impl Data {
     fn id(&mut self, prefix: &str) -> String {
         self.next += 1;
         format!("{prefix}{}", self.next)
+    }
+
+    /// A folder of another mailbox (`parent` `None`: at its top).
+    pub fn shared_folder(&mut self, owner: &str, name: &str, parent: Option<&str>, known: Option<&str>) -> String {
+        let top = format!("root-{owner}");
+        self.folder(name, Some(parent.unwrap_or(&top)), known)
+    }
+
+    /// Whose mailbox a folder is in (`None`: this account's).
+    fn owner_of(&self, folder: &str) -> Option<String> {
+        let mut at = folder.to_string();
+        for _ in 0..32 {
+            if let Some(o) = at.strip_prefix("root-") {
+                return Some(o.to_string());
+            }
+            at = self.folders.iter().find(|f| f.id == at)?.parent.clone();
+        }
+        None
+    }
+
+    /// The top of the mailbox being answered for.
+    fn top(&self) -> String {
+        self.ctx.as_ref().map_or_else(|| ROOT.to_string(), |o| format!("root-{o}"))
     }
 
     pub fn folder(&mut self, name: &str, parent: Option<&str>, known: Option<&str>) -> String {
@@ -97,8 +125,9 @@ impl Data {
         self.folders.iter().find(|f| f.name == name)
     }
 
+    /// A folder by id or well-known name, in the mailbox being answered for.
     fn resolve(&self, id: &str) -> Option<String> {
-        self.folders.iter().find(|f| f.id == id || f.known.as_deref() == Some(id)).map(|f| f.id.clone())
+        self.folders.iter().find(|f| (f.id == id || f.known.as_deref() == Some(id)) && self.owner_of(&f.id) == self.ctx).map(|f| f.id.clone())
     }
 
     fn folder_json(&self, f: &Fo) -> Value {
@@ -152,6 +181,29 @@ impl Data {
             let e = json!({"error": {"code": "MailboxNotEnabledForRESTAPI", "message": "The mailbox is either inactive, soft-deleted, or is hosted on-premise."}});
             return (404, e.to_string().into_bytes(), "application/json");
         }
+        // Another mailbox's mail, as `/me`'s but for that mailbox; one not shared with this
+        // account is refused.
+        let mut parts = parts;
+        self.ctx = None;
+        if let ["users", who, "mailFolders" | "messages", ..] = parts.as_slice() {
+            let who = who.replace("%40", "@").to_ascii_lowercase();
+            if !self.shared.contains(&who) {
+                return (
+                    403,
+                    json!({"error": {"code": "ErrorAccessDenied", "message": "Access is denied."}}).to_string().into_bytes(),
+                    "application/json",
+                );
+            }
+            self.ctx = Some(who);
+            parts = std::iter::once("me").chain(parts.iter().skip(2).copied()).collect();
+        }
+        // A message or folder asked for through another mailbox than its own isn't found there.
+        if let ["me", "messages", id, ..] = parts.as_slice()
+            && let Some(m) = self.message(id)
+            && self.owner_of(&m.folder) != self.ctx
+        {
+            return not_found();
+        }
         match (method, parts.as_slice()) {
             ("POST", ["$batch"]) => {
                 let mut out = Vec::new();
@@ -164,7 +216,8 @@ impl Data {
                 ok(json!({ "responses": out }))
             }
             ("GET", ["me", "mailFolders"]) => {
-                self.page(self.folders.iter().filter(|f| f.parent == ROOT).map(|f| self.folder_json(f)).collect(), path, query, base)
+                let top = self.top();
+                self.page(self.folders.iter().filter(|f| f.parent == top).map(|f| self.folder_json(f)).collect(), path, query, base)
             }
             ("POST", ["me", "mailFolders"]) => {
                 let id = self.folder(input["displayName"].as_str().unwrap_or("?"), None, None);
@@ -721,6 +774,58 @@ mod tests {
         assert!(String::from_utf8_lossy(&reply.raw).contains("In-Reply-To: <v1@x>"), "made as a reply");
         drop(d);
         assert_eq!(store.load_folder("a1", "INBOX").unwrap().find(m.key.uid).unwrap().voted, "Non");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_shared_mailbox_opens_under_the_account_and_keeps_its_mail() {
+        let mut d = Data::default();
+        let inbox = d.folder("Inbox", None, Some("inbox"));
+        d.folder("Deleted Items", None, Some("deleteditems"));
+        d.deliver(&inbox, &mail("Mine", "o1"), true, "2024-05-06T09:00:00Z");
+        let support = "support@contoso.example";
+        d.shared = vec![support.into()];
+        let their_inbox = d.shared_folder(support, "Inbox", None, Some("inbox"));
+        let their_trash = d.shared_folder(support, "Deleted Items", None, Some("deleteditems"));
+        d.shared_folder(support, "Escalated", Some(&their_inbox), None);
+        let ticket = d.deliver(&their_inbox, &mail("Printer on fire", "s1"), false, "2024-05-06T10:00:00Z");
+        let server = serve(d);
+        let data = server.data.clone();
+        let dir = std::env::temp_dir().join(format!("mailcraft-graph-shared-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let store = Store::open(&dir).unwrap();
+        let mut pool = crate::worker::Pool::new(store.clone(), Arc::new(crate::worker::MemoryCredentials::default()));
+        // A mailbox this account may not open is left out; the rest still lists.
+        let account = AccountConfig {
+            id: "a1".into(),
+            email: "me@contoso.example".into(),
+            graph: Some(server.base.clone()),
+            shared_mailboxes: vec![support.into(), "boss@contoso.example".into()],
+            ..Default::default()
+        };
+        pool.submit(Job::Start { account: account.clone(), password: Some(Secret(TOKEN.into())) });
+        let seen = until(&pool, "online", |e| matches!(e, Event::Status { status: SyncStatus::Online { .. }, .. }));
+        let folders = seen.iter().rev().find_map(|e| match e {
+            Event::Folders { folders, .. } => Some(folders.clone()),
+            _ => None,
+        });
+        let paths: Vec<String> = folders.unwrap().iter().map(|f| f.path.clone()).collect();
+        for want in
+            ["INBOX", support, "support@contoso.example/Inbox", "support@contoso.example/Inbox/Escalated", "support@contoso.example/Deleted Items"]
+        {
+            assert!(paths.iter().any(|p| p == want), "{want} in {paths:?}");
+        }
+        assert!(!paths.iter().any(|p| p.starts_with("boss@")));
+        // Its mail syncs, through its own address.
+        eventually("their inbox", || store.load_folder("a1", "support@contoso.example/Inbox").is_ok_and(|f| f.messages.len() == 1));
+        let key = store.load_folder("a1", "support@contoso.example/Inbox").unwrap().messages[0].key.clone();
+        pool.submit(Job::FetchBody { key: key.clone() });
+        until(&pool, "their message", |e| matches!(e, Event::Body { key: k, .. } if *k == key));
+        // Read there, and deleted to its own Deleted Items.
+        pool.submit(Job::Apply { account: "a1".into(), op: Op::SetFlag { keys: vec![key.clone()], flag: Flag::Seen, on: true } });
+        eventually("read in their mailbox", || data.lock().unwrap().message(&ticket).is_some_and(|m| m.read));
+        pool.submit(Job::Apply { account: "a1".into(), op: Op::Move { keys: vec![key], to: "support@contoso.example/Deleted Items".into() } });
+        eventually("in their Deleted Items", || data.lock().unwrap().message(&ticket).is_some_and(|m| m.folder == their_trash));
         let _ = std::fs::remove_dir_all(&dir);
     }
 

@@ -765,7 +765,7 @@ impl Worker {
     }
 
     fn inbox(&self) -> Option<String> {
-        self.folders.iter().find(|f| f.role == FolderRole::Inbox).map(|f| f.path.clone())
+        self.folders.iter().find(|f| f.role == FolderRole::Inbox && self.acc.folder_owner(&f.path).is_none()).map(|f| f.path.clone())
     }
 
     /// Note a failure; drop the connection when it is unusable.
@@ -938,8 +938,8 @@ impl Worker {
         let listed = match self.conn.as_mut() {
             Some(Conn::Imap(c)) => c.list(&id),
             Some(Conn::Jmap(c)) => jmap::list_folders(c, &mut self.jstate, &id),
-            Some(Conn::Graph(c)) => crate::graph::list_folders(c, &mut self.jstate, &id),
-            Some(Conn::Ews(c)) => crate::ews::list_folders(c, &mut self.jstate, &id),
+            Some(Conn::Graph(c)) => crate::graph::list_folders(c, &mut self.jstate, &id, &self.acc.shared_mailboxes),
+            Some(Conn::Ews(c)) => crate::ews::list_folders(c, &mut self.jstate, &id, &self.acc.shared_mailboxes),
             Some(Conn::Pop) => crate::pop::folders(&self.store, &id),
             None => Err(NetError::Closed("not connected".into())),
         };

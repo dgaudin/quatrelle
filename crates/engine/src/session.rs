@@ -20,6 +20,7 @@ use serde_json::Value;
 use crate::{CmdError, CmdResult, Registry};
 
 pub mod invite;
+mod mailboxes;
 mod organize;
 pub mod pim;
 mod vote;
@@ -49,8 +50,18 @@ pub enum VacationState {
 }
 
 impl AccountState {
+    /// This account's own folder for a role (not one in another mailbox opened here).
     pub fn folder(&self, role: FolderRole) -> Option<&Folder> {
-        self.folders.iter().find(|f| f.role == role)
+        self.folders.iter().find(|f| f.role == role && self.config.folder_owner(&f.path).is_none())
+    }
+
+    /// The folder for a role in the mailbox `path` is in: another mailbox's own (its Deleted
+    /// Items for mail deleted there), else this account's.
+    pub fn folder_beside(&self, path: &str, role: FolderRole) -> Option<&Folder> {
+        match self.config.folder_owner(path) {
+            Some(owner) => self.folders.iter().find(|f| f.role == role && self.config.folder_owner(&f.path) == Some(owner)),
+            None => self.folder(role),
+        }
     }
 
     /// A local-only account (the sample mailbox): no server, changes apply to the cache alone.
@@ -1868,18 +1879,21 @@ impl Session {
             return Err(CmdError::Disabled("no message selected".into()));
         }
         let next = self.successor(&self.selection.clone());
-        let mut by_account: HashMap<String, Vec<MessageKey>> = HashMap::new();
+        // By account, and by mailbox within it: mail in another mailbox opened here goes to
+        // that mailbox's own Deleted Items, Archive… (Exchange moves mail within a mailbox).
+        let mut groups: BTreeMap<(String, Option<String>), Vec<MessageKey>> = BTreeMap::new();
         for m in &sel {
-            by_account.entry(m.key.account.clone()).or_default().push(m.key.clone());
+            let owner = self.account(&m.key.account).and_then(|a| a.config.folder_owner(&m.key.folder)).map(str::to_string);
+            groups.entry((m.key.account.clone(), owner)).or_default().push(m.key.clone());
         }
         let mut moved = 0usize;
-        let mut accounts: Vec<String> = by_account.keys().cloned().collect();
-        accounts.sort();
-        for a in accounts {
-            let keys = by_account.remove(&a).unwrap_or_default();
+        for ((a, _), keys) in groups {
             let dest = match &target {
                 MoveTarget::Folder(f) => Some(f.clone()),
-                MoveTarget::Role(r) => self.account(&a).and_then(|acc| acc.folder(*r)).map(|f| f.path.clone()),
+                MoveTarget::Role(r) => {
+                    let from = keys.first().map(|k| k.folder.clone()).unwrap_or_default();
+                    self.account(&a).and_then(|acc| acc.folder_beside(&from, *r)).map(|f| f.path.clone())
+                }
             };
             let Some(dest) = dest else {
                 let what = match target {
@@ -2823,6 +2837,7 @@ impl Session {
             || a.config.pop_keep_days != config.pop_keep_days
             || a.config.pop_delete_with_trash != config.pop_delete_with_trash
             || a.config.username != config.username
+            || a.config.shared_mailboxes != config.shared_mailboxes
             || password.is_some();
         a.config = config.clone();
         let local = a.is_local();

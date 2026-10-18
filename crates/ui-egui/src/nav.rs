@@ -209,6 +209,16 @@ pub fn show(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>) {
                     acts.push(Action::EditSignature { account: config.id.clone(), insert: false });
                     ui.close();
                 }
+                // Exchange: a shared mailbox, or someone's who made this account a delegate.
+                if (config.graph.is_some() || config.ews.is_some()) && ui.button(tl!("Open another mailbox…")).clicked() {
+                    acts.push(Action::Dialog(Dialog::OpenSharedMailbox {
+                        account: config.id.clone(),
+                        email: String::new(),
+                        calendar: true,
+                        error: None,
+                    }));
+                    ui.close();
+                }
                 if ui.button(tl!("New folder…")).clicked() {
                     // In the folder open now (as Outlook's New Folder starts), else at the top.
                     let here = match &s.view {
@@ -270,7 +280,10 @@ fn folder_row(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>, f: &
     };
     // Unread counts matter for mail you receive, not for Sent or Drafts.
     let unread = if matches!(f.role, FolderRole::Sent | FolderRole::Drafts | FolderRole::Trash | FolderRole::Archive) { 0 } else { f.unread };
-    let user_folder = f.role == FolderRole::Other && !f.path.eq_ignore_ascii_case("INBOX");
+    // Another mailbox opened here: its folders stay in it (Exchange moves folders within a
+    // mailbox), and its top folder closes it.
+    let owner = s.account(&f.account).and_then(|a| a.config.folder_owner(&f.path)).map(str::to_string);
+    let user_folder = f.role == FolderRole::Other && !f.path.eq_ignore_ascii_case("INBOX") && owner.is_none();
     let resp = row(ui, t, role_icon(f.role), &name, unread, depth, selected, f.selectable, user_folder && !favorite);
     if let Some(collapsed) = collapse {
         let x = resp.rect.min.x + 10.0 + depth as f32 * 14.0 - 14.0;
@@ -303,6 +316,13 @@ fn folder_row(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>, f: &
     let account = f.account.clone();
     let is_favorite = s.favorites().iter().any(|r| r.account == f.account && r.folder == f.path);
     resp.context_menu(|ui| {
+        if let Some(o) = owner.as_deref().filter(|o| o.eq_ignore_ascii_case(&path)) {
+            if ui.button(tl!("Close this mailbox")).clicked() {
+                acts.push(Action::Run("account.closeMailbox", json!({"account": account, "email": o})));
+                ui.close();
+            }
+            return;
+        }
         if ui.button(tl!("Open")).clicked() {
             acts.push(Action::Run("folder.open", json!({"account": account, "folder": path})));
             ui.close();
