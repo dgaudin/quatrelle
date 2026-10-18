@@ -72,6 +72,8 @@ pub struct Data {
     pub wlinks: Vec<String>,
     /// The directory: (X.500 name, address).
     pub directory: Vec<(String, String)>,
+    /// Answer item searches (the mail sync) only after this long: a mailbox taking minutes.
+    pub slow_sync: Option<std::time::Duration>,
     next: u32,
 }
 
@@ -97,6 +99,7 @@ impl Default for Data {
             shared: Vec::new(),
             wlinks: Vec::new(),
             directory: Vec::new(),
+            slow_sync: None,
             next: 0,
         };
         d.folders.push(Fo {
@@ -817,6 +820,10 @@ fn serve_connection(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>) {
             );
             continue;
         };
+        let slow = shared.lock().unwrap().slow_sync.filter(|_| op.name == "FindItem");
+        if let Some(wait) = slow {
+            std::thread::sleep(wait);
+        }
         let mut d = shared.lock().unwrap();
         d.calls.push(op.name.clone());
         d.routed = routed;
@@ -1274,6 +1281,34 @@ mod tests {
         // One that can't be read says so, and the rest still syncs.
         assert!(sync.errors.iter().any(|e| e.starts_with("nobody@contoso.example's calendar")), "{:?}", sync.errors);
         assert!(!sync.synced_calendars.contains(&shared_calendar_id("nobody@contoso.example")));
+    }
+
+    /// Automatic replies answer at once while the mailbox takes minutes to sync: they don't wait
+    /// behind it (File › Info said "Checking with the server…" all the while).
+    #[test]
+    fn automatic_replies_answer_while_the_mailbox_syncs() {
+        let mut d = Data::default();
+        let inbox = d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+        d.deliver(&inbox, &mail("Storyboard", "m1"), true, "2024-05-06T09:00:00Z");
+        d.slow_sync = Some(Duration::from_secs(30));
+        let server = serve(d);
+        let dir = std::env::temp_dir().join(format!("mailcraft-ews-oof-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut pool = crate::worker::Pool::new(Store::open(&dir).unwrap(), Arc::new(crate::worker::MemoryCredentials::default()));
+        let account = AccountConfig {
+            id: "a1".into(),
+            email: "riley@contoso.example".into(),
+            username: format!("{DOMAIN}\\{USER}"),
+            ews: Some(server.url.clone()),
+            ..Default::default()
+        };
+        pool.submit(Job::Start { account, password: Some(Secret(PASSWORD.into())) });
+        until(&pool, "syncing", |e| matches!(e, Event::Folders { .. }));
+        let asked = Instant::now();
+        pool.submit(Job::GetVacation { account: "a1".into() });
+        until(&pool, "replies read", |e| matches!(e, Event::Vacation { vacation: Some(v), error: None, .. } if !v.enabled));
+        assert!(asked.elapsed() < Duration::from_secs(10), "waited {:?}", asked.elapsed());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// An Outlook navigation shortcut to someone's calendar, in a group of the Calendar pane.
