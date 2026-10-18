@@ -89,12 +89,12 @@ pub fn primary_button(ui: &mut Ui, label: &str, t: &Tokens, enabled: bool) -> Re
 }
 
 /// An icon button on the coloured title bar.
-pub fn bar_icon_button(ui: &mut Ui, icon: Icon, tip: &str) -> Response {
-    let (rect, resp) = ui.allocate_exact_size(vec2(30.0, 30.0), Sense::click());
+pub fn bar_icon_button(ui: &mut Ui, icon: Icon, tip: &str, t: &Tokens) -> Response {
+    let (rect, resp) = ui.allocate_exact_size(vec2(28.0, 28.0), Sense::click());
     if resp.hovered() {
-        ui.painter().rect_filled(rect, 6.0, Color32::from_white_alpha(40));
+        ui.painter().rect_filled(rect, 4.0, t.hover);
     }
-    icons::paint(ui.painter(), icons::centered(rect, 17.0), icon, Color32::WHITE);
+    icons::paint(ui.painter(), icons::centered(rect, 16.0), icon, if resp.hovered() { t.text } else { t.dim });
     resp.on_hover_text(tl!(tip))
 }
 

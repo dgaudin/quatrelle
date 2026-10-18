@@ -683,7 +683,7 @@ impl MailApp {
             self.flush_jobs();
             return;
         }
-        egui::Panel::top("topbar").exact_size(46.0).frame(egui::Frame::new().fill(t.accent).inner_margin(Margin::symmetric(12, 6))).show(ui, |ui| {
+        egui::Panel::top("topbar").exact_size(40.0).frame(egui::Frame::new().fill(t.chrome).inner_margin(Margin::symmetric(10, 5))).show(ui, |ui| {
             self.top_bar(ui, &mut acts);
         });
         if self.ui.backstage.is_none() {
@@ -1516,26 +1516,33 @@ impl MailApp {
     fn top_bar(&mut self, ui: &mut Ui, acts: &mut Vec<Action>) {
         let t = self.ui.tokens;
         ui.horizontal_centered(|ui| {
-            let (r, _) = ui.allocate_exact_size(vec2(22.0, 22.0), Sense::hover());
-            ui.painter().rect_filled(r, 5.0, Color32::WHITE);
-            icons::paint(ui.painter(), icons::centered(r, 15.0), Icon::Unread, t.accent);
-            ui.label(RichText::new(tl!("MailCraft")).font(theme::bold(16.0)).color(Color32::WHITE));
-            ui.add_space(6.0);
+            // The app's own mark, the only colour up here: the bar itself is plain, as the title
+            // bars around it are.
+            let (r, _) = ui.allocate_exact_size(vec2(20.0, 20.0), Sense::hover());
+            ui.painter().rect_filled(r, 4.0, t.accent);
+            icons::paint(ui.painter(), icons::centered(r, 14.0), Icon::Unread, t.on_accent);
+            ui.add_space(4.0);
             // Quick access, as Outlook's title bar: Send / Receive all folders, and Undo the last
             // move, delete, flag or category (Ctrl+Z).
             let can_sync = self.session.registry().get("mail.sync").is_some_and(|c| (c.enabled)(&self.session).is_none());
-            if can_sync && widgets::bar_icon_button(ui, Icon::Sync, tl!("Send / Receive all folders (F9)")).clicked() {
+            if can_sync && widgets::bar_icon_button(ui, Icon::Sync, tl!("Send / Receive all folders (F9)"), &t).clicked() {
                 acts.push(Action::Run("mail.sync", json!({})));
             }
-            if !self.session.undo.is_empty() && widgets::bar_icon_button(ui, Icon::Back, tl!("Undo (Ctrl+Z)")).clicked() {
+            if !self.session.undo.is_empty() && widgets::bar_icon_button(ui, Icon::Back, tl!("Undo (Ctrl+Z)"), &t).clicked() {
                 acts.push(Action::Run("edit.undo", json!({})));
             }
             ui.add_space(10.0);
+            // Centred in the window, whatever is left of it.
             let avail = ui.available_width();
             let search_w = (avail * 0.45).clamp(220.0, 620.0);
-            ui.add_space(((avail - search_w) / 2.0 - 160.0).max(0.0));
-            let frame =
-                egui::Frame::new().fill(if t.dark { t.surface } else { Color32::WHITE }).corner_radius(6).inner_margin(Margin::symmetric(8, 3));
+            let left = ui.min_rect().width();
+            let full = left + avail;
+            ui.add_space(((full - search_w) / 2.0 - left).clamp(0.0, (avail - search_w - 80.0).max(0.0)));
+            let frame = egui::Frame::new()
+                .fill(if t.dark { t.surface } else { Color32::WHITE })
+                .stroke(egui::Stroke::new(1.0, t.border))
+                .corner_radius(4)
+                .inner_margin(Margin::symmetric(8, 3));
             frame.show(ui, |ui| {
                 ui.horizontal(|ui| {
                     let (r, _) = ui.allocate_exact_size(vec2(16.0, 16.0), Sense::hover());
@@ -1610,10 +1617,10 @@ impl MailApp {
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 let dark = t.dark;
                 let (icon, tip) = if dark { (Icon::Sun, tl!("Switch to light mode")) } else { (Icon::Moon, tl!("Switch to dark mode")) };
-                if widgets::bar_icon_button(ui, icon, tip).clicked() {
+                if widgets::bar_icon_button(ui, icon, tip, &t).clicked() {
                     acts.push(Action::SetDark(Some(!dark)));
                 }
-                if widgets::bar_icon_button(ui, Icon::Gear, "Accounts and settings").clicked() {
+                if widgets::bar_icon_button(ui, Icon::Gear, "Accounts and settings", &t).clicked() {
                     acts.push(Action::Backstage(backstage::Page::Info));
                 }
             });
