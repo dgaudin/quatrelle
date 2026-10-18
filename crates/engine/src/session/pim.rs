@@ -25,9 +25,11 @@ pub enum Module {
 
 /// How much of the calendar is shown.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "camelCase")]
 pub enum CalMode {
     Day,
+    /// Monday to Friday (Outlook's Work Week).
+    WorkWeek,
     #[default]
     Week,
     Month,
@@ -110,12 +112,14 @@ impl Session {
         self.cal_day.unwrap_or_else(|| self.clock.now.saturating_add(i64::from(self.clock.offset)).div_euclid(86_400))
     }
 
-    /// The local days on screen: a day, the week (Monday first) or the weeks of the month.
+    /// The local days on screen: a day, the working days or the whole week (Monday first), or the
+    /// weeks of the month.
     pub fn cal_days(&self) -> (i64, i64) {
         let d = self.cal_day();
         let monday = |x: i64| x - (x + 3).rem_euclid(7);
         match self.cal_mode {
             CalMode::Day => (d, d + 1),
+            CalMode::WorkWeek => (monday(d), monday(d) + 5),
             CalMode::Week => (monday(d), monday(d) + 7),
             CalMode::Month => {
                 let (y, m, _) = civil_from_days(d);
@@ -145,7 +149,7 @@ impl Session {
         let step = step.clamp(-1200, 1200);
         d = match self.cal_mode {
             CalMode::Day => d + step,
-            CalMode::Week => d + 7 * step,
+            CalMode::Week | CalMode::WorkWeek => d + 7 * step,
             CalMode::Month => {
                 let (y, m, day) = civil_from_days(d);
                 let total = i64::from(m) - 1 + step;

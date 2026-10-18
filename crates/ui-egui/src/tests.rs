@@ -431,7 +431,7 @@ pub(crate) fn backstage_tour(a: &mut MailApp, ctx: &egui::Context) {
 /// Calendar (each view, an event open) and People (someone picked, the form open).
 pub(crate) fn pim_tour(a: &mut MailApp, ctx: &egui::Context) {
     a.run("view.module", json!({"name": "calendar"}));
-    for mode in ["day", "week", "month"] {
+    for mode in ["day", "workWeek", "week", "month"] {
         a.run("calendar.view", json!({"mode": mode}));
         frame(ctx, a, vec![]);
     }

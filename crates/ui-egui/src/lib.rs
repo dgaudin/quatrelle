@@ -1698,6 +1698,7 @@ impl MailApp {
                     groups.end(ui, &t, "Go to");
                     for (mode, icon, label, code) in [
                         (CalMode::Day, Icon::CalendarDay, "Day", "day"),
+                        (CalMode::WorkWeek, Icon::CalendarWorkWeek, "Work week", "workWeek"),
                         (CalMode::Week, Icon::CalendarWeek, "Week", "week"),
                         (CalMode::Month, Icon::CalendarMonth, "Month", "month"),
                     ] {

@@ -59,6 +59,7 @@ pub enum Icon {
     /// The calendar's views and today.
     CalendarDay,
     CalendarWeek,
+    CalendarWorkWeek,
     CalendarMonth,
     CalendarToday,
     People,
@@ -179,7 +180,8 @@ fn svg(icon: Icon) -> &'static str {
         Icon::Funnel => f!("filter"),
         Icon::Calendar => f!("calendar_ltr"),
         Icon::CalendarDay => f!("calendar_day"),
-        Icon::CalendarWeek => f!("calendar_work_week"),
+        Icon::CalendarWeek => f!("calendar_week_start"),
+        Icon::CalendarWorkWeek => f!("calendar_work_week"),
         Icon::CalendarMonth => f!("calendar_month"),
         Icon::CalendarToday => f!("calendar_today"),
         Icon::People => f!("people"),
@@ -509,7 +511,9 @@ fn drawn(p: &Painter, rect: Rect, icon: Icon, color: Color32) {
             pen.line(&ellipse(8.0, 0.0, PI));
             pen.line(&ellipse(12.5, 0.0, PI));
         }
-        Icon::CalendarDay | Icon::CalendarWeek | Icon::CalendarMonth | Icon::CalendarToday => drawn(p, rect, Icon::Calendar, color),
+        Icon::CalendarDay | Icon::CalendarWeek | Icon::CalendarWorkWeek | Icon::CalendarMonth | Icon::CalendarToday => {
+            drawn(p, rect, Icon::Calendar, color)
+        }
         Icon::Calendar => {
             pen.rect(1.5, 3.0, 14.5, 14.5);
             pen.line(&[(1.5, 6.5), (14.5, 6.5)]);
@@ -631,6 +635,7 @@ mod tests {
             Calendar,
             CalendarDay,
             CalendarWeek,
+            CalendarWorkWeek,
             CalendarMonth,
             CalendarToday,
             People,

@@ -2265,3 +2265,17 @@ fn the_todo_bar_is_on_until_turned_off() {
     assert!(s.prefs.todo_bar);
     done(s);
 }
+
+#[test]
+fn the_work_week_is_monday_to_friday() {
+    let mut s = sample_session("work-week");
+    s.run("calendar.view", &json!({"mode": "workWeek"})).unwrap();
+    s.run("calendar.goto", &json!({"date": "2026-10-18"})).unwrap();
+    let (d0, d1) = s.cal_days();
+    assert_eq!(d1 - d0, 5);
+    assert_eq!((d0 + 3).rem_euclid(7), 0, "starts on a Monday");
+    let r = s.run("calendar.goto", &json!({"step": 1})).unwrap();
+    assert_eq!(r["date"], "2026-10-25", "a week on");
+    assert_eq!(r["mode"], "workWeek");
+    done(s);
+}

@@ -429,7 +429,7 @@ impl Default for Prefs {
             notes_order: NotesOrder::Modified,
             hidden_calendars: BTreeSet::new(),
             calendars_side_by_side: false,
-            calendar_months: 1,
+            calendar_months: 2,
             address_book: "all".into(),
             keep_messages: 1000,
             keep_offline: 40,

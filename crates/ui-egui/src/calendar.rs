@@ -44,7 +44,7 @@ pub fn title(s: &Session) -> String {
             let (y, m, _) = civil_from_days(s.cal_day());
             tf!("{month} {year}", month = month(m), year = y)
         }
-        CalMode::Week => {
+        CalMode::Week | CalMode::WorkWeek => {
             let ((y0, m0, a), (y1, m1, b)) = (civil_from_days(d0), civil_from_days(d1 - 1));
             if (y0, m0) == (y1, m1) {
                 tf!("{from} – {to} {month} {year}", from = a, to = b, month = month(m1), year = y1)
@@ -65,56 +65,30 @@ pub fn title(s: &Session) -> String {
 pub fn nav(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
     let t = st.tokens;
     egui::ScrollArea::vertical().auto_shrink(false).id_salt("calendar-nav").show(ui, |ui| {
-        if widgets::accent_button(ui, Icon::Plus, "New event", &t, !s.accounts.is_empty()).clicked() {
-            acts.push(Action::Dialog(Dialog::new_event(s, None)));
-        }
-        ui.add_space(10.0);
         months(s, st, ui, acts);
-        ui.add_space(12.0);
-        ui.label(RichText::new(tl!("Calendars")).font(theme::bold(12.0)).color(t.faint));
+        ui.add_space(8.0);
         let several = s.pim.values().map(|p| p.calendars.len()).sum::<usize>() > 1;
+        // The calendars in groups, as Outlook's: this user's own, then those others share.
+        let mut mine = Vec::new();
+        let mut shared = Vec::new();
         for a in &s.accounts {
             let Some(p) = s.pim.get(&a.config.id) else { continue };
             for c in &p.calendars {
-                let shared = c.id.strip_prefix("shared:").map(str::to_string);
-                let shown = s.calendar_shown(&a.config.id, &c.id);
-                let row = ui.horizontal(|ui| {
-                    // Ticked: shown (in its colour); click to leave it out, as Outlook's boxes.
-                    let (r, resp) = ui.allocate_exact_size(vec2(14.0, 14.0), Sense::click());
-                    let c32 = color(c.color, &t);
-                    if shown {
-                        ui.painter().rect_filled(r, 3.0, c32);
-                        let p = |x: f32, y: f32| pos2(r.min.x + r.width() * x, r.min.y + r.height() * y);
-                        ui.painter().line_segment([p(0.22, 0.52), p(0.42, 0.72)], egui::Stroke::new(1.8, egui::Color32::WHITE));
-                        ui.painter().line_segment([p(0.42, 0.72), p(0.78, 0.3)], egui::Stroke::new(1.8, egui::Color32::WHITE));
-                    } else {
-                        ui.painter().rect_stroke(r.shrink(0.5), 3.0, egui::Stroke::new(1.5, c32), egui::StrokeKind::Inside);
-                    }
-                    let tip = if shown { tl!("Shown: click to hide it") } else { tl!("Hidden: click to show it") };
-                    if resp.on_hover_text(tip).clicked() {
-                        acts.push(Action::Run("calendar.show", json!({"account": a.config.id, "calendar": c.id, "shown": !shown})));
-                    }
-                    let name = if c.id == mailcraft_engine::model::pim::LOCAL { tl!("Calendar").to_string() } else { c.name.clone() };
-                    let tip = if shared.is_some() {
-                        tf!("Shared with you, opened from {account}", account = a.config.email)
-                    } else {
-                        a.config.email.clone()
-                    };
-                    ui.label(RichText::new(name).color(t.text)).on_hover_text(tip);
-                    if c.read_only {
-                        ui.label(RichText::new(tl!("read-only")).color(t.faint).small());
+                if c.id.starts_with("shared:") { &mut shared } else { &mut mine }.push((a, c));
+            }
+        }
+        for (title, list) in [("My calendars", &mine), ("Shared calendars", &shared)] {
+            if list.is_empty() {
+                continue;
+            }
+            egui::CollapsingHeader::new(RichText::new(tl!(title)).font(theme::bold(13.0)).color(t.text))
+                .id_salt(("calendar-group", title))
+                .default_open(true)
+                .show(ui, |ui| {
+                    for (a, c) in list {
+                        calendar_row(s, &t, ui, a, c, acts);
                     }
                 });
-                // Someone else's calendar: right-click closes it.
-                if let Some(email) = shared {
-                    row.response.interact(Sense::click()).context_menu(|ui| {
-                        if ui.button(tl!("Remove this calendar")).clicked() {
-                            acts.push(Action::Run("calendar.closeShared", json!({"email": email})));
-                            ui.close();
-                        }
-                    });
-                }
-            }
         }
         // Each in a column of its own, or all together (Outlook's side-by-side view).
         if several {
@@ -132,6 +106,50 @@ pub fn nav(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
             }
         }
     });
+}
+
+/// A calendar in the side pane: ticked (in its colour) when shown, a click on the box hides or
+/// shows it; someone else's closes from its right-click menu.
+fn calendar_row(
+    s: &Session,
+    t: &Tokens,
+    ui: &mut Ui,
+    a: &mailcraft_engine::AccountState,
+    c: &mailcraft_engine::model::pim::CalendarInfo,
+    acts: &mut Vec<Action>,
+) {
+    let shared = c.id.strip_prefix("shared:").map(str::to_string);
+    let shown = s.calendar_shown(&a.config.id, &c.id);
+    let row = ui.horizontal(|ui| {
+        let (r, resp) = ui.allocate_exact_size(vec2(14.0, 14.0), Sense::click());
+        let c32 = color(c.color, t);
+        if shown {
+            ui.painter().rect_filled(r, 3.0, c32);
+            let p = |x: f32, y: f32| pos2(r.min.x + r.width() * x, r.min.y + r.height() * y);
+            ui.painter().line_segment([p(0.22, 0.52), p(0.42, 0.72)], egui::Stroke::new(1.8, egui::Color32::WHITE));
+            ui.painter().line_segment([p(0.42, 0.72), p(0.78, 0.3)], egui::Stroke::new(1.8, egui::Color32::WHITE));
+        } else {
+            ui.painter().rect_stroke(r.shrink(0.5), 3.0, egui::Stroke::new(1.5, c32), egui::StrokeKind::Inside);
+        }
+        let tip = if shown { tl!("Shown: click to hide it") } else { tl!("Hidden: click to show it") };
+        if resp.on_hover_text(tip).clicked() {
+            acts.push(Action::Run("calendar.show", json!({"account": a.config.id, "calendar": c.id, "shown": !shown})));
+        }
+        let name = if c.id == mailcraft_engine::model::pim::LOCAL { tl!("Calendar").to_string() } else { c.name.clone() };
+        let tip = if shared.is_some() { tf!("Shared with you, opened from {account}", account = a.config.email) } else { a.config.email.clone() };
+        ui.add(egui::Label::new(RichText::new(name).color(t.text)).truncate()).on_hover_text(tip);
+        if c.read_only {
+            ui.label(RichText::new(tl!("read-only")).color(t.faint).small());
+        }
+    });
+    if let Some(email) = shared {
+        row.response.interact(Sense::click()).context_menu(|ui| {
+            if ui.button(tl!("Remove this calendar")).clicked() {
+                acts.push(Action::Run("calendar.closeShared", json!({"email": email})));
+                ui.close();
+            }
+        });
+    }
 }
 
 /// The months of the side pane, one under another (Outlook's date navigator, pulled down for
@@ -350,12 +368,22 @@ pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) 
             }
             ui.add_space(6.0);
             ui.label(RichText::new(title(s)).font(theme::bold(18.0)).color(t.text));
+            // The view, as a drop-down at the right, as Outlook's.
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                for (mode, label, code) in [(CalMode::Month, "Month", "month"), (CalMode::Week, "Week", "week"), (CalMode::Day, "Day", "day")] {
-                    if ui.selectable_label(s.cal_mode == mode, tl!(label)).clicked() {
-                        acts.push(Action::Run("calendar.view", json!({"mode": code})));
+                let views = [
+                    (CalMode::Day, "Day", "day"),
+                    (CalMode::WorkWeek, "Work week", "workWeek"),
+                    (CalMode::Week, "Week", "week"),
+                    (CalMode::Month, "Month", "month"),
+                ];
+                let current = views.iter().find(|(m, _, _)| *m == s.cal_mode).map_or("Week", |(_, l, _)| *l);
+                egui::ComboBox::from_id_salt("calendar-view").selected_text(tl!(current)).show_ui(ui, |ui| {
+                    for (mode, label, code) in views {
+                        if ui.selectable_label(s.cal_mode == mode, tl!(label)).clicked() {
+                            acts.push(Action::Run("calendar.view", json!({"mode": code})));
+                        }
                     }
-                }
+                });
             });
         });
     });
@@ -363,7 +391,7 @@ pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) 
     let items = s.agenda(s.local_midnight(d0), s.local_midnight(d1));
     match s.cal_mode {
         CalMode::Month => month(s, &t, ui, &items, d0, acts),
-        CalMode::Day | CalMode::Week => days(s, st, ui, &items, d0, d1, acts),
+        CalMode::Day | CalMode::WorkWeek | CalMode::Week => days(s, st, ui, &items, d0, d1, acts),
     }
 }
 
@@ -530,26 +558,27 @@ fn days(s: &Session, st: &mut UiState, ui: &mut Ui, items: &[AgendaItem], d0: i6
             }
         }
     }
-    // Day headings, in every pane.
-    let (head, _) = ui.allocate_exact_size(vec2(full.width(), 40.0), Sense::hover());
+    // Day headings, in every pane, as Outlook's: the weekday, the date under it, at the column's
+    // left; today's in the app colour with a bar over it.
+    let (head, _) = ui.allocate_exact_size(vec2(full.width(), 44.0), Sense::hover());
+    const WEEKDAYS: [&str; 7] = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
     for j in 0..k {
         for i in 0..n {
             let d = d0 + i;
             let x = head.min.x + day_x(i, j);
             let (_, _, dd) = civil_from_days(d);
-            let wd = DAYS.get(((d + 3).rem_euclid(7)) as usize).copied().unwrap_or("");
-            ui.painter().text(
-                pos2(x + cw / 2.0, head.min.y + 10.0),
-                Align2::CENTER_CENTER,
-                tl!(wd),
-                theme::regular(12.0),
-                if d == now { t.accent } else { t.dim },
-            );
-            let c = pos2(x + cw / 2.0, head.min.y + 28.0);
-            if d == now {
-                ui.painter().circle_filled(c, 12.0, t.accent);
+            let wd = WEEKDAYS.get(((d + 3).rem_euclid(7)) as usize).copied().unwrap_or("");
+            let today_col = d == now;
+            if today_col {
+                ui.painter().rect_filled(Rect::from_min_size(pos2(x + 1.0, head.min.y), vec2(cw - 2.0, 3.0)), 0.0, t.accent);
             }
-            ui.painter().text(c, Align2::CENTER_CENTER, dd.to_string(), theme::bold(15.0), if d == now { t.on_accent } else { t.text });
+            if i > 0 {
+                ui.painter().line_segment([pos2(x, head.min.y + 6.0), pos2(x, head.max.y)], egui::Stroke::new(1.0, t.border));
+            }
+            let clip = ui.painter().with_clip_rect(Rect::from_x_y_ranges(x..=x + cw - 2.0, head.y_range()));
+            clip.text(pos2(x + 8.0, head.min.y + 13.0), Align2::LEFT_CENTER, tl!(wd), theme::regular(12.5), if today_col { t.accent } else { t.dim });
+            let font = if today_col { theme::bold(17.0) } else { theme::regular(17.0) };
+            clip.text(pos2(x + 8.0, head.min.y + 32.0), Align2::LEFT_CENTER, dd.to_string(), font, if today_col { t.accent } else { t.text });
         }
     }
     // All-day events, across their days (in their calendar's pane).
