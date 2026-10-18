@@ -63,6 +63,7 @@ pub enum Icon {
     CalendarWorkWeek,
     CalendarMonth,
     CalendarToday,
+    CalendarAdd,
     People,
     Phone,
     Location,
@@ -186,6 +187,7 @@ fn svg(icon: Icon) -> &'static str {
         Icon::CalendarWorkWeek => f!("calendar_work_week"),
         Icon::CalendarMonth => f!("calendar_month"),
         Icon::CalendarToday => f!("calendar_today"),
+        Icon::CalendarAdd => f!("calendar_add"),
         Icon::People => f!("people"),
         Icon::Phone => f!("call"),
         Icon::Location => f!("location"),
@@ -514,7 +516,7 @@ fn drawn(p: &Painter, rect: Rect, icon: Icon, color: Color32) {
             pen.line(&ellipse(8.0, 0.0, PI));
             pen.line(&ellipse(12.5, 0.0, PI));
         }
-        Icon::CalendarDay | Icon::CalendarWeek | Icon::CalendarWorkWeek | Icon::CalendarMonth | Icon::CalendarToday => {
+        Icon::CalendarDay | Icon::CalendarWeek | Icon::CalendarWorkWeek | Icon::CalendarMonth | Icon::CalendarToday | Icon::CalendarAdd => {
             drawn(p, rect, Icon::Calendar, color)
         }
         Icon::Calendar => {
@@ -642,6 +644,7 @@ mod tests {
             CalendarWorkWeek,
             CalendarMonth,
             CalendarToday,
+            CalendarAdd,
             People,
             Phone,
             Location,

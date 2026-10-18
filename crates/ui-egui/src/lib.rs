@@ -1730,10 +1730,20 @@ impl MailApp {
                             acts.push(Action::Run("calendar.view", json!({"mode": code})));
                         }
                     }
-                    // Each calendar in a column of its own (Outlook's side by side), or together.
-                    if s.pim.values().map(|p| p.calendars.len()).sum::<usize>() > 1 {
+                    // Each calendar in a column of its own (Outlook's side by side), or together;
+                    // and Outlook's Open Calendar: someone's calendar shared with an Exchange account.
+                    let several = s.pim.values().map(|p| p.calendars.len()).sum::<usize>() > 1;
+                    let exchange = s.accounts.iter().any(|a| a.config.graph.is_some() || a.config.ews.is_some());
+                    if several || exchange {
                         groups.end(ui, &t, "Arrange");
-                        if widgets::big_toggle(ui, Icon::Calendar, "Side by side", &t, s.prefs.calendars_side_by_side).clicked() {
+                        if exchange
+                            && widgets::big_button(ui, Icon::CalendarAdd, "Open calendar", &t, true)
+                                .on_hover_text(tl!("Open someone's calendar shared with you in Exchange"))
+                                .clicked()
+                        {
+                            acts.push(Action::Dialog(Dialog::OpenSharedCalendar { email: String::new(), error: None }));
+                        }
+                        if several && widgets::big_toggle(ui, Icon::Calendar, "Side by side", &t, s.prefs.calendars_side_by_side).clicked() {
                             acts.push(Action::Run("calendar.sideBySide", json!({})));
                         }
                         groups.last(ui, &t, "Manage calendars");
