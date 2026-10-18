@@ -1286,7 +1286,7 @@ mod tests {
     /// Automatic replies answer at once while the mailbox takes minutes to sync: they don't wait
     /// behind it (File › Info said "Checking with the server…" all the while).
     #[test]
-    fn automatic_replies_answer_while_the_mailbox_syncs() {
+    fn automatic_replies_and_sending_go_while_the_mailbox_syncs() {
         let mut d = Data::default();
         let inbox = d.folder("Inbox", None, Some("inbox"), "IPF.Note");
         d.deliver(&inbox, &mail("Storyboard", "m1"), true, "2024-05-06T09:00:00Z");
@@ -1308,6 +1308,20 @@ mod tests {
         pool.submit(Job::GetVacation { account: "a1".into() });
         until(&pool, "replies read", |e| matches!(e, Event::Vacation { vacation: Some(v), error: None, .. } if !v.enabled));
         assert!(asked.elapsed() < Duration::from_secs(10), "waited {:?}", asked.elapsed());
+        // A reply goes at once too.
+        let reply = b"From: Riley <riley@contoso.example>\r\nTo: Zoe Park <zoe@contoso.example>\r\nSubject: Re: Storyboard\r\nIn-Reply-To: <m1@x>\r\n\r\nThanks.\r\n";
+        let asked = Instant::now();
+        pool.submit(Job::Send {
+            account: "a1".into(),
+            id: 7,
+            raw: reply.to_vec(),
+            from: "riley@contoso.example".into(),
+            recipients: vec!["zoe@contoso.example".into()],
+            sent_folder: None,
+        });
+        until(&pool, "sent", |e| matches!(e, Event::Sent { id: 7, .. }));
+        assert!(asked.elapsed() < Duration::from_secs(10), "waited {:?}", asked.elapsed());
+        assert!(server.data.lock().unwrap().sent.iter().any(|m| String::from_utf8_lossy(m).contains("Re: Storyboard")));
         let _ = std::fs::remove_dir_all(&dir);
     }
 
