@@ -403,6 +403,32 @@ fn open(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>) {
     if r.clicked() {
         acts.push(Action::OpenDataFile);
     }
+    // Outlook's Other User's Folder: another mailbox opened in an Exchange account (a shared
+    // one, or someone's who made this account a delegate), its calendar beside it.
+    let exchange: Vec<&AccountState> = s.accounts.iter().filter(|a| a.config.graph.is_some() || a.config.ews.is_some()).collect();
+    if let Some(first) = exchange.first() {
+        let into = s
+            .current_account()
+            .filter(|a| a.config.graph.is_some() || a.config.ews.is_some())
+            .map_or_else(|| first.config.id.clone(), |a| a.config.id.clone());
+        let r = tile(
+            ui,
+            t,
+            Icon::People,
+            "Other user's folder",
+            "Open another mailbox",
+            "A shared mailbox, or someone's who made you a delegate: its folders open under this account, as far as Exchange lets you in.",
+            |ui| {
+                let open: Vec<&str> = exchange.iter().flat_map(|a| a.config.shared_mailboxes.iter().map(String::as_str)).collect();
+                if !open.is_empty() {
+                    ui.label(RichText::new(tf!("Open now: {files}", files = open.join(", "))).color(t.faint).small());
+                }
+            },
+        );
+        if r.clicked() {
+            acts.push(Action::Dialog(Dialog::OpenSharedMailbox { account: into, email: String::new(), calendar: true, error: None }));
+        }
+    }
     let current = s.current_account().map(|a| a.config.id.clone());
     let r = tile(
         ui,
