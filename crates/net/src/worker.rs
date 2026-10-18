@@ -57,6 +57,7 @@ struct Sink {
 
 impl Sink {
     fn emit(&self, e: Event) {
+        log_event(&e);
         let _ = self.tx.send(e);
         if let Ok(w) = self.wake.lock()
             && let Some(f) = w.as_ref()
@@ -1050,6 +1051,7 @@ impl Worker {
     }
 
     fn sync_all(&mut self, rx: &Receiver<Job>) {
+        let began = Instant::now();
         if !self.relist() {
             return;
         }
@@ -1074,6 +1076,7 @@ impl Worker {
         if self.conn.is_some() {
             self.prune_jmap_numbers();
             self.last_full = Some(Instant::now());
+            log::info!("{}: full sync done in {:.0} s", self.acc.id, began.elapsed().as_secs_f32());
             // Anything left from a failed attempt gets another try every full sync.
             self.flush_outbox();
             self.status(SyncStatus::Online { at: now() });
@@ -1762,11 +1765,36 @@ fn ews_vacation(c: &crate::ews::Client, set: Option<&mailcraft_model::job::Vacat
     }
 }
 
+/// What the account's connection did, for the log: statuses, sending, failures and what a
+/// calendar sync brought (never a message's content).
+fn log_event(e: &Event) {
+    match e {
+        Event::Status { account, status } => log::info!("{account}: {status:?}"),
+        Event::Folders { account, folders } => log::info!("{account}: {} folders", folders.len()),
+        Event::Sent { account, id } => log::info!("{account}: message {id} sent"),
+        Event::SendFailed { account, id, error } => log::warn!("{account}: message {id} not sent: {error}"),
+        Event::Queued { account, id, error } => log::warn!("{account}: message {id} waits in the Outbox: {error}"),
+        Event::OpFailed { account, error, .. } => log::warn!("{account}: a change failed: {error}"),
+        Event::BodyFailed { key, error } => log::warn!("{}: a message didn't download: {error}", key.account),
+        Event::Vacation { account, error: Some(error), .. } => log::warn!("{account}: automatic replies: {error}"),
+        Event::Voted { key, error: Some(error), .. } => log::warn!("{}: vote not sent: {error}", key.account),
+        Event::Notice { account, message } => log::info!("{account}: {message}"),
+        Event::DavSynced { account, sync } => {
+            let names: Vec<&str> = sync.calendars.iter().flatten().map(|c| c.name.as_str()).collect();
+            log::info!("{account}: calendars {names:?}, {} events", sync.events.len());
+            for err in &sync.errors {
+                log::warn!("{account}: {err}");
+            }
+        }
+        _ => {}
+    }
+}
+
 /// Jobs someone is looking at a spinner for, done between two folders of a full sync rather
-/// than after it (the first sync of a large Exchange mailbox can take many minutes): one quick
-/// request each.
+/// than after it (the first sync of a large Exchange mailbox can take many minutes): an opened
+/// message, automatic replies, a calendar just opened.
 fn jumps_queue(j: &Job) -> bool {
-    matches!(j, Job::FetchBody { .. } | Job::GetVacation { .. } | Job::SetVacation { .. })
+    matches!(j, Job::FetchBody { .. } | Job::GetVacation { .. } | Job::SetVacation { .. } | Job::SyncDav { .. })
 }
 
 #[cfg(test)]
@@ -1779,7 +1807,8 @@ mod tests {
     fn automatic_replies_jump_the_full_syncs_queue() {
         assert!(jumps_queue(&Job::GetVacation { account: "a".into() }));
         assert!(jumps_queue(&Job::SetVacation { account: "a".into(), vacation: Default::default() }));
-        assert!(!jumps_queue(&Job::SyncDav { account: "a".into() }));
+        assert!(jumps_queue(&Job::SyncDav { account: "a".into() }));
+        assert!(!jumps_queue(&Job::SyncAll { account: "a".into() }));
     }
 
     #[test]
