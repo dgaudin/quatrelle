@@ -1,5 +1,8 @@
 <h1 align="center">MailCraft</h1>
 
+> **Ce fork (dgaudin/mailcraft)** s'écarte de l'original sur les icônes (Fluent UI de Microsoft,
+> MIT), le style de la fenêtre et l'apparence d'Outlook : voir [FORK.md](FORK.md).
+
 <p align="center">
   <b>Local-first email for creators; an open-source, clean-room alternative to Microsoft Outlook, rebuilt in pure Rust.</b>
 </p>
