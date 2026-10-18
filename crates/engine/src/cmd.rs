@@ -303,6 +303,13 @@ pub fn registry() -> Registry {
             Ok(json!({"on": s.prefs.compact}))
         })
         .params(r#"{"on"?: bool}"#),
+        CommandSpec::new("view.listLayout", "Message list layout", "View › Layout", |s, v| {
+            let value = p::req_str(v, "value")?;
+            s.prefs.list_layout =
+                crate::session::ListLayout::from_code(value).ok_or_else(|| CmdError::Params(format!("`{value}` isn't auto, cards or table")))?;
+            Ok(json!({"value": s.prefs.list_layout.code(), "table": s.list_as_table()}))
+        })
+        .params(r#"{"value": "auto" (a table when the reading pane is at the bottom or off)|"cards"|"table"}"#),
         CommandSpec::new("view.arrange", "Arrange by", "View › Arrangement", |s, v| {
             let by = p::req_str(v, "by")?;
             s.prefs.arrange =

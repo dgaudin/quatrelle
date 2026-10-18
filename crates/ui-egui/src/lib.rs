@@ -2001,6 +2001,24 @@ impl MailApp {
                                 }
                             }
                         });
+                        // The list as cards or a table (Automatic: a table when the reading pane
+                        // is at the bottom or off, as Outlook switches).
+                        let r = widgets::big_button(ui, Icon::ListBullet, "Message list", &t, true);
+                        egui::Popup::menu(&r).show(|ui| {
+                            use mailcraft_engine::ListLayout as L;
+                            for (v, label, tip) in [
+                                (L::Auto, "Automatic", "A table when the reading pane is at the bottom or off"),
+                                (L::Cards, "Cards", ""),
+                                (L::Table, "Table", ""),
+                            ] {
+                                let r = ui.radio(s.prefs.list_layout == v, tl!(label));
+                                let r = if tip.is_empty() { r } else { r.on_hover_text(tl!(tip)) };
+                                if r.clicked() {
+                                    acts.push(Action::Run("view.listLayout", json!({"value": v.code()})));
+                                    ui.close();
+                                }
+                            }
+                        });
                         if widgets::big_toggle(ui, Icon::Folder, "Folder pane", &t, !s.prefs.folder_pane_minimized).clicked() {
                             acts.push(Action::Run("view.folderPane", json!({})));
                         }

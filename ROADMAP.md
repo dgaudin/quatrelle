@@ -138,4 +138,8 @@ local-first, media-aware v1); the fuller request is
   message's voting buttons (`PidLidVerbStream`, read as [MS-OXOMSG] describes it) show above
   it; a click sends that answer as Exchange's own reply carrying the choice
   (`PidLidVerbResponse`), so the sender's Outlook counts it, and the answer is remembered.
+- **2026-10-18** — The window as Outlook's, from screenshots of it: a plain top bar, Microsoft's
+  Fluent UI icons (MIT, the owner's choice), a ribbon of large buttons in named groups, the
+  modules down the window's edge, and the message list as a table with sortable columns
+  (automatically when the reading pane is at the bottom or off, or chosen in View).
 

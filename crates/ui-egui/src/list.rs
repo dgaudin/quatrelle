@@ -115,6 +115,14 @@ pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) 
     });
     let sep = ui.available_rect_before_wrap();
     ui.painter().line_segment([sep.left_top(), sep.right_top()], egui::Stroke::new(1.0, t.border));
+    let sent_view = matches!(s.view_role(), Some(FolderRole::Sent | FolderRole::Drafts)) || s.view == mailcraft_engine::View::Outbox;
+    // A table where the list is wide (see `Session::list_as_table`): its headings stay put above
+    // the rows, sized as the rows are (the scroll bar's width aside).
+    let table = s.list_as_table();
+    let cols = columns(ui.available_width() - ui.spacing().scroll.bar_width - 2.0);
+    if table {
+        table_header(s, &t, ui, &cols, sent_view, acts);
+    }
 
     let rows = s.rows();
     if rows.is_empty() {
@@ -135,12 +143,13 @@ pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) 
         return;
     }
 
-    let mh = row_height(s);
+    let mh = if table { table_row_height(s) } else { row_height(s) };
+    let hh = if table { TABLE_HEADING_H } else { HEADER_H };
     let mut tops = Vec::with_capacity(rows.len());
     let mut y = 0.0;
     for r in &rows {
         tops.push(y);
-        y += if matches!(r, Row::Header(_) | Row::Group(_)) { HEADER_H } else { mh };
+        y += if matches!(r, Row::Header(_) | Row::Group(_)) { hh } else { mh };
     }
     let total = y;
     let focus_index = s.focus.as_ref().and_then(|k| s.list.iter().position(|m| &m.key == k));
@@ -150,7 +159,6 @@ pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) 
     } else {
         None
     };
-    let sent_view = matches!(s.view_role(), Some(FolderRole::Sent | FolderRole::Drafts)) || s.view == mailcraft_engine::View::Outbox;
 
     egui::ScrollArea::vertical().auto_shrink(false).id_salt("list").show_viewport(ui, |ui, viewport| {
         ui.set_height(total);
@@ -170,22 +178,271 @@ pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) 
             }
             match row {
                 Row::Header(label) => {
-                    let r = Rect::from_min_size(origin + vec2(0.0, top), vec2(width, HEADER_H));
-                    ui.painter().text(r.left_bottom() + vec2(14.0, -8.0), egui::Align2::LEFT_BOTTOM, tl!(label), theme::bold(12.5), t.dim);
+                    let r = Rect::from_min_size(origin + vec2(0.0, top), vec2(width, hh));
+                    heading(ui, &t, r, tl!(label), table);
                 }
                 Row::Group(name) => {
-                    let r = Rect::from_min_size(origin + vec2(0.0, top), vec2(width, HEADER_H));
+                    let r = Rect::from_min_size(origin + vec2(0.0, top), vec2(width, hh));
                     let (name, _) = crate::bidi::shown(name);
-                    ui.painter().text(r.left_bottom() + vec2(14.0, -8.0), egui::Align2::LEFT_BOTTOM, name.as_ref(), theme::bold(12.5), t.dim);
+                    heading(ui, &t, r, name.as_ref(), table);
                 }
                 Row::Message { index, count, unread } => {
                     let Some(m) = s.list.get(*index) else { continue };
                     let r = Rect::from_min_size(origin + vec2(0.0, top), vec2(width, mh));
-                    message_row(s, &t, ui, r, m, *count, *unread, sent_view, acts);
+                    if table {
+                        table_row(s, &t, ui, r, &cols, m, *count, *unread, sent_view, acts);
+                    } else {
+                        message_row(s, &t, ui, r, m, *count, *unread, sent_view, acts);
+                    }
                 }
             }
         }
     });
+}
+
+/// A date (or other) heading between the rows.
+fn heading(ui: &Ui, t: &theme::Tokens, r: Rect, text: &str, table: bool) {
+    if table {
+        ui.painter().text(r.left_center() + vec2(10.0, 0.0), egui::Align2::LEFT_CENTER, text, theme::bold(12.0), t.dim);
+        ui.painter().line_segment([r.left_bottom(), r.right_bottom()], egui::Stroke::new(1.0, t.border.gamma_multiply(0.6)));
+    } else {
+        ui.painter().text(r.left_bottom() + vec2(14.0, -8.0), egui::Align2::LEFT_BOTTOM, text, theme::bold(12.5), t.dim);
+    }
+}
+
+/// The table's headings, and its date headings.
+const TABLE_HEADER_H: f32 = 24.0;
+const TABLE_HEADING_H: f32 = 24.0;
+
+/// A table row: one line, or two with the preview under the sender and subject.
+fn table_row_height(s: &Session) -> f32 {
+    if s.prefs.show_preview && !s.prefs.compact { 38.0 } else { 24.0 }
+}
+
+/// The table's columns, as Outlook's: importance, attachment, sender (recipients in Sent),
+/// subject, received, size, categories, flag.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Col {
+    Importance,
+    Attach,
+    Who,
+    Subject,
+    Received,
+    Size,
+    Categories,
+    Flag,
+}
+
+/// Each column's span from the row's left edge: the narrow and dated ones fixed, the sender and
+/// subject sharing the rest; size and categories go first when the list is narrow.
+fn columns(width: f32) -> Vec<(Col, f32, f32)> {
+    let mut fixed_right = vec![(Col::Received, 156.0)];
+    if width >= 620.0 {
+        fixed_right.push((Col::Size, 64.0));
+    }
+    if width >= 760.0 {
+        fixed_right.push((Col::Categories, 110.0));
+    }
+    fixed_right.push((Col::Flag, 26.0));
+    let left = 8.0 + 18.0 + 20.0;
+    let right: f32 = fixed_right.iter().map(|(_, w)| w).sum();
+    let rest = (width - left - right - 6.0).max(120.0);
+    let who = (rest * 0.34).clamp(90.0, 260.0);
+    let mut out =
+        vec![(Col::Importance, 8.0, 26.0), (Col::Attach, 26.0, 46.0), (Col::Who, left, left + who), (Col::Subject, left + who, left + rest)];
+    let mut x = left + rest;
+    for (c, w) in fixed_right {
+        out.push((c, x, x + w));
+        x += w;
+    }
+    out
+}
+
+/// What a column's heading arranges the list by, when it does.
+fn column_arrange(c: Col, sent_view: bool) -> Option<mailcraft_engine::Arrange> {
+    use mailcraft_engine::Arrange as A;
+    match c {
+        Col::Attach => Some(A::Attachments),
+        Col::Who => Some(if sent_view { A::To } else { A::From }),
+        Col::Subject => Some(A::Subject),
+        Col::Received => Some(A::Date),
+        Col::Size => Some(A::Size),
+        Col::Flag => Some(A::Flag),
+        Col::Importance | Col::Categories => None,
+    }
+}
+
+/// The table's headings: a click arranges the list by that column, again turns it round.
+fn table_header(s: &Session, t: &theme::Tokens, ui: &mut Ui, cols: &[(Col, f32, f32)], sent_view: bool, acts: &mut Vec<Action>) {
+    let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), TABLE_HEADER_H), Sense::hover());
+    let p = ui.painter_at(r);
+    p.line_segment([r.left_bottom(), r.right_bottom()], egui::Stroke::new(1.0, t.border));
+    for &(c, x0, x1) in cols {
+        let cell = Rect::from_x_y_ranges(r.min.x + x0..=r.min.x + x1, r.y_range());
+        let arrange = column_arrange(c, sent_view);
+        let resp = ui.interact(cell, ui.id().with(("col", c as u8)), if arrange.is_some() { Sense::click() } else { Sense::hover() });
+        if arrange.is_some() && resp.hovered() {
+            p.rect_filled(cell, 0.0, t.hover);
+        }
+        if x0 > 30.0 {
+            p.line_segment([cell.left_top() + vec2(0.0, 5.0), cell.left_bottom() - vec2(0.0, 5.0)], egui::Stroke::new(1.0, t.border));
+        }
+        let active = arrange.is_some_and(|a| a == s.prefs.arrange);
+        let label = match c {
+            Col::Importance => "!".to_string(),
+            Col::Attach | Col::Flag => String::new(),
+            Col::Who => tl!(if sent_view { "To" } else { "From" }).to_string(),
+            Col::Subject => tl!("Subject").to_string(),
+            Col::Received => tl!("Received").to_string(),
+            Col::Size => tl!("Size").to_string(),
+            Col::Categories => tl!("Categories").to_string(),
+        };
+        let color = if active { t.text } else { t.dim };
+        match c {
+            Col::Attach => icons::paint(&p, icons::centered(cell, 13.0), Icon::Attach, color),
+            Col::Flag => icons::paint(&p, icons::centered(cell, 13.0), Icon::Flag, color),
+            Col::Importance => {
+                p.text(cell.center(), egui::Align2::CENTER_CENTER, label, theme::bold(12.0), color);
+            }
+            _ => {
+                let font = if active { theme::bold(12.0) } else { theme::regular(12.0) };
+                let g = p.layout_no_wrap(label, font, color);
+                let w = g.size().x;
+                p.with_clip_rect(cell.shrink2(vec2(4.0, 0.0))).galley(egui::pos2(cell.min.x + 6.0, cell.center().y - g.size().y / 2.0), g, color);
+                if active {
+                    let arrow = if s.prefs.reverse_sort { "▲" } else { "▼" };
+                    p.text(
+                        egui::pos2((cell.min.x + 12.0 + w).min(cell.max.x - 8.0), cell.center().y),
+                        egui::Align2::LEFT_CENTER,
+                        arrow,
+                        theme::regular(9.0),
+                        t.dim,
+                    );
+                }
+            }
+        }
+        if let Some(a) = arrange
+            && resp.on_hover_text(tf!("Arrange by: {field}", field = tl!(a.label()))).clicked()
+        {
+            if active {
+                acts.push(Action::Run("view.reverseSort", json!({})));
+            } else {
+                acts.push(Action::Run("view.arrange", json!({"by": a.code()})));
+            }
+        }
+    }
+}
+
+/// A message as a table row: its cells in the columns, bold while unread.
+#[allow(clippy::too_many_arguments)]
+fn table_row(
+    s: &Session,
+    t: &theme::Tokens,
+    ui: &mut Ui,
+    r: Rect,
+    cols: &[(Col, f32, f32)],
+    m: &Summary,
+    count: usize,
+    unread_in_thread: usize,
+    sent_view: bool,
+    acts: &mut Vec<Action>,
+) {
+    let id = ui.make_persistent_id(("row", &m.key));
+    let resp = ui.interact(r, id, Sense::click_and_drag());
+    let hovered = ui.rect_contains_pointer(r) && !ui.ctx().is_being_dragged(id) || resp.hovered();
+    let selected = s.selection.contains(&m.key);
+    let unread = if count > 1 { unread_in_thread > 0 } else { !m.flags.seen };
+    let p = ui.painter_at(r);
+    let fill = if selected {
+        t.accent_soft
+    } else if hovered {
+        t.hover_row
+    } else {
+        Color32::TRANSPARENT
+    };
+    p.rect_filled(r, 0.0, fill);
+    if unread {
+        p.rect_filled(Rect::from_min_size(r.min + vec2(1.0, 4.0), vec2(3.0, r.height() - 8.0)), 1.5, t.accent);
+    }
+    p.line_segment([r.left_bottom(), r.right_bottom()], egui::Stroke::new(1.0, t.border.gamma_multiply(0.5)));
+    let two_lines = r.height() > 30.0;
+    let line1 = if two_lines { r.min.y + 11.0 } else { r.center().y };
+    let font = |size: f32| if unread { theme::bold(size) } else { theme::regular(size) };
+    let mut clicked_action = false;
+    for &(c, x0, x1) in cols {
+        let cell = Rect::from_x_y_ranges(r.min.x + x0..=r.min.x + x1, r.y_range());
+        let text_cell = |p: &egui::Painter, text: String, color: Color32, size: f32| {
+            let (text, rtl) = crate::bidi::shown(&text);
+            let g = p.layout_no_wrap(text.into_owned(), font(size), color);
+            let inner = cell.shrink2(vec2(6.0, 0.0));
+            let x = if rtl { (inner.max.x - g.size().x).max(inner.min.x) } else { inner.min.x };
+            p.with_clip_rect(inner).galley(egui::pos2(x, line1 - g.size().y / 2.0), g, color);
+        };
+        match c {
+            Col::Importance if m.importance != 0 => {
+                let (mark, color) = if m.importance > 0 { ("!", t.danger) } else { ("↓", t.accent) };
+                p.text(egui::pos2(cell.center().x, line1), egui::Align2::CENTER_CENTER, mark, theme::bold(13.0), color);
+            }
+            Col::Attach if m.has_attachments => {
+                icons::paint(&p, Rect::from_center_size(egui::pos2(cell.center().x, line1), vec2(13.0, 13.0)), Icon::Attach, t.dim);
+            }
+            Col::Who => {
+                let who = if sent_view { addr::display_list(&m.to) } else { m.from.display().to_string() };
+                let who = if count > 1 { format!("{who}  ({count})") } else { who };
+                text_cell(&p, who, t.text, 13.0);
+            }
+            Col::Subject => {
+                let subject = if m.subject.is_empty() { tl!("(no subject)").to_string() } else { m.subject.clone() };
+                text_cell(&p, subject, if unread { t.accent } else { t.text }, 13.0);
+            }
+            Col::Received => {
+                let when = crate::i18n::date(&dates::full_time(m.date, &s.clock));
+                text_cell(&p, when, if unread { t.accent } else { t.dim }, 12.0);
+            }
+            Col::Size => text_cell(&p, widgets::human_size(m.size as usize), t.dim, 12.0),
+            Col::Categories => {
+                let cats = s.categories_of(m);
+                let mut x = cell.min.x + 6.0;
+                for c in cats.iter().take(3) {
+                    p.circle_filled(egui::pos2(x + 5.0, line1), 5.0, theme::category_color(c.color, t.dark));
+                    x += 13.0;
+                }
+                if let Some(first) = cats.first() {
+                    let g = p.layout_no_wrap(first.name.clone(), theme::regular(12.0), t.dim);
+                    p.with_clip_rect(cell.shrink2(vec2(4.0, 0.0))).galley(egui::pos2(x + 2.0, line1 - g.size().y / 2.0), g, t.dim);
+                }
+            }
+            Col::Flag => {
+                // Flag or unflag from the row, as Outlook's flag column.
+                let fr = Rect::from_center_size(egui::pos2(cell.center().x, line1), vec2(20.0, 20.0));
+                let fresp = ui.interact(fr, id.with("flag"), Sense::click()).on_hover_text(tl!(if m.flags.flagged { "Unflag" } else { "Flag" }));
+                if m.flags.flagged || fresp.hovered() || hovered {
+                    let color = if m.flags.flagged { t.flag } else { t.faint };
+                    icons::paint(&p, icons::centered(fr, 13.0), Icon::Flag, color);
+                }
+                if fresp.clicked() {
+                    clicked_action = true;
+                    if !selected {
+                        acts.push(Action::Run("list.select", json!({"key": m.key.to_id()})));
+                    }
+                    acts.push(Action::Run("mail.flag", json!({})));
+                }
+            }
+            _ => {}
+        }
+    }
+    // The preview under the sender and subject.
+    if two_lines && !m.preview.is_empty() {
+        let span = cols
+            .iter()
+            .filter(|(c, _, _)| matches!(c, Col::Who | Col::Subject))
+            .fold((f32::MAX, 0.0f32), |(a, b), (_, x0, x1)| (a.min(*x0), b.max(*x1)));
+        let inner = Rect::from_x_y_ranges(r.min.x + span.0 + 6.0..=r.min.x + span.1 - 6.0, r.y_range());
+        let (preview, _) = crate::bidi::shown(&m.preview);
+        let g = p.layout_no_wrap(preview.into_owned(), theme::regular(12.0), t.dim);
+        p.with_clip_rect(inner).galley(egui::pos2(inner.min.x, r.min.y + 20.0), g, t.dim);
+    }
+    row_input(s, t, ui, &resp, id, m, selected, clicked_action, acts);
 }
 
 /// Arrange the list by…, as a menu (the list's own and the View tab's).
@@ -343,6 +600,24 @@ fn message_row(
         }
     }
 
+    row_input(s, t, ui, &resp, id, m, selected, clicked_action, acts);
+}
+
+/// What a row does with the pointer, in cards and in the table alike: a click opens it (Ctrl
+/// adds it to the selection, Shift selects up to it), a double-click opens it in a window (a
+/// draft carries on being written), a drag takes it to a folder, a right-click gives its menu.
+#[allow(clippy::too_many_arguments)]
+fn row_input(
+    s: &Session,
+    t: &theme::Tokens,
+    ui: &mut Ui,
+    resp: &egui::Response,
+    id: egui::Id,
+    m: &Summary,
+    selected: bool,
+    clicked_action: bool,
+    acts: &mut Vec<Action>,
+) {
     if resp.clicked() && !clicked_action {
         let mods = ui.input(|i| i.modifiers);
         if mods.command || mods.ctrl {

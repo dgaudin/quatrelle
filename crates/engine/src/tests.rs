@@ -2237,3 +2237,20 @@ fn voting_buttons_show_and_a_vote_goes_as_a_job() {
     assert_eq!(s.voting(&key).unwrap().1, "Need it this weekend");
     done(s);
 }
+
+#[test]
+fn the_list_is_a_table_where_it_has_room() {
+    let mut s = sample_session("list-layout");
+    assert!(!s.list_as_table(), "cards beside the reading pane");
+    s.run("view.readingPane", &json!({"value": "bottom"})).unwrap();
+    assert!(s.list_as_table(), "a table over it");
+    s.run("view.readingPane", &json!({"value": "off"})).unwrap();
+    assert!(s.list_as_table());
+    s.run("view.listLayout", &json!({"value": "cards"})).unwrap();
+    assert!(!s.list_as_table(), "chosen: cards whatever the pane");
+    s.run("view.readingPane", &json!({"value": "right"})).unwrap();
+    s.run("view.listLayout", &json!({"value": "table"})).unwrap();
+    assert!(s.list_as_table(), "chosen: a table even beside the pane");
+    assert!(s.run("view.listLayout", &json!({"value": "grid"})).is_err());
+    done(s);
+}

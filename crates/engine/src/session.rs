@@ -159,6 +159,36 @@ pub enum ReadingPane {
     Off,
 }
 
+/// How the message list lays out its messages.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ListLayout {
+    /// A table when the reading pane is at the bottom or off (the list is wide then), else
+    /// cards, as Outlook switches.
+    #[default]
+    Auto,
+    /// Each message on lines of its own: the sender, the subject, a preview.
+    Cards,
+    /// One line per message, in columns that sort the list when their heading is clicked.
+    Table,
+}
+
+impl ListLayout {
+    pub const ALL: [ListLayout; 3] = [ListLayout::Auto, ListLayout::Cards, ListLayout::Table];
+
+    pub fn code(self) -> &'static str {
+        match self {
+            ListLayout::Auto => "auto",
+            ListLayout::Cards => "cards",
+            ListLayout::Table => "table",
+        }
+    }
+
+    pub fn from_code(s: &str) -> Option<ListLayout> {
+        ListLayout::ALL.into_iter().find(|l| l.code() == s)
+    }
+}
+
 /// How notes are listed (Outlook's Arrange by for notes).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -218,6 +248,8 @@ pub struct Prefs {
     pub show_preview: bool,
     /// Tighter rows.
     pub compact: bool,
+    /// Cards, a table, or whichever suits where the reading pane is.
+    pub list_layout: ListLayout,
     /// Ask before deleting permanently.
     pub confirm_permanent_delete: bool,
     /// Desktop notifications for new mail in an Inbox.
@@ -402,6 +434,7 @@ impl Default for Prefs {
             read_after_secs: 0,
             show_preview: true,
             compact: false,
+            list_layout: ListLayout::Auto,
             confirm_permanent_delete: true,
             favorites: None,
             notify: true,
@@ -1107,6 +1140,15 @@ impl Session {
             return pinned_rows;
         }
         out
+    }
+
+    /// Whether the message list is a table now (see [`ListLayout`]).
+    pub fn list_as_table(&self) -> bool {
+        match self.prefs.list_layout {
+            ListLayout::Table => true,
+            ListLayout::Cards => false,
+            ListLayout::Auto => self.prefs.reading_pane != ReadingPane::Right,
+        }
     }
 
     pub fn summary(&self, key: &MessageKey) -> Option<&Summary> {
