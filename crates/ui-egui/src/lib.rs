@@ -686,6 +686,23 @@ impl MailApp {
         egui::Panel::top("topbar").exact_size(40.0).frame(egui::Frame::new().fill(t.chrome).inner_margin(Margin::symmetric(10, 5))).show(ui, |ui| {
             self.top_bar(ui, &mut acts);
         });
+        egui::Panel::bottom("status").exact_size(26.0).frame(egui::Frame::new().fill(t.chrome).inner_margin(Margin::symmetric(10, 3))).show(
+            ui,
+            |ui| {
+                self.status_bar(ui);
+            },
+        );
+        // The modules down the window's edge, beside the ribbon, as Outlook's (the other edge
+        // for right-to-left languages).
+        if self.ui.backstage.is_none() && !self.session.accounts.is_empty() {
+            let rail = if i18n::current().rtl() { egui::Panel::right("modules") } else { egui::Panel::left("modules") };
+            rail.resizable(false)
+                .exact_size(48.0)
+                .frame(egui::Frame::new().fill(t.chrome).inner_margin(Margin::symmetric(4, 8)).stroke(egui::Stroke::new(1.0, t.border)))
+                .show(ui, |ui| {
+                    ui.vertical_centered(|ui| module_rail(ui, &t, self.session.module, &mut acts));
+                });
+        }
         if self.ui.backstage.is_none() {
             egui::Panel::top("ribbon")
                 .frame(egui::Frame::new().fill(t.chrome).inner_margin(Margin::symmetric(8, 4)).stroke(egui::Stroke::new(1.0, t.border)))
@@ -694,12 +711,6 @@ impl MailApp {
                     self.ui.ribbon_rect = Some(ui.min_rect());
                 });
         }
-        egui::Panel::bottom("status").exact_size(26.0).frame(egui::Frame::new().fill(t.chrome).inner_margin(Margin::symmetric(10, 3))).show(
-            ui,
-            |ui| {
-                self.status_bar(ui);
-            },
-        );
 
         if self.ui.backstage.is_some() {
             backstage::show(&self.session, &mut self.ui, ui, &mut acts);
@@ -718,7 +729,7 @@ impl MailApp {
             if minimized {
                 start("nav-min")
                     .resizable(false)
-                    .exact_size(52.0)
+                    .exact_size(32.0)
                     .frame(egui::Frame::new().fill(t.chrome).inner_margin(Margin::symmetric(4, 8)))
                     .show(ui, |ui| {
                         ui.vertical_centered(|ui| {
@@ -726,8 +737,6 @@ impl MailApp {
                             if widgets::tiny_icon_button(ui, chevron, "Show the folder pane", &t).clicked() {
                                 acts.push(Action::Run("view.folderPane", json!({"minimized": false})));
                             }
-                            ui.add_space(10.0);
-                            module_switch_vertical(ui, &t, module, &mut acts);
                         });
                     });
             }
@@ -738,9 +747,6 @@ impl MailApp {
                     .size_range(170.0..=380.0)
                     .frame(egui::Frame::new().fill(t.chrome).inner_margin(Margin::symmetric(6, 8)))
                     .show(ui, |ui| {
-                        egui::Panel::bottom("modules").frame(egui::Frame::new().inner_margin(Margin::symmetric(0, 4))).show(ui, |ui| {
-                            module_switch(ui, &t, module, &mut acts);
-                        });
                         // Minimize, as Outlook's ‹ at the top of its folder pane.
                         ui.with_layout(Layout::right_to_left(Align::Min), |ui| {
                             let chevron = if rtl { Icon::ChevronRight } else { Icon::ChevronLeft };
@@ -2306,43 +2312,26 @@ fn window_toolbar(ui: &mut Ui, s: &Session, t: &Tokens, key: &MessageKey, acts: 
     });
 }
 
-/// Mail, Calendar and People, at the bottom of the side pane.
-fn module_switch(ui: &mut Ui, t: &Tokens, module: Module, acts: &mut Vec<Action>) {
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 4.0;
-        for (m, icon, label, code) in [
-            (Module::Mail, Icon::Unread, "Mail", "mail"),
-            (Module::Calendar, Icon::Calendar, "Calendar", "calendar"),
-            (Module::People, Icon::People, "People", "people"),
-            (Module::Notes, Icon::Note, "Notes", "notes"),
-        ] {
-            let (r, resp) = ui.allocate_exact_size(vec2(40.0, 34.0), Sense::click());
-            let on = m == module;
-            if on || resp.hovered() {
-                ui.painter().rect_filled(r, 6.0, if on { t.accent_soft } else { t.hover });
-            }
-            icons::paint(ui.painter(), icons::centered(r, 19.0), icon, if on { t.accent } else { t.dim });
-            if resp.on_hover_text(tl!(label)).clicked() {
-                acts.push(Action::Run("view.module", json!({"name": code})));
-            }
-        }
-    });
-}
-
-/// Mail, Calendar and People one above another (the minimized folder pane).
-fn module_switch_vertical(ui: &mut Ui, t: &Tokens, module: Module, acts: &mut Vec<Action>) {
+/// Mail, Calendar, People and Notes down the window's edge, as Outlook's: the module shown
+/// lit, with a bar at its edge.
+fn module_rail(ui: &mut Ui, t: &Tokens, module: Module, acts: &mut Vec<Action>) {
+    ui.spacing_mut().item_spacing.y = 4.0;
     for (m, icon, label, code) in [
         (Module::Mail, Icon::Unread, "Mail", "mail"),
         (Module::Calendar, Icon::Calendar, "Calendar", "calendar"),
         (Module::People, Icon::People, "People", "people"),
         (Module::Notes, Icon::Note, "Notes", "notes"),
     ] {
-        let (r, resp) = ui.allocate_exact_size(vec2(40.0, 34.0), Sense::click());
+        let (r, resp) = ui.allocate_exact_size(vec2(38.0, 38.0), Sense::click());
         let on = m == module;
         if on || resp.hovered() {
-            ui.painter().rect_filled(r, 6.0, if on { t.accent_soft } else { t.hover });
+            ui.painter().rect_filled(r, 4.0, if on { t.accent_soft } else { t.hover });
         }
-        icons::paint(ui.painter(), icons::centered(r, 19.0), icon, if on { t.accent } else { t.dim });
+        if on {
+            let edge = if i18n::current().rtl() { r.right() - 3.0 } else { r.left() };
+            ui.painter().rect_filled(egui::Rect::from_min_size(egui::pos2(edge, r.top() + 8.0), vec2(3.0, r.height() - 16.0)), 1.5, t.accent);
+        }
+        icons::paint(ui.painter(), icons::centered(r, 22.0), icon, if on { t.accent } else { t.dim });
         if resp.on_hover_text(tl!(label)).clicked() {
             acts.push(Action::Run("view.module", json!({"name": code})));
         }
