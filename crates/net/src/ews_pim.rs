@@ -7,6 +7,8 @@
 //! appointments updated field by field, changed contacts made again, deletions done (no meeting
 //! mail is ever sent); then both folders are read again.
 
+use std::collections::HashMap;
+
 use mailcraft_model::ical::{Attendee, CalEvent};
 use mailcraft_model::pim::{BookInfo, CalendarInfo, DavSync, Note, Pim, StoredCard, StoredEvent, StoredNote};
 use mailcraft_model::vcard::{Card, Typed};
@@ -390,6 +392,118 @@ fn delete(c: &Client, id: &str) -> Result<()> {
     .map(drop)
 }
 
+/// A calendar Outlook keeps in a group of its Calendar pane (a colleague's in a team's group, a
+/// room's…): whose it is, the name shown, and the group's name.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct CalendarLink {
+    pub email: String,
+    pub name: String,
+    pub group: String,
+}
+
+/// Navigation shortcuts read at most.
+const MAX_LINKS: usize = 300;
+
+/// The calendars Outlook keeps in groups of its Calendar pane. Outlook stores its groups as
+/// navigation shortcuts ([MS-OXOCFG] 2.2.9): hidden items of the mailbox's Common Views folder,
+/// each naming its group (`PidTagWlinkGroupName`), its section (3: Calendar), its kind (2: a
+/// folder another user owns) and that user's address book entry (`PidTagWlinkAddressBookEID`),
+/// whose X.500 name Exchange resolves to an address.
+pub(crate) fn calendar_links(c: &Client) -> Result<Vec<CalendarLink>> {
+    let m = c.call_one(
+        "<m:FindFolder Traversal=\"Shallow\"><m:FolderShape><t:BaseShape>IdOnly</t:BaseShape><t:AdditionalProperties>\
+         <t:FieldURI FieldURI=\"folder:DisplayName\"/></t:AdditionalProperties></m:FolderShape>\
+         <m:IndexedPageFolderView MaxEntriesReturned=\"200\" Offset=\"0\" BasePoint=\"Beginning\"/>\
+         <m:ParentFolderIds><t:DistinguishedFolderId Id=\"root\"/></m:ParentFolderIds></m:FindFolder>",
+    )?;
+    let mut folders = Vec::new();
+    if let Some(rf) = m.child("RootFolder") {
+        rf.all("Folder", &mut folders);
+    }
+    let Some(views) = folders.iter().find(|f| f.text_of("DisplayName") == Some("Common Views")).and_then(|f| f.child("FolderId")?.attr("Id")) else {
+        return Ok(Vec::new());
+    };
+    let prop = |tag: &str, kind: &str| format!("<t:ExtendedFieldURI PropertyTag=\"{tag}\" PropertyType=\"{kind}\"/>");
+    let m = c.call_one(&format!(
+        "<m:FindItem Traversal=\"Associated\"><m:ItemShape><t:BaseShape>IdOnly</t:BaseShape><t:AdditionalProperties>{}{}{}{}{}{}\
+         </t:AdditionalProperties></m:ItemShape><m:IndexedPageItemView MaxEntriesReturned=\"{MAX_LINKS}\" Offset=\"0\" BasePoint=\"Beginning\"/>\
+         <m:ParentFolderIds><t:FolderId Id=\"{}\"/></m:ParentFolderIds></m:FindItem>",
+        prop("0x001A", "String"),
+        prop("0x0E1D", "String"),
+        prop("0x6849", "Integer"),
+        prop("0x6851", "String"),
+        prop("0x6852", "Integer"),
+        prop("0x6854", "Binary"),
+        esc(views)
+    ))?;
+    let items: Vec<El> = m.find("Items").map(|i| i.kids.clone()).unwrap_or_default();
+    let mut resolved: HashMap<String, Option<String>> = HashMap::new();
+    let mut out: Vec<CalendarLink> = Vec::new();
+    for it in items.iter().take(MAX_LINKS) {
+        let text = |tag: &str| ext_text(it, tag);
+        let int = |tag: &str| text(tag).and_then(|v| v.trim().parse::<i64>().ok());
+        // A calendar (section 3) another user owns (kind 2), in a group.
+        if text("0x001A") != Some("IPM.Microsoft.WunderBar.Link") || int("0x6852") != Some(3) || int("0x6849") != Some(2) {
+            continue;
+        }
+        let Some(dn) = text("0x6854").and_then(|v| crate::ews::unb64(v.trim())).and_then(|b| address_book_dn(&b)) else { continue };
+        let email = match resolved.get(&dn) {
+            Some(e) => e.clone(),
+            None => {
+                let e = resolve(c, &dn);
+                resolved.insert(dn.clone(), e.clone());
+                e
+            }
+        };
+        let Some(email) = email.filter(|e| !e.eq_ignore_ascii_case(c.email())) else { continue };
+        if out.iter().any(|l| l.email == email) {
+            continue;
+        }
+        let name = text("0x0E1D").map(str::trim).filter(|n| !n.is_empty()).unwrap_or(&email).to_string();
+        out.push(CalendarLink { email, name, group: text("0x6851").unwrap_or_default().trim().to_string() });
+    }
+    Ok(out)
+}
+
+/// An extended property's value, by its tag (`0x6851`, as EWS gives it back).
+fn ext_text<'a>(it: &'a El, tag: &str) -> Option<&'a str> {
+    let want = u32::from_str_radix(tag.trim_start_matches("0x"), 16).ok()?;
+    it.children("ExtendedProperty")
+        .find(|p| {
+            p.child("ExtendedFieldURI").and_then(|u| u.attr("PropertyTag")).is_some_and(|t| {
+                let t = t.trim();
+                t.strip_prefix("0x").or_else(|| t.strip_prefix("0X")).map_or_else(|| t.parse().ok(), |h| u32::from_str_radix(h, 16).ok())
+                    == Some(want)
+            })
+        })
+        .and_then(|p| p.text_of("Value"))
+}
+
+/// The X.500 name in an Exchange address book entry id ([MS-OXCDATA] 2.2.5.2: flags, the
+/// provider's UID, version and type, then the name, ending in a zero byte).
+fn address_book_dn(b: &[u8]) -> Option<String> {
+    const PROVIDER: [u8; 16] = [0xDC, 0xA7, 0x40, 0xC8, 0xC0, 0x42, 0x10, 0x1A, 0xB4, 0xB9, 0x08, 0x00, 0x2B, 0x2F, 0xE1, 0x82];
+    if b.get(4..20)? != PROVIDER {
+        return None;
+    }
+    let rest = b.get(28..)?;
+    let end = rest.iter().position(|c| *c == 0).unwrap_or(rest.len()).min(1024);
+    let dn = std::str::from_utf8(rest.get(..end)?).ok()?.trim();
+    (dn.starts_with('/') && dn.is_ascii()).then(|| dn.to_string())
+}
+
+/// The address behind an X.500 name, as Exchange's directory has it.
+fn resolve(c: &Client, dn: &str) -> Option<String> {
+    let m = c
+        .call_one(&format!(
+            "<m:ResolveNames ReturnFullContactData=\"false\" SearchScope=\"ActiveDirectory\"><m:UnresolvedEntry>{}</m:UnresolvedEntry></m:ResolveNames>",
+            esc(dn)
+        ))
+        .ok()?;
+    let email = m.find("Mailbox").and_then(|b| b.text_of("EmailAddress"))?.trim().to_ascii_lowercase();
+    email.contains('@').then_some(email)
+}
+
 /// The calendar folder: this mailbox's, or someone else's by their address.
 fn calendar_folder(owner: Option<&str>) -> String {
     match owner {
@@ -522,9 +636,21 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
     let mut calendars =
         vec![CalendarInfo { id: CALENDAR.into(), name: "Calendar".into(), color: 0, read_only: false, ctag: String::new(), group: String::new() }];
     out.synced_calendars.push(CALENDAR.into());
-    // Other people's calendars opened here: their mailbox's calendar folder (the delegate
-    // permissions they gave decide whether it can be read, and whether changed).
-    for (n, email) in pim.shared.iter().enumerate() {
+    // Other people's calendars: those opened here by their address, and those Outlook keeps in
+    // the groups of its Calendar pane (under the group's name). Their mailbox's calendar folder
+    // is read where the permissions they gave allow, and changed where they let this account.
+    let mut others: Vec<(String, String, String)> = pim.shared.iter().map(|e| (e.clone(), e.clone(), String::new())).collect();
+    match calendar_links(c) {
+        Ok(links) => {
+            for l in links {
+                if !others.iter().any(|(e, _, _)| *e == l.email) {
+                    others.push((l.email, l.name, l.group));
+                }
+            }
+        }
+        Err(e) => log::info!("no calendar groups: {e}"),
+    }
+    for (n, (email, name, group)) in others.iter().enumerate() {
         let id = mailcraft_model::pim::shared_calendar_id(email);
         let parent = calendar_folder(Some(email));
         let can_edit = may_edit(c, &parent);
@@ -545,11 +671,11 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
         }
         calendars.push(CalendarInfo {
             id,
-            name: email.clone(),
+            name: name.clone(),
             color: u8::try_from((n + 1) % 8).unwrap_or(0),
             read_only: !can_edit,
             ctag: String::new(),
-            group: String::new(),
+            group: group.clone(),
         });
     }
     out.calendars = Some(calendars);
@@ -704,5 +830,36 @@ mod tests {
         assert!(event_fields(&e).iter().any(|(_, x)| x.contains("<t:String>Red category</t:String>")));
         let plain = CalEvent { categories: Vec::new(), ..e };
         assert!(event_fields(&plain).iter().all(|(n, _)| *n != "Categories"));
+    }
+
+    /// The X.500 name comes out of an address book entry id; anything else (too short, another
+    /// provider, not a name, no end) gives nothing or what's there, never a crash.
+    #[test]
+    fn address_book_entry_ids_give_their_x500_name() {
+        let mut eid = vec![0u8; 4];
+        eid.extend([0xDC, 0xA7, 0x40, 0xC8, 0xC0, 0x42, 0x10, 0x1A, 0xB4, 0xB9, 0x08, 0x00, 0x2B, 0x2F, 0xE1, 0x82]);
+        eid.extend([1, 0, 0, 0, 0, 0, 0, 0]);
+        let dn = "/o=Contoso/ou=Exchange Administrative Group (FYDIBOHF23SPDLT)/cn=Recipients/cn=ana";
+        let mut full = eid.clone();
+        full.extend(dn.as_bytes());
+        full.push(0);
+        full.extend(b"trailing");
+        assert_eq!(address_book_dn(&full).as_deref(), Some(dn));
+        // No final zero: the name still reads.
+        let mut open = eid.clone();
+        open.extend(dn.as_bytes());
+        assert_eq!(address_book_dn(&open).as_deref(), Some(dn));
+        let mut other = full.clone();
+        if let Some(b) = other.get_mut(5) {
+            *b = 0;
+        }
+        assert_eq!(address_book_dn(&other), None);
+        let mut junk = eid.clone();
+        junk.extend([0xFF, 0xFE, 0]);
+        assert_eq!(address_book_dn(&junk), None);
+        for n in 0..full.len() {
+            let _ = address_book_dn(full.get(..n).unwrap_or_default());
+        }
+        assert_eq!(address_book_dn(&[]), None);
     }
 }

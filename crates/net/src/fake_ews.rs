@@ -68,6 +68,10 @@ pub struct Data {
     /// Other mailboxes this account may open (shared, or as a delegate); their folders hang
     /// under `ROOT-<address>`.
     pub shared: Vec<String>,
+    /// Outlook's navigation shortcuts, as items of the Common Views folder (hidden ones).
+    pub wlinks: Vec<String>,
+    /// The directory: (X.500 name, address).
+    pub directory: Vec<(String, String)>,
     next: u32,
 }
 
@@ -91,6 +95,8 @@ impl Default for Data {
             pf_mailbox: None,
             routed: String::new(),
             shared: Vec::new(),
+            wlinks: Vec::new(),
+            directory: Vec::new(),
             next: 0,
         };
         d.folders.push(Fo {
@@ -320,6 +326,31 @@ impl Data {
                         Some(fo) => out.push(ok(format!("<m:Folders>{}</m:Folders>", self.folder_xml(&fo)))),
                         None => out.push(err("ErrorFolderNotFound")),
                     }
+                }
+            }
+            // The mailbox's own root (above the mail folders): its Common Views folder.
+            "FindFolder"
+                if op.attr("Traversal") == Some("Shallow")
+                    && op.child("ParentFolderIds").and_then(|p| p.kids.first()).is_some_and(|f| f.attr("Id") == Some("root")) =>
+            {
+                out.push(ok("<m:RootFolder IncludesLastItemInRange=\"true\"><t:Folders><t:Folder><t:FolderId Id=\"COMMON-VIEWS\"/>\
+                     <t:DisplayName>Common Views</t:DisplayName></t:Folder><t:Folder><t:FolderId Id=\"FINDER\"/><t:DisplayName>Finder</t:DisplayName>\
+                     </t:Folder></t:Folders></m:RootFolder>"
+                    .into()));
+            }
+            "FindItem" if op.attr("Traversal") == Some("Associated") => {
+                let folder = op.child("ParentFolderIds").and_then(|p| p.kids.first()).and_then(|f| self.folder_id(f)).unwrap_or_default();
+                let items = if folder == "COMMON-VIEWS" { self.wlinks.concat() } else { String::new() };
+                out.push(ok(format!("<m:RootFolder IncludesLastItemInRange=\"true\"><t:Items>{items}</t:Items></m:RootFolder>")));
+            }
+            "ResolveNames" => {
+                let want = op.child("UnresolvedEntry").map(|e| e.text.clone()).unwrap_or_default();
+                match self.directory.iter().find(|(dn, _)| dn.eq_ignore_ascii_case(&want)) {
+                    Some((_, email)) => out.push(ok(format!(
+                        "<m:ResolutionSet TotalItemsInView=\"1\"><t:Resolution><t:Mailbox><t:Name>{email}</t:Name>\
+                         <t:EmailAddress>{email}</t:EmailAddress><t:RoutingType>SMTP</t:RoutingType></t:Mailbox></t:Resolution></m:ResolutionSet>"
+                    ))),
+                    None => out.push(err("ErrorNameResolutionNoResults")),
                 }
             }
             // Shallow (public folders): the folders right under the one asked for.
@@ -1243,6 +1274,82 @@ mod tests {
         // One that can't be read says so, and the rest still syncs.
         assert!(sync.errors.iter().any(|e| e.starts_with("nobody@contoso.example's calendar")), "{:?}", sync.errors);
         assert!(!sync.synced_calendars.contains(&shared_calendar_id("nobody@contoso.example")));
+    }
+
+    /// An Outlook navigation shortcut to someone's calendar, in a group of the Calendar pane.
+    fn wlink(class: &str, section: i64, kind: i64, group: &str, name: &str, dn: &str) -> String {
+        let mut eid = vec![0u8; 4];
+        eid.extend([0xDC, 0xA7, 0x40, 0xC8, 0xC0, 0x42, 0x10, 0x1A, 0xB4, 0xB9, 0x08, 0x00, 0x2B, 0x2F, 0xE1, 0x82]);
+        eid.extend([1, 0, 0, 0, 0, 0, 0, 0]);
+        eid.extend(dn.as_bytes());
+        eid.push(0);
+        let p = |tag: &str, kind: &str, v: &str| {
+            format!(
+                "<t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"{tag}\" PropertyType=\"{kind}\"/><t:Value>{v}</t:Value></t:ExtendedProperty>"
+            )
+        };
+        format!(
+            "<t:Message><t:ItemId Id=\"W{name}\"/>{}{}{}{}{}{}</t:Message>",
+            p("0x1a", "String", class),
+            p("0xe1d", "String", name),
+            p("0x6849", "Integer", &kind.to_string()),
+            p("0x6851", "String", group),
+            p("0x6852", "Integer", &section.to_string()),
+            p("0x6854", "Binary", &crate::imap::base64(&eid)),
+        )
+    }
+
+    /// The calendars Outlook keeps in groups of its Calendar pane come in under those groups,
+    /// read as other people's calendars; shortcuts to mail folders, to this account's own
+    /// calendar, or to names the directory doesn't know are left alone.
+    #[test]
+    fn outlook_calendar_groups_come_in_with_their_calendars() {
+        use mailcraft_model::pim::{Pim, shared_calendar_id};
+        let mut d = Data::default();
+        d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+        d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
+        d.folder("Contacts", None, Some("contacts"), "IPF.Contact");
+        let standup = parse(
+            "<t:CalendarItem><t:Subject>Stand-up</t:Subject><t:Start>2026-10-06T08:00:00Z</t:Start><t:End>2026-10-06T08:15:00Z</t:End>\
+             <t:IsAllDayEvent>false</t:IsAllDayEvent><t:UID>standup-1</t:UID></t:CalendarItem>",
+        );
+        d.pim.push(("S1".into(), "mailbox:ana@contoso.example".into(), standup.kids[0].clone()));
+        d.pim.push(("S2".into(), "mailbox:room.lyon@contoso.example".into(), standup.kids[0].clone()));
+        let dn = |who: &str| format!("/o=Contoso/ou=Exchange Administrative Group (FYDIBOHF23SPDLT)/cn=Recipients/cn={who}");
+        d.directory = vec![
+            (dn("ana"), "Ana@Contoso.example".into()),
+            (dn("lyon"), "room.lyon@contoso.example".into()),
+            (dn("riley"), "riley@contoso.example".into()),
+        ];
+        let link = "IPM.Microsoft.WunderBar.Link";
+        d.wlinks = vec![
+            wlink(link, 3, 2, "Équipe : Studio", "Ana Lima", &dn("ana")),
+            wlink(link, 3, 2, "Salles", "Salle Lyon", &dn("lyon")),
+            // Twice, in another group: one calendar.
+            wlink(link, 3, 2, "Calendriers partagés", "Ana", &dn("ana")),
+            // This account's own calendar, a mail folder shortcut, a group header, someone unknown.
+            wlink(link, 3, 2, "Mes calendriers", "Riley", &dn("riley")),
+            wlink(link, 1, 2, "Favorites", "Ana's Inbox", &dn("ana")),
+            wlink(link, 3, 4, "Salles", "", ""),
+            wlink(link, 3, 2, "Salles", "Ghost", &dn("ghost")),
+        ];
+        let server = serve(d);
+        let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
+        let links = crate::ews_pim::calendar_links(&c).unwrap();
+        assert_eq!(
+            links.iter().map(|l| (l.email.as_str(), l.name.as_str(), l.group.as_str())).collect::<Vec<_>>(),
+            [("ana@contoso.example", "Ana Lima", "Équipe : Studio"), ("room.lyon@contoso.example", "Salle Lyon", "Salles")]
+        );
+        // Opened here by address as well: once, under its group.
+        let pim = Pim { shared: vec!["ana@contoso.example".into()], ..Default::default() };
+        let sync = crate::ews_pim::sync(&c, &pim, 1_792_000_000).unwrap();
+        let cals = sync.calendars.clone().unwrap();
+        let ana = shared_calendar_id("ana@contoso.example");
+        let room = shared_calendar_id("room.lyon@contoso.example");
+        assert_eq!(cals.iter().filter(|x| x.id == ana).count(), 1);
+        assert!(cals.iter().any(|x| x.id == room && x.name == "Salle Lyon" && x.group == "Salles" && x.read_only), "{cals:?}");
+        assert!(sync.events.iter().any(|e| e.calendar == room && e.event.summary == "Stand-up"));
+        assert!(sync.synced_calendars.contains(&room));
     }
 
     /// Someone who made this account an editor of their calendar: events go in, change and go

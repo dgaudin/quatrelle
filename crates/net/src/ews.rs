@@ -534,6 +534,11 @@ impl Client {
     }
 
     /// Run an operation on one thing: its single response message, checked.
+    /// The account's own address.
+    pub(crate) fn email(&self) -> &str {
+        &self.email
+    }
+
     pub(crate) fn call_one(&self, body: &str) -> Result<El> {
         let doc = self.call(body)?;
         let m = messages(&doc).first().map(|m| (*m).clone()).ok_or_else(|| NetError::Protocol("an empty answer".into()))?;

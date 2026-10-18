@@ -149,4 +149,7 @@ local-first, media-aware v1); the fuller request is
   (Graph and EWS), under a folder named after them, with their calendar; mail deleted there
   goes to their own Deleted Items. Microsoft 365's calendar groups (My Calendars, a team's)
   come in as Outlook lists them, colleagues' calendars kept in them included.
+- **2026-10-18** — On-premises Exchange (EWS) too: the calendars Outlook keeps in the groups of
+  its Calendar pane (a team's, shared calendars, rooms) come in under those groups, read from
+  Outlook's navigation shortcuts ([MS-OXOCFG]) and the directory.
 
