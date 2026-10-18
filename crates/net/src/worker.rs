@@ -367,6 +367,9 @@ impl Pool {
                     Err(e) => self.sink.emit(Event::Notice { account, message: format!("the draft couldn't be kept: {e}") }),
                 }
             }
+            Job::Vote { key, choice } if !self.workers.contains_key(&key.account) => {
+                self.sink.emit(Event::Voted { key, choice, error: Some("the account is offline".into()) });
+            }
             Job::GetVacation { account } | Job::SetVacation { account, .. } if !self.workers.contains_key(&account) => {
                 self.sink.emit(Event::Vacation { account, vacation: None, error: Some("the account is offline".into()) });
             }
@@ -1097,6 +1100,7 @@ impl Worker {
                 }
             }
             Job::FetchBody { key } => self.fetch(key),
+            Job::Vote { key, choice } => self.vote(key, choice),
             Job::Apply { op, .. } => {
                 // POP: a move is carried out here (there's no server copy to come back); what's
                 // deleted for good is noted, for removing the server's copy when the account says.
@@ -1357,6 +1361,42 @@ impl Worker {
             }
             Err(e) => {
                 self.sink.emit(Event::BodyFailed { key, error: e.to_string() });
+                if e.is_fatal() || matches!(e, NetError::Auth(_)) {
+                    self.failed(e);
+                }
+            }
+        }
+    }
+
+    /// Answer a message's voting buttons; the choice is kept with the message once it's gone.
+    fn vote(&mut self, key: MessageKey, choice: String) {
+        let r = (|| -> Result<()> {
+            if self.conn.is_none() {
+                self.connect()?;
+            }
+            let subject =
+                self.store.load_folder(&key.account, &key.folder).ok().and_then(|f| f.find(key.uid).map(|m| m.subject.clone())).unwrap_or_default();
+            match self.conn.as_ref() {
+                Some(Conn::Graph(c)) => crate::graph::vote(c, &self.jstate, &key, &choice, &subject),
+                Some(Conn::Ews(c)) => crate::ews::vote(c, &self.jstate, &key, &choice, &subject),
+                _ => Err(NetError::No("voting buttons can only be answered on Exchange and Microsoft 365 accounts".into())),
+            }
+        })();
+        match r {
+            Ok(()) => {
+                if let Ok(mut fs) = self.store.load_folder(&key.account, &key.folder)
+                    && let Some(m) = fs.find_mut(key.uid)
+                {
+                    m.voted = choice.clone();
+                    if let Err(e) = self.store.save_folder(&key.account, &key.folder, &fs) {
+                        self.notice(e.to_string());
+                    }
+                }
+                self.sink.emit(Event::Voted { key: key.clone(), choice, error: None });
+                self.sink.emit(Event::FolderChanged { account: key.account, folder: key.folder });
+            }
+            Err(e) => {
+                self.sink.emit(Event::Voted { key, choice, error: Some(e.to_string()) });
                 if e.is_fatal() || matches!(e, NetError::Auth(_)) {
                     self.failed(e);
                 }

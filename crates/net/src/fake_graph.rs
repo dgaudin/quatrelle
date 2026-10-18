@@ -29,6 +29,10 @@ pub struct Msg {
     pub flagged: bool,
     pub draft: bool,
     pub received: String,
+    /// The voting buttons (`PidLidVerbStream`), when it has some.
+    pub voting: Vec<u8>,
+    /// The choice a vote carries (`PidLidVerbResponse`).
+    pub vote: String,
 }
 
 #[derive(Default)]
@@ -37,6 +41,8 @@ pub struct Data {
     pub messages: Vec<Msg>,
     /// MIME sources handed to `sendMail`.
     pub sent: Vec<Vec<u8>>,
+    /// Votes sent: (subject, choice).
+    pub votes: Vec<(String, String)>,
     pub replies: Value,
     /// Calendars (id, name), events (with a `calendar` field) and contacts, as Graph has them.
     pub calendars: Vec<(String, String)>,
@@ -77,6 +83,8 @@ impl Data {
             flagged: false,
             draft: false,
             received: received.into(),
+            voting: Vec::new(),
+            vote: String::new(),
         });
         id
     }
@@ -105,7 +113,7 @@ impl Data {
     fn message_json(&self, m: &Msg) -> Value {
         let p = mailcraft_mime::parse(&m.raw);
         let addr = |a: &mailcraft_model::EmailAddress| json!({"emailAddress": {"name": a.name, "address": a.email}});
-        json!({
+        let mut v = json!({
             "id": m.id, "parentFolderId": m.folder, "isRead": m.read, "isDraft": m.draft,
             "flag": {"flagStatus": if m.flagged { "flagged" } else { "notFlagged" }},
             "subject": p.as_ref().map(|p| p.subject.clone()),
@@ -116,7 +124,12 @@ impl Data {
             "bodyPreview": p.as_ref().map(|p| p.text.chars().take(60).collect::<String>()),
             "hasAttachments": false,
             "internetMessageId": p.as_ref().map(|p| format!("<{}>", p.message_id)),
-        })
+        });
+        if !m.voting.is_empty() {
+            v["singleValueExtendedProperties"] =
+                json!([{"id": "Binary {00062008-0000-0000-c000-000000000046} Id 0x8520", "value": crate::imap::base64(&m.voting)}]);
+        }
+        v
     }
 
     /// One request: (status, body, content type).
@@ -225,6 +238,16 @@ impl Data {
                     if let Some(f) = input["flag"]["flagStatus"].as_str() {
                         m.flagged = f == "flagged";
                     }
+                    if let Some(subject) = input["subject"].as_str() {
+                        let text = String::from_utf8_lossy(&m.raw).into_owned();
+                        let kept: String = text.split_inclusive("\r\n").filter(|l| !l.starts_with("Subject:")).collect();
+                        m.raw = format!("Subject: {subject}\r\n{kept}").into_bytes();
+                    }
+                    for p in input["singleValueExtendedProperties"].as_array().cloned().unwrap_or_default() {
+                        if p["id"].as_str().is_some_and(|id| id.to_ascii_lowercase().ends_with("id 0x8524")) {
+                            m.vote = p["value"].as_str().unwrap_or_default().to_string();
+                        }
+                    }
                     ok(json!({ "id": id }))
                 }
                 None => not_found(),
@@ -233,6 +256,34 @@ impl Data {
                 let id = id.to_string();
                 self.messages.retain(|m| m.id != id);
                 (204, Vec::new(), "text/plain")
+            }
+            ("POST", ["me", "messages", id, "createReply"]) => {
+                let Some(orig) = self.message(id).map(|m| mailcraft_mime::parse(&m.raw).unwrap_or_default()) else { return not_found() };
+                let raw = format!(
+                    "From: riley@contoso.example\r\nTo: {}\r\nSubject: RE: {}\r\nIn-Reply-To: <{}>\r\n\r\n",
+                    orig.from.email, orig.subject, orig.message_id
+                );
+                let drafts = self.resolve("drafts").unwrap_or_default();
+                let rid = self.deliver(&drafts, raw.as_bytes(), true, "2030-01-01T00:00:00Z");
+                if let Some(m) = self.messages.iter_mut().find(|m| m.id == rid) {
+                    m.draft = true;
+                }
+                (201, json!({"id": rid, "parentFolderId": drafts}).to_string().into_bytes(), "application/json")
+            }
+            ("POST", ["me", "messages", id, "send"]) => {
+                let sent = self.resolve("sentitems").unwrap_or_default();
+                match self.messages.iter_mut().find(|m| m.id == *id && m.draft) {
+                    Some(m) => {
+                        m.folder = sent;
+                        m.draft = false;
+                        let subject = mailcraft_mime::parse(&m.raw).map(|p| p.subject).unwrap_or_default();
+                        let (raw, vote) = (m.raw.clone(), m.vote.clone());
+                        self.sent.push(raw);
+                        self.votes.push((subject, vote));
+                        (202, Vec::new(), "text/plain")
+                    }
+                    None => not_found(),
+                }
             }
             ("POST", ["me", "messages", id, "move"]) => {
                 let dest = input["destinationId"].as_str().and_then(|d| self.resolve(d));
@@ -642,6 +693,37 @@ mod tests {
 
     /// Graph files a sent message's copy a moment after taking it: Sent Items showed it only at the
     /// next poll (minutes) or Send / Receive. It's read again soon after.
+    #[test]
+    fn voting_buttons_come_in_and_a_vote_goes_back_through_graph() {
+        let mut d = Data::default();
+        let inbox = d.folder("Inbox", None, Some("inbox"));
+        d.folder("Drafts", None, Some("drafts"));
+        let sent = d.folder("Sent Items", None, Some("sentitems"));
+        let lunch = d.deliver(&inbox, &mail("Team lunch on Friday?", "v1"), false, "2024-05-06T09:00:00Z");
+        d.messages.iter_mut().find(|m| m.id == lunch).unwrap().voting = mailcraft_model::voting::stream(&["Oui", "Non"]);
+        let server = serve(d);
+        let data = server.data.clone();
+        let dir = std::env::temp_dir().join(format!("mailcraft-graph-vote-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let store = Store::open(&dir).unwrap();
+        let mut pool = crate::worker::Pool::new(store.clone(), Arc::new(crate::worker::MemoryCredentials::default()));
+        let account = AccountConfig { id: "a1".into(), email: "me@contoso.example".into(), graph: Some(server.base.clone()), ..Default::default() };
+        pool.submit(Job::Start { account, password: Some(Secret(TOKEN.into())) });
+        until(&pool, "online", |e| matches!(e, Event::Status { status: SyncStatus::Online { .. }, .. }));
+        let m = store.load_folder("a1", "INBOX").unwrap().messages.into_iter().find(|m| m.subject == "Team lunch on Friday?").unwrap();
+        assert_eq!(m.voting, ["Oui", "Non"]);
+        pool.submit(Job::Vote { key: m.key.clone(), choice: "Non".into() });
+        let seen = until(&pool, "voted", |e| matches!(e, Event::Voted { .. }));
+        assert!(matches!(seen.last(), Some(Event::Voted { error: None, .. })), "{seen:?}");
+        let d = data.lock().unwrap();
+        assert_eq!(d.votes, [("Non: Team lunch on Friday?".to_string(), "Non".to_string())]);
+        let reply = d.messages.iter().find(|m| m.folder == sent).unwrap();
+        assert!(String::from_utf8_lossy(&reply.raw).contains("In-Reply-To: <v1@x>"), "made as a reply");
+        drop(d);
+        assert_eq!(store.load_folder("a1", "INBOX").unwrap().find(m.key.uid).unwrap().voted, "Non");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn a_sent_message_shows_in_sent_items_soon_after() {
         let mut d = Data { file_late: true, ..Default::default() };

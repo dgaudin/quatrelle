@@ -815,3 +815,7 @@ month	May	5月
 	Everyone you've written to or heard from, and your contacts	与你通过邮件的所有人，以及你的联系人
 	Hide {calendar}	隐藏 {calendar}
 	Write your signature, or paste it…	输入签名或粘贴…
+	Sending your vote: {choice}…	正在发送你的投票：{choice}…
+	You voted: {choice}. Another button sends a new vote.	你已投票：{choice}。点另一个按钮可重新投票。
+	The sender asks for a vote. Choose your answer:	发件人请你投票。请选择你的回答：
+	Send this answer to the sender	将此回答发送给发件人

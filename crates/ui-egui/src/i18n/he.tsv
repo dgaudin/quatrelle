@@ -814,3 +814,7 @@ month	May	מאי
 	Everyone you've written to or heard from, and your contacts	כל מי שכתבת לו או שכתב לך, ואנשי הקשר שלך
 	Hide {calendar}	הסתר את {calendar}
 	Write your signature, or paste it…	כתבו את החתימה או הדביקו אותה…
+	Sending your vote: {choice}…	ההצבעה שלך נשלחת: {choice}…
+	You voted: {choice}. Another button sends a new vote.	הצבעת: {choice}. לחצן אחר שולח הצבעה חדשה.
+	The sender asks for a vote. Choose your answer:	השולח מבקש הצבעה. בחר את תשובתך:
+	Send this answer to the sender	שליחת תשובה זו לשולח

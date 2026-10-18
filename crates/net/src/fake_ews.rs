@@ -32,6 +32,10 @@ pub struct It {
     pub flagged: bool,
     pub draft: bool,
     pub received: String,
+    /// The voting buttons (`PidLidVerbStream`), when it has some.
+    pub voting: Vec<u8>,
+    /// The choice a vote carries (`PidLidVerbResponse`).
+    pub vote: String,
 }
 
 pub struct Data {
@@ -41,6 +45,8 @@ pub struct Data {
     pub pim: Vec<(String, String, El)>,
     /// MIME sources sent.
     pub sent: Vec<Vec<u8>>,
+    /// Votes sent: (subject, choice).
+    pub votes: Vec<(String, String)>,
     /// (state, start, end, message)
     /// State, start, end, inside reply, outside reply, outside audience.
     pub oof: (String, String, String, String, String, String),
@@ -72,6 +78,7 @@ impl Default for Data {
             items: Vec::new(),
             pim: Vec::new(),
             sent: Vec::new(),
+            votes: Vec::new(),
             oof: ("Disabled".into(), String::new(), String::new(), String::new(), String::new(), "All".into()),
             basic: false,
             calls: Vec::new(),
@@ -121,6 +128,8 @@ impl Data {
             flagged: false,
             draft: false,
             received: received.into(),
+            voting: Vec::new(),
+            vote: String::new(),
         });
         id
     }
@@ -201,6 +210,12 @@ impl Data {
             x.push_str(&ext("0x1090", 2));
         }
         x.push_str(&ext("0x0E07", if it.draft { 8 } else { 1 }));
+        if !it.voting.is_empty() {
+            x.push_str(&format!(
+                "<t:ExtendedProperty><t:ExtendedFieldURI DistinguishedPropertySetId=\"Common\" PropertyId=\"34080\" PropertyType=\"Binary\"/><t:Value>{}</t:Value></t:ExtendedProperty>",
+                crate::imap::base64(&it.voting)
+            ));
+        }
         x.push_str(&format!("<t:ToRecipients>{}</t:ToRecipients>", p.to.iter().map(mb).collect::<String>()));
         if !p.cc.is_empty() {
             x.push_str(&format!("<t:CcRecipients>{}</t:CcRecipients>", p.cc.iter().map(mb).collect::<String>()));
@@ -375,6 +390,33 @@ impl Data {
                         self.pim.push((id, folder.clone(), m));
                         continue;
                     }
+                    // A reply made by Exchange from the original (a voting response starts so).
+                    if m.name == "ReplyToItem" {
+                        let reference = m.child("ReferenceItemId").and_then(|r| r.attr("Id")).unwrap_or_default().to_string();
+                        let Some(orig) = self.items.iter().find(|i| i.id == reference).map(|i| mailcraft_mime::parse(&i.raw).unwrap_or_default())
+                        else {
+                            out.push(err("ErrorItemNotFound"));
+                            continue;
+                        };
+                        let raw = format!(
+                            "From: riley@contoso.example\r\nTo: {}\r\nSubject: RE: {}\r\nIn-Reply-To: <{}>\r\n\r\n",
+                            orig.from.email, orig.subject, orig.message_id
+                        );
+                        let id = self.id("I");
+                        self.items.push(It {
+                            id: id.clone(),
+                            folder: folder.clone(),
+                            raw: raw.into_bytes(),
+                            read: true,
+                            flagged: false,
+                            draft: true,
+                            received: "2026-10-15T12:00:00Z".into(),
+                            voting: Vec::new(),
+                            vote: String::new(),
+                        });
+                        out.push(ok(format!("<m:Items><t:Message><t:ItemId Id=\"{id}\" ChangeKey=\"ck\"/></t:Message></m:Items>")));
+                        continue;
+                    }
                     let raw = m.child("MimeContent").and_then(|c| unb64(&c.text)).unwrap_or_default();
                     if send && String::from_utf8_lossy(&raw).contains("nobody@") {
                         out.push(err("ErrorInvalidRecipients"));
@@ -393,6 +435,8 @@ impl Data {
                         flagged: false,
                         draft,
                         received: "2026-10-15T12:00:00Z".into(),
+                        voting: Vec::new(),
+                        vote: String::new(),
                     });
                     out.push(ok(if send { String::new() } else { format!("<m:Items><t:Message><t:ItemId Id=\"{id}\"/></t:Message></m:Items>") }));
                 }
@@ -429,8 +473,35 @@ impl Data {
                         if u.find("ExtendedFieldURI").and_then(|e| e.attr("PropertyTag")) == Some("0x1090") {
                             it.flagged = u.name == "SetItemField";
                         }
+                        if u.find("ExtendedFieldURI").and_then(|e| e.attr("PropertyId")) == Some("34084") {
+                            it.vote = u.find("Value").map(|v| v.text.clone()).unwrap_or_default();
+                        }
+                        if u.find("FieldURI").and_then(|f| f.attr("FieldURI")) == Some("item:Subject")
+                            && let Some(subject) = u.find("Subject").map(|s| s.text.clone())
+                        {
+                            let text = String::from_utf8_lossy(&it.raw).into_owned();
+                            let kept: String = text.split_inclusive("\r\n").filter(|l| !l.starts_with("Subject:")).collect();
+                            it.raw = format!("Subject: {subject}\r\n{kept}").into_bytes();
+                        }
                     }
-                    out.push(ok(String::new()));
+                    out.push(ok(format!("<m:Items><t:Message><t:ItemId Id=\"{id}\" ChangeKey=\"ck2\"/></t:Message></m:Items>")));
+                }
+            }
+            "SendItem" => {
+                let to = op.child("SavedItemFolderId").and_then(|t| t.kids.first()).and_then(|f| self.folder_id(f)).unwrap_or_default();
+                for id in ids(op.child("ItemIds")) {
+                    match self.items.iter_mut().find(|i| i.id == id) {
+                        Some(it) => {
+                            it.folder = to.clone();
+                            it.draft = false;
+                            let subject = mailcraft_mime::parse(&it.raw).map(|p| p.subject).unwrap_or_default();
+                            let (raw, vote) = (it.raw.clone(), it.vote.clone());
+                            self.sent.push(raw);
+                            self.votes.push((subject, vote));
+                            out.push(ok(String::new()));
+                        }
+                        None => out.push(err("ErrorItemNotFound")),
+                    }
                 }
             }
             "MoveItem" => {
@@ -960,6 +1031,58 @@ mod tests {
         assert_eq!((moved.event.summary.as_str(), moved.event.rrule.as_deref()), ("Stand-up (moved)", None));
         // No Notes folder on this server: notes stay on this computer.
         assert!(sync.notes.is_none());
+    }
+
+    #[test]
+    fn voting_buttons_come_in_and_a_vote_goes_back_as_exchange_counts_it() {
+        let mut d = Data::default();
+        let inbox = d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+        d.folder("Drafts", None, Some("drafts"), "IPF.Note");
+        let sent = d.folder("Sent Items", None, Some("sentitems"), "IPF.Note");
+        let lunch = d.deliver(&inbox, &mail("Team lunch on Friday?", "v1"), false, "2024-05-06T09:00:00Z");
+        d.items.iter_mut().find(|i| i.id == lunch).unwrap().voting = mailcraft_model::voting::stream(&["Yes", "No", "Maybe"]);
+        d.deliver(&inbox, &mail("No vote here", "v2"), false, "2024-05-06T08:00:00Z");
+        let server = serve(d);
+        let data = server.data.clone();
+        let dir = std::env::temp_dir().join(format!("mailcraft-ews-vote-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let store = Store::open(&dir).unwrap();
+        let mut pool = crate::worker::Pool::new(store.clone(), Arc::new(crate::worker::MemoryCredentials::default()));
+        let account = AccountConfig {
+            id: "a1".into(),
+            email: "riley@contoso.example".into(),
+            username: format!("{DOMAIN}\\{USER}"),
+            ews: Some(server.url.clone()),
+            ..Default::default()
+        };
+        pool.submit(Job::Start { account, password: Some(Secret(PASSWORD.into())) });
+        until(&pool, "online", |e| matches!(e, Event::Status { status: SyncStatus::Online { .. }, .. }));
+        let st = store.load_folder("a1", "INBOX").unwrap();
+        let m = st.messages.iter().find(|m| m.subject == "Team lunch on Friday?").unwrap();
+        assert_eq!(m.voting, ["Yes", "No", "Maybe"]);
+        assert!(st.messages.iter().find(|m| m.subject == "No vote here").unwrap().voting.is_empty());
+
+        let key = m.key.clone();
+        pool.submit(Job::Vote { key: key.clone(), choice: "Maybe".into() });
+        let seen = until(&pool, "voted", |e| matches!(e, Event::Voted { .. }));
+        assert!(matches!(seen.last(), Some(Event::Voted { error: None, choice, .. }) if choice == "Maybe"), "{seen:?}");
+        {
+            let d = data.lock().unwrap();
+            assert_eq!(d.votes, [("Maybe: Team lunch on Friday?".to_string(), "Maybe".to_string())]);
+            let reply = d.items.iter().find(|i| i.folder == sent).unwrap();
+            let text = String::from_utf8_lossy(&reply.raw);
+            assert!(text.contains("To: zoe@contoso.example") && text.contains("In-Reply-To: <v1@x>"), "a reply to the sender: {text}");
+            assert!(!reply.draft);
+        }
+        // Remembered with the message.
+        assert_eq!(store.load_folder("a1", "INBOX").unwrap().find(key.uid).unwrap().voted, "Maybe");
+
+        // A message that's gone says so.
+        let gone = mailcraft_model::MessageKey { uid: 9999, ..key };
+        pool.submit(Job::Vote { key: gone, choice: "Yes".into() });
+        let seen = until(&pool, "vote refused", |e| matches!(e, Event::Voted { .. }));
+        assert!(matches!(seen.last(), Some(Event::Voted { error: Some(_), .. })));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

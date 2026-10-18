@@ -277,6 +277,11 @@ fn crc32(data: &[u8]) -> u32 {
     !c
 }
 
+/// The sample message with voting buttons (Studio Ops asking who still needs the farm), and
+/// its choices.
+pub const VOTE_SUBJECT: &str = "Render farm maintenance this weekend";
+pub const VOTE_CHOICES: [&str; 3] = ["Queued before Friday", "Need it this weekend", "Nothing to render"];
+
 fn mails() -> Vec<Mail> {
     vec![
         Mail {
@@ -605,7 +610,11 @@ pub fn seed_if_empty_at(store: &Store, now: i64, offset: i64) -> Result<bool, St
         let flags = Flags { seen: m.seen, flagged: m.flagged, ..Default::default() };
         let size = u32::try_from(raw.len()).unwrap_or(u32::MAX);
         store.write_body(&key, &raw)?;
-        st.messages.push(mime::summary_from_full(&raw, key, flags, size, date));
+        let mut summary = mime::summary_from_full(&raw, key, flags, size, date);
+        if m.subject == VOTE_SUBJECT {
+            summary.voting = VOTE_CHOICES.iter().map(|c| (*c).to_string()).collect();
+        }
+        st.messages.push(summary);
     }
     let mut folders = folders;
     for (path, st) in &mut states {

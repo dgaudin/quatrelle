@@ -134,4 +134,8 @@ local-first, media-aware v1); the fuller request is
   instead of winit's bare grey frame; light or dark read from the desktop's settings on Linux
   (winit doesn't say there), the desktop's accent colour (Windows, macOS, GNOME and KDE) as an
   option on by default, and the desktop's interface font on Linux.
+- **2026-10-18** — Voting buttons: on Exchange (EWS) and Microsoft 365 (Graph) accounts, a
+  message's voting buttons (`PidLidVerbStream`, read as [MS-OXOMSG] describes it) show above
+  it; a click sends that answer as Exchange's own reply carrying the choice
+  (`PidLidVerbResponse`), so the sender's Outlook counts it, and the answer is remembered.
 

@@ -178,13 +178,16 @@ pub enum Job {
     ImportPst { account: String, path: String },
     /// Write the account's mail to an Outlook data file, which opens as `name`.
     ExportPst { account: String, path: String, name: String },
+    /// Answer a message's voting buttons with `choice`: a reply to its sender that names it, as
+    /// the sender's mail client counts votes.
+    Vote { key: MessageKey, choice: String },
 }
 
 impl Job {
     pub fn account(&self) -> &str {
         match self {
             Job::Start { account, .. } => &account.id,
-            Job::FetchBody { key } => &key.account,
+            Job::FetchBody { key } | Job::Vote { key, .. } => &key.account,
             Job::Remove { account }
             | Job::SyncAll { account }
             | Job::SyncFolder { account, .. }
@@ -339,6 +342,12 @@ pub enum Event {
         messages: usize,
         skipped: usize,
         done: bool,
+        error: Option<String>,
+    },
+    /// A vote went (`error` `None`), or why it didn't.
+    Voted {
+        key: MessageKey,
+        choice: String,
         error: Option<String>,
     },
     /// Something the user should see in the status bar.

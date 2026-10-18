@@ -818,3 +818,7 @@ folder	Archive	封存
 
 # A month's full name, where it differs from its short form.
 month	May	5月
+	Sending your vote: {choice}…	正在傳送你的投票：{choice}…
+	You voted: {choice}. Another button sends a new vote.	你已投票：{choice}。按另一個按鈕可重新投票。
+	The sender asks for a vote. Choose your answer:	寄件者請你投票。請選擇你的回答：
+	Send this answer to the sender	將此回答傳送給寄件者

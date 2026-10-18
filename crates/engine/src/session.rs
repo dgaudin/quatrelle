@@ -22,6 +22,7 @@ use crate::{CmdError, CmdResult, Registry};
 pub mod invite;
 mod organize;
 pub mod pim;
+mod vote;
 
 /// One account and what the session knows about it.
 #[derive(Clone, Debug, PartialEq)]
@@ -600,6 +601,8 @@ pub struct Session {
     pub print_fonts: Option<(Vec<u8>, Option<Vec<u8>>)>,
     /// Pages to show in the browser (OAuth sign-in), oldest first.
     pub open_urls: Vec<String>,
+    /// A vote on its way: the message and the choice.
+    pub vote_sending: Option<(MessageKey, String)>,
     /// Each account's calendars and address books.
     pub pim: HashMap<String, mailcraft_model::pim::Pim>,
     /// Mail, Calendar or People.
@@ -664,6 +667,7 @@ impl Session {
             jmap_only: false,
             print_fonts: None,
             open_urls: Vec::new(),
+            vote_sending: None,
             pim: HashMap::new(),
             module: pim::Module::Mail,
             cal_mode: pim::CalMode::Week,
@@ -2918,6 +2922,7 @@ impl Session {
                     self.notice(format!("automatic replies weren't changed: {e}"), true);
                 }
             }
+            Event::Voted { key, choice, error } => self.voted(&key, &choice, error),
             Event::Body { key, raw } => {
                 self.show_body(&key, &raw);
                 self.index_body(&key, &raw);

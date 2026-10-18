@@ -815,3 +815,7 @@ month	May	5月
 	Everyone you've written to or heard from, and your contacts	メールをやり取りしたすべての人と連絡先
 	Hide {calendar}	{calendar} を非表示
 	Write your signature, or paste it…	署名を入力するか貼り付けます…
+	Sending your vote: {choice}…	投票を送信しています: {choice}…
+	You voted: {choice}. Another button sends a new vote.	投票済み: {choice}。別のボタンで投票し直せます。
+	The sender asks for a vote. Choose your answer:	送信者が投票を求めています。回答を選んでください:
+	Send this answer to the sender	この回答を送信者に送る

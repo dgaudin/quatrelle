@@ -818,3 +818,7 @@ folder	Archive	보관함
 
 # A month's full name, where it differs from its short form.
 month	May	5월
+	Sending your vote: {choice}…	투표를 보내는 중: {choice}…
+	You voted: {choice}. Another button sends a new vote.	투표함: {choice}. 다른 버튼을 누르면 새로 투표합니다.
+	The sender asks for a vote. Choose your answer:	보낸 사람이 투표를 요청합니다. 답을 고르세요:
+	Send this answer to the sender	이 답을 보낸 사람에게 보내기

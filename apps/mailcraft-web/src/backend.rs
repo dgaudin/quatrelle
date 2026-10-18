@@ -405,6 +405,11 @@ async fn job(sh: &Rcs, id: &str, j: Job) {
             };
             emit(sh, Event::Vacation { account: id.to_string(), vacation, error });
         }
+        // Voting buttons come with Exchange accounts, which the browser doesn't reach.
+        Job::Vote { key, choice } => {
+            let error = Some("voting buttons can only be answered on Exchange and Microsoft 365 accounts".to_string());
+            emit(sh, Event::Voted { key, choice, error });
+        }
         // Nothing to do in the browser: no Outbox (sending needs the server), no CalDAV.
         Job::FlushOutbox { .. } | Job::SyncDav { .. } => {}
         Job::Start { .. }

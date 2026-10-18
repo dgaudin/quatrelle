@@ -818,3 +818,7 @@ folder	Archive	Архив
 
 # A month's full name, where it differs from its short form.
 month	May	Май
+	Sending your vote: {choice}…	Отправка вашего голоса: {choice}…
+	You voted: {choice}. Another button sends a new vote.	Вы проголосовали: {choice}. Другая кнопка отправит новый голос.
+	The sender asks for a vote. Choose your answer:	Отправитель просит проголосовать. Выберите ответ:
+	Send this answer to the sender	Отправить этот ответ отправителю

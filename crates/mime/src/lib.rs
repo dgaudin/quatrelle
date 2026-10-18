@@ -126,6 +126,8 @@ fn summary_from_message(m: &Message<'_>, key: MessageKey, flags: Flags, size: u3
         modseq: 0,
         bulk: is_bulk(m),
         importance: importance(m),
+        voting: Vec::new(),
+        voted: String::new(),
     }
 }
 

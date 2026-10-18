@@ -819,3 +819,7 @@ folder	Archive	Archiv
 
 # A month's full name, where it differs from its short form.
 month	May	Mai
+	Sending your vote: {choice}…	Ihre Stimme wird gesendet: {choice}…
+	You voted: {choice}. Another button sends a new vote.	Sie haben abgestimmt: {choice}. Eine andere Schaltfläche sendet eine neue Stimme.
+	The sender asks for a vote. Choose your answer:	Der Absender bittet um eine Abstimmung. Wählen Sie Ihre Antwort:
+	Send this answer to the sender	Diese Antwort an den Absender senden

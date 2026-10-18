@@ -17,6 +17,7 @@ pub mod search;
 pub mod thread;
 pub mod utf7;
 pub mod vcard;
+pub mod voting;
 
 use serde::{Deserialize, Serialize};
 
@@ -641,6 +642,12 @@ pub struct Summary {
     /// How important the sender marked it: 1 high, -1 low, 0 normal (`Importance`, `X-Priority`).
     #[serde(default, skip_serializing_if = "is_zero")]
     pub importance: i8,
+    /// The voting buttons the sender put on it (Exchange's verb stream), in order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub voting: Vec<String>,
+    /// The choice this user sent from here, once the vote has gone.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub voted: String,
 }
 
 fn is_zero(n: &i8) -> bool {

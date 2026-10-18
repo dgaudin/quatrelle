@@ -819,3 +819,7 @@ folder	Archive	Arquivo
 
 # A month's full name, where it differs from its short form.
 month	May	maio
+	Sending your vote: {choice}…	Enviando seu voto: {choice}…
+	You voted: {choice}. Another button sends a new vote.	Você votou: {choice}. Outro botão envia um novo voto.
+	The sender asks for a vote. Choose your answer:	O remetente pede um voto. Escolha sua resposta:
+	Send this answer to the sender	Enviar esta resposta ao remetente

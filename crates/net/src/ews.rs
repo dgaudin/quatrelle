@@ -17,7 +17,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 
 use mailcraft_mime as mime;
-use mailcraft_model::{Flag, Flags, Folder, FolderRole, MessageKey, Op, Summary, sort_newest_first, utf7};
+use mailcraft_model::{Flag, Flags, Folder, FolderRole, MessageKey, Op, Summary, sort_newest_first, utf7, voting};
 use mailcraft_store::{FolderState, Store};
 use quick_xml::Reader;
 use quick_xml::events::Event as X;
@@ -839,6 +839,52 @@ impl Client {
         Ok(m.find("ItemId").and_then(|i| i.attr("Id")).unwrap_or_default().to_string())
     }
 
+    /// Answer a message's voting buttons with `choice`: a reply to it (so it stays in the
+    /// conversation), its subject the choice's, carrying the choice (`PidLidVerbResponse`) for the
+    /// sender's mail client to count; sent, with a copy in Sent Items.
+    pub fn vote(&self, id: &str, choice: &str, subject: &str) -> Result<()> {
+        let item = |m: &El| {
+            let i = m.find("ItemId");
+            let id = i.and_then(|i| i.attr("Id")).unwrap_or_default().to_string();
+            let ck = i.and_then(|i| i.attr("ChangeKey")).filter(|c| !c.is_empty()).map(|c| format!(" ChangeKey=\"{}\"", esc(c))).unwrap_or_default();
+            (id, ck)
+        };
+        let original = self.call_one(&format!(
+            "<m:GetItem><m:ItemShape><t:BaseShape>IdOnly</t:BaseShape></m:ItemShape><m:ItemIds><t:ItemId Id=\"{}\"/></m:ItemIds></m:GetItem>",
+            esc(id)
+        ))?;
+        let (oid, ock) = item(&original);
+        let reply = self.call_one(&format!(
+            "<m:CreateItem MessageDisposition=\"SaveOnly\"><m:SavedItemFolderId><t:DistinguishedFolderId Id=\"drafts\"/></m:SavedItemFolderId>\
+             <m:Items><t:ReplyToItem><t:ReferenceItemId Id=\"{}\"{ock}/></t:ReplyToItem></m:Items></m:CreateItem>",
+            esc(&oid)
+        ))?;
+        let (rid, rck) = item(&reply);
+        if rid.is_empty() {
+            return Err(NetError::Protocol("Exchange didn't make the reply".into()));
+        }
+        let field =
+            format!("<t:ExtendedFieldURI DistinguishedPropertySetId=\"Common\" PropertyId=\"{}\" PropertyType=\"String\"/>", voting::VERB_RESPONSE);
+        let updated = self.call_one(&format!(
+            "<m:UpdateItem MessageDisposition=\"SaveOnly\" ConflictResolution=\"AlwaysOverwrite\"><m:ItemChanges><t:ItemChange>\
+             <t:ItemId Id=\"{}\"{rck}/><t:Updates>\
+             <t:SetItemField><t:FieldURI FieldURI=\"item:Subject\"/><t:Message><t:Subject>{}</t:Subject></t:Message></t:SetItemField>\
+             <t:SetItemField>{field}<t:Message><t:ExtendedProperty>{field}<t:Value>{}</t:Value></t:ExtendedProperty></t:Message></t:SetItemField>\
+             </t:Updates></t:ItemChange></m:ItemChanges></m:UpdateItem>",
+            esc(&rid),
+            esc(&voting::response_subject(choice, subject)),
+            esc(choice)
+        ))?;
+        let (_, uck) = item(&updated);
+        let ck = if uck.is_empty() { rck } else { uck };
+        self.call_one(&format!(
+            "<m:SendItem SaveItemToFolder=\"true\"><m:ItemIds><t:ItemId Id=\"{}\"{ck}/></m:ItemIds>\
+             <m:SavedItemFolderId><t:DistinguishedFolderId Id=\"sentitems\"/></m:SavedItemFolderId></m:SendItem>",
+            esc(&rid)
+        ))
+        .map(drop)
+    }
+
     /// Send a MIME message, keeping a copy in Sent Items.
     pub fn send_mime(&self, raw: &[u8]) -> Result<()> {
         self.call_one(&format!(
@@ -1006,7 +1052,24 @@ const HEADER_FIELDS: &str = "<t:FieldURI FieldURI=\"item:Subject\"/><t:FieldURI 
 <t:FieldURI FieldURI=\"message:ToRecipients\"/><t:FieldURI FieldURI=\"message:CcRecipients\"/>\
 <t:FieldURI FieldURI=\"message:ReplyTo\"/><t:FieldURI FieldURI=\"item:DateTimeReceived\"/>\
 <t:FieldURI FieldURI=\"item:DateTimeSent\"/><t:FieldURI FieldURI=\"message:InternetMessageId\"/>\
-<t:FieldURI FieldURI=\"item:HasAttachments\"/><t:FieldURI FieldURI=\"item:Size\"/>";
+<t:FieldURI FieldURI=\"item:HasAttachments\"/><t:FieldURI FieldURI=\"item:Size\"/>\
+<t:ExtendedFieldURI DistinguishedPropertySetId=\"Common\" PropertyId=\"34080\" PropertyType=\"Binary\"/>";
+
+/// The voting buttons on an item (`PidLidVerbStream`, asked for with its details).
+fn voting_choices(it: &El) -> Vec<String> {
+    let id = u32::from(voting::VERB_STREAM);
+    it.children("ExtendedProperty")
+        .find(|p| {
+            p.child("ExtendedFieldURI").and_then(|u| u.attr("PropertyId")).is_some_and(|v| {
+                let v = v.trim();
+                v.parse::<u32>().ok().or_else(|| v.strip_prefix("0x").and_then(|h| u32::from_str_radix(h, 16).ok())) == Some(id)
+            })
+        })
+        .and_then(|p| p.text_of("Value"))
+        .and_then(|v| unb64(v.trim()))
+        .map(|b| voting::choices(&b))
+        .unwrap_or_default()
+}
 
 /// An extended property's value.
 fn extended(it: &El, tag: &str) -> Option<i64> {
@@ -1120,6 +1183,7 @@ pub fn sync_folder(c: &Client, st: &mut State, store: &Store, account: &str, fol
         let size = it.text_of("Size").and_then(|s| s.trim().parse::<u32>().ok()).unwrap_or(0);
         let mut s = mime::summary_from_header(&header_block(&it), key, flags(&it), size, received);
         s.has_attachments = it.text_of("HasAttachments").is_some_and(|v| v == "true");
+        s.voting = voting_choices(&it);
         fs.messages.push(s);
         report.new += 1;
     }
@@ -1181,6 +1245,12 @@ fn folder_ref(id: Option<&str>) -> String {
 }
 
 /// Apply one change on the server.
+/// Vote on a message (see [`Client::vote`]).
+pub fn vote(c: &Client, st: &State, key: &MessageKey, choice: &str, subject: &str) -> Result<()> {
+    let id = st.id(key.uid).filter(|_| key.validity == VALIDITY).ok_or_else(|| NetError::No("the message is no longer on the server".into()))?;
+    c.vote(id, choice, subject)
+}
+
 pub fn apply_remote(c: &Client, st: &State, op: &Op) -> Result<()> {
     let ids = |keys: &[MessageKey]| -> Vec<(String, String)> {
         keys.iter().filter(|k| k.validity == VALIDITY).filter_map(|k| Some((st.id(k.uid)?.to_string(), k.folder.clone()))).collect()

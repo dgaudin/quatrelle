@@ -40,10 +40,43 @@ pub fn window(s: &mut Session, st: &mut UiState, ui: &mut Ui, w: mailcraft_engin
     }
 }
 
+/// The sender's voting buttons, above the message: a button per choice, which sends that answer
+/// at once; once answered, which one (and the buttons stay, to vote again).
+fn vote_bar(ui: &mut Ui, t: &Tokens, key: &MessageKey, choices: &[String], voted: &str, sending: Option<&str>, acts: &mut Vec<Action>) {
+    egui::Frame::new().fill(t.accent_soft).corner_radius(6).inner_margin(Margin::symmetric(10, 8)).show(ui, |ui| {
+        ui.set_width(ui.available_width());
+        ui.horizontal(|ui| {
+            let (ir, _) = ui.allocate_exact_size(vec2(16.0, 16.0), Sense::hover());
+            icons::paint(ui.painter(), ir, Icon::Info, t.accent);
+            let text = match sending {
+                Some(c) => tf!("Sending your vote: {choice}…", choice = c),
+                None if !voted.is_empty() => tf!("You voted: {choice}. Another button sends a new vote.", choice = voted),
+                None => tl!("The sender asks for a vote. Choose your answer:").to_string(),
+            };
+            ui.label(RichText::new(text).color(t.text));
+        });
+        ui.add_space(4.0);
+        ui.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing.x = 6.0;
+            for c in choices {
+                let chosen = c == voted;
+                let label = RichText::new(c).color(if chosen { t.on_accent } else { t.text });
+                let b = egui::Button::new(label).fill(if chosen { t.accent } else { t.surface }).stroke(egui::Stroke::new(1.0, t.accent));
+                if ui.add_enabled(sending.is_none(), b).on_hover_text(tl!("Send this answer to the sender")).clicked() {
+                    acts.push(Action::Run("mail.vote", json!({"key": key.to_id(), "choice": c})));
+                }
+            }
+        });
+    });
+}
+
 fn message(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>, in_window: bool) {
     let t = st.tokens;
     let Some(r) = s.reading.clone() else { return };
     let summary = s.summary(&r.key).cloned();
+    // Voting buttons the sender put on it, the answer sent from here, and one on its way.
+    let voting = s.voting(&r.key);
+    let vote_sending = s.vote_sending.as_ref().filter(|(k, _)| *k == r.key).map(|(_, c)| c.clone());
     // An attachment shown in place of the text (its chip clicked); Escape goes back.
     let viewing = st
         .attachment_view
@@ -179,6 +212,10 @@ fn message(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action
                         }
                     });
                     ui.add_space(6.0);
+                }
+                if let Some((choices, voted)) = &voting {
+                    vote_bar(ui, &t, &r.key, choices, voted, vote_sending.as_deref(), acts);
+                    ui.add_space(8.0);
                 }
                 if let Some((_, item)) = s.outbox_entry(&r.key) {
                     egui::Frame::new().fill(t.warn.gamma_multiply(0.12)).corner_radius(6).inner_margin(Margin::symmetric(10, 6)).show(ui, |ui| {

@@ -23,6 +23,23 @@ fn has_reading(s: &Session) -> Option<&'static str> {
     }
 }
 
+/// The message being read has voting buttons.
+fn has_voting(s: &Session) -> Option<&'static str> {
+    match &s.reading {
+        Some(r) if s.summary(&r.key).is_some_and(|m| !m.voting.is_empty()) => None,
+        Some(_) => Some("this message has no voting buttons"),
+        None => Some("open a message first"),
+    }
+}
+
+fn vote(s: &mut Session, v: &Value) -> CmdResult {
+    let key = match v.get("key") {
+        Some(_) => parse_key(v).ok_or_else(|| CmdError::Params("`key` isn't a message".into()))?,
+        None => s.reading.as_ref().map(|r| r.key.clone()).ok_or_else(|| CmdError::Disabled("open a message first".into()))?,
+    };
+    s.vote(&key, p::req_str(v, "choice")?)
+}
+
 fn has_compose(s: &Session) -> Option<&'static str> {
     if s.compose.is_some() { None } else { Some("no message is being written") }
 }
@@ -52,6 +69,9 @@ pub fn registry() -> Registry {
         CommandSpec::new("mail.reply", "Reply", "Home › Respond", |s, _| s.reply_compose(ReplyMode::Reply)).key("Mod+R").when(has_reading),
         CommandSpec::new("mail.replyAll", "Reply all", "Home › Respond", |s, _| s.reply_compose(ReplyMode::ReplyAll)).key("Mod+Shift+R").when(has_reading),
         CommandSpec::new("mail.forward", "Forward", "Home › Respond", |s, _| s.reply_compose(ReplyMode::Forward)).key("Mod+F").when(has_reading),
+        CommandSpec::new("mail.vote", "Vote", "Home › Respond", vote)
+            .params(r#"{"choice": string (one of the message's voting buttons), "key"?: string (else the message being read)}"#)
+            .when(has_voting),
         CommandSpec::new("mail.forwardAsAttachment", "Forward as attachment", "Reading pane › More", |s, _| s.forward_as_attachment()).when(has_reading),
         // Home › Move
         CommandSpec::new("mail.move", "Move to", "Home › Move", move_to).key("Mod+Shift+V").params(r#"{"folder": string}"#).when(has_selection),

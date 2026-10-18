@@ -13,7 +13,7 @@
 use std::collections::HashMap;
 
 use mailcraft_mime as mime;
-use mailcraft_model::{Flag, Flags, Folder, FolderRole, MessageKey, Op, Summary, sort_newest_first, utf7};
+use mailcraft_model::{Flag, Flags, Folder, FolderRole, MessageKey, Op, Summary, sort_newest_first, utf7, voting};
 use mailcraft_store::{FolderState, Store};
 use serde_json::{Value, json};
 
@@ -36,6 +36,11 @@ const MAX_PAGES: usize = 200;
 const MAX_FOLDERS: usize = 5000;
 const FOLDER_FIELDS: &str = "id,displayName,parentFolderId,childFolderCount,totalItemCount,unreadItemCount";
 const HEADER_FIELDS: &str = "id,isRead,isDraft,flag,subject,from,sender,toRecipients,ccRecipients,replyTo,receivedDateTime,sentDateTime,bodyPreview,hasAttachments,internetMessageId,internetMessageHeaders";
+/// The voting buttons (`PidLidVerbStream`), asked for with a message's details.
+const VOTING_EXPAND: &str =
+    "$expand=singleValueExtendedProperties($filter=id%20eq%20'Binary%20%7B00062008-0000-0000-C000-000000000046%7D%20Id%200x8520')";
+/// The choice a vote carries (`PidLidVerbResponse`), as Graph names the property.
+const VERB_RESPONSE_ID: &str = "String {00062008-0000-0000-C000-000000000046} Id 0x8524";
 
 /// A signed-in Graph session.
 pub struct Client {
@@ -249,7 +254,7 @@ impl Client {
     /// Messages' details, for the list.
     fn headers(&self, ids: &[String]) -> Result<Vec<Value>> {
         let reqs: Vec<(&str, String, Option<Value>)> =
-            ids.iter().map(|id| ("GET", format!("/me/messages/{}?$select={HEADER_FIELDS}", seg(id)), None)).collect();
+            ids.iter().map(|id| ("GET", format!("/me/messages/{}?$select={HEADER_FIELDS}&{VOTING_EXPAND}", seg(id)), None)).collect();
         Ok(self.batch(&reqs)?.into_iter().filter(|(s, _)| *s == 200).map(|(_, b)| b).collect())
     }
 
@@ -276,6 +281,24 @@ impl Client {
             }
         }
         Ok(id)
+    }
+
+    /// Answer a message's voting buttons with `choice`: a reply to it (so it stays in the
+    /// conversation), its subject the choice's, carrying the choice (`PidLidVerbResponse`) for the
+    /// sender's mail client to count; Exchange files the copy in Sent Items.
+    pub fn vote(&self, id: &str, choice: &str, subject: &str) -> Result<()> {
+        let reply = self.post(&format!("/me/messages/{}/createReply", seg(id)), &json!({}))?;
+        let rid = reply.get("id").and_then(Value::as_str).ok_or_else(|| NetError::Protocol("Graph: the reply wasn't made".into()))?.to_string();
+        let change = json!({
+            "subject": voting::response_subject(choice, subject),
+            "singleValueExtendedProperties": [{"id": VERB_RESPONSE_ID, "value": choice}],
+        });
+        let bytes = serde_json::to_vec(&change).map_err(|e| NetError::Protocol(e.to_string()))?;
+        self.send_raw("PATCH", &format!("/me/messages/{}", seg(&rid)), "application/json", bytes)?;
+        self.send_raw("POST", &format!("/me/messages/{}/send", seg(&rid)), "application/json", Vec::new()).map(drop).map_err(|e| match e {
+            NetError::No(m) | NetError::Bad(m) => NetError::Smtp(m),
+            e => e,
+        })
     }
 
     /// Send a MIME message; Exchange files the copy in Sent Items.
@@ -473,6 +496,7 @@ pub fn sync_folder(c: &Client, st: &mut State, store: &Store, account: &str, fol
         let mut s = mime::summary_from_header(&header_block(&m), key, flags(&m), 0, received);
         s.preview = m.get("bodyPreview").and_then(Value::as_str).map(mime::preview).unwrap_or_default();
         s.has_attachments = m.get("hasAttachments").and_then(Value::as_bool).unwrap_or(false);
+        s.voting = voting_choices(&m);
         fs.messages.push(s);
         report.new += 1;
     }
@@ -524,6 +548,23 @@ pub fn fetch_body(c: &Client, st: &State, store: &Store, key: &MessageKey) -> Re
         store.save_folder(&key.account, &key.folder, &fs)?;
     }
     Ok(raw)
+}
+
+/// The voting buttons on a message (its `PidLidVerbStream`, when asked for).
+fn voting_choices(m: &Value) -> Vec<String> {
+    m.get("singleValueExtendedProperties")
+        .and_then(Value::as_array)
+        .and_then(|props| props.iter().find(|p| p.get("id").and_then(Value::as_str).is_some_and(|id| id.to_ascii_lowercase().ends_with("id 0x8520"))))
+        .and_then(|p| p.get("value").and_then(Value::as_str))
+        .and_then(|v| crate::ews::unb64(v.trim()))
+        .map(|b| voting::choices(&b))
+        .unwrap_or_default()
+}
+
+/// Vote on a message (see [`Client::vote`]).
+pub fn vote(c: &Client, st: &State, key: &MessageKey, choice: &str, subject: &str) -> Result<()> {
+    let id = st.id(key.uid).filter(|_| key.validity == VALIDITY).ok_or_else(|| NetError::No("the message is no longer on the server".into()))?;
+    c.vote(id, choice, subject)
 }
 
 /// Apply one change on the server.
