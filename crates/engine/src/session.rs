@@ -250,6 +250,8 @@ pub struct Prefs {
     pub compact: bool,
     /// Cards, a table, or whichever suits where the reading pane is.
     pub list_layout: ListLayout,
+    /// The month and the coming appointments beside the mail (Outlook's To-Do bar).
+    pub todo_bar: bool,
     /// Ask before deleting permanently.
     pub confirm_permanent_delete: bool,
     /// Desktop notifications for new mail in an Inbox.
@@ -435,6 +437,7 @@ impl Default for Prefs {
             show_preview: true,
             compact: false,
             list_layout: ListLayout::Auto,
+            todo_bar: true,
             confirm_permanent_delete: true,
             favorites: None,
             notify: true,

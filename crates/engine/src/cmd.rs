@@ -303,6 +303,11 @@ pub fn registry() -> Registry {
             Ok(json!({"on": s.prefs.compact}))
         })
         .params(r#"{"on"?: bool}"#),
+        CommandSpec::new("view.todoBar", "To-Do bar", "View › Layout", |s, v| {
+            s.prefs.todo_bar = p::bool(v, "on").unwrap_or(!s.prefs.todo_bar);
+            Ok(json!({"on": s.prefs.todo_bar}))
+        })
+        .params(r#"{"on"?: bool}"#),
         CommandSpec::new("view.listLayout", "Message list layout", "View › Layout", |s, v| {
             let value = p::req_str(v, "value")?;
             s.prefs.list_layout =

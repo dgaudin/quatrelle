@@ -2254,3 +2254,14 @@ fn the_list_is_a_table_where_it_has_room() {
     assert!(s.run("view.listLayout", &json!({"value": "grid"})).is_err());
     done(s);
 }
+
+#[test]
+fn the_todo_bar_is_on_until_turned_off() {
+    let mut s = sample_session("todo-bar");
+    assert!(s.prefs.todo_bar);
+    s.run("view.todoBar", &json!({})).unwrap();
+    assert!(!s.prefs.todo_bar);
+    s.run("view.todoBar", &json!({"on": true})).unwrap();
+    assert!(s.prefs.todo_bar);
+    done(s);
+}

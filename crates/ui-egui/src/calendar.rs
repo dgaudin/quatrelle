@@ -182,6 +182,12 @@ fn months(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
 /// A small month (`month`: months since year 0): click a day to show it. The first of them has
 /// the arrows that move them all (`shown` is the first one's month).
 fn mini_month(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>, shown: i64, month: i64, arrows: bool) {
+    mini_month_to(s, st, ui, acts, shown, month, arrows, false);
+}
+
+/// [`mini_month`], a click on a day opening the calendar there when `open` (from the mail).
+#[allow(clippy::too_many_arguments)]
+fn mini_month_to(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>, shown: i64, month: i64, arrows: bool, open: bool) {
     let t = st.tokens;
     let (y, m) = (month.div_euclid(12), u32::try_from(month.rem_euclid(12) + 1).unwrap_or(1));
     ui.horizontal(|ui| {
@@ -245,12 +251,87 @@ fn mini_month(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>
                 ui.painter().text(r.center(), Align2::CENTER_CENTER, dd.to_string(), theme::regular(12.0), c);
                 if resp.clicked() {
                     let (yy, mm, ddd) = civil_from_days(d);
+                    if open {
+                        acts.push(Action::Run("view.module", json!({"name": "calendar"})));
+                    }
                     acts.push(Action::Run("calendar.goto", json!({"date": format!("{yy:04}-{mm:02}-{ddd:02}")})));
                     st.mini_month = None;
                 }
             }
         });
     }
+}
+
+/// Beside the mail, as Outlook's To-Do bar: this month, and the appointments of the coming
+/// week under their day (a click opens one).
+pub fn todo_bar(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
+    let t = st.tokens;
+    egui::ScrollArea::vertical().auto_shrink(false).id_salt("todo-bar").show(ui, |ui| {
+        let shown = st.mini_month.unwrap_or_else(|| {
+            let (y, m, _) = civil_from_days(today(s));
+            y * 12 + i64::from(m) - 1
+        });
+        mini_month_to(s, st, ui, acts, shown, shown, true, true);
+        ui.add_space(8.0);
+        let r = ui.available_rect_before_wrap();
+        ui.painter().line_segment([r.left_top(), r.right_top()], egui::Stroke::new(1.0, t.border));
+        ui.add_space(8.0);
+        let now = s.clock.now;
+        let mut items: Vec<_> = s.agenda(now, now + 7 * 86_400).into_iter().filter(|i| i.end > now).collect();
+        items.sort_by_key(|i| (i.start, i.all_day));
+        if items.is_empty() {
+            ui.label(RichText::new(tl!("Nothing planned in the coming week.")).color(t.dim).small());
+            return;
+        }
+        let now_day = today(s);
+        let mut last_day = None;
+        for item in items.iter().take(20) {
+            let day = day_of(item.start, s).max(now_day);
+            if last_day != Some(day) {
+                last_day = Some(day);
+                let label = match day - now_day {
+                    0 => tl!("Today").to_string(),
+                    1 => tl!("Tomorrow").to_string(),
+                    _ => crate::i18n::date(&dates::day_label(day)),
+                };
+                ui.add_space(4.0);
+                ui.label(RichText::new(label).font(theme::bold(12.5)).color(t.text));
+            }
+            // An all-day event says so under its title (the time column is narrow).
+            let when = if item.all_day { String::new() } else { hm(item.start, s) };
+            let under = match (item.all_day, item.location.is_empty()) {
+                (true, true) => tl!("All day").to_string(),
+                (true, false) => format!("{} · {}", tl!("All day"), item.location),
+                (false, _) => item.location.clone(),
+            };
+            let resp = ui
+                .horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 6.0;
+                    ui.add_sized(vec2(40.0, 16.0), egui::Label::new(RichText::new(when).color(t.dim).small()));
+                    let (bar, _) = ui.allocate_exact_size(vec2(3.0, 30.0), Sense::hover());
+                    ui.painter().rect_filled(bar, 1.0, color(item.color, &t));
+                    ui.vertical(|ui| {
+                        ui.spacing_mut().item_spacing.y = 0.0;
+                        let title = if item.summary.trim().is_empty() { tl!("(no title)").to_string() } else { item.summary.clone() };
+                        ui.add(egui::Label::new(RichText::new(title).font(theme::bold(12.0)).color(t.text)).truncate());
+                        if !under.is_empty() {
+                            ui.add(egui::Label::new(RichText::new(&under).color(t.dim).small()).truncate());
+                        }
+                    });
+                })
+                .response
+                .interact(Sense::click());
+            if resp.hovered() {
+                ui.painter().rect_filled(resp.rect.expand(2.0), 4.0, t.hover_row.gamma_multiply(0.6));
+            }
+            if resp.on_hover_cursor(egui::CursorIcon::PointingHand).clicked()
+                && let Some(d) = Dialog::open_event(s, &item.uid, item.occurrence)
+            {
+                acts.push(Action::Dialog(d));
+            }
+            ui.add_space(4.0);
+        }
+    });
 }
 
 /// The main pane.

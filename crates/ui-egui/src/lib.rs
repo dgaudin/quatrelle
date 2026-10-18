@@ -764,6 +764,17 @@ impl MailApp {
             }
             let pane = self.session.prefs.reading_pane;
             let list_frame = egui::Frame::new().fill(t.surface).stroke(egui::Stroke::new(1.0, t.border));
+            // Beside the mail, the month and the coming appointments (Outlook's To-Do bar), on
+            // the far side, where the window has room for it.
+            let room = if pane == ReadingPane::Right { 1100.0 } else { 800.0 };
+            if module == Module::Mail && self.session.prefs.todo_bar && ui.available_width() > room {
+                let end = if rtl { egui::Panel::left("todo") } else { egui::Panel::right("todo") };
+                end.resizable(true)
+                    .default_size(230.0)
+                    .size_range(190.0..=320.0)
+                    .frame(egui::Frame::new().fill(t.chrome).inner_margin(Margin::symmetric(10, 8)))
+                    .show(ui, |ui| calendar::todo_bar(&self.session, &mut self.ui, ui, &mut acts));
+            }
             match (module, pane) {
                 (Module::Calendar, _) => {
                     egui::CentralPanel::default().frame(egui::Frame::new().fill(t.surface)).show(ui, |ui| {
@@ -2021,6 +2032,12 @@ impl MailApp {
                         });
                         if widgets::big_toggle(ui, Icon::Folder, "Folder pane", &t, !s.prefs.folder_pane_minimized).clicked() {
                             acts.push(Action::Run("view.folderPane", json!({})));
+                        }
+                        if widgets::big_toggle(ui, Icon::CalendarToday, "To-Do bar", &t, s.prefs.todo_bar)
+                            .on_hover_text(tl!("The month and your coming appointments beside the mail"))
+                            .clicked()
+                        {
+                            acts.push(Action::Run("view.todoBar", json!({})));
                         }
                         groups.end(ui, &t, "Layout");
                         // Messages: small boxes stacked, as Outlook's.
