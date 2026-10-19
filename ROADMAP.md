@@ -94,7 +94,8 @@ local-first, media-aware v1); the fuller request is
    and password of its own.
 20. **Next:** what's left in [docs/gaps.md](docs/gaps.md): a relay for IMAP accounts in the
    browser, bidirectional editing, Wayland drag-out, Kerberos-only Exchange, what the `.pst`
-   libraries can't do yet.
+   libraries can't do yet; then whole mailboxes kept offline, the search index on disk,
+   Exchange's own rules and every contact field with its photo.
 
 ## Progress log
 
@@ -252,3 +253,10 @@ local-first, media-aware v1); the fuller request is
 - **2026-10-18** — On-premises Exchange (EWS) too: the calendars Outlook keeps in the groups of
   its Calendar pane (a team's, shared calendars, rooms) come in under those groups, read from
   Outlook's navigation shortcuts ([MS-OXOCFG]) and the directory.
+- **2026-10-19** — **Search that never freezes:** the index behind the search box was built in one
+  go on the window's thread, so a big mailbox froze the window for as long as reading every
+  message took (75 s for 800 000). It is now built a slice at a time (500 messages a frame, the
+  window drawing between slices), what it has found so far is shown while it goes on with
+  "Searching…" in the status bar, and carrying the same query on keeps the open message and the
+  selection. Tested slice by slice: the first answer says more is coming, and the match is found
+  once the index is done.

@@ -2073,6 +2073,56 @@ fn searching_a_big_mailbox_stays_quick() {
     let _ = std::fs::remove_dir_all(store.root());
 }
 
+/// A big mailbox's search is indexed a slice at a time: each call answers with what it has and
+/// says whether more is coming, so the window keeps drawing between the calls instead of
+/// freezing while the whole mailbox is read.
+#[test]
+fn a_search_is_indexed_a_slice_at_a_time() {
+    let store = temp("slice-search");
+    store.save_accounts(&[mailcraft_model::AccountConfig { id: "a1".into(), email: "me@studio.example".into(), ..Default::default() }]).unwrap();
+    store
+        .save_folders(
+            "a1",
+            &[mailcraft_model::Folder {
+                account: "a1".into(),
+                path: "INBOX".into(),
+                role: FolderRole::Inbox,
+                selectable: true,
+                ..Default::default()
+            }],
+        )
+        .unwrap();
+    let mut st = store.load_folder("a1", "INBOX").unwrap();
+    for uid in 1..=60u32 {
+        let key = mailcraft_model::MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 1, uid };
+        st.messages.push(mailcraft_model::Summary { key, subject: format!("Report {uid}"), ..Default::default() });
+    }
+    st.messages[59].subject = "needle in the last one".into();
+    store.save_folder("a1", "INBOX", &st).unwrap();
+    let mut s = Session::open(Some(store.clone()), mailcraft_model::dates::Clock::new(NOW, 0));
+    s.take_jobs();
+    // Ten messages a call: the first answers with what it has indexed and says more is coming.
+    let v = s.run("search.run", &json!({"query": "needle", "index": 10})).unwrap();
+    assert_eq!(v["pending"], true, "a slice is left: {v}");
+    assert_eq!(v["results"], 0, "the matching message isn't indexed yet: {v}");
+    // The window keeps asking, a slice a frame, until the index is done.
+    let mut calls = 0;
+    loop {
+        let v = s.run("search.run", &json!({"query": "needle", "index": 10})).unwrap();
+        calls += 1;
+        if v["pending"] == false {
+            assert_eq!(v["results"], 1, "the match is found once the index is done: {v}");
+            break;
+        }
+        assert!(calls < 100, "the scan must finish");
+    }
+    // A later search of the same scope uses the index it has: nothing left to do.
+    let v = s.run("search.run", &json!({"query": "report", "index": 10})).unwrap();
+    assert_eq!(v["pending"], false, "the index is built: {v}");
+    assert!(v["results"].as_u64().unwrap_or(0) > 0, "the whole folder is searchable: {v}");
+    let _ = std::fs::remove_dir_all(store.root());
+}
+
 /// Issue #1: the reading pane marks mail read as Outlook's Reading Pane options say: when shown
 /// (after a wait), once another message is chosen, or not at all; a message opened in its own
 /// window (a double-click) is always read.

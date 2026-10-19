@@ -249,7 +249,7 @@ pub fn registry() -> Registry {
         })
         .params(r#"{"on"?: bool}"#),
         // Search
-        CommandSpec::new("search.run", "Search", "Search box", search).key("Mod+E").params(r#"{"query": string, "scope"?: "all"|"current"}"#),
+        CommandSpec::new("search.run", "Search", "Search box", search).key("Mod+E").params(r#"{"query": string, "scope"?: "all"|"current", "index"?: number (messages added to the index this call; the window adds a slice at a time so a big mailbox doesn't freeze it; 0 or absent: no limit)}"#),
         CommandSpec::new("search.clear", "Clear search", "Search box", |s, _| Ok(json!({"results": s.run_search("", SearchScope::All)}))).key("Escape"),
         // Compose
         CommandSpec::new("compose.update", "Edit message", "Message", compose_update)
@@ -1069,8 +1069,11 @@ fn search(s: &mut Session, v: &Value) -> CmdResult {
         Some(x) if x.eq_ignore_ascii_case("current") => SearchScope::Current,
         _ => SearchScope::All,
     };
-    let n = s.run_search(&q, scope);
-    Ok(json!({"results": n}))
+    // The window adds a slice at a time to the index and draws between calls; `pending` says
+    // whether more is left, so a big mailbox's first search never freezes it.
+    let budget = p::u64(v, "index").and_then(|n| usize::try_from(n).ok()).unwrap_or(0);
+    let n = s.run_search_budgeted(&q, scope, budget);
+    Ok(json!({"results": n, "pending": s.search_pending}))
 }
 
 fn compose_update(s: &mut Session, v: &Value) -> CmdResult {
