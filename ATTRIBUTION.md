@@ -101,3 +101,4 @@ are rendered by `cargo xtask icons` from MailCraft's own drawing in `xtask/src/i
 | `assets/icons/fluent/calendar_week_start_20_regular.svg` | Microsoft Corporation | Fluent UI System Icons, `@fluentui/svg-icons` 1.1.292, unchanged | MIT |
 | `assets/icons/fluent/chevron_up_20_regular.svg` | Microsoft Corporation | Fluent UI System Icons, `@fluentui/svg-icons` 1.1.292, unchanged | MIT |
 | `assets/icons/fluent/calendar_add_20_regular.svg` | Microsoft Corporation | Fluent UI System Icons, `@fluentui/svg-icons` 1.1.292, unchanged | MIT |
+| `assets/icons/fluent/vote_20_regular.svg` | Microsoft Corporation | Fluent UI System Icons, `@fluentui/svg-icons` 1.1.292, unchanged | MIT |

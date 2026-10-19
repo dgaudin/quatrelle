@@ -172,6 +172,24 @@ impl Session {
         !self.prefs.hidden_calendars.contains(&Session::calendar_key(account, calendar))
     }
 
+    /// Calendars come ticked when they're an account's own or opened here by address; others'
+    /// that come with Outlook's calendar groups, and public folders', come unticked the first
+    /// time they're seen (a dozen colleagues' weeks at once are slow to draw and hard to read),
+    /// as Outlook leaves them until they're ticked. Run after a sync and once the settings are
+    /// read (the calendars kept on this computer were seen before the settings came).
+    pub fn note_new_calendars(&mut self) {
+        let seen: Vec<(String, bool)> = self
+            .pim
+            .iter()
+            .flat_map(|(a, p)| p.calendars.iter().map(move |c| (Session::calendar_key(a, &c.id), !c.group.is_empty() || c.id.starts_with("public:"))))
+            .collect();
+        for (key, others) in seen {
+            if self.prefs.known_calendars.insert(key.clone()) && others {
+                self.prefs.hidden_calendars.insert(key);
+            }
+        }
+    }
+
     /// The calendars shown, in the order the side pane lists them: (account, id, name, colour).
     pub fn shown_calendars(&self) -> Vec<(String, String, String, u8)> {
         self.accounts
@@ -399,21 +417,7 @@ impl Session {
             }
             p.calendars = list;
         }
-        // Calendars come ticked when they're this account's or opened here by address; others'
-        // that come with Outlook's calendar groups, and public folders', come unticked the first
-        // time (a dozen colleagues' weeks at once are slow to draw and hard to read), as
-        // Outlook leaves them until they're ticked.
-        let seen: Vec<(String, bool)> = sync
-            .calendars
-            .iter()
-            .flatten()
-            .map(|c| (Session::calendar_key(account, &c.id), !c.group.is_empty() || c.id.starts_with("public:")))
-            .collect();
-        for (key, others) in seen {
-            if self.prefs.known_calendars.insert(key.clone()) && others {
-                self.prefs.hidden_calendars.insert(key);
-            }
-        }
+        self.note_new_calendars();
         let p = self.pim_mut(account);
         if let Some(server) = &sync.books {
             let keep_local = server.is_empty() || p.cards.iter().any(|c| c.book == LOCAL);

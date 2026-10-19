@@ -1005,10 +1005,24 @@ impl Client {
 
     /// Send a MIME message, keeping a copy in Sent Items.
     pub fn send_mime(&self, raw: &[u8]) -> Result<()> {
+        // Voting buttons asked for: Exchange's verb stream ([MS-OXOMSG] PidLidVerbStream), which
+        // Outlook shows as buttons; the header that carried them here stays here.
+        let (raw, choices) = mime::take_voting(raw);
+        let verbs = if choices.is_empty() {
+            String::new()
+        } else {
+            let names: Vec<&str> = choices.iter().map(String::as_str).collect();
+            format!(
+                "<t:ExtendedProperty><t:ExtendedFieldURI DistinguishedPropertySetId=\"Common\" PropertyId=\"{}\" PropertyType=\"Binary\"/>\
+                 <t:Value>{}</t:Value></t:ExtendedProperty>",
+                voting::VERB_STREAM,
+                b64(&voting::stream(&names))
+            )
+        };
         self.call_one(&format!(
             "<m:CreateItem MessageDisposition=\"SendAndSaveCopy\"><m:SavedItemFolderId><t:DistinguishedFolderId Id=\"sentitems\"/></m:SavedItemFolderId>\
-             <m:Items><t:Message><t:MimeContent CharacterSet=\"UTF-8\">{}</t:MimeContent></t:Message></m:Items></m:CreateItem>",
-            b64(raw)
+             <m:Items><t:Message><t:MimeContent CharacterSet=\"UTF-8\">{}</t:MimeContent>{verbs}</t:Message></m:Items></m:CreateItem>",
+            b64(&raw)
         ))
         .map(drop)
     }
