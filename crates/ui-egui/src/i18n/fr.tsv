@@ -942,3 +942,5 @@ month	May	mai
 	Its password	Son mot de passe
 	Password (unchanged when empty)	Mot de passe (inchangé si vide)
 	Searching…	Recherche…
+	Download all	Télécharger tout
+	Downloading {done} of {total}	Téléchargement : {done} sur {total}

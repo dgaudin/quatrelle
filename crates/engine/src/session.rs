@@ -613,6 +613,20 @@ struct SearchIndex {
     done: bool,
 }
 
+/// Outlook's "Download all": the messages still to bring onto this computer, the ones asked for
+/// (a batch at a time) and not answered yet, and how many are done.
+struct DownloadAll {
+    keys: Vec<MessageKey>,
+    next: usize,
+    in_flight: HashSet<MessageKey>,
+    done: usize,
+    failed: usize,
+}
+
+/// Message sources asked for at once by "Download all": the worker fetches them in order, and
+/// each answer asks for the next, so a mailbox of any size doesn't flood the job queue.
+const FETCH_BATCH: usize = 32;
+
 /// File for the Replied/Forwarded flags still owed by replies and forwards in the Outbox.
 const PENDING_MARKS: &str = "pending-marks.json";
 
@@ -639,6 +653,8 @@ pub struct Session {
     pub search_pending: bool,
     /// Messages the search index adds per call (`usize::MAX`: no limit).
     search_budget: usize,
+    /// Outlook's "Download all": the messages still to bring onto this computer.
+    download_all: Option<DownloadAll>,
     /// The messages on screen, newest first.
     pub list: Vec<Summary>,
     /// Conversations over `list` (when [`Prefs::conversations`] is on).
@@ -738,6 +754,7 @@ impl Session {
             search: None,
             search_pending: false,
             search_budget: usize::MAX,
+            download_all: None,
             list: Vec::new(),
             threads: Vec::new(),
             selection: Vec::new(),
@@ -2405,6 +2422,95 @@ impl Session {
         self.list.len()
     }
 
+    // ----- downloading -----
+
+    /// Bring every message of an account (or one folder) that isn't on this computer yet, as
+    /// Outlook's "Download all": the worker fetches them a batch at a time, and the search has
+    /// their words too once they're here. Anything already kept is passed over.
+    pub fn download_all(&mut self, account: Option<&str>, folder: Option<&str>) -> CmdResult {
+        let store = self.store.clone().ok_or_else(|| CmdError::Disabled("this mailbox keeps no files on this computer".into()))?;
+        let ids: Vec<String> = match account {
+            Some(a) => {
+                if self.account(a).is_none() {
+                    return Err(CmdError::Params(format!("no account `{a}`")));
+                }
+                vec![a.to_string()]
+            }
+            None => self.accounts.iter().map(|a| a.config.id.clone()).collect(),
+        };
+        let mut keys: Vec<MessageKey> = Vec::new();
+        for id in ids {
+            let folders: Vec<String> = {
+                let Some(a) = self.account(&id) else { continue };
+                match folder {
+                    Some(f) if a.folders.iter().any(|x| x.path == f) => vec![f.to_string()],
+                    Some(f) => return Err(CmdError::Params(format!("no folder `{f}` in account `{id}`"))),
+                    None => a.folders.iter().filter(|x| x.selectable).map(|x| x.path.clone()).collect(),
+                }
+            };
+            for f in folders {
+                for m in &self.folder_state(&id, &f).messages {
+                    if !m.flags.deleted && !store.has_body(&m.key) {
+                        keys.push(m.key.clone());
+                    }
+                }
+            }
+        }
+        if keys.is_empty() {
+            self.notice("Every message is already on this computer", false);
+            return Ok(serde_json::json!({"total": 0}));
+        }
+        let total = keys.len();
+        self.download_all = Some(DownloadAll { keys, next: 0, in_flight: HashSet::new(), done: 0, failed: 0 });
+        self.pump_download();
+        self.notice(format!("Downloading {total} messages…"), false);
+        Ok(serde_json::json!({"total": total}))
+    }
+
+    /// How far "Download all" has got: (done, total, failed), or `None` when nothing is going on.
+    pub fn download_progress(&self) -> Option<(usize, usize, usize)> {
+        self.download_all.as_ref().map(|d| (d.done, d.keys.len(), d.failed))
+    }
+
+    /// Keep [`FETCH_BATCH`] sources in flight: one more is asked for as each answer comes back.
+    fn pump_download(&mut self) {
+        let Some(mut d) = self.download_all.take() else { return };
+        while d.in_flight.len() < FETCH_BATCH && d.next < d.keys.len() {
+            let key = d.keys[d.next].clone();
+            d.next += 1;
+            d.in_flight.insert(key.clone());
+            self.jobs.push(Job::FetchBody { key });
+        }
+        if d.next >= d.keys.len() && d.in_flight.is_empty() {
+            let (done, failed) = (d.done, d.failed);
+            self.notice(
+                if failed == 0 { format!("{done} messages downloaded") } else { format!("{done} messages downloaded, {failed} failed") },
+                failed > 0,
+            );
+        } else {
+            self.download_all = Some(d);
+        }
+    }
+
+    /// A source arrived (or failed): count it when "Download all" asked for it, and ask for the
+    /// next one. Sources opened by hand aren't part of the count.
+    fn downloaded(&mut self, key: &MessageKey, ok: bool) {
+        let counted = self.download_all.as_mut().is_some_and(|d| {
+            if d.in_flight.remove(key) {
+                d.done += 1;
+                if !ok {
+                    d.failed += 1;
+                }
+                true
+            } else {
+                false
+            }
+        });
+        if counted {
+            self.pump_download();
+        }
+    }
+
     // ----- writing -----
 
     fn me(&self, account: &str) -> Vec<String> {
@@ -3341,6 +3447,7 @@ impl Session {
             Event::Body { key, raw } => {
                 self.show_body(&key, &raw);
                 self.index_body(&key, &raw);
+                self.downloaded(&key, true);
             }
             Event::BodyFailed { key, error } => {
                 for w in self.windows.iter_mut().filter(|w| w.key == key && w.parsed.is_none()) {
@@ -3351,6 +3458,7 @@ impl Session {
                 {
                     r.error = Some(error);
                 }
+                self.downloaded(&key, false);
             }
             Event::Sent { id, .. } => {
                 if let Some(c) = self.compose.clone().filter(|c| c.id == id) {
