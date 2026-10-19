@@ -65,6 +65,16 @@ pub struct ServerConfig {
     pub security: Security,
 }
 
+/// A picture in a signature: its id in the signature's HTML, its file name and type, and the
+/// picture itself.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SignaturePicture {
+    pub cid: String,
+    pub name: String,
+    pub mime: String,
+    pub data: Vec<u8>,
+}
+
 /// A mail account. Never holds the password: that lives in the system keychain.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AccountConfig {
@@ -83,6 +93,10 @@ pub struct AccountConfig {
     /// links, as pasted from Outlook or set in the signature editor.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub signature_html: String,
+    /// The signature's pictures (a company logo): kept here, and put into each message with it,
+    /// where its HTML names them (`cid:`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub signature_pictures: Vec<SignaturePicture>,
     /// The signature isn't added to new messages (Outlook's New messages: none).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub signature_not_new: bool,
@@ -217,6 +231,7 @@ impl AccountConfig {
             smtp,
             signature: String::new(),
             signature_html: String::new(),
+            signature_pictures: Vec::new(),
             signature_not_new: false,
             signature_not_replies: false,
             color: 0,

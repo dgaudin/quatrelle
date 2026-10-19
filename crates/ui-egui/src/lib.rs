@@ -253,6 +253,8 @@ pub enum Action {
     SignInAgain(String),
     /// Insert a picture at the cursor of the message being written (from a file).
     InsertPicture,
+    /// A picture into the signature being made (a logo), from a file.
+    SignaturePicture,
     /// The account's signature at the cursor of the message being written.
     InsertSignature,
     /// Paste a picture from the clipboard, if there is one.
@@ -1295,6 +1297,29 @@ impl MailApp {
                         }
                     }
                     Err(e) => self.session.notice(e.to_string(), true),
+                }
+            }
+            Action::SignaturePicture => {
+                for p in self.services.pick_pictures() {
+                    let name = p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "picture.png".into());
+                    let mime = mailcraft_engine::mime::mime_from_name(&name);
+                    let data = match std::fs::metadata(&p) {
+                        Ok(m) if m.len() > 500 * 1024 => {
+                            self.session.notice(format!("{name}: a signature picture is 500 KB at most"), true);
+                            continue;
+                        }
+                        _ => std::fs::read(&p),
+                    };
+                    let (Ok(data), true) = (data, mime.starts_with("image/")) else {
+                        self.session.notice(format!("{name} isn't a picture that can be read"), true);
+                        continue;
+                    };
+                    let cid = self.session.new_cid();
+                    if let Some(Dialog::Signature(f)) = self.ui.dialog.as_mut() {
+                        let at = f.compose.body.chars().count();
+                        f.compose.inline.push(mailcraft_engine::mime::InlinePicture { cid: cid.clone(), name, mime: mime.to_string(), data });
+                        mailcraft_engine::cmd::insert_picture_at(&mut f.compose, at, &cid);
+                    }
                 }
             }
             Action::InsertPicture => {

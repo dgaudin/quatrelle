@@ -2453,3 +2453,29 @@ fn a_signature_goes_where_the_account_says() {
     let config = s.account("sample").unwrap().config.clone();
     assert!(config.signature_not_new && config.signature_not_replies);
 }
+
+/// A signature's logo is kept with the account and goes into each message with it, as a
+/// picture of the message (never fetched from the web); a picture the HTML no longer names
+/// goes.
+#[test]
+fn a_signature_keeps_its_logo() {
+    let mut s = sample_session("signature-logo");
+    let logo = json!({"cid": "logo@mc", "name": "logo.gif", "mime": "image/gif", "data": [71, 73, 70, 56, 57, 97]});
+    let html = "<p><img src=\"cid:logo@mc\"></p><p><b>Didier GAUDIN</b><br>Tél. 02 51 70 93 93</p>";
+    s.run("account.setSignature", &json!({"account": "sample", "signature": "x", "html": html, "pictures": [logo]})).unwrap();
+    let config = s.account("sample").unwrap().config.clone();
+    assert_eq!(config.signature_pictures.len(), 1);
+    assert!(config.signature_html.contains("cid:logo@mc"), "{}", config.signature_html);
+    s.run("mail.new", &json!({})).unwrap();
+    let (text, html, pictures) = s.compose.as_ref().unwrap().bodies();
+    assert!(text.contains("Didier GAUDIN"));
+    assert!(html.unwrap_or_default().contains("cid:logo@mc"));
+    assert_eq!(pictures.len(), 1);
+    // Changed without its picture: it goes.
+    s.run("account.setSignature", &json!({"account": "sample", "signature": "Didier", "html": "<p><b>Didier</b></p>"})).unwrap();
+    assert!(s.account("sample").unwrap().config.signature_pictures.is_empty());
+    // A picture on the web isn't kept (nor fetched).
+    s.run("account.setSignature", &json!({"account": "sample", "signature": "x", "html": "<img src=\"https://www.example.com/logo.gif\"><b>D</b>"}))
+        .unwrap();
+    assert!(!s.account("sample").unwrap().config.signature_html.contains("https://www.example.com"));
+}

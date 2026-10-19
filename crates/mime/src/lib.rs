@@ -381,6 +381,36 @@ pub fn pasted_html(html: &str) -> (String, rich::Styles) {
     rich::from_rich(&lines)
 }
 
+/// A signature's HTML as text and styles: as [`pasted_html`], keeping the pictures it names by
+/// `cid:` (its own, kept with the account), each where a [`rich::PICTURE`] stands.
+pub fn signature_html(html: &str) -> (String, rich::Styles) {
+    const MARK: char = '\u{E000}';
+    let mut lines = html_to_rich(&word_paragraphs(html));
+    let mut cids = Vec::new();
+    for line in &mut lines {
+        line.retain(|sp| sp.image.as_deref().is_none_or(|src| src.starts_with("cid:")));
+        for sp in line.iter_mut() {
+            if let Some(cid) = sp.image.take().and_then(|src| src.strip_prefix("cid:").map(str::to_string)) {
+                cids.push(cid);
+                sp.text = MARK.to_string();
+            }
+        }
+    }
+    let blank = |l: &Vec<Span>| l.iter().all(|sp| sp.text.trim().is_empty());
+    while lines.last().is_some_and(blank) {
+        lines.pop();
+    }
+    let first = lines.iter().position(|l| !blank(l)).unwrap_or(lines.len());
+    lines.drain(..first);
+    let (mut text, mut styles) = rich::from_rich(&lines);
+    let marks: Vec<usize> = text.chars().enumerate().filter(|(_, c)| *c == MARK).map(|(i, _)| i).collect();
+    text = text.replace(MARK, &rich::PICTURE.to_string());
+    for (at, cid) in marks.into_iter().zip(cids) {
+        styles.restyle(&text, at..at + 1, |s| rich::Style { picture: Some(cid.clone()), ..s.clone() });
+    }
+    (text, styles)
+}
+
 /// HTML → lines of formatted spans: paragraphs, emphasis, links, list bullets, quotes, tables
 /// laid out as text, and pictures by reference. No scripts, styles or remote loads: what comes
 /// out is plain data. Never panics; empty when conversion fails.
