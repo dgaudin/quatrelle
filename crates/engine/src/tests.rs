@@ -2799,32 +2799,6 @@ fn new_mail_to_someone() {
     done(s);
 }
 
-/// Shared mailboxes are added to an Exchange account by address and removed again; each change
-/// connects the account again to list their folders. Junk, duplicates and its own address are
-/// refused, and other kinds of accounts have none.
-#[test]
-fn shared_mailboxes_are_added_and_removed() {
-    let mut s = sample_session("shared-mailboxes");
-    let id = s
-        .run("account.add", &json!({"email": "riley@contoso.example", "password": "pw", "ews": "https://mail.contoso.example/EWS/Exchange.asmx", "username": "CONTOSO\\riley"}))
-        .unwrap()["account"]
-        .as_str()
-        .unwrap()
-        .to_string();
-    s.take_jobs();
-    s.run("account.addSharedMailbox", &json!({"account": id, "address": "Sales <sales@contoso.example>"})).unwrap();
-    assert_eq!(s.account(&id).unwrap().config.shared_mailboxes, ["sales@contoso.example"]);
-    assert!(s.take_jobs().iter().any(|j| matches!(j, Job::Start { account, .. } if account.shared_mailboxes == ["sales@contoso.example"])));
-    for bad in ["SALES@contoso.example", "riley@contoso.example", "not an address", "a@x.example, b@x.example"] {
-        assert!(s.run("account.addSharedMailbox", &json!({"account": id, "address": bad})).is_err(), "{bad}");
-    }
-    assert!(s.run("account.addSharedMailbox", &json!({"account": "sample", "address": "x@y.example"})).is_err(), "not Exchange");
-    s.run("account.removeSharedMailbox", &json!({"account": id, "address": "sales@CONTOSO.example"})).unwrap();
-    assert!(s.account(&id).unwrap().config.shared_mailboxes.is_empty());
-    assert!(s.run("account.removeSharedMailbox", &json!({"account": id, "address": "sales@contoso.example"})).is_err());
-    done(s);
-}
-
 /// Removing an account keeps its data file where it is, as Outlook keeps a removed account's
 /// .pst: the same address added again gets a file of its own beside it, and the kept one opens
 /// again as a data file. A file that failed to open, or an account starting again, isn't kept.

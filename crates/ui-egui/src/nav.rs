@@ -220,12 +220,6 @@ pub fn show(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>) {
                     }));
                     ui.close();
                 }
-                // Exchange: another mailbox opened beside this one, as Outlook's Open these
-                // additional mailboxes.
-                if config.ews.is_some() && ui.button(tl!("Add shared mailbox…")).clicked() {
-                    acts.push(Action::Dialog(Dialog::AddSharedMailbox { account: config.id.clone(), address: String::new(), error: None }));
-                    ui.close();
-                }
                 if ui.button(tl!("New folder…")).clicked() {
                     // In the folder open now (as Outlook's New Folder starts), else at the top.
                     let here = match &s.view {
@@ -353,18 +347,14 @@ fn shared_header(t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>, a: &mailcraft_
             ui.close();
         }
         ui.separator();
-        // One added by hand is removed here; one the server opens is the server's to stop.
+        // One added by hand is closed here; one the server opens is the server's to stop.
         if added {
-            if ui.button(RichText::new(tl!("Remove shared mailbox")).color(t.danger)).clicked() {
-                acts.push(Action::Run("account.removeSharedMailbox", json!({"account": account, "address": address})));
+            if ui.button(RichText::new(tl!("Close this mailbox")).color(t.danger)).clicked() {
+                acts.push(Action::Run("account.closeMailbox", json!({"account": account, "email": address})));
                 ui.close();
             }
         } else {
             ui.add_enabled(false, egui::Button::new(tl!("Opened by the server for your access to it")));
-        }
-        if ui.button(tl!("Add shared mailbox…")).clicked() {
-            acts.push(Action::Dialog(Dialog::AddSharedMailbox { account: account.clone(), address: String::new(), error: None }));
-            ui.close();
         }
     });
     resp.clicked()

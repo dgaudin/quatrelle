@@ -37,7 +37,7 @@ impl Session {
         if a.config.email.eq_ignore_ascii_case(&email) {
             return Err(CmdError::Params("that's this account's own mailbox".into()));
         }
-        if !a.config.shared_mailboxes.contains(&email) {
+        if !a.config.shared_mailboxes.iter().any(|m| m.eq_ignore_ascii_case(&email)) {
             if a.config.shared_mailboxes.len() >= MAX_SHARED {
                 return Err(CmdError::Params(format!("at most {MAX_SHARED} other mailboxes can be open in an account")));
             }
@@ -65,17 +65,17 @@ impl Session {
             None => self
                 .accounts
                 .iter()
-                .find(|a| a.config.shared_mailboxes.contains(&email))
+                .find(|a| a.config.shared_mailboxes.iter().any(|m| m.eq_ignore_ascii_case(&email)))
                 .map(|a| a.config.id.clone())
                 .ok_or_else(|| CmdError::Params(format!("{email} isn't open")))?,
         };
         let Some(a) = self.account_mut(&account) else { return Err(CmdError::Params(format!("no account `{account}`"))) };
-        if !a.config.shared_mailboxes.contains(&email) {
+        if !a.config.shared_mailboxes.iter().any(|m| m.eq_ignore_ascii_case(&email)) {
             return Err(CmdError::Params(format!("{email} isn't open in this account")));
         }
         let gone: Vec<String> =
-            a.folders.iter().filter(|f| a.folder_mailbox(&f.path).as_deref() == Some(email.as_str())).map(|f| f.path.clone()).collect();
-        a.config.shared_mailboxes.retain(|m| *m != email);
+            a.folders.iter().filter(|f| a.folder_mailbox(&f.path).is_some_and(|m| m.eq_ignore_ascii_case(&email))).map(|f| f.path.clone()).collect();
+        a.config.shared_mailboxes.retain(|m| !m.eq_ignore_ascii_case(&email));
         a.folders.retain(|f| !gone.contains(&f.path));
         let config = a.config.clone();
         if let Some(store) = &self.store {
