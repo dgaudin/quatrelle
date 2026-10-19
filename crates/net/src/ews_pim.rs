@@ -332,20 +332,39 @@ fn note_xml(n: &Note) -> String {
 /// Public contact folders and calendars read, at most.
 const MAX_PUBLIC_PIM: usize = 20;
 
-/// Every item of a distinguished folder, with all its properties (bodies as text).
-fn items(c: &Client, folder: &str) -> Result<Vec<El>> {
-    items_in(c, &format!("<t:DistinguishedFolderId Id=\"{folder}\"/>"), if folder == "notes" { NOTE_COLOR } else { "" })
+/// How far back calendars are read: Outlook's own cached mode keeps about this much, and
+/// reading every meeting of every colleague's calendar since it began never ended.
+pub(crate) const CALENDAR_BACK: i64 = 183 * 86_400;
+
+/// A calendar's items that matter from `since` on: those ending then or later, and every
+/// recurring series (its first meeting may be long before) — not the years before.
+fn calendar_restriction(since: i64) -> String {
+    format!(
+        "<m:Restriction><t:Or><t:IsGreaterThanOrEqualTo><t:FieldURI FieldURI=\"calendar:End\"/>\
+         <t:FieldURIOrConstant><t:Constant Value=\"{}\"/></t:FieldURIOrConstant></t:IsGreaterThanOrEqualTo>\
+         <t:IsEqualTo><t:FieldURI FieldURI=\"calendar:CalendarItemType\"/>\
+         <t:FieldURIOrConstant><t:Constant Value=\"RecurringMaster\"/></t:FieldURIOrConstant></t:IsEqualTo></t:Or></m:Restriction>",
+        utc(since)
+    )
+}
+
+/// Every item of a distinguished folder, with all its properties (bodies as text); a
+/// calendar's from `since` on.
+fn items(c: &Client, folder: &str, since: Option<i64>) -> Result<Vec<El>> {
+    items_in(c, &format!("<t:DistinguishedFolderId Id=\"{folder}\"/>"), if folder == "notes" { NOTE_COLOR } else { "" }, since)
 }
 
 /// Every item of a folder (given as its EWS folder id element), with all its properties.
-fn items_in(c: &Client, parent: &str, extra: &str) -> Result<Vec<El>> {
+fn items_in(c: &Client, parent: &str, extra: &str, since: Option<i64>) -> Result<Vec<El>> {
     let folder = parent;
+    let began = std::time::Instant::now();
+    let restriction = since.map(calendar_restriction).unwrap_or_default();
     let mut ids: Vec<String> = Vec::new();
     let mut offset = 0;
     loop {
         let m = c.call_one(&format!(
             "<m:FindItem Traversal=\"Shallow\"><m:ItemShape><t:BaseShape>IdOnly</t:BaseShape></m:ItemShape>\
-             <m:IndexedPageItemView MaxEntriesReturned=\"500\" Offset=\"{offset}\" BasePoint=\"Beginning\"/>\
+             <m:IndexedPageItemView MaxEntriesReturned=\"500\" Offset=\"{offset}\" BasePoint=\"Beginning\"/>{restriction}\
              <m:ParentFolderIds>{folder}</m:ParentFolderIds></m:FindItem>"
         ))?;
         let Some(rf) = m.child("RootFolder") else { break };
@@ -376,6 +395,7 @@ fn items_in(c: &Client, parent: &str, extra: &str) -> Result<Vec<El>> {
             }
         }
     }
+    log::info!("{} items read in {:.1} s", out.len(), began.elapsed().as_secs_f32());
     Ok(out)
 }
 
@@ -533,14 +553,14 @@ fn may_edit(c: &Client, folder: &str) -> bool {
 /// mailbox, and reading it is routed there (asked for by the GUID the folder names); a server
 /// that answers without that (older ones, a single public folder mailbox) is asked plainly
 /// first.
-fn public_items(c: &Client, id: &str, replica: Option<&str>, total: u32) -> Result<Vec<El>> {
+fn public_items(c: &Client, id: &str, replica: Option<&str>, total: u32, since: Option<i64>) -> Result<Vec<El>> {
     let folder = format!("<t:FolderId Id=\"{}\"/>", esc(id));
-    let plain = items_in(c, &folder, "");
+    let plain = items_in(c, &folder, "", since);
     let Some(guid) = replica else { return plain };
     match plain {
         Ok(list) if !list.is_empty() || total == 0 => Ok(list),
         plain => match c.public_folder_mailbox(guid) {
-            Ok(mailbox) => c.routed_to(&mailbox, || items_in(c, &folder, "")),
+            Ok(mailbox) => c.routed_to(&mailbox, || items_in(c, &folder, "", since)),
             Err(e) => {
                 log::info!("public folder mailbox {guid}: {e}");
                 plain
@@ -624,7 +644,7 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
         }
     }
     // Then both folders, read again.
-    for it in items(c, "calendar")? {
+    for it in items(c, "calendar", Some(now - CALENDAR_BACK))? {
         if let Some(event) = event_of(&it) {
             let (href, etag) = it
                 .child("ItemId")
@@ -657,7 +677,7 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
         let id = mailcraft_model::pim::shared_calendar_id(email);
         let parent = calendar_folder(Some(&c.address_of(email)));
         let can_edit = may_edit(c, &parent);
-        match items_in(c, &parent, "") {
+        match items_in(c, &parent, "", Some(now - CALENDAR_BACK)) {
             Ok(list) => {
                 for it in list {
                     if let Some(event) = event_of(&it) {
@@ -682,7 +702,7 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
         });
     }
     out.calendars = Some(calendars);
-    for it in items(c, "contacts")? {
+    for it in items(c, "contacts", None)? {
         if let Some(card) = card_of(&it) {
             let etag = it.child("ItemId").and_then(|i| i.attr("ChangeKey")).unwrap_or("").to_string();
             out.cards.push(StoredCard { book: CONTACTS.into(), href: format!("contact:{}", card.uid), etag, card, dirty: false });
@@ -698,7 +718,9 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
             for (n, f) in list.into_iter().take(MAX_PUBLIC_PIM).enumerate() {
                 let (id, name, class) = (f.id, f.path, f.class);
                 let key = format!("public:{id}");
-                let found = match public_items(c, &id, f.replica.as_deref(), f.total) {
+                // A public calendar from six months back, as the others; contacts whole.
+                let since = class.starts_with("IPF.Appointment").then_some(now - CALENDAR_BACK);
+                let found = match public_items(c, &id, f.replica.as_deref(), f.total, since) {
                     Ok(found) => found,
                     Err(e) => {
                         out.errors.push(format!("{name}: {e}"));
@@ -765,7 +787,7 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
             Err(x) => out.errors.push(format!("{}: {x}", n.note.title())),
         }
     }
-    match items(c, "notes") {
+    match items(c, "notes", None) {
         Ok(list) => out.notes = Some(list.iter().filter_map(note_of).collect()),
         Err(e) => log::info!("no Notes folder: {e}"),
     }
