@@ -410,19 +410,6 @@ impl Pool {
             Job::GetVacation { account } | Job::SetVacation { account, .. } if !self.workers.contains_key(&account) => {
                 self.sink.emit(Event::Vacation { account, vacation: None, error: Some("the account is offline".into()) });
             }
-            // On Exchange (EWS), automatic replies go on a connection and a thread of their own:
-            // they answer in a moment even while the account's worker spends minutes syncing
-            // the mailbox and its calendars.
-            job @ (Job::GetVacation { .. } | Job::SetVacation { .. }) if self.configs.get(job.account()).is_some_and(|c| c.ews.is_some()) => {
-                self.ews_vacation(job);
-            }
-            // Mail written on Exchange (EWS) goes at once, on a connection of its own, rather than
-            // after the sync the account's worker may spend minutes on.
-            Job::Send { account, id, raw, from, recipients, sent_folder }
-                if self.workers.contains_key(&account) && self.configs.get(&account).is_some_and(|c| c.ews.is_some()) =>
-            {
-                self.ews_send(account, id, raw, from, recipients, sent_folder);
-            }
             Job::Apply { account, op } if !self.workers.contains_key(&account) => {
                 // Offline: change the cache now and keep the change for the next connection.
                 match self.store.apply_op(&account, &op) {
@@ -467,76 +454,6 @@ impl Pool {
                     None => self.sink.emit(Event::Notice { account: id, message: "the account is not connected".into() }),
                 }
             }
-        }
-    }
-
-    /// An Exchange account's automatic replies, read (or changed, then read) on a thread.
-    fn ews_vacation(&self, job: Job) {
-        let (account, set) = match job {
-            Job::GetVacation { account } => (account, None),
-            Job::SetVacation { account, vacation } => (account, Some(vacation)),
-            _ => return,
-        };
-        let Some(acc) = self.configs.get(&account).cloned() else { return };
-        let Some(pw) = self.creds.get(&acc) else {
-            self.sink.emit(Event::Vacation { account, vacation: None, error: Some("the account needs its password".into()) });
-            return;
-        };
-        let (sink, store) = (self.sink.clone(), self.store.clone());
-        let spawned = std::thread::Builder::new().name(format!("oof-{account}")).spawn(move || {
-            let (vacation, error) = match ews_client(&acc, &pw, &store) {
-                Ok(c) => ews_vacation(&c, set.as_ref()),
-                Err(e) => (None, Some(e.to_string())),
-            };
-            sink.emit(Event::Vacation { account: acc.id, vacation, error });
-        });
-        if let Err(e) = spawned {
-            self.sink.emit(Event::Vacation { account, vacation: None, error: Some(e.to_string()) });
-        }
-    }
-
-    /// Send a message from an Exchange account on a thread; Exchange files the copy in Sent
-    /// Items, which the account's worker looks at next. One that can't go yet waits in the
-    /// Outbox, as the worker keeps it.
-    fn ews_send(&self, account: String, id: u64, raw: Vec<u8>, from: String, recipients: Vec<String>, sent_folder: Option<String>) {
-        let Some(acc) = self.configs.get(&account).cloned() else { return };
-        let Some(pw) = self.creds.get(&acc) else {
-            self.sink.emit(Event::SendFailed { account, id, error: "the account needs its password".into() });
-            return;
-        };
-        let (sink, store) = (self.sink.clone(), self.store.clone());
-        let worker = self.workers.get(&account).map(|h| h.tx.clone());
-        let who = account.clone();
-        let spawned = std::thread::Builder::new().name(format!("send-{account}")).spawn(move || {
-            let sent = ews_client(&acc, &pw, &store).and_then(|c| crate::ews::send(&c, &raw, &recipients));
-            match sent {
-                Ok(()) => {
-                    sink.emit(Event::Sent { account: account.clone(), id });
-                    if let Some(tx) = worker {
-                        if let Some(folder) = sent_folder {
-                            let _ = tx.send(Job::SyncFolder { account: account.clone(), folder });
-                        }
-                        // Mail to oneself (or a quick answer) comes into the Inbox moments later:
-                        // look then, rather than at the next poll.
-                        for wait in [5, 20] {
-                            std::thread::sleep(Duration::from_secs(wait));
-                            let _ = tx.send(Job::SyncFolder { account: account.clone(), folder: "INBOX".into() });
-                        }
-                    }
-                }
-                Err(e) if e.is_retryable() => {
-                    let item =
-                        OutboxItem { id, from, recipients, sent_folder, queued: now(), attempts: 1, error: Some(e.to_string()), not_before: 0 };
-                    match store.outbox_add(&account, &item, &raw) {
-                        Ok(()) => sink.emit(Event::Queued { account, id, error: e.to_string() }),
-                        Err(se) => sink.emit(Event::SendFailed { account, id, error: format!("{e} (and the Outbox couldn't keep it: {se})") }),
-                    }
-                }
-                Err(e) => sink.emit(Event::SendFailed { account, id, error: e.to_string() }),
-            }
-        });
-        if let Err(e) = spawned {
-            self.sink.emit(Event::SendFailed { account: who, id, error: e.to_string() });
         }
     }
 
@@ -1966,29 +1883,6 @@ pub fn apply_remote_with<S: std::io::Read + std::io::Write>(c: &mut Client<S>, o
         Op::RenameFolder { from, to } => c.rename(from, to),
         Op::DeleteFolder { path } => c.delete(path),
         Op::EmptyFolder { path } => c.empty(path),
-    }
-}
-
-/// An EWS session for an account: at its address, or the one Autodiscover found for it.
-fn ews_client(acc: &AccountConfig, pw: &str, store: &Store) -> Result<crate::ews::Client> {
-    let user = if acc.username.is_empty() { acc.email.clone() } else { acc.username.clone() };
-    let Some(url) = &acc.ews else { return Err(NetError::No("not an Exchange account".into())) };
-    let url = if url == crate::ews::AUTODISCOVER {
-        let kept: String = store.load_account_doc(&acc.id, "ews.json").unwrap_or_default();
-        if kept.is_empty() { crate::ews::autodiscover(&acc.email, &user, pw, None)? } else { kept }
-    } else {
-        url.clone()
-    };
-    crate::ews::Client::connect(&url, &user, pw, &acc.email)
-}
-
-/// Read (and first change, with `set`) an Exchange account's automatic replies: what the server
-/// has, and why a change failed.
-fn ews_vacation(c: &crate::ews::Client, set: Option<&mailcraft_model::job::Vacation>) -> (Option<mailcraft_model::job::Vacation>, Option<String>) {
-    let failed = set.and_then(|v| c.set_vacation(v).err()).map(|e| e.to_string());
-    match c.vacation() {
-        Ok(v) => (Some(v), failed),
-        Err(e) => (None, Some(failed.unwrap_or_else(|| e.to_string()))),
     }
 }
 
