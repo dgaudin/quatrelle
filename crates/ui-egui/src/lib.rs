@@ -427,6 +427,8 @@ pub struct UiState {
     pub people_view: people::PeopleView,
     /// The People list's columns and sort.
     pub people_list: people::ListSettings,
+    /// The message table's column widths, as dragged (see `list::ColumnWidths`).
+    pub list_columns: list::ColumnWidths,
     /// Notes: the search, the note being written on (and its text), a new note to write on,
     /// and the keyboard to give its text box.
     pub(crate) notes_query: String,
@@ -518,6 +520,7 @@ impl MailApp {
                 people_query: String::new(),
                 people_view: people::PeopleView::default(),
                 people_list: people::ListSettings::default(),
+                list_columns: list::ColumnWidths::default(),
                 notes_query: String::new(),
                 months_drag: 0.0,
                 note_edit: None,
@@ -2257,7 +2260,7 @@ impl MailApp {
 
     /// Preferences and theme for the app to save.
     pub fn saved_state(&self) -> Value {
-        json!({ "prefs": self.session.prefs, "dark": self.ui.dark, "systemAccent": self.ui.system_accent, "ribbonCollapsed": self.ui.ribbon_collapsed, "language": self.ui.language, "windows": self.ui.places, "peopleView": self.ui.people_view, "peopleList": self.ui.people_list })
+        json!({ "prefs": self.session.prefs, "dark": self.ui.dark, "systemAccent": self.ui.system_accent, "ribbonCollapsed": self.ui.ribbon_collapsed, "language": self.ui.language, "windows": self.ui.places, "peopleView": self.ui.people_view, "peopleList": self.ui.people_list, "listColumns": self.ui.list_columns })
     }
 
     pub fn restore_state(&mut self, v: &Value) {
@@ -2282,6 +2285,9 @@ impl MailApp {
         self.ui.ribbon_collapsed = v.get("ribbonCollapsed").and_then(Value::as_bool).unwrap_or(false);
         if let Some(pv) = v.get("peopleView").and_then(|w| serde_json::from_value(w.clone()).ok()) {
             self.ui.people_view = pv;
+        }
+        if let Some(c) = v.get("listColumns").and_then(|w| serde_json::from_value::<list::ColumnWidths>(w.clone()).ok()) {
+            self.ui.list_columns = c.clamped();
         }
         if let Some(pl) = v.get("peopleList").and_then(|w| serde_json::from_value(w.clone()).ok()) {
             self.ui.people_list = pl;
