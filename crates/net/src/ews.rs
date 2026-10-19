@@ -287,6 +287,8 @@ pub struct Client {
     route: RefCell<Option<String>>,
     /// Public folder mailboxes found by Autodiscover: GUID → address.
     pf_mailboxes: RefCell<HashMap<String, String>>,
+    /// Other people's addresses as the directory has them (see [`Client::address_of`]).
+    addresses: Box<RefCell<HashMap<String, String>>>,
 }
 
 /// A public folder in the tree.
@@ -372,7 +374,40 @@ impl Client {
             email: email.to_string(),
             route: RefCell::new(None),
             pf_mailboxes: RefCell::new(HashMap::new()),
+            addresses: Box::new(RefCell::new(HashMap::new())),
         })
+    }
+
+    /// The address Exchange knows someone's mailbox by. Another mailbox or calendar is asked
+    /// for by its primary address, and one typed as an alias (or in other letters) gets "no
+    /// mailbox associated with it": the directory says which it is (asked once).
+    pub(crate) fn address_of(&self, who: &str) -> String {
+        let who = who.trim().to_ascii_lowercase();
+        if let Some(a) = self.addresses.borrow().get(&who) {
+            return a.clone();
+        }
+        let found = self
+            .call_one(&format!(
+                "<m:ResolveNames ReturnFullContactData=\"false\" SearchScope=\"ActiveDirectory\"><m:UnresolvedEntry>{}</m:UnresolvedEntry></m:ResolveNames>",
+                esc(&who)
+            ))
+            .ok()
+            .and_then(|m| {
+                let mut all = Vec::new();
+                m.all("Resolution", &mut all);
+                // Only one person by that address: theirs.
+                match all.as_slice() {
+                    [one] => one.find("Mailbox").and_then(|b| b.text_of("EmailAddress")).map(|e| e.trim().to_ascii_lowercase()),
+                    _ => None,
+                }
+            })
+            .filter(|e| e.contains('@'));
+        let address = found.unwrap_or_else(|| who.clone());
+        if address != who {
+            log::info!("{who} is {address} in the directory");
+        }
+        self.addresses.borrow_mut().insert(who, address.clone());
+        address
     }
 
     /// Run `f` with every request routed to a public folder mailbox.
@@ -571,6 +606,9 @@ impl Client {
     /// account a delegate): a folder named after its address, its mail folders under it. A
     /// delegate who may only open some folders gets those of the usual ones it can.
     pub fn shared_mailbox(&self, owner: &str) -> Result<Vec<Mailbox>> {
+        let typed = owner;
+        let address = self.address_of(owner);
+        let owner = address.as_str();
         let mut out = match self.mailboxes_of(Some(owner)) {
             Ok(list) => list,
             Err(e) => {
@@ -617,7 +655,7 @@ impl Client {
                 m.parent = Some(root.clone());
             }
         }
-        out.insert(0, Mailbox { id: root, name: owner.to_string(), parent: None, role: FolderRole::Other, total: 0, unread: 0 });
+        out.insert(0, Mailbox { id: root, name: typed.to_string(), parent: None, role: FolderRole::Other, total: 0, unread: 0 });
         Ok(out)
     }
 
@@ -653,7 +691,8 @@ impl Client {
                 "<m:FindFolder Traversal=\"Deep\"><m:FolderShape><t:BaseShape>IdOnly</t:BaseShape><t:AdditionalProperties>\
                  <t:FieldURI FieldURI=\"folder:DisplayName\"/><t:FieldURI FieldURI=\"folder:ParentFolderId\"/>\
                  <t:FieldURI FieldURI=\"folder:TotalCount\"/><t:FieldURI FieldURI=\"folder:UnreadCount\"/>\
-                 <t:FieldURI FieldURI=\"folder:FolderClass\"/></t:AdditionalProperties></m:FolderShape>\
+                 <t:FieldURI FieldURI=\"folder:FolderClass\"/><t:ExtendedFieldURI PropertyTag=\"0x10F4\" PropertyType=\"Boolean\"/>\
+                 </t:AdditionalProperties></m:FolderShape>\
                  <m:IndexedPageFolderView MaxEntriesReturned=\"500\" Offset=\"{offset}\" BasePoint=\"Beginning\"/>\
                  <m:ParentFolderIds>{}</m:ParentFolderIds></m:FindFolder>",
                 distinguished("msgfolderroot", owner)
@@ -667,6 +706,18 @@ impl Client {
             for f in folders {
                 let Some(id) = f.child("FolderId").and_then(|i| i.attr("Id")).map(str::to_string) else { continue };
                 let class = f.text_of("FolderClass").unwrap_or("");
+                // Exchange's own hidden folders (Working Set, Yammer Root…; PidTagAttributeHidden)
+                // aren't the user's mail: Outlook doesn't show them, and some take long to read.
+                let hidden = f.children("ExtendedProperty").any(|p| {
+                    p.child("ExtendedFieldURI").and_then(|u| u.attr("PropertyTag")).is_some_and(|t| t.eq_ignore_ascii_case("0x10f4"))
+                        && p.text_of("Value").is_some_and(|v| v.trim().eq_ignore_ascii_case("true"))
+                });
+                // Some servers don't mark them: the ones Exchange makes itself, by name, at the top.
+                let system = ["Working Set", "Yammer Root", "PersonMetadata", "ExternalContacts", "Social Activity Notifications"];
+                let top = f.child("ParentFolderId").and_then(|p| p.attr("Id")).is_some_and(|p| Some(p) == root.as_deref());
+                if hidden || (top && f.text_of("DisplayName").is_some_and(|n| system.contains(&n.trim()))) {
+                    continue;
+                }
                 if !(class.is_empty() || class == "IPF.Note" || class.starts_with("IPF.Note.")) || skip.contains(&id) || out.len() >= MAX_FOLDERS {
                     continue;
                 }

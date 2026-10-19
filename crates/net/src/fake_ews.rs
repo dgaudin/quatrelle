@@ -74,6 +74,8 @@ pub struct Data {
     pub directory: Vec<(String, String)>,
     /// Answer item searches (the mail sync) only after this long: a mailbox taking minutes.
     pub slow_sync: Option<std::time::Duration>,
+    /// Folders Exchange keeps hidden (PidTagAttributeHidden), by id.
+    pub hidden: Vec<String>,
     next: u32,
 }
 
@@ -100,6 +102,7 @@ impl Default for Data {
             wlinks: Vec::new(),
             directory: Vec::new(),
             slow_sync: None,
+            hidden: Vec::new(),
             next: 0,
         };
         d.folders.push(Fo {
@@ -219,6 +222,12 @@ impl Data {
             )
         } else {
             String::new()
+        };
+        let replica = if self.hidden.contains(&f.id) {
+            replica
+                + "<t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"0x10f4\" PropertyType=\"Boolean\"/><t:Value>true</t:Value></t:ExtendedProperty>"
+        } else {
+            replica
         };
         format!(
             "<t:Folder><t:FolderId Id=\"{}\"/><t:ParentFolderId Id=\"{}\"/><t:FolderClass>{}</t:FolderClass><t:DisplayName>{}</t:DisplayName><t:TotalCount>{total}</t:TotalCount><t:ChildFolderCount>0</t:ChildFolderCount><t:UnreadCount>{unread}</t:UnreadCount>{replica}</t:Folder>",
@@ -1323,6 +1332,37 @@ mod tests {
         assert!(asked.elapsed() < Duration::from_secs(10), "waited {:?}", asked.elapsed());
         assert!(server.data.lock().unwrap().sent.iter().any(|m| String::from_utf8_lossy(m).contains("Re: Storyboard")));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Exchange's hidden folders (Working Set…) aren't listed: Outlook doesn't show them, and
+    /// MailCraft's sync stalled on one. Someone's calendar asked for by an alias opens by the
+    /// address the directory has.
+    #[test]
+    fn hidden_folders_stay_out_and_an_alias_finds_the_calendar() {
+        use mailcraft_model::pim::{Pim, shared_calendar_id};
+        let mut d = Data::default();
+        d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+        d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
+        d.folder("Contacts", None, Some("contacts"), "IPF.Contact");
+        let ws = d.folder("Working Set", None, None, "IPF.Note");
+        d.hidden.push(ws);
+        d.folder("Yammer Root", None, None, "");
+        d.folder("Projects", None, None, "IPF.Note");
+        let review = parse(
+            "<t:CalendarItem><t:Subject>Budget review</t:Subject><t:Start>2026-10-06T13:00:00Z</t:Start><t:End>2026-10-06T14:00:00Z</t:End>\
+             <t:IsAllDayEvent>false</t:IsAllDayEvent><t:UID>budget-1</t:UID></t:CalendarItem>",
+        );
+        d.pim.push(("S1".into(), "mailbox:ana.lima@contoso.example".into(), review.kids[0].clone()));
+        d.directory = vec![("ana@contoso.example".into(), "Ana.Lima@contoso.example".into())];
+        let server = serve(d);
+        let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
+        let names: Vec<String> = c.mailboxes().unwrap().into_iter().map(|m| m.name).collect();
+        assert!(names.contains(&"Projects".to_string()) && names.contains(&"Inbox".to_string()), "{names:?}");
+        assert!(!names.iter().any(|n| n == "Working Set" || n == "Yammer Root"), "{names:?}");
+        let pim = Pim { shared: vec!["ana@contoso.example".into()], ..Default::default() };
+        let sync = crate::ews_pim::sync(&c, &pim, 1_792_000_000).unwrap();
+        let id = shared_calendar_id("ana@contoso.example");
+        assert!(sync.events.iter().any(|e| e.calendar == id && e.event.summary == "Budget review"), "{:?}", sync.errors);
     }
 
     /// An Outlook navigation shortcut to someone's calendar, in a group of the Calendar pane.
