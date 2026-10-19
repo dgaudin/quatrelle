@@ -25,6 +25,8 @@ pub struct AccountForm {
     pub smtp_host: String,
     pub smtp_port: String,
     pub smtp_security: Security,
+    /// The outgoing server's own user name and password.
+    pub smtp_sign_in: SmtpSignIn,
     /// Syncs over JMAP instead of IMAP and SMTP, through this session address.
     pub jmap: bool,
     pub jmap_url: String,
@@ -46,6 +48,53 @@ pub struct AccountForm {
     /// The address whose looked-up settings are filled in, and where they came from.
     pub found_for: Option<String>,
     pub found_source: Option<String>,
+}
+
+/// The outgoing server's own sign-in, as Outlook's "Log on using" for SMTP: for servers whose
+/// user name and password aren't the incoming server's (issue #3).
+#[derive(Clone, Debug, Default)]
+pub struct SmtpSignIn {
+    pub own: bool,
+    pub username: String,
+    pub password: String,
+    /// Its password is kept already (an account being changed): left empty, it stays.
+    pub kept: bool,
+}
+
+impl SmtpSignIn {
+    fn of(c: &AccountConfig) -> SmtpSignIn {
+        SmtpSignIn {
+            own: c.smtp_username.is_some(),
+            username: c.smtp_username.clone().unwrap_or_default(),
+            password: String::new(),
+            kept: c.smtp_username.is_some(),
+        }
+    }
+
+    /// `smtpUsername` (null: the incoming server's sign-in) and `smtpPassword`.
+    fn params(&self, p: &mut serde_json::Value) {
+        if self.own {
+            p["smtpUsername"] = json!(self.username.trim());
+            if !self.password.is_empty() {
+                p["smtpPassword"] = json!(self.password);
+            }
+        } else {
+            p["smtpUsername"] = serde_json::Value::Null;
+        }
+    }
+
+    fn ui(&mut self, ui: &mut Ui, w: f32) {
+        ui.checkbox(&mut self.own, tl!("The outgoing server has its own user name and password"));
+        if self.own {
+            ui.horizontal(|ui| {
+                let half = ((w - 30.0) / 2.0).max(100.0);
+                ui.add_space(22.0);
+                ui.add_sized([half, 26.0], egui::TextEdit::singleline(&mut self.username).hint_text(tl!("Its user name")));
+                let hint = if self.kept { tl!("Password (unchanged when empty)") } else { tl!("Its password") };
+                ui.add_sized([half, 26.0], egui::TextEdit::singleline(&mut self.password).password(true).hint_text(hint));
+            });
+        }
+    }
 }
 
 /// When a POP server's copy of downloaded mail goes: kept (for so many days, or until it's deleted
@@ -161,12 +210,13 @@ impl AccountForm {
                 "smtpSecurity": self.smtp_security.code(),
             });
             self.pop_keep.params(&mut p);
+            self.smtp_sign_in.params(&mut p);
             if !self.pst.trim().is_empty() {
                 p["pst"] = json!(self.pst.trim());
             }
             return p;
         }
-        json!({
+        let mut p = json!({
             "email": self.email.trim(),
             "name": self.name.trim(),
             "password": self.password,
@@ -177,7 +227,9 @@ impl AccountForm {
             "smtpHost": self.smtp_host.trim(),
             "smtpPort": port(&self.smtp_port),
             "smtpSecurity": self.smtp_security.code(),
-        })
+        });
+        self.smtp_sign_in.params(&mut p);
+        p
     }
 }
 
@@ -202,6 +254,8 @@ pub struct EditForm {
     pub smtp_host: String,
     pub smtp_port: String,
     pub smtp_security: Security,
+    /// The outgoing server's own user name and password.
+    pub smtp_sign_in: SmtpSignIn,
     pub error: Option<String>,
 }
 
@@ -227,9 +281,10 @@ impl EditForm {
                 "smtpSecurity": self.smtp_security.code(),
             });
             self.pop_keep.params(&mut v);
+            self.smtp_sign_in.params(&mut v);
             return v;
         }
-        json!({
+        let mut v = json!({
             "account": self.account,
             "name": self.name.trim(),
             "username": self.username.trim(),
@@ -240,7 +295,11 @@ impl EditForm {
             "smtpHost": self.smtp_host.trim(),
             "smtpPort": port(&self.smtp_port),
             "smtpSecurity": self.smtp_security.code(),
-        })
+        });
+        if !self.jmap {
+            self.smtp_sign_in.params(&mut v);
+        }
+        v
     }
 }
 
@@ -320,6 +379,7 @@ fn edit_account(ui: &mut Ui, f: &mut EditForm, t: &Tokens, acts: &mut Vec<Action
             ui.add_sized([56.0, 26.0], egui::TextEdit::singleline(&mut f.smtp_port).hint_text("465").align(egui::Align2::CENTER_TOP));
             security_combo(ui, "edit-smtpsec", &mut f.smtp_security);
         });
+        f.smtp_sign_in.ui(ui, w);
     } else {
         ui.horizontal(|ui| {
             label(ui, "Mail server");
@@ -345,6 +405,7 @@ fn edit_account(ui: &mut Ui, f: &mut EditForm, t: &Tokens, acts: &mut Vec<Action
             ui.add_sized([56.0, 26.0], egui::TextEdit::singleline(&mut f.smtp_port).hint_text("465").align(egui::Align2::CENTER_TOP));
             security_combo(ui, "edit-smtpsec", &mut f.smtp_security);
         });
+        f.smtp_sign_in.ui(ui, w);
         if f.imap_security == Security::None || f.smtp_security == Security::None {
             ui.label(
                 RichText::new(tl!("Without encryption your password travels in the clear. Use only for local test servers.")).color(t.warn).small(),
@@ -540,6 +601,13 @@ pub enum Dialog {
     /// Open someone else's calendar by their address (Outlook's Open Calendar).
     OpenSharedCalendar {
         email: String,
+        error: Option<String>,
+    },
+    /// Open another mailbox in an Exchange account by its address (Outlook's "Open these
+    /// additional mailboxes").
+    AddSharedMailbox {
+        account: String,
+        address: String,
         error: Option<String>,
     },
     /// A folder's Properties: where it is, how many messages, how much is on this computer.
@@ -852,7 +920,7 @@ impl Dialog {
         let unread = if kept.messages.is_empty() { f.unread as usize } else { kept.messages.iter().filter(|m| !m.flags.seen).count() };
         let email = s.account(&f.account).map(|a| a.config.email.clone()).unwrap_or_default();
         Dialog::FolderProperties {
-            name: crate::i18n::tc("folder", &f.display_name()).to_string(),
+            name: crate::i18n::folder(f),
             location: {
                 let decoded = mailcraft_engine::model::utf7::decode(&f.path);
                 match f.delimiter {
@@ -880,6 +948,11 @@ impl Dialog {
         Dialog::Contact(Box::new(crate::pim_dialogs::ContactForm::edit(c)))
     }
 
+    /// A new contact for someone in a message, their name and address filled in.
+    pub fn contact_from(a: &mailcraft_engine::model::EmailAddress) -> Dialog {
+        Dialog::Contact(Box::new(crate::pim_dialogs::ContactForm::from_address(a)))
+    }
+
     pub fn edit_account(a: &AccountConfig) -> Dialog {
         Dialog::EditAccount(Box::new(EditForm {
             account: a.id.clone(),
@@ -897,6 +970,7 @@ impl Dialog {
             smtp_host: a.smtp.host.clone(),
             smtp_port: a.smtp.port.to_string(),
             smtp_security: a.smtp.security,
+            smtp_sign_in: SmtpSignIn::of(a),
             error: None,
         }))
     }
@@ -936,7 +1010,9 @@ impl Dialog {
             Dialog::Event(f) => f.error = Some(e),
             Dialog::Contact(f) => f.error = Some(e),
             Dialog::Vacation(f) => f.error = Some(e),
-            Dialog::OpenSharedCalendar { error, .. } | Dialog::OpenSharedMailbox { error, .. } => *error = Some(e),
+            Dialog::OpenSharedCalendar { error, .. } | Dialog::OpenSharedMailbox { error, .. } | Dialog::AddSharedMailbox { error, .. } => {
+                *error = Some(e)
+            }
             _ => {}
         }
     }
@@ -1408,6 +1484,7 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Act
                     label(ui, "User name");
                     edited |=
                         ui.add_sized([w, 26.0], egui::TextEdit::singleline(&mut f.username).hint_text(tl!("Usually the email address"))).changed();
+                    f.smtp_sign_in.ui(ui, w);
                     f.servers_edited |= edited;
                     if f.pop {
                         // Outlook's "use an existing data file": mail kept from before comes in first.
@@ -1554,11 +1631,12 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Act
             ui.label(RichText::new(tf!("Enter the password for {email}.", email = email)).color(t.dim));
             ui.add_space(8.0);
             let r = ui.add(egui::TextEdit::singleline(password).password(true).desired_width(f32::INFINITY));
+            // Before the focus request below, which would hide the Enter that ended input.
+            let enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
             // The one thing to type: ready for it.
             if ui.memory(|m| m.focused().is_none()) {
                 r.request_focus();
             }
-            let enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
             let (ok, cancel) = buttons(ui, t, "Sign in", !password.is_empty());
             if (ok || enter) && !password.is_empty() {
                 acts.push(Action::Run("account.setPassword", json!({"account": account, "password": password})));
@@ -1633,13 +1711,25 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Act
         Dialog::RemoveAccount { account, email } => {
             ui.set_width(380.0);
             title(ui, t, "Remove account?");
-            ui.label(
-                RichText::new(tf!(
-                    "{email} and its downloaded mail will be removed from this computer. Nothing is deleted on the server.",
-                    email = email
-                ))
-                .color(t.dim),
-            );
+            // As Outlook removes one: its data file stays, to open again from Open & Export.
+            let file = s.store.as_ref().and_then(|st| st.data_file(account)).filter(|f| f.exists());
+            // A mailbox with no server (an opened data file) has nothing there to keep.
+            let local = s.account(account).is_some_and(|a| a.is_local());
+            let text = match file.as_ref().and_then(|f| f.file_name()).map(|n| n.to_string_lossy().into_owned()) {
+                Some(file) if local => tf!(
+                    "{email} will be removed from MailCraft. Its data file, {file}, stays in your MailCraft Files folder: open it from File › Open & Export to see its mail again.",
+                    email = email,
+                    file = file
+                ),
+                Some(file) => tf!(
+                    "{email} will be removed from MailCraft. Its data file, {file}, stays in your MailCraft Files folder: open it from File › Open & Export to see its mail again. Nothing is deleted on the server.",
+                    email = email,
+                    file = file
+                ),
+                None if local => tf!("{email} will be removed from MailCraft.", email = email),
+                None => tf!("{email} will be removed from MailCraft. Nothing is deleted on the server.", email = email),
+            };
+            ui.add(egui::Label::new(RichText::new(text).color(t.dim)).wrap());
             let (ok, cancel) = buttons(ui, t, "Remove", true);
             if ok {
                 acts.push(Action::Run("account.remove", json!({"account": account})));
@@ -1775,7 +1865,7 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Act
             egui::ScrollArea::vertical().max_height(300.0).show(ui, |ui| {
                 for f in &folders {
                     let indent = "    ".repeat(f.depth());
-                    if ui.selectable_label(false, format!("{indent}{}", f.display_name())).clicked() {
+                    if ui.selectable_label(false, format!("{indent}{}", crate::i18n::folder(f))).clicked() {
                         chosen = Some(f.path.clone());
                     }
                 }
@@ -1844,7 +1934,7 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Act
                         continue;
                     }
                     let indent = "    ".repeat(f.depth());
-                    if ui.selectable_label(false, format!("{indent}{}", f.display_name())).clicked() {
+                    if ui.selectable_label(false, format!("{indent}{}", crate::i18n::folder(f))).clicked() {
                         chosen = Some(Some(f.path.clone()));
                     }
                 }
@@ -2101,14 +2191,16 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Act
                             .account
                             .as_deref()
                             .and_then(|a| s.folder(a, &f.target))
-                            .map(|x| format!("{} ({})", x.display_name(), s.account(&x.account).map(|a| a.config.email.as_str()).unwrap_or_default()))
+                            .map(|x| {
+                                format!("{} ({})", crate::i18n::folder(x), s.account(&x.account).map(|a| a.config.email.as_str()).unwrap_or_default())
+                            })
                             .unwrap_or_else(|| tl!("Choose…").into());
                         egui::ComboBox::from_id_salt("rule-folder").width(300.0).selected_text(shown).show_ui(ui, |ui| {
                             for a in &s.accounts {
                                 ui.label(RichText::new(&a.config.email).small().color(t.faint));
                                 for x in a.folders.iter().filter(|x| x.selectable) {
                                     let on = f.account.as_deref() == Some(a.config.id.as_str()) && f.target == x.path;
-                                    if ui.selectable_label(on, format!("{}{}", "    ".repeat(x.depth()), x.display_name())).clicked() {
+                                    if ui.selectable_label(on, format!("{}{}", "    ".repeat(x.depth()), crate::i18n::folder(x))).clicked() {
                                         f.account = Some(a.config.id.clone());
                                         f.target = x.path.clone();
                                     }
@@ -2207,6 +2299,8 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Act
             );
             ui.add_space(8.0);
             let r = ui.add(egui::TextEdit::singleline(email).hint_text("name@example.com").desired_width(f32::INFINITY));
+            // Before the focus request below, which would hide the Enter that ended input.
+            let enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
             if ui.memory(|m| m.focused().is_none()) {
                 r.request_focus();
             }
@@ -2214,11 +2308,38 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Act
                 ui.add_space(4.0);
                 ui.label(RichText::new(e.as_str()).color(t.danger).small());
             }
-            let enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
             let ready = email.contains('@');
             let (ok, cancel) = buttons(ui, t, "Open", ready);
             if (ok || enter) && ready {
                 acts.push(Action::Submit("calendar.openShared", json!({"email": email.trim()})));
+            }
+            !cancel
+        }
+        Dialog::AddSharedMailbox { account, address, error } => {
+            ui.set_width(420.0);
+            title(ui, t, "Add a shared mailbox");
+            ui.add(
+                egui::Label::new(
+                    RichText::new(tl!("Its folders show under this account. You need access to it on the Exchange server; the ones you have full access to open by themselves."))
+                        .color(t.dim),
+                )
+                .wrap(),
+            );
+            ui.add_space(8.0);
+            let r = ui.add(egui::TextEdit::singleline(address).hint_text("sales@example.com").desired_width(f32::INFINITY));
+            // Before the focus request below, which would hide the Enter that ended input.
+            let enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+            if ui.memory(|m| m.focused().is_none()) {
+                r.request_focus();
+            }
+            if let Some(e) = error {
+                ui.add_space(4.0);
+                ui.label(RichText::new(e.as_str()).color(t.danger).small());
+            }
+            let ready = address.contains('@');
+            let (ok, cancel) = buttons(ui, t, "Add", ready);
+            if (ok || enter) && ready {
+                acts.push(Action::Submit("account.addSharedMailbox", json!({"account": account, "address": address.trim()})));
             }
             !cancel
         }

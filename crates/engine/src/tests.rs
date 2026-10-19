@@ -90,7 +90,7 @@ fn open_marks_read_and_shows_text_and_attachments() {
     let p = r.parsed.unwrap();
     assert!(p.text.contains("revised frames"));
     assert_eq!(p.attachments[0].name, "colour-key.png");
-    assert_eq!(r.thread.len(), 2, "the reply joins the conversation");
+    assert!(r.thread.is_empty(), "one message shown, as the list isn't grouped by conversation (issue #1)");
     assert!(s.list.iter().find(|m| m.subject == "Storyboard review on Thursday").unwrap().flags.seen);
     // Persisted for local accounts.
     let st = s.store.as_ref().unwrap().load_folder(sample::SAMPLE_ACCOUNT, "INBOX").unwrap();
@@ -186,6 +186,27 @@ fn flags_filters_and_conversations() {
     s.run("list.next", &json!({})).unwrap();
     s.run("list.prev", &json!({})).unwrap();
     assert!(s.focus.is_some());
+    done(s);
+}
+
+/// Issue #1: a message's whole conversation showed above it in the reading pane though the
+/// list wasn't grouped by conversation; as Outlook, it shows only while grouped, and turning
+/// conversations on or off changes the open message at once.
+#[test]
+fn the_conversation_shows_above_a_message_only_when_grouped() {
+    let mut s = sample_session("conversation-pane");
+    assert!(!s.prefs.conversations);
+    let k = key_of(&s, "Storyboard review on Thursday");
+    s.run("list.open", &k).unwrap();
+    assert!(s.reading.as_ref().unwrap().thread.is_empty());
+    s.run("view.conversations", &json!({"on": true})).unwrap();
+    assert_eq!(s.reading.as_ref().unwrap().thread.len(), 2, "the reply joins the conversation");
+    // Arranged by something other than date, conversations still show above the message.
+    s.run("view.arrange", &json!({"by": "from"})).unwrap();
+    s.run("list.open", &k).unwrap();
+    assert_eq!(s.reading.as_ref().unwrap().thread.len(), 2);
+    s.run("view.conversations", &json!({"on": false})).unwrap();
+    assert!(s.reading.as_ref().unwrap().thread.is_empty());
     done(s);
 }
 
@@ -1416,8 +1437,7 @@ fn outlook_data_files_open_as_accounts_on_this_computer() {
         delimiter: Some('/'),
         role: FolderRole::Inbox,
         selectable: true,
-        unread: 0,
-        total: 0,
+        ..Default::default()
     };
     s.apply(Event::Folders { account: id.clone(), folders: vec![inbox] });
     // The file's contacts were written next to its mail: they show once it's done.
@@ -2447,6 +2467,9 @@ fn another_mailbox_opens_in_an_exchange_account_with_its_own_deleted_items() {
         selectable: true,
         unread: 0,
         total: 0,
+        name: None,
+        mailbox: None,
+        mailbox_role: FolderRole::Other,
     };
     let folders = vec![
         f("INBOX", FolderRole::Inbox),
@@ -2461,11 +2484,38 @@ fn another_mailbox_opens_in_an_exchange_account_with_its_own_deleted_items() {
     assert_eq!(a.folder(FolderRole::Trash).unwrap().path, "Deleted Items");
     assert_eq!(a.folder_beside("support@contoso.example/Inbox", FolderRole::Trash).unwrap().path, "support@contoso.example/Deleted Items");
     assert_eq!(a.folder_beside("INBOX", FolderRole::Trash).unwrap().path, "Deleted Items");
+    // Exchange marks a shared mailbox's folders themselves (`mailbox` and the role it has
+    // there): mail deleted in one goes to that mailbox's own Deleted Items, not the account's.
+    let marked = |path: &str, mailbox: &str, mailbox_role: FolderRole| Folder {
+        account: id.clone(),
+        path: path.into(),
+        delimiter: Some('/'),
+        role: FolderRole::Other,
+        selectable: true,
+        mailbox: Some(mailbox.into()),
+        mailbox_role,
+        ..Default::default()
+    };
+    s.apply(Event::Folders {
+        account: id.clone(),
+        folders: vec![
+            f("INBOX", FolderRole::Inbox),
+            f("Deleted Items", FolderRole::Trash),
+            marked("Support", "support@contoso.example", FolderRole::Other),
+            marked("Support/Inbox", "support@contoso.example", FolderRole::Inbox),
+            marked("Support/Deleted Items", "support@contoso.example", FolderRole::Trash),
+        ],
+    });
+    let a = s.account(&id).unwrap();
+    assert_eq!(a.folder(FolderRole::Inbox).unwrap().path, "INBOX", "a shared mailbox's Inbox isn't the account's");
+    assert_eq!(a.folder_mailbox("Support/Inbox").as_deref(), Some("support@contoso.example"));
+    assert_eq!(a.folder_beside("Support/Inbox", FolderRole::Trash).unwrap().path, "Support/Deleted Items");
+    assert_eq!(a.folder_beside("INBOX", FolderRole::Trash).unwrap().path, "Deleted Items");
     // Closed: its folders and calendar go.
     s.run("account.closeMailbox", &json!({"email": "support@contoso.example"})).unwrap();
     let a = s.account(&id).unwrap();
     assert!(a.config.shared_mailboxes.is_empty());
-    assert!(a.folders.iter().all(|f| !f.path.starts_with("support@")));
+    assert!(a.folders.iter().all(|f| a.folder_mailbox(&f.path).is_none()), "its folders go, whichever way they're named");
     assert!(s.pim.get(&id).is_none_or(|p| p.shared.is_empty()));
     assert!(s.run("account.closeMailbox", &json!({"email": "support@contoso.example"})).is_err());
     if let Some(st) = &s.store {
@@ -2732,5 +2782,120 @@ fn rules_export_and_import() {
     assert_eq!(other.rules.len(), 2, "a bad file changes nothing");
     assert!(other.run("rules.import", &json!({"path": "/no/such/file"})).is_err());
     done(other);
+    done(s);
+}
+
+/// A new message to someone (a contact card's Send email): To filled in, ready for more.
+#[test]
+fn new_mail_to_someone() {
+    let mut s = sample_session("new-mail-to");
+    s.run("mail.new", &json!({"to": "Zoe Park <zoe@studio.example>"})).unwrap();
+    assert_eq!(s.compose.as_ref().unwrap().to, "Zoe Park <zoe@studio.example>; ");
+    s.compose = None;
+    assert!(s.run("mail.new", &json!({"to": "not an address"})).is_err());
+    assert!(s.compose.is_none(), "nothing opens for a bad address");
+    s.run("mail.new", &json!({"to": "  "})).unwrap();
+    assert_eq!(s.compose.as_ref().unwrap().to, "");
+    done(s);
+}
+
+/// Shared mailboxes are added to an Exchange account by address and removed again; each change
+/// connects the account again to list their folders. Junk, duplicates and its own address are
+/// refused, and other kinds of accounts have none.
+#[test]
+fn shared_mailboxes_are_added_and_removed() {
+    let mut s = sample_session("shared-mailboxes");
+    let id = s
+        .run("account.add", &json!({"email": "riley@contoso.example", "password": "pw", "ews": "https://mail.contoso.example/EWS/Exchange.asmx", "username": "CONTOSO\\riley"}))
+        .unwrap()["account"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    s.take_jobs();
+    s.run("account.addSharedMailbox", &json!({"account": id, "address": "Sales <sales@contoso.example>"})).unwrap();
+    assert_eq!(s.account(&id).unwrap().config.shared_mailboxes, ["sales@contoso.example"]);
+    assert!(s.take_jobs().iter().any(|j| matches!(j, Job::Start { account, .. } if account.shared_mailboxes == ["sales@contoso.example"])));
+    for bad in ["SALES@contoso.example", "riley@contoso.example", "not an address", "a@x.example, b@x.example"] {
+        assert!(s.run("account.addSharedMailbox", &json!({"account": id, "address": bad})).is_err(), "{bad}");
+    }
+    assert!(s.run("account.addSharedMailbox", &json!({"account": "sample", "address": "x@y.example"})).is_err(), "not Exchange");
+    s.run("account.removeSharedMailbox", &json!({"account": id, "address": "sales@CONTOSO.example"})).unwrap();
+    assert!(s.account(&id).unwrap().config.shared_mailboxes.is_empty());
+    assert!(s.run("account.removeSharedMailbox", &json!({"account": id, "address": "sales@contoso.example"})).is_err());
+    done(s);
+}
+
+/// Removing an account keeps its data file where it is, as Outlook keeps a removed account's
+/// .pst: the same address added again gets a file of its own beside it, and the kept one opens
+/// again as a data file. A file that failed to open, or an account starting again, isn't kept.
+#[test]
+fn a_removed_account_keeps_its_data_file() {
+    let dir = std::env::temp_dir().join(format!("mailcraft-engine-keep-file-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let files = dir.join("MailCraft Files");
+    let store = Store::open_packed(dir.join("app"), &files).unwrap();
+    let mut s = Session::open(Some(store), mailcraft_model::dates::Clock::new(NOW, 0));
+    let id = s.run("account.add", &json!({"email": "zoe@example.org", "password": "pw"})).unwrap()["account"].as_str().unwrap().to_string();
+    let st = s.store.clone().unwrap();
+    st.save_folders(&id, &[mailcraft_model::Folder { account: id.clone(), path: "INBOX".into(), selectable: true, ..Default::default() }]).unwrap();
+    let kept = files.join("zoe@example.org.mailcraft");
+    assert_eq!(st.data_file(&id).as_deref(), Some(kept.as_path()));
+
+    let r = s.run("account.remove", &json!({"account": id})).unwrap();
+    assert_eq!(r["dataFile"].as_str(), Some(kept.display().to_string().as_str()));
+    assert!(kept.exists(), "the data file stays");
+    assert!(s.accounts.is_empty() && st.data_file(&id).is_none());
+
+    // Added again: a file of its own, the kept one untouched.
+    let before = std::fs::read(&kept).unwrap();
+    let id = s.run("account.add", &json!({"email": "zoe@example.org", "password": "pw"})).unwrap()["account"].as_str().unwrap().to_string();
+    st.save_folders(&id, &[mailcraft_model::Folder { account: id.clone(), path: "INBOX".into(), selectable: true, ..Default::default() }]).unwrap();
+    let second = files.join("zoe@example.org (2).mailcraft");
+    assert_eq!(st.data_file(&id).as_deref(), Some(second.as_path()));
+    assert_eq!(std::fs::read(&kept).unwrap(), before);
+
+    // The kept file opens again (File › Open & Export) as a mailbox of its own.
+    let opened = st.clone();
+    let n = opened.import_data_file("a9", &kept).unwrap();
+    assert_eq!(n, 0, "no mail in it, but it opens");
+    assert_eq!(opened.load_folders("a9").unwrap().len(), 1);
+    drop(s);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Issue #3: an account whose outgoing server has its own user name and password. The user name
+/// is kept with the account, the password goes to the keychain on its own (never in the
+/// account's settings), a new one needs its password, and turning it off signs in as IMAP does.
+#[test]
+fn the_outgoing_server_keeps_a_sign_in_of_its_own() {
+    let mut s = sample_session("smtp-sign-in");
+    let add = json!({"email": "zoe@example.org", "password": "imap-pw", "imapHost": "imap.example.org", "smtpHost": "mail.relay.example",
+        "smtpUsername": "relay-user"});
+    assert!(s.run("account.add", &add).unwrap_err().to_string().contains("outgoing server's password"));
+    let mut add = add;
+    add["smtpPassword"] = json!("smtp-pw");
+    let id = s.run("account.add", &add).unwrap()["account"].as_str().unwrap().to_string();
+    let jobs = s.take_jobs();
+    assert!(
+        matches!(jobs.as_slice(), [Job::Start { account, password: Some(p) }, Job::SmtpPassword { account: a2, password: sp }]
+            if account.smtp_username.as_deref() == Some("relay-user") && p.0 == "imap-pw" && a2.id == id && sp.0 == "smtp-pw"),
+        "{jobs:?}"
+    );
+    let saved = std::fs::read_to_string(s.store.as_ref().unwrap().root().join("accounts.json")).unwrap();
+    assert!(saved.contains("relay-user"));
+    assert!(!saved.contains("smtp-pw") && !saved.contains("imap-pw"), "passwords stay out of MailCraft's files");
+    // Its password changed alone: kept, no reconnecting.
+    s.run("account.update", &json!({"account": id, "smtpUsername": "relay-user", "smtpPassword": "new-pw"})).unwrap();
+    assert!(matches!(s.take_jobs().as_slice(), [Job::SmtpPassword { password, .. }] if password.0 == "new-pw"));
+    // A new user name with the password kept: it reconnects with it.
+    s.run("account.update", &json!({"account": id, "smtpUsername": "relay-2"})).unwrap();
+    assert!(matches!(s.take_jobs().as_slice(), [Job::Start { account, .. }] if account.smtp_username.as_deref() == Some("relay-2")));
+    // Off: SMTP signs in as IMAP does.
+    s.run("account.update", &json!({"account": id, "smtpUsername": null})).unwrap();
+    assert!(s.account(&id).unwrap().config.smtp_username.is_none());
+    assert!(matches!(s.take_jobs().as_slice(), [Job::Start { .. }]));
+    // Accounts that don't send over SMTP have none.
+    let ews = json!({"email": "riley@contoso.example", "password": "pw", "ews": "mail.contoso.example", "smtpUsername": "x", "smtpPassword": "y"});
+    assert!(s.run("account.add", &ews).is_err());
     done(s);
 }

@@ -171,3 +171,34 @@ propre — donc la fusion n'a rien réécrit. 19 fichiers ont demandé une réso
 
 Preuves de la fusion : `cargo xtask ci` vert (fmt, `clippy -D warnings`, 366 tests, layers, assets,
 wasm), un build `--workspace` complet, et le test d'envoi Exchange relancé trois fois sans échec.
+
+### État de la récupération : v0.18 et v0.19 intégrées (2026-10-19)
+
+Second passage, sans recréer de remote : `git fetch https://github.com/ZIDAN44/mailcraft main` puis
+fusion de `FETCH_HEAD` (10 commits, v0.18 + v0.19 — boîtes partagées Exchange, fiche contact,
+sign-in SMTP propre, fichier `.mailcraft` conservé à la suppression d'un compte). Aucun commit de
+ce fork n'a été réécrit ; 23 fichiers ont demandé une résolution.
+
+- **Traductions** (14 `.tsv`) : union des deux côtés, sans doublon.
+- **Modèle** (`model/lib.rs`) : le `Folder` prend les champs de l'origine `mailbox` et
+  `mailbox_role` (une boîte partagée est une boîte à part entière). Le tri du volet unionne la
+  règle de l'origine (Exchange, dossiers marqués) et celle de ce fork (Graph, dossiers nommés
+  d'après l'adresse, détectés par le `@`).
+- **Exchange (EWS)** : l'implémentation de l'origine **remplace** celle de ce fork — elle lit les
+  boîtes partagées qu'Autodiscover associe au compte en plus de celles ajoutées à la main, avec les
+  vrais rôles de dossiers. Le `address_of` de ce fork reste (il sert aux calendriers).
+- **Graph** : ce fork garde son implémentation (boîtes partagées sous `/users/<adresse>`, que
+  l'origine n'a pas), plus le `name_special` de l'origine.
+- **Boîte du même rôle** (`session.rs`) : `folder()` et `folder_beside()` reconnaissent les dossiers
+  d'une autre boîte des deux façons (`mailbox` de l'origine, préfixe d'adresse de ce fork), et
+  `move_selection` groupe par boîte — un message supprimé dans une boîte partagée Exchange va bien
+  dans *ses* Éléments supprimés. Un test le vérifie désormais sur les deux formes de nommage.
+- **Dialogues et boîtes partagées** : les deux entrées coexistent (celle de ce fork « Ouvrir une
+  autre boîte aux lettres… », plus riche : Graph et calendrier ; et celle de l'origine « Ajouter une
+  boîte partagée… »). À unifier si souhaité.
+- **Doublure de test** (`fake_ews.rs`) : celle de l'origine (boîtes partagées, ancrage
+  `X-AnchorMailbox`) plus les ajouts de ce fork (boutons de vote, dossiers masqués, `slow_sync`,
+  répertoire, raccourcis de navigation), `ResolveNames` réuni.
+
+Preuves de la fusion : `cargo xtask ci` vert (fmt, `clippy -D warnings`, 375 tests, layers, assets,
+wasm) et un build `--workspace` complet. La version du manifeste suit l'origine (`0.19.0`).

@@ -338,7 +338,6 @@
 	{a} and {b}	{a} 和 {b}
 	{a}, {b} and others	{a}、{b} 等人
 	{email} (sample)	{email} (示例)
-	{email} and its downloaded mail will be removed from this computer. Nothing is deleted on the server.	{email} 及其已下载的邮件将从这台电脑上移除。服务器上不会删除任何内容。
 	{name} could not be opened: {error}	无法打开 {name}: {error}
 	{n} attachments	{n} 个附件
 	{n} messages in this conversation	此对话中有 {n} 封邮件
@@ -916,3 +915,26 @@ month	May	5月
 	Run every rule that's on, on the mail already in the Inbox	对收件箱中已有的邮件运行所有已打开的规则
 	Find a rule	查找规则
 	No rule matches.	没有匹配的规则。
+	 and {n} more	 等另外 {n} 人
+	Add to contacts…	添加到联系人…
+	Copy address	复制地址
+	Edit contact…	编辑联系人…
+	Send email	发送电子邮件
+	Add	添加
+	Add a shared mailbox	添加共享邮箱
+	Add…	添加…
+	Its folders show under this account. You need access to it on the Exchange server; the ones you have full access to open by themselves.	其文件夹显示在此帐户下。你需要在 Exchange 服务器上拥有访问权限；拥有完全访问权限的邮箱会自动打开。
+	Mailboxes you have full access to open by themselves.	拥有完全访问权限的邮箱会自动打开。
+	Shared mailboxes	共享邮箱
+	{email} will be removed from MailCraft. Its data file, {file}, stays in your MailCraft Files folder: open it from File › Open & Export to see its mail again. Nothing is deleted on the server.	将从 MailCraft 中删除 {email}。其数据文件 {file} 会保留在 MailCraft Files 文件夹中：从“文件 › 打开和导出”打开即可再次查看其邮件。服务器上的内容不会被删除。
+	{email} will be removed from MailCraft. Nothing is deleted on the server.	将从 MailCraft 中删除 {email}。服务器上的内容不会被删除。
+	{email} will be removed from MailCraft. Its data file, {file}, stays in your MailCraft Files folder: open it from File › Open & Export to see its mail again.	将从 MailCraft 中删除 {email}。其数据文件 {file} 会保留在 MailCraft Files 文件夹中：从“文件 › 打开和导出”打开即可再次查看其邮件。
+	{email} will be removed from MailCraft.	将从 MailCraft 中删除 {email}。
+	Add shared mailbox…	添加共享邮箱…
+	Remove shared mailbox	删除共享邮箱
+	Opened by the server for your access to it	因你有访问权限，由服务器打开
+	Shared mailbox {address}, opened by {email}	共享邮箱 {address}，由 {email} 打开
+	The outgoing server has its own user name and password	发送服务器有自己的用户名和密码
+	Its user name	其用户名
+	Its password	其密码
+	Password (unchanged when empty)	密码（留空则不变）

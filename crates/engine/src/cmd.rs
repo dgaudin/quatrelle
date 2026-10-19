@@ -56,7 +56,10 @@ fn can_connect(s: &Session) -> Option<&'static str> {
 pub fn registry() -> Registry {
     Registry::new(vec![
         // Home › New
-        CommandSpec::new("mail.new", "New mail", "Home › New", new_mail).key("Mod+N").params(r#"{"account"?: string}"#).when(has_account),
+        CommandSpec::new("mail.new", "New mail", "Home › New", new_mail)
+            .key("Mod+N")
+            .params(r#"{"account"?: string, "to"?: string (who it's to, "Name <address>")}"#)
+            .when(has_account),
         // Home › Delete
         CommandSpec::new("mail.delete", "Delete", "Home › Delete", delete).key("Delete").params(r#"{"permanent"?: bool}"#).when(has_selection),
         CommandSpec::new("mail.archive", "Archive", "Home › Delete", |s, _| s.move_selection(MoveTarget::Role(FolderRole::Archive)))
@@ -303,6 +306,7 @@ pub fn registry() -> Registry {
         CommandSpec::new("view.conversations", "Show as conversations", "View › Messages", |s, v| {
             s.prefs.conversations = p::bool(v, "on").unwrap_or(!s.prefs.conversations);
             s.refresh_list();
+            s.rethread_reading();
             Ok(json!({"on": s.prefs.conversations}))
         })
         .params(r#"{"on"?: bool}"#),
@@ -717,7 +721,7 @@ pub fn registry() -> Registry {
         })
         .params(r#"{"account"?: string, "folder"?: string (Deleted Items and Junk are emptied for good; any other folder's mail goes to Deleted Items), "role"?: "trash"|"junk"}"#),
         CommandSpec::new("account.add", "Add account", "File › Accounts", add_account)
-            .params(r#"{"email": string, "password"?: string, "oauth"?: "google"|"microsoft", "deferSignIn"?: bool, "local"?: bool, "name"?: string, "username"?: string, "imapHost"?: string, "imapPort"?: number, "imapSecurity"?: "tls"|"starttls"|"none", "smtpHost"?: string, "smtpPort"?: number, "smtpSecurity"?: …, "jmap"?: string (a JMAP session URL, instead of IMAP and SMTP), "pop"?: true (POP3 instead of IMAP: popHost, popPort, popSecurity, "popDelete"?: bool to remove mail from the server once downloaded, else a copy stays: "popKeepDays"?: number (removed that many days after downloading; 14 when not given, 0 for never), "popDeleteWithTrash"?: bool (removed once deleted here for good)), "pst"?: string (an existing Outlook data file whose mail comes in first), "ews"?: string|true (on-premises Exchange: its EWS address or server name, or true to find it with Autodiscover; username DOMAIN\\user or an address), "graph"?: true|string (Exchange Online through Microsoft Graph; signs in with Microsoft)}"#),
+            .params(r#"{"email": string, "password"?: string, "oauth"?: "google"|"microsoft", "deferSignIn"?: bool, "local"?: bool, "name"?: string, "username"?: string, "imapHost"?: string, "imapPort"?: number, "imapSecurity"?: "tls"|"starttls"|"none", "smtpHost"?: string, "smtpPort"?: number, "smtpSecurity"?: …, "smtpUsername"?: string and "smtpPassword"?: string (the outgoing server's own sign-in, when it isn't the incoming server's), "jmap"?: string (a JMAP session URL, instead of IMAP and SMTP), "pop"?: true (POP3 instead of IMAP: popHost, popPort, popSecurity, "popDelete"?: bool to remove mail from the server once downloaded, else a copy stays: "popKeepDays"?: number (removed that many days after downloading; 14 when not given, 0 for never), "popDeleteWithTrash"?: bool (removed once deleted here for good)), "pst"?: string (an existing Outlook data file whose mail comes in first), "ews"?: string|true (on-premises Exchange: its EWS address or server name, or true to find it with Autodiscover; username DOMAIN\\user or an address), "graph"?: true|string (Exchange Online through Microsoft Graph; signs in with Microsoft)}"#),
         CommandSpec::new("account.importPst", "Open Outlook data file", "File › Open & Export", |s, v| {
             let path = p::req_str(v, "path")?.to_string();
             s.import_pst(&path)
@@ -788,8 +792,16 @@ pub fn registry() -> Registry {
         CommandSpec::new("account.setSignature", "Signature", "File › Options › Mail", set_signature)
             .params(r#"{"account": string, "signature": string, "html"?: string (its look: bold, colours, links; the text then comes from it), "newMessages"?: bool (added to new messages; default: as it was), "replies"?: bool (added to replies and forwards), "rawHtml"?: string (the signature written in HTML, sent as it is, cleaned)}"#),
         CommandSpec::new("account.list", "Accounts", "File › Accounts", list_accounts),
+        CommandSpec::new("account.addSharedMailbox", "Add a shared mailbox", "File › Info › Account settings", |s, v| {
+            shared_mailbox(s, v, true)
+        })
+        .params(r#"{"account": string, "address": string (a mailbox the account has access to on the Exchange server)}"#),
+        CommandSpec::new("account.removeSharedMailbox", "Remove a shared mailbox", "File › Info › Account settings", |s, v| {
+            shared_mailbox(s, v, false)
+        })
+        .params(r#"{"account": string, "address": string}"#),
         CommandSpec::new("account.update", "Account settings", "File › Info › Account settings", update_account).params(
-            r#"{"account": string, "name"?: string, "username"?: string, "imapHost"?: string, "imapPort"?: number, "imapSecurity"?: …, "smtpHost"?: …, "jmap"?: string|null, "popHost"?: …, "popDelete"?: bool, "popKeepDays"?: number, "popDeleteWithTrash"?: bool}"#,
+            r#"{"account": string, "name"?: string, "username"?: string, "imapHost"?: string, "imapPort"?: number, "imapSecurity"?: …, "smtpHost"?: …, "smtpUsername"?: string|null (the outgoing server's own sign-in; null: the incoming server's), "smtpPassword"?: string, "jmap"?: string|null, "popHost"?: …, "popDelete"?: bool, "popKeepDays"?: number, "popDeleteWithTrash"?: bool}"#,
         ),
         CommandSpec::new("account.mailbox", "Mailbox settings", "File › Info › Mailbox settings", |s, v| {
             let id = account_param(s, v)?;
@@ -839,7 +851,15 @@ fn account_param(s: &Session, v: &Value) -> Result<String, CmdError> {
 }
 
 fn new_mail(s: &mut Session, v: &Value) -> CmdResult {
+    // Who it's to, checked before anything opens.
+    let to = match p::str(v, "to").map(str::trim).filter(|t| !t.is_empty()) {
+        Some(t) => mailcraft_model::addr::parse_list(t).map_err(|bad| CmdError::Params(format!("not an email address: {bad}")))?,
+        None => Vec::new(),
+    };
     let c = s.new_compose(p::str(v, "account"))?;
+    if !to.is_empty() {
+        c.to = mailcraft_model::addr::format_field(&to);
+    }
     Ok(json!({"compose": c.id}))
 }
 
@@ -1469,6 +1489,7 @@ fn add_account(s: &mut Session, v: &Value) -> CmdResult {
         username: p::str(v, "username").map(str::to_string).unwrap_or(guess.username.clone()),
         imap: if plain || pop.is_some() { ServerConfig::default() } else { server(v, "imap", &guess.imap)? },
         smtp: if plain { ServerConfig::default() } else { server(v, "smtp", &guess.smtp)? },
+        smtp_username: None,
         signature: p::str(v, "signature").unwrap_or_default().to_string(),
         signature_html: String::new(),
         signature_raw_html: String::new(),
@@ -1502,7 +1523,13 @@ fn add_account(s: &mut Session, v: &Value) -> CmdResult {
     if !local && !defer && config.oauth.is_none() && password.as_deref().is_none_or(str::is_empty) {
         return Err(CmdError::Params("`password` is required".into()));
     }
+    // The outgoing server's own sign-in (IMAP or POP with SMTP).
+    let mut config = config;
+    let smtp_password = smtp_sign_in(v, &mut config, true)?;
     let id = s.add_account(config, password)?;
+    if let Some(pw) = smtp_password {
+        s.keep_smtp_password(&id, pw);
+    }
     // `pst`: an existing data file whose mail comes into the account first.
     if let Some(path) = p::str(v, "pst").map(str::trim).filter(|p| !p.is_empty()) {
         s.attach_data_file(&id, path)?;
@@ -1570,7 +1597,37 @@ fn update_account(s: &mut Session, v: &Value) -> CmdResult {
             return Err(CmdError::Params("incoming and outgoing server names and ports are required".into()));
         }
     }
-    s.update_account(c, None)
+    let smtp_password = smtp_sign_in(v, &mut c, false)?;
+    let done = s.update_account(c, None)?;
+    if let Some(pw) = smtp_password {
+        s.keep_smtp_password(id, pw);
+    }
+    Ok(done)
+}
+
+/// The outgoing server's own sign-in, as Outlook's "Log on using" for SMTP (issue #3: its user
+/// name and password aren't the incoming server's): `smtpUsername` (null or empty: signs in as
+/// the incoming server does) and `smtpPassword`, which is returned to be kept. A new one needs
+/// its password; one already kept keeps it when none is given.
+fn smtp_sign_in(v: &Value, c: &mut AccountConfig, adding: bool) -> Result<Option<String>, CmdError> {
+    let password = p::str(v, "smtpPassword").filter(|p| !p.is_empty()).map(str::to_string);
+    let user = match v.get("smtpUsername") {
+        None => return Ok(password.filter(|_| c.smtp_username.is_some())),
+        Some(Value::Null) => None,
+        Some(u) => u.as_str().map(str::trim).filter(|u| !u.is_empty()).map(|u| u.chars().take(320).collect::<String>()),
+    };
+    let Some(user) = user else {
+        c.smtp_username = None;
+        return Ok(None);
+    };
+    if c.is_local() || c.is_api() {
+        return Err(CmdError::Params("only accounts that send over SMTP have an outgoing server's sign-in".into()));
+    }
+    if password.is_none() && (adding || c.smtp_username.is_none()) && !p::bool(v, "deferSignIn").unwrap_or(false) {
+        return Err(CmdError::Params("the outgoing server's password is required".into()));
+    }
+    c.smtp_username = Some(user);
+    Ok(password)
 }
 
 /// Pictures a signature takes, and how large each.
@@ -1815,4 +1872,36 @@ fn read_capped(path: &str, max: u64) -> Result<Vec<u8>, CmdError> {
         return Err(CmdError::Params(format!("{path} is too big")));
     }
     Ok(bytes)
+}
+
+/// Add a shared mailbox to an Exchange account by its address (Outlook's "Open these additional
+/// mailboxes"), or remove one; the account connects again to list its folders.
+fn shared_mailbox(s: &mut Session, v: &Value, add: bool) -> CmdResult {
+    let id = p::req_str(v, "account")?;
+    let mut c = s.account(id).map(|a| a.config.clone()).ok_or_else(|| CmdError::Params(format!("no account `{id}`")))?;
+    if c.ews.is_none() {
+        return Err(CmdError::Params("shared mailboxes are opened on Exchange accounts (EWS)".into()));
+    }
+    let address = p::req_str(v, "address")?.trim().to_string();
+    let parsed = mailcraft_model::addr::parse_list(&address).map_err(|bad| CmdError::Params(format!("not an email address: {bad}")))?;
+    let [one] = parsed.as_slice() else { return Err(CmdError::Params("one address at a time".into())) };
+    let email = one.email.trim().to_string();
+    let known = c.shared_mailboxes.iter().position(|a| a.eq_ignore_ascii_case(&email));
+    if add {
+        if email.eq_ignore_ascii_case(&c.email) {
+            return Err(CmdError::Params("that's this account's own mailbox".into()));
+        }
+        if known.is_some() {
+            return Err(CmdError::Params(format!("{email} is already open in this account")));
+        }
+        if c.shared_mailboxes.len() >= 20 {
+            return Err(CmdError::Params("at most 20 shared mailboxes".into()));
+        }
+        c.shared_mailboxes.push(email.clone());
+    } else {
+        let at = known.ok_or_else(|| CmdError::Params(format!("{email} isn't open in this account")))?;
+        c.shared_mailboxes.remove(at);
+    }
+    s.update_account(c, None)?;
+    Ok(json!({ "account": id, "address": email, "added": add }))
 }

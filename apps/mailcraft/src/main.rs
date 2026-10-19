@@ -39,6 +39,11 @@ fn entry(a: &AccountConfig) -> Result<keyring::Entry, String> {
     keyring::Entry::new(SERVICE, &format!("{}|{}|{}", a.id, a.username, a.imap.host)).map_err(|e| e.to_string())
 }
 
+/// The outgoing server's own password, for an account whose SMTP sign-in is its own.
+fn smtp_entry(a: &AccountConfig) -> Result<keyring::Entry, String> {
+    keyring::Entry::new(SERVICE, &format!("{}|smtp", a.id)).map_err(|e| e.to_string())
+}
+
 impl Credentials for Keychain {
     fn get(&self, account: &AccountConfig) -> Option<String> {
         entry(account).ok()?.get_password().ok()
@@ -48,6 +53,17 @@ impl Credentials for Keychain {
     }
     fn delete(&self, account: &AccountConfig) {
         if let Ok(e) = entry(account) {
+            let _ = e.delete_credential();
+        }
+    }
+    fn get_smtp(&self, account: &AccountConfig) -> Option<String> {
+        smtp_entry(account).ok()?.get_password().ok()
+    }
+    fn set_smtp(&self, account: &AccountConfig, password: &str) -> Result<(), String> {
+        smtp_entry(account)?.set_password(password).map_err(|e| e.to_string())
+    }
+    fn delete_smtp(&self, account: &AccountConfig) {
+        if let Ok(e) = smtp_entry(account) {
             let _ = e.delete_credential();
         }
     }
@@ -263,8 +279,12 @@ impl Services for Desktop {
         rfd::FileDialog::new().set_title("Import rules").add_filter("MailCraft rules", &["json"]).add_filter("All files", &["*"]).pick_file()
     }
     fn pick_data_file(&mut self) -> Option<PathBuf> {
-        rfd::FileDialog::new()
-            .set_title("Open data file")
+        let mut d = rfd::FileDialog::new();
+        // Where the data files are (a removed account's stays there), as Outlook opens its own.
+        if let Some(dir) = self.data.as_ref().filter(|d| d.is_dir()) {
+            d = d.set_directory(dir);
+        }
+        d.set_title("Open data file")
             .add_filter("Data files", &["pst", "mailcraft"])
             .add_filter("Outlook data files", &["pst"])
             .add_filter("MailCraft data files", &["mailcraft"])

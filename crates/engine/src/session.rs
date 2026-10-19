@@ -52,16 +52,26 @@ pub enum VacationState {
 impl AccountState {
     /// This account's own folder for a role (not one in another mailbox opened here).
     pub fn folder(&self, role: FolderRole) -> Option<&Folder> {
-        self.folders.iter().find(|f| f.role == role && self.config.folder_owner(&f.path).is_none())
+        self.folders.iter().find(|f| f.role == role && f.mailbox.is_none() && self.config.folder_owner(&f.path).is_none())
+    }
+
+    /// The mailbox a folder path is in (`None`: this account's own), whether the server marks
+    /// its folders (`mailbox`, Exchange) or names them after the address (Graph's `/users`).
+    pub fn folder_mailbox(&self, path: &str) -> Option<String> {
+        self.folders.iter().find(|f| f.path == path).and_then(|f| f.mailbox.clone()).or_else(|| self.config.folder_owner(path).map(str::to_string))
     }
 
     /// The folder for a role in the mailbox `path` is in: another mailbox's own (its Deleted
     /// Items for mail deleted there), else this account's.
     pub fn folder_beside(&self, path: &str, role: FolderRole) -> Option<&Folder> {
-        match self.config.folder_owner(path) {
-            Some(owner) => self.folders.iter().find(|f| f.role == role && self.config.folder_owner(&f.path) == Some(owner)),
-            None => self.folder(role),
+        if let Some(owner) = self.folder_mailbox(path) {
+            return self
+                .folders
+                .iter()
+                .find(|f| f.mailbox.as_deref() == Some(owner.as_str()) && f.mailbox_role == role)
+                .or_else(|| self.folders.iter().find(|f| f.role == role && self.config.folder_owner(&f.path) == Some(owner.as_str())));
         }
+        self.folder(role)
     }
 
     /// A local-only account (the sample mailbox): no server, changes apply to the cache alone.
@@ -1263,14 +1273,28 @@ impl Session {
     }
 
     /// The conversation a message belongs to in the current list.
+    /// The open message's conversation again (conversations turned on or off).
+    pub(crate) fn rethread_reading(&mut self) {
+        let Some(key) = self.reading.as_ref().map(|r| r.key.clone()) else { return };
+        let thread = self.thread_of(&key);
+        if let Some(r) = self.reading.as_mut() {
+            r.thread = thread;
+        }
+    }
+
+    /// The conversation a message is in, shown above it in the reading pane: only while the list
+    /// is grouped by conversation (as Outlook's reading pane shows one message otherwise).
     fn thread_of(&self, key: &MessageKey) -> Vec<MessageKey> {
+        if !self.prefs.conversations {
+            return Vec::new();
+        }
         let Some(i) = self.list.iter().position(|m| &m.key == key) else { return Vec::new() };
         let ts;
-        let threads = if self.prefs.conversations {
-            &self.threads
-        } else {
+        let threads = if self.threads.is_empty() {
             ts = threads(&self.list);
             &ts
+        } else {
+            &self.threads
         };
         threads
             .iter()
@@ -1666,14 +1690,17 @@ impl Session {
             match op {
                 Op::CreateFolder { path } => {
                     if !a.folders.iter().any(|f| &f.path == path) {
+                        // Made in another mailbox (a shared one), it's in that mailbox too.
+                        let parent = delimiter.and_then(|d| path.rsplit_once(d)).map(|(p, _)| p);
+                        let mailbox = a.folders.iter().find(|f| Some(f.path.as_str()) == parent).and_then(|f| f.mailbox.clone());
                         a.folders.push(Folder {
                             account: account.to_string(),
                             path: path.clone(),
                             delimiter,
                             role: FolderRole::Other,
                             selectable: true,
-                            unread: 0,
-                            total: 0,
+                            mailbox,
+                            ..Default::default()
                         });
                     }
                 }
@@ -1825,7 +1852,7 @@ impl Session {
             return Err(CmdError::Params(format!("no account `{account}`")));
         }
         let f = self.folder(account, path).cloned().ok_or_else(|| CmdError::Params(format!("no folder `{path}`")))?;
-        if f.role != FolderRole::Other || f.path.eq_ignore_ascii_case("INBOX") {
+        if f.is_fixed() {
             return Err(CmdError::Failed(format!("{} can't be renamed, moved or deleted", f.display_name())));
         }
         Ok(f)
@@ -2022,7 +2049,7 @@ impl Session {
         // that mailbox's own Deleted Items, Archive… (Exchange moves mail within a mailbox).
         let mut groups: BTreeMap<(String, Option<String>), Vec<MessageKey>> = BTreeMap::new();
         for m in &sel {
-            let owner = self.account(&m.key.account).and_then(|a| a.config.folder_owner(&m.key.folder)).map(str::to_string);
+            let owner = self.account(&m.key.account).and_then(|a| a.folder_mailbox(&m.key.folder));
             groups.entry((m.key.account.clone(), owner)).or_default().push(m.key.clone());
         }
         let mut moved = 0usize;
@@ -2939,8 +2966,8 @@ impl Session {
         }
         match error {
             Some(e) => {
-                // Nothing came in: the account goes again.
-                let _ = self.remove_account(account);
+                // Nothing came in: the account goes again, and the file it was starting.
+                let _ = self.drop_account(account, false);
                 self.notice(format!("{name} could not be opened: {e}"), true);
             }
             None => {
@@ -2976,17 +3003,30 @@ impl Session {
         Ok(serde_json::json!({ "account": id, "position": to }))
     }
 
+    /// Remove an account as Outlook does: gone from here, its data file kept (closed) where it
+    /// is, so it can be opened again from File › Open & Export; nothing changes on the server.
     pub fn remove_account(&mut self, id: &str) -> CmdResult {
-        if self.account(id).is_none() {
+        self.drop_account(id, true)
+    }
+
+    /// An account gone; `keep` keeps its data file (an account the user removes), otherwise the
+    /// file goes too (one that never held anyone's mail, or an account starting again).
+    fn drop_account(&mut self, id: &str, keep: bool) -> CmdResult {
+        let Some(email) = self.account(id).map(|a| a.config.email.clone()) else {
             return Err(CmdError::Params(format!("no account `{id}`")));
-        }
+        };
         self.accounts.retain(|a| a.config.id != id);
         self.cache.retain(|(a, _), _| a != id);
         self.pim.remove(id);
-        if let Some(store) = &self.store
-            && let Err(e) = store.remove_account(id)
-        {
-            self.notice(e.to_string(), true);
+        let mut kept = None;
+        if let Some(store) = &self.store {
+            let gone = if keep { store.remove_account(id).map(|f| kept = f) } else { store.delete_account(id) };
+            if let Err(e) = gone {
+                self.notice(e.to_string(), true);
+            }
+        }
+        if let Some(f) = &kept {
+            self.notice(format!("{email} removed. Its data file stays at {}", f.display()), false);
         }
         self.save_accounts();
         self.jobs.push(Job::Remove { account: id.to_string() });
@@ -2995,7 +3035,7 @@ impl Session {
         }
         let view = self.default_view();
         self.open_view(view);
-        Ok(serde_json::json!({ "removed": id }))
+        Ok(serde_json::json!({ "removed": id, "dataFile": kept.map(|f| f.display().to_string()) }))
     }
 
     /// An account that signs in to Microsoft with a password (which Microsoft refuses) switched to
@@ -3035,7 +3075,8 @@ impl Session {
             return Err(CmdError::Params("signing in with Microsoft isn't set up in this copy of MailCraft".into()));
         }
         let at = self.accounts.iter().position(|x| x.config.id == id).unwrap_or(0);
-        self.remove_account(id)?;
+        // Starting again from the server: its old file isn't kept beside the new one.
+        self.drop_account(id, false)?;
         let config = AccountConfig {
             name: c.name,
             email: c.email,
@@ -3056,6 +3097,13 @@ impl Session {
         Ok(serde_json::json!({ "account": new, "graph": true }))
     }
 
+    /// Keep an account's outgoing server's own password (its `smtp_username`'s), in the keychain.
+    pub(crate) fn keep_smtp_password(&mut self, account: &str, password: String) {
+        if let Some(a) = self.account(account) {
+            self.jobs.push(Job::SmtpPassword { account: a.config.clone(), password: Secret(password) });
+        }
+    }
+
     pub fn update_account(&mut self, config: AccountConfig, password: Option<String>) -> CmdResult {
         let id = config.id.clone();
         let Some(a) = self.account_mut(&id) else { return Err(CmdError::Params(format!("no account `{id}`"))) };
@@ -3069,6 +3117,7 @@ impl Session {
             || a.config.pop_keep_days != config.pop_keep_days
             || a.config.pop_delete_with_trash != config.pop_delete_with_trash
             || a.config.username != config.username
+            || a.config.smtp_username != config.smtp_username
             || a.config.shared_mailboxes != config.shared_mailboxes
             || password.is_some();
         a.config = config.clone();

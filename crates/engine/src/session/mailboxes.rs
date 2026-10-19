@@ -73,7 +73,8 @@ impl Session {
         if !a.config.shared_mailboxes.contains(&email) {
             return Err(CmdError::Params(format!("{email} isn't open in this account")));
         }
-        let gone: Vec<String> = a.folders.iter().filter(|f| a.config.folder_owner(&f.path) == Some(email.as_str())).map(|f| f.path.clone()).collect();
+        let gone: Vec<String> =
+            a.folders.iter().filter(|f| a.folder_mailbox(&f.path).as_deref() == Some(email.as_str())).map(|f| f.path.clone()).collect();
         a.config.shared_mailboxes.retain(|m| *m != email);
         a.folders.retain(|f| !gone.contains(&f.path));
         let config = a.config.clone();

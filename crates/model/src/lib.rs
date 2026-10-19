@@ -87,6 +87,10 @@ pub struct AccountConfig {
     pub username: String,
     pub imap: ServerConfig,
     pub smtp: ServerConfig,
+    /// The outgoing server's own user name, when it doesn't share the incoming server's sign-in
+    /// (its password is kept apart in the keychain); otherwise SMTP signs in as IMAP or POP does.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub smtp_username: Option<String>,
     #[serde(default)]
     pub signature: String,
     /// The signature's look, as HTML (empty when it's plain text): bold, colours, sizes and
@@ -145,8 +149,9 @@ pub struct AccountConfig {
     /// differs from `email`: an alias, or another account picked on the sign-in page.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub oauth_user: Option<String>,
-    /// Other mailboxes opened in this account (Exchange: a shared mailbox, or someone's who
-    /// made this account a delegate), by address: each lists under a folder named after it.
+    /// Other mailboxes this account opens, added by hand (Exchange: Outlook's "Open these
+    /// additional mailboxes"); those the server maps to it open by themselves. Each shows as a
+    /// mailbox of its own, its folders under it.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub shared_mailboxes: Vec<String>,
 }
@@ -233,6 +238,7 @@ impl AccountConfig {
             username: email.to_string(),
             imap: ServerConfig { host: imap_host, port: 993, security: Security::Tls },
             smtp,
+            smtp_username: None,
             signature: String::new(),
             signature_html: String::new(),
             signature_raw_html: String::new(),
@@ -309,6 +315,10 @@ impl FolderRole {
         }
     }
 
+    pub fn is_other(&self) -> bool {
+        *self == FolderRole::Other
+    }
+
     /// Display order in the folder pane: Inbox first, then the usual folders, then the rest.
     pub fn rank(self) -> u8 {
         match self {
@@ -371,6 +381,18 @@ pub struct Folder {
     pub unread: u32,
     #[serde(default)]
     pub total: u32,
+    /// The server's own name for a special folder, shown instead of the role's label: Exchange
+    /// names them in the language the mailbox was made in ("Postvak IN"), as Outlook shows them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// Another mailbox's folder (an Exchange shared mailbox the account opens): that mailbox's
+    /// address. Its top folder is shown as a mailbox of its own, beside the account.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mailbox: Option<String>,
+    /// In another mailbox, the role the folder has there: its icon and place follow it, while
+    /// `role` stays `Other`, so that it isn't taken for the account's own Inbox or Sent Items.
+    #[serde(default, skip_serializing_if = "FolderRole::is_other")]
+    pub mailbox_role: FolderRole,
 }
 
 fn yes() -> bool {
@@ -378,8 +400,12 @@ fn yes() -> bool {
 }
 
 impl Folder {
-    /// The decoded leaf name (`Projects/Café` → `Café`), or the role's label for special folders.
+    /// The decoded leaf name (`Projects/Café` → `Café`), or the role's label for special folders
+    /// (the server's own name for one, when it gives it).
     pub fn display_name(&self) -> String {
+        if let Some(n) = self.server_name() {
+            return n.to_string();
+        }
         if let Some(l) = self.role.label() {
             return l.to_string();
         }
@@ -388,6 +414,24 @@ impl Folder {
             Some(d) => decoded.rsplit(d).next().unwrap_or(&decoded).to_string(),
             None => decoded,
         }
+    }
+
+    /// The name the server gives a special folder, when it's shown as it is (not translated).
+    pub fn server_name(&self) -> Option<&str> {
+        self.name.as_deref().map(str::trim).filter(|n| !n.is_empty() && self.role != FolderRole::Other)
+    }
+
+    /// A folder that can't be renamed, moved or deleted: the Inbox and the other special
+    /// folders, and in a shared mailbox its top folder and its special folders too.
+    pub fn is_fixed(&self) -> bool {
+        self.role != FolderRole::Other
+            || self.path.eq_ignore_ascii_case("INBOX")
+            || (self.mailbox.is_some() && (self.mailbox_role != FolderRole::Other || self.depth() == 0))
+    }
+
+    /// The role the folder has where it is: its own mailbox's, or the shared mailbox's it's in.
+    pub fn look(&self) -> FolderRole {
+        if self.mailbox.is_some() { self.mailbox_role } else { self.role }
     }
 
     /// Nesting depth (0 for top-level folders).
@@ -446,20 +490,30 @@ pub fn child_path(parent: Option<&str>, delimiter: Option<char>, name: &str) -> 
 /// path so children follow their parents. A folder of the user's goes with the folder at the top
 /// of its path, so one made in the Inbox shows under the Inbox, as Outlook shows it.
 pub fn sort_folders(folders: &mut [Folder]) {
-    let roles: std::collections::HashMap<String, FolderRole> = folders.iter().map(|f| (f.path.clone(), f.role)).collect();
+    let roles: std::collections::HashMap<String, FolderRole> = folders.iter().map(|f| (f.path.clone(), f.look())).collect();
     folders.sort_by_cached_key(|f| {
-        let parts: Vec<String> = match f.delimiter {
+        let mut parts: Vec<String> = match f.delimiter {
             Some(d) => f.path.split(d).map(|p| utf7::decode(p).to_lowercase()).collect(),
             None => vec![utf7::decode(&f.path).to_lowercase()],
         };
-        // A special folder keeps its own place; another goes where its top folder is. Inside
-        // another mailbox opened here, its special folders come first, in their usual order, and
-        // what's in each stays under it.
+        let rank = |role: FolderRole| if role == FolderRole::Other { 6 } else { role.rank() };
+        let top_role = |n: usize| {
+            let top = f.delimiter.map(|d| f.path.split(d).take(n).collect::<Vec<_>>().join(&d.to_string())).unwrap_or_else(|| f.path.clone());
+            roles.get(&top).copied().unwrap_or(FolderRole::Other)
+        };
+        // Another mailbox's folders come after the account's own, each mailbox together, and
+        // inside it as the account's are: its top folder, then its special folders in their places.
+        if f.mailbox.is_some() {
+            let mailbox = if parts.is_empty() { String::new() } else { parts.remove(0) };
+            let role = if f.mailbox_role == FolderRole::Other { top_role(2) } else { f.mailbox_role };
+            return (7, mailbox, if parts.is_empty() { 0 } else { 1 + rank(role) }, parts);
+        }
+        // Another mailbox opened here whose folders aren't marked as such (Graph's `/users`):
+        // its top folder is named after the address, and its special folders come first, in
+        // their usual order, with what's in each under it.
         let top = f.delimiter.and_then(|d| f.path.split(d).next()).unwrap_or(&f.path);
-        let top_role = roles.get(top).copied().unwrap_or(FolderRole::Other);
-        // Another mailbox's top folder is named after its address.
-        let in_other = top.len() < f.path.len() && top_role == FolderRole::Other && top.contains('@');
-        let role = if f.role == FolderRole::Other || in_other { top_role } else { f.role };
+        let in_other = top.len() < f.path.len() && top_role(1) == FolderRole::Other && top.contains('@');
+        let role = if f.role == FolderRole::Other || in_other { top_role(1) } else { f.role };
         let inner = match (in_other, f.delimiter) {
             (true, Some(d)) => {
                 let second: String = f.path.split(d).take(2).collect::<Vec<_>>().join(&d.to_string());
@@ -471,7 +525,7 @@ pub fn sort_folders(folders: &mut [Folder]) {
             _ => 0,
         };
         let first = parts.first().cloned().unwrap_or_default();
-        (if role == FolderRole::Other { 6 } else { role.rank() }, first, inner, parts)
+        (rank(role), first, inner, parts)
     });
 }
 
@@ -757,6 +811,9 @@ mod tests {
             selectable: true,
             unread: 0,
             total: 0,
+            name: None,
+            mailbox: None,
+            mailbox_role: FolderRole::Other,
         };
         let mut list = vec![
             f("support@contoso.example/Projects", FolderRole::Other),
@@ -798,8 +855,7 @@ mod tests {
             delimiter: Some('/'),
             role,
             selectable: true,
-            unread: 0,
-            total: 0,
+            ..Default::default()
         };
         let mut list = vec![
             f("Projects", FolderRole::Other),
