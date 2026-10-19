@@ -2175,7 +2175,7 @@ impl Session {
     pub fn signature_rich(&self, account: &str) -> (String, mime::rich::Styles) {
         let Some(a) = self.account(account) else { return (String::new(), mime::rich::Styles::default()) };
         if !a.config.signature_html.trim().is_empty() {
-            let (text, styles) = mime::pasted_html(&a.config.signature_html);
+            let (text, styles) = mime::signature_html(&a.config.signature_html);
             if !text.trim().is_empty() {
                 return (text, styles);
             }
@@ -2187,9 +2187,24 @@ impl Session {
     fn style_signature(&mut self) {
         let Some(account) = self.compose.as_ref().map(|c| c.account.clone()) else { return };
         let sig = self.signature_rich(&account);
+        let pictures = self.signature_pictures(&account);
         if let Some(c) = self.compose.as_mut() {
             style_signature(c, &sig);
+            add_pictures(c, pictures);
         }
+    }
+
+    /// An account's signature pictures, as pictures of a message.
+    pub fn signature_pictures(&self, account: &str) -> Vec<mime::InlinePicture> {
+        self.account(account)
+            .map(|a| {
+                a.config
+                    .signature_pictures
+                    .iter()
+                    .map(|p| mime::InlinePicture { cid: p.cid.clone(), name: p.name.clone(), mime: p.mime.clone(), data: p.data.clone() })
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 
     pub fn new_compose(&mut self, account: Option<&str>) -> Result<&mut Compose, CmdError> {
@@ -3134,6 +3149,16 @@ pub fn signature_block(sig: &str) -> String {
 
 /// Give the signature in a message (`c.signature`, where it still stands as put there) the look
 /// it has: `sig` is its text and styles.
+/// Pictures a message gets with its signature (those it hasn't already).
+pub fn add_pictures(c: &mut Compose, pictures: Vec<mime::InlinePicture>) {
+    for p in pictures {
+        if !c.inline.iter().any(|x| x.cid == p.cid) {
+            c.inline.push(p);
+            c.plain = false;
+        }
+    }
+}
+
 pub fn style_signature(c: &mut Compose, sig: &(String, mime::rich::Styles)) {
     let (text, styles) = sig;
     if c.signature.is_empty() || styles.is_plain() {

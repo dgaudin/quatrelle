@@ -448,7 +448,14 @@ impl SignatureForm {
             on_new: !config.signature_not_new,
             on_replies: !config.signature_not_replies,
             account: account.to_string(),
-            compose: Compose { id: crate::rich_edit::SIGNATURE_ID, account: account.to_string(), body, styles, ..Default::default() },
+            compose: Compose {
+                id: crate::rich_edit::SIGNATURE_ID,
+                account: account.to_string(),
+                body,
+                styles,
+                inline: s.signature_pictures(account),
+                ..Default::default()
+            },
             insert,
             editor: SignatureEditor(crate::rich_edit::Editor::new(crate::rich_edit::SIGNATURE_ID)),
         }
@@ -1659,6 +1666,14 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Act
                     crate::rich_edit::link_dialog(ui, t, &mut editor.0, compose);
                 });
             });
+            // A logo or other picture, from a file (a picture pasted from a web page or another
+            // program isn't kept: it points at the web or at that program's files).
+            if crate::widgets::tool_button(ui, crate::Icon::Image, "Pictures", t, true)
+                .on_hover_text(tl!("Add a picture to the signature, such as a logo, from a file"))
+                .clicked()
+            {
+                acts.push(Action::SignaturePicture);
+            }
             // When it's added, as Outlook chooses it (the Signature button adds it anywhere).
             ui.add_space(4.0);
             ui.horizontal_wrapped(|ui| {
@@ -1673,7 +1688,7 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Act
                 let html = if styles.is_plain() { None } else { Some(mailcraft_engine::mime::rich::to_html(&text, &styles)) };
                 acts.push(Action::Run(
                     "account.setSignature",
-                    json!({"account": f.account, "signature": text, "html": html, "newMessages": f.on_new, "replies": f.on_replies}),
+                    json!({"account": f.account, "signature": text, "html": html, "newMessages": f.on_new, "replies": f.on_replies, "pictures": f.compose.inline}),
                 ));
                 if f.insert && !text.trim().is_empty() {
                     acts.push(Action::InsertSignature);
