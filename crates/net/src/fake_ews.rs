@@ -1907,7 +1907,7 @@ mod tests {
         let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
         let store = crate::fake::tests_store("ews-unreadable");
         let mut st = crate::jmap::State::default();
-        crate::ews::list_folders(&c, &mut st, "a1").unwrap();
+        crate::ews::list_folders(&c, &mut st, "a1", &[]).unwrap();
         crate::ews::sync_folder(&c, &mut st, &store, "a1", "INBOX", &crate::sync::SyncOptions::default()).unwrap();
         let fs = store.load_folder("a1", "INBOX").unwrap();
         assert_eq!(fs.messages.len(), 3);

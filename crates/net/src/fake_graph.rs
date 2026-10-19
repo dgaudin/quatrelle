@@ -1087,7 +1087,7 @@ mod tests {
         let c = crate::graph::Client::connect(&server.base, TOKEN).unwrap();
         let store = crate::fake::tests_store("graph-unreadable");
         let mut st = crate::jmap::State::default();
-        crate::graph::list_folders(&c, &mut st, "a1").unwrap();
+        crate::graph::list_folders(&c, &mut st, "a1", &[]).unwrap();
         crate::graph::sync_folder(&c, &mut st, &store, "a1", "INBOX", &crate::sync::SyncOptions::default()).unwrap();
         let fs = store.load_folder("a1", "INBOX").unwrap();
         assert_eq!(fs.messages.len(), 3);
