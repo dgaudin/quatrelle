@@ -566,7 +566,7 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
             c.call_one(&format!(
                 "<m:CreateItem SendMeetingInvitations=\"SendToNone\"><m:SavedItemFolderId>{}</m:SavedItemFolderId>\
                  <m:Items><t:CalendarItem>{body}</t:CalendarItem></m:Items></m:CreateItem>",
-                calendar_folder(owner)
+                calendar_folder(owner.map(|o| c.address_of(o)).as_deref())
             ))
             .map(|m| new_id(&m))
         } else {
@@ -652,7 +652,7 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
     }
     for (n, (email, name, group)) in others.iter().enumerate() {
         let id = mailcraft_model::pim::shared_calendar_id(email);
-        let parent = calendar_folder(Some(email));
+        let parent = calendar_folder(Some(&c.address_of(email)));
         let can_edit = may_edit(c, &parent);
         match items_in(c, &parent, "") {
             Ok(list) => {
