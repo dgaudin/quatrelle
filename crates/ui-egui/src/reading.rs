@@ -85,7 +85,7 @@ fn message(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action
         .map(|(_, i)| *i)
         .filter(|i| r.parsed.as_ref().is_some_and(|p| p.attachments.iter().any(|a| a.index == *i)));
     if viewing.is_some() && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
-        st.attachment_view = None;
+        close_attachment_view(st);
     }
     let viewing = viewing.filter(|_| st.attachment_view.is_some());
     egui::ScrollArea::vertical().auto_shrink(false).id_salt(("reading", in_window, r.key.to_id(), viewing)).show(ui, |ui| {
@@ -117,6 +117,9 @@ fn message(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action
                 && let Some(a) = p.attachments.iter().find(|a| a.index == index)
             {
                 preview_header(&t, ui, a, acts, &mut st.attachment_view);
+                if st.attachment_view.is_none() {
+                    close_attachment_view(st);
+                }
             }
             if viewing.is_none() {
                 // Subject.
@@ -320,7 +323,7 @@ fn message(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action
                     }
                 });
                 // Wrapped into rows, scrolling past three, as Outlook's are.
-                widgets::chip_grid(ui, egui::Id::new(("attachments", r.key.to_id())), files.len(), 240.0, 400.0, CHIP_H, 3, |ui, i, w| {
+                widgets::chip_grid(ui, egui::Id::unique(("attachments", r.key.to_id())), files.len(), 240.0, 400.0, CHIP_H, 3, |ui, i, w| {
                     if let Some(a) = files.get(i) {
                         attachment_card(s, st, ui, &r.key, a, w, acts);
                     }
@@ -573,7 +576,7 @@ fn preview(s: &Session, st: &mut UiState, ctx: &egui::Context, key: &MessageKey,
 
 /// A picture attachment at a size to look at (decoded once and kept by egui while it's shown).
 pub(crate) fn big_picture(s: &Session, ctx: &egui::Context, key: &MessageKey, index: usize) -> Option<egui::TextureHandle> {
-    let id = egui::Id::new(("big-picture", key.to_id(), index));
+    let id = egui::Id::unique(("big-picture", key.to_id(), index));
     if let Some(t) = ctx.data(|d| d.get_temp::<Option<egui::TextureHandle>>(id)) {
         return t;
     }
@@ -1257,6 +1260,9 @@ fn attachment_card(s: &Session, st: &mut UiState, ui: &mut Ui, key: &MessageKey,
     // The Craft app for the file, when it's installed.
     let craft = mime::craft_app_for(&a.mime, &a.name).and_then(|(cmd, name)| st.craft_apps.iter().any(|(c, _)| *c == cmd).then_some((cmd, name)));
     let text_preview = mime::text_preview_kind(&a.mime, &a.name).is_some();
+    // Several selected, this one among them: its menu can save them together.
+    let several: Option<Vec<usize>> =
+        st.attachment_selected.as_ref().filter(|(k, v)| k == key && v.len() > 1 && v.contains(&a.index)).map(|(_, v)| v.clone());
     let menu = |ui: &mut Ui, acts: &mut Vec<Action>| {
         if kind == AttachmentKind::Image && ui.button(tl!("Preview")).clicked() {
             acts.push(Action::Dialog(crate::Dialog::PicturePreview { key: key.clone(), index: a.index, name: a.name.clone() }));
@@ -1281,6 +1287,12 @@ fn attachment_card(s: &Session, st: &mut UiState, ui: &mut Ui, key: &MessageKey,
             acts.push(Action::SaveAttachment(a.index));
             ui.close();
         }
+        if let Some(v) = &several
+            && ui.button(tf!("Save {n} Selected…", n = v.len())).clicked()
+        {
+            acts.push(Action::SaveAttachments(v.clone()));
+            ui.close();
+        }
         if ui.button(tl!("Save All Attachments…")).clicked() {
             acts.push(Action::SaveAll);
             ui.close();
@@ -1294,16 +1306,32 @@ fn attachment_card(s: &Session, st: &mut UiState, ui: &mut Ui, key: &MessageKey,
     // egui counts the chip as hovered under the ▾ too (it senses drags); the ▾ wins there.
     let on_more = more.contains_pointer();
     let body_hovered = resp.hovered() && !on_more;
-    let sel_id = egui::Id::new(("attachment-selected", key.to_id()));
-    if resp.clicked() || resp.secondary_clicked() || more.clicked() {
-        ui.ctx().data_mut(|d| d.insert_temp(sel_id, a.index));
+    if resp.contains_pointer() || more.contains_pointer() {
+        st.attachment_hovered = true;
     }
-    // A click shows it in place of the message's text, as Outlook previews attachments.
-    if resp.clicked() && !on_more {
+    // The selection: a click picks this one, Ctrl+click adds or removes it; a right-click or
+    // the ▾ on one not selected picks it alone. Any of them gives the strip the keyboard.
+    let mut picked: Vec<usize> = st.attachment_selected.as_ref().filter(|(k, _)| k == key).map(|(_, v)| v.clone()).unwrap_or_default();
+    let ctrl = ui.input(|i| i.modifiers.command);
+    if resp.clicked() && !on_more && ctrl {
+        if let Some(at) = picked.iter().position(|i| *i == a.index) {
+            picked.remove(at);
+        } else {
+            picked.push(a.index);
+        }
+    } else if (resp.clicked() && !on_more) || ((resp.secondary_clicked() || more.clicked()) && !picked.contains(&a.index)) {
+        picked = vec![a.index];
+    }
+    if resp.clicked() || resp.secondary_clicked() || more.clicked() {
+        st.attachment_selected = Some((key.clone(), picked.clone()));
+        st.attachments_active = true;
+    }
+    // A plain click shows it in place of the message's text, as Outlook previews attachments.
+    if resp.clicked() && !on_more && !ctrl {
         st.attachment_view = Some((key.clone(), a.index));
     }
     let previewed = st.attachment_view.as_ref().is_some_and(|(k, i)| k == key && *i == a.index);
-    let selected = previewed || ui.ctx().data(|d| d.get_temp::<usize>(sel_id)) == Some(a.index);
+    let selected = previewed || picked.contains(&a.index);
     if ui.is_rect_visible(rect) {
         let p = ui.painter();
         p.rect(
@@ -1357,6 +1385,14 @@ fn attachment_card(s: &Session, st: &mut UiState, ui: &mut Ui, key: &MessageKey,
     }
 }
 
+/// Back to the message from a previewed attachment: the chip clicked to show it isn't left
+/// selected either.
+fn close_attachment_view(st: &mut UiState) {
+    st.attachment_view = None;
+    st.attachment_selected = None;
+    st.attachments_active = false;
+}
+
 /// Above a previewed attachment: back to the message, the file's name and size, and Open and
 /// Save As (Outlook's Back to message and its Attachments tab).
 fn preview_header(t: &Tokens, ui: &mut Ui, a: &mime::AttachmentInfo, acts: &mut Vec<Action>, view: &mut Option<(MessageKey, usize)>) {
@@ -1402,7 +1438,7 @@ enum Shown {
 /// presentation's slides; other files say there's no preview, with Open and Save As.
 fn attachment_preview(s: &Session, st: &mut UiState, ui: &mut Ui, key: &MessageKey, a: &mime::AttachmentInfo, acts: &mut Vec<Action>) {
     let t = st.tokens;
-    let id = egui::Id::new(("attachment-shown", key.to_id(), a.index));
+    let id = egui::Id::unique(("attachment-shown", key.to_id(), a.index));
     let shown = match ui.ctx().data(|d| d.get_temp::<std::sync::Arc<Shown>>(id)) {
         Some(x) => x,
         None => {
@@ -1510,7 +1546,7 @@ const PDF_PAGES: usize = 60;
 fn pdf_pages(s: &Session, st: &UiState, ui: &mut Ui, key: &MessageKey, a: &mime::AttachmentInfo, width: f32, acts: &mut Vec<Action>) {
     let t = st.tokens;
     let px = (width * ui.ctx().pixels_per_point()).clamp(200.0, 2400.0) as u32;
-    let count_id = egui::Id::new(("pdf-count", key.to_id(), a.index));
+    let count_id = egui::Id::unique(("pdf-count", key.to_id(), a.index));
     let mut rendered_one = false;
     let mut n = 0usize;
     loop {
@@ -1518,7 +1554,7 @@ fn pdf_pages(s: &Session, st: &UiState, ui: &mut Ui, key: &MessageKey, a: &mime:
         if count.is_some_and(|c| n >= c) || n >= PDF_PAGES {
             break;
         }
-        let pid = egui::Id::new(("pdf-page", key.to_id(), a.index, n, px / 100));
+        let pid = egui::Id::unique(("pdf-page", key.to_id(), a.index, n, px / 100));
         let tex = match ui.ctx().data(|d| d.get_temp::<Option<egui::TextureHandle>>(pid)) {
             Some(t) => t,
             None if rendered_one => {
@@ -1590,14 +1626,14 @@ fn office_preview(t: &Tokens, ui: &mut Ui, p: &mime::office::Preview, index: usi
                         }
                     }
                     Block::Table(rows) => {
-                        table(t, ui, egui::Id::new(("doc-table", index, k)), rows, false);
+                        table(t, ui, egui::Id::unique(("doc-table", index, k)), rows, false);
                         ui.add_space(8.0);
                     }
                 }
             }
         }
         Preview::Workbook(sheets) => {
-            let sel_id = egui::Id::new(("sheet-tab", index));
+            let sel_id = egui::Id::unique(("sheet-tab", index));
             let mut sel = ui.ctx().data(|d| d.get_temp::<usize>(sel_id)).unwrap_or(0).min(sheets.len().saturating_sub(1));
             if sheets.len() > 1 {
                 ui.horizontal_wrapped(|ui| {
@@ -1614,7 +1650,7 @@ fn office_preview(t: &Tokens, ui: &mut Ui, p: &mime::office::Preview, index: usi
                 Some((_, rows)) if !rows.is_empty() => {
                     egui::ScrollArea::horizontal()
                         .id_salt(("sheet", index, sel))
-                        .show(ui, |ui| table(t, ui, egui::Id::new(("sheet-grid", index, sel)), rows, true));
+                        .show(ui, |ui| table(t, ui, egui::Id::unique(("sheet-grid", index, sel)), rows, true));
                 }
                 _ => {
                     ui.label(RichText::new(tl!("The sheet is empty.")).color(t.dim));
@@ -1732,7 +1768,7 @@ fn delay_menu(ui: &mut Ui, t: &Tokens, c: &mut mailcraft_engine::Compose, clock:
     }
     ui.separator();
     // A day and time of one's own (local), kept while the menu is open.
-    let id = egui::Id::new(("delay-custom", c.id));
+    let id = egui::Id::unique(("delay-custom", c.id));
     let (mut day, mut time) = ui.data(|d| d.get_temp::<(String, String)>(id)).unwrap_or_else(|| {
         let c0 = dates::civil(c.send_after.unwrap_or(clock.now + 3600), clock);
         (format!("{:04}-{:02}-{:02}", c0.year, c0.month, c0.day), format!("{:02}:{:02}", c0.hour, c0.minute))
@@ -1780,7 +1816,7 @@ const ROW_H: f32 = 30.0;
 
 /// A field box drawn the way Outlook's are: no frame, a line under it (the accent while typing).
 fn underlined(ui: &mut Ui, t: &Tokens, edit: egui::TextEdit<'_>) -> egui::Response {
-    let r = ui.add_sized(vec2(ui.available_width(), ROW_H - 4.0), edit.frame(egui::Frame::NONE).vertical_align(egui::Align::Center));
+    let r = ui.add_sized(vec2(ui.available_width(), ROW_H - 4.0), edit.frame(egui::Frame::NONE).align(egui::Align2::LEFT_CENTER));
     let y = r.rect.bottom();
     let color = if r.has_focus() { t.accent } else { t.border };
     ui.painter().line_segment([egui::pos2(r.rect.left(), y), egui::pos2(r.rect.right(), y)], egui::Stroke::new(1.0, color));
@@ -1789,10 +1825,25 @@ fn underlined(ui: &mut Ui, t: &Tokens, edit: egui::TextEdit<'_>) -> egui::Respon
 
 /// A small framed button naming a field (To, Cc…), as in Outlook's message window.
 fn label_button(ui: &mut Ui, t: &Tokens, label: &str, enabled: bool) -> egui::Response {
+    label_button_menu(ui, t, label, enabled, false)
+}
+
+/// A label button that opens a menu: its label and a small drawn chevron, centred together.
+fn label_button_menu(ui: &mut Ui, t: &Tokens, label: &str, enabled: bool, menu: bool) -> egui::Response {
     let (rect, resp) = ui.allocate_exact_size(vec2(LABEL_W - 8.0, ROW_H - 4.0), if enabled { Sense::click() } else { Sense::hover() });
     let fill = if resp.hovered() && enabled { t.hover } else { t.surface };
     ui.painter().rect(rect, 3.0, fill, egui::Stroke::new(1.0, t.border), egui::StrokeKind::Inside);
-    ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, tl!(label), theme::regular(13.0), if enabled { t.text } else { t.dim });
+    let color = if enabled { t.text } else { t.dim };
+    let galley = ui.painter().layout_no_wrap(tl!(label).to_string(), theme::regular(13.0), color);
+    let chevron = if menu { 14.0 } else { 0.0 };
+    let left = rect.center().x - (galley.size().x + chevron) / 2.0;
+    let text_pos = egui::pos2(left, rect.center().y - galley.size().y / 2.0);
+    let text_w = galley.size().x;
+    ui.painter().galley(text_pos, galley, color);
+    if menu {
+        let r = egui::Rect::from_center_size(egui::pos2(left + text_w + 4.0 + 5.0, rect.center().y + 0.5), vec2(10.0, 10.0));
+        icons::paint(ui.painter(), r, Icon::ChevronDown, t.dim);
+    }
     ui.add_space(8.0);
     resp
 }
@@ -1854,30 +1905,77 @@ fn recipient_field(
             }
         });
     }
+    // Backspace right after a whole recipient takes all of it, as Outlook does with a resolved
+    // name (a half-typed one loses a character as usual).
+    let edit_id = ui.scope_id().with(("recipient", name));
+    if ui.memory(|m| m.has_focus(edit_id))
+        && let Some(mut state) = egui::TextEdit::load_state(ui.ctx(), edit_id)
+        && let Some(range) = state.cursor.char_range().filter(|r| r.is_empty())
+        && let Some((rest, at)) = mailcraft_engine::model::contacts::remove_recipient(value, range.primary.index.0)
+        && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Backspace))
+    {
+        *value = rest;
+        state.cursor.set_char_range(Some(egui::text::CCursorRange::one(egui::text::CCursor::new(at))));
+        state.store(ui.ctx(), edit_id);
+        st.suggest_dismissed = Some(value.clone());
+    }
     let (pressed, r) = ui
         .horizontal(|ui| {
             // The field's button opens the address book (the caller's to show).
             let b = label_button(ui, &t, label, true);
-            (b.clicked(), underlined(ui, &t, egui::TextEdit::singleline(value).hint_text(tl!(hint))))
+            (b.clicked(), underlined(ui, &t, egui::TextEdit::singleline(value).id(edit_id).hint_text(tl!(hint))))
         })
         .inner;
     if focus {
         r.request_focus();
+    }
+    // Picked from the suggestions: the box stays the one being typed in, cursor at the end,
+    // until the click that picked is over.
+    if st.suggest_refocus == Some(name) {
+        r.request_focus();
+        if ui.input(|i| !i.pointer.any_down() && !i.pointer.any_released()) {
+            st.suggest_refocus = None;
+        }
     }
     if r.changed() {
         st.suggest_index = 0;
         st.suggest_dismissed = None;
     }
     if showing && take.is_none() {
-        let area = egui::Area::new(ui.id().with(("suggest", name))).order(egui::Order::Foreground).fixed_pos(r.rect.left_bottom() + vec2(0.0, 2.0));
+        let area =
+            egui::Area::new(ui.scope_id().with(("suggest", name))).order(egui::Order::Foreground).fixed_pos(r.rect.left_bottom() + vec2(0.0, 2.0));
         area.show(ui.ctx(), |ui| {
-            egui::Frame::popup(ui.style()).show(ui, |ui| {
-                ui.set_width(r.rect.width().min(420.0));
+            egui::Frame::popup(ui.style()).inner_margin(egui::Margin::same(4)).show(ui, |ui| {
+                // As wide as the longest suggestion (within the box's width), every row taking
+                // a click anywhere on it: the name, and the address dimmer beside it.
+                let name_font = theme::regular(13.5);
+                let mail_font = theme::regular(12.5);
+                let text_w = |text: &str, font: &egui::FontId| ui.fonts_mut(|f| f.layout_no_wrap(text.to_string(), font.clone(), t.text).size().x);
+                let widest = suggestions
+                    .iter()
+                    .map(|c| {
+                        let name = if c.address.name.is_empty() { 0.0 } else { text_w(&c.address.name, &name_font) + 12.0 };
+                        name + text_w(&c.address.email, &mail_font)
+                    })
+                    .fold(0.0_f32, f32::max);
+                let w = (widest + 24.0).clamp(200.0, r.rect.width().clamp(200.0, 520.0));
+                ui.spacing_mut().item_spacing.y = 0.0;
                 for (i, c) in suggestions.iter().enumerate() {
                     let on = i == st.suggest_index;
-                    let text =
-                        if c.address.name.is_empty() { c.address.email.clone() } else { format!("{}  ·  {}", c.address.name, c.address.email) };
-                    let resp = ui.selectable_label(on, RichText::new(text).color(t.text));
+                    let (row, resp) = ui.allocate_exact_size(vec2(w, 28.0), egui::Sense::click());
+                    if on || resp.hovered() {
+                        ui.painter().rect_filled(row, 4.0, if on { t.accent_soft } else { t.hover_row });
+                    }
+                    let clip = ui.painter().with_clip_rect(row.shrink2(vec2(8.0, 0.0)));
+                    let mut x = row.left() + 10.0;
+                    if !c.address.name.is_empty() {
+                        let g = clip.layout_no_wrap(c.address.name.clone(), name_font.clone(), t.text);
+                        let gw = g.size().x;
+                        clip.galley(egui::pos2(x, row.center().y - g.size().y / 2.0), g, t.text);
+                        x += gw + 12.0;
+                    }
+                    let g = clip.layout_no_wrap(c.address.email.clone(), mail_font.clone(), t.dim);
+                    clip.galley(egui::pos2(x, row.center().y - g.size().y / 2.0), g, t.dim);
                     // On press: the box loses focus on the same click, before a release would count.
                     if resp.hovered() && ui.input(|i| i.pointer.primary_pressed()) {
                         take = Some(i);
@@ -1891,6 +1989,7 @@ fn recipient_field(
     {
         *value = mailcraft_engine::model::contacts::complete(value, &c.address);
         st.suggest_index = 0;
+        st.suggest_refocus = Some(name);
         r.request_focus();
         if let Some(mut state) = egui::TextEdit::load_state(ui.ctx(), r.id) {
             let end = egui::text::CCursor::new(value.chars().count());
@@ -1898,13 +1997,13 @@ fn recipient_field(
             state.store(ui.ctx(), r.id);
         }
     }
-    if r.has_focus() || take.is_some() {
+    if r.has_focus() || take.is_some() || st.suggest_refocus == Some(name) {
         st.suggest_field = Some(name);
     } else if st.suggest_field == Some(name) {
         st.suggest_field = None;
     }
     // Half-typed addresses are fine while typing; check once the box is left.
-    address_check(ui, &t, value, !r.has_focus());
+    address_check(ui, &t, value, !r.has_focus() && st.suggest_refocus != Some(name));
     pressed
 }
 
@@ -1960,7 +2059,7 @@ fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action
     let Some(mut ed) = st.editor.take() else { return };
     // Why it couldn't go: over the message, in its own window when it has one.
     if let Some(msg) = st.compose_alert.clone() {
-        let modal = egui::Modal::new(egui::Id::new(("compose-alert", c.id))).frame(crate::dialogs::dialog_frame(&t)).show(ui.ctx(), |ui| {
+        let modal = egui::Modal::new(egui::Id::unique(("compose-alert", c.id))).frame(crate::dialogs::dialog_frame(&t)).show(ui.ctx(), |ui| {
             ui.set_width(380.0);
             ui.horizontal(|ui| {
                 let (r, _) = ui.allocate_exact_size(vec2(28.0, 28.0), Sense::hover());
@@ -2125,7 +2224,7 @@ fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action
                     ui.horizontal(|ui| {
                         let current = accounts.iter().find(|(id, _)| *id == c.account).map(|(_, l)| l.clone()).unwrap_or_default();
                         let many = accounts.len() > 1;
-                        let b = label_button(ui, &t, if many { "From ▾" } else { "From" }, many);
+                        let b = label_button_menu(ui, &t, "From", many, many);
                         if many {
                             egui::Popup::menu(&b).show(|ui| {
                                 for (id, label) in &accounts {
@@ -2173,7 +2272,7 @@ fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action
                     ui.vertical(|ui| {
                         // Wrapped into rows, scrolling past two, as Outlook's are.
                         let n = c.attachments.len();
-                        widgets::chip_grid(ui, egui::Id::new(("compose-attachments", c.id)), n, 220.0, 320.0, 28.0, 2, |ui, i, w| {
+                        widgets::chip_grid(ui, egui::Id::unique(("compose-attachments", c.id)), n, 220.0, 320.0, 28.0, 2, |ui, i, w| {
                             let Some(a) = c.attachments.get(i) else { return };
                             let (rect, resp) = ui.allocate_exact_size(vec2(w, 28.0), Sense::hover());
                             let x_rect = Rect::from_center_size(egui::pos2(rect.right() - 15.0, rect.center().y), vec2(22.0, 22.0));
