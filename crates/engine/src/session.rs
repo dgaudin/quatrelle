@@ -239,6 +239,9 @@ pub struct Prefs {
     pub notes_order: NotesOrder,
     /// Calendars left out of the calendar (`account/calendar id`), as Outlook's unticked ones.
     pub hidden_calendars: BTreeSet<String>,
+    /// Calendars this computer has seen (`account/calendar id`): one seen for the first time
+    /// that is someone else's in a group, or a public folder's, comes unticked.
+    pub known_calendars: BTreeSet<String>,
     /// Day and week show each calendar in a column of its own (Outlook's side-by-side view)
     /// rather than all of them together.
     pub calendars_side_by_side: bool,
@@ -439,6 +442,7 @@ impl Default for Prefs {
             read_in_pane: ReadInPane::Shown,
             notes_order: NotesOrder::Modified,
             hidden_calendars: BTreeSet::new(),
+            known_calendars: BTreeSet::new(),
             calendars_side_by_side: false,
             calendar_months: 2,
             address_book: "all".into(),

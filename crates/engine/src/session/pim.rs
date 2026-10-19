@@ -399,6 +399,22 @@ impl Session {
             }
             p.calendars = list;
         }
+        // Calendars come ticked when they're this account's or opened here by address; others'
+        // that come with Outlook's calendar groups, and public folders', come unticked the first
+        // time (a dozen colleagues' weeks at once are slow to draw and hard to read), as
+        // Outlook leaves them until they're ticked.
+        let seen: Vec<(String, bool)> = sync
+            .calendars
+            .iter()
+            .flatten()
+            .map(|c| (Session::calendar_key(account, &c.id), !c.group.is_empty() || c.id.starts_with("public:")))
+            .collect();
+        for (key, others) in seen {
+            if self.prefs.known_calendars.insert(key.clone()) && others {
+                self.prefs.hidden_calendars.insert(key);
+            }
+        }
+        let p = self.pim_mut(account);
         if let Some(server) = &sync.books {
             let keep_local = server.is_empty() || p.cards.iter().any(|c| c.book == LOCAL);
             let mut list: Vec<mailcraft_model::pim::BookInfo> = server.clone();
@@ -543,8 +559,11 @@ impl Session {
             }
             p.shared.push(email.clone());
         }
+        // Asked for: shown, even when it came unticked with a calendar group.
+        let id = mailcraft_model::pim::shared_calendar_id(&email);
+        self.prefs.hidden_calendars.remove(&Session::calendar_key(&account, &id));
         self.after_pim_change(&account, true);
-        Ok(serde_json::json!({"account": account, "calendar": mailcraft_model::pim::shared_calendar_id(&email)}))
+        Ok(serde_json::json!({"account": account, "calendar": id}))
     }
 
     /// Close someone else's calendar: it and its events go from this computer.
