@@ -190,6 +190,27 @@ impl Session {
         }
     }
 
+    /// What each Exchange account's next calendar sync reads, as Outlook does: away from the
+    /// calendar, its own calendar only; in it, the calendars ticked. Opening the calendar, or
+    /// ticking one, reads what wasn't read at once.
+    pub(crate) fn update_calendar_reading(&mut self) {
+        let own_only = self.module != crate::Module::Calendar;
+        let accounts: Vec<String> =
+            self.accounts.iter().filter(|a| a.config.ews.is_some() || a.config.graph.is_some()).map(|a| a.config.id.clone()).collect();
+        for a in accounts {
+            let Some(p) = self.pim.get(&a) else { continue };
+            let not_read: Vec<String> = p.calendars.iter().filter(|c| !self.calendar_shown(&a, &c.id)).map(|c| c.id.clone()).collect();
+            if p.own_only == own_only && p.not_read == not_read {
+                continue;
+            }
+            let more = (p.own_only && !own_only) || (!own_only && p.not_read.iter().any(|c| !not_read.contains(c)));
+            let p = self.pim_mut(&a);
+            p.own_only = own_only;
+            p.not_read = not_read;
+            self.after_pim_change(&a, more);
+        }
+    }
+
     /// The calendars shown, in the order the side pane lists them: (account, id, name, colour).
     pub fn shown_calendars(&self) -> Vec<(String, String, String, u8)> {
         self.accounts
@@ -405,6 +426,11 @@ impl Session {
             if keep_local && let Some(l) = p.calendars.iter().find(|c| c.id == LOCAL) {
                 list.push(l.clone());
             }
+            // Only some looked at: the others stay, with their events.
+            if sync.partial {
+                let kept: Vec<_> = p.calendars.iter().filter(|c| c.id != LOCAL && !list.iter().any(|x| x.id == c.id)).cloned().collect();
+                list.extend(kept);
+            }
             p.events.retain(|e| e.calendar == LOCAL || list.iter().any(|c| c.id == e.calendar) || e.dirty);
             for cal in &sync.synced_calendars {
                 p.events.retain(|e| &e.calendar != cal || e.dirty || e.href.is_empty() || sync.kept.contains(&e.href));
@@ -424,6 +450,10 @@ impl Session {
             let mut list: Vec<mailcraft_model::pim::BookInfo> = server.clone();
             if keep_local && let Some(l) = p.books.iter().find(|b| b.id == LOCAL) {
                 list.push(l.clone());
+            }
+            if sync.partial {
+                let kept: Vec<_> = p.books.iter().filter(|b| b.id != LOCAL && !list.iter().any(|x| x.id == b.id)).cloned().collect();
+                list.extend(kept);
             }
             p.cards.retain(|c| c.book == LOCAL || list.iter().any(|b| b.id == c.book) || c.dirty);
             for book in &sync.synced_books {

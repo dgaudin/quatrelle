@@ -164,6 +164,13 @@ pub struct Pim {
     /// When the server was last asked where they are.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dav_checked: Option<i64>,
+    /// Read this account's own calendar and contacts only, not other people's or public
+    /// folders' (the calendar isn't shown: they're read once it is).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub own_only: bool,
+    /// Calendars left unticked: listed, not read (what this computer has of them stays).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub not_read: Vec<String>,
 }
 
 /// What a CalDAV / CardDAV sync found, for the engine to merge into its [`Pim`].
@@ -200,6 +207,10 @@ pub struct DavSync {
     pub deleted: Vec<String>,
     /// What couldn't be stored or deleted (tried again next time).
     pub errors: Vec<String>,
+    /// Only some calendars and address books were looked at ([`Pim::own_only`]): those not
+    /// listed stay as they are.
+    #[serde(default)]
+    pub partial: bool,
 }
 
 impl Pim {

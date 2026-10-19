@@ -1350,6 +1350,40 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// Away from the calendar only this account's own is read; in it, other people's calendars
+    /// left unticked are listed but not read.
+    #[test]
+    fn only_the_calendars_shown_are_read() {
+        use mailcraft_model::pim::{Pim, shared_calendar_id};
+        let mut d = Data::default();
+        d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+        d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
+        d.folder("Contacts", None, Some("contacts"), "IPF.Contact");
+        let ev = parse(
+            "<t:CalendarItem><t:Subject>Budget review</t:Subject><t:Start>2026-10-06T13:00:00Z</t:Start><t:End>2026-10-06T14:00:00Z</t:End>\
+             <t:IsAllDayEvent>false</t:IsAllDayEvent><t:UID>budget-1</t:UID></t:CalendarItem>",
+        );
+        d.pim.push(("S1".into(), "mailbox:ana@contoso.example".into(), ev.kids[0].clone()));
+        d.pim.push(("S2".into(), "mailbox:tom@contoso.example".into(), ev.kids[0].clone()));
+        let server = serve(d);
+        let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
+        let (ana, tom) = (shared_calendar_id("ana@contoso.example"), shared_calendar_id("tom@contoso.example"));
+        let shared = vec!["ana@contoso.example".to_string(), "tom@contoso.example".to_string()];
+        // In Mail: this account's calendar alone, and the sync says it looked at no more.
+        let mail = crate::ews_pim::sync(&c, &Pim { shared: shared.clone(), own_only: true, ..Default::default() }, 1_792_000_000).unwrap();
+        assert!(mail.partial);
+        assert_eq!(mail.calendars.as_ref().map(Vec::len), Some(1));
+        assert!(!mail.events.iter().any(|e| e.calendar == ana || e.calendar == tom));
+        // In the calendar, Tom's unticked: listed, not read.
+        let cal = crate::ews_pim::sync(&c, &Pim { shared, not_read: vec![tom.clone()], ..Default::default() }, 1_792_000_000).unwrap();
+        assert!(!cal.partial);
+        let ids: Vec<&str> = cal.calendars.iter().flatten().map(|x| x.id.as_str()).collect();
+        assert!(ids.contains(&ana.as_str()) && ids.contains(&tom.as_str()), "{ids:?}");
+        assert!(cal.events.iter().any(|e| e.calendar == ana));
+        assert!(!cal.events.iter().any(|e| e.calendar == tom));
+        assert!(cal.synced_calendars.contains(&ana) && !cal.synced_calendars.contains(&tom));
+    }
+
     /// A calendar is read from six months back (and its recurring series whenever they began):
     /// reading every meeting since a calendar began, for each colleague's, never ended.
     #[test]
