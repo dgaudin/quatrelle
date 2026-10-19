@@ -873,3 +873,7 @@ month	May	mai
 	Add it to new messages	L'ajouter aux nouveaux messages
 	Add it to replies and forwards	L'ajouter aux réponses et transferts
 	Add a picture to the signature, such as a logo, from a file	Ajouter une image à la signature, comme un logo, depuis un fichier
+	Formatted	Mise en forme
+	HTML code	Code HTML
+	Paste the signature's HTML: it's sent as written (scripts and forms taken out), its layout kept.	Collez le code HTML de la signature : il est envoyé tel quel (sans scripts ni formulaires), sa mise en page conservée.
+	Preview (pictures on the web aren't loaded here)	Aperçu (les images du web ne sont pas chargées ici)

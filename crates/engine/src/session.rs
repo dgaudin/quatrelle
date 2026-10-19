@@ -2283,6 +2283,9 @@ impl Session {
     fn compose_draft(&self, c: &Compose) -> Result<mime::Draft, CmdError> {
         let parse = |field: &str, s: &str| addr::parse_list(s).map_err(|bad| CmdError::Params(format!("{field}: not an email address: {bad}")));
         let (body, html, inline) = c.bodies();
+        // A signature written in HTML goes as it was written, where its text stands.
+        let raw = self.account(&c.account).map(|a| a.config.signature_raw_html.clone()).unwrap_or_default();
+        let html = if raw.trim().is_empty() || c.plain { html } else { with_html_signature(c, &raw).or(html) };
         Ok(mime::Draft {
             reply_to: parse("Replies to", &c.reply_to)?,
             to: parse("To", &c.to)?,
@@ -3149,6 +3152,24 @@ pub fn signature_block(sig: &str) -> String {
 
 /// Give the signature in a message (`c.signature`, where it still stands as put there) the look
 /// it has: `sig` is its text and styles.
+/// The message as HTML with its signature's HTML where the signature's text stands (`None`
+/// when that text was taken out or changed: the message is sent as written then).
+fn with_html_signature(c: &Compose, raw: &str) -> Option<String> {
+    const MARK: char = '\u{E001}';
+    if c.signature.is_empty() || c.body.contains(MARK) {
+        return None;
+    }
+    let b = c.body.rfind(&c.signature)?;
+    let start = c.body.get(..b)?.chars().count();
+    let n = c.signature.chars().count();
+    let (mut text, mut styles) = (c.body.clone(), c.styles.clone());
+    styles.fit(&text);
+    let mark = MARK.to_string();
+    mime::rich::splice(&mut text, &mut styles, start..start + n, &mark, &mime::rich::Styles::plain(&mark));
+    let html = mime::rich::to_html(&text, &styles);
+    html.contains(MARK).then(|| html.replace(MARK, &format!("<div>{raw}</div>")))
+}
+
 /// Pictures a message gets with its signature (those it hasn't already).
 pub fn add_pictures(c: &mut Compose, pictures: Vec<mime::InlinePicture>) {
     for p in pictures {

@@ -343,10 +343,14 @@ impl Node {
             })
     }
 
-    /// A box that sits beside its neighbours: `inline-block`, a table cell, or floated.
+    /// A box that sits beside its neighbours: `inline-block`, a table cell, or floated (with
+    /// CSS, or a table's `align="left"`, which floats it: Outlook's signatures put the logo and
+    /// the name side by side so).
     fn beside(&self) -> bool {
         self.style("display").is_some_and(|d| matches!(d.as_str(), "inline-block" | "table-cell" | "inline-flex" | "inline-table"))
             || self.style("float").is_some_and(|f| f == "left" || f == "right")
+            || (matches!(self.tag.as_str(), "table" | "img")
+                && self.attr("align").is_some_and(|a| a.eq_ignore_ascii_case("left") || a.eq_ignore_ascii_case("right")))
     }
 
     /// Boxes laid out side by side with CSS alone (flexbox in a row, a grid, or `inline-block` /
@@ -750,7 +754,53 @@ fn colored<R>(ctx: &mut Ctx, n: &Node, f: impl FnOnce(&mut Ctx) -> R) -> R {
     }
 }
 
+/// Boxes side by side among others (two floated tables in a signature, with a heading above):
+/// each run of two or more is put in a box of its own, which lays them out as columns.
+fn group_beside(kids: &[Kid]) -> Option<Vec<Kid>> {
+    let is_beside = |k: &Kid| matches!(k, Kid::El(n) if n.beside() && !n.hidden());
+    let blank = |k: &Kid| matches!(k, Kid::Text(t) if t.trim().is_empty());
+    let mut out = Vec::new();
+    let mut grouped = false;
+    let mut i = 0;
+    while let Some(k) = kids.get(i) {
+        if is_beside(k) {
+            // The run: boxes beside each other, with only white space between them.
+            let mut run = vec![copy(k)];
+            let mut j = i + 1;
+            let mut end = i + 1;
+            while let Some(next) = kids.get(j) {
+                if is_beside(next) {
+                    run.push(copy(next));
+                    end = j + 1;
+                } else if !blank(next) {
+                    break;
+                }
+                j += 1;
+            }
+            if run.len() >= 2 {
+                out.push(Kid::El(Node { tag: "div".into(), attrs: Vec::new(), kids: run }));
+                grouped = true;
+                i = end;
+                continue;
+            }
+        }
+        out.push(copy(k));
+        i += 1;
+    }
+    grouped.then_some(out)
+}
+
 fn blocks(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
+    // Runs of boxes side by side among other content, as boxes of columns (only when there are
+    // others: a parent of nothing but such boxes lays them out itself).
+    let mixed = kids.iter().any(|k| matches!(k, Kid::El(n) if !n.beside() && !n.hidden()) || matches!(k, Kid::Text(t) if !t.trim().is_empty()));
+    if mixed && let Some(grouped) = group_beside(kids) {
+        return blocks_of(&grouped, ctx, depth);
+    }
+    blocks_of(kids, ctx, depth)
+}
+
+fn blocks_of(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
     let mut out = Vec::new();
     let mut pending = String::new();
     let flush = |pending: &mut String, out: &mut Vec<Block>, ctx: &Ctx| {
@@ -870,8 +920,15 @@ fn blocks(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
                             row.into_iter()
                                 .map(|c| {
                                     ctx.cells += 1;
-                                    // A box's own content (its children when it has them, else itself).
-                                    let content = if c.kids.is_empty() { vec![] } else { colored(ctx, c, |ctx| blocks(&c.kids, ctx, depth + 1)) };
+                                    // A box's own content (its children when it has them, else itself; a
+                                    // floated table is a table in its column).
+                                    let content = if c.tag == "table" {
+                                        blocks(&[copy(&Kid::El(c.unfloated()))], ctx, depth + 1)
+                                    } else if c.kids.is_empty() {
+                                        vec![]
+                                    } else {
+                                        colored(ctx, c, |ctx| blocks(&c.kids, ctx, depth + 1))
+                                    };
                                     Cell {
                                         blocks: if ctx.cells > MAX_CELLS { Vec::new() } else { content },
                                         width: c.width(),
@@ -997,6 +1054,24 @@ fn copy(k: &Kid) -> Kid {
 }
 
 impl Node {
+    /// The element no longer floated (its column places it).
+    fn unfloated(&self) -> Node {
+        let attrs = self
+            .attrs
+            .iter()
+            .filter(|(k, _)| k != "align")
+            .map(|(k, v)| {
+                if k == "style" {
+                    let kept: Vec<&str> = v.split(';').filter(|d| !d.trim().to_ascii_lowercase().starts_with("float")).collect();
+                    (k.clone(), kept.join(";"))
+                } else {
+                    (k.clone(), v.clone())
+                }
+            })
+            .collect();
+        Node { tag: self.tag.clone(), attrs, kids: self.kids.iter().map(copy).collect() }
+    }
+
     /// The element without its background (the cell around it carries that).
     fn without_background(&self) -> Node {
         let attrs = self
@@ -1151,6 +1226,21 @@ mod tests {
             r#"<div><div style="display:inline-block;width:280px">One</div> <div style="display:inline-block;width:280px">Two</div></div>"#,
         );
         assert!(matches!(&inline[0], Block::Table(t) if t.rows[0].len() == 2), "{inline:?}");
+        // A signature as Outlook writes it: a logo table and a name table floated side by side
+        // (with CSS, or `align="left"`), after the message's text.
+        let sig = html_layout(
+            r#"<p>Thanks, see you Monday.</p>
+            <table align="left" border="0" style="float:left;"><tr><td><a href="https://www.example.com"><img src="cid:logo@x" width="194"></a></td></tr></table>
+            <table border="0" style="float:left;border-left:1px solid #ccc;"><tr><td><p><span style="font-weight:bold">Didier GAUDIN</span><br>Tél. 02 51 70 93 93</p></td></tr></table>"#,
+        );
+        let row = sig
+            .iter()
+            .find_map(|b| match b {
+                Block::Table(t) if t.rows.first().is_some_and(|r| r.len() == 2) => t.rows.first(),
+                _ => None,
+            })
+            .expect("logo and name side by side");
+        assert_eq!(row.len(), 2);
         let floats = html_layout(r#"<div><div style="float:left">One</div><div style="float:right">Two</div></div>"#);
         assert!(!floats.is_empty());
         // Stacked flexbox, inline text with spans: no columns.
@@ -1261,5 +1351,180 @@ mod tests {
         assert_eq!(color("#abc"), Some([0xaa, 0xbb, 0xcc]));
         assert_eq!(color("rgb(1, 2, 300)"), Some([1, 2, 255]));
         assert_eq!(color("#12"), None);
+    }
+}
+
+/// Elements a signature written in HTML keeps (layout, text and links); everything else goes,
+/// its text kept unless it's a script's, a style sheet's or a form's.
+const CLEAN_TAGS: &[&str] = &[
+    "a",
+    "b",
+    "big",
+    "blockquote",
+    "br",
+    "center",
+    "code",
+    "col",
+    "colgroup",
+    "div",
+    "em",
+    "font",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "hr",
+    "i",
+    "img",
+    "li",
+    "ol",
+    "p",
+    "pre",
+    "s",
+    "small",
+    "span",
+    "strike",
+    "strong",
+    "sub",
+    "sup",
+    "table",
+    "tbody",
+    "td",
+    "tfoot",
+    "th",
+    "thead",
+    "tr",
+    "u",
+    "ul",
+];
+
+/// Elements whose content goes with them.
+const DROPPED: &[&str] =
+    &["script", "style", "iframe", "object", "embed", "form", "input", "button", "select", "textarea", "head", "title", "meta", "link"];
+
+/// Attributes kept on them (all else, `on…` handlers included, goes).
+const CLEAN_ATTRS: &[&str] = &[
+    "align",
+    "alt",
+    "bgcolor",
+    "border",
+    "cellpadding",
+    "cellspacing",
+    "color",
+    "colspan",
+    "face",
+    "height",
+    "hspace",
+    "nowrap",
+    "rowspan",
+    "size",
+    "style",
+    "title",
+    "valign",
+    "vspace",
+    "width",
+    "href",
+    "src",
+];
+
+/// HTML a person wrote (a signature) made safe to send as it is: its layout, text, styles,
+/// links and pictures, without scripts, handlers, forms or frames. Links go to the web or to
+/// an address; pictures are the message's own (`cid:`), embedded (`data:image/`), or on the web
+/// (`https:`, which the recipients' mail apps load as they choose; MailCraft doesn't). Hostile
+/// input is capped as the rest of this module's is; never panics.
+pub fn clean_html(html: &str) -> String {
+    let html = match html.char_indices().nth(crate::HTML_MAX) {
+        Some((i, _)) => html.get(..i).unwrap_or(html),
+        None => html,
+    };
+    let root = match std::panic::catch_unwind(|| parse(html)) {
+        Ok(r) => r,
+        Err(_) => return String::new(),
+    };
+    let mut out = String::new();
+    for k in &root.kids {
+        clean_into(k, &mut out, 0);
+    }
+    out
+}
+
+fn clean_esc(s: &str) -> String {
+    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
+}
+
+fn clean_into(k: &Kid, out: &mut String, depth: usize) {
+    if depth > MAX_DEPTH {
+        return;
+    }
+    match k {
+        Kid::Text(t) => out.push_str(&clean_esc(t)),
+        Kid::El(n) if DROPPED.contains(&n.tag.as_str()) => {}
+        Kid::El(n) if !CLEAN_TAGS.contains(&n.tag.as_str()) => {
+            for c in &n.kids {
+                clean_into(c, out, depth + 1);
+            }
+        }
+        Kid::El(n) => {
+            out.push('<');
+            out.push_str(&n.tag);
+            for (name, value) in &n.attrs {
+                if !CLEAN_ATTRS.contains(&name.as_str()) {
+                    continue;
+                }
+                let v = value.trim();
+                let lower = v.to_ascii_lowercase();
+                let ok = match name.as_str() {
+                    "href" => lower.starts_with("https://") || lower.starts_with("http://") || lower.starts_with("mailto:"),
+                    "src" => lower.starts_with("https://") || lower.starts_with("cid:") || lower.starts_with("data:image/"),
+                    // No scripts or remote loads through a style.
+                    "style" => {
+                        !lower.contains("expression(") && !lower.contains("url(") && !lower.contains("javascript:") && !lower.contains("@import")
+                    }
+                    _ => true,
+                };
+                if ok {
+                    out.push_str(&format!(" {name}=\"{}\"", clean_esc(v)));
+                }
+            }
+            if n.tag == "a" {
+                out.push_str(" target=\"_blank\"");
+            }
+            if void(&n.tag) {
+                out.push('>');
+                return;
+            }
+            out.push('>');
+            for c in &n.kids {
+                clean_into(c, out, depth + 1);
+            }
+            out.push_str(&format!("</{}>", n.tag));
+        }
+    }
+}
+
+#[cfg(test)]
+mod clean_tests {
+    use super::*;
+
+    /// A signature keeps its tables, styles, links and pictures; scripts, handlers, forms and
+    /// remote loads through styles go; junk never breaks it.
+    #[test]
+    fn signatures_are_cleaned_but_keep_their_look() {
+        let sig = r#"<table align="left" style="float:left;"><tr><td valign="middle"><a href="https://www.contoso.example?sign" target="_top"><img src="https://www.contoso.example/images/logo.gif" width="194px" style="width:194px;height:75px" onerror="alert(1)"></a></td></tr></table>
+<p><span style="font-weight:bold;color:#4B5763">Didier GAUDIN</span><br>T&eacute;l.&nbsp;+33<br><a href="mailto:riley@contoso.example" onmouseover="this.style.color='#0C4790'">riley@contoso.example</a></p>
+<script>alert(2)</script><form><input value="x"></form><a href="javascript:alert(3)">bad</a><div style="background:url(https://track.example/p.gif)">t</div>"#;
+        let c = clean_html(sig);
+        assert!(c.contains(r#"<table align="left" style="float:left;">"#), "{c}");
+        assert!(c.contains(r#"src="https://www.contoso.example/images/logo.gif""#));
+        assert!(c.contains("Didier GAUDIN") && c.contains("Tél.\u{a0}+33"), "{c}");
+        assert!(c.contains(r#"href="mailto:riley@contoso.example""#));
+        for gone in ["onerror", "onmouseover", "<script", "alert(2)", "<form", "<input", "javascript:", "url(", "target=\"_top\""] {
+            assert!(!c.contains(gone), "{gone} in {c}");
+        }
+        for junk in ["", "<", "<<table", "<td><tr></table></table>", &"<div>".repeat(5000)] {
+            let _ = clean_html(junk);
+        }
     }
 }

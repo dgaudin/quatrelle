@@ -872,3 +872,7 @@ month	May	5월
 	Add it to new messages	새 메시지에 추가
 	Add it to replies and forwards	회신 및 전달에 추가
 	Add a picture to the signature, such as a logo, from a file	로고 같은 그림을 파일에서 서명에 추가
+	Formatted	서식
+	HTML code	HTML 코드
+	Paste the signature's HTML: it's sent as written (scripts and forms taken out), its layout kept.	서명의 HTML을 붙여 넣으세요. 작성한 그대로(스크립트와 양식 제외) 레이아웃을 유지해 보냅니다.
+	Preview (pictures on the web aren't loaded here)	미리 보기(웹의 그림은 여기서 불러오지 않음)

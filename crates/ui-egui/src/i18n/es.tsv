@@ -873,3 +873,7 @@ month	May	mayo
 	Add it to new messages	Añadirla a los mensajes nuevos
 	Add it to replies and forwards	Añadirla a respuestas y reenvíos
 	Add a picture to the signature, such as a logo, from a file	Añadir una imagen a la firma, como un logotipo, desde un archivo
+	Formatted	Con formato
+	HTML code	Código HTML
+	Paste the signature's HTML: it's sent as written (scripts and forms taken out), its layout kept.	Pegue el HTML de la firma: se envía tal cual (sin scripts ni formularios), con su diseño.
+	Preview (pictures on the web aren't loaded here)	Vista previa (las imágenes de la web no se cargan aquí)

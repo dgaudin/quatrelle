@@ -2479,3 +2479,38 @@ fn a_signature_keeps_its_logo() {
         .unwrap();
     assert!(!s.account("sample").unwrap().config.signature_html.contains("https://www.example.com"));
 }
+
+/// A signature written in HTML goes as it was written (its logo beside the name, cleaned of
+/// what mustn't go), where its text stands in the message; the text part has its text.
+#[test]
+fn an_html_signature_goes_as_written() {
+    let mut s = Session::open(Some(temp("signature-html")), mailcraft_model::dates::Clock::new(NOW, 0));
+    let id = s.run("account.add", &json!({"email": "dgaudin@example.org", "password": "pw"})).unwrap()["account"].as_str().unwrap().to_string();
+    let html = r#"<table align="left" style="float:left;"><tr><td><a href="https://www.contoso.example"><img src="https://www.contoso.example/images/logo.gif" width="194"></a></td></tr></table>
+<table style="float:left;border-left:1px solid #ccc;"><tr><td><p><span style="font-weight:bold">Didier GAUDIN</span><br>T&eacute;l. 02 51 70 93 93</p></td></tr></table><script>x()</script>"#;
+    s.run("account.setSignature", &json!({"account": id, "signature": "", "rawHtml": html})).unwrap();
+    let config = s.account(&id).unwrap().config.clone();
+    assert!(config.signature.contains("Didier GAUDIN"), "{}", config.signature);
+    assert!(!config.signature_raw_html.contains("<script"));
+    s.run("mail.new", &json!({})).unwrap();
+    s.run("compose.update", &json!({"to": "zoe@example.org", "subject": "Hello", "body": "Hi Zoe"})).unwrap();
+    // The body set anew: the signature again, as a new message gets it.
+    s.run("compose.insertSignature", &json!({})).unwrap();
+    s.take_jobs();
+    s.run("compose.send", &json!({})).unwrap();
+    let raw = s
+        .take_jobs()
+        .into_iter()
+        .find_map(|j| match j {
+            Job::Send { raw, .. } => Some(raw),
+            _ => None,
+        })
+        .unwrap();
+    let p = mailcraft_mime::parse(&raw).unwrap();
+    // Read back: the logo and the name side by side, the logo on the web, the message's text.
+    assert!(p.had_html);
+    let side_by_side = p.layout.iter().any(|b| matches!(b, mailcraft_mime::layout::Block::Table(t) if t.rows.iter().any(|r| r.len() == 2)));
+    assert!(side_by_side, "{:?}", p.layout);
+    assert!(p.images.iter().any(|u| u.contains("www.contoso.example/images/logo.gif")), "{:?}", p.images);
+    assert!(p.text.contains("Hi Zoe") && p.text.contains("Didier GAUDIN") && !p.text.contains("x()"), "{}", p.text);
+}

@@ -93,6 +93,10 @@ pub struct AccountConfig {
     /// links, as pasted from Outlook or set in the signature editor.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub signature_html: String,
+    /// The signature as HTML written by hand (cleaned): sent as it is, its layout kept (a logo
+    /// beside the name); the text and look above are what the message shows while it's written.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub signature_raw_html: String,
     /// The signature's pictures (a company logo): kept here, and put into each message with it,
     /// where its HTML names them (`cid:`).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -231,6 +235,7 @@ impl AccountConfig {
             smtp,
             signature: String::new(),
             signature_html: String::new(),
+            signature_raw_html: String::new(),
             signature_pictures: Vec::new(),
             signature_not_new: false,
             signature_not_replies: false,

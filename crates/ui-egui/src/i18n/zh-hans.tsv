@@ -869,3 +869,7 @@ month	May	5月
 	Add it to new messages	添加到新邮件
 	Add it to replies and forwards	添加到答复和转发
 	Add a picture to the signature, such as a logo, from a file	从文件向签名添加图片（如徽标）
+	Formatted	格式化
+	HTML code	HTML 代码
+	Paste the signature's HTML: it's sent as written (scripts and forms taken out), its layout kept.	粘贴签名的 HTML：按原样发送（去除脚本和表单），保留布局。
+	Preview (pictures on the web aren't loaded here)	预览（此处不加载网络图片）
