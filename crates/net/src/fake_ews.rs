@@ -414,8 +414,15 @@ impl Data {
                     out.push(err("ErrorFolderNotFound"));
                     return ("FindItemResponse".into(), out);
                 }
-                let items: String =
-                    self.pim.iter().filter(|(_, f, _)| *f == folder).map(|(id, _, _)| format!("<t:Item><t:ItemId Id=\"{id}\"/></t:Item>")).collect();
+                // A calendar asked for from a date: what ends then or later, and recurring series.
+                let since = op.find("Constant").and_then(|c| c.attr("Value")).filter(|v| v.contains('T')).map(str::to_string);
+                let wanted = |e: &El| since.as_deref().is_none_or(|s| e.text_of("End").is_none_or(|end| end >= s) || e.child("Recurrence").is_some());
+                let items: String = self
+                    .pim
+                    .iter()
+                    .filter(|(_, f, e)| *f == folder && wanted(e))
+                    .map(|(id, _, _)| format!("<t:Item><t:ItemId Id=\"{id}\"/></t:Item>"))
+                    .collect();
                 out.push(ok(format!("<m:RootFolder IncludesLastItemInRange=\"true\"><t:Items>{items}</t:Items></m:RootFolder>")));
             }
             "FindItem" => {
@@ -1341,6 +1348,40 @@ mod tests {
         assert!(asked.elapsed() < Duration::from_secs(10), "waited {:?}", asked.elapsed());
         assert!(server.data.lock().unwrap().sent.iter().any(|m| String::from_utf8_lossy(m).contains("Re: Storyboard")));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A calendar is read from six months back (and its recurring series whenever they began):
+    /// reading every meeting since a calendar began, for each colleague's, never ended.
+    #[test]
+    fn calendars_are_read_from_six_months_back() {
+        use mailcraft_model::pim::Pim;
+        let mut d = Data::default();
+        d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+        let cal = d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
+        d.folder("Contacts", None, Some("contacts"), "IPF.Contact");
+        let item = |subject: &str, start: &str, end: &str, recurring: bool| {
+            let rec = if recurring {
+                "<t:Recurrence><t:WeeklyRecurrence><t:Interval>1</t:Interval><t:DaysOfWeek>Monday</t:DaysOfWeek></t:WeeklyRecurrence>\
+                 <t:NoEndRecurrence><t:StartDate>2019-01-07</t:StartDate></t:NoEndRecurrence></t:Recurrence>"
+            } else {
+                ""
+            };
+            parse(&format!(
+                "<t:CalendarItem><t:Subject>{subject}</t:Subject><t:Start>{start}</t:Start><t:End>{end}</t:End>\
+                 <t:IsAllDayEvent>false</t:IsAllDayEvent><t:UID>{subject}</t:UID>{rec}</t:CalendarItem>"
+            ))
+            .kids
+            .remove(0)
+        };
+        d.pim.push(("P1".into(), cal.clone(), item("Kick-off 2019", "2019-01-07T09:00:00Z", "2019-01-07T10:00:00Z", false)));
+        d.pim.push(("P2".into(), cal.clone(), item("Weekly", "2019-01-07T09:00:00Z", "2019-01-07T09:30:00Z", true)));
+        d.pim.push(("P3".into(), cal, item("Review", "2026-10-06T13:00:00Z", "2026-10-06T14:00:00Z", false)));
+        let server = serve(d);
+        let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
+        let sync = crate::ews_pim::sync(&c, &Pim::default(), 1_792_000_000).unwrap();
+        let names: Vec<&str> = sync.events.iter().map(|e| e.event.summary.as_str()).collect();
+        assert!(names.contains(&"Weekly") && names.contains(&"Review"), "{names:?}");
+        assert!(!names.contains(&"Kick-off 2019"), "{names:?}");
     }
 
     /// Voting buttons chosen while writing go to Exchange as Outlook's verb stream, and the
