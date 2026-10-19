@@ -119,9 +119,9 @@ pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) 
     // A table where the list is wide (see `Session::list_as_table`): its headings stay put above
     // the rows, sized as the rows are (the scroll bar's width aside).
     let table = s.list_as_table();
-    let cols = columns(ui.available_width() - ui.spacing().scroll.bar_width - 2.0);
+    let cols = columns(ui.available_width() - ui.spacing().scroll.bar_width - 2.0, &st.list_columns);
     if table {
-        table_header(s, &t, ui, &cols, sent_view, acts);
+        table_header(s, &t, ui, &cols, sent_view, &mut st.list_columns, acts);
     }
 
     let rows = s.rows();
@@ -233,21 +233,64 @@ enum Col {
     Flag,
 }
 
-/// Each column's span from the row's left edge: the narrow and dated ones fixed, the sender and
-/// subject sharing the rest; size and categories go first when the list is narrow.
-fn columns(width: f32) -> Vec<(Col, f32, f32)> {
-    let mut fixed_right = vec![(Col::Received, 156.0)];
+/// The widths the table's columns were dragged to (`None`: as wide as it sets them), kept with
+/// the app's settings. The subject takes what the others leave.
+#[derive(Clone, Copy, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub struct ColumnWidths {
+    pub who: Option<f32>,
+    pub received: Option<f32>,
+    pub size: Option<f32>,
+    pub categories: Option<f32>,
+}
+
+impl ColumnWidths {
+    const WHO: (f32, f32) = (60.0, 600.0);
+    const RECEIVED: (f32, f32) = (70.0, 320.0);
+    const SIZE: (f32, f32) = (40.0, 160.0);
+    const CATEGORIES: (f32, f32) = (50.0, 320.0);
+
+    /// Within reason (a hand-edited or damaged setting can't hide a column).
+    pub fn clamped(self) -> ColumnWidths {
+        let c = |v: Option<f32>, (lo, hi): (f32, f32)| v.filter(|w| w.is_finite()).map(|w| w.clamp(lo, hi));
+        ColumnWidths {
+            who: c(self.who, Self::WHO),
+            received: c(self.received, Self::RECEIVED),
+            size: c(self.size, Self::SIZE),
+            categories: c(self.categories, Self::CATEGORIES),
+        }
+    }
+
+    /// The width a column's drag handle changes: the sender's by its right edge, the columns
+    /// after the subject by their left edge.
+    fn slot(&mut self, c: Col) -> Option<(&mut Option<f32>, (f32, f32), f32)> {
+        match c {
+            Col::Who => Some((&mut self.who, Self::WHO, 1.0)),
+            Col::Received => Some((&mut self.received, Self::RECEIVED, -1.0)),
+            Col::Size => Some((&mut self.size, Self::SIZE, -1.0)),
+            Col::Categories => Some((&mut self.categories, Self::CATEGORIES, -1.0)),
+            _ => None,
+        }
+    }
+}
+
+/// Each column's span from the row's left edge: the narrow and dated ones fixed (or as wide as
+/// they were dragged), the sender and subject sharing the rest; size and categories go first
+/// when the list is narrow.
+fn columns(width: f32, w: &ColumnWidths) -> Vec<(Col, f32, f32)> {
+    let mut fixed_right = vec![(Col::Received, w.received.unwrap_or(156.0))];
     if width >= 620.0 {
-        fixed_right.push((Col::Size, 64.0));
+        fixed_right.push((Col::Size, w.size.unwrap_or(64.0)));
     }
     if width >= 760.0 {
-        fixed_right.push((Col::Categories, 110.0));
+        fixed_right.push((Col::Categories, w.categories.unwrap_or(110.0)));
     }
     fixed_right.push((Col::Flag, 26.0));
     let left = 8.0 + 18.0 + 20.0;
     let right: f32 = fixed_right.iter().map(|(_, w)| w).sum();
     let rest = (width - left - right - 6.0).max(120.0);
-    let who = (rest * 0.34).clamp(90.0, 260.0);
+    // The subject keeps 80 points whatever the sender's width.
+    let who = w.who.unwrap_or((rest * 0.34).clamp(90.0, 260.0)).min((rest - 80.0).max(60.0));
     let mut out =
         vec![(Col::Importance, 8.0, 26.0), (Col::Attach, 26.0, 46.0), (Col::Who, left, left + who), (Col::Subject, left + who, left + rest)];
     let mut x = left + rest;
@@ -273,7 +316,16 @@ fn column_arrange(c: Col, sent_view: bool) -> Option<mailcraft_engine::Arrange> 
 }
 
 /// The table's headings: a click arranges the list by that column, again turns it round.
-fn table_header(s: &Session, t: &theme::Tokens, ui: &mut Ui, cols: &[(Col, f32, f32)], sent_view: bool, acts: &mut Vec<Action>) {
+#[allow(clippy::too_many_arguments)]
+fn table_header(
+    s: &Session,
+    t: &theme::Tokens,
+    ui: &mut Ui,
+    cols: &[(Col, f32, f32)],
+    sent_view: bool,
+    widths: &mut ColumnWidths,
+    acts: &mut Vec<Action>,
+) {
     let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), TABLE_HEADER_H), Sense::hover());
     let p = ui.painter_at(r);
     p.line_segment([r.left_bottom(), r.right_bottom()], egui::Stroke::new(1.0, t.border));
@@ -329,6 +381,26 @@ fn table_header(s: &Session, t: &theme::Tokens, ui: &mut Ui, cols: &[(Col, f32, 
             } else {
                 acts.push(Action::Run("view.arrange", json!({"by": a.code()})));
             }
+        }
+    }
+    // Above the headings (registered last, so it wins the hover at an edge).
+    // The edges between headings resize the columns, dragged (a double-click sets it back).
+    for &(c, x0, x1) in cols {
+        let current = x1 - x0;
+        let Some((slot, (lo, hi), sign)) = widths.slot(c) else { continue };
+        let edge = r.min.x + if sign > 0.0 { x1 } else { x0 };
+        let grip = Rect::from_x_y_ranges(edge - 3.0..=edge + 3.0, r.y_range());
+        let resp =
+            ui.interact(grip, ui.id().with(("col-edge", c as u8)), Sense::click_and_drag()).on_hover_cursor(egui::CursorIcon::ResizeHorizontal);
+        if resp.dragged() {
+            let dx = resp.drag_delta().x * sign;
+            *slot = Some((slot.unwrap_or(current) + dx).clamp(lo, hi));
+        }
+        if resp.double_clicked() {
+            *slot = None;
+        }
+        if resp.hovered() || resp.dragged() {
+            p.line_segment([egui::pos2(edge, r.min.y + 3.0), egui::pos2(edge, r.max.y - 3.0)], egui::Stroke::new(2.0, t.accent));
         }
     }
 }
@@ -719,5 +791,29 @@ fn range_select(s: &Session, to: &MessageKey, acts: &mut Vec<Action>) {
         if !s.selection.contains(&m.key) {
             acts.push(Action::Run("list.select", json!({"key": m.key.to_id(), "add": true})));
         }
+    }
+}
+
+#[cfg(test)]
+mod column_tests {
+    use super::*;
+
+    /// Columns dragged keep their width; the subject takes the rest and keeps some; a damaged
+    /// setting can't hide a column.
+    #[test]
+    fn dragged_columns_keep_their_width() {
+        let width = |cols: &[(Col, f32, f32)], c: Col| cols.iter().find(|x| x.0 == c).map(|x| x.2 - x.1).unwrap_or(0.0);
+        let plain = columns(900.0, &ColumnWidths::default());
+        assert_eq!(width(&plain, Col::Received), 156.0);
+        let dragged = ColumnWidths { who: Some(300.0), received: Some(100.0), ..Default::default() };
+        let cols = columns(900.0, &dragged);
+        assert_eq!(width(&cols, Col::Who), 300.0);
+        assert_eq!(width(&cols, Col::Received), 100.0);
+        assert!(width(&cols, Col::Subject) > width(&plain, Col::Subject) - 300.0);
+        // Too wide a sender for the list: the subject keeps 80 points.
+        let cols = columns(500.0, &ColumnWidths { who: Some(600.0), ..Default::default() });
+        assert!(width(&cols, Col::Subject) >= 80.0);
+        let bad = ColumnWidths { who: Some(-5.0), received: Some(f32::NAN), size: Some(1e9), categories: None }.clamped();
+        assert_eq!((bad.who, bad.received, bad.size), (Some(60.0), None, Some(160.0)));
     }
 }
