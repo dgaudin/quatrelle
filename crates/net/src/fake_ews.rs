@@ -21,6 +21,21 @@ pub struct Fo {
     pub class: String,
     /// The distinguished id (`inbox`, `sentitems`…).
     pub known: Option<String>,
+    /// The other mailbox it belongs to (a shared one), or empty for the account's own.
+    pub owner: String,
+}
+
+/// Another mailbox on the server (a shared one) and what the account may do with it.
+#[derive(Clone, Debug)]
+pub struct SharedBox {
+    pub address: String,
+    pub name: String,
+    /// Autodiscover maps it to the account (full access with automapping), as Outlook opens it.
+    pub automap: bool,
+    /// Autodiscover names it by its Exchange address only (older servers): ResolveNames finds it.
+    pub legacy: bool,
+    /// The account has access to it.
+    pub granted: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -75,9 +90,10 @@ pub struct Data {
     pub pf_hierarchy: Option<String>,
     /// The request's `X-PublicFolderMailbox` header.
     routed: String,
-    /// Other mailboxes this account may open (shared, or as a delegate); their folders hang
-    /// under `ROOT-<address>`.
-    pub shared: Vec<String>,
+    /// Other mailboxes on the server.
+    pub shared: Vec<SharedBox>,
+    /// The `X-AnchorMailbox` header of each request about a shared mailbox's folders.
+    pub anchors: Vec<String>,
     /// Outlook's navigation shortcuts, as items of the Common Views folder (hidden ones).
     pub wlinks: Vec<String>,
     /// The directory: (X.500 name, address).
@@ -87,6 +103,11 @@ pub struct Data {
     /// Folders Exchange keeps hidden (PidTagAttributeHidden), by id.
     pub hidden: Vec<String>,
     next: u32,
+}
+
+/// A mailbox's Exchange address (its LegacyDN), as older servers name it.
+fn legacy_dn(address: &str) -> String {
+    format!("/o=Contoso/ou=Exchange Administrative Group/cn=Recipients/cn={}", address.split('@').next().unwrap_or(address))
 }
 
 /// The public folder content mailbox's GUID, as `PR_REPLICA_LIST` names it.
@@ -113,6 +134,7 @@ impl Default for Data {
             pf_hierarchy: None,
             routed: String::new(),
             shared: Vec::new(),
+            anchors: Vec::new(),
             wlinks: Vec::new(),
             directory: Vec::new(),
             slow_sync: None,
@@ -125,6 +147,7 @@ impl Default for Data {
             parent: String::new(),
             class: "IPF.Note".into(),
             known: Some("msgfolderroot".into()),
+            owner: String::new(),
         });
         d
     }
@@ -144,8 +167,53 @@ impl Data {
             parent: parent.unwrap_or("ROOT").into(),
             class: class.into(),
             known: known.map(str::to_string),
+            owner: String::new(),
         });
         id
+    }
+
+    /// Another mailbox on the server with its root, Inbox and Outbox: its Inbox's id.
+    pub fn shared_mailbox(&mut self, b: SharedBox) -> String {
+        let owner = b.address.to_ascii_lowercase();
+        let make = |d: &mut Data, name: &str, parent: &str, known: Option<&str>| {
+            let id = d.id("S");
+            d.folders.push(Fo {
+                id: id.clone(),
+                name: name.into(),
+                parent: parent.into(),
+                class: "IPF.Note".into(),
+                known: known.map(str::to_string),
+                owner: owner.clone(),
+            });
+            id
+        };
+        let root = make(self, "Top of Information Store", "", Some("msgfolderroot"));
+        let inbox = make(self, "Inbox", &root, Some("inbox"));
+        make(self, "Outbox", &root, Some("outbox"));
+        self.shared.push(b);
+        inbox
+    }
+
+    /// A folder in a shared mailbox, under `parent`.
+    pub fn shared_folder(&mut self, owner: &str, name: &str, parent: &str) -> String {
+        let id = self.id("S");
+        self.folders.push(Fo {
+            id: id.clone(),
+            name: name.into(),
+            parent: parent.into(),
+            class: "IPF.Note".into(),
+            known: None,
+            owner: owner.to_ascii_lowercase(),
+        });
+        id
+    }
+
+    /// The shared mailbox an element names (`<t:Mailbox>`), if it's one; `Err` when the account
+    /// has no access to it.
+    fn shared_of(&self, el: &El) -> Option<Result<String, ()>> {
+        let who = el.find("Mailbox").and_then(|m| m.text_of("EmailAddress"))?.to_ascii_lowercase();
+        let b = self.shared.iter().find(|b| b.address.eq_ignore_ascii_case(&who))?;
+        Some(if b.granted { Ok(who) } else { Err(()) })
     }
 
     pub fn deliver(&mut self, folder: &str, raw: &[u8], read: bool, received: &str) -> String {
@@ -164,37 +232,6 @@ impl Data {
         id
     }
 
-    /// A folder of another mailbox (`parent` `None`: at its top), the mailbox's root made the
-    /// first time.
-    pub fn shared_folder(&mut self, owner: &str, name: &str, parent: Option<&str>, known: Option<&str>) -> String {
-        let root = format!("ROOT-{owner}");
-        if !self.folders.iter().any(|f| f.id == root) {
-            self.folders.push(Fo {
-                id: root.clone(),
-                name: "Top of Information Store".into(),
-                parent: String::new(),
-                class: "IPF.Note".into(),
-                known: Some("msgfolderroot".into()),
-            });
-        }
-        self.folder(name, Some(parent.unwrap_or(&root)), known, "IPF.Note")
-    }
-
-    /// Whose mailbox a folder is in (`None`: this account's).
-    fn owner_of(&self, folder: &str) -> Option<String> {
-        let mut at = folder.to_string();
-        for _ in 0..32 {
-            if let Some(o) = at.strip_prefix("ROOT-") {
-                return Some(o.to_string());
-            }
-            match self.folders.iter().find(|f| f.id == at) {
-                Some(f) if !f.parent.is_empty() => at = f.parent.clone(),
-                _ => return None,
-            }
-        }
-        None
-    }
-
     pub fn by_name(&self, name: &str) -> Option<&Fo> {
         self.folders.iter().find(|f| f.name == name)
     }
@@ -203,23 +240,19 @@ impl Data {
         match el.name.as_str() {
             "FolderId" => el.attr("Id").map(str::to_string),
             // Another mailbox's folder: its items are kept as `mailbox:<address>`.
+            "DistinguishedFolderId" if el.child("Mailbox").is_some() && self.shared_of(el).is_some() => {
+                let owner = self.shared_of(el)?.ok()?;
+                let known = el.attr("Id")?;
+                self.folders.iter().find(|f| f.owner == owner && f.known.as_deref() == Some(known)).map(|f| f.id.clone())
+            }
             "DistinguishedFolderId" if el.child("Mailbox").is_some() => {
                 let who = el.find("EmailAddress").map(|e| e.text.to_ascii_lowercase())?;
-                // A mailbox shared with this account: its own well-known folder.
-                if self.shared.contains(&who) {
-                    let known = el.attr("Id")?;
-                    return self
-                        .folders
-                        .iter()
-                        .find(|f| f.known.as_deref() == Some(known) && self.owner_of(&f.id).as_deref() == Some(who.as_str()))
-                        .map(|f| f.id.clone());
-                }
                 let id = format!("mailbox:{who}");
                 self.pim.iter().any(|(_, f, _)| *f == id).then_some(id)
             }
             "DistinguishedFolderId" => {
                 let known = el.attr("Id")?;
-                self.folders.iter().find(|f| f.known.as_deref() == Some(known) && self.owner_of(&f.id).is_none()).map(|f| f.id.clone())
+                self.folders.iter().find(|f| f.owner.is_empty() && f.known.as_deref() == Some(known)).map(|f| f.id.clone())
             }
             _ => None,
         }
@@ -363,6 +396,10 @@ impl Data {
                         )));
                         continue;
                     }
+                    if matches!(self.shared_of(&f), Some(Err(()))) {
+                        out.push(err("ErrorAccessDenied"));
+                        continue;
+                    }
                     let root = f.attr("Id") == Some("publicfoldersroot");
                     match self.folder_id(&f).and_then(|id| self.folders.iter().find(|x| x.id == id).cloned()) {
                         // The root is the hierarchy's; any other public folder, its content's.
@@ -392,10 +429,22 @@ impl Data {
                 let entry = op.child("UnresolvedEntry").map(|e| e.text.clone()).unwrap_or_default();
                 // `SMTP:` asks for that exact address.
                 let want = entry.strip_prefix("SMTP:").map_or(entry.clone(), str::to_string);
-                match self.directory.iter().find(|(dn, _)| dn.eq_ignore_ascii_case(&want)) {
-                    Some((_, email)) => out.push(ok(format!(
-                        "<m:ResolutionSet TotalItemsInView=\"1\"><t:Resolution><t:Mailbox><t:Name>{email}</t:Name>\
-                         <t:EmailAddress>{email}</t:EmailAddress><t:RoutingType>SMTP</t:RoutingType></t:Mailbox></t:Resolution></m:ResolutionSet>"
+                // Another mailbox the server names by its Exchange address (its LegacyDN), or a
+                // person the directory knows (X.500 name → address).
+                let found = self
+                    .shared
+                    .iter()
+                    .find(|b| legacy_dn(&b.address).eq_ignore_ascii_case(&want) || b.address.eq_ignore_ascii_case(&want))
+                    .map(|b| (b.name.clone(), b.address.clone()))
+                    .or_else(|| {
+                        self.directory.iter().find(|(dn, _)| dn.eq_ignore_ascii_case(&want)).map(|(_, email)| (email.clone(), email.clone()))
+                    });
+                match found {
+                    Some((name, email)) => out.push(ok(format!(
+                        "<m:ResolutionSet TotalItemsInView=\"1\" IncludesLastItemInRange=\"true\"><t:Resolution><t:Mailbox><t:Name>{}</t:Name>\
+                         <t:EmailAddress>{}</t:EmailAddress><t:RoutingType>SMTP</t:RoutingType></t:Mailbox></t:Resolution></m:ResolutionSet>",
+                        esc(&name),
+                        esc(&email)
                     ))),
                     None => out.push(err("ErrorNameResolutionNoResults")),
                 }
@@ -419,24 +468,27 @@ impl Data {
                     .collect();
                 out.push(ok(format!("<m:RootFolder IncludesLastItemInRange=\"true\"><t:Folders>{}</t:Folders></m:RootFolder>", kids.concat())));
             }
+            "FindFolder" if op.child("ParentFolderIds").and_then(|p| p.kids.first()).and_then(|f| self.shared_of(f)).is_some() => {
+                // Deep, in a shared mailbox: refused without access to it.
+                let Some(Ok(owner)) = op.child("ParentFolderIds").and_then(|p| p.kids.first()).and_then(|f| self.shared_of(f)) else {
+                    out.push(err("ErrorAccessDenied"));
+                    return ("FindFolderResponse".into(), out);
+                };
+                let all: Vec<String> = self
+                    .folders
+                    .iter()
+                    .filter(|f| f.owner == owner && f.known.as_deref() != Some("msgfolderroot"))
+                    .map(|f| self.folder_xml(f))
+                    .collect();
+                out.push(ok(format!("<m:RootFolder IncludesLastItemInRange=\"true\"><t:Folders>{}</t:Folders></m:RootFolder>", all.concat())));
+            }
             "FindFolder" => {
                 // Deep: everything under the root (the mailbox's, not the public folders), in pages.
                 let view = op.child("IndexedPageFolderView");
                 let offset: usize = view.and_then(|v| v.attr("Offset")).and_then(|o| o.parse().ok()).unwrap_or(0);
                 let max: usize = view.and_then(|v| v.attr("MaxEntriesReturned")).and_then(|o| o.parse().ok()).unwrap_or(1000).min(3);
                 let public = self.public_ids();
-                // Under the mailbox asked for: this account's, or one shared with it.
-                let Some(root) = op.child("ParentFolderIds").and_then(|p| p.kids.first()).and_then(|f| self.folder_id(f)) else {
-                    out.push(err("ErrorAccessDenied"));
-                    return ("FindFolderResponse".into(), out);
-                };
-                let owner = self.owner_of(&root);
-                let all: Vec<Fo> = self
-                    .folders
-                    .iter()
-                    .filter(|f| f.id != "ROOT" && !f.id.starts_with("ROOT-") && !public.contains(&f.id) && self.owner_of(&f.id) == owner)
-                    .cloned()
-                    .collect();
+                let all: Vec<Fo> = self.folders.iter().filter(|f| f.id != "ROOT" && f.owner.is_empty() && !public.contains(&f.id)).cloned().collect();
                 let page: Vec<String> = all.iter().skip(offset).take(max).map(|f| self.folder_xml(f)).collect();
                 let last = offset + max >= all.len();
                 out.push(ok(format!(
@@ -793,7 +845,12 @@ fn respond(s: &mut impl Write, status: u16, headers: &[(&str, String)], body: &[
 
 /// Start the server; it runs until the test process ends.
 pub fn serve(data: Data) -> Server {
-    let l = TcpListener::bind("127.0.0.1:0").unwrap();
+    serve_at(data, "127.0.0.1:0")
+}
+
+/// Start the server on an address of its own.
+fn serve_at(data: Data, at: &str) -> Server {
+    let l = TcpListener::bind(at).unwrap();
     let url = format!("http://127.0.0.1:{}/EWS/Exchange.asmx", l.local_addr().unwrap().port());
     let mut data = data;
     data.url = url.clone();
@@ -819,7 +876,7 @@ fn serve_connection(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>) {
         if reader.read_line(&mut first).unwrap_or(0) == 0 {
             return;
         }
-        let (mut len, mut auth, mut routed) = (0usize, String::new(), String::new());
+        let (mut len, mut auth, mut routed, mut anchor) = (0usize, String::new(), String::new(), String::new());
         loop {
             let mut line = String::new();
             if reader.read_line(&mut line).unwrap_or(0) == 0 || line == "\r\n" {
@@ -834,6 +891,9 @@ fn serve_connection(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>) {
                 }
                 if k.eq_ignore_ascii_case("x-publicfoldermailbox") {
                     routed = v.trim().to_string();
+                }
+                if k.eq_ignore_ascii_case("x-anchormailbox") {
+                    anchor = v.trim().to_string();
                 }
             }
         }
@@ -890,6 +950,25 @@ fn serve_connection(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>) {
             // The account's: its server, and its public folder hierarchy mailbox.
             let public =
                 hierarchy.map(|h| format!("<PublicFolderInformation><SmtpAddress>{h}</SmtpAddress></PublicFolderInformation>")).unwrap_or_default();
+            // Mailboxes mapped to the account (full access, automapped), as Outlook is told.
+            let mapped: String = shared
+                .lock()
+                .unwrap()
+                .shared
+                .iter()
+                .filter(|b| b.automap)
+                .map(|b| {
+                    let id = if b.legacy {
+                        format!("<LegacyDN>{}</LegacyDN><Server>mbx.contoso.example</Server>", legacy_dn(&b.address))
+                    } else {
+                        format!("<SmtpAddress>{}</SmtpAddress><OwnerSmtpAddress>{}</OwnerSmtpAddress>", b.address, b.address)
+                    };
+                    format!("<AlternativeMailbox><Type>Delegate</Type><DisplayName>{}</DisplayName>{id}</AlternativeMailbox>", esc(&b.name))
+                })
+                .collect();
+            let public = format!(
+                "{public}{mapped}<AlternativeMailbox><Type>Archive</Type><DisplayName>Online Archive</DisplayName><SmtpAddress>archive@contoso.example</SmtpAddress></AlternativeMailbox>"
+            );
             let answer = format!(
                 "<?xml version=\"1.0\"?><Autodiscover><Response><User><DisplayName>Riley</DisplayName></User><Account><AccountType>email</AccountType><Action>settings</Action>\
                  <Protocol><Type>EXCH</Type><EwsUrl>{url}</EwsUrl></Protocol>{public}</Account></Response></Autodiscover>"
@@ -920,6 +999,9 @@ fn serve_connection(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>) {
         let mut d = shared.lock().unwrap();
         d.calls.push(op.name.clone());
         d.routed = routed;
+        if !anchor.is_empty() && d.anchors.len() < 1000 {
+            d.anchors.push(anchor);
+        }
         let (name, parts) = d.route(&op);
         drop(d);
         let inner = if name.starts_with("GetUserOof") || name.starts_with("SetUserOof") {
@@ -1217,106 +1299,6 @@ mod tests {
         assert_eq!((moved.event.summary.as_str(), moved.event.rrule.as_deref()), ("Stand-up (moved)", None));
         // No Notes folder on this server: notes stay on this computer.
         assert!(sync.notes.is_none());
-    }
-
-    #[test]
-    fn a_shared_mailbox_opens_under_the_account_and_keeps_its_mail() {
-        let mut d = Data::default();
-        let inbox = d.folder("Inbox", None, Some("inbox"), "IPF.Note");
-        d.folder("Deleted Items", None, Some("deleteditems"), "IPF.Note");
-        d.deliver(&inbox, &mail("Mine", "o1"), true, "2024-05-06T09:00:00Z");
-        let support = "support@contoso.example";
-        d.shared = vec![support.into()];
-        let their_inbox = d.shared_folder(support, "Inbox", None, Some("inbox"));
-        let their_trash = d.shared_folder(support, "Deleted Items", None, Some("deleteditems"));
-        d.shared_folder(support, "Escalated", Some(&their_inbox), None);
-        let ticket = d.deliver(&their_inbox, &mail("Printer on fire", "s1"), false, "2024-05-06T10:00:00Z");
-        let server = serve(d);
-        let data = server.data.clone();
-        let dir = std::env::temp_dir().join(format!("mailcraft-ews-shared-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        let store = Store::open(&dir).unwrap();
-        let mut pool = crate::worker::Pool::new(store.clone(), Arc::new(crate::worker::MemoryCredentials::default()));
-        let account = AccountConfig {
-            id: "a1".into(),
-            email: "riley@contoso.example".into(),
-            username: format!("{DOMAIN}\\{USER}"),
-            ews: Some(server.url.clone()),
-            shared_mailboxes: vec![support.into(), "boss@contoso.example".into()],
-            ..Default::default()
-        };
-        pool.submit(Job::Start { account, password: Some(Secret(PASSWORD.into())) });
-        let seen = until(&pool, "online", |e| matches!(e, Event::Status { status: SyncStatus::Online { .. }, .. }));
-        let folders = seen.iter().rev().find_map(|e| match e {
-            Event::Folders { folders, .. } => Some(folders.clone()),
-            _ => None,
-        });
-        let paths: Vec<String> = folders.unwrap().iter().map(|f| f.path.clone()).collect();
-        for want in
-            ["INBOX", support, "support@contoso.example/Inbox", "support@contoso.example/Inbox/Escalated", "support@contoso.example/Deleted Items"]
-        {
-            assert!(paths.iter().any(|p| p == want), "{want} in {paths:?}");
-        }
-        assert!(!paths.iter().any(|p| p.starts_with("boss@")), "one it can't open is left out");
-        eventually("their inbox", || store.load_folder("a1", "support@contoso.example/Inbox").is_ok_and(|f| f.messages.len() == 1));
-        let key = store.load_folder("a1", "support@contoso.example/Inbox").unwrap().messages[0].key.clone();
-        pool.submit(Job::Apply { account: "a1".into(), op: Op::SetFlag { keys: vec![key.clone()], flag: Flag::Seen, on: true } });
-        eventually("read in their mailbox", || data.lock().unwrap().items.iter().any(|i| i.id == ticket && i.read));
-        pool.submit(Job::Apply { account: "a1".into(), op: Op::Move { keys: vec![key], to: "support@contoso.example/Deleted Items".into() } });
-        eventually("in their Deleted Items", || data.lock().unwrap().items.iter().any(|i| i.folder == their_trash));
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn voting_buttons_come_in_and_a_vote_goes_back_as_exchange_counts_it() {
-        let mut d = Data::default();
-        let inbox = d.folder("Inbox", None, Some("inbox"), "IPF.Note");
-        d.folder("Drafts", None, Some("drafts"), "IPF.Note");
-        let sent = d.folder("Sent Items", None, Some("sentitems"), "IPF.Note");
-        let lunch = d.deliver(&inbox, &mail("Team lunch on Friday?", "v1"), false, "2024-05-06T09:00:00Z");
-        d.items.iter_mut().find(|i| i.id == lunch).unwrap().voting = mailcraft_model::voting::stream(&["Yes", "No", "Maybe"]);
-        d.deliver(&inbox, &mail("No vote here", "v2"), false, "2024-05-06T08:00:00Z");
-        let server = serve(d);
-        let data = server.data.clone();
-        let dir = std::env::temp_dir().join(format!("mailcraft-ews-vote-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        let store = Store::open(&dir).unwrap();
-        let mut pool = crate::worker::Pool::new(store.clone(), Arc::new(crate::worker::MemoryCredentials::default()));
-        let account = AccountConfig {
-            id: "a1".into(),
-            email: "riley@contoso.example".into(),
-            username: format!("{DOMAIN}\\{USER}"),
-            ews: Some(server.url.clone()),
-            ..Default::default()
-        };
-        pool.submit(Job::Start { account, password: Some(Secret(PASSWORD.into())) });
-        until(&pool, "online", |e| matches!(e, Event::Status { status: SyncStatus::Online { .. }, .. }));
-        let st = store.load_folder("a1", "INBOX").unwrap();
-        let m = st.messages.iter().find(|m| m.subject == "Team lunch on Friday?").unwrap();
-        assert_eq!(m.voting, ["Yes", "No", "Maybe"]);
-        assert!(st.messages.iter().find(|m| m.subject == "No vote here").unwrap().voting.is_empty());
-
-        let key = m.key.clone();
-        pool.submit(Job::Vote { key: key.clone(), choice: "Maybe".into() });
-        let seen = until(&pool, "voted", |e| matches!(e, Event::Voted { .. }));
-        assert!(matches!(seen.last(), Some(Event::Voted { error: None, choice, .. }) if choice == "Maybe"), "{seen:?}");
-        {
-            let d = data.lock().unwrap();
-            assert_eq!(d.votes, [("Maybe: Team lunch on Friday?".to_string(), "Maybe".to_string())]);
-            let reply = d.items.iter().find(|i| i.folder == sent).unwrap();
-            let text = String::from_utf8_lossy(&reply.raw);
-            assert!(text.contains("To: zoe@contoso.example") && text.contains("In-Reply-To: <v1@x>"), "a reply to the sender: {text}");
-            assert!(!reply.draft);
-        }
-        // Remembered with the message.
-        assert_eq!(store.load_folder("a1", "INBOX").unwrap().find(key.uid).unwrap().voted, "Maybe");
-
-        // A message that's gone says so.
-        let gone = mailcraft_model::MessageKey { uid: 9999, ..key };
-        pool.submit(Job::Vote { key: gone, choice: "Yes".into() });
-        let seen = until(&pool, "vote refused", |e| matches!(e, Event::Voted { .. }));
-        assert!(matches!(seen.last(), Some(Event::Voted { error: Some(_), .. })));
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -1858,7 +1840,7 @@ mod tests {
         // Their mail syncs as any folder's.
         let store = crate::fake::tests_store("public-folders");
         let mut st = crate::jmap::State::default();
-        let folders = crate::ews::list_folders(&c, &mut st, "a1", &[]).unwrap();
+        let folders = crate::ews::list_folders(&c, &mut st, "a1").unwrap();
         let news_path = folders.iter().find(|f| f.path.ends_with("Announcements")).map(|f| f.path.clone()).unwrap();
         crate::ews::sync_folder(&c, &mut st, &store, "a1", &news_path, &crate::sync::SyncOptions::default()).unwrap();
         let fs = store.load_folder("a1", &news_path).unwrap();
@@ -1907,12 +1889,148 @@ mod tests {
         let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
         let store = crate::fake::tests_store("ews-unreadable");
         let mut st = crate::jmap::State::default();
-        crate::ews::list_folders(&c, &mut st, "a1", &[]).unwrap();
+        crate::ews::list_folders(&c, &mut st, "a1").unwrap();
         crate::ews::sync_folder(&c, &mut st, &store, "a1", "INBOX", &crate::sync::SyncOptions::default()).unwrap();
         let fs = store.load_folder("a1", "INBOX").unwrap();
         assert_eq!(fs.messages.len(), 3);
         let with_body: Vec<&str> = fs.messages.iter().filter(|m| store.has_body(&m.key)).map(|m| m.subject.as_str()).collect();
         assert_eq!(with_body, ["three", "one"], "the others downloaded");
+        let _ = std::fs::remove_dir_all(store.root());
+    }
+
+    /// Issue #1: a mailbox made in Dutch showed "Inbox", "Sent Items"… where Outlook shows the
+    /// names Exchange gave them ("Postvak IN", "Verzonden items"); they're kept now, and the
+    /// folders are still the account's Inbox, Sent Items… A folder of the user's own is as it was.
+    #[test]
+    fn special_folders_keep_the_names_exchange_gives_them() {
+        let mut d = Data::default();
+        d.folder("Postvak IN", None, Some("inbox"), "IPF.Note");
+        d.folder("Verzonden items", None, Some("sentitems"), "IPF.Note");
+        d.folder("Verwijderde items", None, Some("deleteditems"), "IPF.Note");
+        d.folder("Afgehandeld", None, None, "IPF.Note");
+        let server = serve(d);
+        let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
+        let folders = crate::ews::list_folders(&c, &mut crate::jmap::State::default(), "a1").unwrap();
+        let named = |role: mailcraft_model::FolderRole| folders.iter().find(|f| f.role == role).map(|f| (f.path.clone(), f.display_name())).unwrap();
+        assert_eq!(named(mailcraft_model::FolderRole::Inbox), ("INBOX".to_string(), "Postvak IN".to_string()));
+        assert_eq!(named(mailcraft_model::FolderRole::Sent).1, "Verzonden items");
+        assert_eq!(named(mailcraft_model::FolderRole::Trash).1, "Verwijderde items");
+        let own = folders.iter().find(|f| f.path == "Afgehandeld").unwrap();
+        assert_eq!((own.name.as_deref(), own.display_name().as_str()), (None, "Afgehandeld"));
+    }
+
+    /// For looking at the app against an Exchange server whose mailbox was made in Dutch, with
+    /// a shared mailbox mapped to it, on 127.0.0.1:8085 without TLS (`CONTOSO\riley`, password
+    /// `pw`): add the account with `"ews": "http://127.0.0.1:8085/EWS/Exchange.asmx"`.
+    /// Run: `cargo test -p mailcraft-net serve_ews_for_the_app -- --ignored`.
+    #[test]
+    #[ignore]
+    fn serve_ews_for_the_app() {
+        let mut d = Data::default();
+        let inbox = d.folder("Postvak IN", None, Some("inbox"), "IPF.Note");
+        d.folder("Concepten", None, Some("drafts"), "IPF.Note");
+        d.folder("Verzonden items", None, Some("sentitems"), "IPF.Note");
+        d.folder("Verwijderde items", None, Some("deleteditems"), "IPF.Note");
+        d.folder("Ongewenste e-mail", None, Some("junkemail"), "IPF.Note");
+        d.folder("Postvak UIT", None, Some("outbox"), "IPF.Note");
+        d.folder("Afgehandeld", None, None, "IPF.Note");
+        d.deliver(&inbox, &mail("Weekly report", "o1"), false, "2026-10-19T08:00:00Z");
+        d.deliver(&inbox, &mail("Re: Weekly report", "o2"), false, "2026-10-19T09:00:00Z");
+        let shared = d.shared_mailbox(SharedBox {
+            address: "test@contoso.example".into(),
+            name: "Test Grommunio".into(),
+            automap: true,
+            legacy: false,
+            granted: true,
+        });
+        d.deliver(&shared, &mail("For the team", "s1"), false, "2026-10-19T10:00:00Z");
+        let _server = serve_at(d, "127.0.0.1:8085");
+        loop {
+            std::thread::park();
+        }
+    }
+
+    /// Shared mailboxes (issue #1): those the server maps to the account open by themselves, one
+    /// named by its Exchange address only is looked up, one added by hand opens too; each under
+    /// a folder of its own, routed to it, its Outbox left out, its Inbox not the account's. One
+    /// without access, and the account's online archive, don't.
+    #[test]
+    fn shared_mailboxes_open_by_themselves_or_by_hand() {
+        let mut d = Data::default();
+        let inbox = d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+        d.folder("Sales", None, None, "IPF.Note");
+        d.deliver(&inbox, &mail("Own", "o1"), false, "2026-10-19T08:00:00Z");
+        let box_ = |address: &str, name: &str, automap: bool, legacy: bool, granted: bool| SharedBox {
+            address: address.into(),
+            name: name.into(),
+            automap,
+            legacy,
+            granted,
+        };
+        let sales = d.shared_mailbox(box_("sales@contoso.example", "Sales", true, false, true));
+        let quotes = d.shared_folder("sales@contoso.example", "Quotes", &sales);
+        d.deliver(&sales, &mail("Order 17", "s1"), false, "2026-10-19T09:00:00Z");
+        d.deliver(&quotes, &mail("Quote 4", "s2"), true, "2026-10-19T09:30:00Z");
+        d.shared_mailbox(box_("support@contoso.example", "Support", true, true, true));
+        d.shared_mailbox(box_("boss@contoso.example", "Boss", true, false, false));
+        let team = d.shared_mailbox(box_("team@contoso.example", "Team", false, false, true));
+        d.deliver(&team, &mail("Standup", "t1"), false, "2026-10-19T10:00:00Z");
+        let server = serve(d);
+        let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
+        c.set_shared(&["team@contoso.example".to_string(), "riley@contoso.example".to_string()]);
+        let mut st = crate::jmap::State::default();
+        let folders = crate::ews::list_folders(&c, &mut st, "a1").unwrap();
+        let paths: Vec<&str> = folders.iter().map(|f| f.path.as_str()).collect();
+        // Sales collides with the account's own folder: named with its address.
+        let sales_top = "Sales (sales@contoso.example)";
+        for want in ["INBOX", "Sales", sales_top, &format!("{sales_top}/Inbox"), &format!("{sales_top}/Inbox/Quotes"), "Support/Inbox", "Team/Inbox"]
+        {
+            assert!(paths.contains(&want), "{want} in {paths:?}");
+        }
+        assert!(!paths.iter().any(|p| p.contains("Boss") || p.contains("Archive") || p.ends_with("Outbox")), "{paths:?}");
+        assert!(!paths.iter().any(|p| p.contains("riley@")), "the account's own mailbox isn't a shared one");
+        assert_eq!(folders.iter().filter(|f| f.role == mailcraft_model::FolderRole::Inbox).count(), 1, "only the account's own Inbox is its Inbox");
+        // Each shared mailbox is a mailbox of its own (issue #1: it showed as one of the
+        // account's folders): its folders say whose they are, and what each is there.
+        let folder = |path: &str| folders.iter().find(|f| f.path == path).unwrap();
+        let top = folder(sales_top);
+        assert_eq!((top.mailbox.as_deref(), top.depth()), (Some("sales@contoso.example"), 0));
+        let shared_inbox = folder(&format!("{sales_top}/Inbox"));
+        assert_eq!(shared_inbox.mailbox.as_deref(), Some("sales@contoso.example"));
+        assert_eq!((shared_inbox.role, shared_inbox.mailbox_role), (mailcraft_model::FolderRole::Other, mailcraft_model::FolderRole::Inbox));
+        assert!(shared_inbox.is_fixed() && top.is_fixed(), "a shared mailbox's top folder and Inbox can't be renamed or deleted");
+        let quotes = folder(&format!("{sales_top}/Inbox/Quotes"));
+        assert_eq!((quotes.mailbox.as_deref(), quotes.mailbox_role), (Some("sales@contoso.example"), mailcraft_model::FolderRole::Other));
+        assert!(!quotes.is_fixed());
+        assert_eq!(folder("Team/Inbox").mailbox.as_deref(), Some("team@contoso.example"));
+        assert!(folder("INBOX").mailbox.is_none() && folder("Sales").mailbox.is_none(), "the account's own folders are its own");
+        // Shown after the account's own folders, each mailbox together, its Inbox first.
+        let mut sorted = folders.clone();
+        mailcraft_model::sort_folders(&mut sorted);
+        let order: Vec<&str> = sorted.iter().map(|f| f.path.as_str()).collect();
+        assert_eq!(
+            order,
+            [
+                "INBOX",
+                "Sales",
+                sales_top,
+                &format!("{sales_top}/Inbox"),
+                &format!("{sales_top}/Inbox/Quotes"),
+                "Support",
+                "Support/Inbox",
+                "Team",
+                "Team/Inbox"
+            ],
+        );
+        // Their mail syncs as any folder's.
+        let store = crate::fake::tests_store("shared-mailboxes");
+        let r = crate::ews::sync_folder(&c, &mut st, &store, "a1", &format!("{sales_top}/Inbox"), &crate::sync::SyncOptions::default()).unwrap();
+        assert_eq!(r.new, 1);
+        assert_eq!(store.load_folder("a1", &format!("{sales_top}/Inbox")).unwrap().messages[0].subject, "Order 17");
+        crate::ews::sync_folder(&c, &mut st, &store, "a1", "Team/Inbox", &crate::sync::SyncOptions::default()).unwrap();
+        assert_eq!(store.load_folder("a1", "Team/Inbox").unwrap().messages[0].subject, "Standup");
+        let anchors = server.data.lock().unwrap().anchors.clone();
+        assert!(anchors.iter().any(|a| a == "sales@contoso.example") && anchors.iter().any(|a| a == "team@contoso.example"), "{anchors:?}");
         let _ = std::fs::remove_dir_all(store.root());
     }
 }

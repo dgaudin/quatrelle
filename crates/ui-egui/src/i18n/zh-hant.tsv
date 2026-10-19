@@ -338,7 +338,6 @@
 	{a} and {b}	{a} 和 {b}
 	{a}, {b} and others	{a}、{b} 等人
 	{email} (sample)	{email} (範例)
-	{email} and its downloaded mail will be removed from this computer. Nothing is deleted on the server.	{email} 和已下載的郵件將從這台電腦移除。伺服器上不會刪除任何內容。
 	{name} could not be opened: {error}	無法開啟 {name}: {error}
 	{n} attachments	{n} 個附件
 	{n} messages in this conversation	此交談中有 {n} 封郵件
@@ -854,6 +853,21 @@
 	Run every rule that's on, on the mail already in the Inbox	對收件匣中已有的郵件執行所有已開啟的規則
 	Find a rule	尋找規則
 	No rule matches.	沒有符合的規則。
+	 and {n} more	 等另外 {n} 人
+	Add to contacts…	新增至連絡人…
+	Copy address	複製地址
+	Edit contact…	編輯連絡人…
+	Send email	傳送電子郵件
+	Add	新增
+	Add a shared mailbox	新增共用信箱
+	Add…	新增…
+	Its folders show under this account. You need access to it on the Exchange server; the ones you have full access to open by themselves.	其資料夾會顯示在此帳戶下。你需要在 Exchange 伺服器上擁有存取權；擁有完整存取權的信箱會自動開啟。
+	Mailboxes you have full access to open by themselves.	擁有完整存取權的信箱會自動開啟。
+	Shared mailboxes	共用信箱
+	{email} will be removed from MailCraft. Its data file, {file}, stays in your MailCraft Files folder: open it from File › Open & Export to see its mail again. Nothing is deleted on the server.	將從 MailCraft 移除 {email}。其資料檔 {file} 會保留在 MailCraft Files 資料夾中：從「檔案 › 開啟與匯出」開啟即可再次查看其郵件。伺服器上的內容不會被刪除。
+	{email} will be removed from MailCraft. Nothing is deleted on the server.	將從 MailCraft 移除 {email}。伺服器上的內容不會被刪除。
+	{email} will be removed from MailCraft. Its data file, {file}, stays in your MailCraft Files folder: open it from File › Open & Export to see its mail again.	將從 MailCraft 移除 {email}。其資料檔 {file} 會保留在 MailCraft Files 資料夾中：從「檔案 › 開啟與匯出」開啟即可再次查看其郵件。
+	{email} will be removed from MailCraft.	將從 MailCraft 移除 {email}。
 
 # The Archive folder, where the plain entry is the command.
 folder	Archive	封存
@@ -918,3 +932,11 @@ month	May	5月
 	HTML code	HTML 程式碼
 	Paste the signature's HTML: it's sent as written (scripts and forms taken out), its layout kept.	貼上簽名的 HTML：依原樣傳送（移除指令碼和表單），保留版面。
 	Preview (pictures on the web aren't loaded here)	預覽（此處不載入網路圖片）
+	Add shared mailbox…	新增共用信箱…
+	Remove shared mailbox	移除共用信箱
+	Opened by the server for your access to it	因您有存取權，由伺服器開啟
+	Shared mailbox {address}, opened by {email}	共用信箱 {address}，由 {email} 開啟
+	The outgoing server has its own user name and password	外寄伺服器有自己的使用者名稱和密碼
+	Its user name	其使用者名稱
+	Its password	其密碼
+	Password (unchanged when empty)	密碼（留空則不變）

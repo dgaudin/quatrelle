@@ -205,6 +205,7 @@ pub(crate) fn tour() {
                 calendar: true,
                 error: Some("no access".into()),
             },
+            Dialog::AddSharedMailbox { account: "sample".into(), address: "sales@contoso.example".into(), error: Some("already open".into()) },
             Dialog::RemoveAccount { account: "sample".into(), email: "x".into() },
             Dialog::MailboxClosed {
                 account: "sample".into(),
@@ -1238,4 +1239,78 @@ fn leaving_an_attachment_preview_lets_go_of_its_chip() {
     frame(&ctx, &mut a, vec![key(Key::Escape, Modifiers::NONE)]);
     assert!(a.ui.attachment_view.is_none() && a.ui.attachment_selected.is_none());
     let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Enter in a dialog's one field submits it: the dialog gave the field its focus back before
+/// looking for the Enter that had just ended input, so only the button worked.
+#[test]
+fn enter_submits_a_one_field_dialog() {
+    let (mut a, dir) = app("enter-submits");
+    let ctx = egui::Context::default();
+    // The sample account isn't an Exchange one, so the submit comes back as the dialog's error.
+    a.ui.dialog = Some(Dialog::AddSharedMailbox { account: "sample".into(), address: "sales@contoso.example".into(), error: None });
+    frame(&ctx, &mut a, vec![]);
+    frame(&ctx, &mut a, vec![]);
+    frame(&ctx, &mut a, vec![key(Key::Enter, Modifiers::NONE)]);
+    frame(&ctx, &mut a, vec![]);
+    assert!(matches!(&a.ui.dialog, Some(Dialog::AddSharedMailbox { error: Some(_), .. })), "submitted: {:?}", a.ui.dialog.is_some());
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Issue #1: a shared mailbox is a mailbox of its own in the folder pane, after the account's
+/// folders, open or collapsed (its unread mail then beside its name); a special folder under the
+/// server's own name draws as it is.
+#[test]
+fn a_shared_mailbox_draws_as_a_mailbox_of_its_own() {
+    use mailcraft_engine::model::{Folder, FolderRole};
+    let (mut a, dir) = app("shared-mailbox");
+    let mut folders = a.session.account("sample").unwrap().folders.clone();
+    if let Some(inbox) = folders.iter_mut().find(|f| f.role == FolderRole::Inbox) {
+        inbox.name = Some("Postvak IN".into());
+    }
+    let shared = |path: &str, role: FolderRole, unread: u32| Folder {
+        account: "sample".into(),
+        path: path.into(),
+        delimiter: Some('/'),
+        selectable: true,
+        unread,
+        mailbox: Some("test@studio.example".into()),
+        mailbox_role: role,
+        ..Default::default()
+    };
+    folders.push(shared("Test Grommunio/Postvak IN", FolderRole::Inbox, 3));
+    folders.push(shared("Test Grommunio", FolderRole::Other, 0));
+    folders.push(shared("Test Grommunio/Postvak IN/Orders", FolderRole::Other, 0));
+    a.session.apply(MailEvent::Folders { account: "sample".into(), folders });
+    let paths: Vec<String> = a.session.account("sample").unwrap().folders.iter().map(|f| f.path.clone()).collect();
+    assert_eq!(&paths[paths.len() - 3..], ["Test Grommunio", "Test Grommunio/Postvak IN", "Test Grommunio/Postvak IN/Orders"]);
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    a.run("folder.open", json!({"account": "sample", "folder": "Test Grommunio/Postvak IN"}));
+    frame(&ctx, &mut a, vec![]);
+    // In Favorites it says whose Inbox it is.
+    a.run("folder.favorite", json!({"account": "sample", "folder": "Test Grommunio/Postvak IN", "on": true}));
+    a.run("view.collapse", json!({"key": "folder:sample/Test Grommunio"}));
+    frame(&ctx, &mut a, vec![]);
+    let e = a.session.run("folder.rename", &json!({"account": "sample", "folder": "Test Grommunio/Postvak IN", "name": "X"})).unwrap_err();
+    assert!(e.to_string().contains("can't be renamed"), "{e}");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Issue #3: Server settings show the outgoing server's own sign-in; left alone, its kept
+/// password stays (none is sent), and turned off it goes back to the incoming server's.
+#[test]
+fn server_settings_keep_the_outgoing_servers_own_sign_in() {
+    let mut c = mailcraft_engine::model::AccountConfig::guess("zoe@example.org");
+    c.id = "a1".into();
+    c.smtp_username = Some("relay-user".into());
+    let Dialog::EditAccount(mut f) = Dialog::edit_account(&c) else { panic!("the server settings") };
+    assert!(f.smtp_sign_in.own && f.smtp_sign_in.kept);
+    let p = f.params();
+    assert_eq!(p["smtpUsername"], "relay-user");
+    assert!(p.get("smtpPassword").is_none(), "the kept password stays");
+    f.smtp_sign_in.password = "new".into();
+    assert_eq!(f.params()["smtpPassword"], "new");
+    f.smtp_sign_in.own = false;
+    assert!(f.params()["smtpUsername"].is_null());
 }

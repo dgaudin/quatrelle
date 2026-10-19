@@ -338,7 +338,6 @@
 	{a} and {b}	{a} et {b}
 	{a}, {b} and others	{a}, {b} et d’autres
 	{email} (sample)	{email} (exemple)
-	{email} and its downloaded mail will be removed from this computer. Nothing is deleted on the server.	{email} et son courrier téléchargé seront retirés de cet ordinateur. Rien n’est supprimé sur le serveur.
 	{name} could not be opened: {error}	Impossible d’ouvrir {name} : {error}
 	{n} attachments	{n} pièces jointes
 	{n} messages in this conversation	{n} messages dans cette conversation
@@ -855,6 +854,21 @@
 	Run every rule that's on, on the mail already in the Inbox	Exécute toutes les règles activées sur le courrier déjà dans la boîte de réception
 	Find a rule	Rechercher une règle
 	No rule matches.	Aucune règle ne correspond.
+	 and {n} more	 et {n} de plus
+	Add to contacts…	Ajouter aux contacts…
+	Copy address	Copier l'adresse
+	Edit contact…	Modifier le contact…
+	Send email	Envoyer un courrier
+	Add	Ajouter
+	Add a shared mailbox	Ajouter une boîte aux lettres partagée
+	Add…	Ajouter…
+	Its folders show under this account. You need access to it on the Exchange server; the ones you have full access to open by themselves.	Ses dossiers apparaissent sous ce compte. Vous devez y avoir accès sur le serveur Exchange ; celles auxquelles vous avez un accès complet s'ouvrent d'elles-mêmes.
+	Mailboxes you have full access to open by themselves.	Les boîtes auxquelles vous avez un accès complet s'ouvrent d'elles-mêmes.
+	Shared mailboxes	Boîtes aux lettres partagées
+	{email} will be removed from MailCraft. Its data file, {file}, stays in your MailCraft Files folder: open it from File › Open & Export to see its mail again. Nothing is deleted on the server.	{email} sera supprimé de MailCraft. Son fichier de données, {file}, reste dans le dossier MailCraft Files : ouvrez-le depuis Fichier › Ouvrir et exporter pour revoir son courrier. Rien n'est supprimé sur le serveur.
+	{email} will be removed from MailCraft. Nothing is deleted on the server.	{email} sera supprimé de MailCraft. Rien n'est supprimé sur le serveur.
+	{email} will be removed from MailCraft. Its data file, {file}, stays in your MailCraft Files folder: open it from File › Open & Export to see its mail again.	{email} sera supprimé de MailCraft. Son fichier de données, {file}, reste dans le dossier MailCraft Files : ouvrez-le depuis Fichier › Ouvrir et exporter pour revoir son courrier.
+	{email} will be removed from MailCraft.	{email} sera supprimé de MailCraft.
 
 # The Archive folder, where the plain entry is the command.
 folder	Archive	Archives
@@ -919,3 +933,11 @@ month	May	mai
 	HTML code	Code HTML
 	Paste the signature's HTML: it's sent as written (scripts and forms taken out), its layout kept.	Collez le code HTML de la signature : il est envoyé tel quel (sans scripts ni formulaires), sa mise en page conservée.
 	Preview (pictures on the web aren't loaded here)	Aperçu (les images du web ne sont pas chargées ici)
+	Add shared mailbox…	Ajouter une boîte aux lettres partagée…
+	Remove shared mailbox	Supprimer la boîte aux lettres partagée
+	Opened by the server for your access to it	Ouverte par le serveur, car vous y avez accès
+	Shared mailbox {address}, opened by {email}	Boîte aux lettres partagée {address}, ouverte par {email}
+	The outgoing server has its own user name and password	Le serveur sortant a son propre nom d'utilisateur et son propre mot de passe
+	Its user name	Son nom d'utilisateur
+	Its password	Son mot de passe
+	Password (unchanged when empty)	Mot de passe (inchangé si vide)

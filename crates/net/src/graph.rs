@@ -520,9 +520,10 @@ pub fn list_folders(c: &Client, st: &mut State, account: &str, shared: &[String]
             Err(e) => log::warn!("{owner}'s mailbox: {e}"),
         }
     }
-    let found = jmap::folders(account, &boxes);
+    let mut found = jmap::folders(account, &boxes);
     st.mailboxes = found.iter().map(|(f, id)| (f.path.clone(), id.clone())).collect();
     st.owners = found.iter().filter_map(|(f, id)| Some((f.path.clone(), owner_of_box.get(id)?.clone()))).collect();
+    jmap::name_special(&mut found, &boxes);
     Ok(found.into_iter().map(|(f, _)| f).collect())
 }
 

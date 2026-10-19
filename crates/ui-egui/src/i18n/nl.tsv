@@ -338,7 +338,6 @@
 	{a} and {b}	{a} en {b}
 	{a}, {b} and others	{a}, {b} en anderen
 	{email} (sample)	{email} (voorbeeld)
-	{email} and its downloaded mail will be removed from this computer. Nothing is deleted on the server.	{email} en de gedownloade mail worden van deze computer verwijderd. Op de server wordt niets verwijderd.
 	{name} could not be opened: {error}	{name} kon niet worden geopend: {error}
 	{n} attachments	{n} bijlagen
 	{n} messages in this conversation	{n} berichten in dit gesprek
@@ -915,3 +914,26 @@ month	May	mei
 	Run every rule that's on, on the mail already in the Inbox	Voert alle ingeschakelde regels uit op de mail die al in het Postvak IN staat
 	Find a rule	Een regel zoeken
 	No rule matches.	Geen regel komt overeen.
+	 and {n} more	 en nog {n}
+	Add to contacts…	Toevoegen aan contactpersonen…
+	Copy address	Adres kopiëren
+	Edit contact…	Contactpersoon bewerken…
+	Send email	E-mail verzenden
+	Add	Toevoegen
+	Add a shared mailbox	Een gedeeld postvak toevoegen
+	Add…	Toevoegen…
+	Its folders show under this account. You need access to it on the Exchange server; the ones you have full access to open by themselves.	De mappen verschijnen onder dit account. U hebt er toegang toe nodig op de Exchange-server; postvakken waartoe u volledige toegang hebt, worden vanzelf geopend.
+	Mailboxes you have full access to open by themselves.	Postvakken waartoe u volledige toegang hebt, worden vanzelf geopend.
+	Shared mailboxes	Gedeelde postvakken
+	{email} will be removed from MailCraft. Its data file, {file}, stays in your MailCraft Files folder: open it from File › Open & Export to see its mail again. Nothing is deleted on the server.	{email} wordt uit MailCraft verwijderd. Het gegevensbestand {file} blijft in de map MailCraft Files: open het via Bestand › Openen en exporteren om de e-mail weer te zien. Er wordt niets van de server verwijderd.
+	{email} will be removed from MailCraft. Nothing is deleted on the server.	{email} wordt uit MailCraft verwijderd. Er wordt niets van de server verwijderd.
+	{email} will be removed from MailCraft. Its data file, {file}, stays in your MailCraft Files folder: open it from File › Open & Export to see its mail again.	{email} wordt uit MailCraft verwijderd. Het gegevensbestand {file} blijft in de map MailCraft Files: open het via Bestand › Openen en exporteren om de e-mail weer te zien.
+	{email} will be removed from MailCraft.	{email} wordt uit MailCraft verwijderd.
+	Add shared mailbox…	Gedeeld postvak toevoegen…
+	Remove shared mailbox	Gedeeld postvak verwijderen
+	Opened by the server for your access to it	Door de server geopend omdat u er toegang toe hebt
+	Shared mailbox {address}, opened by {email}	Gedeeld postvak {address}, geopend via {email}
+	The outgoing server has its own user name and password	De server voor uitgaande e-mail heeft een eigen gebruikersnaam en wachtwoord
+	Its user name	Gebruikersnaam ervan
+	Its password	Wachtwoord ervan
+	Password (unchanged when empty)	Wachtwoord (ongewijzigd als leeg)

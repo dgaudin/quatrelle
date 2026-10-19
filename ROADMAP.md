@@ -1,6 +1,6 @@
 # Roadmap
 
-**Stage:** v0.17 — Copy and paste, and public folder contacts (2026-10-19). Each milestone below is a version: v0.1 was
+**Stage:** v0.19 — Shared mailboxes of their own, and SMTP's own sign-in (2026-10-20). Each milestone below is a version: v0.1 was
 the first working client, and every later one is named for what it added.
 Scope: [storytold/artcraft#2177](https://github.com/storytold/artcraft/issues/2177) (lightweight,
 local-first, media-aware v1); the fuller request is
@@ -12,7 +12,7 @@ local-first, media-aware v1); the fuller request is
 |---|---|
 | Crates | 8 libraries + 3 apps + xtask |
 | Commands | 141 (`mailcraft-cli commands`) |
-| Tests | 327 (unit, in-memory IMAP, JMAP, Graph, EWS (mail, calendars, contacts, Autodiscover), CalDAV/CardDAV and ManageSieve servers, NTLM test vectors, SMTP and HTTP stubs, data files, TCP end-to-end, an X server drag, headless UI) |
+| Tests | 340 (unit, in-memory IMAP, JMAP, Graph, EWS (mail, calendars, contacts, Autodiscover), CalDAV/CardDAV and ManageSieve servers, NTLM test vectors, SMTP and HTTP stubs, data files, TCP end-to-end, an X server drag, headless UI) |
 | Languages | 14 (English, Spanish, French, German, Dutch, Brazilian Portuguese, Italian, Russian, Japanese, Korean, Simplified and Traditional Chinese, Arabic, Hebrew) |
 | Platforms | Windows, macOS, Linux; the browser (JMAP accounts) |
 
@@ -81,7 +81,18 @@ local-first, media-aware v1); the fuller request is
    clipboard back (nothing could be pasted or copied since egui 0.37), so signatures paste from
    Outlook again; the organisation's shared contacts and calendars found in Exchange's public
    folders, and the log saying how many.
-18. **Next:** what's left in [docs/gaps.md](docs/gaps.md): a relay for IMAP accounts in the
+18. **v0.18 — Shared mailboxes and the contact card** ✅ From issue #1's fifth round: an
+   Exchange account's shared mailboxes open under it by themselves (the ones Autodiscover names)
+   or by hand (Info › Account settings › Shared mailboxes); a name in a message's header opens a
+   contact card (send an email, add or edit the contact, copy the address) and its right-click
+   menu has the same; Enter submits the one-field dialogs again. A removed account's data file
+   stays, as Outlook keeps a removed account's `.pst`.
+19. **v0.19 — Shared mailboxes of their own, and SMTP's own sign-in** ✅ From issue #1's sixth
+   round and issue #3: an Exchange shared mailbox shown as a mailbox of its own, Exchange's
+   folders under the names the server gives them, the conversation above a message only when
+   the list is grouped by conversation, and an outgoing server signed in to with a user name
+   and password of its own.
+20. **Next:** what's left in [docs/gaps.md](docs/gaps.md): a relay for IMAP accounts in the
    browser, bidirectional editing, Wayland drag-out, Kerberos-only Exchange, what the `.pst`
    libraries can't do yet.
 
@@ -194,6 +205,26 @@ local-first, media-aware v1); the fuller request is
   an element of its kind (`ContactsFolder`, `CalendarFolder`…), and only `Folder` was read.
   Every kind is read, the fake Exchange answers that way (its test failed until then), and the
   log says how many public address books and calendars were found.
+- **2026-10-19** — **v0.18**, issue #1's fifth round: shared mailboxes didn't show for Exchange
+  and couldn't be added. Autodiscover's `AlternativeMailbox` entries (delegate and team
+  mailboxes; archives left out) open by themselves, others are added by address, and each is
+  listed through EWS with its `Mailbox` and the `X-AnchorMailbox` header; the fake Exchange has
+  them (with no-access and by-legacy-name cases) and its test lists and syncs them. A name in a
+  message's header opens a contact card, its address a new message to them, and right-click ›
+  Add to contacts a filled-in contact. Enter hadn't submitted the password, shared calendar or
+  shared mailbox dialog: they took the focus back before seeing the Enter that let it go.
+  Removing an account deleted its `.mailcraft` file; as Outlook leaves a removed account's
+  `.pst` on disk, the file now stays (closed, no one's), the same address added again gets a
+  file of its own beside it, and Open & Export's picker starts in MailCraft Files to open it.
+- **2026-10-20** — **v0.19**, issue #1's sixth round and issue #3, each reproduced in the app first
+  (against a fake Exchange made in Dutch with a shared mailbox mapped to it): a shared mailbox
+  showed as a folder of the account's own mailbox; it's a mailbox of its own now, after the
+  account, its Inbox, Sent Items… with their icons and places, collapsible, with Add and Remove
+  in its menu and the account's. Exchange's special folders showed MailCraft's English words
+  ("Inbox") where Outlook shows the server's ("Postvak IN"); they keep the server's names (EWS
+  and Graph). The reading pane showed a message's whole conversation above it though the list
+  wasn't grouped; only when grouped now, as Outlook. And an outgoing server can sign in with a
+  user name and password of its own (issue #3), its password kept apart in the keychain.
 - **2026-10-18** — **v0.15**: issue #1 again, each reproduced first: side by side as Outlook shows
   it (a pane per calendar), an editor's rights on someone's Exchange calendar read as Exchange
   gives them, public folder content routed to the mailbox holding it, HTML on the clipboard pasted
