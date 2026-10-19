@@ -939,3 +939,5 @@ month	May	5月
 	Its password	そのパスワード
 	Password (unchanged when empty)	パスワード (空欄なら変更なし)
 	Searching…	検索中…
+	Download all	すべてダウンロード
+	Downloading {done} of {total}	{done} / {total} をダウンロード中

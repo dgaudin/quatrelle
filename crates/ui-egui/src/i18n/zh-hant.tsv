@@ -941,3 +941,5 @@ month	May	5月
 	Its password	其密碼
 	Password (unchanged when empty)	密碼（留空則不變）
 	Searching…	正在搜尋…
+	Download all	全部下載
+	Downloading {done} of {total}	正在下載 {done}/{total}

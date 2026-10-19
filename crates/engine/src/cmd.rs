@@ -156,6 +156,10 @@ pub fn registry() -> Registry {
         // Send / Receive
         CommandSpec::new("mail.sync", "Send / Receive all folders", "Send / Receive", |s, _| Ok(json!({"accounts": s.sync_all()}))).key("F9").when(can_connect),
         CommandSpec::new("folder.sync", "Update folder", "Send / Receive", sync_folder).key("Shift+F9").when(can_connect),
+        CommandSpec::new("account.downloadAll", "Download all", "Send / Receive", |s, v| {
+            s.download_all(p::str(v, "account"), p::str(v, "folder"))
+        })
+        .params(r#"{"account"?: string, "folder"?: string (one folder; else every folder of the account, or of every account): every message not yet on this computer}"#),
         CommandSpec::new("edit.undo", "Undo", "Quick access", |s, _| s.undo_last())
             .key("Mod+Z")
             .when(|s| if s.undo.is_empty() { Some("nothing to undo") } else { None }),

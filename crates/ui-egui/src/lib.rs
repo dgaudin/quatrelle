@@ -2107,6 +2107,11 @@ impl MailApp {
                         if widgets::big_button(ui, Icon::Sync, "Send / Receive all folders", &t, enabled("mail.sync")).on_hover_text("F9").clicked() {
                             acts.push(Action::Run("mail.sync", json!({})));
                         }
+                        // Outlook's Download All: every message on this computer, to read and
+                        // search it away from the server.
+                        if widgets::big_button(ui, Icon::Storage, "Download all", &t, enabled("account.downloadAll")).clicked() {
+                            acts.push(Action::Run("account.downloadAll", json!({})));
+                        }
                         if widgets::big_button(ui, Icon::Folder, "Update folder", &t, enabled("folder.sync")).on_hover_text("Shift+F9").clicked() {
                             acts.push(Action::Run("folder.sync", json!({})));
                         }
@@ -2293,6 +2298,10 @@ impl MailApp {
             // than showing a short list with no word about it.
             if s.search_pending {
                 ui.label(RichText::new(tl!("Searching…")).color(t.accent).small());
+            }
+            // Download all, as Outlook's status bar shows it while mail comes down.
+            if let Some((done, total, _)) = s.download_progress() {
+                ui.label(RichText::new(tf!("Downloading {done} of {total}", done = done, total = total)).color(t.accent).small());
             }
             if !s.outbox.is_empty() {
                 ui.label(RichText::new(tf!("Outbox: {n}", n = s.outbox.len())).color(t.warn).small());

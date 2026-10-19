@@ -941,3 +941,5 @@ month	May	Май
 	Its password	Его пароль
 	Password (unchanged when empty)	Пароль (без изменений, если пусто)
 	Searching…	Поиск…
+	Download all	Скачать всё
+	Downloading {done} of {total}	Скачано {done} из {total}

@@ -94,8 +94,8 @@ local-first, media-aware v1); the fuller request is
    and password of its own.
 20. **Next:** what's left in [docs/gaps.md](docs/gaps.md): a relay for IMAP accounts in the
    browser, bidirectional editing, Wayland drag-out, Kerberos-only Exchange, what the `.pst`
-   libraries can't do yet; then whole mailboxes kept offline, the search index on disk,
-   Exchange's own rules and every contact field with its photo.
+   libraries can't do yet; then the search index on disk, Exchange's own rules and every contact
+   field with its photo.
 
 ## Progress log
 
@@ -260,3 +260,9 @@ local-first, media-aware v1); the fuller request is
   "Searching…" in the status bar, and carrying the same query on keeps the open message and the
   selection. Tested slice by slice: the first answer says more is coming, and the match is found
   once the index is done.
+- **2026-10-20** — **Whole mailboxes kept offline:** Send / Receive › Download all brings every
+  message of an account (or of one folder) that isn't on this computer yet, as Outlook's Download
+  All: the engine lists the sources missing (`Store::has_body`) and keeps 32 asked for at a time,
+  the worker fetches them over whichever transport the account uses, and each one is indexed for
+  search as it arrives. The status bar says how far it has got, messages already kept are passed
+  over, and it stops and says so. Tested: a batch at a time, each answer asks for the next.

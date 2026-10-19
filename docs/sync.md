@@ -42,6 +42,16 @@ Message sources live next to it as `<validity>/<uid>.eml`. A message is identifi
 
 `PEEK` is used everywhere so syncing never marks mail as read.
 
+## Download all (`account.downloadAll`)
+
+Outlook's Download All: the engine lists the messages of an account (or one folder) that have no
+source on this computer (`Store::has_body`), and asks the worker for them with `Job::FetchBody`,
+32 at a time, sending one more as each answer comes back. That is the fetch already used to open a
+message (`crates/net/src/worker.rs`), so every transport serves it: IMAP `BODY.PEEK[]`, JMAP and
+Graph blobs, EWS `GetItem` with the MIME content, POP's copy. A source that arrives is indexed for
+search as it is read (`Session::index_body`). `Session::download_progress` feeds the status bar,
+messages already kept are never asked for again, and it stops by itself once the last one is here.
+
 ## The worker loop
 
 - On start: connect (TLS, or STARTTLS with a fresh capability list), authenticate (`AUTHENTICATE PLAIN`
