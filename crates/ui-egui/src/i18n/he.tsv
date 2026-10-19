@@ -868,3 +868,7 @@ month	May	מאי
 	Add it to new messages	להוסיף להודעות חדשות
 	Add it to replies and forwards	להוסיף לתשובות ולהעברות
 	Add a picture to the signature, such as a logo, from a file	הוספת תמונה לחתימה, כמו סמל, מקובץ
+	Formatted	מעוצב
+	HTML code	קוד HTML
+	Paste the signature's HTML: it's sent as written (scripts and forms taken out), its layout kept.	הדביקו את קוד ה-HTML של החתימה: הוא נשלח כפי שנכתב (ללא סקריפטים וטפסים), והפריסה נשמרת.
+	Preview (pictures on the web aren't loaded here)	תצוגה מקדימה (תמונות מהרשת לא נטענות כאן)

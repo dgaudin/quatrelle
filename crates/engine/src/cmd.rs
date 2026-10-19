@@ -771,7 +771,7 @@ pub fn registry() -> Registry {
         .params(r#"{"account": string} (a Microsoft account over IMAP starts again through Microsoft Graph, for a mailbox Microsoft won't open over IMAP)"#),
         CommandSpec::new("account.setPassword", "Sign in again", "File › Accounts", set_password).params(r#"{"account": string, "password": string}"#),
         CommandSpec::new("account.setSignature", "Signature", "File › Options › Mail", set_signature)
-            .params(r#"{"account": string, "signature": string, "html"?: string (its look: bold, colours, links; the text then comes from it), "newMessages"?: bool (added to new messages; default: as it was), "replies"?: bool (added to replies and forwards)}"#),
+            .params(r#"{"account": string, "signature": string, "html"?: string (its look: bold, colours, links; the text then comes from it), "newMessages"?: bool (added to new messages; default: as it was), "replies"?: bool (added to replies and forwards), "rawHtml"?: string (the signature written in HTML, sent as it is, cleaned)}"#),
         CommandSpec::new("account.list", "Accounts", "File › Accounts", list_accounts),
         CommandSpec::new("account.update", "Account settings", "File › Info › Account settings", update_account).params(
             r#"{"account": string, "name"?: string, "username"?: string, "imapHost"?: string, "imapPort"?: number, "imapSecurity"?: …, "smtpHost"?: …, "jmap"?: string|null, "popHost"?: …, "popDelete"?: bool, "popKeepDays"?: number, "popDeleteWithTrash"?: bool}"#,
@@ -1454,6 +1454,7 @@ fn add_account(s: &mut Session, v: &Value) -> CmdResult {
         smtp: if plain { ServerConfig::default() } else { server(v, "smtp", &guess.smtp)? },
         signature: p::str(v, "signature").unwrap_or_default().to_string(),
         signature_html: String::new(),
+        signature_raw_html: String::new(),
         signature_pictures: Vec::new(),
         signature_not_new: false,
         signature_not_replies: false,
@@ -1563,6 +1564,20 @@ fn set_signature(s: &mut Session, v: &Value) -> CmdResult {
     let id = p::req_str(v, "account")?;
     let mut config = s.account(id).map(|a| a.config.clone()).ok_or_else(|| CmdError::Params(format!("no account `{id}`")))?;
     config.signature = p::req_str(v, "signature")?.chars().take(10_000).collect();
+    // Written in HTML: kept cleaned, sent as it is; its text (and look, pictures on the web
+    // aside) is what a message shows while it's written. Otherwise there's none.
+    config.signature_raw_html =
+        p::str(v, "rawHtml").map(|h| mailcraft_mime::layout::clean_html(&h.chars().take(200_000).collect::<String>())).unwrap_or_default();
+    if !config.signature_raw_html.trim().is_empty() {
+        let (text, styles) = mailcraft_mime::signature_html(&config.signature_raw_html);
+        if text.trim().is_empty() {
+            return Err(CmdError::Params("the signature's HTML has no text".into()));
+        }
+        config.signature = text.chars().take(10_000).collect();
+        config.signature_html = if styles.is_plain() { String::new() } else { mailcraft_mime::rich::to_html(&text, &styles) };
+        config.signature_pictures.clear();
+        return s.update_account(config, None);
+    }
     // When it's added, as Outlook's New messages and Replies/forwards.
     if let Some(on) = p::bool(v, "newMessages") {
         config.signature_not_new = !on;

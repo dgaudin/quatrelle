@@ -869,3 +869,7 @@ month	May	5月
 	Add it to new messages	新しいメッセージに追加する
 	Add it to replies and forwards	返信と転送に追加する
 	Add a picture to the signature, such as a logo, from a file	ロゴなどの画像をファイルから署名に追加します
+	Formatted	書式付き
+	HTML code	HTML コード
+	Paste the signature's HTML: it's sent as written (scripts and forms taken out), its layout kept.	署名の HTML を貼り付けてください。書かれたとおりに送信され (スクリプトとフォームは除去)、レイアウトは保たれます。
+	Preview (pictures on the web aren't loaded here)	プレビュー (Web 上の画像はここでは読み込まれません)

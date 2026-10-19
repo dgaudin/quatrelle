@@ -720,6 +720,24 @@ fn html_bar(s: &Session, t: &Tokens, ui: &mut Ui, p: &mime::Parsed, acts: &mut V
     ui.add_space(6.0);
 }
 
+/// HTML written by hand (a signature) as a message shows it: its layout, text and links, pictures
+/// on the web only as their place (nothing is loaded). The text above is its plain twin.
+pub fn html_preview(s: &Session, st: &mut UiState, ui: &mut Ui, html: &str) {
+    let raw = format!("Content-Type: text/html; charset=utf-8\r\n\r\n{html}");
+    let Some(p) = mime::parse(raw.as_bytes()) else { return };
+    let t = st.tokens;
+    let key = MessageKey::default();
+    let mut shown: Vec<String> = Vec::new();
+    let mut acts: Vec<Action> = Vec::new();
+    let width = ui.available_width();
+    let mut body = Body { s, key: &key, p: &p, allowed: false, shown: &mut shown, acts: &mut acts };
+    if p.layout.is_empty() {
+        body.lines(st, ui, &p.rich, width, theme::surface_rgb(&t), Align::Min);
+    } else {
+        body.blocks(st, ui, &p.layout, width, theme::surface_rgb(&t), mime::layout::Align::Left, 0);
+    }
+}
+
 /// An HTML message, formatted: emphasis, code, links (opened in the browser on click) and
 /// pictures: those inside the message always, those on the web only once allowed. Mail laid out
 /// with tables keeps its columns ([`mime::layout`]).

@@ -872,3 +872,7 @@ month	May	Май
 	Add it to new messages	Добавлять в новые сообщения
 	Add it to replies and forwards	Добавлять в ответы и пересылаемые
 	Add a picture to the signature, such as a logo, from a file	Добавить в подпись изображение из файла, например логотип
+	Formatted	С форматированием
+	HTML code	HTML-код
+	Paste the signature's HTML: it's sent as written (scripts and forms taken out), its layout kept.	Вставьте HTML-код подписи: он отправляется как есть (без скриптов и форм), с сохранением макета.
+	Preview (pictures on the web aren't loaded here)	Предпросмотр (изображения из сети здесь не загружаются)

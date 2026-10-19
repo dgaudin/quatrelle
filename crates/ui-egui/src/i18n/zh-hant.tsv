@@ -872,3 +872,7 @@ month	May	5月
 	Add it to new messages	加入新郵件
 	Add it to replies and forwards	加入回覆和轉寄
 	Add a picture to the signature, such as a logo, from a file	從檔案將圖片（如標誌）加入簽名
+	Formatted	格式化
+	HTML code	HTML 程式碼
+	Paste the signature's HTML: it's sent as written (scripts and forms taken out), its layout kept.	貼上簽名的 HTML：依原樣傳送（移除指令碼和表單），保留版面。
+	Preview (pictures on the web aren't loaded here)	預覽（此處不載入網路圖片）

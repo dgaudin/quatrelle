@@ -868,3 +868,7 @@ month	May	مايو
 	Add it to new messages	إضافته إلى الرسائل الجديدة
 	Add it to replies and forwards	إضافته إلى الردود وإعادة التوجيه
 	Add a picture to the signature, such as a logo, from a file	أضف صورة إلى التوقيع، مثل شعار، من ملف
+	Formatted	منسّق
+	HTML code	رمز HTML
+	Paste the signature's HTML: it's sent as written (scripts and forms taken out), its layout kept.	الصق رمز HTML للتوقيع: يُرسل كما كُتب (بعد إزالة البرامج النصية والنماذج)، مع الحفاظ على تخطيطه.
+	Preview (pictures on the web aren't loaded here)	معاينة (لا تُحمَّل الصور من الويب هنا)

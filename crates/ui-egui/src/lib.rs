@@ -853,6 +853,31 @@ impl MailApp {
                 self.ui.dialog = Some(d);
             } else {
                 let keep = dialogs::show(&ctx, &mut d, &self.session, &t, &mut acts);
+                // A signature written in HTML: how it looks, under the dialog.
+                if let Dialog::Signature(f) = &d
+                    && f.code
+                    && !f.html_code.trim().is_empty()
+                {
+                    let html = mailcraft_engine::mime::layout::clean_html(&f.html_code);
+                    let screen = ctx.content_rect();
+                    egui::Area::new(egui::Id::new("signature-preview"))
+                        .order(egui::Order::Tooltip)
+                        .pivot(egui::Align2::CENTER_BOTTOM)
+                        .fixed_pos(egui::pos2(screen.center().x, screen.max.y - 16.0))
+                        .show(&ctx, |ui| {
+                            egui::Frame::new()
+                                .fill(t.surface)
+                                .stroke(egui::Stroke::new(1.0, t.border))
+                                .corner_radius(8)
+                                .inner_margin(egui::Margin::same(12))
+                                .show(ui, |ui| {
+                                    ui.set_width(560.0);
+                                    ui.label(RichText::new(tl!("Preview (pictures on the web aren't loaded here)")).color(t.dim).small());
+                                    ui.add_space(6.0);
+                                    reading::html_preview(&self.session, &mut self.ui, ui, &html);
+                                });
+                        });
+                }
                 if keep && self.ui.dialog.is_none() {
                     self.ui.dialog = Some(d);
                 }
