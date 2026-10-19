@@ -768,7 +768,7 @@ fn about(t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>) {
     }
     ui.add_space(8.0);
     if ui.link(tl!("Source code and issues")).clicked() {
-        acts.push(Action::OpenUrl("https://github.com/ZIDAN44/mailcraft".into()));
+        acts.push(Action::OpenUrl("https://github.com/dgaudin/mailcraft".into()));
     }
     // Fonts built in from craft-fonts travel with their licences.
     if !crate::craft_fonts::CRAFT_FONTS.is_empty() {

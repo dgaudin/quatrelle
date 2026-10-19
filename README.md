@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/ZIDAN44/mailcraft/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/ZIDAN44/mailcraft/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/dgaudin/mailcraft/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/dgaudin/mailcraft/actions/workflows/ci.yml/badge.svg"></a>
   <img alt="Written in Rust" src="https://img.shields.io/badge/written%20in-Rust-0e7c86?style=flat-square&logo=rust&logoColor=white">
   <img alt="Runs on Windows, macOS and Linux" src="https://img.shields.io/badge/runs%20on-Windows%20%C2%B7%20macOS%20%C2%B7%20Linux-1f9aa6?style=flat-square">
   <img alt="License: MIT OR Apache-2.0" src="https://img.shields.io/badge/license-MIT%20%2F%20Apache--2.0-0e7c86?style=flat-square">
@@ -80,7 +80,7 @@ The full list of what's missing, ranked, is in [docs/gaps.md](docs/gaps.md).
 
 ## Quick start
 
-Installers come from the [Releases](https://github.com/ZIDAN44/mailcraft/releases) page once a
+Installers come from the [Releases](https://github.com/dgaudin/mailcraft/releases) page once a
 release is cut: `.msi` and a portable zip for Windows (x64, x86, ARM64), a `.dmg` for macOS
 (universal), AppImage, `.deb`, `.rpm`, Flatpak and `.tar.gz` for Linux (x86_64, aarch64, riscv64),
 and a FreeBSD tarball. To run from source:

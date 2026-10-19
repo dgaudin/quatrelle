@@ -27,8 +27,8 @@
 
     <Icon Id="MailcraftIcon.ico" SourceFile="$(var.IconPath)" />
     <Property Id="ARPPRODUCTICON" Value="MailcraftIcon.ico" />
-    <Property Id="ARPURLINFOABOUT" Value="https://github.com/ZIDAN44/mailcraft" />
-    <Property Id="ARPURLUPDATEINFO" Value="https://github.com/ZIDAN44/mailcraft/releases" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/dgaudin/mailcraft" />
+    <Property Id="ARPURLUPDATEINFO" Value="https://github.com/dgaudin/mailcraft/releases" />
     <Property Id="ARPHELPLINK" Value="https://discord.gg/artcraft" />
 
     <StandardDirectory Id="ProgramFiles6432Folder">

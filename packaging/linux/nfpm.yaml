@@ -14,7 +14,7 @@ section: mail
 priority: optional
 maintainer: ${MAILCRAFT_MAINTAINER}
 vendor: Learning Machines LLC
-homepage: https://github.com/ZIDAN44/mailcraft
+homepage: https://github.com/dgaudin/mailcraft
 license: MIT OR Apache-2.0
 description: |-
   Open-source, local-first email client with the familiar three-pane mail
