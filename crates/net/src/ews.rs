@@ -386,22 +386,40 @@ impl Client {
         if let Some(a) = self.addresses.borrow().get(&who) {
             return a.clone();
         }
-        let found = self
-            .call_one(&format!(
+        // `SMTP:` asks for that exact address among everyone's (their aliases included); a plain
+        // one also matches names starting so, and several answers are then told apart by it.
+        let mut found = None;
+        for entry in [format!("SMTP:{who}"), who.clone()] {
+            let answer = self.call(&format!(
                 "<m:ResolveNames ReturnFullContactData=\"false\" SearchScope=\"ActiveDirectory\"><m:UnresolvedEntry>{}</m:UnresolvedEntry></m:ResolveNames>",
-                esc(&who)
-            ))
-            .ok()
-            .and_then(|m| {
-                let mut all = Vec::new();
-                m.all("Resolution", &mut all);
-                // Only one person by that address: theirs.
-                match all.as_slice() {
-                    [one] => one.find("Mailbox").and_then(|b| b.text_of("EmailAddress")).map(|e| e.trim().to_ascii_lowercase()),
-                    _ => None,
+                esc(&entry)
+            ));
+            let doc = match answer {
+                Ok(doc) => doc,
+                Err(e) => {
+                    log::info!("the directory on {entry}: {e}");
+                    continue;
                 }
-            })
-            .filter(|e| e.contains('@'));
+            };
+            let mut all = Vec::new();
+            doc.all("Resolution", &mut all);
+            let people: Vec<(String, String)> = all
+                .iter()
+                .filter_map(|r| {
+                    let m = r.find("Mailbox")?;
+                    Some((m.text_of("EmailAddress")?.trim().to_ascii_lowercase(), m.text_of("MailboxType").unwrap_or("").to_string()))
+                })
+                .filter(|(e, _)| e.contains('@'))
+                .collect();
+            log::info!("the directory on {entry}: {people:?}");
+            found = match people.as_slice() {
+                [(one, _)] => Some(one.clone()),
+                many => many.iter().find(|(e, _)| *e == who).map(|(e, _)| e.clone()),
+            };
+            if found.is_some() {
+                break;
+            }
+        }
         let address = found.unwrap_or_else(|| who.clone());
         if address != who {
             log::info!("{who} is {address} in the directory");
