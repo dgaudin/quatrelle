@@ -337,14 +337,21 @@ const MAX_PUBLIC_PIM: usize = 20;
 pub(crate) const CALENDAR_BACK: i64 = 183 * 86_400;
 
 /// A calendar's items that matter from `since` on: those ending then or later, and every
-/// recurring series (its first meeting may be long before) — not the years before.
-fn calendar_restriction(since: i64) -> String {
-    format!(
-        "<m:Restriction><t:Or><t:IsGreaterThanOrEqualTo><t:FieldURI FieldURI=\"calendar:End\"/>\
-         <t:FieldURIOrConstant><t:Constant Value=\"{}\"/></t:FieldURIOrConstant></t:IsGreaterThanOrEqualTo>\
-         <t:IsEqualTo><t:FieldURI FieldURI=\"calendar:CalendarItemType\"/>\
-         <t:FieldURIOrConstant><t:Constant Value=\"RecurringMaster\"/></t:FieldURIOrConstant></t:IsEqualTo></t:Or></m:Restriction>",
+/// recurring series (its first meeting may be long before; [MS-OXOCAL] PidLidRecurring, which
+/// Exchange lets a search ask about, where it refuses CalendarItemType) — not the years before.
+/// `strict`: the ones ending then or later alone, for a server that refuses the other.
+fn calendar_restriction(since: i64, strict: bool) -> String {
+    let ends = format!(
+        "<t:IsGreaterThanOrEqualTo><t:FieldURI FieldURI=\"calendar:End\"/>\
+         <t:FieldURIOrConstant><t:Constant Value=\"{}\"/></t:FieldURIOrConstant></t:IsGreaterThanOrEqualTo>",
         utc(since)
+    );
+    if strict {
+        return format!("<m:Restriction>{ends}</m:Restriction>");
+    }
+    format!(
+        "<m:Restriction><t:Or>{ends}<t:IsEqualTo><t:ExtendedFieldURI DistinguishedPropertySetId=\"Appointment\" PropertyId=\"33315\" PropertyType=\"Boolean\"/>\
+         <t:FieldURIOrConstant><t:Constant Value=\"true\"/></t:FieldURIOrConstant></t:IsEqualTo></t:Or></m:Restriction>"
     )
 }
 
@@ -356,9 +363,26 @@ fn items(c: &Client, folder: &str, since: Option<i64>) -> Result<Vec<El>> {
 
 /// Every item of a folder (given as its EWS folder id element), with all its properties.
 fn items_in(c: &Client, parent: &str, extra: &str, since: Option<i64>) -> Result<Vec<El>> {
+    match (since, items_in_from(c, parent, extra, since.map(|t| calendar_restriction(t, false)))) {
+        // A server that won't search so: what ends from then on, then everything.
+        (Some(t), Err(NetError::No(e) | NetError::Protocol(e))) => {
+            log::info!("calendar search refused ({e}): asking more simply");
+            match items_in_from(c, parent, extra, Some(calendar_restriction(t, true))) {
+                Err(NetError::No(e) | NetError::Protocol(e)) => {
+                    log::info!("calendar search refused again ({e}): reading it all");
+                    items_in_from(c, parent, extra, None)
+                }
+                r => r,
+            }
+        }
+        (_, r) => r,
+    }
+}
+
+fn items_in_from(c: &Client, parent: &str, extra: &str, restriction: Option<String>) -> Result<Vec<El>> {
     let folder = parent;
     let began = std::time::Instant::now();
-    let restriction = since.map(calendar_restriction).unwrap_or_default();
+    let restriction = restriction.unwrap_or_default();
     let mut ids: Vec<String> = Vec::new();
     let mut offset = 0;
     loop {

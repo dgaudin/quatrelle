@@ -864,3 +864,8 @@ month	May	Май
 	Maybe	Возможно
 	Your own choices, separated by semicolons	Свои варианты через точку с запятой
 	No voting buttons	Без кнопок голосования
+	Message {i} of {n} in this conversation	Сообщение {i} из {n} в этой беседе
+	Hide the conversation's messages	Скрыть сообщения беседы
+	Show the conversation's messages	Показать сообщения беседы
+	Next in the conversation	Следующее в беседе
+	Previous in the conversation	Предыдущее в беседе
