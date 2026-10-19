@@ -193,12 +193,17 @@ ce fork n'a été réécrit ; 23 fichiers ont demandé une résolution.
   d'une autre boîte des deux façons (`mailbox` de l'origine, préfixe d'adresse de ce fork), et
   `move_selection` groupe par boîte — un message supprimé dans une boîte partagée Exchange va bien
   dans *ses* Éléments supprimés. Un test le vérifie désormais sur les deux formes de nommage.
-- **Dialogues et boîtes partagées** : les deux entrées coexistent (celle de ce fork « Ouvrir une
-  autre boîte aux lettres… », plus riche : Graph et calendrier ; et celle de l'origine « Ajouter une
-  boîte partagée… »). À unifier si souhaité.
+- **Dialogues et boîtes partagées** : unifiés sur l'entrée de ce fork (commit `5343945`) —
+  « Ouvrir une autre boîte aux lettres… », plus riche (Graph et calendrier), garde ses commandes
+  `account.openMailbox`/`account.closeMailbox` ; le dialogue et les commandes de l'origine
+  (`AddSharedMailbox`, `account.addSharedMailbox`/`removeSharedMailbox`) sont retirés. Le menu d'une
+  boîte partagée ferme désormais via `account.closeMailbox`, et `shared_mailboxes` se compare sans
+  tenir compte de la casse (une entrée laissée par l'ancienne voie restait sinon impossible à fermer).
 - **Doublure de test** (`fake_ews.rs`) : celle de l'origine (boîtes partagées, ancrage
   `X-AnchorMailbox`) plus les ajouts de ce fork (boutons de vote, dossiers masqués, `slow_sync`,
   répertoire, raccourcis de navigation), `ResolveNames` réuni.
 
 Preuves de la fusion : `cargo xtask ci` vert (fmt, `clippy -D warnings`, 375 tests, layers, assets,
-wasm) et un build `--workspace` complet. La version du manifeste suit l'origine (`0.19.0`).
+wasm) et un build `--workspace` complet. Après l'unification des dialogues, `cargo xtask ci` reste
+vert (374 tests — un test de l'origine retiré avec ses commandes). La version du manifeste suit
+l'origine (`0.19.0`).
