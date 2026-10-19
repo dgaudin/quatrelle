@@ -31,13 +31,11 @@ pub struct Backstage {
     asked: HashSet<String>,
     /// Bytes cached per account, measured once per visit.
     cached: HashMap<String, u64>,
-    /// The account Export writes (the one being looked at until another is picked).
-    export: Option<String>,
 }
 
 impl Backstage {
     pub fn new(page: Page) -> Backstage {
-        Backstage { page, account: None, asked: HashSet::new(), cached: HashMap::new(), export: None }
+        Backstage { page, account: None, asked: HashSet::new(), cached: HashMap::new() }
     }
 }
 

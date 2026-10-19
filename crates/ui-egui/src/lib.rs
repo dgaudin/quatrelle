@@ -889,7 +889,7 @@ impl MailApp {
                 {
                     let html = mailcraft_engine::mime::layout::clean_html(&f.html_code);
                     let screen = ctx.content_rect();
-                    egui::Area::new(egui::Id::new("signature-preview"))
+                    egui::Area::new(egui::Id::unique("signature-preview"))
                         .order(egui::Order::Tooltip)
                         .pivot(egui::Align2::CENTER_BOTTOM)
                         .fixed_pos(egui::pos2(screen.center().x, screen.max.y - 16.0))

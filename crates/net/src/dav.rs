@@ -97,16 +97,14 @@ pub fn multistatus(xml: &str) -> Vec<Item> {
                     end_tag(&name, &stack, &mut cur, &mut pending, &mut status, &mut privileges, &text, &mut out);
                 }
             }
-            X::Text(t) => {
-                if text.len() < MAX_BODY {
+            X::Text(t)
+                if text.len() < MAX_BODY => {
                     text.push_str(&t);
                 }
-            }
-            X::CData(t) => {
-                if text.len() < MAX_BODY {
+            X::CData(t)
+                if text.len() < MAX_BODY => {
                     text.push_str(&t);
                 }
-            }
             X::GeneralRef(g) => {
                 let name = g.to_string();
                 let c = match name.as_str() {

@@ -253,7 +253,7 @@ fn clause_matches(term: &Term, doc: &Doc<'_>) -> bool {
     let m = doc.summary;
     match term {
         Term::HasAttachment(b) => m.has_attachments == *b,
-        Term::Unread(b) => !m.flags.seen == *b,
+        Term::Unread(b) => m.flags.seen != *b,
         Term::Flagged(b) => m.flags.flagged == *b,
         Term::Keyword(k) => m.flags.has(k) || m.flags.has(&crate::keyword_for(k)),
         Term::Important => m.importance > 0,
