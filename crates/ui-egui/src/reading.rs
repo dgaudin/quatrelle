@@ -147,7 +147,8 @@ fn message(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action
                 ui.add_space(10.0);
 
                 // Conversation.
-                if r.thread.len() > 1 && !in_window {
+                // Not with View › Conversations off.
+                if r.thread.len() > 1 && !in_window && s.prefs.conversations {
                     thread_list(s, &t, ui, &r.thread, &r.key, acts);
                     ui.add_space(10.0);
                 }
@@ -478,7 +479,41 @@ fn thread_list(s: &Session, t: &Tokens, ui: &mut Ui, thread: &[MessageKey], open
     egui::Frame::new().fill(t.chrome).stroke(egui::Stroke::new(1.0, t.border)).corner_radius(8).inner_margin(Margin::symmetric(10, 8)).show(
         ui,
         |ui| {
-            ui.label(RichText::new(tf!("{n} messages in this conversation", n = thread.len())).color(t.dim).small());
+            // Folded to one line (a long conversation's list would push the message down), with
+            // the previous and next message at hand; unfolded on a click, and kept so.
+            let id = egui::Id::new("conversation-open");
+            let mut unfolded = ui.ctx().data(|d| d.get_temp::<bool>(id)).unwrap_or(false);
+            let at = thread.iter().position(|k| k == open);
+            ui.horizontal(|ui| {
+                let label = match at {
+                    Some(i) => tf!("Message {i} of {n} in this conversation", i = i + 1, n = thread.len()),
+                    None => tf!("{n} messages in this conversation", n = thread.len()),
+                };
+                let r = ui
+                    .add(egui::Button::new(RichText::new(format!("{} {label}", if unfolded { "▾" } else { "▸" })).color(t.dim).small()).frame(false))
+                    .on_hover_text(tl!(if unfolded { "Hide the conversation's messages" } else { "Show the conversation's messages" }));
+                if r.clicked() {
+                    unfolded = !unfolded;
+                    ui.ctx().data_mut(|d| d.insert_temp(id, unfolded));
+                }
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    let next = at.and_then(|i| thread.get(i + 1));
+                    if ui.add_enabled(next.is_some(), egui::Button::new("›").small()).on_hover_text(tl!("Next in the conversation")).clicked()
+                        && let Some(k) = next
+                    {
+                        acts.push(Action::Open(k.clone()));
+                    }
+                    let prev = at.and_then(|i| i.checked_sub(1)).and_then(|i| thread.get(i));
+                    if ui.add_enabled(prev.is_some(), egui::Button::new("‹").small()).on_hover_text(tl!("Previous in the conversation")).clicked()
+                        && let Some(k) = prev
+                    {
+                        acts.push(Action::Open(k.clone()));
+                    }
+                });
+            });
+            if !unfolded {
+                return;
+            }
             for k in thread {
                 let Some(m) = s.summary(k) else { continue };
                 let current = k == open;

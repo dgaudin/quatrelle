@@ -864,3 +864,8 @@ month	May	5월
 	Maybe	아마도
 	Your own choices, separated by semicolons	직접 정한 선택 항목(세미콜론으로 구분)
 	No voting buttons	투표 단추 없음
+	Message {i} of {n} in this conversation	이 대화의 {n}개 중 {i}번째 메시지
+	Hide the conversation's messages	대화의 메시지 숨기기
+	Show the conversation's messages	대화의 메시지 표시
+	Next in the conversation	대화의 다음 메시지
+	Previous in the conversation	대화의 이전 메시지

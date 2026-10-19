@@ -861,3 +861,8 @@ month	May	5月
 	Maybe	たぶん
 	Your own choices, separated by semicolons	独自の選択肢 (セミコロン区切り)
 	No voting buttons	投票ボタンなし
+	Message {i} of {n} in this conversation	このスレッドの {n} 件中 {i} 件目
+	Hide the conversation's messages	スレッドのメッセージを隠す
+	Show the conversation's messages	スレッドのメッセージを表示
+	Next in the conversation	スレッドの次へ
+	Previous in the conversation	スレッドの前へ

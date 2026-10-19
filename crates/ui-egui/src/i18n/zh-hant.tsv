@@ -864,3 +864,8 @@ month	May	5月
 	Maybe	也許
 	Your own choices, separated by semicolons	自訂選項，以分號分隔
 	No voting buttons	無投票按鈕
+	Message {i} of {n} in this conversation	此交談中的第 {i} 封（共 {n} 封）
+	Hide the conversation's messages	隱藏交談中的郵件
+	Show the conversation's messages	顯示交談中的郵件
+	Next in the conversation	交談中的下一封
+	Previous in the conversation	交談中的上一封

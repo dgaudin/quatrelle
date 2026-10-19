@@ -861,3 +861,8 @@ month	May	5月
 	Maybe	也许
 	Your own choices, separated by semicolons	自定义选项，用分号分隔
 	No voting buttons	无投票按钮
+	Message {i} of {n} in this conversation	此对话中的第 {i} 封（共 {n} 封）
+	Hide the conversation's messages	隐藏对话中的邮件
+	Show the conversation's messages	显示对话中的邮件
+	Next in the conversation	对话中的下一封
+	Previous in the conversation	对话中的上一封

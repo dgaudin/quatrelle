@@ -408,6 +408,10 @@ impl Data {
                     page.concat()
                 )));
             }
+            // As Exchange: CalendarItemType can't be searched on.
+            "FindItem" if op.find("FieldURI").is_some_and(|f| f.attr("FieldURI") == Some("calendar:CalendarItemType")) => {
+                out.push(err("ErrorUnsupportedPathForQuery"));
+            }
             "FindItem" if self.pim_folder(op.child("ParentFolderIds").and_then(|p| p.kids.first())) => {
                 let folder = op.child("ParentFolderIds").and_then(|p| p.kids.first()).and_then(|f| self.folder_id(f)).unwrap_or_default();
                 if self.unrouted(&folder) {
