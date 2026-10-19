@@ -2365,3 +2365,26 @@ fn another_mailbox_opens_in_an_exchange_account_with_its_own_deleted_items() {
         let _ = std::fs::remove_dir_all(st.root());
     }
 }
+
+/// Colleagues' calendars that come with Outlook's calendar groups, and public folders', come
+/// unticked the first time (a dozen at once are slow to draw); this account's own, and one
+/// opened here by address, come ticked; a tick given later stays.
+#[test]
+fn calendars_from_groups_come_unticked() {
+    use mailcraft_model::pim::{CalendarInfo, DavSync, shared_calendar_id};
+    let mut s = Session::open(Some(temp("cal-groups-unticked")), mailcraft_model::dates::Clock::new(NOW, 0));
+    let id = s.run("account.add", &json!({"email": "zoe@example.org", "password": "pw"})).unwrap()["account"].as_str().unwrap().to_string();
+    let cal = |id: &str, group: &str| CalendarInfo { id: id.into(), name: id.into(), group: group.into(), ..Default::default() };
+    let ana = shared_calendar_id("ana@example.org");
+    let tom = shared_calendar_id("tom@example.org");
+    let sync = |cals: Vec<CalendarInfo>| DavSync { calendars: Some(cals), checked: NOW, ..Default::default() };
+    s.apply_dav(&id, &sync(vec![cal("calendar", ""), cal(&ana, "Équipe : Studio"), cal(&tom, ""), cal("public:F1", "")]));
+    assert!(s.calendar_shown(&id, "calendar"));
+    assert!(!s.calendar_shown(&id, &ana), "a group's calendar comes unticked");
+    assert!(s.calendar_shown(&id, &tom), "one opened by address comes ticked");
+    assert!(!s.calendar_shown(&id, "public:F1"));
+    // Ticked: it stays so at the next sync.
+    s.run("calendar.show", &json!({"account": id, "calendar": ana, "shown": true})).unwrap();
+    s.apply_dav(&id, &sync(vec![cal("calendar", ""), cal(&ana, "Équipe : Studio"), cal(&tom, ""), cal("public:F1", "")]));
+    assert!(s.calendar_shown(&id, &ana));
+}
