@@ -203,7 +203,7 @@ impl Session {
             if p.own_only == own_only && p.not_read == not_read {
                 continue;
             }
-            let more = (p.own_only && !own_only) || (!own_only && p.not_read.iter().any(|c| !not_read.contains(c)));
+            let more = (p.not_read.iter().any(|c| !not_read.contains(c)) || p.own_only) && !own_only;
             let p = self.pim_mut(&a);
             p.own_only = own_only;
             p.not_read = not_read;

@@ -302,10 +302,8 @@ fn document(xml: &str) -> Option<Preview> {
                     }
                 }
                 "p" if !empty => para = Some((Vec::new(), false, false)),
-                "p" => {
-                    if table.is_none() {
-                        blocks.push(Block::Paragraph { runs: Vec::new(), heading: false, list: false });
-                    }
+                "p" if table.is_none() => {
+                    blocks.push(Block::Paragraph { runs: Vec::new(), heading: false, list: false });
                 }
                 "pStyle" => {
                     let v = attr(attrs, "val").unwrap_or_default().to_ascii_lowercase();

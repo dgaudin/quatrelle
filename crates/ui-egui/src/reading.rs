@@ -484,7 +484,7 @@ fn thread_list(s: &Session, t: &Tokens, ui: &mut Ui, thread: &[MessageKey], open
         |ui| {
             // Folded to one line (a long conversation's list would push the message down), with
             // the previous and next message at hand; unfolded on a click, and kept so.
-            let id = egui::Id::new("conversation-open");
+            let id = egui::Id::unique("conversation-open");
             let mut unfolded = ui.ctx().data(|d| d.get_temp::<bool>(id)).unwrap_or(false);
             let at = thread.iter().position(|k| k == open);
             ui.horizontal(|ui| {

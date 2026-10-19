@@ -352,7 +352,7 @@ fn table_header(
     for &(c, x0, x1) in cols {
         let cell = Rect::from_x_y_ranges(r.min.x + x0..=r.min.x + x1, r.y_range());
         let arrange = column_arrange(c, sent_view);
-        let resp = ui.interact(cell, ui.id().with(("col", c as u8)), if arrange.is_some() { Sense::click() } else { Sense::hover() });
+        let resp = ui.interact(cell, ui.scope_id().with(("col", c as u8)), if arrange.is_some() { Sense::click() } else { Sense::hover() });
         if arrange.is_some() && resp.hovered() {
             p.rect_filled(cell, 0.0, t.hover);
         }
@@ -411,7 +411,7 @@ fn table_header(
         let edge = r.min.x + if sign > 0.0 { x1 } else { x0 };
         let grip = Rect::from_x_y_ranges(edge - 3.0..=edge + 3.0, r.y_range());
         let resp =
-            ui.interact(grip, ui.id().with(("col-edge", c as u8)), Sense::click_and_drag()).on_hover_cursor(egui::CursorIcon::ResizeHorizontal);
+            ui.interact(grip, ui.scope_id().with(("col-edge", c as u8)), Sense::click_and_drag()).on_hover_cursor(egui::CursorIcon::ResizeHorizontal);
         if resp.dragged() {
             let dx = resp.drag_delta().x * sign;
             *slot = Some((slot.unwrap_or(current) + dx).clamp(lo, hi));
@@ -792,7 +792,7 @@ fn row_input(
         crate::organize::context_items(ui, s, t, acts, flags.pinned());
     });
     // Reply actions need the message open.
-    if resp.secondary_clicked() && !s.reading.as_ref().is_some_and(|r| r.key == m.key) {
+    if resp.secondary_clicked() && s.reading.as_ref().is_none_or(|r| r.key != m.key) {
         acts.push(Action::Open(m.key.clone()));
     }
 }

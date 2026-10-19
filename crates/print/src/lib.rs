@@ -44,9 +44,7 @@ impl<'a> Face<'a> {
     fn parse(data: &'a [u8]) -> Option<Face<'a>> {
         let face = ttf_parser::Face::parse(data, 0).ok()?;
         // CFF outlines can't go in a FontFile2 stream.
-        if !face.tables().glyf.is_some() {
-            return None;
-        }
+        face.tables().glyf?;
         Some(Face::Embedded { data, face: Box::new(face), used: BTreeMap::new() })
     }
 

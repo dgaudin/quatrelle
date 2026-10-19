@@ -1,0 +1,93 @@
+warning: this `if` can be collapsed into the outer `match`
+   --> crates/net/src/dav.rs:101:17
+    |
+101 | /                 if text.len() < MAX_BODY {
+102 | |                     text.push_str(&t);
+103 | |                 }
+    | |_________________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#collapsible_match
+    = note: `#[warn(clippy::collapsible_match)]` on by default
+help: collapse nested if block
+    |
+100 ~             X::Text(t)
+101 ~                 if text.len() < MAX_BODY => {
+102 |                     text.push_str(&t);
+103 ~                 }
+    |
+
+warning: this `if` can be collapsed into the outer `match`
+   --> crates/net/src/dav.rs:106:17
+    |
+106 | /                 if text.len() < MAX_BODY {
+107 | |                     text.push_str(&t);
+108 | |                 }
+    | |_________________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#collapsible_match
+help: collapse nested if block
+    |
+105 ~             X::CData(t)
+106 ~                 if text.len() < MAX_BODY => {
+107 |                     text.push_str(&t);
+108 ~                 }
+    |
+
+warning: `mailcraft-net` (lib) generated 2 warnings (run `cargo clippy --fix --lib -p mailcraft-net -- ` to apply 2 suggestions)
+warning: use of deprecated associated function `egui::Id::new`: Use `Id::unique` (for a globally unique id) or `IdSalt::new` (for a locally unique salt) instead
+   --> crates/ui-egui/src/icons.rs:219:76
+    |
+219 |     let cache = ctx.data_mut(|d| d.get_temp_mut_or_default::<Rendered>(Id::new("mailcraft-icons")).clone());
+    |                                                                            ^^^
+    |
+    = note: `#[warn(deprecated)]` on by default
+
+warning: use of deprecated method `egui::Ui::id`: Renamed to `Ui::scope_id`
+   --> crates/ui-egui/src/list.rs:355:41
+    |
+355 |         let resp = ui.interact(cell, ui.id().with(("col", c as u8)), if arrange.is_some() { Sense::click() } else { Sense::hover() });
+    |                                         ^^
+
+warning: use of deprecated method `egui::Ui::id`: Renamed to `Ui::scope_id`
+   --> crates/ui-egui/src/list.rs:414:34
+    |
+414 | ...   ui.interact(grip, ui.id().with(("col-edge", c as u8)), Sense::click_and_drag()).on_hover_cursor(egui::CursorIcon::ResizeHoriz...
+    |                            ^^
+
+warning: use of deprecated associated function `egui::Id::new`: Use `Id::unique` (for a globally unique id) or `IdSalt::new` (for a locally unique salt) instead
+   --> crates/ui-egui/src/reading.rs:487:32
+    |
+487 |             let id = egui::Id::new("conversation-open");
+    |                                ^^^
+
+warning: use of deprecated associated function `egui::Id::new`: Use `Id::unique` (for a globally unique id) or `IdSalt::new` (for a locally unique salt) instead
+   --> crates/ui-egui/src/lib.rs:892:47
+    |
+892 |                     egui::Area::new(egui::Id::new("signature-preview"))
+    |                                               ^^^
+
+warning: field `export` is never read
+  --> crates/ui-egui/src/backstage.rs:35:5
+   |
+26 | pub struct Backstage {
+   |            --------- field in this struct
+...
+35 |     export: Option<String>,
+   |     ^^^^^^
+   |
+   = note: `Backstage` has derived impls for the traits `Debug` and `Clone`, but these are intentionally ignored during dead code analysis
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: this boolean expression can be simplified
+   --> crates/ui-egui/src/list.rs:795:36
+    |
+795 |     if resp.secondary_clicked() && !s.reading.as_ref().is_some_and(|r| r.key == m.key) {
+    |                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: try: `s.reading.as_ref().is_none_or(|r| r.key != m.key)`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#nonminimal_bool
+    = note: `#[warn(clippy::nonminimal_bool)]` on by default
+
+warning: `mailcraft-ui-egui` (lib) generated 7 warnings (run `cargo clippy --fix --lib -p mailcraft-ui-egui -- ` to apply 1 suggestion)
+warning: `mailcraft-ui-egui` (lib test) generated 7 warnings (7 duplicates)
+warning: `mailcraft-net` (lib test) generated 2 warnings (2 duplicates)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.22s
