@@ -810,6 +810,7 @@ impl Session {
 
     /// Jobs for the network layer, oldest first.
     pub fn take_jobs(&mut self) -> Vec<Job> {
+        self.update_calendar_reading();
         std::mem::take(&mut self.jobs)
     }
 

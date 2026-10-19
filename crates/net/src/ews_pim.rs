@@ -659,6 +659,14 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
     // Other people's calendars: those opened here by their address, and those Outlook keeps in
     // the groups of its Calendar pane (under the group's name). Their mailbox's calendar folder
     // is read where the permissions they gave allow, and changed where they let this account.
+    if pim.own_only {
+        // The calendar isn't shown: this account's own is enough (the others are read once it is).
+        out.calendars = Some(calendars);
+        out.partial = true;
+        read_contacts(c, &mut out)?;
+        read_notes(c, pim, &mut out);
+        return Ok(out);
+    }
     let mut others: Vec<(String, String, String)> = pim.shared.iter().map(|e| (e.clone(), e.clone(), String::new())).collect();
     match calendar_links(c) {
         Ok(links) => {
@@ -670,11 +678,25 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
         }
         Err(e) => log::info!("no calendar groups: {e}"),
     }
+    let ticked = others.iter().filter(|(e, _, _)| !pim.not_read.contains(&mailcraft_model::pim::shared_calendar_id(e))).count();
     if !others.is_empty() {
-        log::info!("reading {} other people's calendars", others.len());
+        log::info!("{} other people's calendars, {ticked} ticked and read", others.len());
     }
     for (n, (email, name, group)) in others.iter().enumerate() {
         let id = mailcraft_model::pim::shared_calendar_id(email);
+        // Unticked: listed as it was, not read.
+        if pim.not_read.contains(&id) {
+            let read_only = pim.calendars.iter().find(|c| c.id == id).is_none_or(|c| c.read_only);
+            calendars.push(CalendarInfo {
+                id,
+                name: name.clone(),
+                color: u8::try_from((n + 1) % 8).unwrap_or(0),
+                read_only,
+                ctag: String::new(),
+                group: group.clone(),
+            });
+            continue;
+        }
         let parent = calendar_folder(Some(&c.address_of(email)));
         let can_edit = may_edit(c, &parent);
         match items_in(c, &parent, "", Some(now - CALENDAR_BACK)) {
@@ -702,14 +724,8 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
         });
     }
     out.calendars = Some(calendars);
-    for it in items(c, "contacts", None)? {
-        if let Some(card) = card_of(&it) {
-            let etag = it.child("ItemId").and_then(|i| i.attr("ChangeKey")).unwrap_or("").to_string();
-            out.cards.push(StoredCard { book: CONTACTS.into(), href: format!("contact:{}", card.uid), etag, card, dirty: false });
-        }
-    }
-    let mut books = vec![BookInfo { id: CONTACTS.into(), name: "Contacts".into(), read_only: false, ctag: String::new() }];
-    out.synced_books.push(CONTACTS.into());
+    read_contacts(c, &mut out)?;
+    let mut books = out.books.take().unwrap_or_default();
     // The organisation's shared contacts and calendars kept as public folders (on-premises
     // Exchange): read-only, as Outlook shows them under Public Folders. A server without public
     // folders has none.
@@ -718,6 +734,20 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
             for (n, f) in list.into_iter().take(MAX_PUBLIC_PIM).enumerate() {
                 let (id, name, class) = (f.id, f.path, f.class);
                 let key = format!("public:{id}");
+                // An unticked public calendar: listed, not read.
+                if !class.starts_with("IPF.Contact") && pim.not_read.contains(&key) {
+                    if let Some(cals) = out.calendars.as_mut() {
+                        cals.push(CalendarInfo {
+                            id: key,
+                            name,
+                            color: u8::try_from((n + 3) % 8).unwrap_or(0),
+                            read_only: true,
+                            ctag: String::new(),
+                            group: String::new(),
+                        });
+                    }
+                    continue;
+                }
                 // A public calendar from six months back, as the others; contacts whole.
                 let since = class.starts_with("IPF.Appointment").then_some(now - CALENDAR_BACK);
                 let found = match public_items(c, &id, f.replica.as_deref(), f.total, since) {
@@ -765,6 +795,25 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
         Err(e) => log::info!("no public contacts or calendars: {e}"),
     }
     out.books = Some(books);
+    read_notes(c, pim, &mut out);
+    Ok(out)
+}
+
+/// This account's contacts, read again: its address book in `out`.
+fn read_contacts(c: &Client, out: &mut DavSync) -> Result<()> {
+    for it in items(c, "contacts", None)? {
+        if let Some(card) = card_of(&it) {
+            let etag = it.child("ItemId").and_then(|i| i.attr("ChangeKey")).unwrap_or("").to_string();
+            out.cards.push(StoredCard { book: CONTACTS.into(), href: format!("contact:{}", card.uid), etag, card, dirty: false });
+        }
+    }
+    out.books = Some(vec![BookInfo { id: CONTACTS.into(), name: "Contacts".into(), read_only: false, ctag: String::new() }]);
+    out.synced_books.push(CONTACTS.into());
+    Ok(())
+}
+
+/// Notes: what changed here goes up, then the folder is read again.
+fn read_notes(c: &Client, pim: &Pim, out: &mut DavSync) {
     // Notes (Outlook's sticky notes): what changed here goes up (made again, as contacts are),
     // then the folder is read again. A mailbox without one keeps notes on this computer.
     for n in pim.notes.iter().filter(|n| n.dirty) {
@@ -791,7 +840,6 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
         Ok(list) => out.notes = Some(list.iter().filter_map(note_of).collect()),
         Err(e) => log::info!("no Notes folder: {e}"),
     }
-    Ok(out)
 }
 
 #[cfg(test)]

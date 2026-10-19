@@ -2388,3 +2388,42 @@ fn calendars_from_groups_come_unticked() {
     s.apply_dav(&id, &sync(vec![cal("calendar", ""), cal(&ana, "Équipe : Studio"), cal(&tom, ""), cal("public:F1", "")]));
     assert!(s.calendar_shown(&id, &ana));
 }
+
+/// Away from the calendar, an Exchange account's sync reads its own calendar only; opening the
+/// calendar reads the calendars ticked at once, and one unticked isn't read.
+#[test]
+fn calendars_are_read_when_shown() {
+    use mailcraft_model::pim::{CalendarInfo, DavSync, shared_calendar_id};
+    let mut s = Session::open(Some(temp("cal-read-when-shown")), mailcraft_model::dates::Clock::new(NOW, 0));
+    let id = s
+        .run("account.add", &json!({"email": "riley@contoso.example", "ews": "mail.contoso.example", "username": "CONTOSO\\riley", "password": "pw"}))
+        .unwrap()["account"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let ana = shared_calendar_id("ana@contoso.example");
+    let cal = |id: &str, group: &str| CalendarInfo { id: id.into(), name: id.into(), group: group.into(), ..Default::default() };
+    s.apply_dav(&id, &DavSync { calendars: Some(vec![cal("calendar", ""), cal(&ana, "Équipe")]), checked: NOW, ..Default::default() });
+    s.take_jobs();
+    let pim = |s: &Session| s.pim.get(&id).cloned().unwrap_or_default();
+    assert!(pim(&s).own_only, "in Mail");
+    assert!(pim(&s).not_read.contains(&ana), "unticked");
+    // The calendar opens: the ticked ones are read now.
+    s.run("view.module", &json!({"name": "calendar"})).unwrap();
+    let jobs = s.take_jobs();
+    assert!(!pim(&s).own_only);
+    assert!(jobs.iter().any(|j| matches!(j, Job::SyncDav { account } if *account == id)), "{jobs:?}");
+    // Ticking Ana's reads it.
+    s.run("calendar.show", &json!({"account": id, "calendar": ana, "shown": true})).unwrap();
+    let jobs = s.take_jobs();
+    assert!(pim(&s).not_read.is_empty());
+    assert!(jobs.iter().any(|j| matches!(j, Job::SyncDav { .. })));
+    // Back to Mail: nothing more to read until the calendar opens again.
+    s.run("view.module", &json!({"name": "mail"})).unwrap();
+    let jobs = s.take_jobs();
+    assert!(pim(&s).own_only);
+    assert!(!jobs.iter().any(|j| matches!(j, Job::SyncDav { .. })));
+    // A sync that read this account's own calendar only keeps the others as they were.
+    s.apply_dav(&id, &DavSync { calendars: Some(vec![cal("calendar", "")]), partial: true, checked: NOW, ..Default::default() });
+    assert!(pim(&s).calendars.iter().any(|c| c.id == ana));
+}
