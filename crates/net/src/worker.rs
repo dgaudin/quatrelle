@@ -2052,7 +2052,6 @@ mod tests {
         push_job(&mut q, Job::GetVacation { account: "a".into() });
         assert_eq!(q.len(), 4, "only the folder read is merged");
     }
-    }
 
     #[test]
     fn memory_credentials() {

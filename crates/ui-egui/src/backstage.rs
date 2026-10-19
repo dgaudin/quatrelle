@@ -164,6 +164,36 @@ fn heading(ui: &mut Ui, t: &Tokens, text: &str) {
     ui.add_space(14.0);
 }
 
+/// A big square button with an icon, and its title, description and anything else beside it
+/// (the fork's look for the File page's entries, as Outlook's Backstage).
+fn tile(ui: &mut Ui, t: &Tokens, icon: Icon, label: &str, title: &str, about: &str, extra: impl FnOnce(&mut Ui)) -> egui::Response {
+    let mut out = None;
+    ui.horizontal_top(|ui| {
+        let (r, resp) = ui.allocate_exact_size(vec2(104.0, 92.0), Sense::click());
+        let fill = if resp.hovered() { t.hover } else { t.surface };
+        ui.painter().rect(r, 6.0, fill, egui::Stroke::new(1.0, t.border), egui::StrokeKind::Inside);
+        // The icon over its label, the two centred in the tile together (a label in two lines,
+        // as some languages need, moves the icon up), each line of the label centred.
+        let mut job = egui::text::LayoutJob::simple(tl!(label).to_string(), theme::regular(12.5), t.text, 100.0);
+        job.halign = egui::Align::Center;
+        let galley = ui.painter().layout_job(job);
+        let block = 28.0 + 8.0 + galley.size().y;
+        let top = r.center().y - block / 2.0;
+        icons::paint(ui.painter(), egui::Rect::from_center_size(egui::pos2(r.center().x, top + 14.0), vec2(28.0, 28.0)), icon, t.accent);
+        ui.painter().galley(egui::pos2(r.center().x, top + 36.0), galley, t.text);
+        ui.add_space(14.0);
+        ui.vertical(|ui| {
+            ui.label(RichText::new(tl!(title)).font(theme::bold(16.0)).color(t.text));
+            ui.label(RichText::new(tl!(about)).color(t.dim));
+            ui.add_space(4.0);
+            extra(ui);
+        });
+        out = Some(resp);
+    });
+    ui.add_space(18.0);
+    out.unwrap_or_else(|| ui.label(""))
+}
+
 /// A card on a File page: its title and a line about it, then its rows.
 fn card(ui: &mut Ui, t: &Tokens, title: &str, about: Option<&str>, body: impl FnOnce(&mut Ui)) {
     egui::Frame::new()
@@ -414,15 +444,16 @@ fn info(s: &Session, t: &Tokens, has_files: bool, ui: &mut Ui, b: &mut Backstage
 
 /// Open & Export: Outlook data files, and the rules as a file.
 fn open(s: &Session, t: &Tokens, ui: &mut Ui, b: &mut Backstage, acts: &mut Vec<Action>) {
+    let _ = b;
     heading(ui, t, "Open & Export");
     ui.set_max_width(760.0);
-    card(
+    let r = tile(
         ui,
         t,
-        tl!("Open a data file"),
-        Some(tl!(
-            "Bring in an Outlook data file (.pst) or a MailCraft one (.mailcraft). It opens as a mailbox of its own, with its folders, kept on this computer."
-        )),
+        Icon::Folder,
+        "Open data file",
+        "Open a data file",
+        "Bring in an Outlook data file (.pst) or a MailCraft one (.mailcraft). It opens as a mailbox of its own, with its folders, kept on this computer.",
         |ui| {
             let files: Vec<&str> = s.accounts.iter().filter(|a| a.is_data_file()).map(|a| a.config.email.as_str()).collect();
             if !files.is_empty() {
@@ -503,75 +534,6 @@ fn open(s: &Session, t: &Tokens, ui: &mut Ui, b: &mut Backstage, acts: &mut Vec<
             });
         },
     );
-}
-                }
-            });
-        },
-    );
-    // The account to export: picked in the list (one line, however many accounts there are),
-    // else the one being looked at.
-    let chosen = b
-        .export
-        .as_deref()
-        .and_then(|id| s.account(id))
-        .or_else(|| s.current_account())
-        .or_else(|| s.accounts.first())
-        .map(|a| (a.config.id.clone(), format!("{}   ·   {}", a.config.email, tl!(kind(a)))));
-    card(
-        ui,
-        t,
-        tl!("Export to Outlook data file"),
-        Some(tl!("Write an account's mail, with its folders, to an Outlook data file (.pst) that Outlook and other mail apps can open.")),
-        |ui| {
-            let Some((id, label)) = &chosen else { return };
-            setting_row(
-                ui,
-                t,
-                true,
-                name(t, tl!("Account")),
-                Some(note(t, tl!("Its calendar and contacts go beside it, as .ics and .vcf files."))),
-                |ui| {
-                    if ui.button(tl!("Export…")).clicked() {
-                        acts.push(Action::ExportDataFile(id.clone()));
-                    }
-                    egui::ComboBox::from_id_salt("export-account").width(300.0).selected_text(label).show_ui(ui, |ui| {
-                        for a in &s.accounts {
-                            if ui.selectable_label(&a.config.id == id, format!("{}   ·   {}", a.config.email, tl!(kind(a)))).clicked() {
-                                b.export = Some(a.config.id.clone());
-                            }
-                        }
-                    });
-                },
-            );
-        },
-    );
-    // Rules to a file and back, as Outlook's Import and Export Rules.
-    card(ui, t, tl!("Rules"), None, |ui| {
-        setting_row(
-            ui,
-            t,
-            true,
-            name(t, tl!("Export rules")),
-            Some(note(t, tl!("Save your rules in a file, to keep them or to use them on another computer."))),
-            |ui| {
-                if ui.add_enabled(!s.rules.is_empty(), egui::Button::new(tl!("Export…"))).clicked() {
-                    acts.push(Action::ExportRules);
-                }
-            },
-        );
-        setting_row(
-            ui,
-            t,
-            false,
-            name(t, tl!("Import rules")),
-            Some(note(t, tl!("Add the rules from a file saved by MailCraft. A rule for an account this computer doesn't have comes in turned off."))),
-            |ui| {
-                if ui.button(tl!("Import…")).clicked() {
-                    acts.push(Action::ImportRules);
-                }
-            },
-        );
-    });
 }
 
 fn options(s: &Session, st: &UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
