@@ -921,6 +921,14 @@ impl MailApp {
         for a in acts {
             self.act(a);
         }
+        // A big mailbox's search index goes on a slice at a time: keep going while there's more,
+        // one slice per frame, with the window drawing between them (as Outlook's search does).
+        if self.session.search_pending
+            && let Some((q, _)) = self.session.search.clone()
+        {
+            self.run("search.run", json!({"query": q, "index": SEARCH_INDEX_BUDGET}));
+            ctx.request_repaint();
+        }
         self.flush_jobs();
         if std::mem::take(&mut self.ui.focus_main) {
             ctx.send_viewport_cmd_to(egui::ViewportId::ROOT, egui::ViewportCommand::Focus);
@@ -1168,7 +1176,7 @@ impl MailApp {
             Action::Search(q) => {
                 self.ui.search_text = q.clone();
                 self.ui.tab = RibbonTab::Search;
-                self.run("search.run", json!({"query": q, "scope": "all"}));
+                self.run("search.run", json!({"query": q, "scope": "all", "index": SEARCH_INDEX_BUDGET}));
             }
             Action::FocusMain => self.ui.focus_main = true,
             Action::Backstage(p) => self.ui.backstage = Some(backstage::Backstage::new(p)),
@@ -1776,7 +1784,7 @@ impl MailApp {
                         Some(due) if enter || now >= due || self.ui.search_text.is_empty() => {
                             self.ui.search_due = None;
                             let q = self.ui.search_text.clone();
-                            acts.push(Action::Run("search.run", json!({"query": q})));
+                            acts.push(Action::Run("search.run", json!({"query": q, "index": SEARCH_INDEX_BUDGET})));
                         }
                         Some(due) => ui.ctx().request_repaint_after(std::time::Duration::from_secs_f64((due - now).max(0.01))),
                         None => {}
@@ -2281,6 +2289,11 @@ impl MailApp {
                     ui.label(RichText::new(tf!("Unread: {n}", n = unread)).color(t.dim).small());
                 }
             }
+            // A search's index is still being built: say so, as Outlook's search does, rather
+            // than showing a short list with no word about it.
+            if s.search_pending {
+                ui.label(RichText::new(tl!("Searching…")).color(t.accent).small());
+            }
             if !s.outbox.is_empty() {
                 ui.label(RichText::new(tf!("Outbox: {n}", n = s.outbox.len())).color(t.warn).small());
             }
@@ -2421,10 +2434,14 @@ impl MailApp {
     }
 }
 
-/// The toolbar of a message window. Replying and forwarding happen in the main window, so
-/// they close this one; so do Delete and Archive.
 /// How long the search box waits after the last key before searching, in seconds.
 const SEARCH_PAUSE: f64 = 0.3;
+
+/// Messages the search index adds per call: the window indexes a slice each frame and draws
+/// between them, so a big mailbox's first search never freezes it (500 messages is a few
+/// milliseconds of indexing; a 800,000-message mailbox then takes a few seconds, drawing all the
+/// while).
+const SEARCH_INDEX_BUDGET: usize = 500;
 
 /// An account that waits for you to do something: sign in (again, or with Microsoft rather than
 /// a password), or choose what to do about a mailbox Microsoft won't open over IMAP.
@@ -2473,6 +2490,8 @@ fn account_status(s: &Session, t: &Tokens, a: &mailcraft_engine::AccountState) -
     }
 }
 
+/// The toolbar of a message window. Replying and forwarding happen in the main window, so
+/// they close this one; so do Delete and Archive.
 fn window_toolbar(ui: &mut Ui, s: &Session, t: &Tokens, key: &MessageKey, acts: &mut Vec<Action>) {
     let close = || Action::Run("message.closeWindow", json!({"key": key.to_id()}));
     let flagged = s.summary(key).is_some_and(|m| m.flags.flagged);

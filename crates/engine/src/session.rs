@@ -605,6 +605,12 @@ struct SearchIndex {
     has_body: Vec<bool>,
     scope: SearchScope,
     view: View,
+    /// The folders this index covers and how far the scan has got: the build goes on a slice at a
+    /// time (see [`Session::index_step`]), so searching a big mailbox never freezes the window.
+    scan: Vec<(String, String)>,
+    folder: usize,
+    pos: usize,
+    done: bool,
 }
 
 /// File for the Replied/Forwarded flags still owed by replies and forwards in the Outbox.
@@ -628,6 +634,11 @@ pub struct Session {
     pub filter: ListFilter,
     /// The active search (query text and scope).
     pub search: Option<(String, SearchScope)>,
+    /// The search's index is still being built: the results so far are shown while it goes on, a
+    /// slice per call, so the window stays responsive.
+    pub search_pending: bool,
+    /// Messages the search index adds per call (`usize::MAX`: no limit).
+    search_budget: usize,
     /// The messages on screen, newest first.
     pub list: Vec<Summary>,
     /// Conversations over `list` (when [`Prefs::conversations`] is on).
@@ -725,6 +736,8 @@ impl Session {
             view: View::Empty,
             filter: ListFilter::All,
             search: None,
+            search_pending: false,
+            search_budget: usize::MAX,
             list: Vec::new(),
             threads: Vec::new(),
             selection: Vec::new(),
@@ -1308,6 +1321,7 @@ impl Session {
     pub fn open_view(&mut self, view: View) {
         self.view = view;
         self.search = None;
+        self.search_pending = false;
         self.index = None;
         self.selection.clear();
         self.focus = None;
@@ -2224,42 +2238,69 @@ impl Session {
 
     // ----- search -----
 
+    /// Make sure an index covers this scope, starting one when there's none for it. An index
+    /// already under way for the same scope (or a finished one) is kept as it is: the build goes
+    /// on a slice at a time through [`Session::index_step`].
     fn ensure_index(&mut self, scope: SearchScope) {
         if self.index.as_ref().is_some_and(|ix| ix.scope == scope && (scope == SearchScope::All || ix.view == self.view)) {
             return;
         }
-        let folders: Vec<(String, String)> = match scope {
+        let scan: Vec<(String, String)> = match scope {
             SearchScope::Current => self.view_folders(),
             SearchScope::All => {
                 self.accounts.iter().flat_map(|a| a.folders.iter().filter(|f| f.selectable).map(|f| (a.config.id.clone(), f.path.clone()))).collect()
             }
         };
-        let mut index = Index::new();
-        let mut keys = Vec::new();
-        let mut has_body = Vec::new();
-        for (a, f) in folders {
-            // A thousand at a time: a big folder isn't copied whole while it's read.
-            let n = self.folder_state(&a, &f).messages.len();
-            let mut at = 0;
-            while at < n {
-                let msgs: Vec<Summary> = self.folder_state(&a, &f).messages.get(at..(at + 1000).min(n)).map(<[Summary]>::to_vec).unwrap_or_default();
-                if msgs.is_empty() {
-                    break;
-                }
-                at += msgs.len();
-                for m in msgs {
-                    let doc = u32::try_from(keys.len()).unwrap_or(u32::MAX);
-                    index.add(doc, &summary_text(&m));
+        self.index = Some(SearchIndex {
+            index: Index::new(),
+            keys: Vec::new(),
+            has_body: Vec::new(),
+            scope,
+            view: self.view.clone(),
+            scan,
+            folder: 0,
+            pos: 0,
+            done: false,
+        });
+    }
+
+    /// Index at most `budget` more messages (`usize::MAX`: whatever is left), reading a folder in
+    /// slices so a big one isn't copied whole. Whether the scan is done: a big mailbox's first
+    /// search is spread over several calls, one slice each, and the window keeps drawing between
+    /// them.
+    fn index_step(&mut self, budget: usize) -> bool {
+        let Some(mut ix) = self.index.take() else { return true };
+        if !ix.done {
+            let mut added = 0usize;
+            'scan: while ix.folder < ix.scan.len() {
+                let (a, f) = ix.scan[ix.folder].clone();
+                let n = self.folder_state(&a, &f).messages.len();
+                while ix.pos < n {
+                    if added >= budget {
+                        break 'scan;
+                    }
+                    let Some(m) = self.folder_state(&a, &f).messages.get(ix.pos).cloned() else { break };
+                    let doc = u32::try_from(ix.keys.len()).unwrap_or(u32::MAX);
+                    ix.index.add(doc, &summary_text(&m));
                     let words = self.words_of(&m.key);
                     if let Some(words) = &words {
-                        index.add(doc, words);
+                        ix.index.add(doc, words);
                     }
-                    has_body.push(words.is_some());
-                    keys.push(m.key);
+                    ix.has_body.push(words.is_some());
+                    ix.keys.push(m.key);
+                    ix.pos += 1;
+                    added += 1;
                 }
+                ix.folder += 1;
+                ix.pos = 0;
+            }
+            if ix.folder >= ix.scan.len() {
+                ix.done = true;
             }
         }
-        self.index = Some(SearchIndex { index, keys, has_body, scope, view: self.view.clone() });
+        let done = ix.done;
+        self.index = Some(ix);
+        done
     }
 
     /// A downloaded message's words for search, read once (`None`: not downloaded).
@@ -2301,9 +2342,12 @@ impl Session {
             }
         }
         if query.is_empty() {
+            self.search_pending = false;
             return Vec::new();
         }
         self.ensure_index(scope);
+        let budget = self.search_budget;
+        self.search_pending = !self.index_step(budget);
         let Some(ix) = self.index.take() else { return Vec::new() };
         let mut out = Vec::new();
         // Each folder's messages by number, made once: looked up one by one in the list, a search
@@ -2330,12 +2374,33 @@ impl Session {
         out
     }
 
+    /// Search every folder or the folder open now.
     pub fn run_search(&mut self, query: &str, scope: SearchScope) -> usize {
+        self.search_now(query, scope, usize::MAX)
+    }
+
+    /// Search, adding at most `budget` messages to the index this call (`0`: no limit). A caller
+    /// that draws a frame between calls (the window) keeps the interface responsive on a big
+    /// mailbox; [`Session::search_pending`] says whether more is left to index.
+    pub fn run_search_budgeted(&mut self, query: &str, scope: SearchScope, budget: usize) -> usize {
+        self.search_now(query, scope, if budget == 0 { usize::MAX } else { budget })
+    }
+
+    fn search_now(&mut self, query: &str, scope: SearchScope, budget: usize) -> usize {
         let q = query.trim();
+        // Carrying the same search on (a slice more of the index) leaves the list's selection,
+        // focus and the open message as they are; a new query starts them over.
+        let same = self.search.as_ref().is_some_and(|(t, s)| t == q && *s == scope);
         self.search = if q.is_empty() { None } else { Some((q.to_string(), scope)) };
-        self.selection.clear();
-        self.focus = None;
-        self.reading = None;
+        self.search_budget = budget;
+        if q.is_empty() {
+            self.search_pending = false;
+        }
+        if !same {
+            self.selection.clear();
+            self.focus = None;
+            self.reading = None;
+        }
         self.refresh_list();
         self.list.len()
     }
