@@ -3,10 +3,10 @@ resolver = "3"
 members = ["crates/*", "apps/*", "xtask"]
 
 [workspace.package]
-version = "0.15.0"
+version = "0.17.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
-rust-version = "1.90"
+rust-version = "1.95"
 repository = "https://github.com/ZIDAN44/mailcraft"
 
 [workspace.dependencies]
@@ -37,8 +37,8 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "std"
 webpki-roots = "1"
 
 # ui
-egui = "0.36"
-eframe = { version = "0.36", default-features = false }
+egui = "0.37"
+eframe = { version = "0.37", default-features = false }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

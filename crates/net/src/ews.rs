@@ -80,11 +80,29 @@ impl El {
     pub fn text_of(&self, name: &str) -> Option<&str> {
         self.child(name).map(|c| c.text.as_str())
     }
+    /// The folders in an answer, whatever their kind: Exchange gives each in an element of its
+    /// own (`Folder`, `ContactsFolder`, `CalendarFolder`, `TasksFolder`, `SearchFolder`).
+    pub fn folders(&self) -> Vec<&El> {
+        fn walk<'a>(el: &'a El, out: &mut Vec<&'a El>) {
+            for k in &el.kids {
+                if FOLDER_KINDS.contains(&k.name.as_str()) {
+                    out.push(k);
+                } else {
+                    walk(k, out);
+                }
+            }
+        }
+        let mut out = Vec::new();
+        walk(self, &mut out);
+        out
+    }
 }
 
-fn local(name: &[u8]) -> String {
-    let s = String::from_utf8_lossy(name);
-    s.rsplit(':').next().unwrap_or("").to_string()
+/// The elements a folder comes in (EWS's array of folders).
+const FOLDER_KINDS: [&str; 5] = ["Folder", "ContactsFolder", "CalendarFolder", "TasksFolder", "SearchFolder"];
+
+fn local(name: &str) -> String {
+    name.rsplit(':').next().unwrap_or("").to_string()
 }
 
 /// An attribute's value with its entities replaced.
@@ -150,7 +168,7 @@ pub fn parse(xml: &str) -> El {
                 count += 1;
                 let el = El {
                     name: local(e.name().as_ref()),
-                    attrs: e.attributes().flatten().map(|a| (local(a.key.as_ref()), unescape(&String::from_utf8_lossy(&a.value)))).collect(),
+                    attrs: e.attributes().flatten().map(|a| (local(a.key.as_ref()), unescape(&a.value))).collect(),
                     ..Default::default()
                 };
                 stack.push(el);
@@ -160,16 +178,16 @@ pub fn parse(xml: &str) -> El {
             }
             X::Text(t) => {
                 if let Some(top) = stack.last_mut() {
-                    top.text.push_str(&t.decode().unwrap_or_default());
+                    top.text.push_str(&t);
                 }
             }
             X::CData(t) => {
                 if let Some(top) = stack.last_mut() {
-                    top.text.push_str(&t.decode().unwrap_or_default());
+                    top.text.push_str(&t);
                 }
             }
             X::GeneralRef(g) => {
-                let name = g.decode().unwrap_or_default().to_string();
+                let name = g.to_string();
                 let c = match name.as_str() {
                     "amp" => Some('&'),
                     "lt" => Some('<'),
@@ -289,6 +307,13 @@ pub struct Client {
     pf_mailboxes: RefCell<HashMap<String, String>>,
     /// Other people's addresses as the directory has them (see [`Client::address_of`]).
     addresses: Box<RefCell<HashMap<String, String>>>,
+    /// The account's public folder hierarchy mailbox (Autodiscover's PublicFolderInformation),
+    /// once asked: `None` inside when there is none.
+    pf_hierarchy: RefCell<Option<Option<String>>>,
+    /// The public folder mailboxes holding the public folders' content (their GUIDs, from the
+    /// folders' PR_REPLICA_LIST): a request one of their folders or items isn't found by is
+    /// tried there.
+    pf_replicas: RefCell<Vec<String>>,
 }
 
 /// A public folder in the tree.
@@ -321,10 +346,20 @@ fn replica_guid(value: &str) -> Option<String> {
     ok.then(|| guid.to_ascii_lowercase())
 }
 
-/// The address and the public folder mailbox in an Autodiscover answer about a mailbox.
+/// The address in an Autodiscover answer about a mailbox.
 fn autodiscover_smtp(xml: &str) -> Option<String> {
     let doc = parse(xml);
     doc.find("AutoDiscoverSMTPAddress").map(|a| a.text.trim().to_string()).filter(|a| a.contains('@') && a.len() < 320)
+}
+
+/// The public folder hierarchy mailbox in an Autodiscover answer about the account (Exchange
+/// 2013 and later: `PublicFolderInformation`'s `SmtpAddress`).
+fn autodiscover_public(xml: &str) -> Option<String> {
+    let doc = parse(xml);
+    doc.find("PublicFolderInformation")
+        .and_then(|p| p.find("SmtpAddress"))
+        .map(|a| a.text.trim().to_string())
+        .filter(|a| a.contains('@') && a.len() < 320)
 }
 
 /// What a `…ResponseMessage` said.
@@ -375,6 +410,8 @@ impl Client {
             route: RefCell::new(None),
             pf_mailboxes: RefCell::new(HashMap::new()),
             addresses: Box::new(RefCell::new(HashMap::new())),
+            pf_hierarchy: RefCell::new(None),
+            pf_replicas: RefCell::new(Vec::new()),
         })
     }
 
@@ -428,6 +465,50 @@ impl Client {
         address
     }
 
+    /// Ask Autodiscover about an address (at the Exchange server's own Autodiscover first, then
+    /// the domain's): the first answer.
+    fn ask_autodiscover(&self, address: &str) -> Result<String> {
+        let body = format!(
+            "<?xml version=\"1.0\" encoding=\"utf-8\"?><Autodiscover xmlns=\"http://schemas.microsoft.com/exchange/autodiscover/outlook/requestschema/2006\">\
+             <Request><EMailAddress>{}</EMailAddress><AcceptableResponseSchema>http://schemas.microsoft.com/exchange/autodiscover/outlook/responseschema/2006a</AcceptableResponseSchema></Request></Autodiscover>",
+            esc(address)
+        );
+        let mut urls = Vec::new();
+        if let Ok(u) = http::Url::parse(&self.url)
+            && let Some(origin) = self.url.len().checked_sub(u.path.len()).and_then(|end| self.url.get(..end))
+        {
+            urls.push(format!("{origin}/autodiscover/autodiscover.xml"));
+        }
+        urls.extend(autodiscover_urls(address));
+        let mut last = NetError::No("Autodiscover didn't answer".into());
+        for url in urls {
+            let c = match Client::new(&url, &self.user, &self.password, &self.email) {
+                Ok(c) => c,
+                Err(e) => {
+                    last = e;
+                    continue;
+                }
+            };
+            match c.post(body.clone().into_bytes()) {
+                Ok(resp) if resp.ok() => return Ok(String::from_utf8_lossy(&resp.body).into_owned()),
+                Ok(resp) => last = NetError::Protocol(format!("Autodiscover answered HTTP {}", resp.status)),
+                Err(e) => last = e,
+            }
+        }
+        Err(last)
+    }
+
+    /// The account's public folder hierarchy mailbox, from Autodiscover (asked once): where
+    /// listing public folders is routed on Exchange 2013 and later.
+    pub(crate) fn public_hierarchy_mailbox(&self) -> Option<String> {
+        if let Some(known) = self.pf_hierarchy.borrow().clone() {
+            return known;
+        }
+        let found = self.ask_autodiscover(&self.email).ok().as_deref().and_then(autodiscover_public);
+        *self.pf_hierarchy.borrow_mut() = Some(found.clone());
+        found
+    }
+
     /// Run `f` with every request routed to a public folder mailbox.
     pub(crate) fn routed_to<T>(&self, mailbox: &str, f: impl FnOnce() -> Result<T>) -> Result<T> {
         let before = self.route.replace(Some(mailbox.to_string()));
@@ -446,40 +527,10 @@ impl Client {
         if domain.is_empty() {
             return Err(NetError::No("no domain to ask about public folders".into()));
         }
-        let address = format!("{guid}@{domain}");
-        let body = format!(
-            "<?xml version=\"1.0\" encoding=\"utf-8\"?><Autodiscover xmlns=\"http://schemas.microsoft.com/exchange/autodiscover/outlook/requestschema/2006\">\
-             <Request><EMailAddress>{}</EMailAddress><AcceptableResponseSchema>http://schemas.microsoft.com/exchange/autodiscover/outlook/responseschema/2006a</AcceptableResponseSchema></Request></Autodiscover>",
-            esc(&address)
-        );
-        let mut urls = Vec::new();
-        if let Ok(u) = http::Url::parse(&self.url)
-            && let Some(origin) = self.url.len().checked_sub(u.path.len()).and_then(|end| self.url.get(..end))
-        {
-            urls.push(format!("{origin}/autodiscover/autodiscover.xml"));
-        }
-        urls.extend(autodiscover_urls(&address));
-        let mut last = NetError::No("Autodiscover didn't find the public folder mailbox".into());
-        for url in urls {
-            let c = match Client::new(&url, &self.user, &self.password, &self.email) {
-                Ok(c) => c,
-                Err(e) => {
-                    last = e;
-                    continue;
-                }
-            };
-            match c.post(body.clone().into_bytes()) {
-                Ok(resp) if resp.ok() => {
-                    if let Some(found) = autodiscover_smtp(&String::from_utf8_lossy(&resp.body)) {
-                        self.pf_mailboxes.borrow_mut().insert(guid.to_string(), found.clone());
-                        return Ok(found);
-                    }
-                }
-                Ok(resp) => last = NetError::Protocol(format!("Autodiscover answered HTTP {}", resp.status)),
-                Err(e) => last = e,
-            }
-        }
-        Err(last)
+        let answer = self.ask_autodiscover(&format!("{guid}@{domain}"))?;
+        let found = autodiscover_smtp(&answer).ok_or_else(|| NetError::No("Autodiscover didn't find the public folder mailbox".into()))?;
+        self.pf_mailboxes.borrow_mut().insert(guid.to_string(), found.clone());
+        Ok(found)
     }
 
     /// Connect and check the password (asks for the Inbox).
@@ -571,8 +622,29 @@ impl Client {
         Err(NetError::Auth("the server refused the user name or password".into()))
     }
 
-    /// Run one operation; the answer's elements (a SOAP fault is an error).
+    /// Run one operation; the answer's elements (a SOAP fault is an error). Something not found
+    /// while the account has public folders is asked for again in the public folder mailboxes
+    /// holding their content (Exchange 2013 and later answer only there).
     pub fn call(&self, body: &str) -> Result<El> {
+        let doc = self.call_here(body)?;
+        let missing = |doc: &El| messages(doc).iter().any(|m| matches!(m.text_of("ResponseCode"), Some("ErrorFolderNotFound" | "ErrorItemNotFound")));
+        if self.route.borrow().is_some() || !missing(&doc) {
+            return Ok(doc);
+        }
+        let guids = self.pf_replicas.borrow().clone();
+        for guid in guids {
+            let Ok(mailbox) = self.public_folder_mailbox(&guid) else { continue };
+            if let Ok(there) = self.routed_to(&mailbox, || self.call_here(body))
+                && !missing(&there)
+            {
+                return Ok(there);
+            }
+        }
+        Ok(doc)
+    }
+
+    /// [`Client::call`] where the request is sent, without looking elsewhere.
+    fn call_here(&self, body: &str) -> Result<El> {
         let resp = self.post(envelope(body).into_bytes())?;
         let text = String::from_utf8_lossy(&resp.body);
         let doc = parse(&text);
@@ -718,8 +790,7 @@ impl Client {
             let Some(m) = messages(&doc).first().map(|m| (*m).clone()) else { break };
             check_message(&m)?;
             let Some(rf) = m.child("RootFolder") else { break };
-            let mut folders = Vec::new();
-            rf.all("Folder", &mut folders);
+            let folders = rf.folders();
             let n = folders.len();
             for f in folders {
                 let Some(id) = f.child("FolderId").and_then(|i| i.attr("Id")).map(str::to_string) else { continue };
@@ -811,10 +882,26 @@ impl Client {
             .collect())
     }
 
-    /// Every public folder (walked a level at a time, a few levels deep): the root's id, and
-    /// each folder with its class, whether it holds others and where its content is kept. A
-    /// folder that won't list its own is passed over.
+    /// Every public folder: asked plainly (older servers, one public folder mailbox), else
+    /// routed to the account's public folder hierarchy mailbox, as Exchange 2013 and later want.
     fn public_tree(&self) -> Result<(String, Vec<TreeFolder>)> {
+        let plain = self.public_tree_walk();
+        if plain.as_ref().is_ok_and(|(_, all)| !all.is_empty()) {
+            return plain;
+        }
+        match self.public_hierarchy_mailbox() {
+            Some(mailbox) => match self.routed_to(&mailbox, || self.public_tree_walk()) {
+                Ok(t) => Ok(t),
+                Err(e) => Err(NetError::No(format!("public folders ({mailbox}): {e}"))),
+            },
+            None => plain,
+        }
+    }
+
+    /// Walk the public folders a level at a time, a few levels deep: the root's id, and each
+    /// folder with its class, whether it holds others and where its content is kept. A folder
+    /// that won't list its own is passed over.
+    fn public_tree_walk(&self) -> Result<(String, Vec<TreeFolder>)> {
         let root = self.call_one(
             "<m:GetFolder><m:FolderShape><t:BaseShape>IdOnly</t:BaseShape></m:FolderShape>\
              <m:FolderIds><t:DistinguishedFolderId Id=\"publicfoldersroot\"/></m:FolderIds></m:GetFolder>",
@@ -843,10 +930,7 @@ impl Client {
                     continue;
                 }
             };
-            let mut folders = Vec::new();
-            if let Some(rf) = m.child("RootFolder") {
-                rf.all("Folder", &mut folders);
-            }
+            let folders = m.child("RootFolder").map(El::folders).unwrap_or_default();
             for f in folders {
                 let Some(id) = f.child("FolderId").and_then(|i| i.attr("Id")).map(str::to_string) else { continue };
                 let count = |k: &str| f.text_of(k).and_then(|v| v.trim().parse::<u32>().ok()).unwrap_or(0);
@@ -860,6 +944,12 @@ impl Client {
                     })
                     .and_then(|p| p.text_of("Value"))
                     .and_then(replica_guid);
+                if let Some(g) = &replica {
+                    let mut known = self.pf_replicas.borrow_mut();
+                    if !known.contains(g) && known.len() < 20 {
+                        known.push(g.clone());
+                    }
+                }
                 out.push(TreeFolder {
                     mailbox: Mailbox {
                         name: f.text_of("DisplayName").unwrap_or_default().chars().take(255).collect(),
@@ -892,7 +982,7 @@ impl Client {
              <m:FolderIds><t:FolderId Id=\"{}\"/></m:FolderIds></m:GetFolder>",
             esc(folder)
         ))?;
-        let f = m.find("Folder");
+        let f = m.folders().into_iter().next();
         let count = |k: &str| f.and_then(|f| f.text_of(k)).and_then(|v| v.trim().parse::<u32>().ok()).unwrap_or(0);
         Ok((count("TotalCount"), count("UnreadCount")))
     }
@@ -1379,8 +1469,18 @@ fn prefetch(c: &Client, st: &State, store: &Store, account: &str, folder: &str, 
     if wanted.is_empty() {
         return Ok(());
     }
+    let mut failures = crate::sync::AheadFailures::new();
     for (n, id) in &wanted {
-        let raw = c.download(id)?;
+        let raw = match c.download(id) {
+            Ok(raw) => {
+                failures.ok();
+                raw
+            }
+            Err(e) => {
+                failures.failed(&format!("{account}/{folder}: message {n}"), e)?;
+                continue;
+            }
+        };
         let Some(m) = fs.find_mut(*n) else { continue };
         store.write_body(&m.key, &raw)?;
         fill_from_source(m, &raw);
@@ -1585,6 +1685,17 @@ mod tests {
         let deep = "<a>".repeat(10_000);
         let _ = parse(&deep);
         let _ = parse("<a><b></a></b>&bogus;&#xFFFFFFFF;");
+        // Folders of every kind, in the answer's order (contacts and calendars aren't `Folder`).
+        let f = parse(
+            "<m:RootFolder><t:Folders><t:Folder><t:DisplayName>A</t:DisplayName></t:Folder>                       <t:ContactsFolder><t:DisplayName>B</t:DisplayName></t:ContactsFolder><t:CalendarFolder><t:DisplayName>C</t:DisplayName></t:CalendarFolder>                       <t:TasksFolder><t:DisplayName>D</t:DisplayName></t:TasksFolder><t:SearchFolder><t:DisplayName>E</t:DisplayName></t:SearchFolder></t:Folders></m:RootFolder>",
+        );
+        let names: Vec<&str> = f.folders().iter().filter_map(|x| x.text_of("DisplayName")).collect();
+        assert_eq!(names, ["A", "B", "C", "D", "E"]);
+        // Entities in text and attributes, CDATA and numeric references, read as text.
+        let e = parse("<t:a xmlns:t=\"x\" t:Id=\"R&amp;D &quot;1&quot;\">Tom &amp; Jerry &lt;3 &#233;t&#xE9; <![CDATA[<raw> & co]]> ünï</t:a>");
+        let a = e.find("a").unwrap();
+        assert_eq!(a.attr("Id"), Some("R&D \"1\""));
+        assert_eq!(a.text, "Tom & Jerry <3 été <raw> & co ünï");
         assert_eq!(unb64("aGk=\r\n"), Some(b"hi".to_vec()));
         assert_eq!(unb64("**"), None);
         assert_eq!(esc("a<b&\"c\u{1}"), "a&lt;b&amp;&quot;c");
