@@ -2620,6 +2620,7 @@ fn an_html_signature_goes_as_written() {
     assert!(side_by_side, "{:?}", p.layout);
     assert!(p.images.iter().any(|u| u.contains("www.contoso.example/images/logo.gif")), "{:?}", p.images);
     assert!(p.text.contains("Hi Zoe") && p.text.contains("Didier GAUDIN") && !p.text.contains("x()"), "{}", p.text);
+}
 
 /// A big folder (tens of thousands of messages, as a 60 GB data file brings): selecting all and
 /// marking them read, then deleting them, takes moments, not minutes (per message, a delete read
@@ -2731,4 +2732,5 @@ fn rules_export_and_import() {
     assert_eq!(other.rules.len(), 2, "a bad file changes nothing");
     assert!(other.run("rules.import", &json!({"path": "/no/such/file"})).is_err());
     done(other);
+    done(s);
 }
