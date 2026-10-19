@@ -650,6 +650,9 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
         }
         Err(e) => log::info!("no calendar groups: {e}"),
     }
+    if !others.is_empty() {
+        log::info!("reading {} other people's calendars", others.len());
+    }
     for (n, (email, name, group)) in others.iter().enumerate() {
         let id = mailcraft_model::pim::shared_calendar_id(email);
         let parent = calendar_folder(Some(&c.address_of(email)));

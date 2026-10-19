@@ -356,7 +356,9 @@ impl Data {
                 out.push(ok(format!("<m:RootFolder IncludesLastItemInRange=\"true\"><t:Items>{items}</t:Items></m:RootFolder>")));
             }
             "ResolveNames" => {
-                let want = op.child("UnresolvedEntry").map(|e| e.text.clone()).unwrap_or_default();
+                let entry = op.child("UnresolvedEntry").map(|e| e.text.clone()).unwrap_or_default();
+                // `SMTP:` asks for that exact address.
+                let want = entry.strip_prefix("SMTP:").map_or(entry.clone(), str::to_string);
                 match self.directory.iter().find(|(dn, _)| dn.eq_ignore_ascii_case(&want)) {
                     Some((_, email)) => out.push(ok(format!(
                         "<m:ResolutionSet TotalItemsInView=\"1\"><t:Resolution><t:Mailbox><t:Name>{email}</t:Name>\
