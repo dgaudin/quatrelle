@@ -237,7 +237,7 @@ pub fn registry() -> Registry {
         CommandSpec::new("search.clear", "Clear search", "Search box", |s, _| Ok(json!({"results": s.run_search("", SearchScope::All)}))).key("Escape"),
         // Compose
         CommandSpec::new("compose.update", "Edit message", "Message", compose_update)
-            .params(r#"{"to"?: string, "cc"?: string, "bcc"?: string, "subject"?: string, "body"?: string, "marks"?: bool (the body uses **bold**, *italic*, - lists…), "account"?: string, "importance"?: "high"|"normal"|"low", "readReceipt"?: bool, "replyTo"?: string (where replies go), "sendAfter"?: number (Unix seconds: held in the Outbox until then; 0 sends at once)}"#)
+            .params(r#"{"to"?: string, "cc"?: string, "bcc"?: string, "subject"?: string, "body"?: string, "marks"?: bool (the body uses **bold**, *italic*, - lists…), "account"?: string, "importance"?: "high"|"normal"|"low", "readReceipt"?: bool, "replyTo"?: string (where replies go), "sendAfter"?: number (Unix seconds: held in the Outbox until then; 0 sends at once), "voting"?: string (voting buttons, `;`-separated: "Approve;Reject"; Exchange accounts)}"#)
             .when(has_compose),
         CommandSpec::new("compose.attach", "Attach file", "Message › Insert", attach).params(r#"{"path": string} | {"name": string, "data": [bytes]}"#).when(has_compose),
         CommandSpec::new("compose.insertPicture", "Insert picture", "Message › Insert", insert_picture)
@@ -1085,6 +1085,16 @@ fn compose_update(s: &mut Session, v: &Value) -> CmdResult {
     }
     if let Some(r) = p::bool(v, "readReceipt") {
         c.read_receipt = r;
+    }
+    if let Some(x) = p::str(v, "voting") {
+        c.voting = x
+            .split(';')
+            .map(str::trim)
+            .filter(|c| !c.is_empty())
+            .take(32)
+            .map(|c| c.chars().take(255).collect::<String>())
+            .collect::<Vec<_>>()
+            .join(";");
     }
     if let Some(x) = p::str(v, "replyTo") {
         c.reply_to = cap(x);

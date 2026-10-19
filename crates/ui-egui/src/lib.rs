@@ -2240,6 +2240,7 @@ impl MailApp {
             let offline = p.work_offline;
             let keep = (p.keep_messages, p.keep_offline);
             self.session.prefs = p;
+            self.session.note_new_calendars();
             self.session.refresh_list();
             // How much mail to keep, before any account connects (when it isn't the default).
             let d = mailcraft_engine::Prefs::default();

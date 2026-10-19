@@ -542,6 +542,9 @@ pub struct Compose {
     /// Ask the recipients for a read receipt.
     #[serde(default)]
     pub read_receipt: bool,
+    /// Voting buttons offered (Exchange accounts), `;`-separated: Outlook's Use Voting Buttons.
+    #[serde(default)]
+    pub voting: String,
     /// Where replies go, when not to the sender (Outlook's "Have replies sent to").
     #[serde(default)]
     pub reply_to: String,
@@ -2270,6 +2273,8 @@ impl Session {
             inline,
             importance: c.importance,
             read_receipt: c.read_receipt,
+            // Exchange alone carries voting buttons.
+            voting: if self.account(&c.account).is_some_and(|a| a.config.ews.is_some()) { c.voting.clone() } else { String::new() },
         })
     }
 
@@ -2368,6 +2373,7 @@ impl Session {
             inline,
             importance: c.importance,
             read_receipt: c.read_receipt,
+            voting: String::new(),
         };
         let folder = self
             .account(&c.account)
@@ -2888,8 +2894,17 @@ impl Session {
     }
 
     pub fn sync_all(&mut self) -> usize {
-        let ids: Vec<String> = self.accounts.iter().filter(|a| !a.is_local()).map(|a| a.config.id.clone()).collect();
-        for id in &ids {
+        let ids: Vec<(String, Option<String>)> = self
+            .accounts
+            .iter()
+            .filter(|a| !a.is_local())
+            .map(|a| (a.config.id.clone(), a.folder(FolderRole::Inbox).map(|f| f.path.clone())))
+            .collect();
+        for (id, inbox) in &ids {
+            // The Inbox at once (a full sync of a large mailbox takes minutes), then the rest.
+            if let Some(folder) = inbox {
+                self.jobs.push(Job::SyncFolder { account: id.clone(), folder: folder.clone() });
+            }
             self.jobs.push(Job::SyncAll { account: id.clone() });
         }
         ids.len()

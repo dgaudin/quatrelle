@@ -521,6 +521,13 @@ impl Data {
                         continue;
                     }
                     let draft = m.children("ExtendedProperty").any(|p| p.text_of("Value") == Some("8"));
+                    // Voting buttons sent with it (the verb stream, PidLidVerbStream).
+                    let verbs = m
+                        .children("ExtendedProperty")
+                        .find(|p| p.child("ExtendedFieldURI").and_then(|u| u.attr("PropertyId")) == Some("34080"))
+                        .and_then(|p| p.text_of("Value"))
+                        .and_then(unb64)
+                        .unwrap_or_default();
                     let id = self.id("I");
                     if send {
                         self.sent.push(raw.clone());
@@ -533,7 +540,7 @@ impl Data {
                         flagged: false,
                         draft,
                         received: "2026-10-15T12:00:00Z".into(),
-                        voting: Vec::new(),
+                        voting: verbs,
                         vote: String::new(),
                     });
                     out.push(ok(if send { String::new() } else { format!("<m:Items><t:Message><t:ItemId Id=\"{id}\"/></t:Message></m:Items>") }));
@@ -1332,6 +1339,33 @@ mod tests {
         assert!(asked.elapsed() < Duration::from_secs(10), "waited {:?}", asked.elapsed());
         assert!(server.data.lock().unwrap().sent.iter().any(|m| String::from_utf8_lossy(m).contains("Re: Storyboard")));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Voting buttons chosen while writing go to Exchange as Outlook's verb stream, and the
+    /// header that carried them to the connection doesn't go out with the message.
+    #[test]
+    fn voting_buttons_go_out_as_outlook_reads_them() {
+        let mut d = Data::default();
+        d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+        let sent = d.folder("Sent Items", None, Some("sentitems"), "IPF.Note");
+        let server = serve(d);
+        let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
+        let draft = mailcraft_mime::Draft {
+            to: mailcraft_model::addr::parse_list("Zoe <zoe@contoso.example>").unwrap(),
+            subject: "Lunch on Friday?".into(),
+            body: "Say which.".into(),
+            voting: "Oui ; Non;Peut-être".into(),
+            ..Default::default()
+        };
+        let from = mailcraft_model::addr::parse_list("Riley <riley@contoso.example>").unwrap().remove(0);
+        let raw = mailcraft_mime::build(&draft, &from, 1_792_000_000, "lunch-1@contoso.example").unwrap();
+        assert!(String::from_utf8_lossy(&raw).contains(mailcraft_mime::VOTING_HEADER));
+        crate::ews::send(&c, &raw, &["zoe@contoso.example".into()]).unwrap();
+        let data = server.data.lock().unwrap();
+        let item = data.items.iter().find(|i| i.folder == sent).unwrap();
+        assert_eq!(mailcraft_model::voting::choices(&item.voting), ["Oui", "Non", "Peut-être"]);
+        assert!(data.sent.iter().all(|m| !String::from_utf8_lossy(m).contains(mailcraft_mime::VOTING_HEADER)));
+        assert!(String::from_utf8_lossy(&item.raw).contains("Lunch on Friday?"));
     }
 
     /// Exchange's hidden folders (Working Set…) aren't listed: Outlook doesn't show them, and

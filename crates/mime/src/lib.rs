@@ -910,6 +910,37 @@ pub struct Draft {
     /// Ask for a read receipt (RFC 8098 `Disposition-Notification-To`, to the sender).
     #[serde(default)]
     pub read_receipt: bool,
+    /// Voting buttons offered, separated by `;` (Outlook's "Approve;Reject"). Carried to the
+    /// account's connection in a header of MailCraft's own, [`VOTING_HEADER`], which turns it
+    /// into Exchange's verb stream and takes the header out before the message goes.
+    #[serde(default)]
+    pub voting: String,
+}
+
+/// The header carrying voting buttons from the message written to the connection sending it:
+/// the choices, `;`-separated, in UTF-8 as hex (plain ASCII whatever the language).
+pub const VOTING_HEADER: &str = "X-MailCraft-Voting";
+
+/// Take the voting buttons out of a message: the message without [`VOTING_HEADER`], and the
+/// choices it carried (none when it carried none).
+pub fn take_voting(raw: &[u8]) -> (Vec<u8>, Vec<String>) {
+    let head_end = raw.windows(4).position(|w| w == b"\r\n\r\n").map_or(raw.len(), |i| i + 2);
+    let Some(head) = raw.get(..head_end) else { return (raw.to_vec(), Vec::new()) };
+    let want = format!("{}:", VOTING_HEADER.to_ascii_lowercase());
+    let mut out = Vec::with_capacity(raw.len());
+    let mut choices = Vec::new();
+    for line in head.split_inclusive(|b| *b == b'\n') {
+        let text = String::from_utf8_lossy(line);
+        if text.to_ascii_lowercase().starts_with(&want) {
+            let hex = text.get(want.len()..).unwrap_or("").trim();
+            let bytes: Vec<u8> = (0..hex.len() / 2).filter_map(|i| hex.get(i * 2..i * 2 + 2).and_then(|h| u8::from_str_radix(h, 16).ok())).collect();
+            choices = String::from_utf8_lossy(&bytes).split(';').map(|c| c.trim().to_string()).filter(|c| !c.is_empty()).take(32).collect();
+        } else {
+            out.extend_from_slice(line);
+        }
+    }
+    out.extend_from_slice(raw.get(head_end..).unwrap_or_default());
+    (out, choices)
 }
 
 /// A picture inside a formatted message.
@@ -1004,6 +1035,11 @@ pub fn build(d: &Draft, from: &EmailAddress, date: i64, message_id: &str) -> Res
         1 => b = b.header("Importance", raw("high")).header("X-Priority", raw("1")),
         -1 => b = b.header("Importance", raw("low")).header("X-Priority", raw("5")),
         _ => {}
+    }
+    let voting: Vec<&str> = d.voting.split(';').map(str::trim).filter(|c| !c.is_empty()).collect();
+    if !voting.is_empty() {
+        let hex: String = voting.join(";").bytes().map(|b| format!("{b:02x}")).collect();
+        b = b.header(VOTING_HEADER, mail_builder::headers::raw::Raw::new(hex));
     }
     if d.read_receipt && !from.email.trim().is_empty() {
         b = b.header(

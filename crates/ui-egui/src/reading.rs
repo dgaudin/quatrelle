@@ -1632,6 +1632,27 @@ fn column_name(mut c: usize) -> String {
 /// Height of an attachment chip.
 const CHIP_H: f32 = 42.0;
 
+/// Voting buttons: Outlook's usual sets, in the interface's language, or the sender's own,
+/// separated by semicolons.
+fn voting_menu(ui: &mut Ui, t: &Tokens, c: &mut mailcraft_engine::Compose) {
+    ui.set_min_width(260.0);
+    for set in [["Approve", "Reject", ""], ["Yes", "No", ""], ["Yes", "No", "Maybe"]] {
+        let choices: Vec<String> = set.iter().filter(|x| !x.is_empty()).map(|x| tl!(x).to_string()).collect();
+        let joined = choices.join(";");
+        if ui.radio(c.voting == joined, choices.join(" · ")).clicked() {
+            c.voting = joined;
+            ui.close();
+        }
+    }
+    ui.separator();
+    ui.label(RichText::new(tl!("Your own choices, separated by semicolons")).color(t.dim).small());
+    ui.add(egui::TextEdit::singleline(&mut c.voting).desired_width(240.0).char_limit(500));
+    if !c.voting.is_empty() && ui.button(tl!("No voting buttons")).clicked() {
+        c.voting.clear();
+        ui.close();
+    }
+}
+
 /// When to send a held-back message: in an hour, tomorrow or Monday morning, a time of one's
 /// own, or at once again.
 fn delay_menu(ui: &mut Ui, t: &Tokens, c: &mut mailcraft_engine::Compose, clock: &dates::Clock) {
@@ -1876,6 +1897,7 @@ fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action
     let clock = s.clock;
     // Delay Delivery holds mail in the Outbox, which only a server account's sends from.
     let can_delay = s.compose.as_ref().and_then(|c| s.account(&c.account)).is_some_and(|a| !a.is_local());
+    let can_vote = s.compose.as_ref().and_then(|c| s.account(&c.account)).is_some_and(|a| a.config.ews.is_some());
     let signature = s.compose.as_ref().and_then(|c| s.account(&c.account)).map(|a| a.config.signature.clone()).unwrap_or_default();
     let Some(c) = s.compose.as_mut() else { return };
     // The editor's state belongs to one message.
@@ -1991,6 +2013,13 @@ fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action
                     .changed()
                 {
                     c.read_receipt = receipt;
+                }
+                // Outlook's Use Voting Buttons (Exchange carries them).
+                if can_vote {
+                    let label = if c.voting.is_empty() { tl!("Voting buttons").to_string() } else { c.voting.replace(';', " · ") };
+                    let r = widgets::tool_toggle(ui, Icon::Vote, &label, &t, !c.voting.is_empty())
+                        .on_hover_text(tl!("Let the recipients answer with a button"));
+                    egui::Popup::menu(&r).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| voting_menu(ui, &t, c));
                 }
                 // Outlook's Delay Delivery and Direct Replies To.
                 if can_delay {

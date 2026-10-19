@@ -466,8 +466,16 @@ impl Pool {
             match sent {
                 Ok(()) => {
                     sink.emit(Event::Sent { account: account.clone(), id });
-                    if let (Some(tx), Some(folder)) = (worker, sent_folder) {
-                        let _ = tx.send(Job::SyncFolder { account, folder });
+                    if let Some(tx) = worker {
+                        if let Some(folder) = sent_folder {
+                            let _ = tx.send(Job::SyncFolder { account: account.clone(), folder });
+                        }
+                        // Mail to oneself (or a quick answer) comes into the Inbox moments later:
+                        // look then, rather than at the next poll.
+                        for wait in [5, 20] {
+                            std::thread::sleep(Duration::from_secs(wait));
+                            let _ = tx.send(Job::SyncFolder { account: account.clone(), folder: "INBOX".into() });
+                        }
                     }
                 }
                 Err(e) if e.is_retryable() => {
@@ -1792,9 +1800,10 @@ fn log_event(e: &Event) {
 
 /// Jobs someone is looking at a spinner for, done between two folders of a full sync rather
 /// than after it (the first sync of a large Exchange mailbox can take many minutes): an opened
-/// message, automatic replies, a calendar just opened.
+/// message, automatic replies, a calendar just opened, a folder asked for (Send / Receive's
+/// Inbox).
 fn jumps_queue(j: &Job) -> bool {
-    matches!(j, Job::FetchBody { .. } | Job::GetVacation { .. } | Job::SetVacation { .. } | Job::SyncDav { .. })
+    matches!(j, Job::FetchBody { .. } | Job::GetVacation { .. } | Job::SetVacation { .. } | Job::SyncDav { .. } | Job::SyncFolder { .. })
 }
 
 #[cfg(test)]
@@ -1808,6 +1817,7 @@ mod tests {
         assert!(jumps_queue(&Job::GetVacation { account: "a".into() }));
         assert!(jumps_queue(&Job::SetVacation { account: "a".into(), vacation: Default::default() }));
         assert!(jumps_queue(&Job::SyncDav { account: "a".into() }));
+        assert!(jumps_queue(&Job::SyncFolder { account: "a".into(), folder: "INBOX".into() }));
         assert!(!jumps_queue(&Job::SyncAll { account: "a".into() }));
     }
 
