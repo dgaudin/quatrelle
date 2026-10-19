@@ -147,3 +147,27 @@ Les conflits les plus probables concernent les fichiers touchés par ce fork :
 `crates/ui-egui/src/icons.rs`, `widgets.rs`, `lib.rs`, `list.rs`, `calendar.rs`, `ATTRIBUTION.md`
 et `CLAUDE.md`. Gardez la version de ce fork pour les icônes et le style, et celle d'origine pour
 le reste.
+
+### État de la récupération : v0.17 intégrée (2026-10-19)
+
+`upstream/main` a été fusionnée dans la branche de ce fork : 42 commits (v0.16, v0.17, egui 0.37,
+Rust 1.95 minimum). Les deux versions n'ont eu aucun commit divergent — `main` n'avait rien de
+propre — donc la fusion n'a rien réécrit. 19 fichiers ont demandé une résolution :
+
+- **Traductions** (5 `.tsv`) : les deux côtés ajoutaient des clés différentes ; elles sont toutes
+  gardées, sans doublon.
+- **Cache des lignes** (`list.rs`) : le cache de l'origine (perf des grosses boîtes) est gardé, et
+  sa clé inclut la hauteur du mode table de ce fork.
+- **Filets de sécurité** : `Cargo.lock` et `ROADMAP.md` viennent de l'origine (le journal du fork y
+  est ajouté) ; `logfile.rs` est la version de l'origine (rotation, tests).
+- **Ajouts des deux côtés** : `widgets.rs` (vos widgets de ruban + `switch`/`segmented`), `ews.rs`,
+  `ews_pim.rs`, `fake_ews.rs`, `fake_graph.rs` gardent les champs et fonctions des deux.
+- **Envois Exchange** : la connexion rapide de l'origine (une deuxième connexion par compte)
+  **remplace** le thread par message de ce fork. Même service — envoyer pendant une synchronisation —
+  mais dans l'ordre, et les réponses automatiques en profitent. C'était la seule vraie divergence de
+  conception ; trois tests en dépendent, ils passent.
+- **Fusion non retenue** : la page File › Info garde la mise en page de l'origine (cartes et
+  réglages), tandis qu'Open & Export garde les tuiles de ce fork. À harmoniser si souhaité.
+
+Preuves de la fusion : `cargo xtask ci` vert (fmt, `clippy -D warnings`, 366 tests, layers, assets,
+wasm), un build `--workspace` complet, et le test d'envoi Exchange relancé trois fois sans échec.
