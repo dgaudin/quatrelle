@@ -432,6 +432,9 @@ fn vacation(ui: &mut Ui, f: &mut VacationForm, t: &Tokens, acts: &mut Vec<Action
 pub struct SignatureForm {
     pub account: String,
     pub compose: Compose,
+    /// Added to new messages; to replies and forwards (Outlook's two choices).
+    pub on_new: bool,
+    pub on_replies: bool,
     /// Opened from a message being written: shown over its window, and put into it.
     pub insert: bool,
     editor: SignatureEditor,
@@ -440,7 +443,10 @@ pub struct SignatureForm {
 impl SignatureForm {
     pub fn new(s: &Session, account: &str, insert: bool) -> SignatureForm {
         let (body, styles) = s.signature_rich(account);
+        let config = s.account(account).map(|a| a.config.clone()).unwrap_or_default();
         SignatureForm {
+            on_new: !config.signature_not_new,
+            on_replies: !config.signature_not_replies,
             account: account.to_string(),
             compose: Compose { id: crate::rich_edit::SIGNATURE_ID, account: account.to_string(), body, styles, ..Default::default() },
             insert,
@@ -1641,7 +1647,6 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Act
         Dialog::Signature(f) => {
             ui.set_width(480.0);
             title(ui, t, "Signature");
-            ui.label(RichText::new(tl!("Added to new messages, replies and forwards.")).color(t.dim).small());
             ui.label(
                 RichText::new(tl!("Paste one from Outlook or Word and it keeps its look; Ctrl+B, Ctrl+I and Ctrl+U format it.")).color(t.dim).small(),
             );
@@ -1654,13 +1659,22 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Act
                     crate::rich_edit::link_dialog(ui, t, &mut editor.0, compose);
                 });
             });
+            // When it's added, as Outlook chooses it (the Signature button adds it anywhere).
+            ui.add_space(4.0);
+            ui.horizontal_wrapped(|ui| {
+                ui.checkbox(&mut f.on_new, tl!("Add it to new messages"));
+                ui.checkbox(&mut f.on_replies, tl!("Add it to replies and forwards"));
+            });
             let (ok, cancel) = buttons(ui, t, if f.insert { "Save and insert" } else { "Save" }, true);
             if ok {
                 let text = f.compose.body.trim_end().to_string();
                 let mut styles = f.compose.styles.clone();
                 styles.fit(&text);
                 let html = if styles.is_plain() { None } else { Some(mailcraft_engine::mime::rich::to_html(&text, &styles)) };
-                acts.push(Action::Run("account.setSignature", json!({"account": f.account, "signature": text, "html": html})));
+                acts.push(Action::Run(
+                    "account.setSignature",
+                    json!({"account": f.account, "signature": text, "html": html, "newMessages": f.on_new, "replies": f.on_replies}),
+                ));
                 if f.insert && !text.trim().is_empty() {
                     acts.push(Action::InsertSignature);
                 }

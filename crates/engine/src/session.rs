@@ -2163,6 +2163,14 @@ impl Session {
         self.signature_rich(account).0
     }
 
+    /// The signature added when a message starts: a new one (`reply` false) or a reply or
+    /// forward, as the account says (Outlook's New messages and Replies/forwards); empty when
+    /// it adds none there.
+    fn signature_when(&self, account: &str, reply: bool) -> String {
+        let off = self.account(account).is_some_and(|a| if reply { a.config.signature_not_replies } else { a.config.signature_not_new });
+        if off { String::new() } else { self.signature(account) }
+    }
+
     /// An account's signature with its look: its text and styles (plain when it has none).
     pub fn signature_rich(&self, account: &str) -> (String, mime::rich::Styles) {
         let Some(a) = self.account(account) else { return (String::new(), mime::rich::Styles::default()) };
@@ -2190,7 +2198,7 @@ impl Session {
             None => self.current_account().map(|a| a.config.id.clone()),
         }
         .ok_or_else(|| CmdError::Disabled("add an account first".into()))?;
-        let sig = self.signature(&account);
+        let sig = self.signature_when(&account, false);
         let id = self.fresh_id();
         let body = if sig.trim().is_empty() { String::new() } else { format!("\n\n{}", signature_block(&sig)) };
         let window = self.prefs.new_mail_window;
@@ -2205,7 +2213,7 @@ impl Session {
         let r = self.reading.clone().ok_or_else(|| CmdError::Disabled("open a message first".into()))?;
         let parsed = r.parsed.ok_or_else(|| CmdError::Disabled("the message is still downloading".into()))?;
         let account = r.key.account.clone();
-        let sig = self.signature(&account);
+        let sig = self.signature_when(&account, true);
         let (d, styles) = mime::reply_doc(&parsed, mode, &self.me(&account), &self.clock, &sig);
         let id = self.fresh_id();
         let mut attachments = Vec::new();
@@ -2245,7 +2253,7 @@ impl Session {
         let raw =
             self.store.as_ref().and_then(|s| s.read_body(&r.key)).ok_or_else(|| CmdError::Disabled("the message is still downloading".into()))?;
         let out = self.reply_compose(ReplyMode::Forward)?;
-        let sig = self.signature(&r.key.account);
+        let sig = self.signature_when(&r.key.account, true);
         let subject = r.parsed.as_ref().map(|p| p.subject.trim().to_string()).unwrap_or_default();
         let name = format!("{}.eml", if subject.is_empty() { "message" } else { subject.as_str() });
         if let Some(c) = self.compose.as_mut() {
