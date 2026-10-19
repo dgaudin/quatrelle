@@ -2427,3 +2427,29 @@ fn calendars_are_read_when_shown() {
     s.apply_dav(&id, &DavSync { calendars: Some(vec![cal("calendar", "")]), partial: true, checked: NOW, ..Default::default() });
     assert!(pim(&s).calendars.iter().any(|c| c.id == ana));
 }
+
+/// The signature goes into new messages, replies and forwards, or only some, as the account
+/// says (Outlook's New messages and Replies/forwards); the choice is kept with the account.
+#[test]
+fn a_signature_goes_where_the_account_says() {
+    let mut s = sample_session("signature-where");
+    let first = s.list.first().map(|m| m.key.clone()).unwrap();
+    let body = |s: &Session| s.compose.as_ref().map(|c| c.body.clone()).unwrap_or_default();
+    s.run("account.setSignature", &json!({"account": "sample", "signature": "Riley", "newMessages": false})).unwrap();
+    s.run("mail.new", &json!({})).unwrap();
+    assert!(!body(&s).contains("Riley"), "not in new messages");
+    s.compose = None;
+    s.open_message(&first);
+    s.run("mail.reply", &json!({})).unwrap();
+    assert!(body(&s).contains("Riley"), "in replies");
+    s.compose = None;
+    // Changing the text alone keeps the choices.
+    s.run("account.setSignature", &json!({"account": "sample", "signature": "R.", "replies": false})).unwrap();
+    s.run("mail.forward", &json!({})).unwrap();
+    assert!(!body(&s).contains("R."), "not in forwards");
+    s.compose = None;
+    s.run("mail.new", &json!({})).unwrap();
+    assert!(!body(&s).contains("R."), "still not in new messages");
+    let config = s.account("sample").unwrap().config.clone();
+    assert!(config.signature_not_new && config.signature_not_replies);
+}

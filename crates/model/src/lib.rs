@@ -83,6 +83,12 @@ pub struct AccountConfig {
     /// links, as pasted from Outlook or set in the signature editor.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub signature_html: String,
+    /// The signature isn't added to new messages (Outlook's New messages: none).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub signature_not_new: bool,
+    /// The signature isn't added to replies and forwards (Outlook's Replies/forwards: none).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub signature_not_replies: bool,
     /// The colour index the UI uses for this account's marker.
     #[serde(default)]
     pub color: u8,
@@ -211,6 +217,8 @@ impl AccountConfig {
             smtp,
             signature: String::new(),
             signature_html: String::new(),
+            signature_not_new: false,
+            signature_not_replies: false,
             color: 0,
             oauth: None,
             jmap: None,
