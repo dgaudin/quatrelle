@@ -174,10 +174,17 @@ pub enum Job {
     GetVacation { account: String },
     /// Change them.
     SetVacation { account: String, vacation: Vacation },
-    /// Put the rules the account keeps on its server (Exchange's inbox rules), so mail is filed
-    /// while MailCraft is closed: the ones marked `server` (with their `remote_id` when the
-    /// server already has them), and the ids of the rules to remove there.
-    SetServerRules { account: String, rules: Vec<Rule>, delete: Vec<String> },
+    /// Put the rules the account keeps on its server (Exchange's inbox rules, an IMAP account's
+    /// Sieve script), so mail is filed while MailCraft is closed: the ones marked `server` (with
+    /// their `remote_id` when the server already has them), the ids of the rules to remove there,
+    /// and the account's categories by name with the keyword each is kept as.
+    SetServerRules {
+        account: String,
+        rules: Vec<Rule>,
+        delete: Vec<String>,
+        #[allow(clippy::type_complexity)]
+        categories: Vec<(String, String)>,
+    },
     /// Fetch the picture a directory (Exchange, Microsoft 365) keeps for an address.
     FetchPhoto { account: String, email: String },
     /// Sync the account's calendars and address books with its CalDAV / CardDAV server (changes

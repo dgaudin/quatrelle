@@ -945,7 +945,7 @@ month	May	mai
 	Download all	Télécharger tout
 	Downloading {done} of {total}	Téléchargement : {done} sur {total}
 	Also run on the server	Aussi sur le serveur
-	Exchange can't run this rule: {why}. It stays on this computer.	Exchange ne sait pas exécuter cette règle : {why}. Elle reste sur cet ordinateur.
+	The server can't run this rule: {why}. It stays on this computer.	Le serveur ne sait pas exécuter cette règle : {why}. Elle reste sur cet ordinateur.
 	Department	Service
 	Office	Bureau
 	Profession	Profession

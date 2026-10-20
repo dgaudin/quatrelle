@@ -2336,7 +2336,7 @@ fn server_rules_go_to_the_server_and_keep_their_id() {
         .take_jobs()
         .into_iter()
         .filter_map(|j| match j {
-            mailcraft_model::Job::SetServerRules { account, rules, delete } => Some((account, rules, delete)),
+            mailcraft_model::Job::SetServerRules { account, rules, delete, .. } => Some((account, rules, delete)),
             _ => None,
         })
         .collect();
@@ -2360,7 +2360,7 @@ fn server_rules_go_to_the_server_and_keep_their_id() {
         .take_jobs()
         .into_iter()
         .filter_map(|j| match j {
-            mailcraft_model::Job::SetServerRules { account, rules, delete } => Some((account, rules, delete)),
+            mailcraft_model::Job::SetServerRules { account, rules, delete, .. } => Some((account, rules, delete)),
             _ => None,
         })
         .collect();
@@ -2377,6 +2377,50 @@ fn server_rules_go_to_the_server_and_keep_their_id() {
     s.run("rules.set", &json!({ "rules": [good, bad] })).unwrap();
     assert!(!s.rules[1].server, "Exchange knows no newsletters");
     assert!(s.notices.iter().any(|n| n.text.contains("Newsletters")), "{:?}", s.notices);
+}
+
+/// An IMAP account's rules run in its Sieve script, so a rule Exchange couldn't take (looking in
+/// every header at once) still goes to the server; what neither can run stays home.
+#[test]
+fn sieve_rules_go_to_an_imap_account() {
+    use mailcraft_model::organize::{Condition, Rule, RuleAction, ServerKind};
+    let mut s = sample_session("sieve-rules");
+    let account = s.accounts[0].config.id.clone();
+    assert_eq!(s.server_kind(&account), Some(ServerKind::Sieve), "the sample account is IMAP");
+    let rule = Rule {
+        name: "Urgent".into(),
+        enabled: true,
+        account: Some(account.clone()),
+        conditions: vec![Condition::AnyText("urgent".into())],
+        match_all: true,
+        actions: vec![RuleAction::MarkRead, RuleAction::MoveToRole(FolderRole::Archive)],
+        stop: false,
+        server: true,
+        remote_id: None,
+    };
+    assert!(!rule.server_ready() && rule.sieve_ready(), "Exchange can't, Sieve can");
+    s.run("rules.set", &json!({ "rules": [rule] })).unwrap();
+    let sent: Vec<Vec<Rule>> = s
+        .take_jobs()
+        .into_iter()
+        .filter_map(|j| match j {
+            mailcraft_model::Job::SetServerRules { rules, .. } => Some(rules),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(sent.len(), 1, "the rule marked for the server is sent");
+    assert_eq!(sent[0].len(), 1);
+    assert!(s.rules[0].server, "it stays marked for the server");
+    assert!(!s.notices.iter().any(|n| n.text.contains("Urgent")), "nothing to keep home: {:?}", s.notices);
+    // What Sieve can't look at either (attachments) stays on this computer, and says so.
+    let mut bad = s.rules[0].clone();
+    bad.name = "Attachments".into();
+    bad.conditions = vec![Condition::HasAttachment];
+    let mut good = s.rules[0].clone();
+    good.name = "Urgent".into();
+    s.run("rules.set", &json!({ "rules": [good, bad] })).unwrap();
+    assert!(!s.rules[1].server, "Sieve can't see attachments");
+    assert!(s.notices.iter().any(|n| n.text.contains("Attachments")), "{:?}", s.notices);
 }
 
 /// A contact keeps Outlook's work details: the command stores them, and reading the card back
