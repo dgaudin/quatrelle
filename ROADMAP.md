@@ -315,3 +315,12 @@ local-first, media-aware v1); the fuller request is
   card's, or the one the directory keeps for their address, asked for once) instead of initials,
   its shape kept; initials remain when there is none. Tested: the hidden-picture rule, and a
   headless frame showing the card's texture actually decoded and drawn.
+- **2026-10-20** — **Rules made elsewhere, listed:** when an account connects its server is asked
+  what it keeps — Exchange's inbox rules (EWS), Microsoft 365's (`messageRules`), an IMAP account's
+  Sieve scripts — and the rules MailCraft didn't make (Outlook's own, the server's web page, a
+  script the user wrote) are listed in the Rules dialog under "On the server, made elsewhere", with
+  the reminder that whoever made them owns them. Reading also heals MailCraft's own ids (a rule
+  whose copy vanished from the server gets one again) and refreshes the list after every change,
+  so a rule made in Outlook shows up without a restart. Only the ids MailCraft holds are ever
+  treated as its own. Tested: the split by id, the EWS listing with a rule from Outlook, the Sieve
+  scripts, and the engine keeping the ids and listing the rest.

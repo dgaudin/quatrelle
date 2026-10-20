@@ -914,6 +914,8 @@ fn organising_renders_and_rules_save() {
         json!({"rules": [{"name": "Zoe", "conditions": [{"if": "from", "value": "zoe@"}], "actions": [{"do": "categorize", "value": "Work"}]}]}),
     ));
     assert_eq!(a.session.rules.len(), 1);
+    // A rule the server keeps that MailCraft didn't make (Outlook's own): listed, read-only.
+    a.session.foreign_rules.push(mailcraft_engine::model::organize::ForeignRule { account: "sample".into(), name: "Outlook rule".into() });
     a.ui.dialog = Some(Dialog::Rules);
     frame(&ctx, &mut a, vec![]);
     frame(&ctx, &mut a, vec![]);

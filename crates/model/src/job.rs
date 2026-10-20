@@ -185,6 +185,9 @@ pub enum Job {
         #[allow(clippy::type_complexity)]
         categories: Vec<(String, String)>,
     },
+    /// Read the rules the account's server keeps, with the ids MailCraft's own rules have there
+    /// (`ours`): those made elsewhere come back with them, to be listed.
+    GetServerRules { account: String, ours: Vec<String> },
     /// Fetch the picture a directory (Exchange, Microsoft 365) keeps for an address.
     FetchPhoto { account: String, email: String },
     /// Sync the account's calendars and address books with its CalDAV / CardDAV server (changes
@@ -214,6 +217,7 @@ impl Job {
             | Job::GetVacation { account }
             | Job::SetVacation { account, .. }
             | Job::SetServerRules { account, .. }
+            | Job::GetServerRules { account, .. }
             | Job::FetchPhoto { account, .. }
             | Job::SyncDav { account }
             | Job::ImportPst { account, .. }
@@ -340,11 +344,14 @@ pub enum Event {
         vacation: Option<Vacation>,
         error: Option<String>,
     },
-    /// The server's rules were brought up to date: the id each rule got there (by name), the ids
-    /// of the rules removed, or why it couldn't be done.
+    /// The server's rules were read, or brought up to date: the id each of MailCraft's rules has
+    /// there (by name), the names of the rules it didn't make (Outlook's own, the server's web
+    /// page, a Sieve script), the ids of the rules removed, or why it couldn't be done.
     ServerRules {
         account: String,
         ids: Vec<(String, String)>,
+        #[serde(default)]
+        others: Vec<String>,
         cleared: Vec<String>,
         error: Option<String>,
     },

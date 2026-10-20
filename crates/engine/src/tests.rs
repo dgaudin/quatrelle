@@ -2347,11 +2347,36 @@ fn server_rules_go_to_the_server_and_keep_their_id() {
     s.apply(mailcraft_model::Event::ServerRules {
         account: account.clone(),
         ids: vec![("Invoices".into(), "R1".into())],
+        others: Vec::new(),
         cleared: Vec::new(),
         error: None,
     });
     assert_eq!(s.rules[0].remote_id.as_deref(), Some("R1"));
     assert!(s.take_jobs().is_empty(), "the same rules aren't sent twice");
+    // The rules the server runs that MailCraft didn't make are listed as they are (Outlook's
+    // own, say), and never changed here.
+    s.apply(mailcraft_model::Event::ServerRules {
+        account: account.clone(),
+        ids: Vec::new(),
+        others: vec!["Outlook rule".into()],
+        cleared: Vec::new(),
+        error: None,
+    });
+    assert_eq!(s.foreign_rules.len(), 1, "{:?}", s.foreign_rules);
+    assert_eq!(s.foreign_rules[0].name, "Outlook rule");
+    assert_eq!(s.foreign_rules[0].account, account);
+    assert_eq!(s.rules[0].remote_id.as_deref(), Some("R1"), "a read leaves our own ids alone");
+    // Connecting asks the server what it keeps: ours (to keep their ids right) and the rest.
+    s.apply(mailcraft_model::Event::Status { account: account.clone(), status: SyncStatus::Online { at: NOW } });
+    let reads: Vec<(String, Vec<String>)> = s
+        .take_jobs()
+        .into_iter()
+        .filter_map(|j| match j {
+            mailcraft_model::Job::GetServerRules { account, ours } => Some((account, ours)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(reads, vec![(account.clone(), vec!["R1".to_string()])]);
     // Turned off: its server copy is removed, and the id with it.
     let mut off = s.rules[0].clone();
     off.server = false;
