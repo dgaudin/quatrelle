@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use mailcraft_model::EmailAddress;
 use mailcraft_model::dates::civil_from_days;
 use mailcraft_model::ical::{Attendee, CalEvent};
-use mailcraft_model::vcard::{Card, PostalAddress, Typed};
+use mailcraft_model::vcard::{Card, Photo, PostalAddress, Typed, base64_encode};
 use outlook_pst::ltp::prop_context::{GuidValue, PropertyValue};
 use outlook_pst::messaging::named_prop::{NamedPropertyGuid, NamedPropertyId, PS_MAPI, PS_PUBLIC_STRINGS};
 use outlook_pst::messaging::store::Store as PstStore;
@@ -90,6 +90,8 @@ pub(crate) struct Extra {
     pub note_color: Option<u8>,
     /// When it last changed.
     pub modified: Option<i64>,
+    /// The contact's picture (its media type, and its bytes), when the item holds one.
+    pub photo: Option<(String, Vec<u8>)>,
 }
 
 /// Read the contact and appointment properties of an item.
@@ -176,9 +178,35 @@ pub(crate) fn card_of(x: &Extra, body: &str, uid: String) -> Card {
                 format!("{y:04}-{m:02}-{d:02}")
             })
             .unwrap_or_default(),
+        // Outlook keeps it as a hidden attachment (MS-OXOCNTC 2.2.2.1.1), read by the caller.
+        photo: x.photo.as_ref().map(|(media, bytes)| Photo { media: media.clone(), base64: base64_encode(bytes) }),
         extra: Vec::new(),
         ..Card::default()
     }
+}
+
+/// A contact's picture, from a hidden attachment: its media type (the item's own, or what the
+/// bytes say) and its bytes — a picture, of a sane size, or nothing (a hidden attachment may be
+/// a signature or an OLE object).
+pub(crate) fn contact_photo(hidden: bool, mime: &str, data: Option<&[u8]>) -> Option<(String, Vec<u8>)> {
+    if !hidden {
+        return None;
+    }
+    let bytes = data.filter(|b| !b.is_empty() && b.len() <= mailcraft_model::vcard::MAX_PHOTO)?;
+    let mime = mime.trim().to_ascii_lowercase();
+    let media = if mime.starts_with("image/") {
+        mime
+    } else {
+        match bytes.get(..4)? {
+            [0xFF, 0xD8, 0xFF, _] => "image/jpeg",
+            [0x89, b'P', b'N', b'G'] => "image/png",
+            [b'G', b'I', b'F', b'8'] => "image/gif",
+            [b'B', b'M', ..] => "image/bmp",
+            _ => return None,
+        }
+        .to_string()
+    };
+    Some((media, bytes.to_vec()))
 }
 
 /// The appointment as an event (None without a start).
