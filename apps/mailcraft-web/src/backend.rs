@@ -415,6 +415,16 @@ async fn job(sh: &Rcs, id: &str, j: Job) {
                 error: Some("rules can only be put on Exchange from the desktop app".into()),
             },
         ),
+        // A directory picture comes from Exchange, which the browser doesn't reach.
+        Job::FetchPhoto { email, .. } => emit(
+            sh,
+            Event::Photo {
+                email: email.clone(),
+                media: String::new(),
+                data: Vec::new(),
+                error: Some("pictures come from Exchange, which the browser doesn't reach".into()),
+            },
+        ),
         // Voting buttons come with Exchange accounts, which the browser doesn't reach.
         Job::Vote { key, choice } => {
             let error = Some("voting buttons can only be answered on Exchange and Microsoft 365 accounts".to_string());

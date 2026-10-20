@@ -10,6 +10,7 @@ use mailcraft_model::dates::{Clock, DateGroup};
 use mailcraft_model::job::{Secret, Vacation};
 use mailcraft_model::search::{Doc, Index, Query, summary_text};
 use mailcraft_model::thread::{Thread, threads};
+use mailcraft_model::vcard::Photo;
 use mailcraft_model::{
     AccountConfig, EmailAddress, Event, Flag, Folder, FolderRole, Job, MessageKey, Op, Summary, SyncStatus, addr, sort_folders, sort_newest_first,
 };
@@ -655,6 +656,11 @@ pub struct Session {
     search_budget: usize,
     /// Outlook's "Download all": the messages still to bring onto this computer.
     download_all: Option<DownloadAll>,
+    /// Pictures the directory keeps for addresses, by lowercased address (`None`: there is
+    /// none, or the server keeps none).
+    person_photos: BTreeMap<String, Option<Photo>>,
+    /// Addresses a picture was asked for (even when the answer was "none").
+    photo_asked: HashSet<String>,
     /// The messages on screen, newest first.
     pub list: Vec<Summary>,
     /// Conversations over `list` (when [`Prefs::conversations`] is on).
@@ -755,6 +761,8 @@ impl Session {
             search_pending: false,
             search_budget: usize::MAX,
             download_all: None,
+            person_photos: BTreeMap::new(),
+            photo_asked: HashSet::new(),
             list: Vec::new(),
             threads: Vec::new(),
             selection: Vec::new(),
@@ -3473,6 +3481,16 @@ impl Session {
                         self.save_rules();
                     }
                 }
+            }
+            Event::Photo { email, media, data, error } => {
+                // A picture (or the answer that there is none): kept by address, so the People
+                // card shows it without asking again.
+                let photo = if error.is_none() && !data.is_empty() {
+                    Some(Photo { media, base64: mailcraft_model::vcard::base64_encode(&data) })
+                } else {
+                    None
+                };
+                self.person_photos.insert(email.to_ascii_lowercase(), photo);
             }
             Event::Voted { key, choice, error } => self.voted(&key, &choice, error),
             Event::Body { key, raw } => {

@@ -178,6 +178,8 @@ pub enum Job {
     /// while MailCraft is closed: the ones marked `server` (with their `remote_id` when the
     /// server already has them), and the ids of the rules to remove there.
     SetServerRules { account: String, rules: Vec<Rule>, delete: Vec<String> },
+    /// Fetch the picture a directory (Exchange, Microsoft 365) keeps for an address.
+    FetchPhoto { account: String, email: String },
     /// Sync the account's calendars and address books with its CalDAV / CardDAV server (changes
     /// made here first).
     SyncDav { account: String },
@@ -205,6 +207,7 @@ impl Job {
             | Job::GetVacation { account }
             | Job::SetVacation { account, .. }
             | Job::SetServerRules { account, .. }
+            | Job::FetchPhoto { account, .. }
             | Job::SyncDav { account }
             | Job::ImportPst { account, .. }
             | Job::ExportPst { account, .. } => account,
@@ -336,6 +339,13 @@ pub enum Event {
         account: String,
         ids: Vec<(String, String)>,
         cleared: Vec<String>,
+        error: Option<String>,
+    },
+    /// A directory photo: its bytes and type (`image/jpeg`), or why there is none.
+    Photo {
+        email: String,
+        media: String,
+        data: Vec<u8>,
         error: Option<String>,
     },
     /// A CalDAV / CardDAV sync's result, to merge.

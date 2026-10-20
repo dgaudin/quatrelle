@@ -52,6 +52,20 @@ mod fake_jmap;
 
 use std::io;
 
+/// Largest directory picture kept (bytes): a contact photo, not a photograph album.
+pub(crate) const MAX_PICTURE: usize = 512 * 1024;
+
+/// A picture's media type, read from its first bytes: a directory photo arrives without a name.
+pub(crate) fn picture_media(data: &[u8]) -> &'static str {
+    match data {
+        [0xFF, 0xD8, 0xFF, ..] => "image/jpeg",
+        [0x89, b'P', b'N', b'G', ..] => "image/png",
+        [b'G', b'I', b'F', b'8', ..] => "image/gif",
+        [b'R', b'I', b'F', b'F', _, _, _, _, b'W', b'E', b'B', b'P', ..] => "image/webp",
+        _ => "image/jpeg",
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum NetError {
     #[error("network: {0}")]

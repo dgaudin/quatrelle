@@ -467,6 +467,22 @@ impl Client {
         Ok(out)
     }
 
+    /// The picture the directory keeps for an address (`/users/{id}/photo/$value`): its bytes
+    /// and type. `No` when the person has none.
+    pub fn user_photo(&self, email: &str) -> Result<(String, Vec<u8>)> {
+        let path = format!("/users/{}/photo/$value", seg(email));
+        let r = Request::get(&format!("{}{path}", self.base), MAX_JSON).header("Authorization", &self.auth).header("Accept", "image/jpeg, image/png");
+        let resp = http::send(&r)?;
+        if !resp.ok() {
+            return Err(NetError::No("no picture for this person".into()));
+        }
+        let data = resp.body;
+        if data.is_empty() || data.len() > crate::MAX_PICTURE {
+            return Err(NetError::No("no picture for this person".into()));
+        }
+        Ok((crate::picture_media(&data).to_string(), data))
+    }
+
     /// Delete every message in a folder, a batch at a time.
     fn empty(&self, folder: &str, owner: Option<&str>) -> Result<()> {
         let me = who(owner);

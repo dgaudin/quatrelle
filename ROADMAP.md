@@ -281,3 +281,9 @@ local-first, media-aware v1); the fuller request is
   (`$select`, POST) map them too; the contact form edits them and the People card shows the photo
   (initials when there is none). Tested: a vCard round trip with the picture and Outlook's `X-`
   fields, and the contact commands keeping them.
+- **2026-10-20** — **A colleague's picture:** the picture Exchange (`GetUserPhoto`) or Microsoft 365
+  (`/users/{id}/photo/$value`) keeps for an address is fetched when a contact has none of their own,
+  asked for once per address (a "none" is remembered), capped at 512 KiB, and shown in the People
+  list and on the contact card, with the initials when there is none. Tested: the EWS look-up against
+  the in-memory server, and the engine asking once and keeping the answer. GitHub's CI (stable 1.99)
+  also caught a new clippy lint in the model, fixed with `as_chunks`.

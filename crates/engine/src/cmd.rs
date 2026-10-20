@@ -664,6 +664,10 @@ pub fn registry() -> Registry {
             s.delete_card(&uid)
         })
         .params(r#"{"uid": string}"#),
+        CommandSpec::new("contact.photo", "Contact picture", "People › Contact", |s, v| {
+            s.fetch_person_photo(p::str(v, "account"), p::str(v, "email").unwrap_or_default())
+        })
+        .params(r#"{"email": string, "account"?: string} (the picture Exchange's directory keeps for that address)"#),
         CommandSpec::new("contact.fromMessage", "Add sender to contacts", "Reading pane", |s, _| {
             let from = s.reading.as_ref().and_then(|r| r.parsed.as_ref()).map(|p| p.from.clone()).ok_or_else(|| CmdError::Disabled("open a message first".into()))?;
             if let Some(existing) = s.people(&from.email).into_iter().find(|x| x.card.emails.iter().any(|e| e.value.eq_ignore_ascii_case(&from.email))) {

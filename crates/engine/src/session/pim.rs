@@ -517,6 +517,47 @@ impl Session {
         self.pim.values().any(|p| p.cards.iter().any(|c| c.card.uid == uid && p.books.iter().any(|b| b.id == c.book && b.read_only)))
     }
 
+    /// The picture the directory keeps for an address, once it has been fetched.
+    pub fn person_photo(&self, email: &str) -> Option<&mailcraft_model::vcard::Photo> {
+        self.person_photos.get(&email.trim().to_ascii_lowercase()).and_then(Option::as_ref)
+    }
+
+    /// Whether a picture was asked for (and answered, or none to have): the window stops asking
+    /// once it has.
+    pub fn person_photo_known(&self, email: &str) -> bool {
+        let email = email.trim().to_ascii_lowercase();
+        self.person_photos.contains_key(&email) || self.photo_asked.contains(&email)
+    }
+
+    /// Ask the directory (Exchange, Microsoft 365) for a person's picture, once: an address it
+    /// doesn't know, or a server that keeps no pictures, is remembered as having none.
+    pub fn fetch_person_photo(&mut self, account: Option<&str>, email: &str) -> CmdResult {
+        let email = email.trim().to_ascii_lowercase();
+        if email.is_empty() || !email.contains('@') {
+            return Err(CmdError::Params("an email address is needed".into()));
+        }
+        if self.person_photo_known(&email) {
+            return Ok(serde_json::json!({"known": true, "picture": self.person_photo(&email).is_some()}));
+        }
+        let can = |a: &AccountState| a.config.ews.is_some() || a.config.graph.is_some();
+        let domain = email.rsplit_once('@').map(|(_, d)| d.to_ascii_lowercase()).unwrap_or_default();
+        let chosen = match account {
+            Some(id) => self.account(id).filter(|a| can(a)).map(|a| a.config.id.clone()),
+            None => self
+                .accounts
+                .iter()
+                .find(|a| can(a) && a.config.email.rsplit_once('@').is_some_and(|(_, d)| d.eq_ignore_ascii_case(&domain)))
+                .or_else(|| self.accounts.iter().find(|a| can(a)))
+                .map(|a| a.config.id.clone()),
+        };
+        let Some(account) = chosen else {
+            return Err(CmdError::Disabled("no Exchange account to ask for pictures".into()));
+        };
+        self.photo_asked.insert(email.clone());
+        self.jobs.push(Job::FetchPhoto { account, email });
+        Ok(serde_json::json!({"asked": true}))
+    }
+
     pub fn update_card(&mut self, uid: &str, change: impl FnOnce(&mut Card)) -> CmdResult {
         let account = self.find_person(uid).map(|p| p.account).ok_or_else(|| CmdError::Params(format!("no contact `{uid}`")))?;
         if self.person_read_only(uid) {
