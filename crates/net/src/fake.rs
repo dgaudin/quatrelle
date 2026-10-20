@@ -39,6 +39,10 @@ pub struct State {
     /// What every password sign-in is refused with, when set (Outlook.com: "Basic authentication
     /// is disabled").
     pub refuse_passwords: Option<String>,
+    /// Connections open now, and the most there were at once (what a sync on several
+    /// connections shows).
+    pub open: usize,
+    pub peak: usize,
 }
 
 impl State {
@@ -55,6 +59,8 @@ impl State {
             log: Vec::new(),
             not_connected: Vec::new(),
             refuse_passwords: None,
+            open: 0,
+            peak: 0,
         }))
     }
 
@@ -544,6 +550,20 @@ pub fn serve_tcp(st: &Arc<Mutex<State>>) -> u16 {
                 let mut fake = Fake::connect(&st);
                 let mut sock = sock;
                 let mut buf = [0u8; 8192];
+                // Counted so a test can see that a sync really used several connections.
+                if let Ok(mut s) = st.lock() {
+                    s.open += 1;
+                    s.peak = s.peak.max(s.open);
+                }
+                struct Open(Arc<Mutex<State>>);
+                impl Drop for Open {
+                    fn drop(&mut self) {
+                        if let Ok(mut s) = self.0.lock() {
+                            s.open = s.open.saturating_sub(1);
+                        }
+                    }
+                }
+                let _open = Open(st.clone());
                 loop {
                     let out: Vec<u8> = fake.out.drain(..).collect();
                     if !out.is_empty() && sock.write_all(&out).is_err() {
@@ -870,6 +890,20 @@ mod tests {
                 let mut fake = Fake::connect(&st);
                 let mut sock = sock;
                 let mut buf = [0u8; 8192];
+                // Counted so a test can see that a sync really used several connections.
+                if let Ok(mut s) = st.lock() {
+                    s.open += 1;
+                    s.peak = s.peak.max(s.open);
+                }
+                struct Open(Arc<Mutex<State>>);
+                impl Drop for Open {
+                    fn drop(&mut self) {
+                        if let Ok(mut s) = self.0.lock() {
+                            s.open = s.open.saturating_sub(1);
+                        }
+                    }
+                }
+                let _open = Open(st.clone());
                 loop {
                     let out: Vec<u8> = fake.out.drain(..).collect();
                     if !out.is_empty() && sock.write_all(&out).is_err() {
@@ -1247,6 +1281,41 @@ y"
             std::thread::sleep(Duration::from_millis(50));
         }
         pool.submit(Job::Remove { account: "a1".into() });
+        let _ = std::fs::remove_dir_all(store.root());
+    }
+
+    /// A full sync reads folders on connections of their own, the main one staying free: three
+    /// connections at once (the main one and two readers), and every folder read.
+    #[test]
+    fn folders_are_read_on_connections_of_their_own() {
+        let st = State::new();
+        {
+            let mut s = st.lock().unwrap();
+            for (name, subject) in [("Sent", "sent today"), ("Archive", "old"), ("Projects/Caf&AOk-", "plan")] {
+                s.add(name, subject, &[]);
+            }
+            s.add("INBOX", "hello", &[]);
+        }
+        let imap_port = serve_tcp(&st);
+        let store = store("parallel");
+        let mut pool = crate::worker::Pool::new(store.clone(), std::sync::Arc::new(crate::worker::MemoryCredentials::default()));
+        pool.opts.parallel = 2;
+        let account = AccountConfig {
+            id: "a1".into(),
+            email: "me@studio.example".into(),
+            username: "me@studio.example".into(),
+            imap: ServerConfig { host: "127.0.0.1".into(), port: imap_port, security: Security::None },
+            smtp: ServerConfig { host: "127.0.0.1".into(), port: 1, security: Security::None },
+            ..Default::default()
+        };
+        pool.submit(Job::Start { account, password: Some(Secret("pw".into())) });
+        until(&pool, "online", |e| matches!(e, Event::Status { status: SyncStatus::Online { .. }, .. }));
+        for folder in ["INBOX", "Sent", "Archive", "Projects/Caf&AOk-"] {
+            let f = store.load_folder("a1", folder).unwrap();
+            assert_eq!(f.messages.len(), 1, "{folder} was read");
+        }
+        // The readers opened their own connections: the main one and two of them.
+        assert!(st.lock().unwrap().peak >= 3, "peak connections: {}", st.lock().unwrap().peak);
         let _ = std::fs::remove_dir_all(store.root());
     }
 

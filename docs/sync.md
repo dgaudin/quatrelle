@@ -67,6 +67,21 @@ messages already kept are never asked for again, and it stops by itself once the
   password stops retrying and asks the user (`NeedsPassword`). A refused command is reported and
   the cache is resynced.
 
+### Reading folders on connections of their own
+
+A full sync reads folders on up to `SyncOptions::parallel` connections of their own (the app asks
+for 2, so three with the main one), each taking folders from a shared list. The main connection
+stays free, so an opened message, a send or an automatic-reply change is answered while folders are
+still being read; it also takes a folder of its own when only one is left.
+
+- **Numbers (JMAP, Graph, EWS):** each reader gets `State::reserve` — its own copy with a block of
+  message numbers kept for it — and `State::absorb`/`compact` give them back once it's done, so two
+  connections never number two messages the same. Stored keys (folder states) stay valid.
+- **A server that takes one connection** (or says it's busy): the reader that can't connect says so
+  (`SyncDone::Refused`), the account finishes the round on its main connection, and `parallel` is
+  turned off for that account until it's started again.
+- **POP** reads its Inbox on one connection and never starts a reader.
+
 ## Offline changes (RFC 4549 "pending actions")
 
 Flag changes, moves and deletes are applied to the cache immediately (the UI updates before the
