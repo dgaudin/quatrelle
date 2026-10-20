@@ -534,6 +534,8 @@ fn job(text: &str, st: &Styles, plain: bool, t: &Tokens, wrap: f32, shift: &[f32
         }
         i += chars.len();
     }
+    // What isn't spelt right gets a red line under it (nothing before the dictionaries are read).
+    crate::spellcheck::underline(&mut job, text, t.danger);
     job
 }
 

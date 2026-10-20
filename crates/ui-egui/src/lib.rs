@@ -36,6 +36,7 @@ mod people;
 mod pim_dialogs;
 mod reading;
 mod rich_edit;
+mod spellcheck;
 pub mod theme;
 mod thumbs;
 pub use thumbs::VideoFrame;
@@ -478,6 +479,8 @@ pub struct MailApp {
 
 impl MailApp {
     pub fn new(session: Session, backend: Box<dyn Backend>, mut services: Box<dyn Services>) -> MailApp {
+        // The spelling dictionaries, read once in the background (nothing in the browser).
+        spellcheck::start();
         let seen = session.notices.len();
         let has_files = !services.downloads();
         let (data_folder, pending_move) = (services.data_folder(), services.pending_data_move());
