@@ -1,6 +1,6 @@
-# How MailCraft syncs
+# How Quatrelle syncs
 
-MailCraft is local-first: the UI only ever reads the on-disk cache (`crates/store`), and per-account
+Quatrelle is local-first: the UI only ever reads the on-disk cache (`crates/store`), and per-account
 worker threads (`crates/net/src/worker.rs`) keep that cache in step with the server. This page
 describes the algorithm and the standards it follows.
 
@@ -141,7 +141,7 @@ method calls, signed in with Basic authentication or an OAuth bearer token.
   IDLE; a `state` event syncs the Inbox. Servers without an event stream are polled every two
   minutes.
 
-The transport is written once (`mailcraft-jmap`, async over an `Http` trait) and shared: the
+The transport is written once (`quatrelle-jmap`, async over an `Http` trait) and shared: the
 desktop worker runs it over its own HTTP client, the browser app over `fetch`.
 
 ## Exchange Online through Microsoft Graph (`crates/net/src/graph.rs`)
@@ -248,7 +248,7 @@ moves, deletes, drafts, the sent copy) is made in the cache only; the worker car
 itself, since no server copy comes back. `account.add` with `pst` holds the account's first
 connection until that data file has come into it (Outlook's "use an existing data file").
 
-## In the browser (`apps/mailcraft-web`)
+## In the browser (`apps/quatrelle-web`)
 
 The web build keeps the cache in memory, mirrored to IndexedDB, and runs each account's jobs in
 order over JMAP and `fetch`. New mail comes by push: the session's event stream is read through

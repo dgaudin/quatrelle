@@ -2,10 +2,10 @@
 //! with keyboard shortcuts sent as input events.
 
 use egui::{Event, Key, Modifiers, RawInput};
-use mailcraft_engine::model::dates::Clock;
-use mailcraft_engine::model::{Event as MailEvent, MessageKey, Summary, SyncStatus};
-use mailcraft_engine::store::{FolderState, Store};
-use mailcraft_engine::{ReadingPane, Session, sample};
+use quatrelle_engine::model::dates::Clock;
+use quatrelle_engine::model::{Event as MailEvent, MessageKey, Summary, SyncStatus};
+use quatrelle_engine::store::{FolderState, Store};
+use quatrelle_engine::{ReadingPane, Session, sample};
 use serde_json::json;
 
 use crate::{Dialog, MailApp, NullBackend, NullServices};
@@ -13,7 +13,7 @@ use crate::{Dialog, MailApp, NullBackend, NullServices};
 const NOW: i64 = 1_791_979_200;
 
 fn app(name: &str) -> (MailApp, std::path::PathBuf) {
-    let dir = std::env::temp_dir().join(format!("mailcraft-ui-{name}-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("quatrelle-ui-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let store = Store::open(&dir).unwrap();
     sample::seed_if_empty(&store, NOW).unwrap();
@@ -239,7 +239,7 @@ pub(crate) fn tour() {
             Dialog::edit_account(&a.session.accounts[0].config),
             Dialog::vacation(
                 "sample",
-                &mailcraft_engine::model::job::Vacation {
+                &quatrelle_engine::model::job::Vacation {
                     enabled: true,
                     subject: "Away".into(),
                     text: "Back soon".into(),
@@ -251,7 +251,7 @@ pub(crate) fn tour() {
             ),
             Dialog::vacation(
                 "sample",
-                &mailcraft_engine::model::job::Vacation {
+                &quatrelle_engine::model::job::Vacation {
                     enabled: true,
                     text: "Back soon".into(),
                     external: Some("Out of office".into()),
@@ -281,7 +281,7 @@ pub(crate) fn tour() {
             Dialog::MailboxClosed {
                 account: "sample".into(),
                 email: "zoe@hotmail.com".into(),
-                error: format!("{}. Turn on IMAP on Outlook.com.", mailcraft_engine::model::MICROSOFT_IMAP_CLOSED),
+                error: format!("{}. Turn on IMAP on Outlook.com.", quatrelle_engine::model::MICROSOFT_IMAP_CLOSED),
             },
             Dialog::add_account_with("zoe@hotmail.com", true),
             Dialog::Signature(Box::new(crate::dialogs::SignatureForm::new(&a.session, "sample", false))),
@@ -327,7 +327,7 @@ line two"
     }
     // The Outbox: its folder row, list and reading pane.
     let store = a.session.store.clone().unwrap();
-    let item = mailcraft_engine::store::OutboxItem {
+    let item = quatrelle_engine::store::OutboxItem {
         id: 5,
         from: "riley@studio.example".into(),
         recipients: vec!["ann@x.example".into()],
@@ -401,7 +401,7 @@ fn pop_form() -> Dialog {
         f.pop = true;
         f.pop_host = "pop.example.org".into();
         f.pop_port = "995".into();
-        f.pop_security = mailcraft_engine::model::Security::Tls;
+        f.pop_security = quatrelle_engine::model::Security::Tls;
         f.pst = "C:/Mail/old.pst".into();
         f.password = "pw".into();
     }
@@ -623,10 +623,10 @@ fn the_file_page_shows_accounts_replies_space_and_options() {
     }
     frame(&ctx, &mut a, vec![]);
     frame(&ctx, &mut a, vec![]);
-    assert!(matches!(a.session.account(&id).unwrap().vacation, mailcraft_engine::VacationState::Loading), "asked the server");
-    a.session.apply(mailcraft_engine::model::Event::Vacation {
+    assert!(matches!(a.session.account(&id).unwrap().vacation, quatrelle_engine::VacationState::Loading), "asked the server");
+    a.session.apply(quatrelle_engine::model::Event::Vacation {
         account: id.clone(),
-        vacation: Some(mailcraft_engine::model::job::Vacation {
+        vacation: Some(quatrelle_engine::model::job::Vacation {
             enabled: true,
             text: "Away".into(),
             until: Some("2026-10-20".into()),
@@ -634,7 +634,7 @@ fn the_file_page_shows_accounts_replies_space_and_options() {
         }),
         error: None,
     });
-    a.session.apply(mailcraft_engine::model::Event::Quota { account: id.clone(), used: 3 << 30, limit: 15 << 30 });
+    a.session.apply(quatrelle_engine::model::Event::Quota { account: id.clone(), used: 3 << 30, limit: 15 << 30 });
     frame(&ctx, &mut a, vec![]);
     // The replies dialog saves through the command; bad dates are reported in it.
     let mut d = Dialog::vacation(&id, &Default::default(), false);
@@ -783,7 +783,7 @@ impl crate::Services for Recorder {
         self.0.lock().unwrap().push((title.into(), body.into()));
     }
     fn clipboard_picture(&mut self) -> Option<Vec<u8>> {
-        Some(mailcraft_engine::sample::sample_png())
+        Some(quatrelle_engine::sample::sample_png())
     }
     fn can_drag_out(&self) -> bool {
         true
@@ -838,7 +838,7 @@ fn a_message_windows_attachments_are_its_own() {
 
 #[test]
 fn the_editor_formats_as_you_see_it_with_outlooks_keys() {
-    use mailcraft_engine::mime::rich::{Align, List, PICTURE};
+    use quatrelle_engine::mime::rich::{Align, List, PICTURE};
     let (mut a, dir) = app("editor");
     a.services = Box::new(Recorder(Default::default()));
     a.session.prefs.new_mail_window = false;
@@ -942,11 +942,11 @@ fn new_mail_is_announced_and_counted_in_the_title() {
     let ctx = egui::Context::default();
     frame(&ctx, &mut a, vec![]);
     frame(&ctx, &mut a, vec![]);
-    assert_eq!(a.ui.title_shown, "(3) Inbox – MailCraft");
+    assert_eq!(a.ui.title_shown, "(3) Inbox – Quatrelle");
     assert!(shown.lock().unwrap().is_empty(), "the mail already there isn't news");
     let m = |uid: u32, who: &str, subject: &str| Summary {
         key: MessageKey { account: "sample".into(), folder: "INBOX".into(), validity: 1, uid },
-        from: mailcraft_engine::model::EmailAddress::new(who, "x@y.example"),
+        from: quatrelle_engine::model::EmailAddress::new(who, "x@y.example"),
         subject: subject.into(),
         date: NOW - 5,
         ..Default::default()
@@ -986,8 +986,8 @@ fn organising_renders_and_rules_save() {
         json!({"rules": [{"name": "Zoe", "conditions": [{"if": "from", "value": "zoe@"}], "actions": [{"do": "categorize", "value": "Work"}]}]}),
     ));
     assert_eq!(a.session.rules.len(), 1);
-    // A rule the server keeps that MailCraft didn't make (Outlook's own): listed, read-only.
-    a.session.foreign_rules.push(mailcraft_engine::model::organize::ForeignRule {
+    // A rule the server keeps that Quatrelle didn't make (Outlook's own): listed, read-only.
+    a.session.foreign_rules.push(quatrelle_engine::model::organize::ForeignRule {
         account: "sample".into(),
         id: "R9".into(),
         name: "Outlook rule".into(),
@@ -1230,7 +1230,7 @@ fn people_lay_out_as_a_list_cards_or_a_phone_list() {
     let photo_base64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
     let pictured = a.session.people("").first().map(|p| p.card.uid.clone());
     if let Some(uid) = &pictured {
-        let photo = mailcraft_engine::model::vcard::Photo { media: "image/png".into(), base64: photo_base64.into() };
+        let photo = quatrelle_engine::model::vcard::Photo { media: "image/png".into(), base64: photo_base64.into() };
         a.session.update_card(uid, |c| c.photo = Some(photo)).unwrap();
     }
     for v in crate::people::PeopleView::ALL {
@@ -1280,7 +1280,7 @@ fn notes_are_written_on_and_kept() {
     assert!(a.session.notes("").iter().any(|n| n.note.uid == uid && n.note.text == "Water the plants"));
     // Ctrl+1 goes back to Mail.
     frame(&ctx, &mut a, vec![key(Key::Num1, Modifiers::COMMAND)]);
-    assert_eq!(a.session.module, mailcraft_engine::Module::Mail);
+    assert_eq!(a.session.module, quatrelle_engine::Module::Mail);
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -1356,7 +1356,7 @@ fn enter_submits_a_one_field_dialog() {
 /// server's own name draws as it is.
 #[test]
 fn a_shared_mailbox_draws_as_a_mailbox_of_its_own() {
-    use mailcraft_engine::model::{Folder, FolderRole};
+    use quatrelle_engine::model::{Folder, FolderRole};
     let (mut a, dir) = app("shared-mailbox");
     let mut folders = a.session.account("sample").unwrap().folders.clone();
     if let Some(inbox) = folders.iter_mut().find(|f| f.role == FolderRole::Inbox) {
@@ -1395,7 +1395,7 @@ fn a_shared_mailbox_draws_as_a_mailbox_of_its_own() {
 /// password stays (none is sent), and turned off it goes back to the incoming server's.
 #[test]
 fn server_settings_keep_the_outgoing_servers_own_sign_in() {
-    let mut c = mailcraft_engine::model::AccountConfig::guess("zoe@example.org");
+    let mut c = quatrelle_engine::model::AccountConfig::guess("zoe@example.org");
     c.id = "a1".into();
     c.smtp_username = Some("relay-user".into());
     let Dialog::EditAccount(mut f) = Dialog::edit_account(&c) else { panic!("the server settings") };

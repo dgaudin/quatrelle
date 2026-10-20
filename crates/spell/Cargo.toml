@@ -1,10 +1,10 @@
 [package]
-name = "mailcraft-spell"
+name = "quatrelle-spell"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "MailCraft spelling: Hunspell dictionaries read natively (pure, wasm-safe)"
+description = "Quatrelle spelling: Hunspell dictionaries read natively (pure, wasm-safe)"
 
 [lints]
 workspace = true

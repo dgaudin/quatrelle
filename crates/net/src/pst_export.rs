@@ -10,10 +10,10 @@
 
 use std::path::Path;
 
-use mailcraft_mime as mime;
-use mailcraft_model::{FolderRole, MessageKey, utf7};
-use mailcraft_store::Store;
 use pst_rw::{UnicodePstAttachment, UnicodePstBatchMessage, UnicodePstFile, UnicodePstMessage, UnicodePstRecipient, UnicodePstRecipientType};
+use quatrelle_mime as mime;
+use quatrelle_model::{FolderRole, MessageKey, utf7};
+use quatrelle_store::Store;
 
 /// Messages written per commit to the file, at most: the writer rewrites the folder's table of
 /// contents with each, so a big folder written a hundred at a time took longer with every batch.
@@ -152,18 +152,18 @@ pub fn export(store: &Store, account: &str, name: &str, path: &Path, progress: &
 }
 
 /// The account's calendar and contacts beside the data file: (events, people) written.
-fn pim_beside(store: &Store, account: &str, path: &Path) -> mailcraft_store::Result<(usize, usize)> {
-    let pim: mailcraft_model::pim::Pim = store.load_account_doc(account, mailcraft_model::pim::PIM_DOC).unwrap_or_default();
+fn pim_beside(store: &Store, account: &str, path: &Path) -> quatrelle_store::Result<(usize, usize)> {
+    let pim: quatrelle_model::pim::Pim = store.load_account_doc(account, quatrelle_model::pim::PIM_DOC).unwrap_or_default();
     let stem = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "Mail".into());
     let dir = path.parent().unwrap_or(Path::new("."));
     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| i64::try_from(d.as_secs()).unwrap_or(0)).unwrap_or(0);
-    let events: Vec<mailcraft_model::ical::CalEvent> = pim.events.iter().map(|e| e.event.clone()).collect();
+    let events: Vec<quatrelle_model::ical::CalEvent> = pim.events.iter().map(|e| e.event.clone()).collect();
     if !events.is_empty() {
-        mailcraft_store::write_atomic(&dir.join(format!("{stem} Calendar.ics")), mailcraft_model::ical::write(&events, None, now).as_bytes())?;
+        quatrelle_store::write_atomic(&dir.join(format!("{stem} Calendar.ics")), quatrelle_model::ical::write(&events, None, now).as_bytes())?;
     }
     if !pim.cards.is_empty() {
-        let cards: String = pim.cards.iter().map(|c| mailcraft_model::vcard::write(&c.card)).collect();
-        mailcraft_store::write_atomic(&dir.join(format!("{stem} Contacts.vcf")), cards.as_bytes())?;
+        let cards: String = pim.cards.iter().map(|c| quatrelle_model::vcard::write(&c.card)).collect();
+        quatrelle_store::write_atomic(&dir.join(format!("{stem} Contacts.vcf")), cards.as_bytes())?;
     }
     Ok((events.len(), pim.cards.len()))
 }
@@ -218,8 +218,8 @@ fn write(path: &Path, folder: &[&str], batch: &[Owned], created: &mut bool) -> R
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mailcraft_model::{EmailAddress, Flags};
-    use mailcraft_store::FolderState;
+    use quatrelle_model::{EmailAddress, Flags};
+    use quatrelle_store::FolderState;
 
     #[test]
     fn folder_names() {
@@ -230,7 +230,7 @@ mod tests {
 
     #[test]
     fn an_account_round_trips_through_a_data_file() {
-        let dir = std::env::temp_dir().join(format!("mailcraft-pst-export-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("quatrelle-pst-export-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let store = Store::open(dir.join("cache")).unwrap();
@@ -253,7 +253,7 @@ mod tests {
             store.write_body(&key, &raw).unwrap();
             mime::summary_from_full(&raw, key, Flags::default(), 10, 0)
         };
-        let folder = |path: &str, role| mailcraft_model::Folder {
+        let folder = |path: &str, role| quatrelle_model::Folder {
             account: "a1".into(),
             path: path.into(),
             delimiter: Some('/'),
@@ -276,9 +276,9 @@ mod tests {
         store.save_folder("a1", "INBOX/Projects", &projects).unwrap();
         store.save_folders("a1", &[folder("INBOX", FolderRole::Inbox), folder("INBOX/Projects", FolderRole::Other)]).unwrap();
 
-        let mut pim = mailcraft_model::pim::Pim::default();
-        pim.events.push(mailcraft_model::pim::StoredEvent {
-            event: mailcraft_model::ical::CalEvent {
+        let mut pim = quatrelle_model::pim::Pim::default();
+        pim.events.push(quatrelle_model::pim::StoredEvent {
+            event: quatrelle_model::ical::CalEvent {
                 uid: "e1".into(),
                 summary: "Screening".into(),
                 start: 1_792_000_000,
@@ -287,11 +287,11 @@ mod tests {
             },
             ..Default::default()
         });
-        pim.cards.push(mailcraft_model::pim::StoredCard {
-            card: mailcraft_model::vcard::Card { uid: "c1".into(), name: "Ana Lima".into(), ..Default::default() },
+        pim.cards.push(quatrelle_model::pim::StoredCard {
+            card: quatrelle_model::vcard::Card { uid: "c1".into(), name: "Ana Lima".into(), ..Default::default() },
             ..Default::default()
         });
-        store.save_account_doc("a1", mailcraft_model::pim::PIM_DOC, &pim).unwrap();
+        store.save_account_doc("a1", quatrelle_model::pim::PIM_DOC, &pim).unwrap();
         let file = dir.join("Out.pst");
         std::fs::write(&file, b"an older file").unwrap();
         let mut ticks = 0;

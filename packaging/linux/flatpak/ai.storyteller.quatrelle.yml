@@ -1,0 +1,66 @@
+# Flatpak manifest for Quatrelle, ready for a Flathub submission.
+#
+# Flatpak builds run offline, so the crate sources must be vendored first. From the repo root:
+#
+#   curl -fsSLO https://raw.githubusercontent.com/flatpak/flatpak-builder-tools/master/cargo/flatpak-cargo-generator.py
+#   python3 flatpak-cargo-generator.py Cargo.lock -o packaging/linux/flatpak/cargo-sources.json
+#   flatpak-builder --user --install --force-clean build-flatpak packaging/linux/flatpak/ai.storyteller.quatrelle.yml
+#   flatpak run ai.storyteller.quatrelle
+#
+# For Flathub, replace the `dir` source with a `git` source pinned to a release tag and commit.
+# The release's .flatpak bundles are built from ai.storyteller.quatrelle.bundle.yml instead (it
+# repackages the Linux tarball); keep runtime-version and finish-args identical in both.
+id: ai.storyteller.quatrelle
+runtime: org.freedesktop.Platform
+runtime-version: '25.08'
+sdk: org.freedesktop.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+command: quatrelle
+finish-args:
+  # Display: Wayland first; X11 only when no Wayland compositor is running.
+  - --socket=wayland
+  - --socket=fallback-x11
+  # X11 shared memory (MIT-SHM). Without it the X11 fallback is slow or fails.
+  - --share=ipc
+  # GPU access for the wgpu renderer (Vulkan, or GL as a fallback).
+  - --device=dri
+  # IMAP and SMTP: Quatrelle talks to the user's own mail servers directly.
+  - --share=network
+  # Passwords live in the user's keyring (Secret Service: GNOME Keyring, KWallet, KeePassXC).
+  - --talk-name=org.freedesktop.secrets
+  # Attach and Save dialogs go through the file-chooser portal (rfd), and attachments open with
+  # the OpenURI portal, so picked files work anywhere without broad filesystem access.
+  # Downloads is granted so saved attachments land in the usual place.
+  - --filesystem=xdg-download
+  # Deliberately not granted: home/host filesystem access and sound. The mail cache lives in the
+  # sandbox's own data folder (~/.var/app/ai.storyteller.quatrelle/data/quatrelle).
+build-options:
+  append-path: /usr/lib/sdk/rust-stable/bin
+modules:
+  - name: quatrelle
+    buildsystem: simple
+    build-options:
+      env:
+        CARGO_HOME: /run/build/quatrelle/cargo
+        CARGO_NET_OFFLINE: 'true'
+    build-commands:
+      - cargo --offline build --release --locked -p quatrelle -p quatrelle-cli
+      - install -Dm755 target/release/quatrelle /app/bin/quatrelle
+      - install -Dm755 target/release/quatrelle-cli /app/bin/quatrelle-cli
+      - install -Dm644 packaging/linux/ai.storyteller.quatrelle.desktop /app/share/applications/ai.storyteller.quatrelle.desktop
+      - mkdir -p /app/share/icons && cp -R assets/app-icon/hicolor /app/share/icons/
+      - >-
+        version=$(awk '/^\[/{p=($0=="[workspace.package]");next} p&&$1=="version"{gsub(/[" ]/,"",$3);print $3;exit}' Cargo.toml);
+        install -d /app/share/metainfo;
+        sed -e "s/@VERSION@/$version/" -e "s/@DATE@/$(date -u +%Y-%m-%d)/"
+        packaging/linux/ai.storyteller.quatrelle.metainfo.xml.in > /app/share/metainfo/ai.storyteller.quatrelle.metainfo.xml
+    sources:
+      - type: dir
+        path: ../../..
+        skip:
+          - target
+          - dist
+          - build-flatpak
+          - .flatpak-builder
+      - cargo-sources.json

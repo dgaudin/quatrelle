@@ -1,9 +1,9 @@
 //! Each account in one data file, as Outlook keeps each account in a `.pst`.
 //!
 //! The store's paths stay the same: `<root>/<account>/<path>`. Under this backend everything in
-//! an account's folder lives in `<files>/<name>.mailcraft`, a crash-safe single-file database
+//! an account's folder lives in `<files>/<name>.quatrelle`, a crash-safe single-file database
 //! (redb) with one table from path to bytes; files directly in `<root>` (the account list, the
-//! app's state) stay ordinary files there. `<files>` is "MailCraft Files" in Documents unless
+//! app's state) stay ordinary files there. `<files>` is "Quatrelle Files" in Documents unless
 //! moved (`location.rs`); which file is whose is kept in `<root>/datafiles.json`.
 //!
 //! Data files are hostile input like everything else: one that can't be read is set aside
@@ -28,13 +28,13 @@ const FILES: TableDefinition<&str, &[u8]> = TableDefinition::new("files");
 /// big file goes in pieces that each fill their pages, and `FILES` keeps a note of it.
 const PIECES: TableDefinition<(&str, u32), &[u8]> = TableDefinition::new("pieces");
 /// The note in `FILES` for a file kept in pieces: this, then its length (8 bytes, little-endian).
-/// Nothing MailCraft keeps starts with a NUL.
-const PIECED: &[u8] = b"\0MailCraft:pieces\0";
+/// Nothing Quatrelle keeps starts with a NUL.
+const PIECED: &[u8] = b"\0Quatrelle:pieces\0";
 /// Files up to this size (as kept: compressed when that helps) stay whole: one page's worth. A
 /// bigger value took the next power of two of pages, so it goes in pieces.
 const WHOLE_MAX: usize = PAGE - PAGE_SLACK;
 /// A file kept compressed starts with this, then its deflate stream.
-const DEFLATED: &[u8] = b"\0MailCraft:deflate\0";
+const DEFLATED: &[u8] = b"\0Quatrelle:deflate\0";
 /// Files smaller than this aren't worth compressing.
 const DEFLATE_MIN: usize = 1024;
 /// The most a compressed file may come to (a crafted data file can't fill the memory).
@@ -155,7 +155,7 @@ fn read_file(tx: &redb::ReadTransaction, files: &impl ReadableTable<&'static str
     unpack(out).map(Some)
 }
 /// A data file's extension.
-pub const EXTENSION: &str = "mailcraft";
+pub const EXTENSION: &str = "quatrelle";
 /// Which data file is whose (in the root).
 const NAMES: &str = "datafiles.json";
 /// Memory for each open data file's cache.
@@ -192,10 +192,42 @@ impl Packs {
     /// Data files for the store at `root`, kept in `dir`; folders from before are brought in.
     pub(crate) fn open(root: &Path, dir: &Path) -> Result<Packs> {
         fs::create_dir_all(dir).map_err(io_err(dir))?;
-        let names = fs::read(root.join(NAMES)).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
+        let names: BTreeMap<String, String> = fs::read(root.join(NAMES)).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
         let p = Packs { root: root.to_path_buf(), dir: dir.to_path_buf(), open: Mutex::default(), names: Mutex::new(names) };
+        p.take_over_old_files();
         p.bring_in_folders()?;
         Ok(p)
+    }
+
+    /// Data files written under the fork's old extension are renamed to this one, once, and the
+    /// names file follows: a mailbox keeps its data file, and its place, in the folder.
+    fn take_over_old_files(&self) {
+        let old = format!(".{}", crate::legacy::OLD_EXTENSION);
+        let Ok(rd) = fs::read_dir(&self.dir) else { return };
+        let mut renamed = false;
+        for entry in rd.flatten() {
+            let Some(name) = entry.file_name().to_str().map(str::to_string) else { continue };
+            let Some(stem) = name.to_lowercase().strip_suffix(&old).map(|_| &name[..name.len() - old.len()]) else { continue };
+            let new = format!("{stem}.{EXTENSION}");
+            if self.dir.join(&new).exists() || !entry.file_type().is_ok_and(|t| t.is_file()) {
+                continue;
+            }
+            if fs::rename(entry.path(), self.dir.join(&new)).is_ok() {
+                let mut names = Packs::lock(&self.names);
+                for v in names.values_mut() {
+                    if *v == name {
+                        *v = new.clone();
+                    }
+                }
+                renamed = true;
+            }
+        }
+        if renamed {
+            let names = Packs::lock(&self.names);
+            if let Ok(json) = serde_json::to_vec_pretty(&*names) {
+                let _ = write_atomic(&self.root.join(NAMES), &json);
+            }
+        }
     }
 
     pub(crate) fn dir(&self) -> &Path {
@@ -231,10 +263,15 @@ impl Packs {
         }
         let email = fs::read(self.root.join("accounts.json"))
             .ok()
-            .and_then(|b| serde_json::from_slice::<Vec<mailcraft_model::AccountConfig>>(&b).ok())
+            .and_then(|b| serde_json::from_slice::<Vec<quatrelle_model::AccountConfig>>(&b).ok())
             .and_then(|list| list.into_iter().find(|a| crate::safe_segment(&a.id) == account).map(|a| a.email));
         let stem = email.as_deref().map(str::trim).filter(|e| !e.is_empty()).unwrap_or(account);
-        let stem = stem.strip_suffix(".pst").or_else(|| stem.strip_suffix(".ost")).or_else(|| stem.strip_suffix(".mailcraft")).unwrap_or(stem);
+        let stem = stem
+            .strip_suffix(".pst")
+            .or_else(|| stem.strip_suffix(".ost"))
+            .or_else(|| stem.strip_suffix(".quatrelle"))
+            .or_else(|| stem.strip_suffix(&format!(".{}", crate::legacy::OLD_EXTENSION)))
+            .unwrap_or(stem);
         let stem: String = stem
             .chars()
             .map(|c| if c.is_control() || matches!(c, '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*') { '_' } else { c })
@@ -273,7 +310,7 @@ impl Packs {
         let db = match Database::builder().set_cache_size(CACHE).create(&path) {
             Ok(db) => db,
             Err(redb::DatabaseError::DatabaseAlreadyOpen) => {
-                return Err(other(format!("{} is open in another copy of MailCraft", path.display())));
+                return Err(other(format!("{} is open in another copy of Quatrelle", path.display())));
             }
             // The disk failing isn't damage (a file that isn't a data file is: InvalidData).
             Err(redb::DatabaseError::Storage(redb::StorageError::Io(e))) if e.kind() != io::ErrorKind::InvalidData => return Err(e),
@@ -531,7 +568,7 @@ impl Packs {
         let Ok(rd) = fs::read_dir(&self.root) else { return Ok(()) };
         let accounts: Vec<String> = fs::read(self.root.join("accounts.json"))
             .ok()
-            .and_then(|b| serde_json::from_slice::<Vec<mailcraft_model::AccountConfig>>(&b).ok())
+            .and_then(|b| serde_json::from_slice::<Vec<quatrelle_model::AccountConfig>>(&b).ok())
             .map(|l| l.into_iter().map(|a| crate::safe_segment(&a.id)).collect())
             .unwrap_or_default();
         for entry in rd.flatten() {
@@ -596,16 +633,16 @@ const BATCH: usize = 32 << 20;
 
 /// Every file in the data file at `path` (its path inside the account, its bytes), handed to
 /// `each` in batches. It's read from a copy at `tmp`, so the original is never changed (opening a
-/// database may write to it) and one another MailCraft has open can still be read.
+/// database may write to it) and one another Quatrelle has open can still be read.
 pub(crate) fn read_data_file(path: &Path, tmp: &Path, each: &mut dyn FnMut(Vec<(String, Vec<u8>)>) -> Result<()>) -> Result<usize> {
     let io_err = |source: io::Error| StoreError::Io { path: path.display().to_string(), source };
     fs::copy(path, tmp).map_err(|e| match e.raw_os_error() {
         // Windows' sharing and lock violations: an account here (or another copy) has it open.
-        Some(32 | 33) => io_err(io::Error::other("it's in use: an account in MailCraft has it open")),
+        Some(32 | 33) => io_err(io::Error::other("it's in use: an account in Quatrelle has it open")),
         _ => io_err(e),
     })?;
     let read = (|| -> Result<usize> {
-        let not_ours = |e: &dyn std::fmt::Display| io_err(io::Error::new(io::ErrorKind::InvalidData, format!("not a MailCraft data file ({e})")));
+        let not_ours = |e: &dyn std::fmt::Display| io_err(io::Error::new(io::ErrorKind::InvalidData, format!("not a Quatrelle data file ({e})")));
         let db = Database::builder().set_cache_size(CACHE).open(tmp).map_err(|e| not_ours(&e))?;
         let tx = db.begin_read().map_err(|e| not_ours(&e))?;
         let table = match tx.open_table(FILES) {
@@ -636,12 +673,12 @@ pub(crate) fn read_data_file(path: &Path, tmp: &Path, each: &mut dyn FnMut(Vec<(
 
 #[cfg(test)]
 mod tests {
-    use mailcraft_model::{AccountConfig, Flags, MessageKey, Summary};
+    use quatrelle_model::{AccountConfig, Flags, MessageKey, Summary};
 
     use crate::Store;
 
     fn temp(name: &str) -> std::path::PathBuf {
-        let d = std::env::temp_dir().join(format!("mailcraft-packed-{name}-{}", std::process::id()));
+        let d = std::env::temp_dir().join(format!("quatrelle-packed-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         d
     }
@@ -650,11 +687,45 @@ mod tests {
         AccountConfig { id: id.into(), email: email.into(), ..Default::default() }
     }
 
+    /// A data file written under the fork's old extension is renamed, once, and the names file
+    /// follows it: the account keeps its mail, its file and its place in the folder.
+    #[test]
+    fn an_old_extension_data_file_is_taken_over() {
+        use super::{EXTENSION, NAMES};
+        use quatrelle_model::{Folder, FolderRole};
+        let t = temp("old-extension");
+        let root = t.join("root");
+        let files = t.join("Files");
+        {
+            let store = Store::open_packed(&root, &files).unwrap();
+            store.save_accounts(&[account("a1", "zoe@studio.example")]).unwrap();
+            store.save_folders("a1", &[Folder { path: "INBOX".into(), role: FolderRole::Inbox, ..Default::default() }]).unwrap();
+            let k = MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 1, uid: 7 };
+            store.write_body(&k, b"Subject: hi\r\n\r\nhello").unwrap();
+        }
+        let made = std::fs::read_dir(&files).unwrap().flatten().map(|e| e.path()).find(|p| p.extension().is_some_and(|e| e == EXTENSION)).unwrap();
+        let old_name = format!("{}.{}", made.file_stem().unwrap().to_string_lossy(), crate::legacy::OLD_EXTENSION);
+        std::fs::rename(&made, files.join(&old_name)).unwrap();
+        // The names file still points at the old name, as it did before the rename.
+        let names = std::fs::read_to_string(root.join(NAMES)).unwrap();
+        std::fs::write(root.join(NAMES), names.replace(&*made.file_name().unwrap().to_string_lossy(), &old_name)).unwrap();
+
+        let store = Store::open_packed(&root, &files).unwrap();
+        let taken = store.data_file("a1").unwrap();
+        assert_eq!(taken.extension().unwrap(), EXTENSION);
+        assert!(taken.exists(), "{} is there", taken.display());
+        assert!(!files.join(&old_name).exists(), "the old file is gone, renamed");
+        let k = MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 1, uid: 7 };
+        assert_eq!(store.read_body(&k).unwrap(), b"Subject: hi\r\n\r\nhello", "its mail came along");
+        assert!(store.load_folders("a1").unwrap().iter().any(|f| f.path == "INBOX"), "its folders too");
+        let _ = std::fs::remove_dir_all(&t);
+    }
+
     /// A new account starts from an existing data file: its folders, mail and documents come in,
     /// the messages as this account's; junk is refused and paths that climb out are dropped.
     #[test]
     fn an_account_starts_from_an_existing_data_file() {
-        use mailcraft_model::{Folder, FolderRole};
+        use quatrelle_model::{Folder, FolderRole};
         let t = temp("from-file");
         let old = Store::open_packed(t.join("old"), t.join("Old Files")).unwrap();
         old.save_accounts(&[account("a1", "zoe@studio.example")]).unwrap();
@@ -667,12 +738,12 @@ mod tests {
         old.save_folder("a1", "INBOX", &st).unwrap();
         old.save_account_doc("a1", "pim.json", &serde_json::json!({"notes": []})).unwrap();
         // Changes still to make on its server, and mail still to send: they stay behind.
-        old.save_ops("a1", &[mailcraft_model::Op::Expunge { keys: vec![k.clone()] }]).unwrap();
+        old.save_ops("a1", &[quatrelle_model::Op::Expunge { keys: vec![k.clone()] }]).unwrap();
         old.outbox_add("a1", &crate::OutboxItem { id: 4, ..Default::default() }, b"Subject: later\r\n\r\nx").unwrap();
         let file = old.data_file("a1").unwrap();
         drop(old);
 
-        let s = Store::open_packed(t.join("app"), t.join("MailCraft Files")).unwrap();
+        let s = Store::open_packed(t.join("app"), t.join("Quatrelle Files")).unwrap();
         s.save_accounts(&[account("p7", "ana@example.org")]).unwrap();
         assert_eq!(s.import_data_file("p7", &file).unwrap(), 1);
         let folders = s.load_folders("p7").unwrap();
@@ -688,13 +759,13 @@ mod tests {
         assert!(!t.join("app").join(".import-p7.tmp").exists(), "the copy read from is gone");
 
         // Junk: refused, and nothing written.
-        let junk = t.join("junk.mailcraft");
+        let junk = t.join("junk.quatrelle");
         std::fs::write(&junk, b"not a database at all").unwrap();
         assert!(s.import_data_file("p8", &junk).is_err());
         assert!(s.load_folders("p8").unwrap().is_empty());
 
         // A crafted file: paths that climb out of the account are left out.
-        let crafted = t.join("crafted.mailcraft");
+        let crafted = t.join("crafted.quatrelle");
         {
             let db = redb::Database::create(&crafted).unwrap();
             let tx = db.begin_write().unwrap();
@@ -714,7 +785,7 @@ mod tests {
     #[test]
     fn each_account_is_one_data_file_named_after_it() {
         let t = temp("one-file");
-        let s = Store::open_packed(t.join("app"), t.join("MailCraft Files")).unwrap();
+        let s = Store::open_packed(t.join("app"), t.join("Quatrelle Files")).unwrap();
         s.save_accounts(&[account("a1", "zoe@studio.example"), account("a2", "old.pst")]).unwrap();
         let k = MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 1, uid: 7 };
         s.write_body(&k, b"Subject: hi\r\n\r\nhello").unwrap();
@@ -725,25 +796,25 @@ mod tests {
         s.save_account_doc("a2", "pim.json", &serde_json::json!({"x": 1})).unwrap();
         // One file per account, named as Outlook names a .pst; nothing loose in the app folder.
         let mut files: Vec<String> =
-            std::fs::read_dir(t.join("MailCraft Files")).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
+            std::fs::read_dir(t.join("Quatrelle Files")).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
         files.sort();
-        assert_eq!(files, ["old.mailcraft", "zoe@studio.example.mailcraft"]);
+        assert_eq!(files, ["old.quatrelle", "zoe@studio.example.quatrelle"]);
         assert!(!t.join("app").join("a1").exists());
-        assert_eq!(s.data_file("a1"), Some(t.join("MailCraft Files").join("zoe@studio.example.mailcraft")));
+        assert_eq!(s.data_file("a1"), Some(t.join("Quatrelle Files").join("zoe@studio.example.quatrelle")));
         // Read back, also after opening again.
         drop(s);
-        let s = Store::open_packed(t.join("app"), t.join("MailCraft Files")).unwrap();
+        let s = Store::open_packed(t.join("app"), t.join("Quatrelle Files")).unwrap();
         assert_eq!(s.read_body(&k).unwrap(), b"Subject: hi\r\n\r\nhello");
         assert_eq!(s.load_folder("a1", "INBOX").unwrap().messages.len(), 1);
         assert!(s.account_size("a1") > 0);
         // Folder renames move inside the file; the account going takes its file.
-        s.save_folders("a1", &[mailcraft_model::Folder { account: "a1".into(), path: "INBOX".into(), selectable: true, ..Default::default() }])
+        s.save_folders("a1", &[quatrelle_model::Folder { account: "a1".into(), path: "INBOX".into(), selectable: true, ..Default::default() }])
             .unwrap();
-        s.apply_op("a1", &mailcraft_model::Op::RenameFolder { from: "INBOX".into(), to: "Kept".into() }).unwrap();
+        s.apply_op("a1", &quatrelle_model::Op::RenameFolder { from: "INBOX".into(), to: "Kept".into() }).unwrap();
         assert_eq!(s.load_folder("a1", "Kept").unwrap().messages.len(), 1);
         assert!(s.read_body(&MessageKey { folder: "Kept".into(), ..k.clone() }).is_some(), "its messages moved too");
         // Removing the account keeps its file, as Outlook keeps a .pst: closed, and no one's.
-        let kept = t.join("MailCraft Files").join("zoe@studio.example.mailcraft");
+        let kept = t.join("Quatrelle Files").join("zoe@studio.example.quatrelle");
         assert_eq!(s.remove_account("a1").unwrap(), Some(kept.clone()));
         assert!(kept.exists() && s.data_file("a1").is_none());
         // It still reads (as a file opened from Open & Export).
@@ -758,11 +829,11 @@ mod tests {
         let before = std::fs::read(&kept).unwrap();
         s.save_accounts(&[account("a1", "zoe@studio.example")]).unwrap();
         s.save_folder("a1", "INBOX", &st).unwrap();
-        assert_eq!(s.data_file("a1"), Some(t.join("MailCraft Files").join("zoe@studio.example (2).mailcraft")));
+        assert_eq!(s.data_file("a1"), Some(t.join("Quatrelle Files").join("zoe@studio.example (2).quatrelle")));
         assert_eq!(std::fs::read(&kept).unwrap(), before);
         // Deleting (what never held anyone's mail) takes the file.
         s.delete_account("a1").unwrap();
-        assert!(!t.join("MailCraft Files").join("zoe@studio.example (2).mailcraft").exists() && kept.exists());
+        assert!(!t.join("Quatrelle Files").join("zoe@studio.example (2).quatrelle").exists() && kept.exists());
         let _ = std::fs::remove_dir_all(t);
     }
 
@@ -797,9 +868,9 @@ x"
         s.write_body(&key(1), &big).unwrap();
         assert_eq!(s.read_body(&key(1)).unwrap(), big);
         // A folder renamed takes its pieces.
-        s.save_folders("a1", &[mailcraft_model::Folder { account: "a1".into(), path: "INBOX".into(), selectable: true, ..Default::default() }])
+        s.save_folders("a1", &[quatrelle_model::Folder { account: "a1".into(), path: "INBOX".into(), selectable: true, ..Default::default() }])
             .unwrap();
-        s.apply_op("a1", &mailcraft_model::Op::RenameFolder { from: "INBOX".into(), to: "Kept".into() }).unwrap();
+        s.apply_op("a1", &quatrelle_model::Op::RenameFolder { from: "INBOX".into(), to: "Kept".into() }).unwrap();
         let kept = |uid: u32| MessageKey { folder: "Kept".into(), ..key(uid) };
         assert_eq!(s.read_body(&kept(1)).unwrap(), big);
         assert!(s.read_body(&key(1)).is_none());
@@ -918,7 +989,7 @@ x"
         assert!(!app.join("a1").exists(), "the folder went once it was in");
         assert_eq!(s.read_body(&k).unwrap(), b"Subject: kept\r\n\r\nbody");
         assert_eq!(s.load_account_doc::<Vec<String>>("a1", "pop-seen.json").unwrap(), vec!["u1".to_string()]);
-        assert!(t.join("Files").join("zoe@studio.example.mailcraft").is_file());
+        assert!(t.join("Files").join("zoe@studio.example.quatrelle").is_file());
         let _ = std::fs::remove_dir_all(t);
     }
 
@@ -927,14 +998,14 @@ x"
         let t = temp("damaged");
         let files = t.join("Files");
         std::fs::create_dir_all(&files).unwrap();
-        std::fs::write(files.join("zoe@studio.example.mailcraft"), b"not a database at all, just junk bytes").unwrap();
+        std::fs::write(files.join("zoe@studio.example.quatrelle"), b"not a database at all, just junk bytes").unwrap();
         std::fs::create_dir_all(t.join("app")).unwrap();
-        std::fs::write(t.join("app").join("datafiles.json"), br#"{"a1": "zoe@studio.example.mailcraft"}"#).unwrap();
+        std::fs::write(t.join("app").join("datafiles.json"), br#"{"a1": "zoe@studio.example.quatrelle"}"#).unwrap();
         let s = Store::open_packed(t.join("app"), &files).unwrap();
         let k = MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 1, uid: 1 };
         assert!(s.read_body(&k).is_none());
         s.write_body(&k, b"x").unwrap();
-        assert!(files.join("zoe@studio.example.mailcraft.damaged").exists());
+        assert!(files.join("zoe@studio.example.quatrelle.damaged").exists());
         let _ = std::fs::remove_dir_all(t);
     }
 
@@ -948,14 +1019,14 @@ x"
     }
 
     /// Issue #4: an account kept online only writes none of its mail anywhere. What it had on disk
-    /// comes into memory and its data file goes; it works as before while MailCraft runs (lists,
+    /// comes into memory and its data file goes; it works as before while Quatrelle runs (lists,
     /// sources, changes waiting, the Outbox), and the next start finds nothing of it. Other
     /// accounts keep theirs; turned off again, what's held is written out.
     #[test]
     fn an_online_only_account_leaves_nothing_on_disk() {
-        use mailcraft_model::{Folder, FolderRole};
+        use quatrelle_model::{Folder, FolderRole};
         let t = temp("online-only");
-        let (app, files) = (t.join("app"), t.join("MailCraft Files"));
+        let (app, files) = (t.join("app"), t.join("Quatrelle Files"));
         let s = Store::open_packed(&app, &files).unwrap();
         s.save_accounts(&[account("a1", "zoe@studio.example"), account("a2", "ana@studio.example")]).unwrap();
         let k = |a: &str, uid| MessageKey { account: a.into(), folder: "INBOX".into(), validity: 1, uid };
@@ -979,13 +1050,13 @@ x"
         assert!(s.is_online_only("a1") && !s.is_online_only("a2"));
         assert!(!zoe_file.exists(), "its data file goes");
         assert_eq!(s.data_file("a1"), None);
-        // What it had is still there while MailCraft runs.
+        // What it had is still there while Quatrelle runs.
         assert_eq!(s.load_folder("a1", "INBOX").unwrap().messages.len(), 1);
         assert_eq!(s.read_body(&k("a1", 1)).unwrap(), b"Subject: EARLIER-ZOE\r\n\r\nEARLIER-ZOE body");
         // New mail, changes, the Outbox and documents: in memory only.
         fill(&s, "a1", 2, "SECRET-ZOE");
         s.write_bodies(&[(k("a1", 3), b"Subject: x\r\n\r\nSECRET-BATCH".to_vec()), (k("a2", 3), b"Subject: x\r\n\r\nANA-BATCH".to_vec())]).unwrap();
-        s.save_ops("a1", &[mailcraft_model::Op::Expunge { keys: vec![k("a1", 1)] }]).unwrap();
+        s.save_ops("a1", &[quatrelle_model::Op::Expunge { keys: vec![k("a1", 1)] }]).unwrap();
         s.outbox_add("a1", &crate::OutboxItem { id: 4, ..Default::default() }, b"Subject: later\r\n\r\nSECRET-OUTBOX").unwrap();
         s.save_account_doc("a1", "pim.json", &serde_json::json!({"notes": ["SECRET-NOTE"]})).unwrap();
         assert_eq!(s.load_folder("a1", "INBOX").unwrap().messages.len(), 2);
@@ -994,7 +1065,7 @@ x"
         assert_eq!(s.outbox("a1").len(), 1);
         assert!(s.account_size("a1") > 0);
 
-        // MailCraft closes: nothing of it on disk, and the next start finds nothing of it.
+        // Quatrelle closes: nothing of it on disk, and the next start finds nothing of it.
         drop(s);
         for secret in [&b"EARLIER-ZOE"[..], b"SECRET-ZOE", b"SECRET-BATCH", b"SECRET-OUTBOX", b"SECRET-NOTE"] {
             assert!(!on_disk(&t, secret), "{}", String::from_utf8_lossy(secret));

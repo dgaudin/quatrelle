@@ -3,8 +3,8 @@
 //! and Delete. Exchange accounts keep them in the mailbox's Notes folder, others on this computer.
 
 use egui::{Color32, Margin, RichText, Sense, Ui, vec2};
-use mailcraft_engine::Session;
-use mailcraft_engine::model::dates;
+use quatrelle_engine::Session;
+use quatrelle_engine::model::dates;
 use serde_json::json;
 
 use crate::icons::{self, Icon};
@@ -103,7 +103,7 @@ pub(crate) fn save_edit(st: &mut UiState, acts: &mut Vec<Action>) {
 
 /// One note: its paper, its text (or the text box, while written on), when it last changed.
 /// True when the pointer pressed on it.
-fn note(s: &Session, t: &Tokens, st: &mut UiState, ui: &mut Ui, n: &mailcraft_engine::NoteRef, size: f32, acts: &mut Vec<Action>) -> bool {
+fn note(s: &Session, t: &Tokens, st: &mut UiState, ui: &mut Ui, n: &quatrelle_engine::NoteRef, size: f32, acts: &mut Vec<Action>) -> bool {
     let uid = &n.note.uid;
     let editing = st.note_edit.as_ref().is_some_and(|(u, _)| u == uid);
     let id = ui.scope_id().with(("note", uid));

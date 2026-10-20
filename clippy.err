@@ -33,11 +33,11 @@ help: collapse nested if block
 108 ~                 }
     |
 
-warning: `mailcraft-net` (lib) generated 2 warnings (run `cargo clippy --fix --lib -p mailcraft-net -- ` to apply 2 suggestions)
+warning: `quatrelle-net` (lib) generated 2 warnings (run `cargo clippy --fix --lib -p quatrelle-net -- ` to apply 2 suggestions)
 warning: use of deprecated associated function `egui::Id::new`: Use `Id::unique` (for a globally unique id) or `IdSalt::new` (for a locally unique salt) instead
    --> crates/ui-egui/src/icons.rs:219:76
     |
-219 |     let cache = ctx.data_mut(|d| d.get_temp_mut_or_default::<Rendered>(Id::new("mailcraft-icons")).clone());
+219 |     let cache = ctx.data_mut(|d| d.get_temp_mut_or_default::<Rendered>(Id::new("quatrelle-icons")).clone());
     |                                                                            ^^^
     |
     = note: `#[warn(deprecated)]` on by default
@@ -87,7 +87,7 @@ warning: this boolean expression can be simplified
     = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.95.0/index.html#nonminimal_bool
     = note: `#[warn(clippy::nonminimal_bool)]` on by default
 
-warning: `mailcraft-ui-egui` (lib) generated 7 warnings (run `cargo clippy --fix --lib -p mailcraft-ui-egui -- ` to apply 1 suggestion)
-warning: `mailcraft-ui-egui` (lib test) generated 7 warnings (7 duplicates)
-warning: `mailcraft-net` (lib test) generated 2 warnings (2 duplicates)
+warning: `quatrelle-ui-egui` (lib) generated 7 warnings (run `cargo clippy --fix --lib -p quatrelle-ui-egui -- ` to apply 1 suggestion)
+warning: `quatrelle-ui-egui` (lib test) generated 7 warnings (7 duplicates)
+warning: `quatrelle-net` (lib test) generated 2 warnings (2 duplicates)
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.22s

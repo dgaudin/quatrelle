@@ -1,10 +1,10 @@
 //! Modal dialogs: add an account, sign in again, move to a folder, confirmations, settings.
 
 use egui::{Margin, Rect, RichText, Sense, Ui, vec2};
-use mailcraft_engine::Compose;
-use mailcraft_engine::Session;
-use mailcraft_engine::model::organize::{Condition, ForeignRule, Rule, RuleAction};
-use mailcraft_engine::model::{AccountConfig, Folder, FolderRole, Security};
+use quatrelle_engine::Compose;
+use quatrelle_engine::Session;
+use quatrelle_engine::model::organize::{Condition, ForeignRule, Rule, RuleAction};
+use quatrelle_engine::model::{AccountConfig, Folder, FolderRole, Security};
 use serde_json::json;
 
 use crate::theme::{self, Tokens};
@@ -42,10 +42,10 @@ pub struct AccountForm {
     pub pop_security: Security,
     /// POP: when the server's copy of downloaded mail goes.
     pub pop_keep: PopKeep,
-    /// POP: an existing data file (Outlook's `.pst` or MailCraft's own `.mailcraft`) whose mail comes in first.
+    /// POP: an existing data file (Outlook's `.pst` or Quatrelle's own `.quatrelle`) whose mail comes in first.
     pub pst: String,
     /// Keep none of its mail on this computer (issue #4; not for POP). Until it's chosen, as
-    /// MailCraft runs: on when portable.
+    /// Quatrelle runs: on when portable.
     pub online_only: Option<bool>,
     pub error: Option<String>,
     /// The address whose looked-up settings are filled in, and where they came from.
@@ -460,7 +460,7 @@ fn online_only(ui: &mut Ui, t: &Tokens, on: &mut bool) {
 /// What online only means, said where it's chosen.
 pub(crate) fn online_only_about() -> &'static str {
     tl!(
-        "Its mail is read from the server and held in memory while MailCraft runs; nothing of it is written to this computer. Each message downloads when you open it. Mail waiting to be sent, changes made while offline, and calendar items, contacts and notes kept only in MailCraft are lost when it closes."
+        "Its mail is read from the server and held in memory while Quatrelle runs; nothing of it is written to this computer. Each message downloads when you open it. Mail waiting to be sent, changes made while offline, and calendar items, contacts and notes kept only in Quatrelle are lost when it closes."
     )
 }
 
@@ -684,7 +684,7 @@ pub enum Dialog {
     EditRule(Box<RuleForm>),
     /// A picture attachment, larger.
     PicturePreview {
-        key: mailcraft_engine::model::MessageKey,
+        key: quatrelle_engine::model::MessageKey,
         index: usize,
         name: String,
     },
@@ -930,7 +930,7 @@ impl RuleForm {
         }
     }
 
-    /// A rule the server keeps (made in Outlook, on a web page, in a Sieve script MailCraft
+    /// A rule the server keeps (made in Outlook, on a web page, in a Sieve script Quatrelle
     /// doesn't own): shown and changed from its parts, never re-ordered.
     fn from_server(account: &str, f: &ForeignRule) -> Option<RuleForm> {
         let r = f.rule.as_ref()?;
@@ -952,7 +952,7 @@ impl RuleForm {
 fn folder_path_label(s: &Session, path: &str) -> String {
     // The folder's own delimiter; "/" (the commonest) for one not synced yet.
     let delimiter = s.accounts.iter().flat_map(|a| &a.folders).find(|f| f.path == path).map_or(Some('/'), |f| f.delimiter);
-    let decoded = mailcraft_engine::model::utf7::decode(path);
+    let decoded = quatrelle_engine::model::utf7::decode(path);
     let parts: Vec<&str> = match delimiter {
         Some(d) => decoded.split(d).collect(),
         None => vec![decoded.as_str()],
@@ -1005,7 +1005,7 @@ impl Dialog {
     }
 
     /// The address book for the message being written; a double-click adds to `field`.
-    pub fn select_names(c: &mailcraft_engine::Compose, field: &'static str) -> Dialog {
+    pub fn select_names(c: &quatrelle_engine::Compose, field: &'static str) -> Dialog {
         Dialog::SelectNames(Box::new(NamesForm {
             target: field,
             to: c.to.clone(),
@@ -1047,23 +1047,23 @@ impl Dialog {
 
     /// A meeting about a message, as Outlook's Reply with Meeting: its subject, its sender and
     /// the others it went to as guests (not the user), and its text as the description.
-    pub fn meeting_from(s: &Session, p: &mailcraft_engine::mime::Parsed) -> Dialog {
+    pub fn meeting_from(s: &Session, p: &quatrelle_engine::mime::Parsed) -> Dialog {
         let mut f = crate::pim_dialogs::EventForm::new(s, None);
         f.summary = p.subject.clone();
         let mine = |e: &str| s.accounts.iter().any(|a| a.config.email.eq_ignore_ascii_case(e.trim()));
-        let mut guests: Vec<mailcraft_engine::model::EmailAddress> = Vec::new();
+        let mut guests: Vec<quatrelle_engine::model::EmailAddress> = Vec::new();
         for a in std::iter::once(&p.from).chain(&p.to).chain(&p.cc) {
             if !a.email.trim().is_empty() && !mine(&a.email) && !guests.iter().any(|g| g.email.eq_ignore_ascii_case(&a.email)) {
                 guests.push(a.clone());
             }
         }
-        f.guests = mailcraft_engine::model::addr::format_list(&guests);
+        f.guests = quatrelle_engine::model::addr::format_list(&guests);
         f.description = p.text.chars().take(4000).collect();
         Dialog::Event(Box::new(f))
     }
 
     /// A folder's Properties, from what this computer keeps of it.
-    pub fn folder_properties(s: &Session, f: &mailcraft_engine::model::Folder) -> Dialog {
+    pub fn folder_properties(s: &Session, f: &quatrelle_engine::model::Folder) -> Dialog {
         let kept = s.store.as_ref().and_then(|st| st.load_folder(&f.account, &f.path).ok()).unwrap_or_default();
         let total = if kept.messages.is_empty() { f.total as usize } else { kept.messages.len() };
         let unread = if kept.messages.is_empty() { f.unread as usize } else { kept.messages.iter().filter(|m| !m.flags.seen).count() };
@@ -1071,7 +1071,7 @@ impl Dialog {
         Dialog::FolderProperties {
             name: crate::i18n::folder(f),
             location: {
-                let decoded = mailcraft_engine::model::utf7::decode(&f.path);
+                let decoded = quatrelle_engine::model::utf7::decode(&f.path);
                 match f.delimiter {
                     Some(d) => decoded.split(d).collect::<Vec<_>>().join(" › "),
                     None => decoded,
@@ -1093,12 +1093,12 @@ impl Dialog {
         Dialog::Contact(Box::default())
     }
 
-    pub fn edit_contact(c: &mailcraft_engine::model::vcard::Card) -> Dialog {
+    pub fn edit_contact(c: &quatrelle_engine::model::vcard::Card) -> Dialog {
         Dialog::Contact(Box::new(crate::pim_dialogs::ContactForm::edit(c)))
     }
 
     /// A new contact for someone in a message, their name and address filled in.
-    pub fn contact_from(a: &mailcraft_engine::model::EmailAddress) -> Dialog {
+    pub fn contact_from(a: &quatrelle_engine::model::EmailAddress) -> Dialog {
         Dialog::Contact(Box::new(crate::pim_dialogs::ContactForm::from_address(a)))
     }
 
@@ -1126,7 +1126,7 @@ impl Dialog {
     }
 
     /// Automatic replies; `exchange`: the server keeps a reply for outside the organisation too.
-    pub fn vacation(account: &str, v: &mailcraft_engine::model::job::Vacation, exchange: bool) -> Dialog {
+    pub fn vacation(account: &str, v: &quatrelle_engine::model::job::Vacation, exchange: bool) -> Dialog {
         Dialog::Vacation(Box::new(VacationForm {
             account: account.to_string(),
             enabled: v.enabled,
@@ -1184,14 +1184,14 @@ impl Dialog {
     }
 
     /// The preview of an attachment, from `attachment.preview`'s answer.
-    pub fn preview(v: &serde_json::Value, clock: &mailcraft_engine::model::dates::Clock) -> Dialog {
+    pub fn preview(v: &serde_json::Value, clock: &quatrelle_engine::model::dates::Clock) -> Dialog {
         let get = |k: &str| v.get(k).and_then(serde_json::Value::as_str).unwrap_or("").to_string();
         let mut header = Vec::new();
         if get("kind") == "message" {
             header.push((tl!("From").to_string(), get("from")));
             header.push((tl!("To").to_string(), get("to")));
             if let Some(d) = v.get("date").and_then(serde_json::Value::as_i64).filter(|d| *d > 0) {
-                header.push((tl!("Date").to_string(), crate::i18n::date(&mailcraft_engine::model::dates::full_time(d, clock))));
+                header.push((tl!("Date").to_string(), crate::i18n::date(&quatrelle_engine::model::dates::full_time(d, clock))));
             }
         }
         let mut text = get("text");
@@ -1216,8 +1216,8 @@ impl Dialog {
 
     /// Delete a folder: into Deleted Items, or for good when it's already there.
     pub fn delete_folder(s: &Session, f: &Folder) -> Dialog {
-        let trash = s.account(&f.account).and_then(|a| a.folder(mailcraft_engine::model::FolderRole::Trash)).map(|t| t.path.clone());
-        let permanent = trash.is_none_or(|t| mailcraft_engine::model::is_within(&f.path, &t, f.delimiter));
+        let trash = s.account(&f.account).and_then(|a| a.folder(quatrelle_engine::model::FolderRole::Trash)).map(|t| t.path.clone());
+        let permanent = trash.is_none_or(|t| quatrelle_engine::model::is_within(&f.path, &t, f.delimiter));
         Dialog::DeleteFolder { account: f.account.clone(), folder: f.path.clone(), name: f.display_name(), permanent, error: None }
     }
 }
@@ -1277,7 +1277,7 @@ pub struct NamesForm {
     pub default_source: String,
     /// Each account's address books: (source, name, the account's address).
     pub books: Vec<(String, String, String)>,
-    pub list: Vec<mailcraft_engine::model::EmailAddress>,
+    pub list: Vec<quatrelle_engine::model::EmailAddress>,
     /// The list must be read again (the search or the book changed).
     pub stale: bool,
     pub selected: Option<usize>,
@@ -1289,7 +1289,7 @@ pub struct NamesForm {
 }
 
 /// Add `a` to a recipient field (`a; b` as Outlook writes them), unless it's there.
-fn add_to(field: &mut String, a: &mailcraft_engine::model::EmailAddress) {
+fn add_to(field: &mut String, a: &quatrelle_engine::model::EmailAddress) {
     if field.to_lowercase().contains(&a.email.to_lowercase()) {
         return;
     }
@@ -1452,7 +1452,7 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Act
                 (f.jmap, f.graph, f.ews, f.pop, f.advanced) = (true, false, false, false, true);
                 ui.label(
                     RichText::new(tl!(
-                        "In the browser, MailCraft works with JMAP providers. Your password stays in this tab only and is only ever sent to your mail server."
+                        "In the browser, Quatrelle works with JMAP providers. Your password stays in this tab only and is only ever sent to your mail server."
                     ))
                     .color(t.dim)
                     .small(),
@@ -1474,7 +1474,7 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Act
                 let email = f.email.trim().to_ascii_lowercase();
                 if !s.jmap_only
                     && (r.lost_focus() || f.advanced)
-                    && mailcraft_engine::model::addr::is_valid_email(&email)
+                    && quatrelle_engine::model::addr::is_valid_email(&email)
                     && !s.discovered.contains_key(&email)
                 {
                     acts.push(Action::Run("account.discover", json!({"email": email})));
@@ -1513,7 +1513,7 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Act
                 let browser_only = f.graph
                     || (!f.jmap
                         && !f.ews
-                        && mailcraft_engine::model::microsoft_consumer(&f.email)
+                        && quatrelle_engine::model::microsoft_consumer(&f.email)
                         && s.oauth_available.iter().any(|p| p == "microsoft"));
                 if !browser_only {
                     ui.label(tl!("Password"));
@@ -1643,7 +1643,7 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Act
                         ui.horizontal(|ui| {
                             ui.add_sized(
                                 [w - 90.0, 26.0],
-                                egui::TextEdit::singleline(&mut f.pst).hint_text(tl!("Mail from an old .pst or .mailcraft file comes in first")),
+                                egui::TextEdit::singleline(&mut f.pst).hint_text(tl!("Mail from an old .pst or .quatrelle file comes in first")),
                             );
                             if ui.button(tl!("Browse…")).clicked() {
                                 acts.push(Action::PickAccountDataFile);
@@ -1720,18 +1720,18 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Act
                 ui.label(RichText::new(e).color(t.danger));
             }
             // Providers that sign in through the browser (OAuth), when this copy can.
-            let provider = if f.graph { Some("microsoft") } else { mailcraft_engine::model::oauth_provider_for(&f.imap_host) }
+            let provider = if f.graph { Some("microsoft") } else { quatrelle_engine::model::oauth_provider_for(&f.imap_host) }
                 .filter(|p| s.oauth_available.iter().any(|a| a == p));
             // Outlook.com, Hotmail and Live take no passwords from mail apps any more: without
             // Microsoft sign-in in this copy, say so rather than take a password that can't work.
-            let consumer = !f.jmap && !f.ews && mailcraft_engine::model::microsoft_consumer(&f.email);
+            let consumer = !f.jmap && !f.ews && quatrelle_engine::model::microsoft_consumer(&f.email);
             let blocked = consumer && provider.is_none();
             if blocked {
                 ui.add_space(6.0);
                 ui.add(
                     egui::Label::new(
                         RichText::new(tl!(
-                            "Outlook.com, Hotmail and Live addresses only connect with Sign in with Microsoft: Microsoft no longer accepts passwords from mail apps. This copy of MailCraft wasn't built with Microsoft sign-in, so it can't add this account."
+                            "Outlook.com, Hotmail and Live addresses only connect with Sign in with Microsoft: Microsoft no longer accepts passwords from mail apps. This copy of Quatrelle wasn't built with Microsoft sign-in, so it can't add this account."
                         ))
                         .color(t.warn)
                         .small(),
@@ -1740,7 +1740,7 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Act
                 );
             } else if f.graph && provider.is_none() {
                 ui.add_space(6.0);
-                ui.label(RichText::new(tl!("Signing in with Microsoft isn't set up in this copy of MailCraft.")).color(t.warn).small());
+                ui.label(RichText::new(tl!("Signing in with Microsoft isn't set up in this copy of Quatrelle.")).color(t.warn).small());
             }
             if let Some(p) = provider {
                 ui.add_space(6.0);
@@ -1943,17 +1943,17 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Act
             let local = s.account(account).is_some_and(|a| a.is_local());
             let text = match file.as_ref().and_then(|f| f.file_name()).map(|n| n.to_string_lossy().into_owned()) {
                 Some(file) if local => tf!(
-                    "{email} will be removed from MailCraft. Its data file, {file}, stays in your MailCraft Files folder: open it from File › Open & Export to see its mail again.",
+                    "{email} will be removed from Quatrelle. Its data file, {file}, stays in your Quatrelle Files folder: open it from File › Open & Export to see its mail again.",
                     email = email,
                     file = file
                 ),
                 Some(file) => tf!(
-                    "{email} will be removed from MailCraft. Its data file, {file}, stays in your MailCraft Files folder: open it from File › Open & Export to see its mail again. Nothing is deleted on the server.",
+                    "{email} will be removed from Quatrelle. Its data file, {file}, stays in your Quatrelle Files folder: open it from File › Open & Export to see its mail again. Nothing is deleted on the server.",
                     email = email,
                     file = file
                 ),
-                None if local => tf!("{email} will be removed from MailCraft.", email = email),
-                None => tf!("{email} will be removed from MailCraft. Nothing is deleted on the server.", email = email),
+                None if local => tf!("{email} will be removed from Quatrelle.", email = email),
+                None => tf!("{email} will be removed from Quatrelle. Nothing is deleted on the server.", email = email),
             };
             ui.add(egui::Label::new(RichText::new(text).color(t.dim)).wrap());
             let (ok, cancel) = buttons(ui, t, "Remove", true);
@@ -2054,7 +2054,7 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Act
                 let text = f.compose.body.trim_end().to_string();
                 let mut styles = f.compose.styles.clone();
                 styles.fit(&text);
-                let html = if styles.is_plain() { None } else { Some(mailcraft_engine::mime::rich::to_html(&text, &styles)) };
+                let html = if styles.is_plain() { None } else { Some(quatrelle_engine::mime::rich::to_html(&text, &styles)) };
                 acts.push(Action::Run(
                     "account.setSignature",
                     json!({"account": f.account, "signature": text, "html": html, "newMessages": f.on_new, "replies": f.on_replies, "pictures": f.compose.inline}),
@@ -2085,7 +2085,7 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Act
             let folders: Vec<&Folder> = account
                 .folders
                 .iter()
-                .filter(|f| f.selectable && mailcraft_engine::model::utf7::decode(&f.path).to_lowercase().contains(&needle))
+                .filter(|f| f.selectable && quatrelle_engine::model::utf7::decode(&f.path).to_lowercase().contains(&needle))
                 .collect();
             let mut chosen = None;
             egui::ScrollArea::vertical().max_height(300.0).show(ui, |ui| {
@@ -2155,8 +2155,8 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Act
                 if needle.is_empty() && ui.selectable_label(false, RichText::new(tl!("(Top level)")).italics()).clicked() {
                     chosen = Some(None);
                 }
-                for f in acc.folders.iter().filter(|f| !mailcraft_engine::model::is_within(&f.path, folder, d)) {
-                    if !mailcraft_engine::model::utf7::decode(&f.path).to_lowercase().contains(&needle) {
+                for f in acc.folders.iter().filter(|f| !quatrelle_engine::model::is_within(&f.path, folder, d)) {
+                    if !quatrelle_engine::model::utf7::decode(&f.path).to_lowercase().contains(&needle) {
                         continue;
                     }
                     let indent = "    ".repeat(f.depth());
@@ -2317,7 +2317,7 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Act
                         );
                         let ui = &mut inner;
                         changed |= ui.checkbox(&mut r.enabled, "").on_hover_text(tl!("On / off")).changed();
-                        // The account's server can run it while MailCraft is closed (Exchange's
+                        // The account's server can run it while Quatrelle is closed (Exchange's
                         // inbox rules, or an IMAP account's Sieve script; the dialog says when it
                         // can't).
                         let can_server = r.account.as_deref().is_some_and(|a| s.server_kind(a).is_some());
@@ -2363,7 +2363,7 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Act
             } else if changed {
                 acts.push(Action::Run("rules.set", json!({"rules": rules})));
             }
-            // The rules the accounts' servers run that MailCraft didn't make (Outlook's own, a
+            // The rules the accounts' servers run that Quatrelle didn't make (Outlook's own, a
             // server's web page, a Sieve script): shown, never changed here — whoever made them
             // owns them.
             if !s.foreign_rules.is_empty() {
@@ -2375,7 +2375,7 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Act
                 egui::ScrollArea::vertical().max_height(150.0).auto_shrink([false, true]).id_salt("server-rules").show(ui, |ui| {
                     for f in &s.foreign_rules {
                         ui.horizontal(|ui| {
-                            // The server's own rule: it runs whether MailCraft is open or not, so
+                            // The server's own rule: it runs whether Quatrelle is open or not, so
                             // its switch acts there, not here.
                             let mut on = f.enabled;
                             if ui.checkbox(&mut on, "").on_hover_text(tl!("On / off on the server")).changed() {
@@ -2396,7 +2396,7 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Act
                                 if f.runnable && widgets::tiny_icon_button(ui, Icon::Sync, "Run now", t).clicked() {
                                     acts.push(Action::Run("rules.server.run", json!({"account": f.account, "id": f.id})));
                                 }
-                                // A rule every part of which MailCraft knows can be changed here
+                                // A rule every part of which Quatrelle knows can be changed here
                                 // (its place among the server's rules stays); the others are
                                 // shown with why, and stay as the program that made them has them.
                                 if f.runnable {
@@ -2406,7 +2406,7 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Act
                                         acts.push(Action::Dialog(Dialog::EditRule(Box::new(form))));
                                     }
                                 } else {
-                                    ui.label(RichText::new(tl!("MailCraft doesn't know every part of this rule yet")).color(t.faint).small());
+                                    ui.label(RichText::new(tl!("Quatrelle doesn't know every part of this rule yet")).color(t.faint).small());
                                 }
                             });
                         });
@@ -2558,7 +2558,7 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Act
             }
             ui.add_space(6.0);
             ui.checkbox(&mut f.stop, tl!("Don't run later rules on mail this one matches"));
-            // Outlook's "on this server": the server files the mail while MailCraft is closed,
+            // Outlook's "on this server": the server files the mail while Quatrelle is closed,
             // as far as it can express the rule (Exchange's inbox rules, a Sieve script). A rule
             // the server keeps already runs there.
             if on_server.is_none() {

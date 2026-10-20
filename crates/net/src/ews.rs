@@ -1,6 +1,6 @@
 //! Exchange Web Services: the transport for Exchange servers run by an organisation itself
 //! (on-premises Exchange 2010 SP2 and later) that don't offer IMAP, behind the same
-//! [`Job`](mailcraft_model::Job)/[`Event`](mailcraft_model::Event) interface as the others.
+//! [`Job`](quatrelle_model::Job)/[`Event`](quatrelle_model::Event) interface as the others.
 //!
 //! Every request is a SOAP call over HTTPS to the server's `/EWS/Exchange.asmx`, signed in with
 //! NTLMv2 ([`crate::ntlm`], on a connection kept open, as NTLM signs in the connection) or Basic
@@ -16,10 +16,10 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 
-use mailcraft_mime as mime;
-use mailcraft_model::organize::{Condition, Rule, RuleAction};
-use mailcraft_model::{Flag, Flags, Folder, FolderRole, MessageKey, Op, Summary, sort_newest_first, utf7, voting};
-use mailcraft_store::{FolderState, Store};
+use quatrelle_mime as mime;
+use quatrelle_model::organize::{Condition, Rule, RuleAction};
+use quatrelle_model::{Flag, Flags, Folder, FolderRole, MessageKey, Op, Summary, sort_newest_first, utf7, voting};
+use quatrelle_store::{FolderState, Store};
 use quick_xml::Reader;
 use quick_xml::events::Event as X;
 
@@ -29,7 +29,7 @@ use crate::sync::{SyncOptions, SyncReport, fill_from_source};
 use crate::{NetError, Result};
 
 /// The EWS address of an account whose server Autodiscover finds.
-pub const AUTODISCOVER: &str = mailcraft_model::EWS_AUTODISCOVER;
+pub const AUTODISCOVER: &str = quatrelle_model::EWS_AUTODISCOVER;
 /// Largest answer accepted (message sources come base64-encoded inside).
 const MAX_ANSWER: usize = 96 << 20;
 /// Items asked about in one request.
@@ -444,9 +444,9 @@ fn rule_id(r: &El) -> String {
     r.child("RuleId").map(|x| x.attr("Id").map(str::to_string).unwrap_or_else(|| x.text.trim().to_string())).unwrap_or_default()
 }
 
-/// A rule as the server keeps it, in MailCraft's terms when every part of it can be said there.
-fn server_rule(r: &El) -> mailcraft_model::organize::ForeignRule {
-    use mailcraft_model::organize::{Condition, ForeignRule, Rule, RuleAction};
+/// A rule as the server keeps it, in Quatrelle's terms when every part of it can be said there.
+fn server_rule(r: &El) -> quatrelle_model::organize::ForeignRule {
+    use quatrelle_model::organize::{Condition, ForeignRule, Rule, RuleAction};
     let id = rule_id(r);
     let name = r.text_of("DisplayName").unwrap_or("").trim().to_string();
     let enabled = r.text_of("IsEnabled") != Some("false");
@@ -488,7 +488,7 @@ fn server_rule(r: &El) -> mailcraft_model::organize::ForeignRule {
                     }
                 }
                 // "From these people" / "sent to these people": addresses as Exchange keeps
-                // them, which MailCraft reads by their address.
+                // them, which Quatrelle reads by their address.
                 "FromAddresses" | "SentToAddresses" => {
                     let who = k.name == "FromAddresses";
                     let people: Vec<String> = k
@@ -510,7 +510,7 @@ fn server_rule(r: &El) -> mailcraft_model::organize::ForeignRule {
                     when.push("an attachment".into());
                 }
                 "ContainsBodyStrings" => {
-                    // MailCraft's rules look at the subject and the addresses, not the body.
+                    // Quatrelle's rules look at the subject and the addresses, not the body.
                     when.push(format!("body {}", quoted(&strings(k))));
                     runnable = false;
                 }
@@ -1000,7 +1000,7 @@ impl Client {
             } else if starts("Basic") {
                 Scheme::Basic
             } else {
-                return Err(NetError::Auth("the server offers no sign-in MailCraft knows".into()));
+                return Err(NetError::Auth("the server offers no sign-in Quatrelle knows".into()));
             };
             if scheme == next || attempt == 2 {
                 return Err(NetError::Auth("the server refused the user name or password".into()));
@@ -1479,7 +1479,7 @@ impl Client {
     }
 
     /// The automatic replies.
-    pub fn vacation(&self) -> Result<mailcraft_model::job::Vacation> {
+    pub fn vacation(&self) -> Result<quatrelle_model::job::Vacation> {
         let doc = self.call(&format!(
             "<m:GetUserOofSettingsRequest><t:Mailbox><t:Address>{}</t:Address></t:Mailbox></m:GetUserOofSettingsRequest>",
             esc(&self.email)
@@ -1494,7 +1494,7 @@ impl Client {
             let secs = jmap::utc_date(&t)?;
             // The end is the moment after the last day.
             let secs = if end { secs - 1 } else { secs };
-            let (y, m, d) = mailcraft_model::dates::civil_from_days(secs.div_euclid(86_400));
+            let (y, m, d) = quatrelle_model::dates::civil_from_days(secs.div_euclid(86_400));
             Some(format!("{y:04}-{m:02}-{d:02}"))
         };
         let scheduled = state == "Scheduled";
@@ -1508,7 +1508,7 @@ impl Client {
             "Known" => "known",
             _ => "",
         };
-        Ok(mailcraft_model::job::Vacation {
+        Ok(quatrelle_model::job::Vacation {
             enabled: state != "Disabled",
             subject: String::new(),
             // Outside, the same unless it says something else (an empty one is the same).
@@ -1520,9 +1520,9 @@ impl Client {
         })
     }
 
-    pub fn set_vacation(&self, v: &mailcraft_model::job::Vacation) -> Result<()> {
+    pub fn set_vacation(&self, v: &quatrelle_model::job::Vacation) -> Result<()> {
         let at = |day: &Option<String>, end: bool| -> Option<String> {
-            let d = day.as_deref().filter(|d| mailcraft_model::job::is_day(d))?;
+            let d = day.as_deref().filter(|d| quatrelle_model::job::is_day(d))?;
             Some(if end { format!("{d}T23:59:59Z") } else { format!("{d}T00:00:00Z") })
         };
         let (start, end) = (at(&v.from, false), at(&v.until, true));
@@ -1561,10 +1561,10 @@ impl Client {
         Ok(self.inbox_rules()?.into_iter().map(|r| (r.name, r.id)).collect())
     }
 
-    /// The rules the Inbox keeps, as the server has them: MailCraft's own and the ones made
-    /// elsewhere (Outlook, a web page), each with what it does — and whether MailCraft knows
+    /// The rules the Inbox keeps, as the server has them: Quatrelle's own and the ones made
+    /// elsewhere (Outlook, a web page), each with what it does — and whether Quatrelle knows
     /// every part of it (it can then run it here).
-    pub fn inbox_rules(&self) -> Result<Vec<mailcraft_model::organize::ForeignRule>> {
+    pub fn inbox_rules(&self) -> Result<Vec<quatrelle_model::organize::ForeignRule>> {
         let doc = self.call("<m:GetInboxRules/>")?;
         let m = operation(&doc, "GetInboxRulesResponse")?;
         check_message(m)?;
@@ -1612,13 +1612,13 @@ impl Client {
         Ok(())
     }
 
-    /// Create, change and remove the Inbox rules Exchange runs, from MailCraft's rules: each is
+    /// Create, change and remove the Inbox rules Exchange runs, from Quatrelle's rules: each is
     /// paired with the id of the folder its action moves mail to (`None` for actions that need
     /// none). Answers the id every rule has on the server, by its name.
     ///
     /// Only what Exchange can express is sent ([`Rule::server_ready`]): the engine leaves the
     /// rest at home. A rule the server has never seen is created; one carrying a `remote_id` is
-    /// changed; `delete` names the ids to remove, and only ever ones MailCraft created.
+    /// changed; `delete` names the ids to remove, and only ever ones Quatrelle created.
     pub fn set_inbox_rules(&self, wanted: &[(Rule, Option<String>)], delete: &[String]) -> Result<Vec<(String, String)>> {
         if wanted.is_empty() && delete.is_empty() {
             return Ok(Vec::new());
@@ -1840,7 +1840,7 @@ pub fn autodiscover(email: &str, user: &str, password: &str, base: Option<&str>)
             _ => return Err(last),
         }
     }
-    Err(NetError::No("Autodiscover sent MailCraft round in circles".into()))
+    Err(NetError::No("Autodiscover sent Quatrelle round in circles".into()))
 }
 
 /// A well-known folder (`inbox`, `msgfolderroot`…) of this account's mailbox, or of another one
@@ -2216,10 +2216,10 @@ mod tests {
 
     #[test]
     fn the_inbox_rules_go_to_exchange_and_come_back() {
-        use mailcraft_model::organize::{Condition, Rule, RuleAction};
+        use quatrelle_model::organize::{Condition, Rule, RuleAction};
         let mut d = crate::fake_ews::Data::default();
         d.folder("Inbox", None, Some("inbox"), "IPF.Note");
-        // A rule made in Outlook: listed with the others, and never touched by MailCraft.
+        // A rule made in Outlook: listed with the others, and never touched by Quatrelle.
         d.rules.push(("R-OUTLOOK".into(), "Outlook rule".into()));
         let server = crate::fake_ews::serve(d);
         let user = format!("{}\\{}", crate::fake_ews::DOMAIN, crate::fake_ews::USER);
@@ -2278,11 +2278,11 @@ mod tests {
         assert!(c.user_photo("ghost@nophoto.example").is_err(), "no picture is an answer, not a broken account");
     }
 
-    /// A server rule is described as far as MailCraft can say it, and the rest is kept as text:
-    /// a body condition (which MailCraft's rules don't have) makes it one it can't run here.
+    /// A server rule is described as far as Quatrelle can say it, and the rest is kept as text:
+    /// a body condition (which Quatrelle's rules don't have) makes it one it can't run here.
     #[test]
-    fn a_server_rule_is_read_as_far_as_mailcraft_can_say_it() {
-        use mailcraft_model::organize::{Condition, RuleAction};
+    fn a_server_rule_is_read_as_far_as_quatrelle_can_say_it() {
+        use quatrelle_model::organize::{Condition, RuleAction};
         let doc = parse(
             "<t:Rule><t:RuleId>AgAABUdELrU=</t:RuleId><t:DisplayName>GRC:</t:DisplayName><t:Priority>1</t:Priority>\
              <t:IsEnabled>true</t:IsEnabled><t:Conditions><t:ContainsBodyStrings><t:String>DGA</t:String></t:ContainsBodyStrings>\
@@ -2291,11 +2291,11 @@ mod tests {
         );
         let r = server_rule(&doc.kids[0]);
         assert_eq!((r.id.as_str(), r.name.as_str(), r.enabled), ("AgAABUdELrU=", "GRC:", true));
-        assert!(!r.runnable, "a body condition isn't one MailCraft can run");
+        assert!(!r.runnable, "a body condition isn't one Quatrelle can run");
         assert_eq!(r.rule, None);
         assert!(r.summary.contains("body \"DGA\"") && r.summary.contains("subject \"GRC:\"") && r.summary.contains("delete"), "{}", r.summary);
 
-        // One MailCraft can say entirely is kept whole: what it does, and on/off.
+        // One Quatrelle can say entirely is kept whole: what it does, and on/off.
         let doc = parse(
             "<t:Rule><t:RuleId Id=\"R7\"/><t:DisplayName>Invoices</t:DisplayName><t:IsEnabled>false</t:IsEnabled>\
              <t:Conditions><t:ContainsSubjectStrings><t:String>Invoice</t:String></t:ContainsSubjectStrings></t:Conditions>\
@@ -2310,10 +2310,10 @@ mod tests {
     }
 
     /// A rule that names several people (Outlook's "from these people") is read as one
-    /// MailCraft can run and change here, and written back the same way.
+    /// Quatrelle can run and change here, and written back the same way.
     #[test]
     fn a_rule_from_several_people_can_be_changed_here() {
-        use mailcraft_model::organize::{Condition, RuleAction};
+        use quatrelle_model::organize::{Condition, RuleAction};
         let doc = parse(
             "<t:Rule><t:RuleId Id=\"R5\"/><t:DisplayName>Alertes</t:DisplayName><t:Priority>3</t:Priority><t:IsEnabled>true</t:IsEnabled>\
              <t:Conditions><t:FromAddresses>\
@@ -2349,7 +2349,7 @@ mod tests {
     /// comes as the id the server knows, and the rule keeps its place among the server's rules.
     #[test]
     fn a_rule_that_moves_mail_can_be_changed_here() {
-        use mailcraft_model::organize::{Condition, RuleAction};
+        use quatrelle_model::organize::{Condition, RuleAction};
         let doc = parse(
             "<t:Rule><t:RuleId Id=\"R3\"/><t:DisplayName>Clients</t:DisplayName><t:Priority>7</t:Priority><t:IsEnabled>true</t:IsEnabled>\
              <t:Conditions><t:ContainsSenderStrings><t:String>@client.example</t:String></t:ContainsSenderStrings></t:Conditions>\

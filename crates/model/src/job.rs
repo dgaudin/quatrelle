@@ -131,7 +131,7 @@ impl Op {
     }
 }
 
-/// A published MailCraft release.
+/// A published Quatrelle release.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Release {
     /// As tagged (`v0.19.0-test.15`).
@@ -191,7 +191,7 @@ pub enum Job {
     /// Change them.
     SetVacation { account: String, vacation: Vacation },
     /// Put the rules the account keeps on its server (Exchange's inbox rules, an IMAP account's
-    /// Sieve script), so mail is filed while MailCraft is closed: the ones marked `server` (with
+    /// Sieve script), so mail is filed while Quatrelle is closed: the ones marked `server` (with
     /// their `remote_id` when the server already has them), the ids of the rules to remove there,
     /// and the account's categories by name with the keyword each is kept as.
     SetServerRules {
@@ -201,10 +201,10 @@ pub enum Job {
         #[allow(clippy::type_complexity)]
         categories: Vec<(String, String)>,
     },
-    /// Read the rules the account's server keeps, with the ids MailCraft's own rules have there
+    /// Read the rules the account's server keeps, with the ids Quatrelle's own rules have there
     /// (`ours`): those made elsewhere come back with them, to be listed.
     GetServerRules { account: String, ours: Vec<String> },
-    /// Turn one of the server's own rules on or off (one MailCraft didn't make: its id is
+    /// Turn one of the server's own rules on or off (one Quatrelle didn't make: its id is
     /// enough, everything else stays as the server keeps it).
     SetServerRuleEnabled { account: String, id: String, enabled: bool, ours: Vec<String> },
     /// Change one of the server's own rules (its id at `rule.remote_id`): only that rule goes,
@@ -219,7 +219,7 @@ pub enum Job {
     /// Sync the account's calendars and address books with its CalDAV / CardDAV server (changes
     /// made here first).
     SyncDav { account: String },
-    /// Ask where MailCraft is published for its recent releases (File › About › Check for
+    /// Ask where Quatrelle is published for its recent releases (File › About › Check for
     /// updates); answered by [`Event::Releases`].
     CheckUpdates,
     /// Read an Outlook data file (`.pst`) into an account with no server.
@@ -339,7 +339,7 @@ pub enum Event {
         op: Op,
         error: String,
     },
-    /// MailCraft's recent releases (newest first), or why they couldn't be had.
+    /// Quatrelle's recent releases (newest first), or why they couldn't be had.
     Releases {
         releases: Vec<Release>,
         error: Option<String>,
@@ -381,7 +381,7 @@ pub enum Event {
         vacation: Option<Vacation>,
         error: Option<String>,
     },
-    /// The server's rules were read, or brought up to date: the id each of MailCraft's rules has
+    /// The server's rules were read, or brought up to date: the id each of Quatrelle's rules has
     /// there (by name), the rules it didn't make (Outlook's own, the server's web page, a Sieve
     /// script) as the server keeps them, the ids of the rules removed, or why it couldn't be
     /// done.

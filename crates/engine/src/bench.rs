@@ -1,9 +1,9 @@
 //! A big mailbox, on demand: what opening it, its biggest folder, a search and the address book
 //! cost. An ignored test, run by hand on a cache a data file was imported into (see
-//! `mailcraft-net`'s `pst_bench`):
+//! `quatrelle-net`'s `pst_bench`):
 //!
 //! ```text
-//! MC_CACHE=C:\mc-bench\cache-many cargo test -p mailcraft-engine --release --lib bench::big_mailbox -- --ignored --nocapture
+//! MC_CACHE=C:\mc-bench\cache-many cargo test -p quatrelle-engine --release --lib bench::big_mailbox -- --ignored --nocapture
 //! ```
 //!
 //! Each step prints how long it took; memory is watched from outside. Steps are a few seconds

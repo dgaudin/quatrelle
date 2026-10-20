@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use egui::{Color32, CornerRadius, FontData, FontDefinitions, FontFamily, Stroke, Visuals};
 
-/// MailCraft's app colour: a deep teal, distinct from the other Craft apps.
+/// Quatrelle's app colour: a deep teal, distinct from the other Craft apps.
 pub const APP_COLOR: Color32 = Color32::from_rgb(0x0E, 0x7C, 0x86);
 
 #[derive(Clone, Copy, Debug)]
@@ -87,7 +87,7 @@ impl Tokens {
 
     /// These tokens in another accent colour (the desktop's), its selection and hover tints
     /// worked out from it. A colour too light or too dark to read on the panes (a yellow on
-    /// white) is darkened or lightened until it does; `None` keeps MailCraft's own.
+    /// white) is darkened or lightened until it does; `None` keeps Quatrelle's own.
     pub fn with_accent(self, accent: Option<Color32>) -> Tokens {
         let Some(c) = accent else { return self };
         let surface = rgb(self.surface);
@@ -374,7 +374,7 @@ mod tests {
 
     #[test]
     fn a_system_accent_stays_readable() {
-        // None: MailCraft's own colours, untouched.
+        // None: Quatrelle's own colours, untouched.
         let own = Tokens::light().with_accent(None);
         assert_eq!((own.accent, own.accent_soft, own.hover_row), (Tokens::light().accent, Tokens::light().accent_soft, Tokens::light().hover_row));
         // Windows' blue reads on white as it is.

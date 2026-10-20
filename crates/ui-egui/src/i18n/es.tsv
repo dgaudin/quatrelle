@@ -1,6 +1,6 @@
-# MailCraft interface strings: Spanish (español).
+# Quatrelle interface strings: Spanish (español).
 # context<TAB>English<TAB>translation; escapes \n \t \\. Placeholders like {name} stay as they are.
-# Written for MailCraft (clean room): no wording is taken from other mail clients.
+# Written for Quatrelle (clean room): no wording is taken from other mail clients.
 
 	  Loading folders…	  Cargando carpetas…
 	(Top level)	(Nivel superior)
@@ -120,8 +120,8 @@
 	Local-first: mail is cached on this computer for fast offline search. Passwords stay in the system keychain.	Local primero: el correo se guarda en este equipo para buscar rápido sin conexión. Las contraseñas se quedan en el llavero del sistema.
 	Looking up the server settings…	Buscando la configuración del servidor…
 	Mail from {sender}	Correo de {sender}
-	MailCraft	MailCraft
-	MailCraft {version} · an ArtCraft app · MIT OR Apache-2.0	MailCraft {version} · una aplicación de ArtCraft · MIT OR Apache-2.0
+	Quatrelle	Quatrelle
+	Quatrelle {version} · an ArtCraft app · MIT OR Apache-2.0	Quatrelle {version} · una aplicación de ArtCraft · MIT OR Apache-2.0
 	Mailing list: unsubscribe at {address}	Lista de correo: cancela la suscripción en {address}
 	Mar	mar
 	Mark all as read	Marcar todo como leído
@@ -318,7 +318,7 @@
 	Waiting in the Outbox: it will be sent when you're back online.	Esperando en la Bandeja de salida: se enviará cuando vuelvas a tener conexión.
 	Wed	mié
 	Wednesday	miércoles
-	Welcome to MailCraft	Te damos la bienvenida a MailCraft
+	Welcome to Quatrelle	Te damos la bienvenida a Quatrelle
 	When mail	Cuando el correo
 	Without encryption your password travels in the clear. Use only for local test servers.	Sin cifrado, tu contraseña viaja en claro. Úsalo solo con servidores de prueba locales.
 	Work	Trabajo
@@ -344,7 +344,7 @@
 	{n} new messages	{n} mensajes nuevos
 	• List	• Lista
 	Select a message to read it	Selecciona un mensaje para leerlo
-	MailCraft – Sample mailbox	MailCraft – Buzón de ejemplo
+	Quatrelle – Sample mailbox	Quatrelle – Buzón de ejemplo
 
 	Mail server	Servidor de correo
 	IMAP and SMTP	IMAP y SMTP
@@ -354,7 +354,7 @@
 	Open in new window	Abrir en una ventana nueva
 	{subject} – Message	{subject} – Mensaje
 	About	Acerca de
-	About MailCraft	Acerca de MailCraft
+	About Quatrelle	Acerca de Quatrelle
 	Account information	Información de la cuenta
 	Account settings	Configuración de la cuenta
 	An ArtCraft app · MIT OR Apache-2.0	Una aplicación de ArtCraft · MIT OR Apache-2.0
@@ -377,8 +377,8 @@
 	Inbox and notifications	Bandeja de entrada y notificaciones
 	Info	Información
 	Kept on this computer: {size}	Guardado en este equipo: {size}
-	MailCraft talks only to your own mail servers, over encrypted connections. Pictures from the web load only when you ask.	MailCraft solo se comunica con tus propios servidores de correo, mediante conexiones cifradas. Las imágenes de la web solo se cargan cuando lo pides.
-	MailCraft {version}	MailCraft {version}
+	Quatrelle talks only to your own mail servers, over encrypted connections. Pictures from the web load only when you ask.	Quatrelle solo se comunica con tus propios servidores de correo, mediante conexiones cifradas. Las imágenes de la web solo se cargan cuando lo pides.
+	Quatrelle {version}	Quatrelle {version}
 	Mailbox	Buzón
 	Mailbox settings	Configuración del buzón
 	Manage rules	Administrar reglas
@@ -505,10 +505,10 @@
 	Exchange (Microsoft 365)	Exchange (Microsoft 365)
 	Exchange (Microsoft Graph)	Exchange (Microsoft Graph)
 	Server: {url} (Microsoft Graph)	Servidor: {url} (Microsoft Graph)
-	Signing in with Microsoft isn't set up in this copy of MailCraft.	El inicio de sesión con Microsoft no está configurado en esta copia de MailCraft.
+	Signing in with Microsoft isn't set up in this copy of Quatrelle.	El inicio de sesión con Microsoft no está configurado en esta copia de Quatrelle.
 	Syncs through Microsoft Graph, for work and school accounts where IMAP is switched off. You sign in with Microsoft in the browser: no password is stored.	Sincroniza mediante Microsoft Graph, para cuentas profesionales o educativas con IMAP desactivado. Inicias sesión con Microsoft en el navegador: no se guarda ninguna contraseña.
-	In the browser, MailCraft works with JMAP providers. Your password stays in this tab only and is only ever sent to your mail server.	En el navegador, MailCraft funciona con proveedores JMAP. Tu contraseña se queda solo en esta pestaña y solo se envía a tu servidor de correo.
-	Your mail in the browser. Add a JMAP account (such as Fastmail): MailCraft talks to your mail server directly, and your password stays in this tab only.	Tu correo en el navegador. Añade una cuenta JMAP (como Fastmail): MailCraft habla directamente con tu servidor de correo y tu contraseña se queda solo en esta pestaña.
+	In the browser, Quatrelle works with JMAP providers. Your password stays in this tab only and is only ever sent to your mail server.	En el navegador, Quatrelle funciona con proveedores JMAP. Tu contraseña se queda solo en esta pestaña y solo se envía a tu servidor de correo.
+	Your mail in the browser. Add a JMAP account (such as Fastmail): Quatrelle talks to your mail server directly, and your password stays in this tab only.	Tu correo en el navegador. Añade una cuenta JMAP (como Fastmail): Quatrelle habla directamente con tu servidor de correo y tu contraseña se queda solo en esta pestaña.
 	Pop out	Abrir en ventana
 	Pop in	Volver al panel
 	Back to the reading pane	Volver al panel de lectura
@@ -576,12 +576,12 @@
 	Open folder	Abrir carpeta
 	Move…	Mover…
 	Save as an Outlook data file…	Guardar como archivo de datos de Outlook…
-	Moves to {folder} the next time MailCraft starts.	Se moverá a {folder} la próxima vez que se inicie MailCraft.
-	Chosen when MailCraft was started (--data or MAILCRAFT_DATA), so it can't be moved here.	Se eligió al iniciar MailCraft (--data o MAILCRAFT_DATA), así que no se puede mover desde aquí.
+	Moves to {folder} the next time Quatrelle starts.	Se moverá a {folder} la próxima vez que se inicie Quatrelle.
+	Chosen when Quatrelle was started (--data or QUATRELLE_DATA), so it can't be moved here.	Se eligió al iniciar Quatrelle (--data o QUATRELLE_DATA), así que no se puede mover desde aquí.
 	Your mail couldn't be moved, so it stays where it was: {error}	No se pudo mover el correo, así que se queda donde estaba: {error}
 	Your mail is now kept in {folder}	Tu correo se guarda ahora en {folder}
-	Your mail moves there the next time MailCraft starts.	Tu correo se moverá allí la próxima vez que se inicie MailCraft.
-	Each account's mail, contacts and calendar are kept in a MailCraft data file (.mailcraft) in this folder, as Outlook keeps each account in a .pst in Outlook Files. An Outlook data file you open gets a .mailcraft file of its own here; Outlook's file is left as it was. To have a copy as a .pst, use Save as an Outlook data file under Info.	El correo, los contactos y el calendario de cada cuenta se guardan en un archivo de datos de MailCraft (.mailcraft) en esta carpeta, igual que Outlook guarda cada cuenta en un .pst en Archivos de Outlook. Un archivo de datos de Outlook que abras obtiene aquí su propio archivo .mailcraft; el archivo de Outlook queda como estaba. Para tener una copia como .pst, usa Guardar como archivo de datos de Outlook en Información.
+	Your mail moves there the next time Quatrelle starts.	Tu correo se moverá allí la próxima vez que se inicie Quatrelle.
+	Each account's mail, contacts and calendar are kept in a Quatrelle data file (.quatrelle) in this folder, as Outlook keeps each account in a .pst in Outlook Files. An Outlook data file you open gets a .quatrelle file of its own here; Outlook's file is left as it was. To have a copy as a .pst, use Save as an Outlook data file under Info.	El correo, los contactos y el calendario de cada cuenta se guardan en un archivo de datos de Quatrelle (.quatrelle) en esta carpeta, igual que Outlook guarda cada cuenta en un .pst en Archivos de Outlook. Un archivo de datos de Outlook que abras obtiene aquí su propio archivo .quatrelle; el archivo de Outlook queda como estaba. Para tener una copia como .pst, usa Guardar como archivo de datos de Outlook en Información.
 	Keep a copy of downloaded mail on the server	Conservar en el servidor una copia del correo descargado
 	Remove it from the server after	Quitarla del servidor después de
 	days	días
@@ -675,7 +675,7 @@
 	Don't send before	No enviar antes de
 	Have replies sent to another address	Hacer que las respuestas se envíen a otra dirección
 	Held in the Outbox: it will be sent {when}.	Retenido en la Bandeja de salida: se enviará el {when}.
-	Keep it in the Outbox and send it later (MailCraft has to be running then)	Guardarlo en la Bandeja de salida y enviarlo más tarde (MailCraft debe estar abierto entonces)
+	Keep it in the Outbox and send it later (Quatrelle has to be running then)	Guardarlo en la Bandeja de salida y enviarlo más tarde (Quatrelle debe estar abierto entonces)
 	Replies to	Respuestas a
 	Send right away	Enviar de inmediato
 	Sends {when}	Se envía el {when}
@@ -712,7 +712,7 @@
 	Clear formatting	Borrar formato
 	Insert link	Insertar vínculo
 	The selected text	El texto seleccionado
-	Outlook.com, Hotmail and Live addresses only connect with Sign in with Microsoft: Microsoft no longer accepts passwords from mail apps. This copy of MailCraft wasn't built with Microsoft sign-in, so it can't add this account.	Las direcciones de Outlook.com, Hotmail y Live solo se conectan con Iniciar sesión con Microsoft: Microsoft ya no acepta contraseñas de aplicaciones de correo. Esta copia de MailCraft no se compiló con el inicio de sesión de Microsoft, así que no puede agregar esta cuenta.
+	Outlook.com, Hotmail and Live addresses only connect with Sign in with Microsoft: Microsoft no longer accepts passwords from mail apps. This copy of Quatrelle wasn't built with Microsoft sign-in, so it can't add this account.	Las direcciones de Outlook.com, Hotmail y Live solo se conectan con Iniciar sesión con Microsoft: Microsoft ya no acepta contraseñas de aplicaciones de correo. Esta copia de Quatrelle no se compiló con el inicio de sesión de Microsoft, así que no puede agregar esta cuenta.
 	Back to message	Volver al mensaje
 	Esc	Esc
 	Open it in its app, or save it.	Ábralo en su aplicación o guárdelo.
@@ -747,9 +747,9 @@
 	Public Folders	Carpetas públicas
 	Copy the whole message	Copiar todo el mensaje
 	Existing data file (optional)	Archivo de datos existente (opcional)
-	Mail from an old .pst or .mailcraft file comes in first	El correo de un archivo .pst o .mailcraft antiguo se importa primero
+	Mail from an old .pst or .quatrelle file comes in first	El correo de un archivo .pst o .quatrelle antiguo se importa primero
 	Open a data file	Abrir un archivo de datos
-	Bring in an Outlook data file (.pst) or a MailCraft one (.mailcraft). It opens as a mailbox of its own, with its folders, kept on this computer.	Importe un archivo de datos de Outlook (.pst) o de MailCraft (.mailcraft). Se abre como un buzón propio, con sus carpetas, guardado en este equipo.
+	Bring in an Outlook data file (.pst) or a Quatrelle one (.quatrelle). It opens as a mailbox of its own, with its folders, kept on this computer.	Importe un archivo de datos de Outlook (.pst) o de Quatrelle (.quatrelle). Se abre como un buzón propio, con sus carpetas, guardado en este equipo.
 	Move up	Subir
 	Move down	Bajar
 	Updating…	Actualizando…
@@ -834,7 +834,7 @@
 	Delete this contact?	¿Eliminar este contacto?
 	This contact will be deleted, along with everything kept about them. This can't be undone.	Se eliminará este contacto, junto con todo lo que se guarda sobre él. No se puede deshacer.
 	Export…	Exportar…
-	Add the rules from a file saved by MailCraft. A rule for an account this computer doesn't have comes in turned off.	Añade las reglas de un archivo guardado por MailCraft. Una regla de una cuenta que este equipo no tiene llega desactivada.
+	Add the rules from a file saved by Quatrelle. A rule for an account this computer doesn't have comes in turned off.	Añade las reglas de un archivo guardado por Quatrelle. Una regla de una cuenta que este equipo no tiene llega desactivada.
 	Change…	Cambiar…
 	Clean up	Limpiar
 	Export rules	Exportar reglas
@@ -865,10 +865,10 @@
 	Its folders show under this account. You need access to it on the Exchange server; the ones you have full access to open by themselves.	Sus carpetas aparecen debajo de esta cuenta. Necesitas acceso a él en el servidor Exchange; los buzones a los que tienes acceso completo se abren solos.
 	Mailboxes you have full access to open by themselves.	Los buzones a los que tienes acceso completo se abren solos.
 	Shared mailboxes	Buzones compartidos
-	{email} will be removed from MailCraft. Its data file, {file}, stays in your MailCraft Files folder: open it from File › Open & Export to see its mail again. Nothing is deleted on the server.	{email} se quitará de MailCraft. Su archivo de datos, {file}, se queda en la carpeta MailCraft Files: ábrelo desde Archivo › Abrir y exportar para volver a ver su correo. No se elimina nada del servidor.
-	{email} will be removed from MailCraft. Nothing is deleted on the server.	{email} se quitará de MailCraft. No se elimina nada del servidor.
-	{email} will be removed from MailCraft. Its data file, {file}, stays in your MailCraft Files folder: open it from File › Open & Export to see its mail again.	{email} se quitará de MailCraft. Su archivo de datos, {file}, se queda en la carpeta MailCraft Files: ábrelo desde Archivo › Abrir y exportar para volver a ver su correo.
-	{email} will be removed from MailCraft.	{email} se quitará de MailCraft.
+	{email} will be removed from Quatrelle. Its data file, {file}, stays in your Quatrelle Files folder: open it from File › Open & Export to see its mail again. Nothing is deleted on the server.	{email} se quitará de Quatrelle. Su archivo de datos, {file}, se queda en la carpeta Quatrelle Files: ábrelo desde Archivo › Abrir y exportar para volver a ver su correo. No se elimina nada del servidor.
+	{email} will be removed from Quatrelle. Nothing is deleted on the server.	{email} se quitará de Quatrelle. No se elimina nada del servidor.
+	{email} will be removed from Quatrelle. Its data file, {file}, stays in your Quatrelle Files folder: open it from File › Open & Export to see its mail again.	{email} se quitará de Quatrelle. Su archivo de datos, {file}, se queda en la carpeta Quatrelle Files: ábrelo desde Archivo › Abrir y exportar para volver a ver su correo.
+	{email} will be removed from Quatrelle.	{email} se quitará de Quatrelle.
 
 # The Archive folder, where the plain entry is the command.
 folder	Archive	Archivo
@@ -967,7 +967,7 @@ month	May	mayo
 	Add what the rule looks at	Indica qué mira la regla
 	Change the rule	Cambiar la regla
 	Give the rule a name	Ponle un nombre a la regla
-	MailCraft doesn't know every part of this rule yet	MailCraft aún no conoce todas las partes de esta regla
+	Quatrelle doesn't know every part of this rule yet	Quatrelle aún no conoce todas las partes de esta regla
 	Pick a category	Elige una categoría
 	Pick a folder	Elige una carpeta
 	Say what to look for	Di qué buscar
@@ -995,16 +995,16 @@ month	May	mayo
 	Download	Descargar
 	Join meeting	Unirse a la reunión
 	Links:	Vínculos:
-	MailCraft {version} is available.	MailCraft {version} está disponible.
+	Quatrelle {version} is available.	Quatrelle {version} está disponible.
 	What's new	Novedades
 	You have the newest version.	Tienes la versión más reciente.
 	Online only: keep none of this account's mail on this computer	Solo en línea: no guardar ningún correo de esta cuenta en este equipo
 	Online only: none of this account's mail is kept on this computer.	Solo en línea: no se guarda ningún correo de esta cuenta en este equipo.
 	Online only: {email}	Solo en línea: {email}
 	New message	Mensaje nuevo
-	Open MailCraft to read it.	Abre MailCraft para leerlo.
-	Its mail is read from the server and held in memory while MailCraft runs; nothing of it is written to this computer. Each message downloads when you open it. Mail waiting to be sent, changes made while offline, and calendar items, contacts and notes kept only in MailCraft are lost when it closes.	Su correo se lee del servidor y se mantiene en memoria mientras MailCraft está abierto; no se escribe nada en este equipo. Cada mensaje se descarga al abrirlo. El correo pendiente de envío, los cambios hechos sin conexión y los elementos de calendario, contactos y notas guardados solo en MailCraft se pierden al cerrarlo.
-	Portable: everything is kept in MailCraftData beside MailCraft, and passwords only until it closes.	Portátil: todo se guarda en MailCraftData junto a MailCraft, y las contraseñas solo hasta que se cierra.
+	Open Quatrelle to read it.	Abre Quatrelle para leerlo.
+	Its mail is read from the server and held in memory while Quatrelle runs; nothing of it is written to this computer. Each message downloads when you open it. Mail waiting to be sent, changes made while offline, and calendar items, contacts and notes kept only in Quatrelle are lost when it closes.	Su correo se lee del servidor y se mantiene en memoria mientras Quatrelle está abierto; no se escribe nada en este equipo. Cada mensaje se descarga al abrirlo. El correo pendiente de envío, los cambios hechos sin conexión y los elementos de calendario, contactos y notas guardados solo en Quatrelle se pierden al cerrarlo.
+	Portable: everything is kept in QuatrelleData beside Quatrelle, and passwords only until it closes.	Portátil: todo se guarda en QuatrelleData junto a Quatrelle, y las contraseñas solo hasta que se cierra.
 	When it starts	Al empezar
 	1 minute before	1 minuto antes
 	{n} minutes before	{n} minutos antes

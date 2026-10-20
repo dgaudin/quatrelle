@@ -1,6 +1,6 @@
 # Gaps
 
-What MailCraft lacks compared with the everyday Outlook mail workflow, ranked by how often people
+What Quatrelle lacks compared with the everyday Outlook mail workflow, ranked by how often people
 hit it. v1 scope follows [storytold/artcraft#2177](https://github.com/storytold/artcraft/issues/2177);
 the items it deferred (calendar, contacts, Exchange, PST import, a web build) are now in, with the
 limits below. What each version brought is under [Done](#done); the milestones are in
@@ -14,8 +14,8 @@ _Status: v0.20, 2026-10-20._
 |---|---|---|
 | 1 | **Browser version: accounts other than JMAP** | The web build syncs JMAP accounts over `fetch`, with push, and keeps its cache in IndexedDB; the server must allow the page (CORS). A browser can't open IMAP or SMTP connections, so IMAP accounts would need a relay server that holds the password and speaks JMAP to the page: a server product of its own, not built. |
 | 2 | **Right-to-left: inside the editor, selecting, Hebrew in the browser** | The window mirrors and right-to-left mail and interface text read right to left. In the message editor a line that mixes right-to-left and left-to-right words is shown in the order egui lays it out (reordering it would put the caret in the wrong places); right-to-left mail can't be selected with the pointer (egui 0.36's text layout counts right-to-left letters wrongly, so a selection would copy nothing), but a right-click copies the line or the whole message as written. Release builds draw Arabic, Japanese and Thai in the browser with fonts from [storytold/craft-fonts](https://github.com/storytold/craft-fonts); it has no Hebrew or Korean font yet, and its Simplified Chinese one is too large for the page, so those still need the system (the desktop app) until craft-fonts has them. |
-| 3 | **Outlook data files: what the `.pst` libraries can't do** | Mail, contacts, calendar items, notes and tasks with a due date come in; export writes the mail as `.pst` and the calendar and contacts beside it as `.ics` and `.vcf`. The writer (`outlook-pst-rw`) makes mail items only, marked read, so contacts, appointments and flags can't go inside the `.pst`; the reader (`outlook-pst`) doesn't open the attachments of an attached message; tasks without a due date are left out (MailCraft has no task list). |
-| 4 | **Drag attachments out on a Wayland-only desktop** | Works on Windows, macOS, and Linux and the BSDs under X11 (XDND), and on Wayland desktops through XWayland, which the window opens on by default. With `MAILCRAFT_WAYLAND=1`, or on a desktop without XWayland, the window is native Wayland, where it would need the compositor's data-device drag from the window's own Wayland connection, which egui's window layer doesn't share (reaching it would take unsafe code). |
+| 3 | **Outlook data files: what the `.pst` libraries can't do** | Mail, contacts, calendar items, notes and tasks with a due date come in; export writes the mail as `.pst` and the calendar and contacts beside it as `.ics` and `.vcf`. The writer (`outlook-pst-rw`) makes mail items only, marked read, so contacts, appointments and flags can't go inside the `.pst`; the reader (`outlook-pst`) doesn't open the attachments of an attached message; tasks without a due date are left out (Quatrelle has no task list). |
+| 4 | **Drag attachments out on a Wayland-only desktop** | Works on Windows, macOS, and Linux and the BSDs under X11 (XDND), and on Wayland desktops through XWayland, which the window opens on by default. With `QUATRELLE_WAYLAND=1`, or on a desktop without XWayland, the window is native Wayland, where it would need the compositor's data-device drag from the window's own Wayland connection, which egui's window layer doesn't share (reaching it would take unsafe code). |
 | 5 | **On-premises Exchange: Kerberos-only servers** | EWS signs in with NTLMv2 or Basic and is found with Autodiscover; a server that only takes Kerberos can't be signed in to. ActiveSync is licensed and out of scope. |
 | 6 | **Public folders on Exchange Online** | Public folders list and sync on on-premises Exchange through EWS. Exchange Online reaches them only through EWS, which Microsoft blocks there from October 2026 and removes in April 2027, and Microsoft Graph has no public folders; its suggested replacement, Microsoft 365 Groups, needs permissions only a tenant's administrator can grant. |
 
@@ -70,8 +70,8 @@ mailbox; packaging for every desktop.
   its folders, messages, attachments and flags.
 - **Exchange Online:** Microsoft Graph as a third transport: folders, sync, changes, drafts,
   sending and automatic replies.
-- **Web build:** `apps/mailcraft-web`, the same window in the browser over JMAP and `fetch`
-  (`mailcraft-jmap` shared with the desktop), with downloads, the browser's file picker and a
+- **Web build:** `apps/quatrelle-web`, the same window in the browser over JMAP and `fetch`
+  (`quatrelle-jmap` shared with the desktop), with downloads, the browser's file picker and a
   `?sample` mailbox.
 
 ### v0.6 — Outlook's reach
@@ -115,7 +115,7 @@ mailbox; packaging for every desktop.
 - **Real Outlook data files:** checked against `.pst` files from a current Outlook; a file Outlook
   has open says so, an `.ost` (Outlook's offline copy of a server account) is explained, and the
   RSS Feeds folder and an empty Outbox aren't brought in.
-- **Data files, as Outlook's:** each account is one `.mailcraft` file in Documents\MailCraft
+- **Data files, as Outlook's:** each account is one `.quatrelle` file in Documents\Quatrelle
   Files (an opened `.pst` gets one too), as Outlook keeps `.pst` files in Outlook Files; mail
   kept before comes into them by itself. File › Options › Data files shows and moves the folder
   (at the next start, every file checked before the old ones go); each account's Mailbox
@@ -159,7 +159,7 @@ mailbox; packaging for every desktop.
     Clear flag (the ribbon's Flag ▾ and the right-click menu); the reading pane says when it's
     due (red once overdue) and when mail came with high or low importance. The day is kept on
     this computer, as Outlook keeps it for IMAP accounts.
-  - **Delay delivery** (held in the Outbox until its time, dated when it goes; MailCraft has to
+  - **Delay delivery** (held in the Outbox until its time, dated when it goes; Quatrelle has to
     be running) and **Replies to** (a Reply-To) while writing.
   - **Menus as Outlook's:** Quick print, Ignore and Find related on a message; Reply with
     meeting and Forward as attachment (the original as an `.eml`) under the reading pane's ⋯;
@@ -176,7 +176,7 @@ mailbox; packaging for every desktop.
 From [issue #1](https://github.com/ZIDAN44/mailcraft/issues/1), an Exchange user's list:
 - **Attachment previews in the reading pane:** a click on an attachment shows it in place of
   the message (Back to message, Open, Save As): pictures, a PDF's pages, text, attached mail,
-  and Word documents, Excel workbooks and PowerPoint slides read by MailCraft itself.
+  and Word documents, Excel workbooks and PowerPoint slides read by Quatrelle itself.
 - **Notes**, as Outlook's: coloured sticky notes (Ctrl+5), kept in an Exchange mailbox's
   Notes folder (EWS) or on this computer.
 - **People in three layouts** (Outlook's Change View): the list with an a–z index, business
@@ -211,7 +211,7 @@ Microsoft sign-in, tried end to end once the release builds carried a registrati
   module.
 
 ### v0.13 — The open gaps, again
-- **Microsoft sign-in in release builds:** the test builds carry MailCraft's Microsoft Entra
+- **Microsoft sign-in in release builds:** the test builds carry Quatrelle's Microsoft Entra
   registration (the repository secret), so Outlook.com, Hotmail and Live accounts sign in
   ([docs/oauth.md](oauth.md)); the gap is closed.
 - **Other people's calendars can be changed** where their owner made this account an editor:
@@ -226,16 +226,16 @@ Microsoft sign-in, tried end to end once the release builds carried a registrati
   text unless they say. Text now takes its cell's or table's `color`, so white on a dark band
   stays white.
 - **Outlook's notes from a data file:** importing a `.pst` brings its Notes folders' notes into
-  MailCraft's notes, with their colour and time (they were left out).
+  Quatrelle's notes, with their colour and time (they were left out).
 - **Right-to-left mail can be copied:** a right-click on Arabic or Hebrew text in the reading
   pane copies the line, or the whole message, as written (selecting it with the pointer isn't
   possible: egui's layout miscounts right-to-left letters).
-- **Several accounts, as Outlook keeps them:** MailCraft opens on the first account's Inbox (All
+- **Several accounts, as Outlook keeps them:** Quatrelle opens on the first account's Inbox (All
   Inboxes stays in Favorites), accounts move up and down from their right-click menu (the order is
   kept), and the status bar says one thing for all of them ("All folders are up to date",
   "Updating…", "2 accounts disconnected"), each account's own status on hover, with only those
   that need a password or a sign-in shown on their own.
-- **MailCraft's own data files:** a POP account can start from a `.mailcraft` file as well as a
+- **Quatrelle's own data files:** a POP account can start from a `.quatrelle` file as well as a
   `.pst`, and File › Open a data file opens one as a mailbox of its own (read from a copy, so
   the file itself isn't touched).
 - **The folder pane remembers:** Favorites, accounts and folders with folders in them collapse,
@@ -316,8 +316,8 @@ tester's does, a contact as Exchange keeps it, Outlook's clipboard), then fixed 
   that can't go yet goes to the main connection's Outbox, and Sent Items is read after.
 - **Address suggestions** under To, Cc and Bcc are as wide as the longest one, and a click
   anywhere on a row takes it.
-- **A log file:** `mailcraft.log` in the data folder (the previous run's kept as
-  `mailcraft.old.log`, at most 4 MB a run): accounts' statuses and errors, how long a sync took,
+- **A log file:** `quatrelle.log` in the data folder (the previous run's kept as
+  `quatrelle.old.log`, at most 4 MB a run): accounts' statuses and errors, how long a sync took,
   what a calendar or public folder said; never a message's content or a password.
 - **French:** a value filled in at run time never comes straight after « de », « le », « que » or
   another word French elides before a vowel (« de Anna »); a test checks the catalog.
@@ -396,7 +396,7 @@ tester's does, a contact as Exchange keeps it, Outlook's clipboard), then fixed 
     there, Ctrl+A and Ctrl+C are the text's. In the attachments, Ctrl+A selects them all and
     Ctrl+click picks some or lets one go, and a click elsewhere or Esc lets go of them all; several
     selected save together (`attachment.saveAll` with `indices`).
-  - Rules: `rules.export` and `rules.import` (Open & Export, and the Rules dialog), MailCraft's
+  - Rules: `rules.export` and `rules.import` (Open & Export, and the Rules dialog), Quatrelle's
     own file, each rule's account by its address (one this computer doesn't have comes in off).
     The Rules dialog shows a rule a line, scrolls, has a find box past six rules, and Run all.
 
@@ -430,12 +430,12 @@ tester's does, a contact as Exchange keeps it, Outlook's clipboard), then fixed 
 - **Enter in one-field dialogs:** the password, shared calendar and shared mailbox dialogs gave
   the field its focus back before looking for the Enter that ended input, so only the button
   submitted them. A headless test presses Enter.
-- **A removed account's data file stays:** removing an account deleted its `.mailcraft` file
+- **A removed account's data file stays:** removing an account deleted its `.quatrelle` file
   with all the mail in it. Outlook leaves a removed account's `.pst` on disk (Microsoft: removing
-  one only disconnects it), and so does MailCraft now: the file is closed and no one's, the
+  one only disconnects it), and so does Quatrelle now: the file is closed and no one's, the
   Remove dialog names it, and the notice says where it is. The same address added again gets a
-  file of its own (`address (2).mailcraft`), the kept one untouched; Open & Export's picker
-  starts in MailCraft Files, and the kept file opens there as a mailbox of its own. A file that
+  file of its own (`address (2).quatrelle`), the kept one untouched; Open & Export's picker
+  starts in Quatrelle Files, and the kept file opens there as a mailbox of its own. A file that
   failed to open, and an account moving to Graph (starting again from the server), still go.
 
 ### v0.19 — Shared mailboxes of their own, and SMTP's own sign-in
@@ -460,19 +460,19 @@ tester's does, a contact as Exchange keeps it, Outlook's clipboard), then fixed 
 - **The outgoing server's own sign-in (issue #3):** IMAP or POP and SMTP shared one user name and
   password, so an account whose servers sign in differently couldn't send. Add account and Server
   settings have "The outgoing server has its own user name and password"; its password is kept in
-  the keychain apart from the account's and never in MailCraft's files, stays when left empty in
+  the keychain apart from the account's and never in Quatrelle's files, stays when left empty in
   Server settings, and is forgotten with the account. Sending without it says where to enter it
   rather than signing in as the IMAP user; a test checks the SMTP server sees its own user.
 
 ### v0.20 — A window on every Windows PC
 - **No GPU, no window:** on some Windows PCs without a GPU the app never showed its window. The
   process stayed in the background, kept later launches out (its data files were open: "open in
-  another copy of MailCraft") and crashed when Windows shut it down. wgpu started Vulkan and
+  another copy of Quatrelle") and crashed when Windows shut it down. wgpu started Vulkan and
   OpenGL as well as DirectX 12; without a GPU those load only leftover or overlay drivers and
   Windows' OpenGL 1.1 software renderer, while DirectX 12 works through WARP. On Windows only
-  DirectX 12 starts now, and MailCraft picks the adapter: a real GPU first (discrete, or
+  DirectX 12 starts now, and Quatrelle picks the adapter: a real GPU first (discrete, or
   integrated with `WGPU_POWER_PREF=low`), WARP when there's none, all of them and the choice in
-  `mailcraft.log`. Shaders are compiled with FXC, part of Windows, rather than any
+  `quatrelle.log`. Shaders are compiled with FXC, part of Windows, rather than any
   `dxcompiler.dll` on the search path. `WGPU_BACKEND` still overrides it, and
   `WGPU_FORCE_FALLBACK_ADAPTER=1` draws with WARP.
 - **A window that can't open says why:** an error or a panic while the window opens shows a
@@ -482,7 +482,7 @@ tester's does, a contact as Exchange keeps it, Outlook's clipboard), then fixed 
   Render Driver); with no adapter, the message shows and the process exits on OK.
 - **What the other Craft apps learnt:** their fixes to shared ground (graphics start-up,
   Windows, Linux, packaging) were read across sixteen repositories and checked against
-  MailCraft; the ones that applied are in:
+  Quatrelle; the ones that applied are in:
   - the device asks for the adapter's own limits and whole texture size (a GPU short of egui's
     fixed limits, or a window wider than 8192 pixels, ended the start); after its first frames
     a wgpu error is logged rather than ending the app; Intel Macs leave out wgpu's indirect-call
@@ -493,7 +493,7 @@ tester's does, a contact as Exchange keeps it, Outlook's clipboard), then fixed 
     out on Wayland desktops (a stale `DISPLAY` opens on Wayland), and clipboard reads give up
     after two seconds instead of freezing the window while another app hangs;
   - the DMG is built with `hdiutil create`, as `makehybrid` left Finder information on the app
-    that `codesign --strict` rejects, and the MSI says MailCraft needs Windows 10 or later
+    that `codesign --strict` rejects, and the MSI says Quatrelle needs Windows 10 or later
     rather than installing an app that can't start on 7 or 8.
 - **WordCraft, PdfCraft, DeckCraft and GridCraft, every change to their desktop glue:** the
   four closest siblings' 367 commits to their desktop apps, packaging and build tools were read
@@ -504,12 +504,12 @@ tester's does, a contact as Exchange keeps it, Outlook's clipboard), then fixed 
   - windows come back on screen when their monitor went, and fit a screen smaller than they were;
   - an argument that isn't Unicode no longer ends the app or the CLI before they start, messages
     on start-up can't panic on a broken standard error, and quitting on macOS no longer crashes;
-  - `mailcraft.exe` declares per-monitor DPI awareness;
+  - `quatrelle.exe` declares per-monitor DPI awareness;
   - files handed to other apps (an opened attachment, video frames) go in a folder of the user's
     own, not in a shared `/tmp`.
   Looked at and left: OpenGL fallbacks (DirectX 12 with WARP covers a PC without a GPU),
-  egui's keyboard zoom (MailCraft binds none of its keys), GridCraft's damaged-font guard
-  (egui 0.37 skips such a font; a test keeps it so), links (MailCraft already opens only web and
+  egui's keyboard zoom (Quatrelle binds none of its keys), GridCraft's damaged-font guard
+  (egui 0.37 skips such a font; a test keeps it so), links (Quatrelle already opens only web and
   mail links), single-instance hand-off and portable mode (features of their own), WordCraft's
   built-in file browser for Linux desktops without a file chooser (a feature of its own), and
   app-specific fixes.
@@ -536,7 +536,7 @@ tester's does, a contact as Exchange keeps it, Outlook's clipboard), then fixed 
   a secret is now kept as UTF-8 over as many entries as it needs (earlier passwords still read,
   leftover parts removed), tested there growing, shrinking and removed.
 - **Online only, and a portable copy that leaves nothing behind (issue #4):** asked for to run
-  MailCraft from a USB stick or on a shared PC with no mail left there, and without downloading
+  Quatrelle from a USB stick or on a shared PC with no mail left there, and without downloading
   thousands of messages. Reproduced first: one IMAP account, five messages, twenty seconds, and
   its data file (557 KB) held every subject and body; the password was in Credential Manager.
   - **Online only, per account** (Add account, Account settings, File › Options › Mail): the
@@ -547,12 +547,12 @@ tester's does, a contact as Exchange keeps it, Outlook's clipboard), then fixed 
     downloaded in full ahead of reading: a message comes when it's opened. Its snoozed mail is
     remembered without the subject, its notifications name neither sender nor subject (Windows
     keeps them), and attachments opened with other apps go from the temporary folder when
-    MailCraft closes. Not for POP, whose mail has no other home, nor the sample mailbox. As
+    Quatrelle closes. Not for POP, whose mail has no other home, nor the sample mailbox. As
     Thunderbird's "Keep messages for this account on this computer" off, the list still comes
     from the server at each start.
   - **Portable** (the Craft apps' scheme, as PdfCraft and PhotoCraft): `portable.txt` or
-    `MailCraft.portable` beside the app (beside the `.app` on macOS) keeps the account list,
-    the window's state, the log and the data files in `MailCraftData` there; passwords and
+    `Quatrelle.portable` beside the app (beside the `.app` on macOS) keeps the account list,
+    the window's state, the log and the data files in `QuatrelleData` there; passwords and
     sign-ins stay in memory (asked again at the next start), nothing goes to the registry, and
     a new account starts with Online only ticked. A folder that can't be written turns it off
     and says why. The Windows portable zip ships `portable.txt`.
@@ -563,4 +563,4 @@ tester's does, a contact as Exchange keeps it, Outlook's clipboard), then fixed 
     the disk may still hold what the file held until it's overwritten: for no trace at all, add
     the account with Online only ticked. What another app has open (an attachment in Word) stays
     until that app lets it go, and what Windows keeps of its own (its search index, if the
-    data folder is indexed; the GPU driver's shader cache) is outside MailCraft's reach.
+    data folder is indexed; the GPU driver's shader cache) is outside Quatrelle's reach.

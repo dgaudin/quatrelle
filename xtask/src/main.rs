@@ -27,33 +27,33 @@ commands:
 
 /// Crate layers. A crate may depend only on crates in lower layers.
 const LAYERS: &[(&str, u8)] = &[
-    ("mailcraft-model", 0),
-    ("mailcraft-mime", 1),
-    ("mailcraft-store", 1),
-    ("mailcraft-print", 1),
-    ("mailcraft-spell", 1),
-    ("mailcraft-jmap", 2),
-    ("mailcraft-net", 3),
-    ("mailcraft-engine", 4),
-    ("mailcraft-ui-egui", 6),
+    ("quatrelle-model", 0),
+    ("quatrelle-mime", 1),
+    ("quatrelle-store", 1),
+    ("quatrelle-print", 1),
+    ("quatrelle-spell", 1),
+    ("quatrelle-jmap", 2),
+    ("quatrelle-net", 3),
+    ("quatrelle-engine", 4),
+    ("quatrelle-ui-egui", 6),
 ];
 
 /// Crates that never build for the web (sockets, threads, TLS).
-const NATIVE_ONLY: &[&str] = &["mailcraft-net"];
+const NATIVE_ONLY: &[&str] = &["quatrelle-net"];
 
 /// External crates that belong to one layer only.
 const RESTRICTED: &[(&str, &[&str])] = &[
     // UI toolkits: only the UI crate and the apps.
-    ("egui", &["mailcraft-ui-egui"]),
+    ("egui", &["quatrelle-ui-egui"]),
     ("eframe", &[]),
     ("winit", &[]),
     ("rfd", &[]),
     // The network layer is wired up by the apps only: the engine stays sans-I/O.
-    ("mailcraft-net", &[]),
+    ("quatrelle-net", &[]),
     // Network stacks: only the network layer.
-    ("lettre", &["mailcraft-net"]),
-    ("rustls", &["mailcraft-net"]),
-    ("imap-proto", &["mailcraft-net"]),
+    ("lettre", &["quatrelle-net"]),
+    ("rustls", &["quatrelle-net"]),
+    ("imap-proto", &["quatrelle-net"]),
 ];
 
 fn root() -> PathBuf {
@@ -125,7 +125,7 @@ fn cmd_layers() -> Result<(), String> {
         })
         .collect();
     for (name, deps) in &crates {
-        let ws: Vec<&str> = deps.iter().filter(|(d, dev)| !dev && d.starts_with("mailcraft-")).map(|(d, _)| d.as_str()).collect();
+        let ws: Vec<&str> = deps.iter().filter(|(d, dev)| !dev && d.starts_with("quatrelle-")).map(|(d, _)| d.as_str()).collect();
         let l = layer(name).map_or("app".to_string(), |l| format!("L{l}"));
         println!("{name:<20} {l:<4} {}", ws.join(", "));
     }
@@ -172,7 +172,7 @@ fn cmd_wasm() -> Result<(), String> {
         c.args(["-p", name]);
     }
     // The browser app itself.
-    c.args(["-p", "mailcraft-web"]);
+    c.args(["-p", "quatrelle-web"]);
     run(c, "cargo check --target wasm32-unknown-unknown (portable crates)")
 }
 
@@ -222,13 +222,13 @@ mod tests {
     #[test]
     fn catches_upward_and_restricted_dependencies() {
         let crates = vec![
-            ("mailcraft-engine".to_string(), vec![("mailcraft-net".to_string(), false), ("mailcraft-model".to_string(), false)]),
-            ("mailcraft-model".to_string(), vec![("egui".to_string(), false)]),
-            ("mailcraft-store".to_string(), vec![("mailcraft-engine".to_string(), true)]),
+            ("quatrelle-engine".to_string(), vec![("quatrelle-net".to_string(), false), ("quatrelle-model".to_string(), false)]),
+            ("quatrelle-model".to_string(), vec![("egui".to_string(), false)]),
+            ("quatrelle-store".to_string(), vec![("quatrelle-engine".to_string(), true)]),
         ];
         let v = violations(&crates);
         assert_eq!(v.len(), 2, "{v:?}");
-        assert!(v[0].contains("mailcraft-net"));
+        assert!(v[0].contains("quatrelle-net"));
         assert!(v[1].contains("egui"));
     }
 }

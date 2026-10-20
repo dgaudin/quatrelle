@@ -11,7 +11,7 @@ local-first, media-aware v1); the fuller request is
 | | |
 |---|---|
 | Crates | 8 libraries + 3 apps + xtask |
-| Commands | 141 (`mailcraft-cli commands`) |
+| Commands | 141 (`quatrelle-cli commands`) |
 | Tests | 369 (unit, in-memory IMAP, JMAP, Graph, EWS (mail, calendars, contacts, Autodiscover), CalDAV/CardDAV and ManageSieve servers, NTLM test vectors, SMTP and HTTP stubs, data files, TCP end-to-end, an X server drag, headless UI) |
 | Languages | 14 (English, Spanish, French, German, Dutch, Brazilian Portuguese, Italian, Russian, Japanese, Korean, Simplified and Traditional Chinese, Arabic, Hebrew) |
 | Platforms | Windows, macOS, Linux; the browser (JMAP accounts) |
@@ -71,7 +71,7 @@ local-first, media-aware v1); the fuller request is
    Backspace; someone's Exchange calendar editable when its events say so; public folders routed
    on Exchange 2013 and later (listing and mail too), and People's address books to find them.
    A second connection per account for sending and automatic replies, so neither waits for a
-   sync; diagnostics in mailcraft.log; French values kept away from words that elide; address
+   sync; diagnostics in quatrelle.log; French values kept away from words that elide; address
    suggestions that fit and click anywhere. Big data files and mailboxes: a 64.5 GB `.pst` of
    800,000 messages imports in 13 minutes under 850 MB of memory, and a mailbox that size opens,
    searches and changes without reading all of it. The File pages laid out as settings
@@ -95,7 +95,7 @@ local-first, media-aware v1); the fuller request is
 20. **v0.20 — A window on every Windows PC** ✅ Windows draws with DirectX 12 alone: a real GPU
    first, Windows' software renderer (WARP) on a PC without one, where the window never opened;
    a window that can't open says why; and the other Craft apps' fixes to shared ground that
-   apply to MailCraft (GPU device limits and errors, Intel Macs, Linux's GPU, XWayland for drag
+   apply to Quatrelle (GPU device limits and errors, Intel Macs, Linux's GPU, XWayland for drag
    and drop, clipboard reads that can't hang, a maximized window that doesn't blink, the DMG's
    strict signature, Windows 10 at install), and from WordCraft, PdfCraft, DeckCraft and
    GridCraft's desktop glue: winit's input-method and monitor fixes, windows back on screen,
@@ -127,7 +127,7 @@ local-first, media-aware v1); the fuller request is
   contacts (iCalendar, vCard, CalDAV/CardDAV, invitations).
 - **2026-10-15** — **v0.5**: Outlook data files (`.pst`) open as mailboxes; Exchange Online through
   Microsoft Graph; the store in memory, JMAP as a portable crate, and the browser version
-  (`apps/mailcraft-web`).
+  (`apps/quatrelle-web`).
 - **2026-10-15** — **v0.6**: Outlook's message editor and windows; Exchange calendars and contacts; `.pst`
   contacts, calendar and export; video frames from the system; browser push and IndexedDB;
   Arabic and Hebrew with right-to-left text; newsletter layouts; on-premises Exchange through
@@ -137,8 +137,8 @@ local-first, media-aware v1); the fuller request is
   calendar and contacts exported beside the `.pst`.
 - **2026-10-15** — **v0.8**: POP accounts (downloaded mail in folders on this computer, a copy left
   on the server), "use an existing data file", and real Outlook `.pst` files checked: open files,
-  `.ost` files, RSS Feeds and the Outbox handled; each account in a `.mailcraft` data file in
-  Documents\MailCraft Files.
+  `.ost` files, RSS Feeds and the Outbox handled; each account in a `.quatrelle` data file in
+  Documents\Quatrelle Files.
 - **2026-10-15** — **v0.9**: an audit against Outlook: Arrange by and Reverse sort, a Send / Receive
   tab with Work offline, Undo, Filter (categorized, important, to me), Ignore a conversation, New
   items, a minimizable folder pane, File › Save As / Save Attachments / Print / Exit, importance
@@ -177,7 +177,7 @@ local-first, media-aware v1); the fuller request is
 - **2026-10-19** — **v0.16**, more: a message sent, or automatic replies asked for, during a big
   mailbox's first sync went only after it (20 s and more in a test holding each folder 4 s): they
   go on a second connection now, sharing the sign-in. Diagnostics had nowhere to be written:
-  `mailcraft.log` keeps them. French sentences keep filled-in values away from « de », « le »
+  `quatrelle.log` keeps them. French sentences keep filled-in values away from « de », « le »
   and other words that elide, and a test checks the catalog.
 - **2026-10-19** — **v0.16**, big mailboxes, measured on generated data files (3 GB, 9.4 GB of
   800,000 messages, 64.5 GB): imports wrote a transaction per message (386/s), held every folder's
@@ -226,14 +226,14 @@ local-first, media-aware v1); the fuller request is
   message's header opens a contact card, its address a new message to them, and right-click ›
   Add to contacts a filled-in contact. Enter hadn't submitted the password, shared calendar or
   shared mailbox dialog: they took the focus back before seeing the Enter that let it go.
-  Removing an account deleted its `.mailcraft` file; as Outlook leaves a removed account's
+  Removing an account deleted its `.quatrelle` file; as Outlook leaves a removed account's
   `.pst` on disk, the file now stays (closed, no one's), the same address added again gets a
-  file of its own beside it, and Open & Export's picker starts in MailCraft Files to open it.
+  file of its own beside it, and Open & Export's picker starts in Quatrelle Files to open it.
 - **2026-10-20** — **v0.19**, issue #1's sixth round and issue #3, each reproduced in the app first
   (against a fake Exchange made in Dutch with a shared mailbox mapped to it): a shared mailbox
   showed as a folder of the account's own mailbox; it's a mailbox of its own now, after the
   account, its Inbox, Sent Items… with their icons and places, collapsible, with Add and Remove
-  in its menu and the account's. Exchange's special folders showed MailCraft's English words
+  in its menu and the account's. Exchange's special folders showed Quatrelle's English words
   ("Inbox") where Outlook shows the server's ("Postvak IN"); they keep the server's names (EWS
   and Graph). The reading pane showed a message's whole conversation above it though the list
   wasn't grouped; only when grouped now, as Outlook. And an outgoing server can sign in with a
@@ -279,11 +279,11 @@ local-first, media-aware v1); the fuller request is
   search as it arrives. The status bar says how far it has got, messages already kept are passed
   over, and it stops and says so. Tested: a batch at a time, each answer asks for the next.
 - **2026-10-20** — **Rules that run on the server:** a rule has "Also run on the server" (Outlook's
-  own), and MailCraft creates, changes and removes it in Exchange's inbox rules (EWS
+  own), and Quatrelle creates, changes and removes it in Exchange's inbox rules (EWS
   `UpdateInboxRules`, reading the ids back with `GetInboxRules`) and in Microsoft 365's
   (`messageRules`) — so mail is filed while the app is closed. Only what Exchange can express goes
   there (conditions in AND, no "any text", no newsletters, no flag or pin): the others stay on this
-  computer, and the dialog says why. MailCraft only ever changes or removes rules it made, a rule
+  computer, and the dialog says why. Quatrelle only ever changes or removes rules it made, a rule
   turned off there is removed from the server, and rules made offline go up when the account
   connects. Tested: create, change by id, remove, and the engine's job and id keeping.
 - **2026-10-20** — **Outlook's contacts, complete:** a card keeps department, office, profession,
@@ -310,7 +310,7 @@ local-first, media-aware v1); the fuller request is
   found with the body gone from the cache, a body downloaded after the index was kept joins it,
   and a folder that changed is read again on its own.
 - **2026-10-20** — **Rules on IMAP servers:** a rule marked "also run on the server" now runs on an
-  IMAP account too, in its Sieve script (`mailcraft` through ManageSieve): conditions become
+  IMAP account too, in its Sieve script (`quatrelle` through ManageSieve): conditions become
   `header :contains` tests (all or any of them), actions `fileinto` (the folder, by its UTF-8 name)
   and `addflag` (read, flagged, `$Pinned`, a category's keyword), and `stop` keeps the rest from
   running. The automatic replies stay in the same script, our rules run before the user's own
@@ -329,21 +329,21 @@ local-first, media-aware v1); the fuller request is
   headless frame showing the card's texture actually decoded and drawn.
 - **2026-10-20** — **Rules made elsewhere, listed:** when an account connects its server is asked
   what it keeps — Exchange's inbox rules (EWS), Microsoft 365's (`messageRules`), an IMAP account's
-  Sieve scripts — and the rules MailCraft didn't make (Outlook's own, the server's web page, a
+  Sieve scripts — and the rules Quatrelle didn't make (Outlook's own, the server's web page, a
   script the user wrote) are listed in the Rules dialog under "On the server, made elsewhere", with
-  the reminder that whoever made them owns them. Reading also heals MailCraft's own ids (a rule
+  the reminder that whoever made them owns them. Reading also heals Quatrelle's own ids (a rule
   whose copy vanished from the server gets one again) and refreshes the list after every change,
-  so a rule made in Outlook shows up without a restart. Only the ids MailCraft holds are ever
+  so a rule made in Outlook shows up without a restart. Only the ids Quatrelle holds are ever
   treated as its own. Tested: the split by id, the EWS listing with a rule from Outlook, the Sieve
   scripts, and the engine keeping the ids and listing the rest.
 - **2026-10-20** — **v0.20**: on some Windows PCs without a GPU the window never opened; the
   process stayed in the background holding the data files (so later launches were told another
   copy had them) and crashed when Windows shut it down. wgpu started Vulkan and OpenGL beside
   DirectX 12, and without a GPU those find only leftover or overlay drivers and Windows' OpenGL
-  1.1. Only DirectX 12 starts now, the adapter picked by MailCraft (a real GPU first, WARP when
+  1.1. Only DirectX 12 starts now, the adapter picked by Quatrelle (a real GPU first, WARP when
   there's none), its shaders compiled with FXC; a window that can't open says why in a message.
 - **2026-10-20** — **v0.20**, more: the sixteen sibling Craft repositories were cloned and their
-  fixes to what every Craft app shares were read and checked against MailCraft. Adopted, each
+  fixes to what every Craft app shares were read and checked against Quatrelle. Adopted, each
   tested: device limits from the adapter, wgpu errors logged after start-up, Intel Macs without
   indirect-call validation, Linux on the desktop's GPU and through XWayland (attachments drag on
   Wayland desktops; a stale DISPLAY falls back), clipboard reads with a time limit, no blink
@@ -365,7 +365,7 @@ local-first, media-aware v1); the fuller request is
   tested on the real Credential Manager.
 - **2026-10-20** — **v0.20**, issue #4: an account can be kept online only (its mail held in
   memory, each message downloaded when opened, its data file gone) and `portable.txt` beside the
-  app keeps everything in MailCraftData there, passwords in memory only; reproduced with the app
+  app keeps everything in QuatrelleData there, passwords in memory only; reproduced with the app
   against a fake IMAP server (a 557 KB data file holding every subject and body, then nothing),
   the host's folders, Credential Manager and registry compared before and after.
 - **2026-10-20** — **v0.20 merged into this fork:** upstream's release (24 commits: online-only
@@ -382,8 +382,17 @@ local-first, media-aware v1); the fuller request is
   `TRIGGER` a plain duration: `-PT15M`, `-P1D`), written back as Outlook writes it
   (`ACTION:DISPLAY`), and mapped both ways on Exchange (`ReminderIsSet`,
   `ReminderMinutesBeforeStart`) and Microsoft 365 (`isReminderOn`,
-  `reminderMinutesBeforeStart`); an alarm MailCraft can't read (an absolute time, one relative
+  `reminderMinutesBeforeStart`); an alarm Quatrelle can't read (an absolute time, one relative
   to the end) is kept as written rather than lost. The calendar's card says when it sounds
   ("15 minutes before", "1 hour before", "1 day before", "When it starts"), with the appointment
   dialog's Reminder list beside it. Tested: a `VALARM` parsed, written and read again; an
   unreadable one kept; a reminder set, changed, kept across a restart and taken off.
+- **2026-10-20** — **Renamed Quatrelle:** the project, its crates, its binaries, its window and
+  its data files take the new name (the postman's yellow Renault 4L, a little rusty, like Rust).
+  Nothing a user had is lost: the old app folder (`%APPDATA%\mailcraft`, `~/.local/share/mailcraft`,
+  `~/Library/Application Support/mailcraft`), the `MailCraft Files` folder, each account's
+  `.mailcraft` data file, the keychain entry (`MailCraft`) and portable sticks (`MailCraft.portable`,
+  `MailCraftData`) are renamed, or read where they are, once, at the first start; `MAILCRAFT_DATA`
+  and `MAILCRAFT_LANGUAGE` still work. The MSI's UpgradeCode is the same, so an installed copy
+  upgrades. Tested: an old app folder taken over, an old data file renamed with its mail read
+  back, an old portable stick, and `cargo xtask ci` green (455 tests).

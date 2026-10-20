@@ -1,4 +1,4 @@
-//! An in-memory JMAP server (RFC 8620/8621, the parts MailCraft uses) on localhost, for tests:
+//! An in-memory JMAP server (RFC 8620/8621, the parts Quatrelle uses) on localhost, for tests:
 //! the session, `Mailbox/get|set`, `Email/query|get|set|import`, `Identity/get`,
 //! `EmailSubmission/set`, back-references, blob download and upload, Basic authentication, and
 //! CORS for web pages (so the browser app can be tried against it: see
@@ -411,9 +411,9 @@ fn handle(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>, auth: &str) {
 mod tests {
     use std::time::{Duration, Instant};
 
-    use mailcraft_model::job::Secret;
-    use mailcraft_model::{AccountConfig, Event, Flag, Job, Op, SyncStatus};
-    use mailcraft_store::Store;
+    use quatrelle_model::job::Secret;
+    use quatrelle_model::{AccountConfig, Event, Flag, Job, Op, SyncStatus};
+    use quatrelle_store::Store;
 
     use super::*;
 
@@ -458,7 +458,7 @@ mod tests {
         let server = serve(d);
         let data = server.data.clone();
 
-        let dir = std::env::temp_dir().join(format!("mailcraft-jmap-e2e-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("quatrelle-jmap-e2e-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let store = Store::open(&dir).unwrap();
         let mut pool = crate::worker::Pool::new(store.clone(), Arc::new(crate::worker::MemoryCredentials::default()));
@@ -538,7 +538,7 @@ mod tests {
         assert!(seen.iter().any(|e| matches!(e, Event::Quota { used, limit: 1_000_000, .. } if *used > 0)), "the quota comes with a full sync");
         pool.submit(Job::GetVacation { account: "a1".into() });
         until(&pool, "replies read", |e| matches!(e, Event::Vacation { vacation: Some(v), error: None, .. } if !v.enabled));
-        let away = mailcraft_model::job::Vacation {
+        let away = quatrelle_model::job::Vacation {
             enabled: true,
             subject: "Away".into(),
             text: "Back on Monday".into(),
@@ -549,7 +549,7 @@ mod tests {
         pool.submit(Job::SetVacation { account: "a1".into(), vacation: away.clone() });
         until(&pool, "replies on", |e| matches!(e, Event::Vacation { vacation: Some(v), error: None, .. } if *v == away));
         assert_eq!(data.lock().unwrap().vacation["toDate"], "2026-10-20T23:59:59Z");
-        pool.submit(Job::SetVacation { account: "a1".into(), vacation: mailcraft_model::job::Vacation { text: "refuse".into(), ..away.clone() } });
+        pool.submit(Job::SetVacation { account: "a1".into(), vacation: quatrelle_model::job::Vacation { text: "refuse".into(), ..away.clone() } });
         until(&pool, "a refused change", |e| matches!(e, Event::Vacation { vacation: Some(v), error: Some(_), .. } if *v == away));
         let trash = data.lock().unwrap().by_name("Trash").unwrap().id.clone();
         for i in 0..3 {
@@ -609,8 +609,8 @@ mod tests {
     }
 
     /// For trying the browser app by hand: a sample JMAP server at http://127.0.0.1:8775 (or
-    /// `MAILCRAFT_FAKE_JMAP_PORT`) for ten minutes, signing in as `me@studio.example` / `pw`.
-    /// `cargo test -p mailcraft-net serve_for_the_browser -- --ignored --nocapture`
+    /// `QUATRELLE_FAKE_JMAP_PORT`) for ten minutes, signing in as `me@studio.example` / `pw`.
+    /// `cargo test -p quatrelle-net serve_for_the_browser -- --ignored --nocapture`
     #[test]
     #[ignore]
     fn serve_for_the_browser() {
@@ -623,7 +623,7 @@ mod tests {
         d.deliver(&inbox, &mail("Storyboard", "m1"), &["$seen"], "2026-10-14T09:00:00Z");
         d.deliver(&inbox, &mail("Sound mix", "m2"), &[], "2026-10-15T06:00:00Z");
         d.deliver(&projects, &mail("Plan", "m3"), &["$seen"], "2026-10-01T10:00:00Z");
-        let port = std::env::var("MAILCRAFT_FAKE_JMAP_PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(8775);
+        let port = std::env::var("QUATRELLE_FAKE_JMAP_PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(8775);
         let server = serve_at(d, port);
         println!("JMAP at {}/.well-known/jmap ({USER} / {PASSWORD})", server.base);
         // New mail now and then, to watch push bring it in.

@@ -1,6 +1,6 @@
-<h1 align="center">MailCraft</h1>
+<h1 align="center">Quatrelle</h1>
 
-> **Ce fork (dgaudin/mailcraft)** s'écarte de l'original sur les icônes (Fluent UI de Microsoft,
+> **Ce fork (dgaudin/quatrelle)** s'écarte de l'original sur les icônes (Fluent UI de Microsoft,
 > MIT), le style de la fenêtre et l'apparence d'Outlook : voir [FORK.md](FORK.md).
 
 <p align="center">
@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/dgaudin/mailcraft/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/dgaudin/mailcraft/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/dgaudin/quatrelle/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/dgaudin/quatrelle/actions/workflows/ci.yml/badge.svg"></a>
   <img alt="Written in Rust" src="https://img.shields.io/badge/written%20in-Rust-0e7c86?style=flat-square&logo=rust&logoColor=white">
   <img alt="Runs on Windows, macOS and Linux" src="https://img.shields.io/badge/runs%20on-Windows%20%C2%B7%20macOS%20%C2%B7%20Linux-1f9aa6?style=flat-square">
   <img alt="License: MIT OR Apache-2.0" src="https://img.shields.io/badge/license-MIT%20%2F%20Apache--2.0-0e7c86?style=flat-square">
@@ -25,7 +25,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/reading.png" alt="MailCraft with the sample mailbox: the folder pane on the left with Favorites and the account's folders and unread counts, the ribbon with Categorize, Pin and Snooze, the Inbox grouped under Today, Yesterday, Monday and Last week, and the reading pane showing a flagged message with its two-message conversation, sender card, Reply, Print and Save buttons and a picture attachment with a preview" width="100%">
+  <img src="docs/images/reading.png" alt="Quatrelle with the sample mailbox: the folder pane on the left with Favorites and the account's folders and unread counts, the ribbon with Categorize, Pin and Snooze, the Inbox grouped under Today, Yesterday, Monday and Last week, and the reading pane showing a flagged message with its two-message conversation, sender card, Reply, Print and Save buttons and a picture attachment with a preview" width="100%">
 </p>
 
 <table>
@@ -35,7 +35,7 @@
 </tr>
 </table>
 
-## Why MailCraft
+## Why Quatrelle
 
 - **Familiar.** Three panes, the ribbon's everyday buttons and the shortcuts people already use:
   Ctrl+N new, Ctrl+R reply, Ctrl+Shift+R reply all, Ctrl+F forward, Ctrl+Q / Ctrl+U read / unread,
@@ -54,12 +54,18 @@
 - **Fast.** The message list only lays out the rows on screen; search uses an inverted index over
   headers, cached bodies and attachment names.
 - **Built for agents.** Every action is a command with an id. The same commands drive the ribbon,
-  shortcuts, the CLI (`mailcraft-cli run mail.reply`) and startup scripting (`--cmd`).
+  shortcuts, the CLI (`quatrelle-cli run mail.reply`) and startup scripting (`--cmd`).
 - **Never crash.** No `unwrap`/`expect`/`panic` outside tests, hostile-input caps in the IMAP
   parser, a test that runs every command with junk parameters, and `Session::run` catches any panic.
 - **Open.** MIT OR Apache-2.0, clean-room: built from the RFCs and public behaviour, every asset
   original but the interface icons, Microsoft's MIT-licensed Fluent UI System Icons
   ([ATTRIBUTION.md](ATTRIBUTION.md)).
+
+## The name
+
+A *quatrelle* is a Renault 4L — the yellow van the postman drove from one mailbox to the next,
+never in a hurry and never leaving a letter behind. Ours is a little rusty in places, and that is
+the point: Rust is the language underneath, and the rust is what keeps it from falling apart.
 
 ## What works today
 
@@ -71,7 +77,7 @@
 | **Organising** | Delete (to Deleted Items; permanent there, with confirmation), Archive, Report junk / Not junk, Move to (dialog or drag), Read / Unread, Flag, Pin, Snooze, colour categories, Mark all as read; Focused / Other; inbox rules; filters: Unread, Flagged, Has files; multi-select with Ctrl and Shift; folders created, renamed, moved and deleted; favourites; Undo (Ctrl+Z); Ignore a conversation (its later replies go to Deleted Items) |
 | **Writing** | New, Reply, Reply all, Forward (with attachments); formatting (bold, italic, lists, headings, quotes, links) sent with a plain-text alternative; pictures inserted or pasted inline; To / Cc / Bcc suggested from mail you've seen; attachments up to 25 MB; signatures; drafts saved to the server; an Outbox for mail written offline; High / Low importance and read receipts; drafts that can't reach the server are kept and saved when it's back |
 | **Calendar and people** | Day, week and month views; events with recurrences and time zones; meeting invitations by mail (accept, tentative, decline, inviting guests); an address book; synced with CalDAV / CardDAV |
-| **Mailbox** | The File page: account settings, automatic replies (Sieve, JMAP or Exchange), the space used, emptying Deleted Items and Junk Email, rules, Options; Work offline; each account in one `.mailcraft` data file in Documents\MailCraft Files, movable as Outlook's are |
+| **Mailbox** | The File page: account settings, automatic replies (Sieve, JMAP or Exchange), the space used, emptying Deleted Items and Junk Email, rules, Options; Work offline; each account in one `.quatrelle` data file in Documents\Quatrelle Files, movable as Outlook's are |
 | **Search** | Offline, all folders or this folder; bare words match word prefixes; `"phrases"`, `from:`, `to:`, `subject:`, `body:`, `has:attachment`, `is:unread`, `is:flagged`, `-negation` |
 | **Languages** | English, Español, Français, Deutsch, Português (Brasil), Italiano, Русский, 日本語, 한국어, 简体中文, 繁體中文, العربية, עברית: following the system or chosen in Options; right-to-left mail reads right to left |
 | **Platforms** | Windows, macOS, Linux (egui on the GPU), and the browser (WebAssembly; JMAP accounts) |
@@ -80,48 +86,48 @@ The full list of what's missing, ranked, is in [docs/gaps.md](docs/gaps.md).
 
 ## Quick start
 
-Installers come from the [Releases](https://github.com/dgaudin/mailcraft/releases) page once a
+Installers come from the [Releases](https://github.com/dgaudin/quatrelle/releases) page once a
 release is cut: `.msi` and a portable zip for Windows (x64, x86, ARM64), a `.dmg` for macOS
 (universal), AppImage, `.deb`, `.rpm`, Flatpak and `.tar.gz` for Linux (x86_64, aarch64, riscv64),
 and a FreeBSD tarball. To run from source:
 
 ```bash
-cargo run --release -p mailcraft -- --sample
+cargo run --release -p quatrelle -- --sample
 ```
 
 `--sample` opens a local-only sample mailbox, so you can try everything without a server. Run
 without it to add your own account (the gear button, or the welcome screen).
 
 To keep no mail on the computer, tick **Online only** when adding an account (or later in File ›
-Options › Mail): its mail stays on the server and in memory while MailCraft runs. The Windows
+Options › Mail): its mail stays on the server and in memory while Quatrelle runs. The Windows
 portable zip runs from any folder, a USB stick included: its `portable.txt` keeps everything
-MailCraft writes in `MailCraftData` beside it, and passwords only until it closes (put a
+Quatrelle writes in `QuatrelleData` beside it, and passwords only until it closes (put a
 `portable.txt` beside the app on macOS and Linux for the same).
 
-From the command line (passwords come from `MAILCRAFT_PASSWORD` or a prompt, never stored):
+From the command line (passwords come from `QUATRELLE_PASSWORD` or a prompt, never stored):
 
 ```bash
-cargo run -p mailcraft-cli -- add --email you@example.com
-cargo run -p mailcraft-cli -- add --email you@example.com --imap mail.example.com:993 --smtp mail.example.com:465
-cargo run -p mailcraft-cli -- add --email you@fastmail.com --jmap https://api.fastmail.com/jmap/session
-cargo run -p mailcraft-cli -- test
-cargo run -p mailcraft-cli -- sync
-cargo run -p mailcraft-cli -- list --limit 10
-cargo run -p mailcraft-cli -- search "from:zoe has:attachment"
-cargo run -p mailcraft-cli -- send --to friend@example.com --subject "Hello" --body "Sent from MailCraft"
-cargo run -p mailcraft-cli -- commands
+cargo run -p quatrelle-cli -- add --email you@example.com
+cargo run -p quatrelle-cli -- add --email you@example.com --imap mail.example.com:993 --smtp mail.example.com:465
+cargo run -p quatrelle-cli -- add --email you@fastmail.com --jmap https://api.fastmail.com/jmap/session
+cargo run -p quatrelle-cli -- test
+cargo run -p quatrelle-cli -- sync
+cargo run -p quatrelle-cli -- list --limit 10
+cargo run -p quatrelle-cli -- search "from:zoe has:attachment"
+cargo run -p quatrelle-cli -- send --to friend@example.com --subject "Hello" --body "Sent from Quatrelle"
+cargo run -p quatrelle-cli -- commands
 ```
 
 The browser version (JMAP accounts; see [packaging/web/README.md](packaging/web/README.md)):
 
 ```bash
-cd apps/mailcraft-web && trunk serve
+cd apps/quatrelle-web && trunk serve
 ```
 
 Then open http://127.0.0.1:8774/?sample for the sample mailbox.
 
-The desktop app and the CLI share the cache (`%APPDATA%\MailCraft`, `~/Library/Application Support/MailCraft`
-or `~/.local/share/mailcraft`; override with `--data DIR` or `MAILCRAFT_DATA`).
+The desktop app and the CLI share the cache (`%APPDATA%\Quatrelle`, `~/Library/Application Support/Quatrelle`
+or `~/.local/share/quatrelle`; override with `--data DIR` or `QUATRELLE_DATA`).
 
 ## Architecture
 
@@ -135,7 +141,7 @@ or `~/.local/share/mailcraft`; override with `--data DIR` or `MAILCRAFT_DATA`).
 | L3 | `net` | native only: IMAP client on `imap-proto`, the sync algorithm, SMTP via `lettre`, JMAP push, Microsoft Graph, Exchange Web Services (NTLM), CalDAV/CardDAV, ManageSieve, POP3, HTTP, DNS, autoconfig, OAuth, Outlook data files, per-account worker threads |
 | L4 | `engine` | the sans-I/O session: views, selection, compose, search, the command registry; queues jobs, applies events |
 | L6 | `ui-egui` | the egui front end (thin: reads the session, runs commands) |
-| apps | `mailcraft`, `mailcraft-cli`, `mailcraft-web` | the desktop app, the command line and the browser version |
+| apps | `quatrelle`, `quatrelle-cli`, `quatrelle-web` | the desktop app, the command line and the browser version |
 
 The engine never touches the network: it emits `Job`s and applies `Event`s, which the app connects
 to the `net` worker pool. Tests drive it with scripted events, and in-memory IMAP and JMAP servers
@@ -160,7 +166,8 @@ and the GitHub workflows run them through the shared Craft pipelines in
 | `release.yml` | a push to the `release` branch, or by hand | sign, notarize and package every platform, then draft a GitHub Release |
 
 The version lives only in `[workspace.package]` of `Cargo.toml` (`cargo xtask version`,
-`cargo xtask version set 0.2.0`). App icons are drawn by `cargo xtask icons`.
+`cargo xtask version set 0.2.0`). App icons are drawn by `cargo xtask icons`; put a square picture
+of your own in `assets/icon.png` and run it again to use that instead.
 
 ## License and credits
 
@@ -171,5 +178,5 @@ MIT OR Apache-2.0. Built on [`mail-parser`](https://github.com/stalwartlabs/mail
 [`ttf-parser`](https://github.com/harfbuzz/ttf-parser) and [`miniz_oxide`](https://github.com/Frommi/miniz_oxide) (MIT / Apache-2.0),
 [`quick-xml`](https://github.com/tafia/quick-xml) (MIT), [`hayro`](https://github.com/LaurenzV/hayro) (MIT / Apache-2.0),
 [`outlook-pst`](https://github.com/microsoft/outlook-pst-rs) (Microsoft, MIT), [`outlook-pst-rw`](https://github.com/dongs0104/outlook-pst-rs) (MIT), [`drag`](https://github.com/crabnebula-dev/drag-rs) (MIT / Apache-2.0), [`x11rb`](https://github.com/psychon/x11rb) (MIT / Apache-2.0) and
-[`egui`](https://github.com/emilk/egui). Microsoft Outlook is a trademark of Microsoft; MailCraft is
+[`egui`](https://github.com/emilk/egui). Microsoft Outlook is a trademark of Microsoft; Quatrelle is
 not affiliated with it and uses none of its code, icons or assets.

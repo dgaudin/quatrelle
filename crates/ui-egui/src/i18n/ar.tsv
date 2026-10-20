@@ -1,6 +1,6 @@
-# MailCraft interface strings: Arabic (العربية).
+# Quatrelle interface strings: Arabic (العربية).
 # context<TAB>English<TAB>translation; escapes \n \t \\. Placeholders like {name} stay as they are.
-# Written for MailCraft (clean room): no wording is taken from other mail clients.
+# Written for Quatrelle (clean room): no wording is taken from other mail clients.
 
 	  Loading folders…	  جارٍ تحميل المجلدات…
 	(Top level)	(المستوى الأعلى)
@@ -120,8 +120,8 @@
 	Local-first: mail is cached on this computer for fast offline search. Passwords stay in the system keychain.	محلي أولًا: يُحفظ البريد على هذا الكمبيوتر لبحث سريع دون اتصال. تبقى كلمات المرور في سلسلة مفاتيح النظام.
 	Looking up the server settings…	جارٍ البحث عن إعدادات الخادم…
 	Mail from {sender}	بريد من {sender}
-	MailCraft	MailCraft
-	MailCraft {version} · an ArtCraft app · MIT OR Apache-2.0	MailCraft {version} · تطبيق من ArtCraft · MIT OR Apache-2.0
+	Quatrelle	Quatrelle
+	Quatrelle {version} · an ArtCraft app · MIT OR Apache-2.0	Quatrelle {version} · تطبيق من ArtCraft · MIT OR Apache-2.0
 	Mailing list: unsubscribe at {address}	قائمة بريدية: ألغِ الاشتراك عبر {address}
 	Mar	مارس
 	Mark all as read	تعليم الكل كمقروء
@@ -318,7 +318,7 @@
 	Waiting in the Outbox: it will be sent when you're back online.	ينتظر في علبة الصادر: سيُرسل عند عودتك للاتصال.
 	Wed	الأربعاء
 	Wednesday	الأربعاء
-	Welcome to MailCraft	مرحبًا بك في MailCraft
+	Welcome to Quatrelle	مرحبًا بك في Quatrelle
 	When mail	عندما يكون البريد
 	Without encryption your password travels in the clear. Use only for local test servers.	بلا تشفير تنتقل كلمة المرور مكشوفة. استخدمه فقط مع خوادم الاختبار المحلية.
 	Work	العمل
@@ -344,7 +344,7 @@
 	{n} new messages	{n} رسائل جديدة
 	• List	• قائمة
 	Select a message to read it	اختر رسالة لقراءتها
-	MailCraft – Sample mailbox	MailCraft – صندوق بريد تجريبي
+	Quatrelle – Sample mailbox	Quatrelle – صندوق بريد تجريبي
 	Mail server	خادم البريد
 	IMAP and SMTP	IMAP وSMTP
 	JMAP	JMAP
@@ -353,7 +353,7 @@
 	Open in new window	فتح في نافذة جديدة
 	{subject} – Message	{subject} – رسالة
 	About	حول
-	About MailCraft	حول MailCraft
+	About Quatrelle	حول Quatrelle
 	Account information	معلومات الحساب
 	Account settings	إعدادات الحساب
 	An ArtCraft app · MIT OR Apache-2.0	تطبيق من ArtCraft · MIT OR Apache-2.0
@@ -376,8 +376,8 @@
 	Inbox and notifications	علبة الوارد والإشعارات
 	Info	معلومات
 	Kept on this computer: {size}	محفوظ على هذا الكمبيوتر: {size}
-	MailCraft talks only to your own mail servers, over encrypted connections. Pictures from the web load only when you ask.	لا يتصل MailCraft إلا بخوادم بريدك، عبر اتصالات مشفّرة. لا تُحمّل الصور من الويب إلا عندما تطلب.
-	MailCraft {version}	MailCraft {version}
+	Quatrelle talks only to your own mail servers, over encrypted connections. Pictures from the web load only when you ask.	لا يتصل Quatrelle إلا بخوادم بريدك، عبر اتصالات مشفّرة. لا تُحمّل الصور من الويب إلا عندما تطلب.
+	Quatrelle {version}	Quatrelle {version}
 	Mailbox	صندوق البريد
 	Mailbox settings	إعدادات صندوق البريد
 	Manage rules	إدارة القواعد
@@ -504,10 +504,10 @@
 	Exchange (Microsoft 365)	Exchange (Microsoft 365)
 	Exchange (Microsoft Graph)	Exchange (Microsoft Graph)
 	Server: {url} (Microsoft Graph)	الخادم: {url} (Microsoft Graph)
-	Signing in with Microsoft isn't set up in this copy of MailCraft.	تسجيل الدخول بحساب Microsoft غير مُعدّ في هذه النسخة من MailCraft.
+	Signing in with Microsoft isn't set up in this copy of Quatrelle.	تسجيل الدخول بحساب Microsoft غير مُعدّ في هذه النسخة من Quatrelle.
 	Syncs through Microsoft Graph, for work and school accounts where IMAP is switched off. You sign in with Microsoft in the browser: no password is stored.	يُزامن عبر Microsoft Graph، لحسابات العمل والدراسة التي أُوقف فيها IMAP. تسجّل الدخول بحساب Microsoft في المتصفح: لا تُحفظ كلمة مرور.
-	In the browser, MailCraft works with JMAP providers. Your password stays in this tab only and is only ever sent to your mail server.	في المتصفح، يعمل MailCraft مع مزوّدي JMAP. تبقى كلمة المرور في هذا التبويب فقط ولا تُرسل إلا إلى خادم بريدك.
-	Your mail in the browser. Add a JMAP account (such as Fastmail): MailCraft talks to your mail server directly, and your password stays in this tab only.	بريدك في المتصفح. أضف حساب JMAP (مثل Fastmail): يتصل MailCraft بخادم بريدك مباشرة، وتبقى كلمة المرور في هذا التبويب فقط.
+	In the browser, Quatrelle works with JMAP providers. Your password stays in this tab only and is only ever sent to your mail server.	في المتصفح، يعمل Quatrelle مع مزوّدي JMAP. تبقى كلمة المرور في هذا التبويب فقط ولا تُرسل إلا إلى خادم بريدك.
+	Your mail in the browser. Add a JMAP account (such as Fastmail): Quatrelle talks to your mail server directly, and your password stays in this tab only.	بريدك في المتصفح. أضف حساب JMAP (مثل Fastmail): يتصل Quatrelle بخادم بريدك مباشرة، وتبقى كلمة المرور في هذا التبويب فقط.
 	Pop out	فتح في نافذة
 	Pop in	إعادة إلى الجزء
 	Back to the reading pane	العودة إلى جزء القراءة
@@ -577,12 +577,12 @@ month	May	مايو
 	Open folder	فتح المجلد
 	Move…	نقل…
 	Save as an Outlook data file…	حفظ كملف بيانات Outlook…
-	Moves to {folder} the next time MailCraft starts.	سيُنقل إلى {folder} عند تشغيل MailCraft في المرة القادمة.
-	Chosen when MailCraft was started (--data or MAILCRAFT_DATA), so it can't be moved here.	اختير عند تشغيل MailCraft (‏--data أو MAILCRAFT_DATA)، لذا لا يمكن نقله من هنا.
+	Moves to {folder} the next time Quatrelle starts.	سيُنقل إلى {folder} عند تشغيل Quatrelle في المرة القادمة.
+	Chosen when Quatrelle was started (--data or QUATRELLE_DATA), so it can't be moved here.	اختير عند تشغيل Quatrelle (‏--data أو QUATRELLE_DATA)، لذا لا يمكن نقله من هنا.
 	Your mail couldn't be moved, so it stays where it was: {error}	تعذّر نقل بريدك، لذا بقي في مكانه: {error}
 	Your mail is now kept in {folder}	يُحفظ بريدك الآن في {folder}
-	Your mail moves there the next time MailCraft starts.	سيُنقل بريدك إلى هناك عند تشغيل MailCraft في المرة القادمة.
-	Each account's mail, contacts and calendar are kept in a MailCraft data file (.mailcraft) in this folder, as Outlook keeps each account in a .pst in Outlook Files. An Outlook data file you open gets a .mailcraft file of its own here; Outlook's file is left as it was. To have a copy as a .pst, use Save as an Outlook data file under Info.	يُحفظ بريد كل حساب وجهات اتصاله وتقويمه في ملف بيانات MailCraft ‏(.mailcraft) في هذا المجلد، كما يحفظ Outlook كل حساب في ملف ‎.pst‏ ضمن ملفات Outlook. يحصل ملف بيانات Outlook الذي تفتحه على ملف ‎.mailcraft‏ خاص به هنا، ويبقى ملف Outlook كما هو. للحصول على نسخة ‎.pst‏، استخدم «حفظ كملف بيانات Outlook» ضمن «معلومات».
+	Your mail moves there the next time Quatrelle starts.	سيُنقل بريدك إلى هناك عند تشغيل Quatrelle في المرة القادمة.
+	Each account's mail, contacts and calendar are kept in a Quatrelle data file (.quatrelle) in this folder, as Outlook keeps each account in a .pst in Outlook Files. An Outlook data file you open gets a .quatrelle file of its own here; Outlook's file is left as it was. To have a copy as a .pst, use Save as an Outlook data file under Info.	يُحفظ بريد كل حساب وجهات اتصاله وتقويمه في ملف بيانات Quatrelle ‏(.quatrelle) في هذا المجلد، كما يحفظ Outlook كل حساب في ملف ‎.pst‏ ضمن ملفات Outlook. يحصل ملف بيانات Outlook الذي تفتحه على ملف ‎.quatrelle‏ خاص به هنا، ويبقى ملف Outlook كما هو. للحصول على نسخة ‎.pst‏، استخدم «حفظ كملف بيانات Outlook» ضمن «معلومات».
 	Keep a copy of downloaded mail on the server	الاحتفاظ بنسخة من البريد الذي تم تنزيله على الخادم
 	Remove it from the server after	إزالتها من الخادم بعد
 	days	يومًا
@@ -676,7 +676,7 @@ month	May	مايو
 	Don't send before	عدم الإرسال قبل
 	Have replies sent to another address	إرسال الردود إلى عنوان آخر
 	Held in the Outbox: it will be sent {when}.	محتجزة في علبة الصادر: ستُرسل في {when}.
-	Keep it in the Outbox and send it later (MailCraft has to be running then)	إبقاؤها في علبة الصادر وإرسالها لاحقاً (يجب أن يكون MailCraft قيد التشغيل حينها)
+	Keep it in the Outbox and send it later (Quatrelle has to be running then)	إبقاؤها في علبة الصادر وإرسالها لاحقاً (يجب أن يكون Quatrelle قيد التشغيل حينها)
 	Replies to	الردود إلى
 	Send right away	الإرسال فوراً
 	Sends {when}	تُرسل في {when}
@@ -713,7 +713,7 @@ month	May	مايو
 	Clear formatting	مسح التنسيق
 	Insert link	إدراج ارتباط
 	The selected text	النص المحدد
-	Outlook.com, Hotmail and Live addresses only connect with Sign in with Microsoft: Microsoft no longer accepts passwords from mail apps. This copy of MailCraft wasn't built with Microsoft sign-in, so it can't add this account.	لا تتصل عناوين Outlook.com وHotmail وLive إلا عبر تسجيل الدخول باستخدام Microsoft: لم تعد Microsoft تقبل كلمات المرور من تطبيقات البريد. لم تُبنَ هذه النسخة من MailCraft مع تسجيل دخول Microsoft، لذا لا يمكنها إضافة هذا الحساب.
+	Outlook.com, Hotmail and Live addresses only connect with Sign in with Microsoft: Microsoft no longer accepts passwords from mail apps. This copy of Quatrelle wasn't built with Microsoft sign-in, so it can't add this account.	لا تتصل عناوين Outlook.com وHotmail وLive إلا عبر تسجيل الدخول باستخدام Microsoft: لم تعد Microsoft تقبل كلمات المرور من تطبيقات البريد. لم تُبنَ هذه النسخة من Quatrelle مع تسجيل دخول Microsoft، لذا لا يمكنها إضافة هذا الحساب.
 	Back to message	العودة إلى الرسالة
 	Esc	Esc
 	Open it in its app, or save it.	افتحه في تطبيقه أو احفظه.
@@ -748,9 +748,9 @@ month	May	مايو
 	Public Folders	المجلدات العامة
 	Copy the whole message	نسخ الرسالة كاملة
 	Existing data file (optional)	ملف بيانات موجود (اختياري)
-	Mail from an old .pst or .mailcraft file comes in first	يُستورد بريد ملف ‎.pst أو ‎.mailcraft قديم أولاً
+	Mail from an old .pst or .quatrelle file comes in first	يُستورد بريد ملف ‎.pst أو ‎.quatrelle قديم أولاً
 	Open a data file	فتح ملف بيانات
-	Bring in an Outlook data file (.pst) or a MailCraft one (.mailcraft). It opens as a mailbox of its own, with its folders, kept on this computer.	استورد ملف بيانات Outlook ‏(.pst) أو ملف MailCraft ‏(.mailcraft). يُفتح كصندوق بريد مستقل بمجلداته، محفوظ على هذا الكمبيوتر.
+	Bring in an Outlook data file (.pst) or a Quatrelle one (.quatrelle). It opens as a mailbox of its own, with its folders, kept on this computer.	استورد ملف بيانات Outlook ‏(.pst) أو ملف Quatrelle ‏(.quatrelle). يُفتح كصندوق بريد مستقل بمجلداته، محفوظ على هذا الكمبيوتر.
 	Move up	نقل لأعلى
 	Move down	نقل لأسفل
 	Updating…	جارٍ التحديث…
@@ -894,7 +894,7 @@ month	May	مايو
 	Delete this contact?	هل تريد حذف جهة الاتصال هذه؟
 	This contact will be deleted, along with everything kept about them. This can't be undone.	سيتم حذف جهة الاتصال هذه مع كل ما هو محفوظ عنها. لا يمكن التراجع عن ذلك.
 	Export…	تصدير…
-	Add the rules from a file saved by MailCraft. A rule for an account this computer doesn't have comes in turned off.	يضيف القواعد من ملف حفظه MailCraft. القاعدة الخاصة بحساب غير موجود على هذا الكمبيوتر تُضاف معطّلة.
+	Add the rules from a file saved by Quatrelle. A rule for an account this computer doesn't have comes in turned off.	يضيف القواعد من ملف حفظه Quatrelle. القاعدة الخاصة بحساب غير موجود على هذا الكمبيوتر تُضاف معطّلة.
 	Change…	تغيير…
 	Clean up	تنظيف
 	Export rules	تصدير القواعد
@@ -925,10 +925,10 @@ month	May	مايو
 	Its folders show under this account. You need access to it on the Exchange server; the ones you have full access to open by themselves.	تظهر مجلداته تحت هذا الحساب. تحتاج إلى صلاحية الوصول إليه على خادم Exchange؛ وتُفتح الصناديق التي لديك وصول كامل إليها تلقائيًا.
 	Mailboxes you have full access to open by themselves.	تُفتح الصناديق التي لديك وصول كامل إليها تلقائيًا.
 	Shared mailboxes	صناديق البريد المشتركة
-	{email} will be removed from MailCraft. Its data file, {file}, stays in your MailCraft Files folder: open it from File › Open & Export to see its mail again. Nothing is deleted on the server.	ستتم إزالة {email} من MailCraft. يبقى ملف بياناته {file} في مجلد MailCraft Files: افتحه من ملف › فتح وتصدير لرؤية بريده مرة أخرى. لا يُحذف شيء من الخادم.
-	{email} will be removed from MailCraft. Nothing is deleted on the server.	ستتم إزالة {email} من MailCraft. لا يُحذف شيء من الخادم.
-	{email} will be removed from MailCraft. Its data file, {file}, stays in your MailCraft Files folder: open it from File › Open & Export to see its mail again.	ستتم إزالة {email} من MailCraft. يبقى ملف بياناته {file} في مجلد MailCraft Files: افتحه من ملف › فتح وتصدير لرؤية بريده مرة أخرى.
-	{email} will be removed from MailCraft.	ستتم إزالة {email} من MailCraft.
+	{email} will be removed from Quatrelle. Its data file, {file}, stays in your Quatrelle Files folder: open it from File › Open & Export to see its mail again. Nothing is deleted on the server.	ستتم إزالة {email} من Quatrelle. يبقى ملف بياناته {file} في مجلد Quatrelle Files: افتحه من ملف › فتح وتصدير لرؤية بريده مرة أخرى. لا يُحذف شيء من الخادم.
+	{email} will be removed from Quatrelle. Nothing is deleted on the server.	ستتم إزالة {email} من Quatrelle. لا يُحذف شيء من الخادم.
+	{email} will be removed from Quatrelle. Its data file, {file}, stays in your Quatrelle Files folder: open it from File › Open & Export to see its mail again.	ستتم إزالة {email} من Quatrelle. يبقى ملف بياناته {file} في مجلد Quatrelle Files: افتحه من ملف › فتح وتصدير لرؤية بريده مرة أخرى.
+	{email} will be removed from Quatrelle.	ستتم إزالة {email} من Quatrelle.
 	Add shared mailbox…	إضافة صندوق بريد مشترك…
 	Remove shared mailbox	إزالة صندوق البريد المشترك
 	Opened by the server for your access to it	يفتحه الخادم لأن لديك حق الوصول إليه
@@ -963,7 +963,7 @@ month	May	مايو
 	Add what the rule looks at	حدّد ما تفحصه القاعدة
 	Change the rule	تغيير القاعدة
 	Give the rule a name	أعطِ القاعدة اسمًا
-	MailCraft doesn't know every part of this rule yet	لا يعرف MailCraft بعد كل أجزاء هذه القاعدة
+	Quatrelle doesn't know every part of this rule yet	لا يعرف Quatrelle بعد كل أجزاء هذه القاعدة
 	Pick a category	اختر فئة
 	Pick a folder	اختر مجلدًا
 	Say what to look for	حدّد ما تبحث عنه
@@ -991,16 +991,16 @@ month	May	مايو
 	Download	تنزيل
 	Join meeting	الانضمام إلى الاجتماع
 	Links:	الروابط:
-	MailCraft {version} is available.	يتوفر MailCraft {version}.
+	Quatrelle {version} is available.	يتوفر Quatrelle {version}.
 	What's new	ما الجديد
 	You have the newest version.	لديك أحدث إصدار.
 	Online only: keep none of this account's mail on this computer	عبر الإنترنت فقط: عدم الاحتفاظ بأي بريد لهذا الحساب على هذا الكمبيوتر
 	Online only: none of this account's mail is kept on this computer.	عبر الإنترنت فقط: لا يُحتفظ بأي بريد لهذا الحساب على هذا الكمبيوتر.
 	Online only: {email}	عبر الإنترنت فقط: {email}
 	New message	رسالة جديدة
-	Open MailCraft to read it.	افتح MailCraft لقراءتها.
-	Its mail is read from the server and held in memory while MailCraft runs; nothing of it is written to this computer. Each message downloads when you open it. Mail waiting to be sent, changes made while offline, and calendar items, contacts and notes kept only in MailCraft are lost when it closes.	يُقرأ بريده من الخادم ويُحتفظ به في الذاكرة أثناء تشغيل MailCraft، ولا يُكتب منه شيء على هذا الكمبيوتر. تُنزَّل كل رسالة عند فتحها. تضيع عند إغلاقه الرسائل التي تنتظر الإرسال، والتغييرات التي أُجريت دون اتصال، وعناصر التقويم وجهات الاتصال والملاحظات المحفوظة في MailCraft فقط.
-	Portable: everything is kept in MailCraftData beside MailCraft, and passwords only until it closes.	محمول: يُحفظ كل شيء في MailCraftData بجانب MailCraft، وكلمات المرور حتى إغلاقه فقط.
+	Open Quatrelle to read it.	افتح Quatrelle لقراءتها.
+	Its mail is read from the server and held in memory while Quatrelle runs; nothing of it is written to this computer. Each message downloads when you open it. Mail waiting to be sent, changes made while offline, and calendar items, contacts and notes kept only in Quatrelle are lost when it closes.	يُقرأ بريده من الخادم ويُحتفظ به في الذاكرة أثناء تشغيل Quatrelle، ولا يُكتب منه شيء على هذا الكمبيوتر. تُنزَّل كل رسالة عند فتحها. تضيع عند إغلاقه الرسائل التي تنتظر الإرسال، والتغييرات التي أُجريت دون اتصال، وعناصر التقويم وجهات الاتصال والملاحظات المحفوظة في Quatrelle فقط.
+	Portable: everything is kept in QuatrelleData beside Quatrelle, and passwords only until it closes.	محمول: يُحفظ كل شيء في QuatrelleData بجانب Quatrelle، وكلمات المرور حتى إغلاقه فقط.
 	When it starts	في وقت البدء
 	1 minute before	قبل دقيقة واحدة
 	{n} minutes before	قبل {n} دقيقة

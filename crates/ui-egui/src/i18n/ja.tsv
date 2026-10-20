@@ -1,6 +1,6 @@
-# MailCraft interface strings: Japanese (日本語).
+# Quatrelle interface strings: Japanese (日本語).
 # context<TAB>English<TAB>translation; escapes \n \t \\. Placeholders like {name} stay as they are.
-# Written for MailCraft (clean room): no wording is taken from other mail clients.
+# Written for Quatrelle (clean room): no wording is taken from other mail clients.
 
 	  Loading folders…	  フォルダーを読み込んでいます…
 	(Top level)	(最上位)
@@ -120,8 +120,8 @@
 	Local-first: mail is cached on this computer for fast offline search. Passwords stay in the system keychain.	ローカル優先: メールはこのコンピューターに保存され、オフラインでもすばやく検索できます。パスワードはシステムのキーチェーンに保管されます。
 	Looking up the server settings…	サーバー設定を調べています…
 	Mail from {sender}	{sender} からのメール
-	MailCraft	MailCraft
-	MailCraft {version} · an ArtCraft app · MIT OR Apache-2.0	MailCraft {version} · ArtCraft アプリ · MIT OR Apache-2.0
+	Quatrelle	Quatrelle
+	Quatrelle {version} · an ArtCraft app · MIT OR Apache-2.0	Quatrelle {version} · ArtCraft アプリ · MIT OR Apache-2.0
 	Mailing list: unsubscribe at {address}	メーリング リスト: {address} で登録解除
 	Mar	3月
 	Mark all as read	すべて既読にする
@@ -318,7 +318,7 @@
 	Waiting in the Outbox: it will be sent when you're back online.	送信トレイで待機中: オンラインに戻ると送信されます。
 	Wed	水
 	Wednesday	水曜日
-	Welcome to MailCraft	MailCraft へようこそ
+	Welcome to Quatrelle	Quatrelle へようこそ
 	When mail	メールが次の条件のとき
 	Without encryption your password travels in the clear. Use only for local test servers.	暗号化しないと、パスワードが平文で送られます。ローカルのテスト サーバーにのみ使用してください。
 	Work	仕事
@@ -344,7 +344,7 @@
 	{n} new messages	{n} 件の新着メッセージ
 	• List	• リスト
 	Select a message to read it	メッセージを選択すると、ここに表示されます
-	MailCraft – Sample mailbox	MailCraft – サンプル メールボックス
+	Quatrelle – Sample mailbox	Quatrelle – サンプル メールボックス
 	Mail server	メール サーバー
 	IMAP and SMTP	IMAP と SMTP
 	JMAP	JMAP
@@ -353,7 +353,7 @@
 	Open in new window	新しいウィンドウで開く
 	{subject} – Message	{subject} – メッセージ
 	About	バージョン情報
-	About MailCraft	MailCraft について
+	About Quatrelle	Quatrelle について
 	Account information	アカウント情報
 	Account settings	アカウント設定
 	An ArtCraft app · MIT OR Apache-2.0	ArtCraft アプリ · MIT OR Apache-2.0
@@ -376,8 +376,8 @@
 	Inbox and notifications	受信トレイと通知
 	Info	情報
 	Kept on this computer: {size}	このコンピューターに保存: {size}
-	MailCraft talks only to your own mail servers, over encrypted connections. Pictures from the web load only when you ask.	MailCraft は暗号化された接続であなたのメール サーバーとだけ通信します。Web 上の画像は指示したときだけ読み込まれます。
-	MailCraft {version}	MailCraft {version}
+	Quatrelle talks only to your own mail servers, over encrypted connections. Pictures from the web load only when you ask.	Quatrelle は暗号化された接続であなたのメール サーバーとだけ通信します。Web 上の画像は指示したときだけ読み込まれます。
+	Quatrelle {version}	Quatrelle {version}
 	Mailbox	メールボックス
 	Mailbox settings	メールボックスの設定
 	Manage rules	ルールの管理
@@ -507,10 +507,10 @@ month	May	5月
 	Exchange (Microsoft 365)	Exchange (Microsoft 365)
 	Exchange (Microsoft Graph)	Exchange (Microsoft Graph)
 	Server: {url} (Microsoft Graph)	サーバー: {url} (Microsoft Graph)
-	Signing in with Microsoft isn't set up in this copy of MailCraft.	この MailCraft では Microsoft でのサインインが設定されていません。
+	Signing in with Microsoft isn't set up in this copy of Quatrelle.	この Quatrelle では Microsoft でのサインインが設定されていません。
 	Syncs through Microsoft Graph, for work and school accounts where IMAP is switched off. You sign in with Microsoft in the browser: no password is stored.	IMAP が無効になっている職場や学校のアカウント向けに、Microsoft Graph で同期します。ブラウザーで Microsoft にサインインするため、パスワードは保存されません。
-	In the browser, MailCraft works with JMAP providers. Your password stays in this tab only and is only ever sent to your mail server.	ブラウザーでは、MailCraft は JMAP プロバイダーで動作します。パスワードはこのタブの中だけに保持され、メール サーバーにのみ送信されます。
-	Your mail in the browser. Add a JMAP account (such as Fastmail): MailCraft talks to your mail server directly, and your password stays in this tab only.	ブラウザーでメールを。JMAP アカウント (Fastmail など) を追加してください。MailCraft はメール サーバーと直接通信し、パスワードはこのタブの中だけに保持されます。
+	In the browser, Quatrelle works with JMAP providers. Your password stays in this tab only and is only ever sent to your mail server.	ブラウザーでは、Quatrelle は JMAP プロバイダーで動作します。パスワードはこのタブの中だけに保持され、メール サーバーにのみ送信されます。
+	Your mail in the browser. Add a JMAP account (such as Fastmail): Quatrelle talks to your mail server directly, and your password stays in this tab only.	ブラウザーでメールを。JMAP アカウント (Fastmail など) を追加してください。Quatrelle はメール サーバーと直接通信し、パスワードはこのタブの中だけに保持されます。
 	Pop out	ポップアウト
 	Pop in	閲覧ウィンドウに戻す
 	Back to the reading pane	閲覧ウィンドウに戻します
@@ -578,12 +578,12 @@ month	May	5月
 	Open folder	フォルダーを開く
 	Move…	移動…
 	Save as an Outlook data file…	Outlook データ ファイルとして保存…
-	Moves to {folder} the next time MailCraft starts.	次回 MailCraft の起動時に {folder} へ移動します。
-	Chosen when MailCraft was started (--data or MAILCRAFT_DATA), so it can't be moved here.	MailCraft の起動時に指定されたため (--data または MAILCRAFT_DATA)、ここでは移動できません。
+	Moves to {folder} the next time Quatrelle starts.	次回 Quatrelle の起動時に {folder} へ移動します。
+	Chosen when Quatrelle was started (--data or QUATRELLE_DATA), so it can't be moved here.	Quatrelle の起動時に指定されたため (--data または QUATRELLE_DATA)、ここでは移動できません。
 	Your mail couldn't be moved, so it stays where it was: {error}	メールを移動できなかったため、元の場所のままです: {error}
 	Your mail is now kept in {folder}	メールは {folder} に保存されるようになりました
-	Your mail moves there the next time MailCraft starts.	次回 MailCraft の起動時にメールがそこへ移動します。
-	Each account's mail, contacts and calendar are kept in a MailCraft data file (.mailcraft) in this folder, as Outlook keeps each account in a .pst in Outlook Files. An Outlook data file you open gets a .mailcraft file of its own here; Outlook's file is left as it was. To have a copy as a .pst, use Save as an Outlook data file under Info.	各アカウントのメール、連絡先、予定表は、このフォルダーの MailCraft データ ファイル (.mailcraft) に保存されます。Outlook が各アカウントを Outlook ファイルの .pst に保存するのと同じです。開いた Outlook データ ファイルにはここに専用の .mailcraft ファイルが作られ、Outlook のファイルはそのまま残ります。.pst としてコピーが必要な場合は、[情報] の [Outlook データ ファイルとして保存] を使います。
+	Your mail moves there the next time Quatrelle starts.	次回 Quatrelle の起動時にメールがそこへ移動します。
+	Each account's mail, contacts and calendar are kept in a Quatrelle data file (.quatrelle) in this folder, as Outlook keeps each account in a .pst in Outlook Files. An Outlook data file you open gets a .quatrelle file of its own here; Outlook's file is left as it was. To have a copy as a .pst, use Save as an Outlook data file under Info.	各アカウントのメール、連絡先、予定表は、このフォルダーの Quatrelle データ ファイル (.quatrelle) に保存されます。Outlook が各アカウントを Outlook ファイルの .pst に保存するのと同じです。開いた Outlook データ ファイルにはここに専用の .quatrelle ファイルが作られ、Outlook のファイルはそのまま残ります。.pst としてコピーが必要な場合は、[情報] の [Outlook データ ファイルとして保存] を使います。
 	Keep a copy of downloaded mail on the server	ダウンロードしたメールのコピーをサーバーに残す
 	Remove it from the server after	次の期間後にサーバーから削除:
 	days	日
@@ -677,7 +677,7 @@ month	May	5月
 	Don't send before	次の日時以降に送信
 	Have replies sent to another address	返信を別のアドレスに送信する
 	Held in the Outbox: it will be sent {when}.	送信トレイで保留中: {when} に送信されます。
-	Keep it in the Outbox and send it later (MailCraft has to be running then)	送信トレイに保留して後で送信します (その時点で MailCraft が起動している必要があります)
+	Keep it in the Outbox and send it later (Quatrelle has to be running then)	送信トレイに保留して後で送信します (その時点で Quatrelle が起動している必要があります)
 	Replies to	返信先
 	Send right away	すぐに送信
 	Sends {when}	{when} に送信
@@ -714,7 +714,7 @@ month	May	5月
 	Clear formatting	書式のクリア
 	Insert link	リンクの挿入
 	The selected text	選択した文字列
-	Outlook.com, Hotmail and Live addresses only connect with Sign in with Microsoft: Microsoft no longer accepts passwords from mail apps. This copy of MailCraft wasn't built with Microsoft sign-in, so it can't add this account.	Outlook.com、Hotmail、Live のアドレスは「Microsoft でサインイン」でのみ接続できます。Microsoft はメール アプリからのパスワードを受け付けなくなりました。この MailCraft は Microsoft サインインなしでビルドされているため、このアカウントは追加できません。
+	Outlook.com, Hotmail and Live addresses only connect with Sign in with Microsoft: Microsoft no longer accepts passwords from mail apps. This copy of Quatrelle wasn't built with Microsoft sign-in, so it can't add this account.	Outlook.com、Hotmail、Live のアドレスは「Microsoft でサインイン」でのみ接続できます。Microsoft はメール アプリからのパスワードを受け付けなくなりました。この Quatrelle は Microsoft サインインなしでビルドされているため、このアカウントは追加できません。
 	Back to message	メッセージに戻る
 	Esc	Esc
 	Open it in its app, or save it.	対応するアプリで開くか、保存してください。
@@ -749,9 +749,9 @@ month	May	5月
 	Public Folders	パブリック フォルダー
 	Copy the whole message	メッセージ全体をコピー
 	Existing data file (optional)	既存のデータ ファイル (省略可)
-	Mail from an old .pst or .mailcraft file comes in first	古い .pst または .mailcraft ファイルのメールを最初に取り込みます
+	Mail from an old .pst or .quatrelle file comes in first	古い .pst または .quatrelle ファイルのメールを最初に取り込みます
 	Open a data file	データ ファイルを開く
-	Bring in an Outlook data file (.pst) or a MailCraft one (.mailcraft). It opens as a mailbox of its own, with its folders, kept on this computer.	Outlook のデータ ファイル (.pst) または MailCraft のファイル (.mailcraft) を取り込みます。フォルダーごと独立したメールボックスとして開き、このコンピューターに保存されます。
+	Bring in an Outlook data file (.pst) or a Quatrelle one (.quatrelle). It opens as a mailbox of its own, with its folders, kept on this computer.	Outlook のデータ ファイル (.pst) または Quatrelle のファイル (.quatrelle) を取り込みます。フォルダーごと独立したメールボックスとして開き、このコンピューターに保存されます。
 	Move up	上へ移動
 	Move down	下へ移動
 	Updating…	更新しています…
@@ -895,7 +895,7 @@ month	May	5月
 	Delete this contact?	この連絡先を削除しますか?
 	This contact will be deleted, along with everything kept about them. This can't be undone.	この連絡先と、保存されているすべての情報が削除されます。元に戻すことはできません。
 	Export…	エクスポート…
-	Add the rules from a file saved by MailCraft. A rule for an account this computer doesn't have comes in turned off.	MailCraft で保存したファイルからルールを追加します。このコンピューターにないアカウントのルールはオフの状態で追加されます。
+	Add the rules from a file saved by Quatrelle. A rule for an account this computer doesn't have comes in turned off.	Quatrelle で保存したファイルからルールを追加します。このコンピューターにないアカウントのルールはオフの状態で追加されます。
 	Change…	変更…
 	Clean up	クリーンアップ
 	Export rules	ルールのエクスポート
@@ -926,10 +926,10 @@ month	May	5月
 	Its folders show under this account. You need access to it on the Exchange server; the ones you have full access to open by themselves.	フォルダーはこのアカウントの下に表示されます。Exchange サーバーでのアクセス権が必要です。フル アクセス権のあるメールボックスは自動的に開きます。
 	Mailboxes you have full access to open by themselves.	フル アクセス権のあるメールボックスは自動的に開きます。
 	Shared mailboxes	共有メールボックス
-	{email} will be removed from MailCraft. Its data file, {file}, stays in your MailCraft Files folder: open it from File › Open & Export to see its mail again. Nothing is deleted on the server.	{email} を MailCraft から削除します。データ ファイル {file} は MailCraft Files フォルダーに残ります。[ファイル] › [開く/エクスポート] から開くと、メールをまた見られます。サーバー上では何も削除されません。
-	{email} will be removed from MailCraft. Nothing is deleted on the server.	{email} を MailCraft から削除します。サーバー上では何も削除されません。
-	{email} will be removed from MailCraft. Its data file, {file}, stays in your MailCraft Files folder: open it from File › Open & Export to see its mail again.	{email} を MailCraft から削除します。データ ファイル {file} は MailCraft Files フォルダーに残ります。[ファイル] › [開く/エクスポート] から開くと、メールをまた見られます。
-	{email} will be removed from MailCraft.	{email} を MailCraft から削除します。
+	{email} will be removed from Quatrelle. Its data file, {file}, stays in your Quatrelle Files folder: open it from File › Open & Export to see its mail again. Nothing is deleted on the server.	{email} を Quatrelle から削除します。データ ファイル {file} は Quatrelle Files フォルダーに残ります。[ファイル] › [開く/エクスポート] から開くと、メールをまた見られます。サーバー上では何も削除されません。
+	{email} will be removed from Quatrelle. Nothing is deleted on the server.	{email} を Quatrelle から削除します。サーバー上では何も削除されません。
+	{email} will be removed from Quatrelle. Its data file, {file}, stays in your Quatrelle Files folder: open it from File › Open & Export to see its mail again.	{email} を Quatrelle から削除します。データ ファイル {file} は Quatrelle Files フォルダーに残ります。[ファイル] › [開く/エクスポート] から開くと、メールをまた見られます。
+	{email} will be removed from Quatrelle.	{email} を Quatrelle から削除します。
 	Add shared mailbox…	共有メールボックスを追加…
 	Remove shared mailbox	共有メールボックスを削除
 	Opened by the server for your access to it	アクセス権があるため、サーバーが開いています
@@ -964,7 +964,7 @@ month	May	5月
 	Add what the rule looks at	ルールが確認する内容を指定してください
 	Change the rule	ルールを変更
 	Give the rule a name	ルールに名前を付けてください
-	MailCraft doesn't know every part of this rule yet	MailCraft はこのルールのすべてをまだ理解していません
+	Quatrelle doesn't know every part of this rule yet	Quatrelle はこのルールのすべてをまだ理解していません
 	Pick a category	カテゴリを選択
 	Pick a folder	フォルダーを選択
 	Say what to look for	検索する文字を入力してください
@@ -992,16 +992,16 @@ month	May	5月
 	Download	ダウンロード
 	Join meeting	会議に参加
 	Links:	リンク:
-	MailCraft {version} is available.	MailCraft {version} を利用できます。
+	Quatrelle {version} is available.	Quatrelle {version} を利用できます。
 	What's new	新機能
 	You have the newest version.	最新バージョンを使用しています。
 	Online only: keep none of this account's mail on this computer	オンラインのみ: このアカウントのメールをこのコンピューターに保存しない
 	Online only: none of this account's mail is kept on this computer.	オンラインのみ: このアカウントのメールはこのコンピューターに保存されません。
 	Online only: {email}	オンラインのみ: {email}
 	New message	新しいメッセージ
-	Open MailCraft to read it.	MailCraft を開いて読んでください。
-	Its mail is read from the server and held in memory while MailCraft runs; nothing of it is written to this computer. Each message downloads when you open it. Mail waiting to be sent, changes made while offline, and calendar items, contacts and notes kept only in MailCraft are lost when it closes.	メールはサーバーから読み込まれ、MailCraft の実行中はメモリにのみ保持されます。このコンピューターには何も書き込まれません。各メッセージは開いたときにダウンロードされます。送信待ちのメール、オフライン中の変更、MailCraft にのみ保存されている予定・連絡先・メモは、閉じると失われます。
-	Portable: everything is kept in MailCraftData beside MailCraft, and passwords only until it closes.	ポータブル: すべて MailCraft の横の MailCraftData に保存され、パスワードは閉じるまでだけ保持されます。
+	Open Quatrelle to read it.	Quatrelle を開いて読んでください。
+	Its mail is read from the server and held in memory while Quatrelle runs; nothing of it is written to this computer. Each message downloads when you open it. Mail waiting to be sent, changes made while offline, and calendar items, contacts and notes kept only in Quatrelle are lost when it closes.	メールはサーバーから読み込まれ、Quatrelle の実行中はメモリにのみ保持されます。このコンピューターには何も書き込まれません。各メッセージは開いたときにダウンロードされます。送信待ちのメール、オフライン中の変更、Quatrelle にのみ保存されている予定・連絡先・メモは、閉じると失われます。
+	Portable: everything is kept in QuatrelleData beside Quatrelle, and passwords only until it closes.	ポータブル: すべて Quatrelle の横の QuatrelleData に保存され、パスワードは閉じるまでだけ保持されます。
 	When it starts	開始時
 	1 minute before	1 分前
 	{n} minutes before	{n} 分前

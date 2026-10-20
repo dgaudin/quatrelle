@@ -1432,7 +1432,7 @@ const CLEAN_ATTRS: &[&str] = &[
 /// HTML a person wrote (a signature) made safe to send as it is: its layout, text, styles,
 /// links and pictures, without scripts, handlers, forms or frames. Links go to the web or to
 /// an address; pictures are the message's own (`cid:`), embedded (`data:image/`), or on the web
-/// (`https:`, which the recipients' mail apps load as they choose; MailCraft doesn't). Hostile
+/// (`https:`, which the recipients' mail apps load as they choose; Quatrelle doesn't). Hostile
 /// input is capped as the rest of this module's is; never panics.
 pub fn clean_html(html: &str) -> String {
     let html = match html.char_indices().nth(crate::HTML_MAX) {

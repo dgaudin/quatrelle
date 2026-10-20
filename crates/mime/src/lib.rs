@@ -1,4 +1,4 @@
-//! MailCraft MIME handling.
+//! Quatrelle MIME handling.
 //!
 //! * [`summary_from_header`] turns a header block (what sync downloads for every message) into
 //!   the message-list [`Summary`].
@@ -23,9 +23,9 @@ use mail_builder::MessageBuilder;
 use mail_builder::headers::content_type::ContentType;
 use mail_builder::mime::MimePart;
 use mail_parser::{Address, HeaderValue, Message, MessageParser, MimeHeaders};
-use mailcraft_model::dates::{Clock, full_time};
-use mailcraft_model::thread::norm_id;
-use mailcraft_model::{EmailAddress, Flags, MessageKey, Summary};
+use quatrelle_model::dates::{Clock, full_time};
+use quatrelle_model::thread::norm_id;
+use quatrelle_model::{EmailAddress, Flags, MessageKey, Summary};
 use serde::{Deserialize, Serialize};
 
 /// Longest preview kept in a summary, in characters.
@@ -988,7 +988,7 @@ pub struct Draft {
     #[serde(default)]
     pub read_receipt: bool,
     /// Voting buttons offered, separated by `;` (Outlook's "Approve;Reject"). Carried to the
-    /// account's connection in a header of MailCraft's own, [`VOTING_HEADER`], which turns it
+    /// account's connection in a header of Quatrelle's own, [`VOTING_HEADER`], which turns it
     /// into Exchange's verb stream and takes the header out before the message goes.
     #[serde(default)]
     pub voting: String,
@@ -996,7 +996,7 @@ pub struct Draft {
 
 /// The header carrying voting buttons from the message written to the connection sending it:
 /// the choices, `;`-separated, in UTF-8 as hex (plain ASCII whatever the language).
-pub const VOTING_HEADER: &str = "X-MailCraft-Voting";
+pub const VOTING_HEADER: &str = "X-Quatrelle-Voting";
 
 /// Take the voting buttons out of a message: the message without [`VOTING_HEADER`], and the
 /// choices it carried (none when it carried none).
@@ -1055,7 +1055,7 @@ fn b_list(v: &[EmailAddress]) -> mail_builder::headers::address::Address<'static
 /// A fresh Message-ID: `<time.seed@domain>`. The caller supplies the randomness (`seed`), so this
 /// stays deterministic and wasm-safe.
 pub fn new_message_id(from_email: &str, time: i64, seed: u64) -> String {
-    let domain = from_email.rsplit_once('@').map(|(_, d)| d).filter(|d| !d.is_empty()).unwrap_or("mailcraft.invalid");
+    let domain = from_email.rsplit_once('@').map(|(_, d)| d).filter(|d| !d.is_empty()).unwrap_or("quatrelle.invalid");
     format!("{:x}.{:016x}@{}", time.max(0), seed, domain)
 }
 
@@ -1105,7 +1105,7 @@ pub fn build(d: &Draft, from: &EmailAddress, date: i64, message_id: &str) -> Res
     if !d.references.is_empty() {
         b = b.references(d.references.clone());
     }
-    b = b.header("X-Mailer", mail_builder::headers::raw::Raw::new(format!("MailCraft {}", env!("CARGO_PKG_VERSION"))));
+    b = b.header("X-Mailer", mail_builder::headers::raw::Raw::new(format!("Quatrelle {}", env!("CARGO_PKG_VERSION"))));
     // Importance as RFC 2156 says, and as X-Priority, which most mail programs read.
     let raw = mail_builder::headers::raw::Raw::new;
     match d.importance.signum() {
@@ -1179,7 +1179,7 @@ pub enum ReplyMode {
 }
 
 fn prefixed(prefix: &str, subject: &str) -> String {
-    let base = mailcraft_model::thread::base_subject(subject);
+    let base = quatrelle_model::thread::base_subject(subject);
     let already = subject.trim().to_ascii_lowercase().starts_with(&prefix.to_ascii_lowercase());
     if already { subject.trim().to_string() } else { format!("{prefix} {base}") }
 }
@@ -1189,10 +1189,10 @@ fn prefixed(prefix: &str, subject: &str) -> String {
 fn quoted_original(p: &Parsed, clock: &Clock) -> (String, rich::Styles) {
     let mut lines: Vec<(&str, String)> = vec![("From:", p.from.to_string()), ("Sent:", full_time(p.date, clock))];
     if !p.to.is_empty() {
-        lines.push(("To:", mailcraft_model::addr::format_list(&p.to)));
+        lines.push(("To:", quatrelle_model::addr::format_list(&p.to)));
     }
     if !p.cc.is_empty() {
-        lines.push(("Cc:", mailcraft_model::addr::format_list(&p.cc)));
+        lines.push(("Cc:", quatrelle_model::addr::format_list(&p.cc)));
     }
     lines.push(("Subject:", p.subject.clone()));
     // The rule: an empty paragraph drawn as a line.
@@ -1282,7 +1282,7 @@ mod tests {
             "<p>Hi</p><a href=\"{long}\">Join</a> <A HREF='https://x.example/a?b=1&amp;c=2'>x</A> <a href=https://y.example/u>y</a>             <a href = \"javascript:alert(1)\">no</a><a href=\"mailto:z@x.example\">m</a><a href=\"{long}\">again</a><a href>bare</a>"
         );
         assert_eq!(html_links(&html), [long.clone(), "https://x.example/a?b=1&c=2".into(), "https://y.example/u".into()]);
-        let cut = mailcraft_model::ical::CalEvent { description: html_to_text(&html), ..Default::default() }.join_link().unwrap_or_default();
+        let cut = quatrelle_model::ical::CalEvent { description: html_to_text(&html), ..Default::default() }.join_link().unwrap_or_default();
         assert!(cut.len() < long.len(), "the text alone cuts it ({}), which is why the HTML is read", cut.len());
         assert!(html_links(&"<a href=\"".repeat(10_000)).is_empty());
         assert!(html_links("href").is_empty() && html_links("").is_empty());
@@ -1299,7 +1299,7 @@ mod tests {
             <div><a href=\"https://teams.microsoft.com/l/meetup-join/19%3ameeting_NjA3%40thread.v2/0?context=%7b%22Tid%22%3a%22c1%22%7d\">\
             <span>Join the meeting now</span></a></div><div>Meeting ID: 366 254 181 924</div></body></html>";
         let text = html_to_text(html);
-        let event = mailcraft_model::ical::CalEvent { description: text.clone(), ..Default::default() };
+        let event = quatrelle_model::ical::CalEvent { description: text.clone(), ..Default::default() };
         let join = event.join_link().unwrap_or_default();
         assert!(join.starts_with("https://teams.microsoft.com/l/meetup-join/19%3ameeting_NjA3%40thread.v2/0?context="), "{join} in {text}");
         assert!(event.links().contains(&"https://aka.ms/JoinTeamsMeeting".to_string()), "{text}");
@@ -1558,8 +1558,8 @@ iVBORw0KGgo=\r\n\
             to: vec![EmailAddress::new("", "ann@studio.example")],
             subject: "Look".into(),
             body: "See the picture.".into(),
-            html: Some("<p>See the <b>picture</b>.</p><img src=\"cid:pic1@mailcraft\" alt=\"pic\">".into()),
-            inline: vec![InlinePicture { cid: "pic1@mailcraft".into(), name: "p.png".into(), mime: "image/png".into(), data: vec![9, 9] }],
+            html: Some("<p>See the <b>picture</b>.</p><img src=\"cid:pic1@quatrelle\" alt=\"pic\">".into()),
+            inline: vec![InlinePicture { cid: "pic1@quatrelle".into(), name: "p.png".into(), mime: "image/png".into(), data: vec![9, 9] }],
             ..Default::default()
         };
         let raw = build(&d, &EmailAddress::new("", "z@studio.example"), 0, "f@x").unwrap();
@@ -1568,8 +1568,8 @@ iVBORw0KGgo=\r\n\
         let p = parse(&raw).unwrap();
         assert_eq!(p.text.trim(), "See the picture.");
         assert!(p.rich.iter().flatten().any(|s| s.bold && s.text == "picture"));
-        assert_eq!(p.images, vec!["cid:pic1@mailcraft".to_string()]);
-        let pic = p.attachments.iter().find(|a| a.content_id.as_deref() == Some("pic1@mailcraft")).unwrap();
+        assert_eq!(p.images, vec!["cid:pic1@quatrelle".to_string()]);
+        let pic = p.attachments.iter().find(|a| a.content_id.as_deref() == Some("pic1@quatrelle")).unwrap();
         assert!(pic.inline);
         assert_eq!(attachment_data(&raw, pic.index).unwrap(), vec![9, 9]);
     }
@@ -1653,7 +1653,7 @@ iVBORw0KGgo=\r\n\
         assert_eq!(sanitize_filename("..."), "attachment");
         assert_eq!(mime_from_name("X.JPG"), "image/jpeg");
         assert_eq!(new_message_id("z@studio.example", 255, 1), "ff.0000000000000001@studio.example");
-        assert_eq!(new_message_id("bad", -5, 0), "0.0000000000000000@mailcraft.invalid");
+        assert_eq!(new_message_id("bad", -5, 0), "0.0000000000000000@quatrelle.invalid");
         assert_eq!(preview("a\n\n  b   c\n> q\n-- \nsig"), "a b c");
         assert_eq!(preview(&"x".repeat(500)).chars().count(), PREVIEW_CHARS + 1);
     }

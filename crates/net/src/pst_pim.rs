@@ -7,13 +7,13 @@
 
 use std::collections::HashMap;
 
-use mailcraft_model::EmailAddress;
-use mailcraft_model::dates::civil_from_days;
-use mailcraft_model::ical::{Attendee, CalEvent};
-use mailcraft_model::vcard::{Card, Photo, PostalAddress, Typed, base64_encode};
 use outlook_pst::ltp::prop_context::{GuidValue, PropertyValue};
 use outlook_pst::messaging::named_prop::{NamedPropertyGuid, NamedPropertyId, PS_MAPI, PS_PUBLIC_STRINGS};
 use outlook_pst::messaging::store::Store as PstStore;
+use quatrelle_model::EmailAddress;
+use quatrelle_model::dates::civil_from_days;
+use quatrelle_model::ical::{Attendee, CalEvent};
+use quatrelle_model::vcard::{Card, Photo, PostalAddress, Typed, base64_encode};
 
 type GuidKey = (u32, u16, u16, [u8; 8]);
 const OLE: [u8; 8] = [0xC0, 0, 0, 0, 0, 0, 0, 0x46];
@@ -150,7 +150,7 @@ pub(crate) fn extract<'a>(p: &dyn Fn(u16) -> Option<&'a PropertyValue>, named: &
         x.uid = b.buffer().iter().map(|b| format!("{b:02X}")).collect();
     }
     if let Some(PropertyValue::Integer32(c)) = n(PSETID_NOTE, 0x8B00) {
-        x.note_color = u8::try_from(*c).ok().filter(|c| *c < mailcraft_model::pim::NOTE_COLORS);
+        x.note_color = u8::try_from(*c).ok().filter(|c| *c < quatrelle_model::pim::NOTE_COLORS);
     }
     x.modified = p(0x3008).and_then(crate::pst::time_of);
     x
@@ -192,7 +192,7 @@ pub(crate) fn contact_photo(hidden: bool, mime: &str, data: Option<&[u8]>) -> Op
     if !hidden {
         return None;
     }
-    let bytes = data.filter(|b| !b.is_empty() && b.len() <= mailcraft_model::vcard::MAX_PHOTO)?;
+    let bytes = data.filter(|b| !b.is_empty() && b.len() <= quatrelle_model::vcard::MAX_PHOTO)?;
     let mime = mime.trim().to_ascii_lowercase();
     let media = if mime.starts_with("image/") {
         mime
@@ -335,7 +335,7 @@ pub(crate) fn recurrence(blob: &[u8], start: i64) -> Option<(String, Vec<i64>)> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mailcraft_model::dates::days_from_civil;
+    use quatrelle_model::dates::days_from_civil;
 
     fn minutes(y: i64, m: u32, d: u32) -> u32 {
         u32::try_from((days_from_civil(y, m, d) * 1440) + EPOCH_MINUTES).unwrap()

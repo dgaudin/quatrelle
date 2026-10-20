@@ -1,13 +1,13 @@
-# Hosting MailCraft for the web
+# Hosting Quatrelle for the web
 
-`mailcraft-web-<version>.zip` (from the GitHub release, or `packaging/web/package.sh`) holds a
-static site in `mailcraft-web-<version>/`:
+`quatrelle-web-<version>.zip` (from the GitHub release, or `packaging/web/package.sh`) holds a
+static site in `quatrelle-web-<version>/`:
 
 | File | What it is |
 |---|---|
 | `index.html` | The page. It loads everything through relative URLs. |
-| `mailcraft-web-<hash>.js` | wasm-bindgen glue (generated, ES module) |
-| `mailcraft-web-<hash>_bg.wasm` | The app |
+| `quatrelle-web-<hash>.js` | wasm-bindgen glue (generated, ES module) |
+| `quatrelle-web-<hash>_bg.wasm` | The app |
 | `_headers`, `.htaccess` | Sample header rules for Netlify/Cloudflare Pages and Apache |
 
 There is no server-side code. Upload the folder's contents anywhere that serves static files.
@@ -23,9 +23,9 @@ kept with the account, and every language.
 - **The mail server must allow the page.** The browser only lets the page talk to a JMAP server
   that answers with CORS headers for the page's origin (`Access-Control-Allow-Origin`, and
   `Authorization` in `Access-Control-Allow-Headers`). Without them, connecting fails with
-  "the server may not allow web pages to reach it". Serving MailCraft from the mail server's own
+  "the server may not allow web pages to reach it". Serving Quatrelle from the mail server's own
   domain avoids the question.
-- **Passwords are never kept.** They stay in the tab's memory; after a reload MailCraft asks
+- **Passwords are never kept.** They stay in the tab's memory; after a reload Quatrelle asks
   again. The account list, folder lists and settings are kept in the page's `localStorage`
   (no mail, no passwords). Mail is cached in memory and synced again on each visit.
 - **Desktop only:** IMAP/SMTP, Google and Microsoft sign-in, Exchange (Microsoft Graph), opening
@@ -36,7 +36,7 @@ kept with the account, and every language.
 
 ## Any path works
 
-All URLs in `index.html` are relative (`public_url = "./"` in `apps/mailcraft-web/Trunk.toml`),
+All URLs in `index.html` are relative (`public_url = "./"` in `apps/quatrelle-web/Trunk.toml`),
 so the site works at a domain root, under a prefix (`https://example.com/mail/`) and from a CDN
 bucket. The asset names carry a content hash, so they can be cached forever; only `index.html`
 needs revalidation.

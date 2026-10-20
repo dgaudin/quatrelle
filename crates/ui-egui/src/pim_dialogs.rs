@@ -1,8 +1,8 @@
 //! The event and contact forms.
 
 use egui::{Color32, Margin, RichText, Sense, Ui, vec2};
-use mailcraft_engine::Session;
-use mailcraft_engine::model::dates;
+use quatrelle_engine::Session;
+use quatrelle_engine::model::dates;
 use serde_json::{Value, json};
 
 use crate::icons::{self, Icon};
@@ -68,7 +68,7 @@ fn writable_calendars(s: &Session) -> Vec<(String, String, String)> {
     for a in &s.accounts {
         if let Some(p) = s.pim.get(&a.config.id) {
             for c in p.calendars.iter().filter(|c| !c.read_only) {
-                let name = if c.id == mailcraft_engine::model::pim::LOCAL { tl!("Calendar").to_string() } else { c.name.clone() };
+                let name = if c.id == quatrelle_engine::model::pim::LOCAL { tl!("Calendar").to_string() } else { c.name.clone() };
                 out.push((a.config.id.clone(), c.id.clone(), format!("{name} · {}", a.config.email)));
             }
         }
@@ -186,7 +186,7 @@ impl EventForm {
     }
 }
 
-/// The categories to pick from (name, colour): the ones made in MailCraft, and any an event
+/// The categories to pick from (name, colour): the ones made in Quatrelle, and any an event
 /// already has from elsewhere.
 fn all_categories(s: &Session, has: &[String]) -> Vec<(String, u8)> {
     let mut out: Vec<(String, u8)> = s.prefs.categories.iter().map(|c| (c.name.clone(), c.color)).collect();
@@ -488,9 +488,9 @@ pub struct ContactForm {
     /// Business, home, mobile, fax and other (as [`PHONES`]).
     pub phones: [String; 5],
     /// Numbers beyond one of each kind, kept as they were.
-    pub more_phones: Vec<mailcraft_engine::model::vcard::Typed>,
+    pub more_phones: Vec<quatrelle_engine::model::vcard::Typed>,
     /// Business, home and other (as [`ADDRESSES`]).
-    pub addresses: [mailcraft_engine::model::vcard::PostalAddress; 3],
+    pub addresses: [quatrelle_engine::model::vcard::PostalAddress; 3],
     /// The address shown in the form.
     pub address_shown: usize,
     /// `YYYY-MM-DD`.
@@ -513,13 +513,13 @@ pub struct ContactForm {
 
 impl ContactForm {
     /// A new contact with a name and address filled in (Add to contacts on someone in a message).
-    pub fn from_address(a: &mailcraft_engine::model::EmailAddress) -> ContactForm {
+    pub fn from_address(a: &quatrelle_engine::model::EmailAddress) -> ContactForm {
         let mut f = ContactForm { uid: None, name: a.name.trim().to_string(), ..Default::default() };
         f.emails[0] = a.email.trim().to_string();
         f
     }
 
-    pub fn edit(c: &mailcraft_engine::model::vcard::Card) -> ContactForm {
+    pub fn edit(c: &quatrelle_engine::model::vcard::Card) -> ContactForm {
         let mut f = ContactForm {
             uid: Some(c.uid.clone()),
             name: c.display(),

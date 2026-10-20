@@ -4,17 +4,17 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::sync::Arc;
 
-use mailcraft_mime::{self as mime, OutAttachment, Parsed, ReplyMode};
-use mailcraft_model::contacts::{Contact, ContactBook};
-use mailcraft_model::dates::{Clock, DateGroup};
-use mailcraft_model::job::{Secret, Vacation};
-use mailcraft_model::search::{Doc, FolderIndex, Index, Query, summary_text};
-use mailcraft_model::thread::{Thread, threads};
-use mailcraft_model::vcard::Photo;
-use mailcraft_model::{
+use quatrelle_mime::{self as mime, OutAttachment, Parsed, ReplyMode};
+use quatrelle_model::contacts::{Contact, ContactBook};
+use quatrelle_model::dates::{Clock, DateGroup};
+use quatrelle_model::job::{Secret, Vacation};
+use quatrelle_model::search::{Doc, FolderIndex, Index, Query, summary_text};
+use quatrelle_model::thread::{Thread, threads};
+use quatrelle_model::vcard::Photo;
+use quatrelle_model::{
     AccountConfig, EmailAddress, Event, Flag, Folder, FolderRole, Job, MessageKey, Op, Summary, SyncStatus, addr, sort_folders, sort_newest_first,
 };
-use mailcraft_store::{FolderState, OutboxItem, Store};
+use quatrelle_store::{FolderState, OutboxItem, Store};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -95,7 +95,7 @@ pub enum UpdateCheck {
     /// This is the newest (the newest release's tag, when there is one).
     UpToDate(String),
     /// A newer one is out.
-    Available(mailcraft_model::job::Release),
+    Available(quatrelle_model::job::Release),
     Failed(String),
 }
 
@@ -106,8 +106,8 @@ pub enum UpdateCheck {
 pub fn newer_release<'a>(
     version: &str,
     build_sha: Option<&str>,
-    releases: &'a [mailcraft_model::job::Release],
-) -> Option<&'a mailcraft_model::job::Release> {
+    releases: &'a [quatrelle_model::job::Release],
+) -> Option<&'a quatrelle_model::job::Release> {
     let parse = |v: &str| -> Option<(u32, u32, u32)> {
         let mut p = v.split('.').map(|n| n.parse::<u32>().ok());
         Some((p.next()??, p.next()??, p.next()??))
@@ -321,7 +321,7 @@ pub struct Prefs {
     /// Desktop notifications for new mail in an Inbox.
     pub notify: bool,
     /// The categories offered, in order.
-    pub categories: Vec<mailcraft_model::organize::Category>,
+    pub categories: Vec<quatrelle_model::organize::Category>,
     /// Split the Inbox into Focused and Other.
     pub focused_inbox: bool,
     /// Senders the user moved: `true` always Focused, `false` always Other.
@@ -435,7 +435,7 @@ pub enum Undo {
 const UNDO_DEPTH: usize = 20;
 
 /// Who a message is shown under: a name, else the address, else nothing.
-fn person(a: Option<&mailcraft_model::EmailAddress>) -> String {
+fn person(a: Option<&quatrelle_model::EmailAddress>) -> String {
     a.map(|a| if a.name.trim().is_empty() { a.email.trim().to_string() } else { a.name.trim().to_string() }).unwrap_or_default()
 }
 
@@ -518,7 +518,7 @@ impl Default for Prefs {
             confirm_permanent_delete: true,
             favorites: None,
             notify: true,
-            categories: mailcraft_model::organize::default_categories(),
+            categories: quatrelle_model::organize::default_categories(),
             focused_inbox: false,
             focus_overrides: std::collections::BTreeMap::new(),
             show_html: true,
@@ -802,13 +802,13 @@ pub struct Session {
     /// New mail to announce (desktop notifications), oldest first.
     pub new_mail: Vec<Summary>,
     /// Inbox rules, run on mail as it arrives (`rules.json`).
-    pub rules: Vec<mailcraft_model::organize::Rule>,
-    /// The rules the accounts' servers run that MailCraft didn't make (Outlook's own, the
+    pub rules: Vec<quatrelle_model::organize::Rule>,
+    /// The rules the accounts' servers run that Quatrelle didn't make (Outlook's own, the
     /// server's web page, a Sieve script): listed, never changed from here. Read when an account
     /// connects, and after every change of ours.
-    pub foreign_rules: Vec<mailcraft_model::organize::ForeignRule>,
+    pub foreign_rules: Vec<quatrelle_model::organize::ForeignRule>,
     /// Snoozed messages and when they come back (`snoozes.json`).
-    pub snoozes: Vec<mailcraft_model::organize::Snooze>,
+    pub snoozes: Vec<quatrelle_model::organize::Snooze>,
     /// The Other tab of a Focused/Other Inbox is showing.
     pub focus_other: bool,
     /// Pictures from the web, by address: downloaded only after the user asked.
@@ -832,7 +832,7 @@ pub struct Session {
     /// A vote on its way: the message and the choice.
     pub vote_sending: Option<(MessageKey, String)>,
     /// Each account's calendars and address books.
-    pub pim: HashMap<String, mailcraft_model::pim::Pim>,
+    pub pim: HashMap<String, quatrelle_model::pim::Pim>,
     /// Mail, Calendar or People.
     pub module: pim::Module,
     pub cal_mode: pim::CalMode,
@@ -852,7 +852,7 @@ pub struct Session {
     registry: Arc<Registry>,
     next_id: u64,
     seed: u64,
-    /// The commit this build was made from (release builds: `MAILCRAFT_BUILD_SHA`), for
+    /// The commit this build was made from (release builds: `QUATRELLE_BUILD_SHA`), for
     /// telling its test build from a later one of the same version.
     pub build_sha: Option<String>,
     /// File › About's update check.
@@ -1048,7 +1048,7 @@ impl Session {
 
     /// A fresh `Content-ID` for a picture placed in a message.
     pub fn new_cid(&mut self) -> String {
-        format!("{:016x}@mailcraft", self.random())
+        format!("{:016x}@quatrelle", self.random())
     }
 
     fn random(&mut self) -> u64 {
@@ -1111,14 +1111,14 @@ impl Session {
         }
         match &self.view {
             View::Folder { account, folder } => {
-                self.folder(account, folder).map(Folder::display_name).unwrap_or_else(|| mailcraft_model::utf7::decode(folder))
+                self.folder(account, folder).map(Folder::display_name).unwrap_or_else(|| quatrelle_model::utf7::decode(folder))
             }
             View::Unified { role } => match role {
                 FolderRole::Inbox => "All Inboxes".to_string(),
                 r => format!("All {}", r.label().unwrap_or("folders")),
             },
             View::Outbox => "Outbox".to_string(),
-            View::Empty => "MailCraft".to_string(),
+            View::Empty => "Quatrelle".to_string(),
         }
     }
 
@@ -1883,12 +1883,12 @@ impl Session {
                 }
                 Op::RenameFolder { from, to } => {
                     for f in a.folders.iter_mut() {
-                        if let Some(new) = mailcraft_model::rebase_path(&f.path, from, to, f.delimiter.or(delimiter)) {
+                        if let Some(new) = quatrelle_model::rebase_path(&f.path, from, to, f.delimiter.or(delimiter)) {
                             f.path = new;
                         }
                     }
                 }
-                Op::DeleteFolder { path } => a.folders.retain(|f| !mailcraft_model::is_within(&f.path, path, f.delimiter.or(delimiter))),
+                Op::DeleteFolder { path } => a.folders.retain(|f| !quatrelle_model::is_within(&f.path, path, f.delimiter.or(delimiter))),
                 Op::SetFlag { .. } | Op::SetKeyword { .. } | Op::Move { .. } | Op::Expunge { .. } | Op::EmptyFolder { .. } => {}
             }
             sort_folders(&mut a.folders);
@@ -1896,27 +1896,27 @@ impl Session {
         match op {
             Op::CreateFolder { .. } => {}
             Op::RenameFolder { from, to } => {
-                self.cache.retain(|(acc, f), _| acc != account || !mailcraft_model::is_within(f, from, delimiter));
+                self.cache.retain(|(acc, f), _| acc != account || !quatrelle_model::is_within(f, from, delimiter));
                 if let View::Folder { account: va, folder } = &mut self.view
                     && va == account
-                    && let Some(new) = mailcraft_model::rebase_path(folder, from, to, delimiter)
+                    && let Some(new) = quatrelle_model::rebase_path(folder, from, to, delimiter)
                 {
                     *folder = new;
                 }
                 if let Some(favs) = self.prefs.favorites.as_mut() {
                     for fav in favs.iter_mut().filter(|f| f.account == account) {
-                        if let Some(new) = mailcraft_model::rebase_path(&fav.folder, from, to, delimiter) {
+                        if let Some(new) = quatrelle_model::rebase_path(&fav.folder, from, to, delimiter) {
                             fav.folder = new;
                         }
                     }
                 }
             }
             Op::DeleteFolder { path } => {
-                self.cache.retain(|(acc, f), _| acc != account || !mailcraft_model::is_within(f, path, delimiter));
+                self.cache.retain(|(acc, f), _| acc != account || !quatrelle_model::is_within(f, path, delimiter));
                 if let Some(favs) = self.prefs.favorites.as_mut() {
-                    favs.retain(|f| f.account != account || !mailcraft_model::is_within(&f.folder, path, delimiter));
+                    favs.retain(|f| f.account != account || !quatrelle_model::is_within(&f.folder, path, delimiter));
                 }
-                if matches!(&self.view, View::Folder { account: va, folder } if va == account && mailcraft_model::is_within(folder, path, delimiter))
+                if matches!(&self.view, View::Folder { account: va, folder } if va == account && quatrelle_model::is_within(folder, path, delimiter))
                 {
                     self.view = self.default_view();
                     self.reading = None;
@@ -1967,7 +1967,7 @@ impl Session {
     /// Change an account's automatic replies on the server.
     pub fn set_vacation(&mut self, account: &str, v: Vacation) -> CmdResult {
         for d in [&v.from, &v.until].into_iter().flatten() {
-            if !mailcraft_model::job::is_day(d) {
+            if !quatrelle_model::job::is_day(d) {
                 return Err(CmdError::Params(format!("`{d}` is not a date (YYYY-MM-DD)")));
             }
         }
@@ -2046,7 +2046,7 @@ impl Session {
             return Err(CmdError::Params(format!("no folder `{p}`")));
         }
         let parent = parent.map(str::to_string).or_else(|| self.top_parent(account));
-        let path = mailcraft_model::child_path(parent.as_deref(), self.delimiter(account), name).map_err(CmdError::Params)?;
+        let path = quatrelle_model::child_path(parent.as_deref(), self.delimiter(account), name).map_err(CmdError::Params)?;
         if self.folder(account, &path).is_some() {
             return Err(CmdError::Params(format!("there is already a folder called {}", name.trim())));
         }
@@ -2058,7 +2058,7 @@ impl Session {
     pub fn rename_folder(&mut self, account: &str, path: &str, name: &str) -> CmdResult {
         let f = self.user_folder(account, path)?;
         let d = f.delimiter.or(self.delimiter(account));
-        let to = mailcraft_model::child_path(Self::parent_of(path, d), d, name).map_err(CmdError::Params)?;
+        let to = quatrelle_model::child_path(Self::parent_of(path, d), d, name).map_err(CmdError::Params)?;
         if to == path {
             return Ok(serde_json::json!({ "renamed": to }));
         }
@@ -2079,7 +2079,7 @@ impl Session {
                 if self.folder(account, p).is_none() {
                     return Err(CmdError::Params(format!("no folder `{p}`")));
                 }
-                if mailcraft_model::is_within(p, path, Some(d)) {
+                if quatrelle_model::is_within(p, path, Some(d)) {
                     return Err(CmdError::Params("a folder can't be moved into itself".into()));
                 }
                 Some(p.to_string())
@@ -2107,7 +2107,7 @@ impl Session {
         let f = self.user_folder(account, path)?;
         let d = f.delimiter.or(self.delimiter(account));
         let trash = self.account(account).and_then(|a| a.folder(FolderRole::Trash)).map(|t| t.path.clone());
-        let in_trash = trash.as_deref().is_some_and(|t| mailcraft_model::is_within(path, t, d));
+        let in_trash = trash.as_deref().is_some_and(|t| quatrelle_model::is_within(path, t, d));
         if let (Some(trash), Some(d), false, false) = (&trash, d, in_trash, permanent) {
             // Like deleting mail: the folder waits in Deleted Items.
             let leaf = path.rsplit(d).next().unwrap_or(path);
@@ -2123,7 +2123,7 @@ impl Session {
         // Deepest first: servers refuse to delete a folder that still has children.
         let mut doomed: Vec<String> = self
             .account(account)
-            .map(|a| a.folders.iter().filter(|x| mailcraft_model::is_within(&x.path, path, d)).map(|x| x.path.clone()).collect())
+            .map(|a| a.folders.iter().filter(|x| quatrelle_model::is_within(&x.path, path, d)).map(|x| x.path.clone()).collect())
             .unwrap_or_default();
         doomed.sort_by_key(|p| std::cmp::Reverse(p.len()));
         let n = doomed.len();
@@ -2346,7 +2346,7 @@ impl Session {
                 }
             }
         }
-        Ok(serde_json::json!({ "flagged": !complete, "due": due.filter(|_| !complete).map(mailcraft_model::dates::day_string), "count": sel.len() }))
+        Ok(serde_json::json!({ "flagged": !complete, "due": due.filter(|_| !complete).map(quatrelle_model::dates::day_string), "count": sel.len() }))
     }
 
     /// When a flagged message is due, if a day was given.
@@ -2588,12 +2588,12 @@ impl Session {
         // `category:Work` means the Work category's keyword (`$label2`).
         // `is:categorized` means one of the categories.
         for c in &mut query.clauses {
-            if let mailcraft_model::search::Term::Keyword(k) = &mut c.term
+            if let quatrelle_model::search::Term::Keyword(k) = &mut c.term
                 && let Some(cat) = self.category(k)
             {
                 *k = cat.keyword.clone();
             }
-            if let mailcraft_model::search::Term::Categorized(ks) = &mut c.term {
+            if let quatrelle_model::search::Term::Categorized(ks) = &mut c.term {
                 *ks = self.prefs.categories.iter().map(|c| c.keyword.clone()).collect();
             }
         }
@@ -2926,7 +2926,7 @@ impl Session {
 
     fn compose_bytes(&mut self, c: &Compose, d: &mime::Draft) -> Result<(Vec<u8>, String), CmdError> {
         let acc = self.account(&c.account).ok_or_else(|| CmdError::Failed("the sending account is gone".into()))?;
-        let from = mailcraft_model::EmailAddress::new(acc.config.name.clone(), acc.config.email.clone());
+        let from = quatrelle_model::EmailAddress::new(acc.config.name.clone(), acc.config.email.clone());
         let email = acc.config.email.clone();
         let now = self.clock.now;
         let mid = mime::new_message_id(&email, now, self.random());
@@ -2967,7 +2967,7 @@ impl Session {
             self.finish_sent(&c, false);
             // finish_sent says "sent"; it isn't yet.
             self.notices.pop();
-            self.notice(format!("It will be sent {}", mailcraft_model::dates::full_time(at, &self.clock)), false);
+            self.notice(format!("It will be sent {}", quatrelle_model::dates::full_time(at, &self.clock)), false);
             return Ok(serde_json::json!({ "queued": c.id, "sendAfter": at }));
         }
         if local {
@@ -3073,7 +3073,7 @@ impl Session {
         let uid = st.uid_next.max(st.messages.iter().map(|m| m.key.uid).max().unwrap_or(0) + 1);
         st.uid_next = uid + 1;
         let key = MessageKey { account: account.to_string(), folder: folder.to_string(), validity: st.validity, uid };
-        let flags = mailcraft_model::Flags { seen, draft: !seen, ..Default::default() };
+        let flags = quatrelle_model::Flags { seen, draft: !seen, ..Default::default() };
         let size = u32::try_from(raw.len()).unwrap_or(u32::MAX);
         let s = mime::summary_from_full(raw, key.clone(), flags, size, self.clock.now);
         let _ = store.write_body(&key, raw);
@@ -3113,11 +3113,11 @@ impl Session {
             let key = MessageKey { account: account.clone(), folder: OUTBOX.to_string(), validity: 0, uid: u32::try_from(n + 1).unwrap_or(u32::MAX) };
             let raw = store.outbox_raw(account, item.id).unwrap_or_default();
             let size = u32::try_from(raw.len()).unwrap_or(u32::MAX);
-            let flags = mailcraft_model::Flags { seen: true, ..Default::default() };
+            let flags = quatrelle_model::Flags { seen: true, ..Default::default() };
             let mut m = mime::summary_from_full(&raw, key, flags, size, item.queued);
             m.preview = match &item.error {
                 Some(e) if e != "offline" => format!("Not sent yet: {e}"),
-                _ if item.not_before > self.clock.now => format!("Will be sent {}", mailcraft_model::dates::full_time(item.not_before, &self.clock)),
+                _ if item.not_before > self.clock.now => format!("Will be sent {}", quatrelle_model::dates::full_time(item.not_before, &self.clock)),
                 _ => "Waiting to be sent".to_string(),
             };
             out.push(m);
@@ -3409,7 +3409,7 @@ impl Session {
             None => {
                 // The file's contacts and calendar came in too.
                 if let Some(store) = self.store.clone()
-                    && let Ok(mut p) = store.load_account_doc::<mailcraft_model::pim::Pim>(account, mailcraft_model::pim::PIM_DOC)
+                    && let Ok(mut p) = store.load_account_doc::<quatrelle_model::pim::Pim>(account, quatrelle_model::pim::PIM_DOC)
                 {
                     p.ensure_defaults();
                     self.pim.insert(account.to_string(), p);
@@ -3479,12 +3479,12 @@ impl Session {
     /// password in the keychain.
     pub fn use_microsoft_sign_in(&mut self, id: &str) -> CmdResult {
         let a = self.account_mut(id).ok_or_else(|| CmdError::Params(format!("no account `{id}`")))?;
-        if !mailcraft_model::microsoft_password_account(&a.config) {
+        if !quatrelle_model::microsoft_password_account(&a.config) {
             return Err(CmdError::Params("this account doesn't sign in to Microsoft with a password".into()));
         }
         a.config.oauth = Some("microsoft".into());
         // Outlook.com's own servers, where the address is one of Microsoft's.
-        if a.config.imap.host.trim().is_empty() || mailcraft_model::microsoft_consumer(&a.config.email) && a.config.pop.is_none() {
+        if a.config.imap.host.trim().is_empty() || quatrelle_model::microsoft_consumer(&a.config.email) && a.config.pop.is_none() {
             let guess = AccountConfig::guess(&a.config.email);
             a.config.imap = guess.imap;
             a.config.smtp = guess.smtp;
@@ -3503,12 +3503,12 @@ impl Session {
     pub fn use_graph(&mut self, id: &str) -> CmdResult {
         let a = self.account(id).ok_or_else(|| CmdError::Params(format!("no account `{id}`")))?;
         let c = a.config.clone();
-        let microsoft = c.oauth.as_deref() == Some("microsoft") || mailcraft_model::microsoft_password_account(&c);
+        let microsoft = c.oauth.as_deref() == Some("microsoft") || quatrelle_model::microsoft_password_account(&c);
         if c.graph.is_some() || c.jmap.is_some() || c.ews.is_some() || c.pop.is_some() || !microsoft {
             return Err(CmdError::Params("only a Microsoft account connected over IMAP can move to Microsoft Graph".into()));
         }
         if !self.oauth_available.iter().any(|p| p == "microsoft") {
-            return Err(CmdError::Params("signing in with Microsoft isn't set up in this copy of MailCraft".into()));
+            return Err(CmdError::Params("signing in with Microsoft isn't set up in this copy of Quatrelle".into()));
         }
         let at = self.accounts.iter().position(|x| x.config.id == id).unwrap_or(0);
         // Starting again from the server: its old file isn't kept beside the new one.
@@ -3519,7 +3519,7 @@ impl Session {
             username: String::new(),
             signature: c.signature,
             oauth: Some("microsoft".into()),
-            graph: Some(mailcraft_model::GRAPH_URL.to_string()),
+            graph: Some(quatrelle_model::GRAPH_URL.to_string()),
             ..Default::default()
         };
         let new = self.add_account(config, None)?;
@@ -3533,7 +3533,7 @@ impl Session {
         Ok(serde_json::json!({ "account": new, "graph": true }))
     }
 
-    /// Ask for MailCraft's releases (File › About › Check for updates).
+    /// Ask for Quatrelle's releases (File › About › Check for updates).
     pub(crate) fn check_updates(&mut self) {
         self.update = UpdateCheck::Checking;
         self.jobs.push(Job::CheckUpdates);
@@ -3642,7 +3642,7 @@ impl Session {
             Event::Status { account, status } => {
                 // Refusals that need something done say so once, as they come.
                 if let SyncStatus::Error { error } = &status
-                    && (error.starts_with(mailcraft_model::MICROSOFT_IMAP_CLOSED) || error.starts_with(mailcraft_model::MICROSOFT_NO_PASSWORDS))
+                    && (error.starts_with(quatrelle_model::MICROSOFT_IMAP_CLOSED) || error.starts_with(quatrelle_model::MICROSOFT_NO_PASSWORDS))
                     && self.account(&account).is_some_and(|a| a.status != status)
                 {
                     let who = self.account(&account).map(|a| a.config.email.clone()).unwrap_or_default();
@@ -3664,7 +3664,7 @@ impl Session {
                     a.status = status;
                 }
                 // Rules made while the account was offline reach its server now it's connected,
-                // and the ones it keeps that MailCraft didn't make are listed.
+                // and the ones it keeps that Quatrelle didn't make are listed.
                 if online || connecting {
                     self.resend_server_rules(&account);
                     self.refresh_server_rules(&account);
@@ -3738,7 +3738,7 @@ impl Session {
                 }
             }
             Event::ServerRules { account, ids, others, cleared, error } => {
-                // The rules the server keeps that MailCraft didn't make (or no longer does):
+                // The rules the server keeps that Quatrelle didn't make (or no longer does):
                 // listed as they are, whoever made them owns them.
                 log::info!("rules: {account} keeps {} rules made elsewhere", others.len());
                 self.foreign_rules.retain(|r| r.account != account);
@@ -3777,7 +3777,7 @@ impl Session {
                 // A picture (or the answer that there is none): kept by address, so the People
                 // card shows it without asking again.
                 let photo = if error.is_none() && !data.is_empty() {
-                    Some(Photo { media, base64: mailcraft_model::vcard::base64_encode(&data) })
+                    Some(Photo { media, base64: quatrelle_model::vcard::base64_encode(&data) })
                 } else {
                     None
                 };

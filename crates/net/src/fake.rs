@@ -5,7 +5,7 @@ use std::collections::VecDeque;
 use std::io::{self, Read, Write};
 use std::sync::{Arc, Mutex};
 
-use mailcraft_store::Store;
+use quatrelle_store::Store;
 
 use crate::imap::Client;
 use crate::sync::{SyncOptions, sync_folder};
@@ -588,7 +588,7 @@ pub(crate) fn tests_store(name: &str) -> Store {
 }
 
 fn store(name: &str) -> Store {
-    let dir = std::env::temp_dir().join(format!("mailcraft-fake-{name}-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("quatrelle-fake-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     Store::open(dir).unwrap()
 }
@@ -603,8 +603,8 @@ fn login(st: &Arc<Mutex<State>>) -> Client<Fake> {
 mod tests {
     use std::time::{Duration, Instant};
 
-    use mailcraft_model::job::Secret;
-    use mailcraft_model::{AccountConfig, Event, Flag, FolderRole, Job, MessageKey, Op, Security, ServerConfig, SyncStatus};
+    use quatrelle_model::job::Secret;
+    use quatrelle_model::{AccountConfig, Event, Flag, FolderRole, Job, MessageKey, Op, Security, ServerConfig, SyncStatus};
 
     use super::*;
     use crate::worker::apply_remote;
@@ -864,20 +864,20 @@ mod tests {
 
     /// For looking at the app against a mail server that acts as Outlook.com does, on
     /// 127.0.0.1:1143 without TLS (user name anything, password `pw`, OAuth token `good-token`):
-    /// `MAILCRAFT_FAKE_REFUSE` refuses every password with its text ("Basic authentication is
-    /// disabled"); `MAILCRAFT_FAKE_CLOSED` (an address) takes that address's token but won't
-    /// open its mailbox. Run: `cargo test -p mailcraft-net serve_imap_for_the_app -- --ignored`.
+    /// `QUATRELLE_FAKE_REFUSE` refuses every password with its text ("Basic authentication is
+    /// disabled"); `QUATRELLE_FAKE_CLOSED` (an address) takes that address's token but won't
+    /// open its mailbox. Run: `cargo test -p quatrelle-net serve_imap_for_the_app -- --ignored`.
     #[test]
     #[ignore]
     fn serve_imap_for_the_app() {
         let st = State::new();
         {
             let mut s = st.lock().unwrap();
-            s.refuse_passwords = std::env::var("MAILCRAFT_FAKE_REFUSE").ok().filter(|v| !v.is_empty());
-            s.not_connected.extend(std::env::var("MAILCRAFT_FAKE_CLOSED").ok().filter(|v| !v.is_empty()));
+            s.refuse_passwords = std::env::var("QUATRELLE_FAKE_REFUSE").ok().filter(|v| !v.is_empty());
+            s.not_connected.extend(std::env::var("QUATRELLE_FAKE_CLOSED").ok().filter(|v| !v.is_empty()));
             s.add("INBOX", "Welcome", &[]);
-            // `MAILCRAFT_FAKE_EML`: messages to put in the Inbox (paths, separated by `;`).
-            for path in std::env::var("MAILCRAFT_FAKE_EML").unwrap_or_default().split(';').filter(|p| !p.is_empty()) {
+            // `QUATRELLE_FAKE_EML`: messages to put in the Inbox (paths, separated by `;`).
+            for path in std::env::var("QUATRELLE_FAKE_EML").unwrap_or_default().split(';').filter(|p| !p.is_empty()) {
                 if let Ok(raw) = std::fs::read(path) {
                     s.add_raw("INBOX", raw);
                 }
@@ -1035,7 +1035,7 @@ x"
 
         pool.submit(Job::GetVacation { account: "a1".into() });
         until(&pool, "replies read", |e| matches!(e, Event::Vacation { vacation: Some(v), error: None, .. } if !v.enabled));
-        let away = mailcraft_model::job::Vacation { enabled: true, subject: "Away".into(), text: "Back soon".into(), ..Default::default() };
+        let away = quatrelle_model::job::Vacation { enabled: true, subject: "Away".into(), text: "Back soon".into(), ..Default::default() };
         pool.submit(Job::SetVacation { account: "a1".into(), vacation: away.clone() });
         until(&pool, "replies on", |e| matches!(e, Event::Vacation { vacation: Some(v), error: None, .. } if *v == away));
         assert_eq!(sieve.lock().unwrap().active.as_deref(), Some(crate::sieve::SCRIPT));
@@ -1081,10 +1081,10 @@ x"
         };
         pool.submit(Job::Start { account, password: Some(Secret("pw".into())) });
         until(&pool, "online", |e| matches!(e, Event::Status { status: SyncStatus::Online { .. }, .. }));
-        let away = mailcraft_model::job::Vacation { enabled: true, text: "Back soon".into(), ..Default::default() };
+        let away = quatrelle_model::job::Vacation { enabled: true, text: "Back soon".into(), ..Default::default() };
         pool.submit(Job::SetVacation { account: "a1".into(), vacation: away.clone() });
         until(&pool, "replies on", |e| matches!(e, Event::Vacation { vacation: Some(v), error: None, .. } if *v == away));
-        use mailcraft_model::organize::{Condition, Rule, RuleAction};
+        use quatrelle_model::organize::{Condition, Rule, RuleAction};
         let rule = Rule {
             name: "Invoices".into(),
             enabled: true,
@@ -1117,7 +1117,7 @@ x"
             assert_eq!(f.active.as_deref(), Some(crate::sieve::SCRIPT));
         }
         // What the server keeps is read back: our rule by the id the script holds for it, and
-        // the user's own script as a rule MailCraft didn't make.
+        // the user's own script as a rule Quatrelle didn't make.
         pool.submit(Job::GetServerRules { account: "a1".into(), ours: vec!["sieve:Invoices".into()] });
         let seen = until(&pool, "rules read", |e| matches!(e, Event::ServerRules { error: None, .. } if ids_of(e).len() == 1));
         let read = seen.into_iter().find_map(|e| match e {
@@ -1215,7 +1215,7 @@ y"
 
     /// Issue #4: an account kept online only syncs its folders and opens its mail as any other,
     /// but none of it reaches the disk: no data file, nothing downloaded ahead of reading, and
-    /// once MailCraft closes, nothing of its mail is anywhere under the data folders. The other
+    /// once Quatrelle closes, nothing of its mail is anywhere under the data folders. The other
     /// account beside it keeps its mail as before (and shows the search finds what's kept).
     #[test]
     fn an_online_only_account_syncs_and_reads_with_nothing_on_disk() {
@@ -1234,9 +1234,9 @@ y"
             online.lock().unwrap().add_raw("INBOX", mail(&format!("ONLINE-SUBJECT-{i}"), &format!("ONLINE-BODY-{i}")));
             kept.lock().unwrap().add_raw("INBOX", mail(&format!("KEPT-SUBJECT-{i}"), &format!("KEPT-BODY-{i}")));
         }
-        let t = std::env::temp_dir().join(format!("mailcraft-fake-online-only-{}", std::process::id()));
+        let t = std::env::temp_dir().join(format!("quatrelle-fake-online-only-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&t);
-        let store = Store::open_packed(t.join("app"), t.join("MailCraft Files")).unwrap();
+        let store = Store::open_packed(t.join("app"), t.join("Quatrelle Files")).unwrap();
         let account = |id: &str, port: u16, online_only: bool| AccountConfig {
             id: id.into(),
             email: format!("{id}@studio.example"),
@@ -1270,7 +1270,7 @@ y"
         assert!(store.has_body(&key));
         assert_eq!(store.data_file("a1"), None, "no data file");
 
-        // MailCraft closes (its threads let the data files go).
+        // Quatrelle closes (its threads let the data files go).
         let kept_file = store.data_file("a2").unwrap();
         drop(pool);
         drop(store);
@@ -1284,8 +1284,8 @@ y"
             assert!(on_disk(&t, format!("KEPT-SUBJECT-{i}").as_bytes()) && on_disk(&t, format!("KEPT-BODY-{i}").as_bytes()), "{i}");
         }
         let files: Vec<String> =
-            std::fs::read_dir(t.join("MailCraft Files")).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
-        assert_eq!(files, ["a2@studio.example.mailcraft"], "only the other account has a data file");
+            std::fs::read_dir(t.join("Quatrelle Files")).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+        assert_eq!(files, ["a2@studio.example.quatrelle"], "only the other account has a data file");
         let _ = std::fs::remove_dir_all(&t);
     }
 
@@ -1331,7 +1331,7 @@ y"
         assert!(store.outbox("a1")[1].error.as_deref().is_some_and(|e| e.contains("network")), "{:?}", store.outbox("a1"));
 
         // A message held back for tomorrow (Delay Delivery) isn't sent with them.
-        let later = mailcraft_store::OutboxItem {
+        let later = quatrelle_store::OutboxItem {
             id: 3,
             from: "me@studio.example".into(),
             recipients: vec!["zoe@studio.example".into()],

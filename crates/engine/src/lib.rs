@@ -1,4 +1,4 @@
-//! MailCraft engine: the session and its commands.
+//! Quatrelle engine: the session and its commands.
 //!
 //! **Everything is a command.** Each user-visible action is a [`CommandSpec`] with a stable id
 //! (`mail.reply`, `folder.open`), a label, its place in the UI, a default shortcut, a params
@@ -7,7 +7,7 @@
 //!
 //! **Sans-I/O.** The session reads the local cache ([`Store`]) but never touches the network: it
 //! queues [`Job`]s ([`Session::take_jobs`]) and applies the [`Event`]s that come back
-//! ([`Session::apply`]). The desktop app connects the two to `mailcraft-net`'s worker pool; tests
+//! ([`Session::apply`]). The desktop app connects the two to `quatrelle-net`'s worker pool; tests
 //! script the events directly.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
@@ -19,9 +19,9 @@ use std::collections::HashMap;
 
 use serde_json::Value;
 
-pub use mailcraft_mime as mime;
-pub use mailcraft_model as model;
-pub use mailcraft_store as store;
+pub use quatrelle_mime as mime;
+pub use quatrelle_model as model;
+pub use quatrelle_store as store;
 pub use session::{
     ARRANGE_HEADINGS, AccountState, Arrange, Compose, FolderRef, ListFilter, ListLayout, MoveTarget, NotesOrder, Notice, Picture, Prefs, ReadInPane,
     Reading, ReadingPane, Row, SearchScope, Session, UpdateCheck, VacationState, View,
@@ -42,8 +42,8 @@ pub enum CmdError {
     Failed(String),
 }
 
-impl From<mailcraft_store::StoreError> for CmdError {
-    fn from(e: mailcraft_store::StoreError) -> Self {
+impl From<quatrelle_store::StoreError> for CmdError {
+    fn from(e: quatrelle_store::StoreError) -> Self {
         CmdError::Failed(e.to_string())
     }
 }
@@ -105,7 +105,7 @@ impl Registry {
     pub fn all(&self) -> &[CommandSpec] {
         &self.specs
     }
-    /// The command list as JSON (for agents and `mailcraft-cli commands`).
+    /// The command list as JSON (for agents and `quatrelle-cli commands`).
     pub fn describe(&self) -> Value {
         Value::Array(
             self.specs

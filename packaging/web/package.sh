@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Build the browser version and zip it:  $DIST/mailcraft-web-<version>.zip
+# Build the browser version and zip it:  $DIST/quatrelle-web-<version>.zip
 #
 # Usage: packaging/web/package.sh [--skip-build]
 #
 # Needs: trunk (cargo install trunk --locked) and the wasm32-unknown-unknown target. The zip holds
-# a self-contained static site in mailcraft-web-<version>/ that works from any URL path and inside
+# a self-contained static site in quatrelle-web-<version>/ that works from any URL path and inside
 # an <iframe>. Hosting notes: packaging/web/README.md.
 #
 # Fonts: with CRAFT_FONTS_DIR set (a storytold/craft-fonts checkout), the Arabic, Japanese and Thai
@@ -28,7 +28,7 @@ if [ "${1:-}" != "--skip-build" ]; then
     git -C "$FONTS" checkout -q FETCH_HEAD
     export CRAFT_FONTS_DIR="$FONTS" CRAFT_FONTS_REQUIRED=1
   fi
-  (cd "$ROOT/apps/mailcraft-web" && trunk build --release)
+  (cd "$ROOT/apps/quatrelle-web" && trunk build --release)
 fi
 
 SITE="$ROOT/dist/web"
@@ -39,7 +39,7 @@ if grep -Eq '(src|href)="/[^/]' "$SITE/index.html"; then
   exit 1
 fi
 
-NAME="mailcraft-web-$VERSION"
+NAME="quatrelle-web-$VERSION"
 WORK="$CARGO_TARGET_DIR/web-package"
 rm -rf "$WORK"
 mkdir -p "$WORK/$NAME"

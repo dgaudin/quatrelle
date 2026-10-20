@@ -2,10 +2,10 @@
 //! compose form that replaces it while a message is being written.
 
 use egui::{Align, Color32, Margin, Rect, RichText, Sense, Ui, vec2};
-use mailcraft_engine::mime::{self, AttachmentKind};
-use mailcraft_engine::model::contacts::Contact;
-use mailcraft_engine::model::{MessageKey, addr, dates};
-use mailcraft_engine::{Session, model::EmailAddress};
+use quatrelle_engine::mime::{self, AttachmentKind};
+use quatrelle_engine::model::contacts::Contact;
+use quatrelle_engine::model::{MessageKey, addr, dates};
+use quatrelle_engine::{Session, model::EmailAddress};
 use serde_json::json;
 
 use crate::icons::{self, Icon};
@@ -28,7 +28,7 @@ pub fn show(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Actio
 
 /// A message in a window of its own. What it asks for applies to that message: it becomes the
 /// open one first.
-pub fn window(s: &mut Session, st: &mut UiState, ui: &mut Ui, w: mailcraft_engine::Reading, acts: &mut Vec<Action>) {
+pub fn window(s: &mut Session, st: &mut UiState, ui: &mut Ui, w: quatrelle_engine::Reading, acts: &mut Vec<Action>) {
     let key = w.key.clone();
     let saved = s.reading.replace(w);
     let mut mine = Vec::new();
@@ -651,8 +651,8 @@ fn video_preview(s: &Session, st: &mut UiState, ctx: &egui::Context, key: &Messa
             let written = (|| {
                 let raw = s.store.as_ref()?.read_body(key)?;
                 let data = mime::attachment_data(&raw, a.index)?;
-                let dir = mailcraft_engine::store::scratch_dir("thumbs")?;
-                let name = format!("{:016x}-{}", mailcraft_engine::store::fnv64(&key.to_id()), mime::sanitize_filename(&a.name));
+                let dir = quatrelle_engine::store::scratch_dir("thumbs")?;
+                let name = format!("{:016x}-{}", quatrelle_engine::store::fnv64(&key.to_id()), mime::sanitize_filename(&a.name));
                 let path = dir.join(name);
                 std::fs::write(&path, &data).ok()?;
                 Some(path)
@@ -1266,7 +1266,7 @@ fn picture_texture(s: &Session, st: &mut UiState, ctx: &egui::Context, key: &Mes
         return Pic::Missing;
     }
     match s.pictures.get(src) {
-        Some(mailcraft_engine::Picture::Ready(bytes)) => {
+        Some(quatrelle_engine::Picture::Ready(bytes)) => {
             if let Some(t) = st.web_pictures.get(src) {
                 return t.clone().map_or(Pic::Missing, Pic::Ready);
             }
@@ -1277,7 +1277,7 @@ fn picture_texture(s: &Session, st: &mut UiState, ctx: &egui::Context, key: &Mes
             st.web_pictures.insert(src.to_string(), t.clone());
             t.map_or(Pic::Missing, Pic::Ready)
         }
-        Some(mailcraft_engine::Picture::Loading) => Pic::Loading,
+        Some(quatrelle_engine::Picture::Loading) => Pic::Loading,
         _ => Pic::Missing,
     }
 }
@@ -1298,7 +1298,7 @@ fn cover(tex: &egui::TextureHandle, rect: egui::Rect) -> egui::Shape {
 const MAX_PEOPLE_SHOWN: usize = 50;
 
 /// The contact someone is saved as, if they are (by address).
-fn known_contact(s: &Session, email: &str) -> Option<mailcraft_engine::model::vcard::Card> {
+fn known_contact(s: &Session, email: &str) -> Option<quatrelle_engine::model::vcard::Card> {
     if email.trim().is_empty() {
         return None;
     }
@@ -1356,7 +1356,7 @@ fn contact_card(
     ui: &mut Ui,
     t: &Tokens,
     a: &EmailAddress,
-    known: Option<&mailcraft_engine::model::vcard::Card>,
+    known: Option<&quatrelle_engine::model::vcard::Card>,
     acts: &mut Vec<Action>,
 ) {
     ui.set_min_width(260.0);
@@ -1894,7 +1894,7 @@ const CHIP_H: f32 = 42.0;
 
 /// Voting buttons: Outlook's usual sets, in the interface's language, or the sender's own,
 /// separated by semicolons.
-fn voting_menu(ui: &mut Ui, t: &Tokens, c: &mut mailcraft_engine::Compose) {
+fn voting_menu(ui: &mut Ui, t: &Tokens, c: &mut quatrelle_engine::Compose) {
     ui.set_min_width(260.0);
     for set in [["Approve", "Reject", ""], ["Yes", "No", ""], ["Yes", "No", "Maybe"]] {
         let choices: Vec<String> = set.iter().filter(|x| !x.is_empty()).map(|x| tl!(x).to_string()).collect();
@@ -1915,7 +1915,7 @@ fn voting_menu(ui: &mut Ui, t: &Tokens, c: &mut mailcraft_engine::Compose) {
 
 /// When to send a held-back message: in an hour, tomorrow or Monday morning, a time of one's
 /// own, or at once again.
-fn delay_menu(ui: &mut Ui, t: &Tokens, c: &mut mailcraft_engine::Compose, clock: &dates::Clock) {
+fn delay_menu(ui: &mut Ui, t: &Tokens, c: &mut quatrelle_engine::Compose, clock: &dates::Clock) {
     let today = dates::today(clock);
     let at = |day: i64, minutes: i64| day.saturating_mul(86_400) - i64::from(clock.offset) + minutes * 60;
     let weekday = (today + 3).rem_euclid(7);
@@ -1970,7 +1970,7 @@ fn delay_menu(ui: &mut Ui, t: &Tokens, c: &mut mailcraft_engine::Compose, clock:
 
 /// A local `YYYY-MM-DD` and `HH:MM` as (day, minutes into it).
 pub(crate) fn parse_local(day: &str, time: &str) -> Option<(i64, i64)> {
-    if !mailcraft_engine::model::job::is_day(day.trim()) {
+    if !quatrelle_engine::model::job::is_day(day.trim()) {
         return None;
     }
     let d = day.trim();
@@ -2097,7 +2097,7 @@ fn recipient_field(
     if ui.memory(|m| m.has_focus(edit_id))
         && let Some(mut state) = egui::TextEdit::load_state(ui.ctx(), edit_id)
         && let Some(range) = state.cursor.char_range().filter(|r| r.is_empty())
-        && let Some((rest, at)) = mailcraft_engine::model::contacts::remove_recipient(value, range.primary.index.0)
+        && let Some((rest, at)) = quatrelle_engine::model::contacts::remove_recipient(value, range.primary.index.0)
         && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Backspace))
     {
         *value = rest;
@@ -2173,7 +2173,7 @@ fn recipient_field(
     if let Some(i) = take
         && let Some(c) = suggestions.get(i)
     {
-        *value = mailcraft_engine::model::contacts::complete(value, &c.address);
+        *value = quatrelle_engine::model::contacts::complete(value, &c.address);
         st.suggest_index = 0;
         st.suggest_refocus = Some(name);
         r.request_focus();
@@ -2222,7 +2222,7 @@ fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action
                 "cc" => c.cc.clone(),
                 _ => c.bcc.clone(),
             };
-            let token = mailcraft_engine::model::contacts::last_token(&text).to_string();
+            let token = quatrelle_engine::model::contacts::last_token(&text).to_string();
             if token.chars().count() < 1 || st.suggest_dismissed.as_deref() == Some(text.as_str()) {
                 Vec::new()
             } else {
@@ -2252,7 +2252,7 @@ fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action
                 icons::paint(ui.painter(), r, Icon::Warning, t.warn);
                 ui.add_space(6.0);
                 ui.vertical(|ui| {
-                    ui.label(RichText::new(tl!("MailCraft")).font(theme::bold(16.0)).color(t.text));
+                    ui.label(RichText::new(tl!("Quatrelle")).font(theme::bold(16.0)).color(t.text));
                     let mut text = if msg == "add at least one recipient" {
                         tl!("Add at least one name in To, Cc or Bcc before sending.").to_string()
                     } else {
@@ -2282,7 +2282,7 @@ fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action
     st.compose_shown = Some(c.id);
     let focus_to = fresh && c.to.trim().is_empty();
     let focus_body = fresh && !focus_to;
-    let send = |c: &mailcraft_engine::Compose, acts: &mut Vec<Action>| {
+    let send = |c: &quatrelle_engine::Compose, acts: &mut Vec<Action>| {
         if c.subject.trim().is_empty() {
             acts.push(Action::Dialog(crate::Dialog::EmptySubject));
         } else {
@@ -2370,7 +2370,7 @@ fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action
                         None => tl!("Delay delivery").to_string(),
                     };
                     let r = widgets::tool_toggle(ui, Icon::Clock, &label, &t, c.send_after.is_some())
-                        .on_hover_text(tl!("Keep it in the Outbox and send it later (MailCraft has to be running then)"));
+                        .on_hover_text(tl!("Keep it in the Outbox and send it later (Quatrelle has to be running then)"));
                     egui::Popup::menu(&r).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| delay_menu(ui, &t, c, &clock));
                 }
                 if widgets::tool_toggle(ui, Icon::Reply, "Replies to", &t, c.show_reply_to || !c.reply_to.is_empty())

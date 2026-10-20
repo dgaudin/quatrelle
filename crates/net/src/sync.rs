@@ -18,14 +18,14 @@
 
 use std::io::{Read, Write};
 
-use mailcraft_mime as mime;
-use mailcraft_model::{Flags, MessageKey, Summary, sort_newest_first};
-use mailcraft_store::{FolderState, Store};
+use quatrelle_mime as mime;
+use quatrelle_model::{Flags, MessageKey, Summary, sort_newest_first};
+use quatrelle_store::{FolderState, Store};
 
 use crate::imap::{Client, Fetched, uid_chunks, uid_set};
 use crate::{NetError, Result};
 
-pub use mailcraft_jmap::{SyncOptions, SyncReport, fill_from_source};
+pub use quatrelle_jmap::{SyncOptions, SyncReport, fill_from_source};
 
 /// Downloading ahead, one message at a time: whether to go on after one failed. A message the
 /// server won't give (gone meanwhile, or failing on its side) is left for when it's opened, and

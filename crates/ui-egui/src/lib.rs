@@ -1,4 +1,4 @@
-//! MailCraft's egui front end: the familiar three-pane mail layout (folders, message list,
+//! Quatrelle's egui front end: the familiar three-pane mail layout (folders, message list,
 //! reading pane) with a simplified ribbon, search box, inline compose and account dialogs.
 //!
 //! The UI is thin: it reads [`Session`] state and changes it through commands (by id), so the
@@ -46,8 +46,8 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use egui::{Align, Color32, Key, Layout, Margin, RichText, Sense, Ui, vec2};
-use mailcraft_engine::model::{Event, Job, MessageKey, SyncStatus};
-use mailcraft_engine::{CalMode, Module, ReadingPane, SearchScope, Session};
+use quatrelle_engine::model::{Event, Job, MessageKey, SyncStatus};
+use quatrelle_engine::{CalMode, Module, ReadingPane, SearchScope, Session};
 use serde_json::{Value, json};
 
 pub use dialogs::Dialog;
@@ -71,11 +71,11 @@ pub(crate) fn clipboard_html() -> Option<String> {
     CLIPBOARD_HTML.get().and_then(|read| read())
 }
 
-pub(crate) fn compose_inline(c: &mailcraft_engine::Compose, ctx: &egui::Context) -> bool {
+pub(crate) fn compose_inline(c: &quatrelle_engine::Compose, ctx: &egui::Context) -> bool {
     !c.window || ctx.embed_viewports()
 }
 
-/// The network side: the desktop app plugs in `mailcraft-net`'s worker pool.
+/// The network side: the desktop app plugs in `quatrelle-net`'s worker pool.
 pub trait Backend {
     fn submit(&mut self, job: Job);
     fn poll(&mut self) -> Vec<Event>;
@@ -151,7 +151,7 @@ pub trait Services {
     fn pick_data_file(&mut self) -> Option<PathBuf> {
         None
     }
-    /// The folder MailCraft keeps its data in, and whether it can be moved from here (not when
+    /// The folder Quatrelle keeps its data in, and whether it can be moved from here (not when
     /// it was chosen at start, or in the browser).
     fn data_folder(&self) -> Option<(PathBuf, bool)> {
         None
@@ -160,11 +160,11 @@ pub trait Services {
     fn take_data_moved(&mut self) -> Option<Result<PathBuf, String>> {
         None
     }
-    /// Where the data moves when MailCraft next starts, if a move was asked for.
+    /// Where the data moves when Quatrelle next starts, if a move was asked for.
     fn pending_data_move(&self) -> Option<PathBuf> {
         None
     }
-    /// Ask for the data to move into `to` when MailCraft next starts (`None` forgets the move);
+    /// Ask for the data to move into `to` when Quatrelle next starts (`None` forgets the move);
     /// the folder it will be in.
     fn move_data_folder(&mut self, _to: Option<&std::path::Path>) -> Result<Option<PathBuf>, String> {
         Err("not available".into())
@@ -296,7 +296,7 @@ pub enum Action {
     ExportDataFile(String),
     /// Show a folder in the system's file manager.
     OpenFolder(PathBuf),
-    /// Choose a folder to move MailCraft's data into (at the next start).
+    /// Choose a folder to move Quatrelle's data into (at the next start).
     MoveDataFolder,
     /// Forget a move asked for.
     CancelDataMove,
@@ -458,7 +458,7 @@ pub struct UiState {
     pub pending_move: Option<PathBuf>,
     /// `None` follows the system.
     pub dark: Option<bool>,
-    /// The accent colour is the desktop's (when it has one) rather than MailCraft's.
+    /// The accent colour is the desktop's (when it has one) rather than Quatrelle's.
     pub system_accent: bool,
     /// The ribbon folded away to its tabs (Ctrl+F1, or its ⌃), as Outlook's.
     pub ribbon_collapsed: bool,
@@ -520,7 +520,7 @@ pub struct UiState {
     rtl_font: Option<Vec<u8>>,
     /// The language whose CJK font is loaded.
     cjk_loaded: Option<&'static str>,
-    /// The app's name in the window title (`MailCraft`, or `MailCraft – Sample mailbox`).
+    /// The app's name in the window title (`Quatrelle`, or `Quatrelle – Sample mailbox`).
     pub title_base: String,
     /// This page is a message's own window (the browser): only that message is shown.
     pub page_message: Option<MessageKey>,
@@ -559,7 +559,7 @@ pub struct UiState {
     /// The person whose card is shown (uid).
     pub(crate) person: Option<String>,
     /// The invitation in the open message, worked out once per message and calendar change.
-    pub(crate) invite: Option<(MessageKey, u64, Option<mailcraft_engine::Invite>)>,
+    pub(crate) invite: Option<(MessageKey, u64, Option<quatrelle_engine::Invite>)>,
     /// A file to drag out of the window (the app starts the system drag).
     drag_out: Option<PathBuf>,
     /// The platform can drag files out.
@@ -635,7 +635,7 @@ impl MailApp {
                 fonts: (None, None),
                 rtl_font: None,
                 cjk_loaded: None,
-                title_base: "MailCraft".into(),
+                title_base: "Quatrelle".into(),
                 places: Default::default(),
                 page_message: None,
                 title_shown: String::new(),
@@ -715,7 +715,7 @@ impl MailApp {
 
     /// Run a command, reporting failures in a toast.
     pub fn run(&mut self, id: &str, params: Value) {
-        use mailcraft_engine::CmdError;
+        use quatrelle_engine::CmdError;
         match self.session.run(id, &params) {
             Ok(_) => {}
             Err(CmdError::Disabled(_)) => {}
@@ -991,7 +991,7 @@ impl MailApp {
                     && f.code
                     && !f.html_code.trim().is_empty()
                 {
-                    let html = mailcraft_engine::mime::layout::clean_html(&f.html_code);
+                    let html = quatrelle_engine::mime::layout::clean_html(&f.html_code);
                     let screen = ctx.content_rect();
                     egui::Area::new(egui::Id::unique("signature-preview"))
                         .order(egui::Order::Tooltip)
@@ -1210,7 +1210,7 @@ impl MailApp {
             let (title, body) = i18n::as_written(|| match news.as_slice() {
                 _ if private => (
                     if news.len() == 1 { tl!("New message").to_string() } else { tf!("{n} new messages", n = news.len()) },
-                    tl!("Open MailCraft to read it.").to_string(),
+                    tl!("Open Quatrelle to read it.").to_string(),
                 ),
                 [m] => (m.from.display().to_string(), if m.subject.is_empty() { tl!("(no subject)").to_string() } else { m.subject.clone() }),
                 many => {
@@ -1245,7 +1245,7 @@ impl MailApp {
             };
             (view, tl!(&self.ui.title_base).to_string())
         });
-        let title = if self.session.view == mailcraft_engine::View::Empty {
+        let title = if self.session.view == quatrelle_engine::View::Empty {
             base.to_string()
         } else if unread > 0 {
             format!("({unread}) {view} – {base}")
@@ -1330,7 +1330,7 @@ impl MailApp {
                     .account(&account)
                     .map(|a| if a.config.email.trim().is_empty() { a.config.name.clone() } else { a.config.email.clone() })
                     .unwrap_or_default();
-                let name = mailcraft_engine::mime::sanitize_filename(if name.trim().is_empty() { "Mail" } else { name.trim() });
+                let name = quatrelle_engine::mime::sanitize_filename(if name.trim().is_empty() { "Mail" } else { name.trim() });
                 if let Some(path) = self.services.save_path(&format!("{name}.pst")) {
                     match self.session.run("account.exportPst", &json!({"account": account, "path": path.to_string_lossy()})) {
                         Ok(_) => {
@@ -1342,7 +1342,7 @@ impl MailApp {
                 }
             }
             Action::ExportRules => {
-                if let Some(path) = self.services.save_path("MailCraft rules.json") {
+                if let Some(path) = self.services.save_path("Quatrelle rules.json") {
                     match self.session.run("rules.export", &json!({"path": path.to_string_lossy()})) {
                         Ok(v) => {
                             let n = v.get("rules").and_then(Value::as_u64).unwrap_or(0);
@@ -1383,7 +1383,7 @@ impl MailApp {
                         }
                         Ok(target) => {
                             self.ui.pending_move = target;
-                            self.session.notice(tl!("Your mail moves there the next time MailCraft starts.").to_string(), false);
+                            self.session.notice(tl!("Your mail moves there the next time Quatrelle starts.").to_string(), false);
                         }
                         Err(e) => self.session.notice(e, true),
                     }
@@ -1441,7 +1441,7 @@ impl MailApp {
                 }
             }
             Action::SaveAttachment(i) | Action::OpenAttachment(i) if self.services.downloads() => {
-                let name = mailcraft_engine::mime::sanitize_filename(&self.attachment_name(i));
+                let name = quatrelle_engine::mime::sanitize_filename(&self.attachment_name(i));
                 match self.session.attachment_bytes(i) {
                     Ok(b) => self.services.download(&name, &b),
                     Err(e) => self.session.notice(e.to_string(), true),
@@ -1457,7 +1457,7 @@ impl MailApp {
                     .unwrap_or_default();
                 for (i, name) in files {
                     if let Ok(b) = self.session.attachment_bytes(i) {
-                        self.services.download(&mailcraft_engine::mime::sanitize_filename(&name), &b);
+                        self.services.download(&quatrelle_engine::mime::sanitize_filename(&name), &b);
                     }
                 }
             }
@@ -1514,7 +1514,7 @@ impl MailApp {
             Action::SignaturePicture => {
                 for p in self.services.pick_pictures() {
                     let name = p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "picture.png".into());
-                    let mime = mailcraft_engine::mime::mime_from_name(&name);
+                    let mime = quatrelle_engine::mime::mime_from_name(&name);
                     let data = match std::fs::metadata(&p) {
                         Ok(m) if m.len() > 500 * 1024 => {
                             self.session.notice(format!("{name}: a signature picture is 500 KB at most"), true);
@@ -1529,8 +1529,8 @@ impl MailApp {
                     let cid = self.session.new_cid();
                     if let Some(Dialog::Signature(f)) = self.ui.dialog.as_mut() {
                         let at = f.compose.body.chars().count();
-                        f.compose.inline.push(mailcraft_engine::mime::InlinePicture { cid: cid.clone(), name, mime: mime.to_string(), data });
-                        mailcraft_engine::cmd::insert_picture_at(&mut f.compose, at, &cid);
+                        f.compose.inline.push(quatrelle_engine::mime::InlinePicture { cid: cid.clone(), name, mime: mime.to_string(), data });
+                        quatrelle_engine::cmd::insert_picture_at(&mut f.compose, at, &cid);
                     }
                 }
             }
@@ -1543,7 +1543,7 @@ impl MailApp {
             Action::PastePicture => {
                 // Formatted text that came with a picture (from Word or a web page) was pasted
                 // as text.
-                let text = clipboard_html().is_some_and(|h| !mailcraft_engine::mime::pasted_html(&h).0.trim().is_empty());
+                let text = clipboard_html().is_some_and(|h| !quatrelle_engine::mime::pasted_html(&h).0.trim().is_empty());
                 if !text && let Some(png) = self.services.clipboard_picture() {
                     let r = self.session.run("compose.insertPicture", &json!({"name": "pasted.png", "data": png, "at": self.picture_at()}));
                     self.place_picture(r);
@@ -1575,14 +1575,14 @@ impl MailApp {
         let Some((config, status)) = self.session.account(id).map(|a| (a.config.clone(), a.status.clone())) else { return };
         // Microsoft took the sign-in but won't open the mailbox: say why, and what helps.
         if let SyncStatus::Error { error } = &status
-            && error.starts_with(mailcraft_engine::model::MICROSOFT_IMAP_CLOSED)
+            && error.starts_with(quatrelle_engine::model::MICROSOFT_IMAP_CLOSED)
         {
             self.ui.dialog = Some(Dialog::MailboxClosed { account: id.to_string(), email: config.email.clone(), error: error.clone() });
             return;
         }
         // A Microsoft account with a password, which Microsoft refuses: Sign in with Microsoft.
         if config.oauth.is_some()
-            || mailcraft_engine::model::microsoft_password_account(&config) && self.session.oauth_available.iter().any(|p| p == "microsoft")
+            || quatrelle_engine::model::microsoft_password_account(&config) && self.session.oauth_available.iter().any(|p| p == "microsoft")
         {
             self.run("account.signIn", json!({"account": id}));
         } else {
@@ -1597,7 +1597,7 @@ impl MailApp {
         self.ui.editor.as_ref().filter(|e| self.session.compose.as_ref().is_some_and(|c| c.id == e.id)).map_or(n, |e| e.sel.start.min(n))
     }
 
-    fn place_picture(&mut self, r: mailcraft_engine::CmdResult) {
+    fn place_picture(&mut self, r: quatrelle_engine::CmdResult) {
         match r {
             // In place: the cursor goes after it.
             Ok(_) => {
@@ -1630,7 +1630,7 @@ impl MailApp {
     /// A file name for the open message (its subject, made safe).
     fn message_file_name(&self) -> String {
         let subject = self.session.reading.as_ref().and_then(|r| r.parsed.as_ref()).map(|p| p.subject.clone()).unwrap_or_default();
-        let name = mailcraft_engine::mime::sanitize_filename(if subject.trim().is_empty() { "message" } else { &subject });
+        let name = quatrelle_engine::mime::sanitize_filename(if subject.trim().is_empty() { "message" } else { &subject });
         name.chars().take(80).collect()
     }
 
@@ -1640,11 +1640,11 @@ impl MailApp {
             return None;
         }
         let name = self.attachment_name(i);
-        let Some(dir) = mailcraft_engine::store::scratch_dir("open") else {
+        let Some(dir) = quatrelle_engine::store::scratch_dir("open") else {
             self.session.notice(tl!("There's no folder to put the attachment in for another app"), true);
             return None;
         };
-        let path = dir.join(mailcraft_engine::mime::sanitize_filename(&name));
+        let path = dir.join(quatrelle_engine::mime::sanitize_filename(&name));
         match self.session.run("attachment.save", &json!({"index": i, "path": path.to_string_lossy()})) {
             Ok(_) => Some(path),
             Err(e) => {
@@ -1805,7 +1805,7 @@ impl MailApp {
             && self.session.selected().iter().all(|m| {
                 self.session
                     .account(&m.key.account)
-                    .and_then(|a| a.folder(mailcraft_engine::model::FolderRole::Trash))
+                    .and_then(|a| a.folder(quatrelle_engine::model::FolderRole::Trash))
                     .is_some_and(|t| t.path == m.key.folder)
             })
     }
@@ -2051,7 +2051,7 @@ impl MailApp {
                     groups.end(ui, &t, "Actions");
                     let r = widgets::big_button(ui, Icon::ListBullet, "Arrange by", &t, true);
                     egui::Popup::menu(&r).show(|ui| {
-                        use mailcraft_engine::NotesOrder as O;
+                        use quatrelle_engine::NotesOrder as O;
                         for (order, label, code) in
                             [(O::Modified, "Last changed", "modified"), (O::Title, "Title (A to Z)", "title"), (O::Color, "Color", "color")]
                         {
@@ -2158,7 +2158,7 @@ impl MailApp {
                         {
                             acts.push(Action::Run("mail.archive", json!({})));
                         }
-                        let in_junk = s.view_role() == Some(mailcraft_engine::model::FolderRole::Junk);
+                        let in_junk = s.view_role() == Some(quatrelle_engine::model::FolderRole::Junk);
                         let (jid, jl) = if in_junk { ("mail.notJunk", "Not junk") } else { ("mail.junk", "Report junk") };
                         if widgets::big_button(ui, Icon::Junk, jl, &t, enabled(jid)).clicked() {
                             acts.push(Action::Run(jid, json!({})));
@@ -2211,7 +2211,7 @@ impl MailApp {
                         // Show only some mail, as Outlook's Filter Email.
                         let r = widgets::big_button(ui, Icon::Funnel, "Filter", &t, true);
                         egui::Popup::menu(&r).show(|ui| {
-                            for f in mailcraft_engine::ListFilter::EVERY {
+                            for f in quatrelle_engine::ListFilter::EVERY {
                                 if ui.selectable_label(s.filter == f, tl!(f.label())).clicked() {
                                     acts.push(Action::Run("list.filter", json!({"value": f.code()})));
                                     ui.close();
@@ -2327,7 +2327,7 @@ impl MailApp {
                         // is at the bottom or off, as Outlook switches).
                         let r = widgets::big_button(ui, Icon::ListBullet, "Message list", &t, true);
                         egui::Popup::menu(&r).show(|ui| {
-                            use mailcraft_engine::ListLayout as L;
+                            use quatrelle_engine::ListLayout as L;
                             for (v, label, tip) in [
                                 (L::Auto, "Automatic", "A table when the reading pane is at the bottom or off"),
                                 (L::Cards, "Cards", ""),
@@ -2523,7 +2523,7 @@ impl MailApp {
     }
 
     pub fn restore_state(&mut self, v: &Value) {
-        if let Some(p) = v.get("prefs").and_then(|p| serde_json::from_value::<mailcraft_engine::Prefs>(p.clone()).ok()) {
+        if let Some(p) = v.get("prefs").and_then(|p| serde_json::from_value::<quatrelle_engine::Prefs>(p.clone()).ok()) {
             let offline = p.work_offline;
             let keep = (p.keep_messages, p.keep_offline);
             self.session.prefs = p;
@@ -2531,7 +2531,7 @@ impl MailApp {
             self.session.note_new_calendars();
             self.session.refresh_list();
             // How much mail to keep, before any account connects (when it isn't the default).
-            let d = mailcraft_engine::Prefs::default();
+            let d = quatrelle_engine::Prefs::default();
             if keep != (d.keep_messages, d.keep_offline) {
                 self.session.apply_sync_prefs();
             }
@@ -2572,18 +2572,18 @@ const SEARCH_INDEX_BUDGET: usize = 500;
 
 /// An account that waits for you to do something: sign in (again, or with Microsoft rather than
 /// a password), or choose what to do about a mailbox Microsoft won't open over IMAP.
-fn needs_you(a: &mailcraft_engine::AccountState) -> bool {
+fn needs_you(a: &quatrelle_engine::AccountState) -> bool {
     match &a.status {
         SyncStatus::NeedsPassword { .. } => true,
         SyncStatus::Error { error } => {
-            error.starts_with(mailcraft_engine::model::MICROSOFT_IMAP_CLOSED) || error.starts_with(mailcraft_engine::model::MICROSOFT_NO_PASSWORDS)
+            error.starts_with(quatrelle_engine::model::MICROSOFT_IMAP_CLOSED) || error.starts_with(quatrelle_engine::model::MICROSOFT_NO_PASSWORDS)
         }
         _ => false,
     }
 }
 
 /// An account's address, and what's wrong with it when something is (for hovering its status).
-fn why(a: &mailcraft_engine::AccountState) -> String {
+fn why(a: &quatrelle_engine::AccountState) -> String {
     match &a.status {
         SyncStatus::Error { error } | SyncStatus::NeedsPassword { error } if !error.is_empty() => {
             format!("{}\n{}", a.config.email, tl!(error))
@@ -2593,15 +2593,15 @@ fn why(a: &mailcraft_engine::AccountState) -> String {
 }
 
 /// An account's status for the status bar: its colour and words.
-fn account_status(s: &Session, t: &Tokens, a: &mailcraft_engine::AccountState) -> (egui::Color32, String) {
+fn account_status(s: &Session, t: &Tokens, a: &quatrelle_engine::AccountState) -> (egui::Color32, String) {
     match &a.status {
-        SyncStatus::Error { error } if error.starts_with(mailcraft_engine::model::MICROSOFT_NO_PASSWORDS) => {
+        SyncStatus::Error { error } if error.starts_with(quatrelle_engine::model::MICROSOFT_NO_PASSWORDS) => {
             (t.danger, tl!("Sign in with Microsoft").to_string())
         }
-        SyncStatus::Error { error } if error.starts_with(mailcraft_engine::model::MICROSOFT_IMAP_CLOSED) => {
+        SyncStatus::Error { error } if error.starts_with(quatrelle_engine::model::MICROSOFT_IMAP_CLOSED) => {
             (t.danger, tl!("Mailbox won't open").to_string())
         }
-        SyncStatus::Online { at } => (t.ok, tf!("Updated {time}", time = i18n::date(&mailcraft_engine::model::dates::list_time(*at, &s.clock)))),
+        SyncStatus::Online { at } => (t.ok, tf!("Updated {time}", time = i18n::date(&quatrelle_engine::model::dates::list_time(*at, &s.clock)))),
         SyncStatus::Syncing { .. } if a.is_data_file() => (t.accent, tf!("Opening {file}…", file = a.config.email)),
         SyncStatus::Syncing { folder } => {
             (t.accent, tf!("Updating {folder}…", folder = s.folder(&a.config.id, folder).map(i18n::folder).unwrap_or_default()))

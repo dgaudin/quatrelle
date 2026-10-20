@@ -1,6 +1,6 @@
-# MailCraft interface strings: Simplified Chinese (简体中文).
+# Quatrelle interface strings: Simplified Chinese (简体中文).
 # context<TAB>English<TAB>translation; escapes \n \t \\. Placeholders like {name} stay as they are.
-# Written for MailCraft (clean room): no wording is taken from other mail clients.
+# Written for Quatrelle (clean room): no wording is taken from other mail clients.
 
 	  Loading folders…	  正在加载文件夹…
 	(Top level)	(顶层)
@@ -120,8 +120,8 @@
 	Local-first: mail is cached on this computer for fast offline search. Passwords stay in the system keychain.	本地优先: 邮件缓存在这台电脑上，可快速离线搜索。密码保存在系统钥匙串中。
 	Looking up the server settings…	正在查找服务器设置…
 	Mail from {sender}	来自 {sender} 的邮件
-	MailCraft	MailCraft
-	MailCraft {version} · an ArtCraft app · MIT OR Apache-2.0	MailCraft {version} · ArtCraft 应用 · MIT OR Apache-2.0
+	Quatrelle	Quatrelle
+	Quatrelle {version} · an ArtCraft app · MIT OR Apache-2.0	Quatrelle {version} · ArtCraft 应用 · MIT OR Apache-2.0
 	Mailing list: unsubscribe at {address}	邮件列表: 在 {address} 退订
 	Mar	3月
 	Mark all as read	全部标记为已读
@@ -318,7 +318,7 @@
 	Waiting in the Outbox: it will be sent when you're back online.	在发件箱中等待: 恢复联网后会发送。
 	Wed	周三
 	Wednesday	星期三
-	Welcome to MailCraft	欢迎使用 MailCraft
+	Welcome to Quatrelle	欢迎使用 Quatrelle
 	When mail	当邮件
 	Without encryption your password travels in the clear. Use only for local test servers.	不加密时，你的密码会以明文传输。仅用于本地测试服务器。
 	Work	工作
@@ -344,7 +344,7 @@
 	{n} new messages	{n} 封新邮件
 	• List	• 列表
 	Select a message to read it	选择一封邮件进行阅读
-	MailCraft – Sample mailbox	MailCraft – 示例邮箱
+	Quatrelle – Sample mailbox	Quatrelle – 示例邮箱
 	Mail server	邮件服务器
 	IMAP and SMTP	IMAP 和 SMTP
 	JMAP	JMAP
@@ -353,7 +353,7 @@
 	Open in new window	在新窗口中打开
 	{subject} – Message	{subject} – 邮件
 	About	关于
-	About MailCraft	关于 MailCraft
+	About Quatrelle	关于 Quatrelle
 	Account information	帐户信息
 	Account settings	帐户设置
 	An ArtCraft app · MIT OR Apache-2.0	ArtCraft 应用 · MIT OR Apache-2.0
@@ -376,8 +376,8 @@
 	Inbox and notifications	收件箱和通知
 	Info	信息
 	Kept on this computer: {size}	保存在这台电脑上: {size}
-	MailCraft talks only to your own mail servers, over encrypted connections. Pictures from the web load only when you ask.	MailCraft 只通过加密连接与你自己的邮件服务器通信。来自网络的图片只在你要求时加载。
-	MailCraft {version}	MailCraft {version}
+	Quatrelle talks only to your own mail servers, over encrypted connections. Pictures from the web load only when you ask.	Quatrelle 只通过加密连接与你自己的邮件服务器通信。来自网络的图片只在你要求时加载。
+	Quatrelle {version}	Quatrelle {version}
 	Mailbox	邮箱
 	Mailbox settings	邮箱设置
 	Manage rules	管理规则
@@ -507,10 +507,10 @@ month	May	5月
 	Exchange (Microsoft 365)	Exchange (Microsoft 365)
 	Exchange (Microsoft Graph)	Exchange (Microsoft Graph)
 	Server: {url} (Microsoft Graph)	服务器：{url} (Microsoft Graph)
-	Signing in with Microsoft isn't set up in this copy of MailCraft.	此 MailCraft 副本未设置 Microsoft 登录。
+	Signing in with Microsoft isn't set up in this copy of Quatrelle.	此 Quatrelle 副本未设置 Microsoft 登录。
 	Syncs through Microsoft Graph, for work and school accounts where IMAP is switched off. You sign in with Microsoft in the browser: no password is stored.	通过 Microsoft Graph 同步，适用于关闭了 IMAP 的工作或学校帐户。在浏览器中使用 Microsoft 登录：不会保存密码。
-	In the browser, MailCraft works with JMAP providers. Your password stays in this tab only and is only ever sent to your mail server.	在浏览器中，MailCraft 支持 JMAP 提供商。你的密码只保存在此标签页中，并且只会发送到你的邮件服务器。
-	Your mail in the browser. Add a JMAP account (such as Fastmail): MailCraft talks to your mail server directly, and your password stays in this tab only.	在浏览器中收发邮件。添加一个 JMAP 帐户（例如 Fastmail）：MailCraft 直接与你的邮件服务器通信，你的密码只保存在此标签页中。
+	In the browser, Quatrelle works with JMAP providers. Your password stays in this tab only and is only ever sent to your mail server.	在浏览器中，Quatrelle 支持 JMAP 提供商。你的密码只保存在此标签页中，并且只会发送到你的邮件服务器。
+	Your mail in the browser. Add a JMAP account (such as Fastmail): Quatrelle talks to your mail server directly, and your password stays in this tab only.	在浏览器中收发邮件。添加一个 JMAP 帐户（例如 Fastmail）：Quatrelle 直接与你的邮件服务器通信，你的密码只保存在此标签页中。
 	Pop out	弹出
 	Pop in	放回阅读窗格
 	Back to the reading pane	放回阅读窗格
@@ -578,12 +578,12 @@ month	May	5月
 	Open folder	打开文件夹
 	Move…	移动…
 	Save as an Outlook data file…	另存为 Outlook 数据文件…
-	Moves to {folder} the next time MailCraft starts.	下次启动 MailCraft 时移动到 {folder}。
-	Chosen when MailCraft was started (--data or MAILCRAFT_DATA), so it can't be moved here.	这是启动 MailCraft 时指定的（--data 或 MAILCRAFT_DATA），因此不能在此移动。
+	Moves to {folder} the next time Quatrelle starts.	下次启动 Quatrelle 时移动到 {folder}。
+	Chosen when Quatrelle was started (--data or QUATRELLE_DATA), so it can't be moved here.	这是启动 Quatrelle 时指定的（--data 或 QUATRELLE_DATA），因此不能在此移动。
 	Your mail couldn't be moved, so it stays where it was: {error}	无法移动邮件，邮件仍在原处：{error}
 	Your mail is now kept in {folder}	你的邮件现在保存在 {folder}
-	Your mail moves there the next time MailCraft starts.	下次启动 MailCraft 时邮件将移到那里。
-	Each account's mail, contacts and calendar are kept in a MailCraft data file (.mailcraft) in this folder, as Outlook keeps each account in a .pst in Outlook Files. An Outlook data file you open gets a .mailcraft file of its own here; Outlook's file is left as it was. To have a copy as a .pst, use Save as an Outlook data file under Info.	每个帐户的邮件、联系人和日历都保存在此文件夹中的 MailCraft 数据文件 (.mailcraft) 里，就像 Outlook 把每个帐户保存在 Outlook 文件中的 .pst 里一样。你打开的 Outlook 数据文件会在这里获得自己的 .mailcraft 文件；Outlook 的文件保持原样。如需 .pst 副本，请在“信息”中使用“另存为 Outlook 数据文件”。
+	Your mail moves there the next time Quatrelle starts.	下次启动 Quatrelle 时邮件将移到那里。
+	Each account's mail, contacts and calendar are kept in a Quatrelle data file (.quatrelle) in this folder, as Outlook keeps each account in a .pst in Outlook Files. An Outlook data file you open gets a .quatrelle file of its own here; Outlook's file is left as it was. To have a copy as a .pst, use Save as an Outlook data file under Info.	每个帐户的邮件、联系人和日历都保存在此文件夹中的 Quatrelle 数据文件 (.quatrelle) 里，就像 Outlook 把每个帐户保存在 Outlook 文件中的 .pst 里一样。你打开的 Outlook 数据文件会在这里获得自己的 .quatrelle 文件；Outlook 的文件保持原样。如需 .pst 副本，请在“信息”中使用“另存为 Outlook 数据文件”。
 	Keep a copy of downloaded mail on the server	在服务器上保留已下载邮件的副本
 	Remove it from the server after	在以下天数后从服务器删除：
 	days	天
@@ -677,7 +677,7 @@ month	May	5月
 	Don't send before	在此之前不发送
 	Have replies sent to another address	将答复发送到其他地址
 	Held in the Outbox: it will be sent {when}.	保留在发件箱中:将于 {when} 发送。
-	Keep it in the Outbox and send it later (MailCraft has to be running then)	保留在发件箱中稍后发送(届时 MailCraft 需要在运行)
+	Keep it in the Outbox and send it later (Quatrelle has to be running then)	保留在发件箱中稍后发送(届时 Quatrelle 需要在运行)
 	Replies to	答复发送至
 	Send right away	立即发送
 	Sends {when}	{when} 发送
@@ -714,7 +714,7 @@ month	May	5月
 	Clear formatting	清除格式
 	Insert link	插入链接
 	The selected text	所选文字
-	Outlook.com, Hotmail and Live addresses only connect with Sign in with Microsoft: Microsoft no longer accepts passwords from mail apps. This copy of MailCraft wasn't built with Microsoft sign-in, so it can't add this account.	Outlook.com、Hotmail 和 Live 地址只能通过“使用 Microsoft 登录”连接:Microsoft 不再接受邮件应用的密码。此 MailCraft 副本构建时未包含 Microsoft 登录,因此无法添加此帐户。
+	Outlook.com, Hotmail and Live addresses only connect with Sign in with Microsoft: Microsoft no longer accepts passwords from mail apps. This copy of Quatrelle wasn't built with Microsoft sign-in, so it can't add this account.	Outlook.com、Hotmail 和 Live 地址只能通过“使用 Microsoft 登录”连接:Microsoft 不再接受邮件应用的密码。此 Quatrelle 副本构建时未包含 Microsoft 登录,因此无法添加此帐户。
 	Back to message	返回邮件
 	Esc	Esc
 	Open it in its app, or save it.	在其应用中打开,或保存它。
@@ -749,9 +749,9 @@ month	May	5月
 	Public Folders	公用文件夹
 	Copy the whole message	复制整封邮件
 	Existing data file (optional)	现有数据文件(可选)
-	Mail from an old .pst or .mailcraft file comes in first	先导入旧 .pst 或 .mailcraft 文件中的邮件
+	Mail from an old .pst or .quatrelle file comes in first	先导入旧 .pst 或 .quatrelle 文件中的邮件
 	Open a data file	打开数据文件
-	Bring in an Outlook data file (.pst) or a MailCraft one (.mailcraft). It opens as a mailbox of its own, with its folders, kept on this computer.	导入 Outlook 数据文件 (.pst) 或 MailCraft 文件 (.mailcraft)。它会连同文件夹作为独立的邮箱打开,保存在此计算机上。
+	Bring in an Outlook data file (.pst) or a Quatrelle one (.quatrelle). It opens as a mailbox of its own, with its folders, kept on this computer.	导入 Outlook 数据文件 (.pst) 或 Quatrelle 文件 (.quatrelle)。它会连同文件夹作为独立的邮箱打开,保存在此计算机上。
 	Move up	上移
 	Move down	下移
 	Updating…	正在更新…
@@ -895,7 +895,7 @@ month	May	5月
 	Delete this contact?	删除此联系人?
 	This contact will be deleted, along with everything kept about them. This can't be undone.	将删除此联系人及其保存的所有信息。此操作无法撤消。
 	Export…	导出…
-	Add the rules from a file saved by MailCraft. A rule for an account this computer doesn't have comes in turned off.	添加由 MailCraft 保存的文件中的规则。此计算机上没有的帐户的规则会以关闭状态添加。
+	Add the rules from a file saved by Quatrelle. A rule for an account this computer doesn't have comes in turned off.	添加由 Quatrelle 保存的文件中的规则。此计算机上没有的帐户的规则会以关闭状态添加。
 	Change…	更改…
 	Clean up	清理
 	Export rules	导出规则
@@ -926,10 +926,10 @@ month	May	5月
 	Its folders show under this account. You need access to it on the Exchange server; the ones you have full access to open by themselves.	其文件夹显示在此帐户下。你需要在 Exchange 服务器上拥有访问权限；拥有完全访问权限的邮箱会自动打开。
 	Mailboxes you have full access to open by themselves.	拥有完全访问权限的邮箱会自动打开。
 	Shared mailboxes	共享邮箱
-	{email} will be removed from MailCraft. Its data file, {file}, stays in your MailCraft Files folder: open it from File › Open & Export to see its mail again. Nothing is deleted on the server.	将从 MailCraft 中删除 {email}。其数据文件 {file} 会保留在 MailCraft Files 文件夹中：从“文件 › 打开和导出”打开即可再次查看其邮件。服务器上的内容不会被删除。
-	{email} will be removed from MailCraft. Nothing is deleted on the server.	将从 MailCraft 中删除 {email}。服务器上的内容不会被删除。
-	{email} will be removed from MailCraft. Its data file, {file}, stays in your MailCraft Files folder: open it from File › Open & Export to see its mail again.	将从 MailCraft 中删除 {email}。其数据文件 {file} 会保留在 MailCraft Files 文件夹中：从“文件 › 打开和导出”打开即可再次查看其邮件。
-	{email} will be removed from MailCraft.	将从 MailCraft 中删除 {email}。
+	{email} will be removed from Quatrelle. Its data file, {file}, stays in your Quatrelle Files folder: open it from File › Open & Export to see its mail again. Nothing is deleted on the server.	将从 Quatrelle 中删除 {email}。其数据文件 {file} 会保留在 Quatrelle Files 文件夹中：从“文件 › 打开和导出”打开即可再次查看其邮件。服务器上的内容不会被删除。
+	{email} will be removed from Quatrelle. Nothing is deleted on the server.	将从 Quatrelle 中删除 {email}。服务器上的内容不会被删除。
+	{email} will be removed from Quatrelle. Its data file, {file}, stays in your Quatrelle Files folder: open it from File › Open & Export to see its mail again.	将从 Quatrelle 中删除 {email}。其数据文件 {file} 会保留在 Quatrelle Files 文件夹中：从“文件 › 打开和导出”打开即可再次查看其邮件。
+	{email} will be removed from Quatrelle.	将从 Quatrelle 中删除 {email}。
 	Add shared mailbox…	添加共享邮箱…
 	Remove shared mailbox	删除共享邮箱
 	Opened by the server for your access to it	因你有访问权限，由服务器打开
@@ -964,7 +964,7 @@ month	May	5月
 	Add what the rule looks at	指定规则检查的内容
 	Change the rule	更改规则
 	Give the rule a name	为规则命名
-	MailCraft doesn't know every part of this rule yet	MailCraft 尚未识别此规则的所有部分
+	Quatrelle doesn't know every part of this rule yet	Quatrelle 尚未识别此规则的所有部分
 	Pick a category	选择类别
 	Pick a folder	选择文件夹
 	Say what to look for	指明要查找的内容
@@ -992,16 +992,16 @@ month	May	5月
 	Download	下载
 	Join meeting	加入会议
 	Links:	链接：
-	MailCraft {version} is available.	MailCraft {version} 已推出。
+	Quatrelle {version} is available.	Quatrelle {version} 已推出。
 	What's new	新功能
 	You have the newest version.	你使用的是最新版本。
 	Online only: keep none of this account's mail on this computer	仅联机：不在此电脑上保留此帐户的任何邮件
 	Online only: none of this account's mail is kept on this computer.	仅联机：此帐户的邮件不会保留在此电脑上。
 	Online only: {email}	仅联机：{email}
 	New message	新邮件
-	Open MailCraft to read it.	打开 MailCraft 阅读。
-	Its mail is read from the server and held in memory while MailCraft runs; nothing of it is written to this computer. Each message downloads when you open it. Mail waiting to be sent, changes made while offline, and calendar items, contacts and notes kept only in MailCraft are lost when it closes.	其邮件从服务器读取，并在 MailCraft 运行期间仅保存在内存中；不会写入此电脑。每封邮件在打开时下载。等待发送的邮件、脱机时所做的更改，以及仅保存在 MailCraft 中的日历项、联系人和便笺，会在关闭时丢失。
-	Portable: everything is kept in MailCraftData beside MailCraft, and passwords only until it closes.	便携版：所有内容都保存在 MailCraft 旁边的 MailCraftData 中，密码仅保留到关闭为止。
+	Open Quatrelle to read it.	打开 Quatrelle 阅读。
+	Its mail is read from the server and held in memory while Quatrelle runs; nothing of it is written to this computer. Each message downloads when you open it. Mail waiting to be sent, changes made while offline, and calendar items, contacts and notes kept only in Quatrelle are lost when it closes.	其邮件从服务器读取，并在 Quatrelle 运行期间仅保存在内存中；不会写入此电脑。每封邮件在打开时下载。等待发送的邮件、脱机时所做的更改，以及仅保存在 Quatrelle 中的日历项、联系人和便笺，会在关闭时丢失。
+	Portable: everything is kept in QuatrelleData beside Quatrelle, and passwords only until it closes.	便携版：所有内容都保存在 Quatrelle 旁边的 QuatrelleData 中，密码仅保留到关闭为止。
 	When it starts	开始时
 	1 minute before	1 分钟前
 	{n} minutes before	{n} 分钟前

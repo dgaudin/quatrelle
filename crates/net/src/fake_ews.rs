@@ -310,8 +310,8 @@ impl Data {
     }
 
     fn item_xml(&self, it: &It, mime_content: bool) -> String {
-        let p = mailcraft_mime::parse(&it.raw).unwrap_or_default();
-        let mb = |a: &mailcraft_model::EmailAddress| {
+        let p = quatrelle_mime::parse(&it.raw).unwrap_or_default();
+        let mb = |a: &quatrelle_model::EmailAddress| {
             format!(
                 "<t:Mailbox><t:Name>{}</t:Name><t:EmailAddress>{}</t:EmailAddress><t:RoutingType>SMTP</t:RoutingType></t:Mailbox>",
                 esc(&a.name),
@@ -686,7 +686,7 @@ impl Data {
                     // A reply made by Exchange from the original (a voting response starts so).
                     if m.name == "ReplyToItem" {
                         let reference = m.child("ReferenceItemId").and_then(|r| r.attr("Id")).unwrap_or_default().to_string();
-                        let Some(orig) = self.items.iter().find(|i| i.id == reference).map(|i| mailcraft_mime::parse(&i.raw).unwrap_or_default())
+                        let Some(orig) = self.items.iter().find(|i| i.id == reference).map(|i| quatrelle_mime::parse(&i.raw).unwrap_or_default())
                         else {
                             out.push(err("ErrorItemNotFound"));
                             continue;
@@ -794,7 +794,7 @@ impl Data {
                         Some(it) => {
                             it.folder = to.clone();
                             it.draft = false;
-                            let subject = mailcraft_mime::parse(&it.raw).map(|p| p.subject).unwrap_or_default();
+                            let subject = quatrelle_mime::parse(&it.raw).map(|p| p.subject).unwrap_or_default();
                             let (raw, vote) = (it.raw.clone(), it.vote.clone());
                             self.sent.push(raw);
                             self.votes.push((subject, vote));
@@ -1107,9 +1107,9 @@ fn xml(e: &El) -> String {
 mod tests {
     use std::time::{Duration, Instant};
 
-    use mailcraft_model::job::Secret;
-    use mailcraft_model::{AccountConfig, Event, Flag, Job, Op, SyncStatus};
-    use mailcraft_store::Store;
+    use quatrelle_model::job::Secret;
+    use quatrelle_model::{AccountConfig, Event, Flag, Job, Op, SyncStatus};
+    use quatrelle_store::Store;
 
     use super::*;
 
@@ -1161,7 +1161,7 @@ mod tests {
         let server = serve(d);
         let data = server.data.clone();
 
-        let dir = std::env::temp_dir().join(format!("mailcraft-ews-e2e-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("quatrelle-ews-e2e-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let store = Store::open(&dir).unwrap();
         let mut pool = crate::worker::Pool::new(store.clone(), Arc::new(crate::worker::MemoryCredentials::default()));
@@ -1235,7 +1235,7 @@ mod tests {
         // Automatic replies.
         pool.submit(Job::GetVacation { account: "a1".into() });
         until(&pool, "replies read", |e| matches!(e, Event::Vacation { vacation: Some(v), error: None, .. } if !v.enabled));
-        let away = mailcraft_model::job::Vacation {
+        let away = quatrelle_model::job::Vacation {
             enabled: true,
             subject: String::new(),
             text: "Back on Monday".into(),
@@ -1247,14 +1247,14 @@ mod tests {
         until(&pool, "replies on", |e| matches!(e, Event::Vacation { vacation: Some(v), error: None, .. } if *v == away));
         assert_eq!(data.lock().unwrap().oof.0, "Scheduled");
         // Another reply for people outside the organisation, to the user's contacts only.
-        let split = mailcraft_model::job::Vacation { external: Some("Out of office".into()), outside: "known".into(), ..away.clone() };
+        let split = quatrelle_model::job::Vacation { external: Some("Out of office".into()), outside: "known".into(), ..away.clone() };
         pool.submit(Job::SetVacation { account: "a1".into(), vacation: split.clone() });
         until(&pool, "two replies", |e| matches!(e, Event::Vacation { vacation: Some(v), error: None, .. } if *v == split));
         let oof = data.lock().unwrap().oof.clone();
         assert_eq!((oof.4.as_str(), oof.5.as_str()), ("Out of office", "Known"));
         pool.submit(Job::SetVacation { account: "a1".into(), vacation: away.clone() });
         until(&pool, "one reply again", |e| matches!(e, Event::Vacation { vacation: Some(v), error: None, .. } if *v == away));
-        pool.submit(Job::SetVacation { account: "a1".into(), vacation: mailcraft_model::job::Vacation { text: "refuse".into(), ..away.clone() } });
+        pool.submit(Job::SetVacation { account: "a1".into(), vacation: quatrelle_model::job::Vacation { text: "refuse".into(), ..away.clone() } });
         until(&pool, "a refused change", |e| matches!(e, Event::Vacation { vacation: Some(v), error: Some(_), .. } if *v == away));
 
         // Empty Deleted Items; delete for good.
@@ -1298,9 +1298,9 @@ mod tests {
 
     #[test]
     fn calendars_and_contacts_sync_and_autodiscover_finds_the_server() {
-        use mailcraft_model::ical::CalEvent;
-        use mailcraft_model::pim::{LOCAL, Pim, StoredCard, StoredEvent, Tombstone};
-        use mailcraft_model::vcard::{Card, Typed};
+        use quatrelle_model::ical::CalEvent;
+        use quatrelle_model::pim::{LOCAL, Pim, StoredCard, StoredEvent, Tombstone};
+        use quatrelle_model::vcard::{Card, Typed};
         let mut d = Data::default();
         d.folder("Inbox", None, Some("inbox"), "IPF.Note");
         let cal = d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
@@ -1379,7 +1379,7 @@ mod tests {
 
     #[test]
     fn sticky_notes_sync_with_the_notes_folder() {
-        use mailcraft_model::pim::{Note, Pim, StoredNote};
+        use quatrelle_model::pim::{Note, Pim, StoredNote};
         let mut d = Data::default();
         d.folder("Inbox", None, Some("inbox"), "IPF.Note");
         d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
@@ -1410,7 +1410,7 @@ mod tests {
 
     #[test]
     fn someone_elses_calendar_opens_read_only() {
-        use mailcraft_model::pim::{Pim, shared_calendar_id};
+        use quatrelle_model::pim::{Pim, shared_calendar_id};
         let mut d = Data::default();
         d.folder("Inbox", None, Some("inbox"), "IPF.Note");
         d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
@@ -1443,7 +1443,7 @@ mod tests {
         d.deliver(&inbox, &mail("Storyboard", "m1"), true, "2024-05-06T09:00:00Z");
         d.slow_sync = Some(Duration::from_secs(30));
         let server = serve(d);
-        let dir = std::env::temp_dir().join(format!("mailcraft-ews-oof-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("quatrelle-ews-oof-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let mut pool = crate::worker::Pool::new(Store::open(&dir).unwrap(), Arc::new(crate::worker::MemoryCredentials::default()));
         let account = AccountConfig {
@@ -1480,7 +1480,7 @@ mod tests {
     /// left unticked are listed but not read.
     #[test]
     fn only_the_calendars_shown_are_read() {
-        use mailcraft_model::pim::{Pim, shared_calendar_id};
+        use quatrelle_model::pim::{Pim, shared_calendar_id};
         let mut d = Data::default();
         d.folder("Inbox", None, Some("inbox"), "IPF.Note");
         d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
@@ -1514,7 +1514,7 @@ mod tests {
     /// reading every meeting since a calendar began, for each colleague's, never ended.
     #[test]
     fn calendars_are_read_from_six_months_back() {
-        use mailcraft_model::pim::Pim;
+        use quatrelle_model::pim::Pim;
         let mut d = Data::default();
         d.folder("Inbox", None, Some("inbox"), "IPF.Note");
         let cal = d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
@@ -1553,30 +1553,30 @@ mod tests {
         let sent = d.folder("Sent Items", None, Some("sentitems"), "IPF.Note");
         let server = serve(d);
         let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
-        let draft = mailcraft_mime::Draft {
-            to: mailcraft_model::addr::parse_list("Zoe <zoe@contoso.example>").unwrap(),
+        let draft = quatrelle_mime::Draft {
+            to: quatrelle_model::addr::parse_list("Zoe <zoe@contoso.example>").unwrap(),
             subject: "Lunch on Friday?".into(),
             body: "Say which.".into(),
             voting: "Oui ; Non;Peut-être".into(),
             ..Default::default()
         };
-        let from = mailcraft_model::addr::parse_list("Riley <riley@contoso.example>").unwrap().remove(0);
-        let raw = mailcraft_mime::build(&draft, &from, 1_792_000_000, "lunch-1@contoso.example").unwrap();
-        assert!(String::from_utf8_lossy(&raw).contains(mailcraft_mime::VOTING_HEADER));
+        let from = quatrelle_model::addr::parse_list("Riley <riley@contoso.example>").unwrap().remove(0);
+        let raw = quatrelle_mime::build(&draft, &from, 1_792_000_000, "lunch-1@contoso.example").unwrap();
+        assert!(String::from_utf8_lossy(&raw).contains(quatrelle_mime::VOTING_HEADER));
         crate::ews::send(&c, &raw, &["zoe@contoso.example".into()]).unwrap();
         let data = server.data.lock().unwrap();
         let item = data.items.iter().find(|i| i.folder == sent).unwrap();
-        assert_eq!(mailcraft_model::voting::choices(&item.voting), ["Oui", "Non", "Peut-être"]);
-        assert!(data.sent.iter().all(|m| !String::from_utf8_lossy(m).contains(mailcraft_mime::VOTING_HEADER)));
+        assert_eq!(quatrelle_model::voting::choices(&item.voting), ["Oui", "Non", "Peut-être"]);
+        assert!(data.sent.iter().all(|m| !String::from_utf8_lossy(m).contains(quatrelle_mime::VOTING_HEADER)));
         assert!(String::from_utf8_lossy(&item.raw).contains("Lunch on Friday?"));
     }
 
     /// Exchange's hidden folders (Working Set…) aren't listed: Outlook doesn't show them, and
-    /// MailCraft's sync stalled on one. Someone's calendar asked for by an alias opens by the
+    /// Quatrelle's sync stalled on one. Someone's calendar asked for by an alias opens by the
     /// address the directory has.
     #[test]
     fn hidden_folders_stay_out_and_an_alias_finds_the_calendar() {
-        use mailcraft_model::pim::{Pim, shared_calendar_id};
+        use quatrelle_model::pim::{Pim, shared_calendar_id};
         let mut d = Data::default();
         d.folder("Inbox", None, Some("inbox"), "IPF.Note");
         d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
@@ -1630,7 +1630,7 @@ mod tests {
     /// calendar, or to names the directory doesn't know are left alone.
     #[test]
     fn outlook_calendar_groups_come_in_with_their_calendars() {
-        use mailcraft_model::pim::{Pim, shared_calendar_id};
+        use quatrelle_model::pim::{Pim, shared_calendar_id};
         let mut d = Data::default();
         d.folder("Inbox", None, Some("inbox"), "IPF.Note");
         d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
@@ -1682,8 +1682,8 @@ mod tests {
     /// there; someone who didn't keeps theirs read-only.
     #[test]
     fn someone_elses_calendar_can_be_changed_by_an_editor() {
-        use mailcraft_model::ical::CalEvent;
-        use mailcraft_model::pim::{Pim, StoredEvent, Tombstone, shared_calendar_id};
+        use quatrelle_model::ical::CalEvent;
+        use quatrelle_model::pim::{Pim, StoredEvent, Tombstone, shared_calendar_id};
         let mut d = Data { editors: vec!["ana@contoso.example".into()], ..Default::default() };
         d.folder("Inbox", None, Some("inbox"), "IPF.Note");
         d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
@@ -1746,7 +1746,7 @@ mod tests {
     /// editor may change it, while each of its events does (as Outlook finds by trying).
     #[test]
     fn an_editor_is_known_by_the_events_rights_too() {
-        use mailcraft_model::pim::{Pim, shared_calendar_id};
+        use quatrelle_model::pim::{Pim, shared_calendar_id};
         let mut d = Data { editors: vec!["ana@contoso.example".into()], item_rights_only: true, ..Default::default() };
         d.folder("Inbox", None, Some("inbox"), "IPF.Note");
         d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
@@ -1782,7 +1782,7 @@ mod tests {
         d.deliver(&inbox, &mail("Storyboard", "m1"), false, "2024-05-06T09:00:00Z");
         let server = serve(d);
         let data = server.data.clone();
-        let dir = std::env::temp_dir().join(format!("mailcraft-ews-busy-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("quatrelle-ews-busy-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let store = Store::open(&dir).unwrap();
         let mut pool = crate::worker::Pool::new(store, Arc::new(crate::worker::MemoryCredentials::default()));
@@ -1834,7 +1834,7 @@ mod tests {
                 sent_folder: Some("Sent Items".into()),
             });
         }
-        let away = mailcraft_model::job::Vacation { enabled: true, text: "Away".into(), ..Default::default() };
+        let away = quatrelle_model::job::Vacation { enabled: true, text: "Away".into(), ..Default::default() };
         pool.submit(Job::SetVacation { account: "a1".into(), vacation: away.clone() });
         let asked = Instant::now();
         let mut done: Vec<u64> = Vec::new();
@@ -1851,7 +1851,7 @@ mod tests {
         assert_eq!(done, [8, 9, 10]);
         assert!(set && asked.elapsed() < Duration::from_secs(4), "{:?}", asked.elapsed());
         let subjects: Vec<String> =
-            data.lock().unwrap().sent.iter().map(|r| mailcraft_mime::parse(r).map(|p| p.subject).unwrap_or_default()).collect();
+            data.lock().unwrap().sent.iter().map(|r| quatrelle_mime::parse(r).map(|p| p.subject).unwrap_or_default()).collect();
         assert_eq!(subjects, ["Quick answer", "Second", "Third", "Fourth"]);
         // The sync carries on, and finishes (each folder 4 s, Sent Items read again once however
         // many went).
@@ -1924,7 +1924,7 @@ mod tests {
         assert_eq!(fs.messages[0].subject, "Holiday hours");
         let _ = std::fs::remove_dir_all(store.root());
         // Issue #1: the organisation's shared contacts and calendars come in, read-only.
-        let sync = crate::ews_pim::sync(&c, &mailcraft_model::pim::Pim::default(), 0).unwrap();
+        let sync = crate::ews_pim::sync(&c, &quatrelle_model::pim::Pim::default(), 0).unwrap();
         let books = sync.books.clone().unwrap_or_default();
         let book = books.iter().find(|b| b.id.starts_with("public:")).unwrap();
         assert_eq!((book.name.as_str(), book.read_only), ("Team › Company contacts", true));
@@ -1987,10 +1987,10 @@ mod tests {
         let server = serve(d);
         let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
         let folders = crate::ews::list_folders(&c, &mut crate::jmap::State::default(), "a1").unwrap();
-        let named = |role: mailcraft_model::FolderRole| folders.iter().find(|f| f.role == role).map(|f| (f.path.clone(), f.display_name())).unwrap();
-        assert_eq!(named(mailcraft_model::FolderRole::Inbox), ("INBOX".to_string(), "Postvak IN".to_string()));
-        assert_eq!(named(mailcraft_model::FolderRole::Sent).1, "Verzonden items");
-        assert_eq!(named(mailcraft_model::FolderRole::Trash).1, "Verwijderde items");
+        let named = |role: quatrelle_model::FolderRole| folders.iter().find(|f| f.role == role).map(|f| (f.path.clone(), f.display_name())).unwrap();
+        assert_eq!(named(quatrelle_model::FolderRole::Inbox), ("INBOX".to_string(), "Postvak IN".to_string()));
+        assert_eq!(named(quatrelle_model::FolderRole::Sent).1, "Verzonden items");
+        assert_eq!(named(quatrelle_model::FolderRole::Trash).1, "Verwijderde items");
         let own = folders.iter().find(|f| f.path == "Afgehandeld").unwrap();
         assert_eq!((own.name.as_deref(), own.display_name().as_str()), (None, "Afgehandeld"));
     }
@@ -2032,7 +2032,7 @@ mod tests {
         let server = serve(d);
         let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
         crate::ews::list_folders(&c, &mut crate::jmap::State::default(), "a1").unwrap();
-        let out = crate::ews_pim::sync(&c, &mailcraft_model::pim::Pim::default(), 1_792_000_000).unwrap();
+        let out = crate::ews_pim::sync(&c, &quatrelle_model::pim::Pim::default(), 1_792_000_000).unwrap();
         let cals = out.calendars.clone().unwrap();
         let names: Vec<(&str, &str)> = cals.iter().map(|c| (c.id.as_str(), c.name.as_str())).collect();
         assert_eq!(names, [(crate::ews_pim::CALENDAR, "Agenda"), ("shared:sales@contoso.example", "Sales")], "{names:?}");
@@ -2046,7 +2046,7 @@ mod tests {
     /// For looking at the app against an Exchange server whose mailbox was made in Dutch, with
     /// a shared mailbox mapped to it, on 127.0.0.1:8085 without TLS (`CONTOSO\riley`, password
     /// `pw`): add the account with `"ews": "http://127.0.0.1:8085/EWS/Exchange.asmx"`.
-    /// Run: `cargo test -p mailcraft-net serve_ews_for_the_app -- --ignored`.
+    /// Run: `cargo test -p quatrelle-net serve_ews_for_the_app -- --ignored`.
     #[test]
     #[ignore]
     fn serve_ews_for_the_app() {
@@ -2134,7 +2134,7 @@ mod tests {
         }
         assert!(!paths.iter().any(|p| p.contains("Boss") || p.contains("Archive") || p.ends_with("Outbox")), "{paths:?}");
         assert!(!paths.iter().any(|p| p.contains("riley@")), "the account's own mailbox isn't a shared one");
-        assert_eq!(folders.iter().filter(|f| f.role == mailcraft_model::FolderRole::Inbox).count(), 1, "only the account's own Inbox is its Inbox");
+        assert_eq!(folders.iter().filter(|f| f.role == quatrelle_model::FolderRole::Inbox).count(), 1, "only the account's own Inbox is its Inbox");
         // Each shared mailbox is a mailbox of its own (issue #1: it showed as one of the
         // account's folders): its folders say whose they are, and what each is there.
         let folder = |path: &str| folders.iter().find(|f| f.path == path).unwrap();
@@ -2142,16 +2142,16 @@ mod tests {
         assert_eq!((top.mailbox.as_deref(), top.depth()), (Some("sales@contoso.example"), 0));
         let shared_inbox = folder(&format!("{sales_top}/Inbox"));
         assert_eq!(shared_inbox.mailbox.as_deref(), Some("sales@contoso.example"));
-        assert_eq!((shared_inbox.role, shared_inbox.mailbox_role), (mailcraft_model::FolderRole::Other, mailcraft_model::FolderRole::Inbox));
+        assert_eq!((shared_inbox.role, shared_inbox.mailbox_role), (quatrelle_model::FolderRole::Other, quatrelle_model::FolderRole::Inbox));
         assert!(shared_inbox.is_fixed() && top.is_fixed(), "a shared mailbox's top folder and Inbox can't be renamed or deleted");
         let quotes = folder(&format!("{sales_top}/Inbox/Quotes"));
-        assert_eq!((quotes.mailbox.as_deref(), quotes.mailbox_role), (Some("sales@contoso.example"), mailcraft_model::FolderRole::Other));
+        assert_eq!((quotes.mailbox.as_deref(), quotes.mailbox_role), (Some("sales@contoso.example"), quatrelle_model::FolderRole::Other));
         assert!(!quotes.is_fixed());
         assert_eq!(folder("Team/Inbox").mailbox.as_deref(), Some("team@contoso.example"));
         assert!(folder("INBOX").mailbox.is_none() && folder("Sales").mailbox.is_none(), "the account's own folders are its own");
         // Shown after the account's own folders, each mailbox together, its Inbox first.
         let mut sorted = folders.clone();
-        mailcraft_model::sort_folders(&mut sorted);
+        quatrelle_model::sort_folders(&mut sorted);
         let order: Vec<&str> = sorted.iter().map(|f| f.path.as_str()).collect();
         assert_eq!(
             order,

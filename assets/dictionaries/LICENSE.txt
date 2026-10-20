@@ -1,4 +1,4 @@
-The spelling dictionaries in this folder are third-party data, not MailCraft code.
+The spelling dictionaries in this folder are third-party data, not Quatrelle code.
 
 - fr_FR.aff.gz, fr_FR.dic.gz — French Hunspell dictionary from Dicollecte
   (https://www.dicollecte.org/), taken unchanged from the hunspell-fr package and
@@ -11,5 +11,5 @@ The spelling dictionaries in this folder are third-party data, not MailCraft cod
   domain, at the reader's choice) are those of the SCOWL project.
 
 They are read at run time by the `spellbook` crate (MPL-2.0), also used unchanged.
-MailCraft embeds these files in the program (no dictionary is read from the
+Quatrelle embeds these files in the program (no dictionary is read from the
 system), which is why they travel with it on every platform.

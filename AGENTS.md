@@ -1,6 +1,6 @@
-# MailCraft — instructions for agents
+# Quatrelle — instructions for agents
 
-MailCraft is a clean-room, open-source, Rust-native, local-first email client: the everyday
+Quatrelle is a clean-room, open-source, Rust-native, local-first email client: the everyday
 Microsoft Outlook mail workflow over IMAP and SMTP (v1 scope:
 [storytold/artcraft#2177](https://github.com/storytold/artcraft/issues/2177)). It runs natively on
 Windows, macOS and Linux; the engine and UI crates also build for wasm. Siblings with the same
@@ -29,7 +29,7 @@ A mail client that crashes loses drafts and trust. **This outranks feature work.
   runs every command with junk params — keep it green.
 
 ## Privacy and security
-- Passwords never touch MailCraft's files or logs: the `Credentials` trait (system keychain in the
+- Passwords never touch Quatrelle's files or logs: the `Credentials` trait (system keychain in the
   app, memory in the CLI and tests); `Secret`'s `Debug` is redacted.
 - Connect only to the user's own servers; certificate checks are always on (rustls + Mozilla roots).
 - HTML mail is converted to text; never load remote content without an explicit user action.
@@ -46,9 +46,9 @@ A mail client that crashes loses drafts and trust. **This outranks feature work.
   outlines, taken unchanged from `@fluentui/svg-icons`, with the licence beside them), each with a
   row in `ATTRIBUTION.md`; `crates/ui-egui/src/icons.rs` maps each icon to one and keeps a line
   drawing in code for when it can't be rendered. A new icon takes another Fluent file the same way.
-  The app icon and the app colour stay MailCraft's own.
+  The app icon and the app colour stay Quatrelle's own.
 - Every asset file has a row in `ATTRIBUTION.md`; `cargo xtask assets` enforces it.
-- The app icon is MailCraft's own drawing in `xtask/src/icons.rs`; `cargo xtask icons` renders
+- The app icon is Quatrelle's own drawing in `xtask/src/icons.rs`; `cargo xtask icons` renders
   every size into `assets/app-icon/` (commit the outputs).
 - Fonts: use installed system fonts at runtime; never bundle proprietary fonts.
 
@@ -69,7 +69,7 @@ A mail client that crashes loses drafts and trust. **This outranks feature work.
 | L3 | `net` | IMAP client + sync, SMTP, JMAP push, Microsoft Graph, CalDAV/CardDAV, ManageSieve, `.pst` import, HTTP/DNS/OAuth, worker pool (native only) |
 | L4 | `engine` | sans-I/O `Session` + command registry |
 | L6 | `ui-egui` | egui front end |
-| apps | `mailcraft`, `mailcraft-cli`, `mailcraft-web` | binaries (the web app: `trunk build --release` in `apps/mailcraft-web`) |
+| apps | `quatrelle`, `quatrelle-cli`, `quatrelle-web` | binaries (the web app: `trunk build --release` in `apps/quatrelle-web`) |
 
 - **Everything is a command** (`crates/engine/src/cmd.rs`): id, label, location, shortcut, params
   doc, `enabled`, `run`. The ribbon, shortcuts, CLI and `--cmd` all dispatch by id. Commands never
@@ -86,19 +86,19 @@ Before every commit: `cargo xtask ci`. Commit after every arc of work that build
 ## Packaging and releases
 - `packaging/` holds the installer scripts (Linux AppImage/deb/rpm/Flatpak, macOS dmg, Windows
   MSI, FreeBSD); `.github/workflows/` calls them through `storytold/craft-common-actions`
-  (`release.yml` on the `release` branch). Keep app ids (`ai.storyteller.mailcraft`), binary
+  (`release.yml` on the `release` branch). Keep app ids (`ai.storyteller.quatrelle`), binary
   names and the WiX `UpgradeCode` stable.
 - The version lives only in `[workspace.package]` (`cargo xtask version [set X.Y.Z]`).
 - After touching workflows, run `npx actions-up` to keep pinned actions current; the
   `craft-common-actions@main` references stay on `main` on purpose.
 
 ## Running and looking at the app
-- `cargo run -p mailcraft -- --sample` (local sample mailbox). Script it at start-up:
+- `cargo run -p quatrelle -- --sample` (local sample mailbox). Script it at start-up:
   `--cmd 'list.open={"key":"sample:1:1:INBOX"}' --cmd mail.reply`, `--light` / `--dark`,
   `--cmd ui.addAccount`, `--cmd ui.file` / `ui.options` / `ui.about` (the File page).
-- For UI work, look at the result: screenshot **the MailCraft window only** and read the PNG.
+- For UI work, look at the result: screenshot **the Quatrelle window only** and read the PNG.
 - Headless frames: `crates/ui-egui/src/tests.rs` renders every pane layout and dialog.
-- Browser: `trunk serve` in `apps/mailcraft-web`, then `/?sample`; a local JMAP server with CORS:
-  `cargo test -p mailcraft-net serve_for_the_browser -- --ignored` (`me@studio.example` / `pw`).
+- Browser: `trunk serve` in `apps/quatrelle-web`, then `/?sample`; a local JMAP server with CORS:
+  `cargo test -p quatrelle-net serve_for_the_browser -- --ignored` (`me@studio.example` / `pw`).
   Portable code must not read the clock or temporary files: std panics there on wasm32.
-- CLI: `mailcraft-cli commands`, `mailcraft-cli run <id> '<json>'`, `sync`, `list`, `read`, `search`, `send`.
+- CLI: `quatrelle-cli commands`, `quatrelle-cli run <id> '<json>'`, `sync`, `list`, `read`, `search`, `send`.

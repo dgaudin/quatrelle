@@ -77,7 +77,7 @@ pub struct CalEvent {
     /// `VALARM`, as Outlook's reminder.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reminder: Option<i64>,
-    /// Properties MailCraft doesn't read, kept as written (unfolded content lines).
+    /// Properties Quatrelle doesn't read, kept as written (unfolded content lines).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub extra: Vec<String>,
     /// The address to join it online, when the server gives one apart from its notes (Microsoft
@@ -541,7 +541,7 @@ pub fn parse(text: &str, local_offset: i64) -> ICalendar {
     let mut ev: Option<(CalEvent, Option<i64>)> = None;
     let mut depth_in_event = 0usize;
     // The `VALARM` being read, as written: its trigger becomes the reminder, and an alarm
-    // MailCraft can't read is kept whole.
+    // Quatrelle can't read is kept whole.
     let mut alarm: Option<Vec<String>> = None;
     for l in &all {
         let n = l.name.as_str();
@@ -718,7 +718,7 @@ fn mailbox(prop: &str, a: &Attendee) -> String {
 
 /// One `VEVENT`, folded.
 /// The minutes a `VALARM`'s trigger is from its start, when it says so plainly (`-PT15M`,
-/// `-P1D`…); `None` for an absolute time or one MailCraft can't read, whose alarm is then kept
+/// `-P1D`…); `None` for an absolute time or one Quatrelle can't read, whose alarm is then kept
 /// as written.
 fn alarm_minutes(lines: &[String]) -> Option<i64> {
     for line in lines {
@@ -735,7 +735,7 @@ fn alarm_minutes(lines: &[String]) -> Option<i64> {
     None
 }
 
-/// `-PT15M` and its like, in minutes; `None` when it isn't a duration MailCraft reads.
+/// `-PT15M` and its like, in minutes; `None` when it isn't a duration Quatrelle reads.
 fn duration_minutes(v: &str) -> Option<i64> {
     let mut s = v.trim();
     let sign = match s.chars().next() {
@@ -854,7 +854,7 @@ pub fn write_event(e: &CalEvent, now: i64, out: &mut String) {
 /// A calendar file with these events (`method` for invitations: `REQUEST`, `REPLY`, `CANCEL`).
 pub fn write(events: &[CalEvent], method: Option<&str>, now: i64) -> String {
     let mut out = String::new();
-    for l in ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//MailCraft//MailCraft//EN", "CALSCALE:GREGORIAN"] {
+    for l in ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Quatrelle//Quatrelle//EN", "CALSCALE:GREGORIAN"] {
         fold(l, &mut out);
     }
     if let Some(m) = method {
@@ -1093,7 +1093,7 @@ pub fn occurrences(events: &[CalEvent], from: i64, to: i64) -> Vec<Occurrence> {
 
 #[cfg(test)]
 mod tests {
-    /// A `VALARM` becomes the reminder (and goes back out as one); an alarm MailCraft can't
+    /// A `VALARM` becomes the reminder (and goes back out as one); an alarm Quatrelle can't
     /// read is kept whole rather than lost.
     #[test]
     fn a_valarm_is_the_reminder() {

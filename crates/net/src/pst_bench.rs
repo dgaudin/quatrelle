@@ -2,8 +2,8 @@
 //! ignored tests (they take minutes and gigabytes), run by hand:
 //!
 //! ```text
-//! MC_PST=D:\big.pst MC_MESSAGES=200000 MC_ATTACH_KB=300 cargo test -p mailcraft-net --release --lib pst_bench::make -- --ignored --nocapture
-//! MC_PST=D:\big.pst MC_CACHE=D:\cache cargo test -p mailcraft-net --release --lib pst_bench::import -- --ignored --nocapture
+//! MC_PST=D:\big.pst MC_MESSAGES=200000 MC_ATTACH_KB=300 cargo test -p quatrelle-net --release --lib pst_bench::make -- --ignored --nocapture
+//! MC_PST=D:\big.pst MC_CACHE=D:\cache cargo test -p quatrelle-net --release --lib pst_bench::import -- --ignored --nocapture
 //! ```
 //!
 //! Memory is watched from outside (the test process's working set), so the numbers are the
@@ -167,7 +167,7 @@ fn import() {
     if env("MC_KEEP").is_none() {
         let _ = std::fs::remove_dir_all(&cache);
     }
-    let store = mailcraft_store::Store::open_packed(cache.join("root"), cache.join("files")).unwrap();
+    let store = quatrelle_store::Store::open_packed(cache.join("root"), cache.join("files")).unwrap();
     let began = Instant::now();
     let mut last = Instant::now();
     let mut progress = |n: usize| {
@@ -200,11 +200,11 @@ fn dir_size(p: &Path) -> u64 {
 /// held it whole), and changing it afterwards writes as any folder does.
 #[test]
 fn a_big_folder_comes_in_a_page_at_a_time() {
-    let dir = std::env::temp_dir().join(format!("mailcraft-pst-pages-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("quatrelle-pst-pages-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let pst = dir.join("big.pst");
-    let n = mailcraft_store::PAGE_MESSAGES * 2 + 808;
+    let n = quatrelle_store::PAGE_MESSAGES * 2 + 808;
     let owned: Vec<(String, String, i64)> =
         (0..n).map(|k| (format!("Report #{k}"), format!("<p{k}@bench.example>"), 1_700_000_000 + k as i64 * 60)).collect();
     let recipients = [UnicodePstRecipient { name: "Zoe", email: "zoe@studio.example", recipient_type: UnicodePstRecipientType::To }];
@@ -228,7 +228,7 @@ fn a_big_folder_comes_in_a_page_at_a_time() {
     for part in batch[1..].chunks(4000) {
         UnicodePstFile::append_many_in_folder_with_attachments(&pst, &["Inbox"], part).unwrap();
     }
-    let store = mailcraft_store::Store::open_packed(dir.join("root"), dir.join("files")).unwrap();
+    let store = quatrelle_store::Store::open_packed(dir.join("root"), dir.join("files")).unwrap();
     let done = crate::pst::import(&pst, &store, "d1", &mut |_| {}).unwrap();
     assert_eq!(done.messages, n);
     let inbox = done.folders.iter().find(|f| f.path == "INBOX").unwrap();

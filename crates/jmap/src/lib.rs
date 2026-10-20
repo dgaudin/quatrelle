@@ -1,6 +1,6 @@
-//! JMAP (RFC 8620 core, RFC 8621 mail): MailCraft's second transport, behind the same
-//! [`Job`](mailcraft_model::Job)/[`Event`](mailcraft_model::Event) interface as IMAP. Portable:
-//! it runs over any [`Http`] client, the desktop's own (through `mailcraft-net`, which waits on
+//! JMAP (RFC 8620 core, RFC 8621 mail): Quatrelle's second transport, behind the same
+//! [`Job`](quatrelle_model::Job)/[`Event`](quatrelle_model::Event) interface as IMAP. Portable:
+//! it runs over any [`Http`] client, the desktop's own (through `quatrelle-net`, which waits on
 //! each request) or the browser's `fetch` (the web app).
 //!
 //! Every request is one HTTPS POST of a batch of method calls to the session's API URL, signed
@@ -23,9 +23,9 @@ pub mod url;
 
 use std::collections::{BTreeMap, HashMap};
 
-use mailcraft_mime as mime;
-use mailcraft_model::{Flag, Flags, Folder, FolderRole, MessageKey, Op, Summary, sort_newest_first, utf7};
-use mailcraft_store::{FolderState, Store, StoreError};
+use quatrelle_mime as mime;
+use quatrelle_model::{Flag, Flags, Folder, FolderRole, MessageKey, Op, Summary, sort_newest_first, utf7};
+use quatrelle_store::{FolderState, Store, StoreError};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
@@ -41,7 +41,7 @@ const VACATION: &str = "urn:ietf:params:jmap:vacationresponse";
 const MAX_JSON: usize = 32 << 20;
 /// Largest message source downloaded.
 const MAX_BLOB: usize = 64 << 20;
-/// The constant "UIDVALIDITY" of JMAP folders (the numbering is MailCraft's own).
+/// The constant "UIDVALIDITY" of JMAP folders (the numbering is Quatrelle's own).
 pub const VALIDITY: u32 = 1;
 /// The Inbox's folder path, as on IMAP.
 const INBOX: &str = "INBOX";
@@ -417,15 +417,15 @@ impl<H: Http> Client<H> {
     }
 
     /// The automatic replies (RFC 8621 §8); an error when the server offers none.
-    pub async fn vacation(&self) -> Result<mailcraft_model::job::Vacation> {
+    pub async fn vacation(&self) -> Result<quatrelle_model::job::Vacation> {
         if !self.vacation {
             return Err(Error::No("this server doesn't offer automatic replies".into()));
         }
         let r = self.call(&[CORE, VACATION], vec![("VacationResponse/get", json!({"accountId": self.account, "ids": ["singleton"]}))]).await?;
         let v = list(r.first(), "list").first().cloned().unwrap_or(Value::Null);
         let day =
-            |k: &str| v.get(k).and_then(Value::as_str).and_then(|d| d.get(..10)).filter(|d| mailcraft_model::job::is_day(d)).map(str::to_string);
-        Ok(mailcraft_model::job::Vacation {
+            |k: &str| v.get(k).and_then(Value::as_str).and_then(|d| d.get(..10)).filter(|d| quatrelle_model::job::is_day(d)).map(str::to_string);
+        Ok(quatrelle_model::job::Vacation {
             enabled: v.get("isEnabled").and_then(Value::as_bool).unwrap_or(false),
             subject: v.get("subject").and_then(Value::as_str).unwrap_or_default().to_string(),
             text: v.get("textBody").and_then(Value::as_str).unwrap_or_default().to_string(),
@@ -435,7 +435,7 @@ impl<H: Http> Client<H> {
         })
     }
 
-    pub async fn set_vacation(&self, v: &mailcraft_model::job::Vacation) -> Result<()> {
+    pub async fn set_vacation(&self, v: &quatrelle_model::job::Vacation) -> Result<()> {
         if !self.vacation {
             return Err(Error::No("this server doesn't offer automatic replies".into()));
         }
@@ -542,7 +542,7 @@ pub fn utc_date(s: &str) -> Option<i64> {
     if !(1..=12).contains(&mo) || !(1..=31).contains(&d) || h > 23 || mi > 59 || se > 60 {
         return None;
     }
-    let mut t = mailcraft_model::dates::days_from_civil(y, u32::try_from(mo).ok()?, u32::try_from(d).ok()?) * 86_400 + h * 3600 + mi * 60 + se;
+    let mut t = quatrelle_model::dates::days_from_civil(y, u32::try_from(mo).ok()?, u32::try_from(d).ok()?) * 86_400 + h * 3600 + mi * 60 + se;
     // Fractions are skipped; an offset other than Z is applied.
     let tail = s.get(19..)?.trim_start_matches(|c: char| c == '.' || c.is_ascii_digit());
     if let Some(off) = tail.strip_prefix('+').map(|o| (1, o)).or_else(|| tail.strip_prefix('-').map(|o| (-1, o))) {
@@ -618,7 +618,7 @@ pub fn folders(account: &str, boxes: &[Mailbox]) -> Vec<(Folder, String)> {
 
 /// Special folders keep the names their mailbox gives them (Exchange names them in the
 /// language the mailbox was made in: "Postvak IN", "Verzonden items"), shown as Outlook shows
-/// them rather than in MailCraft's own words.
+/// them rather than in Quatrelle's own words.
 pub fn name_special(found: &mut [(Folder, String)], boxes: &[Mailbox]) {
     let names: HashMap<&str, &str> = boxes.iter().map(|b| (b.id.as_str(), b.name.trim())).collect();
     for (f, id) in found {
@@ -912,7 +912,7 @@ pub async fn apply_remote<H: Http>(c: &Client<H>, st: &State, op: &Op) -> Result
             Some(k) => c.set_emails(patch_all(keys, &format!("keywords/{k}"), *on), Vec::new()).await,
             None => Ok(()),
         },
-        Op::SetKeyword { keys, keyword, on } if mailcraft_model::is_keyword(keyword) => {
+        Op::SetKeyword { keys, keyword, on } if quatrelle_model::is_keyword(keyword) => {
             c.set_emails(patch_all(keys, &format!("keywords/{}", keyword.to_ascii_lowercase()), *on), Vec::new()).await
         }
         Op::SetKeyword { .. } => Ok(()),

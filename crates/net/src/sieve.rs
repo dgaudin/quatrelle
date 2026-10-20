@@ -1,9 +1,9 @@
 //! Automatic replies and inbox rules on IMAP servers: a small ManageSieve client (RFC 5804)
-//! that keeps a Sieve script (RFC 5228) named `mailcraft` with a `vacation` action (RFC 5230),
+//! that keeps a Sieve script (RFC 5228) named `quatrelle` with a `vacation` action (RFC 5230),
 //! limited to a date range with `currentdate` (RFC 5260) when one is set, and the rules marked
 //! "also run on the server" (filing mail with `fileinto`, marking it with `imap4flags`).
 //!
-//! The script is MailCraft's own: the settings it was made from are kept in its first lines, so
+//! The script is Quatrelle's own: the settings it was made from are kept in its first lines, so
 //! reading them back never means parsing Sieve. A script the user already runs stays in charge
 //! of their other rules: ours `include`s it (RFC 6609) and becomes the active one; when ours does
 //! nothing any more (no replies, no rule) theirs becomes active again.
@@ -12,9 +12,9 @@
 
 use std::io::{BufRead, BufReader, Read, Write};
 
-use mailcraft_model::job::{Vacation, is_day};
-use mailcraft_model::organize::{Condition, Rule, RuleAction};
-use mailcraft_model::{PINNED, Security, ServerConfig, keyword_for, utf7};
+use quatrelle_model::job::{Vacation, is_day};
+use quatrelle_model::organize::{Condition, Rule, RuleAction};
+use quatrelle_model::{PINNED, Security, ServerConfig, keyword_for, utf7};
 
 use crate::stream::{self, Stream};
 use crate::{NetError, Result};
@@ -22,9 +22,9 @@ use crate::{NetError, Result};
 /// ManageSieve's registered port.
 pub const PORT: u16 = 4190;
 /// Our script's name.
-pub const SCRIPT: &str = "mailcraft";
-const MARK: &str = "# mailcraft-vacation ";
-const RULES_MARK: &str = "# mailcraft-rules ";
+pub const SCRIPT: &str = "quatrelle";
+const MARK: &str = "# quatrelle-vacation ";
+const RULES_MARK: &str = "# quatrelle-rules ";
 const MAX_LINE: usize = 64 << 10;
 const MAX_LITERAL: usize = 1 << 20;
 
@@ -335,7 +335,7 @@ fn sieve_str(s: &str) -> String {
     format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\"").replace('\r', ""))
 }
 
-/// What MailCraft keeps in its script: the automatic replies and the rules that run on the
+/// What Quatrelle keeps in its script: the automatic replies and the rules that run on the
 /// server (their folders already resolved to the server's names).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Settings {
@@ -365,7 +365,7 @@ pub fn script(s: &Settings, include: Option<&str>) -> String {
         out.push_str(&format!("{RULES_MARK}{}\r\n", one_line(&s.rules)));
     }
     if let Some(p) = include {
-        out.push_str(&format!("# mailcraft-previous {}\r\n", p.replace(['\r', '\n'], " ")));
+        out.push_str(&format!("# quatrelle-previous {}\r\n", p.replace(['\r', '\n'], " ")));
     }
     let from = v.from.as_deref().filter(|d| is_day(d));
     let until = v.until.as_deref().filter(|d| is_day(d));
@@ -499,7 +499,7 @@ pub fn read_rules(s: &str) -> Vec<Rule> {
 }
 
 fn read_previous(s: &str) -> Option<String> {
-    s.lines().take(3).find_map(|l| l.strip_prefix("# mailcraft-previous ").map(|p| p.trim().to_string())).filter(|p| !p.is_empty())
+    s.lines().take(3).find_map(|l| l.strip_prefix("# quatrelle-previous ").map(|p| p.trim().to_string())).filter(|p| !p.is_empty())
 }
 
 #[cfg(test)]

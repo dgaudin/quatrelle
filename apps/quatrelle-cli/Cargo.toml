@@ -1,0 +1,21 @@
+[package]
+name = "quatrelle-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+description = "Quatrelle on the command line: accounts, sync, list, read, search, send, and every engine command"
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "quatrelle-cli"
+path = "src/main.rs"
+
+[dependencies]
+quatrelle-engine = { workspace = true }
+quatrelle-net = { workspace = true }
+serde_json = { workspace = true }
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }

@@ -1,4 +1,4 @@
-//! MailCraft's local-first cache.
+//! Quatrelle's local-first cache.
 //!
 //! Everything the app shows comes from here, so mail stays readable and searchable offline. The
 //! network layer writes what it syncs; the engine reads. Layout under the data folder:
@@ -19,6 +19,7 @@
 //! outlast the page.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
+pub mod legacy;
 pub mod location;
 #[cfg(not(target_arch = "wasm32"))]
 mod packed;
@@ -31,7 +32,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-use mailcraft_model::{AccountConfig, Folder, MessageKey, Op, Summary, sort_newest_first};
+use quatrelle_model::{AccountConfig, Folder, MessageKey, Op, Summary, sort_newest_first};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
@@ -673,8 +674,8 @@ impl Store {
 
     /// Keep an account online only (issue #4): its mail, folder lists, changes waiting for the
     /// server, Outbox, calendars and contacts are held in memory and never written anywhere, so
-    /// nothing of it is left on this computer once MailCraft closes. Turned on, what was kept on
-    /// disk comes into memory (nothing is lost while MailCraft runs) and its data file goes;
+    /// nothing of it is left on this computer once Quatrelle closes. Turned on, what was kept on
+    /// disk comes into memory (nothing is lost while Quatrelle runs) and its data file goes;
     /// turned off, what's held is written out to disk again.
     pub fn set_online_only(&self, account: &str, on: bool) -> Result<()> {
         if self.is_online_only(account) == on {
@@ -736,7 +737,7 @@ impl Store {
         self.root.join(safe_segment(account))
     }
 
-    /// Fill an account from an existing MailCraft data file (`.mailcraft`): its folders, mail,
+    /// Fill an account from an existing Quatrelle data file (`.quatrelle`): its folders, mail,
     /// calendar and contacts, as they were. The file is only read (from a copy). Messages are
     /// renumbered as this account's; returns how many there are.
     #[cfg(not(target_arch = "wasm32"))]
@@ -1046,7 +1047,7 @@ impl Store {
         self.folder_dir(account, folder).join("search.idx")
     }
 
-    /// Keep a folder's search index (its bytes are `mailcraft_model::search::FolderIndex`'s): the
+    /// Keep a folder's search index (its bytes are `quatrelle_model::search::FolderIndex`'s): the
     /// next run reads it back instead of reading the folder's messages again.
     pub fn save_search_index(&self, account: &str, folder: &str, bytes: &[u8]) -> Result<()> {
         self.files.write(&self.search_index_path(account, folder), bytes)
@@ -1157,7 +1158,7 @@ impl Store {
                         account: account.to_string(),
                         path: path.clone(),
                         delimiter,
-                        role: mailcraft_model::FolderRole::Other,
+                        role: quatrelle_model::FolderRole::Other,
                         selectable: true,
                         mailbox,
                         ..Default::default()
@@ -1168,7 +1169,7 @@ impl Store {
             Op::RenameFolder { from, to } => {
                 let mut moved = Vec::new();
                 for f in list.iter_mut() {
-                    if let Some(new) = mailcraft_model::rebase_path(&f.path, from, to, f.delimiter.or(delimiter)) {
+                    if let Some(new) = quatrelle_model::rebase_path(&f.path, from, to, f.delimiter.or(delimiter)) {
                         let (src, dst) = (self.folder_dir(account, &f.path), self.folder_dir(account, &new));
                         if self.files.exists(&src) {
                             let _ = self.files.remove_dir_all(&dst);
@@ -1182,7 +1183,7 @@ impl Store {
             }
             Op::DeleteFolder { path } => {
                 let gone: Vec<String> =
-                    list.iter().filter(|f| mailcraft_model::is_within(&f.path, path, f.delimiter.or(delimiter))).map(|f| f.path.clone()).collect();
+                    list.iter().filter(|f| quatrelle_model::is_within(&f.path, path, f.delimiter.or(delimiter))).map(|f| f.path.clone()).collect();
                 for g in &gone {
                     self.clear_folder(account, g)?;
                 }
@@ -1191,7 +1192,7 @@ impl Store {
             }
             Op::SetFlag { .. } | Op::SetKeyword { .. } | Op::Move { .. } | Op::Expunge { .. } | Op::EmptyFolder { .. } => Vec::new(),
         };
-        mailcraft_model::sort_folders(&mut list);
+        quatrelle_model::sort_folders(&mut list);
         self.save_folders(account, &list)?;
         Ok(changed)
     }
@@ -1246,16 +1247,23 @@ impl Store {
 }
 
 /// The app folder (the account list, the app's state): the per-user one
-/// ([`location::base_root`]); `MAILCRAFT_DATA` overrides it. The accounts' data files are in
+/// ([`location::base_root`]); `QUATRELLE_DATA` overrides it. The accounts' data files are in
 /// [`location::files_dir`].
 pub fn default_root() -> Option<PathBuf> {
-    if let Some(d) = std::env::var_os("MAILCRAFT_DATA").filter(|d| !d.is_empty()) {
-        return Some(PathBuf::from(d));
+    if let Some(d) = env_data_dir() {
+        return Some(d);
     }
     location::base_root()
 }
 
-/// A folder of this user's own for files MailCraft hands to other apps (an attachment opened with
+/// Where `QUATRELLE_DATA` says to keep everything, when it does; the fork's old variable is
+/// still read, so a start script written before the rename keeps working.
+pub fn env_data_dir() -> Option<PathBuf> {
+    let set = |name: &str| std::env::var_os(name).filter(|d| !d.is_empty()).map(PathBuf::from);
+    set("QUATRELLE_DATA").or_else(|| set(legacy::OLD_DATA_VAR))
+}
+
+/// A folder of this user's own for files Quatrelle hands to other apps (an attachment opened with
 /// its app, a video's frames): `name` inside it, made when missing. Not the shared temporary
 /// folder on Linux and the BSDs, where `/tmp` is everyone's: a folder of a predictable name there
 /// could be made first by another user, who could then read the attachments put in it or plant
@@ -1267,7 +1275,7 @@ pub fn default_root() -> Option<PathBuf> {
 pub fn scratch_dir(name: &str) -> Option<PathBuf> {
     let dir = if cfg!(all(unix, not(target_os = "macos"))) {
         let base = std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from).filter(|p| p.is_absolute()).or_else(dirs::cache_dir)?;
-        let own = base.join("mailcraft");
+        let own = base.join("quatrelle");
         fs::create_dir_all(&own).ok()?;
         #[cfg(unix)]
         {
@@ -1276,7 +1284,7 @@ pub fn scratch_dir(name: &str) -> Option<PathBuf> {
         }
         own.join(name)
     } else {
-        std::env::temp_dir().join(format!("mailcraft-{name}"))
+        std::env::temp_dir().join(format!("quatrelle-{name}"))
     };
     fs::create_dir_all(&dir).ok()?;
     Some(dir)
@@ -1288,7 +1296,7 @@ pub fn scratch_dir(_name: &str) -> Option<PathBuf> {
     None
 }
 
-/// The [`scratch_dir`]s MailCraft puts mail in: attachments opened with other apps, and the
+/// The [`scratch_dir`]s Quatrelle puts mail in: attachments opened with other apps, and the
 /// pictures and video frames made of them.
 pub const SCRATCH: [&str; 3] = ["open", "thumbs", "frames"];
 
@@ -1317,7 +1325,7 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use mailcraft_model::{Flag, Flags};
+    use quatrelle_model::{Flag, Flags};
 
     use super::*;
 
@@ -1346,7 +1354,7 @@ mod tests {
     #[test]
     fn a_big_folder_list_is_kept_in_pages() {
         for packed in [false, true] {
-            let dir = std::env::temp_dir().join(format!("mailcraft-pages-{packed}-{}", std::process::id()));
+            let dir = std::env::temp_dir().join(format!("quatrelle-pages-{packed}-{}", std::process::id()));
             let _ = std::fs::remove_dir_all(&dir);
             let s = if packed { Store::open_packed(dir.join("app"), dir.join("Files")).unwrap() } else { Store::open(&dir).unwrap() };
             let n = PAGE_MESSAGES as u32 * 2 + 500;
@@ -1396,7 +1404,7 @@ mod tests {
     }
 
     pub(crate) fn temp_store(name: &str) -> Store {
-        let dir = std::env::temp_dir().join(format!("mailcraft-store-{name}-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("quatrelle-store-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         Store::open(dir).unwrap()
     }
@@ -1488,7 +1496,7 @@ mod tests {
     #[test]
     fn a_search_index_is_kept_with_its_folder() {
         for packed in [false, true] {
-            let dir = std::env::temp_dir().join(format!("mailcraft-index-{packed}-{}", std::process::id()));
+            let dir = std::env::temp_dir().join(format!("quatrelle-index-{packed}-{}", std::process::id()));
             let _ = fs::remove_dir_all(&dir);
             let s = if packed { Store::open_packed(dir.join("app"), dir.join("Files")).unwrap() } else { Store::open(&dir).unwrap() };
             assert!(s.load_search_index("a1", "INBOX").is_none());
@@ -1515,7 +1523,7 @@ mod tests {
             account: "a1".into(),
             path: p.into(),
             delimiter: Some('/'),
-            role: mailcraft_model::FolderRole::from_name(p, Some('/')),
+            role: quatrelle_model::FolderRole::from_name(p, Some('/')),
             selectable: true,
             ..Default::default()
         };

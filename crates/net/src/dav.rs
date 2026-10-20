@@ -12,9 +12,9 @@
 
 use std::collections::HashMap;
 
-use mailcraft_model::ical::{self, CalEvent};
-use mailcraft_model::pim::{BookInfo, CalendarInfo, DavSync, LOCAL, Pim, StoredCard, StoredEvent};
-use mailcraft_model::vcard;
+use quatrelle_model::ical::{self, CalEvent};
+use quatrelle_model::pim::{BookInfo, CalendarInfo, DavSync, LOCAL, Pim, StoredCard, StoredEvent};
+use quatrelle_model::vcard;
 use quick_xml::Reader;
 use quick_xml::events::Event as X;
 

@@ -7,13 +7,13 @@
   <key>CFBundleDevelopmentRegion</key>
   <string>en</string>
   <key>CFBundleDisplayName</key>
-  <string>MailCraft</string>
+  <string>Quatrelle</string>
   <key>CFBundleName</key>
-  <string>MailCraft</string>
+  <string>Quatrelle</string>
   <key>CFBundleExecutable</key>
-  <string>MailCraft</string>
+  <string>Quatrelle</string>
   <key>CFBundleIdentifier</key>
-  <string>ai.storyteller.mailcraft</string>
+  <string>ai.storyteller.quatrelle</string>
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundlePackageType</key>
@@ -24,12 +24,12 @@
   <string>@SHORT_VERSION@</string>
   <key>CFBundleVersion</key>
   <string>@SHORT_VERSION@</string>
-  <key>MailCraftVersion</key>
+  <key>QuatrelleVersion</key>
   <string>@VERSION@</string>
-  <key>MailCraftBuildCommit</key>
+  <key>QuatrelleBuildCommit</key>
   <string>@BUILD_SHA@</string>
   <key>CFBundleIconFile</key>
-  <string>MailCraft</string>
+  <string>Quatrelle</string>
   <key>LSApplicationCategoryType</key>
   <string>public.app-category.productivity</string>
   <!-- Must match MACOSX_DEPLOYMENT_TARGET in package.sh. Big Sur is the first release on
@@ -43,6 +43,6 @@
   <key>NSRequiresAquaSystemAppearance</key>
   <false/>
   <key>NSHumanReadableCopyright</key>
-  <string>Copyright © the MailCraft authors. MIT OR Apache-2.0.</string>
+  <string>Copyright © the Quatrelle authors. MIT OR Apache-2.0.</string>
 </dict>
 </plist>

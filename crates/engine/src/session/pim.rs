@@ -2,14 +2,14 @@
 //! Accounts whose server offers CalDAV / CardDAV sync them (see `net::dav`); the others, and the
 //! sample mailbox, keep a calendar and an address book on this computer.
 
-use mailcraft_model::dates::{civil_from_days, days_from_civil};
-use mailcraft_model::ical::{self, CalEvent};
-use mailcraft_model::pim::{LOCAL, Pim, StoredCard, StoredEvent, Tombstone};
-use mailcraft_model::vcard::Card;
+use quatrelle_model::dates::{civil_from_days, days_from_civil};
+use quatrelle_model::ical::{self, CalEvent};
+use quatrelle_model::pim::{LOCAL, Pim, StoredCard, StoredEvent, Tombstone};
+use quatrelle_model::vcard::Card;
 
 use super::*;
 
-pub use mailcraft_model::pim::PIM_DOC;
+pub use quatrelle_model::pim::PIM_DOC;
 
 /// The part of the app on screen.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -230,7 +230,7 @@ impl Session {
     /// account's colour, as its mail shows it, so each account's calendar can be told apart
     /// (they used to share one); its others in theirs. [`ACCOUNT_COLOR`] and above stand for
     /// an account's colour (`ACCOUNT_COLOR + AccountConfig::color`).
-    pub fn calendar_color(a: &AccountState, c: &mailcraft_model::pim::CalendarInfo) -> u8 {
+    pub fn calendar_color(a: &AccountState, c: &quatrelle_model::pim::CalendarInfo) -> u8 {
         if c.color == 0 { ACCOUNT_COLOR.saturating_add(a.config.color) } else { c.color }
     }
 
@@ -279,7 +279,7 @@ impl Session {
     }
 
     /// A category's colour by its name: the one made with that name (mail and events share
-    /// them), else one picked from the name (a category from the server MailCraft has no colour
+    /// them), else one picked from the name (a category from the server Quatrelle has no colour
     /// for still gets the same one every time).
     pub fn category_color_of(&self, name: &str) -> u8 {
         if let Some(c) = self.prefs.categories.iter().find(|c| c.name.eq_ignore_ascii_case(name.trim())) {
@@ -296,7 +296,7 @@ impl Session {
 
     fn new_uid(&mut self) -> String {
         let n = self.fresh_id();
-        format!("{:016x}-{n}@mailcraft", self.seed)
+        format!("{:016x}-{n}@quatrelle", self.seed)
     }
 
     /// Add an event; returns its uid. Events in a server calendar are sent there.
@@ -391,7 +391,7 @@ impl Session {
 
     /// Merge what a CalDAV / CardDAV sync found. Changes made here since stay (and go to the
     /// server next time); everything else follows the server.
-    pub fn apply_dav(&mut self, account: &str, sync: &mailcraft_model::pim::DavSync) {
+    pub fn apply_dav(&mut self, account: &str, sync: &quatrelle_model::pim::DavSync) {
         let p = self.pim_mut(account);
         p.caldav_home = sync.caldav_home.clone().or_else(|| Some(String::new()));
         p.carddav_home = sync.carddav_home.clone().or_else(|| Some(String::new()));
@@ -438,7 +438,7 @@ impl Session {
             // The calendar on this computer goes once the server has calendars, unless it holds
             // events (they stay there).
             let keep_local = server.is_empty() || p.events.iter().any(|e| e.calendar == LOCAL);
-            let mut list: Vec<mailcraft_model::pim::CalendarInfo> = server.clone();
+            let mut list: Vec<quatrelle_model::pim::CalendarInfo> = server.clone();
             if keep_local && let Some(l) = p.calendars.iter().find(|c| c.id == LOCAL) {
                 list.push(l.clone());
             }
@@ -471,7 +471,7 @@ impl Session {
         let p = self.pim_mut(account);
         if let Some(server) = &sync.books {
             let keep_local = server.is_empty() || p.cards.iter().any(|c| c.book == LOCAL);
-            let mut list: Vec<mailcraft_model::pim::BookInfo> = server.clone();
+            let mut list: Vec<quatrelle_model::pim::BookInfo> = server.clone();
             if keep_local && let Some(l) = p.books.iter().find(|b| b.id == LOCAL) {
                 list.push(l.clone());
             }
@@ -542,7 +542,7 @@ impl Session {
     }
 
     /// The picture the directory keeps for an address, once it has been fetched.
-    pub fn person_photo(&self, email: &str) -> Option<&mailcraft_model::vcard::Photo> {
+    pub fn person_photo(&self, email: &str) -> Option<&quatrelle_model::vcard::Photo> {
         self.person_photos.get(&email.trim().to_ascii_lowercase()).and_then(Option::as_ref)
     }
 
@@ -658,7 +658,7 @@ impl Session {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NoteRef {
     pub account: String,
-    pub note: mailcraft_model::pim::Note,
+    pub note: quatrelle_model::pim::Note,
 }
 
 impl Session {
@@ -681,7 +681,7 @@ impl Session {
         }
         let email = email.trim().to_ascii_lowercase();
         let ok =
-            mailcraft_model::addr::parse_list(&email).is_ok_and(|l| l.len() == 1 && l.first().is_some_and(|a| a.email.eq_ignore_ascii_case(&email)));
+            quatrelle_model::addr::parse_list(&email).is_ok_and(|l| l.len() == 1 && l.first().is_some_and(|a| a.email.eq_ignore_ascii_case(&email)));
         if !ok {
             return Err(CmdError::Params(format!("not an email address: {email}")));
         }
@@ -697,7 +697,7 @@ impl Session {
             p.shared.push(email.clone());
         }
         // Asked for: shown, even when it came unticked with a calendar group.
-        let id = mailcraft_model::pim::shared_calendar_id(&email);
+        let id = quatrelle_model::pim::shared_calendar_id(&email);
         self.prefs.hidden_calendars.remove(&Session::calendar_key(&account, &id));
         self.after_pim_change(&account, true);
         Ok(serde_json::json!({"account": account, "calendar": id}))
@@ -706,7 +706,7 @@ impl Session {
     /// Close someone else's calendar: it and its events go from this computer.
     pub fn close_shared_calendar(&mut self, email: &str) -> CmdResult {
         let email = email.trim().to_ascii_lowercase();
-        let id = mailcraft_model::pim::shared_calendar_id(&email);
+        let id = quatrelle_model::pim::shared_calendar_id(&email);
         let account = self.pim.iter().find(|(_, p)| p.shared.contains(&email) || p.calendars.iter().any(|c| c.id == id)).map(|(a, _)| a.clone());
         let Some(account) = account else { return Err(CmdError::Params(format!("no calendar of {email} is open"))) };
         let p = self.pim_mut(&account);
@@ -758,10 +758,10 @@ impl Session {
     /// A new note; returns its uid.
     pub fn create_note(&mut self, account: Option<&str>, text: &str, color: Option<u8>) -> CmdResult {
         let account = self.pim_account(account)?;
-        let note = mailcraft_model::pim::Note {
+        let note = quatrelle_model::pim::Note {
             uid: self.new_uid(),
             text: cap_note(text),
-            color: color.unwrap_or(mailcraft_model::pim::NOTE_YELLOW).min(mailcraft_model::pim::NOTE_COLORS - 1),
+            color: color.unwrap_or(quatrelle_model::pim::NOTE_YELLOW).min(quatrelle_model::pim::NOTE_COLORS - 1),
             modified: self.clock.now,
         };
         let uid = note.uid.clone();
@@ -770,7 +770,7 @@ impl Session {
         if p.notes.len() >= MAX_NOTES {
             return Err(CmdError::Params(format!("an account keeps at most {MAX_NOTES} notes")));
         }
-        p.notes.push(mailcraft_model::pim::StoredNote { note, dirty: remote, ..Default::default() });
+        p.notes.push(quatrelle_model::pim::StoredNote { note, dirty: remote, ..Default::default() });
         self.after_pim_change(&account, remote);
         Ok(serde_json::json!({"uid": uid, "account": account}))
     }
@@ -787,7 +787,7 @@ impl Session {
             n.note.text = cap_note(t);
         }
         if let Some(c) = color {
-            n.note.color = c.min(mailcraft_model::pim::NOTE_COLORS - 1);
+            n.note.color = c.min(quatrelle_model::pim::NOTE_COLORS - 1);
         }
         if n.note == before {
             return Ok(serde_json::json!({"uid": uid, "changed": false}));

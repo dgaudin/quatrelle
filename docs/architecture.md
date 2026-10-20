@@ -1,7 +1,7 @@
 # Architecture
 
 ```
-            ┌──────────────── apps/mailcraft (eframe) ────────────────┐
+            ┌──────────────── apps/quatrelle (eframe) ────────────────┐
             │  keychain · file dialogs · system font · clock           │
             │                                                          │
    input ──▶│  ui-egui (L6) ──commands──▶ engine::Session (L4)         │
@@ -11,7 +11,7 @@
             │                          store (L1) ◀─────┘ writes cache  │
             └──────────────────────────────────────────────────────────┘
 
-            ┌──────────── apps/mailcraft-web (eframe web runner) ─────────┐
+            ┌──────────── apps/quatrelle-web (eframe web runner) ─────────┐
             │  the same ui-egui and engine; store in memory ⇄ IndexedDB    │
             │  WebBackend: jobs run per account ── jmap (L2) over fetch ──▶ JMAP
             └──────────────────────────────────────────────────────────────┘
@@ -21,14 +21,14 @@
 
 | Layer | Crate | Depends on | Notes |
 |---|---|---|---|
-| L0 | `mailcraft-model` | — | Pure data + algorithms; `Job`/`Event` are defined here so `net` and `engine` agree without depending on each other |
-| L1 | `mailcraft-mime` | model | `mail-parser`, `mail-builder`, `html2text` (formatted text), `html5ever` (the tokenizer, for table layouts) |
-| L1 | `mailcraft-store` | model | Plain files + JSON; atomic writes; no database engine |
-| L1 | `mailcraft-print` | — | Messages laid out as PDF pages with an embedded TrueType font (`ttf-parser`, `miniz_oxide`) |
-| L2 | `mailcraft-jmap` | model, mime, store | The JMAP transport, written once as async code over a two-method `Http` trait: the desktop runs it over `net`'s client (answers are ready at once, so a no-op `block_on` drives it), the browser over `fetch`. Portable, wasm-safe |
-| L3 | `mailcraft-net` | model, mime, store, jmap | Native only. IMAP (`imap-proto`), POP3, SMTP (`lettre`), JMAP push, Microsoft Graph, Exchange Web Services with NTLM, CalDAV/CardDAV (`quick-xml`), ManageSieve, a small HTTP/1.1 client, DNS for autoconfiguration, OAuth, Outlook data files (`outlook-pst` to read, `outlook-pst-rw` to write); TLS through `rustls` |
-| L4 | `mailcraft-engine` | model, mime, store | Sans-I/O, wasm-safe |
-| L6 | `mailcraft-ui-egui` | engine | egui only; platform services behind traits; interface languages (`i18n/*.tsv`) |
+| L0 | `quatrelle-model` | — | Pure data + algorithms; `Job`/`Event` are defined here so `net` and `engine` agree without depending on each other |
+| L1 | `quatrelle-mime` | model | `mail-parser`, `mail-builder`, `html2text` (formatted text), `html5ever` (the tokenizer, for table layouts) |
+| L1 | `quatrelle-store` | model | Plain files + JSON; atomic writes; no database engine |
+| L1 | `quatrelle-print` | — | Messages laid out as PDF pages with an embedded TrueType font (`ttf-parser`, `miniz_oxide`) |
+| L2 | `quatrelle-jmap` | model, mime, store | The JMAP transport, written once as async code over a two-method `Http` trait: the desktop runs it over `net`'s client (answers are ready at once, so a no-op `block_on` drives it), the browser over `fetch`. Portable, wasm-safe |
+| L3 | `quatrelle-net` | model, mime, store, jmap | Native only. IMAP (`imap-proto`), POP3, SMTP (`lettre`), JMAP push, Microsoft Graph, Exchange Web Services with NTLM, CalDAV/CardDAV (`quick-xml`), ManageSieve, a small HTTP/1.1 client, DNS for autoconfiguration, OAuth, Outlook data files (`outlook-pst` to read, `outlook-pst-rw` to write); TLS through `rustls` |
+| L4 | `quatrelle-engine` | model, mime, store | Sans-I/O, wasm-safe |
+| L6 | `quatrelle-ui-egui` | engine | egui only; platform services behind traits; interface languages (`i18n/*.tsv`) |
 
 `cargo xtask layers` enforces this, including that `egui` stays in L6 and network crates stay in `net`.
 `cargo xtask wasm` checks that every crate but `net`, and the web app, build for `wasm32`.
@@ -45,26 +45,26 @@ IMAP hosts. An account with none of these (the sample mailbox, an opened Outlook
 on this computer only: the pool applies its changes to the cache directly. A POP account
 (`pop`) is the same after its mail is downloaded: only the Inbox talks to the server.
 
-Each account is one data file, `<address>.mailcraft`, in Documents\MailCraft Files, as Outlook
+Each account is one data file, `<address>.quatrelle`, in Documents\Quatrelle Files, as Outlook
 keeps an account in `<address> - <name>.pst` in Documents\Outlook Files
 (`crates/store/src/packed.rs`): a crash-safe single-file database (redb) holding the account's
 cache, keyed by the paths the store always used. The account list and the app's own state stay
-in the per-user app folder (`%APPDATA%\MailCraft`). `.pst` is only read (an Outlook data file
-opened gets a `.mailcraft` file of its own; Outlook's file isn't touched) and written (export).
+in the per-user app folder (`%APPDATA%\Quatrelle`). `.pst` is only read (an Outlook data file
+opened gets a `.quatrelle` file of its own; Outlook's file isn't touched) and written (export).
 Account folders from before are brought into data files when the store opens, and removed once
 read back. The data files' folder can be moved (`crates/store/src/location.rs`): `location.json`
 in the app folder points at it, and a move asked for (`move-pending.json`) is carried out at the
 next start, before anything opens the files, every file checked before the old ones go. The
 sample mailbox and the browser keep plain files and memory.
 
-## The browser (`apps/mailcraft-web`)
+## The browser (`apps/quatrelle-web`)
 
 The same `MailApp` runs in eframe's web runner. The store is `Store::memory()`, loaded from
 IndexedDB at start; it notes the files that change (`Store::take_changes`) and each frame's
 changes are written back, so mail stays between visits (settings stay in local storage; never
 passwords). The `WebBackend` runs each account's jobs in order on the browser's event loop with
-`mailcraft-jmap` over `fetch`, holds the push stream open (read through `fetch`, parsed by
-`mailcraft_jmap::sse`), polls as the fallback, and answers what a browser can't do (IMAP,
+`quatrelle-jmap` over `fetch`, holds the push stream open (read through `fetch`, parsed by
+`quatrelle_jmap::sse`), polls as the fallback, and answers what a browser can't do (IMAP,
 OAuth sign-in, data files) with an explanation. `Services` tells the UI files are downloads and
 that the file picker answers on a later frame. `Session::jmap_only` keeps the account form to
 JMAP.
@@ -102,7 +102,7 @@ bidirectional algorithm. `ui-egui/src/bidi.rs` orders right-to-left text itself:
 through the Unicode Bidirectional Algorithm (`unicode-bidi`), is cut where egui will cut it into
 runs (the main font's coverage, read with `skrifa`), and runs egui will turn around are handed
 over turned around; Arabic that egui won't shape gets its joined forms. Wrapped text (mail bodies,
-subjects) is broken into lines by MailCraft first (`bidi::job`). Translations of Arabic and
+subjects) is broken into lines by Quatrelle first (`bidi::job`). Translations of Arabic and
 Hebrew go through it in `tl!`/`tf!`; text for the system (window titles, notifications) is taken
 as written (`i18n::as_written`).
 

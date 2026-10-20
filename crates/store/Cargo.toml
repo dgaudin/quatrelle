@@ -1,16 +1,16 @@
 [package]
-name = "mailcraft-store"
+name = "quatrelle-store"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "MailCraft local-first cache: accounts, folders, per-folder sync state, message sources and pending offline changes on disk"
+description = "Quatrelle local-first cache: accounts, folders, per-folder sync state, message sources and pending offline changes on disk"
 
 [lints]
 workspace = true
 
 [dependencies]
-mailcraft-model = { workspace = true }
+quatrelle-model = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 log = { workspace = true }
@@ -22,5 +22,5 @@ thiserror = { workspace = true }
 redb = "=4.4.0"
 # What a data file keeps is compressed (deflate, pure Rust): mail and folder lists are text.
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
-# The Documents folder (where "MailCraft Files" goes), wherever the system has put it.
+# The Documents folder (where "Quatrelle Files" goes), wherever the system has put it.
 dirs = "7"

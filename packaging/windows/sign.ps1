@@ -15,7 +15,7 @@
   timestamp server, ...). Optional overrides: WINDOWS_TIMESTAMP_URL, SIGNTOOL (path to signtool.exe).
 
 .EXAMPLE
-  pwsh packaging/windows/sign.ps1 dist/mailcraft.exe dist/Mailcraft.msi
+  pwsh packaging/windows/sign.ps1 dist/quatrelle.exe dist/Quatrelle.msi
 #>
 param(
   [Parameter(Mandatory = $true, ValueFromRemainingArguments = $true)]
@@ -57,8 +57,8 @@ if (-not $haveCert -and -not $haveAzure) {
 }
 
 $script:SignTool = Find-SignTool
-$common = @('sign', '/v', '/fd', 'SHA256', '/td', 'SHA256', '/d', 'MailCraft', '/du', 'https://github.com/dgaudin/mailcraft')
-$tmp = Join-Path ([IO.Path]::GetTempPath()) "mailcraft-sign-$PID"
+$common = @('sign', '/v', '/fd', 'SHA256', '/td', 'SHA256', '/d', 'Quatrelle', '/du', 'https://github.com/dgaudin/quatrelle')
+$tmp = Join-Path ([IO.Path]::GetTempPath()) "quatrelle-sign-$PID"
 New-Item -ItemType Directory -Force -Path $tmp | Out-Null
 
 try {

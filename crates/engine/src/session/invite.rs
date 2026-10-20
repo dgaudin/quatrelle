@@ -2,8 +2,8 @@
 //! in the answers and cancellations organizers and guests send, and inviting people to the
 //! user's own events. Invitations travel as `text/calendar` parts with a `METHOD`.
 
-use mailcraft_model::ical::{self, Attendee, CalEvent, ICalendar};
-use mailcraft_model::pim::{LOCAL, StoredEvent, Tombstone};
+use quatrelle_model::ical::{self, Attendee, CalEvent, ICalendar};
+use quatrelle_model::pim::{LOCAL, StoredEvent, Tombstone};
 
 use super::*;
 
@@ -247,7 +247,7 @@ impl Session {
             e.status = "CANCELLED".into();
             (format!("Cancelled: {}", event.summary), format!("{} has been cancelled.", event.summary))
         } else {
-            let when = mailcraft_model::dates::full_time(event.start, &self.clock);
+            let when = quatrelle_model::dates::full_time(event.start, &self.clock);
             let place = if event.location.is_empty() { String::new() } else { format!("\nWhere: {}", event.location) };
             (format!("Invitation: {}", event.summary), format!("{}\nWhen: {when}{place}\n\n{}", event.summary, event.description))
         };

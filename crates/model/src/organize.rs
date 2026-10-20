@@ -108,7 +108,7 @@ pub struct Rule {
     /// Don't run later rules on a message this one matched.
     #[serde(default)]
     pub stop: bool,
-    /// Also run on the server (Exchange's inbox rules), so mail is filed while MailCraft is
+    /// Also run on the server (Exchange's inbox rules), so mail is filed while Quatrelle is
     /// closed. Only what the server can express goes there: see [`Rule::server_blockers`].
     #[serde(default)]
     pub server: bool,
@@ -215,7 +215,7 @@ pub fn actions_for(rules: &[Rule], m: &Summary) -> Vec<RuleAction> {
     out
 }
 
-/// A rule MailCraft didn't make but the account's server runs (Outlook's own, the server's web
+/// A rule Quatrelle didn't make but the account's server runs (Outlook's own, the server's web
 /// page, a Sieve script the user wrote): listed as it is, never changed from here — whoever made
 /// it owns it.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -226,11 +226,11 @@ pub struct ForeignRule {
     pub id: String,
     pub name: String,
     pub enabled: bool,
-    /// MailCraft knows every condition and action of it, so it can run it here.
+    /// Quatrelle knows every condition and action of it, so it can run it here.
     pub runnable: bool,
-    /// The rule in MailCraft's terms, when it can be run here.
+    /// The rule in Quatrelle's terms, when it can be run here.
     pub rule: Option<Rule>,
-    /// What it does, in a line (the server's own words where MailCraft has none).
+    /// What it does, in a line (the server's own words where Quatrelle has none).
     pub summary: String,
 }
 

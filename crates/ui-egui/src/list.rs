@@ -3,8 +3,8 @@
 //! Only visible rows are laid out, so long folders scroll smoothly.
 
 use egui::{Color32, Rect, RichText, Sense, Ui, pos2, vec2};
-use mailcraft_engine::model::{FolderRole, MessageKey, Summary, addr, dates};
-use mailcraft_engine::{ListFilter, Row, SearchScope, Session};
+use quatrelle_engine::model::{FolderRole, MessageKey, Summary, addr, dates};
+use quatrelle_engine::{ListFilter, Row, SearchScope, Session};
 use serde_json::json;
 
 use crate::icons::{self, Icon};
@@ -125,7 +125,7 @@ pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) 
     });
     let sep = ui.available_rect_before_wrap();
     ui.painter().line_segment([sep.left_top(), sep.right_top()], egui::Stroke::new(1.0, t.border));
-    let sent_view = matches!(s.view_role(), Some(FolderRole::Sent | FolderRole::Drafts)) || s.view == mailcraft_engine::View::Outbox;
+    let sent_view = matches!(s.view_role(), Some(FolderRole::Sent | FolderRole::Drafts)) || s.view == quatrelle_engine::View::Outbox;
     // A table where the list is wide (see `Session::list_as_table`): its headings stay put above
     // the rows, sized as the rows are (the scroll bar's width aside).
     let table = s.list_as_table();
@@ -322,8 +322,8 @@ fn columns(width: f32, w: &ColumnWidths) -> Vec<(Col, f32, f32)> {
 }
 
 /// What a column's heading arranges the list by, when it does.
-fn column_arrange(c: Col, sent_view: bool) -> Option<mailcraft_engine::Arrange> {
-    use mailcraft_engine::Arrange as A;
+fn column_arrange(c: Col, sent_view: bool) -> Option<quatrelle_engine::Arrange> {
+    use quatrelle_engine::Arrange as A;
     match c {
         Col::Attach => Some(A::Attachments),
         Col::Who => Some(if sent_view { A::To } else { A::From }),
@@ -539,7 +539,7 @@ fn table_row(
 
 /// Arrange the list by…, as a menu (the list's own and the View tab's).
 pub(crate) fn arrange_menu(ui: &mut Ui, s: &Session, acts: &mut Vec<Action>) {
-    for a in mailcraft_engine::Arrange::ALL {
+    for a in quatrelle_engine::Arrange::ALL {
         if ui.selectable_label(s.prefs.arrange == a, tl!(a.label())).clicked() {
             acts.push(Action::Run("view.arrange", json!({"by": a.code()})));
             ui.close();
@@ -784,7 +784,7 @@ fn row_input(
         ui.separator();
         // Find related, as Outlook's: the conversation, or everything from the sender.
         ui.menu_button(tl!("Find related"), |ui| {
-            let topic = mailcraft_engine::model::thread::base_subject(&subject);
+            let topic = quatrelle_engine::model::thread::base_subject(&subject);
             let searches = [
                 ("Messages in this conversation", format!("subject:\"{}\"", topic.replace('"', ""))),
                 ("Messages from sender", format!("from:{sender}")),

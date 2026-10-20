@@ -9,9 +9,9 @@
 
 use std::collections::HashMap;
 
-use mailcraft_model::ical::{Attendee, CalEvent};
-use mailcraft_model::pim::{BookInfo, CalendarInfo, DavSync, Note, Pim, StoredCard, StoredEvent, StoredNote};
-use mailcraft_model::vcard::{Card, PostalAddress, Typed};
+use quatrelle_model::ical::{Attendee, CalEvent};
+use quatrelle_model::pim::{BookInfo, CalendarInfo, DavSync, Note, Pim, StoredCard, StoredEvent, StoredNote};
+use quatrelle_model::vcard::{Card, PostalAddress, Typed};
 use serde_json::{Value, json};
 
 use crate::ews::{Client, El, esc};
@@ -28,7 +28,7 @@ const MONTHS: [&str; 12] = ["January", "February", "March", "April", "May", "Jun
 const DAYS: [&str; 7] = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 fn utc(t: i64) -> String {
-    let (y, m, d) = mailcraft_model::dates::civil_from_days(t.div_euclid(86_400));
+    let (y, m, d) = quatrelle_model::dates::civil_from_days(t.div_euclid(86_400));
     let s = t.rem_euclid(86_400);
     format!("{y:04}-{m:02}-{d:02}T{:02}:{:02}:{:02}Z", s / 3600, s / 60 % 60, s % 60)
 }
@@ -131,8 +131,8 @@ pub fn event_of(it: &El) -> Option<CalEvent> {
         return None;
     }
     let all_day = it.text_of("IsAllDayEvent").is_some_and(|v| v == "true");
-    let start = mailcraft_jmap::utc_date(&text(it, "Start"))?;
-    let end = mailcraft_jmap::utc_date(&text(it, "End")).unwrap_or(start + 3600).max(start);
+    let start = quatrelle_jmap::utc_date(&text(it, "Start"))?;
+    let end = quatrelle_jmap::utc_date(&text(it, "End")).unwrap_or(start + 3600).max(start);
     // All-day times are local midnights: the nearest UTC midnight is the day.
     let day = |t: i64| (t + 43_200).div_euclid(86_400) * 86_400;
     let (start, end) = if all_day { (day(start), day(end).max(day(start) + 86_400)) } else { (start, end) };
@@ -141,11 +141,11 @@ pub fn event_of(it: &El) -> Option<CalEvent> {
     let html = body.and_then(|b| b.attr("BodyType")).is_some_and(|t| t.eq_ignore_ascii_case("HTML"));
     // A Teams or Zoom invitation's join link, whole, from the HTML (its text wraps long ones).
     let join_url = if html {
-        mailcraft_mime::html_links(&content).into_iter().find(|l| mailcraft_model::ical::is_meeting_link(l)).unwrap_or_default()
+        quatrelle_mime::html_links(&content).into_iter().find(|l| quatrelle_model::ical::is_meeting_link(l)).unwrap_or_default()
     } else {
         String::new()
     };
-    let description = if html { mailcraft_mime::html_to_text(&content) } else { content };
+    let description = if html { quatrelle_mime::html_to_text(&content) } else { content };
     // Outlook's reminder: set, and how long before the start.
     let reminder = (it.text_of("ReminderIsSet") == Some("true"))
         .then(|| it.text_of("ReminderMinutesBeforeStart").and_then(|m| m.trim().parse::<i64>().ok()))
@@ -301,7 +301,7 @@ fn contact_xml(c: &Card) -> String {
         x.push_str("</t:PhoneNumbers>");
     }
     // A birthday at midday UTC, so it's the same day everywhere.
-    if let Some(b) = mailcraft_model::vcard::birthday_of(&c.birthday).filter(|b| !b.starts_with("--")) {
+    if let Some(b) = quatrelle_model::vcard::birthday_of(&c.birthday).filter(|b| !b.starts_with("--")) {
         x.push_str(&format!("<t:Birthday>{b}T12:00:00Z</t:Birthday>"));
     }
     if !c.title.is_empty() {
@@ -325,7 +325,7 @@ fn contact_xml(c: &Card) -> String {
     if !c.im.is_empty() {
         x.push_str(&format!("<t:IMAddresses><t:String>{}</t:String></t:IMAddresses>", esc(&c.im)));
     }
-    if let Some(a) = mailcraft_model::vcard::birthday_of(&c.anniversary).filter(|b| !b.starts_with("--")) {
+    if let Some(a) = quatrelle_model::vcard::birthday_of(&c.anniversary).filter(|b| !b.starts_with("--")) {
         x.push_str(&format!("<t:WeddingAnniversary>{a}T12:00:00Z</t:WeddingAnniversary>"));
     }
     if !c.family.is_empty() {
@@ -392,13 +392,13 @@ pub fn card_of(it: &El) -> Option<Card> {
         })
         .unwrap_or_default();
     // Exchange keeps a birthday (and a wedding anniversary) as the start of that day where it
-    // was set, in UTC (the evening before, east of Greenwich); MailCraft writes noon. Either
+    // was set, in UTC (the evening before, east of Greenwich); Quatrelle writes noon. Either
     // way, the day from just after noon the day before to noon is the one.
     let day_of = |name: &str| -> String {
         it.text_of(name)
-            .and_then(|b| mailcraft_jmap::utc_date(b.trim()))
+            .and_then(|b| quatrelle_jmap::utc_date(b.trim()))
             .map(|t| {
-                let (y, m, d) = mailcraft_model::dates::civil_from_days((t + 12 * 3600 - 1).div_euclid(86_400));
+                let (y, m, d) = quatrelle_model::dates::civil_from_days((t + 12 * 3600 - 1).div_euclid(86_400));
                 format!("{y:04}-{m:02}-{d:02}")
             })
             .unwrap_or_default()
@@ -460,9 +460,9 @@ pub fn note_of(it: &El) -> Option<StoredNote> {
         .find(|p| p.find("ExtendedFieldURI").and_then(|f| f.attr("PropertyId")) == Some("35584"))
         .and_then(|p| p.text_of("Value"))
         .and_then(|v| v.trim().parse::<u8>().ok())
-        .filter(|c| *c < mailcraft_model::pim::NOTE_COLORS)
-        .unwrap_or(mailcraft_model::pim::NOTE_YELLOW);
-    let modified = it.text_of("LastModifiedTime").and_then(mailcraft_jmap::utc_date).unwrap_or(0);
+        .filter(|c| *c < quatrelle_model::pim::NOTE_COLORS)
+        .unwrap_or(quatrelle_model::pim::NOTE_YELLOW);
+    let modified = it.text_of("LastModifiedTime").and_then(quatrelle_jmap::utc_date).unwrap_or(0);
     Some(StoredNote {
         href: href.clone(),
         etag: id.attr("ChangeKey").unwrap_or("").to_string(),
@@ -775,7 +775,7 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
     }
     for e in pim.events.iter().filter(|e| e.dirty) {
         let fields = event_fields(&e.event);
-        let owner = mailcraft_model::pim::shared_calendar_owner(&e.calendar);
+        let owner = quatrelle_model::pim::shared_calendar_owner(&e.calendar);
         let r = if e.href.is_empty() {
             let body: String = fields.iter().map(|(_, x)| x.as_str()).collect();
             c.call_one(&format!(
@@ -891,12 +891,12 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
         }
         Err(e) => log::info!("no calendar groups: {e}"),
     }
-    let ticked = others.iter().filter(|(e, _, _, _)| !pim.not_read.contains(&mailcraft_model::pim::shared_calendar_id(e))).count();
+    let ticked = others.iter().filter(|(e, _, _, _)| !pim.not_read.contains(&quatrelle_model::pim::shared_calendar_id(e))).count();
     if !others.is_empty() {
         log::info!("{} other people's calendars, {ticked} ticked and read", others.len());
     }
     for (n, (email, name, group, asked)) in others.iter().enumerate() {
-        let id = mailcraft_model::pim::shared_calendar_id(email);
+        let id = quatrelle_model::pim::shared_calendar_id(email);
         let parent = calendar_folder(Some(&c.address_of(email)));
         // Editable when the folder's rights say so, or (some servers say nothing useful about
         // another mailbox's folder) when its events do, as Outlook finds by trying.
@@ -1080,7 +1080,7 @@ mod tests {
 
     #[test]
     fn recurrences_both_ways() {
-        let start = mailcraft_jmap::utc_date("2026-10-05T09:00:00Z").unwrap_or(0);
+        let start = quatrelle_jmap::utc_date("2026-10-05T09:00:00Z").unwrap_or(0);
         for rule in [
             "FREQ=WEEKLY;BYDAY=MO,WE;INTERVAL=2;UNTIL=20261231T235959Z",
             "FREQ=MONTHLY;BYDAY=-1FR;COUNT=6",
