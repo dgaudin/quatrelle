@@ -971,3 +971,15 @@ month	May	مايو
 	When a message	عند وصول رسالة
 	matches all of them	يطابق كل الشروط
 	matches any of them	يطابق أي شرط
+	Spelling	التدقيق الإملائي
+	Check the spelling of the message (F7)	تدقيق إملاء الرسالة (F7)
+	The dictionaries are still being read.	لا تزال القواميس قيد القراءة.
+	No misspelt words.	لا توجد كلمات بها أخطاء إملائية.
+	Not in the dictionary: {word}	غير موجود في القاموس: {word}
+	Suggestions	اقتراحات
+	No suggestions.	لا توجد اقتراحات.
+	Change	تغيير
+	Add to dictionary	إضافة إلى القاموس
+	Stop underlining this word, here and in other messages	التوقف عن وضع خط تحت هذه الكلمة، هنا وفي الرسائل الأخرى
+	There's no message to check.	لا توجد رسالة للتدقيق.
+	Check the spelling as you type	تدقيق الإملاء أثناء الكتابة

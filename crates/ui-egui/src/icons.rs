@@ -53,6 +53,7 @@ pub enum Icon {
     /// Undo the last change (the quick access bar).
     Undo,
     Info,
+    SpellCheck,
     Away,
     Storage,
     Funnel,
@@ -180,6 +181,7 @@ fn svg(icon: Icon) -> &'static str {
         Icon::Back => f!("arrow_left"),
         Icon::Undo => f!("arrow_undo"),
         Icon::Info => f!("info"),
+        Icon::SpellCheck => f!("text_grammar_checkmark"),
         Icon::Away => f!("person_clock"),
         Icon::Storage => f!("storage"),
         Icon::Funnel => f!("filter"),
@@ -578,6 +580,14 @@ fn drawn(p: &Painter, rect: Rect, icon: Icon, color: Color32) {
             pen.closed(&[(8.0, 1.5), (15.0, 14.0), (1.0, 14.0)]);
             pen.line(&[(8.0, 6.0), (8.0, 9.8)]);
             pen.filled(&[(7.3, 11.4), (8.7, 11.4), (8.7, 12.6), (7.3, 12.6)], color);
+        }
+        Icon::SpellCheck => {
+            // Lines of text, and a tick in a circle beside the last one.
+            pen.line(&[(1.5, 4.0), (14.5, 4.0)]);
+            pen.line(&[(1.5, 7.5), (14.5, 7.5)]);
+            pen.line(&[(1.5, 11.0), (7.5, 11.0)]);
+            pen.circle(11.5, 11.5, 4.0);
+            pen.line(&[(9.5, 11.5), (11.0, 13.0), (13.5, 10.0)]);
         }
     }
 }

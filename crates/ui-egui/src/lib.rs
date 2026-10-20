@@ -479,8 +479,10 @@ pub struct MailApp {
 
 impl MailApp {
     pub fn new(session: Session, backend: Box<dyn Backend>, mut services: Box<dyn Services>) -> MailApp {
-        // The spelling dictionaries, read once in the background (nothing in the browser).
+        // The spelling dictionaries, read once in the background (nothing in the browser), with
+        // the words added to them so far.
         spellcheck::start();
+        spellcheck::set_personal(session.prefs.spelling.clone());
         let seen = session.notices.len();
         let has_files = !services.downloads();
         let (data_folder, pending_move) = (services.data_folder(), services.pending_data_move());
@@ -664,6 +666,8 @@ impl MailApp {
 
     /// The whole window.
     pub fn ui(&mut self, ui: &mut Ui) {
+        // The switch in Options, wherever it was changed from (a command, another window).
+        spellcheck::set_on(self.session.prefs.spell_check);
         let ctx = ui.ctx().clone();
         let mut main = self.ui.places.get("main").copied();
         WindowPlace::note(&mut main, ui);
@@ -2413,6 +2417,7 @@ impl MailApp {
             let offline = p.work_offline;
             let keep = (p.keep_messages, p.keep_offline);
             self.session.prefs = p;
+            spellcheck::set_personal(self.session.prefs.spelling.clone());
             self.session.note_new_calendars();
             self.session.refresh_list();
             // How much mail to keep, before any account connects (when it isn't the default).

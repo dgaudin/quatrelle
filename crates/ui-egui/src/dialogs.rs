@@ -654,6 +654,20 @@ pub enum Dialog {
         header: Vec<(String, String)>,
         text: String,
     },
+    /// Outlook's Spelling: the words the dictionaries don't know, one at a time.
+    Spelling(Box<SpellForm>),
+}
+
+/// What the spelling dialog keeps from one word to the next: the words let be in this message,
+/// and the suggestion picked for the word it shows (none for the next word).
+#[derive(Clone, Debug, Default)]
+pub struct SpellForm {
+    /// Words ignored while this dialog is open (Ignore).
+    ignored: Vec<String>,
+    /// The suggestion picked, when one is.
+    chosen: Option<String>,
+    /// The word `chosen` was picked for: a new word comes with nothing picked.
+    shown: String,
 }
 
 /// What the rule editor offers: one test and one action (rules made elsewhere can have more).
@@ -964,7 +978,8 @@ impl Dialog {
 
     /// Dialogs that belong to the message being written (shown in its window when it has one).
     pub fn for_compose(&self) -> bool {
-        matches!(self, Dialog::SelectNames(_) | Dialog::SaveChanges | Dialog::EmptySubject) || matches!(self, Dialog::Signature(f) if f.insert)
+        matches!(self, Dialog::SelectNames(_) | Dialog::SaveChanges | Dialog::EmptySubject | Dialog::Spelling(_))
+            || matches!(self, Dialog::Signature(f) if f.insert)
     }
 
     /// The add-account dialog with the address filled in (servers guessed from it).
@@ -978,6 +993,11 @@ impl Dialog {
 
     pub fn move_to() -> Dialog {
         Dialog::MoveTo { filter: String::new() }
+    }
+
+    /// Outlook's Spelling, over the message being written.
+    pub fn spelling() -> Dialog {
+        Dialog::Spelling(Box::default())
     }
 
     /// A new event (at a time, or the next hour).
@@ -1796,6 +1816,77 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Act
                 return false;
             }
             !cancel
+        }
+        Dialog::Spelling(f) => {
+            ui.set_width(460.0);
+            title(ui, t, "Spelling");
+            let mut keep = true;
+            if crate::spellcheck::ready().is_none() {
+                ui.label(RichText::new(tl!("The dictionaries are still being read.")).color(t.dim));
+            } else if let Some(c) = s.compose.as_ref() {
+                // The body first, then the subject (Outlook's order); both are read again on
+                // every frame, so a change moves straight on to the next word.
+                let mut words: Vec<(&'static str, std::ops::Range<usize>, String)> = Vec::new();
+                for (field, text) in [("body", &c.body), ("subject", &c.subject)] {
+                    words.extend(crate::spellcheck::misspelt(text).into_iter().map(|(r, w)| (field, r, w)));
+                }
+                words.retain(|(_, _, w)| !f.ignored.iter().any(|i| i.eq_ignore_ascii_case(w)));
+                if words.is_empty() {
+                    ui.label(RichText::new(tl!("No misspelt words.")).color(t.dim));
+                } else {
+                    // The first word left, with what could take its place.
+                    let (field, range, word) = (words[0].0, words[0].1.clone(), words[0].2.clone());
+                    if f.shown != word {
+                        f.shown = word.clone();
+                        f.chosen = None;
+                    }
+                    ui.label(RichText::new(tf!("Not in the dictionary: {word}", word = word)).strong());
+                    ui.add_space(6.0);
+                    ui.label(RichText::new(tl!("Suggestions")).color(t.dim).small());
+                    let suggestions = crate::spellcheck::suggest(&word, 8);
+                    if suggestions.is_empty() {
+                        ui.label(RichText::new(tl!("No suggestions.")).color(t.faint).small());
+                    }
+                    egui::ScrollArea::vertical().max_height(170.0).auto_shrink([false, true]).show(ui, |ui| {
+                        for sug in &suggestions {
+                            let picked = f.chosen.as_deref() == Some(sug.as_str());
+                            if ui.selectable_label(picked, sug).clicked() {
+                                f.chosen = Some(sug.clone());
+                            }
+                        }
+                    });
+                    ui.add_space(10.0);
+                    button_row(ui, |ui| {
+                        if widgets::primary_button(ui, "Change", t, f.chosen.is_some()).clicked()
+                            && let Some(with) = f.chosen.clone()
+                        {
+                            acts.push(Action::Run(
+                                "compose.replaceText",
+                                json!({"from": range.start, "to": range.end, "text": with, "field": field}),
+                            ));
+                            f.chosen = None;
+                        }
+                        if ui.button(tl!("Ignore")).clicked() {
+                            f.ignored.push(word.clone());
+                            f.chosen = None;
+                        }
+                        if ui.button(tl!("Add to dictionary")).on_hover_text(tl!("Stop underlining this word, here and in other messages")).clicked()
+                        {
+                            acts.push(Action::Run("spelling.add", json!({"word": word.clone()})));
+                            crate::spellcheck::add_word(&word);
+                            f.ignored.push(word.clone());
+                            f.chosen = None;
+                        }
+                    });
+                }
+            } else {
+                ui.label(RichText::new(tl!("There's no message to check.")).color(t.dim));
+            }
+            ui.add_space(10.0);
+            if ui.button(tl!("Close")).clicked() {
+                keep = false;
+            }
+            keep
         }
         Dialog::RemoveAccount { account, email } => {
             ui.set_width(380.0);

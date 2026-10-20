@@ -314,6 +314,18 @@ pub struct Prefs {
     /// IMAP has nowhere for it, so it's kept here, as Outlook keeps it for IMAP accounts.
     #[serde(default)]
     pub follow_up: BTreeMap<String, i64>,
+    /// Words the writer added to the dictionary (the spelling check keeps them).
+    #[serde(default)]
+    pub spelling: Vec<String>,
+    /// Underline the words the dictionaries don't know as the message is written (Outlook's
+    /// "Check spelling as you type").
+    #[serde(default = "yes")]
+    pub spell_check: bool,
+}
+
+/// A setting that was on before it existed.
+fn yes() -> bool {
+    true
 }
 
 /// What the message list is sorted and grouped by.
@@ -480,6 +492,8 @@ impl Default for Prefs {
             follow_up: BTreeMap::new(),
             folder_pane_minimized: false,
             collapsed: BTreeSet::new(),
+            spelling: Vec::new(),
+            spell_check: true,
         }
     }
 }
@@ -587,6 +601,33 @@ impl Compose {
     pub fn set_text(&mut self, text: String) {
         self.styles = mime::rich::Styles::plain(&text);
         self.body = text;
+    }
+
+    /// Replace a stretch of the text (byte offsets) with another, the look of the text it
+    /// replaces kept: a misspelt word changed for a suggestion in the spelling dialog.
+    pub fn replace_text(&mut self, from: usize, to: usize, with: &str) -> Result<(), CmdError> {
+        if from > to || to > self.body.len() || !self.body.is_char_boundary(from) || !self.body.is_char_boundary(to) {
+            return Err(CmdError::Params("that stretch of the text isn't there".into()));
+        }
+        let first = self.body[..from].chars().count();
+        let was = self.body[from..to].chars().count();
+        self.body.replace_range(from..to, with);
+        let style = self.styles.chars.get(first).copied().unwrap_or(0);
+        let end = (first + was).min(self.styles.chars.len());
+        self.styles.chars.splice(first..end, std::iter::repeat_n(style, with.chars().count()));
+        if self.styles.chars.len() != self.body.chars().count() {
+            self.styles.fit(&self.body);
+        }
+        Ok(())
+    }
+
+    /// Replace a stretch of the subject (byte offsets): a misspelt word changed for a suggestion.
+    pub fn replace_subject(&mut self, from: usize, to: usize, with: &str) -> Result<(), CmdError> {
+        if from > to || to > self.subject.len() || !self.subject.is_char_boundary(from) || !self.subject.is_char_boundary(to) {
+            return Err(CmdError::Params("that stretch of the subject isn't there".into()));
+        }
+        self.subject.replace_range(from..to, with);
+        Ok(())
     }
 }
 

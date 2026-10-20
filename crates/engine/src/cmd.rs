@@ -265,6 +265,11 @@ pub fn registry() -> Registry {
             .params(r#"{"always"?: bool}"#)
             .when(has_reading),
         CommandSpec::new("message.blockPictures", "Don't show pictures from this sender", "Reading pane", |s, _| s.block_pictures()).when(has_reading),
+        CommandSpec::new("view.spelling", "Check the spelling as you type", "View › Messages", |s, v| {
+            s.prefs.spell_check = p::bool(v, "on").unwrap_or(!s.prefs.spell_check);
+            Ok(json!({"on": s.prefs.spell_check}))
+        })
+        .params(r#"{"on"?: bool}"#),
         CommandSpec::new("view.html", "Show HTML formatted", "View › Messages", |s, v| {
             s.prefs.show_html = p::bool(v, "on").unwrap_or(!s.prefs.show_html);
             Ok(json!({"on": s.prefs.show_html}))
@@ -277,6 +282,23 @@ pub fn registry() -> Registry {
         CommandSpec::new("compose.update", "Edit message", "Message", compose_update)
             .params(r#"{"to"?: string, "cc"?: string, "bcc"?: string, "subject"?: string, "body"?: string, "marks"?: bool (the body uses **bold**, *italic*, - lists…), "account"?: string, "importance"?: "high"|"normal"|"low", "readReceipt"?: bool, "replyTo"?: string (where replies go), "sendAfter"?: number (Unix seconds: held in the Outbox until then; 0 sends at once), "voting"?: string (voting buttons, `;`-separated: "Approve;Reject"; Exchange accounts)}"#)
             .when(has_compose),
+        CommandSpec::new("compose.replaceText", "Replace a stretch of the message", "Message", compose_replace_text)
+            .params(
+                r#"{"from": number (byte offset), "to": number, "text": string, "field"?: "body" (default) | "subject" (the subject: byte offsets into it)}"#,
+            )
+            .when(has_compose),
+        CommandSpec::new("spelling.add", "Add a word to the dictionary", "Message", |s, v| {
+            let word = p::req_str(v, "word")?.trim().to_lowercase();
+            if word.is_empty() || word.chars().count() > 64 {
+                return Err(CmdError::Params("a word is needed".into()));
+            }
+            if !s.prefs.spelling.iter().any(|w| w.eq_ignore_ascii_case(&word)) {
+                s.prefs.spelling.push(word.clone());
+                s.prefs.spelling.sort();
+            }
+            Ok(json!({"word": word, "words": s.prefs.spelling}))
+        })
+        .params(r#"{"word": string}"#),
         CommandSpec::new("compose.attach", "Attach file", "Message › Insert", attach).params(r#"{"path": string} | {"name": string, "data": [bytes]}"#).when(has_compose),
         CommandSpec::new("compose.insertPicture", "Insert picture", "Message › Insert", insert_picture)
             .params(r#"{"path": string} | {"name": string, "data": [bytes]}, "insert"?: bool (default true), "at"?: number (character; default the end)"#)
@@ -1100,6 +1122,29 @@ fn search(s: &mut Session, v: &Value) -> CmdResult {
     let budget = p::u64(v, "index").and_then(|n| usize::try_from(n).ok()).unwrap_or(0);
     let n = s.run_search_budgeted(&q, scope, budget);
     Ok(json!({"results": n, "pending": s.search_pending}))
+}
+
+fn compose_replace_text(s: &mut Session, v: &Value) -> CmdResult {
+    let from = p::i64(v, "from").ok_or_else(|| CmdError::Params("`from` is required".into()))?;
+    let to = p::i64(v, "to").ok_or_else(|| CmdError::Params("`to` is required".into()))?;
+    let (from, to) = (usize::try_from(from), usize::try_from(to));
+    let (Ok(from), Ok(to)) = (from, to) else {
+        return Err(CmdError::Params("`from` and `to` are byte offsets".into()));
+    };
+    let text = p::req_str(v, "text")?;
+    let field = p::str(v, "field").unwrap_or("body");
+    let c = s.compose.as_mut().ok_or_else(|| CmdError::Disabled("no message is being written".into()))?;
+    match field {
+        "body" => {
+            c.replace_text(from, to, text)?;
+            Ok(json!({"body": c.body}))
+        }
+        "subject" => {
+            c.replace_subject(from, to, text)?;
+            Ok(json!({"subject": c.subject}))
+        }
+        other => Err(CmdError::Params(format!("there's no field `{other}`"))),
+    }
 }
 
 fn compose_update(s: &mut Session, v: &Value) -> CmdResult {

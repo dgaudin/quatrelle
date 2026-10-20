@@ -685,6 +685,9 @@ fn options(s: &Session, st: &UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
         setting(ui, false, tl!("Write new messages in a window of their own"), None, &mut |ui| {
             switch(ui, s.prefs.new_mail_window, tl!("Write new messages in a window of their own"), "view.newMailWindow", acts);
         });
+        setting(ui, false, tl!("Check the spelling as you type"), None, &mut |ui| {
+            switch(ui, s.prefs.spell_check, tl!("Check the spelling as you type"), "view.spelling", acts);
+        });
         setting(ui, false, tl!("Show HTML mail formatted (otherwise as plain text)"), None, &mut |ui| {
             switch(ui, s.prefs.show_html, tl!("Show HTML mail formatted (otherwise as plain text)"), "view.html", acts);
         });
