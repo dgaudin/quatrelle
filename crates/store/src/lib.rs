@@ -878,6 +878,26 @@ impl Store {
         let _ = self.files.remove_file(&self.body_path(key));
     }
 
+    /// Where a folder's kept search index lives, beside what it caches of its messages.
+    fn search_index_path(&self, account: &str, folder: &str) -> PathBuf {
+        self.folder_dir(account, folder).join("search.idx")
+    }
+
+    /// Keep a folder's search index (its bytes are `mailcraft_model::search::FolderIndex`'s): the
+    /// next run reads it back instead of reading the folder's messages again.
+    pub fn save_search_index(&self, account: &str, folder: &str, bytes: &[u8]) -> Result<()> {
+        self.files.write(&self.search_index_path(account, folder), bytes)
+    }
+
+    /// The index kept for a folder, if any (a damaged one is refused by its reader).
+    pub fn load_search_index(&self, account: &str, folder: &str) -> Option<Vec<u8>> {
+        self.files.read(&self.search_index_path(account, folder)).ok()
+    }
+
+    pub fn remove_search_index(&self, account: &str, folder: &str) {
+        let _ = self.files.remove_file(&self.search_index_path(account, folder));
+    }
+
     pub fn load_ops(&self, account: &str) -> Result<Vec<Op>> {
         self.read_json(&self.account_dir(account).join("ops.json"))
     }
@@ -1232,6 +1252,31 @@ mod tests {
         s.save_ops("a1", &[]).unwrap();
         assert!(s.load_ops("a1").unwrap().is_empty());
         let _ = fs::remove_dir_all(s.root());
+    }
+
+    /// A folder's search index is kept beside its messages and goes with them: a folder
+    /// cleared (its UIDVALIDITY changed, or it went) loses it.
+    #[test]
+    fn a_search_index_is_kept_with_its_folder() {
+        for packed in [false, true] {
+            let dir = std::env::temp_dir().join(format!("mailcraft-index-{packed}-{}", std::process::id()));
+            let _ = fs::remove_dir_all(&dir);
+            let s = if packed { Store::open_packed(dir.join("app"), dir.join("Files")).unwrap() } else { Store::open(&dir).unwrap() };
+            assert!(s.load_search_index("a1", "INBOX").is_none());
+            s.save_search_index("a1", "INBOX", b"MCFI\x01kept").unwrap();
+            assert_eq!(s.load_search_index("a1", "INBOX").as_deref(), Some(&b"MCFI\x01kept"[..]));
+            // Another folder, or another account, has its own.
+            assert!(s.load_search_index("a1", "Sent").is_none());
+            assert!(s.load_search_index("a2", "INBOX").is_none());
+            s.save_search_index("a1", "Sent", b"sent").unwrap();
+            assert_eq!(s.load_search_index("a1", "INBOX").as_deref(), Some(&b"MCFI\x01kept"[..]));
+            s.clear_folder("a1", "INBOX").unwrap();
+            assert!(s.load_search_index("a1", "INBOX").is_none());
+            assert!(s.load_search_index("a1", "Sent").is_some());
+            s.remove_search_index("a1", "Sent");
+            assert!(s.load_search_index("a1", "Sent").is_none());
+            let _ = fs::remove_dir_all(s.root());
+        }
     }
 
     #[test]

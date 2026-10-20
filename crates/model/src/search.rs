@@ -13,7 +13,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::{EmailAddress, Summary};
+use crate::{EmailAddress, MessageKey, Summary};
 
 /// Lower-cased words of a text (UAX #29 word boundaries).
 pub fn words(text: &str) -> impl Iterator<Item = String> + '_ {
@@ -335,6 +335,133 @@ impl Index {
         out
     }
 
+    /// Take another index in, its documents numbered from `offset` on: a folder read on its own
+    /// keeps its numbers once joined to the mailbox's. The words are moved rather than copied (a
+    /// big folder's would take twice its memory while it joins).
+    pub fn absorb(&mut self, other: Index, offset: u32) {
+        for (w, mut docs) in other.postings {
+            match self.postings.entry(w) {
+                std::collections::btree_map::Entry::Vacant(e) => {
+                    for d in &mut docs {
+                        *d = d.saturating_add(offset);
+                    }
+                    e.insert(docs);
+                }
+                std::collections::btree_map::Entry::Occupied(mut e) => {
+                    let list = e.get_mut();
+                    let first = docs.first().map(|&d| d.saturating_add(offset));
+                    // Everything in the whole index comes before the folder's documents: the
+                    // list is simply extended.
+                    if list.last().is_none_or(|&last| first.is_some_and(|f| f > last)) {
+                        list.extend(docs.into_iter().map(|d| d.saturating_add(offset)));
+                    } else {
+                        for d in docs {
+                            let d = d.saturating_add(offset);
+                            match list.last() {
+                                Some(&last) if last >= d => {
+                                    if let Err(at) = list.binary_search(&d) {
+                                        list.insert(at, d);
+                                    }
+                                }
+                                _ => list.push(d),
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        for d in other.docs {
+            self.docs.insert(d.saturating_add(offset));
+        }
+    }
+
+    /// The index as bytes, for keeping it between runs: the documents, then each word and the
+    /// documents holding it as differences (a big folder's list stays a couple of bytes a
+    /// message). [`Index::from_bytes`] reads it back.
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut out = Vec::with_capacity(64 + self.postings.len() * 8);
+        out.extend_from_slice(INDEX_MAGIC);
+        out.push(INDEX_VERSION);
+        put_varint(&mut out, u32::try_from(self.docs.len()).unwrap_or(u32::MAX));
+        let mut prev = 0u32;
+        for &d in &self.docs {
+            put_varint(&mut out, d.saturating_sub(prev));
+            prev = d;
+        }
+        // A word too long for its length byte (none are: `add` caps them) is dropped.
+        let kept = self.postings.iter().filter(|(w, _)| !w.is_empty() && w.len() <= MAX_WORD_BYTES);
+        put_varint(&mut out, u32::try_from(kept.clone().count()).unwrap_or(u32::MAX));
+        for (w, docs) in kept {
+            out.push(w.len() as u8);
+            out.extend_from_slice(w.as_bytes());
+            put_varint(&mut out, u32::try_from(docs.len()).unwrap_or(u32::MAX));
+            let mut prev = 0u32;
+            for &d in docs {
+                put_varint(&mut out, d.saturating_sub(prev));
+                prev = d;
+            }
+        }
+        out
+    }
+
+    /// Read back an index [`Index::to_bytes`] wrote; `None` for anything else: a damaged cache
+    /// file is rebuilt, never trusted.
+    pub fn from_bytes(bytes: &[u8]) -> Option<Index> {
+        let mut r = Bytes { b: bytes, at: 0 };
+        if r.take(INDEX_MAGIC.len())? != INDEX_MAGIC || r.u8()? != INDEX_VERSION {
+            return None;
+        }
+        let docs = r.varint()? as usize;
+        if docs > MAX_INDEX_DOCS {
+            return None;
+        }
+        let mut ix = Index::new();
+        let mut prev = 0u32;
+        for i in 0..docs {
+            let delta = r.varint()?;
+            let d = if i == 0 { delta } else { prev.checked_add(delta)? };
+            if i > 0 && d <= prev {
+                return None;
+            }
+            ix.docs.insert(d);
+            prev = d;
+        }
+        let words = r.varint()? as usize;
+        if words > MAX_INDEX_WORDS {
+            return None;
+        }
+        for _ in 0..words {
+            let n = usize::from(r.u8()?);
+            if n == 0 || n > MAX_WORD_BYTES {
+                return None;
+            }
+            let w = std::str::from_utf8(r.take(n)?).ok()?;
+            let count = r.varint()? as usize;
+            // Each document takes at least a byte: a count past the rest of the bytes is a lie.
+            if count > MAX_INDEX_DOCS || count > bytes.len() - r.at {
+                return None;
+            }
+            let mut list = Vec::with_capacity(count.min(1024));
+            let mut prev = 0u32;
+            for i in 0..count {
+                let delta = r.varint()?;
+                let d = if i == 0 { delta } else { prev.checked_add(delta)? };
+                if i > 0 && d <= prev {
+                    return None;
+                }
+                list.push(d);
+                prev = d;
+            }
+            if !list.is_empty() {
+                ix.postings.insert(w.to_string(), list);
+            }
+        }
+        if r.at != bytes.len() {
+            return None;
+        }
+        Some(ix)
+    }
+
     /// Candidates for a query: documents with every index word as a prefix of some word, or all
     /// documents when the query has no words (flag-only queries).
     pub fn candidates(&self, q: &Query) -> BTreeSet<u32> {
@@ -354,6 +481,132 @@ impl Index {
             }
         }
         acc.unwrap_or_default()
+    }
+}
+
+/// What [`Index::to_bytes`] writes first, and the format's version.
+const INDEX_MAGIC: &[u8] = b"MCIX";
+const INDEX_VERSION: u8 = 1;
+/// What [`FolderIndex::to_bytes`] writes first, and the format's version.
+const FOLDER_MAGIC: &[u8] = b"MCFI";
+const FOLDER_VERSION: u8 = 1;
+/// Bounds read back from a file: past them the file isn't ours any more (or is damaged), and it
+/// is rebuilt.
+const MAX_INDEX_DOCS: usize = 8_000_000;
+const MAX_INDEX_WORDS: usize = 8_000_000;
+const MAX_WORD_BYTES: usize = 160;
+
+/// A little-endian base-128 number, the short form of the numbers and gaps kept on disk.
+fn put_varint(out: &mut Vec<u8>, mut v: u32) {
+    while v >= 0x80 {
+        out.push((v as u8 & 0x7f) | 0x80);
+        v >>= 7;
+    }
+    out.push(v as u8);
+}
+
+/// Reading bytes that may come from a damaged or hostile file: every read is checked.
+struct Bytes<'a> {
+    b: &'a [u8],
+    at: usize,
+}
+
+impl<'a> Bytes<'a> {
+    fn take(&mut self, n: usize) -> Option<&'a [u8]> {
+        let end = self.at.checked_add(n)?;
+        let s = self.b.get(self.at..end)?;
+        self.at = end;
+        Some(s)
+    }
+
+    fn u8(&mut self) -> Option<u8> {
+        Some(self.take(1)?[0])
+    }
+
+    fn u32(&mut self) -> Option<u32> {
+        Some(u32::from_le_bytes(self.take(4)?.try_into().ok()?))
+    }
+
+    fn u64(&mut self) -> Option<u64> {
+        Some(u64::from_le_bytes(self.take(8)?.try_into().ok()?))
+    }
+
+    fn varint(&mut self) -> Option<u32> {
+        let mut v = 0u32;
+        for shift in (0..35).step_by(7) {
+            let b = self.u8()?;
+            v |= u32::from(b & 0x7f) << shift;
+            if b & 0x80 == 0 {
+                return Some(v);
+            }
+        }
+        None
+    }
+}
+
+/// A folder's index as kept between runs: the state it was read from (its `stamp`), the messages
+/// in the order of their number (and whether each had a body), and the words.
+///
+/// Kept per folder: a folder that changed is read again on its own, the others are taken as they
+/// are. The stamp covers the messages' text, not their flags: marking mail read doesn't throw the
+/// index away. Bodies read since are added when the index is read back (see the session).
+#[derive(Clone, Debug, Default)]
+pub struct FolderIndex {
+    pub stamp: u64,
+    pub keys: Vec<MessageKey>,
+    pub has_body: Vec<bool>,
+    pub index: Index,
+}
+
+impl FolderIndex {
+    pub fn new(stamp: u64) -> FolderIndex {
+        FolderIndex { stamp, ..Default::default() }
+    }
+
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut out = Vec::with_capacity(32 + self.keys.len() * 10);
+        out.extend_from_slice(FOLDER_MAGIC);
+        out.push(FOLDER_VERSION);
+        out.extend_from_slice(&self.stamp.to_le_bytes());
+        let n = self.keys.len().min(self.has_body.len());
+        put_varint(&mut out, u32::try_from(n).unwrap_or(u32::MAX));
+        for (i, k) in self.keys.iter().take(n).enumerate() {
+            out.extend_from_slice(&k.validity.to_le_bytes());
+            out.extend_from_slice(&k.uid.to_le_bytes());
+            out.push(u8::from(self.has_body.get(i) == Some(&true)));
+        }
+        let words = self.index.to_bytes();
+        put_varint(&mut out, u32::try_from(words.len()).unwrap_or(u32::MAX));
+        out.extend_from_slice(&words);
+        out
+    }
+
+    /// Read back a folder index; `None` for a damaged file or one of another format. `account`
+    /// and `folder` aren't kept in it: the file's place says which folder it is.
+    pub fn from_bytes(account: &str, folder: &str, bytes: &[u8]) -> Option<FolderIndex> {
+        let mut r = Bytes { b: bytes, at: 0 };
+        if r.take(FOLDER_MAGIC.len())? != FOLDER_MAGIC || r.u8()? != FOLDER_VERSION {
+            return None;
+        }
+        let stamp = r.u64()?;
+        let n = r.varint()? as usize;
+        if n > MAX_INDEX_DOCS {
+            return None;
+        }
+        let mut fi = FolderIndex::new(stamp);
+        fi.keys.reserve(n.min(1024));
+        fi.has_body.reserve(n.min(1024));
+        for _ in 0..n {
+            let (validity, uid, body) = (r.u32()?, r.u32()?, r.u8()? != 0);
+            fi.keys.push(MessageKey { account: account.to_string(), folder: folder.to_string(), validity, uid });
+            fi.has_body.push(body);
+        }
+        let len = r.varint()? as usize;
+        fi.index = Index::from_bytes(r.take(len)?)?;
+        if r.at != bytes.len() {
+            return None;
+        }
+        Some(fi)
     }
 }
 
@@ -466,5 +719,105 @@ mod tests {
         for not in ["from:zoe storyboard", "is:unread budget", "subject:weekly"] {
             assert!(!Query::parse(not).needs_body(), "{not}");
         }
+    }
+
+    /// An index kept between runs comes back with the same words for the same documents, and a
+    /// folder's index with the same messages.
+    #[test]
+    fn an_index_is_kept_and_read_back() {
+        let mut a = Index::new();
+        a.add(0, &summary_text(&sample()));
+        a.add(1, "invoice payment due");
+        a.add(2, "invoice again, storyboard review");
+        a.add(7, ""); // a document with no word at all still exists
+        let bytes = a.to_bytes();
+        let b = Index::from_bytes(&bytes).expect("it reads back");
+        assert_eq!(b.len(), 4);
+        for q in ["invo", "storyboard review", "opening scene", "nothing-here"] {
+            assert_eq!(a.candidates(&Query::parse(q)), b.candidates(&Query::parse(q)), "{q}");
+        }
+        // Nothing left over, and no word kept twice.
+        assert_eq!(b.to_bytes(), bytes);
+    }
+
+    #[test]
+    fn merging_indexes_numbers_them_apart() {
+        let mut folder = Index::new();
+        folder.add(0, "storyboard");
+        folder.add(1, "budget");
+        let mut whole = Index::new();
+        whole.add(0, "storyboard review");
+        whole.absorb(folder, 1);
+        assert_eq!(whole.len(), 3);
+        assert_eq!(whole.candidates(&Query::parse("storyboard")).into_iter().collect::<Vec<_>>(), [0, 1]);
+        assert_eq!(whole.candidates(&Query::parse("budget")).into_iter().collect::<Vec<_>>(), [2]);
+        // The joined index is itself kept and read back.
+        let back = Index::from_bytes(&whole.to_bytes()).expect("it reads back");
+        assert_eq!(back.candidates(&Query::parse("storyboard")).into_iter().collect::<Vec<_>>(), [0, 1]);
+    }
+
+    /// Bytes that aren't an index — cut short, from another format, with a lying count or a
+    /// posting out of order — are refused rather than trusted.
+    #[test]
+    fn damaged_index_bytes_are_refused() {
+        let mut ix = Index::new();
+        ix.add(0, "storyboard review");
+        ix.add(3, "budget");
+        let good = ix.to_bytes();
+        assert!(Index::from_bytes(&good).is_some());
+        for cut in 0..good.len() {
+            assert!(Index::from_bytes(&good[..cut]).is_none(), "cut at {cut}");
+        }
+        let mut trailing = good.clone();
+        trailing.push(0);
+        assert!(Index::from_bytes(&trailing).is_none());
+        let mut magic = good.clone();
+        magic[0] = b'X';
+        assert!(Index::from_bytes(&magic).is_none());
+        // A word count of four billion in four bytes.
+        let mut lying = good[..6].to_vec();
+        lying.extend_from_slice(&[0xff, 0xff, 0xff, 0xff, 0x0f]);
+        assert!(Index::from_bytes(&lying).is_none());
+        // A posting list with the same document twice (its gaps must grow).
+        let mut twice = Vec::new();
+        twice.extend_from_slice(INDEX_MAGIC);
+        twice.push(INDEX_VERSION);
+        put_varint(&mut twice, 2);
+        put_varint(&mut twice, 5);
+        put_varint(&mut twice, 1);
+        put_varint(&mut twice, 1);
+        twice.push(1);
+        twice.push(b'w');
+        put_varint(&mut twice, 2);
+        put_varint(&mut twice, 5);
+        put_varint(&mut twice, 0);
+        assert!(Index::from_bytes(&twice).is_none());
+    }
+
+    #[test]
+    fn a_folder_index_is_kept_and_read_back() {
+        let mut fi = FolderIndex::new(42);
+        for uid in 1..=3u32 {
+            fi.keys.push(MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 7, uid });
+            fi.has_body.push(uid == 2);
+        }
+        fi.index.add(0, "storyboard");
+        fi.index.add(1, "body words, budget");
+        fi.index.add(2, "storyboard");
+        let bytes = fi.to_bytes();
+        let back = FolderIndex::from_bytes("a1", "INBOX", &bytes).expect("it reads back");
+        assert_eq!(back.stamp, 42);
+        assert_eq!(back.keys, fi.keys);
+        assert_eq!(back.has_body, [false, true, false]);
+        assert_eq!(back.index.candidates(&Query::parse("storyboard")).into_iter().collect::<Vec<_>>(), [0, 2]);
+        // The folder isn't kept in the file: it's the one it's read for.
+        let other = FolderIndex::from_bytes("a1", "Sent", &bytes).expect("it reads back");
+        assert_eq!(other.keys[0].folder, "Sent");
+        for cut in [0, 3, 6, 12, bytes.len() - 1] {
+            assert!(FolderIndex::from_bytes("a1", "INBOX", &bytes[..cut]).is_none(), "cut at {cut}");
+        }
+        let mut version = bytes.clone();
+        version[4] = FOLDER_VERSION + 1;
+        assert!(FolderIndex::from_bytes("a1", "INBOX", &version).is_none());
     }
 }
