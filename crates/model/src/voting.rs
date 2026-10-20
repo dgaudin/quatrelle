@@ -142,7 +142,9 @@ impl Reader<'_> {
         let mut wide = || -> Option<String> {
             let n = usize::from(self.u8()?);
             let bytes = self.take(n.checked_mul(2)?)?;
-            let units: Vec<u16> = bytes.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
+            // Two bytes a UTF-16 unit, little-endian (an odd tail, if any, is left out).
+            let (units, _) = bytes.as_chunks::<2>();
+            let units: Vec<u16> = units.iter().map(|c| u16::from_le_bytes(*c)).collect();
             Some(String::from_utf16_lossy(&units))
         };
         let name = wide()?;
