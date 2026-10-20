@@ -143,6 +143,12 @@ pub fn registry() -> Registry {
             s.delete_server_rule(p::req_str(v, "account")?, p::req_str(v, "id")?)
         })
         .params(r#"{"account": string, "id": string}"#),
+        CommandSpec::new("rules.server.save", "Change a server rule", "Rules", |s, v| {
+            let rule = v.get("rule").cloned().ok_or_else(|| CmdError::Params("`rule` is required".into()))?;
+            let rule = serde_json::from_value(rule).map_err(|e| CmdError::Params(format!("rule: {e}")))?;
+            s.save_server_rule(p::req_str(v, "account")?, p::req_str(v, "id")?, rule)
+        })
+        .params(r#"{"account": string, "id": string, "rule": Rule}"#),
         CommandSpec::new("rules.server.run", "Run a server rule now", "Rules", |s, v| {
             s.run_server_rule(p::req_str(v, "account")?, p::req_str(v, "id")?)
         })

@@ -367,6 +367,31 @@ impl Session {
         Ok(serde_json::json!({ "deleted": id }))
     }
 
+    /// Change one of the server's own rules: its name, whether it runs, what it looks at and
+    /// what it does — nothing else (its place among the server's rules stays).
+    pub fn save_server_rule(&mut self, account: &str, id: &str, mut rule: mailcraft_model::organize::Rule) -> CmdResult {
+        let Some(f) = self.foreign_rules.iter().find(|r| r.account == account && r.id == id) else {
+            return Err(CmdError::Params(format!("no rule `{id}` on that server")));
+        };
+        if !f.runnable {
+            return Err(CmdError::Failed(format!("MailCraft doesn't know every part of \"{}\" yet", f.name)));
+        }
+        if rule.name.trim().is_empty() {
+            return Err(CmdError::Params("a rule needs a name".into()));
+        }
+        if rule.conditions.is_empty() || rule.actions.is_empty() {
+            return Err(CmdError::Params("a rule needs a condition and an action".into()));
+        }
+        // What the server keeps: its id, its place, and that it runs there.
+        rule.remote_id = Some(id.to_string());
+        rule.priority = self.foreign_rules.iter().find(|r| r.account == account && r.id == id).and_then(|r| r.rule.as_ref()).and_then(|r| r.priority);
+        rule.server = true;
+        rule.account = Some(account.to_string());
+        let ours = self.our_server_ids(account);
+        self.jobs.push(Job::SetServerRule { account: account.to_string(), id: id.to_string(), rule, ours });
+        Ok(serde_json::json!({ "saved": id }))
+    }
+
     /// Run one of the server's own rules on the mail already in the Inbox (Outlook's "Run this
     /// rule now"): only for a rule every part of which MailCraft knows.
     pub fn run_server_rule(&mut self, account: &str, id: &str) -> CmdResult {

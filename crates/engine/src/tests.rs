@@ -1889,6 +1889,72 @@ fn shared_calendars_open_from_exchange_accounts_and_close() {
     done(s);
 }
 
+/// A server's rule MailCraft understands can be changed from here: only that rule goes, with
+/// the place it has there; one it doesn't understand is refused rather than truncated.
+#[test]
+fn a_server_rule_is_changed_where_it_lives() {
+    use mailcraft_model::organize::{Condition, ForeignRule, Rule, RuleAction};
+
+    let mut s = Session::open(Some(temp("server-rule-save")), mailcraft_model::dates::Clock::new(NOW, 0));
+    let id = s
+        .run("account.add", &json!({"email": "zoe@contoso.example", "password": "pw", "ews": "https://mail.contoso.example/EWS/Exchange.asmx"}))
+        .unwrap()["account"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    s.take_jobs();
+    let known = Rule {
+        name: "Clients".into(),
+        enabled: true,
+        account: Some(id.clone()),
+        conditions: vec![Condition::From("@client.example".into())],
+        match_all: true,
+        actions: vec![RuleAction::MoveTo("INBOX/Clients".into())],
+        stop: false,
+        server: true,
+        remote_id: Some("R3".into()),
+        priority: Some(7),
+    };
+    s.foreign_rules.push(ForeignRule {
+        account: id.clone(),
+        id: "R3".into(),
+        name: "Clients".into(),
+        enabled: true,
+        runnable: true,
+        rule: Some(known.clone()),
+        summary: String::new(),
+    });
+    s.foreign_rules.push(ForeignRule {
+        account: id.clone(),
+        id: "R9".into(),
+        name: "Body rule".into(),
+        enabled: true,
+        runnable: false,
+        rule: None,
+        summary: String::new(),
+    });
+    // Changed: its name and what it does, its place kept.
+    let edited = Rule {
+        name: "Clients (prospects)".into(),
+        conditions: vec![Condition::From("@client.example".into()), Condition::HasAttachment],
+        actions: vec![RuleAction::MoveTo("INBOX/Clients".into()), RuleAction::MarkRead],
+        ..known.clone()
+    };
+    s.run("rules.server.save", &json!({"account": id, "id": "R3", "rule": edited})).unwrap();
+    let job = s.take_jobs().into_iter().find(|j| matches!(j, Job::SetServerRule { .. })).expect("the rule goes to the server");
+    assert!(matches!(&job, Job::SetServerRule { .. }), "the rule goes to the server");
+    if let Job::SetServerRule { id: rule_id, rule, .. } = job {
+        assert_eq!(rule_id, "R3");
+        assert_eq!(rule.conditions.len(), 2);
+        assert_eq!(rule.actions.len(), 2);
+        assert_eq!(rule.priority, Some(7), "the place it has there");
+        assert_eq!(rule.remote_id.as_deref(), Some("R3"));
+    }
+    // A rule MailCraft can't say entirely isn't half-written.
+    assert!(s.run("rules.server.save", &json!({"account": id, "id": "R9", "rule": known})).is_err());
+    done(s);
+}
+
 /// Two appointments the server keeps under one UID — some Exchange series arrive as separate
 /// items that all carry the series' UID — are both kept: Friday's meeting must not vanish
 /// behind its siblings, and a re-sync doesn't double them.
@@ -2370,6 +2436,7 @@ fn server_rules_go_to_the_server_and_keep_their_id() {
         stop: false,
         server: true,
         remote_id: None,
+        priority: None,
     };
     s.run("rules.set", &json!({ "rules": [rule] })).unwrap();
     let sent: Vec<(String, Vec<Rule>, Vec<String>)> = s
@@ -2477,6 +2544,7 @@ fn sieve_rules_go_to_an_imap_account() {
         stop: false,
         server: true,
         remote_id: None,
+        priority: None,
     };
     assert!(!rule.server_ready() && rule.sieve_ready(), "Exchange can't, Sieve can");
     s.run("rules.set", &json!({ "rules": [rule] })).unwrap();

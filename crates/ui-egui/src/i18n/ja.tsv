@@ -956,3 +956,19 @@ month	May	5月
 	On the server, made elsewhere	サーバー上、別の場所で作成
 	Change or remove them in the program that made them.	作成したプログラムで変更または削除してください。
 	On / off on the server	サーバー上でオン / オフ
+	+ Add a condition	+ 条件を追加
+	+ Add another condition	+ 条件をさらに追加
+	+ Add an action	+ 操作を追加
+	+ Add another action	+ 操作をさらに追加
+	Add what the rule does	ルールの動作を指定してください
+	Add what the rule looks at	ルールが確認する内容を指定してください
+	Change the rule	ルールを変更
+	Give the rule a name	ルールに名前を付けてください
+	MailCraft doesn't know every part of this rule yet	MailCraft はこのルールのすべてをまだ理解していません
+	Pick a category	カテゴリを選択
+	Pick a folder	フォルダーを選択
+	Say what to look for	検索する文字を入力してください
+	These rules run on the server. Turn them off, run them, change them or remove them here.	これらのルールはサーバーで実行されます。ここで無効化、実行、変更、削除ができます。
+	When a message	メッセージが
+	matches all of them	すべてに一致
+	matches any of them	いずれかに一致

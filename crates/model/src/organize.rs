@@ -106,6 +106,10 @@ pub struct Rule {
     /// The id the server gave this rule, kept to change or remove it there (never set by hand).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub remote_id: Option<String>,
+    /// The place the server gives it among its rules (Exchange's `Priority`), kept when changing
+    /// it so that the other rules keep theirs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub priority: Option<u32>,
 }
 
 fn yes() -> bool {
@@ -319,6 +323,7 @@ mod tests {
             stop: true,
             server: false,
             remote_id: None,
+            priority: None,
         };
         let flag = Rule {
             name: "Boss".into(),
@@ -357,6 +362,7 @@ mod tests {
             stop: false,
             server: false,
             remote_id: None,
+            priority: None,
         };
         assert!(base.server_ready(), "a subject test and a move: Exchange does that");
         for (change, why) in [

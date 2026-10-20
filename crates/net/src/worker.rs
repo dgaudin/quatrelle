@@ -1462,6 +1462,7 @@ impl Worker {
                 }
             },
             Job::SetServerRuleEnabled { id, enabled, ours, .. } => self.change_server_rule(&id, Some(enabled), false, ours),
+            Job::SetServerRule { id, rule, ours, .. } => self.edit_server_rule(&id, &rule, ours),
             Job::DeleteServerRule { id, ours, .. } => self.change_server_rule(&id, None, true, ours),
             Job::FetchPhoto { email, contact, .. } => self.fetch_photo(&email, contact.as_deref()),
             Job::FetchUrl { .. } | Job::Discover { .. } | Job::SignIn { .. } | Job::ImportPst { .. } | Job::ExportPst { .. } => {}
@@ -1553,6 +1554,7 @@ impl Worker {
             for r in &mut others {
                 r.account.clone_from(&self.acc.id);
             }
+            self.resolve_rule_folders(&mut others);
             Ok((ids, others))
         })();
         match r {
@@ -1622,7 +1624,84 @@ impl Worker {
         for r in &mut others {
             r.account.clone_from(&self.acc.id);
         }
+        self.resolve_rule_folders(&mut others);
         Ok((ids, others, cleared))
+    }
+
+    /// The folder path behind the id a server's rule files mail into (Exchange names folders by
+    /// id, MailCraft by path).
+    fn path_of_folder_id(&self, id: &str) -> Option<String> {
+        self.folders
+            .iter()
+            .filter(|f| f.mailbox.is_none())
+            .find(|f| self.jstate.mailboxes.get(&f.path).is_some_and(|x| x == id))
+            .map(|f| f.path.clone())
+    }
+
+    /// A server rule's `MoveTo` names a folder by the id the server knows; in MailCraft's terms
+    /// it's the folder's path, so the rule can be shown and changed here.
+    fn resolve_rule_folders(&self, rules: &mut [mailcraft_model::organize::ForeignRule]) {
+        for f in rules.iter_mut() {
+            let Some(rule) = &mut f.rule else { continue };
+            for a in &mut rule.actions {
+                if let mailcraft_model::organize::RuleAction::MoveTo(path) = a
+                    && let Some(id) = path.strip_prefix("id:")
+                    && let Some(found) = self.path_of_folder_id(id)
+                {
+                    *path = found;
+                }
+            }
+        }
+    }
+
+    /// Change one of the server's own rules (one MailCraft didn't make): only that rule is sent,
+    /// with the place it already has there, so the other rules and their order stay as they are.
+    fn edit_server_rule(&mut self, id: &str, rule: &mailcraft_model::organize::Rule, ours: Vec<String>) {
+        use mailcraft_model::organize::RuleAction;
+        let r = (|| -> Result<()> {
+            if self.conn.is_none() {
+                self.connect()?;
+            }
+            let mut rule = rule.clone();
+            rule.remote_id = Some(id.to_string());
+            rule.server = true;
+            let folder: Option<String> = match rule.actions.iter().find_map(|a| match a {
+                RuleAction::MoveTo(path) => Some(path.clone()),
+                RuleAction::MoveToRole(role) => self.folders.iter().find(|f| f.role == *role && f.mailbox.is_none()).map(|f| f.path.clone()),
+                _ => None,
+            }) {
+                Some(path) => Some(match path.strip_prefix("id:") {
+                    Some(id) => id.to_string(),
+                    None => self.jstate.mailbox(&path)?.to_string(),
+                }),
+                None => None,
+            };
+            let wanted = [(rule, folder)];
+            match self.conn.as_mut() {
+                Some(Conn::Ews(c)) => c.set_inbox_rules(&wanted, &[]).map(|_| ()),
+                Some(Conn::Graph(c)) => c.set_message_rules(&wanted, &[]).map(|_| ()),
+                _ => Err(NetError::No("this server's rules can't be changed from MailCraft".into())),
+            }
+        })();
+        match r {
+            Ok(()) => match self.read_server_rules(ours) {
+                Ok((ids, others, cleared)) => self.sink.emit(Event::ServerRules { account: self.id(), ids, others, cleared, error: None }),
+                Err(e) => self.sink.emit(Event::ServerRules {
+                    account: self.id(),
+                    ids: Vec::new(),
+                    others: Vec::new(),
+                    cleared: Vec::new(),
+                    error: Some(e.to_string()),
+                }),
+            },
+            Err(e) => self.sink.emit(Event::ServerRules {
+                account: self.id(),
+                ids: Vec::new(),
+                others: Vec::new(),
+                cleared: Vec::new(),
+                error: Some(e.to_string()),
+            }),
+        }
     }
 
     /// Turn one of the server's own rules on or off, or remove it; then read them all back, so

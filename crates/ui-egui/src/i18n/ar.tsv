@@ -955,3 +955,19 @@ month	May	مايو
 	On the server, made elsewhere	على الخادم، أُنشئت في مكان آخر
 	Change or remove them in the program that made them.	غيّرها أو أزلها من البرنامج الذي أنشأها.
 	On / off on the server	التشغيل أو الإيقاف على الخادم
+	+ Add a condition	+ إضافة شرط
+	+ Add another condition	+ إضافة شرط آخر
+	+ Add an action	+ إضافة إجراء
+	+ Add another action	+ إضافة إجراء آخر
+	Add what the rule does	حدّد ما تفعله القاعدة
+	Add what the rule looks at	حدّد ما تفحصه القاعدة
+	Change the rule	تغيير القاعدة
+	Give the rule a name	أعطِ القاعدة اسمًا
+	MailCraft doesn't know every part of this rule yet	لا يعرف MailCraft بعد كل أجزاء هذه القاعدة
+	Pick a category	اختر فئة
+	Pick a folder	اختر مجلدًا
+	Say what to look for	حدّد ما تبحث عنه
+	These rules run on the server. Turn them off, run them, change them or remove them here.	تُنفَّذ هذه القواعد على الخادم. عطّلها أو شغّلها أو غيّرها أو احذفها من هنا.
+	When a message	عند وصول رسالة
+	matches all of them	يطابق كل الشروط
+	matches any of them	يطابق أي شرط

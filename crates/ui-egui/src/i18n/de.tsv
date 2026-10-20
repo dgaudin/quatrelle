@@ -959,3 +959,19 @@ month	May	Mai
 	On the server, made elsewhere	Auf dem Server, anderswo erstellt
 	Change or remove them in the program that made them.	Ändern oder entfernen Sie sie in dem Programm, das sie erstellt hat.
 	On / off on the server	Auf dem Server an / aus
+	+ Add a condition	+ Bedingung hinzufügen
+	+ Add another condition	+ Weitere Bedingung hinzufügen
+	+ Add an action	+ Aktion hinzufügen
+	+ Add another action	+ Weitere Aktion hinzufügen
+	Add what the rule does	Legen Sie fest, was die Regel tut
+	Add what the rule looks at	Legen Sie fest, was die Regel prüft
+	Change the rule	Regel ändern
+	Give the rule a name	Geben Sie der Regel einen Namen
+	MailCraft doesn't know every part of this rule yet	MailCraft kennt noch nicht alle Teile dieser Regel
+	Pick a category	Wählen Sie eine Kategorie
+	Pick a folder	Wählen Sie einen Ordner
+	Say what to look for	Geben Sie an, wonach gesucht wird
+	These rules run on the server. Turn them off, run them, change them or remove them here.	Diese Regeln laufen auf dem Server. Hier lassen sie sich aus- und einschalten, ausführen, ändern oder löschen.
+	When a message	Wenn eine Nachricht
+	matches all of them	auf alle zutrifft
+	matches any of them	auf mindestens eine zutrifft
