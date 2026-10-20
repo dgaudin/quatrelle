@@ -435,8 +435,16 @@ impl Session {
             for cal in &sync.synced_calendars {
                 p.events.retain(|e| &e.calendar != cal || e.dirty || e.href.is_empty() || sync.kept.contains(&e.href));
                 for x in sync.events.iter().filter(|x| &x.calendar == cal) {
-                    if !p.events.iter().any(|e| e.dirty && e.event.uid == x.event.uid) {
-                        p.events.retain(|e| !(e.event.uid == x.event.uid && e.event.recurrence_id == x.event.recurrence_id && !e.dirty));
+                    let edited_here = p.events.iter().any(|e| e.dirty && (e.href == x.href || (e.href.is_empty() && e.event.uid == x.event.uid)));
+                    if !edited_here {
+                        // The same item there (its address); and an appointment kept here that
+                        // never went (no address). Two items may share a UID — some Exchange
+                        // series arrive as separate items keeping the series' UID — and each
+                        // is kept, since the server's address tells them apart.
+                        p.events.retain(|e| x.href.is_empty() || e.href != x.href);
+                        p.events.retain(|e| {
+                            !(e.href.is_empty() && e.event.uid == x.event.uid && e.event.recurrence_id == x.event.recurrence_id && !e.dirty)
+                        });
                         p.events.push(x.clone());
                     }
                 }

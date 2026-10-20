@@ -160,6 +160,11 @@ pub fn event_of(it: &El) -> Option<CalEvent> {
     }
     let id = it.child("ItemId").and_then(|i| i.attr("Id")).unwrap_or("").to_string();
     let uid = [text(it, "UID"), id].into_iter().find(|u| !u.is_empty())?;
+    // Single items can share a UID: some organizers' series reach Exchange as so many separate
+    // appointments, all keeping the series' UID (an Exchange 2016 server does this), and a UID
+    // kept alone would leave but one of them. The start makes each its own appointment — and
+    // stays the same when the item moves to another calendar.
+    let uid = if it.text_of("CalendarItemType") == Some("Single") { format!("{uid}#{start}") } else { uid };
     Some(CalEvent {
         uid,
         summary: text(it, "Subject"),
@@ -1088,6 +1093,36 @@ mod tests {
         // Exchange's own: a birthday kept as the start of that day in Brussels, in UTC.
         let theirs = "<t:Contact><t:ItemId Id=\"C2\"/><t:Birthday>1990-07-11T22:00:00Z</t:Birthday></t:Contact>";
         assert_eq!(card_of(parse(theirs).find("Contact").unwrap()).unwrap().birthday, "1990-07-12");
+    }
+
+    /// Appointments Exchange keeps as separate items under one series' UID (seen on an Exchange
+    /// 2016 server, a series expanded into single items): each one is its own event, so a whole
+    /// set of meetings isn't lost to a shared UID.
+    #[test]
+    fn single_items_sharing_a_uid_are_each_their_own() {
+        let item = |id: &str, start: &str| {
+            event_of(
+                parse(&format!(
+                    "<t:CalendarItem><t:ItemId Id=\"{id}\"/><t:Subject>Comité de sécurité</t:Subject>\
+                     <t:Start>{start}</t:Start><t:End>2026-10-23T10:00:00Z</t:End>\
+                     <t:CalendarItemType>Single</t:CalendarItemType><t:UID>040000008200E00074C5</t:UID></t:CalendarItem>"
+                ))
+                .find("CalendarItem")
+                .unwrap(),
+            )
+            .unwrap()
+        };
+        let a = item("I1", "2026-10-23T08:00:00Z");
+        let b = item("I2", "2026-10-30T08:00:00Z");
+        assert_ne!(a.uid, b.uid, "two appointments, two identities");
+        assert_eq!(a.uid, item("I1", "2026-10-23T08:00:00Z").uid, "and the same one twice is the same");
+        // A recurring master keeps the series' UID (its occurrences are worked out from it).
+        let master = "<t:CalendarItem><t:ItemId Id=\"M1\"/><t:Subject>Weekly</t:Subject><t:Start>2026-10-02T08:00:00Z</t:Start>\
+                      <t:End>2026-10-02T09:00:00Z</t:End><t:CalendarItemType>RecurringMaster</t:CalendarItemType>\
+                      <t:UID>040000008200E00074C6</t:UID><t:Recurrence><t:WeeklyRecurrence><t:Interval>1</t:Interval>\
+                      <t:DaysOfWeek>Friday</t:DaysOfWeek></t:WeeklyRecurrence><t:NoEndRecurrence><t:StartDate>2026-10-02</t:StartDate>\
+                      </t:NoEndRecurrence></t:Recurrence></t:CalendarItem>";
+        assert_eq!(event_of(parse(master).find("CalendarItem").unwrap()).unwrap().uid, "040000008200E00074C6");
     }
 
     /// An appointment's categories come in, and go out between its body and its start (the

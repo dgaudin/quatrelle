@@ -1889,6 +1889,46 @@ fn shared_calendars_open_from_exchange_accounts_and_close() {
     done(s);
 }
 
+/// Two appointments the server keeps under one UID — some Exchange series arrive as separate
+/// items that all carry the series' UID — are both kept: Friday's meeting must not vanish
+/// behind its siblings, and a re-sync doesn't double them.
+#[test]
+fn appointments_sharing_a_uid_are_all_kept() {
+    use mailcraft_model::dates::Clock;
+    use mailcraft_model::ical::CalEvent;
+    use mailcraft_model::pim::{CalendarInfo, DavSync, StoredEvent};
+
+    let mut s = Session::open(Some(temp("shared-uid")), Clock::new(NOW, 0));
+    let id = s
+        .run("account.add", &json!({"email": "zoe@contoso.example", "password": "pw", "ews": "https://mail.contoso.example/EWS/Exchange.asmx"}))
+        .unwrap()["account"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    s.take_jobs();
+    let cal = "ews:calendar";
+    let item = |href: &str, start: i64| StoredEvent {
+        calendar: cal.into(),
+        href: href.into(),
+        event: CalEvent {
+            uid: "040000008200E00074C5".into(), summary: "Comité de sécurité".into(), start, end: start + 7_200, ..Default::default()
+        },
+        ..Default::default()
+    };
+    let sync = DavSync {
+        calendars: Some(vec![CalendarInfo { id: cal.into(), name: "Calendar".into(), ..Default::default() }]),
+        synced_calendars: vec![cal.into()],
+        events: vec![item("I1", NOW), item("I2", NOW + 7 * 86_400)],
+        ..Default::default()
+    };
+    s.apply_dav(&id, &sync);
+    let titles = |s: &Session| s.agenda(NOW - 10, NOW + 8 * 86_400).into_iter().map(|a| a.start).collect::<Vec<_>>();
+    assert_eq!(titles(&s), [NOW, NOW + 7 * 86_400], "both meetings, on their own days");
+    s.apply_dav(&id, &sync);
+    assert_eq!(titles(&s), [NOW, NOW + 7 * 86_400], "and once only after another sync");
+    done(s);
+}
+
 /// With several accounts, the first one's Inbox opens (as Outlook opens on its first mailbox),
 /// and accounts can be put in another order, which is kept.
 #[test]
