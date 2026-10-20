@@ -566,11 +566,32 @@ fn cards(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
                             t.surface
                         };
                         ui.painter().rect(r, 8.0, fill, egui::Stroke::new(1.0, if selected { t.accent } else { t.border }), egui::StrokeKind::Inside);
-                        // A band in the person's colour down the left, with their initials.
+                        // A band in the person's colour down the left, with their picture when
+                        // there is one (their card's, or the one the directory keeps for their
+                        // address), their initials when there isn't.
                         let band = egui::Rect::from_min_size(r.min, vec2(74.0, card_h));
                         let color = theme::avatar_color(&name, t.dark);
                         ui.painter().rect_filled(band.shrink(1.0), egui::CornerRadius { nw: 7, sw: 7, ne: 0, se: 0 }, color.gamma_multiply(0.18));
-                        widgets::avatar(ui, band.center(), 24.0, &initials(&name), color);
+                        let email = c.emails.first().map(|e| e.value.trim()).unwrap_or_default();
+                        if !email.is_empty() && c.photo.is_none() && !s.person_photo_known(email) {
+                            acts.push(Action::Run("contact.photo", json!({ "email": email })));
+                        }
+                        let texture = picture(s, c).and_then(|p| photo_texture(ui, &c.uid, p));
+                        match texture {
+                            Some(tex) if tex.size_vec2().x > 0.0 && tex.size_vec2().y > 0.0 => {
+                                // At the top of the band, its shape kept.
+                                let side = band.width() - 8.0;
+                                let cell = egui::Rect::from_min_size(band.min + vec2(4.0, 4.0), vec2(side, side));
+                                let size = tex.size_vec2();
+                                let scale = (side / size.x).min(side / size.y);
+                                let rect = egui::Rect::from_center_size(cell.center(), size * scale);
+                                let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
+                                ui.painter().image(tex.id(), rect, uv, egui::Color32::WHITE);
+                            }
+                            _ => {
+                                widgets::avatar(ui, band.center(), 24.0, &initials(&name), color);
+                            }
+                        }
                         let x = band.right() + 12.0;
                         let w = r.right() - x - 10.0;
                         let mut y = r.top() + 12.0;

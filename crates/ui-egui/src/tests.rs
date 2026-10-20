@@ -1144,10 +1144,23 @@ fn people_lay_out_as_a_list_cards_or_a_phone_list() {
     let ctx = egui::Context::default();
     frame(&ctx, &mut a, vec![]);
     a.run("view.module", json!({"name": "people"}));
+    // One contact gets a picture (a 1×1 PNG): the business cards draw it rather than initials.
+    let photo_base64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+    let pictured = a.session.people("").first().map(|p| p.card.uid.clone());
+    if let Some(uid) = &pictured {
+        let photo = mailcraft_engine::model::vcard::Photo { media: "image/png".into(), base64: photo_base64.into() };
+        a.session.update_card(uid, |c| c.photo = Some(photo)).unwrap();
+    }
     for v in crate::people::PeopleView::ALL {
         a.ui.people_view = v;
         frame(&ctx, &mut a, vec![]);
         frame(&ctx, &mut a, vec![]);
+    }
+    // The card's picture was decoded and drawn (egui keeps the texture while it's shown).
+    if let Some(uid) = &pictured {
+        let id = egui::Id::unique(("contact-photo", uid.as_str(), photo_base64.len()));
+        let drawn = ctx.data(|d| d.get_temp::<Option<egui::TextureHandle>>(id)).flatten().is_some();
+        assert!(drawn, "the business card draws the contact's picture");
     }
     // The layout is remembered with the window's other settings.
     // The list's columns and sort are kept too.

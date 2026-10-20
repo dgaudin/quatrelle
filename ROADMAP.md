@@ -308,3 +308,10 @@ local-first, media-aware v1); the fuller request is
   could not run instead of naming Exchange. Tested: the script the manager writes, the rules kept
   while the replies change and the other way round, a rule turned off, and the engine sending a
   rule Exchange would have refused.
+- **2026-10-20** — **Contact pictures, everywhere they're kept:** a `.pst`'s contacts carry theirs
+  as a hidden attachment (Outlook's "ContactPicture.jpg"), now read — the item's own image type, or
+  what the bytes say, capped like any contact photo, and never a visible attachment or something
+  else hidden (a signature, an OLE object). The People business-card view draws the picture (their
+  card's, or the one the directory keeps for their address, asked for once) instead of initials,
+  its shape kept; initials remain when there is none. Tested: the hidden-picture rule, and a
+  headless frame showing the card's texture actually decoded and drawn.

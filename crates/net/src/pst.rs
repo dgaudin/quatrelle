@@ -108,16 +108,21 @@ macro_rules! reader {
             let read = |entry: &EntryId| -> io::Result<Item> {
                 let m = <$message>::read(store.clone(), entry, None)?;
                 let mut files = Vec::new();
+                let mut photo = None;
                 if let Some(table) = m.attachment_table() {
                     for row in table.rows_matrix() {
                         let node = NodeId::from(u32::from(row.id()));
                         match <$attachment>::read(m.clone(), node, None) {
-                            Ok(a) => files.extend(attachment(&*a, 0, &named)),
+                            Ok(a) => {
+                                // A contact's picture is one of its attachments, hidden.
+                                photo = photo.or_else(|| picture_of(&*a));
+                                files.extend(attachment(&*a, 0, &named));
+                            }
                             Err(e) => log::info!("an attachment could not be read: {e}"),
                         }
                     }
                 }
-                Ok(item(&*m, files, &named))
+                Ok(item(&*m, files, &named, photo))
             };
             walk(&*any, &read, out)
         }
@@ -239,7 +244,7 @@ enum File {
     Message(Box<Item>),
 }
 
-fn item(m: &dyn Message, files: Vec<File>, named: &crate::pst_pim::Named) -> Item {
+fn item(m: &dyn Message, files: Vec<File>, named: &crate::pst_pim::Named, photo: Option<(String, Vec<u8>)>) -> Item {
     let p = |id: u16| m.properties().get(id);
     let s = |id: u16| p(id).and_then(text_of).unwrap_or_default();
     let mut it = Item { class: s(0x001A), files, ..Default::default() };
@@ -249,7 +254,11 @@ fn item(m: &dyn Message, files: Vec<File>, named: &crate::pst_pim::Named) -> Ite
         || class.starts_with("ipm.task")
         || class.starts_with("ipm.stickynote")
     {
-        it.extra = Some(crate::pst_pim::extract(&p, named));
+        let mut extra = crate::pst_pim::extract(&p, named);
+        if class.starts_with("ipm.contact") {
+            extra.photo = photo;
+        }
+        it.extra = Some(extra);
     }
     // A subject may start with a prefix marker (0x01, length).
     it.subject = {
@@ -299,6 +308,19 @@ fn item(m: &dyn Message, files: Vec<File>, named: &crate::pst_pim::Named) -> Ite
     it
 }
 
+/// A contact's picture: Outlook keeps it as a hidden attachment (MS-OXOCNTC 2.2.2.1.1), which
+/// isn't shown as an attachment of the message.
+fn picture_of(a: &dyn Attachment) -> Option<(String, Vec<u8>)> {
+    let p = |id: u16| a.properties().get(id);
+    let hidden = matches!(p(0x7FFE), Some(PropertyValue::Boolean(true)));
+    if !hidden {
+        return None;
+    }
+    let mime = p(0x370E).and_then(text_of).unwrap_or_default();
+    let AttachmentData::Binary(b) = a.data()? else { return None };
+    crate::pst_pim::contact_photo(true, &mime, Some(b.buffer()))
+}
+
 /// An attachment's file, or the message it holds.
 fn attachment(a: &dyn Attachment, nesting: usize, named: &crate::pst_pim::Named) -> Option<File> {
     let p = |id: u16| a.properties().get(id);
@@ -318,7 +340,7 @@ fn attachment(a: &dyn Attachment, nesting: usize, named: &crate::pst_pim::Named)
         }
         AttachmentData::Message(m) if nesting < MAX_NESTING => {
             // The embedded message's own attachments need its concrete type: left out.
-            Some(File::Message(Box::new(item(&**m, Vec::new(), named))))
+            Some(File::Message(Box::new(item(&**m, Vec::new(), named, None))))
         }
         AttachmentData::Message(_) => None,
     }
@@ -817,6 +839,31 @@ mod tests {
         assert!(import(&file, &store, "a1", &mut |_| {}).is_err());
         assert!(import(&dir.join("missing.pst"), &store, "a1", &mut |_| {}).is_err());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A contact's picture is one of its hidden attachments: taken when it is a picture of a
+    /// sane size, and never a visible file (an attachment the mail shows) or something else.
+    #[test]
+    fn a_contact_picture_is_a_hidden_picture() {
+        let jpeg = [0xFFu8, 0xD8, 0xFF, 0xE0, 1, 2, 3];
+        assert_eq!(
+            crate::pst_pim::contact_photo(true, "", Some(&jpeg)),
+            Some(("image/jpeg".to_string(), jpeg.to_vec())),
+            "the bytes say it's a JPEG, as Outlook's ContactPicture.jpg is"
+        );
+        assert_eq!(
+            crate::pst_pim::contact_photo(true, "image/png", Some(&jpeg)),
+            Some(("image/png".to_string(), jpeg.to_vec())),
+            "the item's own type wins"
+        );
+        assert_eq!(crate::pst_pim::contact_photo(false, "image/jpeg", Some(&jpeg)), None, "a visible attachment isn't the picture");
+        assert_eq!(crate::pst_pim::contact_photo(true, "text/plain", Some(b"hello")), None, "not a picture");
+        assert_eq!(crate::pst_pim::contact_photo(true, "", Some(b"")), None);
+        assert_eq!(crate::pst_pim::contact_photo(true, "", None), None);
+        // A picture bigger than a contact photo (512 KiB) is left out.
+        let mut big = vec![0xFFu8, 0xD8, 0xFF, 0xE0];
+        big.resize(mailcraft_model::vcard::MAX_PHOTO + 1, 0);
+        assert_eq!(crate::pst_pim::contact_photo(true, "image/jpeg", Some(&big)), None);
     }
 
     #[test]
