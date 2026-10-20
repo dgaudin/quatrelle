@@ -1443,14 +1443,20 @@ impl Worker {
             }
             Job::SetServerRules { rules, delete, categories, .. } => self.set_server_rules(rules, delete, categories),
             Job::GetServerRules { ours, .. } => match self.read_server_rules(ours) {
-                Ok((ids, others, cleared)) => self.sink.emit(Event::ServerRules { account: self.id(), ids, others, cleared, error: None }),
-                Err(e) => self.sink.emit(Event::ServerRules {
-                    account: self.id(),
-                    ids: Vec::new(),
-                    others: Vec::new(),
-                    cleared: Vec::new(),
-                    error: Some(e.to_string()),
-                }),
+                Ok((ids, others, cleared)) => {
+                    log::info!("{}: the server keeps {} rules ({} of ours, {} others)", self.id(), ids.len() + others.len(), ids.len(), others.len());
+                    self.sink.emit(Event::ServerRules { account: self.id(), ids, others, cleared, error: None });
+                }
+                Err(e) => {
+                    log::info!("{}: the server's rules couldn't be read: {e}", self.id());
+                    self.sink.emit(Event::ServerRules {
+                        account: self.id(),
+                        ids: Vec::new(),
+                        others: Vec::new(),
+                        cleared: Vec::new(),
+                        error: Some(e.to_string()),
+                    })
+                }
             },
             Job::FetchPhoto { email, contact, .. } => self.fetch_photo(&email, contact.as_deref()),
             Job::FetchUrl { .. } | Job::Discover { .. } | Job::SignIn { .. } | Job::ImportPst { .. } | Job::ExportPst { .. } => {}
@@ -2200,6 +2206,7 @@ fn jumps_queue(j: &Job) -> bool {
         j,
         Job::FetchBody { .. }
             | Job::FetchPhoto { .. }
+            | Job::GetServerRules { .. }
             | Job::GetVacation { .. }
             | Job::SetVacation { .. }
             | Job::SyncDav { .. }

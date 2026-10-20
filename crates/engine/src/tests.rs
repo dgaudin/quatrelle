@@ -2366,6 +2366,13 @@ fn server_rules_go_to_the_server_and_keep_their_id() {
     assert_eq!(s.foreign_rules[0].name, "Outlook rule");
     assert_eq!(s.foreign_rules[0].account, account);
     assert_eq!(s.rules[0].remote_id.as_deref(), Some("R1"), "a read leaves our own ids alone");
+    // A server that has started syncing is readable: its rules are asked for then, not once
+    // the whole mailbox has been walked — and once is enough, however many folders follow.
+    s.apply(mailcraft_model::Event::Status { account: account.clone(), status: SyncStatus::Syncing { folder: "INBOX".into() } });
+    let asked = |s: &mut Session| s.take_jobs().into_iter().filter(|j| matches!(j, mailcraft_model::Job::GetServerRules { .. })).count();
+    assert_eq!(asked(&mut s), 1, "asked as soon as the server answers");
+    s.apply(mailcraft_model::Event::Status { account: account.clone(), status: SyncStatus::Syncing { folder: "Sent".into() } });
+    assert_eq!(asked(&mut s), 0, "once a session is enough");
     // Connecting asks the server what it keeps: ours (to keep their ids right) and the rest.
     s.apply(mailcraft_model::Event::Status { account: account.clone(), status: SyncStatus::Online { at: NOW } });
     let reads: Vec<(String, Vec<String>)> = s
