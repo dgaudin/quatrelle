@@ -48,7 +48,7 @@ fn attr(tag: &str, name: &str) -> Option<String> {
 }
 
 /// A typeface's name from a CSS `font-family` list: the first, unquoted, or `None` for a
-/// generic one or MailCraft's own (Aptos).
+/// generic one or Quatrelle's own (Aptos).
 fn family(v: &str) -> Option<String> {
     let first = v.split(',').next()?.trim().trim_matches(['"', '\'']).trim();
     let clean: String = first.chars().filter(|c| c.is_alphanumeric() || matches!(c, ' ' | '-' | '_')).take(64).collect();

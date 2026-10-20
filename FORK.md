@@ -1,6 +1,7 @@
-# Ce fork : dgaudin/mailcraft
+# Ce fork : dgaudin/quatrelle
 
-Ce dépôt est un fork de [ZIDAN44/mailcraft](https://github.com/ZIDAN44/mailcraft). Il s'en écarte
+Ce dépôt est un fork de [ZIDAN44/mailcraft](https://github.com/ZIDAN44/mailcraft), renommé
+**Quatrelle** (son nom d'origine était MailCraft). Il s'en écarte
 volontairement sur l'apparence, pour ressembler davantage à Outlook et s'intégrer au bureau, et il
 ajoute des fonctions Exchange. Ce fichier dit **quoi**, **pourquoi**, et **comment revenir en
 arrière** si besoin.
@@ -34,7 +35,7 @@ On peut donc l'utiliser, la modifier et la redistribuer, à condition de garder 
 
 **Les limites, qui restent valables.**
 - Aucune icône « classique » d'Office, ni aucune image, aucun son, aucun modèle ou texte d'Outlook.
-- L'icône de l'application et sa couleur restent celles de MailCraft.
+- L'icône de l'application et sa couleur restent celles de Quatrelle.
 - Une nouvelle icône doit être un autre fichier Fluent, ajouté de la même façon : fichier
   inchangé, plus une ligne dans `ATTRIBUTION.md`.
 
@@ -49,7 +50,7 @@ GNOME Wayland, sa couleur sarcelle partout, sa police, et un mode clair forcé s
 **Pourquoi.** Une application de bureau doit avoir les mêmes boutons de fenêtre (réduire,
 agrandir, fermer), les mêmes couleurs et les mêmes polices que les autres applications.
 
-**Comment** (commit `3f5a21d`, code dans `apps/mailcraft/src/appearance.rs`).
+**Comment** (commit `3f5a21d`, code dans `apps/quatrelle/src/appearance.rs`).
 - **Barre de titre.** Là où le gestionnaire de fenêtres la dessine (KDE, wlroots, X11, Windows,
   macOS), c'est lui qui le fait. Sous GNOME Wayland, la fonction `wayland-csd-adwaita` de `winit`
   en dessine une identique à celle de GNOME : titre, boutons placés selon le réglage
@@ -58,7 +59,7 @@ agrandir, fermer), les mêmes couleurs et les mêmes polices que les autres appl
   « Comme le système » donnait toujours le mode clair.
 - **Couleur d'accent.**
   - Elle vient du système : DWM sous Windows, l'accent de macOS, `accent-color` du portail sous
-    Linux. Elle remplace le sarcelle de MailCraft.
+    Linux. Elle remplace le sarcelle de Quatrelle.
   - Elle est éclaircie ou foncée jusqu'à rester lisible sur les volets.
   - **Option, activée par défaut** : Options › « Utiliser la couleur d'accentuation du système ».
     Décochez-la pour retrouver le sarcelle.
@@ -130,7 +131,7 @@ Toutes s'appuient sur les spécifications publiques de Microsoft (EWS, Graph, [M
 - Le contenu distant n'est jamais chargé sans action de l'utilisateur.
 - Tout le texte de l'interface passe par `tl!` / `tf!`, traduit dans les 14 langues.
 - `cargo xtask ci` doit rester vert avant chaque commit.
-- Les identifiants d'application (`ai.storyteller.mailcraft`), les noms des exécutables et le
+- Les identifiants d'application (`ai.storyteller.quatrelle`), les noms des exécutables et le
   `UpgradeCode` de l'installeur Windows sont inchangés.
 
 ## Suivre le projet d'origine
@@ -176,7 +177,7 @@ wasm), un build `--workspace` complet, et le test d'envoi Exchange relancé troi
 
 Second passage, sans recréer de remote : `git fetch https://github.com/ZIDAN44/mailcraft main` puis
 fusion de `FETCH_HEAD` (10 commits, v0.18 + v0.19 — boîtes partagées Exchange, fiche contact,
-sign-in SMTP propre, fichier `.mailcraft` conservé à la suppression d'un compte). Aucun commit de
+sign-in SMTP propre, fichier `.quatrelle` conservé à la suppression d'un compte). Aucun commit de
 ce fork n'a été réécrit ; 23 fichiers ont demandé une résolution.
 
 - **Traductions** (14 `.tsv`) : union des deux côtés, sans doublon.

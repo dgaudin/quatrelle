@@ -1,6 +1,6 @@
 //! vCard (RFC 6350; 3.0 files read too): the people in an address book.
 //!
-//! The fields MailCraft shows and edits are read into a [`Card`]; every other property is kept
+//! The fields Quatrelle shows and edits are read into a [`Card`]; every other property is kept
 //! as written so editing a card from a server loses nothing.
 
 use serde::{Deserialize, Serialize};
@@ -201,7 +201,7 @@ pub fn base64_encode(data: &[u8]) -> String {
 }
 
 /// A `PHOTO` property's value and parameters, when it carries the picture itself (a link to one
-/// isn't fetched: MailCraft never loads remote content on its own).
+/// isn't fetched: Quatrelle never loads remote content on its own).
 fn photo_of(value: &str, params: &[(String, String)]) -> Option<Photo> {
     let value = value.trim();
     let (media, b64) = match value.strip_prefix("data:") {
@@ -498,7 +498,7 @@ fn fold(line: &str, out: &mut String) {
 
 /// A card as vCard 4.0 text.
 pub fn write(c: &Card) -> String {
-    let mut lines: Vec<String> = vec!["BEGIN:VCARD".into(), "VERSION:4.0".into(), "PRODID:-//MailCraft//MailCraft//EN".into()];
+    let mut lines: Vec<String> = vec!["BEGIN:VCARD".into(), "VERSION:4.0".into(), "PRODID:-//Quatrelle//Quatrelle//EN".into()];
     lines.push(format!("UID:{}", c.uid.replace(['\r', '\n'], "")));
     lines.push(format!("FN:{}", esc(&c.display())));
     lines.push(format!("N:{};{};;;", esc(&c.family), esc(&c.given)));

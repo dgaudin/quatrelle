@@ -1,18 +1,18 @@
 [package]
-name = "mailcraft-ui-egui"
+name = "quatrelle-ui-egui"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "MailCraft egui front end (folders, message list, reading pane, compose); swappable: nothing below depends on it"
+description = "Quatrelle egui front end (folders, message list, reading pane, compose); swappable: nothing below depends on it"
 
 [lints]
 workspace = true
 
 [dependencies]
-mailcraft-engine = { workspace = true }
+quatrelle-engine = { workspace = true }
 # Spelling the composer: Hunspell dictionaries read natively, in the background.
-mailcraft-spell = { workspace = true }
+quatrelle-spell = { workspace = true }
 # egui's emoji and symbol fonts, as egui had them by default before 0.37: emoji in subjects and
 # text, and symbols such as ▾, otherwise draw as empty boxes.
 egui = { workspace = true, features = ["monochrome_emoji_fonts"] }

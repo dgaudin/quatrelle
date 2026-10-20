@@ -1,5 +1,5 @@
 # Unsigned test builds for every platform the Craft release covers, published as a pre-release
-# of this repository so people can try MailCraft. Run by hand only (Actions › Release (unsigned
+# of this repository so people can try Quatrelle. Run by hand only (Actions › Release (unsigned
 # test build) › Run workflow); nothing starts it on a push.
 #
 # The same platforms as release.yml (storytold/craft-common-actions): macOS universal, Windows
@@ -38,9 +38,9 @@ env:
   # Browser sign-in (OAuth) for Microsoft (Outlook.com, Hotmail, Microsoft 365) and Google is
   # built in when the repository has these secrets (an app registration's client id; empty
   # otherwise, and the build offers passwords only). See docs/oauth.md.
-  MAILCRAFT_MICROSOFT_CLIENT_ID: ${{ secrets.MAILCRAFT_MICROSOFT_CLIENT_ID }}
-  MAILCRAFT_GOOGLE_CLIENT_ID: ${{ secrets.MAILCRAFT_GOOGLE_CLIENT_ID }}
-  MAILCRAFT_GOOGLE_CLIENT_SECRET: ${{ secrets.MAILCRAFT_GOOGLE_CLIENT_SECRET }}
+  QUATRELLE_MICROSOFT_CLIENT_ID: ${{ secrets.QUATRELLE_MICROSOFT_CLIENT_ID }}
+  QUATRELLE_GOOGLE_CLIENT_ID: ${{ secrets.QUATRELLE_GOOGLE_CLIENT_ID }}
+  QUATRELLE_GOOGLE_CLIENT_SECRET: ${{ secrets.QUATRELLE_GOOGLE_CLIENT_SECRET }}
 
 jobs:
   version:
@@ -57,7 +57,7 @@ jobs:
         uses: storytold/craft-common-actions/actions/resolve-version@main
         with:
           input-version: ${{ inputs.version }}
-          app-title: MailCraft (unsigned test build)
+          app-title: Quatrelle (unsigned test build)
       - id: tag
         name: Tag
         run: echo "tag=v${{ steps.v.outputs.version }}-test.${{ github.run_number }}" >>"$GITHUB_OUTPUT"
@@ -372,11 +372,11 @@ jobs:
           VERSION: ${{ needs.version.outputs.version }}
         run: |
           cat >../notes.md <<EOF
-          **Unsigned test build** of MailCraft $VERSION (\`${GITHUB_SHA::9}\`), for trying it out.
+          **Unsigned test build** of Quatrelle $VERSION (\`${GITHUB_SHA::9}\`), for trying it out.
 
           These builds aren't code-signed:
           - **Windows:** SmartScreen may say "Windows protected your PC": choose *More info › Run anyway*.
-          - **macOS:** the app is ad-hoc signed, not notarized: right-click it and choose *Open* the first time (or run \`xattr -dr com.apple.quarantine /Applications/MailCraft.app\`).
+          - **macOS:** the app is ad-hoc signed, not notarized: right-click it and choose *Open* the first time (or run \`xattr -dr com.apple.quarantine /Applications/Quatrelle.app\`).
           - **Linux, FreeBSD, web:** nothing extra.
 
           | Platform | Files |
@@ -386,12 +386,12 @@ jobs:
           | Linux x86_64 / aarch64 | \`.AppImage\`, \`.deb\`, \`.rpm\`, \`.flatpak\`, \`.tar.gz\` |
           | Linux riscv64 | \`.deb\`, \`.rpm\`, \`.tar.gz\` |
           | FreeBSD x86_64 | \`.tar.gz\` |
-          | Web | \`mailcraft-web-*.zip\` (a static site; see HOSTING.md inside) |
+          | Web | \`quatrelle-web-*.zip\` (a static site; see HOSTING.md inside) |
 
           Check a download against \`SHA256SUMS.txt\`.
           EOF
           gh release create "$TAG" --prerelease --target "$GITHUB_SHA" \
-            --title "MailCraft $VERSION (unsigned test build ${{ github.run_number }})" \
+            --title "Quatrelle $VERSION (unsigned test build ${{ github.run_number }})" \
             --notes-file ../notes.md -- *
           {
             echo "Published **$TAG**:"

@@ -17,7 +17,7 @@
 //! only when the user types an address into the account dialog. Everything fetched is hostile input: sizes are capped and
 //! a bad file is simply skipped.
 
-use mailcraft_model::{AccountConfig, Security, ServerConfig};
+use quatrelle_model::{AccountConfig, Security, ServerConfig};
 
 /// Largest configuration file read.
 const MAX_XML: usize = 256 << 10;
@@ -225,7 +225,7 @@ mod tests {
     }
 
     /// Live: real DNS and the real ISP database (only domain names are sent). Run by hand with
-    /// `cargo test -p mailcraft-net -- --ignored live_`.
+    /// `cargo test -p quatrelle-net -- --ignored live_`.
     #[test]
     #[ignore]
     fn live_discovery() {

@@ -95,8 +95,8 @@ pub(crate) fn interface_strings() -> BTreeSet<String> {
             }
         }
     }
-    use mailcraft_engine::model::dates::DateGroup;
-    use mailcraft_engine::model::organize::SnoozeUntil;
+    use quatrelle_engine::model::dates::DateGroup;
+    use quatrelle_engine::model::organize::SnoozeUntil;
     for g in [
         DateGroup::Today,
         DateGroup::Yesterday,
@@ -116,20 +116,20 @@ pub(crate) fn interface_strings() -> BTreeSet<String> {
     ] {
         out.insert(g.label().to_string());
     }
-    use mailcraft_engine::model::FolderRole;
+    use quatrelle_engine::model::FolderRole;
     for r in [FolderRole::Inbox, FolderRole::Drafts, FolderRole::Sent, FolderRole::Archive, FolderRole::Junk, FolderRole::Trash] {
         out.extend(r.label().map(str::to_string));
     }
-    for f in mailcraft_engine::ListFilter::EVERY {
+    for f in quatrelle_engine::ListFilter::EVERY {
         out.insert(f.label().to_string());
     }
     for p in SnoozeUntil::ALL {
         out.insert(p.label().to_string());
     }
-    for a in mailcraft_engine::Arrange::ALL {
+    for a in quatrelle_engine::Arrange::ALL {
         out.insert(a.label().to_string());
     }
-    out.extend(mailcraft_engine::ARRANGE_HEADINGS.map(str::to_string));
+    out.extend(quatrelle_engine::ARRANGE_HEADINGS.map(str::to_string));
     // The message editor's ribbon and dialogs; labels chosen at run time.
     for s in [
         "Ignore the conversation",
@@ -169,7 +169,7 @@ pub(crate) fn interface_strings() -> BTreeSet<String> {
     ] {
         out.insert(s.to_string());
     }
-    for c in mailcraft_engine::model::organize::default_categories() {
+    for c in quatrelle_engine::model::organize::default_categories() {
         out.insert(c.name);
     }
     for w in [
@@ -285,7 +285,7 @@ pub(crate) fn interface_strings() -> BTreeSet<String> {
         "Subject contains",
         "Sender, recipients or subject contain",
         "Has attachments",
-        "MailCraft – Sample mailbox",
+        "Quatrelle – Sample mailbox",
         // The File page: lists and calls laid out over several lines.
         "Info",
         "Options",
@@ -310,7 +310,7 @@ pub(crate) fn interface_strings() -> BTreeSet<String> {
         "See how much space your mail takes, and empty Deleted Items and Junk Email.",
         "Sort new mail as it arrives: move it, flag it, categorize it.",
         "Local-first: mail is cached on this computer for fast offline search. Passwords stay in the system keychain.",
-        "MailCraft talks only to your own mail servers, over encrypted connections. Pictures from the web load only when you ask.",
+        "Quatrelle talks only to your own mail servers, over encrypted connections. Pictures from the web load only when you ask.",
         "Built in the open from the email standards: no code, icons or assets from other mail apps.",
         // Calendar and People: names in lists.
         "January",
@@ -408,7 +408,7 @@ fn french_keeps_filled_in_values_away_from_words_that_elide() {
 #[test]
 fn every_interface_string_is_translated() {
     let strings = interface_strings();
-    if let Ok(path) = std::env::var("MAILCRAFT_DUMP_STRINGS") {
+    if let Ok(path) = std::env::var("QUATRELLE_DUMP_STRINGS") {
         let _ = std::fs::write(path, strings.iter().map(|s| s.replace('\n', "\\n")).collect::<Vec<_>>().join("\n"));
     }
     assert!(strings.len() > 200, "{} strings found", strings.len());

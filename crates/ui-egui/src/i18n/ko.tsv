@@ -1,6 +1,6 @@
-# MailCraft interface strings: Korean (한국어).
+# Quatrelle interface strings: Korean (한국어).
 # context<TAB>English<TAB>translation; escapes \n \t \\. Placeholders like {name} stay as they are.
-# Written for MailCraft (clean room): no wording is taken from other mail clients.
+# Written for Quatrelle (clean room): no wording is taken from other mail clients.
 
 	  Loading folders…	  폴더를 불러오는 중…
 	(Top level)	(최상위)
@@ -120,8 +120,8 @@
 	Local-first: mail is cached on this computer for fast offline search. Passwords stay in the system keychain.	로컬 우선: 메일을 이 컴퓨터에 저장해 오프라인에서도 빠르게 검색합니다. 암호는 시스템 키체인에 보관됩니다.
 	Looking up the server settings…	서버 설정을 찾는 중…
 	Mail from {sender}	{sender}의 메일
-	MailCraft	MailCraft
-	MailCraft {version} · an ArtCraft app · MIT OR Apache-2.0	MailCraft {version} · ArtCraft 앱 · MIT OR Apache-2.0
+	Quatrelle	Quatrelle
+	Quatrelle {version} · an ArtCraft app · MIT OR Apache-2.0	Quatrelle {version} · ArtCraft 앱 · MIT OR Apache-2.0
 	Mailing list: unsubscribe at {address}	메일링 리스트: {address}에서 구독 취소
 	Mar	3월
 	Mark all as read	모두 읽음으로 표시
@@ -318,7 +318,7 @@
 	Waiting in the Outbox: it will be sent when you're back online.	보낼 편지함에서 대기 중: 다시 온라인이 되면 보냅니다.
 	Wed	수
 	Wednesday	수요일
-	Welcome to MailCraft	MailCraft에 오신 것을 환영합니다
+	Welcome to Quatrelle	Quatrelle에 오신 것을 환영합니다
 	When mail	메일이 다음과 같을 때
 	Without encryption your password travels in the clear. Use only for local test servers.	암호화하지 않으면 암호가 평문으로 전송됩니다. 로컬 테스트 서버에만 사용하세요.
 	Work	업무
@@ -344,7 +344,7 @@
 	{n} new messages	새 메시지 {n}개
 	• List	• 목록
 	Select a message to read it	메시지를 선택해 읽으세요
-	MailCraft – Sample mailbox	MailCraft – 예제 사서함
+	Quatrelle – Sample mailbox	Quatrelle – 예제 사서함
 	Mail server	메일 서버
 	IMAP and SMTP	IMAP 및 SMTP
 	JMAP	JMAP
@@ -353,7 +353,7 @@
 	Open in new window	새 창에서 열기
 	{subject} – Message	{subject} – 메시지
 	About	프로그램 정보
-	About MailCraft	MailCraft 정보
+	About Quatrelle	Quatrelle 정보
 	Account information	계정 정보
 	Account settings	계정 설정
 	An ArtCraft app · MIT OR Apache-2.0	ArtCraft 앱 · MIT OR Apache-2.0
@@ -376,8 +376,8 @@
 	Inbox and notifications	받은 편지함 및 알림
 	Info	정보
 	Kept on this computer: {size}	이 컴퓨터에 보관: {size}
-	MailCraft talks only to your own mail servers, over encrypted connections. Pictures from the web load only when you ask.	MailCraft는 암호화된 연결로 내 메일 서버하고만 통신합니다. 웹의 그림은 요청할 때만 불러옵니다.
-	MailCraft {version}	MailCraft {version}
+	Quatrelle talks only to your own mail servers, over encrypted connections. Pictures from the web load only when you ask.	Quatrelle는 암호화된 연결로 내 메일 서버하고만 통신합니다. 웹의 그림은 요청할 때만 불러옵니다.
+	Quatrelle {version}	Quatrelle {version}
 	Mailbox	사서함
 	Mailbox settings	사서함 설정
 	Manage rules	규칙 관리
@@ -504,10 +504,10 @@
 	Exchange (Microsoft 365)	Exchange(Microsoft 365)
 	Exchange (Microsoft Graph)	Exchange(Microsoft Graph)
 	Server: {url} (Microsoft Graph)	서버: {url}(Microsoft Graph)
-	Signing in with Microsoft isn't set up in this copy of MailCraft.	이 MailCraft에는 Microsoft 로그인이 설정되어 있지 않습니다.
+	Signing in with Microsoft isn't set up in this copy of Quatrelle.	이 Quatrelle에는 Microsoft 로그인이 설정되어 있지 않습니다.
 	Syncs through Microsoft Graph, for work and school accounts where IMAP is switched off. You sign in with Microsoft in the browser: no password is stored.	IMAP이 꺼져 있는 회사 및 학교 계정을 위해 Microsoft Graph로 동기화합니다. 브라우저에서 Microsoft로 로그인하므로 암호는 저장되지 않습니다.
-	In the browser, MailCraft works with JMAP providers. Your password stays in this tab only and is only ever sent to your mail server.	브라우저에서 MailCraft는 JMAP 공급자와 함께 작동합니다. 암호는 이 탭에만 보관되며 메일 서버로만 전송됩니다.
-	Your mail in the browser. Add a JMAP account (such as Fastmail): MailCraft talks to your mail server directly, and your password stays in this tab only.	브라우저에서 메일을 사용하세요. JMAP 계정(예: Fastmail)을 추가하세요. MailCraft는 메일 서버와 직접 통신하며 암호는 이 탭에만 보관됩니다.
+	In the browser, Quatrelle works with JMAP providers. Your password stays in this tab only and is only ever sent to your mail server.	브라우저에서 Quatrelle는 JMAP 공급자와 함께 작동합니다. 암호는 이 탭에만 보관되며 메일 서버로만 전송됩니다.
+	Your mail in the browser. Add a JMAP account (such as Fastmail): Quatrelle talks to your mail server directly, and your password stays in this tab only.	브라우저에서 메일을 사용하세요. JMAP 계정(예: Fastmail)을 추가하세요. Quatrelle는 메일 서버와 직접 통신하며 암호는 이 탭에만 보관됩니다.
 	Pop out	새 창으로
 	Pop in	읽기 창으로
 	Back to the reading pane	읽기 창으로 돌아갑니다
@@ -575,12 +575,12 @@
 	Open folder	폴더 열기
 	Move…	이동…
 	Save as an Outlook data file…	Outlook 데이터 파일로 저장…
-	Moves to {folder} the next time MailCraft starts.	다음에 MailCraft를 시작할 때 {folder}(으)로 이동합니다.
-	Chosen when MailCraft was started (--data or MAILCRAFT_DATA), so it can't be moved here.	MailCraft 시작 시 지정되었으므로(--data 또는 MAILCRAFT_DATA) 여기서 이동할 수 없습니다.
+	Moves to {folder} the next time Quatrelle starts.	다음에 Quatrelle를 시작할 때 {folder}(으)로 이동합니다.
+	Chosen when Quatrelle was started (--data or QUATRELLE_DATA), so it can't be moved here.	Quatrelle 시작 시 지정되었으므로(--data 또는 QUATRELLE_DATA) 여기서 이동할 수 없습니다.
 	Your mail couldn't be moved, so it stays where it was: {error}	메일을 이동할 수 없어 원래 위치에 그대로 있습니다: {error}
 	Your mail is now kept in {folder}	이제 메일이 {folder}에 보관됩니다
-	Your mail moves there the next time MailCraft starts.	다음에 MailCraft를 시작할 때 메일이 그곳으로 이동합니다.
-	Each account's mail, contacts and calendar are kept in a MailCraft data file (.mailcraft) in this folder, as Outlook keeps each account in a .pst in Outlook Files. An Outlook data file you open gets a .mailcraft file of its own here; Outlook's file is left as it was. To have a copy as a .pst, use Save as an Outlook data file under Info.	각 계정의 메일, 연락처, 일정은 이 폴더의 MailCraft 데이터 파일(.mailcraft)에 보관됩니다. Outlook이 각 계정을 Outlook 파일의 .pst에 보관하는 것과 같습니다. 연 Outlook 데이터 파일은 여기에 자체 .mailcraft 파일이 만들어지며, Outlook 파일은 그대로 남습니다. .pst로 사본을 만들려면 정보에서 Outlook 데이터 파일로 저장을 사용하세요.
+	Your mail moves there the next time Quatrelle starts.	다음에 Quatrelle를 시작할 때 메일이 그곳으로 이동합니다.
+	Each account's mail, contacts and calendar are kept in a Quatrelle data file (.quatrelle) in this folder, as Outlook keeps each account in a .pst in Outlook Files. An Outlook data file you open gets a .quatrelle file of its own here; Outlook's file is left as it was. To have a copy as a .pst, use Save as an Outlook data file under Info.	각 계정의 메일, 연락처, 일정은 이 폴더의 Quatrelle 데이터 파일(.quatrelle)에 보관됩니다. Outlook이 각 계정을 Outlook 파일의 .pst에 보관하는 것과 같습니다. 연 Outlook 데이터 파일은 여기에 자체 .quatrelle 파일이 만들어지며, Outlook 파일은 그대로 남습니다. .pst로 사본을 만들려면 정보에서 Outlook 데이터 파일로 저장을 사용하세요.
 	Keep a copy of downloaded mail on the server	다운로드한 메일의 사본을 서버에 보관
 	Remove it from the server after	다음 기간 후 서버에서 제거:
 	days	일
@@ -674,7 +674,7 @@
 	Don't send before	다음 시간 이전에 보내지 않음
 	Have replies sent to another address	회신을 다른 주소로 받기
 	Held in the Outbox: it will be sent {when}.	보낼 편지함에 보류됨: {when}에 보내집니다.
-	Keep it in the Outbox and send it later (MailCraft has to be running then)	보낼 편지함에 두었다가 나중에 보냅니다(그때 MailCraft가 실행 중이어야 함)
+	Keep it in the Outbox and send it later (Quatrelle has to be running then)	보낼 편지함에 두었다가 나중에 보냅니다(그때 Quatrelle가 실행 중이어야 함)
 	Replies to	회신 받을 주소
 	Send right away	바로 보내기
 	Sends {when}	{when}에 보냄
@@ -711,7 +711,7 @@
 	Clear formatting	서식 지우기
 	Insert link	링크 삽입
 	The selected text	선택한 텍스트
-	Outlook.com, Hotmail and Live addresses only connect with Sign in with Microsoft: Microsoft no longer accepts passwords from mail apps. This copy of MailCraft wasn't built with Microsoft sign-in, so it can't add this account.	Outlook.com, Hotmail, Live 주소는 'Microsoft로 로그인'으로만 연결됩니다. Microsoft는 더 이상 메일 앱의 암호를 받지 않습니다. 이 MailCraft는 Microsoft 로그인 없이 빌드되어 이 계정을 추가할 수 없습니다.
+	Outlook.com, Hotmail and Live addresses only connect with Sign in with Microsoft: Microsoft no longer accepts passwords from mail apps. This copy of Quatrelle wasn't built with Microsoft sign-in, so it can't add this account.	Outlook.com, Hotmail, Live 주소는 'Microsoft로 로그인'으로만 연결됩니다. Microsoft는 더 이상 메일 앱의 암호를 받지 않습니다. 이 Quatrelle는 Microsoft 로그인 없이 빌드되어 이 계정을 추가할 수 없습니다.
 	Back to message	메시지로 돌아가기
 	Esc	Esc
 	Open it in its app, or save it.	해당 앱에서 열거나 저장하세요.
@@ -746,9 +746,9 @@
 	Public Folders	공용 폴더
 	Copy the whole message	메시지 전체 복사
 	Existing data file (optional)	기존 데이터 파일(선택 사항)
-	Mail from an old .pst or .mailcraft file comes in first	이전 .pst 또는 .mailcraft 파일의 메일을 먼저 가져옵니다
+	Mail from an old .pst or .quatrelle file comes in first	이전 .pst 또는 .quatrelle 파일의 메일을 먼저 가져옵니다
 	Open a data file	데이터 파일 열기
-	Bring in an Outlook data file (.pst) or a MailCraft one (.mailcraft). It opens as a mailbox of its own, with its folders, kept on this computer.	Outlook 데이터 파일(.pst) 또는 MailCraft 파일(.mailcraft)을 가져옵니다. 폴더와 함께 별도의 사서함으로 열리며 이 컴퓨터에 보관됩니다.
+	Bring in an Outlook data file (.pst) or a Quatrelle one (.quatrelle). It opens as a mailbox of its own, with its folders, kept on this computer.	Outlook 데이터 파일(.pst) 또는 Quatrelle 파일(.quatrelle)을 가져옵니다. 폴더와 함께 별도의 사서함으로 열리며 이 컴퓨터에 보관됩니다.
 	Move up	위로 이동
 	Move down	아래로 이동
 	Updating…	업데이트하는 중…
@@ -833,7 +833,7 @@
 	Delete this contact?	이 연락처를 삭제할까요?
 	This contact will be deleted, along with everything kept about them. This can't be undone.	이 연락처와 저장된 모든 정보가 삭제됩니다. 되돌릴 수 없습니다.
 	Export…	내보내기…
-	Add the rules from a file saved by MailCraft. A rule for an account this computer doesn't have comes in turned off.	MailCraft에서 저장한 파일의 규칙을 추가합니다. 이 컴퓨터에 없는 계정의 규칙은 꺼진 상태로 추가됩니다.
+	Add the rules from a file saved by Quatrelle. A rule for an account this computer doesn't have comes in turned off.	Quatrelle에서 저장한 파일의 규칙을 추가합니다. 이 컴퓨터에 없는 계정의 규칙은 꺼진 상태로 추가됩니다.
 	Change…	변경…
 	Clean up	정리
 	Export rules	규칙 내보내기
@@ -864,10 +864,10 @@
 	Its folders show under this account. You need access to it on the Exchange server; the ones you have full access to open by themselves.	폴더가 이 계정 아래에 표시됩니다. Exchange 서버에서 액세스 권한이 필요하며, 모든 권한이 있는 사서함은 자동으로 열립니다.
 	Mailboxes you have full access to open by themselves.	모든 권한이 있는 사서함은 자동으로 열립니다.
 	Shared mailboxes	공유 사서함
-	{email} will be removed from MailCraft. Its data file, {file}, stays in your MailCraft Files folder: open it from File › Open & Export to see its mail again. Nothing is deleted on the server.	{email}이(가) MailCraft에서 제거됩니다. 데이터 파일 {file}은(는) MailCraft Files 폴더에 남으며, 파일 › 열기 및 내보내기에서 열면 메일을 다시 볼 수 있습니다. 서버에서는 아무것도 삭제되지 않습니다.
-	{email} will be removed from MailCraft. Nothing is deleted on the server.	{email}이(가) MailCraft에서 제거됩니다. 서버에서는 아무것도 삭제되지 않습니다.
-	{email} will be removed from MailCraft. Its data file, {file}, stays in your MailCraft Files folder: open it from File › Open & Export to see its mail again.	{email}이(가) MailCraft에서 제거됩니다. 데이터 파일 {file}은(는) MailCraft Files 폴더에 남으며, 파일 › 열기 및 내보내기에서 열면 메일을 다시 볼 수 있습니다.
-	{email} will be removed from MailCraft.	{email}이(가) MailCraft에서 제거됩니다.
+	{email} will be removed from Quatrelle. Its data file, {file}, stays in your Quatrelle Files folder: open it from File › Open & Export to see its mail again. Nothing is deleted on the server.	{email}이(가) Quatrelle에서 제거됩니다. 데이터 파일 {file}은(는) Quatrelle Files 폴더에 남으며, 파일 › 열기 및 내보내기에서 열면 메일을 다시 볼 수 있습니다. 서버에서는 아무것도 삭제되지 않습니다.
+	{email} will be removed from Quatrelle. Nothing is deleted on the server.	{email}이(가) Quatrelle에서 제거됩니다. 서버에서는 아무것도 삭제되지 않습니다.
+	{email} will be removed from Quatrelle. Its data file, {file}, stays in your Quatrelle Files folder: open it from File › Open & Export to see its mail again.	{email}이(가) Quatrelle에서 제거됩니다. 데이터 파일 {file}은(는) Quatrelle Files 폴더에 남으며, 파일 › 열기 및 내보내기에서 열면 메일을 다시 볼 수 있습니다.
+	{email} will be removed from Quatrelle.	{email}이(가) Quatrelle에서 제거됩니다.
 
 # The Archive folder, where the plain entry is the command.
 folder	Archive	보관함
@@ -966,7 +966,7 @@ month	May	5월
 	Add what the rule looks at	규칙이 확인할 내용을 지정하세요
 	Change the rule	규칙 변경
 	Give the rule a name	규칙 이름을 입력하세요
-	MailCraft doesn't know every part of this rule yet	MailCraft가 아직 이 규칙의 일부를 이해하지 못합니다
+	Quatrelle doesn't know every part of this rule yet	Quatrelle가 아직 이 규칙의 일부를 이해하지 못합니다
 	Pick a category	범주 선택
 	Pick a folder	폴더 선택
 	Say what to look for	찾을 내용을 입력하세요
@@ -994,16 +994,16 @@ month	May	5월
 	Download	다운로드
 	Join meeting	모임 참가
 	Links:	링크:
-	MailCraft {version} is available.	MailCraft {version}을(를) 사용할 수 있습니다.
+	Quatrelle {version} is available.	Quatrelle {version}을(를) 사용할 수 있습니다.
 	What's new	새로운 기능
 	You have the newest version.	최신 버전을 사용하고 있습니다.
 	Online only: keep none of this account's mail on this computer	온라인 전용: 이 계정의 메일을 이 컴퓨터에 보관하지 않음
 	Online only: none of this account's mail is kept on this computer.	온라인 전용: 이 계정의 메일은 이 컴퓨터에 보관되지 않습니다.
 	Online only: {email}	온라인 전용: {email}
 	New message	새 메시지
-	Open MailCraft to read it.	MailCraft를 열어 읽으세요.
-	Its mail is read from the server and held in memory while MailCraft runs; nothing of it is written to this computer. Each message downloads when you open it. Mail waiting to be sent, changes made while offline, and calendar items, contacts and notes kept only in MailCraft are lost when it closes.	메일은 서버에서 읽어 MailCraft가 실행되는 동안 메모리에만 보관되며, 이 컴퓨터에는 아무것도 기록되지 않습니다. 각 메시지는 열 때 다운로드됩니다. 보내기를 기다리는 메일, 오프라인 중 변경 내용, MailCraft에만 보관된 일정 항목·연락처·메모는 닫으면 사라집니다.
-	Portable: everything is kept in MailCraftData beside MailCraft, and passwords only until it closes.	포터블: 모든 것이 MailCraft 옆의 MailCraftData에 보관되며, 암호는 닫을 때까지만 보관됩니다.
+	Open Quatrelle to read it.	Quatrelle를 열어 읽으세요.
+	Its mail is read from the server and held in memory while Quatrelle runs; nothing of it is written to this computer. Each message downloads when you open it. Mail waiting to be sent, changes made while offline, and calendar items, contacts and notes kept only in Quatrelle are lost when it closes.	메일은 서버에서 읽어 Quatrelle가 실행되는 동안 메모리에만 보관되며, 이 컴퓨터에는 아무것도 기록되지 않습니다. 각 메시지는 열 때 다운로드됩니다. 보내기를 기다리는 메일, 오프라인 중 변경 내용, Quatrelle에만 보관된 일정 항목·연락처·메모는 닫으면 사라집니다.
+	Portable: everything is kept in QuatrelleData beside Quatrelle, and passwords only until it closes.	포터블: 모든 것이 Quatrelle 옆의 QuatrelleData에 보관되며, 암호는 닫을 때까지만 보관됩니다.
 	When it starts	시작할 때
 	1 minute before	1분 전
 	{n} minutes before	{n}분 전

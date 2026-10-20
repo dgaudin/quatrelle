@@ -1,7 +1,7 @@
 //! People: the address books, searchable, with a card for the person picked.
 
 use egui::{Margin, RichText, Sense, Ui, vec2};
-use mailcraft_engine::Session;
+use quatrelle_engine::Session;
 use serde_json::json;
 
 use crate::icons::{self, Icon};
@@ -84,7 +84,7 @@ impl Column {
     }
 
     /// What it shows for someone.
-    fn text(self, s: &Session, p: &mailcraft_engine::Person) -> String {
+    fn text(self, s: &Session, p: &quatrelle_engine::Person) -> String {
         let c = &p.card;
         let phone = |kinds: &[&str]| c.phones.iter().find(|x| kinds.contains(&x.kind.as_str())).map(|x| x.value.clone()).unwrap_or_default();
         match self {
@@ -95,7 +95,7 @@ impl Column {
             Column::Fax => phone(&["fax"]),
             Column::BusinessAddress => c.addresses.iter().find(|a| a.kind == "work").map(|a| a.one_line()).unwrap_or_default(),
             Column::HomeAddress => c.addresses.iter().find(|a| a.kind == "home").map(|a| a.one_line()).unwrap_or_default(),
-            Column::Birthday => mailcraft_engine::model::dates::birthday(&c.birthday),
+            Column::Birthday => quatrelle_engine::model::dates::birthday(&c.birthday),
             Column::Mobile => phone(&["cell", "mobile"]),
             Column::Home => phone(&["home"]),
             Column::Notes => c.note.lines().next().unwrap_or_default().to_string(),
@@ -103,7 +103,7 @@ impl Column {
                 .pim
                 .get(&p.account)
                 .and_then(|pim| pim.books.iter().find(|b| b.id == p.book))
-                .map(|b| if b.id == mailcraft_engine::model::pim::LOCAL { tl!("Contacts").to_string() } else { b.name.clone() })
+                .map(|b| if b.id == quatrelle_engine::model::pim::LOCAL { tl!("Contacts").to_string() } else { b.name.clone() })
                 .unwrap_or_default(),
         }
     }
@@ -181,7 +181,7 @@ fn index_letter(name: &str) -> char {
 
 /// The side pane: everyone, A to Z (searched from the box at the top).
 /// The people shown: those matching the search, in the address book chosen.
-pub(crate) fn shown(s: &Session, st: &UiState) -> Vec<mailcraft_engine::Person> {
+pub(crate) fn shown(s: &Session, st: &UiState) -> Vec<quatrelle_engine::Person> {
     let mut people = s.people(&st.people_query);
     if let Some((account, book)) = &st.people_book {
         people.retain(|p| p.account == *account && p.book == *book);
@@ -193,7 +193,7 @@ pub(crate) fn shown(s: &Session, st: &UiState) -> Vec<mailcraft_engine::Person> 
 /// organisation's shared ones in public folders): a click shows that one alone.
 fn books(s: &Session, st: &mut UiState, ui: &mut Ui) {
     let t = st.tokens;
-    let all: Vec<(String, mailcraft_engine::model::pim::BookInfo, String)> = s
+    let all: Vec<(String, quatrelle_engine::model::pim::BookInfo, String)> = s
         .accounts
         .iter()
         .filter_map(|a| s.pim.get(&a.config.id).map(|p| (a, p)))
@@ -235,7 +235,7 @@ fn books(s: &Session, st: &mut UiState, ui: &mut Ui) {
     }
     for (account, b, email) in &all {
         let on = st.people_book.as_ref().is_some_and(|(a, x)| a == account && *x == b.id);
-        let name = if b.id == mailcraft_engine::model::pim::LOCAL || b.name.is_empty() || b.name == "Contacts" {
+        let name = if b.id == quatrelle_engine::model::pim::LOCAL || b.name.is_empty() || b.name == "Contacts" {
             tl!("Contacts").to_string()
         } else {
             b.name.clone()
@@ -252,30 +252,30 @@ fn books(s: &Session, st: &mut UiState, ui: &mut Ui) {
 
 /// The picture to draw for a person: the one their card carries, else the one the directory
 /// keeps for their address (once it has arrived).
-fn picture<'a>(s: &'a Session, card: &'a mailcraft_engine::model::vcard::Card) -> Option<&'a mailcraft_engine::model::vcard::Photo> {
+fn picture<'a>(s: &'a Session, card: &'a quatrelle_engine::model::vcard::Card) -> Option<&'a quatrelle_engine::model::vcard::Photo> {
     card.photo.as_ref().or_else(|| card.emails.first().and_then(|e| s.person_photo(e.value.trim())))
 }
 
 /// A contact's picture as a texture, decoded once and kept by egui while it's shown (a wrong or
 /// too big picture is no picture).
-fn photo_texture(ui: &Ui, uid: &str, p: &mailcraft_engine::model::vcard::Photo) -> Option<egui::TextureHandle> {
+fn photo_texture(ui: &Ui, uid: &str, p: &quatrelle_engine::model::vcard::Photo) -> Option<egui::TextureHandle> {
     let id = egui::Id::unique(("contact-photo", uid, p.base64.len()));
     if let Some(t) = ui.ctx().data(|d| d.get_temp::<Option<egui::TextureHandle>>(id)) {
         return t;
     }
-    let tex = p.bytes(mailcraft_engine::model::vcard::MAX_PHOTO).and_then(|b| crate::reading::decode(ui.ctx(), &format!("contact-{uid}"), &b, 256));
+    let tex = p.bytes(quatrelle_engine::model::vcard::MAX_PHOTO).and_then(|b| crate::reading::decode(ui.ctx(), &format!("contact-{uid}"), &b, 256));
     ui.ctx().data_mut(|d| d.insert_temp(id, tex.clone()));
     tex
 }
 
 /// A person's picture as a round texture (their avatar), decoded once and kept while it's shown.
-pub(crate) fn card_picture(ui: &Ui, uid: &str, p: &mailcraft_engine::model::vcard::Photo) -> Option<egui::TextureHandle> {
+pub(crate) fn card_picture(ui: &Ui, uid: &str, p: &quatrelle_engine::model::vcard::Photo) -> Option<egui::TextureHandle> {
     let id = egui::Id::unique(("contact-photo-round", uid, p.base64.len()));
     if let Some(t) = ui.ctx().data(|d| d.get_temp::<Option<egui::TextureHandle>>(id)) {
         return t;
     }
     let tex = p
-        .bytes(mailcraft_engine::model::vcard::MAX_PHOTO)
+        .bytes(quatrelle_engine::model::vcard::MAX_PHOTO)
         .and_then(|b| crate::reading::decode_round(ui.ctx(), &format!("contact-round-{uid}"), &b, 256));
     ui.ctx().data_mut(|d| d.insert_temp(id, tex.clone()));
     tex
@@ -509,7 +509,7 @@ pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) 
                 field(ui, &t, Icon::Location, &lines, kind);
             }
             if !c.birthday.is_empty() {
-                field(ui, &t, Icon::Calendar, &crate::i18n::date(&mailcraft_engine::model::dates::birthday(&c.birthday)), tl!("Birthday"));
+                field(ui, &t, Icon::Calendar, &crate::i18n::date(&quatrelle_engine::model::dates::birthday(&c.birthday)), tl!("Birthday"));
             }
             // Outlook's contact card: the work details an address book carries beside the name.
             if !c.department.is_empty() {

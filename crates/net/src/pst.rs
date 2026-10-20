@@ -5,7 +5,7 @@
 //! standard message (RFC 5322 / MIME) from its properties (MS-OXCMSG / MS-OXPROPS), keeping the
 //! original headers when the item has them. Contacts and calendar items go to the account's address
 //! book and calendar (see `pst_pim`), notes to its notes; tasks show in the calendar on their due
-//! day (MailCraft has no task list), and those without one are left out.
+//! day (Quatrelle has no task list), and those without one are left out.
 //!
 //! A data file is hostile input like any other: the reader runs behind `catch_unwind`, items that
 //! can't be read are skipped and counted, and sizes are capped.
@@ -15,10 +15,6 @@ use std::io;
 use std::path::Path;
 use std::rc::Rc;
 
-use mailcraft_mime::{self as mime, Draft, InlinePicture, OutAttachment};
-use mailcraft_model::pim::{LOCAL, NOTE_YELLOW, Note, PIM_DOC, Pim, StoredCard, StoredEvent, StoredNote};
-use mailcraft_model::{EmailAddress, Flags, Folder, FolderRole, MessageKey, utf7};
-use mailcraft_store::{FolderState, Store};
 use outlook_pst::ltp::prop_context::PropertyValue;
 use outlook_pst::ltp::table_context::TableContext;
 use outlook_pst::messaging::attachment::{AnsiAttachment, Attachment, AttachmentData, UnicodeAttachment};
@@ -27,6 +23,10 @@ use outlook_pst::messaging::message::{AnsiMessage, Message, UnicodeMessage};
 use outlook_pst::messaging::store::{AnsiStore, EntryId, Store as PstStore, UnicodeStore};
 use outlook_pst::ndb::node_id::NodeId;
 use outlook_pst::{AnsiPstFile, UnicodePstFile};
+use quatrelle_mime::{self as mime, Draft, InlinePicture, OutAttachment};
+use quatrelle_model::pim::{LOCAL, NOTE_YELLOW, Note, PIM_DOC, Pim, StoredCard, StoredEvent, StoredNote};
+use quatrelle_model::{EmailAddress, Flags, Folder, FolderRole, MessageKey, utf7};
+use quatrelle_store::{FolderState, Store};
 
 /// Folders nested deeper than this are left out.
 const MAX_DEPTH: usize = 32;
@@ -159,7 +159,7 @@ fn visit(store: &dyn PstStore, folder: &dyn PstFolder, parent: Option<&str>, dep
         let mail = (class.is_empty() || class.starts_with("IPF.Note") || class.starts_with("IPF.Imap"))
             // Outlook's RSS Feeds folder is its own bookkeeping, not mail.
             && !class.starts_with("IPF.Note.OutlookHomepage");
-        // Outlook's own Outbox, when it has nothing waiting (MailCraft has an Outbox of its own).
+        // Outlook's own Outbox, when it has nothing waiting (Quatrelle has an Outbox of its own).
         let empty = sub.contents_table().is_none_or(|t| t.rows_matrix().next().is_none());
         if empty && special_folder(store, 0x35E2) == Some(u32::from(row.id())) {
             continue;
@@ -475,7 +475,7 @@ fn with_headers(built: Vec<u8>, original: &str, bcc: &[EmailAddress]) -> Vec<u8>
         }
     } else {
         if !bcc.is_empty() {
-            out.push_str(&format!("Bcc: {}\r\n", mailcraft_model::addr::format_list(bcc)));
+            out.push_str(&format!("Bcc: {}\r\n", quatrelle_model::addr::format_list(bcc)));
         }
         out.push_str(&head);
         out.push_str("\r\n");
@@ -494,7 +494,7 @@ const BATCH_BYTES: usize = 16 << 20;
 /// A message's summary from its rebuilt source's headers, with its preview and attachments
 /// from the item itself (parsing the whole source again, attachments and all, only to find them
 /// cost more than reading it).
-fn summary_of(raw: &[u8], it: &Item, key: MessageKey, size: u32) -> mailcraft_model::Summary {
+fn summary_of(raw: &[u8], it: &Item, key: MessageKey, size: u32) -> quatrelle_model::Summary {
     let end = raw.windows(4).position(|w| w == b"\r\n\r\n").map_or(raw.len(), |i| i + 4);
     let mut s = mime::summary_from_header(raw.get(..end).unwrap_or(raw), key, it.flags.clone(), size, it.date);
     s.has_attachments = !it.files.is_empty();
@@ -514,8 +514,8 @@ fn summary_of(raw: &[u8], it: &Item, key: MessageKey, size: u32) -> mailcraft_mo
 struct Open {
     uid_next: u32,
     /// Messages whose sources may not be written yet (they go to the list once they are).
-    waiting: Vec<mailcraft_model::Summary>,
-    list: mailcraft_store::ListWriter,
+    waiting: Vec<quatrelle_model::Summary>,
+    list: quatrelle_store::ListWriter,
 }
 
 /// What has been written so far.
@@ -575,7 +575,7 @@ impl Out<'_> {
     fn add_pim(&mut self, it: Item) {
         let Some(x) = &it.extra else { return };
         let n = self.pim.events.len() + self.pim.cards.len() + self.pim.notes.len();
-        let uid = format!("pst-{}-{n}@mailcraft.invalid", self.account);
+        let uid = format!("pst-{}-{n}@quatrelle.invalid", self.account);
         if it.class.to_ascii_lowercase().starts_with("ipm.stickynote") {
             // A note's text is its body (its subject is the first line of it).
             let text = if it.body.trim().is_empty() { it.subject.clone() } else { it.body.replace("\r\n", "\n") };
@@ -587,7 +587,7 @@ impl Out<'_> {
                 Note { uid, text: text.trim_end().to_string(), color: x.note_color.unwrap_or(NOTE_YELLOW), modified: x.modified.unwrap_or(it.date) };
             self.pim.notes.push(StoredNote { note, ..Default::default() });
         } else if it.class.to_ascii_lowercase().starts_with("ipm.task") {
-            // MailCraft has no task list: a task with a due date shows in the calendar that day.
+            // Quatrelle has no task list: a task with a due date shows in the calendar that day.
             let Some(due) = x.due else {
                 self.skipped += 1;
                 return;
@@ -618,7 +618,7 @@ impl Out<'_> {
         }
         let Some(st) = self.states.get_mut(path) else { return };
         let uid = st.uid_next;
-        let fallback = format!("pst.{}.{}.{uid}@mailcraft.invalid", self.account, self.imported);
+        let fallback = format!("pst.{}.{}.{uid}@quatrelle.invalid", self.account, self.imported);
         let raw = match to_raw(&it, &fallback) {
             Ok(r) => r,
             Err(e) => {
@@ -631,7 +631,7 @@ impl Out<'_> {
         st.uid_next = uid.saturating_add(1);
         let size = u32::try_from(raw.len()).unwrap_or(u32::MAX);
         st.waiting.push(summary_of(&raw, &it, key.clone(), size));
-        let page_full = st.waiting.len() >= mailcraft_store::PAGE_MESSAGES;
+        let page_full = st.waiting.len() >= quatrelle_store::PAGE_MESSAGES;
         self.imported += 1;
         self.pending_bytes += raw.len();
         self.pending.push((key, raw));
@@ -725,7 +725,7 @@ mod tests {
     /// Outlook's notes come in as notes: their text, colour and time; an empty one doesn't.
     #[test]
     fn notes_come_in_as_notes() {
-        let dir = std::env::temp_dir().join(format!("mailcraft-pst-notes-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("quatrelle-pst-notes-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let store = Store::open(&dir).unwrap();
         let mut progress = |_| {};
@@ -818,7 +818,7 @@ mod tests {
 
     #[test]
     fn an_offline_copy_is_explained() {
-        let dir = std::env::temp_dir().join(format!("mailcraft-ost-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("quatrelle-ost-{}", std::process::id()));
         let _ = std::fs::create_dir_all(&dir);
         let file = dir.join("me@example.com.ost");
         std::fs::write(&file, b"!BDN    SO$ rest").unwrap();
@@ -830,7 +830,7 @@ mod tests {
 
     #[test]
     fn junk_is_refused_and_nothing_is_written() {
-        let dir = std::env::temp_dir().join(format!("mailcraft-pst-junk-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("quatrelle-pst-junk-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let file = dir.join("junk.pst");
@@ -862,14 +862,14 @@ mod tests {
         assert_eq!(crate::pst_pim::contact_photo(true, "", None), None);
         // A picture bigger than a contact photo (512 KiB) is left out.
         let mut big = vec![0xFFu8, 0xD8, 0xFF, 0xE0];
-        big.resize(mailcraft_model::vcard::MAX_PHOTO + 1, 0);
+        big.resize(quatrelle_model::vcard::MAX_PHOTO + 1, 0);
         assert_eq!(crate::pst_pim::contact_photo(true, "image/jpeg", Some(&big)), None);
     }
 
     #[test]
     fn imports_a_data_file() {
         use pst_rw::{UnicodePstAttachment, UnicodePstFile as Writer, UnicodePstMessage, UnicodePstRecipient, UnicodePstRecipientType};
-        let dir = std::env::temp_dir().join(format!("mailcraft-pst-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("quatrelle-pst-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let file = dir.join("Archive 2024.pst");
@@ -940,14 +940,14 @@ mod tests {
 
 #[cfg(test)]
 mod real_files {
-    /// Import a real data file named by `MAILCRAFT_PST` (counts only).
+    /// Import a real data file named by `QUATRELLE_PST` (counts only).
     #[test]
     #[ignore]
-    fn imports_the_file_in_mailcraft_pst() {
-        let Ok(path) = std::env::var("MAILCRAFT_PST") else { return };
-        let dir = std::env::temp_dir().join(format!("mailcraft-real-pst-{}", std::process::id()));
+    fn imports_the_file_in_quatrelle_pst() {
+        let Ok(path) = std::env::var("QUATRELLE_PST") else { return };
+        let dir = std::env::temp_dir().join(format!("quatrelle-real-pst-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
-        let store = mailcraft_store::Store::open(&dir).unwrap();
+        let store = quatrelle_store::Store::open(&dir).unwrap();
         let t = std::time::Instant::now();
         let r = super::import(std::path::Path::new(&path), &store, "r1", &mut |_| {});
         match r {
@@ -965,7 +965,7 @@ mod real_files {
                     eprintln!("  {:30} {:?} total {} unread {}", f.path, f.role, f.total, f.unread);
                     for m in store.load_folder("r1", &f.path).unwrap().messages {
                         dated += usize::from(m.date > 0);
-                        if let Some(p) = store.read_body(&m.key).and_then(|raw| mailcraft_mime::parse(&raw)) {
+                        if let Some(p) = store.read_body(&m.key).and_then(|raw| quatrelle_mime::parse(&raw)) {
                             parsed += 1;
                             html += usize::from(p.had_html);
                             files += p.attachments.len();

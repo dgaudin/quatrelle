@@ -12,9 +12,9 @@ use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use mailcraft_model::job::Secret;
-use mailcraft_model::{AccountConfig, Event, Flag, Folder, FolderRole, Job, MessageKey, Op, SyncStatus, sort_folders};
-use mailcraft_store::{OutboxItem, Store};
+use quatrelle_model::job::Secret;
+use quatrelle_model::{AccountConfig, Event, Flag, Folder, FolderRole, Job, MessageKey, Op, SyncStatus, sort_folders};
+use quatrelle_store::{OutboxItem, Store};
 
 use crate::imap::{Client, uid_set};
 use crate::jmap;
@@ -149,12 +149,12 @@ const PENDING_DRAFTS: &str = "drafts-pending.json";
 struct PendingDraft {
     folder: String,
     #[serde(default)]
-    replaces: Option<mailcraft_model::MessageKey>,
+    replaces: Option<quatrelle_model::MessageKey>,
     raw: Vec<u8>,
 }
 
 /// Keep a draft on this computer for the next connection.
-fn keep_draft(store: &Store, account: &str, folder: &str, replaces: Option<mailcraft_model::MessageKey>, raw: Vec<u8>) -> Result<()> {
+fn keep_draft(store: &Store, account: &str, folder: &str, replaces: Option<quatrelle_model::MessageKey>, raw: Vec<u8>) -> Result<()> {
     let mut list: Vec<PendingDraft> = store.load_account_doc(account, PENDING_DRAFTS).unwrap_or_default();
     // A newer version of the same draft replaces the one kept.
     if let Some(r) = &replaces {
@@ -164,19 +164,19 @@ fn keep_draft(store: &Store, account: &str, folder: &str, replaces: Option<mailc
     store.save_account_doc(account, PENDING_DRAFTS, &list).map_err(NetError::from)
 }
 
-pub use mailcraft_model::MICROSOFT_NO_PASSWORDS;
+pub use quatrelle_model::MICROSOFT_NO_PASSWORDS;
 
 /// What a mailbox Microsoft won't open over IMAP needs: IMAP switched on (Outlook.com's own
 /// setting; an organisation's administrator for work accounts), the right account picked in the
 /// browser, or Microsoft Graph, which doesn't use IMAP.
 fn microsoft_imap_closed(email: &str, signed_in_as: Option<&str>) -> String {
     let who = signed_in_as.map(|o| format!(" (the browser signed in as {o})")).unwrap_or_default();
-    let fix = if mailcraft_model::microsoft_consumer(email) {
+    let fix = if quatrelle_model::microsoft_consumer(email) {
         "Turn on IMAP on Outlook.com (Settings › Mail › Forwarding and IMAP), or connect the account through Microsoft Graph instead"
     } else {
         "Your organisation may have turned IMAP off: connect the account through Microsoft Graph instead, or ask its administrator"
     };
-    format!("{}{who}. {fix}.", mailcraft_model::MICROSOFT_IMAP_CLOSED)
+    format!("{}{who}. {fix}.", quatrelle_model::MICROSOFT_IMAP_CLOSED)
 }
 
 pub(crate) fn now() -> i64 {
@@ -204,7 +204,7 @@ impl Pool {
     /// (`Event::OpenUrl`), the refresh token goes to the keychain, then the account starts.
     fn sign_in(&mut self, account: AccountConfig) {
         let Some(p) = crate::oauth::provider_for_account(&account) else {
-            let error = format!("signing in with {} isn't set up in this copy of MailCraft", account.oauth.as_deref().unwrap_or("that provider"));
+            let error = format!("signing in with {} isn't set up in this copy of Quatrelle", account.oauth.as_deref().unwrap_or("that provider"));
             return self.sink.emit(Event::Status { account: account.id, status: SyncStatus::NeedsPassword { error } });
         };
         let (sink, creds) = (self.sink.clone(), self.creds.clone());
@@ -277,13 +277,13 @@ impl Pool {
         }
     }
 
-    /// Import a data file on a thread of its own: an Outlook one (`.pst`), or MailCraft's own
-    /// (`.mailcraft`, copied in as it is).
+    /// Import a data file on a thread of its own: an Outlook one (`.pst`), or Quatrelle's own
+    /// (`.quatrelle`, copied in as it is).
     fn import_pst(&mut self, account: String, path: String) {
         let sink = self.sink.clone();
         let store = self.store.clone();
         let spawned = std::thread::Builder::new().name("mail-import".into()).spawn(move || {
-            if path.to_ascii_lowercase().ends_with(".mailcraft") {
+            if path.to_ascii_lowercase().ends_with(".quatrelle") {
                 match store.import_data_file(&account, std::path::Path::new(&path)) {
                     Ok(messages) => {
                         let folders = store.load_folders(&account).unwrap_or_default();
@@ -583,12 +583,12 @@ const SENT_LATER: Duration = Duration::from_secs(15);
 const QUICK_IDLE: Duration = Duration::from_secs(5 * 60);
 
 /// The connection to an account's server.
-/// Split the rules a server lists into the ones MailCraft holds the id of, and the names of the
+/// Split the rules a server lists into the ones Quatrelle holds the id of, and the names of the
 /// others (Outlook's own, the server's web page, a script the user wrote).
 fn split_rules(
-    all: Vec<mailcraft_model::organize::ForeignRule>,
+    all: Vec<quatrelle_model::organize::ForeignRule>,
     ours: &[String],
-) -> (Vec<(String, String)>, Vec<mailcraft_model::organize::ForeignRule>) {
+) -> (Vec<(String, String)>, Vec<quatrelle_model::organize::ForeignRule>) {
     let mut mine = Vec::new();
     let mut others = Vec::new();
     for r in all {
@@ -691,7 +691,7 @@ impl Worker {
             return Ok(t.access.clone());
         }
         let p = crate::oauth::provider_for_account(&self.acc)
-            .ok_or_else(|| NetError::Auth(format!("signing in with {id} isn't set up in this copy of MailCraft")))?;
+            .ok_or_else(|| NetError::Auth(format!("signing in with {id} isn't set up in this copy of Quatrelle")))?;
         let t = crate::oauth::refresh(&p, &auth.secret)?;
         // Some providers hand out a new refresh token each time: keep the newest.
         if let Some(r) = t.refresh.clone().filter(|r| *r != auth.secret) {
@@ -1023,7 +1023,7 @@ impl Worker {
                 self.status(SyncStatus::Error { error: microsoft_imap_closed(&self.acc.email, self.acc.oauth_user.as_deref()) });
             }
             // Microsoft's servers refuse passwords from mail apps: asking for it again only loops.
-            NetError::Auth(m) if mailcraft_model::microsoft_password_account(&self.acc) => {
+            NetError::Auth(m) if quatrelle_model::microsoft_password_account(&self.acc) => {
                 self.conn = None;
                 self.auth_failed = true;
                 self.status(SyncStatus::Error { error: format!("{MICROSOFT_NO_PASSWORDS} ({m})") });
@@ -1432,7 +1432,7 @@ impl Worker {
                 // POP: a move is carried out here (there's no server copy to come back); what's
                 // deleted for good is noted, for removing the server's copy when the account says.
                 if self.acc.pop.is_some() {
-                    let gone: Vec<mailcraft_model::MessageKey> = match &op {
+                    let gone: Vec<quatrelle_model::MessageKey> = match &op {
                         Op::Expunge { keys } => keys.clone(),
                         Op::EmptyFolder { path } => {
                             self.store.load_folder(&self.acc.id, path).map(|f| f.messages.into_iter().map(|m| m.key).collect()).unwrap_or_default()
@@ -1473,7 +1473,7 @@ impl Worker {
                         self.connect()?;
                     }
                     if let Some(Conn::Pop) = self.conn.as_ref() {
-                        let flags = mailcraft_model::Flags { draft: true, seen: true, ..Default::default() };
+                        let flags = quatrelle_model::Flags { draft: true, seen: true, ..Default::default() };
                         crate::pop::file_locally(&self.store, &self.acc.id, &folder, &raw, flags, now())?;
                         if let Some(old) = replaces {
                             self.store.apply_op(&self.acc.id, &Op::Expunge { keys: vec![old] })?;
@@ -1567,10 +1567,10 @@ impl Worker {
     }
 
     /// Put the account's server-marked rules on its server (Exchange's inbox rules), so mail is
-    /// filed while MailCraft is closed, and remove the ones turned off or deleted here.
-    fn set_server_rules(&mut self, rules: Vec<mailcraft_model::organize::Rule>, delete: Vec<String>, categories: Vec<(String, String)>) {
-        use mailcraft_model::organize::RuleAction;
-        let r = (|| -> Result<(Vec<(String, String)>, Vec<mailcraft_model::organize::ForeignRule>)> {
+    /// filed while Quatrelle is closed, and remove the ones turned off or deleted here.
+    fn set_server_rules(&mut self, rules: Vec<quatrelle_model::organize::Rule>, delete: Vec<String>, categories: Vec<(String, String)>) {
+        use quatrelle_model::organize::RuleAction;
+        let r = (|| -> Result<(Vec<(String, String)>, Vec<quatrelle_model::organize::ForeignRule>)> {
             if rules.is_empty() && delete.is_empty() {
                 return Ok((Vec::new(), Vec::new()));
             }
@@ -1584,7 +1584,7 @@ impl Worker {
                 let secret = self.secret()?;
                 let user = if self.acc.username.is_empty() { self.acc.email.clone() } else { self.acc.username.clone() };
                 let mut s = crate::sieve::Client::connect(&self.acc.imap, self.sieve_port).map_err(|e| match e {
-                    NetError::Io(_) => NetError::No("this server doesn't take inbox rules from MailCraft (no ManageSieve)".into()),
+                    NetError::Io(_) => NetError::No("this server doesn't take inbox rules from Quatrelle (no ManageSieve)".into()),
                     e => e,
                 })?;
                 if self.acc.oauth.is_some() {
@@ -1600,7 +1600,7 @@ impl Worker {
                 let others = names
                     .iter()
                     .filter(|n| n.as_str() != crate::sieve::SCRIPT)
-                    .map(|n| mailcraft_model::organize::ForeignRule {
+                    .map(|n| quatrelle_model::organize::ForeignRule {
                         account: self.acc.id.clone(),
                         id: format!("sieve:{n}"),
                         name: n.clone(),
@@ -1613,7 +1613,7 @@ impl Worker {
                 return Ok((ids, others));
             }
             // The folder each rule files mail into, by the id the server knows it by.
-            let mut wanted: Vec<(mailcraft_model::organize::Rule, Option<String>)> = Vec::new();
+            let mut wanted: Vec<(quatrelle_model::organize::Rule, Option<String>)> = Vec::new();
             for rule in rules.iter().filter(|r| r.server && r.server_ready()) {
                 let folder: Option<&str> = rule.actions.iter().find_map(|a| match a {
                     RuleAction::MoveTo(path) => Some(path.as_str()),
@@ -1637,7 +1637,7 @@ impl Worker {
             let ids = match self.conn.as_mut() {
                 Some(Conn::Ews(c)) => c.set_inbox_rules(&wanted, &delete),
                 Some(Conn::Graph(c)) => c.set_message_rules(&wanted, &delete),
-                _ => Err(NetError::No("this server's rules can't be changed from MailCraft".into())),
+                _ => Err(NetError::No("this server's rules can't be changed from Quatrelle".into())),
             }?;
             // What else the server runs: made in Outlook, or on its own web page.
             let all = match self.conn.as_ref() {
@@ -1665,9 +1665,9 @@ impl Worker {
         }
     }
 
-    /// What the account's server keeps: the ids MailCraft's own rules have there (`ours` is what
+    /// What the account's server keeps: the ids Quatrelle's own rules have there (`ours` is what
     /// it holds), the names of the ones it didn't make, and its own the server no longer has.
-    fn read_server_rules(&mut self, ours: Vec<String>) -> Result<(Vec<(String, String)>, Vec<mailcraft_model::organize::ForeignRule>, Vec<String>)> {
+    fn read_server_rules(&mut self, ours: Vec<String>) -> Result<(Vec<(String, String)>, Vec<quatrelle_model::organize::ForeignRule>, Vec<String>)> {
         if self.conn.is_none() {
             self.connect()?;
         }
@@ -1678,7 +1678,7 @@ impl Worker {
             let secret = self.secret()?;
             let user = if self.acc.username.is_empty() { self.acc.email.clone() } else { self.acc.username.clone() };
             let mut s = crate::sieve::Client::connect(&self.acc.imap, self.sieve_port).map_err(|e| match e {
-                NetError::Io(_) => NetError::No("this server keeps no rules for MailCraft (no ManageSieve)".into()),
+                NetError::Io(_) => NetError::No("this server keeps no rules for Quatrelle (no ManageSieve)".into()),
                 e => e,
             })?;
             if self.acc.oauth.is_some() {
@@ -1697,7 +1697,7 @@ impl Worker {
             let others = names
                 .iter()
                 .filter(|n| n.as_str() != crate::sieve::SCRIPT)
-                .map(|n| mailcraft_model::organize::ForeignRule {
+                .map(|n| quatrelle_model::organize::ForeignRule {
                     account: self.acc.id.clone(),
                     id: format!("sieve:{n}"),
                     name: n.clone(),
@@ -1725,7 +1725,7 @@ impl Worker {
     }
 
     /// The folder path behind the id a server's rule files mail into (Exchange names folders by
-    /// id, MailCraft by path).
+    /// id, Quatrelle by path).
     fn path_of_folder_id(&self, id: &str) -> Option<String> {
         self.folders
             .iter()
@@ -1734,13 +1734,13 @@ impl Worker {
             .map(|f| f.path.clone())
     }
 
-    /// A server rule's `MoveTo` names a folder by the id the server knows; in MailCraft's terms
+    /// A server rule's `MoveTo` names a folder by the id the server knows; in Quatrelle's terms
     /// it's the folder's path, so the rule can be shown and changed here.
-    fn resolve_rule_folders(&self, rules: &mut [mailcraft_model::organize::ForeignRule]) {
+    fn resolve_rule_folders(&self, rules: &mut [quatrelle_model::organize::ForeignRule]) {
         for f in rules.iter_mut() {
             let Some(rule) = &mut f.rule else { continue };
             for a in &mut rule.actions {
-                if let mailcraft_model::organize::RuleAction::MoveTo(path) = a
+                if let quatrelle_model::organize::RuleAction::MoveTo(path) = a
                     && let Some(id) = path.strip_prefix("id:")
                     && let Some(found) = self.path_of_folder_id(id)
                 {
@@ -1750,10 +1750,10 @@ impl Worker {
         }
     }
 
-    /// Change one of the server's own rules (one MailCraft didn't make): only that rule is sent,
+    /// Change one of the server's own rules (one Quatrelle didn't make): only that rule is sent,
     /// with the place it already has there, so the other rules and their order stay as they are.
-    fn edit_server_rule(&mut self, id: &str, rule: &mailcraft_model::organize::Rule, ours: Vec<String>) {
-        use mailcraft_model::organize::RuleAction;
+    fn edit_server_rule(&mut self, id: &str, rule: &quatrelle_model::organize::Rule, ours: Vec<String>) {
+        use quatrelle_model::organize::RuleAction;
         let r = (|| -> Result<()> {
             if self.conn.is_none() {
                 self.connect()?;
@@ -1776,7 +1776,7 @@ impl Worker {
             match self.conn.as_mut() {
                 Some(Conn::Ews(c)) => c.set_inbox_rules(&wanted, &[]).map(|_| ()),
                 Some(Conn::Graph(c)) => c.set_message_rules(&wanted, &[]).map(|_| ()),
-                _ => Err(NetError::No("this server's rules can't be changed from MailCraft".into())),
+                _ => Err(NetError::No("this server's rules can't be changed from Quatrelle".into())),
             }
         })();
         match r {
@@ -1822,7 +1822,7 @@ impl Worker {
                         c.set_rule_enabled(id, enabled.unwrap_or(true))
                     }
                 }
-                _ => Err(NetError::No("this server's rules can't be changed from MailCraft".into())),
+                _ => Err(NetError::No("this server's rules can't be changed from Quatrelle".into())),
             }
         })();
         match r {
@@ -1887,8 +1887,8 @@ impl Worker {
 
     /// The rules an IMAP account's Sieve script gets, their destinations resolved to the
     /// server's folder names, and the id kept for each (the script holds the rules by name).
-    fn sieve_rules(&self, rules: &[mailcraft_model::organize::Rule]) -> (Vec<mailcraft_model::organize::Rule>, Vec<(String, String)>) {
-        use mailcraft_model::organize::RuleAction;
+    fn sieve_rules(&self, rules: &[quatrelle_model::organize::Rule]) -> (Vec<quatrelle_model::organize::Rule>, Vec<(String, String)>) {
+        use quatrelle_model::organize::RuleAction;
         let mut wanted = Vec::new();
         let mut ids = Vec::new();
         for rule in rules.iter().filter(|r| r.server && r.sieve_ready()) {
@@ -1914,8 +1914,8 @@ impl Worker {
                         Some(f) => actions.push(RuleAction::MoveTo(f.path.clone())),
                         None => missing = true,
                     },
-                    // Deleting is filing in Deleted Items, as MailCraft does here.
-                    RuleAction::Delete => match self.folders.iter().find(|f| f.role == mailcraft_model::FolderRole::Trash && f.mailbox.is_none()) {
+                    // Deleting is filing in Deleted Items, as Quatrelle does here.
+                    RuleAction::Delete => match self.folders.iter().find(|f| f.role == quatrelle_model::FolderRole::Trash && f.mailbox.is_none()) {
                         Some(f) => actions.push(RuleAction::MoveTo(f.path.clone())),
                         None => missing = true,
                     },
@@ -1937,7 +1937,7 @@ impl Worker {
 
     /// Read (and first change, when `set`) the automatic replies: JMAP's own, or a Sieve script
     /// through ManageSieve on the IMAP host.
-    fn vacation(&mut self, set: Option<&mailcraft_model::job::Vacation>) -> Result<mailcraft_model::job::Vacation> {
+    fn vacation(&mut self, set: Option<&quatrelle_model::job::Vacation>) -> Result<quatrelle_model::job::Vacation> {
         // Not connected: one try, and a failure shows as the account's status (it said
         // "Connecting…" for good when the vacation page was opened on an account that can't).
         // (The second connection asks ManageSieve straight away: it needs no IMAP session.)
@@ -1993,7 +1993,7 @@ impl Worker {
         v
     }
 
-    fn report_vacation(&self, r: Result<mailcraft_model::job::Vacation>, failed: Option<String>) {
+    fn report_vacation(&self, r: Result<quatrelle_model::job::Vacation>, failed: Option<String>) {
         let (vacation, error) = match r {
             Ok(v) => (Some(v), failed),
             Err(e) => (None, Some(failed.unwrap_or_else(|| e.to_string()))),
@@ -2006,7 +2006,7 @@ impl Worker {
     fn sync_dav(&mut self) {
         // Exchange Online: its calendars and contacts through Graph.
         if let Some(Conn::Graph(c)) = &self.conn {
-            let pim: mailcraft_model::pim::Pim = self.store.load_account_doc(&self.acc.id, mailcraft_model::pim::PIM_DOC).unwrap_or_default();
+            let pim: quatrelle_model::pim::Pim = self.store.load_account_doc(&self.acc.id, quatrelle_model::pim::PIM_DOC).unwrap_or_default();
             match crate::graph_pim::sync(c, &pim, now()) {
                 Ok(sync) => self.sink.emit(Event::DavSynced { account: self.id(), sync: Box::new(sync) }),
                 Err(e) => log::info!("{}: calendars and contacts: {e}", self.acc.id),
@@ -2015,7 +2015,7 @@ impl Worker {
         }
         // On-premises Exchange: its calendar and contacts through EWS.
         if let Some(Conn::Ews(c)) = &self.conn {
-            let pim: mailcraft_model::pim::Pim = self.store.load_account_doc(&self.acc.id, mailcraft_model::pim::PIM_DOC).unwrap_or_default();
+            let pim: quatrelle_model::pim::Pim = self.store.load_account_doc(&self.acc.id, quatrelle_model::pim::PIM_DOC).unwrap_or_default();
             match crate::ews_pim::sync(c, &pim, now()) {
                 Ok(sync) => self.sink.emit(Event::DavSynced { account: self.id(), sync: Box::new(sync) }),
                 Err(e) => log::info!("{}: calendars and contacts: {e}", self.acc.id),
@@ -2026,7 +2026,7 @@ impl Worker {
         if self.acc.oauth.is_some() || self.acc.ews.is_some() {
             return;
         }
-        let pim: mailcraft_model::pim::Pim = self.store.load_account_doc(&self.acc.id, mailcraft_model::pim::PIM_DOC).unwrap_or_default();
+        let pim: quatrelle_model::pim::Pim = self.store.load_account_doc(&self.acc.id, quatrelle_model::pim::PIM_DOC).unwrap_or_default();
         let user = if self.acc.username.is_empty() { self.acc.email.clone() } else { self.acc.username.clone() };
         let password = self.auth.lock().unwrap_or_else(std::sync::PoisonError::into_inner).secret.clone();
         let dav = crate::dav::Dav::new(&user, &password);
@@ -2220,7 +2220,7 @@ impl Worker {
                 continue;
             }
             let Some(raw) = self.store.outbox_raw(&self.acc.id, item.id) else { continue };
-            let raw = if item.not_before > 0 { mailcraft_mime::with_date(&raw, now()) } else { raw };
+            let raw = if item.not_before > 0 { quatrelle_mime::with_date(&raw, now()) } else { raw };
             if item.error.as_deref().is_some_and(|e| e.starts_with("refused:")) {
                 // Refused for good: waits for the user to edit or delete it.
                 continue;
@@ -2274,7 +2274,7 @@ impl Worker {
                 }
                 // POP: Sent Items is on this computer.
                 if let Some(Conn::Pop) = self.conn.as_ref() {
-                    let flags = mailcraft_model::Flags { seen: true, ..Default::default() };
+                    let flags = quatrelle_model::Flags { seen: true, ..Default::default() };
                     return crate::pop::file_locally(&self.store, &self.acc.id, &folder, raw, flags, now()).map(drop);
                 }
                 self.client()?.append(&folder, "\\Seen", raw).map(|_| ())
@@ -2415,7 +2415,7 @@ pub fn apply_remote_with<S: std::io::Read + std::io::Write>(c: &mut Client<S>, o
     match op {
         Op::SetFlag { keys, flag, on } => by_folder(c, keys, |c, _, set| c.uid_store(set, *on, flag.imap())),
         // A keyword that isn't an atom would make the command malformed: the engine never sends one.
-        Op::SetKeyword { keys, keyword, on } if mailcraft_model::is_keyword(keyword) => {
+        Op::SetKeyword { keys, keyword, on } if quatrelle_model::is_keyword(keyword) => {
             by_folder(c, keys, |c, _, set| c.uid_store(set, *on, keyword))
         }
         Op::SetKeyword { .. } => Ok(()),
@@ -2462,13 +2462,13 @@ fn log_event(e: &Event) {
 /// folders and years of archives takes minutes, and the Inbox must not wait for them.
 fn sync_order(folders: &[Folder]) -> Vec<String> {
     let rank = |f: &Folder| match f.role {
-        mailcraft_model::FolderRole::Inbox => 0,
-        mailcraft_model::FolderRole::Drafts => 1,
-        mailcraft_model::FolderRole::Sent => 2,
-        mailcraft_model::FolderRole::Junk => 3,
-        mailcraft_model::FolderRole::Trash => 4,
-        mailcraft_model::FolderRole::Other => 5,
-        mailcraft_model::FolderRole::Archive => 6,
+        quatrelle_model::FolderRole::Inbox => 0,
+        quatrelle_model::FolderRole::Drafts => 1,
+        quatrelle_model::FolderRole::Sent => 2,
+        quatrelle_model::FolderRole::Junk => 3,
+        quatrelle_model::FolderRole::Trash => 4,
+        quatrelle_model::FolderRole::Other => 5,
+        quatrelle_model::FolderRole::Archive => 6,
     };
     let mut v: Vec<(&Folder, u8)> = folders.iter().filter(|f| f.selectable).map(|f| (f, rank(f))).collect();
     v.sort_by(|a, b| a.1.cmp(&b.1).then_with(|| a.0.path.cmp(&b.0.path)));
@@ -2585,7 +2585,7 @@ mod tests {
     /// last: a mailbox of public folders and years of archives must not hold the Inbox back.
     #[test]
     fn a_full_sync_starts_with_the_inbox() {
-        use mailcraft_model::FolderRole;
+        use quatrelle_model::FolderRole;
         let f = |path: &str, role: FolderRole| Folder {
             account: "a1".into(),
             path: path.into(),
@@ -2596,7 +2596,7 @@ mod tests {
             total: 0,
             name: None,
             mailbox: None,
-            mailbox_role: mailcraft_model::FolderRole::Other,
+            mailbox_role: quatrelle_model::FolderRole::Other,
         };
         let folders = vec![
             f("ASP", FolderRole::Other),
@@ -2615,11 +2615,11 @@ mod tests {
         );
     }
 
-    /// A server's rules split by whose they are: the ones MailCraft holds the id of, and the
+    /// A server's rules split by whose they are: the ones Quatrelle holds the id of, and the
     /// ones it didn't make (Outlook's own, the server's web page).
     #[test]
     fn server_rules_split_by_whose_they_are() {
-        let rule = |name: &str, id: &str| mailcraft_model::organize::ForeignRule {
+        let rule = |name: &str, id: &str| quatrelle_model::organize::ForeignRule {
             account: String::new(),
             id: id.into(),
             name: name.into(),
@@ -2684,13 +2684,13 @@ mod tests {
         let mut acc = AccountConfig {
             id: "a1".into(),
             email: "zoe@hotmail.example".into(),
-            imap: mailcraft_model::ServerConfig { host: "127.0.0.1".into(), port, security: mailcraft_model::Security::None },
+            imap: quatrelle_model::ServerConfig { host: "127.0.0.1".into(), port, security: quatrelle_model::Security::None },
             oauth: Some("microsoft".into()),
             ..Default::default()
         };
         let w = Worker::new(acc.clone(), Auth::shared("refresh"), store.clone(), pool.sink.clone(), SyncOptions::default());
         let e = w.imap_with_token("zoe@hotmail.example", crate::fake::GOOD_TOKEN).err().unwrap();
-        assert!(e.to_string().starts_with(mailcraft_model::MICROSOFT_IMAP_CLOSED) && e.to_string().contains("IMAP"), "{e:?}");
+        assert!(e.to_string().starts_with(quatrelle_model::MICROSOFT_IMAP_CLOSED) && e.to_string().contains("IMAP"), "{e:?}");
         // The browser signed in as the mailbox's own address: that one opens it.
         acc.oauth_user = Some("me@studio.example".into());
         let w = Worker::new(acc.clone(), Auth::shared("refresh"), store.clone(), pool.sink.clone(), SyncOptions::default());
@@ -2711,17 +2711,17 @@ mod tests {
         assert!(matches!(w.imap_with_token("zoe@hotmail.example", "expired"), Err(NetError::Auth(_))));
     }
 
-    /// A MailCraft data file (`.mailcraft`) comes in through the same job as a `.pst`.
+    /// A Quatrelle data file (`.quatrelle`) comes in through the same job as a `.pst`.
     #[test]
-    fn a_mailcraft_data_file_is_imported() {
-        let t = std::env::temp_dir().join(format!("mailcraft-worker-datafile-{}", std::process::id()));
+    fn a_quatrelle_data_file_is_imported() {
+        let t = std::env::temp_dir().join(format!("quatrelle-worker-datafile-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&t);
         let old = Store::open_packed(t.join("old"), t.join("Old Files")).unwrap();
         old.save_accounts(&[AccountConfig { id: "a1".into(), email: "zoe@studio.example".into(), ..Default::default() }]).unwrap();
         old.save_folders("a1", &[Folder { path: "INBOX".into(), role: FolderRole::Inbox, ..Default::default() }]).unwrap();
         let k = MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 1, uid: 3 };
         let mut st = old.load_folder("a1", "INBOX").unwrap();
-        st.messages.push(mailcraft_model::Summary { key: k, subject: "Kept".into(), ..Default::default() });
+        st.messages.push(quatrelle_model::Summary { key: k, subject: "Kept".into(), ..Default::default() });
         old.save_folder("a1", "INBOX", &st).unwrap();
         let file = old.data_file("a1").unwrap();
         drop(old);
@@ -2741,7 +2741,7 @@ mod tests {
 
     #[test]
     fn pool_without_password_asks_for_one() {
-        let dir = std::env::temp_dir().join(format!("mailcraft-pool-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("quatrelle-pool-{}", std::process::id()));
         let store = Store::open(&dir).unwrap();
         let mut p = Pool::new(store, Arc::new(MemoryCredentials::default()));
         let a = AccountConfig { id: "a1".into(), ..Default::default() };

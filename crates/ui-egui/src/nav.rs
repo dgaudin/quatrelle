@@ -6,8 +6,8 @@
 //! folders in them collapse, and stay so from one start to the next.
 
 use egui::{Color32, RichText, Sense, Ui, vec2};
-use mailcraft_engine::model::{Folder, FolderRole};
-use mailcraft_engine::{Session, View};
+use quatrelle_engine::model::{Folder, FolderRole};
+use quatrelle_engine::{Session, View};
 use serde_json::json;
 
 use crate::icons::{self, Icon};
@@ -189,7 +189,7 @@ pub fn show(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>) {
                     ui.close();
                 }
                 // A Microsoft account with a password (refused there) switches to Microsoft sign-in.
-                let switch = mailcraft_engine::model::microsoft_password_account(&config) && s.oauth_available.iter().any(|p| p == "microsoft");
+                let switch = quatrelle_engine::model::microsoft_password_account(&config) && s.oauth_available.iter().any(|p| p == "microsoft");
                 if !a.is_local() && ui.button(if switch { tl!("Sign in with Microsoft…") } else { tl!("Sign in again…") }).clicked() {
                     acts.push(Action::SignInAgain(config.id.clone()));
                     ui.close();
@@ -290,7 +290,7 @@ pub fn show(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>) {
 
 /// A shared mailbox's heading (its top folder `top`): its name, an arrow that collapses it, and
 /// a menu. Whether it was clicked.
-fn shared_header(t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>, a: &mailcraft_engine::AccountState, top: &Folder, open: bool) -> bool {
+fn shared_header(t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>, a: &quatrelle_engine::AccountState, top: &Folder, open: bool) -> bool {
     let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 30.0), Sense::click());
     let dropping = resp.dnd_hover_payload::<DragKeys>().is_some() || resp.dnd_hover_payload::<DragFolder>().is_some();
     if resp.hovered() || dropping {

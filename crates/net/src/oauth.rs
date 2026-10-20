@@ -9,8 +9,8 @@
 //!
 //! Providers only issue tokens to registered apps. The registration (a client id, and for
 //! Google a client "secret" that isn't secret for installed apps) belongs to whoever ships
-//! MailCraft: it is read from `MAILCRAFT_GOOGLE_CLIENT_ID` / `MAILCRAFT_GOOGLE_CLIENT_SECRET` and
-//! `MAILCRAFT_MICROSOFT_CLIENT_ID`, at run time or baked in at build time. Without one, a
+//! Quatrelle: it is read from `QUATRELLE_GOOGLE_CLIENT_ID` / `QUATRELLE_GOOGLE_CLIENT_SECRET` and
+//! `QUATRELLE_MICROSOFT_CLIENT_ID`, at run time or baked in at build time. Without one, a
 //! provider isn't offered.
 
 use std::io::{BufRead, BufReader, Write};
@@ -40,7 +40,7 @@ fn setting(name: &str, built_in: Option<&'static str>) -> Option<String> {
     std::env::var(name).ok().or_else(|| built_in.map(str::to_string)).map(|v| v.trim().to_string()).filter(|v| !v.is_empty())
 }
 
-/// A provider by id, when MailCraft has a registration for it.
+/// A provider by id, when Quatrelle has a registration for it.
 pub fn provider(id: &str) -> Option<Provider> {
     match id {
         "google" => Some(Provider {
@@ -49,8 +49,8 @@ pub fn provider(id: &str) -> Option<Provider> {
             auth_url: "https://accounts.google.com/o/oauth2/v2/auth".into(),
             token_url: "https://oauth2.googleapis.com/token".into(),
             scope: "https://mail.google.com/".into(),
-            client_id: setting("MAILCRAFT_GOOGLE_CLIENT_ID", option_env!("MAILCRAFT_GOOGLE_CLIENT_ID"))?,
-            client_secret: setting("MAILCRAFT_GOOGLE_CLIENT_SECRET", option_env!("MAILCRAFT_GOOGLE_CLIENT_SECRET")),
+            client_id: setting("QUATRELLE_GOOGLE_CLIENT_ID", option_env!("QUATRELLE_GOOGLE_CLIENT_ID"))?,
+            client_secret: setting("QUATRELLE_GOOGLE_CLIENT_SECRET", option_env!("QUATRELLE_GOOGLE_CLIENT_SECRET")),
         }),
         "microsoft" => Some(Provider {
             id: "microsoft".into(),
@@ -58,18 +58,18 @@ pub fn provider(id: &str) -> Option<Provider> {
             auth_url: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize".into(),
             token_url: "https://login.microsoftonline.com/common/oauth2/v2.0/token".into(),
             scope: "https://outlook.office.com/IMAP.AccessAsUser.All https://outlook.office.com/SMTP.Send offline_access".into(),
-            client_id: setting("MAILCRAFT_MICROSOFT_CLIENT_ID", option_env!("MAILCRAFT_MICROSOFT_CLIENT_ID"))?,
+            client_id: setting("QUATRELLE_MICROSOFT_CLIENT_ID", option_env!("QUATRELLE_MICROSOFT_CLIENT_ID"))?,
             client_secret: None,
         }),
         _ => None,
     }
 }
 
-pub use mailcraft_model::oauth_provider_for as provider_for_host;
+pub use quatrelle_model::oauth_provider_for as provider_for_host;
 
 /// The provider an account signs in with: Graph accounts ask Microsoft for Graph's mail
 /// permissions instead of IMAP's and SMTP's (a token is for one service).
-pub fn provider_for_account(account: &mailcraft_model::AccountConfig) -> Option<Provider> {
+pub fn provider_for_account(account: &quatrelle_model::AccountConfig) -> Option<Provider> {
     let mut p = provider(account.oauth.as_deref()?)?;
     if account.graph.is_some() && p.id == "microsoft" {
         p.scope = GRAPH_SCOPE.into();
@@ -259,10 +259,10 @@ pub fn authorize(p: &Provider, login_hint: &str, open: &mut dyn FnMut(&str) -> s
             continue;
         }
         let (status, page) = match (get("code"), get("error")) {
-            (Some(_), _) => ("200 OK", "You're signed in to MailCraft. You can close this window."),
-            _ => ("400 Bad Request", "MailCraft wasn't allowed to sign in. You can close this window and try again."),
+            (Some(_), _) => ("200 OK", "You're signed in to Quatrelle. You can close this window."),
+            _ => ("400 Bad Request", "Quatrelle wasn't allowed to sign in. You can close this window and try again."),
         };
-        let body = format!("<!doctype html><meta charset=utf-8><title>MailCraft</title><p style=\"font:16px sans-serif;margin:3em\">{page}</p>");
+        let body = format!("<!doctype html><meta charset=utf-8><title>Quatrelle</title><p style=\"font:16px sans-serif;margin:3em\">{page}</p>");
         let _ = (&sock).write_all(
             format!(
                 "HTTP/1.1 {status}\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
@@ -301,7 +301,7 @@ pub(crate) mod tests {
             auth_url: "http://127.0.0.1:9/auth".into(),
             token_url: token_url.into(),
             scope: "mail".into(),
-            client_id: "mailcraft-test".into(),
+            client_id: "quatrelle-test".into(),
             client_secret: None,
         }
     }

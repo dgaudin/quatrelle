@@ -1,18 +1,18 @@
-//! File › About › Check for updates: MailCraft's releases, as GitHub lists them.
+//! File › About › Check for updates: Quatrelle's releases, as GitHub lists them.
 //!
-//! MailCraft's releases are pre-releases (`v0.19.0-test.15`), which GitHub's "latest release"
+//! Quatrelle's releases are pre-releases (`v0.19.0-test.15`), which GitHub's "latest release"
 //! leaves out, so the recent ones are listed and the engine picks (`Session::check_updates`).
 //! The answer is untrusted: its size is capped, and only addresses on the project's own releases
 //! pages are kept (anything else falls back to the release's page, or nothing).
 
-use mailcraft_model::job::Release;
+use quatrelle_model::job::Release;
 use serde_json::Value;
 
 use crate::http::{Request, send};
 use crate::{NetError, Result};
 
-/// Where MailCraft is published.
-pub const REPO: &str = "ZIDAN44/mailcraft";
+/// Where Quatrelle is published.
+pub const REPO: &str = "ZIDAN44/quatrelle";
 
 /// The largest answer read (ten releases with their files lists).
 const MAX_ANSWER: usize = 2 << 20;
@@ -22,7 +22,7 @@ pub fn releases() -> Result<Vec<Release>> {
     let req = Request::get(&format!("https://api.github.com/repos/{REPO}/releases?per_page=10"), MAX_ANSWER)
         .header("Accept", "application/vnd.github+json")
         .header("X-GitHub-Api-Version", "2022-11-28")
-        .header("User-Agent", concat!("MailCraft/", env!("CARGO_PKG_VERSION")));
+        .header("User-Agent", concat!("Quatrelle/", env!("CARGO_PKG_VERSION")));
     let resp = send(&req)?;
     // GitHub answers 403 (or 429) when its anonymous quota ran out (60 an hour for everyone
     // behind the same address); when it refills rides along.
@@ -137,20 +137,20 @@ mod tests {
         }
     }
 
-    /// GitHub's answer, as it lists MailCraft's pre-releases: drafts and other tags left out, the
+    /// GitHub's answer, as it lists Quatrelle's pre-releases: drafts and other tags left out, the
     /// right installer picked, and nothing but the project's own release pages kept.
     #[test]
     fn releases_are_read_from_githubs_answer() {
         let body = r#"[
-          {"tag_name": "v0.20.0-test.16", "draft": true, "html_url": "https://github.com/ZIDAN44/mailcraft/releases/tag/v0.20.0-test.16", "assets": []},
+          {"tag_name": "v0.20.0-test.16", "draft": true, "html_url": "https://github.com/ZIDAN44/quatrelle/releases/tag/v0.20.0-test.16", "assets": []},
           {"tag_name": "v0.19.0-test.15", "draft": false, "prerelease": true, "target_commitish": "8bdba5ceb26a8b910102731c634d6998b8ab25d1",
-           "html_url": "https://github.com/ZIDAN44/mailcraft/releases/tag/v0.19.0-test.15",
+           "html_url": "https://github.com/ZIDAN44/quatrelle/releases/tag/v0.19.0-test.15",
            "assets": [
-             {"name": "mailcraft-0.19.0-windows-arm64.msi", "browser_download_url": "https://github.com/ZIDAN44/mailcraft/releases/download/v0.19.0-test.15/mailcraft-0.19.0-windows-arm64.msi"},
-             {"name": "mailcraft-0.19.0-windows-x64.msi", "browser_download_url": "https://github.com/ZIDAN44/mailcraft/releases/download/v0.19.0-test.15/mailcraft-0.19.0-windows-x64.msi"},
-             {"name": "mailcraft-0.19.0-macos-universal.dmg", "browser_download_url": "https://evil.example/mailcraft.dmg"}
+             {"name": "quatrelle-0.19.0-windows-arm64.msi", "browser_download_url": "https://github.com/ZIDAN44/quatrelle/releases/download/v0.19.0-test.15/quatrelle-0.19.0-windows-arm64.msi"},
+             {"name": "quatrelle-0.19.0-windows-x64.msi", "browser_download_url": "https://github.com/ZIDAN44/quatrelle/releases/download/v0.19.0-test.15/quatrelle-0.19.0-windows-x64.msi"},
+             {"name": "quatrelle-0.19.0-macos-universal.dmg", "browser_download_url": "https://evil.example/quatrelle.dmg"}
            ]},
-          {"tag_name": "web-0.15.0-2d69edf", "draft": false, "html_url": "https://github.com/ZIDAN44/mailcraft/releases/tag/web-0.15.0-2d69edf", "assets": []},
+          {"tag_name": "web-0.15.0-2d69edf", "draft": false, "html_url": "https://github.com/ZIDAN44/quatrelle/releases/tag/web-0.15.0-2d69edf", "assets": []},
           {"tag_name": "v0.18.0-test.14", "draft": false, "target_commitish": "release", "html_url": "https://evil.example/", "assets": []}
         ]"#;
         let r = parse(body, Some("-windows-x64.msi")).unwrap();
@@ -158,8 +158,8 @@ mod tests {
         let first = &r[0];
         assert_eq!((first.version.as_str(), first.build), ("0.19.0", 15));
         assert_eq!(first.commit, "8bdba5ceb26a8b910102731c634d6998b8ab25d1");
-        assert!(first.download.ends_with("/mailcraft-0.19.0-windows-x64.msi"), "{}", first.download);
-        assert_eq!(r[1].page, "https://github.com/ZIDAN44/mailcraft/releases", "a page elsewhere isn't offered");
+        assert!(first.download.ends_with("/quatrelle-0.19.0-windows-x64.msi"), "{}", first.download);
+        assert_eq!(r[1].page, "https://github.com/ZIDAN44/quatrelle/releases", "a page elsewhere isn't offered");
         assert_eq!(r[1].commit, "", "a branch name isn't a commit");
         // Another site's file is never offered for download.
         assert_eq!(parse(body, Some("-macos-universal.dmg")).unwrap()[0].download, "");

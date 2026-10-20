@@ -4,8 +4,8 @@
 //! reply all, Ctrl+F forward, Ctrl+Q / Ctrl+U read / unread, Insert flag, Delete, Backspace
 //! archive, Ctrl+Shift+V move, F9 send/receive, Ctrl+Enter send.
 
-use mailcraft_mime::{OutAttachment, ReplyMode, mime_from_name, sanitize_filename};
-use mailcraft_model::{AccountConfig, Flag, FolderRole, Security, ServerConfig};
+use quatrelle_mime::{OutAttachment, ReplyMode, mime_from_name, sanitize_filename};
+use quatrelle_model::{AccountConfig, Flag, FolderRole, Security, ServerConfig};
 use serde_json::{Value, json};
 
 use crate::session::{ListFilter, MoveTarget, ReadingPane, SearchScope, View, parse_key};
@@ -502,7 +502,7 @@ pub fn registry() -> Registry {
             let on = s.account(id).is_some_and(|a| a.config.keeps_online());
             Ok(json!({"account": id, "on": on}))
         })
-        .params(r#"{"account": string, "on"?: bool (default: the other way; keep none of its mail on this computer, only in memory while MailCraft runs)}"#),
+        .params(r#"{"account": string, "on"?: bool (default: the other way; keep none of its mail on this computer, only in memory while Quatrelle runs)}"#),
         CommandSpec::new("note.arrange", "Arrange notes", "Notes › Arrange by", |s, v| {
             s.prefs.notes_order = match p::req_str(v, "by")? {
                 "modified" => crate::session::NotesOrder::Modified,
@@ -537,7 +537,7 @@ pub fn registry() -> Registry {
         .params(r#"{"markRead"?: bool (in the reading pane at all; opening a message in its own window always does), "when"?: "shown"|"left" (when it's shown, or once another is chosen), "after"?: number (seconds shown first, with "shown")}"#),
         CommandSpec::new("view.trustSender", "Show pictures from a sender", "File › Options › Privacy", |s, v| {
             let who = p::req_str(v, "address")?.trim().to_ascii_lowercase();
-            if !mailcraft_model::addr::is_valid_email(&who) {
+            if !quatrelle_model::addr::is_valid_email(&who) {
                 return Err(CmdError::Params(format!("`{who}` is not an email address")));
             }
             if p::bool(v, "on").unwrap_or(true) {
@@ -608,7 +608,7 @@ pub fn registry() -> Registry {
         })
         .params(r#"{"from"?: date or date-time, "to"?: …} (default: what the calendar shows)"#),
         CommandSpec::new("event.create", "New event", "Calendar › New event", |s, v| {
-            let mut e = event_from(s, v, mailcraft_model::ical::CalEvent::default())?;
+            let mut e = event_from(s, v, quatrelle_model::ical::CalEvent::default())?;
             let account = match p::str(v, "account") {
                 Some(a) => a.to_string(),
                 None => s.current_account().map(|a| a.config.id.clone()).ok_or_else(|| CmdError::Disabled("add an account first".into()))?,
@@ -616,7 +616,7 @@ pub fn registry() -> Registry {
             // With guests, the user organizes it.
             if !e.attendees.is_empty() && e.organizer.is_none() {
                 let me = s.account(&account).map(|a| (a.config.name.clone(), a.config.email.clone())).unwrap_or_default();
-                e.organizer = Some(mailcraft_model::ical::Attendee { email: me.1, name: me.0, partstat: "ACCEPTED".into(), rsvp: false });
+                e.organizer = Some(quatrelle_model::ical::Attendee { email: me.1, name: me.0, partstat: "ACCEPTED".into(), rsvp: false });
             }
             let r = s.create_event(Some(&account), p::str(v, "calendar"), e.clone())?;
             if let Some(uid) = r.get("uid").and_then(Value::as_str) {
@@ -695,7 +695,7 @@ pub fn registry() -> Registry {
         })
         .params(r#"{"source": "all" | "people" | "book:<account>:<book id>"}"#),
         CommandSpec::new("contact.create", "New contact", "People › New contact", |s, v| {
-            let c = card_from(v, mailcraft_model::vcard::Card::default())?;
+            let c = card_from(v, quatrelle_model::vcard::Card::default())?;
             s.create_card(p::str(v, "account"), c)
         })
         .params(
@@ -722,9 +722,9 @@ pub fn registry() -> Registry {
             if let Some(existing) = s.people(&from.email).into_iter().find(|x| x.card.emails.iter().any(|e| e.value.eq_ignore_ascii_case(&from.email))) {
                 return Ok(json!({"uid": existing.card.uid, "existing": true}));
             }
-            let card = mailcraft_model::vcard::Card {
+            let card = quatrelle_model::vcard::Card {
                 name: from.name.clone(),
-                emails: vec![mailcraft_model::vcard::Typed { value: from.email.clone(), kind: String::new() }],
+                emails: vec![quatrelle_model::vcard::Typed { value: from.email.clone(), kind: String::new() }],
                 ..Default::default()
             };
             let account = s.reading.as_ref().map(|r| r.key.account.clone());
@@ -783,7 +783,7 @@ pub fn registry() -> Registry {
             let path = p::req_str(v, "path")?.to_string();
             s.import_pst(&path)
         })
-        .params(r#"{"path": string (a .pst or .mailcraft data file; its mail goes into a new account on this computer)}"#),
+        .params(r#"{"path": string (a .pst or .quatrelle data file; its mail goes into a new account on this computer)}"#),
         CommandSpec::new("account.exportPst", "Export to Outlook data file", "File › Open & Export", |s, v| {
             let path = p::req_str(v, "path")?.to_string();
             let account = match p::str(v, "account") {
@@ -795,7 +795,7 @@ pub fn registry() -> Registry {
         .params(r#"{"path": string (the .pst file to write; one already there is replaced), "account"?: string (default: the current one)}"#),
         CommandSpec::new("account.discover", "Find server settings", "File › Accounts", |s, v| {
             let email = p::req_str(v, "email")?.trim().to_ascii_lowercase();
-            if !mailcraft_model::addr::is_valid_email(&email) {
+            if !quatrelle_model::addr::is_valid_email(&email) {
                 return Err(CmdError::Params(format!("`{email}` is not an email address")));
             }
             match s.discovered.get(&email) {
@@ -806,7 +806,7 @@ pub fn registry() -> Registry {
                 Some(None) => Ok(json!({"pending": true})),
                 None => {
                     s.discovered.insert(email.clone(), None);
-                    s.push_job(mailcraft_model::Job::Discover { email });
+                    s.push_job(quatrelle_model::Job::Discover { email });
                     Ok(json!({"pending": true}))
                 }
             }
@@ -828,15 +828,15 @@ pub fn registry() -> Registry {
             let config = s.account(id).map(|a| a.config.clone()).ok_or_else(|| CmdError::Params(format!("no account `{id}`")))?;
             if config.oauth.is_none() {
                 // A Microsoft account signing in with a password (refused there) switches over.
-                if mailcraft_model::microsoft_password_account(&config) {
+                if quatrelle_model::microsoft_password_account(&config) {
                     if !s.oauth_available.iter().any(|p| p == "microsoft") {
-                        return Err(CmdError::Params("signing in with Microsoft isn't set up in this copy of MailCraft".into()));
+                        return Err(CmdError::Params("signing in with Microsoft isn't set up in this copy of Quatrelle".into()));
                     }
                     return s.use_microsoft_sign_in(id);
                 }
                 return Err(CmdError::Params("this account signs in with a password".into()));
             }
-            s.push_job(mailcraft_model::Job::SignIn { account: config });
+            s.push_job(quatrelle_model::Job::SignIn { account: config });
             Ok(json!({"signingIn": id}))
         })
         .params(r#"{"account": string} (a Microsoft account that signs in with a password switches to Sign in with Microsoft, keeping its mail)"#),
@@ -849,7 +849,7 @@ pub fn registry() -> Registry {
         CommandSpec::new("account.setSignature", "Signature", "File › Options › Mail", set_signature)
             .params(r#"{"account": string, "signature": string, "html"?: string (its look: bold, colours, links; the text then comes from it), "newMessages"?: bool (added to new messages; default: as it was), "replies"?: bool (added to replies and forwards), "rawHtml"?: string (the signature written in HTML, sent as it is, cleaned)}"#),
         CommandSpec::new("account.list", "Accounts", "File › Accounts", list_accounts),
-        // Asks where MailCraft is published; File › About shows the answer (`Session::update`).
+        // Asks where Quatrelle is published; File › About shows the answer (`Session::update`).
         CommandSpec::new("app.checkUpdates", "Check for updates", "File › About", |s, _| {
             if s.jmap_only {
                 return Err(CmdError::Failed("the browser version is always the newest".into()));
@@ -879,7 +879,7 @@ pub fn registry() -> Registry {
         CommandSpec::new("account.setVacation", "Turn automatic replies on or off", "File › Info › Automatic replies", |s, v| {
             let id = account_param(s, v)?;
             let day = |k: &str| p::str(v, k).map(str::trim).filter(|d| !d.is_empty()).map(str::to_string);
-            let vacation = mailcraft_model::job::Vacation {
+            let vacation = quatrelle_model::job::Vacation {
                 enabled: p::bool(v, "enabled").unwrap_or(true),
                 subject: p::str(v, "subject").unwrap_or_default().chars().take(200).collect(),
                 text: p::str(v, "text").unwrap_or_default().chars().take(20_000).collect(),
@@ -910,12 +910,12 @@ fn account_param(s: &Session, v: &Value) -> Result<String, CmdError> {
 fn new_mail(s: &mut Session, v: &Value) -> CmdResult {
     // Who it's to, checked before anything opens.
     let to = match p::str(v, "to").map(str::trim).filter(|t| !t.is_empty()) {
-        Some(t) => mailcraft_model::addr::parse_list(t).map_err(|bad| CmdError::Params(format!("not an email address: {bad}")))?,
+        Some(t) => quatrelle_model::addr::parse_list(t).map_err(|bad| CmdError::Params(format!("not an email address: {bad}")))?,
         None => Vec::new(),
     };
     let c = s.new_compose(p::str(v, "account"))?;
     if !to.is_empty() {
-        c.to = mailcraft_model::addr::format_field(&to);
+        c.to = quatrelle_model::addr::format_field(&to);
     }
     Ok(json!({"compose": c.id}))
 }
@@ -944,7 +944,7 @@ fn move_to(s: &mut Session, v: &Value) -> CmdResult {
 fn snooze(s: &mut Session, v: &Value) -> CmdResult {
     let until = match (p::str(v, "preset"), v.get("until").and_then(Value::as_i64)) {
         (Some(code), _) => {
-            mailcraft_model::organize::SnoozeUntil::from_code(code).ok_or_else(|| CmdError::Params(format!("unknown preset `{code}`")))?.at(&s.clock)
+            quatrelle_model::organize::SnoozeUntil::from_code(code).ok_or_else(|| CmdError::Params(format!("unknown preset `{code}`")))?.at(&s.clock)
         }
         (None, Some(t)) => t,
         (None, None) => return Err(CmdError::Params("`preset` or `until` is required".into())),
@@ -961,11 +961,11 @@ fn flag(s: &mut Session, v: &Value) -> CmdResult {
         None => s.flag_selection(Flag::Flagged, p::bool(v, "on")),
         Some(d) if d.eq_ignore_ascii_case("none") => s.follow_up_selection(None, false),
         Some(d) => {
-            let day = match mailcraft_model::dates::FollowUp::from_code(d) {
+            let day = match quatrelle_model::dates::FollowUp::from_code(d) {
                 Some(f) => f.due(&s.clock),
-                None if mailcraft_model::job::is_day(d) => {
+                None if quatrelle_model::job::is_day(d) => {
                     let num = |a: usize, z: usize| d.get(a..z).and_then(|x| x.parse::<u32>().ok()).unwrap_or(1);
-                    mailcraft_model::dates::days_from_civil(i64::from(num(0, 4)), num(5, 7), num(8, 10))
+                    quatrelle_model::dates::days_from_civil(i64::from(num(0, 4)), num(5, 7), num(8, 10))
                 }
                 None => return Err(CmdError::Params(format!("`due`: not today, tomorrow, thisWeek, nextWeek, none or a date: `{d}`"))),
             };
@@ -982,7 +982,7 @@ fn mark_all_read(s: &mut Session, _: &Value) -> CmdResult {
         by_account.entry(k.account.clone()).or_default().push(k);
     }
     for (a, keys) in by_account {
-        s.apply_op(&a, mailcraft_model::Op::SetFlag { keys, flag: Flag::Seen, on: true });
+        s.apply_op(&a, quatrelle_model::Op::SetFlag { keys, flag: Flag::Seen, on: true });
     }
     Ok(json!({"count": n}))
 }
@@ -996,7 +996,7 @@ fn sync_folder(s: &mut Session, _: &Value) -> CmdResult {
     };
     for (account, folder) in folders {
         if s.account(&account).is_some_and(|a| !a.is_local()) {
-            s.push_job(mailcraft_model::Job::SyncFolder { account, folder });
+            s.push_job(quatrelle_model::Job::SyncFolder { account, folder });
             n += 1;
         }
     }
@@ -1022,7 +1022,7 @@ fn unified(s: &mut Session, v: &Value) -> CmdResult {
     Ok(json!({"messages": s.list.len()}))
 }
 
-fn key_param(s: &Session, v: &Value) -> Result<mailcraft_model::MessageKey, CmdError> {
+fn key_param(s: &Session, v: &Value) -> Result<quatrelle_model::MessageKey, CmdError> {
     let k = parse_key(v).ok_or_else(|| CmdError::Params("`key` is required (account:validity:uid:folder)".into()))?;
     if s.summary(&k).is_none() {
         return Err(CmdError::Params(format!("`{}` is not in the list", k.to_id())));
@@ -1083,7 +1083,7 @@ fn filter(s: &mut Session, v: &Value) -> CmdResult {
     Ok(json!({"messages": s.list.len()}))
 }
 
-fn summary_json(m: &mailcraft_model::Summary) -> Value {
+fn summary_json(m: &quatrelle_model::Summary) -> Value {
     json!({
         "key": m.key.to_id(),
         "date": m.date,
@@ -1118,8 +1118,8 @@ fn read_message(s: &mut Session, v: &Value) -> CmdResult {
             "key": r.key.to_id(),
             "subject": m.subject,
             "from": m.from.to_string(),
-            "to": mailcraft_model::addr::format_list(&m.to),
-            "cc": mailcraft_model::addr::format_list(&m.cc),
+            "to": quatrelle_model::addr::format_list(&m.to),
+            "cc": quatrelle_model::addr::format_list(&m.cc),
             "date": m.date,
             "text": m.text,
             "attachments": m.attachments.iter().map(|a| json!({"index": a.index, "name": a.name, "mime": a.mime, "size": a.size})).collect::<Vec<_>>(),
@@ -1183,7 +1183,7 @@ fn compose_update(s: &mut Session, v: &Value) -> CmdResult {
     }
     if let Some(x) = p::str(v, "body") {
         if p::bool(v, "marks").unwrap_or(false) {
-            let (text, styles) = mailcraft_mime::rich::from_markup(&cap(x));
+            let (text, styles) = quatrelle_mime::rich::from_markup(&cap(x));
             c.body = text;
             c.styles = styles;
         } else {
@@ -1289,7 +1289,7 @@ fn insert_picture(s: &mut Session, v: &Value) -> CmdResult {
     if compose_size(c) + data.len() > ATTACH_MAX {
         return Err(CmdError::Failed("pictures and attachments are limited to 25 MB in total".into()));
     }
-    c.inline.push(mailcraft_mime::InlinePicture { cid: cid.clone(), name, mime, data });
+    c.inline.push(quatrelle_mime::InlinePicture { cid: cid.clone(), name, mime, data });
     c.plain = false;
     if p::bool(v, "insert").unwrap_or(true) {
         let n = c.body.chars().count();
@@ -1302,7 +1302,7 @@ fn insert_picture(s: &mut Session, v: &Value) -> CmdResult {
 /// The account's signature into the message being written, at character `at` (else the end),
 /// on a line of its own after the usual `-- ` line (Outlook's Insert › Signature).
 fn insert_signature(s: &mut Session, v: &Value) -> CmdResult {
-    use mailcraft_mime::rich::Style;
+    use quatrelle_mime::rich::Style;
     let account = s.compose.as_ref().map(|c| c.account.clone()).ok_or_else(|| CmdError::Disabled("no message is being written".into()))?;
     let rich = s.signature_rich(&account);
     let pictures = s.signature_pictures(&account);
@@ -1340,7 +1340,7 @@ fn insert_signature(s: &mut Session, v: &Value) -> CmdResult {
 
 /// Put picture `cid` into the text at character `at`.
 pub fn insert_picture_at(c: &mut crate::session::Compose, at: usize, cid: &str) {
-    use mailcraft_mime::rich::{PICTURE, Style};
+    use quatrelle_mime::rich::{PICTURE, Style};
     let old = c.body.clone();
     let byte = old.char_indices().nth(at).map_or(old.len(), |(b, _)| b);
     c.body.insert(byte, PICTURE);
@@ -1389,7 +1389,7 @@ impl Session {
     pub fn attachment_bytes(&self, index: usize) -> Result<Vec<u8>, CmdError> {
         let r = self.reading.as_ref().ok_or_else(|| CmdError::Disabled("open a message first".into()))?;
         let raw = self.store.as_ref().and_then(|st| st.read_body(&r.key)).ok_or_else(|| CmdError::Failed("the message isn't downloaded".into()))?;
-        mailcraft_mime::attachment_data(&raw, index).ok_or_else(|| CmdError::Params(format!("no attachment {index}")))
+        quatrelle_mime::attachment_data(&raw, index).ok_or_else(|| CmdError::Params(format!("no attachment {index}")))
     }
 
     /// The open message's source (`.eml`).
@@ -1409,21 +1409,21 @@ impl Session {
         let m = r.parsed.as_ref().ok_or_else(|| CmdError::Disabled("the message is still downloading".into()))?;
         let mut header = vec![("From".to_string(), m.from.to_string())];
         if !m.to.is_empty() {
-            header.push(("To".into(), mailcraft_model::addr::format_list(&m.to)));
+            header.push(("To".into(), quatrelle_model::addr::format_list(&m.to)));
         }
         if !m.cc.is_empty() {
-            header.push(("Cc".into(), mailcraft_model::addr::format_list(&m.cc)));
+            header.push(("Cc".into(), quatrelle_model::addr::format_list(&m.cc)));
         }
         if m.date > 0 {
-            header.push(("Date".into(), mailcraft_model::dates::full_time(m.date, &self.clock)));
+            header.push(("Date".into(), quatrelle_model::dates::full_time(m.date, &self.clock)));
         }
         let files: Vec<String> = m.attachments.iter().filter(|a| !a.inline).map(|a| a.name.clone()).collect();
         if !files.is_empty() {
             header.push(("Attachments".into(), files.join(", ")));
         }
-        let doc = mailcraft_print::Doc { title: m.subject.clone(), header, body: m.text.clone() };
-        let fonts = self.print_fonts.as_ref().map(|(r, b)| mailcraft_print::Fonts { regular: r, bold: b.as_deref() });
-        mailcraft_print::pdf(&doc, fonts).map_err(CmdError::Failed)
+        let doc = quatrelle_print::Doc { title: m.subject.clone(), header, body: m.text.clone() };
+        let fonts = self.print_fonts.as_ref().map(|(r, b)| quatrelle_print::Fonts { regular: r, bold: b.as_deref() });
+        quatrelle_print::pdf(&doc, fonts).map_err(CmdError::Failed)
     }
 }
 
@@ -1449,7 +1449,7 @@ fn save_all_attachments(s: &mut Session, v: &Value) -> CmdResult {
     let only: Option<Vec<u64>> = v.get("indices").and_then(Value::as_array).map(|a| a.iter().filter_map(Value::as_u64).take(10_000).collect());
     let mut saved = Vec::new();
     for a in parsed.attachments.iter().filter(|a| !a.inline && only.as_ref().is_none_or(|o| o.contains(&(a.index as u64)))) {
-        let Some(data) = mailcraft_mime::attachment_data(&raw, a.index) else { continue };
+        let Some(data) = quatrelle_mime::attachment_data(&raw, a.index) else { continue };
         let name = sanitize_filename(&a.name);
         let (stem, ext) = name.rsplit_once('.').map_or((name.clone(), String::new()), |(s, e)| (s.to_string(), format!(".{e}")));
         let mut path = dir.join(&name);
@@ -1470,13 +1470,13 @@ fn preview_attachment(s: &mut Session, v: &Value) -> CmdResult {
     let r = s.reading.as_ref().ok_or_else(|| CmdError::Disabled("open a message first".into()))?;
     let parsed = r.parsed.as_ref().ok_or_else(|| CmdError::Disabled("the message is still downloading".into()))?;
     let a = parsed.attachments.iter().find(|a| a.index == index).ok_or_else(|| CmdError::Params(format!("no attachment {index}")))?;
-    let kind = mailcraft_mime::text_preview_kind(&a.mime, &a.name).ok_or_else(|| CmdError::Failed(format!("{} can't be shown as text", a.name)))?;
+    let kind = quatrelle_mime::text_preview_kind(&a.mime, &a.name).ok_or_else(|| CmdError::Failed(format!("{} can't be shown as text", a.name)))?;
     let raw = s.store.as_ref().and_then(|st| st.read_body(&r.key)).ok_or_else(|| CmdError::Failed("the message isn't downloaded".into()))?;
-    let data = mailcraft_mime::attachment_data(&raw, index).ok_or_else(|| CmdError::Failed("the attachment can't be read".into()))?;
+    let data = quatrelle_mime::attachment_data(&raw, index).ok_or_else(|| CmdError::Failed("the attachment can't be read".into()))?;
     if kind == "message" {
-        let m = mailcraft_mime::parse(&data).ok_or_else(|| CmdError::Failed("the attached message can't be read".into()))?;
+        let m = quatrelle_mime::parse(&data).ok_or_else(|| CmdError::Failed("the attached message can't be read".into()))?;
         return Ok(
-            json!({"kind": "message", "name": a.name, "subject": m.subject, "from": m.from.to_string(), "to": mailcraft_model::addr::format_list(&m.to), "date": m.date, "text": m.text}),
+            json!({"kind": "message", "name": a.name, "subject": m.subject, "from": m.from.to_string(), "to": quatrelle_model::addr::format_list(&m.to), "date": m.date, "text": m.text}),
         );
     }
     // At most 512 KB, cut on a character boundary.
@@ -1534,7 +1534,7 @@ fn add_account(s: &mut Session, v: &Value) -> CmdResult {
     let jmap = p::str(v, "jmap").map(str::trim).filter(|u| !u.is_empty()).map(str::to_string);
     // `graph`: true for Exchange Online through Microsoft Graph (or the API's address).
     let graph = match v.get("graph") {
-        Some(Value::Bool(true)) => Some(mailcraft_model::GRAPH_URL.to_string()),
+        Some(Value::Bool(true)) => Some(quatrelle_model::GRAPH_URL.to_string()),
         Some(Value::String(u)) if !u.trim().is_empty() => Some(u.trim().to_string()),
         _ => None,
     };
@@ -1542,12 +1542,12 @@ fn add_account(s: &mut Session, v: &Value) -> CmdResult {
     // alone means its usual `/EWS/Exchange.asmx`).
     // `true`: found with Autodiscover when the account connects.
     let ews = match v.get("ews") {
-        Some(Value::Bool(true)) => Some(mailcraft_model::EWS_AUTODISCOVER.to_string()),
+        Some(Value::Bool(true)) => Some(quatrelle_model::EWS_AUTODISCOVER.to_string()),
         Some(Value::String(u)) if !u.trim().is_empty() => Some(ews_url(u)),
         _ => None,
     };
     if s.jmap_only && jmap.is_none() {
-        return Err(CmdError::Params("in the browser, MailCraft works with JMAP accounts only".into()));
+        return Err(CmdError::Params("in the browser, Quatrelle works with JMAP accounts only".into()));
     }
     // `pop`: true to download mail over POP3 (popHost, popPort, popSecurity) and send over SMTP.
     let pop = if p::bool(v, "pop").unwrap_or(false) {
@@ -1600,7 +1600,7 @@ fn add_account(s: &mut Session, v: &Value) -> CmdResult {
     if let Some(o) = &config.oauth
         && !s.oauth_available.contains(o)
     {
-        return Err(CmdError::Params(format!("signing in with {o} isn't set up in this copy of MailCraft")));
+        return Err(CmdError::Params(format!("signing in with {o} isn't set up in this copy of Quatrelle")));
     }
     // `deferSignIn`: add now, ask for the password when the account first connects.
     let defer = p::bool(v, "deferSignIn").unwrap_or(false);
@@ -1728,14 +1728,14 @@ fn set_signature(s: &mut Session, v: &Value) -> CmdResult {
     // Written in HTML: kept cleaned, sent as it is; its text (and look, pictures on the web
     // aside) is what a message shows while it's written. Otherwise there's none.
     config.signature_raw_html =
-        p::str(v, "rawHtml").map(|h| mailcraft_mime::layout::clean_html(&h.chars().take(200_000).collect::<String>())).unwrap_or_default();
+        p::str(v, "rawHtml").map(|h| quatrelle_mime::layout::clean_html(&h.chars().take(200_000).collect::<String>())).unwrap_or_default();
     if !config.signature_raw_html.trim().is_empty() {
-        let (text, styles) = mailcraft_mime::signature_html(&config.signature_raw_html);
+        let (text, styles) = quatrelle_mime::signature_html(&config.signature_raw_html);
         if text.trim().is_empty() {
             return Err(CmdError::Params("the signature's HTML has no text".into()));
         }
         config.signature = text.chars().take(10_000).collect();
-        config.signature_html = if styles.is_plain() { String::new() } else { mailcraft_mime::rich::to_html(&text, &styles) };
+        config.signature_html = if styles.is_plain() { String::new() } else { quatrelle_mime::rich::to_html(&text, &styles) };
         config.signature_pictures.clear();
         return s.update_account(config, None);
     }
@@ -1751,26 +1751,26 @@ fn set_signature(s: &mut Session, v: &Value) -> CmdResult {
     config.signature_html = String::new();
     // Its pictures (a logo), as the editor sends them: those its HTML names are kept, a few
     // and small enough to go with every message.
-    let given: Vec<mailcraft_mime::InlinePicture> = v.get("pictures").and_then(|p| serde_json::from_value(p.clone()).ok()).unwrap_or_default();
-    let mut pictures: Vec<mailcraft_model::SignaturePicture> = Vec::new();
+    let given: Vec<quatrelle_mime::InlinePicture> = v.get("pictures").and_then(|p| serde_json::from_value(p.clone()).ok()).unwrap_or_default();
+    let mut pictures: Vec<quatrelle_model::SignaturePicture> = Vec::new();
     if let Some(html) = p::str(v, "html").filter(|h| !h.trim().is_empty()) {
-        let (text, styles) = mailcraft_mime::signature_html(&html.chars().take(200_000).collect::<String>());
+        let (text, styles) = quatrelle_mime::signature_html(&html.chars().take(200_000).collect::<String>());
         if !text.trim().is_empty() && !styles.is_plain() {
-            config.signature_html = mailcraft_mime::rich::to_html(&text, &styles);
+            config.signature_html = quatrelle_mime::rich::to_html(&text, &styles);
             config.signature = text.chars().take(10_000).collect();
-            let used = mailcraft_mime::rich::pictures(&text, &styles);
+            let used = quatrelle_mime::rich::pictures(&text, &styles);
             for p in given.into_iter().filter(|p| used.contains(&p.cid)) {
                 if pictures.len() >= SIGNATURE_PICTURES || p.data.len() > SIGNATURE_PICTURE_MAX || !p.mime.starts_with("image/") {
                     return Err(CmdError::Params(format!("{}: a signature takes {SIGNATURE_PICTURES} pictures of 500 KB at most", p.name)));
                 }
-                pictures.push(mailcraft_model::SignaturePicture { cid: p.cid, name: p.name, mime: p.mime, data: p.data });
+                pictures.push(quatrelle_model::SignaturePicture { cid: p.cid, name: p.name, mime: p.mime, data: p.data });
             }
         }
     }
     // Pictures given or not, its own stay while its HTML names them.
     if pictures.is_empty() {
-        let (text, styles) = mailcraft_mime::signature_html(&config.signature_html);
-        let used = mailcraft_mime::rich::pictures(&text, &styles);
+        let (text, styles) = quatrelle_mime::signature_html(&config.signature_html);
+        let used = quatrelle_mime::rich::pictures(&text, &styles);
         pictures = config.signature_pictures.iter().filter(|p| used.contains(&p.cid)).cloned().collect();
     }
     config.signature_pictures = pictures;
@@ -1797,7 +1797,7 @@ fn list_accounts(s: &mut Session, _: &Value) -> CmdResult {
 }
 
 /// An event from command params, starting from `e` (what's not given stays).
-fn event_from(s: &Session, v: &Value, mut e: mailcraft_model::ical::CalEvent) -> Result<mailcraft_model::ical::CalEvent, CmdError> {
+fn event_from(s: &Session, v: &Value, mut e: quatrelle_model::ical::CalEvent) -> Result<quatrelle_model::ical::CalEvent, CmdError> {
     let off = i64::from(s.clock.offset);
     let when = |k: &str| -> Result<Option<(i64, bool)>, CmdError> {
         match p::str(v, k) {
@@ -1827,14 +1827,14 @@ fn event_from(s: &Session, v: &Value, mut e: mailcraft_model::ical::CalEvent) ->
         }
     }
     if let Some(list) = p::str(v, "attendees") {
-        let people = mailcraft_model::addr::parse_list(list).map_err(|bad| CmdError::Params(format!("not an email address: {bad}")))?;
+        let people = quatrelle_model::addr::parse_list(list).map_err(|bad| CmdError::Params(format!("not an email address: {bad}")))?;
         let before = std::mem::take(&mut e.attendees);
         e.attendees = people
             .into_iter()
             .take(200)
             .map(|a| {
                 let known = before.iter().find(|b| b.email.eq_ignore_ascii_case(&a.email));
-                mailcraft_model::ical::Attendee {
+                quatrelle_model::ical::Attendee {
                     partstat: known.map_or_else(|| "NEEDS-ACTION".to_string(), |k| k.partstat.clone()),
                     rsvp: known.is_none_or(|k| k.rsvp),
                     email: a.email,
@@ -1873,7 +1873,7 @@ fn event_from(s: &Session, v: &Value, mut e: mailcraft_model::ical::CalEvent) ->
 }
 
 /// A card from command params, starting from `c`.
-fn card_from(v: &Value, mut c: mailcraft_model::vcard::Card) -> Result<mailcraft_model::vcard::Card, CmdError> {
+fn card_from(v: &Value, mut c: quatrelle_model::vcard::Card) -> Result<quatrelle_model::vcard::Card, CmdError> {
     let list = |k: &str| -> Option<Vec<String>> {
         match v.get(k)? {
             Value::String(s) => Some(s.split([',', ';', '\n']).map(str::trim).filter(|x| !x.is_empty()).map(str::to_string).collect()),
@@ -1886,7 +1886,7 @@ fn card_from(v: &Value, mut c: mailcraft_model::vcard::Card) -> Result<mailcraft
         c.given.clear();
         c.family.clear();
     }
-    use mailcraft_model::vcard::{PostalAddress, Typed};
+    use quatrelle_model::vcard::{PostalAddress, Typed};
     // A list of values, each a string or {"value", "kind"} (a phone's kind: work, home, cell,
     // fax, pager, or none).
     let typed = |k: &str| -> Option<Vec<Typed>> {
@@ -1940,7 +1940,7 @@ fn card_from(v: &Value, mut c: mailcraft_model::vcard::Card) -> Result<mailcraft
         c.birthday = if b.trim().is_empty() {
             String::new()
         } else {
-            mailcraft_model::vcard::birthday_of(b).ok_or_else(|| CmdError::Params(format!("`{b}` is not a date (YYYY-MM-DD)")))?
+            quatrelle_model::vcard::birthday_of(b).ok_or_else(|| CmdError::Params(format!("`{b}` is not a date (YYYY-MM-DD)")))?
         };
     }
     for (k, field) in [
@@ -1965,14 +1965,14 @@ fn card_from(v: &Value, mut c: mailcraft_model::vcard::Card) -> Result<mailcraft
         c.anniversary = if a.trim().is_empty() {
             String::new()
         } else {
-            mailcraft_model::vcard::birthday_of(a).ok_or_else(|| CmdError::Params(format!("`{a}` is not a date (YYYY-MM-DD)")))?
+            quatrelle_model::vcard::birthday_of(a).ok_or_else(|| CmdError::Params(format!("`{a}` is not a date (YYYY-MM-DD)")))?
         };
     }
     Ok(c)
 }
 
 /// The user organizes this event and it has guests to tell.
-fn organized_by_me(s: &Session, e: &mailcraft_model::ical::CalEvent) -> bool {
+fn organized_by_me(s: &Session, e: &quatrelle_model::ical::CalEvent) -> bool {
     !e.attendees.is_empty()
         && e.organizer.as_ref().is_some_and(|o| {
             s.accounts.iter().any(|a| a.config.email.eq_ignore_ascii_case(&o.email) || a.config.username.eq_ignore_ascii_case(&o.email))

@@ -8,7 +8,7 @@
 //! in both columns, `#` comments.
 //!
 //! The language follows the system's (Windows display language, macOS preferred languages,
-//! `LANG`/`LC_*`; `MAILCRAFT_LANGUAGE` overrides) unless one is chosen in Settings.
+//! `LANG`/`LC_*`; `QUATRELLE_LANGUAGE` overrides) unless one is chosen in Settings.
 //!
 //! # Adding a language
 //! Add `xx.tsv` next to `es.tsv` (translate from the *meaning* of the English, never from another
@@ -204,7 +204,9 @@ pub fn system_lang() -> Lang {
     }
     static SYSTEM: OnceLock<Lang> = OnceLock::new();
     *SYSTEM.get_or_init(|| {
-        if let Some(l) = std::env::var("MAILCRAFT_LANGUAGE").ok().and_then(|v| lang_from_tag(&v)) {
+        // The fork's old variable is still read: a start script keeps working.
+        let chosen = std::env::var("QUATRELLE_LANGUAGE").ok().or_else(|| std::env::var(quatrelle_engine::store::legacy::OLD_LANGUAGE_VAR).ok());
+        if let Some(l) = chosen.and_then(|v| lang_from_tag(&v)) {
             return l;
         }
         sys_locale::get_locales().take(16).find_map(|t| lang_from_tag(&t)).unwrap_or(Lang::EN)
@@ -288,7 +290,7 @@ pub fn tc<'a>(ctx: &str, s: &'a str) -> &'a str {
 
 /// A folder's name as shown: the name its server gives a special folder as it is (Exchange
 /// names them in the mailbox's language, as Outlook shows them), any other translated.
-pub fn folder(f: &mailcraft_engine::model::Folder) -> String {
+pub fn folder(f: &quatrelle_engine::model::Folder) -> String {
     match f.server_name() {
         Some(n) => n.to_string(),
         None => tc("folder", &f.display_name()).to_string(),

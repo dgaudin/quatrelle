@@ -1,11 +1,11 @@
 <#
 .SYNOPSIS
-  Build, sign and package MailCraft for Windows.
+  Build, sign and package Quatrelle for Windows.
 
 .DESCRIPTION
   Produces, in $env:DIST (default: dist/release):
-    mailcraft-<version>-windows-<arch>.msi            per-machine installer (WiX v5)
-    mailcraft-<version>-windows-<arch>-portable.zip   mailcraft.exe + mailcraft-cli.exe + portable.txt
+    quatrelle-<version>-windows-<arch>.msi            per-machine installer (WiX v5)
+    quatrelle-<version>-windows-<arch>-portable.zip   quatrelle.exe + quatrelle-cli.exe + portable.txt
 
   The binaries link the C runtime statically (+crt-static), so neither the MSI nor the portable
   zip needs the Visual C++ redistributable. Signing is delegated to sign.ps1 (skipped with a
@@ -33,7 +33,7 @@ function Invoke-Native([string] $What, [scriptblock] $Block) {
 }
 
 # The version lives in one place: [workspace.package] version in the root Cargo.toml.
-$Version = $env:MAILCRAFT_VERSION
+$Version = $env:QUATRELLE_VERSION
 if (-not $Version) {
   $inPkg = $false
   foreach ($line in Get-Content (Join-Path $Root 'Cargo.toml')) {
@@ -50,11 +50,11 @@ $Dist = if ($env:DIST) { $env:DIST } else { Join-Path $Root 'dist\release' }
 $TargetDir = if ($env:CARGO_TARGET_DIR) { $env:CARGO_TARGET_DIR } else { Join-Path $Root 'target' }
 New-Item -ItemType Directory -Force -Path $Dist | Out-Null
 
-# Shown by `mailcraft --version`. The shared release workflow sets BUILD_SHA and BUILD_DATE.
-if (-not $env:MAILCRAFT_BUILD_SHA) { $env:MAILCRAFT_BUILD_SHA = if ($env:BUILD_SHA) { $env:BUILD_SHA } else { (git -C $Root rev-parse HEAD 2>$null) } }
-if (-not $env:MAILCRAFT_BUILD_DATE) { $env:MAILCRAFT_BUILD_DATE = if ($env:BUILD_DATE) { $env:BUILD_DATE } else { (Get-Date).ToUniversalTime().ToString('yyyy-MM-dd') } }
+# Shown by `quatrelle --version`. The shared release workflow sets BUILD_SHA and BUILD_DATE.
+if (-not $env:QUATRELLE_BUILD_SHA) { $env:QUATRELLE_BUILD_SHA = if ($env:BUILD_SHA) { $env:BUILD_SHA } else { (git -C $Root rev-parse HEAD 2>$null) } }
+if (-not $env:QUATRELLE_BUILD_DATE) { $env:QUATRELLE_BUILD_DATE = if ($env:BUILD_DATE) { $env:BUILD_DATE } else { (Get-Date).ToUniversalTime().ToString('yyyy-MM-dd') } }
 
-Write-Output "MailCraft $Version for Windows $Arch ($Target)"
+Write-Output "Quatrelle $Version for Windows $Arch ($Target)"
 
 if (-not $SkipBuild) {
   # Static CRT: no VC++ redistributable needed. Scoped to the target so host build scripts and
@@ -62,8 +62,8 @@ if (-not $SkipBuild) {
   $flagVar = 'CARGO_TARGET_' + ($Target.ToUpper() -replace '-', '_') + '_RUSTFLAGS'
   [Environment]::SetEnvironmentVariable($flagVar, '-C target-feature=+crt-static')
   # Fail the build (rather than warn) if the icon/VERSIONINFO can't be embedded.
-  $env:MAILCRAFT_REQUIRE_WINRES = '1'
-  Invoke-Native "cargo build ($Target)" { cargo build --release --locked -p mailcraft -p mailcraft-cli --target $Target }
+  $env:QUATRELLE_REQUIRE_WINRES = '1'
+  Invoke-Native "cargo build ($Target)" { cargo build --release --locked -p quatrelle -p quatrelle-cli --target $Target }
 }
 
 $Bin = Join-Path $TargetDir "$Target\release"
@@ -78,7 +78,7 @@ function Get-PeHeader([string] $Path) {
   return @{ Machine = [BitConverter]::ToUInt16($bytes, $pe + 4); Subsystem = [BitConverter]::ToUInt16($bytes, $pe + 0x5C) }
 }
 $Machine = switch ($Arch) { 'x64' { 0x8664 } 'x86' { 0x14C } 'arm64' { 0xAA64 } }
-foreach ($check in @(@('mailcraft.exe', 2), @('mailcraft-cli.exe', 3))) {
+foreach ($check in @(@('quatrelle.exe', 2), @('quatrelle-cli.exe', 3))) {
   $h = Get-PeHeader (Join-Path $Bin $check[0])
   if ($h.Machine -ne $Machine) { throw "$($check[0]) is for machine 0x$('{0:X}' -f $h.Machine), expected 0x$('{0:X}' -f $Machine) ($Arch)" }
   if ($h.Subsystem -ne $check[1]) { throw "$($check[0]) has PE subsystem $($h.Subsystem), expected $($check[1])" }
@@ -87,15 +87,15 @@ foreach ($check in @(@('mailcraft.exe', 2), @('mailcraft-cli.exe', 3))) {
 $Stage = Join-Path $TargetDir "windows-package\$Arch"
 Remove-Item -Recurse -Force $Stage -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $Stage | Out-Null
-Copy-Item (Join-Path $Bin 'mailcraft.exe'), (Join-Path $Bin 'mailcraft-cli.exe') $Stage
+Copy-Item (Join-Path $Bin 'quatrelle.exe'), (Join-Path $Bin 'quatrelle-cli.exe') $Stage
 
-& (Join-Path $PSScriptRoot 'sign.ps1') (Join-Path $Stage 'mailcraft.exe') (Join-Path $Stage 'mailcraft-cli.exe')
+& (Join-Path $PSScriptRoot 'sign.ps1') (Join-Path $Stage 'quatrelle.exe') (Join-Path $Stage 'quatrelle-cli.exe')
 
 # ---- MSI ---------------------------------------------------------------------------------------
-$Msi = Join-Path $Dist "mailcraft-$Version-windows-$Arch.msi"
+$Msi = Join-Path $Dist "quatrelle-$Version-windows-$Arch.msi"
 Invoke-Native 'wix build' {
-  wix build (Join-Path $PSScriptRoot 'mailcraft.wxs') -arch $Arch `
-    -d "Version=$MsiVersion" -d "BinDir=$Stage" -d "IconPath=$(Join-Path $Root 'assets\app-icon\mailcraft.ico')" `
+  wix build (Join-Path $PSScriptRoot 'quatrelle.wxs') -arch $Arch `
+    -d "Version=$MsiVersion" -d "BinDir=$Stage" -d "IconPath=$(Join-Path $Root 'assets\app-icon\quatrelle.ico')" `
     -o $Msi
 }
 # wix writes its debug symbols (.wixpdb) next to the MSI; keep them out of the release assets.
@@ -103,7 +103,7 @@ Remove-Item -Force -ErrorAction SilentlyContinue ([IO.Path]::ChangeExtension($Ms
 & (Join-Path $PSScriptRoot 'sign.ps1') $Msi
 
 # ---- portable zip ------------------------------------------------------------------------------
-$Portable = Join-Path $TargetDir "windows-package\mailcraft-$Version-windows-$Arch-portable"
+$Portable = Join-Path $TargetDir "windows-package\quatrelle-$Version-windows-$Arch-portable"
 Remove-Item -Recurse -Force $Portable -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path $Portable | Out-Null
 Copy-Item (Join-Path $Stage '*.exe') $Portable
@@ -111,10 +111,10 @@ foreach ($f in 'README.md', 'LICENSE', 'LICENSE-MIT', 'LICENSE-APACHE', 'ATTRIBU
   $p = Join-Path $Root $f
   if (Test-Path $p) { Copy-Item $p $Portable }
 }
-# portable.txt beside mailcraft.exe switches on portable mode: everything goes to MailCraftData\ next
-# to the exe, passwords stay in memory (issue #4; see apps/mailcraft/src/portable.rs).
+# portable.txt beside quatrelle.exe switches on portable mode: everything goes to QuatrelleData\ next
+# to the exe, passwords stay in memory (issue #4; see apps/quatrelle/src/portable.rs).
 Copy-Item (Join-Path $PSScriptRoot 'portable.txt') $Portable
-$Zip = Join-Path $Dist "mailcraft-$Version-windows-$Arch-portable.zip"
+$Zip = Join-Path $Dist "quatrelle-$Version-windows-$Arch-portable.zip"
 Remove-Item -Force $Zip -ErrorAction SilentlyContinue
 Compress-Archive -Path $Portable -DestinationPath $Zip
 
@@ -122,8 +122,8 @@ Compress-Archive -Path $Portable -DestinationPath $Zip
 # here.
 $HostArch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString().ToLowerInvariant()
 if ($Arch -ne 'arm64' -or $HostArch -eq 'arm64') {
-  Invoke-Native 'mailcraft-cli --version' { & (Join-Path $Stage 'mailcraft-cli.exe') --version }
+  Invoke-Native 'quatrelle-cli --version' { & (Join-Path $Stage 'quatrelle-cli.exe') --version }
 } else {
-  Write-Output "skipping mailcraft-cli --version: an $Arch build doesn't run on this $HostArch machine"
+  Write-Output "skipping quatrelle-cli --version: an $Arch build doesn't run on this $HostArch machine"
 }
 Get-Item $Msi, $Zip | Format-Table Name, Length

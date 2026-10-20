@@ -10,7 +10,7 @@ use std::io::{self, Read, Write};
 use std::time::{Duration, Instant};
 
 use imap_proto::{AttributeValue, Capability, MailboxDatum, NameAttribute, Response, ResponseCode, Status, StatusAttribute};
-use mailcraft_model::{Folder, FolderRole, ServerConfig};
+use quatrelle_model::{Folder, FolderRole, ServerConfig};
 
 use crate::stream::{self, IO_TIMEOUT, Stream, Timeouts};
 use crate::{NetError, Result};
@@ -92,7 +92,7 @@ pub fn parse_internal_date(s: &str) -> Option<i64> {
     if !(1..=31).contains(&day) || h > 23 || m > 59 || sec > 60 {
         return None;
     }
-    let days = mailcraft_model::dates::days_from_civil(year, month, day);
+    let days = quatrelle_model::dates::days_from_civil(year, month, day);
     Some(days * 86_400 + h * 3600 + m * 60 + sec - sign * (zh * 3600 + zm * 60))
 }
 
@@ -383,9 +383,9 @@ impl Client<Stream> {
     pub fn connect(cfg: &ServerConfig) -> Result<Client<Stream>> {
         let sock = stream::tcp(&cfg.host, cfg.port)?;
         match cfg.security {
-            mailcraft_model::Security::Tls => Client::from_stream(stream::tls(sock, &cfg.host)?),
-            mailcraft_model::Security::None => Client::from_stream(Stream::Plain(sock)),
-            mailcraft_model::Security::StartTls => {
+            quatrelle_model::Security::Tls => Client::from_stream(stream::tls(sock, &cfg.host)?),
+            quatrelle_model::Security::None => Client::from_stream(Stream::Plain(sock)),
+            quatrelle_model::Security::StartTls => {
                 let mut c = Client::from_stream(Stream::Plain(sock))?;
                 if !c.has("STARTTLS") {
                     c.capability()?;
@@ -828,7 +828,7 @@ impl<S: Read + Write> Client<S> {
             let _ = self.conn.run(&[Part::Text("UNSELECT")]);
         } else if self.selected.is_some() {
             // A failed EXAMINE leaves the selected state without expunging (RFC 3501 §6.3.1).
-            let _ = self.conn.run(&[Part::Text("EXAMINE \"MailCraft no such folder\"")]);
+            let _ = self.conn.run(&[Part::Text("EXAMINE \"Quatrelle no such folder\"")]);
         }
         self.selected = None;
     }

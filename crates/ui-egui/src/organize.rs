@@ -1,9 +1,9 @@
 //! Menus and marks for organising mail: Categorize, Snooze, rules.
 
 use egui::{RichText, Sense, Ui, vec2};
-use mailcraft_engine::Session;
-use mailcraft_engine::model::dates;
-use mailcraft_engine::model::organize::SnoozeUntil;
+use quatrelle_engine::Session;
+use quatrelle_engine::model::dates;
+use quatrelle_engine::model::organize::SnoozeUntil;
 use serde_json::json;
 
 use crate::theme::{self, Tokens};

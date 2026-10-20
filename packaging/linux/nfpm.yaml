@@ -3,7 +3,7 @@
 # exports VERSION and NFPM_ARCH.
 #
 #   nfpm package -f packaging/linux/nfpm.yaml -p deb -t dist/release/
-name: mailcraft
+name: quatrelle
 arch: ${NFPM_ARCH}
 platform: linux
 version: ${VERSION}
@@ -12,16 +12,16 @@ version_schema: semver
 release: 1
 section: mail
 priority: optional
-maintainer: ${MAILCRAFT_MAINTAINER}
+maintainer: ${QUATRELLE_MAINTAINER}
 vendor: Learning Machines LLC
-homepage: https://github.com/dgaudin/mailcraft
+homepage: https://github.com/dgaudin/quatrelle
 license: MIT OR Apache-2.0
 description: |-
   Open-source, local-first email client with the familiar three-pane mail
   workflow over IMAP and SMTP: several accounts and a unified inbox, a
   date-grouped message list, reading pane, conversations, offline cache and
   search, drafts, attachments; passwords in the system keyring.
-  Includes mailcraft-cli, a command-line client and command runner.
+  Includes quatrelle-cli, a command-line client and command runner.
 
 # The binaries link only glibc and libgcc_s directly. Windowing (X11/Wayland, xkbcommon) and the
 # GPU (Vulkan, EGL/GL) are loaded at runtime, so they are dependencies/recommendations here
@@ -60,11 +60,11 @@ overrides:
       - xdg-utils
 
 contents:
-  - src: ${STAGE}/usr/bin/mailcraft
-    dst: /usr/bin/mailcraft
+  - src: ${STAGE}/usr/bin/quatrelle
+    dst: /usr/bin/quatrelle
     file_info: { mode: 0755 }
-  - src: ${STAGE}/usr/bin/mailcraft-cli
-    dst: /usr/bin/mailcraft-cli
+  - src: ${STAGE}/usr/bin/quatrelle-cli
+    dst: /usr/bin/quatrelle-cli
     file_info: { mode: 0755 }
   - src: ${STAGE}/usr/share/
     dst: /usr/share/

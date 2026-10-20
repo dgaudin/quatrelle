@@ -2848,184 +2848,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "mailcraft"
-version = "0.20.0"
-dependencies = [
- "arboard",
- "chrono",
- "drag",
- "eframe",
- "egui",
- "image",
- "keyring",
- "log",
- "mailcraft-engine",
- "mailcraft-net",
- "mailcraft-ui-egui",
- "notify-rust",
- "open",
- "raw-window-handle",
- "rfd",
- "serde_json",
- "windows-registry",
- "winit",
- "winresource",
- "x11rb",
- "zbus 5.19.0",
-]
-
-[[package]]
-name = "mailcraft-cli"
-version = "0.20.0"
-dependencies = [
- "chrono",
- "mailcraft-engine",
- "mailcraft-net",
- "serde_json",
-]
-
-[[package]]
-name = "mailcraft-engine"
-version = "0.20.0"
-dependencies = [
- "log",
- "mailcraft-mime",
- "mailcraft-model",
- "mailcraft-print",
- "mailcraft-store",
- "serde",
- "serde_json",
- "thiserror 2.0.21",
-]
-
-[[package]]
-name = "mailcraft-jmap"
-version = "0.20.0"
-dependencies = [
- "log",
- "mailcraft-mime",
- "mailcraft-model",
- "mailcraft-store",
- "serde",
- "serde_json",
- "thiserror 2.0.21",
-]
-
-[[package]]
-name = "mailcraft-mime"
-version = "0.20.0"
-dependencies = [
- "flate2",
- "html2text",
- "html5ever",
- "mail-builder",
- "mail-parser",
- "mailcraft-model",
- "serde",
-]
-
-[[package]]
-name = "mailcraft-model"
-version = "0.20.0"
-dependencies = [
- "serde",
- "serde_json",
- "unicode-segmentation",
-]
-
-[[package]]
-name = "mailcraft-net"
-version = "0.20.0"
-dependencies = [
- "hmac 0.13.0",
- "imap-proto",
- "ipconfig",
- "lettre",
- "log",
- "mailcraft-jmap",
- "mailcraft-mime",
- "mailcraft-model",
- "mailcraft-store",
- "md-5",
- "md4",
- "outlook-pst",
- "outlook-pst-rw",
- "quick-xml 0.42.0",
- "ring",
- "rustls",
- "serde",
- "serde_json",
- "thiserror 2.0.21",
- "webpki-roots",
-]
-
-[[package]]
-name = "mailcraft-print"
-version = "0.20.0"
-dependencies = [
- "miniz_oxide 0.9.1",
- "ttf-parser",
-]
-
-[[package]]
-name = "mailcraft-spell"
-version = "0.20.0"
-dependencies = [
- "flate2",
- "spellbook",
-]
-
-[[package]]
-name = "mailcraft-store"
-version = "0.20.0"
-dependencies = [
- "dirs",
- "flate2",
- "log",
- "mailcraft-model",
- "redb",
- "serde",
- "serde_json",
- "thiserror 2.0.21",
-]
-
-[[package]]
-name = "mailcraft-ui-egui"
-version = "0.20.0"
-dependencies = [
- "egui",
- "hayro",
- "image",
- "log",
- "mailcraft-engine",
- "mailcraft-spell",
- "resvg",
- "serde",
- "serde_json",
- "skrifa 0.44.0",
- "sys-locale",
- "unicode-bidi",
-]
-
-[[package]]
-name = "mailcraft-web"
-version = "0.20.0"
-dependencies = [
- "eframe",
- "egui",
- "js-sys",
- "log",
- "mailcraft-engine",
- "mailcraft-jmap",
- "mailcraft-ui-egui",
- "rfd",
- "serde_json",
- "wasm-bindgen",
- "wasm-bindgen-futures",
- "web-sys",
-]
-
-[[package]]
 name = "markup5ever"
 version = "0.40.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4250,6 +4072,184 @@ name = "pxfm"
 version = "0.1.30"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d55d956fa96f5ec02be2e13af0e20391a5aa83d6a074e3ad368959d0fab299ea"
+
+[[package]]
+name = "quatrelle"
+version = "0.20.0"
+dependencies = [
+ "arboard",
+ "chrono",
+ "drag",
+ "eframe",
+ "egui",
+ "image",
+ "keyring",
+ "log",
+ "notify-rust",
+ "open",
+ "quatrelle-engine",
+ "quatrelle-net",
+ "quatrelle-ui-egui",
+ "raw-window-handle",
+ "rfd",
+ "serde_json",
+ "windows-registry",
+ "winit",
+ "winresource",
+ "x11rb",
+ "zbus 5.19.0",
+]
+
+[[package]]
+name = "quatrelle-cli"
+version = "0.20.0"
+dependencies = [
+ "chrono",
+ "quatrelle-engine",
+ "quatrelle-net",
+ "serde_json",
+]
+
+[[package]]
+name = "quatrelle-engine"
+version = "0.20.0"
+dependencies = [
+ "log",
+ "quatrelle-mime",
+ "quatrelle-model",
+ "quatrelle-print",
+ "quatrelle-store",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "quatrelle-jmap"
+version = "0.20.0"
+dependencies = [
+ "log",
+ "quatrelle-mime",
+ "quatrelle-model",
+ "quatrelle-store",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "quatrelle-mime"
+version = "0.20.0"
+dependencies = [
+ "flate2",
+ "html2text",
+ "html5ever",
+ "mail-builder",
+ "mail-parser",
+ "quatrelle-model",
+ "serde",
+]
+
+[[package]]
+name = "quatrelle-model"
+version = "0.20.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "unicode-segmentation",
+]
+
+[[package]]
+name = "quatrelle-net"
+version = "0.20.0"
+dependencies = [
+ "hmac 0.13.0",
+ "imap-proto",
+ "ipconfig",
+ "lettre",
+ "log",
+ "md-5",
+ "md4",
+ "outlook-pst",
+ "outlook-pst-rw",
+ "quatrelle-jmap",
+ "quatrelle-mime",
+ "quatrelle-model",
+ "quatrelle-store",
+ "quick-xml 0.42.0",
+ "ring",
+ "rustls",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "webpki-roots",
+]
+
+[[package]]
+name = "quatrelle-print"
+version = "0.20.0"
+dependencies = [
+ "miniz_oxide 0.9.1",
+ "ttf-parser",
+]
+
+[[package]]
+name = "quatrelle-spell"
+version = "0.20.0"
+dependencies = [
+ "flate2",
+ "spellbook",
+]
+
+[[package]]
+name = "quatrelle-store"
+version = "0.20.0"
+dependencies = [
+ "dirs",
+ "flate2",
+ "log",
+ "quatrelle-model",
+ "redb",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "quatrelle-ui-egui"
+version = "0.20.0"
+dependencies = [
+ "egui",
+ "hayro",
+ "image",
+ "log",
+ "quatrelle-engine",
+ "quatrelle-spell",
+ "resvg",
+ "serde",
+ "serde_json",
+ "skrifa 0.44.0",
+ "sys-locale",
+ "unicode-bidi",
+]
+
+[[package]]
+name = "quatrelle-web"
+version = "0.20.0"
+dependencies = [
+ "eframe",
+ "egui",
+ "js-sys",
+ "log",
+ "quatrelle-engine",
+ "quatrelle-jmap",
+ "quatrelle-ui-egui",
+ "rfd",
+ "serde_json",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+]
 
 [[package]]
 name = "quick-error"

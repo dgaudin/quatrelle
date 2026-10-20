@@ -1,10 +1,10 @@
-//! The sample mailbox (`mailcraft --sample`): a local-only account full of our own example mail,
+//! The sample mailbox (`quatrelle --sample`): a local-only account full of our own example mail,
 //! so the app can be explored, screenshotted and tested without a server. Every word here is
 //! original; addresses use the reserved `example` domains (RFC 2606).
 
-use mailcraft_mime::{self as mime, Draft, OutAttachment};
-use mailcraft_model::{AccountConfig, EmailAddress, Flags, Folder, FolderRole, MessageKey, sort_newest_first};
-use mailcraft_store::{FolderState, Store, StoreError};
+use quatrelle_mime::{self as mime, Draft, OutAttachment};
+use quatrelle_model::{AccountConfig, EmailAddress, Flags, Folder, FolderRole, MessageKey, sort_newest_first};
+use quatrelle_store::{FolderState, Store, StoreError};
 
 pub const SAMPLE_ACCOUNT: &str = "sample";
 /// The sample's second calendar (the studio's), beside the personal one.
@@ -341,7 +341,7 @@ fn mails() -> Vec<Mail> {
             ago: 60 * 26,
             seen: false,
             flagged: false,
-            attachments: &[("invite.ics", Attach::Invite("mix@sample.mailcraft"))],
+            attachments: &[("invite.ics", Attach::Invite("mix@sample.quatrelle"))],
             reply_to_index: None,
             html: None,
         },
@@ -473,7 +473,7 @@ fn mails() -> Vec<Mail> {
             to: &[ME],
             cc: &[],
             subject: "You may have won a camera",
-            body: "Click to claim your prize. (This is a sample junk message: MailCraft never loads links or remote images on its own.)",
+            body: "Click to claim your prize. (This is a sample junk message: Quatrelle never loads links or remote images on its own.)",
             ago: 60 * 24 * 4,
             seen: false,
             flagged: false,
@@ -553,7 +553,7 @@ pub fn seed_if_empty_at(store: &Store, now: i64, offset: i64) -> Result<bool, St
                     OutAttachment {
                         name: (*name).into(),
                         mime: "text/calendar; method=REQUEST".into(),
-                        data: mailcraft_model::ical::write(&events, Some("REQUEST"), date).into_bytes(),
+                        data: quatrelle_model::ical::write(&events, Some("REQUEST"), date).into_bytes(),
                     }
                 }
             })
@@ -633,16 +633,16 @@ pub fn seed_if_empty_at(store: &Store, now: i64, offset: i64) -> Result<bool, St
 }
 
 /// The sample calendar (a week around `now`, in local time) and address book.
-pub fn sample_pim(now: i64, offset: i64) -> mailcraft_model::pim::Pim {
-    use mailcraft_model::ical::{Attendee, CalEvent};
-    use mailcraft_model::pim::{LOCAL, Pim, StoredCard, StoredEvent};
-    use mailcraft_model::vcard::{Card, Typed};
+pub fn sample_pim(now: i64, offset: i64) -> quatrelle_model::pim::Pim {
+    use quatrelle_model::ical::{Attendee, CalEvent};
+    use quatrelle_model::pim::{LOCAL, Pim, StoredCard, StoredEvent};
+    use quatrelle_model::vcard::{Card, Typed};
     let today = (now + offset).div_euclid(86_400);
     let monday = today - (today + 3).rem_euclid(7);
     let at = |day: i64, h: i64, m: i64| day * 86_400 + h * 3600 + m * 60 - offset;
     let who = |name: &str, email: &str, partstat: &str| Attendee { email: email.into(), name: name.into(), partstat: partstat.into(), rsvp: false };
     let ev = |uid: &str, summary: &str, start: i64, end: i64| CalEvent {
-        uid: format!("{uid}@sample.mailcraft"),
+        uid: format!("{uid}@sample.quatrelle"),
         summary: summary.into(),
         start,
         end,
@@ -673,7 +673,7 @@ pub fn sample_pim(now: i64, offset: i64) -> mailcraft_model::pim::Pim {
         CalEvent { location: "Community Gallery".into(), ..ev("opening", "Winter group show opening", at(today + 9, 18, 0), at(today + 9, 21, 0)) },
     ];
     let person = |uid: &str, name: &str, email: &str, org: &str, title: &str, phone: &str| Card {
-        uid: format!("{uid}@sample.mailcraft"),
+        uid: format!("{uid}@sample.quatrelle"),
         name: name.into(),
         emails: vec![Typed { value: email.into(), kind: "work".into() }],
         phones: if phone.is_empty() { Vec::new() } else { vec![Typed { value: phone.into(), kind: "cell".into() }] },
@@ -696,7 +696,7 @@ pub fn sample_pim(now: i64, offset: i64) -> mailcraft_model::pim::Pim {
     let mut p = Pim::default();
     p.ensure_defaults();
     // In a group of its own, as a team's calendars are kept in Outlook.
-    p.calendars.push(mailcraft_model::pim::CalendarInfo {
+    p.calendars.push(quatrelle_model::pim::CalendarInfo {
         id: STUDIO_CALENDAR.into(),
         name: "Studio".into(),
         color: 3,
@@ -718,8 +718,8 @@ pub fn sample_pim(now: i64, offset: i64) -> mailcraft_model::pim::Pim {
     }
     p.cards = cards.into_iter().map(|card| StoredCard { book: LOCAL.into(), card, ..Default::default() }).collect();
     // Notes (Outlook's Notes), kept on this computer.
-    let note = |uid: &str, text: &str, color: u8, ago: i64| mailcraft_model::pim::StoredNote {
-        note: mailcraft_model::pim::Note { uid: format!("{uid}@sample.mailcraft"), text: text.into(), color, modified: now - ago },
+    let note = |uid: &str, text: &str, color: u8, ago: i64| quatrelle_model::pim::StoredNote {
+        note: quatrelle_model::pim::Note { uid: format!("{uid}@sample.quatrelle"), text: text.into(), color, modified: now - ago },
         ..Default::default()
     };
     p.notes = vec![

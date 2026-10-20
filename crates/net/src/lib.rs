@@ -1,4 +1,4 @@
-//! MailCraft's network layer (native builds only).
+//! Quatrelle's network layer (native builds only).
 //!
 //! * [`stream`]: TCP with timeouts, TLS through rustls (Mozilla's root store), STARTTLS.
 //! * [`imap`]: a small, strict IMAP4rev1 client (RFC 3501) on top of `imap-proto`'s parser,
@@ -10,8 +10,8 @@
 //! * [`pst`]: importing Outlook data files (`.pst`) into an account on this computer.
 //! * [`sieve`]: automatic replies on IMAP servers, through ManageSieve (RFC 5804).
 //! * [`smtp`]: message submission through `lettre` (RFC 6409, implicit TLS per RFC 8314).
-//! * [`worker`]: one thread per account that runs the engine's [`Job`](mailcraft_model::Job)s
-//!   and reports [`Event`](mailcraft_model::Event)s, keeping a connection open, idling on the
+//! * [`worker`]: one thread per account that runs the engine's [`Job`](quatrelle_model::Job)s
+//!   and reports [`Event`](quatrelle_model::Event)s, keeping a connection open, idling on the
 //!   Inbox for new mail and replaying changes made offline.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
@@ -94,7 +94,7 @@ pub enum NetError {
     #[error("the server asked to try again later: {0}")]
     Later(String),
     #[error("{0}")]
-    Store(#[from] mailcraft_store::StoreError),
+    Store(#[from] quatrelle_store::StoreError),
     /// Can't go on, for a reason said in full (what to do included): not a server's words.
     #[error("{0}")]
     Refused(String),

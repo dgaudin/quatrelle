@@ -220,7 +220,7 @@ fn svg(icon: Icon) -> &'static str {
 struct Rendered(Arc<Mutex<HashMap<(Icon, u32), Option<TextureHandle>>>>);
 
 fn texture(ctx: &Context, icon: Icon, px: u32) -> Option<TextureHandle> {
-    let cache = ctx.data_mut(|d| d.get_temp_mut_or_default::<Rendered>(Id::unique("mailcraft-icons")).clone());
+    let cache = ctx.data_mut(|d| d.get_temp_mut_or_default::<Rendered>(Id::unique("quatrelle-icons")).clone());
     let mut map = cache.0.lock().ok()?;
     if let Some(t) = map.get(&(icon, px)) {
         return t.clone();

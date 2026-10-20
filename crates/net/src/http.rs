@@ -233,7 +233,7 @@ impl Conn {
 fn write_request<S: Write>(s: &mut S, req: &Request, url: &Url, keep: bool) -> Result<()> {
     let host = if url.port == default_port(url.https) { url.host.clone() } else { format!("{}:{}", url.host, url.port) };
     let mut head = format!(
-        "{} {} HTTP/1.1\r\nHost: {host}\r\nUser-Agent: MailCraft/{}\r\nConnection: {}\r\n",
+        "{} {} HTTP/1.1\r\nHost: {host}\r\nUser-Agent: Quatrelle/{}\r\nConnection: {}\r\n",
         req.method,
         url.path,
         env!("CARGO_PKG_VERSION"),

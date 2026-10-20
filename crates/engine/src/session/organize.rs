@@ -1,7 +1,7 @@
 //! Organising mail: categories, pinning, snoozing, inbox rules and the Focused/Other split.
 
-use mailcraft_model::organize::{Category, Rule, RuleAction, ServerKind, Snooze, actions_for};
-use mailcraft_model::{PINNED, is_keyword};
+use quatrelle_model::organize::{Category, Rule, RuleAction, ServerKind, Snooze, actions_for};
+use quatrelle_model::{PINNED, is_keyword};
 
 use super::*;
 
@@ -208,7 +208,7 @@ impl Session {
             .snoozes
             .iter()
             .map(|s| match self.account(&s.account) {
-                Some(a) if a.config.keeps_online() => mailcraft_model::organize::Snooze { subject: String::new(), ..s.clone() },
+                Some(a) if a.config.keeps_online() => quatrelle_model::organize::Snooze { subject: String::new(), ..s.clone() },
                 _ => s.clone(),
             })
             .collect();
@@ -326,7 +326,7 @@ impl Session {
         }
     }
 
-    /// Read the rules the account's server keeps (`GetServerRules`): the ids MailCraft's own have
+    /// Read the rules the account's server keeps (`GetServerRules`): the ids Quatrelle's own have
     /// there, and the ones made elsewhere. Accounts whose server keeps none are left alone.
     pub(super) fn refresh_server_rules(&mut self, account: &str) {
         if self.server_kind(account).is_none() {
@@ -348,7 +348,7 @@ impl Session {
         self.jobs.push(Job::SetServerRules { account: account.to_string(), rules: pending, delete: Vec::new(), categories: self.rule_keywords() });
     }
 
-    /// The ids MailCraft's own rules have on that account's server (what tells the server's
+    /// The ids Quatrelle's own rules have on that account's server (what tells the server's
     /// rules apart from the ones it didn't make).
     fn our_server_ids(&self, account: &str) -> Vec<String> {
         self.rules.iter().filter(|r| r.account.as_deref() == Some(account)).filter_map(|r| r.remote_id.clone()).collect()
@@ -378,12 +378,12 @@ impl Session {
 
     /// Change one of the server's own rules: its name, whether it runs, what it looks at and
     /// what it does — nothing else (its place among the server's rules stays).
-    pub fn save_server_rule(&mut self, account: &str, id: &str, mut rule: mailcraft_model::organize::Rule) -> CmdResult {
+    pub fn save_server_rule(&mut self, account: &str, id: &str, mut rule: quatrelle_model::organize::Rule) -> CmdResult {
         let Some(f) = self.foreign_rules.iter().find(|r| r.account == account && r.id == id) else {
             return Err(CmdError::Params(format!("no rule `{id}` on that server")));
         };
         if !f.runnable {
-            return Err(CmdError::Failed(format!("MailCraft doesn't know every part of \"{}\" yet", f.name)));
+            return Err(CmdError::Failed(format!("Quatrelle doesn't know every part of \"{}\" yet", f.name)));
         }
         if rule.name.trim().is_empty() {
             return Err(CmdError::Params("a rule needs a name".into()));
@@ -402,7 +402,7 @@ impl Session {
     }
 
     /// Run one of the server's own rules on the mail already in the Inbox (Outlook's "Run this
-    /// rule now"): only for a rule every part of which MailCraft knows.
+    /// rule now"): only for a rule every part of which Quatrelle knows.
     pub fn run_server_rule(&mut self, account: &str, id: &str) -> CmdResult {
         let f = self
             .foreign_rules
@@ -410,7 +410,7 @@ impl Session {
             .find(|r| r.account == account && r.id == id)
             .ok_or_else(|| CmdError::Params(format!("no rule `{id}` on that server")))?;
         let rule = f.rule.clone().ok_or_else(|| {
-            CmdError::Disabled("MailCraft can't run this rule here: it uses a condition or an action MailCraft doesn't know".into())
+            CmdError::Disabled("Quatrelle can't run this rule here: it uses a condition or an action Quatrelle doesn't know".into())
         })?;
         let inbox = self.account(account).and_then(|a| a.folder(FolderRole::Inbox)).map(|x| x.path.clone());
         let Some(inbox) = inbox else { return Err(CmdError::Disabled("that account has no Inbox yet".into())) };
@@ -440,7 +440,7 @@ impl Session {
                 v
             })
             .collect();
-        let doc = serde_json::json!({ "mailcraftRules": 1, "rules": rules });
+        let doc = serde_json::json!({ "quatrelleRules": 1, "rules": rules });
         serde_json::to_vec_pretty(&doc).map_err(|e| CmdError::Failed(e.to_string()))
     }
 
@@ -455,17 +455,17 @@ impl Session {
         }
         // A file saved again by an editor may start with a byte order mark.
         let bytes = bytes.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(bytes);
-        let doc: serde_json::Value = serde_json::from_slice(bytes).map_err(|_| CmdError::Failed("not a MailCraft rules file".into()))?;
-        let list = match (doc.get("mailcraftRules"), doc.get("rules").and_then(serde_json::Value::as_array)) {
+        let doc: serde_json::Value = serde_json::from_slice(bytes).map_err(|_| CmdError::Failed("not a Quatrelle rules file".into()))?;
+        let list = match (doc.get("quatrelleRules"), doc.get("rules").and_then(serde_json::Value::as_array)) {
             (Some(_), Some(list)) => list.clone(),
-            _ => return Err(CmdError::Failed("not a MailCraft rules file".into())),
+            _ => return Err(CmdError::Failed("not a Quatrelle rules file".into())),
         };
         let mut rules = if replace { Vec::new() } else { self.rules.clone() };
         let (mut added, mut off) = (0usize, 0usize);
         for (i, v) in list.into_iter().take(500).enumerate() {
             let email = v.get("accountEmail").and_then(serde_json::Value::as_str).map(str::to_string);
             let mut rule: Rule =
-                serde_json::from_value(v).map_err(|e| CmdError::Failed(format!("not a MailCraft rules file: rule {}: {e}", i + 1)))?;
+                serde_json::from_value(v).map_err(|e| CmdError::Failed(format!("not a Quatrelle rules file: rule {}: {e}", i + 1)))?;
             rule.account = None;
             if let Some(email) = email.filter(|e| !e.is_empty()) {
                 match self.accounts.iter().find(|a| a.config.email.eq_ignore_ascii_case(&email)) {
@@ -500,7 +500,7 @@ impl Session {
         std::iter::once(&m.message_id)
             .chain(std::iter::once(&m.in_reply_to))
             .chain(&m.references)
-            .map(|id| mailcraft_model::thread::norm_id(id).to_ascii_lowercase())
+            .map(|id| quatrelle_model::thread::norm_id(id).to_ascii_lowercase())
             .filter(|id| !id.is_empty())
             .collect()
     }
@@ -530,7 +530,7 @@ impl Session {
         let mut members: Vec<Summary> = Vec::new();
         for m in &sel {
             let folder = self.folder_state(&m.key.account, &m.key.folder).messages.clone();
-            for t in mailcraft_model::thread::threads(&folder) {
+            for t in quatrelle_model::thread::threads(&folder) {
                 let msgs: Vec<&Summary> = t.messages.iter().filter_map(|&i| folder.get(i)).collect();
                 if msgs.iter().any(|x| x.key == m.key) {
                     members.extend(msgs.into_iter().cloned());
@@ -693,7 +693,7 @@ impl Session {
     }
 }
 
-/// What a server would be told for these rules (MailCraft's ids left out): comparing it says
+/// What a server would be told for these rules (Quatrelle's ids left out): comparing it says
 /// whether a change is worth a round trip to the server.
 fn server_shape(rules: &[Rule], kind: &impl Fn(&str) -> Option<ServerKind>) -> Vec<String> {
     rules

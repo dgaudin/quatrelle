@@ -10,19 +10,20 @@ version = "0.20.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 rust-version = "1.95"
-repository = "https://github.com/dgaudin/mailcraft"
+repository = "https://github.com/dgaudin/quatrelle"
+homepage = "https://github.com/dgaudin/quatrelle"
 
 [workspace.dependencies]
 # internal
-mailcraft-model = { path = "crates/model" }
-mailcraft-mime = { path = "crates/mime" }
-mailcraft-store = { path = "crates/store" }
-mailcraft-jmap = { path = "crates/jmap" }
-mailcraft-print = { path = "crates/print" }
-mailcraft-spell = { path = "crates/spell" }
-mailcraft-net = { path = "crates/net" }
-mailcraft-engine = { path = "crates/engine" }
-mailcraft-ui-egui = { path = "crates/ui-egui" }
+quatrelle-model = { path = "crates/model" }
+quatrelle-mime = { path = "crates/mime" }
+quatrelle-store = { path = "crates/store" }
+quatrelle-jmap = { path = "crates/jmap" }
+quatrelle-print = { path = "crates/print" }
+quatrelle-spell = { path = "crates/spell" }
+quatrelle-net = { path = "crates/net" }
+quatrelle-engine = { path = "crates/engine" }
+quatrelle-ui-egui = { path = "crates/ui-egui" }
 
 # foundation
 thiserror = "2"

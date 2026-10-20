@@ -148,8 +148,8 @@ impl Data {
     }
 
     fn message_json(&self, m: &Msg) -> Value {
-        let p = mailcraft_mime::parse(&m.raw);
-        let addr = |a: &mailcraft_model::EmailAddress| json!({"emailAddress": {"name": a.name, "address": a.email}});
+        let p = quatrelle_mime::parse(&m.raw);
+        let addr = |a: &quatrelle_model::EmailAddress| json!({"emailAddress": {"name": a.name, "address": a.email}});
         let mut v = json!({
             "id": m.id, "parentFolderId": m.folder, "isRead": m.read, "isDraft": m.draft,
             "flag": {"flagStatus": if m.flagged { "flagged" } else { "notFlagged" }},
@@ -319,7 +319,7 @@ impl Data {
                 (204, Vec::new(), "text/plain")
             }
             ("POST", ["me", "messages", id, "createReply"]) => {
-                let Some(orig) = self.message(id).map(|m| mailcraft_mime::parse(&m.raw).unwrap_or_default()) else { return not_found() };
+                let Some(orig) = self.message(id).map(|m| quatrelle_mime::parse(&m.raw).unwrap_or_default()) else { return not_found() };
                 let raw = format!(
                     "From: riley@contoso.example\r\nTo: {}\r\nSubject: RE: {}\r\nIn-Reply-To: <{}>\r\n\r\n",
                     orig.from.email, orig.subject, orig.message_id
@@ -337,7 +337,7 @@ impl Data {
                     Some(m) => {
                         m.folder = sent;
                         m.draft = false;
-                        let subject = mailcraft_mime::parse(&m.raw).map(|p| p.subject).unwrap_or_default();
+                        let subject = quatrelle_mime::parse(&m.raw).map(|p| p.subject).unwrap_or_default();
                         let (raw, vote) = (m.raw.clone(), m.vote.clone());
                         self.sent.push(raw);
                         self.votes.push((subject, vote));
@@ -615,9 +615,9 @@ pub fn serve(data: Data) -> Server {
 mod tests {
     use std::time::{Duration, Instant};
 
-    use mailcraft_model::job::Secret;
-    use mailcraft_model::{AccountConfig, Event, Flag, Job, Op, SyncStatus};
-    use mailcraft_store::Store;
+    use quatrelle_model::job::Secret;
+    use quatrelle_model::{AccountConfig, Event, Flag, Job, Op, SyncStatus};
+    use quatrelle_store::Store;
 
     use super::*;
 
@@ -668,8 +668,8 @@ mod tests {
     /// and deleted there, not in this mailbox), read-only when they don't.
     #[test]
     fn other_peoples_calendars_are_written_where_allowed() {
-        use mailcraft_model::ical::CalEvent;
-        use mailcraft_model::pim::{Pim, StoredEvent, Tombstone, shared_calendar_id};
+        use quatrelle_model::ical::CalEvent;
+        use quatrelle_model::pim::{Pim, StoredEvent, Tombstone, shared_calendar_id};
         let mut d = Data { others: vec![("ana@contoso.example".into(), true), ("ben@contoso.example".into(), false)], ..Default::default() };
         d.folder("Inbox", None, Some("inbox"));
         d.calendars.push(("CAL1".into(), "Calendar".into()));
@@ -725,9 +725,9 @@ mod tests {
 
     #[test]
     fn exchange_calendars_and_contacts_sync_both_ways() {
-        use mailcraft_model::ical::CalEvent;
-        use mailcraft_model::pim::{LOCAL, Pim, StoredCard, StoredEvent, Tombstone};
-        use mailcraft_model::vcard::{Card, Typed};
+        use quatrelle_model::ical::CalEvent;
+        use quatrelle_model::pim::{LOCAL, Pim, StoredCard, StoredEvent, Tombstone};
+        use quatrelle_model::vcard::{Card, Typed};
         let mut d = Data::default();
         d.folder("Inbox", None, Some("inbox"));
         d.calendars.push(("CAL1".into(), "Calendar".into()));
@@ -790,7 +790,7 @@ mod tests {
     #[test]
     fn a_microsoft_account_without_a_mailbox_says_so_and_stops() {
         let server = serve(Data { no_mailbox: true, ..Default::default() });
-        let dir = std::env::temp_dir().join(format!("mailcraft-graph-nomailbox-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("quatrelle-graph-nomailbox-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let mut pool = crate::worker::Pool::new(Store::open(&dir).unwrap(), Arc::new(crate::worker::MemoryCredentials::default()));
         let account = AccountConfig { id: "a1".into(), email: "me@gmail.example".into(), graph: Some(server.base.clone()), ..Default::default() };
@@ -816,10 +816,10 @@ mod tests {
         d.folder("Drafts", None, Some("drafts"));
         let sent = d.folder("Sent Items", None, Some("sentitems"));
         let lunch = d.deliver(&inbox, &mail("Team lunch on Friday?", "v1"), false, "2024-05-06T09:00:00Z");
-        d.messages.iter_mut().find(|m| m.id == lunch).unwrap().voting = mailcraft_model::voting::stream(&["Oui", "Non"]);
+        d.messages.iter_mut().find(|m| m.id == lunch).unwrap().voting = quatrelle_model::voting::stream(&["Oui", "Non"]);
         let server = serve(d);
         let data = server.data.clone();
-        let dir = std::env::temp_dir().join(format!("mailcraft-graph-vote-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("quatrelle-graph-vote-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let store = Store::open(&dir).unwrap();
         let mut pool = crate::worker::Pool::new(store.clone(), Arc::new(crate::worker::MemoryCredentials::default()));
@@ -854,7 +854,7 @@ mod tests {
         let ticket = d.deliver(&their_inbox, &mail("Printer on fire", "s1"), false, "2024-05-06T10:00:00Z");
         let server = serve(d);
         let data = server.data.clone();
-        let dir = std::env::temp_dir().join(format!("mailcraft-graph-shared-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("quatrelle-graph-shared-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let store = Store::open(&dir).unwrap();
         let mut pool = crate::worker::Pool::new(store.clone(), Arc::new(crate::worker::MemoryCredentials::default()));
@@ -894,7 +894,7 @@ mod tests {
 
     #[test]
     fn calendar_groups_come_in_as_outlook_keeps_them() {
-        use mailcraft_model::pim::Pim;
+        use quatrelle_model::pim::Pim;
         let mut d = Data::default();
         d.folder("Inbox", None, Some("inbox"));
         d.calendars.push(("CAL1".into(), "Calendar".into()));
@@ -924,7 +924,7 @@ mod tests {
         d.folder("Inbox", None, Some("inbox"));
         d.folder("Sent Items", None, Some("sentitems"));
         let server = serve(d);
-        let dir = std::env::temp_dir().join(format!("mailcraft-graph-sentsoon-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("quatrelle-graph-sentsoon-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let store = Store::open(&dir).unwrap();
         let mut pool = crate::worker::Pool::new(store.clone(), Arc::new(crate::worker::MemoryCredentials::default()));
@@ -963,7 +963,7 @@ mod tests {
         let server = serve(d);
         let data = server.data.clone();
 
-        let dir = std::env::temp_dir().join(format!("mailcraft-graph-e2e-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("quatrelle-graph-e2e-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let store = Store::open(&dir).unwrap();
         let mut pool = crate::worker::Pool::new(store.clone(), Arc::new(crate::worker::MemoryCredentials::default()));
@@ -999,7 +999,7 @@ mod tests {
             "pages followed, children listed, the Outbox left out"
         );
         let role = |p: &str| folders.iter().find(|f| f.path == p).unwrap().role;
-        assert_eq!((role("Sent Items"), role("Deleted Items")), (mailcraft_model::FolderRole::Sent, mailcraft_model::FolderRole::Trash));
+        assert_eq!((role("Sent Items"), role("Deleted Items")), (quatrelle_model::FolderRole::Sent, quatrelle_model::FolderRole::Trash));
         let inbox_folder = folders.iter().find(|f| f.path == "INBOX").unwrap();
         assert_eq!((inbox_folder.total, inbox_folder.unread), (2, 1));
         let st = store.load_folder("a1", "INBOX").unwrap();
@@ -1040,7 +1040,7 @@ mod tests {
         // Automatic replies.
         pool.submit(Job::GetVacation { account: "a1".into() });
         until(&pool, "replies read", |e| matches!(e, Event::Vacation { vacation: Some(v), error: None, .. } if !v.enabled));
-        let away = mailcraft_model::job::Vacation {
+        let away = quatrelle_model::job::Vacation {
             enabled: true,
             subject: String::new(),
             text: "Back on Monday".into(),
@@ -1052,7 +1052,7 @@ mod tests {
         pool.submit(Job::SetVacation { account: "a1".into(), vacation: away.clone() });
         until(&pool, "replies on", |e| matches!(e, Event::Vacation { vacation: Some(v), error: None, .. } if *v == away));
         assert_eq!(data.lock().unwrap().replies["scheduledEndDateTime"]["dateTime"], "2026-10-20T23:59:59");
-        pool.submit(Job::SetVacation { account: "a1".into(), vacation: mailcraft_model::job::Vacation { text: "refuse".into(), ..away.clone() } });
+        pool.submit(Job::SetVacation { account: "a1".into(), vacation: quatrelle_model::job::Vacation { text: "refuse".into(), ..away.clone() } });
         until(&pool, "a refused change", |e| matches!(e, Event::Vacation { vacation: Some(v), error: Some(_), .. } if *v == away));
 
         // Empty Deleted Items; delete for good.

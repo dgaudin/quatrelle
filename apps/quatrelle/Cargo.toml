@@ -1,0 +1,71 @@
+[package]
+name = "quatrelle"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+description = "Quatrelle: local-first mail, calendar and people in Rust, an open-source alternative to Outlook"
+default-run = "quatrelle"
+
+[lints]
+workspace = true
+
+[dependencies]
+quatrelle-engine = { workspace = true }
+quatrelle-net = { workspace = true }
+quatrelle-ui-egui = { workspace = true }
+# Without default features, so each is named: "clipboard" is copy and paste (eframe 0.37 made it
+# a feature of its own; leaving it out leaves the app without a clipboard).
+eframe = { workspace = true, features = ["clipboard", "default_fonts", "system_fonts", "wgpu", "accesskit", "wayland", "x11"] }
+egui = { workspace = true }
+serde_json = { workspace = true }
+log = { workspace = true }
+# The local UTC offset for message times.
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+# Native file dialogs (attach, save as).
+rfd = "0.17"
+# Open attachments with the system's default app.
+open = "5"
+# Pictures pasted into a message.
+arboard = { version = "3", default-features = false, features = ["image-data"] }
+# Desktop notifications for new mail (toasts, Notification Center, freedesktop notifications).
+notify-rust = { version = "4", default-features = false, features = ["z"] }
+# Decodes the window icon (assets/app-icon).
+image = { version = "0.25", default-features = false, features = ["png"] }
+# Passwords live in the system keychain, never in Quatrelle's files.
+keyring = { version = "3.6", default-features = false }
+
+[build-dependencies]
+# Icon + VERSIONINFO for quatrelle.exe; build.rs only uses it when the target is Windows.
+winresource = "0.1"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+keyring = { version = "3.6", default-features = false, features = ["windows-native"] }
+# Notifications under Quatrelle's name: its app id's name and icon, per user (`toast.rs`).
+# The version ipconfig (the network crate's DNS settings) uses, so it's built once.
+windows-registry = "0.6"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3.6", default-features = false, features = ["apple-native"] }
+
+[target.'cfg(all(unix, not(target_os = "macos")))'.dependencies]
+keyring = { version = "3.6", default-features = false, features = ["async-secret-service", "async-io", "crypto-rust"] }
+# Dragging attachments out under X11 (XDND), in safe Rust; and the window's id for it. The
+# version winit and arboard use, so it's built once.
+x11rb = "0.13"
+raw-window-handle = "0.6"
+# GNOME's compositor leaves the title bar to the app: without this, winit draws a bare grey
+# frame; with it, a title bar like the desktop's own (title, buttons, light and dark). Where
+# the window manager draws title bars (KDE, X11), it still does.
+winit = { version = "0.30", default-features = false, features = ["wayland-csd-adwaita", "x11"] }
+# The desktop's light or dark style and accent colour (the XDG settings portal).
+zbus = { version = "5", default-features = false, features = ["blocking-api", "async-io"] }
+
+[target.'cfg(all(unix, not(target_os = "macos")))'.dev-dependencies]
+# The drag test plays the user on a virtual X server (Xvfb).
+x11rb = { version = "0.13", features = ["xtest"] }
+
+# Dragging attachments out of the window to other apps (Linux and the BSDs: `xdnd.rs`).
+[target.'cfg(any(target_os = "windows", target_os = "macos"))'.dependencies]
+drag = "2.1"

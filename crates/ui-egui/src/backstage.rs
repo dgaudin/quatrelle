@@ -7,7 +7,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use egui::{Margin, RichText, Sense, Ui, vec2};
-use mailcraft_engine::{AccountState, ReadingPane, Session, VacationState};
+use quatrelle_engine::{AccountState, ReadingPane, Session, VacationState};
 use serde_json::json;
 
 use crate::icons::{self, Icon};
@@ -101,7 +101,7 @@ pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) 
                     b.page = page;
                 }
             }
-            // Close MailCraft (the desktop app; a browser tab is closed by the browser).
+            // Close Quatrelle (the desktop app; a browser tab is closed by the browser).
             if st.has_files && rail_item(ui, &t, Icon::Close, "Exit", false).clicked() {
                 ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
             }
@@ -417,8 +417,8 @@ fn info(s: &Session, t: &Tokens, has_files: bool, ui: &mut Ui, b: &mut Backstage
         });
         setting_row(ui, t, false, name(t, tl!("Clean up")), None, |ui| {
             for (role, label) in [
-                (mailcraft_engine::model::FolderRole::Junk, "Empty Junk Email…"),
-                (mailcraft_engine::model::FolderRole::Trash, "Empty Deleted Items…"),
+                (quatrelle_engine::model::FolderRole::Junk, "Empty Junk Email…"),
+                (quatrelle_engine::model::FolderRole::Trash, "Empty Deleted Items…"),
             ] {
                 if let Some(f) = a.folder(role)
                     && ui.add_enabled(f.total > 0 || a.is_local(), egui::Button::new(tl!(label))).clicked()
@@ -457,7 +457,7 @@ fn open(s: &Session, t: &Tokens, ui: &mut Ui, b: &mut Backstage, acts: &mut Vec<
         Icon::Folder,
         "Open data file",
         "Open a data file",
-        "Bring in an Outlook data file (.pst) or a MailCraft one (.mailcraft). It opens as a mailbox of its own, with its folders, kept on this computer.",
+        "Bring in an Outlook data file (.pst) or a Quatrelle one (.quatrelle). It opens as a mailbox of its own, with its folders, kept on this computer.",
         |ui| {
             let files: Vec<&str> = s.accounts.iter().filter(|a| a.is_data_file()).map(|a| a.config.email.as_str()).collect();
             if !files.is_empty() {
@@ -526,7 +526,7 @@ fn open(s: &Session, t: &Tokens, ui: &mut Ui, b: &mut Backstage, acts: &mut Vec<
         Icon::Inbox,
         "Rules",
         "Rules as a file",
-        "Save your rules in a file, to keep them or to use them on another computer, and add the ones from a file saved by MailCraft. A rule for an account this computer doesn't have comes in turned off.",
+        "Save your rules in a file, to keep them or to use them on another computer, and add the ones from a file saved by Quatrelle. A rule for an account this computer doesn't have comes in turned off.",
         |ui| {
             ui.horizontal_wrapped(|ui| {
                 if ui.add_enabled(!s.rules.is_empty(), egui::Button::new(RichText::new(tl!("Export…")).small())).clicked() {
@@ -593,7 +593,7 @@ fn options(s: &Session, st: &UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
             ui,
             tl!("Data files"),
             Some(tl!(
-                "Each account's mail, contacts and calendar are kept in a MailCraft data file (.mailcraft) in this folder, as Outlook keeps each account in a .pst in Outlook Files. An Outlook data file you open gets a .mailcraft file of its own here; Outlook's file is left as it was. To have a copy as a .pst, use Save as an Outlook data file under Info."
+                "Each account's mail, contacts and calendar are kept in a Quatrelle data file (.quatrelle) in this folder, as Outlook keeps each account in a .pst in Outlook Files. An Outlook data file you open gets a .quatrelle file of its own here; Outlook's file is left as it was. To have a copy as a .pst, use Save as an Outlook data file under Info."
             )),
             &mut |ui| {
                 let path = dir.display().to_string();
@@ -607,9 +607,9 @@ fn options(s: &Session, st: &UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
                 });
                 if !*movable && st.pending_move.is_none() {
                     let why = if s.portable {
-                        tl!("Portable: everything is kept in MailCraftData beside MailCraft, and passwords only until it closes.")
+                        tl!("Portable: everything is kept in QuatrelleData beside Quatrelle, and passwords only until it closes.")
                     } else {
-                        tl!("Chosen when MailCraft was started (--data or MAILCRAFT_DATA), so it can't be moved here.")
+                        tl!("Chosen when Quatrelle was started (--data or QUATRELLE_DATA), so it can't be moved here.")
                     };
                     ui.label(RichText::new(why).color(t.faint).small());
                 }
@@ -617,7 +617,7 @@ fn options(s: &Session, st: &UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
                     ui.add_space(6.0);
                     ui.horizontal_wrapped(|ui| {
                         ui.label(
-                            RichText::new(tf!("Moves to {folder} the next time MailCraft starts.", folder = to.display().to_string()))
+                            RichText::new(tf!("Moves to {folder} the next time Quatrelle starts.", folder = to.display().to_string()))
                                 .color(t.warn)
                                 .small(),
                         );
@@ -668,7 +668,7 @@ fn options(s: &Session, st: &UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
         );
         if on {
             ui.indent("read-when", |ui| {
-                let shown = s.prefs.read_in_pane == mailcraft_engine::ReadInPane::Shown;
+                let shown = s.prefs.read_in_pane == quatrelle_engine::ReadInPane::Shown;
                 ui.horizontal(|ui| {
                     if ui.radio(shown, tl!("When it's shown, after")).clicked() {
                         acts.push(Action::Run("view.readingOptions", json!({"when": "shown"})));
@@ -721,7 +721,7 @@ fn options(s: &Session, st: &UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
                 }
             });
             // Issue #4: an account kept online only has none of its mail here.
-            let servers: Vec<&mailcraft_engine::model::AccountConfig> =
+            let servers: Vec<&quatrelle_engine::model::AccountConfig> =
                 s.accounts.iter().map(|a| &a.config).filter(|c| c.can_be_online_only()).collect();
             for (i, c) in servers.iter().enumerate() {
                 let label = tf!("Online only: {email}", email = c.email);
@@ -766,7 +766,7 @@ fn options(s: &Session, st: &UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
 /// Check for updates, and what it found: a newer release to download (its installer for this
 /// system, else its page) and what's new in it. Nothing installs by itself.
 fn updates(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>) {
-    use mailcraft_engine::UpdateCheck;
+    use quatrelle_engine::UpdateCheck;
     if s.jmap_only {
         return;
     }
@@ -786,7 +786,7 @@ fn updates(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>) {
             }
             UpdateCheck::Available(r) => {
                 let name = r.tag.trim_start_matches('v').to_string();
-                ui.label(RichText::new(tf!("MailCraft {version} is available.", version = name)).color(t.text).strong());
+                ui.label(RichText::new(tf!("Quatrelle {version} is available.", version = name)).color(t.text).strong());
                 let target = if r.download.is_empty() { r.page.clone() } else { r.download.clone() };
                 if widgets::accent_button(ui, Icon::Sync, "Download", t, true).on_hover_text(&target).clicked() {
                     acts.push(Action::OpenUrl(target));
@@ -803,14 +803,14 @@ fn updates(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>) {
 }
 
 fn about(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>) {
-    heading(ui, t, "About MailCraft");
+    heading(ui, t, "About Quatrelle");
     ui.horizontal(|ui| {
         let (r, _) = ui.allocate_exact_size(vec2(56.0, 56.0), Sense::hover());
         ui.painter().rect_filled(r, 12.0, t.accent);
         icons::paint(ui.painter(), icons::centered(r, 34.0), Icon::Unread, egui::Color32::WHITE);
         ui.add_space(10.0);
         ui.vertical(|ui| {
-            ui.label(RichText::new(tf!("MailCraft {version}", version = env!("CARGO_PKG_VERSION"))).font(theme::bold(18.0)).color(t.text));
+            ui.label(RichText::new(tf!("Quatrelle {version}", version = env!("CARGO_PKG_VERSION"))).font(theme::bold(18.0)).color(t.text));
             ui.label(RichText::new(tl!("An ArtCraft app · MIT OR Apache-2.0")).color(t.dim));
         });
     });
@@ -819,7 +819,7 @@ fn about(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>) {
     ui.add_space(14.0);
     for line in [
         "Local-first: mail is cached on this computer for fast offline search. Passwords stay in the system keychain.",
-        "MailCraft talks only to your own mail servers, over encrypted connections. Pictures from the web load only when you ask.",
+        "Quatrelle talks only to your own mail servers, over encrypted connections. Pictures from the web load only when you ask.",
         "Built in the open from the email standards: no code, icons or assets from other mail apps.",
     ] {
         ui.label(RichText::new(tl!(line)).color(t.dim));
@@ -827,7 +827,7 @@ fn about(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>) {
     }
     ui.add_space(8.0);
     if ui.link(tl!("Source code and issues")).clicked() {
-        acts.push(Action::OpenUrl("https://github.com/dgaudin/mailcraft".into()));
+        acts.push(Action::OpenUrl("https://github.com/dgaudin/quatrelle".into()));
     }
     // Fonts built in from craft-fonts travel with their licences.
     if !crate::craft_fonts::CRAFT_FONTS.is_empty() {

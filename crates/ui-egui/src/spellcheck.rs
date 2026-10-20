@@ -4,7 +4,7 @@
 //! so the first message opens at once; until they're ready nothing is underlined, and in the
 //! browser nothing is either (a page doesn't read two megabytes of dictionary at start-up).
 
-use mailcraft_spell::Spell;
+use quatrelle_spell::Spell;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{OnceLock, RwLock};
 
@@ -140,7 +140,7 @@ mod tests {
         {
             let _ = SPELL.set(s);
         }
-        let text = "Le serveur mailcraft est en panne";
+        let text = "Le serveur quatrelle est en panne";
         let mut job = egui::text::LayoutJob::simple(text.to_string(), egui::FontId::default(), egui::Color32::WHITE, 400.0);
         underline(&mut job, text, egui::Color32::RED);
         let rebuilt: String =
@@ -152,6 +152,6 @@ mod tests {
             .filter(|s| s.format.underline.width > 0.0)
             .filter_map(|s| job.text.get(s.byte_range.start.0..s.byte_range.end.0))
             .collect();
-        assert_eq!(marked, ["mailcraft"], "only the word that isn't in the dictionaries");
+        assert_eq!(marked, ["quatrelle"], "only the word that isn't in the dictionaries");
     }
 }

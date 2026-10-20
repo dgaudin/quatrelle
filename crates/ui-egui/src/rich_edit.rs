@@ -12,8 +12,8 @@ use std::sync::Arc;
 
 use egui::text::{CCursor, CCursorRange, LayoutJob, TextFormat};
 use egui::{Color32, FontId, Galley, Key, Modifiers, Rect, RichText, Sense, Stroke, Ui, vec2};
-use mailcraft_engine::Compose;
-use mailcraft_engine::mime::rich::{self, Align, List, PICTURE, Style, Styles};
+use quatrelle_engine::Compose;
+use quatrelle_engine::mime::rich::{self, Align, List, PICTURE, Style, Styles};
 
 use crate::icons::{self, Icon};
 use crate::theme::{self, Tokens};
@@ -438,7 +438,7 @@ fn keys(ui: &mut Ui, ed: &mut Editor, c: &mut Compose, acts: &mut Vec<Action>) {
 /// or it holds no text (a picture alone is pasted as a picture).
 fn paste_formatted(ui: &mut Ui, ed: &mut Editor, c: &mut Compose, id: egui::Id) -> bool {
     let Some(html) = crate::clipboard_html() else { return false };
-    let (add, add_styles) = mailcraft_engine::mime::pasted_html(&html);
+    let (add, add_styles) = quatrelle_engine::mime::pasted_html(&html);
     if add.trim().is_empty() {
         return false;
     }

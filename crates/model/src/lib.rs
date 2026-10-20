@@ -1,4 +1,4 @@
-//! MailCraft data model.
+//! Quatrelle data model.
 //!
 //! Pure data and algorithms shared by every layer: accounts and servers, folders (with their
 //! RFC 6154 special-use roles), message keys and summaries, flags, the jobs the engine asks the
@@ -155,7 +155,7 @@ pub struct AccountConfig {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub shared_mailboxes: Vec<String>,
     /// Online only (issue #4): none of the account's mail is kept on this computer. Its folders,
-    /// messages, changes waiting for the server and Outbox are held in memory while MailCraft
+    /// messages, changes waiting for the server and Outbox are held in memory while Quatrelle
     /// runs, and a message is downloaded when it's opened. Not for POP, whose mail has no other
     /// home, nor an account with no server ([`AccountConfig::keeps_online`]).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -168,7 +168,7 @@ pub const EWS_AUTODISCOVER: &str = "autodiscover";
 /// Microsoft Graph's address, for Exchange Online accounts.
 pub const GRAPH_URL: &str = "https://graph.microsoft.com/v1.0";
 
-/// The OAuth provider that runs an IMAP server, when it's one MailCraft knows.
+/// The OAuth provider that runs an IMAP server, when it's one Quatrelle knows.
 pub fn oauth_provider_for(imap_host: &str) -> Option<&'static str> {
     let h = imap_host.trim().to_ascii_lowercase();
     if h == "imap.gmail.com" || h == "imap.googlemail.com" {
@@ -603,7 +603,7 @@ pub fn is_keyword(k: &str) -> bool {
     !k.is_empty() && k.len() <= 64 && !k.starts_with('\\') && k.chars().all(|c| c.is_ascii_graphic() && !"(){%*\"\\]".contains(c))
 }
 
-/// A keyword for a category name (`To do` → `to_do`), for categories made in MailCraft.
+/// A keyword for a category name (`To do` → `to_do`), for categories made in Quatrelle.
 pub fn keyword_for(name: &str) -> String {
     if !name.is_ascii() {
         // Keywords are ASCII atoms: other scripts get a stable hash of the name.

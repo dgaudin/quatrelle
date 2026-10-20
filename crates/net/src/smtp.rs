@@ -7,7 +7,7 @@ use lettre::address::{Address, Envelope};
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::transport::smtp::client::{Tls, TlsParameters};
 use lettre::{SmtpTransport, Transport};
-use mailcraft_model::{Security, ServerConfig};
+use quatrelle_model::{Security, ServerConfig};
 
 use crate::{NetError, Result};
 

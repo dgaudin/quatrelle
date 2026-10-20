@@ -2,7 +2,7 @@
 //! dictionary to find), French first and English beside it for technical terms.
 //!
 //! The dictionaries are the two `assets/dictionaries/` files, gunzipped and parsed once; a word
-//! MailCraft doesn't know can be added by the writer (a personal list, kept by the caller).
+//! Quatrelle doesn't know can be added by the writer (a personal list, kept by the caller).
 //! Pure Rust, no I/O of its own: [`Dict::new`] takes the two files' text.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
@@ -43,7 +43,7 @@ impl Dict {
     }
 }
 
-/// The dictionaries MailCraft carries: French, then English (technical terms a French text
+/// The dictionaries Quatrelle carries: French, then English (technical terms a French text
 /// borrows), and the words the writer added.
 pub struct Spell {
     dicts: Vec<(&'static str, Dict)>,
@@ -222,8 +222,8 @@ mod tests {
         let w: Vec<&str> = words("RTX4090 et PSTVL, mais bonjour").into_iter().map(|(_, w)| w).collect();
         assert_eq!(w, ["et", "mais", "bonjour"], "a part number and an acronym are left alone");
         let s = spell();
-        let bad = s.misspelt("Le serveur est en panne, mailcraft aussi");
-        assert!(bad.iter().any(|(_, w)| *w == "mailcraft"), "{bad:?}");
+        let bad = s.misspelt("Le serveur est en panne, quatrelle aussi");
+        assert!(bad.iter().any(|(_, w)| *w == "quatrelle"), "{bad:?}");
         assert!(!bad.iter().any(|(_, w)| *w == "serveur"), "{bad:?}");
     }
 }

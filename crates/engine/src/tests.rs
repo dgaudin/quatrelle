@@ -1,7 +1,7 @@
 //! Engine tests: commands against the sample mailbox and scripted network events.
 
-use mailcraft_model::{Event, Flag, FolderRole, Job, Op, SyncStatus};
-use mailcraft_store::Store;
+use quatrelle_model::{Event, Flag, FolderRole, Job, Op, SyncStatus};
+use quatrelle_store::Store;
 use serde_json::{Value, json};
 
 use crate::session::{ListFilter, Row, SearchScope, View};
@@ -10,7 +10,7 @@ use crate::{CmdError, Session, sample};
 const NOW: i64 = 1_791_979_200;
 
 fn temp(name: &str) -> Store {
-    let dir = std::env::temp_dir().join(format!("mailcraft-engine-{name}-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("quatrelle-engine-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     Store::open(dir).unwrap()
 }
@@ -19,7 +19,7 @@ fn sample_session(name: &str) -> Session {
     let store = temp(name);
     assert!(sample::seed_if_empty(&store, NOW).unwrap());
     assert!(!sample::seed_if_empty(&store, NOW).unwrap());
-    let mut s = Session::open(Some(store), mailcraft_model::dates::Clock::new(NOW, 0));
+    let mut s = Session::open(Some(store), quatrelle_model::dates::Clock::new(NOW, 0));
     assert!(s.take_jobs().is_empty(), "local accounts start no workers");
     s
 }
@@ -98,7 +98,7 @@ fn open_marks_read_and_shows_text_and_attachments() {
     let inbox = s.account(sample::SAMPLE_ACCOUNT).unwrap().folder(FolderRole::Inbox).unwrap();
     assert_eq!(inbox.unread, 2);
     // Counts survive a restart.
-    let reopened = Session::open(Some(Store::open(s.store.as_ref().unwrap().root()).unwrap()), mailcraft_model::dates::Clock::new(NOW, 0));
+    let reopened = Session::open(Some(Store::open(s.store.as_ref().unwrap().root()).unwrap()), quatrelle_model::dates::Clock::new(NOW, 0));
     assert_eq!(reopened.account(sample::SAMPLE_ACCOUNT).unwrap().folder(FolderRole::Inbox).unwrap().unread, 2);
     let read = s.run("message.read", &json!({})).unwrap();
     assert_eq!(read["attachments"][0]["mime"], "image/png");
@@ -164,11 +164,11 @@ fn flags_filters_and_conversations() {
     // Follow Up: flagged with a day it's due; Mark Complete and unflagging forget it.
     let turnaround = |s: &Session| s.list.iter().find(|m| m.subject == "Character turnarounds").cloned().unwrap();
     s.run("list.select", &k).unwrap();
-    let today = mailcraft_model::dates::today(&s.clock);
+    let today = quatrelle_model::dates::today(&s.clock);
     s.run("mail.flag", &json!({"due": "tomorrow"})).unwrap();
     assert_eq!(s.follow_up_due(&turnaround(&s)), Some(today + 1));
     s.run("mail.flag", &json!({"due": "2026-12-01"})).unwrap();
-    assert_eq!(s.follow_up_due(&turnaround(&s)).map(mailcraft_model::dates::day_string).as_deref(), Some("2026-12-01"));
+    assert_eq!(s.follow_up_due(&turnaround(&s)).map(quatrelle_model::dates::day_string).as_deref(), Some("2026-12-01"));
     assert!(s.run("mail.flag", &json!({"due": "someday"})).is_err());
     s.run("mail.flag", &json!({"complete": true})).unwrap();
     assert!(!turnaround(&s).flags.flagged && s.prefs.follow_up.is_empty());
@@ -345,7 +345,7 @@ fn folders_create_rename_move_delete_and_favorites() {
 
     // Changes persist.
     let root = s.store.as_ref().unwrap().root().to_path_buf();
-    let s2 = Session::open(Some(Store::open(&root).unwrap()), mailcraft_model::dates::Clock::new(NOW, 0));
+    let s2 = Session::open(Some(Store::open(&root).unwrap()), quatrelle_model::dates::Clock::new(NOW, 0));
     assert!(s2.folder(a, "Customers").is_some());
     assert!(s2.folder(a, "Clients").is_none());
     done(s);
@@ -354,9 +354,9 @@ fn folders_create_rename_move_delete_and_favorites() {
 #[test]
 fn remote_folder_changes_are_queued_as_jobs() {
     let store = temp("remote-folders");
-    let mut s = Session::open(Some(store), mailcraft_model::dates::Clock::new(NOW, 0));
+    let mut s = Session::open(Some(store), quatrelle_model::dates::Clock::new(NOW, 0));
     let id = s.run("account.add", &json!({"email": "zoe@example.org", "password": "pw"})).unwrap()["account"].as_str().unwrap().to_string();
-    let f = |p: &str, role| mailcraft_model::Folder {
+    let f = |p: &str, role| quatrelle_model::Folder {
         account: id.clone(),
         path: p.into(),
         delimiter: Some('.'),
@@ -404,7 +404,7 @@ hi
     s.run("message.closeWindow", &json!({"key": k.to_id()})).unwrap();
     assert_eq!(s.windows.len(), 1);
     // The focused message without a key; and never more than a handful of windows.
-    let keys: Vec<mailcraft_model::MessageKey> = s.list.iter().map(|m| m.key.clone()).collect();
+    let keys: Vec<quatrelle_model::MessageKey> = s.list.iter().map(|m| m.key.clone()).collect();
     for k in &keys {
         s.run("list.select", &json!({"key": k.to_id()})).unwrap();
         s.run("message.popOut", &json!({})).unwrap();
@@ -438,7 +438,7 @@ fn mailbox_settings_commands() {
     done(s);
 
     // A server account: replies, quota and settings go through jobs and events.
-    let mut s = Session::open(Some(temp("mailbox-remote")), mailcraft_model::dates::Clock::new(NOW, 0));
+    let mut s = Session::open(Some(temp("mailbox-remote")), quatrelle_model::dates::Clock::new(NOW, 0));
     let id = s.run("account.add", &json!({"email": "zoe@example.org", "password": "pw"})).unwrap()["account"].as_str().unwrap().to_string();
     s.take_jobs();
     assert_eq!(s.run("account.vacation", &json!({"account": id})).unwrap()["pending"], true);
@@ -458,7 +458,7 @@ fn mailbox_settings_commands() {
     assert!(
         matches!(s.take_jobs().as_slice(), [Job::SetVacation { vacation, .. }] if vacation.enabled && vacation.until.as_deref() == Some("2026-10-20"))
     );
-    let v = mailcraft_model::job::Vacation { enabled: true, text: "Back Monday".into(), ..Default::default() };
+    let v = quatrelle_model::job::Vacation { enabled: true, text: "Back Monday".into(), ..Default::default() };
     s.apply(Event::Vacation { account: id.clone(), vacation: Some(v.clone()), error: Some("refused".into()) });
     assert_eq!(s.run("account.vacation", &json!({"account": id, "refresh": false})).unwrap()["vacation"]["text"], "Back Monday");
     assert!(s.notices.last().is_some_and(|n| n.error && n.text.contains("refused")));
@@ -478,7 +478,7 @@ fn mailbox_settings_commands() {
 #[test]
 fn jmap_accounts_need_no_imap_servers() {
     let store = temp("jmap-account");
-    let mut s = Session::open(Some(store), mailcraft_model::dates::Clock::new(NOW, 0));
+    let mut s = Session::open(Some(store), quatrelle_model::dates::Clock::new(NOW, 0));
     let id = s
         .run("account.add", &json!({"email": "zoe@fastmail.example", "password": "pw", "jmap": " https://api.fastmail.example/jmap/session "}))
         .unwrap()["account"]
@@ -491,7 +491,7 @@ fn jmap_accounts_need_no_imap_servers() {
     assert!(matches!(s.take_jobs().as_slice(), [Job::Start { account, .. }] if account.jmap.is_some()));
     // Saved and read back.
     let root = s.store.as_ref().unwrap().root().to_path_buf();
-    let s2 = Session::open(Some(Store::open(&root).unwrap()), mailcraft_model::dates::Clock::new(NOW, 0));
+    let s2 = Session::open(Some(Store::open(&root).unwrap()), quatrelle_model::dates::Clock::new(NOW, 0));
     assert!(s2.account(&id).is_some_and(|a| a.config.jmap.is_some()));
     let _ = std::fs::remove_dir_all(root);
 }
@@ -499,13 +499,13 @@ fn jmap_accounts_need_no_imap_servers() {
 #[test]
 fn pop_accounts_download_and_can_start_from_a_data_file() {
     let store = temp("pop-account");
-    let mut s = Session::open(Some(store), mailcraft_model::dates::Clock::new(NOW, 0));
+    let mut s = Session::open(Some(store), quatrelle_model::dates::Clock::new(NOW, 0));
     // The POP server is guessed from the address; a copy stays on the server unless asked.
     let id =
         s.run("account.add", &json!({"email": "zoe@example.org", "password": "pw", "pop": true})).unwrap()["account"].as_str().unwrap().to_string();
     let a = s.account(&id).unwrap();
     let pop = a.config.pop.clone().unwrap();
-    assert_eq!((pop.host.as_str(), pop.port, pop.security), ("mail.example.org", 995, mailcraft_model::Security::Tls));
+    assert_eq!((pop.host.as_str(), pop.port, pop.security), ("mail.example.org", 995, quatrelle_model::Security::Tls));
     assert!(a.config.imap.host.is_empty() && !a.config.pop_delete && !a.is_local());
     assert_eq!((a.config.pop_keep_days, a.config.pop_delete_with_trash), (Some(14), false), "for 14 days, as Outlook's default");
     assert!(matches!(s.take_jobs().as_slice(), [Job::Start { account, .. }] if account.pop.is_some()));
@@ -553,7 +553,7 @@ fn messages_save_as_eml_and_pdf() {
     std::fs::create_dir_all(&dir).unwrap();
     let eml = dir.join("m.eml");
     s.run("message.saveAs", &json!({"path": eml.to_string_lossy()})).unwrap();
-    assert_eq!(mailcraft_mime::parse(&std::fs::read(&eml).unwrap()).unwrap().subject, "Storyboard review on Thursday");
+    assert_eq!(quatrelle_mime::parse(&std::fs::read(&eml).unwrap()).unwrap().subject, "Storyboard review on Thursday");
     if let Some(font) =
         ["C:\\Windows\\Fonts\\segoeui.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"].iter().find_map(|p| std::fs::read(p).ok())
     {
@@ -563,7 +563,7 @@ fn messages_save_as_eml_and_pdf() {
     s.run("message.exportPdf", &json!({"path": pdf.to_string_lossy()})).unwrap();
     let bytes = std::fs::read(&pdf).unwrap();
     assert!(bytes.starts_with(b"%PDF-") && bytes.ends_with(b"%%EOF\n"));
-    if let Ok(keep) = std::env::var("MAILCRAFT_KEEP_PDF") {
+    if let Ok(keep) = std::env::var("QUATRELLE_KEEP_PDF") {
         let _ = std::fs::copy(&pdf, keep);
     }
     done(s);
@@ -594,16 +594,16 @@ fn attachments_preview_and_save_all() {
     assert_eq!(only["saved"].as_array().map(Vec::len), Some(1));
     assert!(s.run("attachment.saveAll", &json!({"dir": dir.to_string_lossy(), "indices": "junk"})).is_ok(), "junk means all");
     assert!(s.run("attachment.saveAll", &json!({"dir": "/no/such/folder"})).is_err());
-    assert_eq!(mailcraft_mime::craft_app_for("application/pdf", "a.pdf"), Some(("pdfcraft", "PdfCraft")));
-    assert_eq!(mailcraft_mime::craft_app_for("application/octet-stream", "q.XLSX").map(|a| a.0), Some("gridcraft"));
-    assert_eq!(mailcraft_mime::text_preview_kind("message/rfc822", "fwd.eml"), Some("message"));
+    assert_eq!(quatrelle_mime::craft_app_for("application/pdf", "a.pdf"), Some(("pdfcraft", "PdfCraft")));
+    assert_eq!(quatrelle_mime::craft_app_for("application/octet-stream", "q.XLSX").map(|a| a.0), Some("gridcraft"));
+    assert_eq!(quatrelle_mime::text_preview_kind("message/rfc822", "fwd.eml"), Some("message"));
     done(s);
 }
 
 #[test]
 fn oauth_accounts_sign_in_through_the_browser() {
     let store = temp("oauth");
-    let mut s = Session::open(Some(store.clone()), mailcraft_model::dates::Clock::new(NOW, 0));
+    let mut s = Session::open(Some(store.clone()), quatrelle_model::dates::Clock::new(NOW, 0));
     let add = json!({"email": "zoe@gmail.com", "oauth": "google"});
     assert!(s.run("account.add", &add).is_err(), "not offered without a registration");
     s.oauth_available = vec!["google".into()];
@@ -636,7 +636,7 @@ fn server_settings_are_looked_up_once() {
     assert!(matches!(s.take_jobs().as_slice(), [Job::Discover { email }] if email == "zoe@example.org"));
     assert_eq!(s.run("account.discover", &json!({"email": "zoe@example.org"})).unwrap()["pending"], true);
     assert!(s.take_jobs().is_empty(), "asked once");
-    let mut c = mailcraft_model::AccountConfig::guess("zoe@example.org");
+    let mut c = quatrelle_model::AccountConfig::guess("zoe@example.org");
     c.imap.host = "imap.example.org".into();
     s.apply(Event::Discovered { email: "zoe@example.org".into(), config: Some(Box::new(c)), source: "example.org".into() });
     let r = s.run("account.discover", &json!({"email": "zoe@example.org"})).unwrap();
@@ -651,11 +651,11 @@ fn formatted_messages_go_out_as_html_with_pictures() {
     s.run("compose.update", &json!({"to": "ann@x.example", "subject": "Plan", "body": "Hi **Ann**,\n- frames\n- sound\n", "marks": true})).unwrap();
     let c = s.compose.as_ref().unwrap();
     assert_eq!(c.body, "Hi Ann,\nframes\nsound\n");
-    assert!(c.styles.style(3).bold && c.styles.para(1).list == mailcraft_mime::rich::List::Bullet);
+    assert!(c.styles.style(3).bold && c.styles.para(1).list == quatrelle_mime::rich::List::Bullet);
     let png = crate::sample::sample_png();
     let r = s.run("compose.insertPicture", &json!({"name": "board.png", "data": png})).unwrap();
     assert!(r["cid"].as_str().is_some());
-    assert!(s.compose.as_ref().unwrap().body.ends_with(mailcraft_mime::rich::PICTURE));
+    assert!(s.compose.as_ref().unwrap().body.ends_with(quatrelle_mime::rich::PICTURE));
     assert!(s.run("compose.insertPicture", &json!({"name": "notes.txt", "data": [1]})).is_err(), "pictures only");
     s.run("compose.send", &json!({})).unwrap();
     s.run("folder.open", &json!({"account": "sample", "folder": "Sent"})).unwrap();
@@ -726,10 +726,10 @@ fn a_correction_replaces_the_word_and_keeps_its_look() {
     s.run("view.spelling", &json!({})).unwrap();
     assert!(s.prefs.spell_check);
     // The words added to the dictionary, once each, whatever the case.
-    assert_eq!(s.run("spelling.add", &json!({"word": "  MailCraft "})).unwrap()["word"], "mailcraft");
-    s.run("spelling.add", &json!({"word": "MAILCRAFT"})).unwrap();
+    assert_eq!(s.run("spelling.add", &json!({"word": "  Quatrelle "})).unwrap()["word"], "quatrelle");
+    s.run("spelling.add", &json!({"word": "QUATRELLE"})).unwrap();
     s.run("spelling.add", &json!({"word": "serveur"})).unwrap();
-    assert_eq!(s.prefs.spelling, vec!["mailcraft".to_string(), "serveur".to_string()]);
+    assert_eq!(s.prefs.spelling, vec!["quatrelle".to_string(), "serveur".to_string()]);
     assert!(s.run("spelling.add", &json!({"word": "   "})).is_err());
     done(s);
 }
@@ -737,18 +737,18 @@ fn a_correction_replaces_the_word_and_keeps_its_look() {
 #[test]
 fn web_pictures_load_only_when_asked() {
     let store = temp("pictures");
-    let mut s = Session::open(Some(store.clone()), mailcraft_model::dates::Clock::new(NOW, 0));
+    let mut s = Session::open(Some(store.clone()), quatrelle_model::dates::Clock::new(NOW, 0));
     let id = s.run("account.add", &json!({"email": "zoe@example.org", "password": "pw"})).unwrap()["account"].as_str().unwrap().to_string();
     let inbox =
-        mailcraft_model::Folder { account: id.clone(), path: "INBOX".into(), role: FolderRole::Inbox, selectable: true, ..Default::default() };
+        quatrelle_model::Folder { account: id.clone(), path: "INBOX".into(), role: FolderRole::Inbox, selectable: true, ..Default::default() };
     s.apply(Event::Folders { account: id.clone(), folders: vec![inbox] });
-    let key = |uid| mailcraft_model::MessageKey { account: id.clone(), folder: "INBOX".into(), validity: 1, uid };
+    let key = |uid| quatrelle_model::MessageKey { account: id.clone(), folder: "INBOX".into(), validity: 1, uid };
     let msgs = vec![
-        mailcraft_model::Summary { key: key(1), subject: "News".into(), date: NOW, ..Default::default() },
-        mailcraft_model::Summary { key: key(2), subject: "More".into(), date: NOW - 1, ..Default::default() },
+        quatrelle_model::Summary { key: key(1), subject: "News".into(), date: NOW, ..Default::default() },
+        quatrelle_model::Summary { key: key(2), subject: "More".into(), date: NOW - 1, ..Default::default() },
     ];
     store
-        .save_folder(&id, "INBOX", &mailcraft_store::FolderState { validity: 1, uid_next: 3, highest_modseq: 0, messages: msgs, window: 0 })
+        .save_folder(&id, "INBOX", &quatrelle_store::FolderState { validity: 1, uid_next: 3, highest_modseq: 0, messages: msgs, window: 0 })
         .unwrap();
     let html = |n: u32| {
         format!(
@@ -840,7 +840,7 @@ fn snoozed_mail_comes_back_unread() {
     assert_eq!(s.snoozes.len(), 1);
     // Saved, so a restart still brings it back.
     let root = s.store.as_ref().unwrap().root().to_path_buf();
-    let mut s = Session::open(Some(Store::open(&root).unwrap()), mailcraft_model::dates::Clock::new(NOW + 60, 0));
+    let mut s = Session::open(Some(Store::open(&root).unwrap()), quatrelle_model::dates::Clock::new(NOW + 60, 0));
     assert_eq!(s.snoozes.len(), 1);
     s.tick();
     assert_eq!(s.snoozes.len(), 1, "not due yet");
@@ -868,7 +868,7 @@ fn rules_file_new_mail_as_it_arrives() {
     let mut m = st.messages[0].clone();
     m.key.uid = 500;
     m.subject = "Fresh from Zoe".into();
-    m.from = mailcraft_model::EmailAddress::new("Zoe Park", "zoe@studio.example");
+    m.from = quatrelle_model::EmailAddress::new("Zoe Park", "zoe@studio.example");
     m.flags.seen = false;
     m.date = NOW;
     st.messages.insert(0, m);
@@ -881,7 +881,7 @@ fn rules_file_new_mail_as_it_arrives() {
     let filed = s.list.iter().find(|m| m.subject == "Fresh from Zoe").unwrap();
     assert!(filed.flags.has("$label2"));
     // Rules persist, and can run on a folder by hand.
-    let s2 = Session::open(Some(Store::open(store.root()).unwrap()), mailcraft_model::dates::Clock::new(NOW, 0));
+    let s2 = Session::open(Some(Store::open(store.root()).unwrap()), quatrelle_model::dates::Clock::new(NOW, 0));
     assert_eq!(s2.rules.len(), 1);
     s.run("folder.open", &json!({"account": "sample", "folder": "INBOX"})).unwrap();
     assert_eq!(s.run("rules.run", &json!({})).unwrap()["matched"], 1, "Zoe's older message in the Inbox");
@@ -894,21 +894,21 @@ fn rules_file_new_mail_as_it_arrives() {
 #[test]
 fn only_mail_that_arrives_later_is_announced() {
     let store = temp("notify");
-    let mut s = Session::open(Some(store.clone()), mailcraft_model::dates::Clock::new(NOW, 0));
+    let mut s = Session::open(Some(store.clone()), quatrelle_model::dates::Clock::new(NOW, 0));
     let id = s.run("account.add", &json!({"email": "zoe@example.org", "password": "pw"})).unwrap()["account"].as_str().unwrap().to_string();
     let inbox =
-        mailcraft_model::Folder { account: id.clone(), path: "INBOX".into(), role: FolderRole::Inbox, selectable: true, ..Default::default() };
+        quatrelle_model::Folder { account: id.clone(), path: "INBOX".into(), role: FolderRole::Inbox, selectable: true, ..Default::default() };
     s.apply(Event::Folders { account: id.clone(), folders: vec![inbox] });
-    let m = |uid: u32, seen: bool, age: i64| mailcraft_model::Summary {
-        key: mailcraft_model::MessageKey { account: id.clone(), folder: "INBOX".into(), validity: 9, uid },
+    let m = |uid: u32, seen: bool, age: i64| quatrelle_model::Summary {
+        key: quatrelle_model::MessageKey { account: id.clone(), folder: "INBOX".into(), validity: 9, uid },
         subject: format!("m{uid}"),
         date: NOW - age,
-        flags: mailcraft_model::Flags { seen, ..Default::default() },
+        flags: quatrelle_model::Flags { seen, ..Default::default() },
         ..Default::default()
     };
-    let save = |msgs: Vec<mailcraft_model::Summary>| {
+    let save = |msgs: Vec<quatrelle_model::Summary>| {
         store
-            .save_folder(&id, "INBOX", &mailcraft_store::FolderState { validity: 9, uid_next: 99, highest_modseq: 0, messages: msgs, window: 0 })
+            .save_folder(&id, "INBOX", &quatrelle_store::FolderState { validity: 9, uid_next: 99, highest_modseq: 0, messages: msgs, window: 0 })
             .unwrap();
     };
     // The first sync's backlog is not news.
@@ -948,7 +948,7 @@ fn recipients_are_suggested_from_mail_seen() {
 #[test]
 fn offline_sends_wait_in_the_outbox() {
     let store = temp("outbox");
-    let mut s = Session::open(Some(store.clone()), mailcraft_model::dates::Clock::new(NOW, 0));
+    let mut s = Session::open(Some(store.clone()), quatrelle_model::dates::Clock::new(NOW, 0));
     let id = s.run("account.add", &json!({"email": "zoe@example.org", "password": "pw"})).unwrap()["account"].as_str().unwrap().to_string();
     s.take_jobs();
     s.run("mail.new", &json!({})).unwrap();
@@ -959,7 +959,7 @@ fn offline_sends_wait_in_the_outbox() {
         panic!()
     };
     // The network layer couldn't send: it put the message in the Outbox.
-    let item = mailcraft_store::OutboxItem { id: send_id, from, recipients, queued: NOW, error: Some("offline".into()), ..Default::default() };
+    let item = quatrelle_store::OutboxItem { id: send_id, from, recipients, queued: NOW, error: Some("offline".into()), ..Default::default() };
     store.outbox_add(&id, &item, &raw).unwrap();
     s.apply(Event::Queued { account: id.clone(), id: send_id, error: "offline".into() });
     assert!(s.compose.is_none(), "a queued message is done for the user");
@@ -1002,7 +1002,7 @@ fn offline_sends_wait_in_the_outbox() {
 #[test]
 fn remote_accounts_go_through_jobs_and_events() {
     let store = temp("remote");
-    let mut s = Session::open(Some(store), mailcraft_model::dates::Clock::new(NOW, 0));
+    let mut s = Session::open(Some(store), quatrelle_model::dates::Clock::new(NOW, 0));
     assert_eq!(s.view, View::Empty);
     assert!(s.run("mail.new", &json!({})).is_err());
     assert!(s.run("account.add", &json!({"email": "zoe@example.org"})).is_err(), "password required");
@@ -1020,16 +1020,16 @@ fn remote_accounts_go_through_jobs_and_events() {
 
     // The worker reports folders and a synced Inbox.
     let folders = vec![
-        mailcraft_model::Folder { account: id.clone(), path: "INBOX".into(), role: FolderRole::Inbox, selectable: true, ..Default::default() },
-        mailcraft_model::Folder { account: id.clone(), path: "Trash".into(), role: FolderRole::Trash, selectable: true, ..Default::default() },
+        quatrelle_model::Folder { account: id.clone(), path: "INBOX".into(), role: FolderRole::Inbox, selectable: true, ..Default::default() },
+        quatrelle_model::Folder { account: id.clone(), path: "Trash".into(), role: FolderRole::Trash, selectable: true, ..Default::default() },
     ];
     s.apply(Event::Folders { account: id.clone(), folders });
-    let key = mailcraft_model::MessageKey { account: id.clone(), folder: "INBOX".into(), validity: 9, uid: 1 };
-    let st = mailcraft_store::FolderState {
+    let key = quatrelle_model::MessageKey { account: id.clone(), folder: "INBOX".into(), validity: 9, uid: 1 };
+    let st = quatrelle_store::FolderState {
         validity: 9,
         uid_next: 2,
         highest_modseq: 0,
-        messages: vec![mailcraft_model::Summary { key: key.clone(), subject: "Hello".into(), date: NOW - 60, ..Default::default() }],
+        messages: vec![quatrelle_model::Summary { key: key.clone(), subject: "Hello".into(), date: NOW - 60, ..Default::default() }],
         window: 0,
     };
     s.store.as_ref().unwrap().save_folder(&id, "INBOX", &st).unwrap();
@@ -1075,7 +1075,7 @@ fn remote_accounts_go_through_jobs_and_events() {
     assert!(s.compose.is_none(), "the compose closes anyway");
     assert!(!s.take_jobs().iter().any(|j| matches!(j, Job::Apply { op: Op::SetFlag { flag: Flag::Answered, .. }, .. })), "no flag before delivery");
     // The owed flag survives a restart and is set on delivery.
-    let mut again = Session::open(s.store.clone(), mailcraft_model::dates::Clock::new(NOW, 0));
+    let mut again = Session::open(s.store.clone(), quatrelle_model::dates::Clock::new(NOW, 0));
     again.take_jobs();
     again.apply(Event::Sent { account: id.clone(), id: send_id });
     assert!(
@@ -1084,17 +1084,17 @@ fn remote_accounts_go_through_jobs_and_events() {
     again.apply(Event::Sent { account: id.clone(), id: send_id });
     assert!(!again.take_jobs().iter().any(|j| matches!(j, Job::Apply { op: Op::SetFlag { .. }, .. })), "set a single time");
     drop(again);
-    let mut s = Session::open(s.store.clone(), mailcraft_model::dates::Clock::new(NOW, 0));
+    let mut s = Session::open(s.store.clone(), quatrelle_model::dates::Clock::new(NOW, 0));
     s.apply(Event::Folders {
         account: id.clone(),
         folders: vec![
-            mailcraft_model::Folder { account: id.clone(), path: "INBOX".into(), role: FolderRole::Inbox, selectable: true, ..Default::default() },
-            mailcraft_model::Folder { account: id.clone(), path: "Trash".into(), role: FolderRole::Trash, selectable: true, ..Default::default() },
+            quatrelle_model::Folder { account: id.clone(), path: "INBOX".into(), role: FolderRole::Inbox, selectable: true, ..Default::default() },
+            quatrelle_model::Folder { account: id.clone(), path: "Trash".into(), role: FolderRole::Trash, selectable: true, ..Default::default() },
         ],
     });
     let answered = |s: &mut Session| s.take_jobs().iter().any(|j| matches!(j, Job::Apply { op: Op::SetFlag { flag: Flag::Answered, .. }, .. }));
     // Queue a reply in the Outbox (as the network layer does when it can't send) and show it.
-    let queue_reply = |s: &mut Session| -> mailcraft_model::MessageKey {
+    let queue_reply = |s: &mut Session| -> quatrelle_model::MessageKey {
         s.run("folder.open", &json!({"account": id, "folder": "INBOX"})).unwrap();
         s.run("list.open", &json!({"key": key.to_id()})).unwrap();
         s.apply(Event::Body { key: key.clone(), raw: b"From: a@b.example\r\nSubject: Hello\r\nMessage-ID: <h@b>\r\n\r\nHi there\r\n".to_vec() });
@@ -1103,7 +1103,7 @@ fn remote_accounts_go_through_jobs_and_events() {
         let Some(Job::Send { id: send_id, raw, from, recipients, .. }) = s.take_jobs().into_iter().find(|j| matches!(j, Job::Send { .. })) else {
             panic!()
         };
-        let item = mailcraft_store::OutboxItem { id: send_id, from, recipients, queued: NOW, error: Some("offline".into()), ..Default::default() };
+        let item = quatrelle_store::OutboxItem { id: send_id, from, recipients, queued: NOW, error: Some("offline".into()), ..Default::default() };
         s.store.as_ref().unwrap().outbox_add(&id, &item, &raw).unwrap();
         s.apply(Event::Queued { account: id.clone(), id: send_id, error: "offline".into() });
         s.run("folder.outbox", &json!({})).unwrap();
@@ -1143,7 +1143,7 @@ fn remote_accounts_go_through_jobs_and_events() {
     assert!(s.accounts.is_empty());
     let root = s.store.as_ref().unwrap().root().to_path_buf();
     // Accounts persist across sessions (without passwords).
-    let s2 = Session::open(Some(Store::open(&root).unwrap()), mailcraft_model::dates::Clock::new(NOW, 0));
+    let s2 = Session::open(Some(Store::open(&root).unwrap()), quatrelle_model::dates::Clock::new(NOW, 0));
     assert!(s2.accounts.is_empty());
     let _ = std::fs::remove_dir_all(root);
 }
@@ -1195,7 +1195,7 @@ fn calendar_events_on_this_computer() {
 
     // All of it is kept.
     let root = s.store.as_ref().unwrap().root().to_path_buf();
-    let mut again = Session::open(Some(Store::open(&root).unwrap()), mailcraft_model::dates::Clock::new(NOW, 0));
+    let mut again = Session::open(Some(Store::open(&root).unwrap()), quatrelle_model::dates::Clock::new(NOW, 0));
     assert_eq!(again.find_event(&uid).unwrap().1.event.summary, "Grading");
     again.run("event.delete", &json!({"uid": uid})).unwrap();
     assert!(again.find_event(&uid).is_none());
@@ -1223,7 +1223,7 @@ fn a_reminder_is_set_kept_and_taken_off() {
     assert_eq!(s.find_event(&uid).unwrap().1.event.reminder, Some(1440), "a day before");
     // Kept as written, a VALARM in its calendar file.
     let root = s.store.as_ref().unwrap().root().to_path_buf();
-    let mut again = Session::open(Some(Store::open(&root).unwrap()), mailcraft_model::dates::Clock::new(NOW, 0));
+    let mut again = Session::open(Some(Store::open(&root).unwrap()), quatrelle_model::dates::Clock::new(NOW, 0));
     assert_eq!(again.find_event(&uid).unwrap().1.event.reminder, Some(1440));
     again.run("event.update", &json!({"uid": uid, "reminder": null})).unwrap();
     assert_eq!(again.find_event(&uid).unwrap().1.event.reminder, None, "taken off");
@@ -1300,11 +1300,11 @@ fn invitations_are_answered_and_sent() {
 
     // Declining takes it out of the calendar.
     s.run("invite.respond", &json!({"answer": "declined"})).unwrap();
-    assert!(s.find_event("mix@sample.mailcraft").is_none());
+    assert!(s.find_event("mix@sample.quatrelle").is_none());
     assert_eq!(sent_calendar(&s, "Sent", "Declined: Sound mix playback").0, "REPLY");
     // Accepting again puts it back.
     s.run("invite.respond", &json!({"answer": "tentative"})).unwrap();
-    let e = s.find_event("mix@sample.mailcraft").unwrap().1.event.clone();
+    let e = s.find_event("mix@sample.quatrelle").unwrap().1.event.clone();
     assert!(e.attendees.iter().any(|a| a.email == "riley@studio.example" && a.partstat == "TENTATIVE"));
     done(s);
 }
@@ -1331,29 +1331,29 @@ fn own_events_invite_and_cancel_guests() {
 
     // A guest's answer comes back and is recorded.
     let mut reply = e.clone();
-    reply.attendees = vec![mailcraft_model::ical::Attendee {
+    reply.attendees = vec![quatrelle_model::ical::Attendee {
         email: "zoe@studio.example".into(),
         name: "Zoe Park".into(),
         partstat: "ACCEPTED".into(),
         rsvp: false,
     }];
-    let ics = mailcraft_model::ical::write(&[reply], Some("REPLY"), NOW);
-    let d = mailcraft_mime::Draft {
-        to: vec![mailcraft_model::EmailAddress::new("Riley", "riley@studio.example")],
+    let ics = quatrelle_model::ical::write(&[reply], Some("REPLY"), NOW);
+    let d = quatrelle_mime::Draft {
+        to: vec![quatrelle_model::EmailAddress::new("Riley", "riley@studio.example")],
         subject: "Accepted: Trailer review".into(),
         body: "Zoe accepted.".into(),
-        attachments: vec![mailcraft_mime::OutAttachment {
+        attachments: vec![quatrelle_mime::OutAttachment {
             name: "invite.ics".into(),
             mime: "text/calendar; method=REPLY".into(),
             data: ics.into_bytes(),
         }],
         ..Default::default()
     };
-    let raw = mailcraft_mime::build(&d, &mailcraft_model::EmailAddress::new("Zoe Park", "zoe@studio.example"), NOW, "<r1@x>").unwrap();
+    let raw = quatrelle_mime::build(&d, &quatrelle_model::EmailAddress::new("Zoe Park", "zoe@studio.example"), NOW, "<r1@x>").unwrap();
     let store = s.store.clone().unwrap();
     let mut inbox = store.load_folder("sample", "INBOX").unwrap();
-    let key = mailcraft_model::MessageKey { account: "sample".into(), folder: "INBOX".into(), validity: inbox.validity, uid: 999 };
-    inbox.messages.insert(0, mailcraft_mime::summary_from_full(&raw, key.clone(), mailcraft_model::Flags::default(), 0, NOW));
+    let key = quatrelle_model::MessageKey { account: "sample".into(), folder: "INBOX".into(), validity: inbox.validity, uid: 999 };
+    inbox.messages.insert(0, quatrelle_mime::summary_from_full(&raw, key.clone(), quatrelle_model::Flags::default(), 0, NOW));
     store.save_folder("sample", "INBOX", &inbox).unwrap();
     store.write_body(&key, &raw).unwrap();
     s.apply(Event::FolderChanged { account: "sample".into(), folder: "INBOX".into() });
@@ -1375,9 +1375,9 @@ fn own_events_invite_and_cancel_guests() {
 
 #[test]
 fn dav_results_merge_without_losing_local_changes() {
-    use mailcraft_model::ical::CalEvent;
-    use mailcraft_model::pim::{CalendarInfo, DavSync, StoredEvent};
-    let mut s = Session::open(Some(temp("dav-merge")), mailcraft_model::dates::Clock::new(NOW, 0));
+    use quatrelle_model::ical::CalEvent;
+    use quatrelle_model::pim::{CalendarInfo, DavSync, StoredEvent};
+    let mut s = Session::open(Some(temp("dav-merge")), quatrelle_model::dates::Clock::new(NOW, 0));
     let id = s.run("account.add", &json!({"email": "zoe@example.org", "password": "pw"})).unwrap()["account"].as_str().unwrap().to_string();
     let cal = "https://dav.example.org/cal/work/".to_string();
     let ev = |uid: &str, summary: &str, href: &str| StoredEvent {
@@ -1457,10 +1457,10 @@ fn dav_results_merge_without_losing_local_changes() {
     assert!(e.dirty && e.event.summary == "Review (moved again)", "{e:?}");
     // A server without calendars: the one on this computer stays.
     let none = DavSync { checked: NOW, ..Default::default() };
-    let mut s2 = Session::open(Some(temp("dav-none")), mailcraft_model::dates::Clock::new(NOW, 0));
+    let mut s2 = Session::open(Some(temp("dav-none")), quatrelle_model::dates::Clock::new(NOW, 0));
     let id2 = s2.run("account.add", &json!({"email": "ann@example.org", "password": "pw"})).unwrap()["account"].as_str().unwrap().to_string();
     s2.apply(Event::DavSynced { account: id2.clone(), sync: Box::new(none) });
-    assert_eq!(s2.pim.get(&id2).unwrap().calendars[0].id, mailcraft_model::pim::LOCAL);
+    assert_eq!(s2.pim.get(&id2).unwrap().calendars[0].id, quatrelle_model::pim::LOCAL);
     assert_eq!(s2.pim.get(&id2).unwrap().caldav_home.as_deref(), Some(""), "remembered as none");
     // An event made on this computer, stored in the server's calendar (Exchange gives it a new
     // uid): one event after the merge, the server's.
@@ -1507,7 +1507,7 @@ fn outlook_data_files_open_as_accounts_on_this_computer() {
     // The import reports progress, then its folders, then that it's done: the Inbox opens.
     s.apply(Event::Imported { account: id.clone(), messages: 200, skipped: 0, done: false, error: None });
     assert!(s.notices.last().is_some_and(|n| !n.error && n.text.contains("200")));
-    let inbox = mailcraft_model::Folder {
+    let inbox = quatrelle_model::Folder {
         account: id.clone(),
         path: "INBOX".into(),
         delimiter: Some('/'),
@@ -1517,13 +1517,13 @@ fn outlook_data_files_open_as_accounts_on_this_computer() {
     };
     s.apply(Event::Folders { account: id.clone(), folders: vec![inbox] });
     // The file's contacts were written next to its mail: they show once it's done.
-    let mut pim = mailcraft_model::pim::Pim::default();
-    pim.cards.push(mailcraft_model::pim::StoredCard {
-        book: mailcraft_model::pim::LOCAL.into(),
-        card: mailcraft_model::vcard::Card { uid: "c1".into(), name: "Ana Lima".into(), ..Default::default() },
+    let mut pim = quatrelle_model::pim::Pim::default();
+    pim.cards.push(quatrelle_model::pim::StoredCard {
+        book: quatrelle_model::pim::LOCAL.into(),
+        card: quatrelle_model::vcard::Card { uid: "c1".into(), name: "Ana Lima".into(), ..Default::default() },
         ..Default::default()
     });
-    s.store.clone().unwrap().save_account_doc(&id, mailcraft_model::pim::PIM_DOC, &pim).unwrap();
+    s.store.clone().unwrap().save_account_doc(&id, quatrelle_model::pim::PIM_DOC, &pim).unwrap();
     s.apply(Event::Imported { account: id.clone(), messages: 250, skipped: 2, done: true, error: None });
     assert!(s.pim[&id].cards.iter().any(|c| c.card.name == "Ana Lima"));
     assert!(!s.pim[&id].calendars.is_empty(), "with a calendar to add to");
@@ -1557,20 +1557,20 @@ fn outlook_data_files_open_as_accounts_on_this_computer() {
 #[test]
 fn exchange_accounts_go_through_microsoft_graph() {
     let store = temp("graph-account");
-    let mut s = Session::open(Some(store), mailcraft_model::dates::Clock::new(NOW, 0));
+    let mut s = Session::open(Some(store), quatrelle_model::dates::Clock::new(NOW, 0));
     // Graph signs in with Microsoft: refused when this copy has no registration.
     assert!(s.run("account.add", &json!({"email": "ana@contoso.example", "graph": true})).is_err());
     s.oauth_available = vec!["microsoft".into()];
     let id = s.run("account.add", &json!({"email": "ana@contoso.example", "graph": true})).unwrap()["account"].as_str().unwrap().to_string();
     let a = s.account(&id).unwrap();
-    assert_eq!(a.config.graph.as_deref(), Some(mailcraft_model::GRAPH_URL));
+    assert_eq!(a.config.graph.as_deref(), Some(quatrelle_model::GRAPH_URL));
     assert_eq!(a.config.oauth.as_deref(), Some("microsoft"));
     assert!(a.config.is_api() && !a.is_local() && a.config.imap.host.is_empty(), "no IMAP or SMTP");
     assert!(matches!(s.take_jobs().as_slice(), [Job::SignIn { account }] if account.graph.is_some()));
     // Server settings can't turn it into an IMAP account by accident.
     s.run("account.update", &json!({"account": id, "name": "Ana Ruiz"})).unwrap();
     assert_eq!(s.account(&id).unwrap().config.name, "Ana Ruiz");
-    assert_eq!(s.run("account.list", &json!({})).map(|v| v[0]["graph"].clone()).unwrap_or_default(), json!(mailcraft_model::GRAPH_URL));
+    assert_eq!(s.run("account.list", &json!({})).map(|v| v[0]["graph"].clone()).unwrap_or_default(), json!(quatrelle_model::GRAPH_URL));
     let root = s.store.as_ref().unwrap().root().to_path_buf();
     let _ = std::fs::remove_dir_all(root);
 }
@@ -1578,7 +1578,7 @@ fn exchange_accounts_go_through_microsoft_graph() {
 #[test]
 fn on_premises_exchange_accounts_go_through_ews() {
     let store = temp("ews-account");
-    let mut s = Session::open(Some(store), mailcraft_model::dates::Clock::new(NOW, 0));
+    let mut s = Session::open(Some(store), quatrelle_model::dates::Clock::new(NOW, 0));
     assert!(s.run("account.add", &json!({"email": "riley@contoso.example", "ews": "mail.contoso.example"})).is_err(), "a password is needed");
     let id = s
         .run("account.add", &json!({"email": "riley@contoso.example", "ews": "mail.contoso.example", "username": "CONTOSO\\riley", "password": "pw"}))
@@ -1597,7 +1597,7 @@ fn on_premises_exchange_accounts_go_through_ews() {
             .as_str()
             .unwrap()
             .to_string();
-    assert_eq!(s.account(&auto).unwrap().config.ews.as_deref(), Some(mailcraft_model::EWS_AUTODISCOVER));
+    assert_eq!(s.account(&auto).unwrap().config.ews.as_deref(), Some(quatrelle_model::EWS_AUTODISCOVER));
     s.take_jobs();
     // A full address is kept as it is, and can be changed.
     s.run("account.update", &json!({"account": id, "ews": "https://owa.contoso.example/ews/exchange.asmx"})).unwrap();
@@ -1672,7 +1672,7 @@ fn the_list_is_arranged_by_sender_size_flag_and_reversed() {
 #[test]
 fn working_offline_comes_first_and_stops_send_receive() {
     let store = temp("offline");
-    let mut s = Session::open(Some(store), mailcraft_model::dates::Clock::new(NOW, 0));
+    let mut s = Session::open(Some(store), quatrelle_model::dates::Clock::new(NOW, 0));
     s.run("account.add", &json!({"email": "zoe@example.org", "password": "pw"})).unwrap();
     s.run("mail.workOffline", &json!({})).unwrap();
     assert!(s.prefs.work_offline);
@@ -1773,7 +1773,7 @@ fn a_folder_made_in_the_inbox_shows_under_it() {
     let order: Vec<String> = s.account("sample").unwrap().folders.iter().map(|f| f.path.clone()).collect();
     let inbox = order.iter().position(|p| p == "INBOX").unwrap();
     assert_eq!(order.get(inbox + 1), Some(&path), "right under the Inbox: {order:?}");
-    assert_eq!(s.folder("sample", &path).map(mailcraft_model::Folder::depth), Some(1));
+    assert_eq!(s.folder("sample", &path).map(quatrelle_model::Folder::depth), Some(1));
 }
 
 /// A rule can run right away on the mail already in the Inbox, whatever folder is on screen, as
@@ -1801,7 +1801,7 @@ fn mail_a_rule_deletes_is_not_announced() {
     let mut m = st.messages[0].clone();
     m.key.uid = 700;
     m.subject = "Deleted on arrival".into();
-    m.from = mailcraft_model::EmailAddress::new("Zoe Park", "zoe@studio.example");
+    m.from = quatrelle_model::EmailAddress::new("Zoe Park", "zoe@studio.example");
     m.flags.seen = false;
     m.date = NOW;
     st.messages.insert(0, m);
@@ -1812,7 +1812,7 @@ fn mail_a_rule_deletes_is_not_announced() {
 
 #[test]
 fn delay_delivery_holds_mail_in_the_outbox_until_its_time() {
-    let mut s = Session::open(Some(temp("delay")), mailcraft_model::dates::Clock::new(NOW, 0));
+    let mut s = Session::open(Some(temp("delay")), quatrelle_model::dates::Clock::new(NOW, 0));
     s.run("account.add", &json!({"email": "zoe@example.org", "password": "pw"})).unwrap();
     s.take_jobs();
     s.run("mail.new", &json!({})).unwrap();
@@ -1853,7 +1853,7 @@ fn delay_delivery_holds_mail_in_the_outbox_until_its_time() {
 
 #[test]
 fn the_samples_office_files_read_as_documents() {
-    use mailcraft_mime::office::{Block, Preview, preview};
+    use quatrelle_mime::office::{Block, Preview, preview};
     let Some(Preview::Document(b)) = preview("order-4471.docx", "", &sample::sample_docx()) else { panic!("not a document") };
     assert!(matches!(&b[0], Block::Paragraph { heading: true, .. }));
     assert!(b.iter().any(|x| matches!(x, Block::Table(rows) if rows.len() == 3 && rows[1][1] == "A2")));
@@ -1880,12 +1880,12 @@ fn notes_are_written_coloured_and_deleted() {
     // Kept with the account's calendar and contacts, across starts.
     let root = s.store.as_ref().unwrap().root().to_path_buf();
     drop(s);
-    let s = Session::open(Some(Store::open(&root).unwrap()), mailcraft_model::dates::Clock::new(NOW, 0));
+    let s = Session::open(Some(Store::open(&root).unwrap()), quatrelle_model::dates::Clock::new(NOW, 0));
     assert_eq!(s.notes("").len(), 3);
     done(s);
 
     // An Exchange account: notes go to its Notes folder, and what the server says follows.
-    let mut s = Session::open(Some(temp("notes-ews")), mailcraft_model::dates::Clock::new(NOW, 0));
+    let mut s = Session::open(Some(temp("notes-ews")), quatrelle_model::dates::Clock::new(NOW, 0));
     let id = s
         .run("account.add", &json!({"email": "zoe@contoso.example", "password": "pw", "ews": "https://mail.contoso.example/EWS/Exchange.asmx"}))
         .unwrap()["account"]
@@ -1896,15 +1896,15 @@ fn notes_are_written_coloured_and_deleted() {
     let uid = s.run("note.create", &json!({"text": "Sync me"})).unwrap()["uid"].as_str().unwrap().to_string();
     assert!(s.take_jobs().iter().any(|j| matches!(j, Job::SyncDav { .. })), "asks for a sync");
     assert!(s.pim[&id].notes[0].dirty);
-    let stored = mailcraft_model::pim::StoredNote { href: "note:X1".into(), note: s.pim[&id].notes[0].note.clone(), ..Default::default() };
+    let stored = quatrelle_model::pim::StoredNote { href: "note:X1".into(), note: s.pim[&id].notes[0].note.clone(), ..Default::default() };
     let server_copy =
-        mailcraft_model::pim::StoredNote { note: mailcraft_model::pim::Note { uid: "note:X1".into(), ..stored.note.clone() }, ..stored.clone() };
-    let other = mailcraft_model::pim::StoredNote {
+        quatrelle_model::pim::StoredNote { note: quatrelle_model::pim::Note { uid: "note:X1".into(), ..stored.note.clone() }, ..stored.clone() };
+    let other = quatrelle_model::pim::StoredNote {
         href: "note:X2".into(),
-        note: mailcraft_model::pim::Note { uid: "note:X2".into(), text: "From Outlook".into(), color: 2, modified: 1 },
+        note: quatrelle_model::pim::Note { uid: "note:X2".into(), text: "From Outlook".into(), color: 2, modified: 1 },
         ..Default::default()
     };
-    let sync = mailcraft_model::pim::DavSync { pushed_notes: vec![stored], notes: Some(vec![server_copy, other]), ..Default::default() };
+    let sync = quatrelle_model::pim::DavSync { pushed_notes: vec![stored], notes: Some(vec![server_copy, other]), ..Default::default() };
     s.apply_dav(&id, &sync);
     let texts: Vec<String> = s.notes("").into_iter().map(|n| n.note.text).collect();
     assert_eq!(texts.len(), 2, "{texts:?}: the note sent isn't doubled");
@@ -1920,7 +1920,7 @@ fn shared_calendars_open_from_exchange_accounts_and_close() {
     let mut s = sample_session("shared-cal");
     assert!(s.run("calendar.openShared", &json!({"email": "ana@soundlab.example"})).is_err(), "the sample isn't an Exchange account");
     done(s);
-    let mut s = Session::open(Some(temp("shared-cal-ews")), mailcraft_model::dates::Clock::new(NOW, 0));
+    let mut s = Session::open(Some(temp("shared-cal-ews")), quatrelle_model::dates::Clock::new(NOW, 0));
     let id = s
         .run("account.add", &json!({"email": "zoe@contoso.example", "password": "pw", "ews": "https://mail.contoso.example/EWS/Exchange.asmx"}))
         .unwrap()["account"]
@@ -1935,17 +1935,17 @@ fn shared_calendars_open_from_exchange_accounts_and_close() {
     assert_eq!(s.pim[&id].shared, vec!["ana@contoso.example".to_string()], "once, lower-case");
     assert!(s.take_jobs().iter().any(|j| matches!(j, Job::SyncDav { .. })));
     // The server shows it: read-only, with its events; closing takes it and them away.
-    let cal = mailcraft_model::pim::shared_calendar_id("ana@contoso.example");
-    let sync = mailcraft_model::pim::DavSync {
+    let cal = quatrelle_model::pim::shared_calendar_id("ana@contoso.example");
+    let sync = quatrelle_model::pim::DavSync {
         calendars: Some(vec![
-            mailcraft_model::pim::CalendarInfo { id: "ews:calendar".into(), name: "Calendar".into(), ..Default::default() },
-            mailcraft_model::pim::CalendarInfo { id: cal.clone(), name: "ana@contoso.example".into(), read_only: true, ..Default::default() },
+            quatrelle_model::pim::CalendarInfo { id: "ews:calendar".into(), name: "Calendar".into(), ..Default::default() },
+            quatrelle_model::pim::CalendarInfo { id: cal.clone(), name: "ana@contoso.example".into(), read_only: true, ..Default::default() },
         ]),
         synced_calendars: vec![cal.clone()],
-        events: vec![mailcraft_model::pim::StoredEvent {
+        events: vec![quatrelle_model::pim::StoredEvent {
             calendar: cal.clone(),
             href: "S1".into(),
-            event: mailcraft_model::ical::CalEvent {
+            event: quatrelle_model::ical::CalEvent {
                 uid: "b1".into(),
                 summary: "Budget review".into(),
                 start: NOW,
@@ -1965,13 +1965,13 @@ fn shared_calendars_open_from_exchange_accounts_and_close() {
     done(s);
 }
 
-/// A server's rule MailCraft understands can be changed from here: only that rule goes, with
+/// A server's rule Quatrelle understands can be changed from here: only that rule goes, with
 /// the place it has there; one it doesn't understand is refused rather than truncated.
 #[test]
 fn a_server_rule_is_changed_where_it_lives() {
-    use mailcraft_model::organize::{Condition, ForeignRule, Rule, RuleAction};
+    use quatrelle_model::organize::{Condition, ForeignRule, Rule, RuleAction};
 
-    let mut s = Session::open(Some(temp("server-rule-save")), mailcraft_model::dates::Clock::new(NOW, 0));
+    let mut s = Session::open(Some(temp("server-rule-save")), quatrelle_model::dates::Clock::new(NOW, 0));
     let id = s
         .run("account.add", &json!({"email": "zoe@contoso.example", "password": "pw", "ews": "https://mail.contoso.example/EWS/Exchange.asmx"}))
         .unwrap()["account"]
@@ -2026,7 +2026,7 @@ fn a_server_rule_is_changed_where_it_lives() {
         assert_eq!(rule.priority, Some(7), "the place it has there");
         assert_eq!(rule.remote_id.as_deref(), Some("R3"));
     }
-    // A rule MailCraft can't say entirely isn't half-written.
+    // A rule Quatrelle can't say entirely isn't half-written.
     assert!(s.run("rules.server.save", &json!({"account": id, "id": "R9", "rule": known})).is_err());
     done(s);
 }
@@ -2036,9 +2036,9 @@ fn a_server_rule_is_changed_where_it_lives() {
 /// behind its siblings, and a re-sync doesn't double them.
 #[test]
 fn appointments_sharing_a_uid_are_all_kept() {
-    use mailcraft_model::dates::Clock;
-    use mailcraft_model::ical::CalEvent;
-    use mailcraft_model::pim::{CalendarInfo, DavSync, StoredEvent};
+    use quatrelle_model::dates::Clock;
+    use quatrelle_model::ical::CalEvent;
+    use quatrelle_model::pim::{CalendarInfo, DavSync, StoredEvent};
 
     let mut s = Session::open(Some(temp("shared-uid")), Clock::new(NOW, 0));
     let id = s
@@ -2075,9 +2075,9 @@ fn appointments_sharing_a_uid_are_all_kept() {
 /// and accounts can be put in another order, which is kept.
 #[test]
 fn the_first_account_opens_and_accounts_can_be_reordered() {
-    use mailcraft_model::dates::Clock;
-    use mailcraft_model::{AccountConfig, Folder};
-    let dir = std::env::temp_dir().join(format!("mailcraft-acct-order-{}", std::process::id()));
+    use quatrelle_model::dates::Clock;
+    use quatrelle_model::{AccountConfig, Folder};
+    let dir = std::env::temp_dir().join(format!("quatrelle-acct-order-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let store = Store::open(&dir).unwrap();
     let config = |id: &str, email: &str| AccountConfig { id: id.into(), email: email.into(), ..Default::default() };
@@ -2106,9 +2106,9 @@ fn the_first_account_opens_and_accounts_can_be_reordered() {
 /// it) opens them as its own: opening one said "no folder … in account a1".
 #[test]
 fn folders_kept_under_another_account_open_as_this_ones() {
-    use mailcraft_model::dates::Clock;
-    use mailcraft_model::{AccountConfig, Folder};
-    let dir = std::env::temp_dir().join(format!("mailcraft-folder-owner-{}", std::process::id()));
+    use quatrelle_model::dates::Clock;
+    use quatrelle_model::{AccountConfig, Folder};
+    let dir = std::env::temp_dir().join(format!("quatrelle-folder-owner-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let store = Store::open(&dir).unwrap();
     store.save_accounts(&[AccountConfig { id: "a2".into(), email: "zidan@garnetbyte.example".into(), ..Default::default() }]).unwrap();
@@ -2141,19 +2141,19 @@ fn collapsing_in_the_folder_pane_is_kept() {
 #[test]
 fn a_microsoft_account_with_a_password_switches_to_microsoft_sign_in() {
     let store = temp("ms-switch");
-    let mut s = Session::open(Some(store.clone()), mailcraft_model::dates::Clock::new(NOW, 0));
+    let mut s = Session::open(Some(store.clone()), quatrelle_model::dates::Clock::new(NOW, 0));
     s.oauth_available = vec!["microsoft".into()];
     let id = s.run("account.add", &json!({"email": "zoe@hotmail.com", "password": "old"})).unwrap()["account"].as_str().unwrap().to_string();
     s.take_jobs();
     s.apply(Event::Status {
         account: id.clone(),
-        status: SyncStatus::Error { error: format!("{} (Basic authentication is disabled)", mailcraft_model::MICROSOFT_NO_PASSWORDS) },
+        status: SyncStatus::Error { error: format!("{} (Basic authentication is disabled)", quatrelle_model::MICROSOFT_NO_PASSWORDS) },
     });
     assert!(s.notices.last().unwrap().text.contains("Sign in with Microsoft"), "said once, as it comes");
     let n = s.notices.len();
     s.apply(Event::Status {
         account: id.clone(),
-        status: SyncStatus::Error { error: format!("{} (Basic authentication is disabled)", mailcraft_model::MICROSOFT_NO_PASSWORDS) },
+        status: SyncStatus::Error { error: format!("{} (Basic authentication is disabled)", quatrelle_model::MICROSOFT_NO_PASSWORDS) },
     });
     assert_eq!(s.notices.len(), n, "not again while it stays so");
     s.run("account.signIn", &json!({"account": id})).unwrap();
@@ -2185,7 +2185,7 @@ fn a_microsoft_account_with_a_password_switches_to_microsoft_sign_in() {
 #[test]
 fn a_microsoft_account_moves_to_graph() {
     let store = temp("ms-graph");
-    let mut s = Session::open(Some(store.clone()), mailcraft_model::dates::Clock::new(NOW, 0));
+    let mut s = Session::open(Some(store.clone()), quatrelle_model::dates::Clock::new(NOW, 0));
     s.oauth_available = vec!["microsoft".into()];
     let first = s.run("account.add", &json!({"email": "ann@studio.example", "password": "pw"})).unwrap()["account"].as_str().unwrap().to_string();
     let id = s.run("account.add", &json!({"email": "zoe@hotmail.com", "oauth": "microsoft", "name": "Zoe"})).unwrap()["account"]
@@ -2195,7 +2195,7 @@ fn a_microsoft_account_moves_to_graph() {
     let last = s.run("account.add", &json!({"email": "bo@studio.example", "password": "pw"})).unwrap()["account"].as_str().unwrap().to_string();
     s.run("account.setSignature", &json!({"account": id, "signature": "Zoe x"})).unwrap();
     s.take_jobs();
-    let closed = format!("{}. Turn on IMAP", mailcraft_model::MICROSOFT_IMAP_CLOSED);
+    let closed = format!("{}. Turn on IMAP", quatrelle_model::MICROSOFT_IMAP_CLOSED);
     s.apply(Event::Status { account: id.clone(), status: SyncStatus::Error { error: closed } });
     assert!(s.notices.last().unwrap().text.contains("IMAP"));
     assert!(s.run("account.useGraph", &json!({"account": first})).is_err(), "not a Microsoft account");
@@ -2204,7 +2204,7 @@ fn a_microsoft_account_moves_to_graph() {
     assert_eq!(order, [first.as_str(), new.as_str(), last.as_str()]);
     let c = &s.account(&new).unwrap().config;
     assert_eq!((c.email.as_str(), c.name.as_str(), c.signature.as_str()), ("zoe@hotmail.com", "Zoe", "Zoe x"));
-    assert_eq!((c.graph.as_deref(), c.oauth.as_deref()), (Some(mailcraft_model::GRAPH_URL), Some("microsoft")));
+    assert_eq!((c.graph.as_deref(), c.oauth.as_deref()), (Some(quatrelle_model::GRAPH_URL), Some("microsoft")));
     let jobs = s.take_jobs();
     assert!(jobs.iter().any(|j| matches!(j, Job::Remove { account } if *account == id)));
     assert!(jobs.iter().any(|j| matches!(j, Job::SignIn { account } if account.id == new && account.graph.is_some())));
@@ -2217,11 +2217,11 @@ fn a_microsoft_account_moves_to_graph() {
 #[test]
 fn searching_a_big_mailbox_stays_quick() {
     let store = temp("big-search");
-    store.save_accounts(&[mailcraft_model::AccountConfig { id: "a1".into(), email: "me@studio.example".into(), ..Default::default() }]).unwrap();
+    store.save_accounts(&[quatrelle_model::AccountConfig { id: "a1".into(), email: "me@studio.example".into(), ..Default::default() }]).unwrap();
     store
         .save_folders(
             "a1",
-            &[mailcraft_model::Folder {
+            &[quatrelle_model::Folder {
                 account: "a1".into(),
                 path: "INBOX".into(),
                 role: FolderRole::Inbox,
@@ -2232,15 +2232,15 @@ fn searching_a_big_mailbox_stays_quick() {
         .unwrap();
     let mut st = store.load_folder("a1", "INBOX").unwrap();
     for uid in 1..=3000u32 {
-        let key = mailcraft_model::MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 1, uid };
+        let key = quatrelle_model::MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 1, uid };
         let html = format!("<html><body><table><tr><td><h1>Report {uid}</h1></td><td>{}</td></tr></table></body></html>", "word ".repeat(400));
         let raw = format!("From: a@x.example\r\nSubject: Report {uid}\r\nContent-Type: text/html\r\n\r\n{html}\r\n");
         store.write_body(&key, raw.as_bytes()).unwrap();
-        st.messages.push(mailcraft_model::Summary { key, subject: format!("Report {uid}"), ..Default::default() });
+        st.messages.push(quatrelle_model::Summary { key, subject: format!("Report {uid}"), ..Default::default() });
     }
     st.messages[1234].subject = "needle here".into();
     store.save_folder("a1", "INBOX", &st).unwrap();
-    let mut s = Session::open(Some(store.clone()), mailcraft_model::dates::Clock::new(NOW, 0));
+    let mut s = Session::open(Some(store.clone()), quatrelle_model::dates::Clock::new(NOW, 0));
     s.take_jobs();
     let t = std::time::Instant::now();
     assert_eq!(s.run("search.run", &json!({"query": "needle"})).unwrap()["results"], 1);
@@ -2261,11 +2261,11 @@ fn searching_a_big_mailbox_stays_quick() {
 #[test]
 fn a_search_is_indexed_a_slice_at_a_time() {
     let store = temp("slice-search");
-    store.save_accounts(&[mailcraft_model::AccountConfig { id: "a1".into(), email: "me@studio.example".into(), ..Default::default() }]).unwrap();
+    store.save_accounts(&[quatrelle_model::AccountConfig { id: "a1".into(), email: "me@studio.example".into(), ..Default::default() }]).unwrap();
     store
         .save_folders(
             "a1",
-            &[mailcraft_model::Folder {
+            &[quatrelle_model::Folder {
                 account: "a1".into(),
                 path: "INBOX".into(),
                 role: FolderRole::Inbox,
@@ -2276,12 +2276,12 @@ fn a_search_is_indexed_a_slice_at_a_time() {
         .unwrap();
     let mut st = store.load_folder("a1", "INBOX").unwrap();
     for uid in 1..=60u32 {
-        let key = mailcraft_model::MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 1, uid };
-        st.messages.push(mailcraft_model::Summary { key, subject: format!("Report {uid}"), ..Default::default() });
+        let key = quatrelle_model::MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 1, uid };
+        st.messages.push(quatrelle_model::Summary { key, subject: format!("Report {uid}"), ..Default::default() });
     }
     st.messages[59].subject = "needle in the last one".into();
     store.save_folder("a1", "INBOX", &st).unwrap();
-    let mut s = Session::open(Some(store.clone()), mailcraft_model::dates::Clock::new(NOW, 0));
+    let mut s = Session::open(Some(store.clone()), quatrelle_model::dates::Clock::new(NOW, 0));
     s.take_jobs();
     // Ten messages a call: the first answers with what it has indexed and says more is coming.
     let v = s.run("search.run", &json!({"query": "needle", "index": 10})).unwrap();
@@ -2310,11 +2310,11 @@ fn a_search_is_indexed_a_slice_at_a_time() {
 #[test]
 fn a_search_index_is_kept_for_the_next_run() {
     let store = temp("kept-index");
-    store.save_accounts(&[mailcraft_model::AccountConfig { id: "a1".into(), email: "me@studio.example".into(), ..Default::default() }]).unwrap();
+    store.save_accounts(&[quatrelle_model::AccountConfig { id: "a1".into(), email: "me@studio.example".into(), ..Default::default() }]).unwrap();
     store
         .save_folders(
             "a1",
-            &[mailcraft_model::Folder {
+            &[quatrelle_model::Folder {
                 account: "a1".into(),
                 path: "INBOX".into(),
                 role: FolderRole::Inbox,
@@ -2326,22 +2326,22 @@ fn a_search_index_is_kept_for_the_next_run() {
     let mut st = store.load_folder("a1", "INBOX").unwrap();
     st.validity = 1;
     for uid in 1..=40u32 {
-        let key = mailcraft_model::MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 1, uid };
-        st.messages.push(mailcraft_model::Summary { key, subject: format!("Report {uid}"), ..Default::default() });
+        let key = quatrelle_model::MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 1, uid };
+        st.messages.push(quatrelle_model::Summary { key, subject: format!("Report {uid}"), ..Default::default() });
     }
     // A word only the body holds: the summary alone can't find it.
     let key = st.messages[39].key.clone();
     store.write_body(&key, b"From: a@x.example\r\nSubject: Report 40\r\n\r\nwatermelon in the body\r\n").unwrap();
     store.save_folder("a1", "INBOX", &st).unwrap();
     {
-        let mut s = Session::open(Some(store.clone()), mailcraft_model::dates::Clock::new(NOW, 0));
+        let mut s = Session::open(Some(store.clone()), quatrelle_model::dates::Clock::new(NOW, 0));
         s.take_jobs();
         assert_eq!(s.run("search.run", &json!({"query": "watermelon"})).unwrap()["results"], 1);
         assert!(store.load_search_index("a1", "INBOX").is_some(), "the folder's index is kept");
     }
     // The body goes (a cache that let go of it), and the next run still finds the word.
     store.remove_body(&key);
-    let mut s = Session::open(Some(store.clone()), mailcraft_model::dates::Clock::new(NOW, 0));
+    let mut s = Session::open(Some(store.clone()), quatrelle_model::dates::Clock::new(NOW, 0));
     s.take_jobs();
     let v = s.run("search.run", &json!({"query": "watermelon"})).unwrap();
     assert_eq!(v["results"], 1, "found in the kept index, not by reading the messages: {v}");
@@ -2355,11 +2355,11 @@ fn a_search_index_is_kept_for_the_next_run() {
 #[test]
 fn a_downloaded_body_joins_a_kept_index() {
     let store = temp("kept-delta");
-    store.save_accounts(&[mailcraft_model::AccountConfig { id: "a1".into(), email: "me@studio.example".into(), ..Default::default() }]).unwrap();
+    store.save_accounts(&[quatrelle_model::AccountConfig { id: "a1".into(), email: "me@studio.example".into(), ..Default::default() }]).unwrap();
     store
         .save_folders(
             "a1",
-            &[mailcraft_model::Folder {
+            &[quatrelle_model::Folder {
                 account: "a1".into(),
                 path: "INBOX".into(),
                 role: FolderRole::Inbox,
@@ -2371,13 +2371,13 @@ fn a_downloaded_body_joins_a_kept_index() {
     let mut st = store.load_folder("a1", "INBOX").unwrap();
     st.validity = 1;
     for uid in 1..=20u32 {
-        let key = mailcraft_model::MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 1, uid };
-        st.messages.push(mailcraft_model::Summary { key, subject: format!("Report {uid}"), ..Default::default() });
+        let key = quatrelle_model::MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 1, uid };
+        st.messages.push(quatrelle_model::Summary { key, subject: format!("Report {uid}"), ..Default::default() });
     }
     let key = st.messages[7].key.clone();
     store.save_folder("a1", "INBOX", &st).unwrap();
     {
-        let mut s = Session::open(Some(store.clone()), mailcraft_model::dates::Clock::new(NOW, 0));
+        let mut s = Session::open(Some(store.clone()), quatrelle_model::dates::Clock::new(NOW, 0));
         s.take_jobs();
         assert_eq!(s.run("search.run", &json!({"query": "report"})).unwrap()["results"], 20);
         // The body comes in, as "Download all" brings it.
@@ -2386,7 +2386,7 @@ fn a_downloaded_body_joins_a_kept_index() {
         s.apply(Event::Body { key: key.clone(), raw });
         assert_eq!(s.run("search.run", &json!({"query": "watermelon"})).unwrap()["results"], 1);
     }
-    let mut s = Session::open(Some(store.clone()), mailcraft_model::dates::Clock::new(NOW, 0));
+    let mut s = Session::open(Some(store.clone()), quatrelle_model::dates::Clock::new(NOW, 0));
     s.take_jobs();
     let v = s.run("search.run", &json!({"query": "watermelon"})).unwrap();
     assert_eq!(v["results"], 1, "the body read since is added to the kept index: {v}");
@@ -2398,11 +2398,11 @@ fn a_downloaded_body_joins_a_kept_index() {
 #[test]
 fn a_changed_folder_is_indexed_again() {
     let store = temp("kept-change");
-    store.save_accounts(&[mailcraft_model::AccountConfig { id: "a1".into(), email: "me@studio.example".into(), ..Default::default() }]).unwrap();
+    store.save_accounts(&[quatrelle_model::AccountConfig { id: "a1".into(), email: "me@studio.example".into(), ..Default::default() }]).unwrap();
     store
         .save_folders(
             "a1",
-            &[mailcraft_model::Folder {
+            &[quatrelle_model::Folder {
                 account: "a1".into(),
                 path: "INBOX".into(),
                 role: FolderRole::Inbox,
@@ -2414,18 +2414,18 @@ fn a_changed_folder_is_indexed_again() {
     let mut st = store.load_folder("a1", "INBOX").unwrap();
     st.validity = 1;
     for uid in 1..=20u32 {
-        let key = mailcraft_model::MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 1, uid };
-        st.messages.push(mailcraft_model::Summary { key, subject: format!("Report {uid}"), ..Default::default() });
+        let key = quatrelle_model::MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 1, uid };
+        st.messages.push(quatrelle_model::Summary { key, subject: format!("Report {uid}"), ..Default::default() });
     }
     store.save_folder("a1", "INBOX", &st).unwrap();
-    let mut s = Session::open(Some(store.clone()), mailcraft_model::dates::Clock::new(NOW, 0));
+    let mut s = Session::open(Some(store.clone()), quatrelle_model::dates::Clock::new(NOW, 0));
     s.take_jobs();
     assert_eq!(s.run("search.run", &json!({"query": "report"})).unwrap()["results"], 20);
     // Mail arrives while the window is open: the folder is read again (the index no longer fits
     // it), and the new subject is searchable.
     let mut st = store.load_folder("a1", "INBOX").unwrap();
-    let key = mailcraft_model::MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 1, uid: 21 };
-    st.messages.push(mailcraft_model::Summary { key, subject: "kitchen sink".into(), ..Default::default() });
+    let key = quatrelle_model::MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 1, uid: 21 };
+    st.messages.push(quatrelle_model::Summary { key, subject: "kitchen sink".into(), ..Default::default() });
     store.save_folder("a1", "INBOX", &st).unwrap();
     s.apply(Event::FolderChanged { account: "a1".into(), folder: "INBOX".into() });
     assert_eq!(s.run("search.run", &json!({"query": "kitchen"})).unwrap()["results"], 1);
@@ -2439,11 +2439,11 @@ fn a_changed_folder_is_indexed_again() {
 #[test]
 fn download_all_brings_every_message_a_batch_at_a_time() {
     let store = temp("download-all");
-    store.save_accounts(&[mailcraft_model::AccountConfig { id: "a1".into(), email: "me@studio.example".into(), ..Default::default() }]).unwrap();
+    store.save_accounts(&[quatrelle_model::AccountConfig { id: "a1".into(), email: "me@studio.example".into(), ..Default::default() }]).unwrap();
     store
         .save_folders(
             "a1",
-            &[mailcraft_model::Folder {
+            &[quatrelle_model::Folder {
                 account: "a1".into(),
                 path: "INBOX".into(),
                 role: FolderRole::Inbox,
@@ -2456,21 +2456,21 @@ fn download_all_brings_every_message_a_batch_at_a_time() {
     // The keys are rebuilt with the folder's validity when it's read back, so set it first.
     st.validity = 1;
     for uid in 1..=50u32 {
-        let key = mailcraft_model::MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 1, uid };
-        st.messages.push(mailcraft_model::Summary { key, subject: format!("Report {uid}"), ..Default::default() });
+        let key = quatrelle_model::MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 1, uid };
+        st.messages.push(quatrelle_model::Summary { key, subject: format!("Report {uid}"), ..Default::default() });
     }
     // The first one is already here, so it isn't asked for again.
     let kept = st.messages[0].key.clone();
     store.write_body(&kept, b"From: a@x.example\r\nSubject: kept\r\n\r\nbody\r\n").unwrap();
     store.save_folder("a1", "INBOX", &st).unwrap();
-    let mut s = Session::open(Some(store.clone()), mailcraft_model::dates::Clock::new(NOW, 0));
+    let mut s = Session::open(Some(store.clone()), quatrelle_model::dates::Clock::new(NOW, 0));
     s.take_jobs();
     // The folder's keys get its validity back when it's read (a renamed cache stays consistent).
     assert!(store.has_body(&s.folder_state("a1", "INBOX").messages[0].key), "the kept body is found under the key the engine sees");
     let v = s.run("account.downloadAll", &json!({})).unwrap();
     assert_eq!(v["total"], 49, "one of fifty is already on this computer: {v}");
-    let asked = |jobs: Vec<mailcraft_model::Job>| -> Vec<mailcraft_model::MessageKey> {
-        jobs.into_iter().filter_map(|j| if let mailcraft_model::Job::FetchBody { key } = j { Some(key) } else { None }).collect()
+    let asked = |jobs: Vec<quatrelle_model::Job>| -> Vec<quatrelle_model::MessageKey> {
+        jobs.into_iter().filter_map(|j| if let quatrelle_model::Job::FetchBody { key } = j { Some(key) } else { None }).collect()
     };
     let first = asked(s.take_jobs());
     assert!(!first.is_empty() && first.len() < 49, "a batch, not the whole mailbox at once: {}", first.len());
@@ -2499,7 +2499,7 @@ fn download_all_brings_every_message_a_batch_at_a_time() {
 /// same rule. A rule Exchange can't run stays home, and says so.
 #[test]
 fn server_rules_go_to_the_server_and_keep_their_id() {
-    use mailcraft_model::organize::{Condition, Rule, RuleAction};
+    use quatrelle_model::organize::{Condition, Rule, RuleAction};
     let mut s = sample_session("server-rules");
     let account = s.accounts[0].config.id.clone();
     let rule = Rule {
@@ -2519,7 +2519,7 @@ fn server_rules_go_to_the_server_and_keep_their_id() {
         .take_jobs()
         .into_iter()
         .filter_map(|j| match j {
-            mailcraft_model::Job::SetServerRules { account, rules, delete, .. } => Some((account, rules, delete)),
+            quatrelle_model::Job::SetServerRules { account, rules, delete, .. } => Some((account, rules, delete)),
             _ => None,
         })
         .collect();
@@ -2527,7 +2527,7 @@ fn server_rules_go_to_the_server_and_keep_their_id() {
     assert_eq!(sent[0].1.len(), 1, "the rule marked for the server");
     assert!(sent[0].2.is_empty(), "nothing to remove");
     // The server's answer brings its id back: it's kept, and nothing is sent again.
-    s.apply(mailcraft_model::Event::ServerRules {
+    s.apply(quatrelle_model::Event::ServerRules {
         account: account.clone(),
         ids: vec![("Invoices".into(), "R1".into())],
         others: Vec::new(),
@@ -2536,12 +2536,12 @@ fn server_rules_go_to_the_server_and_keep_their_id() {
     });
     assert_eq!(s.rules[0].remote_id.as_deref(), Some("R1"));
     assert!(s.take_jobs().is_empty(), "the same rules aren't sent twice");
-    // The rules the server runs that MailCraft didn't make are listed as they are (Outlook's
+    // The rules the server runs that Quatrelle didn't make are listed as they are (Outlook's
     // own, say), and never changed here.
-    s.apply(mailcraft_model::Event::ServerRules {
+    s.apply(quatrelle_model::Event::ServerRules {
         account: account.clone(),
         ids: Vec::new(),
-        others: vec![mailcraft_model::organize::ForeignRule {
+        others: vec![quatrelle_model::organize::ForeignRule {
             account: String::new(),
             id: "R9".into(),
             name: "Outlook rule".into(),
@@ -2559,18 +2559,18 @@ fn server_rules_go_to_the_server_and_keep_their_id() {
     assert_eq!(s.rules[0].remote_id.as_deref(), Some("R1"), "a read leaves our own ids alone");
     // A server that has started syncing is readable: its rules are asked for then, not once
     // the whole mailbox has been walked — and once is enough, however many folders follow.
-    s.apply(mailcraft_model::Event::Status { account: account.clone(), status: SyncStatus::Syncing { folder: "INBOX".into() } });
-    let asked = |s: &mut Session| s.take_jobs().into_iter().filter(|j| matches!(j, mailcraft_model::Job::GetServerRules { .. })).count();
+    s.apply(quatrelle_model::Event::Status { account: account.clone(), status: SyncStatus::Syncing { folder: "INBOX".into() } });
+    let asked = |s: &mut Session| s.take_jobs().into_iter().filter(|j| matches!(j, quatrelle_model::Job::GetServerRules { .. })).count();
     assert_eq!(asked(&mut s), 1, "asked as soon as the server answers");
-    s.apply(mailcraft_model::Event::Status { account: account.clone(), status: SyncStatus::Syncing { folder: "Sent".into() } });
+    s.apply(quatrelle_model::Event::Status { account: account.clone(), status: SyncStatus::Syncing { folder: "Sent".into() } });
     assert_eq!(asked(&mut s), 0, "once a session is enough");
     // Connecting asks the server what it keeps: ours (to keep their ids right) and the rest.
-    s.apply(mailcraft_model::Event::Status { account: account.clone(), status: SyncStatus::Online { at: NOW } });
+    s.apply(quatrelle_model::Event::Status { account: account.clone(), status: SyncStatus::Online { at: NOW } });
     let reads: Vec<(String, Vec<String>)> = s
         .take_jobs()
         .into_iter()
         .filter_map(|j| match j {
-            mailcraft_model::Job::GetServerRules { account, ours } => Some((account, ours)),
+            quatrelle_model::Job::GetServerRules { account, ours } => Some((account, ours)),
             _ => None,
         })
         .collect();
@@ -2583,7 +2583,7 @@ fn server_rules_go_to_the_server_and_keep_their_id() {
         .take_jobs()
         .into_iter()
         .filter_map(|j| match j {
-            mailcraft_model::Job::SetServerRules { account, rules, delete, .. } => Some((account, rules, delete)),
+            quatrelle_model::Job::SetServerRules { account, rules, delete, .. } => Some((account, rules, delete)),
             _ => None,
         })
         .collect();
@@ -2606,7 +2606,7 @@ fn server_rules_go_to_the_server_and_keep_their_id() {
 /// every header at once) still goes to the server; what neither can run stays home.
 #[test]
 fn sieve_rules_go_to_an_imap_account() {
-    use mailcraft_model::organize::{Condition, Rule, RuleAction, ServerKind};
+    use quatrelle_model::organize::{Condition, Rule, RuleAction, ServerKind};
     let mut s = sample_session("sieve-rules");
     let account = s.accounts[0].config.id.clone();
     assert_eq!(s.server_kind(&account), Some(ServerKind::Sieve), "the sample account is IMAP");
@@ -2628,7 +2628,7 @@ fn sieve_rules_go_to_an_imap_account() {
         .take_jobs()
         .into_iter()
         .filter_map(|j| match j {
-            mailcraft_model::Job::SetServerRules { rules, .. } => Some(rules),
+            quatrelle_model::Job::SetServerRules { rules, .. } => Some(rules),
             _ => None,
         })
         .collect();
@@ -2698,14 +2698,14 @@ fn a_contacts_own_picture_is_asked_for_by_its_id() {
     let mut s = sample_session("contact-photo");
     s.accounts[0].config.ews = Some("https://mail.example/EWS/Exchange.asmx".into());
     let account = s.accounts[0].config.id.clone();
-    s.pim_mut(&account).cards.push(mailcraft_model::pim::StoredCard {
+    s.pim_mut(&account).cards.push(quatrelle_model::pim::StoredCard {
         book: "contacts".into(),
         href: "contact:C9".into(),
         etag: String::new(),
-        card: mailcraft_model::vcard::Card {
+        card: quatrelle_model::vcard::Card {
             uid: "C9".into(),
             name: "Ana Lima".into(),
-            emails: vec![mailcraft_model::vcard::Typed { value: "ana@contoso.example".into(), kind: "work".into() }],
+            emails: vec![quatrelle_model::vcard::Typed { value: "ana@contoso.example".into(), kind: "work".into() }],
             ..Default::default()
         },
         dirty: false,
@@ -2713,7 +2713,7 @@ fn a_contacts_own_picture_is_asked_for_by_its_id() {
     s.run("contact.photo", &json!({"email": "Ana@Contoso.Example"})).unwrap();
     let jobs = s.take_jobs();
     assert_eq!(jobs.len(), 1);
-    assert!(matches!(&jobs[0], mailcraft_model::Job::FetchPhoto { contact: Some(id), .. } if id == "C9"), "the item's id goes with the look-up");
+    assert!(matches!(&jobs[0], quatrelle_model::Job::FetchPhoto { contact: Some(id), .. } if id == "C9"), "the item's id goes with the look-up");
 }
 
 /// A directory keeps a person's picture, at most once asked for: the People card shows it, and
@@ -2728,11 +2728,11 @@ fn a_directory_picture_is_asked_for_once_and_kept() {
     assert_eq!(v["asked"], true, "{v}");
     let jobs = s.take_jobs();
     assert_eq!(jobs.len(), 1, "one look-up");
-    assert!(matches!(&jobs[0], mailcraft_model::Job::FetchPhoto { email, .. } if email == "zoe@studio.example"));
+    assert!(matches!(&jobs[0], quatrelle_model::Job::FetchPhoto { email, .. } if email == "zoe@studio.example"));
     s.run("contact.photo", &json!({"email": "zoe@studio.example"})).unwrap();
     assert!(s.take_jobs().is_empty(), "already asked for");
     // The answer is kept by address, without case; a "none" is kept too.
-    s.apply(mailcraft_model::Event::Photo {
+    s.apply(quatrelle_model::Event::Photo {
         email: "Zoe@Studio.Example".into(),
         media: "image/jpeg".into(),
         data: vec![0xFF, 0xD8, 0xFF],
@@ -2742,7 +2742,7 @@ fn a_directory_picture_is_asked_for_once_and_kept() {
     let p = s.person_photo("zoe@studio.example").unwrap();
     assert_eq!(p.media, "image/jpeg");
     assert_eq!(p.bytes(1024).unwrap(), vec![0xFF, 0xD8, 0xFF]);
-    s.apply(mailcraft_model::Event::Photo {
+    s.apply(quatrelle_model::Event::Photo {
         email: "ghost@studio.example".into(),
         media: String::new(),
         data: Vec::new(),
@@ -2758,11 +2758,11 @@ fn a_directory_picture_is_asked_for_once_and_kept() {
 #[test]
 fn the_reading_pane_marks_mail_read_as_chosen() {
     let mut s = sample_session("read-options");
-    let unread: Vec<mailcraft_model::MessageKey> = s.list.iter().take(4).map(|m| m.key.clone()).collect();
+    let unread: Vec<quatrelle_model::MessageKey> = s.list.iter().take(4).map(|m| m.key.clone()).collect();
     assert_eq!(unread.len(), 4, "the sample has mail");
     s.selection = unread.clone();
     s.run("mail.markUnread", &json!({})).unwrap();
-    let seen = |s: &Session, k: &mailcraft_model::MessageKey| s.summary(k).is_some_and(|m| m.flags.seen);
+    let seen = |s: &Session, k: &quatrelle_model::MessageKey| s.summary(k).is_some_and(|m| m.flags.seen);
     // After a wait: not read until its time, and not at all when left before.
     s.run("view.readingOptions", &json!({"when": "shown", "after": 3})).unwrap();
     s.open_message(&unread[0]);
@@ -2862,7 +2862,7 @@ fn a_formatted_signature_keeps_its_look() {
         assert_eq!(c.styles.style(link).link.as_deref(), Some("http://www.company.com/"));
         assert!(!c.styles.style(0).bold, "the text before it stays as it was");
         assert_eq!(c.styles.chars.len(), c.body.chars().count());
-        let html = mailcraft_mime::rich::to_html(&c.body, &c.styles);
+        let html = quatrelle_mime::rich::to_html(&c.body, &c.styles);
         assert!(html.contains("http://www.company.com/"), "{html}");
     };
     s.run("mail.new", &json!({})).unwrap();
@@ -2957,7 +2957,7 @@ fn events_take_their_categorys_colour() {
     add("Pitch", json!(["clients"]));
     add("Mix", json!("Studio, Clients"));
     add("Plain", json!([]));
-    let day = mailcraft_engine_day(&s);
+    let day = quatrelle_engine_day(&s);
     let item = |name: &str| s.agenda(day, day + 86_400).into_iter().find(|i| i.summary == name).unwrap();
     assert_eq!(item("Pitch").category, Some(5), "a category's own colour, whatever its case");
     let studio = item("Mix").category.unwrap();
@@ -2969,7 +2969,7 @@ fn events_take_their_categorys_colour() {
 }
 
 /// The start of 2026-10-16, local, as the sample's clock has it.
-fn mailcraft_engine_day(s: &Session) -> i64 {
+fn quatrelle_engine_day(s: &Session) -> i64 {
     crate::parse_local("2026-10-16", i64::from(s.clock.offset)).map(|(t, _)| t).unwrap()
 }
 
@@ -2980,12 +2980,12 @@ fn calendars_can_be_hidden_and_shown_side_by_side() {
     let mut s = sample_session("calendar-views");
     let studio = crate::sample::STUDIO_CALENDAR;
     let names = |s: &Session| s.shown_calendars().into_iter().map(|c| c.1).collect::<Vec<_>>();
-    assert_eq!(names(&s), [mailcraft_model::pim::LOCAL, studio]);
+    assert_eq!(names(&s), [quatrelle_model::pim::LOCAL, studio]);
     let (from, to) = (s.clock.now - 7 * 86_400, s.clock.now + 7 * 86_400);
     let in_studio = |s: &Session| s.agenda(from, to).iter().filter(|i| i.calendar == studio).count();
     assert_eq!(in_studio(&s), 2);
     s.run("calendar.show", &json!({"account": "sample", "calendar": studio})).unwrap();
-    assert_eq!(names(&s), [mailcraft_model::pim::LOCAL]);
+    assert_eq!(names(&s), [quatrelle_model::pim::LOCAL]);
     assert_eq!(in_studio(&s), 0, "a hidden calendar's events aren't shown");
     assert!(s.agenda(from, to).iter().any(|i| i.summary == "Lunch with Jun"));
     s.run("calendar.show", &json!({"account": "sample", "calendar": studio, "shown": true})).unwrap();
@@ -3024,9 +3024,9 @@ fn how_much_mail_is_kept_is_a_setting() {
 /// changed or deleted.
 #[test]
 fn shared_contacts_are_read_only() {
-    use mailcraft_model::pim::{BookInfo, DavSync, StoredCard};
+    use quatrelle_model::pim::{BookInfo, DavSync, StoredCard};
     let mut s = sample_session("shared-contacts");
-    let card = mailcraft_model::vcard::Card { uid: "desk".into(), name: "Front desk".into(), ..Default::default() };
+    let card = quatrelle_model::vcard::Card { uid: "desk".into(), name: "Front desk".into(), ..Default::default() };
     let mut books = s.pim.get("sample").unwrap().books.clone();
     books.push(BookInfo { id: "public:pc".into(), name: "Company contacts".into(), read_only: true, ctag: String::new() });
     let sync = DavSync {
@@ -3116,8 +3116,8 @@ fn the_work_week_is_monday_to_friday() {
 
 #[test]
 fn another_mailbox_opens_in_an_exchange_account_with_its_own_deleted_items() {
-    use mailcraft_model::{AccountConfig, Folder};
-    let mut s = Session::open(Some(temp("shared-mailbox")), mailcraft_model::dates::Clock::new(NOW, 0));
+    use quatrelle_model::{AccountConfig, Folder};
+    let mut s = Session::open(Some(temp("shared-mailbox")), quatrelle_model::dates::Clock::new(NOW, 0));
     // Not without an Exchange account.
     assert!(s.run("account.openMailbox", &json!({"email": "support@contoso.example"})).is_err());
     let config = AccountConfig {
@@ -3207,8 +3207,8 @@ fn another_mailbox_opens_in_an_exchange_account_with_its_own_deleted_items() {
 /// opened here by address, come ticked; a tick given later stays.
 #[test]
 fn calendars_from_groups_come_unticked() {
-    use mailcraft_model::pim::{CalendarInfo, DavSync, shared_calendar_id};
-    let mut s = Session::open(Some(temp("cal-groups-unticked")), mailcraft_model::dates::Clock::new(NOW, 0));
+    use quatrelle_model::pim::{CalendarInfo, DavSync, shared_calendar_id};
+    let mut s = Session::open(Some(temp("cal-groups-unticked")), quatrelle_model::dates::Clock::new(NOW, 0));
     let id = s.run("account.add", &json!({"email": "zoe@example.org", "password": "pw"})).unwrap()["account"].as_str().unwrap().to_string();
     let cal = |id: &str, group: &str| CalendarInfo { id: id.into(), name: id.into(), group: group.into(), ..Default::default() };
     let ana = shared_calendar_id("ana@example.org");
@@ -3229,8 +3229,8 @@ fn calendars_from_groups_come_unticked() {
 /// calendar reads the calendars ticked at once, and one unticked isn't read.
 #[test]
 fn calendars_are_read_when_shown() {
-    use mailcraft_model::pim::{CalendarInfo, DavSync, shared_calendar_id};
-    let mut s = Session::open(Some(temp("cal-read-when-shown")), mailcraft_model::dates::Clock::new(NOW, 0));
+    use quatrelle_model::pim::{CalendarInfo, DavSync, shared_calendar_id};
+    let mut s = Session::open(Some(temp("cal-read-when-shown")), quatrelle_model::dates::Clock::new(NOW, 0));
     let id = s
         .run("account.add", &json!({"email": "riley@contoso.example", "ews": "mail.contoso.example", "username": "CONTOSO\\riley", "password": "pw"}))
         .unwrap()["account"]
@@ -3320,7 +3320,7 @@ fn a_signature_keeps_its_logo() {
 /// what mustn't go), where its text stands in the message; the text part has its text.
 #[test]
 fn an_html_signature_goes_as_written() {
-    let mut s = Session::open(Some(temp("signature-html")), mailcraft_model::dates::Clock::new(NOW, 0));
+    let mut s = Session::open(Some(temp("signature-html")), quatrelle_model::dates::Clock::new(NOW, 0));
     let id = s.run("account.add", &json!({"email": "dgaudin@example.org", "password": "pw"})).unwrap()["account"].as_str().unwrap().to_string();
     let html = r#"<table align="left" style="float:left;"><tr><td><a href="https://www.contoso.example"><img src="https://www.contoso.example/images/logo.gif" width="194"></a></td></tr></table>
 <table style="float:left;border-left:1px solid #ccc;"><tr><td><p><span style="font-weight:bold">Didier GAUDIN</span><br>T&eacute;l. 02 51 70 93 93</p></td></tr></table><script>x()</script>"#;
@@ -3342,10 +3342,10 @@ fn an_html_signature_goes_as_written() {
             _ => None,
         })
         .unwrap();
-    let p = mailcraft_mime::parse(&raw).unwrap();
+    let p = quatrelle_mime::parse(&raw).unwrap();
     // Read back: the logo and the name side by side, the logo on the web, the message's text.
     assert!(p.had_html);
-    let side_by_side = p.layout.iter().any(|b| matches!(b, mailcraft_mime::layout::Block::Table(t) if t.rows.iter().any(|r| r.len() == 2)));
+    let side_by_side = p.layout.iter().any(|b| matches!(b, quatrelle_mime::layout::Block::Table(t) if t.rows.iter().any(|r| r.len() == 2)));
     assert!(side_by_side, "{:?}", p.layout);
     assert!(p.images.iter().any(|u| u.contains("www.contoso.example/images/logo.gif")), "{:?}", p.images);
     assert!(p.text.contains("Hi Zoe") && p.text.contains("Didier GAUDIN") && !p.text.contains("x()"), "{}", p.text);
@@ -3362,15 +3362,15 @@ fn a_big_folder_changes_all_at_once_quickly() {
     let mut st = store.load_folder("sample", "Projects").unwrap();
     st.validity = 7;
     st.messages = (1..=n)
-        .map(|uid| mailcraft_model::Summary {
-            key: mailcraft_model::MessageKey { account: "sample".into(), folder: "Projects".into(), validity: 7, uid },
+        .map(|uid| quatrelle_model::Summary {
+            key: quatrelle_model::MessageKey { account: "sample".into(), folder: "Projects".into(), validity: 7, uid },
             subject: format!("Report {uid}"),
             date: NOW - i64::from(uid) * 60,
             ..Default::default()
         })
         .collect();
     store.save_folder("sample", "Projects", &st).unwrap();
-    let mut s = Session::open(Some(store), mailcraft_model::dates::Clock::new(NOW, 0));
+    let mut s = Session::open(Some(store), quatrelle_model::dates::Clock::new(NOW, 0));
     s.run("folder.open", &json!({"account": "sample", "folder": "Projects"})).unwrap();
     assert_eq!(s.list.len(), n as usize);
     let began = std::time::Instant::now();
@@ -3427,7 +3427,7 @@ fn rules_export_and_import() {
     let rule = |name: &str, account: Option<&str>| json!({"rule": {"name": name, "conditions": [{"if": "from", "value": "printshop"}], "actions": [{"do": "categorize", "value": "Clients"}], "account": account}});
     s.run("rules.add", &rule("Print shop", Some("sample"))).unwrap();
     s.run("rules.add", &rule("Everywhere", None)).unwrap();
-    let file = s.store.as_ref().unwrap().root().join("rules.mailcraft-rules");
+    let file = s.store.as_ref().unwrap().root().join("rules.quatrelle-rules");
     s.run("rules.export", &json!({"path": file.to_string_lossy()})).unwrap();
     let text = std::fs::read_to_string(&file).unwrap();
     assert!(text.contains("\"accountEmail\"") && !text.contains("\"account\": \"sample\""), "an account by its address: {text}");
@@ -3454,7 +3454,7 @@ fn rules_export_and_import() {
     assert!(!other.rules[0].enabled && other.rules[0].account.is_none());
 
     // Junk, and a file that isn't one.
-    for junk in [&b"{\"rules\": []}"[..], b"not json", b"{\"mailcraftRules\": 1, \"rules\": [{\"name\": 3}]}", &[0xff; 64][..]] {
+    for junk in [&b"{\"rules\": []}"[..], b"not json", b"{\"quatrelleRules\": 1, \"rules\": [{\"name\": 3}]}", &[0xff; 64][..]] {
         std::fs::write(&file, junk).unwrap();
         assert!(other.run("rules.import", &json!({"path": file.to_string_lossy()})).is_err());
     }
@@ -3483,15 +3483,15 @@ fn new_mail_to_someone() {
 /// again as a data file. A file that failed to open, or an account starting again, isn't kept.
 #[test]
 fn a_removed_account_keeps_its_data_file() {
-    let dir = std::env::temp_dir().join(format!("mailcraft-engine-keep-file-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("quatrelle-engine-keep-file-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
-    let files = dir.join("MailCraft Files");
+    let files = dir.join("Quatrelle Files");
     let store = Store::open_packed(dir.join("app"), &files).unwrap();
-    let mut s = Session::open(Some(store), mailcraft_model::dates::Clock::new(NOW, 0));
+    let mut s = Session::open(Some(store), quatrelle_model::dates::Clock::new(NOW, 0));
     let id = s.run("account.add", &json!({"email": "zoe@example.org", "password": "pw"})).unwrap()["account"].as_str().unwrap().to_string();
     let st = s.store.clone().unwrap();
-    st.save_folders(&id, &[mailcraft_model::Folder { account: id.clone(), path: "INBOX".into(), selectable: true, ..Default::default() }]).unwrap();
-    let kept = files.join("zoe@example.org.mailcraft");
+    st.save_folders(&id, &[quatrelle_model::Folder { account: id.clone(), path: "INBOX".into(), selectable: true, ..Default::default() }]).unwrap();
+    let kept = files.join("zoe@example.org.quatrelle");
     assert_eq!(st.data_file(&id).as_deref(), Some(kept.as_path()));
 
     let r = s.run("account.remove", &json!({"account": id})).unwrap();
@@ -3502,8 +3502,8 @@ fn a_removed_account_keeps_its_data_file() {
     // Added again: a file of its own, the kept one untouched.
     let before = std::fs::read(&kept).unwrap();
     let id = s.run("account.add", &json!({"email": "zoe@example.org", "password": "pw"})).unwrap()["account"].as_str().unwrap().to_string();
-    st.save_folders(&id, &[mailcraft_model::Folder { account: id.clone(), path: "INBOX".into(), selectable: true, ..Default::default() }]).unwrap();
-    let second = files.join("zoe@example.org (2).mailcraft");
+    st.save_folders(&id, &[quatrelle_model::Folder { account: id.clone(), path: "INBOX".into(), selectable: true, ..Default::default() }]).unwrap();
+    let second = files.join("zoe@example.org (2).quatrelle");
     assert_eq!(st.data_file(&id).as_deref(), Some(second.as_path()));
     assert_eq!(std::fs::read(&kept).unwrap(), before);
 
@@ -3536,7 +3536,7 @@ fn the_outgoing_server_keeps_a_sign_in_of_its_own() {
     );
     let saved = std::fs::read_to_string(s.store.as_ref().unwrap().root().join("accounts.json")).unwrap();
     assert!(saved.contains("relay-user"));
-    assert!(!saved.contains("smtp-pw") && !saved.contains("imap-pw"), "passwords stay out of MailCraft's files");
+    assert!(!saved.contains("smtp-pw") && !saved.contains("imap-pw"), "passwords stay out of Quatrelle's files");
     // Its password changed alone: kept, no reconnecting.
     s.run("account.update", &json!({"account": id, "smtpUsername": "relay-user", "smtpPassword": "new-pw"})).unwrap();
     assert!(matches!(s.take_jobs().as_slice(), [Job::SmtpPassword { password, .. }] if password.0 == "new-pw"));
@@ -3553,18 +3553,18 @@ fn the_outgoing_server_keeps_a_sign_in_of_its_own() {
     done(s);
 }
 
-/// Issue #1 (an Update button): MailCraft's releases are test builds of a version; a newer
+/// Issue #1 (an Update button): Quatrelle's releases are test builds of a version; a newer
 /// version is an update, and so is a later test build of this one when this build is an earlier
 /// test build (known by its commit). A developer's build, ahead or level, is up to date.
 #[test]
 fn update_checks_tell_newer_releases_and_test_builds() {
-    use mailcraft_model::job::Release;
+    use quatrelle_model::job::Release;
     let r = |tag: &str, version: &str, build: u32, commit: &str| Release {
         tag: tag.into(),
         version: version.into(),
         build,
         commit: commit.into(),
-        page: format!("https://github.com/ZIDAN44/mailcraft/releases/tag/{tag}"),
+        page: format!("https://github.com/ZIDAN44/quatrelle/releases/tag/{tag}"),
         download: String::new(),
     };
     let sha15 = "8bdba5ceb26a8b910102731c634d6998b8ab25d1";
@@ -3602,16 +3602,16 @@ fn update_checks_tell_newer_releases_and_test_builds() {
 fn each_accounts_calendar_has_the_accounts_colour() {
     let mut s = sample_session("calendar-colours");
     let a = s.run("account.add", &json!({"email": "zoe@example.org", "password": "pw"})).unwrap()["account"].as_str().unwrap().to_string();
-    let mut p = mailcraft_model::pim::Pim::default();
+    let mut p = quatrelle_model::pim::Pim::default();
     p.ensure_defaults();
     s.pim.insert(a.clone(), p);
     let colour = |s: &Session, account: &str, cal: &str| s.shown_calendars().into_iter().find(|c| c.0 == account && c.1 == cal).map(|c| c.3);
-    let (sample, zoe) = (colour(&s, "sample", mailcraft_model::pim::LOCAL).unwrap(), colour(&s, &a, mailcraft_model::pim::LOCAL).unwrap());
+    let (sample, zoe) = (colour(&s, "sample", quatrelle_model::pim::LOCAL).unwrap(), colour(&s, &a, quatrelle_model::pim::LOCAL).unwrap());
     assert_ne!(sample, zoe, "two accounts' calendars, two colours");
     assert_eq!(zoe, crate::ACCOUNT_COLOR + s.account(&a).unwrap().config.color);
     assert_eq!(colour(&s, "sample", crate::sample::STUDIO_CALENDAR), Some(3), "another calendar keeps its own");
     let (from, to) = (s.clock.now - 7 * 86_400, s.clock.now + 7 * 86_400);
-    assert!(s.agenda(from, to).iter().filter(|i| i.calendar == mailcraft_model::pim::LOCAL).all(|i| i.color == sample));
+    assert!(s.agenda(from, to).iter().filter(|i| i.calendar == quatrelle_model::pim::LOCAL).all(|i| i.color == sample));
     done(s);
 }
 
@@ -3649,7 +3649,7 @@ fn an_account_can_be_kept_online_only() {
     assert!(s.accounts.iter().all(|x| x.config.email != "pop@example.org"));
 
     // Snoozed: remembered without the subject (the sample mailbox's keeps it).
-    let snooze = |account: &str, subject: &str| mailcraft_model::organize::Snooze {
+    let snooze = |account: &str, subject: &str| quatrelle_model::organize::Snooze {
         account: account.into(),
         message_id: format!("<{}@example.org>", subject.len()),
         folder: "Snoozed".into(),
@@ -3658,14 +3658,14 @@ fn an_account_can_be_kept_online_only() {
         subject: subject.into(),
     };
     // (One of an account that's gone, due: dropped, and the rest saved.)
-    let gone = mailcraft_model::organize::Snooze { until: NOW - 60, ..snooze("gone", "Gone") };
+    let gone = quatrelle_model::organize::Snooze { until: NOW - 60, ..snooze("gone", "Gone") };
     s.snoozes = vec![snooze(&a, "SECRET-SNOOZED"), snooze("sample", "Sample snoozed"), gone];
     s.tick();
     let saved = std::fs::read_to_string(store.root().join("snoozes.json")).unwrap();
     assert!(!saved.contains("SECRET-SNOOZED") && saved.contains("Sample snoozed") && saved.contains(&a), "{saved}");
 
     // Opened again: held in memory from the start.
-    let again = Session::open(Some(Store::open(store.root()).unwrap()), mailcraft_model::dates::Clock::new(NOW, 0));
+    let again = Session::open(Some(Store::open(store.root()).unwrap()), quatrelle_model::dates::Clock::new(NOW, 0));
     assert!(again.store.as_ref().unwrap().is_online_only(&a));
     assert!(!again.store.as_ref().unwrap().is_online_only("sample"));
     done(s);

@@ -304,7 +304,7 @@ pub fn pdf(doc: &Doc, fonts: Option<Fonts<'_>>) -> Result<Vec<u8>, String> {
     };
     add(&mut objects, Vec::new()); // catalog, filled in last
     add(&mut objects, Vec::new()); // pages, filled in last
-    add(&mut objects, format!("<< /Producer (MailCraft {}) /Title {} >>", env!("CARGO_PKG_VERSION"), info_string(&title)).into_bytes());
+    add(&mut objects, format!("<< /Producer (Quatrelle {}) /Title {} >>", env!("CARGO_PKG_VERSION"), info_string(&title)).into_bytes());
     let mut font_refs = Vec::new();
     for (i, f) in faces.iter().enumerate() {
         let r = match f {
@@ -326,7 +326,7 @@ pub fn pdf(doc: &Doc, fonts: Option<Fonts<'_>>) -> Result<Vec<u8>, String> {
                 let file_ref = add(&mut objects, stream);
                 let bbox = face.global_bounding_box();
                 let descriptor = format!(
-                    "<< /Type /FontDescriptor /FontName /MailCraftFont{i} /Flags 32 /FontBBox [{} {} {} {}] /ItalicAngle 0 /Ascent {} /Descent {} /CapHeight {} /StemV {} /FontFile2 {file_ref} 0 R >>",
+                    "<< /Type /FontDescriptor /FontName /QuatrelleFont{i} /Flags 32 /FontBBox [{} {} {} {}] /ItalicAngle 0 /Ascent {} /Descent {} /CapHeight {} /StemV {} /FontFile2 {file_ref} 0 R >>",
                     scale(bbox.x_min),
                     scale(bbox.y_min),
                     scale(bbox.x_max),
@@ -344,7 +344,7 @@ pub fn pdf(doc: &Doc, fonts: Option<Fonts<'_>>) -> Result<Vec<u8>, String> {
                 }
                 w.push_str(" ]");
                 let cid = format!(
-                    "<< /Type /Font /Subtype /CIDFontType2 /BaseFont /MailCraftFont{i} /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> /FontDescriptor {desc_ref} 0 R /DW 1000 /W {w} /CIDToGIDMap /Identity >>"
+                    "<< /Type /Font /Subtype /CIDFontType2 /BaseFont /QuatrelleFont{i} /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> /FontDescriptor {desc_ref} 0 R /DW 1000 /W {w} /CIDToGIDMap /Identity >>"
                 );
                 let cid_ref = add(&mut objects, cid.into_bytes());
                 let mut cmap = String::from(
@@ -368,7 +368,7 @@ pub fn pdf(doc: &Doc, fonts: Option<Fonts<'_>>) -> Result<Vec<u8>, String> {
                 let tu_ref = add(&mut objects, s);
                 add(
                     &mut objects,
-                    format!("<< /Type /Font /Subtype /Type0 /BaseFont /MailCraftFont{i} /Encoding /Identity-H /DescendantFonts [{cid_ref} 0 R] /ToUnicode {tu_ref} 0 R >>")
+                    format!("<< /Type /Font /Subtype /Type0 /BaseFont /QuatrelleFont{i} /Encoding /Identity-H /DescendantFonts [{cid_ref} 0 R] /ToUnicode {tu_ref} 0 R >>")
                         .into_bytes(),
                 )
             }

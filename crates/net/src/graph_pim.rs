@@ -1,14 +1,14 @@
 //! Exchange Online calendars and contacts through Microsoft Graph, synced into the same calendars
 //! and address books as CalDAV and CardDAV ([`DavSync`], which the engine merges).
 //!
-//! Events and contacts are Graph's JSON resources mapped to and from MailCraft's model: times in
+//! Events and contacts are Graph's JSON resources mapped to and from Quatrelle's model: times in
 //! UTC (`Prefer: outlook.timezone="UTC"`), recurrence patterns as RRULEs (RFC 5545), attendees
 //! with their responses. Changes made here go first (new, changed, deleted), then every calendar
 //! and the contacts are read again.
 
-use mailcraft_model::ical::{Attendee, CalEvent};
-use mailcraft_model::pim::{BookInfo, CalendarInfo, DavSync, LOCAL, Pim, StoredCard, StoredEvent};
-use mailcraft_model::vcard::{Card, PostalAddress, Typed};
+use quatrelle_model::ical::{Attendee, CalEvent};
+use quatrelle_model::pim::{BookInfo, CalendarInfo, DavSync, LOCAL, Pim, StoredCard, StoredEvent};
+use quatrelle_model::vcard::{Card, PostalAddress, Typed};
 use serde_json::{Value, json};
 
 use crate::graph::Client;
@@ -22,7 +22,7 @@ const EVENT_FIELDS: &str = "id,iCalUId,subject,body,start,end,isAllDay,location,
 const CONTACT_FIELDS: &str = "id,changeKey,displayName,givenName,surname,emailAddresses,businessPhones,homePhones,mobilePhone,companyName,department,jobTitle,profession,officeLocation,manager,assistantName,businessHomePage,imAddresses,nickName,spouseName,personalNotes,businessAddress,homeAddress,otherAddress,birthday";
 
 fn seg(id: &str) -> String {
-    mailcraft_jmap::pct(id)
+    quatrelle_jmap::pct(id)
 }
 
 fn s(v: &Value, k: &str) -> String {
@@ -31,18 +31,18 @@ fn s(v: &Value, k: &str) -> String {
 
 /// `{"dateTime": "2026-10-15T09:00:00.0000000", "timeZone": "UTC"}` in Unix seconds.
 fn when(v: Option<&Value>) -> Option<i64> {
-    mailcraft_jmap::utc_date(v?.get("dateTime")?.as_str()?)
+    quatrelle_jmap::utc_date(v?.get("dateTime")?.as_str()?)
 }
 
 fn date_time(t: i64) -> Value {
     let days = t.div_euclid(86_400);
     let secs = t.rem_euclid(86_400);
-    let (y, m, d) = mailcraft_model::dates::civil_from_days(days);
+    let (y, m, d) = quatrelle_model::dates::civil_from_days(days);
     json!({"dateTime": format!("{y:04}-{m:02}-{d:02}T{:02}:{:02}:{:02}", secs / 3600, secs / 60 % 60, secs % 60), "timeZone": "UTC"})
 }
 
 fn ymd(t: i64) -> String {
-    let (y, m, d) = mailcraft_model::dates::civil_from_days(t.div_euclid(86_400));
+    let (y, m, d) = quatrelle_model::dates::civil_from_days(t.div_euclid(86_400));
     format!("{y:04}-{m:02}-{d:02}")
 }
 
@@ -116,7 +116,7 @@ pub fn recurrence_of(rule: &str, start: i64) -> Option<Value> {
                 .collect()
         })
         .unwrap_or_default();
-    let (y, m, d) = mailcraft_model::dates::civil_from_days(start.div_euclid(86_400));
+    let (y, m, d) = quatrelle_model::dates::civil_from_days(start.div_euclid(86_400));
     let index = |n: i32| INDEX.iter().find(|(_, i)| *i == n).map_or("first", |(name, _)| *name);
     let days: Vec<&str> = byday.iter().map(|(_, d)| *d).collect();
     let pattern = match get("FREQ")? {
@@ -175,7 +175,7 @@ pub fn event_of(v: &Value) -> Option<CalEvent> {
     let end = when(v.get("end")).unwrap_or(start + 3600).max(start);
     let body = v.get("body").cloned().unwrap_or(Value::Null);
     let content = s(&body, "content");
-    let description = if s(&body, "contentType").eq_ignore_ascii_case("html") { mailcraft_mime::html_to_text(&content) } else { content };
+    let description = if s(&body, "contentType").eq_ignore_ascii_case("html") { quatrelle_mime::html_to_text(&content) } else { content };
     let attendees = v
         .get("attendees")
         .and_then(Value::as_array)
@@ -274,9 +274,9 @@ pub fn card_of(v: &Value) -> Option<Card> {
         im: v.get("imAddresses").and_then(Value::as_array).and_then(|a| a.first()).and_then(Value::as_str).unwrap_or_default().to_string(),
         nickname: s(v, "nickName"),
         spouse: s(v, "spouseName"),
-        anniversary: mailcraft_jmap::utc_date(&s(v, "weddingAnniversary"))
+        anniversary: quatrelle_jmap::utc_date(&s(v, "weddingAnniversary"))
             .map(|t| {
-                let (y, m, d) = mailcraft_model::dates::civil_from_days((t + 12 * 3600 - 1).div_euclid(86_400));
+                let (y, m, d) = quatrelle_model::dates::civil_from_days((t + 12 * 3600 - 1).div_euclid(86_400));
                 format!("{y:04}-{m:02}-{d:02}")
             })
             .unwrap_or_default(),
@@ -296,10 +296,10 @@ pub fn card_of(v: &Value) -> Option<Card> {
                 (!a.is_empty()).then_some(a)
             })
             .collect(),
-        // The start of the day where it was set, in UTC (or noon, as MailCraft writes it).
-        birthday: mailcraft_jmap::utc_date(&s(v, "birthday"))
+        // The start of the day where it was set, in UTC (or noon, as Quatrelle writes it).
+        birthday: quatrelle_jmap::utc_date(&s(v, "birthday"))
             .map(|t| {
-                let (y, m, d) = mailcraft_model::dates::civil_from_days((t + 12 * 3600 - 1).div_euclid(86_400));
+                let (y, m, d) = quatrelle_model::dates::civil_from_days((t + 12 * 3600 - 1).div_euclid(86_400));
                 format!("{y:04}-{m:02}-{d:02}")
             })
             .unwrap_or_default(),
@@ -344,13 +344,13 @@ pub fn card_json(c: &Card) -> Value {
         "businessAddress": address("work"),
         "homeAddress": address("home"),
         "otherAddress": address(""),
-        "birthday": mailcraft_model::vcard::birthday_of(&c.birthday).filter(|b| !b.starts_with("--")).map(|b| format!("{b}T12:00:00Z")),
+        "birthday": quatrelle_model::vcard::birthday_of(&c.birthday).filter(|b| !b.starts_with("--")).map(|b| format!("{b}T12:00:00Z")),
     })
 }
 
 /// Where a calendar's events live: `/me`, or `/users/<address>` for someone else's.
 fn owner_path(calendar: &str) -> String {
-    match mailcraft_model::pim::shared_calendar_owner(calendar) {
+    match quatrelle_model::pim::shared_calendar_owner(calendar) {
         Some(email) => format!("/users/{}", seg(email)),
         None => "/me".into(),
     }
@@ -437,7 +437,7 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
     }
     for e in pim.events.iter().filter(|e| e.dirty) {
         let body = event_json(&e.event);
-        let shared = mailcraft_model::pim::shared_calendar_owner(&e.calendar).is_some();
+        let shared = quatrelle_model::pim::shared_calendar_owner(&e.calendar).is_some();
         let r = if e.href.is_empty() && shared {
             // Into someone else's calendar (they let this account edit it).
             c.post(&format!("{}/calendar/events", owner_path(&e.calendar)), &body).map(|v| (v, e.calendar.clone()))
@@ -503,7 +503,7 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
     // Other people's calendars opened here, by their address: editable where their owner let this
     // account edit them (Calendars.ReadWrite.Shared), read-only otherwise.
     for email in &pim.shared {
-        let id = mailcraft_model::pim::shared_calendar_id(email);
+        let id = quatrelle_model::pim::shared_calendar_id(email);
         let n = calendars.len();
         let can_edit = c.get(&format!("/users/{}/calendar?$select=canEdit", seg(email))).ok().and_then(|v| v.get("canEdit").and_then(Value::as_bool));
         match c.all(&format!("/users/{}/calendar/events?$top=100&$select={EVENT_FIELDS}", seg(email)), MAX_ITEMS) {
@@ -552,7 +552,7 @@ mod tests {
         assert_eq!(rrule_of(&yearly).as_deref(), Some("FREQ=YEARLY;BYMONTH=3;BYMONTHDAY=14"));
         assert_eq!(rrule_of(&json!({"pattern": {"type": "hourly"}})), None);
         // And back.
-        let start = mailcraft_jmap::utc_date("2026-10-05T09:00:00Z").unwrap();
+        let start = quatrelle_jmap::utc_date("2026-10-05T09:00:00Z").unwrap();
         let r = recurrence_of("FREQ=WEEKLY;BYDAY=MO,WE;INTERVAL=2;UNTIL=20261231T235959Z", start).unwrap();
         assert_eq!(r["pattern"]["daysOfWeek"], json!(["monday", "wednesday"]));
         assert_eq!((r["pattern"]["interval"].as_u64(), r["range"]["endDate"].as_str()), (Some(2), Some("2026-12-31")));

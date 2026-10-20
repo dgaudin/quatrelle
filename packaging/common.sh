@@ -4,10 +4,10 @@
 #
 # Exports:
 #   ROOT                    workspace root
-#   VERSION                 [workspace.package] version from Cargo.toml (override: MAILCRAFT_VERSION)
+#   VERSION                 [workspace.package] version from Cargo.toml (override: QUATRELLE_VERSION)
 #   DIST                    output directory for release artifacts (default: $ROOT/dist/release)
-#   MAILCRAFT_BUILD_SHA     git commit shown by `mailcraft --version` (default: BUILD_SHA, then git)
-#   MAILCRAFT_BUILD_DATE    UTC build date, YYYY-MM-DD (default: BUILD_DATE, then today)
+#   QUATRELLE_BUILD_SHA     git commit shown by `quatrelle --version` (default: BUILD_SHA, then git)
+#   QUATRELLE_BUILD_DATE    UTC build date, YYYY-MM-DD (default: BUILD_DATE, then today)
 #   CARGO_TARGET_DIR        cargo's target dir (default: $ROOT/target)
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -22,7 +22,7 @@ workspace_version() {
   ' "$ROOT/Cargo.toml"
 }
 
-VERSION="${MAILCRAFT_VERSION:-$(workspace_version)}"
+VERSION="${QUATRELLE_VERSION:-$(workspace_version)}"
 if [ -z "$VERSION" ]; then
   echo "error: could not read [workspace.package] version from $ROOT/Cargo.toml" >&2
   exit 1
@@ -34,12 +34,12 @@ mkdir -p "$DIST"
 export DIST
 
 # The shared release workflow (storytold/craft-common-actions) sets BUILD_SHA and BUILD_DATE.
-MAILCRAFT_BUILD_SHA="${MAILCRAFT_BUILD_SHA:-${BUILD_SHA:-}}"
-if [ -z "$MAILCRAFT_BUILD_SHA" ]; then
-  MAILCRAFT_BUILD_SHA="$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || true)"
+QUATRELLE_BUILD_SHA="${QUATRELLE_BUILD_SHA:-${BUILD_SHA:-}}"
+if [ -z "$QUATRELLE_BUILD_SHA" ]; then
+  QUATRELLE_BUILD_SHA="$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || true)"
 fi
-export MAILCRAFT_BUILD_SHA
-export MAILCRAFT_BUILD_DATE="${MAILCRAFT_BUILD_DATE:-${BUILD_DATE:-$(date -u +%Y-%m-%d)}}"
+export QUATRELLE_BUILD_SHA
+export QUATRELLE_BUILD_DATE="${QUATRELLE_BUILD_DATE:-${BUILD_DATE:-$(date -u +%Y-%m-%d)}}"
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$ROOT/target}"
 
 # Emit a GitHub Actions warning (plain stderr outside Actions).

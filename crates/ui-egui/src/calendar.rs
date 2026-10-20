@@ -2,8 +2,8 @@
 //! or a month in the main one. Click an empty hour to add an event there, an event to open it.
 
 use egui::{Align2, Color32, Margin, Rect, RichText, Sense, Ui, pos2, vec2};
-use mailcraft_engine::model::dates::{self, civil_from_days, days_from_civil};
-use mailcraft_engine::{AgendaItem, CalMode, Session};
+use quatrelle_engine::model::dates::{self, civil_from_days, days_from_civil};
+use quatrelle_engine::{AgendaItem, CalMode, Session};
 use serde_json::json;
 
 use crate::icons::{self, Icon};
@@ -127,8 +127,8 @@ fn calendar_row(
     s: &Session,
     t: &Tokens,
     ui: &mut Ui,
-    a: &mailcraft_engine::AccountState,
-    c: &mailcraft_engine::model::pim::CalendarInfo,
+    a: &quatrelle_engine::AccountState,
+    c: &quatrelle_engine::model::pim::CalendarInfo,
     acts: &mut Vec<Action>,
 ) {
     let shared = c.id.strip_prefix("shared:").map(str::to_string);
@@ -148,7 +148,7 @@ fn calendar_row(
         if resp.on_hover_text(tip).clicked() {
             acts.push(Action::Run("calendar.show", json!({"account": a.config.id, "calendar": c.id, "shown": !shown})));
         }
-        let name = if c.id == mailcraft_engine::model::pim::LOCAL { tl!("Calendar").to_string() } else { c.name.clone() };
+        let name = if c.id == quatrelle_engine::model::pim::LOCAL { tl!("Calendar").to_string() } else { c.name.clone() };
         let tip = match (&shared, s.pim.get(&a.config.id)) {
             // A shared mailbox's calendar comes with the mailbox; only one opened by hand closes.
             (Some(owner), Some(p)) if !p.shared.iter().any(|x| x.eq_ignore_ascii_case(owner)) => {
@@ -463,7 +463,7 @@ fn item_color(item: &AgendaItem, t: &Tokens) -> egui::Color32 {
 }
 
 /// What the card says, one line each: when the appointment is, where, and the calendar it's in
-/// (nothing for what it doesn't have). As Outlook's card, which also shows the reminder (MailCraft
+/// (nothing for what it doesn't have). As Outlook's card, which also shows the reminder (Quatrelle
 /// doesn't read `VALARM` yet).
 pub(crate) fn card_rows(s: &Session, item: &AgendaItem) -> Vec<(Icon, String)> {
     let mut out = vec![(Icon::Clock, when(s, item))];
@@ -533,7 +533,7 @@ fn day_text(d: i64) -> String {
 
 /// The calendar an appointment is in, by the name the calendar's pane gives it.
 fn calendar_name(s: &Session, item: &AgendaItem) -> String {
-    if item.calendar == mailcraft_engine::model::pim::LOCAL {
+    if item.calendar == quatrelle_engine::model::pim::LOCAL {
         return tl!("Calendar").to_string();
     }
     s.shown_calendars()
@@ -689,7 +689,7 @@ fn days(s: &Session, st: &mut UiState, ui: &mut Ui, items: &[AgendaItem], d0: i6
         for (j, (account, id, name, c)) in cals.iter().enumerate() {
             let r = Rect::from_min_size(pos2(names.min.x + pane_x(j), names.min.y), vec2(pane, 24.0)).shrink2(vec2(0.0, 1.0));
             ui.painter().rect_filled(r, 3.0, color(*c, &t).gamma_multiply(if t.dark { 0.45 } else { 0.3 }));
-            let label = if id == mailcraft_engine::model::pim::LOCAL { tl!("Calendar").to_string() } else { name.clone() };
+            let label = if id == quatrelle_engine::model::pim::LOCAL { tl!("Calendar").to_string() } else { name.clone() };
             ui.painter().with_clip_rect(r.shrink2(vec2(6.0, 0.0)).with_max_x(r.max.x - 24.0)).text(
                 pos2(r.min.x + 8.0, r.center().y),
                 Align2::LEFT_CENTER,

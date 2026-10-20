@@ -1,5 +1,5 @@
 //! Microsoft Graph mail: the transport for Exchange Online (Microsoft 365, Outlook.com), behind
-//! the same [`Job`](mailcraft_model::Job)/[`Event`](mailcraft_model::Event) interface as IMAP
+//! the same [`Job`](quatrelle_model::Job)/[`Event`](quatrelle_model::Event) interface as IMAP
 //! and JMAP. It works where an organisation has switched IMAP off.
 //!
 //! Every request is HTTPS with an OAuth bearer token (`Mail.ReadWrite`, `Mail.Send`,
@@ -12,10 +12,10 @@
 
 use std::collections::HashMap;
 
-use mailcraft_mime as mime;
-use mailcraft_model::organize::{Condition, Rule, RuleAction};
-use mailcraft_model::{Flag, Flags, Folder, FolderRole, MessageKey, Op, Summary, sort_newest_first, utf7, voting};
-use mailcraft_store::{FolderState, Store};
+use quatrelle_mime as mime;
+use quatrelle_model::organize::{Condition, Rule, RuleAction};
+use quatrelle_model::{Flag, Flags, Folder, FolderRole, MessageKey, Op, Summary, sort_newest_first, utf7, voting};
+use quatrelle_store::{FolderState, Store};
 use serde_json::{Value, json};
 
 use crate::http::{self, Request, Response};
@@ -61,7 +61,7 @@ fn check(resp: &Response) -> Result<()> {
 
 /// What a Microsoft account without a mailbox Graph can reach gets (a personal account made
 /// with a Gmail or other address, a mailbox on premises).
-pub(crate) const NO_MAILBOX: &str = "this Microsoft account has no Outlook.com or Microsoft 365 mailbox that MailCraft can reach. \
+pub(crate) const NO_MAILBOX: &str = "this Microsoft account has no Outlook.com or Microsoft 365 mailbox that Quatrelle can reach. \
 If its mail is with another provider (such as Gmail), add it with that provider's settings instead";
 
 fn status_error(status: u16, body: &[u8]) -> Result<()> {
@@ -367,11 +367,11 @@ impl Client {
     }
 
     /// The automatic replies.
-    pub fn vacation(&self) -> Result<mailcraft_model::job::Vacation> {
+    pub fn vacation(&self) -> Result<quatrelle_model::job::Vacation> {
         let v = self.get("/me/mailboxSettings/automaticRepliesSetting")?;
         let status = v.get("status").and_then(Value::as_str).unwrap_or("disabled").to_ascii_lowercase();
         let day = |k: &str| {
-            v.get(k).and_then(|d| d.get("dateTime")).and_then(Value::as_str).and_then(|d| d.get(..10)).filter(|d| mailcraft_model::job::is_day(d))
+            v.get(k).and_then(|d| d.get("dateTime")).and_then(Value::as_str).and_then(|d| d.get(..10)).filter(|d| quatrelle_model::job::is_day(d))
         };
         let scheduled = status == "scheduled";
         let reply = |k: &str| {
@@ -384,7 +384,7 @@ impl Client {
             "contactsonly" => "known",
             _ => "",
         };
-        Ok(mailcraft_model::job::Vacation {
+        Ok(quatrelle_model::job::Vacation {
             enabled: status != "disabled",
             subject: String::new(),
             external: (!external.is_empty() && external != text).then_some(external),
@@ -395,7 +395,7 @@ impl Client {
         })
     }
 
-    pub fn set_vacation(&self, v: &mailcraft_model::job::Vacation) -> Result<()> {
+    pub fn set_vacation(&self, v: &quatrelle_model::job::Vacation) -> Result<()> {
         let html = |t: &str| t.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('\n', "<br>");
         let dated = v.from.is_some() || v.until.is_some();
         let audience = match v.outside.as_str() {
@@ -430,14 +430,14 @@ impl Client {
     }
 
     /// The Inbox's rules, as Graph keeps them (made in Outlook on the web, or here).
-    pub fn message_rules(&self) -> Result<Vec<mailcraft_model::organize::ForeignRule>> {
+    pub fn message_rules(&self) -> Result<Vec<quatrelle_model::organize::ForeignRule>> {
         let v = self.get("/me/mailFolders/inbox/messageRules?$select=id,displayName,isEnabled&$top=500")?;
         Ok(v.get("value")
             .and_then(Value::as_array)
             .map(|list| {
                 list.iter()
                     .filter_map(|r| {
-                        Some(mailcraft_model::organize::ForeignRule {
+                        Some(quatrelle_model::organize::ForeignRule {
                             account: String::new(),
                             id: r.get("id")?.as_str()?.to_string(),
                             name: r.get("displayName").and_then(Value::as_str).unwrap_or("").to_string(),
@@ -463,7 +463,7 @@ impl Client {
         self.send_raw("DELETE", &format!("/me/mailFolders/inbox/messageRules/{}", seg(id)), "application/json", Vec::new()).map(drop)
     }
 
-    /// Create, change and remove the Inbox rules Graph runs, from MailCraft's rules, as
+    /// Create, change and remove the Inbox rules Graph runs, from Quatrelle's rules, as
     /// [`ews::Client::set_inbox_rules`](crate::ews::Client::set_inbox_rules) does.
     pub fn set_message_rules(&self, wanted: &[(Rule, Option<String>)], delete: &[String]) -> Result<Vec<(String, String)>> {
         if wanted.is_empty() && delete.is_empty() {

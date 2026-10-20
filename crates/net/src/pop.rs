@@ -10,9 +10,9 @@
 
 use std::io::{BufRead, BufReader, Read, Write};
 
-use mailcraft_mime as mime;
-use mailcraft_model::{AccountConfig, Flags, Folder, FolderRole, MessageKey, Security, ServerConfig, sort_newest_first};
-use mailcraft_store::{FolderState, Store};
+use quatrelle_mime as mime;
+use quatrelle_model::{AccountConfig, Flags, Folder, FolderRole, MessageKey, Security, ServerConfig, sort_newest_first};
+use quatrelle_store::{FolderState, Store};
 
 use crate::stream::{self, Stream};
 use crate::sync::SyncReport;
@@ -506,7 +506,7 @@ mod tests {
     #[test]
     fn new_mail_comes_down_once_and_stays_on_the_server_unless_asked() {
         let server = fake::serve(vec![("u1".into(), mail("One", "")), ("u2".into(), mail("Two", ".a line starting with a dot\r\n"))]);
-        let dir = std::env::temp_dir().join(format!("mailcraft-pop-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("quatrelle-pop-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let store = Store::open(&dir).unwrap();
         let cfg = ServerConfig { host: "127.0.0.1".into(), port: server.port, security: Security::None };
@@ -547,7 +547,7 @@ mod tests {
     fn server_copies_go_after_days_or_once_deleted_for_good() {
         let day = 86_400;
         let server = fake::serve(vec![("u1".into(), mail("One", "")), ("u2".into(), mail("Two", "")), ("u3".into(), mail("Three", ""))]);
-        let dir = std::env::temp_dir().join(format!("mailcraft-pop-keep-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("quatrelle-pop-keep-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let store = Store::open(&dir).unwrap();
         let cfg = ServerConfig { host: "127.0.0.1".into(), port: server.port, security: Security::None };
@@ -605,12 +605,12 @@ mod tests {
 
     #[test]
     fn a_pop_account_works_through_the_pool() {
-        use mailcraft_model::job::Secret;
-        use mailcraft_model::{Event, Flag, Job, Op, SyncStatus};
+        use quatrelle_model::job::Secret;
+        use quatrelle_model::{Event, Flag, Job, Op, SyncStatus};
         use std::time::{Duration, Instant};
         let server = fake::serve(vec![("u1".into(), mail("Welcome", "")), ("u2".into(), mail("Invoice", ""))]);
         let (smtp_port, smtp) = crate::smtp::tests::serve_once();
-        let dir = std::env::temp_dir().join(format!("mailcraft-pop-pool-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("quatrelle-pop-pool-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let store = Store::open(&dir).unwrap();
         let mut pool = crate::worker::Pool::new(store.clone(), std::sync::Arc::new(crate::worker::MemoryCredentials::default()));

@@ -29,7 +29,7 @@ impl Session {
         let account = self.exchange_account(account)?;
         let email = email.trim().to_ascii_lowercase();
         let ok =
-            mailcraft_model::addr::parse_list(&email).is_ok_and(|l| l.len() == 1 && l.first().is_some_and(|a| a.email.eq_ignore_ascii_case(&email)));
+            quatrelle_model::addr::parse_list(&email).is_ok_and(|l| l.len() == 1 && l.first().is_some_and(|a| a.email.eq_ignore_ascii_case(&email)));
         if !ok || email.contains('/') {
             return Err(CmdError::Params(format!("not an email address: {email}")));
         }

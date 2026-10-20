@@ -1,10 +1,10 @@
-//! Where MailCraft keeps its things, and moving its data files (as Outlook moves a `.pst`).
+//! Where Quatrelle keeps its things, and moving its data files (as Outlook moves a `.pst`).
 //!
 //! As Outlook keeps each account in a `.pst` in Documents\Outlook Files and its settings
-//! elsewhere, MailCraft keeps each account in a data file (`<address>.mailcraft`) in
-//! Documents\MailCraft Files ([`files_dir`]), and its account list and window state in the
+//! elsewhere, Quatrelle keeps each account in a data file (`<address>.quatrelle`) in
+//! Documents\Quatrelle Files ([`files_dir`]), and its account list and window state in the
 //! per-user app folder ([`base_root`]). The data files' folder can be moved: the move is asked
-//! for while MailCraft runs ([`schedule_move`]) and carried out when it next starts, before
+//! for while Quatrelle runs ([`schedule_move`]) and carried out when it next starts, before
 //! anything is open ([`apply_pending_move`]); then `location.json` in the app folder points at
 //! the new folder. The old files go only once every file has been copied and checked.
 
@@ -17,7 +17,7 @@ const LOCATION: &str = "location.json";
 /// In the app folder: a move asked for, carried out at the next start.
 const PENDING: &str = "move-pending.json";
 /// The data files' folder, in Documents (or wherever it's moved to inside a folder in use).
-pub const FILES_FOLDER: &str = "MailCraft Files";
+pub const FILES_FOLDER: &str = "Quatrelle Files";
 
 #[derive(serde::Serialize, serde::Deserialize)]
 struct Pointer {
@@ -34,29 +34,35 @@ fn write_pointer(file: &Path, path: &Path) -> Result<(), String> {
     crate::write_atomic(file, &json).map_err(|e| e.to_string())
 }
 
-/// The per-user app folder: `%APPDATA%\MailCraft` on Windows, `~/Library/Application
-/// Support/MailCraft` on macOS, `$XDG_DATA_HOME/mailcraft` (or `~/.local/share/mailcraft`)
+/// The per-user app folder: `%APPDATA%\Quatrelle` on Windows, `~/Library/Application
+/// Support/Quatrelle` on macOS, `$XDG_DATA_HOME/quatrelle` (or `~/.local/share/quatrelle`)
 /// elsewhere.
 pub fn base_root() -> Option<PathBuf> {
+    // The folder this app was forked from is taken over the first time (see `legacy`): its
+    // settings, its accounts and its mail stay where they were.
     if cfg!(target_os = "windows") {
-        return std::env::var_os("APPDATA").map(|d| PathBuf::from(d).join("MailCraft"));
+        let appdata = std::env::var_os("APPDATA").map(PathBuf::from)?;
+        return Some(crate::legacy::take_over(&appdata, "Quatrelle", crate::legacy::OLD_APP));
     }
     let home = std::env::var_os("HOME").map(PathBuf::from)?;
     if cfg!(target_os = "macos") {
-        return Some(home.join("Library").join("Application Support").join("MailCraft"));
+        let support = home.join("Library").join("Application Support");
+        return Some(crate::legacy::take_over(&support, "Quatrelle", crate::legacy::OLD_APP));
     }
-    match std::env::var_os("XDG_DATA_HOME").filter(|d| !d.is_empty()) {
-        Some(x) => Some(PathBuf::from(x).join("mailcraft")),
-        None => Some(home.join(".local").join("share").join("mailcraft")),
-    }
+    let base = match std::env::var_os("XDG_DATA_HOME").filter(|d| !d.is_empty()) {
+        Some(x) => PathBuf::from(x),
+        None => home.join(".local").join("share"),
+    };
+    Some(crate::legacy::take_over(&base, "quatrelle", crate::legacy::OLD_APP))
 }
 
-/// Where the data files go unless moved: "MailCraft Files" in Documents (wherever the system
+/// Where the data files go unless moved: "Quatrelle Files" in Documents (wherever the system
 /// keeps Documents), or in the app folder when there's no Documents folder.
 pub fn default_files_dir(base: &Path) -> PathBuf {
     #[cfg(not(target_arch = "wasm32"))]
     if let Some(docs) = dirs::document_dir() {
-        return docs.join(FILES_FOLDER);
+        // An earlier version's folder is taken over, its data files with it.
+        return crate::legacy::take_over(&docs, FILES_FOLDER, crate::legacy::OLD_FILES);
     }
     base.join(FILES_FOLDER)
 }
@@ -75,8 +81,8 @@ fn has_files(p: &Path) -> bool {
     fs::read_dir(p).is_ok_and(|mut d| d.next().is_some())
 }
 
-/// Ask for the data files to move into `to` when MailCraft next starts; returns the folder
-/// they'll be in. A folder that already has other files gets a "MailCraft Files" folder inside
+/// Ask for the data files to move into `to` when Quatrelle next starts; returns the folder
+/// they'll be in. A folder that already has other files gets a "Quatrelle Files" folder inside
 /// it; moving into, or above, the folder in use is refused.
 pub fn schedule_move(base: &Path, to: &Path) -> Result<PathBuf, String> {
     if !to.is_absolute() {
@@ -177,7 +183,7 @@ mod tests {
     use super::*;
 
     fn temp(name: &str) -> PathBuf {
-        let d = std::env::temp_dir().join(format!("mailcraft-location-{name}-{}", std::process::id()));
+        let d = std::env::temp_dir().join(format!("quatrelle-location-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&d);
         fs::create_dir_all(&d).unwrap();
         d
@@ -186,8 +192,8 @@ mod tests {
     /// An app folder whose data files were moved to `files` (as if from Documents).
     fn seed(base: &Path, files: &Path) {
         fs::create_dir_all(files).unwrap();
-        fs::write(files.join("zoe@studio.example.mailcraft"), vec![7u8; 3 << 20]).unwrap();
-        fs::write(files.join("old.mailcraft"), b"small").unwrap();
+        fs::write(files.join("zoe@studio.example.quatrelle"), vec![7u8; 3 << 20]).unwrap();
+        fs::write(files.join("old.quatrelle"), b"small").unwrap();
         fs::create_dir_all(base).unwrap();
         write_pointer(&base.join(LOCATION), files).unwrap();
     }
@@ -201,11 +207,11 @@ mod tests {
         // Asked for: nothing moves yet.
         assert_eq!(schedule_move(&base, &elsewhere).unwrap(), elsewhere);
         assert_eq!(pending_move(&base), Some(elsewhere.clone()));
-        assert!(first.join("old.mailcraft").exists() && !elsewhere.exists());
+        assert!(first.join("old.quatrelle").exists() && !elsewhere.exists());
         // At the next start: copied, checked, pointed at, and the old ones gone.
         assert_eq!(apply_pending_move(&base).unwrap(), Some(elsewhere.clone()));
         assert_eq!(files_dir(&base), elsewhere);
-        assert_eq!(fs::read(elsewhere.join("zoe@studio.example.mailcraft")).unwrap(), vec![7u8; 3 << 20]);
+        assert_eq!(fs::read(elsewhere.join("zoe@studio.example.quatrelle")).unwrap(), vec![7u8; 3 << 20]);
         assert!(!first.exists(), "the old folder went once empty");
         assert_eq!(pending_move(&base), None);
         assert_eq!(apply_pending_move(&base).unwrap(), None, "done once");
@@ -219,7 +225,7 @@ mod tests {
         seed(&base, &files);
         assert!(schedule_move(&base, Path::new("relative")).is_err());
         assert!(schedule_move(&base, &files.join("inner")).is_err(), "not into itself");
-        // A folder with other files in it gets a "MailCraft Files" folder inside.
+        // A folder with other files in it gets a "Quatrelle Files" folder inside.
         let docs = t.join("Documents");
         fs::create_dir_all(&docs).unwrap();
         fs::write(docs.join("cv.pdf"), b"%PDF").unwrap();
@@ -232,7 +238,7 @@ mod tests {
         write_pointer(&base.join(PENDING), &blocked.join("x")).unwrap();
         assert!(apply_pending_move(&base).is_err());
         assert_eq!(files_dir(&base), files);
-        assert!(files.join("old.mailcraft").exists() && pending_move(&base).is_none());
+        assert!(files.join("old.quatrelle").exists() && pending_move(&base).is_none());
         // A damaged pointer is ignored.
         fs::write(base.join(LOCATION), b"{nope").unwrap();
         assert_eq!(files_dir(&base), default_files_dir(&base));
