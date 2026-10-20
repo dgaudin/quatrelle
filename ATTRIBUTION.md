@@ -41,6 +41,7 @@ are rendered by `cargo xtask icons` from MailCraft's own drawing in `xtask/src/i
 | `assets/dictionaries/fr_FR.dic.gz` | Dicollecte | [Dicollecte](https://www.dicollecte.org/) (`hunspell-fr`), gzipped unchanged | MPL-2.0 (of its MPL/LGPL/GPL triple licence) |
 | `assets/icons/fluent/LICENSE.txt` | Microsoft Corporation | [fluentui-system-icons](https://github.com/microsoft/fluentui-system-icons/blob/main/LICENSE) (the licence of the icons beside it) | MIT |
 | `assets/icons/fluent/add_20_regular.svg` | Microsoft Corporation | Fluent UI System Icons, `@fluentui/svg-icons` 1.1.292, unchanged | MIT |
+| `assets/icons/fluent/alert_20_regular.svg` | Microsoft Corporation | Fluent UI System Icons, `@fluentui/svg-icons` 1.1.292, unchanged | MIT |
 | `assets/icons/fluent/archive_20_regular.svg` | Microsoft Corporation | Fluent UI System Icons, `@fluentui/svg-icons` 1.1.292, unchanged | MIT |
 | `assets/icons/fluent/arrow_enter_20_regular.svg` | Microsoft Corporation | Fluent UI System Icons, `@fluentui/svg-icons` 1.1.292, unchanged | MIT |
 | `assets/icons/fluent/arrow_forward_20_regular.svg` | Microsoft Corporation | Fluent UI System Icons, `@fluentui/svg-icons` 1.1.292, unchanged | MIT |

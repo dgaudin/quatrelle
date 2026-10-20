@@ -139,7 +139,17 @@ pub fn event_of(it: &El) -> Option<CalEvent> {
     let body = it.child("Body");
     let content = body.map(|b| b.text.clone()).unwrap_or_default();
     let html = body.and_then(|b| b.attr("BodyType")).is_some_and(|t| t.eq_ignore_ascii_case("HTML"));
+    // A Teams or Zoom invitation's join link, whole, from the HTML (its text wraps long ones).
+    let join_url = if html {
+        mailcraft_mime::html_links(&content).into_iter().find(|l| mailcraft_model::ical::is_meeting_link(l)).unwrap_or_default()
+    } else {
+        String::new()
+    };
     let description = if html { mailcraft_mime::html_to_text(&content) } else { content };
+    // Outlook's reminder: set, and how long before the start.
+    let reminder = (it.text_of("ReminderIsSet") == Some("true"))
+        .then(|| it.text_of("ReminderMinutesBeforeStart").and_then(|m| m.trim().parse::<i64>().ok()))
+        .flatten();
     let mut attendees = Vec::new();
     for list in ["RequiredAttendees", "OptionalAttendees"] {
         if let Some(l) = it.child(list) {
@@ -169,6 +179,8 @@ pub fn event_of(it: &El) -> Option<CalEvent> {
         uid,
         summary: text(it, "Subject"),
         description: description.trim().to_string(),
+        join_url,
+        reminder,
         location: text(it, "Location"),
         start,
         end,
@@ -206,6 +218,11 @@ fn event_fields(e: &CalEvent) -> Vec<(&'static str, String)> {
     ]);
     if let Some(r) = e.rrule.as_deref().and_then(|r| recurrence_xml(r, e.start)) {
         f.push(("Recurrence", r));
+    }
+    // After Recurrence in EWS's schema, as Outlook writes it.
+    f.push(("ReminderIsSet", format!("<t:ReminderIsSet>{}</t:ReminderIsSet>", e.reminder.is_some())));
+    if let Some(m) = e.reminder {
+        f.push(("ReminderMinutesBeforeStart", format!("<t:ReminderMinutesBeforeStart>{m}</t:ReminderMinutesBeforeStart>")));
     }
     f
 }
@@ -686,6 +703,20 @@ fn resolve(c: &Client, dn: &str) -> Option<String> {
 }
 
 /// The calendar folder: this mailbox's, or someone else's by their address.
+/// The name the server gives one of the account's own special folders (`calendar`, `contacts`):
+/// the mailbox's language's ("Agenda", "Contactpersonen"). `None` when it doesn't say.
+fn folder_name(c: &Client, distinguished: &str) -> Option<String> {
+    let m = c
+        .call_one(&format!(
+            "<m:GetFolder><m:FolderShape><t:BaseShape>IdOnly</t:BaseShape><t:AdditionalProperties>\
+             <t:FieldURI FieldURI=\"folder:DisplayName\"/></t:AdditionalProperties></m:FolderShape>\
+             <m:FolderIds><t:DistinguishedFolderId Id=\"{distinguished}\"/></m:FolderIds></m:GetFolder>"
+        ))
+        .ok()?;
+    let name: String = m.find("DisplayName")?.text.trim().chars().take(120).collect();
+    (!name.is_empty()).then_some(name)
+}
+
 fn calendar_folder(owner: Option<&str>) -> String {
     match owner {
         Some(email) => format!(
@@ -817,8 +848,9 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
             out.events.push(StoredEvent { calendar: CALENDAR.into(), href, etag, event, dirty: false });
         }
     }
-    let mut calendars =
-        vec![CalendarInfo { id: CALENDAR.into(), name: "Calendar".into(), color: 0, read_only: false, ctag: String::new(), group: String::new() }];
+    // Named as the server names it, in the mailbox's language ("Agenda"), as Outlook shows it.
+    let own = folder_name(c, "calendar").unwrap_or_else(|| "Calendar".into());
+    let mut calendars = vec![CalendarInfo { id: CALENDAR.into(), name: own, color: 0, read_only: false, ctag: String::new(), group: String::new() }];
     out.synced_calendars.push(CALENDAR.into());
     // Other people's calendars: those opened here by their address, and those Outlook keeps in
     // the groups of its Calendar pane (under the group's name). Their mailbox's calendar folder
@@ -831,22 +863,39 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
         read_notes(c, pim, &mut out);
         return Ok(out);
     }
-    let mut others: Vec<(String, String, String)> = pim.shared.iter().map(|e| (e.clone(), e.clone(), String::new())).collect();
+    // Opened here by their address, then the calendars of the shared mailboxes the account opens
+    // (Outlook lists a shared mailbox's calendar with its mail), then those Outlook keeps in the
+    // groups of its Calendar pane, under the group's name. `asked` says which were opened by hand:
+    // theirs is the one that says why it's missing.
+    let mut others: Vec<(String, String, String, bool)> = pim.shared.iter().map(|e| (e.clone(), e.clone(), String::new(), true)).collect();
+    for m in c.shared_mailboxes() {
+        if !others.iter().any(|(e, _, _, _)| e.eq_ignore_ascii_case(&m.address)) {
+            others.push((m.address, m.name, String::new(), false));
+        }
+    }
     match calendar_links(c) {
         Ok(links) => {
             for l in links {
-                if !others.iter().any(|(e, _, _)| *e == l.email) {
-                    others.push((l.email, l.name, l.group));
+                match others.iter_mut().find(|(e, _, _, _)| *e == l.email) {
+                    Some(o) => {
+                        if !l.name.is_empty() {
+                            o.1 = l.name.clone();
+                        }
+                        if o.2.is_empty() {
+                            o.2 = l.group.clone();
+                        }
+                    }
+                    None => others.push((l.email, l.name, l.group, false)),
                 }
             }
         }
         Err(e) => log::info!("no calendar groups: {e}"),
     }
-    let ticked = others.iter().filter(|(e, _, _)| !pim.not_read.contains(&mailcraft_model::pim::shared_calendar_id(e))).count();
+    let ticked = others.iter().filter(|(e, _, _, _)| !pim.not_read.contains(&mailcraft_model::pim::shared_calendar_id(e))).count();
     if !others.is_empty() {
         log::info!("{} other people's calendars, {ticked} ticked and read", others.len());
     }
-    for (n, (email, name, group)) in others.iter().enumerate() {
+    for (n, (email, name, group, asked)) in others.iter().enumerate() {
         let id = mailcraft_model::pim::shared_calendar_id(email);
         let parent = calendar_folder(Some(&c.address_of(email)));
         // Editable when the folder's rights say so, or (some servers say nothing useful about
@@ -882,7 +931,13 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
                 }
                 out.synced_calendars.push(id.clone());
             }
-            Err(e) => out.errors.push(format!("{email}'s calendar: {e}")),
+            // One asked for by hand says why it's missing; a shared mailbox whose calendar
+            // isn't shared with the account just has none here.
+            Err(e) if *asked => out.errors.push(format!("{email}'s calendar: {e}")),
+            Err(e) => {
+                log::info!("shared mailbox {email}: no calendar ({e})");
+                continue;
+            }
         }
         calendars.push(CalendarInfo {
             id,
@@ -982,7 +1037,8 @@ fn read_contacts(c: &Client, out: &mut DavSync) -> Result<()> {
             out.cards.push(StoredCard { book: CONTACTS.into(), href: format!("contact:{}", card.uid), etag, card, dirty: false });
         }
     }
-    out.books = Some(vec![BookInfo { id: CONTACTS.into(), name: "Contacts".into(), read_only: false, ctag: String::new() }]);
+    let own = folder_name(c, "contacts").unwrap_or_else(|| "Contacts".into());
+    out.books = Some(vec![BookInfo { id: CONTACTS.into(), name: own, read_only: false, ctag: String::new() }]);
     out.synced_books.push(CONTACTS.into());
     Ok(())
 }

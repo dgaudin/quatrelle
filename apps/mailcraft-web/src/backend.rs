@@ -439,6 +439,7 @@ async fn job(sh: &Rcs, id: &str, j: Job) {
         Job::FlushOutbox { .. } | Job::SyncDav { .. } => {}
         Job::Start { .. }
         | Job::SmtpPassword { .. }
+        | Job::CheckUpdates
         | Job::Remove { .. }
         | Job::FetchUrl { .. }
         | Job::Discover { .. }

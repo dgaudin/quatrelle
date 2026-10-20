@@ -40,10 +40,16 @@ pub struct EventForm {
     pub can_invite: bool,
     /// The user was invited and hasn't answered.
     pub needs_reply: bool,
+    /// Its reminder: minutes before the start (0: when it starts); `None`: none.
+    pub reminder: Option<i64>,
     pub read_only: bool,
     /// Its categories, and every category there is (name, colour) to pick from.
     pub categories: Vec<String>,
     pub all_categories: Vec<(String, u8)>,
+    /// The web addresses in its place and notes, and the one that joins it online (Teams, Zoom…):
+    /// shown as links to open, as the notes box can't open them.
+    pub links: Vec<String>,
+    pub join: Option<String>,
     pub error: Option<String>,
 }
 
@@ -130,6 +136,7 @@ impl EventForm {
             organizer: e.organizer.as_ref().map(|o| if o.name.is_empty() { o.email.clone() } else { format!("{} <{}>", o.name, o.email) }),
             attendees: e.attendees.iter().map(|a| (if a.name.is_empty() { a.email.clone() } else { a.name.clone() }, a.partstat.clone())).collect(),
             needs_reply: e.attendees.iter().any(|a| mine.contains(&a.email.to_ascii_lowercase()) && a.partstat == "NEEDS-ACTION"),
+            reminder: e.reminder,
             guests: e
                 .attendees
                 .iter()
@@ -137,6 +144,8 @@ impl EventForm {
                 .collect::<Vec<_>>()
                 .join(", "),
             can_invite: e.organizer.as_ref().is_none_or(|o| mine.contains(&o.email.to_ascii_lowercase())),
+            links: e.links(),
+            join: e.join_link(),
             read_only,
             categories: e.categories.clone(),
             all_categories: all_categories(s, &e.categories),
@@ -159,6 +168,7 @@ impl EventForm {
             "allDay": self.all_day,
             "repeat": if self.repeat.is_empty() { "none" } else { self.repeat.as_str() },
             "categories": self.categories,
+            "reminder": self.reminder,
         });
         if self.can_invite {
             p["attendees"] = json!(self.guests.trim());
@@ -268,6 +278,13 @@ fn footer_rule(ui: &mut Ui, t: &Tokens) {
 pub fn event(ui: &mut Ui, f: &mut EventForm, t: &Tokens, acts: &mut Vec<Action>) -> bool {
     ui.set_width(540.0);
     form_header(ui, t, Ok(Icon::Calendar), if f.uid.is_some() { "Event" } else { "New event" });
+    // An online meeting (Teams, Zoom…): Join, as Outlook has it, read-only calendar or not.
+    if let Some(url) = f.join.clone() {
+        if ui.add(egui::Button::new(RichText::new(tl!("Join meeting")).color(t.on_accent).strong()).fill(t.accent)).on_hover_text(&url).clicked() {
+            acts.push(Action::OpenUrl(url));
+        }
+        ui.add_space(8.0);
+    }
     ui.add_enabled_ui(!f.read_only, |ui| {
         let w = ui.available_width();
         ui.add(
@@ -320,6 +337,21 @@ pub fn event(ui: &mut Ui, f: &mut EventForm, t: &Tokens, acts: &mut Vec<Action>)
                 });
             });
         });
+        // Outlook's reminder: how long before it starts (or none).
+        form_row(ui, t, true, Some(Icon::Reminder), "Reminder", |ui| {
+            let label = |m: Option<i64>| match m {
+                None => tl!("None").to_string(),
+                Some(m) => crate::calendar::reminder_text(m),
+            };
+            ui.allocate_ui_with_layout(vec2(200.0, FIELD_H), egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                egui::ComboBox::from_id_salt("event-reminder").width(194.0).selected_text(label(f.reminder)).show_ui(ui, |ui| {
+                    ui.selectable_value(&mut f.reminder, None, label(None));
+                    for m in [0, 5, 10, 15, 30, 60, 120, 1440] {
+                        ui.selectable_value(&mut f.reminder, Some(m), label(Some(m)));
+                    }
+                });
+            });
+        });
         form_row(ui, t, true, Some(Icon::Location), "Location", |ui| {
             field(ui, &mut f.location, tl!("Add a place"), f32::INFINITY);
         });
@@ -367,6 +399,20 @@ pub fn event(ui: &mut Ui, f: &mut EventForm, t: &Tokens, acts: &mut Vec<Action>)
         }
         area(ui, &mut f.description, tl!("Notes"), 4);
     });
+    // The notes' links, to open (the box above only edits them): a Teams invitation's "Join the
+    // meeting now", a document, a dial-in page.
+    if !f.links.is_empty() {
+        ui.add_space(4.0);
+        ui.horizontal_wrapped(|ui| {
+            ui.label(RichText::new(tl!("Links:")).color(t.dim).small());
+            for url in &f.links {
+                let shown = url.split_once("://").map_or(url.as_str(), |(_, r)| r);
+                if ui.link(RichText::new(crate::widgets::shorten(shown, 48)).small()).on_hover_text(url).clicked() {
+                    acts.push(Action::OpenUrl(url.clone()));
+                }
+            }
+        });
+    }
     if f.recurring {
         ui.add_space(4.0);
         ui.label(RichText::new(tl!("Changes apply to every occurrence.")).color(t.faint).small());

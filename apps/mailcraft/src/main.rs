@@ -26,46 +26,51 @@ use mailcraft_ui_egui::{Backend, MailApp, Services, VideoFrame};
 struct Keychain;
 
 mod appearance;
+mod display;
+mod graphics;
 mod logfile;
+mod portable;
+mod secrets;
 #[cfg(windows)]
 mod toast;
 mod video;
+#[cfg(test)]
+mod windows_manifest;
 #[cfg(all(unix, not(target_os = "macos")))]
 mod xdnd;
 
 const SERVICE: &str = "MailCraft";
 
-fn entry(a: &AccountConfig) -> Result<keyring::Entry, String> {
-    keyring::Entry::new(SERVICE, &format!("{}|{}|{}", a.id, a.username, a.imap.host)).map_err(|e| e.to_string())
+/// The keychain entry an account's password or sign-in is kept under.
+fn entry(a: &AccountConfig) -> String {
+    format!("{}|{}|{}", a.id, a.username, a.imap.host)
 }
 
 /// The outgoing server's own password, for an account whose SMTP sign-in is its own.
-fn smtp_entry(a: &AccountConfig) -> Result<keyring::Entry, String> {
-    keyring::Entry::new(SERVICE, &format!("{}|smtp", a.id)).map_err(|e| e.to_string())
+fn smtp_entry(a: &AccountConfig) -> String {
+    format!("{}|smtp", a.id)
 }
 
+// Kept whatever their length (`secrets.rs`): a Microsoft 365 sign-in is longer than one Windows
+// Credential Manager entry holds (issue #5).
 impl Credentials for Keychain {
     fn get(&self, account: &AccountConfig) -> Option<String> {
-        entry(account).ok()?.get_password().ok()
+        secrets::load(SERVICE, &entry(account))
     }
     fn set(&self, account: &AccountConfig, password: &str) -> Result<(), String> {
-        entry(account)?.set_password(password).map_err(|e| e.to_string())
+        secrets::store(SERVICE, &entry(account), password)
     }
     fn delete(&self, account: &AccountConfig) {
-        if let Ok(e) = entry(account) {
-            let _ = e.delete_credential();
-        }
+        secrets::remove(SERVICE, &entry(account));
     }
     fn get_smtp(&self, account: &AccountConfig) -> Option<String> {
-        smtp_entry(account).ok()?.get_password().ok()
+        secrets::load(SERVICE, &smtp_entry(account))
     }
     fn set_smtp(&self, account: &AccountConfig, password: &str) -> Result<(), String> {
-        smtp_entry(account)?.set_password(password).map_err(|e| e.to_string())
+        secrets::store(SERVICE, &smtp_entry(account), password)
     }
     fn delete_smtp(&self, account: &AccountConfig) {
-        if let Ok(e) = smtp_entry(account) {
-            let _ = e.delete_credential();
-        }
+        secrets::remove(SERVICE, &smtp_entry(account));
     }
 }
 
@@ -94,6 +99,9 @@ struct Desktop {
     moved: Option<Result<PathBuf, String>>,
     /// The desktop's light or dark style and accent colour, kept up to date.
     style: appearance::Watch,
+    /// Portable mode (`portable.rs`): MailCraft's name isn't written to Windows' registry.
+    #[cfg(windows)]
+    portable: bool,
 }
 
 impl Services for Desktop {
@@ -298,7 +306,7 @@ impl Services for Desktop {
             .unwrap_or_default()
     }
     fn clipboard_picture(&mut self) -> Option<Vec<u8>> {
-        let img = arboard::Clipboard::new().ok()?.get_image().ok()?;
+        let img = read_clipboard(|c| c.get_image().ok())?;
         let (w, h) = (u32::try_from(img.width).ok()?, u32::try_from(img.height).ok()?);
         let rgba = image::RgbaImage::from_raw(w, h, img.bytes.into_owned())?;
         let mut png = Vec::new();
@@ -321,13 +329,16 @@ impl Services for Desktop {
     }
     fn notify(&mut self, title: &str, body: &str) {
         let (title, body) = (title.to_string(), body.to_string());
+        #[cfg(windows)]
+        let portable = self.portable;
         // Off the UI thread: the notification service can be slow, or missing.
         std::thread::spawn(move || {
             let mut n = notify_rust::Notification::new();
             n.summary(&title).body(&body).appname("MailCraft");
             // Windows names a toast after its app id (PowerShell's when none is given).
+            // (Portable: its name isn't written to the registry.)
             #[cfg(windows)]
-            if toast::registered() {
+            if !portable && toast::registered() {
                 n.app_id(toast::APP_ID);
             }
             if let Err(e) = n.show() {
@@ -453,10 +464,19 @@ fn drag_out(_frame: &eframe::Frame, _path: PathBuf) {}
 struct App {
     app: MailApp,
     state_path: Option<PathBuf>,
+    /// The window's GPU device, until its errors are only logged (`graphics::log_errors`).
+    gpu: Option<eframe::wgpu::Device>,
+    frames: u32,
 }
 
 impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
+        self.frames = self.frames.saturating_add(1);
+        if self.frames >= graphics::STARTUP_FRAMES
+            && let Some(device) = self.gpu.take()
+        {
+            graphics::log_errors(&device);
+        }
         self.app.ui(ui);
         if let Some(path) = self.app.take_drag_out() {
             drag_out(frame, path);
@@ -468,33 +488,55 @@ impl eframe::App for App {
         {
             let _ = mailcraft_engine::store::write_atomic(p, &bytes);
         }
+        // Issue #4: attachments handed to other apps, and pictures made of them, go with
+        // MailCraft when it's portable or keeps an account online only (one still open in an
+        // app stays until that app lets it go).
+        let s = &self.app.session;
+        if s.portable || s.accounts.iter().any(|a| a.config.keeps_online()) {
+            mailcraft_engine::store::clear_scratch();
+        }
+        // macOS: end here, before eframe tears the window down. AccessKit's macOS adapter
+        // subclasses the window's content view and puts its class back on teardown; AppKit's
+        // Touch Bar support observes that view, so in the next display cycle it throws ("not
+        // registered") and quitting ends in a crash report (DeckCraft and GridCraft found). Every
+        // way of quitting comes here, and nothing after it is needed: the window's state is
+        // saved, the log is unbuffered and the data files keep what they committed.
+        #[cfg(target_os = "macos")]
+        std::process::exit(0);
     }
 }
 
 fn main() -> eframe::Result {
-    let args: Vec<String> = std::env::args().skip(1).collect();
+    // `args()` panics on an argument that isn't Unicode (a file name in another encoding).
+    let args: Vec<String> = std::env::args_os().skip(1).map(|a| a.to_string_lossy().into_owned()).collect();
     if args.iter().any(|a| a == "--version" || a == "-V") {
-        println!("{}", version_line());
+        say_out(&version_line());
         return Ok(());
     }
     let cmd_args = args.clone();
     let sample = args.iter().any(|a| a == "--sample");
     // Text pasted from Outlook, Word or a web page keeps its look.
-    mailcraft_ui_egui::set_clipboard_html(|| arboard::Clipboard::new().ok()?.get().html().ok().filter(|h| !h.trim().is_empty()));
+    mailcraft_ui_egui::set_clipboard_html(|| read_clipboard(|c| c.get().html().ok()).filter(|h| !h.trim().is_empty()));
     // Each account is a data file in Documents\MailCraft Files (as Outlook keeps .pst files in
     // Outlook Files); the account list and the app's state stay in the app folder. The data files'
     // folder can be moved (File › Options) when it's the usual one: a move asked for is carried
     // out now, before anything opens them.
-    let base = (!sample && !args.iter().any(|a| a == "--data") && std::env::var_os("MAILCRAFT_DATA").is_none_or(|d| d.is_empty()))
-        .then(location::base_root)
-        .flatten();
+    let chosen = sample || args.iter().any(|a| a == "--data") || std::env::var_os("MAILCRAFT_DATA").is_some_and(|d| !d.is_empty());
+    // Portable (issue #4): `portable.txt` beside the app keeps everything in MailCraftData there.
+    let portable = if chosen { portable::Portable::default() } else { portable::current().clone() };
+    let base = (!chosen && portable.dir.is_none()).then(location::base_root).flatten();
     let mut moved = match base.as_deref().map(location::apply_pending_move) {
         Some(Ok(Some(to))) => Some(Ok(to)),
         Some(Err(e)) => Some(Err(e)),
         _ => None,
     };
-    let data =
-        args.iter().position(|a| a == "--data").and_then(|i| args.get(i + 1)).map(PathBuf::from).or_else(mailcraft_engine::store::default_root);
+    let data = args
+        .iter()
+        .position(|a| a == "--data")
+        .and_then(|i| args.get(i + 1))
+        .map(PathBuf::from)
+        .or_else(|| portable.dir.clone())
+        .or_else(mailcraft_engine::store::default_root);
     let root = data.map(|d| if sample { d.join("sample") } else { d });
     // The sample mailbox stays a folder of files; anything else keeps its data files beside it
     // (`--data`) or in Documents.
@@ -505,6 +547,14 @@ fn main() -> eframe::Result {
     if let Some(path) = logfile::start(root.as_deref(), echo) {
         log::info!("{} started; log at {}", version_line(), path.display());
     }
+    if let Some(dir) = &portable.dir {
+        log::info!("portable: everything is kept in {}", dir.display());
+    }
+    if let Some(why) = &portable.unwritable {
+        log::warn!("{why}");
+        say(why);
+    }
+
     let (now, offset) = Desktop::default().clock();
     let store = root.as_ref().and_then(|r| {
         let opened = match &files {
@@ -518,7 +568,7 @@ fn main() -> eframe::Result {
         match opened {
             Ok(s) => Some(s),
             Err(e) => {
-                eprintln!("mailcraft: the mail cache can't be opened ({e}); running without one");
+                say(&format!("the mail cache can't be opened ({e}); running without one"));
                 None
             }
         }
@@ -527,11 +577,14 @@ fn main() -> eframe::Result {
         && let Some(s) = &store
         && let Err(e) = mailcraft_engine::sample::seed_if_empty_at(s, now, i64::from(offset))
     {
-        eprintln!("mailcraft: the sample mailbox couldn't be created: {e}");
+        say(&format!("the sample mailbox couldn't be created: {e}"));
     }
     let mut session = Session::open(store.clone(), Clock::new(now, offset));
     let desktop_data = store.as_ref().and_then(Store::data_files_dir);
     session.oauth_available = mailcraft_net::oauth::available();
+    session.portable = portable.dir.is_some();
+    // A release build's commit, so File › About can tell its test build from a later one.
+    session.build_sha = option_env!("MAILCRAFT_BUILD_SHA").filter(|s| !s.trim().is_empty()).map(str::to_string);
     let state_path = root.as_ref().map(|r| r.join("ui.json"));
 
     // The main window opens where it was, at the size it was, maximized if it was.
@@ -551,18 +604,120 @@ fn main() -> eframe::Result {
             .with_icon(Arc::new(app_icon())),
         ..Default::default()
     };
-    let options = match main_place {
+    let mut options = match main_place {
         Some(p) => eframe::NativeOptions { viewport: p.apply(options.viewport), ..options },
         None => options,
     };
+    graphics::configure(&mut options);
+    // Linux and the BSDs: through XWayland on a Wayland desktop, so attachments drag in and out.
+    #[cfg(all(unix, not(target_os = "macos")))]
+    if display::choose_from_env() == display::Choice::X11 {
+        options.event_loop_builder = Some(Box::new(|b| {
+            use winit::platform::x11::EventLoopBuilderExtX11;
+            b.with_x11();
+        }));
+    }
+    // A window that can't open says why, rather than the app leaving without a word (or
+    // staying in the background); a panic on the way is caught for that too.
+    let ran = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        run(options, sample, store, session, desktop_data, base, moved, state_path, cmd_args)
+    }));
+    let failed = match ran {
+        Ok(Ok(())) => return Ok(()),
+        Ok(Err(e)) => e.to_string(),
+        Err(p) => p
+            .downcast_ref::<&str>()
+            .map(|s| (*s).to_string())
+            .or_else(|| p.downcast_ref::<String>().cloned())
+            .unwrap_or_else(|| "it stopped unexpectedly".into()),
+    };
+    log::error!("the window couldn't open: {failed}");
+    say(&format!("the window couldn't open: {failed}"));
+    rfd::MessageDialog::new()
+        .set_level(rfd::MessageLevel::Error)
+        .set_title("MailCraft")
+        .set_description(cant_open(&failed))
+        .set_buttons(rfd::MessageButtons::Ok)
+        .show();
+    std::process::exit(1)
+}
+
+/// How long a clipboard read may wait on the app that copied (Linux and the BSDs).
+#[cfg(all(unix, not(target_os = "macos")))]
+const CLIPBOARD_WAIT: std::time::Duration = std::time::Duration::from_secs(2);
+
+/// Read the clipboard. On Linux and the BSDs the read runs on a thread of its own and gives up
+/// after [`CLIPBOARD_WAIT`]: a Wayland or X11 read waits on the app that copied, with no time
+/// limit of its own, so an app that hangs would hang MailCraft's window too (FigCraft found).
+#[cfg(all(unix, not(target_os = "macos")))]
+fn read_clipboard<T: Send + 'static>(read: fn(&mut arboard::Clipboard) -> Option<T>) -> Option<T> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::Builder::new()
+        .name("clipboard".into())
+        .spawn(move || {
+            let _ = tx.send(arboard::Clipboard::new().ok().and_then(|mut c| read(&mut c)));
+        })
+        .ok()?;
+    rx.recv_timeout(CLIPBOARD_WAIT).ok().flatten()
+}
+
+/// Read the clipboard (Windows' and macOS's reads don't wait on the app that copied).
+#[cfg(not(all(unix, not(target_os = "macos"))))]
+fn read_clipboard<T>(read: fn(&mut arboard::Clipboard) -> Option<T>) -> Option<T> {
+    read(&mut arboard::Clipboard::new().ok()?)
+}
+
+/// Tell standard error (and the log). `eprintln!` panics when standard error is a broken pipe,
+/// which a launch from another program can leave it as (PdfCraft and GridCraft found).
+fn say(what: &str) {
+    log::warn!("{what}");
+    let _ = std::io::Write::write_fmt(&mut std::io::stderr(), format_args!("mailcraft: {what}\n"));
+}
+
+/// Tell standard output, as `println!` would without its panic on a closed pipe.
+fn say_out(what: &str) {
+    let _ = std::io::Write::write_fmt(&mut std::io::stdout(), format_args!("{what}\n"));
+}
+
+/// What the message box says when the window can't open.
+fn cant_open(why: &str) -> String {
+    let (help, log) = if cfg!(windows) {
+        (
+            "Updating it may help, or starting MailCraft with the environment variable WGPU_FORCE_FALLBACK_ADAPTER=1, which draws it with \
+             Windows' software renderer.",
+            "%APPDATA%\\MailCraft\\mailcraft.log",
+        )
+    } else {
+        ("Updating it may help.", "mailcraft.log, in MailCraft's data folder")
+    };
+    format!("MailCraft's window couldn't open:\n{why}\n\nThis is usually the graphics driver. {help}\n\nThe details are in {log}.")
+}
+
+/// Open the window and run the app until it closes.
+#[allow(clippy::too_many_arguments)]
+fn run(
+    options: eframe::NativeOptions,
+    sample: bool,
+    store: Option<Store>,
+    session: Session,
+    desktop_data: Option<PathBuf>,
+    base: Option<PathBuf>,
+    moved: Option<Result<PathBuf, String>>,
+    state_path: Option<PathBuf>,
+    cmd_args: Vec<String>,
+) -> eframe::Result {
     eframe::run_native(
         "MailCraft",
         options,
         Box::new(move |cc| {
             let args = cmd_args;
+            let app_portable = session.portable;
             let backend: Box<dyn Backend> = match store {
                 Some(store) => {
-                    let mut pool = Pool::new(store, Arc::new(Keychain));
+                    // Portable: passwords and sign-ins in memory only, never the system's keychain.
+                    let creds: Arc<dyn Credentials> =
+                        if app_portable { Arc::new(mailcraft_net::worker::MemoryCredentials::default()) } else { Arc::new(Keychain) };
+                    let mut pool = Pool::new(store, creds);
                     // Folders read on two connections of their own: the main one stays free
                     // for what someone is waiting on (see `SyncOptions::parallel`).
                     pool.opts.parallel = 2;
@@ -574,7 +729,19 @@ fn main() -> eframe::Result {
             };
             let ctx = cc.egui_ctx.clone();
             let style = appearance::Watch::start(move || ctx.request_repaint());
-            let mut app = MailApp::new(session, backend, Box::new(Desktop { data: desktop_data, base, moved, style, ..Default::default() }));
+            let mut app = MailApp::new(
+                session,
+                backend,
+                Box::new(Desktop {
+                    data: desktop_data,
+                    base,
+                    moved,
+                    style,
+                    #[cfg(windows)]
+                    portable: app_portable,
+                    ..Default::default()
+                }),
+            );
             if sample {
                 app.ui.title_base = "MailCraft – Sample mailbox".into();
             }
@@ -616,11 +783,12 @@ fn main() -> eframe::Result {
                     "ui.rules" => app.ui.dialog = Some(mailcraft_ui_egui::Dialog::Rules),
                     _ => match serde_json::from_str(params) {
                         Ok(p) => app.run(id, p),
-                        Err(e) => eprintln!("--cmd {id}: bad JSON: {e}"),
+                        Err(e) => say(&format!("--cmd {id}: bad JSON: {e}")),
                     },
                 }
             }
-            Ok(Box::new(App { app, state_path }))
+            let gpu = cc.wgpu_render_state.as_ref().map(|rs| rs.device.clone());
+            Ok(Box::new(App { app, state_path, gpu, frames: 0 }))
         }),
     )
 }
@@ -629,6 +797,57 @@ fn main() -> eframe::Result {
 mod tests {
     use super::*;
 
+    /// Issue #5: a Microsoft 365 sign-in (a refresh token of about 2,000 characters, and more
+    /// with more claims) couldn't be kept in Windows' Credential Manager. Run here against the
+    /// real keychain, under an entry of the test's own that it removes.
+    #[cfg(windows)]
+    #[test]
+    fn a_long_sign_in_is_kept_in_the_keychain() {
+        let token: String = (0..2000).map(|i| char::from(b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_."[i * 7 % 65])).collect();
+        let mut a = AccountConfig::guess("keychain-test@contoso.example");
+        a.id = format!("test-{}", std::process::id());
+        let k = Keychain;
+        let kept = k.set(&a, &token);
+        let back = k.get(&a);
+        k.delete(&a);
+        assert_eq!(kept, Ok(()));
+        assert_eq!(back.as_deref(), Some(token.as_str()));
+        assert_eq!(k.get(&a), None, "removed with the account");
+    }
+
+    /// Trying to break it, on the real keychain: a password kept by an earlier version (UTF-16,
+    /// one entry) still reads and is replaced; a secret growing and shrinking leaves no stale
+    /// parts; a very long one and one in other scripts come back whole; removing leaves nothing.
+    #[cfg(windows)]
+    #[test]
+    fn the_keychain_keeps_secrets_growing_shrinking_and_old() {
+        let user = format!("test-{}|grow|example", std::process::id());
+        let parts_left = || {
+            (2..=secrets::MAX_PARTS)
+                .filter(|n| keyring::Entry::new(SERVICE, &format!("{user}|part{n}")).is_ok_and(|e| e.get_secret().is_ok()))
+                .count()
+        };
+        // As an earlier MailCraft kept it.
+        keyring::Entry::new(SERVICE, &user).unwrap().set_password("old pässword").unwrap();
+        assert_eq!(secrets::load(SERVICE, &user).as_deref(), Some("old pässword"));
+        let long = "t".repeat(7000);
+        secrets::store(SERVICE, &user, &long).unwrap();
+        assert_eq!(secrets::load(SERVICE, &user).as_deref(), Some(long.as_str()));
+        assert_eq!(parts_left(), 2, "7000 bytes in three entries");
+        secrets::store(SERVICE, &user, "short").unwrap();
+        assert_eq!(secrets::load(SERVICE, &user).as_deref(), Some("short"));
+        assert_eq!(parts_left(), 0, "the longer one's parts went");
+        let huge: String = "密码🔑-".repeat(3000);
+        secrets::store(SERVICE, &user, &huge).unwrap();
+        assert_eq!(secrets::load(SERVICE, &user).as_deref(), Some(huge.as_str()));
+        secrets::remove(SERVICE, &user);
+        assert_eq!(secrets::load(SERVICE, &user), None);
+        assert_eq!(parts_left(), 0, "every part removed");
+        assert!(secrets::store(SERVICE, &user, &"x".repeat(200_000)).is_err(), "too long is refused, not cut");
+        assert_eq!(secrets::load(SERVICE, &user), None, "and nothing half-kept");
+        secrets::remove(SERVICE, &user);
+    }
+
     /// eframe is used without its default features, and copy and paste are one of them since
     /// 0.37: the app had no clipboard (nothing pasted anywhere) until it was named.
     #[test]
@@ -636,6 +855,14 @@ mod tests {
         let manifest = include_str!("../Cargo.toml");
         let eframe = manifest.lines().find(|l| l.trim_start().starts_with("eframe")).unwrap_or("");
         assert!(eframe.contains("\"clipboard\""), "eframe without its clipboard feature: {eframe}");
+    }
+
+    /// A window that can't open says why, in plain sentences (no gaps left from the source).
+    #[test]
+    fn a_window_that_cant_open_says_why() {
+        let m = cant_open("no graphics adapter");
+        assert!(m.starts_with("MailCraft's window couldn't open:\nno graphics adapter\n"), "{m}");
+        assert!(m.contains("mailcraft.log") && !m.contains("  "), "{m}");
     }
 
     #[test]

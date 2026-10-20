@@ -72,9 +72,103 @@ pub struct CalEvent {
     /// Its categories (`CATEGORIES`), which colour it in the calendar as Outlook colours them.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub categories: Vec<String>,
+    /// The reminder's distance from the start, in minutes (15: a quarter of an hour before; a
+    /// negative one sounds after it started). `None` when there's none. Read from the event's
+    /// `VALARM`, as Outlook's reminder.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reminder: Option<i64>,
     /// Properties MailCraft doesn't read, kept as written (unfolded content lines).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub extra: Vec<String>,
+    /// The address to join it online, when the server gives one apart from its notes (Microsoft
+    /// Graph's `onlineMeeting.joinUrl`); otherwise found in its notes ([`CalEvent::join_link`]).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub join_url: String,
+}
+
+/// Most web addresses taken from an event's notes.
+const MAX_LINKS: usize = 20;
+
+/// The web addresses in a text, once each and in order: written out, or as the `[1]: https://…`
+/// footnotes an HTML body's links become when it's made text (a Teams invitation's "Join the
+/// meeting now"). Only `http` and `https`; a sentence's closing punctuation isn't part of one.
+pub fn links_in(text: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let lower = text.to_ascii_lowercase();
+    let mut at = 0;
+    while out.len() < MAX_LINKS {
+        let next = [lower.get(at..).and_then(|r| r.find("https://")), lower.get(at..).and_then(|r| r.find("http://"))].into_iter().flatten().min();
+        let Some(rel) = next else { break };
+        let start = at + rel;
+        let rest = text.get(start..).unwrap_or("");
+        let len = rest.find(|c: char| c.is_whitespace() || matches!(c, '<' | '>' | '"' | '\'' | '[' | ']' | '{' | '}' | '|')).unwrap_or(rest.len());
+        let mut link = rest.get(..len).unwrap_or("");
+        // Closing punctuation, and a closing bracket the link didn't open.
+        loop {
+            let trimmed = link.trim_end_matches(['.', ',', ';', ':', '!', '?']);
+            let trimmed = if trimmed.ends_with(')') && trimmed.matches('(').count() < trimmed.matches(')').count() {
+                trimmed.get(..trimmed.len() - 1).unwrap_or(trimmed)
+            } else {
+                trimmed
+            };
+            if trimmed.len() == link.len() {
+                break;
+            }
+            link = trimmed;
+        }
+        at = start + len.max(1);
+        let host_ok = link.split_once("://").is_some_and(|(_, r)| r.split(['/', '?', '#']).next().is_some_and(|h| h.contains('.') && h.len() < 256));
+        if host_ok && link.len() <= 4096 && !out.iter().any(|l| l == link) {
+            out.push(link.to_string());
+        }
+    }
+    out
+}
+
+/// Whether a web address joins an online meeting: Microsoft Teams, Zoom, Google Meet, Webex,
+/// GoTo Meeting, Jitsi, Whereby, Skype.
+pub fn is_meeting_link(url: &str) -> bool {
+    let lower = url.to_ascii_lowercase();
+    let Some(rest) = lower.strip_prefix("https://").or_else(|| lower.strip_prefix("http://")) else { return false };
+    let (host, path) = rest.split_once('/').unwrap_or((rest, ""));
+    let host = host.split(':').next().unwrap_or(host);
+    let on = |domain: &str| host == domain || host.ends_with(&format!(".{domain}"));
+    (on("teams.microsoft.com") && (path.starts_with("l/meetup-join") || path.starts_with("meet/")))
+        || (on("teams.live.com") && path.starts_with("meet"))
+        || (on("zoom.us") && (path.starts_with("j/") || path.starts_with("w/") || path.starts_with("my/")))
+        || on("meet.google.com")
+        || (on("webex.com") && (path.contains("j.php") || path.starts_with("meet") || path.contains("/meet")))
+        || (on("gotomeeting.com") && path.starts_with("join"))
+        || on("meet.goto.com")
+        || on("meet.jit.si")
+        || on("whereby.com")
+        || on("join.skype.com")
+}
+
+impl CalEvent {
+    /// The address that joins it online: the server's own, else the first meeting link in its
+    /// location or notes (as Outlook's Join finds a Teams or Zoom meeting).
+    pub fn join_link(&self) -> Option<String> {
+        if is_meeting_link(&self.join_url) {
+            return Some(self.join_url.clone());
+        }
+        links_in(&self.location).into_iter().chain(links_in(&self.description)).find(|l| is_meeting_link(l))
+    }
+
+    /// Every web address in its location and notes (and its join address), once each.
+    pub fn links(&self) -> Vec<String> {
+        let mut out = links_in(&self.location);
+        for l in links_in(&self.description) {
+            if !out.contains(&l) {
+                out.push(l);
+            }
+        }
+        if !self.join_url.is_empty() && !out.contains(&self.join_url) && self.join_url.starts_with("http") {
+            out.insert(0, self.join_url.clone());
+        }
+        out.truncate(MAX_LINKS);
+        out
+    }
 }
 
 /// A calendar file: what it asks (`METHOD`, for invitations) and its events.
@@ -446,6 +540,9 @@ pub fn parse(text: &str, local_offset: i64) -> ICalendar {
 
     let mut ev: Option<(CalEvent, Option<i64>)> = None;
     let mut depth_in_event = 0usize;
+    // The `VALARM` being read, as written: its trigger becomes the reminder, and an alarm
+    // MailCraft can't read is kept whole.
+    let mut alarm: Option<Vec<String>> = None;
     for l in &all {
         let n = l.name.as_str();
         if n == "BEGIN" {
@@ -456,20 +553,40 @@ pub fn parse(text: &str, local_offset: i64) -> ICalendar {
                 continue;
             }
             if ev.is_some() {
-                // A nested component (VALARM): kept as written.
                 depth_in_event += 1;
-                if let Some((e, _)) = ev.as_mut() {
+                if what == "VALARM" && depth_in_event == 1 && alarm.is_none() {
+                    alarm = Some(vec![l.raw.clone()]);
+                } else if let Some(a) = alarm.as_mut() {
+                    a.push(l.raw.clone());
+                } else if let Some((e, _)) = ev.as_mut() {
                     e.extra.push(l.raw.clone());
                 }
             }
             continue;
         }
         if n == "END" {
-            if let Some((e, _)) = ev.as_mut()
-                && depth_in_event > 0
-            {
+            if ev.is_some() && depth_in_event > 0 {
                 depth_in_event -= 1;
-                e.extra.push(l.raw.clone());
+                if let Some(lines) = alarm.as_mut() {
+                    lines.push(l.raw.clone());
+                    if depth_in_event == 0 {
+                        let lines = alarm.take().unwrap_or_default();
+                        match alarm_minutes(&lines) {
+                            Some(m) => {
+                                if let Some((e, _)) = ev.as_mut() {
+                                    e.reminder = Some(m);
+                                }
+                            }
+                            None => {
+                                if let Some((e, _)) = ev.as_mut() {
+                                    e.extra.extend(lines);
+                                }
+                            }
+                        }
+                    }
+                } else if let Some((e, _)) = ev.as_mut() {
+                    e.extra.push(l.raw.clone());
+                }
                 continue;
             }
             if l.value.trim().eq_ignore_ascii_case("VEVENT")
@@ -495,7 +612,10 @@ pub fn parse(text: &str, local_offset: i64) -> ICalendar {
             continue;
         };
         if depth_in_event > 0 {
-            e.extra.push(l.raw.clone());
+            match alarm.as_mut() {
+                Some(lines) => lines.push(l.raw.clone()),
+                None => e.extra.push(l.raw.clone()),
+            }
             continue;
         }
         match n {
@@ -597,6 +717,83 @@ fn mailbox(prop: &str, a: &Attendee) -> String {
 }
 
 /// One `VEVENT`, folded.
+/// The minutes a `VALARM`'s trigger is from its start, when it says so plainly (`-PT15M`,
+/// `-P1D`…); `None` for an absolute time or one MailCraft can't read, whose alarm is then kept
+/// as written.
+fn alarm_minutes(lines: &[String]) -> Option<i64> {
+    for line in lines {
+        let line = line.trim();
+        if let Some(v) = line.get(..8).filter(|v| v.eq_ignore_ascii_case("TRIGGER;")) {
+            // Parameters (RELATED=END, VALUE=DATE-TIME) aren't read: the alarm is kept whole.
+            let _ = v;
+            return None;
+        }
+        if let Some(v) = line.strip_prefix("TRIGGER:") {
+            return duration_minutes(v);
+        }
+    }
+    None
+}
+
+/// `-PT15M` and its like, in minutes; `None` when it isn't a duration MailCraft reads.
+fn duration_minutes(v: &str) -> Option<i64> {
+    let mut s = v.trim();
+    let sign = match s.chars().next() {
+        Some('-') => {
+            s = s.get(1..)?;
+            -1
+        }
+        Some('+') => {
+            s = s.get(1..)?;
+            1
+        }
+        _ => 1,
+    };
+    s = s.strip_prefix('P')?;
+    let (mut date, mut time) = match s.split_once('T') {
+        Some((d, t)) => (d, Some(t)),
+        None => (s, None),
+    };
+    let mut secs: i64 = 0;
+    while !date.is_empty() {
+        let n = take_unit(&mut date, 'D')?;
+        secs = secs.checked_add(n.checked_mul(86_400)?)?;
+    }
+    if let Some(t) = time.as_mut() {
+        while !t.is_empty() {
+            let n = if let Some(h) = take_unit(t, 'H') {
+                h.checked_mul(3_600)?
+            } else if let Some(m) = take_unit(t, 'M') {
+                m.checked_mul(60)?
+            } else {
+                take_unit(t, 'S')?
+            };
+            secs = secs.checked_add(n)?;
+        }
+    }
+    // `-PT15M` is a quarter of an hour before the start: minutes before it are positive here.
+    let minutes = -sign * (secs / 60);
+    // A fortnight either way is as far as an alarm is ever set.
+    (minutes.abs() <= 20_160).then_some(minutes)
+}
+
+/// The number before `unit` at the front of `s` (`30` in `30M`), `s` keeping what follows.
+fn take_unit(s: &mut &str, unit: char) -> Option<i64> {
+    let i = s.find(unit)?;
+    let n: i64 = s.get(..i)?.parse().ok()?;
+    *s = s.get(i + unit.len_utf8()..)?;
+    Some(n)
+}
+
+/// A trigger for `minutes` from the start, as a `VALARM` writes it (`-PT15M`, `PT0S`).
+fn trigger(minutes: i64) -> String {
+    match minutes {
+        0 => "PT0S".to_string(),
+        m if m > 0 => format!("-PT{m}M"),
+        m => format!("PT{}M", -m),
+    }
+}
+
 pub fn write_event(e: &CalEvent, now: i64, out: &mut String) {
     let mut lines: Vec<String> = vec!["BEGIN:VEVENT".into(), format!("UID:{}", e.uid.replace(['\r', '\n'], "")), format!("DTSTAMP:{}", stamp(now))];
     if e.all_day {
@@ -638,6 +835,14 @@ pub fn write_event(e: &CalEvent, now: i64, out: &mut String) {
     }
     for a in &e.attendees {
         lines.push(mailbox("ATTENDEE", a));
+    }
+    if let Some(m) = e.reminder {
+        // Outlook's reminder: a display alarm, its trigger a plain duration from the start.
+        lines.push("BEGIN:VALARM".into());
+        lines.push("ACTION:DISPLAY".into());
+        lines.push(format!("DESCRIPTION:{}", escape(if e.summary.is_empty() { "Reminder" } else { &e.summary })));
+        lines.push(format!("TRIGGER:{}", trigger(m)));
+        lines.push("END:VALARM".into());
     }
     lines.extend(e.extra.iter().map(|x| x.replace(['\r', '\n'], "")));
     lines.push("END:VEVENT".into());
@@ -888,6 +1093,90 @@ pub fn occurrences(events: &[CalEvent], from: i64, to: i64) -> Vec<Occurrence> {
 
 #[cfg(test)]
 mod tests {
+    /// A `VALARM` becomes the reminder (and goes back out as one); an alarm MailCraft can't
+    /// read is kept whole rather than lost.
+    #[test]
+    fn a_valarm_is_the_reminder() {
+        let ics = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:r1\r\nDTSTART:20261016T140000Z\r\nDTEND:20261016T150000Z\r\n                   SUMMARY:Review\r\nBEGIN:VALARM\r\nACTION:DISPLAY\r\nDESCRIPTION:Review\r\nTRIGGER:-PT15M\r\nEND:VALARM\r\n\
+                   END:VEVENT\r\nEND:VCALENDAR\r\n";
+        let cal = parse(ics, 0);
+        let e = cal.events.first().expect("one event");
+        assert_eq!(e.reminder, Some(15), "a quarter of an hour before");
+        assert!(e.extra.is_empty(), "the alarm isn't kept twice: {:?}", e.extra);
+        // Written out again, it's still there, and read back the same.
+        let out = write(std::slice::from_ref(e), None, 1_791_979_200);
+        assert!(out.contains("BEGIN:VALARM") && out.contains("TRIGGER:-PT15M"), "{out}");
+        assert_eq!(parse(&out, 0).events.first().and_then(|e| e.reminder), Some(15));
+        // Hours, days, and after the start.
+        for (trigger, minutes) in [("-PT2H", 120), ("-P1D", 1440), ("-PT1H30M", 90), ("PT0S", 0), ("PT5M", -5)] {
+            let e = parse(
+                &format!(
+                    "BEGIN:VEVENT\r\nUID:t\r\nDTSTART:20261016T140000Z\r\nBEGIN:VALARM\r\nACTION:DISPLAY\r\nTRIGGER:{trigger}\r\nEND:VALARM\r\nEND:VEVENT\r\n"
+                ),
+                0,
+            );
+            assert_eq!(e.events.first().and_then(|e| e.reminder), Some(minutes), "{trigger}");
+        }
+        // An alarm with a time of its own (or one relative to the end) is kept as written.
+        let e = parse(
+            "BEGIN:VEVENT\r\nUID:t\r\nDTSTART:20261016T140000Z\r\nBEGIN:VALARM\r\nACTION:DISPLAY\r\nTRIGGER;VALUE=DATE-TIME:20261016T133000Z\r\nEND:VALARM\r\nEND:VEVENT\r\n",
+            0,
+        );
+        let e = e.events.first().expect("one event");
+        assert_eq!(e.reminder, None);
+        assert!(e.extra.iter().any(|l| l.contains("TRIGGER;VALUE=DATE-TIME")));
+        assert!(e.extra.iter().any(|l| l == "END:VALARM"));
+    }
+
+    /// Web addresses in an event's notes: written out or as footnotes, once each, without the
+    /// sentence's punctuation; and which one joins the meeting.
+    #[test]
+    fn an_events_links_and_the_one_that_joins_it() {
+        let notes = "Join here: https://zoom.us/j/9876543210?pwd=abc. Slides (https://docs.example.org/deck) attached.\n\
+                     [1]: https://teams.microsoft.com/l/meetup-join/19%3ameeting_x%40thread.v2/0\n\
+                     Again https://zoom.us/j/9876543210?pwd=abc, and ftp://files.example.org and http://localhost/x";
+        assert_eq!(
+            links_in(notes),
+            [
+                "https://zoom.us/j/9876543210?pwd=abc",
+                "https://docs.example.org/deck",
+                "https://teams.microsoft.com/l/meetup-join/19%3ameeting_x%40thread.v2/0",
+            ]
+        );
+        for meeting in [
+            "https://teams.microsoft.com/l/meetup-join/19%3a",
+            "https://teams.live.com/meet/9312",
+            "https://us02web.zoom.us/j/123",
+            "https://meet.google.com/abc-defg-hij",
+            "https://acme.webex.com/acme/j.php?MTID=m1",
+            "https://meet.jit.si/Standup",
+        ] {
+            assert!(is_meeting_link(meeting), "{meeting}");
+        }
+        for not in [
+            "https://docs.example.org/deck",
+            "https://zoom.us/pricing",
+            "https://teams.microsoft.com/",
+            "https://evil.example/zoom.us/j/1",
+            "javascript:alert(1)",
+        ] {
+            assert!(!is_meeting_link(not), "{not}");
+        }
+        // The first meeting link, from its place before its notes; the server's own first.
+        let e = CalEvent { location: "Microsoft Teams Meeting".into(), description: notes.into(), ..Default::default() };
+        assert_eq!(e.join_link().as_deref(), Some("https://zoom.us/j/9876543210?pwd=abc"));
+        let e = CalEvent { join_url: "https://teams.microsoft.com/l/meetup-join/own".into(), description: notes.into(), ..Default::default() };
+        assert_eq!(e.join_link().as_deref(), Some("https://teams.microsoft.com/l/meetup-join/own"));
+        assert_eq!(e.links().first().map(String::as_str), Some("https://teams.microsoft.com/l/meetup-join/own"));
+        assert_eq!(CalEvent::default().join_link(), None);
+        // Long or odd text doesn't run away.
+        let many = "https://a.example/x ".repeat(5000);
+        assert_eq!(links_in(&many).len(), 1);
+        let junk: String = (0..20_000).map(|i| char::from_u32(0x20 + (i * 7919) % 0x2000).unwrap_or('x')).collect();
+        let _ = links_in(&junk);
+        assert!(links_in("https://").is_empty() && links_in("http://x").is_empty());
+    }
+
     use super::*;
 
     fn at(y: i64, m: u32, d: u32, h: i64, mi: i64) -> i64 {
@@ -938,7 +1227,7 @@ SEQUENCE:2\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
         assert!(e.attendees[0].rsvp);
         assert_eq!(e.sequence, 2);
         assert!(e.extra.iter().any(|x| x.starts_with("X-MICROSOFT")), "unknown properties are kept");
-        assert!(e.extra.iter().any(|x| x == "TRIGGER:-PT15M"), "alarms too");
+        assert_eq!(e.reminder, Some(15), "its alarm, as the reminder");
         // In winter the same zone is +1.
         let winter = INVITE.replace("20261015T140000", "20261215T140000").replace("20261015T153000", "20261215T153000");
         assert_eq!(parse(&winter, 0).events[0].start, at(2026, 12, 15, 13, 0));

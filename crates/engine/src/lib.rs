@@ -24,10 +24,10 @@ pub use mailcraft_model as model;
 pub use mailcraft_store as store;
 pub use session::{
     ARRANGE_HEADINGS, AccountState, Arrange, Compose, FolderRef, ListFilter, ListLayout, MoveTarget, NotesOrder, Notice, Picture, Prefs, ReadInPane,
-    Reading, ReadingPane, Row, SearchScope, Session, VacationState, View,
+    Reading, ReadingPane, Row, SearchScope, Session, UpdateCheck, VacationState, View,
     invite::Invite,
-    parse_key,
-    pim::{AgendaItem, CalMode, Module, NoteRef, Person, parse_local},
+    newer_release, parse_key,
+    pim::{ACCOUNT_COLOR, AgendaItem, CalMode, Module, NoteRef, Person, parse_local},
 };
 
 #[derive(Debug, thiserror::Error, Clone, PartialEq)]

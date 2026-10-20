@@ -1209,6 +1209,29 @@ fn calendar_events_on_this_computer() {
     done(s);
 }
 
+/// A reminder is minutes before the start; it's kept through a change, and taken off when asked.
+#[test]
+fn a_reminder_is_set_kept_and_taken_off() {
+    let mut s = sample_session("reminder");
+    let uid =
+        s.run("event.create", &json!({"summary": "Review", "start": "2026-10-23T11:00", "end": "2026-10-23T12:00", "reminder": 15})).unwrap()["uid"]
+            .as_str()
+            .unwrap()
+            .to_string();
+    assert_eq!(s.find_event(&uid).unwrap().1.event.reminder, Some(15));
+    s.run("event.update", &json!({"uid": uid, "reminder": 1440})).unwrap();
+    assert_eq!(s.find_event(&uid).unwrap().1.event.reminder, Some(1440), "a day before");
+    // Kept as written, a VALARM in its calendar file.
+    let root = s.store.as_ref().unwrap().root().to_path_buf();
+    let mut again = Session::open(Some(Store::open(&root).unwrap()), mailcraft_model::dates::Clock::new(NOW, 0));
+    assert_eq!(again.find_event(&uid).unwrap().1.event.reminder, Some(1440));
+    again.run("event.update", &json!({"uid": uid, "reminder": null})).unwrap();
+    assert_eq!(again.find_event(&uid).unwrap().1.event.reminder, None, "taken off");
+    assert!(again.run("event.update", &json!({"uid": uid, "reminder": 99_999})).is_ok(), "nonsense is ignored, not a panic");
+    assert_eq!(again.find_event(&uid).unwrap().1.event.reminder, None);
+    done(s);
+}
+
 #[test]
 fn people_in_the_address_book() {
     let mut s = sample_session("people");
@@ -3527,5 +3550,123 @@ fn the_outgoing_server_keeps_a_sign_in_of_its_own() {
     // Accounts that don't send over SMTP have none.
     let ews = json!({"email": "riley@contoso.example", "password": "pw", "ews": "mail.contoso.example", "smtpUsername": "x", "smtpPassword": "y"});
     assert!(s.run("account.add", &ews).is_err());
+    done(s);
+}
+
+/// Issue #1 (an Update button): MailCraft's releases are test builds of a version; a newer
+/// version is an update, and so is a later test build of this one when this build is an earlier
+/// test build (known by its commit). A developer's build, ahead or level, is up to date.
+#[test]
+fn update_checks_tell_newer_releases_and_test_builds() {
+    use mailcraft_model::job::Release;
+    let r = |tag: &str, version: &str, build: u32, commit: &str| Release {
+        tag: tag.into(),
+        version: version.into(),
+        build,
+        commit: commit.into(),
+        page: format!("https://github.com/ZIDAN44/mailcraft/releases/tag/{tag}"),
+        download: String::new(),
+    };
+    let sha15 = "8bdba5ceb26a8b910102731c634d6998b8ab25d1";
+    let sha14 = "23c7fb53b86cce9856b1b9fc76bf32f9ef397b83";
+    let list = vec![r("v0.19.0-test.15", "0.19.0", 15, sha15), r("v0.19.0-test.14", "0.19.0", 14, sha14), r("v0.18.0-test.13", "0.18.0", 13, "")];
+    let newer = |version: &str, sha: Option<&str>| crate::newer_release(version, sha, &list).map(|r| r.tag.clone());
+    assert_eq!(newer("0.18.0", None).as_deref(), Some("v0.19.0-test.15"), "a newer version");
+    assert_eq!(newer("0.19.0", Some(sha14)).as_deref(), Some("v0.19.0-test.15"), "a later test build of this version");
+    assert_eq!(newer("0.19.0", Some(&sha14[..9])).as_deref(), Some("v0.19.0-test.15"), "a short commit");
+    assert_eq!(newer("0.19.0", Some(sha15)), None, "this is the newest");
+    assert_eq!(newer("0.19.0", None), None, "a developer's build of the newest version");
+    assert_eq!(newer("0.20.0", Some("0123456789abcdef")), None, "a developer's build ahead");
+    assert_eq!(newer("1.0", None), None);
+    assert_eq!(crate::newer_release("0.19.0", None, &[]), None);
+
+    // The command asks the network side; the answer decides what File › About shows.
+    let mut s = sample_session("updates");
+    s.run("app.checkUpdates", &json!({})).unwrap();
+    assert_eq!(s.update, crate::UpdateCheck::Checking);
+    assert!(s.take_jobs().iter().any(|j| matches!(j, Job::CheckUpdates)));
+    let ahead = vec![r("v99.0.0-test.1", "99.0.0", 1, "")];
+    s.apply(Event::Releases { releases: ahead, error: None });
+    assert!(matches!(&s.update, crate::UpdateCheck::Available(r) if r.version == "99.0.0"));
+    s.apply(Event::Releases { releases: list.clone(), error: None });
+    assert!(matches!(&s.update, crate::UpdateCheck::UpToDate(_)), "{:?}", s.update);
+    s.apply(Event::Releases { releases: Vec::new(), error: Some("offline".into()) });
+    assert_eq!(s.update, crate::UpdateCheck::Failed("offline".into()));
+    done(s);
+}
+
+/// Issue #1: every account's own calendar was named "Calendar" in one colour, so they couldn't
+/// be told apart. An account's own calendar takes the account's colour (as its mail shows it),
+/// its events too; its other calendars keep theirs.
+#[test]
+fn each_accounts_calendar_has_the_accounts_colour() {
+    let mut s = sample_session("calendar-colours");
+    let a = s.run("account.add", &json!({"email": "zoe@example.org", "password": "pw"})).unwrap()["account"].as_str().unwrap().to_string();
+    let mut p = mailcraft_model::pim::Pim::default();
+    p.ensure_defaults();
+    s.pim.insert(a.clone(), p);
+    let colour = |s: &Session, account: &str, cal: &str| s.shown_calendars().into_iter().find(|c| c.0 == account && c.1 == cal).map(|c| c.3);
+    let (sample, zoe) = (colour(&s, "sample", mailcraft_model::pim::LOCAL).unwrap(), colour(&s, &a, mailcraft_model::pim::LOCAL).unwrap());
+    assert_ne!(sample, zoe, "two accounts' calendars, two colours");
+    assert_eq!(zoe, crate::ACCOUNT_COLOR + s.account(&a).unwrap().config.color);
+    assert_eq!(colour(&s, "sample", crate::sample::STUDIO_CALENDAR), Some(3), "another calendar keeps its own");
+    let (from, to) = (s.clock.now - 7 * 86_400, s.clock.now + 7 * 86_400);
+    assert!(s.agenda(from, to).iter().filter(|i| i.calendar == mailcraft_model::pim::LOCAL).all(|i| i.color == sample));
+    done(s);
+}
+
+/// Issue #4: an account kept online only (from when it's added, or switched in Options) has none
+/// of its mail kept on this computer: the store holds it in memory, its worker starts again with
+/// the change, and the next start holds it in memory from the outset. POP and the sample mailbox
+/// keep their mail here and can't be. A snoozed message of it is remembered without its subject.
+#[test]
+fn an_account_can_be_kept_online_only() {
+    let mut s = sample_session("online-only");
+    let store = s.store.clone().unwrap();
+    let a = s.run("account.add", &json!({"email": "zoe@example.org", "password": "pw", "onlineOnly": true})).unwrap()["account"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(s.account(&a).unwrap().config.keeps_online() && store.is_online_only(&a));
+    s.take_jobs();
+
+    assert_eq!(s.run("account.onlineOnly", &json!({"account": a, "on": false})).unwrap()["on"], false);
+    assert!(!store.is_online_only(&a));
+    assert!(s.take_jobs().iter().any(|j| matches!(j, Job::Start { account, .. } if account.id == a && !account.online_only)), "it starts again");
+    assert_eq!(s.run("account.onlineOnly", &json!({"account": a})).unwrap()["on"], true, "the other way");
+    assert!(store.is_online_only(&a));
+    assert!(
+        s.run("account.update", &json!({"account": a, "imapHost": "mail.example.org", "smtpHost": "mail.example.org", "onlineOnly": false})).is_ok()
+    );
+    assert!(!store.is_online_only(&a));
+    s.run("account.update", &json!({"account": a, "imapHost": "mail.example.org", "smtpHost": "mail.example.org", "onlineOnly": true})).unwrap();
+    assert!(store.is_online_only(&a));
+
+    assert!(s.run("account.onlineOnly", &json!({"account": "sample", "on": true})).is_err(), "the sample mailbox has no server");
+    assert!(!store.is_online_only("sample"));
+    let pop = json!({"email": "pop@example.org", "password": "pw", "pop": true, "popHost": "pop.example.org", "popPort": 995, "smtpHost": "smtp.example.org", "onlineOnly": true});
+    assert!(s.run("account.add", &pop).is_err(), "POP's mail has no other home");
+    assert!(s.accounts.iter().all(|x| x.config.email != "pop@example.org"));
+
+    // Snoozed: remembered without the subject (the sample mailbox's keeps it).
+    let snooze = |account: &str, subject: &str| mailcraft_model::organize::Snooze {
+        account: account.into(),
+        message_id: format!("<{}@example.org>", subject.len()),
+        folder: "Snoozed".into(),
+        back_to: "INBOX".into(),
+        until: NOW + 86_400,
+        subject: subject.into(),
+    };
+    // (One of an account that's gone, due: dropped, and the rest saved.)
+    let gone = mailcraft_model::organize::Snooze { until: NOW - 60, ..snooze("gone", "Gone") };
+    s.snoozes = vec![snooze(&a, "SECRET-SNOOZED"), snooze("sample", "Sample snoozed"), gone];
+    s.tick();
+    let saved = std::fs::read_to_string(store.root().join("snoozes.json")).unwrap();
+    assert!(!saved.contains("SECRET-SNOOZED") && saved.contains("Sample snoozed") && saved.contains(&a), "{saved}");
+
+    // Opened again: held in memory from the start.
+    let again = Session::open(Some(Store::open(store.root()).unwrap()), mailcraft_model::dates::Clock::new(NOW, 0));
+    assert!(again.store.as_ref().unwrap().is_online_only(&a));
+    assert!(!again.store.as_ref().unwrap().is_online_only("sample"));
     done(s);
 }

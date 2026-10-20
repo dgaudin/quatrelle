@@ -327,6 +327,19 @@ impl Pool {
     pub fn submit(&mut self, job: Job) {
         match job {
             Job::FetchUrl { url } => self.fetch_url(url),
+            Job::CheckUpdates => {
+                let sink = self.sink.clone();
+                let spawned = std::thread::Builder::new().name("mail-updates".into()).spawn(move || {
+                    let (releases, error) = match crate::updates::releases() {
+                        Ok(r) => (r, None),
+                        Err(e) => (Vec::new(), Some(e.to_string())),
+                    };
+                    sink.emit(Event::Releases { releases, error });
+                });
+                if let Err(e) = spawned {
+                    self.sink.emit(Event::Releases { releases: Vec::new(), error: Some(e.to_string()) });
+                }
+            }
             Job::SignIn { account } => self.sign_in(account),
             Job::Discover { email } => {
                 let sink = self.sink.clone();
@@ -637,6 +650,9 @@ impl Worker {
         let ops = store.load_ops(&acc.id).unwrap_or_default();
         let folders = store.load_folders(&acc.id).unwrap_or_default();
         let jstate = if acc.is_api() { jmap::State::load(&store, &acc.id) } else { jmap::State::default() };
+        // Online only (issue #4): nothing downloaded in full ahead of reading; a message comes
+        // when it's opened, and is held in memory only.
+        let opts = if acc.keeps_online() { SyncOptions { prefetch: 0, ..opts } } else { opts };
         Worker {
             acc,
             auth,
@@ -1545,7 +1561,7 @@ impl Worker {
             Job::SetServerRule { id, rule, ours, .. } => self.edit_server_rule(&id, &rule, ours),
             Job::DeleteServerRule { id, ours, .. } => self.change_server_rule(&id, None, true, ours),
             Job::FetchPhoto { email, contact, .. } => self.fetch_photo(&email, contact.as_deref()),
-            Job::FetchUrl { .. } | Job::Discover { .. } | Job::SignIn { .. } | Job::ImportPst { .. } | Job::ExportPst { .. } => {}
+            Job::FetchUrl { .. } | Job::Discover { .. } | Job::SignIn { .. } | Job::ImportPst { .. } | Job::ExportPst { .. } | Job::CheckUpdates => {}
             Job::Start { .. } | Job::SmtpPassword { .. } | Job::Remove { .. } | Job::WorkOffline { .. } | Job::SetSync { .. } => {}
         }
     }

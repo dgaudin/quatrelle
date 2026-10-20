@@ -988,3 +988,35 @@ month	May	mai
 	There's no message to check.	Aucun message à vérifier.
 	Check the spelling as you type	Vérifier l’orthographe au fil de la saisie
 	{from} – {to}	{from} – {to}
+	There's no folder to put the attachment in for another app	Aucun dossier où placer la pièce jointe pour une autre application
+	Check for updates	Rechercher des mises à jour
+	Checking…	Vérification…
+	Couldn't check for updates: {error}	Impossible de rechercher des mises à jour : {error}
+	Download	Télécharger
+	Join meeting	Rejoindre la réunion
+	Links:	Liens :
+	MailCraft {version} is available.	MailCraft {version} est disponible.
+	What's new	Nouveautés
+	You have the newest version.	Vous avez la version la plus récente.
+	Online only: keep none of this account's mail on this computer	En ligne uniquement : ne conserver aucun courrier de ce compte sur cet ordinateur
+	Online only: none of this account's mail is kept on this computer.	En ligne uniquement : aucun courrier de ce compte n'est conservé sur cet ordinateur.
+	Online only: {email}	En ligne uniquement : {email}
+	New message	Nouveau message
+	Open MailCraft to read it.	Ouvrez MailCraft pour le lire.
+	Its mail is read from the server and held in memory while MailCraft runs; nothing of it is written to this computer. Each message downloads when you open it. Mail waiting to be sent, changes made while offline, and calendar items, contacts and notes kept only in MailCraft are lost when it closes.	Son courrier est lu sur le serveur et gardé en mémoire tant que MailCraft est ouvert ; rien n'est écrit sur cet ordinateur. Chaque message est téléchargé à son ouverture. Le courrier en attente d'envoi, les modifications faites hors connexion et les éléments de calendrier, contacts et notes conservés uniquement dans MailCraft sont perdus à sa fermeture.
+	Portable: everything is kept in MailCraftData beside MailCraft, and passwords only until it closes.	Portable : tout est conservé dans MailCraftData à côté de MailCraft, et les mots de passe seulement jusqu'à sa fermeture.
+	When it starts	À l’heure du début
+	1 minute before	1 minute avant
+	{n} minutes before	{n} minutes avant
+	1 hour before	1 heure avant
+	{n} hours before	{n} heures avant
+	1 day before	1 jour avant
+	{n} days before	{n} jours avant
+	1 minute after	1 minute après
+	{n} minutes after	{n} minutes après
+	1 hour after	1 heure après
+	{n} hours after	{n} heures après
+	1 day after	1 jour après
+	{n} days after	{n} jours après
+	Reminder	Rappel
+	None	Aucun

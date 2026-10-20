@@ -988,3 +988,35 @@ month	May	mayo
 	There's no message to check.	No hay ningún mensaje que comprobar.
 	Check the spelling as you type	Comprobar la ortografía mientras se escribe
 	{from} – {to}	{from} – {to}
+	There's no folder to put the attachment in for another app	No hay ninguna carpeta donde dejar el adjunto para otra aplicación
+	Check for updates	Buscar actualizaciones
+	Checking…	Comprobando…
+	Couldn't check for updates: {error}	No se pudieron buscar actualizaciones: {error}
+	Download	Descargar
+	Join meeting	Unirse a la reunión
+	Links:	Vínculos:
+	MailCraft {version} is available.	MailCraft {version} está disponible.
+	What's new	Novedades
+	You have the newest version.	Tienes la versión más reciente.
+	Online only: keep none of this account's mail on this computer	Solo en línea: no guardar ningún correo de esta cuenta en este equipo
+	Online only: none of this account's mail is kept on this computer.	Solo en línea: no se guarda ningún correo de esta cuenta en este equipo.
+	Online only: {email}	Solo en línea: {email}
+	New message	Mensaje nuevo
+	Open MailCraft to read it.	Abre MailCraft para leerlo.
+	Its mail is read from the server and held in memory while MailCraft runs; nothing of it is written to this computer. Each message downloads when you open it. Mail waiting to be sent, changes made while offline, and calendar items, contacts and notes kept only in MailCraft are lost when it closes.	Su correo se lee del servidor y se mantiene en memoria mientras MailCraft está abierto; no se escribe nada en este equipo. Cada mensaje se descarga al abrirlo. El correo pendiente de envío, los cambios hechos sin conexión y los elementos de calendario, contactos y notas guardados solo en MailCraft se pierden al cerrarlo.
+	Portable: everything is kept in MailCraftData beside MailCraft, and passwords only until it closes.	Portátil: todo se guarda en MailCraftData junto a MailCraft, y las contraseñas solo hasta que se cierra.
+	When it starts	Al empezar
+	1 minute before	1 minuto antes
+	{n} minutes before	{n} minutos antes
+	1 hour before	1 hora antes
+	{n} hours before	{n} horas antes
+	1 day before	1 día antes
+	{n} days before	{n} días antes
+	1 minute after	1 minuto después
+	{n} minutes after	{n} minutos después
+	1 hour after	1 hora después
+	{n} hours after	{n} horas después
+	1 day after	1 día después
+	{n} days after	{n} días después
+	Reminder	Recordatorio
+	None	Ninguno

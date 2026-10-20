@@ -656,6 +656,7 @@ pub fn sample_pim(now: i64, offset: i64) -> mailcraft_model::pim::Pim {
         },
         CalEvent {
             location: "Screening room".into(),
+            reminder: Some(15),
             description: "Revised frames for scenes 4 to 7, and the colour key.".into(),
             organizer: Some(who("Zoe Park", "zoe@studio.example", "ACCEPTED")),
             attendees: vec![who("Riley Moreno", ME.1, "ACCEPTED"), who("Sam Okafor", "sam@studio.example", "ACCEPTED")],
