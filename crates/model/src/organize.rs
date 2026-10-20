@@ -198,10 +198,20 @@ pub fn actions_for(rules: &[Rule], m: &Summary) -> Vec<RuleAction> {
 /// A rule MailCraft didn't make but the account's server runs (Outlook's own, the server's web
 /// page, a Sieve script the user wrote): listed as it is, never changed from here — whoever made
 /// it owns it.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ForeignRule {
     pub account: String,
+    /// The id the server knows it by: what turns it off or removes it there.
+    pub id: String,
     pub name: String,
+    pub enabled: bool,
+    /// MailCraft knows every condition and action of it, so it can run it here.
+    pub runnable: bool,
+    /// The rule in MailCraft's terms, when it can be run here.
+    pub rule: Option<Rule>,
+    /// What it does, in a line (the server's own words where MailCraft has none).
+    pub summary: String,
 }
 
 /// A snoozed message: it waits in the Snoozed folder and comes back to `back_to` at `until`.

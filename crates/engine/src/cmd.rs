@@ -135,6 +135,18 @@ pub fn registry() -> Registry {
             s.set_rules(rules)
         })
         .params(r#"{"index": number}"#),
+        CommandSpec::new("rules.server.enabled", "Turn a server rule on or off", "Rules", |s, v| {
+            s.set_server_rule_enabled(p::req_str(v, "account")?, p::req_str(v, "id")?, p::bool(v, "enabled").unwrap_or(true))
+        })
+        .params(r#"{"account": string, "id": string, "enabled": bool}"#),
+        CommandSpec::new("rules.server.delete", "Remove a server rule", "Rules", |s, v| {
+            s.delete_server_rule(p::req_str(v, "account")?, p::req_str(v, "id")?)
+        })
+        .params(r#"{"account": string, "id": string}"#),
+        CommandSpec::new("rules.server.run", "Run a server rule now", "Rules", |s, v| {
+            s.run_server_rule(p::req_str(v, "account")?, p::req_str(v, "id")?)
+        })
+        .params(r#"{"account": string, "id": string}"#),
         CommandSpec::new("rules.export", "Export rules", "Home › Rules › Options", |s, v| {
             let path = p::req_str(v, "path")?;
             let bytes = s.rules_file()?;

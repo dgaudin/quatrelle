@@ -406,7 +406,10 @@ async fn job(sh: &Rcs, id: &str, j: Job) {
             emit(sh, Event::Vacation { account: id.to_string(), vacation, error });
         }
         // Rules on Exchange's server need the desktop app (the browser reaches JMAP accounts).
-        Job::SetServerRules { account, .. } | Job::GetServerRules { account, .. } => emit(
+        Job::SetServerRules { account, .. }
+        | Job::GetServerRules { account, .. }
+        | Job::SetServerRuleEnabled { account, .. }
+        | Job::DeleteServerRule { account, .. } => emit(
             sh,
             Event::ServerRules {
                 account: account.clone(),

@@ -2142,12 +2142,36 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Act
                 ui.add_space(10.0);
                 ui.label(RichText::new(tl!("On the server, made elsewhere")).color(t.dim).small().strong());
                 ui.add_space(2.0);
-                for f in &s.foreign_rules {
-                    let who =
-                        if s.accounts.len() > 1 { s.account(&f.account).map(|a| a.config.email.clone()).unwrap_or_default() } else { String::new() };
-                    let text = if who.is_empty() { format!("· {}", f.name) } else { format!("· {} — {}", f.name, who) };
-                    ui.label(RichText::new(text).color(t.faint).small());
-                }
+                // A mailbox can keep dozens (a web page's rules, Outlook's own): they scroll
+                // rather than pushing the dialog's buttons off the screen.
+                egui::ScrollArea::vertical().max_height(150.0).auto_shrink([false, true]).id_salt("server-rules").show(ui, |ui| {
+                    for f in &s.foreign_rules {
+                        ui.horizontal(|ui| {
+                            // The server's own rule: it runs whether MailCraft is open or not, so
+                            // its switch acts there, not here.
+                            let mut on = f.enabled;
+                            if ui.checkbox(&mut on, "").on_hover_text(tl!("On / off on the server")).changed() {
+                                acts.push(Action::Run("rules.server.enabled", json!({"account": f.account, "id": f.id, "enabled": on})));
+                            }
+                            let who = if s.accounts.len() > 1 {
+                                s.account(&f.account).map(|a| a.config.email.clone()).unwrap_or_default()
+                            } else {
+                                String::new()
+                            };
+                            let text = if who.is_empty() { f.name.clone() } else { format!("{} — {}", f.name, who) };
+                            ui.label(RichText::new(text).color(if f.enabled { t.text } else { t.faint }).small()).on_hover_text(&f.summary);
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                ui.spacing_mut().item_spacing.x = 2.0;
+                                if widgets::tiny_icon_button(ui, Icon::Delete, "Delete", t).clicked() {
+                                    acts.push(Action::Run("rules.server.delete", json!({"account": f.account, "id": f.id})));
+                                }
+                                if f.runnable && widgets::tiny_icon_button(ui, Icon::Sync, "Run now", t).clicked() {
+                                    acts.push(Action::Run("rules.server.run", json!({"account": f.account, "id": f.id})));
+                                }
+                            });
+                        });
+                    }
+                });
                 ui.label(RichText::new(tl!("Change or remove them in the program that made them.")).color(t.faint).small());
             }
             ui.add_space(8.0);

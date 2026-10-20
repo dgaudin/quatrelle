@@ -339,6 +339,57 @@ impl Session {
         self.jobs.push(Job::SetServerRules { account: account.to_string(), rules: pending, delete: Vec::new(), categories: self.rule_keywords() });
     }
 
+    /// The ids MailCraft's own rules have on that account's server (what tells the server's
+    /// rules apart from the ones it didn't make).
+    fn our_server_ids(&self, account: &str) -> Vec<String> {
+        self.rules.iter().filter(|r| r.account.as_deref() == Some(account)).filter_map(|r| r.remote_id.clone()).collect()
+    }
+
+    /// Turn one of the server's own rules (made in Outlook, on a web page) on or off, there.
+    pub fn set_server_rule_enabled(&mut self, account: &str, id: &str, enabled: bool) -> CmdResult {
+        let found = self.foreign_rules.iter().any(|r| r.account == account && r.id == id);
+        if !found {
+            return Err(CmdError::Params(format!("no rule `{id}` on that server")));
+        }
+        let ours = self.our_server_ids(account);
+        self.jobs.push(Job::SetServerRuleEnabled { account: account.to_string(), id: id.to_string(), enabled, ours });
+        Ok(serde_json::json!({ "enabled": enabled }))
+    }
+
+    /// Remove one of the server's own rules.
+    pub fn delete_server_rule(&mut self, account: &str, id: &str) -> CmdResult {
+        let found = self.foreign_rules.iter().any(|r| r.account == account && r.id == id);
+        if !found {
+            return Err(CmdError::Params(format!("no rule `{id}` on that server")));
+        }
+        let ours = self.our_server_ids(account);
+        self.jobs.push(Job::DeleteServerRule { account: account.to_string(), id: id.to_string(), ours });
+        Ok(serde_json::json!({ "deleted": id }))
+    }
+
+    /// Run one of the server's own rules on the mail already in the Inbox (Outlook's "Run this
+    /// rule now"): only for a rule every part of which MailCraft knows.
+    pub fn run_server_rule(&mut self, account: &str, id: &str) -> CmdResult {
+        let f = self
+            .foreign_rules
+            .iter()
+            .find(|r| r.account == account && r.id == id)
+            .ok_or_else(|| CmdError::Params(format!("no rule `{id}` on that server")))?;
+        let rule = f.rule.clone().ok_or_else(|| {
+            CmdError::Disabled("MailCraft can't run this rule here: it uses a condition or an action MailCraft doesn't know".into())
+        })?;
+        let inbox = self.account(account).and_then(|a| a.folder(FolderRole::Inbox)).map(|x| x.path.clone());
+        let Some(inbox) = inbox else { return Err(CmdError::Disabled("that account has no Inbox yet".into())) };
+        let msgs: Vec<Summary> = self.folder_state(account, &inbox).messages.iter().filter(|m| !m.flags.deleted).cloned().collect();
+        let saved = std::mem::replace(&mut self.rules, vec![Rule { enabled: true, account: Some(account.to_string()), ..rule }]);
+        let n = msgs.iter().filter(|m| !actions_for(&self.rules, m).is_empty()).count();
+        self.run_rules(&msgs);
+        self.rules = saved;
+        let what = if n == 1 { "1 message".to_string() } else { format!("{n} messages") };
+        self.notice(format!("The rule ran on the mail there now: {what} matched"), false);
+        Ok(serde_json::json!({ "matched": n }))
+    }
+
     /// The rules as a file to keep or take to another computer (Outlook's Export Rules): each
     /// rule's account named by its address, which another computer knows it by.
     pub fn rules_file(&self) -> Result<Vec<u8>, CmdError> {

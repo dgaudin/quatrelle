@@ -2358,7 +2358,15 @@ fn server_rules_go_to_the_server_and_keep_their_id() {
     s.apply(mailcraft_model::Event::ServerRules {
         account: account.clone(),
         ids: Vec::new(),
-        others: vec!["Outlook rule".into()],
+        others: vec![mailcraft_model::organize::ForeignRule {
+            account: String::new(),
+            id: "R9".into(),
+            name: "Outlook rule".into(),
+            enabled: true,
+            runnable: false,
+            rule: None,
+            summary: "subject \"x\" → delete".into(),
+        }],
         cleared: Vec::new(),
         error: None,
     });

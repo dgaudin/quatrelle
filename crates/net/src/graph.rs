@@ -429,6 +429,40 @@ impl Client {
             .unwrap_or_default())
     }
 
+    /// The Inbox's rules, as Graph keeps them (made in Outlook on the web, or here).
+    pub fn message_rules(&self) -> Result<Vec<mailcraft_model::organize::ForeignRule>> {
+        let v = self.get("/me/mailFolders/inbox/messageRules?$select=id,displayName,isEnabled&$top=500")?;
+        Ok(v.get("value")
+            .and_then(Value::as_array)
+            .map(|list| {
+                list.iter()
+                    .filter_map(|r| {
+                        Some(mailcraft_model::organize::ForeignRule {
+                            account: String::new(),
+                            id: r.get("id")?.as_str()?.to_string(),
+                            name: r.get("displayName").and_then(Value::as_str).unwrap_or("").to_string(),
+                            enabled: r.get("isEnabled").and_then(Value::as_bool).unwrap_or(true),
+                            runnable: false,
+                            rule: None,
+                            summary: "a rule Microsoft 365 runs".into(),
+                        })
+                    })
+                    .collect()
+            })
+            .unwrap_or_default())
+    }
+
+    /// Turn one of the Inbox's rules on or off.
+    pub fn set_rule_enabled(&self, id: &str, enabled: bool) -> Result<()> {
+        let body = serde_json::to_vec(&json!({ "isEnabled": enabled })).map_err(|e| NetError::Protocol(e.to_string()))?;
+        self.send_raw("PATCH", &format!("/me/mailFolders/inbox/messageRules/{}", seg(id)), "application/json", body).map(drop)
+    }
+
+    /// Remove one of the Inbox's rules.
+    pub fn delete_rule(&self, id: &str) -> Result<()> {
+        self.send_raw("DELETE", &format!("/me/mailFolders/inbox/messageRules/{}", seg(id)), "application/json", Vec::new()).map(drop)
+    }
+
     /// Create, change and remove the Inbox rules Graph runs, from MailCraft's rules, as
     /// [`ews::Client::set_inbox_rules`](crate::ews::Client::set_inbox_rules) does.
     pub fn set_message_rules(&self, wanted: &[(Rule, Option<String>)], delete: &[String]) -> Result<Vec<(String, String)>> {
