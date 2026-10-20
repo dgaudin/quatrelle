@@ -958,3 +958,19 @@ month	May	5月
 	On the server, made elsewhere	在伺服器上，在其他位置建立
 	Change or remove them in the program that made them.	請在建立它們的程式中變更或刪除。
 	On / off on the server	在伺服器上開啟 / 關閉
+	+ Add a condition	+ 新增條件
+	+ Add another condition	+ 再新增一個條件
+	+ Add an action	+ 新增動作
+	+ Add another action	+ 再新增一個動作
+	Add what the rule does	指定規則執行的動作
+	Add what the rule looks at	指定規則檢查的內容
+	Change the rule	變更規則
+	Give the rule a name	為規則命名
+	MailCraft doesn't know every part of this rule yet	MailCraft 尚未辨識此規則的所有部分
+	Pick a category	選擇類別
+	Pick a folder	選擇資料夾
+	Say what to look for	指明要尋找的內容
+	These rules run on the server. Turn them off, run them, change them or remove them here.	這些規則在伺服器上執行。可在此停用、執行、變更或刪除它們。
+	When a message	當郵件
+	matches all of them	符合全部條件
+	matches any of them	符合任一條件

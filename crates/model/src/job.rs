@@ -191,6 +191,9 @@ pub enum Job {
     /// Turn one of the server's own rules on or off (one MailCraft didn't make: its id is
     /// enough, everything else stays as the server keeps it).
     SetServerRuleEnabled { account: String, id: String, enabled: bool, ours: Vec<String> },
+    /// Change one of the server's own rules (its id at `rule.remote_id`): only that rule goes,
+    /// with the place it has on the server, so the others keep theirs.
+    SetServerRule { account: String, id: String, rule: Rule, ours: Vec<String> },
     /// Remove one of the server's own rules.
     DeleteServerRule { account: String, id: String, ours: Vec<String> },
     /// Fetch the picture kept for a person: the one their contact item carries (its id in
@@ -226,6 +229,7 @@ impl Job {
             | Job::SetServerRules { account, .. }
             | Job::GetServerRules { account, .. }
             | Job::SetServerRuleEnabled { account, .. }
+            | Job::SetServerRule { account, .. }
             | Job::DeleteServerRule { account, .. }
             | Job::FetchPhoto { account, .. }
             | Job::SyncDav { account }

@@ -906,8 +906,7 @@ fn organising_renders_and_rules_save() {
     a.ui.dialog = Some(Dialog::rule_from("zoe@studio.example", ""));
     frame(&ctx, &mut a, vec![]);
     if let Some(Dialog::EditRule(f)) = a.ui.dialog.as_mut() {
-        f.action = crate::dialogs::RuleDo::Categorize;
-        f.target = "Work".into();
+        f.actions = vec![crate::dialogs::RuleAct { action: crate::dialogs::RuleDo::Categorize, target: "Work".into() }];
     }
     a.act(crate::Action::Submit(
         "rules.set",

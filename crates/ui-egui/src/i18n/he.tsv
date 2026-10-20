@@ -955,3 +955,19 @@ month	May	מאי
 	On the server, made elsewhere	בשרת, נוצרו במקום אחר
 	Change or remove them in the program that made them.	שנה או הסר אותן בתוכנה שיצרה אותן.
 	On / off on the server	פועל / כבוי בשרת
+	+ Add a condition	+ הוספת תנאי
+	+ Add another condition	+ הוספת תנאי נוסף
+	+ Add an action	+ הוספת פעולה
+	+ Add another action	+ הוספת פעולה נוספת
+	Add what the rule does	ציין מה הכלל עושה
+	Add what the rule looks at	ציין מה הכלל בודק
+	Change the rule	שינוי הכלל
+	Give the rule a name	תן שם לכלל
+	MailCraft doesn't know every part of this rule yet	MailCraft עדיין לא מכיר את כל חלקי הכלל הזה
+	Pick a category	בחר קטגוריה
+	Pick a folder	בחר תיקייה
+	Say what to look for	ציין מה לחפש
+	These rules run on the server. Turn them off, run them, change them or remove them here.	כללים אלה פועלים בשרת. כאן אפשר לכבות, להפעיל, לשנות או למחוק אותם.
+	When a message	כשמגיעה הודעה
+	matches all of them	מתאים לכל התנאים
+	matches any of them	מתאים לאחד התנאים

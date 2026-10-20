@@ -408,6 +408,7 @@ async fn job(sh: &Rcs, id: &str, j: Job) {
         // Rules on Exchange's server need the desktop app (the browser reaches JMAP accounts).
         Job::SetServerRules { account, .. }
         | Job::GetServerRules { account, .. }
+        | Job::SetServerRule { account, .. }
         | Job::SetServerRuleEnabled { account, .. }
         | Job::DeleteServerRule { account, .. } => emit(
             sh,

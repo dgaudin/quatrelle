@@ -520,6 +520,18 @@ fn server_rule(r: &El) -> mailcraft_model::organize::ForeignRule {
                         then.push(format!("categorise \"{c}\""));
                     }
                 }
+                "MoveToFolder" => {
+                    // The folder by the id the server knows it by; the account's folders turn it
+                    // into a path on the way in (see `worker::path_of_folder_id`).
+                    let id = k.child("FolderId").and_then(|f| f.attr("Id")).unwrap_or("").to_string();
+                    if id.is_empty() {
+                        runnable = false;
+                        then.push("move".to_string());
+                    } else {
+                        actions.push(RuleAction::MoveTo(format!("id:{id}")));
+                        then.push("move to one of its folders".to_string());
+                    }
+                }
                 "StopProcessingRules" if k.text.trim() == "true" => stop = true,
                 other => {
                     then.push(other.to_string());
@@ -541,6 +553,7 @@ fn server_rule(r: &El) -> mailcraft_model::organize::ForeignRule {
         stop,
         server: true,
         remote_id: Some(id.clone()),
+        priority: r.text_of("Priority").and_then(|p| p.trim().parse().ok()),
     });
     ForeignRule { account: String::new(), id, name, enabled, runnable, rule, summary }
 }
@@ -1696,7 +1709,9 @@ fn inbox_rule_xml(r: &Rule, folder: Option<&str>, priority: usize, id: Option<&s
         x.push_str(&format!("<t:RuleId Id=\"{0}\">{0}</t:RuleId>", esc(id)));
     }
     x.push_str(&format!("<t:DisplayName>{}</t:DisplayName>", esc(&r.name)));
-    x.push_str(&format!("<t:Priority>{priority}</t:Priority>"));
+    // Its place among the server's rules: the one it had, so that changing it leaves the others
+    // where they are (a new rule goes last).
+    x.push_str(&format!("<t:Priority>{}</t:Priority>", r.priority.unwrap_or(priority as u32)));
     x.push_str(&format!("<t:IsEnabled>{}</t:IsEnabled>", r.enabled));
     x.push_str("<t:Conditions>");
     for c in &r.conditions {
@@ -2191,6 +2206,7 @@ mod tests {
             stop: false,
             server: true,
             remote_id: id.map(str::to_string),
+            priority: None,
         };
         // Created: the server's id comes back, found by name (creating answers none).
         let ids = c.set_inbox_rules(&[(rule("Invoices", None), Some("F-INVOICES".into()))], &[]).unwrap();
@@ -2263,6 +2279,33 @@ mod tests {
         assert_eq!(rule.conditions, vec![Condition::Subject("Invoice".into())]);
         assert_eq!(rule.actions, vec![RuleAction::Delete]);
         assert_eq!((rule.stop, rule.server, rule.remote_id.as_deref()), (true, true, Some("R7")));
+    }
+
+    /// A rule that files mail into a folder is one MailCraft can show and change: the folder
+    /// comes as the id the server knows, and the rule keeps its place among the server's rules.
+    #[test]
+    fn a_rule_that_moves_mail_can_be_changed_here() {
+        use mailcraft_model::organize::{Condition, RuleAction};
+        let doc = parse(
+            "<t:Rule><t:RuleId Id=\"R3\"/><t:DisplayName>Clients</t:DisplayName><t:Priority>7</t:Priority><t:IsEnabled>true</t:IsEnabled>\
+             <t:Conditions><t:ContainsSenderStrings><t:String>@client.example</t:String></t:ContainsSenderStrings></t:Conditions>\
+             <t:Actions><t:MoveToFolder><t:FolderId Id=\"AAMkAD-folder\"/></t:MoveToFolder><t:MarkAsRead>true</t:MarkAsRead></t:Actions></t:Rule>",
+        );
+        let r = server_rule(&doc.kids[0]);
+        assert!(r.runnable, "a sender test and a move are both known");
+        let rule = r.rule.unwrap();
+        assert_eq!(rule.conditions, vec![Condition::From("@client.example".into())]);
+        assert_eq!(rule.actions, vec![RuleAction::MoveTo("id:AAMkAD-folder".into()), RuleAction::MarkRead]);
+        assert_eq!(rule.priority, Some(7), "its place among the server's rules");
+        // Changed here, it goes back with that place, so the rules around it keep theirs.
+        let xml = inbox_rule_xml(&rule, Some("AAMkAD-folder"), 1, Some("R3"));
+        assert!(xml.contains("<t:Priority>7</t:Priority>"), "{xml}");
+        assert!(xml.contains("<t:RuleId Id=\"R3\">R3</t:RuleId>"), "{xml}");
+        assert!(xml.contains("<t:MoveToFolder><t:FolderId Id=\"AAMkAD-folder\"/></t:MoveToFolder>"), "{xml}");
+        // A new one goes where the caller puts it.
+        let mut fresh = rule.clone();
+        fresh.priority = None;
+        assert!(inbox_rule_xml(&fresh, None, 4, None).contains("<t:Priority>4</t:Priority>"));
     }
 
     /// A server's own rule is turned off and removed where it lives, everything else in it

@@ -955,3 +955,19 @@ month	May	mei
 	On the server, made elsewhere	Op de server, elders gemaakt
 	Change or remove them in the program that made them.	Wijzig of verwijder ze in het programma dat ze heeft gemaakt.
 	On / off on the server	Aan / uit op de server
+	+ Add a condition	+ Voorwaarde toevoegen
+	+ Add another condition	+ Nog een voorwaarde toevoegen
+	+ Add an action	+ Actie toevoegen
+	+ Add another action	+ Nog een actie toevoegen
+	Add what the rule does	Geef aan wat de regel doet
+	Add what the rule looks at	Geef aan waar de regel naar kijkt
+	Change the rule	Regel wijzigen
+	Give the rule a name	Geef de regel een naam
+	MailCraft doesn't know every part of this rule yet	MailCraft kent nog niet alle onderdelen van deze regel
+	Pick a category	Kies een categorie
+	Pick a folder	Kies een map
+	Say what to look for	Geef aan waarnaar gezocht wordt
+	These rules run on the server. Turn them off, run them, change them or remove them here.	Deze regels draaien op de server. Zet ze hier uit, voer ze uit, wijzig ze of verwijder ze.
+	When a message	Wanneer een bericht
+	matches all of them	aan alle voldoet
+	matches any of them	aan minstens één voldoet

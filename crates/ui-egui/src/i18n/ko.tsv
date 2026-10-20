@@ -958,3 +958,19 @@ month	May	5월
 	On the server, made elsewhere	서버에 있음, 다른 곳에서 만듦
 	Change or remove them in the program that made them.	만든 프로그램에서 변경하거나 제거하세요.
 	On / off on the server	서버에서 켜기 / 끄기
+	+ Add a condition	+ 조건 추가
+	+ Add another condition	+ 조건 더 추가
+	+ Add an action	+ 동작 추가
+	+ Add another action	+ 동작 더 추가
+	Add what the rule does	규칙이 하는 일을 지정하세요
+	Add what the rule looks at	규칙이 확인할 내용을 지정하세요
+	Change the rule	규칙 변경
+	Give the rule a name	규칙 이름을 입력하세요
+	MailCraft doesn't know every part of this rule yet	MailCraft가 아직 이 규칙의 일부를 이해하지 못합니다
+	Pick a category	범주 선택
+	Pick a folder	폴더 선택
+	Say what to look for	찾을 내용을 입력하세요
+	These rules run on the server. Turn them off, run them, change them or remove them here.	이 규칙은 서버에서 실행됩니다. 여기에서 끄거나 실행, 변경, 삭제할 수 있습니다.
+	When a message	메시지가 다음일 때
+	matches all of them	모두 일치
+	matches any of them	하나라도 일치

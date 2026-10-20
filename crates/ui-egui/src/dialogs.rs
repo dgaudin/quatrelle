@@ -3,7 +3,7 @@
 use egui::{Margin, Rect, RichText, Sense, Ui, vec2};
 use mailcraft_engine::Compose;
 use mailcraft_engine::Session;
-use mailcraft_engine::model::organize::{Condition, Rule, RuleAction};
+use mailcraft_engine::model::organize::{Condition, ForeignRule, Rule, RuleAction};
 use mailcraft_engine::model::{AccountConfig, Folder, FolderRole, Security};
 use serde_json::json;
 
@@ -710,16 +710,33 @@ impl RuleDo {
     }
 }
 
+/// One test of a rule being written.
+#[derive(Clone, Debug)]
+pub struct RuleCond {
+    pub test: RuleTest,
+    pub text: String,
+}
+
+/// One action of a rule being written.
+#[derive(Clone, Debug)]
+pub struct RuleAct {
+    pub action: RuleDo,
+    /// A folder path (`Move to folder`) or a category name (`Categorize`).
+    pub target: String,
+}
+
 #[derive(Clone, Debug)]
 pub struct RuleForm {
     /// The rule being changed (`None`: a new one).
     pub index: Option<usize>,
+    /// A rule of the server's own being changed: its account, and the id it has there.
+    pub remote: Option<(String, String)>,
     pub name: String,
-    pub test: RuleTest,
-    pub text: String,
-    pub action: RuleDo,
-    /// A folder path (`MoveTo`) or a category name (`Categorize`).
-    pub target: String,
+    pub enabled: bool,
+    /// Every condition must match (`false`: any one).
+    pub match_all: bool,
+    pub conditions: Vec<RuleCond>,
+    pub actions: Vec<RuleAct>,
     /// The account whose folders `MoveTo` offers (and the only one it applies to).
     pub account: Option<String>,
     pub stop: bool,
@@ -731,78 +748,121 @@ pub struct RuleForm {
     pub error: Option<String>,
 }
 
+impl RuleCond {
+    fn of(c: &Condition) -> RuleCond {
+        let (test, text) = match c {
+            Condition::From(t) => (RuleTest::From, t.clone()),
+            Condition::To(t) => (RuleTest::To, t.clone()),
+            Condition::Subject(t) => (RuleTest::Subject, t.clone()),
+            Condition::AnyText(t) => (RuleTest::AnyText, t.clone()),
+            Condition::HasAttachment => (RuleTest::HasAttachment, String::new()),
+            Condition::Bulk => (RuleTest::Bulk, String::new()),
+        };
+        RuleCond { test, text }
+    }
+}
+
+impl RuleAct {
+    fn of(a: &RuleAction) -> RuleAct {
+        let (action, target) = match a {
+            RuleAction::MoveTo(f) => (RuleDo::MoveTo, f.clone()),
+            RuleAction::MoveToRole(FolderRole::Trash) | RuleAction::Delete => (RuleDo::Delete, String::new()),
+            RuleAction::MoveToRole(_) => (RuleDo::Archive, String::new()),
+            RuleAction::Categorize(c) => (RuleDo::Categorize, c.clone()),
+            RuleAction::MarkRead => (RuleDo::MarkRead, String::new()),
+            RuleAction::Flag => (RuleDo::Flag, String::new()),
+            RuleAction::Pin => (RuleDo::Pin, String::new()),
+        };
+        RuleAct { action, target }
+    }
+}
+
 impl RuleForm {
     fn to_rule(&self) -> Result<Rule, String> {
         if self.name.trim().is_empty() {
-            return Err("Give the rule a name".into());
+            return Err(tl!("Give the rule a name").into());
         }
-        if self.test.needs_text() && self.text.trim().is_empty() {
-            return Err("Say what to look for".into());
+        let mut conditions = Vec::new();
+        for c in &self.conditions {
+            let t = c.text.trim().to_string();
+            if c.test.needs_text() && t.is_empty() {
+                return Err(tl!("Say what to look for").into());
+            }
+            conditions.push(match c.test {
+                RuleTest::From => Condition::From(t),
+                RuleTest::To => Condition::To(t),
+                RuleTest::Subject => Condition::Subject(t),
+                RuleTest::AnyText => Condition::AnyText(t),
+                RuleTest::HasAttachment => Condition::HasAttachment,
+                RuleTest::Bulk => Condition::Bulk,
+            });
         }
-        let t = self.text.trim().to_string();
-        let condition = match self.test {
-            RuleTest::From => Condition::From(t),
-            RuleTest::To => Condition::To(t),
-            RuleTest::Subject => Condition::Subject(t),
-            RuleTest::AnyText => Condition::AnyText(t),
-            RuleTest::HasAttachment => Condition::HasAttachment,
-            RuleTest::Bulk => Condition::Bulk,
-        };
-        let action = match self.action {
-            RuleDo::MoveTo if self.target.is_empty() => return Err("Pick a folder".into()),
-            RuleDo::MoveTo => RuleAction::MoveTo(self.target.clone()),
-            RuleDo::Archive => RuleAction::MoveToRole(FolderRole::Archive),
-            RuleDo::Delete => RuleAction::Delete,
-            RuleDo::Categorize if self.target.is_empty() => return Err("Pick a category".into()),
-            RuleDo::Categorize => RuleAction::Categorize(self.target.clone()),
-            RuleDo::MarkRead => RuleAction::MarkRead,
-            RuleDo::Flag => RuleAction::Flag,
-            RuleDo::Pin => RuleAction::Pin,
-        };
+        if conditions.is_empty() {
+            return Err(tl!("Add what the rule looks at").into());
+        }
+        let mut actions = Vec::new();
+        for a in &self.actions {
+            actions.push(match a.action {
+                RuleDo::MoveTo if a.target.is_empty() => return Err(tl!("Pick a folder").into()),
+                RuleDo::MoveTo => RuleAction::MoveTo(a.target.clone()),
+                RuleDo::Archive => RuleAction::MoveToRole(FolderRole::Archive),
+                RuleDo::Delete => RuleAction::Delete,
+                RuleDo::Categorize if a.target.is_empty() => return Err(tl!("Pick a category").into()),
+                RuleDo::Categorize => RuleAction::Categorize(a.target.clone()),
+                RuleDo::MarkRead => RuleAction::MarkRead,
+                RuleDo::Flag => RuleAction::Flag,
+                RuleDo::Pin => RuleAction::Pin,
+            });
+        }
+        if actions.is_empty() {
+            return Err(tl!("Add what the rule does").into());
+        }
+        let moves = self.actions.iter().any(|a| a.action == RuleDo::MoveTo);
         Ok(Rule {
             name: self.name.trim().to_string(),
-            enabled: true,
-            account: if self.action == RuleDo::MoveTo || self.server { self.account.clone() } else { None },
-            conditions: vec![condition],
-            match_all: true,
-            actions: vec![action],
+            enabled: self.enabled,
+            account: if moves || self.server || self.remote.is_some() { self.account.clone() } else { None },
+            conditions,
+            match_all: self.match_all,
+            actions,
             stop: self.stop,
-            server: self.server,
-            remote_id: None,
+            server: self.server || self.remote.is_some(),
+            remote_id: self.remote.as_ref().map(|(_, id)| id.clone()),
+            priority: None,
         })
     }
 
     fn from_rule(index: usize, r: &Rule) -> RuleForm {
-        let (test, text) = match r.conditions.first() {
-            Some(Condition::From(t)) => (RuleTest::From, t.clone()),
-            Some(Condition::To(t)) => (RuleTest::To, t.clone()),
-            Some(Condition::Subject(t)) => (RuleTest::Subject, t.clone()),
-            Some(Condition::AnyText(t)) => (RuleTest::AnyText, t.clone()),
-            Some(Condition::HasAttachment) => (RuleTest::HasAttachment, String::new()),
-            Some(Condition::Bulk) | None => (RuleTest::Bulk, String::new()),
-        };
-        let (action, target) = match r.actions.first() {
-            Some(RuleAction::MoveTo(f)) => (RuleDo::MoveTo, f.clone()),
-            Some(RuleAction::MoveToRole(FolderRole::Trash)) | Some(RuleAction::Delete) => (RuleDo::Delete, String::new()),
-            Some(RuleAction::MoveToRole(_)) => (RuleDo::Archive, String::new()),
-            Some(RuleAction::Categorize(c)) => (RuleDo::Categorize, c.clone()),
-            Some(RuleAction::MarkRead) => (RuleDo::MarkRead, String::new()),
-            Some(RuleAction::Flag) => (RuleDo::Flag, String::new()),
-            Some(RuleAction::Pin) | None => (RuleDo::Pin, String::new()),
-        };
         RuleForm {
             index: Some(index),
+            remote: None,
             name: r.name.clone(),
-            test,
-            text,
-            action,
-            target,
+            enabled: r.enabled,
+            match_all: r.match_all,
+            conditions: r.conditions.iter().map(RuleCond::of).collect(),
+            actions: r.actions.iter().map(RuleAct::of).collect(),
             account: r.account.clone(),
             stop: r.stop,
             server: r.server,
             run_now: false,
             error: None,
         }
+    }
+
+    /// A rule the server keeps (made in Outlook, on a web page, in a Sieve script MailCraft
+    /// doesn't own): shown and changed from its parts, never re-ordered.
+    fn from_server(account: &str, f: &ForeignRule) -> Option<RuleForm> {
+        let r = f.rule.as_ref()?;
+        Some(RuleForm {
+            remote: Some((account.to_string(), f.id.clone())),
+            account: Some(account.to_string()),
+            ..RuleForm::from_rule(0, r).without_index()
+        })
+    }
+
+    fn without_index(mut self) -> RuleForm {
+        self.index = None;
+        self
     }
 }
 
@@ -1018,11 +1078,12 @@ impl Dialog {
     pub fn rule_from(sender: &str, _subject: &str) -> Dialog {
         Dialog::EditRule(Box::new(RuleForm {
             index: None,
+            remote: None,
             name: tf!("Mail from {sender}", sender = sender),
-            test: RuleTest::From,
-            text: sender.to_string(),
-            action: RuleDo::Archive,
-            target: String::new(),
+            enabled: true,
+            match_all: true,
+            conditions: vec![RuleCond { test: RuleTest::From, text: sender.to_string() }],
+            actions: vec![RuleAct { action: RuleDo::Archive, target: String::new() }],
             account: None,
             stop: false,
             server: false,
@@ -2168,11 +2229,26 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Act
                                 if f.runnable && widgets::tiny_icon_button(ui, Icon::Sync, "Run now", t).clicked() {
                                     acts.push(Action::Run("rules.server.run", json!({"account": f.account, "id": f.id})));
                                 }
+                                // A rule every part of which MailCraft knows can be changed here
+                                // (its place among the server's rules stays); the others say why.
+                                let edit = widgets::tiny_icon_button(ui, Icon::Drafts, "Edit", t);
+                                if edit.clicked()
+                                    && let Some(form) = RuleForm::from_server(&f.account, f)
+                                {
+                                    acts.push(Action::Dialog(Dialog::EditRule(Box::new(form))));
+                                }
+                                if !f.runnable {
+                                    edit.on_hover_text(tl!("MailCraft doesn't know every part of this rule yet"));
+                                }
                             });
                         });
                     }
                 });
-                ui.label(RichText::new(tl!("Change or remove them in the program that made them.")).color(t.faint).small());
+                ui.label(
+                    RichText::new(tl!("These rules run on the server. Turn them off, run them, change them or remove them here."))
+                        .color(t.faint)
+                        .small(),
+                );
             }
             ui.add_space(8.0);
             ui.horizontal(|ui| {
@@ -2201,133 +2277,192 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Act
             close_row(ui)
         }
         Dialog::EditRule(f) => {
-            ui.set_width(440.0);
-            title(ui, t, if f.index.is_some() { "Edit rule" } else { "New rule" });
-            egui::Grid::new("rule").num_columns(2).spacing(vec2(10.0, 8.0)).show(ui, |ui| {
+            ui.set_width(540.0);
+            let on_server = f.remote.clone();
+            title(
+                ui,
+                t,
+                if on_server.is_some() {
+                    "Change the rule"
+                } else if f.index.is_some() {
+                    "Edit rule"
+                } else {
+                    "New rule"
+                },
+            );
+            ui.horizontal(|ui| {
                 ui.label(tl!("Name"));
-                ui.add(egui::TextEdit::singleline(&mut f.name).desired_width(300.0));
-                ui.end_row();
-                ui.label(tl!("When mail"));
-                egui::ComboBox::from_id_salt("rule-test").width(300.0).selected_text(f.test.label()).show_ui(ui, |ui| {
-                    for x in RuleTest::ALL {
-                        ui.selectable_value(&mut f.test, x, x.label());
-                    }
+                ui.add(egui::TextEdit::singleline(&mut f.name).desired_width(400.0));
+            });
+            ui.add_space(8.0);
+            // What the rule looks at: as many tests as needed, all of them or any one.
+            ui.label(RichText::new(tl!("When a message")).strong());
+            if f.conditions.len() > 1 {
+                ui.horizontal(|ui| {
+                    ui.radio_value(&mut f.match_all, true, tl!("matches all of them"));
+                    ui.radio_value(&mut f.match_all, false, tl!("matches any of them"));
                 });
-                ui.end_row();
-                if f.test.needs_text() {
-                    ui.label("");
-                    ui.add(egui::TextEdit::singleline(&mut f.text).hint_text(tl!("Text or address")).desired_width(300.0));
-                    ui.end_row();
-                }
-                ui.label(tl!("Then"));
-                egui::ComboBox::from_id_salt("rule-do").width(300.0).selected_text(f.action.label()).show_ui(ui, |ui| {
-                    for x in RuleDo::ALL {
-                        if ui.selectable_value(&mut f.action, x, x.label()).changed() {
-                            f.target.clear();
+            }
+            let mut remove_cond = None;
+            for (i, c) in f.conditions.iter_mut().enumerate() {
+                ui.horizontal(|ui| {
+                    egui::ComboBox::from_id_salt(("rule-test", i)).width(230.0).selected_text(c.test.label()).show_ui(ui, |ui| {
+                        for x in RuleTest::ALL {
+                            ui.selectable_value(&mut c.test, x, x.label());
                         }
+                    });
+                    if c.test.needs_text() {
+                        ui.add(egui::TextEdit::singleline(&mut c.text).hint_text(tl!("Text or address")).desired_width(220.0));
+                    }
+                    if widgets::tiny_icon_button(ui, Icon::Delete, "Remove", t).clicked() {
+                        remove_cond = Some(i);
                     }
                 });
-                ui.end_row();
-                match f.action {
-                    RuleDo::MoveTo => {
-                        ui.label(tl!("Folder"));
-                        let shown = f
-                            .account
-                            .as_deref()
-                            .and_then(|a| s.folder(a, &f.target))
-                            .map(|x| {
-                                format!("{} ({})", crate::i18n::folder(x), s.account(&x.account).map(|a| a.config.email.as_str()).unwrap_or_default())
-                            })
-                            .unwrap_or_else(|| tl!("Choose…").into());
-                        egui::ComboBox::from_id_salt("rule-folder").width(300.0).selected_text(shown).show_ui(ui, |ui| {
-                            for a in &s.accounts {
-                                ui.label(RichText::new(&a.config.email).small().color(t.faint));
-                                for x in a.folders.iter().filter(|x| x.selectable) {
-                                    let on = f.account.as_deref() == Some(a.config.id.as_str()) && f.target == x.path;
-                                    if ui.selectable_label(on, format!("{}{}", "    ".repeat(x.depth()), crate::i18n::folder(x))).clicked() {
-                                        f.account = Some(a.config.id.clone());
-                                        f.target = x.path.clone();
+            }
+            if let Some(i) = remove_cond {
+                f.conditions.remove(i);
+            }
+            if ui.button(tl!(if f.conditions.is_empty() { "+ Add a condition" } else { "+ Add another condition" })).clicked() {
+                f.conditions.push(RuleCond { test: RuleTest::From, text: String::new() });
+            }
+            ui.add_space(8.0);
+            // What it does: as many actions as needed.
+            ui.label(RichText::new(tl!("Then")).strong());
+            let mut account = f.account.clone();
+            let mut remove_act = None;
+            for (i, a) in f.actions.iter_mut().enumerate() {
+                ui.horizontal(|ui| {
+                    egui::ComboBox::from_id_salt(("rule-do", i)).width(200.0).selected_text(a.action.label()).show_ui(ui, |ui| {
+                        for x in RuleDo::ALL {
+                            if ui.selectable_value(&mut a.action, x, x.label()).changed() {
+                                a.target.clear();
+                            }
+                        }
+                    });
+                    match a.action {
+                        RuleDo::MoveTo => {
+                            let shown = account
+                                .as_deref()
+                                .and_then(|id| s.folder(id, &a.target))
+                                .map(|x| {
+                                    format!(
+                                        "{} ({})",
+                                        crate::i18n::folder(x),
+                                        s.account(&x.account).map(|a| a.config.email.as_str()).unwrap_or_default()
+                                    )
+                                })
+                                .unwrap_or_else(|| tl!("Choose…").into());
+                            egui::ComboBox::from_id_salt(("rule-folder", i)).width(240.0).selected_text(shown).show_ui(ui, |ui| {
+                                for acc in &s.accounts {
+                                    ui.label(RichText::new(&acc.config.email).small().color(t.faint));
+                                    for x in acc.folders.iter().filter(|x| x.selectable) {
+                                        let on = account.as_deref() == Some(acc.config.id.as_str()) && a.target == x.path;
+                                        let label = format!("{}{}", "    ".repeat(x.depth()), crate::i18n::folder(x));
+                                        if ui.selectable_label(on, label).clicked() {
+                                            account = Some(acc.config.id.clone());
+                                            a.target = x.path.clone();
+                                        }
                                     }
                                 }
-                            }
-                        });
-                        ui.end_row();
+                            });
+                        }
+                        RuleDo::Categorize => {
+                            let shown = if a.target.is_empty() { tl!("Choose…").to_string() } else { tl!(&a.target).to_string() };
+                            egui::ComboBox::from_id_salt(("rule-cat", i)).width(200.0).selected_text(shown).show_ui(ui, |ui| {
+                                for c in &s.prefs.categories {
+                                    ui.selectable_value(&mut a.target, c.name.clone(), &c.name);
+                                }
+                            });
+                        }
+                        _ => {}
                     }
-                    RuleDo::Categorize => {
-                        ui.label(tl!("Category"));
-                        let shown = if f.target.is_empty() { tl!("Choose…").to_string() } else { tl!(&f.target).to_string() };
-                        egui::ComboBox::from_id_salt("rule-cat").width(300.0).selected_text(shown).show_ui(ui, |ui| {
-                            for c in &s.prefs.categories {
-                                ui.selectable_value(&mut f.target, c.name.clone(), &c.name);
-                            }
-                        });
-                        ui.end_row();
+                    if widgets::tiny_icon_button(ui, Icon::Delete, "Remove", t).clicked() {
+                        remove_act = Some(i);
                     }
-                    _ => {}
-                }
-            });
+                });
+            }
+            f.account = account;
+            if let Some(i) = remove_act {
+                f.actions.remove(i);
+            }
+            if ui.button(tl!(if f.actions.is_empty() { "+ Add an action" } else { "+ Add another action" })).clicked() {
+                f.actions.push(RuleAct { action: RuleDo::MoveTo, target: String::new() });
+            }
+            ui.add_space(6.0);
             ui.checkbox(&mut f.stop, tl!("Don't run later rules on mail this one matches"));
             // Outlook's "on this server": the server files the mail while MailCraft is closed,
-            // as far as it can express the rule (Exchange's inbox rules, a Sieve script).
-            let server_account = f
-                .account
-                .clone()
-                .filter(|a| s.server_kind(a).is_some())
-                .or_else(|| s.accounts.iter().find(|a| s.server_kind(&a.config.id).is_some()).map(|a| a.config.id.clone()));
-            if let Some(id) = server_account {
-                let mut on = f.server;
-                if ui.checkbox(&mut on, tl!("Also run on the server")).changed() {
-                    f.server = on;
-                    if on && f.account.is_none() {
-                        f.account = Some(id.clone());
-                    }
-                }
-                if f.server {
-                    // What this account's server (Exchange's rules, or Sieve) can't express stays
-                    // here, and the dialog says why.
-                    let kind = s.server_kind(&id);
-                    let blockers = f.to_rule().map(|r| kind.map(|k| r.server_blockers_for(k)).unwrap_or_default()).unwrap_or_default();
-                    if !blockers.is_empty() {
-                        ui.label(
-                            RichText::new(tf!("The server can't run this rule: {why}. It stays on this computer.", why = blockers.join(", ")))
-                                .color(t.warn)
-                                .small(),
-                        );
+            // as far as it can express the rule (Exchange's inbox rules, a Sieve script). A rule
+            // the server keeps already runs there.
+            if on_server.is_none() {
+                let server_account = f
+                    .account
+                    .clone()
+                    .filter(|a| s.server_kind(a).is_some())
+                    .or_else(|| s.accounts.iter().find(|a| s.server_kind(&a.config.id).is_some()).map(|a| a.config.id.clone()));
+                if let Some(id) = server_account {
+                    let mut on = f.server;
+                    if ui.checkbox(&mut on, tl!("Also run on the server")).changed() {
+                        f.server = on;
+                        if on && f.account.is_none() {
+                            f.account = Some(id.clone());
+                        }
                     }
                 }
             }
-            ui.checkbox(&mut f.run_now, tl!("Run it now on the mail already in the Inbox"));
+            if f.server || on_server.is_some() {
+                // What this account's server (Exchange's rules, or Sieve) can't express stays
+                // here, and the dialog says why.
+                let kind = f.account.clone().or_else(|| on_server.as_ref().map(|(a, _)| a.clone())).and_then(|a| s.server_kind(&a));
+                let blockers = f.to_rule().map(|r| kind.map(|k| r.server_blockers_for(k)).unwrap_or_default()).unwrap_or_default();
+                if !blockers.is_empty() {
+                    ui.label(
+                        RichText::new(tf!("The server can't run this rule: {why}. It stays on this computer.", why = blockers.join(", ")))
+                            .color(t.warn)
+                            .small(),
+                    );
+                }
+            }
+            if on_server.is_none() {
+                ui.checkbox(&mut f.run_now, tl!("Run it now on the mail already in the Inbox"));
+            }
             if let Some(e) = &f.error {
                 ui.label(RichText::new(e.as_str()).color(t.danger).small());
             }
             let (ok, cancel) = buttons(ui, t, "Save", true);
             if ok {
                 match f.to_rule() {
-                    Ok(rule) => {
-                        let mut rules = s.rules.clone();
-                        let at = match f.index.filter(|i| *i < rules.len()) {
-                            Some(i) => {
-                                // Keep what the server knows of it: its id, and whether it runs.
-                                let (enabled, remote_id) = match rules.get(i) {
-                                    Some(r) => (r.enabled, r.remote_id.clone()),
-                                    None => (true, None),
-                                };
-                                if let Some(slot) = rules.get_mut(i) {
-                                    *slot = Rule { enabled, remote_id, ..rule };
-                                }
-                                i
-                            }
-                            None => {
-                                rules.push(rule);
-                                rules.len() - 1
-                            }
-                        };
-                        f.error = None;
-                        acts.push(Action::Submit("rules.set", json!({"rules": rules})));
-                        if f.run_now {
-                            acts.push(Action::Run("rules.run", json!({"index": at, "inbox": true})));
+                    Ok(rule) => match &on_server {
+                        // The server's own rule: only its parts go back, at the place it keeps.
+                        Some((account, id)) => {
+                            f.error = None;
+                            acts.push(Action::Submit("rules.server.save", json!({"account": account, "id": id, "rule": rule})));
                         }
-                    }
+                        None => {
+                            let mut rules = s.rules.clone();
+                            let at = match f.index.filter(|i| *i < rules.len()) {
+                                Some(i) => {
+                                    // Keep what the server knows of it: its id, and whether it runs.
+                                    let (enabled, remote_id, priority) = match rules.get(i) {
+                                        Some(r) => (r.enabled, r.remote_id.clone(), r.priority),
+                                        None => (true, None, None),
+                                    };
+                                    if let Some(slot) = rules.get_mut(i) {
+                                        *slot = Rule { enabled, remote_id, priority, ..rule };
+                                    }
+                                    i
+                                }
+                                None => {
+                                    rules.push(rule);
+                                    rules.len() - 1
+                                }
+                            };
+                            f.error = None;
+                            acts.push(Action::Submit("rules.set", json!({"rules": rules})));
+                            if f.run_now {
+                                acts.push(Action::Run("rules.run", json!({"index": at, "inbox": true})));
+                            }
+                        }
+                    },
                     Err(e) => f.error = Some(e),
                 }
             }

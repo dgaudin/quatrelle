@@ -956,3 +956,19 @@ month	May	5月
 	On the server, made elsewhere	在服务器上，在其他位置创建
 	Change or remove them in the program that made them.	请在创建它们的程序中更改或删除。
 	On / off on the server	在服务器上开启 / 关闭
+	+ Add a condition	+ 添加条件
+	+ Add another condition	+ 再添加一个条件
+	+ Add an action	+ 添加操作
+	+ Add another action	+ 再添加一个操作
+	Add what the rule does	指定规则执行的操作
+	Add what the rule looks at	指定规则检查的内容
+	Change the rule	更改规则
+	Give the rule a name	为规则命名
+	MailCraft doesn't know every part of this rule yet	MailCraft 尚未识别此规则的所有部分
+	Pick a category	选择类别
+	Pick a folder	选择文件夹
+	Say what to look for	指明要查找的内容
+	These rules run on the server. Turn them off, run them, change them or remove them here.	这些规则在服务器上运行。可在此停用、运行、更改或删除它们。
+	When a message	当邮件
+	matches all of them	符合全部条件
+	matches any of them	符合任一条件

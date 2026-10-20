@@ -958,3 +958,19 @@ month	May	Май
 	On the server, made elsewhere	На сервере, созданы в другом месте
 	Change or remove them in the program that made them.	Измените или удалите их в программе, которая их создала.
 	On / off on the server	Включено или выключено на сервере
+	+ Add a condition	+ Добавить условие
+	+ Add another condition	+ Добавить ещё условие
+	+ Add an action	+ Добавить действие
+	+ Add another action	+ Добавить ещё действие
+	Add what the rule does	Укажите, что делает правило
+	Add what the rule looks at	Укажите, на что смотрит правило
+	Change the rule	Изменить правило
+	Give the rule a name	Дайте правилу имя
+	MailCraft doesn't know every part of this rule yet	MailCraft пока не знает всех частей этого правила
+	Pick a category	Выберите категорию
+	Pick a folder	Выберите папку
+	Say what to look for	Укажите, что искать
+	These rules run on the server. Turn them off, run them, change them or remove them here.	Эти правила выполняются на сервере. Здесь их можно отключить, запустить, изменить или удалить.
+	When a message	Когда сообщение
+	matches all of them	совпадает со всеми
+	matches any of them	совпадает с любым

@@ -1061,6 +1061,7 @@ x"
             stop: true,
             server: true,
             remote_id: None,
+            priority: None,
         };
         pool.submit(Job::SetServerRules { account: "a1".into(), rules: vec![rule.clone()], delete: Vec::new(), categories: Vec::new() });
         let seen = until(&pool, "rules written", |e| matches!(e, Event::ServerRules { ids, error: None, .. } if !ids.is_empty()));
