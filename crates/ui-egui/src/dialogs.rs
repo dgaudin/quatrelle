@@ -665,10 +665,26 @@ pub enum RuleTest {
     AnyText,
     HasAttachment,
     Bulk,
+    /// A list of senders, any of which matches (Exchange's "from these people").
+    FromAny,
+    /// A list of recipients.
+    ToAny,
+    /// A list of subjects.
+    SubjectAny,
 }
 
 impl RuleTest {
-    const ALL: [RuleTest; 6] = [RuleTest::From, RuleTest::To, RuleTest::Subject, RuleTest::AnyText, RuleTest::HasAttachment, RuleTest::Bulk];
+    const ALL: [RuleTest; 9] = [
+        RuleTest::From,
+        RuleTest::To,
+        RuleTest::Subject,
+        RuleTest::AnyText,
+        RuleTest::HasAttachment,
+        RuleTest::Bulk,
+        RuleTest::FromAny,
+        RuleTest::ToAny,
+        RuleTest::SubjectAny,
+    ];
     fn label(self) -> &'static str {
         tl!(match self {
             RuleTest::From => "From contains",
@@ -677,6 +693,9 @@ impl RuleTest {
             RuleTest::AnyText => "Sender, recipients or subject contain",
             RuleTest::HasAttachment => "Has attachments",
             RuleTest::Bulk => "Is a newsletter or list mail",
+            RuleTest::FromAny => "From one of these (comma-separated)",
+            RuleTest::ToAny => "To or Cc one of these (comma-separated)",
+            RuleTest::SubjectAny => "Subject has one of these (comma-separated)",
         })
     }
     fn needs_text(self) -> bool {
@@ -757,6 +776,10 @@ impl RuleCond {
             Condition::AnyText(t) => (RuleTest::AnyText, t.clone()),
             Condition::HasAttachment => (RuleTest::HasAttachment, String::new()),
             Condition::Bulk => (RuleTest::Bulk, String::new()),
+            // "; " between them, so a subject that has a comma keeps it.
+            Condition::FromAny(v) => (RuleTest::FromAny, v.join("; ")),
+            Condition::ToAny(v) => (RuleTest::ToAny, v.join("; ")),
+            Condition::SubjectAny(v) => (RuleTest::SubjectAny, v.join("; ")),
         };
         RuleCond { test, text }
     }
@@ -788,6 +811,7 @@ impl RuleForm {
             if c.test.needs_text() && t.is_empty() {
                 return Err(tl!("Say what to look for").into());
             }
+            let several = || t.split([',', ';']).map(|x| x.trim().to_string()).filter(|x| !x.is_empty()).collect::<Vec<_>>();
             conditions.push(match c.test {
                 RuleTest::From => Condition::From(t),
                 RuleTest::To => Condition::To(t),
@@ -795,6 +819,9 @@ impl RuleForm {
                 RuleTest::AnyText => Condition::AnyText(t),
                 RuleTest::HasAttachment => Condition::HasAttachment,
                 RuleTest::Bulk => Condition::Bulk,
+                RuleTest::FromAny => Condition::FromAny(several()),
+                RuleTest::ToAny => Condition::ToAny(several()),
+                RuleTest::SubjectAny => Condition::SubjectAny(several()),
             });
         }
         if conditions.is_empty() {
@@ -895,6 +922,9 @@ fn describe(s: &Session, r: &Rule) -> String {
             Condition::AnyText(t) => tf!("mentions “{text}”", text = t),
             Condition::HasAttachment => tl!("has attachments").to_string(),
             Condition::Bulk => tl!("is list mail").to_string(),
+            Condition::FromAny(v) => tf!("from “{text}”", text = v.join(", ")),
+            Condition::ToAny(v) => tf!("to “{text}”", text = v.join(", ")),
+            Condition::SubjectAny(v) => tf!("subject has “{text}”", text = v.join(", ")),
         })
         .collect::<Vec<_>>()
         .join(&format!(" {} ", if r.match_all { tl!("and") } else { tl!("or") }));

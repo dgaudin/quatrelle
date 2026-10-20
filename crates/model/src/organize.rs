@@ -46,6 +46,12 @@ pub enum Condition {
     HasAttachment,
     /// Newsletters, lists, automatic mail.
     Bulk,
+    /// The sender is one of these (Exchange keeps "from these people" as a list).
+    FromAny(Vec<String>),
+    /// Sent to one of these addresses (Exchange's "sent to people or groups").
+    ToAny(Vec<String>),
+    /// The subject contains one of these.
+    SubjectAny(Vec<String>),
 }
 
 impl Condition {
@@ -59,6 +65,9 @@ impl Condition {
             Condition::AnyText(t) => has(&m.subject, t) || has(&addr(&m.from), t) || m.to.iter().chain(&m.cc).any(|a| has(&addr(a), t)),
             Condition::HasAttachment => m.has_attachments,
             Condition::Bulk => m.bulk,
+            Condition::FromAny(any) => any.iter().any(|t| has(&addr(&m.from), t)),
+            Condition::ToAny(any) => any.iter().any(|t| m.to.iter().chain(&m.cc).any(|a| has(&addr(a), t))),
+            Condition::SubjectAny(any) => any.iter().any(|t| has(&m.subject, t)),
         }
     }
 }
@@ -139,7 +148,14 @@ impl Rule {
                 Condition::AnyText(_) if kind == ServerKind::Exchange => out.push("looking in the subject, sender and recipients at once"),
                 Condition::Bulk => out.push("newsletters and automatic mail"),
                 Condition::HasAttachment if kind == ServerKind::Sieve => out.push("checking for attachments"),
-                Condition::From(_) | Condition::To(_) | Condition::Subject(_) | Condition::AnyText(_) | Condition::HasAttachment => {}
+                Condition::From(_)
+                | Condition::To(_)
+                | Condition::Subject(_)
+                | Condition::AnyText(_)
+                | Condition::HasAttachment
+                | Condition::FromAny(_)
+                | Condition::ToAny(_)
+                | Condition::SubjectAny(_) => {}
             }
         }
         if kind == ServerKind::Exchange {
@@ -309,6 +325,30 @@ mod tests {
             bulk,
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn a_rule_can_look_at_a_list_of_people_or_subjects() {
+        let r = Rule {
+            name: "Alerts".into(),
+            enabled: true,
+            account: None,
+            conditions: vec![Condition::FromAny(vec!["nagios@".into(), "zabbix@".into()])],
+            match_all: true,
+            actions: vec![RuleAction::MoveTo("Alerts".into())],
+            stop: false,
+            server: false,
+            remote_id: None,
+            priority: None,
+        };
+        assert!(r.matches(&m("nagios@asp.example", "disk", false)), "the first of them");
+        assert!(r.matches(&m("ZABBIX@asp.example", "disk", false)), "the other, case aside");
+        assert!(!r.matches(&m("someone@asp.example", "disk", false)));
+        let subjects = Condition::SubjectAny(vec!["disk full".into(), "raid".into()]);
+        assert!(subjects.matches(&m("x@y", "RAID degraded", false)));
+        assert!(!subjects.matches(&m("x@y", "hello", false)));
+        let to = Condition::ToAny(vec!["team@x.example".into()]);
+        assert!(!to.matches(&m("x@y", "hello", false)), "the message goes to me@x.example, not to that list");
     }
 
     #[test]

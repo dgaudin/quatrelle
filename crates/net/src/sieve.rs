@@ -453,12 +453,20 @@ fn condition_test(c: &Condition) -> Option<String> {
         let t = t.trim();
         (!t.is_empty()).then(|| sieve_str(t))
     };
+    let list = |v: &[String]| {
+        let items: Vec<String> = v.iter().filter_map(|t| text(t)).collect();
+        (!items.is_empty()).then(|| format!("[{}]", items.join(", ")))
+    };
     Some(match c {
         Condition::From(t) => format!("header :contains \"from\" {}", text(t)?),
         Condition::To(t) => format!("header :contains [\"to\", \"cc\"] {}", text(t)?),
         Condition::Subject(t) => format!("header :contains \"subject\" {}", text(t)?),
         Condition::AnyText(t) => format!("header :contains [\"subject\", \"from\", \"to\", \"cc\"] {}", text(t)?),
         Condition::HasAttachment | Condition::Bulk => return None,
+        // A list of values, any of which matches (`header :contains "from" ["a", "b"]`).
+        Condition::FromAny(v) => format!("header :contains \"from\" {}", list(v)?),
+        Condition::ToAny(v) => format!("header :contains [\"to\", \"cc\"] {}", list(v)?),
+        Condition::SubjectAny(v) => format!("header :contains \"subject\" {}", list(v)?),
     })
 }
 
