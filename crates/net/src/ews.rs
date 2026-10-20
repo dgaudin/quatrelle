@@ -438,6 +438,30 @@ fn check_message(m: &El) -> Result<()> {
     }
 }
 
+/// The rules an `InboxRules` answer lists: each one's name and id.
+fn rules_of(m: &El) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    if let Some(list) = m.find("InboxRules") {
+        for r in list.children("Rule").take(MAX_RULES) {
+            // The id comes as the element's attribute in the schema, and as its text from a
+            // server that keeps the older shape (this Exchange 2016 does).
+            let id =
+                r.child("RuleId").map(|x| x.attr("Id").map(str::to_string).unwrap_or_else(|| x.text.trim().to_string())).filter(|id| !id.is_empty());
+            let name = r.text_of("DisplayName");
+            if let (Some(id), Some(name)) = (id, name) {
+                out.push((name.to_string(), id));
+            }
+        }
+    }
+    out
+}
+
+/// The response message of an operation: the one inside `ResponseMessages`, or — as some servers
+/// (Exchange 2016 among them) answer — the response element itself, carrying `ResponseClass`.
+fn operation<'a>(doc: &'a El, element: &str) -> Result<&'a El> {
+    messages(doc).first().copied().or_else(|| doc.find(element)).ok_or_else(|| NetError::Protocol("an empty answer".into()))
+}
+
 /// The picture a `GetUserPhoto` answer carries. Exchange 2016 answers with the response element
 /// itself (`ResponseClass`, `PictureData` and all), not inside the `ResponseMessages` list every
 /// other operation uses; a server that does wrap it is read too.
@@ -1408,19 +1432,9 @@ impl Client {
     /// The ids of the rules Exchange keeps for the Inbox, by name.
     pub fn inbox_rule_ids(&self) -> Result<Vec<(String, String)>> {
         let doc = self.call("<m:GetInboxRules/>")?;
-        let m = messages(&doc).first().copied().ok_or_else(|| NetError::Protocol("an empty answer".into()))?;
+        let m = operation(&doc, "GetInboxRulesResponse")?;
         check_message(m)?;
-        let mut out = Vec::new();
-        if let Some(list) = m.find("InboxRules") {
-            for r in list.children("Rule").take(MAX_RULES) {
-                let id = r.child("RuleId").and_then(|x| x.attr("Id"));
-                let name = r.text_of("DisplayName");
-                if let (Some(id), Some(name)) = (id, name) {
-                    out.push((name.to_string(), id.to_string()));
-                }
-            }
-        }
-        Ok(out)
+        Ok(rules_of(m))
     }
 
     /// Create, change and remove the Inbox rules Exchange runs, from MailCraft's rules: each is
@@ -1447,12 +1461,15 @@ impl Client {
             }
         }
         for id in delete.iter().filter(|id| !id.is_empty()) {
-            ops.push_str(&format!("<t:DeleteRuleOperation><t:RuleId Id=\"{}\"/></t:DeleteRuleOperation>", esc(id)));
+            // The id travels both ways: as the attribute the schema names and as the text an
+            // older answer shape uses (this Exchange 2016 writes the text).
+            ops.push_str(&format!("<t:DeleteRuleOperation><t:RuleId Id=\"{0}\">{0}</t:RuleId></t:DeleteRuleOperation>", esc(id)));
         }
         let doc = self.call(&format!("<m:UpdateInboxRules><m:Operations>{ops}</m:Operations></m:UpdateInboxRules>"))?;
+        // As with GetInboxRules: a server may answer with the response element itself.
         let messages = messages(&doc);
         if messages.is_empty() {
-            return Err(NetError::Protocol("an empty answer".into()));
+            check_message(operation(&doc, "UpdateInboxRulesResponse")?)?;
         }
         for m in messages {
             check_message(m)?;
@@ -1532,7 +1549,7 @@ const MAX_RULES: usize = 500;
 fn inbox_rule_xml(r: &Rule, folder: Option<&str>, priority: usize, id: Option<&str>) -> String {
     let mut x = String::from("<t:Rule>");
     if let Some(id) = id {
-        x.push_str(&format!("<t:RuleId Id=\"{}\"/>", esc(id)));
+        x.push_str(&format!("<t:RuleId Id=\"{0}\">{0}</t:RuleId>", esc(id)));
     }
     x.push_str(&format!("<t:DisplayName>{}</t:DisplayName>", esc(&r.name)));
     x.push_str(&format!("<t:Priority>{priority}</t:Priority>"));
@@ -2071,6 +2088,30 @@ mod tests {
         assert_eq!(media, "image/jpeg");
         assert_eq!(data, vec![0xFF, 0xD8, 0xFF], "the bytes, not the base64 it came as");
         assert!(c.user_photo("ghost@nophoto.example").is_err(), "no picture is an answer, not a broken account");
+    }
+
+    #[test]
+    fn inbox_rules_are_read_in_either_shape() {
+        // As Exchange 2016 answers: the response element itself, the ids as the element's text.
+        let direct = parse(
+            "<s:Envelope><s:Body><GetInboxRulesResponse ResponseClass=\"Success\"><ResponseCode>NoError</ResponseCode><InboxRules>\
+             <Rule><RuleId>AgAABUdELrU=</RuleId><DisplayName>GRC:</DisplayName><Priority>1</Priority><IsEnabled>true</IsEnabled></Rule>\
+             <Rule><RuleId Id=\"R2\"/><DisplayName>Invoices</DisplayName><Priority>2</Priority><IsEnabled>true</IsEnabled></Rule>\
+             </InboxRules></GetInboxRulesResponse></s:Body></s:Envelope>",
+        );
+        let m = operation(&direct, "GetInboxRulesResponse").unwrap();
+        assert_eq!(
+            rules_of(m),
+            vec![("GRC:".to_string(), "AgAABUdELrU=".to_string()), ("Invoices".to_string(), "R2".to_string())],
+            "the id read from the text and from the attribute"
+        );
+        let wrapped = parse(
+            "<s:Envelope><s:Body><m:GetInboxRulesResponse><m:ResponseMessages><m:GetInboxRulesResponseMessage ResponseClass=\"Success\">\
+             <m:ResponseCode>NoError</m:ResponseCode></m:GetInboxRulesResponseMessage></m:ResponseMessages></m:GetInboxRulesResponse></s:Body></s:Envelope>",
+        );
+        assert!(operation(&wrapped, "GetInboxRulesResponse").is_ok());
+        let none = parse("<s:Envelope><s:Body></s:Body></s:Envelope>");
+        assert!(matches!(operation(&none, "GetInboxRulesResponse"), Err(NetError::Protocol(_))));
     }
 
     #[test]

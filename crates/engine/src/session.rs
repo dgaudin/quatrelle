@@ -704,6 +704,8 @@ pub struct Session {
     pub outbox: Vec<(String, OutboxItem)>,
     /// Held-back Outbox messages already asked to be sent when their time came.
     flushed: BTreeSet<u64>,
+    /// Accounts whose server has been asked for its rules this session (once is enough).
+    rules_asked: std::collections::BTreeSet<String>,
     jobs: Vec<Job>,
     pub(crate) cache: HashMap<(String, String), FolderState>,
     /// The cached folders, the least recently used first.
@@ -802,6 +804,7 @@ impl Session {
             pim_revision: 0,
             outbox: Vec::new(),
             flushed: BTreeSet::new(),
+            rules_asked: std::collections::BTreeSet::new(),
             jobs: Vec::new(),
             cache: HashMap::new(),
             cache_order: Vec::new(),
@@ -3532,12 +3535,16 @@ impl Session {
                     self.notice(format!("{who} {what}{why}"), true);
                 }
                 let online = matches!(status, SyncStatus::Online { .. });
+                // A server that has started syncing is readable: its rules are asked for then,
+                // not once the whole mailbox (public folders and all) has been walked — that
+                // takes minutes, and the Rules dialog would sit empty until then.
+                let connecting = matches!(status, SyncStatus::Syncing { .. }) && self.rules_asked.insert(account.clone());
                 if let Some(a) = self.account_mut(&account) {
                     a.status = status;
                 }
                 // Rules made while the account was offline reach its server now it's connected,
                 // and the ones it keeps that MailCraft didn't make are listed.
-                if online {
+                if online || connecting {
                     self.resend_server_rules(&account);
                     self.refresh_server_rules(&account);
                 }
@@ -3554,6 +3561,7 @@ impl Session {
                 if let Some(a) = self.account_mut(&account) {
                     a.folders = folders;
                 }
+
                 // A view on a folder that no longer exists falls back to the Inbox.
                 let missing = matches!(&self.view, View::Folder { account: va, folder } if *va == account && self.folder(va, folder).is_none());
                 if missing {
