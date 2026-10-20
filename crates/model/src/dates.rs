@@ -165,6 +165,22 @@ pub fn list_time(t: i64, clock: &Clock) -> String {
     }
 }
 
+/// A birthday as a card shows it: `Feb 20` when no year is known (vCard's `--02-20`, or the year
+/// Exchange writes when a birthday has none, 1604), the date as it is otherwise.
+pub fn birthday(text: &str) -> String {
+    let text = text.trim();
+    let rest = match text.strip_prefix("--").or_else(|| text.strip_prefix("1604-")) {
+        Some(rest) => rest,
+        None => return text.to_string(),
+    };
+    let mut it = rest.split('-');
+    let (month, day) = (it.next().and_then(|m| m.parse::<u32>().ok()), it.next().and_then(|d| d.parse::<u32>().ok()));
+    match (month, day) {
+        (Some(m), Some(d)) if (1..=12).contains(&m) && (1..=31).contains(&d) => format!("{} {d}", MONTHS[(m - 1) as usize]),
+        _ => text.to_string(),
+    }
+}
+
 /// The full date in the reading pane: `Wed 2026-10-14 14:05`.
 pub fn full_time(t: i64, clock: &Clock) -> String {
     let c = civil(t, clock);
@@ -242,6 +258,16 @@ pub fn day_label(day: i64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A birthday with no year is shown as Outlook shows it: the day and month alone.
+    #[test]
+    fn birthdays_without_a_year_lose_their_placeholder() {
+        assert_eq!(birthday("1604-02-20"), "Feb 20", "Exchange's \"no year\" date");
+        assert_eq!(birthday("--02-20"), "Feb 20", "vCard's yearless date");
+        assert_eq!(birthday("1990-07-12"), "1990-07-12", "a real year is kept");
+        assert_eq!(birthday("1604-13-01"), "1604-13-01", "not a date: as it came");
+        assert_eq!(birthday(""), "");
+    }
 
     #[test]
     fn follow_up_days() {

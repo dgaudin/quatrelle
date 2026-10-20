@@ -95,7 +95,7 @@ impl Column {
             Column::Fax => phone(&["fax"]),
             Column::BusinessAddress => c.addresses.iter().find(|a| a.kind == "work").map(|a| a.one_line()).unwrap_or_default(),
             Column::HomeAddress => c.addresses.iter().find(|a| a.kind == "home").map(|a| a.one_line()).unwrap_or_default(),
-            Column::Birthday => c.birthday.clone(),
+            Column::Birthday => mailcraft_engine::model::dates::birthday(&c.birthday),
             Column::Mobile => phone(&["cell", "mobile"]),
             Column::Home => phone(&["home"]),
             Column::Notes => c.note.lines().next().unwrap_or_default().to_string(),
@@ -509,7 +509,7 @@ pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) 
                 field(ui, &t, Icon::Location, &lines, kind);
             }
             if !c.birthday.is_empty() {
-                field(ui, &t, Icon::Calendar, &c.birthday, tl!("Birthday"));
+                field(ui, &t, Icon::Calendar, &crate::i18n::date(&mailcraft_engine::model::dates::birthday(&c.birthday)), tl!("Birthday"));
             }
             // Outlook's contact card: the work details an address book carries beside the name.
             if !c.department.is_empty() {
