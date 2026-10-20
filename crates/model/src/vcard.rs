@@ -86,8 +86,34 @@ pub struct Card {
     pub phones: Vec<Typed>,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub org: String,
+    /// The department inside the organisation (`ORG`'s second part).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub department: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub title: String,
+    /// What they do (`ROLE`), beside the job title.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub profession: String,
+    /// Where they sit (`X-OFFICE`, as Outlook writes it).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub office: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub manager: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub assistant: String,
+    /// A web page (`URL`).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub web: String,
+    /// An instant-messaging address (`IMPP`).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub im: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub nickname: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub spouse: String,
+    /// `YYYY-MM-DD` (or `--MM-DD`), like the birthday.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub anniversary: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub note: String,
     /// Postal addresses: work, home, other.
@@ -96,9 +122,117 @@ pub struct Card {
     /// `YYYY-MM-DD` (or `--MM-DD`); empty when not known.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub birthday: String,
+    /// Their picture (`PHOTO`), when the address book carries one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub photo: Option<Photo>,
     /// Other properties, as written (unfolded content lines).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub extra: Vec<String>,
+}
+
+/// A contact's picture, as `PHOTO` carries it: base64 (the form a vCard line holds), and what
+/// kind of picture it is.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Photo {
+    /// `image/jpeg`, `image/png`…
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub media: String,
+    /// The picture, base64, as written.
+    pub base64: String,
+}
+
+impl Photo {
+    /// The picture's bytes, when they decode and aren't larger than `max` (a picture from a
+    /// server is hostile input: a wrong size or alphabet means none).
+    pub fn bytes(&self, max: usize) -> Option<Vec<u8>> {
+        let data = base64_decode(&self.base64)?;
+        (!data.is_empty() && data.len() <= max).then_some(data)
+    }
+}
+
+/// Largest photo kept from an address book, decoded (a card that carries more is read without
+/// its picture rather than growing the cache without bound).
+pub const MAX_PHOTO: usize = 512 * 1024;
+
+const B64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+/// Base64 as vCard writes it (standard alphabet, padding optional, whitespace ignored). `None`
+/// when a character isn't base64, or the answer would be absurdly large.
+pub fn base64_decode(s: &str) -> Option<Vec<u8>> {
+    let mut out: Vec<u8> = Vec::new();
+    let mut buf: u32 = 0;
+    let mut bits: u32 = 0;
+    for b in s.bytes() {
+        let v = match b {
+            b'A'..=b'Z' => b - b'A',
+            b'a'..=b'z' => b - b'a' + 26,
+            b'0'..=b'9' => b - b'0' + 52,
+            b'+' | b'-' => 62,
+            b'/' | b'_' => 63,
+            b'=' => break,
+            b'\r' | b'\n' | b' ' | b'\t' => continue,
+            _ => return None,
+        } as u32;
+        buf = (buf << 6) | v;
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            out.push((buf >> bits) as u8);
+            buf &= (1 << bits) - 1;
+        }
+        if out.len() > 16 << 20 {
+            return None;
+        }
+    }
+    Some(out)
+}
+
+/// Base64 for a vCard line: standard alphabet, padded, no line breaks (folding comes later).
+pub fn base64_encode(data: &[u8]) -> String {
+    let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
+    for chunk in data.chunks(3) {
+        let n = (u32::from(chunk[0]) << 16) | (u32::from(*chunk.get(1).unwrap_or(&0)) << 8) | u32::from(*chunk.get(2).unwrap_or(&0));
+        out.push(B64[(n >> 18) as usize & 63] as char);
+        out.push(B64[(n >> 12) as usize & 63] as char);
+        out.push(if chunk.len() > 1 { B64[(n >> 6) as usize & 63] as char } else { '=' });
+        out.push(if chunk.len() > 2 { B64[n as usize & 63] as char } else { '=' });
+    }
+    out
+}
+
+/// A `PHOTO` property's value and parameters, when it carries the picture itself (a link to one
+/// isn't fetched: MailCraft never loads remote content on its own).
+fn photo_of(value: &str, params: &[(String, String)]) -> Option<Photo> {
+    let value = value.trim();
+    let (media, b64) = match value.strip_prefix("data:") {
+        // vCard 4: `data:image/jpeg;base64,…`
+        Some(rest) => {
+            let (head, data) = rest.split_once(',')?;
+            if !head.to_ascii_lowercase().contains("base64") {
+                return None;
+            }
+            (head.split(';').next().unwrap_or("").to_string(), data.to_string())
+        }
+        None => {
+            let encoding = params.iter().find(|(k, _)| k == "ENCODING").map(|(_, v)| v.to_ascii_lowercase()).unwrap_or_default();
+            if !encoding.contains('b') && !encoding.contains("base64") {
+                return None;
+            }
+            let kind = params.iter().find(|(k, _)| k == "TYPE").map(|(_, v)| v.to_ascii_lowercase()).unwrap_or_default();
+            let media = match kind.trim_matches('"') {
+                "png" => "image/png",
+                "gif" => "image/gif",
+                "webp" => "image/webp",
+                _ => "image/jpeg",
+            };
+            (media.to_string(), value.to_string())
+        }
+    };
+    let bytes = base64_decode(&b64)?;
+    if bytes.is_empty() || bytes.len() > MAX_PHOTO {
+        return None;
+    }
+    Some(Photo { media: if media.is_empty() { "image/jpeg".into() } else { media }, base64: base64_encode(&bytes) })
 }
 
 impl Card {
@@ -292,8 +426,35 @@ pub fn parse(text: &str) -> Vec<Card> {
                         let v = v.strip_prefix("tel:").unwrap_or(v);
                         c.phones.push(Typed { value: v.to_string(), kind: kind(&params) });
                     }
-                    "ORG" => c.org = components(value).into_iter().filter(|x| !x.is_empty()).collect::<Vec<_>>().join(", "),
+                    "ORG" => {
+                        let parts: Vec<String> = components(value).into_iter().filter(|x| !x.is_empty()).collect();
+                        c.org = parts.first().map(|x| x.trim().to_string()).unwrap_or_default();
+                        c.department = parts.get(1).map(|x| x.trim().to_string()).unwrap_or_default();
+                    }
                     "TITLE" => c.title = text(),
+                    "ROLE" => c.profession = text(),
+                    "URL" => {
+                        if c.web.is_empty() {
+                            c.web = value.trim().to_string();
+                        }
+                    }
+                    "IMPP" => {
+                        let v = value.trim();
+                        if c.im.is_empty() {
+                            c.im = v.strip_prefix("xmpp:").unwrap_or(v).to_string();
+                        }
+                    }
+                    "NICKNAME" => c.nickname = components(value).join(", "),
+                    "ANNIVERSARY" => c.anniversary = birthday_of(value).unwrap_or_default(),
+                    "X-OFFICE" => c.office = text(),
+                    "X-MANAGER" => c.manager = text(),
+                    "X-ASSISTANT" => c.assistant = text(),
+                    "X-SPOUSE" => c.spouse = text(),
+                    "PHOTO" => {
+                        if c.photo.is_none() {
+                            c.photo = photo_of(value, &params);
+                        }
+                    }
                     "NOTE" => c.note = components(value).join(";"),
                     "ADR" if c.addresses.len() < 20 => {
                         let a = components(value);
@@ -351,11 +512,47 @@ pub fn write(c: &Card) -> String {
     };
     lines.extend(c.emails.iter().map(|e| typed("EMAIL", e)));
     lines.extend(c.phones.iter().map(|p| typed("TEL", p)));
-    if !c.org.is_empty() {
-        lines.push(format!("ORG:{}", esc(&c.org)));
+    if !c.org.is_empty() || !c.department.is_empty() {
+        lines.push(format!("ORG:{};{}", esc(&c.org), esc(&c.department)));
     }
     if !c.title.is_empty() {
         lines.push(format!("TITLE:{}", esc(&c.title)));
+    }
+    if !c.profession.is_empty() {
+        lines.push(format!("ROLE:{}", esc(&c.profession)));
+    }
+    if !c.office.is_empty() {
+        lines.push(format!("X-OFFICE:{}", esc(&c.office)));
+    }
+    if !c.manager.is_empty() {
+        lines.push(format!("X-MANAGER:{}", esc(&c.manager)));
+    }
+    if !c.assistant.is_empty() {
+        lines.push(format!("X-ASSISTANT:{}", esc(&c.assistant)));
+    }
+    if !c.web.is_empty() {
+        lines.push(format!("URL:{}", c.web.replace(['\r', '\n'], "")));
+    }
+    if !c.im.is_empty() {
+        lines.push(format!("IMPP:{}", c.im.replace(['\r', '\n'], "")));
+    }
+    if !c.nickname.is_empty() {
+        lines.push(format!("NICKNAME:{}", esc(&c.nickname)));
+    }
+    if !c.spouse.is_empty() {
+        lines.push(format!("X-SPOUSE:{}", esc(&c.spouse)));
+    }
+    if !c.anniversary.is_empty()
+        && let Some(a) = birthday_of(&c.anniversary)
+    {
+        lines.push(match a.strip_prefix("--") {
+            Some(md) => format!("ANNIVERSARY:--{}", md.replace('-', "")),
+            None => format!("ANNIVERSARY:{}", a.replace('-', "")),
+        });
+    }
+    if let Some(ph) = &c.photo {
+        let media = if ph.media.is_empty() { "image/jpeg" } else { ph.media.as_str() };
+        lines.push(format!("PHOTO:data:{media};base64,{}", ph.base64));
     }
     if !c.note.is_empty() {
         lines.push(format!("NOTE:{}", esc(&c.note)));
@@ -385,6 +582,45 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_card_keeps_the_photo_and_outlooks_fields() {
+        // vCard 3 as Exchange and Outlook write it: a picture in base64, and their X- fields.
+        let text = "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:zoe\r\nFN:Zoe Park\r\nN:Park;Zoe;;;\r\n\
+ORG:Studio Lantern;Story\r\nTITLE:Director\r\nROLE:Storyteller\r\nX-OFFICE:Room 4\r\n\
+X-MANAGER:Riley Kim\r\nX-ASSISTANT:Sam Lee\r\nX-SPOUSE:Ann Park\r\nURL:https://zoe.example\r\n\
+IMPP:xmpp:zoe@chat.example\r\nNICKNAME:Z\r\nANNIVERSARY:2018-06-02\r\n\
+PHOTO;ENCODING=b;TYPE=JPEG:aGVsbG8=\r\nEND:VCARD\r\n";
+        let c = &parse(text)[0];
+        assert_eq!(c.org, "Studio Lantern");
+        assert_eq!(c.department, "Story");
+        assert_eq!(c.profession, "Storyteller");
+        assert_eq!((c.office.as_str(), c.manager.as_str(), c.assistant.as_str()), ("Room 4", "Riley Kim", "Sam Lee"));
+        assert_eq!(c.spouse, "Ann Park");
+        assert_eq!(c.web, "https://zoe.example");
+        assert_eq!(c.im, "zoe@chat.example", "the xmpp: prefix is dropped");
+        assert_eq!(c.nickname, "Z");
+        assert_eq!(c.anniversary, "2018-06-02");
+        let photo = c.photo.as_ref().unwrap();
+        assert_eq!(photo.media, "image/jpeg");
+        assert_eq!(photo.bytes(1024).unwrap(), b"hello");
+        // Written back as vCard 4 and read again: nothing lost.
+        let back = parse(&write(c))[0].clone();
+        assert_eq!(&back, c);
+        // vCard 4's data URI, and a picture over the cap (read without it).
+        let v4 = parse("BEGIN:VCARD\nVERSION:4.0\nFN:A\nPHOTO:data:image/png;base64,aGVsbG8=\nEND:VCARD\n")[0].clone();
+        assert_eq!(v4.photo.as_ref().unwrap().media, "image/png");
+        assert_eq!(v4.photo.as_ref().unwrap().bytes(1024).unwrap(), b"hello");
+        let big = format!("BEGIN:VCARD\nVERSION:4.0\nFN:B\nPHOTO:data:image/jpeg;base64,{}\nEND:VCARD\n", base64_encode(&vec![0u8; MAX_PHOTO + 1]));
+        assert!(parse(&big)[0].photo.is_none(), "too big: read without its picture");
+        // A link to a picture isn't fetched (no remote content without asking).
+        let link = parse("BEGIN:VCARD\nVERSION:4.0\nFN:C\nPHOTO;VALUE=uri:https://x.example/p.jpg\nEND:VCARD\n")[0].clone();
+        assert!(link.photo.is_none());
+        // Hostile base64.
+        assert_eq!(base64_decode("%%%"), None);
+        assert_eq!(base64_decode("aGVsbG8"), Some(b"hello".to_vec()));
+        assert_eq!(base64_encode(b"hello"), "aGVsbG8=");
+    }
+
+    #[test]
     fn reads_both_versions_and_writes_back() {
         let v3 = "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:zoe-1\r\nFN:Zoe Park\r\nN:Park;Zoe;;;\r\n\
 item1.EMAIL;TYPE=INTERNET,WORK:zoe@studio.example\r\nEMAIL;HOME:zoe@home.example\r\n\
@@ -401,14 +637,14 @@ BEGIN:VCARD\r\nVERSION:4.0\r\nUID:urn:uuid:ann\r\nEMAIL:ann@x.example\r\nEND:VCA
             vec![Typed { value: "zoe@studio.example".into(), kind: "work".into() }, Typed { value: "zoe@home.example".into(), kind: "home".into() }]
         );
         assert_eq!(z.phones[0], Typed { value: "+49 151 234".into(), kind: "cell".into() });
-        assert_eq!((z.org.as_str(), z.title.as_str()), ("Studio Lantern, Story", "Director"));
+        assert_eq!((z.org.as_str(), z.department.as_str(), z.title.as_str()), ("Studio Lantern", "Story", "Director"));
         assert_eq!(z.note, "Prefers mornings, not Mondays.\nCall first.");
         assert_eq!(z.birthday, "1990-04-01");
-        assert!(z.extra.iter().any(|x| x.contains("AAAABBBB")), "the rest is kept");
+        assert!(z.photo.is_some(), "the picture is read, not left as a raw line");
         assert_eq!(cards[1].display(), "ann@x.example");
         let back = parse(&write(z));
         assert_eq!(back.len(), 1);
-        assert_eq!(back[0], Card { org: "Studio Lantern\\, Story".replace("\\,", ","), ..z.clone() });
+        assert_eq!(back[0], z.clone());
         assert!(z.matches("lantern") && z.matches("ZOE@home") && z.matches("+49151") && !z.matches("ann"));
     }
 

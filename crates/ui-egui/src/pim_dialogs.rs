@@ -450,7 +450,17 @@ pub struct ContactForm {
     /// `YYYY-MM-DD`.
     pub birthday: String,
     pub org: String,
+    pub department: String,
+    pub office: String,
     pub title: String,
+    pub profession: String,
+    pub manager: String,
+    pub assistant: String,
+    pub web: String,
+    pub im: String,
+    pub nickname: String,
+    pub spouse: String,
+    pub anniversary: String,
     pub note: String,
     pub error: Option<String>,
 }
@@ -468,7 +478,17 @@ impl ContactForm {
             uid: Some(c.uid.clone()),
             name: c.display(),
             org: c.org.clone(),
+            department: c.department.clone(),
+            office: c.office.clone(),
             title: c.title.clone(),
+            profession: c.profession.clone(),
+            manager: c.manager.clone(),
+            assistant: c.assistant.clone(),
+            web: c.web.clone(),
+            im: c.im.clone(),
+            nickname: c.nickname.clone(),
+            spouse: c.spouse.clone(),
+            anniversary: c.anniversary.clone(),
             note: c.note.clone(),
             birthday: c.birthday.clone(),
             ..Default::default()
@@ -526,7 +546,17 @@ impl ContactForm {
             "addresses": addresses,
             "birthday": self.birthday.trim(),
             "org": self.org.trim(),
+            "department": self.department.trim(),
+            "office": self.office.trim(),
             "title": self.title.trim(),
+            "profession": self.profession.trim(),
+            "manager": self.manager.trim(),
+            "assistant": self.assistant.trim(),
+            "web": self.web.trim(),
+            "im": self.im.trim(),
+            "nickname": self.nickname.trim(),
+            "spouse": self.spouse.trim(),
+            "anniversary": self.anniversary.trim(),
             "note": self.note,
         });
         if let Some(u) = &self.uid {
@@ -554,6 +584,37 @@ pub fn contact(ui: &mut Ui, f: &mut ContactForm, t: &Tokens, acts: &mut Vec<Acti
         });
         form_row(ui, t, false, None, "Job title", |ui| {
             field(ui, &mut f.title, "", f32::INFINITY);
+        });
+        // Outlook's other work details, kept by Exchange, CardDAV and a .pst alike.
+        form_row(ui, t, false, None, "Department", |ui| {
+            field(ui, &mut f.department, "", f32::INFINITY);
+        });
+        form_row(ui, t, false, None, "Office", |ui| {
+            field(ui, &mut f.office, "", f32::INFINITY);
+        });
+        form_row(ui, t, false, None, "Profession", |ui| {
+            field(ui, &mut f.profession, "", f32::INFINITY);
+        });
+        form_row(ui, t, false, None, "Manager", |ui| {
+            field(ui, &mut f.manager, "", f32::INFINITY);
+        });
+        form_row(ui, t, false, None, "Assistant", |ui| {
+            field(ui, &mut f.assistant, "", f32::INFINITY);
+        });
+        form_row(ui, t, false, None, "Web page", |ui| {
+            field(ui, &mut f.web, "", f32::INFINITY);
+        });
+        form_row(ui, t, false, None, "Instant messaging", |ui| {
+            field(ui, &mut f.im, "", f32::INFINITY);
+        });
+        form_row(ui, t, false, None, "Nickname", |ui| {
+            field(ui, &mut f.nickname, "", f32::INFINITY);
+        });
+        form_row(ui, t, false, None, "Spouse", |ui| {
+            field(ui, &mut f.spouse, "", f32::INFINITY);
+        });
+        form_row(ui, t, false, None, "Anniversary", |ui| {
+            field(ui, &mut f.anniversary, tl!("YYYY-MM-DD"), 140.0);
         });
         for (i, label) in ["Email", "Email 2", "Email 3"].into_iter().enumerate() {
             if let Some(v) = f.emails.get_mut(i) {

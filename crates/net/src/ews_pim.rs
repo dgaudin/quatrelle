@@ -285,6 +285,27 @@ fn contact_xml(c: &Card) -> String {
     if !c.title.is_empty() {
         x.push_str(&format!("<t:JobTitle>{}</t:JobTitle>", esc(&c.title)));
     }
+    // Outlook's work details, which Exchange keeps on the contact.
+    for (name, value) in [
+        ("Department", &c.department),
+        ("OfficeLocation", &c.office),
+        ("Manager", &c.manager),
+        ("AssistantName", &c.assistant),
+        ("Profession", &c.profession),
+        ("BusinessHomePage", &c.web),
+        ("NickName", &c.nickname),
+        ("SpouseName", &c.spouse),
+    ] {
+        if !value.trim().is_empty() {
+            x.push_str(&format!("<t:{name}>{}</t:{name}>", esc(value.trim())));
+        }
+    }
+    if !c.im.is_empty() {
+        x.push_str(&format!("<t:IMAddresses><t:String>{}</t:String></t:IMAddresses>", esc(&c.im)));
+    }
+    if let Some(a) = mailcraft_model::vcard::birthday_of(&c.anniversary).filter(|b| !b.starts_with("--")) {
+        x.push_str(&format!("<t:WeddingAnniversary>{a}T12:00:00Z</t:WeddingAnniversary>"));
+    }
     if !c.family.is_empty() {
         x.push_str(&format!("<t:Surname>{}</t:Surname>", esc(&c.family)));
     }
@@ -348,17 +369,18 @@ pub fn card_of(it: &El) -> Option<Card> {
                 .collect()
         })
         .unwrap_or_default();
-    // Exchange keeps a birthday as the start of that day where it was set, in UTC (the evening
-    // before, east of Greenwich); MailCraft writes noon. Either way, the day from just after
-    // noon the day before to noon is the one.
-    let birthday = it
-        .text_of("Birthday")
-        .and_then(|b| mailcraft_jmap::utc_date(b.trim()))
-        .map(|t| {
-            let (y, m, d) = mailcraft_model::dates::civil_from_days((t + 12 * 3600 - 1).div_euclid(86_400));
-            format!("{y:04}-{m:02}-{d:02}")
-        })
-        .unwrap_or_default();
+    // Exchange keeps a birthday (and a wedding anniversary) as the start of that day where it
+    // was set, in UTC (the evening before, east of Greenwich); MailCraft writes noon. Either
+    // way, the day from just after noon the day before to noon is the one.
+    let day_of = |name: &str| -> String {
+        it.text_of(name)
+            .and_then(|b| mailcraft_jmap::utc_date(b.trim()))
+            .map(|t| {
+                let (y, m, d) = mailcraft_model::dates::civil_from_days((t + 12 * 3600 - 1).div_euclid(86_400));
+                format!("{y:04}-{m:02}-{d:02}")
+            })
+            .unwrap_or_default()
+    };
     let body = it.child("Body").map(|b| b.text.trim().to_string()).unwrap_or_default();
     Some(Card {
         uid: id,
@@ -368,10 +390,21 @@ pub fn card_of(it: &El) -> Option<Card> {
         emails,
         phones,
         org: text(it, "CompanyName"),
+        department: text(it, "Department"),
         title: text(it, "JobTitle"),
+        profession: text(it, "Profession"),
+        office: text(it, "OfficeLocation"),
+        manager: text(it, "Manager"),
+        assistant: text(it, "AssistantName"),
+        web: text(it, "BusinessHomePage"),
+        im: it.child("IMAddresses").and_then(|x| x.text_of("String")).map(str::trim).unwrap_or_default().to_string(),
+        nickname: text(it, "NickName"),
+        spouse: text(it, "SpouseName"),
+        anniversary: day_of("WeddingAnniversary"),
         note: body,
         addresses,
-        birthday,
+        birthday: day_of("Birthday"),
+        photo: None,
         extra: Vec::new(),
     })
 }
@@ -1035,6 +1068,7 @@ mod tests {
             ],
             birthday: "1990-07-12".into(),
             extra: Vec::new(),
+            ..Card::default()
         };
         let xml = contact_xml(&card).replace("<t:Contact>", "<t:Contact><t:ItemId Id=\"C1\" ChangeKey=\"k\"/>");
         // In the schema's order: addresses between emails and phones, the birthday after phones.

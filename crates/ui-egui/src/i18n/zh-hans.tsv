@@ -943,3 +943,13 @@ month	May	5月
 	Downloading {done} of {total}	正在下载 {done}/{total}
 	Also run on the server	也在服务器上运行
 	Exchange can't run this rule: {why}. It stays on this computer.	Exchange 无法运行此规则：{why}。它将保留在此计算机上。
+	Department	部门
+	Office	办公室
+	Profession	职业
+	Manager	经理
+	Assistant	助理
+	Web page	网页
+	Instant messaging	即时消息
+	Nickname	昵称
+	Spouse	配偶
+	Anniversary	周年纪念

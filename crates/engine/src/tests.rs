@@ -2251,6 +2251,50 @@ fn server_rules_go_to_the_server_and_keep_their_id() {
     assert!(s.notices.iter().any(|n| n.text.contains("Newsletters")), "{:?}", s.notices);
 }
 
+/// A contact keeps Outlook's work details: the command stores them, and reading the card back
+/// gives them, so CardDAV, Exchange and a .pst carry the same fields.
+#[test]
+fn a_contact_keeps_outlooks_fields() {
+    let mut s = sample_session("contact-fields");
+    let v = s
+        .run(
+            "contact.create",
+            &json!({
+                "name": "Ana Lima",
+                "emails": ["ana@contoso.example"],
+                "org": "Contoso",
+                "department": "Story",
+                "office": "Room 4",
+                "title": "Producer",
+                "profession": "Storyteller",
+                "manager": "Riley Kim",
+                "assistant": "Sam Lee",
+                "web": "https://ana.example",
+                "im": "ana@chat.example",
+                "nickname": "A",
+                "spouse": "Jo Lima",
+                "anniversary": "2018-06-02",
+                "birthday": "1990-07-12",
+            }),
+        )
+        .unwrap();
+    let uid = v["uid"].as_str().unwrap_or_default().to_string();
+    assert!(!uid.is_empty(), "{v}");
+    let p = s.find_person(&uid).unwrap();
+    let c = &p.card;
+    assert_eq!((c.org.as_str(), c.department.as_str(), c.office.as_str()), ("Contoso", "Story", "Room 4"));
+    assert_eq!((c.title.as_str(), c.profession.as_str()), ("Producer", "Storyteller"));
+    assert_eq!((c.manager.as_str(), c.assistant.as_str()), ("Riley Kim", "Sam Lee"));
+    assert_eq!((c.web.as_str(), c.im.as_str()), ("https://ana.example", "ana@chat.example"));
+    assert_eq!((c.nickname.as_str(), c.spouse.as_str()), ("A", "Jo Lima"));
+    assert_eq!((c.birthday.as_str(), c.anniversary.as_str()), ("1990-07-12", "2018-06-02"));
+    // Changing one leaves the others; a wrong date is refused.
+    s.run("contact.update", &json!({"uid": uid, "office": "Room 5"})).unwrap();
+    let c = s.find_person(&uid).unwrap().card;
+    assert_eq!((c.office.as_str(), c.department.as_str(), c.anniversary.as_str()), ("Room 5", "Story", "2018-06-02"));
+    assert!(s.run("contact.update", &json!({"uid": uid, "anniversary": "June"})).is_err());
+}
+
 /// Issue #1: the reading pane marks mail read as Outlook's Reading Pane options say: when shown
 /// (after a wait), once another message is chosen, or not at all; a message opened in its own
 /// window (a double-click) is always read.

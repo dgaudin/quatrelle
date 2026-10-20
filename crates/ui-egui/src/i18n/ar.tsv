@@ -942,3 +942,13 @@ month	May	مايو
 	Downloading {done} of {total}	جارٍ تنزيل {done} من {total}
 	Also run on the server	التشغيل على الخادم أيضًا
 	Exchange can't run this rule: {why}. It stays on this computer.	لا يمكن لـ Exchange تشغيل هذه القاعدة: {why}. ستبقى على هذا الكمبيوتر.
+	Department	القسم
+	Office	المكتب
+	Profession	المهنة
+	Manager	المدير
+	Assistant	المساعد
+	Web page	صفحة الويب
+	Instant messaging	المراسلة الفورية
+	Nickname	الاسم المستعار
+	Spouse	الزوج/الزوجة
+	Anniversary	الذكرى السنوية
