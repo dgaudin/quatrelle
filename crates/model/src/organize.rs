@@ -195,6 +195,15 @@ pub fn actions_for(rules: &[Rule], m: &Summary) -> Vec<RuleAction> {
     out
 }
 
+/// A rule MailCraft didn't make but the account's server runs (Outlook's own, the server's web
+/// page, a Sieve script the user wrote): listed as it is, never changed from here — whoever made
+/// it owns it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ForeignRule {
+    pub account: String,
+    pub name: String,
+}
+
 /// A snoozed message: it waits in the Snoozed folder and comes back to `back_to` at `until`.
 /// Found again by Message-ID, since moving gives it a new UID.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

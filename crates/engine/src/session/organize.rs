@@ -317,6 +317,16 @@ impl Session {
         }
     }
 
+    /// Read the rules the account's server keeps (`GetServerRules`): the ids MailCraft's own have
+    /// there, and the ones made elsewhere. Accounts whose server keeps none are left alone.
+    pub(super) fn refresh_server_rules(&mut self, account: &str) {
+        if self.server_kind(account).is_none() {
+            return;
+        }
+        let ours: Vec<String> = self.rules.iter().filter(|r| r.account.as_deref() == Some(account)).filter_map(|r| r.remote_id.clone()).collect();
+        self.jobs.push(Job::GetServerRules { account: account.to_string(), ours });
+    }
+
     /// Rules marked for the server that never got there (the account was offline when they were
     /// made): send them now that it's connected. One the server refused is tried again on the
     /// next connection, until it takes it.

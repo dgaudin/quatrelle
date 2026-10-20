@@ -721,6 +721,10 @@ pub struct Session {
     pub new_mail: Vec<Summary>,
     /// Inbox rules, run on mail as it arrives (`rules.json`).
     pub rules: Vec<mailcraft_model::organize::Rule>,
+    /// The rules the accounts' servers run that MailCraft didn't make (Outlook's own, the
+    /// server's web page, a Sieve script): listed, never changed from here. Read when an account
+    /// connects, and after every change of ours.
+    pub foreign_rules: Vec<mailcraft_model::organize::ForeignRule>,
     /// Snoozed messages and when they come back (`snoozes.json`).
     pub snoozes: Vec<mailcraft_model::organize::Snooze>,
     /// The Other tab of a Focused/Other Inbox is showing.
@@ -807,6 +811,7 @@ impl Session {
             seen_uid: HashMap::new(),
             new_mail: Vec::new(),
             rules: Vec::new(),
+            foreign_rules: Vec::new(),
             snoozes: Vec::new(),
             focus_other: false,
             pictures: HashMap::new(),
@@ -3530,9 +3535,11 @@ impl Session {
                 if let Some(a) = self.account_mut(&account) {
                     a.status = status;
                 }
-                // Rules made while the account was offline reach its server now it's connected.
+                // Rules made while the account was offline reach its server now it's connected,
+                // and the ones it keeps that MailCraft didn't make are listed.
                 if online {
                     self.resend_server_rules(&account);
+                    self.refresh_server_rules(&account);
                 }
             }
             Event::Folders { account, mut folders } => {
@@ -3601,7 +3608,13 @@ impl Session {
                     self.notice(format!("automatic replies weren't changed: {e}"), true);
                 }
             }
-            Event::ServerRules { account, ids, cleared, error } => {
+            Event::ServerRules { account, ids, others, cleared, error } => {
+                // The rules the server keeps that MailCraft didn't make (or no longer does):
+                // listed as they are, whoever made them owns them.
+                self.foreign_rules.retain(|r| r.account != account);
+                self.foreign_rules.extend(others.into_iter().map(|name| mailcraft_model::organize::ForeignRule { account: account.clone(), name }));
+                self.foreign_rules
+                    .sort_by(|a, b| (a.account.as_str(), a.name.to_lowercase().as_str()).cmp(&(b.account.as_str(), b.name.to_lowercase().as_str())));
                 if let Some(e) = error {
                     self.notice(format!("the server's rules weren't changed: {e}"), true);
                 } else {

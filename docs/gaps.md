@@ -18,7 +18,6 @@ _Status: v0.19, 2026-10-20._
 | 4 | **Drag attachments out under Wayland** | Works on Windows, macOS, and Linux and the BSDs under X11 (XDND). A native Wayland window would need the compositor's data-device drag from the window's own Wayland connection, which egui's window layer doesn't share (reaching it would take unsafe code). |
 | 5 | **On-premises Exchange: Kerberos-only servers** | EWS signs in with NTLMv2 or Basic and is found with Autodiscover; a server that only takes Kerberos can't be signed in to. ActiveSync is licensed and out of scope. |
 | 6 | **Public folders on Exchange Online** | Public folders list and sync on on-premises Exchange through EWS. Exchange Online reaches them only through EWS, which Microsoft blocks there from October 2026 and removes in April 2027, and Microsoft Graph has no public folders; its suggested replacement, Microsoft 365 Groups, needs permissions only a tenant's administrator can grant. |
-| 7 | **Rules made elsewhere** | A rule marked "also on the server" runs while MailCraft is closed: in Exchange's inbox rules (EWS `GetInboxRules`/`UpdateInboxRules`), in Microsoft 365's (`messageRules`), and in an IMAP account's Sieve script (`mailcraft`, through ManageSieve: `fileinto`, `imap4flags`, `stop`, including the user's own script and keeping the automatic replies). What those servers can't see (attachments, newsletters) is said in the dialog and stays here. Rules made in another client — Outlook's own, the server's web interface, a Sieve script of the user's — aren't read back into the list. |
 
 ## Done
 

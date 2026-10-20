@@ -570,6 +570,21 @@ const SENT_LATER: Duration = Duration::from_secs(15);
 const QUICK_IDLE: Duration = Duration::from_secs(5 * 60);
 
 /// The connection to an account's server.
+/// Split the rules a server lists into the ones MailCraft holds the id of, and the names of the
+/// others (Outlook's own, the server's web page, a script the user wrote).
+fn split_rules(all: Vec<(String, String)>, ours: &[String]) -> (Vec<(String, String)>, Vec<String>) {
+    let mut mine = Vec::new();
+    let mut others = Vec::new();
+    for (name, id) in all {
+        if ours.iter().any(|o| o == &id) {
+            mine.push((name, id));
+        } else {
+            others.push(name);
+        }
+    }
+    (mine, others)
+}
+
 enum Conn {
     Imap(Client<Stream>),
     Jmap(jmap::Client),
@@ -1427,6 +1442,16 @@ impl Worker {
                 }
             }
             Job::SetServerRules { rules, delete, categories, .. } => self.set_server_rules(rules, delete, categories),
+            Job::GetServerRules { ours, .. } => match self.read_server_rules(ours) {
+                Ok((ids, others, cleared)) => self.sink.emit(Event::ServerRules { account: self.id(), ids, others, cleared, error: None }),
+                Err(e) => self.sink.emit(Event::ServerRules {
+                    account: self.id(),
+                    ids: Vec::new(),
+                    others: Vec::new(),
+                    cleared: Vec::new(),
+                    error: Some(e.to_string()),
+                }),
+            },
             Job::FetchPhoto { email, .. } => self.fetch_photo(&email),
             Job::FetchUrl { .. } | Job::Discover { .. } | Job::SignIn { .. } | Job::ImportPst { .. } | Job::ExportPst { .. } => {}
             Job::Start { .. } | Job::SmtpPassword { .. } | Job::Remove { .. } | Job::WorkOffline { .. } | Job::SetSync { .. } => {}
@@ -1437,9 +1462,9 @@ impl Worker {
     /// filed while MailCraft is closed, and remove the ones turned off or deleted here.
     fn set_server_rules(&mut self, rules: Vec<mailcraft_model::organize::Rule>, delete: Vec<String>, categories: Vec<(String, String)>) {
         use mailcraft_model::organize::RuleAction;
-        let r = (|| -> Result<Vec<(String, String)>> {
+        let r = (|| -> Result<(Vec<(String, String)>, Vec<String>)> {
             if rules.is_empty() && delete.is_empty() {
-                return Ok(Vec::new());
+                return Ok((Vec::new(), Vec::new()));
             }
             if self.conn.is_none() {
                 self.connect()?;
@@ -1460,9 +1485,12 @@ impl Worker {
                     s.login(&user, &secret)?;
                 }
                 let written = s.set_rules(wanted, categories);
+                let listed = s.list();
                 s.logout();
                 written?;
-                return Ok(ids);
+                let (names, _) = listed?;
+                let others = names.iter().filter(|n| n.as_str() != crate::sieve::SCRIPT).cloned().collect();
+                return Ok((ids, others));
             }
             // The folder each rule files mail into, by the id the server knows it by.
             let mut wanted: Vec<(mailcraft_model::organize::Rule, Option<String>)> = Vec::new();
@@ -1486,18 +1514,74 @@ impl Worker {
                 };
                 wanted.push((rule.clone(), id));
             }
-            match self.conn.as_mut() {
+            let ids = match self.conn.as_mut() {
                 Some(Conn::Ews(c)) => c.set_inbox_rules(&wanted, &delete),
                 Some(Conn::Graph(c)) => c.set_message_rules(&wanted, &delete),
                 _ => Err(NetError::No("this server's rules can't be changed from MailCraft".into())),
-            }
+            }?;
+            // What else the server runs: made in Outlook, or on its own web page.
+            let all = match self.conn.as_ref() {
+                Some(Conn::Ews(c)) => c.inbox_rule_ids()?,
+                Some(Conn::Graph(c)) => c.message_rule_ids()?,
+                _ => Vec::new(),
+            };
+            let mine: Vec<String> = ids.iter().map(|(_, id)| id.clone()).collect();
+            let (_, others) = split_rules(all, &mine);
+            Ok((ids, others))
         })();
         match r {
-            Ok(ids) => self.sink.emit(Event::ServerRules { account: self.acc.id.clone(), ids, cleared: delete, error: None }),
-            Err(e) => {
-                self.sink.emit(Event::ServerRules { account: self.acc.id.clone(), ids: Vec::new(), cleared: Vec::new(), error: Some(e.to_string()) })
-            }
+            Ok((ids, others)) => self.sink.emit(Event::ServerRules { account: self.acc.id.clone(), ids, others, cleared: delete, error: None }),
+            Err(e) => self.sink.emit(Event::ServerRules {
+                account: self.acc.id.clone(),
+                ids: Vec::new(),
+                others: Vec::new(),
+                cleared: Vec::new(),
+                error: Some(e.to_string()),
+            }),
         }
+    }
+
+    /// What the account's server keeps: the ids MailCraft's own rules have there (`ours` is what
+    /// it holds), the names of the ones it didn't make, and its own the server no longer has.
+    fn read_server_rules(&mut self, ours: Vec<String>) -> Result<(Vec<(String, String)>, Vec<String>, Vec<String>)> {
+        if self.conn.is_none() {
+            self.connect()?;
+        }
+        if matches!(self.conn, Some(Conn::Pop)) {
+            return Err(NetError::No("POP accounts keep no rules on their server".into()));
+        }
+        if matches!(self.conn, Some(Conn::Imap(_))) {
+            let secret = self.secret()?;
+            let user = if self.acc.username.is_empty() { self.acc.email.clone() } else { self.acc.username.clone() };
+            let mut s = crate::sieve::Client::connect(&self.acc.imap, self.sieve_port).map_err(|e| match e {
+                NetError::Io(_) => NetError::No("this server keeps no rules for MailCraft (no ManageSieve)".into()),
+                e => e,
+            })?;
+            if self.acc.oauth.is_some() {
+                s.login_xoauth2(&user, &secret)?;
+            } else {
+                s.login(&user, &secret)?;
+            }
+            let listed = s.list();
+            s.logout();
+            let (names, _) = listed?;
+            // Our script holds our rules; without it, they're gone from the server.
+            let own = names.iter().any(|n| n == crate::sieve::SCRIPT);
+            let ids =
+                if own { ours.iter().map(|id| (id.strip_prefix("sieve:").unwrap_or(id).to_string(), id.clone())).collect() } else { Vec::new() };
+            let cleared = if own { Vec::new() } else { ours };
+            let others = names.iter().filter(|n| n.as_str() != crate::sieve::SCRIPT).cloned().collect();
+            return Ok((ids, others, cleared));
+        }
+        let all = match self.conn.as_ref() {
+            Some(Conn::Ews(c)) => c.inbox_rule_ids()?,
+            Some(Conn::Graph(c)) => c.message_rule_ids()?,
+            _ => return Err(NetError::No("this server keeps no inbox rules".into())),
+        };
+        let on_server: Vec<&str> = all.iter().map(|(_, id)| id.as_str()).collect();
+        let cleared = ours.iter().filter(|id| !on_server.contains(&id.as_str())).cloned().collect();
+        let (ids, others) = split_rules(all, &ours);
+        Ok((ids, others, cleared))
     }
 
     /// The picture a directory keeps for an address: none is an answer too (the person simply
@@ -2099,6 +2183,19 @@ fn jumps_queue(j: &Job) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A server's rules split by whose they are: the ones MailCraft holds the id of, and the
+    /// names of those it didn't make (Outlook's own, the server's web page).
+    #[test]
+    fn server_rules_split_by_whose_they_are() {
+        let all = vec![("Outlook rule".to_string(), "R9".to_string()), ("Invoices".to_string(), "R1".to_string())];
+        let (mine, others) = split_rules(all, &["R1".to_string()]);
+        assert_eq!(mine, vec![("Invoices".to_string(), "R1".to_string())]);
+        assert_eq!(others, ["Outlook rule"]);
+        let (mine, others) = split_rules(vec![("Theirs".into(), "R2".into())], &[]);
+        assert!(mine.is_empty());
+        assert_eq!(others, ["Theirs"], "nothing of ours there: all of it is theirs");
+    }
 
     /// Automatic replies are answered between two folders of a long first sync, not after it
     /// (File › Info said "Checking with the server…" all the while).

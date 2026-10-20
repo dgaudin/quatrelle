@@ -2135,6 +2135,21 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Act
             } else if changed {
                 acts.push(Action::Run("rules.set", json!({"rules": rules})));
             }
+            // The rules the accounts' servers run that MailCraft didn't make (Outlook's own, a
+            // server's web page, a Sieve script): shown, never changed here — whoever made them
+            // owns them.
+            if !s.foreign_rules.is_empty() {
+                ui.add_space(10.0);
+                ui.label(RichText::new(tl!("On the server, made elsewhere")).color(t.dim).small().strong());
+                ui.add_space(2.0);
+                for f in &s.foreign_rules {
+                    let who =
+                        if s.accounts.len() > 1 { s.account(&f.account).map(|a| a.config.email.clone()).unwrap_or_default() } else { String::new() };
+                    let text = if who.is_empty() { format!("· {}", f.name) } else { format!("· {} — {}", f.name, who) };
+                    ui.label(RichText::new(text).color(t.faint).small());
+                }
+                ui.label(RichText::new(tl!("Change or remove them in the program that made them.")).color(t.faint).small());
+            }
             ui.add_space(8.0);
             ui.horizontal(|ui| {
                 if ui.button(tl!("New rule…")).clicked() {

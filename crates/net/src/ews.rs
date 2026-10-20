@@ -1967,6 +1967,8 @@ mod tests {
         use mailcraft_model::organize::{Condition, Rule, RuleAction};
         let mut d = crate::fake_ews::Data::default();
         d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+        // A rule made in Outlook: listed with the others, and never touched by MailCraft.
+        d.rules.push(("R-OUTLOOK".into(), "Outlook rule".into()));
         let server = crate::fake_ews::serve(d);
         let user = format!("{}\\{}", crate::fake_ews::DOMAIN, crate::fake_ews::USER);
         let c = Client::connect(&server.url, &user, crate::fake_ews::PASSWORD, "riley@contoso.example").unwrap();
@@ -1987,14 +1989,25 @@ mod tests {
         let (name, id) = ids[0].clone();
         assert_eq!(name, "Invoices");
         assert!(!id.is_empty());
-        assert_eq!(c.inbox_rule_ids().unwrap(), vec![("Invoices".to_string(), id.clone())]);
+        assert_eq!(
+            c.inbox_rule_ids().unwrap(),
+            vec![("Outlook rule".to_string(), "R-OUTLOOK".to_string()), ("Invoices".to_string(), id.clone())],
+            "the server's rules all come back, whoever made them"
+        );
         // Changed by its id: the server keeps the same rule, under its new name.
         let ids = c.set_inbox_rules(&[(rule("Invoices 2026", Some(&id)), Some("F-INVOICES".into()))], &[]).unwrap();
         assert_eq!(ids, vec![("Invoices 2026".to_string(), id.clone())]);
-        assert_eq!(c.inbox_rule_ids().unwrap(), vec![("Invoices 2026".to_string(), id.clone())]);
+        assert_eq!(
+            c.inbox_rule_ids().unwrap(),
+            vec![("Outlook rule".to_string(), "R-OUTLOOK".to_string()), ("Invoices 2026".to_string(), id.clone())]
+        );
         // Removed.
         assert!(c.set_inbox_rules(&[], std::slice::from_ref(&id)).unwrap().is_empty());
-        assert!(c.inbox_rule_ids().unwrap().is_empty());
+        assert_eq!(
+            c.inbox_rule_ids().unwrap(),
+            vec![("Outlook rule".to_string(), "R-OUTLOOK".to_string())],
+            "ours is gone; the one Outlook made is left alone"
+        );
         let calls = server.data.lock().unwrap().calls.clone();
         assert!(calls.iter().any(|c| c == "UpdateInboxRules"), "{calls:?}");
     }

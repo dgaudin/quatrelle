@@ -941,6 +941,14 @@ mod tests {
         assert!(s.log.iter().any(|l| l.starts_with("SUBSCRIBE \"Clients\"")));
     }
 
+    /// The ids a `ServerRules` event carries.
+    fn ids_of(e: &Event) -> Vec<(String, String)> {
+        match e {
+            Event::ServerRules { ids, .. } => ids.clone(),
+            _ => Vec::new(),
+        }
+    }
+
     fn until(pool: &crate::worker::Pool, what: &str, mut f: impl FnMut(&Event) -> bool) -> Vec<Event> {
         let end = Instant::now() + Duration::from_secs(20);
         let mut seen = Vec::new();
@@ -1020,7 +1028,8 @@ x"
         st.lock().unwrap().mailbox("Archive").unwrap();
         let imap_port = serve_tcp(&st);
         let (sieve_port, sieve) = crate::sieve::tests::serve(crate::sieve::tests::Fake {
-            scripts: Vec::new(),
+            // A script of the user's own, which ours leaves to them.
+            scripts: vec![("filters".into(), "require \"fileinto\";".into())],
             active: None,
             sieve: "fileinto imap4flags vacation include",
             log: Vec::new(),
@@ -1072,6 +1081,18 @@ x"
             assert!(script.contains("vacation :days 1"), "the automatic replies it held are kept: {script}");
             assert_eq!(f.active.as_deref(), Some(crate::sieve::SCRIPT));
         }
+        // What the server keeps is read back: our rule by the id the script holds for it, and
+        // the user's own script as a rule MailCraft didn't make.
+        pool.submit(Job::GetServerRules { account: "a1".into(), ours: vec!["sieve:Invoices".into()] });
+        let seen = until(&pool, "rules read", |e| matches!(e, Event::ServerRules { error: None, .. } if ids_of(e).len() == 1));
+        let read = seen.into_iter().find_map(|e| match e {
+            Event::ServerRules { ids, others, cleared, error: None, .. } => Some((ids, others, cleared)),
+            _ => None,
+        });
+        let (ids, others, cleared) = read.unwrap_or_default();
+        assert_eq!(ids, vec![("Invoices".to_string(), "sieve:Invoices".to_string())]);
+        assert_eq!(others, vec!["filters".to_string()], "the user's own script is listed, and left alone");
+        assert!(cleared.is_empty());
         // The rule turned off: the script keeps the replies and loses the rule.
         pool.submit(Job::SetServerRules { account: "a1".into(), rules: Vec::new(), delete: vec![ids[0].1.clone()], categories: Vec::new() });
         until(&pool, "rules removed", |e| matches!(e, Event::ServerRules { ids, error: None, .. } if ids.is_empty()));
