@@ -1455,6 +1455,24 @@ impl Client {
         }
         Ok(out)
     }
+
+    /// The picture the directory keeps for an address (`GetUserPhoto`, Exchange 2013 and later):
+    /// its bytes and type. `No` when the mailbox has none, or the server predates it.
+    pub fn user_photo(&self, email: &str) -> Result<(String, Vec<u8>)> {
+        let doc =
+            self.call(&format!("<m:GetUserPhoto><m:Email>{}</m:Email><m:SizeRequested>HR240x240</m:SizeRequested></m:GetUserPhoto>", esc(email)))?;
+        let m = messages(&doc).first().copied().ok_or_else(|| NetError::Protocol("an empty answer".into()))?;
+        check_message(m)?;
+        let data = m.text_of("PictureData").map(str::trim).unwrap_or_default();
+        if data.is_empty() {
+            return Err(NetError::No("no picture for this person".into()));
+        }
+        let bytes = unb64(data).ok_or_else(|| NetError::Protocol("the picture isn't base64".into()))?;
+        if bytes.is_empty() || bytes.len() > crate::MAX_PICTURE {
+            return Err(NetError::No("no picture for this person".into()));
+        }
+        Ok((crate::picture_media(&bytes).to_string(), bytes))
+    }
 }
 
 /// The most rules Exchange answers with (a mailbox's rule list is small; a hostile one isn't
@@ -1979,6 +1997,19 @@ mod tests {
         assert!(c.inbox_rule_ids().unwrap().is_empty());
         let calls = server.data.lock().unwrap().calls.clone();
         assert!(calls.iter().any(|c| c == "UpdateInboxRules"), "{calls:?}");
+    }
+
+    #[test]
+    fn the_directory_picture_is_fetched() {
+        let mut d = crate::fake_ews::Data::default();
+        d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+        let server = crate::fake_ews::serve(d);
+        let user = format!("{}\\{}", crate::fake_ews::DOMAIN, crate::fake_ews::USER);
+        let c = Client::connect(&server.url, &user, crate::fake_ews::PASSWORD, "riley@contoso.example").unwrap();
+        let (media, data) = c.user_photo("zoe@contoso.example").unwrap();
+        assert_eq!(media, "image/jpeg");
+        assert_eq!(data, vec![0xFF, 0xD8, 0xFF], "the bytes, not the base64 it came as");
+        assert!(c.user_photo("ghost@nophoto.example").is_err(), "no picture is an answer, not a broken account");
     }
 
     #[test]

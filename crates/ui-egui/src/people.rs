@@ -250,6 +250,24 @@ fn books(s: &Session, st: &mut UiState, ui: &mut Ui) {
     ui.separator();
 }
 
+/// The picture to draw for a person: the one their card carries, else the one the directory
+/// keeps for their address (once it has arrived).
+fn picture<'a>(s: &'a Session, card: &'a mailcraft_engine::model::vcard::Card) -> Option<&'a mailcraft_engine::model::vcard::Photo> {
+    card.photo.as_ref().or_else(|| card.emails.first().and_then(|e| s.person_photo(e.value.trim())))
+}
+
+/// A contact's picture as a texture, decoded once and kept by egui while it's shown (a wrong or
+/// too big picture is no picture).
+fn photo_texture(ui: &Ui, uid: &str, p: &mailcraft_engine::model::vcard::Photo) -> Option<egui::TextureHandle> {
+    let id = egui::Id::unique(("contact-photo", uid, p.base64.len()));
+    if let Some(t) = ui.ctx().data(|d| d.get_temp::<Option<egui::TextureHandle>>(id)) {
+        return t;
+    }
+    let tex = p.bytes(mailcraft_engine::model::vcard::MAX_PHOTO).and_then(|b| crate::reading::decode(ui.ctx(), &format!("contact-{uid}"), &b, 256));
+    ui.ctx().data_mut(|d| d.insert_temp(id, tex.clone()));
+    tex
+}
+
 pub fn nav(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
     let t = st.tokens;
     if widgets::accent_button(ui, Icon::Plus, "New contact", &t, !s.accounts.is_empty()).clicked() {
@@ -297,7 +315,15 @@ pub fn nav(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
                         ui.painter().rect_filled(r, 6.0, if selected { t.accent_soft } else { t.hover_row });
                     }
                     let initials: String = name.split_whitespace().filter_map(|w| w.chars().next()).take(2).collect::<String>().to_uppercase();
-                    widgets::avatar(ui, r.left_center() + vec2(20.0, 0.0), 14.0, &initials, theme::avatar_color(&name, t.dark));
+                    match picture(s, &p.card).and_then(|ph| photo_texture(ui, &p.card.uid, ph)) {
+                        Some(tex) => {
+                            let av = egui::Rect::from_center_size(r.left_center() + vec2(20.0, 0.0), vec2(28.0, 28.0));
+                            ui.put(av, egui::Image::new(&tex).fit_to_exact_size(av.size()));
+                        }
+                        None => {
+                            widgets::avatar(ui, r.left_center() + vec2(20.0, 0.0), 14.0, &initials, theme::avatar_color(&name, t.dark));
+                        }
+                    }
                     ui.painter().with_clip_rect(r.shrink2(vec2(2.0, 0.0))).text(
                         r.left_center() + vec2(42.0, -7.0),
                         egui::Align2::LEFT_CENTER,
@@ -371,19 +397,15 @@ pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) 
         egui::Frame::new().inner_margin(Margin { left: 28, right: 28, top: 24, bottom: 24 }).show(ui, |ui| {
             ui.horizontal(|ui| {
                 let (r, _) = ui.allocate_exact_size(vec2(72.0, 72.0), Sense::hover());
-                // Outlook shows the picture an address book carries; without one, the initials.
-                let photo = c.photo.as_ref().and_then(|p| {
-                    let id = egui::Id::unique(("contact-photo", c.uid.as_str(), p.base64.len()));
-                    if let Some(t) = ui.ctx().data(|d| d.get_temp::<Option<egui::TextureHandle>>(id)) {
-                        return t;
-                    }
-                    let tex = p
-                        .bytes(mailcraft_engine::model::vcard::MAX_PHOTO)
-                        .and_then(|b| crate::reading::decode(ui.ctx(), &format!("contact-{}", c.uid), &b, 256));
-                    ui.ctx().data_mut(|d| d.insert_temp(id, tex.clone()));
-                    tex
-                });
-                match photo {
+                // Outlook shows the picture an address book carries; without one, and for a
+                // colleague, the one the directory keeps (asked for once).
+                let email = c.emails.first().map(|e| e.value.trim()).unwrap_or_default();
+                if !email.is_empty() && c.photo.is_none() && !s.person_photo_known(email) {
+                    acts.push(Action::Run("contact.photo", json!({ "email": email })));
+                }
+                let photo = picture(s, c);
+                let texture = photo.and_then(|p| photo_texture(ui, &c.uid, p));
+                match texture {
                     Some(tex) => {
                         ui.put(r, egui::Image::new(&tex).fit_to_exact_size(r.size()));
                     }

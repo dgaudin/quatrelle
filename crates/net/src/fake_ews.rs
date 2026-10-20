@@ -387,6 +387,15 @@ impl Data {
         };
         let mut out = Vec::new();
         match op.name.as_str() {
+            "GetUserPhoto" => {
+                let email = op.text_of("Email").unwrap_or_default();
+                if email.is_empty() || email.ends_with("@nophoto.example") {
+                    out.push(err("ErrorItemNotFound"));
+                } else {
+                    // Three bytes of a JPEG marker: enough to be read as a picture.
+                    out.push(ok("<m:PictureData>/9j/</m:PictureData>".into()));
+                }
+            }
             "GetInboxRules" => {
                 let list: String = self
                     .rules

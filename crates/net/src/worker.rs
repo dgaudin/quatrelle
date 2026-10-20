@@ -1427,6 +1427,7 @@ impl Worker {
                 }
             }
             Job::SetServerRules { rules, delete, .. } => self.set_server_rules(rules, delete),
+            Job::FetchPhoto { email, .. } => self.fetch_photo(&email),
             Job::FetchUrl { .. } | Job::Discover { .. } | Job::SignIn { .. } | Job::ImportPst { .. } | Job::ExportPst { .. } => {}
             Job::Start { .. } | Job::SmtpPassword { .. } | Job::Remove { .. } | Job::WorkOffline { .. } | Job::SetSync { .. } => {}
         }
@@ -1477,6 +1478,26 @@ impl Worker {
                 self.sink.emit(Event::ServerRules { account: self.acc.id.clone(), ids: Vec::new(), cleared: Vec::new(), error: Some(e.to_string()) })
             }
         }
+    }
+
+    /// The picture a directory keeps for an address: none is an answer too (the person simply
+    /// has no picture, or the server doesn't keep them).
+    fn fetch_photo(&mut self, email: &str) {
+        let r = (|| -> Result<(String, Vec<u8>)> {
+            if self.conn.is_none() {
+                self.connect()?;
+            }
+            match self.conn.as_mut() {
+                Some(Conn::Ews(c)) => c.user_photo(email),
+                Some(Conn::Graph(c)) => c.user_photo(email),
+                _ => Err(NetError::No("this server keeps no pictures".into())),
+            }
+        })();
+        let (media, data, error) = match r {
+            Ok((media, data)) => (media, data, None),
+            Err(e) => (String::new(), Vec::new(), Some(e.to_string())),
+        };
+        self.sink.emit(Event::Photo { email: email.to_string(), media, data, error });
     }
 
     /// Read (and first change, when `set`) the automatic replies: JMAP's own, or a Sieve script

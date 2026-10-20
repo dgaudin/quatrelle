@@ -2295,6 +2295,42 @@ fn a_contact_keeps_outlooks_fields() {
     assert!(s.run("contact.update", &json!({"uid": uid, "anniversary": "June"})).is_err());
 }
 
+/// A directory keeps a person's picture, at most once asked for: the People card shows it, and
+/// an address without one isn't asked for again.
+#[test]
+fn a_directory_picture_is_asked_for_once_and_kept() {
+    let mut s = sample_session("directory-photo");
+    assert!(!s.person_photo_known("zoe@studio.example"));
+    // An Exchange account is what can ask; the sample's own account stands in for one.
+    s.accounts[0].config.ews = Some("https://mail.example/EWS/Exchange.asmx".into());
+    let v = s.run("contact.photo", &json!({"email": "Zoe@Studio.Example"})).unwrap();
+    assert_eq!(v["asked"], true, "{v}");
+    let jobs = s.take_jobs();
+    assert_eq!(jobs.len(), 1, "one look-up");
+    assert!(matches!(&jobs[0], mailcraft_model::Job::FetchPhoto { email, .. } if email == "zoe@studio.example"));
+    s.run("contact.photo", &json!({"email": "zoe@studio.example"})).unwrap();
+    assert!(s.take_jobs().is_empty(), "already asked for");
+    // The answer is kept by address, without case; a "none" is kept too.
+    s.apply(mailcraft_model::Event::Photo {
+        email: "Zoe@Studio.Example".into(),
+        media: "image/jpeg".into(),
+        data: vec![0xFF, 0xD8, 0xFF],
+        error: None,
+    });
+    assert!(s.person_photo_known("zoe@studio.example"));
+    let p = s.person_photo("zoe@studio.example").unwrap();
+    assert_eq!(p.media, "image/jpeg");
+    assert_eq!(p.bytes(1024).unwrap(), vec![0xFF, 0xD8, 0xFF]);
+    s.apply(mailcraft_model::Event::Photo {
+        email: "ghost@studio.example".into(),
+        media: String::new(),
+        data: Vec::new(),
+        error: Some("no picture for this person".into()),
+    });
+    assert!(s.person_photo_known("ghost@studio.example"), "a person without a picture isn't asked for again");
+    assert!(s.person_photo("ghost@studio.example").is_none());
+}
+
 /// Issue #1: the reading pane marks mail read as Outlook's Reading Pane options say: when shown
 /// (after a wait), once another message is chosen, or not at all; a message opened in its own
 /// window (a double-click) is always read.
