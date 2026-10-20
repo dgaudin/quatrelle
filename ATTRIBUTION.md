@@ -33,6 +33,12 @@ are rendered by `cargo xtask icons` from MailCraft's own drawing in `xtask/src/i
 | `assets/app-icon/mailcraft-1024.png` | MailCraft contributors | Rendered by `cargo xtask icons` (`xtask/src/icons.rs`) | MIT OR Apache-2.0 |
 | `assets/app-icon/mailcraft.icns` | MailCraft contributors | Rendered by `cargo xtask icons` (`xtask/src/icons.rs`) | MIT OR Apache-2.0 |
 | `assets/app-icon/mailcraft.ico` | MailCraft contributors | Rendered by `cargo xtask icons` (`xtask/src/icons.rs`) | MIT OR Apache-2.0 |
+| `assets/dictionaries/LICENSE.txt` | MailCraft contributors | What the dictionaries below are licensed under, and where they come from | MIT OR Apache-2.0 |
+| `assets/dictionaries/MPL-2.0.txt` | Mozilla | [Mozilla Public License 2.0](https://www.mozilla.org/media/MPL/2.0/index.txt), unchanged | MPL-2.0 |
+| `assets/dictionaries/en_US.aff.gz` | Kevin Atkinson / SCOWL | [SCOWL](http://wordlist.aspell.net/) (`hunspell-en-us`), gzipped unchanged | MIT-like / BSD-like / Public domain |
+| `assets/dictionaries/en_US.dic.gz` | Kevin Atkinson / SCOWL | [SCOWL](http://wordlist.aspell.net/) (`hunspell-en-us`), gzipped unchanged | MIT-like / BSD-like / Public domain |
+| `assets/dictionaries/fr_FR.aff.gz` | Dicollecte | [Dicollecte](https://www.dicollecte.org/) (`hunspell-fr`), gzipped unchanged | MPL-2.0 (of its MPL/LGPL/GPL triple licence) |
+| `assets/dictionaries/fr_FR.dic.gz` | Dicollecte | [Dicollecte](https://www.dicollecte.org/) (`hunspell-fr`), gzipped unchanged | MPL-2.0 (of its MPL/LGPL/GPL triple licence) |
 | `assets/icons/fluent/LICENSE.txt` | Microsoft Corporation | [fluentui-system-icons](https://github.com/microsoft/fluentui-system-icons/blob/main/LICENSE) (the licence of the icons beside it) | MIT |
 | `assets/icons/fluent/add_20_regular.svg` | Microsoft Corporation | Fluent UI System Icons, `@fluentui/svg-icons` 1.1.292, unchanged | MIT |
 | `assets/icons/fluent/archive_20_regular.svg` | Microsoft Corporation | Fluent UI System Icons, `@fluentui/svg-icons` 1.1.292, unchanged | MIT |

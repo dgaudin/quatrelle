@@ -1,0 +1,17 @@
+[package]
+name = "mailcraft-spell"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "MailCraft spelling: Hunspell dictionaries read natively (pure, wasm-safe)"
+
+[lints]
+workspace = true
+
+[dependencies]
+# Hunspell dictionaries, read natively (no C library): the French one, and the English one for
+# technical terms. MPL-2.0; see `assets/dictionaries/MPL-2.0.txt`.
+spellbook = "0.4"
+# The dictionaries travel compressed.
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }

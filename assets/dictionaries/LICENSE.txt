@@ -1,0 +1,15 @@
+The spelling dictionaries in this folder are third-party data, not MailCraft code.
+
+- fr_FR.aff.gz, fr_FR.dic.gz — French Hunspell dictionary from Dicollecte
+  (https://www.dicollecte.org/), taken unchanged from the hunspell-fr package and
+  gzipped. Dicollecte publishes it under the Mozilla Public License 2.0 (MPL-2.0),
+  the GNU Lesser General Public License and the GNU General Public License; it is
+  used here under MPL-2.0, whose text is in MPL-2.0.txt beside this file.
+- en_US.aff.gz, en_US.dic.gz — English (United States) Hunspell dictionary from
+  SCOWL (http://wordlist.aspell.net/), taken unchanged from the hunspell-en-us
+  package and gzipped. Its copyright and licence (MIT-like, BSD-like and public
+  domain, at the reader's choice) are those of the SCOWL project.
+
+They are read at run time by the `spellbook` crate (MPL-2.0), also used unchanged.
+MailCraft embeds these files in the program (no dictionary is read from the
+system), which is why they travel with it on every platform.
