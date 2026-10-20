@@ -413,10 +413,9 @@ fn open(s: &Session, item: &AgendaItem) -> Option<Action> {
     Dialog::open_event(s, &item.uid, item.occurrence).map(Action::Dialog)
 }
 
-fn chip(ui: &mut Ui, t: &Tokens, rect: Rect, item: &AgendaItem, text: &str) -> egui::Response {
+fn chip(ui: &mut Ui, s: &Session, t: &Tokens, rect: Rect, item: &AgendaItem, text: &str) -> egui::Response {
     let resp = ui.interact(rect, ui.scope_id().with(("chip", &item.uid, item.start)), Sense::click());
-    // A category's colour, as Outlook draws a categorized appointment; else its calendar's.
-    let c = item.category.map_or_else(|| color(item.color, t), |i| theme::category_color(i, t.dark));
+    let c = item_color(item, t);
     let tentative = item.needs_reply || item.status == "TENTATIVE";
     // Stronger under the pointer, with its colour round it.
     let hovered = resp.hovered();
@@ -441,7 +440,101 @@ fn chip(ui: &mut Ui, t: &Tokens, rect: Rect, item: &AgendaItem, text: &str) -> e
     job.wrap.overflow_character = Some('…');
     let galley = ui.fonts_mut(|f| f.layout_job(job));
     ui.painter().with_clip_rect(rect.shrink(1.0)).galley(rect.min + vec2(6.0, 2.0), galley, t.text);
+    // Outlook's card when the pointer rests on it: what it is, when, where, and its calendar.
+    hover_card(&resp, s, t, item);
     resp
+}
+
+/// The colour of an appointment: its first category's, as Outlook draws a categorized one; else
+/// its calendar's.
+fn item_color(item: &AgendaItem, t: &Tokens) -> egui::Color32 {
+    item.category.map_or_else(|| color(item.color, t), |i| theme::category_color(i, t.dark))
+}
+
+/// What the card says, one line each: when the appointment is, where, and the calendar it's in
+/// (nothing for what it doesn't have). As Outlook's card, which also shows the reminder (MailCraft
+/// doesn't read `VALARM` yet).
+pub(crate) fn card_rows(s: &Session, item: &AgendaItem) -> Vec<(Icon, String)> {
+    let mut out = vec![(Icon::Clock, when(s, item))];
+    let location = item.location.trim();
+    if !location.is_empty() {
+        out.push((Icon::Location, location.to_string()));
+    }
+    out.push((Icon::Calendar, calendar_name(s, item)));
+    out
+}
+
+/// When an appointment is, as the Day view says it: `Friday, 23 October 2026 · 12:30 – 13:30`
+/// (both days for something over several, `All day` for an all-day one).
+fn when(s: &Session, item: &AgendaItem) -> String {
+    let (d0, d1) = (day_of(item.start, s), day_of(item.end.max(item.start + 1) - 1, s));
+    let date = if d1 > d0 { tf!("{from} – {to}", from = day_text(d0), to = day_text(d1)) } else { day_text(d0) };
+    let time = if item.all_day { tl!("All day").to_string() } else { format!("{} – {}", hm(item.start, s), hm(item.end, s)) };
+    format!("{date} · {time}")
+}
+
+/// A local day written out, as the Day view's heading has it.
+fn day_text(d: i64) -> String {
+    let (y, m, dd) = civil_from_days(d);
+    let wd = (d + 3).rem_euclid(7) as usize;
+    let name = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].get(wd).copied().unwrap_or("");
+    tf!(
+        "{weekday}, {day} {month} {year}",
+        weekday = tl!(name),
+        day = dd,
+        month = crate::i18n::tc("month", MONTHS.get(m as usize - 1).copied().unwrap_or("")),
+        year = y
+    )
+}
+
+/// The calendar an appointment is in, by the name the calendar's pane gives it.
+fn calendar_name(s: &Session, item: &AgendaItem) -> String {
+    if item.calendar == mailcraft_engine::model::pim::LOCAL {
+        return tl!("Calendar").to_string();
+    }
+    s.shown_calendars()
+        .into_iter()
+        .find(|(a, c, _, _)| *a == item.account && *c == item.calendar)
+        .map(|(_, _, n, _)| n)
+        .filter(|n| !n.trim().is_empty())
+        .unwrap_or_else(|| tl!("Calendar").to_string())
+}
+
+/// The card itself: the title on the appointment's colour, then its lines, as Outlook's.
+fn hover_card(resp: &egui::Response, s: &Session, t: &Tokens, item: &AgendaItem) {
+    let c = item_color(item, t);
+    let title = if item.summary.trim().is_empty() { tl!("(no title)").to_string() } else { item.summary.clone() };
+    let rows = card_rows(s, item);
+    // The tooltip's own frame is replaced by the card's: the header's band on top, square
+    // corners where the body meets it.
+    let frame = egui::Frame::new().fill(t.surface).stroke(egui::Stroke::new(1.0, t.border)).corner_radius(5.0);
+    let mut tip = egui::Tooltip::for_enabled(resp);
+    tip.popup = tip.popup.frame(frame).gap(6.0).width(340.0);
+    tip.at_pointer().show(|ui| {
+        ui.spacing_mut().item_spacing = vec2(6.0, 0.0);
+        egui::Frame::new()
+            .fill(c.gamma_multiply(if t.dark { 0.45 } else { 0.22 }))
+            .corner_radius(egui::CornerRadius { nw: 4, ne: 4, sw: 0, se: 0 })
+            .inner_margin(egui::Margin::symmetric(10, 7))
+            .show(ui, |ui| {
+                ui.set_width(300.0);
+                ui.label(RichText::new(title).font(theme::bold(13.5)).color(t.text));
+            });
+        egui::Frame::new().corner_radius(egui::CornerRadius { nw: 0, ne: 0, sw: 4, se: 4 }).inner_margin(egui::Margin::symmetric(10, 8)).show(
+            ui,
+            |ui| {
+                ui.set_width(300.0);
+                ui.spacing_mut().item_spacing.y = 5.0;
+                for (icon, text) in &rows {
+                    ui.horizontal(|ui| {
+                        let (r, _) = ui.allocate_exact_size(vec2(16.0, 16.0), Sense::hover());
+                        icons::paint(ui.painter(), r, *icon, t.dim);
+                        ui.add(egui::Label::new(RichText::new(text).color(t.text)).wrap());
+                    });
+                }
+            },
+        );
+    });
 }
 
 fn month(s: &Session, t: &Tokens, ui: &mut Ui, items: &[AgendaItem], d0: i64, acts: &mut Vec<Action>) {
@@ -488,7 +581,7 @@ fn month(s: &Session, t: &Tokens, ui: &mut Ui, items: &[AgendaItem], d0: i64, ac
             for (k, it) in todays.iter().take(shown).enumerate() {
                 let cr = Rect::from_min_size(r.min + vec2(3.0, 24.0 + 19.0 * k as f32), vec2(cw - 6.0, 17.0));
                 let text = if it.all_day { it.summary.clone() } else { format!("{} {}", hm(it.start, s), it.summary) };
-                if chip(ui, t, cr, it, &text).clicked()
+                if chip(ui, s, t, cr, it, &text).clicked()
                     && let Some(a) = open(s, it)
                 {
                     acts.push(a);
@@ -619,7 +712,7 @@ fn days(s: &Session, st: &mut UiState, ui: &mut Ui, items: &[AgendaItem], d0: i6
                 pos2(strip.min.x + day_x(a - d0, col_of(it)) + 2.0, strip.min.y + 3.0 + 20.0 * lane as f32),
                 vec2(cw * (b - a + 1) as f32 - 4.0, 18.0),
             );
-            if chip(ui, &t, r, it, &it.summary).clicked()
+            if chip(ui, s, &t, r, it, &it.summary).clicked()
                 && let Some(act) = open(s, it)
             {
                 acts.push(act);
@@ -717,7 +810,7 @@ fn days(s: &Session, st: &mut UiState, ui: &mut Ui, items: &[AgendaItem], d0: i6
                     text.push_str(if w <= r.width() - 8.0 { " · " } else { "\n" });
                     text.push_str(&it.location);
                 }
-                if chip(ui, &t, r, it, &text).clicked()
+                if chip(ui, s, &t, r, it, &text).clicked()
                     && let Some(a) = open(s, it)
                 {
                     acts.push(a);

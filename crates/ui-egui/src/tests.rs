@@ -59,6 +59,30 @@ fn a_banner_and_a_placed_label_draw() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// The card the calendar shows when the pointer rests on an appointment, as Outlook's: when,
+/// where, and the calendar it's in.
+#[test]
+fn the_calendar_card_says_when_and_where_an_appointment_is() {
+    use crate::icons::Icon;
+    let (a, dir) = app("calendar-card");
+    let now = a.session.clock.now;
+    let items = a.session.agenda(now - 86_400, now + 2 * 86_400);
+    let lunch = items.iter().find(|i| i.summary == "Lunch with Jun").expect("the sample's lunch");
+    let rows = crate::calendar::card_rows(&a.session, lunch);
+    assert_eq!(rows.len(), 3);
+    assert!(matches!(rows[0].0, Icon::Clock));
+    assert!(rows[0].1.contains("12:30 – 13:30"), "{}", rows[0].1);
+    assert_eq!(rows[1].1, "Café on the corner");
+    assert_eq!(rows[2].1, "Calendar");
+    // An all-day event with no place says the day, and has no place line.
+    let poster = items.iter().find(|i| i.summary == "Poster to the print shop").expect("the sample's all-day event");
+    let rows = crate::calendar::card_rows(&a.session, poster);
+    assert_eq!(rows.len(), 2);
+    assert!(rows[0].1.ends_with("All day"), "{}", rows[0].1);
+    assert!(matches!(rows[1].0, Icon::Calendar));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 /// The spelling dialog shows the word the dictionaries don't know, with what could replace it,
 /// and Change is the command that puts the suggestion in its place.
 #[test]
