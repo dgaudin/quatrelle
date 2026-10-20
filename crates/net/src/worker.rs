@@ -1204,7 +1204,7 @@ impl Worker {
         if !self.relist() {
             return;
         }
-        let paths: Vec<String> = self.folders.iter().filter(|f| f.selectable).map(|f| f.path.clone()).collect();
+        let paths = sync_order(&self.folders);
         for path in paths {
             self.drain(rx);
             // What someone is waiting on jumps the queue: an opened message, automatic replies.
@@ -2201,6 +2201,24 @@ fn log_event(e: &Event) {
 /// than after it (the first sync of a large Exchange mailbox can take many minutes): an opened
 /// message, automatic replies, a calendar just opened, a folder asked for (Send / Receive's
 /// Inbox).
+/// The order a full sync walks the folders in: the Inbox first (the mailbox is usable as soon as
+/// it is in), then what mail is about, the rest, and the archive last — an account with public
+/// folders and years of archives takes minutes, and the Inbox must not wait for them.
+fn sync_order(folders: &[Folder]) -> Vec<String> {
+    let rank = |f: &Folder| match f.role {
+        mailcraft_model::FolderRole::Inbox => 0,
+        mailcraft_model::FolderRole::Drafts => 1,
+        mailcraft_model::FolderRole::Sent => 2,
+        mailcraft_model::FolderRole::Junk => 3,
+        mailcraft_model::FolderRole::Trash => 4,
+        mailcraft_model::FolderRole::Other => 5,
+        mailcraft_model::FolderRole::Archive => 6,
+    };
+    let mut v: Vec<(&Folder, u8)> = folders.iter().filter(|f| f.selectable).map(|f| (f, rank(f))).collect();
+    v.sort_by(|a, b| a.1.cmp(&b.1).then_with(|| a.0.path.cmp(&b.0.path)));
+    v.into_iter().map(|(f, _)| f.path.clone()).collect()
+}
+
 fn jumps_queue(j: &Job) -> bool {
     matches!(
         j,
@@ -2217,6 +2235,40 @@ fn jumps_queue(j: &Job) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A full sync walks the Inbox first, then what mail is about, then the rest, the archive
+    /// last: a mailbox of public folders and years of archives must not hold the Inbox back.
+    #[test]
+    fn a_full_sync_starts_with_the_inbox() {
+        use mailcraft_model::FolderRole;
+        let f = |path: &str, role: FolderRole| Folder {
+            account: "a1".into(),
+            path: path.into(),
+            delimiter: Some('/'),
+            role,
+            selectable: true,
+            unread: 0,
+            total: 0,
+            name: None,
+            mailbox: None,
+            mailbox_role: mailcraft_model::FolderRole::Other,
+        };
+        let folders = vec![
+            f("ASP", FolderRole::Other),
+            f("Archives/2025", FolderRole::Archive),
+            f("Public Folders", FolderRole::Other),
+            f("Éléments envoyés", FolderRole::Sent),
+            f("Brouillons", FolderRole::Drafts),
+            f("Corbeille", FolderRole::Trash),
+            f("INBOX", FolderRole::Inbox),
+            Folder { selectable: false, ..f("Conteneur", FolderRole::Other) },
+        ];
+        assert_eq!(
+            sync_order(&folders),
+            ["INBOX", "Brouillons", "Éléments envoyés", "Corbeille", "ASP", "Public Folders", "Archives/2025"],
+            "Inbox, drafts, sent, trash, the rest (by name), the archive last; no containers"
+        );
+    }
 
     /// A server's rules split by whose they are: the ones MailCraft holds the id of, and the
     /// names of those it didn't make (Outlook's own, the server's web page).
