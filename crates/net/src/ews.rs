@@ -463,28 +463,46 @@ fn server_rule(r: &El) -> mailcraft_model::organize::ForeignRule {
                 "ContainsSubjectStrings" => {
                     let v = strings(k);
                     when.push(format!("subject {}", quoted(&v)));
-                    if v.len() == 1 {
-                        conditions.push(Condition::Subject(v[0].clone()));
-                    } else {
-                        runnable = false;
+                    match v.len() {
+                        1 => conditions.push(Condition::Subject(v[0].clone())),
+                        0 => runnable = false,
+                        _ => conditions.push(Condition::SubjectAny(v)),
                     }
                 }
                 "ContainsSenderStrings" => {
                     let v = strings(k);
                     when.push(format!("sender {}", quoted(&v)));
-                    if v.len() == 1 {
-                        conditions.push(Condition::From(v[0].clone()));
-                    } else {
-                        runnable = false;
+                    match v.len() {
+                        1 => conditions.push(Condition::From(v[0].clone())),
+                        0 => runnable = false,
+                        _ => conditions.push(Condition::FromAny(v)),
                     }
                 }
                 "ContainsRecipientStrings" => {
                     let v = strings(k);
                     when.push(format!("recipient {}", quoted(&v)));
-                    if v.len() == 1 {
-                        conditions.push(Condition::To(v[0].clone()));
-                    } else {
-                        runnable = false;
+                    match v.len() {
+                        1 => conditions.push(Condition::To(v[0].clone())),
+                        0 => runnable = false,
+                        _ => conditions.push(Condition::ToAny(v)),
+                    }
+                }
+                // "From these people" / "sent to these people": addresses as Exchange keeps
+                // them, which MailCraft reads by their address.
+                "FromAddresses" | "SentToAddresses" => {
+                    let who = k.name == "FromAddresses";
+                    let people: Vec<String> = k
+                        .children("Address")
+                        .filter_map(|a| a.text_of("EmailAddress").map(|e| e.trim().to_string()))
+                        .filter(|e| e.contains('@'))
+                        .collect();
+                    when.push(format!("{} {}", if who { "from" } else { "sent to" }, quoted(&people)));
+                    match (who, people.len()) {
+                        (true, 1) => conditions.push(Condition::From(people[0].clone())),
+                        (false, 1) => conditions.push(Condition::To(people[0].clone())),
+                        (true, 0) | (false, 0) => runnable = false,
+                        (true, _) => conditions.push(Condition::FromAny(people)),
+                        (false, _) => conditions.push(Condition::ToAny(people)),
                     }
                 }
                 "HasAttachments" if k.text.trim() == "true" => {
@@ -1701,6 +1719,12 @@ impl Client {
 /// unbounded).
 const MAX_RULES: usize = 500;
 
+/// A rule test's values, as Exchange writes a list of them.
+fn rule_strings(element: &str, values: &[String]) -> String {
+    let list: String = values.iter().filter(|v| !v.trim().is_empty()).map(|v| format!("<t:String>{}</t:String>", esc(v))).collect();
+    if list.is_empty() { String::new() } else { format!("<t:{element}>{list}</t:{element}>") }
+}
+
 /// A rule as Exchange's `InboxRules` hold it, for `CreateRuleOperation` / `SetRuleOperation`.
 /// Only the parts Exchange can express are written; the engine never sends the others.
 fn inbox_rule_xml(r: &Rule, folder: Option<&str>, priority: usize, id: Option<&str>) -> String {
@@ -1720,6 +1744,10 @@ fn inbox_rule_xml(r: &Rule, folder: Option<&str>, priority: usize, id: Option<&s
             Condition::To(t) => x.push_str(&format!("<t:ContainsRecipientStrings><t:String>{}</t:String></t:ContainsRecipientStrings>", esc(t))),
             Condition::Subject(t) => x.push_str(&format!("<t:ContainsSubjectStrings><t:String>{}</t:String></t:ContainsSubjectStrings>", esc(t))),
             Condition::HasAttachment => x.push_str("<t:HasAttachments>true</t:HasAttachments>"),
+            // A list: any of them matches (Exchange's own "from these people").
+            Condition::FromAny(v) => x.push_str(&rule_strings("ContainsSenderStrings", v)),
+            Condition::ToAny(v) => x.push_str(&rule_strings("ContainsRecipientStrings", v)),
+            Condition::SubjectAny(v) => x.push_str(&rule_strings("ContainsSubjectStrings", v)),
             // Exchange knows neither: the engine keeps those rules at home.
             Condition::AnyText(_) | Condition::Bulk => {}
         }
@@ -2281,7 +2309,43 @@ mod tests {
         assert_eq!((rule.stop, rule.server, rule.remote_id.as_deref()), (true, true, Some("R7")));
     }
 
-    /// A rule that files mail into a folder is one MailCraft can show and change: the folder
+    /// A rule that names several people (Outlook's "from these people") is read as one
+    /// MailCraft can run and change here, and written back the same way.
+    #[test]
+    fn a_rule_from_several_people_can_be_changed_here() {
+        use mailcraft_model::organize::{Condition, RuleAction};
+        let doc = parse(
+            "<t:Rule><t:RuleId Id=\"R5\"/><t:DisplayName>Alertes</t:DisplayName><t:Priority>3</t:Priority><t:IsEnabled>true</t:IsEnabled>\
+             <t:Conditions><t:FromAddresses>\
+             <t:Address><t:Name>Nagios</t:Name><t:EmailAddress>nagios@asp.example</t:EmailAddress></t:Address>\
+             <t:Address><t:Name>Zabbix</t:Name><t:EmailAddress>zabbix@asp.example</t:EmailAddress></t:Address>\
+             </t:FromAddresses></t:Conditions>\
+             <t:Actions><t:Delete>true</t:Delete></t:Actions></t:Rule>",
+        );
+        let r = server_rule(&doc.kids[0]);
+        assert!(r.runnable, "{}", r.summary);
+        let rule = r.rule.unwrap();
+        assert_eq!(rule.conditions, vec![Condition::FromAny(vec!["nagios@asp.example".into(), "zabbix@asp.example".into()])]);
+        assert_eq!(rule.actions, vec![RuleAction::Delete]);
+        let xml = inbox_rule_xml(&rule, None, 1, Some("R5"));
+        assert!(
+            xml.contains(
+                "<t:ContainsSenderStrings><t:String>nagios@asp.example</t:String><t:String>zabbix@asp.example</t:String></t:ContainsSenderStrings>"
+            ),
+            "{xml}"
+        );
+        assert!(xml.contains("<t:Priority>3</t:Priority>"), "{xml}");
+        // Several subjects too.
+        let doc = parse(
+            "<t:Rule><t:RuleId Id=\"R6\"/><t:DisplayName>Rien</t:DisplayName><t:IsEnabled>true</t:IsEnabled>\
+             <t:Conditions><t:ContainsSubjectStrings><t:String>spam</t:String><t:String>virus</t:String></t:ContainsSubjectStrings></t:Conditions>\
+             <t:Actions><t:Delete>true</t:Delete></t:Actions></t:Rule>",
+        );
+        let r = server_rule(&doc.kids[0]);
+        assert_eq!(r.rule.as_ref().map(|x| x.conditions.clone()), Some(vec![Condition::SubjectAny(vec!["spam".into(), "virus".into()])]));
+        assert!(r.runnable);
+    }
+
     /// comes as the id the server knows, and the rule keeps its place among the server's rules.
     #[test]
     fn a_rule_that_moves_mail_can_be_changed_here() {

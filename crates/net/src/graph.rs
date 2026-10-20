@@ -626,6 +626,9 @@ fn message_rule_json(r: &Rule, folder: Option<&str>, sequence: usize) -> Value {
             Condition::Subject(t) => subjects.push(t.clone()),
             Condition::From(t) => senders.push(t.clone()),
             Condition::To(t) => recipients.push(t.clone()),
+            Condition::SubjectAny(v) => subjects.extend(v.iter().cloned()),
+            Condition::FromAny(v) => senders.extend(v.iter().cloned()),
+            Condition::ToAny(v) => recipients.extend(v.iter().cloned()),
             Condition::HasAttachment => {
                 conditions.insert("hasAttachments".into(), Value::Bool(true));
             }
