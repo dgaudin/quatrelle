@@ -19,7 +19,7 @@ const MAX_ITEMS: usize = 5000;
 /// The address book Graph's contacts go into.
 pub const CONTACTS: &str = "graph:contacts";
 const EVENT_FIELDS: &str = "id,iCalUId,subject,body,start,end,isAllDay,location,attendees,organizer,recurrence,changeKey,isCancelled,type,categories";
-const CONTACT_FIELDS: &str = "id,changeKey,displayName,givenName,surname,emailAddresses,businessPhones,homePhones,mobilePhone,companyName,jobTitle,personalNotes,businessAddress,homeAddress,otherAddress,birthday";
+const CONTACT_FIELDS: &str = "id,changeKey,displayName,givenName,surname,emailAddresses,businessPhones,homePhones,mobilePhone,companyName,department,jobTitle,profession,officeLocation,manager,assistantName,businessHomePage,imAddresses,nickName,spouseName,personalNotes,businessAddress,homeAddress,otherAddress,birthday";
 
 fn seg(id: &str) -> String {
     mailcraft_jmap::pct(id)
@@ -259,7 +259,22 @@ pub fn card_of(v: &Value) -> Option<Card> {
             .collect(),
         phones,
         org: s(v, "companyName"),
+        department: s(v, "department"),
         title: s(v, "jobTitle"),
+        profession: s(v, "profession"),
+        office: s(v, "officeLocation"),
+        manager: s(v, "manager"),
+        assistant: s(v, "assistantName"),
+        web: s(v, "businessHomePage"),
+        im: v.get("imAddresses").and_then(Value::as_array).and_then(|a| a.first()).and_then(Value::as_str).unwrap_or_default().to_string(),
+        nickname: s(v, "nickName"),
+        spouse: s(v, "spouseName"),
+        anniversary: mailcraft_jmap::utc_date(&s(v, "weddingAnniversary"))
+            .map(|t| {
+                let (y, m, d) = mailcraft_model::dates::civil_from_days((t + 12 * 3600 - 1).div_euclid(86_400));
+                format!("{y:04}-{m:02}-{d:02}")
+            })
+            .unwrap_or_default(),
         note: s(v, "personalNotes"),
         addresses: [("businessAddress", "work"), ("homeAddress", "home"), ("otherAddress", "")]
             .into_iter()
@@ -284,6 +299,7 @@ pub fn card_of(v: &Value) -> Option<Card> {
             })
             .unwrap_or_default(),
         extra: Vec::new(),
+        ..Card::default()
     })
 }
 
@@ -309,7 +325,16 @@ pub fn card_json(c: &Card) -> Value {
         "homePhones": phones("home"),
         "mobilePhone": phones("cell").first().cloned().unwrap_or_default(),
         "companyName": c.org,
+        "department": c.department,
         "jobTitle": c.title,
+        "profession": c.profession,
+        "officeLocation": c.office,
+        "manager": c.manager,
+        "assistantName": c.assistant,
+        "businessHomePage": c.web,
+        "imAddresses": if c.im.is_empty() { Vec::new() } else { vec![c.im.clone()] },
+        "nickName": c.nickname,
+        "spouseName": c.spouse,
         "personalNotes": c.note,
         "businessAddress": address("work"),
         "homeAddress": address("home"),

@@ -650,7 +650,7 @@ pub fn registry() -> Registry {
             s.create_card(p::str(v, "account"), c)
         })
         .params(
-            r#"{"name": string, "emails"?: [string] | "a, b", "phones"?: [string | {"value": string, "kind"?: "work"|"home"|"cell"|"fax"|"pager"}], "addresses"?: [{"kind"?: "work"|"home", "street"?, "city"?, "region"?, "postcode"?, "country"?}], "birthday"?: "YYYY-MM-DD" | "", "org"?: string, "title"?: string, "note"?: string, "account"?: string}"#,
+            r#"{"name": string, "emails"?: [string] | "a, b", "phones"?: [string | {"value": string, "kind"?: "work"|"home"|"cell"|"fax"|"pager"}], "addresses"?: [{"kind"?: "work"|"home", "street"?, "city"?, "region"?, "postcode"?, "country"?}], "birthday"?: "YYYY-MM-DD" | "", "org"?: string, "department"?: string, "office"?: string, "title"?: string, "profession"?: string, "manager"?: string, "assistant"?: string, "web"?: string, "im"?: string, "nickname"?: string, "spouse"?: string, "anniversary"?: "YYYY-MM-DD" | "", "note"?: string, "account"?: string}"#,
         ),
         CommandSpec::new("contact.update", "Edit contact", "People › Contact", |s, v| {
             let uid = p::req_str(v, "uid")?.to_string();
@@ -1845,10 +1845,30 @@ fn card_from(v: &Value, mut c: mailcraft_model::vcard::Card) -> Result<mailcraft
             mailcraft_model::vcard::birthday_of(b).ok_or_else(|| CmdError::Params(format!("`{b}` is not a date (YYYY-MM-DD)")))?
         };
     }
-    for (k, field) in [("org", &mut c.org), ("title", &mut c.title), ("note", &mut c.note)] {
+    for (k, field) in [
+        ("org", &mut c.org),
+        ("title", &mut c.title),
+        ("note", &mut c.note),
+        ("department", &mut c.department),
+        ("office", &mut c.office),
+        ("manager", &mut c.manager),
+        ("assistant", &mut c.assistant),
+        ("profession", &mut c.profession),
+        ("web", &mut c.web),
+        ("im", &mut c.im),
+        ("nickname", &mut c.nickname),
+        ("spouse", &mut c.spouse),
+    ] {
         if let Some(x) = p::str(v, k) {
             *field = x.chars().take(10_000).collect();
         }
+    }
+    if let Some(a) = p::str(v, "anniversary") {
+        c.anniversary = if a.trim().is_empty() {
+            String::new()
+        } else {
+            mailcraft_model::vcard::birthday_of(a).ok_or_else(|| CmdError::Params(format!("`{a}` is not a date (YYYY-MM-DD)")))?
+        };
     }
     Ok(c)
 }

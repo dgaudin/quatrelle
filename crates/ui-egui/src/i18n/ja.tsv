@@ -943,3 +943,13 @@ month	May	5月
 	Downloading {done} of {total}	{done} / {total} をダウンロード中
 	Also run on the server	サーバーでも実行
 	Exchange can't run this rule: {why}. It stays on this computer.	Exchange ではこのルールを実行できません: {why}。このコンピューターに残ります。
+	Department	部署
+	Office	オフィス
+	Profession	職種
+	Manager	上司
+	Assistant	アシスタント
+	Web page	Web ページ
+	Instant messaging	インスタント メッセージ
+	Nickname	ニックネーム
+	Spouse	配偶者
+	Anniversary	記念日

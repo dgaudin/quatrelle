@@ -371,8 +371,27 @@ pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) 
         egui::Frame::new().inner_margin(Margin { left: 28, right: 28, top: 24, bottom: 24 }).show(ui, |ui| {
             ui.horizontal(|ui| {
                 let (r, _) = ui.allocate_exact_size(vec2(72.0, 72.0), Sense::hover());
-                let initials: String = name.split_whitespace().filter_map(|w| w.chars().next()).take(2).collect::<String>().to_uppercase();
-                widgets::avatar(ui, r.center(), 34.0, &initials, theme::avatar_color(&name, t.dark));
+                // Outlook shows the picture an address book carries; without one, the initials.
+                let photo = c.photo.as_ref().and_then(|p| {
+                    let id = egui::Id::unique(("contact-photo", c.uid.as_str(), p.base64.len()));
+                    if let Some(t) = ui.ctx().data(|d| d.get_temp::<Option<egui::TextureHandle>>(id)) {
+                        return t;
+                    }
+                    let tex = p
+                        .bytes(mailcraft_engine::model::vcard::MAX_PHOTO)
+                        .and_then(|b| crate::reading::decode(ui.ctx(), &format!("contact-{}", c.uid), &b, 256));
+                    ui.ctx().data_mut(|d| d.insert_temp(id, tex.clone()));
+                    tex
+                });
+                match photo {
+                    Some(tex) => {
+                        ui.put(r, egui::Image::new(&tex).fit_to_exact_size(r.size()));
+                    }
+                    None => {
+                        let initials: String = name.split_whitespace().filter_map(|w| w.chars().next()).take(2).collect::<String>().to_uppercase();
+                        widgets::avatar(ui, r.center(), 34.0, &initials, theme::avatar_color(&name, t.dark));
+                    }
+                }
                 ui.add_space(10.0);
                 ui.vertical(|ui| {
                     ui.label(RichText::new(&name).font(theme::bold(22.0)).color(t.text));
@@ -437,6 +456,37 @@ pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) 
             }
             if !c.birthday.is_empty() {
                 field(ui, &t, Icon::Calendar, &c.birthday, tl!("Birthday"));
+            }
+            // Outlook's contact card: the work details an address book carries beside the name.
+            if !c.department.is_empty() {
+                field(ui, &t, Icon::Gear, &c.department, tl!("Department"));
+            }
+            if !c.office.is_empty() {
+                field(ui, &t, Icon::Location, &c.office, tl!("Office"));
+            }
+            if !c.profession.is_empty() {
+                field(ui, &t, Icon::Person, &c.profession, tl!("Profession"));
+            }
+            if !c.manager.is_empty() {
+                field(ui, &t, Icon::Person, &c.manager, tl!("Manager"));
+            }
+            if !c.assistant.is_empty() {
+                field(ui, &t, Icon::Person, &c.assistant, tl!("Assistant"));
+            }
+            if !c.web.is_empty() {
+                field(ui, &t, Icon::Info, &c.web, tl!("Web page"));
+            }
+            if !c.im.is_empty() {
+                field(ui, &t, Icon::Phone, &c.im, tl!("Instant messaging"));
+            }
+            if !c.nickname.is_empty() {
+                field(ui, &t, Icon::Tag, &c.nickname, tl!("Nickname"));
+            }
+            if !c.spouse.is_empty() {
+                field(ui, &t, Icon::Person, &c.spouse, tl!("Spouse"));
+            }
+            if !c.anniversary.is_empty() {
+                field(ui, &t, Icon::Calendar, &c.anniversary, tl!("Anniversary"));
             }
             if !c.note.is_empty() {
                 ui.add_space(10.0);

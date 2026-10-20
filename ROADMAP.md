@@ -274,3 +274,10 @@ local-first, media-aware v1); the fuller request is
   computer, and the dialog says why. MailCraft only ever changes or removes rules it made, a rule
   turned off there is removed from the server, and rules made offline go up when the account
   connects. Tested: create, change by id, remove, and the engine's job and id keeping.
+- **2026-10-20** — **Outlook's contacts, complete:** a card keeps department, office, profession,
+  manager, assistant, web page, instant messaging, nickname, spouse and wedding anniversary, and its
+  picture (`PHOTO`, base64, capped at 512 KiB; a link to one is never fetched). vCard 3 and 4 read and
+  write them, so CardDAV carries them both ways; Exchange (EWS, `AllProperties`) and Microsoft Graph
+  (`$select`, POST) map them too; the contact form edits them and the People card shows the photo
+  (initials when there is none). Tested: a vCard round trip with the picture and Outlook's `X-`
+  fields, and the contact commands keeping them.

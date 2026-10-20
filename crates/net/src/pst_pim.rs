@@ -177,6 +177,7 @@ pub(crate) fn card_of(x: &Extra, body: &str, uid: String) -> Card {
             })
             .unwrap_or_default(),
         extra: Vec::new(),
+        ..Card::default()
     }
 }
 

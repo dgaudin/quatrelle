@@ -945,3 +945,13 @@ month	May	5월
 	Downloading {done} of {total}	{total}개 중 {done}개 다운로드 중
 	Also run on the server	서버에서도 실행
 	Exchange can't run this rule: {why}. It stays on this computer.	Exchange에서 이 규칙을 실행할 수 없습니다: {why}. 이 컴퓨터에 남습니다.
+	Department	부서
+	Office	사무실
+	Profession	직업
+	Manager	관리자
+	Assistant	비서
+	Web page	웹 페이지
+	Instant messaging	인스턴트 메시징
+	Nickname	별명
+	Spouse	배우자
+	Anniversary	기념일

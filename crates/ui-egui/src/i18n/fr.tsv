@@ -946,3 +946,13 @@ month	May	mai
 	Downloading {done} of {total}	Téléchargement : {done} sur {total}
 	Also run on the server	Aussi sur le serveur
 	Exchange can't run this rule: {why}. It stays on this computer.	Exchange ne sait pas exécuter cette règle : {why}. Elle reste sur cet ordinateur.
+	Department	Service
+	Office	Bureau
+	Profession	Profession
+	Manager	Responsable
+	Assistant	Assistant
+	Web page	Page web
+	Instant messaging	Messagerie instantanée
+	Nickname	Surnom
+	Spouse	Conjoint
+	Anniversary	Anniversaire de mariage
