@@ -2492,6 +2492,31 @@ fn a_contact_keeps_outlooks_fields() {
     assert!(s.run("contact.update", &json!({"uid": uid, "anniversary": "June"})).is_err());
 }
 
+/// A contact's own picture is looked up by the item's id: Outlook keeps a contact's photo on the
+/// contact item, and the server knows it by that id.
+#[test]
+fn a_contacts_own_picture_is_asked_for_by_its_id() {
+    let mut s = sample_session("contact-photo");
+    s.accounts[0].config.ews = Some("https://mail.example/EWS/Exchange.asmx".into());
+    let account = s.accounts[0].config.id.clone();
+    s.pim_mut(&account).cards.push(mailcraft_model::pim::StoredCard {
+        book: "contacts".into(),
+        href: "contact:C9".into(),
+        etag: String::new(),
+        card: mailcraft_model::vcard::Card {
+            uid: "C9".into(),
+            name: "Ana Lima".into(),
+            emails: vec![mailcraft_model::vcard::Typed { value: "ana@contoso.example".into(), kind: "work".into() }],
+            ..Default::default()
+        },
+        dirty: false,
+    });
+    s.run("contact.photo", &json!({"email": "Ana@Contoso.Example"})).unwrap();
+    let jobs = s.take_jobs();
+    assert_eq!(jobs.len(), 1);
+    assert!(matches!(&jobs[0], mailcraft_model::Job::FetchPhoto { contact: Some(id), .. } if id == "C9"), "the item's id goes with the look-up");
+}
+
 /// A directory keeps a person's picture, at most once asked for: the People card shows it, and
 /// an address without one isn't asked for again.
 #[test]

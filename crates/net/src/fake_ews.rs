@@ -387,6 +387,21 @@ impl Data {
         };
         let mut out = Vec::new();
         match op.name.as_str() {
+            "GetAttachment" => {
+                // A contact's picture: the bytes of any attachment this mailbox's items carry.
+                for id in ids(op.child("AttachmentIds")) {
+                    let known = self.pim.iter().any(|(_, _, el)| {
+                        let mut files = Vec::new();
+                        el.all("FileAttachment", &mut files);
+                        files.iter().any(|f| f.child("AttachmentId").and_then(|a| a.attr("Id")) == Some(id.as_str()))
+                    });
+                    if known {
+                        out.push(ok("<m:Attachments><t:FileAttachment><t:Content>/9j/</t:Content></t:FileAttachment></m:Attachments>".into()));
+                    } else {
+                        out.push(err("ErrorItemNotFound"));
+                    }
+                }
+            }
             "GetUserPhoto" => {
                 let email = op.text_of("Email").unwrap_or_default();
                 if email.is_empty() || email.ends_with("@nophoto.example") {

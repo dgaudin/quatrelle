@@ -1452,7 +1452,7 @@ impl Worker {
                     error: Some(e.to_string()),
                 }),
             },
-            Job::FetchPhoto { email, .. } => self.fetch_photo(&email),
+            Job::FetchPhoto { email, contact, .. } => self.fetch_photo(&email, contact.as_deref()),
             Job::FetchUrl { .. } | Job::Discover { .. } | Job::SignIn { .. } | Job::ImportPst { .. } | Job::ExportPst { .. } => {}
             Job::Start { .. } | Job::SmtpPassword { .. } | Job::Remove { .. } | Job::WorkOffline { .. } | Job::SetSync { .. } => {}
         }
@@ -1584,12 +1584,26 @@ impl Worker {
         Ok((ids, others, cleared))
     }
 
-    /// The picture a directory keeps for an address: none is an answer too (the person simply
+    /// The picture kept for a person: the one their contact item carries (`contact`), or else
+    /// the one the directory keeps for their address. None is an answer too (the person simply
     /// has no picture, or the server doesn't keep them).
-    fn fetch_photo(&mut self, email: &str) {
+    fn fetch_photo(&mut self, email: &str, contact: Option<&str>) {
         let r = (|| -> Result<(String, Vec<u8>)> {
             if self.conn.is_none() {
                 self.connect()?;
+            }
+            if let Some(id) = contact {
+                let own = match self.conn.as_mut() {
+                    Some(Conn::Ews(c)) => c.contact_photo(id),
+                    Some(Conn::Graph(c)) => c.contact_photo(id),
+                    _ => Err(NetError::No("this server keeps no contact pictures".into())),
+                };
+                // A contact without a picture of its own may still have one in the directory.
+                match own {
+                    Ok(p) => return Ok(p),
+                    Err(NetError::No(_)) => {}
+                    Err(e) => return Err(e),
+                }
             }
             match self.conn.as_mut() {
                 Some(Conn::Ews(c)) => c.user_photo(email),
@@ -1601,6 +1615,11 @@ impl Worker {
             Ok((media, data)) => (media, data, None),
             Err(e) => (String::new(), Vec::new(), Some(e.to_string())),
         };
+        // Said in the log either way: "why is there no picture?" is answered without a debugger.
+        match &error {
+            Some(e) => log::info!("picture of {email}: none ({e})"),
+            None => log::info!("picture of {email}: {} bytes, {media}", data.len()),
+        }
         self.sink.emit(Event::Photo { email: email.to_string(), media, data, error });
     }
 
@@ -2177,7 +2196,15 @@ fn log_event(e: &Event) {
 /// message, automatic replies, a calendar just opened, a folder asked for (Send / Receive's
 /// Inbox).
 fn jumps_queue(j: &Job) -> bool {
-    matches!(j, Job::FetchBody { .. } | Job::GetVacation { .. } | Job::SetVacation { .. } | Job::SyncDav { .. } | Job::SyncFolder { .. })
+    matches!(
+        j,
+        Job::FetchBody { .. }
+            | Job::FetchPhoto { .. }
+            | Job::GetVacation { .. }
+            | Job::SetVacation { .. }
+            | Job::SyncDav { .. }
+            | Job::SyncFolder { .. }
+    )
 }
 
 #[cfg(test)]

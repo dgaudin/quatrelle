@@ -159,7 +159,20 @@ fn message(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action
                 // Sender card.
                 ui.horizontal(|ui| {
                     let (ar, _) = ui.allocate_exact_size(vec2(44.0, 44.0), Sense::hover());
-                    widgets::avatar(ui, ar.center(), 21.0, &p.from.initials(), theme::avatar_color(&p.from.email, t.dark));
+                    // Outlook shows the sender's picture there: the one the directory keeps for
+                    // their address, asked for once (a server that keeps none is remembered).
+                    if !s.person_photo_known(&p.from.email) && s.photo_possible_for(&p.from.email) {
+                        acts.push(Action::Run("contact.photo", json!({ "email": p.from.email.trim() })));
+                    }
+                    match crate::people::address_picture(ui, s, &p.from.email) {
+                        Some(tex) => {
+                            let side = ar.width().min(ar.height());
+                            let r = egui::Rect::from_center_size(ar.center(), vec2(side, side));
+                            let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
+                            ui.painter().image(tex.id(), r, uv, egui::Color32::WHITE);
+                        }
+                        None => widgets::avatar(ui, ar.center(), 21.0, &p.from.initials(), theme::avatar_color(&p.from.email, t.dark)),
+                    }
                     ui.add_space(4.0);
                     ui.vertical(|ui| {
                         ui.horizontal_wrapped(|ui| {
@@ -674,6 +687,15 @@ fn video_preview(s: &Session, st: &mut UiState, ctx: &egui::Context, key: &Messa
 /// Decode a picture from mail or the web into a texture, at most `max` pixels on a side.
 /// Pictures are hostile input: size and allocation are capped before decoding.
 pub(crate) fn decode(ctx: &egui::Context, name: &str, data: &[u8], max: u32) -> Option<egui::TextureHandle> {
+    decode_with(ctx, name, data, max, false)
+}
+
+/// A picture cut to a circle: what a person's picture looks like in a round avatar.
+pub(crate) fn decode_round(ctx: &egui::Context, name: &str, data: &[u8], max: u32) -> Option<egui::TextureHandle> {
+    decode_with(ctx, name, data, max, true)
+}
+
+fn decode_with(ctx: &egui::Context, name: &str, data: &[u8], max: u32, round: bool) -> Option<egui::TextureHandle> {
     if data.len() > 30 << 20 {
         return None;
     }
@@ -687,7 +709,22 @@ pub(crate) fn decode(ctx: &egui::Context, name: &str, data: &[u8], max: u32) -> 
     // Shrink large pictures; never enlarge small ones (the painter scales them crisply).
     let img = if decoded.width() > max || decoded.height() > max { decoded.thumbnail(max, max) } else { decoded }.to_rgba8();
     let size = [img.width() as usize, img.height() as usize];
-    let ci = egui::ColorImage::from_rgba_unmultiplied(size, img.as_raw());
+    let mut ci = egui::ColorImage::from_rgba_unmultiplied(size, img.as_raw());
+    if round && size[0] > 0 {
+        // Everything outside the circle goes, with a pixel of smoothing at its edge (a picture
+        // that isn't square keeps its middle).
+        let (w, h) = (size[0] as f32, size[1] as f32);
+        let (cx, cy, r) = (w / 2.0, h / 2.0, w.min(h) / 2.0);
+        for (i, px) in ci.pixels.iter_mut().enumerate() {
+            let (x, y) = ((i % size[0]) as f32 + 0.5, (i / size[0]) as f32 + 0.5);
+            let d = ((x - cx).powi(2) + (y - cy).powi(2)).sqrt();
+            if d > r {
+                px[3] = 0;
+            } else if d > r - 1.0 {
+                px[3] = (f32::from(px[3]) * (r - d)) as u8;
+            }
+        }
+    }
     // Pixel art and tiny swatches stay crisp when scaled up.
     let filter = if size[0].max(size[1]) < 96 { egui::TextureOptions::NEAREST } else { egui::TextureOptions::LINEAR };
     Some(ctx.load_texture(name, ci, filter))
@@ -1285,7 +1322,7 @@ fn person_menus(s: &Session, t: &Tokens, r: &egui::Response, a: &EmailAddress, a
         return;
     }
     let known = known_contact(s, &a.email);
-    egui::Popup::menu(r).id(r.id.with("card")).show(|ui| contact_card(ui, t, a, known.as_ref(), acts));
+    egui::Popup::menu(r).id(r.id.with("card")).show(|ui| contact_card(s, ui, t, a, known.as_ref(), acts));
     r.context_menu(|ui| {
         if ui.button(tl!("Send email")).clicked() {
             acts.push(Action::Run("mail.new", json!({"to": a.to_string()})));
@@ -1315,11 +1352,27 @@ fn person_menus(s: &Session, t: &Tokens, r: &egui::Response, a: &EmailAddress, a
 
 /// A small card for someone (Outlook's contact card): who they are, their address (a click
 /// writes to them), and what can be done.
-fn contact_card(ui: &mut Ui, t: &Tokens, a: &EmailAddress, known: Option<&mailcraft_engine::model::vcard::Card>, acts: &mut Vec<Action>) {
+fn contact_card(
+    s: &Session,
+    ui: &mut Ui,
+    t: &Tokens,
+    a: &EmailAddress,
+    known: Option<&mailcraft_engine::model::vcard::Card>,
+    acts: &mut Vec<Action>,
+) {
     ui.set_min_width(260.0);
     ui.horizontal(|ui| {
         let (ar, _) = ui.allocate_exact_size(vec2(40.0, 40.0), Sense::hover());
-        widgets::avatar(ui, ar.center(), 19.0, &a.initials(), theme::avatar_color(&a.email, t.dark));
+        let photo = known.and_then(|c| c.photo.clone()).or_else(|| s.person_photo(a.email.trim()).cloned());
+        match photo.and_then(|p| crate::people::card_picture(ui, &a.email.to_ascii_lowercase(), &p)) {
+            Some(tex) => {
+                let side = ar.width().min(ar.height());
+                let r = egui::Rect::from_center_size(ar.center(), vec2(side, side));
+                let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
+                ui.painter().image(tex.id(), r, uv, egui::Color32::WHITE);
+            }
+            None => widgets::avatar(ui, ar.center(), 19.0, &a.initials(), theme::avatar_color(&a.email, t.dark)),
+        }
         ui.add_space(4.0);
         ui.vertical(|ui| {
             let name = known.map(|c| c.display()).filter(|n| !n.is_empty()).unwrap_or_else(|| a.display().to_string());

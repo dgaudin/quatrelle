@@ -48,6 +48,8 @@ pub struct Data {
     pub calendars: Vec<(String, String)>,
     pub events: Vec<Value>,
     pub contacts: Vec<Value>,
+    /// Contacts that carry a picture (their id), as Outlook's do.
+    pub contact_photos: Vec<String>,
     /// Every request, as `METHOD path`.
     pub calls: Vec<String>,
     /// The signed-in Microsoft account has no mailbox.
@@ -511,6 +513,14 @@ impl Data {
                 self.contacts.retain(|c| c["id"] != *id);
                 (204, Vec::new(), "text/plain")
             }
+            ("GET", ["me", "contacts", id, "photo", "$value"]) => {
+                if self.contact_photos.iter().any(|p| p == id) {
+                    // A JPEG marker: enough to be read as a picture.
+                    (200, vec![0xFF, 0xD8, 0xFF], "image/jpeg")
+                } else {
+                    not_found()
+                }
+            }
             _ => not_found(),
         }
     }
@@ -632,6 +642,21 @@ mod tests {
             assert!(Instant::now() < end, "never: {what}");
             std::thread::sleep(Duration::from_millis(50));
         }
+    }
+
+    #[test]
+    fn a_contacts_picture_is_fetched() {
+        let mut d = Data::default();
+        d.folder("Inbox", None, Some("inbox"));
+        d.contacts.push(json!({"id": "C1", "displayName": "Ana Lima", "emailAddresses": [{"address": "ana@contoso.example"}]}));
+        d.contacts.push(json!({"id": "C2", "displayName": "Ben Ito"}));
+        d.contact_photos.push("C1".into());
+        let server = serve(d);
+        let c = crate::graph::Client::connect(&server.base, TOKEN).unwrap();
+        let (media, data) = c.contact_photo("C1").unwrap();
+        assert_eq!(media, "image/jpeg");
+        assert_eq!(data, vec![0xFF, 0xD8, 0xFF]);
+        assert!(matches!(c.contact_photo("C2"), Err(crate::NetError::No(_))), "a contact with no picture is an answer, not a broken account");
     }
 
     fn mail(subject: &str, id: &str) -> Vec<u8> {

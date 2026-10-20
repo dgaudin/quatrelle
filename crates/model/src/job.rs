@@ -188,8 +188,10 @@ pub enum Job {
     /// Read the rules the account's server keeps, with the ids MailCraft's own rules have there
     /// (`ours`): those made elsewhere come back with them, to be listed.
     GetServerRules { account: String, ours: Vec<String> },
-    /// Fetch the picture a directory (Exchange, Microsoft 365) keeps for an address.
-    FetchPhoto { account: String, email: String },
+    /// Fetch the picture kept for a person: the one their contact item carries (its id in
+    /// `contact`, as the address book keeps it), or else the one the directory (Exchange,
+    /// Microsoft 365) keeps for their address.
+    FetchPhoto { account: String, email: String, contact: Option<String> },
     /// Sync the account's calendars and address books with its CalDAV / CardDAV server (changes
     /// made here first).
     SyncDav { account: String },
