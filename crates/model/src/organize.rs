@@ -99,6 +99,13 @@ pub struct Rule {
     /// Don't run later rules on a message this one matched.
     #[serde(default)]
     pub stop: bool,
+    /// Also run on the server (Exchange's inbox rules), so mail is filed while MailCraft is
+    /// closed. Only what the server can express goes there: see [`Rule::server_blockers`].
+    #[serde(default)]
+    pub server: bool,
+    /// The id the server gave this rule, kept to change or remove it there (never set by hand).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remote_id: Option<String>,
 }
 
 fn yes() -> bool {
@@ -106,6 +113,38 @@ fn yes() -> bool {
 }
 
 impl Rule {
+    /// What keeps this rule from running on Exchange, in words (`[]` when it can go there):
+    /// Exchange's rules combine their conditions with AND, and know no "any text", no
+    /// newsletters, no flag and no pin.
+    pub fn server_blockers(&self) -> Vec<&'static str> {
+        let mut out: Vec<&'static str> = Vec::new();
+        if !self.match_all {
+            out.push("mail matching any one of its conditions");
+        }
+        for c in &self.conditions {
+            match c {
+                Condition::AnyText(_) => out.push("looking in the subject, sender and recipients at once"),
+                Condition::Bulk => out.push("newsletters and automatic mail"),
+                Condition::From(_) | Condition::To(_) | Condition::Subject(_) | Condition::HasAttachment => {}
+            }
+        }
+        for a in &self.actions {
+            match a {
+                RuleAction::Flag => out.push("flagging"),
+                RuleAction::Pin => out.push("pinning"),
+                RuleAction::MoveTo(_) | RuleAction::MoveToRole(_) | RuleAction::MarkRead | RuleAction::Categorize(_) | RuleAction::Delete => {}
+            }
+        }
+        out.sort_unstable();
+        out.dedup();
+        out
+    }
+
+    /// Whether Exchange can run this rule as it is.
+    pub fn server_ready(&self) -> bool {
+        self.server_blockers().is_empty()
+    }
+
     pub fn matches(&self, m: &Summary) -> bool {
         if !self.enabled || self.conditions.is_empty() || self.actions.is_empty() {
             return false;
@@ -232,6 +271,8 @@ mod tests {
             match_all: true,
             actions: vec![RuleAction::MoveTo("News".into()), RuleAction::MarkRead],
             stop: true,
+            server: false,
+            remote_id: None,
         };
         let flag = Rule {
             name: "Boss".into(),
@@ -254,6 +295,37 @@ mod tests {
         let json = serde_json::to_string(&rules).unwrap();
         assert!(json.contains("\"if\":\"bulk\""), "{json}");
         assert_eq!(serde_json::from_str::<Vec<Rule>>(&json).unwrap(), rules);
+    }
+
+    /// Exchange's inbox rules combine their conditions with AND and know no "any text", no
+    /// newsletters, no flag and no pin: a rule says what keeps it from running there.
+    #[test]
+    fn a_rule_knows_what_exchange_can_run() {
+        let base = Rule {
+            name: "R".into(),
+            enabled: true,
+            account: Some("a1".into()),
+            conditions: vec![Condition::Subject("invoice".into())],
+            match_all: true,
+            actions: vec![RuleAction::MoveTo("Invoices".into())],
+            stop: false,
+            server: false,
+            remote_id: None,
+        };
+        assert!(base.server_ready(), "a subject test and a move: Exchange does that");
+        for (change, why) in [
+            (Rule { conditions: vec![Condition::AnyText("x".into())], ..base.clone() }, "looking in the subject"),
+            (Rule { conditions: vec![Condition::Bulk], ..base.clone() }, "newsletters"),
+            (Rule { match_all: false, ..base.clone() }, "any one of its conditions"),
+            (Rule { actions: vec![RuleAction::Flag], ..base.clone() }, "flagging"),
+            (Rule { actions: vec![RuleAction::Pin], ..base.clone() }, "pinning"),
+        ] {
+            let blockers = change.server_blockers();
+            assert!(blockers.iter().any(|b| b.contains(why)), "{why}: {blockers:?}");
+            assert!(!change.server_ready());
+        }
+        assert!(Rule { actions: vec![RuleAction::MoveToRole(FolderRole::Archive)], ..base.clone() }.server_ready());
+        assert!(Rule { actions: vec![RuleAction::Categorize("Blue".into())], ..base }.server_ready());
     }
 
     #[test]

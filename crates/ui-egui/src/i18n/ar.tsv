@@ -940,3 +940,5 @@ month	May	مايو
 	Searching…	جارٍ البحث…
 	Download all	تنزيل الكل
 	Downloading {done} of {total}	جارٍ تنزيل {done} من {total}
+	Also run on the server	التشغيل على الخادم أيضًا
+	Exchange can't run this rule: {why}. It stays on this computer.	لا يمكن لـ Exchange تشغيل هذه القاعدة: {why}. ستبقى على هذا الكمبيوتر.

@@ -944,3 +944,5 @@ month	May	maio
 	Searching…	Pesquisando…
 	Download all	Baixar tudo
 	Downloading {done} of {total}	Baixando {done} de {total}
+	Also run on the server	Também no servidor
+	Exchange can't run this rule: {why}. It stays on this computer.	O Exchange não consegue executar esta regra: {why}. Ela fica neste computador.

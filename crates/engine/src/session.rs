@@ -3373,8 +3373,13 @@ impl Session {
                     let what = if browser { "needs you to sign in again" } else { "needs its password" };
                     self.notice(format!("{who} {what}{why}"), true);
                 }
+                let online = matches!(status, SyncStatus::Online { .. });
                 if let Some(a) = self.account_mut(&account) {
                     a.status = status;
+                }
+                // Rules made while the account was offline reach its server now it's connected.
+                if online {
+                    self.resend_server_rules(&account);
                 }
             }
             Event::Folders { account, mut folders } => {
@@ -3441,6 +3446,32 @@ impl Session {
                 }
                 if let Some(e) = failed {
                     self.notice(format!("automatic replies weren't changed: {e}"), true);
+                }
+            }
+            Event::ServerRules { account, ids, cleared, error } => {
+                if let Some(e) = error {
+                    self.notice(format!("the server's rules weren't changed: {e}"), true);
+                } else {
+                    // Keep the id the server gave each rule: it's what changes or removes it
+                    // there next time (nothing else may touch it).
+                    let mut changed = false;
+                    for r in self.rules.iter_mut().filter(|r| r.account.as_deref() == Some(&account)) {
+                        let Some((_, id)) = ids.iter().find(|(name, _)| name == &r.name) else { continue };
+                        if r.remote_id.as_deref() != Some(id.as_str()) {
+                            r.remote_id = Some(id.clone());
+                            changed = true;
+                        }
+                    }
+                    for r in &mut self.rules {
+                        let gone = r.remote_id.as_deref().is_some_and(|id| cleared.iter().any(|c| c == id));
+                        if gone {
+                            r.remote_id = None;
+                            changed = true;
+                        }
+                    }
+                    if changed {
+                        self.save_rules();
+                    }
                 }
             }
             Event::Voted { key, choice, error } => self.voted(&key, &choice, error),

@@ -405,6 +405,16 @@ async fn job(sh: &Rcs, id: &str, j: Job) {
             };
             emit(sh, Event::Vacation { account: id.to_string(), vacation, error });
         }
+        // Rules on Exchange's server need the desktop app (the browser reaches JMAP accounts).
+        Job::SetServerRules { account, .. } => emit(
+            sh,
+            Event::ServerRules {
+                account: account.clone(),
+                ids: Vec::new(),
+                cleared: Vec::new(),
+                error: Some("rules can only be put on Exchange from the desktop app".into()),
+            },
+        ),
         // Voting buttons come with Exchange accounts, which the browser doesn't reach.
         Job::Vote { key, choice } => {
             let error = Some("voting buttons can only be answered on Exchange and Microsoft 365 accounts".to_string());

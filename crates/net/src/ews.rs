@@ -17,6 +17,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 
 use mailcraft_mime as mime;
+use mailcraft_model::organize::{Condition, Rule, RuleAction};
 use mailcraft_model::{Flag, Flags, Folder, FolderRole, MessageKey, Op, Summary, sort_newest_first, utf7, voting};
 use mailcraft_store::{FolderState, Store};
 use quick_xml::Reader;
@@ -1385,6 +1386,121 @@ impl Client {
             None => Ok(()),
         }
     }
+
+    /// The ids of the rules Exchange keeps for the Inbox, by name.
+    pub fn inbox_rule_ids(&self) -> Result<Vec<(String, String)>> {
+        let doc = self.call("<m:GetInboxRules/>")?;
+        let m = messages(&doc).first().copied().ok_or_else(|| NetError::Protocol("an empty answer".into()))?;
+        check_message(m)?;
+        let mut out = Vec::new();
+        if let Some(list) = m.find("InboxRules") {
+            for r in list.children("Rule").take(MAX_RULES) {
+                let id = r.child("RuleId").and_then(|x| x.attr("Id"));
+                let name = r.text_of("DisplayName");
+                if let (Some(id), Some(name)) = (id, name) {
+                    out.push((name.to_string(), id.to_string()));
+                }
+            }
+        }
+        Ok(out)
+    }
+
+    /// Create, change and remove the Inbox rules Exchange runs, from MailCraft's rules: each is
+    /// paired with the id of the folder its action moves mail to (`None` for actions that need
+    /// none). Answers the id every rule has on the server, by its name.
+    ///
+    /// Only what Exchange can express is sent ([`Rule::server_ready`]): the engine leaves the
+    /// rest at home. A rule the server has never seen is created; one carrying a `remote_id` is
+    /// changed; `delete` names the ids to remove, and only ever ones MailCraft created.
+    pub fn set_inbox_rules(&self, wanted: &[(Rule, Option<String>)], delete: &[String]) -> Result<Vec<(String, String)>> {
+        if wanted.is_empty() && delete.is_empty() {
+            return Ok(Vec::new());
+        }
+        // What the server has before: a rule it just created is the one it didn't have.
+        let before: Vec<String> = self.inbox_rule_ids()?.into_iter().map(|(_, id)| id).collect();
+        let mut ops = String::new();
+        for (i, (r, folder)) in wanted.iter().enumerate() {
+            let known = r.remote_id.as_deref().filter(|id| !id.is_empty());
+            let rule = inbox_rule_xml(r, folder.as_deref(), i + 1, known);
+            if known.is_some() {
+                ops.push_str(&format!("<t:SetRuleOperation>{rule}</t:SetRuleOperation>"));
+            } else {
+                ops.push_str(&format!("<t:CreateRuleOperation>{rule}</t:CreateRuleOperation>"));
+            }
+        }
+        for id in delete.iter().filter(|id| !id.is_empty()) {
+            ops.push_str(&format!("<t:DeleteRuleOperation><t:RuleId Id=\"{}\"/></t:DeleteRuleOperation>", esc(id)));
+        }
+        let doc = self.call(&format!("<m:UpdateInboxRules><m:Operations>{ops}</m:Operations></m:UpdateInboxRules>"))?;
+        let messages = messages(&doc);
+        if messages.is_empty() {
+            return Err(NetError::Protocol("an empty answer".into()));
+        }
+        for m in messages {
+            check_message(m)?;
+        }
+        // Read the ids back: creating a rule answers none. A rule we sent without one is the
+        // rule that appeared, under that name.
+        let after = self.inbox_rule_ids()?;
+        let mut out = Vec::new();
+        for (r, _) in wanted {
+            let id = match r.remote_id.as_deref().filter(|id| !id.is_empty()) {
+                Some(id) => Some(id.to_string()),
+                None => after.iter().find(|(name, id)| name == &r.name && !before.contains(id)).map(|(_, id)| id.clone()),
+            };
+            match id {
+                Some(id) => out.push((r.name.clone(), id)),
+                None => log::warn!("the rule {} was sent to Exchange but isn't listed there", r.name),
+            }
+        }
+        Ok(out)
+    }
+}
+
+/// The most rules Exchange answers with (a mailbox's rule list is small; a hostile one isn't
+/// unbounded).
+const MAX_RULES: usize = 500;
+
+/// A rule as Exchange's `InboxRules` hold it, for `CreateRuleOperation` / `SetRuleOperation`.
+/// Only the parts Exchange can express are written; the engine never sends the others.
+fn inbox_rule_xml(r: &Rule, folder: Option<&str>, priority: usize, id: Option<&str>) -> String {
+    let mut x = String::from("<t:Rule>");
+    if let Some(id) = id {
+        x.push_str(&format!("<t:RuleId Id=\"{}\"/>", esc(id)));
+    }
+    x.push_str(&format!("<t:DisplayName>{}</t:DisplayName>", esc(&r.name)));
+    x.push_str(&format!("<t:Priority>{priority}</t:Priority>"));
+    x.push_str(&format!("<t:IsEnabled>{}</t:IsEnabled>", r.enabled));
+    x.push_str("<t:Conditions>");
+    for c in &r.conditions {
+        match c {
+            Condition::From(t) => x.push_str(&format!("<t:ContainsSenderStrings><t:String>{}</t:String></t:ContainsSenderStrings>", esc(t))),
+            Condition::To(t) => x.push_str(&format!("<t:ContainsRecipientStrings><t:String>{}</t:String></t:ContainsRecipientStrings>", esc(t))),
+            Condition::Subject(t) => x.push_str(&format!("<t:ContainsSubjectStrings><t:String>{}</t:String></t:ContainsSubjectStrings>", esc(t))),
+            Condition::HasAttachment => x.push_str("<t:HasAttachments>true</t:HasAttachments>"),
+            // Exchange knows neither: the engine keeps those rules at home.
+            Condition::AnyText(_) | Condition::Bulk => {}
+        }
+    }
+    x.push_str("</t:Conditions><t:Actions>");
+    for a in &r.actions {
+        match a {
+            RuleAction::MoveTo(_) | RuleAction::MoveToRole(_) => {
+                if let Some(folder) = folder {
+                    x.push_str(&format!("<t:MoveToFolder><t:FolderId Id=\"{}\"/></t:MoveToFolder>", esc(folder)));
+                }
+            }
+            RuleAction::MarkRead => x.push_str("<t:MarkAsRead/>"),
+            RuleAction::Categorize(c) => x.push_str(&format!("<t:AssignCategories><t:String>{}</t:String></t:AssignCategories>", esc(c))),
+            RuleAction::Delete => x.push_str("<t:Delete/>"),
+            RuleAction::Flag | RuleAction::Pin => {}
+        }
+    }
+    if r.stop {
+        x.push_str("<t:StopProcessingRules/>");
+    }
+    x.push_str("</t:Actions></t:Rule>");
+    x
 }
 
 /// Where Autodiscover is asked (POX, MS-OXDSCLI): the domain's `autodiscover.` host, then the
@@ -1827,6 +1943,43 @@ pub fn send(c: &Client, raw: &[u8], recipients: &[String]) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_inbox_rules_go_to_exchange_and_come_back() {
+        use mailcraft_model::organize::{Condition, Rule, RuleAction};
+        let mut d = crate::fake_ews::Data::default();
+        d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+        let server = crate::fake_ews::serve(d);
+        let user = format!("{}\\{}", crate::fake_ews::DOMAIN, crate::fake_ews::USER);
+        let c = Client::connect(&server.url, &user, crate::fake_ews::PASSWORD, "riley@contoso.example").unwrap();
+        let rule = |name: &str, id: Option<&str>| Rule {
+            name: name.into(),
+            enabled: true,
+            account: Some("a1".into()),
+            conditions: vec![Condition::Subject("invoice".into())],
+            match_all: true,
+            actions: vec![RuleAction::MoveTo("Invoices".into())],
+            stop: false,
+            server: true,
+            remote_id: id.map(str::to_string),
+        };
+        // Created: the server's id comes back, found by name (creating answers none).
+        let ids = c.set_inbox_rules(&[(rule("Invoices", None), Some("F-INVOICES".into()))], &[]).unwrap();
+        assert_eq!(ids.len(), 1);
+        let (name, id) = ids[0].clone();
+        assert_eq!(name, "Invoices");
+        assert!(!id.is_empty());
+        assert_eq!(c.inbox_rule_ids().unwrap(), vec![("Invoices".to_string(), id.clone())]);
+        // Changed by its id: the server keeps the same rule, under its new name.
+        let ids = c.set_inbox_rules(&[(rule("Invoices 2026", Some(&id)), Some("F-INVOICES".into()))], &[]).unwrap();
+        assert_eq!(ids, vec![("Invoices 2026".to_string(), id.clone())]);
+        assert_eq!(c.inbox_rule_ids().unwrap(), vec![("Invoices 2026".to_string(), id.clone())]);
+        // Removed.
+        assert!(c.set_inbox_rules(&[], std::slice::from_ref(&id)).unwrap().is_empty());
+        assert!(c.inbox_rule_ids().unwrap().is_empty());
+        let calls = server.data.lock().unwrap().calls.clone();
+        assert!(calls.iter().any(|c| c == "UpdateInboxRules"), "{calls:?}");
+    }
 
     #[test]
     fn answers_are_read_carefully() {
