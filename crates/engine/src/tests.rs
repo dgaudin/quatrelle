@@ -2184,6 +2184,73 @@ fn download_all_brings_every_message_a_batch_at_a_time() {
     let _ = std::fs::remove_dir_all(store.root());
 }
 
+/// A rule marked "on the server" goes to Exchange as a job, only when what the server would be
+/// told changes; the id Exchange gives it comes back and is kept, so the next change finds the
+/// same rule. A rule Exchange can't run stays home, and says so.
+#[test]
+fn server_rules_go_to_the_server_and_keep_their_id() {
+    use mailcraft_model::organize::{Condition, Rule, RuleAction};
+    let mut s = sample_session("server-rules");
+    let account = s.accounts[0].config.id.clone();
+    let rule = Rule {
+        name: "Invoices".into(),
+        enabled: true,
+        account: Some(account.clone()),
+        conditions: vec![Condition::Subject("invoice".into())],
+        match_all: true,
+        actions: vec![RuleAction::MoveTo("Inbox".into())],
+        stop: false,
+        server: true,
+        remote_id: None,
+    };
+    s.run("rules.set", &json!({ "rules": [rule] })).unwrap();
+    let sent: Vec<(String, Vec<Rule>, Vec<String>)> = s
+        .take_jobs()
+        .into_iter()
+        .filter_map(|j| match j {
+            mailcraft_model::Job::SetServerRules { account, rules, delete } => Some((account, rules, delete)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(sent.len(), 1, "one job for the account");
+    assert_eq!(sent[0].1.len(), 1, "the rule marked for the server");
+    assert!(sent[0].2.is_empty(), "nothing to remove");
+    // The server's answer brings its id back: it's kept, and nothing is sent again.
+    s.apply(mailcraft_model::Event::ServerRules {
+        account: account.clone(),
+        ids: vec![("Invoices".into(), "R1".into())],
+        cleared: Vec::new(),
+        error: None,
+    });
+    assert_eq!(s.rules[0].remote_id.as_deref(), Some("R1"));
+    assert!(s.take_jobs().is_empty(), "the same rules aren't sent twice");
+    // Turned off: its server copy is removed, and the id with it.
+    let mut off = s.rules[0].clone();
+    off.server = false;
+    s.run("rules.set", &json!({ "rules": [off] })).unwrap();
+    let sent: Vec<(String, Vec<Rule>, Vec<String>)> = s
+        .take_jobs()
+        .into_iter()
+        .filter_map(|j| match j {
+            mailcraft_model::Job::SetServerRules { account, rules, delete } => Some((account, rules, delete)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(sent.len(), 1);
+    assert!(sent[0].1.is_empty());
+    assert_eq!(sent[0].2, vec!["R1".to_string()], "the server copy goes");
+    assert_eq!(s.rules[0].remote_id, None, "and the id is forgotten");
+    // A rule Exchange can't run stays on this computer, and the user is told why.
+    let mut good = s.rules[0].clone();
+    good.server = true;
+    let mut bad = good.clone();
+    bad.name = "Newsletters".into();
+    bad.conditions = vec![Condition::Bulk];
+    s.run("rules.set", &json!({ "rules": [good, bad] })).unwrap();
+    assert!(!s.rules[1].server, "Exchange knows no newsletters");
+    assert!(s.notices.iter().any(|n| n.text.contains("Newsletters")), "{:?}", s.notices);
+}
+
 /// Issue #1: the reading pane marks mail read as Outlook's Reading Pane options say: when shown
 /// (after a wait), once another message is chosen, or not at all; a message opened in its own
 /// window (a double-click) is always read.

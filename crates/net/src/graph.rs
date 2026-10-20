@@ -13,6 +13,7 @@
 use std::collections::HashMap;
 
 use mailcraft_mime as mime;
+use mailcraft_model::organize::{Condition, Rule, RuleAction};
 use mailcraft_model::{Flag, Flags, Folder, FolderRole, MessageKey, Op, Summary, sort_newest_first, utf7, voting};
 use mailcraft_store::{FolderState, Store};
 use serde_json::{Value, json};
@@ -419,6 +420,53 @@ impl Client {
         self.send_raw("PATCH", "/me/mailboxSettings", "application/json", body).map(|_| ())
     }
 
+    /// The ids of the Inbox rules Graph keeps, by name.
+    pub fn message_rule_ids(&self) -> Result<Vec<(String, String)>> {
+        let v = self.get("/me/mailFolders/inbox/messageRules?$select=id,displayName&$top=500")?;
+        Ok(v.get("value")
+            .and_then(Value::as_array)
+            .map(|list| list.iter().filter_map(|r| Some((r.get("displayName")?.as_str()?.to_string(), r.get("id")?.as_str()?.to_string()))).collect())
+            .unwrap_or_default())
+    }
+
+    /// Create, change and remove the Inbox rules Graph runs, from MailCraft's rules, as
+    /// [`ews::Client::set_inbox_rules`](crate::ews::Client::set_inbox_rules) does.
+    pub fn set_message_rules(&self, wanted: &[(Rule, Option<String>)], delete: &[String]) -> Result<Vec<(String, String)>> {
+        if wanted.is_empty() && delete.is_empty() {
+            return Ok(Vec::new());
+        }
+        let before: Vec<String> = self.message_rule_ids()?.into_iter().map(|(_, id)| id).collect();
+        for (i, (r, folder)) in wanted.iter().enumerate() {
+            let body = message_rule_json(r, folder.as_deref(), i + 1);
+            match r.remote_id.as_deref().filter(|id| !id.is_empty()) {
+                Some(id) => {
+                    let path = format!("/me/mailFolders/inbox/messageRules/{}", seg(id));
+                    self.send_raw("PATCH", &path, "application/json", serde_json::to_vec(&body).map_err(|e| NetError::Protocol(e.to_string()))?)?;
+                }
+                None => {
+                    self.post("/me/mailFolders/inbox/messageRules", &body)?;
+                }
+            }
+        }
+        for id in delete.iter().filter(|id| !id.is_empty()) {
+            let path = format!("/me/mailFolders/inbox/messageRules/{}", seg(id));
+            self.send_raw("DELETE", &path, "application/json", Vec::new())?;
+        }
+        let after = self.message_rule_ids()?;
+        let mut out = Vec::new();
+        for (r, _) in wanted {
+            let id = match r.remote_id.as_deref().filter(|id| !id.is_empty()) {
+                Some(id) => Some(id.to_string()),
+                None => after.iter().find(|(name, id)| name == &r.name && !before.contains(id)).map(|(_, id)| id.clone()),
+            };
+            match id {
+                Some(id) => out.push((r.name.clone(), id)),
+                None => log::warn!("the rule {} was sent to Graph but isn't listed there", r.name),
+            }
+        }
+        Ok(out)
+    }
+
     /// Delete every message in a folder, a batch at a time.
     fn empty(&self, folder: &str, owner: Option<&str>) -> Result<()> {
         let me = who(owner);
@@ -501,6 +549,68 @@ fn header_block(m: &Value) -> Vec<u8> {
     }
     out.push_str("\r\n");
     out.into_bytes()
+}
+
+/// A rule as Graph's `messageRules` hold it. Only the parts Exchange can express are written;
+/// the engine never sends the others (`Rule::server_blockers`).
+fn message_rule_json(r: &Rule, folder: Option<&str>, sequence: usize) -> Value {
+    let mut conditions = serde_json::Map::new();
+    let mut subjects: Vec<String> = Vec::new();
+    let mut senders: Vec<String> = Vec::new();
+    let mut recipients: Vec<String> = Vec::new();
+    for c in &r.conditions {
+        match c {
+            Condition::Subject(t) => subjects.push(t.clone()),
+            Condition::From(t) => senders.push(t.clone()),
+            Condition::To(t) => recipients.push(t.clone()),
+            Condition::HasAttachment => {
+                conditions.insert("hasAttachments".into(), Value::Bool(true));
+            }
+            Condition::AnyText(_) | Condition::Bulk => {}
+        }
+    }
+    if !subjects.is_empty() {
+        conditions.insert("subjectContains".into(), json!(subjects));
+    }
+    if !senders.is_empty() {
+        conditions.insert("senderContains".into(), json!(senders));
+    }
+    if !recipients.is_empty() {
+        conditions.insert("recipientContains".into(), json!(recipients));
+    }
+    let mut actions = serde_json::Map::new();
+    for a in &r.actions {
+        match a {
+            RuleAction::MoveTo(_) | RuleAction::MoveToRole(_) => {
+                if let Some(folder) = folder {
+                    actions.insert("moveToFolder".into(), Value::String(folder.to_string()));
+                }
+            }
+            RuleAction::MarkRead => {
+                actions.insert("markAsRead".into(), Value::Bool(true));
+            }
+            RuleAction::Categorize(c) => {
+                let list = actions.entry("assignCategories").or_insert_with(|| json!([]));
+                if let Some(list) = list.as_array_mut() {
+                    list.push(Value::String(c.clone()));
+                }
+            }
+            RuleAction::Delete => {
+                actions.insert("delete".into(), Value::Bool(true));
+            }
+            RuleAction::Flag | RuleAction::Pin => {}
+        }
+    }
+    if r.stop {
+        actions.insert("stopProcessingRules".into(), Value::Bool(true));
+    }
+    json!({
+        "displayName": r.name,
+        "sequence": sequence,
+        "isEnabled": r.enabled,
+        "conditions": Value::Object(conditions),
+        "actions": Value::Object(actions),
+    })
 }
 
 /// Refresh the folder list (and the folder ids behind it).

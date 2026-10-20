@@ -941,3 +941,5 @@ month	May	5月
 	Searching…	検索中…
 	Download all	すべてダウンロード
 	Downloading {done} of {total}	{done} / {total} をダウンロード中
+	Also run on the server	サーバーでも実行
+	Exchange can't run this rule: {why}. It stays on this computer.	Exchange ではこのルールを実行できません: {why}。このコンピューターに残ります。

@@ -940,3 +940,5 @@ month	May	mei
 	Searching…	Zoeken…
 	Download all	Alles downloaden
 	Downloading {done} of {total}	{done} van {total} downloaden
+	Also run on the server	Ook op de server
+	Exchange can't run this rule: {why}. It stays on this computer.	Exchange kan deze regel niet uitvoeren: {why}. Hij blijft op deze computer.

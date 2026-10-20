@@ -1426,8 +1426,56 @@ impl Worker {
                     }
                 }
             }
+            Job::SetServerRules { rules, delete, .. } => self.set_server_rules(rules, delete),
             Job::FetchUrl { .. } | Job::Discover { .. } | Job::SignIn { .. } | Job::ImportPst { .. } | Job::ExportPst { .. } => {}
             Job::Start { .. } | Job::SmtpPassword { .. } | Job::Remove { .. } | Job::WorkOffline { .. } | Job::SetSync { .. } => {}
+        }
+    }
+
+    /// Put the account's server-marked rules on its server (Exchange's inbox rules), so mail is
+    /// filed while MailCraft is closed, and remove the ones turned off or deleted here.
+    fn set_server_rules(&mut self, rules: Vec<mailcraft_model::organize::Rule>, delete: Vec<String>) {
+        use mailcraft_model::organize::RuleAction;
+        let r = (|| -> Result<Vec<(String, String)>> {
+            if rules.is_empty() && delete.is_empty() {
+                return Ok(Vec::new());
+            }
+            if self.conn.is_none() {
+                self.connect()?;
+            }
+            // The folder each rule files mail into, by the id the server knows it by.
+            let mut wanted: Vec<(mailcraft_model::organize::Rule, Option<String>)> = Vec::new();
+            for rule in rules.iter().filter(|r| r.server && r.server_ready()) {
+                let folder: Option<&str> = rule.actions.iter().find_map(|a| match a {
+                    RuleAction::MoveTo(path) => Some(path.as_str()),
+                    RuleAction::MoveToRole(role) => self.folders.iter().find(|f| f.role == *role && f.mailbox.is_none()).map(|f| f.path.as_str()),
+                    _ => None,
+                });
+                let id = match folder {
+                    Some(path) => match self.jstate.mailbox(path) {
+                        Ok(id) => Some(id.to_string()),
+                        Err(_) => {
+                            // Its folder isn't on the server (any more): keeping the rule here is
+                            // better than filing mail nowhere.
+                            self.notice(format!("the rule \"{}\" waits: its folder isn't on the server", rule.name));
+                            continue;
+                        }
+                    },
+                    None => None,
+                };
+                wanted.push((rule.clone(), id));
+            }
+            match self.conn.as_mut() {
+                Some(Conn::Ews(c)) => c.set_inbox_rules(&wanted, &delete),
+                Some(Conn::Graph(c)) => c.set_message_rules(&wanted, &delete),
+                _ => Err(NetError::No("this server's rules can't be changed from MailCraft".into())),
+            }
+        })();
+        match r {
+            Ok(ids) => self.sink.emit(Event::ServerRules { account: self.acc.id.clone(), ids, cleared: delete, error: None }),
+            Err(e) => {
+                self.sink.emit(Event::ServerRules { account: self.acc.id.clone(), ids: Vec::new(), cleared: Vec::new(), error: Some(e.to_string()) })
+            }
         }
     }
 

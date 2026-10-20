@@ -723,6 +723,8 @@ pub struct RuleForm {
     /// The account whose folders `MoveTo` offers (and the only one it applies to).
     pub account: Option<String>,
     pub stop: bool,
+    /// Run it on the server too (Exchange's inbox rules), when Exchange can express it.
+    pub server: bool,
     /// Run it on the mail already in the Inbox once saved (Outlook's "run this rule now").
     pub run_now: bool,
     pub error: Option<String>,
@@ -759,11 +761,13 @@ impl RuleForm {
         Ok(Rule {
             name: self.name.trim().to_string(),
             enabled: true,
-            account: if self.action == RuleDo::MoveTo { self.account.clone() } else { None },
+            account: if self.action == RuleDo::MoveTo || self.server { self.account.clone() } else { None },
             conditions: vec![condition],
             match_all: true,
             actions: vec![action],
             stop: self.stop,
+            server: self.server,
+            remote_id: None,
         })
     }
 
@@ -794,6 +798,7 @@ impl RuleForm {
             target,
             account: r.account.clone(),
             stop: r.stop,
+            server: r.server,
             run_now: false,
             error: None,
         }
@@ -1019,6 +1024,7 @@ impl Dialog {
             target: String::new(),
             account: None,
             stop: false,
+            server: false,
             run_now: true,
             error: None,
         }))
@@ -2082,6 +2088,12 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Act
                         );
                         let ui = &mut inner;
                         changed |= ui.checkbox(&mut r.enabled, "").on_hover_text(tl!("On / off")).changed();
+                        // Exchange can run it while MailCraft is closed (it says when it can't).
+                        let can_server =
+                            r.account.as_deref().and_then(|a| s.account(a)).is_some_and(|a| a.config.ews.is_some() || a.config.graph.is_some());
+                        if can_server {
+                            changed |= ui.checkbox(&mut r.server, "").on_hover_text(tl!("Also run on the server")).changed();
+                        }
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             ui.spacing_mut().item_spacing.x = 2.0;
                             if widgets::tiny_icon_button(ui, Icon::Delete, "Delete", t).clicked() {
@@ -2214,6 +2226,32 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Act
                 }
             });
             ui.checkbox(&mut f.stop, tl!("Don't run later rules on mail this one matches"));
+            // Outlook's "on this server": Exchange files the mail while MailCraft is closed, as
+            // far as it can express the rule.
+            let server_account = f
+                .account
+                .clone()
+                .filter(|a| s.account(a).is_some_and(|a| a.config.ews.is_some() || a.config.graph.is_some()))
+                .or_else(|| s.accounts.iter().find(|a| a.config.ews.is_some() || a.config.graph.is_some()).map(|a| a.config.id.clone()));
+            if let Some(id) = server_account {
+                let mut on = f.server;
+                if ui.checkbox(&mut on, tl!("Also run on the server")).changed() {
+                    f.server = on;
+                    if on && f.account.is_none() {
+                        f.account = Some(id);
+                    }
+                }
+                if f.server {
+                    let blockers = f.to_rule().map(|r| r.server_blockers()).unwrap_or_default();
+                    if !blockers.is_empty() {
+                        ui.label(
+                            RichText::new(tf!("Exchange can't run this rule: {why}. It stays on this computer.", why = blockers.join(", ")))
+                                .color(t.warn)
+                                .small(),
+                        );
+                    }
+                }
+            }
             ui.checkbox(&mut f.run_now, tl!("Run it now on the mail already in the Inbox"));
             if let Some(e) = &f.error {
                 ui.label(RichText::new(e.as_str()).color(t.danger).small());
@@ -2225,9 +2263,13 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Act
                         let mut rules = s.rules.clone();
                         let at = match f.index.filter(|i| *i < rules.len()) {
                             Some(i) => {
-                                let enabled = rules.get(i).is_none_or(|r| r.enabled);
+                                // Keep what the server knows of it: its id, and whether it runs.
+                                let (enabled, remote_id) = match rules.get(i) {
+                                    Some(r) => (r.enabled, r.remote_id.clone()),
+                                    None => (true, None),
+                                };
                                 if let Some(slot) = rules.get_mut(i) {
-                                    *slot = Rule { enabled, ..rule };
+                                    *slot = Rule { enabled, remote_id, ..rule };
                                 }
                                 i
                             }

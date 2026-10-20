@@ -88,6 +88,8 @@ pub struct Data {
     /// The public folder hierarchy mailbox (Exchange 2013 and later): listing public folders is
     /// only answered when routed there.
     pub pf_hierarchy: Option<String>,
+    /// The Inbox rules Exchange keeps, as (id, name).
+    pub rules: Vec<(String, String)>,
     /// The request's `X-PublicFolderMailbox` header.
     routed: String,
     /// Other mailboxes on the server.
@@ -132,6 +134,7 @@ impl Default for Data {
             unreadable: Vec::new(),
             pf_mailbox: None,
             pf_hierarchy: None,
+            rules: Vec::new(),
             routed: String::new(),
             shared: Vec::new(),
             anchors: Vec::new(),
@@ -384,6 +387,55 @@ impl Data {
         };
         let mut out = Vec::new();
         match op.name.as_str() {
+            "GetInboxRules" => {
+                let list: String = self
+                    .rules
+                    .iter()
+                    .enumerate()
+                    .map(|(i, (id, name))| {
+                        format!(
+                            "<t:Rule><t:RuleId Id=\"{}\"/><t:DisplayName>{}</t:DisplayName><t:Priority>{}</t:Priority><t:IsEnabled>true</t:IsEnabled></t:Rule>",
+                            esc(id),
+                            esc(name),
+                            i + 1
+                        )
+                    })
+                    .collect();
+                out.push(ok(format!("<m:OutlookRuleBlobExists>false</m:OutlookRuleBlobExists><m:InboxRules>{list}</m:InboxRules>")));
+            }
+            "UpdateInboxRules" => {
+                let mut problem = None;
+                if let Some(ops) = op.child("Operations") {
+                    for o in &ops.kids {
+                        match o.name.as_str() {
+                            "CreateRuleOperation" => {
+                                let Some(rule) = o.child("Rule") else { continue };
+                                let name = rule.text_of("DisplayName").unwrap_or_default().to_string();
+                                let id = self.id("R");
+                                self.rules.push((id, name));
+                            }
+                            "SetRuleOperation" => {
+                                let Some(rule) = o.child("Rule") else { continue };
+                                let id = rule.child("RuleId").and_then(|r| r.attr("Id")).unwrap_or_default().to_string();
+                                let name = rule.text_of("DisplayName").unwrap_or_default().to_string();
+                                match self.rules.iter_mut().find(|(i, _)| *i == id) {
+                                    Some(r) => r.1 = name,
+                                    None => problem = Some("ErrorRuleNotFound"),
+                                }
+                            }
+                            "DeleteRuleOperation" => {
+                                let id = o.child("RuleId").and_then(|r| r.attr("Id")).unwrap_or_default().to_string();
+                                self.rules.retain(|(i, _)| *i != id);
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                out.push(match problem {
+                    Some(code) => err(code),
+                    None => ok(String::new()),
+                });
+            }
             "GetFolder" => {
                 for f in op.child("FolderIds").map(|f| f.kids.clone()).unwrap_or_default() {
                     // Someone else's calendar: what this account may do there.

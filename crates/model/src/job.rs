@@ -7,7 +7,7 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{AccountConfig, Flag, Folder, MessageKey};
+use crate::{AccountConfig, Flag, Folder, MessageKey, organize::Rule};
 
 /// A password in transit. Its `Debug` form is redacted so it never reaches a log.
 #[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -174,6 +174,10 @@ pub enum Job {
     GetVacation { account: String },
     /// Change them.
     SetVacation { account: String, vacation: Vacation },
+    /// Put the rules the account keeps on its server (Exchange's inbox rules), so mail is filed
+    /// while MailCraft is closed: the ones marked `server` (with their `remote_id` when the
+    /// server already has them), and the ids of the rules to remove there.
+    SetServerRules { account: String, rules: Vec<Rule>, delete: Vec<String> },
     /// Sync the account's calendars and address books with its CalDAV / CardDAV server (changes
     /// made here first).
     SyncDav { account: String },
@@ -200,6 +204,7 @@ impl Job {
             | Job::FlushOutbox { account }
             | Job::GetVacation { account }
             | Job::SetVacation { account, .. }
+            | Job::SetServerRules { account, .. }
             | Job::SyncDav { account }
             | Job::ImportPst { account, .. }
             | Job::ExportPst { account, .. } => account,
@@ -323,6 +328,14 @@ pub enum Event {
     Vacation {
         account: String,
         vacation: Option<Vacation>,
+        error: Option<String>,
+    },
+    /// The server's rules were brought up to date: the id each rule got there (by name), the ids
+    /// of the rules removed, or why it couldn't be done.
+    ServerRules {
+        account: String,
+        ids: Vec<(String, String)>,
+        cleared: Vec<String>,
         error: Option<String>,
     },
     /// A CalDAV / CardDAV sync's result, to merge.

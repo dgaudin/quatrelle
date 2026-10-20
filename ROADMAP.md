@@ -94,8 +94,8 @@ local-first, media-aware v1); the fuller request is
    and password of its own.
 20. **Next:** what's left in [docs/gaps.md](docs/gaps.md): a relay for IMAP accounts in the
    browser, bidirectional editing, Wayland drag-out, Kerberos-only Exchange, what the `.pst`
-   libraries can't do yet; then the search index on disk, Exchange's own rules and every contact
-   field with its photo.
+   libraries can't do yet; then the search index on disk, rules on IMAP (Sieve) servers and every
+   contact field with its photo.
 
 ## Progress log
 
@@ -266,3 +266,11 @@ local-first, media-aware v1); the fuller request is
   the worker fetches them over whichever transport the account uses, and each one is indexed for
   search as it arrives. The status bar says how far it has got, messages already kept are passed
   over, and it stops and says so. Tested: a batch at a time, each answer asks for the next.
+- **2026-10-20** — **Rules that run on the server:** a rule has "Also run on the server" (Outlook's
+  own), and MailCraft creates, changes and removes it in Exchange's inbox rules (EWS
+  `UpdateInboxRules`, reading the ids back with `GetInboxRules`) and in Microsoft 365's
+  (`messageRules`) — so mail is filed while the app is closed. Only what Exchange can express goes
+  there (conditions in AND, no "any text", no newsletters, no flag or pin): the others stay on this
+  computer, and the dialog says why. MailCraft only ever changes or removes rules it made, a rule
+  turned off there is removed from the server, and rules made offline go up when the account
+  connects. Tested: create, change by id, remove, and the engine's job and id keeping.

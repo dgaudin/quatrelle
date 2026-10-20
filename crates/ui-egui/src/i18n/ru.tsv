@@ -943,3 +943,5 @@ month	May	Май
 	Searching…	Поиск…
 	Download all	Скачать всё
 	Downloading {done} of {total}	Скачано {done} из {total}
+	Also run on the server	Также на сервере
+	Exchange can't run this rule: {why}. It stays on this computer.	Exchange не может выполнить это правило: {why}. Оно останется на этом компьютере.
