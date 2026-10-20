@@ -2123,6 +2123,134 @@ fn a_search_is_indexed_a_slice_at_a_time() {
     let _ = std::fs::remove_dir_all(store.root());
 }
 
+/// A folder's index is kept when the folder is read: the next run searches it again without
+/// reading the messages (with the bodies out of the cache, only the kept index finds the words).
+#[test]
+fn a_search_index_is_kept_for_the_next_run() {
+    let store = temp("kept-index");
+    store.save_accounts(&[mailcraft_model::AccountConfig { id: "a1".into(), email: "me@studio.example".into(), ..Default::default() }]).unwrap();
+    store
+        .save_folders(
+            "a1",
+            &[mailcraft_model::Folder {
+                account: "a1".into(),
+                path: "INBOX".into(),
+                role: FolderRole::Inbox,
+                selectable: true,
+                ..Default::default()
+            }],
+        )
+        .unwrap();
+    let mut st = store.load_folder("a1", "INBOX").unwrap();
+    st.validity = 1;
+    for uid in 1..=40u32 {
+        let key = mailcraft_model::MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 1, uid };
+        st.messages.push(mailcraft_model::Summary { key, subject: format!("Report {uid}"), ..Default::default() });
+    }
+    // A word only the body holds: the summary alone can't find it.
+    let key = st.messages[39].key.clone();
+    store.write_body(&key, b"From: a@x.example\r\nSubject: Report 40\r\n\r\nwatermelon in the body\r\n").unwrap();
+    store.save_folder("a1", "INBOX", &st).unwrap();
+    {
+        let mut s = Session::open(Some(store.clone()), mailcraft_model::dates::Clock::new(NOW, 0));
+        s.take_jobs();
+        assert_eq!(s.run("search.run", &json!({"query": "watermelon"})).unwrap()["results"], 1);
+        assert!(store.load_search_index("a1", "INBOX").is_some(), "the folder's index is kept");
+    }
+    // The body goes (a cache that let go of it), and the next run still finds the word.
+    store.remove_body(&key);
+    let mut s = Session::open(Some(store.clone()), mailcraft_model::dates::Clock::new(NOW, 0));
+    s.take_jobs();
+    let v = s.run("search.run", &json!({"query": "watermelon"})).unwrap();
+    assert_eq!(v["results"], 1, "found in the kept index, not by reading the messages: {v}");
+    assert_eq!(v["pending"], false);
+    assert_eq!(s.run("search.run", &json!({"query": "report"})).unwrap()["results"], 40);
+    done(s);
+}
+
+/// A body that arrives after the index was kept joins it: the same run finds it, and the next
+/// run reads that body only (the folder itself isn't read again).
+#[test]
+fn a_downloaded_body_joins_a_kept_index() {
+    let store = temp("kept-delta");
+    store.save_accounts(&[mailcraft_model::AccountConfig { id: "a1".into(), email: "me@studio.example".into(), ..Default::default() }]).unwrap();
+    store
+        .save_folders(
+            "a1",
+            &[mailcraft_model::Folder {
+                account: "a1".into(),
+                path: "INBOX".into(),
+                role: FolderRole::Inbox,
+                selectable: true,
+                ..Default::default()
+            }],
+        )
+        .unwrap();
+    let mut st = store.load_folder("a1", "INBOX").unwrap();
+    st.validity = 1;
+    for uid in 1..=20u32 {
+        let key = mailcraft_model::MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 1, uid };
+        st.messages.push(mailcraft_model::Summary { key, subject: format!("Report {uid}"), ..Default::default() });
+    }
+    let key = st.messages[7].key.clone();
+    store.save_folder("a1", "INBOX", &st).unwrap();
+    {
+        let mut s = Session::open(Some(store.clone()), mailcraft_model::dates::Clock::new(NOW, 0));
+        s.take_jobs();
+        assert_eq!(s.run("search.run", &json!({"query": "report"})).unwrap()["results"], 20);
+        // The body comes in, as "Download all" brings it.
+        let raw = b"From: a@x.example\r\nSubject: Report 8\r\n\r\nwatermelon in the body\r\n".to_vec();
+        store.write_body(&key, &raw).unwrap();
+        s.apply(Event::Body { key: key.clone(), raw });
+        assert_eq!(s.run("search.run", &json!({"query": "watermelon"})).unwrap()["results"], 1);
+    }
+    let mut s = Session::open(Some(store.clone()), mailcraft_model::dates::Clock::new(NOW, 0));
+    s.take_jobs();
+    let v = s.run("search.run", &json!({"query": "watermelon"})).unwrap();
+    assert_eq!(v["results"], 1, "the body read since is added to the kept index: {v}");
+    done(s);
+}
+
+/// A folder that changed since its index was kept is read again, on its own: the messages that
+/// arrived are searchable, and nothing else is read.
+#[test]
+fn a_changed_folder_is_indexed_again() {
+    let store = temp("kept-change");
+    store.save_accounts(&[mailcraft_model::AccountConfig { id: "a1".into(), email: "me@studio.example".into(), ..Default::default() }]).unwrap();
+    store
+        .save_folders(
+            "a1",
+            &[mailcraft_model::Folder {
+                account: "a1".into(),
+                path: "INBOX".into(),
+                role: FolderRole::Inbox,
+                selectable: true,
+                ..Default::default()
+            }],
+        )
+        .unwrap();
+    let mut st = store.load_folder("a1", "INBOX").unwrap();
+    st.validity = 1;
+    for uid in 1..=20u32 {
+        let key = mailcraft_model::MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 1, uid };
+        st.messages.push(mailcraft_model::Summary { key, subject: format!("Report {uid}"), ..Default::default() });
+    }
+    store.save_folder("a1", "INBOX", &st).unwrap();
+    let mut s = Session::open(Some(store.clone()), mailcraft_model::dates::Clock::new(NOW, 0));
+    s.take_jobs();
+    assert_eq!(s.run("search.run", &json!({"query": "report"})).unwrap()["results"], 20);
+    // Mail arrives while the window is open: the folder is read again (the index no longer fits
+    // it), and the new subject is searchable.
+    let mut st = store.load_folder("a1", "INBOX").unwrap();
+    let key = mailcraft_model::MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 1, uid: 21 };
+    st.messages.push(mailcraft_model::Summary { key, subject: "kitchen sink".into(), ..Default::default() });
+    store.save_folder("a1", "INBOX", &st).unwrap();
+    s.apply(Event::FolderChanged { account: "a1".into(), folder: "INBOX".into() });
+    assert_eq!(s.run("search.run", &json!({"query": "kitchen"})).unwrap()["results"], 1);
+    assert_eq!(s.run("search.run", &json!({"query": "report"})).unwrap()["results"], 20);
+    done(s);
+}
+
 /// Outlook's "Download all" brings every message not on this computer yet, a batch at a time:
 /// each answer asks for the next, a message already kept isn't asked for again, and when the
 /// last one arrives it says so and stops.

@@ -94,8 +94,8 @@ local-first, media-aware v1); the fuller request is
    and password of its own.
 20. **Next:** what's left in [docs/gaps.md](docs/gaps.md): a relay for IMAP accounts in the
    browser, bidirectional editing, Wayland drag-out, Kerberos-only Exchange, what the `.pst`
-   libraries can't do yet; then the search index on disk, rules on IMAP (Sieve) servers and every
-   contact field with its photo.
+   libraries can't do yet; then rules on IMAP (Sieve) servers, the `.pst`'s contact pictures and
+   the business-card view.
 
 ## Progress log
 
@@ -287,3 +287,13 @@ local-first, media-aware v1); the fuller request is
   list and on the contact card, with the initials when there is none. Tested: the EWS look-up against
   the in-memory server, and the engine asking once and keeping the answer. GitHub's CI (stable 1.99)
   also caught a new clippy lint in the model, fixed with `as_chunks`.
+- **2026-10-20** — **The search index kept on disk:** each folder's index (its words, its messages
+  and whether each one's body was read) is kept beside its cache in a compact binary form (words'
+  documents as gaps, one or two bytes a message), written when the folder has been read. A later
+  run takes a folder as it is instead of reading its messages again, and only a folder whose
+  messages changed — a fingerprint of their text, flags aside, says so — is read again; the bodies
+  that came in since are added one at a time. Marking mail read or filing it in a category no
+  longer throws the index away, a big folder still joins the mailbox's a slice a frame, and a
+  damaged file is refused and rewritten rather than trusted. Tested: a word only a body held is
+  found with the body gone from the cache, a body downloaded after the index was kept joins it,
+  and a folder that changed is read again on its own.
