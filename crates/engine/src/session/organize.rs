@@ -1,6 +1,6 @@
 //! Organising mail: categories, pinning, snoozing, inbox rules and the Focused/Other split.
 
-use mailcraft_model::organize::{Category, Rule, RuleAction, Snooze, actions_for};
+use mailcraft_model::organize::{Category, Rule, RuleAction, ServerKind, Snooze, actions_for};
 use mailcraft_model::{PINNED, is_keyword};
 
 use super::*;
@@ -229,17 +229,19 @@ impl Session {
             }
         }
         let mut rules = rules;
-        // What goes to the server has to be something Exchange can run: what it can't stays
-        // here (as Outlook's client-only rules do), and the user is told.
+        // What goes to the server has to be something it can run (Exchange's rules, or an IMAP
+        // account's Sieve): what it can't stays here (as Outlook's client-only rules do), and
+        // the user is told.
         let mut kept_home: Vec<String> = Vec::new();
         for r in &mut rules {
-            if r.server && (r.account.is_none() || !r.server_ready()) {
+            let ready = r.account.as_deref().and_then(|a| self.server_kind(a)).is_some_and(|kind| r.server_ready_for(kind));
+            if r.server && !ready {
                 r.server = false;
                 kept_home.push(r.name.clone());
             }
         }
         if !kept_home.is_empty() {
-            self.notice(format!("{} stays on this computer: Exchange can't run it", kept_home.join(", ")), false);
+            self.notice(format!("{} stays on this computer: the server can't run it", kept_home.join(", ")), false);
         }
         // The server copies that must go: rules removed here, turned off, or no longer sent.
         let mut delete: BTreeMap<String, Vec<String>> = BTreeMap::new();
@@ -257,7 +259,7 @@ impl Session {
                 r.remote_id = None;
             }
         }
-        let before = server_shape(&self.rules);
+        let before = server_shape(&self.rules, &|a| self.server_kind(a));
         self.rules = rules;
         if let Some(store) = &self.store
             && let Err(e) = store.save_doc("rules.json", &self.rules)
@@ -266,7 +268,7 @@ impl Session {
         }
         // Tell each server, when there is something to say: a change to what runs there, or a
         // rule to remove there.
-        if before != server_shape(&self.rules) || !delete.is_empty() {
+        if before != server_shape(&self.rules, &|a| self.server_kind(a)) || !delete.is_empty() {
             let mut accounts: BTreeSet<String> = delete.keys().cloned().collect();
             for r in &self.rules {
                 if r.server
@@ -279,11 +281,30 @@ impl Session {
                 let wanted: Vec<Rule> = self.rules.iter().filter(|r| r.server && r.account.as_deref() == Some(&account)).cloned().collect();
                 let remove = delete.remove(&account).unwrap_or_default();
                 if !wanted.is_empty() || !remove.is_empty() {
-                    self.jobs.push(Job::SetServerRules { account, rules: wanted, delete: remove });
+                    self.jobs.push(Job::SetServerRules { account, rules: wanted, delete: remove, categories: self.rule_keywords() });
                 }
             }
         }
         Ok(serde_json::json!({ "rules": self.rules.len() }))
+    }
+
+    /// The categories by name, with the keyword each is kept as (a rule run by a server adds
+    /// the keyword of the category it files mail in).
+    fn rule_keywords(&self) -> Vec<(String, String)> {
+        self.prefs.categories.iter().map(|c| (c.name.clone(), c.keyword.clone())).collect()
+    }
+
+    /// Where an account's rules can also run beside this computer (`None`: its server keeps no
+    /// rules at all — JMAP, POP). An IMAP account's are its Sieve script, through ManageSieve.
+    pub fn server_kind(&self, account: &str) -> Option<ServerKind> {
+        let a = self.account(account)?;
+        if a.config.graph.is_some() || a.config.ews.is_some() {
+            Some(ServerKind::Exchange)
+        } else if a.config.jmap.is_some() || a.config.pop.is_some() {
+            None
+        } else {
+            Some(ServerKind::Sieve)
+        }
     }
 
     /// Keep the rules on disk, without telling any server (the server's answer brings the ids
@@ -305,7 +326,7 @@ impl Session {
         if pending.is_empty() {
             return;
         }
-        self.jobs.push(Job::SetServerRules { account: account.to_string(), rules: pending, delete: Vec::new() });
+        self.jobs.push(Job::SetServerRules { account: account.to_string(), rules: pending, delete: Vec::new(), categories: self.rule_keywords() });
     }
 
     /// The rules as a file to keep or take to another computer (Outlook's Export Rules): each
@@ -579,10 +600,10 @@ impl Session {
 
 /// What a server would be told for these rules (MailCraft's ids left out): comparing it says
 /// whether a change is worth a round trip to the server.
-fn server_shape(rules: &[Rule]) -> Vec<String> {
+fn server_shape(rules: &[Rule], kind: &impl Fn(&str) -> Option<ServerKind>) -> Vec<String> {
     rules
         .iter()
-        .filter(|r| r.server && r.account.is_some() && r.server_ready())
+        .filter(|r| r.server && r.account.as_deref().and_then(kind).is_some_and(|k| r.server_ready_for(k)))
         .map(|r| format!("{:?}|{}|{}|{:?}|{:?}|{}", r.account, r.name, r.enabled, r.conditions, r.actions, r.stop))
         .collect()
 }

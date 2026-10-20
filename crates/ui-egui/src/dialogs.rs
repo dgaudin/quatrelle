@@ -723,7 +723,8 @@ pub struct RuleForm {
     /// The account whose folders `MoveTo` offers (and the only one it applies to).
     pub account: Option<String>,
     pub stop: bool,
-    /// Run it on the server too (Exchange's inbox rules), when Exchange can express it.
+    /// Run it on the server too (Exchange's inbox rules, an IMAP account's Sieve script), when
+    /// the server can express it.
     pub server: bool,
     /// Run it on the mail already in the Inbox once saved (Outlook's "run this rule now").
     pub run_now: bool,
@@ -2088,9 +2089,10 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Act
                         );
                         let ui = &mut inner;
                         changed |= ui.checkbox(&mut r.enabled, "").on_hover_text(tl!("On / off")).changed();
-                        // Exchange can run it while MailCraft is closed (it says when it can't).
-                        let can_server =
-                            r.account.as_deref().and_then(|a| s.account(a)).is_some_and(|a| a.config.ews.is_some() || a.config.graph.is_some());
+                        // The account's server can run it while MailCraft is closed (Exchange's
+                        // inbox rules, or an IMAP account's Sieve script; the dialog says when it
+                        // can't).
+                        let can_server = r.account.as_deref().is_some_and(|a| s.server_kind(a).is_some());
                         if can_server {
                             changed |= ui.checkbox(&mut r.server, "").on_hover_text(tl!("Also run on the server")).changed();
                         }
@@ -2226,26 +2228,29 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Act
                 }
             });
             ui.checkbox(&mut f.stop, tl!("Don't run later rules on mail this one matches"));
-            // Outlook's "on this server": Exchange files the mail while MailCraft is closed, as
-            // far as it can express the rule.
+            // Outlook's "on this server": the server files the mail while MailCraft is closed,
+            // as far as it can express the rule (Exchange's inbox rules, a Sieve script).
             let server_account = f
                 .account
                 .clone()
-                .filter(|a| s.account(a).is_some_and(|a| a.config.ews.is_some() || a.config.graph.is_some()))
-                .or_else(|| s.accounts.iter().find(|a| a.config.ews.is_some() || a.config.graph.is_some()).map(|a| a.config.id.clone()));
+                .filter(|a| s.server_kind(a).is_some())
+                .or_else(|| s.accounts.iter().find(|a| s.server_kind(&a.config.id).is_some()).map(|a| a.config.id.clone()));
             if let Some(id) = server_account {
                 let mut on = f.server;
                 if ui.checkbox(&mut on, tl!("Also run on the server")).changed() {
                     f.server = on;
                     if on && f.account.is_none() {
-                        f.account = Some(id);
+                        f.account = Some(id.clone());
                     }
                 }
                 if f.server {
-                    let blockers = f.to_rule().map(|r| r.server_blockers()).unwrap_or_default();
+                    // What this account's server (Exchange's rules, or Sieve) can't express stays
+                    // here, and the dialog says why.
+                    let kind = s.server_kind(&id);
+                    let blockers = f.to_rule().map(|r| kind.map(|k| r.server_blockers_for(k)).unwrap_or_default()).unwrap_or_default();
                     if !blockers.is_empty() {
                         ui.label(
-                            RichText::new(tf!("Exchange can't run this rule: {why}. It stays on this computer.", why = blockers.join(", ")))
+                            RichText::new(tf!("The server can't run this rule: {why}. It stays on this computer.", why = blockers.join(", ")))
                                 .color(t.warn)
                                 .small(),
                         );

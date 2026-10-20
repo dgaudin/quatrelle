@@ -112,27 +112,39 @@ fn yes() -> bool {
     true
 }
 
+/// Where a rule can run besides this computer.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ServerKind {
+    /// Exchange's inbox rules (EWS, Microsoft Graph): conditions combined with AND, no "any
+    /// text", no newsletters, no flag or pin.
+    Exchange,
+    /// The IMAP account's Sieve script: everything but a look at the attachments and at
+    /// newsletters, for which no extension a server is sure to have exists.
+    Sieve,
+}
+
 impl Rule {
-    /// What keeps this rule from running on Exchange, in words (`[]` when it can go there):
-    /// Exchange's rules combine their conditions with AND, and know no "any text", no
-    /// newsletters, no flag and no pin.
-    pub fn server_blockers(&self) -> Vec<&'static str> {
+    /// What keeps this rule from running on `kind`, in words (`[]` when it can go there).
+    pub fn server_blockers_for(&self, kind: ServerKind) -> Vec<&'static str> {
         let mut out: Vec<&'static str> = Vec::new();
-        if !self.match_all {
+        if kind == ServerKind::Exchange && !self.match_all {
             out.push("mail matching any one of its conditions");
         }
         for c in &self.conditions {
             match c {
-                Condition::AnyText(_) => out.push("looking in the subject, sender and recipients at once"),
+                Condition::AnyText(_) if kind == ServerKind::Exchange => out.push("looking in the subject, sender and recipients at once"),
                 Condition::Bulk => out.push("newsletters and automatic mail"),
-                Condition::From(_) | Condition::To(_) | Condition::Subject(_) | Condition::HasAttachment => {}
+                Condition::HasAttachment if kind == ServerKind::Sieve => out.push("checking for attachments"),
+                Condition::From(_) | Condition::To(_) | Condition::Subject(_) | Condition::AnyText(_) | Condition::HasAttachment => {}
             }
         }
-        for a in &self.actions {
-            match a {
-                RuleAction::Flag => out.push("flagging"),
-                RuleAction::Pin => out.push("pinning"),
-                RuleAction::MoveTo(_) | RuleAction::MoveToRole(_) | RuleAction::MarkRead | RuleAction::Categorize(_) | RuleAction::Delete => {}
+        if kind == ServerKind::Exchange {
+            for a in &self.actions {
+                match a {
+                    RuleAction::Flag => out.push("flagging"),
+                    RuleAction::Pin => out.push("pinning"),
+                    RuleAction::MoveTo(_) | RuleAction::MoveToRole(_) | RuleAction::MarkRead | RuleAction::Categorize(_) | RuleAction::Delete => {}
+                }
             }
         }
         out.sort_unstable();
@@ -140,9 +152,24 @@ impl Rule {
         out
     }
 
+    /// What keeps this rule from running on Exchange (see [`Rule::server_blockers_for`]).
+    pub fn server_blockers(&self) -> Vec<&'static str> {
+        self.server_blockers_for(ServerKind::Exchange)
+    }
+
+    /// Whether `kind` can run this rule as it is.
+    pub fn server_ready_for(&self, kind: ServerKind) -> bool {
+        self.server_blockers_for(kind).is_empty()
+    }
+
     /// Whether Exchange can run this rule as it is.
     pub fn server_ready(&self) -> bool {
-        self.server_blockers().is_empty()
+        self.server_blockers_for(ServerKind::Exchange).is_empty()
+    }
+
+    /// Whether an IMAP account's Sieve can run this rule as it is.
+    pub fn sieve_ready(&self) -> bool {
+        self.server_ready_for(ServerKind::Sieve)
     }
 
     pub fn matches(&self, m: &Summary) -> bool {

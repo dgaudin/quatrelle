@@ -944,7 +944,7 @@ month	May	5월
 	Download all	모두 다운로드
 	Downloading {done} of {total}	{total}개 중 {done}개 다운로드 중
 	Also run on the server	서버에서도 실행
-	Exchange can't run this rule: {why}. It stays on this computer.	Exchange에서 이 규칙을 실행할 수 없습니다: {why}. 이 컴퓨터에 남습니다.
+	The server can't run this rule: {why}. It stays on this computer.	서버에서 이 규칙을 실행할 수 없습니다: {why}. 이 컴퓨터에 남습니다.
 	Department	부서
 	Office	사무실
 	Profession	직업

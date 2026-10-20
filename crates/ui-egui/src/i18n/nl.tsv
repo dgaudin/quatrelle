@@ -941,7 +941,7 @@ month	May	mei
 	Download all	Alles downloaden
 	Downloading {done} of {total}	{done} van {total} downloaden
 	Also run on the server	Ook op de server
-	Exchange can't run this rule: {why}. It stays on this computer.	Exchange kan deze regel niet uitvoeren: {why}. Hij blijft op deze computer.
+	The server can't run this rule: {why}. It stays on this computer.	De server kan deze regel niet uitvoeren: {why}. Hij blijft op deze computer.
 	Department	Afdeling
 	Office	Kantoor
 	Profession	Beroep

@@ -1012,6 +1012,91 @@ x"
         let _ = std::fs::remove_dir_all(store.root());
     }
 
+    /// An IMAP account's rules go to its Sieve script: the rule as Sieve, the automatic replies
+    /// it already held kept, and the id the script keeps for each rule coming back.
+    #[test]
+    fn rules_reach_an_imap_accounts_sieve_script() {
+        let st = State::new();
+        st.lock().unwrap().mailbox("Archive").unwrap();
+        let imap_port = serve_tcp(&st);
+        let (sieve_port, sieve) = crate::sieve::tests::serve(crate::sieve::tests::Fake {
+            scripts: Vec::new(),
+            active: None,
+            sieve: "fileinto imap4flags vacation include",
+            log: Vec::new(),
+        });
+        let store = store("sieve-rules");
+        let mut pool = crate::worker::Pool::new(store.clone(), std::sync::Arc::new(crate::worker::MemoryCredentials::default()));
+        pool.sieve_port = sieve_port;
+        let account = AccountConfig {
+            id: "a1".into(),
+            email: "me@studio.example".into(),
+            username: "me@studio.example".into(),
+            imap: ServerConfig { host: "127.0.0.1".into(), port: imap_port, security: Security::None },
+            smtp: ServerConfig { host: "127.0.0.1".into(), port: 1, security: Security::None },
+            ..Default::default()
+        };
+        pool.submit(Job::Start { account, password: Some(Secret("pw".into())) });
+        until(&pool, "online", |e| matches!(e, Event::Status { status: SyncStatus::Online { .. }, .. }));
+        let away = mailcraft_model::job::Vacation { enabled: true, text: "Back soon".into(), ..Default::default() };
+        pool.submit(Job::SetVacation { account: "a1".into(), vacation: away.clone() });
+        until(&pool, "replies on", |e| matches!(e, Event::Vacation { vacation: Some(v), error: None, .. } if *v == away));
+        use mailcraft_model::organize::{Condition, Rule, RuleAction};
+        let rule = Rule {
+            name: "Invoices".into(),
+            enabled: true,
+            account: Some("a1".into()),
+            conditions: vec![Condition::Subject("invoice".into())],
+            match_all: true,
+            actions: vec![RuleAction::MoveTo("Archive".into()), RuleAction::MarkRead],
+            stop: true,
+            server: true,
+            remote_id: None,
+        };
+        pool.submit(Job::SetServerRules { account: "a1".into(), rules: vec![rule.clone()], delete: Vec::new(), categories: Vec::new() });
+        let seen = until(&pool, "rules written", |e| matches!(e, Event::ServerRules { ids, error: None, .. } if !ids.is_empty()));
+        let ids = seen
+            .into_iter()
+            .find_map(|e| match e {
+                Event::ServerRules { ids, .. } => Some(ids),
+                _ => None,
+            })
+            .unwrap_or_default();
+        assert_eq!(ids.len(), 1, "one id for the one rule: {ids:?}");
+        {
+            let f = sieve.lock().unwrap();
+            let script = &f.scripts.iter().find(|(n, _)| n == crate::sieve::SCRIPT).expect("our script is written").1;
+            assert!(script.contains("if header :contains \"subject\" \"invoice\" {"), "{script}");
+            assert!(script.contains("fileinto \"Archive\";"), "{script}");
+            assert!(script.contains("addflag \"\\\\Seen\";"), "{script}");
+            assert!(script.contains("vacation :days 1"), "the automatic replies it held are kept: {script}");
+            assert_eq!(f.active.as_deref(), Some(crate::sieve::SCRIPT));
+        }
+        // The rule turned off: the script keeps the replies and loses the rule.
+        pool.submit(Job::SetServerRules { account: "a1".into(), rules: Vec::new(), delete: vec![ids[0].1.clone()], categories: Vec::new() });
+        until(&pool, "rules removed", |e| matches!(e, Event::ServerRules { ids, error: None, .. } if ids.is_empty()));
+        {
+            let f = sieve.lock().unwrap();
+            let script = &f.scripts.iter().find(|(n, _)| n == crate::sieve::SCRIPT).expect("our script stays").1;
+            assert!(!script.contains("fileinto"), "the rule is gone: {script}");
+            assert!(script.contains("vacation :days 1"), "the replies stay: {script}");
+            assert_eq!(f.active.as_deref(), Some(crate::sieve::SCRIPT), "still ours, for the replies");
+        }
+        // A rule turned off here isn't written to the script, and its id still comes back (so
+        // it isn't sent again until it changes).
+        let off = Rule { enabled: false, ..rule.clone() };
+        pool.submit(Job::SetServerRules { account: "a1".into(), rules: vec![off], delete: vec![ids[0].1.clone()], categories: Vec::new() });
+        let seen = until(&pool, "off rule kept", |e| matches!(e, Event::ServerRules { ids, error: None, .. } if !ids.is_empty()));
+        assert!(seen.iter().any(|e| matches!(e, Event::ServerRules { ids, .. } if ids.iter().any(|(_, id)| id == "sieve:Invoices"))));
+        {
+            let f = sieve.lock().unwrap();
+            let script = &f.scripts.iter().find(|(n, _)| n == crate::sieve::SCRIPT).expect("our script stays").1;
+            assert!(!script.contains("if "), "a rule that's off isn't in the script: {script}");
+        }
+        pool.submit(Job::Remove { account: "a1".into() });
+        let _ = std::fs::remove_dir_all(store.root());
+    }
+
     /// Send / Receive › Work Offline: connections close; changes, sent mail and drafts wait on
     /// this computer; turned off, the account connects and the draft reaches the server.
     #[test]

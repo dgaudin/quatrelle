@@ -1426,7 +1426,7 @@ impl Worker {
                     }
                 }
             }
-            Job::SetServerRules { rules, delete, .. } => self.set_server_rules(rules, delete),
+            Job::SetServerRules { rules, delete, categories, .. } => self.set_server_rules(rules, delete, categories),
             Job::FetchPhoto { email, .. } => self.fetch_photo(&email),
             Job::FetchUrl { .. } | Job::Discover { .. } | Job::SignIn { .. } | Job::ImportPst { .. } | Job::ExportPst { .. } => {}
             Job::Start { .. } | Job::SmtpPassword { .. } | Job::Remove { .. } | Job::WorkOffline { .. } | Job::SetSync { .. } => {}
@@ -1435,7 +1435,7 @@ impl Worker {
 
     /// Put the account's server-marked rules on its server (Exchange's inbox rules), so mail is
     /// filed while MailCraft is closed, and remove the ones turned off or deleted here.
-    fn set_server_rules(&mut self, rules: Vec<mailcraft_model::organize::Rule>, delete: Vec<String>) {
+    fn set_server_rules(&mut self, rules: Vec<mailcraft_model::organize::Rule>, delete: Vec<String>, categories: Vec<(String, String)>) {
         use mailcraft_model::organize::RuleAction;
         let r = (|| -> Result<Vec<(String, String)>> {
             if rules.is_empty() && delete.is_empty() {
@@ -1443,6 +1443,26 @@ impl Worker {
             }
             if self.conn.is_none() {
                 self.connect()?;
+            }
+            // An IMAP account keeps them in its Sieve script, through ManageSieve: the script
+            // holds the whole set, so it is written again (nothing to remove by id).
+            if matches!(self.conn, Some(Conn::Imap(_))) {
+                let (wanted, ids) = self.sieve_rules(&rules);
+                let secret = self.secret()?;
+                let user = if self.acc.username.is_empty() { self.acc.email.clone() } else { self.acc.username.clone() };
+                let mut s = crate::sieve::Client::connect(&self.acc.imap, self.sieve_port).map_err(|e| match e {
+                    NetError::Io(_) => NetError::No("this server doesn't take inbox rules from MailCraft (no ManageSieve)".into()),
+                    e => e,
+                })?;
+                if self.acc.oauth.is_some() {
+                    s.login_xoauth2(&user, &secret)?;
+                } else {
+                    s.login(&user, &secret)?;
+                }
+                let written = s.set_rules(wanted, categories);
+                s.logout();
+                written?;
+                return Ok(ids);
             }
             // The folder each rule files mail into, by the id the server knows it by.
             let mut wanted: Vec<(mailcraft_model::organize::Rule, Option<String>)> = Vec::new();
@@ -1498,6 +1518,56 @@ impl Worker {
             Err(e) => (String::new(), Vec::new(), Some(e.to_string())),
         };
         self.sink.emit(Event::Photo { email: email.to_string(), media, data, error });
+    }
+
+    /// The rules an IMAP account's Sieve script gets, their destinations resolved to the
+    /// server's folder names, and the id kept for each (the script holds the rules by name).
+    fn sieve_rules(&self, rules: &[mailcraft_model::organize::Rule]) -> (Vec<mailcraft_model::organize::Rule>, Vec<(String, String)>) {
+        use mailcraft_model::organize::RuleAction;
+        let mut wanted = Vec::new();
+        let mut ids = Vec::new();
+        for rule in rules.iter().filter(|r| r.server && r.sieve_ready()) {
+            if !rule.enabled {
+                // Off: it isn't in the script. Its id still comes back, so it isn't sent again
+                // until it changes.
+                ids.push((rule.name.clone(), format!("sieve:{}", rule.name)));
+                continue;
+            }
+            let mut kept = rule.clone();
+            let mut actions = Vec::new();
+            let mut missing = false;
+            for a in &rule.actions {
+                match a {
+                    RuleAction::MoveTo(path) => {
+                        if self.folders.iter().any(|f| &f.path == path) {
+                            actions.push(a.clone());
+                        } else {
+                            missing = true;
+                        }
+                    }
+                    RuleAction::MoveToRole(role) => match self.folders.iter().find(|f| f.role == *role && f.mailbox.is_none()) {
+                        Some(f) => actions.push(RuleAction::MoveTo(f.path.clone())),
+                        None => missing = true,
+                    },
+                    // Deleting is filing in Deleted Items, as MailCraft does here.
+                    RuleAction::Delete => match self.folders.iter().find(|f| f.role == mailcraft_model::FolderRole::Trash && f.mailbox.is_none()) {
+                        Some(f) => actions.push(RuleAction::MoveTo(f.path.clone())),
+                        None => missing = true,
+                    },
+                    other => actions.push(other.clone()),
+                }
+            }
+            // Its folder isn't on the server (any more): keeping the rule here is better than
+            // filing mail nowhere.
+            if missing {
+                self.notice(format!("the rule \"{}\" waits: its folder isn't on the server", rule.name));
+                continue;
+            }
+            kept.actions = actions;
+            ids.push((rule.name.clone(), format!("sieve:{}", rule.name)));
+            wanted.push(kept);
+        }
+        (wanted, ids)
     }
 
     /// Read (and first change, when `set`) the automatic replies: JMAP's own, or a Sieve script

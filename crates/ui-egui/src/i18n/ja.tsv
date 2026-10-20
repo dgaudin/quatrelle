@@ -942,7 +942,7 @@ month	May	5月
 	Download all	すべてダウンロード
 	Downloading {done} of {total}	{done} / {total} をダウンロード中
 	Also run on the server	サーバーでも実行
-	Exchange can't run this rule: {why}. It stays on this computer.	Exchange ではこのルールを実行できません: {why}。このコンピューターに残ります。
+	The server can't run this rule: {why}. It stays on this computer.	サーバーではこのルールを実行できません: {why}。このコンピューターに残ります。
 	Department	部署
 	Office	オフィス
 	Profession	職種

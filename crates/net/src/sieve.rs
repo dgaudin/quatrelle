@@ -1,18 +1,20 @@
-//! Automatic replies on IMAP servers: a small ManageSieve client (RFC 5804) that keeps a Sieve
-//! script (RFC 5228) named `mailcraft` with a `vacation` action (RFC 5230), limited to a date
-//! range with `currentdate` (RFC 5260) when one is set.
+//! Automatic replies and inbox rules on IMAP servers: a small ManageSieve client (RFC 5804)
+//! that keeps a Sieve script (RFC 5228) named `mailcraft` with a `vacation` action (RFC 5230),
+//! limited to a date range with `currentdate` (RFC 5260) when one is set, and the rules marked
+//! "also run on the server" (filing mail with `fileinto`, marking it with `imap4flags`).
 //!
-//! The script is MailCraft's own: the settings it was made from are kept in its first line, so
+//! The script is MailCraft's own: the settings it was made from are kept in its first lines, so
 //! reading them back never means parsing Sieve. A script the user already runs stays in charge
-//! of their other rules: ours `include`s it (RFC 6609) and becomes the active one; turning the
-//! replies off makes theirs active again.
+//! of their other rules: ours `include`s it (RFC 6609) and becomes the active one; when ours does
+//! nothing any more (no replies, no rule) theirs becomes active again.
 //!
 //! Server input is hostile: lines and literals are capped.
 
 use std::io::{BufRead, BufReader, Read, Write};
 
 use mailcraft_model::job::{Vacation, is_day};
-use mailcraft_model::{Security, ServerConfig};
+use mailcraft_model::organize::{Condition, Rule, RuleAction};
+use mailcraft_model::{PINNED, Security, ServerConfig, keyword_for, utf7};
 
 use crate::stream::{self, Stream};
 use crate::{NetError, Result};
@@ -22,6 +24,7 @@ pub const PORT: u16 = 4190;
 /// Our script's name.
 pub const SCRIPT: &str = "mailcraft";
 const MARK: &str = "# mailcraft-vacation ";
+const RULES_MARK: &str = "# mailcraft-rules ";
 const MAX_LINE: usize = 64 << 10;
 const MAX_LITERAL: usize = 1 << 20;
 
@@ -227,41 +230,79 @@ impl<S: Read + Write> Client<S> {
     /// The automatic replies this script holds (`None`: never set up here).
     pub fn vacation(&mut self) -> Result<Vacation> {
         let (names, active) = self.list()?;
-        if !names.iter().any(|n| n == SCRIPT) {
-            return Ok(Vacation::default());
-        }
-        let mut v = read_script(&self.get(SCRIPT)?).unwrap_or_default();
+        let (mut settings, _) = self.settings(&names, active.as_deref())?;
         // Someone switched our script off elsewhere: the replies don't run.
-        v.enabled &= active.as_deref() == Some(SCRIPT);
-        Ok(v)
+        settings.vacation.enabled &= active.as_deref() == Some(SCRIPT);
+        Ok(settings.vacation)
     }
 
-    /// Store the automatic replies and switch them on or off.
+    /// Store the automatic replies and switch them on or off (the rules it holds are kept).
     pub fn set_vacation(&mut self, v: &Vacation) -> Result<()> {
-        if v.enabled && !self.has_extension("vacation") {
-            return Err(NetError::No("this server's Sieve has no automatic replies (vacation)".into()));
+        self.update(|s| s.vacation = v.clone())
+    }
+
+    /// Store the rules that run on the server (the automatic replies it holds are kept).
+    pub fn set_rules(&mut self, rules: Vec<Rule>, categories: Vec<(String, String)>) -> Result<()> {
+        self.update(|s| {
+            s.rules = rules;
+            s.categories = categories;
+        })
+    }
+
+    /// What our script holds, and the script the user had before ours.
+    fn settings(&mut self, names: &[String], active: Option<&str>) -> Result<(Settings, Option<String>)> {
+        if !names.iter().any(|n| n == SCRIPT) {
+            return Ok((Settings::default(), None));
         }
+        let text = self.get(SCRIPT)?;
+        let mut vacation = read_script(&text).unwrap_or_default();
+        if active != Some(SCRIPT) {
+            // Someone switched our script off elsewhere: the replies don't run (the rules are
+            // kept as they are: rewriting them off would throw them away).
+            vacation.enabled = false;
+        }
+        Ok((Settings { vacation, rules: read_rules(&text), categories: Vec::new() }, read_previous(&text)))
+    }
+
+    /// Rewrite our script with these settings, switching it on when it does anything and the
+    /// user's own script back on when it doesn't.
+    fn update(&mut self, change: impl FnOnce(&mut Settings)) -> Result<()> {
         let (names, active) = self.list()?;
-        // The script the user had before ours (kept when we last wrote ours).
-        let previous = if names.iter().any(|n| n == SCRIPT) { read_previous(&self.get(SCRIPT)?) } else { None };
+        let (mut s, previous) = self.settings(&names, active.as_deref())?;
+        change(&mut s);
+        // The script the user had before ours: the one active now, or the one ours remembers.
         let theirs = match active.as_deref() {
             Some(a) if a != SCRIPT => Some(a.to_string()),
             _ => previous.filter(|p| names.contains(p)),
         };
-        if theirs.is_some() && v.enabled && !self.has_extension("include") {
+        let dated = s.vacation.from.is_some() || s.vacation.until.is_some();
+        let files = s.rules.iter().any(|r| r.actions.iter().any(|a| matches!(a, RuleAction::MoveTo(_))));
+        let marks = s
+            .rules
+            .iter()
+            .any(|r| r.actions.iter().any(|a| matches!(a, RuleAction::MarkRead | RuleAction::Flag | RuleAction::Pin | RuleAction::Categorize(_))));
+        if s.vacation.enabled && !self.has_extension("vacation") {
+            return Err(NetError::No("this server's Sieve has no automatic replies (vacation)".into()));
+        }
+        if s.vacation.enabled && dated && !self.has_extension("date") {
+            return Err(NetError::No("this server can't limit automatic replies to dates".into()));
+        }
+        if files && !self.has_extension("fileinto") {
+            return Err(NetError::No("this server's Sieve can't file mail into folders (no fileinto)".into()));
+        }
+        if marks && !self.has_extension("imap4flags") {
+            return Err(NetError::No("this server's Sieve can't mark mail (no imap4flags)".into()));
+        }
+        if theirs.is_some() && s.any() && !self.has_extension("include") {
             return Err(NetError::No(
                 "another Sieve script runs your filters and this server can't combine scripts (include); turn it off first".into(),
             ));
         }
-        let dated = v.from.is_some() || v.until.is_some();
-        if v.enabled && dated && !self.has_extension("date") {
-            return Err(NetError::No("this server can't limit automatic replies to dates".into()));
-        }
-        self.put(SCRIPT, &script(v, theirs.as_deref()))?;
-        if v.enabled {
+        self.put(SCRIPT, &script(&s, theirs.as_deref()))?;
+        if s.any() {
             self.activate(SCRIPT)
         } else {
-            // Off: the user's own script runs again (or none).
+            // Nothing of ours to run: the user's own script runs again (or none).
             self.activate(theirs.as_deref().unwrap_or(""))
         }
     }
@@ -294,27 +335,67 @@ fn sieve_str(s: &str) -> String {
     format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\"").replace('\r', ""))
 }
 
+/// What MailCraft keeps in its script: the automatic replies and the rules that run on the
+/// server (their folders already resolved to the server's names).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Settings {
+    pub vacation: Vacation,
+    pub rules: Vec<Rule>,
+    /// The account's categories by name, with the IMAP keyword each is kept as (a rule adds the
+    /// keyword of the category it files mail in).
+    pub categories: Vec<(String, String)>,
+}
+
+impl Settings {
+    /// Whether our script does anything (otherwise the user's own script runs again).
+    pub fn any(&self) -> bool {
+        self.vacation.enabled || !self.rules.is_empty()
+    }
+}
+
 /// Our script for these settings. The settings themselves (and the user's own script, which it
 /// includes) are kept in the first lines.
-pub fn script(v: &Vacation, include: Option<&str>) -> String {
-    let settings = serde_json::to_string(v).unwrap_or_default().replace(['\r', '\n'], " ");
-    let mut out = format!("{MARK}{settings}\r\n");
+pub fn script(s: &Settings, include: Option<&str>) -> String {
+    let v = &s.vacation;
+    fn one_line<T: serde::Serialize>(v: &T) -> String {
+        serde_json::to_string(v).unwrap_or_default().replace(['\r', '\n'], " ")
+    }
+    let mut out = format!("{MARK}{}\r\n", one_line(v));
+    if !s.rules.is_empty() {
+        out.push_str(&format!("{RULES_MARK}{}\r\n", one_line(&s.rules)));
+    }
     if let Some(p) = include {
         out.push_str(&format!("# mailcraft-previous {}\r\n", p.replace(['\r', '\n'], " ")));
     }
     let from = v.from.as_deref().filter(|d| is_day(d));
     let until = v.until.as_deref().filter(|d| is_day(d));
-    let mut req = vec!["vacation"];
+    let dated = v.enabled && (from.is_some() || until.is_some());
+    let files = s.rules.iter().any(|r| r.actions.iter().any(|a| matches!(a, RuleAction::MoveTo(_))));
+    let marks = s
+        .rules
+        .iter()
+        .any(|r| r.actions.iter().any(|a| matches!(a, RuleAction::MarkRead | RuleAction::Flag | RuleAction::Pin | RuleAction::Categorize(_))));
+    let mut req: Vec<&str> = Vec::new();
+    if v.enabled {
+        req.push("vacation");
+    }
     if include.is_some() {
         req.push("include");
     }
-    if from.is_some() || until.is_some() {
+    if dated {
         req.extend(["date", "relational"]);
     }
-    if v.enabled {
+    if files {
+        req.push("fileinto");
+    }
+    if marks {
+        req.push("imap4flags");
+    }
+    if !req.is_empty() {
         out.push_str(&format!("require [{}];\r\n", req.iter().map(|r| sieve_str(r)).collect::<Vec<_>>().join(", ")));
-    } else if include.is_some() {
-        out.push_str("require [\"include\"];\r\n");
+    }
+    for r in &s.rules {
+        out.push_str(&rule_script(r, &s.categories));
     }
     if let Some(p) = include {
         out.push_str(&format!("include :personal {};\r\n", sieve_str(p)));
@@ -338,10 +419,75 @@ pub fn script(v: &Vacation, include: Option<&str>) -> String {
     out
 }
 
+/// A rule as Sieve statements (`""` for one that can never match).
+fn rule_script(r: &Rule, categories: &[(String, String)]) -> String {
+    let mut tests: Vec<String> = r.conditions.iter().filter_map(condition_test).collect();
+    if tests.is_empty() || r.actions.is_empty() {
+        return String::new();
+    }
+    let test = match tests.len() {
+        1 => tests.remove(0),
+        _ if r.match_all => format!("allof({})", tests.join(", ")),
+        _ => format!("anyof({})", tests.join(", ")),
+    };
+    let mut actions = String::new();
+    for a in &r.actions {
+        if let Some(line) = action_line(a, categories) {
+            actions.push_str("    ");
+            actions.push_str(&line);
+            actions.push_str("\r\n");
+        }
+    }
+    if actions.is_empty() {
+        return String::new();
+    }
+    if r.stop {
+        actions.push_str("    stop;\r\n");
+    }
+    format!("if {test} {{\r\n{actions}}}\r\n")
+}
+
+/// A condition as a Sieve test (`None`: it can't be one, or an empty text matches nothing).
+fn condition_test(c: &Condition) -> Option<String> {
+    let text = |t: &str| {
+        let t = t.trim();
+        (!t.is_empty()).then(|| sieve_str(t))
+    };
+    Some(match c {
+        Condition::From(t) => format!("header :contains \"from\" {}", text(t)?),
+        Condition::To(t) => format!("header :contains [\"to\", \"cc\"] {}", text(t)?),
+        Condition::Subject(t) => format!("header :contains \"subject\" {}", text(t)?),
+        Condition::AnyText(t) => format!("header :contains [\"subject\", \"from\", \"to\", \"cc\"] {}", text(t)?),
+        Condition::HasAttachment | Condition::Bulk => return None,
+    })
+}
+
+/// What an action runs as in Sieve (`None` when only the caller can resolve it: a folder).
+fn action_line(a: &RuleAction, categories: &[(String, String)]) -> Option<String> {
+    Some(match a {
+        RuleAction::MoveTo(path) => format!("fileinto {};", sieve_str(&utf7::decode(path))),
+        RuleAction::MoveToRole(_) | RuleAction::Delete => return None,
+        RuleAction::MarkRead => "addflag \"\\\\Seen\";".into(),
+        RuleAction::Flag => "addflag \"\\\\Flagged\";".into(),
+        RuleAction::Pin => format!("addflag {};", sieve_str(PINNED)),
+        // A category's keyword is the account's (its default "Work" is `$label2`); one made
+        // since is the hash of its name.
+        RuleAction::Categorize(name) => {
+            let keyword = categories.iter().find(|(n, _)| n == name).map(|(_, k)| k.clone()).unwrap_or_else(|| keyword_for(name));
+            format!("addflag {};", sieve_str(&keyword))
+        }
+    })
+}
+
 /// The settings our script was made from.
 pub fn read_script(s: &str) -> Option<Vacation> {
     let first = s.lines().next()?;
     serde_json::from_str(first.strip_prefix(MARK)?.trim()).ok()
+}
+
+/// The rules our script was made from.
+pub fn read_rules(s: &str) -> Vec<Rule> {
+    s.lines().take(3).find_map(|l| l.strip_prefix(RULES_MARK)).and_then(|j| serde_json::from_str(j.trim()).ok()).unwrap_or_default()
 }
 
 fn read_previous(s: &str) -> Option<String> {
@@ -366,7 +512,7 @@ pub(crate) mod tests {
             until: None,
             ..Default::default()
         };
-        let s = script(&v, Some("filters"));
+        let s = script(&Settings { vacation: v.clone(), ..Default::default() }, Some("filters"));
         assert!(s.starts_with(MARK));
         assert!(s.contains(r#"require ["vacation", "include", "date", "relational"];"#), "{s}");
         assert!(s.contains("include :personal \"filters\";"));
@@ -380,12 +526,86 @@ Zoe";"#
         );
         assert_eq!(read_script(&s), Some(v.clone()));
         assert_eq!(read_previous(&s).as_deref(), Some("filters"));
-        let off = script(&Vacation { enabled: false, ..v }, None);
+        let off = script(&Settings { vacation: Vacation { enabled: false, ..v }, ..Default::default() }, None);
         assert!(!off.contains("vacation :days"), "off: no action");
         assert_eq!(read_script("require \"vacation\";"), None);
         // Settings never break out of the comment line.
         let evil = Vacation { enabled: true, subject: "x\r\nrequire \"fileinto\";".into(), text: "t".into(), ..Default::default() };
-        assert_eq!(script(&evil, None).lines().next().unwrap().matches("require").count(), 1, "still one comment line");
+        assert_eq!(
+            script(&Settings { vacation: evil, ..Default::default() }, None).lines().next().unwrap().matches("require").count(),
+            1,
+            "still one comment line"
+        );
+    }
+
+    /// A rule marked for the server becomes Sieve: its conditions as tests (any or all), its
+    /// actions as fileinto/addflag/stop, and what Sieve can't look at is left out.
+    #[test]
+    fn rules_become_sieve() {
+        let rule = Rule {
+            name: "Invoices".into(),
+            enabled: true,
+            account: Some("a1".into()),
+            conditions: vec![Condition::From("billing@x.example".into()), Condition::Subject("invoice".into())],
+            match_all: true,
+            actions: vec![RuleAction::MoveTo("INBOX/Invoices".into()), RuleAction::MarkRead, RuleAction::Categorize("Work".into())],
+            stop: true,
+            server: true,
+            remote_id: None,
+        };
+        let categories = vec![("Work".to_string(), "$label2".to_string())];
+        // The script is written with CRLF; the blocks below are read as written.
+        let crlf = |s: String| s.replace("\r\n", "\n");
+        let s = crlf(script(&Settings { rules: vec![rule.clone()], categories: categories.clone(), ..Default::default() }, None));
+        assert!(s.contains(r#"require ["fileinto", "imap4flags"];"#), "{s}");
+        assert!(
+            s.contains(
+                r#"if allof(header :contains "from" "billing@x.example", header :contains "subject" "invoice") {
+    fileinto "INBOX/Invoices";
+    addflag "\\Seen";
+    addflag "$label2";
+    stop;
+}"#
+            ),
+            "{s}"
+        );
+        assert_eq!(read_rules(&s), vec![rule.clone()]);
+        assert_eq!(read_script(&s), Some(Vacation::default()));
+        // Any of the conditions, and the flag/pin actions Sieve knows with imap4flags.
+        let any = Rule {
+            conditions: vec![Condition::To("ann@x.example".into()), Condition::AnyText("urgent".into())],
+            match_all: false,
+            actions: vec![RuleAction::Flag, RuleAction::Pin],
+            ..rule.clone()
+        };
+        let s = crlf(script(&Settings { rules: vec![any], ..Default::default() }, None));
+        assert!(
+            s.contains(
+                r#"if anyof(header :contains ["to", "cc"] "ann@x.example", header :contains ["subject", "from", "to", "cc"] "urgent") {
+    addflag "\\Flagged";
+    addflag "$Pinned";
+    stop;
+}"#
+            ),
+            "{s}"
+        );
+        // A rule with nothing to match (an empty text) would match every message: left out.
+        let empty = Rule { conditions: vec![Condition::From("  ".into())], actions: vec![RuleAction::MarkRead], stop: false, ..rule.clone() };
+        let s = crlf(script(&Settings { rules: vec![empty], ..Default::default() }, None));
+        assert!(!s.contains("if "), "{s}");
+        // What Sieve can't see (attachments, newsletters) is never sent.
+        assert!(!Rule { conditions: vec![Condition::HasAttachment], actions: vec![], ..rule.clone() }.sieve_ready());
+        assert!(!Rule { conditions: vec![Condition::Bulk], actions: vec![], ..rule.clone() }.sieve_ready());
+        assert!(rule.sieve_ready() && rule.server_ready(), "both can take it");
+        let any_text = Rule { conditions: vec![Condition::AnyText("x".into())], actions: vec![RuleAction::MarkRead], ..rule.clone() };
+        assert!(any_text.sieve_ready() && !any_text.server_ready(), "Exchange can't look in every header, Sieve can");
+        // The automatic replies and the rules live in the same script, both kept.
+        let v = Vacation { enabled: true, text: "Away".into(), ..Default::default() };
+        let s = crlf(script(&Settings { vacation: v.clone(), rules: vec![rule.clone()], categories }, Some("filters")));
+        assert!(s.contains(r#"require ["vacation", "include", "fileinto", "imap4flags"];"#), "{s}");
+        assert_eq!(read_script(&s), Some(v));
+        assert_eq!(read_rules(&s), vec![rule]);
+        assert!(s.find("fileinto").unwrap() < s.find("include :personal").unwrap(), "our rules first, then the user's own");
     }
 
     /// A ManageSieve server for tests: scripts in memory, one connection at a time.

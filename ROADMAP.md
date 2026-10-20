@@ -297,3 +297,14 @@ local-first, media-aware v1); the fuller request is
   damaged file is refused and rewritten rather than trusted. Tested: a word only a body held is
   found with the body gone from the cache, a body downloaded after the index was kept joins it,
   and a folder that changed is read again on its own.
+- **2026-10-20** — **Rules on IMAP servers:** a rule marked "also run on the server" now runs on an
+  IMAP account too, in its Sieve script (`mailcraft` through ManageSieve): conditions become
+  `header :contains` tests (all or any of them), actions `fileinto` (the folder, by its UTF-8 name)
+  and `addflag` (read, flagged, `$Pinned`, a category's keyword), and `stop` keeps the rest from
+  running. The automatic replies stay in the same script, our rules run before the user's own
+  script (which ours `include`s), and the server is only asked for the extensions the rules need
+  (`fileinto`, `imap4flags`). A rule whose folder isn't on the server waits and says so; what Sieve
+  can't look at (attachments, newsletters) stays here, where the dialog now says what the server
+  could not run instead of naming Exchange. Tested: the script the manager writes, the rules kept
+  while the replies change and the other way round, a rule turned off, and the engine sending a
+  rule Exchange would have refused.
