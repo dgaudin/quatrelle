@@ -975,3 +975,15 @@ month	May	mayo
 	When a message	Cuando un mensaje
 	matches all of them	coincide con todas
 	matches any of them	coincide con alguna
+	Spelling	Ortografía
+	Check the spelling of the message (F7)	Comprobar la ortografía del mensaje (F7)
+	The dictionaries are still being read.	Los diccionarios se están leyendo.
+	No misspelt words.	No hay palabras mal escritas.
+	Not in the dictionary: {word}	No está en el diccionario: {word}
+	Suggestions	Sugerencias
+	No suggestions.	No hay sugerencias.
+	Change	Cambiar
+	Add to dictionary	Añadir al diccionario
+	Stop underlining this word, here and in other messages	Dejar de subrayar esta palabra, aquí y en otros mensajes
+	There's no message to check.	No hay ningún mensaje que comprobar.
+	Check the spelling as you type	Comprobar la ortografía mientras se escribe

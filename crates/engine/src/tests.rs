@@ -682,6 +682,59 @@ fn formatted_messages_go_out_as_html_with_pictures() {
 }
 
 #[test]
+fn a_correction_replaces_the_word_and_keeps_its_look() {
+    let mut s = sample_session("replace");
+    s.run("mail.new", &json!({})).unwrap();
+    s.run("compose.update", &json!({"to": "ann@x.example", "subject": "Plan", "body": "Le **serveur** est lent", "marks": true})).unwrap();
+    let c = s.compose.as_ref().unwrap();
+    assert_eq!(c.body, "Le serveur est lent");
+    let at = c.body.find("serveur").unwrap();
+    assert!(c.styles.style(3).bold, "the word is bold");
+    // The suggestion takes the word's place, the look with it.
+    s.run("compose.replaceText", &json!({"from": at, "to": at + "serveur".len(), "text": "serveur mail"})).unwrap();
+    let c = s.compose.as_ref().unwrap();
+    assert_eq!(c.body, "Le serveur mail est lent");
+    assert_eq!(c.styles.chars.len(), c.body.chars().count(), "one style per character");
+    assert!(c.styles.style(3).bold && c.styles.style(14).bold, "the replacement stays bold");
+    assert!(!c.styles.style(15).bold, "what follows it keeps its own look");
+    // What isn't there is refused, and the text is left as it was.
+    for bad in [json!({"from": 4, "to": 2, "text": "x"}), json!({"from": 0, "to": 9_999, "text": "x"}), json!({"from": -1, "to": 2, "text": "x"})] {
+        assert!(s.run("compose.replaceText", &bad).is_err(), "{bad}");
+    }
+    assert_eq!(s.compose.as_ref().unwrap().body, "Le serveur mail est lent");
+    // In the middle of a character: refused, not a panic.
+    s.run("compose.update", &json!({"body": "Le café est prêt"})).unwrap();
+    let e = s.compose.as_ref().unwrap().body.find('é').unwrap();
+    assert!(s.run("compose.replaceText", &json!({"from": e + 1, "to": e + 3, "text": "e"})).is_err());
+    assert_eq!(s.compose.as_ref().unwrap().body, "Le café est prêt");
+    // Taking a word out.
+    let (from, to) = (3, 3 + "café".len());
+    s.run("compose.replaceText", &json!({"from": from, "to": to, "text": ""})).unwrap();
+    let c = s.compose.as_ref().unwrap();
+    assert_eq!(c.body, "Le  est prêt");
+    assert_eq!(c.styles.chars.len(), c.body.chars().count());
+    // The subject, with offsets into it.
+    s.run("compose.update", &json!({"subject": "Le servveur est là"})).unwrap();
+    s.run("compose.replaceText", &json!({"from": 3, "to": 11, "text": "serveur", "field": "subject"})).unwrap();
+    assert_eq!(s.compose.as_ref().unwrap().subject, "Le serveur est là");
+    assert!(s.run("compose.replaceText", &json!({"from": 0, "to": 99, "text": "x", "field": "subject"})).is_err());
+    assert!(s.run("compose.replaceText", &json!({"from": 0, "to": 1, "text": "x", "field": "nowhere"})).is_err());
+    // Underlining as you type, on or off (Outlook's "Check spelling as you type").
+    assert!(s.prefs.spell_check);
+    assert_eq!(s.run("view.spelling", &json!({"on": false})).unwrap()["on"], false);
+    assert!(!s.prefs.spell_check);
+    s.run("view.spelling", &json!({})).unwrap();
+    assert!(s.prefs.spell_check);
+    // The words added to the dictionary, once each, whatever the case.
+    assert_eq!(s.run("spelling.add", &json!({"word": "  MailCraft "})).unwrap()["word"], "mailcraft");
+    s.run("spelling.add", &json!({"word": "MAILCRAFT"})).unwrap();
+    s.run("spelling.add", &json!({"word": "serveur"})).unwrap();
+    assert_eq!(s.prefs.spelling, vec!["mailcraft".to_string(), "serveur".to_string()]);
+    assert!(s.run("spelling.add", &json!({"word": "   "})).is_err());
+    done(s);
+}
+
+#[test]
 fn web_pictures_load_only_when_asked() {
     let store = temp("pictures");
     let mut s = Session::open(Some(store.clone()), mailcraft_model::dates::Clock::new(NOW, 0));

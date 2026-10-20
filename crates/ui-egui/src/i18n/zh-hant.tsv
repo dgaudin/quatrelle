@@ -974,3 +974,15 @@ month	May	5月
 	When a message	當郵件
 	matches all of them	符合全部條件
 	matches any of them	符合任一條件
+	Spelling	拼字檢查
+	Check the spelling of the message (F7)	檢查郵件拼字(F7)
+	The dictionaries are still being read.	正在讀取字典。
+	No misspelt words.	沒有拼字錯誤的字詞。
+	Not in the dictionary: {word}	字典中沒有：{word}
+	Suggestions	建議
+	No suggestions.	沒有建議。
+	Change	變更
+	Add to dictionary	加入字典
+	Stop underlining this word, here and in other messages	不再為這個字詞加底線（此處和其他郵件）
+	There's no message to check.	沒有可檢查的郵件。
+	Check the spelling as you type	輸入時檢查拼字

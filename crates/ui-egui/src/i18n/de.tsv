@@ -975,3 +975,15 @@ month	May	Mai
 	When a message	Wenn eine Nachricht
 	matches all of them	auf alle zutrifft
 	matches any of them	auf mindestens eine zutrifft
+	Spelling	Rechtschreibung
+	Check the spelling of the message (F7)	Rechtschreibung des Nachrichtentexts prüfen (F7)
+	The dictionaries are still being read.	Die Wörterbücher werden noch gelesen.
+	No misspelt words.	Keine falsch geschriebenen Wörter.
+	Not in the dictionary: {word}	Nicht im Wörterbuch: {word}
+	Suggestions	Vorschläge
+	No suggestions.	Keine Vorschläge.
+	Change	Ändern
+	Add to dictionary	Zum Wörterbuch hinzufügen
+	Stop underlining this word, here and in other messages	Dieses Wort nicht mehr unterstreichen, hier und in anderen Nachrichten
+	There's no message to check.	Es gibt keine Nachricht zum Prüfen.
+	Check the spelling as you type	Rechtschreibung während der Eingabe prüfen

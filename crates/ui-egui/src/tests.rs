@@ -59,6 +59,48 @@ fn a_banner_and_a_placed_label_draw() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// The spelling dialog shows the word the dictionaries don't know, with what could replace it,
+/// and Change is the command that puts the suggestion in its place.
+#[test]
+fn the_spelling_dialog_offers_a_correction() {
+    let (mut a, dir) = app("spelling");
+    assert!(crate::spellcheck::load_for_test(), "the dictionaries read");
+    a.run("mail.new", json!({}));
+    a.run("compose.update", json!({"to": "ann@x.example", "subject": "Plan", "body": "Le servveur de la salle"}));
+    let ctx = egui::Context::default();
+    a.ui.dialog = Some(Dialog::spelling());
+    for _ in 0..3 {
+        frame(&ctx, &mut a, vec![]);
+    }
+    assert!(a.ui.dialog.is_some(), "the dialog stays open");
+    let words = crate::spellcheck::misspelt("Le servveur de la salle");
+    let (range, word) = words.iter().find(|(_, w)| w == "servveur").cloned().expect("the word the dialog shows");
+    assert!(!crate::spellcheck::suggest(&word, 8).is_empty(), "it has suggestions");
+    // What Change runs.
+    a.run("compose.replaceText", json!({"from": range.start, "to": range.end, "text": "serveur"}));
+    frame(&ctx, &mut a, vec![]);
+    assert_eq!(a.session.compose.as_ref().map(|c| c.body.clone()).unwrap_or_default(), "Le serveur de la salle");
+    // The subject is checked too, and corrected with the same command.
+    a.run("compose.update", json!({"subject": "Le servveur est là"}));
+    let subject = a.session.compose.as_ref().map(|c| c.subject.clone()).unwrap_or_default();
+    let (sr, _) = crate::spellcheck::misspelt(&subject).into_iter().find(|(_, w)| w == "servveur").expect("the subject's word");
+    a.run("compose.replaceText", json!({"from": sr.start, "to": sr.end, "text": "serveur", "field": "subject"}));
+    assert_eq!(a.session.compose.as_ref().map(|c| c.subject.clone()).unwrap_or_default(), "Le serveur est là");
+    // Underlining can be turned off; the dialog still checks.
+    a.run("view.spelling", json!({"on": false}));
+    crate::spellcheck::set_on(a.session.prefs.spell_check);
+    let mut job = egui::text::LayoutJob::simple("servveur".into(), egui::FontId::default(), egui::Color32::WHITE, 400.0);
+    crate::spellcheck::underline(&mut job, "servveur", egui::Color32::RED);
+    assert!(job.sections.iter().all(|s| s.format.underline.width == 0.0), "nothing underlined when it's off");
+    crate::spellcheck::set_on(true);
+    // Added to the dictionary: no longer underlined, from the preferences' list.
+    a.run("spelling.add", json!({"word": "Servveur"}));
+    crate::spellcheck::add_word("servveur");
+    assert!(crate::spellcheck::misspelt("Le servveur").is_empty());
+    assert!(a.session.prefs.spelling.iter().any(|w| w == "servveur"));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 /// People's list and A–Z index were a few pixels wider than the pane, so the pane (shared by
 /// every module) grew each frame to its widest and Mail, Calendar and Notes stayed that wide.
 #[test]
@@ -223,6 +265,7 @@ pub(crate) fn tour() {
             Dialog::NewCategory { name: "Clients".into(), color: 3, error: Some("taken".into()) },
             Dialog::Rules,
             Dialog::rule_from("zoe@studio.example", "x"),
+            Dialog::spelling(),
             Dialog::add_account_with("zoe@gmail.com", true),
             jmap_form(),
             graph_form(),

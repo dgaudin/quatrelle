@@ -972,3 +972,15 @@ month	May	5月
 	When a message	当邮件
 	matches all of them	符合全部条件
 	matches any of them	符合任一条件
+	Spelling	拼写检查
+	Check the spelling of the message (F7)	检查邮件拼写(F7)
+	The dictionaries are still being read.	正在读取词典。
+	No misspelt words.	没有拼写错误的单词。
+	Not in the dictionary: {word}	词典中没有：{word}
+	Suggestions	建议
+	No suggestions.	没有建议。
+	Change	更改
+	Add to dictionary	添加到词典
+	Stop underlining this word, here and in other messages	不再为此单词加下划线（此处和其他邮件）
+	There's no message to check.	没有可检查的邮件。
+	Check the spelling as you type	键入时检查拼写

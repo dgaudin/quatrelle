@@ -972,3 +972,15 @@ month	May	5月
 	When a message	メッセージが
 	matches all of them	すべてに一致
 	matches any of them	いずれかに一致
+	Spelling	スペルチェック
+	Check the spelling of the message (F7)	メッセージのスペルを確認 (F7)
+	The dictionaries are still being read.	辞書を読み込み中です。
+	No misspelt words.	スペルミスのある単語はありません。
+	Not in the dictionary: {word}	辞書にありません: {word}
+	Suggestions	候補
+	No suggestions.	候補はありません。
+	Change	変更
+	Add to dictionary	辞書に追加
+	Stop underlining this word, here and in other messages	この単語に下線を付けない（このメッセージと他のメッセージ）
+	There's no message to check.	確認するメッセージがありません。
+	Check the spelling as you type	入力時にスペルを確認する

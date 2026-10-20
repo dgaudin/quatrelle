@@ -974,3 +974,15 @@ month	May	maggio
 	When a message	Quando un messaggio
 	matches all of them	corrisponde a tutte
 	matches any of them	corrisponde ad almeno una
+	Spelling	Ortografia
+	Check the spelling of the message (F7)	Controlla l’ortografia del messaggio (F7)
+	The dictionaries are still being read.	I dizionari sono in lettura.
+	No misspelt words.	Nessuna parola errata.
+	Not in the dictionary: {word}	Non è nel dizionario: {word}
+	Suggestions	Suggerimenti
+	No suggestions.	Nessun suggerimento.
+	Change	Cambia
+	Add to dictionary	Aggiungi al dizionario
+	Stop underlining this word, here and in other messages	Non sottolineare più questa parola, qui e negli altri messaggi
+	There's no message to check.	Non c’è nessun messaggio da controllare.
+	Check the spelling as you type	Controlla l’ortografia durante la digitazione

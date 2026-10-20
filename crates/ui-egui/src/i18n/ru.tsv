@@ -974,3 +974,15 @@ month	May	Май
 	When a message	Когда сообщение
 	matches all of them	совпадает со всеми
 	matches any of them	совпадает с любым
+	Spelling	Орфография
+	Check the spelling of the message (F7)	Проверить орфографию сообщения (F7)
+	The dictionaries are still being read.	Словари ещё читаются.
+	No misspelt words.	Ошибок нет.
+	Not in the dictionary: {word}	Нет в словаре: {word}
+	Suggestions	Варианты
+	No suggestions.	Нет вариантов.
+	Change	Заменить
+	Add to dictionary	Добавить в словарь
+	Stop underlining this word, here and in other messages	Больше не подчёркивать это слово здесь и в других сообщениях
+	There's no message to check.	Нет сообщения для проверки.
+	Check the spelling as you type	Проверять орфографию при вводе

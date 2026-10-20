@@ -2032,15 +2032,30 @@ fn send_button(ui: &mut Ui, t: &Tokens, height: f32, sending: bool) -> egui::Res
     resp.on_hover_text(tl!("Send (Ctrl+Enter)"))
 }
 
-fn field(ui: &mut Ui, t: &Tokens, label: &str, value: &mut String, hint: &str, check_addresses: bool, focus: bool) {
+fn field(ui: &mut Ui, t: &Tokens, label: &str, value: &mut String, hint: &str, check_addresses: bool, focus: bool, spell: bool) {
     ui.horizontal(|ui| {
         ui.add_sized(vec2(LABEL_W, ROW_H), egui::Label::new(RichText::new(tl!(label)).color(t.dim)));
-        let r = underlined(ui, t, egui::TextEdit::singleline(value).hint_text(tl!(hint)));
+        let r =
+            if spell { underlined_spelling(ui, t, value, hint) } else { underlined(ui, t, egui::TextEdit::singleline(value).hint_text(tl!(hint))) };
         if focus {
             r.request_focus();
         }
     });
     address_check(ui, t, value, check_addresses);
+}
+
+/// A one-line field whose misspelt words are underlined in red, as the message's are (the
+/// subject: the words people read first).
+fn underlined_spelling(ui: &mut Ui, t: &Tokens, value: &mut String, hint: &str) -> egui::Response {
+    let colour = t.danger;
+    let mut layouter = move |ui: &egui::Ui, buf: &dyn egui::TextBuffer, wrap: f32| {
+        let text = buf.as_str().to_string();
+        let font = egui::TextStyle::Body.resolve(ui.style());
+        let mut job = egui::text::LayoutJob::simple(text.clone(), font, ui.visuals().text_color(), wrap);
+        crate::spellcheck::underline(&mut job, &text, colour);
+        ui.fonts_mut(|f| f.layout_job(job))
+    };
+    underlined(ui, t, egui::TextEdit::singleline(value).hint_text(tl!(hint)).layouter(&mut layouter))
 }
 
 /// A recipient box (To, Cc, Bcc) that suggests people from mail already seen: ↑/↓ choose,
@@ -2278,11 +2293,12 @@ fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action
     // Alt+S sends, as in Outlook; in a window of its own the main window's shortcuts don't reach
     // it, so Ctrl+Enter and Ctrl+S are the message's own there.
     if !c.sending {
-        let (alt_s, send_key, save_key) = ui.input_mut(|i| {
+        let (alt_s, send_key, save_key, spelling) = ui.input_mut(|i| {
             (
                 i.consume_key(egui::Modifiers::ALT, egui::Key::S),
                 in_window && i.consume_key(egui::Modifiers::COMMAND, egui::Key::Enter),
                 in_window && i.consume_key(egui::Modifiers::COMMAND, egui::Key::S),
+                i.consume_key(egui::Modifiers::NONE, egui::Key::F7),
             )
         });
         if alt_s || send_key {
@@ -2290,6 +2306,9 @@ fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action
         }
         if save_key {
             acts.push(Action::Run("compose.saveDraft", json!({})));
+        }
+        if spelling {
+            acts.push(Action::Dialog(crate::Dialog::spelling()));
         }
     }
     egui::Frame::new().inner_margin(Margin { left: 16, right: 16, top: 8, bottom: 12 }).show(ui, |ui| {
@@ -2430,12 +2449,12 @@ fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action
             if c.show_reply_to || !c.reply_to.is_empty() {
                 ui.horizontal(|ui| {
                     ui.add_space(76.0);
-                    ui.vertical(|ui| field(ui, &t, "Replies to", &mut c.reply_to, "Where replies go instead of to you", true, false));
+                    ui.vertical(|ui| field(ui, &t, "Replies to", &mut c.reply_to, "Where replies go instead of to you", true, false, false));
                 });
             }
             ui.horizontal(|ui| {
                 ui.add_space(76.0);
-                ui.vertical(|ui| field(ui, &t, "Subject", &mut c.subject, "Add a subject", false, false));
+                ui.vertical(|ui| field(ui, &t, "Subject", &mut c.subject, "Add a subject", false, false, true));
             });
             if !c.attachments.is_empty() {
                 ui.horizontal(|ui| {

@@ -1014,6 +1014,14 @@ pub(crate) fn ribbon(ui: &mut Ui, t: &Tokens, ed: &mut Editor, c: &mut Compose, 
         if crate::widgets::tool_button(ui, Icon::Image, "Pictures", t, !c.sending && !c.plain).clicked() {
             acts.push(Action::InsertPicture);
         }
+        // The browser has no dictionaries: nothing to check with.
+        if !cfg!(target_arch = "wasm32")
+            && crate::widgets::tool_button(ui, Icon::SpellCheck, "Spelling", t, !c.sending)
+                .on_hover_text(tl!("Check the spelling of the message (F7)"))
+                .clicked()
+        {
+            acts.push(Action::Dialog(Dialog::spelling()));
+        }
         // The account's signature at the cursor, or making and changing it, from the message
         // (Outlook's Signature menu on the Message ribbon).
         let r = crate::widgets::tool_button(ui, Icon::Drafts, "Signature", t, !c.sending);
