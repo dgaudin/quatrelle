@@ -3619,8 +3619,12 @@ impl Session {
             Event::ServerRules { account, ids, others, cleared, error } => {
                 // The rules the server keeps that MailCraft didn't make (or no longer does):
                 // listed as they are, whoever made them owns them.
+                log::info!("rules: {account} keeps {} rules made elsewhere", others.len());
                 self.foreign_rules.retain(|r| r.account != account);
-                self.foreign_rules.extend(others.into_iter().map(|name| mailcraft_model::organize::ForeignRule { account: account.clone(), name }));
+                self.foreign_rules.extend(others.into_iter().map(|mut r| {
+                    r.account.clone_from(&account);
+                    r
+                }));
                 self.foreign_rules
                     .sort_by(|a, b| (a.account.as_str(), a.name.to_lowercase().as_str()).cmp(&(b.account.as_str(), b.name.to_lowercase().as_str())));
                 if let Some(e) = error {

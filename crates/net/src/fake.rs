@@ -1091,7 +1091,11 @@ x"
         });
         let (ids, others, cleared) = read.unwrap_or_default();
         assert_eq!(ids, vec![("Invoices".to_string(), "sieve:Invoices".to_string())]);
-        assert_eq!(others, vec!["filters".to_string()], "the user's own script is listed, and left alone");
+        assert_eq!(
+            others.iter().map(|r| r.name.clone()).collect::<Vec<_>>(),
+            vec!["filters".to_string()],
+            "the user's own script is listed, and left alone"
+        );
         assert!(cleared.is_empty());
         // The rule turned off: the script keeps the replies and loses the rule.
         pool.submit(Job::SetServerRules { account: "a1".into(), rules: Vec::new(), delete: vec![ids[0].1.clone()], categories: Vec::new() });

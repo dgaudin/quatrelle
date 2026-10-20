@@ -188,6 +188,11 @@ pub enum Job {
     /// Read the rules the account's server keeps, with the ids MailCraft's own rules have there
     /// (`ours`): those made elsewhere come back with them, to be listed.
     GetServerRules { account: String, ours: Vec<String> },
+    /// Turn one of the server's own rules on or off (one MailCraft didn't make: its id is
+    /// enough, everything else stays as the server keeps it).
+    SetServerRuleEnabled { account: String, id: String, enabled: bool, ours: Vec<String> },
+    /// Remove one of the server's own rules.
+    DeleteServerRule { account: String, id: String, ours: Vec<String> },
     /// Fetch the picture kept for a person: the one their contact item carries (its id in
     /// `contact`, as the address book keeps it), or else the one the directory (Exchange,
     /// Microsoft 365) keeps for their address.
@@ -220,6 +225,8 @@ impl Job {
             | Job::SetVacation { account, .. }
             | Job::SetServerRules { account, .. }
             | Job::GetServerRules { account, .. }
+            | Job::SetServerRuleEnabled { account, .. }
+            | Job::DeleteServerRule { account, .. }
             | Job::FetchPhoto { account, .. }
             | Job::SyncDav { account }
             | Job::ImportPst { account, .. }
@@ -347,13 +354,14 @@ pub enum Event {
         error: Option<String>,
     },
     /// The server's rules were read, or brought up to date: the id each of MailCraft's rules has
-    /// there (by name), the names of the rules it didn't make (Outlook's own, the server's web
-    /// page, a Sieve script), the ids of the rules removed, or why it couldn't be done.
+    /// there (by name), the rules it didn't make (Outlook's own, the server's web page, a Sieve
+    /// script) as the server keeps them, the ids of the rules removed, or why it couldn't be
+    /// done.
     ServerRules {
         account: String,
         ids: Vec<(String, String)>,
         #[serde(default)]
-        others: Vec<String>,
+        others: Vec<crate::organize::ForeignRule>,
         cleared: Vec<String>,
         error: Option<String>,
     },

@@ -572,14 +572,17 @@ const QUICK_IDLE: Duration = Duration::from_secs(5 * 60);
 /// The connection to an account's server.
 /// Split the rules a server lists into the ones MailCraft holds the id of, and the names of the
 /// others (Outlook's own, the server's web page, a script the user wrote).
-fn split_rules(all: Vec<(String, String)>, ours: &[String]) -> (Vec<(String, String)>, Vec<String>) {
+fn split_rules(
+    all: Vec<mailcraft_model::organize::ForeignRule>,
+    ours: &[String],
+) -> (Vec<(String, String)>, Vec<mailcraft_model::organize::ForeignRule>) {
     let mut mine = Vec::new();
     let mut others = Vec::new();
-    for (name, id) in all {
-        if ours.iter().any(|o| o == &id) {
-            mine.push((name, id));
-        } else {
-            others.push(name);
+    for r in all {
+        if ours.iter().any(|o| o == &r.id) {
+            mine.push((r.name, r.id));
+        } else if !r.id.is_empty() && !r.name.is_empty() {
+            others.push(r);
         }
     }
     (mine, others)
@@ -1458,6 +1461,8 @@ impl Worker {
                     })
                 }
             },
+            Job::SetServerRuleEnabled { id, enabled, ours, .. } => self.change_server_rule(&id, Some(enabled), false, ours),
+            Job::DeleteServerRule { id, ours, .. } => self.change_server_rule(&id, None, true, ours),
             Job::FetchPhoto { email, contact, .. } => self.fetch_photo(&email, contact.as_deref()),
             Job::FetchUrl { .. } | Job::Discover { .. } | Job::SignIn { .. } | Job::ImportPst { .. } | Job::ExportPst { .. } => {}
             Job::Start { .. } | Job::SmtpPassword { .. } | Job::Remove { .. } | Job::WorkOffline { .. } | Job::SetSync { .. } => {}
@@ -1468,7 +1473,7 @@ impl Worker {
     /// filed while MailCraft is closed, and remove the ones turned off or deleted here.
     fn set_server_rules(&mut self, rules: Vec<mailcraft_model::organize::Rule>, delete: Vec<String>, categories: Vec<(String, String)>) {
         use mailcraft_model::organize::RuleAction;
-        let r = (|| -> Result<(Vec<(String, String)>, Vec<String>)> {
+        let r = (|| -> Result<(Vec<(String, String)>, Vec<mailcraft_model::organize::ForeignRule>)> {
             if rules.is_empty() && delete.is_empty() {
                 return Ok((Vec::new(), Vec::new()));
             }
@@ -1495,7 +1500,19 @@ impl Worker {
                 s.logout();
                 written?;
                 let (names, _) = listed?;
-                let others = names.iter().filter(|n| n.as_str() != crate::sieve::SCRIPT).cloned().collect();
+                let others = names
+                    .iter()
+                    .filter(|n| n.as_str() != crate::sieve::SCRIPT)
+                    .map(|n| mailcraft_model::organize::ForeignRule {
+                        account: self.acc.id.clone(),
+                        id: format!("sieve:{n}"),
+                        name: n.clone(),
+                        enabled: true,
+                        runnable: false,
+                        rule: None,
+                        summary: "a Sieve script".into(),
+                    })
+                    .collect();
                 return Ok((ids, others));
             }
             // The folder each rule files mail into, by the id the server knows it by.
@@ -1527,12 +1544,15 @@ impl Worker {
             }?;
             // What else the server runs: made in Outlook, or on its own web page.
             let all = match self.conn.as_ref() {
-                Some(Conn::Ews(c)) => c.inbox_rule_ids()?,
-                Some(Conn::Graph(c)) => c.message_rule_ids()?,
+                Some(Conn::Ews(c)) => c.inbox_rules()?,
+                Some(Conn::Graph(c)) => c.message_rules()?,
                 _ => Vec::new(),
             };
             let mine: Vec<String> = ids.iter().map(|(_, id)| id.clone()).collect();
-            let (_, others) = split_rules(all, &mine);
+            let (_, mut others) = split_rules(all, &mine);
+            for r in &mut others {
+                r.account.clone_from(&self.acc.id);
+            }
             Ok((ids, others))
         })();
         match r {
@@ -1549,7 +1569,7 @@ impl Worker {
 
     /// What the account's server keeps: the ids MailCraft's own rules have there (`ours` is what
     /// it holds), the names of the ones it didn't make, and its own the server no longer has.
-    fn read_server_rules(&mut self, ours: Vec<String>) -> Result<(Vec<(String, String)>, Vec<String>, Vec<String>)> {
+    fn read_server_rules(&mut self, ours: Vec<String>) -> Result<(Vec<(String, String)>, Vec<mailcraft_model::organize::ForeignRule>, Vec<String>)> {
         if self.conn.is_none() {
             self.connect()?;
         }
@@ -1576,18 +1596,79 @@ impl Worker {
             let ids =
                 if own { ours.iter().map(|id| (id.strip_prefix("sieve:").unwrap_or(id).to_string(), id.clone())).collect() } else { Vec::new() };
             let cleared = if own { Vec::new() } else { ours };
-            let others = names.iter().filter(|n| n.as_str() != crate::sieve::SCRIPT).cloned().collect();
+            let others = names
+                .iter()
+                .filter(|n| n.as_str() != crate::sieve::SCRIPT)
+                .map(|n| mailcraft_model::organize::ForeignRule {
+                    account: self.acc.id.clone(),
+                    id: format!("sieve:{n}"),
+                    name: n.clone(),
+                    enabled: true,
+                    runnable: false,
+                    rule: None,
+                    summary: "a Sieve script".into(),
+                })
+                .collect();
             return Ok((ids, others, cleared));
         }
         let all = match self.conn.as_ref() {
-            Some(Conn::Ews(c)) => c.inbox_rule_ids()?,
-            Some(Conn::Graph(c)) => c.message_rule_ids()?,
+            Some(Conn::Ews(c)) => c.inbox_rules()?,
+            Some(Conn::Graph(c)) => c.message_rules()?,
             _ => return Err(NetError::No("this server keeps no inbox rules".into())),
         };
-        let on_server: Vec<&str> = all.iter().map(|(_, id)| id.as_str()).collect();
+        let on_server: Vec<&str> = all.iter().map(|r| r.id.as_str()).collect();
         let cleared = ours.iter().filter(|id| !on_server.contains(&id.as_str())).cloned().collect();
-        let (ids, others) = split_rules(all, &ours);
+        let (ids, mut others) = split_rules(all, &ours);
+        for r in &mut others {
+            r.account.clone_from(&self.acc.id);
+        }
         Ok((ids, others, cleared))
+    }
+
+    /// Turn one of the server's own rules on or off, or remove it; then read them all back, so
+    /// the dialog shows what the server now keeps.
+    fn change_server_rule(&mut self, id: &str, enabled: Option<bool>, delete: bool, ours: Vec<String>) {
+        let r = (|| -> Result<()> {
+            if self.conn.is_none() {
+                self.connect()?;
+            }
+            match self.conn.as_ref() {
+                Some(Conn::Ews(c)) => {
+                    if delete {
+                        c.delete_rule(id)
+                    } else {
+                        c.set_rule_enabled(id, enabled.unwrap_or(true))
+                    }
+                }
+                Some(Conn::Graph(c)) => {
+                    if delete {
+                        c.delete_rule(id)
+                    } else {
+                        c.set_rule_enabled(id, enabled.unwrap_or(true))
+                    }
+                }
+                _ => Err(NetError::No("this server's rules can't be changed from MailCraft".into())),
+            }
+        })();
+        match r {
+            Ok(()) => match self.read_server_rules(ours) {
+                Ok((ids, others, cleared)) => self.sink.emit(Event::ServerRules { account: self.id(), ids, others, cleared, error: None }),
+                Err(e) => self.sink.emit(Event::ServerRules {
+                    account: self.id(),
+                    ids: Vec::new(),
+                    others: Vec::new(),
+                    cleared: Vec::new(),
+                    error: Some(e.to_string()),
+                }),
+            },
+            Err(e) => self.sink.emit(Event::ServerRules {
+                account: self.id(),
+                ids: Vec::new(),
+                others: Vec::new(),
+                cleared: Vec::new(),
+                error: Some(e.to_string()),
+            }),
+        }
     }
 
     /// The picture kept for a person: the one their contact item carries (`contact`), or else
@@ -2271,16 +2352,24 @@ mod tests {
     }
 
     /// A server's rules split by whose they are: the ones MailCraft holds the id of, and the
-    /// names of those it didn't make (Outlook's own, the server's web page).
+    /// ones it didn't make (Outlook's own, the server's web page).
     #[test]
     fn server_rules_split_by_whose_they_are() {
-        let all = vec![("Outlook rule".to_string(), "R9".to_string()), ("Invoices".to_string(), "R1".to_string())];
-        let (mine, others) = split_rules(all, &["R1".to_string()]);
+        let rule = |name: &str, id: &str| mailcraft_model::organize::ForeignRule {
+            account: String::new(),
+            id: id.into(),
+            name: name.into(),
+            enabled: true,
+            runnable: false,
+            rule: None,
+            summary: String::new(),
+        };
+        let (mine, others) = split_rules(vec![rule("Outlook rule", "R9"), rule("Invoices", "R1")], &["R1".to_string()]);
         assert_eq!(mine, vec![("Invoices".to_string(), "R1".to_string())]);
-        assert_eq!(others, ["Outlook rule"]);
-        let (mine, others) = split_rules(vec![("Theirs".into(), "R2".into())], &[]);
+        assert_eq!(others.iter().map(|r| r.name.as_str()).collect::<Vec<_>>(), ["Outlook rule"]);
+        let (mine, others) = split_rules(vec![rule("Theirs", "R2")], &[]);
         assert!(mine.is_empty());
-        assert_eq!(others, ["Theirs"], "nothing of ours there: all of it is theirs");
+        assert_eq!(others.iter().map(|r| r.name.as_str()).collect::<Vec<_>>(), ["Theirs"], "nothing of ours there: all of it is theirs");
     }
 
     /// Automatic replies are answered between two folders of a long first sync, not after it

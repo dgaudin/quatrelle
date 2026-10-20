@@ -438,22 +438,118 @@ fn check_message(m: &El) -> Result<()> {
     }
 }
 
-/// The rules an `InboxRules` answer lists: each one's name and id.
-fn rules_of(m: &El) -> Vec<(String, String)> {
-    let mut out = Vec::new();
-    if let Some(list) = m.find("InboxRules") {
-        for r in list.children("Rule").take(MAX_RULES) {
-            // The id comes as the element's attribute in the schema, and as its text from a
-            // server that keeps the older shape (this Exchange 2016 does).
-            let id =
-                r.child("RuleId").map(|x| x.attr("Id").map(str::to_string).unwrap_or_else(|| x.text.trim().to_string())).filter(|id| !id.is_empty());
-            let name = r.text_of("DisplayName");
-            if let (Some(id), Some(name)) = (id, name) {
-                out.push((name.to_string(), id));
+/// A rule's id: the element's attribute in the schema, its text from a server that keeps the
+/// older shape (Exchange 2016 does).
+fn rule_id(r: &El) -> String {
+    r.child("RuleId").map(|x| x.attr("Id").map(str::to_string).unwrap_or_else(|| x.text.trim().to_string())).unwrap_or_default()
+}
+
+/// A rule as the server keeps it, in MailCraft's terms when every part of it can be said there.
+fn server_rule(r: &El) -> mailcraft_model::organize::ForeignRule {
+    use mailcraft_model::organize::{Condition, ForeignRule, Rule, RuleAction};
+    let id = rule_id(r);
+    let name = r.text_of("DisplayName").unwrap_or("").trim().to_string();
+    let enabled = r.text_of("IsEnabled") != Some("false");
+    let strings = |el: &El| -> Vec<String> { el.children("String").map(|s| s.text.trim().to_string()).filter(|s| !s.is_empty()).collect() };
+    let quoted = |v: &[String]| v.iter().map(|s| format!("\"{s}\"")).collect::<Vec<_>>().join(", ");
+    let mut conditions = Vec::new();
+    let mut actions = Vec::new();
+    let mut stop = false;
+    let mut runnable = true;
+    let (mut when, mut then) = (Vec::new(), Vec::new());
+    if let Some(c) = r.child("Conditions") {
+        for k in &c.kids {
+            match k.name.as_str() {
+                "ContainsSubjectStrings" => {
+                    let v = strings(k);
+                    when.push(format!("subject {}", quoted(&v)));
+                    if v.len() == 1 {
+                        conditions.push(Condition::Subject(v[0].clone()));
+                    } else {
+                        runnable = false;
+                    }
+                }
+                "ContainsSenderStrings" => {
+                    let v = strings(k);
+                    when.push(format!("sender {}", quoted(&v)));
+                    if v.len() == 1 {
+                        conditions.push(Condition::From(v[0].clone()));
+                    } else {
+                        runnable = false;
+                    }
+                }
+                "ContainsRecipientStrings" => {
+                    let v = strings(k);
+                    when.push(format!("recipient {}", quoted(&v)));
+                    if v.len() == 1 {
+                        conditions.push(Condition::To(v[0].clone()));
+                    } else {
+                        runnable = false;
+                    }
+                }
+                "HasAttachments" if k.text.trim() == "true" => {
+                    conditions.push(Condition::HasAttachment);
+                    when.push("an attachment".into());
+                }
+                "ContainsBodyStrings" => {
+                    // MailCraft's rules look at the subject and the addresses, not the body.
+                    when.push(format!("body {}", quoted(&strings(k))));
+                    runnable = false;
+                }
+                other => {
+                    when.push(other.to_string());
+                    runnable = false;
+                }
             }
         }
     }
-    out
+    if let Some(a) = r.child("Actions") {
+        for k in &a.kids {
+            match k.name.as_str() {
+                "Delete" if k.text.trim() == "true" => {
+                    actions.push(RuleAction::Delete);
+                    then.push("delete".to_string());
+                }
+                "MarkAsRead" if k.text.trim() == "true" => {
+                    actions.push(RuleAction::MarkRead);
+                    then.push("mark as read".to_string());
+                }
+                "AssignCategories" => {
+                    for c in strings(k) {
+                        actions.push(RuleAction::Categorize(c.clone()));
+                        then.push(format!("categorise \"{c}\""));
+                    }
+                }
+                "StopProcessingRules" if k.text.trim() == "true" => stop = true,
+                other => {
+                    then.push(other.to_string());
+                    runnable = false;
+                }
+            }
+        }
+    }
+    let when = if when.is_empty() { "every message".to_string() } else { when.join(" + ") };
+    let then = if then.is_empty() { "nothing".to_string() } else { then.join(", ") };
+    let summary = if stop { format!("{when} → {then}, then stops") } else { format!("{when} → {then}") };
+    let rule = runnable.then(|| Rule {
+        name: name.clone(),
+        enabled,
+        account: None,
+        conditions,
+        match_all: true,
+        actions,
+        stop,
+        server: true,
+        remote_id: Some(id.clone()),
+    });
+    ForeignRule { account: String::new(), id, name, enabled, runnable, rule, summary }
+}
+
+/// An element as EWS XML, its names in the `t:` namespace (what a rule sent back must look like).
+fn xml_of(el: &El) -> String {
+    let attrs: String = el.attrs.iter().filter(|(k, _)| *k != "xmlns" && !k.contains(':')).map(|(k, v)| format!(" {k}=\"{}\"", esc(v))).collect();
+    let kids: String = el.kids.iter().map(xml_of).collect();
+    format!("<t:{}{attrs}>{}{}</t:{}>", el.name, esc(&el.text), kids, el.name)
 }
 
 /// The response message of an operation: the one inside `ResponseMessages`, or — as some servers
@@ -1431,10 +1527,58 @@ impl Client {
 
     /// The ids of the rules Exchange keeps for the Inbox, by name.
     pub fn inbox_rule_ids(&self) -> Result<Vec<(String, String)>> {
+        Ok(self.inbox_rules()?.into_iter().map(|r| (r.name, r.id)).collect())
+    }
+
+    /// The rules the Inbox keeps, as the server has them: MailCraft's own and the ones made
+    /// elsewhere (Outlook, a web page), each with what it does — and whether MailCraft knows
+    /// every part of it (it can then run it here).
+    pub fn inbox_rules(&self) -> Result<Vec<mailcraft_model::organize::ForeignRule>> {
         let doc = self.call("<m:GetInboxRules/>")?;
         let m = operation(&doc, "GetInboxRulesResponse")?;
         check_message(m)?;
-        Ok(rules_of(m))
+        let mut out = Vec::new();
+        if let Some(list) = m.find("InboxRules") {
+            for r in list.children("Rule").take(MAX_RULES) {
+                out.push(server_rule(r));
+            }
+        }
+        Ok(out)
+    }
+
+    /// Turn one of the server's own rules on or off: the rule is sent back as the server keeps
+    /// it, with only `IsEnabled` changed (a SetRuleOperation replaces the whole rule).
+    pub fn set_rule_enabled(&self, id: &str, enabled: bool) -> Result<()> {
+        let mut rule = self.rule_element(id)?.ok_or_else(|| NetError::No("that rule is no longer on the server".into()))?;
+        rule.kids.retain(|k| k.name != "IsEnabled");
+        rule.kids.push(El { name: "IsEnabled".into(), text: if enabled { "true".into() } else { "false".into() }, ..Default::default() });
+        self.update_rules(&format!("<t:SetRuleOperation>{}</t:SetRuleOperation>", xml_of(&rule)))
+    }
+
+    /// Remove one of the server's own rules.
+    pub fn delete_rule(&self, id: &str) -> Result<()> {
+        self.update_rules(&format!("<t:DeleteRuleOperation><t:RuleId Id=\"{0}\">{0}</t:RuleId></t:DeleteRuleOperation>", esc(id)))
+    }
+
+    /// The element a rule is kept as, found by its id.
+    fn rule_element(&self, id: &str) -> Result<Option<El>> {
+        let doc = self.call("<m:GetInboxRules/>")?;
+        let m = operation(&doc, "GetInboxRulesResponse")?;
+        check_message(m)?;
+        Ok(m.find("InboxRules").and_then(|l| l.children("Rule").find(|r| rule_id(r) == id)).cloned())
+    }
+
+    /// One `UpdateInboxRules`, its answer checked.
+    fn update_rules(&self, operations: &str) -> Result<()> {
+        let doc = self.call(&format!("<m:UpdateInboxRules><m:Operations>{operations}</m:Operations></m:UpdateInboxRules>"))?;
+        let messages = messages(&doc);
+        if messages.is_empty() {
+            return check_message(operation(&doc, "UpdateInboxRulesResponse")?);
+        }
+        for m in messages {
+            check_message(m)?;
+        }
+        Ok(())
     }
 
     /// Create, change and remove the Inbox rules Exchange runs, from MailCraft's rules: each is
@@ -2090,6 +2234,55 @@ mod tests {
         assert!(c.user_photo("ghost@nophoto.example").is_err(), "no picture is an answer, not a broken account");
     }
 
+    /// A server rule is described as far as MailCraft can say it, and the rest is kept as text:
+    /// a body condition (which MailCraft's rules don't have) makes it one it can't run here.
+    #[test]
+    fn a_server_rule_is_read_as_far_as_mailcraft_can_say_it() {
+        use mailcraft_model::organize::{Condition, RuleAction};
+        let doc = parse(
+            "<t:Rule><t:RuleId>AgAABUdELrU=</t:RuleId><t:DisplayName>GRC:</t:DisplayName><t:Priority>1</t:Priority>\
+             <t:IsEnabled>true</t:IsEnabled><t:Conditions><t:ContainsBodyStrings><t:String>DGA</t:String></t:ContainsBodyStrings>\
+             <t:ContainsSubjectStrings><t:String>GRC:</t:String></t:ContainsSubjectStrings></t:Conditions>\
+             <t:Actions><t:Delete>true</t:Delete><t:StopProcessingRules>true</t:StopProcessingRules></t:Actions></t:Rule>",
+        );
+        let r = server_rule(&doc.kids[0]);
+        assert_eq!((r.id.as_str(), r.name.as_str(), r.enabled), ("AgAABUdELrU=", "GRC:", true));
+        assert!(!r.runnable, "a body condition isn't one MailCraft can run");
+        assert_eq!(r.rule, None);
+        assert!(r.summary.contains("body \"DGA\"") && r.summary.contains("subject \"GRC:\"") && r.summary.contains("delete"), "{}", r.summary);
+
+        // One MailCraft can say entirely is kept whole: what it does, and on/off.
+        let doc = parse(
+            "<t:Rule><t:RuleId Id=\"R7\"/><t:DisplayName>Invoices</t:DisplayName><t:IsEnabled>false</t:IsEnabled>\
+             <t:Conditions><t:ContainsSubjectStrings><t:String>Invoice</t:String></t:ContainsSubjectStrings></t:Conditions>\
+             <t:Actions><t:Delete>true</t:Delete><t:StopProcessingRules>true</t:StopProcessingRules></t:Actions></t:Rule>",
+        );
+        let r = server_rule(&doc.kids[0]);
+        assert!(r.runnable && !r.enabled);
+        let rule = r.rule.unwrap();
+        assert_eq!(rule.conditions, vec![Condition::Subject("Invoice".into())]);
+        assert_eq!(rule.actions, vec![RuleAction::Delete]);
+        assert_eq!((rule.stop, rule.server, rule.remote_id.as_deref()), (true, true, Some("R7")));
+    }
+
+    /// A server's own rule is turned off and removed where it lives, everything else in it
+    /// going back as the server keeps it.
+    #[test]
+    fn a_server_rule_is_changed_where_it_lives() {
+        let mut d = crate::fake_ews::Data::default();
+        d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+        d.rules.push(("R-OUTLOOK".into(), "Outlook rule".into()));
+        let server = crate::fake_ews::serve(d);
+        let user = format!("{}{}{}", crate::fake_ews::DOMAIN, '\\', crate::fake_ews::USER);
+        let c = Client::connect(&server.url, &user, crate::fake_ews::PASSWORD, "riley@contoso.example").unwrap();
+        c.set_rule_enabled("R-OUTLOOK", false).unwrap();
+        assert_eq!(c.inbox_rule_ids().unwrap(), vec![("Outlook rule".to_string(), "R-OUTLOOK".to_string())], "still there, under its name");
+        let calls = server.data.lock().unwrap().calls.clone();
+        assert!(calls.iter().any(|c| c == "UpdateInboxRules"), "{calls:?}");
+        c.delete_rule("R-OUTLOOK").unwrap();
+        assert!(c.inbox_rule_ids().unwrap().is_empty(), "removed");
+    }
+
     #[test]
     fn inbox_rules_are_read_in_either_shape() {
         // As Exchange 2016 answers: the response element itself, the ids as the element's text.
@@ -2100,8 +2293,9 @@ mod tests {
              </InboxRules></GetInboxRulesResponse></s:Body></s:Envelope>",
         );
         let m = operation(&direct, "GetInboxRulesResponse").unwrap();
+        let rules: Vec<(String, String)> = m.find("InboxRules").unwrap().children("Rule").map(server_rule).map(|r| (r.name, r.id)).collect();
         assert_eq!(
-            rules_of(m),
+            rules,
             vec![("GRC:".to_string(), "AgAABUdELrU=".to_string()), ("Invoices".to_string(), "R2".to_string())],
             "the id read from the text and from the attribute"
         );
