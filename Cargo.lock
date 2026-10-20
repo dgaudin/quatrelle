@@ -2849,7 +2849,7 @@ dependencies = [
 
 [[package]]
 name = "mailcraft"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "arboard",
  "chrono",
@@ -2876,7 +2876,7 @@ dependencies = [
 
 [[package]]
 name = "mailcraft-cli"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "chrono",
  "mailcraft-engine",
@@ -2886,7 +2886,7 @@ dependencies = [
 
 [[package]]
 name = "mailcraft-engine"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "log",
  "mailcraft-mime",
@@ -2900,7 +2900,7 @@ dependencies = [
 
 [[package]]
 name = "mailcraft-jmap"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "log",
  "mailcraft-mime",
@@ -2913,7 +2913,7 @@ dependencies = [
 
 [[package]]
 name = "mailcraft-mime"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "flate2",
  "html2text",
@@ -2926,7 +2926,7 @@ dependencies = [
 
 [[package]]
 name = "mailcraft-model"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -2935,7 +2935,7 @@ dependencies = [
 
 [[package]]
 name = "mailcraft-net"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "hmac 0.13.0",
  "imap-proto",
@@ -2961,7 +2961,7 @@ dependencies = [
 
 [[package]]
 name = "mailcraft-print"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "miniz_oxide 0.9.1",
  "ttf-parser",
@@ -2969,7 +2969,7 @@ dependencies = [
 
 [[package]]
 name = "mailcraft-spell"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "flate2",
  "spellbook",
@@ -2977,7 +2977,7 @@ dependencies = [
 
 [[package]]
 name = "mailcraft-store"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "dirs",
  "flate2",
@@ -2991,7 +2991,7 @@ dependencies = [
 
 [[package]]
 name = "mailcraft-ui-egui"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "egui",
  "hayro",
@@ -3009,7 +3009,7 @@ dependencies = [
 
 [[package]]
 name = "mailcraft-web"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "eframe",
  "egui",
@@ -6525,8 +6525,6 @@ checksum = "d6bbff5f0aada427a1e5a6da5f1f98158182f26556f345ac9e04d36d0ebed650"
 [[package]]
 name = "winit"
 version = "0.30.13"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a6755fa58a9f8350bd1e472d4c3fcc25f824ec358933bba33306d0b63df5978d"
 dependencies = [
  "ahash",
  "android-activity",
@@ -6723,7 +6721,7 @@ checksum = "ec7a2a501ed189703dba8b08142f057e887dfc4b2cc4db2d343ac6376ba3e0b9"
 
 [[package]]
 name = "xtask"
-version = "0.19.0"
+version = "0.20.0"
 dependencies = [
  "png 0.18.1",
  "serde_json",

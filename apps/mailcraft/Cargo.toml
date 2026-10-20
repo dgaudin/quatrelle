@@ -58,7 +58,7 @@ raw-window-handle = "0.6"
 # GNOME's compositor leaves the title bar to the app: without this, winit draws a bare grey
 # frame; with it, a title bar like the desktop's own (title, buttons, light and dark). Where
 # the window manager draws title bars (KDE, X11), it still does.
-winit = { version = "0.30", default-features = false, features = ["wayland-csd-adwaita"] }
+winit = { version = "0.30", default-features = false, features = ["wayland-csd-adwaita", "x11"] }
 # The desktop's light or dark style and accent colour (the XDG settings portal).
 zbus = { version = "5", default-features = false, features = ["blocking-api", "async-io"] }
 

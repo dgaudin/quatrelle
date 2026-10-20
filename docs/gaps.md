@@ -6,7 +6,7 @@ the items it deferred (calendar, contacts, Exchange, PST import, a web build) ar
 limits below. What each version brought is under [Done](#done); the milestones are in
 [ROADMAP.md](../ROADMAP.md).
 
-_Status: v0.19, 2026-10-20._
+_Status: v0.20, 2026-10-20._
 
 ## Open
 
@@ -15,7 +15,7 @@ _Status: v0.19, 2026-10-20._
 | 1 | **Browser version: accounts other than JMAP** | The web build syncs JMAP accounts over `fetch`, with push, and keeps its cache in IndexedDB; the server must allow the page (CORS). A browser can't open IMAP or SMTP connections, so IMAP accounts would need a relay server that holds the password and speaks JMAP to the page: a server product of its own, not built. |
 | 2 | **Right-to-left: inside the editor, selecting, Hebrew in the browser** | The window mirrors and right-to-left mail and interface text read right to left. In the message editor a line that mixes right-to-left and left-to-right words is shown in the order egui lays it out (reordering it would put the caret in the wrong places); right-to-left mail can't be selected with the pointer (egui 0.36's text layout counts right-to-left letters wrongly, so a selection would copy nothing), but a right-click copies the line or the whole message as written. Release builds draw Arabic, Japanese and Thai in the browser with fonts from [storytold/craft-fonts](https://github.com/storytold/craft-fonts); it has no Hebrew or Korean font yet, and its Simplified Chinese one is too large for the page, so those still need the system (the desktop app) until craft-fonts has them. |
 | 3 | **Outlook data files: what the `.pst` libraries can't do** | Mail, contacts, calendar items, notes and tasks with a due date come in; export writes the mail as `.pst` and the calendar and contacts beside it as `.ics` and `.vcf`. The writer (`outlook-pst-rw`) makes mail items only, marked read, so contacts, appointments and flags can't go inside the `.pst`; the reader (`outlook-pst`) doesn't open the attachments of an attached message; tasks without a due date are left out (MailCraft has no task list). |
-| 4 | **Drag attachments out under Wayland** | Works on Windows, macOS, and Linux and the BSDs under X11 (XDND). A native Wayland window would need the compositor's data-device drag from the window's own Wayland connection, which egui's window layer doesn't share (reaching it would take unsafe code). |
+| 4 | **Drag attachments out on a Wayland-only desktop** | Works on Windows, macOS, and Linux and the BSDs under X11 (XDND), and on Wayland desktops through XWayland, which the window opens on by default. With `MAILCRAFT_WAYLAND=1`, or on a desktop without XWayland, the window is native Wayland, where it would need the compositor's data-device drag from the window's own Wayland connection, which egui's window layer doesn't share (reaching it would take unsafe code). |
 | 5 | **On-premises Exchange: Kerberos-only servers** | EWS signs in with NTLMv2 or Basic and is found with Autodiscover; a server that only takes Kerberos can't be signed in to. ActiveSync is licensed and out of scope. |
 | 6 | **Public folders on Exchange Online** | Public folders list and sync on on-premises Exchange through EWS. Exchange Online reaches them only through EWS, which Microsoft blocks there from October 2026 and removes in April 2027, and Microsoft Graph has no public folders; its suggested replacement, Microsoft 365 Groups, needs permissions only a tenant's administrator can grant. |
 
@@ -463,3 +463,104 @@ tester's does, a contact as Exchange keeps it, Outlook's clipboard), then fixed 
   the keychain apart from the account's and never in MailCraft's files, stays when left empty in
   Server settings, and is forgotten with the account. Sending without it says where to enter it
   rather than signing in as the IMAP user; a test checks the SMTP server sees its own user.
+
+### v0.20 — A window on every Windows PC
+- **No GPU, no window:** on some Windows PCs without a GPU the app never showed its window. The
+  process stayed in the background, kept later launches out (its data files were open: "open in
+  another copy of MailCraft") and crashed when Windows shut it down. wgpu started Vulkan and
+  OpenGL as well as DirectX 12; without a GPU those load only leftover or overlay drivers and
+  Windows' OpenGL 1.1 software renderer, while DirectX 12 works through WARP. On Windows only
+  DirectX 12 starts now, and MailCraft picks the adapter: a real GPU first (discrete, or
+  integrated with `WGPU_POWER_PREF=low`), WARP when there's none, all of them and the choice in
+  `mailcraft.log`. Shaders are compiled with FXC, part of Windows, rather than any
+  `dxcompiler.dll` on the search path. `WGPU_BACKEND` still overrides it, and
+  `WGPU_FORCE_FALLBACK_ADAPTER=1` draws with WARP.
+- **A window that can't open says why:** an error or a panic while the window opens shows a
+  message box with the reason, what may help and where the log is, and the process ends.
+- Checked on a PC with an RTX 4070 Ti SUPER, an integrated Radeon and WARP: the GPU draws (185 MB
+  of its memory, the others none); forced, WARP draws the whole window (200 MB on the Basic
+  Render Driver); with no adapter, the message shows and the process exits on OK.
+- **What the other Craft apps learnt:** their fixes to shared ground (graphics start-up,
+  Windows, Linux, packaging) were read across sixteen repositories and checked against
+  MailCraft; the ones that applied are in:
+  - the device asks for the adapter's own limits and whole texture size (a GPU short of egui's
+    fixed limits, or a window wider than 8192 pixels, ended the start); after its first frames
+    a wgpu error is logged rather than ending the app; Intel Macs leave out wgpu's indirect-call
+    validation, which Metal's Intel compiler aborts on; Linux draws on the desktop's GPU;
+  - on Windows a window saved maximized no longer appears, vanishes and appears again at
+    start-up (measured 6 times in 6; now shown once, maximized, through the vendored winit);
+  - on Linux the window opens through XWayland when there is one, so attachments drag in and
+    out on Wayland desktops (a stale `DISPLAY` opens on Wayland), and clipboard reads give up
+    after two seconds instead of freezing the window while another app hangs;
+  - the DMG is built with `hdiutil create`, as `makehybrid` left Finder information on the app
+    that `codesign --strict` rejects, and the MSI says MailCraft needs Windows 10 or later
+    rather than installing an app that can't start on 7 or 8.
+- **WordCraft, PdfCraft, DeckCraft and GridCraft, every change to their desktop glue:** the
+  four closest siblings' 367 commits to their desktop apps, packaging and build tools were read
+  one by one (not by keyword), and these adopted:
+  - winit 0.30.13 as PdfCraft carries it (`vendor/README.md`): a window dragged to a monitor
+    with another scale on Windows 11, input methods on Windows (Korean), X11, Wayland and macOS,
+    and windows created maximized;
+  - windows come back on screen when their monitor went, and fit a screen smaller than they were;
+  - an argument that isn't Unicode no longer ends the app or the CLI before they start, messages
+    on start-up can't panic on a broken standard error, and quitting on macOS no longer crashes;
+  - `mailcraft.exe` declares per-monitor DPI awareness;
+  - files handed to other apps (an opened attachment, video frames) go in a folder of the user's
+    own, not in a shared `/tmp`.
+  Looked at and left: OpenGL fallbacks (DirectX 12 with WARP covers a PC without a GPU),
+  egui's keyboard zoom (MailCraft binds none of its keys), GridCraft's damaged-font guard
+  (egui 0.37 skips such a font; a test keeps it so), links (MailCraft already opens only web and
+  mail links), single-instance hand-off and portable mode (features of their own), WordCraft's
+  built-in file browser for Linux desktops without a file chooser (a feature of its own), and
+  app-specific fixes.
+- **Calendars from issue #1, each reproduced first** (a fake Exchange with two accounts, a Dutch
+  mailbox, a shared mailbox's calendar and a Teams meeting as Teams writes it):
+  - every account's own calendar was "Calendar" in one colour; with several accounts they're
+    listed under each one's address, an account's own calendar in the account's colour (its
+    events too) and named as the server names it ("Agenda"); side by side, two of one name say
+    whose each is;
+  - a shared mailbox's calendar never showed; it's read with the mailbox, named after it,
+    editable as its rights say (one not shared with the account is passed over quietly);
+  - a meeting's links couldn't be opened from its notes; Join meeting opens its Teams, Zoom,
+    Meet or Webex link (Graph's `onlineMeeting.joinUrl`, else the first meeting link in its
+    body, read whole from the HTML: the text's footnotes cut a 904-character link to 395), and
+    its notes' links are listed to open;
+  - a meeting in two calendars at once didn't open (a click started a new event behind it).
+- **Check for updates (File › About):** the newest release from GitHub (pre-releases included,
+  and a later test build of this version told by the build's commit), Download offering this
+  system's installer (or the release page on Linux), What's new; nothing installs by itself.
+- **A Microsoft 365 sign-in kept on Windows (issue #5):** "the sign-in couldn't be kept in the
+  keychain: password encoded as UTF-16 is longer than platform limit of 2560 chars". Credential
+  Manager holds 2560 bytes an entry and the keyring crate wrote UTF-16, so nothing over 1280
+  characters fit, and a Microsoft refresh token is about 2,000. Reproduced on Credential Manager;
+  a secret is now kept as UTF-8 over as many entries as it needs (earlier passwords still read,
+  leftover parts removed), tested there growing, shrinking and removed.
+- **Online only, and a portable copy that leaves nothing behind (issue #4):** asked for to run
+  MailCraft from a USB stick or on a shared PC with no mail left there, and without downloading
+  thousands of messages. Reproduced first: one IMAP account, five messages, twenty seconds, and
+  its data file (557 KB) held every subject and body; the password was in Credential Manager.
+  - **Online only, per account** (Add account, Account settings, File › Options › Mail): the
+    store holds that account's folders, lists, message sources, changes waiting for the server,
+    Outbox, calendars, contacts and notes in memory (`Store::set_online_only`); turned on, what
+    was kept comes into memory and its data file goes; turned off, it's written out again; at
+    start it's held in memory from the outset (a data file left by a crash goes). Nothing is
+    downloaded in full ahead of reading: a message comes when it's opened. Its snoozed mail is
+    remembered without the subject, its notifications name neither sender nor subject (Windows
+    keeps them), and attachments opened with other apps go from the temporary folder when
+    MailCraft closes. Not for POP, whose mail has no other home, nor the sample mailbox. As
+    Thunderbird's "Keep messages for this account on this computer" off, the list still comes
+    from the server at each start.
+  - **Portable** (the Craft apps' scheme, as PdfCraft and PhotoCraft): `portable.txt` or
+    `MailCraft.portable` beside the app (beside the `.app` on macOS) keeps the account list,
+    the window's state, the log and the data files in `MailCraftData` there; passwords and
+    sign-ins stay in memory (asked again at the next start), nothing goes to the registry, and
+    a new account starts with Online only ticked. A folder that can't be written turns it off
+    and says why. The Windows portable zip ships `portable.txt`.
+  - Checked with the app against a fake IMAP server: online only, the mail listed and opened,
+    the app killed, and none of its subjects or bodies anywhere in the data folder; portable,
+    `%APPDATA%`, Documents, Credential Manager and the registry the same before and after.
+    Turning online only on for an account that already kept mail removes its data file, but
+    the disk may still hold what the file held until it's overwritten: for no trace at all, add
+    the account with Online only ticked. What another app has open (an attachment in Word) stays
+    until that app lets it go, and what Windows keeps of its own (its search index, if the
+    data folder is indexed; the GPU driver's shader cache) is outside MailCraft's reach.

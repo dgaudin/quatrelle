@@ -984,3 +984,35 @@ month	May	mei
 	There's no message to check.	Er is geen bericht om te controleren.
 	Check the spelling as you type	Spelling controleren tijdens het typen
 	{from} – {to}	{from} – {to}
+	There's no folder to put the attachment in for another app	Er is geen map om de bijlage voor een andere app in te zetten
+	Check for updates	Controleren op updates
+	Checking…	Bezig met controleren…
+	Couldn't check for updates: {error}	Kan niet controleren op updates: {error}
+	Download	Downloaden
+	Join meeting	Deelnemen aan vergadering
+	Links:	Koppelingen:
+	MailCraft {version} is available.	MailCraft {version} is beschikbaar.
+	What's new	Wat is er nieuw
+	You have the newest version.	U hebt de nieuwste versie.
+	Online only: keep none of this account's mail on this computer	Alleen online: geen e-mail van dit account op deze computer bewaren
+	Online only: none of this account's mail is kept on this computer.	Alleen online: er wordt geen e-mail van dit account op deze computer bewaard.
+	Online only: {email}	Alleen online: {email}
+	New message	Nieuw bericht
+	Open MailCraft to read it.	Open MailCraft om het te lezen.
+	Its mail is read from the server and held in memory while MailCraft runs; nothing of it is written to this computer. Each message downloads when you open it. Mail waiting to be sent, changes made while offline, and calendar items, contacts and notes kept only in MailCraft are lost when it closes.	De e-mail wordt van de server gelezen en in het geheugen gehouden zolang MailCraft draait; er wordt niets op deze computer geschreven. Elk bericht wordt gedownload wanneer u het opent. E-mail die nog moet worden verzonden, offline gemaakte wijzigingen en agenda-items, contactpersonen en notities die alleen in MailCraft staan, gaan verloren bij het sluiten.
+	Portable: everything is kept in MailCraftData beside MailCraft, and passwords only until it closes.	Draagbaar: alles wordt bewaard in MailCraftData naast MailCraft, en wachtwoorden alleen tot het wordt gesloten.
+	When it starts	Bij het begin
+	1 minute before	1 minuut ervoor
+	{n} minutes before	{n} minuten ervoor
+	1 hour before	1 uur ervoor
+	{n} hours before	{n} uur ervoor
+	1 day before	1 dag ervoor
+	{n} days before	{n} dagen ervoor
+	1 minute after	1 minuut erna
+	{n} minutes after	{n} minuten erna
+	1 hour after	1 uur erna
+	{n} hours after	{n} uur erna
+	1 day after	1 dag erna
+	{n} days after	{n} dagen erna
+	Reminder	Herinnering
+	None	Geen

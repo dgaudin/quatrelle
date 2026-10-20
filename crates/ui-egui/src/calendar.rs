@@ -149,13 +149,22 @@ fn calendar_row(
             acts.push(Action::Run("calendar.show", json!({"account": a.config.id, "calendar": c.id, "shown": !shown})));
         }
         let name = if c.id == mailcraft_engine::model::pim::LOCAL { tl!("Calendar").to_string() } else { c.name.clone() };
-        let tip = if shared.is_some() { tf!("Shared with you, opened from {account}", account = a.config.email) } else { a.config.email.clone() };
+        let tip = match (&shared, s.pim.get(&a.config.id)) {
+            // A shared mailbox's calendar comes with the mailbox; only one opened by hand closes.
+            (Some(owner), Some(p)) if !p.shared.iter().any(|x| x.eq_ignore_ascii_case(owner)) => {
+                tf!("Shared mailbox {address}, opened by {email}", address = owner, email = a.config.email)
+            }
+            (Some(_), _) => tf!("Shared with you, opened from {account}", account = a.config.email),
+            (None, _) => a.config.email.clone(),
+        };
         ui.add(egui::Label::new(RichText::new(name).color(t.text)).truncate()).on_hover_text(tip);
         if c.read_only {
             ui.label(RichText::new(tl!("read-only")).color(t.faint).small());
         }
     });
-    if let Some(email) = shared {
+    if let Some(email) = shared
+        && s.pim.get(&a.config.id).is_some_and(|p| p.shared.iter().any(|x| x.eq_ignore_ascii_case(&email)))
+    {
         row.response.interact(Sense::click()).context_menu(|ui| {
             if ui.button(tl!("Remove this calendar")).clicked() {
                 acts.push(Action::Run("calendar.closeShared", json!({"email": email})));
@@ -414,7 +423,9 @@ fn open(s: &Session, item: &AgendaItem) -> Option<Action> {
 }
 
 fn chip(ui: &mut Ui, s: &Session, t: &Tokens, rect: Rect, item: &AgendaItem, text: &str) -> egui::Response {
-    let resp = ui.interact(rect, ui.scope_id().with(("chip", &item.uid, item.start)), Sense::click());
+    // The same meeting can be in two calendars (two accounts', or an account's and a shared
+    // mailbox's) at the same time: told apart by whose it is, or the click goes to neither.
+    let resp = ui.interact(rect, ui.scope_id().with(("chip", &item.account, &item.calendar, &item.uid, item.start)), Sense::click());
     let c = item_color(item, t);
     let tentative = item.needs_reply || item.status == "TENTATIVE";
     // Stronger under the pointer, with its colour round it.
@@ -461,7 +472,40 @@ pub(crate) fn card_rows(s: &Session, item: &AgendaItem) -> Vec<(Icon, String)> {
         out.push((Icon::Location, location.to_string()));
     }
     out.push((Icon::Calendar, calendar_name(s, item)));
+    if let Some(m) = item.reminder {
+        out.push((Icon::Reminder, reminder_text(m)));
+    }
     out
+}
+
+/// When the reminder sounds, as Outlook's card says it: `15 minutes before`, `1 hour before`.
+pub(crate) fn reminder_text(m: i64) -> String {
+    let n = m.unsigned_abs();
+    if n == 0 {
+        return tl!("When it starts").to_string();
+    }
+    // Days and hours when they divide it, minutes otherwise.
+    let (unit, count) = if n.is_multiple_of(1440) {
+        (1440, n / 1440)
+    } else if n.is_multiple_of(60) {
+        (60, n / 60)
+    } else {
+        (1, n)
+    };
+    match (m > 0, count == 1, unit) {
+        (true, true, 1440) => tl!("1 day before").to_string(),
+        (true, false, 1440) => tf!("{n} days before", n = count),
+        (true, true, 60) => tl!("1 hour before").to_string(),
+        (true, false, 60) => tf!("{n} hours before", n = count),
+        (true, true, _) => tl!("1 minute before").to_string(),
+        (true, false, _) => tf!("{n} minutes before", n = count),
+        (false, true, 1440) => tl!("1 day after").to_string(),
+        (false, false, 1440) => tf!("{n} days after", n = count),
+        (false, true, 60) => tl!("1 hour after").to_string(),
+        (false, false, 60) => tf!("{n} hours after", n = count),
+        (false, true, _) => tl!("1 minute after").to_string(),
+        (false, false, _) => tf!("{n} minutes after", n = count),
+    }
 }
 
 /// When an appointment is, as the Day view says it: `Friday, 23 October 2026 · 12:30 – 13:30`

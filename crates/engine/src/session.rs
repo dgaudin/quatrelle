@@ -86,6 +86,45 @@ impl AccountState {
     }
 }
 
+/// File › About › Check for updates.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum UpdateCheck {
+    #[default]
+    NotAsked,
+    Checking,
+    /// This is the newest (the newest release's tag, when there is one).
+    UpToDate(String),
+    /// A newer one is out.
+    Available(mailcraft_model::job::Release),
+    Failed(String),
+}
+
+/// The newest release `releases` has for a build of `version` made from commit `build_sha`:
+/// `Some` when it's newer. A newer version is; the same version at a later test build is when
+/// this build is one of that version's earlier test builds (by its commit). A build made from
+/// no release (a developer's), ahead or the same, is up to date.
+pub fn newer_release<'a>(
+    version: &str,
+    build_sha: Option<&str>,
+    releases: &'a [mailcraft_model::job::Release],
+) -> Option<&'a mailcraft_model::job::Release> {
+    let parse = |v: &str| -> Option<(u32, u32, u32)> {
+        let mut p = v.split('.').map(|n| n.parse::<u32>().ok());
+        Some((p.next()??, p.next()??, p.next()??))
+    };
+    let current = parse(version)?;
+    let newest = releases.iter().filter_map(|r| parse(&r.version).map(|v| (v, r))).max_by_key(|(v, r)| (*v, r.build))?;
+    match newest.0.cmp(&current) {
+        std::cmp::Ordering::Greater => Some(newest.1),
+        std::cmp::Ordering::Less => None,
+        std::cmp::Ordering::Equal => {
+            let sha = build_sha.map(str::trim).filter(|s| s.len() >= 7)?;
+            let mine = releases.iter().find(|r| !r.commit.is_empty() && (r.commit.starts_with(sha) || sha.starts_with(&r.commit)))?;
+            (mine.version == newest.1.version && mine.build < newest.1.build).then_some(newest.1)
+        }
+    }
+}
+
 /// What the message list shows.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
@@ -782,6 +821,8 @@ pub struct Session {
     held: HashMap<String, Job>,
     /// OAuth providers this copy can sign in with (set by the app).
     pub oauth_available: Vec<String>,
+    /// Running portable (set by the app): everything is kept beside it, passwords only in memory.
+    pub portable: bool,
     /// Only JMAP accounts can be added (the browser, which can't open IMAP or SMTP connections).
     pub jmap_only: bool,
     /// The fonts PDFs embed (regular, bold): the system's, set by the app.
@@ -811,6 +852,11 @@ pub struct Session {
     registry: Arc<Registry>,
     next_id: u64,
     seed: u64,
+    /// The commit this build was made from (release builds: `MAILCRAFT_BUILD_SHA`), for
+    /// telling its test build from a later one of the same version.
+    pub build_sha: Option<String>,
+    /// File › About's update check.
+    pub update: UpdateCheck,
 }
 
 const NOTICE_MAX: usize = 50;
@@ -863,6 +909,7 @@ impl Session {
             discovered: HashMap::new(),
             held: HashMap::new(),
             oauth_available: Vec::new(),
+            portable: false,
             jmap_only: false,
             print_fonts: None,
             open_urls: Vec::new(),
@@ -880,6 +927,8 @@ impl Session {
             // Compose ids also name Outbox entries, which outlive a session: start from the clock.
             next_id: u64::try_from(clock.now.max(0)).unwrap_or(0).saturating_mul(1000),
             seed: (clock.now as u64) ^ 0x9E37_79B9_7F4A_7C15,
+            build_sha: None,
+            update: UpdateCheck::NotAsked,
         };
         if let Some(store) = &s.store {
             s.rules = store.load_doc("rules.json").unwrap_or_default();
@@ -895,6 +944,12 @@ impl Session {
                 Vec::new()
             });
             for config in accounts {
+                // Online only: held in memory from the start (anything left on disk goes).
+                if config.keeps_online()
+                    && let Err(e) = store.set_online_only(&config.id, true)
+                {
+                    log::warn!("{}: couldn't be kept online only: {e}", config.id);
+                }
                 let mut folders = store.load_folders(&config.id).unwrap_or_default();
                 // A folder belongs to the account it's kept with (a data file brought in from
                 // another account once kept that one's name).
@@ -3216,6 +3271,14 @@ impl Session {
             return Err(CmdError::Params("incoming and outgoing server names and ports are required".into()));
         }
         let id = config.id.clone();
+        if config.online_only && !config.can_be_online_only() {
+            return Err(CmdError::Params("a POP account keeps its mail on this computer: it can't be online only".into()));
+        }
+        if let Some(store) = &self.store
+            && config.keeps_online()
+        {
+            store.set_online_only(&id, true).map_err(|e| CmdError::Failed(e.to_string()))?;
+        }
         self.accounts.push(AccountState {
             config: config.clone(),
             folders: Vec::new(),
@@ -3470,6 +3533,12 @@ impl Session {
         Ok(serde_json::json!({ "account": new, "graph": true }))
     }
 
+    /// Ask for MailCraft's releases (File › About › Check for updates).
+    pub(crate) fn check_updates(&mut self) {
+        self.update = UpdateCheck::Checking;
+        self.jobs.push(Job::CheckUpdates);
+    }
+
     /// Keep an account's outgoing server's own password (its `smtp_username`'s), in the keychain.
     pub(crate) fn keep_smtp_password(&mut self, account: &str, password: String) {
         if let Some(a) = self.account(account) {
@@ -3492,7 +3561,18 @@ impl Session {
             || a.config.username != config.username
             || a.config.smtp_username != config.smtp_username
             || a.config.shared_mailboxes != config.shared_mailboxes
+            || a.config.online_only != config.online_only
             || password.is_some();
+        if config.online_only && !config.can_be_online_only() {
+            return Err(CmdError::Params("a POP account keeps its mail on this computer: it can't be online only".into()));
+        }
+        // Online only, or kept here again: what's kept moves between memory and the disk first.
+        if a.config.online_only != config.online_only
+            && let Some(store) = self.store.clone()
+        {
+            store.set_online_only(&id, config.keeps_online()).map_err(|e| CmdError::Failed(e.to_string()))?;
+        }
+        let Some(a) = self.account_mut(&id) else { return Err(CmdError::Params(format!("no account `{id}`"))) };
         a.config = config.clone();
         let local = a.is_local();
         self.save_accounts();
@@ -3781,6 +3861,15 @@ impl Session {
             }
             Event::Discovered { email, config, source } => {
                 self.discovered.insert(email.trim().to_ascii_lowercase(), Some((config.map(|c| *c), source)));
+            }
+            Event::Releases { releases, error } => {
+                self.update = match error {
+                    Some(e) => UpdateCheck::Failed(e),
+                    None => match newer_release(env!("CARGO_PKG_VERSION"), self.build_sha.as_deref(), &releases) {
+                        Some(r) => UpdateCheck::Available(r.clone()),
+                        None => UpdateCheck::UpToDate(releases.first().map(|r| r.tag.clone()).unwrap_or_default()),
+                    },
+                };
             }
             Event::Fetched { url, data, error } => {
                 let p = match (data, error) {

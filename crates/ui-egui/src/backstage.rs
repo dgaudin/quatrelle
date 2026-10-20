@@ -115,7 +115,7 @@ pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) 
                     Page::Info => info(s, &t, st.has_files, ui, &mut b, acts),
                     Page::Open => open(s, &t, ui, &mut b, acts),
                     Page::Options => options(s, st, ui, acts),
-                    Page::About => about(&t, ui, acts),
+                    Page::About => about(s, &t, ui, acts),
                 }
             });
         });
@@ -396,8 +396,10 @@ fn info(s: &Session, t: &Tokens, has_files: bool, ui: &mut Ui, b: &mut Backstage
             first = false;
         }
         // Where, as Outlook shows a data file's place; and a copy as one.
-        let file = if has_files { s.store.as_ref().map(|store| store.account_path(&id)) } else { None };
+        let online = a.config.keeps_online();
+        let file = if has_files && !online { s.store.as_ref().map(|store| store.account_path(&id)) } else { None };
         let here = match &file {
+            _ if online => tl!("Online only: none of this account's mail is kept on this computer.").to_string(),
             Some(f) => format!("{}\n{}", tf!("Kept on this computer: {size}", size = size(cached)), f.display()),
             None => tf!("Kept on this computer: {size}", size = size(cached)),
         };
@@ -604,11 +606,12 @@ fn options(s: &Session, st: &UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
                     }
                 });
                 if !*movable && st.pending_move.is_none() {
-                    ui.label(
-                        RichText::new(tl!("Chosen when MailCraft was started (--data or MAILCRAFT_DATA), so it can't be moved here."))
-                            .color(t.faint)
-                            .small(),
-                    );
+                    let why = if s.portable {
+                        tl!("Portable: everything is kept in MailCraftData beside MailCraft, and passwords only until it closes.")
+                    } else {
+                        tl!("Chosen when MailCraft was started (--data or MAILCRAFT_DATA), so it can't be moved here.")
+                    };
+                    ui.label(RichText::new(why).color(t.faint).small());
                 }
                 if let Some(to) = &st.pending_move {
                     ui.add_space(6.0);
@@ -717,6 +720,18 @@ fn options(s: &Session, st: &UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
                     acts.push(Action::Run("account.keepMail", json!({"offline": n})));
                 }
             });
+            // Issue #4: an account kept online only has none of its mail here.
+            let servers: Vec<&mailcraft_engine::model::AccountConfig> =
+                s.accounts.iter().map(|a| &a.config).filter(|c| c.can_be_online_only()).collect();
+            for (i, c) in servers.iter().enumerate() {
+                let label = tf!("Online only: {email}", email = c.email);
+                setting(ui, false, &label, (i == 0).then(crate::dialogs::online_only_about), &mut |ui| {
+                    let mut on = c.keeps_online();
+                    if widgets::switch(ui, &t, &mut on, &label).changed() {
+                        acts.push(Action::Run("account.onlineOnly", json!({"account": c.id, "on": on})));
+                    }
+                });
+            }
         },
     );
 
@@ -748,7 +763,46 @@ fn options(s: &Session, st: &UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
     });
 }
 
-fn about(t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>) {
+/// Check for updates, and what it found: a newer release to download (its installer for this
+/// system, else its page) and what's new in it. Nothing installs by itself.
+fn updates(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>) {
+    use mailcraft_engine::UpdateCheck;
+    if s.jmap_only {
+        return;
+    }
+    ui.horizontal_wrapped(|ui| {
+        let checking = s.update == UpdateCheck::Checking;
+        if ui.add_enabled(!checking, egui::Button::new(tl!("Check for updates"))).clicked() {
+            acts.push(Action::Run("app.checkUpdates", json!({})));
+        }
+        match &s.update {
+            UpdateCheck::NotAsked => {}
+            UpdateCheck::Checking => {
+                ui.spinner();
+                ui.label(RichText::new(tl!("Checking…")).color(t.dim));
+            }
+            UpdateCheck::UpToDate(_) => {
+                ui.label(RichText::new(tl!("You have the newest version.")).color(t.dim));
+            }
+            UpdateCheck::Available(r) => {
+                let name = r.tag.trim_start_matches('v').to_string();
+                ui.label(RichText::new(tf!("MailCraft {version} is available.", version = name)).color(t.text).strong());
+                let target = if r.download.is_empty() { r.page.clone() } else { r.download.clone() };
+                if widgets::accent_button(ui, Icon::Sync, "Download", t, true).on_hover_text(&target).clicked() {
+                    acts.push(Action::OpenUrl(target));
+                }
+                if ui.link(tl!("What's new")).on_hover_text(&r.page).clicked() {
+                    acts.push(Action::OpenUrl(r.page.clone()));
+                }
+            }
+            UpdateCheck::Failed(e) => {
+                ui.label(RichText::new(tf!("Couldn't check for updates: {error}", error = e)).color(t.danger));
+            }
+        }
+    });
+}
+
+fn about(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>) {
     heading(ui, t, "About MailCraft");
     ui.horizontal(|ui| {
         let (r, _) = ui.allocate_exact_size(vec2(56.0, 56.0), Sense::hover());
@@ -760,6 +814,8 @@ fn about(t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>) {
             ui.label(RichText::new(tl!("An ArtCraft app · MIT OR Apache-2.0")).color(t.dim));
         });
     });
+    ui.add_space(10.0);
+    updates(s, t, ui, acts);
     ui.add_space(14.0);
     for line in [
         "Local-first: mail is cached on this computer for fast offline search. Passwords stay in the system keychain.",

@@ -987,3 +987,35 @@ month	May	maggio
 	There's no message to check.	Non c’è nessun messaggio da controllare.
 	Check the spelling as you type	Controlla l’ortografia durante la digitazione
 	{from} – {to}	{from} – {to}
+	There's no folder to put the attachment in for another app	Non c'è una cartella in cui mettere l'allegato per un'altra app
+	Check for updates	Verifica aggiornamenti
+	Checking…	Verifica in corso…
+	Couldn't check for updates: {error}	Impossibile verificare gli aggiornamenti: {error}
+	Download	Scarica
+	Join meeting	Partecipa alla riunione
+	Links:	Collegamenti:
+	MailCraft {version} is available.	MailCraft {version} è disponibile.
+	What's new	Novità
+	You have the newest version.	Hai la versione più recente.
+	Online only: keep none of this account's mail on this computer	Solo online: non conservare la posta di questo account su questo computer
+	Online only: none of this account's mail is kept on this computer.	Solo online: nessuna posta di questo account è conservata su questo computer.
+	Online only: {email}	Solo online: {email}
+	New message	Nuovo messaggio
+	Open MailCraft to read it.	Apri MailCraft per leggerlo.
+	Its mail is read from the server and held in memory while MailCraft runs; nothing of it is written to this computer. Each message downloads when you open it. Mail waiting to be sent, changes made while offline, and calendar items, contacts and notes kept only in MailCraft are lost when it closes.	La sua posta viene letta dal server e tenuta in memoria finché MailCraft è aperto; nulla viene scritto su questo computer. Ogni messaggio viene scaricato quando lo apri. La posta in attesa di invio, le modifiche fatte offline e gli elementi del calendario, i contatti e le note conservati solo in MailCraft vanno persi alla chiusura.
+	Portable: everything is kept in MailCraftData beside MailCraft, and passwords only until it closes.	Portatile: tutto è conservato in MailCraftData accanto a MailCraft, e le password solo fino alla chiusura.
+	When it starts	All’inizio
+	1 minute before	1 minuto prima
+	{n} minutes before	{n} minuti prima
+	1 hour before	1 ora prima
+	{n} hours before	{n} ore prima
+	1 day before	1 giorno prima
+	{n} days before	{n} giorni prima
+	1 minute after	1 minuto dopo
+	{n} minutes after	{n} minuti dopo
+	1 hour after	1 ora dopo
+	{n} hours after	{n} ore dopo
+	1 day after	1 giorno dopo
+	{n} days after	{n} giorni dopo
+	Reminder	Promemoria
+	None	Nessuno

@@ -984,3 +984,35 @@ month	May	مايو
 	There's no message to check.	لا توجد رسالة للتدقيق.
 	Check the spelling as you type	تدقيق الإملاء أثناء الكتابة
 	{from} – {to}	{from} – {to}
+	There's no folder to put the attachment in for another app	لا يوجد مجلد لوضع المرفق فيه لتطبيق آخر
+	Check for updates	التحقق من وجود تحديثات
+	Checking…	جارٍ التحقق…
+	Couldn't check for updates: {error}	تعذّر التحقق من التحديثات: {error}
+	Download	تنزيل
+	Join meeting	الانضمام إلى الاجتماع
+	Links:	الروابط:
+	MailCraft {version} is available.	يتوفر MailCraft {version}.
+	What's new	ما الجديد
+	You have the newest version.	لديك أحدث إصدار.
+	Online only: keep none of this account's mail on this computer	عبر الإنترنت فقط: عدم الاحتفاظ بأي بريد لهذا الحساب على هذا الكمبيوتر
+	Online only: none of this account's mail is kept on this computer.	عبر الإنترنت فقط: لا يُحتفظ بأي بريد لهذا الحساب على هذا الكمبيوتر.
+	Online only: {email}	عبر الإنترنت فقط: {email}
+	New message	رسالة جديدة
+	Open MailCraft to read it.	افتح MailCraft لقراءتها.
+	Its mail is read from the server and held in memory while MailCraft runs; nothing of it is written to this computer. Each message downloads when you open it. Mail waiting to be sent, changes made while offline, and calendar items, contacts and notes kept only in MailCraft are lost when it closes.	يُقرأ بريده من الخادم ويُحتفظ به في الذاكرة أثناء تشغيل MailCraft، ولا يُكتب منه شيء على هذا الكمبيوتر. تُنزَّل كل رسالة عند فتحها. تضيع عند إغلاقه الرسائل التي تنتظر الإرسال، والتغييرات التي أُجريت دون اتصال، وعناصر التقويم وجهات الاتصال والملاحظات المحفوظة في MailCraft فقط.
+	Portable: everything is kept in MailCraftData beside MailCraft, and passwords only until it closes.	محمول: يُحفظ كل شيء في MailCraftData بجانب MailCraft، وكلمات المرور حتى إغلاقه فقط.
+	When it starts	في وقت البدء
+	1 minute before	قبل دقيقة واحدة
+	{n} minutes before	قبل {n} دقيقة
+	1 hour before	قبل ساعة واحدة
+	{n} hours before	قبل {n} ساعة
+	1 day before	قبل يوم واحد
+	{n} days before	قبل {n} يوم
+	1 minute after	بعد دقيقة واحدة
+	{n} minutes after	بعد {n} دقيقة
+	1 hour after	بعد ساعة واحدة
+	{n} hours after	بعد {n} ساعة
+	1 day after	بعد يوم واحد
+	{n} days after	بعد {n} يوم
+	Reminder	تذكير
+	None	بلا

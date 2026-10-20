@@ -984,3 +984,35 @@ month	May	מאי
 	There's no message to check.	אין הודעה לבדיקה.
 	Check the spelling as you type	בדיקת איות תוך כדי הקלדה
 	{from} – {to}	{from} – {to}
+	There's no folder to put the attachment in for another app	אין תיקייה שבה אפשר לשים את הקובץ המצורף עבור יישום אחר
+	Check for updates	חיפוש עדכונים
+	Checking…	בודק…
+	Couldn't check for updates: {error}	לא ניתן היה לחפש עדכונים: {error}
+	Download	הורדה
+	Join meeting	הצטרפות לפגישה
+	Links:	קישורים:
+	MailCraft {version} is available.	MailCraft {version} זמין.
+	What's new	מה חדש
+	You have the newest version.	יש לך את הגרסה החדשה ביותר.
+	Online only: keep none of this account's mail on this computer	מקוון בלבד: לא לשמור דואר של חשבון זה במחשב הזה
+	Online only: none of this account's mail is kept on this computer.	מקוון בלבד: שום דואר של חשבון זה אינו נשמר במחשב הזה.
+	Online only: {email}	מקוון בלבד: {email}
+	New message	הודעה חדשה
+	Open MailCraft to read it.	פתח את MailCraft כדי לקרוא.
+	Its mail is read from the server and held in memory while MailCraft runs; nothing of it is written to this computer. Each message downloads when you open it. Mail waiting to be sent, changes made while offline, and calendar items, contacts and notes kept only in MailCraft are lost when it closes.	הדואר שלו נקרא מהשרת ונשמר בזיכרון בזמן ש-MailCraft פועל; דבר ממנו אינו נכתב למחשב הזה. כל הודעה מורדת כשפותחים אותה. דואר שממתין לשליחה, שינויים שנעשו במצב לא מקוון, ופריטי לוח שנה, אנשי קשר והערות שנשמרים רק ב-MailCraft יאבדו כשהוא נסגר.
+	Portable: everything is kept in MailCraftData beside MailCraft, and passwords only until it closes.	נייד: הכול נשמר ב-MailCraftData לצד MailCraft, והסיסמאות רק עד שהוא נסגר.
+	When it starts	בשעת ההתחלה
+	1 minute before	דקה אחת לפני
+	{n} minutes before	{n} דקות לפני
+	1 hour before	שעה אחת לפני
+	{n} hours before	{n} שעות לפני
+	1 day before	יום אחד לפני
+	{n} days before	{n} ימים לפני
+	1 minute after	דקה אחת אחרי
+	{n} minutes after	{n} דקות אחרי
+	1 hour after	שעה אחת אחרי
+	{n} hours after	{n} שעות אחרי
+	1 day after	יום אחד אחרי
+	{n} days after	{n} ימים אחרי
+	Reminder	תזכורת
+	None	ללא

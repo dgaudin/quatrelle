@@ -54,6 +54,7 @@ pub enum Icon {
     Undo,
     Info,
     SpellCheck,
+    Reminder,
     Away,
     Storage,
     Funnel,
@@ -182,6 +183,7 @@ fn svg(icon: Icon) -> &'static str {
         Icon::Undo => f!("arrow_undo"),
         Icon::Info => f!("info"),
         Icon::SpellCheck => f!("text_grammar_checkmark"),
+        Icon::Reminder => f!("alert"),
         Icon::Away => f!("person_clock"),
         Icon::Storage => f!("storage"),
         Icon::Funnel => f!("filter"),
@@ -580,6 +582,14 @@ fn drawn(p: &Painter, rect: Rect, icon: Icon, color: Color32) {
             pen.closed(&[(8.0, 1.5), (15.0, 14.0), (1.0, 14.0)]);
             pen.line(&[(8.0, 6.0), (8.0, 9.8)]);
             pen.filled(&[(7.3, 11.4), (8.7, 11.4), (8.7, 12.6), (7.3, 12.6)], color);
+        }
+        Icon::Reminder => {
+            // A bell, its clapper under it.
+            pen.line(&[(3.0, 11.5), (4.0, 10.5), (4.0, 6.5), (4.6, 4.6), (6.0, 3.4), (8.0, 3.0)]);
+            pen.line(&[(13.0, 11.5), (12.0, 10.5), (12.0, 6.5), (11.4, 4.6), (10.0, 3.4), (8.0, 3.0)]);
+            pen.line(&[(3.0, 11.5), (13.0, 11.5)]);
+            pen.line(&[(8.0, 2.0), (8.0, 3.0)]);
+            pen.line(&[(6.6, 13.5), (7.4, 14.4), (8.6, 14.4), (9.4, 13.5)]);
         }
         Icon::SpellCheck => {
             // Lines of text, and a tick in a circle beside the last one.

@@ -18,7 +18,7 @@ use crate::{NetError, Result};
 const MAX_ITEMS: usize = 5000;
 /// The address book Graph's contacts go into.
 pub const CONTACTS: &str = "graph:contacts";
-const EVENT_FIELDS: &str = "id,iCalUId,subject,body,start,end,isAllDay,location,attendees,organizer,recurrence,changeKey,isCancelled,type,categories";
+const EVENT_FIELDS: &str = "id,iCalUId,subject,body,start,end,isAllDay,location,attendees,organizer,recurrence,changeKey,isCancelled,type,categories,onlineMeeting,isReminderOn,reminderMinutesBeforeStart";
 const CONTACT_FIELDS: &str = "id,changeKey,displayName,givenName,surname,emailAddresses,businessPhones,homePhones,mobilePhone,companyName,department,jobTitle,profession,officeLocation,manager,assistantName,businessHomePage,imAddresses,nickName,spouseName,personalNotes,businessAddress,homeAddress,otherAddress,birthday";
 
 fn seg(id: &str) -> String {
@@ -191,11 +191,14 @@ pub fn event_of(v: &Value) -> Option<CalEvent> {
                 .collect()
         })
         .unwrap_or_default();
+    let reminder =
+        (v.get("isReminderOn").and_then(Value::as_bool) == Some(true)).then(|| v.get("reminderMinutesBeforeStart").and_then(Value::as_i64)).flatten();
     let uid = [s(v, "iCalUId"), s(v, "id")].into_iter().find(|u| !u.is_empty())?;
     Some(CalEvent {
         uid,
         summary: s(v, "subject"),
         description: description.trim().to_string(),
+        reminder,
         location: v.get("location").map(|l| s(l, "displayName")).unwrap_or_default(),
         start,
         end,
@@ -224,6 +227,8 @@ pub fn event_json(e: &CalEvent) -> Value {
         "end": if e.all_day { json!({"dateTime": format!("{}T00:00:00", ymd(e.end.max(e.start + 86_400))), "timeZone": "UTC"}) } else { date_time(e.end) },
         "attendees": e.attendees.iter().map(|a| json!({"type": "required", "emailAddress": {"address": a.email, "name": a.name}})).collect::<Vec<_>>(),
         "categories": e.categories,
+        "isReminderOn": e.reminder.is_some(),
+        "reminderMinutesBeforeStart": e.reminder.unwrap_or(0),
     });
     v["recurrence"] = e.rrule.as_deref().and_then(|r| recurrence_of(r, e.start)).unwrap_or(Value::Null);
     v

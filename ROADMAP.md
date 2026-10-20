@@ -1,6 +1,6 @@
 # Roadmap
 
-**Stage:** v0.19 — Shared mailboxes of their own, and SMTP's own sign-in (2026-10-20). Each milestone below is a version: v0.1 was
+**Stage:** v0.20 — A window on every Windows PC (2026-10-20). Each milestone below is a version: v0.1 was
 the first working client, and every later one is named for what it added.
 Scope: [storytold/artcraft#2177](https://github.com/storytold/artcraft/issues/2177) (lightweight,
 local-first, media-aware v1); the fuller request is
@@ -12,7 +12,7 @@ local-first, media-aware v1); the fuller request is
 |---|---|
 | Crates | 8 libraries + 3 apps + xtask |
 | Commands | 141 (`mailcraft-cli commands`) |
-| Tests | 340 (unit, in-memory IMAP, JMAP, Graph, EWS (mail, calendars, contacts, Autodiscover), CalDAV/CardDAV and ManageSieve servers, NTLM test vectors, SMTP and HTTP stubs, data files, TCP end-to-end, an X server drag, headless UI) |
+| Tests | 369 (unit, in-memory IMAP, JMAP, Graph, EWS (mail, calendars, contacts, Autodiscover), CalDAV/CardDAV and ManageSieve servers, NTLM test vectors, SMTP and HTTP stubs, data files, TCP end-to-end, an X server drag, headless UI) |
 | Languages | 14 (English, Spanish, French, German, Dutch, Brazilian Portuguese, Italian, Russian, Japanese, Korean, Simplified and Traditional Chinese, Arabic, Hebrew) |
 | Platforms | Windows, macOS, Linux; the browser (JMAP accounts) |
 
@@ -92,7 +92,19 @@ local-first, media-aware v1); the fuller request is
    folders under the names the server gives them, the conversation above a message only when
    the list is grouped by conversation, and an outgoing server signed in to with a user name
    and password of its own.
-20. **Next:** what's left in [docs/gaps.md](docs/gaps.md): a relay for IMAP accounts in the
+20. **v0.20 — A window on every Windows PC** ✅ Windows draws with DirectX 12 alone: a real GPU
+   first, Windows' software renderer (WARP) on a PC without one, where the window never opened;
+   a window that can't open says why; and the other Craft apps' fixes to shared ground that
+   apply to MailCraft (GPU device limits and errors, Intel Macs, Linux's GPU, XWayland for drag
+   and drop, clipboard reads that can't hang, a maximized window that doesn't blink, the DMG's
+   strict signature, Windows 10 at install), and from WordCraft, PdfCraft, DeckCraft and
+   GridCraft's desktop glue: winit's input-method and monitor fixes, windows back on screen,
+   arguments and quitting that can't crash, DPI awareness, files for other apps kept private;
+   and from issue #1, calendars told apart by account, shared mailboxes' calendars, Join and
+   links in meetings, Check for updates; and from issue #5, a Microsoft 365 sign-in kept in
+   Windows' Credential Manager whatever its length; and from issue #4, accounts kept online only
+   (none of their mail written to the computer) and a portable mode that leaves nothing behind.
+21. **Next:** what's left in [docs/gaps.md](docs/gaps.md): a relay for IMAP accounts in the
    browser, bidirectional editing, Wayland drag-out, Kerberos-only Exchange, what the `.pst`
    libraries can't do yet; then rules on IMAP (Sieve) servers, the `.pst`'s contact pictures and
    the business-card view.
@@ -324,3 +336,54 @@ local-first, media-aware v1); the fuller request is
   so a rule made in Outlook shows up without a restart. Only the ids MailCraft holds are ever
   treated as its own. Tested: the split by id, the EWS listing with a rule from Outlook, the Sieve
   scripts, and the engine keeping the ids and listing the rest.
+- **2026-10-20** — **v0.20**: on some Windows PCs without a GPU the window never opened; the
+  process stayed in the background holding the data files (so later launches were told another
+  copy had them) and crashed when Windows shut it down. wgpu started Vulkan and OpenGL beside
+  DirectX 12, and without a GPU those find only leftover or overlay drivers and Windows' OpenGL
+  1.1. Only DirectX 12 starts now, the adapter picked by MailCraft (a real GPU first, WARP when
+  there's none), its shaders compiled with FXC; a window that can't open says why in a message.
+- **2026-10-20** — **v0.20**, more: the sixteen sibling Craft repositories were cloned and their
+  fixes to what every Craft app shares were read and checked against MailCraft. Adopted, each
+  tested: device limits from the adapter, wgpu errors logged after start-up, Intel Macs without
+  indirect-call validation, Linux on the desktop's GPU and through XWayland (attachments drag on
+  Wayland desktops; a stale DISPLAY falls back), clipboard reads with a time limit, no blink
+  from a maximized window at start-up, the DMG built so its app passes `codesign --strict`, and
+  the MSI's Windows 10 condition.
+- **2026-10-20** — **v0.20**, the four closest siblings again, every commit to their desktop apps,
+  packaging and build tools (367) read rather than searched: winit 0.30.13 vendored as PdfCraft
+  carries it (Windows 11 monitor scale, input methods on every platform, windows created
+  maximized: now shown once, maximized), windows brought back on screen and fitted to it,
+  non-Unicode arguments, broken standard error and quitting on macOS made safe, per-monitor DPI
+  in the manifest, and attachments for other apps in a folder of the user's own.
+- **2026-10-20** — **v0.20**, issue #1's calendars, reproduced against a fake Exchange first: each
+  account's calendars under its address in its colour and the server's name, a shared mailbox's
+  calendar read with it, Join meeting and the notes' links (a long Teams link read whole from
+  the HTML), a meeting in two calendars that opens again, and File › About's Check for updates.
+- **2026-10-20** — **v0.20**, issue #5: an Office 365 sign-in couldn't be kept on Windows (its
+  refresh token, about 2,000 characters, is over the 1,280 a Credential Manager entry held as
+  the keyring crate wrote it); kept as UTF-8 over as many entries as it needs, reproduced and
+  tested on the real Credential Manager.
+- **2026-10-20** — **v0.20**, issue #4: an account can be kept online only (its mail held in
+  memory, each message downloaded when opened, its data file gone) and `portable.txt` beside the
+  app keeps everything in MailCraftData there, passwords in memory only; reproduced with the app
+  against a fake IMAP server (a 557 KB data file holding every subject and body, then nothing),
+  the host's folders, Credential Manager and registry compared before and after.
+- **2026-10-20** — **v0.20 merged into this fork:** upstream's release (24 commits: online-only
+  accounts, portable mode, Check for updates, a Microsoft 365 sign-in kept on Windows, shared
+  mailboxes' calendars and the server's folder names, the Windows/XWayland/packaging fixes,
+  `winit` 0.30.13 vendored) came in beside this fork's work. Twenty-two conflicts resolved: the
+  calendar pane keeps **Outlook's groups** (My calendars, the server's groups, Shared calendars)
+  and gains shared mailboxes' calendars and their tips, a meeting in two calendars opens again
+  (the box's id names whose it is), the Graph contact fields this fork reads are kept, and the
+  port's own commands (`app.checkUpdates`, `account.onlineOnly`) join the 64 commits already
+  here. Tested: `cargo xtask ci` green on the merge (23 suites), the port's own tests for an
+  online-only account and a shared mailbox's calendar among them.
+- **2026-10-20** — **Reminders (`VALARM`):** an event's alarm is read as the reminder (its
+  `TRIGGER` a plain duration: `-PT15M`, `-P1D`), written back as Outlook writes it
+  (`ACTION:DISPLAY`), and mapped both ways on Exchange (`ReminderIsSet`,
+  `ReminderMinutesBeforeStart`) and Microsoft 365 (`isReminderOn`,
+  `reminderMinutesBeforeStart`); an alarm MailCraft can't read (an absolute time, one relative
+  to the end) is kept as written rather than lost. The calendar's card says when it sounds
+  ("15 minutes before", "1 hour before", "1 day before", "When it starts"), with the appointment
+  dialog's Reminder list beside it. Tested: a `VALARM` parsed, written and read again; an
+  unreadable one kept; a reminder set, changed, kept across a restart and taken off.

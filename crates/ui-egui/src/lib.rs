@@ -312,7 +312,18 @@ pub struct WindowPlace {
     pub h: f32,
     #[serde(default)]
     pub maximized: bool,
+    /// The size of the monitor it was on, so a window whose monitor went (an external one
+    /// unplugged) is brought back on screen ([`WindowPlace::rescue`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub monitor: Option<[f32; 2]>,
 }
+
+/// Room a window leaves on each side of its monitor for the taskbar, the Dock or a desktop panel,
+/// which the monitor size (all egui reports) includes.
+const SYSTEM_BAR: egui::Vec2 = egui::vec2(48.0, 48.0);
+
+/// The smallest a window is made to fit its monitor (the main window's minimum size).
+const FIT_MIN: egui::Vec2 = egui::vec2(760.0, 480.0);
 
 impl WindowPlace {
     /// Note where a window is now (nothing while it's minimized; while maximized, only that).
@@ -329,8 +340,51 @@ impl WindowPlace {
             return;
         }
         if let (Some(outer), Some(inner)) = (v.outer_rect, v.inner_rect) {
-            *place = Some(WindowPlace { x: outer.min.x, y: outer.min.y, w: inner.width(), h: inner.height(), maximized: false });
+            let monitor = v.monitor_size.filter(|m| m.is_finite() && m.x > 0.0 && m.y > 0.0).map(|m| [m.x, m.y]);
+            *place = Some(WindowPlace { x: outer.min.x, y: outer.min.y, w: inner.width(), h: inner.height(), maximized: false, monitor });
         }
+    }
+
+    /// Where to move a restored window, once its monitor is known (the other Craft apps' fix): a
+    /// window whose monitor differs from the one it was saved on (an external monitor unplugged)
+    /// may sit where no monitor is any more, so it's centred on the primary one, whose top-left
+    /// corner is the origin. A maximized window fills whichever monitor the system picks.
+    pub fn rescue(self, info: &egui::ViewportInfo) -> Option<egui::Pos2> {
+        if self.maximized {
+            return None;
+        }
+        let saved = egui::Vec2::from(self.monitor?);
+        let now = info.monitor_size.filter(|s| s.is_finite() && s.x > 0.0 && s.y > 0.0)?;
+        if (now - saved).length() <= 1.0 {
+            return None;
+        }
+        let free = now - egui::vec2(self.w, self.h);
+        Some(egui::pos2((free.x / 2.0).max(0.0), (free.y / 2.0).max(0.0)))
+    }
+
+    /// Once the monitor is known, a smaller size and a centred position for a window that doesn't
+    /// fit on it, frame included: one saved on a bigger screen, or the default size on a laptop,
+    /// reached under the taskbar or past the screen's edge (WordCraft found). `restored`: it was
+    /// put where a saved place says (perhaps another monitor), so only its size counts; one the
+    /// system placed is on the primary monitor, so its position counts too.
+    pub fn fit(info: &egui::ViewportInfo, restored: bool) -> Option<(egui::Pos2, egui::Vec2)> {
+        if info.maximized == Some(true) || info.fullscreen == Some(true) || info.minimized == Some(true) {
+            return None;
+        }
+        let monitor = info.monitor_size.filter(|s| s.is_finite() && s.x > 0.0 && s.y > 0.0)?;
+        let inner = info.inner_rect.filter(|r| r.is_finite())?;
+        let outer = info.outer_rect.filter(|r| r.is_finite()).unwrap_or(inner);
+        let frame = (outer.size() - inner.size()).max(egui::Vec2::ZERO);
+        let room = monitor - 2.0 * SYSTEM_BAR;
+        let too_big = outer.width() > room.x || outer.height() > room.y;
+        let edge = monitor - SYSTEM_BAR;
+        let past_edge = !restored && (outer.max.x > edge.x || outer.max.y > edge.y);
+        if !too_big && !past_edge {
+            return None;
+        }
+        let size = (room - frame).min(inner.size()).max(FIT_MIN);
+        let free = monitor - (size + frame);
+        Some((egui::pos2((free.x / 2.0).max(0.0), (free.y / 2.0).max(0.0)), size))
     }
 
     /// A place that's sensible to open at: a real size, and on a screen as far as can be told.
@@ -344,10 +398,52 @@ impl WindowPlace {
     /// Open a window where this place says.
     pub fn apply(self, b: egui::ViewportBuilder) -> egui::ViewportBuilder {
         match self.usable() {
+            // On Windows, winit 0.30.13 showed a window created maximized at once, though eframe
+            // keeps it hidden until its first frame: it appeared, vanished and appeared again. The
+            // vendored winit (vendor/README.md) maximizes a hidden window only as it's shown.
             Some(p) => b.with_position([p.x, p.y]).with_inner_size([p.w, p.h]).with_maximized(p.maximized),
             None => b,
         }
     }
+}
+
+/// What a window does once it has opened, from its place as it opened (`place`), called at the
+/// top of each of its frames before the place is noted again: on the first frame that knows its
+/// monitor, one restored where no monitor is any more is brought back ([`WindowPlace::rescue`]),
+/// and one too big for its screen is made to fit ([`WindowPlace::fit`]).
+///
+/// [`forget_open`] when it closes, so it does the same when it opens again.
+pub fn after_open(ui: &Ui, place: Option<WindowPlace>) {
+    let ctx = ui.ctx();
+    let id = egui::Id::unique(("after-open", ctx.viewport_id()));
+    let place = place.and_then(WindowPlace::usable);
+    // Absent: its first frame; Some(pending): still to check once the monitor is known.
+    let pending: Option<Option<WindowPlace>> = ctx.data(|d| d.get_temp(id));
+    // A window with no place (the system put it) is checked too.
+    let pending = pending.unwrap_or_else(|| Some(place.unwrap_or_default()));
+    let info = ui.input(|i| i.viewport().clone());
+    let known = info.monitor_size.is_some_and(|m| m.is_finite() && m.x > 0.0 && m.y > 0.0);
+    let pending = match pending {
+        Some(p) if known => {
+            let restored = place.is_some();
+            if let Some(pos) = p.rescue(&info) {
+                ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(pos));
+            } else if !p.maximized
+                && let Some((pos, size)) = WindowPlace::fit(&info, restored)
+            {
+                ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(size));
+                ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(pos));
+            }
+            None
+        }
+        other => other,
+    };
+    ctx.data_mut(|d| d.insert_temp(id, pending));
+}
+
+/// A closed window opens afresh next time ([`after_open`]).
+fn forget_open(ctx: &egui::Context, viewport: egui::ViewportId) {
+    ctx.data_mut(|d| d.remove::<Option<WindowPlace>>(egui::Id::unique(("after-open", viewport))));
 }
 
 /// UI-only state.
@@ -670,6 +766,7 @@ impl MailApp {
         spellcheck::set_on(self.session.prefs.spell_check);
         let ctx = ui.ctx().clone();
         let mut main = self.ui.places.get("main").copied();
+        after_open(ui, main);
         WindowPlace::note(&mut main, ui);
         if let Some(p) = main {
             self.ui.places.insert("main".into(), p);
@@ -963,6 +1060,7 @@ impl MailApp {
         let (session, st) = (&mut self.session, &mut self.ui);
         let close = ctx.show_viewport_immediate(id, builder, |ui, _| {
             let mut place = st.places.get("compose").copied();
+            after_open(ui, place);
             WindowPlace::note(&mut place, ui);
             if let Some(p) = place {
                 st.places.insert("compose".into(), p);
@@ -992,6 +1090,7 @@ impl MailApp {
             closing
         });
         if close {
+            forget_open(ctx, id);
             acts.push(Action::Run("compose.close", json!({"save": false})));
         }
     }
@@ -1064,6 +1163,7 @@ impl MailApp {
             let (session, st) = (&mut self.session, &mut self.ui);
             let close = ctx.show_viewport_immediate(id, builder, |ui, _| {
                 let mut place = st.places.get("message").copied();
+                after_open(ui, place);
                 WindowPlace::note(&mut place, ui);
                 if let Some(p) = place {
                     st.places.insert("message".into(), p);
@@ -1093,6 +1193,7 @@ impl MailApp {
                 closing && !leave
             });
             if close {
+                forget_open(ctx, id);
                 acts.push(Action::Run("message.closeWindow", json!({"key": key.to_id()})));
             }
         }
@@ -1102,8 +1203,15 @@ impl MailApp {
     fn announce(&mut self, ctx: &egui::Context) {
         let news = self.session.take_new_mail();
         if !news.is_empty() {
+            // Issue #4: the system keeps its notifications (Windows, in its history): one for an
+            // account kept online only names neither sender nor subject.
+            let private = news.iter().any(|m| self.session.account(&m.key.account).is_some_and(|a| a.config.keeps_online()));
             // A system notification: text as written.
             let (title, body) = i18n::as_written(|| match news.as_slice() {
+                _ if private => (
+                    if news.len() == 1 { tl!("New message").to_string() } else { tf!("{n} new messages", n = news.len()) },
+                    tl!("Open MailCraft to read it.").to_string(),
+                ),
                 [m] => (m.from.display().to_string(), if m.subject.is_empty() { tl!("(no subject)").to_string() } else { m.subject.clone() }),
                 many => {
                     let mut who: Vec<&str> = Vec::new();
@@ -1532,8 +1640,10 @@ impl MailApp {
             return None;
         }
         let name = self.attachment_name(i);
-        let dir = std::env::temp_dir().join("mailcraft-open");
-        let _ = std::fs::create_dir_all(&dir);
+        let Some(dir) = mailcraft_engine::store::scratch_dir("open") else {
+            self.session.notice(tl!("There's no folder to put the attachment in for another app"), true);
+            return None;
+        };
         let path = dir.join(mailcraft_engine::mime::sanitize_filename(&name));
         match self.session.run("attachment.save", &json!({"index": i, "path": path.to_string_lossy()})) {
             Ok(_) => Some(path),

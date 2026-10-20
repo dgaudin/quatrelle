@@ -988,3 +988,35 @@ month	May	Mai
 	There's no message to check.	Es gibt keine Nachricht zum Prüfen.
 	Check the spelling as you type	Rechtschreibung während der Eingabe prüfen
 	{from} – {to}	{from} – {to}
+	There's no folder to put the attachment in for another app	Es gibt keinen Ordner, in dem der Anhang für eine andere App abgelegt werden kann
+	Check for updates	Nach Updates suchen
+	Checking…	Wird geprüft…
+	Couldn't check for updates: {error}	Updates konnten nicht gesucht werden: {error}
+	Download	Herunterladen
+	Join meeting	An Besprechung teilnehmen
+	Links:	Links:
+	MailCraft {version} is available.	MailCraft {version} ist verfügbar.
+	What's new	Neuerungen
+	You have the newest version.	Sie verwenden die neueste Version.
+	Online only: keep none of this account's mail on this computer	Nur online: keine E-Mails dieses Kontos auf diesem Computer speichern
+	Online only: none of this account's mail is kept on this computer.	Nur online: Keine E-Mails dieses Kontos werden auf diesem Computer gespeichert.
+	Online only: {email}	Nur online: {email}
+	New message	Neue Nachricht
+	Open MailCraft to read it.	Öffnen Sie MailCraft, um sie zu lesen.
+	Its mail is read from the server and held in memory while MailCraft runs; nothing of it is written to this computer. Each message downloads when you open it. Mail waiting to be sent, changes made while offline, and calendar items, contacts and notes kept only in MailCraft are lost when it closes.	Die E-Mails werden vom Server gelesen und nur im Arbeitsspeicher gehalten, solange MailCraft läuft; nichts davon wird auf diesen Computer geschrieben. Jede Nachricht wird beim Öffnen heruntergeladen. Noch nicht gesendete E-Mails, offline vorgenommene Änderungen sowie Kalendereinträge, Kontakte und Notizen, die nur in MailCraft gespeichert sind, gehen beim Schließen verloren.
+	Portable: everything is kept in MailCraftData beside MailCraft, and passwords only until it closes.	Portabel: Alles wird in MailCraftData neben MailCraft gespeichert, Kennwörter nur bis zum Schließen.
+	When it starts	Zum Beginn
+	1 minute before	1 Minute vorher
+	{n} minutes before	{n} Minuten vorher
+	1 hour before	1 Stunde vorher
+	{n} hours before	{n} Stunden vorher
+	1 day before	1 Tag vorher
+	{n} days before	{n} Tage vorher
+	1 minute after	1 Minute nachher
+	{n} minutes after	{n} Minuten nachher
+	1 hour after	1 Stunde nachher
+	{n} hours after	{n} Stunden nachher
+	1 day after	1 Tag nachher
+	{n} days after	{n} Tage nachher
+	Reminder	Erinnerung
+	None	Keine
