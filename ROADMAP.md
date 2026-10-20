@@ -396,3 +396,12 @@ local-first, media-aware v1); the fuller request is
   and `MAILCRAFT_LANGUAGE` still work. The MSI's UpgradeCode is the same, so an installed copy
   upgrades. Tested: an old app folder taken over, an old data file renamed with its mail read
   back, an old portable stick, and `cargo xtask ci` green (455 tests).
+- **2026-10-20** — **The rename broke the data files' own notes (fixed):** a data file keeps
+  `\0Quatrelle:deflate\0` or `\0Quatrelle:pieces\0` in front of every value it compressed or cut
+  into pieces, and the rename rewrote those bytes too, so every compressed setting, every folder's
+  sync state and every big message read back as garbage: "unreadable, starting fresh" for the
+  states, an empty calendar list (so all 55 of the organisation's shared calendars were read at
+  once, minutes of Exchange before any mail), nothing readable in the folders. The fork's notes
+  (`\0MailCraft:deflate\0`, `\0MailCraft:pieces\0`) are read beside the new ones, and a test writes
+  a data file carrying them and reads both kinds of value back. The lesson: a marker kept inside
+  the data is a format, not a name — it may only change with a migration.

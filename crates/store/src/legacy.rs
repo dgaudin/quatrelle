@@ -19,6 +19,11 @@ pub const OLD_EXTENSION: &str = "mailcraft";
 pub const OLD_PORTABLE_MARKER: &str = "MailCraft.portable";
 /// The folder portable mode kept everything in.
 pub const OLD_PORTABLE_DIR: &str = "MailCraftData";
+/// The note a data file keeps for a value written in pieces (see `packed`): it's in the file's
+/// own bytes, so the old one is still what most data files carry.
+pub const OLD_PIECED: &[u8] = b"\0MailCraft:pieces\0";
+/// The note a compressed value starts with, as most data files carry it.
+pub const OLD_DEFLATED: &[u8] = b"\0MailCraft:deflate\0";
 /// The keychain service passwords and sign-ins were kept under.
 pub const OLD_KEYCHAIN: &str = "MailCraft";
 /// What `QUATRELLE_DATA` was called.
