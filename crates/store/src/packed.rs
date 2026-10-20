@@ -30,11 +30,16 @@ const PIECES: TableDefinition<(&str, u32), &[u8]> = TableDefinition::new("pieces
 /// The note in `FILES` for a file kept in pieces: this, then its length (8 bytes, little-endian).
 /// Nothing Quatrelle keeps starts with a NUL.
 const PIECED: &[u8] = b"\0Quatrelle:pieces\0";
+/// The note as the fork wrote it before it took its name (see `legacy`): a data file keeps it in
+/// its own bytes, so the rename can't simply replace them, and both are read.
+const PIECED_OLD: &[u8] = crate::legacy::OLD_PIECED;
 /// Files up to this size (as kept: compressed when that helps) stay whole: one page's worth. A
 /// bigger value took the next power of two of pages, so it goes in pieces.
 const WHOLE_MAX: usize = PAGE - PAGE_SLACK;
 /// A file kept compressed starts with this, then its deflate stream.
 const DEFLATED: &[u8] = b"\0Quatrelle:deflate\0";
+/// The same, as the fork wrote it before it took its name (see `legacy`): read too.
+const DEFLATED_OLD: &[u8] = crate::legacy::OLD_DEFLATED;
 /// Files smaller than this aren't worth compressing.
 const DEFLATE_MIN: usize = 1024;
 /// The most a compressed file may come to (a crafted data file can't fill the memory).
@@ -43,7 +48,7 @@ const INFLATE_MAX: u64 = 1 << 30;
 /// A file as kept: compressed (fast deflate) when that saves a tenth or more.
 fn pack(bytes: &[u8]) -> std::borrow::Cow<'_, [u8]> {
     use std::io::Write;
-    if bytes.len() < DEFLATE_MIN || bytes.starts_with(DEFLATED) {
+    if bytes.len() < DEFLATE_MIN || bytes.starts_with(DEFLATED) || bytes.starts_with(DEFLATED_OLD) {
         return bytes.into();
     }
     let mut z = flate2::write::DeflateEncoder::new(DEFLATED.to_vec(), flate2::Compression::fast());
@@ -56,7 +61,7 @@ fn pack(bytes: &[u8]) -> std::borrow::Cow<'_, [u8]> {
 /// A file as kept, back as it was written.
 fn unpack(kept: Vec<u8>) -> io::Result<Vec<u8>> {
     use std::io::Read;
-    let Some(stream) = kept.strip_prefix(DEFLATED) else { return Ok(kept) };
+    let Some(stream) = kept.strip_prefix(DEFLATED).or_else(|| kept.strip_prefix(DEFLATED_OLD)) else { return Ok(kept) };
     let mut out = Vec::with_capacity(stream.len().saturating_mul(3).min(64 << 20));
     flate2::read::DeflateDecoder::new(stream).take(INFLATE_MAX + 1).read_to_end(&mut out)?;
     if out.len() as u64 > INFLATE_MAX {
@@ -84,7 +89,7 @@ fn piece_sizes(len: usize) -> Vec<usize> {
 
 /// A file kept in pieces: its length.
 fn pieced_len(note: &[u8]) -> Option<u64> {
-    let rest = note.strip_prefix(PIECED)?;
+    let rest = note.strip_prefix(PIECED).or_else(|| note.strip_prefix(PIECED_OLD))?;
     Some(u64::from_le_bytes(rest.get(..8)?.try_into().ok()?))
 }
 
@@ -685,6 +690,58 @@ mod tests {
 
     fn account(id: &str, email: &str) -> AccountConfig {
         AccountConfig { id: id.into(), email: email.into(), ..Default::default() }
+    }
+
+    /// A data file keeps the notes it wrote in its own bytes, so the ones from before the rename
+    /// (the fork's name) are still what most of it carries: they're read, and mail, calendars and
+    /// settings come back whole rather than as "unreadable, starting fresh".
+    #[test]
+    fn values_written_before_the_rename_are_read() {
+        use redb::ReadableTable;
+
+        use super::{DEFLATED, FILES, PIECED, WHOLE_MAX};
+        use crate::legacy::{OLD_DEFLATED, OLD_PIECED};
+        let t = temp("old-markers");
+        let (root, files) = (t.join("app"), t.join("Files"));
+        let small = serde_json::json!({ "not_read": (0..200).map(|i| format!("cal{i}@example.org")).collect::<Vec<_>>() });
+        // Not compressible (a run of one letter would go whole, it deflates so well).
+        let mut seed = 0x2545_f491_4f6c_dd1du64;
+        let big: String = (0..WHOLE_MAX * 4)
+            .map(|_| {
+                seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                char::from_digit(((seed >> 33) % 16) as u32, 16).unwrap_or('0')
+            })
+            .collect();
+        {
+            let s = Store::open_packed(&root, &files).unwrap();
+            s.save_account_doc("a1", "pim.json", &small).unwrap();
+            s.save_account_doc("a1", "big.txt", &big).unwrap();
+        }
+        // Rewrite both values with the notes the fork used, as a data file from before has them.
+        let db = redb::Database::open(files.join("a1.quatrelle")).unwrap();
+        {
+            let tx = db.begin_write().unwrap();
+            {
+                let mut table = tx.open_table(FILES).unwrap();
+                let kept = table.get("pim.json").unwrap().map(|v| v.value().to_vec()).unwrap();
+                assert!(kept.starts_with(DEFLATED), "the test needs a compressed value");
+                let mut old = OLD_DEFLATED.to_vec();
+                old.extend_from_slice(&kept[DEFLATED.len()..]);
+                table.insert("pim.json", old.as_slice()).unwrap();
+                let note = table.get("big.txt").unwrap().map(|v| v.value().to_vec()).unwrap();
+                assert!(note.starts_with(PIECED) && note.len() == PIECED.len() + 8, "the test needs a value in pieces");
+                let mut old = OLD_PIECED.to_vec();
+                old.extend_from_slice(&note[PIECED.len()..]);
+                table.insert("big.txt", old.as_slice()).unwrap();
+            }
+            tx.commit().unwrap();
+        }
+        drop(db);
+
+        let s = Store::open_packed(&root, &files).unwrap();
+        assert_eq!(s.load_account_doc::<serde_json::Value>("a1", "pim.json").unwrap(), small, "a compressed value comes back");
+        assert_eq!(s.load_account_doc::<String>("a1", "big.txt").unwrap(), big, "one kept in pieces comes back");
+        let _ = std::fs::remove_dir_all(&t);
     }
 
     /// A data file written under the fork's old extension is renamed, once, and the names file
