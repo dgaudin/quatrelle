@@ -2260,15 +2260,16 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Act
                                     acts.push(Action::Run("rules.server.run", json!({"account": f.account, "id": f.id})));
                                 }
                                 // A rule every part of which MailCraft knows can be changed here
-                                // (its place among the server's rules stays); the others say why.
-                                let edit = widgets::tiny_icon_button(ui, Icon::Drafts, "Edit", t);
-                                if edit.clicked()
-                                    && let Some(form) = RuleForm::from_server(&f.account, f)
-                                {
-                                    acts.push(Action::Dialog(Dialog::EditRule(Box::new(form))));
-                                }
-                                if !f.runnable {
-                                    edit.on_hover_text(tl!("MailCraft doesn't know every part of this rule yet"));
+                                // (its place among the server's rules stays); the others are
+                                // shown with why, and stay as the program that made them has them.
+                                if f.runnable {
+                                    if widgets::tiny_icon_button(ui, Icon::Drafts, "Edit", t).clicked()
+                                        && let Some(form) = RuleForm::from_server(&f.account, f)
+                                    {
+                                        acts.push(Action::Dialog(Dialog::EditRule(Box::new(form))));
+                                    }
+                                } else {
+                                    ui.label(RichText::new(tl!("MailCraft doesn't know every part of this rule yet")).color(t.faint).small());
                                 }
                             });
                         });
