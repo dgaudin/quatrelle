@@ -268,6 +268,30 @@ fn photo_texture(ui: &Ui, uid: &str, p: &mailcraft_engine::model::vcard::Photo) 
     tex
 }
 
+/// A person's picture as a round texture (their avatar), decoded once and kept while it's shown.
+pub(crate) fn card_picture(ui: &Ui, uid: &str, p: &mailcraft_engine::model::vcard::Photo) -> Option<egui::TextureHandle> {
+    let id = egui::Id::unique(("contact-photo-round", uid, p.base64.len()));
+    if let Some(t) = ui.ctx().data(|d| d.get_temp::<Option<egui::TextureHandle>>(id)) {
+        return t;
+    }
+    let tex = p
+        .bytes(mailcraft_engine::model::vcard::MAX_PHOTO)
+        .and_then(|b| crate::reading::decode_round(ui.ctx(), &format!("contact-round-{uid}"), &b, 256));
+    ui.ctx().data_mut(|d| d.insert_temp(id, tex.clone()));
+    tex
+}
+
+/// The picture the directory keeps for an address, round: where a person is shown by address (a
+/// message's sender, a card).
+pub(crate) fn address_picture(ui: &Ui, s: &Session, email: &str) -> Option<egui::TextureHandle> {
+    let email = email.trim();
+    if email.is_empty() {
+        return None;
+    }
+    let p = s.person_photo(email)?;
+    card_picture(ui, &email.to_ascii_lowercase(), p)
+}
+
 pub fn nav(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
     let t = st.tokens;
     if widgets::accent_button(ui, Icon::Plus, "New contact", &t, !s.accounts.is_empty()).clicked() {
@@ -315,6 +339,14 @@ pub fn nav(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
                         ui.painter().rect_filled(r, 6.0, if selected { t.accent_soft } else { t.hover_row });
                     }
                     let initials: String = name.split_whitespace().filter_map(|w| w.chars().next()).take(2).collect::<String>().to_uppercase();
+                    // The list shows the picture as Outlook's does: the card's, or the one the
+                    // directory keeps for the person's address (asked for once).
+                    let email = p.card.emails.first().map(|e| e.value.trim()).unwrap_or_default();
+                    // Only for the rows on screen: a long list asks as it is scrolled, not all at
+                    // once.
+                    if p.card.photo.is_none() && !s.person_photo_known(email) && s.photo_possible_for(email) && ui.clip_rect().intersects(r) {
+                        acts.push(Action::Run("contact.photo", json!({ "email": email })));
+                    }
                     match picture(s, &p.card).and_then(|ph| photo_texture(ui, &p.card.uid, ph)) {
                         Some(tex) => {
                             let av = egui::Rect::from_center_size(r.left_center() + vec2(20.0, 0.0), vec2(28.0, 28.0));
@@ -400,7 +432,7 @@ pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) 
                 // Outlook shows the picture an address book carries; without one, and for a
                 // colleague, the one the directory keeps (asked for once).
                 let email = c.emails.first().map(|e| e.value.trim()).unwrap_or_default();
-                if !email.is_empty() && c.photo.is_none() && !s.person_photo_known(email) {
+                if c.photo.is_none() && !s.person_photo_known(email) && s.photo_possible_for(email) {
                     acts.push(Action::Run("contact.photo", json!({ "email": email })));
                 }
                 let photo = picture(s, c);
@@ -573,7 +605,7 @@ fn cards(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
                         let color = theme::avatar_color(&name, t.dark);
                         ui.painter().rect_filled(band.shrink(1.0), egui::CornerRadius { nw: 7, sw: 7, ne: 0, se: 0 }, color.gamma_multiply(0.18));
                         let email = c.emails.first().map(|e| e.value.trim()).unwrap_or_default();
-                        if !email.is_empty() && c.photo.is_none() && !s.person_photo_known(email) {
+                        if c.photo.is_none() && !s.person_photo_known(email) && s.photo_possible_for(email) && ui.clip_rect().intersects(r) {
                             acts.push(Action::Run("contact.photo", json!({ "email": email })));
                         }
                         let texture = picture(s, c).and_then(|p| photo_texture(ui, &c.uid, p));

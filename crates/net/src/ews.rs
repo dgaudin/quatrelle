@@ -438,6 +438,24 @@ fn check_message(m: &El) -> Result<()> {
     }
 }
 
+/// The picture a `GetUserPhoto` answer carries. Exchange 2016 answers with the response element
+/// itself (`ResponseClass`, `PictureData` and all), not inside the `ResponseMessages` list every
+/// other operation uses; a server that does wrap it is read too.
+fn photo_of(doc: &El) -> Result<(String, Vec<u8>)> {
+    let m =
+        messages(doc).first().copied().or_else(|| doc.find("GetUserPhotoResponse")).ok_or_else(|| NetError::Protocol("an empty answer".into()))?;
+    check_message(m)?;
+    let data = m.find("PictureData").map(|c| c.text.trim()).unwrap_or_default();
+    if data.is_empty() {
+        return Err(NetError::No("no picture for this person".into()));
+    }
+    let bytes = unb64(data).ok_or_else(|| NetError::Protocol("the picture isn't base64".into()))?;
+    if bytes.is_empty() || bytes.len() > crate::MAX_PICTURE {
+        return Err(NetError::No("no picture for this person".into()));
+    }
+    Ok((crate::picture_media(&bytes).to_string(), bytes))
+}
+
 /// The `…ResponseMessage` elements of an answer.
 pub(crate) fn messages(doc: &El) -> Vec<&El> {
     let mut out = Vec::new();
@@ -1461,9 +1479,39 @@ impl Client {
     pub fn user_photo(&self, email: &str) -> Result<(String, Vec<u8>)> {
         let doc =
             self.call(&format!("<m:GetUserPhoto><m:Email>{}</m:Email><m:SizeRequested>HR240x240</m:SizeRequested></m:GetUserPhoto>", esc(email)))?;
+        photo_of(&doc)
+    }
+
+    /// The picture a contact item carries (Outlook keeps a contact's photo as an attachment of
+    /// the item, marked as the contact's picture): its bytes and type. `No` when the contact has
+    /// none.
+    pub fn contact_photo(&self, id: &str) -> Result<(String, Vec<u8>)> {
+        let doc = self.call(&format!(
+            "<m:GetItem><m:ItemShape><t:BaseShape>IdOnly</t:BaseShape>\
+             <t:AdditionalProperties><t:FieldURI FieldURI=\"item:Attachments\"/></t:AdditionalProperties></m:ItemShape>\
+             <m:ItemIds><t:ItemId Id=\"{}\"/></m:ItemIds></m:GetItem>",
+            esc(id)
+        ))?;
         let m = messages(&doc).first().copied().ok_or_else(|| NetError::Protocol("an empty answer".into()))?;
         check_message(m)?;
-        let data = m.text_of("PictureData").map(str::trim).unwrap_or_default();
+        let mut files = Vec::new();
+        if let Some(items) = m.child("Items") {
+            items.all("FileAttachment", &mut files);
+        }
+        // Exchange marks it so; a server that doesn't name the picture as Outlook's does still
+        // gives it the name Outlook gives it.
+        let photo = files
+            .iter()
+            .find(|f| f.attr("IsContactPhoto") == Some("true"))
+            .or_else(|| files.iter().find(|f| f.text_of("Name").is_some_and(|n| n.starts_with("ContactPicture"))));
+        let att = photo.and_then(|f| f.child("AttachmentId")).and_then(|a| a.attr("Id")).filter(|a| !a.is_empty());
+        let Some(att) = att else { return Err(NetError::No("no picture for this person".into())) };
+        let doc =
+            self.call(&format!("<m:GetAttachment><m:AttachmentIds><t:AttachmentId Id=\"{}\"/></m:AttachmentIds></m:GetAttachment>", esc(att)))?;
+        let m = messages(&doc).first().copied().ok_or_else(|| NetError::Protocol("an empty answer".into()))?;
+        check_message(m)?;
+        // Inside the attachment, not directly under the response.
+        let data = m.find("Content").map(|c| c.text.trim()).unwrap_or_default();
         if data.is_empty() {
             return Err(NetError::No("no picture for this person".into()));
         }
@@ -2023,6 +2071,59 @@ mod tests {
         assert_eq!(media, "image/jpeg");
         assert_eq!(data, vec![0xFF, 0xD8, 0xFF], "the bytes, not the base64 it came as");
         assert!(c.user_photo("ghost@nophoto.example").is_err(), "no picture is an answer, not a broken account");
+    }
+
+    #[test]
+    fn a_picture_answer_is_read_in_either_shape() {
+        // As Exchange 2016 answers: the response element itself, no ResponseMessages list.
+        let direct = parse(
+            "<s:Envelope><s:Body><GetUserPhotoResponse ResponseClass=\"Success\">\
+             <ResponseCode>NoError</ResponseCode><HasChanged>true</HasChanged><PictureData>/9j/</PictureData>\
+             </GetUserPhotoResponse></s:Body></s:Envelope>",
+        );
+        assert_eq!(photo_of(&direct).unwrap(), ("image/jpeg".to_string(), vec![0xFF, 0xD8, 0xFF]));
+        // As a server that wraps it does.
+        let wrapped = parse(
+            "<s:Envelope><s:Body><m:GetUserPhotoResponse><m:ResponseMessages><m:GetUserPhotoResponseMessage ResponseClass=\"Success\">\
+             <m:ResponseCode>NoError</m:ResponseCode><m:PictureData>/9j/</m:PictureData>\
+             </m:GetUserPhotoResponseMessage></m:ResponseMessages></m:GetUserPhotoResponse></s:Body></s:Envelope>",
+        );
+        assert_eq!(photo_of(&wrapped).unwrap().0, "image/jpeg");
+        // No picture is an answer; an error is said as such.
+        let none = parse(
+            "<s:Envelope><s:Body><GetUserPhotoResponse ResponseClass=\"Success\"><PictureData></PictureData></GetUserPhotoResponse></s:Body></s:Envelope>",
+        );
+        assert!(matches!(photo_of(&none), Err(NetError::No(_))));
+        let gone = parse(
+            "<s:Envelope><s:Body><GetUserPhotoResponse ResponseClass=\"Error\"><ResponseCode>ErrorItemNotFound</ResponseCode></GetUserPhotoResponse></s:Body></s:Envelope>",
+        );
+        assert!(matches!(photo_of(&gone), Err(NetError::No(_))));
+    }
+
+    #[test]
+    fn a_contacts_picture_comes_with_the_contact() {
+        let mut d = crate::fake_ews::Data::default();
+        let contacts = d.folder("Contacts", None, Some("contacts"), "IPF.Contact");
+        d.pim.push((
+            "P1".into(),
+            contacts,
+            parse(
+                "<t:Contact><t:GivenName>Ana</t:GivenName><t:Attachments>\
+                 <t:FileAttachment IsContactPhoto=\"true\"><t:AttachmentId Id=\"A1\"/><t:Name>ContactPicture.jpg</t:Name></t:FileAttachment>\
+                 </t:Attachments></t:Contact>",
+            )
+            .kids[0]
+                .clone(),
+        ));
+        d.pim.push(("P2".into(), "contacts".into(), parse("<t:Contact><t:GivenName>Ben</t:GivenName></t:Contact>").kids[0].clone()));
+        let server = crate::fake_ews::serve(d);
+        let user = format!("{}{}{}", crate::fake_ews::DOMAIN, '\\', crate::fake_ews::USER);
+        let c = Client::connect(&server.url, &user, crate::fake_ews::PASSWORD, "riley@contoso.example").unwrap();
+        let (media, data) = c.contact_photo("P1").unwrap();
+        assert_eq!(media, "image/jpeg");
+        assert_eq!(data, vec![0xFF, 0xD8, 0xFF], "the bytes, not the base64 it came as");
+        assert!(matches!(c.contact_photo("P2"), Err(NetError::No(_))), "a contact with no picture is an answer, not a broken account");
+        assert!(matches!(c.contact_photo("ghost"), Err(NetError::No(_) | NetError::Protocol(_))), "an unknown contact is no picture either");
     }
 
     #[test]

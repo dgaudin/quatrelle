@@ -529,6 +529,35 @@ impl Session {
         self.person_photos.contains_key(&email) || self.photo_asked.contains(&email)
     }
 
+    /// Whether some account is one that keeps pictures of people (Exchange, Microsoft 365).
+    pub fn pictures_possible(&self) -> bool {
+        self.accounts.iter().any(|a| a.config.ews.is_some() || a.config.graph.is_some())
+    }
+
+    /// Whether a picture of that address can be had: one their contact item carries (an Exchange
+    /// address book's), or one the directory keeps for a colleague's address. A directory only
+    /// knows its own people, so an outsider's address is not asked for.
+    pub fn photo_possible_for(&self, email: &str) -> bool {
+        let email = email.trim();
+        if email.is_empty() || !self.pictures_possible() {
+            return false;
+        }
+        let own = self
+            .pim
+            .values()
+            .flat_map(|p| p.cards.iter())
+            .any(|c| c.href.starts_with("contact:") && c.card.emails.iter().any(|e| e.value.trim().eq_ignore_ascii_case(email)));
+        if own {
+            return true;
+        }
+        let domain = email.rsplit_once('@').map(|(_, d)| d.to_ascii_lowercase()).unwrap_or_default();
+        !domain.is_empty()
+            && self.accounts.iter().any(|a| {
+                (a.config.ews.is_some() || a.config.graph.is_some())
+                    && a.config.email.rsplit_once('@').is_some_and(|(_, d)| d.eq_ignore_ascii_case(&domain))
+            })
+    }
+
     /// Ask the directory (Exchange, Microsoft 365) for a person's picture, once: an address it
     /// doesn't know, or a server that keeps no pictures, is remembered as having none.
     pub fn fetch_person_photo(&mut self, account: Option<&str>, email: &str) -> CmdResult {
@@ -553,8 +582,17 @@ impl Session {
         let Some(account) = chosen else {
             return Err(CmdError::Disabled("no Exchange account to ask for pictures".into()));
         };
+        // The contact item's own picture first (Outlook's contacts keep one), then the
+        // directory's: the address book's id is what the server knows the item by.
+        let contact = self
+            .pim
+            .values()
+            .flat_map(|p| p.cards.iter())
+            .find(|c| c.card.emails.iter().any(|e| e.value.trim().eq_ignore_ascii_case(&email)))
+            .and_then(|c| c.href.strip_prefix("contact:").map(str::to_string))
+            .filter(|id| !id.is_empty());
         self.photo_asked.insert(email.clone());
-        self.jobs.push(Job::FetchPhoto { account, email });
+        self.jobs.push(Job::FetchPhoto { account, email, contact });
         Ok(serde_json::json!({"asked": true}))
     }
 

@@ -590,7 +590,14 @@ fn message_row(
     let who_addr = if sent_view { m.to.first().cloned().unwrap_or_default() } else { m.from.clone() };
     if !compact {
         let c = egui::pos2(x + 17.0, r.min.y + 26.0);
-        widgets::avatar(ui, c, 17.0, &who_addr.initials(), theme::avatar_color(&who_addr.email, t.dark));
+        // A sender whose picture we have (the directory's) shows it; otherwise their initials.
+        match crate::people::address_picture(ui, s, &who_addr.email) {
+            Some(tex) => {
+                let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
+                ui.painter().image(tex.id(), egui::Rect::from_center_size(c, vec2(34.0, 34.0)), uv, Color32::WHITE);
+            }
+            None => widgets::avatar(ui, c, 17.0, &who_addr.initials(), theme::avatar_color(&who_addr.email, t.dark)),
+        }
         x += 44.0;
     }
     let right = r.max.x - 14.0;

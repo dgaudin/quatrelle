@@ -470,8 +470,21 @@ impl Client {
     /// The picture the directory keeps for an address (`/users/{id}/photo/$value`): its bytes
     /// and type. `No` when the person has none.
     pub fn user_photo(&self, email: &str) -> Result<(String, Vec<u8>)> {
-        let path = format!("/users/{}/photo/$value", seg(email));
-        let r = Request::get(&format!("{}{path}", self.base), MAX_JSON).header("Authorization", &self.auth).header("Accept", "image/jpeg, image/png");
+        self.photo(&format!("/users/{}/photo/$value", seg(email)))
+    }
+
+    /// The picture a contact carries (`/me/contacts/{id}/photo/$value`): its bytes and type.
+    /// `No` when the contact has none.
+    pub fn contact_photo(&self, id: &str) -> Result<(String, Vec<u8>)> {
+        self.photo(&format!("/me/contacts/{}/photo/$value", seg(id)))
+    }
+
+    /// A picture endpoint's answer: its bytes and type.
+    fn photo(&self, path: &str) -> Result<(String, Vec<u8>)> {
+        let r = Request::get(&format!("{}{path}", self.base), MAX_JSON)
+            .header("Authorization", &self.auth)
+            .header("Accept", "image/jpeg, image/png, image/gif")
+            .header("Prefer", "IdType=\"ImmutableId\"");
         let resp = http::send(&r)?;
         if !resp.ok() {
             return Err(NetError::No("no picture for this person".into()));
