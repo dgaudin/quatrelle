@@ -19,7 +19,7 @@ use mailcraft_store::{OutboxItem, Store};
 use crate::imap::{Client, uid_set};
 use crate::jmap;
 use crate::stream::Stream;
-use crate::sync::{SyncOptions, fetch_body, sync_folder};
+use crate::sync::{SyncOptions, SyncReport, fetch_body, sync_folder};
 use crate::{NetError, Result, smtp};
 
 /// Where passwords live. The desktop app backs this with the system keychain.
@@ -1207,7 +1207,13 @@ impl Worker {
         if !self.relist() {
             return;
         }
-        let paths = sync_order(&self.folders);
+        let mut paths = sync_order(&self.folders);
+        if self.opts.parallel > 0 && paths.len() > 2 {
+            paths = self.sync_parallel(paths, rx);
+            if self.closed {
+                return;
+            }
+        }
         for path in paths {
             self.drain(rx);
             // What someone is waiting on jumps the queue: an opened message, automatic replies.
@@ -1289,6 +1295,11 @@ impl Worker {
             Some(Conn::Pop) => Ok(crate::pop::local_counts(&store, &id, path)),
             None => Err(NetError::Closed("not connected".into())),
         };
+        self.apply_report(path, result);
+    }
+
+    /// What a folder's sync changed: its counts, its list if any, and the account's state.
+    fn apply_report(&mut self, path: &str, result: std::result::Result<SyncReport, NetError>) {
         match result {
             Ok(r) => {
                 let first = self.folders.iter().find(|f| f.path == path).is_some_and(|f| f.total == 0 && r.total > 0);
@@ -1301,7 +1312,7 @@ impl Worker {
                     }
                 }
                 if r.touched() || first {
-                    self.sink.emit(Event::FolderChanged { account: id, folder: path.to_string() });
+                    self.sink.emit(Event::FolderChanged { account: self.acc.id.clone(), folder: path.to_string() });
                 }
                 if self.last_full.is_some() {
                     self.status(SyncStatus::Online { at: now() });
@@ -1309,6 +1320,75 @@ impl Worker {
             }
             Err(e) => self.failed(e),
         }
+    }
+
+    /// Read folders on connections of their own (up to `opts.parallel`), each taking folders
+    /// from a shared list, while this connection stays free for what someone is waiting on.
+    /// Answers the folders no connection read (none unless one was refused): the caller reads
+    /// them here.
+    fn sync_parallel(&mut self, paths: Vec<String>, rx: &Receiver<Job>) -> Vec<String> {
+        let n = self.opts.parallel.min(3).min(paths.len().saturating_sub(1));
+        if n == 0 || matches!(self.conn, Some(Conn::Pop) | None) {
+            return paths;
+        }
+        let Ok(secret) = self.secret() else {
+            return paths;
+        };
+        let queue = Arc::new(Mutex::new(paths.into_iter().collect::<VecDeque<String>>()));
+        let (tx, done) = mpsc::channel::<SyncDone>();
+        let mut running = 0usize;
+        for _ in 0..n {
+            // The numbers it may give, kept apart from this connection's (see `State::reserve`).
+            let state = self.jstate.reserve(1_000_000);
+            let (acc, store) = (self.acc.clone(), self.store.clone());
+            let (secret, opts, q, tx) = (secret.clone(), self.opts, queue.clone(), tx.clone());
+            if std::thread::Builder::new()
+                .name(format!("{} sync", acc.id))
+                .spawn(move || sync_folders(acc, store, secret, opts, state, q, tx))
+                .is_err()
+            {
+                break;
+            }
+            running += 1;
+        }
+        drop(tx);
+        // This connection answers what someone waits on meanwhile, then takes a folder of its
+        // own if the others are still at it.
+        let mut refused = false;
+        while running > 0 {
+            self.drain(rx);
+            let urgent: Vec<Job> = self.queue.iter().filter(|j| jumps_queue(j)).cloned().collect();
+            self.queue.retain(|j| !jumps_queue(j));
+            for j in urgent {
+                self.handle(j);
+            }
+            if self.closed {
+                break;
+            }
+            match done.recv_timeout(std::time::Duration::from_millis(25)) {
+                Ok(SyncDone::Folder(path, result)) => {
+                    self.status(SyncStatus::Syncing { folder: path.clone() });
+                    self.apply_report(&path, result.map_err(NetError::No));
+                }
+                Ok(SyncDone::State(state)) => {
+                    self.jstate.absorb(state);
+                    running -= 1;
+                }
+                Ok(SyncDone::Refused) => {
+                    // A server that takes only one connection (or says it's busy): the rest waits
+                    // for this one, and this account syncs on one connection from now on.
+                    refused = true;
+                    self.opts.parallel = 0;
+                }
+                Err(mpsc::RecvTimeoutError::Timeout) => {}
+                Err(mpsc::RecvTimeoutError::Disconnected) => break,
+            }
+        }
+        self.jstate.compact();
+        self.save_jstate();
+        // Whatever no connection took (a refusal, or a thread that couldn't start).
+        let _ = refused;
+        queue.lock().map(|q| q.iter().cloned().collect()).unwrap_or_default()
     }
 
     fn handle(&mut self, job: Job) {
@@ -2377,6 +2457,95 @@ fn sync_order(folders: &[Folder]) -> Vec<String> {
     let mut v: Vec<(&Folder, u8)> = folders.iter().filter(|f| f.selectable).map(|f| (f, rank(f))).collect();
     v.sort_by(|a, b| a.1.cmp(&b.1).then_with(|| a.0.path.cmp(&b.0.path)));
     v.into_iter().map(|(f, _)| f.path.clone()).collect()
+}
+
+/// What a connection of its own sends back while it reads folders.
+enum SyncDone {
+    /// A folder read, and what changed there.
+    Folder(String, std::result::Result<SyncReport, String>),
+    /// The numbers it gave while reading, when it's done.
+    State(jmap::State),
+    /// It couldn't connect: this account syncs on one connection.
+    Refused,
+}
+
+/// Open a connection like the account's main one, for a folder reader of its own.
+fn connect_for_sync(acc: &AccountConfig, store: &Store, secret: &str) -> Result<Conn> {
+    let user = if acc.username.is_empty() { acc.email.clone() } else { acc.username.clone() };
+    if let Some(url) = &acc.graph {
+        return Ok(Conn::Graph(crate::graph::Client::connect(url, secret)?));
+    }
+    if acc.pop.is_some() {
+        return Err(NetError::No("POP accounts read mail on one connection".into()));
+    }
+    if let Some(url) = &acc.ews {
+        let url = if url == crate::ews::AUTODISCOVER {
+            let kept: String = store.load_account_doc(&acc.id, "ews.json").unwrap_or_default();
+            if kept.is_empty() {
+                let found = crate::ews::autodiscover(&acc.email, &user, secret, None)?;
+                let _ = store.save_account_doc(&acc.id, "ews.json", &found);
+                found
+            } else {
+                kept
+            }
+        } else {
+            url.clone()
+        };
+        let c = crate::ews::Client::connect(&url, &user, secret, &acc.email)?;
+        c.set_shared(&acc.shared_mailboxes);
+        return Ok(Conn::Ews(Box::new(c)));
+    }
+    if let Some(url) = &acc.jmap {
+        return Ok(Conn::Jmap(jmap::Client::connect(url, &user, secret, acc.oauth.is_some())?));
+    }
+    let mut c = Client::connect(&acc.imap)?;
+    if acc.oauth.is_some() {
+        c.login_xoauth2(&user, secret)?;
+    } else {
+        c.login(&user, secret)?;
+    }
+    Ok(Conn::Imap(c))
+}
+
+/// Read folders from a shared list on a connection of its own, reporting each as it's read.
+fn sync_folders(
+    acc: AccountConfig,
+    store: Store,
+    secret: String,
+    opts: SyncOptions,
+    mut state: jmap::State,
+    queue: Arc<Mutex<VecDeque<String>>>,
+    tx: Sender<SyncDone>,
+) {
+    let mut conn = match connect_for_sync(&acc, &store, &secret) {
+        Ok(c) => c,
+        Err(e) => {
+            log::info!("{}: a second connection wasn't taken ({e}): the rest syncs on the first", acc.id);
+            let _ = tx.send(SyncDone::Refused);
+            let _ = tx.send(SyncDone::State(state));
+            return;
+        }
+    };
+    while let Some(path) = queue.lock().ok().and_then(|mut q| q.pop_front()) {
+        let r = match &mut conn {
+            Conn::Imap(c) => sync_folder(c, &store, &acc.id, &path, &opts),
+            Conn::Jmap(c) => jmap::sync_folder(c, &mut state, &store, &acc.id, &path, &opts),
+            Conn::Graph(c) => crate::graph::sync_folder(c, &mut state, &store, &acc.id, &path, &opts),
+            Conn::Ews(c) => crate::ews::sync_folder(c, &mut state, &store, &acc.id, &path, &opts),
+            Conn::Pop => Err(NetError::No("POP accounts read mail on one connection".into())),
+        };
+        let closed = matches!(&r, Err(NetError::Closed(_)));
+        if tx.send(SyncDone::Folder(path, r.map_err(|e| e.to_string()))).is_err() {
+            break;
+        }
+        if closed {
+            break;
+        }
+    }
+    if let Conn::Imap(mut c) = conn {
+        c.logout();
+    }
+    let _ = tx.send(SyncDone::State(state));
 }
 
 fn jumps_queue(j: &Job) -> bool {

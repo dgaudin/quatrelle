@@ -562,7 +562,10 @@ fn main() -> eframe::Result {
             let args = cmd_args;
             let backend: Box<dyn Backend> = match store {
                 Some(store) => {
-                    let pool = Pool::new(store, Arc::new(Keychain));
+                    let mut pool = Pool::new(store, Arc::new(Keychain));
+                    // Folders read on two connections of their own: the main one stays free
+                    // for what someone is waiting on (see `SyncOptions::parallel`).
+                    pool.opts.parallel = 2;
                     let ctx = cc.egui_ctx.clone();
                     pool.set_waker(Arc::new(move || ctx.request_repaint()));
                     Box::new(PoolBackend(pool))

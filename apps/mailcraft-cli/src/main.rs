@@ -139,6 +139,7 @@ fn start(s: &mut Session, store: &Store, account: &str) -> Result<Pool, String> 
     }
     let pw = password(&config.email)?;
     let mut pool = Pool::new(store.clone(), Arc::new(MemoryCredentials::default()));
+    pool.opts.parallel = 2;
     // Session::open queued Start jobs without passwords; replace them with one that has it.
     let _ = s.take_jobs();
     pool.submit(Job::Start { account: config, password: Some(Secret(pw)) });

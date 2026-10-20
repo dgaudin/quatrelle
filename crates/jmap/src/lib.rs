@@ -689,6 +689,33 @@ impl State {
         self.mailboxes.get(path).map(String::as_str).ok_or_else(|| Error::No(format!("there is no folder {} on the server", utf7::decode(path))))
     }
 
+    /// A copy of this state for a connection syncing on its own, with `count` numbers kept for it
+    /// so that two connections never give the same number to different messages. The numbers it
+    /// took are given back by [`State::absorb`], and [`State::compact`] returns the counter to
+    /// the numbers really in use once every such connection has finished.
+    pub fn reserve(&mut self, count: u32) -> State {
+        let base = self.next;
+        self.next = self.next.saturating_add(count);
+        State { next: base, ids: HashMap::new(), numbers: HashMap::new(), mailboxes: self.mailboxes.clone(), owners: self.owners.clone() }
+    }
+
+    /// Take what a connection of its own numbered while it read folders.
+    pub fn absorb(&mut self, other: State) {
+        self.ids.extend(other.ids);
+        self.numbers.extend(other.numbers);
+        // A folder it listed for the first time, or another mailbox it met.
+        for (path, id) in other.mailboxes {
+            self.mailboxes.entry(path).or_insert(id);
+        }
+        self.owners.extend(other.owners);
+    }
+
+    /// Put the counter back after the numbers kept by [`State::reserve`], so a long run of
+    /// parallel syncs doesn't walk the whole range.
+    pub fn compact(&mut self) {
+        self.next = self.ids.values().copied().max().unwrap_or(0).saturating_add(1);
+    }
+
     /// Forget numbers no cached message uses any more.
     pub fn prune(&mut self, keep: &std::collections::HashSet<u32>) {
         self.ids.retain(|_, n| keep.contains(n));
@@ -705,11 +732,14 @@ pub struct SyncOptions {
     pub prefetch: usize,
     /// Sources larger than this are only downloaded when opened.
     pub prefetch_max_bytes: u32,
+    /// Folders read on connections of their own, beside the main one (0: one at a time). The
+    /// main connection then stays free for what someone is waiting on.
+    pub parallel: usize,
 }
 
 impl Default for SyncOptions {
     fn default() -> Self {
-        SyncOptions { window: 1000, prefetch: 40, prefetch_max_bytes: 2 << 20 }
+        SyncOptions { window: 1000, prefetch: 40, prefetch_max_bytes: 2 << 20, parallel: 0 }
     }
 }
 
@@ -986,6 +1016,34 @@ mod tests {
         );
         assert_eq!(expand("/d/{blobId}/{name}", &[("blobId", "b 1"), ("name", "m.eml")]), "/d/b%201/m.eml");
         assert!(template_url(&base, "http://h.example/upload/{accountId}/").is_err(), "no downgrade");
+    }
+
+    /// Two connections numbering messages at once never give the same number to two of them,
+    /// and the counter comes back to what's really in use once they're done.
+    #[test]
+    fn numbers_reserved_for_connections_of_their_own() {
+        let mut main = State::default();
+        main.mailboxes.insert("INBOX".into(), "mb1".into());
+        let mut a = main.reserve(1_000_000);
+        let mut b = main.reserve(1_000_000);
+        let na = a.number("id-a");
+        let nb = b.number("id-b");
+        assert_ne!(na, nb, "two connections, two numbers");
+        assert!(!main.ids.contains_key("id-a") && !main.ids.contains_key("id-b"), "the main one saw neither yet");
+        assert_eq!(a.mailbox("INBOX").unwrap(), "mb1", "the folders come with the copy");
+        main.absorb(a);
+        main.absorb(b);
+        assert_eq!(main.id(na), Some("id-a"));
+        assert_eq!(main.id(nb), Some("id-b"));
+        assert_eq!(main.number("id-a"), na, "absorbed ids keep their number");
+        main.compact();
+        assert_eq!(main.next, nb.max(na) + 1, "the counter is back to what's used");
+        // A number it had already: the same one.
+        assert_eq!(main.number("id-a"), na);
+        let base = main.next;
+        let mut c = main.reserve(10);
+        assert_eq!(c.number("id-c"), base + 1, "a fresh block, above the numbers in use");
+        assert_eq!(main.next, base + 10, "and the main one keeps clear of it");
     }
 
     #[test]
