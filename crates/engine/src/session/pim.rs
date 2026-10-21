@@ -291,7 +291,37 @@ impl Session {
 
     /// The event (master, not an instance) with a uid, and its account.
     pub fn find_event(&self, uid: &str) -> Option<(&str, &StoredEvent)> {
-        self.pim.iter().find_map(|(a, p)| p.events.iter().find(|e| e.event.uid == uid && e.event.recurrence_id.is_none()).map(|e| (a.as_str(), e)))
+        let (account, at) = self.find_event_index(uid)?;
+        Some((account, self.pim.get(account)?.events.get(at)?))
+    }
+
+    /// Where the event a dialog names is: its account and its place in that account's list.
+    ///
+    /// An appointment read from Exchange carries its start after a `#` in its UID (several items
+    /// can share a series' UID), and that start changes when the appointment moves. A dialog
+    /// opened before a sync therefore still names the old one, and asking for it by that name
+    /// gave "no event `…`" while the appointment was there all along: the name without its start
+    /// finds it again, as long as only one appointment answers to it.
+    fn find_event_index(&self, uid: &str) -> Option<(&str, usize)> {
+        let exact = |e: &StoredEvent| e.event.uid == uid && e.event.recurrence_id.is_none();
+        if let Some(found) = self.pim.iter().find_map(|(a, p)| p.events.iter().position(exact).map(|at| (a.as_str(), at))) {
+            return Some(found);
+        }
+        let base = uid.split('#').next().unwrap_or(uid);
+        let mut found: Option<(&str, usize)> = None;
+        for (account, p) in &self.pim {
+            for (at, e) in p.events.iter().enumerate() {
+                if e.event.recurrence_id.is_some() || e.event.uid.split('#').next() != Some(base) {
+                    continue;
+                }
+                // Two of them: which one the dialog meant can't be told, so nothing is guessed.
+                if found.is_some() {
+                    return None;
+                }
+                found = Some((account.as_str(), at));
+            }
+        }
+        found
     }
 
     fn new_uid(&mut self) -> String {
@@ -328,12 +358,15 @@ impl Session {
 
     /// Change an event (all of its occurrences).
     pub fn update_event(&mut self, uid: &str, change: impl FnOnce(&mut CalEvent)) -> CmdResult {
-        let (account, _) =
-            self.find_event(uid).map(|(a, e)| (a.to_string(), e.calendar.clone())).ok_or_else(|| CmdError::Params(format!("no event `{uid}`")))?;
+        let (account, at, real) = self
+            .find_event_index(uid)
+            .and_then(|(a, at)| self.pim.get(a).and_then(|p| p.events.get(at)).map(|e| (a.to_string(), at, e.event.uid.clone())))
+            .ok_or_else(|| CmdError::Params(format!("no event `{uid}`")))?;
         let p = self.pim_mut(&account);
-        let Some(stored) = p.events.iter_mut().find(|e| e.event.uid == uid && e.event.recurrence_id.is_none()) else {
+        let Some(stored) = p.events.get_mut(at) else {
             return Err(CmdError::Params(format!("no event `{uid}`")));
         };
+        let _ = &real;
         if p.calendars.iter().any(|c| c.id == stored.calendar && c.read_only) {
             return Err(CmdError::Params("this calendar can't be changed".into()));
         }
@@ -345,7 +378,7 @@ impl Session {
         let remote = stored.calendar != LOCAL;
         stored.dirty |= remote;
         self.after_pim_change(&account, remote);
-        Ok(serde_json::json!({"uid": uid}))
+        Ok(serde_json::json!({"uid": real}))
     }
 
     /// Delete an event, or one occurrence of a recurring one (`occurrence`: its start).

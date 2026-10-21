@@ -1209,6 +1209,36 @@ fn calendar_events_on_this_computer() {
     done(s);
 }
 
+/// An appointment read from Exchange carries its start in its name (`…#<start>`), and a dialog
+/// opened before it moved still holds the old one: it finds the appointment all the same, when
+/// only one answers to the name without its start, instead of "no event `…`".
+#[test]
+fn an_appointment_answers_to_the_name_a_dialog_opened_with() {
+    let mut s = sample_session("event-name");
+    let uid = s.run("event.create", &json!({"summary": "test dga", "start": "2026-10-23T11:00", "end": "2026-10-23T12:00"})).unwrap()["uid"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    // What a copy read from Exchange looks like.
+    {
+        let account = "sample".to_string();
+        let p = s.pim_mut(&account);
+        if let Some(e) = p.events.iter_mut().find(|e| e.event.uid == uid) {
+            e.event.uid = "040000008200E00074C5B7101A82E00800000000A0FB60422C61DD01#1792569600".into();
+        }
+    }
+    let old = "040000008200E00074C5B7101A82E00800000000A0FB60422C61DD01#1792569600";
+    let moved = "040000008200E00074C5B7101A82E00800000000A0FB60422C61DD01#1792574700";
+    s.run("event.update", &json!({"uid": old, "summary": "test dga déplacé"})).unwrap();
+    let r = s.run("event.update", &json!({"uid": moved, "location": "Bureau"})).expect("the name of a moved appointment still finds it");
+    assert_eq!(r["uid"], old, "the appointment keeps its own name");
+    let (_, e) = s.find_event(old).expect("still there");
+    assert_eq!((e.event.summary.as_str(), e.event.location.as_str()), ("test dga déplacé", "Bureau"));
+    // Two appointments answering to the same name without its start: nothing is guessed.
+    assert!(s.run("event.update", &json!({"uid": "nobody#1", "summary": "x"})).is_err());
+    done(s);
+}
+
 /// A reminder is minutes before the start; it's kept through a change, and taken off when asked.
 #[test]
 fn a_reminder_is_set_kept_and_taken_off() {
