@@ -69,14 +69,22 @@ pub fn nav(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
         ui.add_space(8.0);
         let several = s.pim.values().map(|p| p.calendars.len()).sum::<usize>() > 1;
         // The calendars in groups, as Outlook's: this user's own, the groups kept on the server
-        // (a team's…), then those opened by their owner's address.
+        // (a team's…), then those opened by their owner's address; a shared mailbox's own
+        // calendar sits under its name, in the folder pane's order (issue #1).
+        let sections = s.pane_sections();
         let mut groups: Vec<(String, Vec<_>)> = vec![(tl!("My calendars").to_string(), Vec::new())];
         let mut shared = Vec::new();
         for a in &s.accounts {
             let Some(p) = s.pim.get(&a.config.id) else { continue };
             for c in &p.calendars {
                 if c.id.starts_with("shared:") {
-                    shared.push((a, c));
+                    if section_key(&sections, a, c).is_some() {
+                        if let Some((_, list)) = groups.first_mut() {
+                            list.push((a, c));
+                        }
+                    } else {
+                        shared.push((a, c));
+                    }
                 } else if c.group.is_empty() {
                     if let Some((_, list)) = groups.first_mut() {
                         list.push((a, c));
@@ -98,7 +106,15 @@ pub fn nav(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
                 .id_salt(("calendar-group", title))
                 .default_open(true)
                 .show(ui, |ui| {
+                    let mut last: Option<String> = None;
                     for (a, c) in list {
+                        if sections.len() > 1 {
+                            let key = section_key(&sections, a, c).unwrap_or_else(|| a.config.id.clone());
+                            if last.as_deref() != Some(key.as_str()) {
+                                section_heading(s, &t, ui, &key);
+                                last = Some(key);
+                            }
+                        }
                         calendar_row(s, &t, ui, a, c, acts);
                     }
                 });
@@ -118,6 +134,32 @@ pub fn nav(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
                 acts.push(Action::Dialog(Dialog::OpenSharedCalendar { email: String::new(), error: None }));
             }
         }
+    });
+}
+
+/// The mailbox a calendar belongs to, when it's a shared mailbox the folder pane opens
+/// (`<account>|<address>`).
+fn section_key(sections: &[quatrelle_engine::PaneSection], a: &quatrelle_engine::AccountState, c: &quatrelle_engine::model::pim::CalendarInfo) -> Option<String> {
+    let owner = c.id.strip_prefix("shared:")?.to_ascii_lowercase();
+    let key = format!("{}|{owner}", a.config.id);
+    sections.iter().any(|x| x.key == key).then_some(key)
+}
+
+/// A mailbox's name above its calendars, with the icon of a shared one.
+fn section_heading(s: &Session, t: &Tokens, ui: &mut Ui, key: &str) {
+    let (shared, name) = match key.split_once('|') {
+        Some((_, mailbox)) => (true, mailbox.to_string()),
+        None => (false, s.account(key).map(|a| a.config.email.clone()).unwrap_or_else(|| key.to_string())),
+    };
+    ui.add_space(4.0);
+    ui.horizontal(|ui| {
+        let (r, _) = ui.allocate_exact_size(vec2(8.0, 8.0), Sense::hover());
+        if shared {
+            icons::paint(ui.painter(), r.expand(3.0), Icon::People, t.dim);
+        } else if let Some(a) = s.account(key) {
+            ui.painter().circle_filled(r.center(), 4.0, theme::account_color(a.config.color));
+        }
+        ui.add(egui::Label::new(RichText::new(name).font(theme::bold(12.0)).color(t.dim)).truncate());
     });
 }
 

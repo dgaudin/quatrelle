@@ -824,6 +824,13 @@ pub fn registry() -> Registry {
             s.move_account(&id, by.clamp(-1000, 1000))
         })
         .params(r#"{"account": string, "by": number (-1 moves it up, 1 down)}"#),
+        CommandSpec::new("folderPane.move", "Move mailbox", "Folder pane › mailbox menu", |s, v| {
+            let key = p::req_str(v, "key")?.to_string();
+            let by = p::i64(v, "by").ok_or_else(|| CmdError::Params("`by` is required: -1 (up) or 1 (down)".into()))?;
+            let to = s.move_pane_section(&key, by.clamp(-1000, 1000))?;
+            Ok(json!({"key": key, "position": to}))
+        })
+        .params(r#"{"key": string (an account id, or <account>|<address> for a shared mailbox), "by": number (-1 moves it up, 1 down)}"#),
         CommandSpec::new("account.remove", "Remove account", "File › Accounts", |s, v| {
             let id = p::req_str(v, "account")?.to_string();
             s.remove_account(&id)

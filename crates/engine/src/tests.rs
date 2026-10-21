@@ -3759,3 +3759,44 @@ fn an_account_can_be_kept_online_only() {
     assert!(!again.store.as_ref().unwrap().is_online_only("sample"));
     done(s);
 }
+
+/// Issue #1: a shared mailbox an account opens is a mailbox of its own in the folder pane,
+/// after its account at first, and moves among the mailboxes as an account does (the accounts'
+/// own order follows); the order is kept with the settings.
+#[test]
+fn shared_mailboxes_are_mailboxes_of_their_own_in_the_pane() {
+    use quatrelle_model::Folder;
+    let mut s = sample_session("pane-order");
+    let a = s
+        .run("account.add", &json!({"email": "riley@contoso.example", "password": "pw", "ews": "http://127.0.0.1:1/EWS/Exchange.asmx"}))
+        .unwrap()["account"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let folder = |path: &str, mailbox: Option<&str>| Folder {
+        account: a.clone(),
+        path: path.into(),
+        mailbox: mailbox.map(str::to_string),
+        ..Default::default()
+    };
+    s.apply(Event::Folders {
+        account: a.clone(),
+        folders: vec![folder("INBOX", None), folder("Sales", Some("Sales@contoso.example")), folder("Sales/Inbox", Some("Sales@contoso.example"))],
+    });
+    let keys = |s: &Session| s.pane_sections().into_iter().map(|x| x.key).collect::<Vec<_>>();
+    let sales = format!("{a}|sales@contoso.example");
+    assert_eq!(keys(&s), ["sample".to_string(), a.clone(), sales.clone()]);
+    assert_eq!(s.pane_sections()[2].mailbox.as_deref(), Some("Sales"));
+    // The shared mailbox to the top, then the sample mailbox below Riley's account.
+    s.run("folderPane.move", &json!({"key": sales, "by": -2})).unwrap();
+    assert_eq!(keys(&s), [sales.clone(), "sample".to_string(), a.clone()]);
+    s.run("account.move", &json!({"account": "sample", "by": 1})).unwrap();
+    assert_eq!(keys(&s), [sales.clone(), a.clone(), "sample".to_string()]);
+    assert_eq!(s.accounts.iter().map(|x| x.config.id.clone()).collect::<Vec<_>>(), [a.clone(), "sample".to_string()], "the accounts follow");
+    assert_eq!(s.prefs.pane_order, keys(&s), "kept with the settings");
+    assert!(s.run("folderPane.move", &json!({"key": "nobody", "by": 1})).is_err());
+    // A mailbox gone from the server leaves the order; a new one comes after its account.
+    s.apply(Event::Folders { account: a.clone(), folders: vec![folder("INBOX", None), folder("Team", Some("team@contoso.example"))] });
+    assert_eq!(keys(&s), [a.clone(), format!("{a}|team@contoso.example"), "sample".to_string()]);
+    done(s);
+}
