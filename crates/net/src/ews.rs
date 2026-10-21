@@ -1951,6 +1951,57 @@ fn mime_word(s: &str) -> String {
     if s.is_ascii() { s.to_string() } else { format!("=?UTF-8?B?{}?=", b64(s.as_bytes())) }
 }
 
+/// Messages the server finds for `query` in `folders` (paths), as the headers a sync reads:
+/// Exchange searches with its own index, bodies included, so a message whose text isn't on this
+/// computer is found too — what Outlook does. `limit` bounds the answer (its newest ones).
+pub fn search(c: &Client, st: &mut State, account: &str, folders: &[String], query: &str, limit: usize) -> Result<Vec<Summary>> {
+    let query = query.trim();
+    if query.is_empty() {
+        return Ok(Vec::new());
+    }
+    // The folders this account's state knows, and their ids on the server.
+    let mut known: Vec<(String, String)> = Vec::new();
+    for path in folders {
+        if let Ok(id) = st.mailbox(path) {
+            known.push((path.clone(), id.to_string()));
+        }
+        // A request with hundreds of folder ids is refused; the first eighty are plenty for a
+        // search that shows what it found.
+        if known.len() >= 80 {
+            break;
+        }
+    }
+    if known.is_empty() {
+        return Ok(Vec::new());
+    }
+    let ids: String = known.iter().map(|(_, id)| format!("<t:FolderId Id=\"{}\"/>", esc(id))).collect();
+    let m = c.call_one(&format!(
+        "<m:FindItem Traversal=\"Shallow\"><m:ItemShape><t:BaseShape>IdOnly</t:BaseShape><t:AdditionalProperties>{HEADER_FIELDS}{FLAG_FIELDS}         <t:FieldURI FieldURI=\"item:ParentFolderId\"/><t:FieldURI FieldURI=\"item:HasAttachments\"/><t:FieldURI FieldURI=\"item:Size\"/></t:AdditionalProperties></m:ItemShape>\
+         <m:IndexedPageItemView MaxEntriesReturned=\"{}\" Offset=\"0\" BasePoint=\"Beginning\"/>\
+         <m:SortOrder><t:FieldOrder Order=\"Descending\"><t:FieldURI FieldURI=\"item:DateTimeReceived\"/></t:FieldOrder></m:SortOrder>\
+         <m:ParentFolderIds>{ids}</m:ParentFolderIds>\
+         <m:QueryString>{}</m:QueryString></m:FindItem>",
+        limit.clamp(1, 500),
+        esc(query)
+    ))?;
+    let path_of: HashMap<&str, &str> = known.iter().map(|(path, id)| (id.as_str(), path.as_str())).collect();
+    let first = known.first().map(|(path, _)| path.as_str()).unwrap_or_default();
+    let mut out = Vec::new();
+    let Some(items) = m.find("Items") else { return Ok(out) };
+    for it in &items.kids {
+        let Some(id) = it.child("ItemId").and_then(|i| i.attr("Id")) else { continue };
+        // The folder it's in, by the id it says it belongs to (a request may span several).
+        let folder = it.child("ParentFolderId").and_then(|p| p.attr("Id")).and_then(|i| path_of.get(i).copied()).unwrap_or(first);
+        let key = MessageKey { account: account.to_string(), folder: folder.to_string(), validity: VALIDITY, uid: st.number(id) };
+        let received = it.text_of("DateTimeReceived").and_then(jmap::utc_date).unwrap_or(0);
+        let size = it.text_of("Size").and_then(|s| s.trim().parse::<u32>().ok()).unwrap_or(0);
+        let mut found = mime::summary_from_header(&header_block(it), key, flags(it), size, received);
+        found.has_attachments = it.text_of("HasAttachments").is_some_and(|v| v == "true");
+        out.push(found);
+    }
+    Ok(out)
+}
+
 /// Refresh the folder list (and the folder ids behind it).
 pub fn list_folders(c: &Client, st: &mut State, account: &str) -> Result<Vec<Folder>> {
     let boxes = c.mailboxes()?;
@@ -2270,6 +2321,48 @@ mod tests {
         );
         let calls = server.data.lock().unwrap().calls.clone();
         assert!(calls.iter().any(|c| c == "UpdateInboxRules"), "{calls:?}");
+    }
+
+    #[test]
+    fn a_search_finds_a_message_whose_text_is_only_on_the_server() {
+        let mut d = crate::fake_ews::Data::default();
+        d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+        let archive = d.folder("Archive", None, None, "IPF.Note");
+        let inbox = d.by_name("Inbox").map(|f| f.id.clone()).unwrap_or_default();
+        // An old one: this computer has neither its headers nor its body.
+        d.deliver(
+            &archive,
+            b"From: Ada <ada@example.org>\r\nTo: riley@contoso.example\r\nSubject: Old notes\r\nDate: Tue, 01 Feb 2005 09:00:00 +0000\r\n\r\nwe tried deepseek in the lab\r\n",
+            true,
+            "2005-02-01T09:00:00Z",
+        );
+        d.deliver(
+            &inbox,
+            b"From: Bob <bob@example.org>\r\nTo: riley@contoso.example\r\nSubject: Lunch\r\nDate: Wed, 21 Oct 2026 09:00:00 +0000\r\n\r\npizza?\r\n",
+            false,
+            "2026-10-21T09:00:00Z",
+        );
+        let server = crate::fake_ews::serve(d);
+        let user = format!("{}\\{}", crate::fake_ews::DOMAIN, crate::fake_ews::USER);
+        let c = Client::connect(&server.url, &user, crate::fake_ews::PASSWORD, "riley@contoso.example").unwrap();
+        let mut st = State::default();
+        let folders: Vec<String> = list_folders(&c, &mut st, "a1").unwrap().into_iter().map(|f| f.path).collect();
+        assert!(folders.len() >= 2, "{folders:?}");
+        // The word is in a body that was never downloaded: the server answers anyway, with the
+        // headers the list shows.
+        let found = search(&c, &mut st, "a1", &folders, "deepseek", 50).unwrap();
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert_eq!(found[0].subject, "Old notes");
+        assert_eq!(found[0].from.email, "ada@example.org");
+        assert_eq!(found[0].key.folder, "Archive", "the folder it came from");
+        assert_eq!(found[0].date, 1_107_248_400);
+        assert_eq!(found[0].key.account, "a1");
+        // Nothing in the inbox has the word.
+        assert!(search(&c, &mut st, "a1", &folders, "pizza", 50).unwrap().iter().all(|m| m.subject != "Old notes"));
+        assert_eq!(search(&c, &mut st, "a1", &folders, "lunch", 50).unwrap().len(), 1);
+        // Two searches, one numbering: the same message keeps its key.
+        let again = search(&c, &mut st, "a1", &folders, "deepseek", 50).unwrap();
+        assert_eq!(again[0].key, found[0].key);
     }
 
     #[test]

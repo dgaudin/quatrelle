@@ -622,22 +622,52 @@ impl Data {
             }
             "FindItem" => {
                 // A folder the mailbox hasn't (a Notes folder, say): as Exchange answers.
-                let Some(folder) = op.child("ParentFolderIds").and_then(|p| p.kids.first()).and_then(|f| self.folder_id(f)) else {
+                let wanted_folders: Vec<String> =
+                    op.child("ParentFolderIds").map(|p| p.kids.iter().filter_map(|f| self.folder_id(f)).collect()).unwrap_or_default();
+                if wanted_folders.is_empty() {
                     out.push(err("ErrorFolderNotFound"));
                     return ("FindItemResponse".into(), out);
-                };
-                if self.unrouted(&folder) {
+                }
+                if wanted_folders.iter().any(|f| self.unrouted(f)) {
                     out.push(err("ErrorFolderNotFound"));
                     return ("FindItemResponse".into(), out);
                 }
                 let max: usize =
                     op.child("IndexedPageItemView").and_then(|v| v.attr("MaxEntriesReturned")).and_then(|o| o.parse().ok()).unwrap_or(1000);
-                let mut list: Vec<&It> = self.items.iter().filter(|i| i.folder == folder).collect();
+                let mut list: Vec<&It> = self.items.iter().filter(|i| wanted_folders.contains(&i.folder)).collect();
+                // A query: Exchange's own index, over subjects, addresses and bodies (every word
+                // has to be somewhere, as `QueryString` means).
+                let query = op.child("QueryString").map(|q| q.text.trim().to_ascii_lowercase()).unwrap_or_default();
+                if !query.is_empty() {
+                    let words: Vec<String> = query.split_whitespace().map(str::to_string).collect();
+                    list.retain(|i| {
+                        let p = quatrelle_mime::parse(&i.raw).unwrap_or_default();
+                        let all = i.raw.to_ascii_lowercase();
+                        let all = String::from_utf8_lossy(&all).to_string();
+                        let subject = p.subject.to_ascii_lowercase();
+                        let from = format!("{} {}", p.from.name.to_ascii_lowercase(), p.from.email.to_ascii_lowercase());
+                        words.iter().all(|w| subject.contains(w.as_str()) || from.contains(w.as_str()) || all.contains(w.as_str()))
+                    });
+                }
                 list.sort_by(|a, b| b.received.cmp(&a.received));
+                // With the headers asked for (a search): the fields a list shows, and the folder
+                // each message is in.
+                let mut uris = Vec::new();
+                op.all("FieldURI", &mut uris);
+                let asked = |u: &str| uris.iter().any(|f| f.attr("FieldURI") == Some(u));
+                let with_fields = asked("item:Subject");
+                let with_parent = asked("item:ParentFolderId");
                 let items: String = list
                     .iter()
                     .take(max)
                     .map(|i| {
+                        if with_fields {
+                            let mut x = self.item_xml(i, false);
+                            if with_parent {
+                                x = x.replace("</t:Message>", &format!("<t:ParentFolderId Id=\"{}\"/></t:Message>", i.folder));
+                            }
+                            return x;
+                        }
                         format!(
                             "<t:Message><t:ItemId Id=\"{}\" ChangeKey=\"ck\"/><t:IsRead>{}</t:IsRead>{}</t:Message>",
                             i.id,

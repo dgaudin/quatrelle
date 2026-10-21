@@ -1,6 +1,6 @@
 //! Engine tests: commands against the sample mailbox and scripted network events.
 
-use quatrelle_model::{Event, Flag, FolderRole, Job, Op, SyncStatus};
+use quatrelle_model::{EmailAddress, Event, Flag, FolderRole, Job, MessageKey, Op, Summary, SyncStatus};
 use quatrelle_store::Store;
 use serde_json::{Value, json};
 
@@ -225,6 +225,35 @@ fn search_finds_bodies_fields_and_attachment_names() {
     assert!(s.search.is_none());
     assert_eq!(s.list.len(), 7);
     let _ = SearchScope::All;
+    done(s);
+}
+
+#[test]
+fn what_the_server_finds_joins_what_the_index_found() {
+    let mut s = sample_session("server-search");
+    assert_eq!(s.run("search.run", &json!({"query": "deepseek"})).unwrap()["results"], 0);
+    // What Exchange answered: a message whose text is on the server only (an old one), so it
+    // never reached the index. It's shown with the others, as Outlook merges them.
+    let key = MessageKey { account: "sample".into(), folder: "Archive".into(), validity: 1, uid: 9_001 };
+    let mut m = Summary {
+        key: key.clone(),
+        subject: "Deepseek notes".into(),
+        from: EmailAddress { name: "Ada".into(), email: "ada@example.org".into() },
+        date: 1_107_248_400,
+        ..Default::default()
+    };
+    m.preview = "we tried deepseek in the lab".into();
+    s.apply(Event::Found { account: "sample".into(), query: "deepseek".into(), items: vec![m], error: None });
+    assert_eq!(s.list.len(), 1);
+    assert_eq!(s.list[0].subject, "Deepseek notes");
+    assert_eq!(s.summary(&key).map(|m| m.subject.as_str()), Some("Deepseek notes"), "it can be opened from there");
+    // Found twice (the index and the server): one row.
+    let again = s.list[0].clone();
+    s.apply(Event::Found { account: "sample".into(), query: "deepseek".into(), items: vec![again], error: None });
+    assert_eq!(s.list.len(), 1);
+    // Another search leaves them out.
+    s.run("search.run", &json!({"query": "projector"})).unwrap();
+    assert!(!s.list.iter().any(|m| m.subject == "Deepseek notes"));
     done(s);
 }
 

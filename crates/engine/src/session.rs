@@ -754,6 +754,13 @@ pub struct Session {
     pub search_pending: bool,
     /// Messages the search index adds per call (`usize::MAX`: no limit).
     search_budget: usize,
+    /// What the server found for the search on screen: Exchange's own index answers for the
+    /// messages whose body was never downloaded, and those are merged with the local answer the
+    /// way Outlook does.
+    found: Option<(String, Vec<Summary>)>,
+    /// The query (and scope) the server was asked about: once per search, however many slices
+    /// the local index takes.
+    server_asked: Option<(String, SearchScope)>,
     /// Outlook's "Download all": the messages still to bring onto this computer.
     download_all: Option<DownloadAll>,
     /// Pictures the directory keeps for addresses, by lowercased address (`None`: there is
@@ -873,6 +880,8 @@ impl Session {
             search: None,
             search_pending: false,
             search_budget: usize::MAX,
+            found: None,
+            server_asked: None,
             download_all: None,
             person_photos: BTreeMap::new(),
             photo_asked: HashSet::new(),
@@ -1314,6 +1323,19 @@ impl Session {
             }
             v
         };
+        // The server's own findings, after the local ones (Outlook merges them so): a message
+        // whose body is here shows once, from the index.
+        if let Some((q, _)) = &self.search
+            && let Some((found_for, found)) = &self.found
+            && found_for == q
+        {
+            for m in found {
+                let known = list.iter().any(|x| x.key == m.key || (!x.message_id.is_empty() && x.message_id == m.message_id));
+                if !known {
+                    list.push(m.clone());
+                }
+            }
+        }
         let filter = self.filter;
         list.retain(|m| self.filter_keeps(filter, m));
         if self.focus_split() {
@@ -2674,9 +2696,73 @@ impl Session {
             self.selection.clear();
             self.focus = None;
             self.reading = None;
+            self.found = None;
         }
         self.refresh_list();
+        self.ask_server(q, scope);
         self.list.len()
+    }
+
+    /// Ask the server's own index about the query, once: what it finds (bodies included) joins
+    /// the local answer when it arrives.
+    fn ask_server(&mut self, query: &str, scope: SearchScope) {
+        if query.is_empty() || self.store.is_none() {
+            return;
+        }
+        if self.server_asked.as_ref().is_some_and(|(q, s)| q == query && *s == scope) {
+            return;
+        }
+        self.server_asked = Some((query.to_string(), scope));
+        for (account, folder) in self.search_accounts(scope) {
+            self.jobs.push(Job::Search { account, query: query.to_string(), folder });
+        }
+    }
+
+    /// What the server found for a search: kept for the query on screen, and shown with the
+    /// messages the local index found (they answer at once; the server takes a moment).
+    fn found_by_server(&mut self, account: &str, query: &str, items: Vec<Summary>, error: Option<String>) {
+        let on_screen = self.search.as_ref().is_some_and(|(q, _)| q == query);
+        if on_screen {
+            let entry = match self.found.take() {
+                Some((q, v)) if q == query => (q, v),
+                _ => (query.to_string(), Vec::new()),
+            };
+            let mut v = entry.1;
+            for m in items {
+                if !v.iter().any(|x| x.key == m.key || (!x.message_id.is_empty() && x.message_id == m.message_id)) {
+                    v.push(m);
+                }
+            }
+            self.found = Some((query.to_string(), v));
+            self.refresh_list();
+        } else if !items.is_empty() {
+            // The query changed while the server was answering: keep them anyway, so typing the
+            // same search again shows them at once.
+            self.found = Some((query.to_string(), items));
+        }
+        if let Some(e) = error
+            && on_screen
+            && self.list.is_empty()
+        {
+            self.notice(format!("{account}: the server's search failed ({e})"), true);
+        }
+    }
+
+    /// The accounts a search asks the server about, with the folder when it's the one open.
+    /// Accounts whose server has an index of its own are the ones worth asking (Exchange's, here);
+    /// the others answer from this computer alone.
+    fn search_accounts(&self, scope: SearchScope) -> Vec<(String, Option<String>)> {
+        let indexed = |a: &AccountState| a.config.ews.is_some();
+        match scope {
+            SearchScope::Current => {
+                let folders: Vec<(String, Option<String>)> = self.view_folders().into_iter().map(|(a, f)| (a, Some(f))).collect();
+                if folders.is_empty() {
+                    return self.accounts.iter().filter(|a| indexed(a)).map(|a| (a.config.id.clone(), None)).collect();
+                }
+                folders.into_iter().filter(|(a, _)| self.account(a).is_some_and(indexed)).collect()
+            }
+            SearchScope::All => self.accounts.iter().filter(|a| indexed(a)).map(|a| (a.config.id.clone(), None)).collect(),
+        }
     }
 
     // ----- downloading -----
@@ -3783,6 +3869,7 @@ impl Session {
                 };
                 self.person_photos.insert(email.to_ascii_lowercase(), photo);
             }
+            Event::Found { account, query, items, error } => self.found_by_server(&account, &query, items, error),
             Event::Voted { key, choice, error } => self.voted(&key, &choice, error),
             Event::Body { key, raw } => {
                 self.show_body(&key, &raw);

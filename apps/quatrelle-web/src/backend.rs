@@ -447,7 +447,8 @@ async fn job(sh: &Rcs, id: &str, j: Job) {
         | Job::ImportPst { .. }
         | Job::ExportPst { .. }
         | Job::WorkOffline { .. }
-        | Job::SetSync { .. } => {}
+        | Job::SetSync { .. }
+        | Job::Search { .. } => {}
     }
 }
 
