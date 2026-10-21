@@ -71,6 +71,9 @@ pub struct Data {
     pub calls: Vec<String>,
     /// NTLM handshakes done (one per connection).
     pub handshakes: usize,
+    /// The next request on a signed-in connection is told to sign in again (a recycled
+    /// connection), once.
+    pub forget_sign_in: bool,
     /// The EWS address, for Autodiscover's answer.
     pub url: String,
     /// People whose calendars this account may change (delegates with editor rights).
@@ -153,6 +156,7 @@ impl Default for Data {
             basic: false,
             calls: Vec::new(),
             handshakes: 0,
+            forget_sign_in: false,
             url: String::new(),
             editors: Vec::new(),
             item_rights_only: false,
@@ -1057,26 +1061,33 @@ fn serve_connection(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>) {
                 respond(&mut s, 401, &[("WWW-Authenticate", "Basic realm=\"x\"".into())], b"");
                 continue;
             }
-        } else if !signed_in {
-            match auth.strip_prefix("NTLM ").and_then(unb64) {
-                Some(m) if m.get(8) == Some(&1) => {
-                    let c = crate::ntlm::make_challenge([9; 8], &[]);
-                    challenge = crate::ntlm::challenge(&c).ok();
-                    respond(&mut s, 401, &[("WWW-Authenticate", format!("NTLM {}", crate::imap::base64(&c)))], b"");
-                    continue;
-                }
-                Some(m) if m.get(8) == Some(&3) => {
-                    let ok = challenge.as_ref().is_some_and(|c| crate::ntlm::verify(c, &m, USER, DOMAIN, PASSWORD));
-                    if !ok {
-                        respond(&mut s, 401, &[("WWW-Authenticate", "NTLM".into()), ("WWW-Authenticate", "Negotiate".into())], b"");
+        } else {
+            // A connection the server no longer has signed in (it was recycled, or the session
+            // expired): the request is refused once, as Exchange does.
+            if signed_in && std::mem::take(&mut shared.lock().unwrap().forget_sign_in) {
+                signed_in = false;
+            }
+            if !signed_in {
+                match auth.strip_prefix("NTLM ").and_then(unb64) {
+                    Some(m) if m.get(8) == Some(&1) => {
+                        let c = crate::ntlm::make_challenge([9; 8], &[]);
+                        challenge = crate::ntlm::challenge(&c).ok();
+                        respond(&mut s, 401, &[("WWW-Authenticate", format!("NTLM {}", crate::imap::base64(&c)))], b"");
                         continue;
                     }
-                    signed_in = true;
-                    shared.lock().unwrap().handshakes += 1;
-                }
-                _ => {
-                    respond(&mut s, 401, &[("WWW-Authenticate", "Negotiate".into()), ("WWW-Authenticate", "NTLM".into())], b"");
-                    continue;
+                    Some(m) if m.get(8) == Some(&3) => {
+                        let ok = challenge.as_ref().is_some_and(|c| crate::ntlm::verify(c, &m, USER, DOMAIN, PASSWORD));
+                        if !ok {
+                            respond(&mut s, 401, &[("WWW-Authenticate", "NTLM".into()), ("WWW-Authenticate", "Negotiate".into())], b"");
+                            continue;
+                        }
+                        signed_in = true;
+                        shared.lock().unwrap().handshakes += 1;
+                    }
+                    _ => {
+                        respond(&mut s, 401, &[("WWW-Authenticate", "Negotiate".into()), ("WWW-Authenticate", "NTLM".into())], b"");
+                        continue;
+                    }
                 }
             }
         }

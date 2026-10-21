@@ -1002,6 +1002,14 @@ impl Client {
             } else {
                 return Err(NetError::Auth("the server offers no sign-in Quatrelle knows".into()));
             };
+            // A session that was signed in and is told 401 again (the server dropped or recycled
+            // the connection it signed in on, or an hour passed) isn't a wrong password: sign in
+            // once more, on a fresh connection, before telling the account to ask for it.
+            if *self.signed_in.borrow() && next == scheme {
+                *self.signed_in.borrow_mut() = false;
+                *self.conn.borrow_mut() = None;
+                continue;
+            }
             if scheme == next || attempt == 2 {
                 return Err(NetError::Auth("the server refused the user name or password".into()));
             }
@@ -2536,6 +2544,23 @@ mod tests {
         assert!(String::from_utf8_lossy(&raw).contains("deepseek"));
         assert!(lost.id(key.uid).is_some(), "and it is numbered again");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_connection_whose_sign_in_was_forgotten_signs_in_again() {
+        let mut d = crate::fake_ews::Data::default();
+        d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+        let server = crate::fake_ews::serve(d);
+        let user = format!("{}\\{}", crate::fake_ews::DOMAIN, crate::fake_ews::USER);
+        let c = Client::connect(&server.url, &user, crate::fake_ews::PASSWORD, "riley@contoso.example").unwrap();
+        let before = server.data.lock().unwrap().handshakes;
+        // The server forgot the session (a connection it recycled): the next request is refused
+        // once, and the account must sign in again rather than hear its password was refused.
+        server.data.lock().unwrap().forget_sign_in = true;
+        let mut st = State::default();
+        let folders = list_folders(&c, &mut st, "a1").unwrap();
+        assert!(!folders.is_empty());
+        assert!(server.data.lock().unwrap().handshakes > before, "signed in again");
     }
 
     #[test]
