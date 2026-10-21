@@ -1046,7 +1046,14 @@ impl Client {
         let doc = parse(&text);
         if let Some(fault) = doc.find("Fault") {
             let why = fault.find("faultstring").map(|f| f.text.clone()).unwrap_or_else(|| "the server refused the request".into());
-            return Err(NetError::Protocol(why));
+            // The fault's detail says which refusal it is (`ErrorInvalidRequest`) and, when the
+            // server gives one, a message naming the part it didn't like: "The request is invalid."
+            // alone left a refused calendar change unexplained.
+            let detail = fault.find("detail");
+            let code = detail.and_then(|d| d.text_of("ResponseCode")).unwrap_or("").trim().to_string();
+            let more = detail.and_then(|d| d.text_of("Message")).unwrap_or("").trim().to_string();
+            let said = [code, more].into_iter().filter(|s| !s.is_empty() && *s != why).collect::<Vec<_>>().join(": ");
+            return Err(NetError::Protocol(if said.is_empty() { why } else { format!("{why} ({said})") }));
         }
         if !resp.ok() {
             return Err(NetError::Protocol(format!("Exchange answered HTTP {}", resp.status)));

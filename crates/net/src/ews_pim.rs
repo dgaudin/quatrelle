@@ -197,32 +197,41 @@ pub fn event_of(it: &El) -> Option<CalEvent> {
     })
 }
 
-/// The fields of an appointment, in the order EWS wants them.
+/// The fields of an appointment, in the order EWS wants them, each with the field URI that names
+/// it in an update.
+///
+/// The URI's prefix is the type the property is declared on, and Exchange refuses the whole
+/// `UpdateItem` with "The request is invalid." when one is wrong: `item:Subject`, `item:Body` and
+/// `item:Categories` are on `ItemType`, while `calendar:Start`, `calendar:End`,
+/// `calendar:IsAllDayEvent`, `calendar:Location` and `calendar:Recurrence` are on
+/// `CalendarItemType`. A reminder sent as `calendar:ReminderIsSet` (it's `item:`) did just that,
+/// and the change stayed on this computer, Outlook on the old day. Each field now carries its
+/// URI instead of it being guessed from the field's name.
 fn event_fields(e: &CalEvent) -> Vec<(&'static str, String)> {
     let (start, end) = if e.all_day { (e.start, e.end.max(e.start + 86_400)) } else { (e.start, e.end.max(e.start)) };
     let mut f = vec![
-        ("Subject", format!("<t:Subject>{}</t:Subject>", esc(&e.summary))),
-        ("Body", format!("<t:Body BodyType=\"Text\">{}</t:Body>", esc(&e.description))),
+        ("item:Subject", format!("<t:Subject>{}</t:Subject>", esc(&e.summary))),
+        ("item:Body", format!("<t:Body BodyType=\"Text\">{}</t:Body>", esc(&e.description))),
     ];
     // Categories come between the item's fields and the appointment's (EWS keeps the schema's
     // order); none at all is left out (an empty list isn't allowed).
     if !e.categories.is_empty() {
         let list: String = e.categories.iter().map(|c| format!("<t:String>{}</t:String>", esc(c))).collect();
-        f.push(("Categories", format!("<t:Categories>{list}</t:Categories>")));
+        f.push(("item:Categories", format!("<t:Categories>{list}</t:Categories>")));
     }
     f.extend([
-        ("Start", format!("<t:Start>{}</t:Start>", utc(start))),
-        ("End", format!("<t:End>{}</t:End>", utc(end))),
-        ("IsAllDayEvent", format!("<t:IsAllDayEvent>{}</t:IsAllDayEvent>", e.all_day)),
-        ("Location", format!("<t:Location>{}</t:Location>", esc(&e.location))),
+        ("calendar:Start", format!("<t:Start>{}</t:Start>", utc(start))),
+        ("calendar:End", format!("<t:End>{}</t:End>", utc(end))),
+        ("calendar:IsAllDayEvent", format!("<t:IsAllDayEvent>{}</t:IsAllDayEvent>", e.all_day)),
+        ("calendar:Location", format!("<t:Location>{}</t:Location>", esc(&e.location))),
     ]);
     if let Some(r) = e.rrule.as_deref().and_then(|r| recurrence_xml(r, e.start)) {
-        f.push(("Recurrence", r));
+        f.push(("calendar:Recurrence", r));
     }
     // After Recurrence in EWS's schema, as Outlook writes it.
-    f.push(("ReminderIsSet", format!("<t:ReminderIsSet>{}</t:ReminderIsSet>", e.reminder.is_some())));
+    f.push(("item:ReminderIsSet", format!("<t:ReminderIsSet>{}</t:ReminderIsSet>", e.reminder.is_some())));
     if let Some(m) = e.reminder {
-        f.push(("ReminderMinutesBeforeStart", format!("<t:ReminderMinutesBeforeStart>{m}</t:ReminderMinutesBeforeStart>")));
+        f.push(("item:ReminderMinutesBeforeStart", format!("<t:ReminderMinutesBeforeStart>{m}</t:ReminderMinutesBeforeStart>")));
     }
     f
 }
@@ -787,10 +796,7 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
         } else {
             let mut updates: String = fields
                 .iter()
-                .map(|(name, x)| {
-                    let uri = if matches!(*name, "Subject" | "Body" | "Categories") { format!("item:{name}") } else { format!("calendar:{name}") };
-                    format!("<t:SetItemField><t:FieldURI FieldURI=\"{uri}\"/><t:CalendarItem>{x}</t:CalendarItem></t:SetItemField>")
-                })
+                .map(|(uri, x)| format!("<t:SetItemField><t:FieldURI FieldURI=\"{uri}\"/><t:CalendarItem>{x}</t:CalendarItem></t:SetItemField>"))
                 .collect();
             if e.event.rrule.is_none() {
                 updates.push_str("<t:DeleteItemField><t:FieldURI FieldURI=\"calendar:Recurrence\"/></t:DeleteItemField>");
@@ -1205,11 +1211,13 @@ mod tests {
                    <t:Start>2026-10-16T10:00:00Z</t:Start><t:End>2026-10-16T11:00:00Z</t:End></t:CalendarItem>";
         let e = event_of(parse(xml).find("CalendarItem").unwrap()).unwrap();
         assert_eq!(e.categories, ["Clients", "Red category"]);
-        let names: Vec<&str> = event_fields(&e).iter().map(|(n, _)| *n).collect();
-        assert_eq!(names.get(..4), Some(&["Subject", "Body", "Categories", "Start"][..]));
+        // Each field carries the URI its property is declared on (`item:` for the item's own,
+        // `calendar:` for the appointment's): Exchange refuses the request when one is wrong.
+        let names: Vec<&str> = event_fields(&e).iter().map(|(uri, _)| *uri).collect();
+        assert_eq!(names.get(..4), Some(&["item:Subject", "item:Body", "item:Categories", "calendar:Start"][..]));
         assert!(event_fields(&e).iter().any(|(_, x)| x.contains("<t:String>Red category</t:String>")));
         let plain = CalEvent { categories: Vec::new(), ..e };
-        assert!(event_fields(&plain).iter().all(|(n, _)| *n != "Categories"));
+        assert!(event_fields(&plain).iter().all(|(uri, _)| *uri != "item:Categories"));
     }
 
     /// The X.500 name comes out of an address book entry id; anything else (too short, another
