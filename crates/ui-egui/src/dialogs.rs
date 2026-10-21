@@ -1889,7 +1889,7 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Act
                     ui.label(RichText::new(tf!("Not in the dictionary: {word}", word = word)).strong());
                     ui.add_space(6.0);
                     ui.label(RichText::new(tl!("Suggestions")).color(t.dim).small());
-                    let suggestions = crate::spellcheck::suggest(&word, 8);
+                    let suggestions = crate::spellcheck::suggest(&word, 10);
                     if suggestions.is_empty() {
                         ui.label(RichText::new(tl!("No suggestions.")).color(t.faint).small());
                     }
