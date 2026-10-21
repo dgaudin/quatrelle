@@ -691,6 +691,21 @@ fn options(s: &Session, st: &UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
         setting(ui, false, tl!("Check the spelling as you type"), None, &mut |ui| {
             switch(ui, s.prefs.spell_check, tl!("Check the spelling as you type"), "view.spelling", acts);
         });
+        // The words added with "Add to dictionary", each taken back out here (they belong to the
+        // preferences, so they stay between starts).
+        if !s.prefs.spelling.is_empty() {
+            setting(ui, false, tl!("Your words"), None, &mut |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    for w in s.prefs.spelling.clone() {
+                        let label = format!("{w}  ✕");
+                        if ui.button(label).on_hover_text(tl!("Remove")).clicked() {
+                            acts.push(Action::Run("spelling.remove", serde_json::json!({"word": w.clone()})));
+                            crate::spellcheck::remove_word(&w);
+                        }
+                    }
+                });
+            });
+        }
         setting(ui, false, tl!("Show HTML mail formatted (otherwise as plain text)"), None, &mut |ui| {
             switch(ui, s.prefs.show_html, tl!("Show HTML mail formatted (otherwise as plain text)"), "view.html", acts);
         });

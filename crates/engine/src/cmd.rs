@@ -299,6 +299,12 @@ pub fn registry() -> Registry {
             Ok(json!({"word": word, "words": s.prefs.spelling}))
         })
         .params(r#"{"word": string}"#),
+        CommandSpec::new("spelling.remove", "Remove a word from the dictionary", "Message", |s, v| {
+            let word = p::req_str(v, "word")?.trim().to_lowercase();
+            s.prefs.spelling.retain(|w| !w.eq_ignore_ascii_case(&word));
+            Ok(json!({"word": word, "words": s.prefs.spelling}))
+        })
+        .params(r#"{"word": string}"#),
         CommandSpec::new("compose.attach", "Attach file", "Message › Insert", attach).params(r#"{"path": string} | {"name": string, "data": [bytes]}"#).when(has_compose),
         CommandSpec::new("compose.insertPicture", "Insert picture", "Message › Insert", insert_picture)
             .params(r#"{"path": string} | {"name": string, "data": [bytes]}, "insert"?: bool (default true), "at"?: number (character; default the end)"#)

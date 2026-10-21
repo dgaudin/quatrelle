@@ -975,6 +975,7 @@ month	May	5월
 	matches all of them	모두 일치
 	matches any of them	하나라도 일치
 	Spelling	맞춤법
+	Reminder	미리 알림
 	Check the spelling of the message (F7)	메시지의 맞춤법 검사(F7)
 	The dictionaries are still being read.	사전을 아직 읽는 중입니다.
 	No misspelt words.	맞춤법이 틀린 단어가 없습니다.
@@ -983,6 +984,8 @@ month	May	5월
 	No suggestions.	제안이 없습니다.
 	Change	변경
 	Add to dictionary	사전에 추가
+	Your words	사용자 사전
+	Remove “{word}” from the dictionary	사전에서 “{word}” 삭제
 	Stop underlining this word, here and in other messages	이 단어에 밑줄을 표시하지 않음(여기와 다른 메시지)
 	There's no message to check.	검사할 메시지가 없습니다.
 	Check the spelling as you type	입력할 때 맞춤법 검사
@@ -1017,5 +1020,4 @@ month	May	5월
 	{n} hours after	{n}시간 후
 	1 day after	1일 후
 	{n} days after	{n}일 후
-	Reminder	알림
 	None	없음

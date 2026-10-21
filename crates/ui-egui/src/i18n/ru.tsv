@@ -975,6 +975,7 @@ month	May	Май
 	matches all of them	совпадает со всеми
 	matches any of them	совпадает с любым
 	Spelling	Орфография
+	Reminder	Напоминание
 	Check the spelling of the message (F7)	Проверить орфографию сообщения (F7)
 	The dictionaries are still being read.	Словари ещё читаются.
 	No misspelt words.	Ошибок нет.
@@ -983,6 +984,8 @@ month	May	Май
 	No suggestions.	Нет вариантов.
 	Change	Заменить
 	Add to dictionary	Добавить в словарь
+	Your words	Ваши слова
+	Remove “{word}” from the dictionary	Удалить «{word}» из словаря
 	Stop underlining this word, here and in other messages	Больше не подчёркивать это слово здесь и в других сообщениях
 	There's no message to check.	Нет сообщения для проверки.
 	Check the spelling as you type	Проверять орфографию при вводе
@@ -1017,5 +1020,4 @@ month	May	Май
 	{n} hours after	через {n} часов
 	1 day after	через 1 день
 	{n} days after	через {n} дней
-	Reminder	Напоминание
 	None	Нет

@@ -972,6 +972,7 @@ month	May	mei
 	matches all of them	aan alle voldoet
 	matches any of them	aan minstens één voldoet
 	Spelling	Spelling
+	Reminder	Herinnering
 	Check the spelling of the message (F7)	Spelling van het bericht controleren (F7)
 	The dictionaries are still being read.	De woordenboeken worden nog gelezen.
 	No misspelt words.	Geen verkeerd gespelde woorden.
@@ -980,6 +981,8 @@ month	May	mei
 	No suggestions.	Geen suggesties.
 	Change	Wijzigen
 	Add to dictionary	Aan woordenboek toevoegen
+	Your words	Uw woorden
+	Remove “{word}” from the dictionary	„{word}“ uit het woordenboek verwijderen
 	Stop underlining this word, here and in other messages	Dit woord niet meer onderstrepen, hier en in andere berichten
 	There's no message to check.	Er is geen bericht om te controleren.
 	Check the spelling as you type	Spelling controleren tijdens het typen
@@ -1014,5 +1017,4 @@ month	May	mei
 	{n} hours after	{n} uur erna
 	1 day after	1 dag erna
 	{n} days after	{n} dagen erna
-	Reminder	Herinnering
 	None	Geen

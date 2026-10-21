@@ -973,6 +973,7 @@ month	May	5月
 	matches all of them	符合全部条件
 	matches any of them	符合任一条件
 	Spelling	拼写检查
+	Reminder	提醒
 	Check the spelling of the message (F7)	检查邮件拼写(F7)
 	The dictionaries are still being read.	正在读取词典。
 	No misspelt words.	没有拼写错误的单词。
@@ -981,6 +982,8 @@ month	May	5月
 	No suggestions.	没有建议。
 	Change	更改
 	Add to dictionary	添加到词典
+	Your words	您的词语
+	Remove “{word}” from the dictionary	从词典中删除“{word}”
 	Stop underlining this word, here and in other messages	不再为此单词加下划线（此处和其他邮件）
 	There's no message to check.	没有可检查的邮件。
 	Check the spelling as you type	键入时检查拼写
@@ -1015,5 +1018,4 @@ month	May	5月
 	{n} hours after	{n} 小时后
 	1 day after	1 天后
 	{n} days after	{n} 天后
-	Reminder	提醒
 	None	无
