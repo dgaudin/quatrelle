@@ -62,6 +62,18 @@ pub struct AgendaItem {
     pub reminder: Option<i64>,
 }
 
+/// A reminder that has come due: what a popup says about the appointment.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DueReminder {
+    /// Names the appointment's occurrence (`uid@start`): a series rings once for each of them.
+    pub key: String,
+    pub summary: String,
+    pub location: String,
+    /// When the appointment starts, and how long before it its reminder sounds.
+    pub start: i64,
+    pub minutes: i64,
+}
+
 /// A person in an address book.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Person {
@@ -90,6 +102,27 @@ impl Session {
         if let Err(e) = store.save_account_doc(account, PIM_DOC, p) {
             self.notice(format!("calendar and contacts could not be saved: {e}"), true);
         }
+    }
+
+    /// The reminders due at `now`: each appointment whose reminder time has come, whose start is
+    /// not more than a day past (a machine left off for a week doesn't ring for all of them).
+    pub fn reminders_due(&self, now: i64) -> Vec<DueReminder> {
+        let mut out = Vec::new();
+        for i in self.agenda(now - 86_400, now + 15 * 86_400) {
+            let Some(m) = i.reminder else { continue };
+            let due = i.start.saturating_sub(m.saturating_mul(60));
+            if due > now || due < now - 86_400 {
+                continue;
+            }
+            out.push(DueReminder {
+                key: format!("{}@{}", i.uid, i.occurrence),
+                summary: i.summary,
+                location: i.location,
+                start: i.start,
+                minutes: m,
+            });
+        }
+        out
     }
 
     /// An account's calendars and address books (made on first use).

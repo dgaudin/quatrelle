@@ -519,6 +519,10 @@ pub struct UiState {
     search_due: Option<f64>,
     /// Why the message being written couldn't be sent or saved, shown over it until dismissed.
     pub compose_alert: Option<String>,
+    /// Reminders already rung (`uid@start`), so one rings once however often it's looked at.
+    reminded: std::collections::HashSet<String>,
+    /// When the reminders were last looked at.
+    reminders_checked: i64,
     /// The attachment shown in place of its message's text (a click on its chip), as Outlook
     /// previews attachments in the reading pane.
     pub attachment_view: Option<(MessageKey, usize)>,
@@ -656,6 +660,8 @@ impl MailApp {
                 search_cursor_end: false,
                 search_due: None,
                 compose_alert: None,
+                reminded: Default::default(),
+                reminders_checked: 0,
                 attachment_view: None,
                 attachment_selected: None,
                 attachments_active: false,
@@ -805,6 +811,27 @@ impl MailApp {
     }
 
     /// The whole window.
+    /// Ring the reminders that have come due, in the system's own popup, as Outlook's popup does:
+    /// the window is otherwise only drawn when something happens, so it's woken four times a
+    /// minute to look. Each appointment rings once (`uid@start`), and only from fifteen days
+    /// before its start (a reminder can be that long) to a day after it.
+    fn ring_reminders(&mut self, ctx: &egui::Context) {
+        ctx.request_repaint_after(std::time::Duration::from_secs(30));
+        let now = self.session.clock.now + i64::from(self.session.clock.offset);
+        if now.saturating_sub(self.ui.reminders_checked) < 30 {
+            return;
+        }
+        self.ui.reminders_checked = now;
+        let title = i18n::as_written(|| tl!("Reminder").to_string());
+        for r in self.session.reminders_due(now) {
+            if !self.ui.reminded.insert(r.key.clone()) {
+                continue;
+            }
+            let body = if r.location.is_empty() { r.summary.clone() } else { format!("{}\n{}", r.summary, r.location) };
+            self.services.notify(&title, &body);
+        }
+    }
+
     pub fn ui(&mut self, ui: &mut Ui) {
         // The switch in Options, wherever it was changed from (a command, another window).
         spellcheck::set_on(self.session.prefs.spell_check);
@@ -821,6 +848,7 @@ impl MailApp {
             ctx.request_repaint();
             return;
         }
+        self.ring_reminders(&ctx);
         self.apply_language(&ctx);
         self.pump();
         self.announce(&ctx);
