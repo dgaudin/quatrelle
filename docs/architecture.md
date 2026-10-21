@@ -113,6 +113,13 @@ as written (`i18n::as_written`).
 attachment names for the chosen scope; candidates are verified against the full query, so the index
 may over-approximate but never misses. The index is rebuilt lazily after changes.
 
+The index only knows what is here, and what is here is bounded (a thousand headers, forty bodies
+per folder on some accounts). So the session also asks the server's own index, once per query
+(`Job::Search` → `Event::Found`): Exchange's `FindItem` with a `QueryString` made from the query's
+clauses (`ews::search`), over every folder the account knows, and the hits — whole summaries, with
+the item ids numbered as a sync numbers them, so a message found this way can be read and kept —
+are shown after the local ones, once each. IMAP's `SEARCH` isn't wired yet.
+
 ## Threading
 
 `model::thread` implements JWZ threading (as used by IMAP `THREAD=REFERENCES`): containers per

@@ -1951,11 +1951,48 @@ fn mime_word(s: &str) -> String {
     if s.is_ascii() { s.to_string() } else { format!("=?UTF-8?B?{}?=", b64(s.as_bytes())) }
 }
 
+/// The query in Exchange's own syntax (`QueryString`, its Advanced Query Syntax): the words, and
+/// the fields Quatrelle's queries name that Exchange knows too. A clause it has no word for
+/// (`is:unread`, `keyword:…`) is left to the local index rather than sent as nonsense.
+fn aqs_of(query: &str) -> String {
+    use quatrelle_model::search::{Field, Query as ModelQuery, Term};
+    let q = ModelQuery::parse(query);
+    let mut out: Vec<String> = Vec::new();
+    for c in q.clauses.iter().filter(|c| !c.negated) {
+        let part = match &c.term {
+            Term::Words(field, ws) => {
+                let prefix = match field {
+                    Field::From => "from:",
+                    Field::To => "to:",
+                    Field::Subject => "subject:",
+                    Field::Body => "body:",
+                    Field::Any => "",
+                };
+                ws.iter().map(|w| format!("{prefix}{w}")).collect::<Vec<_>>().join(" ")
+            }
+            Term::Phrase(field, s) => {
+                let s = s.replace('"', " ");
+                let prefix = match field {
+                    Field::From => "from:",
+                    Field::To => "to:",
+                    Field::Subject => "subject:",
+                    Field::Body => "body:",
+                    Field::Any => "",
+                };
+                format!("{prefix}\"{s}\"")
+            }
+            _ => continue,
+        };
+        out.push(part);
+    }
+    out.join(" ")
+}
+
 /// Messages the server finds for `query` in `folders` (paths), as the headers a sync reads:
 /// Exchange searches with its own index, bodies included, so a message whose text isn't on this
 /// computer is found too — what Outlook does. `limit` bounds the answer (its newest ones).
 pub fn search(c: &Client, st: &mut State, account: &str, folders: &[String], query: &str, limit: usize) -> Result<Vec<Summary>> {
-    let query = query.trim();
+    let query = aqs_of(query);
     if query.is_empty() {
         return Ok(Vec::new());
     }
@@ -1965,9 +2002,9 @@ pub fn search(c: &Client, st: &mut State, account: &str, folders: &[String], que
         if let Ok(id) = st.mailbox(path) {
             known.push((path.clone(), id.to_string()));
         }
-        // A request with hundreds of folder ids is refused; the first eighty are plenty for a
-        // search that shows what it found.
-        if known.len() >= 80 {
+        // A folder list of a mailbox's size (a hundred and ten here) is one small request; a
+        // thousand would not be.
+        if known.len() >= 250 {
             break;
         }
     }
@@ -1982,7 +2019,7 @@ pub fn search(c: &Client, st: &mut State, account: &str, folders: &[String], que
          <m:ParentFolderIds>{ids}</m:ParentFolderIds>\
          <m:QueryString>{}</m:QueryString></m:FindItem>",
         limit.clamp(1, 500),
-        esc(query)
+        esc(&query)
     ))?;
     let path_of: HashMap<&str, &str> = known.iter().map(|(path, id)| (id.as_str(), path.as_str())).collect();
     let first = known.first().map(|(path, _)| path.as_str()).unwrap_or_default();
@@ -2321,6 +2358,19 @@ mod tests {
         );
         let calls = server.data.lock().unwrap().calls.clone();
         assert!(calls.iter().any(|c| c == "UpdateInboxRules"), "{calls:?}");
+    }
+
+    #[test]
+    fn a_query_is_put_in_the_servers_own_words() {
+        // The words, and the fields Exchange knows; what only the local index can answer for is
+        // left out rather than sent as nonsense.
+        assert_eq!(aqs_of("deepseek"), "deepseek");
+        assert_eq!(aqs_of("deepseek report"), "deepseek report");
+        assert_eq!(aqs_of("from:ada subject:\"shot list\""), "from:ada subject:\"shot list\"");
+        assert_eq!(aqs_of("\"shot list\""), "\"shot list\"");
+        assert_eq!(aqs_of("is:unread deepseek"), "deepseek");
+        assert_eq!(aqs_of("is:unread"), "");
+        assert_eq!(aqs_of("-pizza lunch"), "lunch", "a negation stays with the index");
     }
 
     #[test]

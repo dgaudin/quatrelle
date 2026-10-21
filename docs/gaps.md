@@ -564,3 +564,18 @@ tester's does, a contact as Exchange keeps it, Outlook's clipboard), then fixed 
     the account with Online only ticked. What another app has open (an attachment in Word) stays
     until that app lets it go, and what Windows keeps of its own (its search index, if the
     data folder is indexed; the GPU driver's shader cache) is outside Quatrelle's reach.
+
+### v0.21 — Finding the mail that isn't here
+- **Search reaches the server:** a search only looked at what this computer kept, and what it keeps
+  is bounded (a thousand headers and forty bodies per folder by default), so a word in an old
+  message — a February 2005 one, here — found nothing. The search now also asks Exchange's own
+  index (`FindItem` + `QueryString` over every folder of the account, two hundred hits at most),
+  and its findings are merged with the local ones as Outlook merges them: shown after them, once
+  each (same message, same row), cleared with the next query. A hit can be read, kept, and marked
+  read or moved like any other: its item id is numbered as a sync numbers it, and that numbering
+  is saved.
+  - The query goes to the server in its own words: the words themselves, and the fields both
+    understand (`from:`, `to:`, `subject:`, a phrase in quotes); what only the local index can
+    answer for (`is:unread`, `keyword:…`, a negation) stays here rather than being sent as
+    nonsense.
+  - IMAP accounts still answer from this computer: their `SEARCH` is the next step.
