@@ -120,6 +120,11 @@ clauses (`ews::search`), over every folder the account knows, and the hits — w
 the item ids numbered as a sync numbers them, so a message found this way can be read and kept —
 are shown after the local ones, once each. IMAP's `SEARCH` isn't wired yet.
 
+A folder keeps a window of its own (`windows.json` with the account) when Show more asked for
+more than Options keeps: the worker syncs it that wide from then on, and a wider window takes the
+newest of what isn't kept yet rather than only what is older than the oldest kept, since a hit of
+the server's search can be older than the messages skipped.
+
 ## Threading
 
 `model::thread` implements JWZ threading (as used by IMAP `THREAD=REFERENCES`): containers per
