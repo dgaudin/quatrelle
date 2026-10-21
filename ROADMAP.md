@@ -444,3 +444,14 @@ local-first, media-aware v1); the fuller request is
   logs what each window reports about itself (outer and inner rectangles, monitor, scale) whenever
   it changes, which is how this was followed: the same window alternating between `2129,99` and
   `2190,154` frame after frame.
+- **2026-10-21** — **A search reaches the server:** the local index only knows what this computer
+  kept — a thousand headers and forty bodies per folder, by default — so a word in a February 2005
+  message found nothing, which is what a mail client is for. A search now also asks Exchange's own
+  index (`FindItem` with a `QueryString` built from the query's clauses: the words, and `from:`,
+  `to:`, `subject:`, a phrase in quotes; the rest stays with the index), over every folder of the
+  account, two hundred hits at most, and merges its findings with the local ones the way Outlook
+  does: after them, once each by key or Message-ID, cleared with the next query. A hit is numbered
+  as a sync numbers it — saved with the account's state — so it can be opened, kept, marked read or
+  moved. IMAP's `SEARCH` is next. The app icon is now the owner's own picture (`assets/icon.png`,
+  the 4L and the envelope): every size, the `.ico`, the `.icns` and the scalable SVG are sampled
+  from it by `cargo xtask icons`.

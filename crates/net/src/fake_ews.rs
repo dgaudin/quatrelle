@@ -639,7 +639,12 @@ impl Data {
                 // has to be somewhere, as `QueryString` means).
                 let query = op.child("QueryString").map(|q| q.text.trim().to_ascii_lowercase()).unwrap_or_default();
                 if !query.is_empty() {
-                    let words: Vec<String> = query.split_whitespace().map(str::to_string).collect();
+                    // A field's name (`from:`, `subject:`…) is a name, not a word to find.
+                    let words: Vec<String> = query
+                        .split_whitespace()
+                        .map(|w| w.rsplit_once(':').map_or(w, |(_, v)| v).trim_matches('"').to_string())
+                        .filter(|w| !w.is_empty())
+                        .collect();
                     list.retain(|i| {
                         let p = quatrelle_mime::parse(&i.raw).unwrap_or_default();
                         let all = i.raw.to_ascii_lowercase();
