@@ -310,7 +310,8 @@ fn contact_xml(c: &Card) -> String {
         x.push_str("</t:PhoneNumbers>");
     }
     // A birthday at midday UTC, so it's the same day everywhere.
-    if let Some(b) = quatrelle_model::vcard::birthday_of(&c.birthday).filter(|b| !b.starts_with("--")) {
+    // A birthday with no year (Exchange's placeholder year says so) goes back with it.
+    if let Some(b) = quatrelle_model::vcard::birthday_for_exchange(&c.birthday) {
         x.push_str(&format!("<t:Birthday>{b}T12:00:00Z</t:Birthday>"));
     }
     if !c.title.is_empty() {
@@ -408,7 +409,8 @@ pub fn card_of(it: &El) -> Option<Card> {
             .and_then(|b| quatrelle_jmap::utc_date(b.trim()))
             .map(|t| {
                 let (y, m, d) = quatrelle_model::dates::civil_from_days((t + 12 * 3600 - 1).div_euclid(86_400));
-                format!("{y:04}-{m:02}-{d:02}")
+                // The placeholder year Exchange stores for a day and month only isn't a year.
+                quatrelle_model::vcard::birthday_of(&format!("{y:04}-{m:02}-{d:02}")).unwrap_or_else(|| format!("{y:04}-{m:02}-{d:02}"))
             })
             .unwrap_or_default()
     };
@@ -1093,6 +1095,9 @@ fn read_notes(c: &Client, pim: &Pim, out: &mut DavSync) {
         Ok(list) => out.notes = Some(list.iter().filter_map(note_of).collect()),
         Err(e) => log::info!("no Notes folder: {e}"),
     }
+    // A scheduling tool can send several plain appointments under one series' UID: the engine
+    // keeps events by UID, so they would collapse into one.
+    quatrelle_model::pim::separate_shared_uids(&mut out.events);
 }
 
 #[cfg(test)]
