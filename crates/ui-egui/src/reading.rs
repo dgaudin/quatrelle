@@ -689,6 +689,33 @@ pub(crate) fn decode(ctx: &egui::Context, name: &str, data: &[u8], max: u32) -> 
     decode_with(ctx, name, data, max, false)
 }
 
+/// A picture cut to a circle: its middle square is kept (a picture that isn't square would
+/// otherwise fill a square box stretched, its circle an oval), then everything outside the
+/// circle goes, with a pixel of smoothing at its edge.
+fn round_pixels(img: image::RgbaImage) -> ([usize; 2], Vec<u8>) {
+    let (w, h) = (img.width(), img.height());
+    let side = w.min(h);
+    let square = if side == 0 || (w == side && h == side) {
+        img
+    } else {
+        image::imageops::crop_imm(&img, (w - side) / 2, (h - side) / 2, side, side).to_image()
+    };
+    let (w, h) = (square.width() as f32, square.height() as f32);
+    let mut ci = egui::ColorImage::from_rgba_unmultiplied([square.width() as usize, square.height() as usize], square.as_raw());
+    let (cx, cy, r) = (w / 2.0, h / 2.0, w.min(h) / 2.0);
+    for (i, px) in ci.pixels.iter_mut().enumerate() {
+        let (x, y) = ((i % square.width() as usize) as f32 + 0.5, (i / square.width() as usize) as f32 + 0.5);
+        let d = ((x - cx).powi(2) + (y - cy).powi(2)).sqrt();
+        if d > r {
+            px[3] = 0;
+        } else if d > r - 1.0 {
+            px[3] = (f32::from(px[3]) * (r - d)) as u8;
+        }
+    }
+    let bytes = ci.pixels.iter().flat_map(|p| p.to_array()).collect();
+    ([square.width() as usize, square.height() as usize], bytes)
+}
+
 /// A picture cut to a circle: what a person's picture looks like in a round avatar.
 pub(crate) fn decode_round(ctx: &egui::Context, name: &str, data: &[u8], max: u32) -> Option<egui::TextureHandle> {
     decode_with(ctx, name, data, max, true)
@@ -707,23 +734,8 @@ fn decode_with(ctx: &egui::Context, name: &str, data: &[u8], max: u32, round: bo
     let decoded = reader.decode().ok()?;
     // Shrink large pictures; never enlarge small ones (the painter scales them crisply).
     let img = if decoded.width() > max || decoded.height() > max { decoded.thumbnail(max, max) } else { decoded }.to_rgba8();
-    let size = [img.width() as usize, img.height() as usize];
-    let mut ci = egui::ColorImage::from_rgba_unmultiplied(size, img.as_raw());
-    if round && size[0] > 0 {
-        // Everything outside the circle goes, with a pixel of smoothing at its edge (a picture
-        // that isn't square keeps its middle).
-        let (w, h) = (size[0] as f32, size[1] as f32);
-        let (cx, cy, r) = (w / 2.0, h / 2.0, w.min(h) / 2.0);
-        for (i, px) in ci.pixels.iter_mut().enumerate() {
-            let (x, y) = ((i % size[0]) as f32 + 0.5, (i / size[0]) as f32 + 0.5);
-            let d = ((x - cx).powi(2) + (y - cy).powi(2)).sqrt();
-            if d > r {
-                px[3] = 0;
-            } else if d > r - 1.0 {
-                px[3] = (f32::from(px[3]) * (r - d)) as u8;
-            }
-        }
-    }
+    let (size, pixels) = if round { round_pixels(img) } else { ([img.width() as usize, img.height() as usize], img.into_raw()) };
+    let ci = egui::ColorImage::from_rgba_unmultiplied(size, &pixels);
     // Pixel art and tiny swatches stay crisp when scaled up.
     let filter = if size[0].max(size[1]) < 96 { egui::TextureOptions::NEAREST } else { egui::TextureOptions::LINEAR };
     Some(ctx.load_texture(name, ci, filter))
@@ -2515,4 +2527,25 @@ fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action
         });
     });
     st.editor = Some(ed);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A picture that isn't square is cut to its middle square before the circle: drawn in a
+    /// square box, a wide one was stretched and its "circle" came out an oval.
+    #[test]
+    fn a_round_picture_keeps_its_middle_square() {
+        let wide = image::RgbaImage::from_pixel(8, 4, image::Rgba([200, 100, 50, 255]));
+        let (size, pixels) = round_pixels(wide);
+        assert_eq!(size, [4, 4], "cut to the middle square, not stretched");
+        assert_eq!(pixels.len(), 4 * 4 * 4, "one RGBA for each pixel of the square");
+        let alpha = |i: usize| pixels[i * 4 + 3];
+        assert_eq!((alpha(0), alpha(3)), (0, 0), "the corners fall outside the circle");
+        assert!(alpha(5) > 0 || alpha(6) > 0, "the middle is kept");
+        // A square picture is left as it is.
+        let square = image::RgbaImage::from_pixel(16, 16, image::Rgba([1, 2, 3, 255]));
+        assert_eq!(round_pixels(square).0, [16, 16]);
+    }
 }
