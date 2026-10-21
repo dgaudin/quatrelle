@@ -975,6 +975,7 @@ month	May	5月
 	matches all of them	符合全部條件
 	matches any of them	符合任一條件
 	Spelling	拼字檢查
+	Reminder	提醒
 	Check the spelling of the message (F7)	檢查郵件拼字(F7)
 	The dictionaries are still being read.	正在讀取字典。
 	No misspelt words.	沒有拼字錯誤的字詞。
@@ -983,6 +984,8 @@ month	May	5月
 	No suggestions.	沒有建議。
 	Change	變更
 	Add to dictionary	加入字典
+	Your words	您的詞語
+	Remove “{word}” from the dictionary	從詞典中刪除「{word}」
 	Stop underlining this word, here and in other messages	不再為這個字詞加底線（此處和其他郵件）
 	There's no message to check.	沒有可檢查的郵件。
 	Check the spelling as you type	輸入時檢查拼字
@@ -1017,5 +1020,4 @@ month	May	5月
 	{n} hours after	{n} 小時後
 	1 day after	1 天後
 	{n} days after	{n} 天後
-	Reminder	提醒
 	None	無

@@ -76,6 +76,19 @@ pub fn add_word(word: &str) {
     }
 }
 
+/// Stop accepting a word the writer added (the command takes it out of the preferences).
+pub fn remove_word(word: &str) {
+    let w = word.trim();
+    if let Ok(mut p) = PERSONAL.write() {
+        p.retain(|x| !x.eq_ignore_ascii_case(w));
+    }
+}
+
+/// Whether the writer added this word (it can then be taken back out).
+pub fn added(word: &str) -> bool {
+    is_personal(word)
+}
+
 fn is_personal(word: &str) -> bool {
     PERSONAL.read().is_ok_and(|p| p.iter().any(|x| x.eq_ignore_ascii_case(word)))
 }

@@ -972,6 +972,7 @@ month	May	מאי
 	matches all of them	מתאים לכל התנאים
 	matches any of them	מתאים לאחד התנאים
 	Spelling	בדיקת איות
+	Reminder	תזכורת
 	Check the spelling of the message (F7)	בדיקת האיות של ההודעה (F7)
 	The dictionaries are still being read.	המילונים עדיין נטענים.
 	No misspelt words.	אין מילים שגויות.
@@ -980,6 +981,8 @@ month	May	מאי
 	No suggestions.	אין הצעות.
 	Change	החלפה
 	Add to dictionary	הוספה למילון
+	Your words	המילים שלך
+	Remove “{word}” from the dictionary	הסרת „{word}“ מהמילון
 	Stop underlining this word, here and in other messages	להפסיק להדגיש את המילה הזו, כאן ובהודעות אחרות
 	There's no message to check.	אין הודעה לבדיקה.
 	Check the spelling as you type	בדיקת איות תוך כדי הקלדה
@@ -1014,5 +1017,4 @@ month	May	מאי
 	{n} hours after	{n} שעות אחרי
 	1 day after	יום אחד אחרי
 	{n} days after	{n} ימים אחרי
-	Reminder	תזכורת
 	None	ללא

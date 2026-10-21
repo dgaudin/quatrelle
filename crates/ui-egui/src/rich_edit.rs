@@ -772,26 +772,37 @@ fn text_menu(resp: &egui::Response, ed: &mut Editor, c: &mut Compose, acts: &mut
     let shown = resp.context_menu(|ui| {
         ui.set_min_width(190.0);
         if let Some((range, word)) = &misspelt {
-            // Ten, as Outlook lists a good handful: the dictionaries put the likeliest first but
-            // not always first ("vai" → "vais" comes eighth), and five cut it off.
+            // Ten, as Outlook lists a good handful: the dictionaries put the likeliest words
+            // first but not always first ("vai" → "vais" comes eighth), and five cut it off.
             let suggestions = crate::spellcheck::suggest(word, 10);
-            for sug in &suggestions {
-                if ui.add_enabled(!c.sending, egui::Button::new(sug)).clicked() {
-                    let style = typing_style(&c.body, &c.styles, range.start);
-                    replace(ed, c, range.clone(), sug, style);
-                    let end = range.start + sug.chars().count();
-                    ed.refocus = Some(end..end);
+            // Under "Spelling", as Outlook's own submenu: what could take the word, and the
+            // writer's own dictionary (this word in it, or back out).
+            ui.menu_button(tl!("Spelling"), |ui| {
+                ui.set_min_width(170.0);
+                for sug in &suggestions {
+                    if ui.add_enabled(!c.sending, egui::Button::new(sug)).clicked() {
+                        let style = typing_style(&c.body, &c.styles, range.start);
+                        replace(ed, c, range.clone(), sug, style);
+                        let end = range.start + sug.chars().count();
+                        ed.refocus = Some(end..end);
+                        ui.close();
+                    }
+                }
+                if !suggestions.is_empty() {
+                    ui.separator();
+                }
+                if crate::spellcheck::added(word) {
+                    if ui.button(tf!("Remove “{word}” from the dictionary", word = word)).clicked() {
+                        acts.push(Action::Run("spelling.remove", serde_json::json!({"word": word.clone()})));
+                        crate::spellcheck::remove_word(word);
+                        ui.close();
+                    }
+                } else if ui.button(tl!("Add to dictionary")).on_hover_text(tl!("Stop underlining this word, here and in other messages")).clicked() {
+                    acts.push(Action::Run("spelling.add", serde_json::json!({"word": word.clone()})));
+                    crate::spellcheck::add_word(word);
                     ui.close();
                 }
-            }
-            if !suggestions.is_empty() {
-                ui.separator();
-            }
-            if ui.button(tl!("Add to dictionary")).on_hover_text(tl!("Stop underlining this word, here and in other messages")).clicked() {
-                acts.push(Action::Run("spelling.add", serde_json::json!({"word": word.clone()})));
-                crate::spellcheck::add_word(word);
-                ui.close();
-            }
+            });
             ui.separator();
         }
         let item = |ui: &mut Ui, label: &str, keys: &str, enabled: bool| -> bool {

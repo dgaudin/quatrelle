@@ -976,6 +976,7 @@ month	May	mai
 	matches all of them	correspond à toutes
 	matches any of them	correspond à au moins une
 	Spelling	Orthographe
+	Reminder	Rappel
 	Check the spelling of the message (F7)	Vérifier l’orthographe du message (F7)
 	The dictionaries are still being read.	Les dictionnaires sont en cours de lecture.
 	No misspelt words.	Aucun mot mal orthographié.
@@ -984,6 +985,8 @@ month	May	mai
 	No suggestions.	Aucune suggestion.
 	Change	Modifier
 	Add to dictionary	Ajouter au dictionnaire
+	Your words	Vos mots
+	Remove “{word}” from the dictionary	Retirer « {word} » du dictionnaire
 	Stop underlining this word, here and in other messages	Ne plus souligner ce mot, ici et dans les autres messages
 	There's no message to check.	Aucun message à vérifier.
 	Check the spelling as you type	Vérifier l’orthographe au fil de la saisie
@@ -1018,5 +1021,4 @@ month	May	mai
 	{n} hours after	{n} heures après
 	1 day after	1 jour après
 	{n} days after	{n} jours après
-	Reminder	Rappel
 	None	Aucun

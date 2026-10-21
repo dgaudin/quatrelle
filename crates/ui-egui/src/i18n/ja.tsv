@@ -973,6 +973,7 @@ month	May	5月
 	matches all of them	すべてに一致
 	matches any of them	いずれかに一致
 	Spelling	スペルチェック
+	Reminder	リマインダー
 	Check the spelling of the message (F7)	メッセージのスペルを確認 (F7)
 	The dictionaries are still being read.	辞書を読み込み中です。
 	No misspelt words.	スペルミスのある単語はありません。
@@ -981,6 +982,8 @@ month	May	5月
 	No suggestions.	候補はありません。
 	Change	変更
 	Add to dictionary	辞書に追加
+	Your words	ユーザー辞書
+	Remove “{word}” from the dictionary	「{word}」を辞書から削除
 	Stop underlining this word, here and in other messages	この単語に下線を付けない（このメッセージと他のメッセージ）
 	There's no message to check.	確認するメッセージがありません。
 	Check the spelling as you type	入力時にスペルを確認する
@@ -1015,5 +1018,4 @@ month	May	5月
 	{n} hours after	{n} 時間後
 	1 day after	1 日後
 	{n} days after	{n} 日後
-	Reminder	通知
 	None	なし
