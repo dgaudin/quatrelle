@@ -413,3 +413,10 @@ local-first, media-aware v1); the fuller request is
   it now keeps its kind, a fatal one stops the pass and backs off (5 s, doubling), the account
   goes back to one connection, and a connection left half-read after a timeout is dropped
   rather than reused (a stale 401 on it read as "the server refused the user name or password").
+- **2026-10-21** — **A first sync no longer reads a whole organisation's calendars:** on a fresh
+  profile nothing was ticked or unticked yet, so the calendar job read every shared calendar it
+  found (53 of them, four minutes, one Exchange round trip after another) before it got to the
+  contacts, and the Calendar and People pages looked empty. A sync that knows no shared calendar
+  yet lists them and reads none (as Outlook leaves them unticked, and as the engine records them
+  a moment later); contacts are read first, before any of it. Tested against the fake Exchange:
+  a first sync lists Ana's calendar, reads nothing of it, and has the contacts.

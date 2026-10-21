@@ -1476,6 +1476,50 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// A first sync (nothing known of other people's calendars yet) lists them and reads none:
+    /// Outlook leaves them unticked, and reading a whole organisation's weeks is minutes.
+    #[test]
+    fn a_first_sync_lists_other_peoples_calendars_without_reading_them() {
+        use quatrelle_model::pim::{Pim, shared_calendar_id};
+        let mut d = Data::default();
+        d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+        let cal = d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
+        let contacts = d.folder("Contacts", None, Some("contacts"), "IPF.Contact");
+        let ev = parse(
+            "<t:CalendarItem><t:Subject>Budget review</t:Subject><t:Start>2026-10-06T13:00:00Z</t:Start><t:End>2026-10-06T14:00:00Z</t:End>\
+             <t:IsAllDayEvent>false</t:IsAllDayEvent><t:UID>budget-1</t:UID></t:CalendarItem>",
+        );
+        d.pim.push(("M1".into(), cal, ev.kids[0].clone()));
+        // Ana's calendar, in one of Outlook's groups.
+        d.pim.push(("S1".into(), "mailbox:ana@contoso.example".into(), ev.kids[0].clone()));
+        let dn = |who: &str| format!("/o=Contoso/ou=Exchange Administrative Group (FYDIBOHF23SPDLT)/cn=Recipients/cn={who}");
+        d.directory = vec![(dn("ana"), "ana@contoso.example".into())];
+        d.wlinks = vec![wlink("IPM.Microsoft.WunderBar.Link", 3, 2, "Équipe : Studio", "Ana Lima", &dn("ana"))];
+        // One contact of this account's own.
+        d.pim.push((
+            "C1".into(),
+            contacts,
+            parse(
+                "<t:Contact><t:FileAs>Ana Lima</t:FileAs><t:DisplayName>Ana Lima</t:DisplayName><t:GivenName>Ana</t:GivenName>\
+                 <t:EmailAddresses><t:Entry>SmtpAddress</t:Entry><t:EmailAddress>ana@contoso.example</t:EmailAddress></t:EmailAddresses></t:Contact>",
+            )
+            .kids[0]
+                .clone(),
+        ));
+        let server = serve(d);
+        let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
+        let sync = crate::ews_pim::sync(&c, &Pim::default(), 1_792_000_000).unwrap();
+        // Its own calendar read.
+        assert!(sync.events.iter().any(|e| e.calendar == crate::ews_pim::CALENDAR && e.event.summary == "Budget review"));
+        // Ana's listed, and nothing of it read.
+        let ana = shared_calendar_id("ana@contoso.example");
+        assert!(sync.calendars.as_ref().is_some_and(|c| c.iter().any(|x| x.id == ana)), "{:?}", sync.calendars);
+        assert!(!sync.events.iter().any(|e| e.calendar == ana), "not read");
+        assert!(!sync.synced_calendars.contains(&ana));
+        // And the contacts came anyway.
+        assert!(sync.cards.iter().any(|k| k.card.name == "Ana Lima"), "contacts: {}", sync.cards.len());
+    }
+
     /// Away from the calendar only this account's own is read; in it, other people's calendars
     /// left unticked are listed but not read.
     #[test]
@@ -1666,8 +1710,14 @@ mod tests {
             links.iter().map(|l| (l.email.as_str(), l.name.as_str(), l.group.as_str())).collect::<Vec<_>>(),
             [("ana@contoso.example", "Ana Lima", "Équipe : Studio"), ("room.lyon@contoso.example", "Salle Lyon", "Salles")]
         );
-        // Opened here by address as well: once, under its group.
-        let pim = Pim { shared: vec!["ana@contoso.example".into()], ..Default::default() };
+        // Opened here by address as well: once, under its group. The list is known (a second
+        // sync: the first only lists them, see `a_first_sync_lists_other_peoples_calendars_without_reading_them`).
+        let known = |id: &str| quatrelle_model::pim::CalendarInfo { id: id.into(), ..Default::default() };
+        let pim = Pim {
+            shared: vec!["ana@contoso.example".into()],
+            calendars: vec![known(&shared_calendar_id("ana@contoso.example"))],
+            ..Default::default()
+        };
         let sync = crate::ews_pim::sync(&c, &pim, 1_792_000_000).unwrap();
         let cals = sync.calendars.clone().unwrap();
         let ana = shared_calendar_id("ana@contoso.example");
@@ -2032,7 +2082,12 @@ mod tests {
         let server = serve(d);
         let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
         crate::ews::list_folders(&c, &mut crate::jmap::State::default(), "a1").unwrap();
-        let out = crate::ews_pim::sync(&c, &quatrelle_model::pim::Pim::default(), 1_792_000_000).unwrap();
+        // A second sync: the first one only lists the others' calendars (see above).
+        let pim = quatrelle_model::pim::Pim {
+            calendars: vec![quatrelle_model::pim::CalendarInfo { id: "shared:sales@contoso.example".into(), ..Default::default() }],
+            ..Default::default()
+        };
+        let out = crate::ews_pim::sync(&c, &pim, 1_792_000_000).unwrap();
         let cals = out.calendars.clone().unwrap();
         let names: Vec<(&str, &str)> = cals.iter().map(|c| (c.id.as_str(), c.name.as_str())).collect();
         assert_eq!(names, [(crate::ews_pim::CALENDAR, "Agenda"), ("shared:sales@contoso.example", "Sales")], "{names:?}");

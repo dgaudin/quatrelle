@@ -855,11 +855,13 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
     // Other people's calendars: those opened here by their address, and those Outlook keeps in
     // the groups of its Calendar pane (under the group's name). Their mailbox's calendar folder
     // is read where the permissions they gave allow, and changed where they let this account.
+    // Contacts first: People shows them, and a first sync's whole address book mustn't wait
+    // behind a dozen colleagues' calendars.
+    read_contacts(c, &mut out)?;
     if pim.own_only {
         // The calendar isn't shown: this account's own is enough (the others are read once it is).
         out.calendars = Some(calendars);
         out.partial = true;
-        read_contacts(c, &mut out)?;
         read_notes(c, pim, &mut out);
         return Ok(out);
     }
@@ -891,12 +893,27 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
         }
         Err(e) => log::info!("no calendar groups: {e}"),
     }
-    let ticked = others.iter().filter(|(e, _, _, _)| !pim.not_read.contains(&quatrelle_model::pim::shared_calendar_id(e))).count();
+    // A profile that knows nothing of other people's calendars yet (a first sync): they're
+    // listed, none read. Outlook leaves them unticked, and ticking is what reads one; the engine
+    // records the ticks as soon as it sees the list, so the next sync reads the ones ticked.
+    let known = pim.calendars.iter().any(|c| quatrelle_model::pim::shared_calendar_owner(&c.id).is_some());
+    let ticked = others.iter().filter(|(e, _, _, _)| !known || !pim.not_read.contains(&quatrelle_model::pim::shared_calendar_id(e))).count();
     if !others.is_empty() {
-        log::info!("{} other people's calendars, {ticked} ticked and read", others.len());
+        log::info!("{} other people's calendars, {ticked} ticked{}", others.len(), if known { " and read" } else { " (listed, none read yet)" });
     }
     for (n, (email, name, group, asked)) in others.iter().enumerate() {
         let id = quatrelle_model::pim::shared_calendar_id(email);
+        if !*asked && !known {
+            calendars.push(CalendarInfo {
+                id,
+                name: name.clone(),
+                color: u8::try_from((n + 1) % 8).unwrap_or(0),
+                read_only: true,
+                ctag: String::new(),
+                group: group.clone(),
+            });
+            continue;
+        }
         let parent = calendar_folder(Some(&c.address_of(email)));
         // Editable when the folder's rights say so, or (some servers say nothing useful about
         // another mailbox's folder) when its events do, as Outlook finds by trying.
@@ -949,7 +966,6 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
         });
     }
     out.calendars = Some(calendars);
-    read_contacts(c, &mut out)?;
     let mut books = out.books.take().unwrap_or_default();
     // The organisation's shared contacts and calendars kept as public folders (on-premises
     // Exchange): read-only, as Outlook shows them under Public Folders. A server without public
