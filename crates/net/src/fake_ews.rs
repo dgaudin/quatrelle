@@ -108,6 +108,32 @@ pub struct Data {
 }
 
 /// A mailbox's Exchange address (its LegacyDN), as older servers name it.
+/// Whether a field URI names its property on the type it's declared on, as Exchange checks it: an
+/// `item:` property is on `ItemType`, a `calendar:` one on `CalendarItemType`. One on the wrong
+/// type is refused for the whole request ("The request is invalid."), which is what a reminder
+/// sent as `calendar:ReminderIsSet` got. What the lists don't know is left alone.
+fn field_uri_is_known(uri: &str) -> bool {
+    const ITEM: [&str; 8] = ["Subject", "Body", "Categories", "Sensitivity", "ReminderIsSet", "ReminderMinutesBeforeStart", "Importance", "IsDraft"];
+    const CALENDAR: [&str; 10] = [
+        "Start",
+        "End",
+        "IsAllDayEvent",
+        "Location",
+        "Recurrence",
+        "UID",
+        "RequiredAttendees",
+        "OptionalAttendees",
+        "LegacyFreeBusyStatus",
+        "TimeZone",
+    ];
+    let Some((kind, name)) = uri.split_once(':') else { return false };
+    match kind {
+        "item" => !CALENDAR.contains(&name),
+        "calendar" => !ITEM.contains(&name),
+        _ => true,
+    }
+}
+
 fn legacy_dn(address: &str) -> String {
     format!("/o=Contoso/ou=Exchange Administrative Group/cn=Recipients/cn={}", address.split('@').next().unwrap_or(address))
 }
@@ -749,7 +775,12 @@ impl Data {
                         continue;
                     }
                     if let Some((_, _, el)) = self.pim.iter_mut().find(|(i, _, _)| *i == id) {
-                        for u in ch.child("Updates").map(|u| u.kids.clone()).unwrap_or_default() {
+                        let updates = ch.child("Updates").map(|u| u.kids.clone()).unwrap_or_default();
+                        if updates.iter().filter_map(|u| u.find("FieldURI").and_then(|f| f.attr("FieldURI"))).any(|uri| !field_uri_is_known(uri)) {
+                            out.push(err("ErrorInvalidRequest"));
+                            continue;
+                        }
+                        for u in updates {
                             let field =
                                 u.find("FieldURI").and_then(|f| f.attr("FieldURI")).and_then(|f| f.split(':').nth(1)).unwrap_or("").to_string();
                             el.kids.retain(|k| k.name != field);
@@ -1375,6 +1406,56 @@ mod tests {
         assert_eq!((moved.event.summary.as_str(), moved.event.rrule.as_deref()), ("Stand-up (moved)", None));
         // No Notes folder on this server: notes stay on this computer.
         assert!(sync.notes.is_none());
+    }
+
+    /// A meeting's date can be changed on the server: a field URI that names its property on the
+    /// wrong type makes Exchange refuse the whole `UpdateItem` ("The request is invalid."), and
+    /// the change then stays on this computer while Outlook keeps the old day.
+    #[test]
+    fn a_meeting_moves_to_another_day_on_the_server() {
+        use quatrelle_model::ical::CalEvent;
+        use quatrelle_model::pim::{Pim, StoredEvent};
+        let mut d = Data::default();
+        d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+        let cal = d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
+        d.folder("Contacts", None, Some("contacts"), "IPF.Contact");
+        d.pim.push((
+            "M1".into(),
+            cal,
+            parse(
+                "<t:CalendarItem><t:Subject>test dga</t:Subject><t:Body BodyType=\"Text\">Point</t:Body>\
+                 <t:Start>2026-10-21T09:00:00Z</t:Start><t:End>2026-10-21T09:30:00Z</t:End><t:IsAllDayEvent>false</t:IsAllDayEvent>\
+                 <t:Location>Bureau</t:Location><t:UID>test-dga-1</t:UID></t:CalendarItem>",
+            )
+            .kids[0]
+                .clone(),
+        ));
+        let server = serve(d);
+        let user = format!("{DOMAIN}\\{USER}");
+        let c = crate::ews::Client::connect(&server.url, &user, PASSWORD, "riley@contoso.example").unwrap();
+        let mut pim = Pim::default();
+        pim.events.push(StoredEvent {
+            calendar: crate::ews_pim::CALENDAR.into(),
+            href: "M1".into(),
+            event: CalEvent {
+                uid: "test-dga-1".into(),
+                summary: "test dga".into(),
+                location: "Bureau".into(),
+                start: 1_792_000_000,
+                end: 1_792_001_800,
+                ..Default::default()
+            },
+            dirty: true,
+            ..Default::default()
+        });
+        let sync = crate::ews_pim::sync(&c, &pim, 1_792_000_000).unwrap();
+        assert!(sync.errors.is_empty(), "{:?}", sync.errors);
+        let day = {
+            let data = server.data.lock().unwrap();
+            let (_, _, el) = data.pim.iter().find(|(i, _, _)| i == "M1").unwrap();
+            el.text_of("Start").unwrap_or_default().to_string()
+        };
+        assert_eq!(day, "2026-10-14T17:46:40Z", "the server has the new day");
     }
 
     #[test]
