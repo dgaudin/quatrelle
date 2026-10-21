@@ -1384,7 +1384,13 @@ impl Worker {
             match done.recv_timeout(std::time::Duration::from_millis(25)) {
                 Ok(SyncDone::Folder(path, result)) => {
                     self.status(SyncStatus::Syncing { folder: path.clone() });
-                    self.apply_report(&path, result.map_err(NetError::No));
+                    // A reader that timed out or lost its connection says the server doesn't want
+                    // several of us right now (Exchange throttles a first full sync): the rest
+                    // goes on this connection, and a fatal error stops the pass (`failed`).
+                    if result.as_ref().is_err_and(NetError::is_fatal) {
+                        self.opts.parallel = 0;
+                    }
+                    self.apply_report(&path, result);
                 }
                 Ok(SyncDone::State(state)) => {
                     self.jstate.absorb(state);
@@ -2477,8 +2483,9 @@ fn sync_order(folders: &[Folder]) -> Vec<String> {
 
 /// What a connection of its own sends back while it reads folders.
 enum SyncDone {
-    /// A folder read, and what changed there.
-    Folder(String, std::result::Result<SyncReport, String>),
+    /// A folder read, and what changed there (or why not, as it was: a connection that timed
+    /// out must stop the sync, not pass for "no such folder").
+    Folder(String, std::result::Result<SyncReport, NetError>),
     /// The numbers it gave while reading, when it's done.
     State(jmap::State),
     /// It couldn't connect: this account syncs on one connection.
@@ -2551,7 +2558,7 @@ fn sync_folders(
             Conn::Pop => Err(NetError::No("POP accounts read mail on one connection".into())),
         };
         let closed = matches!(&r, Err(NetError::Closed(_)));
-        if tx.send(SyncDone::Folder(path, r.map_err(|e| e.to_string()))).is_err() {
+        if tx.send(SyncDone::Folder(path, r)).is_err() {
             break;
         }
         if closed {

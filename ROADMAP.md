@@ -405,3 +405,11 @@ local-first, media-aware v1); the fuller request is
   (`\0MailCraft:deflate\0`, `\0MailCraft:pieces\0`) are read beside the new ones, and a test writes
   a data file carrying them and reads both kinds of value back. The lesson: a marker kept inside
   the data is a format, not a name — it may only change with a migration.
+- **2026-10-21** — **A timed-out folder no longer stops at "Updating…" for an hour:** on a fresh
+  install, Exchange slowed down (or throttled the first full sync of 110 folders on four
+  connections), a request ran past the 60 s read timeout, and every folder after it was asked
+  for on the main connection, one 60 s timeout each: the window sat on "Updating Drafts" for
+  minutes. A reader's error was being flattened to "not found", so it never stopped the pass;
+  it now keeps its kind, a fatal one stops the pass and backs off (5 s, doubling), the account
+  goes back to one connection, and a connection left half-read after a timeout is dropped
+  rather than reused (a stale 401 on it read as "the server refused the user name or password").
