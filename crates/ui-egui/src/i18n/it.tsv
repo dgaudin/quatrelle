@@ -1021,3 +1021,18 @@ month	May	maggio
 	1 day after	1 giorno dopo
 	{n} days after	{n} giorni dopo
 	None	Nessuno
+	Close Quatrelle?	Chiudere Quatrelle?
+	Close anyway	Chiudi comunque
+	Edit notes	Modifica note
+	Getting them from the server…	Recupero dal server…
+	Its mail stays on the server and is held in memory only while Quatrelle runs: none of it is written to this computer, and each message downloads when you open it. Mail you send goes straight to the server; only mail that can't go yet (while offline) waits, and it's lost with changes made offline if Quatrelle closes first (you're asked). Calendars, contacts and notes on a server stay there; those kept only in Quatrelle are lost when it closes.	La sua posta resta sul server ed è tenuta solo in memoria finché Quatrelle è aperto: nulla viene scritto su questo computer, e ogni messaggio viene scaricato quando lo apri. La posta che invii va direttamente al server; aspetta solo quella che non può ancora partire (offline), che va persa insieme alle modifiche fatte offline se Quatrelle si chiude prima (ti viene chiesto). Calendari, contatti e note su un server restano lì; quelli conservati solo in Quatrelle vanno persi alla chiusura.
+	Mail older than what's kept here is only on the server.	La posta più vecchia di quella conservata qui è solo sul server.
+	Search the server	Cerca sul server
+	Searching the server…	Ricerca sul server…
+	Show more	Mostra altro
+	The account list (no passwords), the window's settings and the log	L'elenco degli account (senza password), le impostazioni della finestra e il registro
+	The server found {n}	Il server ne ha trovati {n}
+	These are held in memory only, as their accounts are online only, and are lost if Quatrelle closes now: {what}. Connect and send them first (Send / Receive), or close anyway.	Sono tenuti solo in memoria, perché i loro account sono solo online, e vanno persi se Quatrelle si chiude ora: {what}. Connettiti e inviali prima (Invia/Ricevi), oppure chiudi comunque.
+	{n} more on the server	altri {n} sul server
+	Changes not yet on the server: {n}	Modifiche non ancora sul server: {n}
+	Messages waiting to be sent: {n}	Messaggi in attesa di invio: {n}
