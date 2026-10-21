@@ -154,6 +154,9 @@ pub enum Job {
     /// Start (or restart) the worker for an account. `password` is set when the user just typed
     /// it (the app stores it in the system keychain); otherwise the keychain is asked.
     Start { account: AccountConfig, password: Option<Secret> },
+    /// Search the server itself (`folder`: that one only, else the account's own folders), for
+    /// what the local index can't answer for: bodies that were never downloaded.
+    Search { account: String, query: String, folder: Option<String> },
     /// Keep the outgoing server's own password (an account whose SMTP sign-in isn't the incoming
     /// server's: `smtp_username`), in the system keychain apart from the account's password.
     SmtpPassword { account: AccountConfig, password: Secret },
@@ -251,6 +254,7 @@ impl Job {
             | Job::SetServerRule { account, .. }
             | Job::DeleteServerRule { account, .. }
             | Job::FetchPhoto { account, .. }
+            | Job::Search { account, .. }
             | Job::SyncDav { account }
             | Job::ImportPst { account, .. }
             | Job::ExportPst { account, .. } => account,
@@ -307,6 +311,14 @@ pub enum Event {
     FolderChanged {
         account: String,
         folder: String,
+    },
+    /// What the server found for a search (whole messages, ready to show), merged with what the
+    /// local index found; `error` when it couldn't be asked (offline, a transport without one).
+    Found {
+        account: String,
+        query: String,
+        items: Vec<crate::Summary>,
+        error: Option<String>,
     },
     /// A message's source arrived (it is cached on disk too).
     Body {

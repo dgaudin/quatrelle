@@ -13,7 +13,7 @@ use std::thread::JoinHandle;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use quatrelle_model::job::Secret;
-use quatrelle_model::{AccountConfig, Event, Flag, Folder, FolderRole, Job, MessageKey, Op, SyncStatus, sort_folders};
+use quatrelle_model::{AccountConfig, Event, Flag, Folder, FolderRole, Job, MessageKey, Op, Summary, SyncStatus, sort_folders};
 use quatrelle_store::{OutboxItem, Store};
 
 use crate::imap::{Client, uid_set};
@@ -21,6 +21,9 @@ use crate::jmap;
 use crate::stream::Stream;
 use crate::sync::{SyncOptions, SyncReport, fetch_body, sync_folder};
 use crate::{NetError, Result, smtp};
+
+/// How many messages one server-side search answers with.
+const SEARCH_LIMIT: usize = 200;
 
 /// Where passwords live. The desktop app backs this with the system keychain.
 pub trait Credentials: Send + Sync {
@@ -110,6 +113,10 @@ impl Auth {
 fn push_job(queue: &mut VecDeque<Job>, j: Job) {
     if matches!(j, Job::SyncFolder { .. }) && queue.contains(&j) {
         return;
+    }
+    // A newer search makes a waiting one pointless.
+    if let Job::Search { account, .. } = &j {
+        queue.retain(|q| !matches!(q, Job::Search { account: a, .. } if a == account));
     }
     queue.push_back(j);
 }
@@ -412,6 +419,10 @@ impl Pool {
                     self.creds.delete(&c);
                     self.creds.delete_smtp(&c);
                 }
+            }
+            Job::Search { account, query, .. } if !self.workers.contains_key(&account) => {
+                // No connection: the local index's answer stands.
+                self.sink.emit(Event::Found { account, query, items: Vec::new(), error: Some("the account is offline".into()) });
             }
             Job::FetchBody { key } if !self.workers.contains_key(&key.account) => {
                 // Offline or not started: the cache may still have it.
@@ -1433,6 +1444,7 @@ impl Worker {
                 }
             }
             Job::FetchBody { key } => self.fetch(key),
+            Job::Search { query, folder, .. } => self.search(query, folder),
             Job::Vote { key, choice } => self.vote(key, choice),
             Job::Apply { op, .. } => {
                 // POP: a move is carried out here (there's no server copy to come back); what's
@@ -2061,6 +2073,46 @@ impl Worker {
             Ok(None) => {}
             Err(e) if e.is_fatal() => self.failed(e),
             Err(e) => log::info!("{}: quota: {e}", self.acc.id),
+        }
+    }
+
+    /// Search with the server's own index (Exchange's): the local one can only find a message
+    /// whose text is here, and a search over years of mail needs the rest.
+    fn search(&mut self, query: String, folder: Option<String>) {
+        let account = self.acc.id.clone();
+        let r = (|| -> Result<Vec<Summary>> {
+            if self.conn.is_none() {
+                self.connect()?;
+            }
+            // Its own numbering: an id the search brings is numbered as a sync would, so the
+            // message it stands for can be read (and kept) afterwards.
+            let mut state = std::mem::take(&mut self.jstate);
+            let r = match self.conn.as_ref() {
+                Some(Conn::Ews(c)) => {
+                    let paths: Vec<String> = match &folder {
+                        Some(f) => vec![f.clone()],
+                        None => self.folders.iter().map(|f| f.path.clone()).collect(),
+                    };
+                    crate::ews::search(c, &mut state, &account, &paths, &query, SEARCH_LIMIT)
+                }
+                // IMAP's own SEARCH finds what the local index already has (headers come first),
+                // and the other transports have theirs to come: the local answer stands.
+                _ => Ok(Vec::new()),
+            };
+            // The numbering an id got is kept, so a message found by a search can still be read
+            // after a restart.
+            let _ = state.save(&self.store, &account);
+            self.jstate = state;
+            r
+        })();
+        match r {
+            Ok(items) => self.sink.emit(Event::Found { account, query, items, error: None }),
+            Err(e) => {
+                self.sink.emit(Event::Found { account, query, items: Vec::new(), error: Some(e.to_string()) });
+                if e.is_fatal() {
+                    self.failed(e);
+                }
+            }
         }
     }
 
