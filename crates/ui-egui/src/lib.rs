@@ -779,10 +779,14 @@ impl MailApp {
         }
     }
 
-    fn pump(&mut self) {
+    /// Take in what the workers sent; `true` when a server-side search was answered (the list
+    /// changed, so the frame is drawn again at once rather than at the next idle tick).
+    fn pump(&mut self) -> bool {
         let (now, offset) = self.services.clock();
         self.session.set_clock(now, offset);
+        let mut answered = false;
         for e in self.backend.poll() {
+            answered |= matches!(e, Event::Found { .. });
             self.session.apply(e);
         }
         // Sign-in pages go to the browser.
@@ -802,6 +806,7 @@ impl MailApp {
         }
         // Snoozed mail that is due comes back.
         self.session.tick();
+        answered
     }
 
     fn flush_jobs(&mut self) {
@@ -850,7 +855,9 @@ impl MailApp {
         }
         self.ring_reminders(&ctx);
         self.apply_language(&ctx);
-        self.pump();
+        if self.pump() {
+            ctx.request_repaint();
+        }
         self.announce(&ctx);
         // A search started by a command or agent shows its query in the box.
         if let Some((q, _)) = &self.session.search
