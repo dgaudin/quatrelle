@@ -719,7 +719,21 @@ pub(crate) fn body(ui: &mut Ui, t: &Tokens, ed: &mut Editor, c: &mut Compose, st
             .collect();
         ui.painter().set(behind, egui::Shape::Vec(shapes));
     }
-    text_menu(&out.response, ed, c, acts);
+    // Where the right-click landed in the text (none when the menu is opened another way).
+    let at_pointer = out.response.interact_pointer_pos().map(|p| out.galley.cursor_from_pos(p - out.galley_pos).index.0);
+    text_menu(&out.response, ed, c, acts, at_pointer);
+}
+
+/// The word at `at` (a character index into `text`), when it isn't spelt right, with its range in
+/// characters: what the right-click menu offers to mend. A click between two words, past the end,
+/// or on a word the dictionaries know gives nothing.
+fn misspelt_at(text: &str, at: usize) -> Option<(Range<usize>, String)> {
+    let at = at.min(text.chars().count());
+    let byte = text.char_indices().nth(at).map_or(text.len(), |(b, _)| b);
+    crate::spellcheck::misspelt(text).into_iter().find(|(r, _)| r.start <= byte && byte < r.end).map(|(r, word)| {
+        let start = text[..r.start].chars().count();
+        (start..start + word.chars().count(), word)
+    })
 }
 
 /// The rectangles a selection covers, one per row (galley coordinates).
@@ -742,13 +756,38 @@ fn selection_rects(g: &Galley, sel: Range<usize>) -> Vec<Rect> {
 
 /// The right-click menu on the text, as Outlook's: Cut, Copy, Paste and Select all; the link
 /// (insert, edit, open, remove); and clearing the formatting.
-fn text_menu(resp: &egui::Response, ed: &mut Editor, c: &mut Compose, acts: &mut Vec<Action>) {
+fn text_menu(resp: &egui::Response, ed: &mut Editor, c: &mut Compose, acts: &mut Vec<Action>, at_pointer: Option<usize>) {
     let n = c.body.chars().count();
     let sel = ed.sel.start.min(n)..ed.sel.end.min(n);
     let chosen: String = c.body.chars().skip(sel.start).take(sel.end - sel.start).collect();
     let link = c.styles.style(sel.start).link.filter(|_| n > 0);
+    // The word the menu was opened on, when it isn't spelt right, in characters: Outlook puts
+    // what could take its place at the top of this menu, so a red-underlined word is two clicks
+    // from mended instead of a trip through the spelling dialog.
+    let misspelt = misspelt_at(&c.body, at_pointer.unwrap_or(ed.sel.start));
     let shown = resp.context_menu(|ui| {
         ui.set_min_width(190.0);
+        if let Some((range, word)) = &misspelt {
+            let suggestions = crate::spellcheck::suggest(word, 5);
+            for sug in &suggestions {
+                if ui.add_enabled(!c.sending, egui::Button::new(sug)).clicked() {
+                    let style = typing_style(&c.body, &c.styles, range.start);
+                    replace(ed, c, range.clone(), sug, style);
+                    let end = range.start + sug.chars().count();
+                    ed.refocus = Some(end..end);
+                    ui.close();
+                }
+            }
+            if !suggestions.is_empty() {
+                ui.separator();
+            }
+            if ui.button(tl!("Add to dictionary")).on_hover_text(tl!("Stop underlining this word, here and in other messages")).clicked() {
+                acts.push(Action::Run("spelling.add", serde_json::json!({"word": word.clone()})));
+                crate::spellcheck::add_word(word);
+                ui.close();
+            }
+            ui.separator();
+        }
         let item = |ui: &mut Ui, label: &str, keys: &str, enabled: bool| -> bool {
             let b = egui::Button::new(tl!(label)).shortcut_text(keys);
             let clicked = ui.add_enabled(enabled, b).clicked();
@@ -1144,6 +1183,26 @@ pub(crate) fn link_dialog(ui: &mut Ui, t: &Tokens, ed: &mut Editor, c: &mut Comp
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A right-click on a red-underlined word finds that word (and not its neighbour), so the
+    /// menu can offer what could take its place, as Outlook's does.
+    #[test]
+    fn the_word_under_the_pointer_is_the_one_offered() {
+        // The dictionaries are read here, on the test thread, as the app does in the background.
+        assert!(crate::spellcheck::load_for_test(), "the dictionaries are built in");
+        crate::spellcheck::set_on(true);
+        let text = "je vai partir dans les pyrénés";
+        let found = misspelt_at(text, 4).map(|(r, w)| (text.chars().skip(r.start).take(r.end - r.start).collect::<String>(), w));
+        assert_eq!(found, Some(("vai".to_string(), "vai".to_string())), "the word clicked");
+        // The second one, and none on the words that are spelt right or between two of them.
+        assert!(misspelt_at(text, text.chars().count() - 2).is_some_and(|(_, w)| w == "pyrénés"));
+        assert_eq!(misspelt_at(text, 0), None, "je");
+        assert_eq!(misspelt_at(text, 2), None, "the space after it");
+        assert_eq!(misspelt_at(text, 1000), None, "past the end");
+        // A word with an accent before it: the range is in characters, not bytes.
+        let accented = "déja partir";
+        assert!(misspelt_at(accented, 2).is_some_and(|(r, w)| w == "déja" && r == (0..4)), "characters, not bytes");
+    }
 
     #[test]
     fn link_addresses() {
