@@ -665,7 +665,13 @@ impl State {
         s
     }
 
+    /// Keep the numbering on disk — never an empty one over the one there: a state that lost
+    /// its ids (a mistake, a connection refused mid-way) would take every cached message's key
+    /// with it, and the next sync would wipe the folder states and download everything again.
     pub fn save(&self, store: &Store, account: &str) -> Result<()> {
+        if self.ids.is_empty() {
+            return Ok(());
+        }
         Ok(store.save_account_doc(account, STATE_DOC, self)?)
     }
 
@@ -678,6 +684,22 @@ impl State {
         self.ids.insert(id.to_string(), self.next);
         self.numbers.insert(self.next, id.to_string());
         self.next
+    }
+
+    /// Give an id the number it had: a message found again after the numbering lost it.
+    pub fn set_number(&mut self, id: &str, n: u32) {
+        self.ids.insert(id.to_string(), n);
+        self.numbers.insert(n, id.to_string());
+        self.next = self.next.max(n);
+    }
+
+    /// How many message ids the numbering knows (none: it numbered nothing yet).
+    pub fn len(&self) -> usize {
+        self.ids.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.ids.is_empty()
     }
 
     pub fn id(&self, n: u32) -> Option<&str> {
@@ -994,6 +1016,23 @@ pub fn block_on<F: std::future::Future>(f: F) -> F::Output {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_empty_numbering_never_overwrites_the_one_on_disk() {
+        let dir = std::env::temp_dir().join(format!("quatrelle-jmap-state-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let store = Store::open(&dir).unwrap();
+        let mut st = State::default();
+        assert_eq!(st.number("A"), 1);
+        st.save(&store, "a1").unwrap();
+        // A state that numbered nothing (a connection refused halfway, a mistake) must not take
+        // the numbering with it: the next sync would renumber every folder and delete the cache.
+        State::default().save(&store, "a1").unwrap();
+        let mut back = State::load(&store, "a1");
+        assert_eq!(back.id(1), Some("A"));
+        assert_eq!(back.number("A"), 1, "and the same number");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn session_urls_dates_and_keywords() {

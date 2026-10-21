@@ -2112,7 +2112,7 @@ pub fn sync_folder(c: &Client, st: &mut State, store: &Store, account: &str, fol
     Ok(report)
 }
 
-fn prefetch(c: &Client, st: &State, store: &Store, account: &str, folder: &str, fs: &mut FolderState, opts: &SyncOptions) -> Result<()> {
+fn prefetch(c: &Client, st: &mut State, store: &Store, account: &str, folder: &str, fs: &mut FolderState, opts: &SyncOptions) -> Result<()> {
     let wanted: Vec<(u32, String)> = fs
         .messages
         .iter()
@@ -2143,13 +2143,66 @@ fn prefetch(c: &Client, st: &State, store: &Store, account: &str, folder: &str, 
     Ok(())
 }
 
+/// The item id of the message whose `Message-ID` is `mid`, in a folder (Exchange keeps it with
+/// its angle brackets; both are tried).
+fn id_by_message_id(c: &Client, folder_id: &str, mid: &str) -> Result<Option<String>> {
+    for want in [format!("<{mid}>"), mid.to_string()] {
+        let m = c.call_one(&format!(
+            "<m:FindItem Traversal=\"Shallow\"><m:ItemShape><t:BaseShape>IdOnly</t:BaseShape></m:ItemShape>\
+             <m:IndexedPageItemView MaxEntriesReturned=\"1\" Offset=\"0\" BasePoint=\"Beginning\"/>\
+             <m:ParentFolderIds><t:FolderId Id=\"{}\"/></m:ParentFolderIds>\
+             <m:Restriction><t:IsEqualTo><t:FieldURI FieldURI=\"message:InternetMessageId\"/>\
+             <t:FieldURIOrConstant><t:Constant Value=\"{}\"/></t:FieldURIOrConstant></t:IsEqualTo></m:Restriction></m:FindItem>",
+            esc(folder_id),
+            esc(&want)
+        ))?;
+        if let Some(id) = m.find("Items").and_then(|items| items.kids.first()).and_then(|it| it.child("ItemId")).and_then(|i| i.attr("Id")) {
+            return Ok(Some(id.to_string()));
+        }
+    }
+    Ok(None)
+}
+
 /// Download one message's source (and cache it).
-pub fn fetch_body(c: &Client, st: &State, store: &Store, key: &MessageKey) -> Result<Vec<u8>> {
+pub fn fetch_body(c: &Client, st: &mut State, store: &Store, key: &MessageKey) -> Result<Vec<u8>> {
     if let Some(raw) = store.read_body(key) {
         return Ok(raw);
     }
-    let id = st.id(key.uid).filter(|_| key.validity == VALIDITY).ok_or_else(|| NetError::No("the message is no longer on the server".into()))?;
-    let raw = c.download(id)?;
+    let known = st.id(key.uid).filter(|_| key.validity == VALIDITY).map(str::to_string);
+    let id = match known {
+        Some(id) => id,
+        None => {
+            // The numbering no longer has this message (a state reloaded, a folder listed under
+            // another numbering): it is still there, and the cache knows its Message-ID. Find it
+            // again and number it, rather than telling the reader an old message is gone.
+            let mid =
+                store.load_folder(&key.account, &key.folder).ok().and_then(|f| f.find(key.uid).map(|m| m.message_id.clone())).unwrap_or_default();
+            let folder_id = st.mailbox(&key.folder).ok().map(str::to_string);
+            let again = match (mid.is_empty(), folder_id) {
+                (false, Some(folder_id)) => id_by_message_id(c, &folder_id, &mid)?,
+                _ => None,
+            };
+            match again {
+                Some(id) => {
+                    log::info!("{}: {} #{} wasn't in the numbering: found again by its Message-ID", key.account, utf7::decode(&key.folder), key.uid);
+                    st.set_number(&id, key.uid);
+                    id
+                }
+                None => {
+                    log::warn!(
+                        "{}: {} #{} (validity {}) isn't in the numbering ({} ids) and wasn't found by its Message-ID",
+                        key.account,
+                        utf7::decode(&key.folder),
+                        key.uid,
+                        key.validity,
+                        st.len()
+                    );
+                    return Err(NetError::No("the message is no longer on the server".into()));
+                }
+            }
+        }
+    };
+    let raw = c.download(&id)?;
     store.write_body(key, &raw)?;
     let mut fs = store.load_folder(&key.account, &key.folder)?;
     if let Some(m) = fs.find_mut(key.uid) {
@@ -2413,6 +2466,76 @@ mod tests {
         // Two searches, one numbering: the same message keeps its key.
         let again = search(&c, &mut st, "a1", &folders, "deepseek", 50).unwrap();
         assert_eq!(again[0].key, found[0].key);
+    }
+
+    #[test]
+    fn a_message_the_search_found_can_be_read() {
+        // Three recent ones and an old one outside the window this computer keeps: the search is
+        // the only way to it, and it has to be readable from what the search answered.
+        let mut d = crate::fake_ews::Data::default();
+        let inbox = d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+        for n in 1..=3 {
+            let raw = format!(
+                "From: Bob <bob@example.org>\r\nTo: riley@contoso.example\r\nSubject: Note {n}\r\nDate: Tue, 20 Oct 2026 09:0{n}:00 +0000\r\n\r\nhello {n}\r\n"
+            );
+            d.deliver(&inbox, raw.as_bytes(), false, &format!("2026-10-20T09:0{n}:00Z"));
+        }
+        let old = d.deliver(
+            &inbox,
+            b"From: Ada <ada@example.org>\r\nTo: riley@contoso.example\r\nSubject: Old notes\r\nDate: Tue, 01 Feb 2005 09:00:00 +0000\r\n\r\nwe tried deepseek in the lab\r\n",
+            true,
+            "2005-02-01T09:00:00Z",
+        );
+        let _ = old;
+        let server = crate::fake_ews::serve(d);
+        let dir = std::env::temp_dir().join(format!("quatrelle-ews-search-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let store = Store::open(&dir).unwrap();
+        let user = format!("{}\\{}", crate::fake_ews::DOMAIN, crate::fake_ews::USER);
+        let c = Client::connect(&server.url, &user, crate::fake_ews::PASSWORD, "riley@contoso.example").unwrap();
+        let mut st = State::default();
+        list_folders(&c, &mut st, "a1").unwrap();
+        let opts = SyncOptions { window: 3, prefetch: 0, ..Default::default() };
+        sync_folder(&c, &mut st, &store, "a1", "INBOX", &opts).unwrap();
+        assert_eq!(store.load_folder("a1", "INBOX").unwrap().messages.len(), 3, "the old one is out of the window");
+        let hits = search(&c, &mut st, "a1", &["INBOX".to_string()], "deepseek", 50).unwrap();
+        assert_eq!(hits.len(), 1);
+        let raw = fetch_body(&c, &mut st, &store, &hits[0].key).unwrap();
+        assert!(String::from_utf8_lossy(&raw).contains("deepseek"), "read from the id the search numbered");
+        assert!(store.read_body(&hits[0].key).is_some(), "kept like any other message");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_message_the_numbering_lost_is_found_again_by_its_message_id() {
+        let mut d = crate::fake_ews::Data::default();
+        let inbox = d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+        d.deliver(
+            &inbox,
+            b"From: Ada <ada@example.org>\r\nTo: riley@contoso.example\r\nSubject: Old notes\r\nMessage-ID: <old-1@example.org>\r\nDate: Tue, 01 Feb 2005 09:00:00 +0000\r\n\r\nwe tried deepseek\r\n",
+            true,
+            "2005-02-01T09:00:00Z",
+        );
+        let server = crate::fake_ews::serve(d);
+        let dir = std::env::temp_dir().join(format!("quatrelle-ews-renumber-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let store = Store::open(&dir).unwrap();
+        let user = format!("{}\\{}", crate::fake_ews::DOMAIN, crate::fake_ews::USER);
+        let c = Client::connect(&server.url, &user, crate::fake_ews::PASSWORD, "riley@contoso.example").unwrap();
+        let mut st = State::default();
+        list_folders(&c, &mut st, "a1").unwrap();
+        let opts = SyncOptions { prefetch: 0, ..Default::default() };
+        sync_folder(&c, &mut st, &store, "a1", "INBOX", &opts).unwrap();
+        let key = store.load_folder("a1", "INBOX").unwrap().messages[0].key.clone();
+        assert!(store.read_body(&key).is_none(), "nothing kept yet: the click asks the server");
+        // A state that lost the numbering but still knows the folders: what an old state file
+        // (or one written by another connection) leaves behind. The old message must still open.
+        let mut lost = State::default();
+        lost.mailboxes = st.mailboxes.clone();
+        let raw = fetch_body(&c, &mut lost, &store, &key).unwrap();
+        assert!(String::from_utf8_lossy(&raw).contains("deepseek"));
+        assert!(lost.id(key.uid).is_some(), "and it is numbered again");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
