@@ -222,8 +222,17 @@ impl Conn {
         if !self.reaches(&req.url) {
             return Err(NetError::Protocol("a request for another server".into()));
         }
-        write_request(&mut self.s, req, &url, true)?;
-        let resp = read_response(&mut self.s, req.max, req.method == "HEAD")?;
+        // Whatever fails here leaves the connection half-read: the answer that didn't come (a
+        // timeout, a reset) would be read as the next request's, and a stale 401 as a refused
+        // password. It's dropped rather than reused.
+        let sent = write_request(&mut self.s, req, &url, true).and_then(|()| read_response(&mut self.s, req.max, req.method == "HEAD"));
+        let resp = match sent {
+            Ok(resp) => resp,
+            Err(e) => {
+                self.closing = true;
+                return Err(e);
+            }
+        };
         self.closing = resp.header("Connection").is_some_and(|c| c.eq_ignore_ascii_case("close"))
             || (resp.header("Content-Length").is_none() && resp.header("Transfer-Encoding").is_none() && resp.status != 204 && resp.status != 304);
         Ok(resp)
