@@ -4093,6 +4093,7 @@ dependencies = [
  "raw-window-handle",
  "rfd",
  "serde_json",
+ "uds_windows",
  "windows-registry",
  "winit",
  "winresource",
