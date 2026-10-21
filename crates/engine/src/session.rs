@@ -2774,10 +2774,13 @@ impl Session {
     }
 
     /// The accounts a search asks the server about, with the folder when it's the one open.
-    /// Accounts whose server has an index of its own are the ones worth asking (Exchange's, here);
-    /// the others answer from this computer alone.
+    /// Accounts whose server can be asked are the ones worth asking: Exchange's own index, or an
+    /// IMAP server's `SEARCH`; the others (local, POP, JMAP) answer from this computer alone.
     fn search_accounts(&self, scope: SearchScope) -> Vec<(String, Option<String>)> {
-        let indexed = |a: &AccountState| a.config.ews.is_some();
+        let indexed = |a: &AccountState| {
+            let c = &a.config;
+            !a.is_local() && (c.ews.is_some() || (c.pop.is_none() && c.jmap.is_none() && c.graph.is_none()))
+        };
         match scope {
             SearchScope::Current => {
                 let folders: Vec<(String, Option<String>)> = self.view_folders().into_iter().map(|(a, f)| (a, Some(f))).collect();

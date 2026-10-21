@@ -473,3 +473,13 @@ local-first, media-aware v1); the fuller request is
   more), the worker keeping that folder wider from then on; closing Quatrelle with an
   online-only account's unsent mail or changes asks first, and a portable copy's missing password
   is asked for at start-up.
+- **2026-10-21** — **A search reaches an IMAP server too:** the local index only knows the words
+  of what this computer keeps, so a Gmail account's search would stop at its window. The query's
+  clauses now become `SEARCH` keys (`TEXT` for words anywhere, `FROM`/`SUBJECT`/`BODY`, `OR TO …
+  CC …` for `to:`, `UNSEEN`/`FLAGGED`/`KEYWORD`, a leading `-` as `NOT`), a word outside ASCII
+  going as a literal under `CHARSET UTF-8`. Each folder is `EXAMINE`d and searched, the newest two
+  hundred hits kept, and the headers of those this computer doesn't have are fetched into the
+  folder's cache — so a hit older than the window can be opened, kept, marked or moved like any
+  other, and arrives merged with the local results the way Exchange's do. A search of all folders
+  asks the biggest first (Gmail's All Mail holds everything) and stops at eighty folders or five
+  seconds; JMAP and the browser still answer from this computer alone.
