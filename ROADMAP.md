@@ -420,3 +420,19 @@ local-first, media-aware v1); the fuller request is
   yet lists them and reads none (as Outlook leaves them unticked, and as the engine records them
   a moment later); contacts are read first, before any of it. Tested against the fake Exchange:
   a first sync lists Ana's calendar, reads nothing of it, and has the contacts.
+- **2026-10-20** — **Spelling, underlined as you write:** a `quatrelle-spell` crate wraps
+  `spellbook` (MPL-2.0) with the French and English (US) dictionaries carried gzipped in
+  `assets/dictionaries`, so no system tool is needed and it works on Windows, macOS, Linux and in
+  the browser. The composer underlines in red the words neither dictionary nor the user's own list
+  knows, in the body and in the subject, as they're typed (the dictionary loads and the check runs
+  a slice at a time, never in the frame that draws); `Prefs::spell_check` turns it off. F7 or
+  Spelling opens the dialog: the word in its sentence, the suggestions, Ignore / Ignore all / Add
+  to the dictionary (`spelling.add`, kept in `Prefs::spelling`), and the correction made where the
+  word stands in the body or the subject (`compose.replaceText {from, to, text, field}`).
+- **2026-10-20** — **Outlook's card when the pointer rests on an appointment:** resting it on a
+  chip in the month, week or day view brings the card Outlook shows — when it is (both days for
+  one over several, "All day" for an all-day one), where, which calendar it's in (named as the
+  side pane names it), and when its reminder sounds, in words ("15 minutes before", "1 day
+  before", "When it starts"). `card_rows` builds the rows, `reminder_text` says the alarm, and the
+  same card follows the chip in every view; the reminder line is there when the appointment has
+  one.
