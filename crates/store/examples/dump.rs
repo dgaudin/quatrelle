@@ -12,6 +12,38 @@ const PIECED_OLD: &[u8] = b"\0MailCraft:pieces\0";
 const DEFLATED: &[u8] = b"\0Quatrelle:deflate\0";
 const DEFLATED_OLD: &[u8] = b"\0MailCraft:deflate\0";
 
+/// A file's bytes as written: the deflate marker taken off when it's there.
+fn unpack_kept(kept: &[u8]) -> Vec<u8> {
+    let mark = if kept.starts_with(DEFLATED) {
+        DEFLATED.len()
+    } else if kept.starts_with(DEFLATED_OLD) {
+        DEFLATED_OLD.len()
+    } else {
+        return kept.to_vec();
+    };
+    let mut out = Vec::new();
+    let mut d = flate2::read::DeflateDecoder::new(&kept[mark..]);
+    let _ = std::io::Read::read_to_end(&mut d, &mut out);
+    out
+}
+
+/// A file's bytes, from the FILES table or its pieces, deflate taken off.
+fn read_file(tx: &redb::ReadTransaction, name: &str) -> Result<Option<Vec<u8>>, Box<dyn std::error::Error>> {
+    let files = tx.open_table(FILES)?;
+    let Some(value) = files.get(name)?.map(|v| v.value().to_vec()) else { return Ok(None) };
+    if value.starts_with(PIECED) || value.starts_with(PIECED_OLD) {
+        let _mark = if value.starts_with(PIECED) { PIECED.len() } else { PIECED_OLD.len() };
+        let pieces = tx.open_table(PIECES)?;
+        let mut whole = Vec::new();
+        for n in 0.. {
+            let Some(p) = pieces.get((name, n))? else { break };
+            whole.extend_from_slice(p.value());
+        }
+        return Ok(Some(unpack_kept(&whole).clone()));
+    }
+    Ok(Some(unpack_kept(&value)))
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = std::env::args().skip(1);
     let path = args.next().expect("a data file");
@@ -24,6 +56,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             for row in files.iter()? {
                 let (k, v) = row?;
                 println!("{}\t{}", k.value(), v.value().len());
+            }
+        }
+        // `@states`: each folder's state, as a line of its own (how much of it is kept here).
+        Some(name) if name == "@states" => {
+            let mut rows: Vec<(String, usize, i64)> = Vec::new();
+            for row in files.iter()? {
+                let (k, v) = row?;
+                let key = k.value();
+                if !key.ends_with("/state.json") {
+                    continue;
+                }
+                let _ = v;
+                let Some(raw) = read_file(&tx, key)? else { continue };
+                let Ok(json) = serde_json::from_slice::<serde_json::Value>(&raw) else { continue };
+                let messages = json.get("messages").and_then(|m| m.as_array()).cloned().unwrap_or_default();
+                let oldest = messages.iter().filter_map(|m| m.get("date").or_else(|| m.get("received")).and_then(|d| d.as_i64())).min().unwrap_or(0);
+                rows.push((key.to_string(), messages.len(), oldest));
+            }
+            rows.sort_by_key(|r| std::cmp::Reverse(r.1));
+            for (key, n, oldest) in rows {
+                println!("{key}\t{n}\t{oldest}");
             }
         }
         Some(name) => {
