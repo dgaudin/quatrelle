@@ -1019,3 +1019,18 @@ month	May	5月
 	1 day after	1 日後
 	{n} days after	{n} 日後
 	None	なし
+	Close Quatrelle?	Quatrelle を閉じますか?
+	Close anyway	閉じる
+	Edit notes	メモを編集
+	Getting them from the server…	サーバーから取得しています…
+	Its mail stays on the server and is held in memory only while Quatrelle runs: none of it is written to this computer, and each message downloads when you open it. Mail you send goes straight to the server; only mail that can't go yet (while offline) waits, and it's lost with changes made offline if Quatrelle closes first (you're asked). Calendars, contacts and notes on a server stay there; those kept only in Quatrelle are lost when it closes.	メールはサーバーに残り、Quatrelle の実行中はメモリにのみ保持されます。このコンピューターには何も書き込まれず、各メッセージは開いたときにダウンロードされます。送信したメールはそのままサーバーに送られます。まだ送信できないメール (オフライン時) だけが待機し、先に Quatrelle を閉じるとオフライン中の変更とともに失われます (確認されます)。サーバー上の予定表・連絡先・メモはそのまま残ります。Quatrelle にのみ保存されているものは閉じると失われます。
+	Mail older than what's kept here is only on the server.	ここに保存されているより古いメールはサーバーにのみあります。
+	Search the server	サーバーを検索
+	Searching the server…	サーバーを検索しています…
+	Show more	さらに表示
+	The account list (no passwords), the window's settings and the log	アカウントの一覧 (パスワードなし)、ウィンドウの設定、ログ
+	The server found {n}	サーバーで {n} 件見つかりました
+	These are held in memory only, as their accounts are online only, and are lost if Quatrelle closes now: {what}. Connect and send them first (Send / Receive), or close anyway.	これらはアカウントがオンラインのみのためメモリにのみ保持されており、今 Quatrelle を閉じると失われます: {what}。先に接続して送信する (送受信) か、このまま閉じてください。
+	{n} more on the server	サーバーにさらに {n} 件
+	Changes not yet on the server: {n}	サーバーに未反映の変更: {n}
+	Messages waiting to be sent: {n}	送信待ちのメッセージ: {n}
