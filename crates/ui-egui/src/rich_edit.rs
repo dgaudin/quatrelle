@@ -772,7 +772,9 @@ fn text_menu(resp: &egui::Response, ed: &mut Editor, c: &mut Compose, acts: &mut
     let shown = resp.context_menu(|ui| {
         ui.set_min_width(190.0);
         if let Some((range, word)) = &misspelt {
-            let suggestions = crate::spellcheck::suggest(word, 5);
+            // Ten, as Outlook lists a good handful: the dictionaries put the likeliest first but
+            // not always first ("vai" → "vais" comes eighth), and five cut it off.
+            let suggestions = crate::spellcheck::suggest(word, 10);
             for sug in &suggestions {
                 if ui.add_enabled(!c.sending, egui::Button::new(sug)).clicked() {
                     let style = typing_style(&c.body, &c.styles, range.start);

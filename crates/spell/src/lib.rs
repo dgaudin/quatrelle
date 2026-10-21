@@ -226,4 +226,12 @@ mod tests {
         assert!(bad.iter().any(|(_, w)| *w == "quatrelle"), "{bad:?}");
         assert!(!bad.iter().any(|(_, w)| *w == "serveur"), "{bad:?}");
     }
+    /// A likely correction isn't always the first one: the menu lists ten (as Outlook does), so a
+    /// "vai" typed for "vais" is among them.
+    #[test]
+    fn a_likely_word_is_among_the_first_ten() {
+        let s = spell();
+        let first: Vec<String> = s.suggest("vai", 10);
+        assert!(first.iter().any(|w| w == "vais"), "{first:?}");
+    }
 }
