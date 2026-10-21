@@ -455,3 +455,21 @@ local-first, media-aware v1); the fuller request is
   moved. IMAP's `SEARCH` is next. The app icon is now the owner's own picture (`assets/icon.png`,
   the 4L and the envelope): every size, the `.ico`, the `.icns` and the scalable SVG are sampled
   from it by `cargo xtask icons`.
+- **2026-10-21** — **An invitation reads as Outlook reads it:** Exchange makes an invitation's HTML
+  notes text, each link written after its words in angle brackets, and they were shown as that.
+  They now read as the invitation does (`model::ical::note_lines`): `Join with Google Meet<https://…>`
+  shows its words and opens the address from them, a phone link stays its words, an address alone on
+  its line is a link of its own, and words on the line above (Google's Yes, No, More options) name
+  the address below them. An invitation's notes (or any event's with a link) are shown to read
+  rather than in the box that edits them, scrolling when tall, with Edit notes to change them; a
+  dialog is never taller than the window any more, so its title and buttons stay on screen.
+  `folderPane.move` comes with it: a mailbox is where the user put it, dragged or from its menu.
+- **2026-10-21** — **A shared mailbox is a mailbox of its own:** one an Exchange account opens was
+  a top folder inside the account's tree; it is now its own heading in the folder pane, after its
+  account, with its own folders, its own menu and its own place among the mailboxes — moved up or
+  down (an account's order follows), kept with the settings, and a new one coming after the
+  mailbox it came with. The calendar pane follows that order, each shared mailbox's calendars
+  under its name. A folder also says what's past what's kept ("40 more on the server", Show
+  more), the worker keeping that folder wider from then on; closing Quatrelle with an
+  online-only account's unsent mail or changes asks first, and a portable copy's missing password
+  is asked for at start-up.
