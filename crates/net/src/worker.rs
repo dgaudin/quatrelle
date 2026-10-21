@@ -13,7 +13,7 @@ use std::thread::JoinHandle;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use quatrelle_model::job::Secret;
-use quatrelle_model::{AccountConfig, Event, Flag, Folder, FolderRole, Job, MessageKey, Op, Summary, SyncStatus, sort_folders};
+use quatrelle_model::{AccountConfig, Event, Flag, Folder, FolderRole, Job, MessageKey, Op, SyncStatus, sort_folders};
 use quatrelle_store::{OutboxItem, Store};
 
 use crate::imap::{Client, uid_set};
@@ -633,6 +633,9 @@ struct Worker {
     conn: Option<Conn>,
     /// JMAP and Graph accounts: message numbers and mailbox ids.
     jstate: jmap::State,
+    /// The numbers a server-side search gave messages that are in no folder's cache (they live
+    /// on the server only): never pruned, or a result couldn't be opened.
+    search_numbers: Vec<u32>,
     folders: Vec<Folder>,
     ops: Vec<Op>,
     queue: VecDeque<Job>,
@@ -673,6 +676,7 @@ impl Worker {
             opts,
             conn: None,
             jstate,
+            search_numbers: Vec::new(),
             folders,
             ops,
             queue: VecDeque::new(),
@@ -1269,7 +1273,8 @@ impl Worker {
         }
     }
 
-    /// Forget the numbers of JMAP messages no longer cached (nor waiting in a change).
+    /// Forget the numbers of JMAP messages no longer cached (nor waiting in a change, nor found
+    /// by a search).
     fn prune_jmap_numbers(&mut self) {
         if !matches!(self.conn, Some(Conn::Jmap(_) | Conn::Graph(_) | Conn::Ews(_))) {
             return;
@@ -1280,6 +1285,7 @@ impl Worker {
                 keep.extend(st.messages.iter().map(|m| m.key.uid));
             }
         }
+        keep.extend(self.search_numbers.iter().copied());
         self.jstate.prune(&keep);
         self.save_jstate();
     }
@@ -2080,31 +2086,42 @@ impl Worker {
     /// whose text is here, and a search over years of mail needs the rest.
     fn search(&mut self, query: String, folder: Option<String>) {
         let account = self.acc.id.clone();
-        let r = (|| -> Result<Vec<Summary>> {
-            if self.conn.is_none() {
-                self.connect()?;
+        if self.conn.is_none()
+            && let Err(e) = self.connect()
+        {
+            self.sink.emit(Event::Found { account, query, items: Vec::new(), error: Some(e.to_string()) });
+            return;
+        }
+        // The numbering an id gets is kept, so a message found by a search can be read afterwards
+        // (and after a restart). The state is taken out of `self` — it can't be borrowed twice for
+        // the call — and goes back whatever the call answered: one left empty would key every
+        // cached message to nothing.
+        let mut state = std::mem::take(&mut self.jstate);
+        let r = match self.conn.as_ref() {
+            Some(Conn::Ews(c)) => {
+                let paths: Vec<String> = match &folder {
+                    Some(f) => vec![f.clone()],
+                    None => self.folders.iter().map(|f| f.path.clone()).collect(),
+                };
+                crate::ews::search(c, &mut state, &account, &paths, &query, SEARCH_LIMIT)
             }
-            // Its own numbering: an id the search brings is numbered as a sync would, so the
-            // message it stands for can be read (and kept) afterwards.
-            let mut state = std::mem::take(&mut self.jstate);
-            let r = match self.conn.as_ref() {
-                Some(Conn::Ews(c)) => {
-                    let paths: Vec<String> = match &folder {
-                        Some(f) => vec![f.clone()],
-                        None => self.folders.iter().map(|f| f.path.clone()).collect(),
-                    };
-                    crate::ews::search(c, &mut state, &account, &paths, &query, SEARCH_LIMIT)
-                }
-                // IMAP's own SEARCH finds what the local index already has (headers come first),
-                // and the other transports have theirs to come: the local answer stands.
-                _ => Ok(Vec::new()),
-            };
-            // The numbering an id got is kept, so a message found by a search can still be read
-            // after a restart.
-            let _ = state.save(&self.store, &account);
-            self.jstate = state;
-            r
-        })();
+            // IMAP's own SEARCH finds what the local index already has (headers come first), and
+            // the other transports have theirs to come: the local answer stands.
+            _ => Ok(Vec::new()),
+        };
+        let numbers: Vec<u32> = r.as_ref().map(|items| items.iter().map(|m| m.key.uid).collect()).unwrap_or_default();
+        let _ = state.save(&self.store, &account);
+        self.jstate = state;
+        // What only a search found isn't in any folder's cache, so the numbers it may not be
+        // kept by must survive the next cleanup: the message is still one to open.
+        for n in numbers {
+            if !self.search_numbers.contains(&n) {
+                self.search_numbers.push(n);
+            }
+        }
+        if self.search_numbers.len() > 4_000 {
+            self.search_numbers.drain(..2_000);
+        }
         match r {
             Ok(items) => self.sink.emit(Event::Found { account, query, items, error: None }),
             Err(e) => {
@@ -2122,6 +2139,7 @@ impl Worker {
             return;
         }
         let store = self.store.clone();
+        let numbered = self.jstate.len();
         let r = (|| -> Result<Vec<u8>> {
             if self.conn.is_none() {
                 self.connect()?;
@@ -2129,12 +2147,16 @@ impl Worker {
             match self.conn.as_mut() {
                 Some(Conn::Jmap(c)) => jmap::fetch_body(c, &self.jstate, &store, &key),
                 Some(Conn::Graph(c)) => crate::graph::fetch_body(c, &self.jstate, &store, &key),
-                Some(Conn::Ews(c)) => crate::ews::fetch_body(c, &self.jstate, &store, &key),
+                Some(Conn::Ews(c)) => crate::ews::fetch_body(c, &mut self.jstate, &store, &key),
                 // POP mail is downloaded whole: what isn't here isn't anywhere.
                 Some(Conn::Pop) => store.read_body(&key).ok_or_else(|| NetError::No("this message isn't on this computer".into())),
                 _ => fetch_body(self.client()?, &store, &key),
             }
         })();
+        if self.jstate.len() != numbered {
+            // A message found again by its Message-ID: the numbering is worth keeping.
+            self.save_jstate();
+        }
         match r {
             Ok(raw) => {
                 self.sink.emit(Event::Body { key: key.clone(), raw });

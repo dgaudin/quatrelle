@@ -654,6 +654,15 @@ impl Data {
                         words.iter().all(|w| subject.contains(w.as_str()) || from.contains(w.as_str()) || all.contains(w.as_str()))
                     });
                 }
+                // A restriction the server knows: a message found by its `Message-ID`.
+                if let Some(restriction) = op.find("Restriction") {
+                    let uri = restriction.find("FieldURI").and_then(|f| f.attr("FieldURI")).unwrap_or_default();
+                    let value = restriction.find("Constant").and_then(|c| c.attr("Value")).unwrap_or_default();
+                    if uri == "message:InternetMessageId" {
+                        let want = value.trim_matches(['<', '>']).to_ascii_lowercase();
+                        list.retain(|i| quatrelle_mime::parse(&i.raw).is_some_and(|p| p.message_id.to_ascii_lowercase() == want));
+                    }
+                }
                 list.sort_by(|a, b| b.received.cmp(&a.received));
                 // With the headers asked for (a search): the fields a list shows, and the folder
                 // each message is in.
