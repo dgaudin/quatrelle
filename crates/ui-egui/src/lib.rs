@@ -441,6 +441,50 @@ pub fn after_open(ui: &Ui, place: Option<WindowPlace>) {
     ctx.data_mut(|d| d.insert_temp(id, pending));
 }
 
+/// Whether this is the first frame of a window: its place is asked for once, at its opening, and
+/// left to the window manager from then on. A place handed in at every frame made a window the
+/// window manager had just placed jump between the two places, frame after frame (GNOME put a
+/// compose window at one spot, the app asked for another, and the window flashed between them).
+fn first_frame(ctx: &egui::Context, viewport: egui::ViewportId) -> bool {
+    let id = egui::Id::unique(("first-frame", viewport));
+    let seen = ctx.data(|d| d.get_temp::<bool>(id)).unwrap_or(false);
+    if !seen {
+        ctx.data_mut(|d| d.insert_temp(id, true));
+    }
+    !seen
+}
+
+/// `QUATRELLE_TRACE_WINDOWS=1`: what a window of the app says about itself — its outer and inner
+/// rectangles, its monitor, its scale — logged each time it changes, with the window's id, so a
+/// window that the window manager and the app seem to fight over (one that jumps between two
+/// places, flashes, or comes in two) can be followed in `quatrelle.log` frame by frame.
+pub fn trace_window(ui: &Ui, what: &str) {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    if !*ON.get_or_init(|| std::env::var_os("QUATRELLE_TRACE_WINDOWS").is_some_and(|v| !v.is_empty())) {
+        return;
+    }
+    let ctx = ui.ctx();
+    let id = ctx.viewport_id();
+    let v = ui.input(|i| i.viewport().clone());
+    let rect = |r: Option<egui::Rect>| r.map(|r| format!("{:.0},{:.0} {:.0}x{:.0}", r.min.x, r.min.y, r.width(), r.height()));
+    let say = format!(
+        "outer {} inner {} monitor {:?} scale {:.2} maximized {:?} minimized {:?} focused {:?}",
+        rect(v.outer_rect).unwrap_or_else(|| "-".into()),
+        rect(v.inner_rect).unwrap_or_else(|| "-".into()),
+        v.monitor_size.map(|m| format!("{:.0}x{:.0}", m.x, m.y)),
+        v.native_pixels_per_point.unwrap_or(1.0),
+        v.maximized,
+        v.minimized,
+        v.focused,
+    );
+    let key = egui::Id::unique(("trace-window", id));
+    let last: Option<String> = ctx.data(|d| d.get_temp(key));
+    if last.as_deref() != Some(say.as_str()) {
+        log::info!("window {what} {id:?}: {say}");
+        ctx.data_mut(|d| d.insert_temp(key, say));
+    }
+}
+
 /// A closed window opens afresh next time ([`after_open`]).
 fn forget_open(ctx: &egui::Context, viewport: egui::ViewportId) {
     ctx.data_mut(|d| d.remove::<Option<WindowPlace>>(egui::Id::unique(("after-open", viewport))));
@@ -1048,19 +1092,21 @@ impl MailApp {
         let t = self.ui.tokens;
         let subject = if c.subject.trim().is_empty() { tl!("Untitled").to_string() } else { c.subject.trim().to_string() };
         let id = egui::ViewportId::from_hash_of(("compose-window", c.id));
-        let builder = egui::ViewportBuilder::default()
+        let mut builder = egui::ViewportBuilder::default()
             .with_title(i18n::as_written(|| tf!("{subject} – Message", subject = subject)))
-            .with_inner_size([900.0, 720.0])
             .with_min_inner_size([520.0, 420.0]);
-        // Where the last one was, and its size.
-        let builder = match self.ui.places.get("compose") {
-            Some(p) => p.apply(builder),
-            None => builder,
-        };
+        // Where the last one was, and its size: at its opening only (see `first_frame`).
+        if first_frame(ctx, id) {
+            builder = match self.ui.places.get("compose") {
+                Some(p) => p.apply(builder),
+                None => builder.with_inner_size([900.0, 720.0]),
+            };
+        }
         let (session, st) = (&mut self.session, &mut self.ui);
         let close = ctx.show_viewport_immediate(id, builder, |ui, _| {
             let mut place = st.places.get("compose").copied();
             after_open(ui, place);
+            trace_window(ui, "compose");
             WindowPlace::note(&mut place, ui);
             if let Some(p) = place {
                 st.places.insert("compose".into(), p);
@@ -1151,19 +1197,21 @@ impl MailApp {
             let subject =
                 w.parsed.as_ref().map(|p| p.subject.clone()).filter(|s| !s.trim().is_empty()).unwrap_or_else(|| tl!("(no subject)").to_string());
             let id = egui::ViewportId::from_hash_of(("message-window", key.to_id()));
-            let builder = egui::ViewportBuilder::default()
+            let mut builder = egui::ViewportBuilder::default()
                 .with_title(i18n::as_written(|| tf!("{subject} – Message", subject = subject)))
-                .with_inner_size([940.0, 740.0])
                 .with_min_inner_size([480.0, 360.0]);
-            // Where the last one was, and its size.
-            let builder = match self.ui.places.get("message") {
-                Some(p) => p.apply(builder),
-                None => builder,
-            };
+            // Where the last one was, and its size: at its opening only (see `first_frame`).
+            if first_frame(ctx, id) {
+                builder = match self.ui.places.get("message") {
+                    Some(p) => p.apply(builder),
+                    None => builder.with_inner_size([940.0, 740.0]),
+                };
+            }
             let (session, st) = (&mut self.session, &mut self.ui);
             let close = ctx.show_viewport_immediate(id, builder, |ui, _| {
                 let mut place = st.places.get("message").copied();
                 after_open(ui, place);
+                trace_window(ui, "message");
                 WindowPlace::note(&mut place, ui);
                 if let Some(p) = place {
                     st.places.insert("message".into(), p);
