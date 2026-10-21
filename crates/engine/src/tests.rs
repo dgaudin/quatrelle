@@ -1239,7 +1239,37 @@ fn an_appointment_answers_to_the_name_a_dialog_opened_with() {
     done(s);
 }
 
-/// A reminder is minutes before the start; it's kept through a change, and taken off when asked.
+/// A reminder comes due the given minutes before its appointment, once (named by its occurrence),
+/// and stops ringing once the appointment is a day past.
+#[test]
+fn a_reminder_comes_due_before_its_appointment() {
+    let mut s = sample_session("reminders-due");
+    let uid = s
+        .run("event.create", &json!({"summary": "Point budget", "start": "2026-10-23T11:00", "end": "2026-10-23T12:00", "reminder": 15}))
+        .unwrap()["uid"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let start = s.find_event(&uid).unwrap().1.event.start;
+    let rings = |s: &Session, at: i64| s.reminders_due(at).into_iter().filter(|r| r.summary == "Point budget").collect::<Vec<_>>();
+    assert!(rings(&s, start - 901).is_empty(), "a minute early, nothing");
+    let due = rings(&s, start - 899);
+    assert_eq!(due.len(), 1, "fifteen minutes before, once");
+    assert_eq!((due[0].minutes, due[0].start, due[0].key.as_str()), (15, start, format!("{uid}@{start}").as_str()));
+    assert_eq!(rings(&s, start - 899).len(), 1, "asked again, still the one");
+    assert!(rings(&s, start + 2 * 86_400).is_empty(), "a day past, it no longer rings");
+    // One with no reminder never rings.
+    let quiet = s
+        .run("event.create", &json!({"summary": "Sans rappel", "start": "2026-10-23T11:00", "end": "2026-10-23T12:00", "reminder": null}))
+        .unwrap()["uid"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(s.reminders_due(start - 899).iter().all(|r| r.summary != "Sans rappel"), "{quiet}");
+    done(s);
+}
+
+/// A reminder is minutes before the start; it's kept through a change, and taken off when asked./// A reminder is minutes before the start; it's kept through a change, and taken off when asked.
 #[test]
 fn a_reminder_is_set_kept_and_taken_off() {
     let mut s = sample_session("reminder");
