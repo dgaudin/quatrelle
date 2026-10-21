@@ -29,9 +29,9 @@ const HEADER_H: f32 = 30.0;
 
 fn row_height(s: &Session) -> f32 {
     match (s.prefs.compact, s.prefs.show_preview) {
-        (true, _) => 46.0,
-        (false, true) => 76.0,
-        (false, false) => 58.0,
+        (true, _) => 50.0,
+        (false, true) => 80.0,
+        (false, false) => 62.0,
     }
 }
 
@@ -236,7 +236,7 @@ const TABLE_HEADING_H: f32 = 24.0;
 
 /// A table row: one line, or two with the preview under the sender and subject.
 fn table_row_height(s: &Session) -> f32 {
-    if s.prefs.show_preview && !s.prefs.compact { 38.0 } else { 24.0 }
+    if s.prefs.show_preview && !s.prefs.compact { 40.0 } else { 26.0 }
 }
 
 /// The table's columns, as Outlook's: importance, attachment, sender (recipients in Sent),
@@ -456,7 +456,7 @@ fn table_row(
     if unread {
         p.rect_filled(Rect::from_min_size(r.min + vec2(1.0, 4.0), vec2(3.0, r.height() - 8.0)), 1.5, t.accent);
     }
-    p.line_segment([r.left_bottom(), r.right_bottom()], egui::Stroke::new(1.0, t.border.gamma_multiply(0.5)));
+    p.line_segment([r.left_bottom(), r.right_bottom()], egui::Stroke::new(1.0, t.border));
     let two_lines = r.height() > 30.0;
     let line1 = if two_lines { r.min.y + 11.0 } else { r.center().y };
     let font = |size: f32| if unread { theme::bold(size) } else { theme::regular(size) };
@@ -583,7 +583,8 @@ fn message_row(
     if unread {
         p.rect_filled(Rect::from_min_size(r.min + vec2(4.0, 8.0), vec2(3.0, r.height() - 16.0)), 2.0, t.accent);
     }
-    p.line_segment([r.left_bottom() + vec2(14.0, 0.0), r.right_bottom() - vec2(8.0, 0.0)], egui::Stroke::new(1.0, t.border.gamma_multiply(0.6)));
+    // A line between two messages, as Outlook's: light, but plain to see, and across the row.
+    p.line_segment([r.left_bottom() + vec2(8.0, 0.0), r.right_bottom() - vec2(8.0, 0.0)], egui::Stroke::new(1.0, t.border));
 
     let compact = s.prefs.compact;
     let mut x = r.min.x + 14.0;
@@ -601,7 +602,7 @@ fn message_row(
         x += 44.0;
     }
     let right = r.max.x - 14.0;
-    let line1 = r.min.y + if compact { 6.0 } else { 9.0 };
+    let line1 = r.min.y + if compact { 7.0 } else { 11.0 };
     // Sender (or recipients in Sent) and time.
     let time = crate::i18n::date(&dates::list_time(m.date, &s.clock));
     let time_g = p.layout_no_wrap(time, if unread { theme::bold(12.0) } else { theme::regular(12.0) }, if unread { t.accent } else { t.dim });
