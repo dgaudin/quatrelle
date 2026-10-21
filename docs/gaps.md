@@ -578,4 +578,8 @@ tester's does, a contact as Exchange keeps it, Outlook's clipboard), then fixed 
     understand (`from:`, `to:`, `subject:`, a phrase in quotes); what only the local index can
     answer for (`is:unread`, `keyword:…`, a negation) stays here rather than being sent as
     nonsense.
-  - IMAP accounts still answer from this computer: their `SEARCH` is the next step.
+  - IMAP accounts ask their server's own `SEARCH` too (the words anywhere, `from:`/`to:`/
+    `subject:`/`body:`, unread/flagged/keywords, a leading `-` as `NOT`; a word outside ASCII as a
+    UTF-8 literal). A hit older than this computer's window is fetched into its folder so it can
+    be opened. Searching all folders asks the biggest first and stops at eighty folders or five
+    seconds; JMAP accounts and the browser still answer from this computer alone.

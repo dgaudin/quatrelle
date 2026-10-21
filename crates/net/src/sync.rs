@@ -290,3 +290,132 @@ mod tests {
         assert!(AheadFailures::new().failed("m", NetError::Auth("expired".into())).is_err());
     }
 }
+
+/// An argument of an IMAP `SEARCH`: a search key, or a string it takes.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SearchArg {
+    Atom(String),
+    Str(String),
+}
+
+/// The search box's query as IMAP `SEARCH` keys (RFC 3501 §6.4.4), for mail the index here
+/// doesn't have the words of: words anywhere are `TEXT`, `from:` `FROM`, `to:` and `cc:` `OR TO
+/// … CC …`, `subject:` `SUBJECT`, `body:` `BODY`, `is:unread` `UNSEEN`, `is:flagged` `FLAGGED`,
+/// `keyword:x` `KEYWORD`, a leading `-` `NOT`. What IMAP can't ask (attachments, importance,
+/// categories) is left to the list; `None` when nothing is left to ask.
+pub fn imap_criteria(query: &str) -> Option<Vec<SearchArg>> {
+    use quatrelle_model::search::{Field, Query, Term};
+    let q = Query::parse(query);
+    let mut out = Vec::new();
+    let atom = |s: &str| SearchArg::Atom(s.to_string());
+    for c in q.clauses.iter().take(16) {
+        let not = |out: &mut Vec<SearchArg>| {
+            if c.negated {
+                out.push(atom("NOT"));
+            }
+        };
+        // `to:` matches the recipients and those copied, as it does here.
+        let push_text = |out: &mut Vec<SearchArg>, f: &Field, s: &str| {
+            let s = SearchArg::Str(s.chars().take(200).collect());
+            match f {
+                Field::To => out.extend([atom("OR"), atom("TO"), s.clone(), atom("CC"), s]),
+                Field::From => out.extend([atom("FROM"), s]),
+                Field::Subject => out.extend([atom("SUBJECT"), s]),
+                Field::Body => out.extend([atom("BODY"), s]),
+                Field::Any => out.extend([atom("TEXT"), s]),
+            }
+        };
+        match &c.term {
+            Term::Words(f, words) => {
+                for w in words.iter().filter(|w| !w.is_empty()).take(8) {
+                    not(&mut out);
+                    push_text(&mut out, f, w);
+                }
+            }
+            Term::Phrase(f, p) if !p.is_empty() => {
+                not(&mut out);
+                push_text(&mut out, f, p);
+            }
+            Term::Unread(on) => out.push(atom(if *on != c.negated { "UNSEEN" } else { "SEEN" })),
+            Term::Flagged(on) => out.push(atom(if *on != c.negated { "FLAGGED" } else { "UNFLAGGED" })),
+            Term::Keyword(k)
+                if !k.is_empty() && k.len() < 100 && k.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '$' | '_' | '-' | '.')) =>
+            {
+                not(&mut out);
+                out.extend([atom("KEYWORD"), atom(k)]);
+            }
+            _ => {}
+        }
+    }
+    (!out.is_empty()).then_some(out)
+}
+
+/// The messages of `folder` the server finds for `criteria`, the newest `cap` of them: their
+/// headers are fetched when they aren't kept here, so each can be listed and opened. A folder
+/// never synced (or whose UIDVALIDITY changed) is left to its sync.
+pub fn find_on_server<S: Read + Write>(
+    c: &mut Client<S>,
+    store: &Store,
+    account: &str,
+    folder: &str,
+    criteria: &[SearchArg],
+    cap: usize,
+) -> Result<Vec<Summary>> {
+    let info = c.select(folder, true)?;
+    let mut st = store.load_folder(account, folder)?;
+    if st.validity == 0 || st.validity != info.validity {
+        return Ok(Vec::new());
+    }
+    let mut uids = c.uid_search_args(criteria)?;
+    let uids = uids.split_off(uids.len().saturating_sub(cap));
+    let missing: Vec<u32> = uids.iter().filter(|u| st.find(**u).is_none()).copied().collect();
+    if !missing.is_empty() {
+        let mut report = SyncReport::default();
+        fetch_headers(c, &mut st, account, folder, &missing, &mut report)?;
+        if report.new > 0 {
+            sort_newest_first(&mut st.messages);
+            store.save_folder(account, folder, &st)?;
+        }
+    }
+    Ok(uids.iter().filter_map(|u| st.find(*u).cloned()).collect())
+}
+
+/// How long a search asks the server's folders, and how many folders it asks at most: enough for
+/// the search box to answer while the user waits (a mailbox of a hundred folders isn't walked).
+pub const SEARCH_SECONDS: u64 = 5;
+pub const SEARCH_FOLDERS: usize = 80;
+
+/// Ask the server's own `SEARCH` about `folders` (in the order given): `cap` hits a folder at
+/// most and `cap` in all, stopping after `most` folders or `budget`. The messages, newest first.
+/// A folder that can't be searched is passed over; a lost connection ends it.
+pub fn search_folders<S: Read + Write>(
+    c: &mut Client<S>,
+    store: &Store,
+    account: &str,
+    folders: &[String],
+    query: &str,
+    cap: usize,
+    budget: std::time::Duration,
+    most: usize,
+) -> Result<Vec<Summary>> {
+    let Some(criteria) = imap_criteria(query) else { return Ok(Vec::new()) };
+    let began = std::time::Instant::now();
+    let mut out = Vec::new();
+    for folder in folders.iter().take(most) {
+        if began.elapsed() > budget {
+            break;
+        }
+        match find_on_server(c, store, account, folder, &criteria, cap) {
+            Ok(found) => out.extend(found),
+            Err(e) => {
+                log::info!("{account}/{folder}: searching the server: {e}");
+                if matches!(e, NetError::Io(_) | NetError::Closed(_)) {
+                    return Err(e);
+                }
+            }
+        }
+    }
+    sort_newest_first(&mut out);
+    out.truncate(cap);
+    Ok(out)
+}

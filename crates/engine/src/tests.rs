@@ -257,6 +257,34 @@ fn what_the_server_finds_joins_what_the_index_found() {
     done(s);
 }
 
+/// An IMAP account is asked too: its server's `SEARCH` finds what this computer doesn't keep
+/// (the words of a message past the window, or of a body never downloaded), as Exchange's index
+/// does for an Exchange account. The sample mailbox, kept here, isn't.
+#[test]
+fn a_search_asks_an_imap_account_as_well() {
+    let mut s = sample_session("imap-search");
+    let a = s
+        .run("account.add", &json!({"email": "zoe@example.org", "password": "pw", "imapHost": "mail.example.org", "smtpHost": "mail.example.org"}))
+        .unwrap()["account"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    s.take_jobs();
+    s.run("search.run", &json!({"query": "needle", "scope": "all"})).unwrap();
+    let jobs = s.take_jobs();
+    assert!(
+        jobs.iter().any(|j| matches!(j, Job::Search { account, query, folder: None } if *account == a && query == "needle")),
+        "the account's server is asked for every folder: {jobs:?}"
+    );
+    assert!(!jobs.iter().any(|j| matches!(j, Job::Search { account, .. } if account == "sample")), "kept here: not asked");
+    // A search of the folder on view asks nothing of it while this computer's sample mailbox is
+    // the one open; it asks that folder alone once a folder of the account is.
+    s.run("search.clear", &json!({})).unwrap();
+    s.run("search.run", &json!({"query": "needle", "scope": "current"})).unwrap();
+    assert!(!s.take_jobs().iter().any(|j| matches!(j, Job::Search { account, .. } if *account == a)), "the sample is on view");
+    done(s);
+}
+
 #[test]
 fn compose_reply_and_send_locally() {
     let mut s = sample_session("compose");

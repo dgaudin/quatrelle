@@ -118,7 +118,18 @@ per folder on some accounts). So the session also asks the server's own index, o
 (`Job::Search` → `Event::Found`): Exchange's `FindItem` with a `QueryString` made from the query's
 clauses (`ews::search`), over every folder the account knows, and the hits — whole summaries, with
 the item ids numbered as a sync numbers them, so a message found this way can be read and kept —
-are shown after the local ones, once each. IMAP's `SEARCH` isn't wired yet.
+are shown after the local ones, once each.
+
+An IMAP server is asked the same way (`sync::search_folders`): the query's clauses become `SEARCH`
+keys (`sync::imap_criteria`, RFC 3501 §6.4.4 — `TEXT` for words anywhere, `FROM`/`SUBJECT`/
+`BODY`, `OR TO … CC …` for `to:`, `UNSEEN`/`FLAGGED`/`KEYWORD`, `NOT`), a word that isn't plain
+ASCII going as a literal under `CHARSET UTF-8`. A string IMAP can't ask for (an attachment, an
+importance, a category) stays with the index. Each folder is `EXAMINE`d and searched, the newest
+two hundred hits kept; the headers of those this computer doesn't have are fetched into the
+folder's cache, so a hit can be read, kept, marked or moved like any other. A search of all
+folders asks the biggest first (Gmail's All Mail holds everything) and stops at eighty folders or
+five seconds, so the search box answers while the user waits; the folder on view alone costs one
+round trip.
 
 A folder keeps a window of its own (`windows.json` with the account) when Show more asked for
 more than Options keeps: the worker syncs it that wide from then on, and a wider window takes the

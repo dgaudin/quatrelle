@@ -2156,21 +2156,37 @@ impl Worker {
             self.sink.emit(Event::Found { account, query, items: Vec::new(), error: Some(e.to_string()) });
             return;
         }
+        // Which folders to ask: the one on view, or every folder of the account, the biggest
+        // first (Gmail's All Mail holds everything; the walk stops when its time is up).
+        let paths: Vec<String> = match &folder {
+            Some(f) => vec![f.clone()],
+            None => {
+                let mut fs: Vec<&quatrelle_model::Folder> = self.folders.iter().collect();
+                fs.sort_by_key(|f| std::cmp::Reverse(f.total));
+                fs.into_iter().map(|f| f.path.clone()).collect()
+            }
+        };
         // The numbering an id gets is kept, so a message found by a search can be read afterwards
         // (and after a restart). The state is taken out of `self` — it can't be borrowed twice for
         // the call — and goes back whatever the call answered: one left empty would key every
         // cached message to nothing.
         let mut state = std::mem::take(&mut self.jstate);
-        let r = match self.conn.as_ref() {
-            Some(Conn::Ews(c)) => {
-                let paths: Vec<String> = match &folder {
-                    Some(f) => vec![f.clone()],
-                    None => self.folders.iter().map(|f| f.path.clone()).collect(),
-                };
-                crate::ews::search(c, &mut state, &account, &paths, &query, SEARCH_LIMIT)
-            }
-            // IMAP's own SEARCH finds what the local index already has (headers come first), and
-            // the other transports have theirs to come: the local answer stands.
+        let store = self.store.clone();
+        let r = match self.conn.as_mut() {
+            Some(Conn::Ews(c)) => crate::ews::search(c, &mut state, &account, &paths, &query, SEARCH_LIMIT),
+            // IMAP's own SEARCH: the words may be in a message older than the window kept here,
+            // or in a body never downloaded.
+            Some(Conn::Imap(c)) => crate::sync::search_folders(
+                c,
+                &store,
+                &account,
+                &paths,
+                &query,
+                SEARCH_LIMIT,
+                std::time::Duration::from_secs(crate::sync::SEARCH_SECONDS),
+                crate::sync::SEARCH_FOLDERS,
+            ),
+            // The other transports answer from this computer alone.
             _ => Ok(Vec::new()),
         };
         let numbers: Vec<u32> = r.as_ref().map(|items| items.iter().map(|m| m.key.uid).collect()).unwrap_or_default();
@@ -2178,13 +2194,17 @@ impl Worker {
         self.jstate = state;
         // What only a search found isn't in any folder's cache, so the numbers it may not be
         // kept by must survive the next cleanup: the message is still one to open.
-        for n in numbers {
-            if !self.search_numbers.contains(&n) {
-                self.search_numbers.push(n);
+        // Only the API transports number a message themselves; an IMAP key is the server's UID,
+        // kept in its folder's cache already.
+        if self.acc.is_api() {
+            for n in numbers {
+                if !self.search_numbers.contains(&n) {
+                    self.search_numbers.push(n);
+                }
             }
-        }
-        if self.search_numbers.len() > 4_000 {
-            self.search_numbers.drain(..2_000);
+            if self.search_numbers.len() > 4_000 {
+                self.search_numbers.drain(..2_000);
+            }
         }
         match r {
             Ok(items) => self.sink.emit(Event::Found { account, query, items, error: None }),
