@@ -224,7 +224,8 @@ impl Conn {
         }
         // Whatever fails here leaves the connection half-read: the answer that didn't come (a
         // timeout, a reset) would be read as the next request's, and a stale 401 as a refused
-        // password. It's dropped rather than reused.
+        // password. It's dropped rather than reused — assumed closed until a full answer is in.
+        self.closing = true;
         let sent = write_request(&mut self.s, req, &url, true).and_then(|()| read_response(&mut self.s, req.max, req.method == "HEAD"));
         let resp = match sent {
             Ok(resp) => resp,
