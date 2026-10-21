@@ -671,14 +671,17 @@ pub(crate) fn body(ui: &mut Ui, t: &Tokens, ed: &mut Editor, c: &mut Compose, st
         let r = r.as_sorted_char_range();
         r.start.0..r.end.0
     });
-    if right_press
-        && !kept.is_empty()
-        && let Some(p) = out.response.interact_pointer_pos().or_else(|| out.response.hover_pos())
-    {
-        let at = out.galley.cursor_from_pos(p - out.galley_pos).index.0;
-        if (kept.start..=kept.end).contains(&at) {
+    if right_press && let Some(p) = out.response.interact_pointer_pos().or_else(|| out.response.hover_pos()) {
+        let at = out.galley.cursor_from_pos(p - out.galley_pos).index.0.min(c.body.chars().count());
+        if !kept.is_empty() && (kept.start..=kept.end).contains(&at) {
             set_selection(ui.ctx(), id, kept.clone());
             cursor = Some(kept.clone());
+        } else {
+            // A right-click puts the caret where it landed, as Outlook's does: the menu then
+            // knows which word it was opened on (without it the caret stayed where it was, and
+            // a misspelt word got no suggestions at all).
+            set_selection(ui.ctx(), id, at..at);
+            cursor = Some(at..at);
         }
     }
     if c.body != before {
@@ -720,7 +723,8 @@ pub(crate) fn body(ui: &mut Ui, t: &Tokens, ed: &mut Editor, c: &mut Compose, st
         ui.painter().set(behind, egui::Shape::Vec(shapes));
     }
     // Where the right-click landed in the text (none when the menu is opened another way).
-    let at_pointer = out.response.interact_pointer_pos().map(|p| out.galley.cursor_from_pos(p - out.galley_pos).index.0);
+    let at_pointer =
+        out.response.interact_pointer_pos().or_else(|| out.response.hover_pos()).map(|p| out.galley.cursor_from_pos(p - out.galley_pos).index.0);
     text_menu(&out.response, ed, c, acts, at_pointer);
 }
 
