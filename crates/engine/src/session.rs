@@ -778,6 +778,13 @@ pub struct Session {
     server_asked: Option<(String, SearchScope)>,
     /// Outlook's "Download all": the messages still to bring onto this computer.
     download_all: Option<DownloadAll>,
+    /// A folder asked to show more of its older mail than it keeps (`folder.more`), until the
+    /// sync it started ends.
+    pub showing_more: Option<(String, String)>,
+    /// Accounts whose password is to be asked for, one at a time (`NeedsPassword`), and those
+    /// already asked while this runs.
+    pub ask_password: Vec<String>,
+    asked_password: HashSet<String>,
     /// Pictures the directory keeps for addresses, by lowercased address (`None`: there is
     /// none, or the server keeps none).
     person_photos: BTreeMap<String, Option<Photo>>,
@@ -898,6 +905,9 @@ impl Session {
             found: None,
             server_asked: None,
             download_all: None,
+            showing_more: None,
+            ask_password: Vec::new(),
+            asked_password: HashSet::new(),
             person_photos: BTreeMap::new(),
             photo_asked: HashSet::new(),
             list: Vec::new(),
@@ -2780,6 +2790,47 @@ impl Session {
         }
     }
 
+    /// What closing would lose: online-only accounts' mail still waiting to be sent, and their
+    /// changes not yet on the server, held in memory only.
+    pub fn lost_on_close(&self) -> (usize, usize) {
+        let online: Vec<&str> = self.accounts.iter().filter(|a| a.config.keeps_online()).map(|a| a.config.id.as_str()).collect();
+        if online.is_empty() {
+            return (0, 0);
+        }
+        let unsent = self.outbox.iter().filter(|(a, _)| online.contains(&a.as_str())).count();
+        let changes = online.iter().map(|a| self.store.as_ref().and_then(|s| s.load_ops(a).ok()).map_or(0, |o| o.len())).sum();
+        (unsent, changes)
+    }
+
+    /// How many more of the folder on view its server has than are kept here, with the folder:
+    /// shown at the end of its list, to show more (mail past what's kept).
+    pub fn more_on_server(&self) -> Option<(String, String, u32)> {
+        let View::Folder { account, folder } = &self.view else { return None };
+        if self.search.is_some() {
+            return None;
+        }
+        let a = self.account(account)?;
+        if a.is_local() || a.config.pop.is_some() {
+            return None;
+        }
+        let total = a.folders.iter().find(|f| &f.path == folder)?.total;
+        // The folder on view is loaded (its list is on screen).
+        let kept = self.cache.get(&(account.clone(), folder.clone())).map_or(0, |st| st.messages.len());
+        let kept = u32::try_from(kept).unwrap_or(u32::MAX);
+        (total > kept).then(|| (account.clone(), folder.clone(), total - kept))
+    }
+
+    /// Keep `more` older messages of a folder than it keeps now, fetched from its server.
+    pub fn show_more(&mut self, account: &str, folder: &str, more: u32) -> CmdResult {
+        let a = self.account(account).ok_or_else(|| CmdError::Params(format!("no account `{account}`")))?;
+        if a.is_local() || a.config.pop.is_some() {
+            return Err(CmdError::Disabled("this account keeps all its mail here".into()));
+        }
+        self.jobs.push(Job::MoreMail { account: account.to_string(), folder: folder.to_string(), more });
+        self.showing_more = Some((account.to_string(), folder.to_string()));
+        Ok(serde_json::json!({ "account": account, "folder": folder, "more": more }))
+    }
+
     // ----- downloading -----
 
     /// Bring every message of an account (or one folder) that isn't on this computer yet, as
@@ -3784,6 +3835,12 @@ impl Session {
     pub fn apply(&mut self, e: Event) {
         match e {
             Event::Status { account, status } => {
+                // Show more ended (with nothing new, or failing): its footer can be asked again.
+                if !matches!(status, SyncStatus::Syncing { .. } | SyncStatus::Connecting)
+                    && self.showing_more.as_ref().is_some_and(|(a, _)| *a == account)
+                {
+                    self.showing_more = None;
+                }
                 // Refusals that need something done say so once, as they come.
                 if let SyncStatus::Error { error } = &status
                     && (error.starts_with(quatrelle_model::MICROSOFT_IMAP_CLOSED) || error.starts_with(quatrelle_model::MICROSOFT_NO_PASSWORDS))
@@ -3798,6 +3855,9 @@ impl Session {
                     // An account that signs in in the browser has no password to ask for.
                     let what = if browser { "needs you to sign in again" } else { "needs its password" };
                     self.notice(format!("{who} {what}{why}"), true);
+                    if !browser && self.asked_password.insert(account.clone()) {
+                        self.ask_password.push(account.clone());
+                    }
                 }
                 let online = matches!(status, SyncStatus::Online { .. });
                 // A server that has started syncing is readable: its rules are asked for then,
@@ -3839,6 +3899,9 @@ impl Session {
                 self.index = None;
             }
             Event::FolderChanged { account, folder } => {
+                if self.showing_more.as_ref().is_some_and(|(a, f)| *a == account && *f == folder) {
+                    self.showing_more = None;
+                }
                 self.reload_folder(&account, &folder);
                 self.note_new_mail(&account, &folder);
                 let visible = self.search.is_some() || self.view_folders().iter().any(|(a, f)| *a == account && *f == folder);

@@ -166,15 +166,14 @@ pub fn sync_folder<S: Read + Write>(c: &mut Client<S>, store: &Store, account: &
             st.window = opts.window;
         } else {
             new_mail(c, &mut st, account, folder, known_max, &mut report)?;
-            // 3: kept more since it was filled: the older mail too, once.
+            // 3: kept more since it was filled (Options, or Show more on the server): the newest
+            // of what isn't kept yet, once. Not only what's older than the oldest kept: a message
+            // found by searching the server can be older than the ones skipped.
             if opts.window > st.window && st.messages.len() < opts.window {
-                let oldest = st.messages.iter().map(|m| m.key.uid).min().unwrap_or(0);
-                if oldest > 1 {
-                    let older = c.uid_search(&format!("UID 1:{}", oldest - 1))?;
-                    let want = opts.window - st.messages.len();
-                    let take: Vec<u32> = older.iter().rev().take(want).rev().copied().collect();
-                    fetch_headers(c, &mut st, account, folder, &take, &mut report)?;
-                }
+                let all = c.uid_search("ALL")?;
+                let want = opts.window - st.messages.len();
+                let take: Vec<u32> = all.iter().rev().filter(|u| st.find(**u).is_none()).take(want).copied().collect();
+                fetch_headers(c, &mut st, account, folder, &take, &mut report)?;
                 st.window = opts.window;
             }
         }

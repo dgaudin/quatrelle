@@ -139,7 +139,11 @@ pub fn nav(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
 
 /// The mailbox a calendar belongs to, when it's a shared mailbox the folder pane opens
 /// (`<account>|<address>`).
-fn section_key(sections: &[quatrelle_engine::PaneSection], a: &quatrelle_engine::AccountState, c: &quatrelle_engine::model::pim::CalendarInfo) -> Option<String> {
+fn section_key(
+    sections: &[quatrelle_engine::PaneSection],
+    a: &quatrelle_engine::AccountState,
+    c: &quatrelle_engine::model::pim::CalendarInfo,
+) -> Option<String> {
     let owner = c.id.strip_prefix("shared:")?.to_ascii_lowercase();
     let key = format!("{}|{owner}", a.config.id);
     sections.iter().any(|x| x.key == key).then_some(key)

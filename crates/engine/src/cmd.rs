@@ -278,6 +278,19 @@ pub fn registry() -> Registry {
         // Search
         CommandSpec::new("search.run", "Search", "Search box", search).key("Mod+E").params(r#"{"query": string, "scope"?: "all"|"current", "index"?: number (messages added to the index this call; the window adds a slice at a time so a big mailbox doesn't freeze it; 0 or absent: no limit)}"#),
         CommandSpec::new("search.clear", "Clear search", "Search box", |s, _| Ok(json!({"results": s.run_search("", SearchScope::All)}))).key("Escape"),
+        CommandSpec::new("folder.more", "Show more from the server", "Folder › end of the list", |s, v| {
+            let (account, folder) = match (p::str(v, "account"), p::str(v, "folder")) {
+                (Some(a), Some(f)) => (a.to_string(), f.to_string()),
+                _ => match &s.view {
+                    crate::View::Folder { account, folder } => (account.clone(), folder.clone()),
+                    _ => return Err(CmdError::Disabled("open a folder first".into())),
+                },
+            };
+            let step = if s.prefs.keep_messages == 0 { 1000 } else { s.prefs.keep_messages };
+            let more = p::u64(v, "more").map_or(step, |n| u32::try_from(n.clamp(1, 100_000)).unwrap_or(step));
+            s.show_more(&account, &folder, more)
+        })
+        .params(r#"{"account"?: string, "folder"?: string (default: the folder on view), "more"?: number (default: as many as Options keeps)}"#),
         // Compose
         CommandSpec::new("compose.update", "Edit message", "Message", compose_update)
             .params(r#"{"to"?: string, "cc"?: string, "bcc"?: string, "subject"?: string, "body"?: string, "marks"?: bool (the body uses **bold**, *italic*, - lists…), "account"?: string, "importance"?: "high"|"normal"|"low", "readReceipt"?: bool, "replyTo"?: string (where replies go), "sendAfter"?: number (Unix seconds: held in the Outbox until then; 0 sends at once), "voting"?: string (voting buttons, `;`-separated: "Approve;Reject"; Exchange accounts)}"#)

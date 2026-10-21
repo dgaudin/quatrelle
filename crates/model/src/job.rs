@@ -166,6 +166,9 @@ pub enum Job {
     SyncAll { account: String },
     /// Refresh one folder (new mail, flag changes, deletions).
     SyncFolder { account: String, folder: String },
+    /// Keep `more` of a folder's older messages than it keeps now, fetched from the server
+    /// (mail past what's kept on this computer, shown when asked for).
+    MoreMail { account: String, folder: String, more: u32 },
     /// Download a message's full source.
     FetchBody { key: MessageKey },
     /// Apply a mailbox change on the server.
@@ -242,6 +245,7 @@ impl Job {
             Job::Remove { account }
             | Job::SyncAll { account }
             | Job::SyncFolder { account, .. }
+            | Job::MoreMail { account, .. }
             | Job::Apply { account, .. }
             | Job::Send { account, .. }
             | Job::SaveDraft { account, .. }

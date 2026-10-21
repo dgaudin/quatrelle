@@ -410,12 +410,7 @@ fn shared_header(
             ui.add_enabled(false, egui::Button::new(tl!("Opened by the server for your access to it")));
         }
         if ui.button(tl!("Add shared mailbox…")).clicked() {
-            acts.push(Action::Dialog(Dialog::OpenSharedMailbox {
-                account: account.clone(),
-                email: String::new(),
-                calendar: false,
-                error: None,
-            }));
+            acts.push(Action::Dialog(Dialog::OpenSharedMailbox { account: account.clone(), email: String::new(), calendar: false, error: None }));
             ui.close();
         }
         move_items(ui, sections, at, acts);
