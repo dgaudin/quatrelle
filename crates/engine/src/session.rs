@@ -275,6 +275,16 @@ pub enum ReadInPane {
     Left,
 }
 
+/// A mailbox in the folder pane: an account, or a shared mailbox one opens ([`Session::pane_sections`]).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PaneSection {
+    /// The account's id, or `<account>|<address>` for a shared mailbox.
+    pub key: String,
+    pub account: String,
+    /// A shared mailbox: its top folder's path.
+    pub mailbox: Option<String>,
+}
+
 /// Settings the user changes from the View tab (saved by the app).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -349,6 +359,10 @@ pub struct Prefs {
     /// `favorites`, `account:<id>`, `folder:<account>/<path>`.
     #[serde(default)]
     pub collapsed: BTreeSet<String>,
+    /// The folder pane's order of mailboxes, moved by the user ([`Session::pane_sections`]):
+    /// account ids, and shared mailboxes as `<account>|<address>`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub pane_order: Vec<String>,
     /// When flagged messages are due (Follow Up › Today, Tomorrow…): Message-ID → local day.
     /// IMAP has nowhere for it, so it's kept here, as Outlook keeps it for IMAP accounts.
     #[serde(default)]
@@ -533,6 +547,7 @@ impl Default for Prefs {
             collapsed: BTreeSet::new(),
             spelling: Vec::new(),
             spell_check: true,
+            pane_order: Vec::new(),
         }
     }
 }
@@ -3513,16 +3528,59 @@ impl Session {
 
     /// Move an account up (`by` < 0) or down the folder pane, as Outlook moves a mailbox.
     pub fn move_account(&mut self, id: &str, by: i64) -> CmdResult {
-        let from = self.accounts.iter().position(|a| a.config.id == id).ok_or_else(|| CmdError::Params(format!("no account `{id}`")))?;
-        let last = self.accounts.len().saturating_sub(1);
+        if self.account(id).is_none() {
+            return Err(CmdError::Params(format!("no account `{id}`")));
+        }
+        let to = self.move_pane_section(id, by)?;
+        Ok(serde_json::json!({ "account": id, "position": to }))
+    }
+
+    /// The folder pane's mailboxes in order (issue #1): each account, and each shared mailbox an
+    /// account opens as a mailbox of its own (`<account>|<address>`), placed where the user moved
+    /// them; new ones after the mailbox they came with.
+    pub fn pane_sections(&self) -> Vec<PaneSection> {
+        let mut natural = Vec::new();
+        for a in &self.accounts {
+            natural.push(PaneSection { key: a.config.id.clone(), account: a.config.id.clone(), mailbox: None });
+            for top in a.folders.iter().filter(|f| f.depth() == 0) {
+                if let Some(address) = &top.mailbox {
+                    let key = format!("{}|{}", a.config.id, address.to_ascii_lowercase());
+                    if !natural.iter().any(|s: &PaneSection| s.key == key) {
+                        natural.push(PaneSection { key, account: a.config.id.clone(), mailbox: Some(top.path.clone()) });
+                    }
+                }
+            }
+        }
+        let mut out: Vec<PaneSection> = self.prefs.pane_order.iter().filter_map(|k| natural.iter().find(|s| &s.key == k).cloned()).collect();
+        for (i, s) in natural.iter().enumerate() {
+            if out.iter().any(|o| o.key == s.key) {
+                continue;
+            }
+            let after = natural.get(..i).unwrap_or_default().iter().rev().find_map(|p| out.iter().position(|o| o.key == p.key));
+            out.insert(after.map_or(0, |at| at + 1), s.clone());
+        }
+        out
+    }
+
+    /// Move a mailbox in the folder pane `by` places (an account's own order follows, as the
+    /// accounts' order is theirs everywhere else). Returns where it is now.
+    pub fn move_pane_section(&mut self, key: &str, by: i64) -> Result<usize, CmdError> {
+        let mut order: Vec<String> = self.pane_sections().into_iter().map(|s| s.key).collect();
+        let from = order.iter().position(|k| k == key).ok_or_else(|| CmdError::Params(format!("no mailbox `{key}` in the folder pane")))?;
+        let last = order.len().saturating_sub(1);
         let to = if by < 0 { from.saturating_sub(by.unsigned_abs() as usize) } else { from.saturating_add(by as usize).min(last) };
         if to != from {
-            let a = self.accounts.remove(from);
-            self.accounts.insert(to, a);
+            let k = order.remove(from);
+            order.insert(to, k);
+            let ids: Vec<String> = order.iter().filter(|k| !k.contains('|')).cloned().collect();
+            let mut accounts = std::mem::take(&mut self.accounts);
+            accounts.sort_by_key(|a| ids.iter().position(|id| *id == a.config.id).unwrap_or(usize::MAX));
+            self.accounts = accounts;
+            self.prefs.pane_order = order;
             self.save_accounts();
             self.revision = self.revision.wrapping_add(1);
         }
-        Ok(serde_json::json!({ "account": id, "position": to }))
+        Ok(to)
     }
 
     /// Remove an account as Outlook does: gone from here, its data file kept (closed) where it
