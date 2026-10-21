@@ -437,6 +437,10 @@ async fn job(sh: &Rcs, id: &str, j: Job) {
         }
         // Nothing to do in the browser: no Outbox (sending needs the server), no CalDAV.
         Job::FlushOutbox { .. } | Job::SyncDav { .. } => {}
+        // Mail past what's kept is asked of the desktop's servers, not yet of the browser's.
+        Job::MoreMail { .. } => {
+            emit(sh, Event::Notice { account: id.to_string(), message: "showing more from the server isn't in the browser yet".into() })
+        }
         Job::Start { .. }
         | Job::SmtpPassword { .. }
         | Job::CheckUpdates

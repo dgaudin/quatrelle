@@ -598,6 +598,11 @@ pub enum Dialog {
     ConfirmDelete {
         count: usize,
     },
+    /// Closing would lose what online-only accounts hold in memory only.
+    LostOnClose {
+        unsent: usize,
+        changes: usize,
+    },
     /// Confirmation before `contact.delete`, which can't be undone.
     ConfirmDeleteContact {
         uid: String,
@@ -1801,6 +1806,33 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Act
             let (ok, cancel) = buttons(ui, t, "Sign in", !password.is_empty());
             if (ok || enter) && !password.is_empty() {
                 acts.push(Action::Run("account.setPassword", json!({"account": account, "password": password})));
+                return false;
+            }
+            !cancel
+        }
+        Dialog::LostOnClose { unsent, changes } => {
+            ui.set_width(420.0);
+            title(ui, t, "Close Quatrelle?");
+            let mut lost = Vec::new();
+            if *unsent > 0 {
+                lost.push(tf!("Messages waiting to be sent: {n}", n = unsent));
+            }
+            if *changes > 0 {
+                lost.push(tf!("Changes not yet on the server: {n}", n = changes));
+            }
+            ui.add(
+                egui::Label::new(
+                    RichText::new(tf!(
+                        "These are held in memory only, as their accounts are online only, and are lost if Quatrelle closes now: {what}. Connect and send them first (Send / Receive), or close anyway.",
+                        what = lost.join("; ")
+                    ))
+                    .color(t.dim),
+                )
+                .wrap(),
+            );
+            let (ok, cancel) = buttons(ui, t, "Close anyway", true);
+            if ok {
+                acts.push(Action::CloseAnyway);
                 return false;
             }
             !cancel

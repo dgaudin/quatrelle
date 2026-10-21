@@ -166,6 +166,8 @@ pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) 
                 tl!("All caught up: nothing in this folder.")
             };
             ui.label(RichText::new(msg).color(t.dim));
+            ui.add_space(10.0);
+            footer(s, &t, ui, acts);
         });
         st.list_rows = Some(cached);
         return;
@@ -179,8 +181,10 @@ pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) 
         None
     };
 
+    // After the last message: more on the server (mail past what's kept here).
+    let has_footer = s.more_on_server().is_some();
     egui::ScrollArea::vertical().auto_shrink(false).id_salt("list").show_viewport(ui, |ui, viewport| {
-        ui.set_height(total);
+        ui.set_height(total + if has_footer { FOOTER_H } else { 0.0 });
         let origin = ui.min_rect().min;
         let width = ui.available_width();
         if let Some(ri) = scroll_to
@@ -216,8 +220,31 @@ pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) 
                 }
             }
         }
+        if has_footer && total < viewport.max.y {
+            let r = Rect::from_min_size(origin + vec2(0.0, total), vec2(width, FOOTER_H));
+            ui.scope_builder(egui::UiBuilder::new().max_rect(r.shrink2(vec2(14.0, 8.0))), |ui| {
+                ui.vertical_centered(|ui| footer(s, &t, ui, acts));
+            });
+        }
     });
     st.list_rows = Some(cached);
+}
+
+/// The list's footer's height.
+const FOOTER_H: f32 = 76.0;
+
+/// What's past the list: a folder's older mail on its server, to show more of.
+fn footer(s: &Session, t: &theme::Tokens, ui: &mut Ui, acts: &mut Vec<Action>) {
+    let Some((account, folder, n)) = s.more_on_server() else { return };
+    ui.label(RichText::new(tf!("{n} more on the server", n = n)).color(t.dim).small());
+    if s.showing_more.as_ref().is_some_and(|(a, f)| *a == account && *f == folder) {
+        ui.horizontal(|ui| {
+            ui.spinner();
+            ui.label(RichText::new(tl!("Getting them from the server…")).color(t.dim).small());
+        });
+    } else if ui.button(tl!("Show more")).clicked() {
+        acts.push(Action::Run("folder.more", json!({"account": account, "folder": folder})));
+    }
 }
 
 /// A date (or other) heading between the rows.

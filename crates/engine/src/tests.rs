@@ -3800,3 +3800,71 @@ fn shared_mailboxes_are_mailboxes_of_their_own_in_the_pane() {
     assert_eq!(keys(&s), [a.clone(), format!("{a}|team@contoso.example"), "sample".to_string()]);
     done(s);
 }
+
+/// Mail past what is kept: a folder with more on its server says how many and shows more of its
+/// older mail when asked, then says so while it gets them.
+#[test]
+fn a_folder_says_whats_past_what_it_keeps_and_shows_more() {
+    use quatrelle_model::{Folder, Summary};
+    let mut s = sample_session("server-more");
+    let a = s
+        .run("account.add", &json!({"email": "zoe@example.org", "password": "pw", "imapHost": "mail.example.org", "smtpHost": "mail.example.org"}))
+        .unwrap()["account"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    s.take_jobs();
+    s.apply(Event::Folders {
+        account: a.clone(),
+        folders: vec![Folder { account: a.clone(), path: "INBOX".into(), role: FolderRole::Inbox, total: 50, ..Default::default() }],
+    });
+    let store = s.store.clone().unwrap();
+    let key = |uid| MessageKey { account: a.clone(), folder: "INBOX".into(), validity: 1, uid };
+    let mut st = store.load_folder(&a, "INBOX").unwrap();
+    st.validity = 1;
+    st.messages = (41..=50).map(|n| Summary { key: key(n), subject: format!("Message {n}"), ..Default::default() }).collect();
+    store.save_folder(&a, "INBOX", &st).unwrap();
+    s.view = crate::View::Folder { account: a.clone(), folder: "INBOX".into() };
+    s.apply(Event::FolderChanged { account: a.clone(), folder: "INBOX".into() });
+    assert_eq!(s.more_on_server(), Some((a.clone(), "INBOX".to_string(), 40)));
+    s.run("folder.more", &json!({})).unwrap();
+    assert!(s.take_jobs().iter().any(|j| matches!(j, Job::MoreMail { account, folder, more: 1000 } if *account == a && folder == "INBOX")));
+    assert_eq!(s.showing_more, Some((a.clone(), "INBOX".to_string())));
+    s.apply(Event::Status { account: a.clone(), status: SyncStatus::Online { at: 0 } });
+    assert_eq!(s.showing_more, None, "settled, it can be asked again");
+    // A folder it keeps all of, and a search, have nothing past the list.
+    s.run("search.run", &json!({"query": "Message", "scope": "current"})).unwrap();
+    assert_eq!(s.more_on_server(), None);
+    assert!(s.run("folder.more", &json!({"account": "sample", "folder": "INBOX"})).is_err(), "the sample mailbox keeps all its mail here");
+    done(s);
+}
+
+/// Closing loses what online-only accounts hold in memory only (unsent mail, changes not on the
+/// server yet): counted, to ask first. A start without a kept password asks for it, once while
+/// Quatrelle runs.
+#[test]
+fn closing_counts_whats_lost_and_a_missing_password_is_asked_for() {
+    let mut s = sample_session("lost-on-close");
+    let a = s
+        .run("account.add", &json!({"email": "zoe@example.org", "password": "pw", "imapHost": "mail.example.org", "smtpHost": "mail.example.org", "onlineOnly": true}))
+        .unwrap()["account"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert_eq!(s.lost_on_close(), (0, 0));
+    let store = s.store.clone().unwrap();
+    store.save_ops(&a, &[Op::Expunge { keys: Vec::new() }]).unwrap();
+    s.outbox.push((a.clone(), quatrelle_store::OutboxItem { id: 3, ..Default::default() }));
+    s.outbox.push(("sample".into(), quatrelle_store::OutboxItem { id: 4, ..Default::default() }));
+    assert_eq!(s.lost_on_close(), (1, 1), "only the online-only account's");
+    s.run("account.onlineOnly", &json!({"account": a, "on": false})).unwrap();
+    assert_eq!(s.lost_on_close(), (0, 0), "kept on this computer: nothing lost");
+
+    let needs = |s: &mut Session| s.apply(Event::Status { account: a.clone(), status: SyncStatus::NeedsPassword { error: String::new() } });
+    needs(&mut s);
+    assert_eq!(s.ask_password, std::slice::from_ref(&a));
+    s.ask_password.clear();
+    needs(&mut s);
+    assert!(s.ask_password.is_empty(), "once while Quatrelle runs");
+    done(s);
+}
