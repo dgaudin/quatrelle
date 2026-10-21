@@ -436,3 +436,11 @@ local-first, media-aware v1); the fuller request is
   before", "When it starts"). `card_rows` builds the rows, `reminder_text` says the alarm, and the
   same card follows the chip in every view; the reminder line is there when the appointment has
   one.
+- **2026-10-21** — **A window keeps the place the desktop gave it:** the app handed every separate
+  window its saved position and size at every frame, so a window the window manager had just
+  placed — or one being dragged to the other screen — jumped between the two places several times
+  a second (a compose window flashing, and looking like two). The place is now asked for at the
+  window's opening only, and its last place is still remembered for the next one. `QUATRELLE_TRACE_WINDOWS=1`
+  logs what each window reports about itself (outer and inner rectangles, monitor, scale) whenever
+  it changes, which is how this was followed: the same window alternating between `2129,99` and
+  `2190,154` frame after frame.
