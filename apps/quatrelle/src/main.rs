@@ -29,6 +29,7 @@ mod graphics;
 mod keychain;
 mod logfile;
 mod portable;
+mod screenshot;
 mod secrets;
 mod self_update;
 mod single_instance;
@@ -138,6 +139,9 @@ impl eframe::App for App {
         self.keep_state(Some(ui.ctx()), false);
         if let Some(path) = self.app.take_drag_out() {
             drag_out(frame, path);
+        }
+        if let Some(path) = screenshot::wanted() {
+            screenshot::step(ui.ctx(), self.frames, &path);
         }
     }
     fn on_exit(&mut self) {
