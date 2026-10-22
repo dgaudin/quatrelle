@@ -23,6 +23,15 @@ fn server_shape(rules: &[Rule], kind: &impl Fn(&str) -> Option<ServerKind>) -> V
         .collect()
 }
 
+/// Where "run the rules now" looks: the list on screen, the Inbox of each account the rules
+/// apply to, or one folder (`account`: the rule's, or the current one, when not given).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RulesScope {
+    List,
+    Inbox,
+    Folder { account: Option<String>, folder: String },
+}
+
 impl Session {
     // ----- categories and pins -----
 
@@ -641,28 +650,45 @@ impl Session {
         quiet
     }
 
-    /// Run the rules (or one) now, on the list on screen or (`inbox`) on the mail already in the
-    /// Inbox of the accounts they apply to, as Outlook's "run this rule now".
-    pub fn run_rules_now(&mut self, only: Option<usize>, inbox: bool) -> CmdResult {
+    /// Run the rules (or one) now, on the list on screen, on the mail already in the Inbox of
+    /// the accounts they apply to, or on one folder's, as Outlook's "run this rule now".
+    pub fn run_rules_now(&mut self, only: Option<usize>, scope: RulesScope) -> CmdResult {
         let saved = self.rules.clone();
         if let Some(i) = only {
             let r = saved.get(i).cloned().ok_or_else(|| CmdError::Params(format!("no rule {i}")))?;
             self.rules = vec![Rule { enabled: true, ..r }];
         }
-        let msgs: Vec<Summary> = if inbox {
-            let only_account = only.and_then(|i| saved.get(i)).and_then(|r| r.account.clone());
-            let inboxes: Vec<(String, String)> = self
+        let only_account = only.and_then(|i| saved.get(i)).and_then(|r| r.account.clone());
+        let folders: Vec<(String, String)> = match &scope {
+            RulesScope::List => Vec::new(),
+            RulesScope::Inbox => self
                 .accounts
                 .iter()
                 .filter(|a| only_account.as_ref().is_none_or(|o| *o == a.config.id))
                 .filter_map(|a| a.folder(FolderRole::Inbox).map(|f| (a.config.id.clone(), f.path.clone())))
-                .collect();
-            inboxes
+                .collect(),
+            // A rule made from a message in another folder runs on that folder's mail: the
+            // rule's account's, else the one on screen.
+            RulesScope::Folder { account, folder } => {
+                let account = account
+                    .clone()
+                    .or_else(|| only_account.clone())
+                    .or_else(|| self.current_account().map(|a| a.config.id.clone()))
+                    .ok_or_else(|| CmdError::Params("`account` is required".into()))?;
+                if self.folder(&account, folder).is_none() {
+                    self.rules = saved;
+                    return Err(CmdError::Params(format!("no folder `{folder}` in that account")));
+                }
+                vec![(account, folder.clone())]
+            }
+        };
+        let msgs: Vec<Summary> = if matches!(scope, RulesScope::List) {
+            self.list.clone()
+        } else {
+            folders
                 .iter()
                 .flat_map(|(a, f)| self.folder_state(a, f).messages.iter().filter(|m| !m.flags.deleted).cloned().collect::<Vec<_>>())
                 .collect()
-        } else {
-            self.list.clone()
         };
         let n = msgs.iter().filter(|m| !actions_for(&self.rules, m).is_empty()).count();
         self.run_rules(&msgs);

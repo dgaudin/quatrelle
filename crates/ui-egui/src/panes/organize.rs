@@ -116,7 +116,7 @@ pub fn context_items(ui: &mut Ui, s: &Session, t: &Tokens, acts: &mut Vec<Action
         // goes by the name then.
         let sender = if m.from.email.trim().is_empty() { m.from.name.trim() } else { m.from.email.trim() };
         let server = s.server_kind(&m.key.account).is_some();
-        acts.push(Action::Dialog(Dialog::rule_from(sender, Some(&m.key.account), server)));
+        acts.push(Action::Dialog(Dialog::rule_from(sender, Some(&m.key.account), server, Some(&m.key.folder))));
         ui.close();
     }
 }

@@ -174,9 +174,15 @@ pub(super) fn commands() -> Vec<CommandSpec> {
         })
         .params(r#"{"path": string, "replace"?: bool (in place of the rules here; else added after them)}"#),
         CommandSpec::new("rules.run", "Run rules now", "Home › Rules", |s, v| {
-            s.run_rules_now(p::u64(v, "index").and_then(|i| usize::try_from(i).ok()), p::bool(v, "inbox").unwrap_or(false))
+            let only = p::u64(v, "index").and_then(|i| usize::try_from(i).ok());
+            let scope = match p::str(v, "folder").map(str::trim).filter(|f| !f.is_empty()) {
+                Some(folder) => RulesScope::Folder { account: p::str(v, "account").map(str::to_string), folder: folder.to_string() },
+                None if p::bool(v, "inbox").unwrap_or(false) => RulesScope::Inbox,
+                None => RulesScope::List,
+            };
+            s.run_rules_now(only, scope)
         })
-        .params(r#"{"index"?: number, "inbox"?: bool (the mail already in the Inbox, not the list on screen)}"#)
+        .params(r#"{"index"?: number, "inbox"?: bool (the mail already in the Inbox, not the list on screen), "folder"?: string and "account"?: string (the mail already in that folder — the rule's account's, or the current one, when `account` isn't given)}"#)
             .when(has_account),
     ]
 }

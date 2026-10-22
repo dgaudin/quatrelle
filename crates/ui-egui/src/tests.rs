@@ -137,7 +137,7 @@ pub(crate) fn tour() {
             Dialog::delete_folder(&a.session, &projects),
             Dialog::NewCategory { name: "Clients".into(), color: 3, error: Some("taken".into()) },
             Dialog::Rules,
-            Dialog::rule_from("zoe@studio.example", Some("sample"), true),
+            Dialog::rule_from("zoe@studio.example", Some("sample"), true, Some("Archive")),
             Dialog::spelling(),
             Dialog::add_account_with("zoe@gmail.com", true),
             jmap_form(),
