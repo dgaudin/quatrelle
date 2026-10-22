@@ -37,6 +37,7 @@ pub(crate) struct Desktop {
     /// threads that wait on them for the window to take; and the window's waker, so it draws
     /// (and answers) as soon as one comes.
     pub(crate) reminder_answers: Arc<std::sync::Mutex<Vec<(String, ReminderAction)>>>,
+    #[cfg(all(unix, not(target_os = "macos")))]
     pub(crate) waker: Option<Arc<dyn Fn() + Send + Sync>>,
 }
 

@@ -416,6 +416,7 @@ fn run(
                     portable: app_portable,
                     updater: updater.clone(),
                     // A reminder answered from its notification wakes the window to act on it.
+                    #[cfg(all(unix, not(target_os = "macos")))]
                     waker: Some(Arc::new({
                         let ctx = cc.egui_ctx.clone();
                         move || ctx.request_repaint()
