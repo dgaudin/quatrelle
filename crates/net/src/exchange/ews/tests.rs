@@ -211,7 +211,8 @@ fn a_folder_that_hasnt_changed_isnt_listed_again() {
     let mut st = State::default();
     list_folders(&c, &mut st, "a1").unwrap();
     let opts = SyncOptions { prefetch: 0, ..Default::default() };
-    let listings = || server.data.lock().unwrap().calls.iter().filter(|c| c.as_str() == "FindItem").count();
+    // Anything that reads the folder's messages: a listing, or its changes.
+    let listings = || server.data.lock().unwrap().calls.iter().filter(|c| matches!(c.as_str(), "FindItem" | "SyncFolderItems")).count();
     let sync = |st: &mut State| sync_folder(&c, st, &store, "a1", "INBOX", &opts).unwrap();
     assert_eq!(sync(&mut st).new, 2);
     let n = listings();
@@ -235,12 +236,112 @@ fn a_folder_that_hasnt_changed_isnt_listed_again() {
     }
     sync(&mut st);
     assert!(listings() > n, "an old mark: listed again");
-    // A server that doesn't stamp its folders: listed every time.
+    // A server that doesn't stamp its folders: read every time.
     server.data.lock().unwrap().no_commit_time = true;
     let n = listings();
     sync(&mut st);
     sync(&mut st);
-    assert_eq!(listings(), n + 2);
+    assert!(listings() >= n + 2);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Once a folder has been read, only what changed since is asked for (`SyncFolderItems`): new
+/// mail, read marks, flags and deletions come in without listing the folder, a page at a time;
+/// a state the server refuses has the folder listed in full again.
+#[test]
+fn a_folder_read_once_asks_only_what_changed() {
+    let mut d = crate::fakes::fake_ews::Data::default();
+    let inbox = d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    let mut ids = Vec::new();
+    for i in 1..=3 {
+        ids.push(d.deliver(&inbox, format!("From: a@x.example\r\nSubject: m{i}\r\n\r\nx\r\n").as_bytes(), false, &format!("2024-05-0{i}T09:00:00Z")));
+    }
+    let server = crate::fakes::fake_ews::serve(d);
+    let dir = std::env::temp_dir().join(format!("quatrelle-ews-changes-only-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let store = Store::open(&dir).unwrap();
+    let user = format!("{}\\{}", crate::fakes::fake_ews::DOMAIN, crate::fakes::fake_ews::USER);
+    let c = Client::connect(&server.url, &user, crate::fakes::fake_ews::PASSWORD, "riley@contoso.example").unwrap();
+    let mut st = State::default();
+    list_folders(&c, &mut st, "a1").unwrap();
+    let opts = SyncOptions { prefetch: 0, ..Default::default() };
+    let count = |op: &str| server.data.lock().unwrap().calls.iter().filter(|c| c.as_str() == op).count();
+    let sync = |st: &mut State| sync_folder(&c, st, &store, "a1", "INBOX", &opts).unwrap();
+    let subjects = || {
+        let mut v: Vec<(String, bool, bool)> =
+            store.load_folder("a1", "INBOX").unwrap().messages.iter().map(|m| (m.subject.clone(), m.flags.seen, m.flags.flagged)).collect();
+        v.sort();
+        v
+    };
+    assert_eq!(sync(&mut st).new, 3);
+    assert!(st.marks.get("INBOX").is_some_and(|m| !m.sync.is_empty()), "its state kept");
+    // New mail, one read and one flagged elsewhere, one deleted: only the changes are asked.
+    let listed = count("FindItem");
+    {
+        let mut d = server.data.lock().unwrap();
+        d.deliver(&inbox, b"From: b@x.example\r\nSubject: m4\r\n\r\nx\r\n", false, "2024-05-04T09:00:00Z");
+        d.items.iter_mut().filter(|i| i.id == ids[0]).for_each(|i| i.read = true);
+        d.items.iter_mut().filter(|i| i.id == ids[1]).for_each(|i| i.flagged = true);
+        d.items.retain(|i| i.id != ids[2]);
+    }
+    let r = sync(&mut st);
+    assert_eq!(count("FindItem"), listed, "not listed again");
+    assert_eq!((r.new, r.changed, r.removed), (1, 2, 1), "{r:?}");
+    assert_eq!(subjects(), [("m1".into(), true, false), ("m2".into(), false, true), ("m4".into(), false, false)]);
+    // A page at a time.
+    server.data.lock().unwrap().sync_page = Some(1);
+    {
+        let mut d = server.data.lock().unwrap();
+        for i in 5..=7 {
+            d.deliver(&inbox, format!("From: c@x.example\r\nSubject: m{i}\r\n\r\nx\r\n").as_bytes(), false, &format!("2024-05-0{i}T09:00:00Z"));
+        }
+    }
+    let pages = count("SyncFolderItems");
+    assert_eq!(sync(&mut st).new, 3);
+    assert!(count("SyncFolderItems") >= pages + 3, "three pages");
+    server.data.lock().unwrap().sync_page = None;
+    // A state the server no longer takes: listed in full, and right.
+    if let Some(m) = st.marks.get_mut("INBOX") {
+        m.sync = "garbage".into();
+    }
+    server.data.lock().unwrap().deliver(&inbox, b"From: d@x.example\r\nSubject: m8\r\n\r\nx\r\n", false, "2024-05-08T09:00:00Z");
+    let listed = count("FindItem");
+    assert_eq!(sync(&mut st).new, 1);
+    assert!(count("FindItem") > listed, "listed in full");
+    assert!(st.marks.get("INBOX").is_some_and(|m| m.sync.starts_with("v1")), "a good state again");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Messages are downloaded ahead a few at a time in one request, not one request each; one the
+/// server won't give is left for when it's opened, the others still come.
+#[test]
+fn messages_are_downloaded_ahead_a_few_at_a_time() {
+    let mut d = crate::fakes::fake_ews::Data::default();
+    let inbox = d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    let mut ids = Vec::new();
+    for i in 1..=25 {
+        ids.push(d.deliver(&inbox, format!("From: a@x.example\r\nSubject: m{i}\r\n\r\nbody {i}\r\n").as_bytes(), false, "2024-05-01T09:00:00Z"));
+    }
+    d.unreadable.push(ids[3].clone());
+    let server = crate::fakes::fake_ews::serve(d);
+    let dir = std::env::temp_dir().join(format!("quatrelle-ews-ahead-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let store = Store::open(&dir).unwrap();
+    let user = format!("{}\\{}", crate::fakes::fake_ews::DOMAIN, crate::fakes::fake_ews::USER);
+    let c = Client::connect(&server.url, &user, crate::fakes::fake_ews::PASSWORD, "riley@contoso.example").unwrap();
+    let mut st = State::default();
+    list_folders(&c, &mut st, "a1").unwrap();
+    let gets = || server.data.lock().unwrap().calls.iter().filter(|c| c.as_str() == "GetItem").count();
+    let before = gets();
+    sync_folder(&c, &mut st, &store, "a1", "INBOX", &SyncOptions { prefetch: 25, ..Default::default() }).unwrap();
+    // One GetItem for the details, three for the sources (10, 10 and 5).
+    assert_eq!(gets() - before, 4);
+    let fs = store.load_folder("a1", "INBOX").unwrap();
+    assert_eq!(fs.messages.iter().filter(|m| store.has_body(&m.key)).count(), 24, "all but the one the server won't give");
+    // Asked to keep more downloaded: read again though nothing changed.
+    let before = gets();
+    sync_folder(&c, &mut st, &store, "a1", "INBOX", &SyncOptions { prefetch: 30, ..Default::default() }).unwrap();
+    assert!(gets() > before);
     let _ = std::fs::remove_dir_all(&dir);
 }
 

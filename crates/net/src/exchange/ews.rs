@@ -314,6 +314,18 @@ fn is_hidden(f: &El) -> bool {
 }
 
 /// The read, flag and draft state, asked for with every item.
+/// A change in a folder, as `SyncFolderItems` tells it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum Change {
+    Created(String, Flags),
+    Updated(String, Flags),
+    Deleted(String),
+    Read(String, bool),
+}
+
+/// Changes asked for at a time (Exchange answers 512 at most).
+const CHANGES_PAGE: usize = 512;
+
 const FLAG_FIELDS: &str = "<t:FieldURI FieldURI=\"message:IsRead\"/>\
 <t:ExtendedFieldURI PropertyTag=\"0x1090\" PropertyType=\"Integer\"/>\
 <t:ExtendedFieldURI PropertyTag=\"0x0E07\" PropertyType=\"Integer\"/>";

@@ -41,6 +41,13 @@ pub struct FolderMark {
     pub unread: u32,
     pub window: usize,
     pub at: i64,
+    /// How many of its newest were to be kept downloaded then (more asked: it's read again).
+    #[serde(default)]
+    pub ahead: usize,
+    /// Exchange's state of the folder as read (`SyncFolderItems`): the next read asks only what
+    /// changed since. Empty: unknown, the folder is listed.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub sync: String,
 }
 
 /// Messages a folder's search of the server brings in, at most.
@@ -74,7 +81,7 @@ impl State {
         self.owners.hash(&mut h);
         self.found.hash(&mut h);
         for (k, m) in &self.marks {
-            (k, &m.stamp, m.total, m.unread, m.window, m.at).hash(&mut h);
+            (k, &m.stamp, m.total, m.unread, m.window, m.at, m.ahead, &m.sync).hash(&mut h);
         }
         h.finish()
     }
@@ -124,6 +131,11 @@ impl State {
 
     pub fn id(&self, n: u32) -> Option<&str> {
         self.numbers.get(&n).map(String::as_str)
+    }
+
+    /// The number a message id has, if it has one (none is given).
+    pub fn known(&self, id: &str) -> Option<u32> {
+        self.ids.get(id).copied()
     }
 
     /// The mailbox id behind a folder path.
