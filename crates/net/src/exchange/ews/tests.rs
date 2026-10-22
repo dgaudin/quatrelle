@@ -501,6 +501,12 @@ fn the_directory_picture_is_fetched() {
     assert_eq!(media, "image/jpeg");
     assert_eq!(data, vec![0xFF, 0xD8, 0xFF], "the bytes, not the base64 it came as");
     assert!(c.user_photo("ghost@nophoto.example").is_err(), "no picture is an answer, not a broken account");
+    // Said with a bare HTTP 404 (a shared mailbox's, on Exchange 2016): a refusal, not a broken
+    // connection (that set the account in error at every start); the next call goes through.
+    let none = c.user_photo("support@http404.example");
+    assert!(matches!(none, Err(NetError::No(_))), "{none:?}");
+    assert!(none.is_err_and(|e| !e.is_fatal()));
+    assert!(c.user_photo("zoe@contoso.example").is_ok());
 }
 
 /// A server rule is described as far as Quatrelle can say it, and the rest is kept as text:

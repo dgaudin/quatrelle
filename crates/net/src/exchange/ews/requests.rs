@@ -223,7 +223,7 @@ impl Client {
             return Err(Busy::Wait(std::time::Duration::from_secs(after)));
         }
         if !resp.ok() {
-            return Err(Busy::Failed(NetError::Protocol(format!("Exchange answered HTTP {}", resp.status))));
+            return Err(Busy::Failed(NetError::Protocol(answered_http(resp.status))));
         }
         Ok(doc)
     }
@@ -249,4 +249,9 @@ impl Client {
         }
         Ok(())
     }
+}
+
+/// What an HTTP refusal without a SOAP answer says.
+pub(super) fn answered_http(status: u16) -> String {
+    format!("Exchange answered HTTP {status}")
 }

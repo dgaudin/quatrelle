@@ -205,6 +205,11 @@ fn serve_connection(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>) {
         if let Some(h) = hold {
             std::thread::sleep(h);
         }
+        // A mailbox without a picture, as Exchange 2016 tells of it: HTTP 404, nothing else.
+        if op.name == "GetUserPhoto" && op.text_of("Email").is_some_and(|e| e.ends_with("@http404.example")) {
+            respond(&mut s, 404, &[], b"");
+            continue;
+        }
         let mut d = shared.lock().unwrap();
         d.calls.push(op.name.clone());
         d.routed = routed;
