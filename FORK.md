@@ -112,6 +112,28 @@ Toutes s'appuient sur les spécifications publiques de Microsoft (EWS, Graph, [M
   - Sur Microsoft 365 (`54bba09`).
   - Sur Exchange **on-premise** (`0817f83`), à partir des raccourcis de navigation qu'Outlook
     enregistre dans la boîte, décrits dans [MS-OXOCFG] §2.2.9.
+- **Glisser-déposer dans le calendrier**
+  - Un rendez-vous se déplace à la souris dans les vues Jour, Semaine de travail, Semaine et
+    Mois (à la minute près, par quart d'heure) ; son bord inférieur change l'heure de fin ;
+    Échap abandonne ; Ctrl+Z remet en place.
+  - Une occurrence d'une série peut être déplacée seule (une instance avec `RECURRENCE-ID`) :
+    CalDAV l'écrit dans le fichier de la série ; Exchange (EWS) demande l'élément de
+    l'occurrence (`OccurrenceItemId`) et le modifie, puis relit avec la série ses occurrences
+    modifiées (`ModifiedOccurrences`) et supprimées (`DeletedOccurrences`). Sur Microsoft 365
+    (Graph), seule la série entière se déplace : Graph ne relit pas les exceptions.
+  - Pour une réunion organisée par l'utilisateur, la question d'Outlook : « Envoyer la mise à
+    jour / Enregistrer sans envoyer ». Sur Exchange, c'est le serveur qui envoie la mise à jour
+    (`SendToAllAndSaveCopy`, sur la clé de modification de l'élément), aux invités qu'il connaît
+    désormais (`RequiredAttendees`) ; plus d'invitation iMIP en double. Sur Microsoft 365, le
+    serveur prévient toujours. Ailleurs (CalDAV, calendrier local), un `REQUEST` par courrier,
+    `SEQUENCE` incrémenté.
+- **Rappels**
+  - La notification de bureau d'un rappel reste jusqu'à réponse, sonne, et a les boutons
+    « Répéter dans 5 minutes » et « Ignorer » (Linux, via `notify-rust`) ; un clic dessus ramène
+    la fenêtre.
+  - Option « Afficher les rappels au-dessus des autres fenêtres » (activée par défaut) : la
+    fenêtre Rappels s'ouvre dans une fenêtre à part, toujours au premier plan, même Quatrelle
+    réduit (`RequestPaintWhileHidden` tant qu'un rappel est dû).
 
 ## 5. Construire un paquet (.rpm, .deb, AppImage…)
 

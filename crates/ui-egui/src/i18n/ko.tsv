@@ -1142,3 +1142,6 @@ month	May	5월
 	Save without sending	보내지 않고 저장
 	Microsoft 365 tells the attendees of the change itself.	Microsoft 365가 변경 내용을 참석자에게 직접 알립니다.
 	Moved to {when}. Ctrl+Z puts it back.	{when}(으)로 옮겼습니다. Ctrl+Z로 되돌릴 수 있습니다.
+	Snooze 5 minutes	5분 후 다시 알림
+	Show reminders on top of other windows	미리 알림을 다른 창 위에 표시
+	The Reminders window opens in a window of its own when a reminder comes, even while Quatrelle is minimized	미리 알림이 오면 Quatrelle이 최소화되어 있어도 미리 알림 창이 별도의 창으로 열립니다

@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use quatrelle_engine::store::location;
-use quatrelle_ui_egui::{Services, VideoFrame};
+use quatrelle_ui_egui::{ReminderAction, Services, VideoFrame};
 
 #[cfg(windows)]
 use crate::toast;
@@ -33,6 +33,11 @@ pub(crate) struct Desktop {
     pub(crate) portable: bool,
     /// Test builds' updater (`self_update.rs`), when this one has it.
     pub(crate) updater: Option<self_update::Updater>,
+    /// What was pressed on reminder notifications (the reminder's key, and what), left by the
+    /// threads that wait on them for the window to take; and the window's waker, so it draws
+    /// (and answers) as soon as one comes.
+    pub(crate) reminder_answers: Arc<std::sync::Mutex<Vec<(String, ReminderAction)>>>,
+    pub(crate) waker: Option<Arc<dyn Fn() + Send + Sync>>,
 }
 
 impl Services for Desktop {
@@ -283,6 +288,63 @@ impl Services for Desktop {
                 log::warn!("notification: {e}");
             }
         });
+    }
+    /// A reminder on the desktop. On Linux (and the BSDs) it's one that stays until answered,
+    /// sounding the alarm, with Snooze and Dismiss buttons and a click that brings the window
+    /// forward: a thread waits on what's pressed and leaves it for the window. Elsewhere, a
+    /// plain notification (Windows' toasts have no buttons without unsafe code; macOS's none).
+    fn notify_reminder(&mut self, key: &str, title: &str, body: &str, snooze: &str, dismiss: &str) {
+        #[cfg(all(unix, not(target_os = "macos")))]
+        {
+            let (key, title, body, snooze, dismiss) = (key.to_string(), title.to_string(), body.to_string(), snooze.to_string(), dismiss.to_string());
+            let answers = self.reminder_answers.clone();
+            let waker = self.waker.clone();
+            let spawned = std::thread::Builder::new().name("reminder-notification".into()).spawn(move || {
+                let mut n = notify_rust::Notification::new();
+                n.summary(&title)
+                    .body(&body)
+                    .appname("Quatrelle")
+                    .urgency(notify_rust::Urgency::Critical)
+                    .timeout(notify_rust::Timeout::Never)
+                    .hint(notify_rust::Hint::SoundName("alarm-clock-elapsed".into()))
+                    // The notification itself (its label is the title: a desktop that shows
+                    // one says what opens).
+                    .action("default", &title)
+                    .action("snooze", &snooze)
+                    .action("dismiss", &dismiss);
+                let handle = match n.show() {
+                    Ok(h) => h,
+                    Err(e) => {
+                        log::warn!("reminder notification: {e}");
+                        return;
+                    }
+                };
+                handle.wait_for_action(|action| {
+                    let what = match action {
+                        "snooze" => ReminderAction::Snooze,
+                        "dismiss" => ReminderAction::Dismiss,
+                        "default" => ReminderAction::Open,
+                        // Closed, or timed out by the desktop: the window still shows it.
+                        _ => return,
+                    };
+                    answers.lock().unwrap_or_else(std::sync::PoisonError::into_inner).push((key.clone(), what));
+                    if let Some(wake) = &waker {
+                        wake();
+                    }
+                });
+            });
+            if let Err(e) = spawned {
+                log::warn!("reminder notification: {e}");
+            }
+        }
+        #[cfg(not(all(unix, not(target_os = "macos"))))]
+        {
+            let _ = (key, snooze, dismiss);
+            self.notify(title, body);
+        }
+    }
+    fn take_reminder_actions(&mut self) -> Vec<(String, ReminderAction)> {
+        std::mem::take(&mut *self.reminder_answers.lock().unwrap_or_else(std::sync::PoisonError::into_inner))
     }
 }
 

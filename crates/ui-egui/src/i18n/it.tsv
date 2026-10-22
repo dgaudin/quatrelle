@@ -1142,3 +1142,6 @@ month	May	maggio
 	Save without sending	Salva senza inviare
 	Microsoft 365 tells the attendees of the change itself.	Microsoft 365 informa da sé i partecipanti della modifica.
 	Moved to {when}. Ctrl+Z puts it back.	Spostato a {when}. Ctrl+Z lo rimette a posto.
+	Snooze 5 minutes	Posponi di 5 minuti
+	Show reminders on top of other windows	Mostra i promemoria sopra le altre finestre
+	The Reminders window opens in a window of its own when a reminder comes, even while Quatrelle is minimized	La finestra Promemoria si apre in una finestra a sé quando arriva un promemoria, anche con Quatrelle ridotto a icona

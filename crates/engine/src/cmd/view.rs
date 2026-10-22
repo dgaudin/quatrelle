@@ -105,6 +105,11 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             Ok(json!({"on": s.prefs.notify}))
         })
         .params(r#"{"on"?: bool}"#),
+        CommandSpec::new("view.remindersOnTop", "Show reminders on top of other windows", "File › Options › Mail", |s, v| {
+            s.prefs.reminders_on_top = p::bool(v, "on").unwrap_or(!s.prefs.reminders_on_top);
+            Ok(json!({"on": s.prefs.reminders_on_top}))
+        })
+        .params(r#"{"on"?: bool} (the Reminders window in a window of its own, over every other)"#),
         CommandSpec::new("view.newMailWindow", "New messages in their own window", "File › Options › Mail", |s, v| {
             s.prefs.new_mail_window = p::bool(v, "on").unwrap_or(!s.prefs.new_mail_window);
             Ok(json!({"on": s.prefs.new_mail_window}))

@@ -402,6 +402,11 @@ fn run(
                     #[cfg(windows)]
                     portable: app_portable,
                     updater: updater.clone(),
+                    // A reminder answered from its notification wakes the window to act on it.
+                    waker: Some(Arc::new({
+                        let ctx = cc.egui_ctx.clone();
+                        move || ctx.request_repaint()
+                    })),
                     ..Default::default()
                 }),
             );

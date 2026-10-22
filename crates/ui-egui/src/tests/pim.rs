@@ -204,7 +204,8 @@ fn reminders_pop_up_snooze_and_dismiss() {
     let (mut a, dir) = app("reminders");
     let now = std::sync::Arc::new(std::sync::Mutex::new(NOW));
     let shown = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
-    a.services = Box::new(Ticking(now.clone(), shown.clone()));
+    let pressed = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    a.services = Box::new(Ticking(now.clone(), shown.clone(), pressed.clone()));
     let ctx = egui::Context::default();
     frame(&ctx, &mut a, vec![]);
     assert!(!crate::reminders::showing(&a.ui.reminders), "the sample has none due");
@@ -233,13 +234,37 @@ fn reminders_pop_up_snooze_and_dismiss() {
     frame(&ctx, &mut a, vec![]);
     frame(&ctx, &mut a, vec![]);
     assert!(crate::reminders::showing(&a.ui.reminders));
-    assert_eq!(shown.lock().unwrap().iter().filter(|(t, _)| t == "Colour review").count(), 1, "told once");
-    // Snoozed: gone until the snooze is over, then back (and told again).
     let key = a.ui.reminders.due[0].key.clone();
+    let told: Vec<(String, String)> = shown.lock().unwrap().iter().filter(|(t, _)| t == "Colour review").cloned().collect();
+    assert_eq!(told.len(), 1, "told once");
+    assert!(told[0].1.contains(&format!("[{key}]")) && told[0].1.contains("Snooze 5 minutes/Dismiss"), "{told:?}");
+    // Snoozed from the notification's button: gone until the snooze is over, then back.
+    pressed.lock().unwrap().push((key.clone(), crate::ReminderAction::Snooze));
+    frame(&ctx, &mut a, vec![]);
+    assert!(!crate::reminders::showing(&a.ui.reminders));
+    assert_eq!(a.session.prefs.reminders.get(&key), Some(&(start - 15 * 60 + 5 * 60)), "five minutes");
+    *now.lock().unwrap() = start - 10 * 60;
+    frame(&ctx, &mut a, vec![]);
+    assert!(crate::reminders::showing(&a.ui.reminders));
+    // Clicked on the notification once the window was closed: the window comes back with it.
+    a.ui.reminders.closed.insert(key.clone());
+    assert!(!crate::reminders::showing(&a.ui.reminders));
+    pressed.lock().unwrap().push((key.clone(), crate::ReminderAction::Open));
+    frame(&ctx, &mut a, vec![]);
+    assert!(crate::reminders::showing(&a.ui.reminders));
+    assert_eq!(a.ui.reminders.selected.as_deref(), Some(key.as_str()));
+    // The option off: the window is drawn inside the main one (as it always is in tests, where
+    // windows are drawn inside the page); on, it would be a window of its own.
+    a.run("view.remindersOnTop", json!({"on": false}));
+    frame(&ctx, &mut a, vec![]);
+    assert!(!a.session.prefs.reminders_on_top && crate::reminders::showing(&a.ui.reminders));
+    a.run("view.remindersOnTop", json!({"on": true}));
+    frame(&ctx, &mut a, vec![]);
+    // Snoozed from the window: gone until the snooze is over, then back (and told again).
     a.act(crate::Action::Run("reminders.snooze", json!({"key": key, "minutes": 5})));
     frame(&ctx, &mut a, vec![]);
     assert!(!crate::reminders::showing(&a.ui.reminders));
-    *now.lock().unwrap() = start - 10 * 60;
+    *now.lock().unwrap() = start - 4 * 60;
     frame(&ctx, &mut a, vec![]);
     assert!(crate::reminders::showing(&a.ui.reminders));
     // Closed with the X: hidden, not dismissed; a new one brings it back with both.

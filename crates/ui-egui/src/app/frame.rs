@@ -15,11 +15,36 @@ impl MailApp {
             ctx.request_repaint();
         }
         self.announce(ctx);
-        // Calendar reminders: the desktop told of each as it comes, whatever the window shows.
+        // Reminders answered from their notification: as from the window's buttons; clicked:
+        // the window comes forward, the Reminders window with it. (Before the due list is
+        // worked out again below, so a snooze takes effect in this very frame.)
+        for (key, what) in self.services.take_reminder_actions() {
+            match what {
+                ReminderAction::Snooze => self.run("reminders.snooze", json!({"key": key, "minutes": 5})),
+                ReminderAction::Dismiss => self.run("reminders.dismiss", json!({"key": key})),
+                ReminderAction::Open => {
+                    self.ui.reminders.closed.remove(&key);
+                    self.ui.reminders.selected = Some(key);
+                    ctx.send_viewport_cmd_to(egui::ViewportId::ROOT, egui::ViewportCommand::Minimized(false));
+                    self.ui.focus_main = true;
+                }
+            }
+            ctx.request_repaint();
+        }
+        // Calendar reminders: the desktop told of each as it comes, whatever the window shows,
+        // with Snooze and Dismiss to answer it from there.
         for r in reminders::refresh(&mut self.ui.reminders, &self.session, false) {
             let start = quatrelle_engine::model::dates::civil(r.start, &self.session.clock);
             let when = if r.all_day { String::new() } else { format!("{:02}:{:02}", start.hour, start.minute) };
-            self.services.notify(&r.summary, &if r.location.is_empty() { when } else { format!("{when} · {}", r.location) });
+            let body = if r.location.is_empty() { when } else { format!("{when} · {}", r.location) };
+            let (snooze, dismiss) = i18n::as_written(|| (tl!("Snooze 5 minutes").to_string(), tl!("Dismiss").to_string()));
+            self.services.notify_reminder(&r.key, &r.summary, &body, &snooze, &dismiss);
+        }
+        // Minimized or covered, the window draws nothing, so the Reminders window — a window of
+        // its own, on top of the others — couldn't open: a frame is asked for while something
+        // is due, and once that window is up eframe keeps drawing for it.
+        if self.session.prefs.reminders_on_top && reminders::showing(&self.ui.reminders) && ctx.input(|i| i.viewport().visible() == Some(false)) {
+            ctx.send_viewport_cmd_to(egui::ViewportId::ROOT, egui::ViewportCommand::RequestPaintWhileHidden);
         }
         self.flush_jobs();
         // Woken by the workers when they have news; this is for the clock (reminders, snoozed

@@ -1142,3 +1142,6 @@ month	May	Май
 	Save without sending	Сохранить без отправки
 	Microsoft 365 tells the attendees of the change itself.	Microsoft 365 сам сообщает участникам об изменении.
 	Moved to {when}. Ctrl+Z puts it back.	Перемещено на {when}. Ctrl+Z вернёт обратно.
+	Snooze 5 minutes	Отложить на 5 минут
+	Show reminders on top of other windows	Показывать напоминания поверх других окон
+	The Reminders window opens in a window of its own when a reminder comes, even while Quatrelle is minimized	Окно напоминаний открывается отдельным окном, когда приходит напоминание, даже если Quatrelle свёрнут
