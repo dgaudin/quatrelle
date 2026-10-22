@@ -119,6 +119,12 @@ pub struct Rule {
     /// it so that the other rules keep theirs.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub priority: Option<u32>,
+    /// Why the server refused it the last time it was sent there (Exchange keeps Outlook's own
+    /// copy of the rules and changes none while it's there, say). A refused rule isn't sent
+    /// again by itself on every connection: it goes again once it's changed here (which clears
+    /// this), or when the user sends the rules again.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub refused: Option<String>,
 }
 
 fn yes() -> bool {
@@ -340,6 +346,7 @@ mod tests {
             server: false,
             remote_id: None,
             priority: None,
+            refused: None,
         };
         assert!(r.matches(&m("nagios@asp.example", "disk", false)), "the first of them");
         assert!(r.matches(&m("ZABBIX@asp.example", "disk", false)), "the other, case aside");
@@ -364,6 +371,7 @@ mod tests {
             server: false,
             remote_id: None,
             priority: None,
+            refused: None,
         };
         let flag = Rule {
             name: "Boss".into(),
@@ -403,6 +411,7 @@ mod tests {
             server: false,
             remote_id: None,
             priority: None,
+            refused: None,
         };
         assert!(base.server_ready(), "a subject test and a move: Exchange does that");
         for (change, why) in [
@@ -418,6 +427,18 @@ mod tests {
         }
         assert!(Rule { actions: vec![RuleAction::MoveToRole(FolderRole::Archive)], ..base.clone() }.server_ready());
         assert!(Rule { actions: vec![RuleAction::Categorize("Blue".into())], ..base }.server_ready());
+    }
+
+    /// Rules kept before the marker came in read as they were; one marked keeps its reason.
+    #[test]
+    fn a_rule_remembers_why_the_server_refused_it() {
+        let mut r: Rule = serde_json::from_str(r#"{"name":"x","conditions":[],"actions":[]}"#).unwrap();
+        assert_eq!((r.refused.as_deref(), r.enabled, r.match_all), (None, true, true));
+        r.refused = Some("the server refused: no".into());
+        let back: Rule = serde_json::from_str(&serde_json::to_string(&r).unwrap()).unwrap();
+        assert_eq!(back.refused.as_deref(), Some("the server refused: no"));
+        r.refused = None;
+        assert!(!serde_json::to_string(&r).unwrap().contains("refused"), "left out when there's none");
     }
 
     #[test]

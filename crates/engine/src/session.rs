@@ -363,6 +363,9 @@ pub struct Session {
     flushed: BTreeSet<u64>,
     /// Accounts whose server has been asked for its rules this session (once is enough).
     rules_asked: std::collections::BTreeSet<String>,
+    /// The last reason each account's server gave for refusing its rules that was told this
+    /// session: the same one isn't told again on every try.
+    rules_refused_told: HashMap<String, String>,
     jobs: Vec<Job>,
     pub(crate) cache: HashMap<(String, String), FolderState>,
     /// The cached folders, the least recently used first.
@@ -484,6 +487,7 @@ impl Session {
             outbox: Vec::new(),
             flushed: BTreeSet::new(),
             rules_asked: std::collections::BTreeSet::new(),
+            rules_refused_told: HashMap::new(),
             jobs: Vec::new(),
             cache: HashMap::new(),
             cache_order: Vec::new(),

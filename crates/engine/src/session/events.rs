@@ -154,7 +154,7 @@ impl Session {
                     });
                 }
                 if let Some(e) = error {
-                    self.notice(format!("the server's rules weren't changed: {e}"), true);
+                    self.server_rules_refused(&account, e);
                 } else {
                     // Keep the id the server gave each rule: it's what changes or removes it
                     // there next time (nothing else may touch it).

@@ -561,6 +561,7 @@ Zoe";"#
             server: true,
             remote_id: None,
             priority: None,
+            refused: None,
         };
         let categories = vec![("Work".to_string(), "$label2".to_string())];
         // The script is written with CRLF; the blocks below are read as written.

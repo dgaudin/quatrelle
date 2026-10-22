@@ -954,6 +954,8 @@ month	May	مايو
 	Spouse	الزوج/الزوجة
 	Anniversary	الذكرى السنوية
 	On the server, made elsewhere	على الخادم، أُنشئت في مكان آخر
+	Refused by the server	رفضها الخادم
+	The server refused this rule ({why}). It's sent there again once saved.	رفض الخادم هذه القاعدة ({why}). ستُرسل إليه مجددًا بعد الحفظ.
 	Change or remove them in the program that made them.	غيّرها أو أزلها من البرنامج الذي أنشأها.
 	On / off on the server	التشغيل أو الإيقاف على الخادم
 	+ Add a condition	+ إضافة شرط
