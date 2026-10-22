@@ -63,6 +63,17 @@ impl MailApp {
         ctx.request_repaint_after(std::time::Duration::from_secs(15));
     }
 
+    /// The address book (recipient suggestions, Select Names, the Focused Inbox), built the way
+    /// the search index is: a slice per frame, the window drawing between slices. Asked for
+    /// while a message is being written, ahead of the first name typed; kept going once started.
+    /// Built whole at that first name, it read every folder of a big mailbox from disk at once
+    /// and froze the window for seconds.
+    fn build_contacts(&mut self, ctx: &egui::Context) {
+        if (self.session.all_composes().next().is_some() || self.session.contacts_pending()) && !self.session.contacts_step(CONTACTS_BUDGET) {
+            ctx.request_repaint();
+        }
+    }
+
     /// The whole window.
     pub fn ui(&mut self, ui: &mut Ui) {
         // The switch in Options, wherever it was changed from (a command, another window).
@@ -151,6 +162,7 @@ impl MailApp {
             for a in acts {
                 self.act(a);
             }
+            self.build_contacts(&ctx);
             self.flush_jobs();
             return;
         }
@@ -330,9 +342,10 @@ impl MailApp {
         self.message_windows(&ctx, &mut acts);
         self.compose_windows(&ctx, &mut acts);
 
-        // The address book reads the session's people.
+        // The address book reads the session's people: what is known now, listed again as the
+        // book fills in (built a slice per frame, below).
         if let Some(Dialog::SelectNames(f)) = self.ui.dialog.as_mut()
-            && f.stale
+            && (f.stale || self.session.contacts_pending())
         {
             // Opened: with the address book chosen to open with (one gone is everyone).
             if f.source.is_empty() {
@@ -341,7 +354,7 @@ impl MailApp {
                 let known = f.default_source == "people" || f.books.iter().any(|(b, _, _)| *b == f.default_source);
                 f.source = if known { f.default_source.clone() } else { "all".into() };
             }
-            f.list = self.session.address_book(&f.source, &f.query);
+            f.list = self.session.address_book_now(&f.source, &f.query);
             f.stale = false;
         }
         // A message window's own dialogs show in that window.
@@ -403,6 +416,7 @@ impl MailApp {
             self.run("search.run", json!({"query": q, "index": SEARCH_INDEX_BUDGET}));
             ctx.request_repaint();
         }
+        self.build_contacts(&ctx);
         self.flush_jobs();
         if std::mem::take(&mut self.ui.focus_main) {
             ctx.send_viewport_cmd_to(egui::ViewportId::ROOT, egui::ViewportCommand::Focus);

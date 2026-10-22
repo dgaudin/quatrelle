@@ -127,6 +127,14 @@ as written (`i18n::as_written`).
 attachment names for the chosen scope; candidates are verified against the full query, so the index
 may over-approximate but never misses. The index is rebuilt lazily after changes.
 
+The index is built a slice at a time (`Session::index_step`, `search.run` with an `index` budget):
+the window indexes a few hundred messages per frame and draws between slices, so a big mailbox's
+first search never freezes it. The address book built from the mail (`model::contacts`, for the
+recipient boxes' suggestions, Select Names and the Focused Inbox) goes the same way
+(`Session::contacts_step`): the window asks for what is known so far (`suggest_contacts_now`,
+`address_book_now`) and takes a slice per frame while a message is being written; commands and
+the CLI, with no frames to draw, read the whole book (`suggest_contacts`, `address_book`).
+
 The index only knows what is here, and what is here is bounded (a thousand headers, forty bodies
 per folder on some accounts). So the session also asks the server's own index, once per query
 (`Job::Search` → `Event::Found`): Exchange's `FindItem` with a `QueryString` made from the query's

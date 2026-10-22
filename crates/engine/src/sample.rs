@@ -632,6 +632,39 @@ pub fn seed_if_empty_at(store: &Store, now: i64, offset: i64) -> Result<bool, St
     Ok(true)
 }
 
+/// A big mailbox, for the tests of what a big one costs: a local account (`big`) of `folders`
+/// folders (the first its Inbox) of `per_folder` summaries each, every message from someone
+/// else (`Ann<n> Person <p<n>@big.example>`, `n` counting through the whole mailbox), with no
+/// message sources. Past fifty thousand messages its counts are kept as written here, as a
+/// data file's are, rather than counted by reading every folder when the session opens.
+pub fn seed_big_mailbox(store: &Store, folders: usize, per_folder: u32, now: i64) -> Result<(), StoreError> {
+    const ACCOUNT: &str = "big";
+    let config = AccountConfig { id: ACCOUNT.into(), name: "Me".into(), email: "me@big.example".into(), ..Default::default() };
+    store.save_accounts(std::slice::from_ref(&config))?;
+    let mut list = Vec::new();
+    for i in 0..folders {
+        let path = if i == 0 { "INBOX".to_string() } else { format!("Folder{i}") };
+        let role = if i == 0 { FolderRole::Inbox } else { FolderRole::Other };
+        list.push(Folder { account: ACCOUNT.into(), path: path.clone(), role, selectable: true, total: per_folder, ..Default::default() });
+        let messages = (1..=per_folder)
+            .map(|uid| {
+                let n = u32::try_from(i).unwrap_or(0).saturating_mul(per_folder).saturating_add(uid);
+                quatrelle_model::Summary {
+                    key: MessageKey { account: ACCOUNT.into(), folder: path.clone(), validity: 1, uid },
+                    subject: format!("Message {n}"),
+                    from: EmailAddress::new(format!("Ann{n} Person"), format!("p{n}@big.example")),
+                    to: vec![EmailAddress::new("Me", "me@big.example")],
+                    date: now - i64::from(n) * 60,
+                    preview: "Hello there, this is the preview of the message".into(),
+                    ..Default::default()
+                }
+            })
+            .collect();
+        store.save_folder(ACCOUNT, &path, &FolderState { validity: 1, messages, ..Default::default() })?;
+    }
+    store.save_folders(ACCOUNT, &list)
+}
+
 /// The sample calendar (a week around `now`, in local time) and address book.
 pub fn sample_pim(now: i64, offset: i64) -> quatrelle_model::pim::Pim {
     use quatrelle_model::ical::{Attendee, CalEvent};

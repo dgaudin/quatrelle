@@ -631,3 +631,81 @@ fn a_signature_keeps_every_bit_of_its_look() {
     s.run("account.setSignature", &json!({"account": id, "signature": "x", "styles": junk})).unwrap();
     assert!(s.signature_rich(&id).1.is_plain());
 }
+
+/// The address book over a big mailbox (16 folders of 5,000 messages, more than the cache keeps):
+/// the window's suggestions never read it whole in one go. The first name typed starts the
+/// build and reads nothing; each slice reads at most the one folder it is in (a slice of 5,000
+/// over folders of 5,000: never more than two folders cached beyond those before), and the
+/// book is complete in as many slices as the mailbox has; what it then suggests is what the
+/// whole book (a command's, read in one go) suggests. Built whole, as it was, the first name
+/// typed read every folder from disk at once: seconds, with the window frozen.
+#[test]
+fn recipient_suggestions_read_a_big_mailbox_a_slice_at_a_time() {
+    let store = temp("contacts-slices");
+    sample::seed_big_mailbox(&store, 16, 5000, NOW).unwrap();
+    let mut s = Session::open(Some(store), quatrelle_model::dates::Clock::new(NOW, 0));
+    s.take_jobs();
+    s.set_cache_limit(12_000);
+    s.run("folder.open", &json!({"account": "big", "folder": "INBOX"})).unwrap();
+    let began = std::time::Instant::now();
+    let first = s.suggest_contacts_now("ann1", 8);
+    let asked = began.elapsed();
+    assert!(first.is_empty() && s.contacts_pending(), "nothing known yet: the build starts, reading nothing");
+    assert_eq!(s.cache_order.len(), 1, "the folder on screen only; the first name typed read no folder");
+    let revision = s.contacts_revision();
+    let mut slices = 0;
+    let mut longest = std::time::Duration::ZERO;
+    let mut most = 0;
+    while s.contacts_pending() {
+        let before: Vec<(String, String)> = s.cache_order.clone();
+        let began = std::time::Instant::now();
+        let done = s.contacts_step(5000);
+        longest = longest.max(began.elapsed());
+        most = most.max(s.cache_order.iter().filter(|k| !before.contains(k)).count());
+        slices += 1;
+        assert!(slices <= 17, "16 folders of a slice each (and one more to finish)");
+        assert_eq!(done, !s.contacts_pending());
+    }
+    assert!(most <= 2, "a slice reads the folder it is in, at most the next too: {most}");
+    assert_ne!(s.contacts_revision(), revision, "what the book answers changed");
+    let built = s.suggest_contacts_now("ann1", 8);
+    assert_eq!(built.len(), 8);
+    assert!(built.iter().all(|c| c.address.name.starts_with("Ann1")), "{built:?}");
+    assert_eq!(s.suggest_contacts("ann1", 8), built, "the whole book, read in one go, answers the same");
+    println!("asked {asked:?}; {slices} slices, the longest {longest:?}");
+    done(s);
+}
+
+/// Mail arriving makes the book stale: built again after some minutes, a slice at a time, the
+/// book from before answering meanwhile (never nothing, never a partial one over a whole one);
+/// the Focused Inbox, told apart by the book, follows a build done.
+#[test]
+fn a_stale_address_book_answers_while_it_is_built_again() {
+    let store = temp("contacts-stale");
+    sample::seed_big_mailbox(&store, 4, 100, NOW).unwrap();
+    let mut s = Session::open(Some(store), quatrelle_model::dates::Clock::new(NOW, 0));
+    s.take_jobs();
+    s.run("folder.open", &json!({"account": "big", "folder": "INBOX"})).unwrap();
+    assert_eq!(s.suggest_contacts("ann1", 8).len(), 8);
+    let revision = s.contacts_revision();
+    // A sync touched a folder: stale, but not built again for a while.
+    s.apply(Event::FolderChanged { account: "big".into(), folder: "Folder2".into() });
+    assert!(!s.contacts_pending() && s.suggest_contacts_now("ann1", 8).len() == 8);
+    assert!(s.contacts_step(10), "complete as it is");
+    assert!(!s.contacts_pending(), "not for some minutes");
+    s.set_clock(NOW + 600, 0);
+    assert_eq!(s.suggest_contacts_now("ann1", 8).len(), 8, "the book from before answers");
+    assert!(s.contacts_pending(), "and the build has started");
+    assert_eq!(s.contacts_revision(), revision, "a book answering unchanged");
+    assert!(!s.contacts_step(150) && s.contacts_pending());
+    assert_eq!(s.suggest_contacts_now("ann1", 8).len(), 8, "still the book from before, not the half-read one");
+    assert_eq!(s.suggest_contacts("ann1", 8).len(), 8, "a command (Send resolving names) answers from it too");
+    assert!(s.contacts_pending(), "without reading the mailbox whole: the window goes on with the slices");
+    // Focused Inbox: a bulk sender written to goes to Focused once the book says so.
+    s.run("view.focused", &json!({"on": true})).unwrap();
+    let before = s.revision;
+    assert!(s.contacts_step(usize::MAX) && !s.contacts_pending());
+    assert_ne!(s.contacts_revision(), revision);
+    assert_ne!(s.revision, before, "the list was made again when the build was done");
+    done(s);
+}

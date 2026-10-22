@@ -318,7 +318,9 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
     }
     let accounts: Vec<(String, String)> =
         s.accounts.iter().map(|a| (a.config.id.clone(), EmailAddress::new(a.config.name.clone(), a.config.email.clone()).to_string())).collect();
-    // Suggestions for the recipient box being typed in (computed before the form borrows it).
+    // Suggestions for the recipient box being typed in (computed before the form borrows it):
+    // from what the address book knows now — it is built a slice per frame, never whole in one
+    // go — and worked out again only as the text or the book changes.
     let suggestions: Vec<Contact> = match (st.suggest_field, s.compose.as_ref()) {
         (Some(f), Some(c)) => {
             let text = match f {
@@ -330,8 +332,21 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
             if token.chars().count() < 1 || st.suggest_dismissed.as_deref() == Some(text.as_str()) {
                 Vec::new()
             } else {
-                let present = text.to_lowercase();
-                s.suggest_contacts(&token, 8).into_iter().filter(|x| !present.contains(&x.address.email.to_lowercase())).take(6).collect()
+                let key = (f, text.clone(), s.contacts_revision());
+                match &st.suggest_cache {
+                    Some((k, found)) if *k == key => found.clone(),
+                    _ => {
+                        let present = text.to_lowercase();
+                        let found: Vec<Contact> = s
+                            .suggest_contacts_now(&token, 8)
+                            .into_iter()
+                            .filter(|x| !present.contains(&x.address.email.to_lowercase()))
+                            .take(6)
+                            .collect();
+                        st.suggest_cache = Some((key, found.clone()));
+                        found
+                    }
+                }
             }
         }
         _ => Vec::new(),

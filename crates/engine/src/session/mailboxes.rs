@@ -1,8 +1,10 @@
 //! The session: accounts' folder lists and what's kept of each folder; with them, making and
-//! changing folders, a mailbox's settings on the server, and other mailboxes opened in an account.
+//! changing folders, a mailbox's settings on the server, other mailboxes opened in an account,
+//! and the address book built from the mail kept.
 
 use super::*;
 
+mod contacts;
 mod folder_edits;
 mod mailbox_settings;
 mod shared_mailboxes;
@@ -82,6 +84,12 @@ impl Session {
         }
         static EMPTY: std::sync::OnceLock<FolderState> = std::sync::OnceLock::new();
         self.cache.get(&k).unwrap_or_else(|| EMPTY.get_or_init(FolderState::default))
+    }
+
+    /// The folders whose lists are in memory, the least recently used first (what a look
+    /// through the mailbox has read so far, for the tests of what one costs).
+    pub fn cached_folders(&self) -> Vec<(String, String)> {
+        self.cache_order.clone()
     }
 
     /// Keep the cached lists under `cache_limit` summaries: the least recently used folders
@@ -187,12 +195,6 @@ impl Session {
         self.accounts.iter().filter_map(|a| a.folder(FolderRole::Inbox)).map(|f| f.unread).sum()
     }
 
-    /// People to suggest for a recipient box, best first.
-    pub fn suggest_contacts(&mut self, query: &str, limit: usize) -> Vec<Contact> {
-        self.ensure_contacts();
-        self.contacts.as_ref().map(|b| b.suggest(query, limit, self.clock.now)).unwrap_or_default()
-    }
-
     /// Whether anything was written in the message being written (more than its signature):
     /// closing it then asks whether to keep it.
     pub fn compose_written(&self) -> bool {
@@ -209,63 +211,6 @@ impl Session {
             && c.subject.trim().is_empty()
             && c.attachments.is_empty()
             && (body.is_empty() || body.trim_start_matches("--").trim() == signature))
-    }
-
-    /// The address book, as Outlook's Select Names dialog lists it: `people` for the people
-    /// saved in Contacts, anything else for everyone known (Contacts and everyone mail was
-    /// exchanged with). Filtered by `query` (name or address), sorted by name.
-    pub fn address_book(&mut self, source: &str, query: &str) -> Vec<EmailAddress> {
-        const MAX: usize = 2000;
-        let book = source.strip_prefix("book:").and_then(|b| b.split_once(':'));
-        if source == "people" || book.is_some() {
-            let mut v: Vec<EmailAddress> = self
-                .people(query)
-                .into_iter()
-                .filter(|p| book.is_none_or(|(a, b)| p.account == a && p.book == b))
-                .flat_map(|p| p.card.emails.iter().map(|e| EmailAddress::new(p.card.display(), e.value.clone())).collect::<Vec<_>>())
-                .collect();
-            v.truncate(MAX);
-            return v;
-        }
-        self.ensure_contacts();
-        self.contacts.as_ref().map(|b| b.list(query, MAX).into_iter().map(|c| c.address).collect()).unwrap_or_default()
-    }
-
-    /// The address books Select Names can show besides everyone (`all`) and every contact
-    /// (`people`): each account's, as (source, name, the account's address).
-    pub fn address_books(&self) -> Vec<(String, String, String)> {
-        self.accounts
-            .iter()
-            .filter_map(|a| self.pim.get(&a.config.id).map(|p| (a, p)))
-            .flat_map(|(a, p)| p.books.iter().map(move |b| (format!("book:{}:{}", a.config.id, b.id), b.name.clone(), a.config.email.clone())))
-            .collect()
-    }
-
-    /// Build the address book from the cache if it isn't built.
-    pub(super) fn ensure_contacts(&mut self) {
-        let due = self.contacts_stale && self.clock.now.saturating_sub(self.contacts_built) >= CONTACTS_EVERY;
-        if self.contacts.is_none() || due {
-            self.contacts_built = self.clock.now;
-            self.contacts_stale = false;
-            let mine: Vec<String> = self.accounts.iter().flat_map(|a| [a.config.email.clone(), a.config.username.clone()]).collect();
-            let folders: Vec<(String, String)> =
-                self.accounts.iter().flat_map(|a| a.folders.iter().filter(|f| f.selectable).map(|f| (a.config.id.clone(), f.path.clone()))).collect();
-            let mut book = ContactBook::new();
-            for (a, f) in folders {
-                for m in &self.folder_state(&a, &f).messages {
-                    book.add(m, &mine);
-                }
-            }
-            // People saved in an address book come first.
-            for p in self.pim.values() {
-                for c in &p.cards {
-                    for e in &c.card.emails {
-                        book.add_saved(&EmailAddress::new(c.card.display(), e.value.clone()), self.clock.now);
-                    }
-                }
-            }
-            self.contacts = Some(book);
-        }
     }
 
     /// The folders the view draws from.
@@ -320,7 +265,9 @@ impl Session {
         let filter = self.filter;
         list.retain(|m| self.filter_keeps(filter, m) || self.filter_keep.as_ref() == Some(&m.key));
         if self.focus_split() {
-            self.ensure_contacts();
+            // Told apart by the address book: the one built, meanwhile (a build only starts
+            // here; the window takes it on, a slice per frame, and the list follows when done).
+            self.contacts_step(0);
             let other = self.focus_other;
             list.retain(|m| self.is_focused(m) != other);
         }
