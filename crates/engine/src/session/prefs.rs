@@ -98,6 +98,10 @@ pub struct Prefs {
     /// "Check spelling as you type").
     #[serde(default = "yes")]
     pub spell_check: bool,
+    /// Put the `-- ` line (RFC 3676's signature delimiter) before the signature, as some mail
+    /// apps mark it. Off: the signature goes in as Outlook adds it, with nothing before it.
+    #[serde(default)]
+    pub signature_dashes: bool,
     /// Quick Steps: actions done to the selection in one go ([`quick_steps`]).
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub quick_steps: Vec<quick_steps::QuickStep>,
@@ -164,6 +168,7 @@ impl Default for Prefs {
             collapsed: BTreeSet::new(),
             spelling: Vec::new(),
             spell_check: true,
+            signature_dashes: false,
             pane_order: Vec::new(),
         }
     }

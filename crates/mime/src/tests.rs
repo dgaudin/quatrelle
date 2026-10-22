@@ -90,6 +90,21 @@ fn a_signature_pasted_from_outlook_keeps_its_formatting() {
     assert!(pasted_html("<img src=\"https://x.example/a.png\">").0.is_empty());
 }
 
+/// A signature kept as HTML (one made before its styles were kept, or given as HTML from the
+/// command line) reads back with its sizes and typefaces, its own pictures where they stand.
+#[test]
+fn a_signature_read_from_its_html_keeps_its_sizes_and_pictures() {
+    let (text, styles) = signature_html(
+        "<p style='font-size:16pt;font-family:Arial'><u>Didier</u> GAUDIN</p><p><img src=\"cid:logo@x\"> <img src=\"https://x.example/a.png\"></p>",
+    );
+    let at = |needle: &str| styles.style(text.find(needle).map(|b| text[..b].chars().count()).unwrap());
+    assert_eq!((at("Didier").size, at("Didier").font.as_deref(), at("GAUDIN").size), (Some(16), Some("Arial"), Some(16)), "{text:?} {styles:?}");
+    let pictures = rich::pictures(&text, &styles);
+    assert_eq!(pictures, ["logo@x"], "its own picture stays, the one on the web goes: {text:?}");
+    let html = rich::to_html(&text, &styles);
+    assert!(html.contains("font-size:16pt") && html.contains("cid:logo@x"), "{html}");
+}
+
 const SIMPLE: &[u8] = b"From: Zoe Park <zoe@studio.example>\r\n\
 To: Ann <ann@studio.example>, ops@studio.example\r\n\
 Cc: Kim <kim@studio.example>\r\n\
@@ -326,7 +341,7 @@ fn replies() {
     assert!(html.contains("Hello team,") && !html.contains("<b>Hello"));
     assert!(markup::has_formatting(&r.body));
     assert_eq!(markup::header_lines("x\n____________\nFrom: a\n  b\nTo: c\n\nFrom: not a header"), [false, false, true, true, true, false, false]);
-    let all = reply(&p, ReplyMode::ReplyAll, &me, &clock, "Ann");
+    let all = reply(&p, ReplyMode::ReplyAll, &me, &clock, "-- \nAnn");
     let cc: Vec<&str> = all.cc.iter().map(|a| a.email.as_str()).collect();
     assert_eq!(cc, vec!["ops@studio.example", "kim@studio.example"]);
     assert!(all.body.starts_with("\n\n-- \nAnn"));

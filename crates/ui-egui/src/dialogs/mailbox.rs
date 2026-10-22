@@ -63,13 +63,15 @@ pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, _s: &Session, t: &Tokens, acts: 
                 return false;
             }
             if ok {
+                // The editor's own styles go with the text, as they are: every size, typeface,
+                // underline and alignment comes back the same in each message.
                 let text = f.compose.body.trim_end().to_string();
                 let mut styles = f.compose.styles.clone();
                 styles.fit(&text);
-                let html = if styles.is_plain() { None } else { Some(quatrelle_engine::mime::rich::to_html(&text, &styles)) };
+                let styles = (!styles.is_plain()).then_some(styles);
                 acts.push(Action::Run(
                     "account.setSignature",
-                    json!({"account": f.account, "signature": text, "html": html, "newMessages": f.on_new, "replies": f.on_replies, "pictures": f.compose.inline}),
+                    json!({"account": f.account, "signature": text, "styles": styles, "newMessages": f.on_new, "replies": f.on_replies, "pictures": f.compose.inline}),
                 ));
                 if f.insert && !text.trim().is_empty() {
                     acts.push(Action::InsertSignature);

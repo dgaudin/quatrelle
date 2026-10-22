@@ -1130,3 +1130,5 @@ month	May	مايو
 	Other terms	شروط أخرى
 	Clear	مسح
 	No results. Try fewer words.	لا نتائج. جرّب كلمات أقل.
+	Put a “-- ” line before the signature	وضع سطر “-- ” قبل التوقيع
+	Some mail apps use it to tell the signature apart; Outlook adds none.	تستخدمه بعض برامج البريد لتمييز التوقيع؛ ولا يضيفه Outlook.

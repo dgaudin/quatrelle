@@ -110,13 +110,12 @@ impl Compose {
     }
 }
 
-/// A signature as it goes into a message: after the usual `-- ` line (RFC 3676's delimiter).
-pub fn signature_block(sig: &str) -> String {
-    format!("-- \n{}", sig.trim_end())
+/// A signature as it goes into a message: after the `-- ` line (RFC 3676's delimiter) when the
+/// writer wants one (`dashes`), as it is otherwise, which is how Outlook adds it.
+pub fn signature_block(sig: &str, dashes: bool) -> String {
+    if dashes { format!("-- \n{}", sig.trim_end()) } else { sig.trim_end().to_string() }
 }
 
-/// Give the signature in a message (`c.signature`, where it still stands as put there) the look
-/// it has: `sig` is its text and styles.
 /// The message as HTML with its signature's HTML where the signature's text stands (`None`
 /// when that text was taken out or changed: the message is sent as written then).
 pub(super) fn with_html_signature(c: &Compose, raw: &str) -> Option<String> {
@@ -145,12 +144,14 @@ pub fn add_pictures(c: &mut Compose, pictures: Vec<mime::InlinePicture>) {
     }
 }
 
-pub fn style_signature(c: &mut Compose, sig: &(String, mime::rich::Styles)) {
+/// Give the signature in a message (`c.signature`, where it still stands as put there) the look
+/// it has: `sig` is its text and styles, `dashes` whether a `-- ` line was put before it.
+pub fn style_signature(c: &mut Compose, sig: &(String, mime::rich::Styles), dashes: bool) {
     let (text, styles) = sig;
     if c.signature.is_empty() || styles.is_plain() {
         return;
     }
-    let mut block = "-- \n".to_string();
+    let mut block = if dashes { "-- \n".to_string() } else { String::new() };
     let mut block_styles = mime::rich::Styles::plain(&block);
     mime::rich::append(&mut block, &mut block_styles, text.trim_end(), styles);
     if block != c.signature {
