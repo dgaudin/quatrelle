@@ -193,6 +193,181 @@ pub fn sync_folder<S: Read + Write>(c: &mut Client<S>, store: &Store, account: &
     Ok(report)
 }
 
+/// An argument of an IMAP `SEARCH`: a search key, or a string it takes.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SearchArg {
+    Atom(String),
+    Str(String),
+}
+
+/// The search box's query as IMAP `SEARCH` keys (RFC 3501 §6.4.4), for mail past what's kept
+/// (issue #4): words anywhere are `TEXT`, `from:` `FROM` and so on, `is:unread` `UNSEEN`, a
+/// leading `-` `NOT`. What IMAP can't ask (attachments, importance) is left to the list; `None`
+/// when nothing is left to ask.
+pub fn imap_criteria(query: &str) -> Option<Vec<SearchArg>> {
+    use quatrelle_model::search::{Field, Query, Term};
+    let q = Query::parse(query);
+    let mut out = Vec::new();
+    let atom = |s: &str| SearchArg::Atom(s.to_string());
+    for c in q.clauses.iter().take(16) {
+        let not = |out: &mut Vec<SearchArg>| {
+            if c.negated {
+                out.push(atom("NOT"));
+            }
+        };
+        let key = |f: &Field| match f {
+            Field::Any => "TEXT",
+            Field::From => "FROM",
+            Field::To => "TO",
+            Field::Subject => "SUBJECT",
+            Field::Body => "BODY",
+        };
+        match &c.term {
+            Term::Words(f, words) => {
+                for w in words.iter().filter(|w| !w.is_empty()).take(8) {
+                    not(&mut out);
+                    out.extend([atom(key(f)), SearchArg::Str(w.chars().take(200).collect())]);
+                }
+            }
+            Term::Phrase(f, p) if !p.is_empty() => {
+                not(&mut out);
+                out.extend([atom(key(f)), SearchArg::Str(p.chars().take(200).collect())]);
+            }
+            Term::Unread(on) => out.push(atom(if *on != c.negated { "UNSEEN" } else { "SEEN" })),
+            Term::Flagged(on) => out.push(atom(if *on != c.negated { "FLAGGED" } else { "UNFLAGGED" })),
+            Term::Size(larger, bytes) => {
+                not(&mut out);
+                out.extend([atom(if *larger { "LARGER" } else { "SMALLER" }), atom(&bytes.to_string())]);
+            }
+            // `from:ana,jun`: OR ana OR jun …, when each is one key (a word or a phrase).
+            Term::AnyOf(any) => {
+                let keys: Vec<(&str, String)> = any
+                    .iter()
+                    .filter_map(|t| match t {
+                        Term::Words(f, w) if w.len() == 1 => w.first().map(|w| (key(f), w.chars().take(200).collect())),
+                        Term::Phrase(f, p) if !p.is_empty() => Some((key(f), p.chars().take(200).collect())),
+                        _ => None,
+                    })
+                    .take(16)
+                    .collect();
+                if keys.len() == any.len() && !keys.is_empty() {
+                    not(&mut out);
+                    let last = keys.len() - 1;
+                    for (i, (k, v)) in keys.into_iter().enumerate() {
+                        if i < last {
+                            out.push(atom("OR"));
+                        }
+                        out.extend([atom(k), SearchArg::Str(v)]);
+                    }
+                }
+            }
+            Term::Keyword(k)
+                if !k.is_empty() && k.len() < 100 && k.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '$' | '_' | '-' | '.')) =>
+            {
+                not(&mut out);
+                out.extend([atom("KEYWORD"), atom(k)]);
+            }
+            _ => {}
+        }
+    }
+    (!out.is_empty()).then_some(out)
+}
+
+/// The search box's query for Exchange's searches (issue #4): the words as KQL (Microsoft
+/// Graph's `$search`) or AQS (EWS's `QueryString`), which read the same for what Quatrelle
+/// asks, and the read, flag and attachment conditions, which neither searches: those are asked
+/// as a filter when there are no words, and checked on what comes back.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct WordQuery {
+    /// `from:ana subject:"short film" NOT budget`; empty when the query has no words.
+    pub text: String,
+    pub unread: Option<bool>,
+    pub flagged: Option<bool>,
+    pub attachment: Option<bool>,
+}
+
+impl WordQuery {
+    /// Whether a message's flags and attachments meet the query's conditions.
+    pub fn admits(&self, flags: &Flags, has_attachments: bool) -> bool {
+        self.unread.is_none_or(|u| u != flags.seen)
+            && self.flagged.is_none_or(|f| f == flags.flagged)
+            && self.attachment.is_none_or(|a| a == has_attachments)
+    }
+}
+
+/// [`WordQuery`] for a search box query; `None` when nothing is left to ask.
+pub fn word_query(query: &str) -> Option<WordQuery> {
+    use quatrelle_model::search::{Field, Query, Term};
+    let q = Query::parse(query);
+    let mut out = WordQuery::default();
+    let mut parts: Vec<String> = Vec::new();
+    let prefix = |f: &Field| match f {
+        Field::Any => "",
+        Field::From => "from:",
+        Field::To => "to:",
+        Field::Subject => "subject:",
+        Field::Body => "body:",
+    };
+    // A word as written when it's plain (a prefix match, as the list's own search), quoted
+    // otherwise; quotes and backslashes can't be asked for and are dropped.
+    let word = |w: &str| {
+        let w: String = w.chars().filter(|c| !matches!(c, '"' | '\\') && !c.is_control()).take(200).collect();
+        let plain =
+            w.chars().all(|c| c.is_alphanumeric() || matches!(c, '@' | '.' | '_' | '-' | '\'')) && !matches!(w.as_str(), "AND" | "OR" | "NOT");
+        if plain && !w.starts_with('-') { w } else { format!("\"{w}\"") }
+    };
+    for c in q.clauses.iter().take(16) {
+        let not = if c.negated { "NOT " } else { "" };
+        match &c.term {
+            Term::Words(f, words) => {
+                for w in words.iter().filter(|w| !w.is_empty()).take(8) {
+                    parts.push(format!("{not}{}{}", prefix(f), word(w)));
+                }
+            }
+            Term::Phrase(f, p) if !p.is_empty() => {
+                let p: String = p.chars().filter(|c| !matches!(c, '"' | '\\') && !c.is_control()).take(200).collect();
+                parts.push(format!("{not}{}\"{p}\"", prefix(f)));
+            }
+            Term::Unread(on) => out.unread = Some(*on != c.negated),
+            Term::Flagged(on) => out.flagged = Some(*on != c.negated),
+            Term::HasAttachment(on) => out.attachment = Some(*on != c.negated),
+            _ => {}
+        }
+    }
+    // Words that were nothing but quotes.
+    parts.retain(|p| !p.ends_with("\"\"") && !p.ends_with(':') && !p.trim_start_matches("NOT ").is_empty());
+    out.text = parts.join(" ");
+    (!out.text.is_empty() || out.unread.is_some() || out.flagged.is_some() || out.attachment.is_some()).then_some(out)
+}
+
+/// The messages of `folder` the server finds for `criteria`, the newest `cap` of them: those not
+/// kept yet come into its list (issue #4). Their keys, and how many came in. A folder never
+/// synced (or whose UIDVALIDITY changed) is left to its sync.
+pub fn find_on_server<S: Read + Write>(
+    c: &mut Client<S>,
+    store: &Store,
+    account: &str,
+    folder: &str,
+    criteria: &[SearchArg],
+    cap: usize,
+) -> Result<(Vec<quatrelle_model::MessageKey>, usize)> {
+    let info = c.select(folder, true)?;
+    let mut st = store.load_folder(account, folder)?;
+    if st.validity == 0 || st.validity != info.validity {
+        return Ok((Vec::new(), 0));
+    }
+    let mut uids = c.uid_search_args(criteria)?;
+    let uids = uids.split_off(uids.len().saturating_sub(cap));
+    let missing: Vec<u32> = uids.iter().filter(|u| st.find(**u).is_none()).copied().collect();
+    let mut report = SyncReport::default();
+    fetch_headers(c, &mut st, account, folder, &missing, &mut report)?;
+    if report.new > 0 {
+        sort_newest_first(&mut st.messages);
+        store.save_folder(account, folder, &st)?;
+    }
+    Ok((uids.iter().filter_map(|u| st.find(*u).map(|m| m.key.clone())).collect(), report.new))
+}
+
 /// Headers for every message at or above the cached UIDNEXT.
 fn new_mail<S: Read + Write>(
     c: &mut Client<S>,
@@ -273,87 +448,11 @@ pub fn fetch_body<S: Read + Write>(c: &mut Client<S>, store: &Store, key: &Messa
     Ok(raw)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Downloading ahead goes past a message that fails, but not a refused sign-in, nor three
-    /// failures running.
-    #[test]
-    fn ahead_failures_go_on_until_they_mean_the_connection() {
-        let mut f = AheadFailures::new();
-        assert!(f.failed("m1", NetError::No("gone".into())).is_ok());
-        f.ok();
-        assert!(f.failed("m2", NetError::Protocol("x".into())).is_ok());
-        assert!(f.failed("m3", NetError::Closed("HTTP 500".into())).is_ok());
-        assert!(f.failed("m4", NetError::Closed("HTTP 500".into())).is_err(), "three running");
-        assert!(AheadFailures::new().failed("m", NetError::Auth("expired".into())).is_err());
-    }
-}
-
-/// An argument of an IMAP `SEARCH`: a search key, or a string it takes.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum SearchArg {
-    Atom(String),
-    Str(String),
-}
-
-/// The search box's query as IMAP `SEARCH` keys (RFC 3501 §6.4.4), for mail the index here
-/// doesn't have the words of: words anywhere are `TEXT`, `from:` `FROM`, `to:` and `cc:` `OR TO
-/// … CC …`, `subject:` `SUBJECT`, `body:` `BODY`, `is:unread` `UNSEEN`, `is:flagged` `FLAGGED`,
-/// `keyword:x` `KEYWORD`, a leading `-` `NOT`. What IMAP can't ask (attachments, importance,
-/// categories) is left to the list; `None` when nothing is left to ask.
-pub fn imap_criteria(query: &str) -> Option<Vec<SearchArg>> {
-    use quatrelle_model::search::{Field, Query, Term};
-    let q = Query::parse(query);
-    let mut out = Vec::new();
-    let atom = |s: &str| SearchArg::Atom(s.to_string());
-    for c in q.clauses.iter().take(16) {
-        let not = |out: &mut Vec<SearchArg>| {
-            if c.negated {
-                out.push(atom("NOT"));
-            }
-        };
-        // `to:` matches the recipients and those copied, as it does here.
-        let push_text = |out: &mut Vec<SearchArg>, f: &Field, s: &str| {
-            let s = SearchArg::Str(s.chars().take(200).collect());
-            match f {
-                Field::To => out.extend([atom("OR"), atom("TO"), s.clone(), atom("CC"), s]),
-                Field::From => out.extend([atom("FROM"), s]),
-                Field::Subject => out.extend([atom("SUBJECT"), s]),
-                Field::Body => out.extend([atom("BODY"), s]),
-                Field::Any => out.extend([atom("TEXT"), s]),
-            }
-        };
-        match &c.term {
-            Term::Words(f, words) => {
-                for w in words.iter().filter(|w| !w.is_empty()).take(8) {
-                    not(&mut out);
-                    push_text(&mut out, f, w);
-                }
-            }
-            Term::Phrase(f, p) if !p.is_empty() => {
-                not(&mut out);
-                push_text(&mut out, f, p);
-            }
-            Term::Unread(on) => out.push(atom(if *on != c.negated { "UNSEEN" } else { "SEEN" })),
-            Term::Flagged(on) => out.push(atom(if *on != c.negated { "FLAGGED" } else { "UNFLAGGED" })),
-            Term::Keyword(k)
-                if !k.is_empty() && k.len() < 100 && k.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '$' | '_' | '-' | '.')) =>
-            {
-                not(&mut out);
-                out.extend([atom("KEYWORD"), atom(k)]);
-            }
-            _ => {}
-        }
-    }
-    (!out.is_empty()).then_some(out)
-}
-
 /// The messages of `folder` the server finds for `criteria`, the newest `cap` of them: their
 /// headers are fetched when they aren't kept here, so each can be listed and opened. A folder
-/// never synced (or whose UIDVALIDITY changed) is left to its sync.
-pub fn find_on_server<S: Read + Write>(
+/// never synced (or whose UIDVALIDITY changed) is left to its sync. (The search box's search, as
+/// summaries; [`find_on_server`] is Show more's, as keys.)
+pub fn search_on_server<S: Read + Write>(
     c: &mut Client<S>,
     store: &Store,
     account: &str,
@@ -405,7 +504,7 @@ pub fn search_folders<S: Read + Write>(
         if began.elapsed() > budget {
             break;
         }
-        match find_on_server(c, store, account, folder, &criteria, cap) {
+        match search_on_server(c, store, account, folder, &criteria, cap) {
             Ok(found) => out.extend(found),
             Err(e) => {
                 log::info!("{account}/{folder}: searching the server: {e}");
@@ -418,4 +517,22 @@ pub fn search_folders<S: Read + Write>(
     sort_newest_first(&mut out);
     out.truncate(cap);
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Downloading ahead goes past a message that fails, but not a refused sign-in, nor three
+    /// failures running.
+    #[test]
+    fn ahead_failures_go_on_until_they_mean_the_connection() {
+        let mut f = AheadFailures::new();
+        assert!(f.failed("m1", NetError::No("gone".into())).is_ok());
+        f.ok();
+        assert!(f.failed("m2", NetError::Protocol("x".into())).is_ok());
+        assert!(f.failed("m3", NetError::Closed("HTTP 500".into())).is_ok());
+        assert!(f.failed("m4", NetError::Closed("HTTP 500".into())).is_err(), "three running");
+        assert!(AheadFailures::new().failed("m", NetError::Auth("expired".into())).is_err());
+    }
 }

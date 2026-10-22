@@ -5,7 +5,7 @@
 //! create, rename, move, delete or pin it to Favorites. Favorites, accounts and folders with
 //! folders in them collapse, and stay so from one start to the next.
 
-use egui::{Color32, RichText, Sense, Ui, vec2};
+use egui::{RichText, Sense, Ui, vec2};
 use quatrelle_engine::model::{Folder, FolderRole};
 use quatrelle_engine::{Session, View};
 use serde_json::json;
@@ -79,18 +79,14 @@ fn row(
     let h = 26.0;
     let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), h), if draggable { Sense::click_and_drag() } else { Sense::click() });
     let hovering_drop = drop_ok && (resp.dnd_hover_payload::<DragKeys>().is_some() || resp.dnd_hover_payload::<DragFolder>().is_some());
-    let fill = if hovering_drop {
-        t.accent.gamma_multiply(0.3)
-    } else if selected {
-        t.accent_soft
-    } else if resp.hovered() {
-        t.hover_row
-    } else {
-        Color32::TRANSPARENT
-    };
+    let ctx = ui.ctx().clone();
+    let sel = crate::motion::toward(&ctx, resp.id.with("selected"), selected, crate::motion::NORMAL);
+    let hover = crate::motion::toward(&ctx, resp.id.with("hover"), resp.hovered(), crate::motion::FAST);
+    let fill = if hovering_drop { t.accent.gamma_multiply(0.3) } else { crate::motion::mix(t.hover_row.gamma_multiply(hover), t.accent_soft, sel) };
     ui.painter().rect_filled(rect, 6.0, fill);
-    if selected {
-        let bar = egui::Rect::from_min_size(rect.min + vec2(0.0, 7.0), vec2(3.0, h - 14.0));
+    if sel > 0.0 {
+        let full = h - 14.0;
+        let bar = egui::Rect::from_center_size(egui::pos2(rect.min.x + 1.5, rect.center().y), vec2(3.0, full * sel));
         ui.painter().rect_filled(bar, 2.0, t.accent);
     }
     let x = rect.min.x + 10.0 + depth as f32 * 14.0;
@@ -245,7 +241,65 @@ pub fn show(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>) {
                 ui.add_space(6.0);
             }
         }
+        search_folders(s, t, ui, acts);
     });
+}
+
+/// Search Folders, after the mailboxes: each a saved search, opened with a click; New Search
+/// Folder from the heading's menu (or the row when there are none).
+fn search_folders(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>) {
+    if s.accounts.is_empty() {
+        return;
+    }
+    let open = !s.prefs.collapsed.contains("searchFolders");
+    ui.add_space(4.0);
+    let new = |ui: &mut Ui, acts: &mut Vec<Action>| {
+        if ui.button(tl!("New Search Folder…")).clicked() {
+            acts.push(Action::Dialog(Dialog::SearchFolder(Box::new(crate::dialogs::SearchFolderForm::new()))));
+            ui.close();
+        }
+    };
+    let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 22.0), Sense::click());
+    if resp.hovered() {
+        ui.painter().rect_filled(rect, 4.0, t.hover_row);
+    }
+    let chev = egui::Rect::from_min_size(egui::pos2(rect.min.x + 2.0, rect.center().y - 6.0), vec2(12.0, 12.0));
+    icons::paint(ui.painter(), chev, if open { Icon::ChevronDown } else { Icon::ChevronRight }, t.faint);
+    ui.painter().text(egui::pos2(rect.min.x + 18.0, rect.center().y), egui::Align2::LEFT_CENTER, tl!("Search Folders"), theme::bold(12.0), t.faint);
+    if resp.clicked() {
+        acts.push(Action::Run("view.collapse", json!({"key": "searchFolders"})));
+    }
+    resp.context_menu(|ui| new(ui, acts));
+    if !open {
+        return;
+    }
+    if s.prefs.search_folders.is_empty() {
+        if row(ui, t, Icon::Plus, tl!("New Search Folder…"), 0, 0, false, false, false).clicked() {
+            acts.push(Action::Dialog(Dialog::SearchFolder(Box::new(crate::dialogs::SearchFolderForm::new()))));
+        }
+        return;
+    }
+    let showing = s.open_search_folder_name();
+    for f in &s.prefs.search_folders {
+        let selected = showing == Some(f.name.as_str());
+        let r = row(ui, t, Icon::Search, &f.name, 0, 0, selected, false, false).on_hover_text(&f.query);
+        if r.clicked() {
+            acts.push(Action::Run("searchFolder.open", json!({"name": f.name})));
+        }
+        r.context_menu(|ui| {
+            if ui.button(tl!("Customize this Search Folder…")).clicked() {
+                acts.push(Action::Dialog(Dialog::SearchFolder(Box::new(crate::dialogs::SearchFolderForm::edit(f)))));
+                ui.close();
+            }
+            new(ui, acts);
+            ui.separator();
+            // Only the search goes; its mail stays where it is, so no question is asked.
+            if ui.button(RichText::new(tl!("Delete Search Folder")).color(t.danger)).clicked() {
+                acts.push(Action::Run("searchFolder.delete", json!({"name": f.name})));
+                ui.close();
+            }
+        });
+    }
 }
 
 /// A shared mailbox an account opens, as a mailbox of its own (issue #1): its top folder `top`

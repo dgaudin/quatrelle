@@ -1002,7 +1002,6 @@ month	May	מאי
 	Online only: {email}	מקוון בלבד: {email}
 	New message	הודעה חדשה
 	Open Quatrelle to read it.	פתח את Quatrelle כדי לקרוא.
-	Its mail is read from the server and held in memory while Quatrelle runs; nothing of it is written to this computer. Each message downloads when you open it. Mail waiting to be sent, changes made while offline, and calendar items, contacts and notes kept only in Quatrelle are lost when it closes.	הדואר שלו נקרא מהשרת ונשמר בזיכרון בזמן ש-Quatrelle פועל; דבר ממנו אינו נכתב למחשב הזה. כל הודעה מורדת כשפותחים אותה. דואר שממתין לשליחה, שינויים שנעשו במצב לא מקוון, ופריטי לוח שנה, אנשי קשר והערות שנשמרים רק ב-Quatrelle יאבדו כשהוא נסגר.
 	Portable: everything is kept in QuatrelleData beside Quatrelle, and passwords only until it closes.	נייד: הכול נשמר ב-QuatrelleData לצד Quatrelle, והסיסמאות רק עד שהוא נסגר.
 	When it starts	בשעת ההתחלה
 	1 minute before	דקה אחת לפני
@@ -1029,3 +1028,94 @@ month	May	מאי
 	{n} more on the server	{n} נוספות בשרת
 	Changes not yet on the server: {n}	שינויים שעדיין לא בשרת: {n}
 	Messages waiting to be sent: {n}	הודעות שממתינות לשליחה: {n}
+	Mail older than what's kept here is only on the server.	דואר ישן יותר ממה שנשמר כאן נמצא רק בשרת.
+	Search the server	חיפוש בשרת
+	Searching the server…	מחפש בשרת…
+	The server found {n}	השרת מצא {n}
+	{day} {month}	{day} ב{month}
+	Restart to update	הפעל מחדש לעדכון
+	Quatrelle {version} is downloaded. It installs when you close Quatrelle.	Quatrelle {version} הורד. הוא יותקן כשתסגור את Quatrelle.
+	1 minute	דקה אחת
+	{n} minutes	{n} דקות
+	1 hour	שעה אחת
+	{n} hours	{n} שעות
+	1 day	יום אחד
+	{n} days	{n} ימים
+	1 week	שבוע אחד
+	{n} weeks	{n} שבועות
+	0 minutes before start	0 דקות לפני ההתחלה
+	1 Reminder	תזכורת אחת
+	{n} Reminders	{n} תזכורות
+	Click Snooze to be reminded again in:	לחץ על 'נודניק' כדי לקבל תזכורת שוב בעוד:
+	Dismiss	בטל
+	Dismiss All	בטל הכל
+	Open Item	פתח פריט
+	Overdue	באיחור
+	Now	עכשיו
+	In {n} minutes	בעוד {n} דקות
+	In {n} hours	בעוד {n} שעות
+	In {n} days	בעוד {n} ימים
+	Junk	דואר זבל
+	Junk options	אפשרויות דואר זבל
+	Junk Email options…	אפשרויות דואר זבל…
+	Block sender	חסום שולח
+	Never block sender	לעולם אל תחסום את השולח
+	Never block sender's domain	לעולם אל תחסום את תחום השולח
+	Their mail goes to Junk Email from now on	הדואר שלו יעבור לדואר זבל מעכשיו
+	Their mail is never treated as junk	הדואר שלו לעולם לא ייחשב כזבל
+	Mail from anyone at their domain is never treated as junk	דואר מכל אחד בתחום שלו לעולם לא ייחשב כזבל
+	Blocked senders	שולחים חסומים
+	Safe senders	שולחים בטוחים
+	Mail from these addresses and domains goes to Junk Email as it arrives.	דואר מכתובות ותחומים אלה עובר לדואר זבל עם הגעתו.
+	Mail from these addresses and domains is never treated as junk, and its pictures load.	דואר מכתובות ותחומים אלה לעולם לא ייחשב כזבל, והתמונות שלו נטענות.
+	name@example.com or @example.com	name@example.com או ‎@example.com
+	And {n} more	ועוד {n}
+	Clean up conversation	נקה שיחה
+	Clean up folder	נקה תיקיה
+	Messages quoted in full by a later reply go to Deleted Items	הודעות שמצוטטות במלואן בתשובה מאוחרת יותר עוברות לפריטים שנמחקו
+	No conversations to clean up	אין שיחות לניקוי
+	Nothing to clean up: no message is quoted in full by a later reply	אין מה לנקות: אף הודעה אינה מצוטטת במלואה בתשובה מאוחרת יותר
+	Search Folders	תיקיות חיפוש
+	New Search Folder…	תיקיית חיפוש חדשה…
+	New Search Folder	תיקיית חיפוש חדשה
+	Edit Search Folder	ערוך תיקיית חיפוש
+	Customize this Search Folder…	התאם אישית תיקיית חיפוש זו…
+	Delete Search Folder	מחק תיקיית חיפוש
+	Shows the mail it finds in every folder, except Deleted Items and Junk Email.	מציג את הדואר שנמצא בכל תיקיה, למעט פריטים שנמחקו ודואר זבל.
+	Show	הצג
+	From these people (addresses or names, separated by commas)	מאנשים אלה (כתובות או שמות, מופרדים בפסיקים)
+	Search for	חפש
+	Unread mail	דואר שלא נקרא
+	Mail flagged for follow up	דואר שסומן לטיפול
+	Important mail	דואר חשוב
+	Categorized mail	דואר מסווג
+	Mail with attachments	דואר עם קבצים מצורפים
+	Large mail (over 100 KB)	דואר גדול (מעל 100 KB)
+	Pinned mail	דואר מוצמד
+	Mail from specific people	דואר מאנשים מסוימים
+	Quick steps	צעדים מהירים
+	No Quick Steps yet.	אין עדיין צעדים מהירים.
+	New Quick Step…	צעד מהיר חדש…
+	New Quick Step	צעד מהיר חדש
+	Edit a Quick Step	ערוך צעד מהיר
+	Edit Quick Step	ערוך צעד מהיר
+	Done to the selected mail in one click; the first nine also with Ctrl+Shift+1 to 9.	מתבצע על הדואר הנבחר בלחיצה אחת; תשעת הראשונים גם עם Ctrl+Shift+1 עד 9.
+	Done	בוצע
+	Then move to	ואז העבר אל
+	Don't move	אל תעביר
+	Delete this Quick Step	מחק צעד מהיר זה
+	Date & time	תאריך ושעה
+	Word count	ספירת מילים
+	Words	מילים
+	Characters (no spaces)	תווים (ללא רווחים)
+	Characters (with spaces)	תווים (כולל רווחים)
+	Paragraphs	פסקאות
+	Lines	שורות
+	Save the message you're writing?	לשמור את ההודעה שאתה כותב?
+	Save the messages you're writing?	לשמור את ההודעות שאתה כותב?
+	It's kept in Drafts if you save it.	היא נשמרת בטיוטות אם תשמור אותה.
+	{n} messages are being written. They're kept in Drafts if you save them.	{n} הודעות נמצאות בכתיבה. הן נשמרות בטיוטות אם תשמור אותן.
+	Don't save	אל תשמור
+	Also being written:	בכתיבה גם:
+	Play animations	הפעל הנפשות
+	Hovers, selections and panes ease into place; off, everything changes at once	ריחוף, בחירות וחלוניות נכנסים למקומם בהדרגה; כשכבוי, הכול משתנה מיד

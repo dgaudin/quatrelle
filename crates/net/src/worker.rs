@@ -447,9 +447,19 @@ impl Pool {
             }
             // Offline: changes wait in the cache for the next sync.
             Job::SyncDav { account } if !self.workers.contains_key(&account) => {}
+            Job::SearchServer { account, query, .. } if !self.workers.contains_key(&account) => {
+                self.sink.emit(Event::ServerSearched { account, query, keys: Vec::new(), error: Some("the account is offline".into()) });
+            }
             // Working offline: nothing connects, by choice.
             Job::SyncAll { account } | Job::SyncFolder { account, .. } | Job::FlushOutbox { account }
                 if self.offline && !self.workers.contains_key(&account) => {}
+            // Closing with a message written: on disk before the app goes (the worker may be busy
+            // or about to stop); filed on the server at the next connection, as offline drafts.
+            Job::KeepDraft { account, raw, folder, replaces } => {
+                if let Err(e) = keep_draft(&self.store, &account, &folder, replaces, raw) {
+                    log::warn!("{account}: the draft couldn't be kept: {e}");
+                }
+            }
             Job::SaveDraft { account, raw, folder, replaces } if !self.workers.contains_key(&account) => {
                 match keep_draft(&self.store, &account, &folder, replaces, raw) {
                     Ok(()) => self.sink.emit(Event::Notice {
@@ -689,6 +699,8 @@ struct Worker {
 
 /// Where an account keeps its folders' own windows.
 const WINDOWS: &str = "windows.json";
+/// The most messages of a folder a search of the server brings in.
+const FOUND_MAX: usize = 500;
 
 impl Worker {
     fn new(acc: AccountConfig, auth: Arc<Mutex<Auth>>, store: Store, sink: Sink, opts: SyncOptions) -> Worker {
@@ -1365,6 +1377,70 @@ impl Worker {
         self.sink.emit(Event::Folders { account: self.id(), folders: self.folders.clone() });
     }
 
+    /// Search folders on the server (issue #4): IMAP's `SEARCH`, JMAP's `Email/query`, Graph's
+    /// `$search` and EWS's `QueryString`, the messages found brought into their folders' lists.
+    fn search_server(&mut self, folders: &[String], query: String) {
+        let id = self.id();
+        let answer = |keys, error| Event::ServerSearched { account: id.clone(), query: query.clone(), keys, error };
+        if self.conn.is_none() {
+            self.next_attempt = Instant::now();
+            self.connect_and_sync();
+        }
+        let store = self.store.clone();
+        let (imap, filter, words) = (crate::sync::imap_criteria(&query), quatrelle_jmap::search_filter(&query), crate::sync::word_query(&query));
+        let asks = match self.conn.as_ref() {
+            None => {
+                self.sink.emit(answer(Vec::new(), Some("the account isn't connected".into())));
+                return;
+            }
+            Some(Conn::Pop) => {
+                self.sink.emit(answer(Vec::new(), Some("a POP account keeps all its mail here".into())));
+                return;
+            }
+            Some(Conn::Imap(_)) => imap.is_some(),
+            Some(Conn::Jmap(_)) => filter.is_some(),
+            Some(Conn::Graph(_) | Conn::Ews(_)) => words.is_some(),
+        };
+        if !asks {
+            self.sink.emit(answer(Vec::new(), None));
+            return;
+        }
+        let (mut keys, mut changed, mut failed) = (Vec::new(), Vec::new(), None);
+        for f in folders.iter().take(200) {
+            let found = match (self.conn.as_mut(), &imap, &filter, &words) {
+                (Some(Conn::Imap(c)), Some(q), _, _) => crate::sync::find_on_server(c, &store, &id, f, q, FOUND_MAX),
+                (Some(Conn::Jmap(c)), _, Some(q), _) => jmap::find_on_server(c, &mut self.jstate, &store, &id, f, q, FOUND_MAX),
+                (Some(Conn::Graph(c)), _, _, Some(q)) => crate::graph::find_on_server(c, &mut self.jstate, &store, &id, f, q, FOUND_MAX),
+                (Some(Conn::Ews(c)), _, _, Some(q)) => crate::ews::find_on_server(c, &mut self.jstate, &store, &id, f, q, FOUND_MAX),
+                _ => break,
+            };
+            match found {
+                Ok((found, new)) => {
+                    keys.extend(found);
+                    if new > 0 {
+                        changed.push(f.clone());
+                    }
+                }
+                Err(e) => {
+                    log::info!("{id}/{f}: searching the server: {e}");
+                    failed = Some(e.to_string());
+                    if matches!(e, NetError::Io(_) | NetError::Closed(_)) {
+                        self.conn = None;
+                        break;
+                    }
+                }
+            }
+        }
+        if !matches!(self.conn, Some(Conn::Imap(_))) {
+            self.save_jstate();
+        }
+        for f in changed {
+            self.sink.emit(Event::FolderChanged { account: id.clone(), folder: f });
+        }
+        let error = if keys.is_empty() { failed } else { None };
+        self.sink.emit(answer(keys, error));
+    }
+
     fn sync_one(&mut self, path: &str) {
         self.status(SyncStatus::Syncing { folder: path.to_string() });
         // A folder asked to keep more keeps them (the API servers keep only the newest window).
@@ -1551,6 +1627,7 @@ impl Worker {
                     self.sync_one(&folder);
                 }
             }
+            Job::SearchServer { folders, query, .. } => self.search_server(&folders, query),
             Job::FetchBody { key } => self.fetch(key),
             Job::Search { query, folder, .. } => self.search(query, folder),
             // Already in the cache and ops.json (the pool wrote them): push the queue.
@@ -1566,7 +1643,7 @@ impl Worker {
             Job::Apply { op, .. } => {
                 // POP: a move is carried out here (there's no server copy to come back); what's
                 // deleted for good is noted, for removing the server's copy when the account says.
-                if self.acc.pop.is_some() {
+                {
                     let gone: Vec<quatrelle_model::MessageKey> = match &op {
                         Op::Expunge { keys } => keys.clone(),
                         Op::EmptyFolder { path } => {
@@ -1602,6 +1679,12 @@ impl Worker {
                 }
             }
             Job::Send { id, raw, from, recipients, sent_folder, .. } => self.send(id, &raw, &from, &recipients, sent_folder),
+            // The pool keeps these itself; one reaching a worker is kept the same way.
+            Job::KeepDraft { raw, folder, replaces, .. } => {
+                if let Err(e) = keep_draft(&self.store, &self.acc.id, &folder, replaces, raw) {
+                    log::warn!("{}: the draft couldn't be kept: {e}", self.acc.id);
+                }
+            }
             Job::SaveDraft { raw, folder, replaces, .. } => {
                 let (raw_kept, replaces_kept) = (raw.clone(), replaces.clone());
                 let r = (|| -> Result<()> {

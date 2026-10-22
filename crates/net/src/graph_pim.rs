@@ -194,7 +194,7 @@ pub fn event_of(v: &Value) -> Option<CalEvent> {
     let reminder =
         (v.get("isReminderOn").and_then(Value::as_bool) == Some(true)).then(|| v.get("reminderMinutesBeforeStart").and_then(Value::as_i64)).flatten();
     let uid = [s(v, "iCalUId"), s(v, "id")].into_iter().find(|u| !u.is_empty())?;
-    Some(CalEvent {
+    let event = CalEvent {
         uid,
         summary: s(v, "subject"),
         description: description.trim().to_string(),
@@ -213,7 +213,8 @@ pub fn event_of(v: &Value) -> Option<CalEvent> {
             .map(|a| a.iter().filter_map(Value::as_str).map(str::trim).filter(|c| !c.is_empty()).take(20).map(str::to_string).collect())
             .unwrap_or_default(),
         ..Default::default()
-    })
+    };
+    Some(event)
 }
 
 /// An event as Graph's JSON (for creating or changing it).
@@ -302,6 +303,7 @@ pub fn card_of(v: &Value) -> Option<Card> {
                 let (y, m, d) = quatrelle_model::dates::civil_from_days((t + 12 * 3600 - 1).div_euclid(86_400));
                 format!("{y:04}-{m:02}-{d:02}")
             })
+            .and_then(|b| quatrelle_model::vcard::birthday_of(&b))
             .unwrap_or_default(),
         extra: Vec::new(),
         ..Card::default()
@@ -344,7 +346,7 @@ pub fn card_json(c: &Card) -> Value {
         "businessAddress": address("work"),
         "homeAddress": address("home"),
         "otherAddress": address(""),
-        "birthday": quatrelle_model::vcard::birthday_of(&c.birthday).filter(|b| !b.starts_with("--")).map(|b| format!("{b}T12:00:00Z")),
+        "birthday": quatrelle_model::vcard::birthday_for_exchange(&c.birthday).map(|b| format!("{b}T12:00:00Z")),
     })
 }
 
@@ -535,6 +537,7 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
     }
     out.books = Some(vec![BookInfo { id: CONTACTS.into(), name: "Contacts".into(), read_only: false, ctag: String::new() }]);
     out.synced_books.push(CONTACTS.into());
+    quatrelle_model::pim::separate_shared_uids(&mut out.events);
     Ok(out)
 }
 

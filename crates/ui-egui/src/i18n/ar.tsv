@@ -1002,7 +1002,6 @@ month	May	مايو
 	Online only: {email}	عبر الإنترنت فقط: {email}
 	New message	رسالة جديدة
 	Open Quatrelle to read it.	افتح Quatrelle لقراءتها.
-	Its mail is read from the server and held in memory while Quatrelle runs; nothing of it is written to this computer. Each message downloads when you open it. Mail waiting to be sent, changes made while offline, and calendar items, contacts and notes kept only in Quatrelle are lost when it closes.	يُقرأ بريده من الخادم ويُحتفظ به في الذاكرة أثناء تشغيل Quatrelle، ولا يُكتب منه شيء على هذا الكمبيوتر. تُنزَّل كل رسالة عند فتحها. تضيع عند إغلاقه الرسائل التي تنتظر الإرسال، والتغييرات التي أُجريت دون اتصال، وعناصر التقويم وجهات الاتصال والملاحظات المحفوظة في Quatrelle فقط.
 	Portable: everything is kept in QuatrelleData beside Quatrelle, and passwords only until it closes.	محمول: يُحفظ كل شيء في QuatrelleData بجانب Quatrelle، وكلمات المرور حتى إغلاقه فقط.
 	When it starts	في وقت البدء
 	1 minute before	قبل دقيقة واحدة
@@ -1029,3 +1028,94 @@ month	May	مايو
 	{n} more on the server	{n} أخرى على الخادم
 	Changes not yet on the server: {n}	تغييرات لم تصل إلى الخادم بعد: {n}
 	Messages waiting to be sent: {n}	رسائل بانتظار الإرسال: {n}
+	Mail older than what's kept here is only on the server.	البريد الأقدم مما يُحتفظ به هنا موجود على الخادم فقط.
+	Search the server	البحث في الخادم
+	Searching the server…	جارٍ البحث في الخادم…
+	The server found {n}	عثر الخادم على {n}
+	{day} {month}	{day} {month}
+	Restart to update	أعد التشغيل للتحديث
+	Quatrelle {version} is downloaded. It installs when you close Quatrelle.	تم تنزيل Quatrelle {version}. سيُثبَّت عند إغلاق Quatrelle.
+	1 minute	دقيقة واحدة
+	{n} minutes	{n} دقيقة
+	1 hour	ساعة واحدة
+	{n} hours	{n} ساعات
+	1 day	يوم واحد
+	{n} days	{n} أيام
+	1 week	أسبوع واحد
+	{n} weeks	{n} أسابيع
+	0 minutes before start	0 دقيقة قبل البدء
+	1 Reminder	تذكير واحد
+	{n} Reminders	{n} تذكيرات
+	Click Snooze to be reminded again in:	انقر فوق «غفوة» للتذكير مرة أخرى بعد:
+	Dismiss	تجاهل
+	Dismiss All	تجاهل الكل
+	Open Item	فتح العنصر
+	Overdue	متأخر
+	Now	الآن
+	In {n} minutes	بعد {n} دقيقة
+	In {n} hours	بعد {n} ساعات
+	In {n} days	بعد {n} أيام
+	Junk	البريد العشوائي
+	Junk options	خيارات البريد العشوائي
+	Junk Email options…	خيارات البريد العشوائي…
+	Block sender	حظر المرسل
+	Never block sender	عدم حظر المرسل مطلقاً
+	Never block sender's domain	عدم حظر مجال المرسل مطلقاً
+	Their mail goes to Junk Email from now on	سينتقل بريده إلى البريد العشوائي من الآن فصاعداً
+	Their mail is never treated as junk	لن يُعامل بريده كبريد عشوائي أبداً
+	Mail from anyone at their domain is never treated as junk	لن يُعامل البريد من أي شخص في مجاله كبريد عشوائي أبداً
+	Blocked senders	المرسلون المحظورون
+	Safe senders	المرسلون الآمنون
+	Mail from these addresses and domains goes to Junk Email as it arrives.	ينتقل البريد من هذه العناوين والمجالات إلى البريد العشوائي عند وصوله.
+	Mail from these addresses and domains is never treated as junk, and its pictures load.	لا يُعامل البريد من هذه العناوين والمجالات كبريد عشوائي أبداً، وتُحمَّل صوره.
+	name@example.com or @example.com	name@example.com أو ‎@example.com
+	And {n} more	و{n} أخرى
+	Clean up conversation	تنظيف المحادثة
+	Clean up folder	تنظيف المجلد
+	Messages quoted in full by a later reply go to Deleted Items	تنتقل الرسائل المقتبسة بالكامل في رد لاحق إلى العناصر المحذوفة
+	No conversations to clean up	لا توجد محادثات لتنظيفها
+	Nothing to clean up: no message is quoted in full by a later reply	لا شيء للتنظيف: لا توجد رسالة مقتبسة بالكامل في رد لاحق
+	Search Folders	مجلدات البحث
+	New Search Folder…	مجلد بحث جديد…
+	New Search Folder	مجلد بحث جديد
+	Edit Search Folder	تحرير مجلد البحث
+	Customize this Search Folder…	تخصيص مجلد البحث هذا…
+	Delete Search Folder	حذف مجلد البحث
+	Shows the mail it finds in every folder, except Deleted Items and Junk Email.	يعرض البريد الذي يعثر عليه في كل مجلد، باستثناء العناصر المحذوفة والبريد العشوائي.
+	Show	إظهار
+	From these people (addresses or names, separated by commas)	من هؤلاء الأشخاص (عناوين أو أسماء، مفصولة بفواصل)
+	Search for	البحث عن
+	Unread mail	البريد غير المقروء
+	Mail flagged for follow up	البريد الموضوع عليه علامة للمتابعة
+	Important mail	البريد المهم
+	Categorized mail	البريد المصنف
+	Mail with attachments	البريد الذي يحتوي على مرفقات
+	Large mail (over 100 KB)	البريد الكبير (أكثر من 100 كيلوبايت)
+	Pinned mail	البريد المثبت
+	Mail from specific people	البريد الوارد من أشخاص معينين
+	Quick steps	الخطوات السريعة
+	No Quick Steps yet.	لا توجد خطوات سريعة بعد.
+	New Quick Step…	خطوة سريعة جديدة…
+	New Quick Step	خطوة سريعة جديدة
+	Edit a Quick Step	تحرير خطوة سريعة
+	Edit Quick Step	تحرير الخطوة السريعة
+	Done to the selected mail in one click; the first nine also with Ctrl+Shift+1 to 9.	تُنفَّذ على البريد المحدد بنقرة واحدة؛ والتسع الأولى أيضاً باستخدام Ctrl+Shift+1 إلى 9.
+	Done	تم
+	Then move to	ثم النقل إلى
+	Don't move	عدم النقل
+	Delete this Quick Step	حذف هذه الخطوة السريعة
+	Date & time	التاريخ والوقت
+	Word count	عدد الكلمات
+	Words	الكلمات
+	Characters (no spaces)	الأحرف (بدون مسافات)
+	Characters (with spaces)	الأحرف (مع المسافات)
+	Paragraphs	الفقرات
+	Lines	الأسطر
+	Save the message you're writing?	هل تريد حفظ الرسالة التي تكتبها؟
+	Save the messages you're writing?	هل تريد حفظ الرسائل التي تكتبها؟
+	It's kept in Drafts if you save it.	يتم الاحتفاظ بها في المسودات إذا قمت بحفظها.
+	{n} messages are being written. They're kept in Drafts if you save them.	يتم كتابة {n} رسائل. يتم الاحتفاظ بها في المسودات إذا قمت بحفظها.
+	Don't save	عدم الحفظ
+	Also being written:	قيد الكتابة أيضاً:
+	Play animations	تشغيل الرسوم المتحركة
+	Hovers, selections and panes ease into place; off, everything changes at once	تنتقل التمريرات والتحديدات والأجزاء إلى مكانها بسلاسة؛ عند الإيقاف يتغير كل شيء فوراً

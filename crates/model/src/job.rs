@@ -145,6 +145,15 @@ pub struct Release {
     pub page: String,
     /// The installer for this system, when there is one to offer (else the page).
     pub download: String,
+    /// That installer's SHA-256 (lowercase hex) as GitHub records it, when it does.
+    #[serde(default)]
+    pub sha256: String,
+    /// That installer's size in bytes (0 when not said).
+    #[serde(default)]
+    pub size: u64,
+    /// The release's `SHA256SUMS.txt`, for checking a download GitHub gives no digest for.
+    #[serde(default)]
+    pub sums: String,
 }
 
 /// Work for the network layer.
@@ -169,6 +178,10 @@ pub enum Job {
     /// Keep `more` of a folder's older messages than it keeps now, fetched from the server
     /// (mail past what's kept on this computer, shown when asked for).
     MoreMail { account: String, folder: String, more: u32 },
+    /// Search these folders on the server for `query` (the search box's words), for mail past
+    /// what's kept here; the messages found come into their folders' lists, answered by
+    /// [`Event::ServerSearched`].
+    SearchServer { account: String, folders: Vec<String>, query: String },
     /// Download a message's full source.
     FetchBody { key: MessageKey },
     /// Apply a mailbox change on the server.
@@ -178,6 +191,9 @@ pub enum Job {
     Send { account: String, id: u64, raw: Vec<u8>, from: String, recipients: Vec<String>, sent_folder: Option<String> },
     /// Store a draft (`APPEND` with `\Draft`), replacing an earlier copy.
     SaveDraft { account: String, raw: Vec<u8>, folder: String, replaces: Option<MessageKey> },
+    /// A draft kept on this computer at once, filed in Drafts on the server at the next
+    /// connection: Quatrelle is closing with the message being written.
+    KeepDraft { account: String, raw: Vec<u8>, folder: String, replaces: Option<MessageKey> },
     /// Try to send what waits in the Outbox now.
     FlushOutbox { account: String },
     /// Download a picture a message links to (only after the user asked to see pictures).
@@ -246,9 +262,11 @@ impl Job {
             | Job::SyncAll { account }
             | Job::SyncFolder { account, .. }
             | Job::MoreMail { account, .. }
+            | Job::SearchServer { account, .. }
             | Job::Apply { account, .. }
             | Job::Send { account, .. }
             | Job::SaveDraft { account, .. }
+            | Job::KeepDraft { account, .. }
             | Job::FlushOutbox { account }
             | Job::GetVacation { account }
             | Job::SetVacation { account, .. }
@@ -448,6 +466,14 @@ pub enum Event {
     Notice {
         account: String,
         message: String,
+    },
+    /// What the server found for a [`Job::SearchServer`]: the messages, now in their folders'
+    /// lists, or why it couldn't search.
+    ServerSearched {
+        account: String,
+        query: String,
+        keys: Vec<MessageKey>,
+        error: Option<String>,
     },
 }
 

@@ -6,7 +6,7 @@ the items it deferred (calendar, contacts, Exchange, PST import, a web build) ar
 limits below. What each version brought is under [Done](#done); the milestones are in
 [ROADMAP.md](../ROADMAP.md).
 
-_Status: v0.20, 2026-10-20._
+_Status: v0.22, 2026-10-22._
 
 ## Open
 
@@ -583,3 +583,146 @@ tester's does, a contact as Exchange keeps it, Outlook's clipboard), then fixed 
     UTF-8 literal). A hit older than this computer's window is fetched into its folder so it can
     be opened. Searching all folders asks the biggest first and stops at eighty folders or five
     seconds; JMAP accounts and the browser still answer from this computer alone.
+### v0.21 — One Quatrelle at a time
+- **Started again, the running Quatrelle comes forward:** a second launch (a second click on the
+  taskbar or Start, a shortcut, a `mailto:` handler) opened another window on the same data,
+  whose accounts' data files were open in the first ("open in another copy of Quatrelle"), and
+  its log replaced the running one's. Now the first Quatrelle on a data folder listens on a
+  socket in the user's own scratch folder, named after the data folder and the Windows session
+  or display, and a later launch on that data asks it to show its window and leaves before it
+  touches anything. The window comes out of the taskbar and in front (on Wayland it asks for
+  attention, as it can't put itself in front), handled while minimized too. Another data folder
+  is another Quatrelle. Launches started together take turns, a socket left by a crash is
+  replaced, and any failure leaves the launch a window of its own, as before. As PdfCraft does
+  (`single_instance.rs`); macOS, where Finder already brings a running app forward, gets it for
+  launches from a terminal or a script.
+- Checked in the app: the first window minimized behind Notepad, a second launch leaves in 181 ms
+  and the window is restored and in front; after a clean close or a kill, the next launch opens.
+- **Shared mailboxes as mailboxes of their own (issue #1):** a shared mailbox an account opens
+  was listed under that account, in the folder pane and the calendar. Each is now a mailbox of
+  its own there, after its account at first, and moves as an account does (drag its heading, or
+  Move up and Move down in its menu); the order is kept with the settings, and the calendar
+  list follows it, each shared mailbox's calendar under its own name.
+- **Invitations that read, dialogs that fit (issue #1):** an Exchange invitation's notes came as
+  Exchange makes HTML text, each link written after its words in angle brackets, and showed so
+  in the notes box, long Google links and all; the dialog grew taller than the window, its title
+  and buttons off screen (a 2160-pixel screen at 150%). The notes now read as the invitation
+  does: each link under its words (`Join with Google Meet`, `View all guest info`, a guest's
+  name, Google's Yes, No and More options), long addresses shortened, phone links as text, with
+  Edit notes for the box. Every dialog stays within the window, what doesn't fit scrolling.
+- **Mail past what's kept (issue #4):** past the newest 1,000 a folder keeps (File › Options),
+  nothing could be seen or searched. The end of a folder's list now says how many more its
+  server has, with Show more (as many again, kept for that folder across syncs:
+  `windows.json` with the account, for every kind of account); the end of a search has Search
+  the server, which asks IMAP servers (`UID SEARCH`, UTF-8 words as literals) in the folders
+  searched, and what they find comes into those folders' lists and the results, found by words
+  in mail not downloaded too. Bringing in older mail takes the newest of what isn't kept, so a
+  message found by searching doesn't leave a gap.
+- **Online only made clearer (issue #4):** its explanation now says that sending goes straight
+  to the server, that only mail that can't go yet waits, and which calendars, contacts and notes
+  stay (those on a server) and which go (those kept only in Quatrelle). Closing with unsent mail
+  or changes not yet on the server of an online-only account asks first. An account with no
+  password kept (a portable copy's) asks for it when Quatrelle starts, once. File › Options says
+  where the account list and settings are (the app folder, not the data files' folder in
+  Documents, where 3dluvr looked).
+- Checked in the app against fake IMAP (1,500 messages, online only) and Exchange servers: the
+  shared mailbox moved above its account, in the calendar list too; the Google invitation read
+  with its links, the dialog scrolled to its Save; Show more brought the 501 others; Message 120,
+  not kept, found by Search the server and opened; offline, a flag change made closing ask, and
+  Close anyway closed; a portable copy asked for its password at its second start.
+- **Searching the server for every kind of account (gap #7):** Search the server asked IMAP
+  servers only; an Exchange, Microsoft 365 or JMAP account said it couldn't. Each now asks its
+  server its own way: JMAP an `Email/query` filter (`text`, `from`, `subject`, `NOT`, the `$seen`
+  and `$flagged` keywords), Microsoft Graph `$search` (KQL, the whole quoted) or, for the read and
+  flag state alone, `$filter`, and EWS a `QueryString` (AQS) or a `Restriction`. What a user types
+  can't break out of the query (quotes and backslashes dropped, XML escaped). What's found stays
+  in its folder past the newest kept, as IMAP keeps what it fetches: each sync checks the server
+  still has it there and follows its read and flag state, and drops it when it's gone. The
+  browser searches JMAP servers and shows more too (its own `windows.json`).
+- **JMAP folders kept no more than one request's worth:** a JMAP folder kept at most the server's
+  `maxObjectsInGet` messages (often 500, 100 on some), whatever it was to keep, so Show more
+  showed nothing more. The newest are now asked a page at a time.
+- **The reading pane's header in a narrow pane:** the date ran over the sender's address; it now
+  keeps its room, or goes under the sender when the pane is too narrow, and Reply, Forward,
+  Print, Save and More wrap instead of being cut off.
+- Checked in the app against a fake Exchange server (1,500 in a folder, 1,000 kept): Message 321
+  found by Search the server and opened; a second search and a sync kept it; Show more brought
+  the other 499; a query of quotes, a backslash and `]]>` asked without an error. And in the
+  browser against a fake JMAP server (601 in a folder): 300 kept (100 before), Search the server
+  and Show more (all 601).
+- **Edits made mid-sync:** the pool handed a flag change, move or delete to the account
+  thread, which only picked it up after a full sync (minutes on a big Exchange mailbox). Until
+  then a folder refresh could repaint the old state, and quitting discarded the job. The pool now
+  writes the edit to the cache and `ops.json` itself; the thread uploads between folders and
+  re-applies queued edits to any folder it refreshes. `write_atomic` gives each call its own
+  temporary file, since two threads may now write the same file.
+- **Graph `$batch`:** the immutable-id preference was sent only on the outer request, so batched
+  message fetches returned ids in the other format; the next sync didn't recognise them and fetched
+  again, and server-search hits vanished. Every entry now carries the header. Batches shrink to 4
+  entries and 429 entries are retried after `Retry-After`. When more than 20 messages are new, the
+  summaries come from the listing instead of one request per message; the downloaded source later
+  supplies threading and importance.
+- **Message windows:** saved geometry went into the viewport builder every frame, and since all
+  message windows share one saved place, moving one pulled the others onto it. Geometry is now
+  applied only as a window first appears.
+- **Exchange calendars and contacts:** several non-recurring appointments with the same UID were
+  merged into one (now `<uid>/<start>`); a birthday saved without a year showed the placeholder
+  1604 (now "20 February", and saved back with the placeholder); folders with
+  `PidTagAttributeHidden` set, and their subfolders at any depth, are no longer listed.
+- **Connecting:** the two address families alternate, each attempt limited to 3 s unless it's the
+  last candidate, and IPv4 leads after an IPv6 miss; a connection whose exchange failed is never
+  reused; the account reports Online as soon as mail is done, with calendars and contacts after.
+- **Test builds update themselves (v0.22):** File › About only linked to a newer build. A build
+  from the unsigned test-build workflow now checks for the next one shortly after start and about
+  hourly, downloads the installer matching how it was installed (Windows `.msi` or portable
+  `.zip`, macOS `.dmg`, Linux `.AppImage`), accepts it only if its size and SHA-256 match the
+  release's record, and installs it as Quatrelle closes, or at once from **Restart to update**
+  (status bar, File › About). `.deb`, `.rpm`, Flatpak and FreeBSD copies keep the Download link.
+  `QUATRELLE_NO_AUTO_UPDATE=1` turns it off; signed releases never update themselves this way.
+
+### v0.22 — Outlook's everyday tools
+- **Reminders:** an event's reminder (Outlook's list, None to 2 weeks; 15 minutes for a new
+  one) is the VALARM it carries, kept by CalDAV and mapped to Exchange's and Graph's own
+  fields. When one comes due a Reminders window opens (each with its time and how soon,
+  overdue in red; Dismiss, Dismiss All, Open Item, Snooze from 5 minutes to a day or "0 minutes
+  before start") and a desktop notification is shown once. Answers are kept per occurrence.
+- **Junk Email lists:** Block sender, Never block sender and Never block sender's domain (the
+  ribbon's Junk drop-down and the message's menu), and both lists in File › Options. Blocked
+  senders' mail goes to Junk as it arrives; safe senders' mail filed in Junk by the server comes
+  back to the Inbox, and their pictures load. Not junk can also trust the sender.
+- **Clean Up:** Clean up conversation and Clean up folder (Delete drop-down) move to Deleted
+  Items each message a later reply in its chain quotes in full, as whole words; never one
+  unread, flagged, pinned, categorized, not downloaded, or with attachments the reply lacks.
+  Undo brings them back.
+- **Search Folders:** saved searches in the folder pane (unread, flagged, important,
+  categorized, with attachments, large, pinned, from specific people, or any search), over every
+  folder but Deleted Items and Junk. The search language gains `larger:`/`smaller:` and lists
+  in `from:`/`to:`.
+- **Quick Steps:** named sets of marks and one move, from the ribbon or Ctrl+Shift+1 to 9.
+- **Calendar:** the Work Week view (Monday to Friday).
+- **Writing:** Insert date & time (written out, as numbers, with the time, or the time alone)
+  and Word count (words, characters with and without spaces, paragraphs, lines; the selection's
+  when there is one).
+- **Reliability found on the way:** settings are saved every few seconds when they change, not
+  only on a clean close; the log's terminal echo and the CLI no longer panic when their output
+  is gone; the ribbon drops labels from its end when the window is too narrow for them; Junk's
+  high-water mark is set when the folder is known; changes made with `quatrelle-cli run` now
+  reach the server with the next `sync` (they were dropped).
+- **Several messages at once:** New mail, Reply or Forward while a message is being written
+  opens another window, as Outlook does; the first stays open (it was dropped, unsaved). Each
+  window keeps its own selection and undo, and its dialogs show in it. Closing Quatrelle with
+  messages written asks to save them; saved, each is kept on this computer at once and filed in
+  Drafts on the server at the next connection.
+- **Notifications from a portable copy** say Quatrelle when an installed Quatrelle is on the
+  computer (its Start menu shortcut is what Windows goes by); a portable copy alone still shows
+  under Windows PowerShell's name, since naming it would mean writing to the registry or the
+  Start menu.
+- **Motion:** hovers and selections ease in and out (ribbon buttons, folders, messages; the
+  selection bar grows from its middle), the ribbon tab's underline glides to the tab chosen, the
+  folder pane slides between its full and minimized widths, a message just opened fades up into
+  the reading pane, and notices slide in and fade away. Coming in decelerates, leaving
+  accelerates, in 100 to 250 ms, on cubic Bézier curves solved in `motion.rs`. Play animations
+  (File › Options) turns it all off, egui's own fades and smooth scrolling included. The
+  ribbon is one height on every tab, so switching tabs no longer nudges the window below.
+- Not done: Contact groups (distribution lists), Copy Folder, Read Aloud, and spell checking
+  (needs a dictionary Quatrelle can ship).

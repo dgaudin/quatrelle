@@ -681,6 +681,97 @@ fn store(name: &str) -> Store {
     Store::open(dir).unwrap()
 }
 
+/// Gap #7 through the worker, the same for JMAP, Graph and EWS accounts: a server whose Inbox
+/// has `Message 1`…`Message 25` (bodies `tag1`…, the first five unread) and a window of ten. A
+/// search of the server brings in what it finds past the window and keeps it across syncs while
+/// the server has it, its flags followed; words, fields and the read state are asked; Show more
+/// keeps more. `server(n, true)` marks `Message n` read on the server, `server(n, false)` deletes it.
+pub(crate) fn search_the_server_past_the_window(name: &str, account: quatrelle_model::AccountConfig, secret: &str, server: &dyn Fn(u32, bool)) {
+    use quatrelle_model::job::Secret;
+    use quatrelle_model::{Event, Job, SyncStatus};
+    let store = store(name);
+    let mut pool = crate::worker::Pool::new(store.clone(), Arc::new(crate::worker::MemoryCredentials::default()));
+    let until = |pool: &crate::worker::Pool, what: &str, f: &dyn Fn(&Event) -> bool| {
+        let end = std::time::Instant::now() + std::time::Duration::from_secs(20);
+        let mut seen = Vec::new();
+        while std::time::Instant::now() < end {
+            if let Some(e) = pool.wait(std::time::Duration::from_millis(100)) {
+                let hit = f(&e);
+                seen.push(e);
+                if hit {
+                    return seen;
+                }
+            }
+        }
+        panic!("timed out waiting for {what}; saw {seen:?}");
+    };
+    let online = |e: &Event| matches!(e, Event::Status { status: SyncStatus::Online { .. }, .. });
+    let subjects = || {
+        let mut v: Vec<String> = store.load_folder("a1", "INBOX").unwrap().messages.iter().map(|m| m.subject.clone()).collect();
+        v.sort();
+        v
+    };
+    let has = |s: &str| subjects().iter().any(|x| x == s);
+    let search = |pool: &mut crate::worker::Pool, q: &str| {
+        pool.submit(Job::SearchServer { account: "a1".into(), folders: vec!["INBOX".into()], query: q.into() });
+        let seen = until(pool, "searched", &|e| matches!(e, Event::ServerSearched { .. }));
+        match seen.last() {
+            Some(Event::ServerSearched { keys, error: None, .. }) => keys.len(),
+            other => panic!("{q}: {other:?}"),
+        }
+    };
+    pool.submit(Job::SetSync { messages: 10, offline: 0 });
+    pool.submit(Job::Start { account, password: Some(Secret(secret.into())) });
+    until(&pool, "online", &online);
+    let end = std::time::Instant::now() + std::time::Duration::from_secs(20);
+    while subjects().len() < 10 {
+        assert!(std::time::Instant::now() < end, "never synced: {:?}", subjects());
+        let _ = pool.wait(std::time::Duration::from_millis(100));
+    }
+    assert!(has("Message 16") && !has("Message 15") && !has("Message 3"), "{:?}", subjects());
+
+    // Words: found past the window, and kept by the next sync.
+    assert_eq!(search(&mut pool, "tag3"), 1);
+    assert!(has("Message 3"), "{:?}", subjects());
+    pool.submit(Job::SyncFolder { account: "a1".into(), folder: "INBOX".into() });
+    until(&pool, "synced", &online);
+    assert!(has("Message 3"), "kept past the window: {:?}", subjects());
+    // A field and a word.
+    assert_eq!(search(&mut pool, "subject:message tag7"), 1);
+    assert!(has("Message 7"));
+
+    // Show more: five more than kept (ten and the one found).
+    pool.submit(Job::MoreMail { account: "a1".into(), folder: "INBOX".into(), more: 5 });
+    let end = std::time::Instant::now() + std::time::Duration::from_secs(20);
+    while !has("Message 10") {
+        assert!(std::time::Instant::now() < end, "never showed more: {:?}", subjects());
+        let _ = pool.wait(std::time::Duration::from_millis(100));
+    }
+
+    // The read state alone; finds add up, as IMAP keeps what it fetches (another search doesn't
+    // take Message 3 and 7 away).
+    assert_eq!(search(&mut pool, "is:unread"), 5);
+    assert_eq!(search(&mut pool, "nothing-like-this"), 0);
+    pool.submit(Job::SyncFolder { account: "a1".into(), folder: "INBOX".into() });
+    until(&pool, "synced", &online);
+    assert!(has("Message 1") && has("Message 5") && has("Message 3") && has("Message 7"), "{:?}", subjects());
+
+    // On the server, Message 3 is deleted and Message 2 read: the next sync follows both.
+    server(3, false);
+    server(2, true);
+    pool.submit(Job::SyncFolder { account: "a1".into(), folder: "INBOX".into() });
+    // (A push stream may say "online" before this sync ends: wait for what it does.)
+    let seen = |s: &str| store.load_folder("a1", "INBOX").unwrap().messages.iter().find(|m| m.subject == s).map(|m| m.flags.seen);
+    let end = std::time::Instant::now() + std::time::Duration::from_secs(20);
+    while has("Message 3") || seen("Message 2") != Some(true) {
+        assert!(std::time::Instant::now() < end, "never followed the server: {:?} {:?}", subjects(), seen("Message 2"));
+        let _ = pool.wait(std::time::Duration::from_millis(100));
+    }
+    assert!(has("Message 7"), "{:?}", subjects());
+    assert_eq!(seen("Message 1"), Some(false));
+    pool.submit(Job::Remove { account: "a1".into() });
+}
+
 fn login(st: &Arc<Mutex<State>>) -> Client<Fake> {
     let mut c = Client::from_stream(Fake::connect(st)).unwrap();
     c.login("me@studio.example", "pw").unwrap();
@@ -964,6 +1055,19 @@ mod tests {
             s.refuse_passwords = std::env::var("QUATRELLE_FAKE_REFUSE").ok().filter(|v| !v.is_empty());
             s.not_connected.extend(std::env::var("QUATRELLE_FAKE_CLOSED").ok().filter(|v| !v.is_empty()));
             s.add("INBOX", "Welcome", &[]);
+            // `QUATRELLE_FAKE_COUNT`: that many more in the Inbox, oldest first ("Message 1" is
+            // the oldest; each body says `needle-<n>`), for more mail than is kept (issue #4).
+            let count: u32 = std::env::var("QUATRELLE_FAKE_COUNT").ok().and_then(|n| n.parse().ok()).unwrap_or(0);
+            for n in 1..=count.min(20_000) {
+                let day = 1 + n / 400;
+                s.add_raw(
+                    "INBOX",
+                    format!(
+                        "From: Ana <ana@studio.example>\r\nTo: me@studio.example\r\nSubject: Message {n}\r\nDate: Mon, {day:02} Jun 2025 10:00:00 +0000\r\nMessage-ID: <m{n}@studio.example>\r\n\r\nBody of message {n}: needle-{n}.\r\n"
+                    )
+                    .into_bytes(),
+                );
+            }
             // `QUATRELLE_FAKE_EML`: messages to put in the Inbox (paths, separated by `;`).
             for path in std::env::var("QUATRELLE_FAKE_EML").unwrap_or_default().split(';').filter(|p| !p.is_empty()) {
                 if let Ok(raw) = std::fs::read(path) {
@@ -1301,6 +1405,197 @@ y"
         let _ = std::fs::remove_dir_all(store.root());
     }
 
+    /// Issue #4: the search box's words as IMAP SEARCH keys; what IMAP can't ask is left out.
+    #[test]
+    fn a_query_becomes_imap_search_keys() {
+        use crate::sync::{SearchArg, imap_criteria};
+        let a = |s: &str| SearchArg::Atom(s.into());
+        let st = |s: &str| SearchArg::Str(s.into());
+        assert_eq!(imap_criteria("quarterly"), Some(vec![a("TEXT"), st("quarterly")]));
+        assert_eq!(
+            imap_criteria("from:ana subject:\"the plan\" -draft is:unread"),
+            Some(vec![a("FROM"), st("ana"), a("SUBJECT"), st("the plan"), a("NOT"), a("TEXT"), st("draft"), a("UNSEEN")])
+        );
+        assert_eq!(imap_criteria("is:flagged -is:unread"), Some(vec![a("FLAGGED"), a("SEEN")]));
+        assert_eq!(imap_criteria("has:attachment"), None, "nothing IMAP can ask");
+        assert_eq!(imap_criteria(""), None);
+        assert_eq!(imap_criteria("Grüße"), Some(vec![a("TEXT"), st("grüße")]));
+        // Sizes; a list as nested ORs (left to the list when one name is several words).
+        assert_eq!(imap_criteria("larger:1KB -smaller:10"), Some(vec![a("LARGER"), a("1024"), a("NOT"), a("SMALLER"), a("10")]));
+        assert_eq!(
+            imap_criteria("from:ana,jun,\"zoe park\""),
+            Some(vec![a("OR"), a("FROM"), st("ana"), a("OR"), a("FROM"), st("jun"), a("FROM"), st("zoe park")])
+        );
+        assert_eq!(imap_criteria("-to:ana,jun"), Some(vec![a("NOT"), a("OR"), a("TO"), st("ana"), a("TO"), st("jun")]));
+        assert_eq!(
+            imap_criteria("from:ana,jun lee"),
+            Some(vec![a("TEXT"), st("lee")]).map(|v| [vec![a("OR"), a("FROM"), st("ana"), a("FROM"), st("jun")], v].concat())
+        );
+    }
+
+    /// Gap #7: the query as Exchange's KQL/AQS words with the read, flag and attachment
+    /// conditions apart, and as a JMAP filter. What a user types can't break out of a word: quotes
+    /// and backslashes are dropped, a word spelled like an operator is quoted.
+    #[test]
+    fn a_query_becomes_exchange_words_and_a_jmap_filter() {
+        use crate::sync::{WordQuery, word_query};
+        use serde_json::json;
+        let w = |text: &str| WordQuery { text: text.into(), ..Default::default() };
+        assert_eq!(word_query("quarterly"), Some(w("quarterly")));
+        assert_eq!(
+            word_query("from:ana subject:\"the plan\" -draft is:unread"),
+            Some(WordQuery { text: "from:ana subject:\"the plan\" NOT draft".into(), unread: Some(true), ..Default::default() })
+        );
+        assert_eq!(
+            word_query("is:flagged -is:unread has:attachment"),
+            Some(WordQuery { unread: Some(false), flagged: Some(true), attachment: Some(true), ..Default::default() })
+        );
+        assert_eq!(word_query(""), None);
+        assert_eq!(word_query("is:important"), None, "nothing Exchange's searches ask");
+        assert_eq!(word_query("OR NOT"), Some(w("or not")), "words, lowercased by the parser: not operators");
+        assert_eq!(word_query("a(b) ana@x.example").map(|q| q.text), Some("a b ana x.example".into()), "the parser's own words");
+        for hostile in ["subject:\"a\\\" OR from:x\" a(b)", "\"\"", "\\\"", "from:\"", "x\" OR \"y", "\u{0}\"\r\n", "-\"-\""] {
+            let Some(q) = word_query(hostile) else { continue };
+            assert_eq!(q.text.matches('"').count() % 2, 0, "{hostile:?} → {:?}", q.text);
+            assert!(!q.text.contains('\\') && !q.text.contains("\"\"") && !q.text.chars().any(char::is_control), "{hostile:?} → {:?}", q.text);
+        }
+        let long = "x".repeat(5000);
+        assert!(word_query(&long).unwrap().text.len() <= 202);
+        let read = WordQuery { unread: Some(true), ..Default::default() };
+        assert!(read.admits(&quatrelle_model::Flags::default(), false));
+        assert!(!read.admits(&quatrelle_model::Flags { seen: true, ..Default::default() }, false));
+
+        assert_eq!(
+            quatrelle_jmap::search_filter("from:ana -draft is:unread is:flagged"),
+            Some(json!({"operator": "AND", "conditions": [
+                {"from": "ana"},
+                {"operator": "NOT", "conditions": [{"text": "draft"}]},
+                {"notKeyword": "$seen"},
+                {"hasKeyword": "$flagged"},
+            ]}))
+        );
+        assert_eq!(
+            quatrelle_jmap::search_filter("-is:unread has:attachment"),
+            Some(json!({"operator": "AND", "conditions": [{"hasKeyword": "$seen"}, {"hasAttachment": true}]}))
+        );
+        assert_eq!(quatrelle_jmap::search_filter("is:important"), None);
+        assert_eq!(quatrelle_jmap::search_filter(""), None);
+        // Sizes (minSize is at least, so one more byte), and a list as OR.
+        assert_eq!(
+            quatrelle_jmap::search_filter("larger:1KB smaller:2KB from:ana,\"zoe park\""),
+            Some(json!({"operator": "AND", "conditions": [
+                {"minSize": 1025},
+                {"maxSize": 2048},
+                {"operator": "OR", "conditions": [{"from": "ana"}, {"from": "zoe park"}]},
+            ]}))
+        );
+    }
+
+    /// Issue #4: mail past what's kept is found on the server. A folder keeps its newest 10 of
+    /// 30; searching the server finds an old one by a word of its body (and one by a word in
+    /// UTF-8, sent as a literal), brings it into the list, and then shows more fills in the
+    /// newest of the rest without skipping what's around the found one.
+    #[test]
+    fn mail_past_whats_kept_is_found_and_shown_more() {
+        let st = State::new();
+        {
+            let mut s = st.lock().unwrap();
+            for n in 1..=30 {
+                let body = if n == 3 { "Grüße und needle-three".to_string() } else { format!("body {n}") };
+                s.add_raw("INBOX", format!("Subject: Message {n}\r\nMessage-ID: <m{n}@x>\r\n\r\n{body}\r\n").into_bytes());
+            }
+        }
+        let store = store("past-kept");
+        let mut c = login(&st);
+        sync_folder(&mut c, &store, "a1", "INBOX", &SyncOptions { window: 10, prefetch: 0, ..Default::default() }).unwrap();
+        assert_eq!(store.load_folder("a1", "INBOX").unwrap().messages.len(), 10);
+
+        let criteria = crate::sync::imap_criteria("needle-three").unwrap();
+        let (keys, new) = crate::sync::find_on_server(&mut c, &store, "a1", "INBOX", &criteria, 500).unwrap();
+        assert_eq!((keys.iter().map(|k| k.uid).collect::<Vec<_>>(), new), (vec![3], 1));
+        let kept = store.load_folder("a1", "INBOX").unwrap();
+        assert!(kept.messages.iter().any(|m| m.subject == "Message 3") && kept.messages.len() == 11);
+        // Found again: nothing new to bring in.
+        assert_eq!(crate::sync::find_on_server(&mut c, &store, "a1", "INBOX", &criteria, 500).unwrap(), (keys.clone(), 0));
+        // A word in UTF-8: sent as a literal with CHARSET UTF-8.
+        let (keys, _) = crate::sync::find_on_server(&mut c, &store, "a1", "INBOX", &crate::sync::imap_criteria("Grüße").unwrap(), 500).unwrap();
+        assert_eq!(keys.iter().map(|k| k.uid).collect::<Vec<_>>(), [3]);
+        assert!(st.lock().unwrap().log.iter().any(|l| l.ends_with("UID SEARCH CHARSET UTF-8 TEXT ")), "a literal follows");
+        // Nothing found: nothing changes.
+        assert_eq!(
+            crate::sync::find_on_server(&mut c, &store, "a1", "INBOX", &crate::sync::imap_criteria("absent").unwrap(), 500).unwrap(),
+            (vec![], 0)
+        );
+
+        // Show more: 10 more, the newest of what isn't kept (20 down to 11), the found one kept.
+        sync_folder(&mut c, &store, "a1", "INBOX", &SyncOptions { window: 20, prefetch: 0, ..Default::default() }).unwrap();
+        let mut uids: Vec<u32> = store.load_folder("a1", "INBOX").unwrap().messages.iter().map(|m| m.key.uid).collect();
+        uids.sort_unstable();
+        assert_eq!(uids, [3].into_iter().chain(12..=30).collect::<Vec<u32>>(), "the newest of the rest, up to 20 in all");
+        // The usual window again: nothing is dropped.
+        sync_folder(&mut c, &store, "a1", "INBOX", &SyncOptions { window: 10, prefetch: 0, ..Default::default() }).unwrap();
+        assert_eq!(store.load_folder("a1", "INBOX").unwrap().messages.len(), 20);
+        let _ = std::fs::remove_dir_all(store.root());
+    }
+
+    /// Issue #4 through the worker: Show more keeps the folder's larger window across syncs
+    /// (windows.json), and a server search answers with what it found, in the list.
+    #[test]
+    fn show_more_and_search_the_server_through_the_worker() {
+        let st = State::new();
+        {
+            let mut s = st.lock().unwrap();
+            for n in 1..=25 {
+                s.add_raw("INBOX", format!("Subject: Message {n}\r\nMessage-ID: <w{n}@x>\r\n\r\nbody needle-{n}\r\n").into_bytes());
+            }
+        }
+        let port = serve_tcp(&st);
+        let store = store("worker-more");
+        let mut pool = crate::worker::Pool::new(store.clone(), std::sync::Arc::new(crate::worker::MemoryCredentials::default()));
+        pool.submit(Job::SetSync { messages: 10, offline: 0 });
+        let account = AccountConfig {
+            id: "a1".into(),
+            email: "me@studio.example".into(),
+            username: "me@studio.example".into(),
+            imap: ServerConfig { host: "127.0.0.1".into(), port, security: Security::None },
+            smtp: ServerConfig { host: "127.0.0.1".into(), port: 1, security: Security::None },
+            ..Default::default()
+        };
+        pool.submit(Job::Start { account, password: Some(Secret("pw".into())) });
+        until(&pool, "online", |e| matches!(e, Event::Status { status: SyncStatus::Online { .. }, .. }));
+        assert_eq!(store.load_folder("a1", "INBOX").unwrap().messages.len(), 10);
+
+        pool.submit(Job::SearchServer { account: "a1".into(), folders: vec!["INBOX".into()], query: "needle-2".into() });
+        let seen = until(&pool, "searched", |e| matches!(e, Event::ServerSearched { .. }));
+        let found = seen.iter().find_map(|e| match e {
+            Event::ServerSearched { keys, error: None, query, .. } if query == "needle-2" => Some(keys.iter().map(|k| k.uid).collect::<Vec<_>>()),
+            _ => None,
+        });
+        // "needle-2" is the words "needle" and "2", each found anywhere as IMAP's TEXT finds them
+        // (so "needle-12" too).
+        assert_eq!(found, Some(vec![2, 12, 20, 21, 22, 23, 24, 25]), "{seen:?}");
+        assert!(seen.iter().any(|e| matches!(e, Event::FolderChanged { folder, .. } if folder == "INBOX")));
+        assert!(store.load_folder("a1", "INBOX").unwrap().messages.iter().any(|m| m.key.uid == 2));
+
+        pool.submit(Job::MoreMail { account: "a1".into(), folder: "INBOX".into(), more: 5 });
+        let end = Instant::now() + Duration::from_secs(20);
+        while store.load_folder("a1", "INBOX").unwrap().messages.len() < 17 {
+            assert!(Instant::now() < end, "never showed more");
+            let _ = pool.wait(Duration::from_millis(100));
+        }
+        let windows: std::collections::HashMap<String, usize> = store.load_account_doc("a1", "windows.json").unwrap();
+        assert_eq!(windows.get("INBOX"), Some(&17), "12 kept (10, and 2 found), 5 more");
+        // A later sync keeps them.
+        pool.submit(Job::SyncFolder { account: "a1".into(), folder: "INBOX".into() });
+        until(&pool, "synced", |e| matches!(e, Event::Status { status: SyncStatus::Online { .. }, .. }));
+        assert_eq!(store.load_folder("a1", "INBOX").unwrap().messages.len(), 17);
+        pool.submit(Job::Remove { account: "a1".into() });
+        // Offline: answered at once.
+        pool.submit(Job::SearchServer { account: "a1".into(), folders: vec!["INBOX".into()], query: "x".into() });
+        until(&pool, "offline answer", |e| matches!(e, Event::ServerSearched { error: Some(_), .. }));
+        let _ = std::fs::remove_dir_all(store.root());
+    }
+
     /// Issue #4: an account kept online only syncs its folders and opens its mail as any other,
     /// but none of it reaches the disk: no data file, nothing downloaded ahead of reading, and
     /// once Quatrelle closes, nothing of its mail is anywhere under the data folders. The other
@@ -1597,26 +1892,6 @@ y"
         let _ = std::fs::remove_dir_all(store.root());
     }
 
-    /// The search box's words as IMAP SEARCH keys; what IMAP can't ask is left out.
-    #[test]
-    fn a_query_becomes_imap_search_keys() {
-        use crate::sync::{SearchArg, imap_criteria};
-        let a = |s: &str| SearchArg::Atom(s.into());
-        let st = |s: &str| SearchArg::Str(s.into());
-        assert_eq!(imap_criteria("quarterly"), Some(vec![a("TEXT"), st("quarterly")]));
-        assert_eq!(
-            imap_criteria("from:ana subject:\"the plan\" -draft is:unread"),
-            Some(vec![a("FROM"), st("ana"), a("SUBJECT"), st("the plan"), a("NOT"), a("TEXT"), st("draft"), a("UNSEEN")])
-        );
-        // `to:` is the recipients and those copied, as it is here.
-        assert_eq!(imap_criteria("to:zoe"), Some(vec![a("OR"), a("TO"), st("zoe"), a("CC"), st("zoe")]));
-        assert_eq!(imap_criteria("-to:zoe"), Some(vec![a("NOT"), a("OR"), a("TO"), st("zoe"), a("CC"), st("zoe")]));
-        assert_eq!(imap_criteria("is:flagged -is:unread"), Some(vec![a("FLAGGED"), a("SEEN")]));
-        assert_eq!(imap_criteria("has:attachment"), None, "nothing IMAP can ask");
-        assert_eq!(imap_criteria(""), None);
-        assert_eq!(imap_criteria("Grüße"), Some(vec![a("TEXT"), st("grüße")]));
-    }
-
     /// Mail past what's kept is found on the server: a folder keeps its newest 10 of 30, and a
     /// word of the third's body brings it into the folder's cache, headers and all, once.
     #[test]
@@ -1635,22 +1910,24 @@ y"
         assert_eq!(store.load_folder("a1", "INBOX").unwrap().messages.len(), 10);
 
         let criteria = crate::sync::imap_criteria("needle-three").unwrap();
-        let found = crate::sync::find_on_server(&mut c, &store, "a1", "INBOX", &criteria, 500).unwrap();
+        let found = crate::sync::search_on_server(&mut c, &store, "a1", "INBOX", &criteria, 500).unwrap();
         assert_eq!(found.iter().map(|m| m.key.uid).collect::<Vec<_>>(), [3]);
         assert_eq!(found.first().map(|m| m.subject.as_str()), Some("Message 3"), "its headers came too");
         let kept = store.load_folder("a1", "INBOX").unwrap();
         assert!(kept.messages.iter().any(|m| m.subject == "Message 3") && kept.messages.len() == 11);
         // Found again: it's here now, so it's read from the cache rather than fetched again.
-        let again = crate::sync::find_on_server(&mut c, &store, "a1", "INBOX", &criteria, 500).unwrap();
+        let again = crate::sync::search_on_server(&mut c, &store, "a1", "INBOX", &criteria, 500).unwrap();
         assert_eq!(again.iter().map(|m| m.key.uid).collect::<Vec<_>>(), [3]);
         // A word in UTF-8: sent as a literal with CHARSET UTF-8.
-        let found = crate::sync::find_on_server(&mut c, &store, "a1", "INBOX", &crate::sync::imap_criteria("Grüße").unwrap(), 500).unwrap();
+        let found = crate::sync::search_on_server(&mut c, &store, "a1", "INBOX", &crate::sync::imap_criteria("Grüße").unwrap(), 500).unwrap();
         assert_eq!(found.iter().map(|m| m.key.uid).collect::<Vec<_>>(), [3]);
         assert!(st.lock().unwrap().log.iter().any(|l| l.ends_with("UID SEARCH CHARSET UTF-8 TEXT ")), "a literal follows");
         // Nothing found: nothing changes.
-        assert!(crate::sync::find_on_server(&mut c, &store, "a1", "INBOX", &crate::sync::imap_criteria("absent").unwrap(), 500).unwrap().is_empty());
+        assert!(
+            crate::sync::search_on_server(&mut c, &store, "a1", "INBOX", &crate::sync::imap_criteria("absent").unwrap(), 500).unwrap().is_empty()
+        );
         // The newest of a word found anywhere: only the newest `cap` are kept.
-        let many = crate::sync::find_on_server(&mut c, &store, "a1", "INBOX", &crate::sync::imap_criteria("body").unwrap(), 3).unwrap();
+        let many = crate::sync::search_on_server(&mut c, &store, "a1", "INBOX", &crate::sync::imap_criteria("body").unwrap(), 3).unwrap();
         assert_eq!(many.len(), 3);
         assert_eq!(many.iter().map(|m| m.key.uid).collect::<Vec<_>>(), [28, 29, 30]);
         let _ = std::fs::remove_dir_all(store.root());

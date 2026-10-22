@@ -1005,7 +1005,6 @@ month	May	5月
 	Online only: {email}	僅限線上：{email}
 	New message	新郵件
 	Open Quatrelle to read it.	開啟 Quatrelle 閱讀。
-	Its mail is read from the server and held in memory while Quatrelle runs; nothing of it is written to this computer. Each message downloads when you open it. Mail waiting to be sent, changes made while offline, and calendar items, contacts and notes kept only in Quatrelle are lost when it closes.	其郵件從伺服器讀取，並在 Quatrelle 執行期間僅保存在記憶體中；不會寫入此電腦。每封郵件在開啟時下載。等待傳送的郵件、離線時所做的變更，以及僅保存在 Quatrelle 中的行事曆項目、連絡人和記事，會在關閉時遺失。
 	Portable: everything is kept in QuatrelleData beside Quatrelle, and passwords only until it closes.	可攜版：所有內容都保存在 Quatrelle 旁邊的 QuatrelleData 中，密碼僅保留到關閉為止。
 	When it starts	開始時
 	1 minute before	1 分鐘前
@@ -1032,3 +1031,94 @@ month	May	5月
 	{n} more on the server	伺服器上還有 {n} 封
 	Changes not yet on the server: {n}	尚未同步到伺服器的變更：{n}
 	Messages waiting to be sent: {n}	等待傳送的郵件：{n}
+	Mail older than what's kept here is only on the server.	比此處保留的更早的郵件僅在伺服器上。
+	Search the server	搜尋伺服器
+	Searching the server…	正在搜尋伺服器…
+	The server found {n}	伺服器找到 {n} 封
+	{day} {month}	{month}{day}日
+	Restart to update	重新啟動以更新
+	Quatrelle {version} is downloaded. It installs when you close Quatrelle.	已下載 Quatrelle {version}。關閉 Quatrelle 時將安裝。
+	1 minute	1 分鐘
+	{n} minutes	{n} 分鐘
+	1 hour	1 小時
+	{n} hours	{n} 小時
+	1 day	1 天
+	{n} days	{n} 天
+	1 week	1 週
+	{n} weeks	{n} 週
+	0 minutes before start	開始前 0 分鐘
+	1 Reminder	1 個提醒
+	{n} Reminders	{n} 個提醒
+	Click Snooze to be reminded again in:	按一下「延後」，在以下時間後再次提醒：
+	Dismiss	關閉
+	Dismiss All	全部關閉
+	Open Item	開啟項目
+	Overdue	已逾期
+	Now	現在
+	In {n} minutes	{n} 分鐘後
+	In {n} hours	{n} 小時後
+	In {n} days	{n} 天後
+	Junk	垃圾郵件
+	Junk options	垃圾郵件選項
+	Junk Email options…	垃圾郵件選項…
+	Block sender	封鎖寄件者
+	Never block sender	永不封鎖寄件者
+	Never block sender's domain	永不封鎖寄件者的網域
+	Their mail goes to Junk Email from now on	此後其郵件將移至垃圾郵件
+	Their mail is never treated as junk	其郵件永遠不會被視為垃圾郵件
+	Mail from anyone at their domain is never treated as junk	來自該網域任何人的郵件永遠不會被視為垃圾郵件
+	Blocked senders	封鎖的寄件者
+	Safe senders	安全寄件者
+	Mail from these addresses and domains goes to Junk Email as it arrives.	來自這些位址和網域的郵件在送達時移至垃圾郵件。
+	Mail from these addresses and domains is never treated as junk, and its pictures load.	來自這些位址和網域的郵件永遠不會被視為垃圾郵件，其圖片會載入。
+	name@example.com or @example.com	name@example.com 或 @example.com
+	And {n} more	還有 {n} 個
+	Clean up conversation	清理交談
+	Clean up folder	清理資料夾
+	Messages quoted in full by a later reply go to Deleted Items	被後續回覆完整引用的郵件會移至「刪除的郵件」
+	No conversations to clean up	沒有要清理的交談
+	Nothing to clean up: no message is quoted in full by a later reply	沒有要清理的內容: 沒有郵件被後續回覆完整引用
+	Search Folders	搜尋資料夾
+	New Search Folder…	新增搜尋資料夾…
+	New Search Folder	新增搜尋資料夾
+	Edit Search Folder	編輯搜尋資料夾
+	Customize this Search Folder…	自訂此搜尋資料夾…
+	Delete Search Folder	刪除搜尋資料夾
+	Shows the mail it finds in every folder, except Deleted Items and Junk Email.	顯示在「刪除的郵件」和「垃圾郵件」以外所有資料夾中找到的郵件。
+	Show	顯示
+	From these people (addresses or names, separated by commas)	來自以下人員 (位址或名稱，以逗號分隔)
+	Search for	搜尋
+	Unread mail	未讀郵件
+	Mail flagged for follow up	標示待處理的郵件
+	Important mail	重要郵件
+	Categorized mail	已分類的郵件
+	Mail with attachments	含附件的郵件
+	Large mail (over 100 KB)	大型郵件 (超過 100 KB)
+	Pinned mail	已釘選的郵件
+	Mail from specific people	來自特定人員的郵件
+	Quick steps	快速步驟
+	No Quick Steps yet.	尚無快速步驟。
+	New Quick Step…	新增快速步驟…
+	New Quick Step	新增快速步驟
+	Edit a Quick Step	編輯快速步驟
+	Edit Quick Step	編輯快速步驟
+	Done to the selected mail in one click; the first nine also with Ctrl+Shift+1 to 9.	一鍵套用至選取的郵件；前九個也可以使用 Ctrl+Shift+1 到 9。
+	Done	完成
+	Then move to	然後移至
+	Don't move	不移動
+	Delete this Quick Step	刪除此快速步驟
+	Date & time	日期和時間
+	Word count	字數統計
+	Words	字數
+	Characters (no spaces)	字元數 (不含空格)
+	Characters (with spaces)	字元數 (含空格)
+	Paragraphs	段落數
+	Lines	行數
+	Save the message you're writing?	要儲存正在撰寫的郵件嗎?
+	Save the messages you're writing?	要儲存正在撰寫的郵件嗎?
+	It's kept in Drafts if you save it.	儲存後會保留在「草稿」中。
+	{n} messages are being written. They're kept in Drafts if you save them.	正在撰寫 {n} 封郵件。儲存後會保留在「草稿」中。
+	Don't save	不要儲存
+	Also being written:	其他正在撰寫的郵件:
+	Play animations	播放動畫
+	Hovers, selections and panes ease into place; off, everything changes at once	暫留、選取和窗格會平順轉換；關閉後一切立即變更

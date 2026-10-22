@@ -7,16 +7,97 @@ use crate::theme::{self, Tokens};
 use crate::{Action, Dialog};
 
 /// A ribbon button: icon over nothing, label to the right.
+/// The ribbon's buttons as it's drawn: those from `icons_from` on are icons alone, their labels
+/// tooltips (it didn't fit the window); how wide each label is, and how far right they reached.
+#[derive(Clone, Debug, Default)]
+pub struct RibbonFit {
+    pub active: bool,
+    pub icons_from: usize,
+    pub count: usize,
+    pub labels: Vec<f32>,
+    pub right: f32,
+}
+
+impl RibbonFit {
+    /// The first button to draw without its label so that the ribbon fits `room_right`: labels
+    /// go from the end, as few as it takes.
+    pub fn fit(&self, room_right: f32) -> usize {
+        let hidden: f32 = self.labels.iter().skip(self.icons_from).sum();
+        let need = self.right + hidden - room_right;
+        let mut from = self.labels.len();
+        let mut saved = 0.0;
+        while need > 0.5 && saved < need && from > 0 {
+            from -= 1;
+            saved += self.labels.get(from).copied().unwrap_or(0.0);
+        }
+        from
+    }
+}
+
+pub fn ribbon_fit_id() -> egui::Id {
+    egui::Id::unique("ribbon-fit")
+}
+
+/// While the ribbon is drawn: note a button (its label's width) and whether it goes without it.
+fn ribbon_button(ui: &Ui, label_width: f32) -> bool {
+    ui.ctx().data_mut(|d| {
+        let f = d.get_temp_mut_or_default::<RibbonFit>(ribbon_fit_id());
+        if !f.active {
+            return false;
+        }
+        let i = f.count;
+        f.count += 1;
+        f.labels.push(label_width + 4.0);
+        i >= f.icons_from
+    })
+}
+
+fn reached(ui: &Ui, rect: egui::Rect) {
+    ui.ctx().data_mut(|d| {
+        let f = d.get_temp_mut_or_default::<RibbonFit>(ribbon_fit_id());
+        if f.active {
+            f.right = f.right.max(rect.right());
+        }
+    });
+}
+
+/// An icon alone, its label as the tooltip (a ribbon too wide for the window).
+/// A button's background as the pointer comes and goes: the hover fades in and out (quickly),
+/// a press shows at once.
+fn hover_fill(ui: &Ui, resp: &Response, rect: egui::Rect, t: &Tokens, enabled: bool) {
+    let k = crate::motion::toward(ui.ctx(), resp.id.with("hover"), enabled && resp.hovered(), crate::motion::FAST);
+    if enabled && resp.is_pointer_button_down_on() {
+        ui.painter().rect_filled(rect, 6.0, t.accent_soft);
+    } else if k > 0.0 {
+        ui.painter().rect_filled(rect, 6.0, t.hover.gamma_multiply(k));
+    }
+}
+
+fn icon_button(ui: &mut Ui, icon: Icon, label: &str, t: &Tokens, enabled: bool, on: bool) -> Response {
+    let (rect, resp) = ui.allocate_exact_size(vec2(32.0, 30.0), if enabled { Sense::click() } else { Sense::hover() });
+    reached(ui, rect);
+    if on {
+        ui.painter().rect(rect, 6.0, t.accent_soft, Stroke::new(1.0, t.accent.gamma_multiply(0.5)), egui::StrokeKind::Inside);
+    } else {
+        hover_fill(ui, &resp, rect, t, enabled);
+    }
+    let ir = egui::Rect::from_min_size(rect.min + vec2(8.0, 7.0), vec2(16.0, 16.0));
+    icons::paint(ui.painter(), ir, icon, if enabled { t.accent } else { t.faint });
+    resp.on_hover_text(label)
+}
+
 pub fn tool_button(ui: &mut Ui, icon: Icon, label: &str, t: &Tokens, enabled: bool) -> Response {
     let label = tl!(label);
     let font = theme::regular(13.0);
     let galley = ui.painter().layout_no_wrap(label.to_string(), font, t.text);
+    if ribbon_button(ui, galley.size().x) {
+        return icon_button(ui, icon, label, t, enabled, false);
+    }
     let size = vec2(galley.size().x + 36.0, 30.0);
     let (rect, resp) = ui.allocate_exact_size(size, if enabled { Sense::click() } else { Sense::hover() });
+    reached(ui, rect);
     let color = if enabled { t.text } else { t.faint };
-    if enabled && (resp.hovered() || resp.is_pointer_button_down_on()) {
-        ui.painter().rect_filled(rect, 6.0, if resp.is_pointer_button_down_on() { t.accent_soft } else { t.hover });
-    }
+    hover_fill(ui, &resp, rect, t, enabled);
     let ir = egui::Rect::from_min_size(rect.min + vec2(8.0, 7.0), vec2(16.0, 16.0));
     icons::paint(ui.painter(), ir, icon, if enabled { t.accent } else { t.faint });
     ui.painter().galley_with_override_text_color(rect.min + vec2(30.0, (30.0 - galley.size().y) / 2.0), galley, color);
@@ -27,11 +108,24 @@ pub fn tool_button(ui: &mut Ui, icon: Icon, label: &str, t: &Tokens, enabled: bo
 pub fn tool_toggle(ui: &mut Ui, icon: Icon, label: &str, t: &Tokens, on: bool) -> Response {
     let label = tl!(label);
     let galley = ui.painter().layout_no_wrap(label.to_string(), theme::regular(13.0), t.text);
+    if ribbon_button(ui, galley.size().x) {
+        return icon_button(ui, icon, label, t, true, on);
+    }
     let (rect, resp) = ui.allocate_exact_size(vec2(galley.size().x + 36.0, 30.0), Sense::click());
-    if on {
-        ui.painter().rect(rect, 6.0, t.accent_soft, Stroke::new(1.0, t.accent.gamma_multiply(0.5)), egui::StrokeKind::Inside);
-    } else if resp.hovered() {
-        ui.painter().rect_filled(rect, 6.0, t.hover);
+    reached(ui, rect);
+    // Lit or not, easing between the two.
+    let lit = crate::motion::toward(ui.ctx(), resp.id.with("on"), on, crate::motion::NORMAL);
+    if lit > 0.0 {
+        ui.painter().rect(
+            rect,
+            6.0,
+            t.accent_soft.gamma_multiply(lit),
+            Stroke::new(1.0, t.accent.gamma_multiply(0.5 * lit)),
+            egui::StrokeKind::Inside,
+        );
+    }
+    if !on {
+        hover_fill(ui, &resp, rect, t, true);
     }
     icons::paint(ui.painter(), egui::Rect::from_min_size(rect.min + vec2(8.0, 7.0), vec2(16.0, 16.0)), icon, t.accent);
     ui.painter().galley_with_override_text_color(rect.min + vec2(30.0, (30.0 - galley.size().y) / 2.0), galley, t.text);

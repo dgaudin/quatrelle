@@ -1,18 +1,18 @@
-//! One MailCraft per data folder: a second launch brings the running one forward and exits.
+//! One Quatrelle per data folder: a second launch brings the running one forward and exits.
 //!
 //! Started again (a second click on the taskbar or Start, a `mailto:` handler, a desktop
-//! shortcut), MailCraft opened a second window on the same data. Its account data files were
-//! open in the first ("open in another copy of MailCraft"), so it showed errors or nothing, and
-//! its log replaced the running one's. The first MailCraft now listens on a Unix domain socket;
+//! shortcut), Quatrelle opened a second window on the same data. Its account data files were
+//! open in the first ("open in another copy of Quatrelle"), so it showed errors or nothing, and
+//! its log replaced the running one's. The first Quatrelle now listens on a Unix domain socket;
 //! a later launch on the same data folder asks it to show its window and leaves. Another data
-//! folder (`--data`, `--sample`, a portable copy) is another MailCraft and opens its own window.
+//! folder (`--data`, `--sample`, a portable copy) is another Quatrelle and opens its own window.
 //!
 //! As PdfCraft does (`apps/pdfcraft/src/single_instance.rs`): the socket is in a folder only the
 //! user can reach (`store::scratch_dir`: the user's temporary folder on Windows and macOS,
-//! `$XDG_RUNTIME_DIR` on Linux and the BSDs), so other accounts can't listen in MailCraft's
+//! `$XDG_RUNTIME_DIR` on Linux and the BSDs), so other accounts can't listen in Quatrelle's
 //! place; its name has the data folder's hash and the Windows session or the display, so a
 //! launch never reaches a window on another screen. Launches started together take turns through
-//! a lock file beside it, a socket left by a MailCraft that didn't exit cleanly is replaced, and
+//! a lock file beside it, a socket left by a Quatrelle that didn't exit cleanly is replaced, and
 //! any failure falls back to the old behaviour: a window of its own. The exchange is one line each
 //! way, `show` and `ok`. On Windows the socket comes from `uds_windows` (std has no Unix sockets
 //! there, and Winsock directly would need `unsafe`).
@@ -29,16 +29,16 @@ use uds_windows::{UnixListener, UnixStream};
 
 /// What a launch asks: show the window.
 const SHOW: &str = "show\n";
-/// What the running MailCraft answers.
+/// What the running Quatrelle answers.
 const OK: &str = "ok\n";
 /// How long either side waits for the other.
 const TIMEOUT: Duration = Duration::from_secs(5);
 
 /// What this launch does.
 pub enum Claim {
-    /// The running MailCraft is showing its window: exit without one.
+    /// The running Quatrelle is showing its window: exit without one.
     Shown,
-    /// The first MailCraft on this data: open the window and answer later launches.
+    /// The first Quatrelle on this data: open the window and answer later launches.
     Primary(Server),
     /// A window of its own, answering nothing (as before).
     Alone,
@@ -51,7 +51,7 @@ struct Asks {
     wake: Mutex<Option<egui::Context>>,
 }
 
-/// The first MailCraft's end of the socket: a thread answers launches as long as it runs.
+/// The first Quatrelle's end of the socket: a thread answers launches as long as it runs.
 pub struct Server {
     asks: Arc<Asks>,
     path: PathBuf,
@@ -76,7 +76,7 @@ impl Server {
         }
     }
 
-    /// Stop answering as MailCraft closes: the socket goes (a portable copy leaves no trace).
+    /// Stop answering as Quatrelle closes: the socket goes (a portable copy leaves no trace).
     pub fn close(&self) {
         let _ = std::fs::remove_file(&self.path);
         let _ = std::fs::remove_file(self.path.with_extension("lock"));
@@ -167,12 +167,12 @@ fn claim_at(path: &Path) -> Claim {
                 return match ask_to_show(&stream) {
                     Ok(()) => Claim::Shown,
                     Err(e) => {
-                        log::warn!("the running MailCraft didn't answer ({e}); opening a window");
+                        log::warn!("the running Quatrelle didn't answer ({e}); opening a window");
                         Claim::Alone
                     }
                 };
             }
-            // Nobody listens: no socket yet, or one left by a MailCraft that didn't exit cleanly.
+            // Nobody listens: no socket yet, or one left by a Quatrelle that didn't exit cleanly.
             // Removed without asking `exists()` first: on Windows that follows the socket's
             // reparse point, which can fail.
             Err(_) => match std::fs::remove_file(path) {
@@ -202,7 +202,7 @@ fn claim_at(path: &Path) -> Claim {
     Claim::Alone
 }
 
-/// Ask the MailCraft at the other end to show its window, and wait for its `ok`.
+/// Ask the Quatrelle at the other end to show its window, and wait for its `ok`.
 fn ask_to_show(stream: &UnixStream) -> std::io::Result<()> {
     use std::io::{BufRead, Read, Write};
     stream.set_read_timeout(Some(TIMEOUT))?;
@@ -255,7 +255,7 @@ mod tests {
     use super::*;
 
     fn socket(test: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("mailcraft-instance-{}-{test}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("quatrelle-instance-{}-{test}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         dir.join(socket_name(Path::new("C:/data"), ""))
     }
@@ -264,11 +264,11 @@ mod tests {
     /// another screen, another name; never a path.
     #[test]
     fn each_data_folder_and_screen_has_its_own_socket() {
-        let a = socket_name(Path::new("/home/zoe/.local/share/mailcraft"), "wayland-0");
-        assert_eq!(a, socket_name(Path::new("/home/zoe/.local/share/mailcraft/"), "wayland-0"));
-        assert_ne!(a, socket_name(Path::new("/home/zoe/.local/share/mailcraft/sample"), "wayland-0"));
-        assert_ne!(a, socket_name(Path::new("/media/usb/MailCraftData"), "wayland-0"));
-        assert_ne!(a, socket_name(Path::new("/home/zoe/.local/share/mailcraft"), "wayland-1"));
+        let a = socket_name(Path::new("/home/zoe/.local/share/quatrelle"), "wayland-0");
+        assert_eq!(a, socket_name(Path::new("/home/zoe/.local/share/quatrelle/"), "wayland-0"));
+        assert_ne!(a, socket_name(Path::new("/home/zoe/.local/share/quatrelle/sample"), "wayland-0"));
+        assert_ne!(a, socket_name(Path::new("/media/usb/QuatrelleData"), "wayland-0"));
+        assert_ne!(a, socket_name(Path::new("/home/zoe/.local/share/quatrelle"), "wayland-1"));
         assert_ne!(socket_name(Path::new("/d"), "RDP-Tcp#3"), socket_name(Path::new("/d"), "Console"));
         for odd in ["../../x/y", "RDP-Tcp#3", &"z".repeat(200), ""] {
             let n = socket_name(Path::new("/d"), odd);
@@ -277,8 +277,8 @@ mod tests {
         }
         #[cfg(windows)]
         assert_eq!(
-            socket_name(Path::new(r"C:\Users\Zoe\AppData\Roaming\MailCraft"), ""),
-            socket_name(Path::new(r"c:\users\zoe\appdata\roaming\mailcraft"), "")
+            socket_name(Path::new(r"C:\Users\Zoe\AppData\Roaming\Quatrelle"), ""),
+            socket_name(Path::new(r"c:\users\zoe\appdata\roaming\quatrelle"), "")
         );
     }
 
@@ -324,8 +324,8 @@ mod tests {
         let _ = std::fs::remove_dir_all(path.parent().unwrap());
     }
 
-    /// A socket left by a MailCraft that didn't exit cleanly is replaced; something that isn't
-    /// MailCraft at the other end, or junk sent to it, opens a window of its own.
+    /// A socket left by a Quatrelle that didn't exit cleanly is replaced; something that isn't
+    /// Quatrelle at the other end, or junk sent to it, opens a window of its own.
     #[test]
     fn a_stale_socket_is_replaced_and_junk_is_refused() {
         let path = socket("stale");

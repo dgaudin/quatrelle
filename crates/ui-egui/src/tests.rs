@@ -1533,3 +1533,379 @@ fn an_account_is_kept_online_only_from_the_forms() {
     assert!(matches!(&a.ui.dialog, Some(Dialog::AddAccount(f)) if f.online_only == Some(false) && f.params().get("onlineOnly").is_none()));
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// Issue #1: an invitation opens with its notes to read, its links under their words, and the
+/// dialog fits the window however long the notes are; Edit notes goes back to the box. Issue #4:
+/// the list's footer and the close warning draw.
+#[test]
+fn invitations_read_and_the_new_footers_draw() {
+    let (mut a, dir) = app("invitation");
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    let mut notes = String::from("Join with Google Meet<https://meet.google.com/abc-defg-hij>\nMeeting link\n");
+    for i in 0..60 {
+        notes.push_str(&format!("Line {i} More options<https://calendar.google.com/calendar/event?action=VIEW&eid={}>\n", "x".repeat(120)));
+    }
+    let mut d = Dialog::new_event(&a.session, None);
+    if let Dialog::Event(f) = &mut d {
+        f.description = notes.clone();
+        f.reading_notes = true;
+    }
+    a.ui.dialog = Some(d);
+    frame(&ctx, &mut a, vec![]);
+    frame(&ctx, &mut a, vec![]);
+    // However long, the dialog stays within the window (its body scrolls).
+    let shown = ctx.memory(|m| m.layer_ids().filter(|l| l.order == egui::Order::Foreground).count());
+    assert!(shown > 0, "the dialog is up");
+    let screen = ctx.content_rect();
+    let tallest = ctx.memory(|m| m.layer_ids().filter_map(|l| m.area_rect(l.id)).map(|r| r.height()).fold(0.0f32, f32::max));
+    assert!(tallest <= screen.height() + 1.0, "{tallest} in {}", screen.height());
+    if let Some(Dialog::Event(f)) = &mut a.ui.dialog {
+        assert_eq!(f.description, notes, "reading changes nothing");
+        f.reading_notes = false;
+    }
+    frame(&ctx, &mut a, vec![]);
+    a.ui.dialog = None;
+
+    // The list's footer: a search, before and after asking the server; the close warning.
+    a.run("search.run", serde_json::json!({"query": "zzz-nothing", "scope": "all"}));
+    frame(&ctx, &mut a, vec![]);
+    a.session.server_search = Some(quatrelle_engine::ServerSearch { query: "zzz-nothing".into(), pending: 1, ..Default::default() });
+    frame(&ctx, &mut a, vec![]);
+    a.ui.dialog = Some(Dialog::LostOnClose { unsent: 2, changes: 1 });
+    frame(&ctx, &mut a, vec![]);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Services whose clock the test moves, remembering the notifications shown.
+struct Ticking(std::sync::Arc<std::sync::Mutex<i64>>, std::sync::Arc<std::sync::Mutex<Vec<(String, String)>>>);
+
+impl crate::Services for Ticking {
+    fn clock(&self) -> (i64, i32) {
+        (*self.0.lock().unwrap(), 0)
+    }
+    fn pick_files(&mut self) -> Vec<std::path::PathBuf> {
+        Vec::new()
+    }
+    fn save_path(&mut self, _: &str) -> Option<std::path::PathBuf> {
+        None
+    }
+    fn open_path(&mut self, _: &std::path::Path) -> Result<(), String> {
+        Ok(())
+    }
+    fn notify(&mut self, title: &str, body: &str) {
+        self.1.lock().unwrap().push((title.into(), body.into()));
+    }
+}
+
+#[test]
+fn reminders_pop_up_snooze_and_dismiss() {
+    let (mut a, dir) = app("reminders");
+    let now = std::sync::Arc::new(std::sync::Mutex::new(NOW));
+    let shown = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    a.services = Box::new(Ticking(now.clone(), shown.clone()));
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    assert!(!crate::reminders::showing(&a.ui.reminders), "the sample has none due");
+    // A new event's form starts with a 15-minute reminder, and saves it.
+    let start = NOW + 3600;
+    let mut d = Dialog::new_event(&a.session, Some(start));
+    let params = match &mut d {
+        Dialog::Event(f) => {
+            assert_eq!(f.reminder, Some(crate::pim_dialogs::DEFAULT_REMINDER));
+            f.summary = "Colour review".into();
+            f.location = "Suite B".into();
+            f.params()
+        }
+        _ => serde_json::Value::Null,
+    };
+    a.ui.dialog = Some(d);
+    frame(&ctx, &mut a, vec![]);
+    a.act(crate::Action::Submit("event.create", params));
+    let it = a.session.agenda(NOW, NOW + 86_400).into_iter().find(|i| i.summary == "Colour review").unwrap();
+    let reopened = Dialog::open_event(&a.session, &it.uid, it.occurrence).unwrap();
+    assert!(matches!(&reopened, Dialog::Event(f) if f.reminder == Some(15)));
+    // Not yet; then due: the window and one desktop notification.
+    frame(&ctx, &mut a, vec![]);
+    assert!(!crate::reminders::showing(&a.ui.reminders));
+    *now.lock().unwrap() = start - 15 * 60;
+    frame(&ctx, &mut a, vec![]);
+    frame(&ctx, &mut a, vec![]);
+    assert!(crate::reminders::showing(&a.ui.reminders));
+    assert_eq!(shown.lock().unwrap().iter().filter(|(t, _)| t == "Colour review").count(), 1, "told once");
+    // Snoozed: gone until the snooze is over, then back (and told again).
+    let key = a.ui.reminders.due[0].key.clone();
+    a.act(crate::Action::Run("reminders.snooze", json!({"key": key, "minutes": 5})));
+    frame(&ctx, &mut a, vec![]);
+    assert!(!crate::reminders::showing(&a.ui.reminders));
+    *now.lock().unwrap() = start - 10 * 60;
+    frame(&ctx, &mut a, vec![]);
+    assert!(crate::reminders::showing(&a.ui.reminders));
+    // Closed with the X: hidden, not dismissed; a new one brings it back with both.
+    a.ui.reminders.closed.insert(key.clone());
+    frame(&ctx, &mut a, vec![]);
+    assert!(!crate::reminders::showing(&a.ui.reminders));
+    // Many at once, with long names, still draw.
+    for n in 0..40 {
+        let p = json!({"summary": format!("{} {n}", "Very long meeting name ".repeat(8)), "start": quatrelle_engine::model::dates::day_string((start).div_euclid(86_400)) + "T23:59", "reminder": 20160});
+        a.run("event.create", p);
+    }
+    frame(&ctx, &mut a, vec![]);
+    frame(&ctx, &mut a, vec![]);
+    assert!(crate::reminders::showing(&a.ui.reminders));
+    assert!(a.ui.reminders.due.len() > 40);
+    // Dismiss all: gone, and stays gone.
+    a.act(crate::Action::Run("reminders.dismiss", json!({})));
+    frame(&ctx, &mut a, vec![]);
+    *now.lock().unwrap() += 3600;
+    frame(&ctx, &mut a, vec![]);
+    assert!(!crate::reminders::showing(&a.ui.reminders));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Junk Email: the menu blocks the sender, and the lists in Options draw, long ones in part.
+#[test]
+fn junk_lists_block_and_draw() {
+    let (mut a, dir) = app("junk-lists");
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    a.run("list.open", json!({"key": "sample:1:1:INBOX"}));
+    a.act(crate::Action::Run("junk.blockSender", json!({})));
+    assert!(a.session.prefs.blocked_senders.contains("zoe@studio.example"));
+    for n in 0..1500 {
+        a.run("junk.edit", json!({"list": if n % 2 == 0 { "blocked" } else { "safe" }, "entry": format!("@d{n}.example")}));
+    }
+    assert_eq!(a.session.prefs.blocked_senders.len() + a.session.prefs.safe_senders.len(), 1501);
+    a.act(crate::Action::Backstage(crate::backstage::Page::Options));
+    frame(&ctx, &mut a, vec![]);
+    frame(&ctx, &mut a, vec![]);
+    assert!(a.ui.backstage.is_some());
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Search Folders: made from the dialog (a kind, or people), opened from the pane, the heading
+/// its name and the search box left empty; the dialog shows the reason when refused.
+#[test]
+fn search_folders_are_made_from_the_dialog_and_open() {
+    let (mut a, dir) = app("search-folders");
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    let mut f = crate::dialogs::SearchFolderForm::new();
+    assert_eq!(f.final_query(), "is:unread");
+    let before = f.preset;
+    f.preset = 7;
+    f.apply_preset(before);
+    assert_eq!(f.name, "Mail from specific people", "the name follows the kind until one is typed");
+    f.people = "zoe@studio.example; Ana Lima, , \"x".into();
+    assert_eq!(f.final_query(), "from:zoe@studio.example,\"Ana Lima\",x");
+    f.name = "Zoe and Ana".into();
+    a.ui.dialog = Some(Dialog::SearchFolder(Box::new(f.clone())));
+    frame(&ctx, &mut a, vec![]);
+    a.ui.search_text = "typed before".into();
+    a.act(crate::Action::Submit("searchFolder.create", json!({"name": f.name, "query": f.final_query()})));
+    assert!(a.ui.dialog.is_none());
+    assert_eq!(crate::view_title(&a.session), "Zoe and Ana");
+    assert!(a.ui.search_text.is_empty());
+    frame(&ctx, &mut a, vec![]);
+    assert!(a.ui.search_text.is_empty(), "the box isn't filled with its query");
+    assert!(!a.session.list.is_empty() && a.session.list.iter().all(|m| m.from.email.starts_with("zoe") || m.from.name.contains("Ana")));
+    // The same name again: the dialog stays, with why.
+    a.ui.dialog = Some(Dialog::SearchFolder(Box::new(f.clone())));
+    a.act(crate::Action::Submit("searchFolder.create", json!({"name": "zoe AND ana", "query": "is:unread"})));
+    assert!(matches!(&a.ui.dialog, Some(Dialog::SearchFolder(f)) if f.error.is_some()));
+    // Edited: a preset's search shows as that kind, anything else as Custom.
+    let edit = crate::dialogs::SearchFolderForm::edit(&a.session.prefs.search_folders[0]);
+    assert_eq!((edit.preset, edit.query.as_str()), (8, "from:zoe@studio.example,\"Ana Lima\",x"));
+    a.ui.dialog = Some(Dialog::SearchFolder(Box::new(edit)));
+    frame(&ctx, &mut a, vec![]);
+    // Many, with long names, draw.
+    for n in 0..60 {
+        a.run("searchFolder.create", json!({"name": format!("{} {n}", "Quite a long Search Folder name ".repeat(3)), "query": "is:flagged"}));
+    }
+    a.ui.dialog = None;
+    frame(&ctx, &mut a, vec![]);
+    a.run("search.run", json!({"query": "storyboard"}));
+    assert!(crate::view_title(&a.session).contains("storyboard"));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Quick Steps: made from the dialog, done with Ctrl+Shift+1, changed and deleted from it.
+#[test]
+fn quick_steps_are_made_and_done_with_their_keys() {
+    let (mut a, dir) = app("quick-steps");
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    let mut f = crate::dialogs::QuickStepForm::new(&a.session);
+    assert_eq!(f.actions(), vec![json!({"do": "markRead"}), json!({"do": "moveToRole", "value": "archive"})], "Done, as Outlook's");
+    f.name = "Done".into();
+    f.flag = true;
+    a.ui.dialog = Some(Dialog::QuickStep(Box::new(f.clone())));
+    frame(&ctx, &mut a, vec![]);
+    a.act(crate::Action::Submit("quickStep.create", json!({"name": f.name, "actions": f.actions()})));
+    assert!(a.ui.dialog.is_none() && a.session.prefs.quick_steps.len() == 1);
+    // Ctrl+Shift+1 on the first message: flagged, read, archived.
+    frame(&ctx, &mut a, vec![key(Key::ArrowDown, Modifiers::NONE)]);
+    let m = a.session.selected()[0].clone();
+    // As Windows sends it: Shift makes the key `!`; where it is says 1.
+    let shifted = Event::Key {
+        key: Key::Exclamationmark,
+        physical_key: Some(Key::Num1),
+        pressed: true,
+        repeat: false,
+        modifiers: Modifiers::COMMAND | Modifiers::SHIFT,
+    };
+    frame(&ctx, &mut a, vec![shifted]);
+    let archive = a.session.account("sample").and_then(|x| x.folder(quatrelle_engine::model::FolderRole::Archive)).map(|x| x.path.clone()).unwrap();
+    let there = a.session.folder_state("sample", &archive).messages.iter().find(|x| x.message_id == m.message_id).cloned().unwrap();
+    assert!(there.flags.seen && there.flags.flagged);
+    // Opened again, it shows what it does; renamed to a taken name: the reason in the dialog.
+    a.run("quickStep.create", json!({"name": "Later", "actions": [{"do": "pin"}]}));
+    let mut edit = crate::dialogs::QuickStepForm::edit(&a.session, &a.session.prefs.quick_steps[0]);
+    assert!(edit.read && edit.flag && edit.move_to == crate::dialogs::StepMove::Role(quatrelle_engine::model::FolderRole::Archive));
+    edit.name = "later".into();
+    a.ui.dialog = Some(Dialog::QuickStep(Box::new(edit.clone())));
+    a.act(crate::Action::Submit("quickStep.edit", json!({"name": "Done", "newName": edit.name, "actions": edit.actions()})));
+    assert!(matches!(&a.ui.dialog, Some(Dialog::QuickStep(f)) if f.error.is_some()));
+    frame(&ctx, &mut a, vec![]);
+    a.act(crate::Action::Submit("quickStep.delete", json!({"name": "Done"})));
+    assert!(a.ui.dialog.is_none());
+    assert_eq!(a.session.prefs.quick_steps.len(), 1);
+    // Nothing to do: the dialog can't be saved.
+    assert!(crate::dialogs::QuickStepForm { name: "x".into(), ..Default::default() }.actions().is_empty());
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Writing: today's date or the time goes in at the cursor (a plain message stays plain, and
+/// Undo takes it out); Word count counts the message, or what's selected.
+#[test]
+fn the_date_goes_in_and_words_are_counted() {
+    let (mut a, dir) = app("date-words");
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    let choices = crate::rich_edit::date_choices(&a.session.clock);
+    assert_eq!(choices.len(), 4);
+    let iso = quatrelle_engine::model::dates::day_string(NOW.div_euclid(86_400));
+    assert_eq!(choices[1], iso);
+    assert!(choices[0].contains(&quatrelle_engine::model::dates::civil(NOW, &a.session.clock).year.to_string()));
+    a.run("mail.new", json!({}));
+    frame(&ctx, &mut a, vec![]);
+    let c = a.session.compose.as_mut().unwrap();
+    c.body = "Hello  world.\n\nSecond paragraph here".into();
+    c.plain = true;
+    let mut ed = crate::rich_edit::Editor::new(c.id);
+    ed.sel = 5..5;
+    crate::rich_edit::apply(&mut ed, c, crate::rich_edit::Op::Insert(format!(" {iso}")));
+    assert_eq!(c.body, format!("Hello {iso}  world.\n\nSecond paragraph here"));
+    assert!(c.plain, "a plain message stays plain");
+    assert_eq!(ed.sel, 5 + 1 + iso.chars().count()..5 + 1 + iso.chars().count());
+    // Past the end, or a selection replaced.
+    ed.sel = 10_000..10_000;
+    crate::rich_edit::apply(&mut ed, c, crate::rich_edit::Op::Insert("!".into()));
+    assert!(c.body.ends_with('!'));
+    let n = crate::rich_edit::count_words(&c.body);
+    assert_eq!((n.words, n.paragraphs, n.lines), (6, 2, 3), "{n:?}");
+    assert_eq!(crate::rich_edit::count_words(""), crate::rich_edit::Counts::default());
+    let w = crate::rich_edit::count_words("naïve café — 東京 2026 don't");
+    assert_eq!((w.words, w.chars_no_spaces), (6, "naïvecafé—東京2026don't".chars().count()), "{w:?}");
+    // Shown where the message is being written (its own window), as Address Book is.
+    assert!(Dialog::WordCount(n, false).for_compose());
+    a.ui.dialog = Some(Dialog::WordCount(n, false));
+    frame(&ctx, &mut a, vec![]);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Several messages written at once, each in its own window: a second New mail keeps the first;
+/// what a window does goes to its own message; each keeps its editor (selection, undo); a
+/// dialog opened from one shows in that one.
+#[test]
+fn several_messages_are_written_at_once() {
+    let (mut a, dir) = app("several-composes");
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    a.run("mail.new", json!({}));
+    a.run("compose.update", json!({"subject": "First", "to": "ana@soundlab.example"}));
+    let first = a.session.compose.as_ref().unwrap().id;
+    frame(&ctx, &mut a, vec![]);
+    a.ui.editor.as_mut().unwrap().sel = 3..3;
+    a.run("mail.new", json!({}));
+    frame(&ctx, &mut a, vec![]);
+    let second = a.session.compose.as_ref().unwrap().id;
+    assert_ne!(first, second);
+    assert_eq!(a.session.all_composes().count(), 2, "the first is kept");
+    // Its window's action goes to it, not to the one acted on last.
+    a.act(crate::Action::ForCompose(first, Box::new(crate::Action::Run("compose.update", json!({"subject": "First, changed"})))));
+    let subjects: Vec<String> = a.session.all_composes().map(|c| c.subject.clone()).collect();
+    assert!(subjects.contains(&"First, changed".to_string()) && subjects.contains(&String::new()), "{subjects:?}");
+    // Its editor came back with it.
+    assert_eq!(a.ui.editor.as_ref().map(|e| (e.id, e.sel.clone())), Some((first, 3..3)));
+    // A dialog from the first's window belongs to it.
+    a.act(crate::Action::ForCompose(first, Box::new(crate::Action::Dialog(Dialog::SaveChanges))));
+    assert_eq!(a.ui.dialog_for, Some(first));
+    a.ui.dialog = None;
+    // Closing one leaves the other.
+    a.act(crate::Action::ForCompose(second, Box::new(crate::Action::Run("compose.close", json!({"save": false})))));
+    frame(&ctx, &mut a, vec![]);
+    assert_eq!(a.session.all_composes().map(|c| c.id).collect::<Vec<_>>(), vec![first]);
+    // An action for a message gone does nothing.
+    a.act(crate::Action::ForCompose(second, Box::new(crate::Action::Run("compose.update", json!({"subject": "ghost"})))));
+    assert_eq!(a.session.compose.as_ref().unwrap().subject, "First, changed");
+    for _ in 0..3 {
+        frame(&ctx, &mut a, vec![]);
+    }
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Closing Quatrelle with messages being written asks first; Save keeps each as a draft.
+#[test]
+fn closing_with_messages_written_asks_and_keeps_them() {
+    let (mut a, dir) = app("save-on-close");
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    a.run("mail.new", json!({}));
+    a.run("compose.update", json!({"subject": "Half done"}));
+    a.run("mail.new", json!({}));
+    a.run("compose.update", json!({"subject": "Also half done"}));
+    let close = RawInput {
+        screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1280.0, 800.0))),
+        viewports: std::iter::once((egui::ViewportId::ROOT, egui::ViewportInfo { events: vec![egui::ViewportEvent::Close], ..Default::default() }))
+            .collect(),
+        ..Default::default()
+    };
+    let mut out = ctx.run_ui(close, |ui| a.ui(ui));
+    out.textures_delta.clear();
+    assert!(matches!(a.ui.dialog, Some(Dialog::SaveOnClose(2))), "asked");
+    frame(&ctx, &mut a, vec![]);
+    a.act(crate::Action::Run("compose.keepAll", json!({})));
+    let drafts = a.session.account("sample").and_then(|x| x.folder(quatrelle_engine::model::FolderRole::Drafts)).map(|f| f.path.clone()).unwrap();
+    let subjects: Vec<String> = a.session.folder_state("sample", &drafts).messages.iter().map(|m| m.subject.clone()).collect();
+    assert!(subjects.contains(&"Half done".into()) && subjects.contains(&"Also half done".into()), "{subjects:?}");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Motion: the folder pane slides between its two widths and the rest draws through it; Play
+/// animations off makes egui's own motion instant too; a message just opened fades in.
+#[test]
+fn motion_plays_and_stops() {
+    let (mut a, dir) = app("motion");
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    assert!(crate::motion::enabled(&ctx));
+    for minimized in [true, false, true, false] {
+        a.run("view.folderPane", json!({"minimized": minimized}));
+        for _ in 0..4 {
+            frame(&ctx, &mut a, vec![]);
+        }
+    }
+    a.run("list.open", json!({"key": "sample:1:1:INBOX"}));
+    frame(&ctx, &mut a, vec![]);
+    a.run("view.animations", json!({"on": false}));
+    frame(&ctx, &mut a, vec![]);
+    assert!(!crate::motion::enabled(&ctx));
+    assert_eq!(ctx.global_style().animation_time, 0.0);
+    a.run("view.folderPane", json!({"minimized": true}));
+    frame(&ctx, &mut a, vec![]);
+    a.run("view.animations", json!({}));
+    frame(&ctx, &mut a, vec![]);
+    assert!(a.session.prefs.animations && crate::motion::enabled(&ctx));
+    let _ = std::fs::remove_dir_all(dir);
+}

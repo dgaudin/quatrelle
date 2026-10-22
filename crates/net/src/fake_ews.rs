@@ -313,15 +313,8 @@ impl Data {
         } else {
             String::new()
         };
-        // The fork marks hidden folders (0x10f4); the shared version answers with each folder
-        // in an element of its kind (EWS's folder array).
-        let replica = if self.hidden.contains(&f.id) {
-            replica
-                + "<t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"0x10f4\" PropertyType=\"Boolean\"/><t:Value>true</t:Value></t:ExtendedProperty>"
-        } else {
-            replica
-        };
-        let replica = if self.flagged_hidden.contains(&f.id) {
+        // Hidden folders (0x10f4, PidTagAttributeHidden), as either list marks them.
+        let replica = if self.flagged_hidden.contains(&f.id) || self.hidden.contains(&f.id) {
             format!(
                 "{replica}<t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"0x10f4\" PropertyType=\"Boolean\"/><t:Value>true</t:Value></t:ExtendedProperty>"
             )
@@ -653,35 +646,36 @@ impl Data {
                     out.push(err("ErrorFolderNotFound"));
                     return ("FindItemResponse".into(), out);
                 }
-                let max: usize =
-                    op.child("IndexedPageItemView").and_then(|v| v.attr("MaxEntriesReturned")).and_then(|o| o.parse().ok()).unwrap_or(1000);
+                let view = op.child("IndexedPageItemView");
+                let max: usize = view.and_then(|v| v.attr("MaxEntriesReturned")).and_then(|o| o.parse().ok()).unwrap_or(1000);
+                // Pages by offset, as Exchange does (up to 1000 at a time).
+                let offset: usize = view.and_then(|v| v.attr("Offset")).and_then(|o| o.parse().ok()).unwrap_or(0);
+                let max = max.min(1000);
                 let mut list: Vec<&It> = self.items.iter().filter(|i| wanted_folders.contains(&i.folder)).collect();
-                // A query: Exchange's own index, over subjects, addresses and bodies (every word
-                // has to be somewhere, as `QueryString` means).
-                let query = op.child("QueryString").map(|q| q.text.trim().to_ascii_lowercase()).unwrap_or_default();
-                if !query.is_empty() {
-                    // A field's name (`from:`, `subject:`…) is a name, not a word to find.
-                    let words: Vec<String> = query
-                        .split_whitespace()
-                        .map(|w| w.rsplit_once(':').map_or(w, |(_, v)| v).trim_matches('"').to_string())
-                        .filter(|w| !w.is_empty())
-                        .collect();
-                    list.retain(|i| {
-                        let p = quatrelle_mime::parse(&i.raw).unwrap_or_default();
-                        let all = i.raw.to_ascii_lowercase();
-                        let all = String::from_utf8_lossy(&all).to_string();
-                        let subject = p.subject.to_ascii_lowercase();
-                        let from = format!("{} {}", p.from.name.to_ascii_lowercase(), p.from.email.to_ascii_lowercase());
-                        words.iter().all(|w| subject.contains(w.as_str()) || from.contains(w.as_str()) || all.contains(w.as_str()))
-                    });
+                // A query: Exchange's own index (AQS words), over subjects, addresses and bodies.
+                if let Some(q) = op.child("QueryString") {
+                    list.retain(|i| crate::fake_graph::words_match(&q.text, &i.raw));
                 }
-                // A restriction the server knows: a message found by its `Message-ID`.
+                // A restriction the server knows: a message found by its `Message-ID`, or the
+                // read and flag state.
                 if let Some(restriction) = op.find("Restriction") {
                     let uri = restriction.find("FieldURI").and_then(|f| f.attr("FieldURI")).unwrap_or_default();
                     let value = restriction.find("Constant").and_then(|c| c.attr("Value")).unwrap_or_default();
                     if uri == "message:InternetMessageId" {
                         let want = value.trim_matches(['<', '>']).to_ascii_lowercase();
                         list.retain(|i| quatrelle_mime::parse(&i.raw).is_some_and(|p| p.message_id.to_ascii_lowercase() == want));
+                    }
+                    let mut all = Vec::new();
+                    restriction.all("IsEqualTo", &mut all);
+                    for cond in all {
+                        let value = cond.find("Constant").and_then(|c| c.attr("Value")).unwrap_or("");
+                        if cond.find("FieldURI").and_then(|f| f.attr("FieldURI")) == Some("message:IsRead") {
+                            let want = value == "true";
+                            list.retain(|i| i.read == want);
+                        } else if cond.find("ExtendedFieldURI").is_some() {
+                            let negated = restriction.find("Not").is_some();
+                            list.retain(|i| i.flagged != negated);
+                        }
                     }
                 }
                 list.sort_by(|a, b| b.received.cmp(&a.received));
@@ -692,8 +686,10 @@ impl Data {
                 let asked = |u: &str| uris.iter().any(|f| f.attr("FieldURI") == Some(u));
                 let with_fields = asked("item:Subject");
                 let with_parent = asked("item:ParentFolderId");
+                let last = offset + max >= list.len();
                 let items: String = list
                     .iter()
+                    .skip(offset)
                     .take(max)
                     .map(|i| {
                         if with_fields {
@@ -716,7 +712,7 @@ impl Data {
                     })
                     .collect();
                 out.push(ok(format!(
-                    "<m:RootFolder TotalItemsInView=\"{}\" IncludesLastItemInRange=\"true\"><t:Items>{items}</t:Items></m:RootFolder>",
+                    "<m:RootFolder TotalItemsInView=\"{}\" IncludesLastItemInRange=\"{last}\"><t:Items>{items}</t:Items></m:RootFolder>",
                     list.len()
                 )));
             }
@@ -1265,6 +1261,46 @@ mod tests {
             std::thread::sleep(Duration::from_millis(50));
         }
         panic!("timed out waiting for {what}");
+    }
+
+    /// Gap #7: searching Exchange through EWS (`QueryString`, and a `Restriction` for the read
+    /// state) for mail past the window.
+    #[test]
+    fn ews_is_searched_past_the_window() {
+        let mut d = Data::default();
+        let inbox = d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+        let mut ids = Vec::new();
+        for n in 1..=25 {
+            ids.push(
+                d.deliver(
+                    &inbox,
+                    &format!(
+                        "From: Zoe Park <zoe@x.example>\r\nTo: me@x.example\r\nSubject: Message {n}\r\nMessage-ID: <s{n}@x>\r\n\r\nBody tag{n}.\r\n"
+                    )
+                    .into_bytes(),
+                    n > 5,
+                    &format!("2024-05-{n:02}T09:00:00Z"),
+                ),
+            );
+        }
+        let server = serve(d);
+        let account = AccountConfig {
+            id: "a1".into(),
+            email: "riley@contoso.example".into(),
+            username: format!("{DOMAIN}\\{USER}"),
+            ews: Some(server.url.clone()),
+            ..Default::default()
+        };
+        let data = server.data.clone();
+        crate::fake::search_the_server_past_the_window("ews-search", account, PASSWORD, &|n, read| {
+            let mut d = data.lock().unwrap();
+            let id = ids[n as usize - 1].clone();
+            if read {
+                d.items.iter_mut().filter(|m| m.id == id).for_each(|m| m.read = true);
+            } else {
+                d.items.retain(|m| m.id != id);
+            }
+        });
     }
 
     fn mail(subject: &str, id: &str) -> Vec<u8> {
@@ -2436,6 +2472,17 @@ mod tests {
         d.folder("Afgehandeld", None, None, "IPF.Note");
         d.deliver(&inbox, &mail("Weekly report", "o1"), false, "2026-10-19T08:00:00Z");
         d.deliver(&inbox, &mail("Re: Weekly report", "o2"), false, "2026-10-19T09:00:00Z");
+        // `QUATRELLE_FAKE_COUNT`: that many older ones in Afgehandeld ("Message 1" the oldest,
+        // each body `needle-<n>`), for more mail than is kept (gap #7).
+        let count: u32 = std::env::var("QUATRELLE_FAKE_COUNT").ok().and_then(|n| n.parse().ok()).unwrap_or(0);
+        let done = d.by_name("Afgehandeld").map(|f| f.id.clone()).unwrap_or_default();
+        for n in 1..=count.min(20_000) {
+            let raw = format!(
+                "From: Zoe Park <zoe@contoso.example>\r\nTo: riley@contoso.example\r\nSubject: Message {n}\r\nMessage-ID: <old{n}@x>\r\n\r\nOld body needle-{n}.\r\n"
+            );
+            let at = format!("2025-01-{:02}T{:02}:{:02}:00Z", 1 + n / 1440, n / 60 % 24, n % 60);
+            d.deliver(&done, raw.as_bytes(), n % 7 != 0, &at);
+        }
         let shared = d.shared_mailbox(SharedBox {
             address: "test@contoso.example".into(),
             name: "Test Grommunio".into(),
@@ -2451,7 +2498,7 @@ mod tests {
         let teams = parse(
             "<t:CalendarItem><t:Subject>Weekly sync</t:Subject><t:Body BodyType=\"HTML\">&lt;html&gt;&lt;body&gt;&lt;p&gt;Agenda: the release.&lt;/p&gt;             &lt;div&gt;________________________________________________________________________________&lt;/div&gt;             &lt;div&gt;&lt;span style=\"font-size:24px\"&gt;Microsoft Teams &lt;a href=\"https://aka.ms/JoinTeamsMeeting\"&gt;Need help?&lt;/a&gt;&lt;/span&gt;&lt;/div&gt;             &lt;div&gt;&lt;a href=\"https://teams.microsoft.com/l/meetup-join/19%3ameeting_NjA3%40thread.v2/0?context=%7b%22Tid%22%3a%22c1%22%7d\"&gt;             &lt;span style=\"font-size:21px\"&gt;Join the meeting now&lt;/span&gt;&lt;/a&gt;&lt;/div&gt;&lt;div&gt;Meeting ID: 366 254 181 924&lt;/div&gt;             &lt;div&gt;Passcode: Ab3cD9&lt;/div&gt;&lt;/body&gt;&lt;/html&gt;</t:Body>             <t:Start>2026-10-20T13:00:00Z</t:Start><t:End>2026-10-20T13:30:00Z</t:End><t:IsAllDayEvent>false</t:IsAllDayEvent>             <t:Location>Microsoft Teams Meeting</t:Location><t:UID>weekly-sync-1</t:UID></t:CalendarItem>",
         );
-        d.pim.push(("E1".into(), agenda, teams.kids[0].clone()));
+        d.pim.push(("E1".into(), agenda.clone(), teams.kids[0].clone()));
         let shared_cal = d.id("S");
         d.folders.push(Fo {
             id: shared_cal.clone(),
@@ -2465,6 +2512,33 @@ mod tests {
             "<t:CalendarItem><t:Subject>Team planning</t:Subject><t:Start>2026-10-20T09:00:00Z</t:Start><t:End>2026-10-20T10:00:00Z</t:End>             <t:IsAllDayEvent>false</t:IsAllDayEvent><t:UID>team-plan-1</t:UID></t:CalendarItem>",
         );
         d.pim.push(("T1".into(), shared_cal, team.kids[0].clone()));
+        // Issue #1: a Google Calendar invitation, its body as Exchange gives it as text (each
+        // link written `label<url>`), long links and all.
+        let tok = "AKUaPmZ3cDk0bWtnZ2I5NjBhYmRlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwYWJjZGVm";
+        let eid = "NnQ5MWVxZzdhY2JkMWU0ZXJnaGtnOHFwdmEgc3R1ZGlvQGNvbnRvc28uZXhhbXBsZQ";
+        let mut invite = String::from(
+            "Join with Google Meet – You have been invited by ana@studio.example to attend an event named Design review on Wednesday 21 Oct 2026 14:00 – 15:00 (Eastern European Time).\n\n\
+             <https://meet.google.com/abc-defg-hij>\nJoin with Google Meet\n\nMeeting link\nmeet.google.com/abc-defg-hij<https://meet.google.com/abc-defg-hij?hs=224>\n\
+             Join by phone\n(US) +1 555-0100<tel:+1-555-0100%3B618021784%23>\nPIN: 618 021 784#\n\nMore phone numbers<https://tel.meet/abc-defg-hij?pin=6180217840000&hs=1>\n\n\n\
+             When\nWednesday 21 Oct 2026 14:00 – 15:00 (Eastern European Time)\nGuests\nAna <mailto:ana@studio.example>\nRiley <mailto:riley@contoso.example>\nView all guest info<https://calendar.google.com/calendar/event?action=VIEW&eid=",
+        );
+        invite.push_str(&format!("{eid}&tok={tok}&ctz=Europe%2FAmsterdam&hl=en&es=0>\n\nReply for riley@contoso.example\n"));
+        for (label, rst) in [("Yes", 1), ("No", 2), ("Maybe", 3)] {
+            invite.push_str(&format!("{label}\n\n<https://calendar.google.com/calendar/event?action=RESPOND&eid={eid}&rst={rst}&tok={tok}&ctz=Europe%2FAmsterdam&hl=en&es=0>\n"));
+        }
+        invite.push_str(&format!(
+            "More options\n\n<https://calendar.google.com/calendar/event?action=VIEW&eid={eid}&tok={tok}&ctz=Europe%2FAmsterdam&hl=en&es=0>\n\n\n\n\
+             Sent by Google Calendar<https://calendar.google.com/calendar/>\n\nYou are receiving this email because you are an attendee on the event.\n\n\
+             Forwarding this invitation could allow any recipient to send a response to the organizer, be added to the guest list, invite others regardless of their own invitation status, or modify your RSVP. Learn more<https://support.google.com/calendar/answer/37135#forwarding>\n"
+        ));
+        let xml = |s: &str| s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;");
+        let google = parse(&format!(
+            "<t:CalendarItem><t:Subject>Invitation: Design review @ Wed 21 Oct 2026 14:00 - 15:00 (EET)</t:Subject><t:Body BodyType=\"Text\">{}</t:Body>\
+             <t:Start>2026-10-21T12:00:00Z</t:Start><t:End>2026-10-21T13:00:00Z</t:End><t:IsAllDayEvent>false</t:IsAllDayEvent>\
+             <t:Location>https://meet.google.com/abc-defg-hij</t:Location><t:UID>google-invite-1</t:UID></t:CalendarItem>",
+            xml(&invite)
+        ));
+        d.pim.push(("G1".into(), agenda, google.kids[0].clone()));
         let _server = serve_at(d, "127.0.0.1:8085");
         loop {
             std::thread::park();

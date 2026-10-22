@@ -1296,37 +1296,7 @@ fn an_appointment_answers_to_the_name_a_dialog_opened_with() {
     done(s);
 }
 
-/// A reminder comes due the given minutes before its appointment, once (named by its occurrence),
-/// and stops ringing once the appointment is a day past.
-#[test]
-fn a_reminder_comes_due_before_its_appointment() {
-    let mut s = sample_session("reminders-due");
-    let uid = s
-        .run("event.create", &json!({"summary": "Point budget", "start": "2026-10-23T11:00", "end": "2026-10-23T12:00", "reminder": 15}))
-        .unwrap()["uid"]
-        .as_str()
-        .unwrap()
-        .to_string();
-    let start = s.find_event(&uid).unwrap().1.event.start;
-    let rings = |s: &Session, at: i64| s.reminders_due(at).into_iter().filter(|r| r.summary == "Point budget").collect::<Vec<_>>();
-    assert!(rings(&s, start - 901).is_empty(), "a minute early, nothing");
-    let due = rings(&s, start - 899);
-    assert_eq!(due.len(), 1, "fifteen minutes before, once");
-    assert_eq!((due[0].minutes, due[0].start, due[0].key.as_str()), (15, start, format!("{uid}@{start}").as_str()));
-    assert_eq!(rings(&s, start - 899).len(), 1, "asked again, still the one");
-    assert!(rings(&s, start + 2 * 86_400).is_empty(), "a day past, it no longer rings");
-    // One with no reminder never rings.
-    let quiet = s
-        .run("event.create", &json!({"summary": "Sans rappel", "start": "2026-10-23T11:00", "end": "2026-10-23T12:00", "reminder": null}))
-        .unwrap()["uid"]
-        .as_str()
-        .unwrap()
-        .to_string();
-    assert!(s.reminders_due(start - 899).iter().all(|r| r.summary != "Sans rappel"), "{quiet}");
-    done(s);
-}
-
-/// A reminder is minutes before the start; it's kept through a change, and taken off when asked./// A reminder is minutes before the start; it's kept through a change, and taken off when asked.
+/// A reminder is minutes before the start; it's kept through a change, and taken off when asked.
 #[test]
 fn a_reminder_is_set_kept_and_taken_off() {
     let mut s = sample_session("reminder");
@@ -1344,7 +1314,7 @@ fn a_reminder_is_set_kept_and_taken_off() {
     assert_eq!(again.find_event(&uid).unwrap().1.event.reminder, Some(1440));
     again.run("event.update", &json!({"uid": uid, "reminder": null})).unwrap();
     assert_eq!(again.find_event(&uid).unwrap().1.event.reminder, None, "taken off");
-    assert!(again.run("event.update", &json!({"uid": uid, "reminder": 99_999})).is_ok(), "nonsense is ignored, not a panic");
+    assert!(again.run("event.update", &json!({"uid": uid, "reminder": 99_999})).is_err(), "nonsense is refused, not a panic");
     assert_eq!(again.find_event(&uid).unwrap().1.event.reminder, None);
     done(s);
 }
@@ -3241,6 +3211,7 @@ fn the_work_week_is_monday_to_friday() {
     let r = s.run("calendar.goto", &json!({"step": 1})).unwrap();
     assert_eq!(r["date"], "2026-10-25", "a week on");
     assert_eq!(r["mode"], "workWeek");
+    assert!(s.run("calendar.view", &json!({"mode": "fortnight"})).is_err());
     done(s);
 }
 
@@ -3694,8 +3665,9 @@ fn update_checks_tell_newer_releases_and_test_builds() {
         version: version.into(),
         build,
         commit: commit.into(),
-        page: format!("https://github.com/ZIDAN44/quatrelle/releases/tag/{tag}"),
+        page: format!("https://github.com/dgaudin/quatrelle/releases/tag/{tag}"),
         download: String::new(),
+        ..Default::default()
     };
     let sha15 = "8bdba5ceb26a8b910102731c634d6998b8ab25d1";
     let sha14 = "23c7fb53b86cce9856b1b9fc76bf32f9ef397b83";
@@ -3842,12 +3814,13 @@ fn shared_mailboxes_are_mailboxes_of_their_own_in_the_pane() {
     done(s);
 }
 
-/// Mail past what is kept: a folder with more on its server says how many and shows more of its
-/// older mail when asked, then says so while it gets them.
+/// Issue #4: mail past what is kept. A folder with more on its server says how many and shows
+/// more when asked; a search asks the servers, and what they find is in the results whether or
+/// not its words are in what is downloaded here.
 #[test]
-fn a_folder_says_whats_past_what_it_keeps_and_shows_more() {
-    use quatrelle_model::{Folder, Summary};
-    let mut s = sample_session("server-more");
+fn more_on_the_server_and_searching_it() {
+    use quatrelle_model::{Folder, FolderRole, MessageKey, Summary};
+    let mut s = sample_session("server-search");
     let a = s
         .run("account.add", &json!({"email": "zoe@example.org", "password": "pw", "imapHost": "mail.example.org", "smtpHost": "mail.example.org"}))
         .unwrap()["account"]
@@ -3873,16 +3846,40 @@ fn a_folder_says_whats_past_what_it_keeps_and_shows_more() {
     assert_eq!(s.showing_more, Some((a.clone(), "INBOX".to_string())));
     s.apply(Event::Status { account: a.clone(), status: SyncStatus::Online { at: 0 } });
     assert_eq!(s.showing_more, None, "settled, it can be asked again");
-    // A folder it keeps all of, and a search, have nothing past the list.
-    s.run("search.run", &json!({"query": "Message", "scope": "current"})).unwrap();
-    assert_eq!(s.more_on_server(), None);
-    assert!(s.run("folder.more", &json!({"account": "sample", "folder": "INBOX"})).is_err(), "the sample mailbox keeps all its mail here");
+    assert_eq!(s.more_on_server().map(|m| m.2), Some(40));
+
+    // Searching: nothing here has "needle"; the server finds an old message.
+    assert!(s.run("search.server", &json!({})).is_err(), "search for something first");
+    s.run("search.run", &json!({"query": "needle", "scope": "all"})).unwrap();
+    assert!(s.list.is_empty());
+    s.run("search.server", &json!({})).unwrap();
+    let jobs = s.take_jobs();
+    assert!(
+        jobs.iter().any(
+            |j| matches!(j, Job::SearchServer { account, query, folders } if *account == a && query == "needle" && folders == &["INBOX".to_string()])
+        ),
+        "{jobs:?}"
+    );
+    assert!(!jobs.iter().any(|j| matches!(j, Job::SearchServer { account, .. } if account == "sample")), "the sample mailbox has no server");
+    assert_eq!(s.server_search.as_ref().map(|x| x.pending), Some(1));
+    let mut st = store.load_folder(&a, "INBOX").unwrap();
+    st.messages.push(Summary { key: key(7), subject: "Old one".into(), ..Default::default() });
+    store.save_folder(&a, "INBOX", &st).unwrap();
+    s.apply(Event::FolderChanged { account: a.clone(), folder: "INBOX".into() });
+    s.apply(Event::ServerSearched { account: a.clone(), query: "needle".into(), keys: vec![key(7)], error: None });
+    assert_eq!(s.list.iter().map(|m| m.subject.as_str()).collect::<Vec<_>>(), ["Old one"]);
+    assert_eq!(s.server_search.as_ref().map(|x| (x.pending, x.found.len())), Some((0, 1)));
+    // An answer for another query is not this search's; a new query starts again.
+    s.apply(Event::ServerSearched { account: a.clone(), query: "other".into(), keys: vec![key(41)], error: None });
+    assert_eq!(s.list.len(), 1);
+    s.run("search.run", &json!({"query": "something else", "scope": "all"})).unwrap();
+    assert!(s.server_search.is_none());
     done(s);
 }
 
-/// Closing loses what online-only accounts hold in memory only (unsent mail, changes not on the
-/// server yet): counted, to ask first. A start without a kept password asks for it, once while
-/// Quatrelle runs.
+/// Issue #4: closing loses what online-only accounts hold in memory only (unsent mail, changes
+/// not on the server yet): counted, to ask first. A start without a kept password asks for it,
+/// once while Quatrelle runs.
 #[test]
 fn closing_counts_whats_lost_and_a_missing_password_is_asked_for() {
     let mut s = sample_session("lost-on-close");
@@ -3894,7 +3891,7 @@ fn closing_counts_whats_lost_and_a_missing_password_is_asked_for() {
         .to_string();
     assert_eq!(s.lost_on_close(), (0, 0));
     let store = s.store.clone().unwrap();
-    store.save_ops(&a, &[Op::Expunge { keys: Vec::new() }]).unwrap();
+    store.save_ops(&a, &[quatrelle_model::Op::Expunge { keys: Vec::new() }]).unwrap();
     s.outbox.push((a.clone(), quatrelle_store::OutboxItem { id: 3, ..Default::default() }));
     s.outbox.push(("sample".into(), quatrelle_store::OutboxItem { id: 4, ..Default::default() }));
     assert_eq!(s.lost_on_close(), (1, 1), "only the online-only account's");
@@ -3908,4 +3905,413 @@ fn closing_counts_whats_lost_and_a_missing_password_is_asked_for() {
     needs(&mut s);
     assert!(s.ask_password.is_empty(), "once while Quatrelle runs");
     done(s);
+}
+
+/// Reminders: an event's reminder comes due at its time, snoozes, comes back, and goes when
+/// dismissed; each occurrence of a series has its own; one without a reminder, or cancelled,
+/// never comes; a hidden calendar's still does; and bad params are refused.
+#[test]
+fn reminders_come_snooze_and_go() {
+    let mut s = sample_session("reminders");
+    let tomorrow = s.clock.now - s.clock.now.rem_euclid(86_400) + 86_400;
+    let (start, review_at) = (tomorrow + 9 * 3600, tomorrow + 14 * 3600);
+    let day = quatrelle_model::dates::day_string(start.div_euclid(86_400));
+    let make = |s: &mut Session, summary: &str, time: &str, extra: Value| -> String {
+        let mut p = json!({"summary": summary, "start": format!("{day}T{time}"), "end": format!("{day}T{}", if time == "09:00" { "10:00" } else { "15:00" })});
+        if let (Some(o), Some(x)) = (p.as_object_mut(), extra.as_object()) {
+            o.extend(x.clone());
+        }
+        s.run("event.create", &p).unwrap()["uid"].as_str().unwrap().to_string()
+    };
+    let standup = make(&mut s, "Stand-up", "09:00", json!({"reminder": 15, "repeat": "daily"}));
+    let quiet = make(&mut s, "No reminder", "09:00", json!({}));
+    let review = make(&mut s, "Review", "14:00", json!({"reminder": "60"}));
+    // The sample's own appointments have reminders too (its storyboard review): only these
+    // three are looked at.
+    let ours = ["Stand-up", "No reminder", "Review"];
+    let due = |s: &Session| s.due_reminders(s.clock.now).into_iter().map(|r| r.summary).filter(|m| ours.contains(&m.as_str())).collect::<Vec<_>>();
+    // A day before: nothing yet.
+    s.clock.now = start - 86_400;
+    assert!(due(&s).is_empty(), "{:?}", due(&s));
+    // At 08:45 the stand-up's is due; the quiet one never.
+    s.clock.now = start - 15 * 60;
+    assert_eq!(due(&s), ["Stand-up"]);
+    let key = s.due_reminders(s.clock.now).into_iter().find(|r| r.summary == "Stand-up").unwrap().key;
+    assert!(key.starts_with("local|") || key.contains(&standup), "{key}");
+    // Snoozed five minutes: gone, then back.
+    s.run("reminders.snooze", &json!({"key": key, "minutes": 5})).unwrap();
+    assert!(due(&s).is_empty());
+    s.clock.now += 5 * 60;
+    assert_eq!(due(&s), ["Stand-up"]);
+    // Snooze until "0 minutes before start" when that's still ahead; refused once it's passed.
+    s.run("reminders.snooze", &json!({"key": key, "beforeStart": 0})).unwrap();
+    assert!(due(&s).is_empty());
+    s.clock.now = start;
+    assert_eq!(due(&s), ["Stand-up"]);
+    assert!(s.run("reminders.snooze", &json!({"key": key, "beforeStart": 5})).is_err());
+    // Dismissed: gone for good; tomorrow's occurrence has its own.
+    s.run("reminders.dismiss", &json!({"key": key})).unwrap();
+    assert!(due(&s).is_empty());
+    s.clock.now = start + 86_400 - 10 * 60;
+    assert_eq!(due(&s), ["Review", "Stand-up"], "the next day's stand-up, and yesterday's review still unanswered (overdue)");
+    assert!(s.run("reminders.dismiss", &json!({})).unwrap()["dismissed"].as_u64().unwrap() >= 2, "all of them, the sample's too");
+    assert!(due(&s).is_empty());
+    // The 14:00 review's an hour before; hiding its calendar doesn't silence it.
+    s.prefs.reminders.clear();
+    s.clock.now = review_at - 3600;
+    s.prefs.hidden_calendars.insert("local:local".into());
+    assert_eq!(due(&s), ["Stand-up", "Review"], "the stand-up's of 09:00 is still unanswered too (soonest first)");
+    s.run("event.update", &json!({"uid": standup, "reminder": "none"})).unwrap();
+    assert_eq!(due(&s), ["Review"]);
+    // Changing its reminder to none: gone; a cancelled event never comes.
+    s.run("event.update", &json!({"uid": review, "reminder": "none"})).unwrap();
+    assert!(due(&s).is_empty());
+    s.run("event.update", &json!({"uid": review, "reminder": 60})).unwrap();
+    assert_eq!(due(&s), ["Review"]);
+    s.update_event(&review, |e| e.status = "CANCELLED".into()).unwrap();
+    assert!(due(&s).is_empty());
+    // Long after it ended, an unanswered reminder no longer waits.
+    s.update_event(&review, |e| e.status = String::new()).unwrap();
+    s.clock.now = review_at + 3 * 86_400;
+    assert!(!due(&s).contains(&"Review".to_string()));
+    // Junk.
+    for bad in
+        [json!({"key": "nope", "minutes": 5}), json!({"key": key}), json!({"key": key, "minutes": 0}), json!({"key": key, "minutes": 99_999_999})]
+    {
+        assert!(s.run("reminders.snooze", &bad).is_err(), "{bad}");
+    }
+    assert!(s.run("reminders.dismiss", &json!({"key": "nope"})).is_err());
+    for bad in [json!(-1), json!(999_999), json!("soon"), json!(true)] {
+        assert!(s.run("event.update", &json!({"uid": quiet, "reminder": bad})).is_err(), "{bad}");
+    }
+    assert!(s.run("reminders.list", &json!({})).unwrap().is_array());
+    done(s);
+}
+
+/// Junk Email lists, as Outlook's: a blocked sender's mail goes to Junk as it arrives, a safe
+/// sender's comes back out of it; a domain covers every address at it; safe wins over blocked.
+#[test]
+fn blocked_and_safe_senders_sort_mail_as_it_arrives() {
+    let mut s = sample_session("junk-lists");
+    let junk = s.account("sample").and_then(|a| a.folder(FolderRole::Junk)).map(|f| f.path.clone()).unwrap();
+    let store = s.store.clone().unwrap();
+    let arrive = |s: &mut Session, folder: &str, uid: u32, from: &str, subject: &str| {
+        let mut st = store.load_folder("sample", folder).unwrap();
+        let mut m = store.load_folder("sample", "INBOX").unwrap().messages[0].clone();
+        m.key.folder = folder.into();
+        m.key.uid = uid;
+        m.key.validity = st.validity;
+        m.from = quatrelle_model::EmailAddress::new("", from);
+        m.subject = subject.into();
+        m.message_id = format!("{uid}@junk.example");
+        m.in_reply_to.clear();
+        m.references.clear();
+        m.flags.seen = false;
+        m.date = NOW;
+        st.messages.insert(0, m);
+        store.save_folder("sample", folder, &st).unwrap();
+        s.apply(Event::FolderChanged { account: "sample".into(), folder: folder.into() });
+    };
+    let inbox_has = |s: &mut Session, subject: &str| s.folder_state("sample", "INBOX").messages.iter().any(|m| m.subject == subject);
+    let junk_has = |s: &mut Session, subject: &str| s.folder_state("sample", &junk).messages.iter().any(|m| m.subject == subject);
+    // Block Zoe from the selection: her mail goes to Junk now, and as it comes.
+    let k = key_of(&s, "Storyboard review on Thursday");
+    s.run("list.select", &k).unwrap();
+    let r = s.run("junk.blockSender", &json!({})).unwrap();
+    assert_eq!(r["added"], json!(["zoe@studio.example"]));
+    assert!(junk_has(&mut s, "Storyboard review on Thursday"));
+    s.take_new_mail();
+    arrive(&mut s, "INBOX", 700, "ZOE@Studio.Example", "Again");
+    assert!(junk_has(&mut s, "Again") && !inbox_has(&mut s, "Again"), "an address matches whatever its case");
+    assert!(s.take_new_mail().is_empty(), "blocked mail isn't announced");
+    // A domain: every address at it, not its look-alikes.
+    s.run("junk.edit", &json!({"list": "blocked", "entry": "Spam.Example"})).unwrap();
+    arrive(&mut s, "INBOX", 701, "a@spam.example", "Offer");
+    arrive(&mut s, "INBOX", 702, "b@notspam.example", "Fine");
+    arrive(&mut s, "INBOX", 703, "c@spam.example.org", "Fine too");
+    assert!(junk_has(&mut s, "Offer") && inbox_has(&mut s, "Fine") && inbox_has(&mut s, "Fine too"));
+    // Safe wins: never blocking a@ lets just that address through.
+    s.run("junk.edit", &json!({"list": "safe", "entry": "<a@spam.example>"})).unwrap();
+    arrive(&mut s, "INBOX", 704, "a@spam.example", "Through");
+    arrive(&mut s, "INBOX", 705, "d@spam.example", "Still junk");
+    assert!(inbox_has(&mut s, "Through") && junk_has(&mut s, "Still junk"));
+    // A safe sender's mail filed in Junk by the server comes back to the Inbox: Junk's mark is
+    // set as soon as its folder is known, so the first change it sees is already an arrival
+    // (found against a real server: Junk empty at the first sync sent no change).
+    s.seen_uid.clear();
+    let folders = s.account("sample").unwrap().folders.clone();
+    s.apply(Event::Folders { account: "sample".into(), folders });
+    arrive(&mut s, &junk, 900, "a@spam.example", "Misfiled");
+    assert!(inbox_has(&mut s, "Misfiled") && !junk_has(&mut s, "Misfiled"));
+    // Never block from Junk: on the safe list, off the blocked one, and back to the Inbox.
+    s.run("folder.open", &json!({"account": "sample", "folder": junk})).unwrap();
+    let k = key_of(&s, "Again");
+    s.run("list.select", &k).unwrap();
+    s.run("junk.neverBlockSender", &json!({})).unwrap();
+    assert!(inbox_has(&mut s, "Again"));
+    assert!(s.prefs.safe_senders.contains("zoe@studio.example") && !s.prefs.blocked_senders.contains("zoe@studio.example"));
+    // Not junk, always trusting the domain's sender; the domain itself.
+    let k = key_of(&s, "Still junk");
+    s.run("list.select", &k).unwrap();
+    s.run("junk.neverBlockDomain", &json!({})).unwrap();
+    assert!(s.prefs.safe_senders.contains("@spam.example") && !s.prefs.blocked_senders.contains("@spam.example"));
+    assert!(inbox_has(&mut s, "Still junk"));
+    // Junk entries and params.
+    for bad in ["", "@", "nobody", "a@", "@-x.example", "x..example", "a@b@c.example", &"x".repeat(400)] {
+        assert!(s.run("junk.edit", &json!({"list": "blocked", "entry": bad})).is_err(), "{bad:?}");
+    }
+    assert!(s.run("junk.edit", &json!({"list": "nope", "entry": "a@b.example"})).is_err());
+    assert!(s.run("junk.edit", &json!({"entry": "a@b.example"})).is_err());
+    let r = s.run("junk.edit", &json!({"list": "safe", "entry": "a@spam.example", "on": false})).unwrap();
+    assert!(!r["safe"].as_array().unwrap().iter().any(|e| e == "a@spam.example"));
+    // The lists are kept with the settings.
+    let lists = s.run("junk.lists", &json!({})).unwrap();
+    assert!(lists["safe"].as_array().unwrap().iter().any(|e| e == "@spam.example"));
+    let back: crate::session::Prefs = serde_json::from_value(serde_json::to_value(&s.prefs).unwrap()).unwrap();
+    assert_eq!((back.safe_senders, back.blocked_senders), (s.prefs.safe_senders.clone(), s.prefs.blocked_senders.clone()));
+}
+
+/// Clean Up: in a conversation, a message a later reply quotes in full goes to Deleted Items
+/// (undoably); one that isn't, isn't downloaded, or is flagged, stays.
+#[test]
+fn clean_up_moves_only_what_a_reply_quotes() {
+    let mut s = sample_session("clean-up");
+    let trash = s.account("sample").and_then(|a| a.folder(FolderRole::Trash)).map(|f| f.path.clone()).unwrap();
+    let store = s.store.clone().unwrap();
+    let mut st = store.load_folder("sample", "INBOX").unwrap();
+    let template = st.messages[0].clone();
+    let thread = [
+        (801, "Frames for Thursday", "Can you send the frames?\r\n\r\nZoe", true),
+        (802, "Re: Frames for Thursday", "Sure.\r\n\r\n> Can you send the frames?\r\n>\r\n> Zoe", true),
+        (803, "Re: Frames for Thursday", "Thanks!\r\n\r\n> Sure.\r\n>\r\n>> Can you send the frames?\r\n>>\r\n>> Zoe", true),
+        // Another conversation: one not downloaded, and a flagged one.
+        (811, "Budget", "Numbers attached.", false),
+        (812, "Re: Budget", "Got them.\r\n> Numbers attached.", true),
+    ];
+    for (i, (uid, subject, body, downloaded)) in thread.iter().enumerate() {
+        let mut m = template.clone();
+        m.key.uid = *uid;
+        m.subject = subject.to_string();
+        m.message_id = format!("c{uid}@studio.example");
+        let parent = if *uid == 801 || *uid == 811 { None } else { Some(format!("c{}@studio.example", uid - 1)) };
+        m.in_reply_to = parent.clone().unwrap_or_default();
+        m.references = if *uid == 803 { vec!["c801@studio.example".into(), "c802@studio.example".into()] } else { parent.into_iter().collect() };
+        m.date = NOW - 1000 + i as i64;
+        m.flags.seen = true;
+        m.has_attachments = false;
+        st.messages.insert(0, m.clone());
+        if *downloaded {
+            let raw = format!(
+                "From: a@b.example\r\nSubject: {subject}\r\nMessage-ID: <c{uid}@studio.example>\r\nContent-Type: text/plain\r\n\r\n{body}\r\n"
+            );
+            store.write_body(&m.key, raw.as_bytes()).unwrap();
+        }
+    }
+    store.save_folder("sample", "INBOX", &st).unwrap();
+    s.apply(Event::FolderChanged { account: "sample".into(), folder: "INBOX".into() });
+    let in_trash = |s: &mut Session, uid_subject: &str| s.folder_state("sample", &trash).messages.iter().any(|m| m.message_id == uid_subject);
+    // The selection's conversation only.
+    s.run("folder.open", &json!({"account": "sample", "folder": "INBOX"})).unwrap();
+    let k = s.list.iter().find(|m| m.message_id == "c803@studio.example").map(|m| json!({"key": m.key.to_id()})).unwrap();
+    s.run("list.select", &k).unwrap();
+    assert_eq!(s.run("mail.cleanUp", &json!({})).unwrap()["moved"], 2);
+    assert!(in_trash(&mut s, "c801@studio.example") && in_trash(&mut s, "c802@studio.example") && !in_trash(&mut s, "c803@studio.example"));
+    // Undone: back.
+    s.run("edit.undo", &json!({})).unwrap();
+    assert!(!in_trash(&mut s, "c801@studio.example"));
+    // The folder: the budget thread's first isn't downloaded, so it stays; flag the first of
+    // the frames thread and only the reply in the middle goes.
+    let k = s.list.iter().find(|m| m.message_id == "c801@studio.example").map(|m| json!({"key": m.key.to_id()})).unwrap();
+    s.run("list.select", &k).unwrap();
+    s.run("mail.flag", &json!({})).unwrap();
+    let r = s.run("folder.cleanUp", &json!({})).unwrap();
+    assert_eq!(r["moved"], 1, "{r}");
+    assert!(in_trash(&mut s, "c802@studio.example") && !in_trash(&mut s, "c801@studio.example") && !in_trash(&mut s, "c811@studio.example"));
+    // Again: nothing more; Deleted Items isn't cleaned; bad params.
+    assert_eq!(s.run("folder.cleanUp", &json!({"account": "sample", "folder": "INBOX"})).unwrap()["moved"], 0);
+    assert_eq!(s.run("folder.cleanUp", &json!({"account": "sample", "folder": trash})).unwrap()["moved"], 0);
+    assert!(s.run("folder.cleanUp", &json!({"account": "sample", "folder": "Nope"})).is_err());
+    assert!(s.run("folder.cleanUp", &json!({"account": "nobody", "folder": "INBOX"})).is_err());
+}
+
+/// Search Folders: saved searches over every folder but Deleted Items and Junk, kept with the
+/// settings; renamed, changed, deleted (its mail stays); names and queries checked.
+#[test]
+fn search_folders_find_mail_everywhere_but_deleted_and_junk() {
+    let mut s = sample_session("search-folders");
+    let r = s.run("searchFolder.create", &json!({"name": "Unread mail", "query": "is:unread"})).unwrap();
+    let unread_everywhere: Vec<String> = s.list.iter().map(|m| m.subject.clone()).collect();
+    assert_eq!(r["messages"], unread_everywhere.len());
+    assert!(!unread_everywhere.is_empty());
+    assert_eq!(s.open_search_folder_name(), Some("Unread mail"));
+    // Junk's unread one isn't in it; the plain search finds it.
+    let junk = s.account("sample").and_then(|a| a.folder(FolderRole::Junk)).map(|f| f.path.clone()).unwrap();
+    let junk_unread = s.folder_state("sample", &junk).messages.iter().filter(|m| !m.flags.seen).count();
+    assert!(junk_unread > 0, "the sample's Junk has unread mail");
+    assert!(s.list.iter().all(|m| m.key.folder != junk));
+    s.run("search.run", &json!({"query": "is:unread"})).unwrap();
+    assert!(s.list.iter().any(|m| m.key.folder == junk), "a search of its own isn't the Search Folder");
+    assert_eq!(s.open_search_folder_name(), None);
+    // From certain people, any of them; larger than.
+    s.run("searchFolder.create", &json!({"name": "From Zoe or Ana", "query": "from:zoe,ana"})).unwrap();
+    let froms: Vec<String> = s.list.iter().map(|m| m.from.email.clone()).collect();
+    assert!(froms.iter().any(|f| f.starts_with("zoe")) && froms.iter().any(|f| f.starts_with("ana")), "{froms:?}");
+    assert!(froms.iter().all(|f| f.starts_with("zoe") || f.starts_with("ana")));
+    // Changed and renamed while open: shows what it finds now.
+    let r = s.run("searchFolder.edit", &json!({"name": "from zoe or ana", "newName": "Zoe", "query": "from:zoe"})).unwrap();
+    assert_eq!(r["name"], "Zoe");
+    assert!(s.list.iter().all(|m| m.from.email.starts_with("zoe")));
+    assert_eq!(s.open_search_folder_name(), Some("Zoe"));
+    // Checked: names unique whatever their case, a query that searches, limits.
+    for bad in [
+        json!({"name": "", "query": "is:unread"}),
+        json!({"name": "  ", "query": "is:unread"}),
+        json!({"name": "UNREAD MAIL", "query": "is:flagged"}),
+        json!({"name": "Nothing", "query": "   "}),
+        json!({"name": "x".repeat(101), "query": "is:unread"}),
+        json!({"name": "Long", "query": "a".repeat(1001)}),
+        json!({"name": "Ctl\u{7}", "query": "is:unread"}),
+        json!({"name": "No query"}),
+    ] {
+        assert!(s.run("searchFolder.create", &bad).is_err(), "{bad}");
+    }
+    assert!(s.run("searchFolder.edit", &json!({"name": "Zoe", "newName": "Unread mail"})).is_err(), "taken");
+    assert!(s.run("searchFolder.open", &json!({"name": "Nope"})).is_err());
+    assert!(s.run("searchFolder.delete", &json!({"name": "Nope"})).is_err());
+    // Deleted while open: the search goes, the mail stays.
+    let before = s.folder_state("sample", "INBOX").messages.len();
+    s.run("searchFolder.delete", &json!({"name": "zoe"})).unwrap();
+    assert!(s.search.is_none());
+    assert_eq!(s.folder_state("sample", "INBOX").messages.len(), before);
+    // Kept with the settings; capped.
+    let back: crate::session::Prefs = serde_json::from_value(serde_json::to_value(&s.prefs).unwrap()).unwrap();
+    assert_eq!(back.search_folders, s.prefs.search_folders);
+    for n in 0..200 {
+        let _ = s.run("searchFolder.create", &json!({"name": format!("F{n}"), "query": "is:flagged"}));
+    }
+    assert_eq!(s.prefs.search_folders.len(), crate::session::search_folders::SEARCH_FOLDERS_MAX);
+}
+
+/// Quick Steps: their marks, then their one move (undoable); by name, place or shortcut;
+/// checked as they're made; a category deleted since is passed over.
+#[test]
+fn quick_steps_mark_then_move_the_selection() {
+    let mut s = sample_session("quick-steps");
+    s.run("category.create", &json!({"name": "Done"})).unwrap();
+    let archive = s.account("sample").and_then(|a| a.folder(FolderRole::Archive)).map(|f| f.path.clone()).unwrap();
+    let r = s
+        .run(
+            "quickStep.create",
+            &json!({"name": "Done", "actions": [{"do": "moveToRole", "value": "archive"}, {"do": "markRead"}, {"do": "categorize", "value": "Done"}, {"do": "markRead"}]}),
+        )
+        .unwrap();
+    assert_eq!(r["index"], 0);
+    assert_eq!(s.prefs.quick_steps[0].actions.len(), 3, "the same action twice is done once");
+    s.run("quickStep.create", &json!({"name": "Flag it", "actions": [{"do": "flag"}, {"do": "pin"}]})).unwrap();
+    // Ctrl+Shift+1: the first, on Ana's unread message.
+    let k = key_of(&s, "Sound mix, version 3");
+    s.run("list.select", &k).unwrap();
+    let id = s.summary(&crate::parse_key(&k).unwrap()).unwrap().message_id.clone();
+    let by_key = crate::cmd::registry().all().iter().find(|c| c.shortcut == "Mod+Shift+1").map(|c| c.id);
+    assert_eq!(by_key, Some("quickStep.1"));
+    s.run("quickStep.1", &json!({})).unwrap();
+    let moved = s.folder_state("sample", &archive).messages.iter().find(|m| m.message_id == id).cloned().unwrap();
+    assert!(moved.flags.seen && !moved.flags.keywords.is_empty(), "read and categorized before it left: {:?}", moved.flags);
+    // Undone: back in the Inbox.
+    s.run("edit.undo", &json!({})).unwrap();
+    assert!(s.folder_state("sample", "INBOX").messages.iter().any(|m| m.message_id == id));
+    // By name: flagged and pinned, staying where it is.
+    let k = key_of(&s, "Character turnarounds");
+    s.run("list.select", &k).unwrap();
+    s.run("quickStep.run", &json!({"name": "flag IT"})).unwrap();
+    let m = s.folder_state("sample", "INBOX").messages.iter().find(|m| m.subject == "Character turnarounds").cloned().unwrap();
+    assert!(m.flags.flagged && m.flags.pinned());
+    // A category deleted since: the rest is still done.
+    s.run("category.delete", &json!({"name": "Done"})).unwrap();
+    let k = key_of(&s, "Open call: winter group show");
+    s.run("list.select", &k).unwrap();
+    s.run("quickStep.run", &json!({"index": 0})).unwrap();
+    assert!(s.folder_state("sample", &archive).messages.iter().any(|m| m.subject == "Open call: winter group show"));
+    // No such step; none selected.
+    assert!(s.run("quickStep.9", &json!({})).is_err());
+    s.selection.clear();
+    assert!(s.run("quickStep.1", &json!({})).is_err());
+    // Checked as made and edited.
+    for bad in [
+        json!({"name": "", "actions": [{"do": "flag"}]}),
+        json!({"name": "done", "actions": [{"do": "flag"}]}),
+        json!({"name": "Nothing", "actions": []}),
+        json!({"name": "No actions"}),
+        json!({"name": "Two moves", "actions": [{"do": "delete"}, {"do": "moveToRole", "value": "archive"}]}),
+        json!({"name": "Ghost", "actions": [{"do": "categorize", "value": "Nope"}]}),
+        json!({"name": "Nowhere", "actions": [{"do": "moveTo", "value": "No/Such"}]}),
+        json!({"name": "Odd", "actions": [{"do": "explode"}]}),
+        json!({"name": "Many", "actions": vec![json!({"do": "flag"}); 11]}),
+    ] {
+        assert!(s.run("quickStep.create", &bad).is_err(), "{bad}");
+    }
+    s.run("quickStep.edit", &json!({"name": "Flag it", "newName": "Flag", "actions": [{"do": "flag"}]})).unwrap();
+    assert!(s.run("quickStep.edit", &json!({"name": "Flag", "newName": "Done"})).is_err(), "taken");
+    s.run("quickStep.delete", &json!({"name": "flag"})).unwrap();
+    assert_eq!(s.prefs.quick_steps.len(), 1);
+    let back: crate::session::Prefs = serde_json::from_value(serde_json::to_value(&s.prefs).unwrap()).unwrap();
+    assert_eq!(back.quick_steps, s.prefs.quick_steps);
+}
+
+/// Several messages written at once, as Outlook keeps every New Email window: starting another
+/// sets the one being written aside (in a window of its own), never drops it; an empty one goes.
+#[test]
+fn new_mail_keeps_the_message_being_written() {
+    let mut s = sample_session("several-composes");
+    let first = s.run("mail.new", &json!({})).unwrap()["compose"].as_u64().unwrap();
+    // Nothing typed yet: a second New mail replaces it.
+    let second = s.run("mail.new", &json!({})).unwrap()["compose"].as_u64().unwrap();
+    assert!(s.composes.is_empty(), "an empty message isn't kept");
+    assert_ne!(first, second);
+    s.run("compose.update", &json!({"to": "ana@soundlab.example", "subject": "One"})).unwrap();
+    let third = s.run("mail.new", &json!({})).unwrap()["compose"].as_u64().unwrap();
+    s.run("compose.update", &json!({"subject": "Two", "body": "Second text"})).unwrap();
+    // A reply too: both written ones stay.
+    let k = key_of(&s, "Sound mix, version 3");
+    s.run("list.open", &k).unwrap();
+    s.run("mail.reply", &json!({})).unwrap();
+    let list = s.run("compose.list", &json!({})).unwrap();
+    let subjects: Vec<String> = list.as_array().unwrap().iter().map(|c| c["subject"].as_str().unwrap().to_string()).collect();
+    assert_eq!(subjects.len(), 3, "{subjects:?}");
+    assert!(subjects.contains(&"One".into()) && subjects.contains(&"Two".into()));
+    assert!(s.composes.iter().all(|c| c.window), "set aside in windows of their own");
+    // Back to the first: edits go to it; the reply is set aside in turn.
+    s.run("compose.activate", &json!({"id": second})).unwrap();
+    assert_eq!(s.compose.as_ref().unwrap().subject, "One");
+    s.run("compose.update", &json!({"subject": "One, changed"})).unwrap();
+    assert!(s.composes.iter().any(|c| c.id == third && c.subject == "Two"));
+    // Closed (kept in Drafts): the others stay.
+    s.run("compose.close", &json!({})).unwrap();
+    assert_eq!(s.all_composes().count(), 2);
+    assert!(s.run("compose.activate", &json!({"id": second})).is_err(), "closed");
+    assert!(s.run("compose.activate", &json!({})).is_err());
+    assert!(s.activate_compose(third));
+    assert_eq!(s.compose.as_ref().unwrap().subject, "Two");
+}
+
+/// Closing with messages written: each one with something in it is kept as a draft (on this
+/// computer at once; a server account's goes to Drafts at the next connection).
+#[test]
+fn closing_keeps_every_message_being_written() {
+    let mut s = sample_session("keep-on-close");
+    s.run("mail.new", &json!({})).unwrap();
+    s.run("compose.update", &json!({"subject": "Kept one"})).unwrap();
+    s.run("mail.new", &json!({})).unwrap();
+    s.run("compose.update", &json!({"subject": "Kept two"})).unwrap();
+    s.run("mail.new", &json!({})).unwrap(); // nothing written in this one
+    assert_eq!(s.run("compose.keepAll", &json!({})).unwrap()["kept"], 2);
+    let drafts = s.account("sample").and_then(|a| a.folder(FolderRole::Drafts)).map(|f| f.path.clone()).unwrap();
+    let subjects: Vec<String> = s.folder_state("sample", &drafts).messages.iter().map(|m| m.subject.clone()).collect();
+    assert!(subjects.contains(&"Kept one".into()) && subjects.contains(&"Kept two".into()), "{subjects:?}");
+    // A server account's: handed to the network side, kept before Quatrelle goes.
+    s.accounts[0].config.imap.host = "imap.studio.example".into();
+    s.take_jobs();
+    s.activate_compose(s.composes[0].id);
+    s.keep_drafts();
+    assert!(s.take_jobs().iter().any(|j| matches!(j, quatrelle_model::Job::KeepDraft { .. })));
 }

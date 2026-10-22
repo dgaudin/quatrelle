@@ -1005,7 +1005,6 @@ month	May	5월
 	Online only: {email}	온라인 전용: {email}
 	New message	새 메시지
 	Open Quatrelle to read it.	Quatrelle를 열어 읽으세요.
-	Its mail is read from the server and held in memory while Quatrelle runs; nothing of it is written to this computer. Each message downloads when you open it. Mail waiting to be sent, changes made while offline, and calendar items, contacts and notes kept only in Quatrelle are lost when it closes.	메일은 서버에서 읽어 Quatrelle가 실행되는 동안 메모리에만 보관되며, 이 컴퓨터에는 아무것도 기록되지 않습니다. 각 메시지는 열 때 다운로드됩니다. 보내기를 기다리는 메일, 오프라인 중 변경 내용, Quatrelle에만 보관된 일정 항목·연락처·메모는 닫으면 사라집니다.
 	Portable: everything is kept in QuatrelleData beside Quatrelle, and passwords only until it closes.	포터블: 모든 것이 Quatrelle 옆의 QuatrelleData에 보관되며, 암호는 닫을 때까지만 보관됩니다.
 	When it starts	시작할 때
 	1 minute before	1분 전
@@ -1032,3 +1031,94 @@ month	May	5월
 	{n} more on the server	서버에 {n}개 더
 	Changes not yet on the server: {n}	아직 서버에 반영되지 않은 변경: {n}
 	Messages waiting to be sent: {n}	보내기 대기 중인 메시지: {n}
+	Mail older than what's kept here is only on the server.	여기에 보관된 것보다 오래된 메일은 서버에만 있습니다.
+	Search the server	서버 검색
+	Searching the server…	서버를 검색하는 중…
+	The server found {n}	서버에서 {n}개를 찾았습니다
+	{day} {month}	{month} {day}일
+	Restart to update	다시 시작하여 업데이트
+	Quatrelle {version} is downloaded. It installs when you close Quatrelle.	Quatrelle {version}이(가) 다운로드되었습니다. Quatrelle를 닫으면 설치됩니다.
+	1 minute	1분
+	{n} minutes	{n}분
+	1 hour	1시간
+	{n} hours	{n}시간
+	1 day	1일
+	{n} days	{n}일
+	1 week	1주
+	{n} weeks	{n}주
+	0 minutes before start	시작 0분 전
+	1 Reminder	미리 알림 1개
+	{n} Reminders	미리 알림 {n}개
+	Click Snooze to be reminded again in:	다시 알림을 클릭하면 다음 시간 후에 다시 알립니다:
+	Dismiss	해제
+	Dismiss All	모두 해제
+	Open Item	항목 열기
+	Overdue	기한 지남
+	Now	지금
+	In {n} minutes	{n}분 후
+	In {n} hours	{n}시간 후
+	In {n} days	{n}일 후
+	Junk	정크 메일
+	Junk options	정크 메일 옵션
+	Junk Email options…	정크 메일 옵션…
+	Block sender	보낸 사람 차단
+	Never block sender	보낸 사람 차단 안 함
+	Never block sender's domain	보낸 사람 도메인 차단 안 함
+	Their mail goes to Junk Email from now on	이제부터 이 사람의 메일은 정크 메일로 이동합니다
+	Their mail is never treated as junk	이 사람의 메일은 정크로 처리되지 않습니다
+	Mail from anyone at their domain is never treated as junk	이 도메인의 모든 사람이 보낸 메일은 정크로 처리되지 않습니다
+	Blocked senders	수신 거부 목록
+	Safe senders	수신 허용 목록
+	Mail from these addresses and domains goes to Junk Email as it arrives.	이 주소와 도메인에서 온 메일은 도착 시 정크 메일로 이동합니다.
+	Mail from these addresses and domains is never treated as junk, and its pictures load.	이 주소와 도메인에서 온 메일은 정크로 처리되지 않으며 그림이 로드됩니다.
+	name@example.com or @example.com	name@example.com 또는 @example.com
+	And {n} more	외 {n}개
+	Clean up conversation	대화 정리
+	Clean up folder	폴더 정리
+	Messages quoted in full by a later reply go to Deleted Items	이후 회신에 전체가 인용된 메시지는 지운 항목으로 이동합니다
+	No conversations to clean up	정리할 대화가 없습니다
+	Nothing to clean up: no message is quoted in full by a later reply	정리할 항목이 없습니다. 이후 회신에 전체가 인용된 메시지가 없습니다
+	Search Folders	검색 폴더
+	New Search Folder…	새 검색 폴더…
+	New Search Folder	새 검색 폴더
+	Edit Search Folder	검색 폴더 편집
+	Customize this Search Folder…	이 검색 폴더 사용자 지정…
+	Delete Search Folder	검색 폴더 삭제
+	Shows the mail it finds in every folder, except Deleted Items and Junk Email.	지운 항목과 정크 메일을 제외한 모든 폴더에서 찾은 메일을 표시합니다.
+	Show	표시
+	From these people (addresses or names, separated by commas)	보낸 사람(주소 또는 이름, 쉼표로 구분)
+	Search for	검색할 내용
+	Unread mail	읽지 않은 메일
+	Mail flagged for follow up	후속 작업 플래그가 지정된 메일
+	Important mail	중요한 메일
+	Categorized mail	범주가 지정된 메일
+	Mail with attachments	첨부 파일이 있는 메일
+	Large mail (over 100 KB)	큰 메일(100KB 초과)
+	Pinned mail	고정된 메일
+	Mail from specific people	특정 사용자가 보낸 메일
+	Quick steps	빠른 단계
+	No Quick Steps yet.	아직 빠른 단계가 없습니다.
+	New Quick Step…	새 빠른 단계…
+	New Quick Step	새 빠른 단계
+	Edit a Quick Step	빠른 단계 편집
+	Edit Quick Step	빠른 단계 편집
+	Done to the selected mail in one click; the first nine also with Ctrl+Shift+1 to 9.	선택한 메일에 한 번의 클릭으로 적용됩니다. 처음 9개는 Ctrl+Shift+1~9로도 실행할 수 있습니다.
+	Done	완료
+	Then move to	그런 다음 이동할 위치
+	Don't move	이동 안 함
+	Delete this Quick Step	이 빠른 단계 삭제
+	Date & time	날짜 및 시간
+	Word count	단어 개수
+	Words	단어 수
+	Characters (no spaces)	문자 수(공백 제외)
+	Characters (with spaces)	문자 수(공백 포함)
+	Paragraphs	단락 수
+	Lines	줄 수
+	Save the message you're writing?	작성 중인 메시지를 저장할까요?
+	Save the messages you're writing?	작성 중인 메시지를 저장할까요?
+	It's kept in Drafts if you save it.	저장하면 임시 보관함에 보관됩니다.
+	{n} messages are being written. They're kept in Drafts if you save them.	메시지 {n}개를 작성 중입니다. 저장하면 임시 보관함에 보관됩니다.
+	Don't save	저장 안 함
+	Also being written:	작성 중인 다른 메시지:
+	Play animations	애니메이션 재생
+	Hovers, selections and panes ease into place; off, everything changes at once	마우스 오버, 선택, 창이 부드럽게 바뀝니다. 끄면 모든 것이 즉시 바뀝니다

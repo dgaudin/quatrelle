@@ -21,9 +21,12 @@ use serde_json::Value;
 use crate::{CmdError, CmdResult, Registry};
 
 pub mod invite;
+pub mod junk;
 mod mailboxes;
 mod organize;
 pub mod pim;
+pub mod quick_steps;
+pub mod search_folders;
 mod vote;
 
 /// One account and what the session knows about it.
@@ -275,6 +278,19 @@ pub enum ReadInPane {
     Left,
 }
 
+/// A search asked of the servers ([`Session::search_server`]).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ServerSearch {
+    pub query: String,
+    /// Accounts still searching.
+    pub pending: usize,
+    /// What the servers found (in their folders' lists now), shown whether or not the words are
+    /// in what's downloaded here.
+    pub found: HashSet<MessageKey>,
+    /// Why an account couldn't search.
+    pub errors: Vec<String>,
+}
+
 /// A mailbox in the folder pane: an account, or a shared mailbox one opens ([`Session::pane_sections`]).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PaneSection {
@@ -340,6 +356,13 @@ pub struct Prefs {
     pub show_html: bool,
     /// Senders whose pictures from the web load without asking (lower-case addresses).
     pub trusted_senders: BTreeSet<String>,
+    /// Junk Email: senders (a lower-case address, or `@domain`) whose mail goes to Junk as it
+    /// arrives ([`junk`]).
+    #[serde(skip_serializing_if = "BTreeSet::is_empty")]
+    pub blocked_senders: BTreeSet<String>,
+    /// Junk Email: senders whose mail is never junk (taken back out of Junk; pictures load).
+    #[serde(skip_serializing_if = "BTreeSet::is_empty")]
+    pub safe_senders: BTreeSet<String>,
     /// Folders the user pinned to Favorites, in order. `None` until the user changes them: the
     /// Inbox, Sent Items and Drafts of a single account are shown.
     pub favorites: Option<Vec<FolderRef>>,
@@ -374,6 +397,19 @@ pub struct Prefs {
     /// "Check spelling as you type").
     #[serde(default = "yes")]
     pub spell_check: bool,
+    /// Quick Steps: actions done to the selection in one go ([`quick_steps`]).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub quick_steps: Vec<quick_steps::QuickStep>,
+    /// Play animations: hovers and selections easing, panes sliding, notices sliding in (off:
+    /// everything changes at once).
+    pub animations: bool,
+    /// Search Folders: saved searches shown as folders ([`search_folders`]).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub search_folders: Vec<search_folders::SearchFolder>,
+    /// Reminders answered ([`Session::due_reminders`]), by occurrence
+    /// (`<account>|<uid>|<occurrence>`): 0 dismissed, else snoozed until that Unix time.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub reminders: BTreeMap<String, i64>,
 }
 
 /// A setting that was on before it existed.
@@ -537,12 +573,18 @@ impl Default for Prefs {
             focus_overrides: std::collections::BTreeMap::new(),
             show_html: true,
             trusted_senders: BTreeSet::new(),
+            blocked_senders: BTreeSet::new(),
+            safe_senders: BTreeSet::new(),
             new_mail_window: true,
             arrange: Arrange::Date,
             reverse_sort: false,
             work_offline: false,
             ignored: BTreeSet::new(),
             follow_up: BTreeMap::new(),
+            reminders: BTreeMap::new(),
+            search_folders: Vec::new(),
+            animations: true,
+            quick_steps: Vec::new(),
             folder_pane_minimized: false,
             collapsed: BTreeSet::new(),
             spelling: Vec::new(),
@@ -776,6 +818,13 @@ pub struct Session {
     /// The query (and scope) the server was asked about: once per search, however many slices
     /// the local index takes.
     server_asked: Option<(String, SearchScope)>,
+    /// The Search Folder last opened ([`Session::open_search_folder_name`]: while the search is
+    /// still its own).
+    pub search_folder: Option<String>,
+    /// The search box's query asked of the servers at the user's request (Search the server, at
+    /// the end of the results: mail past what's kept here), beyond what `ask_server`
+    /// asks on its own.
+    pub server_search: Option<ServerSearch>,
     /// Outlook's "Download all": the messages still to bring onto this computer.
     download_all: Option<DownloadAll>,
     /// A folder asked to show more of its older mail than it keeps (`folder.more`), until the
@@ -799,7 +848,12 @@ pub struct Session {
     pub reading: Option<Reading>,
     /// Messages opened in their own windows (double-click), oldest first.
     pub windows: Vec<Reading>,
+    /// The message being written that commands act on (`compose.*`).
     pub compose: Option<Compose>,
+    /// Other messages being written, each in a window of its own (Outlook keeps every one
+    /// open): starting another sets the current one aside here rather than losing it.
+    /// [`Session::activate_compose`] brings one back to act on.
+    pub composes: Vec<Compose>,
     pub prefs: Prefs,
     pub clock: Clock,
     pub notices: Vec<Notice>,
@@ -827,7 +881,7 @@ pub struct Session {
     /// Built on first use from the cached mail; dropped when mail arrives.
     contacts: Option<ContactBook>,
     /// The highest UID seen per Inbox, so only mail that arrives later is announced.
-    seen_uid: HashMap<(String, String), u32>,
+    pub(crate) seen_uid: HashMap<(String, String), u32>,
     /// New mail to announce (desktop notifications), oldest first.
     pub new_mail: Vec<Summary>,
     /// Inbox rules, run on mail as it arrives (`rules.json`).
@@ -904,6 +958,8 @@ impl Session {
             search_budget: usize::MAX,
             found: None,
             server_asked: None,
+            search_folder: None,
+            server_search: None,
             download_all: None,
             showing_more: None,
             ask_password: Vec::new(),
@@ -917,6 +973,7 @@ impl Session {
             reading: None,
             windows: Vec::new(),
             compose: None,
+            composes: Vec::new(),
             prefs: Prefs::default(),
             clock,
             notices: Vec::new(),
@@ -1017,6 +1074,9 @@ impl Session {
             s.accounts.iter().filter_map(|a| a.folder(FolderRole::Inbox).map(|f| (a.config.id.clone(), f.path.clone()))).collect();
         for (a, f) in inboxes {
             s.note_new_mail(&a, &f);
+        }
+        for id in s.accounts.iter().map(|a| a.config.id.clone()).collect::<Vec<_>>() {
+            s.mark_junk(&id);
         }
         s.refresh_outbox();
         s.load_pim();
@@ -1213,7 +1273,8 @@ impl Session {
     /// Remember what an Inbox holds; unread mail above the last high-water mark is new. The first
     /// look at a folder only sets the mark, so a first sync doesn't announce the backlog.
     fn note_new_mail(&mut self, account: &str, folder: &str) {
-        if self.folder(account, folder).is_none_or(|f| f.role != FolderRole::Inbox) {
+        let role = self.folder(account, folder).map(|f| f.role);
+        if !matches!(role, Some(FolderRole::Inbox | FolderRole::Junk)) {
             return;
         }
         let st = self.folder_state(account, folder);
@@ -1226,9 +1287,16 @@ impl Session {
             None => Vec::new(),
         };
         self.seen_uid.insert(k, max);
-        // Replies in ignored conversations go to Deleted Items, then rules; what they file away
-        // or mark read isn't announced.
-        let mut quiet = self.ignore_arrived(&arrived);
+        // Junk from safe senders goes back to the Inbox (and is seen arriving there).
+        if role == Some(FolderRole::Junk) {
+            self.rescue_arrived(&arrived);
+            return;
+        }
+        // Blocked senders' mail goes to Junk, replies in ignored conversations to Deleted Items,
+        // then rules; what they file away or mark read isn't announced.
+        let mut quiet = self.block_arrived(&arrived);
+        let rest: Vec<Summary> = arrived.iter().filter(|m| !quiet.contains(&m.key)).cloned().collect();
+        quiet.extend(self.ignore_arrived(&rest));
         let rest: Vec<Summary> = arrived.iter().filter(|m| !quiet.contains(&m.key)).cloned().collect();
         quiet.extend(self.run_rules(&rest));
         // Mail older than a day (a resync after a long time away) isn't "new" any more.
@@ -1239,6 +1307,16 @@ impl Session {
             // A burst (a first sync, a long time offline) is summed up by the UI; keep it bounded.
             let excess = self.new_mail.len().saturating_sub(50);
             self.new_mail.drain(..excess);
+        }
+    }
+
+    /// Junk's high-water mark, from what's kept, as soon as the folder is known: what the server
+    /// files there after is seen arriving (a safe sender's goes back to the Inbox), even when the
+    /// folder was empty at the first sync and so never changed until then.
+    fn mark_junk(&mut self, account: &str) {
+        let Some(junk) = self.account(account).and_then(|a| a.folder(FolderRole::Junk)).map(|f| f.path.clone()) else { return };
+        if !self.seen_uid.contains_key(&(account.to_string(), junk.clone())) {
+            self.note_new_mail(account, &junk);
         }
     }
 
@@ -1261,7 +1339,11 @@ impl Session {
     /// Whether anything was written in the message being written (more than its signature):
     /// closing it then asks whether to keep it.
     pub fn compose_written(&self) -> bool {
-        let Some(c) = &self.compose else { return false };
+        self.compose.as_ref().is_some_and(|c| self.written(c))
+    }
+
+    /// Whether anything was written in `c` (beyond its signature).
+    pub fn written(&self, c: &Compose) -> bool {
         let signature = self.signature(&c.account).trim().to_string();
         let body = c.body.trim();
         !(c.to.trim().is_empty()
@@ -1338,7 +1420,21 @@ impl Session {
     /// Rebuild the list from the view, search and filter, keeping the selection where possible.
     pub fn refresh_list(&mut self) {
         let mut list: Vec<Summary> = if let Some((q, scope)) = self.search.clone() {
-            self.search_results(&q, scope)
+            let mut found = self.search_results(&q, scope);
+            // What the servers found: its words may be in mail not downloaded here.
+            let hits: Vec<MessageKey> = self.server_search.iter().filter(|ss| ss.query == q).flat_map(|ss| ss.found.iter().cloned()).collect();
+            let have: HashSet<MessageKey> = found.iter().map(|m| m.key.clone()).collect();
+            for key in hits.into_iter().filter(|k| !have.contains(k)) {
+                if let Some(m) = self.folder_state(&key.account, &key.folder).messages.iter().find(|m| m.key.uid == key.uid).cloned() {
+                    found.push(m);
+                }
+            }
+            // A Search Folder leaves out Deleted Items and Junk, as Outlook's.
+            if self.open_search_folder_name().is_some() {
+                found.retain(|m| self.folder(&m.key.account, &m.key.folder).is_none_or(|f| !matches!(f.role, FolderRole::Trash | FolderRole::Junk)));
+            }
+            sort_newest_first(&mut found);
+            found
         } else if self.view == View::Outbox {
             self.outbox_summaries()
         } else {
@@ -1681,7 +1777,7 @@ impl Session {
     pub fn pictures_allowed(&self) -> bool {
         let Some(r) = &self.reading else { return false };
         let sender = r.parsed.as_ref().map(|p| p.from.email.trim().to_ascii_lowercase()).unwrap_or_default();
-        self.pictures_for.contains(&r.key) || (!sender.is_empty() && self.prefs.trusted_senders.contains(&sender))
+        self.pictures_for.contains(&r.key) || (!sender.is_empty() && (self.prefs.trusted_senders.contains(&sender) || self.sender_safe(&sender)))
     }
 
     /// Ask the network layer for the open message's pictures, when allowed.
@@ -2697,25 +2793,44 @@ impl Session {
 
     /// Search every folder or the folder open now.
     pub fn run_search(&mut self, query: &str, scope: SearchScope) -> usize {
-        self.search_now(query, scope, usize::MAX)
+        self.search_now(query, scope, usize::MAX, None)
     }
 
     /// Search, adding at most `budget` messages to the index this call (`0`: no limit). A caller
     /// that draws a frame between calls (the window) keeps the interface responsive on a big
     /// mailbox; [`Session::search_pending`] says whether more is left to index.
     pub fn run_search_budgeted(&mut self, query: &str, scope: SearchScope, budget: usize) -> usize {
-        self.search_now(query, scope, if budget == 0 { usize::MAX } else { budget })
+        // A whole search asked for at once is a search of its own, never a Search Folder's (the
+        // window's slices of one search carry it on: they keep it).
+        if budget == 0 {
+            self.search_folder = None;
+        }
+        self.search_now(query, scope, if budget == 0 { usize::MAX } else { budget }, None)
     }
 
-    fn search_now(&mut self, query: &str, scope: SearchScope, budget: usize) -> usize {
+    /// A search, or (`folder`) a Search Folder's: a search typed in is never one, whatever it
+    /// asks.
+    pub(crate) fn search_as(&mut self, query: &str, scope: SearchScope, folder: Option<String>) -> usize {
+        self.search_now(query, scope, usize::MAX, folder)
+    }
+
+    fn search_now(&mut self, query: &str, scope: SearchScope, budget: usize, folder: Option<String>) -> usize {
         let q = query.trim();
         // Carrying the same search on (a slice more of the index) leaves the list's selection,
         // focus and the open message as they are; a new query starts them over.
         let same = self.search.as_ref().is_some_and(|(t, s)| t == q && *s == scope);
         self.search = if q.is_empty() { None } else { Some((q.to_string(), scope)) };
+        // Carrying a Search Folder's search on (a slice more of the index) keeps it its own; a
+        // new search, or one typed in, is never one.
+        if folder.is_some() || !same {
+            self.search_folder = folder;
+        }
         self.search_budget = budget;
         if q.is_empty() {
             self.search_pending = false;
+        }
+        if self.server_search.as_ref().is_some_and(|ss| ss.query != q) {
+            self.server_search = None;
         }
         if !same {
             self.selection.clear();
@@ -2981,6 +3096,37 @@ impl Session {
             .unwrap_or_default()
     }
 
+    /// Start writing `c`: the message being written, if any, is set aside in a window of its
+    /// own ([`Session::composes`]), never lost; one that's empty (nothing typed) goes.
+    pub fn open_compose(&mut self, c: Compose) {
+        if let Some(mut old) = self.compose.take()
+            && (self.written(&old) || old.sending)
+        {
+            old.window = true;
+            self.composes.push(old);
+        }
+        self.compose = Some(c);
+    }
+
+    /// Act on message `id` (one set aside comes back; the current one is set aside in turn).
+    /// False when there's no such message.
+    pub fn activate_compose(&mut self, id: u64) -> bool {
+        if self.compose.as_ref().is_some_and(|c| c.id == id) {
+            return true;
+        }
+        let Some(at) = self.composes.iter().position(|c| c.id == id) else { return false };
+        let c = self.composes.remove(at);
+        if let Some(old) = self.compose.replace(c) {
+            self.composes.insert(at, old);
+        }
+        true
+    }
+
+    /// Every message being written: the current one, then those set aside.
+    pub fn all_composes(&self) -> impl Iterator<Item = &Compose> {
+        self.compose.iter().chain(self.composes.iter())
+    }
+
     pub fn new_compose(&mut self, account: Option<&str>) -> Result<&mut Compose, CmdError> {
         let account = match account {
             Some(a) => self.account(a).map(|a| a.config.id.clone()),
@@ -2993,7 +3139,7 @@ impl Session {
         let window = self.prefs.new_mail_window;
         let signature = if sig.trim().is_empty() { String::new() } else { signature_block(&sig) };
         let styles = mime::rich::Styles::plain(&body);
-        self.compose = Some(Compose { id, account, body, styles, window, signature, ..Default::default() });
+        self.open_compose(Compose { id, account, body, styles, window, signature, ..Default::default() });
         self.style_signature();
         self.compose.as_mut().ok_or_else(|| CmdError::Failed("compose".into()))
     }
@@ -3015,7 +3161,7 @@ impl Session {
                 }
             }
         }
-        self.compose = Some(Compose {
+        self.open_compose(Compose {
             id,
             account,
             signature: if sig.trim().is_empty() { String::new() } else { signature_block(&sig) },
@@ -3168,12 +3314,55 @@ impl Session {
         if self.compose.as_ref().is_some_and(|x| x.id == c.id) {
             self.compose = None;
         }
+        self.composes.retain(|x| x.id != c.id);
         self.notice("Message sent", false);
     }
 
     /// Save the message being written to Drafts.
     pub fn save_draft(&mut self) -> CmdResult {
         let c = self.compose.clone().ok_or_else(|| CmdError::Disabled("nothing to save".into()))?;
+        let (raw, folder) = self.draft_bytes(&c)?;
+        if self.account(&c.account).is_none_or(AccountState::is_local) {
+            if let Some(old) = &c.draft {
+                self.apply_op(&c.account.clone(), Op::Expunge { keys: vec![old.clone()] });
+            }
+            let key = self.file_locally(&c.account, &folder, &raw, false);
+            if let Some(cm) = self.compose.as_mut() {
+                cm.draft = key;
+            }
+        } else {
+            self.jobs.push(Job::SaveDraft { account: c.account.clone(), raw, folder, replaces: c.draft.clone() });
+            if let Some(cm) = self.compose.as_mut() {
+                // The server assigns the new copy's UID; the old one is replaced by the worker.
+                cm.draft = None;
+            }
+        }
+        self.notice("Draft saved", false);
+        Ok(serde_json::json!({ "saved": c.id }))
+    }
+
+    /// Every message being written with something in it, kept as a draft as Quatrelle closes:
+    /// on this computer at once, and in Drafts on the server at the next connection. How many.
+    pub fn keep_drafts(&mut self) -> usize {
+        let written: Vec<Compose> = self.all_composes().filter(|c| self.written(c) && !c.sending).cloned().collect();
+        let mut kept = 0;
+        for c in written {
+            let Ok((raw, folder)) = self.draft_bytes(&c) else { continue };
+            if self.account(&c.account).is_none_or(AccountState::is_local) {
+                if let Some(old) = &c.draft {
+                    self.apply_op(&c.account.clone(), Op::Expunge { keys: vec![old.clone()] });
+                }
+                self.file_locally(&c.account, &folder, &raw, false);
+            } else {
+                self.jobs.push(Job::KeepDraft { account: c.account.clone(), raw, folder, replaces: c.draft.clone() });
+            }
+            kept += 1;
+        }
+        kept
+    }
+
+    /// A message as a draft's source, and the Drafts folder it goes in.
+    fn draft_bytes(&mut self, c: &Compose) -> Result<(Vec<u8>, String), CmdError> {
         // Drafts may hold unfinished addresses: keep only the valid ones.
         let lenient = |s: &str| s.split([',', ';']).filter_map(|p| addr::parse_list(p).ok()).flatten().collect::<Vec<_>>();
         let (body, html, inline) = c.bodies();
@@ -3198,24 +3387,8 @@ impl Session {
             .and_then(|a| a.folder(FolderRole::Drafts))
             .map(|f| f.path.clone())
             .ok_or_else(|| CmdError::Failed("this account has no Drafts folder".into()))?;
-        let (raw, _) = self.compose_bytes(&c, &d)?;
-        if self.account(&c.account).is_none_or(AccountState::is_local) {
-            if let Some(old) = &c.draft {
-                self.apply_op(&c.account.clone(), Op::Expunge { keys: vec![old.clone()] });
-            }
-            let key = self.file_locally(&c.account, &folder, &raw, false);
-            if let Some(cm) = self.compose.as_mut() {
-                cm.draft = key;
-            }
-        } else {
-            self.jobs.push(Job::SaveDraft { account: c.account.clone(), raw, folder, replaces: c.draft.clone() });
-            if let Some(cm) = self.compose.as_mut() {
-                // The server assigns the new copy's UID; the old one is replaced by the worker.
-                cm.draft = None;
-            }
-        }
-        self.notice("Draft saved", false);
-        Ok(serde_json::json!({ "saved": c.id }))
+        let (raw, _) = self.compose_bytes(c, &d)?;
+        Ok((raw, folder))
     }
 
     /// File a message in a local account's folder; returns its key.
@@ -3372,7 +3545,7 @@ impl Session {
         let shown: Vec<String> = p.to.iter().chain(&p.cc).map(|a| a.email.to_ascii_lowercase()).collect();
         let bcc: Vec<String> = item.recipients.iter().filter(|r| !shown.contains(&r.to_ascii_lowercase())).cloned().collect();
         let id = self.fresh_id();
-        self.compose = Some(Compose {
+        self.open_compose(Compose {
             id,
             account: account.clone(),
             to: addr::format_field(&p.to),
@@ -3667,6 +3840,7 @@ impl Session {
         if self.compose.as_ref().is_some_and(|c| c.account == id) {
             self.compose = None;
         }
+        self.composes.retain(|c| c.account != id);
         let view = self.default_view();
         self.open_view(view);
         Ok(serde_json::json!({ "removed": id, "dataFile": kept.map(|f| f.display().to_string()) }))
@@ -3729,6 +3903,34 @@ impl Session {
         }
         self.open_view(View::Folder { account: new.clone(), folder: "INBOX".into() });
         Ok(serde_json::json!({ "account": new, "graph": true }))
+    }
+
+    /// Ask the servers for the search box's query (issue #4: mail past what's kept here): the
+    /// folder on view, or every folder of every account with a server.
+    pub fn search_server(&mut self) -> CmdResult {
+        let (q, scope) = self.search.clone().ok_or_else(|| CmdError::Disabled("search for something first".into()))?;
+        let mut by_account: Vec<(String, Vec<String>)> = Vec::new();
+        let folders: Vec<(String, String)> = match scope {
+            SearchScope::Current => self.view_folders(),
+            SearchScope::All => self.accounts.iter().flat_map(|a| a.folders.iter().map(|f| (a.config.id.clone(), f.path.clone()))).collect(),
+        };
+        for (a, f) in folders {
+            if self.account(&a).is_none_or(|x| x.is_local() || x.config.pop.is_some()) {
+                continue;
+            }
+            match by_account.iter_mut().find(|(x, _)| *x == a) {
+                Some((_, v)) => v.push(f),
+                None => by_account.push((a, vec![f])),
+            }
+        }
+        if by_account.is_empty() {
+            return Err(CmdError::Disabled("no account here has its mail on a server".into()));
+        }
+        self.server_search = Some(ServerSearch { query: q.clone(), pending: by_account.len(), ..Default::default() });
+        for (account, folders) in by_account {
+            self.jobs.push(Job::SearchServer { account, folders, query: q.clone() });
+        }
+        Ok(serde_json::json!({ "query": q, "searching": true }))
     }
 
     /// Ask for Quatrelle's releases (File › About › Check for updates).
@@ -3903,6 +4105,7 @@ impl Session {
                 } else if first {
                     self.refresh_list();
                 }
+                self.mark_junk(&account);
                 self.index = None;
             }
             Event::FolderChanged { account, folder } => {
@@ -3924,6 +4127,19 @@ impl Session {
                     if let Some(r) = self.reading.as_mut() {
                         r.thread = thread;
                     }
+                }
+            }
+            Event::ServerSearched { account, query, keys, error } => {
+                if let Some(ss) = self.server_search.as_mut().filter(|ss| ss.query == query) {
+                    ss.pending = ss.pending.saturating_sub(1);
+                    ss.found.extend(keys);
+                    if let Some(e) = error {
+                        let who = self.accounts.iter().find(|a| a.config.id == account).map(|a| a.config.email.clone()).unwrap_or(account);
+                        if let Some(ss) = self.server_search.as_mut() {
+                            ss.errors.push(format!("{who}: {e}"));
+                        }
+                    }
+                    self.refresh_list();
                 }
             }
             Event::DavSynced { account, sync } => self.apply_dav(&account, &sync),

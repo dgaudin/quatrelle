@@ -1002,7 +1002,6 @@ month	May	mei
 	Online only: {email}	Alleen online: {email}
 	New message	Nieuw bericht
 	Open Quatrelle to read it.	Open Quatrelle om het te lezen.
-	Its mail is read from the server and held in memory while Quatrelle runs; nothing of it is written to this computer. Each message downloads when you open it. Mail waiting to be sent, changes made while offline, and calendar items, contacts and notes kept only in Quatrelle are lost when it closes.	De e-mail wordt van de server gelezen en in het geheugen gehouden zolang Quatrelle draait; er wordt niets op deze computer geschreven. Elk bericht wordt gedownload wanneer u het opent. E-mail die nog moet worden verzonden, offline gemaakte wijzigingen en agenda-items, contactpersonen en notities die alleen in Quatrelle staan, gaan verloren bij het sluiten.
 	Portable: everything is kept in QuatrelleData beside Quatrelle, and passwords only until it closes.	Draagbaar: alles wordt bewaard in QuatrelleData naast Quatrelle, en wachtwoorden alleen tot het wordt gesloten.
 	When it starts	Bij het begin
 	1 minute before	1 minuut ervoor
@@ -1029,3 +1028,94 @@ month	May	mei
 	{n} more on the server	Nog {n} op de server
 	Changes not yet on the server: {n}	Wijzigingen nog niet op de server: {n}
 	Messages waiting to be sent: {n}	Berichten die wachten op verzending: {n}
+	Mail older than what's kept here is only on the server.	E-mail die ouder is dan wat hier wordt bewaard, staat alleen op de server.
+	Search the server	Zoeken op de server
+	Searching the server…	Zoeken op de server…
+	The server found {n}	De server vond er {n}
+	{day} {month}	{day} {month}
+	Restart to update	Opnieuw starten om bij te werken
+	Quatrelle {version} is downloaded. It installs when you close Quatrelle.	Quatrelle {version} is gedownload. Het wordt geïnstalleerd wanneer u Quatrelle sluit.
+	1 minute	1 minuut
+	{n} minutes	{n} minuten
+	1 hour	1 uur
+	{n} hours	{n} uur
+	1 day	1 dag
+	{n} days	{n} dagen
+	1 week	1 week
+	{n} weeks	{n} weken
+	0 minutes before start	0 minuten voor aanvang
+	1 Reminder	1 herinnering
+	{n} Reminders	{n} herinneringen
+	Click Snooze to be reminded again in:	Klik op Uitstellen om opnieuw te worden herinnerd over:
+	Dismiss	Negeren
+	Dismiss All	Alles negeren
+	Open Item	Item openen
+	Overdue	Te laat
+	Now	Nu
+	In {n} minutes	Over {n} minuten
+	In {n} hours	Over {n} uur
+	In {n} days	Over {n} dagen
+	Junk	Ongewenste e-mail
+	Junk options	Opties voor ongewenste e-mail
+	Junk Email options…	Opties voor ongewenste e-mail…
+	Block sender	Afzender blokkeren
+	Never block sender	Afzender nooit blokkeren
+	Never block sender's domain	Domein van afzender nooit blokkeren
+	Their mail goes to Junk Email from now on	Hun e-mail gaat voortaan naar Ongewenste e-mail
+	Their mail is never treated as junk	Hun e-mail wordt nooit als ongewenst behandeld
+	Mail from anyone at their domain is never treated as junk	E-mail van iedereen op dit domein wordt nooit als ongewenst behandeld
+	Blocked senders	Geblokkeerde afzenders
+	Safe senders	Veilige afzenders
+	Mail from these addresses and domains goes to Junk Email as it arrives.	E-mail van deze adressen en domeinen gaat bij aankomst naar Ongewenste e-mail.
+	Mail from these addresses and domains is never treated as junk, and its pictures load.	E-mail van deze adressen en domeinen wordt nooit als ongewenst behandeld en de afbeeldingen worden geladen.
+	name@example.com or @example.com	naam@example.com of @example.com
+	And {n} more	En nog {n}
+	Clean up conversation	Gesprek opschonen
+	Clean up folder	Map opschonen
+	Messages quoted in full by a later reply go to Deleted Items	Berichten die volledig in een later antwoord zijn geciteerd, gaan naar Verwijderde items
+	No conversations to clean up	Geen gesprekken om op te schonen
+	Nothing to clean up: no message is quoted in full by a later reply	Niets op te schonen: geen bericht is volledig geciteerd in een later antwoord
+	Search Folders	Zoekmappen
+	New Search Folder…	Nieuwe zoekmap…
+	New Search Folder	Nieuwe zoekmap
+	Edit Search Folder	Zoekmap bewerken
+	Customize this Search Folder…	Deze zoekmap aanpassen…
+	Delete Search Folder	Zoekmap verwijderen
+	Shows the mail it finds in every folder, except Deleted Items and Junk Email.	Toont de gevonden e-mail uit alle mappen, behalve Verwijderde items en Ongewenste e-mail.
+	Show	Weergeven
+	From these people (addresses or names, separated by commas)	Van deze personen (adressen of namen, gescheiden door komma's)
+	Search for	Zoeken naar
+	Unread mail	Ongelezen e-mail
+	Mail flagged for follow up	E-mail gemarkeerd voor opvolging
+	Important mail	Belangrijke e-mail
+	Categorized mail	Gecategoriseerde e-mail
+	Mail with attachments	E-mail met bijlagen
+	Large mail (over 100 KB)	Grote e-mail (meer dan 100 kB)
+	Pinned mail	Vastgemaakte e-mail
+	Mail from specific people	E-mail van bepaalde personen
+	Quick steps	Snelle stappen
+	No Quick Steps yet.	Nog geen snelle stappen.
+	New Quick Step…	Nieuwe snelle stap…
+	New Quick Step	Nieuwe snelle stap
+	Edit a Quick Step	Een snelle stap bewerken
+	Edit Quick Step	Snelle stap bewerken
+	Done to the selected mail in one click; the first nine also with Ctrl+Shift+1 to 9.	Met één klik op de geselecteerde e-mail uitgevoerd; de eerste negen ook met Ctrl+Shift+1 tot 9.
+	Done	Gereed
+	Then move to	Daarna verplaatsen naar
+	Don't move	Niet verplaatsen
+	Delete this Quick Step	Deze snelle stap verwijderen
+	Date & time	Datum en tijd
+	Word count	Aantal woorden
+	Words	Woorden
+	Characters (no spaces)	Tekens (zonder spaties)
+	Characters (with spaces)	Tekens (met spaties)
+	Paragraphs	Alinea's
+	Lines	Regels
+	Save the message you're writing?	Het bericht dat u schrijft opslaan?
+	Save the messages you're writing?	De berichten die u schrijft opslaan?
+	It's kept in Drafts if you save it.	Het wordt bewaard in Concepten als u het opslaat.
+	{n} messages are being written. They're kept in Drafts if you save them.	Er worden {n} berichten geschreven. Ze worden bewaard in Concepten als u ze opslaat.
+	Don't save	Niet opslaan
+	Also being written:	Ook in bewerking:
+	Play animations	Animaties afspelen
+	Hovers, selections and panes ease into place; off, everything changes at once	Aanwijzen, selecties en deelvensters schuiven soepel op hun plek; uit: alles verandert meteen

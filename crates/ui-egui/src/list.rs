@@ -96,7 +96,8 @@ pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) 
                         acts.push(Action::Run("list.filter", json!({"value": f.code()})));
                     }
                 }
-                if let Some((q, scope)) = &s.search {
+                // A Search Folder always looks everywhere: no scope to pick.
+                if let Some((q, scope)) = s.search.as_ref().filter(|_| s.open_search_folder_name().is_none()) {
                     ui.add_space(8.0);
                     let all = *scope == SearchScope::All;
                     if ui.selectable_label(all, RichText::new(tl!("All folders")).small()).clicked() && !all {
@@ -181,8 +182,8 @@ pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) 
         None
     };
 
-    // After the last message: more on the server (mail past what's kept here).
-    let has_footer = s.more_on_server().is_some();
+    // After the last message: more on the server, or searching it (issue #4).
+    let has_footer = s.more_on_server().is_some() || s.search.is_some();
     egui::ScrollArea::vertical().auto_shrink(false).id_salt("list").show_viewport(ui, |ui, viewport| {
         ui.set_height(total + if has_footer { FOOTER_H } else { 0.0 });
         let origin = ui.min_rect().min;
@@ -233,17 +234,44 @@ pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) 
 /// The list's footer's height.
 const FOOTER_H: f32 = 76.0;
 
-/// What's past the list: a folder's older mail on its server, to show more of.
+/// What's past the list (issue #4): a folder's older mail on its server, to show more of; a
+/// search's, to ask the servers for.
 fn footer(s: &Session, t: &theme::Tokens, ui: &mut Ui, acts: &mut Vec<Action>) {
-    let Some((account, folder, n)) = s.more_on_server() else { return };
-    ui.label(RichText::new(tf!("{n} more on the server", n = n)).color(t.dim).small());
-    if s.showing_more.as_ref().is_some_and(|(a, f)| *a == account && *f == folder) {
-        ui.horizontal(|ui| {
-            ui.spinner();
-            ui.label(RichText::new(tl!("Getting them from the server…")).color(t.dim).small());
-        });
-    } else if ui.button(tl!("Show more")).clicked() {
-        acts.push(Action::Run("folder.more", json!({"account": account, "folder": folder})));
+    if let Some((account, folder, n)) = s.more_on_server() {
+        ui.label(RichText::new(tf!("{n} more on the server", n = n)).color(t.dim).small());
+        if s.showing_more.as_ref().is_some_and(|(a, f)| *a == account && *f == folder) {
+            ui.horizontal(|ui| {
+                ui.spinner();
+                ui.label(RichText::new(tl!("Getting them from the server…")).color(t.dim).small());
+            });
+        } else if ui.button(tl!("Show more")).clicked() {
+            acts.push(Action::Run("folder.more", json!({"account": account, "folder": folder})));
+        }
+        return;
+    }
+    if s.search.is_none() || s.accounts.iter().all(|a| a.is_local() || a.config.pop.is_some()) {
+        return;
+    }
+    match &s.server_search {
+        Some(ss) if Some(&ss.query) == s.search.as_ref().map(|(q, _)| q) => {
+            if ss.pending > 0 {
+                ui.horizontal(|ui| {
+                    ui.spinner();
+                    ui.label(RichText::new(tl!("Searching the server…")).color(t.dim).small());
+                });
+            } else {
+                ui.label(RichText::new(tf!("The server found {n}", n = ss.found.len())).color(t.dim).small());
+            }
+            for e in ss.errors.iter().take(3) {
+                ui.add(egui::Label::new(RichText::new(e).color(t.warn).small()).wrap());
+            }
+        }
+        _ => {
+            ui.label(RichText::new(tl!("Mail older than what's kept here is only on the server.")).color(t.dim).small());
+            if ui.button(tl!("Search the server")).clicked() {
+                acts.push(Action::Run("search.server", json!({})));
+            }
+        }
     }
 }
 
@@ -599,13 +627,9 @@ fn message_row(
     let selected = s.selection.contains(&m.key);
     let unread = if count > 1 { unread_in_thread > 0 } else { !m.flags.seen };
     let p = ui.painter_at(r);
-    let fill = if selected {
-        t.accent_soft
-    } else if hovered {
-        t.hover_row
-    } else {
-        Color32::TRANSPARENT
-    };
+    let sel = crate::motion::toward(ui.ctx(), id.with("selected"), selected, crate::motion::NORMAL);
+    let hover = crate::motion::toward(ui.ctx(), id.with("hover"), hovered, crate::motion::FAST);
+    let fill = crate::motion::mix(t.hover_row.gamma_multiply(hover), t.accent_soft, sel);
     p.rect_filled(r.shrink2(vec2(4.0, 1.0)), 6.0, fill);
     if unread {
         p.rect_filled(Rect::from_min_size(r.min + vec2(4.0, 8.0), vec2(3.0, r.height() - 16.0)), 2.0, t.accent);
@@ -807,6 +831,7 @@ fn row_input(
         item(ui, acts, tl!("Move to…"), Action::Dialog(Dialog::move_to()));
         item(ui, acts, tl!("Archive"), Action::Run("mail.archive", json!({})));
         item(ui, acts, tl!("Report junk"), Action::Run("mail.junk", json!({})));
+        ui.menu_button(tl!("Junk"), |ui| crate::junk_menu(ui, s, acts));
         item(ui, acts, tl!("Ignore"), Action::Run("mail.ignore", json!({})));
         item(ui, acts, tl!("Delete"), Action::Run("mail.delete", json!({})));
         ui.separator();
