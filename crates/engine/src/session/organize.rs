@@ -1,12 +1,27 @@
 //! Organising mail: categories, pinning, snoozing, inbox rules and the Focused/Other split.
 
-use quatrelle_model::organize::{Category, Rule, RuleAction, ServerKind, Snooze, actions_for};
+use quatrelle_model::organize::{Category, Rule, RuleAction, Snooze, actions_for};
 use quatrelle_model::{PINNED, is_keyword};
 
 use super::*;
+use quatrelle_model::organize::ServerKind;
+
+pub mod junk;
+pub mod quick_steps;
+pub mod search_folders;
 
 /// The folder snoozed mail waits in.
 const SNOOZED: &str = "Snoozed";
+
+/// What a server would be told for these rules (Quatrelle's ids left out): comparing it says
+/// whether a change is worth a round trip to the server.
+fn server_shape(rules: &[Rule], kind: &impl Fn(&str) -> Option<ServerKind>) -> Vec<String> {
+    rules
+        .iter()
+        .filter(|r| r.server && r.account.as_deref().and_then(kind).is_some_and(|k| r.server_ready_for(k)))
+        .map(|r| format!("{:?}|{}|{}|{:?}|{:?}|{}", r.account, r.name, r.enabled, r.conditions, r.actions, r.stop))
+        .collect()
+}
 
 impl Session {
     // ----- categories and pins -----
@@ -691,16 +706,6 @@ impl Session {
         self.refresh_list();
         Ok(serde_json::json!({ "focused": focused, "senders": sel.len() }))
     }
-}
-
-/// What a server would be told for these rules (Quatrelle's ids left out): comparing it says
-/// whether a change is worth a round trip to the server.
-fn server_shape(rules: &[Rule], kind: &impl Fn(&str) -> Option<ServerKind>) -> Vec<String> {
-    rules
-        .iter()
-        .filter(|r| r.server && r.account.as_deref().and_then(kind).is_some_and(|k| r.server_ready_for(k)))
-        .map(|r| format!("{:?}|{}|{}|{:?}|{:?}|{}", r.account, r.name, r.enabled, r.conditions, r.actions, r.stop))
-        .collect()
 }
 
 impl Session {

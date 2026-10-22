@@ -1,0 +1,545 @@
+//! EWS: the mailbox (its folders, their messages, sending, automatic replies).
+
+use super::*;
+
+impl Client {
+    /// The account's mail folders, with their roles and counts.
+    pub fn mailboxes(&self) -> Result<Vec<Mailbox>> {
+        let roles = SPECIAL;
+        let hidden = ["msgfolderroot", "outbox", "conversationhistory", "syncissues"];
+        let ids: String = roles.iter().map(|(n, _)| *n).chain(hidden).map(|n| distinguished(n, None)).collect();
+        let doc = self.call(&format!(
+            "<m:GetFolder><m:FolderShape><t:BaseShape>IdOnly</t:BaseShape></m:FolderShape><m:FolderIds>{ids}</m:FolderIds></m:GetFolder>"
+        ))?;
+        // One answer per asked-for folder, in order; missing ones are errors.
+        let found: Vec<Option<String>> = messages(&doc)
+            .iter()
+            .map(|m| if m.attr("ResponseClass") == Some("Error") { None } else { m.find("FolderId").and_then(|f| f.attr("Id")).map(str::to_string) })
+            .collect();
+        let role_of: HashMap<String, FolderRole> = roles.iter().zip(&found).filter_map(|((_, r), id)| Some((id.clone()?, *r))).collect();
+        let root = found.get(roles.len()).cloned().flatten();
+        let skip: Vec<String> = found.iter().skip(roles.len() + 1).flatten().cloned().collect();
+
+        let mut out: Vec<Mailbox> = Vec::new();
+        let mut offset = 0;
+        loop {
+            let doc = self.call(&format!(
+                "<m:FindFolder Traversal=\"Deep\"><m:FolderShape><t:BaseShape>IdOnly</t:BaseShape><t:AdditionalProperties>\
+                 <t:FieldURI FieldURI=\"folder:DisplayName\"/><t:FieldURI FieldURI=\"folder:ParentFolderId\"/>\
+                 <t:FieldURI FieldURI=\"folder:TotalCount\"/><t:FieldURI FieldURI=\"folder:UnreadCount\"/>\
+                 <t:FieldURI FieldURI=\"folder:FolderClass\"/>{HIDDEN}\
+                 </t:AdditionalProperties></m:FolderShape>\
+                 <m:IndexedPageFolderView MaxEntriesReturned=\"500\" Offset=\"{offset}\" BasePoint=\"Beginning\"/>\
+                 <m:ParentFolderIds>{}</m:ParentFolderIds></m:FindFolder>",
+                distinguished("msgfolderroot", None)
+            ))?;
+            let Some(m) = messages(&doc).first().map(|m| (*m).clone()) else { break };
+            check_message(&m)?;
+            let Some(rf) = m.child("RootFolder") else { break };
+            let folders = rf.folders();
+            let n = folders.len();
+            for f in folders {
+                let Some(id) = f.child("FolderId").and_then(|i| i.attr("Id")).map(str::to_string) else { continue };
+                let class = f.text_of("FolderClass").unwrap_or("");
+                // Exchange's own hidden folders aren't the user's mail: Outlook doesn't show
+                // them, and some take long to read.
+                let hidden = is_hidden(f);
+                // Some servers don't mark them: the ones Exchange makes itself, by name, at the top.
+                let system = ["Working Set", "Yammer Root", "PersonMetadata", "ExternalContacts", "Social Activity Notifications"];
+                let top = f.child("ParentFolderId").and_then(|p| p.attr("Id")).is_some_and(|p| Some(p) == root.as_deref());
+                if hidden || (top && f.text_of("DisplayName").is_some_and(|n| system.contains(&n.trim()))) {
+                    continue;
+                }
+                if !(class.is_empty() || class == "IPF.Note" || class.starts_with("IPF.Note.")) || skip.contains(&id) || out.len() >= MAX_FOLDERS {
+                    continue;
+                }
+                let parent = f.child("ParentFolderId").and_then(|p| p.attr("Id")).map(str::to_string).filter(|p| Some(p) != root.as_ref());
+                let count = |k: &str| f.text_of(k).and_then(|v| v.trim().parse::<u32>().ok()).unwrap_or(0);
+                out.push(Mailbox {
+                    name: f.text_of("DisplayName").unwrap_or_default().chars().take(255).collect(),
+                    parent,
+                    role: role_of.get(&id).copied().unwrap_or(FolderRole::Other),
+                    total: count("TotalCount"),
+                    unread: count("UnreadCount"),
+                    id,
+                });
+            }
+            let last = rf.attr("IncludesLastItemInRange").is_none_or(|v| v == "true");
+            offset += n;
+            if last || n == 0 || out.len() >= MAX_FOLDERS {
+                break;
+            }
+        }
+        keep_rooted(&mut out);
+        // Exchange's public folders, under a folder of their own (a server without them, or
+        // one that won't show them, just has none).
+        match self.public_folders() {
+            Ok(pf) => out.extend(pf),
+            Err(e) => log::info!("no public folders: {e}"),
+        }
+        // Shared mailboxes, each under a folder of its own (named so it can't be taken for one
+        // of the account's folders).
+        let mut open = Vec::new();
+        self.shared_roles.borrow_mut().clear();
+        for sm in self.shared_mailboxes() {
+            let taken = |n: &str| out.iter().any(|m| m.parent.is_none() && m.name.eq_ignore_ascii_case(n));
+            let top = if taken(&sm.name) { format!("{} ({})", sm.name, sm.address) } else { sm.name.clone() };
+            match self.shared_folders(&sm, &top) {
+                Ok(f) if !f.is_empty() => {
+                    log::info!("shared mailbox {}: {} folders", sm.address, f.len().saturating_sub(1));
+                    open.push(sm.address.clone());
+                    out.extend(f);
+                }
+                Ok(_) => log::info!("shared mailbox {}: no folders", sm.address),
+                Err(e) => log::warn!("shared mailbox {}: {e}", sm.address),
+            }
+        }
+        *self.shared_open.borrow_mut() = open;
+        Ok(out)
+    }
+
+    /// A folder's (total, unread).
+    pub(super) fn counts(&self, folder: &str) -> Result<(u32, u32)> {
+        let m = self.call_one(&format!(
+            "<m:GetFolder><m:FolderShape><t:BaseShape>IdOnly</t:BaseShape><t:AdditionalProperties>\
+             <t:FieldURI FieldURI=\"folder:TotalCount\"/><t:FieldURI FieldURI=\"folder:UnreadCount\"/></t:AdditionalProperties></m:FolderShape>\
+             <m:FolderIds><t:FolderId Id=\"{}\"/></m:FolderIds></m:GetFolder>",
+            esc(folder)
+        ))?;
+        let f = m.folders().into_iter().next();
+        let count = |k: &str| f.and_then(|f| f.text_of(k)).and_then(|v| v.trim().parse::<u32>().ok()).unwrap_or(0);
+        Ok((count("TotalCount"), count("UnreadCount")))
+    }
+
+    /// The newest `limit` messages of a folder with their flags.
+    /// The newest `limit` messages' ids and flags, a page of up to a thousand at a time (EWS
+    /// pages by offset; it says when the last page is in).
+    pub(super) fn newest(&self, folder: &str, limit: usize) -> Result<Vec<(String, Flags)>> {
+        let limit = limit.clamp(1, MAX_KEPT);
+        let mut out: Vec<(String, Flags)> = Vec::new();
+        while out.len() < limit {
+            let page = (limit - out.len()).min(1000);
+            let m = self.call_one(&format!(
+                "<m:FindItem Traversal=\"Shallow\"><m:ItemShape><t:BaseShape>IdOnly</t:BaseShape><t:AdditionalProperties>{FLAG_FIELDS}</t:AdditionalProperties></m:ItemShape>\
+                 <m:IndexedPageItemView MaxEntriesReturned=\"{}\" Offset=\"{}\" BasePoint=\"Beginning\"/>\
+                 <m:SortOrder><t:FieldOrder Order=\"Descending\"><t:FieldURI FieldURI=\"item:DateTimeReceived\"/></t:FieldOrder></m:SortOrder>\
+                 <m:ParentFolderIds><t:FolderId Id=\"{}\"/></m:ParentFolderIds></m:FindItem>",
+                page,
+                out.len(),
+                esc(folder)
+            ))?;
+            let last = m.find("RootFolder").and_then(|r| r.attr("IncludesLastItemInRange")) != Some("false");
+            let Some(items) = m.find("Items") else { break };
+            let got: Vec<(String, Flags)> =
+                items.kids.iter().filter_map(|it| Some((it.child("ItemId")?.attr("Id")?.to_string(), flags(it)))).collect();
+            let n = got.len();
+            out.extend(got);
+            if last || n == 0 || n < page {
+                break;
+            }
+        }
+        Ok(out)
+    }
+
+    /// The newest `limit` ids of a folder's messages a search finds (one page: `limit` is at most
+    /// a few hundred).
+    pub(super) fn find(&self, folder: &str, q: &WordQuery, limit: usize) -> Result<Vec<String>> {
+        let (restriction, words) = if q.text.is_empty() {
+            (restriction(q), String::new())
+        } else {
+            (String::new(), format!("<m:QueryString>{}</m:QueryString>", esc(&q.text)))
+        };
+        let m = self.call_one(&format!(
+            "<m:FindItem Traversal=\"Shallow\"><m:ItemShape><t:BaseShape>IdOnly</t:BaseShape><t:AdditionalProperties>{FLAG_FIELDS}\
+             <t:FieldURI FieldURI=\"item:HasAttachments\"/></t:AdditionalProperties></m:ItemShape>\
+             <m:IndexedPageItemView MaxEntriesReturned=\"{}\" Offset=\"0\" BasePoint=\"Beginning\"/>{restriction}\
+             <m:SortOrder><t:FieldOrder Order=\"Descending\"><t:FieldURI FieldURI=\"item:DateTimeReceived\"/></t:FieldOrder></m:SortOrder>\
+             <m:ParentFolderIds><t:FolderId Id=\"{}\"/></m:ParentFolderIds>{words}</m:FindItem>",
+            limit.clamp(1, 1000),
+            esc(folder)
+        ))?;
+        let Some(items) = m.find("Items") else { return Ok(Vec::new()) };
+        Ok(items
+            .kids
+            .iter()
+            .filter(|it| q.admits(&flags(it), it.text_of("HasAttachments").is_some_and(|v| v == "true")))
+            .filter_map(|it| Some(it.child("ItemId")?.attr("Id")?.to_string()))
+            .take(limit)
+            .collect())
+    }
+
+    /// Of these messages, those still in a folder, with their flags.
+    pub(super) fn still_in(&self, folder: &str, ids: &[String]) -> Result<Vec<(String, Flags)>> {
+        let mut out = Vec::new();
+        for chunk in ids.chunks(BATCH) {
+            let list: String = chunk.iter().map(|id| format!("<t:ItemId Id=\"{}\"/>", esc(id))).collect();
+            let doc = self.call(&format!(
+                "<m:GetItem><m:ItemShape><t:BaseShape>IdOnly</t:BaseShape><t:AdditionalProperties>{FLAG_FIELDS}\
+                 <t:FieldURI FieldURI=\"item:ParentFolderId\"/></t:AdditionalProperties></m:ItemShape><m:ItemIds>{list}</m:ItemIds></m:GetItem>"
+            ))?;
+            for m in messages(&doc).into_iter().filter(|m| m.attr("ResponseClass") != Some("Error")) {
+                for it in m.child("Items").map(|i| i.kids.as_slice()).unwrap_or_default() {
+                    let Some(id) = it.child("ItemId").and_then(|i| i.attr("Id")) else { continue };
+                    if it.child("ParentFolderId").and_then(|p| p.attr("Id")).is_none_or(|p| p == folder) {
+                        out.push((id.to_string(), flags(it)));
+                    }
+                }
+            }
+        }
+        Ok(out)
+    }
+
+    /// Messages' details, for the list.
+    pub(super) fn headers(&self, ids: &[String]) -> Result<Vec<El>> {
+        let mut out = Vec::new();
+        for chunk in ids.chunks(BATCH) {
+            let list: String = chunk.iter().map(|id| format!("<t:ItemId Id=\"{}\"/>", esc(id))).collect();
+            let doc = self.call(&format!(
+                "<m:GetItem><m:ItemShape><t:BaseShape>IdOnly</t:BaseShape><t:AdditionalProperties>{HEADER_FIELDS}{FLAG_FIELDS}</t:AdditionalProperties></m:ItemShape>\
+                 <m:ItemIds>{list}</m:ItemIds></m:GetItem>"
+            ))?;
+            for m in messages(&doc) {
+                if m.attr("ResponseClass") == Some("Error") {
+                    continue;
+                }
+                if let Some(items) = m.child("Items") {
+                    out.extend(items.kids.iter().cloned());
+                }
+            }
+        }
+        Ok(out)
+    }
+
+    /// A message's MIME source.
+    pub fn download(&self, id: &str) -> Result<Vec<u8>> {
+        let m = self.call_one(&format!(
+            "<m:GetItem><m:ItemShape><t:BaseShape>IdOnly</t:BaseShape><t:IncludeMimeContent>true</t:IncludeMimeContent></m:ItemShape>\
+             <m:ItemIds><t:ItemId Id=\"{}\"/></m:ItemIds></m:GetItem>",
+            esc(id)
+        ))?;
+        let mime = m.find("MimeContent").ok_or_else(|| NetError::Protocol("the message has no source".into()))?;
+        unb64(&mime.text).ok_or_else(|| NetError::Protocol("a damaged message source".into()))
+    }
+
+    /// Store a MIME message in a folder (as a draft when it's one); its id.
+    pub fn create(&self, raw: &[u8], folder: &str, draft: bool) -> Result<String> {
+        let flags = if draft {
+            "<t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"0x0E07\" PropertyType=\"Integer\"/><t:Value>8</t:Value></t:ExtendedProperty>"
+        } else {
+            ""
+        };
+        let m = self.call_one(&format!(
+            "<m:CreateItem MessageDisposition=\"SaveOnly\"><m:SavedItemFolderId><t:FolderId Id=\"{}\"/></m:SavedItemFolderId>\
+             <m:Items><t:Message><t:MimeContent CharacterSet=\"UTF-8\">{}</t:MimeContent>{flags}</t:Message></m:Items></m:CreateItem>",
+            esc(folder),
+            b64(raw)
+        ))?;
+        Ok(m.find("ItemId").and_then(|i| i.attr("Id")).unwrap_or_default().to_string())
+    }
+
+    /// Answer a message's voting buttons with `choice`: a reply to it (so it stays in the
+    /// conversation), its subject the choice's, carrying the choice (`PidLidVerbResponse`) for the
+    /// sender's mail client to count; sent, with a copy in Sent Items.
+    pub fn vote(&self, id: &str, choice: &str, subject: &str) -> Result<()> {
+        let item = |m: &El| {
+            let i = m.find("ItemId");
+            let id = i.and_then(|i| i.attr("Id")).unwrap_or_default().to_string();
+            let ck = i.and_then(|i| i.attr("ChangeKey")).filter(|c| !c.is_empty()).map(|c| format!(" ChangeKey=\"{}\"", esc(c))).unwrap_or_default();
+            (id, ck)
+        };
+        let original = self.call_one(&format!(
+            "<m:GetItem><m:ItemShape><t:BaseShape>IdOnly</t:BaseShape></m:ItemShape><m:ItemIds><t:ItemId Id=\"{}\"/></m:ItemIds></m:GetItem>",
+            esc(id)
+        ))?;
+        let (oid, ock) = item(&original);
+        let reply = self.call_one(&format!(
+            "<m:CreateItem MessageDisposition=\"SaveOnly\"><m:SavedItemFolderId><t:DistinguishedFolderId Id=\"drafts\"/></m:SavedItemFolderId>\
+             <m:Items><t:ReplyToItem><t:ReferenceItemId Id=\"{}\"{ock}/></t:ReplyToItem></m:Items></m:CreateItem>",
+            esc(&oid)
+        ))?;
+        let (rid, rck) = item(&reply);
+        if rid.is_empty() {
+            return Err(NetError::Protocol("Exchange didn't make the reply".into()));
+        }
+        let field =
+            format!("<t:ExtendedFieldURI DistinguishedPropertySetId=\"Common\" PropertyId=\"{}\" PropertyType=\"String\"/>", voting::VERB_RESPONSE);
+        let updated = self.call_one(&format!(
+            "<m:UpdateItem MessageDisposition=\"SaveOnly\" ConflictResolution=\"AlwaysOverwrite\"><m:ItemChanges><t:ItemChange>\
+             <t:ItemId Id=\"{}\"{rck}/><t:Updates>\
+             <t:SetItemField><t:FieldURI FieldURI=\"item:Subject\"/><t:Message><t:Subject>{}</t:Subject></t:Message></t:SetItemField>\
+             <t:SetItemField>{field}<t:Message><t:ExtendedProperty>{field}<t:Value>{}</t:Value></t:ExtendedProperty></t:Message></t:SetItemField>\
+             </t:Updates></t:ItemChange></m:ItemChanges></m:UpdateItem>",
+            esc(&rid),
+            esc(&voting::response_subject(choice, subject)),
+            esc(choice)
+        ))?;
+        let (_, uck) = item(&updated);
+        let ck = if uck.is_empty() { rck } else { uck };
+        self.call_one(&format!(
+            "<m:SendItem SaveItemToFolder=\"true\"><m:ItemIds><t:ItemId Id=\"{}\"{ck}/></m:ItemIds>\
+             <m:SavedItemFolderId><t:DistinguishedFolderId Id=\"sentitems\"/></m:SavedItemFolderId></m:SendItem>",
+            esc(&rid)
+        ))
+        .map(drop)
+    }
+
+    /// Send a MIME message, keeping a copy in Sent Items.
+    pub fn send_mime(&self, raw: &[u8]) -> Result<()> {
+        // Voting buttons asked for: Exchange's verb stream ([MS-OXOMSG] PidLidVerbStream), which
+        // Outlook shows as buttons; the header that carried them here stays here.
+        let (raw, choices) = mime::take_voting(raw);
+        let verbs = if choices.is_empty() {
+            String::new()
+        } else {
+            let names: Vec<&str> = choices.iter().map(String::as_str).collect();
+            format!(
+                "<t:ExtendedProperty><t:ExtendedFieldURI DistinguishedPropertySetId=\"Common\" PropertyId=\"{}\" PropertyType=\"Binary\"/>\
+                 <t:Value>{}</t:Value></t:ExtendedProperty>",
+                voting::VERB_STREAM,
+                b64(&voting::stream(&names))
+            )
+        };
+        self.call_one(&format!(
+            "<m:CreateItem MessageDisposition=\"SendAndSaveCopy\"><m:SavedItemFolderId><t:DistinguishedFolderId Id=\"sentitems\"/></m:SavedItemFolderId>\
+             <m:Items><t:Message><t:MimeContent CharacterSet=\"UTF-8\">{}</t:MimeContent>{verbs}</t:Message></m:Items></m:CreateItem>",
+            b64(&raw)
+        ))
+        .map(drop)
+    }
+
+    /// The automatic replies.
+    pub fn vacation(&self) -> Result<quatrelle_model::job::Vacation> {
+        let doc = self.call(&format!(
+            "<m:GetUserOofSettingsRequest><t:Mailbox><t:Address>{}</t:Address></t:Mailbox></m:GetUserOofSettingsRequest>",
+            esc(&self.email)
+        ))?;
+        if let Some(rm) = doc.find("ResponseMessage") {
+            check_message(rm)?;
+        }
+        let s = doc.find("OofSettings").ok_or_else(|| NetError::Protocol("no automatic reply settings".into()))?;
+        let state = s.text_of("OofState").unwrap_or("Disabled");
+        let day = |name: &str, end: bool| -> Option<String> {
+            let t = s.find(name)?.text.clone();
+            let secs = jmap::utc_date(&t)?;
+            // The end is the moment after the last day.
+            let secs = if end { secs - 1 } else { secs };
+            let (y, m, d) = quatrelle_model::dates::civil_from_days(secs.div_euclid(86_400));
+            Some(format!("{y:04}-{m:02}-{d:02}"))
+        };
+        let scheduled = state == "Scheduled";
+        let reply = |which: &str| {
+            let m = s.find(which).and_then(|r| r.child("Message")).map(|m| m.text.clone()).unwrap_or_default();
+            if m.contains('<') { mime::html_to_text(&m).trim().to_string() } else { m.trim().to_string() }
+        };
+        let (text, external) = (reply("InternalReply"), reply("ExternalReply"));
+        let outside = match s.text_of("ExternalAudience").unwrap_or("All") {
+            "None" => "none",
+            "Known" => "known",
+            _ => "",
+        };
+        Ok(quatrelle_model::job::Vacation {
+            enabled: state != "Disabled",
+            subject: String::new(),
+            // Outside, the same unless it says something else (an empty one is the same).
+            external: (!external.is_empty() && external != text).then_some(external),
+            outside: outside.to_string(),
+            text,
+            from: if scheduled { day("StartTime", false) } else { None },
+            until: if scheduled { day("EndTime", true) } else { None },
+        })
+    }
+
+    pub fn set_vacation(&self, v: &quatrelle_model::job::Vacation) -> Result<()> {
+        let at = |day: &Option<String>, end: bool| -> Option<String> {
+            let d = day.as_deref().filter(|d| quatrelle_model::job::is_day(d))?;
+            Some(if end { format!("{d}T23:59:59Z") } else { format!("{d}T00:00:00Z") })
+        };
+        let (start, end) = (at(&v.from, false), at(&v.until, true));
+        let state = match (v.enabled, start.is_some() || end.is_some()) {
+            (false, _) => "Disabled",
+            (true, true) => "Scheduled",
+            (true, false) => "Enabled",
+        };
+        let duration = format!(
+            "<t:Duration><t:StartTime>{}</t:StartTime><t:EndTime>{}</t:EndTime></t:Duration>",
+            start.unwrap_or_else(|| "2000-01-01T00:00:00Z".into()),
+            end.unwrap_or_else(|| "2100-01-01T00:00:00Z".into())
+        );
+        let text = esc(&v.text).replace('\n', "&lt;br&gt;");
+        let external = esc(v.external_text()).replace('\n', "&lt;br&gt;");
+        let audience = match v.outside.as_str() {
+            "none" => "None",
+            "known" => "Known",
+            _ => "All",
+        };
+        let doc = self.call(&format!(
+            "<m:SetUserOofSettingsRequest><t:Mailbox><t:Address>{}</t:Address></t:Mailbox><t:UserOofSettings>\
+             <t:OofState>{state}</t:OofState><t:ExternalAudience>{audience}</t:ExternalAudience>{duration}\
+             <t:InternalReply><t:Message>{text}</t:Message></t:InternalReply><t:ExternalReply><t:Message>{external}</t:Message></t:ExternalReply>\
+             </t:UserOofSettings></m:SetUserOofSettingsRequest>",
+            esc(&self.email)
+        ))?;
+        match doc.find("ResponseMessage") {
+            Some(rm) => check_message(rm),
+            None => Ok(()),
+        }
+    }
+
+    /// The ids of the rules Exchange keeps for the Inbox, by name.
+    pub fn inbox_rule_ids(&self) -> Result<Vec<(String, String)>> {
+        Ok(self.inbox_rules()?.into_iter().map(|r| (r.name, r.id)).collect())
+    }
+
+    /// The rules the Inbox keeps, as the server has them: Quatrelle's own and the ones made
+    /// elsewhere (Outlook, a web page), each with what it does — and whether Quatrelle knows
+    /// every part of it (it can then run it here).
+    pub fn inbox_rules(&self) -> Result<Vec<quatrelle_model::organize::ForeignRule>> {
+        let doc = self.call("<m:GetInboxRules/>")?;
+        let m = operation(&doc, "GetInboxRulesResponse")?;
+        check_message(m)?;
+        let mut out = Vec::new();
+        if let Some(list) = m.find("InboxRules") {
+            for r in list.children("Rule").take(MAX_RULES) {
+                out.push(server_rule(r));
+            }
+        }
+        Ok(out)
+    }
+
+    /// Turn one of the server's own rules on or off: the rule is sent back as the server keeps
+    /// it, with only `IsEnabled` changed (a SetRuleOperation replaces the whole rule).
+    pub fn set_rule_enabled(&self, id: &str, enabled: bool) -> Result<()> {
+        let mut rule = self.rule_element(id)?.ok_or_else(|| NetError::No("that rule is no longer on the server".into()))?;
+        rule.kids.retain(|k| k.name != "IsEnabled");
+        rule.kids.push(El { name: "IsEnabled".into(), text: if enabled { "true".into() } else { "false".into() }, ..Default::default() });
+        self.update_rules(&format!("<t:SetRuleOperation>{}</t:SetRuleOperation>", xml_of(&rule)))
+    }
+
+    /// Remove one of the server's own rules.
+    pub fn delete_rule(&self, id: &str) -> Result<()> {
+        self.update_rules(&format!("<t:DeleteRuleOperation><t:RuleId Id=\"{0}\">{0}</t:RuleId></t:DeleteRuleOperation>", esc(id)))
+    }
+
+    /// The element a rule is kept as, found by its id.
+    pub(super) fn rule_element(&self, id: &str) -> Result<Option<El>> {
+        let doc = self.call("<m:GetInboxRules/>")?;
+        let m = operation(&doc, "GetInboxRulesResponse")?;
+        check_message(m)?;
+        Ok(m.find("InboxRules").and_then(|l| l.children("Rule").find(|r| rule_id(r) == id)).cloned())
+    }
+
+    /// One `UpdateInboxRules`, its answer checked.
+    pub(super) fn update_rules(&self, operations: &str) -> Result<()> {
+        let doc = self.call(&format!("<m:UpdateInboxRules><m:Operations>{operations}</m:Operations></m:UpdateInboxRules>"))?;
+        let messages = messages(&doc);
+        if messages.is_empty() {
+            return check_message(operation(&doc, "UpdateInboxRulesResponse")?);
+        }
+        for m in messages {
+            check_message(m)?;
+        }
+        Ok(())
+    }
+
+    /// Create, change and remove the Inbox rules Exchange runs, from Quatrelle's rules: each is
+    /// paired with the id of the folder its action moves mail to (`None` for actions that need
+    /// none). Answers the id every rule has on the server, by its name.
+    ///
+    /// Only what Exchange can express is sent ([`Rule::server_ready`]): the engine leaves the
+    /// rest at home. A rule the server has never seen is created; one carrying a `remote_id` is
+    /// changed; `delete` names the ids to remove, and only ever ones Quatrelle created.
+    pub fn set_inbox_rules(&self, wanted: &[(Rule, Option<String>)], delete: &[String]) -> Result<Vec<(String, String)>> {
+        if wanted.is_empty() && delete.is_empty() {
+            return Ok(Vec::new());
+        }
+        // What the server has before: a rule it just created is the one it didn't have.
+        let before: Vec<String> = self.inbox_rule_ids()?.into_iter().map(|(_, id)| id).collect();
+        let mut ops = String::new();
+        for (i, (r, folder)) in wanted.iter().enumerate() {
+            let known = r.remote_id.as_deref().filter(|id| !id.is_empty());
+            let rule = inbox_rule_xml(r, folder.as_deref(), i + 1, known);
+            if known.is_some() {
+                ops.push_str(&format!("<t:SetRuleOperation>{rule}</t:SetRuleOperation>"));
+            } else {
+                ops.push_str(&format!("<t:CreateRuleOperation>{rule}</t:CreateRuleOperation>"));
+            }
+        }
+        for id in delete.iter().filter(|id| !id.is_empty()) {
+            // The id travels both ways: as the attribute the schema names and as the text an
+            // older answer shape uses (this Exchange 2016 writes the text).
+            ops.push_str(&format!("<t:DeleteRuleOperation><t:RuleId Id=\"{0}\">{0}</t:RuleId></t:DeleteRuleOperation>", esc(id)));
+        }
+        let doc = self.call(&format!("<m:UpdateInboxRules><m:Operations>{ops}</m:Operations></m:UpdateInboxRules>"))?;
+        // As with GetInboxRules: a server may answer with the response element itself.
+        let messages = messages(&doc);
+        if messages.is_empty() {
+            check_message(operation(&doc, "UpdateInboxRulesResponse")?)?;
+        }
+        for m in messages {
+            check_message(m)?;
+        }
+        // Read the ids back: creating a rule answers none. A rule we sent without one is the
+        // rule that appeared, under that name.
+        let after = self.inbox_rule_ids()?;
+        let mut out = Vec::new();
+        for (r, _) in wanted {
+            let id = match r.remote_id.as_deref().filter(|id| !id.is_empty()) {
+                Some(id) => Some(id.to_string()),
+                None => after.iter().find(|(name, id)| name == &r.name && !before.contains(id)).map(|(_, id)| id.clone()),
+            };
+            match id {
+                Some(id) => out.push((r.name.clone(), id)),
+                None => log::warn!("the rule {} was sent to Exchange but isn't listed there", r.name),
+            }
+        }
+        Ok(out)
+    }
+
+    /// The picture the directory keeps for an address (`GetUserPhoto`, Exchange 2013 and later):
+    /// its bytes and type. `No` when the mailbox has none, or the server predates it.
+    pub fn user_photo(&self, email: &str) -> Result<(String, Vec<u8>)> {
+        let doc =
+            self.call(&format!("<m:GetUserPhoto><m:Email>{}</m:Email><m:SizeRequested>HR240x240</m:SizeRequested></m:GetUserPhoto>", esc(email)))?;
+        photo_of(&doc)
+    }
+
+    /// The picture a contact item carries (Outlook keeps a contact's photo as an attachment of
+    /// the item, marked as the contact's picture): its bytes and type. `No` when the contact has
+    /// none.
+    pub fn contact_photo(&self, id: &str) -> Result<(String, Vec<u8>)> {
+        let doc = self.call(&format!(
+            "<m:GetItem><m:ItemShape><t:BaseShape>IdOnly</t:BaseShape>\
+             <t:AdditionalProperties><t:FieldURI FieldURI=\"item:Attachments\"/></t:AdditionalProperties></m:ItemShape>\
+             <m:ItemIds><t:ItemId Id=\"{}\"/></m:ItemIds></m:GetItem>",
+            esc(id)
+        ))?;
+        let m = messages(&doc).first().copied().ok_or_else(|| NetError::Protocol("an empty answer".into()))?;
+        check_message(m)?;
+        let mut files = Vec::new();
+        if let Some(items) = m.child("Items") {
+            items.all("FileAttachment", &mut files);
+        }
+        // Exchange marks it so; a server that doesn't name the picture as Outlook's does still
+        // gives it the name Outlook gives it.
+        let photo = files
+            .iter()
+            .find(|f| f.attr("IsContactPhoto") == Some("true"))
+            .or_else(|| files.iter().find(|f| f.text_of("Name").is_some_and(|n| n.starts_with("ContactPicture"))));
+        let att = photo.and_then(|f| f.child("AttachmentId")).and_then(|a| a.attr("Id")).filter(|a| !a.is_empty());
+        let Some(att) = att else { return Err(NetError::No("no picture for this person".into())) };
+        let doc =
+            self.call(&format!("<m:GetAttachment><m:AttachmentIds><t:AttachmentId Id=\"{}\"/></m:AttachmentIds></m:GetAttachment>", esc(att)))?;
+        let m = messages(&doc).first().copied().ok_or_else(|| NetError::Protocol("an empty answer".into()))?;
+        check_message(m)?;
+        // Inside the attachment, not directly under the response.
+        let data = m.find("Content").map(|c| c.text.trim()).unwrap_or_default();
+        if data.is_empty() {
+            return Err(NetError::No("no picture for this person".into()));
+        }
+        let bytes = unb64(data).ok_or_else(|| NetError::Protocol("the picture isn't base64".into()))?;
+        if bytes.is_empty() || bytes.len() > crate::MAX_PICTURE {
+            return Err(NetError::No("no picture for this person".into()));
+        }
+        Ok((crate::picture_media(&bytes).to_string(), bytes))
+    }
+}

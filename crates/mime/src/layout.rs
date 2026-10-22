@@ -19,6 +19,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::RichText;
 
+mod blocks;
+pub(crate) use blocks::background_pictures;
+use blocks::*;
+
 /// Tables nested deeper than this are flattened into text.
 const MAX_DEPTH: usize = 12;
 /// More cells than this in a message: no layout (it flows as text).
@@ -554,6 +558,24 @@ impl Node {
             .and_then(font_px)
             .or_else(|| (self.tag == "font").then(|| self.attr("size").and_then(font_attr_px)).flatten())
     }
+
+    /// The element no longer floated (its column places it).
+    fn unfloated(&self) -> Node {
+        let attrs = self
+            .attrs
+            .iter()
+            .filter(|(k, _)| k != "align")
+            .map(|(k, v)| {
+                if k == "style" {
+                    let kept: Vec<&str> = v.split(';').filter(|d| !d.trim().to_ascii_lowercase().starts_with("float")).collect();
+                    (k.clone(), kept.join(";"))
+                } else {
+                    (k.clone(), v.clone())
+                }
+            })
+            .collect();
+        Node { tag: self.tag.clone(), attrs, kids: self.kids.iter().map(copy).collect() }
+    }
 }
 
 /// The message with its style sheets' rules written into each element's `style` (inline
@@ -728,29 +750,252 @@ fn write(k: &Kid, out: &mut String) {
     }
 }
 
-struct Ctx {
-    /// The message's `<style>` blocks, given to each piece of text (for colours and hidden parts).
-    css: String,
-    cells: usize,
-    /// The text colour the boxes around inherit to the text inside (a cell's `color`).
-    color: Option<String>,
+/// A shallow copy of a part of the tree (its children too).
+fn copy(k: &Kid) -> Kid {
+    match k {
+        Kid::Text(t) => Kid::Text(t.clone()),
+        Kid::El(n) => Kid::El(Node { tag: n.tag.clone(), attrs: n.attrs.clone(), kids: n.kids.iter().map(copy).collect() }),
+    }
 }
 
-/// `f` with the text colour `n` sets, if it sets one, as CSS inherits it.
-fn colored<R>(ctx: &mut Ctx, n: &Node, f: impl FnOnce(&mut Ctx) -> R) -> R {
-    // Only what a colour is written with: it goes back into markup.
-    let own = n
-        .style_as_written("color")
-        .or_else(|| (n.tag == "font").then(|| n.attr("color").map(str::to_string)).flatten())
-        .filter(|c| c.len() < 40 && c.chars().all(|ch| ch.is_ascii_alphanumeric() || "#(),. %".contains(ch)));
-    match own {
-        Some(c) => {
-            let saved = ctx.color.replace(c);
-            let r = f(ctx);
-            ctx.color = saved;
-            r
+impl Node {
+    /// The element without its background (the cell around it carries that).
+    fn without_background(&self) -> Node {
+        let attrs = self
+            .attrs
+            .iter()
+            .filter(|(k, _)| k != "background" && k != "bgcolor")
+            .map(|(k, v)| {
+                if k != "style" {
+                    return (k.clone(), v.clone());
+                }
+                let kept: Vec<&str> = v
+                    .split(';')
+                    .filter(|d| d.split_once(':').is_none_or(|(p, _)| !p.trim().to_ascii_lowercase().starts_with("background")))
+                    .collect();
+                (k.clone(), kept.join(";"))
+            })
+            .collect();
+        Node { tag: self.tag.clone(), attrs, kids: self.kids.iter().map(copy).collect() }
+    }
+
+    /// The element without its placement (to draw it inside the box placed over another).
+    fn unplaced(&self) -> Node {
+        let attrs = self.attrs.iter().filter(|(k, _)| k != "style").cloned().collect();
+        Node { tag: self.tag.clone(), attrs, kids: self.kids.iter().map(copy).collect() }
+    }
+}
+
+/// The layout of an HTML message: empty when it has no columns (the text flows instead).
+pub fn html_layout(html: &str) -> Vec<Block> {
+    let lower = html.to_ascii_lowercase();
+    if !(lower.contains("<table")
+        || lower.contains("flex")
+        || lower.contains("grid")
+        || lower.contains("inline-block")
+        || lower.contains("float")
+        || lower.contains("background")
+        || lower.contains("absolute"))
+    {
+        return Vec::new();
+    }
+    let html = match html.char_indices().nth(crate::HTML_MAX) {
+        Some((i, _)) => html.get(..i).unwrap_or(html),
+        None => html,
+    };
+    let built = std::panic::catch_unwind(|| {
+        let root = parse(html);
+        let mut css = String::new();
+        collect_css(&root, &mut css, 0);
+        let mut ctx = Ctx { css, cells: 0, color: None };
+        let body = find(&root, "body", 0).unwrap_or(&root);
+        let out = blocks(&body.kids, &mut ctx, 0);
+        if ctx.cells > MAX_CELLS { Vec::new() } else { out }
+    });
+    match built {
+        Ok(b) if has_columns(&b) => b,
+        _ => Vec::new(),
+    }
+}
+
+fn find<'a>(n: &'a Node, tag: &str, depth: usize) -> Option<&'a Node> {
+    if n.tag == tag {
+        return Some(n);
+    }
+    if depth > 8 {
+        return None;
+    }
+    n.kids.iter().find_map(|k| if let Kid::El(e) = k { find(e, tag, depth + 1) } else { None })
+}
+
+fn collect_css(n: &Node, out: &mut String, depth: usize) {
+    if depth > MAX_DEPTH * 4 || out.len() > 256 * 1024 {
+        return;
+    }
+    if n.tag == "style" {
+        out.push_str("<style>");
+        for k in &n.kids {
+            if let Kid::Text(t) = k {
+                out.push_str(&t.replace("</", ""));
+            }
         }
-        None => f(ctx),
+        out.push_str("</style>");
+        return;
+    }
+    for k in &n.kids {
+        if let Kid::El(e) = k {
+            collect_css(e, out, depth + 1);
+        }
+    }
+}
+
+/// Elements a signature written in HTML keeps (layout, text and links); everything else goes,
+/// its text kept unless it's a script's, a style sheet's or a form's.
+const CLEAN_TAGS: &[&str] = &[
+    "a",
+    "b",
+    "big",
+    "blockquote",
+    "br",
+    "center",
+    "code",
+    "col",
+    "colgroup",
+    "div",
+    "em",
+    "font",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "hr",
+    "i",
+    "img",
+    "li",
+    "ol",
+    "p",
+    "pre",
+    "s",
+    "small",
+    "span",
+    "strike",
+    "strong",
+    "sub",
+    "sup",
+    "table",
+    "tbody",
+    "td",
+    "tfoot",
+    "th",
+    "thead",
+    "tr",
+    "u",
+    "ul",
+];
+
+/// Elements whose content goes with them.
+const DROPPED: &[&str] =
+    &["script", "style", "iframe", "object", "embed", "form", "input", "button", "select", "textarea", "head", "title", "meta", "link"];
+
+/// Attributes kept on them (all else, `on…` handlers included, goes).
+const CLEAN_ATTRS: &[&str] = &[
+    "align",
+    "alt",
+    "bgcolor",
+    "border",
+    "cellpadding",
+    "cellspacing",
+    "color",
+    "colspan",
+    "face",
+    "height",
+    "hspace",
+    "nowrap",
+    "rowspan",
+    "size",
+    "style",
+    "title",
+    "valign",
+    "vspace",
+    "width",
+    "href",
+    "src",
+];
+
+/// HTML a person wrote (a signature) made safe to send as it is: its layout, text, styles,
+/// links and pictures, without scripts, handlers, forms or frames. Links go to the web or to
+/// an address; pictures are the message's own (`cid:`), embedded (`data:image/`), or on the web
+/// (`https:`, which the recipients' mail apps load as they choose; Quatrelle doesn't). Hostile
+/// input is capped as the rest of this module's is; never panics.
+pub fn clean_html(html: &str) -> String {
+    let html = match html.char_indices().nth(crate::HTML_MAX) {
+        Some((i, _)) => html.get(..i).unwrap_or(html),
+        None => html,
+    };
+    let root = match std::panic::catch_unwind(|| parse(html)) {
+        Ok(r) => r,
+        Err(_) => return String::new(),
+    };
+    let mut out = String::new();
+    for k in &root.kids {
+        clean_into(k, &mut out, 0);
+    }
+    out
+}
+
+fn clean_esc(s: &str) -> String {
+    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
+}
+
+fn clean_into(k: &Kid, out: &mut String, depth: usize) {
+    if depth > MAX_DEPTH {
+        return;
+    }
+    match k {
+        Kid::Text(t) => out.push_str(&clean_esc(t)),
+        Kid::El(n) if DROPPED.contains(&n.tag.as_str()) => {}
+        Kid::El(n) if !CLEAN_TAGS.contains(&n.tag.as_str()) => {
+            for c in &n.kids {
+                clean_into(c, out, depth + 1);
+            }
+        }
+        Kid::El(n) => {
+            out.push('<');
+            out.push_str(&n.tag);
+            for (name, value) in &n.attrs {
+                if !CLEAN_ATTRS.contains(&name.as_str()) {
+                    continue;
+                }
+                let v = value.trim();
+                let lower = v.to_ascii_lowercase();
+                let ok = match name.as_str() {
+                    "href" => lower.starts_with("https://") || lower.starts_with("http://") || lower.starts_with("mailto:"),
+                    "src" => lower.starts_with("https://") || lower.starts_with("cid:") || lower.starts_with("data:image/"),
+                    // No scripts or remote loads through a style.
+                    "style" => {
+                        !lower.contains("expression(") && !lower.contains("url(") && !lower.contains("javascript:") && !lower.contains("@import")
+                    }
+                    _ => true,
+                };
+                if ok {
+                    out.push_str(&format!(" {name}=\"{}\"", clean_esc(v)));
+                }
+            }
+            if n.tag == "a" {
+                out.push_str(" target=\"_blank\"");
+            }
+            if void(&n.tag) {
+                out.push('>');
+                return;
+            }
+            out.push('>');
+            for c in &n.kids {
+                clean_into(c, out, depth + 1);
+            }
+            out.push_str(&format!("</{}>", n.tag));
+        }
     }
 }
 
@@ -788,16 +1033,6 @@ fn group_beside(kids: &[Kid]) -> Option<Vec<Kid>> {
         i += 1;
     }
     grouped.then_some(out)
-}
-
-fn blocks(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
-    // Runs of boxes side by side among other content, as boxes of columns (only when there are
-    // others: a parent of nothing but such boxes lays them out itself).
-    let mixed = kids.iter().any(|k| matches!(k, Kid::El(n) if !n.beside() && !n.hidden()) || matches!(k, Kid::Text(t) if !t.trim().is_empty()));
-    if mixed && let Some(grouped) = group_beside(kids) {
-        return blocks_of(&grouped, ctx, depth);
-    }
-    blocks_of(kids, ctx, depth)
 }
 
 fn blocks_of(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
@@ -1000,509 +1235,8 @@ fn blocks_of(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
     out
 }
 
-/// Whether any table puts content side by side, or a picture behind it, or boxes over it: a
-/// layout worth keeping (otherwise the text flows).
-fn has_columns(b: &[Block]) -> bool {
-    b.iter().any(|b| match b {
-        Block::Text(_) => false,
-        Block::Table(t) => {
-            t.background_image.is_some()
-                || t.rows.iter().any(|r| r.iter().filter(|c| !c.blocks.is_empty()).count() > 1)
-                || t.rows.iter().flatten().any(|c| c.background_image.is_some() || !c.overlays.is_empty() || has_columns(&c.blocks))
-        }
-    })
-}
-
-/// The pictures behind boxes in a layout (to be shown, or held back, like the message's others).
-pub fn background_pictures(b: &[Block]) -> Vec<String> {
-    let mut out: Vec<String> = Vec::new();
-    let mut add = |src: &Option<String>, out: &mut Vec<String>| {
-        if let Some(s) = src
-            && !out.contains(s)
-            && out.len() < 200
-        {
-            out.push(s.clone());
-        }
-    };
-    fn walk(b: &[Block], out: &mut Vec<String>, add: &mut dyn FnMut(&Option<String>, &mut Vec<String>), depth: usize) {
-        if depth > MAX_DEPTH * 2 {
-            return;
-        }
-        for x in b {
-            if let Block::Table(t) = x {
-                add(&t.background_image, out);
-                for c in t.rows.iter().flatten() {
-                    add(&c.background_image, out);
-                    walk(&c.blocks, out, add, depth + 1);
-                    for o in &c.overlays {
-                        walk(&o.blocks, out, add, depth + 1);
-                    }
-                }
-            }
-        }
-    }
-    walk(b, &mut out, &mut add, 0);
-    out
-}
-
-/// A shallow copy of a part of the tree (its children too).
-fn copy(k: &Kid) -> Kid {
-    match k {
-        Kid::Text(t) => Kid::Text(t.clone()),
-        Kid::El(n) => Kid::El(Node { tag: n.tag.clone(), attrs: n.attrs.clone(), kids: n.kids.iter().map(copy).collect() }),
-    }
-}
-
-impl Node {
-    /// The element no longer floated (its column places it).
-    fn unfloated(&self) -> Node {
-        let attrs = self
-            .attrs
-            .iter()
-            .filter(|(k, _)| k != "align")
-            .map(|(k, v)| {
-                if k == "style" {
-                    let kept: Vec<&str> = v.split(';').filter(|d| !d.trim().to_ascii_lowercase().starts_with("float")).collect();
-                    (k.clone(), kept.join(";"))
-                } else {
-                    (k.clone(), v.clone())
-                }
-            })
-            .collect();
-        Node { tag: self.tag.clone(), attrs, kids: self.kids.iter().map(copy).collect() }
-    }
-
-    /// The element without its background (the cell around it carries that).
-    fn without_background(&self) -> Node {
-        let attrs = self
-            .attrs
-            .iter()
-            .filter(|(k, _)| k != "background" && k != "bgcolor")
-            .map(|(k, v)| {
-                if k != "style" {
-                    return (k.clone(), v.clone());
-                }
-                let kept: Vec<&str> = v
-                    .split(';')
-                    .filter(|d| d.split_once(':').is_none_or(|(p, _)| !p.trim().to_ascii_lowercase().starts_with("background")))
-                    .collect();
-                (k.clone(), kept.join(";"))
-            })
-            .collect();
-        Node { tag: self.tag.clone(), attrs, kids: self.kids.iter().map(copy).collect() }
-    }
-
-    /// The element without its placement (to draw it inside the box placed over another).
-    fn unplaced(&self) -> Node {
-        let attrs = self.attrs.iter().filter(|(k, _)| k != "style").cloned().collect();
-        Node { tag: self.tag.clone(), attrs, kids: self.kids.iter().map(copy).collect() }
-    }
-}
-
-/// The layout of an HTML message: empty when it has no columns (the text flows instead).
-pub fn html_layout(html: &str) -> Vec<Block> {
-    let lower = html.to_ascii_lowercase();
-    if !(lower.contains("<table")
-        || lower.contains("flex")
-        || lower.contains("grid")
-        || lower.contains("inline-block")
-        || lower.contains("float")
-        || lower.contains("background")
-        || lower.contains("absolute"))
-    {
-        return Vec::new();
-    }
-    let html = match html.char_indices().nth(crate::HTML_MAX) {
-        Some((i, _)) => html.get(..i).unwrap_or(html),
-        None => html,
-    };
-    let built = std::panic::catch_unwind(|| {
-        let root = parse(html);
-        let mut css = String::new();
-        collect_css(&root, &mut css, 0);
-        let mut ctx = Ctx { css, cells: 0, color: None };
-        let body = find(&root, "body", 0).unwrap_or(&root);
-        let out = blocks(&body.kids, &mut ctx, 0);
-        if ctx.cells > MAX_CELLS { Vec::new() } else { out }
-    });
-    match built {
-        Ok(b) if has_columns(&b) => b,
-        _ => Vec::new(),
-    }
-}
-
-fn find<'a>(n: &'a Node, tag: &str, depth: usize) -> Option<&'a Node> {
-    if n.tag == tag {
-        return Some(n);
-    }
-    if depth > 8 {
-        return None;
-    }
-    n.kids.iter().find_map(|k| if let Kid::El(e) = k { find(e, tag, depth + 1) } else { None })
-}
-
-fn collect_css(n: &Node, out: &mut String, depth: usize) {
-    if depth > MAX_DEPTH * 4 || out.len() > 256 * 1024 {
-        return;
-    }
-    if n.tag == "style" {
-        out.push_str("<style>");
-        for k in &n.kids {
-            if let Kid::Text(t) = k {
-                out.push_str(&t.replace("</", ""));
-            }
-        }
-        out.push_str("</style>");
-        return;
-    }
-    for k in &n.kids {
-        if let Kid::El(e) = k {
-            collect_css(e, out, depth + 1);
-        }
-    }
-}
-
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn text(b: &Block) -> String {
-        match b {
-            Block::Text(r) => r.iter().map(|l| l.iter().map(|s| s.text.as_str()).collect::<String>()).collect::<Vec<_>>().join("\n"),
-            Block::Table(_) => String::new(),
-        }
-    }
-
-    #[test]
-    fn a_newsletter_keeps_its_columns() {
-        let html = r##"<html><head><style>.hide{display:none}</style></head><body>
-            <div style="display:none">Preheader text</div>
-            <center><table width="600" align="center" bgcolor="#f4f4f4"><tr><td align="center"><h1>Studio news</h1></td></tr>
-            <tr><td><table width="100%"><tr>
-                <td width="50%" style="background-color: #ffeedd"><p>Left <b>column</b></p><img src="cid:a@x" alt="poster"></td>
-                <td width="50%"><p>Right column</p><a href="https://example.com/x">Read more</a></td>
-            </tr></table></td></tr></table></center>
-            <p class="hide">Hidden by a rule</p><p>Footer</p></body></html>"##;
-        let b = html_layout(html);
-        assert!(!b.is_empty());
-        // Centre wrapper → table → second row's cell → the two columns.
-        let Block::Table(center) = &b[0] else { panic!("{b:?}") };
-        let Block::Table(outer) = &center.rows[0][0].blocks[0] else { panic!() };
-        assert_eq!(outer.width, Some(Width::Px(600)));
-        assert_eq!(outer.align, Align::Center);
-        assert_eq!(outer.background, Some([0xf4, 0xf4, 0xf4]));
-        assert_eq!(outer.rows[0][0].align, Align::Center);
-        assert!(text(&outer.rows[0][0].blocks[0]).contains("Studio news"));
-        let Block::Table(cols) = &outer.rows[1][0].blocks[0] else { panic!() };
-        let row = &cols.rows[0];
-        assert_eq!(row.len(), 2);
-        assert_eq!(row[0].width, Some(Width::Percent(50)));
-        assert_eq!(row[0].background, Some([0xff, 0xee, 0xdd]));
-        let Block::Text(left) = &row[0].blocks[0] else { panic!() };
-        assert!(left.iter().flatten().any(|s| s.bold && s.text.contains("column")));
-        assert!(left.iter().flatten().any(|s| s.image.as_deref() == Some("cid:a@x")));
-        let Block::Text(right) = &row[1].blocks[0] else { panic!() };
-        assert!(right.iter().flatten().any(|s| s.link.as_deref() == Some("https://example.com/x")));
-        // Hidden parts stay hidden; text after the table follows it.
-        let all = format!("{b:?}");
-        assert!(!all.contains("Preheader") && !all.contains("Hidden by a rule"), "{all}");
-        assert!(text(b.last().unwrap()).contains("Footer"));
-    }
-
-    #[test]
-    fn css_columns_are_columns_too() {
-        // Flexbox, a grid and inline-block boxes, no tables.
-        let flex = html_layout(
-            r#"<div style="display:flex"><div style="width:30%"><p>Left</p></div><div style="background-color:#eee"><p>Right</p></div></div>"#,
-        );
-        let Block::Table(t) = &flex[0] else { panic!("{flex:?}") };
-        assert_eq!(t.rows[0].len(), 2);
-        assert_eq!(t.rows[0][0].width, Some(Width::Percent(30)));
-        assert_eq!(t.rows[0][1].background, Some([0xee, 0xee, 0xee]));
-        let grid = html_layout(r#"<div style="display: grid; grid-template-columns: repeat(2, 1fr)"><div>a</div><div>b</div><div>c</div></div>"#);
-        let Block::Table(t) = &grid[0] else { panic!("{grid:?}") };
-        assert_eq!(t.rows.iter().map(Vec::len).collect::<Vec<_>>(), [2, 1]);
-        let inline = html_layout(
-            r#"<div><div style="display:inline-block;width:280px">One</div> <div style="display:inline-block;width:280px">Two</div></div>"#,
-        );
-        assert!(matches!(&inline[0], Block::Table(t) if t.rows[0].len() == 2), "{inline:?}");
-        // A signature as Outlook writes it: a logo table and a name table floated side by side
-        // (with CSS, or `align="left"`), after the message's text.
-        let sig = html_layout(
-            r#"<p>Thanks, see you Monday.</p>
-            <table align="left" border="0" style="float:left;"><tr><td><a href="https://www.example.com"><img src="cid:logo@x" width="194"></a></td></tr></table>
-            <table border="0" style="float:left;border-left:1px solid #ccc;"><tr><td><p><span style="font-weight:bold">Didier GAUDIN</span><br>Tél. 02 51 70 93 93</p></td></tr></table>"#,
-        );
-        let row = sig
-            .iter()
-            .find_map(|b| match b {
-                Block::Table(t) if t.rows.first().is_some_and(|r| r.len() == 2) => t.rows.first(),
-                _ => None,
-            })
-            .expect("logo and name side by side");
-        assert_eq!(row.len(), 2);
-        let floats = html_layout(r#"<div><div style="float:left">One</div><div style="float:right">Two</div></div>"#);
-        assert!(!floats.is_empty());
-        // Stacked flexbox, inline text with spans: no columns.
-        assert!(html_layout(r#"<div style="display:flex;flex-direction:column"><div>a</div><div>b</div></div>"#).is_empty());
-        assert!(
-            html_layout(r#"<p>Hello <span style="display:inline-block">a</span> and <span style="display:inline-block">b</span></p>"#).is_empty()
-        );
-    }
-
-    #[test]
-    fn pictures_behind_boxes_are_kept() {
-        // A banner: a cell with a picture behind its heading (the address keeps its case).
-        let banner = html_layout(
-            r##"<table width="600"><tr><td bgcolor="#2e7d6b" background="https://img.example/Hero.JPG" style="color:#fff"><h1>Open call</h1></td></tr></table>"##,
-        );
-        let Block::Table(t) = &banner[0] else { panic!("{banner:?}") };
-        assert_eq!(t.rows[0][0].background_image.as_deref(), Some("https://img.example/Hero.JPG"));
-        assert_eq!(t.rows[0][0].background, Some([0x2e, 0x7d, 0x6b]), "the colour stays, for when the picture isn't shown");
-        // CSS forms, on a `<div>`: `background-image` and `background` with `url()`.
-        for css in ["background-image: url('cid:Hero@x')", "background: #000 url(cid:Hero@x) no-repeat center / cover"] {
-            let b = html_layout(&format!(r#"<div style="{css}"><p>Over the picture</p></div>"#));
-            let Block::Table(t) = &b[0] else { panic!("{css}: {b:?}") };
-            assert_eq!(t.rows[0][0].background_image.as_deref(), Some("cid:Hero@x"), "{css}");
-            assert!(text(&t.rows[0][0].blocks[0]).contains("Over the picture"));
-            assert_eq!(background_pictures(&b), ["cid:Hero@x"]);
-        }
-        // Columns inside a box with a picture behind it stay columns.
-        let cols = html_layout(r#"<div style="display:flex;background-image:url(cid:b@x)"><div>One</div><div>Two</div></div>"#);
-        let Block::Table(t) = &cols[0] else { panic!("{cols:?}") };
-        assert!(matches!(&t.rows[0][0].blocks[0], Block::Table(inner) if inner.rows[0].len() == 2), "{cols:?}");
-        // Nothing that runs, and nothing local.
-        for bad in ["javascript:alert(1)", "file:///etc/passwd", "data:text/html,x"] {
-            assert!(html_layout(&format!(r#"<div style="background-image:url({bad})"><p>x</p></div>"#)).is_empty(), "{bad}");
-        }
-    }
-
-    #[test]
-    fn text_takes_its_cells_colour() {
-        // White on a dark band, set on the cell (or the table), as CSS inherits it.
-        let colour_of = |b: &[Block], word: &str| {
-            format!("{b:?}").contains(word).then(|| {
-                fn spans(b: &[Block], out: &mut Vec<(String, Option<[u8; 3]>)>) {
-                    for x in b {
-                        match x {
-                            Block::Text(r) => out.extend(r.iter().flatten().map(|s| (s.text.clone(), s.color))),
-                            Block::Table(t) => t.rows.iter().flatten().for_each(|c| spans(&c.blocks, out)),
-                        }
-                    }
-                }
-                let mut v = Vec::new();
-                spans(b, &mut v);
-                v.into_iter().find(|(t, _)| t.contains(word)).and_then(|(_, c)| c)
-            })
-        };
-        let cell = html_layout(r##"<table><tr><td style="color:#ffffff" bgcolor="#123456">Band</td><td>Other</td></tr></table>"##);
-        assert_eq!(colour_of(&cell, "Band").flatten(), Some([255, 255, 255]), "{cell:?}");
-        assert_eq!(colour_of(&cell, "Other").flatten(), None, "a neighbour keeps its own");
-        let table = html_layout(r##"<table style="color:#00ff00"><tr><td>A</td><td>B</td></tr></table>"##);
-        assert_eq!(colour_of(&table, "A").flatten(), Some([0, 255, 0]));
-        // A colour can't smuggle markup in.
-        let evil = html_layout(r##"<table><tr><td style="color:red&quot;><script>x</script>">A</td><td>B</td></tr></table>"##);
-        assert!(!format!("{evil:?}").contains("script"), "{evil:?}");
-    }
-
-    #[test]
-    fn boxes_placed_over_others_are_kept() {
-        // A label over a picture, and a note in the bottom right corner.
-        let b = html_layout(
-            r##"<div style="position:relative; width:300px"><img src="cid:poster@x" alt="Poster">
-               <span style="position:absolute; top:8px; left:10px; background:#c62828; color:#fff">NEW</span>
-               <div style="position:absolute; right:4px; bottom:6px; width:120px">Ends Friday</div></div>"##,
-        );
-        let Block::Table(t) = &b[0] else { panic!("{b:?}") };
-        assert_eq!(t.width, Some(Width::Px(300)));
-        let cell = &t.rows[0][0];
-        assert!(matches!(&cell.blocks[0], Block::Text(r) if r.iter().flatten().any(|s| s.image.as_deref() == Some("cid:poster@x"))));
-        assert_eq!(cell.overlays.len(), 2);
-        let (new, ends) = (&cell.overlays[0], &cell.overlays[1]);
-        assert_eq!((new.x, new.y, new.from_right, new.from_bottom), (10, 8, false, false));
-        assert_eq!(new.background, Some([0xc6, 0x28, 0x28]));
-        assert!(text(&new.blocks[0]).contains("NEW"));
-        assert_eq!((ends.x, ends.y, ends.from_right, ends.from_bottom), (4, 6, true, true));
-        assert_eq!(ends.width, Some(Width::Px(120)));
-        // Placed with nothing to sit over: it flows; absurd offsets are capped.
-        assert!(html_layout(r#"<p>Hi <span style="position:absolute;top:3px">there</span></p>"#).is_empty());
-        let far = html_layout(r#"<div style="position:relative"><p>a</p><b style="position:absolute;top:99999999px;left:-50px">b</b></div>"#);
-        let Block::Table(t) = &far[0] else { panic!("{far:?}") };
-        assert_eq!((t.rows[0][0].overlays[0].x, t.rows[0][0].overlays[0].y), (0, MAX_OFFSET));
-    }
-
-    #[test]
-    fn plain_mail_and_one_column_tables_have_no_layout() {
-        assert!(html_layout("<p>Hello <b>there</b></p>").is_empty());
-        assert!(html_layout("<table><tr><td>One</td></tr><tr><td>Two</td></tr></table>").is_empty());
-        // A receipt (a data table) has columns.
-        assert!(!html_layout("<table><tr><th>Item</th><th>Price</th></tr><tr><td>Poster</td><td>40</td></tr></table>").is_empty());
-    }
-
-    #[test]
-    fn hostile_markup_is_survived() {
-        // Unclosed, misnested, deep, huge.
-        let deep = "<table><tr><td>".repeat(500) + "x";
-        let _ = html_layout(&deep);
-        let _ = html_layout("<table><td>a<td>b</tr></tr></table></td><tr><td><td>");
-        let _ = html_layout("<table><tr><td><script>if (a < b) { document.write('<td>') }</script>z</td><td>y</td></tr></table>");
-        let many = "<table><tr>".to_string() + &"<td>c</td>".repeat(5000) + "</tr></table>";
-        assert!(html_layout(&many).is_empty(), "too many cells: flows as text");
-        assert_eq!(color("#abc"), Some([0xaa, 0xbb, 0xcc]));
-        assert_eq!(color("rgb(1, 2, 300)"), Some([1, 2, 255]));
-        assert_eq!(color("#12"), None);
-    }
-}
-
-/// Elements a signature written in HTML keeps (layout, text and links); everything else goes,
-/// its text kept unless it's a script's, a style sheet's or a form's.
-const CLEAN_TAGS: &[&str] = &[
-    "a",
-    "b",
-    "big",
-    "blockquote",
-    "br",
-    "center",
-    "code",
-    "col",
-    "colgroup",
-    "div",
-    "em",
-    "font",
-    "h1",
-    "h2",
-    "h3",
-    "h4",
-    "h5",
-    "h6",
-    "hr",
-    "i",
-    "img",
-    "li",
-    "ol",
-    "p",
-    "pre",
-    "s",
-    "small",
-    "span",
-    "strike",
-    "strong",
-    "sub",
-    "sup",
-    "table",
-    "tbody",
-    "td",
-    "tfoot",
-    "th",
-    "thead",
-    "tr",
-    "u",
-    "ul",
-];
-
-/// Elements whose content goes with them.
-const DROPPED: &[&str] =
-    &["script", "style", "iframe", "object", "embed", "form", "input", "button", "select", "textarea", "head", "title", "meta", "link"];
-
-/// Attributes kept on them (all else, `on…` handlers included, goes).
-const CLEAN_ATTRS: &[&str] = &[
-    "align",
-    "alt",
-    "bgcolor",
-    "border",
-    "cellpadding",
-    "cellspacing",
-    "color",
-    "colspan",
-    "face",
-    "height",
-    "hspace",
-    "nowrap",
-    "rowspan",
-    "size",
-    "style",
-    "title",
-    "valign",
-    "vspace",
-    "width",
-    "href",
-    "src",
-];
-
-/// HTML a person wrote (a signature) made safe to send as it is: its layout, text, styles,
-/// links and pictures, without scripts, handlers, forms or frames. Links go to the web or to
-/// an address; pictures are the message's own (`cid:`), embedded (`data:image/`), or on the web
-/// (`https:`, which the recipients' mail apps load as they choose; Quatrelle doesn't). Hostile
-/// input is capped as the rest of this module's is; never panics.
-pub fn clean_html(html: &str) -> String {
-    let html = match html.char_indices().nth(crate::HTML_MAX) {
-        Some((i, _)) => html.get(..i).unwrap_or(html),
-        None => html,
-    };
-    let root = match std::panic::catch_unwind(|| parse(html)) {
-        Ok(r) => r,
-        Err(_) => return String::new(),
-    };
-    let mut out = String::new();
-    for k in &root.kids {
-        clean_into(k, &mut out, 0);
-    }
-    out
-}
-
-fn clean_esc(s: &str) -> String {
-    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
-}
-
-fn clean_into(k: &Kid, out: &mut String, depth: usize) {
-    if depth > MAX_DEPTH {
-        return;
-    }
-    match k {
-        Kid::Text(t) => out.push_str(&clean_esc(t)),
-        Kid::El(n) if DROPPED.contains(&n.tag.as_str()) => {}
-        Kid::El(n) if !CLEAN_TAGS.contains(&n.tag.as_str()) => {
-            for c in &n.kids {
-                clean_into(c, out, depth + 1);
-            }
-        }
-        Kid::El(n) => {
-            out.push('<');
-            out.push_str(&n.tag);
-            for (name, value) in &n.attrs {
-                if !CLEAN_ATTRS.contains(&name.as_str()) {
-                    continue;
-                }
-                let v = value.trim();
-                let lower = v.to_ascii_lowercase();
-                let ok = match name.as_str() {
-                    "href" => lower.starts_with("https://") || lower.starts_with("http://") || lower.starts_with("mailto:"),
-                    "src" => lower.starts_with("https://") || lower.starts_with("cid:") || lower.starts_with("data:image/"),
-                    // No scripts or remote loads through a style.
-                    "style" => {
-                        !lower.contains("expression(") && !lower.contains("url(") && !lower.contains("javascript:") && !lower.contains("@import")
-                    }
-                    _ => true,
-                };
-                if ok {
-                    out.push_str(&format!(" {name}=\"{}\"", clean_esc(v)));
-                }
-            }
-            if n.tag == "a" {
-                out.push_str(" target=\"_blank\"");
-            }
-            if void(&n.tag) {
-                out.push('>');
-                return;
-            }
-            out.push('>');
-            for c in &n.kids {
-                clean_into(c, out, depth + 1);
-            }
-            out.push_str(&format!("</{}>", n.tag));
-        }
-    }
-}
+mod tests;
 
 #[cfg(test)]
 mod clean_tests {

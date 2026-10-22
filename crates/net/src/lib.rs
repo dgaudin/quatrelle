@@ -16,42 +16,18 @@
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
 pub mod autoconfig;
-pub mod dav;
+mod data_files;
 pub mod dns;
-pub mod ews;
-mod ews_pim;
-pub mod graph;
-pub mod graph_pim;
-pub mod http;
-pub mod imap;
-pub mod jmap;
-pub mod ntlm;
-pub mod oauth;
-pub mod pop;
-pub mod pst;
+mod exchange;
 #[cfg(test)]
-mod pst_bench;
-pub mod pst_export;
-mod pst_pim;
-pub mod sieve;
-pub mod smtp;
+mod fakes;
+pub mod http;
+pub mod oauth;
+mod protocols;
 pub mod stream;
 pub mod sync;
 pub mod updates;
 pub mod worker;
-
-#[cfg(test)]
-mod fake;
-#[cfg(test)]
-mod fake_dav;
-#[cfg(test)]
-mod fake_ews;
-#[cfg(test)]
-mod fake_graph;
-#[cfg(test)]
-mod fake_jmap;
-
-use std::io;
 
 /// Largest directory picture kept (bytes): a contact photo, not a photograph album.
 pub(crate) const MAX_PICTURE: usize = 512 * 1024;
@@ -66,6 +42,17 @@ pub(crate) fn picture_media(data: &[u8]) -> &'static str {
         _ => "image/jpeg",
     }
 }
+
+// Each module by its own name, wherever its file sits (`quatrelle_net::ews`, `crate::imap`).
+use data_files::pst_pim;
+pub use data_files::{pst, pst_export};
+use exchange::ews_pim;
+pub use exchange::{ews, graph, graph_pim, ntlm};
+#[cfg(test)]
+use fakes::{fake, fake_graph};
+pub use protocols::{dav, imap, jmap, pop, sieve, smtp};
+
+use std::io;
 
 #[derive(Debug, thiserror::Error)]
 pub enum NetError {
