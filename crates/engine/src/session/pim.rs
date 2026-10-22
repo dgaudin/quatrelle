@@ -116,7 +116,7 @@ impl Session {
     }
 
     pub(crate) fn save_pim(&mut self, account: &str) {
-        self.contacts = None;
+        self.forget_contacts();
         self.pim_revision = self.pim_revision.wrapping_add(1);
         let (Some(store), Some(p)) = (&self.store, self.pim.get(account)) else { return };
         if let Err(e) = store.save_account_doc(account, PIM_DOC, p) {
