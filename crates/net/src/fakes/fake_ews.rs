@@ -72,6 +72,8 @@ pub struct Data {
     /// The next request on a signed-in connection is told to sign in again (a recycled
     /// connection), once.
     pub forget_sign_in: bool,
+    /// Folders listed without their last change (as a server that doesn't keep it).
+    pub no_commit_time: bool,
     /// The next request on a connection already used is met with the connection closed, unread
     /// (a connection the server closed for being idle), this many times.
     pub drop_kept: usize,
@@ -163,6 +165,7 @@ impl Default for Data {
             handshakes: 0,
             forget_sign_in: false,
             drop_kept: 0,
+            no_commit_time: false,
             busy: 0,
             url: String::new(),
             editors: Vec::new(),
@@ -318,6 +321,21 @@ impl Data {
             )
         } else {
             replica
+        };
+        // When anything in it last changed (PR_LOCAL_COMMIT_TIME_MAX): here a digest of what it
+        // holds, which changes as Exchange's time does (unless told to leave it out).
+        let replica = if self.no_commit_time {
+            replica
+        } else {
+            use std::hash::{Hash, Hasher};
+            let mut h = std::collections::hash_map::DefaultHasher::new();
+            for i in self.items.iter().filter(|i| i.folder == f.id) {
+                (&i.id, i.read, i.flagged, i.draft).hash(&mut h);
+            }
+            format!(
+                "{replica}<t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"0x670a\" PropertyType=\"SystemTime\"/><t:Value>2026-01-01T00:00:00.{:x}Z</t:Value></t:ExtendedProperty>",
+                h.finish()
+            )
         };
         // As Exchange answers: each folder in an element of its kind (EWS's folder array).
         let kind = match f.class.as_str() {

@@ -110,8 +110,25 @@ pub fn list_folders(c: &Client, st: &mut State, account: &str) -> Result<Vec<Fol
 /// Bring one folder's cache up to date.
 pub fn sync_folder(c: &Client, st: &mut State, store: &Store, account: &str, folder: &str, opts: &SyncOptions) -> Result<SyncReport> {
     let id = st.mailbox(folder)?.to_string();
+    let (total, unread, stamp) = c.counts(&id)?;
+    // As it was when last read in full (same last change, same counts, same window, not long
+    // ago): nothing to list. A pass over a hundred folders was a listing of each, up to its
+    // whole window, every time — most of them unchanged since the last pass.
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX));
+    let mark = jmap::FolderMark { stamp, total, unread, window: opts.window, at: now };
+    let same = |m: &jmap::FolderMark| {
+        !mark.stamp.is_empty()
+            && m.stamp == mark.stamp
+            && m.total == total
+            && m.unread == unread
+            && m.window == mark.window
+            && now - m.at < MARK_TRUSTED
+    };
+    if st.marks.get(folder).is_some_and(same) && store.folder_kept(account, folder, VALIDITY) {
+        return Ok(SyncReport { total, unread, ..Default::default() });
+    }
+    st.marks.remove(folder);
     let newest = c.newest(&id, opts.window)?;
-    let (total, unread) = c.counts(&id)?;
     let mut fs = store.load_folder(account, folder)?;
     let mut report = SyncReport::default();
     if fs.validity != VALIDITY && (fs.validity != 0 || !fs.messages.is_empty()) {
@@ -159,10 +176,16 @@ pub fn sync_folder(c: &Client, st: &mut State, store: &Store, account: &str, fol
     fs.uid_next = fs.messages.iter().map(|m| m.key.uid).max().unwrap_or(0).saturating_add(1);
     store.save_folder(account, folder, &fs)?;
     prefetch(c, st, store, account, folder, &mut fs, opts)?;
+    // Read in full: noted as it was, for the next pass to leave alone if nothing changes.
+    st.marks.insert(folder.to_string(), mark);
     report.total = total;
     report.unread = unread;
     Ok(report)
 }
+
+/// How long a folder's mark is trusted (seconds): past this, it's read in full again anyway
+/// (a change the server's stamp doesn't show, a flag set elsewhere, still comes in).
+const MARK_TRUSTED: i64 = 6 * 3600;
 
 /// An item's list entry from its details.
 fn item_summary(it: &El, key: MessageKey) -> Summary {

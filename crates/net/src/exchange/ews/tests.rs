@@ -192,6 +192,58 @@ fn a_message_the_search_found_can_be_read() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// A folder as it was when last read in full (the server's stamp of its last change, its
+/// counts) is left alone: one look at it rather than a listing. New mail, a message read
+/// elsewhere, an old mark, or a server that doesn't stamp folders: listed again.
+#[test]
+fn a_folder_that_hasnt_changed_isnt_listed_again() {
+    let mut d = crate::fakes::fake_ews::Data::default();
+    let inbox = d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    for i in 1..=2 {
+        d.deliver(&inbox, format!("From: a@x.example\r\nSubject: m{i}\r\n\r\nx\r\n").as_bytes(), false, &format!("2024-05-0{i}T09:00:00Z"));
+    }
+    let server = crate::fakes::fake_ews::serve(d);
+    let dir = std::env::temp_dir().join(format!("quatrelle-ews-marks-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let store = Store::open(&dir).unwrap();
+    let user = format!("{}\\{}", crate::fakes::fake_ews::DOMAIN, crate::fakes::fake_ews::USER);
+    let c = Client::connect(&server.url, &user, crate::fakes::fake_ews::PASSWORD, "riley@contoso.example").unwrap();
+    let mut st = State::default();
+    list_folders(&c, &mut st, "a1").unwrap();
+    let opts = SyncOptions { prefetch: 0, ..Default::default() };
+    let listings = || server.data.lock().unwrap().calls.iter().filter(|c| c.as_str() == "FindItem").count();
+    let sync = |st: &mut State| sync_folder(&c, st, &store, "a1", "INBOX", &opts).unwrap();
+    assert_eq!(sync(&mut st).new, 2);
+    let n = listings();
+    let r = sync(&mut st);
+    assert_eq!(listings(), n, "unchanged: not listed again");
+    assert_eq!((r.total, r.unread, r.new), (2, 2, 0), "its counts all the same");
+    // New mail: listed, and it's there.
+    let id = server.data.lock().unwrap().deliver(&inbox, b"From: b@x.example\r\nSubject: m3\r\n\r\nx\r\n", false, "2024-05-03T09:00:00Z");
+    assert_eq!(sync(&mut st).new, 1);
+    assert!(listings() > n);
+    // Read elsewhere: the read mark comes in.
+    let n = listings();
+    server.data.lock().unwrap().items.iter_mut().filter(|i| i.id == id).for_each(|i| i.read = true);
+    sync(&mut st);
+    assert!(listings() > n);
+    assert!(store.load_folder("a1", "INBOX").unwrap().messages.iter().any(|m| m.subject == "m3" && m.flags.seen));
+    // A mark hours old isn't trusted.
+    let n = listings();
+    if let Some(m) = st.marks.get_mut("INBOX") {
+        m.at -= 7 * 3600;
+    }
+    sync(&mut st);
+    assert!(listings() > n, "an old mark: listed again");
+    // A server that doesn't stamp its folders: listed every time.
+    server.data.lock().unwrap().no_commit_time = true;
+    let n = listings();
+    sync(&mut st);
+    sync(&mut st);
+    assert_eq!(listings(), n + 2);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn a_message_the_numbering_lost_is_found_again_by_its_message_id() {
     let mut d = crate::fakes::fake_ews::Data::default();

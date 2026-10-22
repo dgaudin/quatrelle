@@ -99,16 +99,20 @@ impl Client {
     }
 
     /// A folder's (total, unread).
-    pub(super) fn counts(&self, folder: &str) -> Result<(u32, u32)> {
+    /// A folder's counts, and when anything in it last changed (`PR_LOCAL_COMMIT_TIME_MAX`,
+    /// empty when the server doesn't say): `(total, unread, stamp)`.
+    pub(super) fn counts(&self, folder: &str) -> Result<(u32, u32, String)> {
         let m = self.call_one(&format!(
             "<m:GetFolder><m:FolderShape><t:BaseShape>IdOnly</t:BaseShape><t:AdditionalProperties>\
-             <t:FieldURI FieldURI=\"folder:TotalCount\"/><t:FieldURI FieldURI=\"folder:UnreadCount\"/></t:AdditionalProperties></m:FolderShape>\
+             <t:FieldURI FieldURI=\"folder:TotalCount\"/><t:FieldURI FieldURI=\"folder:UnreadCount\"/>\
+             <t:ExtendedFieldURI PropertyTag=\"0x670A\" PropertyType=\"SystemTime\"/></t:AdditionalProperties></m:FolderShape>\
              <m:FolderIds><t:FolderId Id=\"{}\"/></m:FolderIds></m:GetFolder>",
             esc(folder)
         ))?;
         let f = m.folders().into_iter().next();
         let count = |k: &str| f.and_then(|f| f.text_of(k)).and_then(|v| v.trim().parse::<u32>().ok()).unwrap_or(0);
-        Ok((count("TotalCount"), count("UnreadCount")))
+        let stamp = f.and_then(|f| extended_text(f, "0x670A")).map(|v| v.trim().to_string()).unwrap_or_default();
+        Ok((count("TotalCount"), count("UnreadCount"), stamp))
     }
 
     /// The newest `limit` messages of a folder with their flags.
