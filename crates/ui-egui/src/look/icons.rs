@@ -138,7 +138,7 @@ impl Pen<'_> {
 fn svg(icon: Icon) -> &'static str {
     macro_rules! f {
         ($name:literal) => {
-            include_str!(concat!("../../../assets/icons/fluent/", $name, "_20_regular.svg"))
+            include_str!(concat!("../../../../assets/icons/fluent/", $name, "_20_regular.svg"))
         };
     }
     match icon {
