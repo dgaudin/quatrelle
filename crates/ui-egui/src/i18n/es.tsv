@@ -1188,3 +1188,29 @@ month	May	mayo
 	Horizontal line	Línea horizontal
 	Increase font size (Ctrl+])	Aumentar el tamaño de fuente (Ctrl+])
 	Decrease font size (Ctrl+[)	Reducir el tamaño de fuente (Ctrl+[)
+	All rooms	Todas las salas
+	A room's address	La dirección de una sala
+	Click or drag the meeting to move it.	Haga clic o arrastre la reunión para moverla.
+	Filter rooms	Filtrar salas
+	From your calendar: the rooms booked in your meetings and those in Outlook's Rooms group.	De su calendario: las salas reservadas en sus reuniones y las del grupo Salas de Outlook.
+	Give the meeting a start and an end to see when everyone is free.	Indique un inicio y un fin de la reunión para ver cuándo están todos libres.
+	Loading availability…	Cargando la disponibilidad…
+	Looking for rooms…	Buscando salas…
+	Meeting day	Día de la reunión
+	Next day	Día siguiente
+	Previous day	Día anterior
+	No information	Sin información
+	No room matches	Ninguna sala coincide
+	No rooms are offered here yet: a room booked in one of your meetings shows here.	Aún no se ofrecen salas aquí: una sala reservada en una de sus reuniones aparecerá aquí.
+	Room Finder	Buscador de salas
+	Rooms	Salas
+	Rooms: {names}	Salas: {names}
+	Scheduling Assistant	Asistente para programación
+	The rooms couldn't be read: {error}	No se pudieron leer las salas: {error}
+	Organizer	Organizador
+	Guest	Invitado
+	Room	Sala
+	Free	Libre
+	Busy	Ocupado
+	Out of office	Fuera de la oficina
+	Working elsewhere	Trabajando en otro lugar

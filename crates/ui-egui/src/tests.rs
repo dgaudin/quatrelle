@@ -350,6 +350,23 @@ pub(crate) fn pim_tour(a: &mut MailApp, ctx: &egui::Context) {
     }
     a.ui.dialog = Some(Dialog::new_event(&a.session, None));
     frame(ctx, a, vec![]);
+    // A meeting with guests and a room, its Room Finder open and its Scheduling Assistant
+    // showing everyone's hours (the rooms and hours still being read too).
+    let mut d = Dialog::new_event(&a.session, None);
+    if let Dialog::Event(f) = &mut d {
+        f.guests = "Zoe Park <zoe@studio.example>".into();
+        f.add_room("Sound Lab", "sound.lab@studio.example");
+        f.finder = Some(crate::pim_dialogs::RoomFinderUi::default());
+        f.scheduling = true;
+    }
+    a.ui.dialog = Some(d);
+    frame(ctx, a, vec![]);
+    frame(ctx, a, vec![]);
+    a.session.rooms.insert("sample".into(), quatrelle_engine::Fetched::Loading);
+    a.session.free_busy.clear();
+    frame(ctx, a, vec![]);
+    a.session.rooms.insert("sample".into(), quatrelle_engine::Fetched::Failed("no directory".into()));
+    frame(ctx, a, vec![]);
     a.ui.dialog = None;
     a.run("view.module", json!({"name": "people"}));
     frame(ctx, a, vec![]);
@@ -471,6 +488,7 @@ mod accounts;
 mod organize;
 mod pim;
 mod reading;
+mod scheduling;
 mod windows;
 mod writing;
 

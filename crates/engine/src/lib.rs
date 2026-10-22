@@ -30,6 +30,7 @@ pub use session::{
     newer_release, parse_key,
     pim::{ACCOUNT_COLOR, AgendaItem, CalMode, DueReminder, Module, NoteRef, Person, parse_local},
     quick_steps::QuickStep,
+    scheduling::{Fetched, RoomFinder},
     search_folders::SearchFolder,
 };
 

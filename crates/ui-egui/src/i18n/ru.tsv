@@ -1187,3 +1187,29 @@ month	May	Май
 	Horizontal line	Горизонтальная линия
 	Increase font size (Ctrl+])	Увеличить размер шрифта (Ctrl+])
 	Decrease font size (Ctrl+[)	Уменьшить размер шрифта (Ctrl+[)
+	All rooms	Все переговорные
+	A room's address	Адрес переговорной
+	Click or drag the meeting to move it.	Щёлкните или перетащите встречу, чтобы перенести её.
+	Filter rooms	Фильтр переговорных
+	From your calendar: the rooms booked in your meetings and those in Outlook's Rooms group.	Из вашего календаря: переговорные, забронированные в ваших встречах, и те, что в группе «Переговорные» Outlook.
+	Give the meeting a start and an end to see when everyone is free.	Укажите начало и конец встречи, чтобы увидеть, когда все свободны.
+	Loading availability…	Загрузка занятости…
+	Looking for rooms…	Поиск переговорных…
+	Meeting day	День встречи
+	Next day	Следующий день
+	Previous day	Предыдущий день
+	No information	Нет сведений
+	No room matches	Ни одна переговорная не подходит
+	No rooms are offered here yet: a room booked in one of your meetings shows here.	Переговорных здесь пока нет: переговорная, забронированная в одной из ваших встреч, появится здесь.
+	Room Finder	Поиск переговорных
+	Rooms	Переговорные
+	Rooms: {names}	Переговорные: {names}
+	Scheduling Assistant	Помощник по планированию
+	The rooms couldn't be read: {error}	Не удалось получить переговорные: {error}
+	Organizer	Организатор
+	Guest	Участник
+	Room	Переговорная
+	Free	Свободен
+	Busy	Занят
+	Out of office	Нет на месте
+	Working elsewhere	Работает в другом месте

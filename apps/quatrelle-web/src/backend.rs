@@ -483,6 +483,19 @@ async fn job(sh: &Rcs, id: &str, j: Job) {
             let error = Some("voting buttons can only be answered on Exchange and Microsoft 365 accounts".to_string());
             emit(sh, Event::Voted { key, choice, error });
         }
+        // Rooms and free/busy come from Exchange, which the browser doesn't reach.
+        Job::GetRooms { account } => {
+            let error = Some("rooms are offered by Exchange and Microsoft 365 accounts, which the browser doesn't reach".into());
+            emit(sh, Event::Rooms { account, lists: Vec::new(), rooms: Vec::new(), error });
+        }
+        Job::GetAvailability { account, emails, from, to } => {
+            let error = "availability comes from Exchange and Microsoft 365 accounts, which the browser doesn't reach".to_string();
+            let people = emails
+                .into_iter()
+                .map(|email| quatrelle_engine::model::scheduling::Availability { email, slots: Vec::new(), error: Some(error.clone()) })
+                .collect();
+            emit(sh, Event::Availability { account, from, to, people, error: Some(error) });
+        }
         // Nothing to do in the browser: no Outbox (sending needs the server), no CalDAV.
         Job::FlushOutbox { .. } | Job::SyncDav { .. } => {}
         // Mail past what's kept (issue #4).

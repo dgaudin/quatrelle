@@ -33,6 +33,7 @@ mod outbox;
 mod pictures;
 pub mod pim;
 mod prefs;
+pub mod scheduling;
 mod searching;
 mod vote;
 mod writing;
@@ -439,6 +440,11 @@ pub struct Session {
     pub vote_sending: Option<(MessageKey, String)>,
     /// Each account's calendars and address books.
     pub pim: HashMap<String, quatrelle_model::pim::Pim>,
+    /// The rooms each account offers for meetings, once asked for (Outlook's Room Finder).
+    pub rooms: HashMap<String, scheduling::Fetched<scheduling::RoomFinder>>,
+    /// When people and rooms are busy, by (account, address, from, to), once asked for (the
+    /// Scheduling Assistant's free/busy).
+    pub free_busy: HashMap<(String, String, i64, i64), scheduling::Fetched<quatrelle_model::scheduling::Availability>>,
     /// Mail, Calendar or People.
     pub module: pim::Module,
     pub cal_mode: pim::CalMode,
@@ -537,6 +543,8 @@ impl Session {
             open_urls: Vec::new(),
             vote_sending: None,
             pim: HashMap::new(),
+            rooms: HashMap::new(),
+            free_busy: HashMap::new(),
             module: pim::Module::Mail,
             cal_mode: pim::CalMode::Week,
             cal_day: None,

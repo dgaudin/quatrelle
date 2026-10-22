@@ -366,6 +366,86 @@ impl Data {
                 self.events.retain(|e| e["id"] != *id || e["calendar"].as_str().unwrap_or("").starts_with("user:"));
                 (204, Vec::new(), "text/plain")
             }
+            // The organisation's rooms: the Places API (when the sign-in may), and the older
+            // functions.
+            ("GET", ["places", "microsoft.graph.roomList"]) if self.places_refused => (
+                403,
+                json!({"error": {"code": "ErrorAccessDenied", "message": "Access is denied. Check credentials and try again."}})
+                    .to_string()
+                    .into_bytes(),
+                "application/json",
+            ),
+            ("GET", ["places", "microsoft.graph.roomList"]) => {
+                let list: Vec<Value> =
+                    self.room_lists.iter().map(|(name, email)| json!({"id": email, "displayName": name, "emailAddress": email})).collect();
+                ok(json!({ "value": list }))
+            }
+            ("GET", ["places", list, "microsoft.graph.roomList", "rooms"]) => {
+                let list = list.replace("%40", "@").to_ascii_lowercase();
+                if self.places_refused || !self.room_lists.iter().any(|(_, e)| e.eq_ignore_ascii_case(&list)) {
+                    return not_found();
+                }
+                let rooms: Vec<Value> = self
+                    .rooms
+                    .iter()
+                    .filter(|(_, _, l)| l.eq_ignore_ascii_case(&list))
+                    .map(|(name, email, _)| json!({"id": email, "displayName": name, "emailAddress": email, "capacity": 8}))
+                    .collect();
+                ok(json!({ "value": rooms }))
+            }
+            ("GET", ["me", "findRoomLists"]) => {
+                let list: Vec<Value> = self.room_lists.iter().map(|(name, email)| json!({"name": name, "address": email})).collect();
+                ok(json!({ "value": list }))
+            }
+            ("GET", ["me", rooms]) if rooms.starts_with("findRooms") => {
+                let wanted = rooms.strip_prefix("findRooms(RoomList=").map(|w| crate::oauth::unpct(w).trim_matches(['\'', ')']).to_ascii_lowercase());
+                let list: Vec<Value> = self
+                    .rooms
+                    .iter()
+                    .filter(|(_, _, l)| wanted.as_deref().is_none_or(|w| l.eq_ignore_ascii_case(w)))
+                    .map(|(name, email, _)| json!({"name": name, "address": email}))
+                    .collect();
+                ok(json!({ "value": list }))
+            }
+            ("POST", ["me", "calendar", "getSchedule"]) => {
+                self.schedule_asked.push(input.clone());
+                let at = |k: &str| input.get(k).and_then(|t| t.get("dateTime")).and_then(Value::as_str).and_then(quatrelle_jmap::utc_date);
+                let (Some(from), Some(to)) = (at("startTime"), at("endTime")) else {
+                    return (
+                        400,
+                        json!({"error": {"code": "ErrorInvalidRequest", "message": "the window is invalid"}}).to_string().into_bytes(),
+                        "application/json",
+                    );
+                };
+                let mut out = Vec::new();
+                for email in input["schedules"].as_array().cloned().unwrap_or_default().iter().filter_map(Value::as_str) {
+                    let email = email.trim().to_ascii_lowercase();
+                    if self.no_freebusy.iter().any(|e| e.eq_ignore_ascii_case(&email)) {
+                        out.push(json!({"scheduleId": email, "error": {"message": "No free/busy access.", "responseCode": "ErrorNoFreeBusyAccess"}}));
+                        continue;
+                    }
+                    // The account's own calendars, or another's shared here, between the dates.
+                    let own = email == "riley@contoso.example";
+                    let theirs = format!("user:{email}");
+                    let when =
+                        |e: &Value, k: &str| e.get(k).and_then(|t| t.get("dateTime")).and_then(Value::as_str).and_then(quatrelle_jmap::utc_date);
+                    let mut items: Vec<Value> = self
+                        .events
+                        .iter()
+                        .filter(|e| {
+                            let cal = e["calendar"].as_str().unwrap_or("");
+                            if own { self.calendars.iter().any(|(c, _)| c == cal) } else { cal == theirs }
+                        })
+                        .filter(|e| when(e, "end").is_some_and(|x| x > from) && when(e, "start").is_some_and(|x| x < to))
+                        .map(|e| json!({"status": e.get("showAs").and_then(Value::as_str).unwrap_or("busy"), "start": e["start"], "end": e["end"], "subject": e["subject"]}))
+                        .collect();
+                    items.extend(self.busy.iter().filter(|(e, ..)| e.eq_ignore_ascii_case(&email)).map(|(_, s, e, status, subject)| {
+                        json!({"status": status, "start": {"dateTime": s, "timeZone": "UTC"}, "end": {"dateTime": e, "timeZone": "UTC"}, "subject": subject})
+                    }));
+                    out.push(json!({"scheduleId": email, "availabilityView": "", "scheduleItems": items}));
+                }
+                ok(json!({ "value": out }))
+            }
             ("GET", ["me", "contacts"]) => ok(json!({ "value": self.contacts })),
             ("POST", ["me", "contacts"]) => {
                 let id = self.id("CT");
