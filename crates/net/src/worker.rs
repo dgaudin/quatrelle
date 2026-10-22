@@ -251,6 +251,9 @@ const MAX_PICTURE: usize = 8 << 20;
 const FULL_SYNC_EVERY: Duration = Duration::from_secs(15 * 60);
 const IDLE_FOR: Duration = Duration::from_secs(10 * 60);
 const POLL_EVERY: Duration = Duration::from_secs(120);
+/// An Exchange account's Inbox is looked at more often: a look is one GetFolder now (an
+/// unchanged folder isn't read), so new mail shows within half a minute.
+const EWS_POLL_EVERY: Duration = Duration::from_secs(30);
 /// When Sent Items is read again after Graph or Exchange took a message (its copy is filed a
 /// moment later), and once more in case that was too soon.
 const SENT_SOON: Duration = Duration::from_secs(3);
