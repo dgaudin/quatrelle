@@ -1130,3 +1130,15 @@ month	May	مايو
 	Other terms	شروط أخرى
 	Clear	مسح
 	No results. Try fewer words.	لا نتائج. جرّب كلمات أقل.
+	Move this occurrence or the whole series?	نقل هذا التكرار أم السلسلة كلها؟
+	This occurrence	هذا التكرار
+	The whole series	السلسلة كلها
+	On Microsoft 365, only the whole series can be moved from here.	في Microsoft 365، لا يمكن من هنا نقل سوى السلسلة كلها.
+	Send the update to the attendees?	إرسال التحديث إلى الحاضرين؟
+	Send update	إرسال التحديث
+	Save without sending	حفظ دون إرسال
+	Microsoft 365 tells the attendees of the change itself.	يُعلم Microsoft 365 الحاضرين بالتغيير بنفسه.
+	Moved to {when}. Ctrl+Z puts it back.	نُقل إلى {when}. يعيده Ctrl+Z إلى مكانه.
+	Snooze 5 minutes	تأجيل 5 دقائق
+	Show reminders on top of other windows	إظهار التذكيرات فوق النوافذ الأخرى
+	The Reminders window opens in a window of its own when a reminder comes, even while Quatrelle is minimized	تُفتح نافذة التذكيرات في نافذة مستقلة عند حلول تذكير، حتى عندما يكون Quatrelle مصغّرًا

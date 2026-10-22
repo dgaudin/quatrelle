@@ -150,6 +150,23 @@ pub(crate) fn tour() {
 line two"
                     .into(),
             },
+            Dialog::MoveEvent(Box::new(crate::dialogs::MoveForm {
+                uid: "weekly".into(),
+                summary: "Stand-up".into(),
+                recurring: true,
+                occurrence_allowed: false,
+                meeting: true,
+                quiet_allowed: false,
+                ..Default::default()
+            })),
+            Dialog::MoveEvent(Box::new(crate::dialogs::MoveForm {
+                uid: "review".into(),
+                summary: "Review".into(),
+                meeting: true,
+                quiet_allowed: true,
+                error: Some("no".into()),
+                ..Default::default()
+            })),
         ] {
             a.ui.dialog = Some(d);
             frame(&ctx, &mut a, vec![]);
@@ -363,8 +380,13 @@ impl crate::Services for WebLike {
     }
 }
 
-/// Services whose clock the test moves, remembering the notifications shown.
-struct Ticking(std::sync::Arc<std::sync::Mutex<i64>>, std::sync::Arc<std::sync::Mutex<Vec<(String, String)>>>);
+/// Services whose clock the test moves, remembering the notifications shown (reminders with
+/// their key and buttons), and handing back what the test "pressed" on them.
+struct Ticking(
+    std::sync::Arc<std::sync::Mutex<i64>>,
+    std::sync::Arc<std::sync::Mutex<Vec<(String, String)>>>,
+    std::sync::Arc<std::sync::Mutex<Vec<(String, crate::ReminderAction)>>>,
+);
 
 impl crate::Services for Ticking {
     fn clock(&self) -> (i64, i32) {
@@ -381,6 +403,12 @@ impl crate::Services for Ticking {
     }
     fn notify(&mut self, title: &str, body: &str) {
         self.1.lock().unwrap().push((title.into(), body.into()));
+    }
+    fn notify_reminder(&mut self, key: &str, title: &str, body: &str, snooze: &str, dismiss: &str) {
+        self.1.lock().unwrap().push((title.into(), format!("{body} [{key}] {snooze}/{dismiss}")));
+    }
+    fn take_reminder_actions(&mut self) -> Vec<(String, crate::ReminderAction)> {
+        std::mem::take(&mut *self.2.lock().unwrap())
     }
 }
 

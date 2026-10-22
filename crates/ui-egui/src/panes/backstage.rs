@@ -768,6 +768,15 @@ fn options(s: &Session, st: &UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
         setting(ui, true, tl!("Show a desktop notification when new mail arrives"), None, &mut |ui| {
             switch(ui, s.prefs.notify, tl!("Show a desktop notification when new mail arrives"), "view.notifications", acts);
         });
+        setting(
+            ui,
+            false,
+            tl!("Show reminders on top of other windows"),
+            Some(tl!("The Reminders window opens in a window of its own when a reminder comes, even while Quatrelle is minimized")),
+            &mut |ui| {
+                switch(ui, s.prefs.reminders_on_top, tl!("Show reminders on top of other windows"), "view.remindersOnTop", acts);
+            },
+        );
         setting(ui, false, tl!("Focused Inbox: put newsletters and automatic mail in Other"), None, &mut |ui| {
             switch(ui, s.prefs.focused_inbox, tl!("Focused Inbox: put newsletters and automatic mail in Other"), "view.focused", acts);
         });

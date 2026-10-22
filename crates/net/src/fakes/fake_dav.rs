@@ -269,7 +269,33 @@ mod tests {
         settled.events.iter_mut().for_each(|e| e.dirty = false);
         settled.cards.clear();
         let fourth = sync(&dav, USER, "imap.example", &settled, 400).unwrap();
-        assert_eq!(fourth.unchanged_calendars, vec![cal_id]);
+        assert_eq!(fourth.unchanged_calendars, vec![cal_id.clone()]);
         assert!(fourth.events.is_empty());
+
+        // One occurrence of a series moved on its own (an instance with a RECURRENCE-ID, no
+        // item of its own yet): written in the series' file with it, and read back as its own
+        // event alongside the series.
+        let mut series = settled.clone();
+        series.calendars = fourth.calendars.clone().unwrap_or_else(|| third.calendars.clone().unwrap());
+        let weekly = CalEvent { rrule: Some("FREQ=WEEKLY".into()), ..event("w", "Stand-up", 1_800_200_000) };
+        let second_week = 1_800_200_000 + 7 * 86_400;
+        let instance =
+            CalEvent { recurrence_id: Some(second_week), rrule: None, start: second_week + 3600, end: second_week + 7200, ..weekly.clone() };
+        series.events.push(StoredEvent { calendar: cal_id.clone(), event: weekly, dirty: true, ..Default::default() });
+        series.events.push(StoredEvent { calendar: cal_id.clone(), event: instance, dirty: true, ..Default::default() });
+        let fifth = sync(&dav, USER, "imap.example", &series, 500).unwrap();
+        assert!(fifth.errors.is_empty(), "{:?}", fifth.errors);
+        let pushed: Vec<&StoredEvent> = fifth.pushed_events.iter().filter(|e| e.event.uid == "w").collect();
+        assert_eq!(pushed.len(), 2, "the series and its instance, together");
+        assert!(pushed.iter().all(|e| e.href.ends_with("/w.ics")), "{pushed:?}");
+        {
+            let d = data.lock().unwrap();
+            let ics = &d.items.get(&format!("{CAL}w.ics")).unwrap().1;
+            assert!(ics.contains("RRULE:FREQ=WEEKLY") && ics.contains("RECURRENCE-ID:"), "{ics}");
+        }
+        let back: Vec<&StoredEvent> = fifth.events.iter().filter(|e| e.event.uid == "w").collect();
+        assert_eq!(back.len(), 2, "{back:?}");
+        assert!(back.iter().any(|e| e.event.recurrence_id == Some(second_week) && e.event.start == second_week + 3600));
+        assert!(back.iter().any(|e| e.event.recurrence_id.is_none() && e.event.rrule.is_some()));
     }
 }

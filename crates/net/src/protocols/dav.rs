@@ -530,7 +530,14 @@ pub fn sync(dav: &Dav, email: &str, imap_host: &str, pim: &Pim, now: i64) -> Res
                 out.kept.extend(listed.iter().filter(|(h, _)| !fetch.contains(h)).map(|(h, _)| h.clone()));
                 for (href, etag, data) in dav.multiget(Kind::Calendars, &c.href, &fetch)? {
                     for event in ical::parse(&data, 0).events {
-                        out.events.push(StoredEvent { calendar: c.href.clone(), href: href.clone(), etag: etag.clone(), event, dirty: false });
+                        out.events.push(StoredEvent {
+                            calendar: c.href.clone(),
+                            href: href.clone(),
+                            etag: etag.clone(),
+                            event,
+                            dirty: false,
+                            notify: false,
+                        });
                     }
                 }
                 out.synced_calendars.push(c.href.clone());

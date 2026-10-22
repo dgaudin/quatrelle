@@ -1130,3 +1130,15 @@ month	May	מאי
 	Other terms	תנאים נוספים
 	Clear	ניקוי
 	No results. Try fewer words.	אין תוצאות. נסה פחות מילים.
+	Move this occurrence or the whole series?	להזיז את המופע הזה או את הסדרה כולה?
+	This occurrence	המופע הזה
+	The whole series	הסדרה כולה
+	On Microsoft 365, only the whole series can be moved from here.	ב‑Microsoft 365 אפשר להזיז מכאן רק את הסדרה כולה.
+	Send the update to the attendees?	לשלוח את העדכון למשתתפים?
+	Send update	שליחת עדכון
+	Save without sending	שמירה בלי לשלוח
+	Microsoft 365 tells the attendees of the change itself.	Microsoft 365 מודיע למשתתפים על השינוי בעצמו.
+	Moved to {when}. Ctrl+Z puts it back.	הועבר אל {when}. Ctrl+Z מחזיר אותו למקומו.
+	Snooze 5 minutes	נודניק 5 דקות
+	Show reminders on top of other windows	הצגת תזכורות מעל חלונות אחרים
+	The Reminders window opens in a window of its own when a reminder comes, even while Quatrelle is minimized	חלון התזכורות נפתח בחלון משלו כשמגיעה תזכורת, גם כש‑Quatrelle ממוזער
