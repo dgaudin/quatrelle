@@ -7,6 +7,7 @@
 //! password stops retrying until the user enters a new one.
 
 use std::collections::{HashMap, VecDeque};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender, TryRecvError};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
@@ -150,6 +151,9 @@ pub struct Pool {
     fetcher: Option<Sender<String>>,
     /// Working offline: no account connects until it's turned off.
     offline: bool,
+    /// The server search still wanted ([`Job::SearchServer`]'s `search`; 0: none), shared with
+    /// every worker so a search running stops when it's no longer wanted.
+    search: Arc<AtomicU64>,
 }
 
 /// Drafts that couldn't be saved to the server (offline, or it failed), kept with the account
@@ -279,6 +283,8 @@ struct Worker {
     /// Folders asked to keep more than the setting (Show more on the server): how many of each
     /// (`windows.json` with the account).
     windows: HashMap<String, usize>,
+    /// The server search still wanted (the pool's).
+    search: Arc<AtomicU64>,
     /// When the Inbox is next looked at, on a server that can't say when mail comes (no IDLE,
     /// no push). A deadline, not a wait restarted by every job: while someone works (messages
     /// opened, pictures, read marks), the look kept being put off, and new mail with it.
@@ -321,6 +327,7 @@ impl Worker {
             no_push: false,
             pushed: false,
             soon: Vec::new(),
+            search: Arc::new(AtomicU64::new(0)),
             next_poll: Instant::now() + POLL_EVERY,
         }
     }

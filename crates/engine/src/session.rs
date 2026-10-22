@@ -146,9 +146,14 @@ pub fn newer_release<'a>(
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum SearchScope {
-    /// Every folder of every account.
-    #[default]
+    /// Every folder of every account (Outlook's All Mailboxes).
     All,
+    /// Every folder of the account on view (Outlook's Current Mailbox, its default); every
+    /// account's from a unified view.
+    #[default]
+    Mailbox,
+    /// The folder on view and the folders inside it.
+    Subfolders,
     /// The folder (or unified view) on screen.
     Current,
 }
@@ -156,6 +161,8 @@ pub enum SearchScope {
 /// A search asked of the servers ([`Session::search_server`]).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ServerSearch {
+    /// Which search it is (the jobs' `search`), so a newer one stops it.
+    pub id: u64,
     pub query: String,
     /// Accounts still searching.
     pub pending: usize,
@@ -300,6 +307,11 @@ pub struct Session {
     /// the end of the results: mail past what's kept here), beyond what `ask_server`
     /// asks on its own.
     pub server_search: Option<ServerSearch>,
+    /// Server searches asked so far (each one's id).
+    searches: u64,
+    /// The recent searches while an account is kept online only (issue #4): in memory only,
+    /// since what's searched for can tell what the mail says.
+    recent_in_memory: Vec<String>,
     /// Outlook's "Download all": the messages still to bring onto this computer.
     download_all: Option<DownloadAll>,
     /// A folder asked to show more of its older mail than it keeps (`folder.more`), until the
@@ -435,6 +447,8 @@ impl Session {
             server_asked: None,
             search_folder: None,
             server_search: None,
+            searches: 0,
+            recent_in_memory: Vec::new(),
             download_all: None,
             showing_more: None,
             ask_password: Vec::new(),
@@ -660,4 +674,22 @@ pub fn parse_key(v: &Value) -> Option<MessageKey> {
 /// What a follow-up date is kept under: the Message-ID, or (without one) the message's place.
 fn follow_up_id(m: &Summary) -> String {
     if m.message_id.trim().is_empty() { m.key.to_id() } else { m.message_id.trim().to_string() }
+}
+
+impl SearchScope {
+    pub const ALL: [SearchScope; 4] = [SearchScope::Current, SearchScope::Subfolders, SearchScope::Mailbox, SearchScope::All];
+
+    /// Its name in commands (`search.run`'s `scope`).
+    pub fn code(self) -> &'static str {
+        match self {
+            SearchScope::All => "all",
+            SearchScope::Mailbox => "mailbox",
+            SearchScope::Subfolders => "subfolders",
+            SearchScope::Current => "current",
+        }
+    }
+
+    pub fn from_code(code: &str) -> Option<SearchScope> {
+        SearchScope::ALL.into_iter().find(|s| s.code().eq_ignore_ascii_case(code))
+    }
 }

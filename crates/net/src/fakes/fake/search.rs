@@ -32,6 +32,9 @@ pub(super) fn search_tokens(s: &str) -> Vec<String> {
 /// What a `SEARCH` key is checked against.
 struct SearchCtx<'a> {
     m: &'a Msg,
+    /// Its message number, and how many there are (`*` in a number set).
+    seq: u32,
+    exists: u32,
     raw: String,
     head: String,
     body: String,
@@ -44,14 +47,15 @@ impl SearchCtx<'_> {
     }
 }
 
-/// Whether a message matches every key (RFC 3501 §6.4.4; strings as substrings, any case).
-pub(super) fn search_matches(m: &Msg, keys: &[String], max: u32) -> bool {
+/// Whether a message (`seq`, its message number) matches every key (RFC 3501 §6.4.4; strings as
+/// substrings, any case; a sequence set is the message numbers').
+pub(super) fn search_matches(m: &Msg, seq: u32, keys: &[String], max: u32, exists: u32) -> bool {
     let raw = String::from_utf8_lossy(&m.raw).to_lowercase();
     let (head, body) = match raw.split_once("\r\n\r\n") {
         Some((h, b)) => (h.to_string(), b.to_string()),
         None => (raw.clone(), String::new()),
     };
-    let ctx = SearchCtx { m, raw, head, body, max };
+    let ctx = SearchCtx { m, seq, exists, raw, head, body, max };
     let mut i = 0;
     while i < keys.len() {
         let (ok, used) = search_key(&ctx, keys, i);
@@ -91,6 +95,7 @@ fn search_key(ctx: &SearchCtx<'_>, keys: &[String], i: usize) -> (bool, usize) {
         "TO" => (ctx.header("to").contains(&arg), 2),
         "CC" => (ctx.header("cc").contains(&arg), 2),
         "KEYWORD" => (ctx.m.flags.iter().any(|f| f.eq_ignore_ascii_case(&arg)), 2),
+        set if set.starts_with(|c: char| c.is_ascii_digit() || c == '*') => (in_set(ctx.seq, set, ctx.exists), 1),
         _ => (false, 1),
     }
 }

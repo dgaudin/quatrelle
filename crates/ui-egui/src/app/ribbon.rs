@@ -356,14 +356,16 @@ impl MailApp {
                     }
                     RibbonTab::Search => {
                         let query = s.search.as_ref().map(|(q, _)| q.clone()).unwrap_or_else(|| ust.search_text.clone());
-                        let all = s.search.as_ref().is_none_or(|(_, scope)| *scope == SearchScope::All);
-                        widgets::stack(ui, |ui| {
-                            for (on, label, scope) in [(all, "All folders", "all"), (!all, "This folder", "current")] {
-                                if ui.radio(on, tl!(label)).clicked() && !on && !query.trim().is_empty() {
-                                    acts.push(Action::Run("search.run", json!({"query": query, "scope": scope})));
+                        let current = s.search.as_ref().map_or(s.prefs.search_scope, |(_, scope)| *scope);
+                        for pair in [[SearchScope::All, SearchScope::Mailbox], [SearchScope::Current, SearchScope::Subfolders]] {
+                            widgets::stack(ui, |ui| {
+                                for scope in pair {
+                                    if ui.radio(scope == current, scope_label(scope)).clicked() && scope != current {
+                                        acts.push(Action::Run("search.run", json!({"query": query, "scope": scope.code()})));
+                                    }
                                 }
-                            }
-                        });
+                            });
+                        }
                         groups.end(ui, &t, "Look in");
                         // Terms to type a name after: put in the box, ready for it.
                         for (icon, label, term) in
@@ -401,7 +403,7 @@ impl MailApp {
                                 if q.trim().is_empty() {
                                     acts.push(Action::Run("search.clear", json!({})));
                                 } else {
-                                    acts.push(Action::Run("search.run", json!({"query": q, "scope": if all { "all" } else { "current" }})));
+                                    acts.push(Action::Run("search.run", json!({"query": q, "scope": current.code()})));
                                 }
                             }
                         }

@@ -61,47 +61,7 @@ impl MailApp {
                         }
                         return;
                     }
-                    let te = egui::TextEdit::singleline(&mut self.ui.search_text)
-                        .hint_text(tl!("Search mail (from:, subject:, has:attachment…)"))
-                        .frame(egui::Frame::NONE)
-                        .desired_width(search_w - 60.0)
-                        .text_color(t.text);
-                    let resp = ui.add(te);
-                    // Into the search box: the Search tab, as Outlook switches to it.
-                    if resp.gained_focus() {
-                        self.ui.tab = RibbonTab::Search;
-                    }
-                    self.ui.search_focused = resp.has_focus();
-                    if self.ui.search_cursor_end {
-                        self.ui.search_cursor_end = false;
-                        if let Some(mut state) = egui::TextEdit::load_state(ui.ctx(), resp.id) {
-                            let end = egui::text::CCursor::new(self.ui.search_text.chars().count());
-                            state.cursor.set_char_range(Some(egui::text::CCursorRange::one(end)));
-                            state.store(ui.ctx(), resp.id);
-                        }
-                    }
-                    if self.ui.focus_search {
-                        resp.request_focus();
-                        self.ui.focus_search = false;
-                    }
-                    // Searched a moment after the last key (Enter: at once), not on every key.
-                    let now = ui.input(|i| i.time);
-                    if resp.changed() {
-                        self.ui.search_due = Some(now + SEARCH_PAUSE);
-                    }
-                    let enter = resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-                    match self.ui.search_due {
-                        Some(due) if enter || now >= due || self.ui.search_text.is_empty() => {
-                            self.ui.search_due = None;
-                            let q = self.ui.search_text.clone();
-                            acts.push(Action::Run("search.run", json!({"query": q, "index": SEARCH_INDEX_BUDGET})));
-                        }
-                        Some(due) => ui.ctx().request_repaint_after(std::time::Duration::from_secs_f64((due - now).max(0.01))),
-                        None => {}
-                    }
-                    if !self.ui.search_text.is_empty() && widgets::tiny_icon_button(ui, Icon::Close, "Clear search", &t).clicked() {
-                        acts.push(Action::Run("search.clear", json!({})));
-                    }
+                    self.search_box(ui, search_w, acts);
                 });
             });
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
@@ -267,9 +227,6 @@ impl MailApp {
             });
     }
 }
-
-/// How long the search box waits after the last key before searching, in seconds.
-pub(crate) const SEARCH_PAUSE: f64 = 0.3;
 
 /// An account that waits for you to do something: sign in (again, or with Microsoft rather than
 /// a password), or choose what to do about a mailbox Microsoft won't open over IMAP.

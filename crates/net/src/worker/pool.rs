@@ -16,6 +16,7 @@ impl Pool {
             sieve_port: crate::sieve::PORT,
             fetcher: None,
             offline: false,
+            search: Arc::new(AtomicU64::new(0)),
         }
     }
 
@@ -144,8 +145,12 @@ impl Pool {
     }
 
     pub fn submit(&mut self, job: Job) {
+        if let Job::SearchServer { search, .. } = &job {
+            self.search.store(*search, Ordering::Relaxed);
+        }
         match job {
             Job::FetchUrl { url } => self.fetch_url(url),
+            Job::StopSearch => self.search.store(0, Ordering::Relaxed),
             Job::CheckUpdates => {
                 let sink = self.sink.clone();
                 let spawned = std::thread::Builder::new().name("mail-updates".into()).spawn(move || {
@@ -254,7 +259,7 @@ impl Pool {
             // Offline: changes wait in the cache for the next sync.
             Job::SyncDav { account } if !self.workers.contains_key(&account) => {}
             Job::SearchServer { account, query, .. } if !self.workers.contains_key(&account) => {
-                self.sink.emit(Event::ServerSearched { account, query, keys: Vec::new(), error: Some("the account is offline".into()) });
+                self.sink.emit(Event::ServerSearched { account, query, keys: Vec::new(), error: Some("the account is offline".into()), done: true });
             }
             // Working offline: nothing connects, by choice.
             Job::SyncAll { account } | Job::SyncFolder { account, .. } | Job::FlushOutbox { account }
@@ -371,6 +376,7 @@ impl Pool {
         let mut w = Worker::new(account.clone(), auth.clone(), self.store.clone(), self.sink.clone(), self.opts);
         w.creds = Some(self.creds.clone());
         w.sieve_port = self.sieve_port;
+        w.search = self.search.clone();
         // The second connection: quiet (the account's status is the main one's), connecting
         // only when there's something to do.
         let (qtx, qrx) = mpsc::channel();
