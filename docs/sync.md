@@ -193,10 +193,18 @@ servers that don't offer IMAP. Every call is SOAP over HTTPS.
   distinguished folders (`inbox`, `sentitems`, `deleteditems`…) are looked up in one `GetFolder`
   for their roles, and the Outbox, Exchange's bookkeeping folders and calendar, contact and task
   folders are left out.
-- **A folder sync** finds the newest items with their read, flag (`PidTagFlagStatus`) and draft
-  (`PidTagMessageFlags`) state, then the details of those not cached yet with `GetItem`, fifty at a
-  time; sources are `GetItem` with the MIME content. Item ids are numbered like JMAP's; Exchange
-  gives a moved item a new id, so it shows up as a new message in its new folder.
+- **A folder sync** first asks the folder's counts and when anything in it last changed
+  (`PR_LOCAL_COMMIT_TIME_MAX`) in one `GetFolder`. Found as it was when last read (same stamp,
+  counts, window and download-ahead, within six hours), the folder is left alone. Read before,
+  only its changes since are asked (`SyncFolderItems` from the state kept in the numbering's
+  `marks`, 512 a page): new items (their details then with `GetItem`, fifty at a time), read and
+  flag marks, deletions. Otherwise — the first read, a state refused, a server without stamps —
+  the folder's state is taken, then its newest items are listed with their read, flag
+  (`PidTagFlagStatus`) and draft (`PidTagMessageFlags`) state and those not cached yet get their
+  details. Sources downloaded ahead go ten (8 MB) to a `GetItem` with the MIME content. Item ids
+  are numbered like JMAP's; Exchange gives a moved item a new id, so it shows up as a new message
+  in its new folder. The Inbox is looked at every thirty seconds (one `GetFolder` when nothing
+  came). The numbering is written only when it changed.
 - **Changes** are `UpdateItem`, `MoveItem`, `DeleteItem` and the folder calls, fifty items a call.
 - **Sending** is `CreateItem` with the MIME source and `SendAndSaveCopy` (the copy goes to Sent
   Items); envelope-only recipients go in a `Bcc:` header. Drafts are `CreateItem` with `SaveOnly`,

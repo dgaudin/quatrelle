@@ -3,6 +3,11 @@
 use super::*;
 
 impl Worker {
+    /// How often the Inbox is looked at, on a server that can't say when mail comes.
+    pub(super) fn poll_every(&self) -> Duration {
+        if self.acc.ews.is_some() { EWS_POLL_EVERY } else { POLL_EVERY }
+    }
+
     /// Wait for new mail: IDLE on the Inbox when the server supports it, else poll.
     pub(super) fn wait_for_mail(&mut self, rx: &Receiver<Job>) {
         let inbox = self.inbox();
@@ -28,7 +33,7 @@ impl Worker {
                     }
                 }
                 Err(RecvTimeoutError::Timeout) => {
-                    self.next_poll = Instant::now() + POLL_EVERY;
+                    self.next_poll = Instant::now() + self.poll_every();
                     if let Some(f) = inbox {
                         self.sync_one(&f);
                     }
@@ -196,7 +201,7 @@ impl Worker {
             self.report_quota();
             self.prune_jmap_numbers();
             self.last_full = Some(Instant::now());
-            self.next_poll = Instant::now() + POLL_EVERY;
+            self.next_poll = Instant::now() + self.poll_every();
             log::info!("{}: full sync done in {:.0} s", self.acc.id, began.elapsed().as_secs_f32());
             // Anything left from a failed attempt gets another try every full sync.
             self.flush_outbox();
