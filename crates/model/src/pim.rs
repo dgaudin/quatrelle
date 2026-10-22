@@ -46,6 +46,11 @@ pub struct StoredEvent {
     /// Changed here and not yet on the server.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub dirty: bool,
+    /// The server is to tell the guests of this change itself (Exchange sends the meeting
+    /// update, as Outlook's "Send update" has it): nothing is mailed from here then. Cleared
+    /// once the change is on the server.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub notify: bool,
 }
 
 /// An address book.

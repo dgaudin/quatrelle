@@ -486,3 +486,111 @@ fn an_editor_is_known_by_the_events_rights_too() {
         "Ana made this account an editor; Ben didn't"
     );
 }
+
+/// One occurrence of a series dragged to another hour: asked for by its place in the series
+/// (`OccurrenceItemId`), changed as an item of its own, and read back with the series at the
+/// next sync on its new hour (the series' deleted occurrences as the days taken out of it). A
+/// meeting the user organizes is sent to its guests by the server when the change asks for it,
+/// against the item as last seen; otherwise no one hears of it.
+#[test]
+fn an_occurrence_moves_on_its_own_and_the_server_tells_the_guests() {
+    use quatrelle_model::ical::CalEvent;
+    use quatrelle_model::pim::{Pim, StoredEvent};
+    let mut d = Data::default();
+    d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    let cal = d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
+    d.folder("Contacts", None, Some("contacts"), "IPF.Contact");
+    let standup = parse(
+        "<t:CalendarItem><t:Subject>Stand-up</t:Subject><t:Start>2026-10-05T09:00:00Z</t:Start><t:End>2026-10-05T09:15:00Z</t:End>\
+         <t:IsAllDayEvent>false</t:IsAllDayEvent><t:UID>standup-1</t:UID><t:CalendarItemType>RecurringMaster</t:CalendarItemType>\
+         <t:Recurrence><t:WeeklyRecurrence><t:Interval>1</t:Interval><t:DaysOfWeek>Monday</t:DaysOfWeek></t:WeeklyRecurrence>\
+         <t:NoEndRecurrence><t:StartDate>2026-10-05Z</t:StartDate></t:NoEndRecurrence></t:Recurrence>\
+         <t:DeletedOccurrences><t:DeletedOccurrence><t:Start>2026-10-19T09:00:00Z</t:Start></t:DeletedOccurrence></t:DeletedOccurrences></t:CalendarItem>",
+    );
+    d.pim.push(("E1".into(), cal.clone(), standup.kids[0].clone()));
+    let server = serve(d);
+    let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
+    let at = |s: &str| quatrelle_jmap::utc_date(s).unwrap();
+    let first = crate::ews_pim::sync(&c, &Pim::default(), 1_792_000_000).unwrap();
+    let master = first.events.iter().find(|e| e.event.uid == "standup-1").cloned().unwrap();
+    assert_eq!(master.event.exdates, [at("2026-10-19T09:00:00Z")], "the deleted occurrence is a day taken out");
+    // The second Monday's, an hour later: an instance of its own, with no item yet.
+    let second = at("2026-10-12T09:00:00Z");
+    let mut pim = Pim { events: first.events.clone(), ..Default::default() };
+    pim.events.push(StoredEvent {
+        calendar: crate::ews_pim::CALENDAR.into(),
+        href: String::new(),
+        etag: String::new(),
+        event: CalEvent {
+            recurrence_id: Some(second),
+            rrule: None,
+            exdates: Vec::new(),
+            start: second + 3600,
+            end: second + 4500,
+            ..master.event.clone()
+        },
+        dirty: true,
+        notify: false,
+    });
+    let second_sync = crate::ews_pim::sync(&c, &pim, 1_792_000_100).unwrap();
+    assert!(second_sync.errors.is_empty(), "{:?}", second_sync.errors);
+    let pushed = second_sync.pushed_events.iter().find(|e| e.event.recurrence_id == Some(second)).unwrap();
+    assert_eq!(pushed.href, "E1:occ2", "the occurrence's own item, the second in the series");
+    // Read back with the series: the instance on its new hour, the series itself as it was.
+    let back: Vec<&StoredEvent> = second_sync.events.iter().filter(|e| e.event.uid == "standup-1").collect();
+    assert_eq!(back.len(), 2, "{back:?}");
+    let instance = back.iter().find(|e| e.event.recurrence_id.is_some()).unwrap();
+    assert_eq!((instance.event.recurrence_id, instance.event.start, instance.href.as_str()), (Some(second), second + 3600, "E1:occ2"));
+    assert_eq!((instance.event.summary.as_str(), instance.event.rrule.as_deref()), ("Stand-up", None));
+    assert!(back.iter().any(|e| e.event.recurrence_id.is_none() && e.event.start == master.event.start));
+    assert_eq!(server.data.lock().unwrap().meeting_sends, ["SendToNone"]);
+    // The series moved by its organizer with "Send update": the server tells the guests,
+    // resolving against the item as last seen; "Save without sending": no one hears of it.
+    for (notify, delta) in [(true, 1800), (false, 3600)] {
+        let mut pim = Pim { events: second_sync.events.clone(), ..Default::default() };
+        for e in pim.events.iter_mut().filter(|e| e.event.uid == "standup-1" && e.event.recurrence_id.is_none()) {
+            e.event.start = master.event.start + delta;
+            e.event.end = master.event.end + delta;
+            e.dirty = true;
+            e.notify = notify;
+        }
+        let again = crate::ews_pim::sync(&c, &pim, 1_792_000_200).unwrap();
+        assert!(again.errors.is_empty(), "{:?}", again.errors);
+    }
+    // A new meeting with guests, sent by the server when asked: the guests go with it (the
+    // organizer isn't one of them), so the server has someone to invite.
+    let who = |name: &str, email: &str| quatrelle_model::ical::Attendee {
+        name: name.into(),
+        email: email.into(),
+        partstat: "NEEDS-ACTION".into(),
+        rsvp: true,
+    };
+    let mut pim = Pim::default();
+    pim.events.push(StoredEvent {
+        calendar: crate::ews_pim::CALENDAR.into(),
+        href: String::new(),
+        etag: String::new(),
+        event: CalEvent {
+            uid: "new-1".into(),
+            summary: "Budget".into(),
+            start: 1_792_000_000,
+            end: 1_792_003_600,
+            organizer: Some(who("Riley", "riley@contoso.example")),
+            attendees: vec![who("Riley", "riley@contoso.example"), who("Ana Lima", "ana@contoso.example")],
+            ..Default::default()
+        },
+        dirty: true,
+        notify: true,
+    });
+    let made = crate::ews_pim::sync(&c, &pim, 1_792_000_300).unwrap();
+    assert!(made.errors.is_empty(), "{:?}", made.errors);
+    assert_eq!(server.data.lock().unwrap().meeting_sends, ["SendToNone", "SendToAllAndSaveCopy", "SendToNone", "SendToAllAndSaveCopy"]);
+    let budget = made.events.iter().find(|e| e.event.summary == "Budget").unwrap();
+    let guests: Vec<&str> = budget.event.attendees.iter().map(|a| a.email.as_str()).collect();
+    assert_eq!(guests, ["ana@contoso.example"]);
+    // Someone else's meeting changed here (its reminder, say) keeps their guest list.
+    let mut theirs = budget.clone();
+    theirs.event.organizer = Some(who("Ana Lima", "ana@contoso.example"));
+    theirs.event.attendees = vec![who("Riley", "riley@contoso.example")];
+    assert!(crate::ews_pim::events::event_fields(&theirs.event, "riley@contoso.example").iter().all(|(uri, _)| *uri != "calendar:RequiredAttendees"));
+}

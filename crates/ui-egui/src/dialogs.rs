@@ -13,6 +13,7 @@ use crate::{Action, Icon, widgets};
 mod accounts;
 mod folders;
 mod mailbox;
+mod moving;
 mod organize;
 mod other;
 pub(crate) mod pim_dialogs;
@@ -20,6 +21,7 @@ mod writing;
 
 pub use accounts::*;
 pub use mailbox::*;
+pub use moving::MoveForm;
 pub use organize::*;
 pub use writing::*;
 
@@ -103,6 +105,8 @@ pub enum Dialog {
     },
     Event(Box<crate::pim_dialogs::EventForm>),
     Contact(Box<crate::pim_dialogs::ContactForm>),
+    /// An appointment dragged to another time: Outlook's questions before it moves.
+    MoveEvent(Box<MoveForm>),
     /// New folder (in `parent`), or rename `rename`.
     FolderName {
         account: String,
@@ -325,6 +329,7 @@ impl Dialog {
             Dialog::EditAccount(f) => f.error = Some(e),
             Dialog::Event(f) => f.error = Some(e),
             Dialog::Contact(f) => f.error = Some(e),
+            Dialog::MoveEvent(f) => f.error = Some(e),
             Dialog::Vacation(f) => f.error = Some(e),
             Dialog::OpenSharedCalendar { error, .. } | Dialog::OpenSharedMailbox { error, .. } => *error = Some(e),
             _ => {}
@@ -469,6 +474,7 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Act
         | Dialog::OpenSharedCalendar { .. }
         | Dialog::Event(..)
         | Dialog::Contact(..) => other::draw(ui, d, s, t, acts),
+        Dialog::MoveEvent(f) => moving::draw(ui, f, t, acts),
     }
 }
 

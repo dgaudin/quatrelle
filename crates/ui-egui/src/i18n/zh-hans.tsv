@@ -1131,3 +1131,12 @@ month	May	5月
 	Other terms	其他条件
 	Clear	清除
 	No results. Try fewer words.	没有结果。请减少关键词。
+	Move this occurrence or the whole series?	移动此次重复，还是整个系列？
+	This occurrence	此次重复
+	The whole series	整个系列
+	On Microsoft 365, only the whole series can be moved from here.	在 Microsoft 365 上，从这里只能移动整个系列。
+	Send the update to the attendees?	向与会者发送更新吗？
+	Send update	发送更新
+	Save without sending	保存但不发送
+	Microsoft 365 tells the attendees of the change itself.	Microsoft 365 会自行将更改通知与会者。
+	Moved to {when}. Ctrl+Z puts it back.	已移至 {when}。按 Ctrl+Z 可撤销。

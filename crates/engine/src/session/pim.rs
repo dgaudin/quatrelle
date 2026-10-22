@@ -11,6 +11,7 @@ use super::*;
 
 pub use quatrelle_model::pim::PIM_DOC;
 
+mod moving;
 mod notes;
 mod people;
 pub use notes::NoteRef;
@@ -87,6 +88,11 @@ pub struct AgendaItem {
     pub needs_reply: bool,
     /// Its reminder, in minutes before the start (a negative one after it); `None`: none.
     pub reminder: Option<i64>,
+    /// It can be dragged to another time: its calendar can be changed, and it's the user's own
+    /// (not a meeting someone else organizes).
+    pub movable: bool,
+    /// A meeting the user organizes, with guests to tell of a change.
+    pub organized: bool,
 }
 
 /// A calendar colour of this or above is an account's colour ([`Session::calendar_color`]).
@@ -280,7 +286,10 @@ impl Session {
                         continue;
                     }
                     let needs_reply = e.attendees.iter().any(|a| mine.contains(&a.email.to_ascii_lowercase()) && a.partstat == "NEEDS-ACTION");
+                    let organizer_is_me = e.organizer.as_ref().is_some_and(|o| mine.contains(&o.email.to_ascii_lowercase()));
                     out.push(AgendaItem {
+                        movable: !cal.read_only && (e.attendees.is_empty() || e.organizer.is_none() || organizer_is_me),
+                        organized: !e.attendees.is_empty() && organizer_is_me,
                         account: account.clone(),
                         calendar: cal.id.clone(),
                         uid: e.uid.clone(),
@@ -415,7 +424,7 @@ impl Session {
     /// opened before a sync therefore still names the old one, and asking for it by that name
     /// gave "no event `…`" while the appointment was there all along: the name without its start
     /// finds it again, as long as only one appointment answers to it.
-    fn find_event_index(&self, uid: &str) -> Option<(&str, usize)> {
+    pub(super) fn find_event_index(&self, uid: &str) -> Option<(&str, usize)> {
         let exact = |e: &StoredEvent| e.event.uid == uid && e.event.recurrence_id.is_none();
         if let Some(found) = self.pim.iter().find_map(|(a, p)| p.events.iter().position(exact).map(|at| (a.as_str(), at))) {
             return Some(found);
@@ -464,7 +473,7 @@ impl Session {
         let id = cal.id.clone();
         let uid = e.uid.clone();
         p.events.retain(|x| x.event.uid != uid);
-        p.events.push(StoredEvent { calendar: id.clone(), href: String::new(), etag: String::new(), event: e, dirty: id != LOCAL });
+        p.events.push(StoredEvent { calendar: id.clone(), href: String::new(), etag: String::new(), event: e, dirty: id != LOCAL, notify: false });
         self.after_pim_change(&account, id != LOCAL);
         Ok(serde_json::json!({"uid": uid, "account": account}))
     }
@@ -552,6 +561,8 @@ impl Session {
                 // Stored in another calendar (a new event goes to the server's default one).
                 e.calendar = x.calendar.clone();
                 e.dirty &= e.event != x.event;
+                // The server told the guests with that change; a later change asks again.
+                e.notify &= e.dirty;
             }
         }
         // Notes stored on the server: their item there, and no longer to send.
@@ -702,7 +713,7 @@ impl Session {
     }
 }
 
-fn check_event(e: &CalEvent) -> Result<(), CmdError> {
+pub(super) fn check_event(e: &CalEvent) -> Result<(), CmdError> {
     if e.summary.trim().is_empty() {
         return Err(CmdError::Params("give the event a title".into()));
     }

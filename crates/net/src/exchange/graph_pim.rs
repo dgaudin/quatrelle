@@ -460,6 +460,7 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
                 etag: s(&v, "changeKey"),
                 event: e.event.clone(),
                 dirty: false,
+                notify: false,
             }),
             Err(x) => out.errors.push(format!("{}: {x}", e.event.summary)),
         }
@@ -497,7 +498,7 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
         };
         for v in &list {
             if let Some(event) = event_of(v) {
-                out.events.push(StoredEvent { calendar: id.clone(), href: s(v, "id"), etag: s(v, "changeKey"), event, dirty: false });
+                out.events.push(StoredEvent { calendar: id.clone(), href: s(v, "id"), etag: s(v, "changeKey"), event, dirty: false, notify: false });
             }
         }
         out.synced_calendars.push(id.clone());
@@ -512,7 +513,14 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
             Ok(list) => {
                 for v in &list {
                     if let Some(event) = event_of(v) {
-                        out.events.push(StoredEvent { calendar: id.clone(), href: s(v, "id"), etag: s(v, "changeKey"), event, dirty: false });
+                        out.events.push(StoredEvent {
+                            calendar: id.clone(),
+                            href: s(v, "id"),
+                            etag: s(v, "changeKey"),
+                            event,
+                            dirty: false,
+                            notify: false,
+                        });
                     }
                 }
                 out.synced_calendars.push(id.clone());

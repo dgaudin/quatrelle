@@ -191,6 +191,9 @@ pub enum Undo {
     Move { account: String, to: String, back: Vec<(String, String)> },
     /// Flags or keywords changed: the changes that put them back.
     Ops { account: String, ops: Vec<Op> },
+    /// An appointment moved (or one occurrence of it, `occurrence`): where it was, and whether
+    /// its guests were told (they're told of its return the same way).
+    EventMove { uid: String, occurrence: Option<i64>, start: i64, end: i64, send: bool },
 }
 
 /// Changes Undo remembers.
