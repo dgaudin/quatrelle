@@ -1142,3 +1142,33 @@ month	May	mei
 	Snooze 5 minutes	5 minuten sluimeren
 	Show reminders on top of other windows	Herinneringen boven andere vensters tonen
 	The Reminders window opens in a window of its own when a reminder comes, even while Quatrelle is minimized	Het venster Herinneringen opent in een eigen venster als er een herinnering komt, ook als Quatrelle geminimaliseerd is
+	Put a “-- ” line before the signature	Een regel “-- ” vóór de handtekening zetten
+	Some mail apps use it to tell the signature apart; Outlook adds none.	Sommige mailprogramma’s herkennen de handtekening eraan; Outlook voegt er geen toe.
+	Ignore all	Alles negeren
+	Ignore once	Eenmaal negeren
+	All languages	Alle talen
+	The language the spelling is checked in	De taal waarin de spelling wordt gecontroleerd
+	Let this word be, here and elsewhere in this message	Dit woord zo laten, hier en elders in dit bericht
+	Message	Bericht
+	Format Text	Tekst opmaken
+	Review	Controleren
+	Clipboard	Klembord
+	Basic Text	Basistekst
+	Names	Namen
+	Include	Invoegen
+	Show Fields	Velden weergeven
+	Tracking	Opvolgen
+	More Options	Meer opties
+	Format	Indeling
+	Paragraph	Alinea
+	Font	Lettertype
+	Proofing	Controle
+	Paste options	Plakopties
+	Keep text only	Alleen tekst behouden
+	Paste without the look it has where it was copied	Plakken zonder de opmaak van de bron
+	Check Names	Namen controleren
+	Fill in the addresses of the names typed, from your contacts and the people you've written to	Vul de adressen van de getypte namen in, uit uw contacten en de mensen aan wie u hebt geschreven
+	HTML	HTML
+	Horizontal line	Horizontale lijn
+	Increase font size (Ctrl+])	Lettertype vergroten (Ctrl+])
+	Decrease font size (Ctrl+[)	Lettertype verkleinen (Ctrl+[)

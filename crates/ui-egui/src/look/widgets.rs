@@ -104,34 +104,6 @@ pub fn tool_button(ui: &mut Ui, icon: Icon, label: &str, t: &Tokens, enabled: bo
     resp
 }
 
-/// A ribbon button that stays lit while it's on (a search term in the box, say).
-pub fn tool_toggle(ui: &mut Ui, icon: Icon, label: &str, t: &Tokens, on: bool) -> Response {
-    let label = tl!(label);
-    let galley = ui.painter().layout_no_wrap(label.to_string(), theme::regular(13.0), t.text);
-    if ribbon_button(ui, galley.size().x) {
-        return icon_button(ui, icon, label, t, true, on);
-    }
-    let (rect, resp) = ui.allocate_exact_size(vec2(galley.size().x + 36.0, 30.0), Sense::click());
-    reached(ui, rect);
-    // Lit or not, easing between the two.
-    let lit = crate::motion::toward(ui.ctx(), resp.id.with("on"), on, crate::motion::NORMAL);
-    if lit > 0.0 {
-        ui.painter().rect(
-            rect,
-            6.0,
-            t.accent_soft.gamma_multiply(lit),
-            Stroke::new(1.0, t.accent.gamma_multiply(0.5 * lit)),
-            egui::StrokeKind::Inside,
-        );
-    }
-    if !on {
-        hover_fill(ui, &resp, rect, t, true);
-    }
-    icons::paint(ui.painter(), egui::Rect::from_min_size(rect.min + vec2(8.0, 7.0), vec2(16.0, 16.0)), icon, t.accent);
-    ui.painter().galley_with_override_text_color(rect.min + vec2(30.0, (30.0 - galley.size().y) / 2.0), galley, t.text);
-    resp
-}
-
 /// A "⋯" button in the style of [`pill_button`], for a menu of more actions.
 pub fn more_pill(ui: &mut Ui, tip: &str, t: &Tokens) -> Response {
     let (rect, resp) = ui.allocate_exact_size(vec2(34.0, 28.0), Sense::click());

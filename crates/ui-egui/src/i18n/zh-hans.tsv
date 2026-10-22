@@ -1143,3 +1143,33 @@ month	May	5月
 	Snooze 5 minutes	推迟 5 分钟
 	Show reminders on top of other windows	将提醒显示在其他窗口之上
 	The Reminders window opens in a window of its own when a reminder comes, even while Quatrelle is minimized	提醒到来时，即使 Quatrelle 已最小化，提醒窗口也会在独立窗口中打开
+	Put a “-- ” line before the signature	在签名前加一行“-- ”
+	Some mail apps use it to tell the signature apart; Outlook adds none.	部分邮件程序用它来区分签名；Outlook 不会添加。
+	Ignore all	全部忽略
+	Ignore once	忽略一次
+	All languages	所有语言
+	The language the spelling is checked in	检查拼写所用的语言
+	Let this word be, here and elsewhere in this message	在此邮件中保留该词，此处及其他位置均不再标记
+	Message	邮件
+	Format Text	设置文本格式
+	Review	审阅
+	Clipboard	剪贴板
+	Basic Text	普通文本
+	Names	姓名
+	Include	添加
+	Show Fields	显示字段
+	Tracking	跟踪
+	More Options	其他选项
+	Format	格式
+	Paragraph	段落
+	Font	字体
+	Proofing	校对
+	Paste options	粘贴选项
+	Keep text only	只保留文本
+	Paste without the look it has where it was copied	粘贴时不带原来的格式
+	Check Names	检查姓名
+	Fill in the addresses of the names typed, from your contacts and the people you've written to	根据联系人和写过信的人，补全所输入姓名的地址
+	HTML	HTML
+	Horizontal line	水平线
+	Increase font size (Ctrl+])	增大字号 (Ctrl+])
+	Decrease font size (Ctrl+[)	减小字号 (Ctrl+[)

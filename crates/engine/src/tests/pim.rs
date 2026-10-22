@@ -391,6 +391,8 @@ fn notes_can_be_arranged() {
 #[test]
 fn a_signature_goes_in_from_the_message() {
     let mut s = sample_session("insert-signature");
+    // With the `-- ` line before it (off unless asked for: Outlook adds none).
+    s.prefs.signature_dashes = true;
     s.run("account.setSignature", &json!({"account": "sample", "signature": ""})).unwrap();
     s.run("mail.new", &json!({})).unwrap();
     s.compose.as_mut().unwrap().body = "Hello there".into();
@@ -416,6 +418,7 @@ fn a_signature_goes_in_from_the_message() {
 #[test]
 fn a_formatted_signature_keeps_its_look() {
     let mut s = sample_session("formatted-signature");
+    s.prefs.signature_dashes = true;
     let html = "<p class=MsoNormal><b><span style='color:#BFBFBF'>Company bv</span></b></p>\
                 <p class=MsoNormal>An street 1<br><a href=\"http://www.company.com/\">www.company.com</a></p>\
                 <p class=MsoNormal><i>Confidential.</i></p>";

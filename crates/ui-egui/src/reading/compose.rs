@@ -7,7 +7,7 @@ pub(super) const CHIP_H: f32 = 42.0;
 
 /// When to send a held-back message: in an hour, tomorrow or Monday morning, a time of one's
 /// own, or at once again.
-pub(super) fn delay_menu(ui: &mut Ui, t: &Tokens, c: &mut quatrelle_engine::Compose, clock: &dates::Clock) {
+pub(crate) fn delay_menu(ui: &mut Ui, t: &Tokens, c: &mut quatrelle_engine::Compose, clock: &dates::Clock) {
     let today = dates::today(clock);
     let at = |day: i64, minutes: i64| day.saturating_mul(86_400) - i64::from(clock.offset) + minutes * 60;
     let weekday = (today + 3).rem_euclid(7);
@@ -124,11 +124,23 @@ pub(super) fn send_button(ui: &mut Ui, t: &Tokens, height: f32, sending: bool) -
     resp.on_hover_text(tl!("Send (Ctrl+Enter)"))
 }
 
-pub(super) fn field(ui: &mut Ui, t: &Tokens, label: &str, value: &mut String, hint: &str, check_addresses: bool, focus: bool, spell: bool) {
+/// A labelled field; its spelling is checked when `spell` says how.
+pub(super) fn field(
+    ui: &mut Ui,
+    t: &Tokens,
+    label: &str,
+    value: &mut String,
+    hint: &str,
+    check_addresses: bool,
+    focus: bool,
+    spell: Option<&crate::spellcheck::Check>,
+) {
     ui.horizontal(|ui| {
         ui.add_sized(vec2(LABEL_W, ROW_H), egui::Label::new(RichText::new(tl!(label)).color(t.dim)));
-        let r =
-            if spell { underlined_spelling(ui, t, value, hint) } else { underlined(ui, t, egui::TextEdit::singleline(value).hint_text(tl!(hint))) };
+        let r = match spell {
+            Some(check) => underlined_spelling(ui, t, value, hint, check),
+            None => underlined(ui, t, egui::TextEdit::singleline(value).hint_text(tl!(hint))),
+        };
         if focus {
             r.request_focus();
         }
@@ -401,88 +413,23 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
             acts.push(Action::Dialog(crate::Dialog::spelling()));
         }
     }
+    // The typefaces the text is set in (Arial, Calibri…), from the system when it has them, so
+    // the text shows as it will be read.
+    let typefaces = c.styles.palette.iter().filter_map(|s| s.font.clone());
+    for name in crate::look::typefaces::wanted(ui.ctx(), typefaces) {
+        acts.push(Action::LoadTypeface(name));
+    }
+    // The subject's spelling is checked as the message's is (its language, the words let be).
+    let subject_check = crate::spellcheck::Check { skip: Vec::new(), ..rich_edit::check_for(c) };
     egui::Frame::new().inner_margin(Margin { left: 16, right: 16, top: 8, bottom: 12 }).show(ui, |ui| {
-        // The Message ribbon.
+        // The ribbon, as Outlook's message window has it: its tabs, with Save, Pop out (or in)
+        // and Discard small at their right; where windows can't open (the browser), messages
+        // stay in the reading pane.
+        let input =
+            rich_edit::RibbonInput { signature: &signature, clock: &clock, can_delay, can_vote, in_window, can_pop: !ui.ctx().embed_viewports() };
         egui::Frame::new().fill(t.chrome).corner_radius(6).inner_margin(Margin::symmetric(8, 4)).show(ui, |ui| {
             ui.set_width(ui.available_width());
-            rich_edit::ribbon(ui, &t, &mut ed, c, &signature, &clock, acts);
-        });
-        ui.add_space(4.0);
-        // Drafts, Bcc and the format at the left (wrapping onto a second line in a narrow pane);
-        // Discard and Pop out (or in) kept at the right, as in Outlook.
-        ui.horizontal(|ui| {
-            let (icon, label, id) = if in_window { (Icon::PopIn, "Pop in", "compose.popIn") } else { (Icon::PopOut, "Pop out", "compose.popOut") };
-            // Where windows can't open (the browser), messages stay in the reading pane.
-            let can_pop = !ui.ctx().embed_viewports();
-            let width_of = |ui: &Ui, l: &str| ui.painter().layout_no_wrap(tl!(l).to_string(), theme::regular(13.0), t.text).size().x + 36.0;
-            let gap = ui.spacing().item_spacing.x;
-            let right = width_of(ui, "Discard") + if can_pop { width_of(ui, label) + gap } else { 0.0 } + 2.0 * gap;
-            let left_w = (ui.available_width() - right).max(120.0);
-            ui.allocate_ui_with_layout(vec2(left_w, 30.0), egui::Layout::left_to_right(egui::Align::Center).with_main_wrap(true), |ui| {
-                if widgets::tool_button(ui, Icon::Drafts, "Save draft", &t, !c.sending).on_hover_text(tl!("Save draft (Ctrl+S)")).clicked() {
-                    acts.push(Action::Run("compose.saveDraft", json!({})));
-                }
-                if widgets::tool_button(ui, Icon::Person, if c.show_cc { "Hide Bcc" } else { "Bcc" }, &t, !c.sending).clicked() {
-                    c.show_cc = !c.show_cc;
-                }
-                let mut plain = c.plain;
-                if ui.checkbox(&mut plain, RichText::new(tl!("Plain text")).small()).on_hover_text(tl!("Send without formatting")).changed() {
-                    c.plain = plain;
-                }
-                // Importance and a read receipt, as Outlook's Tags and Options.
-                ui.add_space(6.0);
-                if ui.selectable_label(c.importance > 0, RichText::new("!").strong().color(t.danger)).on_hover_text(tl!("High importance")).clicked()
-                {
-                    c.importance = if c.importance > 0 { 0 } else { 1 };
-                }
-                if ui.selectable_label(c.importance < 0, RichText::new("↓").strong().color(t.accent)).on_hover_text(tl!("Low importance")).clicked()
-                {
-                    c.importance = if c.importance < 0 { 0 } else { -1 };
-                }
-                let mut receipt = c.read_receipt;
-                if ui
-                    .checkbox(&mut receipt, RichText::new(tl!("Read receipt")).small())
-                    .on_hover_text(tl!("Ask the recipients to confirm they've read it (their mail app may not, or may ask them)"))
-                    .changed()
-                {
-                    c.read_receipt = receipt;
-                }
-                // Outlook's Use Voting Buttons (Exchange carries them).
-                if can_vote {
-                    let label = if c.voting.is_empty() { tl!("Voting buttons").to_string() } else { c.voting.replace(';', " · ") };
-                    let r = widgets::tool_toggle(ui, Icon::Vote, &label, &t, !c.voting.is_empty())
-                        .on_hover_text(tl!("Let the recipients answer with a button"));
-                    egui::Popup::menu(&r).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| voting_menu(ui, &t, c));
-                }
-                // Outlook's Delay Delivery and Direct Replies To.
-                if can_delay {
-                    let label = match c.send_after {
-                        Some(at) => tf!("Sends {when}", when = crate::i18n::date(&dates::full_time(at, &clock))),
-                        None => tl!("Delay delivery").to_string(),
-                    };
-                    let r = widgets::tool_toggle(ui, Icon::Clock, &label, &t, c.send_after.is_some())
-                        .on_hover_text(tl!("Keep it in the Outbox and send it later (Quatrelle has to be running then)"));
-                    egui::Popup::menu(&r).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| delay_menu(ui, &t, c, &clock));
-                }
-                if widgets::tool_toggle(ui, Icon::Reply, "Replies to", &t, c.show_reply_to || !c.reply_to.is_empty())
-                    .on_hover_text(tl!("Have replies sent to another address"))
-                    .clicked()
-                {
-                    c.show_reply_to = !c.show_reply_to;
-                }
-            });
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
-                if can_pop
-                    && widgets::tool_button(ui, icon, label, &t, true)
-                        .on_hover_text(tl!(if in_window { "Back to the reading pane" } else { "Write it in a window of its own" }))
-                        .clicked()
-                {
-                    acts.push(Action::Run(id, json!({})));
-                }
-                if widgets::tool_button(ui, Icon::Delete, "Discard", &t, true).clicked() {
-                    acts.push(Action::Run("compose.discard", json!({})));
-                }
-            });
+            rich_edit::compose_ribbon(ui, &t, &mut ed, c, &input, acts);
         });
         if let Some(e) = &c.error {
             ui.add_space(4.0);
@@ -539,12 +486,12 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
             if c.show_reply_to || !c.reply_to.is_empty() {
                 ui.horizontal(|ui| {
                     ui.add_space(76.0);
-                    ui.vertical(|ui| field(ui, &t, "Replies to", &mut c.reply_to, "Where replies go instead of to you", true, false, false));
+                    ui.vertical(|ui| field(ui, &t, "Replies to", &mut c.reply_to, "Where replies go instead of to you", true, false, None));
                 });
             }
             ui.horizontal(|ui| {
                 ui.add_space(76.0);
-                ui.vertical(|ui| field(ui, &t, "Subject", &mut c.subject, "Add a subject", false, false, true));
+                ui.vertical(|ui| field(ui, &t, "Subject", &mut c.subject, "Add a subject", false, false, Some(&subject_check)));
             });
             if !c.attachments.is_empty() {
                 ui.horizontal(|ui| {

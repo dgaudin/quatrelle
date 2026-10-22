@@ -1146,3 +1146,33 @@ month	May	mayo
 	Snooze 5 minutes	Posponer 5 minutos
 	Show reminders on top of other windows	Mostrar los recordatorios por encima de las demás ventanas
 	The Reminders window opens in a window of its own when a reminder comes, even while Quatrelle is minimized	La ventana de recordatorios se abre en una ventana propia cuando llega un recordatorio, incluso con Quatrelle minimizado
+	Put a “-- ” line before the signature	Poner una línea “-- ” antes de la firma
+	Some mail apps use it to tell the signature apart; Outlook adds none.	Algunos programas de correo la usan para distinguir la firma; Outlook no la añade.
+	Ignore all	Omitir todas
+	Ignore once	Omitir una vez
+	All languages	Todos los idiomas
+	The language the spelling is checked in	El idioma en que se revisa la ortografía
+	Let this word be, here and elsewhere in this message	Dejar esta palabra tal cual, aquí y en el resto del mensaje
+	Message	Mensaje
+	Format Text	Formato de texto
+	Review	Revisar
+	Clipboard	Portapapeles
+	Basic Text	Texto básico
+	Names	Nombres
+	Include	Incluir
+	Show Fields	Mostrar campos
+	Tracking	Seguimiento
+	More Options	Más opciones
+	Format	Formato
+	Paragraph	Párrafo
+	Font	Fuente
+	Proofing	Revisión
+	Paste options	Opciones de pegado
+	Keep text only	Conservar solo el texto
+	Paste without the look it has where it was copied	Pegar sin el formato de origen
+	Check Names	Comprobar nombres
+	Fill in the addresses of the names typed, from your contacts and the people you've written to	Completar las direcciones de los nombres escritos, a partir de sus contactos y de las personas a las que ha escrito
+	HTML	HTML
+	Horizontal line	Línea horizontal
+	Increase font size (Ctrl+])	Aumentar el tamaño de fuente (Ctrl+])
+	Decrease font size (Ctrl+[)	Reducir el tamaño de fuente (Ctrl+[)

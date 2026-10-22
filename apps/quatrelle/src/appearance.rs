@@ -255,10 +255,80 @@ fn font_family(desc: &str) -> Option<String> {
 
 #[cfg(all(unix, not(target_os = "macos")))]
 fn fc_match(pattern: &str) -> Option<std::path::PathBuf> {
-    let out = std::process::Command::new("fc-match").args(["--format=%{file}", pattern]).output().ok()?;
+    fc_match_named(pattern).map(|(_, path)| path)
+}
+
+/// fontconfig's match for a pattern: the family it found, and its file.
+#[cfg(all(unix, not(target_os = "macos")))]
+fn fc_match_named(pattern: &str) -> Option<(String, std::path::PathBuf)> {
+    let out = std::process::Command::new("fc-match").args(["--format=%{family}|%{file}", pattern]).output().ok()?;
     out.status.success().then_some(())?;
-    let path = std::path::PathBuf::from(String::from_utf8(out.stdout).ok()?.trim());
-    path.is_file().then_some(path)
+    let text = String::from_utf8(out.stdout).ok()?;
+    let (family, file) = text.trim().split_once('|')?;
+    let path = std::path::PathBuf::from(file.trim());
+    path.is_file().then(|| (family.split(',').next().unwrap_or("").trim().to_string(), path))
+}
+
+/// The files of a typeface by name (`Arial`, `Calibri`), for the message editor: its regular
+/// face, and its bold when there's one of its own. On Linux fontconfig answers, with the font
+/// standing in for one that isn't installed (Liberation Sans for Arial, Carlito for Calibri),
+/// but not with its last resort for a name it doesn't know; on Windows and macOS the usual
+/// files are looked for by name.
+pub fn typeface_files(family: &str) -> Option<(std::path::PathBuf, Option<std::path::PathBuf>)> {
+    let family = family.trim();
+    if family.is_empty() || family.len() > 64 || family.contains([':', '=', ',', '/', '\\']) {
+        return None;
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let (found, regular) = fc_match_named(&format!("{family}:weight=regular"))?;
+        let named = found.eq_ignore_ascii_case(family);
+        // The last resort (the default sans, serif or monospace) isn't the typeface asked for.
+        let last_resort = ["sans-serif", "serif", "monospace"].iter().filter_map(|g| fc_match(g)).any(|p| p == regular);
+        if !named && last_resort {
+            return None;
+        }
+        let bold = fc_match(&format!("{family}:weight=bold")).filter(|b| *b != regular);
+        return Some((regular, bold));
+    }
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
+    {
+        let (dir, files): (std::path::PathBuf, &[(&str, &str, &str)]) = if cfg!(target_os = "windows") {
+            (
+                std::path::PathBuf::from(std::env::var("WINDIR").unwrap_or_else(|_| "C:\\Windows".into())).join("Fonts"),
+                &[
+                    ("arial", "arial.ttf", "arialbd.ttf"),
+                    ("calibri", "calibri.ttf", "calibrib.ttf"),
+                    ("cambria", "cambria.ttc", "cambriab.ttf"),
+                    ("courier new", "cour.ttf", "courbd.ttf"),
+                    ("georgia", "georgia.ttf", "georgiab.ttf"),
+                    ("segoe ui", "segoeui.ttf", "segoeuib.ttf"),
+                    ("tahoma", "tahoma.ttf", "tahomabd.ttf"),
+                    ("times new roman", "times.ttf", "timesbd.ttf"),
+                    ("verdana", "verdana.ttf", "verdanab.ttf"),
+                ],
+            )
+        } else {
+            (
+                std::path::PathBuf::from("/System/Library/Fonts/Supplemental"),
+                &[
+                    ("arial", "Arial.ttf", "Arial Bold.ttf"),
+                    ("courier new", "Courier New.ttf", "Courier New Bold.ttf"),
+                    ("georgia", "Georgia.ttf", "Georgia Bold.ttf"),
+                    ("tahoma", "Tahoma.ttf", "Tahoma Bold.ttf"),
+                    ("times new roman", "Times New Roman.ttf", "Times New Roman Bold.ttf"),
+                    ("verdana", "Verdana.ttf", "Verdana Bold.ttf"),
+                ],
+            )
+        };
+        let lower = family.to_ascii_lowercase();
+        let (_, regular, bold) = files.iter().find(|(name, _, _)| *name == lower)?;
+        let regular = dir.join(regular);
+        let bold = dir.join(bold);
+        return regular.is_file().then(|| (regular, bold.is_file().then_some(bold)));
+    }
+    #[allow(unreachable_code)]
+    None
 }
 
 #[cfg(all(test, unix, not(target_os = "macos")))]

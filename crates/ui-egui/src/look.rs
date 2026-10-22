@@ -7,4 +7,5 @@ pub mod icons;
 pub mod motion;
 pub mod theme;
 pub(crate) mod thumbs;
+pub(crate) mod typefaces;
 pub(crate) mod widgets;

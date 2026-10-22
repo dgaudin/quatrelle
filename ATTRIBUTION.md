@@ -72,6 +72,7 @@ owner's own picture `assets/icon.png` when it is there (every size is sampled do
 | `assets/icons/fluent/info_20_regular.svg` | Microsoft Corporation | Fluent UI System Icons, `@fluentui/svg-icons` 1.1.292, unchanged | MIT |
 | `assets/icons/fluent/layout_column_two_20_regular.svg` | Microsoft Corporation | Fluent UI System Icons, `@fluentui/svg-icons` 1.1.292, unchanged | MIT |
 | `assets/icons/fluent/link_20_regular.svg` | Microsoft Corporation | Fluent UI System Icons, `@fluentui/svg-icons` 1.1.292, unchanged | MIT |
+| `assets/icons/fluent/local_language_20_regular.svg` | Microsoft Corporation | Fluent UI System Icons, `@fluentui/svg-icons` 1.1.292, unchanged | MIT |
 | `assets/icons/fluent/location_20_regular.svg` | Microsoft Corporation | Fluent UI System Icons, `@fluentui/svg-icons` 1.1.292, unchanged | MIT |
 | `assets/icons/fluent/mail_20_regular.svg` | Microsoft Corporation | Fluent UI System Icons, `@fluentui/svg-icons` 1.1.292, unchanged | MIT |
 | `assets/icons/fluent/mail_add_20_regular.svg` | Microsoft Corporation | Fluent UI System Icons, `@fluentui/svg-icons` 1.1.292, unchanged | MIT |
@@ -113,3 +114,16 @@ owner's own picture `assets/icon.png` when it is there (every size is sampled do
 | `assets/icons/fluent/chevron_up_20_regular.svg` | Microsoft Corporation | Fluent UI System Icons, `@fluentui/svg-icons` 1.1.292, unchanged | MIT |
 | `assets/icons/fluent/calendar_add_20_regular.svg` | Microsoft Corporation | Fluent UI System Icons, `@fluentui/svg-icons` 1.1.292, unchanged | MIT |
 | `assets/icons/fluent/vote_20_regular.svg` | Microsoft Corporation | Fluent UI System Icons, `@fluentui/svg-icons` 1.1.292, unchanged | MIT |
+| `assets/icons/fluent/arrow_down_20_regular.svg` | Microsoft Corporation | Fluent UI System Icons, `@fluentui/svg-icons` 1.1.292, unchanged | MIT |
+| `assets/icons/fluent/calendar_clock_20_regular.svg` | Microsoft Corporation | Fluent UI System Icons, `@fluentui/svg-icons` 1.1.292, unchanged | MIT |
+| `assets/icons/fluent/clipboard_paste_20_regular.svg` | Microsoft Corporation | Fluent UI System Icons, `@fluentui/svg-icons` 1.1.292, unchanged | MIT |
+| `assets/icons/fluent/copy_20_regular.svg` | Microsoft Corporation | Fluent UI System Icons, `@fluentui/svg-icons` 1.1.292, unchanged | MIT |
+| `assets/icons/fluent/cut_20_regular.svg` | Microsoft Corporation | Fluent UI System Icons, `@fluentui/svg-icons` 1.1.292, unchanged | MIT |
+| `assets/icons/fluent/eye_20_regular.svg` | Microsoft Corporation | Fluent UI System Icons, `@fluentui/svg-icons` 1.1.292, unchanged | MIT |
+| `assets/icons/fluent/font_decrease_20_regular.svg` | Microsoft Corporation | Fluent UI System Icons, `@fluentui/svg-icons` 1.1.292, unchanged | MIT |
+| `assets/icons/fluent/font_increase_20_regular.svg` | Microsoft Corporation | Fluent UI System Icons, `@fluentui/svg-icons` 1.1.292, unchanged | MIT |
+| `assets/icons/fluent/important_20_regular.svg` | Microsoft Corporation | Fluent UI System Icons, `@fluentui/svg-icons` 1.1.292, unchanged | MIT |
+| `assets/icons/fluent/line_horizontal_1_20_regular.svg` | Microsoft Corporation | Fluent UI System Icons, `@fluentui/svg-icons` 1.1.292, unchanged | MIT |
+| `assets/icons/fluent/person_available_20_regular.svg` | Microsoft Corporation | Fluent UI System Icons, `@fluentui/svg-icons` 1.1.292, unchanged | MIT |
+| `assets/icons/fluent/signature_20_regular.svg` | Microsoft Corporation | Fluent UI System Icons, `@fluentui/svg-icons` 1.1.292, unchanged | MIT |
+| `assets/icons/fluent/text_word_count_20_regular.svg` | Microsoft Corporation | Fluent UI System Icons, `@fluentui/svg-icons` 1.1.292, unchanged | MIT |

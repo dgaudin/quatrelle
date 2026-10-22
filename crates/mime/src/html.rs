@@ -53,6 +53,118 @@ pub fn pasted_html(html: &str) -> (String, rich::Styles) {
     fonts::apply(&text, &styles, &fonts)
 }
 
+/// Most pictures taken from pasted HTML, and the most each may weigh.
+const PASTED_PICTURES: usize = 20;
+const PASTED_PICTURE_MAX: usize = 5 << 20;
+
+/// [`pasted_html`] keeping the pictures that come along: those embedded in the HTML (`data:`
+/// addresses, which web pages and some apps copy) become pictures of the message, each where
+/// a [`rich::PICTURE`] stands; those named by `cid:` (text copied from this editor, whose
+/// message has them) keep their id. Pictures on the web or in another program's files go.
+pub fn pasted_html_with_pictures(html: &str) -> (String, rich::Styles, Vec<InlinePicture>) {
+    const MARK: char = '\u{E000}';
+    let (marked, fonts) = fonts::mark(&word_paragraphs(html));
+    let mut lines = html_to_rich(&marked);
+    let mut pictures: Vec<InlinePicture> = Vec::new();
+    let mut cids: Vec<String> = Vec::new();
+    for line in &mut lines {
+        let mut kept: Vec<Span> = Vec::with_capacity(line.len());
+        for mut sp in line.drain(..) {
+            let Some(src) = sp.image.take() else {
+                kept.push(sp);
+                continue;
+            };
+            let cid = match src.strip_prefix("cid:") {
+                Some(cid) if !cid.is_empty() => Some(cid.to_string()),
+                _ => data_picture(&src).filter(|_| pictures.len() < PASTED_PICTURES).map(|p| {
+                    let cid = p.cid.clone();
+                    if !pictures.iter().any(|x| x.cid == cid) {
+                        pictures.push(p);
+                    }
+                    cid
+                }),
+            };
+            if let Some(cid) = cid {
+                cids.push(cid);
+                sp.text = MARK.to_string();
+                kept.push(sp);
+            }
+        }
+        *line = kept;
+    }
+    let blank = |l: &Vec<Span>| l.iter().all(|sp| sp.text.trim().is_empty());
+    while lines.last().is_some_and(blank) {
+        lines.pop();
+    }
+    let first = lines.iter().position(|l| !blank(l)).unwrap_or(lines.len());
+    lines.drain(..first);
+    let (text, styles) = rich::from_rich(&lines);
+    let (mut text, mut styles) = fonts::apply(&text, &styles, &fonts);
+    let marks: Vec<usize> = text.chars().enumerate().filter(|(_, c)| *c == MARK).map(|(i, _)| i).collect();
+    text = text.replace(MARK, &rich::PICTURE.to_string());
+    for (at, cid) in marks.into_iter().zip(cids) {
+        styles.restyle(&text, at..at + 1, |s| rich::Style { picture: Some(cid.clone()), ..s.clone() });
+    }
+    (text, styles, pictures)
+}
+
+/// A picture embedded in HTML (`data:image/png;base64,…`) as a picture of the message, its id
+/// made from its bytes (the same picture twice is one). `None` for anything else, or one too
+/// big.
+fn data_picture(src: &str) -> Option<InlinePicture> {
+    use std::hash::{Hash, Hasher};
+    let rest = src.trim().strip_prefix("data:")?;
+    let (head, body) = rest.split_once(',')?;
+    let mut parts = head.split(';');
+    let mime = parts.next().unwrap_or("").trim().to_ascii_lowercase();
+    if !mime.starts_with("image/") || !parts.any(|p| p.trim().eq_ignore_ascii_case("base64")) || body.len() > PASTED_PICTURE_MAX / 3 * 4 + 4 {
+        return None;
+    }
+    let data = base64_decode(body)?;
+    if data.is_empty() || data.len() > PASTED_PICTURE_MAX {
+        return None;
+    }
+    let ext = match mime.as_str() {
+        "image/jpeg" | "image/jpg" => "jpg",
+        "image/gif" => "gif",
+        "image/webp" => "webp",
+        "image/bmp" => "bmp",
+        "image/svg+xml" => "svg",
+        _ => "png",
+    };
+    let mut h = std::hash::DefaultHasher::new();
+    data.hash(&mut h);
+    let cid = format!("{:016x}@pasted.quatrelle", h.finish());
+    Some(InlinePicture { cid, name: format!("picture.{ext}"), mime, data })
+}
+
+/// Base64 (standard or URL-safe alphabet, whitespace skipped) as bytes; `None` on any other
+/// character.
+fn base64_decode(s: &str) -> Option<Vec<u8>> {
+    let mut out = Vec::with_capacity(s.len() / 4 * 3);
+    let (mut buf, mut bits) = (0u32, 0u8);
+    for c in s.bytes() {
+        let v = match c {
+            b'A'..=b'Z' => c - b'A',
+            b'a'..=b'z' => c - b'a' + 26,
+            b'0'..=b'9' => c - b'0' + 52,
+            b'+' | b'-' => 62,
+            b'/' | b'_' => 63,
+            b'=' => break,
+            b' ' | b'\n' | b'\r' | b'\t' => continue,
+            _ => return None,
+        };
+        buf = (buf << 6) | u32::from(v);
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            out.push(u8::try_from((buf >> bits) & 0xFF).unwrap_or(0));
+            buf &= (1 << bits) - 1;
+        }
+    }
+    Some(out)
+}
+
 /// HTML → lines of formatted spans: paragraphs, emphasis, links, list bullets, quotes, tables
 /// laid out as text, and pictures by reference. No scripts, styles or remote loads: what comes
 /// out is plain data. Never panics; empty when conversion fails.

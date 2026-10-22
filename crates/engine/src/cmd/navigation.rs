@@ -113,6 +113,11 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             Ok(json!({"on": s.prefs.spell_check}))
         })
         .params(r#"{"on"?: bool}"#),
+        CommandSpec::new("view.signatureDashes", "Put a “-- ” line before the signature", "File › Options", |s, v| {
+            s.prefs.signature_dashes = p::bool(v, "on").unwrap_or(!s.prefs.signature_dashes);
+            Ok(json!({"on": s.prefs.signature_dashes}))
+        })
+        .params(r#"{"on"?: bool}"#),
         CommandSpec::new("view.html", "Show HTML formatted", "View › Messages", |s, v| {
             s.prefs.show_html = p::bool(v, "on").unwrap_or(!s.prefs.show_html);
             Ok(json!({"on": s.prefs.show_html}))
