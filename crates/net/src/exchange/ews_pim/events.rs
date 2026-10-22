@@ -87,7 +87,7 @@ pub fn recurrence_xml(rule: &str, start: i64) -> Option<String> {
 fn person(m: &El) -> Option<Attendee> {
     let mb = if m.name == "Mailbox" { m } else { m.find("Mailbox")? };
     let email = text(mb, "EmailAddress");
-    email.contains('@').then(|| Attendee { email, name: text(mb, "Name"), partstat: String::new(), rsvp: false })
+    email.contains('@').then(|| Attendee { email, name: text(mb, "Name"), partstat: String::new(), rsvp: false, cutype: String::new() })
 }
 
 /// The organizer of a meeting when Exchange names them by their internal (`EX`) address, which
@@ -97,7 +97,7 @@ fn person(m: &El) -> Option<Attendee> {
 pub fn own_organizer(e: &mut CalEvent, it: &El, owner: &str) {
     if e.organizer.is_none() && owner.contains('@') && it.text_of("MyResponseType").is_some_and(|r| r.trim() == "Organizer") {
         let name = it.child("Organizer").and_then(|o| o.find("Mailbox")).map(|mb| text(mb, "Name")).unwrap_or_default();
-        e.organizer = Some(Attendee { email: owner.to_ascii_lowercase(), name, partstat: String::new(), rsvp: false });
+        e.organizer = Some(Attendee { email: owner.to_ascii_lowercase(), name, ..Default::default() });
     }
 }
 
@@ -186,7 +186,9 @@ fn appointment(it: &El) -> Option<CalEvent> {
         .then(|| it.text_of("ReminderMinutesBeforeStart").and_then(|m| m.trim().parse::<i64>().ok()))
         .flatten();
     let mut attendees = Vec::new();
-    for list in ["RequiredAttendees", "OptionalAttendees"] {
+    // The people invited, then the rooms and equipment booked (Exchange's resources, kept
+    // apart as `RESOURCE`: a room's mailbox books itself and isn't a guest).
+    for (list, resource) in [("RequiredAttendees", false), ("OptionalAttendees", false), ("Resources", true)] {
         if let Some(l) = it.child(list) {
             for a in l.children("Attendee").take(500) {
                 if let Some(mut p) = person(a) {
@@ -198,6 +200,9 @@ fn appointment(it: &El) -> Option<CalEvent> {
                     }
                     .to_string();
                     p.rsvp = true;
+                    if resource {
+                        p.cutype = "RESOURCE".into();
+                    }
                     attendees.push(p);
                 }
             }
@@ -264,23 +269,30 @@ pub(crate) fn event_fields(e: &CalEvent, me: &str) -> Vec<(&'static str, String)
         ("calendar:Location", format!("<t:Location>{}</t:Location>", esc(&e.location))),
     ]);
     // The guests (the organizer isn't one of them), between the place and the pattern, as the
-    // schema has it.
+    // schema has it; then the rooms and equipment booked (`Resources`, which the server asks
+    // to book themselves), right after them.
     let mine = e.organizer.as_ref().is_none_or(|o| o.email.eq_ignore_ascii_case(me));
-    let guests: String = e
-        .attendees
-        .iter()
-        .filter(|a| mine && !a.email.eq_ignore_ascii_case(me) && a.email.contains('@'))
-        .take(500)
-        .map(|a| {
-            format!(
-                "<t:Attendee><t:Mailbox><t:Name>{}</t:Name><t:EmailAddress>{}</t:EmailAddress><t:RoutingType>SMTP</t:RoutingType></t:Mailbox></t:Attendee>",
-                esc(&a.name),
-                esc(&a.email)
-            )
-        })
-        .collect();
+    let list = |resource: bool| -> String {
+        e.attendees
+            .iter()
+            .filter(|a| mine && a.is_resource() == resource && !a.email.eq_ignore_ascii_case(me) && a.email.contains('@'))
+            .take(500)
+            .map(|a| {
+                format!(
+                    "<t:Attendee><t:Mailbox><t:Name>{}</t:Name><t:EmailAddress>{}</t:EmailAddress><t:RoutingType>SMTP</t:RoutingType></t:Mailbox></t:Attendee>",
+                    esc(&a.name),
+                    esc(&a.email)
+                )
+            })
+            .collect()
+    };
+    let guests = list(false);
     if !guests.is_empty() {
         f.push(("calendar:RequiredAttendees", format!("<t:RequiredAttendees>{guests}</t:RequiredAttendees>")));
+    }
+    let resources = list(true);
+    if !resources.is_empty() {
+        f.push(("calendar:Resources", format!("<t:Resources>{resources}</t:Resources>")));
     }
     if let Some(r) = e.rrule.as_deref().and_then(|r| recurrence_xml(r, e.start)) {
         f.push(("calendar:Recurrence", r));

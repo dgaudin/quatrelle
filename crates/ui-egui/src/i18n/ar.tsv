@@ -1185,3 +1185,29 @@ month	May	مايو
 	Increase font size (Ctrl+])	تكبير الخط (Ctrl+])
 	Decrease font size (Ctrl+[)	تصغير الخط (Ctrl+[)
 	Remove from suggestions	إزالة من الاقتراحات
+	All rooms	كل الغرف
+	A room's address	عنوان غرفة
+	Click or drag the meeting to move it.	انقر أو اسحب الاجتماع لنقله.
+	Filter rooms	تصفية الغرف
+	From your calendar: the rooms booked in your meetings and those in Outlook's Rooms group.	من تقويمك: الغرف المحجوزة في اجتماعاتك وتلك الموجودة في مجموعة الغرف في Outlook.
+	Give the meeting a start and an end to see when everyone is free.	حدّد بداية الاجتماع ونهايته لمعرفة متى يكون الجميع متفرّغين.
+	Loading availability…	جارٍ تحميل التوفّر…
+	Looking for rooms…	جارٍ البحث عن الغرف…
+	Meeting day	يوم الاجتماع
+	Next day	اليوم التالي
+	Previous day	اليوم السابق
+	No information	لا توجد معلومات
+	No room matches	لا توجد غرفة مطابقة
+	No rooms are offered here yet: a room booked in one of your meetings shows here.	لا توجد غرف معروضة هنا بعد: الغرفة المحجوزة في أحد اجتماعاتك ستظهر هنا.
+	Room Finder	البحث عن غرفة
+	Rooms	الغرف
+	Rooms: {names}	الغرف: {names}
+	Scheduling Assistant	مساعد الجدولة
+	The rooms couldn't be read: {error}	تعذّرت قراءة الغرف: {error}
+	Organizer	المنظّم
+	Guest	مدعو
+	Room	غرفة
+	Free	متاح
+	Busy	مشغول
+	Out of office	خارج المكتب
+	Working elsewhere	يعمل في مكان آخر

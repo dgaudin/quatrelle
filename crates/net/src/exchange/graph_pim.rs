@@ -165,7 +165,7 @@ fn partstat(response: &str) -> &'static str {
 fn person(v: &Value) -> Option<Attendee> {
     let e = v.get("emailAddress")?;
     let email = s(e, "address");
-    (!email.is_empty()).then(|| Attendee { email, name: s(e, "name"), partstat: String::new(), rsvp: false })
+    (!email.is_empty()).then(|| Attendee { email, name: s(e, "name"), partstat: String::new(), rsvp: false, cutype: String::new() })
 }
 
 /// A Graph event as an event.
@@ -186,6 +186,10 @@ pub fn event_of(v: &Value) -> Option<CalEvent> {
                     let mut p = person(x)?;
                     p.partstat = partstat(&x.get("status").map(|st| s(st, "response")).unwrap_or_default()).to_string();
                     p.rsvp = true;
+                    // A room or equipment booked (Graph's `resource` attendee), not a guest.
+                    if s(x, "type").eq_ignore_ascii_case("resource") {
+                        p.cutype = "RESOURCE".into();
+                    }
                     Some(p)
                 })
                 .collect()
@@ -226,7 +230,7 @@ pub fn event_json(e: &CalEvent) -> Value {
         "isAllDay": e.all_day,
         "start": if e.all_day { json!({"dateTime": format!("{}T00:00:00", ymd(e.start)), "timeZone": "UTC"}) } else { date_time(e.start) },
         "end": if e.all_day { json!({"dateTime": format!("{}T00:00:00", ymd(e.end.max(e.start + 86_400))), "timeZone": "UTC"}) } else { date_time(e.end) },
-        "attendees": e.attendees.iter().map(|a| json!({"type": "required", "emailAddress": {"address": a.email, "name": a.name}})).collect::<Vec<_>>(),
+        "attendees": e.attendees.iter().map(|a| json!({"type": if a.is_resource() { "resource" } else { "required" }, "emailAddress": {"address": a.email, "name": a.name}})).collect::<Vec<_>>(),
         "categories": e.categories,
         "isReminderOn": e.reminder.is_some(),
         "reminderMinutesBeforeStart": e.reminder.unwrap_or(0),
@@ -349,6 +353,8 @@ pub fn card_json(c: &Card) -> Value {
         "birthday": quatrelle_model::vcard::birthday_for_exchange(&c.birthday).map(|b| format!("{b}T12:00:00Z")),
     })
 }
+
+pub mod scheduling;
 
 /// Where a calendar's events live: `/me`, or `/users/<address>` for someone else's.
 fn owner_path(calendar: &str) -> String {

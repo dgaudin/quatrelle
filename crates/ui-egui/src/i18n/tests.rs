@@ -177,6 +177,16 @@ pub(crate) fn interface_strings() -> BTreeSet<String> {
         "Contacts",
         "Yes",
         "No",
+        // The Scheduling Assistant's rows and its kinds of busy time.
+        "Organizer",
+        "Guest",
+        "Room",
+        "Free",
+        "Busy",
+        "Tentative",
+        "Out of office",
+        "Working elsewhere",
+        "No information",
     ] {
         out.insert(s.to_string());
     }

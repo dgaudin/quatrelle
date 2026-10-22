@@ -1185,3 +1185,29 @@ month	May	מאי
 	Increase font size (Ctrl+])	הגדלת הגופן (Ctrl+])
 	Decrease font size (Ctrl+[)	הקטנת הגופן (Ctrl+[)
 	Remove from suggestions	הסרה מההצעות
+	All rooms	כל החדרים
+	A room's address	כתובת של חדר
+	Click or drag the meeting to move it.	לחצו או גררו את הפגישה כדי להזיז אותה.
+	Filter rooms	סינון חדרים
+	From your calendar: the rooms booked in your meetings and those in Outlook's Rooms group.	מהיומן שלכם: החדרים שהוזמנו בפגישות שלכם ואלה שבקבוצת החדרים של Outlook.
+	Give the meeting a start and an end to see when everyone is free.	הגדירו התחלה וסיום לפגישה כדי לראות מתי כולם פנויים.
+	Loading availability…	טוען זמינות…
+	Looking for rooms…	מחפש חדרים…
+	Meeting day	יום הפגישה
+	Next day	היום הבא
+	Previous day	היום הקודם
+	No information	אין מידע
+	No room matches	אין חדר מתאים
+	No rooms are offered here yet: a room booked in one of your meetings shows here.	עדיין לא מוצעים כאן חדרים: חדר שהוזמן באחת הפגישות שלכם יופיע כאן.
+	Room Finder	איתור חדרים
+	Rooms	חדרים
+	Rooms: {names}	חדרים: {names}
+	Scheduling Assistant	עוזר התזמון
+	The rooms couldn't be read: {error}	לא ניתן היה לקרוא את החדרים: {error}
+	Organizer	מארגן
+	Guest	אורח
+	Room	חדר
+	Free	פנוי
+	Busy	עסוק
+	Out of office	מחוץ למשרד
+	Working elsewhere	עובד במקום אחר

@@ -1188,3 +1188,29 @@ month	May	5月
 	Increase font size (Ctrl+])	放大字型 (Ctrl+])
 	Decrease font size (Ctrl+[)	縮小字型 (Ctrl+[)
 	Remove from suggestions	從建議中移除
+	All rooms	所有會議室
+	A room's address	會議室地址
+	Click or drag the meeting to move it.	點選或拖曳會議以移動它。
+	Filter rooms	篩選會議室
+	From your calendar: the rooms booked in your meetings and those in Outlook's Rooms group.	來自您的行事曆：會議中預訂的會議室，以及 Outlook「會議室」群組中的會議室。
+	Give the meeting a start and an end to see when everyone is free.	為會議指定開始與結束時間，以查看每個人何時有空。
+	Loading availability…	正在載入空閒狀態…
+	Looking for rooms…	正在尋找會議室…
+	Meeting day	會議當天
+	Next day	後一天
+	Previous day	前一天
+	No information	無資訊
+	No room matches	沒有符合的會議室
+	No rooms are offered here yet: a room booked in one of your meetings shows here.	這裡還沒有可用的會議室：在您的某個會議中預訂的會議室會顯示在這裡。
+	Room Finder	會議室搜尋
+	Rooms	會議室
+	Rooms: {names}	會議室：{names}
+	Scheduling Assistant	排程小幫手
+	The rooms couldn't be read: {error}	無法讀取會議室：{error}
+	Organizer	召集人
+	Guest	與會者
+	Room	會議室
+	Free	空閒
+	Busy	忙碌
+	Out of office	外出
+	Working elsewhere	在其他地點工作

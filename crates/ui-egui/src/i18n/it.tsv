@@ -1188,3 +1188,29 @@ month	May	maggio
 	Increase font size (Ctrl+])	Aumenta dimensione carattere (Ctrl+])
 	Decrease font size (Ctrl+[)	Riduci dimensione carattere (Ctrl+[)
 	Remove from suggestions	Rimuovi dai suggerimenti
+	All rooms	Tutte le sale
+	A room's address	L'indirizzo di una sala
+	Click or drag the meeting to move it.	Fai clic o trascina la riunione per spostarla.
+	Filter rooms	Filtra le sale
+	From your calendar: the rooms booked in your meetings and those in Outlook's Rooms group.	Dal tuo calendario: le sale prenotate nelle tue riunioni e quelle del gruppo Sale di Outlook.
+	Give the meeting a start and an end to see when everyone is free.	Dai alla riunione un inizio e una fine per vedere quando tutti sono liberi.
+	Loading availability…	Caricamento della disponibilità…
+	Looking for rooms…	Ricerca delle sale…
+	Meeting day	Giorno della riunione
+	Next day	Giorno successivo
+	Previous day	Giorno precedente
+	No information	Nessuna informazione
+	No room matches	Nessuna sala corrisponde
+	No rooms are offered here yet: a room booked in one of your meetings shows here.	Qui non sono ancora offerte sale: una sala prenotata in una delle tue riunioni apparirà qui.
+	Room Finder	Ricerca sale
+	Rooms	Sale
+	Rooms: {names}	Sale: {names}
+	Scheduling Assistant	Assistente pianificazione
+	The rooms couldn't be read: {error}	Impossibile leggere le sale: {error}
+	Organizer	Organizzatore
+	Guest	Invitato
+	Room	Sala
+	Free	Libero
+	Busy	Occupato
+	Out of office	Fuori sede
+	Working elsewhere	Lavora altrove

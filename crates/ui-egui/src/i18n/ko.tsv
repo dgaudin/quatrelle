@@ -1188,3 +1188,29 @@ month	May	5월
 	Increase font size (Ctrl+])	글꼴 크기 늘리기 (Ctrl+])
 	Decrease font size (Ctrl+[)	글꼴 크기 줄이기 (Ctrl+[)
 	Remove from suggestions	추천 목록에서 제거
+	All rooms	모든 회의실
+	A room's address	회의실 주소
+	Click or drag the meeting to move it.	회의를 클릭하거나 끌어서 옮깁니다.
+	Filter rooms	회의실 필터
+	From your calendar: the rooms booked in your meetings and those in Outlook's Rooms group.	일정에서: 회의에 예약된 회의실과 Outlook의 회의실 그룹에 있는 회의실.
+	Give the meeting a start and an end to see when everyone is free.	모두가 비어 있는 시간을 보려면 회의의 시작과 끝을 지정하세요.
+	Loading availability…	일정 정보를 불러오는 중…
+	Looking for rooms…	회의실을 찾는 중…
+	Meeting day	회의 날짜
+	Next day	다음 날
+	Previous day	이전 날
+	No information	정보 없음
+	No room matches	일치하는 회의실이 없습니다
+	No rooms are offered here yet: a room booked in one of your meetings shows here.	아직 제공되는 회의실이 없습니다. 회의에 예약된 회의실이 여기에 표시됩니다.
+	Room Finder	회의실 찾기
+	Rooms	회의실
+	Rooms: {names}	회의실: {names}
+	Scheduling Assistant	일정 도우미
+	The rooms couldn't be read: {error}	회의실을 읽을 수 없습니다: {error}
+	Organizer	주최자
+	Guest	참석자
+	Room	회의실
+	Free	비어 있음
+	Busy	바쁨
+	Out of office	부재중
+	Working elsewhere	다른 곳에서 근무

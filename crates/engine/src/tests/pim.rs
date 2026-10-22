@@ -154,6 +154,7 @@ fn own_events_invite_and_cancel_guests() {
         name: "Zoe Park".into(),
         partstat: "ACCEPTED".into(),
         rsvp: false,
+        cutype: String::new(),
     }];
     let ics = quatrelle_model::ical::write(&[reply], Some("REPLY"), NOW);
     let d = quatrelle_mime::Draft {
@@ -548,12 +549,14 @@ fn calendars_can_be_hidden_and_shown_side_by_side() {
     let mut s = sample_session("calendar-views");
     let studio = crate::sample::STUDIO_CALENDAR;
     let names = |s: &Session| s.shown_calendars().into_iter().map(|c| c.1).collect::<Vec<_>>();
-    assert_eq!(names(&s), [quatrelle_model::pim::LOCAL, studio]);
+    // The personal and studio calendars first; the rooms' and a colleague's after them.
+    assert_eq!(names(&s).get(..2), Some(&[quatrelle_model::pim::LOCAL.to_string(), studio.to_string()][..]));
     let (from, to) = (s.clock.now - 7 * 86_400, s.clock.now + 7 * 86_400);
     let in_studio = |s: &Session| s.agenda(from, to).iter().filter(|i| i.calendar == studio).count();
     assert_eq!(in_studio(&s), 2);
     s.run("calendar.show", &json!({"account": "sample", "calendar": studio})).unwrap();
-    assert_eq!(names(&s), [quatrelle_model::pim::LOCAL]);
+    assert!(!names(&s).iter().any(|c| c == studio));
+    assert_eq!(names(&s).first().map(String::as_str), Some(quatrelle_model::pim::LOCAL));
     assert_eq!(in_studio(&s), 0, "a hidden calendar's events aren't shown");
     assert!(s.agenda(from, to).iter().any(|i| i.summary == "Lunch with Jun"));
     s.run("calendar.show", &json!({"account": "sample", "calendar": studio, "shown": true})).unwrap();

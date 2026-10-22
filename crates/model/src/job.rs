@@ -254,6 +254,13 @@ pub enum Job {
     /// Answer a message's voting buttons with `choice`: a reply to its sender that names it, as
     /// the sender's mail client counts votes.
     Vote { key: MessageKey, choice: String },
+    /// The rooms the account's server offers for meetings (Outlook's Room Finder): its room
+    /// lists and their rooms; answered by [`Event::Rooms`]. Exchange and Microsoft 365 only.
+    GetRooms { account: String },
+    /// When these people and rooms are busy between `from` and `to` (Unix seconds; a day or
+    /// more, two months at most), as the server's free/busy has it; answered by
+    /// [`Event::Availability`]. Exchange and Microsoft 365 only.
+    GetAvailability { account: String, emails: Vec<String>, from: i64, to: i64 },
 }
 
 impl Job {
@@ -282,7 +289,9 @@ impl Job {
             | Job::Search { account, .. }
             | Job::SyncDav { account }
             | Job::ImportPst { account, .. }
-            | Job::ExportPst { account, .. } => account,
+            | Job::ExportPst { account, .. }
+            | Job::GetRooms { account }
+            | Job::GetAvailability { account, .. } => account,
             Job::FetchUrl { .. } | Job::Discover { .. } | Job::WorkOffline { .. } | Job::SetSync { .. } | Job::CheckUpdates | Job::StopSearch => "",
             Job::SignIn { account } => &account.id,
         }
@@ -478,6 +487,25 @@ pub enum Event {
         keys: Vec<MessageKey>,
         error: Option<String>,
         done: bool,
+    },
+    /// The rooms the server offers ([`Job::GetRooms`]): its room lists and the rooms in them
+    /// (none when the organisation set no lists up, which many on-premises servers haven't),
+    /// or why they couldn't be read.
+    Rooms {
+        account: String,
+        lists: Vec<crate::scheduling::RoomList>,
+        rooms: Vec<crate::scheduling::Room>,
+        error: Option<String>,
+    },
+    /// When people and rooms are busy over a window ([`Job::GetAvailability`]): one entry per
+    /// address asked about, in that order, each with its own refusal when the server gave
+    /// one; `error` when the whole request failed.
+    Availability {
+        account: String,
+        from: i64,
+        to: i64,
+        people: Vec<crate::scheduling::Availability>,
+        error: Option<String>,
     },
 }
 

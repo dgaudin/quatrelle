@@ -113,6 +113,8 @@ impl Session {
                 }
             }
             Event::DavSynced { account, sync } => self.apply_dav(&account, &sync),
+            Event::Rooms { account, lists, rooms, error } => self.rooms_answered(&account, lists, rooms, error),
+            Event::Availability { account, from, to, people, error } => self.availability_answered(&account, from, to, people, error),
             Event::Imported { account, messages, skipped, done, error } => self.imported(&account, messages, skipped, done, error),
             Event::Exported { account, messages, skipped, done, error } => self.exported(&account, messages, skipped, done, error),
             Event::Quota { account, used, limit } => {

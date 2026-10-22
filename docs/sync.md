@@ -178,6 +178,12 @@ switched IMAP off.
   moved where they belong.
 - **Automatic replies** are the mailbox settings' `automaticRepliesSetting` (scheduled when the
   dates are set). Graph doesn't tell a mailbox's size to its owner, so there is no quota.
+- **Rooms and free/busy** (`graph_pim/scheduling.rs`): the room lists and their rooms from the
+  Places API (`/places/microsoft.graph.roomList`, then each list's `/rooms`), or, where the
+  sign-in hasn't `Place.Read.All`, from `/me/findRoomLists` and `/me/findRooms(RoomList=…)` (and
+  `/me/findRooms` alone when there are no lists); when people and rooms are busy from
+  `POST /me/calendar/getSchedule`, twenty schedules a call, each one's items or its refusal. A
+  room booked goes as an attendee of `type: resource`.
 
 ## On-premises Exchange through EWS (`crates/net/src/exchange/ews.rs`)
 
@@ -217,6 +223,16 @@ servers that don't offer IMAP. Every call is SOAP over HTTPS.
   Contacts folders, synced like CalDAV / CardDAV: changes here first (appointments updated field
   by field, contacts made again, never any meeting mail), then both folders read in full.
   Recurrences go through Graph's pattern-and-range shape, so one RRULE mapping serves both.
+- **Rooms and free/busy** (`ews_pim/scheduling.rs`), on the account's second connection so a
+  long sync never holds them: `GetRoomLists`, then `GetRooms` for each list (an empty answer
+  where the organisation set no lists up: the engine then offers the rooms the calendar knows);
+  `GetUserAvailability` for the organizer, the guests and the rooms over the day shown, with a
+  `TimeZone` of no bias (standard and daylight alike) so every time is UTC, the window a day at
+  least (Exchange answers for nothing less) and two months at most, a `DetailedMerged` view
+  (the events where the person allows it, the merged digits otherwise), each mailbox's refusal
+  (`ErrorNoFreeBusyAccess`) read on its own. A room booked goes in `t:Resources`, after the
+  guests as the schema orders them, and reads back as a resource attendee; a room taken off a
+  meeting is taken off the item (`DeleteItemField calendar:Resources`).
 
 ## Calendars and address books (`crates/net/src/protocols/dav.rs`)
 

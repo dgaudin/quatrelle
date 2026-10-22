@@ -187,7 +187,7 @@ fn busy(doc: &El) -> Option<std::time::Duration> {
 }
 
 /// What a `…ResponseMessage` said.
-fn check_message(m: &El) -> Result<()> {
+pub(crate) fn check_message(m: &El) -> Result<()> {
     match m.attr("ResponseClass") {
         Some("Error") => {
             let code = m.text_of("ResponseCode").unwrap_or("");
@@ -213,7 +213,7 @@ fn check_message(m: &El) -> Result<()> {
 
 /// The response message of an operation: the one inside `ResponseMessages`, or — as some servers
 /// (Exchange 2016 among them) answer — the response element itself, carrying `ResponseClass`.
-fn operation<'a>(doc: &'a El, element: &str) -> Result<&'a El> {
+pub(crate) fn operation<'a>(doc: &'a El, element: &str) -> Result<&'a El> {
     messages(doc).first().copied().or_else(|| doc.find(element)).ok_or_else(|| NetError::Protocol("an empty answer".into()))
 }
 

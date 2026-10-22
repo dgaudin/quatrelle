@@ -15,6 +15,7 @@ pub mod job;
 pub mod organize;
 pub mod pim;
 mod providers;
+pub mod scheduling;
 pub mod search;
 pub mod thread;
 pub mod utf7;

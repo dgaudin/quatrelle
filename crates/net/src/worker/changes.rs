@@ -189,6 +189,8 @@ impl Worker {
             Job::SetServerRule { id, rule, ours, .. } => self.edit_server_rule(&id, &rule, ours),
             Job::DeleteServerRule { id, ours, .. } => self.change_server_rule(&id, None, true, ours),
             Job::FetchPhoto { email, contact, .. } => self.fetch_photo(&email, contact.as_deref()),
+            Job::GetRooms { .. } => self.rooms(),
+            Job::GetAvailability { emails, from, to, .. } => self.availability(&emails, from, to),
             Job::FetchUrl { .. }
             | Job::Discover { .. }
             | Job::SignIn { .. }

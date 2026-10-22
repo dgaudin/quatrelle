@@ -121,11 +121,13 @@ fn push_job(queue: &mut VecDeque<Job>, j: Job) {
 }
 
 /// Whether a job goes on the account's second connection: sending (not over JMAP, whose filing
-/// needs the main connection's mailbox ids) and automatic replies.
+/// needs the main connection's mailbox ids), automatic replies, and what a meeting being
+/// written waits on (rooms, free/busy), which must not sit behind a long sync.
 fn quick_job(j: &Job, acc: &AccountConfig) -> bool {
     match j {
         Job::Send { .. } => acc.pop.is_none() && acc.jmap.is_none(),
         Job::GetVacation { .. } | Job::SetVacation { .. } => acc.pop.is_none(),
+        Job::GetRooms { .. } | Job::GetAvailability { .. } => acc.ews.is_some() || acc.graph.is_some(),
         _ => false,
     }
 }
@@ -242,6 +244,7 @@ pub(crate) fn now() -> i64 {
 mod changes;
 mod connect;
 mod pool;
+mod scheduling;
 mod send;
 mod sync;
 
@@ -549,6 +552,14 @@ fn log_event(e: &Event) {
         Event::BodyFailed { key, error } => log::warn!("{}: a message didn't download: {error}", key.account),
         Event::Vacation { account, error: Some(error), .. } => log::warn!("{account}: automatic replies: {error}"),
         Event::Voted { key, error: Some(error), .. } => log::warn!("{}: vote not sent: {error}", key.account),
+        Event::Rooms { account, lists, rooms, error } => match error {
+            Some(e) => log::warn!("{account}: rooms: {e}"),
+            None => log::info!("{account}: {} room lists, {} rooms", lists.len(), rooms.len()),
+        },
+        Event::Availability { account, people, error, .. } => match error {
+            Some(e) => log::warn!("{account}: availability: {e}"),
+            None => log::info!("{account}: availability of {} read ({} refused)", people.len(), people.iter().filter(|p| p.error.is_some()).count()),
+        },
         Event::Notice { account, message } => log::info!("{account}: {message}"),
         Event::DavSynced { account, sync } => {
             let names: Vec<&str> = sync.calendars.iter().flatten().map(|c| c.name.as_str()).collect();

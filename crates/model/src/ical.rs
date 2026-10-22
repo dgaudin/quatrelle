@@ -41,6 +41,18 @@ pub struct Attendee {
     /// Asked to reply.
     #[serde(default)]
     pub rsvp: bool,
+    /// What kind of participant (RFC 5545 `CUTYPE`): empty for a person; `ROOM` for a room
+    /// booked for the meeting, `RESOURCE` for other equipment (Exchange's resource attendees,
+    /// which book themselves).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub cutype: String,
+}
+
+impl Attendee {
+    /// A room or other resource booked for the meeting rather than someone invited to it.
+    pub fn is_resource(&self) -> bool {
+        matches!(self.cutype.as_str(), "ROOM" | "RESOURCE")
+    }
 }
 
 /// One event (or one changed instance of a recurring event, when `recurrence_id` is set).
@@ -473,6 +485,8 @@ fn person(l: &Line) -> Attendee {
         name: l.param("CN").map(|n| n.trim_matches('"').to_string()).unwrap_or_default(),
         partstat: l.param("PARTSTAT").map(str::to_ascii_uppercase).unwrap_or_default(),
         rsvp: l.param("RSVP").is_some_and(|r| r.eq_ignore_ascii_case("TRUE")),
+        // Only the kinds that matter here are kept: a person is the default.
+        cutype: l.param("CUTYPE").map(str::to_ascii_uppercase).filter(|c| matches!(c.as_str(), "ROOM" | "RESOURCE")).unwrap_or_default(),
     }
 }
 
@@ -729,6 +743,9 @@ fn mailbox(prop: &str, a: &Attendee) -> String {
     }
     if a.rsvp {
         s.push_str(";RSVP=TRUE");
+    }
+    if a.is_resource() {
+        s.push_str(&format!(";CUTYPE={}", a.cutype));
     }
     s.push_str(&format!(":mailto:{}", a.email.replace(['\r', '\n'], "")));
     s

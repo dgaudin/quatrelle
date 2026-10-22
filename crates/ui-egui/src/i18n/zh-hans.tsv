@@ -1186,3 +1186,29 @@ month	May	5月
 	Increase font size (Ctrl+])	增大字号 (Ctrl+])
 	Decrease font size (Ctrl+[)	减小字号 (Ctrl+[)
 	Remove from suggestions	从建议中删除
+	All rooms	所有会议室
+	A room's address	会议室地址
+	Click or drag the meeting to move it.	单击或拖动会议以移动它。
+	Filter rooms	筛选会议室
+	From your calendar: the rooms booked in your meetings and those in Outlook's Rooms group.	来自您的日历：会议中预订的会议室，以及 Outlook“会议室”组中的会议室。
+	Give the meeting a start and an end to see when everyone is free.	为会议指定开始和结束时间，以查看每个人何时有空。
+	Loading availability…	正在加载空闲状态…
+	Looking for rooms…	正在查找会议室…
+	Meeting day	会议当天
+	Next day	后一天
+	Previous day	前一天
+	No information	无信息
+	No room matches	没有匹配的会议室
+	No rooms are offered here yet: a room booked in one of your meetings shows here.	这里还没有可用的会议室：在您的某个会议中预订的会议室会显示在这里。
+	Room Finder	会议室查找
+	Rooms	会议室
+	Rooms: {names}	会议室：{names}
+	Scheduling Assistant	日程安排助理
+	The rooms couldn't be read: {error}	无法读取会议室：{error}
+	Organizer	组织者
+	Guest	与会者
+	Room	会议室
+	Free	空闲
+	Busy	忙碌
+	Out of office	外出
+	Working elsewhere	在其他地点工作
