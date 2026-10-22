@@ -5,10 +5,16 @@ use super::*;
 impl Pool {
     pub fn new(store: Store, creds: Arc<dyn Credentials>) -> Pool {
         let (tx, rx) = mpsc::channel();
+        let sink = Sink { tx, wake: Arc::new(Mutex::new(None)) };
+        let (etx, erx) = mpsc::channel();
+        let (st, sk) = (store.clone(), sink.clone());
+        let edits_thread = std::thread::Builder::new().name("mail-edits".into()).spawn(move || edit_writer(st, sk, erx)).ok();
         Pool {
+            edits: edits_thread.is_some().then_some(etx),
+            edits_thread,
             store,
             creds,
-            sink: Sink { tx, wake: Arc::new(Mutex::new(None)) },
+            sink,
             rx,
             workers: HashMap::new(),
             configs: HashMap::new(),
@@ -292,24 +298,15 @@ impl Pool {
             // app dropped it. A POP account's worker keeps its own bookkeeping, so it still goes
             // that way.
             Job::Apply { account, op } if self.records_edits(&account) => {
-                match self.store.apply_op(&account, &op) {
-                    Ok(changed) => {
-                        if op.is_folder_op() {
-                            let folders = self.store.load_folders(&account).unwrap_or_default();
-                            self.sink.emit(Event::Folders { account: account.clone(), folders });
-                        }
-                        if let Err(e) = self.store.add_op(&account, op.clone()) {
-                            self.sink.emit(Event::Notice { account: account.clone(), message: e.to_string() });
-                        }
-                        for folder in changed {
-                            self.sink.emit(Event::FolderChanged { account: account.clone(), folder });
-                        }
-                    }
-                    Err(e) => self.sink.emit(Event::Notice { account: account.clone(), message: e.to_string() }),
-                }
-                // Wake the account thread: it uploads the queue at its next opportunity.
-                if let Some(h) = self.workers.get(&account) {
-                    let _ = h.tx.send(Job::Apply { account, op });
+                // Into the cache and ops.json on the edit writer's thread (in order, before the
+                // account's thread hears of it): not on the window's.
+                let worker = self.workers.get(&account).map(|h| h.tx.clone());
+                let unsent = match &self.edits {
+                    Some(tx) => tx.send((account, op, worker)).err().map(|mpsc::SendError(e)| e),
+                    None => Some((account, op, worker)),
+                };
+                if let Some((account, op, worker)) = unsent {
+                    write_edit(&self.store, &self.sink, account, op, worker);
                 }
             }
             other => {
@@ -371,25 +368,36 @@ impl Pool {
             self.sink.emit(Event::Status { account: account.id.clone(), status: SyncStatus::NeedsPassword { error: String::new() } });
             return;
         };
+        // The workers are set up on the account's own thread: each reads the account's numbering
+        // (tens of megabytes for a big Exchange mailbox), which froze the window at every start,
+        // password typed, Work offline and settings change. Jobs sent meanwhile wait in the
+        // channels.
         let (tx, rx) = mpsc::channel();
-        let auth = Auth::shared(pw);
-        let mut w = Worker::new(account.clone(), auth.clone(), self.store.clone(), self.sink.clone(), self.opts);
-        w.creds = Some(self.creds.clone());
-        w.sieve_port = self.sieve_port;
-        w.search = self.search.clone();
-        // The second connection: quiet (the account's status is the main one's), connecting
-        // only when there's something to do.
         let (qtx, qrx) = mpsc::channel();
-        let mut q = Worker::new(account.clone(), auth, self.store.clone(), self.sink.clone(), self.opts);
-        q.creds = Some(self.creds.clone());
-        q.sieve_port = self.sieve_port;
-        q.main = Some(tx.clone());
-        let quick_thread = std::thread::Builder::new().name(format!("mail-{}-quick", account.id)).spawn(move || q.run_quick(qrx)).ok();
-        let quick = quick_thread.is_some().then_some(qtx);
-        let name = format!("mail-{}", account.id);
-        match std::thread::Builder::new().name(name).spawn(move || w.run(rx)) {
+        let (creds, store, sink, opts, sieve_port, search) =
+            (self.creds.clone(), self.store.clone(), self.sink.clone(), self.opts, self.sieve_port, self.search.clone());
+        let (acc, main_tx) = (account.clone(), tx.clone());
+        let spawned = std::thread::Builder::new().name(format!("mail-{}", account.id)).spawn(move || {
+            let auth = Auth::shared(pw);
+            let mut w = Worker::new(acc.clone(), auth.clone(), store.clone(), sink.clone(), opts);
+            w.creds = Some(creds.clone());
+            w.sieve_port = sieve_port;
+            w.search = search;
+            // The second connection: quiet (the account's status is the main one's), connecting
+            // only when there's something to do. Should it not start, its jobs go to the main one.
+            let mut q = Worker::new(acc.clone(), auth, store, sink, opts);
+            q.creds = Some(creds);
+            q.sieve_port = sieve_port;
+            q.main = Some(main_tx);
+            let quick = std::thread::Builder::new().name(format!("mail-{}-quick", acc.id)).spawn(move || q.run_quick(qrx)).ok();
+            w.run(rx);
+            if let Some(t) = quick {
+                let _ = t.join();
+            }
+        });
+        match spawned {
             Ok(thread) => {
-                self.workers.insert(account.id.clone(), Handle { tx, thread: Some(thread), quick, quick_thread });
+                self.workers.insert(account.id.clone(), Handle { tx, thread: Some(thread), quick: Some(qtx), quick_thread: None });
             }
             Err(e) => self.sink.emit(Event::Status { account: account.id.clone(), status: SyncStatus::Error { error: e.to_string() } }),
         }
@@ -411,6 +419,11 @@ impl Pool {
     }
 
     pub fn shutdown(&mut self) {
+        // Every edit made is written before the app goes (closing must not drop one).
+        drop(self.edits.take());
+        if let Some(t) = self.edits_thread.take() {
+            let _ = t.join();
+        }
         let ids: Vec<String> = self.workers.keys().cloned().collect();
         for id in ids {
             self.stop(&id);

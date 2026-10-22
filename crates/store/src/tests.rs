@@ -164,6 +164,34 @@ fn ops_apply_locally_and_persist() {
     let _ = fs::remove_dir_all(s.root());
 }
 
+/// A sync reads a folder, an edit is made meanwhile (a message opened, so marked read; another
+/// moved away), and the sync saves what it read: the edits, still on their way to the server,
+/// stay. The old state put back made a read message go bold again until the edit got there.
+#[test]
+fn a_folder_saved_from_an_older_read_keeps_the_edits_waiting() {
+    let s = temp_store("stale-save");
+    let st = FolderState { validity: 3, uid_next: 10, highest_modseq: 0, messages: vec![msg(9, false), msg(4, false), msg(2, false)], window: 0 };
+    s.save_folder("a1", "INBOX", &st).unwrap();
+    // What the sync read, before the edits.
+    let read_by_sync = s.load_folder("a1", "INBOX").unwrap();
+    let (k9, k4) = (st.messages[0].key.clone(), st.messages[1].key.clone());
+    for op in [Op::SetFlag { keys: vec![k9.clone()], flag: Flag::Seen, on: true }, Op::Move { keys: vec![k4.clone()], to: "Archive".into() }] {
+        s.add_op("a1", op.clone()).unwrap();
+        s.apply_op("a1", &op).unwrap();
+    }
+    // The sync saves what it read (the server's flags then): the edits are made again on it.
+    s.save_folder("a1", "INBOX", &read_by_sync).unwrap();
+    let now = s.load_folder("a1", "INBOX").unwrap();
+    assert!(now.find(9).unwrap().flags.seen, "still read");
+    assert!(now.find(4).is_none(), "still moved away");
+    assert!(!now.find(2).unwrap().flags.seen, "the others as the sync had them");
+    // Once the server has them (the journal emptied), what a sync saves is the server's word.
+    s.save_ops("a1", &[]).unwrap();
+    s.save_folder("a1", "INBOX", &read_by_sync).unwrap();
+    assert!(!s.load_folder("a1", "INBOX").unwrap().find(9).unwrap().flags.seen);
+    let _ = fs::remove_dir_all(s.root());
+}
+
 /// A folder's search index is kept beside its messages and goes with them: a folder
 /// cleared (its UIDVALIDITY changed, or it went) loses it.
 #[test]

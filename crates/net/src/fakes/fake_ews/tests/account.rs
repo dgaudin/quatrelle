@@ -276,8 +276,13 @@ fn a_flag_set_mid_sync_is_not_lost() {
     let op = Op::SetFlag { keys: vec![key.clone()], flag: Flag::Flagged, on: true };
     pool.submit(Job::Apply { account: "a1".into(), op: op.clone() });
     let flagged = || store.load_folder("a1", "INBOX").unwrap().messages.iter().any(|m| m.key == key && m.flags.flagged);
-    assert!(flagged(), "cache updated immediately");
-    assert_eq!(store.load_ops("a1").unwrap(), [op], "ops.json written immediately");
+    // Written by the edit writer at once, not after the sync (which is held for seconds).
+    let end = std::time::Instant::now() + Duration::from_secs(1);
+    while !(flagged() && store.load_ops("a1").unwrap() == [op.clone()]) && std::time::Instant::now() < end {
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert!(flagged(), "cache updated at once");
+    assert_eq!(store.load_ops("a1").unwrap(), [op], "ops.json written at once");
     // Shut down mid-sync; a fresh pool must push the flag and keep showing it.
     drop(pool);
     data.lock().unwrap().hold = None;

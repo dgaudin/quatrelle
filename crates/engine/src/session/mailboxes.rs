@@ -117,8 +117,14 @@ impl Session {
     pub(super) fn reload_folder(&mut self, account: &str, folder: &str) {
         let k = (account.to_string(), folder.to_string());
         self.cache.remove(&k);
-        self.index = None;
-        self.contacts = None;
+        // Only an index that covers this folder is out of date (a sync touches folder after
+        // folder: each dropped the whole index, built again from scratch while searching).
+        if self.index.as_ref().is_some_and(|ix| ix.scan.iter().any(|(a, f)| a == account && f == folder)) {
+            self.index = None;
+        }
+        // The address book is built from every folder (walking a big mailbox takes seconds, on
+        // the window's thread): new mail makes it stale, not gone; built again now and then.
+        self.contacts_stale = true;
     }
 
     /// Remember what an Inbox holds; unread mail above the last high-water mark is new. The first
@@ -237,7 +243,10 @@ impl Session {
 
     /// Build the address book from the cache if it isn't built.
     pub(super) fn ensure_contacts(&mut self) {
-        if self.contacts.is_none() {
+        let due = self.contacts_stale && self.clock.now.saturating_sub(self.contacts_built) >= CONTACTS_EVERY;
+        if self.contacts.is_none() || due {
+            self.contacts_built = self.clock.now;
+            self.contacts_stale = false;
             let mine: Vec<String> = self.accounts.iter().flat_map(|a| [a.config.email.clone(), a.config.username.clone()]).collect();
             let folders: Vec<(String, String)> =
                 self.accounts.iter().flat_map(|a| a.folders.iter().filter(|f| f.selectable).map(|f| (a.config.id.clone(), f.path.clone()))).collect();
