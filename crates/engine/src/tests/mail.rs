@@ -635,3 +635,57 @@ fn closing_counts_whats_lost_and_a_missing_password_is_asked_for() {
     assert!(s.ask_password.is_empty(), "once while Quatrelle runs");
     done(s);
 }
+
+#[test]
+fn voting_buttons_show_and_a_vote_goes_as_a_job() {
+    let mut s = sample_session("vote");
+    let k = key_of(&s, sample::VOTE_SUBJECT);
+    // Not offered on a message without voting buttons.
+    s.run("list.open", &key_of(&s, "Sound mix, version 3")).unwrap();
+    assert!(s.run("mail.vote", &json!({"choice": "Yes"})).is_err());
+    s.run("list.open", &k).unwrap();
+    let key = s.reading.as_ref().unwrap().key.clone();
+    assert_eq!(s.voting(&key), Some((sample::VOTE_CHOICES.map(String::from).to_vec(), String::new())));
+    assert!(matches!(s.run("mail.vote", &json!({"choice": "Maybe"})), Err(CmdError::Params(_))), "only the sender's choices");
+    s.take_jobs();
+    s.run("mail.vote", &json!({"choice": "Nothing to render"})).unwrap();
+    assert!(matches!(s.take_jobs().as_slice(), [Job::Vote { key: k, choice }] if *k == key && choice == "Nothing to render"));
+    assert!(s.run("mail.vote", &json!({"choice": "Nothing to render"})).is_err(), "not twice while it's on its way");
+    // Refused: nothing is remembered, and the user is told.
+    s.apply(Event::Voted { key: key.clone(), choice: "Nothing to render".into(), error: Some("the account is offline".into()) });
+    assert!(s.vote_sending.is_none() && s.voting(&key).unwrap().1.is_empty());
+    assert!(s.notices.last().unwrap().text.contains("the account is offline"));
+    // Sent: remembered with the message.
+    s.run("mail.vote", &json!({"choice": "Need it this weekend", "key": key.to_id()})).unwrap();
+    s.apply(Event::Voted { key: key.clone(), choice: "Need it this weekend".into(), error: None });
+    assert_eq!(s.voting(&key).unwrap().1, "Need it this weekend");
+    done(s);
+}
+
+#[test]
+fn the_list_is_a_table_where_it_has_room() {
+    let mut s = sample_session("list-layout");
+    assert!(!s.list_as_table(), "cards beside the reading pane");
+    s.run("view.readingPane", &json!({"value": "bottom"})).unwrap();
+    assert!(s.list_as_table(), "a table over it");
+    s.run("view.readingPane", &json!({"value": "off"})).unwrap();
+    assert!(s.list_as_table());
+    s.run("view.listLayout", &json!({"value": "cards"})).unwrap();
+    assert!(!s.list_as_table(), "chosen: cards whatever the pane");
+    s.run("view.readingPane", &json!({"value": "right"})).unwrap();
+    s.run("view.listLayout", &json!({"value": "table"})).unwrap();
+    assert!(s.list_as_table(), "chosen: a table even beside the pane");
+    assert!(s.run("view.listLayout", &json!({"value": "grid"})).is_err());
+    done(s);
+}
+
+#[test]
+fn the_todo_bar_is_on_until_turned_off() {
+    let mut s = sample_session("todo-bar");
+    assert!(s.prefs.todo_bar);
+    s.run("view.todoBar", &json!({})).unwrap();
+    assert!(!s.prefs.todo_bar);
+    s.run("view.todoBar", &json!({"on": true})).unwrap();
+    assert!(s.prefs.todo_bar);
+    done(s);
+}

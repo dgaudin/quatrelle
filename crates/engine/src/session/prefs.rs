@@ -161,3 +161,72 @@ impl Default for Prefs {
         }
     }
 }
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ReadingPane {
+    #[default]
+    Right,
+    Bottom,
+    Off,
+}
+
+/// How the message list lays out its messages.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ListLayout {
+    /// A table when the reading pane is at the bottom or off (the list is wide then), else
+    /// cards, as Outlook switches.
+    #[default]
+    Auto,
+    /// Each message on lines of its own: the sender, the subject, a preview.
+    Cards,
+    /// One line per message, in columns that sort the list when their heading is clicked.
+    Table,
+}
+
+/// How notes are listed (Outlook's Arrange by for notes).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum NotesOrder {
+    /// The last changed first.
+    #[default]
+    Modified,
+    /// A to Z by their first line.
+    Title,
+    /// By colour, then A to Z.
+    Color,
+}
+
+/// When a message shown in the reading pane is marked read (with `Prefs::mark_read_on_open`),
+/// as Outlook's Reading Pane options have it. Opened in its own window, it always is.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ReadInPane {
+    /// When it's shown (after `Prefs::read_after_secs`).
+    #[default]
+    Shown,
+    /// When another message is chosen (or the folder left).
+    Left,
+}
+
+/// A setting that was on before it existed.
+fn yes() -> bool {
+    true
+}
+
+impl ListLayout {
+    pub const ALL: [ListLayout; 3] = [ListLayout::Auto, ListLayout::Cards, ListLayout::Table];
+
+    pub fn code(self) -> &'static str {
+        match self {
+            ListLayout::Auto => "auto",
+            ListLayout::Cards => "cards",
+            ListLayout::Table => "table",
+        }
+    }
+
+    pub fn from_code(s: &str) -> Option<ListLayout> {
+        ListLayout::ALL.into_iter().find(|l| l.code() == s)
+    }
+}

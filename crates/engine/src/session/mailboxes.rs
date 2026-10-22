@@ -1,6 +1,11 @@
-//! The session: accounts' folder lists and what's kept of each folder.
+//! The session: accounts' folder lists and what's kept of each folder; with them, making and
+//! changing folders, a mailbox's settings on the server, and other mailboxes opened in an account.
 
 use super::*;
+
+mod folder_edits;
+mod mailbox_settings;
+mod shared_mailboxes;
 
 impl Session {
     pub fn account(&self, id: &str) -> Option<&AccountState> {

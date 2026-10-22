@@ -82,3 +82,239 @@ pub fn background_pictures(b: &[Block]) -> Vec<String> {
     walk(b, &mut out, &mut add, 0);
     out
 }
+
+/// Boxes side by side among others (two floated tables in a signature, with a heading above):
+/// each run of two or more is put in a box of its own, which lays them out as columns.
+fn group_beside(kids: &[Kid]) -> Option<Vec<Kid>> {
+    let is_beside = |k: &Kid| matches!(k, Kid::El(n) if n.beside() && !n.hidden());
+    let blank = |k: &Kid| matches!(k, Kid::Text(t) if t.trim().is_empty());
+    let mut out = Vec::new();
+    let mut grouped = false;
+    let mut i = 0;
+    while let Some(k) = kids.get(i) {
+        if is_beside(k) {
+            // The run: boxes beside each other, with only white space between them.
+            let mut run = vec![copy(k)];
+            let mut j = i + 1;
+            let mut end = i + 1;
+            while let Some(next) = kids.get(j) {
+                if is_beside(next) {
+                    run.push(copy(next));
+                    end = j + 1;
+                } else if !blank(next) {
+                    break;
+                }
+                j += 1;
+            }
+            if run.len() >= 2 {
+                out.push(Kid::El(Node { tag: "div".into(), attrs: Vec::new(), kids: run }));
+                grouped = true;
+                i = end;
+                continue;
+            }
+        }
+        out.push(copy(k));
+        i += 1;
+    }
+    grouped.then_some(out)
+}
+
+fn blocks_of(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
+    let mut out = Vec::new();
+    let mut pending = String::new();
+    let flush = |pending: &mut String, out: &mut Vec<Block>, ctx: &Ctx| {
+        if pending.chars().any(|c| !c.is_whitespace()) || pending.contains("<img") {
+            let rich = match &ctx.color {
+                Some(c) => crate::html_to_rich(&format!("{}<div style=\"color:{c}\">{}</div>", ctx.css, pending)),
+                None => crate::html_to_rich(&format!("{}{}", ctx.css, pending)),
+            };
+            if !rich.is_empty() {
+                out.push(Block::Text(rich));
+            }
+        }
+        pending.clear();
+    };
+    for k in kids {
+        match k {
+            Kid::El(n) if n.hidden() => {}
+            Kid::El(n) if n.tag == "table" && depth < MAX_DEPTH => {
+                flush(&mut pending, &mut out, ctx);
+                let rows: Vec<Vec<Cell>> = colored(ctx, n, |ctx| {
+                    n.rows()
+                        .into_iter()
+                        .map(|(tr, row)| {
+                            // A row's colour (`<tr bgcolor>`, a striped row's class) is its cells'.
+                            let row_bg = tr.background();
+                            row.into_iter()
+                                .map(|c| {
+                                    ctx.cells += 1;
+                                    Cell {
+                                        blocks: if ctx.cells > MAX_CELLS {
+                                            Vec::new()
+                                        } else {
+                                            colored(ctx, c, |ctx| blocks(&c.kids, ctx, depth + 1))
+                                        },
+                                        width: c.width(),
+                                        background: c.background().or(row_bg),
+                                        align: c.align(),
+                                        span: c.attr("colspan").and_then(|s| s.trim().parse::<u16>().ok()).unwrap_or(1).clamp(1, 50),
+                                        background_image: c.background_image(),
+                                        overlays: Vec::new(),
+                                    }
+                                })
+                                .filter(|c| !c.blocks.is_empty() || c.background.is_some() || c.background_image.is_some())
+                                .collect::<Vec<Cell>>()
+                        })
+                        .filter(|r| !r.is_empty())
+                        .collect()
+                });
+                if rows.is_empty() {
+                    continue;
+                }
+                out.push(Block::Table(Table {
+                    rows,
+                    width: n.width(),
+                    align: n.table_align(),
+                    background: n.background(),
+                    background_image: n.background_image(),
+                }));
+            }
+            // A box with others placed over it: its content, and theirs on top.
+            Kid::El(n) if depth < MAX_DEPTH && n.has_overlays() => {
+                flush(&mut pending, &mut out, ctx);
+                let (placed, base): (Vec<&Kid>, Vec<&Kid>) = n.kids.iter().partition(|k| matches!(k, Kid::El(c) if c.placed()));
+                let base: Vec<Kid> = base.into_iter().map(copy).collect();
+                let overlays: Vec<Overlay> = colored(ctx, n, |ctx| {
+                    placed
+                        .into_iter()
+                        .filter_map(|k| if let Kid::El(c) = k { Some(c) } else { None })
+                        .filter(|c| !c.hidden())
+                        .take(MAX_OVERLAYS)
+                        .map(|c| {
+                            let (x, y, from_right, from_bottom) = c.overlay_at();
+                            // Its content: its children, or the element itself (a picture).
+                            let content = colored(ctx, c, |ctx| {
+                                if c.kids.is_empty() { blocks(&[Kid::El(c.unplaced())], ctx, depth + 1) } else { blocks(&c.kids, ctx, depth + 1) }
+                            });
+                            Overlay { x, y, from_right, from_bottom, width: c.width(), background: c.background(), blocks: content }
+                        })
+                        .filter(|o| !o.blocks.is_empty() || o.background.is_some())
+                        .collect()
+                });
+                ctx.cells += 1;
+                let cell = Cell {
+                    blocks: colored(ctx, n, |ctx| blocks(&base, ctx, depth + 1)),
+                    background: n.background(),
+                    background_image: n.background_image(),
+                    align: n.align(),
+                    span: 1,
+                    overlays,
+                    ..Default::default()
+                };
+                out.push(Block::Table(Table { rows: vec![vec![cell]], width: n.width(), align: n.table_align(), ..Default::default() }));
+            }
+            // A box with a picture behind it (a banner): one cell that carries it.
+            Kid::El(n) if depth < MAX_DEPTH && !matches!(n.tag.as_str(), "img" | "td" | "th" | "tr") && n.background_image().is_some() => {
+                flush(&mut pending, &mut out, ctx);
+                ctx.cells += 1;
+                // Its content is the box itself without the picture, so columns in it stay columns.
+                let cell = Cell {
+                    blocks: colored(ctx, n, |ctx| blocks(&[Kid::El(n.without_background())], ctx, depth + 1)),
+                    background: n.background(),
+                    background_image: n.background_image(),
+                    align: n.align(),
+                    span: 1,
+                    ..Default::default()
+                };
+                out.push(Block::Table(Table { rows: vec![vec![cell]], width: n.width(), align: n.table_align(), ..Default::default() }));
+            }
+            // Boxes side by side with CSS: a table of one row per line of boxes.
+            Kid::El(n) if depth < MAX_DEPTH && n.columns().is_some() => {
+                flush(&mut pending, &mut out, ctx);
+                let rows: Vec<Vec<Cell>> = colored(ctx, n, |ctx| {
+                    n.columns()
+                        .unwrap_or_default()
+                        .into_iter()
+                        .map(|row| {
+                            row.into_iter()
+                                .map(|c| {
+                                    ctx.cells += 1;
+                                    // A box's own content (its children when it has them, else itself; a
+                                    // floated table is a table in its column).
+                                    let content = if c.tag == "table" {
+                                        blocks(&[copy(&Kid::El(c.unfloated()))], ctx, depth + 1)
+                                    } else if c.kids.is_empty() {
+                                        vec![]
+                                    } else {
+                                        colored(ctx, c, |ctx| blocks(&c.kids, ctx, depth + 1))
+                                    };
+                                    Cell {
+                                        blocks: if ctx.cells > MAX_CELLS { Vec::new() } else { content },
+                                        width: c.width(),
+                                        background: c.background(),
+                                        align: c.align(),
+                                        span: 1,
+                                        background_image: c.background_image(),
+                                        overlays: Vec::new(),
+                                    }
+                                })
+                                .filter(|c| !c.blocks.is_empty() || c.background.is_some() || c.background_image.is_some())
+                                .collect::<Vec<Cell>>()
+                        })
+                        .filter(|r| !r.is_empty())
+                        .collect()
+                });
+                if !rows.is_empty() {
+                    out.push(Block::Table(Table {
+                        rows,
+                        width: n.width(),
+                        align: n.table_align(),
+                        background: n.background(),
+                        background_image: n.background_image(),
+                    }));
+                }
+            }
+            // Pictures centred in a block of their own (a report's charts): a centred cell.
+            Kid::El(n)
+                if depth < MAX_DEPTH
+                    && matches!(n.tag.as_str(), "div" | "p" | "center")
+                    && (n.tag == "center" || n.align() == Align::Center)
+                    && n.has_picture(0)
+                    && !n.has_block_inside(0) =>
+            {
+                flush(&mut pending, &mut out, ctx);
+                ctx.cells += 1;
+                let inner = colored(ctx, n, |ctx| blocks(&n.kids, ctx, depth + 1));
+                if !inner.is_empty() {
+                    out.push(Block::Table(Table {
+                        rows: vec![vec![Cell { blocks: inner, align: Align::Center, background: n.background(), span: 1, ..Default::default() }]],
+                        width: None,
+                        align: Align::Center,
+                        background: None,
+                        background_image: None,
+                    }));
+                }
+            }
+            // A wrapper around tables (`<div>`, `<center>`): its parts in turn.
+            Kid::El(n) if depth < MAX_DEPTH && n.has_table(0) => {
+                flush(&mut pending, &mut out, ctx);
+                let inner = colored(ctx, n, |ctx| blocks(&n.kids, ctx, depth));
+                if n.tag == "center" || n.align() == Align::Center {
+                    // Centred: as a one-cell table that sits in the middle.
+                    out.push(Block::Table(Table {
+                        rows: vec![vec![Cell { blocks: inner, align: Align::Center, span: 1, ..Default::default() }]],
+                        width: n.width(),
+                        align: Align::Center,
+                        background: n.background(),
+                        background_image: None,
+                    }));
+                } else {
+                    out.extend(inner);
+                }
+            }
+            k => write(k, &mut pending),
+        }
+    }
+    flush(&mut pending, &mut out, ctx);
+    out
+}
