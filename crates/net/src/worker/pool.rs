@@ -385,7 +385,7 @@ impl Pool {
             w.search = search;
             // The second connection: quiet (the account's status is the main one's), connecting
             // only when there's something to do. Should it not start, its jobs go to the main one.
-            let mut q = Worker::new(acc.clone(), auth, store, sink, opts);
+            let mut q = Worker::with_numbering(acc.clone(), auth, store, sink, opts, acc.ews.is_none());
             q.creds = Some(creds);
             q.sieve_port = sieve_port;
             q.main = Some(main_tx);

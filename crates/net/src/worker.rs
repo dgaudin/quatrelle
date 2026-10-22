@@ -342,8 +342,15 @@ const FOUND_MAX: usize = 500;
 
 impl Worker {
     fn new(acc: AccountConfig, auth: Arc<Mutex<Auth>>, store: Store, sink: Sink, opts: SyncOptions) -> Worker {
+        Worker::with_numbering(acc, auth, store, sink, opts, true)
+    }
+
+    /// A worker; `numbering`: with the account's numbering of message ids (JMAP, Graph and
+    /// Exchange), which an Exchange account's second connection (sending, automatic replies)
+    /// never uses — read for it too, a big mailbox's was held in memory twice.
+    fn with_numbering(acc: AccountConfig, auth: Arc<Mutex<Auth>>, store: Store, sink: Sink, opts: SyncOptions, numbering: bool) -> Worker {
         let folders = store.load_folders(&acc.id).unwrap_or_default();
-        let jstate = if acc.is_api() { jmap::State::load(&store, &acc.id) } else { jmap::State::default() };
+        let jstate = if acc.is_api() && numbering { jmap::State::load(&store, &acc.id) } else { jmap::State::default() };
         // Online only (issue #4): nothing downloaded in full ahead of reading; a message comes
         // when it's opened, and is held in memory only.
         let opts = if acc.keeps_online() { SyncOptions { prefetch: 0, ..opts } } else { opts };
