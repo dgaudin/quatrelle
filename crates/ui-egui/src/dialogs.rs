@@ -598,7 +598,9 @@ pub enum Dialog {
     ConfirmDelete {
         count: usize,
     },
-    /// Closing would lose what online-only accounts hold in memory only.
+    /// Closing Quatrelle with messages being written (how many): save them as drafts?
+    SaveOnClose(usize),
+    /// Closing would lose what online-only accounts hold in memory only (issue #4).
     LostOnClose {
         unsent: usize,
         changes: usize,
@@ -648,6 +650,8 @@ pub enum Dialog {
         email: String,
         error: Option<String>,
     },
+    /// Word count of the message being written (or its selection: the `bool`).
+    WordCount(crate::rich_edit::Counts, bool),
     /// A folder's Properties: where it is, how many messages, how much is on this computer.
     FolderProperties {
         name: String,
@@ -687,6 +691,10 @@ pub enum Dialog {
     },
     Rules,
     EditRule(Box<RuleForm>),
+    /// A Search Folder made or changed (Outlook's New Search Folder).
+    SearchFolder(Box<SearchFolderForm>),
+    /// A Quick Step made or changed.
+    QuickStep(Box<QuickStepForm>),
     /// A picture attachment, larger.
     PicturePreview {
         key: quatrelle_engine::model::MessageKey,
@@ -801,6 +809,180 @@ pub struct RuleAct {
     pub action: RuleDo,
     /// A folder path (`Move to folder`) or a category name (`Categorize`).
     pub target: String,
+}
+
+/// The Search Folders offered, as Outlook's New Search Folder lists them: a name and what it
+/// searches for. "Mail from specific people" asks for them; "Custom" for the search.
+pub const SEARCH_PRESETS: [(&str, &str); 9] = [
+    ("Unread mail", "is:unread"),
+    ("Mail flagged for follow up", "is:flagged"),
+    ("Important mail", "is:important"),
+    ("Categorized mail", "is:categorized"),
+    ("Mail with attachments", "has:attachment"),
+    ("Large mail (over 100 KB)", "larger:100KB"),
+    ("Pinned mail", "is:pinned"),
+    ("Mail from specific people", "from:"),
+    ("Custom", ""),
+];
+const PRESET_PEOPLE: usize = 7;
+const PRESET_CUSTOM: usize = 8;
+
+#[derive(Clone, Debug, Default)]
+pub struct SearchFolderForm {
+    /// The name it had (`None`: a new one).
+    pub original: Option<String>,
+    /// Which of [`SEARCH_PRESETS`].
+    pub preset: usize,
+    pub name: String,
+    /// For "Mail from specific people": addresses or names, separated by commas.
+    pub people: String,
+    /// For "Custom": the search, as typed in the search box.
+    pub query: String,
+    pub error: Option<String>,
+}
+
+impl SearchFolderForm {
+    pub fn new() -> SearchFolderForm {
+        SearchFolderForm { name: tl!("Unread mail").to_string(), ..Default::default() }
+    }
+
+    /// An existing one, to change: its search shown as written.
+    pub fn edit(f: &quatrelle_engine::SearchFolder) -> SearchFolderForm {
+        let preset = SEARCH_PRESETS.iter().position(|p| !p.1.is_empty() && p.1 != "from:" && p.1 == f.query).unwrap_or(PRESET_CUSTOM);
+        SearchFolderForm { original: Some(f.name.clone()), preset, name: f.name.clone(), query: f.query.clone(), ..Default::default() }
+    }
+
+    /// Another kind picked: its name follows, unless one was typed.
+    pub fn apply_preset(&mut self, before: usize) {
+        let was = SEARCH_PRESETS.get(before).map(|p| tl!(p.0).to_string()).unwrap_or_default();
+        if self.name.trim().is_empty() || self.name == was {
+            self.name = SEARCH_PRESETS.get(self.preset).map(|p| tl!(p.0).to_string()).unwrap_or_default();
+        }
+        if self.preset == PRESET_CUSTOM && self.query.trim().is_empty() {
+            self.query = SEARCH_PRESETS.get(before).map(|p| p.1.to_string()).filter(|q| q != "from:").unwrap_or_default();
+        }
+    }
+
+    /// Whether it asks for people, and for a search of its own.
+    pub fn needs(&self) -> (bool, bool) {
+        (self.preset == PRESET_PEOPLE, self.preset == PRESET_CUSTOM)
+    }
+
+    /// What it searches for: `from:ana,"zoe park"` for people.
+    pub fn final_query(&self) -> String {
+        match self.preset {
+            PRESET_PEOPLE => {
+                let people: Vec<String> = self
+                    .people
+                    .split([',', ';'])
+                    .map(|p| p.trim().replace('"', ""))
+                    .filter(|p| !p.is_empty())
+                    .map(|p| if p.contains(char::is_whitespace) { format!("\"{p}\"") } else { p })
+                    .collect();
+                if people.is_empty() { String::new() } else { format!("from:{}", people.join(",")) }
+            }
+            PRESET_CUSTOM => self.query.trim().to_string(),
+            i => SEARCH_PRESETS.get(i).map(|p| p.1.to_string()).unwrap_or_default(),
+        }
+    }
+}
+
+/// Where a Quick Step moves mail: nowhere, a folder with a role, or a folder by its path.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum StepMove {
+    #[default]
+    Stay,
+    Role(FolderRole),
+    Folder(String),
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct QuickStepForm {
+    /// The name it had (`None`: a new one).
+    pub original: Option<String>,
+    pub name: String,
+    pub read: bool,
+    pub flag: bool,
+    pub pin: bool,
+    /// A category to add (empty: none).
+    pub category: String,
+    pub move_to: StepMove,
+    /// The folders to offer: each account's own, by path, once.
+    pub folders: Vec<String>,
+    pub error: Option<String>,
+}
+
+impl QuickStepForm {
+    fn folders(s: &Session) -> Vec<String> {
+        let mut v: Vec<String> = s
+            .accounts
+            .iter()
+            .flat_map(|a| a.folders.iter())
+            .filter(|f| matches!(f.role, FolderRole::Other | FolderRole::Inbox) && f.mailbox.is_none())
+            .map(|f| f.path.clone())
+            .collect();
+        v.sort();
+        v.dedup();
+        v.truncate(500);
+        v
+    }
+
+    /// A new one: marked read and moved to Archive, as Outlook's "Done".
+    pub fn new(s: &Session) -> QuickStepForm {
+        QuickStepForm { read: true, move_to: StepMove::Role(FolderRole::Archive), folders: Self::folders(s), ..Default::default() }
+    }
+
+    pub fn edit(s: &Session, q: &quatrelle_engine::QuickStep) -> QuickStepForm {
+        use quatrelle_engine::model::organize::RuleAction;
+        let mut f = QuickStepForm { original: Some(q.name.clone()), name: q.name.clone(), folders: Self::folders(s), ..Default::default() };
+        for a in &q.actions {
+            match a {
+                RuleAction::MarkRead => f.read = true,
+                RuleAction::Flag => f.flag = true,
+                RuleAction::Pin => f.pin = true,
+                RuleAction::Categorize(c) => f.category = c.clone(),
+                RuleAction::MoveTo(p) => f.move_to = StepMove::Folder(p.clone()),
+                RuleAction::MoveToRole(r) => f.move_to = StepMove::Role(*r),
+                RuleAction::Delete => f.move_to = StepMove::Role(FolderRole::Trash),
+            }
+        }
+        f
+    }
+
+    /// Its actions as `quickStep.create` takes them.
+    pub fn actions(&self) -> Vec<serde_json::Value> {
+        let mut v = Vec::new();
+        if self.read {
+            v.push(json!({"do": "markRead"}));
+        }
+        if self.flag {
+            v.push(json!({"do": "flag"}));
+        }
+        if self.pin {
+            v.push(json!({"do": "pin"}));
+        }
+        if !self.category.is_empty() {
+            v.push(json!({"do": "categorize", "value": self.category}));
+        }
+        match &self.move_to {
+            StepMove::Stay => {}
+            StepMove::Role(FolderRole::Trash) => v.push(json!({"do": "delete"})),
+            StepMove::Role(r) => v.push(json!({"do": "moveToRole", "value": r.code()})),
+            StepMove::Folder(p) => v.push(json!({"do": "moveTo", "value": p})),
+        }
+        v
+    }
+
+    fn move_label(m: &StepMove) -> String {
+        match m {
+            StepMove::Stay => tl!("Don't move").to_string(),
+            StepMove::Role(FolderRole::Archive) => tl!("Archive").to_string(),
+            StepMove::Role(FolderRole::Trash) => tl!("Deleted Items").to_string(),
+            StepMove::Role(FolderRole::Junk) => tl!("Junk Email").to_string(),
+            StepMove::Role(r) => r.label().unwrap_or("").to_string(),
+            StepMove::Folder(p) => p.clone(),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -1023,7 +1205,7 @@ impl Dialog {
 
     /// Dialogs that belong to the message being written (shown in its window when it has one).
     pub fn for_compose(&self) -> bool {
-        matches!(self, Dialog::SelectNames(_) | Dialog::SaveChanges | Dialog::EmptySubject | Dialog::Spelling(_))
+        matches!(self, Dialog::SelectNames(_) | Dialog::SaveChanges | Dialog::EmptySubject | Dialog::Spelling(_) | Dialog::WordCount(..))
             || matches!(self, Dialog::Signature(f) if f.insert)
     }
 
@@ -1161,6 +1343,8 @@ impl Dialog {
             | Dialog::DeleteFolder { error, .. }
             | Dialog::NewCategory { error, .. } => *error = Some(e),
             Dialog::EditRule(f) => f.error = Some(e),
+            Dialog::SearchFolder(f) => f.error = Some(e),
+            Dialog::QuickStep(f) => f.error = Some(e),
             Dialog::EditAccount(f) => f.error = Some(e),
             Dialog::Event(f) => f.error = Some(e),
             Dialog::Contact(f) => f.error = Some(e),
@@ -1873,6 +2057,33 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Act
             !cancel
         }
         Dialog::SelectNames(f) => select_names(ui, f, t, acts),
+        Dialog::SaveOnClose(n) => {
+            ui.set_width(400.0);
+            title(ui, t, if *n == 1 { "Save the message you're writing?" } else { "Save the messages you're writing?" });
+            let about = if *n == 1 {
+                tl!("It's kept in Drafts if you save it.").to_string()
+            } else {
+                tf!("{n} messages are being written. They're kept in Drafts if you save them.", n = n)
+            };
+            ui.add(egui::Label::new(RichText::new(about).color(t.dim)).wrap());
+            ui.add_space(10.0);
+            let mut keep = true;
+            button_row(ui, |ui| {
+                if ui.button(tl!("Cancel")).clicked() {
+                    keep = false;
+                }
+                if ui.button(tl!("Don't save")).clicked() {
+                    acts.push(Action::CloseAnyway);
+                    keep = false;
+                }
+                if widgets::accent_button(ui, crate::icons::Icon::Drafts, "Save", t, true).clicked() {
+                    acts.push(Action::Run("compose.keepAll", json!({})));
+                    acts.push(Action::CloseAnyway);
+                    keep = false;
+                }
+            });
+            keep
+        }
         Dialog::SaveChanges => {
             ui.set_width(380.0);
             title(ui, t, "Want to save your changes?");
@@ -2736,6 +2947,146 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Act
                 acts.push(Action::Submit("calendar.openShared", json!({"email": email.trim()})));
             }
             !cancel
+        }
+        Dialog::SearchFolder(f) => {
+            ui.set_width(460.0);
+            title(ui, t, if f.original.is_some() { "Edit Search Folder" } else { "New Search Folder" });
+            ui.add(
+                egui::Label::new(RichText::new(tl!("Shows the mail it finds in every folder, except Deleted Items and Junk Email.")).color(t.dim))
+                    .wrap(),
+            );
+            ui.add_space(8.0);
+            ui.label(RichText::new(tl!("Show")).color(t.dim).small());
+            let before = f.preset;
+            egui::ComboBox::from_id_salt("search-folder-preset")
+                .width(ui.available_width())
+                .selected_text(tl!(SEARCH_PRESETS.get(f.preset).map_or("Custom", |p| p.0)))
+                .show_ui(ui, |ui| {
+                    for (i, (label, _)) in SEARCH_PRESETS.iter().enumerate() {
+                        ui.selectable_value(&mut f.preset, i, tl!(label));
+                    }
+                });
+            if f.preset != before {
+                f.apply_preset(before);
+            }
+            let (needs_people, custom) = f.needs();
+            if needs_people {
+                ui.add_space(6.0);
+                ui.label(RichText::new(tl!("From these people (addresses or names, separated by commas)")).color(t.dim).small());
+                ui.add(egui::TextEdit::singleline(&mut f.people).hint_text("ana@example.com, Jun").desired_width(f32::INFINITY));
+            }
+            if custom {
+                ui.add_space(6.0);
+                ui.label(RichText::new(tl!("Search for")).color(t.dim).small());
+                ui.add(egui::TextEdit::singleline(&mut f.query).hint_text("from:ana subject:invoice has:attachment").desired_width(f32::INFINITY));
+            }
+            ui.add_space(6.0);
+            ui.label(RichText::new(tl!("Name")).color(t.dim).small());
+            let r = ui.add(egui::TextEdit::singleline(&mut f.name).desired_width(f32::INFINITY));
+            let enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+            if let Some(e) = &f.error {
+                ui.add_space(4.0);
+                ui.label(RichText::new(e.as_str()).color(t.danger).small());
+            }
+            let query = f.final_query();
+            let ready = !f.name.trim().is_empty() && !query.trim().is_empty();
+            let (ok, cancel) = buttons(ui, t, if f.original.is_some() { "Save" } else { "Create" }, ready);
+            if (ok || enter) && ready {
+                let p = match &f.original {
+                    Some(old) => json!({"name": old, "newName": f.name.trim(), "query": query}),
+                    None => json!({"name": f.name.trim(), "query": query}),
+                };
+                acts.push(Action::Submit(if f.original.is_some() { "searchFolder.edit" } else { "searchFolder.create" }, p));
+            }
+            !cancel
+        }
+        Dialog::QuickStep(f) => {
+            ui.set_width(440.0);
+            title(ui, t, if f.original.is_some() { "Edit Quick Step" } else { "New Quick Step" });
+            ui.add(
+                egui::Label::new(
+                    RichText::new(tl!("Done to the selected mail in one click; the first nine also with Ctrl+Shift+1 to 9.")).color(t.dim),
+                )
+                .wrap(),
+            );
+            ui.add_space(8.0);
+            ui.label(RichText::new(tl!("Name")).color(t.dim).small());
+            let r = ui.add(egui::TextEdit::singleline(&mut f.name).hint_text(tl!("Done")).desired_width(f32::INFINITY));
+            let enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+            ui.add_space(6.0);
+            ui.checkbox(&mut f.read, tl!("Mark as read"));
+            ui.checkbox(&mut f.flag, tl!("Flag"));
+            ui.checkbox(&mut f.pin, tl!("Pin"));
+            ui.add_space(4.0);
+            ui.horizontal(|ui| {
+                ui.label(tl!("Categorize"));
+                let shown = if f.category.is_empty() { tl!("None").to_string() } else { f.category.clone() };
+                egui::ComboBox::from_id_salt("quick-step-category").width(220.0).selected_text(shown).show_ui(ui, |ui| {
+                    ui.selectable_value(&mut f.category, String::new(), tl!("None"));
+                    for c in &s.prefs.categories {
+                        ui.selectable_value(&mut f.category, c.name.clone(), c.name.as_str());
+                    }
+                });
+            });
+            ui.horizontal(|ui| {
+                ui.label(tl!("Then move to"));
+                egui::ComboBox::from_id_salt("quick-step-move").width(220.0).selected_text(QuickStepForm::move_label(&f.move_to)).show_ui(ui, |ui| {
+                    let mut choices = vec![
+                        StepMove::Stay,
+                        StepMove::Role(FolderRole::Archive),
+                        StepMove::Role(FolderRole::Trash),
+                        StepMove::Role(FolderRole::Junk),
+                    ];
+                    choices.extend(f.folders.iter().map(|p| StepMove::Folder(p.clone())));
+                    for c in choices {
+                        let label = QuickStepForm::move_label(&c);
+                        ui.selectable_value(&mut f.move_to, c, label);
+                    }
+                });
+            });
+            if let Some(e) = &f.error {
+                ui.add_space(4.0);
+                ui.label(RichText::new(e.as_str()).color(t.danger).small());
+            }
+            let ready = !f.name.trim().is_empty() && !f.actions().is_empty();
+            if let Some(old) = f.original.clone() {
+                ui.add_space(6.0);
+                if ui.button(RichText::new(tl!("Delete this Quick Step")).color(t.danger)).clicked() {
+                    acts.push(Action::Submit("quickStep.delete", json!({"name": old})));
+                }
+            }
+            let (ok, cancel) = buttons(ui, t, if f.original.is_some() { "Save" } else { "Create" }, ready);
+            if (ok || enter) && ready {
+                let p = match &f.original {
+                    Some(old) => json!({"name": old, "newName": f.name.trim(), "actions": f.actions()}),
+                    None => json!({"name": f.name.trim(), "actions": f.actions()}),
+                };
+                acts.push(Action::Submit(if f.original.is_some() { "quickStep.edit" } else { "quickStep.create" }, p));
+            }
+            !cancel
+        }
+        Dialog::WordCount(n, selection) => {
+            ui.set_width(320.0);
+            title(ui, t, "Word count");
+            if *selection {
+                ui.label(RichText::new(tl!("The selected text")).color(t.dim).small());
+                ui.add_space(4.0);
+            }
+            egui::Grid::new("word-count").num_columns(2).spacing(vec2(24.0, 6.0)).show(ui, |ui| {
+                for (label, value) in [
+                    (tl!("Words"), n.words),
+                    (tl!("Characters (no spaces)"), n.chars_no_spaces),
+                    (tl!("Characters (with spaces)"), n.chars),
+                    (tl!("Paragraphs"), n.paragraphs),
+                    (tl!("Lines"), n.lines),
+                ] {
+                    ui.label(RichText::new(label).color(t.dim));
+                    ui.label(value.to_string());
+                    ui.end_row();
+                }
+            });
+            ui.add_space(8.0);
+            close_row(ui)
         }
         Dialog::FolderProperties { name, account, location, total, unread, size } => {
             ui.set_width(380.0);

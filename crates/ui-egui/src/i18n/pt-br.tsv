@@ -1006,7 +1006,6 @@ month	May	maio
 	Online only: {email}	Somente online: {email}
 	New message	Nova mensagem
 	Open Quatrelle to read it.	Abra o Quatrelle para ler.
-	Its mail is read from the server and held in memory while Quatrelle runs; nothing of it is written to this computer. Each message downloads when you open it. Mail waiting to be sent, changes made while offline, and calendar items, contacts and notes kept only in Quatrelle are lost when it closes.	O email é lido do servidor e mantido na memória enquanto o Quatrelle está aberto; nada é gravado neste computador. Cada mensagem é baixada quando você a abre. Emails aguardando envio, alterações feitas offline e itens de calendário, contatos e notas mantidos apenas no Quatrelle são perdidos ao fechá-lo.
 	Portable: everything is kept in QuatrelleData beside Quatrelle, and passwords only until it closes.	Portátil: tudo é mantido em QuatrelleData ao lado do Quatrelle, e as senhas só até ele fechar.
 	When it starts	Quando começar
 	1 minute before	1 minuto antes
@@ -1033,3 +1032,94 @@ month	May	maio
 	{n} more on the server	Mais {n} no servidor
 	Changes not yet on the server: {n}	Alterações ainda não no servidor: {n}
 	Messages waiting to be sent: {n}	Mensagens aguardando envio: {n}
+	Mail older than what's kept here is only on the server.	Emails mais antigos que os mantidos aqui estão só no servidor.
+	Search the server	Pesquisar no servidor
+	Searching the server…	Pesquisando no servidor…
+	The server found {n}	O servidor encontrou {n}
+	{day} {month}	{day} de {month}
+	Restart to update	Reiniciar para atualizar
+	Quatrelle {version} is downloaded. It installs when you close Quatrelle.	O Quatrelle {version} foi baixado. Ele será instalado quando você fechar o Quatrelle.
+	1 minute	1 minuto
+	{n} minutes	{n} minutos
+	1 hour	1 hora
+	{n} hours	{n} horas
+	1 day	1 dia
+	{n} days	{n} dias
+	1 week	1 semana
+	{n} weeks	{n} semanas
+	0 minutes before start	0 minutos antes do início
+	1 Reminder	1 lembrete
+	{n} Reminders	{n} lembretes
+	Click Snooze to be reminded again in:	Clique em Adiar para ser lembrado novamente em:
+	Dismiss	Ignorar
+	Dismiss All	Ignorar tudo
+	Open Item	Abrir item
+	Overdue	Atrasado
+	Now	Agora
+	In {n} minutes	Em {n} minutos
+	In {n} hours	Em {n} horas
+	In {n} days	Em {n} dias
+	Junk	Lixo eletrônico
+	Junk options	Opções de lixo eletrônico
+	Junk Email options…	Opções de lixo eletrônico…
+	Block sender	Bloquear remetente
+	Never block sender	Nunca bloquear remetente
+	Never block sender's domain	Nunca bloquear o domínio do remetente
+	Their mail goes to Junk Email from now on	Os e-mails dele irão para o Lixo eletrônico a partir de agora
+	Their mail is never treated as junk	Os e-mails dele nunca serão tratados como lixo
+	Mail from anyone at their domain is never treated as junk	E-mails de qualquer pessoa desse domínio nunca serão tratados como lixo
+	Blocked senders	Remetentes bloqueados
+	Safe senders	Remetentes confiáveis
+	Mail from these addresses and domains goes to Junk Email as it arrives.	E-mails destes endereços e domínios vão para o Lixo eletrônico ao chegar.
+	Mail from these addresses and domains is never treated as junk, and its pictures load.	E-mails destes endereços e domínios nunca são tratados como lixo e suas imagens são carregadas.
+	name@example.com or @example.com	nome@example.com ou @example.com
+	And {n} more	E mais {n}
+	Clean up conversation	Limpar conversa
+	Clean up folder	Limpar pasta
+	Messages quoted in full by a later reply go to Deleted Items	Mensagens citadas por completo em uma resposta posterior vão para Itens Excluídos
+	No conversations to clean up	Nenhuma conversa para limpar
+	Nothing to clean up: no message is quoted in full by a later reply	Nada para limpar: nenhuma mensagem é citada por completo em uma resposta posterior
+	Search Folders	Pastas de Pesquisa
+	New Search Folder…	Nova Pasta de Pesquisa…
+	New Search Folder	Nova Pasta de Pesquisa
+	Edit Search Folder	Editar Pasta de Pesquisa
+	Customize this Search Folder…	Personalizar esta Pasta de Pesquisa…
+	Delete Search Folder	Excluir Pasta de Pesquisa
+	Shows the mail it finds in every folder, except Deleted Items and Junk Email.	Mostra os e-mails encontrados em todas as pastas, exceto Itens Excluídos e Lixo Eletrônico.
+	Show	Mostrar
+	From these people (addresses or names, separated by commas)	Destas pessoas (endereços ou nomes, separados por vírgulas)
+	Search for	Pesquisar
+	Unread mail	Email Não Lido
+	Mail flagged for follow up	Email sinalizado para acompanhamento
+	Important mail	Email importante
+	Categorized mail	Email categorizado
+	Mail with attachments	Email com anexos
+	Large mail (over 100 KB)	Email grande (mais de 100 KB)
+	Pinned mail	Email fixado
+	Mail from specific people	Email de pessoas específicas
+	Quick steps	Etapas Rápidas
+	No Quick Steps yet.	Nenhuma Etapa Rápida ainda.
+	New Quick Step…	Nova Etapa Rápida…
+	New Quick Step	Nova Etapa Rápida
+	Edit a Quick Step	Editar uma Etapa Rápida
+	Edit Quick Step	Editar Etapa Rápida
+	Done to the selected mail in one click; the first nine also with Ctrl+Shift+1 to 9.	Aplicada ao email selecionado com um clique; as nove primeiras também com Ctrl+Shift+1 a 9.
+	Done	Concluído
+	Then move to	Depois mover para
+	Don't move	Não mover
+	Delete this Quick Step	Excluir esta Etapa Rápida
+	Date & time	Data e Hora
+	Word count	Contar Palavras
+	Words	Palavras
+	Characters (no spaces)	Caracteres (sem espaços)
+	Characters (with spaces)	Caracteres (com espaços)
+	Paragraphs	Parágrafos
+	Lines	Linhas
+	Save the message you're writing?	Salvar a mensagem que você está escrevendo?
+	Save the messages you're writing?	Salvar as mensagens que você está escrevendo?
+	It's kept in Drafts if you save it.	Ela é mantida em Rascunhos se você salvá-la.
+	{n} messages are being written. They're kept in Drafts if you save them.	{n} mensagens estão sendo escritas. Elas são mantidas em Rascunhos se você salvá-las.
+	Don't save	Não salvar
+	Also being written:	Também em andamento:
+	Play animations	Reproduzir animações
+	Hovers, selections and panes ease into place; off, everything changes at once	Destaques, seleções e painéis se acomodam suavemente; desligado, tudo muda na hora

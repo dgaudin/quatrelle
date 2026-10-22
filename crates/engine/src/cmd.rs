@@ -8,6 +8,7 @@ use quatrelle_mime::{OutAttachment, ReplyMode, mime_from_name, sanitize_filename
 use quatrelle_model::{AccountConfig, Flag, FolderRole, Security, ServerConfig};
 use serde_json::{Value, json};
 
+use crate::JunkList;
 use crate::session::{ListFilter, MoveTarget, ReadingPane, SearchScope, View, parse_key};
 use crate::{CmdError, CmdResult, CommandSpec, Registry, Session, p, parse_local};
 
@@ -66,8 +67,66 @@ pub fn registry() -> Registry {
             .key("Backspace")
             .when(has_selection),
         CommandSpec::new("mail.ignore", "Ignore conversation", "Home › Delete", |s, _| s.ignore_selection()).when(has_selection),
+        CommandSpec::new("mail.cleanUp", "Clean up conversation", "Home › Delete › Clean Up", |s, _| {
+            let sel = s.selected();
+            let keys: Vec<quatrelle_model::MessageKey> = sel.iter().map(|m| m.key.clone()).collect();
+            let mut folders: Vec<(String, String)> = sel.iter().map(|m| (m.key.account.clone(), m.key.folder.clone())).collect();
+            folders.sort();
+            folders.dedup();
+            s.clean_up(&folders, Some(&keys))
+        })
+        .when(has_selection),
+        CommandSpec::new("folder.cleanUp", "Clean up folder", "Home › Delete › Clean Up", |s, v| {
+            let folders = match p::str(v, "folder") {
+                Some(f) => {
+                    let account = account_param(s, v)?;
+                    if s.folder(&account, f).is_none() {
+                        return Err(CmdError::Params(format!("no folder `{f}`")));
+                    }
+                    vec![(account, f.to_string())]
+                }
+                None => match &s.view {
+                    View::Folder { account, folder } => vec![(account.clone(), folder.clone())],
+                    View::Unified { role } => s.accounts.iter().filter_map(|a| a.folder(*role).map(|f| (a.config.id.clone(), f.path.clone()))).collect(),
+                    _ => return Err(CmdError::Disabled("open a folder first".into())),
+                },
+            };
+            s.clean_up(&folders, None)
+        })
+        .params(r#"{"account"?: string, "folder"?: string (none: the folder on screen)}"#),
         CommandSpec::new("mail.junk", "Report junk", "Home › Delete", |s, _| s.move_selection(MoveTarget::Role(FolderRole::Junk))).when(has_selection),
-        CommandSpec::new("mail.notJunk", "Not junk", "Home › Delete", |s, _| s.move_selection(MoveTarget::Role(FolderRole::Inbox))).when(has_selection),
+        CommandSpec::new("mail.notJunk", "Not junk", "Home › Delete", |s, v| {
+            // "Always trust mail from this sender", as Outlook asks.
+            if p::bool(v, "always").unwrap_or(false) {
+                s.junk_list_selection(JunkList::Safe, false)?;
+                return Ok(json!({"trusted": true}));
+            }
+            s.move_selection(MoveTarget::Role(FolderRole::Inbox))
+        })
+        .params(r#"{"always"?: bool}"#)
+        .when(has_selection),
+        // Home › Delete › Junk
+        CommandSpec::new("junk.blockSender", "Block sender", "Home › Delete › Junk", |s, _| s.junk_list_selection(JunkList::Blocked, false))
+            .when(has_selection),
+        CommandSpec::new("junk.neverBlockSender", "Never block sender", "Home › Delete › Junk", |s, _| s.junk_list_selection(JunkList::Safe, false))
+            .when(has_selection),
+        CommandSpec::new("junk.neverBlockDomain", "Never block sender's domain", "Home › Delete › Junk", |s, _| {
+            s.junk_list_selection(JunkList::Safe, true)
+        })
+        .when(has_selection),
+        CommandSpec::new("junk.lists", "Junk Email options", "Home › Delete › Junk", |s, _| {
+            Ok(json!({"blocked": s.prefs.blocked_senders, "safe": s.prefs.safe_senders}))
+        }),
+        CommandSpec::new("junk.edit", "Edit a junk list", "Home › Delete › Junk › Junk Email options", |s, v| {
+            let which = match p::req_str(v, "list")? {
+                "blocked" => JunkList::Blocked,
+                "safe" => JunkList::Safe,
+                other => return Err(CmdError::Params(format!("no list `{other}` (blocked or safe)"))),
+            };
+            let entry = s.set_junk_entry(which, p::req_str(v, "entry")?, p::bool(v, "on").unwrap_or(true))?;
+            Ok(json!({"entry": entry, "blocked": s.prefs.blocked_senders, "safe": s.prefs.safe_senders}))
+        })
+        .params(r#"{"list": "blocked"|"safe", "entry": string (an address or @domain), "on"?: bool}"#),
         // Home › Respond
         CommandSpec::new("mail.reply", "Reply", "Home › Respond", |s, _| s.reply_compose(ReplyMode::Reply)).key("Mod+R").when(has_reading),
         CommandSpec::new("mail.replyAll", "Reply all", "Home › Respond", |s, _| s.reply_compose(ReplyMode::ReplyAll)).key("Mod+Shift+R").when(has_reading),
@@ -277,7 +336,52 @@ pub fn registry() -> Registry {
         .params(r#"{"on"?: bool}"#),
         // Search
         CommandSpec::new("search.run", "Search", "Search box", search).key("Mod+E").params(r#"{"query": string, "scope"?: "all"|"current", "index"?: number (messages added to the index this call; the window adds a slice at a time so a big mailbox doesn't freeze it; 0 or absent: no limit)}"#),
+        // Home › Quick Steps
+        CommandSpec::new("quickStep.list", "Quick Steps", "Home › Quick Steps", |s, _| Ok(json!(s.prefs.quick_steps))),
+        CommandSpec::new("quickStep.create", "New Quick Step", "Home › Quick Steps", |s, v| {
+            let actions = quick_actions(v)?.ok_or_else(|| CmdError::Params("`actions` is required".into()))?;
+            s.create_quick_step(p::req_str(v, "name")?, actions)
+        })
+        .params(QUICK_STEP_PARAMS),
+        CommandSpec::new("quickStep.edit", "Edit Quick Step", "Home › Quick Steps", |s, v| {
+            let actions = quick_actions(v)?;
+            s.edit_quick_step(p::req_str(v, "name")?, p::str(v, "newName"), actions)
+        })
+        .params(r#"{"name": string, "newName"?: string, "actions"?: […] (as quickStep.create)}"#),
+        CommandSpec::new("quickStep.delete", "Delete Quick Step", "Home › Quick Steps", |s, v| s.delete_quick_step(p::req_str(v, "name")?))
+            .params(r#"{"name": string}"#),
+        CommandSpec::new("quickStep.run", "Do a Quick Step", "Home › Quick Steps", |s, v| {
+            let index = p::u64(v, "index").and_then(|i| usize::try_from(i).ok());
+            s.run_quick_step(p::str(v, "name"), index)
+        })
+        .params(r#"{"name"?: string, "index"?: number (from 0)}"#)
+        .when(has_selection),
+        CommandSpec::new("quickStep.1", "Quick Step 1", "Home › Quick Steps", |s, _| s.run_quick_step(None, Some(0))).key("Mod+Shift+1").when(has_selection),
+        CommandSpec::new("quickStep.2", "Quick Step 2", "Home › Quick Steps", |s, _| s.run_quick_step(None, Some(1))).key("Mod+Shift+2").when(has_selection),
+        CommandSpec::new("quickStep.3", "Quick Step 3", "Home › Quick Steps", |s, _| s.run_quick_step(None, Some(2))).key("Mod+Shift+3").when(has_selection),
+        CommandSpec::new("quickStep.4", "Quick Step 4", "Home › Quick Steps", |s, _| s.run_quick_step(None, Some(3))).key("Mod+Shift+4").when(has_selection),
+        CommandSpec::new("quickStep.5", "Quick Step 5", "Home › Quick Steps", |s, _| s.run_quick_step(None, Some(4))).key("Mod+Shift+5").when(has_selection),
+        CommandSpec::new("quickStep.6", "Quick Step 6", "Home › Quick Steps", |s, _| s.run_quick_step(None, Some(5))).key("Mod+Shift+6").when(has_selection),
+        CommandSpec::new("quickStep.7", "Quick Step 7", "Home › Quick Steps", |s, _| s.run_quick_step(None, Some(6))).key("Mod+Shift+7").when(has_selection),
+        CommandSpec::new("quickStep.8", "Quick Step 8", "Home › Quick Steps", |s, _| s.run_quick_step(None, Some(7))).key("Mod+Shift+8").when(has_selection),
+        CommandSpec::new("quickStep.9", "Quick Step 9", "Home › Quick Steps", |s, _| s.run_quick_step(None, Some(8))).key("Mod+Shift+9").when(has_selection),
+        // Search Folders
+        CommandSpec::new("searchFolder.list", "Search Folders", "Folder pane › Search Folders", |s, _| Ok(json!(s.prefs.search_folders))),
+        CommandSpec::new("searchFolder.create", "New Search Folder", "Folder pane › Search Folders", |s, v| {
+            s.create_search_folder(p::req_str(v, "name")?, p::req_str(v, "query")?)
+        })
+        .params(r#"{"name": string, "query": string (as typed in the search box: "is:unread", "from:ana,jun", "larger:1MB")}"#),
+        CommandSpec::new("searchFolder.edit", "Customize Search Folder", "Folder pane › Search Folders", |s, v| {
+            s.edit_search_folder(p::req_str(v, "name")?, p::str(v, "newName"), p::str(v, "query"))
+        })
+        .params(r#"{"name": string, "newName"?: string, "query"?: string}"#),
+        CommandSpec::new("searchFolder.delete", "Delete Search Folder", "Folder pane › Search Folders", |s, v| s.delete_search_folder(p::req_str(v, "name")?))
+            .params(r#"{"name": string (its messages stay where they are)}"#),
+        CommandSpec::new("searchFolder.open", "Open Search Folder", "Folder pane › Search Folders", |s, v| s.open_search_folder(p::req_str(v, "name")?))
+            .params(r#"{"name": string}"#),
         CommandSpec::new("search.clear", "Clear search", "Search box", |s, _| Ok(json!({"results": s.run_search("", SearchScope::All)}))).key("Escape"),
+        CommandSpec::new("search.server", "Search the server", "Search › end of the results", |s, _| s.search_server())
+            .when(|s| s.search.is_none().then_some("search for something first")),
         CommandSpec::new("folder.more", "Show more from the server", "Folder › end of the list", |s, v| {
             let (account, folder) = match (p::str(v, "account"), p::str(v, "folder")) {
                 (Some(a), Some(f)) => (a.to_string(), f.to_string()),
@@ -292,6 +396,19 @@ pub fn registry() -> Registry {
         })
         .params(r#"{"account"?: string, "folder"?: string (default: the folder on view), "more"?: number (default: as many as Options keeps)}"#),
         // Compose
+        CommandSpec::new("compose.list", "Messages being written", "Message", |s, _| {
+            let active = s.compose.as_ref().map(|c| c.id);
+            Ok(json!(s.all_composes().map(|c| json!({"id": c.id, "subject": c.subject, "to": c.to, "active": Some(c.id) == active})).collect::<Vec<_>>()))
+        }),
+        CommandSpec::new("compose.activate", "Switch to a message being written", "Message", |s, v| {
+            let id = p::u64(v, "id").ok_or_else(|| CmdError::Params("`id` is required (from compose.list)".into()))?;
+            if s.activate_compose(id) { Ok(json!({"active": id})) } else { Err(CmdError::Params(format!("no message {id} is being written"))) }
+        })
+        .params(r#"{"id": number (from compose.list)}"#),
+        CommandSpec::new("compose.keepAll", "Keep the messages being written", "Closing Quatrelle", |s, _| {
+            let kept = s.keep_drafts();
+            Ok(json!({ "kept": kept }))
+        }),
         CommandSpec::new("compose.update", "Edit message", "Message", compose_update)
             .params(r#"{"to"?: string, "cc"?: string, "bcc"?: string, "subject"?: string, "body"?: string, "marks"?: bool (the body uses **bold**, *italic*, - lists…), "account"?: string, "importance"?: "high"|"normal"|"low", "readReceipt"?: bool, "replyTo"?: string (where replies go), "sendAfter"?: number (Unix seconds: held in the Outbox until then; 0 sends at once), "voting"?: string (voting buttons, `;`-separated: "Approve;Reject"; Exchange accounts)}"#)
             .when(has_compose),
@@ -554,6 +671,11 @@ pub fn registry() -> Registry {
             Ok(json!({"markRead": s.prefs.mark_read_on_open, "when": when, "after": s.prefs.read_after_secs}))
         })
         .params(r#"{"markRead"?: bool (in the reading pane at all; opening a message in its own window always does), "when"?: "shown"|"left" (when it's shown, or once another is chosen), "after"?: number (seconds shown first, with "shown")}"#),
+        CommandSpec::new("view.animations", "Play animations", "File › Options › General", |s, v| {
+            s.prefs.animations = p::bool(v, "on").unwrap_or(!s.prefs.animations);
+            Ok(json!({ "on": s.prefs.animations }))
+        })
+        .params(r#"{"on"?: bool (none: switch)}"#),
         CommandSpec::new("view.trustSender", "Show pictures from a sender", "File › Options › Privacy", |s, v| {
             let who = p::req_str(v, "address")?.trim().to_ascii_lowercase();
             if !quatrelle_model::addr::is_valid_email(&who) {
@@ -644,7 +766,49 @@ pub fn registry() -> Registry {
             }
             Ok(r)
         })
-        .params(r#"{"summary": string, "start": "YYYY-MM-DD[THH:MM]", "end"?: …, "allDay"?: bool, "location"?: string, "description"?: string, "repeat"?: "daily"|"weekly"|"monthly"|"yearly"|RRULE, "attendees"?: "a@x, Name <b@y>" (invited by mail), "categories"?: [string] | "Work, Clients" (colour it as those categories), "reminder"?: number (minutes before the start; 0 when it starts, null for none), "account"?: string, "calendar"?: string}"#),
+        .params(r#"{"summary": string, "start": "YYYY-MM-DD[THH:MM]", "end"?: …, "allDay"?: bool, "location"?: string, "description"?: string, "repeat"?: "daily"|"weekly"|"monthly"|"yearly"|RRULE, "attendees"?: "a@x, Name <b@y>" (invited by mail), "categories"?: [string] | "Work, Clients" (colour it as those categories), "reminder"?: number (minutes before the start; 0 when it starts, up to four weeks) | "none" | null (none), "account"?: string, "calendar"?: string}"#),
+        CommandSpec::new("reminders.list", "Reminders", "File › Reminders", |s, _| {
+            let now = s.clock.now;
+            Ok(json!(s
+                .due_reminders(now)
+                .iter()
+                .map(|r| json!({
+                    "key": r.key, "uid": r.uid, "account": r.account, "summary": r.summary, "location": r.location,
+                    "start": r.start, "end": r.end, "allDay": r.all_day, "occurrence": r.occurrence, "due": r.due,
+                }))
+                .collect::<Vec<_>>()))
+        })
+        .params("(the reminders due now)"),
+        CommandSpec::new("reminders.dismiss", "Dismiss", "Reminders", |s, v| {
+            let now = s.clock.now;
+            let key = p::str(v, "key");
+            if let Some(k) = key
+                && !s.due_reminders(now).iter().any(|r| r.key == k)
+            {
+                return Err(CmdError::Params(format!("no reminder `{k}` is due")));
+            }
+            let n = s.dismiss_reminders(key, now);
+            Ok(json!({ "dismissed": n }))
+        })
+        .params(r#"{"key"?: string (one reminder; none: every one due)}"#),
+        CommandSpec::new("reminders.snooze", "Snooze", "Reminders", |s, v| {
+            let now = s.clock.now;
+            let key = p::req_str(v, "key")?.to_string();
+            let Some(r) = s.due_reminders(now).into_iter().find(|r| r.key == key) else {
+                return Err(CmdError::Params(format!("no reminder `{key}` is due")));
+            };
+            // Minutes from now, or `"beforeStart": n` (n minutes before it starts, as Outlook's
+            // "0 minutes before start").
+            let until = match (p::i64(v, "minutes"), p::i64(v, "beforeStart")) {
+                (Some(m), _) if (1..=quatrelle_model::ical::REMINDER_MAX_MINUTES).contains(&m) => now + m * 60,
+                (None, Some(b)) if (0..=quatrelle_model::ical::REMINDER_MAX_MINUTES).contains(&b) && r.start - b * 60 > now => r.start - b * 60,
+                (None, Some(_)) => return Err(CmdError::Params("that time has passed".into())),
+                _ => return Err(CmdError::Params("`minutes` from 1 to four weeks, or `beforeStart`".into())),
+            };
+            s.snooze_reminder(&key, until);
+            Ok(json!({ "key": key, "until": until }))
+        })
+        .params(r#"{"key": string, "minutes"?: 1…40320 | "beforeStart"?: minutes before the event starts}"#),
         CommandSpec::new("event.update", "Edit event", "Calendar › Event", |s, v| {
             let uid = p::req_str(v, "uid")?.to_string();
             let current = s.find_event(&uid).map(|(_, e)| e.event.clone()).ok_or_else(|| CmdError::Params(format!("no event `{uid}`")))?;
@@ -1046,6 +1210,16 @@ fn unified(s: &mut Session, v: &Value) -> CmdResult {
     };
     s.open_view(View::Unified { role });
     Ok(json!({"messages": s.list.len()}))
+}
+
+const QUICK_STEP_PARAMS: &str = r#"{"name": string, "actions": [{"do": "markRead"|"flag"|"pin"} | {"do": "categorize", "value": name} | {"do": "moveTo", "value": folder} | {"do": "moveToRole", "value": "archive"|"trash"|…} | {"do": "delete"}] (a move comes last; one at most)}"#;
+
+/// A Quick Step's `actions`, when given.
+fn quick_actions(v: &Value) -> Result<Option<Vec<quatrelle_model::organize::RuleAction>>, CmdError> {
+    match v.get("actions") {
+        None | Some(Value::Null) => Ok(None),
+        Some(a) => serde_json::from_value(a.clone()).map(Some).map_err(|e| CmdError::Params(format!("actions: {e}"))),
+    }
 }
 
 fn key_param(s: &Session, v: &Value) -> Result<quatrelle_model::MessageKey, CmdError> {
@@ -1878,14 +2052,16 @@ fn event_from(s: &Session, v: &Value, mut e: quatrelle_model::ical::CalEvent) ->
         list.dedup();
         e.categories = list.into_iter().take(20).map(|c| c.chars().take(100).collect()).collect();
     }
-    // Its reminder: minutes before the start (0: when it starts), `null` for none, nothing for
-    // "leave it as it is".
+    // Its reminder: minutes before the start (0: when it starts), `null` or "none" for none,
+    // nothing for "leave it as it is". It's the event's own field (`CalEvent::reminder`: read and
+    // written as its `VALARM`, and to Exchange), never an alarm left among its `extra` lines.
     match v.get("reminder") {
         Some(Value::Null) => e.reminder = None,
-        Some(_) => {
-            let m = p::i64(v, "reminder").ok_or_else(|| CmdError::Params("`reminder` is minutes before the start".into()))?;
-            e.reminder = (m.abs() <= 20_160).then_some(m);
-        }
+        Some(Value::String(x)) if matches!(x.trim(), "" | "none") => e.reminder = None,
+        Some(x) => match x.as_i64().or_else(|| x.as_str().and_then(|t| t.trim().parse().ok())) {
+            Some(m) if (0..=quatrelle_model::ical::REMINDER_MAX_MINUTES).contains(&m) => e.reminder = Some(m),
+            _ => return Err(CmdError::Params("`reminder` is minutes before the start (0 to four weeks) or none".into())),
+        },
         None => {}
     }
     match p::str(v, "repeat").map(str::trim) {

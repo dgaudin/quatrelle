@@ -1006,7 +1006,6 @@ month	May	Mai
 	Online only: {email}	Nur online: {email}
 	New message	Neue Nachricht
 	Open Quatrelle to read it.	Öffnen Sie Quatrelle, um sie zu lesen.
-	Its mail is read from the server and held in memory while Quatrelle runs; nothing of it is written to this computer. Each message downloads when you open it. Mail waiting to be sent, changes made while offline, and calendar items, contacts and notes kept only in Quatrelle are lost when it closes.	Die E-Mails werden vom Server gelesen und nur im Arbeitsspeicher gehalten, solange Quatrelle läuft; nichts davon wird auf diesen Computer geschrieben. Jede Nachricht wird beim Öffnen heruntergeladen. Noch nicht gesendete E-Mails, offline vorgenommene Änderungen sowie Kalendereinträge, Kontakte und Notizen, die nur in Quatrelle gespeichert sind, gehen beim Schließen verloren.
 	Portable: everything is kept in QuatrelleData beside Quatrelle, and passwords only until it closes.	Portabel: Alles wird in QuatrelleData neben Quatrelle gespeichert, Kennwörter nur bis zum Schließen.
 	When it starts	Zum Beginn
 	1 minute before	1 Minute vorher
@@ -1033,3 +1032,94 @@ month	May	Mai
 	{n} more on the server	{n} weitere auf dem Server
 	Changes not yet on the server: {n}	Noch nicht auf dem Server gespeicherte Änderungen: {n}
 	Messages waiting to be sent: {n}	Nachrichten, die auf das Senden warten: {n}
+	Mail older than what's kept here is only on the server.	Ältere E-Mails als die hier gespeicherten sind nur auf dem Server.
+	Search the server	Auf dem Server suchen
+	Searching the server…	Server wird durchsucht…
+	The server found {n}	Der Server hat {n} gefunden
+	{day} {month}	{day}. {month}
+	Restart to update	Zum Aktualisieren neu starten
+	Quatrelle {version} is downloaded. It installs when you close Quatrelle.	Quatrelle {version} ist heruntergeladen. Es wird installiert, wenn Sie Quatrelle schließen.
+	1 minute	1 Minute
+	{n} minutes	{n} Minuten
+	1 hour	1 Stunde
+	{n} hours	{n} Stunden
+	1 day	1 Tag
+	{n} days	{n} Tage
+	1 week	1 Woche
+	{n} weeks	{n} Wochen
+	0 minutes before start	0 Minuten vor Beginn
+	1 Reminder	1 Erinnerung
+	{n} Reminders	{n} Erinnerungen
+	Click Snooze to be reminded again in:	Klicken Sie auf „Erneut erinnern“, um erinnert zu werden in:
+	Dismiss	Schließen
+	Dismiss All	Alle schließen
+	Open Item	Element öffnen
+	Overdue	Überfällig
+	Now	Jetzt
+	In {n} minutes	In {n} Minuten
+	In {n} hours	In {n} Stunden
+	In {n} days	In {n} Tagen
+	Junk	Junk-E-Mail
+	Junk options	Junk-E-Mail-Optionen
+	Junk Email options…	Junk-E-Mail-Optionen…
+	Block sender	Absender blockieren
+	Never block sender	Absender nie blockieren
+	Never block sender's domain	Domäne des Absenders nie blockieren
+	Their mail goes to Junk Email from now on	Ihre E-Mails landen ab jetzt in Junk-E-Mail
+	Their mail is never treated as junk	Ihre E-Mails werden nie als Junk behandelt
+	Mail from anyone at their domain is never treated as junk	E-Mails von allen Absendern dieser Domäne werden nie als Junk behandelt
+	Blocked senders	Blockierte Absender
+	Safe senders	Sichere Absender
+	Mail from these addresses and domains goes to Junk Email as it arrives.	E-Mails von diesen Adressen und Domänen werden beim Eingang nach Junk-E-Mail verschoben.
+	Mail from these addresses and domains is never treated as junk, and its pictures load.	E-Mails von diesen Adressen und Domänen werden nie als Junk behandelt, und ihre Bilder werden geladen.
+	name@example.com or @example.com	name@example.com oder @example.com
+	And {n} more	Und {n} weitere
+	Clean up conversation	Unterhaltung aufräumen
+	Clean up folder	Ordner aufräumen
+	Messages quoted in full by a later reply go to Deleted Items	Nachrichten, die eine spätere Antwort vollständig zitiert, werden nach „Gelöschte Elemente“ verschoben
+	No conversations to clean up	Keine Unterhaltungen zum Aufräumen
+	Nothing to clean up: no message is quoted in full by a later reply	Nichts aufzuräumen: Keine Nachricht wird von einer späteren Antwort vollständig zitiert
+	Search Folders	Suchordner
+	New Search Folder…	Neuer Suchordner…
+	New Search Folder	Neuer Suchordner
+	Edit Search Folder	Suchordner bearbeiten
+	Customize this Search Folder…	Diesen Suchordner anpassen…
+	Delete Search Folder	Suchordner löschen
+	Shows the mail it finds in every folder, except Deleted Items and Junk Email.	Zeigt die gefundenen E-Mails aus allen Ordnern außer „Gelöschte Elemente“ und „Junk-E-Mail“.
+	Show	Anzeigen
+	From these people (addresses or names, separated by commas)	Von diesen Personen (Adressen oder Namen, durch Kommas getrennt)
+	Search for	Suchen nach
+	Unread mail	Ungelesene E-Mail
+	Mail flagged for follow up	Zur Nachverfolgung gekennzeichnete E-Mail
+	Important mail	Wichtige E-Mail
+	Categorized mail	Kategorisierte E-Mail
+	Mail with attachments	E-Mail mit Anlagen
+	Large mail (over 100 KB)	Große E-Mail (über 100 KB)
+	Pinned mail	Angeheftete E-Mail
+	Mail from specific people	E-Mail von bestimmten Personen
+	Quick steps	QuickSteps
+	No Quick Steps yet.	Noch keine QuickSteps.
+	New Quick Step…	Neuer QuickStep…
+	New Quick Step	Neuer QuickStep
+	Edit a Quick Step	QuickStep bearbeiten
+	Edit Quick Step	QuickStep bearbeiten
+	Done to the selected mail in one click; the first nine also with Ctrl+Shift+1 to 9.	Wird mit einem Klick auf die ausgewählten E-Mails angewendet; die ersten neun auch mit Strg+Umschalt+1 bis 9.
+	Done	Erledigt
+	Then move to	Dann verschieben nach
+	Don't move	Nicht verschieben
+	Delete this Quick Step	Diesen QuickStep löschen
+	Date & time	Datum und Uhrzeit
+	Word count	Wörter zählen
+	Words	Wörter
+	Characters (no spaces)	Zeichen (ohne Leerzeichen)
+	Characters (with spaces)	Zeichen (mit Leerzeichen)
+	Paragraphs	Absätze
+	Lines	Zeilen
+	Save the message you're writing?	Die Nachricht speichern, die Sie gerade schreiben?
+	Save the messages you're writing?	Die Nachrichten speichern, die Sie gerade schreiben?
+	It's kept in Drafts if you save it.	Sie wird in „Entwürfe“ aufbewahrt, wenn Sie sie speichern.
+	{n} messages are being written. They're kept in Drafts if you save them.	{n} Nachrichten werden gerade geschrieben. Sie werden in „Entwürfe“ aufbewahrt, wenn Sie sie speichern.
+	Don't save	Nicht speichern
+	Also being written:	Ebenfalls in Arbeit:
+	Play animations	Animationen abspielen
+	Hovers, selections and panes ease into place; off, everything changes at once	Hervorhebungen, Auswahl und Bereiche gleiten an ihren Platz; aus: alles ändert sich sofort

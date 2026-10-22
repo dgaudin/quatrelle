@@ -1003,7 +1003,6 @@ month	May	5月
 	Online only: {email}	オンラインのみ: {email}
 	New message	新しいメッセージ
 	Open Quatrelle to read it.	Quatrelle を開いて読んでください。
-	Its mail is read from the server and held in memory while Quatrelle runs; nothing of it is written to this computer. Each message downloads when you open it. Mail waiting to be sent, changes made while offline, and calendar items, contacts and notes kept only in Quatrelle are lost when it closes.	メールはサーバーから読み込まれ、Quatrelle の実行中はメモリにのみ保持されます。このコンピューターには何も書き込まれません。各メッセージは開いたときにダウンロードされます。送信待ちのメール、オフライン中の変更、Quatrelle にのみ保存されている予定・連絡先・メモは、閉じると失われます。
 	Portable: everything is kept in QuatrelleData beside Quatrelle, and passwords only until it closes.	ポータブル: すべて Quatrelle の横の QuatrelleData に保存され、パスワードは閉じるまでだけ保持されます。
 	When it starts	開始時
 	1 minute before	1 分前
@@ -1030,3 +1029,94 @@ month	May	5月
 	{n} more on the server	サーバーにさらに {n} 件
 	Changes not yet on the server: {n}	サーバーに未反映の変更: {n}
 	Messages waiting to be sent: {n}	送信待ちのメッセージ: {n}
+	Mail older than what's kept here is only on the server.	ここに保存されているより古いメールはサーバーにのみあります。
+	Search the server	サーバーを検索
+	Searching the server…	サーバーを検索しています…
+	The server found {n}	サーバーで {n} 件見つかりました
+	{day} {month}	{month}{day}日
+	Restart to update	再起動して更新
+	Quatrelle {version} is downloaded. It installs when you close Quatrelle.	Quatrelle {version} をダウンロードしました。Quatrelle を閉じるとインストールされます。
+	1 minute	1 分
+	{n} minutes	{n} 分
+	1 hour	1 時間
+	{n} hours	{n} 時間
+	1 day	1 日
+	{n} days	{n} 日
+	1 week	1 週間
+	{n} weeks	{n} 週間
+	0 minutes before start	開始の 0 分前
+	1 Reminder	1 件のアラーム
+	{n} Reminders	{n} 件のアラーム
+	Click Snooze to be reminded again in:	[再通知] をクリックすると、次の時間後に再度通知します:
+	Dismiss	アラームを消す
+	Dismiss All	すべてのアラームを消す
+	Open Item	アイテムを開く
+	Overdue	期限切れ
+	Now	今
+	In {n} minutes	{n} 分後
+	In {n} hours	{n} 時間後
+	In {n} days	{n} 日後
+	Junk	迷惑メール
+	Junk options	迷惑メールのオプション
+	Junk Email options…	迷惑メールのオプション…
+	Block sender	受信拒否リストに追加
+	Never block sender	差出人を受信拒否しない
+	Never block sender's domain	差出人のドメインを受信拒否しない
+	Their mail goes to Junk Email from now on	今後、この差出人のメールは迷惑メールに移動します
+	Their mail is never treated as junk	この差出人のメールは迷惑メールとして扱いません
+	Mail from anyone at their domain is never treated as junk	このドメインの誰からのメールも迷惑メールとして扱いません
+	Blocked senders	受信拒否リスト
+	Safe senders	差出人セーフ リスト
+	Mail from these addresses and domains goes to Junk Email as it arrives.	これらのアドレスとドメインからのメールは、受信時に迷惑メールに移動します。
+	Mail from these addresses and domains is never treated as junk, and its pictures load.	これらのアドレスとドメインからのメールは迷惑メールとして扱わず、画像も読み込みます。
+	name@example.com or @example.com	name@example.com または @example.com
+	And {n} more	他 {n} 件
+	Clean up conversation	スレッドのクリーンアップ
+	Clean up folder	フォルダーのクリーンアップ
+	Messages quoted in full by a later reply go to Deleted Items	後の返信に全文が引用されているメッセージを削除済みアイテムに移動します
+	No conversations to clean up	クリーンアップするスレッドはありません
+	Nothing to clean up: no message is quoted in full by a later reply	クリーンアップするものはありません: 後の返信に全文が引用されたメッセージはありません
+	Search Folders	検索フォルダー
+	New Search Folder…	新しい検索フォルダー…
+	New Search Folder	新しい検索フォルダー
+	Edit Search Folder	検索フォルダーの編集
+	Customize this Search Folder…	この検索フォルダーのカスタマイズ…
+	Delete Search Folder	検索フォルダーの削除
+	Shows the mail it finds in every folder, except Deleted Items and Junk Email.	削除済みアイテムと迷惑メールを除く、すべてのフォルダーで見つかったメールを表示します。
+	Show	表示
+	From these people (addresses or names, separated by commas)	次の人から (アドレスまたは名前をコンマで区切って入力)
+	Search for	検索する内容
+	Unread mail	未読メール
+	Mail flagged for follow up	フラグの付いたメール
+	Important mail	重要なメール
+	Categorized mail	分類されたメール
+	Mail with attachments	添付ファイル付きのメール
+	Large mail (over 100 KB)	サイズの大きいメール (100 KB 超)
+	Pinned mail	ピン留めしたメール
+	Mail from specific people	特定の人からのメール
+	Quick steps	クイック操作
+	No Quick Steps yet.	クイック操作はまだありません。
+	New Quick Step…	新しいクイック操作…
+	New Quick Step	新しいクイック操作
+	Edit a Quick Step	クイック操作の編集
+	Edit Quick Step	クイック操作の編集
+	Done to the selected mail in one click; the first nine also with Ctrl+Shift+1 to 9.	選択したメールにワンクリックで実行します。最初の 9 個は Ctrl+Shift+1～9 でも実行できます。
+	Done	完了
+	Then move to	その後の移動先
+	Don't move	移動しない
+	Delete this Quick Step	このクイック操作を削除
+	Date & time	日付と時刻
+	Word count	文字カウント
+	Words	単語数
+	Characters (no spaces)	文字数 (スペースを含めない)
+	Characters (with spaces)	文字数 (スペースを含める)
+	Paragraphs	段落数
+	Lines	行数
+	Save the message you're writing?	作成中のメッセージを保存しますか?
+	Save the messages you're writing?	作成中のメッセージを保存しますか?
+	It's kept in Drafts if you save it.	保存すると下書きに保管されます。
+	{n} messages are being written. They're kept in Drafts if you save them.	{n} 件のメッセージを作成中です。保存すると下書きに保管されます。
+	Don't save	保存しない
+	Also being written:	ほかに作成中:
+	Play animations	アニメーションを再生する
+	Hovers, selections and panes ease into place; off, everything changes at once	ホバー、選択、ウィンドウ枠がなめらかに切り替わります。オフにするとすぐに切り替わります

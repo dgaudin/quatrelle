@@ -115,7 +115,7 @@ pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) 
                     Page::Info => info(s, &t, st.has_files, ui, &mut b, acts),
                     Page::Open => open(s, &t, ui, &mut b, acts),
                     Page::Options => options(s, st, ui, acts),
-                    Page::About => about(s, &t, ui, acts),
+                    Page::About => about(s, &t, st.pending_update.as_deref(), ui, acts),
                 }
             });
         });
@@ -774,7 +774,58 @@ fn options(s: &Session, st: &UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
         setting(ui, false, tl!("Ask before deleting for good"), None, &mut |ui| {
             switch(ui, s.prefs.confirm_permanent_delete, tl!("Ask before deleting for good"), "view.confirmDelete", acts);
         });
+        setting(
+            ui,
+            false,
+            tl!("Play animations"),
+            Some(tl!("Hovers, selections and panes ease into place; off, everything changes at once")),
+            &mut |ui| {
+                switch(ui, s.prefs.animations, tl!("Play animations"), "view.animations", acts);
+            },
+        );
     });
+
+    // Junk Email: the blocked and safe senders, each list with a box to add to it.
+    for (list, title, about) in [
+        ("blocked", "Blocked senders", "Mail from these addresses and domains goes to Junk Email as it arrives."),
+        ("safe", "Safe senders", "Mail from these addresses and domains is never treated as junk, and its pictures load."),
+    ] {
+        let entries = if list == "blocked" { &s.prefs.blocked_senders } else { &s.prefs.safe_senders };
+        group(ui, tl!(title), Some(tl!(about)), &mut |ui| {
+            let id = egui::Id::unique(("junk-add", list));
+            let mut text: String = ui.data_mut(|d| d.get_temp::<String>(id)).unwrap_or_default();
+            let mut add = false;
+            ui.horizontal(|ui| {
+                let r = ui.add(egui::TextEdit::singleline(&mut text).hint_text(tl!("name@example.com or @example.com")).desired_width(320.0));
+                add |= r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+                add |= ui.add_enabled(!text.trim().is_empty(), egui::Button::new(tl!("Add"))).clicked();
+            });
+            if add && !text.trim().is_empty() {
+                acts.push(Action::Run("junk.edit", json!({"list": list, "entry": text.trim()})));
+                // One that can't be added stays to be corrected (the reason shows as a notice).
+                if quatrelle_engine::junk_entry(&text).is_some() {
+                    text.clear();
+                }
+            }
+            ui.data_mut(|d| d.insert_temp(id, text));
+            if entries.is_empty() {
+                ui.add_space(4.0);
+                ui.label(RichText::new(tl!("No senders yet.")).color(t.faint).small());
+                ui.add_space(8.0);
+            }
+            // A long list is shown in part: the first ones, and how many more.
+            for (i, who) in entries.iter().take(200).enumerate() {
+                setting(ui, i == 0, who, None, &mut |ui| {
+                    if ui.button(tl!("Remove")).clicked() {
+                        acts.push(Action::Run("junk.edit", json!({"list": list, "entry": who, "on": false})));
+                    }
+                });
+            }
+            if entries.len() > 200 {
+                ui.label(RichText::new(tf!("And {n} more", n = entries.len() - 200)).color(t.faint).small());
+            }
+        });
+    }
 
     group(ui, tl!("Privacy"), Some(tl!("Pictures from the web load only when you ask. These senders' pictures always load:")), &mut |ui| {
         if s.prefs.trusted_senders.is_empty() {
@@ -831,7 +882,7 @@ fn updates(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>) {
     });
 }
 
-fn about(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>) {
+fn about(s: &Session, t: &Tokens, pending: Option<&str>, ui: &mut Ui, acts: &mut Vec<Action>) {
     heading(ui, t, "About Quatrelle");
     ui.horizontal(|ui| {
         let (r, _) = ui.allocate_exact_size(vec2(56.0, 56.0), Sense::hover());
@@ -845,6 +896,17 @@ fn about(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>) {
     });
     ui.add_space(10.0);
     updates(s, t, ui, acts);
+    // A test build that updates itself, with the next one downloaded.
+    if let Some(tag) = pending {
+        ui.add_space(6.0);
+        ui.horizontal_wrapped(|ui| {
+            let version = tag.trim_start_matches('v');
+            ui.label(RichText::new(tf!("Quatrelle {version} is downloaded. It installs when you close Quatrelle.", version = version)).color(t.text));
+            if widgets::accent_button(ui, Icon::Sync, "Restart to update", t, true).clicked() {
+                acts.push(Action::RestartToUpdate);
+            }
+        });
+    }
     ui.add_space(14.0);
     for line in [
         "Local-first: mail is cached on this computer for fast offline search. Passwords stay in the system keychain.",

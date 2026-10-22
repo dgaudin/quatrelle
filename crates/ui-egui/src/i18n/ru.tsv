@@ -1005,7 +1005,6 @@ month	May	Май
 	Online only: {email}	Только в сети: {email}
 	New message	Новое сообщение
 	Open Quatrelle to read it.	Откройте Quatrelle, чтобы прочитать.
-	Its mail is read from the server and held in memory while Quatrelle runs; nothing of it is written to this computer. Each message downloads when you open it. Mail waiting to be sent, changes made while offline, and calendar items, contacts and notes kept only in Quatrelle are lost when it closes.	Почта читается с сервера и хранится в памяти, пока работает Quatrelle; на этот компьютер ничего не записывается. Каждое сообщение загружается при открытии. Письма, ожидающие отправки, изменения, сделанные вне сети, а также события календаря, контакты и заметки, хранящиеся только в Quatrelle, теряются при его закрытии.
 	Portable: everything is kept in QuatrelleData beside Quatrelle, and passwords only until it closes.	Портативный режим: всё хранится в QuatrelleData рядом с Quatrelle, а пароли — только до его закрытия.
 	When it starts	В начале
 	1 minute before	за 1 минуту
@@ -1032,3 +1031,94 @@ month	May	Май
 	{n} more on the server	Ещё {n} на сервере
 	Changes not yet on the server: {n}	Изменения, ещё не на сервере: {n}
 	Messages waiting to be sent: {n}	Письма, ожидающие отправки: {n}
+	Mail older than what's kept here is only on the server.	Письма старше хранящихся здесь есть только на сервере.
+	Search the server	Искать на сервере
+	Searching the server…	Поиск на сервере…
+	The server found {n}	Найдено на сервере: {n}
+	{day} {month}	{day} {month}
+	Restart to update	Перезапустить для обновления
+	Quatrelle {version} is downloaded. It installs when you close Quatrelle.	Quatrelle {version} загружен. Он установится при закрытии Quatrelle.
+	1 minute	1 минута
+	{n} minutes	{n} мин.
+	1 hour	1 час
+	{n} hours	{n} ч.
+	1 day	1 день
+	{n} days	{n} дн.
+	1 week	1 неделя
+	{n} weeks	{n} нед.
+	0 minutes before start	За 0 мин. до начала
+	1 Reminder	1 напоминание
+	{n} Reminders	Напоминаний: {n}
+	Click Snooze to be reminded again in:	Нажмите «Отложить», чтобы получить напоминание через:
+	Dismiss	Закрыть
+	Dismiss All	Закрыть все
+	Open Item	Открыть элемент
+	Overdue	Просрочено
+	Now	Сейчас
+	In {n} minutes	Через {n} мин.
+	In {n} hours	Через {n} ч.
+	In {n} days	Через {n} дн.
+	Junk	Нежелательная почта
+	Junk options	Параметры нежелательной почты
+	Junk Email options…	Параметры нежелательной почты…
+	Block sender	Заблокировать отправителя
+	Never block sender	Никогда не блокировать отправителя
+	Never block sender's domain	Никогда не блокировать домен отправителя
+	Their mail goes to Junk Email from now on	Их письма теперь будут попадать в нежелательную почту
+	Their mail is never treated as junk	Их письма никогда не считаются нежелательными
+	Mail from anyone at their domain is never treated as junk	Письма от любого адреса этого домена никогда не считаются нежелательными
+	Blocked senders	Заблокированные отправители
+	Safe senders	Надежные отправители
+	Mail from these addresses and domains goes to Junk Email as it arrives.	Письма с этих адресов и доменов при получении попадают в нежелательную почту.
+	Mail from these addresses and domains is never treated as junk, and its pictures load.	Письма с этих адресов и доменов никогда не считаются нежелательными, и их изображения загружаются.
+	name@example.com or @example.com	name@example.com или @example.com
+	And {n} more	И ещё {n}
+	Clean up conversation	Очистить беседу
+	Clean up folder	Очистить папку
+	Messages quoted in full by a later reply go to Deleted Items	Сообщения, полностью процитированные в более позднем ответе, перемещаются в «Удаленные»
+	No conversations to clean up	Нет бесед для очистки
+	Nothing to clean up: no message is quoted in full by a later reply	Нечего очищать: ни одно сообщение не процитировано полностью в более позднем ответе
+	Search Folders	Папки поиска
+	New Search Folder…	Создать папку поиска…
+	New Search Folder	Новая папка поиска
+	Edit Search Folder	Изменить папку поиска
+	Customize this Search Folder…	Настроить эту папку поиска…
+	Delete Search Folder	Удалить папку поиска
+	Shows the mail it finds in every folder, except Deleted Items and Junk Email.	Показывает письма, найденные во всех папках, кроме «Удаленные» и «Нежелательная почта».
+	Show	Показать
+	From these people (addresses or names, separated by commas)	От этих людей (адреса или имена через запятую)
+	Search for	Искать
+	Unread mail	Непрочитанные письма
+	Mail flagged for follow up	Письма, помеченные к исполнению
+	Important mail	Важные письма
+	Categorized mail	Письма с категориями
+	Mail with attachments	Письма с вложениями
+	Large mail (over 100 KB)	Большие письма (более 100 КБ)
+	Pinned mail	Закрепленные письма
+	Mail from specific people	Письма от определенных людей
+	Quick steps	Быстрые действия
+	No Quick Steps yet.	Быстрых действий пока нет.
+	New Quick Step…	Новое быстрое действие…
+	New Quick Step	Новое быстрое действие
+	Edit a Quick Step	Изменить быстрое действие
+	Edit Quick Step	Изменить быстрое действие
+	Done to the selected mail in one click; the first nine also with Ctrl+Shift+1 to 9.	Применяется к выбранным письмам одним щелчком; первые девять — также сочетаниями Ctrl+Shift+1–9.
+	Done	Готово
+	Then move to	Затем переместить в
+	Don't move	Не перемещать
+	Delete this Quick Step	Удалить это быстрое действие
+	Date & time	Дата и время
+	Word count	Статистика
+	Words	Слова
+	Characters (no spaces)	Знаки (без пробелов)
+	Characters (with spaces)	Знаки (с пробелами)
+	Paragraphs	Абзацы
+	Lines	Строки
+	Save the message you're writing?	Сохранить сообщение, которое вы пишете?
+	Save the messages you're writing?	Сохранить сообщения, которые вы пишете?
+	It's kept in Drafts if you save it.	Если сохранить, оно останется в черновиках.
+	{n} messages are being written. They're kept in Drafts if you save them.	Пишется сообщений: {n}. Если сохранить, они останутся в черновиках.
+	Don't save	Не сохранять
+	Also being written:	Также пишется:
+	Play animations	Воспроизводить анимацию
+	Hovers, selections and panes ease into place; off, everything changes at once	Наведение, выделение и панели меняются плавно; если выключить, всё меняется сразу

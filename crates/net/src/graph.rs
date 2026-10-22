@@ -8,7 +8,7 @@
 //! replies. Ids are asked for in their immutable form (`Prefer: IdType="ImmutableId"`), so a
 //! message keeps its id when it moves, as JMAP's do: the numbering and folder paths are the
 //! JMAP transport's ([`jmap::State`], [`jmap::folders`]). Several small requests go as one
-//! JSON batch (20 at a time).
+//! `$batch` (four per batch; see [`BATCH`]).
 
 use std::collections::HashMap;
 
@@ -20,7 +20,7 @@ use serde_json::{Value, json};
 
 use crate::http::{self, Request, Response};
 use crate::jmap::{self, Mailbox, State, VALIDITY};
-use crate::sync::{SyncOptions, SyncReport, fill_from_source};
+use crate::sync::{SyncOptions, SyncReport, WordQuery, fill_from_source};
 use crate::{NetError, Result};
 
 /// The Graph endpoint accounts use.
@@ -29,8 +29,16 @@ pub const DEFAULT_URL: &str = "https://graph.microsoft.com/v1.0";
 const MAX_JSON: usize = 32 << 20;
 /// Largest message source downloaded.
 const MAX_MIME: usize = 64 << 20;
-/// Requests in one batch (Graph's limit).
-const BATCH: usize = 20;
+/// Entries per `$batch`. Graph executes a batch's entries concurrently and Exchange Online's
+/// per-app, per-mailbox concurrency limit is 4, so larger batches mostly came back as 429s.
+const BATCH: usize = 4;
+/// Attempts per request (or batch entry) while the server keeps answering 429.
+const BUSY_ROUNDS: u32 = 4;
+/// Upper bound in seconds on a single back-off, whatever `Retry-After` says.
+const BUSY_WAIT_CAP: u64 = 20;
+/// Up to this many uncached messages are fetched individually (with internet headers); above
+/// it the listing's own fields are used.
+const FEW: usize = 20;
 /// Pages followed for one listing.
 const MAX_PAGES: usize = 200;
 /// Folders listed at most.
@@ -42,6 +50,12 @@ const VOTING_EXPAND: &str =
     "$expand=singleValueExtendedProperties($filter=id%20eq%20'Binary%20%7B00062008-0000-0000-C000-000000000046%7D%20Id%200x8520')";
 /// The choice a vote carries (`PidLidVerbResponse`), as Graph names the property.
 const VERB_RESPONSE_ID: &str = "String {00062008-0000-0000-C000-000000000046} Id 0x8524";
+/// `$select` for folder listings. `internetMessageHeaders` is left out on purpose: it is
+/// expensive for the server to produce per item, and listing pages that include it are slow
+/// enough to hit gateway timeouts. [`fill_from_source`] recovers threading later.
+const LIST_FIELDS: &str = "id,subject,from,sender,toRecipients,ccRecipients,replyTo,internetMessageId,receivedDateTime,importance,hasAttachments,bodyPreview,isRead,flag,isDraft";
+/// Sent on every call, including inside each `$batch` entry, where the outer header is ignored.
+const PREFER: &str = "IdType=\"ImmutableId\", outlook.timezone=\"UTC\"";
 
 /// A signed-in Graph session.
 pub struct Client {
@@ -104,11 +118,10 @@ impl Client {
     }
 
     fn request(&self, mut r: Request) -> Result<Value> {
-        r = r
-            .header("Authorization", &self.auth)
-            .header("Accept", "application/json")
-            .header("Prefer", "IdType=\"ImmutableId\", outlook.timezone=\"UTC\"");
-        let resp = http::send(&r)?;
+        for (name, value) in [("Authorization", self.auth.as_str()), ("Accept", "application/json"), ("Prefer", PREFER)] {
+            r = r.header(name, value);
+        }
+        let resp = send_through_limits(&r)?;
         check(&resp)?;
         if resp.body.iter().all(u8::is_ascii_whitespace) {
             return Ok(Value::Null);
@@ -151,34 +164,47 @@ impl Client {
         Ok(out)
     }
 
-    /// Run requests as JSON batches; each answer's (status, body), in order.
+    /// Run requests through `$batch`, [`BATCH`] at a time, returning (status, body) per request
+    /// in input order. Entries answered 429 are resubmitted on their own after the longest
+    /// `Retry-After` among them, up to [`BUSY_ROUNDS`] times; whatever is still 429 is returned
+    /// as such.
     fn batch(&self, requests: &[(&str, String, Option<Value>)]) -> Result<Vec<(u16, Value)>> {
         let mut out = Vec::with_capacity(requests.len());
         for (n, chunk) in requests.chunks(BATCH).enumerate() {
-            let reqs: Vec<Value> = chunk
-                .iter()
-                .enumerate()
-                .map(|(i, (method, url, body))| {
-                    let mut r = json!({"id": (i + 1).to_string(), "method": method, "url": url});
-                    if let Some(b) = body {
-                        r["body"] = b.clone();
-                        r["headers"] = json!({"Content-Type": "application/json"});
+            let mut results: HashMap<usize, (u16, Value)> = HashMap::new();
+            let mut todo: Vec<usize> = (0..chunk.len()).collect();
+            let mut round = 0;
+            while !todo.is_empty() && round < BUSY_ROUNDS {
+                round += 1;
+                let entries: Vec<Value> = todo.iter().filter_map(|&i| chunk.get(i).map(|req| batch_entry(i, req))).collect();
+                let reply = self.post("/$batch", &json!({ "requests": entries }))?;
+                let by_id: HashMap<&str, &Value> = reply
+                    .get("responses")
+                    .and_then(Value::as_array)
+                    .map(|rs| rs.iter().filter_map(|r| Some((r.get("id")?.as_str()?, r))).collect())
+                    .unwrap_or_default();
+                let mut busy = Vec::new();
+                let mut pause = 0;
+                for &i in &todo {
+                    let key = (i + 1).to_string();
+                    let Some(r) = by_id.get(key.as_str()) else {
+                        return Err(NetError::Protocol(format!("Graph: no answer in batch {n}")));
+                    };
+                    let Some(status) = r["status"].as_u64().and_then(|s| u16::try_from(s).ok()).filter(|s| *s != 0) else {
+                        return Err(NetError::Protocol(format!("Graph: no answer in batch {n}")));
+                    };
+                    if status == 429 {
+                        busy.push(i);
+                        pause = pause.max(backoff_secs(entry_retry_after(r).as_deref(), round));
                     }
-                    r
-                })
-                .collect();
-            let v = self.post("/$batch", &json!({ "requests": reqs }))?;
-            let answers = v.get("responses").and_then(Value::as_array).cloned().unwrap_or_default();
-            for i in 0..chunk.len() {
-                let id = (i + 1).to_string();
-                let a = answers.iter().find(|a| a.get("id").and_then(Value::as_str) == Some(id.as_str()));
-                let status = a.and_then(|a| a.get("status")).and_then(Value::as_u64).and_then(|s| u16::try_from(s).ok()).unwrap_or(0);
-                let body = a.and_then(|a| a.get("body")).cloned().unwrap_or(Value::Null);
-                if status == 0 {
-                    return Err(NetError::Protocol(format!("Graph: no answer in batch {n}")));
+                    results.insert(i, (status, r.get("body").cloned().unwrap_or(Value::Null)));
                 }
-                out.push((status, body));
+                todo = busy;
+                if !todo.is_empty() && round < BUSY_ROUNDS {
+                    std::thread::sleep(std::time::Duration::from_secs(pause));
+                }
             }
+            out.extend((0..chunk.len()).map(|i| results.remove(&i).unwrap_or((429, Value::Null))));
         }
         Ok(out)
     }
@@ -288,21 +314,32 @@ impl Client {
         Ok(out)
     }
 
-    /// The newest `limit` messages of a folder with their flags, and its (total, unread).
-    fn newest(&self, folder: &str, limit: usize, owner: Option<&str>) -> Result<(Vec<(String, Flags)>, (u32, u32))> {
+    /// The newest `limit` messages of a folder with their list details ([`LIST_FIELDS`]), and its
+    /// (total, unread).
+    fn newest(&self, folder: &str, window: usize, owner: Option<&str>) -> Result<(Vec<Value>, (u32, u32))> {
         let me = who(owner);
-        let list = self.all(
-            &format!(
-                "{me}/mailFolders/{}/messages?$top={}&$orderby=receivedDateTime%20desc&$select=id,isRead,isDraft,flag",
-                seg(folder),
-                limit.clamp(1, 1000)
-            ),
-            limit.min(100_000),
+        let page = window.clamp(1, 1000);
+        let mut entries = self.all(
+            &format!("{me}/mailFolders/{}/messages?$top={page}&$orderby=receivedDateTime%20desc&$select={LIST_FIELDS}", seg(folder)),
+            window.min(100_000),
         )?;
-        let ids = list.iter().filter_map(|m| Some((m.get("id")?.as_str()?.to_string(), flags(m)))).collect();
+        entries.retain(|m| m["id"].is_string());
+        let ids = entries;
         let f = self.get(&format!("{me}/mailFolders/{}?$select=totalItemCount,unreadItemCount", seg(folder)))?;
         let count = |k: &str| f.get(k).and_then(Value::as_u64).and_then(|n| u32::try_from(n).ok()).unwrap_or(0);
         Ok((ids, (count("totalItemCount"), count("unreadItemCount"))))
+    }
+
+    /// Of these messages, those still in a folder, with their flags (through `$batch`).
+    fn still_in(&self, folder: &str, ids: &[String]) -> Result<Vec<(String, Flags)>> {
+        let reqs: Vec<(&str, String, Option<Value>)> =
+            ids.iter().map(|id| ("GET", format!("/me/messages/{}?$select=id,isRead,isDraft,flag,parentFolderId", seg(id)), None)).collect();
+        Ok(self
+            .batch(&reqs)?
+            .into_iter()
+            .filter(|(s, m)| *s == 200 && m.get("parentFolderId").and_then(Value::as_str).is_none_or(|p| p == folder))
+            .filter_map(|(_, m)| Some((m.get("id")?.as_str()?.to_string(), flags(&m))))
+            .collect())
     }
 
     /// Messages' details, for the list.
@@ -318,7 +355,7 @@ impl Client {
         let r = Request::get(&format!("{}{}/messages/{}/$value", self.base, who(owner), seg(id)), MAX_MIME)
             .header("Authorization", &self.auth)
             .header("Prefer", "IdType=\"ImmutableId\"");
-        let resp = http::send(&r)?;
+        let resp = send_through_limits(&r)?;
         check(&resp)?;
         Ok(resp.body)
     }
@@ -603,6 +640,7 @@ fn header_block(m: &Value) -> Vec<u8> {
                 ("Reply-To", addresses(m.get("replyTo"))),
                 ("Subject", clean(m.get("subject").and_then(Value::as_str).unwrap_or_default())),
                 ("Message-ID", clean(m.get("internetMessageId").and_then(Value::as_str).unwrap_or_default())),
+                ("Importance", importance_header(m)),
             ] {
                 if !value.trim().is_empty() {
                     out.push_str(&format!("{name}: {value}\r\n"));
@@ -679,6 +717,60 @@ fn message_rule_json(r: &Rule, folder: Option<&str>, sequence: usize) -> Value {
     })
 }
 
+/// The `Importance:` value for Graph's `importance` property (`normal` gives none).
+fn importance_header(m: &Value) -> String {
+    let level = m["importance"].as_str().unwrap_or_default();
+    if level.eq_ignore_ascii_case("high") || level.eq_ignore_ascii_case("low") {
+        let mut c = level.chars();
+        c.next().map(|f| f.to_ascii_uppercase().to_string() + c.as_str()).unwrap_or_default()
+    } else {
+        String::new()
+    }
+}
+
+/// One `$batch` entry: numbered from 1, with the [`PREFER`] header (and a JSON body if any).
+fn batch_entry(i: usize, (method, url, body): &(&str, String, Option<Value>)) -> Value {
+    let mut headers = serde_json::Map::new();
+    headers.insert("Prefer".into(), json!(PREFER));
+    let mut e = json!({"id": (i + 1).to_string(), "method": method, "url": url});
+    if let Some(b) = body {
+        headers.insert("Content-Type".into(), json!("application/json"));
+        e["body"] = b.clone();
+    }
+    e["headers"] = Value::Object(headers);
+    e
+}
+
+/// A batch entry's `Retry-After`, whatever case the key has and whether it's a string or number.
+fn entry_retry_after(r: &Value) -> Option<String> {
+    let headers = r.get("headers")?.as_object()?;
+    match ["Retry-After", "retry-after", "RETRY-AFTER"].iter().find_map(|k| headers.get(*k))? {
+        Value::String(s) => Some(s.clone()),
+        Value::Number(n) => Some(n.to_string()),
+        _ => None,
+    }
+}
+
+/// `http::send`, resubmitted while the answer is 429, up to [`BUSY_ROUNDS`] attempts.
+fn send_through_limits(r: &Request) -> Result<Response> {
+    let mut round = 0;
+    loop {
+        round += 1;
+        let resp = http::send(r)?;
+        if resp.status != 429 || round >= BUSY_ROUNDS {
+            return Ok(resp);
+        }
+        std::thread::sleep(std::time::Duration::from_secs(backoff_secs(resp.header("Retry-After"), round)));
+    }
+}
+
+/// Seconds to pause before attempt `round + 1`: a numeric `Retry-After` hint if present,
+/// otherwise 2 s per round so far; clamped to 1..=[`BUSY_WAIT_CAP`].
+fn backoff_secs(hint: Option<&str>, round: u32) -> u64 {
+    let fallback = 2 * u64::from(round.max(1));
+    hint.and_then(|h| h.trim().parse().ok()).unwrap_or(fallback).clamp(1, BUSY_WAIT_CAP)
+}
+
 /// Refresh the folder list (and the folder ids behind it).
 pub fn list_folders(c: &Client, st: &mut State, account: &str, shared: &[String]) -> Result<Vec<Folder>> {
     let mut boxes = c.mailboxes()?;
@@ -708,7 +800,8 @@ pub fn sync_folder(c: &Client, st: &mut State, store: &Store, account: &str, fol
     let id = st.mailbox(folder)?.to_string();
     let owner = st.owner(folder).map(str::to_string);
     let owner = owner.as_deref();
-    let (newest, (total, unread)) = c.newest(&id, opts.window, owner)?;
+    let (listed, (total, unread)) = c.newest(&id, opts.window, owner)?;
+    let newest: Vec<(String, Flags)> = listed.iter().filter_map(|m| Some((m.get("id")?.as_str()?.to_string(), flags(m)))).collect();
     let mut fs = store.load_folder(account, folder)?;
     let mut report = SyncReport::default();
     if fs.validity != VALIDITY && (fs.validity != 0 || !fs.messages.is_empty()) {
@@ -717,7 +810,13 @@ pub fn sync_folder(c: &Client, st: &mut State, store: &Store, account: &str, fol
         report.reset = true;
     }
     fs.validity = VALIDITY;
-    let wanted: HashMap<u32, Flags> = newest.iter().map(|(id, f)| (st.number(id), f.clone())).collect();
+    let mut wanted: HashMap<u32, Flags> = newest.iter().map(|(id, f)| (st.number(id), f.clone())).collect();
+    // Found by a search of the server past the window: kept while still in the folder.
+    let extra = st.found_outside(folder, &fs.messages, &wanted);
+    for (found, f) in c.still_in(&id, &extra)? {
+        wanted.insert(st.number(&found), f);
+    }
+    st.keep_found(folder, |n| wanted.contains_key(&n));
     let (kept, gone): (Vec<Summary>, Vec<Summary>) = std::mem::take(&mut fs.messages).into_iter().partition(|m| wanted.contains_key(&m.key.uid));
     for m in &gone {
         store.remove_body(&m.key);
@@ -738,18 +837,21 @@ pub fn sync_folder(c: &Client, st: &mut State, store: &Store, account: &str, fol
         }
     }
     let missing: Vec<String> = newest.iter().filter(|(id, _)| fs.find(st.number(id)).is_none()).map(|(id, _)| id.clone()).collect();
-    for m in c.headers(&missing, owner)? {
+    // Small gap: per-message GETs with internet headers. Big gap: reuse the listing entries.
+    let details = if missing.len() <= FEW {
+        c.headers(&missing, owner)?
+    } else {
+        let mut sorted = missing.clone();
+        sorted.sort_unstable();
+        listed.iter().filter(|m| m["id"].as_str().is_some_and(|i| sorted.binary_search_by(|x| x.as_str().cmp(i)).is_ok())).cloned().collect()
+    };
+    for m in details {
         let Some(id) = m.get("id").and_then(Value::as_str) else { continue };
         let key = MessageKey { account: account.to_string(), folder: folder.to_string(), validity: VALIDITY, uid: st.number(id) };
         if fs.find(key.uid).is_some() {
             continue;
         }
-        let received = m.get("receivedDateTime").and_then(Value::as_str).and_then(jmap::utc_date).unwrap_or(0);
-        let mut s = mime::summary_from_header(&header_block(&m), key, flags(&m), 0, received);
-        s.preview = m.get("bodyPreview").and_then(Value::as_str).map(mime::preview).unwrap_or_default();
-        s.has_attachments = m.get("hasAttachments").and_then(Value::as_bool).unwrap_or(false);
-        s.voting = voting_choices(&m);
-        fs.messages.push(s);
+        fs.messages.push(message_summary(&m, key));
         report.new += 1;
     }
     sort_newest_first(&mut fs.messages);
@@ -759,6 +861,73 @@ pub fn sync_folder(c: &Client, st: &mut State, store: &Store, account: &str, fol
     report.total = total;
     report.unread = unread;
     Ok(report)
+}
+
+/// A message's list entry from its details.
+fn message_summary(m: &Value, key: MessageKey) -> Summary {
+    let received = m.get("receivedDateTime").and_then(Value::as_str).and_then(jmap::utc_date).unwrap_or(0);
+    let mut s = mime::summary_from_header(&header_block(m), key, flags(m), 0, received);
+    s.preview = m.get("bodyPreview").and_then(Value::as_str).map(mime::preview).unwrap_or_default();
+    s.has_attachments = m.get("hasAttachments").and_then(Value::as_bool).unwrap_or(false);
+    s.voting = voting_choices(m);
+    s
+}
+
+/// The messages of `folder` the server finds for a search (issue #4), the newest `cap` of them:
+/// its words through `$search` (KQL), or, with none, its read and flag conditions through
+/// `$filter`. Those not kept yet come into its list and stay there past the window while the
+/// folder has them. Their keys, and how many came in.
+pub fn find_on_server(
+    c: &Client,
+    st: &mut State,
+    store: &Store,
+    account: &str,
+    folder: &str,
+    query: &WordQuery,
+    cap: usize,
+) -> Result<(Vec<MessageKey>, usize)> {
+    let id = st.mailbox(folder)?.to_string();
+    let mut fs = store.load_folder(account, folder)?;
+    if fs.validity != VALIDITY {
+        return Ok((Vec::new(), 0));
+    }
+    let cap = cap.min(jmap::FOUND_MAX);
+    let ask = if query.text.is_empty() {
+        let mut f = Vec::new();
+        if let Some(u) = query.unread {
+            f.push(format!("isRead eq {}", !u));
+        }
+        if let Some(on) = query.flagged {
+            f.push(format!("flag/flagStatus {} 'flagged'", if on { "eq" } else { "ne" }));
+        }
+        if let Some(a) = query.attachment {
+            f.push(format!("hasAttachments eq {a}"));
+        }
+        format!("$filter={}", http::pct(&f.join(" and ")))
+    } else {
+        format!("$search={}", http::pct(&format!("\"{}\"", query.text.replace('"', "\\\""))))
+    };
+    let found = c.all(&format!("/me/mailFolders/{}/messages?{ask}&$top={}&$select={HEADER_FIELDS}", seg(&id), cap.clamp(1, 1000)), cap)?;
+    let found: Vec<&Value> =
+        found.iter().filter(|m| query.admits(&flags(m), m.get("hasAttachments").and_then(Value::as_bool).unwrap_or(false))).collect();
+    let mut numbers = Vec::new();
+    let mut new = 0;
+    for m in found {
+        let Some(mid) = m.get("id").and_then(Value::as_str) else { continue };
+        let key = MessageKey { account: account.to_string(), folder: folder.to_string(), validity: VALIDITY, uid: st.number(mid) };
+        numbers.push(key.uid);
+        if fs.find(key.uid).is_none() {
+            fs.messages.push(message_summary(m, key));
+            new += 1;
+        }
+    }
+    st.add_found(folder, &numbers);
+    if new > 0 {
+        sort_newest_first(&mut fs.messages);
+        fs.uid_next = fs.messages.iter().map(|m| m.key.uid).max().unwrap_or(0).saturating_add(1);
+        store.save_folder(account, folder, &fs)?;
+    }
+    Ok((numbers.iter().filter_map(|n| fs.find(*n).map(|m| m.key.clone())).collect(), new))
 }
 
 fn prefetch(c: &Client, st: &State, store: &Store, account: &str, folder: &str, fs: &mut FolderState, opts: &SyncOptions) -> Result<()> {

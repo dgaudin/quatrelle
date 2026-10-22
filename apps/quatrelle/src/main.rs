@@ -31,6 +31,7 @@ mod graphics;
 mod logfile;
 mod portable;
 mod secrets;
+mod self_update;
 mod single_instance;
 #[cfg(windows)]
 mod toast;
@@ -117,6 +118,8 @@ struct Desktop {
     /// Portable mode (`portable.rs`): Quatrelle's name isn't written to Windows' registry.
     #[cfg(windows)]
     portable: bool,
+    /// Test builds' updater (`self_update.rs`), when this one has it.
+    updater: Option<self_update::Updater>,
 }
 
 impl Services for Desktop {
@@ -151,6 +154,12 @@ impl Services for Desktop {
     }
     fn open_path(&mut self, path: &Path) -> Result<(), String> {
         shell_open(path.as_os_str())
+    }
+    fn pending_update(&mut self) -> Option<String> {
+        self.updater.as_ref().and_then(self_update::Updater::ready)
+    }
+    fn restart_to_update(&mut self) -> bool {
+        self.updater.as_ref().is_some_and(self_update::Updater::restart_after_close)
     }
     fn data_folder(&self) -> Option<(PathBuf, bool)> {
         self.data.clone().map(|d| (d, self.base.is_some()))
@@ -351,10 +360,10 @@ impl Services for Desktop {
         std::thread::spawn(move || {
             let mut n = notify_rust::Notification::new();
             n.summary(&title).body(&body).appname("Quatrelle");
-            // Windows names a toast after its app id (PowerShell's when none is given).
-            // (Portable: its name isn't written to the registry.)
+            // Windows names a toast after its app id (PowerShell's when none is given). A
+            // portable copy writes nothing to the registry: it uses an installed Quatrelle's.
             #[cfg(windows)]
-            if !portable && toast::registered() {
+            if (!portable && toast::registered()) || (portable && toast::installed()) {
                 n.app_id(toast::APP_ID);
             }
             if let Err(e) = n.show() {
@@ -486,6 +495,39 @@ struct App {
     /// Answering later launches on the same data folder (`single_instance.rs`).
     instance: Option<single_instance::Server>,
     native_wayland: bool,
+    /// Installs a downloaded update as Quatrelle closes.
+    updater: Option<self_update::Updater>,
+    /// The settings as last written, and when they were last looked at ([`App::keep_state`]).
+    saved: Vec<u8>,
+    looked: std::time::Instant,
+}
+
+/// How often changed settings are written while Quatrelle runs.
+const KEEP_STATE_EVERY: std::time::Duration = std::time::Duration::from_secs(5);
+
+impl App {
+    /// Write the settings when they've changed: a reminder dismissed or a sender blocked isn't
+    /// lost if Quatrelle is ended without closing (a crash, a power cut, a forced quit).
+    fn keep_state(&mut self, ctx: Option<&egui::Context>, force: bool) {
+        let since = self.looked.elapsed();
+        if !force && since < KEEP_STATE_EVERY {
+            // Something may have changed in this frame: look again when it's time, even if
+            // nothing else draws a frame by then.
+            if let Some(ctx) = ctx {
+                ctx.request_repaint_after(KEEP_STATE_EVERY.saturating_sub(since));
+            }
+            return;
+        }
+        self.looked = std::time::Instant::now();
+        let Some(p) = &self.state_path else { return };
+        let Ok(bytes) = serde_json::to_vec_pretty(&self.app.saved_state()) else { return };
+        if bytes != self.saved {
+            match quatrelle_engine::store::write_atomic(p, &bytes) {
+                Ok(()) => self.saved = bytes,
+                Err(e) => log::warn!("the settings weren't saved: {e}"),
+            }
+        }
+    }
 }
 
 impl eframe::App for App {
@@ -504,6 +546,7 @@ impl eframe::App for App {
             graphics::log_errors(&device);
         }
         self.app.ui(ui);
+        self.keep_state(Some(ui.ctx()), false);
         if let Some(path) = self.app.take_drag_out() {
             drag_out(frame, path);
         }
@@ -512,11 +555,13 @@ impl eframe::App for App {
         if let Some(server) = &self.instance {
             server.close();
         }
-        if let Some(p) = &self.state_path
-            && let Ok(bytes) = serde_json::to_vec_pretty(&self.app.saved_state())
+        // A test build downloaded and checked: installed now that Quatrelle closes.
+        if let Some(u) = &self.updater
+            && let Err(e) = u.install(u.restart_wanted())
         {
-            let _ = quatrelle_engine::store::write_atomic(p, &bytes);
+            log::warn!("updates: {e}");
         }
+        self.keep_state(None, true);
         // Issue #4: attachments handed to other apps, and pictures made of them, go with
         // Quatrelle when it's portable or keeps an account online only (one still open in an
         // app stays until that app lets it go).
@@ -562,14 +607,14 @@ fn main() -> eframe::Result {
         .or_else(|| portable.dir.clone())
         .or_else(quatrelle_engine::store::default_root);
     let root = data.map(|d| if sample { d.join("sample") } else { d });
-    // One MailCraft per data folder: started again, it brings the running one forward and leaves,
+    // One Quatrelle per data folder: started again, it brings the running one forward and leaves,
     // before it moves, logs or opens anything there (`single_instance.rs`).
     let instance = match root.as_deref().map(single_instance::claim) {
         Some(single_instance::Claim::Shown) => {
             say(if args.iter().any(|a| a == "--cmd") {
-                "MailCraft is already running: its window is brought forward (--cmd is run only by the first)"
+                "Quatrelle is already running: its window is brought forward (--cmd is run only by the first)"
             } else {
-                "MailCraft is already running: its window is brought forward"
+                "Quatrelle is already running: its window is brought forward"
             });
             return Ok(());
         }
@@ -629,6 +674,8 @@ fn main() -> eframe::Result {
     // A release build's commit, so File › About can tell its test build from a later one.
     session.build_sha = option_env!("QUATRELLE_BUILD_SHA").filter(|s| !s.trim().is_empty()).map(str::to_string);
     let state_path = root.as_ref().map(|r| r.join("ui.json"));
+    // Test builds update themselves (`self_update.rs`); not the sample mailbox's run.
+    let updater = root.clone().filter(|_| !sample).and_then(|r| self_update::Updater::start(r, session.build_sha.clone()));
 
     // The main window opens where it was, at the size it was, maximized if it was.
     let main_place: Option<quatrelle_ui_egui::WindowPlace> = state_path
@@ -663,7 +710,7 @@ fn main() -> eframe::Result {
     // A window that can't open says why, rather than the app leaving without a word (or
     // staying in the background); a panic on the way is caught for that too.
     let ran = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        run(options, sample, store, session, desktop_data, base, moved, state_path, cmd_args, instance)
+        run(options, sample, store, session, desktop_data, base, moved, state_path, cmd_args, instance, updater)
     }));
     let failed = match ran {
         Ok(Ok(())) => return Ok(()),
@@ -749,6 +796,7 @@ fn run(
     state_path: Option<PathBuf>,
     cmd_args: Vec<String>,
     instance: Option<single_instance::Server>,
+    updater: Option<self_update::Updater>,
 ) -> eframe::Result {
     eframe::run_native(
         "Quatrelle",
@@ -783,6 +831,7 @@ fn run(
                     style,
                     #[cfg(windows)]
                     portable: app_portable,
+                    updater: updater.clone(),
                     ..Default::default()
                 }),
             );
@@ -839,7 +888,17 @@ fn run(
             let native_wayland = cfg!(all(unix, not(target_os = "macos")))
                 && std::env::var_os("WAYLAND_DISPLAY").is_some_and(|v| !v.is_empty())
                 && display::choose_from_env() != display::Choice::X11;
-            Ok(Box::new(App { app, state_path, gpu, frames: 0, instance, native_wayland }))
+            Ok(Box::new(App {
+                app,
+                state_path,
+                gpu,
+                frames: 0,
+                instance,
+                native_wayland,
+                updater,
+                saved: Vec::new(),
+                looked: std::time::Instant::now(),
+            }))
         }),
     )
 }

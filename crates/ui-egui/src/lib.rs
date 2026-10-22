@@ -29,12 +29,14 @@ mod dialogs;
 pub mod i18n;
 pub mod icons;
 mod list;
+pub mod motion;
 mod nav;
 mod notes;
 mod organize;
 mod people;
 mod pim_dialogs;
 mod reading;
+mod reminders;
 mod rich_edit;
 mod spellcheck;
 pub mod theme;
@@ -75,6 +77,20 @@ pub(crate) fn compose_inline(c: &quatrelle_engine::Compose, ctx: &egui::Context)
     !c.window || ctx.embed_viewports()
 }
 
+/// The ribbon's height (its tabs and its row of buttons), the same whichever tab is shown.
+const RIBBON_H: f32 = 65.0;
+
+/// Put message `id`'s editor at hand (`st.editor`), keeping the one there for later.
+pub(crate) fn use_editor(st: &mut UiState, id: u64) {
+    if st.editor.as_ref().is_some_and(|e| e.id == id) {
+        return;
+    }
+    if let Some(e) = st.editor.take() {
+        st.editors.insert(e.id, e);
+    }
+    st.editor = st.editors.remove(&id);
+}
+
 /// The network side: the desktop app plugs in `quatrelle-net`'s worker pool.
 pub trait Backend {
     fn submit(&mut self, job: Job);
@@ -101,6 +117,15 @@ pub trait Services {
     fn save_path(&mut self, suggested: &str) -> Option<PathBuf>;
     /// Open a file with the system's default app.
     fn open_path(&mut self, path: &std::path::Path) -> Result<(), String>;
+    /// A newer Quatrelle downloaded and waiting to be installed (its tag), in a build that
+    /// updates itself. The default: none.
+    fn pending_update(&mut self) -> Option<String> {
+        None
+    }
+    /// Install the waiting version as Quatrelle closes, then open it. False when there's none.
+    fn restart_to_update(&mut self) -> bool {
+        false
+    }
     /// Show a desktop notification (new mail). The default does nothing.
     fn notify(&mut self, _title: &str, _body: &str) {}
     /// Where an installed Craft app is (`pdfcraft`, `wordcraft`…), if it is.
@@ -233,10 +258,15 @@ pub enum RibbonTab {
 /// Something a pane asks for; run after drawing so panes only borrow what they read.
 pub enum Action {
     Run(&'static str, Value),
-    /// Close Quatrelle though online-only accounts hold unsent mail or changes.
+    /// Close Quatrelle though online-only accounts hold unsent mail or changes (issue #4).
     CloseAnyway,
+    /// Close, install the downloaded version, and open it.
+    RestartToUpdate,
     Open(MessageKey),
     Dialog(Dialog),
+    /// An action from one message's window: done to that message (several can be written at
+    /// once, each in a window of its own).
+    ForCompose(u64, Box<Action>),
     OpenAttachment(usize),
     SaveAttachment(usize),
     AttachFiles,
@@ -496,10 +526,14 @@ fn forget_open(ctx: &egui::Context, viewport: egui::ViewportId) {
 pub struct UiState {
     /// Where the main window, the last message window and the last compose window were.
     pub places: std::collections::BTreeMap<String, WindowPlace>,
-    /// Closing was confirmed though it loses online-only accounts' unsent mail; and the window
-    /// is to close on the next frame.
+    /// Closing was confirmed though it loses online-only accounts' unsent mail (issue #4); and
+    /// the window is to close on the next frame.
     pub closing_anyway: bool,
     pub close_now: bool,
+    /// A newer Quatrelle downloaded and waiting (its tag), from [`Services::pending_update`].
+    pub pending_update: Option<String>,
+    /// Calendar reminders come due ([`reminders`]).
+    pub reminders: reminders::State,
     pub tokens: Tokens,
     /// The platform has files (temporary ones for other apps): not in the browser.
     pub has_files: bool,
@@ -525,10 +559,6 @@ pub struct UiState {
     search_due: Option<f64>,
     /// Why the message being written couldn't be sent or saved, shown over it until dismissed.
     pub compose_alert: Option<String>,
-    /// Reminders already rung (`uid@start`), so one rings once however often it's looked at.
-    reminded: std::collections::HashSet<String>,
-    /// When the reminders were last looked at.
-    reminders_checked: i64,
     /// The attachment shown in place of its message's text (a click on its chip), as Outlook
     /// previews attachments in the reading pane.
     pub attachment_view: Option<(MessageKey, usize)>,
@@ -542,6 +572,9 @@ pub struct UiState {
     /// Where the ribbon was last drawn (a click on the Search tab's buttons takes the focus
     /// from the box, and mustn't close the tab).
     ribbon_rect: Option<egui::Rect>,
+    /// The ribbon's buttons from this one on go without their labels: it didn't fit the window
+    /// ([`widgets::RibbonFit`]).
+    ribbon_icons_from: usize,
     pub dialog: Option<Dialog>,
     previews: HashMap<(MessageKey, usize), Option<egui::TextureHandle>>,
     /// Decoded web pictures, by address.
@@ -551,8 +584,12 @@ pub struct UiState {
     scroll_to_focus: bool,
     /// The named font families the UI uses are registered (`install_fonts`).
     fonts_ready: bool,
-    /// The compose form last shown, to focus its first field when a new one opens.
-    pub(crate) compose_shown: Option<u64>,
+    /// The messages being written that have been shown, to focus a new one's first field once.
+    pub(crate) compose_shown: std::collections::HashSet<u64>,
+    /// The editors of the messages being written other than the one acting now (`editor`).
+    pub(crate) editors: HashMap<u64, rich_edit::Editor>,
+    /// The message whose window a dialog for messages belongs to (Save changes, Address Book).
+    pub(crate) dialog_for: Option<u64>,
     /// The body's cursor (characters), where pictures go.
     /// The message editor's state (selection, undo, what's typed next).
     pub(crate) editor: Option<rich_edit::Editor>,
@@ -654,6 +691,8 @@ impl MailApp {
                 tokens: Tokens::light(),
                 closing_anyway: false,
                 close_now: false,
+                pending_update: None,
+                reminders: reminders::State::default(),
                 has_files,
                 data_folder,
                 pending_move,
@@ -668,13 +707,12 @@ impl MailApp {
                 search_cursor_end: false,
                 search_due: None,
                 compose_alert: None,
-                reminded: Default::default(),
-                reminders_checked: 0,
                 attachment_view: None,
                 attachment_selected: None,
                 attachments_active: false,
                 attachment_hovered: false,
                 ribbon_rect: None,
+                ribbon_icons_from: usize::MAX,
                 dialog: None,
                 previews: HashMap::new(),
                 web_pictures: HashMap::new(),
@@ -682,7 +720,9 @@ impl MailApp {
                 seen_notices: seen,
                 scroll_to_focus: false,
                 fonts_ready: false,
-                compose_shown: None,
+                compose_shown: Default::default(),
+                editors: HashMap::new(),
+                dialog_for: None,
                 editor: None,
                 suggest_field: None,
                 suggest_index: 0,
@@ -824,27 +864,6 @@ impl MailApp {
     }
 
     /// The whole window.
-    /// Ring the reminders that have come due, in the system's own popup, as Outlook's popup does:
-    /// the window is otherwise only drawn when something happens, so it's woken four times a
-    /// minute to look. Each appointment rings once (`uid@start`), and only from fifteen days
-    /// before its start (a reminder can be that long) to a day after it.
-    fn ring_reminders(&mut self, ctx: &egui::Context) {
-        ctx.request_repaint_after(std::time::Duration::from_secs(30));
-        let now = self.session.clock.now + i64::from(self.session.clock.offset);
-        if now.saturating_sub(self.ui.reminders_checked) < 30 {
-            return;
-        }
-        self.ui.reminders_checked = now;
-        let title = i18n::as_written(|| tl!("Reminder").to_string());
-        for r in self.session.reminders_due(now) {
-            if !self.ui.reminded.insert(r.key.clone()) {
-                continue;
-            }
-            let body = if r.location.is_empty() { r.summary.clone() } else { format!("{}\n{}", r.summary, r.location) };
-            self.services.notify(&title, &body);
-        }
-    }
-
     pub fn ui(&mut self, ui: &mut Ui) {
         // The switch in Options, wherever it was changed from (a command, another window).
         spellcheck::set_on(self.session.prefs.spell_check);
@@ -861,19 +880,27 @@ impl MailApp {
             ctx.request_repaint();
             return;
         }
-        self.ring_reminders(&ctx);
         self.apply_language(&ctx);
+        motion::set_enabled(&ctx, self.session.prefs.animations);
         if self.pump() {
             ctx.request_repaint();
         }
+        self.settle_composes(&ctx);
         self.announce(&ctx);
+        self.ui.pending_update = self.services.pending_update();
         // Closing with online-only accounts' unsent mail or changes held in memory: ask first.
         if self.ui.close_now {
             self.ui.close_now = false;
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         } else if ctx.input(|i| i.viewport().close_requested()) && !self.ui.closing_anyway {
+            // Messages being written: kept as drafts if wanted, as Outlook asks; never lost.
+            let written = self.session.all_composes().filter(|c| self.session.written(c) && !c.sending).count();
             let (unsent, changes) = self.session.lost_on_close();
-            if unsent + changes > 0 {
+            if written > 0 {
+                ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+                self.ui.dialog = Some(Dialog::SaveOnClose(written));
+                self.ui.dialog_for = None;
+            } else if unsent + changes > 0 {
                 ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
                 self.ui.dialog = Some(Dialog::LostOnClose { unsent, changes });
             }
@@ -882,6 +909,7 @@ impl MailApp {
         if let Some((q, _)) = &self.session.search
             && self.ui.search_text.is_empty()
             && !ctx.text_edit_focused()
+            && self.session.open_search_folder_name().is_none()
         {
             self.ui.search_text = q.clone();
         }
@@ -946,8 +974,22 @@ impl MailApp {
             egui::Panel::top("ribbon")
                 .frame(egui::Frame::new().fill(t.chrome).inner_margin(Margin::symmetric(8, 4)).stroke(egui::Stroke::new(1.0, t.border)))
                 .show(ui, |ui| {
+                    // Too wide for the window: its last buttons lose their labels, as few as it
+                    // takes (worked out from this frame for the next).
+                    // One height on every tab: switching tabs doesn't nudge the window below.
+                    ui.set_min_height(RIBBON_H);
+                    let id = widgets::ribbon_fit_id();
+                    let start =
+                        widgets::RibbonFit { active: true, icons_from: self.ui.ribbon_icons_from, right: ui.max_rect().left(), ..Default::default() };
+                    ui.ctx().data_mut(|d| d.insert_temp(id, start));
                     self.ribbon(ui, &mut acts);
+                    let fit = ui.ctx().data_mut(|d| std::mem::take(d.get_temp_mut_or_default::<widgets::RibbonFit>(id)));
                     self.ui.ribbon_rect = Some(ui.min_rect());
+                    let from = fit.fit(ui.max_rect().right());
+                    if from != self.ui.ribbon_icons_from.min(fit.count) {
+                        self.ui.ribbon_icons_from = from;
+                        ui.ctx().request_repaint();
+                    }
                 });
         }
 
@@ -963,43 +1005,44 @@ impl MailApp {
             // the reading pane on the left.
             let rtl = i18n::current().rtl();
             let start = |id: &'static str| if rtl { egui::Panel::right(id) } else { egui::Panel::left(id) };
-            // Minimized: a narrow strip with the way back and the modules, as Outlook's.
-            let minimized = self.session.prefs.folder_pane_minimized;
-            if minimized {
-                start("nav-min")
-                    .resizable(false)
-                    .exact_size(32.0)
-                    .frame(egui::Frame::new().fill(t.chrome).inner_margin(Margin::symmetric(4, 8)))
-                    .show(ui, |ui| {
-                        ui.vertical_centered(|ui| {
-                            let chevron = if rtl { Icon::ChevronLeft } else { Icon::ChevronRight };
-                            if widgets::tiny_icon_button(ui, chevron, "Show the folder pane", &t).clicked() {
-                                acts.push(Action::Run("view.folderPane", json!({"minimized": false})));
-                            }
-                        });
-                    });
-            }
-            if !minimized {
-                start("nav")
-                    .resizable(true)
-                    .default_size(if module == Module::Mail { 230.0 } else { 260.0 })
-                    .size_range(170.0..=380.0)
-                    .frame(egui::Frame::new().fill(t.chrome).inner_margin(Margin::symmetric(6, 8)))
-                    .show(ui, |ui| {
-                        // Minimize, as Outlook's ‹ at the top of its folder pane.
-                        ui.with_layout(Layout::right_to_left(Align::Min), |ui| {
-                            let chevron = if rtl { Icon::ChevronRight } else { Icon::ChevronLeft };
-                            if widgets::tiny_icon_button(ui, chevron, "Minimize the folder pane", &t).clicked() {
-                                acts.push(Action::Run("view.folderPane", json!({"minimized": true})));
-                            }
-                        });
-                        match module {
-                            Module::Mail => nav::show(&self.session, &t, ui, &mut acts),
-                            Module::Calendar => calendar::nav(&self.session, &mut self.ui, ui, &mut acts),
-                            Module::People => people::nav(&self.session, &mut self.ui, ui, &mut acts),
-                            Module::Notes => notes::nav(&self.session, &mut self.ui, ui, &mut acts),
+            // Minimized: a narrow strip with the way back, as Outlook's (the modules are on the
+            // rail beside the ribbon). Between the two, the pane slides (or changes at once, with
+            // animations off).
+            let mut expanded = !self.session.prefs.folder_pane_minimized;
+            let strip =
+                start("nav-min").resizable(false).exact_size(32.0).frame(egui::Frame::new().fill(t.chrome).inner_margin(Margin::symmetric(4, 8)));
+            let full = start("nav")
+                .resizable(true)
+                .default_size(if module == Module::Mail { 230.0 } else { 260.0 })
+                .size_range(170.0..=380.0)
+                .frame(egui::Frame::new().fill(t.chrome).inner_margin(Margin::symmetric(6, 8)));
+            egui::Panel::show_switched(ui, &mut expanded, strip, full, |ui, wide| {
+                if !wide {
+                    ui.vertical_centered(|ui| {
+                        let chevron = if rtl { Icon::ChevronLeft } else { Icon::ChevronRight };
+                        if widgets::tiny_icon_button(ui, chevron, "Show the folder pane", &t).clicked() {
+                            acts.push(Action::Run("view.folderPane", json!({"minimized": false})));
                         }
                     });
+                    return;
+                }
+                // Minimize, as Outlook's ‹ at the top of its folder pane.
+                ui.with_layout(Layout::right_to_left(Align::Min), |ui| {
+                    let chevron = if rtl { Icon::ChevronRight } else { Icon::ChevronLeft };
+                    if widgets::tiny_icon_button(ui, chevron, "Minimize the folder pane", &t).clicked() {
+                        acts.push(Action::Run("view.folderPane", json!({"minimized": true})));
+                    }
+                });
+                match module {
+                    Module::Mail => nav::show(&self.session, &t, ui, &mut acts),
+                    Module::Calendar => calendar::nav(&self.session, &mut self.ui, ui, &mut acts),
+                    Module::People => people::nav(&self.session, &mut self.ui, ui, &mut acts),
+                    Module::Notes => notes::nav(&self.session, &mut self.ui, ui, &mut acts),
+                }
+            });
+            // Dragged narrower than it goes: minimized, as the button does.
+            if expanded == self.session.prefs.folder_pane_minimized {
+                acts.push(Action::Run("view.folderPane", json!({"minimized": !expanded})));
             }
             let pane = self.session.prefs.reading_pane;
             let list_frame = egui::Frame::new().fill(t.surface).stroke(egui::Stroke::new(1.0, t.border));
@@ -1061,7 +1104,7 @@ impl MailApp {
         }
 
         self.message_windows(&ctx, &mut acts);
-        self.compose_window(&ctx, &mut acts);
+        self.compose_windows(&ctx, &mut acts);
 
         // The address book reads the session's people.
         if let Some(Dialog::SelectNames(f)) = self.ui.dialog.as_mut()
@@ -1115,6 +1158,16 @@ impl MailApp {
             }
         }
         self.toasts(&ctx);
+        // Calendar reminders: the window, and the desktop told of each as it comes.
+        for r in reminders::refresh(&mut self.ui.reminders, &self.session, false) {
+            let start = quatrelle_engine::model::dates::civil(r.start, &self.session.clock);
+            let when = if r.all_day { String::new() } else { format!("{:02}:{:02}", start.hour, start.minute) };
+            self.services.notify(&r.summary, &if r.location.is_empty() { when } else { format!("{when} · {}", r.location) });
+        }
+        reminders::show(&ctx, &mut self.ui.reminders, &self.session, &t, &mut acts);
+        if reminders::showing(&self.ui.reminders) {
+            ctx.request_repaint_after(std::time::Duration::from_secs(15));
+        }
         // Video thumbnails the cards asked for.
         for (path, frame) in self.ui.video_frames.iter_mut().filter(|(_, f)| **f == VideoFrame::Pending) {
             *frame = self.services.video_frame(path);
@@ -1139,20 +1192,66 @@ impl MailApp {
         ctx.request_repaint_after(std::time::Duration::from_secs(if busy || self.ui.toast.is_some() { 1 } else { 20 }));
     }
 
-    /// The message being written, when it's in a window of its own (new mail, or popped out).
-    /// Closing the window keeps it in Drafts.
-    fn compose_window(&mut self, ctx: &egui::Context, acts: &mut Vec<Action>) {
-        let Some(c) = self.session.compose.as_ref().filter(|c| !compose_inline(c, ctx)) else { return };
+    /// Make message `id` the one acted on, with its editor (selection, undo) at hand.
+    fn use_compose(&mut self, id: u64) -> bool {
+        if !self.session.activate_compose(id) {
+            return false;
+        }
+        use_editor(&mut self.ui, id);
+        true
+    }
+
+    /// The message written in the main window, if any, made the one acted on (another's window
+    /// may have taken over last frame); editors of messages gone are dropped.
+    fn settle_composes(&mut self, ctx: &egui::Context) {
+        let live: std::collections::HashSet<u64> = self.session.all_composes().map(|c| c.id).collect();
+        self.ui.editors.retain(|id, _| live.contains(id));
+        self.ui.compose_shown.retain(|id| live.contains(id));
+        if self.ui.dialog_for.is_some_and(|id| !live.contains(&id)) {
+            self.ui.dialog_for = None;
+        }
+        let inline = self.session.all_composes().find(|c| compose_inline(c, ctx)).map(|c| c.id);
+        if let Some(id) = inline {
+            self.use_compose(id);
+        }
+    }
+
+    /// Each message being written in a window of its own (new mail, popped out, or set aside
+    /// when another was started), as Outlook keeps every one open. Closing one keeps it in Drafts.
+    fn compose_windows(&mut self, ctx: &egui::Context, acts: &mut Vec<Action>) {
+        let before = self.session.compose.as_ref().map(|c| c.id);
+        let ids: Vec<u64> = self.session.all_composes().filter(|c| !compose_inline(c, ctx)).map(|c| c.id).collect();
+        // A window opening goes a step down and right of those already open.
+        let open = ids.len().saturating_sub(1);
+        for id in ids {
+            if self.use_compose(id) {
+                let mut mine = Vec::new();
+                self.compose_window(ctx, open, &mut mine);
+                acts.extend(mine.into_iter().map(|a| Action::ForCompose(id, Box::new(a))));
+            }
+        }
+        if let Some(id) = before {
+            self.use_compose(id);
+        }
+    }
+
+    /// The window of the message acted on now, opening `n` steps down and right of the last
+    /// place (as many as are open already).
+    fn compose_window(&mut self, ctx: &egui::Context, n: usize, acts: &mut Vec<Action>) {
+        let Some(c) = self.session.compose.as_ref() else { return };
+        let mine = c.id;
         let t = self.ui.tokens;
         let subject = if c.subject.trim().is_empty() { tl!("Untitled").to_string() } else { c.subject.trim().to_string() };
         let id = egui::ViewportId::from_hash_of(("compose-window", c.id));
         let mut builder = egui::ViewportBuilder::default()
             .with_title(i18n::as_written(|| tf!("{subject} – Message", subject = subject)))
             .with_min_inner_size([520.0, 420.0]);
-        // Where the last one was, and its size: at its opening only (see `first_frame`).
+        // Where the last one was, and its size: at its opening only (see `first_frame`); each
+        // further one a step down and right.
         if first_frame(ctx, id) {
+            let step = 28.0 * (n % 8) as f32;
             builder = match self.ui.places.get("compose") {
-                Some(p) => p.apply(builder),
+                Some(p) => WindowPlace { x: p.x + step, y: p.y + step, ..*p }.apply(builder),
                 None => builder.with_inner_size([900.0, 720.0]),
             };
         }
@@ -1165,20 +1264,23 @@ impl MailApp {
             if let Some(p) = place {
                 st.places.insert("compose".into(), p);
             }
-            let mut mine: Vec<Action> = Vec::new();
+            let mut mine_acts: Vec<Action> = Vec::new();
             let mut closing = ui.input(|i| i.viewport().close_requested());
             // Something written: ask first, as Outlook does.
             if closing && session.compose_written() {
                 ui.ctx().send_viewport_cmd(egui::ViewportCommand::CancelClose);
                 st.dialog = Some(Dialog::SaveChanges);
+                st.dialog_for = Some(mine);
                 closing = false;
             }
             egui::CentralPanel::default().frame(egui::Frame::new().fill(t.surface)).show(ui, |ui| {
-                reading::compose_window(session, st, ui, &mut mine);
+                reading::compose_window(session, st, ui, &mut mine_acts);
             });
+            // A dialog for a message shows in that message's window only.
+            let here = st.dialog_for.is_none_or(|f| f == mine);
             if let Some(mut d) = st.dialog.take() {
-                if d.for_compose() {
-                    let keep = dialogs::show(ui.ctx(), &mut d, session, &t, &mut mine);
+                if d.for_compose() && here {
+                    let keep = dialogs::show(ui.ctx(), &mut d, session, &t, &mut mine_acts);
                     if keep && st.dialog.is_none() {
                         st.dialog = Some(d);
                     }
@@ -1186,7 +1288,7 @@ impl MailApp {
                     st.dialog = Some(d);
                 }
             }
-            acts.extend(mine);
+            acts.extend(mine_acts);
             closing
         });
         if close {
@@ -1370,16 +1472,31 @@ impl MailApp {
 
     fn act(&mut self, a: Action) {
         match a {
+            // Done to the message whose window asked; a dialog it opens shows there.
+            Action::ForCompose(id, inner) => {
+                if self.use_compose(id) {
+                    if matches!(*inner, Action::Dialog(ref d) if d.for_compose()) {
+                        self.ui.dialog_for = Some(id);
+                    }
+                    self.act(*inner);
+                }
+            }
             Action::CloseAnyway => {
                 self.ui.closing_anyway = true;
                 self.ui.close_now = true;
+            }
+            Action::RestartToUpdate => {
+                if self.services.restart_to_update() {
+                    self.ui.close_now = true;
+                }
             }
             Action::Run("attachment.preview", p) => match self.session.run("attachment.preview", &p) {
                 Ok(v) => self.ui.dialog = Some(Dialog::preview(&v, &self.session.clock)),
                 Err(e) => self.session.notice(e.to_string(), true),
             },
             Action::Run(id, p) => {
-                if id == "search.clear" {
+                // A Search Folder isn't a search typed in: the box is left empty.
+                if matches!(id, "search.clear" | "searchFolder.open") {
                     self.ui.search_text.clear();
                 }
                 self.run(id, p);
@@ -1518,6 +1635,10 @@ impl MailApp {
                 Ok(v) => {
                     if id == "contact.create" {
                         self.ui.person = v.get("uid").and_then(Value::as_str).map(str::to_string);
+                    }
+                    // A Search Folder made or changed opens: not a search typed in.
+                    if self.session.open_search_folder_name().is_some() {
+                        self.ui.search_text.clear();
                     }
                     self.ui.dialog = None;
                 }
@@ -1820,7 +1941,17 @@ impl MailApp {
             i.events
                 .iter()
                 .filter_map(|e| match e {
-                    egui::Event::Key { key, pressed: true, modifiers, .. } => Some((*key, *modifiers)),
+                    // The digit row by where it is: with Shift, or on a layout whose top row types
+                    // other characters (AZERTY), Ctrl+Shift+1 is still 1, not `!` or `&`.
+                    egui::Event::Key { key, physical_key, pressed: true, modifiers, .. } => {
+                        let digit = physical_key.filter(|p| {
+                            matches!(
+                                p,
+                                Key::Num0 | Key::Num1 | Key::Num2 | Key::Num3 | Key::Num4 | Key::Num5 | Key::Num6 | Key::Num7 | Key::Num8 | Key::Num9
+                            )
+                        });
+                        Some((digit.unwrap_or(*key), *modifiers))
+                    }
                     _ => None,
                 })
                 .collect()
@@ -2064,9 +2195,13 @@ impl MailApp {
                     .frame_when_inactive(false),
                 );
                 if on {
+                    // The underline glides from the tab left to the one chosen.
                     let rect = r.rect;
+                    let ctx = ui.ctx().clone();
+                    let left = motion::glide(&ctx, egui::Id::unique("ribbon-tab-left"), rect.left() + 6.0, motion::NORMAL);
+                    let right = motion::glide(&ctx, egui::Id::unique("ribbon-tab-right"), rect.right() - 6.0, motion::NORMAL);
                     ui.painter().line_segment(
-                        [egui::pos2(rect.left() + 6.0, rect.bottom() + 1.0), egui::pos2(rect.right() - 6.0, rect.bottom() + 1.0)],
+                        [egui::pos2(left, rect.bottom() + 1.0), egui::pos2(right, rect.bottom() + 1.0)],
                         egui::Stroke::new(2.0, t.accent),
                     );
                 }
@@ -2265,6 +2400,17 @@ impl MailApp {
                                 acts.push(Action::Run("mail.ignore", json!({})));
                                 ui.close();
                             }
+                            // Clean Up: what a later reply quotes in full goes to Deleted Items.
+                            ui.separator();
+                            let tip = tl!("Messages quoted in full by a later reply go to Deleted Items");
+                            if ui.add_enabled(enabled("mail.cleanUp"), egui::Button::new(tl!("Clean up conversation"))).on_hover_text(tip).clicked() {
+                                acts.push(Action::Run("mail.cleanUp", json!({})));
+                                ui.close();
+                            }
+                            if ui.add_enabled(enabled("folder.cleanUp"), egui::Button::new(tl!("Clean up folder"))).on_hover_text(tip).clicked() {
+                                acts.push(Action::Run("folder.cleanUp", json!({})));
+                                ui.close();
+                            }
                         });
                         if widgets::big_button(ui, Icon::Archive, "Archive", &t, enabled("mail.archive"))
                             .on_hover_text(tl!("Archive (Backspace)"))
@@ -2277,6 +2423,9 @@ impl MailApp {
                         if widgets::big_button(ui, Icon::Junk, jl, &t, enabled(jid)).clicked() {
                             acts.push(Action::Run(jid, json!({})));
                         }
+                        // The Junk drop-down: the sender's lists, as Outlook's.
+                        let r = widgets::big_more(ui, "Junk options", &t);
+                        egui::Popup::menu(&r).show(|ui| junk_menu(ui, s, acts));
                         groups.end(ui, &t, "Delete");
                         if widgets::big_button(ui, Icon::Move, "Move to", &t, enabled("mail.move"))
                             .on_hover_text(tl!("Move to a folder (Ctrl+Shift+V)"))
@@ -2295,6 +2444,10 @@ impl MailApp {
                             }
                         }
                         groups.end(ui, &t, "Respond");
+                        // Quick Steps: each done to the selection in one click (Ctrl+Shift+1…9).
+                        let r = widgets::big_button(ui, Icon::Steps, "Quick steps", &t, true);
+                        egui::Popup::menu(&r).show(|ui| quick_steps_menu(ui, s, acts));
+                        groups.end(ui, &t, "Quick steps");
                         let first_unread = s.selected().first().is_some_and(|m| !m.flags.seen);
                         let (ricon, rlabel) = if first_unread { (Icon::Read, "Mark read") } else { (Icon::Unread, "Mark unread") };
                         if widgets::big_button(ui, ricon, rlabel, &t, enabled("mail.toggleRead"))
@@ -2514,6 +2667,7 @@ impl MailApp {
         let t = self.ui.tokens;
         let s = &self.session;
         let mut again: Option<String> = None;
+        let mut restart = false;
         ui.horizontal_centered(|ui| {
             // The items of what's shown: the list's mail, or (in People) the contacts.
             if s.module == Module::People {
@@ -2539,6 +2693,14 @@ impl MailApp {
             }
             if s.prefs.work_offline {
                 ui.label(RichText::new(tl!("Working offline")).color(t.warn).small());
+            }
+            // A test build downloaded: installed as Quatrelle closes, or now.
+            if let Some(tag) = &self.ui.pending_update {
+                let version = tag.trim_start_matches('v');
+                let hint = tf!("Quatrelle {version} is downloaded. It installs when you close Quatrelle.", version = version);
+                if ui.link(RichText::new(tl!("Restart to update")).color(t.accent).small()).on_hover_text(hint).clicked() {
+                    restart = true;
+                }
             }
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 let dot = |ui: &mut Ui, color: egui::Color32| {
@@ -2596,6 +2758,9 @@ impl MailApp {
         if let Some(id) = again {
             self.sign_in_again(&id);
         }
+        if restart && self.services.restart_to_update() {
+            self.ui.close_now = true;
+        }
     }
 
     fn toasts(&mut self, ctx: &egui::Context) {
@@ -2614,9 +2779,27 @@ impl MailApp {
             return;
         }
         let t = self.ui.tokens;
-        egui::Area::new(egui::Id::unique("toast")).anchor(egui::Align2::RIGHT_BOTTOM, vec2(-16.0, -36.0)).order(egui::Order::Foreground).show(
-            ctx,
-            |ui| {
+        // In: up from a little below, settling; out: fading over its last moments.
+        let since = (now - at) as f32;
+        let (enter, leave) = if motion::enabled(ctx) {
+            (
+                motion::decelerate((since / motion::GENTLE).clamp(0.0, 1.0)),
+                1.0 - motion::accelerate(((since - (ttl as f32 - motion::GENTLE)) / motion::GENTLE).clamp(0.0, 1.0)),
+            )
+        } else {
+            (1.0, 1.0)
+        };
+        if enter < 1.0 || leave < 1.0 {
+            ctx.request_repaint();
+        } else {
+            ctx.request_repaint_after(std::time::Duration::from_secs_f64((at + ttl - motion::GENTLE as f64 - now).max(0.0)));
+        }
+        egui::Area::new(egui::Id::unique("toast"))
+            .anchor(egui::Align2::RIGHT_BOTTOM, vec2(-16.0, -36.0 + 14.0 * (1.0 - enter)))
+            .order(egui::Order::Foreground)
+            .fade_in(false)
+            .show(ctx, |ui| {
+                ui.multiply_opacity(enter.min(leave));
                 egui::Frame::new()
                     .fill(if error { t.danger } else { t.text })
                     .corner_radius(8)
@@ -2627,8 +2810,7 @@ impl MailApp {
                         // Notices from the engine are English; the ones with a fixed text have a translation.
                         ui.label(RichText::new(tl!(&text)).color(if error { Color32::WHITE } else { t.surface }));
                     });
-            },
-        );
+            });
     }
 
     /// Preferences and theme for the app to save.
@@ -2817,9 +2999,66 @@ fn module_rail(ui: &mut Ui, t: &Tokens, module: Module, acts: &mut Vec<Action>) 
 
 /// The list's title in the interface language.
 pub(crate) fn view_title(s: &Session) -> String {
+    if let Some(name) = s.open_search_folder_name() {
+        return name.to_string();
+    }
     match &s.search {
         Some((q, _)) => tf!("Results for “{query}”", query = q),
         None => i18n::tc("folder", &s.view_title()).to_string(),
+    }
+}
+
+/// The Quick Steps menu: each step (done to the selection), then making and changing them.
+pub(crate) fn quick_steps_menu(ui: &mut egui::Ui, s: &Session, acts: &mut Vec<Action>) {
+    let has = !s.selection.is_empty();
+    if s.prefs.quick_steps.is_empty() {
+        ui.label(RichText::new(tl!("No Quick Steps yet.")).weak());
+    }
+    for (i, q) in s.prefs.quick_steps.iter().enumerate() {
+        let mut b = egui::Button::new(q.name.as_str());
+        if i < 9 {
+            b = b.shortcut_text(format!("Ctrl+Shift+{}", i + 1));
+        }
+        if ui.add_enabled(has, b).clicked() {
+            acts.push(Action::Run("quickStep.run", json!({"index": i})));
+            ui.close();
+        }
+    }
+    ui.separator();
+    if ui.button(tl!("New Quick Step…")).clicked() {
+        acts.push(Action::Dialog(Dialog::QuickStep(Box::new(crate::dialogs::QuickStepForm::new(s)))));
+        ui.close();
+    }
+    if !s.prefs.quick_steps.is_empty() {
+        ui.menu_button(tl!("Edit a Quick Step"), |ui| {
+            for q in &s.prefs.quick_steps {
+                if ui.button(q.name.as_str()).clicked() {
+                    acts.push(Action::Dialog(Dialog::QuickStep(Box::new(crate::dialogs::QuickStepForm::edit(s, q)))));
+                    ui.close();
+                }
+            }
+        });
+    }
+}
+
+/// The Junk menu: block the selection's senders, or never block them (or their domain), and
+/// the lists themselves (File › Options).
+pub(crate) fn junk_menu(ui: &mut egui::Ui, s: &Session, acts: &mut Vec<Action>) {
+    let has = !s.selection.is_empty();
+    for (id, label, tip) in [
+        ("junk.blockSender", "Block sender", "Their mail goes to Junk Email from now on"),
+        ("junk.neverBlockSender", "Never block sender", "Their mail is never treated as junk"),
+        ("junk.neverBlockDomain", "Never block sender's domain", "Mail from anyone at their domain is never treated as junk"),
+    ] {
+        if ui.add_enabled(has, egui::Button::new(tl!(label))).on_hover_text(tl!(tip)).clicked() {
+            acts.push(Action::Run(id, json!({})));
+            ui.close();
+        }
+    }
+    ui.separator();
+    if ui.button(tl!("Junk Email options…")).clicked() {
+        acts.push(Action::Backstage(backstage::Page::Options));
+        ui.close();
     }
 }
 

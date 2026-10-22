@@ -1003,7 +1003,6 @@ month	May	5月
 	Online only: {email}	仅联机：{email}
 	New message	新邮件
 	Open Quatrelle to read it.	打开 Quatrelle 阅读。
-	Its mail is read from the server and held in memory while Quatrelle runs; nothing of it is written to this computer. Each message downloads when you open it. Mail waiting to be sent, changes made while offline, and calendar items, contacts and notes kept only in Quatrelle are lost when it closes.	其邮件从服务器读取，并在 Quatrelle 运行期间仅保存在内存中；不会写入此电脑。每封邮件在打开时下载。等待发送的邮件、脱机时所做的更改，以及仅保存在 Quatrelle 中的日历项、联系人和便笺，会在关闭时丢失。
 	Portable: everything is kept in QuatrelleData beside Quatrelle, and passwords only until it closes.	便携版：所有内容都保存在 Quatrelle 旁边的 QuatrelleData 中，密码仅保留到关闭为止。
 	When it starts	开始时
 	1 minute before	1 分钟前
@@ -1030,3 +1029,94 @@ month	May	5月
 	{n} more on the server	服务器上还有 {n} 封
 	Changes not yet on the server: {n}	尚未同步到服务器的更改：{n}
 	Messages waiting to be sent: {n}	等待发送的邮件：{n}
+	Mail older than what's kept here is only on the server.	比此处保留的更早的邮件仅在服务器上。
+	Search the server	搜索服务器
+	Searching the server…	正在搜索服务器…
+	The server found {n}	服务器找到 {n} 封
+	{day} {month}	{month}{day}日
+	Restart to update	重新启动以更新
+	Quatrelle {version} is downloaded. It installs when you close Quatrelle.	已下载 Quatrelle {version}。关闭 Quatrelle 时将安装。
+	1 minute	1 分钟
+	{n} minutes	{n} 分钟
+	1 hour	1 小时
+	{n} hours	{n} 小时
+	1 day	1 天
+	{n} days	{n} 天
+	1 week	1 周
+	{n} weeks	{n} 周
+	0 minutes before start	开始前 0 分钟
+	1 Reminder	1 个提醒
+	{n} Reminders	{n} 个提醒
+	Click Snooze to be reminded again in:	单击“推迟”，在以下时间后再次提醒:
+	Dismiss	关闭
+	Dismiss All	全部关闭
+	Open Item	打开项目
+	Overdue	已过期
+	Now	现在
+	In {n} minutes	{n} 分钟后
+	In {n} hours	{n} 小时后
+	In {n} days	{n} 天后
+	Junk	垃圾邮件
+	Junk options	垃圾邮件选项
+	Junk Email options…	垃圾邮件选项…
+	Block sender	阻止发件人
+	Never block sender	从不阻止发件人
+	Never block sender's domain	从不阻止发件人的域
+	Their mail goes to Junk Email from now on	今后其邮件将进入垃圾邮件
+	Their mail is never treated as junk	其邮件永远不会被视为垃圾邮件
+	Mail from anyone at their domain is never treated as junk	来自该域任何人的邮件永远不会被视为垃圾邮件
+	Blocked senders	阻止的发件人
+	Safe senders	安全发件人
+	Mail from these addresses and domains goes to Junk Email as it arrives.	来自这些地址和域的邮件在到达时进入垃圾邮件。
+	Mail from these addresses and domains is never treated as junk, and its pictures load.	来自这些地址和域的邮件永远不会被视为垃圾邮件，其图片会加载。
+	name@example.com or @example.com	name@example.com 或 @example.com
+	And {n} more	还有 {n} 个
+	Clean up conversation	清理对话
+	Clean up folder	清理文件夹
+	Messages quoted in full by a later reply go to Deleted Items	被后续答复完整引用的邮件将移至“已删除邮件”
+	No conversations to clean up	没有要清理的对话
+	Nothing to clean up: no message is quoted in full by a later reply	没有要清理的内容: 没有邮件被后续答复完整引用
+	Search Folders	搜索文件夹
+	New Search Folder…	新建搜索文件夹…
+	New Search Folder	新建搜索文件夹
+	Edit Search Folder	编辑搜索文件夹
+	Customize this Search Folder…	自定义此搜索文件夹…
+	Delete Search Folder	删除搜索文件夹
+	Shows the mail it finds in every folder, except Deleted Items and Junk Email.	显示在除“已删除邮件”和“垃圾邮件”以外的所有文件夹中找到的邮件。
+	Show	显示
+	From these people (addresses or names, separated by commas)	来自以下人员(地址或姓名，以逗号分隔)
+	Search for	搜索
+	Unread mail	未读邮件
+	Mail flagged for follow up	标记为待办的邮件
+	Important mail	重要邮件
+	Categorized mail	已分类的邮件
+	Mail with attachments	带附件的邮件
+	Large mail (over 100 KB)	大邮件(超过 100 KB)
+	Pinned mail	已固定的邮件
+	Mail from specific people	来自特定人员的邮件
+	Quick steps	快速步骤
+	No Quick Steps yet.	还没有快速步骤。
+	New Quick Step…	新建快速步骤…
+	New Quick Step	新建快速步骤
+	Edit a Quick Step	编辑快速步骤
+	Edit Quick Step	编辑快速步骤
+	Done to the selected mail in one click; the first nine also with Ctrl+Shift+1 to 9.	一键应用于所选邮件；前九个也可以使用 Ctrl+Shift+1 到 9。
+	Done	完成
+	Then move to	然后移动到
+	Don't move	不移动
+	Delete this Quick Step	删除此快速步骤
+	Date & time	日期和时间
+	Word count	字数统计
+	Words	字数
+	Characters (no spaces)	字符数(不计空格)
+	Characters (with spaces)	字符数(计空格)
+	Paragraphs	段落数
+	Lines	行数
+	Save the message you're writing?	保存正在撰写的邮件?
+	Save the messages you're writing?	保存正在撰写的邮件?
+	It's kept in Drafts if you save it.	保存后会保留在“草稿”中。
+	{n} messages are being written. They're kept in Drafts if you save them.	正在撰写 {n} 封邮件。保存后会保留在“草稿”中。
+	Don't save	不保存
+	Also being written:	其他正在撰写的邮件:
+	Play animations	播放动画
+	Hovers, selections and panes ease into place; off, everything changes at once	悬停、选择和窗格平滑过渡；关闭后一切立即变化

@@ -15,7 +15,8 @@
 //!   search QUERY                   search the cache (from:, subject:, has:attachment…)
 //!   send --to ADDR --subject S --body TEXT [--account ID] [--attach FILE]
 //!   commands                       every engine command, as JSON
-//!   run ID [JSON]                  run an engine command against the cache
+//!   run ID [JSON]                  run an engine command against the cache (its changes
+//!                                  to mail go to the server with the next `sync`)
 //!   --version                      print the version
 //! ```
 //!
@@ -35,6 +36,19 @@ use quatrelle_engine::model::{Event, Job, SyncStatus};
 use quatrelle_engine::store::Store;
 use quatrelle_net::worker::{MemoryCredentials, Pool};
 use serde_json::{Value, json};
+
+// Output that a closed pipe can't turn into a panic (`quatrelle-cli list | head` closes it
+// early; `println!` panicked there).
+macro_rules! outln {
+    ($($t:tt)*) => {{
+        let _ = writeln!(std::io::stdout(), $($t)*);
+    }};
+}
+macro_rules! errln {
+    ($($t:tt)*) => {{
+        let _ = writeln!(std::io::stderr(), $($t)*);
+    }};
+}
 
 struct Args {
     rest: Vec<String>,
@@ -76,7 +90,7 @@ fn password(prompt_for: &str) -> Result<String, String> {
     {
         return Ok(p);
     }
-    eprint!("Password for {prompt_for}: ");
+    let _ = write!(std::io::stderr(), "Password for {prompt_for}: ");
     let _ = std::io::stderr().flush();
     let mut line = String::new();
     std::io::stdin().lock().read_line(&mut line).map_err(|e| e.to_string())?;
@@ -109,15 +123,15 @@ fn drive(s: &mut Session, pool: &mut Pool, timeout: Duration, mut done: impl FnM
         let Some(e) = pool.wait(Duration::from_millis(250)) else { continue };
         match &e {
             Event::Status { status, .. } => match status {
-                SyncStatus::Connecting => eprintln!("connecting…"),
-                SyncStatus::Syncing { folder } => eprintln!("updating {}…", quatrelle_engine::model::utf7::decode(folder)),
-                SyncStatus::Online { .. } => eprintln!("up to date"),
-                SyncStatus::NeedsPassword { error } => eprintln!("sign-in failed: {error}"),
-                SyncStatus::Error { error } => eprintln!("error: {error}"),
+                SyncStatus::Connecting => errln!("connecting…"),
+                SyncStatus::Syncing { folder } => errln!("updating {}…", quatrelle_engine::model::utf7::decode(folder)),
+                SyncStatus::Online { .. } => errln!("up to date"),
+                SyncStatus::NeedsPassword { error } => errln!("sign-in failed: {error}"),
+                SyncStatus::Error { error } => errln!("error: {error}"),
                 SyncStatus::Offline => {}
             },
-            Event::Notice { message, .. } => eprintln!("note: {message}"),
-            Event::OpFailed { error, .. } => eprintln!("change refused: {error}"),
+            Event::Notice { message, .. } => errln!("note: {message}"),
+            Event::OpFailed { error, .. } => errln!("change refused: {error}"),
             _ => {}
         }
         let verdict = done(&e);
@@ -147,7 +161,7 @@ fn start(s: &mut Session, store: &Store, account: &str) -> Result<Pool, String> 
 }
 
 fn print(v: &Value) {
-    println!("{}", serde_json::to_string_pretty(v).unwrap_or_default());
+    outln!("{}", serde_json::to_string_pretty(v).unwrap_or_default());
 }
 
 /// `--version`: the version, plus the commit and date of release builds (packaging/common.sh).
@@ -163,7 +177,7 @@ fn run() -> Result<(), String> {
     // `args()` panics on an argument that isn't Unicode (a file name in another encoding).
     let raw: Vec<String> = std::env::args_os().skip(1).map(|a| a.to_string_lossy().into_owned()).collect();
     if raw.iter().any(|a| a == "--version" || a == "-V") {
-        println!("{}", version_line());
+        outln!("{}", version_line());
         return Ok(());
     }
     let args = Args { rest: raw };
@@ -180,7 +194,7 @@ fn run() -> Result<(), String> {
     if cmd == "sample" {
         let c = clock();
         let made = quatrelle_engine::sample::seed_if_empty_at(&store, c.now, i64::from(c.offset)).map_err(|e| e.to_string())?;
-        println!("{}", if made { format!("sample mailbox created in {}", root.display()) } else { "the data folder already has accounts".into() });
+        outln!("{}", if made { format!("sample mailbox created in {}", root.display()) } else { "the data folder already has accounts".into() });
         return Ok(());
     }
     let mut s = Session::open(Some(store.clone()), clock());
@@ -205,7 +219,7 @@ fn run() -> Result<(), String> {
             if args.opt("--imap").is_none() && args.opt("--smtp").is_none() && args.opt("--jmap").is_none() {
                 match quatrelle_net::autoconfig::discover(&email) {
                     Some(f) => {
-                        eprintln!("settings found: {}", f.source);
+                        errln!("settings found: {}", f.source);
                         p["imapHost"] = json!(f.config.imap.host);
                         p["imapPort"] = json!(f.config.imap.port);
                         p["imapSecurity"] = json!(f.config.imap.security.code());
@@ -216,7 +230,7 @@ fn run() -> Result<(), String> {
                             p["username"] = json!(f.config.username);
                         }
                     }
-                    None => eprintln!("no published settings for this domain: guessing (check with `accounts`)"),
+                    None => errln!("no published settings for this domain: guessing (check with `accounts`)"),
                 }
             }
             for (flag, host, port) in [("--imap", "imapHost", "imapPort"), ("--smtp", "smtpHost", "smtpPort")] {
@@ -241,9 +255,9 @@ fn run() -> Result<(), String> {
             drive(&mut s, &mut pool, timeout, |e| match e {
                 Event::Folders { folders, .. } if test && !folders_seen => {
                     folders_seen = true;
-                    println!("signed in; {} folders:", folders.len());
+                    outln!("signed in; {} folders:", folders.len());
                     for f in folders {
-                        println!("  {:<10} {}", f.role.code(), quatrelle_engine::model::utf7::decode(&f.path));
+                        outln!("  {:<10} {}", f.role.code(), quatrelle_engine::model::utf7::decode(&f.path));
                     }
                     Some(Ok(()))
                 }
@@ -269,14 +283,14 @@ fn run() -> Result<(), String> {
             }
             let limit = args.opt("--limit").and_then(|l| l.parse::<u64>().ok()).unwrap_or(30);
             let r = s.run("list.messages", &json!({"limit": limit})).map_err(|e| e.to_string())?;
-            println!("{} ({} messages)", r["view"].as_str().unwrap_or(""), r["total"]);
+            outln!("{} ({} messages)", r["view"].as_str().unwrap_or(""), r["total"]);
             for m in r["messages"].as_array().into_iter().flatten() {
                 let mark = if m["unread"].as_bool() == Some(true) { "●" } else { " " };
                 let flag = if m["flagged"].as_bool() == Some(true) { "⚑" } else { " " };
                 let att = if m["attachments"].as_bool() == Some(true) { "📎" } else { "  " };
                 let when = full_time(m["date"].as_i64().unwrap_or(0), &s.clock);
-                println!("{mark}{flag}{att} {when}  {:<28}  {}", m["from"].as_str().unwrap_or(""), m["subject"].as_str().unwrap_or(""));
-                println!("      key: {}", m["key"].as_str().unwrap_or(""));
+                outln!("{mark}{flag}{att} {when}  {:<28}  {}", m["from"].as_str().unwrap_or(""), m["subject"].as_str().unwrap_or(""));
+                outln!("      key: {}", m["key"].as_str().unwrap_or(""));
             }
         }
         "read" => {
@@ -295,31 +309,25 @@ fn run() -> Result<(), String> {
                 })?;
                 r = s.run("message.read", &json!({})).map_err(|e| e.to_string())?;
             }
-            println!("From:    {}", r["from"].as_str().unwrap_or(""));
-            println!("To:      {}", r["to"].as_str().unwrap_or(""));
+            outln!("From:    {}", r["from"].as_str().unwrap_or(""));
+            outln!("To:      {}", r["to"].as_str().unwrap_or(""));
             if r["cc"].as_str().is_some_and(|c| !c.is_empty()) {
-                println!("Cc:      {}", r["cc"].as_str().unwrap_or(""));
+                outln!("Cc:      {}", r["cc"].as_str().unwrap_or(""));
             }
-            println!("Date:    {}", full_time(r["date"].as_i64().unwrap_or(0), &s.clock));
-            println!("Subject: {}", r["subject"].as_str().unwrap_or(""));
+            outln!("Date:    {}", full_time(r["date"].as_i64().unwrap_or(0), &s.clock));
+            outln!("Subject: {}", r["subject"].as_str().unwrap_or(""));
             for a in r["attachments"].as_array().into_iter().flatten() {
-                println!(
-                    "Attached: [{}] {} ({}, {} bytes)",
-                    a["index"],
-                    a["name"].as_str().unwrap_or(""),
-                    a["mime"].as_str().unwrap_or(""),
-                    a["size"]
-                );
+                outln!("Attached: [{}] {} ({}, {} bytes)", a["index"], a["name"].as_str().unwrap_or(""), a["mime"].as_str().unwrap_or(""), a["size"]);
             }
-            println!("\n{}", r["text"].as_str().unwrap_or(""));
+            outln!("\n{}", r["text"].as_str().unwrap_or(""));
         }
         "search" => {
             let q = args.positional(1).ok_or("search QUERY")?;
             let r = s.run("search.run", &json!({"query": q})).map_err(|e| e.to_string())?;
-            println!("{} results", r["results"]);
+            outln!("{} results", r["results"]);
             let r = s.run("list.messages", &json!({"limit": 50})).map_err(|e| e.to_string())?;
             for m in r["messages"].as_array().into_iter().flatten() {
-                println!(
+                outln!(
                     "{}  {:<28}  {}\n      key: {}",
                     full_time(m["date"].as_i64().unwrap_or(0), &s.clock),
                     m["from"].as_str().unwrap_or(""),
@@ -349,7 +357,7 @@ fn run() -> Result<(), String> {
                 Event::SendFailed { error, .. } => Some(Err(error.clone())),
                 _ => None,
             })?;
-            println!("sent");
+            outln!("sent");
         }
         "run" => {
             let id = args.positional(1).ok_or("run ID [JSON]")?;
@@ -358,24 +366,66 @@ fn run() -> Result<(), String> {
                 None => json!({}),
             };
             print(&s.run(&id, &params).map_err(|e| e.to_string())?);
-            let jobs = s.take_jobs();
-            if !jobs.is_empty() {
-                eprintln!("{} network job(s) queued (they run in the app or with `sync`)", jobs.len());
+            let (queued, other) = keep_changes(&store, s.take_jobs())?;
+            if queued > 0 {
+                errln!("{queued} change(s) queued for the server: `sync` sends them");
+            }
+            if other > 0 {
+                errln!("{other} other network job(s) skipped: they run in the app");
             }
         }
         _ => {
-            println!("{}", include_str!("help.txt"));
+            outln!("{}", include_str!("help.txt"));
         }
     }
     Ok(())
+}
+
+/// Changes to mail (moves, flags, deletions, folders) kept as the app keeps them: made in the
+/// cache and queued for the server, which the next `sync` sends (they were dropped before).
+/// How many were kept, and how many other jobs (sending, fetching) were left to the app.
+fn keep_changes(store: &Store, jobs: Vec<Job>) -> Result<(usize, usize), String> {
+    let (mut queued, mut other) = (0, 0);
+    for job in jobs {
+        match job {
+            Job::Apply { account, op } => {
+                store.apply_op(&account, &op).map_err(|e| e.to_string())?;
+                store.add_op(&account, op).map_err(|e| e.to_string())?;
+                queued += 1;
+            }
+            _ => other += 1,
+        }
+    }
+    Ok((queued, other))
 }
 
 fn main() -> ExitCode {
     match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
-            eprintln!("error: {e}");
+            errln!("error: {e}");
             ExitCode::FAILURE
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use quatrelle_engine::model::job::Op;
+    use quatrelle_engine::model::{Flag, MessageKey};
+
+    /// A change made with `run` waits for `sync` instead of being dropped.
+    #[test]
+    fn changes_made_with_run_are_kept_for_sync() {
+        let dir = std::env::temp_dir().join(format!("quatrelle-cli-keep-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let store = Store::open(&dir).unwrap();
+        let key = MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 1, uid: 7 };
+        let op = Op::SetFlag { keys: vec![key], flag: Flag::Flagged, on: true };
+        let jobs = vec![Job::Apply { account: "a1".into(), op: op.clone() }, Job::SyncAll { account: "a1".into() }];
+        assert_eq!(keep_changes(&store, jobs).unwrap(), (1, 1));
+        assert_eq!(store.load_ops("a1").unwrap(), vec![op]);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

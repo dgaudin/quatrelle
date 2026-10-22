@@ -1006,7 +1006,6 @@ month	May	mai
 	Online only: {email}	En ligne uniquement : {email}
 	New message	Nouveau message
 	Open Quatrelle to read it.	Ouvrez Quatrelle pour le lire.
-	Its mail is read from the server and held in memory while Quatrelle runs; nothing of it is written to this computer. Each message downloads when you open it. Mail waiting to be sent, changes made while offline, and calendar items, contacts and notes kept only in Quatrelle are lost when it closes.	Son courrier est lu sur le serveur et gardé en mémoire tant que Quatrelle est ouvert ; rien n'est écrit sur cet ordinateur. Chaque message est téléchargé à son ouverture. Le courrier en attente d'envoi, les modifications faites hors connexion et les éléments de calendrier, contacts et notes conservés uniquement dans Quatrelle sont perdus à sa fermeture.
 	Portable: everything is kept in QuatrelleData beside Quatrelle, and passwords only until it closes.	Portable : tout est conservé dans QuatrelleData à côté de Quatrelle, et les mots de passe seulement jusqu'à sa fermeture.
 	When it starts	À l’heure du début
 	1 minute before	1 minute avant
@@ -1033,3 +1032,94 @@ month	May	mai
 	{n} more on the server	{n} de plus sur le serveur
 	Changes not yet on the server: {n}	Modifications pas encore sur le serveur : {n}
 	Messages waiting to be sent: {n}	Messages en attente d'envoi : {n}
+	Mail older than what's kept here is only on the server.	Le courrier plus ancien que celui conservé ici n'est que sur le serveur.
+	Search the server	Rechercher sur le serveur
+	Searching the server…	Recherche sur le serveur…
+	The server found {n}	Le serveur en a trouvé {n}
+	{day} {month}	{day} {month}
+	Restart to update	Redémarrer pour mettre à jour
+	Quatrelle {version} is downloaded. It installs when you close Quatrelle.	Quatrelle {version} est téléchargé. Il s'installera à la fermeture de Quatrelle.
+	1 minute	1 minute
+	{n} minutes	{n} minutes
+	1 hour	1 heure
+	{n} hours	{n} heures
+	1 day	1 jour
+	{n} days	{n} jours
+	1 week	1 semaine
+	{n} weeks	{n} semaines
+	0 minutes before start	0 minute avant le début
+	1 Reminder	1 rappel
+	{n} Reminders	{n} rappels
+	Click Snooze to be reminded again in:	Cliquez sur Répéter pour être averti de nouveau dans :
+	Dismiss	Ignorer
+	Dismiss All	Tout ignorer
+	Open Item	Ouvrir l'élément
+	Overdue	En retard
+	Now	Maintenant
+	In {n} minutes	Dans {n} minutes
+	In {n} hours	Dans {n} heures
+	In {n} days	Dans {n} jours
+	Junk	Courrier indésirable
+	Junk options	Options du courrier indésirable
+	Junk Email options…	Options du courrier indésirable…
+	Block sender	Bloquer l'expéditeur
+	Never block sender	Ne jamais bloquer l'expéditeur
+	Never block sender's domain	Ne jamais bloquer le domaine de l'expéditeur
+	Their mail goes to Junk Email from now on	Ses messages iront désormais dans Courrier indésirable
+	Their mail is never treated as junk	Ses messages ne seront jamais traités comme indésirables
+	Mail from anyone at their domain is never treated as junk	Les messages de toute personne de ce domaine ne seront jamais traités comme indésirables
+	Blocked senders	Expéditeurs bloqués
+	Safe senders	Expéditeurs approuvés
+	Mail from these addresses and domains goes to Junk Email as it arrives.	Les messages de ces adresses et domaines vont dans Courrier indésirable dès leur arrivée.
+	Mail from these addresses and domains is never treated as junk, and its pictures load.	Les messages de ces adresses et domaines ne sont jamais traités comme indésirables, et leurs images se chargent.
+	name@example.com or @example.com	nom@example.com ou @example.com
+	And {n} more	Et {n} de plus
+	Clean up conversation	Nettoyer la conversation
+	Clean up folder	Nettoyer le dossier
+	Messages quoted in full by a later reply go to Deleted Items	Les messages cités en entier par une réponse ultérieure vont dans Éléments supprimés
+	No conversations to clean up	Aucune conversation à nettoyer
+	Nothing to clean up: no message is quoted in full by a later reply	Rien à nettoyer : aucun message n'est cité en entier par une réponse ultérieure
+	Search Folders	Dossiers de recherche
+	New Search Folder…	Nouveau dossier de recherche…
+	New Search Folder	Nouveau dossier de recherche
+	Edit Search Folder	Modifier le dossier de recherche
+	Customize this Search Folder…	Personnaliser ce dossier de recherche…
+	Delete Search Folder	Supprimer le dossier de recherche
+	Shows the mail it finds in every folder, except Deleted Items and Junk Email.	Affiche le courrier trouvé dans tous les dossiers, sauf Éléments supprimés et Courrier indésirable.
+	Show	Afficher
+	From these people (addresses or names, separated by commas)	De ces personnes (adresses ou noms, séparés par des virgules)
+	Search for	Rechercher
+	Unread mail	Courrier non lu
+	Mail flagged for follow up	Courrier marqué pour suivi
+	Important mail	Courrier important
+	Categorized mail	Courrier catégorisé
+	Mail with attachments	Courrier avec pièces jointes
+	Large mail (over 100 KB)	Courrier volumineux (plus de 100 Ko)
+	Pinned mail	Courrier épinglé
+	Mail from specific people	Courrier de certaines personnes
+	Quick steps	Actions rapides
+	No Quick Steps yet.	Aucune action rapide pour l'instant.
+	New Quick Step…	Nouvelle action rapide…
+	New Quick Step	Nouvelle action rapide
+	Edit a Quick Step	Modifier une action rapide
+	Edit Quick Step	Modifier l'action rapide
+	Done to the selected mail in one click; the first nine also with Ctrl+Shift+1 to 9.	Appliquée au courrier sélectionné en un clic ; les neuf premières aussi avec Ctrl+Maj+1 à 9.
+	Done	Terminé
+	Then move to	Puis déplacer vers
+	Don't move	Ne pas déplacer
+	Delete this Quick Step	Supprimer cette action rapide
+	Date & time	Date et heure
+	Word count	Statistiques
+	Words	Mots
+	Characters (no spaces)	Caractères (espaces non compris)
+	Characters (with spaces)	Caractères (espaces compris)
+	Paragraphs	Paragraphes
+	Lines	Lignes
+	Save the message you're writing?	Enregistrer le message en cours de rédaction ?
+	Save the messages you're writing?	Enregistrer les messages en cours de rédaction ?
+	It's kept in Drafts if you save it.	Il est conservé dans Brouillons si vous l'enregistrez.
+	{n} messages are being written. They're kept in Drafts if you save them.	{n} messages sont en cours de rédaction. Ils sont conservés dans Brouillons si vous les enregistrez.
+	Don't save	Ne pas enregistrer
+	Also being written:	Également en cours :
+	Play animations	Lire les animations
+	Hovers, selections and panes ease into place; off, everything changes at once	Survols, sélections et volets se mettent en place en douceur ; désactivé, tout change immédiatement

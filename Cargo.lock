@@ -4075,7 +4075,7 @@ checksum = "d55d956fa96f5ec02be2e13af0e20391a5aa83d6a074e3ad368959d0fab299ea"
 
 [[package]]
 name = "quatrelle"
-version = "0.20.0"
+version = "0.22.0"
 dependencies = [
  "arboard",
  "chrono",
@@ -4103,7 +4103,7 @@ dependencies = [
 
 [[package]]
 name = "quatrelle-cli"
-version = "0.20.0"
+version = "0.22.0"
 dependencies = [
  "chrono",
  "quatrelle-engine",
@@ -4113,7 +4113,7 @@ dependencies = [
 
 [[package]]
 name = "quatrelle-engine"
-version = "0.20.0"
+version = "0.22.0"
 dependencies = [
  "log",
  "quatrelle-mime",
@@ -4127,7 +4127,7 @@ dependencies = [
 
 [[package]]
 name = "quatrelle-jmap"
-version = "0.20.0"
+version = "0.22.0"
 dependencies = [
  "log",
  "quatrelle-mime",
@@ -4140,7 +4140,7 @@ dependencies = [
 
 [[package]]
 name = "quatrelle-mime"
-version = "0.20.0"
+version = "0.22.0"
 dependencies = [
  "flate2",
  "html2text",
@@ -4153,7 +4153,7 @@ dependencies = [
 
 [[package]]
 name = "quatrelle-model"
-version = "0.20.0"
+version = "0.22.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -4162,7 +4162,7 @@ dependencies = [
 
 [[package]]
 name = "quatrelle-net"
-version = "0.20.0"
+version = "0.22.0"
 dependencies = [
  "hmac 0.13.0",
  "imap-proto",
@@ -4188,7 +4188,7 @@ dependencies = [
 
 [[package]]
 name = "quatrelle-print"
-version = "0.20.0"
+version = "0.22.0"
 dependencies = [
  "miniz_oxide 0.9.1",
  "ttf-parser",
@@ -4196,7 +4196,7 @@ dependencies = [
 
 [[package]]
 name = "quatrelle-spell"
-version = "0.20.0"
+version = "0.22.0"
 dependencies = [
  "flate2",
  "spellbook",
@@ -4204,7 +4204,7 @@ dependencies = [
 
 [[package]]
 name = "quatrelle-store"
-version = "0.20.0"
+version = "0.22.0"
 dependencies = [
  "dirs",
  "flate2",
@@ -4218,7 +4218,7 @@ dependencies = [
 
 [[package]]
 name = "quatrelle-ui-egui"
-version = "0.20.0"
+version = "0.22.0"
 dependencies = [
  "egui",
  "hayro",
@@ -4236,7 +4236,7 @@ dependencies = [
 
 [[package]]
 name = "quatrelle-web"
-version = "0.20.0"
+version = "0.22.0"
 dependencies = [
  "eframe",
  "egui",
@@ -6722,7 +6722,7 @@ checksum = "ec7a2a501ed189703dba8b08142f057e887dfc4b2cc4db2d343ac6376ba3e0b9"
 
 [[package]]
 name = "xtask"
-version = "0.20.0"
+version = "0.22.0"
 dependencies = [
  "png 0.18.1",
  "serde_json",

@@ -1,6 +1,6 @@
 # Roadmap
 
-**Stage:** v0.20 — A window on every Windows PC (2026-10-20). Each milestone below is a version: v0.1 was
+**Stage:** v0.22 — Outlook's everyday tools, and test builds that update themselves (2026-10-22). Each milestone below is a version: v0.1 was
 the first working client, and every later one is named for what it added.
 Scope: [storytold/artcraft#2177](https://github.com/storytold/artcraft/issues/2177) (lightweight,
 local-first, media-aware v1); the fuller request is
@@ -104,7 +104,21 @@ local-first, media-aware v1); the fuller request is
    links in meetings, Check for updates; and from issue #5, a Microsoft 365 sign-in kept in
    Windows' Credential Manager whatever its length; and from issue #4, accounts kept online only
    (none of their mail written to the computer) and a portable mode that leaves nothing behind.
-21. **Next:** what's left in [docs/gaps.md](docs/gaps.md): a relay for IMAP accounts in the
+21. **v0.21 — One Quatrelle at a time** ✅ Started again, Quatrelle brings its window forward
+   rather than opening a second one on the same data; and from issues #1 and #4, shared
+   mailboxes as mailboxes of their own, invitations that read with their links in dialogs that
+   fit the window, older mail shown and searched on the server (every kind of account, and in
+   the browser), and online only made clearer (a password asked for at start, a warning before
+   closing loses anything).
+22. **v0.22 — Outlook's everyday tools, and test builds that update themselves** ✅ What a 1:1
+   look at Outlook's Home ribbon and calendar found missing: reminders that pop up (snooze,
+   dismiss, open), blocked and safe senders, Clean Up, Search Folders, Quick Steps
+   (Ctrl+Shift+1…9), the Work Week view, Insert date & time and Word count. A build from the
+   unsigned test-build workflow fetches the next test build in the background, checks its
+   SHA-256 against the release, and installs it when Quatrelle closes (or at once with Restart
+   to update), the way that copy was installed: `.msi`, portable `.zip`, `.dmg` or
+   `.AppImage`. Signed releases are unaffected.
+23. **Next:** what's left in [docs/gaps.md](docs/gaps.md): a relay for IMAP accounts in the
    browser, bidirectional editing, Wayland drag-out, Kerberos-only Exchange, what the `.pst`
    libraries can't do yet; then rules on IMAP (Sieve) servers, the `.pst`'s contact pictures and
    the business-card view.
@@ -500,3 +514,52 @@ local-first, media-aware v1); the fuller request is
   and the rules read again, after every folder; Create rule from a message belongs to the
   message's account, moves to a folder to choose and goes to the server, and a colleague's mail
   carries its SMTP address (`PidTagSenderSmtpAddress`). Drag-out works on XWayland again.
+- **2026-10-21** — **v0.21**: started again, Quatrelle brings its window forward (minimized or
+  behind other windows) instead of opening a second one on the same data, as PdfCraft does;
+  another data folder (`--data`, `--sample`, a portable copy) still opens its own.
+- **2026-10-21** — **v0.21**, issues #1 and #4 again, reproduced with the app against fake IMAP
+  (1,500 messages) and Exchange servers first: a shared mailbox in the folder pane and the
+  calendar as a mailbox of its own, moved like an account; a Google invitation's notes read with
+  their links, and every dialog within the window (its title and buttons were off a 2160-pixel
+  screen); Show more at the end of a folder and Search the server at the end of a search, for
+  mail past what's kept (IMAP); online only explained again, its password asked for at start,
+  and a warning before closing would lose unsent mail or changes.
+- **2026-10-21** — **v0.21**, the gaps audited again (craft-fonts still has no Hebrew or Korean
+  font, the `.pst` crates no new release): gap #7 closed, Search the server for JMAP, Microsoft
+  Graph and EWS accounts, their finds kept while the server has them; the browser searches its
+  server and shows more; JMAP folders keep more than one `Email/get` (they kept 100 to 500); the
+  reading pane's header fits a narrow pane. Checked against fake Exchange and JMAP servers, in
+  the app and the browser.
+- **2026-10-21** — **v0.21**, a reliability round, each problem first reproduced on the fake
+  servers or in the app: edits made mid-sync are now persisted on the spot and replayed
+  over refreshed folders (they could be undone on screen, or lost on exit); Graph `$batch` entries
+  now request immutable ids (mismatched ids caused endless re-downloads and dropped server-search
+  hits), are capped at 4 and retried on 429, and large first syncs read summaries from the listing;
+  sibling message windows no longer drag each other around; non-recurring appointments sharing a
+  UID stay separate; the 1604 placeholder year is read as "no year"; hidden Exchange folders are
+  skipped; Online is shown once mail is current; dead IPv6 routes cost 3 s, not 20 s.
+- **2026-10-22** — **v0.22**, Outlook's everyday tools, from a side-by-side look at Outlook's
+  ribbon and calendar: calendar reminders (VALARM, mapped to EWS and Graph) with a Reminders
+  window, snooze, dismiss and a desktop notification; blocked and safe senders applied as mail
+  arrives (and to Junk, whose high-water mark is now set as soon as it's known: against a real
+  IMAP server, mail filed there before Junk first changed was never seen arriving); Clean Up
+  (messages a later reply quotes in full, conservative by design); Search Folders (with
+  `larger:`/`smaller:` and `from:a,b` in the search language, sent to IMAP and JMAP servers too);
+  Quick Steps with Ctrl+Shift+1…9 (digit shortcuts now read by key position, so Shift or AZERTY
+  don't break them); the Work Week view; Insert date & time and Word count while writing. Found
+  on the way: settings were written only on a clean close, so a crash or a forced quit lost
+  every change (now kept every few seconds when changed); the log's terminal echo panicked once
+  standard error went away (Quatrelle ended at the next log line), and the CLI did the same
+  writing into a closed pipe; the ribbon's last buttons were cut off at 1336 px (labels now drop
+  from the end as needed); a big calendar's expansion was quadratic. Tested against a GreenMail
+  IMAP server in Docker as well as the sample mailbox.
+- **2026-10-22** — **v0.22**, test builds update themselves (`apps/quatrelle/src/self_update.rs`),
+  modelled on how the Craft launcher replaces its own copy and on Office's install-on-close: a
+  check a minute after start and then about hourly with jitter (`If-None-Match`, so an unchanged
+  list costs no quota), never an older or the same build, the installer for how this copy was
+  installed, refused unless its size and SHA-256 match GitHub's per-file digest (or the release's
+  `SHA256SUMS.txt`), installed by a detached helper after Quatrelle exits (logged to
+  `updates/install.log`), and a day-long marker against reinstall loops. Only
+  `release-wip.yml` turns it on (`QUATRELLE_UPDATE_CHANNEL=test`); `release.yml` is unchanged.
+  Checked on Windows from a portable copy posing as 0.20.0: test build 18 downloaded, verified,
+  unzipped over the folder (data kept) and reopened.

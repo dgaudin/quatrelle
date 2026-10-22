@@ -1005,7 +1005,6 @@ month	May	maggio
 	Online only: {email}	Solo online: {email}
 	New message	Nuovo messaggio
 	Open Quatrelle to read it.	Apri Quatrelle per leggerlo.
-	Its mail is read from the server and held in memory while Quatrelle runs; nothing of it is written to this computer. Each message downloads when you open it. Mail waiting to be sent, changes made while offline, and calendar items, contacts and notes kept only in Quatrelle are lost when it closes.	La sua posta viene letta dal server e tenuta in memoria finché Quatrelle è aperto; nulla viene scritto su questo computer. Ogni messaggio viene scaricato quando lo apri. La posta in attesa di invio, le modifiche fatte offline e gli elementi del calendario, i contatti e le note conservati solo in Quatrelle vanno persi alla chiusura.
 	Portable: everything is kept in QuatrelleData beside Quatrelle, and passwords only until it closes.	Portatile: tutto è conservato in QuatrelleData accanto a Quatrelle, e le password solo fino alla chiusura.
 	When it starts	All’inizio
 	1 minute before	1 minuto prima
@@ -1032,3 +1031,94 @@ month	May	maggio
 	{n} more on the server	altri {n} sul server
 	Changes not yet on the server: {n}	Modifiche non ancora sul server: {n}
 	Messages waiting to be sent: {n}	Messaggi in attesa di invio: {n}
+	Mail older than what's kept here is only on the server.	La posta più vecchia di quella conservata qui è solo sul server.
+	Search the server	Cerca sul server
+	Searching the server…	Ricerca sul server…
+	The server found {n}	Il server ne ha trovati {n}
+	{day} {month}	{day} {month}
+	Restart to update	Riavvia per aggiornare
+	Quatrelle {version} is downloaded. It installs when you close Quatrelle.	Quatrelle {version} è stato scaricato. Verrà installato alla chiusura di Quatrelle.
+	1 minute	1 minuto
+	{n} minutes	{n} minuti
+	1 hour	1 ora
+	{n} hours	{n} ore
+	1 day	1 giorno
+	{n} days	{n} giorni
+	1 week	1 settimana
+	{n} weeks	{n} settimane
+	0 minutes before start	0 minuti prima dell'inizio
+	1 Reminder	1 promemoria
+	{n} Reminders	{n} promemoria
+	Click Snooze to be reminded again in:	Fare clic su Posponi per ricevere un nuovo promemoria tra:
+	Dismiss	Chiudi
+	Dismiss All	Chiudi tutto
+	Open Item	Apri elemento
+	Overdue	Scaduto
+	Now	Ora
+	In {n} minutes	Tra {n} minuti
+	In {n} hours	Tra {n} ore
+	In {n} days	Tra {n} giorni
+	Junk	Posta indesiderata
+	Junk options	Opzioni posta indesiderata
+	Junk Email options…	Opzioni posta indesiderata…
+	Block sender	Blocca mittente
+	Never block sender	Non bloccare mai il mittente
+	Never block sender's domain	Non bloccare mai il dominio del mittente
+	Their mail goes to Junk Email from now on	Da ora la sua posta andrà in Posta indesiderata
+	Their mail is never treated as junk	La sua posta non verrà mai considerata indesiderata
+	Mail from anyone at their domain is never treated as junk	La posta di chiunque del suo dominio non verrà mai considerata indesiderata
+	Blocked senders	Mittenti bloccati
+	Safe senders	Mittenti attendibili
+	Mail from these addresses and domains goes to Junk Email as it arrives.	La posta da questi indirizzi e domini va in Posta indesiderata all'arrivo.
+	Mail from these addresses and domains is never treated as junk, and its pictures load.	La posta da questi indirizzi e domini non è mai considerata indesiderata e le sue immagini vengono caricate.
+	name@example.com or @example.com	nome@example.com o @example.com
+	And {n} more	E altri {n}
+	Clean up conversation	Pulisci conversazione
+	Clean up folder	Pulisci cartella
+	Messages quoted in full by a later reply go to Deleted Items	I messaggi citati per intero da una risposta successiva vanno in Posta eliminata
+	No conversations to clean up	Nessuna conversazione da pulire
+	Nothing to clean up: no message is quoted in full by a later reply	Niente da pulire: nessun messaggio è citato per intero da una risposta successiva
+	Search Folders	Cartelle di ricerca
+	New Search Folder…	Nuova cartella di ricerca…
+	New Search Folder	Nuova cartella di ricerca
+	Edit Search Folder	Modifica cartella di ricerca
+	Customize this Search Folder…	Personalizza questa cartella di ricerca…
+	Delete Search Folder	Elimina cartella di ricerca
+	Shows the mail it finds in every folder, except Deleted Items and Junk Email.	Mostra la posta trovata in tutte le cartelle, tranne Posta eliminata e Posta indesiderata.
+	Show	Mostra
+	From these people (addresses or names, separated by commas)	Da queste persone (indirizzi o nomi, separati da virgole)
+	Search for	Cerca
+	Unread mail	Posta da leggere
+	Mail flagged for follow up	Posta contrassegnata per completamento
+	Important mail	Posta importante
+	Categorized mail	Posta classificata
+	Mail with attachments	Posta con allegati
+	Large mail (over 100 KB)	Posta di grandi dimensioni (oltre 100 KB)
+	Pinned mail	Posta aggiunta
+	Mail from specific people	Posta da persone specifiche
+	Quick steps	Azioni rapide
+	No Quick Steps yet.	Ancora nessuna azione rapida.
+	New Quick Step…	Nuova azione rapida…
+	New Quick Step	Nuova azione rapida
+	Edit a Quick Step	Modifica un'azione rapida
+	Edit Quick Step	Modifica azione rapida
+	Done to the selected mail in one click; the first nine also with Ctrl+Shift+1 to 9.	Applicata alla posta selezionata con un clic; le prime nove anche con Ctrl+Maiusc+1-9.
+	Done	Fatto
+	Then move to	Quindi sposta in
+	Don't move	Non spostare
+	Delete this Quick Step	Elimina questa azione rapida
+	Date & time	Data e ora
+	Word count	Conteggio parole
+	Words	Parole
+	Characters (no spaces)	Caratteri (spazi esclusi)
+	Characters (with spaces)	Caratteri (spazi inclusi)
+	Paragraphs	Paragrafi
+	Lines	Righe
+	Save the message you're writing?	Salvare il messaggio che stai scrivendo?
+	Save the messages you're writing?	Salvare i messaggi che stai scrivendo?
+	It's kept in Drafts if you save it.	Viene conservato in Bozze se lo salvi.
+	{n} messages are being written. They're kept in Drafts if you save them.	Stai scrivendo {n} messaggi. Vengono conservati in Bozze se li salvi.
+	Don't save	Non salvare
+	Also being written:	In scrittura anche:
+	Play animations	Riproduci animazioni
+	Hovers, selections and panes ease into place; off, everything changes at once	Evidenziazioni, selezioni e riquadri si posizionano dolcemente; disattivato, tutto cambia subito
