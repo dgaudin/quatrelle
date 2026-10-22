@@ -106,6 +106,11 @@ pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &
                                 acts.push(Action::Run("rules.run", json!({"index": i, "inbox": true})));
                             }
                             ui.add_space(6.0);
+                            // The server wouldn't take it: said here with why, until it's
+                            // changed (then it's sent again).
+                            if let Some(why) = &r.refused {
+                                ui.label(RichText::new(tl!("Refused by the server")).color(t.warn).small()).on_hover_text(why);
+                            }
                             ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
                                 let mut job = egui::text::LayoutJob::default();
                                 let strong = egui::TextFormat {

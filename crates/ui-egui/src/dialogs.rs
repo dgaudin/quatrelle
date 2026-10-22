@@ -352,6 +352,7 @@ impl Dialog {
             server: server && account.is_some(),
             run_now: true,
             run_in: folder.filter(|_| account.is_some()).map(str::to_string),
+            refused: None,
             error: None,
         }))
     }

@@ -27,6 +27,15 @@ fn organising_renders_and_rules_save() {
         json!({"rules": [{"name": "Zoe", "conditions": [{"if": "from", "value": "zoe@"}], "actions": [{"do": "categorize", "value": "Work"}]}]}),
     ));
     assert_eq!(a.session.rules.len(), 1);
+    // One the server refused: the list says so, and the editor says why.
+    a.session.rules[0].server = true;
+    a.session.rules[0].account = Some("sample".into());
+    a.session.rules[0].refused = Some("the server refused: Outlook keeps its own copy of the rules".into());
+    let edit = crate::dialogs::RuleForm::from_rule(0, &a.session.rules[0]);
+    assert!(edit.refused.is_some());
+    a.ui.dialog = Some(Dialog::EditRule(Box::new(edit.clone())));
+    frame(&ctx, &mut a, vec![]);
+    assert_eq!(edit.to_rule().unwrap().refused, None, "saved, it goes to the server again");
     // A rule the server keeps that Quatrelle didn't make (Outlook's own): listed, read-only.
     a.session.foreign_rules.push(quatrelle_engine::model::organize::ForeignRule {
         account: "sample".into(),

@@ -955,6 +955,8 @@ month	May	5月
 	Spouse	配偶者
 	Anniversary	記念日
 	On the server, made elsewhere	サーバー上、別の場所で作成
+	Refused by the server	サーバーに拒否されました
+	The server refused this rule ({why}). It's sent there again once saved.	サーバーはこのルールを拒否しました（{why}）。保存すると再び送信されます。
 	Change or remove them in the program that made them.	作成したプログラムで変更または削除してください。
 	On / off on the server	サーバー上でオン / オフ
 	+ Add a condition	+ 条件を追加

@@ -954,6 +954,8 @@ month	May	מאי
 	Spouse	בן/בת זוג
 	Anniversary	יום נישואין
 	On the server, made elsewhere	בשרת, נוצרו במקום אחר
+	Refused by the server	נדחה על ידי השרת
+	The server refused this rule ({why}). It's sent there again once saved.	השרת דחה כלל זה ({why}). לאחר השמירה הוא יישלח שוב.
 	Change or remove them in the program that made them.	שנה או הסר אותן בתוכנה שיצרה אותן.
 	On / off on the server	פועל / כבוי בשרת
 	+ Add a condition	+ הוספת תנאי

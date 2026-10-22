@@ -957,6 +957,8 @@ month	May	5月
 	Spouse	配偶
 	Anniversary	週年紀念
 	On the server, made elsewhere	在伺服器上，在其他位置建立
+	Refused by the server	被伺服器拒絕
+	The server refused this rule ({why}). It's sent there again once saved.	伺服器拒絕了此規則（{why}）。儲存後會再次傳送。
 	Change or remove them in the program that made them.	請在建立它們的程式中變更或刪除。
 	On / off on the server	在伺服器上開啟 / 關閉
 	+ Add a condition	+ 新增條件

@@ -957,6 +957,8 @@ month	May	Май
 	Spouse	Супруг(а)
 	Anniversary	Годовщина
 	On the server, made elsewhere	На сервере, созданы в другом месте
+	Refused by the server	Отклонено сервером
+	The server refused this rule ({why}). It's sent there again once saved.	Сервер отклонил это правило ({why}). После сохранения оно будет отправлено снова.
 	Change or remove them in the program that made them.	Измените или удалите их в программе, которая их создала.
 	On / off on the server	Включено или выключено на сервере
 	+ Add a condition	+ Добавить условие

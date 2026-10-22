@@ -954,6 +954,8 @@ month	May	mei
 	Spouse	Echtgenoot
 	Anniversary	Jubileum
 	On the server, made elsewhere	Op de server, elders gemaakt
+	Refused by the server	Geweigerd door de server
+	The server refused this rule ({why}). It's sent there again once saved.	De server heeft deze regel geweigerd ({why}). Na het opslaan wordt hij opnieuw verstuurd.
 	Change or remove them in the program that made them.	Wijzig of verwijder ze in het programma dat ze heeft gemaakt.
 	On / off on the server	Aan / uit op de server
 	+ Add a condition	+ Voorwaarde toevoegen

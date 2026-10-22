@@ -957,6 +957,8 @@ month	May	5월
 	Spouse	배우자
 	Anniversary	기념일
 	On the server, made elsewhere	서버에 있음, 다른 곳에서 만듦
+	Refused by the server	서버가 거부함
+	The server refused this rule ({why}). It's sent there again once saved.	서버가 이 규칙을 거부했습니다({why}). 저장하면 다시 전송됩니다.
 	Change or remove them in the program that made them.	만든 프로그램에서 변경하거나 제거하세요.
 	On / off on the server	서버에서 켜기 / 끄기
 	+ Add a condition	+ 조건 추가

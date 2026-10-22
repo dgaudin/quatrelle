@@ -958,6 +958,8 @@ month	May	Mai
 	Spouse	Ehepartner
 	Anniversary	Jahrestag
 	On the server, made elsewhere	Auf dem Server, anderswo erstellt
+	Refused by the server	Vom Server abgelehnt
+	The server refused this rule ({why}). It's sent there again once saved.	Der Server hat diese Regel abgelehnt ({why}). Nach dem Speichern wird sie erneut gesendet.
 	Change or remove them in the program that made them.	Ändern oder entfernen Sie sie in dem Programm, das sie erstellt hat.
 	On / off on the server	Auf dem Server an / aus
 	+ Add a condition	+ Bedingung hinzufügen

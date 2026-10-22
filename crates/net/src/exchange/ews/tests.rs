@@ -26,6 +26,7 @@ fn the_inbox_rules_go_to_exchange_and_come_back() {
         server: true,
         remote_id: id.map(str::to_string),
         priority: None,
+        refused: None,
     };
     // Created: the server's id comes back, found by name (creating answers none).
     let ids = c.set_inbox_rules(&[(rule("Invoices", None), Some("F-INVOICES".into()))], &[]).unwrap();
@@ -307,6 +308,7 @@ fn a_rule_is_written_as_exchange_reads_it() {
         server: true,
         remote_id: None,
         priority: None,
+        refused: None,
     };
     let x = inbox_rule_xml(&r, Some("F1"), 3, None);
     for empty in ["<t:Delete/>", "<t:MarkAsRead/>", "<t:StopProcessingRules/>"] {

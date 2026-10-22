@@ -27,6 +27,7 @@ fn a_server_rule_is_changed_where_it_lives() {
         server: true,
         remote_id: Some("R3".into()),
         priority: Some(7),
+        refused: None,
     };
     s.foreign_rules.push(ForeignRule {
         account: id.clone(),
@@ -87,6 +88,7 @@ fn server_rules_go_to_the_server_and_keep_their_id() {
         server: true,
         remote_id: None,
         priority: None,
+        refused: None,
     };
     s.run("rules.set", &json!({ "rules": [rule] })).unwrap();
     let sent: Vec<(String, Vec<Rule>, Vec<String>)> = s
@@ -189,6 +191,91 @@ fn server_rules_go_to_the_server_and_keep_their_id() {
     assert!(s.notices.iter().any(|n| n.text.contains("Newsletters")), "{:?}", s.notices);
 }
 
+/// A rule the server refuses outright (Exchange won't change its rules while Outlook keeps its
+/// own copy of them) is marked with why, isn't sent again on every connection, and the reason
+/// is told once per account a session, not on every try. Changed here, or turned off and on, it
+/// goes again; a refusal that may pass (the network) marks nothing.
+#[test]
+fn a_refused_rule_waits_to_be_changed() {
+    use quatrelle_model::organize::{Condition, Rule, RuleAction};
+    let mut s = sample_session("refused-rule");
+    let account = s.accounts[0].config.id.clone();
+    let rule = Rule {
+        name: "Invoices".into(),
+        enabled: true,
+        account: Some(account.clone()),
+        conditions: vec![Condition::Subject("invoice".into())],
+        match_all: true,
+        actions: vec![RuleAction::MoveTo("Inbox".into())],
+        stop: false,
+        server: true,
+        remote_id: None,
+        priority: None,
+        refused: None,
+    };
+    s.run("rules.set", &json!({ "rules": [rule] })).unwrap();
+    let sets = |s: &mut Session| s.take_jobs().into_iter().filter(|j| matches!(j, quatrelle_model::Job::SetServerRules { .. })).count();
+    assert_eq!(sets(&mut s), 1);
+    let refusal = || quatrelle_model::Event::ServerRules {
+        account: account.clone(),
+        ids: Vec::new(),
+        others: Vec::new(),
+        cleared: Vec::new(),
+        error: Some("the server refused: Outlook keeps its own copy of this mailbox's rules".into()),
+    };
+    let errors = |s: &Session| s.notices.iter().filter(|n| n.error).count();
+    s.apply(refusal());
+    assert!(s.rules[0].refused.as_deref().is_some_and(|w| w.contains("Outlook")), "{:?}", s.rules[0]);
+    assert_eq!(errors(&s), 1, "told");
+    // Kept: a restart finds the marker.
+    let again = Session::open(Some(Store::open(s.store.clone().unwrap().root()).unwrap()), quatrelle_model::dates::Clock::new(NOW, 0));
+    assert_eq!(again.rules[0].refused, s.rules[0].refused);
+    // Connected again: not sent again, and the same refusal isn't told again.
+    s.apply(quatrelle_model::Event::Status { account: account.clone(), status: SyncStatus::Online { at: NOW } });
+    assert_eq!(sets(&mut s), 0, "a refused rule waits");
+    s.apply(refusal());
+    assert_eq!(errors(&s), 1, "the same reason, told once a session");
+    s.apply(quatrelle_model::Event::ServerRules {
+        account: account.clone(),
+        ids: Vec::new(),
+        others: Vec::new(),
+        cleared: Vec::new(),
+        error: Some("the server refused: access denied".into()),
+    });
+    assert_eq!(errors(&s), 2, "another reason is told");
+    // Changed here (the editor clears the marker): sent again.
+    let mut edited = s.rules[0].clone();
+    edited.conditions = vec![Condition::Subject("invoice ".into())];
+    edited.refused = None;
+    s.run("rules.set", &json!({ "rules": [edited] })).unwrap();
+    assert_eq!(sets(&mut s), 1, "sent again once changed");
+    assert_eq!(s.rules[0].refused, None);
+    // A refusal that may pass (the network, a busy server) marks nothing: tried again next time.
+    s.apply(quatrelle_model::Event::ServerRules {
+        account: account.clone(),
+        ids: Vec::new(),
+        others: Vec::new(),
+        cleared: Vec::new(),
+        error: Some("network: unreachable".into()),
+    });
+    assert_eq!(s.rules[0].refused, None);
+    s.apply(quatrelle_model::Event::Status { account: account.clone(), status: SyncStatus::Offline });
+    s.apply(quatrelle_model::Event::Status { account: account.clone(), status: SyncStatus::Online { at: NOW + 60 } });
+    assert_eq!(sets(&mut s), 1, "sent again on the next connection");
+    // Turned off, the marker goes with the server copy; on again, it's tried afresh.
+    s.apply(refusal());
+    assert!(s.rules[0].refused.is_some());
+    let mut off = s.rules[0].clone();
+    off.server = false;
+    s.run("rules.set", &json!({ "rules": [off] })).unwrap();
+    assert_eq!(s.rules[0].refused, None);
+    let _ = sets(&mut s);
+    let mut on = s.rules[0].clone();
+    on.server = true;
+    s.run("rules.set", &json!({ "rules": [on] })).unwrap();
+    assert_eq!(sets(&mut s), 1);
+}
+
 /// An IMAP account's rules run in its Sieve script, so a rule Exchange couldn't take (looking in
 /// every header at once) still goes to the server; what neither can run stays home.
 #[test]
@@ -208,6 +295,7 @@ fn sieve_rules_go_to_an_imap_account() {
         server: true,
         remote_id: None,
         priority: None,
+        refused: None,
     };
     assert!(!rule.server_ready() && rule.sieve_ready(), "Exchange can't, Sieve can");
     s.run("rules.set", &json!({ "rules": [rule] })).unwrap();

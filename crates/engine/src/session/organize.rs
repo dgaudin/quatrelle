@@ -290,6 +290,8 @@ impl Session {
         for r in &mut rules {
             if !r.server {
                 r.remote_id = None;
+                // Kept here only: nothing to be refused (turned on again, it's tried afresh).
+                r.refused = None;
             }
         }
         let before = server_shape(&self.rules, &|a| self.server_kind(a));
@@ -360,12 +362,42 @@ impl Session {
         self.jobs.push(Job::GetServerRules { account: account.to_string(), ours });
     }
 
+    /// The server wouldn't change its rules: said once per account and reason a session (not
+    /// on every try: the rules are sent again at each connection), and the rules sent there
+    /// that it refused outright are marked with why — Exchange refuses every change while
+    /// Outlook keeps its own copy of the rules, and a rule sent again on every connection
+    /// forever was refused forever. A refusal that may pass (the network, a busy server) marks
+    /// nothing: the rule goes again next time.
+    pub(super) fn server_rules_refused(&mut self, account: &str, why: String) {
+        if why.starts_with("the server refused") {
+            let mut changed = false;
+            for r in self.rules.iter_mut().filter(|r| r.server && r.account.as_deref() == Some(account) && r.remote_id.is_none()) {
+                if r.refused.as_deref() != Some(why.as_str()) {
+                    r.refused = Some(why.clone());
+                    changed = true;
+                }
+            }
+            if changed {
+                self.save_rules();
+            }
+        }
+        if self.rules_refused_told.get(account) != Some(&why) {
+            self.rules_refused_told.insert(account.to_string(), why.clone());
+            self.notice(format!("the server's rules weren't changed: {why}"), true);
+        }
+    }
+
     /// Rules marked for the server that never got there (the account was offline when they were
-    /// made): send them now that it's connected. One the server refused is tried again on the
-    /// next connection, until it takes it.
+    /// made): send them now that it's connected. One the server refused outright waits to be
+    /// changed here, or sent again by hand (`rules.set`): sent on every connection, it was
+    /// refused on every connection, with the same notice each time.
     pub(super) fn resend_server_rules(&mut self, account: &str) {
-        let pending: Vec<Rule> =
-            self.rules.iter().filter(|r| r.server && r.account.as_deref() == Some(account) && r.remote_id.is_none()).cloned().collect();
+        let pending: Vec<Rule> = self
+            .rules
+            .iter()
+            .filter(|r| r.server && r.account.as_deref() == Some(account) && r.remote_id.is_none() && r.refused.is_none())
+            .cloned()
+            .collect();
         if pending.is_empty() {
             return;
         }

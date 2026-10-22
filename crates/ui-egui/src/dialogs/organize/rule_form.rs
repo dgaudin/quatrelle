@@ -146,6 +146,14 @@ pub(super) fn edit_rule(ui: &mut Ui, f: &mut RuleForm, s: &Session, t: &Tokens, 
             );
         }
     }
+    if let Some(why) = f.refused.as_deref().filter(|_| f.server) {
+        ui.add(
+            egui::Label::new(
+                RichText::new(tf!("The server refused this rule ({why}). It's sent there again once saved.", why = why)).color(t.warn).small(),
+            )
+            .wrap(),
+        );
+    }
     if on_server.is_none() {
         // Made from a message in another folder, the rule runs on that folder's mail now (the
         // Inbox alone, it seemed to do nothing there).
@@ -268,6 +276,8 @@ pub struct RuleForm {
     /// The folder the rule was made from (a message's, by its path in `account`), to run it on
     /// now. `None`: the Inbox.
     pub run_in: Option<String>,
+    /// Why the server refused the rule being changed, when it did (shown; saving sends it again).
+    pub refused: Option<String>,
     pub error: Option<String>,
 }
 
@@ -327,6 +337,8 @@ impl RuleForm {
             server: self.server || self.remote.is_some(),
             remote_id: self.remote.as_ref().map(|(_, id)| id.clone()),
             priority: None,
+            // Changed here, it goes to the server again.
+            refused: None,
         })
     }
 
@@ -390,6 +402,7 @@ impl RuleForm {
             server: r.server,
             run_now: false,
             run_in: None,
+            refused: r.refused.clone(),
             error: None,
         }
     }
