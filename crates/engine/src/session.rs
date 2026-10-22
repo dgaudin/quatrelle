@@ -40,6 +40,7 @@ mod writing;
 // named here as before.
 pub use listing::{ARRANGE_HEADINGS, Arrange, FolderRef, ListFilter, OUTBOX, Row, View, arrange_list};
 use listing::{person, size_group};
+use mailboxes::Contacts;
 pub use organize::{RulesScope, junk, quick_steps, search_folders};
 pub use prefs::{ListLayout, NotesOrder, Prefs, ReadInPane, ReadingPane};
 pub use writing::{Compose, add_pictures, style_signature};
@@ -266,19 +267,6 @@ struct DownloadAll {
     failed: usize,
 }
 
-/// The address book being built from the mail kept here, folder by folder, a slice at a time
-/// (see [`Session::contacts_step`]): reading a big mailbox whole took seconds, on the window's
-/// thread, at the first name typed into To.
-struct ContactsBuild {
-    /// The folders to read, and how far the read has got.
-    scan: Vec<(String, String)>,
-    folder: usize,
-    pos: usize,
-    /// The user's own addresses: a message from one of them is one they sent.
-    mine: Vec<String>,
-    book: ContactBook,
-}
-
 /// Message sources asked for at once by "Download all": the worker fetches them in order, and
 /// each answer asks for the next, so a mailbox of any size doesn't flood the job queue.
 const FETCH_BATCH: usize = 32;
@@ -293,9 +281,6 @@ const RECOUNT_MAX: u64 = 50_000;
 /// Message summaries kept in memory at most, besides the folders on screen (a big data file's
 /// whole mailbox is several times this).
 const CACHE_MESSAGES: usize = 300_000;
-/// How long (seconds) a stale address book is used before it's built again: its suggestions
-/// can wait a few minutes for the newest senders; the window can't wait seconds on every sync.
-const CONTACTS_EVERY: i64 = 300;
 
 /// Body words kept for search at most (bytes): enough for the messages a search looks at again.
 const BODY_WORDS_BYTES: usize = 48 << 20;
@@ -391,18 +376,9 @@ pub struct Session {
     pending_marks: BTreeMap<u64, (MessageKey, Flag)>,
     /// Summaries kept cached at most ([`CACHE_MESSAGES`]; tests make it small).
     pub(crate) cache_limit: usize,
-    /// Built on first use from the cached mail; when mail arrives it's stale, and built again
-    /// once it's been some minutes (see [`CONTACTS_EVERY`]).
-    contacts: Option<ContactBook>,
-    /// The build under way, a slice at a time ([`Session::contacts_step`]); the book above
-    /// answers meanwhile when there is one.
-    contacts_build: Option<ContactsBuild>,
-    /// Bumped whenever what the address book answers changes (a build done, or a first one
-    /// grown): the window works its suggestions out again only then.
-    contacts_revision: u64,
-    /// When the address book above was built, and whether mail has arrived since.
-    contacts_built: i64,
-    contacts_stale: bool,
+    /// The address book (recipient suggestions, Select Names, the Focused Inbox): kept on disk,
+    /// and only the mail new in a folder read into it (see `session/mailboxes/contacts.rs`).
+    contacts: Contacts,
     /// The highest UID seen per Inbox, so only mail that arrives later is announced.
     pub(crate) seen_uid: HashMap<(String, String), u32>,
     /// New mail to announce (desktop notifications), oldest first.
@@ -515,11 +491,7 @@ impl Session {
             cache_order: Vec::new(),
             pending_marks: BTreeMap::new(),
             cache_limit: CACHE_MESSAGES,
-            contacts: None,
-            contacts_build: None,
-            contacts_revision: 0,
-            contacts_built: 0,
-            contacts_stale: false,
+            contacts: Contacts::default(),
             seen_uid: HashMap::new(),
             new_mail: Vec::new(),
             rules: Vec::new(),
@@ -555,6 +527,7 @@ impl Session {
         if let Some(store) = &s.store {
             s.rules = store.load_doc("rules.json").unwrap_or_default();
             s.snoozes = store.load_doc("snoozes.json").unwrap_or_default();
+            s.contacts = Contacts::load(store);
             s.pending_marks = store
                 .load_doc::<Vec<(u64, MessageKey, Flag)>>(PENDING_MARKS)
                 .unwrap_or_default()

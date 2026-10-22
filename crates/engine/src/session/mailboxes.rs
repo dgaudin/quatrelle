@@ -5,6 +5,7 @@
 use super::*;
 
 mod contacts;
+pub(crate) use contacts::Contacts;
 mod folder_edits;
 mod mailbox_settings;
 mod shared_mailboxes;
@@ -130,9 +131,8 @@ impl Session {
         if self.index.as_ref().is_some_and(|ix| ix.scan.iter().any(|(a, f)| a == account && f == folder)) {
             self.index = None;
         }
-        // The address book is built from every folder (walking a big mailbox takes seconds, on
-        // the window's thread): new mail makes it stale, not gone; built again now and then.
-        self.contacts_stale = true;
+        // The address book reads the folder's new mail (a slice at a time, by the window).
+        self.contacts_folder_changed(account, folder);
     }
 
     /// Remember what an Inbox holds; unread mail above the last high-water mark is new. The first

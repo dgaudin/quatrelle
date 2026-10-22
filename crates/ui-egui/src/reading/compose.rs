@@ -77,6 +77,8 @@ pub(crate) fn parse_local(day: &str, time: &str) -> Option<(i64, i64)> {
 pub(super) const LABEL_W: f32 = 76.0;
 
 pub(super) const ROW_H: f32 = 30.0;
+/// The width the × beside each recipient suggestion takes.
+const X_W: f32 = 26.0;
 
 /// A field box drawn the way Outlook's are: no frame, a line under it (the accent while typing).
 pub(super) fn underlined(ui: &mut Ui, t: &Tokens, edit: egui::TextEdit<'_>) -> egui::Response {
@@ -164,6 +166,8 @@ pub(super) fn recipient_field(
     let t = st.tokens;
     let showing = st.suggest_field == Some(name) && !suggestions.is_empty();
     let mut take: Option<usize> = None;
+    // Taken out of the suggestions (the × beside one, or Delete on the one highlighted).
+    let mut forget: Option<usize> = None;
     if showing {
         let n = suggestions.len();
         // Before the text box sees them: arrows move the highlight, Enter/Tab accept.
@@ -179,6 +183,9 @@ pub(super) fn recipient_field(
             }
             if i.consume_key(egui::Modifiers::NONE, egui::Key::Escape) {
                 st.suggest_dismissed = Some(value.clone());
+            }
+            if i.consume_key(egui::Modifiers::NONE, egui::Key::Delete) {
+                forget = Some(st.suggest_index.min(n - 1));
             }
         });
     }
@@ -235,31 +242,60 @@ pub(super) fn recipient_field(
                         name + text_w(&c.address.email, &mail_font)
                     })
                     .fold(0.0_f32, f32::max);
-                let w = (widest + 24.0).clamp(200.0, r.rect.width().clamp(200.0, 520.0));
+                // Room for the × at the end of each row.
+                let w = (widest + 24.0 + X_W).clamp(200.0, r.rect.width().clamp(200.0, 520.0));
                 ui.spacing_mut().item_spacing.y = 0.0;
                 for (i, c) in suggestions.iter().enumerate() {
                     let on = i == st.suggest_index;
                     let (row, resp) = ui.allocate_exact_size(vec2(w, 28.0), egui::Sense::click());
-                    if on || resp.hovered() {
+                    // The × at its end (Outlook's), clickable so it's the one under the pointer
+                    // rather than the row beneath it.
+                    let x = egui::Rect::from_center_size(egui::pos2(row.right() - X_W / 2.0, row.center().y), vec2(20.0, 20.0));
+                    let on_x = ui
+                        .interact(x, ui.scope_id().with(("forget", i)), egui::Sense::click())
+                        .on_hover_text(tl!("Remove from suggestions"))
+                        .hovered();
+                    let pointed = resp.hovered() || on_x;
+                    if on || pointed {
                         ui.painter().rect_filled(row, 4.0, if on { t.accent_soft } else { t.hover_row });
                     }
-                    let clip = ui.painter().with_clip_rect(row.shrink2(vec2(8.0, 0.0)));
-                    let mut x = row.left() + 10.0;
+                    let clip = ui.painter().with_clip_rect(row.shrink2(vec2(8.0, 0.0)).with_max_x(row.right() - X_W));
+                    let mut tx = row.left() + 10.0;
                     if !c.address.name.is_empty() {
                         let g = clip.layout_no_wrap(c.address.name.clone(), name_font.clone(), t.text);
                         let gw = g.size().x;
-                        clip.galley(egui::pos2(x, row.center().y - g.size().y / 2.0), g, t.text);
-                        x += gw + 12.0;
+                        clip.galley(egui::pos2(tx, row.center().y - g.size().y / 2.0), g, t.text);
+                        tx += gw + 12.0;
                     }
                     let g = clip.layout_no_wrap(c.address.email.clone(), mail_font.clone(), t.dim);
-                    clip.galley(egui::pos2(x, row.center().y - g.size().y / 2.0), g, t.dim);
+                    clip.galley(egui::pos2(tx, row.center().y - g.size().y / 2.0), g, t.dim);
+                    // Red, on the row pointed at or highlighted.
+                    if on || pointed {
+                        if on_x {
+                            ui.painter().rect_filled(x, 4.0, t.danger.gamma_multiply(0.15));
+                        }
+                        crate::icons::paint(ui.painter(), x.shrink(3.0), crate::icons::Icon::Close, t.danger);
+                    }
                     // On press: the box loses focus on the same click, before a release would count.
-                    if resp.hovered() && ui.input(|i| i.pointer.primary_pressed()) {
-                        take = Some(i);
+                    if pointed && ui.input(|i| i.pointer.primary_pressed()) {
+                        if on_x {
+                            forget = Some(i);
+                        } else {
+                            take = Some(i);
+                        }
                     }
                 }
             });
         });
+    }
+    if let Some(i) = forget
+        && let Some(c) = suggestions.get(i)
+    {
+        st.suggest_forget = Some(c.address.email.clone());
+        st.suggest_index = 0;
+        // The box keeps the cursor, the text as typed: the next suggestions come.
+        st.suggest_refocus = Some(name);
+        r.request_focus();
     }
     if let Some(i) = take
         && let Some(c) = suggestions.get(i)
@@ -303,6 +339,10 @@ pub fn compose_window(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
 
 pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>, in_window: bool) {
     let t = st.tokens;
+    // A suggestion taken out with its × (or Delete): out of the address book for good.
+    if let Some(email) = st.suggest_forget.take() {
+        acts.push(Action::Run("contacts.forget", json!({ "email": email })));
+    }
     // Where there are no windows of their own (the browser), the other messages being written
     // are a click away above this one.
     if !in_window && !s.composes.is_empty() && ui.ctx().embed_viewports() {

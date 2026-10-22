@@ -157,6 +157,8 @@ impl eframe::App for App {
         if let Some(server) = &self.instance {
             server.close();
         }
+        // The address book's latest changes (it's written a minute at most after each).
+        self.app.session.save_contacts();
         // A test build downloaded and checked: installed now that Quatrelle closes.
         if let Some(u) = &self.updater
             && let Err(e) = u.install(u.restart_wanted())

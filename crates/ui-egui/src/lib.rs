@@ -315,6 +315,8 @@ pub struct UiState {
     /// The suggestions last worked out, for which box, text and address book (its revision):
     /// looking through a book of thousands is for a change, not for every frame.
     pub(crate) suggest_cache: Option<((&'static str, String, u64), Vec<quatrelle_engine::model::contacts::Contact>)>,
+    /// A suggestion taken out with its × (its address): the address book is told.
+    pub(crate) suggest_forget: Option<String>,
     /// Installed Craft apps (command, path), found at start-up.
     pub(crate) craft_apps: Vec<(&'static str, PathBuf)>,
     /// The interface language setting (`auto` or a language code).
@@ -450,6 +452,7 @@ impl MailApp {
                 suggest_dismissed: None,
                 suggest_refocus: None,
                 suggest_cache: None,
+                suggest_forget: None,
                 craft_apps: Vec::new(),
                 language: i18n::AUTO.into(),
                 fonts: (None, None),
