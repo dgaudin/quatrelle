@@ -98,6 +98,15 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             Ok(json!(list))
         })
         .params(r#"{"query": string, "limit"?: number}"#),
+        // Outlook's × beside a suggestion.
+        CommandSpec::new("contacts.forget", "Remove from suggestions", "Message › To", |s, v| {
+            let email = p::req_str(v, "email")?.trim().to_string();
+            if !email.contains('@') {
+                return Err(CmdError::Params(format!("`{email}` isn't an email address")));
+            }
+            Ok(json!({ "email": email, "removed": s.forget_contact(&email) }))
+        })
+        .params(r#"{"email": string} (stays out of the suggestions until written to)"#),
         // Attachments
         CommandSpec::new("attachment.save", "Save attachment", "Reading pane", save_attachment).params(r#"{"index": number, "path": string}"#).when(has_reading),
         CommandSpec::new("attachment.saveAll", "Save all attachments", "Reading pane", save_all_attachments).params(r#"{"dir": string, "indices"?: [number] (only these attachments)}"#).when(has_reading),

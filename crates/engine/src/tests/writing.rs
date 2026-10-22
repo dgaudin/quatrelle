@@ -676,36 +676,65 @@ fn recipient_suggestions_read_a_big_mailbox_a_slice_at_a_time() {
     done(s);
 }
 
-/// Mail arriving makes the book stale: built again after some minutes, a slice at a time, the
-/// book from before answering meanwhile (never nothing, never a partial one over a whole one);
-/// the Focused Inbox, told apart by the book, follows a build done.
+/// The address book is kept on disk, as Outlook's AutoComplete list: a start reads no folder,
+/// and a folder a sync changed has only its new mail read (not the whole mailbox again every few
+/// minutes, as it was). An address taken out of the suggestions (the ×) stays out — after a
+/// restart, and whatever mail comes from it — until it's written to. The Focused Inbox follows
+/// what the book learns.
 #[test]
-fn a_stale_address_book_answers_while_it_is_built_again() {
-    let store = temp("contacts-stale");
+fn the_address_book_is_kept_and_reads_only_new_mail() {
+    let store = temp("contacts-kept");
     sample::seed_big_mailbox(&store, 4, 100, NOW).unwrap();
-    let mut s = Session::open(Some(store), quatrelle_model::dates::Clock::new(NOW, 0));
-    s.take_jobs();
-    s.run("folder.open", &json!({"account": "big", "folder": "INBOX"})).unwrap();
-    assert_eq!(s.suggest_contacts("ann1", 8).len(), 8);
-    let revision = s.contacts_revision();
-    // A sync touched a folder: stale, but not built again for a while.
-    s.apply(Event::FolderChanged { account: "big".into(), folder: "Folder2".into() });
-    assert!(!s.contacts_pending() && s.suggest_contacts_now("ann1", 8).len() == 8);
-    assert!(s.contacts_step(10), "complete as it is");
-    assert!(!s.contacts_pending(), "not for some minutes");
-    s.set_clock(NOW + 600, 0);
-    assert_eq!(s.suggest_contacts_now("ann1", 8).len(), 8, "the book from before answers");
-    assert!(s.contacts_pending(), "and the build has started");
-    assert_eq!(s.contacts_revision(), revision, "a book answering unchanged");
-    assert!(!s.contacts_step(150) && s.contacts_pending());
-    assert_eq!(s.suggest_contacts_now("ann1", 8).len(), 8, "still the book from before, not the half-read one");
-    assert_eq!(s.suggest_contacts("ann1", 8).len(), 8, "a command (Send resolving names) answers from it too");
-    assert!(s.contacts_pending(), "without reading the mailbox whole: the window goes on with the slices");
-    // Focused Inbox: a bulk sender written to goes to Focused once the book says so.
+    let open = || {
+        let mut s = Session::open(Some(store.clone()), quatrelle_model::dates::Clock::new(NOW, 0));
+        s.take_jobs();
+        s.run("folder.open", &json!({"account": "big", "folder": "INBOX"})).unwrap();
+        s
+    };
+    let mut s = open();
+    assert_eq!(s.suggest_contacts("ann1", 8).len(), 8, "a first book, read whole");
+    drop(s);
+    // Started again: the book is there at once, read from no folder.
+    let mut s = open();
+    let before = s.cached_folders();
+    assert_eq!(s.suggest_contacts_now("ann1", 8).len(), 8);
+    assert!(s.contacts_step(usize::MAX));
+    assert_eq!(s.cached_folders(), before, "no folder read for it");
+    // New mail in a folder: only that folder is read, only its new message counted.
+    let arrive = |s: &mut Session, uid: u32| {
+        let mut st = store.load_folder("big", "Folder2").unwrap();
+        let mut m = st.messages[0].clone();
+        m.key.uid = uid;
+        m.from = EmailAddress::new("Zed New", "zed@new.example");
+        m.date = NOW;
+        st.messages.insert(0, m);
+        store.save_folder("big", "Folder2", &st).unwrap();
+        s.apply(Event::FolderChanged { account: "big".into(), folder: "Folder2".into() });
+    };
     s.run("view.focused", &json!({"on": true})).unwrap();
-    let before = s.revision;
+    let revision = s.contacts_revision();
+    let list = s.revision;
+    arrive(&mut s, 1000);
+    assert!(s.contacts_pending());
     assert!(s.contacts_step(usize::MAX) && !s.contacts_pending());
+    assert_eq!(s.suggest_contacts_now("zed", 8).len(), 1, "the new sender");
+    assert_eq!(s.known_contact("p201@big.example").map(|c| c.received), Some(1), "the folder's old mail isn't counted again");
     assert_ne!(s.contacts_revision(), revision);
-    assert_ne!(s.revision, before, "the list was made again when the build was done");
+    assert_ne!(s.revision, list, "the Focused Inbox's list made again once read");
+    // Taken out with its ×: gone, and still gone after a start and more mail from it.
+    let r = s.run("contacts.forget", &json!({"email": "Zed@New.example"})).unwrap();
+    assert_eq!(r["removed"], true);
+    assert!(s.suggest_contacts_now("zed", 8).is_empty());
+    assert!(s.run("contacts.forget", &json!({"email": "nobody"})).is_err());
+    drop(s);
+    let mut s = open();
+    arrive(&mut s, 1001);
+    assert!(s.contacts_step(usize::MAX));
+    assert!(s.suggest_contacts_now("zed", 8).is_empty(), "mail from it doesn't bring it back");
+    // Written to: back, first.
+    s.contacts_sent(&[EmailAddress::new("Zed New", "zed@new.example")]);
+    let back = s.suggest_contacts_now("zed", 8);
+    assert_eq!(back.len(), 1);
+    assert_eq!(back[0].sent, 1);
     done(s);
 }

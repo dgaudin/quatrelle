@@ -230,6 +230,9 @@ impl Session {
             return Err(CmdError::Params("the subject is empty (send with {\"allowEmptySubject\": true} to send anyway)".into()));
         }
         let (raw, from) = self.compose_bytes(&c, &d)?;
+        // Written to: suggested first from now on, as Outlook's AutoComplete list does.
+        let written: Vec<EmailAddress> = d.to.iter().chain(&d.cc).chain(&d.bcc).cloned().collect();
+        self.contacts_sent(&written);
         let local = self.account(&c.account).is_none_or(AccountState::is_local);
         let sent_folder = self.account(&c.account).and_then(|a| a.folder(FolderRole::Sent)).map(|f| f.path.clone());
         // Delay Delivery: into the Outbox, sent once it's time (the app has to be running then).

@@ -81,6 +81,56 @@ fn recipient_boxes_suggest_people() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// Outlook's × beside a suggestion: red on the row pointed at, it takes the address out of the
+/// suggestions (out of the address book until it's written to), the text typed staying as it
+/// was; Delete does the same to the one highlighted.
+#[test]
+fn a_suggestion_is_taken_out_with_its_cross() {
+    let (mut a, dir) = app("suggest-forget");
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    a.run("mail.new", json!({}));
+    frame(&ctx, &mut a, vec![]);
+    frame(&ctx, &mut a, vec![]);
+    frame(&ctx, &mut a, vec![Event::Text("zo".into())]);
+    frame(&ctx, &mut a, vec![]);
+    let suggested = |a: &mut MailApp| a.session.suggest_contacts_now("zo", 8).into_iter().map(|c| c.address.email).collect::<Vec<_>>();
+    assert!(suggested(&mut a).contains(&"zoe@studio.example".to_string()));
+    // Where the list is once the message's layout has settled.
+    let shown = |ctx: &egui::Context| {
+        ctx.memory(|m| m.areas().visible_layer_ids().into_iter().filter(|l| l.order == egui::Order::Foreground).find_map(|l| m.area_rect(l.id)))
+    };
+    let mut list = shown(&ctx).expect("the suggestions show");
+    for _ in 0..10 {
+        frame(&ctx, &mut a, vec![]);
+        let now = shown(&ctx).expect("the suggestions show");
+        if now == list {
+            break;
+        }
+        list = now;
+    }
+    // The first row's ×, at its right end.
+    let x = egui::pos2(list.right() - 4.0 - 13.0, list.top() + 4.0 + 14.0);
+    let button = |pressed| Event::PointerButton { pos: x, button: egui::PointerButton::Primary, pressed, modifiers: Modifiers::NONE };
+    frame(&ctx, &mut a, vec![Event::PointerMoved(x)]);
+    frame(&ctx, &mut a, vec![button(true)]);
+    frame(&ctx, &mut a, vec![button(false)]);
+    frame(&ctx, &mut a, vec![]);
+    assert_eq!(a.session.compose.as_ref().unwrap().to, "zo", "the text typed as it was, not the address picked");
+    assert!(!suggested(&mut a).contains(&"zoe@studio.example".to_string()), "taken out");
+    assert_eq!(a.ui.suggest_field, Some("to"), "the box keeps the cursor");
+    // Delete takes out the one highlighted.
+    a.session.compose.as_mut().unwrap().to.clear();
+    frame(&ctx, &mut a, vec![]);
+    frame(&ctx, &mut a, vec![Event::Text("sh".into())]);
+    frame(&ctx, &mut a, vec![]);
+    let first = a.session.suggest_contacts_now("sh", 8).first().map(|c| c.address.email.clone()).expect("someone for sh");
+    frame(&ctx, &mut a, vec![key(Key::Delete, Modifiers::NONE)]);
+    frame(&ctx, &mut a, vec![]);
+    assert!(!a.session.suggest_contacts_now("sh", 8).iter().any(|c| c.address.email == first), "{first} taken out");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 #[test]
 fn the_editor_formats_as_you_see_it_with_outlooks_keys() {
     use quatrelle_engine::mime::rich::{Align, List, PICTURE};

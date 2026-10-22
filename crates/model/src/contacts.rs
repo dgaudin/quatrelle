@@ -1,15 +1,20 @@
-//! An address book built from mail already in the cache, for To/Cc suggestions.
+//! An address book built from mail already in the cache, for To/Cc suggestions: Outlook's
+//! AutoComplete list, kept on disk and added to as mail comes and goes.
 //!
 //! Every sender and recipient seen counts. People you write to (the recipients of your own
 //! messages) rank well above people who only write to you, and recent contact counts more than
-//! old: score = 4 · sent + received, halved for every year since the last message.
+//! old: score = 4 · sent + received, halved for every year since the last message. People saved
+//! in Contacts rank as if written to often. An address taken out of the suggestions (Outlook's
+//! ×) stays out of them, whatever mail comes from it, until it's written to again.
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
+
+use serde::{Deserialize, Serialize};
 
 use crate::{EmailAddress, Summary};
 
 /// One person.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Contact {
     pub address: EmailAddress,
     /// Messages you sent them.
@@ -18,21 +23,39 @@ pub struct Contact {
     pub received: u32,
     /// The newest message involving them (Unix seconds).
     pub last: i64,
+    /// Saved in an address book (laid over the mail counted; not kept with the book).
+    #[serde(skip)]
+    pub saved: bool,
 }
+
+/// What being saved in Contacts counts for: as many messages written to them.
+const SAVED_WEIGHT: f64 = 32.0;
 
 impl Contact {
     fn score(&self, now: i64) -> f64 {
+        let counted = 4.0 * f64::from(self.sent) + f64::from(self.received);
+        // Someone saved in Contacts doesn't fade with time.
+        if self.saved {
+            return counted + SAVED_WEIGHT;
+        }
         let years = (now.saturating_sub(self.last)).max(0) as f64 / (365.0 * 86_400.0);
-        (4.0 * f64::from(self.sent) + f64::from(self.received)) * 0.5f64.powf(years)
+        counted * 0.5f64.powf(years)
     }
 }
 
 /// Most addresses seen; a mailbox full of newsletters stays bounded.
 const MAX_CONTACTS: usize = 20_000;
 
-#[derive(Clone, Debug, Default)]
+/// Most addresses taken out of the suggestions that are remembered.
+const MAX_FORGOTTEN: usize = 5_000;
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct ContactBook {
+    #[serde(default)]
     by_email: HashMap<String, Contact>,
+    /// Taken out of the suggestions: mail from them doesn't bring them back, writing to them does.
+    #[serde(default)]
+    forgotten: BTreeSet<String>,
 }
 
 impl ContactBook {
@@ -58,6 +81,12 @@ impl ContactBook {
         if !crate::addr::is_valid_email(&email) || email.contains("noreply") || email.contains("no-reply") || email.starts_with("mailer-daemon@") {
             return;
         }
+        // Taken out of the suggestions: back only once written to.
+        if sent {
+            self.forgotten.remove(&email);
+        } else if self.forgotten.contains(&email) {
+            return;
+        }
         if self.by_email.len() >= MAX_CONTACTS && !self.by_email.contains_key(&email) {
             return;
         }
@@ -74,11 +103,55 @@ impl ContactBook {
         c.last = c.last.max(date);
     }
 
-    /// Someone saved in an address book: ranked as if written to often.
-    pub fn add_saved(&mut self, a: &EmailAddress, now: i64) {
-        for _ in 0..8 {
-            self.note(a, now, true);
+    /// Someone saved in an address book: ranked as if written to often (see
+    /// [`ContactBook::clear_saved`]: laid over what mail counted, and taken off again).
+    pub fn add_saved(&mut self, a: &EmailAddress) {
+        let email = a.email.trim().to_ascii_lowercase();
+        // Taken out of the suggestions: out of them as one of the Contacts too (still in People).
+        if !crate::addr::is_valid_email(&email)
+            || self.forgotten.contains(&email)
+            || (self.by_email.len() >= MAX_CONTACTS && !self.by_email.contains_key(&email))
+        {
+            return;
         }
+        let c = self.by_email.entry(email.clone()).or_insert_with(|| Contact { address: EmailAddress::new("", email), ..Default::default() });
+        if c.address.name.is_empty() && !a.name.trim().is_empty() {
+            c.address.name = a.name.trim().to_string();
+        }
+        c.saved = true;
+    }
+
+    /// Take off what [`ContactBook::add_saved`] laid over the mail counted (the people saved
+    /// changed): someone known only from Contacts goes.
+    pub fn clear_saved(&mut self) {
+        self.by_email.retain(|_, c| {
+            c.saved = false;
+            c.sent > 0 || c.received > 0
+        });
+    }
+
+    /// Recipients of a message just sent: written to (and back in the suggestions if they were
+    /// taken out). `mine`: the user's own addresses, not counted.
+    pub fn add_sent<'a>(&mut self, to: impl IntoIterator<Item = &'a EmailAddress>, date: i64, mine: &[String]) {
+        for a in to {
+            if !mine.iter().any(|e| e.eq_ignore_ascii_case(a.email.trim())) {
+                self.note(a, date, true);
+            }
+        }
+    }
+
+    /// Take an address out of the suggestions (Outlook's ×): gone from the book, and mail from it
+    /// doesn't bring it back until it's written to. Whether it was there.
+    pub fn forget(&mut self, email: &str) -> bool {
+        let email = email.trim().to_ascii_lowercase();
+        let was = self.by_email.remove(&email).is_some();
+        if self.forgotten.len() >= MAX_FORGOTTEN
+            && let Some(first) = self.forgotten.iter().next().cloned()
+        {
+            self.forgotten.remove(&first);
+        }
+        self.forgotten.insert(email);
+        was
     }
 
     /// Count a message. `mine` are the user's own addresses: a message from one of them is one
@@ -273,6 +346,47 @@ mod tests {
         b.add(&msg(("Ann New", "ann.new@x.example"), &[], now), &me);
         let s = b.suggest("ann", 5, now);
         assert_eq!(s[0].address.email, "ann.new@x.example");
+    }
+
+    /// Outlook's ×: an address taken out stays out whatever mail comes from it, until it's
+    /// written to. People saved in Contacts are a layer over the mail counted: they rank high,
+    /// don't fade, come off again (someone known only from Contacts goes), and aren't kept with
+    /// the book on disk.
+    #[test]
+    fn taken_out_saved_and_kept() {
+        let me = vec!["me@x.example".to_string()];
+        let mut b = ContactBook::new();
+        let now = 2_000_000_000;
+        b.add(&msg(("Bob Seller", "bob@shop.example"), &[], now), &me);
+        assert!(b.forget("BOB@shop.example"));
+        assert!(b.suggest("bob", 5, now).is_empty());
+        b.add(&msg(("Bob Seller", "bob@shop.example"), &[], now), &me);
+        assert!(b.suggest("bob", 5, now).is_empty(), "mail from it doesn't bring it back");
+        b.add_sent(&[EmailAddress::new("Bob", "bob@shop.example"), EmailAddress::new("Me", "me@x.example")], now, &me);
+        assert_eq!(b.suggest("bob", 5, now)[0].sent, 1, "written to: back");
+        assert!(b.get("me@x.example").is_none(), "my own address isn't a contact");
+        // Saved in Contacts, never written to: first, whatever the age.
+        b.add(&msg(("Bea Often", "bea@x.example"), &[], now - 20 * 365 * 86_400), &me);
+        b.add_saved(&EmailAddress::new("Bea Often", "bea@x.example"));
+        b.add_saved(&EmailAddress::new("Ben Saved", "ben@x.example"));
+        let s = b.suggest("b", 5, now);
+        assert!(s[0].saved && s[1].saved, "{s:?}");
+        // Kept on disk without the layer, and the layer comes off.
+        let kept: ContactBook = serde_json::from_str(&serde_json::to_string(&b).unwrap()).unwrap();
+        assert!(kept.get("bea@x.example").is_some_and(|c| !c.saved));
+        b.clear_saved();
+        assert!(b.get("ben@x.example").is_none(), "known only from Contacts: gone");
+        assert!(b.get("bea@x.example").is_some_and(|c| !c.saved && c.received == 1));
+        let kept: ContactBook = serde_json::from_str(&serde_json::to_string(&b).unwrap()).unwrap();
+        kept.suggest("bob", 5, now).iter().for_each(|c| assert_eq!(c.address.email, "bob@shop.example"));
+        let mut kept = kept;
+        kept.forget("bea@x.example");
+        kept.add_saved(&EmailAddress::new("Bea Often", "bea@x.example"));
+        assert!(kept.get("bea@x.example").is_none(), "taken out: not suggested as one of the Contacts either");
+        let again: ContactBook = serde_json::from_str(&serde_json::to_string(&kept).unwrap()).unwrap();
+        let mut again = again;
+        again.add(&msg(("Bea Often", "bea@x.example"), &[], now), &me);
+        assert!(again.get("bea@x.example").is_none(), "taken out, kept taken out on disk");
     }
 
     #[test]
