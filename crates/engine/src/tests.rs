@@ -2692,6 +2692,19 @@ fn server_rules_go_to_the_server_and_keep_their_id() {
         })
         .collect();
     assert_eq!(reads, vec![(account.clone(), vec!["R1".to_string()])]);
+    // Online again (after each folder, each look for new mail): not read again — that was over
+    // a hundred reads a pass on a big mailbox.
+    s.apply(quatrelle_model::Event::Status { account: account.clone(), status: SyncStatus::Online { at: NOW + 60 } });
+    assert_eq!(asked(&mut s), 0, "read on coming online, not on every Online");
+    // A refusal says nothing of what the server keeps: the list stays.
+    s.apply(quatrelle_model::Event::ServerRules {
+        account: account.clone(),
+        ids: Vec::new(),
+        others: Vec::new(),
+        cleared: Vec::new(),
+        error: Some("the server is busy".into()),
+    });
+    assert_eq!(s.foreign_rules.len(), 1, "Outlook's rules stay listed after a refusal");
     // Turned off: its server copy is removed, and the id with it.
     let mut off = s.rules[0].clone();
     off.server = false;

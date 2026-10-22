@@ -295,7 +295,7 @@ pub(crate) fn tour() {
             Dialog::delete_folder(&a.session, &projects),
             Dialog::NewCategory { name: "Clients".into(), color: 3, error: Some("taken".into()) },
             Dialog::Rules,
-            Dialog::rule_from("zoe@studio.example", "x"),
+            Dialog::rule_from("zoe@studio.example", Some("sample"), true),
             Dialog::spelling(),
             Dialog::add_account_with("zoe@gmail.com", true),
             jmap_form(),
@@ -977,7 +977,7 @@ fn organising_renders_and_rules_save() {
     a.run("list.focusTab", json!({"value": "other"}));
     frame(&ctx, &mut a, vec![]);
     // The rule editor saves a rule; the Rules dialog lists it.
-    a.ui.dialog = Some(Dialog::rule_from("zoe@studio.example", ""));
+    a.ui.dialog = Some(Dialog::rule_from("zoe@studio.example", None, false));
     frame(&ctx, &mut a, vec![]);
     if let Some(Dialog::EditRule(f)) = a.ui.dialog.as_mut() {
         f.actions = vec![crate::dialogs::RuleAct { action: crate::dialogs::RuleDo::Categorize, target: "Work".into() }];

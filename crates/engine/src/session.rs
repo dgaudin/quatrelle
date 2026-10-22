@@ -3862,7 +3862,11 @@ impl Session {
                         self.ask_password.push(account.clone());
                     }
                 }
-                let online = matches!(status, SyncStatus::Online { .. });
+                // Coming online, not every "Online" after it: the sync says it after each folder
+                // and each check for new mail, and the rules were read (and a refused one sent
+                // again) that often — over a hundred times a pass on a big mailbox.
+                let was_online = self.account(&account).is_some_and(|a| matches!(a.status, SyncStatus::Online { .. }));
+                let online = matches!(status, SyncStatus::Online { .. }) && !was_online;
                 // A server that has started syncing is readable: its rules are asked for then,
                 // not once the whole mailbox (public folders and all) has been walked — that
                 // takes minutes, and the Rules dialog would sit empty until then.
@@ -3950,14 +3954,19 @@ impl Session {
             Event::ServerRules { account, ids, others, cleared, error } => {
                 // The rules the server keeps that Quatrelle didn't make (or no longer does):
                 // listed as they are, whoever made them owns them.
-                log::info!("rules: {account} keeps {} rules made elsewhere", others.len());
-                self.foreign_rules.retain(|r| r.account != account);
-                self.foreign_rules.extend(others.into_iter().map(|mut r| {
-                    r.account.clone_from(&account);
-                    r
-                }));
-                self.foreign_rules
-                    .sort_by(|a, b| (a.account.as_str(), a.name.to_lowercase().as_str()).cmp(&(b.account.as_str(), b.name.to_lowercase().as_str())));
+                // A refusal says nothing of the rules the server keeps: the list stays as it was
+                // (emptied, the rules made in Outlook vanished from the dialog each time).
+                if error.is_none() {
+                    log::info!("rules: {account} keeps {} rules made elsewhere", others.len());
+                    self.foreign_rules.retain(|r| r.account != account);
+                    self.foreign_rules.extend(others.into_iter().map(|mut r| {
+                        r.account.clone_from(&account);
+                        r
+                    }));
+                    self.foreign_rules.sort_by(|a, b| {
+                        (a.account.as_str(), a.name.to_lowercase().as_str()).cmp(&(b.account.as_str(), b.name.to_lowercase().as_str()))
+                    });
+                }
                 if let Some(e) = error {
                     self.notice(format!("the server's rules weren't changed: {e}"), true);
                 } else {

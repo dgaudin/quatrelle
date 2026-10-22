@@ -681,6 +681,10 @@ struct Worker {
     /// Folders asked to keep more than the setting (Show more on the server): how many of each
     /// (`windows.json` with the account).
     windows: HashMap<String, usize>,
+    /// When the Inbox is next looked at, on a server that can't say when mail comes (no IDLE,
+    /// no push). A deadline, not a wait restarted by every job: while someone works (messages
+    /// opened, pictures, read marks), the look kept being put off, and new mail with it.
+    next_poll: Instant,
 }
 
 /// Where an account keeps its folders' own windows.
@@ -717,6 +721,7 @@ impl Worker {
             no_push: false,
             pushed: false,
             soon: Vec::new(),
+            next_poll: Instant::now() + POLL_EVERY,
         }
     }
 
@@ -944,7 +949,8 @@ impl Worker {
         let idle = matches!(&self.conn, Some(Conn::Imap(c)) if c.has("IDLE"));
         if !idle || inbox.is_none() {
             let next_soon = self.soon.iter().map(|(at, _)| *at).min();
-            let wait = next_soon.map_or(POLL_EVERY, |at| at.saturating_duration_since(Instant::now()).min(POLL_EVERY));
+            let poll_in = self.next_poll.saturating_duration_since(Instant::now());
+            let wait = next_soon.map_or(poll_in, |at| at.saturating_duration_since(Instant::now()).min(poll_in));
             match rx.recv_timeout(wait) {
                 Ok(j) => push_job(&mut self.queue, j),
                 Err(RecvTimeoutError::Disconnected) => self.closed = true,
@@ -959,6 +965,7 @@ impl Worker {
                     }
                 }
                 Err(RecvTimeoutError::Timeout) => {
+                    self.next_poll = Instant::now() + POLL_EVERY;
                     if let Some(f) = inbox {
                         self.sync_one(&f);
                     }
@@ -1081,6 +1088,9 @@ impl Worker {
                 self.backoff = (self.backoff * 2).min(Duration::from_secs(300));
                 self.status(SyncStatus::Error { error: e.to_string() });
             }
+            // The server can't now (busy, a mailbox being moved): the next sync tries again;
+            // the connection is fine and nothing is the user's to do.
+            NetError::Later(_) => {}
             e => self.notice(e.to_string()),
         }
     }
@@ -1090,6 +1100,25 @@ impl Worker {
             return Ok(());
         }
         self.status(SyncStatus::Connecting);
+        let r = self.open_connection();
+        // Connected for something asked (a message, a picture, the rules) rather than by the
+        // sync: "Connecting…" said so far must not stay up — the sync, if it's due, says
+        // "Syncing" next; otherwise the account is as current as before.
+        match &r {
+            Ok(()) => {
+                self.auth_failed = false;
+                if self.last_full.is_some() {
+                    self.status(SyncStatus::Online { at: now() });
+                }
+            }
+            // Said here too: not every caller hands the failure on (a picture, a search), and
+            // the caller that does says it again, more precisely (a password to ask for).
+            Err(e) => self.status(SyncStatus::Error { error: e.to_string() }),
+        }
+        r
+    }
+
+    fn open_connection(&mut self) -> Result<()> {
         let secret = self.secret()?;
         let user = if self.acc.username.is_empty() { self.acc.email.clone() } else { self.acc.username.clone() };
         if let Some(url) = &self.acc.graph {
@@ -1174,6 +1203,14 @@ impl Worker {
         match e {
             e @ NetError::Auth(_) => self.failed(e),
             e if e.is_fatal() => self.failed(e),
+            // Busy: tried again after the backoff, as when the network fails.
+            e @ NetError::Later(_) => {
+                log::warn!("{}: {e}", self.acc.id);
+                self.conn = None;
+                self.next_attempt = Instant::now() + self.backoff;
+                self.backoff = (self.backoff * 2).min(Duration::from_secs(300));
+                self.status(SyncStatus::Error { error: e.to_string() });
+            }
             e => {
                 log::warn!("{}: {e}", self.acc.id);
                 self.conn = None;
@@ -1291,6 +1328,7 @@ impl Worker {
             self.report_quota();
             self.prune_jmap_numbers();
             self.last_full = Some(Instant::now());
+            self.next_poll = Instant::now() + POLL_EVERY;
             log::info!("{}: full sync done in {:.0} s", self.acc.id, began.elapsed().as_secs_f32());
             // Anything left from a failed attempt gets another try every full sync.
             self.flush_outbox();
@@ -1440,13 +1478,23 @@ impl Worker {
             match done.recv_timeout(std::time::Duration::from_millis(25)) {
                 Ok(SyncDone::Folder(path, result)) => {
                     self.status(SyncStatus::Syncing { folder: path.clone() });
-                    // A reader that timed out or lost its connection says the server doesn't want
-                    // several of us right now (Exchange throttles a first full sync): the rest
-                    // goes on this connection, and a fatal error stops the pass (`failed`).
-                    if result.as_ref().is_err_and(NetError::is_fatal) {
-                        self.opts.parallel = 0;
+                    match result {
+                        // A reader that timed out, lost its connection or failed to sign in has
+                        // stopped (the server doesn't want several of us right now: Exchange
+                        // throttles a first full sync). Its folder is read again on this
+                        // connection, after the others, and the rest goes on this connection
+                        // too. It says nothing about this connection: taken as this
+                        // connection's failure, a reader's dropped connection asked for the
+                        // password while the password was fine.
+                        Err(e) if reader_stops(&e) => {
+                            log::warn!("{}: reading {path} on a connection of its own: {e}; read on the main one", self.acc.id);
+                            self.opts.parallel = 0;
+                            if let Ok(mut q) = queue.lock() {
+                                q.push_back(path);
+                            }
+                        }
+                        result => self.apply_report(&path, result),
                     }
-                    self.apply_report(&path, result);
                 }
                 Ok(SyncDone::State(state)) => {
                     self.jstate.absorb(state);
@@ -1634,15 +1682,14 @@ impl Worker {
                     log::info!("{}: the server keeps {} rules ({} of ours, {} others)", self.id(), ids.len() + others.len(), ids.len(), others.len());
                     self.sink.emit(Event::ServerRules { account: self.id(), ids, others, cleared, error: None });
                 }
+                // Read by itself on connecting: one that fails (the server busy, a connection
+                // dropped) is only logged — the list kept is still right, and a red "the server's
+                // rules weren't changed" for a read nobody asked for was one more false alarm.
                 Err(e) => {
-                    log::info!("{}: the server's rules couldn't be read: {e}", self.id());
-                    self.sink.emit(Event::ServerRules {
-                        account: self.id(),
-                        ids: Vec::new(),
-                        others: Vec::new(),
-                        cleared: Vec::new(),
-                        error: Some(e.to_string()),
-                    })
+                    log::warn!("{}: the server's rules couldn't be read: {e}", self.id());
+                    if e.is_fatal() || matches!(e, NetError::Auth(_)) {
+                        self.failed(e);
+                    }
                 }
             },
             Job::SetServerRuleEnabled { id, enabled, ours, .. } => self.change_server_rule(&id, Some(enabled), false, ours),
@@ -1708,17 +1755,17 @@ impl Worker {
                     RuleAction::MoveToRole(role) => self.folders.iter().find(|f| f.role == *role && f.mailbox.is_none()).map(|f| f.path.as_str()),
                     _ => None,
                 });
-                let id = match folder {
-                    Some(path) => match self.jstate.mailbox(path) {
-                        Ok(id) => Some(id.to_string()),
-                        Err(_) => {
-                            // Its folder isn't on the server (any more): keeping the rule here is
-                            // better than filing mail nowhere.
-                            self.notice(format!("the rule \"{}\" waits: its folder isn't on the server", rule.name));
-                            continue;
-                        }
-                    },
-                    None => None,
+                let moves = rule.actions.iter().any(|a| matches!(a, RuleAction::MoveTo(_) | RuleAction::MoveToRole(_)));
+                let id = match folder.map(|path| self.jstate.mailbox(path).map(str::to_string)) {
+                    Some(Ok(id)) => Some(id),
+                    // Its folder isn't on the server (any more), or the mailbox has none of that
+                    // kind (no Archive): keeping the rule here is better than filing mail nowhere —
+                    // sent without its move, it reached the server doing nothing.
+                    Some(Err(_)) | None if moves => {
+                        self.notice(format!("the rule \"{}\" waits: its folder isn't on the server", rule.name));
+                        continue;
+                    }
+                    Some(Err(_)) | None => None,
                 };
                 wanted.push((rule.clone(), id));
             }
@@ -1743,13 +1790,18 @@ impl Worker {
         })();
         match r {
             Ok((ids, others)) => self.sink.emit(Event::ServerRules { account: self.acc.id.clone(), ids, others, cleared: delete, error: None }),
-            Err(e) => self.sink.emit(Event::ServerRules {
-                account: self.acc.id.clone(),
-                ids: Vec::new(),
-                others: Vec::new(),
-                cleared: Vec::new(),
-                error: Some(e.to_string()),
-            }),
+            Err(e) => {
+                // What the server said, in the log too: a notice alone left a refused rule
+                // unexplained once it was gone from the screen.
+                log::warn!("{}: the server's rules weren't changed: {e}", self.acc.id);
+                self.sink.emit(Event::ServerRules {
+                    account: self.acc.id.clone(),
+                    ids: Vec::new(),
+                    others: Vec::new(),
+                    cleared: Vec::new(),
+                    error: Some(e.to_string()),
+                });
+            }
         }
     }
 
@@ -1963,7 +2015,15 @@ impl Worker {
         })();
         let (media, data, error) = match r {
             Ok((media, data)) => (media, data, None),
-            Err(e) => (String::new(), Vec::new(), Some(e.to_string())),
+            Err(e) => {
+                let said = e.to_string();
+                // The connection lost or the sign-in refused is the account's, as when a message
+                // is opened: left unsaid, "Connecting…" stayed up for good.
+                if e.is_fatal() || matches!(e, NetError::Auth(_)) {
+                    self.failed(e);
+                }
+                (String::new(), Vec::new(), Some(said))
+            }
         };
         // Said in the log either way: "why is there no picture?" is answered without a debugger.
         match &error {
@@ -2510,6 +2570,11 @@ impl Worker {
                     self.failed(e);
                     return;
                 }
+                // Busy: the change stays queued for the next pass.
+                Err(e @ NetError::Later(_)) => {
+                    log::warn!("{}: a change waits: {e}", self.acc.id);
+                    return;
+                }
                 Err(e) => {
                     // The server refused: drop the change and resync so the cache matches the
                     // server again (forcing a full flag check).
@@ -2744,11 +2809,11 @@ fn sync_folders(
             Conn::Ews(c) => crate::ews::sync_folder(c, &mut state, &store, &acc.id, &path, &opts),
             Conn::Pop => Err(NetError::No("POP accounts read mail on one connection".into())),
         };
-        let closed = matches!(&r, Err(NetError::Closed(_)));
+        let stop = r.as_ref().is_err_and(reader_stops);
         if tx.send(SyncDone::Folder(path, r)).is_err() {
             break;
         }
-        if closed {
+        if stop {
             break;
         }
     }
@@ -2756,6 +2821,12 @@ fn sync_folders(
         c.logout();
     }
     let _ = tx.send(SyncDone::State(state));
+}
+
+/// A reader connection's error that ends it (the main connection reads its folder instead): its
+/// connection is gone or its sign-in refused.
+fn reader_stops(e: &NetError) -> bool {
+    e.is_fatal() || matches!(e, NetError::Auth(_))
 }
 
 fn jumps_queue(j: &Job) -> bool {
