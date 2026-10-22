@@ -384,6 +384,8 @@ impl MailApp {
                     self.place_picture(r);
                 }
             }
+            // Read at the start of the next frame, which has the context the fonts belong to.
+            Action::LoadTypeface(name) => self.ui.load_typefaces.push(name),
             Action::AttachFiles => {
                 for p in self.services.pick_files() {
                     self.run("compose.attach", json!({"path": p.to_string_lossy()}));

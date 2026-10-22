@@ -309,11 +309,37 @@ fn paragraphs(text: &str) -> Vec<(&str, usize)> {
     out
 }
 
+/// Spaces as HTML keeps them: a run of several, a tab, or one at the paragraph's start would
+/// collapse to one (or nothing) where the message is read, so all but the last of a run are
+/// non-breaking (the last stays a space, so the line can still wrap there). `after_space`
+/// says whether the paragraph so far ends in a space (true at its start).
+fn keep_spaces(escaped: &str, after_space: &mut bool) -> String {
+    let mut out = String::with_capacity(escaped.len());
+    for c in escaped.chars() {
+        match c {
+            ' ' => {
+                out.push_str(if *after_space { "&nbsp;" } else { " " });
+                *after_space = true;
+            }
+            '\t' => {
+                out.push_str("&nbsp;&nbsp;&nbsp;&nbsp;");
+                *after_space = true;
+            }
+            c => {
+                out.push(c);
+                *after_space = false;
+            }
+        }
+    }
+    out
+}
+
 /// One paragraph's runs as HTML.
 fn para_html(line: &str, start: usize, styles: &Styles) -> String {
     let mut out = String::new();
     let chars: Vec<char> = line.chars().collect();
     let mut i = 0;
+    let mut after_space = true;
     while i < chars.len() {
         let st = styles.style(start + i);
         let mut j = i + 1;
@@ -323,10 +349,11 @@ fn para_html(line: &str, start: usize, styles: &Styles) -> String {
         let run: String = chars.get(i..j).map(|c| c.iter().collect()).unwrap_or_default();
         if let Some(cid) = st.picture.as_ref().filter(|_| run.starts_with(PICTURE)) {
             out.push_str(&format!("<img src=\"cid:{}\" style=\"max-width:100%\">", esc(cid)));
+            after_space = false;
             i = j;
             continue;
         }
-        let mut h = esc(&run.replace(PICTURE, ""));
+        let mut h = keep_spaces(&esc(&run.replace(PICTURE, "")), &mut after_space);
         if st.mono {
             h = format!("<code>{h}</code>");
         }
@@ -689,6 +716,15 @@ mod tests {
         assert!(html.contains("<div><br></div>") && html.contains("x<img src=\"cid:pic@x\""), "{html}");
         let t = to_text(text, &s);
         assert_eq!(t, "Hi team\n1. first\n2. second\n\nsee site <https://a.example/>\nx[picture]");
+        // Runs of spaces, tabs and a space at a paragraph's start reach the recipient (HTML
+        // collapses them otherwise); one space between words stays a space.
+        let spaced = "  Ref  A\tB\nx y";
+        let html = to_html(spaced, &Styles::plain(spaced));
+        assert!(html.contains("<div>&nbsp;&nbsp;Ref &nbsp;A&nbsp;&nbsp;&nbsp;&nbsp;B</div>") && html.contains("<div>x y</div>"), "{html}");
+        let mut st = Styles::plain(spaced);
+        st.restyle(spaced, 2..5, |s| Style { bold: true, ..s.clone() });
+        let html = to_html(spaced, &st);
+        assert!(html.contains("&nbsp;&nbsp;<b>Ref</b> &nbsp;A"), "across runs too: {html}");
         // Nothing typed can become markup.
         let evil = "<script>x</script>";
         assert!(!to_html(evil, &Styles::plain(evil)).contains("<script>"));

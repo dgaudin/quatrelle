@@ -1133,3 +1133,31 @@ month	May	5月
 	No results. Try fewer words.	結果がありません。語数を減らしてください。
 	Put a “-- ” line before the signature	署名の前に「-- 」の行を入れる
 	Some mail apps use it to tell the signature apart; Outlook adds none.	一部のメールソフトはこの行で署名を区別します。Outlook は追加しません。
+	Ignore all	すべて無視
+	Ignore once	一度だけ無視
+	All languages	すべての言語
+	The language the spelling is checked in	スペルを確認する言語
+	Let this word be, here and elsewhere in this message	この単語をこのメッセージ内のすべての箇所でそのままにする
+	Message	メッセージ
+	Format Text	テキストの書式
+	Review	校閲
+	Clipboard	クリップボード
+	Basic Text	基本テキスト
+	Names	名前
+	Include	挿入
+	Show Fields	フィールドの表示
+	Tracking	追跡
+	More Options	その他のオプション
+	Format	形式
+	Paragraph	段落
+	Font	フォント
+	Proofing	文章校正
+	Paste options	貼り付けのオプション
+	Keep text only	テキストのみ保持
+	Paste without the look it has where it was copied	コピー元の書式なしで貼り付ける
+	Check Names	名前の確認
+	Fill in the addresses of the names typed, from your contacts and the people you've written to	入力した名前のアドレスを、連絡先と送信先の人から補完します
+	HTML	HTML
+	Horizontal line	水平線
+	Increase font size (Ctrl+])	フォントを大きく (Ctrl+])
+	Decrease font size (Ctrl+[)	フォントを小さく (Ctrl+[)

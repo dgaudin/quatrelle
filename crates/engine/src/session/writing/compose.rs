@@ -58,6 +58,11 @@ pub struct Compose {
     /// The Replies to row is shown.
     #[serde(default)]
     pub show_reply_to: bool,
+    /// The language its spelling is checked in (`fr`, `en`…, as the dictionaries are named;
+    /// empty: the interface's, when there's a dictionary for it; `all`: every dictionary), as
+    /// Outlook's Review › Language.
+    #[serde(default)]
+    pub language: String,
 }
 
 impl Compose {

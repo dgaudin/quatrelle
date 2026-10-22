@@ -69,6 +69,12 @@ pub trait Services {
     fn rtl_font(&mut self) -> Option<Vec<u8>> {
         None
     }
+    /// An installed typeface by name (`Arial`, `Calibri`), for the message editor to draw text
+    /// set in it: its regular file, and its bold when there is one. `None` when the system
+    /// hasn't it (nor, on Linux, a font standing in for it).
+    fn typeface(&mut self, _family: &str) -> Option<(Vec<u8>, Option<Vec<u8>>)> {
+        None
+    }
     /// A picture on the clipboard, as PNG bytes (`None` when there is none).
     fn clipboard_picture(&mut self) -> Option<Vec<u8>> {
         None

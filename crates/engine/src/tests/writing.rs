@@ -544,6 +544,30 @@ fn an_html_signature_goes_as_written() {
     assert!(p.text.contains("Hi Zoe") && p.text.contains("Didier GAUDIN") && !p.text.contains("x()"), "{}", p.text);
 }
 
+/// Check Names writes out the address of a name typed alone, from the people known, and leaves
+/// (and names) the ones it can't tell; the language a message's spelling is checked in is kept
+/// with it.
+#[test]
+fn names_are_checked_and_a_language_is_kept() {
+    let mut s = sample_session("check-names");
+    s.run("mail.new", &json!({})).unwrap();
+    s.run("compose.update", &json!({"to": "zoe; nobody-of-that-name", "cc": "ann@x.example"})).unwrap();
+    let r = s.run("compose.checkNames", &json!({})).unwrap();
+    let c = s.compose.clone().unwrap();
+    assert_eq!(c.to, "Zoe Park <zoe@studio.example>; nobody-of-that-name; ", "{r}");
+    assert_eq!(c.cc, "ann@x.example; ");
+    assert_eq!(r["unresolved"], json!(["nobody-of-that-name"]));
+    assert_eq!(r["resolved"], 1);
+    // Checked again: nothing changes.
+    s.run("compose.checkNames", &json!({})).unwrap();
+    assert_eq!(s.compose.as_ref().unwrap().to, c.to);
+    assert_eq!(s.run("compose.language", &json!({"language": "FR"})).unwrap()["language"], "fr");
+    assert_eq!(s.compose.as_ref().unwrap().language, "fr");
+    assert!(s.run("compose.language", &json!({"language": "fr; drop"})).is_err());
+    s.run("compose.language", &json!({})).unwrap();
+    assert!(s.compose.as_ref().unwrap().language.is_empty(), "the interface's language again");
+}
+
 /// A signature made in the editor comes back exactly as set, in every new message and in what's
 /// sent: its size and typeface, its underline and its centring (it was read back from its HTML
 /// before, which kept none of them). Outlook puts no `-- ` line before a signature: one goes

@@ -72,6 +72,27 @@ pub(crate) fn clipboard_html() -> Option<String> {
     CLIPBOARD_HTML.get().and_then(|read| read())
 }
 
+/// How the app puts HTML on the clipboard (with the text for apps that take text alone), set
+/// once at start: Copy and Cut in the editor then keep the look, for Outlook or Word to paste.
+static CLIPBOARD_HTML_WRITER: std::sync::OnceLock<fn(&str, &str)> = std::sync::OnceLock::new();
+
+/// Tell the editor how to put HTML and text on the clipboard together.
+pub fn set_clipboard_html_writer(write: fn(&str, &str)) {
+    let _ = CLIPBOARD_HTML_WRITER.set(write);
+}
+
+/// Put `html` on the clipboard, with `text` for apps that take text alone; `false` when the app
+/// can't (the caller then copies the text the usual way).
+pub(crate) fn write_clipboard_html(html: &str, text: &str) -> bool {
+    match CLIPBOARD_HTML_WRITER.get() {
+        Some(write) => {
+            write(html, text);
+            true
+        }
+        None => false,
+    }
+}
+
 pub(crate) fn compose_inline(c: &quatrelle_engine::Compose, ctx: &egui::Context) -> bool {
     !c.window || ctx.embed_viewports()
 }
@@ -157,6 +178,9 @@ pub enum Action {
     FocusMain,
     /// Open the File page at a page.
     Backstage(backstage::Page),
+    /// Read a typeface the message being written uses (Arial, Calibri…) from the system, so
+    /// the editor draws it as it will be read.
+    LoadTypeface(String),
     /// An attachment is being dragged out of the window: hand it to the system as a file.
     DragOut(usize),
     /// Choose an Outlook data file and open it.
@@ -313,6 +337,8 @@ pub struct UiState {
     drag_out: Option<PathBuf>,
     /// The platform can drag files out.
     pub(crate) can_drag_out: bool,
+    /// Typefaces a message being written asked for, read from the system at the next frame.
+    pub(crate) load_typefaces: Vec<String>,
 }
 
 pub struct MailApp {
@@ -417,6 +443,7 @@ impl MailApp {
                 invite: None,
                 drag_out: None,
                 can_drag_out: false,
+                load_typefaces: Vec::new(),
             },
         };
         app.ui.craft_apps = craft_apps;

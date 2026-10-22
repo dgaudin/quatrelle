@@ -89,6 +89,23 @@ pub enum Icon {
     Note,
     /// Two chevrons running ahead (Quick Steps: several things in one go).
     Steps,
+    /// The language the spelling is checked in (Review › Language).
+    Language,
+    /// The message window's ribbon: the clipboard, the signature, importance, a rule, the
+    /// font's size, the word count, delay delivery, Bcc, and names checked.
+    Paste,
+    Cut,
+    Copy,
+    Signature,
+    Important,
+    LowImportance,
+    Rule,
+    FontGrow,
+    FontShrink,
+    WordCount,
+    DelayDelivery,
+    Bcc,
+    CheckNames,
 }
 
 struct Pen<'a> {
@@ -214,6 +231,20 @@ fn svg(icon: Icon) -> &'static str {
         Icon::ClearFormat => f!("text_clear_formatting"),
         Icon::AddressBook => f!("book_contacts"),
         Icon::Note => f!("note"),
+        Icon::Language => f!("local_language"),
+        Icon::Paste => f!("clipboard_paste"),
+        Icon::Cut => f!("cut"),
+        Icon::Copy => f!("copy"),
+        Icon::Signature => f!("signature"),
+        Icon::Important => f!("important"),
+        Icon::LowImportance => f!("arrow_down"),
+        Icon::Rule => f!("line_horizontal_1"),
+        Icon::FontGrow => f!("font_increase"),
+        Icon::FontShrink => f!("font_decrease"),
+        Icon::WordCount => f!("text_word_count"),
+        Icon::DelayDelivery => f!("calendar_clock"),
+        Icon::Bcc => f!("eye"),
+        Icon::CheckNames => f!("person_available"),
     }
 }
 
@@ -606,6 +637,93 @@ fn drawn(p: &Painter, rect: Rect, icon: Icon, color: Color32) {
             pen.circle(11.5, 11.5, 4.0);
             pen.line(&[(9.5, 11.5), (11.0, 13.0), (13.5, 10.0)]);
         }
+        Icon::Language => {
+            // A capital A, with a smaller letter's hook and a bar beside it.
+            pen.line(&[(1.5, 14.0), (6.0, 4.0), (10.5, 14.0)]);
+            pen.line(&[(3.3, 10.0), (8.7, 10.0)]);
+            pen.line(&[(12.0, 3.0), (12.0, 9.0), (14.5, 9.0)]);
+            pen.line(&[(11.0, 5.5), (14.5, 5.5)]);
+        }
+        Icon::Paste => {
+            // A clipboard with a sheet on it.
+            pen.rect(3.0, 3.0, 13.0, 15.0);
+            pen.rect(6.0, 1.5, 10.0, 4.5);
+            pen.line(&[(5.5, 8.0), (10.5, 8.0)]);
+            pen.line(&[(5.5, 11.0), (10.5, 11.0)]);
+        }
+        Icon::Cut => {
+            // Scissors: two rings and the blades crossing.
+            pen.circle(4.5, 12.5, 2.3);
+            pen.circle(11.5, 12.5, 2.3);
+            pen.line(&[(6.0, 10.8), (12.0, 2.0)]);
+            pen.line(&[(10.0, 10.8), (4.0, 2.0)]);
+        }
+        Icon::Copy => {
+            // Two sheets, one over the other.
+            pen.rect(5.5, 5.0, 14.0, 15.0);
+            pen.line(&[(5.5, 2.0), (2.0, 2.0), (2.0, 11.5)]);
+            pen.line(&[(2.0, 2.0), (10.5, 2.0), (10.5, 5.0)]);
+        }
+        Icon::Signature => {
+            // A pen stroke, and the line it's signed on.
+            pen.line(&[(2.0, 11.0), (4.0, 7.0), (6.0, 11.0), (8.0, 5.0), (10.0, 11.0), (12.0, 8.0), (14.0, 10.0)]);
+            pen.line(&[(2.0, 14.0), (14.0, 14.0)]);
+        }
+        Icon::Important => {
+            // An exclamation mark.
+            pen.line(&[(8.0, 2.5), (8.0, 10.5)]);
+            pen.dot(8.0, 13.5, 1.1);
+        }
+        Icon::LowImportance => {
+            // An arrow pointing down.
+            pen.line(&[(8.0, 2.5), (8.0, 13.5)]);
+            pen.line(&[(3.5, 9.0), (8.0, 13.5), (12.5, 9.0)]);
+        }
+        Icon::Rule => {
+            // A line across.
+            pen.line(&[(2.0, 8.0), (14.0, 8.0)]);
+        }
+        Icon::FontGrow => {
+            // A capital A and a small arrow up.
+            pen.line(&[(1.5, 13.5), (5.5, 3.5), (9.5, 13.5)]);
+            pen.line(&[(3.1, 9.5), (7.9, 9.5)]);
+            pen.line(&[(13.0, 3.0), (13.0, 9.0)]);
+            pen.line(&[(11.0, 5.0), (13.0, 3.0), (15.0, 5.0)]);
+        }
+        Icon::FontShrink => {
+            // A capital A and a small arrow down.
+            pen.line(&[(1.5, 13.5), (5.5, 3.5), (9.5, 13.5)]);
+            pen.line(&[(3.1, 9.5), (7.9, 9.5)]);
+            pen.line(&[(13.0, 3.0), (13.0, 9.0)]);
+            pen.line(&[(11.0, 7.0), (13.0, 9.0), (15.0, 7.0)]);
+        }
+        Icon::WordCount => {
+            // Lines of text, and "123" as marks under them.
+            pen.line(&[(2.0, 3.0), (14.0, 3.0)]);
+            pen.line(&[(2.0, 6.5), (14.0, 6.5)]);
+            pen.line(&[(2.0, 10.0), (8.0, 10.0)]);
+            pen.dot(9.5, 13.5, 1.0);
+            pen.dot(12.0, 13.5, 1.0);
+            pen.dot(14.5, 13.5, 1.0);
+        }
+        Icon::DelayDelivery => {
+            // A calendar with a clock over its corner.
+            pen.rect(2.0, 3.5, 11.0, 13.5);
+            pen.line(&[(2.0, 6.5), (11.0, 6.5)]);
+            pen.circle(12.0, 11.5, 3.2);
+            pen.line(&[(12.0, 9.8), (12.0, 11.5), (13.4, 12.4)]);
+        }
+        Icon::Bcc => {
+            // An eye.
+            pen.line(&[(1.5, 8.0), (4.0, 5.0), (8.0, 3.8), (12.0, 5.0), (14.5, 8.0), (12.0, 11.0), (8.0, 12.2), (4.0, 11.0), (1.5, 8.0)]);
+            pen.circle(8.0, 8.0, 2.2);
+        }
+        Icon::CheckNames => {
+            // A person, and a tick beside them.
+            pen.circle(6.5, 5.0, 2.6);
+            pen.line(&[(1.5, 14.0), (2.0, 11.0), (4.5, 9.0), (8.5, 9.0), (10.0, 10.0)]);
+            pen.line(&[(10.5, 12.5), (12.0, 14.0), (15.0, 10.5)]);
+        }
     }
 }
 
@@ -691,11 +809,27 @@ mod tests {
             ClearFormat,
             AddressBook,
             Note,
+            Steps,
+            Language,
+            Paste,
+            Cut,
+            Copy,
+            Signature,
+            Important,
+            LowImportance,
+            Rule,
+            FontGrow,
+            FontShrink,
+            WordCount,
+            DelayDelivery,
+            Bcc,
+            CheckNames,
         ];
         for icon in all {
             let img = render(icon, 32).unwrap_or_else(|| panic!("{icon:?} didn't render"));
             let inked = img.pixels.iter().filter(|p| p.a() > 128).count();
-            assert!((30..32 * 32 / 2).contains(&inked), "{icon:?}: {inked} pixels drawn");
+            // A single thin line (the horizontal rule) inks about 25 pixels at this size.
+            assert!((20..32 * 32 / 2).contains(&inked), "{icon:?}: {inked} pixels drawn");
             assert!(img.pixels.iter().all(|p| p.r() == p.a()), "{icon:?}: white, to be tinted");
         }
         // A context draws them, and keeps each size once.
