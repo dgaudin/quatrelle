@@ -132,8 +132,13 @@ the window indexes a few hundred messages per frame and draws between slices, so
 first search never freezes it. The address book built from the mail (`model::contacts`, for the
 recipient boxes' suggestions, Select Names and the Focused Inbox) goes the same way
 (`Session::contacts_step`): the window asks for what is known so far (`suggest_contacts_now`,
-`address_book_now`) and takes a slice per frame while a message is being written; commands and
-the CLI, with no frames to draw, read the whole book (`suggest_contacts`, `address_book`).
+`address_book_now`) and takes a slice per frame while there's mail left to read; commands and
+the CLI, with no frames to draw, read what's left in one go (`suggest_contacts`, `address_book`).
+Like Outlook's AutoComplete list the book is kept on disk (`contacts.json`) with how far each
+folder was read: a start reads no folder, a folder a sync changed has only its new mail read,
+and every folder is read whole once. The people saved in Contacts are a layer over it, laid
+again when they change. An address taken out of the suggestions (the × beside one,
+`contacts.forget`) stays out until it's written to.
 
 The index only knows what is here, and what is here is bounded (a thousand headers, forty bodies
 per folder on some accounts). So the session also asks the server's own index, once per query
