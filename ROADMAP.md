@@ -483,3 +483,20 @@ local-first, media-aware v1); the fuller request is
   other, and arrives merged with the local results the way Exchange's do. A search of all folders
   asks the biggest first (Gmail's All Mail holds everything) and stops at eighty folders or five
   seconds; JMAP and the browser still answer from this computer alone.
+- **2026-10-22** — **Exchange that stays signed in:** from an audit of a large on-premises
+  mailbox's log (110 folders, 550,000 items). A connection lost to an error kept its NTLM sign-in
+  noted apart from it, so the next request went unsigned on a new connection and its 401 asked
+  for a password that was right; the sign-in now lives with its connection. A kept connection
+  idle past 45 s isn't reused (IIS drops them at 120 s, proxies sooner), and one the server closed
+  before reading the request sends it again, once, on a new one. A chunked answer's last empty
+  line is read with it (left behind, the next answer failed as "bad status line"), and empty lines
+  before a status line are skipped. Exchange busy (`ErrorServerBusy`, HTTP 503) is waited out as
+  it asks, then asked again; a SOAP fault refuses one request without dropping the connection
+  and restarting the full sync. A reader connection's failure no longer asks for the password
+  (its folder is read on the main connection); "Connecting…" doesn't stay up after a connection
+  made for a message, a picture or the rules; the Inbox is polled on a deadline that work in the
+  window no longer pushes back. Rules: Exchange refused every rule sent from here (`<t:Delete/>`,
+  an empty boolean, and tests out of the schema's order), and the refused rule was sent again,
+  and the rules read again, after every folder; Create rule from a message belongs to the
+  message's account, moves to a folder to choose and goes to the server, and a colleague's mail
+  carries its SMTP address (`PidTagSenderSmtpAddress`). Drag-out works on XWayland again.

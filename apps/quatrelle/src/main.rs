@@ -271,9 +271,10 @@ impl Services for Desktop {
         candidates.iter().find_map(|p| std::fs::read(p).ok())
     }
     fn can_drag_out(&self) -> bool {
-        // Elsewhere, under X11 only: a Wayland window isn't an X window.
-        cfg!(any(target_os = "windows", target_os = "macos"))
-            || (std::env::var_os("DISPLAY").is_some() && std::env::var_os("WAYLAND_DISPLAY").is_none())
+        // Elsewhere, under X11 only: a Wayland window isn't an X window. A window on XWayland is
+        // one, though `WAYLAND_DISPLAY` is set there too (testing it turned drag-out off on every
+        // Wayland desktop): the window's own choice says.
+        cfg!(any(target_os = "windows", target_os = "macos")) || display::choose_from_env() == display::Choice::X11
     }
     fn video_frame(&mut self, path: &Path) -> VideoFrame {
         if let Some(slot) = self.frames.get(path) {

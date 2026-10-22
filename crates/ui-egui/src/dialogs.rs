@@ -1170,19 +1170,23 @@ impl Dialog {
         }
     }
 
-    /// A new rule for mail like this (from its sender, into Archive).
-    pub fn rule_from(sender: &str, _subject: &str) -> Dialog {
+    /// A new rule for mail like this: from its sender, moved to a folder to choose, as Outlook's
+    /// Create Rule. Made from a message, it's that message's account's (whose folders it offers),
+    /// and it runs on the server too when the server keeps rules (`server`): Exchange's rules work
+    /// while Quatrelle is closed. (It used to belong to no account, filed into an Archive folder
+    /// an Exchange mailbox may not have — the rule then did nothing.)
+    pub fn rule_from(sender: &str, account: Option<&str>, server: bool) -> Dialog {
         Dialog::EditRule(Box::new(RuleForm {
             index: None,
             remote: None,
-            name: tf!("Mail from {sender}", sender = sender),
+            name: if sender.is_empty() { String::new() } else { tf!("Mail from {sender}", sender = sender) },
             enabled: true,
             match_all: true,
             conditions: vec![RuleCond { test: RuleTest::From, text: sender.to_string() }],
-            actions: vec![RuleAct { action: RuleDo::Archive, target: String::new() }],
-            account: None,
+            actions: vec![RuleAct { action: if account.is_some() { RuleDo::MoveTo } else { RuleDo::Archive }, target: String::new() }],
+            account: account.map(str::to_string),
             stop: false,
-            server: false,
+            server: server && account.is_some(),
             run_now: true,
             error: None,
         }))
@@ -2459,7 +2463,7 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Act
             ui.add_space(8.0);
             ui.horizontal(|ui| {
                 if ui.button(tl!("New rule…")).clicked() {
-                    acts.push(Action::Dialog(Dialog::rule_from("", "")));
+                    acts.push(Action::Dialog(Dialog::rule_from("", None, false)));
                 }
                 let any_on = s.rules.iter().any(|r| r.enabled);
                 if ui

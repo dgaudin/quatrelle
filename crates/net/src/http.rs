@@ -7,6 +7,7 @@
 //! header and body sizes are capped and every number is checked.
 
 use std::io::{Read, Write};
+use std::time::{Duration, Instant};
 
 use crate::stream::{self, Stream};
 use crate::{NetError, Result};
@@ -187,12 +188,25 @@ pub fn exchange<S: Read + Write>(s: &mut S, req: &Request, url: &Url) -> Result<
     read_response(s, req.max, req.method == "HEAD")
 }
 
+/// How long a kept connection may sit unused and still be sent a request. Servers close idle
+/// connections on their side (IIS after 120 s, proxies in front of it often sooner) without
+/// telling: a request sent on one is answered by a reset or nothing at all.
+pub const KEEP_IDLE: Duration = Duration::from_secs(45);
+
 /// A connection kept open for several requests to one server (no redirects followed).
 pub struct Conn {
     s: Stream,
     url: Url,
     /// The server said it closes the connection after the last answer.
     closing: bool,
+    /// When the last answer was read (or the connection opened).
+    last: Instant,
+    /// Answers read on it so far.
+    answered: u32,
+    /// The last request failed the way a connection the server had already closed fails: on a
+    /// reused connection, before a single byte of the answer. It never reached the server, so it
+    /// can be sent again on a new connection.
+    unanswered: bool,
 }
 
 impl Conn {
@@ -200,7 +214,7 @@ impl Conn {
         let url = Url::parse(url)?;
         let sock = stream::tcp(&url.host, url.port)?;
         let s = if url.https { stream::tls(sock, &url.host)? } else { Stream::Plain(sock) };
-        Ok(Conn { s, url, closing: false })
+        Ok(Conn { s, url, closing: false, last: Instant::now(), answered: 0, unanswered: false })
     }
 
     /// Whether this connection reaches `url`'s server.
@@ -208,9 +222,16 @@ impl Conn {
         Url::parse(url).is_ok_and(|u| u.https == self.url.https && u.host.eq_ignore_ascii_case(&self.url.host) && u.port == self.url.port)
     }
 
-    /// Whether another request can go on it.
+    /// Whether another request can go on it: not closed, and not idle for so long the server
+    /// has probably closed it on its side.
     pub fn usable(&self) -> bool {
-        !self.closing
+        !self.closing && self.last.elapsed() < KEEP_IDLE
+    }
+
+    /// Whether the last request failed on a connection the server had closed, before it was
+    /// read: sending it again on a new connection is safe.
+    pub fn failed_unanswered(&self) -> bool {
+        self.unanswered
     }
 
     /// Send a request to this server and read its answer.
@@ -226,17 +247,67 @@ impl Conn {
         // timeout, a reset) would be read as the next request's, and a stale 401 as a refused
         // password. It's dropped rather than reused — assumed closed until a full answer is in.
         self.closing = true;
-        let sent = write_request(&mut self.s, req, &url, true).and_then(|()| read_response(&mut self.s, req.max, req.method == "HEAD"));
+        self.unanswered = false;
+        let mut s = Counted { s: &mut self.s, read: 0 };
+        let sent = write_request(&mut s, req, &url, true).and_then(|()| read_response(&mut s, req.max, req.method == "HEAD"));
+        let nothing_read = s.read == 0;
         let resp = match sent {
             Ok(resp) => resp,
             Err(e) => {
-                self.closing = true;
-                return Err(e);
+                self.unanswered = self.answered > 0 && nothing_read && closed_unread(&e);
+                return Err(timed_out(e));
             }
         };
+        self.answered = self.answered.saturating_add(1);
+        self.last = Instant::now();
         self.closing = resp.header("Connection").is_some_and(|c| c.eq_ignore_ascii_case("close"))
             || (resp.header("Content-Length").is_none() && resp.header("Transfer-Encoding").is_none() && resp.status != 204 && resp.status != 304);
         Ok(resp)
+    }
+}
+
+/// A stream that counts the bytes read from it.
+struct Counted<'a, S> {
+    s: &'a mut S,
+    read: usize,
+}
+
+impl<S: Read> Read for Counted<'_, S> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let n = self.s.read(buf)?;
+        self.read = self.read.saturating_add(n);
+        Ok(n)
+    }
+}
+
+impl<S: Write> Write for Counted<'_, S> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.s.write(buf)
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.s.flush()
+    }
+}
+
+/// Whether an error is how a connection the server already closed fails: a reset, a broken
+/// pipe, or the end of the stream. A timeout isn't: the server may be working on the request.
+fn closed_unread(e: &NetError) -> bool {
+    use std::io::ErrorKind as K;
+    match e {
+        NetError::Io(e) => matches!(e.kind(), K::BrokenPipe | K::ConnectionReset | K::ConnectionAborted | K::UnexpectedEof | K::NotConnected),
+        NetError::Closed(_) => true,
+        _ => false,
+    }
+}
+
+/// A read that timed out says so ("Resource temporarily unavailable (os error 11)" didn't).
+fn timed_out(e: NetError) -> NetError {
+    match e {
+        NetError::Io(io) if matches!(io.kind(), std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut) => NetError::Io(std::io::Error::new(
+            std::io::ErrorKind::TimedOut,
+            format!("the server didn't answer within {} s", stream::IO_TIMEOUT.as_secs()),
+        )),
+        e => e,
     }
 }
 
@@ -285,6 +356,12 @@ fn read_head<S: Read>(s: &mut S) -> Result<(u16, Vec<(String, String)>, Vec<u8>)
             return Err(NetError::Closed("the server closed the connection before answering".into()));
         }
         buf.extend_from_slice(tmp.get(..n).unwrap_or_default());
+        // Empty lines before the status line are skipped (RFC 9112 §2.2): the end of an earlier
+        // answer's chunked body, left on a kept connection, read as "bad status line" here.
+        let blank = buf.iter().take_while(|b| matches!(b, b'\r' | b'\n')).count();
+        if blank > 0 {
+            buf.drain(..blank);
+        }
     };
     let head = String::from_utf8_lossy(buf.get(..head_end).unwrap_or_default()).to_string();
     let mut rest: Vec<u8> = buf.get(head_end + 4..).map(<[u8]>::to_vec).unwrap_or_default();
@@ -349,6 +426,28 @@ fn read_response<S: Read>(s: &mut S, max: usize, head_only: bool) -> Result<Resp
                 .map_err(|_| NetError::Protocol("bad chunk size".into()))?;
             pos = line_end + 2;
             if size == 0 {
+                // The trailer: header lines (ignored), then an empty line, which belongs to this
+                // answer — left unread on a kept connection, it began the next one.
+                for _ in 0..64 {
+                    let end = loop {
+                        if let Some(p) = rest.get(pos..).and_then(|r| r.windows(2).position(|w| w == b"\r\n")) {
+                            break Some(pos + p);
+                        }
+                        if rest.len() - pos > MAX_HEAD {
+                            return Err(NetError::Protocol("bad chunked trailer".into()));
+                        }
+                        let want = rest.len() + 1;
+                        if !fill(&mut rest, want)? {
+                            break None;
+                        }
+                    };
+                    let Some(end) = end else { break };
+                    let empty = end == pos;
+                    pos = end + 2;
+                    if empty {
+                        break;
+                    }
+                }
                 return Ok(resp(body));
             }
             if body.len().saturating_add(size) > max {
@@ -631,6 +730,43 @@ pub(crate) mod tests {
         assert!(seen[5].starts_with("POST /token ") && seen[5].contains("Authorization: Bearer t") && seen[5].ends_with("code=x%20y"), "{}", seen[5]);
         // Header injection is refused before anything is sent.
         assert!(send(&Request::get(&base, 10).header("X", "a\r\nEvil: 1")).is_err());
+    }
+
+    /// Hands out each piece on its own read, as a TLS record at a time.
+    struct Pieces(std::collections::VecDeque<Vec<u8>>);
+
+    impl Read for Pieces {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            let Some(p) = self.0.pop_front() else { return Ok(0) };
+            let n = p.len().min(buf.len());
+            buf[..n].copy_from_slice(&p[..n]);
+            if n < p.len() {
+                self.0.push_front(p[n..].to_vec());
+            }
+            Ok(n)
+        }
+    }
+
+    /// A chunked answer's last empty line, arriving on its own, belongs to that answer: left
+    /// unread, the next answer on the kept connection began with it ("bad status line: ").
+    /// And empty lines before a status line are skipped anyway.
+    #[test]
+    fn a_chunked_answer_is_read_to_its_last_line() {
+        let mut s = Pieces(
+            [
+                &b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n3\r\nabc\r\n0\r\n"[..],
+                b"X-Trailer: 1\r\n",
+                b"\r\n",
+                b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nhi",
+                b"\r\n\r\nHTTP/1.1 204 No Content\r\n\r\n",
+            ]
+            .into_iter()
+            .map(<[u8]>::to_vec)
+            .collect(),
+        );
+        assert_eq!(read_response(&mut s, 100, false).unwrap().body, b"abc");
+        assert_eq!(read_response(&mut s, 100, false).unwrap().body, b"hi");
+        assert_eq!(read_response(&mut s, 100, false).unwrap().status, 204);
     }
 
     /// Hands out bytes a few at a time, then "times out".

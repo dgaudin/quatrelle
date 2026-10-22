@@ -74,6 +74,11 @@ pub struct Data {
     /// The next request on a signed-in connection is told to sign in again (a recycled
     /// connection), once.
     pub forget_sign_in: bool,
+    /// The next request on a connection already used is met with the connection closed, unread
+    /// (a connection the server closed for being idle), this many times.
+    pub drop_kept: usize,
+    /// The next requests are answered "busy" (`ErrorServerBusy`, back off 10 ms), this many times.
+    pub busy: usize,
     /// The EWS address, for Autodiscover's answer.
     pub url: String,
     /// People whose calendars this account may change (delegates with editor rights).
@@ -159,6 +164,8 @@ impl Default for Data {
             calls: Vec::new(),
             handshakes: 0,
             forget_sign_in: false,
+            drop_kept: 0,
+            busy: 0,
             url: String::new(),
             editors: Vec::new(),
             item_rights_only: false,
@@ -1008,6 +1015,15 @@ fn respond(s: &mut impl Write, status: u16, headers: &[(&str, String)], body: &[
     let _ = s.write_all(body);
 }
 
+/// Count one down; whether there was one.
+fn take_one(n: &mut usize) -> bool {
+    if *n == 0 {
+        return false;
+    }
+    *n -= 1;
+    true
+}
+
 /// Start the server; it runs until the test process ends.
 pub fn serve(data: Data) -> Server {
     serve_at(data, "127.0.0.1:0")
@@ -1036,11 +1052,17 @@ fn serve_connection(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>) {
     let mut reader = BufReader::new(s.try_clone().unwrap());
     let mut signed_in = false;
     let mut challenge: Option<crate::ntlm::Challenge> = None;
+    let mut answered = 0usize;
     loop {
         let mut first = String::new();
         if reader.read_line(&mut first).unwrap_or(0) == 0 {
             return;
         }
+        if answered > 0 && take_one(&mut shared.lock().unwrap().drop_kept) {
+            let _ = s.shutdown(std::net::Shutdown::Both);
+            return;
+        }
+        answered += 1;
         let (mut len, mut auth, mut routed, mut anchor) = (0usize, String::new(), String::new(), String::new());
         loop {
             let mut line = String::new();
@@ -1100,6 +1122,16 @@ fn serve_connection(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>) {
                     }
                 }
             }
+        }
+        if take_one(&mut shared.lock().unwrap().busy) {
+            let fault = "<?xml version=\"1.0\"?><s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\"><s:Body><s:Fault>\
+                <faultcode>a:ErrorServerBusy</faultcode><faultstring>The server cannot service this request right now. Try again later.</faultstring>\
+                <detail><e:ResponseCode xmlns:e=\"http://schemas.microsoft.com/exchange/services/2006/errors\">ErrorServerBusy</e:ResponseCode>\
+                <e:Message xmlns:e=\"http://schemas.microsoft.com/exchange/services/2006/errors\">The server cannot service this request right now. Try again later.</e:Message>\
+                <t:MessageXml xmlns:t=\"http://schemas.microsoft.com/exchange/services/2006/types\"><t:Value Name=\"BackOffMilliseconds\">10</t:Value></t:MessageXml>\
+                </detail></s:Fault></s:Body></s:Envelope>";
+            respond(&mut s, 500, &[], fault.as_bytes());
+            continue;
         }
         let doc = parse(&String::from_utf8_lossy(&body));
         // Autodiscover: this server's own address.

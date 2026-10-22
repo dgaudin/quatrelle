@@ -290,15 +290,26 @@ enum Scheme {
     Ntlm(&'static str),
 }
 
+/// A connection kept open, and whether NTLM signed it in. They go together: a sign-in noted
+/// apart from its connection outlived it when the connection dropped (a timeout, a server that
+/// closed it), and the next request went out unsigned on a new one, its 401 read as a wrong
+/// password.
+struct Kept {
+    conn: Conn,
+    signed_in: bool,
+}
+
+/// How long Exchange may ask to be left alone (`ErrorServerBusy`'s `BackOffMilliseconds`)
+/// before the request is tried again here; longer, and it's left for later.
+const MAX_BACK_OFF: std::time::Duration = std::time::Duration::from_secs(60);
+
 /// An EWS session: the address, who signs in, and the connection (kept open for NTLM).
 pub struct Client {
     url: String,
     user: String,
     password: String,
-    conn: RefCell<Option<Conn>>,
+    conn: RefCell<Option<Kept>>,
     scheme: RefCell<Scheme>,
-    /// The connection is signed in (NTLM).
-    signed_in: RefCell<bool>,
     /// The account's own address (automatic replies are asked for by it).
     email: String,
     /// The public folder mailbox requests are routed to (`X-AnchorMailbox` and
@@ -422,6 +433,37 @@ fn alternative_mailboxes(xml: &str) -> Vec<Alternative> {
         .collect()
 }
 
+/// Why a call didn't answer: the server asked to wait this long, or it failed.
+enum Busy {
+    Wait(std::time::Duration),
+    Failed(NetError),
+}
+
+/// Refusals that say the server can't now, not that it won't: tried again later rather than
+/// dropped.
+const TRANSIENT: [&str; 7] = [
+    "ErrorServerBusy",
+    "ErrorInternalServerTransientError",
+    "ErrorMailboxStoreUnavailable",
+    "ErrorMailboxMoveInProgress",
+    "ErrorConnectionFailed",
+    "ErrorTimeoutExpired",
+    "ErrorBatchProcessingStopped",
+];
+
+/// Whether Exchange said it's busy (`ErrorServerBusy`, as a fault or in a response message),
+/// and for how long it asks to be left alone (its `BackOffMilliseconds`; a few seconds when it
+/// doesn't say).
+fn busy(doc: &El) -> Option<std::time::Duration> {
+    let fault = doc.find("Fault").and_then(|f| f.find("detail")).filter(|d| d.text_of("ResponseCode").is_some_and(|c| c.trim() == "ErrorServerBusy"));
+    let message = || messages(doc).into_iter().find(|m| m.text_of("ResponseCode").is_some_and(|c| c.trim() == "ErrorServerBusy"));
+    let found = fault.or_else(message)?;
+    let mut values = Vec::new();
+    found.all("Value", &mut values);
+    let ms = values.iter().find(|v| v.attr("Name") == Some("BackOffMilliseconds")).and_then(|v| v.text.trim().parse::<u64>().ok()).unwrap_or(5_000);
+    Some(std::time::Duration::from_millis(ms.max(500)))
+}
+
 /// What a `…ResponseMessage` said.
 fn check_message(m: &El) -> Result<()> {
     match m.attr("ResponseClass") {
@@ -430,6 +472,15 @@ fn check_message(m: &El) -> Result<()> {
             let text = m.text_of("MessageText").unwrap_or(code);
             Err(match code {
                 "ErrorItemNotFound" | "ErrorFolderNotFound" => NetError::No(format!("not on the server any more ({text})")),
+                c if TRANSIENT.contains(&c) => NetError::Later(text.to_string()),
+                // Outlook keeps a copy of the rules of its own in the mailbox, and Exchange won't
+                // change them while it's there (`RemoveOutlookRuleBlob` would remove it, and the
+                // rules Outlook runs only on its computer with it): said plainly.
+                "ErrorOutlookRuleBlobExists" => NetError::No(
+                    "Outlook keeps its own copy of this mailbox's rules, and Exchange won't change them while it's there. \
+                     Change this rule in Outlook, or let Quatrelle replace Outlook's copy (Outlook's rules that run only on its computer would be lost)"
+                        .into(),
+                ),
                 "ErrorAccessDenied" => NetError::No(text.to_string()),
                 _ => NetError::No(text.to_string()),
             })
@@ -634,7 +685,6 @@ impl Client {
             password: password.to_string(),
             conn: RefCell::new(None),
             scheme: RefCell::new(Scheme::Unknown),
-            signed_in: RefCell::new(false),
             email: email.to_string(),
             route: RefCell::new(None),
             pf_mailboxes: RefCell::new(HashMap::new()),
@@ -925,23 +975,76 @@ impl Client {
         Ok(c)
     }
 
-    fn send_on_conn(&self, req: &Request) -> Result<Response> {
+    /// Send on the kept connection, a new one opened when there's none (or it can't be used).
+    /// `fresh` false: only on the connection there is (an NTLM answer must go on the connection
+    /// that was challenged). `Err((e, again))`: `again` when the request failed on a connection
+    /// the server had already closed, before reading it — it can be sent again.
+    fn send_on_conn(&self, req: &Request, fresh: bool) -> std::result::Result<Response, (NetError, bool)> {
         let mut slot = self.conn.borrow_mut();
-        if slot.as_ref().is_none_or(|c| !c.usable()) {
-            *slot = Some(Conn::open(&self.url)?);
-            *self.signed_in.borrow_mut() = false;
-        }
-        let Some(conn) = slot.as_mut() else { return Err(NetError::Closed("no connection".into())) };
-        let r = conn.send(req);
-        if r.is_err() {
+        if slot.as_ref().is_none_or(|k| !k.conn.usable()) {
             *slot = None;
+            if !fresh {
+                return Err((NetError::Closed("the server dropped the connection while signing in".into()), false));
+            }
+            *slot = Some(Kept { conn: Conn::open(&self.url).map_err(|e| (e, false))?, signed_in: false });
         }
-        r
+        let Some(kept) = slot.as_mut() else { return Err((NetError::Closed("no connection".into()), false)) };
+        match kept.conn.send(req) {
+            Ok(r) => Ok(r),
+            Err(e) => {
+                let again = kept.conn.failed_unanswered();
+                *slot = None;
+                Err((e, again))
+            }
+        }
+    }
+
+    /// Whether the kept connection is signed in (NTLM) and still usable.
+    fn signed_in(&self) -> bool {
+        self.conn.borrow().as_ref().is_some_and(|k| k.signed_in && k.conn.usable())
+    }
+
+    fn set_signed_in(&self) {
+        if let Some(k) = self.conn.borrow_mut().as_mut() {
+            k.signed_in = true;
+        }
     }
 
     /// The `WWW-Authenticate` schemes of a 401.
     fn offered(resp: &Response) -> Vec<String> {
         resp.headers.iter().filter(|(k, _)| k.eq_ignore_ascii_case("WWW-Authenticate")).map(|(_, v)| v.trim().to_string()).collect()
+    }
+
+    /// Sign the connection in with NTLM, sending `req` as its last step: answers the server's
+    /// answer to `req`. The first step goes without the body (the server only answers it with
+    /// its challenge): a message being sent went up three times.
+    fn ntlm(&self, req: &Request, name: &'static str) -> std::result::Result<Response, (NetError, bool)> {
+        let negotiate = Request { body: Vec::new(), ..req.clone() }.header("Authorization", &format!("{name} {}", b64(&crate::ntlm::negotiate())));
+        let first = self.send_on_conn(&negotiate, true)?;
+        if first.status != 401 {
+            // Taken without a challenge (the server has the connection signed in already): the
+            // request itself, on the same connection.
+            self.set_signed_in();
+            return self.send_on_conn(req, false);
+        }
+        let fail = |e: NetError| (e, false);
+        let token = Client::offered(&first)
+            .iter()
+            .find_map(|v| v.strip_prefix(name).map(|t| t.trim().to_string()))
+            .filter(|t| !t.is_empty())
+            .ok_or_else(|| fail(NetError::Auth("the server didn't answer the sign-in".into())))?;
+        let challenge = crate::ntlm::challenge(&unb64(&token).ok_or_else(|| fail(NetError::Protocol("bad NTLM challenge".into())))?).map_err(fail)?;
+        let mut client_challenge = [0u8; 8];
+        ring::rand::SecureRandom::fill(&ring::rand::SystemRandom::new(), &mut client_challenge)
+            .map_err(|_| fail(NetError::Protocol("no randomness".into())))?;
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+        let filetime = (now + 11_644_473_600) * 10_000_000;
+        let answer = crate::ntlm::authenticate(&challenge, &self.user, &self.password, filetime, client_challenge);
+        let resp = self.send_on_conn(&req.clone().header("Authorization", &format!("{name} {}", b64(&answer))), false)?;
+        if resp.status != 401 {
+            self.set_signed_in();
+        }
+        Ok(resp)
     }
 
     /// Send a request signed in the way the server wants.
@@ -952,39 +1055,33 @@ impl Client {
         } else if let Some(mailbox) = self.anchor.borrow().as_ref() {
             base = base.header("X-AnchorMailbox", mailbox);
         }
-        for attempt in 0..3 {
+        // A connection kept open that the server had closed (idle too long) fails the request
+        // before it's read: it goes again on a new connection, once.
+        let mut resent = false;
+        // A signed-in connection told 401 is signed in again, once, before it's a refusal.
+        let mut signed_again = false;
+        let mut attempt = 0;
+        while attempt < 3 {
             let scheme = *self.scheme.borrow();
-            let resp = match scheme {
+            let was_signed_in = matches!(scheme, Scheme::Ntlm(_)) && self.signed_in();
+            let sent = match scheme {
                 Scheme::Basic => {
                     let token = b64(format!("{}:{}", self.user, self.password).as_bytes());
-                    self.send_on_conn(&base.clone().header("Authorization", &format!("Basic {token}")))?
+                    self.send_on_conn(&base.clone().header("Authorization", &format!("Basic {token}")), true)
                 }
-                Scheme::Ntlm(name) if !*self.signed_in.borrow() => {
-                    let first = self.send_on_conn(&base.clone().header("Authorization", &format!("{name} {}", b64(&crate::ntlm::negotiate()))))?;
-                    if first.status != 401 {
-                        first
-                    } else {
-                        let token = Client::offered(&first)
-                            .iter()
-                            .find_map(|v| v.strip_prefix(name).map(|t| t.trim().to_string()))
-                            .filter(|t| !t.is_empty())
-                            .ok_or_else(|| NetError::Auth("the server didn't answer the sign-in".into()))?;
-                        let challenge = crate::ntlm::challenge(&unb64(&token).ok_or_else(|| NetError::Protocol("bad NTLM challenge".into()))?)?;
-                        let mut client_challenge = [0u8; 8];
-                        ring::rand::SecureRandom::fill(&ring::rand::SystemRandom::new(), &mut client_challenge)
-                            .map_err(|_| NetError::Protocol("no randomness".into()))?;
-                        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
-                        let filetime = (now + 11_644_473_600) * 10_000_000;
-                        let answer = crate::ntlm::authenticate(&challenge, &self.user, &self.password, filetime, client_challenge);
-                        let resp = self.send_on_conn(&base.clone().header("Authorization", &format!("{name} {}", b64(&answer))))?;
-                        if resp.status != 401 {
-                            *self.signed_in.borrow_mut() = true;
-                        }
-                        resp
-                    }
-                }
-                Scheme::Ntlm(_) | Scheme::Unknown => self.send_on_conn(&base)?,
+                Scheme::Ntlm(name) if !was_signed_in => self.ntlm(&base, name),
+                Scheme::Ntlm(_) | Scheme::Unknown => self.send_on_conn(&base, true),
             };
+            let resp = match sent {
+                Ok(resp) => resp,
+                Err((e, true)) if !resent => {
+                    log::info!("ews: a kept connection was closed by the server ({e}); sent again on a new one");
+                    resent = true;
+                    continue;
+                }
+                Err((e, _)) => return Err(e),
+            };
+            attempt += 1;
             if resp.status != 401 {
                 return Ok(resp);
             }
@@ -1000,19 +1097,18 @@ impl Client {
             } else {
                 return Err(NetError::Auth("the server offers no sign-in Quatrelle knows".into()));
             };
-            // A session that was signed in and is told 401 again (the server dropped or recycled
-            // the connection it signed in on, or an hour passed) isn't a wrong password: sign in
-            // once more, on a fresh connection, before telling the account to ask for it.
-            if *self.signed_in.borrow() && next == scheme {
-                *self.signed_in.borrow_mut() = false;
+            // A connection that was signed in and is told 401 (the server recycled it, or the
+            // session expired) isn't a wrong password: sign in once more, on a new connection,
+            // before telling the account to ask for it.
+            if was_signed_in && next == scheme && !signed_again {
+                signed_again = true;
                 *self.conn.borrow_mut() = None;
                 continue;
             }
-            if scheme == next || attempt == 2 {
+            if scheme == next || attempt >= 3 {
                 return Err(NetError::Auth("the server refused the user name or password".into()));
             }
             *self.scheme.borrow_mut() = next;
-            *self.signed_in.borrow_mut() = false;
         }
         Err(NetError::Auth("the server refused the user name or password".into()))
     }
@@ -1045,11 +1141,32 @@ impl Client {
         Ok(doc)
     }
 
-    /// [`Client::call`] where the request is sent, without looking elsewhere.
+    /// [`Client::call`] where the request is sent, without looking elsewhere. A server that's
+    /// busy (`ErrorServerBusy`, HTTP 503) is left alone for as long as it asks, then asked again;
+    /// still busy, it's for later.
     fn call_here(&self, body: &str) -> Result<El> {
-        let resp = self.post(envelope(body).into_bytes())?;
+        let mut waited = 0;
+        loop {
+            match self.call_once(body) {
+                Err(Busy::Wait(wait)) if waited < 2 && wait <= MAX_BACK_OFF => {
+                    waited += 1;
+                    log::info!("ews: the server is busy; asked again in {} s", wait.as_secs());
+                    std::thread::sleep(wait);
+                }
+                Err(Busy::Wait(_)) => return Err(NetError::Later("Exchange is busy and asked to be left alone for a while".into())),
+                Err(Busy::Failed(e)) => return Err(e),
+                Ok(doc) => return Ok(doc),
+            }
+        }
+    }
+
+    fn call_once(&self, body: &str) -> std::result::Result<El, Busy> {
+        let resp = self.post(envelope(body).into_bytes()).map_err(Busy::Failed)?;
         let text = String::from_utf8_lossy(&resp.body);
         let doc = parse(&text);
+        if let Some(wait) = busy(&doc) {
+            return Err(Busy::Wait(wait));
+        }
         if let Some(fault) = doc.find("Fault") {
             let why = fault.find("faultstring").map(|f| f.text.clone()).unwrap_or_else(|| "the server refused the request".into());
             // The fault's detail says which refusal it is (`ErrorInvalidRequest`) and, when the
@@ -1058,11 +1175,20 @@ impl Client {
             let detail = fault.find("detail");
             let code = detail.and_then(|d| d.text_of("ResponseCode")).unwrap_or("").trim().to_string();
             let more = detail.and_then(|d| d.text_of("Message")).unwrap_or("").trim().to_string();
+            let transient = TRANSIENT.contains(&code.as_str());
             let said = [code, more].into_iter().filter(|s| !s.is_empty() && *s != why).collect::<Vec<_>>().join(": ");
-            return Err(NetError::Protocol(if said.is_empty() { why } else { format!("{why} ({said})") }));
+            let message = if said.is_empty() { why } else { format!("{why} ({said})") };
+            // The answer came whole: the connection is fine, and a refusal of one request (a
+            // folder it won't list, an item it won't take) isn't a reason to drop it and start
+            // the whole sync again — that kept a big mailbox's sync from ever finishing.
+            return Err(Busy::Failed(if transient { NetError::Later(message) } else { NetError::No(message) }));
+        }
+        if resp.status == 503 {
+            let after = resp.header("Retry-After").and_then(|v| v.trim().parse::<u64>().ok()).unwrap_or(5);
+            return Err(Busy::Wait(std::time::Duration::from_secs(after)));
         }
         if !resp.ok() {
-            return Err(NetError::Protocol(format!("Exchange answered HTTP {}", resp.status)));
+            return Err(Busy::Failed(NetError::Protocol(format!("Exchange answered HTTP {}", resp.status))));
         }
         Ok(doc)
     }
@@ -1735,6 +1861,12 @@ fn rule_strings(element: &str, values: &[String]) -> String {
 
 /// A rule as Exchange's `InboxRules` hold it, for `CreateRuleOperation` / `SetRuleOperation`.
 /// Only the parts Exchange can express are written; the engine never sends the others.
+///
+/// Written as the schema has it (`RulePredicatesType`, `RuleActionsType`): each test and action
+/// once, in the schema's order, and the yes-or-no ones saying `true`. Exchange refuses anything
+/// else with the whole update: `<t:Delete/>` (an empty boolean) or a sender test after a subject
+/// test was enough for every rule sent from here to be turned down. The same test twice (two
+/// "from" tests) becomes one list, which Exchange matches when any of it does.
 fn inbox_rule_xml(r: &Rule, folder: Option<&str>, priority: usize, id: Option<&str>) -> String {
     let mut x = String::from("<t:Rule>");
     if let Some(id) = id {
@@ -1745,37 +1877,58 @@ fn inbox_rule_xml(r: &Rule, folder: Option<&str>, priority: usize, id: Option<&s
     // where they are (a new rule goes last).
     x.push_str(&format!("<t:Priority>{}</t:Priority>", r.priority.unwrap_or(priority as u32)));
     x.push_str(&format!("<t:IsEnabled>{}</t:IsEnabled>", r.enabled));
-    x.push_str("<t:Conditions>");
+    let (mut senders, mut recipients, mut subjects, mut attachments) = (Vec::new(), Vec::new(), Vec::new(), false);
     for c in &r.conditions {
         match c {
-            Condition::From(t) => x.push_str(&format!("<t:ContainsSenderStrings><t:String>{}</t:String></t:ContainsSenderStrings>", esc(t))),
-            Condition::To(t) => x.push_str(&format!("<t:ContainsRecipientStrings><t:String>{}</t:String></t:ContainsRecipientStrings>", esc(t))),
-            Condition::Subject(t) => x.push_str(&format!("<t:ContainsSubjectStrings><t:String>{}</t:String></t:ContainsSubjectStrings>", esc(t))),
-            Condition::HasAttachment => x.push_str("<t:HasAttachments>true</t:HasAttachments>"),
+            Condition::From(t) => senders.push(t.clone()),
+            Condition::To(t) => recipients.push(t.clone()),
+            Condition::Subject(t) => subjects.push(t.clone()),
+            Condition::HasAttachment => attachments = true,
             // A list: any of them matches (Exchange's own "from these people").
-            Condition::FromAny(v) => x.push_str(&rule_strings("ContainsSenderStrings", v)),
-            Condition::ToAny(v) => x.push_str(&rule_strings("ContainsRecipientStrings", v)),
-            Condition::SubjectAny(v) => x.push_str(&rule_strings("ContainsSubjectStrings", v)),
+            Condition::FromAny(v) => senders.extend(v.iter().cloned()),
+            Condition::ToAny(v) => recipients.extend(v.iter().cloned()),
+            Condition::SubjectAny(v) => subjects.extend(v.iter().cloned()),
             // Exchange knows neither: the engine keeps those rules at home.
             Condition::AnyText(_) | Condition::Bulk => {}
         }
     }
+    let unique = |v: &mut Vec<String>| {
+        let mut seen = std::collections::HashSet::new();
+        v.retain(|t| seen.insert(t.trim().to_lowercase()));
+    };
+    for v in [&mut senders, &mut recipients, &mut subjects] {
+        unique(v);
+    }
+    x.push_str("<t:Conditions>");
+    x.push_str(&rule_strings("ContainsRecipientStrings", &recipients));
+    x.push_str(&rule_strings("ContainsSenderStrings", &senders));
+    x.push_str(&rule_strings("ContainsSubjectStrings", &subjects));
+    if attachments {
+        x.push_str("<t:HasAttachments>true</t:HasAttachments>");
+    }
     x.push_str("</t:Conditions><t:Actions>");
-    for a in &r.actions {
-        match a {
-            RuleAction::MoveTo(_) | RuleAction::MoveToRole(_) => {
-                if let Some(folder) = folder {
-                    x.push_str(&format!("<t:MoveToFolder><t:FolderId Id=\"{}\"/></t:MoveToFolder>", esc(folder)));
-                }
-            }
-            RuleAction::MarkRead => x.push_str("<t:MarkAsRead/>"),
-            RuleAction::Categorize(c) => x.push_str(&format!("<t:AssignCategories><t:String>{}</t:String></t:AssignCategories>", esc(c))),
-            RuleAction::Delete => x.push_str("<t:Delete/>"),
-            RuleAction::Flag | RuleAction::Pin => {}
-        }
+    let mut categories: Vec<String> = r
+        .actions
+        .iter()
+        .filter_map(|a| match a {
+            RuleAction::Categorize(c) => Some(c.clone()),
+            _ => None,
+        })
+        .collect();
+    unique(&mut categories);
+    x.push_str(&rule_strings("AssignCategories", &categories));
+    let has = |want: fn(&RuleAction) -> bool| r.actions.iter().any(want);
+    if has(|a| matches!(a, RuleAction::Delete)) {
+        x.push_str("<t:Delete>true</t:Delete>");
+    }
+    if has(|a| matches!(a, RuleAction::MarkRead)) {
+        x.push_str("<t:MarkAsRead>true</t:MarkAsRead>");
+    }
+    if let Some(folder) = folder.filter(|_| has(|a| matches!(a, RuleAction::MoveTo(_) | RuleAction::MoveToRole(_)))) {
+        x.push_str(&format!("<t:MoveToFolder><t:FolderId Id=\"{}\"/></t:MoveToFolder>", esc(folder)));
     }
     if r.stop {
-        x.push_str("<t:StopProcessingRules/>");
+        x.push_str("<t:StopProcessingRules>true</t:StopProcessingRules>");
     }
     x.push_str("</t:Actions></t:Rule>");
     x
@@ -1872,7 +2025,8 @@ const HEADER_FIELDS: &str = "<t:FieldURI FieldURI=\"item:Subject\"/><t:FieldURI 
 <t:FieldURI FieldURI=\"message:ReplyTo\"/><t:FieldURI FieldURI=\"item:DateTimeReceived\"/>\
 <t:FieldURI FieldURI=\"item:DateTimeSent\"/><t:FieldURI FieldURI=\"message:InternetMessageId\"/>\
 <t:FieldURI FieldURI=\"item:HasAttachments\"/><t:FieldURI FieldURI=\"item:Size\"/>\
-<t:ExtendedFieldURI DistinguishedPropertySetId=\"Common\" PropertyId=\"34080\" PropertyType=\"Binary\"/>";
+<t:ExtendedFieldURI DistinguishedPropertySetId=\"Common\" PropertyId=\"34080\" PropertyType=\"Binary\"/>\
+<t:ExtendedFieldURI PropertyTag=\"0x5D01\" PropertyType=\"String\"/>";
 
 /// The voting buttons on an item (`PidLidVerbStream`, asked for with its details).
 fn voting_choices(it: &El) -> Vec<String> {
@@ -1896,6 +2050,13 @@ fn extended(it: &El, tag: &str) -> Option<i64> {
         .find(|p| p.child("ExtendedFieldURI").and_then(|u| u.attr("PropertyTag")).is_some_and(|t| t.eq_ignore_ascii_case(tag)))
         .and_then(|p| p.text_of("Value"))
         .and_then(|v| v.trim().parse().ok())
+}
+
+/// An extended property's value as text.
+fn extended_text<'a>(it: &'a El, tag: &str) -> Option<&'a str> {
+    it.children("ExtendedProperty")
+        .find(|p| p.child("ExtendedFieldURI").and_then(|u| u.attr("PropertyTag")).is_some_and(|t| t.eq_ignore_ascii_case(tag)))
+        .and_then(|p| p.text_of("Value"))
 }
 
 fn flags(it: &El) -> Flags {
@@ -1928,7 +2089,15 @@ fn addresses(it: &El, name: &str) -> String {
 fn header_block(it: &El) -> Vec<u8> {
     let mut h = String::new();
     let clean = |s: &str| s.replace(['\r', '\n'], " ");
-    if let Some(f) = it.child("From").and_then(|f| f.child("Mailbox")).and_then(address) {
+    if let Some(mut f) = it.child("From").and_then(|f| f.child("Mailbox")).and_then(address) {
+        // A colleague's mail comes from an Exchange-internal address, kept as a name alone:
+        // the sender's SMTP address (`PidTagSenderSmtpAddress`) is theirs, so a rule, a reply
+        // or the address book has an address to go by.
+        if let Some(name) = f.strip_suffix(" <>")
+            && let Some(smtp) = extended_text(it, "0x5D01").filter(|a| a.contains('@') && !a.contains(['<', '>', '"', '\r', '\n']))
+        {
+            f = format!("{name} <{}>", smtp.trim());
+        }
         h.push_str(&format!("From: {}\r\n", clean(&f)));
     }
     for (field, name) in [("ToRecipients", "To"), ("CcRecipients", "Cc"), ("ReplyTo", "Reply-To")] {
@@ -2578,6 +2747,100 @@ mod tests {
         let folders = list_folders(&c, &mut st, "a1").unwrap();
         assert!(!folders.is_empty());
         assert!(server.data.lock().unwrap().handshakes > before, "signed in again");
+    }
+
+    /// A kept connection the server closed (idle too long) isn't a refused password: the
+    /// request goes again on a new connection, signed in there. And a connection lost to an
+    /// error leaves no sign-in behind: the next request signs in on its new connection rather
+    /// than going unsigned and hearing 401 (which asked for a password that was right).
+    #[test]
+    fn a_connection_the_server_closed_signs_in_again_on_a_new_one() {
+        let mut d = crate::fake_ews::Data::default();
+        d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+        let server = crate::fake_ews::serve(d);
+        let user = format!("{}\\{}", crate::fake_ews::DOMAIN, crate::fake_ews::USER);
+        let c = Client::connect(&server.url, &user, crate::fake_ews::PASSWORD, "riley@contoso.example").unwrap();
+        let mut st = State::default();
+        // Closed by the server between two requests: sent again, unnoticed.
+        server.data.lock().unwrap().drop_kept = 1;
+        assert!(!list_folders(&c, &mut st, "a1").unwrap().is_empty(), "a closed kept connection is no failure");
+        // Closed twice in a row: the second time it's said, as a network failure, not a password.
+        server.data.lock().unwrap().drop_kept = 2;
+        let e = list_folders(&c, &mut st, "a1").unwrap_err();
+        assert!(!matches!(e, NetError::Auth(_)), "a dropped connection isn't a refused password: {e}");
+        assert!(e.is_fatal(), "{e}");
+        // The next request signs in on its new connection.
+        let before = server.data.lock().unwrap().handshakes;
+        assert!(!list_folders(&c, &mut st, "a1").unwrap().is_empty(), "the next request works");
+        assert!(server.data.lock().unwrap().handshakes > before, "signed in on the new connection");
+    }
+
+    /// Exchange busy (`ErrorServerBusy`) is waited out as it asks, then asked again; a refusal
+    /// of one request leaves the connection alone (it isn't fatal).
+    #[test]
+    fn a_busy_server_is_asked_again_after_its_back_off() {
+        let mut d = crate::fake_ews::Data::default();
+        d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+        let server = crate::fake_ews::serve(d);
+        let user = format!("{}\\{}", crate::fake_ews::DOMAIN, crate::fake_ews::USER);
+        let c = Client::connect(&server.url, &user, crate::fake_ews::PASSWORD, "riley@contoso.example").unwrap();
+        let mut st = State::default();
+        server.data.lock().unwrap().busy = 1;
+        assert!(!list_folders(&c, &mut st, "a1").unwrap().is_empty(), "asked again once the back-off passed");
+        server.data.lock().unwrap().busy = 5;
+        let e = list_folders(&c, &mut st, "a1").unwrap_err();
+        assert!(matches!(e, NetError::Later(_)), "still busy: for later, {e}");
+        assert!(!e.is_fatal(), "the connection is fine: {e}");
+        server.data.lock().unwrap().busy = 0;
+        assert!(!list_folders(&c, &mut st, "a1").unwrap().is_empty());
+    }
+
+    /// A rule goes to Exchange as its schema has it: the yes-or-no actions saying `true`, each
+    /// test and action once and in the schema's order. `<t:Delete/>` got every rule refused.
+    #[test]
+    fn a_rule_is_written_as_exchange_reads_it() {
+        let r = Rule {
+            name: "Tri".into(),
+            conditions: vec![
+                Condition::Subject("facture".into()),
+                Condition::From("postmaster@".into()),
+                Condition::FromAny(vec!["a@x.example".into(), "postmaster@".into()]),
+                Condition::HasAttachment,
+            ],
+            actions: vec![RuleAction::MarkRead, RuleAction::Delete, RuleAction::Categorize("Work".into()), RuleAction::MoveTo("Archive".into())],
+            stop: true,
+            enabled: true,
+            account: None,
+            match_all: true,
+            server: true,
+            remote_id: None,
+            priority: None,
+        };
+        let x = inbox_rule_xml(&r, Some("F1"), 3, None);
+        for empty in ["<t:Delete/>", "<t:MarkAsRead/>", "<t:StopProcessingRules/>"] {
+            assert!(!x.contains(empty), "{x}");
+        }
+        let order = [
+            "<t:DisplayName>",
+            "<t:Priority>3</t:Priority>",
+            "<t:IsEnabled>",
+            "<t:Conditions>",
+            "<t:ContainsSenderStrings><t:String>postmaster@</t:String><t:String>a@x.example</t:String></t:ContainsSenderStrings>",
+            "<t:ContainsSubjectStrings><t:String>facture</t:String></t:ContainsSubjectStrings>",
+            "<t:HasAttachments>true</t:HasAttachments>",
+            "<t:Actions>",
+            "<t:AssignCategories><t:String>Work</t:String></t:AssignCategories>",
+            "<t:Delete>true</t:Delete>",
+            "<t:MarkAsRead>true</t:MarkAsRead>",
+            "<t:MoveToFolder><t:FolderId Id=\"F1\"/></t:MoveToFolder>",
+            "<t:StopProcessingRules>true</t:StopProcessingRules>",
+        ];
+        let mut at = 0;
+        for part in order {
+            let found = x.get(at..).and_then(|rest| rest.find(part)).unwrap_or_else(|| panic!("{part} after {at} in {x}"));
+            at += found + part.len();
+        }
+        assert_eq!(x.matches("ContainsSenderStrings>").count(), 2, "one sender test: {x}");
     }
 
     #[test]

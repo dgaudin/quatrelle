@@ -112,7 +112,11 @@ pub fn context_items(ui: &mut Ui, s: &Session, t: &Tokens, acts: &mut Vec<Action
     if let Some(m) = s.selected().into_iter().next()
         && ui.button(tl!("Create rule…")).clicked()
     {
-        acts.push(Action::Dialog(Dialog::rule_from(&m.from.email, &m.subject)));
+        // A colleague's address may be Exchange's internal one, kept as a name alone: the rule
+        // goes by the name then.
+        let sender = if m.from.email.trim().is_empty() { m.from.name.trim() } else { m.from.email.trim() };
+        let server = s.server_kind(&m.key.account).is_some();
+        acts.push(Action::Dialog(Dialog::rule_from(sender, Some(&m.key.account), server)));
         ui.close();
     }
 }
