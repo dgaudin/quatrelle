@@ -470,3 +470,36 @@ fn an_online_only_account_leaves_nothing_on_disk() {
     assert!(!on_disk(&t, b"BACK-ON-DISK"));
     let _ = std::fs::remove_dir_all(t);
 }
+
+/// An account's data file opened by several threads at once (the account's own and its sync
+/// connections, at start) opens once: two that both found it not open yet both opened it, and
+/// the second heard "open in another copy of Quatrelle" — a sync that failed for nothing.
+#[test]
+fn a_data_file_opened_by_threads_at_once_opens_once() {
+    for round in 0..20 {
+        let t = temp(&format!("open-race-{round}"));
+        {
+            let store = Store::open_packed(t.join("app"), t.join("Files")).unwrap();
+            store.save_accounts(&[account("a1", "a1@example.org")]).unwrap();
+            store.save_folder("a1", "INBOX", &crate::FolderState::default()).unwrap();
+        }
+        // A fresh handle on the same folders (the first closed): nothing is open in it yet.
+        let store = Store::open_packed(t.join("app"), t.join("Files")).unwrap();
+        let barrier = std::sync::Arc::new(std::sync::Barrier::new(8));
+        let threads: Vec<_> = (0..8)
+            .map(|_| {
+                let (store, barrier) = (store.clone(), barrier.clone());
+                std::thread::spawn(move || {
+                    barrier.wait();
+                    store.load_folder("a1", "INBOX").map(|_| ())
+                })
+            })
+            .collect();
+        for th in threads {
+            let r = th.join().unwrap();
+            assert!(r.is_ok(), "round {round}: {r:?}");
+        }
+        drop(store);
+        let _ = std::fs::remove_dir_all(&t);
+    }
+}
