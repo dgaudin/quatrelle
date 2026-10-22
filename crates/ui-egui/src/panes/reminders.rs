@@ -1,7 +1,9 @@
 //! The Reminders window: calendar reminders that have come due (Outlook's own window lists them
 //! the same way), each to dismiss, snooze or open; and a desktop notification when one comes.
+//! A window of its own, over every other, when the option says so (the main window minimized
+//! or behind others, it still shows); inside the main window otherwise (and in the browser).
 
-use egui::{RichText, Ui, vec2};
+use egui::{Margin, RichText, Ui, vec2};
 use quatrelle_engine::model::dates;
 use quatrelle_engine::{DueReminder, Session};
 use serde_json::json;
@@ -120,65 +122,87 @@ pub fn show(ctx: &egui::Context, st: &mut State, s: &Session, t: &Tokens, acts: 
     if st.snooze == 0 {
         st.snooze = 5;
     }
-    let now = s.clock.now;
-    let mut open = true;
     let title = if st.due.len() == 1 { tl!("1 Reminder").to_string() } else { tf!("{n} Reminders", n = st.due.len()) };
-    egui::Window::new(title)
-        .id(egui::Id::unique("reminders-window"))
-        .open(&mut open)
-        .collapsible(false)
-        .resizable(false)
-        .default_width(420.0)
-        .anchor(egui::Align2::RIGHT_BOTTOM, vec2(-24.0, -48.0))
-        .show(ctx, |ui: &mut Ui| {
-            egui::ScrollArea::vertical().max_height(220.0).show(ui, |ui| {
-                for r in &st.due {
-                    let picked = st.selected.as_deref() == Some(r.key.as_str());
-                    let text = format!("{}  ·  {}  ·  {}", r.summary, when(r, s), due_in(r, now));
-                    let label = RichText::new(text).color(if r.start <= now { t.danger } else { t.text });
-                    if ui.selectable_label(picked, label).on_hover_text(&r.location).clicked() {
-                        st.selected = Some(r.key.clone());
-                    }
-                }
-            });
-            ui.add_space(6.0);
-            let picked = st.selected.clone().and_then(|k| st.due.iter().find(|r| r.key == k).cloned());
-            ui.horizontal(|ui| {
-                if ui.button(tl!("Dismiss All")).clicked() {
-                    acts.push(Action::Run("reminders.dismiss", json!({})));
-                }
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if let Some(r) = &picked {
-                        if widgets::accent_button(ui, crate::icons::Icon::Close, "Dismiss", t, true).clicked() {
-                            acts.push(Action::Run("reminders.dismiss", json!({ "key": r.key })));
-                        }
-                        if ui.button(tl!("Open Item")).clicked()
-                            && let Some(d) = Dialog::open_event(s, &r.uid, r.occurrence)
-                        {
-                            acts.push(Action::Dialog(d));
-                        }
-                    }
-                });
-            });
-            ui.add_space(4.0);
-            ui.label(RichText::new(tl!("Click Snooze to be reminded again in:")).color(t.dim).small());
-            ui.horizontal(|ui| {
-                egui::ComboBox::from_id_salt("reminder-snooze").width(200.0).selected_text(snooze_label(st.snooze)).show_ui(ui, |ui| {
-                    for m in SNOOZES {
-                        let m = if m == 0 { BEFORE } else { m };
-                        ui.selectable_value(&mut st.snooze, m, snooze_label(m));
-                    }
-                });
-                if let Some(r) = &picked
-                    && ui.button(tl!("Snooze")).clicked()
-                {
-                    let p =
-                        if st.snooze == BEFORE { json!({ "key": r.key, "beforeStart": 0 }) } else { json!({ "key": r.key, "minutes": st.snooze }) };
-                    acts.push(Action::Run("reminders.snooze", p));
-                }
+    let mut open = true;
+    // A window of its own, on top (not in the browser, where windows are drawn inside the page).
+    if s.prefs.reminders_on_top && !ctx.embed_viewports() {
+        let id = egui::ViewportId::from_hash_of("reminders-window");
+        let builder = egui::ViewportBuilder::default()
+            .with_title(crate::i18n::as_written(|| title.clone()))
+            .with_inner_size([480.0, 330.0])
+            .with_min_inner_size([360.0, 240.0])
+            .with_always_on_top()
+            .with_minimize_button(false)
+            .with_maximize_button(false);
+        ctx.show_viewport_immediate(id, builder, |ui, _| {
+            open = !ui.input(|i| i.viewport().close_requested());
+            egui::CentralPanel::default().frame(egui::Frame::new().fill(t.surface).inner_margin(Margin::same(12))).show(ui, |ui| {
+                body(ui, st, s, t, acts);
             });
         });
+    } else {
+        egui::Window::new(title)
+            .id(egui::Id::unique("reminders-window"))
+            .open(&mut open)
+            .collapsible(false)
+            .resizable(false)
+            .default_width(420.0)
+            .anchor(egui::Align2::RIGHT_BOTTOM, vec2(-24.0, -48.0))
+            .show(ctx, |ui: &mut Ui| body(ui, st, s, t, acts));
+    }
     if !open {
         st.closed.extend(st.due.iter().map(|r| r.key.clone()));
     }
+}
+
+/// What the window holds: the list, Dismiss and Open, Snooze with its delay.
+fn body(ui: &mut Ui, st: &mut State, s: &Session, t: &Tokens, acts: &mut Vec<Action>) {
+    let now = s.clock.now;
+    egui::ScrollArea::vertical().max_height(220.0).show(ui, |ui| {
+        for r in &st.due {
+            let picked = st.selected.as_deref() == Some(r.key.as_str());
+            let text = format!("{}  ·  {}  ·  {}", r.summary, when(r, s), due_in(r, now));
+            let label = RichText::new(text).color(if r.start <= now { t.danger } else { t.text });
+            if ui.selectable_label(picked, label).on_hover_text(&r.location).clicked() {
+                st.selected = Some(r.key.clone());
+            }
+        }
+    });
+    ui.add_space(6.0);
+    let picked = st.selected.clone().and_then(|k| st.due.iter().find(|r| r.key == k).cloned());
+    ui.horizontal(|ui| {
+        if ui.button(tl!("Dismiss All")).clicked() {
+            acts.push(Action::Run("reminders.dismiss", json!({})));
+        }
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if let Some(r) = &picked {
+                if widgets::accent_button(ui, crate::icons::Icon::Close, "Dismiss", t, true).clicked() {
+                    acts.push(Action::Run("reminders.dismiss", json!({ "key": r.key })));
+                }
+                if ui.button(tl!("Open Item")).clicked()
+                    && let Some(d) = Dialog::open_event(s, &r.uid, r.occurrence)
+                {
+                    acts.push(Action::Dialog(d));
+                    // The event opens in the main window: brought forward for it.
+                    acts.push(Action::FocusMain);
+                }
+            }
+        });
+    });
+    ui.add_space(4.0);
+    ui.label(RichText::new(tl!("Click Snooze to be reminded again in:")).color(t.dim).small());
+    ui.horizontal(|ui| {
+        egui::ComboBox::from_id_salt("reminder-snooze").width(200.0).selected_text(snooze_label(st.snooze)).show_ui(ui, |ui| {
+            for m in SNOOZES {
+                let m = if m == 0 { BEFORE } else { m };
+                ui.selectable_value(&mut st.snooze, m, snooze_label(m));
+            }
+        });
+        if let Some(r) = &picked
+            && ui.button(tl!("Snooze")).clicked()
+        {
+            let p = if st.snooze == BEFORE { json!({ "key": r.key, "beforeStart": 0 }) } else { json!({ "key": r.key, "minutes": st.snooze }) };
+            acts.push(Action::Run("reminders.snooze", p));
+        }
+    });
 }

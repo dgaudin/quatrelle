@@ -52,7 +52,7 @@ pub(crate) use app::{SearchDrop, junk_menu, scope_label};
 pub use app::{WindowPlace, after_open};
 pub use dialogs::Dialog;
 use icons::Icon;
-pub use services::{Backend, NullBackend, NullServices, Services};
+pub use services::{Backend, NullBackend, NullServices, ReminderAction, Services};
 use theme::Tokens;
 
 /// Whether the message being written shows in the reading pane: when it isn't popped out, or

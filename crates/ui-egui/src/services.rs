@@ -23,6 +23,17 @@ impl Backend for NullBackend {
     }
 }
 
+/// What was done on a reminder's desktop notification ([`Services::notify_reminder`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ReminderAction {
+    /// Its "Snooze" button: five minutes more.
+    Snooze,
+    /// Its "Dismiss" button.
+    Dismiss,
+    /// The notification itself was clicked: bring the window forward, the reminder with it.
+    Open,
+}
+
 /// Platform services the UI needs.
 pub trait Services {
     /// Unix seconds and the local UTC offset in seconds.
@@ -44,6 +55,17 @@ pub trait Services {
     }
     /// Show a desktop notification (new mail). The default does nothing.
     fn notify(&mut self, _title: &str, _body: &str) {}
+    /// Tell of a calendar reminder (`key`: the reminder's, for answering it): a notification
+    /// that stays until answered, with `snooze` and `dismiss` buttons where the desktop has
+    /// them; what was pressed comes back through [`Services::take_reminder_actions`]. The
+    /// default is a plain notification.
+    fn notify_reminder(&mut self, _key: &str, title: &str, body: &str, _snooze: &str, _dismiss: &str) {
+        self.notify(title, body);
+    }
+    /// What was done on reminder notifications since the last call: (the reminder's key, what).
+    fn take_reminder_actions(&mut self) -> Vec<(String, ReminderAction)> {
+        Vec::new()
+    }
     /// Where an installed Craft app is (`pdfcraft`, `wordcraft`…), if it is.
     fn craft_app(&mut self, _command: &str) -> Option<PathBuf> {
         None

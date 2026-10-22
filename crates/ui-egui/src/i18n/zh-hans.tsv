@@ -1140,3 +1140,6 @@ month	May	5月
 	Save without sending	保存但不发送
 	Microsoft 365 tells the attendees of the change itself.	Microsoft 365 会自行将更改通知与会者。
 	Moved to {when}. Ctrl+Z puts it back.	已移至 {when}。按 Ctrl+Z 可撤销。
+	Snooze 5 minutes	推迟 5 分钟
+	Show reminders on top of other windows	将提醒显示在其他窗口之上
+	The Reminders window opens in a window of its own when a reminder comes, even while Quatrelle is minimized	提醒到来时，即使 Quatrelle 已最小化，提醒窗口也会在独立窗口中打开

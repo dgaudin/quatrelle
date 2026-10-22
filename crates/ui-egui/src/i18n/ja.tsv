@@ -1140,3 +1140,6 @@ month	May	5月
 	Save without sending	送信せずに保存
 	Microsoft 365 tells the attendees of the change itself.	Microsoft 365 が変更を出席者に自動的に通知します。
 	Moved to {when}. Ctrl+Z puts it back.	{when} に移動しました。Ctrl+Z で元に戻せます。
+	Snooze 5 minutes	5 分後に再通知
+	Show reminders on top of other windows	アラームを他のウィンドウの前面に表示する
+	The Reminders window opens in a window of its own when a reminder comes, even while Quatrelle is minimized	アラームが来ると、Quatrelle が最小化されていてもアラーム ウィンドウが独立したウィンドウで開きます
