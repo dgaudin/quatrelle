@@ -421,7 +421,8 @@ impl crate::Services for WebLike {
 }
 
 /// Services whose clock the test moves, remembering the notifications shown (reminders with
-/// their key and buttons), and handing back what the test "pressed" on them.
+/// their key and buttons; taken back: `("withdrawn", key)`), and handing back what the test
+/// "pressed" on them.
 struct Ticking(
     std::sync::Arc<std::sync::Mutex<i64>>,
     std::sync::Arc<std::sync::Mutex<Vec<(String, String)>>>,
@@ -449,6 +450,9 @@ impl crate::Services for Ticking {
     }
     fn take_reminder_actions(&mut self) -> Vec<(String, crate::ReminderAction)> {
         std::mem::take(&mut *self.2.lock().unwrap())
+    }
+    fn withdraw_reminder(&mut self, key: &str) {
+        self.1.lock().unwrap().push(("withdrawn".into(), key.into()));
     }
 }
 

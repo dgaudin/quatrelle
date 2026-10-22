@@ -32,6 +32,8 @@ pub struct State {
     pub closed: std::collections::BTreeSet<String>,
     /// Told on the desktop already.
     pub notified: std::collections::BTreeSet<String>,
+    /// Told on the desktop, and no longer due: their notifications to take back.
+    pub gone: Vec<String>,
     /// What the list was worked out from ([`signature`]): when it changes (a reminder answered,
     /// an event changed), it's worked out again at once.
     pub signature: u64,
@@ -67,7 +69,9 @@ pub fn refresh(st: &mut State, s: &Session, force: bool) -> Vec<DueReminder> {
     st.due = s.due_reminders(now);
     let keys: std::collections::BTreeSet<String> = st.due.iter().map(|r| r.key.clone()).collect();
     st.closed.retain(|k| keys.contains(k));
+    let gone: Vec<String> = st.notified.iter().filter(|k| !keys.contains(*k)).cloned().collect();
     st.notified.retain(|k| keys.contains(k));
+    st.gone.extend(gone);
     if st.selected.as_ref().is_none_or(|k| !keys.contains(k)) {
         st.selected = st.due.first().map(|r| r.key.clone());
     }

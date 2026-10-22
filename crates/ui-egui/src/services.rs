@@ -66,6 +66,10 @@ pub trait Services {
     fn take_reminder_actions(&mut self) -> Vec<(String, ReminderAction)> {
         Vec::new()
     }
+    /// Take back a reminder's notification: it was answered elsewhere (the Reminders window,
+    /// another notification) or its time has passed, so its buttons have nothing left to do.
+    /// The default does nothing.
+    fn withdraw_reminder(&mut self, _key: &str) {}
     /// Where an installed Craft app is (`pdfcraft`, `wordcraft`…), if it is.
     fn craft_app(&mut self, _command: &str) -> Option<PathBuf> {
         None
