@@ -151,3 +151,32 @@ fn address_book_entry_ids_give_their_x500_name() {
     }
     assert_eq!(address_book_dn(&[]), None);
 }
+
+/// An on-premises Exchange names the organizer of one's own meeting by an internal (`EX`)
+/// address, not read as an address: the meeting is the calendar owner's when their answer is
+/// "Organizer" (so dragging it offers the update to its guests), and someone else's otherwise.
+#[test]
+fn ones_own_meeting_is_known_by_the_answer_organizer() {
+    let item = |answer: &str| {
+        format!(
+            "<t:CalendarItem><t:ItemId Id=\"m1\" ChangeKey=\"c\"/><t:Subject>Weekly</t:Subject><t:UID>u-1</t:UID>\
+             <t:Start>2026-10-21T08:00:00Z</t:Start><t:End>2026-10-21T09:00:00Z</t:End><t:CalendarItemType>Single</t:CalendarItemType>\
+             <t:Organizer><t:Mailbox><t:Name>Riley Moreno</t:Name><t:EmailAddress>/O=CONTOSO/OU=EXCHANGE ADMINISTRATIVE GROUP/CN=RECIPIENTS/CN=RMORENO</t:EmailAddress>\
+             <t:RoutingType>EX</t:RoutingType></t:Mailbox></t:Organizer>\
+             <t:RequiredAttendees><t:Attendee><t:Mailbox><t:Name>Ana</t:Name><t:EmailAddress>ana@x.example</t:EmailAddress></t:Mailbox>\
+             <t:ResponseType>Unknown</t:ResponseType></t:Attendee></t:RequiredAttendees><t:MyResponseType>{answer}</t:MyResponseType></t:CalendarItem>"
+        )
+    };
+    let doc = parse(&item("Organizer"));
+    let it = doc.find("CalendarItem").unwrap();
+    let mut e = event_of(it).unwrap();
+    assert!(e.organizer.is_none(), "an EX address isn't read as one");
+    own_organizer(&mut e, it, "Riley@Contoso.example");
+    let o = e.organizer.unwrap();
+    assert_eq!((o.email.as_str(), o.name.as_str()), ("riley@contoso.example", "Riley Moreno"));
+    let doc = parse(&item("Accept"));
+    let it = doc.find("CalendarItem").unwrap();
+    let mut e = event_of(it).unwrap();
+    own_organizer(&mut e, it, "riley@contoso.example");
+    assert!(e.organizer.is_none(), "someone else's: not made the owner's");
+}

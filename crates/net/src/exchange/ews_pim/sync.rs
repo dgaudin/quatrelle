@@ -34,7 +34,7 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
         }
     }
     // Then both folders, read again.
-    read_calendar(c, items(c, "calendar", Some(now - CALENDAR_BACK))?, CALENDAR, &mut out);
+    read_calendar(c, items(c, "calendar", Some(now - CALENDAR_BACK))?, CALENDAR, c.email(), &mut out);
     // Named as the server names it, in the mailbox's language ("Agenda"), as Outlook shows it.
     let own = folder_name(c, "calendar").unwrap_or_else(|| "Calendar".into());
     let mut calendars = vec![CalendarInfo { id: CALENDAR.into(), name: own, color: 0, read_only: false, ctag: String::new(), group: String::new() }];
@@ -124,7 +124,7 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
                 if !can_edit && let Err(e) = &folder_rights {
                     log::info!("{email}'s calendar rights: {e}");
                 }
-                read_calendar(c, list, &id, &mut out);
+                read_calendar(c, list, &id, email, &mut out);
                 out.synced_calendars.push(id.clone());
             }
             // One asked for by hand says why it's missing; a shared mailbox whose calendar
@@ -228,13 +228,15 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
 /// occurrences of a series changed on their own (moved, renamed) as instances of their own —
 /// the series lists their items, which are read in a batch — so that a meeting moved in
 /// Outlook, or dragged here, shows on its new day rather than its old one.
-fn read_calendar(c: &Client, list: Vec<El>, calendar: &str, out: &mut DavSync) {
+/// `owner`: the calendar's mailbox (the organizer of the meetings it organizes).
+fn read_calendar(c: &Client, list: Vec<El>, calendar: &str, owner: &str, out: &mut DavSync) {
     let id_of = |it: &El| {
         it.child("ItemId").map(|i| (i.attr("Id").unwrap_or("").to_string(), i.attr("ChangeKey").unwrap_or("").to_string())).unwrap_or_default()
     };
     let mut changed: Vec<String> = Vec::new();
     for it in &list {
-        if let Some(event) = event_of(it) {
+        if let Some(mut event) = event_of(it) {
+            own_organizer(&mut event, it, owner);
             let (href, etag) = id_of(it);
             out.events.push(StoredEvent { calendar: calendar.into(), href, etag, event, dirty: false, notify: false });
             changed.extend(modified_occurrence_ids(it));
@@ -244,7 +246,8 @@ fn read_calendar(c: &Client, list: Vec<El>, calendar: &str, out: &mut DavSync) {
     match get_items(c, &changed, "") {
         Ok(found) => {
             for it in &found {
-                if let Some(event) = exception_of(it) {
+                if let Some(mut event) = exception_of(it) {
+                    own_organizer(&mut event, it, owner);
                     let (href, etag) = id_of(it);
                     out.events.push(StoredEvent { calendar: calendar.into(), href, etag, event, dirty: false, notify: false });
                 }

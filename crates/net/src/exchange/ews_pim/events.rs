@@ -90,6 +90,17 @@ fn person(m: &El) -> Option<Attendee> {
     email.contains('@').then(|| Attendee { email, name: text(mb, "Name"), partstat: String::new(), rsvp: false })
 }
 
+/// The organizer of a meeting when Exchange names them by their internal (`EX`) address, which
+/// isn't read as an address: one whose calendar's owner answered "Organizer" is the owner's
+/// (`owner`: that calendar's mailbox). Without it, the owner's own meetings passed for having no
+/// organizer: dragged or stretched, their guests weren't offered the update.
+pub fn own_organizer(e: &mut CalEvent, it: &El, owner: &str) {
+    if e.organizer.is_none() && owner.contains('@') && it.text_of("MyResponseType").is_some_and(|r| r.trim() == "Organizer") {
+        let name = it.child("Organizer").and_then(|o| o.find("Mailbox")).map(|mb| text(mb, "Name")).unwrap_or_default();
+        e.organizer = Some(Attendee { email: owner.to_ascii_lowercase(), name, partstat: String::new(), rsvp: false });
+    }
+}
+
 /// All-day times are local midnights: the nearest UTC midnight is the day.
 fn day(t: i64) -> i64 {
     (t + 43_200).div_euclid(86_400) * 86_400

@@ -65,7 +65,7 @@ const REMINDERS_MAX: usize = 200;
 
 /// One occurrence of an event, ready to draw. Times are Unix seconds; all-day events start at
 /// local midnight of their first day.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct AgendaItem {
     pub account: String,
     pub calendar: String,
