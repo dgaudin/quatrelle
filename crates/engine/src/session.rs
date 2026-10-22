@@ -40,7 +40,7 @@ mod writing;
 // named here as before.
 pub use listing::{ARRANGE_HEADINGS, Arrange, FolderRef, ListFilter, OUTBOX, Row, View, arrange_list};
 use listing::{person, size_group};
-pub use organize::{junk, quick_steps, search_folders};
+pub use organize::{RulesScope, junk, quick_steps, search_folders};
 pub use prefs::{ListLayout, NotesOrder, Prefs, ReadInPane, ReadingPane};
 pub use writing::{Compose, add_pictures, signature_block, style_signature};
 

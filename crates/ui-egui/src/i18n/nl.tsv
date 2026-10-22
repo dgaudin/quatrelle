@@ -631,6 +631,7 @@
 	Ask the recipients to confirm they've read it (their mail app may not, or may ask them)	De ontvangers vragen te bevestigen dat ze het hebben gelezen (hun mail-app doet dat misschien niet, of vraagt het hun)
 	Works with any provider: IMAP or POP with SMTP, JMAP, or Exchange. Your password is kept in this computer's keychain and only ever sent to your mail server.	Werkt met elke provider: IMAP of POP met SMTP, JMAP of Exchange. Je wachtwoord wordt in de sleutelhanger van deze computer bewaard en alleen naar je mailserver verzonden.
 	Run it now on the mail already in the Inbox	Nu uitvoeren op de mail die al in Postvak IN staat
+	Run it now on the mail already in {folder}	Nu uitvoeren op de mail die al in {folder} staat
 	Run on the mail already in the Inbox	Uitvoeren op de mail die al in Postvak IN staat
 	More options	Meer opties
 	Save As…	Opslaan als…
