@@ -1130,3 +1130,5 @@ month	May	מאי
 	Other terms	תנאים נוספים
 	Clear	ניקוי
 	No results. Try fewer words.	אין תוצאות. נסה פחות מילים.
+	Put a “-- ” line before the signature	הוספת שורת “-- ” לפני החתימה
+	Some mail apps use it to tell the signature apart; Outlook adds none.	חלק מתוכנות הדואר מזהות בה את החתימה; Outlook אינו מוסיף אותה.

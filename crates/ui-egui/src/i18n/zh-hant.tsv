@@ -1133,3 +1133,5 @@ month	May	5月
 	Other terms	其他條件
 	Clear	清除
 	No results. Try fewer words.	沒有結果。請減少關鍵字。
+	Put a “-- ” line before the signature	在簽名前加一行「-- 」
+	Some mail apps use it to tell the signature apart; Outlook adds none.	部分郵件程式用它來區分簽名；Outlook 不會加入。

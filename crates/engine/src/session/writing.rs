@@ -27,16 +27,31 @@ impl Session {
         if off { String::new() } else { self.signature(account) }
     }
 
-    /// An account's signature with its look: its text and styles (plain when it has none).
+    /// An account's signature with its look: its text and styles (plain when it has none). The
+    /// styles its editor kept come back as they were; a signature from before that was kept
+    /// (or pasted as HTML from the command line) is read from its HTML.
     pub fn signature_rich(&self, account: &str) -> (String, mime::rich::Styles) {
         let Some(a) = self.account(account) else { return (String::new(), mime::rich::Styles::default()) };
-        if !a.config.signature_html.trim().is_empty() {
-            let (text, styles) = mime::signature_html(&a.config.signature_html);
+        let c = &a.config;
+        if !c.signature_styles.is_empty()
+            && !c.signature.trim().is_empty()
+            && let Ok(mut styles) = serde_json::from_str::<mime::rich::Styles>(&c.signature_styles)
+        {
+            styles.fit(&c.signature);
+            return (c.signature.clone(), styles);
+        }
+        if !c.signature_html.trim().is_empty() {
+            let (text, styles) = mime::signature_html(&c.signature_html);
             if !text.trim().is_empty() {
                 return (text, styles);
             }
         }
-        (a.config.signature.clone(), mime::rich::Styles::plain(&a.config.signature))
+        (c.signature.clone(), mime::rich::Styles::plain(&c.signature))
+    }
+
+    /// `sig` as it goes into a message: after a `-- ` line when the preferences ask for one.
+    pub(crate) fn signature_in_message(&self, sig: &str) -> String {
+        if sig.trim().is_empty() { String::new() } else { signature_block(sig, self.prefs.signature_dashes) }
     }
 
     /// The signature in the message being made, given its look (the text went in plain).
@@ -44,8 +59,9 @@ impl Session {
         let Some(account) = self.compose.as_ref().map(|c| c.account.clone()) else { return };
         let sig = self.signature_rich(&account);
         let pictures = self.signature_pictures(&account);
+        let dashes = self.prefs.signature_dashes;
         if let Some(c) = self.compose.as_mut() {
-            style_signature(c, &sig);
+            style_signature(c, &sig, dashes);
             add_pictures(c, pictures);
         }
     }
@@ -100,11 +116,10 @@ impl Session {
             None => self.current_account().map(|a| a.config.id.clone()),
         }
         .ok_or_else(|| CmdError::Disabled("add an account first".into()))?;
-        let sig = self.signature_when(&account, false);
+        let signature = self.signature_in_message(&self.signature_when(&account, false));
         let id = self.fresh_id();
-        let body = if sig.trim().is_empty() { String::new() } else { format!("\n\n{}", signature_block(&sig)) };
+        let body = if signature.is_empty() { String::new() } else { format!("\n\n{signature}") };
         let window = self.prefs.new_mail_window;
-        let signature = if sig.trim().is_empty() { String::new() } else { signature_block(&sig) };
         let styles = mime::rich::Styles::plain(&body);
         self.open_compose(Compose { id, account, body, styles, window, signature, ..Default::default() });
         self.style_signature();
@@ -115,7 +130,7 @@ impl Session {
         let r = self.reading.clone().ok_or_else(|| CmdError::Disabled("open a message first".into()))?;
         let parsed = r.parsed.ok_or_else(|| CmdError::Disabled("the message is still downloading".into()))?;
         let account = r.key.account.clone();
-        let sig = self.signature_when(&account, true);
+        let sig = self.signature_in_message(&self.signature_when(&account, true));
         let (d, styles) = mime::reply_doc(&parsed, mode, &self.me(&account), &self.clock, &sig);
         let id = self.fresh_id();
         let mut attachments = Vec::new();
@@ -131,7 +146,7 @@ impl Session {
         self.open_compose(Compose {
             id,
             account,
-            signature: if sig.trim().is_empty() { String::new() } else { signature_block(&sig) },
+            signature: sig,
             to: addr::format_field(&d.to),
             cc: addr::format_field(&d.cc),
             subject: d.subject,
@@ -155,12 +170,12 @@ impl Session {
         let raw =
             self.store.as_ref().and_then(|s| s.read_body(&r.key)).ok_or_else(|| CmdError::Disabled("the message is still downloading".into()))?;
         let out = self.reply_compose(ReplyMode::Forward)?;
-        let sig = self.signature_when(&r.key.account, true);
+        let sig = self.signature_in_message(&self.signature_when(&r.key.account, true));
         let subject = r.parsed.as_ref().map(|p| p.subject.trim().to_string()).unwrap_or_default();
         let name = format!("{}.eml", if subject.is_empty() { "message" } else { subject.as_str() });
         if let Some(c) = self.compose.as_mut() {
-            c.set_text(if sig.trim().is_empty() { String::new() } else { format!("\n\n{}", signature_block(&sig)) });
-            c.signature = if sig.trim().is_empty() { String::new() } else { signature_block(&sig) };
+            c.set_text(if sig.is_empty() { String::new() } else { format!("\n\n{sig}") });
+            c.signature = sig;
             c.attachments = vec![OutAttachment { name, mime: "message/rfc822".into(), data: raw }];
         }
         self.style_signature();

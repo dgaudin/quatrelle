@@ -543,3 +543,67 @@ fn an_html_signature_goes_as_written() {
     assert!(p.images.iter().any(|u| u.contains("www.contoso.example/images/logo.gif")), "{:?}", p.images);
     assert!(p.text.contains("Hi Zoe") && p.text.contains("Didier GAUDIN") && !p.text.contains("x()"), "{}", p.text);
 }
+
+/// A signature made in the editor comes back exactly as set, in every new message and in what's
+/// sent: its size and typeface, its underline and its centring (it was read back from its HTML
+/// before, which kept none of them). Outlook puts no `-- ` line before a signature: one goes
+/// in only when the preferences ask for it.
+#[test]
+fn a_signature_keeps_every_bit_of_its_look() {
+    use quatrelle_mime::rich::{Align, Style, Styles};
+    let mut s = Session::open(Some(temp("signature-look")), quatrelle_model::dates::Clock::new(NOW, 0));
+    let id = s.run("account.add", &json!({"email": "dgaudin@example.org", "password": "pw"})).unwrap()["account"].as_str().unwrap().to_string();
+    let text = "Didier GAUDIN\nContoso";
+    let mut styles = Styles::plain(text);
+    styles.restyle(text, 0..13, |st| Style { size: Some(16), font: Some("Arial".into()), underline: true, ..st.clone() });
+    styles.relayout(text, 0..1, |p| p.align = Align::Center);
+    s.run("account.setSignature", &json!({"account": id, "signature": text, "styles": styles})).unwrap();
+    let config = s.account(&id).unwrap().config.clone();
+    assert!(!config.signature_styles.is_empty() && config.signature_html.contains("16pt"), "{config:?}");
+    // Saved, then read again: the styles themselves, not a rendering of them.
+    let (again, again_styles) = s.signature_rich(&id);
+    assert_eq!(again, text);
+    assert_eq!(again_styles.style(0), styles.style(0));
+    assert_eq!(again_styles.para(0).align, Align::Center);
+    // Into a new message, with no `-- ` line before it.
+    s.run("mail.new", &json!({})).unwrap();
+    let c = s.compose.clone().unwrap();
+    assert_eq!(c.body, "\n\nDidier GAUDIN\nContoso");
+    assert_eq!(c.signature, "Didier GAUDIN\nContoso");
+    let st = c.styles.style(2);
+    assert_eq!((st.size, st.font.as_deref(), st.underline), (Some(16), Some("Arial"), true), "{st:?}");
+    assert_eq!(c.styles.para(2).align, Align::Center);
+    assert!(!s.compose_written(), "a message with only its signature has nothing written");
+    // Written and sent: the HTML says it all, the text twin has no `-- ` line.
+    s.run("compose.update", &json!({"to": "zoe@example.org", "subject": "Hello", "body": "Hi Zoe"})).unwrap();
+    s.run("compose.insertSignature", &json!({})).unwrap();
+    let (plain, html, _) = s.compose.as_ref().unwrap().bodies();
+    let html = html.unwrap_or_default();
+    assert!(html.contains("<span style=\"font-family:'Arial',sans-serif; font-size:16pt\"><u>Didier GAUDIN</u></span>"), "{html}");
+    assert!(html.contains("<div style=\"text-align:center\">"), "{html}");
+    assert!(!plain.contains("-- "), "{plain}");
+    s.take_jobs();
+    s.run("compose.send", &json!({})).unwrap();
+    let raw = s
+        .take_jobs()
+        .into_iter()
+        .find_map(|j| match j {
+            Job::Send { raw, .. } => Some(raw),
+            _ => None,
+        })
+        .unwrap();
+    let p = quatrelle_mime::parse(&raw).unwrap();
+    assert!(p.had_html && p.text.contains("Hi Zoe") && p.text.contains("Didier GAUDIN") && !p.text.contains("-- "), "{}", p.text);
+    // The `-- ` line asked for: it goes in before the signature, which keeps its look.
+    s.run("view.signatureDashes", &json!({"on": true})).unwrap();
+    s.run("mail.new", &json!({})).unwrap();
+    let c = s.compose.clone().unwrap();
+    assert_eq!((c.body.as_str(), c.signature.as_str()), ("\n\n-- \nDidier GAUDIN\nContoso", "-- \nDidier GAUDIN\nContoso"));
+    assert!(c.styles.style(6).underline && c.styles.para(3).align == Align::Center, "{:?}", c.styles);
+    // Junk styles are refused, not trusted.
+    assert!(s.run("account.setSignature", &json!({"account": id, "signature": "x", "styles": "junk"})).is_err());
+    let mut junk = Styles::plain("x");
+    junk.chars = vec![9999];
+    s.run("account.setSignature", &json!({"account": id, "signature": "x", "styles": junk})).unwrap();
+    assert!(s.signature_rich(&id).1.is_plain());
+}
