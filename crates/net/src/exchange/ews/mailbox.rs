@@ -467,9 +467,16 @@ impl Client {
     /// The picture the directory keeps for an address (`GetUserPhoto`, Exchange 2013 and later):
     /// its bytes and type. `No` when the mailbox has none, or the server predates it.
     pub fn user_photo(&self, email: &str) -> Result<(String, Vec<u8>)> {
-        let doc =
-            self.call(&format!("<m:GetUserPhoto><m:Email>{}</m:Email><m:SizeRequested>HR240x240</m:SizeRequested></m:GetUserPhoto>", esc(email)))?;
-        photo_of(&doc)
+        let asked =
+            self.call(&format!("<m:GetUserPhoto><m:Email>{}</m:Email><m:SizeRequested>HR240x240</m:SizeRequested></m:GetUserPhoto>", esc(email)));
+        match asked {
+            Ok(doc) => photo_of(&doc),
+            // Exchange says "no picture" (a shared mailbox's, often) with a bare HTTP 404: an
+            // answer, not a broken connection (the account showed an error, and connected
+            // again, at every start).
+            Err(NetError::Protocol(m)) if m == requests::answered_http(404) => Err(NetError::No("no picture for this person".into())),
+            Err(e) => Err(e),
+        }
     }
 
     /// The picture a contact item carries (Outlook keeps a contact's photo as an attachment of
