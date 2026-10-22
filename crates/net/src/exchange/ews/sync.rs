@@ -462,40 +462,7 @@ pub fn fetch_body(c: &Client, st: &mut State, store: &Store, key: &MessageKey) -
     if let Some(raw) = store.read_body(key) {
         return Ok(raw);
     }
-    let known = st.id(key.uid).filter(|_| key.validity == VALIDITY).map(str::to_string);
-    let id = match known {
-        Some(id) => id,
-        None => {
-            // The numbering no longer has this message (a state reloaded, a folder listed under
-            // another numbering): it is still there, and the cache knows its Message-ID. Find it
-            // again and number it, rather than telling the reader an old message is gone.
-            let mid =
-                store.load_folder(&key.account, &key.folder).ok().and_then(|f| f.find(key.uid).map(|m| m.message_id.clone())).unwrap_or_default();
-            let folder_id = st.mailbox(&key.folder).ok().map(str::to_string);
-            let again = match (mid.is_empty(), folder_id) {
-                (false, Some(folder_id)) => id_by_message_id(c, &folder_id, &mid)?,
-                _ => None,
-            };
-            match again {
-                Some(id) => {
-                    log::info!("{}: {} #{} wasn't in the numbering: found again by its Message-ID", key.account, utf7::decode(&key.folder), key.uid);
-                    st.set_number(&id, key.uid);
-                    id
-                }
-                None => {
-                    log::warn!(
-                        "{}: {} #{} (validity {}) isn't in the numbering ({} ids) and wasn't found by its Message-ID",
-                        key.account,
-                        utf7::decode(&key.folder),
-                        key.uid,
-                        key.validity,
-                        st.len()
-                    );
-                    return Err(NetError::No("the message is no longer on the server".into()));
-                }
-            }
-        }
-    };
+    let id = server_id(c, st, store, key)?.ok_or_else(|| NetError::No("the message is no longer on the server".into()))?;
     let raw = c.download(&id)?;
     store.write_body(key, &raw)?;
     let mut fs = store.load_folder(&key.account, &key.folder)?;
@@ -505,3 +472,53 @@ pub fn fetch_body(c: &Client, st: &mut State, store: &Store, key: &MessageKey) -
     }
     Ok(raw)
 }
+
+/// The server's id for a cached message. When the numbering no longer has it (a state reloaded,
+/// a folder listed under another numbering, a reader's numbers lost with a quit mid-sync), it's
+/// still there and the cache knows its Message-ID: found again and numbered as it was, rather
+/// than an old message said to be gone, or a change to it never made on the server. `None`:
+/// not found.
+pub fn server_id(c: &Client, st: &mut State, store: &Store, key: &MessageKey) -> Result<Option<String>> {
+    if let Some(id) = st.id(key.uid).filter(|_| key.validity == VALIDITY) {
+        return Ok(Some(id.to_string()));
+    }
+    let mid = store.load_folder(&key.account, &key.folder).ok().and_then(|f| f.find(key.uid).map(|m| m.message_id.clone())).unwrap_or_default();
+    let folder_id = st.mailbox(&key.folder).ok().map(str::to_string);
+    let again = match (mid.is_empty(), folder_id) {
+        (false, Some(folder_id)) => id_by_message_id(c, &folder_id, &mid)?,
+        _ => None,
+    };
+    match &again {
+        Some(id) => {
+            log::info!("{}: {} #{} wasn't in the numbering: found again by its Message-ID", key.account, utf7::decode(&key.folder), key.uid);
+            st.set_number(id, key.uid);
+        }
+        None => log::warn!(
+            "{}: {} #{} (validity {}) isn't in the numbering ({} ids) and wasn't found by its Message-ID",
+            key.account,
+            utf7::decode(&key.folder),
+            key.uid,
+            key.validity,
+            st.len()
+        ),
+    }
+    Ok(again)
+}
+
+/// Messages a change names that the numbering lost, looked for again ([`server_id`]) before the
+/// change goes to the server, a few at most: left out, the change was made here only and the
+/// server's state came back over it at the next full read.
+pub fn find_lost(c: &Client, st: &mut State, store: &Store, keys: &[MessageKey]) -> Result<()> {
+    let lost: Vec<&MessageKey> = keys.iter().filter(|k| k.validity == VALIDITY && st.id(k.uid).is_none()).collect();
+    if lost.len() > LOST_LOOKED_FOR {
+        let account = keys.first().map_or("", |k| k.account.as_str());
+        log::warn!("{account}: {} messages of a change have no server id: the first {LOST_LOOKED_FOR} are looked for", lost.len());
+    }
+    for key in lost.into_iter().take(LOST_LOOKED_FOR) {
+        server_id(c, st, store, key)?;
+    }
+    Ok(())
+}
+
+/// How many lost messages one change looks for ([`find_lost`]): each is a search of its folder.
+const LOST_LOOKED_FOR: usize = 50;

@@ -586,8 +586,8 @@ fn sync_order(folders: &[Folder]) -> Vec<String> {
 /// What a connection of its own sends back while it reads folders.
 enum SyncDone {
     /// A folder read, and what changed there (or why not, as it was: a connection that timed
-    /// out must stop the sync, not pass for "no such folder").
-    Folder(String, std::result::Result<SyncReport, NetError>),
+    /// out must stop the sync, not pass for "no such folder"); with the numbers given meanwhile.
+    Folder(String, std::result::Result<SyncReport, NetError>, Vec<(String, u32)>),
     /// The numbers it gave while reading, when it's done.
     State(jmap::State),
     /// It couldn't connect: this account syncs on one connection.
@@ -660,7 +660,7 @@ fn sync_folders(
             Conn::Pop => Err(NetError::No("POP accounts read mail on one connection".into())),
         };
         let stop = r.as_ref().is_err_and(reader_stops);
-        if tx.send(SyncDone::Folder(path, r)).is_err() {
+        if tx.send(SyncDone::Folder(path, r, state.take_given())).is_err() {
             break;
         }
         if stop {

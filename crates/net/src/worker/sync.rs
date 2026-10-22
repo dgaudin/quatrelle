@@ -405,9 +405,12 @@ impl Worker {
         let queue = Arc::new(Mutex::new(paths.into_iter().collect::<VecDeque<String>>()));
         let (tx, done) = mpsc::channel::<SyncDone>();
         let mut running = 0usize;
+        // The numbers given so far, one copy for every reader: they must know the messages
+        // they find (see `State::reserve`).
+        let numbering = self.jstate.numbering();
         for _ in 0..n {
             // The numbers it may give, kept apart from this connection's (see `State::reserve`).
-            let state = self.jstate.reserve(1_000_000);
+            let state = self.jstate.reserve(1_000_000, &numbering);
             let (acc, store) = (self.acc.clone(), self.store.clone());
             let (secret, opts, q, tx) = (secret.clone(), self.opts, queue.clone(), tx.clone());
             if std::thread::Builder::new()
@@ -420,13 +423,18 @@ impl Worker {
             running += 1;
         }
         drop(tx);
+        drop(numbering);
         // This connection answers what someone waits on meanwhile, then takes a folder of its
         // own if the others are still at it.
         let mut refused = false;
         while running > 0 {
             self.drain(rx);
-            let urgent: Vec<Job> = self.queue.iter().filter(|j| jumps_queue(j)).cloned().collect();
-            self.queue.retain(|j| !jumps_queue(j));
+            // What someone waits on, and the edits just made: a read mark went to the server
+            // only once every reader was done, a whole first sync later (the server kept the
+            // messages unread meanwhile, and its counts said so).
+            let now = |j: &Job| jumps_queue(j) || between_folders(j);
+            let urgent: Vec<Job> = self.queue.iter().filter(|j| now(j)).cloned().collect();
+            self.queue.retain(|j| !now(j));
             for j in urgent {
                 self.handle(j);
             }
@@ -434,7 +442,10 @@ impl Worker {
                 break;
             }
             match done.recv_timeout(std::time::Duration::from_millis(25)) {
-                Ok(SyncDone::Folder(path, result)) => {
+                Ok(SyncDone::Folder(path, result, given)) => {
+                    // Known here before the folder is shown: a message in it may be read (and
+                    // the mark sent) at once.
+                    self.jstate.learn(given);
                     self.status(SyncStatus::Syncing { folder: path.clone() });
                     match result {
                         // A reader that timed out, lost its connection or failed to sign in has

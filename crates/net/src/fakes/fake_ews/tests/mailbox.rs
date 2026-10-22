@@ -369,3 +369,69 @@ fn shared_mailboxes_open_by_themselves_or_by_hand() {
     assert!(anchors.iter().any(|a| a == "sales@contoso.example") && anchors.iter().any(|a| a == "team@contoso.example"), "{anchors:?}");
     let _ = std::fs::remove_dir_all(store.root());
 }
+
+/// A full sync read on connections of their own (as the app does): the readers know the
+/// messages already numbered, so a read mark set elsewhere comes in (a reader that didn't
+/// passed it by, and numbered every message of a folder it listed anew); and a message one of
+/// them brings in can be read, and the mark go to the server, while the others still read — not
+/// a whole first sync later (the owner's Inbox said 23 unread that showed read here).
+#[test]
+fn a_parallel_sync_keeps_the_numbers_and_takes_marks_at_once() {
+    let mut d = Data::default();
+    let inbox = d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    d.folder("Projects", None, None, "IPF.Note");
+    d.folder("Archive", None, None, "IPF.Note");
+    let first = d.deliver(&inbox, &mail("Storyboard", "m1"), false, "2024-05-06T09:00:00Z");
+    let server = serve(d);
+    let data = server.data.clone();
+    let dir = std::env::temp_dir().join(format!("quatrelle-ews-parallel-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let store = Store::open(&dir).unwrap();
+    let mut pool = crate::worker::Pool::new(store.clone(), Arc::new(crate::worker::MemoryCredentials::default()));
+    pool.opts.parallel = 2;
+    let account = AccountConfig {
+        id: "a1".into(),
+        name: "Riley".into(),
+        email: "riley@contoso.example".into(),
+        username: format!("{DOMAIN}\\{USER}"),
+        ews: Some(server.url.clone()),
+        ..Default::default()
+    };
+    pool.submit(Job::Start { account, password: Some(Secret(PASSWORD.into())) });
+    until(&pool, "online", |e| matches!(e, Event::Status { status: SyncStatus::Online { .. }, .. }));
+    let inbox_now = || store.load_folder("a1", "INBOX").unwrap().messages;
+    let key = inbox_now()[0].key.clone();
+    assert!(!inbox_now()[0].flags.seen);
+
+    // Meanwhile, elsewhere: the message read (Outlook, a phone), a new one come, and a new folder
+    // whose listing takes seconds (the rest of a big mailbox's first sync).
+    let new = {
+        let mut d = data.lock().unwrap();
+        d.items.iter_mut().filter(|i| i.id == first).for_each(|i| i.read = true);
+        let new = d.deliver(&inbox, &mail("Sound mix", "m2"), false, "2024-05-06T10:00:00Z");
+        let later = d.folder("Later", None, None, "IPF.Note");
+        d.deliver(&later, &mail("Old plan", "m3"), true, "2024-05-01T10:00:00Z");
+        d.hold = Some(Duration::from_secs(3));
+        new
+    };
+    pool.submit(Job::SyncAll { account: "a1".into() });
+    eventually("the new message in the Inbox", || inbox_now().len() == 2);
+    let messages = inbox_now();
+    let old = messages.iter().find(|m| m.subject == "Storyboard").unwrap();
+    assert_eq!(old.key, key, "the same number");
+    assert!(old.flags.seen, "the read mark made elsewhere came in");
+    // Read here while the slow folder is still being read: on the server before the sync ends.
+    let came = messages.iter().find(|m| m.subject == "Sound mix").unwrap().key.clone();
+    pool.submit(Job::Apply { account: "a1".into(), op: Op::SetFlag { keys: vec![came], flag: Flag::Seen, on: true } });
+    let read_there = || data.lock().unwrap().items.iter().any(|i| i.id == new && i.read);
+    let end = Instant::now() + Duration::from_secs(20);
+    while !read_there() {
+        assert!(Instant::now() < end, "the read mark never reached the server");
+        if let Some(Event::Status { status: SyncStatus::Online { .. }, .. }) = pool.wait(Duration::from_millis(50)) {
+            panic!("the sync ended before the read mark went to the server");
+        }
+    }
+    data.lock().unwrap().hold = None;
+    drop(pool);
+    let _ = std::fs::remove_dir_all(&dir);
+}

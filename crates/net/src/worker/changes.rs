@@ -680,7 +680,11 @@ impl Worker {
                 Some(Conn::Imap(c)) => apply_remote_with(c, &op, trash.as_deref()),
                 Some(Conn::Jmap(c)) => jmap::apply_remote(c, &self.jstate, &op),
                 Some(Conn::Graph(c)) => crate::graph::apply_remote(c, &self.jstate, &op),
-                Some(Conn::Ews(c)) => crate::ews::apply_remote(c, &self.jstate, &op),
+                // Messages the numbering lost are looked for first: left out, the change was
+                // made here only.
+                Some(Conn::Ews(c)) => {
+                    crate::ews::find_lost(c, &mut self.jstate, &self.store, op.keys()).and_then(|()| crate::ews::apply_remote(c, &self.jstate, &op))
+                }
                 // POP: changes are made here only (the cache has them already).
                 Some(Conn::Pop) => Ok(()),
                 None => Err(NetError::Closed("not connected".into())),

@@ -43,7 +43,7 @@ fn the_numbering_is_written_only_when_it_changed() {
     let mark = |at| FolderMark { stamp: "s".into(), at, ..Default::default() };
     st.marks.insert("INBOX".into(), mark(10));
     st.marks.insert("Sent".into(), mark(30));
-    let mut reader = st.reserve(100);
+    let mut reader = st.reserve(100, &st.numbering());
     reader.marks.insert("INBOX".into(), mark(20));
     st.absorb(reader);
     assert_eq!((st.marks["INBOX"].at, st.marks["Sent"].at), (20, 30));
@@ -79,8 +79,9 @@ fn session_urls_dates_and_keywords() {
 fn numbers_reserved_for_connections_of_their_own() {
     let mut main = State::default();
     main.mailboxes.insert("INBOX".into(), "mb1".into());
-    let mut a = main.reserve(1_000_000);
-    let mut b = main.reserve(1_000_000);
+    let numbering = main.numbering();
+    let mut a = main.reserve(1_000_000, &numbering);
+    let mut b = main.reserve(1_000_000, &numbering);
     let na = a.number("id-a");
     let nb = b.number("id-b");
     assert_ne!(na, nb, "two connections, two numbers");
@@ -96,9 +97,21 @@ fn numbers_reserved_for_connections_of_their_own() {
     // A number it had already: the same one.
     assert_eq!(main.number("id-a"), na);
     let base = main.next;
-    let mut c = main.reserve(10);
+    let mut c = main.reserve(10, &main.numbering());
     assert_eq!(c.number("id-c"), base + 1, "a fresh block, above the numbers in use");
     assert_eq!(main.next, base + 10, "and the main one keeps clear of it");
+    // A reader knows the numbers given before it: a message it finds again keeps its number
+    // (a reader that didn't numbered a whole folder anew at every full read).
+    assert_eq!(c.number("id-a"), na, "an old message, its old number");
+    assert_eq!(c.known("id-b"), Some(nb));
+    assert_eq!(c.id(na), Some("id-a"));
+    // What it gives is told as it goes, for the main one to know before the reader is done.
+    let nd = c.number("id-d");
+    assert_eq!(c.take_given(), vec![("id-c".to_string(), base + 1), ("id-d".to_string(), nd)], "only the new ones");
+    assert!(c.take_given().is_empty(), "told once");
+    main.learn(vec![("id-d".to_string(), nd)]);
+    assert_eq!(main.id(nd), Some("id-d"));
+    assert_eq!(main.number("id-d"), nd);
 }
 
 #[test]

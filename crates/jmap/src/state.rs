@@ -30,6 +30,20 @@ pub struct State {
     /// What was last written ([`State::fingerprint`]): the same isn't written again.
     #[serde(skip)]
     saved: std::cell::Cell<u64>,
+    /// A reader's ([`State::reserve`]): the numbering it started from, looked up, never changed.
+    #[serde(skip)]
+    base: Option<std::sync::Arc<Numbering>>,
+    /// A reader's: the numbers it gave since it last told ([`State::take_given`]).
+    #[serde(skip)]
+    given: Vec<(String, u32)>,
+}
+
+/// An account's numbering as it was when a full sync handed folders to readers of their own:
+/// one copy shared by them all.
+#[derive(Debug, Default)]
+pub struct Numbering {
+    ids: HashMap<String, u32>,
+    numbers: HashMap<u32, String>,
 }
 
 /// A folder as it was when last read in full: its last change as the server stamps it, its
@@ -104,13 +118,13 @@ impl State {
 
     /// The number standing for a message id (given on first sight).
     pub fn number(&mut self, id: &str) -> u32 {
-        if let Some(n) = self.ids.get(id) {
-            return *n;
+        if let Some(n) = self.known(id) {
+            return n;
         }
         self.next = self.next.saturating_add(1);
-        self.ids.insert(id.to_string(), self.next);
-        self.numbers.insert(self.next, id.to_string());
-        self.next
+        let n = self.next;
+        self.set_number(id, n);
+        n
     }
 
     /// Give an id the number it had: a message found again after the numbering lost it.
@@ -118,24 +132,27 @@ impl State {
         self.ids.insert(id.to_string(), n);
         self.numbers.insert(n, id.to_string());
         self.next = self.next.max(n);
+        if self.base.is_some() {
+            self.given.push((id.to_string(), n));
+        }
     }
 
     /// How many message ids the numbering knows (none: it numbered nothing yet).
     pub fn len(&self) -> usize {
-        self.ids.len()
+        self.ids.len() + self.base.as_ref().map_or(0, |b| b.ids.len())
     }
 
     pub fn is_empty(&self) -> bool {
-        self.ids.is_empty()
+        self.len() == 0
     }
 
     pub fn id(&self, n: u32) -> Option<&str> {
-        self.numbers.get(&n).map(String::as_str)
+        self.numbers.get(&n).or_else(|| self.base.as_ref().and_then(|b| b.numbers.get(&n))).map(String::as_str)
     }
 
     /// The number a message id has, if it has one (none is given).
     pub fn known(&self, id: &str) -> Option<u32> {
-        self.ids.get(id).copied()
+        self.ids.get(id).or_else(|| self.base.as_ref().and_then(|b| b.ids.get(id))).copied()
     }
 
     /// The mailbox id behind a folder path.
@@ -147,7 +164,12 @@ impl State {
     /// so that two connections never give the same number to different messages. The numbers it
     /// took are given back by [`State::absorb`], and [`State::compact`] returns the counter to
     /// the numbers really in use once every such connection has finished.
-    pub fn reserve(&mut self, count: u32) -> State {
+    ///
+    /// It knows the numbers given before (`numbering`, [`State::numbering`]): one that didn't
+    /// numbered every message of a folder it listed again (their downloads thrown away, edits
+    /// made meanwhile on the old numbers lost) and ignored the read marks and deletions of the
+    /// messages it had.
+    pub fn reserve(&mut self, count: u32, numbering: &std::sync::Arc<Numbering>) -> State {
         let base = self.next;
         self.next = self.next.saturating_add(count);
         State {
@@ -159,6 +181,28 @@ impl State {
             found: BTreeMap::new(),
             marks: self.marks.clone(),
             saved: std::cell::Cell::new(0),
+            base: Some(numbering.clone()),
+            given: Vec::new(),
+        }
+    }
+
+    /// The numbering as it is, for readers of their own ([`State::reserve`]).
+    pub fn numbering(&self) -> std::sync::Arc<Numbering> {
+        std::sync::Arc::new(Numbering { ids: self.ids.clone(), numbers: self.numbers.clone() })
+    }
+
+    /// A reader's: the numbers it gave since it last told, for the main connection to know them
+    /// at once ([`State::learn`]) — not only once the reader is done, a whole first sync later,
+    /// while a message it brought in is read and the mark found no number to go to the server.
+    pub fn take_given(&mut self) -> Vec<(String, u32)> {
+        std::mem::take(&mut self.given)
+    }
+
+    /// The numbers a reader gave ([`State::take_given`]).
+    pub fn learn(&mut self, given: Vec<(String, u32)>) {
+        for (id, n) in given {
+            self.ids.insert(id.clone(), n);
+            self.numbers.insert(n, id);
         }
     }
 
