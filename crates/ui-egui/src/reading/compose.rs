@@ -124,11 +124,23 @@ pub(super) fn send_button(ui: &mut Ui, t: &Tokens, height: f32, sending: bool) -
     resp.on_hover_text(tl!("Send (Ctrl+Enter)"))
 }
 
-pub(super) fn field(ui: &mut Ui, t: &Tokens, label: &str, value: &mut String, hint: &str, check_addresses: bool, focus: bool, spell: bool) {
+/// A labelled field; its spelling is checked when `spell` says how.
+pub(super) fn field(
+    ui: &mut Ui,
+    t: &Tokens,
+    label: &str,
+    value: &mut String,
+    hint: &str,
+    check_addresses: bool,
+    focus: bool,
+    spell: Option<&crate::spellcheck::Check>,
+) {
     ui.horizontal(|ui| {
         ui.add_sized(vec2(LABEL_W, ROW_H), egui::Label::new(RichText::new(tl!(label)).color(t.dim)));
-        let r =
-            if spell { underlined_spelling(ui, t, value, hint) } else { underlined(ui, t, egui::TextEdit::singleline(value).hint_text(tl!(hint))) };
+        let r = match spell {
+            Some(check) => underlined_spelling(ui, t, value, hint, check),
+            None => underlined(ui, t, egui::TextEdit::singleline(value).hint_text(tl!(hint))),
+        };
         if focus {
             r.request_focus();
         }
@@ -407,6 +419,8 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
     for name in crate::look::typefaces::wanted(ui.ctx(), typefaces) {
         acts.push(Action::LoadTypeface(name));
     }
+    // The subject's spelling is checked as the message's is (its language, the words let be).
+    let subject_check = crate::spellcheck::Check { skip: Vec::new(), ..rich_edit::check_for(c) };
     egui::Frame::new().inner_margin(Margin { left: 16, right: 16, top: 8, bottom: 12 }).show(ui, |ui| {
         // The ribbon, as Outlook's message window has it: its tabs, with Save, Pop out (or in)
         // and Discard small at their right; where windows can't open (the browser), messages
@@ -472,12 +486,12 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
             if c.show_reply_to || !c.reply_to.is_empty() {
                 ui.horizontal(|ui| {
                     ui.add_space(76.0);
-                    ui.vertical(|ui| field(ui, &t, "Replies to", &mut c.reply_to, "Where replies go instead of to you", true, false, false));
+                    ui.vertical(|ui| field(ui, &t, "Replies to", &mut c.reply_to, "Where replies go instead of to you", true, false, None));
                 });
             }
             ui.horizontal(|ui| {
                 ui.add_space(76.0);
-                ui.vertical(|ui| field(ui, &t, "Subject", &mut c.subject, "Add a subject", false, false, true));
+                ui.vertical(|ui| field(ui, &t, "Subject", &mut c.subject, "Add a subject", false, false, Some(&subject_check)));
             });
             if !c.attachments.is_empty() {
                 ui.horizontal(|ui| {

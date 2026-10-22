@@ -113,14 +113,14 @@ pub(crate) fn voting_menu(ui: &mut Ui, t: &Tokens, c: &mut quatrelle_engine::Com
 }
 
 /// A one-line field whose misspelt words are underlined in red, as the message's are (the
-/// subject: the words people read first).
-fn underlined_spelling(ui: &mut Ui, t: &Tokens, value: &mut String, hint: &str) -> egui::Response {
+/// subject: the words people read first), checked as `check` says (the message's language).
+fn underlined_spelling(ui: &mut Ui, t: &Tokens, value: &mut String, hint: &str, check: &crate::spellcheck::Check) -> egui::Response {
     let colour = t.danger;
     let mut layouter = move |ui: &egui::Ui, buf: &dyn egui::TextBuffer, wrap: f32| {
         let text = buf.as_str().to_string();
         let font = egui::TextStyle::Body.resolve(ui.style());
         let mut job = egui::text::LayoutJob::simple(text.clone(), font, ui.visuals().text_color(), wrap);
-        crate::spellcheck::underline(&mut job, &text, colour);
+        crate::spellcheck::underline_with(&mut job, &text, colour, check);
         ui.fonts_mut(|f| f.layout_job(job))
     };
     underlined(ui, t, egui::TextEdit::singleline(value).hint_text(tl!(hint)).layouter(&mut layouter))

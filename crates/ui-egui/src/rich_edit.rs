@@ -904,7 +904,7 @@ mod tests {
         st.relayout(text, 0..1, |p| p.align = Align::Center);
         let ctx = egui::Context::default();
         let tokens = theme::Tokens::light();
-        let _ = ctx.run_ui(Default::default(), |ui| {
+        let mut out = ctx.run_ui(Default::default(), |ui| {
             let g = layout_aligned(ui, text, &st, false, &tokens, 120.0, &Check::default());
             let centred: Vec<_> = g.rows.iter().take_while(|r| !r.ends_with_newline).collect();
             assert!(centred.len() >= 3, "{} rows", centred.len());
@@ -922,6 +922,7 @@ mod tests {
                 assert!((r.rect().max.x - 120.0).abs() < 1.0, "{:?}", r.rect());
             }
         });
+        out.textures_delta.clear();
     }
 
     #[test]
