@@ -71,6 +71,12 @@ fn update_item(c: &Client, id: &str, change_key: &str, e: &CalEvent, notify: boo
     if e.rrule.is_none() && e.recurrence_id.is_none() {
         updates.push_str("<t:DeleteItemField><t:FieldURI FieldURI=\"calendar:Recurrence\"/></t:DeleteItemField>");
     }
+    // A meeting of the user's whose room was taken off loses its resources too (a plain
+    // appointment, with no one invited, is left alone: nothing to take off).
+    let mine = e.organizer.as_ref().is_none_or(|o| o.email.eq_ignore_ascii_case(c.email()));
+    if mine && !e.attendees.is_empty() && !e.attendees.iter().any(|a| a.is_resource()) {
+        updates.push_str("<t:DeleteItemField><t:FieldURI FieldURI=\"calendar:Resources\"/></t:DeleteItemField>");
+    }
     let send = if notify { "SendToAllAndSaveCopy" } else { "SendToNone" };
     let call = |resolution: &str, key: &str| {
         c.call_one(&format!(

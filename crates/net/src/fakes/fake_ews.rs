@@ -119,6 +119,18 @@ pub struct Data {
     /// How each appointment created or changed asked the guests to be told
     /// (`SendMeetingInvitations`, `SendMeetingInvitationsOrCancellations`), in order.
     pub meeting_sends: Vec<String>,
+    /// The room lists the organisation set up (name, address) — none on most on-premises
+    /// servers — and the rooms (name, address, the list's address).
+    pub room_lists: Vec<(String, String)>,
+    pub rooms: Vec<(String, String, String)>,
+    /// `GetRoomLists` isn't available on this server (refused as an invalid operation).
+    pub rooms_refused: bool,
+    /// Mailboxes whose free/busy this account may not read (`ErrorNoFreeBusyAccess`).
+    pub no_freebusy: Vec<String>,
+    /// Busy stretches besides the calendars' items: (address, start, end, `BusyType`, subject).
+    pub taken: Vec<(String, String, String, String, String)>,
+    /// The `GetUserAvailability` requests seen: the addresses asked about and the window.
+    pub availability_asked: Vec<(Vec<String>, String, String)>,
     next: u32,
 }
 
@@ -129,7 +141,7 @@ pub struct Data {
 /// sent as `calendar:ReminderIsSet` got. What the lists don't know is left alone.
 fn field_uri_is_known(uri: &str) -> bool {
     const ITEM: [&str; 8] = ["Subject", "Body", "Categories", "Sensitivity", "ReminderIsSet", "ReminderMinutesBeforeStart", "Importance", "IsDraft"];
-    const CALENDAR: [&str; 10] = [
+    const CALENDAR: [&str; 11] = [
         "Start",
         "End",
         "IsAllDayEvent",
@@ -138,6 +150,7 @@ fn field_uri_is_known(uri: &str) -> bool {
         "UID",
         "RequiredAttendees",
         "OptionalAttendees",
+        "Resources",
         "LegacyFreeBusyStatus",
         "TimeZone",
     ];
@@ -190,6 +203,12 @@ impl Default for Data {
             slow_sync: None,
             hidden: Vec::new(),
             meeting_sends: Vec::new(),
+            room_lists: Vec::new(),
+            rooms: Vec::new(),
+            rooms_refused: false,
+            no_freebusy: Vec::new(),
+            taken: Vec::new(),
+            availability_asked: Vec::new(),
             next: 0,
         };
         d.folders.push(Fo {

@@ -1185,3 +1185,29 @@ month	May	5月
 	Horizontal line	水平線
 	Increase font size (Ctrl+])	フォントを大きく (Ctrl+])
 	Decrease font size (Ctrl+[)	フォントを小さく (Ctrl+[)
+	All rooms	すべての会議室
+	A room's address	会議室のアドレス
+	Click or drag the meeting to move it.	会議をクリックまたはドラッグして移動します。
+	Filter rooms	会議室を絞り込む
+	From your calendar: the rooms booked in your meetings and those in Outlook's Rooms group.	予定表から：会議で予約した会議室と、Outlook の「会議室」グループの会議室。
+	Give the meeting a start and an end to see when everyone is free.	全員の空き時間を見るには、会議の開始と終了を指定してください。
+	Loading availability…	空き時間を読み込んでいます…
+	Looking for rooms…	会議室を探しています…
+	Meeting day	会議の日
+	Next day	翌日
+	Previous day	前日
+	No information	情報なし
+	No room matches	一致する会議室はありません
+	No rooms are offered here yet: a room booked in one of your meetings shows here.	まだ会議室はありません。いずれかの会議で予約した会議室がここに表示されます。
+	Room Finder	会議室の検索
+	Rooms	会議室
+	Rooms: {names}	会議室：{names}
+	Scheduling Assistant	スケジュール アシスタント
+	The rooms couldn't be read: {error}	会議室を読み取れませんでした：{error}
+	Organizer	開催者
+	Guest	招待者
+	Room	会議室
+	Free	空き
+	Busy	予定あり
+	Out of office	外出中
+	Working elsewhere	別の場所で作業中

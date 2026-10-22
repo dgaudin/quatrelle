@@ -218,7 +218,12 @@ fn serve_connection(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>) {
         }
         let (name, parts) = d.route(&op);
         drop(d);
-        let inner = if name.starts_with("GetUserOof") || name.starts_with("SetUserOof") {
+        // Operations Exchange answers in the response element itself, not in a list of
+        // response messages: automatic replies, room lists and rooms, free/busy.
+        let plain = name.starts_with("GetUserOof")
+            || name.starts_with("SetUserOof")
+            || matches!(name.as_str(), "GetRoomListsResponse" | "GetRoomsResponse" | "GetUserAvailabilityResponse");
+        let inner = if plain {
             parts.concat()
         } else {
             let tag = name.trim_end_matches("Response").to_string() + "ResponseMessage";

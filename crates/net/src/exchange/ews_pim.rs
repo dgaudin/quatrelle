@@ -330,6 +330,7 @@ fn public_items(c: &Client, id: &str, replica: Option<&str>, total: u32, since: 
 mod contacts;
 pub(crate) mod events;
 mod push;
+pub mod scheduling;
 mod sync;
 
 use contacts::{NOTE_COLOR, contact_xml, note_xml};

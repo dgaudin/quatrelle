@@ -9,6 +9,8 @@ use quatrelle_store::{FolderState, Store, StoreError};
 pub const SAMPLE_ACCOUNT: &str = "sample";
 /// The sample's second calendar (the studio's), beside the personal one.
 pub const STUDIO_CALENDAR: &str = "studio";
+/// The studio's rooms (their mailboxes and names), each with a calendar of its own.
+pub const ROOMS: [(&str, &str); 2] = [("screening.room@studio.example", "Screening room"), ("sound.lab@studio.example", "Sound Lab")];
 
 struct Mail {
     folder: &'static str,
@@ -673,7 +675,13 @@ pub fn sample_pim(now: i64, offset: i64) -> quatrelle_model::pim::Pim {
     let today = (now + offset).div_euclid(86_400);
     let monday = today - (today + 3).rem_euclid(7);
     let at = |day: i64, h: i64, m: i64| day * 86_400 + h * 3600 + m * 60 - offset;
-    let who = |name: &str, email: &str, partstat: &str| Attendee { email: email.into(), name: name.into(), partstat: partstat.into(), rsvp: false };
+    let who = |name: &str, email: &str, partstat: &str| Attendee {
+        email: email.into(),
+        name: name.into(),
+        partstat: partstat.into(),
+        rsvp: false,
+        cutype: String::new(),
+    };
     let ev = |uid: &str, summary: &str, start: i64, end: i64| CalEvent {
         uid: format!("{uid}@sample.quatrelle"),
         summary: summary.into(),
@@ -692,7 +700,12 @@ pub fn sample_pim(now: i64, offset: i64) -> quatrelle_model::pim::Pim {
             reminder: Some(15),
             description: "Revised frames for scenes 4 to 7, and the colour key.".into(),
             organizer: Some(who("Zoe Park", "zoe@studio.example", "ACCEPTED")),
-            attendees: vec![who("Riley Moreno", ME.1, "ACCEPTED"), who("Sam Okafor", "sam@studio.example", "ACCEPTED")],
+            // Held in a room booked for it (a resource attendee, as Exchange books rooms).
+            attendees: vec![
+                who("Riley Moreno", ME.1, "ACCEPTED"),
+                who("Sam Okafor", "sam@studio.example", "ACCEPTED"),
+                Attendee { cutype: "ROOM".into(), ..who("Screening room", ROOMS[0].0, "ACCEPTED") },
+            ],
             ..ev("review", "Storyboard review", at(monday + 3, 14, 0), at(monday + 3, 15, 30))
         },
         CalEvent { location: "Café on the corner".into(), ..ev("lunch", "Lunch with Jun", at(today, 12, 30), at(today, 13, 30)) },
@@ -736,10 +749,46 @@ pub fn sample_pim(now: i64, offset: i64) -> quatrelle_model::pim::Pim {
         group: "Studio team".into(),
         ..Default::default()
     });
+    // The studio's rooms, each with a calendar of its own in a group of their own, as Outlook
+    // keeps room calendars (unticked until wanted): the Room Finder offers them, and the
+    // Scheduling Assistant shows when each is booked. And a colleague's calendar, shared.
+    let shared_id = quatrelle_model::pim::shared_calendar_id;
+    for (n, (email, name)) in ROOMS.iter().enumerate() {
+        p.calendars.push(quatrelle_model::pim::CalendarInfo {
+            id: shared_id(email),
+            name: (*name).into(),
+            color: u8::try_from(5 + n).unwrap_or(5),
+            read_only: true,
+            group: "Rooms".into(),
+            ..Default::default()
+        });
+    }
+    p.calendars.push(quatrelle_model::pim::CalendarInfo {
+        id: shared_id("zoe@studio.example"),
+        name: "Zoe Park".into(),
+        color: 7,
+        read_only: true,
+        group: "Studio team".into(),
+        ..Default::default()
+    });
+    let booked = |cal: &str, event: CalEvent| StoredEvent { calendar: shared_id(cal), event, ..Default::default() };
+    let elsewhere = vec![
+        booked(ROOMS[0].0, ev("dailies", "Dailies", at(today, 9, 0), at(today, 10, 0))),
+        booked(ROOMS[0].0, ev("client-screening", "Client screening", at(today, 15, 0), at(today, 17, 0))),
+        booked(ROOMS[0].0, ev("review-room", "Storyboard review", at(monday + 3, 14, 0), at(monday + 3, 15, 30))),
+        booked(ROOMS[1].0, ev("foley", "Foley session", at(today, 9, 30), at(today, 12, 0))),
+        booked(ROOMS[1].0, ev("mix-room", "Sound mix playback", at(today + 1, 11, 0), at(today + 1, 12, 0))),
+        booked("zoe@studio.example", ev("zoe-producers", "Producers' call", at(today, 11, 0), at(today, 12, 0))),
+        booked(
+            "zoe@studio.example",
+            CalEvent { status: "TENTATIVE".into(), ..ev("zoe-casting", "Casting session", at(today, 14, 0), at(today, 16, 0)) },
+        ),
+    ];
     p.events = events
         .into_iter()
         .map(|event| StoredEvent { calendar: LOCAL.into(), event, ..Default::default() })
         .chain(studio.into_iter().map(|event| StoredEvent { calendar: STUDIO_CALENDAR.into(), event, ..Default::default() }))
+        .chain(elsewhere)
         .collect();
     // Categories colour some of them (as in Outlook).
     for e in &mut p.events {

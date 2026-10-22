@@ -564,6 +564,7 @@ fn an_occurrence_moves_on_its_own_and_the_server_tells_the_guests() {
         email: email.into(),
         partstat: "NEEDS-ACTION".into(),
         rsvp: true,
+        cutype: String::new(),
     };
     let mut pim = Pim::default();
     pim.events.push(StoredEvent {
