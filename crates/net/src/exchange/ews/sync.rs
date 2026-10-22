@@ -115,19 +115,43 @@ pub fn sync_folder(c: &Client, st: &mut State, store: &Store, account: &str, fol
     // ago): nothing to list. A pass over a hundred folders was a listing of each, up to its
     // whole window, every time — most of them unchanged since the last pass.
     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX));
-    let mark = jmap::FolderMark { stamp, total, unread, window: opts.window, at: now };
+    let mut mark = jmap::FolderMark { stamp, total, unread, window: opts.window, at: now, ahead: opts.prefetch, sync: String::new() };
     let same = |m: &jmap::FolderMark| {
         !mark.stamp.is_empty()
             && m.stamp == mark.stamp
             && m.total == total
             && m.unread == unread
             && m.window == mark.window
+            && m.ahead == mark.ahead
             && now - m.at < MARK_TRUSTED
     };
-    if st.marks.get(folder).is_some_and(same) && store.folder_kept(account, folder, VALIDITY) {
+    let kept = store.folder_kept(account, folder, VALIDITY);
+    if kept && st.marks.get(folder).is_some_and(same) {
         return Ok(SyncReport { total, unread, ..Default::default() });
     }
-    st.marks.remove(folder);
+    let before = st.marks.remove(folder);
+    // Its state as last read known: only what changed since is asked (new mail, read marks,
+    // deletions), not a listing of the folder's whole window.
+    if let Some(since) = before.filter(|m| kept && !m.sync.is_empty() && m.window == opts.window).map(|m| m.sync) {
+        match changes(c, st, store, account, folder, &since, opts) {
+            Ok((mut report, sync)) => {
+                mark.sync = sync;
+                st.marks.insert(folder.to_string(), mark);
+                report.total = total;
+                report.unread = unread;
+                return Ok(report);
+            }
+            // A state the server no longer takes (too old, the folder rebuilt): listed in full.
+            Err(NetError::No(e)) => log::info!("{account}: {}: changes since the last read refused ({e}); listed in full", utf7::decode(folder)),
+            Err(e) => return Err(e),
+        }
+    }
+    // Listed in full; the folder's state taken first, so a change made while it's listed comes
+    // again next time rather than being missed.
+    mark.sync = state_now(c, &id).unwrap_or_else(|e| {
+        log::info!("{account}: {}: no sync state ({e}); listed in full next time too", utf7::decode(folder));
+        String::new()
+    });
     let newest = c.newest(&id, opts.window)?;
     let mut fs = store.load_folder(account, folder)?;
     let mut report = SyncReport::default();
@@ -183,9 +207,103 @@ pub fn sync_folder(c: &Client, st: &mut State, store: &Store, account: &str, fol
     Ok(report)
 }
 
-/// How long a folder's mark is trusted (seconds): past this, it's read in full again anyway
-/// (a change the server's stamp doesn't show, a flag set elsewhere, still comes in).
+/// How long a folder's mark is trusted (seconds): past this, it's read again anyway (a change
+/// the server's stamp doesn't show, a flag set elsewhere, still comes in) — its changes only,
+/// when its state is known.
 const MARK_TRUSTED: i64 = 6 * 3600;
+
+/// Pages of changes read at most in one go (a folder with more catches up at the next read).
+const CHANGE_PAGES: usize = 200;
+
+/// A folder's state as of now (`SyncFolderItems` from nothing, every page read and its items
+/// let go: only the state matters). Too big a folder is left without one.
+fn state_now(c: &Client, folder: &str) -> Result<String> {
+    let mut state = String::new();
+    for _ in 0..CHANGE_PAGES {
+        let (_, next, last) = c.changes_since(folder, &state)?;
+        state = next;
+        if last {
+            return Ok(state);
+        }
+    }
+    Err(NetError::No("too many messages to follow".into()))
+}
+
+/// What changed in a folder since its state `since`, made on its list: new messages listed
+/// (their details asked for), read and flag marks set, deleted ones taken out. The report, and
+/// the folder's state now.
+fn changes(c: &Client, st: &mut State, store: &Store, account: &str, folder: &str, since: &str, opts: &SyncOptions) -> Result<(SyncReport, String)> {
+    let id = st.mailbox(folder)?.to_string();
+    let mut fs = store.load_folder(account, folder)?;
+    let mut report = SyncReport::default();
+    let mut state = since.to_string();
+    let mut created: Vec<String> = Vec::new();
+    let set = |m: &mut Summary, f: &Flags, report: &mut SyncReport| {
+        let mut next = m.flags.clone();
+        next.seen = f.seen;
+        next.flagged = f.flagged;
+        next.draft = f.draft;
+        if next != m.flags {
+            m.flags = next;
+            report.changed += 1;
+        }
+    };
+    for _ in 0..CHANGE_PAGES {
+        let (list, next, last) = c.changes_since(&id, &state)?;
+        for ch in list {
+            match ch {
+                Change::Created(item, f) => match st.known(&item).and_then(|n| fs.find_mut(n)) {
+                    Some(m) => set(m, &f, &mut report),
+                    None => created.push(item),
+                },
+                // Only what's kept here: a change to a message past the window isn't news.
+                Change::Updated(item, f) => {
+                    if let Some(m) = st.known(&item).and_then(|n| fs.find_mut(n)) {
+                        set(m, &f, &mut report);
+                    }
+                }
+                Change::Read(item, on) => {
+                    if let Some(m) = st.known(&item).and_then(|n| fs.find_mut(n))
+                        && m.flags.seen != on
+                    {
+                        m.flags.seen = on;
+                        report.changed += 1;
+                    }
+                }
+                Change::Deleted(item) => {
+                    if let Some(n) = st.known(&item)
+                        && let Some(at) = fs.messages.iter().position(|m| m.key.uid == n)
+                    {
+                        let m = fs.messages.remove(at);
+                        store.remove_body(&m.key);
+                        report.removed += 1;
+                    }
+                }
+            }
+        }
+        state = next;
+        if last {
+            break;
+        }
+    }
+    created.dedup();
+    for it in c.headers(&created)? {
+        let Some(item) = it.child("ItemId").and_then(|i| i.attr("Id")) else { continue };
+        let key = MessageKey { account: account.to_string(), folder: folder.to_string(), validity: VALIDITY, uid: st.number(item) };
+        if fs.find(key.uid).is_some() {
+            continue;
+        }
+        fs.messages.push(item_summary(&it, key));
+        report.new += 1;
+    }
+    if report.touched() {
+        sort_newest_first(&mut fs.messages);
+        fs.uid_next = fs.messages.iter().map(|m| m.key.uid).max().unwrap_or(0).saturating_add(1);
+        store.save_folder(account, folder, &fs)?;
+    }
+    prefetch(c, st, store, account, folder, &mut fs, opts)?;
+    Ok((report, state))
+}
 
 /// An item's list entry from its details.
 fn item_summary(it: &El, key: MessageKey) -> Summary {
@@ -259,32 +377,61 @@ pub(super) fn restriction(q: &WordQuery) -> String {
     }
 }
 
+/// Messages downloaded ahead in one request at most, and their size together: one request per
+/// message, a thousand messages a folder, was most of a first sync.
+const AHEAD_BATCH: usize = 10;
+const AHEAD_BATCH_BYTES: u64 = 8 << 20;
+
 fn prefetch(c: &Client, st: &State, store: &Store, account: &str, folder: &str, fs: &mut FolderState, opts: &SyncOptions) -> Result<()> {
-    let wanted: Vec<(u32, String)> = fs
+    let wanted: Vec<(u32, String, u64)> = fs
         .messages
         .iter()
         .take(opts.prefetch)
         .filter(|m| u64::from(m.size) <= u64::from(opts.prefetch_max_bytes) && !store.has_body(&m.key))
-        .filter_map(|m| Some((m.key.uid, st.id(m.key.uid)?.to_string())))
+        .filter_map(|m| Some((m.key.uid, st.id(m.key.uid)?.to_string(), u64::from(m.size))))
         .collect();
     if wanted.is_empty() {
         return Ok(());
     }
+    // Batches of a few, kept small in bytes (one big message goes alone).
+    let mut batches: Vec<Vec<(u32, String)>> = Vec::new();
+    let mut bytes = 0u64;
+    for (n, id, size) in wanted {
+        let full = batches.last().is_none_or(|b| b.len() >= AHEAD_BATCH || bytes.saturating_add(size) > AHEAD_BATCH_BYTES);
+        if full {
+            batches.push(Vec::new());
+            bytes = 0;
+        }
+        bytes = bytes.saturating_add(size);
+        if let Some(b) = batches.last_mut() {
+            b.push((n, id));
+        }
+    }
     let mut failures = crate::sync::AheadFailures::new();
-    for (n, id) in &wanted {
-        let raw = match c.download(id) {
-            Ok(raw) => {
-                failures.ok();
-                raw
-            }
+    for batch in batches {
+        let ids: Vec<String> = batch.iter().map(|(_, id)| id.clone()).collect();
+        let answers = match c.download_many(&ids) {
+            Ok(a) => a,
             Err(e) => {
-                failures.failed(&format!("{account}/{folder}: message {n}"), e)?;
+                failures.failed(&format!("{account}/{folder}: {} messages", ids.len()), e)?;
                 continue;
             }
         };
-        let Some(m) = fs.find_mut(*n) else { continue };
-        store.write_body(&m.key, &raw)?;
-        fill_from_source(m, &raw);
+        for ((n, _), answer) in batch.iter().zip(answers) {
+            let raw = match answer {
+                Ok(raw) => {
+                    failures.ok();
+                    raw
+                }
+                Err(e) => {
+                    failures.failed(&format!("{account}/{folder}: message {n}"), e)?;
+                    continue;
+                }
+            };
+            let Some(m) = fs.find_mut(*n) else { continue };
+            store.write_body(&m.key, &raw)?;
+            fill_from_source(m, &raw);
+        }
     }
     store.save_folder(account, folder, fs)?;
     Ok(())

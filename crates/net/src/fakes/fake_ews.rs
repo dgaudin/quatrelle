@@ -74,6 +74,8 @@ pub struct Data {
     pub forget_sign_in: bool,
     /// Folders listed without their last change (as a server that doesn't keep it).
     pub no_commit_time: bool,
+    /// Changes a `SyncFolderItems` answers at most (fewer than asked: to see the pages).
+    pub sync_page: Option<usize>,
     /// The next request on a connection already used is met with the connection closed, unread
     /// (a connection the server closed for being idle), this many times.
     pub drop_kept: usize,
@@ -166,6 +168,7 @@ impl Default for Data {
             forget_sign_in: false,
             drop_kept: 0,
             no_commit_time: false,
+            sync_page: None,
             busy: 0,
             url: String::new(),
             editors: Vec::new(),

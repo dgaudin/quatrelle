@@ -193,6 +193,59 @@ impl Client {
         Ok(out)
     }
 
+    /// What changed in a folder since `state` (`SyncFolderItems`; empty: from nothing, every
+    /// message a creation), a page of up to [`CHANGES_PAGE`]: the changes, the state to ask from
+    /// next, and whether that was all of them.
+    pub(super) fn changes_since(&self, folder: &str, state: &str) -> Result<(Vec<Change>, String, bool)> {
+        let since = if state.is_empty() { String::new() } else { format!("<m:SyncState>{}</m:SyncState>", esc(state)) };
+        let m = self.call_one(&format!(
+            "<m:SyncFolderItems><m:ItemShape><t:BaseShape>IdOnly</t:BaseShape><t:AdditionalProperties>{FLAG_FIELDS}</t:AdditionalProperties></m:ItemShape>\
+             <m:SyncFolderId><t:FolderId Id=\"{}\"/></m:SyncFolderId>{since}<m:MaxChangesReturned>{CHANGES_PAGE}</m:MaxChangesReturned>\
+             <m:SyncScope>NormalItems</m:SyncScope></m:SyncFolderItems>",
+            esc(folder)
+        ))?;
+        let next = m
+            .text_of("SyncState")
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| NetError::No("no sync state in the answer".into()))?;
+        let last = m.text_of("IncludesLastItemInRange").is_none_or(|v| v.trim() == "true");
+        let id_of = |el: &El| el.find("ItemId").and_then(|i| i.attr("Id")).map(str::to_string);
+        let mut out = Vec::new();
+        for ch in m.child("Changes").map(|c| c.kids.as_slice()).unwrap_or_default() {
+            // A creation or an update carries the item (a message, a meeting request…).
+            let item = || ch.kids.iter().find(|k| k.child("ItemId").is_some());
+            match ch.name.as_str() {
+                "Create" => {
+                    if let Some(it) = item()
+                        && let Some(id) = id_of(it)
+                    {
+                        out.push(Change::Created(id, flags(it)));
+                    }
+                }
+                "Update" => {
+                    if let Some(it) = item()
+                        && let Some(id) = id_of(it)
+                    {
+                        out.push(Change::Updated(id, flags(it)));
+                    }
+                }
+                "Delete" => {
+                    if let Some(id) = id_of(ch) {
+                        out.push(Change::Deleted(id));
+                    }
+                }
+                "ReadFlagChange" => {
+                    if let Some(id) = id_of(ch) {
+                        out.push(Change::Read(id, ch.text_of("IsRead").is_some_and(|v| v.trim() == "true")));
+                    }
+                }
+                _ => {}
+            }
+        }
+        Ok((out, next, last))
+    }
+
     /// Messages' details, for the list.
     pub(super) fn headers(&self, ids: &[String]) -> Result<Vec<El>> {
         let mut out = Vec::new();
@@ -215,6 +268,28 @@ impl Client {
     }
 
     /// A message's MIME source.
+    /// Several messages' sources in one request, each with its own answer (one the server won't
+    /// give fails alone), in the order asked.
+    pub(super) fn download_many(&self, ids: &[String]) -> Result<Vec<Result<Vec<u8>>>> {
+        let list: String = ids.iter().map(|id| format!("<t:ItemId Id=\"{}\"/>", esc(id))).collect();
+        let doc = self.call(&format!(
+            "<m:GetItem><m:ItemShape><t:BaseShape>IdOnly</t:BaseShape><t:IncludeMimeContent>true</t:IncludeMimeContent></m:ItemShape>\
+             <m:ItemIds>{list}</m:ItemIds></m:GetItem>"
+        ))?;
+        let answers = messages(&doc);
+        if answers.len() != ids.len() {
+            return Err(NetError::Protocol(format!("{} answers for {} messages", answers.len(), ids.len())));
+        }
+        Ok(answers
+            .into_iter()
+            .map(|m| {
+                check_message(m)?;
+                let mime = m.find("MimeContent").ok_or_else(|| NetError::Protocol("the message has no source".into()))?;
+                unb64(&mime.text).ok_or_else(|| NetError::Protocol("a damaged message source".into()))
+            })
+            .collect())
+    }
+
     pub fn download(&self, id: &str) -> Result<Vec<u8>> {
         let m = self.call_one(&format!(
             "<m:GetItem><m:ItemShape><t:BaseShape>IdOnly</t:BaseShape><t:IncludeMimeContent>true</t:IncludeMimeContent></m:ItemShape>\
