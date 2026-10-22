@@ -1133,3 +1133,12 @@ month	May	5月
 	Other terms	其他條件
 	Clear	清除
 	No results. Try fewer words.	沒有結果。請減少關鍵字。
+	Move this occurrence or the whole series?	移動這次重複，還是整個系列？
+	This occurrence	這次重複
+	The whole series	整個系列
+	On Microsoft 365, only the whole series can be moved from here.	在 Microsoft 365 上，從這裡只能移動整個系列。
+	Send the update to the attendees?	要將更新寄給與會者嗎？
+	Send update	傳送更新
+	Save without sending	儲存但不傳送
+	Microsoft 365 tells the attendees of the change itself.	Microsoft 365 會自行將變更通知與會者。
+	Moved to {when}. Ctrl+Z puts it back.	已移至 {when}。按 Ctrl+Z 可復原。

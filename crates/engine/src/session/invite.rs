@@ -114,6 +114,7 @@ impl Session {
                     etag: old.map(|o| o.etag.clone()).unwrap_or_default(),
                     event: e.clone(),
                     dirty: calendar != LOCAL,
+                    notify: false,
                 });
                 remote |= calendar != LOCAL && i == 0;
             }

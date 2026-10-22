@@ -94,6 +94,11 @@ impl MailApp {
                 Ok(v) => self.ui.dialog = Some(Dialog::preview(&v, &self.session.clock)),
                 Err(e) => self.session.notice(e.to_string(), true),
             },
+            // An appointment dragged somewhere: said where, with the way back.
+            Action::Run("event.move", p) => match self.session.run("event.move", &p) {
+                Ok(v) => self.moved_event(&v),
+                Err(e) => self.session.notice(e.to_string(), true),
+            },
             Action::Run(id, p) => {
                 // A Search Folder isn't a search typed in: the box is left empty.
                 if matches!(id, "search.clear" | "searchFolder.open") {
@@ -235,6 +240,9 @@ impl MailApp {
                 Ok(v) => {
                     if id == "contact.create" {
                         self.ui.person = v.get("uid").and_then(Value::as_str).map(str::to_string);
+                    }
+                    if id == "event.move" {
+                        self.moved_event(&v);
                     }
                     // A Search Folder made or changed opens: not a search typed in.
                     if self.session.open_search_folder_name().is_some() {
@@ -404,6 +412,20 @@ impl MailApp {
                 }
             }
         }
+    }
+
+    /// An appointment was moved (`event.move`'s answer): where to, and that Undo puts it back.
+    fn moved_event(&mut self, v: &Value) {
+        let Some(start) = v.get("start").and_then(Value::as_i64) else { return };
+        let all_day = v.get("allDay").and_then(Value::as_bool).unwrap_or(false);
+        // An all-day event's start is a UTC midnight; a timed one's a moment, said locally.
+        let when = if all_day {
+            calendar::long_date(start.div_euclid(86_400))
+        } else {
+            let day = start.saturating_add(i64::from(self.session.clock.offset)).div_euclid(86_400);
+            format!("{} {}", calendar::long_date(day), calendar::hm(start, &self.session))
+        };
+        self.session.notice(tf!("Moved to {when}. Ctrl+Z puts it back.", when = when), false);
     }
 
     pub(crate) fn sign_in_again(&mut self, id: &str) {

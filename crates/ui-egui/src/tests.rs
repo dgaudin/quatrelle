@@ -150,6 +150,23 @@ pub(crate) fn tour() {
 line two"
                     .into(),
             },
+            Dialog::MoveEvent(Box::new(crate::dialogs::MoveForm {
+                uid: "weekly".into(),
+                summary: "Stand-up".into(),
+                recurring: true,
+                occurrence_allowed: false,
+                meeting: true,
+                quiet_allowed: false,
+                ..Default::default()
+            })),
+            Dialog::MoveEvent(Box::new(crate::dialogs::MoveForm {
+                uid: "review".into(),
+                summary: "Review".into(),
+                meeting: true,
+                quiet_allowed: true,
+                error: Some("no".into()),
+                ..Default::default()
+            })),
         ] {
             a.ui.dialog = Some(d);
             frame(&ctx, &mut a, vec![]);

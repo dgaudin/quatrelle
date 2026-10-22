@@ -114,11 +114,11 @@ fn categories_both_ways() {
     assert_eq!(e.categories, ["Clients", "Red category"]);
     // Each field carries the URI its property is declared on (`item:` for the item's own,
     // `calendar:` for the appointment's): Exchange refuses the request when one is wrong.
-    let names: Vec<&str> = event_fields(&e).iter().map(|(uri, _)| *uri).collect();
+    let names: Vec<&str> = event_fields(&e, "riley@contoso.example").iter().map(|(uri, _)| *uri).collect();
     assert_eq!(names.get(..4), Some(&["item:Subject", "item:Body", "item:Categories", "calendar:Start"][..]));
-    assert!(event_fields(&e).iter().any(|(_, x)| x.contains("<t:String>Red category</t:String>")));
+    assert!(event_fields(&e, "riley@contoso.example").iter().any(|(_, x)| x.contains("<t:String>Red category</t:String>")));
     let plain = CalEvent { categories: Vec::new(), ..e };
-    assert!(event_fields(&plain).iter().all(|(uri, _)| *uri != "item:Categories"));
+    assert!(event_fields(&plain, "riley@contoso.example").iter().all(|(uri, _)| *uri != "item:Categories"));
 }
 
 /// The X.500 name comes out of an address book entry id; anything else (too short, another

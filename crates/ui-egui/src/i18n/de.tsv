@@ -1134,3 +1134,12 @@ month	May	Mai
 	Other terms	Weitere Begriffe
 	Clear	Leeren
 	No results. Try fewer words.	Keine Ergebnisse. Versuchen Sie es mit weniger Wörtern.
+	Move this occurrence or the whole series?	Diesen Termin oder die ganze Serie verschieben?
+	This occurrence	Diesen Termin
+	The whole series	Die ganze Serie
+	On Microsoft 365, only the whole series can be moved from here.	Bei Microsoft 365 kann von hier aus nur die ganze Serie verschoben werden.
+	Send the update to the attendees?	Die Aktualisierung an die Teilnehmer senden?
+	Send update	Aktualisierung senden
+	Save without sending	Speichern, ohne zu senden
+	Microsoft 365 tells the attendees of the change itself.	Microsoft 365 informiert die Teilnehmer selbst über die Änderung.
+	Moved to {when}. Ctrl+Z puts it back.	Verschoben auf {when}. Strg+Z macht es rückgängig.

@@ -1131,3 +1131,12 @@ month	May	5月
 	Other terms	その他の条件
 	Clear	クリア
 	No results. Try fewer words.	結果がありません。語数を減らしてください。
+	Move this occurrence or the whole series?	この回だけ移動しますか、それとも定期的な予定全体を移動しますか？
+	This occurrence	この回だけ
+	The whole series	定期的な予定全体
+	On Microsoft 365, only the whole series can be moved from here.	Microsoft 365 では、ここから移動できるのは定期的な予定全体のみです。
+	Send the update to the attendees?	出席者に更新を送信しますか？
+	Send update	更新を送信
+	Save without sending	送信せずに保存
+	Microsoft 365 tells the attendees of the change itself.	Microsoft 365 が変更を出席者に自動的に通知します。
+	Moved to {when}. Ctrl+Z puts it back.	{when} に移動しました。Ctrl+Z で元に戻せます。
