@@ -709,8 +709,7 @@ pub async fn sync_folder<H: Http>(
         }
     }
     // New.
-    let missing: Vec<String> =
-        newest.iter().filter(|(id, _)| st.ids.get(id).is_some_and(|n| fs.find(*n).is_none())).map(|(id, _)| id.clone()).collect();
+    let missing: Vec<String> = newest.iter().filter(|(id, _)| st.known(id).is_some_and(|n| fs.find(n).is_none())).map(|(id, _)| id.clone()).collect();
     for e in c.headers(&missing).await? {
         let Some(id) = e.get("id").and_then(Value::as_str) else { continue };
         let key = MessageKey { account: account.to_string(), folder: folder.to_string(), validity: VALIDITY, uid: st.number(id) };

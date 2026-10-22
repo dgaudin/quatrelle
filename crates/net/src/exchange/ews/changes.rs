@@ -22,7 +22,15 @@ pub fn vote(c: &Client, st: &State, key: &MessageKey, choice: &str, subject: &st
 
 pub fn apply_remote(c: &Client, st: &State, op: &Op) -> Result<()> {
     let ids = |keys: &[MessageKey]| -> Vec<(String, String)> {
-        keys.iter().filter(|k| k.validity == VALIDITY).filter_map(|k| Some((st.id(k.uid)?.to_string(), k.folder.clone()))).collect()
+        let found: Vec<(String, String)> =
+            keys.iter().filter(|k| k.validity == VALIDITY).filter_map(|k| Some((st.id(k.uid)?.to_string(), k.folder.clone()))).collect();
+        // Said, not passed over in silence: such a change is made here only, and the server's
+        // state comes back over it at the next full read of the folder.
+        if found.len() < keys.len() {
+            let account = keys.first().map_or("", |k| k.account.as_str());
+            log::warn!("{account}: {} of {} messages have no server id: the change is made here only", keys.len() - found.len(), keys.len());
+        }
+        found
     };
     let update = |keys: &[MessageKey], change: &str| -> Result<()> {
         for chunk in ids(keys).chunks(BATCH) {
