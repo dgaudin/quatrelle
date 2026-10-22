@@ -154,6 +154,47 @@ pub struct Pool {
     /// The server search still wanted ([`Job::SearchServer`]'s `search`; 0: none), shared with
     /// every worker so a search running stops when it's no longer wanted.
     search: Arc<AtomicU64>,
+    /// Edits to the cache, written on a thread of their own ([`edit_writer`]): marking a message
+    /// read rewrote its folder's list on the window's thread, seconds for a folder of a hundred
+    /// thousand messages, at every message opened. `None` once the pool shuts down.
+    edits: Option<Sender<Edit>>,
+    edits_thread: Option<JoinHandle<()>>,
+}
+
+/// An edit for the writer: the account, the change, and the account's thread to tell after.
+type Edit = (String, Op, Option<Sender<Job>>);
+
+/// Write an edit to the cache and journal it (ops.json), report what changed, then hand it to
+/// the account's thread, which takes it to the server. Journaled first: a sync saving the folder
+/// meanwhile makes the edit again on what it saves (`Store::save_folder`) rather than putting the
+/// old flags back over it.
+fn write_edit(store: &Store, sink: &Sink, account: String, op: Op, worker: Option<Sender<Job>>) {
+    if let Err(e) = store.add_op(&account, op.clone()) {
+        sink.emit(Event::Notice { account: account.clone(), message: e.to_string() });
+    }
+    match store.apply_op(&account, &op) {
+        Ok(changed) => {
+            if op.is_folder_op() {
+                let folders = store.load_folders(&account).unwrap_or_default();
+                sink.emit(Event::Folders { account: account.clone(), folders });
+            }
+            for folder in changed {
+                sink.emit(Event::FolderChanged { account: account.clone(), folder });
+            }
+        }
+        Err(e) => sink.emit(Event::Notice { account: account.clone(), message: e.to_string() }),
+    }
+    // Wake the account's thread: it uploads the queue at its next opportunity.
+    if let Some(w) = worker {
+        let _ = w.send(Job::Apply { account, op });
+    }
+}
+
+/// The thread writing edits, in the order they were made, until the pool shuts down.
+fn edit_writer(store: Store, sink: Sink, rx: Receiver<Edit>) {
+    for (account, op, worker) in rx {
+        write_edit(&store, &sink, account, op, worker);
+    }
 }
 
 /// Drafts that couldn't be saved to the server (offline, or it failed), kept with the account

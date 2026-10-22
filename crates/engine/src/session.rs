@@ -277,6 +277,9 @@ const RECOUNT_MAX: u64 = 50_000;
 /// Message summaries kept in memory at most, besides the folders on screen (a big data file's
 /// whole mailbox is several times this).
 const CACHE_MESSAGES: usize = 300_000;
+/// How long (seconds) a stale address book is used before it's built again: its suggestions
+/// can wait a few minutes for the newest senders; the window can't wait seconds on every sync.
+const CONTACTS_EVERY: i64 = 300;
 
 /// Body words kept for search at most (bytes): enough for the messages a search looks at again.
 const BODY_WORDS_BYTES: usize = 48 << 20;
@@ -369,8 +372,12 @@ pub struct Session {
     pending_marks: BTreeMap<u64, (MessageKey, Flag)>,
     /// Summaries kept cached at most ([`CACHE_MESSAGES`]; tests make it small).
     pub(crate) cache_limit: usize,
-    /// Built on first use from the cached mail; dropped when mail arrives.
+    /// Built on first use from the cached mail; when mail arrives it's stale, and built again
+    /// once it's been some minutes (see [`CONTACTS_EVERY`]).
     contacts: Option<ContactBook>,
+    /// When the address book above was built, and whether mail has arrived since.
+    contacts_built: i64,
+    contacts_stale: bool,
     /// The highest UID seen per Inbox, so only mail that arrives later is announced.
     pub(crate) seen_uid: HashMap<(String, String), u32>,
     /// New mail to announce (desktop notifications), oldest first.
@@ -483,6 +490,8 @@ impl Session {
             pending_marks: BTreeMap::new(),
             cache_limit: CACHE_MESSAGES,
             contacts: None,
+            contacts_built: 0,
+            contacts_stale: false,
             seen_uid: HashMap::new(),
             new_mail: Vec::new(),
             rules: Vec::new(),

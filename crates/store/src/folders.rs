@@ -53,6 +53,21 @@ impl Store {
         state: &FolderState,
         changed: Option<&std::collections::HashSet<u32>>,
     ) -> Result<usize> {
+        // Edits still on their way to the server win over what this list was made from: a sync
+        // that read the folder before a message was marked read (moved, deleted) and saves after
+        // put the server's old state back — bold, normal, bold again until the edit got there.
+        let pending = self.pending_edits(account, folder);
+        let mutated;
+        let widened;
+        let (state, changed) = if pending.is_empty() {
+            (state, changed)
+        } else {
+            let mut st = state.clone();
+            let touched = reapply(&mut st, account, folder, &pending);
+            mutated = st;
+            widened = changed.map(|c| c.union(&touched).copied().collect::<std::collections::HashSet<u32>>());
+            (&mutated, widened.as_ref())
+        };
         let dir = self.folder_dir(account, folder);
         let head = dir.join("state.json");
         let json_err = |p: &Path| {
@@ -103,6 +118,20 @@ impl Store {
             let _ = self.files.remove_file(&dir.join(format!("state-{i}.json")));
         }
         Ok(writes.len())
+    }
+
+    /// The edits waiting in ops.json that touch messages of this folder.
+    fn pending_edits(&self, account: &str, folder: &str) -> Vec<Op> {
+        let touches = |keys: &[MessageKey]| keys.iter().any(|k| k.account == account && k.folder == folder);
+        self.load_ops(account)
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|op| match op {
+                Op::SetFlag { keys, .. } | Op::SetKeyword { keys, .. } | Op::Expunge { keys } => touches(keys),
+                Op::Move { keys, to } => to != folder && touches(keys),
+                _ => false,
+            })
+            .collect()
     }
 
     /// Write a folder's list a page at a time (importing a data file, the whole list needn't be
@@ -255,4 +284,45 @@ impl Store {
         self.save_folders(account, &list)?;
         Ok(changed)
     }
+}
+
+/// Edits not yet on the server, made again on a folder's list (they're what the user sees until
+/// the server has them): flags and keywords set, messages moved away or deleted taken out. The
+/// numbers of the messages changed.
+fn reapply(st: &mut FolderState, account: &str, folder: &str, ops: &[Op]) -> HashSet<u32> {
+    let mut touched = HashSet::new();
+    let validity = st.validity;
+    let uids = |keys: &[MessageKey]| -> HashSet<u32> {
+        keys.iter().filter(|k| k.account == account && k.folder == folder && k.validity == validity).map(|k| k.uid).collect()
+    };
+    for op in ops {
+        match op {
+            Op::SetFlag { keys, flag, on } => {
+                let wanted = uids(keys);
+                for m in st.messages.iter_mut().filter(|m| wanted.contains(&m.key.uid)) {
+                    let before = m.flags.clone();
+                    flag.set(&mut m.flags, *on);
+                    if m.flags != before {
+                        touched.insert(m.key.uid);
+                    }
+                }
+            }
+            Op::SetKeyword { keys, keyword, on } => {
+                let wanted = uids(keys);
+                for m in st.messages.iter_mut().filter(|m| wanted.contains(&m.key.uid)) {
+                    let before = m.flags.clone();
+                    m.flags.set_keyword(keyword, *on);
+                    if m.flags != before {
+                        touched.insert(m.key.uid);
+                    }
+                }
+            }
+            Op::Move { keys, .. } | Op::Expunge { keys } => {
+                let gone = uids(keys);
+                st.messages.retain(|m| !gone.contains(&m.key.uid));
+            }
+            _ => {}
+        }
+    }
+    touched
 }

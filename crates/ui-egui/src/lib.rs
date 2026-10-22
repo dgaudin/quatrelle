@@ -493,7 +493,31 @@ impl MailApp {
         let (now, offset) = self.services.clock();
         self.session.set_clock(now, offset);
         let mut answered = false;
-        for e in self.backend.poll() {
+        let events = self.backend.poll();
+        // A folder changed several times since the last look (a sync saves a folder more than
+        // once, Download all after each message) is read again once, for its last change: each
+        // was a reload of the whole folder on the window's thread.
+        let mut last: HashMap<(&str, &str), usize> = HashMap::new();
+        for (i, e) in events.iter().enumerate() {
+            if let quatrelle_engine::model::Event::FolderChanged { account, folder } = e {
+                last.insert((account.as_str(), folder.as_str()), i);
+            }
+        }
+        let skip: std::collections::HashSet<usize> = events
+            .iter()
+            .enumerate()
+            .filter_map(|(i, e)| match e {
+                quatrelle_engine::model::Event::FolderChanged { account, folder } => {
+                    (last.get(&(account.as_str(), folder.as_str())) != Some(&i)).then_some(i)
+                }
+                _ => None,
+            })
+            .collect();
+        drop(last);
+        for (i, e) in events.into_iter().enumerate() {
+            if skip.contains(&i) {
+                continue;
+            }
             answered |= matches!(e, quatrelle_engine::model::Event::Found { .. });
             self.session.apply(e);
         }
