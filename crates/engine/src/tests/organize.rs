@@ -621,3 +621,28 @@ fn quick_steps_mark_then_move_the_selection() {
     let back: crate::session::Prefs = serde_json::from_value(serde_json::to_value(&s.prefs).unwrap()).unwrap();
     assert_eq!(back.quick_steps, s.prefs.quick_steps);
 }
+
+/// A message opened in the Unread filter is marked read and stays there, shown in the reading
+/// pane, until another is opened (as in Outlook); it used to vanish from under the pointer.
+#[test]
+fn a_message_read_in_the_unread_filter_stays_until_another_is_opened() {
+    let mut s = sample_session("unread-keep");
+    s.run("list.filter", &json!({"value": "unread"})).unwrap();
+    let unread: Vec<_> = s.list.iter().map(|m| m.key.clone()).collect();
+    assert!(unread.len() >= 2, "{unread:?}");
+    s.run("list.open", &json!({"key": unread[0].to_id()})).unwrap();
+    assert!(s.summary(&unread[0]).is_some_and(|m| m.flags.seen), "marked read as it opens");
+    assert!(s.list.iter().any(|m| m.key == unread[0]), "still in the list");
+    assert_eq!(s.reading.as_ref().map(|r| r.key.clone()), Some(unread[0].clone()), "and in the reading pane");
+    assert_eq!(s.selection, vec![unread[0].clone()]);
+    // The list refreshed meanwhile (a sync): still there.
+    s.refresh_list();
+    assert!(s.list.iter().any(|m| m.key == unread[0]));
+    // The next one opened: the first goes, the new one stays.
+    s.run("list.open", &json!({"key": unread[1].to_id()})).unwrap();
+    assert!(!s.list.iter().any(|m| m.key == unread[0]), "gone once another is opened");
+    assert!(s.list.iter().any(|m| m.key == unread[1]));
+    // Choosing the filter again starts it over.
+    s.run("list.filter", &json!({"value": "unread"})).unwrap();
+    assert!(!s.list.iter().any(|m| m.key == unread[1]));
+}

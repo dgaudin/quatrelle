@@ -127,6 +127,8 @@ impl eframe::App for App {
         if self.instance.as_ref().is_some_and(single_instance::Server::take_show) {
             single_instance::show(ctx, self.native_wayland);
         }
+        // Mail, notifications and reminders keep going while the window is minimized or hidden.
+        self.app.logic(ctx);
     }
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
         self.frames = self.frames.saturating_add(1);

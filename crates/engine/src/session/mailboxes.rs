@@ -309,7 +309,7 @@ impl Session {
             }
         }
         let filter = self.filter;
-        list.retain(|m| self.filter_keeps(filter, m));
+        list.retain(|m| self.filter_keeps(filter, m) || self.filter_keep.as_ref() == Some(&m.key));
         if self.focus_split() {
             self.ensure_contacts();
             let other = self.focus_other;

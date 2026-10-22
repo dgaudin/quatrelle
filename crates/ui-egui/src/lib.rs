@@ -239,6 +239,9 @@ pub struct UiState {
     scroll_to_focus: bool,
     /// The named font families the UI uses are registered (`install_fonts`).
     fonts_ready: bool,
+    /// [`MailApp::logic`] ran for this frame already (the app calls it before each `ui`; a
+    /// caller that only draws, the tests', gets it from `ui`).
+    logic_ran: bool,
     /// The messages being written that have been shown, to focus a new one's first field once.
     pub(crate) compose_shown: std::collections::HashSet<u64>,
     /// The editors of the messages being written other than the one acting now (`editor`).
@@ -376,6 +379,7 @@ impl MailApp {
                 seen_notices: seen,
                 scroll_to_focus: false,
                 fonts_ready: false,
+                logic_ran: false,
                 compose_shown: Default::default(),
                 editors: HashMap::new(),
                 dialog_for: None,
