@@ -136,12 +136,12 @@ Toutes s'appuient sur les spécifications publiques de Microsoft (EWS, Graph, [M
 
 ## Suivre le projet d'origine
 
-Pour récupérer les nouveautés de ZIDAN44/mailcraft :
+Pour récupérer les nouveautés de ZIDAN44/mailcraft, la méthode qui a servi pour la v0.22 (voir
+plus bas) est la plus sûre : une fusion directe bute sur le renommage MailCraft → Quatrelle à
+chaque ligne que l'origine touche.
 
 ```sh
-git remote add upstream https://github.com/ZIDAN44/mailcraft
-git fetch upstream
-git merge upstream/main
+git fetch https://github.com/ZIDAN44/mailcraft main && git branch -f upstream-main FETCH_HEAD
 ```
 
 Les conflits les plus probables concernent les fichiers touchés par ce fork :
@@ -208,3 +208,47 @@ Preuves de la fusion : `cargo xtask ci` vert (fmt, `clippy -D warnings`, 375 tes
 wasm) et un build `--workspace` complet. Après l'unification des dialogues, `cargo xtask ci` reste
 vert (374 tests — un test de l'origine retiré avec ses commandes). La version du manifeste suit
 l'origine (`0.19.0`).
+
+### État de la récupération : v0.21, v0.22 et le découpage en petits fichiers (2026-10-22)
+
+Les 51 commits de l'origine (`f0619af..1dc3ba7`) sont fusionnés en trois fusions, dans une
+branche à part puis dans `main` : jusqu'à `d0dffbd` (les fonctions de la v0.22), puis le découpage
+de l'origine en petits fichiers (`d0dffbd..f78afa9`), puis le reste (`..1dc3ba7`). L'historique de
+l'origine est un parent de chaque fusion : la prochaine repartira de `1dc3ba7`.
+
+**Méthode.**
+- **Renommer l'origine d'abord.** Chaque commit de l'origine utilisé comme point de fusion est
+  recopié avec MailCraft → Quatrelle appliqué aux chemins et au texte (comme `9bb5d25` l'avait
+  fait ici), et la fusion se fait contre ces copies (`git merge-tree --merge-base`). Vérifié : le
+  renommage automatique de `477b835` redonne `9bb5d25` à l'identique, hors ajouts voulus
+  (`legacy.rs`, icônes). Il ne reste alors que les vrais conflits.
+- **Le découpage de l'origine, élément par élément.** Quand l'origine éclate un fichier que ce fork
+  a modifié, chaque fonction, méthode ou test du fork est fusionné à trois voies dans le fichier
+  où l'origine l'a mis ; ce que le fork a ajouté va à côté de son voisin. Les commandes du fork vont
+  dans les registres par domaine (`cmd/*.rs`), ses dialogues dans les groupes (`dialogs/*.rs`).
+- **Rejouable.** Chaque étape est un script : le rejouer redonne exactement le même arbre. Les
+  outils (Python, et `itemize`, un petit programme Rust qui liste les éléments d'un fichier) sont
+  hors du dépôt, dans `~/mailcraft/merge-tools/`.
+
+**Décisions.**
+- **Gardé de ce fork** : l'apparence (ruban, rail, icônes Fluent, fenêtre qui suit le bureau), le
+  calendrier et les contacts, et tout ce que ce fork avait déjà porté à la main (instance unique,
+  en-tête étroit, modifications gardées pendant une synchro, IPv6/IPv4, semaine de travail, boîtes
+  partagées, recherche sur le serveur EWS et IMAP), ainsi que la fiabilité Exchange (`5636c1c`).
+- **Pris de l'origine** : Quick Steps (groupe « Actions rapides » du ruban, icône Fluent `flash`),
+  expéditeurs bloqués et approuvés, Clean Up, dossiers de recherche, `larger:`/`smaller:`, rappels
+  avec répétition et la fenêtre Rappels (à la place de la sonnerie simple de ce fork), plusieurs
+  messages en cours de rédaction, réglages enregistrés au fil de l'eau, animations, recherche sur le
+  serveur pour Graph et JMAP, portées de recherche et recherche avancée, Graph (ImmutableId, 429),
+  la mise à jour automatique des versions de test — pointée sur `dgaudin/quatrelle`.
+- **Les deux** : le `session/mailboxes.rs` de ce fork (autres boîtes ouvertes) devient
+  `session/shared_mailboxes.rs`, l'origine ayant un module de ce nom. L'index de recherche de ce
+  fork (construit par tranches) couvre les portées de l'origine ; l'onglet Rechercher garde ses
+  boutons radio empilés, pour les quatre portées.
+- **La règle des petits fichiers** de l'origine (`cargo xtask sizes` : 1000 lignes par fichier,
+  16 fichiers par dossier) s'applique aussi à ce fork : les fichiers qu'il avait fait grossir sont
+  découpés (`fab2ab9`), sans changement de comportement.
+
+Preuves : `cargo xtask ci` vert à chaque étape (541 tests à la fin, fmt, `clippy -D warnings`,
+tailles, couches, ressources, wasm), et la fenêtre regardée sur la boîte d'exemple.
+

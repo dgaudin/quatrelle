@@ -114,6 +114,8 @@ Before every commit: `cargo xtask ci`. Commit after every arc of work that build
   `--cmd 'list.open={"key":"sample:1:1:INBOX"}' --cmd mail.reply`, `--light` / `--dark`,
   `--cmd ui.addAccount`, `--cmd ui.file` / `ui.options` / `ui.about` (the File page).
 - For UI work, look at the result: screenshot **the Quatrelle window only** and read the PNG.
+  `QUATRELLE_SCREENSHOT=out.png` makes the app save its own window once it has settled (the
+  window must be visible: a hidden one draws nothing).
 - Headless frames: `crates/ui-egui/src/tests.rs` renders every pane layout and dialog.
 - Browser: `trunk serve` in `apps/quatrelle-web`, then `/?sample`; a local JMAP server with CORS:
   `cargo test -p quatrelle-net serve_for_the_browser -- --ignored` (`me@studio.example` / `pw`).
