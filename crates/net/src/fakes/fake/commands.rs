@@ -21,6 +21,10 @@ impl Fake {
             self.say(&format!("{tag} BAD User is authenticated but not connected."));
             return;
         }
+        if upper_line.contains(" SEARCH ") && upper_line.contains(" TEXT ") {
+            let delay = self.st.lock().map(|s| s.search_delay).unwrap_or_default();
+            std::thread::sleep(delay);
+        }
         let st = self.st.clone();
         let mut st = st.lock().unwrap();
         st.log.push(rest.to_string());
@@ -181,7 +185,14 @@ impl Fake {
                     if let Some(l) = &literal {
                         keys.push(String::from_utf8_lossy(l).into_owned());
                     }
-                    let hits: Vec<String> = b.msgs.iter().filter(|m| search_matches(m, &keys, max)).map(|m| m.uid.to_string()).collect();
+                    let exists = u32::try_from(b.msgs.len()).unwrap_or(u32::MAX);
+                    let hits: Vec<String> = b
+                        .msgs
+                        .iter()
+                        .enumerate()
+                        .filter(|(i, m)| search_matches(m, u32::try_from(*i + 1).unwrap_or(0), &keys, max, exists))
+                        .map(|(_, m)| m.uid.to_string())
+                        .collect();
                     lines.push(format!("* SEARCH {}\r\n", hits.join(" ")).trim_end().as_bytes().to_vec());
                 } else if verb == "FETCH" {
                     let set = words.get(2).copied().unwrap_or("");

@@ -37,7 +37,7 @@ impl Worker {
                     self.sync_one(&folder);
                 }
             }
-            Job::SearchServer { folders, query, .. } => self.search_server(&folders, query),
+            Job::SearchServer { folders, query, search, .. } => self.search_server(&folders, query, search),
             Job::FetchBody { key } => self.fetch(key),
             Job::Search { query, folder, .. } => self.search(query, folder),
             // Already in the cache and ops.json (the pool wrote them): push the queue.
@@ -189,7 +189,13 @@ impl Worker {
             Job::SetServerRule { id, rule, ours, .. } => self.edit_server_rule(&id, &rule, ours),
             Job::DeleteServerRule { id, ours, .. } => self.change_server_rule(&id, None, true, ours),
             Job::FetchPhoto { email, contact, .. } => self.fetch_photo(&email, contact.as_deref()),
-            Job::FetchUrl { .. } | Job::Discover { .. } | Job::SignIn { .. } | Job::ImportPst { .. } | Job::ExportPst { .. } | Job::CheckUpdates => {}
+            Job::FetchUrl { .. }
+            | Job::Discover { .. }
+            | Job::SignIn { .. }
+            | Job::ImportPst { .. }
+            | Job::ExportPst { .. }
+            | Job::CheckUpdates
+            | Job::StopSearch => {}
             Job::Start { .. } | Job::SmtpPassword { .. } | Job::Remove { .. } | Job::WorkOffline { .. } | Job::SetSync { .. } => {}
         }
     }

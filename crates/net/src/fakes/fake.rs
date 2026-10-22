@@ -39,6 +39,8 @@ pub struct State {
     /// What every password sign-in is refused with, when set (Outlook.com: "Basic authentication
     /// is disabled").
     pub refuse_passwords: Option<String>,
+    /// How long a text `SEARCH` takes (a server reading every message rather than an index).
+    pub search_delay: std::time::Duration,
     /// Connections open now, and the most there were at once (what a sync on several
     /// connections shows).
     pub open: usize,
@@ -59,6 +61,7 @@ impl State {
             log: Vec::new(),
             not_connected: Vec::new(),
             refuse_passwords: None,
+            search_delay: std::time::Duration::ZERO,
             open: 0,
             peak: 0,
         }))
@@ -305,10 +308,13 @@ pub(crate) fn search_the_server_past_the_window(name: &str, account: quatrelle_m
     };
     let has = |s: &str| subjects().iter().any(|x| x == s);
     let search = |pool: &mut crate::worker::Pool, q: &str| {
-        pool.submit(Job::SearchServer { account: "a1".into(), folders: vec!["INBOX".into()], query: q.into() });
-        let seen = until(pool, "searched", &|e| matches!(e, Event::ServerSearched { .. }));
+        pool.submit(Job::SearchServer { account: "a1".into(), folders: vec!["INBOX".into()], query: q.into(), search: 1 });
+        // What's found comes as it's found, then the end.
+        let seen = until(pool, "searched", &|e| matches!(e, Event::ServerSearched { done: true, .. }));
         match seen.last() {
-            Some(Event::ServerSearched { keys, error: None, .. }) => keys.len(),
+            Some(Event::ServerSearched { error: None, .. }) => {
+                seen.iter().map(|e| if let Event::ServerSearched { keys, .. } = e { keys.len() } else { 0 }).sum::<usize>()
+            }
             other => panic!("{q}: {other:?}"),
         }
     };
