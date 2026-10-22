@@ -215,7 +215,7 @@ pub fn added(word: &str) -> bool {
 /// (`Été` is `été`, which `eq_ignore_ascii_case` didn't know).
 fn is_personal(word: &str) -> bool {
     let w = word.to_lowercase();
-    PERSONAL.read().is_ok_and(|p| p.iter().any(|x| *x == w))
+    PERSONAL.read().is_ok_and(|p| p.contains(&w))
 }
 
 /// Let `word` be in message `message` (Outlook's Ignore All): it isn't marked there again.
@@ -306,12 +306,16 @@ pub fn suggest_in(word: &str, langs: &[String], max: usize) -> Vec<String> {
 }
 
 /// Underline the words `job` lays out that aren't spelt right, in `text`'s own coordinates (the
-/// job's text is that text, piece by piece): a red line under each, as Outlook marks them.
-pub fn underline(job: &mut egui::text::LayoutJob, text: &str, colour: egui::Color32) {
+/// job's text is that text, piece by piece): a red line under each, as Outlook marks them
+/// (the tests' shorthand for a check with nothing particular).
+#[cfg(test)]
+pub(crate) fn underline(job: &mut egui::text::LayoutJob, text: &str, colour: egui::Color32) {
     underline_with(job, text, colour, &Check::default());
 }
 
-/// [`underline`] as `check` says.
+/// Underline the words `job` lays out that aren't spelt right as `check` says, in `text`'s own
+/// coordinates (the job's text is that text, piece by piece): a red line under each, as
+/// Outlook marks them.
 pub fn underline_with(job: &mut egui::text::LayoutJob, text: &str, colour: egui::Color32, check: &Check) {
     if !on() || ready().is_none() || job.text != text {
         return;
@@ -375,7 +379,7 @@ mod tests {
         let all = misspelt(text);
         assert_eq!(all.iter().map(|(_, w)| w.as_str()).collect::<Vec<_>>(), ["servver", "quatrelle", "quatrelle"]);
         let sig = text.find("-- ").unwrap_or(0);
-        let check = Check { langs: vec!["fr".into()], skip: vec![sig..text.len()], ignored: vec!["quatrelle".into()] };
+        let check = Check { langs: vec!["fr".into()], skip: std::iter::once(sig..text.len()).collect(), ignored: vec!["quatrelle".into()] };
         assert_eq!(misspelt_with(text, &check).iter().map(|(_, w)| w.as_str()).collect::<Vec<_>>(), ["servver"]);
         // Remembered: the same text, in the same languages, answers the same (and faster).
         assert_eq!(misspelt_with(text, &check), misspelt_with(text, &check));

@@ -230,7 +230,7 @@ impl Spell {
                 all.push((distance(&lower, &s.to_lowercase()), rank, i, s));
             }
         }
-        all.sort_by(|a, b| (a.0, a.1, a.2).cmp(&(b.0, b.1, b.2)));
+        all.sort_by_key(|a| (a.0, a.1, a.2));
         all.into_iter().map(|(_, _, _, s)| s).take(max).collect()
     }
 
@@ -258,8 +258,10 @@ pub fn distance(a: &str, b: &str) -> usize {
     for (i, row) in d.iter_mut().enumerate() {
         row[0] = i;
     }
-    for j in 0..=m {
-        d[0][j] = j;
+    if let Some(first) = d.first_mut() {
+        for (j, cell) in first.iter_mut().enumerate() {
+            *cell = j;
+        }
     }
     for i in 1..=n {
         for j in 1..=m {

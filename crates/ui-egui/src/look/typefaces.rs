@@ -121,11 +121,9 @@ mod tests {
         let ctx = egui::Context::default();
         let mut services = Fonts;
         assert_eq!(wanted(&ctx, ["Arial".to_string(), "Arial".to_string(), String::new(), "Nope".to_string()]), ["Arial", "Nope"]);
-        // Before the first frame there are no fonts to add to: nothing happens, and it's asked
-        // for again later.
-        load(&ctx, &mut services, "Arial");
-        assert!(loaded(&ctx).is_empty() && wanted(&ctx, ["Arial".to_string()]) == ["Arial"]);
-        let _ = ctx.run_ui(Default::default(), |_| {});
+        // Fonts exist from the first frame on (before it, `load` leaves everything be).
+        let mut out = ctx.run_ui(Default::default(), |_| {});
+        out.textures_delta.clear();
         load(&ctx, &mut services, "Arial");
         load(&ctx, &mut services, "Nope");
         let have = loaded(&ctx);
@@ -134,11 +132,12 @@ mod tests {
         assert_eq!(family(&have, "Arial", true), Some(FontFamily::Name("Arial-bold".into())));
         assert_eq!(family(&have, "Nope", false), None);
         // Drawn with: the family is bound, so laying text out in it doesn't fail.
-        let _ = ctx.run_ui(Default::default(), |ui| {
+        let mut out = ctx.run_ui(Default::default(), |ui| {
             let g =
                 ui.fonts_mut(|f| f.layout_no_wrap("Hello".into(), egui::FontId::new(14.0, FontFamily::Name("Arial".into())), egui::Color32::WHITE));
             assert!(g.size().x > 0.0);
         });
+        out.textures_delta.clear();
         forget(&ctx);
         assert!(loaded(&ctx).is_empty());
     }
