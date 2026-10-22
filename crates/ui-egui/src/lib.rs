@@ -52,7 +52,7 @@ pub(crate) use app::{SearchDrop, junk_menu, scope_label};
 pub use app::{WindowPlace, after_open};
 pub use dialogs::Dialog;
 use icons::Icon;
-pub use services::{Backend, NullBackend, NullServices, Services};
+pub use services::{Backend, NullBackend, NullServices, ReminderAction, Services};
 use theme::Tokens;
 
 /// Whether the message being written shows in the reading pane: when it isn't popped out, or
@@ -303,6 +303,8 @@ pub struct UiState {
     pub(crate) notes_query: String,
     /// How far the calendar's month grip has been dragged since it last added or took a month.
     pub(crate) months_drag: f32,
+    /// An appointment being dragged to another time ([`calendar::Drag`]).
+    pub(crate) cal_drag: Option<calendar::Drag>,
     pub(crate) note_edit: Option<(String, String)>,
     pub(crate) note_focus: bool,
     /// The person whose card is shown (uid).
@@ -411,6 +413,7 @@ impl MailApp {
                 list_columns: list::ColumnWidths::default(),
                 notes_query: String::new(),
                 months_drag: 0.0,
+                cal_drag: None,
                 note_edit: None,
                 note_focus: false,
                 person: None,

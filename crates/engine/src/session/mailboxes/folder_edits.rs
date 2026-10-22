@@ -395,6 +395,10 @@ impl Session {
                 }
                 Ok(serde_json::json!({ "undone": "move", "count": n }))
             }
+            Undo::EventMove { uid, occurrence, start, end, send } => {
+                self.move_event_back(&uid, occurrence, start, end, send)?;
+                Ok(serde_json::json!({ "undone": "event", "uid": uid }))
+            }
         }
     }
 }

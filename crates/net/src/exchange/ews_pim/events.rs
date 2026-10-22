@@ -90,16 +90,75 @@ fn person(m: &El) -> Option<Attendee> {
     email.contains('@').then(|| Attendee { email, name: text(mb, "Name"), partstat: String::new(), rsvp: false })
 }
 
-/// An appointment as an event (occurrences and changed instances are left to their series).
+/// All-day times are local midnights: the nearest UTC midnight is the day.
+fn day(t: i64) -> i64 {
+    (t + 43_200).div_euclid(86_400) * 86_400
+}
+
+/// An appointment as an event: a single one, or a series (its deleted occurrences as the days
+/// taken out of it). An occurrence, changed or not, is left to its series ([`exception_of`]).
 pub fn event_of(it: &El) -> Option<CalEvent> {
     if matches!(it.text_of("CalendarItemType"), Some("Occurrence" | "Exception")) {
         return None;
     }
+    let mut e = appointment(it)?;
+    if let Some(gone) = it.child("DeletedOccurrences") {
+        e.exdates = gone
+            .children("DeletedOccurrence")
+            .filter_map(|d| quatrelle_jmap::utc_date(&text(d, "Start")))
+            .map(|t| if e.all_day { day(t) } else { t })
+            .take(1000)
+            .collect();
+    }
+    Some(e)
+}
+
+/// An occurrence of a series changed on its own (moved, renamed: Exchange's `Exception`) as an
+/// instance of its own, named by the occurrence it stands in for (`OriginalStart`).
+pub fn exception_of(it: &El) -> Option<CalEvent> {
+    if !matches!(it.text_of("CalendarItemType"), Some("Occurrence" | "Exception")) {
+        return None;
+    }
+    let mut e = appointment(it)?;
+    let original = quatrelle_jmap::utc_date(&text(it, "OriginalStart"))?;
+    e.recurrence_id = Some(if e.all_day { day(original) } else { original });
+    e.rrule = None;
+    Some(e)
+}
+
+/// The items of a series' occurrences changed on their own, as the series lists them.
+pub fn modified_occurrence_ids(it: &El) -> Vec<String> {
+    it.child("ModifiedOccurrences")
+        .map(|m| m.children("Occurrence").filter_map(|o| o.child("ItemId")?.attr("Id").map(str::to_string)).take(1000).collect())
+        .unwrap_or_default()
+}
+
+/// The item of one occurrence of a series (`at`: the start the series' rule gives it), with its
+/// change key: asked for by its place in the series (`OccurrenceItemId`, counting from the
+/// first occurrence, days taken out included), as Outlook opens one.
+pub fn occurrence_item_id(c: &Client, master_id: &str, master: &CalEvent, at: i64) -> Result<(String, String)> {
+    let index = quatrelle_model::ical::starts(master, at.saturating_add(1))
+        .iter()
+        .position(|s| *s == at)
+        .ok_or_else(|| NetError::No("the series has no such occurrence".into()))?;
+    let m = c.call_one(&format!(
+        "<m:GetItem><m:ItemShape><t:BaseShape>IdOnly</t:BaseShape></m:ItemShape><m:ItemIds>\
+         <t:OccurrenceItemId RecurringMasterId=\"{}\" InstanceIndex=\"{}\"/></m:ItemIds></m:GetItem>",
+        esc(master_id),
+        index.saturating_add(1)
+    ))?;
+    let (id, key) = new_id(&m);
+    if id.is_empty() {
+        return Err(NetError::Protocol("the occurrence came back without an id".into()));
+    }
+    Ok((id, key))
+}
+
+/// Any appointment item as an event, whatever its place in a series.
+fn appointment(it: &El) -> Option<CalEvent> {
     let all_day = it.text_of("IsAllDayEvent").is_some_and(|v| v == "true");
     let start = quatrelle_jmap::utc_date(&text(it, "Start"))?;
     let end = quatrelle_jmap::utc_date(&text(it, "End")).unwrap_or(start + 3600).max(start);
-    // All-day times are local midnights: the nearest UTC midnight is the day.
-    let day = |t: i64| (t + 43_200).div_euclid(86_400) * 86_400;
     let (start, end) = if all_day { (day(start), day(end).max(day(start) + 86_400)) } else { (start, end) };
     let body = it.child("Body");
     let content = body.map(|b| b.text.clone()).unwrap_or_default();
@@ -172,7 +231,10 @@ pub fn event_of(it: &El) -> Option<CalEvent> {
 /// `CalendarItemType`. A reminder sent as `calendar:ReminderIsSet` (it's `item:`) did just that,
 /// and the change stayed on this computer, Outlook on the old day. Each field now carries its
 /// URI instead of it being guessed from the field's name.
-pub(super) fn event_fields(e: &CalEvent) -> Vec<(&'static str, String)> {
+///
+/// `me`: this account's address; the guests of a meeting it organizes go with it (so the server
+/// can invite them, and tell them of a change), someone else's meeting keeps its own list.
+pub(crate) fn event_fields(e: &CalEvent, me: &str) -> Vec<(&'static str, String)> {
     let (start, end) = if e.all_day { (e.start, e.end.max(e.start + 86_400)) } else { (e.start, e.end.max(e.start)) };
     let mut f = vec![
         ("item:Subject", format!("<t:Subject>{}</t:Subject>", esc(&e.summary))),
@@ -190,6 +252,25 @@ pub(super) fn event_fields(e: &CalEvent) -> Vec<(&'static str, String)> {
         ("calendar:IsAllDayEvent", format!("<t:IsAllDayEvent>{}</t:IsAllDayEvent>", e.all_day)),
         ("calendar:Location", format!("<t:Location>{}</t:Location>", esc(&e.location))),
     ]);
+    // The guests (the organizer isn't one of them), between the place and the pattern, as the
+    // schema has it.
+    let mine = e.organizer.as_ref().is_none_or(|o| o.email.eq_ignore_ascii_case(me));
+    let guests: String = e
+        .attendees
+        .iter()
+        .filter(|a| mine && !a.email.eq_ignore_ascii_case(me) && a.email.contains('@'))
+        .take(500)
+        .map(|a| {
+            format!(
+                "<t:Attendee><t:Mailbox><t:Name>{}</t:Name><t:EmailAddress>{}</t:EmailAddress><t:RoutingType>SMTP</t:RoutingType></t:Mailbox></t:Attendee>",
+                esc(&a.name),
+                esc(&a.email)
+            )
+        })
+        .collect();
+    if !guests.is_empty() {
+        f.push(("calendar:RequiredAttendees", format!("<t:RequiredAttendees>{guests}</t:RequiredAttendees>")));
+    }
     if let Some(r) = e.rrule.as_deref().and_then(|r| recurrence_xml(r, e.start)) {
         f.push(("calendar:Recurrence", r));
     }

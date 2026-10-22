@@ -204,6 +204,7 @@ fn dav_results_merge_without_losing_local_changes() {
         etag: "\"1\"".into(),
         event: CalEvent { uid: uid.into(), summary: summary.into(), start: NOW + 3600, end: NOW + 7200, ..Default::default() },
         dirty: false,
+        notify: false,
     };
     let first = DavSync {
         caldav_home: Some("https://dav.example.org/cal/".into()),
@@ -285,7 +286,8 @@ fn dav_results_merge_without_losing_local_changes() {
     s2.run("event.create", &json!({"summary": "Poster review", "start": NOW + 3600, "end": NOW + 7200})).unwrap();
     let local = s2.pim.get(&id2).unwrap().events[0].clone();
     let server_cal = "CAL1".to_string();
-    let pushed = StoredEvent { calendar: server_cal.clone(), href: "EV1".into(), etag: "ck".into(), event: local.event.clone(), dirty: false };
+    let pushed =
+        StoredEvent { calendar: server_cal.clone(), href: "EV1".into(), etag: "ck".into(), event: local.event.clone(), dirty: false, notify: false };
     let read = StoredEvent { event: CalEvent { uid: "ical-EV1".into(), ..local.event.clone() }, ..pushed.clone() };
     let merged = DavSync {
         caldav_home: Some("graph".into()),

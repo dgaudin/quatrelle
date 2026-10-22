@@ -47,6 +47,9 @@ pub struct Prefs {
     pub confirm_permanent_delete: bool,
     /// Desktop notifications for new mail in an Inbox.
     pub notify: bool,
+    /// The Reminders window opens in a window of its own, over every other, when a reminder
+    /// comes (the main window minimized or behind others too), as Outlook's does.
+    pub reminders_on_top: bool,
     /// The categories offered, in order.
     pub categories: Vec<quatrelle_model::organize::Category>,
     /// Split the Inbox into Focused and Other.
@@ -141,6 +144,7 @@ impl Default for Prefs {
             confirm_permanent_delete: true,
             favorites: None,
             notify: true,
+            reminders_on_top: true,
             categories: quatrelle_model::organize::default_categories(),
             focused_inbox: false,
             focus_overrides: std::collections::BTreeMap::new(),

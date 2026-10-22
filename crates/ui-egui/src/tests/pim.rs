@@ -204,7 +204,8 @@ fn reminders_pop_up_snooze_and_dismiss() {
     let (mut a, dir) = app("reminders");
     let now = std::sync::Arc::new(std::sync::Mutex::new(NOW));
     let shown = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
-    a.services = Box::new(Ticking(now.clone(), shown.clone()));
+    let pressed = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    a.services = Box::new(Ticking(now.clone(), shown.clone(), pressed.clone()));
     let ctx = egui::Context::default();
     frame(&ctx, &mut a, vec![]);
     assert!(!crate::reminders::showing(&a.ui.reminders), "the sample has none due");
@@ -233,13 +234,37 @@ fn reminders_pop_up_snooze_and_dismiss() {
     frame(&ctx, &mut a, vec![]);
     frame(&ctx, &mut a, vec![]);
     assert!(crate::reminders::showing(&a.ui.reminders));
-    assert_eq!(shown.lock().unwrap().iter().filter(|(t, _)| t == "Colour review").count(), 1, "told once");
-    // Snoozed: gone until the snooze is over, then back (and told again).
     let key = a.ui.reminders.due[0].key.clone();
+    let told: Vec<(String, String)> = shown.lock().unwrap().iter().filter(|(t, _)| t == "Colour review").cloned().collect();
+    assert_eq!(told.len(), 1, "told once");
+    assert!(told[0].1.contains(&format!("[{key}]")) && told[0].1.contains("Snooze 5 minutes/Dismiss"), "{told:?}");
+    // Snoozed from the notification's button: gone until the snooze is over, then back.
+    pressed.lock().unwrap().push((key.clone(), crate::ReminderAction::Snooze));
+    frame(&ctx, &mut a, vec![]);
+    assert!(!crate::reminders::showing(&a.ui.reminders));
+    assert_eq!(a.session.prefs.reminders.get(&key), Some(&(start - 15 * 60 + 5 * 60)), "five minutes");
+    *now.lock().unwrap() = start - 10 * 60;
+    frame(&ctx, &mut a, vec![]);
+    assert!(crate::reminders::showing(&a.ui.reminders));
+    // Clicked on the notification once the window was closed: the window comes back with it.
+    a.ui.reminders.closed.insert(key.clone());
+    assert!(!crate::reminders::showing(&a.ui.reminders));
+    pressed.lock().unwrap().push((key.clone(), crate::ReminderAction::Open));
+    frame(&ctx, &mut a, vec![]);
+    assert!(crate::reminders::showing(&a.ui.reminders));
+    assert_eq!(a.ui.reminders.selected.as_deref(), Some(key.as_str()));
+    // The option off: the window is drawn inside the main one (as it always is in tests, where
+    // windows are drawn inside the page); on, it would be a window of its own.
+    a.run("view.remindersOnTop", json!({"on": false}));
+    frame(&ctx, &mut a, vec![]);
+    assert!(!a.session.prefs.reminders_on_top && crate::reminders::showing(&a.ui.reminders));
+    a.run("view.remindersOnTop", json!({"on": true}));
+    frame(&ctx, &mut a, vec![]);
+    // Snoozed from the window: gone until the snooze is over, then back (and told again).
     a.act(crate::Action::Run("reminders.snooze", json!({"key": key, "minutes": 5})));
     frame(&ctx, &mut a, vec![]);
     assert!(!crate::reminders::showing(&a.ui.reminders));
-    *now.lock().unwrap() = start - 10 * 60;
+    *now.lock().unwrap() = start - 4 * 60;
     frame(&ctx, &mut a, vec![]);
     assert!(crate::reminders::showing(&a.ui.reminders));
     // Closed with the X: hidden, not dismissed; a new one brings it back with both.
@@ -261,5 +286,116 @@ fn reminders_pop_up_snooze_and_dismiss() {
     *now.lock().unwrap() += 3600;
     frame(&ctx, &mut a, vec![]);
     assert!(!crate::reminders::showing(&a.ui.reminders));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Outlook's drag and drop in the Day view: an appointment dragged an hour down moves an hour
+/// later (and Undo puts it back), one dragged by its bottom edge ends later, Esc lets go, a
+/// recurring one asks whether to move the occurrence or the series, and a meeting someone else
+/// organizes doesn't move at all.
+#[test]
+fn appointments_are_dragged_to_another_time() {
+    use crate::calendar::{HOUR, chip_id};
+    let (mut a, dir) = app("drag-event");
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    a.run("view.module", json!({"name": "calendar"}));
+    a.run("calendar.view", json!({"mode": "day"}));
+    frame(&ctx, &mut a, vec![]);
+    frame(&ctx, &mut a, vec![]);
+    let agenda = |a: &MailApp| a.session.agenda(NOW - 86_400, NOW + 2 * 86_400);
+    let lunch = agenda(&a).into_iter().find(|i| i.summary == "Lunch with Jun").unwrap();
+    assert!(lunch.movable && !lunch.organized && !lunch.recurring);
+    let press = |pos, pressed| Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed, modifiers: Modifiers::NONE };
+    let chip =
+        |ctx: &egui::Context, item: &quatrelle_engine::AgendaItem| ctx.read_response(chip_id(item)).map(|r| r.rect).expect("the chip is drawn");
+    // Taken by its middle, dragged an hour down, let go.
+    let from = chip(&ctx, &lunch).center();
+    let to = from + egui::vec2(0.0, HOUR);
+    frame(&ctx, &mut a, vec![Event::PointerMoved(from)]);
+    frame(&ctx, &mut a, vec![press(from, true)]);
+    frame(&ctx, &mut a, vec![Event::PointerMoved(from + egui::vec2(0.0, 14.0))]);
+    frame(&ctx, &mut a, vec![Event::PointerMoved(to)]);
+    let going = a.ui.cal_drag.as_ref().and_then(|d| d.to);
+    assert_eq!(going, Some((lunch.start + 3600, lunch.end + 3600)), "the ghost an hour down");
+    frame(&ctx, &mut a, vec![press(to, false)]);
+    frame(&ctx, &mut a, vec![]);
+    assert!(a.ui.cal_drag.is_none());
+    let moved = a.session.find_event(&lunch.uid).unwrap().1.event.clone();
+    assert_eq!((moved.start, moved.end), (lunch.start + 3600, lunch.end + 3600));
+    assert!(a.session.notices.last().is_some_and(|n| n.text.contains("Moved to")), "{:?}", a.session.notices.last());
+    a.run("edit.undo", json!({}));
+    assert_eq!(a.session.find_event(&lunch.uid).unwrap().1.event.start, lunch.start, "Undo puts it back");
+    frame(&ctx, &mut a, vec![]);
+    // Its bottom edge, dragged an hour down: ends an hour later, starts when it did.
+    let r = chip(&ctx, &lunch);
+    let edge = egui::pos2(r.center().x, r.max.y - 3.0);
+    frame(&ctx, &mut a, vec![Event::PointerMoved(edge)]);
+    frame(&ctx, &mut a, vec![press(edge, true)]);
+    frame(&ctx, &mut a, vec![Event::PointerMoved(edge + egui::vec2(0.0, 14.0))]);
+    frame(&ctx, &mut a, vec![Event::PointerMoved(edge + egui::vec2(0.0, HOUR))]);
+    assert!(a.ui.cal_drag.as_ref().is_some_and(|d| d.resize), "{:?}", a.ui.cal_drag);
+    frame(&ctx, &mut a, vec![press(edge + egui::vec2(0.0, HOUR), false)]);
+    frame(&ctx, &mut a, vec![]);
+    let longer = a.session.find_event(&lunch.uid).unwrap().1.event.clone();
+    assert_eq!((longer.start, longer.end), (lunch.start, lunch.end + 3600));
+    a.run("edit.undo", json!({}));
+    // (A moment later: a press soon after a release is a double-click in the making, not a drag.)
+    for _ in 0..24 {
+        frame(&ctx, &mut a, vec![]);
+    }
+    // Esc lets go: nothing moves.
+    let from = chip(&ctx, &lunch).center();
+    frame(&ctx, &mut a, vec![Event::PointerMoved(from)]);
+    frame(&ctx, &mut a, vec![press(from, true)]);
+    frame(&ctx, &mut a, vec![Event::PointerMoved(from + egui::vec2(0.0, 14.0))]);
+    frame(&ctx, &mut a, vec![Event::PointerMoved(from + egui::vec2(0.0, HOUR))]);
+    assert!(a.ui.cal_drag.is_some());
+    frame(&ctx, &mut a, vec![key(Key::Escape, Modifiers::NONE)]);
+    frame(&ctx, &mut a, vec![press(from + egui::vec2(0.0, HOUR), false)]);
+    frame(&ctx, &mut a, vec![]);
+    assert_eq!(a.session.find_event(&lunch.uid).unwrap().1.event.start, lunch.start);
+    // A recurring one asks first; "This occurrence" makes an instance of its own.
+    let day = quatrelle_engine::model::dates::day_string(NOW.div_euclid(86_400));
+    a.run("event.create", json!({"summary": "Daily check", "start": format!("{day}T15:00"), "end": format!("{day}T15:30"), "repeat": "daily"}));
+    frame(&ctx, &mut a, vec![]);
+    let check = agenda(&a).into_iter().find(|i| i.summary == "Daily check" && i.start >= NOW - 86_400).unwrap();
+    assert!(check.recurring);
+    let from = chip(&ctx, &check).center();
+    frame(&ctx, &mut a, vec![Event::PointerMoved(from)]);
+    frame(&ctx, &mut a, vec![press(from, true)]);
+    frame(&ctx, &mut a, vec![Event::PointerMoved(from + egui::vec2(0.0, 14.0))]);
+    frame(&ctx, &mut a, vec![Event::PointerMoved(from + egui::vec2(0.0, HOUR))]);
+    frame(&ctx, &mut a, vec![press(from + egui::vec2(0.0, HOUR), false)]);
+    frame(&ctx, &mut a, vec![]);
+    let params = match a.ui.dialog.as_mut() {
+        Some(Dialog::MoveEvent(f)) => {
+            assert!(f.recurring && f.occurrence_allowed && !f.meeting);
+            f.this_occurrence = Some(true);
+            f.params(true)
+        }
+        other => panic!("asked nothing: {other:?}"),
+    };
+    frame(&ctx, &mut a, vec![]);
+    a.act(crate::Action::Submit("event.move", params));
+    assert!(a.ui.dialog.is_none());
+    let instances =
+        a.session.pim["sample"].events.iter().filter(|e| e.event.uid == check.uid && e.event.recurrence_id == Some(check.occurrence)).count();
+    assert_eq!(instances, 1, "an instance of its own");
+    assert!(agenda(&a).iter().any(|i| i.summary == "Daily check" && i.start == check.start + 3600));
+    // Someone else's meeting can't be taken hold of.
+    a.run("calendar.goto", json!({"step": 1}));
+    frame(&ctx, &mut a, vec![]);
+    frame(&ctx, &mut a, vec![]);
+    let mix = agenda(&a).into_iter().find(|i| i.summary == "Sound mix playback").unwrap();
+    assert!(!mix.movable);
+    let from = chip(&ctx, &mix).center();
+    frame(&ctx, &mut a, vec![Event::PointerMoved(from)]);
+    frame(&ctx, &mut a, vec![press(from, true)]);
+    frame(&ctx, &mut a, vec![Event::PointerMoved(from + egui::vec2(0.0, HOUR))]);
+    assert!(a.ui.cal_drag.is_none());
+    frame(&ctx, &mut a, vec![press(from + egui::vec2(0.0, HOUR), false)]);
+    frame(&ctx, &mut a, vec![]);
+    assert_eq!(a.session.find_event(&mix.uid).unwrap().1.event.start, mix.start);
     let _ = std::fs::remove_dir_all(dir);
 }

@@ -212,10 +212,13 @@ impl Data {
                 // A calendar asked for from a date: what ends then or later, and recurring series.
                 let since = op.find("Constant").and_then(|c| c.attr("Value")).filter(|v| v.contains('T')).map(str::to_string);
                 let wanted = |e: &El| since.as_deref().is_none_or(|s| e.text_of("End").is_none_or(|end| end >= s) || e.child("Recurrence").is_some());
+                // Occurrences that became items of their own are listed by their series, not
+                // by the folder.
+                let own = |e: &El| !matches!(e.text_of("CalendarItemType"), Some("Occurrence" | "Exception"));
                 let items: String = self
                     .pim
                     .iter()
-                    .filter(|(_, f, e)| *f == folder && wanted(e))
+                    .filter(|(_, f, e)| *f == folder && wanted(e) && own(e))
                     .map(|(id, _, _)| format!("<t:Item><t:ItemId Id=\"{id}\"/></t:Item>"))
                     .collect();
                 out.push(ok(format!("<m:RootFolder IncludesLastItemInRange=\"true\"><t:Items>{items}</t:Items></m:RootFolder>")));
@@ -371,6 +374,23 @@ impl Data {
             }
             "GetItem" => {
                 let mime = op.find("IncludeMimeContent").is_some_and(|m| m.text == "true");
+                // An occurrence of a series by its place in it: its own item, made on demand.
+                let occurrences: Vec<(String, usize)> = op
+                    .child("ItemIds")
+                    .map(|l| {
+                        l.children("OccurrenceItemId")
+                            .filter_map(|o| Some((o.attr("RecurringMasterId")?.to_string(), o.attr("InstanceIndex")?.parse().ok()?)))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                for (master, index) in occurrences {
+                    match self.occurrence_item(&master, index) {
+                        Some(id) => {
+                            out.push(ok(format!("<m:Items><t:CalendarItem><t:ItemId Id=\"{id}\" ChangeKey=\"ck\"/></t:CalendarItem></m:Items>")))
+                        }
+                        None => out.push(err("ErrorCalendarOccurrenceIndexIsOutOfRecurrenceRange")),
+                    }
+                }
                 for id in ids(op.child("ItemIds")) {
                     if self.pim.iter().any(|(i, f, _)| *i == id && self.unrouted(f)) {
                         out.push(err("ErrorItemNotFound"));
@@ -378,6 +398,10 @@ impl Data {
                     }
                     if let Some((_, _, el)) = self.pim.iter().find(|(i, _, _)| *i == id) {
                         let mut el = el.clone();
+                        // A series lists the occurrences that became items of their own.
+                        if el.child("Recurrence").is_some() {
+                            el.kids.extend(parse(&self.modified_occurrences(&id)).kids);
+                        }
                         el.kids.insert(
                             0,
                             El {
@@ -410,6 +434,9 @@ impl Data {
             }
             "CreateItem" => {
                 let send = op.attr("MessageDisposition") == Some("SendAndSaveCopy");
+                if let Some(how) = op.attr("SendMeetingInvitations") {
+                    self.meeting_sends.push(how.to_string());
+                }
                 let folder = op.child("SavedItemFolderId").and_then(|s| s.kids.first()).and_then(|f| self.folder_id(f)).unwrap_or_default();
                 for m in op.child("Items").map(|i| i.kids.clone()).unwrap_or_default() {
                     let sticky = m.text_of("ItemClass").is_some_and(|c| c.starts_with("IPM.StickyNote"));
@@ -487,6 +514,15 @@ impl Data {
                     if !self.may_change(&id) {
                         out.push(err("ErrorAccessDenied"));
                         continue;
+                    }
+                    // As Exchange: resolving against the item as last seen needs its change key.
+                    let keyed = ch.child("ItemId").and_then(|i| i.attr("ChangeKey")).is_some_and(|k| !k.is_empty());
+                    if op.attr("ConflictResolution") == Some("AutoResolve") && !keyed {
+                        out.push(err("ErrorChangeKeyRequiredForWriteOperations"));
+                        continue;
+                    }
+                    if let Some(how) = op.attr("SendMeetingInvitationsOrCancellations").filter(|_| self.pim.iter().any(|(i, _, _)| *i == id)) {
+                        self.meeting_sends.push(how.to_string());
                     }
                     if let Some((_, _, el)) = self.pim.iter_mut().find(|(i, _, _)| *i == id) {
                         let updates = ch.child("Updates").map(|u| u.kids.clone()).unwrap_or_default();

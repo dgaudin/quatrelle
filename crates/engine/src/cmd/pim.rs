@@ -59,7 +59,7 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             Ok(json!(s.agenda(from, to).iter().map(|i| json!({
                 "uid": i.uid, "summary": i.summary, "location": i.location, "start": i.start, "end": i.end, "allDay": i.all_day,
                 "occurrence": i.occurrence, "recurring": i.recurring, "account": i.account, "calendar": i.calendar,
-                "needsReply": i.needs_reply, "status": i.status,
+                "needsReply": i.needs_reply, "status": i.status, "movable": i.movable, "organized": i.organized,
             })).collect::<Vec<_>>()))
         })
         .params(r#"{"from"?: date or date-time, "to"?: …} (default: what the calendar shows)"#),
@@ -75,9 +75,9 @@ pub(super) fn commands() -> Vec<CommandSpec> {
                 e.organizer = Some(quatrelle_model::ical::Attendee { email: me.1, name: me.0, partstat: "ACCEPTED".into(), rsvp: false });
             }
             let r = s.create_event(Some(&account), p::str(v, "calendar"), e.clone())?;
-            if let Some(uid) = r.get("uid").and_then(Value::as_str) {
-                e.uid = uid.to_string();
-                s.send_invitations(&e, &account, "REQUEST")?;
+            // The guests are invited: by the server where it does that, else by mail.
+            if let Some(uid) = r.get("uid").and_then(Value::as_str).map(str::to_string) {
+                s.tell_guests(&account, &uid, None, true)?;
             }
             Ok(r)
         })
@@ -130,14 +130,39 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             let e = event_from(s, v, current)?;
             let r = s.update_event(&uid, |x| *x = e)?;
             // The user's own meeting: the guests hear of the change.
-            if let Some((account, stored)) = s.find_event(&uid).map(|(a, e)| (a.to_string(), e.event.clone()))
-                && organized_by_me(s, &stored)
-            {
-                s.send_invitations(&stored, &account, "REQUEST")?;
+            if let Some((account, real)) = s.find_event(&uid).map(|(a, e)| (a.to_string(), e.event.uid.clone())) {
+                s.tell_guests(&account, &real, None, true)?;
             }
             Ok(r)
         })
         .params(r#"{"uid": string, … the fields of event.create to change}"#),
+        CommandSpec::new("event.move", "Move event", "Calendar › Event", |s, v| {
+            let uid = p::req_str(v, "uid")?.to_string();
+            let occurrence = p::i64(v, "occurrence");
+            let master = s.find_event(&uid).map(|(_, e)| e.event.clone()).ok_or_else(|| CmdError::Params(format!("no event `{uid}`")))?;
+            // How long it is now: that occurrence's own length when it has one of its own.
+            let current = occurrence
+                .and_then(|at| s.find_event(&uid).and_then(|(a, _)| s.pim.get(a)).and_then(|p| p.events.iter().find(|e| e.event.uid == master.uid && e.event.recurrence_id == Some(at))))
+                .map_or_else(|| master.clone(), |e| e.event.clone());
+            let off = i64::from(s.clock.offset);
+            let when = |k: &str| -> Result<Option<(i64, bool)>, CmdError> {
+                match p::str(v, k) {
+                    Some(x) => parse_local(x, off).map(Some).ok_or_else(|| CmdError::Params(format!("`{x}` is not a date (YYYY-MM-DD or YYYY-MM-DDTHH:MM)"))),
+                    None => Ok(v.get(k).and_then(Value::as_i64).map(|n| (n, false))),
+                }
+            };
+            let (mut start, _) = when("start")?.ok_or_else(|| CmdError::Params("`start` is needed".into()))?;
+            let mut end = match when("end")? {
+                Some((t, all_day)) => if all_day && current.all_day { t + 86_400 } else { t },
+                None => start.saturating_add(current.end - current.start),
+            };
+            if current.all_day {
+                start -= start.rem_euclid(86_400);
+                end = (end - end.rem_euclid(86_400)).max(start + 86_400);
+            }
+            s.move_event(&uid, occurrence, start, end, p::bool(v, "send").unwrap_or(true))
+        })
+        .params(r#"{"uid": string, "start": "YYYY-MM-DD[THH:MM]" | unix seconds, "end"?: … (else as long as before), "occurrence"?: unix seconds (that occurrence of a recurring event alone, as calendar.events names it), "send"?: bool (the guests of a meeting you organize hear of it; default true)}"#),
         CommandSpec::new("event.delete", "Delete event", "Calendar › Event", |s, v| {
             let uid = p::req_str(v, "uid")?.to_string();
             let before = s.find_event(&uid).map(|(a, e)| (a.to_string(), e.event.clone()));
@@ -444,8 +469,5 @@ pub(super) fn card_from(v: &Value, mut c: quatrelle_model::vcard::Card) -> Resul
 
 /// The user organizes this event and it has guests to tell.
 pub(super) fn organized_by_me(s: &Session, e: &quatrelle_model::ical::CalEvent) -> bool {
-    !e.attendees.is_empty()
-        && e.organizer.as_ref().is_some_and(|o| {
-            s.accounts.iter().any(|a| a.config.email.eq_ignore_ascii_case(&o.email) || a.config.username.eq_ignore_ascii_case(&o.email))
-        })
+    s.organizes(e)
 }

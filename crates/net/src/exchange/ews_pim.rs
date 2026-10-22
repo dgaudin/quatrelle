@@ -4,8 +4,10 @@
 //! The mailbox's Calendar and Contacts folders: appointments (with their recurrence, read as the
 //! pattern and range Graph also uses, so [`crate::graph_pim::rrule_of`] makes the RRULE) and
 //! contacts. What changed here goes first: new appointments and contacts are created, changed
-//! appointments updated field by field, changed contacts made again, deletions done (no meeting
-//! mail is ever sent); then both folders are read again.
+//! appointments updated field by field (an occurrence changed on its own through the
+//! occurrence's own item), changed contacts made again, deletions done; the server mails the
+//! guests of a meeting only when the change asks it to ([`StoredEvent::notify`]). Then both
+//! folders are read again, a series' changed occurrences with it.
 
 use std::collections::HashMap;
 
@@ -109,6 +111,14 @@ fn items_in_from(c: &Client, parent: &str, extra: &str, restriction: Option<Stri
             break;
         }
     }
+    let out = get_items(c, &ids, extra)?;
+    log::info!("{} items read in {:.1} s", out.len(), began.elapsed().as_secs_f32());
+    Ok(out)
+}
+
+/// Items by id, with all their properties (bodies as text), in batches; one the server can't
+/// give (gone meanwhile) is left out.
+fn get_items(c: &Client, ids: &[String], extra: &str) -> Result<Vec<El>> {
     let mut out = Vec::new();
     for chunk in ids.chunks(BATCH) {
         let list: String = chunk.iter().map(|id| format!("<t:ItemId Id=\"{}\"/>", esc(id))).collect();
@@ -127,7 +137,6 @@ fn items_in_from(c: &Client, parent: &str, extra: &str, restriction: Option<Stri
             }
         }
     }
-    log::info!("{} items read in {:.1} s", out.len(), began.elapsed().as_secs_f32());
     Ok(out)
 }
 
@@ -319,13 +328,15 @@ fn public_items(c: &Client, id: &str, replica: Option<&str>, total: u32, since: 
 }
 
 mod contacts;
-mod events;
+pub(crate) mod events;
+mod push;
 mod sync;
 
 use contacts::{NOTE_COLOR, contact_xml, note_xml};
 pub use contacts::{card_of, note_of};
-use events::event_fields;
-pub use events::event_of;
+use events::{event_fields, modified_occurrence_ids, occurrence_item_id};
+pub use events::{event_of, exception_of};
+use push::push_events;
 pub use sync::sync;
 
 #[cfg(test)]

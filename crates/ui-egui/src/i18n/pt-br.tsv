@@ -1134,3 +1134,15 @@ month	May	maio
 	Other terms	Outros termos
 	Clear	Limpar
 	No results. Try fewer words.	Nenhum resultado. Tente menos palavras.
+	Move this occurrence or the whole series?	Mover esta ocorrência ou a série inteira?
+	This occurrence	Esta ocorrência
+	The whole series	A série inteira
+	On Microsoft 365, only the whole series can be moved from here.	No Microsoft 365, só a série inteira pode ser movida daqui.
+	Send the update to the attendees?	Enviar a atualização aos participantes?
+	Send update	Enviar atualização
+	Save without sending	Salvar sem enviar
+	Microsoft 365 tells the attendees of the change itself.	O Microsoft 365 avisa os participantes da alteração por conta própria.
+	Moved to {when}. Ctrl+Z puts it back.	Movido para {when}. Ctrl+Z desfaz.
+	Snooze 5 minutes	Adiar 5 minutos
+	Show reminders on top of other windows	Mostrar lembretes sobre as outras janelas
+	The Reminders window opens in a window of its own when a reminder comes, even while Quatrelle is minimized	A janela Lembretes abre em uma janela própria quando um lembrete chega, mesmo com o Quatrelle minimizado

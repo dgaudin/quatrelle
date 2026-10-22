@@ -11,47 +11,7 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
             Err(e) => out.errors.push(e.to_string()),
         }
     }
-    for e in pim.events.iter().filter(|e| e.dirty) {
-        let fields = event_fields(&e.event);
-        let owner = quatrelle_model::pim::shared_calendar_owner(&e.calendar);
-        let r = if e.href.is_empty() {
-            let body: String = fields.iter().map(|(_, x)| x.as_str()).collect();
-            c.call_one(&format!(
-                "<m:CreateItem SendMeetingInvitations=\"SendToNone\"><m:SavedItemFolderId>{}</m:SavedItemFolderId>\
-                 <m:Items><t:CalendarItem>{body}</t:CalendarItem></m:Items></m:CreateItem>",
-                calendar_folder(owner.map(|o| c.address_of(o)).as_deref())
-            ))
-            .map(|m| new_id(&m))
-        } else {
-            let mut updates: String = fields
-                .iter()
-                .map(|(uri, x)| format!("<t:SetItemField><t:FieldURI FieldURI=\"{uri}\"/><t:CalendarItem>{x}</t:CalendarItem></t:SetItemField>"))
-                .collect();
-            if e.event.rrule.is_none() {
-                updates.push_str("<t:DeleteItemField><t:FieldURI FieldURI=\"calendar:Recurrence\"/></t:DeleteItemField>");
-            }
-            c.call_one(&format!(
-                "<m:UpdateItem ConflictResolution=\"AlwaysOverwrite\" SendMeetingInvitationsOrCancellations=\"SendToNone\"><m:ItemChanges>\
-                 <t:ItemChange><t:ItemId Id=\"{}\"/><t:Updates>{updates}</t:Updates></t:ItemChange></m:ItemChanges></m:UpdateItem>",
-                esc(&e.href)
-            ))
-            .map(|m| {
-                let (id, key) = new_id(&m);
-                (if id.is_empty() { e.href.clone() } else { id }, key)
-            })
-        };
-        match r {
-            // Someone else's event stays in their calendar.
-            Ok((href, etag)) => out.pushed_events.push(StoredEvent {
-                calendar: if owner.is_some() { e.calendar.clone() } else { CALENDAR.into() },
-                href,
-                etag,
-                event: e.event.clone(),
-                dirty: false,
-            }),
-            Err(x) => out.errors.push(format!("{}: {x}", e.event.summary)),
-        }
-    }
+    push_events(c, pim, &mut out);
     for k in pim.cards.iter().filter(|k| k.dirty) {
         // Made again: a contact's addresses and numbers are simplest replaced whole.
         if let Some(old) = k.href.strip_prefix("contact:")
@@ -74,15 +34,7 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
         }
     }
     // Then both folders, read again.
-    for it in items(c, "calendar", Some(now - CALENDAR_BACK))? {
-        if let Some(event) = event_of(&it) {
-            let (href, etag) = it
-                .child("ItemId")
-                .map(|i| (i.attr("Id").unwrap_or("").to_string(), i.attr("ChangeKey").unwrap_or("").to_string()))
-                .unwrap_or_default();
-            out.events.push(StoredEvent { calendar: CALENDAR.into(), href, etag, event, dirty: false });
-        }
-    }
+    read_calendar(c, items(c, "calendar", Some(now - CALENDAR_BACK))?, CALENDAR, &mut out);
     // Named as the server names it, in the mailbox's language ("Agenda"), as Outlook shows it.
     let own = folder_name(c, "calendar").unwrap_or_else(|| "Calendar".into());
     let mut calendars = vec![CalendarInfo { id: CALENDAR.into(), name: own, color: 0, read_only: false, ctag: String::new(), group: String::new() }];
@@ -172,15 +124,7 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
                 if !can_edit && let Err(e) = &folder_rights {
                     log::info!("{email}'s calendar rights: {e}");
                 }
-                for it in list {
-                    if let Some(event) = event_of(&it) {
-                        let (href, etag) = it
-                            .child("ItemId")
-                            .map(|i| (i.attr("Id").unwrap_or("").to_string(), i.attr("ChangeKey").unwrap_or("").to_string()))
-                            .unwrap_or_default();
-                        out.events.push(StoredEvent { calendar: id.clone(), href, etag, event, dirty: false });
-                    }
-                }
+                read_calendar(c, list, &id, &mut out);
                 out.synced_calendars.push(id.clone());
             }
             // One asked for by hand says why it's missing; a shared mailbox whose calendar
@@ -254,7 +198,7 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
                     for it in found {
                         if let Some(event) = event_of(&it) {
                             let href = it.child("ItemId").and_then(|i| i.attr("Id")).unwrap_or("").to_string();
-                            out.events.push(StoredEvent { calendar: key.clone(), href, etag: String::new(), event, dirty: false });
+                            out.events.push(StoredEvent { calendar: key.clone(), href, etag: String::new(), event, dirty: false, notify: false });
                         }
                     }
                     if let Some(cals) = out.calendars.as_mut() {
@@ -278,6 +222,36 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
     out.books = Some(books);
     read_notes(c, pim, &mut out);
     Ok(out)
+}
+
+/// A calendar's items, read, into `out`: each appointment and series as an event, and the
+/// occurrences of a series changed on their own (moved, renamed) as instances of their own —
+/// the series lists their items, which are read in a batch — so that a meeting moved in
+/// Outlook, or dragged here, shows on its new day rather than its old one.
+fn read_calendar(c: &Client, list: Vec<El>, calendar: &str, out: &mut DavSync) {
+    let id_of = |it: &El| {
+        it.child("ItemId").map(|i| (i.attr("Id").unwrap_or("").to_string(), i.attr("ChangeKey").unwrap_or("").to_string())).unwrap_or_default()
+    };
+    let mut changed: Vec<String> = Vec::new();
+    for it in &list {
+        if let Some(event) = event_of(it) {
+            let (href, etag) = id_of(it);
+            out.events.push(StoredEvent { calendar: calendar.into(), href, etag, event, dirty: false, notify: false });
+            changed.extend(modified_occurrence_ids(it));
+        }
+    }
+    changed.truncate(MAX_ITEMS);
+    match get_items(c, &changed, "") {
+        Ok(found) => {
+            for it in &found {
+                if let Some(event) = exception_of(it) {
+                    let (href, etag) = id_of(it);
+                    out.events.push(StoredEvent { calendar: calendar.into(), href, etag, event, dirty: false, notify: false });
+                }
+            }
+        }
+        Err(e) => out.errors.push(format!("changed occurrences: {e}")),
+    }
 }
 
 /// This account's contacts, read again: its address book in `out`.
