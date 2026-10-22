@@ -272,16 +272,19 @@ fn exchange_tells_the_guests_itself_and_mail_tells_them_once() {
         .as_str()
         .unwrap()
         .to_string();
-    // The invitations mailed so far: each one's method and the event's SEQUENCE.
+    // The invitations mailed so far: each one's method and the event's SEQUENCE (by SEQUENCE:
+    // sent in the same second, the folder lists them in no fixed order).
     let sent = |s: &Session| -> Vec<(String, u32)> {
         let folder = s.store.as_ref().unwrap().load_folder("sample", "Sent").unwrap();
-        folder
+        let mut v: Vec<(String, u32)> = folder
             .messages
             .iter()
             .filter(|m| m.subject == "Invitation: Trailer review")
             .filter_map(|m| s.message_calendar(&m.key))
             .map(|c| (c.method.unwrap_or_default(), c.events.first().map_or(0, |e| e.sequence)))
-            .collect()
+            .collect();
+        v.sort();
+        v
     };
     assert_eq!(sent(&s), [("REQUEST".to_string(), 0)]);
     let at = crate::parse_local("2026-10-21T16:00", 0).unwrap().0;
