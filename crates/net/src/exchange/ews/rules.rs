@@ -136,6 +136,7 @@ pub(super) fn server_rule(r: &El) -> quatrelle_model::organize::ForeignRule {
         server: true,
         remote_id: Some(id.clone()),
         priority: r.text_of("Priority").and_then(|p| p.trim().parse().ok()),
+        refused: None,
     });
     ForeignRule { account: String::new(), id, name, enabled, runnable, rule, summary }
 }

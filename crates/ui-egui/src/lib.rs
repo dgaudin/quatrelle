@@ -108,6 +108,32 @@ pub(crate) fn use_editor(st: &mut UiState, id: u64) {
     st.editor = st.editors.remove(&id);
 }
 
+/// How a ribbon tab's groups fit the window, from the frame before ([`widgets::GroupFit`]).
+#[derive(Clone, Debug, PartialEq)]
+pub struct RibbonGroups {
+    /// Groups from this one on are drawn compact (`usize::MAX`: not known yet, all large).
+    pub compact_from: usize,
+    /// Each group's column widths when compact.
+    pub columns: Vec<Vec<f32>>,
+    /// How far past the window's right edge the last group reached in that frame (at most
+    /// zero when the ribbon fits).
+    pub overflow: f32,
+}
+
+impl Default for RibbonGroups {
+    /// Not measured yet: every group large.
+    fn default() -> Self {
+        RibbonGroups { compact_from: usize::MAX, columns: Vec::new(), overflow: 0.0 }
+    }
+}
+
+impl RibbonGroups {
+    /// The fit of a tab drawn this frame, as the tests look at it.
+    pub fn of(ui: &UiState, module: Module, tab: RibbonTab) -> Option<&RibbonGroups> {
+        ui.ribbon_groups.get(&format!("{module:?}/{tab:?}"))
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RibbonTab {
     Home,
@@ -254,6 +280,9 @@ pub struct UiState {
     /// The ribbon's buttons from this one on go without their labels: it didn't fit the window
     /// ([`widgets::RibbonFit`]).
     ribbon_icons_from: usize,
+    /// The ribbon's groups as they fit the window, per module and tab (`"Mail/Home"`): which
+    /// are drawn compact, and their columns ([`widgets::GroupFit`]).
+    ribbon_groups: HashMap<String, RibbonGroups>,
     pub dialog: Option<Dialog>,
     previews: HashMap<(MessageKey, usize), Option<egui::TextureHandle>>,
     /// Decoded web pictures, by address.
@@ -400,6 +429,7 @@ impl MailApp {
                 attachment_hovered: false,
                 ribbon_rect: None,
                 ribbon_icons_from: usize::MAX,
+                ribbon_groups: HashMap::new(),
                 dialog: None,
                 previews: HashMap::new(),
                 web_pictures: HashMap::new(),

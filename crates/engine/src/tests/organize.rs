@@ -286,6 +286,36 @@ fn a_rule_runs_now_on_the_inbox() {
     assert!(s.list.iter().any(|m| m.from.email == "zoe@studio.example"), "and into Archive, on screen");
 }
 
+/// A rule made from a message in another folder runs now on that folder's mail (run on the
+/// Inbox alone, it seemed to do nothing): the folder is the rule's account's, or the current
+/// one; a folder that isn't there is refused, and the rules are left as they were.
+#[test]
+fn a_rule_runs_now_on_the_folder_it_was_made_from() {
+    let mut s = sample_session("rule-folder");
+    s.run("rules.add", &json!({"rule": {"name": "Zoe to Archive", "conditions": [{"if": "from", "value": "zoe@"}], "actions": [{"do": "moveToRole", "value": "archive"}]}})).unwrap();
+    s.run("rules.run", &json!({"index": 0, "inbox": true})).unwrap();
+    let zoe =
+        |s: &mut Session, folder: &str| s.folder_state("sample", folder).messages.iter().filter(|m| m.from.email == "zoe@studio.example").count();
+    let in_archive = zoe(&mut s, "Archive");
+    assert!(in_archive >= 1 && zoe(&mut s, "INBOX") == 0);
+    s.run(
+        "rules.add",
+        &json!({"rule": {"name": "Flag Zoe", "account": "sample", "conditions": [{"if": "from", "value": "zoe@"}], "actions": [{"do": "flag"}]}}),
+    )
+    .unwrap();
+    // On the Inbox: nothing of Zoe's there now.
+    assert_eq!(s.run("rules.run", &json!({"index": 1, "inbox": true})).unwrap()["matched"], 0);
+    // On Archive, by name: her mail there is flagged, whatever folder is on screen.
+    let r = s.run("rules.run", &json!({"index": 1, "account": "sample", "folder": "Archive"})).unwrap();
+    assert_eq!(r["matched"], json!(in_archive));
+    assert!(s.folder_state("sample", "Archive").messages.iter().filter(|m| m.from.email == "zoe@studio.example").all(|m| m.flags.flagged));
+    // Without the account: the rule's, else the current one.
+    assert_eq!(s.run("rules.run", &json!({"index": 1, "folder": "Archive"})).unwrap()["matched"], json!(in_archive));
+    assert!(s.run("rules.run", &json!({"index": 1, "folder": "Nowhere"})).is_err());
+    assert_eq!(s.rules.len(), 2, "the rules are as they were after a refusal");
+    assert!(s.run("rules.run", &json!({"folder": "Archive", "account": "nope"})).is_err());
+}
+
 /// Mail a rule deletes isn't announced (mail it files in a folder is).
 #[test]
 fn mail_a_rule_deletes_is_not_announced() {

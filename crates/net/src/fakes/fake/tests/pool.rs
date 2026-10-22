@@ -100,6 +100,7 @@ fn rules_reach_an_imap_accounts_sieve_script() {
         server: true,
         remote_id: None,
         priority: None,
+        refused: None,
     };
     pool.submit(Job::SetServerRules { account: "a1".into(), rules: vec![rule.clone()], delete: Vec::new(), categories: Vec::new() });
     let seen = until(&pool, "rules written", |e| matches!(e, Event::ServerRules { ids, error: None, .. } if !ids.is_empty()));

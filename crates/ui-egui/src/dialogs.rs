@@ -291,6 +291,9 @@ impl Dialog {
             smtp_security: a.smtp.security,
             smtp_sign_in: SmtpSignIn::of(a),
             online_only: a.online_only,
+            oauth: a.oauth.clone(),
+            client_id: a.oauth_client_id.clone().unwrap_or_default(),
+            tenant: a.oauth_tenant.clone().unwrap_or_default(),
             error: None,
         }))
     }
@@ -342,8 +345,10 @@ impl Dialog {
     /// Create Rule. Made from a message, it's that message's account's (whose folders it offers),
     /// and it runs on the server too when the server keeps rules (`server`): Exchange's rules work
     /// while Quatrelle is closed. (It used to belong to no account, filed into an Archive folder
-    /// an Exchange mailbox may not have — the rule then did nothing.)
-    pub fn rule_from(sender: &str, account: Option<&str>, server: bool) -> Dialog {
+    /// an Exchange mailbox may not have — the rule then did nothing.) Once saved it runs on the
+    /// mail already in `folder` (the message's: made from one in another folder, it ran on the
+    /// Inbox alone, and seemed to do nothing), or the Inbox.
+    pub fn rule_from(sender: &str, account: Option<&str>, server: bool, folder: Option<&str>) -> Dialog {
         Dialog::EditRule(Box::new(RuleForm {
             index: None,
             remote: None,
@@ -356,6 +361,8 @@ impl Dialog {
             stop: false,
             server: server && account.is_some(),
             run_now: true,
+            run_in: folder.filter(|_| account.is_some()).map(str::to_string),
+            refused: None,
             error: None,
         }))
     }

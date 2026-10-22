@@ -27,10 +27,50 @@ fn app(name: &str) -> (MailApp, std::path::PathBuf) {
 }
 
 fn frame(ctx: &egui::Context, app: &mut MailApp, events: Vec<Event>) {
-    let input = RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1280.0, 800.0))), events, ..Default::default() };
+    frame_sized(ctx, app, events, egui::vec2(1280.0, 800.0));
+}
+
+/// A frame in a window of `size`.
+fn frame_sized(ctx: &egui::Context, app: &mut MailApp, events: Vec<Event>, size: egui::Vec2) {
+    let input = RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, size)), events, ..Default::default() };
     let mut out = ctx.run_ui(input, |ui| app.ui(ui));
     // No renderer here: drop the texture uploads deliberately.
     out.textures_delta.clear();
+}
+
+/// The Home ribbon fits the window: at a width that hasn't room for every group's large
+/// buttons (1320 px, since Quick Steps came in, and 1100), the last groups are drawn compact —
+/// small buttons stacked — as many as it takes, and every group ends within the window; given
+/// the room again, they're large again.
+#[test]
+fn the_ribbon_fits_the_window_by_drawing_its_last_groups_compact() {
+    let (mut a, dir) = app("ribbon-fit");
+    let ctx = egui::Context::default();
+    let fit = |a: &MailApp| crate::RibbonGroups::of(&a.ui, quatrelle_engine::Module::Mail, crate::RibbonTab::Home).cloned().unwrap_or_default();
+    let mut compact_at = Vec::new();
+    for width in [1320.0, 1100.0] {
+        // The first frame measures; the next draws the fit; one more proves it steady.
+        for _ in 0..3 {
+            frame_sized(&ctx, &mut a, vec![], egui::vec2(width, 800.0));
+        }
+        let f = fit(&a);
+        assert!(f.overflow <= 0.5, "{width} px: the ribbon reaches {} px past the window", f.overflow);
+        assert!(f.compact_from >= 1, "New mail stays large");
+        compact_at.push(f.compact_from.min(f.columns.len()));
+        let again = fit(&a);
+        frame_sized(&ctx, &mut a, vec![], egui::vec2(width, 800.0));
+        assert_eq!(fit(&a).compact_from, again.compact_from, "{width} px: steady from one frame to the next");
+    }
+    let f = fit(&a);
+    assert!(f.compact_from < f.columns.len(), "1100 px: some groups are compact ({f:?})");
+    assert!(compact_at[1] <= compact_at[0], "narrower: at least as many compact groups");
+    for _ in 0..3 {
+        frame_sized(&ctx, &mut a, vec![], egui::vec2(2200.0, 800.0));
+    }
+    let f = fit(&a);
+    assert_eq!(f.compact_from, f.columns.len(), "room for all: every group large again ({f:?})");
+    assert!(f.overflow <= 0.5);
+    let _ = std::fs::remove_dir_all(dir);
 }
 
 fn key(k: Key, modifiers: Modifiers) -> Event {
@@ -137,7 +177,7 @@ pub(crate) fn tour() {
             Dialog::delete_folder(&a.session, &projects),
             Dialog::NewCategory { name: "Clients".into(), color: 3, error: Some("taken".into()) },
             Dialog::Rules,
-            Dialog::rule_from("zoe@studio.example", Some("sample"), true),
+            Dialog::rule_from("zoe@studio.example", Some("sample"), true, Some("Archive")),
             Dialog::spelling(),
             Dialog::add_account_with("zoe@gmail.com", true),
             jmap_form(),

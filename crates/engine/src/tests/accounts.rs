@@ -99,6 +99,56 @@ fn oauth_accounts_sign_in_through_the_browser() {
     let _ = std::fs::remove_dir_all(store.root());
 }
 
+/// An organisation's own Microsoft app registration (single tenant) goes with the account: the
+/// account signs in with it even when this copy has none built in, it's kept and read back,
+/// changed or let go of from the settings, and checked for what it could be. Found settings say
+/// when Microsoft 365 hosts the domain (Exchange Online through Graph is proposed).
+#[test]
+fn microsoft_accounts_can_bring_their_own_app_registration() {
+    let store = temp("own-app");
+    let mut s = Session::open(Some(store), quatrelle_model::dates::Clock::new(NOW, 0));
+    assert!(s.oauth_available.is_empty(), "nothing built in here");
+    assert!(s.run("account.add", &json!({"email": "zoe@contoso.example", "graph": true})).is_err(), "no sign-in to offer");
+    assert!(s.run("account.add", &json!({"email": "zoe@contoso.example", "graph": true, "oauthClientId": "not a client id!"})).is_err());
+    assert!(
+        s.run("account.add", &json!({"email": "zoe@contoso.example", "graph": true, "oauthClientId": "abc-123", "oauthTenant": "bad tenant"}))
+            .is_err()
+    );
+    assert!(s.run("account.add", &json!({"email": "zoe@contoso.example", "graph": true, "oauthClientId": 5})).is_err());
+    let r = s.run(
+        "account.add",
+        &json!({"email": "zoe@contoso.example", "graph": true, "oauthClientId": " 11111111-2222-3333-4444-555555555555 ", "oauthTenant": "contoso.onmicrosoft.com"}),
+    )
+    .unwrap();
+    let id = r["account"].as_str().unwrap().to_string();
+    let c = s.account(&id).unwrap().config.clone();
+    assert_eq!(c.oauth_client_id.as_deref(), Some("11111111-2222-3333-4444-555555555555"));
+    assert_eq!(c.oauth_tenant.as_deref(), Some("contoso.onmicrosoft.com"));
+    assert_eq!((c.oauth.as_deref(), c.graph.as_deref()), (Some("microsoft"), Some(quatrelle_model::GRAPH_URL)));
+    assert!(matches!(s.take_jobs().as_slice(), [Job::SignIn { account }] if account.own_oauth_app()), "signs in with its own registration");
+    // Kept, and read back.
+    let root = s.store.as_ref().unwrap().root().to_path_buf();
+    let s2 = Session::open(Some(Store::open(&root).unwrap()), quatrelle_model::dates::Clock::new(NOW, 0));
+    assert_eq!(s2.account(&id).unwrap().config.oauth_tenant.as_deref(), Some("contoso.onmicrosoft.com"));
+    // Changed, checked, and let go of (the built-in registration again).
+    s.run("account.update", &json!({"account": id, "oauthTenant": "organizations"})).unwrap();
+    let c = s.account(&id).unwrap().config.clone();
+    assert_eq!((c.oauth_client_id.is_some(), c.oauth_tenant.as_deref()), (true, Some("organizations")));
+    assert!(s.run("account.update", &json!({"account": id, "oauthTenant": "x y"})).is_err());
+    assert!(s.run("account.update", &json!({"account": id, "oauthClientId": "a/b"})).is_err());
+    s.run("account.update", &json!({"account": id, "oauthClientId": "", "oauthTenant": null})).unwrap();
+    let c = s.account(&id).unwrap().config.clone();
+    assert_eq!((c.oauth_client_id, c.oauth_tenant), (None, None));
+    // Found settings say when Microsoft 365 hosts the domain.
+    s.run("account.discover", &json!({"email": "ana@contoso.example"})).unwrap();
+    let mut found = quatrelle_model::AccountConfig::guess("ana@contoso.example");
+    found.graph = Some(quatrelle_model::GRAPH_URL.into());
+    s.apply(Event::Discovered { email: "ana@contoso.example".into(), config: Some(Box::new(found)), source: "Microsoft 365".into() });
+    let r = s.run("account.discover", &json!({"email": "ana@contoso.example"})).unwrap();
+    assert_eq!(r["graph"].as_str(), Some(quatrelle_model::GRAPH_URL));
+    let _ = std::fs::remove_dir_all(root);
+}
+
 #[test]
 fn server_settings_are_looked_up_once() {
     let mut s = Session::blank();

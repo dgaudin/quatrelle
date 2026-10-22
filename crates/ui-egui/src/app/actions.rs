@@ -441,7 +441,8 @@ impl MailApp {
         }
         // A Microsoft account with a password, which Microsoft refuses: Sign in with Microsoft.
         if config.oauth.is_some()
-            || quatrelle_engine::model::microsoft_password_account(&config) && self.session.oauth_available.iter().any(|p| p == "microsoft")
+            || quatrelle_engine::model::microsoft_password_account(&config)
+                && quatrelle_engine::model::microsoft_sign_in_possible(&config, &self.session.oauth_available)
         {
             self.run("account.signIn", json!({"account": id}));
         } else {
