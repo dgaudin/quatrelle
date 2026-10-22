@@ -285,6 +285,9 @@ impl Dialog {
             smtp_security: a.smtp.security,
             smtp_sign_in: SmtpSignIn::of(a),
             online_only: a.online_only,
+            oauth: a.oauth.clone(),
+            client_id: a.oauth_client_id.clone().unwrap_or_default(),
+            tenant: a.oauth_tenant.clone().unwrap_or_default(),
             error: None,
         }))
     }

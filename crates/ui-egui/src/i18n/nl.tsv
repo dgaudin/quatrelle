@@ -502,9 +502,18 @@
 	Not available: a data file has no server.	Niet beschikbaar: een gegevensbestand heeft geen server.
 	Opening {file}…	{file} openen…
 	Exchange (Microsoft 365)	Exchange (Microsoft 365)
+	Microsoft sign-in: your organisation's own app registration (optional)	Aanmelden bij Microsoft: de eigen app-registratie van uw organisatie (optioneel)
+	Application (client) ID	Toepassings-id (client-id)
+	Tenant	Tenant
+	Built into this copy when left empty	Leeg: de in deze kopie ingebouwde
+	Needed: this copy of Quatrelle has none built in	Vereist: deze kopie van Quatrelle heeft er geen ingebouwd
+	The tenant is common (any account), organizations, or your directory's domain or id, as the registration allows.	De tenant is common (elk account), organizations, of het domein of de id van uw directory, zoals de registratie toestaat.
+	That isn't an application (client) ID.	Dat is geen toepassings-id (client-id).
+	Microsoft 365 hosts this domain's mail: Quatrelle connects through Microsoft Graph. To use IMAP and SMTP instead, pick them under Server settings.	Microsoft 365 host de mail van dit domein: Quatrelle verbindt via Microsoft Graph. Kies IMAP en SMTP onder Serverinstellingen om die in plaats daarvan te gebruiken.
 	Exchange (Microsoft Graph)	Exchange (Microsoft Graph)
 	Server: {url} (Microsoft Graph)	Server: {url} (Microsoft Graph)
 	Signing in with Microsoft isn't set up in this copy of Quatrelle.	Aanmelden met Microsoft is niet ingesteld in deze versie van Quatrelle.
+	Signing in with Microsoft isn't set up in this copy of Quatrelle: give your organisation's own application (client) ID under Server settings.	Aanmelden met Microsoft is niet ingesteld in deze kopie van Quatrelle: geef de toepassings-id (client-id) van uw organisatie op onder Serverinstellingen.
 	Syncs through Microsoft Graph, for work and school accounts where IMAP is switched off. You sign in with Microsoft in the browser: no password is stored.	Synchroniseert via Microsoft Graph, voor werk- en schoolaccounts waarbij IMAP is uitgeschakeld. Je meldt je aan bij Microsoft in de browser: er wordt geen wachtwoord opgeslagen.
 	In the browser, Quatrelle works with JMAP providers. Your password stays in this tab only and is only ever sent to your mail server.	In de browser werkt Quatrelle met JMAP-providers. Je wachtwoord blijft alleen in dit tabblad en wordt alleen naar je mailserver verzonden.
 	Your mail in the browser. Add a JMAP account (such as Fastmail): Quatrelle talks to your mail server directly, and your password stays in this tab only.	Je mail in de browser. Voeg een JMAP-account toe (zoals Fastmail): Quatrelle praat rechtstreeks met je mailserver, en je wachtwoord blijft alleen in dit tabblad.

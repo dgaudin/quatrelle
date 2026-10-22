@@ -505,9 +505,18 @@ month	May	5月
 	Not available: a data file has no server.	利用できません: データ ファイルにはサーバーがありません。
 	Opening {file}…	{file} を開いています…
 	Exchange (Microsoft 365)	Exchange (Microsoft 365)
+	Microsoft sign-in: your organisation's own app registration (optional)	Microsoft サインイン: 組織独自のアプリ登録（省略可）
+	Application (client) ID	アプリケーション (クライアント) ID
+	Tenant	テナント
+	Built into this copy when left empty	空欄ならこのコピーに組み込まれたもの
+	Needed: this copy of Quatrelle has none built in	必須: この Quatrelle には組み込まれていません
+	The tenant is common (any account), organizations, or your directory's domain or id, as the registration allows.	テナントは common（任意のアカウント）、organizations、または登録で許可されたディレクトリのドメインか ID です。
+	That isn't an application (client) ID.	アプリケーション (クライアント) ID ではありません。
+	Microsoft 365 hosts this domain's mail: Quatrelle connects through Microsoft Graph. To use IMAP and SMTP instead, pick them under Server settings.	このドメインのメールは Microsoft 365 にあります。Quatrelle は Microsoft Graph で接続します。代わりに IMAP と SMTP を使うには、サーバー設定で選んでください。
 	Exchange (Microsoft Graph)	Exchange (Microsoft Graph)
 	Server: {url} (Microsoft Graph)	サーバー: {url} (Microsoft Graph)
 	Signing in with Microsoft isn't set up in this copy of Quatrelle.	この Quatrelle では Microsoft でのサインインが設定されていません。
+	Signing in with Microsoft isn't set up in this copy of Quatrelle: give your organisation's own application (client) ID under Server settings.	この Quatrelle では Microsoft でのサインインが設定されていません。サーバー設定で組織のアプリケーション (クライアント) ID を入力してください。
 	Syncs through Microsoft Graph, for work and school accounts where IMAP is switched off. You sign in with Microsoft in the browser: no password is stored.	IMAP が無効になっている職場や学校のアカウント向けに、Microsoft Graph で同期します。ブラウザーで Microsoft にサインインするため、パスワードは保存されません。
 	In the browser, Quatrelle works with JMAP providers. Your password stays in this tab only and is only ever sent to your mail server.	ブラウザーでは、Quatrelle は JMAP プロバイダーで動作します。パスワードはこのタブの中だけに保持され、メール サーバーにのみ送信されます。
 	Your mail in the browser. Add a JMAP account (such as Fastmail): Quatrelle talks to your mail server directly, and your password stays in this tab only.	ブラウザーでメールを。JMAP アカウント (Fastmail など) を追加してください。Quatrelle はメール サーバーと直接通信し、パスワードはこのタブの中だけに保持されます。

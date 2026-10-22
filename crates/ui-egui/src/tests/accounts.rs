@@ -19,6 +19,56 @@ fn the_account_form_adds_exchange_accounts() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// Microsoft 365: a domain whose mail is at Exchange Online is proposed through Graph when its
+/// settings come back; the organisation's own app registration (client ID and tenant) goes with
+/// the account — which is added though this copy has no sign-in built in — and the account's
+/// settings dialog shows and changes it.
+#[test]
+fn microsoft_365_domains_are_proposed_through_graph_with_their_own_registration() {
+    let (mut a, dir) = app("m365");
+    let ctx = egui::Context::default();
+    a.ui.dialog = Some(Dialog::add_account_with("zoe@contoso.example", true));
+    frame(&ctx, &mut a, vec![]);
+    let mut c = quatrelle_engine::model::AccountConfig::guess("zoe@contoso.example");
+    c.graph = Some(quatrelle_engine::model::GRAPH_URL.into());
+    c.oauth = Some("microsoft".into());
+    a.session.apply(MailEvent::Discovered { email: "zoe@contoso.example".into(), config: Some(Box::new(c)), source: "Microsoft 365".into() });
+    frame(&ctx, &mut a, vec![]);
+    let Some(Dialog::AddAccount(f)) = a.ui.dialog.as_mut() else { panic!("the Add account dialog") };
+    assert!(f.graph, "proposed through Graph");
+    assert!(f.signs_in_with_microsoft());
+    f.client_id = " 11111111-2222-3333-4444-555555555555 ".into();
+    f.tenant = "contoso.onmicrosoft.com".into();
+    let p = f.params();
+    assert_eq!(
+        (p["graph"].as_bool(), p["oauthClientId"].as_str(), p["oauthTenant"].as_str()),
+        (Some(true), Some("11111111-2222-3333-4444-555555555555"), Some("contoso.onmicrosoft.com"))
+    );
+    frame(&ctx, &mut a, vec![]);
+    a.act(crate::Action::Submit("account.add", p));
+    assert!(a.ui.dialog.is_none(), "added, though no sign-in is built in: it brings its own");
+    let config = a.session.accounts.iter().find(|x| x.config.email == "zoe@contoso.example").unwrap().config.clone();
+    assert_eq!(config.oauth_tenant.as_deref(), Some("contoso.onmicrosoft.com"));
+    // Its settings show the registration, and change it.
+    let Dialog::EditAccount(mut e) = Dialog::edit_account(&config) else { panic!("the server settings") };
+    assert_eq!((e.oauth.as_deref(), e.client_id.as_str()), (Some("microsoft"), "11111111-2222-3333-4444-555555555555"));
+    e.tenant = "organizations".into();
+    a.ui.dialog = Some(Dialog::EditAccount(e.clone()));
+    frame(&ctx, &mut a, vec![]);
+    a.act(crate::Action::Submit("account.update", e.params()));
+    let config = a.session.account(&config.id).unwrap().config.clone();
+    assert_eq!((config.oauth_client_id.is_some(), config.oauth_tenant.as_deref()), (true, Some("organizations")));
+    // An IMAP account of Microsoft's can give one too; a plain one has nowhere to.
+    let mut f = crate::dialogs::AccountForm { email: "zoe@outlook.example".into(), ..Default::default() };
+    f.guess();
+    assert!(f.signs_in_with_microsoft());
+    assert!(f.params().get("oauthClientId").is_none(), "none given: nothing sent");
+    f.email = "zoe@studio.example".into();
+    f.guess();
+    assert!(!f.signs_in_with_microsoft());
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 #[test]
 fn the_file_page_shows_accounts_replies_space_and_options() {
     let (mut a, dir) = app("backstage");

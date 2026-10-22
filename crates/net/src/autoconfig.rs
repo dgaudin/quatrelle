@@ -16,6 +16,11 @@
 //! the domain's own server is told the address; the others are asked about the domain, and
 //! only when the user types an address into the account dialog. Everything fetched is hostile input: sizes are capped and
 //! a bad file is simply skipped.
+//!
+//! A domain whose mail Microsoft 365 hosts (its mail exchanger is Exchange Online's, or its
+//! Autodiscover record points at Microsoft) is proposed as Exchange Online through Microsoft
+//! Graph rather than IMAP, which is often switched off there; IMAP settings found as well stay
+//! in the answer for whoever picks IMAP anyway.
 
 use quatrelle_model::{AccountConfig, Security, ServerConfig};
 
@@ -123,6 +128,30 @@ pub struct Lookups<'a> {
     pub srv: &'a mut dyn FnMut(&str) -> Option<(String, u16)>,
 }
 
+/// Whether Microsoft 365 hosts the domain's mail: its mail exchanger is Exchange Online's
+/// (`<domain>.mail.protection.outlook.com`), or its Autodiscover record (where Outlook looks)
+/// points at Microsoft. (Outlook.com's own exchangers, `*.olc.protection.outlook.com`, aren't
+/// Microsoft 365's: those addresses are known by their domain.)
+pub fn at_microsoft_365(mx: &[String], autodiscover: Option<&str>) -> bool {
+    let microsoft = |host: &str| {
+        let h = host.trim().trim_end_matches('.').to_ascii_lowercase();
+        h.ends_with(".mail.protection.outlook.com")
+            || h == "autodiscover.outlook.com"
+            || h == "outlook.office365.com"
+            || h.ends_with(".outlook.office365.com")
+    };
+    mx.iter().any(|h| microsoft(h)) || autodiscover.is_some_and(microsoft)
+}
+
+/// Exchange Online through Microsoft Graph, for a domain Microsoft 365 hosts; the settings found
+/// otherwise (IMAP's), if any, stay for whoever picks IMAP anyway.
+fn microsoft_365(email: &str, found: Option<Found>) -> Found {
+    let mut config = found.map(|f| f.config).unwrap_or_else(|| AccountConfig::guess(email));
+    config.graph = Some(quatrelle_model::GRAPH_URL.to_string());
+    config.oauth = Some("microsoft".into());
+    Found { config, source: "Microsoft 365 (Exchange Online hosts this domain's mail)".into() }
+}
+
 /// Find settings for `email` (see the module docs for the order).
 pub fn discover_with(email: &str, l: &mut Lookups<'_>) -> Option<Found> {
     let email = email.trim();
@@ -130,6 +159,19 @@ pub fn discover_with(email: &str, l: &mut Lookups<'_>) -> Option<Found> {
     if !domain.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-')) {
         return None;
     }
+    // Asked once: they tell where the mail is (Microsoft 365?), and serve the lookups below.
+    let mx = (l.mx)(&domain);
+    let autodiscover = (l.srv)(&format!("_autodiscover._tcp.{domain}"));
+    let found = settings_for(email, &domain, l, &mx, autodiscover.as_ref().map(|(h, _)| h.as_str()));
+    if at_microsoft_365(&mx, autodiscover.as_ref().map(|(h, _)| h.as_str())) {
+        return Some(microsoft_365(email, found));
+    }
+    found
+}
+
+/// The published settings for `email` at `domain`, in the module's order, given the domain's
+/// mail exchangers and the host its Autodiscover record names.
+fn settings_for(email: &str, domain: &str, l: &mut Lookups<'_>, mx: &[String], autodiscover: Option<&str>) -> Option<Found> {
     let enc = crate::http::pct(email);
     let try_url = |l: &mut Lookups<'_>, url: &str| (l.fetch)(url).and_then(|x| parse_config(&x, email));
     for url in [
@@ -137,14 +179,14 @@ pub fn discover_with(email: &str, l: &mut Lookups<'_>) -> Option<Found> {
         format!("https://{domain}/.well-known/autoconfig/mail/config-v1.1.xml"),
     ] {
         if let Some(c) = try_url(l, &url) {
-            return Some(Found { config: c, source: domain.clone() });
+            return Some(Found { config: c, source: domain.to_string() });
         }
     }
     if let Some(c) = try_url(l, &format!("https://autoconfig.thunderbird.net/v1.1/{domain}")) {
         return Some(Found { config: c, source: "the ISP database".into() });
     }
-    if let Some(mx) = (l.mx)(&domain).into_iter().next() {
-        let base = base_domain(&mx);
+    if let Some(mx) = mx.first() {
+        let base = base_domain(mx);
         if base != domain {
             if let Some(c) = try_url(l, &format!("https://autoconfig.thunderbird.net/v1.1/{base}")) {
                 return Some(Found { config: c, source: format!("the ISP database ({base} handles this domain's mail)") });
@@ -157,11 +199,11 @@ pub fn discover_with(email: &str, l: &mut Lookups<'_>) -> Option<Found> {
     }
     // Where Outlook looks: the host an `_autodiscover._tcp` record names, which providers point
     // at their configuration server.
-    if let Some((host, _)) = (l.srv)(&format!("_autodiscover._tcp.{domain}"))
+    if let Some(host) = autodiscover
         && host.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-'))
         && let Some(c) = try_url(l, &format!("https://{host}/mail/config-v1.1.xml?emaildomain={domain}"))
     {
-        return Some(Found { config: c, source: base_domain(&host) });
+        return Some(Found { config: c, source: base_domain(host) });
     }
     let imap = (l.srv)(&format!("_imaps._tcp.{domain}"))
         .map(|(h, p)| ServerConfig { host: h, port: p, security: Security::Tls })
@@ -272,6 +314,37 @@ mod tests {
         let mut fetch = |_: &str| None;
         let mut srv = |name: &str| name.starts_with("_autodiscover").then(|| ("evil/../x".to_string(), 443));
         assert!(discover_with("zoe@studio.example", &mut Lookups { fetch: &mut fetch, mx: &mut no_mx, srv: &mut srv }).is_none());
+    }
+
+    /// A domain whose mail Microsoft 365 hosts is proposed as Exchange Online through Graph: by
+    /// its mail exchanger, or by Outlook's Autodiscover record alone; IMAP settings found as
+    /// well stay for whoever picks IMAP. Any other exchanger (Outlook.com's own among them)
+    /// proposes nothing of the kind.
+    #[test]
+    fn microsoft_365_domains_are_proposed_through_graph() {
+        let mut none = |_: &str| None;
+        let mut microsoft_mx = |_: &str| vec!["contoso-example.mail.protection.outlook.com.".to_string()];
+        let mut no_srv = |_: &str| None;
+        let f = discover_with("zoe@contoso.example", &mut Lookups { fetch: &mut none, mx: &mut microsoft_mx, srv: &mut no_srv }).unwrap();
+        assert!(f.source.contains("Microsoft 365"), "{}", f.source);
+        assert_eq!((f.config.graph.as_deref(), f.config.oauth.as_deref()), (Some(quatrelle_model::GRAPH_URL), Some("microsoft")));
+        assert_eq!(f.config.email, "zoe@contoso.example");
+        // By the Autodiscover record alone.
+        let mut no_mx = |_: &str| Vec::new();
+        let mut srv = |name: &str| (name == "_autodiscover._tcp.contoso.example").then(|| ("autodiscover.outlook.com".to_string(), 443));
+        let f = discover_with("zoe@contoso.example", &mut Lookups { fetch: &mut none, mx: &mut no_mx, srv: &mut srv }).unwrap();
+        assert!(f.config.graph.is_some());
+        // The domain's own IMAP settings stay in the answer, for whoever picks IMAP.
+        let mut own = |url: &str| url.starts_with("https://autoconfig.contoso.example/").then(|| XML.replace("example.org", "contoso.example"));
+        let f = discover_with("zoe@contoso.example", &mut Lookups { fetch: &mut own, mx: &mut microsoft_mx, srv: &mut no_srv }).unwrap();
+        assert!(f.config.graph.is_some());
+        assert_eq!(f.config.imap.host, "imap.contoso.example");
+        // Any other exchanger: as before.
+        let mut google_mx = |_: &str| vec!["aspmx.l.google.com".to_string()];
+        assert!(discover_with("zoe@contoso.example", &mut Lookups { fetch: &mut none, mx: &mut google_mx, srv: &mut no_srv }).is_none());
+        assert!(!at_microsoft_365(&["outlook-com.olc.protection.outlook.com".into()], None), "Outlook.com's own, not Microsoft 365's");
+        assert!(!at_microsoft_365(&["mx.contoso.example".into()], Some("autoconfig.contoso.example")));
+        assert!(at_microsoft_365(&[], Some("OUTLOOK.office365.com")));
     }
 
     #[test]

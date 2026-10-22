@@ -502,9 +502,18 @@
 	Not available: a data file has no server.	사용할 수 없음: 데이터 파일에는 서버가 없습니다.
 	Opening {file}…	{file} 여는 중…
 	Exchange (Microsoft 365)	Exchange(Microsoft 365)
+	Microsoft sign-in: your organisation's own app registration (optional)	Microsoft 로그인: 조직의 자체 앱 등록(선택 사항)
+	Application (client) ID	애플리케이션(클라이언트) ID
+	Tenant	테넌트
+	Built into this copy when left empty	비워 두면 이 복사본에 내장된 것 사용
+	Needed: this copy of Quatrelle has none built in	필요함: 이 Quatrelle 복사본에는 내장된 것이 없음
+	The tenant is common (any account), organizations, or your directory's domain or id, as the registration allows.	테넌트는 common(모든 계정), organizations, 또는 등록에서 허용하는 디렉터리의 도메인이나 ID입니다.
+	That isn't an application (client) ID.	애플리케이션(클라이언트) ID가 아닙니다.
+	Microsoft 365 hosts this domain's mail: Quatrelle connects through Microsoft Graph. To use IMAP and SMTP instead, pick them under Server settings.	이 도메인의 메일은 Microsoft 365가 호스팅합니다. Quatrelle는 Microsoft Graph로 연결합니다. 대신 IMAP과 SMTP를 쓰려면 서버 설정에서 선택하세요.
 	Exchange (Microsoft Graph)	Exchange(Microsoft Graph)
 	Server: {url} (Microsoft Graph)	서버: {url}(Microsoft Graph)
 	Signing in with Microsoft isn't set up in this copy of Quatrelle.	이 Quatrelle에는 Microsoft 로그인이 설정되어 있지 않습니다.
+	Signing in with Microsoft isn't set up in this copy of Quatrelle: give your organisation's own application (client) ID under Server settings.	이 Quatrelle 복사본에는 Microsoft 로그인이 설정되어 있지 않습니다. 서버 설정에서 조직의 애플리케이션(클라이언트) ID를 입력하세요.
 	Syncs through Microsoft Graph, for work and school accounts where IMAP is switched off. You sign in with Microsoft in the browser: no password is stored.	IMAP이 꺼져 있는 회사 및 학교 계정을 위해 Microsoft Graph로 동기화합니다. 브라우저에서 Microsoft로 로그인하므로 암호는 저장되지 않습니다.
 	In the browser, Quatrelle works with JMAP providers. Your password stays in this tab only and is only ever sent to your mail server.	브라우저에서 Quatrelle는 JMAP 공급자와 함께 작동합니다. 암호는 이 탭에만 보관되며 메일 서버로만 전송됩니다.
 	Your mail in the browser. Add a JMAP account (such as Fastmail): Quatrelle talks to your mail server directly, and your password stays in this tab only.	브라우저에서 메일을 사용하세요. JMAP 계정(예: Fastmail)을 추가하세요. Quatrelle는 메일 서버와 직접 통신하며 암호는 이 탭에만 보관됩니다.

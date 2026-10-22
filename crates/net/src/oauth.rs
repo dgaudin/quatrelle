@@ -11,7 +11,9 @@
 //! Google a client "secret" that isn't secret for installed apps) belongs to whoever ships
 //! Quatrelle: it is read from `QUATRELLE_GOOGLE_CLIENT_ID` / `QUATRELLE_GOOGLE_CLIENT_SECRET` and
 //! `QUATRELLE_MICROSOFT_CLIENT_ID`, at run time or baked in at build time. Without one, a
-//! provider isn't offered.
+//! provider isn't offered — except that an account can bring its own Microsoft registration
+//! (an organisation's single-tenant one: `AccountConfig::oauth_client_id` and `oauth_tenant`),
+//! which then stands in for the built-in one, and for `common`, for that account.
 
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpListener;
@@ -52,32 +54,55 @@ pub fn provider(id: &str) -> Option<Provider> {
             client_id: setting("QUATRELLE_GOOGLE_CLIENT_ID", option_env!("QUATRELLE_GOOGLE_CLIENT_ID"))?,
             client_secret: setting("QUATRELLE_GOOGLE_CLIENT_SECRET", option_env!("QUATRELLE_GOOGLE_CLIENT_SECRET")),
         }),
-        "microsoft" => Some(Provider {
-            id: "microsoft".into(),
-            name: "Microsoft".into(),
-            auth_url: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize".into(),
-            token_url: "https://login.microsoftonline.com/common/oauth2/v2.0/token".into(),
-            scope: "https://outlook.office.com/IMAP.AccessAsUser.All https://outlook.office.com/SMTP.Send offline_access".into(),
-            client_id: setting("QUATRELLE_MICROSOFT_CLIENT_ID", option_env!("QUATRELLE_MICROSOFT_CLIENT_ID"))?,
-            client_secret: None,
-        }),
+        "microsoft" => Some(microsoft(setting("QUATRELLE_MICROSOFT_CLIENT_ID", option_env!("QUATRELLE_MICROSOFT_CLIENT_ID"))?, "common")),
         _ => None,
+    }
+}
+
+/// Microsoft's sign-in for a registration, at a tenant: `common` (any account, the built-in
+/// registration's), or an organisation's own directory.
+fn microsoft(client_id: String, tenant: &str) -> Provider {
+    Provider {
+        id: "microsoft".into(),
+        name: "Microsoft".into(),
+        auth_url: format!("https://login.microsoftonline.com/{tenant}/oauth2/v2.0/authorize"),
+        token_url: format!("https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token"),
+        scope: "https://outlook.office.com/IMAP.AccessAsUser.All https://outlook.office.com/SMTP.Send offline_access".into(),
+        client_id,
+        client_secret: None,
     }
 }
 
 pub use quatrelle_model::oauth_provider_for as provider_for_host;
 
 /// The provider an account signs in with: Graph accounts ask Microsoft for Graph's mail
-/// permissions instead of IMAP's and SMTP's (a token is for one service).
+/// permissions instead of IMAP's and SMTP's (a token is for one service), and an account with
+/// its own Microsoft registration (an organisation's) signs in with it, at its tenant, in place
+/// of the built-in one (the file is hostile input: a client id or tenant that couldn't be one
+/// is ignored).
 pub fn provider_for_account(account: &quatrelle_model::AccountConfig) -> Option<Provider> {
-    let mut p = provider(account.oauth.as_deref()?)?;
+    let id = account.oauth.as_deref()?;
+    let mut p = if id == "microsoft" {
+        let own = account.oauth_client_id.as_deref().map(str::trim).filter(|c| quatrelle_model::valid_oauth_client_id(c));
+        let client_id = match own {
+            Some(c) => c.to_string(),
+            None => setting("QUATRELLE_MICROSOFT_CLIENT_ID", option_env!("QUATRELLE_MICROSOFT_CLIENT_ID"))?,
+        };
+        let tenant = account.oauth_tenant.as_deref().map(str::trim).filter(|t| quatrelle_model::valid_oauth_tenant(t)).unwrap_or("common");
+        microsoft(client_id, tenant)
+    } else {
+        provider(id)?
+    };
     if account.graph.is_some() && p.id == "microsoft" {
         p.scope = GRAPH_SCOPE.into();
     }
     Some(p)
 }
 
-const GRAPH_SCOPE: &str = "https://graph.microsoft.com/Mail.ReadWrite https://graph.microsoft.com/Mail.Send https://graph.microsoft.com/MailboxSettings.ReadWrite https://graph.microsoft.com/Calendars.ReadWrite https://graph.microsoft.com/Calendars.ReadWrite.Shared https://graph.microsoft.com/Contacts.ReadWrite offline_access";
+/// Graph's permissions: the mailbox, its settings, calendars and contacts — and the shared
+/// mailboxes and calendars the person was given (`*.Shared`), so those open too. A permission
+/// added here makes Microsoft ask everyone to approve the app again on their next sign-in.
+const GRAPH_SCOPE: &str = "https://graph.microsoft.com/Mail.ReadWrite https://graph.microsoft.com/Mail.ReadWrite.Shared https://graph.microsoft.com/Mail.Send https://graph.microsoft.com/Mail.Send.Shared https://graph.microsoft.com/MailboxSettings.ReadWrite https://graph.microsoft.com/Calendars.ReadWrite https://graph.microsoft.com/Calendars.ReadWrite.Shared https://graph.microsoft.com/Contacts.ReadWrite offline_access";
 
 /// The providers with a registration, so sign-in can be offered.
 pub fn available() -> Vec<String> {
@@ -333,6 +358,33 @@ pub(crate) mod tests {
         for junk in ["", "a", "a.b.c", "a.!!!.c", "a.e30"] {
             assert_eq!(id_token_user(junk), None, "{junk}");
         }
+    }
+
+    /// An organisation's own Microsoft registration goes with the account: its client id, at
+    /// its tenant, in place of the built-in one and `common`; Graph asks for the shared
+    /// mailboxes' permissions too. A tenant or client id that couldn't be one is ignored.
+    #[test]
+    fn an_account_brings_its_own_microsoft_registration() {
+        let mut a = quatrelle_model::AccountConfig::guess("zoe@contoso.example");
+        a.oauth = Some("microsoft".into());
+        a.oauth_client_id = Some(" 11111111-2222-3333-4444-555555555555 ".into());
+        a.oauth_tenant = Some("contoso.onmicrosoft.com".into());
+        let p = provider_for_account(&a).unwrap();
+        assert_eq!(p.client_id, "11111111-2222-3333-4444-555555555555");
+        assert_eq!(p.auth_url, "https://login.microsoftonline.com/contoso.onmicrosoft.com/oauth2/v2.0/authorize");
+        assert_eq!(p.token_url, "https://login.microsoftonline.com/contoso.onmicrosoft.com/oauth2/v2.0/token");
+        assert!(p.scope.contains("IMAP.AccessAsUser.All") && p.client_secret.is_none());
+        a.graph = Some(quatrelle_model::GRAPH_URL.into());
+        let p = provider_for_account(&a).unwrap();
+        for s in ["Mail.ReadWrite ", "Mail.ReadWrite.Shared", "Mail.Send ", "Mail.Send.Shared", "Calendars.ReadWrite.Shared", "offline_access"] {
+            assert!(p.scope.contains(s), "{s}: {}", p.scope);
+        }
+        a.oauth_tenant = Some("not a tenant".into());
+        assert!(provider_for_account(&a).unwrap().auth_url.contains("/common/"), "a tenant that couldn't be one: common");
+        a.oauth_client_id = Some("not a client id!".into());
+        assert_eq!(provider_for_account(&a).is_some(), provider("microsoft").is_some(), "a client id that couldn't be one: the built-in");
+        a.oauth = Some("google".into());
+        assert_eq!(provider_for_account(&a).is_some(), provider("google").is_some(), "Google takes no registration from the account");
     }
 
     #[test]
