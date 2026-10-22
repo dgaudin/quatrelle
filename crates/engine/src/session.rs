@@ -266,6 +266,19 @@ struct DownloadAll {
     failed: usize,
 }
 
+/// The address book being built from the mail kept here, folder by folder, a slice at a time
+/// (see [`Session::contacts_step`]): reading a big mailbox whole took seconds, on the window's
+/// thread, at the first name typed into To.
+struct ContactsBuild {
+    /// The folders to read, and how far the read has got.
+    scan: Vec<(String, String)>,
+    folder: usize,
+    pos: usize,
+    /// The user's own addresses: a message from one of them is one they sent.
+    mine: Vec<String>,
+    book: ContactBook,
+}
+
 /// Message sources asked for at once by "Download all": the worker fetches them in order, and
 /// each answer asks for the next, so a mailbox of any size doesn't flood the job queue.
 const FETCH_BATCH: usize = 32;
@@ -381,6 +394,12 @@ pub struct Session {
     /// Built on first use from the cached mail; when mail arrives it's stale, and built again
     /// once it's been some minutes (see [`CONTACTS_EVERY`]).
     contacts: Option<ContactBook>,
+    /// The build under way, a slice at a time ([`Session::contacts_step`]); the book above
+    /// answers meanwhile when there is one.
+    contacts_build: Option<ContactsBuild>,
+    /// Bumped whenever what the address book answers changes (a build done, or a first one
+    /// grown): the window works its suggestions out again only then.
+    contacts_revision: u64,
     /// When the address book above was built, and whether mail has arrived since.
     contacts_built: i64,
     contacts_stale: bool,
@@ -497,6 +516,8 @@ impl Session {
             pending_marks: BTreeMap::new(),
             cache_limit: CACHE_MESSAGES,
             contacts: None,
+            contacts_build: None,
+            contacts_revision: 0,
             contacts_built: 0,
             contacts_stale: false,
             seen_uid: HashMap::new(),

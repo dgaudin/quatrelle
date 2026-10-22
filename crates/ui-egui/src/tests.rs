@@ -26,6 +26,17 @@ fn app(name: &str) -> (MailApp, std::path::PathBuf) {
     (MailApp::new(s, Box::new(NullBackend), Box::new(NullServices(NOW))), dir)
 }
 
+/// The app over a big mailbox (`sample::seed_big_mailbox`): `folders` folders of `per_folder`
+/// messages, each from someone else.
+fn app_big(name: &str, folders: usize, per_folder: u32) -> (MailApp, std::path::PathBuf) {
+    let dir = std::env::temp_dir().join(format!("quatrelle-ui-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let store = Store::open(&dir).unwrap();
+    sample::seed_big_mailbox(&store, folders, per_folder, NOW).unwrap();
+    let s = Session::open(Some(store), Clock::new(NOW, 0));
+    (MailApp::new(s, Box::new(NullBackend), Box::new(NullServices(NOW))), dir)
+}
+
 fn frame(ctx: &egui::Context, app: &mut MailApp, events: Vec<Event>) {
     frame_sized(ctx, app, events, egui::vec2(1280.0, 800.0));
 }

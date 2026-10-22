@@ -284,7 +284,11 @@ pub fn typeface_files(family: &str) -> Option<(std::path::PathBuf, Option<std::p
         let (found, regular) = fc_match_named(&format!("{family}:weight=regular"))?;
         let named = found.eq_ignore_ascii_case(family);
         // The last resort (the default sans, serif or monospace) isn't the typeface asked for.
-        let last_resort = ["sans-serif", "serif", "monospace"].iter().filter_map(|g| fc_match(g)).any(|p| p == regular);
+        // The same three for every typeface: asked of fontconfig once, not three processes
+        // more per name, run on the window's thread as a message opens.
+        static LAST_RESORT: std::sync::OnceLock<Vec<std::path::PathBuf>> = std::sync::OnceLock::new();
+        let last_resort =
+            LAST_RESORT.get_or_init(|| ["sans-serif", "serif", "monospace"].iter().filter_map(|g| fc_match(g)).collect()).contains(&regular);
         if !named && last_resort {
             return None;
         }
