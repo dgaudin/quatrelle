@@ -502,9 +502,18 @@
 	Not available: a data file has no server.	غير متاح: ملف البيانات بلا خادم.
 	Opening {file}…	جارٍ فتح {file}…
 	Exchange (Microsoft 365)	Exchange (Microsoft 365)
+	Microsoft sign-in: your organisation's own app registration (optional)	تسجيل الدخول إلى Microsoft: تسجيل التطبيق الخاص بمؤسستك (اختياري)
+	Application (client) ID	معرّف التطبيق (العميل)
+	Tenant	المستأجر (tenant)
+	Built into this copy when left empty	إن تُرك فارغًا يُستخدم المضمّن في هذه النسخة
+	Needed: this copy of Quatrelle has none built in	مطلوب: هذه النسخة من Quatrelle لا تضمّن أيًا منها
+	The tenant is common (any account), organizations, or your directory's domain or id, as the registration allows.	المستأجر هو common (أي حساب) أو organizations أو نطاق دليلك أو معرّفه، حسب ما يسمح به التسجيل.
+	That isn't an application (client) ID.	هذا ليس معرّف تطبيق (عميل).
+	Microsoft 365 hosts this domain's mail: Quatrelle connects through Microsoft Graph. To use IMAP and SMTP instead, pick them under Server settings.	يستضيف Microsoft 365 بريد هذا النطاق: يتصل Quatrelle عبر Microsoft Graph. لاستخدام IMAP وSMTP بدلًا من ذلك، اخترهما ضمن إعدادات الخادم.
 	Exchange (Microsoft Graph)	Exchange (Microsoft Graph)
 	Server: {url} (Microsoft Graph)	الخادم: {url} (Microsoft Graph)
 	Signing in with Microsoft isn't set up in this copy of Quatrelle.	تسجيل الدخول بحساب Microsoft غير مُعدّ في هذه النسخة من Quatrelle.
+	Signing in with Microsoft isn't set up in this copy of Quatrelle: give your organisation's own application (client) ID under Server settings.	تسجيل الدخول باستخدام Microsoft غير مُعدّ في هذه النسخة من Quatrelle: أدخل معرّف التطبيق (العميل) الخاص بمؤسستك ضمن إعدادات الخادم.
 	Syncs through Microsoft Graph, for work and school accounts where IMAP is switched off. You sign in with Microsoft in the browser: no password is stored.	يُزامن عبر Microsoft Graph، لحسابات العمل والدراسة التي أُوقف فيها IMAP. تسجّل الدخول بحساب Microsoft في المتصفح: لا تُحفظ كلمة مرور.
 	In the browser, Quatrelle works with JMAP providers. Your password stays in this tab only and is only ever sent to your mail server.	في المتصفح، يعمل Quatrelle مع مزوّدي JMAP. تبقى كلمة المرور في هذا التبويب فقط ولا تُرسل إلا إلى خادم بريدك.
 	Your mail in the browser. Add a JMAP account (such as Fastmail): Quatrelle talks to your mail server directly, and your password stays in this tab only.	بريدك في المتصفح. أضف حساب JMAP (مثل Fastmail): يتصل Quatrelle بخادم بريدك مباشرة، وتبقى كلمة المرور في هذا التبويب فقط.

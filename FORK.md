@@ -113,6 +113,30 @@ Toutes s'appuient sur les spécifications publiques de Microsoft (EWS, Graph, [M
   - Sur Exchange **on-premise** (`0817f83`), à partir des raccourcis de navigation qu'Outlook
     enregistre dans la boîte, décrits dans [MS-OXOCFG] §2.2.9.
 
+### Exchange Online : inscription d'application propre, boîtes partagées, détection
+
+Trois ajouts (2026-10-22) pour Microsoft 365 (Graph), détaillés dans `docs/oauth.md` :
+
+- **Inscription d'application de l'organisation.** L'identifiant d'application (client) ne venait
+  que de `QUATRELLE_MICROSOFT_CLIENT_ID` (à la compilation ou dans l'environnement), et le
+  locataire était figé à `common`. Les deux se saisissent désormais **par compte**, dans Ajouter
+  un compte › Paramètres du serveur › « Connexion Microsoft : l'inscription d'application de votre
+  organisation », et dans les paramètres du compte ensuite. Ils sont gardés dans `accounts.json`
+  (`oauth_client_id`, `oauth_tenant`, sans secret) et remplacent l'identifiant intégré et
+  `common` pour ce compte. Une organisation peut ainsi inscrire Quatrelle elle-même, en
+  locataire unique, et faire approuver l'application par son administrateur ; une copie de
+  Quatrelle compilée sans aucune inscription ajoute quand même un tel compte. En ligne de
+  commande : `oauthClientId` et `oauthTenant` sur `account.add` et `account.update`.
+- **Boîtes partagées.** Les permissions Graph demandées comprennent `Mail.ReadWrite.Shared`,
+  `Mail.Send.Shared` et `Calendars.ReadWrite.Shared`, pour que les boîtes et calendriers
+  partagés s'ouvrent. Une permission ajoutée oblige Microsoft à redemander le consentement à la
+  prochaine connexion : le navigateur s'ouvre une fois de plus, rien n'est perdu.
+- **Détection de Microsoft 365.** Quand l'enregistrement MX du domaine est celui d'Exchange
+  Online (`<domaine>.mail.protection.outlook.com`), ou que son enregistrement
+  `_autodiscover._tcp` pointe vers Microsoft, le dialogue d'ajout propose **Exchange
+  (Microsoft 365)** par Graph plutôt qu'IMAP, souvent désactivé dans ces organisations. Les
+  réglages IMAP trouvés par ailleurs restent sous Paramètres du serveur.
+
 ## 5. Construire un paquet (.rpm, .deb, AppImage…)
 
 - **Sur GitHub.** Les Actions sont activées sur ce fork. Le workflow

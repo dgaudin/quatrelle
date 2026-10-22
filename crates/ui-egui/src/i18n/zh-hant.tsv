@@ -502,9 +502,18 @@
 	Not available: a data file has no server.	無法使用：資料檔沒有伺服器。
 	Opening {file}…	正在開啟 {file}…
 	Exchange (Microsoft 365)	Exchange (Microsoft 365)
+	Microsoft sign-in: your organisation's own app registration (optional)	Microsoft 登入：您所在組織自己的應用程式註冊（選填）
+	Application (client) ID	應用程式（用戶端）識別碼
+	Tenant	租用戶
+	Built into this copy when left empty	留空則使用此副本內建的
+	Needed: this copy of Quatrelle has none built in	必填：此 Quatrelle 副本沒有內建的
+	The tenant is common (any account), organizations, or your directory's domain or id, as the registration allows.	租用戶為 common（任何帳戶）、organizations，或註冊所允許的目錄網域或識別碼。
+	That isn't an application (client) ID.	這不是應用程式（用戶端）識別碼。
+	Microsoft 365 hosts this domain's mail: Quatrelle connects through Microsoft Graph. To use IMAP and SMTP instead, pick them under Server settings.	此網域的郵件由 Microsoft 365 託管：Quatrelle 透過 Microsoft Graph 連線。若要改用 IMAP 和 SMTP，請在「伺服器設定」中選擇。
 	Exchange (Microsoft Graph)	Exchange (Microsoft Graph)
 	Server: {url} (Microsoft Graph)	伺服器：{url} (Microsoft Graph)
 	Signing in with Microsoft isn't set up in this copy of Quatrelle.	此 Quatrelle 副本未設定 Microsoft 登入。
+	Signing in with Microsoft isn't set up in this copy of Quatrelle: give your organisation's own application (client) ID under Server settings.	此 Quatrelle 副本未設定 Microsoft 登入：請在「伺服器設定」中填寫您所在組織的應用程式（用戶端）識別碼。
 	Syncs through Microsoft Graph, for work and school accounts where IMAP is switched off. You sign in with Microsoft in the browser: no password is stored.	透過 Microsoft Graph 同步，適用於關閉了 IMAP 的公司或學校帳戶。在瀏覽器中以 Microsoft 登入：不會儲存密碼。
 	In the browser, Quatrelle works with JMAP providers. Your password stays in this tab only and is only ever sent to your mail server.	在瀏覽器中，Quatrelle 支援 JMAP 提供者。你的密碼只保存在此分頁中，而且只會傳送到你的郵件伺服器。
 	Your mail in the browser. Add a JMAP account (such as Fastmail): Quatrelle talks to your mail server directly, and your password stays in this tab only.	在瀏覽器中收發郵件。新增一個 JMAP 帳戶（例如 Fastmail）：Quatrelle 直接與你的郵件伺服器通訊，你的密碼只保存在此分頁中。

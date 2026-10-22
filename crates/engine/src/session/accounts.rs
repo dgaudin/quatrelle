@@ -306,7 +306,7 @@ impl Session {
         if c.graph.is_some() || c.jmap.is_some() || c.ews.is_some() || c.pop.is_some() || !microsoft {
             return Err(CmdError::Params("only a Microsoft account connected over IMAP can move to Microsoft Graph".into()));
         }
-        if !self.oauth_available.iter().any(|p| p == "microsoft") {
+        if !quatrelle_model::microsoft_sign_in_possible(&c, &self.oauth_available) {
             return Err(CmdError::Params("signing in with Microsoft isn't set up in this copy of Quatrelle".into()));
         }
         let at = self.accounts.iter().position(|x| x.config.id == id).unwrap_or(0);
@@ -319,6 +319,9 @@ impl Session {
             signature: c.signature,
             oauth: Some("microsoft".into()),
             graph: Some(quatrelle_model::GRAPH_URL.to_string()),
+            // Its own registration goes with it.
+            oauth_client_id: c.oauth_client_id,
+            oauth_tenant: c.oauth_tenant,
             ..Default::default()
         };
         let new = self.add_account(config, None)?;

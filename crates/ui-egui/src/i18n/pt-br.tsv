@@ -503,9 +503,18 @@
 	Not available: a data file has no server.	Indisponível: um arquivo de dados não tem servidor.
 	Opening {file}…	Abrindo {file}…
 	Exchange (Microsoft 365)	Exchange (Microsoft 365)
+	Microsoft sign-in: your organisation's own app registration (optional)	Entrar com a Microsoft: o registro de aplicativo da sua organização (opcional)
+	Application (client) ID	ID do aplicativo (cliente)
+	Tenant	Locatário (tenant)
+	Built into this copy when left empty	Vazio: o embutido nesta cópia
+	Needed: this copy of Quatrelle has none built in	Necessário: esta cópia do Quatrelle não tem nenhum embutido
+	The tenant is common (any account), organizations, or your directory's domain or id, as the registration allows.	O locatário é common (qualquer conta), organizations, ou o domínio ou id do seu diretório, conforme o registro permitir.
+	That isn't an application (client) ID.	Isso não é um ID de aplicativo (cliente).
+	Microsoft 365 hosts this domain's mail: Quatrelle connects through Microsoft Graph. To use IMAP and SMTP instead, pick them under Server settings.	O Microsoft 365 hospeda os emails deste domínio: o Quatrelle conecta-se pelo Microsoft Graph. Para usar IMAP e SMTP em vez disso, escolha-os em Configurações do servidor.
 	Exchange (Microsoft Graph)	Exchange (Microsoft Graph)
 	Server: {url} (Microsoft Graph)	Servidor: {url} (Microsoft Graph)
 	Signing in with Microsoft isn't set up in this copy of Quatrelle.	O login com a Microsoft não está configurado nesta cópia do Quatrelle.
+	Signing in with Microsoft isn't set up in this copy of Quatrelle: give your organisation's own application (client) ID under Server settings.	Entrar com a Microsoft não está configurado nesta cópia do Quatrelle: informe o ID do aplicativo (cliente) da sua organização em Configurações do servidor.
 	Syncs through Microsoft Graph, for work and school accounts where IMAP is switched off. You sign in with Microsoft in the browser: no password is stored.	Sincroniza pelo Microsoft Graph, para contas corporativas ou de estudante com o IMAP desativado. Você entra com a Microsoft no navegador: nenhuma senha é guardada.
 	In the browser, Quatrelle works with JMAP providers. Your password stays in this tab only and is only ever sent to your mail server.	No navegador, o Quatrelle funciona com provedores JMAP. Sua senha fica somente nesta aba e só é enviada ao seu servidor de e-mail.
 	Your mail in the browser. Add a JMAP account (such as Fastmail): Quatrelle talks to your mail server directly, and your password stays in this tab only.	Seus e-mails no navegador. Adicione uma conta JMAP (como a Fastmail): o Quatrelle fala diretamente com seu servidor de e-mail, e sua senha fica somente nesta aba.

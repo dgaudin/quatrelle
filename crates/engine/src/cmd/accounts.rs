@@ -18,7 +18,7 @@ pub(super) fn commands() -> Vec<CommandSpec> {
         })
         .params(r#"{"account"?: string, "folder"?: string (Deleted Items and Junk are emptied for good; any other folder's mail goes to Deleted Items), "role"?: "trash"|"junk"}"#),
         CommandSpec::new("account.add", "Add account", "File › Accounts", add_account)
-            .params(r#"{"email": string, "password"?: string, "oauth"?: "google"|"microsoft", "deferSignIn"?: bool, "local"?: bool, "name"?: string, "username"?: string, "imapHost"?: string, "imapPort"?: number, "imapSecurity"?: "tls"|"starttls"|"none", "smtpHost"?: string, "smtpPort"?: number, "smtpSecurity"?: …, "smtpUsername"?: string and "smtpPassword"?: string (the outgoing server's own sign-in, when it isn't the incoming server's), "jmap"?: string (a JMAP session URL, instead of IMAP and SMTP), "pop"?: true (POP3 instead of IMAP: popHost, popPort, popSecurity, "popDelete"?: bool to remove mail from the server once downloaded, else a copy stays: "popKeepDays"?: number (removed that many days after downloading; 14 when not given, 0 for never), "popDeleteWithTrash"?: bool (removed once deleted here for good)), "pst"?: string (an existing Outlook data file whose mail comes in first), "ews"?: string|true (on-premises Exchange: its EWS address or server name, or true to find it with Autodiscover; username DOMAIN\\user or an address), "graph"?: true|string (Exchange Online through Microsoft Graph; signs in with Microsoft), "onlineOnly"?: bool (keep none of its mail on this computer; not for POP)}"#),
+            .params(r#"{"email": string, "password"?: string, "oauth"?: "google"|"microsoft", "deferSignIn"?: bool, "local"?: bool, "name"?: string, "username"?: string, "imapHost"?: string, "imapPort"?: number, "imapSecurity"?: "tls"|"starttls"|"none", "smtpHost"?: string, "smtpPort"?: number, "smtpSecurity"?: …, "smtpUsername"?: string and "smtpPassword"?: string (the outgoing server's own sign-in, when it isn't the incoming server's), "jmap"?: string (a JMAP session URL, instead of IMAP and SMTP), "pop"?: true (POP3 instead of IMAP: popHost, popPort, popSecurity, "popDelete"?: bool to remove mail from the server once downloaded, else a copy stays: "popKeepDays"?: number (removed that many days after downloading; 14 when not given, 0 for never), "popDeleteWithTrash"?: bool (removed once deleted here for good)), "pst"?: string (an existing Outlook data file whose mail comes in first), "ews"?: string|true (on-premises Exchange: its EWS address or server name, or true to find it with Autodiscover; username DOMAIN\\user or an address), "graph"?: true|string (Exchange Online through Microsoft Graph; signs in with Microsoft), "oauthClientId"?: string and "oauthTenant"?: string (Microsoft sign-in through your organisation's own app registration: its Application (client) ID, and its tenant in place of common), "onlineOnly"?: bool (keep none of its mail on this computer; not for POP)}"#),
         CommandSpec::new("account.importPst", "Open Outlook data file", "File › Open & Export", |s, v| {
             let path = p::req_str(v, "path")?.to_string();
             s.import_pst(&path)
@@ -39,9 +39,16 @@ pub(super) fn commands() -> Vec<CommandSpec> {
                 return Err(CmdError::Params(format!("`{email}` is not an email address")));
             }
             match s.discovered.get(&email) {
-                Some(Some((Some(c), source))) => {
-                    Ok(json!({"found": true, "source": source, "imap": c.imap, "smtp": c.smtp, "pop": c.pop, "username": c.username}))
-                }
+                Some(Some((Some(c), source))) => Ok(json!({
+                    "found": true,
+                    "source": source,
+                    "imap": c.imap,
+                    "smtp": c.smtp,
+                    "pop": c.pop,
+                    "username": c.username,
+                    // Microsoft 365 hosts the domain's mail: Exchange Online through Graph.
+                    "graph": c.graph,
+                })),
                 Some(Some((None, _))) => Ok(json!({"found": false})),
                 Some(None) => Ok(json!({"pending": true})),
                 None => {
@@ -76,7 +83,7 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             if config.oauth.is_none() {
                 // A Microsoft account signing in with a password (refused there) switches over.
                 if quatrelle_model::microsoft_password_account(&config) {
-                    if !s.oauth_available.iter().any(|p| p == "microsoft") {
+                    if !quatrelle_model::microsoft_sign_in_possible(&config, &s.oauth_available) {
                         return Err(CmdError::Params("signing in with Microsoft isn't set up in this copy of Quatrelle".into()));
                     }
                     return s.use_microsoft_sign_in(id);
@@ -105,7 +112,7 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             Ok(json!({"checking": true}))
         }),
         CommandSpec::new("account.update", "Account settings", "File › Info › Account settings", update_account).params(
-            r#"{"account": string, "name"?: string, "username"?: string, "imapHost"?: string, "imapPort"?: number, "imapSecurity"?: …, "smtpHost"?: …, "smtpUsername"?: string|null (the outgoing server's own sign-in; null: the incoming server's), "smtpPassword"?: string, "jmap"?: string|null, "popHost"?: …, "popDelete"?: bool, "popKeepDays"?: number, "popDeleteWithTrash"?: bool, "onlineOnly"?: bool}"#,
+            r#"{"account": string, "name"?: string, "username"?: string, "imapHost"?: string, "imapPort"?: number, "imapSecurity"?: …, "smtpHost"?: …, "smtpUsername"?: string|null (the outgoing server's own sign-in; null: the incoming server's), "smtpPassword"?: string, "jmap"?: string|null, "popHost"?: …, "popDelete"?: bool, "popKeepDays"?: number, "popDeleteWithTrash"?: bool, "onlineOnly"?: bool, "oauthClientId"?: string|null and "oauthTenant"?: string|null (Microsoft sign-in through your organisation's own app registration; null or empty: the built-in one, common)}"#,
         ),
         CommandSpec::new("account.mailbox", "Mailbox settings", "File › Info › Mailbox settings", |s, v| {
             let id = account_param(s, v)?;
@@ -199,6 +206,9 @@ pub(super) fn add_account(s: &mut Session, v: &Value) -> CmdResult {
     let oauth = p::str(v, "oauth")
         .map(str::to_string)
         .or_else(|| (graph.is_some() && password.as_deref().is_none_or(str::is_empty)).then(|| "microsoft".to_string()));
+    // An organisation's own Microsoft app registration, in place of the built-in one.
+    let oauth_client_id = oauth_setting(v, "oauthClientId", quatrelle_model::valid_oauth_client_id)?.flatten();
+    let oauth_tenant = oauth_setting(v, "oauthTenant", quatrelle_model::valid_oauth_tenant)?.flatten();
     let config = AccountConfig {
         id: String::new(),
         name: p::str(v, "name").map(str::to_string).unwrap_or(guess.name.clone()),
@@ -230,9 +240,13 @@ pub(super) fn add_account(s: &mut Session, v: &Value) -> CmdResult {
         oauth_user: None,
         shared_mailboxes: Vec::new(),
         online_only: p::bool(v, "onlineOnly").unwrap_or(false),
+        oauth_client_id,
+        oauth_tenant,
     };
+    // A registration built in, or the account's own (Microsoft).
     if let Some(o) = &config.oauth
         && !s.oauth_available.contains(o)
+        && !(o == "microsoft" && config.own_oauth_app())
     {
         return Err(CmdError::Params(format!("signing in with {o} isn't set up in this copy of Quatrelle")));
     }
@@ -253,6 +267,27 @@ pub(super) fn add_account(s: &mut Session, v: &Value) -> CmdResult {
         s.attach_data_file(&id, path)?;
     }
     Ok(json!({"account": id}))
+}
+
+/// `oauthClientId` / `oauthTenant`: an organisation's own Microsoft app registration. `None`
+/// when not given; `Some(None)` to use the built-in one (null, or empty); checked for what it
+/// could be otherwise.
+fn oauth_setting(v: &Value, key: &str, valid: fn(&str) -> bool) -> Result<Option<Option<String>>, CmdError> {
+    match v.get(key) {
+        None => Ok(None),
+        Some(Value::Null) => Ok(Some(None)),
+        Some(Value::String(s)) => {
+            let s = s.trim();
+            if s.is_empty() {
+                Ok(Some(None))
+            } else if valid(s) {
+                Ok(Some(Some(s.to_string())))
+            } else {
+                Err(CmdError::Params(format!("{key}: `{s}` isn't one")))
+            }
+        }
+        Some(_) => Err(CmdError::Params(format!("{key}: a string is expected"))),
+    }
 }
 
 /// An Exchange Web Services address from what the user typed: a server name gets `https://` and
@@ -317,6 +352,14 @@ pub(super) fn update_account(s: &mut Session, v: &Value) -> CmdResult {
     }
     if let Some(on) = p::bool(v, "onlineOnly") {
         c.online_only = on;
+    }
+    // Its own Microsoft registration, changed or let go of (the built-in one again). The
+    // sign-in kept for the old registration is no good for a new one: asked again when it fails.
+    if let Some(id) = oauth_setting(v, "oauthClientId", quatrelle_model::valid_oauth_client_id)? {
+        c.oauth_client_id = id;
+    }
+    if let Some(t) = oauth_setting(v, "oauthTenant", quatrelle_model::valid_oauth_tenant)? {
+        c.oauth_tenant = t;
     }
     let smtp_password = smtp_sign_in(v, &mut c, false)?;
     let done = s.update_account(c, None)?;
