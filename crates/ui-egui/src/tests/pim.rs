@@ -243,6 +243,9 @@ fn reminders_pop_up_snooze_and_dismiss() {
     frame(&ctx, &mut a, vec![]);
     assert!(!crate::reminders::showing(&a.ui.reminders));
     assert_eq!(a.session.prefs.reminders.get(&key), Some(&(start - 15 * 60 + 5 * 60)), "five minutes");
+    let withdrawn =
+        |shown: &std::sync::Mutex<Vec<(String, String)>>| shown.lock().unwrap().iter().filter(|(t, k)| t == "withdrawn" && *k == key).count();
+    assert_eq!(withdrawn(&shown), 1, "its notification taken back while it sleeps");
     *now.lock().unwrap() = start - 10 * 60;
     frame(&ctx, &mut a, vec![]);
     assert!(crate::reminders::showing(&a.ui.reminders));
@@ -286,6 +289,16 @@ fn reminders_pop_up_snooze_and_dismiss() {
     *now.lock().unwrap() += 3600;
     frame(&ctx, &mut a, vec![]);
     assert!(!crate::reminders::showing(&a.ui.reminders));
+    // Dismissed in the window, their notifications were taken back; a button pressed on one all
+    // the same (just before it went, or on a desktop that keeps it) has nothing left to do, and
+    // says nothing (it said "no reminder … is due").
+    assert!(withdrawn(&shown) >= 3, "{:?}", shown.lock().unwrap());
+    let notices = a.session.notices.len();
+    pressed.lock().unwrap().push((key.clone(), crate::ReminderAction::Dismiss));
+    pressed.lock().unwrap().push((key.clone(), crate::ReminderAction::Snooze));
+    frame(&ctx, &mut a, vec![]);
+    assert_eq!(a.session.notices.len(), notices, "{:?}", a.session.notices.last());
+    assert_eq!(a.session.prefs.reminders.get(&key), Some(&0), "still dismissed, not snoozed");
     let _ = std::fs::remove_dir_all(dir);
 }
 

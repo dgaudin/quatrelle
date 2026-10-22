@@ -64,6 +64,9 @@ raw-window-handle = "0.6"
 winit = { version = "0.30", default-features = false, features = ["wayland-csd-adwaita", "x11"] }
 # The desktop's light or dark style and accent colour (the XDG settings portal).
 zbus = { version = "5", default-features = false, features = ["blocking-api", "async-io"] }
+# Waits on, and closes, reminder notifications (notify-rust's handle is async there). The
+# version zbus uses, so it's built once.
+async-io = "2"
 
 [target.'cfg(all(unix, not(target_os = "macos")))'.dev-dependencies]
 # The drag test plays the user on a virtual X server (Xvfb).

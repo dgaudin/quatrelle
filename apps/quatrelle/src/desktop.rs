@@ -39,6 +39,37 @@ pub(crate) struct Desktop {
     pub(crate) reminder_answers: Arc<std::sync::Mutex<Vec<(String, ReminderAction)>>>,
     #[cfg(all(unix, not(target_os = "macos")))]
     pub(crate) waker: Option<Arc<dyn Fn() + Send + Sync>>,
+    /// The reminder notifications up, by reminder: taken back when the reminder is answered
+    /// elsewhere or its time passes, and as Quatrelle closes (nothing would answer them then).
+    #[cfg(all(unix, not(target_os = "macos")))]
+    pub(crate) reminder_notes: ReminderNotes,
+}
+
+/// The reminder notifications up, by reminder.
+#[cfg(all(unix, not(target_os = "macos")))]
+#[derive(Default)]
+pub(crate) struct ReminderNotes(Arc<std::sync::Mutex<std::collections::HashMap<String, Arc<notify_rust::NotificationHandle>>>>);
+
+#[cfg(all(unix, not(target_os = "macos")))]
+impl Drop for ReminderNotes {
+    /// The reminder notifications go with the window: left up, their buttons would answer
+    /// nothing (and the next start tells of what's still due again). A second at most.
+    fn drop(&mut self) {
+        let up: Vec<_> = std::mem::take(&mut *self.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner)).into_values().collect();
+        if up.is_empty() {
+            return;
+        }
+        let (tx, rx) = std::sync::mpsc::channel();
+        let spawned = std::thread::Builder::new().name("reminder-close".into()).spawn(move || {
+            for note in up {
+                async_io::block_on(note.close_async());
+            }
+            let _ = tx.send(());
+        });
+        if spawned.is_ok() {
+            let _ = rx.recv_timeout(std::time::Duration::from_secs(1));
+        }
+    }
 }
 
 impl Services for Desktop {
@@ -305,6 +336,7 @@ impl Services for Desktop {
             let (key, title, body, snooze, dismiss) = (key.to_string(), title.to_string(), body.to_string(), snooze.to_string(), dismiss.to_string());
             let answers = self.reminder_answers.clone();
             let waker = self.waker.clone();
+            let notes = self.reminder_notes.0.clone();
             let spawned = std::thread::Builder::new().name("reminder-notification".into()).spawn(move || {
                 let mut n = notify_rust::Notification::new();
                 n.summary(&title)
@@ -319,17 +351,22 @@ impl Services for Desktop {
                     .action("snooze", &snooze)
                     .action("dismiss", &dismiss);
                 let handle = match n.show() {
-                    Ok(h) => h,
+                    Ok(h) => Arc::new(h),
                     Err(e) => {
                         log::warn!("reminder notification: {e}");
                         return;
                     }
                 };
-                handle.wait_for_action(|action| {
-                    let what = match action {
-                        "snooze" => ReminderAction::Snooze,
-                        "dismiss" => ReminderAction::Dismiss,
-                        "default" => ReminderAction::Open,
+                // Kept, so it can be taken back; told again (after a snooze), the one before goes.
+                let before = notes.lock().unwrap_or_else(std::sync::PoisonError::into_inner).insert(key.clone(), handle.clone());
+                if let Some(before) = before {
+                    async_io::block_on(before.close_async());
+                }
+                async_io::block_on(handle.wait_for_action_async(|response| {
+                    let what = match response {
+                        notify_rust::NotificationResponse::Action(a) if a == "snooze" => ReminderAction::Snooze,
+                        notify_rust::NotificationResponse::Action(a) if a == "dismiss" => ReminderAction::Dismiss,
+                        notify_rust::NotificationResponse::Default => ReminderAction::Open,
                         // Closed, or timed out by the desktop: the window still shows it.
                         _ => return,
                     };
@@ -337,7 +374,12 @@ impl Services for Desktop {
                     if let Some(wake) = &waker {
                         wake();
                     }
-                });
+                }));
+                // Answered or closed: no longer up (unless told again meanwhile).
+                let mut notes = notes.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+                if notes.get(&key).is_some_and(|n| Arc::ptr_eq(n, &handle)) {
+                    notes.remove(&key);
+                }
             });
             if let Err(e) = spawned {
                 log::warn!("reminder notification: {e}");
@@ -351,6 +393,16 @@ impl Services for Desktop {
     }
     fn take_reminder_actions(&mut self) -> Vec<(String, ReminderAction)> {
         std::mem::take(&mut *self.reminder_answers.lock().unwrap_or_else(std::sync::PoisonError::into_inner))
+    }
+    /// The notification closed, off the window's thread (a call on the session bus); its
+    /// waiting thread then ends.
+    #[cfg(all(unix, not(target_os = "macos")))]
+    fn withdraw_reminder(&mut self, key: &str) {
+        let Some(note) = self.reminder_notes.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner).remove(key) else { return };
+        let spawned = std::thread::Builder::new().name("reminder-close".into()).spawn(move || async_io::block_on(note.close_async()));
+        if let Err(e) = spawned {
+            log::warn!("reminder notification: {e}");
+        }
     }
 }
 

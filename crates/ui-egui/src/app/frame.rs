@@ -19,6 +19,13 @@ impl MailApp {
         // the window comes forward, the Reminders window with it. (Before the due list is
         // worked out again below, so a snooze takes effect in this very frame.)
         for (key, what) in self.services.take_reminder_actions() {
+            // Answered already (in the window, or on another notification for it), or its time
+            // has passed: its buttons have nothing left to do, and nothing to complain about.
+            let due = || self.session.due_reminders(self.session.clock.now).iter().any(|r| r.key == key);
+            if matches!(what, ReminderAction::Snooze | ReminderAction::Dismiss) && !due() {
+                log::info!("reminder {key}: answered from a notification it no longer had");
+                continue;
+            }
             match what {
                 ReminderAction::Snooze => self.run("reminders.snooze", json!({"key": key, "minutes": 5})),
                 ReminderAction::Dismiss => self.run("reminders.dismiss", json!({"key": key})),
@@ -39,6 +46,10 @@ impl MailApp {
             let body = if r.location.is_empty() { when } else { format!("{when} · {}", r.location) };
             let (snooze, dismiss) = i18n::as_written(|| (tl!("Snooze 5 minutes").to_string(), tl!("Dismiss").to_string()));
             self.services.notify_reminder(&r.key, &r.summary, &body, &snooze, &dismiss);
+        }
+        // Answered or past: their notifications go, so none is left with buttons that fail.
+        for key in std::mem::take(&mut self.ui.reminders.gone) {
+            self.services.withdraw_reminder(&key);
         }
         // Minimized or covered, the window draws nothing, so the Reminders window — a window of
         // its own, on top of the others — couldn't open: a frame is asked for while something

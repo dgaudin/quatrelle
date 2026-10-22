@@ -4078,6 +4078,7 @@ name = "quatrelle"
 version = "0.22.0"
 dependencies = [
  "arboard",
+ "async-io",
  "chrono",
  "drag",
  "eframe",
