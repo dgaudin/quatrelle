@@ -146,14 +146,34 @@ impl MailApp {
                     let start =
                         widgets::RibbonFit { active: true, icons_from: self.ui.ribbon_icons_from, right: ui.max_rect().left(), ..Default::default() };
                     ui.ctx().data_mut(|d| d.insert_temp(id, start));
+                    // And its groups of large buttons: the last ones drawn compact (small
+                    // buttons stacked), as many as it takes, worked out the same way — per
+                    // tab, as each has its own groups.
+                    let key = format!("{:?}/{:?}", self.session.module, self.ui.tab);
+                    let groups = self.ui.ribbon_groups.get(&key).cloned().unwrap_or_default();
+                    let gid = widgets::group_fit_id();
+                    let room_right = ui.max_rect().right();
+                    ui.ctx().data_mut(|d| d.insert_temp(gid, widgets::GroupFit::start(groups.compact_from, groups.columns)));
                     self.ribbon(ui, &mut acts);
                     let fit = ui.ctx().data_mut(|d| std::mem::take(d.get_temp_mut_or_default::<widgets::RibbonFit>(id)));
+                    let gfit = ui.ctx().data_mut(|d| std::mem::take(d.get_temp_mut_or_default::<widgets::GroupFit>(gid)));
                     self.ui.ribbon_rect = Some(ui.min_rect());
-                    let from = fit.fit(ui.max_rect().right());
+                    let from = fit.fit(room_right);
                     if from != self.ui.ribbon_icons_from.min(fit.count) {
                         self.ui.ribbon_icons_from = from;
                         ui.ctx().request_repaint();
                     }
+                    let next = RibbonGroups {
+                        compact_from: gfit.fit(room_right),
+                        columns: gfit.groups.iter().map(|g| g.2.clone()).collect(),
+                        overflow: gfit.right - room_right,
+                    };
+                    if next.compact_from != self.ui.ribbon_groups.get(&key).map_or(usize::MAX, |g| g.compact_from).min(gfit.groups.len())
+                        || next.columns != self.ui.ribbon_groups.get(&key).map(|g| g.columns.clone()).unwrap_or_default()
+                    {
+                        ui.ctx().request_repaint();
+                    }
+                    self.ui.ribbon_groups.insert(key, next);
                 });
         }
 
