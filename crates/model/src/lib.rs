@@ -14,11 +14,14 @@ pub mod ical;
 pub mod job;
 pub mod organize;
 pub mod pim;
+mod providers;
 pub mod search;
 pub mod thread;
 pub mod utf7;
 pub mod vcard;
 pub mod voting;
+
+pub use providers::*;
 
 use serde::{Deserialize, Serialize};
 
@@ -166,49 +169,16 @@ pub struct AccountConfig {
     /// home, nor an account with no server ([`AccountConfig::keeps_online`]).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub online_only: bool,
-}
-
-/// The EWS address of an account whose Exchange server Autodiscover finds when it connects.
-pub const EWS_AUTODISCOVER: &str = "autodiscover";
-
-/// Microsoft Graph's address, for Exchange Online accounts.
-pub const GRAPH_URL: &str = "https://graph.microsoft.com/v1.0";
-
-/// The OAuth provider that runs an IMAP server, when it's one Quatrelle knows.
-pub fn oauth_provider_for(imap_host: &str) -> Option<&'static str> {
-    let h = imap_host.trim().to_ascii_lowercase();
-    if h == "imap.gmail.com" || h == "imap.googlemail.com" {
-        Some("google")
-    } else if h == "outlook.office365.com" || h.ends_with(".outlook.com") || h == "imap-mail.outlook.com" {
-        Some("microsoft")
-    } else {
-        None
-    }
-}
-
-/// Microsoft's own addresses (Outlook.com, Hotmail, Live, MSN). Since September 2024 they
-/// take no passwords from other mail apps over IMAP, POP or SMTP: only Microsoft sign-in.
-pub fn microsoft_consumer(email: &str) -> bool {
-    let domain = email.trim().rsplit_once('@').map(|(_, d)| d.to_ascii_lowercase()).unwrap_or_default();
-    let name = domain.split('.').next().unwrap_or_default();
-    matches!(name, "outlook" | "hotmail" | "live" | "msn" | "windowslive" | "passport") && domain.contains('.')
-}
-
-/// Why a Microsoft account signing in with a password can't connect (its status starts with this).
-pub const MICROSOFT_NO_PASSWORDS: &str = "Microsoft doesn't accept passwords from mail apps for this account: it needs Sign in with Microsoft";
-
-/// Why an account signed in with Microsoft can't open its mailbox over IMAP: Microsoft took the
-/// sign-in, then its server said "User is authenticated but not connected". The status starts
-/// with this, so the UI can offer what helps (signing in again, or Microsoft Graph).
-pub const MICROSOFT_IMAP_CLOSED: &str = "Microsoft signed you in, but its mail server won't open this mailbox over IMAP";
-
-/// An account that signs in to Microsoft's servers with a password rather than Microsoft
-/// sign-in, which those servers refuse.
-pub fn microsoft_password_account(a: &AccountConfig) -> bool {
-    a.oauth.is_none()
-        && a.graph.is_none()
-        && a.ews.is_none()
-        && (oauth_provider_for(&a.imap.host) == Some("microsoft") || microsoft_consumer(&a.email))
+    /// Microsoft sign-in through an organisation's own app registration: its Application
+    /// (client) ID, in place of the one built into this copy of Quatrelle (a single-tenant
+    /// registration, say, whose administrator approved it for the organisation).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub oauth_client_id: Option<String>,
+    /// Microsoft sign-in: the tenant the registration is for — a directory's id or domain
+    /// (`contoso.onmicrosoft.com`), `organizations` or `consumers` — in place of `common` (any
+    /// account).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub oauth_tenant: Option<String>,
 }
 
 impl AccountConfig {
@@ -270,7 +240,15 @@ impl AccountConfig {
             oauth_user: None,
             shared_mailboxes: Vec::new(),
             online_only: false,
+            oauth_client_id: None,
+            oauth_tenant: None,
         }
+    }
+
+    /// Whether the account brings its own Microsoft app registration (an Application (client)
+    /// ID of its own), so it can sign in with Microsoft whether or not this copy has one built in.
+    pub fn own_oauth_app(&self) -> bool {
+        self.oauth_client_id.as_deref().is_some_and(valid_oauth_client_id)
     }
 
     /// Whether the account's mail is kept online only: asked for, and on a server that keeps it.
@@ -807,26 +785,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn microsofts_own_addresses_need_its_sign_in() {
-        for e in ["a@outlook.com", "a@hotmail.com", "a@hotmail.co.uk", "a@live.nl", "a@msn.com", "A@Outlook.FR"] {
-            assert!(microsoft_consumer(e), "{e}");
-        }
-        for e in ["a@outlook-studio.example", "a@studio.example", "a@hotmail", "hotmail.com", ""] {
-            assert!(!microsoft_consumer(e), "{e}");
-        }
-        let mut a = AccountConfig::guess("someone@hotmail.com");
-        assert!(microsoft_password_account(&a));
-        assert_eq!(AccountConfig::guess("a@live.nl").imap.host, "outlook.office365.com");
-        a.oauth = Some("microsoft".into());
-        assert!(!microsoft_password_account(&a));
-        assert!(!microsoft_password_account(&AccountConfig::guess("zoe@studio.example")));
-        // A work address on Microsoft 365's servers, signing in with a password.
-        let mut work = AccountConfig::guess("zoe@contoso.example");
-        work.imap.host = "outlook.office365.com".into();
-        assert!(microsoft_password_account(&work));
-    }
-
-    #[test]
     fn another_mailboxs_folders_stay_under_it() {
         let f = |path: &str, role: FolderRole| Folder {
             account: "a".into(),
@@ -902,6 +860,33 @@ mod tests {
 
     #[test]
     fn guesses_servers_from_the_domain() {
+        // An organisation's own Microsoft app registration goes with the account (read as
+        // absent from a file kept before it could), and is checked for what it could be.
+        let kept: AccountConfig = serde_json::from_str(r#"{"id":"a1","name":"Zoe","email":"zoe@contoso.example","username":"zoe@contoso.example","imap":{"host":"","port":0},"smtp":{"host":"","port":0}}"#).unwrap();
+        assert_eq!((kept.oauth_client_id.as_deref(), kept.oauth_tenant.as_deref()), (None, None));
+        assert!(!kept.own_oauth_app() && !microsoft_sign_in_possible(&kept, &[]) && microsoft_sign_in_possible(&kept, &["microsoft".to_string()]));
+        let mut own = kept.clone();
+        own.oauth_client_id = Some("11111111-2222-3333-4444-555555555555".into());
+        own.oauth_tenant = Some("contoso.onmicrosoft.com".into());
+        let back: AccountConfig = serde_json::from_str(&serde_json::to_string(&own).unwrap()).unwrap();
+        assert_eq!(
+            (back.oauth_client_id.as_deref(), back.oauth_tenant.as_deref()),
+            (Some("11111111-2222-3333-4444-555555555555"), Some("contoso.onmicrosoft.com"))
+        );
+        assert!(back.own_oauth_app() && microsoft_sign_in_possible(&back, &[]));
+        assert!(!serde_json::to_string(&kept).unwrap().contains("oauth_client_id"), "left out when there's none");
+        for good in ["11111111-2222-3333-4444-555555555555", "quatrelle-test"] {
+            assert!(valid_oauth_client_id(good), "{good}");
+        }
+        for bad in ["", "not a client id!", &"x".repeat(101)] {
+            assert!(!valid_oauth_client_id(bad), "{bad}");
+        }
+        for good in ["common", "organizations", "consumers", "contoso.onmicrosoft.com", "11111111-2222-3333-4444-555555555555"] {
+            assert!(valid_oauth_tenant(good), "{good}");
+        }
+        for bad in ["", "bad tenant", ".contoso", "contoso.", "a/b", "-x"] {
+            assert!(!valid_oauth_tenant(bad), "{bad}");
+        }
         let a = AccountConfig::guess("zoe@example.org");
         assert_eq!(a.imap.host, "mail.example.org");
         assert_eq!(a.imap.port, 993);

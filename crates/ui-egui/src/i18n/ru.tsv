@@ -502,9 +502,18 @@
 	Not available: a data file has no server.	Недоступно: у файла данных нет сервера.
 	Opening {file}…	Открытие {file}…
 	Exchange (Microsoft 365)	Exchange (Microsoft 365)
+	Microsoft sign-in: your organisation's own app registration (optional)	Вход Microsoft: собственная регистрация приложения вашей организации (необязательно)
+	Application (client) ID	Идентификатор приложения (клиента)
+	Tenant	Клиент (tenant)
+	Built into this copy when left empty	Пусто: встроенный в эту копию
+	Needed: this copy of Quatrelle has none built in	Требуется: в этой копии Quatrelle нет встроенного
+	The tenant is common (any account), organizations, or your directory's domain or id, as the registration allows.	Клиент: common (любая учётная запись), organizations или домен либо идентификатор вашего каталога — как разрешает регистрация.
+	That isn't an application (client) ID.	Это не идентификатор приложения (клиента).
+	Microsoft 365 hosts this domain's mail: Quatrelle connects through Microsoft Graph. To use IMAP and SMTP instead, pick them under Server settings.	Почту этого домена обслуживает Microsoft 365: Quatrelle подключается через Microsoft Graph. Чтобы использовать IMAP и SMTP, выберите их в настройках сервера.
 	Exchange (Microsoft Graph)	Exchange (Microsoft Graph)
 	Server: {url} (Microsoft Graph)	Сервер: {url} (Microsoft Graph)
 	Signing in with Microsoft isn't set up in this copy of Quatrelle.	Вход через Microsoft не настроен в этой копии Quatrelle.
+	Signing in with Microsoft isn't set up in this copy of Quatrelle: give your organisation's own application (client) ID under Server settings.	Вход через Microsoft не настроен в этой копии Quatrelle: укажите идентификатор приложения (клиента) вашей организации в настройках сервера.
 	Syncs through Microsoft Graph, for work and school accounts where IMAP is switched off. You sign in with Microsoft in the browser: no password is stored.	Синхронизация через Microsoft Graph — для рабочих и учебных учётных записей с отключённым IMAP. Вход выполняется через Microsoft в браузере: пароль не сохраняется.
 	In the browser, Quatrelle works with JMAP providers. Your password stays in this tab only and is only ever sent to your mail server.	В браузере Quatrelle работает с провайдерами JMAP. Пароль хранится только в этой вкладке и отправляется только на ваш почтовый сервер.
 	Your mail in the browser. Add a JMAP account (such as Fastmail): Quatrelle talks to your mail server directly, and your password stays in this tab only.	Ваша почта в браузере. Добавьте учётную запись JMAP (например, Fastmail): Quatrelle обращается напрямую к вашему почтовому серверу, а пароль хранится только в этой вкладке.
@@ -631,6 +640,7 @@
 	Ask the recipients to confirm they've read it (their mail app may not, or may ask them)	Попросить получателей подтвердить прочтение (их почтовая программа может этого не сделать или спросить их)
 	Works with any provider: IMAP or POP with SMTP, JMAP, or Exchange. Your password is kept in this computer's keychain and only ever sent to your mail server.	Работает с любым поставщиком: IMAP или POP с SMTP, JMAP или Exchange. Пароль хранится в связке ключей этого компьютера и отправляется только на ваш почтовый сервер.
 	Run it now on the mail already in the Inbox	Применить сейчас к почте во «Входящих»
+	Run it now on the mail already in {folder}	Применить сейчас к почте в папке {folder}
 	Run on the mail already in the Inbox	Применить к почте во «Входящих»
 	More options	Другие действия
 	Save As…	Сохранить как…
@@ -956,6 +966,8 @@ month	May	Май
 	Spouse	Супруг(а)
 	Anniversary	Годовщина
 	On the server, made elsewhere	На сервере, созданы в другом месте
+	Refused by the server	Отклонено сервером
+	The server refused this rule ({why}). It's sent there again once saved.	Сервер отклонил это правило ({why}). После сохранения оно будет отправлено снова.
 	Change or remove them in the program that made them.	Измените или удалите их в программе, которая их создала.
 	On / off on the server	Включено или выключено на сервере
 	+ Add a condition	+ Добавить условие

@@ -503,9 +503,18 @@
 	Not available: a data file has no server.	Nicht verfügbar: Eine Datendatei hat keinen Server.
 	Opening {file}…	{file} wird geöffnet…
 	Exchange (Microsoft 365)	Exchange (Microsoft 365)
+	Microsoft sign-in: your organisation's own app registration (optional)	Microsoft-Anmeldung: die eigene App-Registrierung Ihrer Organisation (optional)
+	Application (client) ID	Anwendungs-ID (Client-ID)
+	Tenant	Mandant (Tenant)
+	Built into this copy when left empty	Leer: die in dieser Kopie eingebaute
+	Needed: this copy of Quatrelle has none built in	Erforderlich: in dieser Kopie von Quatrelle ist keine eingebaut
+	The tenant is common (any account), organizations, or your directory's domain or id, as the registration allows.	Der Mandant ist common (jedes Konto), organizations oder die Domäne bzw. ID Ihres Verzeichnisses, je nachdem, was die Registrierung erlaubt.
+	That isn't an application (client) ID.	Das ist keine Anwendungs-ID (Client-ID).
+	Microsoft 365 hosts this domain's mail: Quatrelle connects through Microsoft Graph. To use IMAP and SMTP instead, pick them under Server settings.	Microsoft 365 hostet die E-Mails dieser Domäne: Quatrelle verbindet sich über Microsoft Graph. Für IMAP und SMTP stattdessen wählen Sie diese unter Servereinstellungen.
 	Exchange (Microsoft Graph)	Exchange (Microsoft Graph)
 	Server: {url} (Microsoft Graph)	Server: {url} (Microsoft Graph)
 	Signing in with Microsoft isn't set up in this copy of Quatrelle.	Die Anmeldung mit Microsoft ist in dieser Quatrelle-Kopie nicht eingerichtet.
+	Signing in with Microsoft isn't set up in this copy of Quatrelle: give your organisation's own application (client) ID under Server settings.	Die Anmeldung mit Microsoft ist in dieser Kopie von Quatrelle nicht eingerichtet: Geben Sie die Anwendungs-ID (Client-ID) Ihrer Organisation unter Servereinstellungen an.
 	Syncs through Microsoft Graph, for work and school accounts where IMAP is switched off. You sign in with Microsoft in the browser: no password is stored.	Synchronisiert über Microsoft Graph, für Geschäfts- und Schulkonten, bei denen IMAP abgeschaltet ist. Sie melden sich im Browser bei Microsoft an: Es wird kein Kennwort gespeichert.
 	In the browser, Quatrelle works with JMAP providers. Your password stays in this tab only and is only ever sent to your mail server.	Im Browser funktioniert Quatrelle mit JMAP-Anbietern. Ihr Kennwort bleibt nur in diesem Tab und wird nur an Ihren Mailserver gesendet.
 	Your mail in the browser. Add a JMAP account (such as Fastmail): Quatrelle talks to your mail server directly, and your password stays in this tab only.	Ihre E-Mails im Browser. Fügen Sie ein JMAP-Konto hinzu (etwa Fastmail): Quatrelle spricht direkt mit Ihrem Mailserver, und Ihr Kennwort bleibt nur in diesem Tab.
@@ -632,6 +641,7 @@
 	Ask the recipients to confirm they've read it (their mail app may not, or may ask them)	Die Empfänger bitten, das Lesen zu bestätigen (ihr Mailprogramm tut es vielleicht nicht oder fragt sie)
 	Works with any provider: IMAP or POP with SMTP, JMAP, or Exchange. Your password is kept in this computer's keychain and only ever sent to your mail server.	Funktioniert mit jedem Anbieter: IMAP oder POP mit SMTP, JMAP oder Exchange. Ihr Kennwort wird im Schlüsselbund dieses Computers gespeichert und nur an Ihren Mailserver gesendet.
 	Run it now on the mail already in the Inbox	Jetzt auf die E-Mails im Posteingang anwenden
+	Run it now on the mail already in {folder}	Jetzt auf die E-Mails im Ordner {folder} anwenden
 	Run on the mail already in the Inbox	Auf die E-Mails im Posteingang anwenden
 	More options	Weitere Optionen
 	Save As…	Speichern unter…
@@ -957,6 +967,8 @@ month	May	Mai
 	Spouse	Ehepartner
 	Anniversary	Jahrestag
 	On the server, made elsewhere	Auf dem Server, anderswo erstellt
+	Refused by the server	Vom Server abgelehnt
+	The server refused this rule ({why}). It's sent there again once saved.	Der Server hat diese Regel abgelehnt ({why}). Nach dem Speichern wird sie erneut gesendet.
 	Change or remove them in the program that made them.	Ändern oder entfernen Sie sie in dem Programm, das sie erstellt hat.
 	On / off on the server	Auf dem Server an / aus
 	+ Add a condition	+ Bedingung hinzufügen

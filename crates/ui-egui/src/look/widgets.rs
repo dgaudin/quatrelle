@@ -237,6 +237,135 @@ pub fn pill_button(ui: &mut Ui, icon: Icon, label: &str, t: &Tokens) -> Response
 pub const RIBBON_BUTTON_H: f32 = 68.0;
 /// The space for a group's name under its buttons.
 const GROUP_NAME_H: f32 = 16.0;
+/// A compact group's rows: three small buttons stacked in the height of a large one.
+const SMALL_H: f32 = 22.0;
+/// Between a compact group's columns.
+const COLUMN_GAP: f32 = 4.0;
+/// Items stacked in a compact group's column.
+const ROWS: usize = 3;
+/// What a group's end takes beyond its buttons: the row's spacing, the line, and the space
+/// either side of it ([`Groups::end`]).
+const GROUP_SEP: f32 = 11.0;
+
+/// How the ribbon's groups fit the window: from `compact_from` on, each group is drawn compact
+/// — its buttons small, stacked three to a column — as Outlook's ribbon shrinks its groups
+/// from the right when the window is too narrow for the large ones. Measured in one frame
+/// (every item's width drawn either way) for the next: [`GroupFit::fit`].
+#[derive(Clone, Debug, Default)]
+pub struct GroupFit {
+    pub active: bool,
+    /// Groups from this index on are compact (the first never is: New mail stays large).
+    pub compact_from: usize,
+    /// Each compact group's column widths, from the frame before (by group index).
+    pub columns: Vec<Vec<f32>>,
+    /// Measured this frame, per group: its width drawn large, drawn compact, and its columns
+    /// when compact.
+    pub groups: Vec<(f32, f32, Vec<f32>)>,
+    /// Where the first group starts, and how far right the last one reached.
+    pub origin: f32,
+    pub right: f32,
+    /// The group being drawn: its index, and its items so far (width drawn large, drawn
+    /// compact; `true` for a menu arrow, which joins the item before it when compact).
+    group: usize,
+    items: Vec<(f32, f32, bool)>,
+    /// When it's drawn compact: its rect and column widths.
+    compact: Option<(egui::Rect, Vec<f32>)>,
+}
+
+impl GroupFit {
+    /// The fit a ribbon is drawn with: the groups compact from `compact_from` on, with the
+    /// columns measured the frame before.
+    pub fn start(compact_from: usize, columns: Vec<Vec<f32>>) -> GroupFit {
+        GroupFit { active: true, compact_from, columns, ..Default::default() }
+    }
+
+    /// The items as stacked: the compact width of each column, menu arrows joined to their item.
+    fn columns_of(items: &[(f32, f32, bool)]) -> Vec<f32> {
+        let mut stacked: Vec<f32> = Vec::new();
+        for &(_, compact, arrow) in items {
+            match (arrow, stacked.last_mut()) {
+                (true, Some(prev)) => *prev += compact,
+                (true, None) => {}
+                (false, _) => stacked.push(compact),
+            }
+        }
+        stacked.chunks(ROWS).map(|c| c.iter().copied().fold(0.0, f32::max)).collect()
+    }
+
+    /// A group's width drawn large and drawn compact (its name under it can widen either).
+    fn widths(items: &[(f32, f32, bool)], name_w: f32) -> (f32, f32, Vec<f32>) {
+        let spacing = 2.0;
+        let large: f32 = items.iter().map(|i| i.0 + spacing).sum();
+        let columns = Self::columns_of(items);
+        let compact = columns.iter().sum::<f32>() + COLUMN_GAP * columns.len().saturating_sub(1) as f32 + spacing;
+        (large.max(name_w + 8.0), compact.max(name_w + 8.0), columns)
+    }
+
+    /// The first group to draw compact so that the ribbon fits `room_right`: from the end, as
+    /// few as it takes; all of them when even that is too wide (the row then scrolls).
+    pub fn fit(&self, room_right: f32) -> usize {
+        let n = self.groups.len();
+        let room = room_right - self.origin - 4.0;
+        let mut width: f32 = self.groups.iter().map(|g| g.0).sum::<f32>() + GROUP_SEP * n.saturating_sub(1) as f32;
+        let mut from = n;
+        while width > room && from > 1 {
+            from -= 1;
+            if let Some(g) = self.groups.get(from) {
+                width -= g.0 - g.1;
+            }
+        }
+        from
+    }
+}
+
+pub fn group_fit_id() -> egui::Id {
+    egui::Id::unique("group-fit")
+}
+
+/// A ribbon item's measure as it's drawn (`large`: a large button's width; `compact`: a small
+/// one's; `arrow`: a menu arrow, drawn beside the item before it when compact). Its rect when
+/// the group is drawn compact.
+fn group_item(ui: &Ui, large: f32, compact: f32, arrow: bool) -> Option<egui::Rect> {
+    ui.ctx().data_mut(|d| {
+        let f = d.get_temp_mut_or_default::<GroupFit>(group_fit_id());
+        if !f.active {
+            return None;
+        }
+        f.items.push((large, compact, arrow));
+        let (rect, cols) = f.compact.as_ref()?;
+        // Where it goes: the arrow at the right of the item before it; the item in its column.
+        let stacked: Vec<&(f32, f32, bool)> = f.items.iter().filter(|i| !i.2).collect();
+        let k = stacked.len().checked_sub(1)?;
+        let (c, r) = (k / ROWS, k % ROWS);
+        let w = *cols.get(c)?;
+        let x = rect.left() + cols.iter().take(c).sum::<f32>() + COLUMN_GAP * c as f32;
+        let y = rect.top() + (SMALL_H + 1.0) * r as f32;
+        let row = egui::Rect::from_min_size(egui::pos2(x, y), vec2(w, SMALL_H));
+        Some(if arrow { egui::Rect::from_min_size(egui::pos2(row.right() - compact, y), vec2(compact, SMALL_H)) } else { row })
+    })
+}
+
+/// A small button in a compact group: its icon and name on one line, in the row it was given.
+fn small(ui: &mut Ui, icon: Icon, galley: std::sync::Arc<egui::Galley>, t: &Tokens, kind: Big, rect: egui::Rect) -> Response {
+    let enabled = kind != Big::Off;
+    let id = ui.scope_id().with(("ribbon-small", rect.min.x as i32, rect.min.y as i32));
+    let resp = ui.interact(rect, id, if enabled { Sense::click() } else { Sense::hover() });
+    let pressed = enabled && resp.is_pointer_button_down_on();
+    if kind == Big::On {
+        ui.painter().rect(rect, 4.0, t.accent_soft, Stroke::new(1.0, t.accent.gamma_multiply(0.5)), egui::StrokeKind::Inside);
+    } else if enabled && (resp.hovered() || pressed) {
+        ui.painter().rect_filled(rect, 4.0, if pressed { t.accent_soft } else { t.hover });
+    }
+    let icon_color = match kind {
+        Big::Off => t.faint,
+        Big::Accent => t.accent,
+        _ => t.text,
+    };
+    icons::paint(ui.painter(), egui::Rect::from_min_size(rect.min + vec2(4.0, 3.0), vec2(16.0, 16.0)), icon, icon_color);
+    let text = if enabled { t.text } else { t.faint };
+    ui.painter().galley_with_override_text_color(rect.min + vec2(24.0, (SMALL_H - galley.size().y) / 2.0), galley, text);
+    resp
+}
 
 /// A ribbon button as Outlook's: a large icon with its name under it (on two lines when long),
 /// greyed out when it can't be used.
@@ -273,6 +402,11 @@ fn big(ui: &mut Ui, icon: Icon, label: &str, t: &Tokens, kind: Big) -> Response 
         galley = ui.painter().layout(label.to_string(), theme::regular(12.5), text, 128.0);
     }
     let w = (galley.size().x + 14.0).max(46.0);
+    // In a group drawn compact (the window too narrow for the large buttons): small, stacked.
+    let line = ui.painter().layout_no_wrap(label.to_string(), theme::regular(12.5), text);
+    if let Some(rect) = group_item(ui, w, line.size().x + 30.0, false) {
+        return small(ui, icon, line, t, kind, rect);
+    }
     let (rect, resp) = ui.allocate_exact_size(vec2(w, RIBBON_BUTTON_H), if enabled { Sense::click() } else { Sense::hover() });
     let pressed = enabled && resp.is_pointer_button_down_on();
     if kind == Big::On {
@@ -295,6 +429,16 @@ fn big(ui: &mut Ui, icon: Icon, label: &str, t: &Tokens, kind: Big) -> Response 
 /// The ▾ beside a ribbon button, for its menu of more choices: as tall as the button, the
 /// arrow level with its name.
 pub fn big_more(ui: &mut Ui, tip: &str, t: &Tokens) -> Response {
+    // Compact: at the right of the small button before it.
+    if let Some(rect) = group_item(ui, 16.0, 14.0, true) {
+        let id = ui.scope_id().with(("ribbon-small-more", rect.min.x as i32, rect.min.y as i32));
+        let resp = ui.interact(rect, id, Sense::click());
+        if resp.hovered() {
+            ui.painter().rect_filled(rect, 4.0, t.hover);
+        }
+        icons::paint(ui.painter(), icons::centered(rect, 10.0), Icon::ChevronDown, if resp.hovered() { t.text } else { t.dim });
+        return resp.on_hover_text(tl!(tip));
+    }
     let (rect, resp) = ui.allocate_exact_size(vec2(16.0, RIBBON_BUTTON_H), Sense::click());
     if resp.hovered() {
         ui.painter().rect_filled(rect, 4.0, t.hover);
@@ -305,16 +449,24 @@ pub fn big_more(ui: &mut Ui, tip: &str, t: &Tokens) -> Response {
 }
 
 /// The ribbon's groups, laid out left to right: each ends with its name centred under its buttons
-/// and a line after it, as Outlook's ribbon names its groups (New, Delete, Respond…).
+/// and a line after it, as Outlook's ribbon names its groups (New, Delete, Respond…). A group
+/// the window has no room for is drawn compact ([`GroupFit`]).
 pub struct Groups {
     start: f32,
     top: f32,
+    index: usize,
 }
 
 impl Groups {
     /// Start the first group where the ribbon's row starts.
-    pub fn new(ui: &Ui) -> Groups {
-        Groups { start: ui.cursor().min.x, top: ui.cursor().min.y }
+    pub fn new(ui: &mut Ui) -> Groups {
+        let mut g = Groups { start: ui.cursor().min.x, top: ui.cursor().min.y, index: 0 };
+        ui.ctx().data_mut(|d| {
+            let f = d.get_temp_mut_or_default::<GroupFit>(group_fit_id());
+            f.origin = g.start;
+        });
+        g.begin(ui);
+        g
     }
 
     /// End the group begun last, named `name`, and start the next one after a line.
@@ -325,6 +477,8 @@ impl Groups {
         ui.painter().rect_filled(r, 0.0, t.border);
         ui.add_space(3.0);
         self.start = ui.cursor().min.x;
+        self.index += 1;
+        self.begin(ui);
     }
 
     /// End the last group, named `name`.
@@ -332,8 +486,27 @@ impl Groups {
         self.name(ui, t, name);
     }
 
+    /// Begin a group: compact when the fit says so and its columns are known from the frame
+    /// before (its whole rect taken now, its buttons placed in it as they come); large
+    /// otherwise.
+    fn begin(&mut self, ui: &mut Ui) {
+        let columns = ui.ctx().data_mut(|d| {
+            let f = d.get_temp_mut_or_default::<GroupFit>(group_fit_id());
+            f.group = self.index;
+            f.items.clear();
+            f.compact = None;
+            (f.active && self.index >= f.compact_from.max(1)).then(|| f.columns.get(self.index).cloned()).flatten().filter(|c| !c.is_empty())
+        });
+        if let Some(cols) = columns {
+            let w = cols.iter().sum::<f32>() + COLUMN_GAP * cols.len().saturating_sub(1) as f32;
+            let (rect, _) = ui.allocate_exact_size(vec2(w, RIBBON_BUTTON_H), Sense::hover());
+            ui.ctx().data_mut(|d| d.get_temp_mut_or_default::<GroupFit>(group_fit_id()).compact = Some((rect, cols)));
+        }
+    }
+
     fn name(&mut self, ui: &mut Ui, t: &Tokens, name: &str) {
         let galley = ui.painter().layout_no_wrap(tl!(name).to_string(), theme::regular(11.5), t.dim);
+        let name_w = galley.size().x;
         // A name wider than its buttons widens the group.
         let span = ui.cursor().min.x - self.start;
         if span < galley.size().x + 8.0 {
@@ -344,6 +517,15 @@ impl Groups {
         ui.painter().galley_with_override_text_color(at, galley, t.dim);
         // Keep the row tall enough for the names.
         ui.allocate_exact_size(vec2(0.0, RIBBON_BUTTON_H + GROUP_NAME_H), Sense::hover());
+        // The group's measure, for the fit.
+        ui.ctx().data_mut(|d| {
+            let f = d.get_temp_mut_or_default::<GroupFit>(group_fit_id());
+            if f.active {
+                let (large, compact, columns) = GroupFit::widths(&f.items, name_w);
+                f.groups.push((large, compact, columns));
+                f.right = f.right.max(right);
+            }
+        });
     }
 }
 

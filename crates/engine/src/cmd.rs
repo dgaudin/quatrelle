@@ -9,7 +9,7 @@ use quatrelle_model::{AccountConfig, Flag, FolderRole, Security, ServerConfig};
 use serde_json::{Value, json};
 
 use crate::JunkList;
-use crate::session::{ListFilter, MoveTarget, ReadingPane, SearchScope, View, parse_key};
+use crate::session::{ListFilter, MoveTarget, ReadingPane, RulesScope, SearchScope, View, parse_key};
 use crate::{CmdError, CmdResult, CommandSpec, Registry, Session, p, parse_local};
 
 fn has_selection(s: &Session) -> Option<&'static str> {

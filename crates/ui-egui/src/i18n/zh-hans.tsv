@@ -505,9 +505,18 @@ month	May	5月
 	Not available: a data file has no server.	不可用：数据文件没有服务器。
 	Opening {file}…	正在打开 {file}…
 	Exchange (Microsoft 365)	Exchange (Microsoft 365)
+	Microsoft sign-in: your organisation's own app registration (optional)	Microsoft 登录：您所在组织自己的应用注册（可选）
+	Application (client) ID	应用程序（客户端）ID
+	Tenant	租户
+	Built into this copy when left empty	留空则使用此副本内置的
+	Needed: this copy of Quatrelle has none built in	必填：此 Quatrelle 副本没有内置的
+	The tenant is common (any account), organizations, or your directory's domain or id, as the registration allows.	租户为 common（任意帐户）、organizations，或注册所允许的目录域名或 ID。
+	That isn't an application (client) ID.	这不是应用程序（客户端）ID。
+	Microsoft 365 hosts this domain's mail: Quatrelle connects through Microsoft Graph. To use IMAP and SMTP instead, pick them under Server settings.	此域的邮件由 Microsoft 365 托管：Quatrelle 通过 Microsoft Graph 连接。若要改用 IMAP 和 SMTP，请在“服务器设置”中选择。
 	Exchange (Microsoft Graph)	Exchange (Microsoft Graph)
 	Server: {url} (Microsoft Graph)	服务器：{url} (Microsoft Graph)
 	Signing in with Microsoft isn't set up in this copy of Quatrelle.	此 Quatrelle 副本未设置 Microsoft 登录。
+	Signing in with Microsoft isn't set up in this copy of Quatrelle: give your organisation's own application (client) ID under Server settings.	此 Quatrelle 副本未设置 Microsoft 登录：请在“服务器设置”中填写您所在组织的应用程序（客户端）ID。
 	Syncs through Microsoft Graph, for work and school accounts where IMAP is switched off. You sign in with Microsoft in the browser: no password is stored.	通过 Microsoft Graph 同步，适用于关闭了 IMAP 的工作或学校帐户。在浏览器中使用 Microsoft 登录：不会保存密码。
 	In the browser, Quatrelle works with JMAP providers. Your password stays in this tab only and is only ever sent to your mail server.	在浏览器中，Quatrelle 支持 JMAP 提供商。你的密码只保存在此标签页中，并且只会发送到你的邮件服务器。
 	Your mail in the browser. Add a JMAP account (such as Fastmail): Quatrelle talks to your mail server directly, and your password stays in this tab only.	在浏览器中收发邮件。添加一个 JMAP 帐户（例如 Fastmail）：Quatrelle 直接与你的邮件服务器通信，你的密码只保存在此标签页中。
@@ -634,6 +643,7 @@ month	May	5月
 	Ask the recipients to confirm they've read it (their mail app may not, or may ask them)	请收件人确认已读（对方的邮件应用可能不发送，或会询问对方）
 	Works with any provider: IMAP or POP with SMTP, JMAP, or Exchange. Your password is kept in this computer's keychain and only ever sent to your mail server.	适用于任何提供商：IMAP 或 POP 加 SMTP、JMAP 或 Exchange。密码保存在这台电脑的钥匙串中，只会发送到你的邮件服务器。
 	Run it now on the mail already in the Inbox	立即对收件箱中已有的邮件运行
+	Run it now on the mail already in {folder}	立即对 {folder} 中已有的邮件运行
 	Run on the mail already in the Inbox	对收件箱中已有的邮件运行
 	More options	更多选项
 	Save As…	另存为…
@@ -954,6 +964,8 @@ month	May	5月
 	Spouse	配偶
 	Anniversary	周年纪念
 	On the server, made elsewhere	在服务器上，在其他位置创建
+	Refused by the server	被服务器拒绝
+	The server refused this rule ({why}). It's sent there again once saved.	服务器拒绝了此规则（{why}）。保存后会再次发送。
 	Change or remove them in the program that made them.	请在创建它们的程序中更改或删除。
 	On / off on the server	在服务器上开启 / 关闭
 	+ Add a condition	+ 添加条件

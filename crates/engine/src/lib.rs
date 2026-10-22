@@ -24,7 +24,7 @@ pub use quatrelle_model as model;
 pub use quatrelle_store as store;
 pub use session::{
     ARRANGE_HEADINGS, AccountState, Arrange, Compose, FolderRef, ListFilter, ListLayout, MoveTarget, NotesOrder, Notice, PaneSection, Picture, Prefs,
-    ReadInPane, Reading, ReadingPane, Row, SearchScope, ServerSearch, Session, UpdateCheck, VacationState, View,
+    ReadInPane, Reading, ReadingPane, Row, RulesScope, SearchScope, ServerSearch, Session, UpdateCheck, VacationState, View,
     invite::Invite,
     junk::{JunkList, junk_entry},
     newer_release, parse_key,

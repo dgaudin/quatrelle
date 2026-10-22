@@ -17,7 +17,7 @@ fn organising_renders_and_rules_save() {
     a.run("list.focusTab", json!({"value": "other"}));
     frame(&ctx, &mut a, vec![]);
     // The rule editor saves a rule; the Rules dialog lists it.
-    a.ui.dialog = Some(Dialog::rule_from("zoe@studio.example", None, false));
+    a.ui.dialog = Some(Dialog::rule_from("zoe@studio.example", None, false, None));
     frame(&ctx, &mut a, vec![]);
     if let Some(Dialog::EditRule(f)) = a.ui.dialog.as_mut() {
         f.actions = vec![crate::dialogs::RuleAct { action: crate::dialogs::RuleDo::Categorize, target: "Work".into() }];
@@ -27,6 +27,15 @@ fn organising_renders_and_rules_save() {
         json!({"rules": [{"name": "Zoe", "conditions": [{"if": "from", "value": "zoe@"}], "actions": [{"do": "categorize", "value": "Work"}]}]}),
     ));
     assert_eq!(a.session.rules.len(), 1);
+    // One the server refused: the list says so, and the editor says why.
+    a.session.rules[0].server = true;
+    a.session.rules[0].account = Some("sample".into());
+    a.session.rules[0].refused = Some("the server refused: Outlook keeps its own copy of the rules".into());
+    let edit = crate::dialogs::RuleForm::from_rule(0, &a.session.rules[0]);
+    assert!(edit.refused.is_some());
+    a.ui.dialog = Some(Dialog::EditRule(Box::new(edit.clone())));
+    frame(&ctx, &mut a, vec![]);
+    assert_eq!(edit.to_rule().unwrap().refused, None, "saved, it goes to the server again");
     // A rule the server keeps that Quatrelle didn't make (Outlook's own): listed, read-only.
     a.session.foreign_rules.push(quatrelle_engine::model::organize::ForeignRule {
         account: "sample".into(),
@@ -41,6 +50,46 @@ fn organising_renders_and_rules_save() {
     frame(&ctx, &mut a, vec![]);
     frame(&ctx, &mut a, vec![]);
     let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Create rule… on a message in another folder: the form offers to run the rule on that folder's
+/// mail (the Inbox alone seemed to do nothing), and saving runs it there; from the Inbox, or
+/// with no folder, on the Inbox.
+#[test]
+fn a_rule_made_from_a_folder_runs_there() {
+    let (mut a, dir) = app("rule-folder");
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    a.ui.dialog = Some(Dialog::rule_from("zoe@studio.example", Some("sample"), false, Some("Archive")));
+    frame(&ctx, &mut a, vec![]);
+    let Some(Dialog::EditRule(mut f)) = a.ui.dialog.clone() else { panic!("the rule editor is open") };
+    assert_eq!(f.run_in.as_deref(), Some("Archive"));
+    assert_eq!(f.run_now_folder(&a.session).as_deref(), Some("Archive"), "named as the folder pane names it");
+    f.actions = vec![crate::dialogs::RuleAct { action: crate::dialogs::RuleDo::Flag, target: String::new() }];
+    let acts = f.save_actions(&a.session).unwrap();
+    assert!(matches!(&acts[0], crate::Action::Submit("rules.set", _)));
+    assert!(matches!(&acts[1], crate::Action::Run("rules.run", p) if p["index"] == 0 && p["account"] == "sample" && p["folder"] == "Archive"));
+    for act in acts {
+        a.act(act);
+    }
+    assert_eq!(a.session.rules.len(), 1);
+    assert!(a.session.notices.last().is_some_and(|n| n.text.contains("matched")), "ran on Archive's mail");
+    // From the Inbox itself: the Inbox wording, and the Inbox run.
+    let inbox = rule_form(Dialog::rule_from("zoe@studio.example", Some("sample"), false, Some("INBOX")));
+    assert_eq!(inbox.run_now_folder(&a.session), None);
+    // A folder that's gone: the Inbox. No account: no folder to run in.
+    let mut gone = rule_form(Dialog::rule_from("zoe@studio.example", Some("sample"), false, Some("Gone")));
+    gone.actions = vec![crate::dialogs::RuleAct { action: crate::dialogs::RuleDo::Flag, target: String::new() }];
+    assert!(matches!(&gone.save_actions(&a.session).unwrap()[1], crate::Action::Run("rules.run", p) if p["inbox"] == true));
+    assert_eq!(rule_form(Dialog::rule_from("zoe@studio.example", None, false, Some("Archive"))).run_in, None);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+fn rule_form(d: Dialog) -> crate::dialogs::RuleForm {
+    match d {
+        Dialog::EditRule(f) => *f,
+        other => panic!("not the rule editor: {other:?}"),
+    }
 }
 
 /// Junk Email: the menu blocks the sender, and the lists in Options draw, long ones in part.
