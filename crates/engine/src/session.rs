@@ -286,6 +286,10 @@ pub struct Session {
     pub accounts: Vec<AccountState>,
     pub view: View,
     pub filter: ListFilter,
+    /// The message last opened: it stays in a filtered list (Unread) until another is opened or
+    /// the filter or folder changes, as in Outlook — marked read as it opened, it used to vanish
+    /// from under the pointer, the reading pane emptied with it.
+    pub(crate) filter_keep: Option<MessageKey>,
     /// The active search (query text and scope).
     pub search: Option<(String, SearchScope)>,
     /// The search's index is still being built: the results so far are shown while it goes on, a
@@ -440,6 +444,7 @@ impl Session {
             accounts: Vec::new(),
             view: View::Empty,
             filter: ListFilter::All,
+            filter_keep: None,
             search: None,
             search_pending: false,
             search_budget: usize::MAX,

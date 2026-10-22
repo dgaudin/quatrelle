@@ -5,6 +5,7 @@ use super::*;
 impl Session {
     pub fn open_view(&mut self, view: View) {
         self.view = view;
+        self.filter_keep = None;
         self.search = None;
         self.stop_server_search();
         self.search_pending = false;
@@ -57,6 +58,7 @@ impl Session {
     /// Select one message and show it; `mark`: as the reading options say (else left as it is).
     pub(super) fn show_message(&mut self, key: &MessageKey, mark: bool) {
         self.leave_reading(Some(key));
+        self.filter_keep = Some(key.clone());
         self.selection = vec![key.clone()];
         self.focus = Some(key.clone());
         let thread = self.thread_of(key);

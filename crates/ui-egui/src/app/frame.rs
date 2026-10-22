@@ -5,6 +5,28 @@ use crate::*;
 use super::ribbon::RIBBON_H;
 
 impl MailApp {
+    /// Every wake, the window shown or not. eframe runs no `ui` while the window is minimized,
+    /// hidden or covered, only this: the workers' news is taken in, new mail and reminders are
+    /// told on the desktop, and jobs go out. When all of it lived in `ui`, a minimized Quatrelle
+    /// announced nothing (and synced nothing new into view) until it was shown again.
+    pub fn logic(&mut self, ctx: &egui::Context) {
+        self.ui.logic_ran = true;
+        if self.pump() {
+            ctx.request_repaint();
+        }
+        self.announce(ctx);
+        // Calendar reminders: the desktop told of each as it comes, whatever the window shows.
+        for r in reminders::refresh(&mut self.ui.reminders, &self.session, false) {
+            let start = quatrelle_engine::model::dates::civil(r.start, &self.session.clock);
+            let when = if r.all_day { String::new() } else { format!("{:02}:{:02}", start.hour, start.minute) };
+            self.services.notify(&r.summary, &if r.location.is_empty() { when } else { format!("{when} · {}", r.location) });
+        }
+        self.flush_jobs();
+        // Woken by the workers when they have news; this is for the clock (reminders, snoozed
+        // mail coming back) when nothing else happens.
+        ctx.request_repaint_after(std::time::Duration::from_secs(15));
+    }
+
     /// The whole window.
     pub fn ui(&mut self, ui: &mut Ui) {
         // The switch in Options, wherever it was changed from (a command, another window).
@@ -24,11 +46,11 @@ impl MailApp {
         }
         self.apply_language(&ctx);
         motion::set_enabled(&ctx, self.session.prefs.animations);
-        if self.pump() {
-            ctx.request_repaint();
+        if !std::mem::take(&mut self.ui.logic_ran) {
+            self.logic(&ctx);
+            self.ui.logic_ran = false;
         }
         self.settle_composes(&ctx);
-        self.announce(&ctx);
         self.ui.pending_update = self.services.pending_update();
         // Closing with online-only accounts' unsent mail or changes held in memory: ask first.
         if self.ui.close_now {
@@ -300,12 +322,7 @@ impl MailApp {
             }
         }
         self.toasts(&ctx);
-        // Calendar reminders: the window, and the desktop told of each as it comes.
-        for r in reminders::refresh(&mut self.ui.reminders, &self.session, false) {
-            let start = quatrelle_engine::model::dates::civil(r.start, &self.session.clock);
-            let when = if r.all_day { String::new() } else { format!("{:02}:{:02}", start.hour, start.minute) };
-            self.services.notify(&r.summary, &if r.location.is_empty() { when } else { format!("{when} · {}", r.location) });
-        }
+        // Calendar reminders' window (the desktop is told in `logic`).
         reminders::show(&ctx, &mut self.ui.reminders, &self.session, &t, &mut acts);
         if reminders::showing(&self.ui.reminders) {
             ctx.request_repaint_after(std::time::Duration::from_secs(15));

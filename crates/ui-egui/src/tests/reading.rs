@@ -160,6 +160,33 @@ fn new_mail_is_announced_and_counted_in_the_title() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// Minimized or hidden, the window draws nothing (eframe calls only `logic`): new mail is told on
+/// the desktop all the same, not when the window comes back.
+#[test]
+fn new_mail_is_announced_while_the_window_is_hidden() {
+    let (mut a, dir) = app("announce-hidden");
+    let shown = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    a.services = Box::new(Recorder(shown.clone()));
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    frame(&ctx, &mut a, vec![]);
+    a.session.new_mail = vec![Summary {
+        key: MessageKey { account: "sample".into(), folder: "INBOX".into(), validity: 1, uid: 90 },
+        from: quatrelle_engine::model::EmailAddress::new("Zoe Park", "zoe@studio.example"),
+        subject: "Lunch?".into(),
+        date: NOW - 5,
+        ..Default::default()
+    }];
+    // No `ui`: what eframe does for a minimized window.
+    a.logic(&ctx);
+    assert_eq!(shown.lock().unwrap().clone(), [("Zoe Park".to_string(), "Lunch?".to_string())]);
+    // The next frame drawn (logic first, as eframe does) doesn't tell it again.
+    a.logic(&ctx);
+    frame(&ctx, &mut a, vec![]);
+    assert_eq!(shown.lock().unwrap().len(), 1);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 #[test]
 fn long_folders_render_quickly() {
     let (mut a, dir) = app("long");

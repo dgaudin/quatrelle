@@ -311,6 +311,7 @@ pub(super) fn filter(s: &mut Session, v: &Value) -> CmdResult {
         .into_iter()
         .find(|f| f.code().eq_ignore_ascii_case(value))
         .ok_or_else(|| CmdError::Params(format!("unknown filter `{value}`")))?;
+    s.filter_keep = None;
     s.refresh_list();
     Ok(json!({"messages": s.list.len()}))
 }
