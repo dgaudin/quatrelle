@@ -269,3 +269,25 @@ fn closing_with_messages_written_asks_and_keeps_them() {
     assert!(subjects.contains(&"Half done".into()) && subjects.contains(&"Also half done".into()), "{subjects:?}");
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// The message window's ribbon has Outlook's tabs, each drawing its groups over the message
+/// being written (in the reading pane here).
+#[test]
+fn the_compose_ribbon_has_outlooks_tabs() {
+    use crate::rich_edit::ComposeTab;
+    let (mut a, dir) = app("compose-ribbon");
+    a.session.prefs.new_mail_window = false;
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    a.run("mail.new", json!({}));
+    a.run("compose.update", json!({"to": "ann@x.example", "subject": "Plan", "body": "Hello"}));
+    for tab in [ComposeTab::Message, ComposeTab::Insert, ComposeTab::Options, ComposeTab::FormatText, ComposeTab::Review] {
+        frame(&ctx, &mut a, vec![]);
+        if let Some(ed) = a.ui.editor.as_mut() {
+            ed.tab = tab;
+        }
+        frame(&ctx, &mut a, vec![]);
+        assert!(a.ui.editor.as_ref().is_some_and(|e| e.tab == tab), "{tab:?}");
+    }
+    let _ = std::fs::remove_dir_all(dir);
+}

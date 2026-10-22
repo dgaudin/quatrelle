@@ -21,6 +21,18 @@ pub(super) fn commands() -> Vec<CommandSpec> {
         CommandSpec::new("compose.update", "Edit message", "Message", compose_update)
             .params(r#"{"to"?: string, "cc"?: string, "bcc"?: string, "subject"?: string, "body"?: string, "marks"?: bool (the body uses **bold**, *italic*, - lists…), "account"?: string, "importance"?: "high"|"normal"|"low", "readReceipt"?: bool, "replyTo"?: string (where replies go), "sendAfter"?: number (Unix seconds: held in the Outbox until then; 0 sends at once), "voting"?: string (voting buttons, `;`-separated: "Approve;Reject"; Exchange accounts)}"#)
             .when(has_compose),
+        CommandSpec::new("compose.language", "Language", "Message › Review", |s, v| {
+            let c = s.compose.as_mut().ok_or_else(|| CmdError::Disabled("no message is being written".into()))?;
+            let lang = p::str(v, "language").unwrap_or("").trim().to_ascii_lowercase();
+            if lang.len() > 16 || !lang.chars().all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_')) {
+                return Err(CmdError::Params("`language` is a code such as `fr`, `en` or `all`".into()));
+            }
+            c.language = lang;
+            Ok(json!({"language": c.language}))
+        })
+        .params(r#"{"language": string (`fr`, `en`… as the dictionaries are named; `all`: every dictionary; empty: the interface's language)}"#)
+        .when(has_compose),
+        CommandSpec::new("compose.checkNames", "Check Names", "Message › Names", check_names).when(has_compose),
         CommandSpec::new("compose.replaceText", "Replace a stretch of the message", "Message", compose_replace_text)
             .params(
                 r#"{"from": number (byte offset), "to": number, "text": string, "field"?: "body" (default) | "subject" (the subject: byte offsets into it)}"#,
@@ -229,7 +241,8 @@ pub(super) fn insert_picture(s: &mut Session, v: &Value) -> CmdResult {
 }
 
 /// The account's signature into the message being written, at character `at` (else the end),
-/// on a line of its own after the usual `-- ` line (Outlook's Insert › Signature).
+/// on a line of its own (after a `-- ` line when the preferences ask for one): Outlook's
+/// Insert › Signature.
 pub(super) fn insert_signature(s: &mut Session, v: &Value) -> CmdResult {
     use quatrelle_mime::rich::Style;
     let account = s.compose.as_ref().map(|c| c.account.clone()).ok_or_else(|| CmdError::Disabled("no message is being written".into()))?;
@@ -239,9 +252,10 @@ pub(super) fn insert_signature(s: &mut Session, v: &Value) -> CmdResult {
     if sig.trim().is_empty() {
         return Err(CmdError::Params("this account has no signature yet: make one with Signatures…".into()));
     }
+    let block = s.signature_in_message(&sig);
+    let dashes = s.prefs.signature_dashes;
     let c = s.compose.as_mut().ok_or_else(|| CmdError::Disabled("no message is being written".into()))?;
     let old = c.body.clone();
-    let block = crate::session::signature_block(&sig);
     // The signature put in before, still there as it was, is replaced (as choosing a signature
     // in Outlook replaces the one there); otherwise it goes in at the cursor.
     let there = if c.signature.is_empty() { None } else { old.rfind(&c.signature).map(|b| (b, b + c.signature.len())) };
@@ -262,9 +276,52 @@ pub(super) fn insert_signature(s: &mut Session, v: &Value) -> CmdResult {
     let mut styles = std::mem::take(&mut c.styles);
     styles.edit_at(&old, &c.body, &Style::default(), Some(end));
     c.styles = styles;
-    crate::session::style_signature(c, &rich);
+    crate::session::style_signature(c, &rich, dashes);
     crate::session::add_pictures(c, pictures);
     Ok(json!({"inserted": at, "end": end}))
+}
+
+/// Outlook's Check Names: each name typed in To, Cc or Bcc without an address is looked up
+/// among the contacts and the people written to or heard from, and written out with its
+/// address when one person matches it. The names left are answered as `unresolved`.
+pub(super) fn check_names(s: &mut Session, _: &Value) -> CmdResult {
+    let Some(c) = s.compose.as_ref() else { return Err(CmdError::Disabled("no message is being written".into())) };
+    let fields = [c.to.clone(), c.cc.clone(), c.bcc.clone()];
+    let mut out: Vec<String> = Vec::new();
+    let mut unresolved: Vec<String> = Vec::new();
+    let mut resolved = 0usize;
+    for field in &fields {
+        let mut parts: Vec<String> = Vec::new();
+        for token in field.split([';', ',']).map(str::trim).filter(|t| !t.is_empty()).take(500) {
+            if token.contains('@') {
+                parts.push(token.to_string());
+                continue;
+            }
+            let found = s.suggest_contacts(token, 2);
+            let lower = token.to_lowercase();
+            // One person it fits (by name or address), and no second one as close.
+            let fits = |a: &quatrelle_model::EmailAddress| a.name.to_lowercase().contains(&lower) || a.email.to_lowercase().starts_with(&lower);
+            let matches: Vec<&quatrelle_model::EmailAddress> = found.iter().map(|x| &x.address).filter(|a| fits(a)).collect();
+            match matches.as_slice() {
+                [one] => {
+                    parts.push(one.to_string());
+                    resolved += 1;
+                }
+                _ => {
+                    parts.push(token.to_string());
+                    unresolved.push(token.to_string());
+                }
+            }
+        }
+        out.push(if parts.is_empty() { String::new() } else { format!("{}; ", parts.join("; ")) });
+    }
+    let c = s.compose.as_mut().ok_or_else(|| CmdError::Disabled("no message is being written".into()))?;
+    if let [to, cc, bcc] = out.as_slice() {
+        c.to = to.clone();
+        c.cc = cc.clone();
+        c.bcc = bcc.clone();
+    }
+    Ok(json!({"resolved": resolved, "unresolved": unresolved}))
 }
 
 /// Put picture `cid` into the text at character `at`.

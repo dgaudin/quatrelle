@@ -90,6 +90,32 @@ fn a_signature_pasted_from_outlook_keeps_its_formatting() {
     assert!(pasted_html("<img src=\"https://x.example/a.png\">").0.is_empty());
 }
 
+/// Pasted HTML brings its embedded pictures along (a `data:` picture becomes a picture of the
+/// message, where it stood), keeps the ids of pictures the message has (`cid:`, text copied
+/// from the editor itself), and drops the rest (the web, another program's files).
+#[test]
+fn pasted_html_keeps_the_pictures_it_can() {
+    // A 1×1 GIF, twice (one picture), a cid picture, and two that can't come along.
+    let gif = "R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==";
+    let html = format!(
+        "<p>Logo <img src=\"data:image/gif;base64,{gif}\"> and <img src=\"data:image/gif;base64,{gif}\"></p>\
+         <p>Own <img src=\"cid:pic@x\"> web <img src=\"https://x.example/a.png\"> file <img src=\"file:///C:/clip.png\"></p>"
+    );
+    let (text, styles, pictures) = pasted_html_with_pictures(&html);
+    assert_eq!(pictures.len(), 1, "{pictures:?}");
+    assert_eq!((pictures[0].mime.as_str(), pictures[0].name.as_str(), pictures[0].data.len()), ("image/gif", "picture.gif", 43));
+    assert!(pictures[0].data.starts_with(b"GIF89a"));
+    let cids = rich::pictures(&text, &styles);
+    assert_eq!(cids, [pictures[0].cid.clone(), "pic@x".to_string()], "{text:?}");
+    assert_eq!(text.matches(rich::PICTURE).count(), 3, "{text:?}");
+    assert!(text.contains("Logo") && text.contains("web") && text.contains("file"));
+    // Not pictures: junk, a text file, one too big to hold.
+    let (_, _, none) = pasted_html_with_pictures("<img src=\"data:image/png;base64,***\"><img src=\"data:text/plain;base64,aGk=\">");
+    assert!(none.is_empty());
+    let (_, _, none) = pasted_html_with_pictures(&format!("<img src=\"data:image/png;base64,{}\">", "A".repeat(8 << 20)));
+    assert!(none.is_empty());
+}
+
 /// A signature kept as HTML (one made before its styles were kept, or given as HTML from the
 /// command line) reads back with its sizes and typefaces, its own pictures where they stand.
 #[test]

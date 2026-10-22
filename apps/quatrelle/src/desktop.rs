@@ -175,6 +175,11 @@ impl Services for Desktop {
         }
         candidates.iter().find_map(|(p, i)| std::fs::read(p).ok().map(|b| (b, *i)))
     }
+    fn typeface(&mut self, family: &str) -> Option<(Vec<u8>, Option<Vec<u8>>)> {
+        let (regular, bold) = appearance::typeface_files(family)?;
+        let regular = std::fs::read(regular).ok()?;
+        Some((regular, bold.and_then(|b| std::fs::read(b).ok())))
+    }
     fn rtl_font(&mut self) -> Option<Vec<u8>> {
         // Fonts with both Arabic and Hebrew first.
         let candidates: &[&str] = if cfg!(target_os = "windows") {

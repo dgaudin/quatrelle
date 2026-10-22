@@ -32,6 +32,10 @@ impl MailApp {
         // The switch in Options, wherever it was changed from (a command, another window).
         spellcheck::set_on(self.session.prefs.spell_check);
         let ctx = ui.ctx().clone();
+        // Typefaces a message being written asked for (Arial, Calibri…), from the system.
+        for name in std::mem::take(&mut self.ui.load_typefaces) {
+            crate::look::typefaces::load(&ctx, &mut *self.services, &name);
+        }
         let mut main = self.ui.places.get("main").copied();
         after_open(ui, main);
         WindowPlace::note(&mut main, ui);

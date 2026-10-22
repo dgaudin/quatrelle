@@ -45,28 +45,32 @@ pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &
                 ui.label(RichText::new(tl!("The dictionaries are still being read.")).color(t.dim));
             } else if let Some(c) = s.compose.as_ref() {
                 // The body first, then the subject (Outlook's order); both are read again on
-                // every frame, so a change moves straight on to the next word.
+                // every frame (from memory, paragraph by paragraph), so a change moves straight
+                // on to the next word. Neither the signature nor the original under a reply is
+                // checked, and the words let be in the message aren't.
                 let mut words: Vec<(&'static str, std::ops::Range<usize>, String)> = Vec::new();
-                for (field, text) in [("body", &c.body), ("subject", &c.subject)] {
-                    words.extend(crate::spellcheck::misspelt(text).into_iter().map(|(r, w)| (field, r, w)));
+                for (field, subject) in [("body", false), ("subject", true)] {
+                    words.extend(crate::rich_edit::misspelt_in(c, subject).into_iter().map(|(r, w)| (field, r, w)));
                 }
-                words.retain(|(_, _, w)| !f.ignored.iter().any(|i| i.eq_ignore_ascii_case(w)));
+                words.retain(|(field, r, _)| !f.passed.contains(&(field, r.start)));
                 if words.is_empty() {
                     ui.label(RichText::new(tl!("No misspelt words.")).color(t.dim));
                 } else {
-                    // The first word left, with what could take its place.
+                    // The first word left, with what could take its place (worked out once
+                    // for it: the dictionaries take a while over it).
                     let (field, range, word) = (words[0].0, words[0].1.clone(), words[0].2.clone());
                     if f.shown != word {
                         f.shown = word.clone();
                         f.chosen = None;
+                        f.suggestions = crate::spellcheck::suggest_in(&word, &crate::rich_edit::check_for(c).langs, 10);
                     }
                     ui.label(RichText::new(tf!("Not in the dictionary: {word}", word = word)).strong());
                     ui.add_space(6.0);
                     ui.label(RichText::new(tl!("Suggestions")).color(t.dim).small());
-                    let suggestions = crate::spellcheck::suggest(&word, 10);
-                    if suggestions.is_empty() {
+                    if f.suggestions.is_empty() {
                         ui.label(RichText::new(tl!("No suggestions.")).color(t.faint).small());
                     }
+                    let suggestions = f.suggestions.clone();
                     egui::ScrollArea::vertical().max_height(170.0).auto_shrink([false, true]).show(ui, |ui| {
                         for sug in &suggestions {
                             let picked = f.chosen.as_deref() == Some(sug.as_str());
@@ -86,15 +90,18 @@ pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &
                             ));
                             f.chosen = None;
                         }
-                        if ui.button(tl!("Ignore")).clicked() {
-                            f.ignored.push(word.clone());
+                        if ui.button(tl!("Ignore once")).clicked() {
+                            f.passed.push((field, range.start));
+                            f.chosen = None;
+                        }
+                        if ui.button(tl!("Ignore all")).on_hover_text(tl!("Let this word be, here and elsewhere in this message")).clicked() {
+                            crate::spellcheck::ignore_all(c.id, &word);
                             f.chosen = None;
                         }
                         if ui.button(tl!("Add to dictionary")).on_hover_text(tl!("Stop underlining this word, here and in other messages")).clicked()
                         {
                             acts.push(Action::Run("spelling.add", json!({"word": word.clone()})));
                             crate::spellcheck::add_word(&word);
-                            f.ignored.push(word.clone());
                             f.chosen = None;
                         }
                     });

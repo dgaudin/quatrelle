@@ -17,17 +17,21 @@ use quatrelle_engine::mime::rich::{self, Align, List, PICTURE, Style, Styles};
 use quatrelle_engine::model::dates::Clock;
 
 use crate::icons::{self, Icon};
+use crate::spellcheck::Check;
 use crate::theme::{self, Tokens};
 use crate::{Action, Dialog};
 
 mod layout;
 mod links;
+mod ribbon;
 mod toolbar;
 use layout::*;
 pub(crate) use links::link_dialog;
 use links::*;
+use ribbon::*;
+pub(crate) use ribbon::{ComposeTab, RibbonInput, compose_ribbon};
 pub use toolbar::Counts;
-pub(crate) use toolbar::ribbon;
+use toolbar::*;
 #[cfg(test)]
 pub(crate) use toolbar::{count_words, date_choices};
 
@@ -86,6 +90,14 @@ pub(crate) struct Editor {
     /// Give the keyboard back to the text (after a ribbon button took the click), with this
     /// selection.
     pub(crate) refocus: Option<Range<usize>>,
+    /// The misspelt word the right-click menu was opened on, and what could take its place:
+    /// worked out as the menu opens, not on every frame it's shown.
+    menu_word: Option<(Range<usize>, String)>,
+    suggestions: Vec<String>,
+    /// The ribbon's tab shown.
+    pub(crate) tab: ComposeTab,
+    /// The next paste goes in as text alone (Paste › Keep text only).
+    paste_plain: bool,
 }
 
 #[derive(Clone)]
@@ -109,6 +121,10 @@ impl Editor {
             menu_open: false,
             pictures: HashMap::new(),
             refocus: None,
+            menu_word: None,
+            suggestions: Vec::new(),
+            tab: ComposeTab::Message,
+            paste_plain: false,
         }
     }
 
@@ -175,6 +191,10 @@ pub(crate) enum Op {
     Clear,
     Link(String),
     Unlink,
+    /// A typeface (`None`: the message's own).
+    Font(Option<String>),
+    /// A horizontal line on a paragraph of its own at the cursor.
+    Rule,
     /// Text put in at the cursor (in place of the selection), as typing would.
     Insert(String),
 }
@@ -188,6 +208,16 @@ pub(crate) fn apply(ed: &mut Editor, c: &mut Compose, op: Op) {
     if let Op::Insert(text) = &op {
         let style = ed.typing.clone().unwrap_or_else(|| typing_style(&c.body, &c.styles, sel.start));
         replace(ed, c, sel, text, style);
+        return;
+    }
+    if op == Op::Rule {
+        // The line goes on a paragraph of its own: a break before it and one after, the
+        // cursor on the paragraph after it.
+        let style = typing_style(&c.body, &c.styles, sel.start);
+        let at = sel.start;
+        replace(ed, c, sel, "\n\n", style);
+        c.styles.relayout(&c.body, at + 1..at + 1, |p| *p = rich::Para { rule: true, ..Default::default() });
+        c.plain = false;
         return;
     }
     ed.remember(c, sel.end);
@@ -228,6 +258,7 @@ pub(crate) fn apply(ed: &mut Editor, c: &mut Compose, op: Op) {
             Some(Box::new(move |s| Style { link: Some(url.clone()), ..s.clone() }))
         }
         Op::Unlink => Some(Box::new(|s| Style { link: None, ..s.clone() })),
+        Op::Font(f) => Some(Box::new(move |s| Style { font: f.clone(), ..s.clone() })),
         _ => None,
     };
     if let Some(f) = char_op {
@@ -290,6 +321,8 @@ fn keys(ui: &mut Ui, ed: &mut Editor, c: &mut Compose, acts: &mut Vec<Action>) {
     let cs = Modifiers::COMMAND | Modifiers::SHIFT;
     let mut ops = Vec::new();
     let (mut undo_k, mut redo_k, mut link_k, mut book_k) = (false, false, false, false);
+    // Copy and Cut are the editor's own: the clipboard gets the look as HTML, not the text alone.
+    let (mut copy_k, mut cut_k) = (false, false);
     // Lists: Enter on an empty item ends the list, Backspace at an item's start takes its bullet
     // away, Tab and Shift+Tab move it in and out.
     let line = rich::lines_of(&c.body, ed.sel.start..ed.sel.start).0;
@@ -299,13 +332,31 @@ fn keys(ui: &mut Ui, ed: &mut Editor, c: &mut Compose, acts: &mut Vec<Action>) {
     let at_start = ed.sel.is_empty() && ed.sel.start == line_start;
     let listed = para.list != List::None;
     ui.input_mut(|i| {
-        // With Shift first, so Ctrl+Shift+Z isn't taken as Ctrl+Z.
+        if !c.sending {
+            i.events.retain(|e| match e {
+                egui::Event::Copy => {
+                    copy_k = true;
+                    false
+                }
+                egui::Event::Cut => {
+                    cut_k = true;
+                    false
+                }
+                _ => true,
+            });
+        }
+        // With Shift first, so Ctrl+Shift+Z isn't taken as Ctrl+Z. On a Mac ⌘⇧Z is Redo (as
+        // everywhere on it), so clearing the formatting there is Ctrl+Space alone.
+        if cfg!(target_os = "macos") {
+            redo_k = i.consume_key(cs, Key::Z);
+        } else if i.consume_key(cs, Key::Z) {
+            ops.push(Op::Clear);
+        }
         for (m, k, op) in [
             (cs, Key::L, Op::Bullets),
             (cs, Key::Period, Op::Grow),
             (cs, Key::Comma, Op::Shrink),
             (cs, Key::T, Op::Outdent),
-            (cs, Key::Z, Op::Clear),
             (cmd, Key::B, Op::Bold),
             (cmd, Key::I, Op::Italic),
             (cmd, Key::U, Op::Underline),
@@ -323,7 +374,7 @@ fn keys(ui: &mut Ui, ed: &mut Editor, c: &mut Compose, acts: &mut Vec<Action>) {
         }
         book_k = i.consume_key(cs, Key::B);
         undo_k = i.consume_key(cmd, Key::Z);
-        redo_k = i.consume_key(cmd, Key::Y);
+        redo_k |= i.consume_key(cmd, Key::Y);
         link_k = i.consume_key(cmd, Key::K);
         if listed && line_empty && ed.sel.is_empty() && i.consume_key(Modifiers::NONE, Key::Enter) {
             ops.push(if para.list == List::Bullet { Op::Bullets } else { Op::Numbers });
@@ -344,6 +395,13 @@ fn keys(ui: &mut Ui, ed: &mut Editor, c: &mut Compose, acts: &mut Vec<Action>) {
     if undo_k || redo_k {
         undo(ed, c, &ctx, redo_k);
     }
+    let sel = ed.sel.start.min(n)..ed.sel.end.min(n);
+    if cut_k && !sel.is_empty() {
+        cut(ui, ed, c, &sel);
+        set_selection(&ctx, id, ed.sel.clone());
+    } else if copy_k && !sel.is_empty() {
+        copy_selection(ui, c, &sel);
+    }
     if link_k {
         ed.link = Some(LinkForm::open(c, ed.sel.clone()));
     }
@@ -356,9 +414,13 @@ fn keys(ui: &mut Ui, ed: &mut Editor, c: &mut Compose, acts: &mut Vec<Action>) {
 /// part of a web page) with its look, in place of the selection. `false` when there is none,
 /// or it holds no text (a picture alone is pasted as a picture).
 fn paste_formatted(ui: &mut Ui, ed: &mut Editor, c: &mut Compose, id: egui::Id) -> bool {
+    // Keep text only: the text box pastes the text as it is.
+    if std::mem::take(&mut ed.paste_plain) {
+        return false;
+    }
     let Some(html) = crate::clipboard_html() else { return false };
-    let (add, add_styles) = quatrelle_engine::mime::pasted_html(&html);
-    if add.trim().is_empty() {
+    let (mut add, mut add_styles, pictures) = quatrelle_engine::mime::pasted_html_with_pictures(&html);
+    if add.replace(PICTURE, "").trim().is_empty() {
         return false;
     }
     ui.input_mut(|i| i.events.retain(|e| !matches!(e, egui::Event::Paste(_))));
@@ -368,6 +430,21 @@ fn paste_formatted(ui: &mut Ui, ed: &mut Editor, c: &mut Compose, id: egui::Id) 
         ed.undo.remove(0);
     }
     ed.redo.clear();
+    // The pictures that came along (embedded in the HTML) become the message's; one named by
+    // `cid:` stays where the message has it already (text copied from the editor), and any
+    // other picture goes.
+    for p in pictures {
+        if !c.inline.iter().any(|x| x.cid == p.cid) {
+            c.inline.push(p);
+        }
+    }
+    let known: Vec<String> = c.inline.iter().map(|p| p.cid.clone()).collect();
+    for _ in 0..10_000 {
+        let unknown =
+            add.chars().enumerate().find(|(i, ch)| *ch == PICTURE && add_styles.style(*i).picture.as_ref().is_none_or(|cid| !known.contains(cid)));
+        let Some((at, _)) = unknown else { break };
+        rich::splice(&mut add, &mut add_styles, at..at + 1, "", &Styles::plain(""));
+    }
     let n = c.body.chars().count();
     let sel = ed.sel.start.min(n)..ed.sel.end.min(n);
     rich::splice(&mut c.body, &mut c.styles, sel.clone(), &add, &add_styles);
@@ -410,7 +487,8 @@ pub(crate) fn body(ui: &mut Ui, t: &Tokens, ed: &mut Editor, c: &mut Compose, st
     let styles = c.styles.clone();
     let plain = c.plain;
     let tokens = *t;
-    let mut layouter = |ui: &Ui, buf: &dyn egui::TextBuffer, wrap: f32| layout(ui, buf.as_str(), &styles, plain, &tokens, wrap);
+    let check = check_for(c);
+    let mut layouter = |ui: &Ui, buf: &dyn egui::TextBuffer, wrap: f32| layout(ui, buf.as_str(), &styles, plain, &tokens, wrap, &check);
     let height = ui.available_height().max(220.0);
     // A right-click inside the selection keeps it (egui's text box moves the cursor on any
     // press); one outside it moves the cursor there, as Outlook does.
@@ -496,14 +574,48 @@ pub(crate) fn body(ui: &mut Ui, t: &Tokens, ed: &mut Editor, c: &mut Compose, st
     text_menu(&out.response, ed, c, acts, at_pointer);
 }
 
-/// The word at `at` (a character index into `text`), when it isn't spelt right, with its range in
-/// characters: what the right-click menu offers to mend. A click between two words, past the end,
-/// or on a word the dictionaries know gives nothing.
-fn misspelt_at(text: &str, at: usize) -> Option<(Range<usize>, String)> {
+/// What the spelling of `c` is checked by: its language (the interface's unless one was chosen
+/// for it), leaving out its signature and the original under a reply or forward, and the words
+/// let be in it (Ignore all).
+pub(crate) fn check_for(c: &Compose) -> crate::spellcheck::Check {
+    let langs = effective_language(c).into_iter().collect();
+    let mut skip = Vec::new();
+    if !c.signature.is_empty()
+        && let Some(b) = c.body.rfind(&c.signature)
+    {
+        skip.push(b..b + c.signature.len());
+    }
+    // The original under a reply or forward: from its rule to the end.
+    let mut at = 0usize;
+    for (n, line) in c.body.split('\n').enumerate() {
+        if c.styles.para(n).rule {
+            skip.push(at..c.body.len());
+            break;
+        }
+        at += line.len() + 1;
+    }
+    crate::spellcheck::Check { langs, skip, ignored: crate::spellcheck::ignored(c.id) }
+}
+
+/// The misspelt words of the message (its subject too, when `subject`), as its check says.
+pub(crate) fn misspelt_in(c: &Compose, subject: bool) -> Vec<(Range<usize>, String)> {
+    let check = check_for(c);
+    if subject {
+        let check = crate::spellcheck::Check { skip: Vec::new(), ..check };
+        return crate::spellcheck::misspelt_with(&c.subject, &check);
+    }
+    crate::spellcheck::misspelt_with(&c.body, &check)
+}
+
+/// The word at `at` (a character index into the text), when it isn't spelt right, with its range
+/// in characters: what the right-click menu offers to mend. A click between two words, past the
+/// end, or on a word the dictionaries know gives nothing.
+fn misspelt_at(c: &Compose, at: usize) -> Option<(Range<usize>, String)> {
+    let text = &c.body;
     let at = at.min(text.chars().count());
     let byte = text.char_indices().nth(at).map_or(text.len(), |(b, _)| b);
-    crate::spellcheck::misspelt(text).into_iter().find(|(r, _)| r.start <= byte && byte < r.end).map(|(r, word)| {
-        let start = text[..r.start].chars().count();
+    misspelt_in(c, false).into_iter().find(|(r, _)| r.start <= byte && byte < r.end).map(|(r, word)| {
+        let start = text.get(..r.start).unwrap_or("").chars().count();
         (start..start + word.chars().count(), word)
     })
 }
@@ -526,51 +638,61 @@ fn selection_rects(g: &Galley, sel: Range<usize>) -> Vec<Rect> {
     out
 }
 
-/// The right-click menu on the text, as Outlook's: Cut, Copy, Paste and Select all; the link
-/// (insert, edit, open, remove); and clearing the formatting.
+/// The right-click menu on the text, as Outlook's: what could take a misspelt word; Cut, Copy,
+/// Paste and Select all; the link (insert, edit, open, remove); and clearing the formatting.
 fn text_menu(resp: &egui::Response, ed: &mut Editor, c: &mut Compose, acts: &mut Vec<Action>, at_pointer: Option<usize>) {
     let n = c.body.chars().count();
     let sel = ed.sel.start.min(n)..ed.sel.end.min(n);
-    let chosen: String = c.body.chars().skip(sel.start).take(sel.end - sel.start).collect();
     let link = c.styles.style(sel.start).link.filter(|_| n > 0);
-    // The word the menu was opened on, when it isn't spelt right, in characters: Outlook puts
-    // what could take its place at the top of this menu, so a red-underlined word is two clicks
-    // from mended instead of a trip through the spelling dialog.
-    let misspelt = misspelt_at(&c.body, at_pointer.unwrap_or(ed.sel.start));
+    let opening = !ed.menu_open;
     let shown = resp.context_menu(|ui| {
         ui.set_min_width(190.0);
-        if let Some((range, word)) = &misspelt {
-            // Ten, as Outlook lists a good handful: the dictionaries put the likeliest words
-            // first but not always first ("vai" → "vais" comes eighth), and five cut it off.
-            let suggestions = crate::spellcheck::suggest(word, 10);
-            // Under "Spelling", as Outlook's own submenu: what could take the word, and the
-            // writer's own dictionary (this word in it, or back out).
-            ui.menu_button(tl!("Spelling"), |ui| {
-                ui.set_min_width(170.0);
-                for sug in &suggestions {
-                    if ui.add_enabled(!c.sending, egui::Button::new(sug)).clicked() {
-                        let style = typing_style(&c.body, &c.styles, range.start);
-                        replace(ed, c, range.clone(), sug, style);
-                        let end = range.start + sug.chars().count();
-                        ed.refocus = Some(end..end);
-                        ui.close();
-                    }
+        // The word the menu was opened on, when it isn't spelt right, in characters: Outlook
+        // puts what could take its place at the top of this menu, so a red-underlined word is
+        // two clicks from mended instead of a trip through the spelling dialog. Worked out as
+        // the menu opens (the suggestions take a while), kept while it's shown.
+        if opening {
+            ed.menu_word = misspelt_at(c, at_pointer.unwrap_or(ed.sel.start));
+            // Ten, as Outlook lists a good handful: the closest words come first, but a likely
+            // one isn't always first ("vai" → "vais"), and five cut it off.
+            ed.suggestions = ed.menu_word.as_ref().map(|(_, w)| crate::spellcheck::suggest_in(w, &check_for(c).langs, 10)).unwrap_or_default();
+        }
+        if let Some((range, word)) = ed.menu_word.clone() {
+            let mut picked: Option<String> = None;
+            for sug in &ed.suggestions {
+                if ui.add_enabled(!c.sending, egui::Button::new(RichText::new(sug).strong())).clicked() {
+                    picked = Some(sug.clone());
                 }
-                if !suggestions.is_empty() {
-                    ui.separator();
-                }
-                if crate::spellcheck::added(word) {
-                    if ui.button(tf!("Remove “{word}” from the dictionary", word = word)).clicked() {
-                        acts.push(Action::Run("spelling.remove", serde_json::json!({"word": word.clone()})));
-                        crate::spellcheck::remove_word(word);
-                        ui.close();
-                    }
-                } else if ui.button(tl!("Add to dictionary")).on_hover_text(tl!("Stop underlining this word, here and in other messages")).clicked() {
-                    acts.push(Action::Run("spelling.add", serde_json::json!({"word": word.clone()})));
-                    crate::spellcheck::add_word(word);
+            }
+            if ed.suggestions.is_empty() {
+                ui.label(RichText::new(tl!("No suggestions.")).weak());
+            }
+            if let Some(sug) = picked {
+                let style = typing_style(&c.body, &c.styles, range.start);
+                replace(ed, c, range.clone(), &sug, style);
+                let end = range.start + sug.chars().count();
+                ed.refocus = Some(end..end);
+                ui.close();
+            }
+            ui.separator();
+            // Let be in this message, or the writer's own dictionary (this word in it, or back
+            // out).
+            if ui.button(tl!("Ignore all")).on_hover_text(tl!("Let this word be, here and elsewhere in this message")).clicked() {
+                crate::spellcheck::ignore_all(c.id, &word);
+                ed.refocus = Some(sel.clone());
+                ui.close();
+            }
+            if crate::spellcheck::added(&word) {
+                if ui.button(tf!("Remove “{word}” from the dictionary", word = word)).clicked() {
+                    acts.push(Action::Run("spelling.remove", serde_json::json!({"word": word.clone()})));
+                    crate::spellcheck::remove_word(&word);
                     ui.close();
                 }
-            });
+            } else if ui.button(tl!("Add to dictionary")).on_hover_text(tl!("Stop underlining this word, here and in other messages")).clicked() {
+                acts.push(Action::Run("spelling.add", serde_json::json!({"word": word.clone()})));
+                crate::spellcheck::add_word(&word);
+                ui.close();
+            }
             ui.separator();
         }
         let item = |ui: &mut Ui, label: &str, keys: &str, enabled: bool| -> bool {
@@ -583,13 +705,10 @@ fn text_menu(resp: &egui::Response, ed: &mut Editor, c: &mut Compose, acts: &mut
         };
         let some = !sel.is_empty();
         if item(ui, "Cut", "Ctrl+X", some && !c.sending) {
-            ui.ctx().copy_text(chosen.clone());
-            let style = typing_style(&c.body, &c.styles, sel.start);
-            replace(ed, c, sel.clone(), "", style);
-            ed.refocus = Some(ed.sel.clone());
+            cut(ui, ed, c, &sel);
         }
         if item(ui, "Copy", "Ctrl+C", some) {
-            ui.ctx().copy_text(chosen.clone());
+            copy_selection(ui, c, &sel);
             ed.refocus = Some(sel.clone());
         }
         if item(ui, "Paste", "Ctrl+V", !c.sending) {
@@ -710,16 +829,99 @@ mod tests {
         assert!(crate::spellcheck::load_for_test(), "the dictionaries are built in");
         crate::spellcheck::set_on(true);
         let text = "je vai partir dans les pyrénés";
-        let found = misspelt_at(text, 4).map(|(r, w)| (text.chars().skip(r.start).take(r.end - r.start).collect::<String>(), w));
+        let mut c = Compose { body: text.into(), language: "all".into(), ..Default::default() };
+        c.styles = Styles::plain(text);
+        let found = misspelt_at(&c, 4).map(|(r, w)| (text.chars().skip(r.start).take(r.end - r.start).collect::<String>(), w));
         assert_eq!(found, Some(("vai".to_string(), "vai".to_string())), "the word clicked");
         // The second one, and none on the words that are spelt right or between two of them.
-        assert!(misspelt_at(text, text.chars().count() - 2).is_some_and(|(_, w)| w == "pyrénés"));
-        assert_eq!(misspelt_at(text, 0), None, "je");
-        assert_eq!(misspelt_at(text, 2), None, "the space after it");
-        assert_eq!(misspelt_at(text, 1000), None, "past the end");
+        assert!(misspelt_at(&c, text.chars().count() - 2).is_some_and(|(_, w)| w == "pyrénés"));
+        assert_eq!(misspelt_at(&c, 0), None, "je");
+        assert_eq!(misspelt_at(&c, 2), None, "the space after it");
+        assert_eq!(misspelt_at(&c, 1000), None, "past the end");
         // A word with an accent before it: the range is in characters, not bytes.
-        let accented = "déja partir";
-        assert!(misspelt_at(accented, 2).is_some_and(|(r, w)| w == "déja" && r == (0..4)), "characters, not bytes");
+        c.body = "déja partir".into();
+        c.styles = Styles::plain(&c.body);
+        assert!(misspelt_at(&c, 2).is_some_and(|(r, w)| w == "déja" && r == (0..4)), "characters, not bytes");
+    }
+
+    /// Neither the signature nor the original under a reply is checked, nor a word let be in
+    /// the message; the subject is checked without those stretches.
+    #[test]
+    fn the_signature_and_the_original_are_left_alone() {
+        assert!(crate::spellcheck::load_for_test(), "the dictionaries are built in");
+        let text = "Bonjour servveur\n\n-- \nDidierr\n\n\nOriginall quoted";
+        let mut c =
+            Compose { body: text.into(), subject: "Objett".into(), signature: "-- \nDidierr".into(), language: "fr".into(), ..Default::default() };
+        c.styles = Styles::plain(text);
+        c.styles.relayout(text, 24..25, |p| p.rule = true);
+        let words = |c: &Compose| misspelt_in(c, false).into_iter().map(|(_, w)| w).collect::<Vec<_>>();
+        assert_eq!(words(&c), ["servveur"], "{:?}", check_for(&c));
+        assert_eq!(misspelt_in(&c, true).into_iter().map(|(_, w)| w).collect::<Vec<_>>(), ["Objett"]);
+        crate::spellcheck::ignore_all(c.id, "servveur");
+        assert!(words(&c).is_empty());
+        // The message's language: French unless chosen, English words wrong in it alone.
+        c.body = "Le backup".into();
+        c.styles = Styles::plain(&c.body);
+        assert_eq!(effective_language(&c).as_deref(), Some("fr"));
+        assert_eq!(words(&c), ["backup"]);
+        c.language = "all".into();
+        assert!(words(&c).is_empty());
+        assert_eq!(language_name("fr"), "Français");
+        assert_eq!(language_name("xx"), "XX");
+    }
+
+    /// A horizontal line goes on a paragraph of its own at the cursor, a typeface is set on the
+    /// selection (and sent with the message), and Undo takes each back.
+    #[test]
+    fn rules_and_typefaces_go_in_and_come_out() {
+        let mut c = Compose { body: "one two".into(), ..Default::default() };
+        c.styles = Styles::plain(&c.body);
+        let mut ed = Editor::new(c.id);
+        ed.sel = 3..3;
+        apply(&mut ed, &mut c, Op::Rule);
+        assert_eq!(c.body, "one\n\n two");
+        assert!(c.styles.para(1).rule && !c.styles.para(0).rule && !c.styles.para(2).rule, "{:?}", c.styles.paras);
+        assert_eq!(ed.sel, 5..5, "the cursor after the line");
+        assert!(rich::to_html(&c.body, &c.styles).contains("<hr"));
+        ed.sel = 0..3;
+        apply(&mut ed, &mut c, Op::Font(Some("Arial".into())));
+        assert_eq!(c.styles.style(0).font.as_deref(), Some("Arial"));
+        assert!(rich::to_html(&c.body, &c.styles).contains("font-family:'Arial',sans-serif"));
+        apply(&mut ed, &mut c, Op::Font(None));
+        assert_eq!(c.styles.style(0).font, None);
+        let ctx = egui::Context::default();
+        for _ in 0..3 {
+            undo(&mut ed, &mut c, &ctx, false);
+        }
+        assert_eq!(c.body, "one two");
+    }
+
+    /// Every row of a centred or right-aligned paragraph is moved over, not the first alone.
+    #[test]
+    fn long_aligned_paragraphs_are_aligned_whole() {
+        let text = "one two three four five six seven eight nine ten eleven twelve\nleft";
+        let mut st = Styles::plain(text);
+        st.relayout(text, 0..1, |p| p.align = Align::Center);
+        let ctx = egui::Context::default();
+        let tokens = theme::Tokens::light();
+        let _ = ctx.run_ui(Default::default(), |ui| {
+            let g = layout_aligned(ui, text, &st, false, &tokens, 120.0, &Check::default());
+            let centred: Vec<_> = g.rows.iter().take_while(|r| !r.ends_with_newline).collect();
+            assert!(centred.len() >= 3, "{} rows", centred.len());
+            // Each row sits in the middle of what's left (a row that fills the width stays).
+            for r in &centred {
+                let room = (120.0 - r.rect().width()).max(0.0);
+                assert!((r.pos.x - room / 2.0).abs() < 0.5, "{:?} in {room}", r.rect());
+            }
+            assert!(centred.iter().any(|r| r.pos.x > 1.0), "the last row, shorter, is moved over");
+            assert!(g.rows.last().is_some_and(|r| r.pos.x == 0.0), "the left-aligned one stays");
+            // Right-aligned: against the edge, each row.
+            st.relayout(text, 0..1, |p| p.align = Align::Right);
+            let g = layout_aligned(ui, text, &st, false, &tokens, 120.0, &Check::default());
+            for r in g.rows.iter().take_while(|r| !r.ends_with_newline) {
+                assert!((r.rect().max.x - 120.0).abs() < 1.0, "{:?}", r.rect());
+            }
+        });
     }
 
     #[test]

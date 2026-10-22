@@ -1,12 +1,17 @@
 //! The message editor's text laid out: each run in its style, pictures, lists' indents, alignment.
 
+use std::collections::BTreeSet;
+
 use super::*;
 
-/// A look as text formatting (the person's colours adjusted to stay readable on the page).
-pub(super) fn format(s: &Style, t: &Tokens) -> TextFormat {
+/// A look as text formatting (the person's colours adjusted to stay readable on the page), in
+/// its typeface when that's loaded (`typefaces`), the usual font otherwise.
+pub(super) fn format(s: &Style, t: &Tokens, typefaces: &BTreeSet<String>) -> TextFormat {
     let px = f32::from(s.size()) * PX;
     let font = if s.mono {
         FontId::monospace(px * 0.92)
+    } else if let Some(family) = s.font.as_deref().and_then(|name| crate::look::typefaces::family(typefaces, name, s.bold)) {
+        FontId::new(px, family)
     } else if s.bold {
         theme::bold(px)
     } else {
@@ -33,21 +38,21 @@ pub(super) fn picture_format() -> TextFormat {
     TextFormat { font_id: theme::regular(PICTURE_PX), color: Color32::TRANSPARENT, extra_letter_spacing: PICTURE_PX * 0.8, ..Default::default() }
 }
 
-/// The text laid out with its styles; `shift` moves a paragraph right (alignment).
-pub(super) fn job(text: &str, st: &Styles, plain: bool, t: &Tokens, wrap: f32, shift: &[f32]) -> LayoutJob {
+/// The text laid out with its styles; `check` says how its spelling is checked, `typefaces`
+/// which typefaces can be drawn.
+pub(super) fn job(text: &str, st: &Styles, plain: bool, t: &Tokens, wrap: f32, check: &Check, typefaces: &BTreeSet<String>) -> LayoutJob {
     let mut job = LayoutJob::default();
     job.wrap.max_width = wrap;
     let plain_fmt = TextFormat { font_id: theme::regular(14.5), color: t.text, ..Default::default() };
     let mut i = 0usize;
     for (n, line) in text.split('\n').enumerate() {
         if n > 0 {
-            let f = if plain { plain_fmt.clone() } else { format(&st.style(i.saturating_sub(1)), t) };
+            let f = if plain { plain_fmt.clone() } else { format(&st.style(i.saturating_sub(1)), t, typefaces) };
             job.append("\n", 0.0, f);
             i += 1;
         }
         let p = st.para(n);
         let mut lead = if plain { 0.0 } else { f32::from(p.indent) * INDENT + if p.list == List::None { 0.0 } else { INDENT } };
-        lead += shift.get(n).copied().unwrap_or(0.0);
         let mut run_start = 0usize;
         let chars: Vec<(usize, char)> = line.char_indices().collect();
         for k in 0..chars.len() {
@@ -63,7 +68,7 @@ pub(super) fn job(text: &str, st: &Styles, plain: bool, t: &Tokens, wrap: f32, s
                 } else if piece.starts_with(PICTURE) && st.style(i + run_start).picture.is_some() {
                     picture_format()
                 } else {
-                    format(&st.style(i + run_start), t)
+                    format(&st.style(i + run_start), t, typefaces)
                 };
                 job.append(piece, lead, f);
                 lead = 0.0;
@@ -71,13 +76,13 @@ pub(super) fn job(text: &str, st: &Styles, plain: bool, t: &Tokens, wrap: f32, s
             }
         }
         if chars.is_empty() && lead > 0.0 {
-            let f = if plain { plain_fmt.clone() } else { format(&st.style(i), t) };
+            let f = if plain { plain_fmt.clone() } else { format(&st.style(i), t, typefaces) };
             job.append("", lead, f);
         }
         i += chars.len();
     }
     // What isn't spelt right gets a red line under it (nothing before the dictionaries are read).
-    crate::spellcheck::underline(&mut job, text, t.danger);
+    crate::spellcheck::underline_with(&mut job, text, t.danger, check);
     job
 }
 
@@ -113,42 +118,52 @@ pub(super) fn indent_empty_rows(g: Arc<Galley>, st: &Styles, plain: bool) -> Arc
     Arc::new(out)
 }
 
-/// Lay the text out; centred and right-aligned paragraphs that fit on one line are moved over.
-pub(super) fn layout(ui: &Ui, text: &str, st: &Styles, plain: bool, t: &Tokens, wrap: f32) -> Arc<Galley> {
-    indent_empty_rows(layout_aligned(ui, text, st, plain, t, wrap), st, plain)
+/// Lay the text out; centred and right-aligned paragraphs are moved over, row by row.
+pub(super) fn layout(ui: &Ui, text: &str, st: &Styles, plain: bool, t: &Tokens, wrap: f32, check: &Check) -> Arc<Galley> {
+    indent_empty_rows(layout_aligned(ui, text, st, plain, t, wrap, check), st, plain)
 }
 
-pub(super) fn layout_aligned(ui: &Ui, text: &str, st: &Styles, plain: bool, t: &Tokens, wrap: f32) -> Arc<Galley> {
-    let first = ui.painter().layout_job(job(text, st, plain, t, wrap, &[]));
+/// The text laid out, each row of a centred or right-aligned paragraph moved over by what's
+/// left of the width (every row, so a paragraph longer than a line is aligned whole).
+pub(super) fn layout_aligned(ui: &Ui, text: &str, st: &Styles, plain: bool, t: &Tokens, wrap: f32, check: &Check) -> Arc<Galley> {
+    let typefaces = crate::look::typefaces::loaded(ui.ctx());
+    let first = ui.painter().layout_job(job(text, st, plain, t, wrap, check, &typefaces));
     // A right-to-left paragraph left as it was sits against the right edge.
     let lines: Vec<&str> = text.split('\n').collect();
     let align_of = |n: usize, a: Align| {
         if a == Align::Left && lines.get(n).is_some_and(|l| crate::bidi::has_rtl(l) && crate::bidi::paragraph_rtl(l)) { Align::Right } else { a }
     };
-    if plain || st.paras.iter().enumerate().all(|(n, p)| align_of(n, p.align) == Align::Left) {
+    if plain || !wrap.is_finite() || st.paras.iter().enumerate().all(|(n, p)| align_of(n, p.align) == Align::Left) {
         return first;
     }
-    let mut shift = vec![0.0; st.paras.len()];
+    let mut out = (*first).clone();
     let mut row = 0;
+    let mut bounds: Option<Rect> = None;
     for (n, p) in st.paras.iter().enumerate() {
         // The rows this paragraph takes.
         let start = row;
-        while let Some(r) = first.rows.get(row) {
+        while let Some(r) = out.rows.get(row) {
             row += 1;
             if r.ends_with_newline {
                 break;
             }
         }
         let align = align_of(n, p.align);
-        if align != Align::Left
-            && row == start + 1
-            && let Some(r) = first.rows.get(start)
-        {
-            let room = (wrap - r.rect().max.x).max(0.0);
-            if let Some(s) = shift.get_mut(n) {
-                *s = if align == Align::Center { room / 2.0 } else { room };
-            }
+        if align == Align::Left {
+            continue;
+        }
+        for r in out.rows.iter_mut().take(row).skip(start) {
+            let room = (wrap - r.rect().width()).max(0.0);
+            r.pos.x = if align == Align::Center { room / 2.0 } else { room };
+            let rect = r.rect();
+            bounds = Some(bounds.map_or(rect, |b| b.union(rect)));
         }
     }
-    ui.painter().layout_job(job(text, st, plain, t, wrap, &shift))
+    // What's drawn reaches further right now: the galley's bounds say so, or it would be
+    // clipped as if it still sat at the left.
+    if let Some(b) = bounds {
+        out.rect = out.rect.union(b);
+        out.mesh_bounds = out.mesh_bounds.union(b);
+    }
+    Arc::new(out)
 }
