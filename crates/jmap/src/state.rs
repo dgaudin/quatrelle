@@ -20,8 +20,27 @@ pub struct State {
     /// newest window while the server has them there.
     #[serde(default)]
     pub found: BTreeMap<String, Vec<u32>>,
+    /// Where each folder was when last read in full (Exchange): a folder found as it was is
+    /// left alone — one look at it rather than a listing of up to its whole window, folder after
+    /// folder, every pass.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub marks: BTreeMap<String, FolderMark>,
     #[serde(skip)]
     pub(super) numbers: HashMap<u32, String>,
+    /// What was last written ([`State::fingerprint`]): the same isn't written again.
+    #[serde(skip)]
+    saved: std::cell::Cell<u64>,
+}
+
+/// A folder as it was when last read in full: its last change as the server stamps it, its
+/// counts, the window it was read with, and when (seconds) — a mark this old isn't trusted.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FolderMark {
+    pub stamp: String,
+    pub total: u32,
+    pub unread: u32,
+    pub window: usize,
+    pub at: i64,
 }
 
 /// Messages a folder's search of the server brings in, at most.
@@ -39,7 +58,25 @@ impl State {
         let mut s: State = store.load_account_doc(account, STATE_DOC).unwrap_or_default();
         s.numbers = s.ids.iter().map(|(k, v)| (*v, k.clone())).collect();
         s.next = s.next.max(s.numbers.keys().max().copied().unwrap_or(0));
+        s.saved.set(s.fingerprint());
         s
+    }
+
+    /// A digest of what's kept: what was written is written again only once it has changed.
+    /// The numbering of a big mailbox is tens of megabytes, and it was rewritten after every
+    /// folder read, changed or not.
+    fn fingerprint(&self) -> u64 {
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        (self.next, self.ids.len()).hash(&mut h);
+        self.ids.values().fold(0u64, |a, n| a.wrapping_add(u64::from(*n).wrapping_mul(0x9e37_79b9_7f4a_7c15))).hash(&mut h);
+        self.mailboxes.hash(&mut h);
+        self.owners.hash(&mut h);
+        self.found.hash(&mut h);
+        for (k, m) in &self.marks {
+            (k, &m.stamp, m.total, m.unread, m.window, m.at).hash(&mut h);
+        }
+        h.finish()
     }
 
     /// Keep the numbering on disk — never an empty one over the one there: a state that lost
@@ -49,7 +86,13 @@ impl State {
         if self.ids.is_empty() {
             return Ok(());
         }
-        Ok(store.save_account_doc(account, STATE_DOC, self)?)
+        let now = self.fingerprint();
+        if now == self.saved.get() {
+            return Ok(());
+        }
+        store.save_account_doc(account, STATE_DOC, self)?;
+        self.saved.set(now);
+        Ok(())
     }
 
     /// The number standing for a message id (given on first sight).
@@ -102,6 +145,8 @@ impl State {
             mailboxes: self.mailboxes.clone(),
             owners: self.owners.clone(),
             found: BTreeMap::new(),
+            marks: self.marks.clone(),
+            saved: std::cell::Cell::new(0),
         }
     }
 
@@ -114,6 +159,13 @@ impl State {
             self.mailboxes.entry(path).or_insert(id);
         }
         self.owners.extend(other.owners);
+        // The folders it read, as they were: the newer mark of each (it started from a copy of
+        // these, so its other marks are older than any this connection set meanwhile).
+        for (folder, m) in other.marks {
+            if self.marks.get(&folder).is_none_or(|cur| cur.at < m.at) {
+                self.marks.insert(folder, m);
+            }
+        }
     }
 
     /// Put the counter back after the numbers kept by [`State::reserve`], so a long run of

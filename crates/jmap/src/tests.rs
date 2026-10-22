@@ -17,6 +17,39 @@ fn an_empty_numbering_never_overwrites_the_one_on_disk() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// The numbering is written again only once it changed: a big mailbox's is tens of megabytes,
+/// and it went to disk after every folder read, changed or not. A reader connection's marks
+/// come back newer than this one's copy of them, and win.
+#[test]
+fn the_numbering_is_written_only_when_it_changed() {
+    let dir = std::env::temp_dir().join(format!("quatrelle-jmap-saved-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let store = Store::open(&dir).unwrap();
+    let mut st = State::default();
+    st.number("m1");
+    st.save(&store, "a1").unwrap();
+    // Something else on disk: an unchanged state doesn't write over it...
+    let mut other = State::default();
+    other.number("x");
+    other.number("y");
+    store.save_account_doc("a1", "jmap.json", &other).unwrap();
+    st.save(&store, "a1").unwrap();
+    assert_eq!(State::load(&store, "a1").len(), 2, "unchanged: not written");
+    // ...a changed one does.
+    st.number("m2");
+    st.save(&store, "a1").unwrap();
+    assert!(State::load(&store, "a1").id(st.number("m2")).is_some());
+    // Marks: the newer of each.
+    let mark = |at| FolderMark { stamp: "s".into(), at, ..Default::default() };
+    st.marks.insert("INBOX".into(), mark(10));
+    st.marks.insert("Sent".into(), mark(30));
+    let mut reader = st.reserve(100);
+    reader.marks.insert("INBOX".into(), mark(20));
+    st.absorb(reader);
+    assert_eq!((st.marks["INBOX"].at, st.marks["Sent"].at), (20, 30));
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn session_urls_dates_and_keywords() {
     assert_eq!(session_url("jmap.example.com"), "https://jmap.example.com/.well-known/jmap");

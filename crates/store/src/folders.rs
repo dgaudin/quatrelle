@@ -30,6 +30,12 @@ impl Store {
         Ok(st)
     }
 
+    /// Whether a folder's list is kept here, numbered under `validity`: read from its head alone
+    /// (a big folder's pages aren't loaded to know).
+    pub fn folder_kept(&self, account: &str, folder: &str, validity: u32) -> bool {
+        self.read_json::<StateFile>(&self.folder_dir(account, folder).join("state.json")).is_ok_and(|head| head.validity == validity)
+    }
+
     /// Keep a folder's list. A big one goes in pages of [`PAGE_MESSAGES`] by number, and only
     /// the pages that changed are written: one message marked read in a folder of hundreds of
     /// thousands rewrote all of it (hundreds of megabytes, held in memory twice over).

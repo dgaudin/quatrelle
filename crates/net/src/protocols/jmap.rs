@@ -5,7 +5,7 @@
 use quatrelle_model::{Folder, MessageKey, Op};
 use quatrelle_store::Store;
 
-pub use quatrelle_jmap::{FOUND_MAX, Mailbox, State, VALIDITY, block_on, folders, name_special, session_url, utc_date};
+pub use quatrelle_jmap::{FOUND_MAX, FolderMark, Mailbox, State, VALIDITY, block_on, folders, name_special, session_url, utc_date};
 
 use crate::sync::{SyncOptions, SyncReport};
 use crate::{NetError, Result, http};
