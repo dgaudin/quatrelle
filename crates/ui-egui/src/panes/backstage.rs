@@ -705,6 +705,11 @@ fn options(s: &Session, st: &UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
         setting(ui, false, tl!("Check the spelling as you type"), None, &mut |ui| {
             switch(ui, s.prefs.spell_check, tl!("Check the spelling as you type"), "view.spelling", acts);
         });
+        // RFC 3676's delimiter before the signature: off, as Outlook adds none.
+        let about = tl!("Some mail apps use it to tell the signature apart; Outlook adds none.");
+        setting(ui, false, tl!("Put a “-- ” line before the signature"), Some(about), &mut |ui| {
+            switch(ui, s.prefs.signature_dashes, tl!("Put a “-- ” line before the signature"), "view.signatureDashes", acts);
+        });
         // The words added with "Add to dictionary", each taken back out here (they belong to the
         // preferences, so they stay between starts).
         if !s.prefs.spelling.is_empty() {

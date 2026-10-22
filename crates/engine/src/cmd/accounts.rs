@@ -94,7 +94,7 @@ pub(super) fn commands() -> Vec<CommandSpec> {
         .params(r#"{"account": string} (a Microsoft account over IMAP starts again through Microsoft Graph, for a mailbox Microsoft won't open over IMAP)"#),
         CommandSpec::new("account.setPassword", "Sign in again", "File › Accounts", set_password).params(r#"{"account": string, "password": string}"#),
         CommandSpec::new("account.setSignature", "Signature", "File › Options › Mail", set_signature)
-            .params(r#"{"account": string, "signature": string, "html"?: string (its look: bold, colours, links; the text then comes from it), "newMessages"?: bool (added to new messages; default: as it was), "replies"?: bool (added to replies and forwards), "rawHtml"?: string (the signature written in HTML, sent as it is, cleaned)}"#),
+            .params(r#"{"account": string, "signature": string, "styles"?: object (its look as the editor keeps it: a style per character and paragraph), "html"?: string (its look as HTML: bold, colours, sizes, links; the text then comes from it), "newMessages"?: bool (added to new messages; default: as it was), "replies"?: bool (added to replies and forwards), "rawHtml"?: string (the signature written in HTML, sent as it is, cleaned)}"#),
         CommandSpec::new("account.list", "Accounts", "File › Accounts", list_accounts),
         // Asks where Quatrelle is published; File › About shows the answer (`Session::update`).
         CommandSpec::new("app.checkUpdates", "Check for updates", "File › About", |s, _| {
@@ -209,6 +209,7 @@ pub(super) fn add_account(s: &mut Session, v: &Value) -> CmdResult {
         smtp_username: None,
         signature: p::str(v, "signature").unwrap_or_default().to_string(),
         signature_html: String::new(),
+        signature_styles: String::new(),
         signature_raw_html: String::new(),
         signature_pictures: Vec::new(),
         signature_not_new: false,
@@ -351,14 +352,35 @@ pub(super) fn smtp_sign_in(v: &Value, c: &mut AccountConfig, adding: bool) -> Re
     Ok(password)
 }
 
+/// Most palette entries a signature's styles may bring (a hostile caller aside, a few dozen).
+const SIGNATURE_STYLES_MAX: usize = 1000;
+
+/// The signature's look from `styles` (the editor's own, as JSON) or `html`: the text and styles
+/// a message shows, when it has a look at all.
+fn signature_look(v: &Value, text: &str) -> Result<Option<(String, quatrelle_mime::rich::Styles)>, CmdError> {
+    use quatrelle_mime::rich::Styles;
+    if let Some(given) = v.get("styles").filter(|st| !st.is_null()) {
+        let mut styles: Styles = serde_json::from_value(given.clone()).map_err(|e| CmdError::Params(format!("styles: {e}")))?;
+        styles.palette.truncate(SIGNATURE_STYLES_MAX);
+        styles.fit(text);
+        return Ok((!text.trim().is_empty() && !styles.is_plain()).then(|| (text.to_string(), styles)));
+    }
+    let Some(html) = p::str(v, "html").filter(|h| !h.trim().is_empty()) else { return Ok(None) };
+    let (text, styles) = quatrelle_mime::signature_html(&html.chars().take(200_000).collect::<String>());
+    Ok((!text.trim().is_empty() && !styles.is_plain()).then(|| (text.chars().take(10_000).collect(), styles)))
+}
+
 pub(super) fn set_signature(s: &mut Session, v: &Value) -> CmdResult {
     let id = p::req_str(v, "account")?;
     let mut config = s.account(id).map(|a| a.config.clone()).ok_or_else(|| CmdError::Params(format!("no account `{id}`")))?;
     config.signature = p::req_str(v, "signature")?.chars().take(10_000).collect();
-    // Written in HTML: kept cleaned, sent as it is; its text (and look, pictures on the web
-    // aside) is what a message shows while it's written. Otherwise there's none.
-    config.signature_raw_html =
-        p::str(v, "rawHtml").map(|h| quatrelle_mime::layout::clean_html(&h.chars().take(200_000).collect::<String>())).unwrap_or_default();
+    // Written in HTML: its style sheets written into its elements first (Outlook's class-based
+    // styles would go with the sheet otherwise), then kept cleaned, sent as it is; its text
+    // (and look, pictures on the web aside) is what a message shows while it's written.
+    // Otherwise there's none.
+    config.signature_raw_html = p::str(v, "rawHtml")
+        .map(|h| quatrelle_mime::layout::clean_html(&quatrelle_mime::layout::inline_css(&h.chars().take(200_000).collect::<String>())))
+        .unwrap_or_default();
     if !config.signature_raw_html.trim().is_empty() {
         let (text, styles) = quatrelle_mime::signature_html(&config.signature_raw_html);
         if text.trim().is_empty() {
@@ -366,6 +388,7 @@ pub(super) fn set_signature(s: &mut Session, v: &Value) -> CmdResult {
         }
         config.signature = text.chars().take(10_000).collect();
         config.signature_html = if styles.is_plain() { String::new() } else { quatrelle_mime::rich::to_html(&text, &styles) };
+        config.signature_styles.clear();
         config.signature_pictures.clear();
         return s.update_account(config, None);
     }
@@ -376,31 +399,30 @@ pub(super) fn set_signature(s: &mut Session, v: &Value) -> CmdResult {
     if let Some(on) = p::bool(v, "replies") {
         config.signature_not_replies = !on;
     }
-    // Its look, as HTML (from the signature editor, or pasted): kept as the editor would send
-    // it, its text the signature's.
+    // Its look: the editor's own styles (every size, typeface, underline and alignment as set,
+    // kept as they are so nothing is lost on the way back), or HTML pasted or given from the
+    // command line, read as the editor would show it; its HTML twin is what a message sends.
     config.signature_html = String::new();
-    // Its pictures (a logo), as the editor sends them: those its HTML names are kept, a few
+    config.signature_styles = String::new();
+    // Its pictures (a logo), as the editor sends them: those its text names are kept, a few
     // and small enough to go with every message.
     let given: Vec<quatrelle_mime::InlinePicture> = v.get("pictures").and_then(|p| serde_json::from_value(p.clone()).ok()).unwrap_or_default();
     let mut pictures: Vec<quatrelle_model::SignaturePicture> = Vec::new();
-    if let Some(html) = p::str(v, "html").filter(|h| !h.trim().is_empty()) {
-        let (text, styles) = quatrelle_mime::signature_html(&html.chars().take(200_000).collect::<String>());
-        if !text.trim().is_empty() && !styles.is_plain() {
-            config.signature_html = quatrelle_mime::rich::to_html(&text, &styles);
-            config.signature = text.chars().take(10_000).collect();
-            let used = quatrelle_mime::rich::pictures(&text, &styles);
-            for p in given.into_iter().filter(|p| used.contains(&p.cid)) {
-                if pictures.len() >= SIGNATURE_PICTURES || p.data.len() > SIGNATURE_PICTURE_MAX || !p.mime.starts_with("image/") {
-                    return Err(CmdError::Params(format!("{}: a signature takes {SIGNATURE_PICTURES} pictures of 500 KB at most", p.name)));
-                }
-                pictures.push(quatrelle_model::SignaturePicture { cid: p.cid, name: p.name, mime: p.mime, data: p.data });
+    let mut used: Vec<String> = Vec::new();
+    if let Some((text, styles)) = signature_look(v, &config.signature)? {
+        config.signature_html = quatrelle_mime::rich::to_html(&text, &styles);
+        config.signature_styles = serde_json::to_string(&styles).unwrap_or_default();
+        config.signature = text.chars().take(10_000).collect();
+        used = quatrelle_mime::rich::pictures(&text, &styles);
+        for p in given.into_iter().filter(|p| used.contains(&p.cid)) {
+            if pictures.len() >= SIGNATURE_PICTURES || p.data.len() > SIGNATURE_PICTURE_MAX || !p.mime.starts_with("image/") {
+                return Err(CmdError::Params(format!("{}: a signature takes {SIGNATURE_PICTURES} pictures of 500 KB at most", p.name)));
             }
+            pictures.push(quatrelle_model::SignaturePicture { cid: p.cid, name: p.name, mime: p.mime, data: p.data });
         }
     }
-    // Pictures given or not, its own stay while its HTML names them.
+    // Pictures given or not, its own stay while its text names them.
     if pictures.is_empty() {
-        let (text, styles) = quatrelle_mime::signature_html(&config.signature_html);
-        let used = quatrelle_mime::rich::pictures(&text, &styles);
         pictures = config.signature_pictures.iter().filter(|p| used.contains(&p.cid)).cloned().collect();
     }
     config.signature_pictures = pictures;

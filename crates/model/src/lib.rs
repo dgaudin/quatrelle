@@ -98,6 +98,11 @@ pub struct AccountConfig {
     /// links, as pasted from Outlook or set in the signature editor.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub signature_html: String,
+    /// The signature's look as its editor keeps it: the message editor's own styles (as JSON),
+    /// so every size, typeface, underline and alignment comes back exactly as set. Empty for a
+    /// signature made before this was kept, whose HTML above is read instead.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub signature_styles: String,
     /// The signature as HTML written by hand (cleaned): sent as it is, its layout kept (a logo
     /// beside the name); the text and look above are what the message shows while it's written.
     #[serde(default, skip_serializing_if = "String::is_empty")]
@@ -248,6 +253,7 @@ impl AccountConfig {
             smtp_username: None,
             signature: String::new(),
             signature_html: String::new(),
+            signature_styles: String::new(),
             signature_raw_html: String::new(),
             signature_pictures: Vec::new(),
             signature_not_new: false,

@@ -345,6 +345,8 @@ pub fn install_fonts_with(ctx: &egui::Context, regular: Option<Vec<u8>>, bold: O
     bold_list.extend(fonts.families.get(&FontFamily::Proportional).cloned().unwrap_or_default());
     fonts.families.insert(bold_family, bold_list);
     ctx.set_fonts(fonts);
+    // The editor's typefaces (Arial, Calibri…) went with the old definitions.
+    crate::look::typefaces::forget(ctx);
 }
 
 /// Last of all, the fonts built in from craft-fonts (none unless built with them).

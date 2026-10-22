@@ -186,6 +186,12 @@ fn main() -> eframe::Result {
     let sample = args.iter().any(|a| a == "--sample");
     // Text pasted from Outlook, Word or a web page keeps its look.
     quatrelle_ui_egui::set_clipboard_html(|| read_clipboard(|c| c.get().html().ok()).filter(|h| !h.trim().is_empty()));
+    // And text copied from a message keeps its look for Outlook or Word to paste.
+    quatrelle_ui_egui::set_clipboard_html_writer(|html, text| {
+        if let Ok(mut c) = arboard::Clipboard::new() {
+            let _ = c.set_html(html.to_string(), Some(text.to_string()));
+        }
+    });
     // Each account is a data file in Documents\Quatrelle Files (as Outlook keeps .pst files in
     // Outlook Files); the account list and the app's state stay in the app folder. The data files'
     // folder can be moved (File › Options) when it's the usual one: a move asked for is carried

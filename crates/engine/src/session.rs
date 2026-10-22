@@ -42,7 +42,7 @@ pub use listing::{ARRANGE_HEADINGS, Arrange, FolderRef, ListFilter, OUTBOX, Row,
 use listing::{person, size_group};
 pub use organize::{junk, quick_steps, search_folders};
 pub use prefs::{ListLayout, NotesOrder, Prefs, ReadInPane, ReadingPane};
-pub use writing::{Compose, add_pictures, signature_block, style_signature};
+pub use writing::{Compose, add_pictures, style_signature};
 
 /// One account and what the session knows about it.
 #[derive(Clone, Debug, PartialEq)]

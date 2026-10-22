@@ -774,10 +774,11 @@ pub fn reply(p: &Parsed, mode: ReplyMode, me: &[String], clock: &Clock, signatur
 }
 
 /// A reply or forward of `p` to edit: the draft (its body the editable text) and the text's
-/// styles.
+/// styles. `signature` is the signature as it goes into the message (after a `-- ` line when
+/// the writer wants one; Outlook adds none), or empty.
 pub fn reply_doc(p: &Parsed, mode: ReplyMode, me: &[String], clock: &Clock, signature: &str) -> (Draft, rich::Styles) {
     let mine = |a: &EmailAddress| me.iter().any(|m| m.eq_ignore_ascii_case(a.email.trim()));
-    let sig = if signature.trim().is_empty() { String::new() } else { format!("\n\n-- \n{}", signature.trim_end()) };
+    let sig = if signature.trim().is_empty() { String::new() } else { format!("\n\n{}", signature.trim_end()) };
     // The cursor's line, the signature, a blank line, then the original under its rule.
     let mut body = sig;
     let mut styles = rich::Styles::plain(&body);
@@ -821,11 +822,13 @@ pub fn reply_doc(p: &Parsed, mode: ReplyMode, me: &[String], clock: &Clock, sign
     (d, styles)
 }
 
-/// A signature's HTML as text and styles: as [`pasted_html`], keeping the pictures it names by
-/// `cid:` (its own, kept with the account), each where a [`rich::PICTURE`] stands.
+/// A signature's HTML as text and styles: as [`pasted_html`] (its sizes and typefaces kept),
+/// keeping the pictures it names by `cid:` (its own, kept with the account), each where a
+/// [`rich::PICTURE`] stands.
 pub fn signature_html(html: &str) -> (String, rich::Styles) {
     const MARK: char = '\u{E000}';
-    let mut lines = html_to_rich(&word_paragraphs(html));
+    let (marked, fonts) = fonts::mark(&word_paragraphs(html));
+    let mut lines = html_to_rich(&marked);
     let mut cids = Vec::new();
     for line in &mut lines {
         line.retain(|sp| sp.image.as_deref().is_none_or(|src| src.starts_with("cid:")));
@@ -842,7 +845,8 @@ pub fn signature_html(html: &str) -> (String, rich::Styles) {
     }
     let first = lines.iter().position(|l| !blank(l)).unwrap_or(lines.len());
     lines.drain(..first);
-    let (mut text, mut styles) = rich::from_rich(&lines);
+    let (text, styles) = rich::from_rich(&lines);
+    let (mut text, mut styles) = fonts::apply(&text, &styles, &fonts);
     let marks: Vec<usize> = text.chars().enumerate().filter(|(_, c)| *c == MARK).map(|(i, _)| i).collect();
     text = text.replace(MARK, &rich::PICTURE.to_string());
     for (at, cid) in marks.into_iter().zip(cids) {

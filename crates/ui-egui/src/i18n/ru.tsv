@@ -1145,3 +1145,33 @@ month	May	Май
 	Snooze 5 minutes	Отложить на 5 минут
 	Show reminders on top of other windows	Показывать напоминания поверх других окон
 	The Reminders window opens in a window of its own when a reminder comes, even while Quatrelle is minimized	Окно напоминаний открывается отдельным окном, когда приходит напоминание, даже если Quatrelle свёрнут
+	Put a “-- ” line before the signature	Ставить строку «-- » перед подписью
+	Some mail apps use it to tell the signature apart; Outlook adds none.	Некоторые почтовые программы отделяют по ней подпись; Outlook её не добавляет.
+	Ignore all	Пропустить все
+	Ignore once	Пропустить один раз
+	All languages	Все языки
+	The language the spelling is checked in	Язык, на котором проверяется орфография
+	Let this word be, here and elsewhere in this message	Оставить это слово как есть, здесь и далее в этом сообщении
+	Message	Сообщение
+	Format Text	Формат текста
+	Review	Рецензирование
+	Clipboard	Буфер обмена
+	Basic Text	Основной текст
+	Names	Имена
+	Include	Включить
+	Show Fields	Показать поля
+	Tracking	Отслеживание
+	More Options	Другие параметры
+	Format	Формат
+	Paragraph	Абзац
+	Font	Шрифт
+	Proofing	Правописание
+	Paste options	Параметры вставки
+	Keep text only	Сохранить только текст
+	Paste without the look it has where it was copied	Вставить без форматирования источника
+	Check Names	Проверить имена
+	Fill in the addresses of the names typed, from your contacts and the people you've written to	Подставить адреса введённых имён из ваших контактов и людей, которым вы писали
+	HTML	HTML
+	Horizontal line	Горизонтальная линия
+	Increase font size (Ctrl+])	Увеличить размер шрифта (Ctrl+])
+	Decrease font size (Ctrl+[)	Уменьшить размер шрифта (Ctrl+[)

@@ -1142,3 +1142,33 @@ month	May	מאי
 	Snooze 5 minutes	נודניק 5 דקות
 	Show reminders on top of other windows	הצגת תזכורות מעל חלונות אחרים
 	The Reminders window opens in a window of its own when a reminder comes, even while Quatrelle is minimized	חלון התזכורות נפתח בחלון משלו כשמגיעה תזכורת, גם כש‑Quatrelle ממוזער
+	Put a “-- ” line before the signature	הוספת שורת “-- ” לפני החתימה
+	Some mail apps use it to tell the signature apart; Outlook adds none.	חלק מתוכנות הדואר מזהות בה את החתימה; Outlook אינו מוסיף אותה.
+	Ignore all	התעלמות מהכול
+	Ignore once	התעלמות פעם אחת
+	All languages	כל השפות
+	The language the spelling is checked in	השפה שבה נבדק האיות
+	Let this word be, here and elsewhere in this message	להשאיר מילה זו כפי שהיא, כאן ובשאר ההודעה
+	Message	הודעה
+	Format Text	עיצוב טקסט
+	Review	סקירה
+	Clipboard	לוח
+	Basic Text	טקסט בסיסי
+	Names	שמות
+	Include	הוספה
+	Show Fields	הצגת שדות
+	Tracking	מעקב
+	More Options	אפשרויות נוספות
+	Format	תבנית
+	Paragraph	פסקה
+	Font	גופן
+	Proofing	הגהה
+	Paste options	אפשרויות הדבקה
+	Keep text only	שמירת הטקסט בלבד
+	Paste without the look it has where it was copied	הדבקה ללא העיצוב מהמקור
+	Check Names	בדיקת שמות
+	Fill in the addresses of the names typed, from your contacts and the people you've written to	השלמת הכתובות של השמות שהוקלדו, מאנשי הקשר ומהאנשים שכתבת להם
+	HTML	HTML
+	Horizontal line	קו אופקי
+	Increase font size (Ctrl+])	הגדלת הגופן (Ctrl+])
+	Decrease font size (Ctrl+[)	הקטנת הגופן (Ctrl+[)

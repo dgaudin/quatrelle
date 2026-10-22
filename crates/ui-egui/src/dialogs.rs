@@ -155,16 +155,18 @@ pub enum Dialog {
     Spelling(Box<SpellForm>),
 }
 
-/// What the spelling dialog keeps from one word to the next: the words let be in this message,
-/// and the suggestion picked for the word it shows (none for the next word).
+/// What the spelling dialog keeps from one word to the next: the places passed over (Ignore
+/// once), and the suggestions and the one picked for the word it shows (none for the next).
 #[derive(Clone, Debug, Default)]
 pub struct SpellForm {
-    /// Words ignored while this dialog is open (Ignore).
-    ignored: Vec<String>,
+    /// Words passed over while this dialog is open: the field and where the word starts.
+    passed: Vec<(&'static str, usize)>,
     /// The suggestion picked, when one is.
     chosen: Option<String>,
     /// The word `chosen` was picked for: a new word comes with nothing picked.
     shown: String,
+    /// What could take `shown`, worked out once for it.
+    suggestions: Vec<String>,
 }
 
 impl Dialog {

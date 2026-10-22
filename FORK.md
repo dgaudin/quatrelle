@@ -274,3 +274,51 @@ l'origine est un parent de chaque fusion : la prochaine repartira de `1dc3ba7`.
 Preuves : `cargo xtask ci` vert à chaque étape (541 tests à la fin, fmt, `clippy -D warnings`,
 tailles, couches, ressources, wasm), et la fenêtre regardée sur la boîte d'exemple.
 
+
+## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
+
+Quatre chantiers, chacun dans son commit, à la suite d'un audit de l'éditeur HTML.
+
+**Les signatures gardent leur mise en forme.** La signature était relue depuis son HTML à chaque
+message (`signature_html`), ce qui perdait les tailles, les polices, le soulignement et le
+centrage. Elle est désormais enregistrée telle que l'éditeur la tient (`AccountConfig::signature_styles`,
+les `rich::Styles` en JSON), et l'HTML n'est relu que pour les signatures d'avant — en gardant
+cette fois les polices (`fonts::mark`/`apply`), et en appliquant `inline_css` avant `clean_html`
+aux signatures écrites en HTML (les styles par classe d'Outlook passaient à la trappe). La ligne
+`-- ` qu'ajoutait Quatrelle avant chaque signature est devenue une option, désactivée par défaut
+(Outlook n'en met pas) : Options › « Placer une ligne « -- » avant la signature »
+(`Prefs::signature_dashes`, commande `view.signatureDashes`).
+
+**Le correcteur orthographique.** Le message entier était vérifié plusieurs fois par image, et les
+suggestions recalculées à chaque image tant que le menu restait ouvert. Désormais (`spellcheck.rs`) :
+- la vérification se fait paragraphe par paragraphe, mémorisée par le texte du paragraphe ;
+  les suggestions sont calculées une fois, à l'ouverture du menu ou du dialogue ;
+- ni la signature ni l'original cité d'une réponse ne sont vérifiés ; un mot dans une écriture
+  sans dictionnaire (chinois, arabe…) n'est pas souligné ;
+- les suggestions FR/EN sont fusionnées et classées par distance d'édition, la langue active
+  d'abord (`Spell::suggest_in`) ; elles sont en tête du menu contextuel, avec « Ignorer partout »
+  (pour le message) et « Ajouter au dictionnaire » ;
+- la langue se choisit par message (Révision › Langue : chaque dictionnaire, ou toutes les
+  langues ; par défaut celle de l'interface), commande `compose.language` ; les dictionnaires
+  Hunspell du système (`/usr/share/hunspell`, `/usr/share/myspell` : `de_DE`, `es_ES`…) sont lus
+  au démarrage, jamais embarqués ;
+- un mot personnel commençant par une majuscule accentuée (« Été ») est reconnu (comparaison en
+  minuscules Unicode, non ASCII).
+
+**Le ruban du message** (`rich_edit/ribbon.rs`) remplace la rangée de boutons et la seconde barre
+d'outils : les onglets Message | Insertion | Options | Format du texte | Révision, avec les
+widgets du ruban principal (`Groups`, `big_button`, `big_more`, `stack`). Enregistrer, Détacher
+et Abandonner sont de petits boutons à droite des onglets ; le grand bouton Envoyer reste à gauche
+de De/À/Cc/Objet. Nouveaux boutons : Vérifier les noms (commande `compose.checkNames`, qui
+complète les adresses depuis les contacts), Ligne horizontale, choix de la police, Coller › Ne
+garder que le texte. Les nouvelles icônes sont des SVG Fluent inchangés (`assets/icons/fluent/`,
+une ligne chacune dans `ATTRIBUTION.md`).
+
+**La fidélité de l'éditeur.** Les polices choisies (Arial, Calibri…) sont lues sur le système
+(`Services::typeface`, fontconfig sous Linux, avec la police de substitution — Liberation Sans
+pour Arial) et dessinées dans l'éditeur (`look/typefaces.rs`) ; les suites d'espaces et les
+tabulations partent en `&nbsp;` (elles s'effondraient chez le destinataire) ; les paragraphes
+centrés ou alignés à droite le sont sur toutes leurs lignes ; ⌘⇧Z refait sur Mac au lieu
+d'effacer la mise en forme ; Couper et Copier mettent aussi l'HTML dans le presse-papiers
+(`set_clipboard_html_writer`, arboard) ; le HTML collé garde ses images incorporées (`data:`)
+et celles que le message possède déjà (`cid:`), en laissant les autres.
