@@ -90,6 +90,8 @@ struct App {
     /// The settings as last written, and when they were last looked at ([`App::keep_state`]).
     saved: Vec<u8>,
     looked: std::time::Instant,
+    /// `QUATRELLE_SCREENSHOT`: the window saved as a picture, then closed.
+    screenshot: Option<screenshot::Shot>,
 }
 
 /// How often changed settings are written while Quatrelle runs.
@@ -142,8 +144,13 @@ impl eframe::App for App {
         if let Some(path) = self.app.take_drag_out() {
             drag_out(frame, path);
         }
-        if let Some(path) = screenshot::wanted() {
-            screenshot::step(ui.ctx(), self.frames, &path);
+        if let Some(shot) = &mut self.screenshot
+            && shot.step(ui.ctx(), self.frames)
+        {
+            // The window wouldn't close by itself: end here, the state kept as closing keeps it.
+            log::warn!("the window didn't close once its picture was saved: ending");
+            self.on_exit();
+            std::process::exit(0);
         }
     }
     fn on_exit(&mut self) {
@@ -468,6 +475,7 @@ fn run(
                 updater,
                 saved: Vec::new(),
                 looked: std::time::Instant::now(),
+                screenshot: screenshot::Shot::wanted(),
             }))
         }),
     )
