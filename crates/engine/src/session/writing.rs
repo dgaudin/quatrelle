@@ -2,6 +2,10 @@
 
 use super::*;
 
+mod compose;
+use compose::with_html_signature;
+pub use compose::{Compose, add_pictures, signature_block, style_signature};
+
 impl Session {
     pub(super) fn me(&self, account: &str) -> Vec<String> {
         let mut v: Vec<String> = self.accounts.iter().map(|a| a.config.email.clone()).collect();

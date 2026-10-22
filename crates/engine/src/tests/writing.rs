@@ -403,3 +403,143 @@ fn closing_keeps_every_message_being_written() {
     s.keep_drafts();
     assert!(s.take_jobs().iter().any(|j| matches!(j, quatrelle_model::Job::KeepDraft { .. })));
 }
+
+#[test]
+fn a_correction_replaces_the_word_and_keeps_its_look() {
+    let mut s = sample_session("replace");
+    s.run("mail.new", &json!({})).unwrap();
+    s.run("compose.update", &json!({"to": "ann@x.example", "subject": "Plan", "body": "Le **serveur** est lent", "marks": true})).unwrap();
+    let c = s.compose.as_ref().unwrap();
+    assert_eq!(c.body, "Le serveur est lent");
+    let at = c.body.find("serveur").unwrap();
+    assert!(c.styles.style(3).bold, "the word is bold");
+    // The suggestion takes the word's place, the look with it.
+    s.run("compose.replaceText", &json!({"from": at, "to": at + "serveur".len(), "text": "serveur mail"})).unwrap();
+    let c = s.compose.as_ref().unwrap();
+    assert_eq!(c.body, "Le serveur mail est lent");
+    assert_eq!(c.styles.chars.len(), c.body.chars().count(), "one style per character");
+    assert!(c.styles.style(3).bold && c.styles.style(14).bold, "the replacement stays bold");
+    assert!(!c.styles.style(15).bold, "what follows it keeps its own look");
+    // What isn't there is refused, and the text is left as it was.
+    for bad in [json!({"from": 4, "to": 2, "text": "x"}), json!({"from": 0, "to": 9_999, "text": "x"}), json!({"from": -1, "to": 2, "text": "x"})] {
+        assert!(s.run("compose.replaceText", &bad).is_err(), "{bad}");
+    }
+    assert_eq!(s.compose.as_ref().unwrap().body, "Le serveur mail est lent");
+    // In the middle of a character: refused, not a panic.
+    s.run("compose.update", &json!({"body": "Le café est prêt"})).unwrap();
+    let e = s.compose.as_ref().unwrap().body.find('é').unwrap();
+    assert!(s.run("compose.replaceText", &json!({"from": e + 1, "to": e + 3, "text": "e"})).is_err());
+    assert_eq!(s.compose.as_ref().unwrap().body, "Le café est prêt");
+    // Taking a word out.
+    let (from, to) = (3, 3 + "café".len());
+    s.run("compose.replaceText", &json!({"from": from, "to": to, "text": ""})).unwrap();
+    let c = s.compose.as_ref().unwrap();
+    assert_eq!(c.body, "Le  est prêt");
+    assert_eq!(c.styles.chars.len(), c.body.chars().count());
+    // The subject, with offsets into it.
+    s.run("compose.update", &json!({"subject": "Le servveur est là"})).unwrap();
+    s.run("compose.replaceText", &json!({"from": 3, "to": 11, "text": "serveur", "field": "subject"})).unwrap();
+    assert_eq!(s.compose.as_ref().unwrap().subject, "Le serveur est là");
+    assert!(s.run("compose.replaceText", &json!({"from": 0, "to": 99, "text": "x", "field": "subject"})).is_err());
+    assert!(s.run("compose.replaceText", &json!({"from": 0, "to": 1, "text": "x", "field": "nowhere"})).is_err());
+    // Underlining as you type, on or off (Outlook's "Check spelling as you type").
+    assert!(s.prefs.spell_check);
+    assert_eq!(s.run("view.spelling", &json!({"on": false})).unwrap()["on"], false);
+    assert!(!s.prefs.spell_check);
+    s.run("view.spelling", &json!({})).unwrap();
+    assert!(s.prefs.spell_check);
+    // The words added to the dictionary, once each, whatever the case.
+    assert_eq!(s.run("spelling.add", &json!({"word": "  Quatrelle "})).unwrap()["word"], "quatrelle");
+    s.run("spelling.add", &json!({"word": "QUATRELLE"})).unwrap();
+    s.run("spelling.add", &json!({"word": "serveur"})).unwrap();
+    assert_eq!(s.prefs.spelling, vec!["quatrelle".to_string(), "serveur".to_string()]);
+    assert!(s.run("spelling.add", &json!({"word": "   "})).is_err());
+    done(s);
+}
+
+/// The signature goes into new messages, replies and forwards, or only some, as the account
+/// says (Outlook's New messages and Replies/forwards); the choice is kept with the account.
+#[test]
+fn a_signature_goes_where_the_account_says() {
+    let mut s = sample_session("signature-where");
+    let first = s.list.first().map(|m| m.key.clone()).unwrap();
+    let body = |s: &Session| s.compose.as_ref().map(|c| c.body.clone()).unwrap_or_default();
+    s.run("account.setSignature", &json!({"account": "sample", "signature": "Riley", "newMessages": false})).unwrap();
+    s.run("mail.new", &json!({})).unwrap();
+    assert!(!body(&s).contains("Riley"), "not in new messages");
+    s.compose = None;
+    s.open_message(&first);
+    s.run("mail.reply", &json!({})).unwrap();
+    assert!(body(&s).contains("Riley"), "in replies");
+    s.compose = None;
+    // Changing the text alone keeps the choices.
+    s.run("account.setSignature", &json!({"account": "sample", "signature": "R.", "replies": false})).unwrap();
+    s.run("mail.forward", &json!({})).unwrap();
+    assert!(!body(&s).contains("R."), "not in forwards");
+    s.compose = None;
+    s.run("mail.new", &json!({})).unwrap();
+    assert!(!body(&s).contains("R."), "still not in new messages");
+    let config = s.account("sample").unwrap().config.clone();
+    assert!(config.signature_not_new && config.signature_not_replies);
+}
+
+/// A signature's logo is kept with the account and goes into each message with it, as a
+/// picture of the message (never fetched from the web); a picture the HTML no longer names
+/// goes.
+#[test]
+fn a_signature_keeps_its_logo() {
+    let mut s = sample_session("signature-logo");
+    let logo = json!({"cid": "logo@mc", "name": "logo.gif", "mime": "image/gif", "data": [71, 73, 70, 56, 57, 97]});
+    let html = "<p><img src=\"cid:logo@mc\"></p><p><b>Didier GAUDIN</b><br>Tél. 02 51 70 93 93</p>";
+    s.run("account.setSignature", &json!({"account": "sample", "signature": "x", "html": html, "pictures": [logo]})).unwrap();
+    let config = s.account("sample").unwrap().config.clone();
+    assert_eq!(config.signature_pictures.len(), 1);
+    assert!(config.signature_html.contains("cid:logo@mc"), "{}", config.signature_html);
+    s.run("mail.new", &json!({})).unwrap();
+    let (text, html, pictures) = s.compose.as_ref().unwrap().bodies();
+    assert!(text.contains("Didier GAUDIN"));
+    assert!(html.unwrap_or_default().contains("cid:logo@mc"));
+    assert_eq!(pictures.len(), 1);
+    // Changed without its picture: it goes.
+    s.run("account.setSignature", &json!({"account": "sample", "signature": "Didier", "html": "<p><b>Didier</b></p>"})).unwrap();
+    assert!(s.account("sample").unwrap().config.signature_pictures.is_empty());
+    // A picture on the web isn't kept (nor fetched).
+    s.run("account.setSignature", &json!({"account": "sample", "signature": "x", "html": "<img src=\"https://www.example.com/logo.gif\"><b>D</b>"}))
+        .unwrap();
+    assert!(!s.account("sample").unwrap().config.signature_html.contains("https://www.example.com"));
+}
+
+/// A signature written in HTML goes as it was written (its logo beside the name, cleaned of
+/// what mustn't go), where its text stands in the message; the text part has its text.
+#[test]
+fn an_html_signature_goes_as_written() {
+    let mut s = Session::open(Some(temp("signature-html")), quatrelle_model::dates::Clock::new(NOW, 0));
+    let id = s.run("account.add", &json!({"email": "dgaudin@example.org", "password": "pw"})).unwrap()["account"].as_str().unwrap().to_string();
+    let html = r#"<table align="left" style="float:left;"><tr><td><a href="https://www.contoso.example"><img src="https://www.contoso.example/images/logo.gif" width="194"></a></td></tr></table>
+<table style="float:left;border-left:1px solid #ccc;"><tr><td><p><span style="font-weight:bold">Didier GAUDIN</span><br>T&eacute;l. 02 51 70 93 93</p></td></tr></table><script>x()</script>"#;
+    s.run("account.setSignature", &json!({"account": id, "signature": "", "rawHtml": html})).unwrap();
+    let config = s.account(&id).unwrap().config.clone();
+    assert!(config.signature.contains("Didier GAUDIN"), "{}", config.signature);
+    assert!(!config.signature_raw_html.contains("<script"));
+    s.run("mail.new", &json!({})).unwrap();
+    s.run("compose.update", &json!({"to": "zoe@example.org", "subject": "Hello", "body": "Hi Zoe"})).unwrap();
+    // The body set anew: the signature again, as a new message gets it.
+    s.run("compose.insertSignature", &json!({})).unwrap();
+    s.take_jobs();
+    s.run("compose.send", &json!({})).unwrap();
+    let raw = s
+        .take_jobs()
+        .into_iter()
+        .find_map(|j| match j {
+            Job::Send { raw, .. } => Some(raw),
+            _ => None,
+        })
+        .unwrap();
+    let p = quatrelle_mime::parse(&raw).unwrap();
+    // Read back: the logo and the name side by side, the logo on the web, the message's text.
+    assert!(p.had_html);
+    let side_by_side = p.layout.iter().any(|b| matches!(b, quatrelle_mime::layout::Block::Table(t) if t.rows.iter().any(|r| r.len() == 2)));
+    assert!(side_by_side, "{:?}", p.layout);
+    assert!(p.images.iter().any(|u| u.contains("www.contoso.example/images/logo.gif")), "{:?}", p.images);
+    assert!(p.text.contains("Hi Zoe") && p.text.contains("Didier GAUDIN") && !p.text.contains("x()"), "{}", p.text);
+}

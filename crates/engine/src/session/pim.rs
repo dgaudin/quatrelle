@@ -11,6 +11,11 @@ use super::*;
 
 pub use quatrelle_model::pim::PIM_DOC;
 
+mod notes;
+mod people;
+pub use notes::NoteRef;
+pub use people::Person;
+
 /// The part of the app on screen.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -84,14 +89,6 @@ pub struct AgendaItem {
     pub reminder: Option<i64>,
 }
 
-/// A person in an address book.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Person {
-    pub account: String,
-    pub book: String,
-    pub card: Card,
-}
-
 /// A calendar colour of this or above is an account's colour ([`Session::calendar_color`]).
 pub const ACCOUNT_COLOR: u8 = 16;
 
@@ -131,7 +128,7 @@ impl Session {
     }
 
     /// The account new events and people go to: the one on screen, else the first.
-    fn pim_account(&self, wanted: Option<&str>) -> Result<String, CmdError> {
+    pub(super) fn pim_account(&self, wanted: Option<&str>) -> Result<String, CmdError> {
         match wanted {
             Some(a) if self.account(a).is_some() => Ok(a.to_string()),
             Some(a) => Err(CmdError::Params(format!("no account `{a}`"))),
@@ -440,7 +437,7 @@ impl Session {
         found
     }
 
-    fn new_uid(&mut self) -> String {
+    pub(super) fn new_uid(&mut self) -> String {
         let n = self.fresh_id();
         format!("{:016x}-{n}@quatrelle", self.seed)
     }
@@ -646,168 +643,6 @@ impl Session {
         }
         self.save_pim(account);
     }
-
-    // ----- people -----
-
-    /// Everyone in the address books matching a search, by name.
-    pub fn people(&self, query: &str) -> Vec<Person> {
-        let mut out: Vec<Person> = self
-            .pim
-            .iter()
-            .flat_map(|(a, p)| {
-                p.cards.iter().filter(|c| c.card.matches(query)).map(|c| Person { account: a.clone(), book: c.book.clone(), card: c.card.clone() })
-            })
-            .collect();
-        out.sort_by_key(|p| p.card.display().to_lowercase());
-        out
-    }
-
-    pub fn find_person(&self, uid: &str) -> Option<Person> {
-        self.pim.iter().find_map(|(a, p)| {
-            p.cards.iter().find(|c| c.card.uid == uid).map(|c| Person { account: a.clone(), book: c.book.clone(), card: c.card.clone() })
-        })
-    }
-
-    /// Add someone; returns their uid.
-    pub fn create_card(&mut self, account: Option<&str>, mut card: Card) -> CmdResult {
-        let account = self.pim_account(account)?;
-        check_card(&card)?;
-        if card.uid.trim().is_empty() {
-            card.uid = self.new_uid();
-        }
-        let p = self.pim_mut(&account);
-        let book = p.default_book().map(|b| b.id.clone()).ok_or_else(|| CmdError::Disabled("no address book to add to".into()))?;
-        let uid = card.uid.clone();
-        p.cards.retain(|c| c.card.uid != uid);
-        p.cards.push(StoredCard { book: book.clone(), href: String::new(), etag: String::new(), card, dirty: book != LOCAL });
-        self.after_pim_change(&account, book != LOCAL);
-        Ok(serde_json::json!({"uid": uid, "account": account}))
-    }
-
-    /// Whether a person is in an address book that can't be changed here (an organisation's
-    /// shared contacts).
-    pub fn person_read_only(&self, uid: &str) -> bool {
-        self.pim.values().any(|p| p.cards.iter().any(|c| c.card.uid == uid && p.books.iter().any(|b| b.id == c.book && b.read_only)))
-    }
-
-    /// The picture the directory keeps for an address, once it has been fetched.
-    pub fn person_photo(&self, email: &str) -> Option<&quatrelle_model::vcard::Photo> {
-        self.person_photos.get(&email.trim().to_ascii_lowercase()).and_then(Option::as_ref)
-    }
-
-    /// Whether a picture was asked for (and answered, or none to have): the window stops asking
-    /// once it has.
-    pub fn person_photo_known(&self, email: &str) -> bool {
-        let email = email.trim().to_ascii_lowercase();
-        self.person_photos.contains_key(&email) || self.photo_asked.contains(&email)
-    }
-
-    /// Whether some account is one that keeps pictures of people (Exchange, Microsoft 365).
-    pub fn pictures_possible(&self) -> bool {
-        self.accounts.iter().any(|a| a.config.ews.is_some() || a.config.graph.is_some())
-    }
-
-    /// Whether a picture of that address can be had: one their contact item carries (an Exchange
-    /// address book's), or one the directory keeps for a colleague's address. A directory only
-    /// knows its own people, so an outsider's address is not asked for.
-    pub fn photo_possible_for(&self, email: &str) -> bool {
-        let email = email.trim();
-        if email.is_empty() || !self.pictures_possible() {
-            return false;
-        }
-        let own = self
-            .pim
-            .values()
-            .flat_map(|p| p.cards.iter())
-            .any(|c| c.href.starts_with("contact:") && c.card.emails.iter().any(|e| e.value.trim().eq_ignore_ascii_case(email)));
-        if own {
-            return true;
-        }
-        let domain = email.rsplit_once('@').map(|(_, d)| d.to_ascii_lowercase()).unwrap_or_default();
-        !domain.is_empty()
-            && self.accounts.iter().any(|a| {
-                (a.config.ews.is_some() || a.config.graph.is_some())
-                    && a.config.email.rsplit_once('@').is_some_and(|(_, d)| d.eq_ignore_ascii_case(&domain))
-            })
-    }
-
-    /// Ask the directory (Exchange, Microsoft 365) for a person's picture, once: an address it
-    /// doesn't know, or a server that keeps no pictures, is remembered as having none.
-    pub fn fetch_person_photo(&mut self, account: Option<&str>, email: &str) -> CmdResult {
-        let email = email.trim().to_ascii_lowercase();
-        if email.is_empty() || !email.contains('@') {
-            return Err(CmdError::Params("an email address is needed".into()));
-        }
-        if self.person_photo_known(&email) {
-            return Ok(serde_json::json!({"known": true, "picture": self.person_photo(&email).is_some()}));
-        }
-        let can = |a: &AccountState| a.config.ews.is_some() || a.config.graph.is_some();
-        let domain = email.rsplit_once('@').map(|(_, d)| d.to_ascii_lowercase()).unwrap_or_default();
-        let chosen = match account {
-            Some(id) => self.account(id).filter(|a| can(a)).map(|a| a.config.id.clone()),
-            None => self
-                .accounts
-                .iter()
-                .find(|a| can(a) && a.config.email.rsplit_once('@').is_some_and(|(_, d)| d.eq_ignore_ascii_case(&domain)))
-                .or_else(|| self.accounts.iter().find(|a| can(a)))
-                .map(|a| a.config.id.clone()),
-        };
-        let Some(account) = chosen else {
-            return Err(CmdError::Disabled("no Exchange account to ask for pictures".into()));
-        };
-        // The contact item's own picture first (Outlook's contacts keep one), then the
-        // directory's: the address book's id is what the server knows the item by.
-        let contact = self
-            .pim
-            .values()
-            .flat_map(|p| p.cards.iter())
-            .find(|c| c.card.emails.iter().any(|e| e.value.trim().eq_ignore_ascii_case(&email)))
-            .and_then(|c| c.href.strip_prefix("contact:").map(str::to_string))
-            .filter(|id| !id.is_empty());
-        self.photo_asked.insert(email.clone());
-        self.jobs.push(Job::FetchPhoto { account, email, contact });
-        Ok(serde_json::json!({"asked": true}))
-    }
-
-    pub fn update_card(&mut self, uid: &str, change: impl FnOnce(&mut Card)) -> CmdResult {
-        let account = self.find_person(uid).map(|p| p.account).ok_or_else(|| CmdError::Params(format!("no contact `{uid}`")))?;
-        if self.person_read_only(uid) {
-            return Err(CmdError::Disabled("this contact is in a shared address book that can't be changed here".into()));
-        }
-        let p = self.pim_mut(&account);
-        let Some(c) = p.cards.iter_mut().find(|c| c.card.uid == uid) else { return Err(CmdError::Params(format!("no contact `{uid}`"))) };
-        let mut card = c.card.clone();
-        change(&mut card);
-        check_card(&card)?;
-        c.card = card;
-        let remote = c.book != LOCAL;
-        c.dirty |= remote;
-        self.after_pim_change(&account, remote);
-        Ok(serde_json::json!({"uid": uid}))
-    }
-
-    pub fn delete_card(&mut self, uid: &str) -> CmdResult {
-        let account = self.find_person(uid).map(|p| p.account).ok_or_else(|| CmdError::Params(format!("no contact `{uid}`")))?;
-        if self.person_read_only(uid) {
-            return Err(CmdError::Disabled("this contact is in a shared address book that can't be changed here".into()));
-        }
-        let p = self.pim_mut(&account);
-        let mut remote = false;
-        for c in p.cards.iter().filter(|c| c.card.uid == uid && !c.href.is_empty()) {
-            remote = true;
-            p.deleted.push(Tombstone { href: c.href.clone(), etag: c.etag.clone(), ..Default::default() });
-        }
-        p.cards.retain(|c| c.card.uid != uid);
-        self.after_pim_change(&account, remote);
-        Ok(serde_json::json!({"deleted": uid}))
-    }
-}
-
-/// A note with the account it's in.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct NoteRef {
-    pub account: String,
-    pub note: quatrelle_model::pim::Note,
 }
 
 impl Session {
@@ -865,108 +700,6 @@ impl Session {
         self.after_pim_change(&account, false);
         Ok(serde_json::json!({"closed": email}))
     }
-
-    // ----- notes -----
-
-    /// Every note matching a search (in its text), the most recently changed first.
-    pub fn notes(&self, query: &str) -> Vec<NoteRef> {
-        let q = query.trim().to_lowercase();
-        let mut out: Vec<NoteRef> = self
-            .pim
-            .iter()
-            .flat_map(|(a, p)| {
-                p.notes
-                    .iter()
-                    .filter(|n| q.is_empty() || n.note.text.to_lowercase().contains(&q))
-                    .map(|n| NoteRef { account: a.clone(), note: n.note.clone() })
-            })
-            .collect();
-        // A note's title is its first line, compared without case.
-        let title = |n: &NoteRef| n.note.text.lines().map(str::trim).find(|l| !l.is_empty()).unwrap_or_default().to_lowercase();
-        match self.prefs.notes_order {
-            super::NotesOrder::Modified => out.sort_by(|a, b| b.note.modified.cmp(&a.note.modified).then_with(|| a.note.uid.cmp(&b.note.uid))),
-            super::NotesOrder::Title => out.sort_by_cached_key(|n| (title(n), n.note.uid.clone())),
-            super::NotesOrder::Color => out.sort_by_cached_key(|n| (n.note.color, title(n), n.note.uid.clone())),
-        }
-        out
-    }
-
-    fn note_account(&self, uid: &str) -> Result<String, CmdError> {
-        self.pim
-            .iter()
-            .find(|(_, p)| p.notes.iter().any(|n| n.note.uid == uid))
-            .map(|(a, _)| a.clone())
-            .ok_or_else(|| CmdError::Params(format!("no note `{uid}`")))
-    }
-
-    /// Notes go to the server only where it keeps them (Exchange's Notes folder).
-    fn notes_sync(&self, account: &str) -> bool {
-        self.account(account).is_some_and(|a| !a.is_local() && a.config.ews.is_some())
-    }
-
-    /// A new note; returns its uid.
-    pub fn create_note(&mut self, account: Option<&str>, text: &str, color: Option<u8>) -> CmdResult {
-        let account = self.pim_account(account)?;
-        let note = quatrelle_model::pim::Note {
-            uid: self.new_uid(),
-            text: cap_note(text),
-            color: color.unwrap_or(quatrelle_model::pim::NOTE_YELLOW).min(quatrelle_model::pim::NOTE_COLORS - 1),
-            modified: self.clock.now,
-        };
-        let uid = note.uid.clone();
-        let remote = self.notes_sync(&account);
-        let p = self.pim_mut(&account);
-        if p.notes.len() >= MAX_NOTES {
-            return Err(CmdError::Params(format!("an account keeps at most {MAX_NOTES} notes")));
-        }
-        p.notes.push(quatrelle_model::pim::StoredNote { note, dirty: remote, ..Default::default() });
-        self.after_pim_change(&account, remote);
-        Ok(serde_json::json!({"uid": uid, "account": account}))
-    }
-
-    /// Change a note's text or colour.
-    pub fn update_note(&mut self, uid: &str, text: Option<&str>, color: Option<u8>) -> CmdResult {
-        let account = self.note_account(uid)?;
-        let remote = self.notes_sync(&account);
-        let now = self.clock.now;
-        let p = self.pim_mut(&account);
-        let Some(n) = p.notes.iter_mut().find(|n| n.note.uid == uid) else { return Err(CmdError::Params(format!("no note `{uid}`"))) };
-        let before = n.note.clone();
-        if let Some(t) = text {
-            n.note.text = cap_note(t);
-        }
-        if let Some(c) = color {
-            n.note.color = c.min(quatrelle_model::pim::NOTE_COLORS - 1);
-        }
-        if n.note == before {
-            return Ok(serde_json::json!({"uid": uid, "changed": false}));
-        }
-        n.note.modified = now;
-        n.dirty |= remote;
-        self.after_pim_change(&account, remote);
-        Ok(serde_json::json!({"uid": uid}))
-    }
-
-    pub fn delete_note(&mut self, uid: &str) -> CmdResult {
-        let account = self.note_account(uid)?;
-        let p = self.pim_mut(&account);
-        let mut remote = false;
-        for n in p.notes.iter().filter(|n| n.note.uid == uid && !n.href.is_empty()) {
-            remote = true;
-            p.deleted.push(Tombstone { href: n.href.clone(), etag: n.etag.clone(), ..Default::default() });
-        }
-        p.notes.retain(|n| n.note.uid != uid);
-        self.after_pim_change(&account, remote);
-        Ok(serde_json::json!({"deleted": uid}))
-    }
-}
-
-/// Most notes an account keeps, and most characters in one.
-const MAX_NOTES: usize = 5_000;
-const MAX_NOTE_CHARS: usize = 100_000;
-
-fn cap_note(text: &str) -> String {
-    text.chars().take(MAX_NOTE_CHARS).collect()
 }
 
 fn check_event(e: &CalEvent) -> Result<(), CmdError> {
@@ -978,18 +711,6 @@ fn check_event(e: &CalEvent) -> Result<(), CmdError> {
     }
     if e.end - e.start > 366 * 86_400 {
         return Err(CmdError::Params("an event can last a year at most".into()));
-    }
-    Ok(())
-}
-
-fn check_card(c: &Card) -> Result<(), CmdError> {
-    if c.display().trim().is_empty() {
-        return Err(CmdError::Params("give the contact a name or an address".into()));
-    }
-    for e in &c.emails {
-        if !addr::is_valid_email(e.value.trim()) {
-            return Err(CmdError::Params(format!("`{}` is not an email address", e.value)));
-        }
     }
     Ok(())
 }

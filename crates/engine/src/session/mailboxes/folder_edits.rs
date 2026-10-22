@@ -4,13 +4,13 @@ use super::*;
 
 impl Session {
     /// The account's hierarchy delimiter (from any folder that has one).
-    pub(super) fn delimiter(&self, account: &str) -> Option<char> {
+    pub(crate) fn delimiter(&self, account: &str) -> Option<char> {
         self.account(account).and_then(|a| a.folders.iter().find_map(|f| f.delimiter))
     }
 
     /// Where top-level folders go: the root, or `INBOX` on servers that keep every folder under
     /// it (`INBOX.Sent`, `INBOX.Projects`).
-    pub(super) fn top_parent(&self, account: &str) -> Option<String> {
+    pub(crate) fn top_parent(&self, account: &str) -> Option<String> {
         let a = self.account(account)?;
         let d = self.delimiter(account)?;
         let others: Vec<&Folder> = a.folders.iter().filter(|f| !f.path.eq_ignore_ascii_case("INBOX")).collect();
@@ -18,12 +18,12 @@ impl Session {
         (!others.is_empty() && others.iter().all(|f| f.path.starts_with(&format!("{}{d}", inbox.path)))).then(|| inbox.path.clone())
     }
 
-    pub(super) fn parent_of(path: &str, delimiter: Option<char>) -> Option<&str> {
+    pub(crate) fn parent_of(path: &str, delimiter: Option<char>) -> Option<&str> {
         delimiter.and_then(|d| path.rsplit_once(d)).map(|(p, _)| p)
     }
 
     /// A user folder (not Inbox or another special folder) that exists, for changing.
-    pub(super) fn user_folder(&self, account: &str, path: &str) -> Result<Folder, CmdError> {
+    pub(crate) fn user_folder(&self, account: &str, path: &str) -> Result<Folder, CmdError> {
         if self.account(account).is_none() {
             return Err(CmdError::Params(format!("no account `{account}`")));
         }
@@ -170,7 +170,7 @@ impl Session {
     }
 
     /// Count a local account's folders again (`only` these, or all of them).
-    pub(super) fn recount_local(&mut self, account: &str, only: Option<&[String]>) {
+    pub(crate) fn recount_local(&mut self, account: &str, only: Option<&[String]>) {
         let paths: Vec<String> = match only {
             Some(list) => list.to_vec(),
             None => self.account(account).map(|a| a.folders.iter().map(|f| f.path.clone()).collect()).unwrap_or_default(),
@@ -202,7 +202,7 @@ impl Session {
     }
 
     /// The message to show after `gone` leave the list: the next one down, else the one above.
-    pub(super) fn successor(&self, gone: &[MessageKey]) -> Option<MessageKey> {
+    pub(crate) fn successor(&self, gone: &[MessageKey]) -> Option<MessageKey> {
         let gone: HashSet<&MessageKey> = gone.iter().collect();
         let last = self.list.iter().rposition(|m| gone.contains(&m.key))?;
         self.list
@@ -284,7 +284,7 @@ impl Session {
         Ok(serde_json::json!({ "deleted": n }))
     }
 
-    pub(super) fn after_removal(&mut self, next: Option<MessageKey>) {
+    pub(crate) fn after_removal(&mut self, next: Option<MessageKey>) {
         self.reading = None;
         self.selection.clear();
         self.focus = None;
@@ -356,7 +356,7 @@ impl Session {
         self.prefs.follow_up.get(&follow_up_id(m)).copied()
     }
 
-    pub(super) fn remember(&mut self, u: Undo) {
+    pub(crate) fn remember(&mut self, u: Undo) {
         self.undo.push(u);
         if self.undo.len() > UNDO_DEPTH {
             self.undo.remove(0);

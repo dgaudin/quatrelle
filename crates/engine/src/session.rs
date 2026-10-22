@@ -24,21 +24,25 @@ use quatrelle_model::vcard::Photo;
 mod accounts;
 mod changing;
 mod events;
-mod folder_edits;
 pub mod invite;
-mod mailbox_settings;
+mod listing;
 mod mailboxes;
 mod opening;
 mod organize;
 mod outbox;
 mod pictures;
+pub mod pim;
 mod prefs;
 mod searching;
+mod vote;
 mod writing;
-// Organizing mail's own parts, named here as before.
+// The list's, the settings', the message being written's and organizing mail's own parts,
+// named here as before.
+pub use listing::{ARRANGE_HEADINGS, Arrange, FolderRef, ListFilter, OUTBOX, Row, View, arrange_list};
+use listing::{person, size_group};
 pub use organize::{junk, quick_steps, search_folders};
-pub use prefs::Prefs;
-pub mod pim;
+pub use prefs::{ListLayout, NotesOrder, Prefs, ReadInPane, ReadingPane};
+pub use writing::{Compose, add_pictures, signature_block, style_signature};
 
 /// One account and what the session knows about it.
 #[derive(Clone, Debug, PartialEq)]
@@ -139,82 +143,6 @@ pub fn newer_release<'a>(
     }
 }
 
-/// What the message list shows.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "camelCase")]
-pub enum View {
-    /// Nothing yet (no accounts).
-    Empty,
-    Folder {
-        account: String,
-        folder: String,
-    },
-    /// The same folder of every account (Favorites › All Inboxes).
-    Unified {
-        role: FolderRole,
-    },
-    /// Messages waiting to be sent, from every account.
-    Outbox,
-}
-
-/// The pseudo-folder of Outbox message keys (NUL never appears in a server's folder names).
-pub const OUTBOX: &str = "\u{0}outbox";
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum ListFilter {
-    #[default]
-    All,
-    Unread,
-    Flagged,
-    Attachments,
-    /// Carrying a category.
-    Categorized,
-    /// Marked high importance by the sender.
-    Important,
-    /// Sent to the account's address, or copied to it.
-    ToMe,
-}
-
-impl ListFilter {
-    /// The filters shown as tabs above the list.
-    pub const ALL: [ListFilter; 4] = [ListFilter::All, ListFilter::Unread, ListFilter::Flagged, ListFilter::Attachments];
-    /// Every filter (the Home tab's Filter menu).
-    pub const EVERY: [ListFilter; 7] = [
-        ListFilter::All,
-        ListFilter::Unread,
-        ListFilter::Flagged,
-        ListFilter::Attachments,
-        ListFilter::Categorized,
-        ListFilter::Important,
-        ListFilter::ToMe,
-    ];
-
-    pub fn label(self) -> &'static str {
-        match self {
-            ListFilter::All => "All",
-            ListFilter::Unread => "Unread",
-            ListFilter::Flagged => "Flagged",
-            ListFilter::Attachments => "Has files",
-            ListFilter::Categorized => "Categorized",
-            ListFilter::Important => "Important",
-            ListFilter::ToMe => "To or Cc me",
-        }
-    }
-
-    pub fn code(self) -> &'static str {
-        match self {
-            ListFilter::All => "all",
-            ListFilter::Unread => "unread",
-            ListFilter::Flagged => "flagged",
-            ListFilter::Attachments => "attachments",
-            ListFilter::Categorized => "categorized",
-            ListFilter::Important => "important",
-            ListFilter::ToMe => "toMe",
-        }
-    }
-}
-
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum SearchScope {
@@ -223,54 +151,6 @@ pub enum SearchScope {
     All,
     /// The folder (or unified view) on screen.
     Current,
-}
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum ReadingPane {
-    #[default]
-    Right,
-    Bottom,
-    Off,
-}
-
-/// How the message list lays out its messages.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum ListLayout {
-    /// A table when the reading pane is at the bottom or off (the list is wide then), else
-    /// cards, as Outlook switches.
-    #[default]
-    Auto,
-    /// Each message on lines of its own: the sender, the subject, a preview.
-    Cards,
-    /// One line per message, in columns that sort the list when their heading is clicked.
-    Table,
-}
-
-/// How notes are listed (Outlook's Arrange by for notes).
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum NotesOrder {
-    /// The last changed first.
-    #[default]
-    Modified,
-    /// A to Z by their first line.
-    Title,
-    /// By colour, then A to Z.
-    Color,
-}
-
-/// When a message shown in the reading pane is marked read (with `Prefs::mark_read_on_open`),
-/// as Outlook's Reading Pane options have it. Opened in its own window, it always is.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum ReadInPane {
-    /// When it's shown (after `Prefs::read_after_secs`).
-    #[default]
-    Shown,
-    /// When another message is chosen (or the folder left).
-    Left,
 }
 
 /// A search asked of the servers ([`Session::search_server`]).
@@ -296,60 +176,6 @@ pub struct PaneSection {
     pub mailbox: Option<String>,
 }
 
-/// What the message list is sorted and grouped by.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum Arrange {
-    /// Newest first, under Today, Yesterday… (conversations, when on, apply here).
-    #[default]
-    Date,
-    /// By sender, A to Z.
-    From,
-    /// By the first recipient, A to Z.
-    To,
-    /// By subject (without Re:, Fwd:…), A to Z.
-    Subject,
-    /// Largest first, under size ranges.
-    Size,
-    /// Flagged first.
-    Flag,
-    /// With attachments first.
-    Attachments,
-}
-
-impl Arrange {
-    pub const ALL: [Arrange; 7] = [Arrange::Date, Arrange::From, Arrange::To, Arrange::Subject, Arrange::Size, Arrange::Flag, Arrange::Attachments];
-
-    pub fn code(self) -> &'static str {
-        match self {
-            Arrange::Date => "date",
-            Arrange::From => "from",
-            Arrange::To => "to",
-            Arrange::Subject => "subject",
-            Arrange::Size => "size",
-            Arrange::Flag => "flag",
-            Arrange::Attachments => "attachments",
-        }
-    }
-
-    pub fn from_code(s: &str) -> Option<Arrange> {
-        Arrange::ALL.into_iter().find(|a| a.code() == s)
-    }
-
-    /// The name shown in the View tab and above the list.
-    pub fn label(self) -> &'static str {
-        match self {
-            Arrange::Date => "Date",
-            Arrange::From => "From",
-            Arrange::To => "To",
-            Arrange::Subject => "Subject",
-            Arrange::Size => "Size",
-            Arrange::Flag => "Flag status",
-            Arrange::Attachments => "Attachments",
-        }
-    }
-}
-
 /// A change the user made that Undo can put back.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Undo {
@@ -363,79 +189,6 @@ pub enum Undo {
 /// Changes Undo remembers.
 const UNDO_DEPTH: usize = 20;
 
-/// Who a message is shown under: a name, else the address, else nothing.
-fn person(a: Option<&quatrelle_model::EmailAddress>) -> String {
-    a.map(|a| if a.name.trim().is_empty() { a.email.trim().to_string() } else { a.name.trim().to_string() }).unwrap_or_default()
-}
-
-/// The fixed headings an arranged list shows (for translations).
-pub const ARRANGE_HEADINGS: [&str; 13] = [
-    "Under 10 KB",
-    "10 to 25 KB",
-    "25 to 100 KB",
-    "100 to 500 KB",
-    "500 KB to 1 MB",
-    "1 to 5 MB",
-    "Over 5 MB",
-    "Flagged",
-    "Not flagged",
-    "With attachments",
-    "Without attachments",
-    "(no subject)",
-    "(nobody)",
-];
-
-/// The size range a message is shown under.
-fn size_group(size: u32) -> &'static str {
-    match size {
-        0..10_240 => "Under 10 KB",
-        10_240..25_600 => "10 to 25 KB",
-        25_600..102_400 => "25 to 100 KB",
-        102_400..512_000 => "100 to 500 KB",
-        512_000..1_048_576 => "500 KB to 1 MB",
-        1_048_576..5_242_880 => "1 to 5 MB",
-        _ => "Over 5 MB",
-    }
-}
-
-/// Sort a list as `arrange` says (each one's natural order; `reverse` the other way), newest
-/// first among equals.
-pub fn arrange_list(list: &mut [Summary], arrange: Arrange, reverse: bool) {
-    let text = |s: String| s.to_lowercase();
-    list.sort_by(|a, b| {
-        let primary = match arrange {
-            Arrange::Date => b.date.cmp(&a.date),
-            Arrange::From => text(person(Some(&a.from))).cmp(&text(person(Some(&b.from)))),
-            Arrange::To => text(person(a.to.first())).cmp(&text(person(b.to.first()))),
-            Arrange::Subject => text(a.base_subject()).cmp(&text(b.base_subject())),
-            Arrange::Size => b.size.cmp(&a.size),
-            Arrange::Flag => b.flags.flagged.cmp(&a.flags.flagged),
-            Arrange::Attachments => b.has_attachments.cmp(&a.has_attachments),
-        };
-        let primary = if reverse { primary.reverse() } else { primary };
-        primary.then_with(|| b.date.cmp(&a.date)).then_with(|| b.key.cmp(&a.key))
-    });
-}
-
-/// A folder of an account, by path.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct FolderRef {
-    pub account: String,
-    pub folder: String,
-}
-
-/// A line in the message list.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Row {
-    /// A date heading (`Today`, `Last week`…), or another heading of a fixed text.
-    Header(&'static str),
-    /// A heading that's a name (a sender, a recipient, a subject), shown as it is.
-    Group(String),
-    /// A message (index into [`Session::list`]); with conversations on, the newest message of a
-    /// conversation and how many messages (and unread ones) it holds.
-    Message { index: usize, count: usize, unread: usize },
-}
-
 /// The most messages open in their own windows at once.
 pub const MAX_WINDOWS: usize = 8;
 
@@ -447,114 +200,6 @@ pub struct Reading {
     pub error: Option<String>,
     /// The other messages of its conversation in this list, oldest first.
     pub thread: Vec<MessageKey>,
-}
-
-/// A message being written.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Compose {
-    pub id: u64,
-    pub account: String,
-    /// The signature in the text as it was put there (`-- ` and the signature): replaced when
-    /// another goes in, while it's still there unchanged.
-    #[serde(default)]
-    pub signature: String,
-    pub to: String,
-    pub cc: String,
-    pub bcc: String,
-    pub subject: String,
-    pub body: String,
-    pub attachments: Vec<OutAttachment>,
-    pub in_reply_to: String,
-    pub references: Vec<String>,
-    pub mode: Option<ReplyMode>,
-    /// The message replied to or forwarded (it gets `\Answered` / `$Forwarded` once sent).
-    pub source: Option<MessageKey>,
-    pub sending: bool,
-    pub error: Option<String>,
-    /// The copy saved in Drafts, replaced on the next save.
-    pub draft: Option<MessageKey>,
-    /// The Bcc row is shown.
-    pub show_cc: bool,
-    /// Send as plain text only (lists written out, the rest of the formatting dropped).
-    #[serde(default)]
-    pub plain: bool,
-    /// The pictures placed in the text (each where a [`mime::rich::PICTURE`] stands).
-    #[serde(default)]
-    pub inline: Vec<mime::InlinePicture>,
-    /// How the text looks: a style for each character and paragraph.
-    #[serde(default)]
-    pub styles: mime::rich::Styles,
-    /// Written in a window of its own rather than the reading pane.
-    #[serde(default)]
-    pub window: bool,
-    /// High (1) or low (-1) importance.
-    #[serde(default)]
-    pub importance: i8,
-    /// Ask the recipients for a read receipt.
-    #[serde(default)]
-    pub read_receipt: bool,
-    /// Voting buttons offered (Exchange accounts), `;`-separated: Outlook's Use Voting Buttons.
-    #[serde(default)]
-    pub voting: String,
-    /// Where replies go, when not to the sender (Outlook's "Have replies sent to").
-    #[serde(default)]
-    pub reply_to: String,
-    /// Hold it in the Outbox until then (Unix seconds): Outlook's Delay Delivery.
-    #[serde(default)]
-    pub send_after: Option<i64>,
-    /// The Replies to row is shown.
-    #[serde(default)]
-    pub show_reply_to: bool,
-}
-
-impl Compose {
-    /// The text, HTML and pictures to send: formatted when the text uses formatting or has
-    /// pictures (and the message isn't set to plain text), else plain text alone.
-    pub fn bodies(&self) -> (String, Option<String>, Vec<mime::InlinePicture>) {
-        let mut styles = self.styles.clone();
-        styles.fit(&self.body);
-        let used = mime::rich::pictures(&self.body, &styles);
-        let pictures: Vec<mime::InlinePicture> = self.inline.iter().filter(|p| used.contains(&p.cid)).cloned().collect();
-        let text = mime::rich::to_text(&self.body, &styles);
-        if self.plain || (styles.is_plain() && pictures.is_empty()) {
-            (text, None, Vec::new())
-        } else {
-            (text, Some(mime::rich::to_html(&self.body, &styles)), pictures)
-        }
-    }
-
-    /// Set the text (and forget its formatting).
-    pub fn set_text(&mut self, text: String) {
-        self.styles = mime::rich::Styles::plain(&text);
-        self.body = text;
-    }
-
-    /// Replace a stretch of the text (byte offsets) with another, the look of the text it
-    /// replaces kept: a misspelt word changed for a suggestion in the spelling dialog.
-    pub fn replace_text(&mut self, from: usize, to: usize, with: &str) -> Result<(), CmdError> {
-        if from > to || to > self.body.len() || !self.body.is_char_boundary(from) || !self.body.is_char_boundary(to) {
-            return Err(CmdError::Params("that stretch of the text isn't there".into()));
-        }
-        let first = self.body[..from].chars().count();
-        let was = self.body[from..to].chars().count();
-        self.body.replace_range(from..to, with);
-        let style = self.styles.chars.get(first).copied().unwrap_or(0);
-        let end = (first + was).min(self.styles.chars.len());
-        self.styles.chars.splice(first..end, std::iter::repeat_n(style, with.chars().count()));
-        if self.styles.chars.len() != self.body.chars().count() {
-            self.styles.fit(&self.body);
-        }
-        Ok(())
-    }
-
-    /// Replace a stretch of the subject (byte offsets): a misspelt word changed for a suggestion.
-    pub fn replace_subject(&mut self, from: usize, to: usize, with: &str) -> Result<(), CmdError> {
-        if from > to || to > self.subject.len() || !self.subject.is_char_boundary(from) || !self.subject.is_char_boundary(to) {
-            return Err(CmdError::Params("that stretch of the subject isn't there".into()));
-        }
-        self.subject.replace_range(from..to, with);
-        Ok(())
-    }
 }
 
 /// A status-bar message.
@@ -1015,82 +660,4 @@ pub fn parse_key(v: &Value) -> Option<MessageKey> {
 /// What a follow-up date is kept under: the Message-ID, or (without one) the message's place.
 fn follow_up_id(m: &Summary) -> String {
     if m.message_id.trim().is_empty() { m.key.to_id() } else { m.message_id.trim().to_string() }
-}
-
-/// A signature as it goes into a message: after the usual `-- ` line (RFC 3676's delimiter).
-pub fn signature_block(sig: &str) -> String {
-    format!("-- \n{}", sig.trim_end())
-}
-
-/// Give the signature in a message (`c.signature`, where it still stands as put there) the look
-/// it has: `sig` is its text and styles.
-/// The message as HTML with its signature's HTML where the signature's text stands (`None`
-/// when that text was taken out or changed: the message is sent as written then).
-fn with_html_signature(c: &Compose, raw: &str) -> Option<String> {
-    const MARK: char = '\u{E001}';
-    if c.signature.is_empty() || c.body.contains(MARK) {
-        return None;
-    }
-    let b = c.body.rfind(&c.signature)?;
-    let start = c.body.get(..b)?.chars().count();
-    let n = c.signature.chars().count();
-    let (mut text, mut styles) = (c.body.clone(), c.styles.clone());
-    styles.fit(&text);
-    let mark = MARK.to_string();
-    mime::rich::splice(&mut text, &mut styles, start..start + n, &mark, &mime::rich::Styles::plain(&mark));
-    let html = mime::rich::to_html(&text, &styles);
-    html.contains(MARK).then(|| html.replace(MARK, &format!("<div>{raw}</div>")))
-}
-
-/// Pictures a message gets with its signature (those it hasn't already).
-pub fn add_pictures(c: &mut Compose, pictures: Vec<mime::InlinePicture>) {
-    for p in pictures {
-        if !c.inline.iter().any(|x| x.cid == p.cid) {
-            c.inline.push(p);
-            c.plain = false;
-        }
-    }
-}
-
-pub fn style_signature(c: &mut Compose, sig: &(String, mime::rich::Styles)) {
-    let (text, styles) = sig;
-    if c.signature.is_empty() || styles.is_plain() {
-        return;
-    }
-    let mut block = "-- \n".to_string();
-    let mut block_styles = mime::rich::Styles::plain(&block);
-    mime::rich::append(&mut block, &mut block_styles, text.trim_end(), styles);
-    if block != c.signature {
-        return;
-    }
-    let Some(b) = c.body.rfind(&c.signature) else { return };
-    let start = c.body.get(..b).unwrap_or("").chars().count();
-    let n = block.chars().count();
-    c.styles.fit(&c.body);
-    mime::rich::splice(&mut c.body, &mut c.styles, start..start + n, &block, &block_styles);
-}
-
-mod shared_mailboxes;
-
-mod vote;
-
-/// A setting that was on before it existed.
-fn yes() -> bool {
-    true
-}
-
-impl ListLayout {
-    pub const ALL: [ListLayout; 3] = [ListLayout::Auto, ListLayout::Cards, ListLayout::Table];
-
-    pub fn code(self) -> &'static str {
-        match self {
-            ListLayout::Auto => "auto",
-            ListLayout::Cards => "cards",
-            ListLayout::Table => "table",
-        }
-    }
-
-    pub fn from_code(s: &str) -> Option<ListLayout> {
-        ListLayout::ALL.into_iter().find(|l| l.code() == s)
-    }
 }

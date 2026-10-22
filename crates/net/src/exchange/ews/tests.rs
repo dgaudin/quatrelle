@@ -1,3 +1,8 @@
+//! Tests of the EWS transport: rules, headers, searching, syncing and Autodiscover, over the fake server.
+
+use super::autodiscover::autodiscover_answer;
+use super::rules::{inbox_rule_xml, server_rule};
+use super::sync::aqs_of;
 use super::*;
 
 #[test]
