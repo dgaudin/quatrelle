@@ -168,7 +168,7 @@ impl Session {
                 {
                     p.ensure_defaults();
                     self.pim.insert(account.to_string(), p);
-                    self.contacts = None;
+                    self.forget_contacts();
                     self.pim_revision = self.pim_revision.wrapping_add(1);
                 }
                 let more = if skipped > 0 { format!(" ({skipped} could not be read)") } else { String::new() };

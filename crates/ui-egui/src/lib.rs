@@ -312,6 +312,9 @@ pub struct UiState {
     /// The recipient box a suggestion was just picked into: it keeps the cursor through the rest
     /// of that click (the release lands outside the box, which would otherwise end its focus).
     pub(crate) suggest_refocus: Option<&'static str>,
+    /// The suggestions last worked out, for which box, text and address book (its revision):
+    /// looking through a book of thousands is for a change, not for every frame.
+    pub(crate) suggest_cache: Option<((&'static str, String, u64), Vec<quatrelle_engine::model::contacts::Contact>)>,
     /// Installed Craft apps (command, path), found at start-up.
     pub(crate) craft_apps: Vec<(&'static str, PathBuf)>,
     /// The interface language setting (`auto` or a language code).
@@ -446,6 +449,7 @@ impl MailApp {
                 suggest_index: 0,
                 suggest_dismissed: None,
                 suggest_refocus: None,
+                suggest_cache: None,
                 craft_apps: Vec::new(),
                 language: i18n::AUTO.into(),
                 fonts: (None, None),
@@ -711,6 +715,12 @@ pub fn trace_window(ui: &Ui, what: &str) {
 /// milliseconds of indexing; a 800,000-message mailbox then takes a few seconds, drawing all the
 /// while).
 const SEARCH_INDEX_BUDGET: usize = 500;
+
+/// Messages the address book (recipient suggestions, Select Names, the Focused Inbox) takes in
+/// per frame while it is built, the window drawing between slices: counting a summary is a
+/// fraction of a microsecond, reading a folder from disk the slice's real cost, so a slice is
+/// a folder or so (a 550,000-message mailbox is built in a hundred frames, a second or two).
+const CONTACTS_BUDGET: usize = 5_000;
 
 /// Mail, Calendar, People and Notes down the window's edge, as Outlook's: the module shown
 /// lit, with a bar at its edge.

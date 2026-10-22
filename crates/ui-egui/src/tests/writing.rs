@@ -2,6 +2,45 @@
 
 use super::*;
 
+/// A name typed into To over a big mailbox (16 folders of 4,000 messages, too many to count
+/// again at the start): no frame reads the mailbox whole. The message's first frame starts the
+/// address book's build; every frame after takes a slice, reading a folder or two, the window
+/// drawing between them; the suggestions show once the book is complete, a few frames on.
+/// Built whole, as it was, the frame of the first letter typed read every folder from disk at
+/// once, and the window froze for as long as that took (seconds, on a mailbox of hundreds of
+/// thousands).
+#[test]
+fn a_name_typed_into_to_never_reads_a_big_mailbox_in_one_frame() {
+    let (mut a, dir) = app_big("suggest-big", 16, 4000);
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    frame(&ctx, &mut a, vec![]);
+    assert!(!a.session.contacts_pending(), "no message being written: the book isn't built");
+    assert_eq!(a.session.cached_folders().len(), 1, "the Inbox on screen");
+    a.run("mail.new", json!({}));
+    let (mut frames, mut most, mut longest) = (0, 0, std::time::Duration::ZERO);
+    while frames < 40 {
+        let before = a.session.cached_folders();
+        let began = std::time::Instant::now();
+        frame(&ctx, &mut a, if frames == 2 { vec![Event::Text("ann1".into())] } else { vec![] });
+        longest = longest.max(began.elapsed());
+        most = most.max(a.session.cached_folders().iter().filter(|k| !before.contains(k)).count());
+        frames += 1;
+        if frames > 3 && !a.session.contacts_pending() {
+            break;
+        }
+    }
+    assert!(frames < 40, "the book is built in a few frames");
+    assert!(most <= 4, "a frame reads the folder its slice is in, the next two at most: {most}");
+    assert_eq!(a.session.compose.as_ref().unwrap().to, "ann1");
+    frame(&ctx, &mut a, vec![]);
+    let list =
+        ctx.memory(|m| m.areas().visible_layer_ids().into_iter().filter(|l| l.order == egui::Order::Foreground).find_map(|l| m.area_rect(l.id)));
+    assert!(list.is_some(), "the suggestions show once the book is built");
+    println!("{frames} frames, the longest {longest:?}");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 #[test]
 fn recipient_boxes_suggest_people() {
     let (mut a, dir) = app("suggest");
