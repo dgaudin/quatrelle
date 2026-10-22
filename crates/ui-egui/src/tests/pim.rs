@@ -322,6 +322,14 @@ fn appointments_are_dragged_to_another_time() {
     let press = |pos, pressed| Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed, modifiers: Modifiers::NONE };
     let chip =
         |ctx: &egui::Context, item: &quatrelle_engine::AgendaItem| ctx.read_response(chip_id(item)).map(|r| r.rect).expect("the chip is drawn");
+    // Once the day has scrolled to the working hours (the chips stay put).
+    for _ in 0..20 {
+        let before = chip(&ctx, &lunch);
+        frame(&ctx, &mut a, vec![]);
+        if chip(&ctx, &lunch) == before {
+            break;
+        }
+    }
     // Taken by its middle, dragged an hour down, let go.
     let from = chip(&ctx, &lunch).center();
     let to = from + egui::vec2(0.0, HOUR);
@@ -352,6 +360,22 @@ fn appointments_are_dragged_to_another_time() {
     frame(&ctx, &mut a, vec![]);
     let longer = a.session.find_event(&lunch.uid).unwrap().1.event.clone();
     assert_eq!((longer.start, longer.end), (lunch.start, lunch.end + 3600));
+    a.run("edit.undo", json!({}));
+    for _ in 0..24 {
+        frame(&ctx, &mut a, vec![]);
+    }
+    // Its top edge, dragged half an hour up: starts half an hour earlier, ends when it did.
+    let r = chip(&ctx, &lunch);
+    let top = egui::pos2(r.center().x, r.min.y + 2.0);
+    frame(&ctx, &mut a, vec![Event::PointerMoved(top)]);
+    frame(&ctx, &mut a, vec![press(top, true)]);
+    frame(&ctx, &mut a, vec![Event::PointerMoved(top - egui::vec2(0.0, 14.0))]);
+    frame(&ctx, &mut a, vec![Event::PointerMoved(top - egui::vec2(0.0, HOUR / 2.0))]);
+    assert!(a.ui.cal_drag.as_ref().is_some_and(|d| d.resize && d.top), "{:?}", a.ui.cal_drag);
+    frame(&ctx, &mut a, vec![press(top - egui::vec2(0.0, HOUR / 2.0), false)]);
+    frame(&ctx, &mut a, vec![]);
+    let earlier = a.session.find_event(&lunch.uid).unwrap().1.event.clone();
+    assert_eq!((earlier.start, earlier.end), (lunch.start - 1800, lunch.end));
     a.run("edit.undo", json!({}));
     // (A moment later: a press soon after a release is a double-click in the making, not a drag.)
     for _ in 0..24 {

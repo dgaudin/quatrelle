@@ -1,7 +1,8 @@
 //! Appointments dragged to another time, as Outlook's calendar has it: a chip's body moves it
 //! (the day from where the pointer is, the time snapped to the quarter hour; in the month and
-//! the all-day strip, to another day as long as it was), its bottom edge changes when it ends,
-//! a ghost shows where it would land, Esc lets go, and letting go asks the engine to move it —
+//! the all-day strip, to another day as long as it was), its bottom edge changes when it ends
+//! and its top edge when it starts (the edges show a grip on the chip pointed at), a ghost
+//! shows where it would land, Esc lets go, and letting go asks the engine to move it —
 //! after asking the user what Outlook asks: one occurrence or the whole series, and whether
 //! the guests of a meeting they organize hear of it ([`crate::dialogs::MoveForm`]).
 //!
@@ -17,8 +18,10 @@ const SNAP: i64 = 900;
 #[derive(Clone, Debug)]
 pub struct Drag {
     pub item: AgendaItem,
-    /// The bottom edge is dragged: only the end changes.
+    /// An edge is dragged: the bottom one changes only the end, the top one (`top`) only the
+    /// start.
     pub resize: bool,
+    pub top: bool,
     /// Seconds from the item's start to where it was taken hold of, so it keeps its place under
     /// the pointer.
     pub grab: i64,
@@ -66,9 +69,14 @@ impl Area {
         match self {
             Area::Hours { grid, .. } => {
                 let secs = i64::from(((p.y - grid.min.y) / HOUR * 3600.0).round() as i32);
-                if d.resize {
-                    let midnight = s.local_midnight(day_of(it.start, s));
-                    let end = (midnight + snap(secs)).clamp(it.start + SNAP, midnight + 86_400);
+                // Bounded with max/min, not clamp: a chip near midnight has bounds the wrong way
+                // round (one starting at 23:50 ends after the day), and clamp panics on those.
+                let midnight = s.local_midnight(day_of(it.start, s));
+                if d.resize && d.top {
+                    let start = (midnight + snap(secs)).max(midnight).min(it.end - SNAP);
+                    Some((start, it.end))
+                } else if d.resize {
+                    let end = (midnight + snap(secs)).min(midnight + 86_400).max(it.start + SNAP);
                     Some((it.start, end))
                 } else {
                     let len = (it.end - it.start).clamp(SNAP, 86_400);
@@ -134,6 +142,12 @@ fn handle_rect(rect: Rect) -> Rect {
     Rect::from_min_max(pos2(rect.min.x, (rect.max.y - 7.0).max(rect.min.y + 4.0)), rect.max)
 }
 
+/// Where its top edge is taken hold of to change when it starts: none on a chip too short to
+/// have both and still a body to move it by.
+fn top_rect(rect: Rect) -> Option<Rect> {
+    (rect.height() >= 26.0).then(|| Rect::from_min_max(rect.min, pos2(rect.max.x, rect.min.y + 6.0)))
+}
+
 /// After a chip is drawn: a drag of it started, followed, or ended (`resp`: the chip's).
 #[allow(clippy::too_many_arguments)]
 pub(super) fn chip(
@@ -150,14 +164,27 @@ pub(super) fn chip(
         return;
     }
     let same = |d: &Drag| d.item.uid == item.uid && d.item.occurrence == item.occurrence && d.item.start == item.start;
-    // The bottom edge, in the hours: dragged, the end moves and the start stays.
-    let handle = match area {
-        Area::Hours { .. } => {
-            Some(ui.interact(handle_rect(rect), resp.id.with("resize"), Sense::drag()).on_hover_cursor(egui::CursorIcon::ResizeVertical))
-        }
-        _ => None,
+    // The edges, in the hours: the bottom one dragged, the end moves and the start stays; the top
+    // one, the start moves and the end stays.
+    let edge = |r: Rect, name: &str| ui.interact(r, resp.id.with(name), Sense::drag()).on_hover_cursor(egui::CursorIcon::ResizeVertical);
+    let (handle, top_handle) = match area {
+        Area::Hours { .. } => (Some(edge(handle_rect(rect), "resize")), top_rect(rect).map(|r| edge(r, "resize-top"))),
+        _ => (None, None),
     };
-    let resize = handle.as_ref().is_some_and(|h| h.drag_started());
+    // A grip on each edge of the chip pointed at, so it's seen that they can be taken hold of.
+    if handle.is_some()
+        && st.cal_drag.is_none()
+        && (resp.hovered() || handle.as_ref().is_some_and(|h| h.hovered()) || top_handle.as_ref().is_some_and(|h| h.hovered()))
+    {
+        let grip = st.tokens.text.gamma_multiply(0.55);
+        let bar = |y: f32| Rect::from_center_size(pos2(rect.center().x, y), vec2(18.0_f32.min(rect.width() - 8.0).max(4.0), 3.0));
+        ui.painter().rect_filled(bar(rect.max.y - 3.0), 1.5, grip);
+        if top_handle.is_some() {
+            ui.painter().rect_filled(bar(rect.min.y + 3.0), 1.5, grip);
+        }
+    }
+    let top = top_handle.as_ref().is_some_and(|h| h.drag_started());
+    let resize = top || handle.as_ref().is_some_and(|h| h.drag_started());
     if (resp.drag_started() || resize) && st.cal_drag.is_none() {
         // Where it was taken hold of: the press, not where the pointer is once the drag is
         // decided (it has moved by then).
@@ -168,7 +195,7 @@ pub(super) fn chip(
             }
             _ => 0,
         };
-        st.cal_drag = Some(Drag { item: item.clone(), resize, grab, to: None });
+        st.cal_drag = Some(Drag { item: item.clone(), resize, top, grab, to: None });
     }
     if !st.cal_drag.as_ref().is_some_and(same) {
         return;
@@ -183,7 +210,10 @@ pub(super) fn chip(
         ui.ctx().set_cursor_icon(if d.resize { egui::CursorIcon::ResizeVertical } else { egui::CursorIcon::Grabbing });
     }
     // Let go: moved, when it went anywhere.
-    let released = resp.drag_stopped() || handle.as_ref().is_some_and(|h| h.drag_stopped()) || !ui.input(|i| i.pointer.primary_down());
+    let released = resp.drag_stopped()
+        || handle.as_ref().is_some_and(|h| h.drag_stopped())
+        || top_handle.as_ref().is_some_and(|h| h.drag_stopped())
+        || !ui.input(|i| i.pointer.primary_down());
     if released
         && let Some(d) = st.cal_drag.take()
         && let Some((start, end)) = d.to
@@ -236,4 +266,35 @@ fn commit(s: &Session, item: &AgendaItem, start: i64, end: i64, acts: &mut Vec<A
         this_occurrence: None,
         error: None,
     }))));
+}
+
+#[cfg(test)]
+mod edge_tests {
+    use super::*;
+
+    /// An edge of an appointment near midnight dragged (one starting at 23:50 ends the next
+    /// day): the bounds are the wrong way round, which `clamp` panicked on.
+    #[test]
+    fn edges_dragged_near_midnight_stay_in_bounds() {
+        let noon = 1_800_000_000 - 1_800_000_000 % 86_400 + 12 * 3600;
+        let s = Session::open(None, quatrelle_engine::model::dates::Clock::new(noon, 0));
+        let midnight = s.local_midnight(day_of(noon, &s));
+        let start = midnight + 23 * 3600 + 50 * 60;
+        let item = AgendaItem { start, end: start + 1800, movable: true, ..Default::default() };
+        let grid = Rect::from_min_size(pos2(0.0, 0.0), vec2(700.0, 24.0 * HOUR));
+        let area = Area::Hours { grid, pane_x: 0.0, cw: 700.0, day0: day_of(start, &s), days: 1 };
+        let drag = |top: bool| Drag { item: item.clone(), resize: true, top, grab: 0, to: None };
+        // The bottom edge anywhere: it still ends a quarter hour after it starts, at least.
+        for y in [0.0, 12.0 * HOUR, 24.0 * HOUR - 1.0] {
+            let (a, b) = area.target(pos2(10.0, y), &drag(false), &s).unwrap();
+            assert_eq!(a, start);
+            assert!(b >= start + SNAP, "{y}: {b}");
+        }
+        // The top edge: starts at the day's first hour at the earliest, its last at the latest
+        // (still before it ends).
+        let (a, b) = area.target(pos2(10.0, 0.0), &drag(true), &s).unwrap();
+        assert_eq!((a, b), (midnight, start + 1800));
+        let (a, b) = area.target(pos2(10.0, 24.0 * HOUR - 1.0), &drag(true), &s).unwrap();
+        assert_eq!((a, b), (midnight + 86_400, start + 1800));
+    }
 }
