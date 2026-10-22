@@ -572,3 +572,88 @@ fn one_unreadable_message_holds_up_nothing() {
     assert_eq!(with_body, ["three", "one"], "the others downloaded");
     let _ = std::fs::remove_dir_all(store.root());
 }
+
+/// Rooms come from the Places API (the room lists and their rooms) or, where the sign-in can't
+/// use it, from the older `findRoomLists` and `findRooms`; with no lists at all, every room the
+/// directory knows. Free/busy comes from `getSchedule`: each schedule's items, or its refusal.
+/// A meeting made with a room carries it as a resource attendee, read back as one.
+#[test]
+fn rooms_and_availability_come_through_graph() {
+    use quatrelle_model::ical::{Attendee, CalEvent};
+    use quatrelle_model::pim::{Pim, StoredEvent};
+    use quatrelle_model::scheduling::BusyKind;
+    let mut d = Data::default();
+    d.folder("Inbox", None, Some("inbox"));
+    d.calendars.push(("CAL1".into(), "Calendar".into()));
+    d.room_lists = vec![("Lyon".into(), "rooms.lyon@contoso.example".into())];
+    d.rooms = vec![
+        ("Salle Rhône".into(), "room.rhone@contoso.example".into(), "rooms.lyon@contoso.example".into()),
+        ("Salle Seine".into(), "room.seine@contoso.example".into(), "rooms.paris@contoso.example".into()),
+    ];
+    d.others = vec![("ana@contoso.example".into(), false)];
+    let at = |h: u32| json!({"dateTime": format!("2026-10-22T{h:02}:00:00.0000000"), "timeZone": "UTC"});
+    d.events.push(json!({"id": "E1", "calendar": "CAL1", "iCalUId": "e1", "subject": "Budget", "start": at(9), "end": at(10)}));
+    d.events.push(json!({"id": "A1", "calendar": "user:ana@contoso.example", "iCalUId": "a1", "subject": "Ana's lunch", "start": at(12), "end": at(13), "showAs": "tentative"}));
+    d.busy.push(("room.rhone@contoso.example".into(), "2026-10-22T13:00:00".into(), "2026-10-22T14:00:00".into(), "busy".into(), "Dailies".into()));
+    d.no_freebusy = vec!["secret@contoso.example".into()];
+    let server = serve(d);
+    let c = crate::graph::Client::connect(&server.base, TOKEN).unwrap();
+    let (lists, rooms) = crate::graph_pim::scheduling::rooms(&c).unwrap();
+    assert_eq!(lists.iter().map(|l| l.name.as_str()).collect::<Vec<_>>(), ["Lyon"]);
+    assert_eq!(rooms.iter().map(|r| (r.name.as_str(), r.list.as_str())).collect::<Vec<_>>(), [("Salle Rhône", "Lyon")], "the lists' rooms");
+    assert!(server.data.lock().unwrap().calls.iter().any(|c| c.starts_with("GET /places/microsoft.graph.roomList")));
+    let from = quatrelle_jmap::utc_date("2026-10-22T00:00:00Z").unwrap();
+    let emails =
+        ["riley@contoso.example".to_string(), "ana@contoso.example".into(), "room.rhone@contoso.example".into(), "secret@contoso.example".into()];
+    let out = crate::graph_pim::scheduling::availability(&c, &emails, from, from + 86_400).unwrap();
+    let slots = |i: usize| out[i].slots.iter().map(|s| (s.start - from, s.end - from, s.kind, s.subject.clone())).collect::<Vec<_>>();
+    assert_eq!(slots(0), [(9 * 3600, 10 * 3600, BusyKind::Busy, "Budget".to_string())]);
+    assert_eq!(slots(1), [(12 * 3600, 13 * 3600, BusyKind::Tentative, "Ana's lunch".to_string())]);
+    assert_eq!(slots(2), [(13 * 3600, 14 * 3600, BusyKind::Busy, "Dailies".to_string())]);
+    assert!(out[3].error.as_deref().is_some_and(|e| e.contains("free/busy")), "{:?}", out[3]);
+    let asked = server.data.lock().unwrap().schedule_asked.clone();
+    assert_eq!(asked.len(), 1);
+    assert_eq!(asked[0]["schedules"].as_array().map(Vec::len), Some(4));
+    assert_eq!(asked[0]["startTime"]["dateTime"], "2026-10-22T00:00:00");
+    // Without the Places API: the older functions, the same rooms.
+    server.data.lock().unwrap().places_refused = true;
+    let (lists, rooms) = crate::graph_pim::scheduling::rooms(&c).unwrap();
+    assert_eq!((lists.len(), rooms.len()), (1, 1));
+    {
+        let d = server.data.lock().unwrap();
+        assert!(d.calls.iter().any(|c| c == "GET /me/findRoomLists"), "{:?}", d.calls);
+        assert!(d.calls.iter().any(|c| c.starts_with("GET /me/findRooms(RoomList=")), "{:?}", d.calls);
+    }
+    // No lists at all: every room the directory knows.
+    server.data.lock().unwrap().room_lists.clear();
+    let (lists, rooms) = crate::graph_pim::scheduling::rooms(&c).unwrap();
+    assert!(lists.is_empty());
+    assert_eq!(rooms.len(), 2);
+    // A meeting with a room: the room is a resource attendee, and reads back as one.
+    let who =
+        |name: &str, email: &str, cutype: &str| Attendee { name: name.into(), email: email.into(), cutype: cutype.into(), ..Default::default() };
+    let mut pim = Pim::default();
+    pim.events.push(StoredEvent {
+        calendar: "CAL1".into(),
+        event: CalEvent {
+            uid: "new-1".into(),
+            summary: "Poster check".into(),
+            start: from + 9 * 3600,
+            end: from + 10 * 3600,
+            attendees: vec![who("Ana", "ana@contoso.example", ""), who("Salle Rhône", "room.rhone@contoso.example", "ROOM")],
+            ..Default::default()
+        },
+        dirty: true,
+        ..Default::default()
+    });
+    let synced = crate::graph_pim::sync(&c, &pim, 1_792_000_000).unwrap();
+    assert!(synced.errors.is_empty(), "{:?}", synced.errors);
+    {
+        let d = server.data.lock().unwrap();
+        let made = d.events.iter().find(|e| e["subject"] == "Poster check").unwrap();
+        let kinds: Vec<&str> = made["attendees"].as_array().unwrap().iter().map(|a| a["type"].as_str().unwrap()).collect();
+        assert_eq!(kinds, ["required", "resource"]);
+    }
+    let back = synced.events.iter().find(|e| e.event.summary == "Poster check").unwrap();
+    assert_eq!(back.event.attendees.iter().map(|a| a.cutype.as_str()).collect::<Vec<_>>(), ["", "RESOURCE"]);
+}

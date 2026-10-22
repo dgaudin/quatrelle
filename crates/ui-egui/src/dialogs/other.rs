@@ -91,7 +91,7 @@ pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &
             }
             !cancel
         }
-        Dialog::Event(f) => crate::pim_dialogs::event(ui, f, t, acts),
+        Dialog::Event(f) => crate::pim_dialogs::event(ui, f, s, t, acts),
         Dialog::Contact(f) => crate::pim_dialogs::contact(ui, f, t, acts),
         // Every other kind is shown by its own group (`body`).
         _ => true,

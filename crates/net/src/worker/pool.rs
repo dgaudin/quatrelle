@@ -292,6 +292,17 @@ impl Pool {
             Job::GetVacation { account } | Job::SetVacation { account, .. } if !self.workers.contains_key(&account) => {
                 self.sink.emit(Event::Vacation { account, vacation: None, error: Some("the account is offline".into()) });
             }
+            Job::GetRooms { account } if !self.workers.contains_key(&account) => {
+                self.sink.emit(Event::Rooms { account, lists: Vec::new(), rooms: Vec::new(), error: Some("the account is offline".into()) });
+            }
+            Job::GetAvailability { account, emails, from, to } if !self.workers.contains_key(&account) => {
+                let error = "the account is offline".to_string();
+                let people = emails
+                    .into_iter()
+                    .map(|email| quatrelle_model::scheduling::Availability { email, slots: Vec::new(), error: Some(error.clone()) })
+                    .collect();
+                self.sink.emit(Event::Availability { account, from, to, people, error: Some(error) });
+            }
             // The change goes into the cache and ops.json here, on the caller's thread, before
             // the account thread is free: it may be minutes into a full sync. Waiting meant a
             // folder refresh could paint the server's old state over the edit, and closing the

@@ -59,6 +59,7 @@ mod compose;
 mod home;
 mod navigation;
 mod pim;
+mod scheduling;
 mod view;
 
 /// Every command, in the order the CLI lists them: the Home tab's first, accounts' last.
@@ -72,6 +73,7 @@ pub fn registry() -> Registry {
     all.extend(compose::commands());
     all.extend(view::commands());
     all.extend(pim::commands());
+    all.extend(scheduling::commands());
     all.extend(accounts::commands());
     Registry::new(all)
 }

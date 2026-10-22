@@ -6,8 +6,9 @@
 //! `QUATRELLE_DATA` environment variable) chooses where mail is cached. `--cmd` runs engine
 //! commands at start-up (`--cmd 'list.open={"key":"sample:1:1:INBOX"}'`); `ui.file` (or
 //! `ui.settings`), `ui.openExport`, `ui.options` and `ui.about` open the File page at that page;
-//! `ui.addAccount` (optionally `={"email":…,"advanced":true,"graph":true}` or `"pop":true`), `ui.newEvent` and
-//! `ui.newContact` open those dialogs.
+//! `ui.addAccount` (optionally `={"email":…,"advanced":true,"graph":true}` or `"pop":true`), `ui.newEvent`
+//! (optionally `={"at":"YYYY-MM-DDTHH:MM","summary":…,"guests":…,"rooms":…,"scheduling":true,"finder":true}`)
+//! and `ui.newContact` open those dialogs.
 #![cfg_attr(all(target_os = "windows", not(debug_assertions)), windows_subsystem = "windows")]
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
@@ -462,7 +463,29 @@ fn run(
                     "ui.options" => app.ui.backstage = Some(Backstage::new(Page::Options)),
                     "ui.openExport" => app.ui.backstage = Some(Backstage::new(Page::Open)),
                     "ui.about" => app.ui.backstage = Some(Backstage::new(Page::About)),
-                    "ui.newEvent" => app.ui.dialog = Some(quatrelle_ui_egui::Dialog::new_event(&app.session, None)),
+                    // Optionally `={"at":"YYYY-MM-DDTHH:MM","summary":…,"guests":"a@x, …","rooms":"Room <r@x>, …","scheduling":true,"finder":true}`.
+                    "ui.newEvent" => {
+                        let p: serde_json::Value = serde_json::from_str(params).unwrap_or_default();
+                        let text = |k: &str| p.get(k).and_then(|v| v.as_str()).map(str::to_string);
+                        let at = text("at").and_then(|x| quatrelle_engine::parse_local(&x, i64::from(app.session.clock.offset))).map(|(t, _)| t);
+                        let mut d = quatrelle_ui_egui::Dialog::new_event(&app.session, at);
+                        if let quatrelle_ui_egui::Dialog::Event(f) = &mut d {
+                            if let Some(s) = text("summary") {
+                                f.summary = s;
+                            }
+                            if let Some(g) = text("guests") {
+                                f.guests = g;
+                            }
+                            for r in quatrelle_engine::model::addr::parse_list(&text("rooms").unwrap_or_default()).unwrap_or_default() {
+                                f.add_room(&r.name, &r.email);
+                            }
+                            f.scheduling = p.get("scheduling").and_then(|v| v.as_bool()).unwrap_or(false);
+                            if p.get("finder").and_then(|v| v.as_bool()).unwrap_or(false) {
+                                f.finder = Some(Default::default());
+                            }
+                        }
+                        app.ui.dialog = Some(d);
+                    }
                     "ui.newContact" => app.ui.dialog = Some(quatrelle_ui_egui::Dialog::new_contact()),
                     "ui.rules" => app.ui.dialog = Some(quatrelle_ui_egui::Dialog::Rules),
                     _ => match serde_json::from_str(params) {

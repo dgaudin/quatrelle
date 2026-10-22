@@ -11,8 +11,8 @@ local-first, media-aware v1); the fuller request is
 | | |
 |---|---|
 | Crates | 8 libraries + 3 apps + xtask |
-| Commands | 141 (`quatrelle-cli commands`) |
-| Tests | 369 (unit, in-memory IMAP, JMAP, Graph, EWS (mail, calendars, contacts, Autodiscover), CalDAV/CardDAV and ManageSieve servers, NTLM test vectors, SMTP and HTTP stubs, data files, TCP end-to-end, an X server drag, headless UI) |
+| Commands | 143 (`quatrelle-cli commands`) |
+| Tests | 388 (unit, in-memory IMAP, JMAP, Graph, EWS (mail, calendars, contacts, rooms and free/busy, Autodiscover), CalDAV/CardDAV and ManageSieve servers, NTLM test vectors, SMTP and HTTP stubs, data files, TCP end-to-end, an X server drag, headless UI) |
 | Languages | 14 (English, Spanish, French, German, Dutch, Brazilian Portuguese, Italian, Russian, Japanese, Korean, Simplified and Traditional Chinese, Arabic, Hebrew) |
 | Platforms | Windows, macOS, Linux; the browser (JMAP accounts) |
 
@@ -571,3 +571,17 @@ local-first, media-aware v1); the fuller request is
   leaving the folder stops it between two ranges. The search box gains Outlook's scope menu
   (Current Folder, Subfolders, Current Mailbox, All Mailboxes), its recent searches and Advanced
   search. Also found on the way: two doc comments the file split had left on the wrong item.
+- **2026-10-23** — **v0.22**, meetings as Outlook makes them (the owner found creating one too
+  thin next to Outlook's rooms and the room's calendar): the event form gains a **Room Finder**
+  (`calendar.rooms`) — an Exchange or Microsoft 365 account's room lists and rooms (EWS
+  `GetRoomLists`/`GetRooms`, Graph's Places API or `findRoomLists`/`findRooms`), and, since many
+  on-premises servers have no room lists set up, the rooms the calendar already knows: the
+  calendars Outlook keeps in its Rooms group (the owner's "Salles") and every room booked in a
+  meeting here; any room by its address too — and a **Scheduling Assistant**
+  (`calendar.availability`): a day's hours with a row for the organizer, each guest and each room,
+  their busy time (EWS `GetUserAvailability` in UTC, Graph `getSchedule`; the calendars kept here
+  for every other account) by kind, and the meeting drawn over them, moved by a click or a drag.
+  A room picked is a resource attendee (iCalendar `CUTYPE=ROOM`, EWS `Resources`, Graph
+  `type: resource`), which Exchange books itself, and the place follows the rooms. Both are asked
+  on the account's second connection, so a long sync never holds the form; loading and refusals
+  are shown as such. The sample mailbox gains two rooms and a colleague's calendar to see it with.

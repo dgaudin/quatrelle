@@ -61,6 +61,7 @@ mod mailboxes;
 mod organize;
 mod people;
 mod pim;
+mod scheduling;
 mod searching;
 mod server_rules;
 mod writing;

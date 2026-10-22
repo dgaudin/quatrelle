@@ -99,6 +99,28 @@ written (`Compose`), preferences and status-bar notices.
 - Local-only accounts (the sample mailbox) apply changes to the cache directly, including moves
   (new UIDs in the destination) and sending (filed in Sent).
 
+### Scheduling a meeting (`session/scheduling.rs`, `cmd/scheduling.rs`)
+
+The event form has Outlook's two helpers, adapted. The **Room Finder** (`calendar.rooms`) lists
+the rooms to book: an Exchange or Microsoft 365 account asks its server once
+(`Job::GetRooms` → `Event::Rooms`: the room lists and their rooms), and the rooms the calendar
+already knows come after them — the mailboxes of the calendars Outlook keeps in its Rooms group
+("Salles" in a French Outlook, `model::scheduling::is_rooms_group`) and every room booked in a
+meeting kept here — so a server with no room lists set up (most on-premises ones) still offers
+something; any other account offers the calendar's at once. A room picked is a resource
+attendee (`Attendee::cutype` `ROOM`, written as iCalendar's `CUTYPE`, EWS `Resources`, Graph
+`type: resource`), which Exchange books itself, and the place follows the rooms until it's typed
+by hand. The **Scheduling Assistant** (`calendar.availability`) draws a day's hours, a row each
+for the organizer, the guests and the rooms, and their busy time (`model::scheduling::BusySlot`,
+by kind: busy, tentative, out of office, working elsewhere, no information) with the meeting
+over them; a click or a drag moves the meeting, and the start and end fields follow. Exchange
+accounts ask their server once per window (`Job::GetAvailability` → `Event::Availability`, on
+the account's second connection, so a long sync never holds it); everyone else is answered from
+the calendars kept here (the account's own for its owner, the one opened by their address for a
+colleague or a room). What's asked is kept in `Session::rooms` and `Session::free_busy`
+(`Fetched`: loading, ready or failed, with why), and the form draws from that frame after
+frame, asking only for what it hasn't.
+
 ## Languages
 
 Interface text is English in the code and looked up in a catalog per language

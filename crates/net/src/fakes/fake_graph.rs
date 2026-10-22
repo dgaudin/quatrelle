@@ -74,6 +74,18 @@ pub struct Data {
     pub at_once: Option<usize>,
     /// Number of upcoming top-level requests to refuse with 429.
     pub throttle: u32,
+    /// Room lists (name, address) and rooms (name, address, the list's address), as the
+    /// directory has them; `places_refused`: the Places API is refused (no `Place.Read.All`),
+    /// so only the older `findRoomLists`/`findRooms` answer.
+    pub room_lists: Vec<(String, String)>,
+    pub rooms: Vec<(String, String, String)>,
+    pub places_refused: bool,
+    /// Busy stretches besides the calendars' events: (address, start, end, status, subject).
+    pub busy: Vec<(String, String, String, String, String)>,
+    /// Mailboxes whose free/busy this account may not read.
+    pub no_freebusy: Vec<String>,
+    /// The `getSchedule` bodies seen.
+    pub schedule_asked: Vec<Value>,
     /// Set per request from its `Prefer` header; without `IdType="ImmutableId"` message ids
     /// are returned in the other (prefixed) form.
     asked_immutable: bool,
