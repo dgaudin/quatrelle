@@ -303,7 +303,11 @@ impl Packs {
 
     /// An account's open data file; `create` makes it when there's none.
     fn db(&self, account: &str, create: bool) -> io::Result<Option<Arc<Database>>> {
-        if let Some(db) = Packs::lock(&self.open).get(account) {
+        // Held until the file is open and noted: two threads that both found it not open yet
+        // both opened it, and the second heard "open in another copy" (an account's sync
+        // connections start at once).
+        let mut open = Packs::lock(&self.open);
+        if let Some(db) = open.get(account) {
             return Ok(Some(db.clone()));
         }
         let known = Packs::lock(&self.names).contains_key(account);
@@ -330,7 +334,7 @@ impl Packs {
             }
         };
         let db = Arc::new(db);
-        Packs::lock(&self.open).insert(account.to_string(), db.clone());
+        open.insert(account.to_string(), db.clone());
         Ok(Some(db))
     }
 
