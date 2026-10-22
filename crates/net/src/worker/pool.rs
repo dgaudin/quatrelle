@@ -357,7 +357,9 @@ impl Pool {
     }
 
     fn start(&mut self, account: AccountConfig, password: Option<Secret>) {
-        self.stop(&account.id);
+        // The account's threads from before end first: one still saving its numbering after
+        // the new one read it took the numbers it gave last with it (messages not found again).
+        let before = self.stopping(&account.id);
         if let Some(p) = &password
             && let Err(e) = self.creds.set(&account, &p.0)
         {
@@ -378,6 +380,9 @@ impl Pool {
             (self.creds.clone(), self.store.clone(), self.sink.clone(), self.opts, self.sieve_port, self.search.clone());
         let (acc, main_tx) = (account.clone(), tx.clone());
         let spawned = std::thread::Builder::new().name(format!("mail-{}", account.id)).spawn(move || {
+            for t in before {
+                let _ = t.join();
+            }
             let auth = Auth::shared(pw);
             let mut w = Worker::new(acc.clone(), auth.clone(), store.clone(), sink.clone(), opts);
             w.creds = Some(creds.clone());
@@ -405,17 +410,21 @@ impl Pool {
     }
 
     fn stop(&mut self, account: &str) {
-        if let Some(mut h) = self.workers.remove(account) {
-            drop(h.tx);
-            drop(h.quick.take());
-            // The thread notices the closed channel within half a second (IDLE slices); don't
-            // block the UI waiting for a slow network call to finish.
-            for t in [h.thread.take(), h.quick_thread.take()].into_iter().flatten() {
-                std::thread::spawn(move || {
-                    let _ = t.join();
-                });
-            }
+        for t in self.stopping(account) {
+            std::thread::spawn(move || {
+                let _ = t.join();
+            });
         }
+    }
+
+    /// Tell an account's threads to stop; the threads, to wait for. They notice the closed
+    /// channel within half a second (IDLE slices), or once a slow network call ends: never
+    /// waited for on the window's thread.
+    fn stopping(&mut self, account: &str) -> Vec<JoinHandle<()>> {
+        let Some(mut h) = self.workers.remove(account) else { return Vec::new() };
+        drop(h.tx);
+        drop(h.quick.take());
+        [h.thread.take(), h.quick_thread.take()].into_iter().flatten().collect()
     }
 
     pub fn shutdown(&mut self) {
