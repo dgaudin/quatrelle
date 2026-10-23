@@ -387,6 +387,32 @@ impl Session {
         }
     }
 
+    /// A page of a folder's older mail read on the server ([`Job::Older`]): added to what's
+    /// shown of it after the folder's own list, held in memory only.
+    pub(super) fn older_from_server(&mut self, account: &str, folder: &str, items: Vec<Summary>, more: bool, error: Option<String>) {
+        if self.showing_more.as_ref().is_some_and(|(a, f)| a == account && f == folder) {
+            self.showing_more = None;
+        }
+        if let Some(e) = error {
+            self.notice(format!("older mail couldn't be read on the server: {e}"), true);
+            return;
+        }
+        if !self.older.as_ref().is_some_and(|(a, f, ..)| a == account && f == folder) {
+            self.older = Some((account.to_string(), folder.to_string(), Vec::new(), true));
+        }
+        if let Some((_, _, list, has_more)) = self.older.as_mut() {
+            for m in items {
+                if !list.iter().any(|x| x.key == m.key) {
+                    list.push(m);
+                }
+            }
+            *has_more = more;
+        }
+        if matches!(&self.view, View::Folder { account: a, folder: f } if a == account && f == folder) {
+            self.refresh_list();
+        }
+    }
+
     /// What the server found for a search: kept for the query on screen, and shown with the
     /// messages the local index found (they answer at once; the server takes a moment).
     pub(super) fn found_by_server(&mut self, account: &str, query: &str, items: Vec<Summary>, error: Option<String>) {

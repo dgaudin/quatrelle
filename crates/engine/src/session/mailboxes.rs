@@ -262,6 +262,17 @@ impl Session {
                 }
             }
         }
+        // Older mail read on the server, after the folder's own (Cached Exchange Mode).
+        if let (View::Folder { account, folder }, Some((oa, of, older, _))) = (&self.view, &self.older)
+            && oa == account
+            && of == folder
+        {
+            for m in older {
+                if !list.iter().any(|x| x.key == m.key) {
+                    list.push(m.clone());
+                }
+            }
+        }
         let filter = self.filter;
         list.retain(|m| self.filter_keeps(filter, m) || self.filter_keep.as_ref() == Some(&m.key));
         if self.focus_split() {

@@ -742,6 +742,62 @@ impl Worker {
         }
     }
 
+    /// A page of a folder's mail older than what's kept, read on the server and held in memory
+    /// by the session (Exchange, as Cached Exchange Mode's "more on the server"): numbered, and
+    /// kept numbered as a search's finds are, but not kept.
+    pub(super) fn older(&mut self, folder: &str, offset: u32) {
+        let account = self.id();
+        let before = self.opts.since(now()).unwrap_or(i64::MAX);
+        let numbered = self.jstate.len();
+        let r = (|| -> Result<(Vec<quatrelle_model::Summary>, bool)> {
+            if self.conn.is_none() {
+                self.connect()?;
+            }
+            match self.conn.as_ref() {
+                Some(Conn::Ews(c)) => crate::ews::older(c, &mut self.jstate, &account, folder, before, offset as usize, OLDER_PAGE),
+                _ => Err(NetError::No("this account reads older mail by keeping more of it".into())),
+            }
+        })();
+        if self.jstate.len() != numbered {
+            self.save_jstate();
+        }
+        match r {
+            Ok((items, more)) => {
+                for n in items.iter().map(|m| m.key.uid) {
+                    if !self.search_numbers.contains(&n) {
+                        self.search_numbers.push(n);
+                    }
+                }
+                if self.search_numbers.len() > 4_000 {
+                    self.search_numbers.drain(..2_000);
+                }
+                self.sink.emit(Event::Older { account, folder: folder.to_string(), items, more, error: None });
+            }
+            Err(e) => {
+                self.sink.emit(Event::Older { account, folder: folder.to_string(), items: Vec::new(), more: false, error: Some(e.to_string()) })
+            }
+        }
+    }
+
+    /// A message's source read on the server for showing, not kept (mail older than what's
+    /// kept, read online).
+    pub(super) fn read_online_body(&mut self, key: MessageKey) {
+        let store = self.store.clone();
+        let r = (|| -> Result<Vec<u8>> {
+            if self.conn.is_none() {
+                self.connect()?;
+            }
+            match self.conn.as_ref() {
+                Some(Conn::Ews(c)) => crate::ews::read_online(c, &mut self.jstate, &store, &key),
+                _ => Err(NetError::No("this account reads its mail by keeping it".into())),
+            }
+        })();
+        match r {
+            Ok(raw) => self.sink.emit(Event::Body { key, raw }),
+            Err(e) => self.sink.emit(Event::BodyFailed { key, error: e.to_string() }),
+        }
+    }
+
     /// Answer a message's voting buttons; the choice is kept with the message once it's gone.
     pub(super) fn vote(&mut self, key: MessageKey, choice: String) {
         let r = (|| -> Result<()> {

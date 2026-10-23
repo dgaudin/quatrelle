@@ -224,7 +224,11 @@ servers that don't offer IMAP. Every call is SOAP over HTTPS.
   date). A search of the server's finds stay while they're there. Every message kept is
   downloaded whole in the end (`SyncOptions::full`, no size limit): the newest few come with
   the folder's list, the rest twenty at a time while nothing else is asked (`ahead_step`,
-  between a full pass and the next look at the Inbox), only their sources written.
+  between a full pass and the next look at the Inbox), only their sources written. What's older
+  than the time kept is read on the server when asked for (Show more: `Job::Older`, a hundred
+  at a time, `FindItem` restricted to before then), held in memory by the session
+  (`Session::older`) and shown after the folder's own list; one opened is read for showing
+  (`Job::ReadOnline`), not kept nor indexed.
 - **Public folders and shared mailboxes** (`Worker::read_online`): a shared mailbox is kept as
   the account's own mail unless the account doesn't keep them (`AccountConfig::shared_online`,
   Outlook's "Download shared folders" off); a public folder (under `Public Folders`,

@@ -90,6 +90,37 @@ pub fn search(c: &Client, st: &mut State, account: &str, folders: &[String], que
     Ok(out)
 }
 
+/// A page of a folder's mail older than what's kept (`before`, Unix seconds), newest first from
+/// `offset`, read on the server with what a list shows (Cached Exchange Mode's "more on the
+/// server"): numbered, not kept. Whether the server has more past it.
+pub fn older(c: &Client, st: &mut State, account: &str, folder: &str, before: i64, offset: usize, page: usize) -> Result<(Vec<Summary>, bool)> {
+    let id = st.mailbox(folder)?.to_string();
+    let m = c.call_one(&format!(
+        "<m:FindItem Traversal=\"Shallow\"><m:ItemShape><t:BaseShape>IdOnly</t:BaseShape><t:AdditionalProperties>{HEADER_FIELDS}{FLAG_FIELDS}<t:FieldURI FieldURI=\"item:HasAttachments\"/><t:FieldURI FieldURI=\"item:Size\"/></t:AdditionalProperties></m:ItemShape>\
+         <m:IndexedPageItemView MaxEntriesReturned=\"{}\" Offset=\"{offset}\" BasePoint=\"Beginning\"/>\
+         <m:Restriction><t:IsLessThan><t:FieldURI FieldURI=\"item:DateTimeReceived\"/><t:FieldURIOrConstant><t:Constant Value=\"{}\"/></t:FieldURIOrConstant></t:IsLessThan></m:Restriction>\
+         <m:SortOrder><t:FieldOrder Order=\"Descending\"><t:FieldURI FieldURI=\"item:DateTimeReceived\"/></t:FieldOrder></m:SortOrder>\
+         <m:ParentFolderIds><t:FolderId Id=\"{}\"/></m:ParentFolderIds></m:FindItem>",
+        page.clamp(1, 1000),
+        crate::ews_pim::utc(before),
+        esc(&id)
+    ))?;
+    let more = m.find("RootFolder").and_then(|r| r.attr("IncludesLastItemInRange")) == Some("false");
+    let mut out = Vec::new();
+    for it in m.find("Items").map(|i| i.kids.as_slice()).unwrap_or_default() {
+        let Some(item) = it.child("ItemId").and_then(|i| i.attr("Id")) else { continue };
+        let key = MessageKey { account: account.to_string(), folder: folder.to_string(), validity: VALIDITY, uid: st.number(item) };
+        out.push(item_summary(it, key));
+    }
+    Ok((out, more))
+}
+
+/// A message's source read on the server for showing, not kept (mail older than what's kept).
+pub fn read_online(c: &Client, st: &mut State, store: &Store, key: &MessageKey) -> Result<Vec<u8>> {
+    let id = server_id(c, st, store, key)?.ok_or_else(|| NetError::No("the message is no longer on the server".into()))?;
+    c.download(&id)
+}
+
 /// Refresh the folder list (and the folder ids behind it).
 pub fn list_folders(c: &Client, st: &mut State, account: &str) -> Result<Vec<Folder>> {
     let boxes = c.mailboxes()?;

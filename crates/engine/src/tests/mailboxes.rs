@@ -227,3 +227,73 @@ fn public_folders_are_read_when_opened_unless_favorites() {
     assert_eq!(synced(s.take_jobs()), ["support@contoso.example/Inbox"]);
     let _ = std::fs::remove_dir_all(store.root());
 }
+
+/// Exchange mail older than what's kept, as Outlook's Cached Exchange Mode shows it: Show more
+/// reads it on the server a page at a time, shown after the folder's own list and held in
+/// memory only; one opened is read on the server, not kept; another folder opened lets it go.
+#[test]
+fn older_mail_is_read_on_the_server_not_kept() {
+    use quatrelle_model::{AccountConfig, Folder, MessageKey, Summary};
+    let store = temp("older-online");
+    let mut s = Session::open(Some(store.clone()), quatrelle_model::dates::Clock::new(NOW, 0));
+    let config = AccountConfig {
+        name: "Riley".into(),
+        email: "riley@contoso.example".into(),
+        username: "riley".into(),
+        ews: Some("https://mail.contoso.example/EWS/Exchange.asmx".into()),
+        ..Default::default()
+    };
+    let id = s.add_account(config, Some("pw".into())).unwrap();
+    let msg = |uid: u32, subject: &str, days_ago: i64| Summary {
+        key: MessageKey { account: id.clone(), folder: "INBOX".into(), validity: 1, uid },
+        subject: subject.into(),
+        date: NOW - days_ago * 86_400,
+        ..Default::default()
+    };
+    store
+        .save_folder(&id, "INBOX", &quatrelle_store::FolderState { validity: 1, messages: vec![msg(1, "This week", 3)], ..Default::default() })
+        .unwrap();
+    let f = |path: &str, role: FolderRole, total: u32| Folder {
+        account: id.clone(),
+        path: path.into(),
+        delimiter: Some('/'),
+        role,
+        selectable: true,
+        total,
+        ..Default::default()
+    };
+    s.apply(Event::Folders { account: id.clone(), folders: vec![f("INBOX", FolderRole::Inbox, 3), f("Archive", FolderRole::Archive, 0)] });
+    s.apply(Event::FolderChanged { account: id.clone(), folder: "INBOX".into() });
+    s.run("folder.open", &json!({"account": id, "folder": "INBOX"})).unwrap();
+    s.take_jobs();
+    assert_eq!(s.list.len(), 1, "{:?}", s.list.iter().map(|m| &m.subject).collect::<Vec<_>>());
+    assert_eq!(s.more_on_server().map(|m| m.2), Some(2));
+    let asked = |s: &mut Session| {
+        s.take_jobs().into_iter().find_map(|j| match j {
+            Job::Older { offset, .. } => Some(offset),
+            _ => None,
+        })
+    };
+    s.run("folder.more", &json!({})).unwrap();
+    assert_eq!(asked(&mut s), Some(0), "read on the server, not kept by more of the folder");
+    s.apply(Event::Older { account: id.clone(), folder: "INBOX".into(), items: vec![msg(7, "Three years ago", 1100)], more: true, error: None });
+    assert_eq!(s.list.len(), 2);
+    assert_eq!(s.more_on_server().map(|m| m.2), Some(1));
+    s.run("folder.more", &json!({})).unwrap();
+    assert_eq!(asked(&mut s), Some(1), "the next page");
+    s.apply(Event::Older { account: id.clone(), folder: "INBOX".into(), items: vec![msg(8, "Four years ago", 1500)], more: false, error: None });
+    assert_eq!(s.list.iter().map(|m| m.subject.as_str()).collect::<Vec<_>>(), ["This week", "Three years ago", "Four years ago"]);
+    assert_eq!(s.more_on_server(), None, "the server has no more");
+    // Opened: read on the server, not kept.
+    let old = msg(7, "", 0).key;
+    s.open_message(&old);
+    assert!(s.take_jobs().iter().any(|j| matches!(j, Job::ReadOnline { key } if *key == old)));
+    s.apply(Event::Body { key: old.clone(), raw: b"Subject: Three years ago\r\n\r\nHello.\r\n".to_vec() });
+    assert!(s.reading.as_ref().is_some_and(|r| r.parsed.is_some()), "shown");
+    assert!(!store.has_body(&old), "not kept");
+    // Another folder: let go.
+    s.run("folder.open", &json!({"account": id, "folder": "Archive"})).unwrap();
+    s.run("folder.open", &json!({"account": id, "folder": "INBOX"})).unwrap();
+    assert_eq!(s.list.len(), 1);
+    let _ = std::fs::remove_dir_all(store.root());
+}

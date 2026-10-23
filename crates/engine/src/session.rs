@@ -308,6 +308,10 @@ pub struct Session {
     /// messages whose body was never downloaded, and those are merged with the local answer the
     /// way Outlook does.
     found: Option<(String, Vec<Summary>)>,
+    /// A folder's mail older than what's kept here, read on the server (Cached Exchange Mode's
+    /// "more on the server"): the account, the folder, the messages, and whether the server
+    /// has more. Held in memory only, shown after the folder's own list.
+    pub(crate) older: Option<(String, String, Vec<Summary>, bool)>,
     /// The query (and scope) the server was asked about: once per search, however many slices
     /// the local index takes.
     server_asked: Option<(String, SearchScope)>,
@@ -471,6 +475,7 @@ impl Session {
             search_pending: false,
             search_budget: usize::MAX,
             found: None,
+            older: None,
             server_asked: None,
             search_folder: None,
             server_search: None,

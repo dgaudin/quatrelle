@@ -359,8 +359,16 @@ impl Session {
             return None;
         }
         let total = a.folders.iter().find(|f| &f.path == folder)?.total;
-        // The folder on view is loaded (its list is on screen).
-        let kept = self.cache.get(&(account.clone(), folder.clone())).map_or(0, |st| st.messages.len());
+        // The folder on view is loaded (its list is on screen); with the older mail read on the
+        // server so far, until it has no more.
+        let older = match &self.older {
+            Some((oa, of, items, more)) if oa == account && of == folder => Some((items.len(), *more)),
+            _ => None,
+        };
+        if older.is_some_and(|(_, more)| !more) {
+            return None;
+        }
+        let kept = self.cache.get(&(account.clone(), folder.clone())).map_or(0, |st| st.messages.len()) + older.map_or(0, |(n, _)| n);
         let kept = u32::try_from(kept).unwrap_or(u32::MAX);
         (total > kept).then(|| (account.clone(), folder.clone(), total - kept))
     }
@@ -371,7 +379,21 @@ impl Session {
         if a.is_local() || a.config.pop.is_some() {
             return Err(CmdError::Disabled("this account keeps all its mail here".into()));
         }
-        self.jobs.push(Job::MoreMail { account: account.to_string(), folder: folder.to_string(), more });
+        // Exchange, keeping mail for a time (Cached Exchange Mode): what's older is read on the
+        // server, a page at a time, and held in memory; the others keep more of it, as before.
+        if a.config.ews.is_some() && self.prefs.keep_days > 0 {
+            let offset = match &self.older {
+                Some((oa, of, items, _)) if oa == account && of == folder => items.len(),
+                _ => 0,
+            };
+            self.jobs.push(Job::Older {
+                account: account.to_string(),
+                folder: folder.to_string(),
+                offset: u32::try_from(offset).unwrap_or(u32::MAX),
+            });
+        } else {
+            self.jobs.push(Job::MoreMail { account: account.to_string(), folder: folder.to_string(), more });
+        }
         self.showing_more = Some((account.to_string(), folder.to_string()));
         Ok(serde_json::json!({ "account": account, "folder": folder, "more": more }))
     }

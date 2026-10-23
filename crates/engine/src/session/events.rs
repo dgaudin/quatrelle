@@ -196,7 +196,10 @@ impl Session {
                 self.person_photos.insert(email.to_ascii_lowercase(), photo);
             }
             Event::Found { account, query, items, error } => self.found_by_server(&account, &query, items, error),
+            Event::Older { account, folder, items, more, error } => self.older_from_server(&account, &folder, items, more, error),
             Event::Voted { key, choice, error } => self.voted(&key, &choice, error),
+            // Older mail read on the server is shown, not kept (nor indexed).
+            Event::Body { key, raw } if self.is_older(&key) => self.show_body(&key, &raw),
             Event::Body { key, raw } => {
                 self.show_body(&key, &raw);
                 self.index_body(&key, &raw);
