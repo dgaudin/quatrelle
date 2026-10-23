@@ -26,6 +26,12 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg",
 unicode-bidi = "0.3"
 # The version egui's own text (epaint) uses, so the font reader is built once.
 skrifa = "0.44"
+# Colour emoji from the system's emoji font (`look/emoji.rs`): shaped with the shaper egui's
+# text uses (a flag, a skin tone or a family is a ligature in the font's own tables) and, for
+# fonts of layered outlines (Segoe UI Emoji), drawn with the rasterizer egui's text uses; both
+# on the versions epaint has, so each is built once.
+harfrust = "0.12"
+vello_cpu = { version = "0.2", default-features = false, features = ["std", "u8_pipeline", "text"] }
 # The system's interface language.
 sys-locale = "0.3"
 # The interface icons (Fluent UI System Icons, SVG): drawn with a pure-Rust SVG renderer.

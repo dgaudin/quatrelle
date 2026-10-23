@@ -281,7 +281,7 @@ fn crc32(data: &[u8]) -> u32 {
 
 /// The sample message with voting buttons (Studio Ops asking who still needs the farm), and
 /// its choices.
-pub const VOTE_SUBJECT: &str = "Render farm maintenance this weekend";
+pub const VOTE_SUBJECT: &str = "Render farm maintenance this weekend 🛠️";
 pub const VOTE_CHOICES: [&str; 3] = ["Queued before Friday", "Need it this weekend", "Nothing to render"];
 
 fn mails() -> Vec<Mail> {
@@ -403,8 +403,10 @@ fn mails() -> Vec<Mail> {
             from: ("Studio Ops", "ops@studio.example"),
             to: &[ME],
             cc: &[],
-            subject: "Render farm maintenance this weekend",
-            body: "The render farm will be offline from Saturday 08:00 to Sunday 20:00 for upgrades. Please queue long renders before Friday evening.",
+            subject: VOTE_SUBJECT,
+            // Emoji of every kind: a picture, a text symbol with its selector, a flag, a skin
+            // tone, a family, a keycap (`look/emoji.rs` draws them from the system's font).
+            body: "The render farm will be offline from Saturday 08:00 to Sunday 20:00 for upgrades 🔧. Please queue long renders before Friday evening ⏰.\n\nThe Paris node 🇫🇷 stays up all weekend. Thanks for your patience 🙏🏽 — Studio Ops 👩‍💻👨‍💻\n\nStatus board: ✅ queue open · ❌ farm closed · 1️⃣ priority jobs first · ☀️ back Monday",
             ago: 60 * 24 * 12,
             seen: true,
             flagged: false,
