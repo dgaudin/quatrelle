@@ -146,7 +146,7 @@ impl Fake {
                 Some(b) => {
                     let uid = b.uid_next;
                     b.uid_next += 1;
-                    b.msgs.push(Msg { uid, flags, raw: literal.unwrap_or_default(), modseq });
+                    b.msgs.push(Msg { uid, flags, raw: literal.unwrap_or_default(), modseq, received: RECEIVED });
                     let v = b.validity;
                     ok(self, &format!("[APPENDUID {v} {uid}] "));
                 }
@@ -206,7 +206,7 @@ impl Fake {
                             item.extend(format!(" RFC822.SIZE {}", m.raw.len()).as_bytes());
                         }
                         if upper.contains("INTERNALDATE") {
-                            item.extend(b" INTERNALDATE \"14-Oct-2026 09:30:00 +0000\"");
+                            item.extend(format!(" INTERNALDATE \"{}\"", internal_date(m.received)).as_bytes());
                         }
                         if upper.contains("BODY.PEEK[HEADER]") {
                             let end = m.raw.windows(4).position(|w| w == b"\r\n\r\n").map_or(m.raw.len(), |p| p + 4);
@@ -246,7 +246,7 @@ impl Fake {
                             .msgs
                             .iter()
                             .filter(|m| in_set(m.uid, set, max))
-                            .map(|m| Msg { uid: m.uid, flags: m.flags.clone(), raw: m.raw.clone(), modseq: 0 })
+                            .map(|m| Msg { uid: m.uid, flags: m.flags.clone(), raw: m.raw.clone(), modseq: 0, received: m.received })
                             .collect();
                     }
                     copied_from = b.validity;
@@ -259,7 +259,7 @@ impl Fake {
                             .msgs
                             .iter()
                             .filter(|m| gone.contains(&m.uid))
-                            .map(|m| Msg { uid: m.uid, flags: Vec::new(), raw: m.raw.clone(), modseq: 0 })
+                            .map(|m| Msg { uid: m.uid, flags: Vec::new(), raw: m.raw.clone(), modseq: 0, received: m.received })
                             .collect();
                         dest = "[Gmail]/All Mail".into();
                     }

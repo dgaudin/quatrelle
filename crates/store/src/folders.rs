@@ -162,6 +162,16 @@ impl Store {
         }
     }
 
+    /// A small document kept with a folder's cache (`name` a plain file name): it moves with the
+    /// folder and goes with it ([`Store::clear_folder`]). Empty when missing or damaged.
+    pub fn load_folder_doc<T: DeserializeOwned + Default>(&self, account: &str, folder: &str, name: &str) -> Result<T> {
+        self.read_json(&self.folder_dir(account, folder).join(safe_doc(name)))
+    }
+
+    pub fn save_folder_doc<T: Serialize + ?Sized>(&self, account: &str, folder: &str, name: &str, value: &T) -> Result<()> {
+        self.write_json(&self.folder_dir(account, folder).join(safe_doc(name)), value)
+    }
+
     /// Forget a folder's cache (UIDVALIDITY changed, or the folder was deleted on the server).
     pub fn clear_folder(&self, account: &str, folder: &str) -> Result<()> {
         let dir = self.folder_dir(account, folder);

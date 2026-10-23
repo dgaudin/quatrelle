@@ -5,12 +5,17 @@
 //!
 //! 1. `SELECT`. A different UIDVALIDITY means every cached UID is meaningless: drop the cache.
 //! 2. **New mail**: headers for `UID FETCH <cached UIDNEXT>:*`. On the first sync, only the newest
-//!    [`SyncOptions::window`] messages are fetched (found with `UID SEARCH ALL`).
+//!    [`SyncOptions::window`] messages are fetched (found with `UID SEARCH ALL`), of those the
+//!    server received in the last [`SyncOptions::since_days`] when the age is limited
+//!    (`UID SEARCH SINCE <day>`, as Outlook's Cached Exchange Mode keeps mail).
 //! 3. **Flag changes**: with CONDSTORE, `UID FETCH … (FLAGS) (CHANGEDSINCE <modseq>)` returns only
 //!    what changed, and nothing at all when HIGHESTMODSEQ hasn't moved. Without it, the flags of
 //!    the cached range are fetched.
-//! 4. **Deletions**: `UID SEARCH UID <cached range>` lists the survivors; the rest are gone.
-//! 5. The newest few message sources are downloaded so they can be read (and searched) offline.
+//! 4. **Deletions**: `UID SEARCH UID <cached range>` lists the survivors; the rest are gone. Mail
+//!    received before the age kept goes too (with its source), but for what a search of the
+//!    server found: older mail is read on the server.
+//! 5. The newest few message sources are downloaded so they can be read (and searched) offline;
+//!    [`download_ahead`] brings the rest when every message kept is to be downloaded.
 //!
 //! With QRESYNC (RFC 7162 §3.2) steps 3 and 4 collapse into the `SELECT`: the server lists the
 //! UIDs expunged since the cached HIGHESTMODSEQ (`VANISHED (EARLIER)`) and the changed flags, so
@@ -26,6 +31,16 @@ use crate::imap::{Client, Fetched, uid_chunks, uid_set};
 use crate::{NetError, Result};
 
 pub use quatrelle_jmap::{SyncOptions, SyncReport, fill_from_source};
+
+mod ahead;
+mod kept;
+
+// For the worker, which doesn't ask for it yet.
+#[cfg_attr(not(test), allow(unused_imports))]
+pub(crate) use ahead::download_ahead;
+#[cfg(test)]
+pub(crate) use kept::imap_date;
+use kept::{Kept, age_out, keep_found, listing, mark_found, unix_now};
 
 /// Downloading ahead, one message at a time: whether to go on after one failed. A message the
 /// server won't give (gone meanwhile, or failing on its side) is left for when it's opened, and
@@ -76,6 +91,8 @@ fn summary(account: &str, folder: &str, validity: u32, f: &Fetched) -> Summary {
 /// Bring one folder's cache up to date.
 pub fn sync_folder<S: Read + Write>(c: &mut Client<S>, store: &Store, account: &str, folder: &str, opts: &SyncOptions) -> Result<SyncReport> {
     let mut st = store.load_folder(account, folder)?;
+    let mut kept = Kept::load(store, account, folder)?;
+    let cutoff = opts.since(unix_now());
     let cached_max = st.messages.iter().map(|m| m.key.uid).max().unwrap_or(0);
     let cached_min = st.messages.iter().map(|m| m.key.uid).min().unwrap_or(0);
     // QRESYNC: expunges and flag changes arrive with the SELECT itself (RFC 7162 §3.2.5).
@@ -92,6 +109,7 @@ pub fn sync_folder<S: Read + Write>(c: &mut Client<S>, store: &Store, account: &
         log::info!("{account}/{folder}: UIDVALIDITY {} → {}, dropping the cache", st.validity, info.validity);
         store.clear_folder(account, folder)?;
         st = FolderState::default();
+        kept = Kept::default();
         report.reset = true;
     }
     let quick = if report.reset { None } else { quick };
@@ -112,15 +130,15 @@ pub fn sync_folder<S: Read + Write>(c: &mut Client<S>, store: &Store, account: &
                 m.modseq = m.modseq.max(f.modseq);
             }
         }
-        let (kept, gone): (Vec<Summary>, Vec<Summary>) =
+        let (alive, gone): (Vec<Summary>, Vec<Summary>) =
             std::mem::take(&mut st.messages).into_iter().partition(|m| !vanished.iter().any(|r| r.contains(&m.key.uid)));
         for m in &gone {
             store.remove_body(&m.key);
         }
-        report.removed = gone.len();
-        st.messages = kept;
-        new_mail(c, &mut st, account, folder, cached_max, &mut report)?;
-        keep_more(c, &mut st, account, folder, opts.window, &mut report)?;
+        st.messages = alive;
+        report.removed = gone.len() + age_out(store, &mut st, &kept, cutoff);
+        new_mail(c, &mut st, account, folder, cached_max, cutoff, &mut report)?;
+        keep_more(c, &mut st, &kept, account, folder, opts, cutoff, &mut report)?;
     } else {
         let known_max = st.messages.iter().map(|m| m.key.uid).max().unwrap_or(0);
         let known_min = st.messages.iter().map(|m| m.key.uid).min().unwrap_or(0);
@@ -149,25 +167,26 @@ pub fn sync_folder<S: Read + Write>(c: &mut Client<S>, store: &Store, account: &
                 }
             }
             let alive = c.uid_search(&format!("UID {range}"))?;
-            let (kept, gone): (Vec<Summary>, Vec<Summary>) =
+            let (alive, gone): (Vec<Summary>, Vec<Summary>) =
                 std::mem::take(&mut st.messages).into_iter().partition(|m| alive.binary_search(&m.key.uid).is_ok());
             for m in &gone {
                 store.remove_body(&m.key);
             }
             report.removed = gone.len();
-            st.messages = kept;
+            st.messages = alive;
         }
+        report.removed += age_out(store, &mut st, &kept, cutoff);
 
         // 2: new mail.
         if st.uid_next == 0 && known_max == 0 {
-            let all = c.uid_search("ALL")?;
+            let all = c.uid_search(&listing(cutoff))?;
             let skip = all.len().saturating_sub(opts.window);
             let first: Vec<u32> = all.into_iter().skip(skip).collect();
-            fetch_headers(c, &mut st, account, folder, &first, &mut report)?;
+            fetch_headers(c, &mut st, account, folder, &first, cutoff, &mut report)?;
             st.window = opts.window;
         } else {
-            new_mail(c, &mut st, account, folder, known_max, &mut report)?;
-            keep_more(c, &mut st, account, folder, opts.window, &mut report)?;
+            new_mail(c, &mut st, account, folder, known_max, cutoff, &mut report)?;
+            keep_more(c, &mut st, &kept, account, folder, opts, cutoff, &mut report)?;
         }
     }
 
@@ -176,6 +195,13 @@ pub fn sync_folder<S: Read + Write>(c: &mut Client<S>, store: &Store, account: &
     st.uid_next = if info.uid_next > 0 { info.uid_next } else { max_uid.saturating_add(1) };
     st.highest_modseq = info.highest_modseq;
     store.save_folder(account, folder, &st)?;
+    // The age listed with, and the finds the server still has.
+    let before = kept.clone();
+    kept.days = opts.since_days;
+    keep_found(&mut kept, &st);
+    if kept != before {
+        kept.save(store, account, folder)?;
+    }
 
     // 5: prefetch the newest sources (in small batches, saving as we go).
     prefetch(c, store, account, folder, &mut st, opts)?;
@@ -338,11 +364,11 @@ const SEARCH_STEP: u32 = 500;
 const SEARCH_STEP_MAX: u32 = 20_000;
 
 /// The messages of `folder` the server finds for `criteria`, the newest `cap` of them: those not
-/// kept yet come into its list (issue #4). The folder is searched newest first, a range of
-/// message numbers at a time (`UID SEARCH 9501:10000 TEXT …`), and what each range finds goes to
-/// `found` with how many came into the list, as it's found; `found` answers whether to go on
-/// (the search can be stopped between two ranges). How many were found in all. A folder never
-/// synced (or whose UIDVALIDITY changed) is left to its sync.
+/// kept yet come into its list (issue #4), and stay however old. The folder is searched newest
+/// first, a range of message numbers at a time (`UID SEARCH 9501:10000 TEXT …`), and what each
+/// range finds goes to `found` with how many came into the list, as it's found; `found` answers
+/// whether to go on (the search can be stopped between two ranges). How many were found in all.
+/// A folder never synced (or whose UIDVALIDITY changed) is left to its sync.
 pub fn find_on_server<S: Read + Write>(
     c: &mut Client<S>,
     store: &Store,
@@ -369,10 +395,11 @@ pub fn find_on_server<S: Read + Write>(
         total += uids.len();
         let missing: Vec<u32> = uids.iter().filter(|u| st.find(**u).is_none()).copied().collect();
         let mut report = SyncReport::default();
-        fetch_headers(c, &mut st, account, folder, &missing, &mut report)?;
+        fetch_headers(c, &mut st, account, folder, &missing, None, &mut report)?;
         if report.new > 0 {
             sort_newest_first(&mut st.messages);
             store.save_folder(account, folder, &st)?;
+            mark_found(store, account, folder, &missing)?;
         }
         let keys = uids.iter().filter_map(|u| st.find(*u).map(|m| m.key.clone())).collect();
         if !found(keys, report.new) {
@@ -392,55 +419,68 @@ pub fn find_on_server<S: Read + Write>(
 }
 
 /// Kept more since the folder was filled (Options, or Show more on the server): the newest of
-/// what isn't kept yet, once. Not only what's older than the oldest kept: a message found by
-/// searching the server can be older than the ones skipped. Both ways of syncing come here (the
-/// QRESYNC one too, issue #4: Dovecot's Show more did nothing).
+/// what isn't kept yet, once — of what the server received since the cutoff when the age is
+/// limited, and again once when it's made longer. Not only what's older than the oldest kept: a
+/// message found by searching the server can be older than the ones skipped. Both ways of
+/// syncing come here (the QRESYNC one too, issue #4: Dovecot's Show more did nothing).
 fn keep_more<S: Read + Write>(
     c: &mut Client<S>,
     st: &mut FolderState,
+    kept: &Kept,
     account: &str,
     folder: &str,
-    window: usize,
+    opts: &SyncOptions,
+    cutoff: Option<i64>,
     report: &mut SyncReport,
 ) -> Result<()> {
-    if window <= st.window || st.messages.len() >= window {
+    let window = opts.window;
+    if (window <= st.window && !kept.widened(opts.since_days)) || st.messages.len() >= window {
         return Ok(());
     }
-    let all = c.uid_search("ALL")?;
+    let all = c.uid_search(&listing(cutoff))?;
     let want = window - st.messages.len();
     let take: Vec<u32> = all.iter().rev().filter(|u| st.find(**u).is_none()).take(want).copied().collect();
-    fetch_headers(c, st, account, folder, &take, report)?;
+    fetch_headers(c, st, account, folder, &take, cutoff, report)?;
     st.window = window;
     Ok(())
 }
 
-/// Headers for every message at or above the cached UIDNEXT.
+/// Headers for every message at or above the cached UIDNEXT: new mail always comes in (but for
+/// what the server received before the cutoff, an old message moved here).
 fn new_mail<S: Read + Write>(
     c: &mut Client<S>,
     st: &mut FolderState,
     account: &str,
     folder: &str,
     known_max: u32,
+    cutoff: Option<i64>,
     report: &mut SyncReport,
 ) -> Result<()> {
     let from = st.uid_next.max(known_max.saturating_add(1)).max(1);
     // `n:*` always returns at least the last message (RFC 3501 §6.4.8): filter.
     let uids: Vec<u32> = c.uid_search(&format!("UID {from}:*"))?.into_iter().filter(|u| *u >= from).collect();
-    fetch_headers(c, st, account, folder, &uids, report)
+    fetch_headers(c, st, account, folder, &uids, cutoff, report)
 }
 
+/// These messages' headers into the list, but for what the server received before `cutoff`
+/// (`SINCE` goes by the day: the cutoff's own day lists some a few hours older).
 fn fetch_headers<S: Read + Write>(
     c: &mut Client<S>,
     st: &mut FolderState,
     account: &str,
     folder: &str,
     uids: &[u32],
+    cutoff: Option<i64>,
     report: &mut SyncReport,
 ) -> Result<()> {
     for chunk in uid_chunks(uids, 200) {
         for f in c.uid_fetch(&uid_set(&chunk), HEADER_ITEMS, "")? {
             if st.find(f.uid).is_none() {
-                st.messages.push(summary(account, folder, st.validity, &f));
+                let m = summary(account, folder, st.validity, &f);
+                if cutoff.is_some_and(|t| m.received_at() < t) {
+                    continue;
+                }
+                st.messages.push(m);
                 report.new += 1;
             }
         }
@@ -451,19 +491,7 @@ fn fetch_headers<S: Read + Write>(
 fn prefetch<S: Read + Write>(c: &mut Client<S>, store: &Store, account: &str, folder: &str, st: &mut FolderState, opts: &SyncOptions) -> Result<()> {
     let wanted: Vec<u32> =
         st.messages.iter().take(opts.prefetch).filter(|m| m.size <= opts.prefetch_max_bytes && !store.has_body(&m.key)).map(|m| m.key.uid).collect();
-    if wanted.is_empty() {
-        return Ok(());
-    }
-    for chunk in uid_chunks(&wanted, 10) {
-        for f in c.uid_fetch(&uid_set(&chunk), "UID BODY.PEEK[]", "")? {
-            let Some(raw) = &f.body else { continue };
-            let Some(m) = st.find_mut(f.uid) else { continue };
-            store.write_body(&m.key, raw)?;
-            fill_from_source(m, raw);
-        }
-        store.save_folder(account, folder, st)?;
-    }
-    Ok(())
+    ahead::download(c, store, account, folder, st, &wanted).map(drop)
 }
 
 /// Download one message's source (and cache it), updating its summary.
@@ -495,9 +523,9 @@ pub fn fetch_body<S: Read + Write>(c: &mut Client<S>, store: &Store, key: &Messa
 }
 
 /// The messages of `folder` the server finds for `criteria`, the newest `cap` of them: their
-/// headers are fetched when they aren't kept here, so each can be listed and opened. A folder
-/// never synced (or whose UIDVALIDITY changed) is left to its sync. (The search box's search, as
-/// summaries; [`find_on_server`] is Show more's, as keys.)
+/// headers are fetched when they aren't kept here, so each can be listed and opened, and they
+/// stay however old. A folder never synced (or whose UIDVALIDITY changed) is left to its sync.
+/// (The search box's search, as summaries; [`find_on_server`] is Show more's, as keys.)
 pub fn search_on_server<S: Read + Write>(
     c: &mut Client<S>,
     store: &Store,
@@ -516,10 +544,11 @@ pub fn search_on_server<S: Read + Write>(
     let missing: Vec<u32> = uids.iter().filter(|u| st.find(**u).is_none()).copied().collect();
     if !missing.is_empty() {
         let mut report = SyncReport::default();
-        fetch_headers(c, &mut st, account, folder, &missing, &mut report)?;
+        fetch_headers(c, &mut st, account, folder, &missing, None, &mut report)?;
         if report.new > 0 {
             sort_newest_first(&mut st.messages);
             store.save_folder(account, folder, &st)?;
+            mark_found(store, account, folder, &missing)?;
         }
     }
     Ok(uids.iter().filter_map(|u| st.find(*u).cloned()).collect())
