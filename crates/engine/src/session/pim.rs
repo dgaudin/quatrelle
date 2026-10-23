@@ -11,9 +11,15 @@ use super::*;
 
 pub use quatrelle_model::pim::PIM_DOC;
 
+mod deleting;
 mod moving;
 mod notes;
 mod people;
+
+/// Whether a calendar is the user's own: not a colleague's shared one, nor a public folder's.
+pub(super) fn own_calendar(id: &str) -> bool {
+    quatrelle_model::pim::shared_calendar_owner(id).is_none() && !id.starts_with("public:")
+}
 pub use notes::NoteRef;
 pub use people::Person;
 
@@ -424,26 +430,42 @@ impl Session {
     /// opened before a sync therefore still names the old one, and asking for it by that name
     /// gave "no event `…`" while the appointment was there all along: the name without its start
     /// finds it again, as long as only one appointment answers to it.
+    ///
+    /// A meeting is under one UID in the user's calendar and in each colleague's shared calendar
+    /// that has it: the user's own copy is the one meant. The first one found was taken, a
+    /// colleague's copy as often as not — moved, or deleted, in a calendar the user may change.
     pub(super) fn find_event_index(&self, uid: &str) -> Option<(&str, usize)> {
+        let own = |e: &StoredEvent| own_calendar(&e.calendar);
         let exact = |e: &StoredEvent| e.event.uid == uid && e.event.recurrence_id.is_none();
-        if let Some(found) = self.pim.iter().find_map(|(a, p)| p.events.iter().position(exact).map(|at| (a.as_str(), at))) {
-            return Some(found);
-        }
-        let base = uid.split('#').next().unwrap_or(uid);
-        let mut found: Option<(&str, usize)> = None;
-        for (account, p) in &self.pim {
-            for (at, e) in p.events.iter().enumerate() {
-                if e.event.recurrence_id.is_some() || e.event.uid.split('#').next() != Some(base) {
-                    continue;
-                }
-                // Two of them: which one the dialog meant can't be told, so nothing is guessed.
-                if found.is_some() {
-                    return None;
-                }
-                found = Some((account.as_str(), at));
+        for mine in [true, false] {
+            let hit = |e: &StoredEvent| exact(e) && own(e) == mine;
+            if let Some(found) = self.pim.iter().find_map(|(a, p)| p.events.iter().position(hit).map(|at| (a.as_str(), at))) {
+                return Some(found);
             }
         }
-        found
+        // Only a name carrying its start (`…#<start>`) stands for an appointment whose start
+        // may have changed: a series' own UID named every appointment read from it, and the
+        // lone occurrence of a series gone found (and deleted) a colleague's copy of one.
+        let (base, _) = uid.split_once('#')?;
+        for mine in [true, false] {
+            let mut found: Option<(&str, usize)> = None;
+            for (account, p) in &self.pim {
+                for (at, e) in p.events.iter().enumerate() {
+                    if e.event.recurrence_id.is_some() || e.event.uid.split('#').next() != Some(base) || own(e) != mine {
+                        continue;
+                    }
+                    // Two of them: which one the dialog meant can't be told, so nothing is guessed.
+                    if found.is_some() {
+                        return None;
+                    }
+                    found = Some((account.as_str(), at));
+                }
+            }
+            if found.is_some() {
+                return found;
+            }
+        }
+        None
     }
 
     pub(super) fn new_uid(&mut self) -> String {
@@ -509,37 +531,6 @@ impl Session {
         stored.dirty |= remote;
         self.after_pim_change(&account, remote);
         Ok(serde_json::json!({"uid": real}))
-    }
-
-    /// Delete an event, or one occurrence of a recurring one (`occurrence`: its start).
-    pub fn delete_event(&mut self, uid: &str, occurrence: Option<i64>) -> CmdResult {
-        let account = self.find_event(uid).map(|(a, _)| a.to_string()).ok_or_else(|| CmdError::Params(format!("no event `{uid}`")))?;
-        let p = self.pim_mut(&account);
-        let mut remote = false;
-        match occurrence {
-            Some(at) if p.events.iter().any(|e| e.event.uid == uid && e.event.rrule.is_some()) => {
-                // One occurrence: an exception on the rule, and any changed instance goes.
-                p.events.retain(|e| !(e.event.uid == uid && e.event.recurrence_id == Some(at)));
-                if let Some(m) = p.events.iter_mut().find(|e| e.event.uid == uid && e.event.recurrence_id.is_none()) {
-                    if !m.event.exdates.contains(&at) {
-                        m.event.exdates.push(at);
-                    }
-                    m.event.sequence = m.event.sequence.saturating_add(1);
-                    remote = m.calendar != LOCAL;
-                    m.dirty |= remote;
-                }
-            }
-            _ => {
-                let gone: Vec<StoredEvent> = p.events.iter().filter(|e| e.event.uid == uid).cloned().collect();
-                for g in gone.iter().filter(|g| !g.href.is_empty()) {
-                    remote = true;
-                    p.deleted.push(Tombstone { href: g.href.clone(), etag: g.etag.clone(), calendar: g.calendar.clone() });
-                }
-                p.events.retain(|e| e.event.uid != uid);
-            }
-        }
-        self.after_pim_change(&account, remote);
-        Ok(serde_json::json!({"deleted": uid}))
     }
 
     /// Save, and ask for a sync when the server has something to learn.
@@ -657,6 +648,7 @@ impl Session {
             p.books = list;
         }
         p.ensure_defaults();
+        self.drop_lone_occurrences(account);
         for e in sync.errors.iter().take(3) {
             self.notice(format!("calendars and contacts: {e}"), true);
         }
