@@ -1,5 +1,7 @@
 //! What JMAP sync keeps between runs (states, ids), and messages' summaries from their properties.
 
+use std::sync::Arc;
+
 use super::*;
 
 /// What an account keeps between syncs: the numbers given to message ids, and the mailbox id
@@ -8,8 +10,11 @@ use super::*;
 pub struct State {
     #[serde(default)]
     pub(super) next: u32,
+    /// Each id is kept once, shared with `numbers` (and a reader's [`Numbering`]): an Exchange id
+    /// is some 160 characters, and a 530,000-message mailbox's ids were in memory twice, three
+    /// times during a full sync — some 500 MB.
     #[serde(default)]
-    pub(super) ids: HashMap<String, u32>,
+    pub(super) ids: HashMap<Arc<str>, u32>,
     #[serde(default)]
     pub mailboxes: BTreeMap<String, String>,
     /// The folders of other mailboxes opened in the account: folder path → the mailbox's
@@ -26,13 +31,13 @@ pub struct State {
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub marks: BTreeMap<String, FolderMark>,
     #[serde(skip)]
-    pub(super) numbers: HashMap<u32, String>,
+    pub(super) numbers: HashMap<u32, Arc<str>>,
     /// What was last written ([`State::fingerprint`]): the same isn't written again.
     #[serde(skip)]
     saved: std::cell::Cell<u64>,
     /// A reader's ([`State::reserve`]): the numbering it started from, looked up, never changed.
     #[serde(skip)]
-    base: Option<std::sync::Arc<Numbering>>,
+    base: Option<Arc<Numbering>>,
     /// A reader's: the numbers it gave since it last told ([`State::take_given`]).
     #[serde(skip)]
     given: Vec<(String, u32)>,
@@ -42,8 +47,8 @@ pub struct State {
 /// one copy shared by them all.
 #[derive(Debug, Default)]
 pub struct Numbering {
-    ids: HashMap<String, u32>,
-    numbers: HashMap<u32, String>,
+    ids: HashMap<Arc<str>, u32>,
+    numbers: HashMap<u32, Arc<str>>,
 }
 
 /// A folder as it was when last read in full: its last change as the server stamps it, its
@@ -129,8 +134,9 @@ impl State {
 
     /// Give an id the number it had: a message found again after the numbering lost it.
     pub fn set_number(&mut self, id: &str, n: u32) {
-        self.ids.insert(id.to_string(), n);
-        self.numbers.insert(n, id.to_string());
+        let shared: Arc<str> = Arc::from(id);
+        self.ids.insert(shared.clone(), n);
+        self.numbers.insert(n, shared);
         self.next = self.next.max(n);
         if self.base.is_some() {
             self.given.push((id.to_string(), n));
@@ -147,7 +153,7 @@ impl State {
     }
 
     pub fn id(&self, n: u32) -> Option<&str> {
-        self.numbers.get(&n).or_else(|| self.base.as_ref().and_then(|b| b.numbers.get(&n))).map(String::as_str)
+        self.numbers.get(&n).or_else(|| self.base.as_ref().and_then(|b| b.numbers.get(&n))).map(|id| &**id)
     }
 
     /// The number a message id has, if it has one (none is given).
@@ -169,7 +175,7 @@ impl State {
     /// numbered every message of a folder it listed again (their downloads thrown away, edits
     /// made meanwhile on the old numbers lost) and ignored the read marks and deletions of the
     /// messages it had.
-    pub fn reserve(&mut self, count: u32, numbering: &std::sync::Arc<Numbering>) -> State {
+    pub fn reserve(&mut self, count: u32, numbering: &Arc<Numbering>) -> State {
         let base = self.next;
         self.next = self.next.saturating_add(count);
         State {
@@ -186,9 +192,10 @@ impl State {
         }
     }
 
-    /// The numbering as it is, for readers of their own ([`State::reserve`]).
-    pub fn numbering(&self) -> std::sync::Arc<Numbering> {
-        std::sync::Arc::new(Numbering { ids: self.ids.clone(), numbers: self.numbers.clone() })
+    /// The numbering as it is, for readers of their own ([`State::reserve`]): the tables are
+    /// copied, the ids shared.
+    pub fn numbering(&self) -> Arc<Numbering> {
+        Arc::new(Numbering { ids: self.ids.clone(), numbers: self.numbers.clone() })
     }
 
     /// A reader's: the numbers it gave since it last told, for the main connection to know them
@@ -201,8 +208,9 @@ impl State {
     /// The numbers a reader gave ([`State::take_given`]).
     pub fn learn(&mut self, given: Vec<(String, u32)>) {
         for (id, n) in given {
-            self.ids.insert(id.clone(), n);
-            self.numbers.insert(n, id);
+            let shared: Arc<str> = Arc::from(id);
+            self.ids.insert(shared.clone(), n);
+            self.numbers.insert(n, shared);
         }
     }
 
