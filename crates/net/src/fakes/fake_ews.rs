@@ -119,6 +119,9 @@ pub struct Data {
     /// How each appointment created or changed asked the guests to be told
     /// (`SendMeetingInvitations`, `SendMeetingInvitationsOrCancellations`), in order.
     pub meeting_sends: Vec<String>,
+    /// Meetings answered (Outlook's buttons): the item, how (`AcceptItem`…), and whether the
+    /// organizer was sent the answer.
+    pub answers: Vec<(String, String, bool)>,
     /// The room lists the organisation set up (name, address) — none on most on-premises
     /// servers — and the rooms (name, address, the list's address).
     pub room_lists: Vec<(String, String)>,
@@ -203,6 +206,7 @@ impl Default for Data {
             slow_sync: None,
             hidden: Vec::new(),
             meeting_sends: Vec::new(),
+            answers: Vec::new(),
             room_lists: Vec::new(),
             rooms: Vec::new(),
             rooms_refused: false,

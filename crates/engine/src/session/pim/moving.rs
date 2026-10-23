@@ -144,6 +144,7 @@ impl Session {
                 event: e,
                 dirty: remote,
                 notify: false,
+                respond: None,
             }),
         }
         self.after_pim_change(&account, remote);

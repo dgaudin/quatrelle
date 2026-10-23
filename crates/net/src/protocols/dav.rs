@@ -537,6 +537,7 @@ pub fn sync(dav: &Dav, email: &str, imap_host: &str, pim: &Pim, now: i64) -> Res
                             event,
                             dirty: false,
                             notify: false,
+                            respond: None,
                         });
                     }
                 }
