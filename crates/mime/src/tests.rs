@@ -459,6 +459,8 @@ fn addresses_written_in_html_are_links() {
     assert_eq!(link("ici").link.as_deref(), Some("https://link.example"));
     let mail = link("support@example.com");
     assert_eq!((mail.link.as_deref(), mail.italic), (Some("mailto:support@example.com"), true));
+}
+
 /// Underlined text comes through as such: `<u>`, `<ins>`, `text-decoration` set inline or by
 /// a style sheet rule; a link's own look stays unless its style underlines it; and the editor
 /// keeps the underline of a signature pasted with one.
