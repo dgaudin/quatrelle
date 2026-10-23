@@ -526,7 +526,9 @@ fn span_style(sp: &Span) -> Style {
         italic: sp.italic,
         strike: sp.strike,
         mono: sp.code,
-        size: heading,
+        // The size and typeface the HTML gave it (a signature's 10-point Arial).
+        size: heading.or(sp.size.filter(|s| *s != DEFAULT_SIZE)),
+        font: sp.font.clone(),
         color: sp.color,
         highlight: sp.background,
         link: sp.link.clone().filter(|l| safe_link(l)),

@@ -83,7 +83,8 @@ pub fn html_preview(s: &Session, st: &mut UiState, ui: &mut Ui, html: &str) {
     let mut shown: Vec<String> = Vec::new();
     let mut acts: Vec<Action> = Vec::new();
     let width = ui.available_width();
-    let mut body = Body { s, key: &key, p: &p, allowed: false, shown: &mut shown, acts: &mut acts };
+    let faces = crate::look::typefaces::loaded(ui.ctx());
+    let mut body = Body { s, key: &key, p: &p, allowed: false, shown: &mut shown, acts: &mut acts, faces };
     if p.layout.is_empty() {
         body.lines(st, ui, &p.rich, width, theme::surface_rgb(&t), Align::Min);
     } else {
