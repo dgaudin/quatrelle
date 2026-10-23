@@ -4222,6 +4222,7 @@ name = "quatrelle-ui-egui"
 version = "0.22.0"
 dependencies = [
  "egui",
+ "harfrust",
  "hayro",
  "image",
  "log",
@@ -4233,6 +4234,7 @@ dependencies = [
  "skrifa 0.44.0",
  "sys-locale",
  "unicode-bidi",
+ "vello_cpu 0.2.0",
 ]
 
 [[package]]
