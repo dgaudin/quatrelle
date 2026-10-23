@@ -659,3 +659,69 @@ fn rooms_and_availability_come_through_graph() {
     let back = synced.events.iter().find(|e| e.event.summary == "Poster check").unwrap();
     assert_eq!(back.event.attendees.iter().map(|a| a.cutype.as_str()).collect::<Vec<_>>(), ["", "RESOURCE"]);
 }
+
+/// An OAuth token Graph refuses (it ran out while the computer slept, say) is renewed from the
+/// refresh token and the work done again; only a refused refresh asks to sign in again.
+#[test]
+fn a_refused_token_is_renewed_once_before_asking_to_sign_in() {
+    // The token endpoint's three answers, in order: t1 at sign-in, t2 on the first renewal, and
+    // a refusal of the refresh token on the second.
+    let answers = [
+        ("200 OK", r#"{"access_token":"t1","expires_in":3600}"#),
+        ("200 OK", r#"{"access_token":"t2","expires_in":3600}"#),
+        ("400 Bad Request", r#"{"error":"invalid_grant"}"#),
+    ];
+    let answers = answers
+        .iter()
+        .map(|(status, json)| {
+            let mut reply = format!("HTTP/1.1 {status}\r\nContent-Length: {}\r\nContent-Type: application/json\r\n\r\n", json.len()).into_bytes();
+            reply.extend_from_slice(json.as_bytes());
+            reply
+        })
+        .collect();
+    let (oauth_base, token_requests) = crate::http::tests::serve(answers);
+    let mut p = crate::oauth::tests::local(&format!("{oauth_base}/token"));
+    p.id = "test-graph-renew".into();
+    crate::oauth::TEST_PROVIDERS.lock().unwrap().push(p);
+
+    let mut d = Data { token: Some("t1".into()), ..Default::default() };
+    let inbox = d.folder("Inbox", None, Some("inbox"));
+    d.deliver(&inbox, &mail("Before", "m1"), true, "2024-05-06T09:00:00Z");
+    let server = serve(d);
+    let store = crate::fake::tests_store("graph-renew");
+    let mut pool = crate::worker::Pool::new(store.clone(), Arc::new(crate::worker::MemoryCredentials::default()));
+    let account = AccountConfig {
+        id: "a1".into(),
+        email: "me@contoso.example".into(),
+        graph: Some(server.base.clone()),
+        oauth: Some("test-graph-renew".into()),
+        ..Default::default()
+    };
+    pool.submit(Job::Start { account, password: Some(Secret("r1".into())) });
+    until(&pool, "online", |e| matches!(e, Event::Status { status: SyncStatus::Online { .. }, .. }));
+
+    // The server stops taking t1: the next sync gets t2 and goes on, without asking anything.
+    {
+        let mut d = server.data.lock().unwrap();
+        d.token = Some("t2".into());
+        d.deliver(&inbox, &mail("After", "m2"), false, "2024-05-06T10:00:00Z");
+    }
+    pool.submit(Job::SyncFolder { account: "a1".into(), folder: "INBOX".into() });
+    let has = |s: &str| store.load_folder("a1", "INBOX").is_ok_and(|f| f.messages.iter().any(|m| m.subject == s));
+    let end = Instant::now() + Duration::from_secs(20);
+    while !has("After") {
+        assert!(Instant::now() < end, "never synced with the renewed token");
+        if let Some(Event::Status { status: SyncStatus::NeedsPassword { error }, .. }) = pool.wait(Duration::from_millis(100)) {
+            panic!("asked to sign in again: {error}");
+        }
+    }
+
+    // Refused again, and the refresh token is refused too: now it's signing in again.
+    server.data.lock().unwrap().token = Some("t3".into());
+    pool.submit(Job::SyncFolder { account: "a1".into(), folder: "INBOX".into() });
+    until(&pool, "sign in again", |e| matches!(e, Event::Status { status: SyncStatus::NeedsPassword { .. }, .. }));
+    let seen = token_requests.join().unwrap();
+    assert!(seen.iter().all(|r| r.contains("grant_type=refresh_token&refresh_token=r1")), "{seen:?}");
+    pool.submit(Job::Remove { account: "a1".into() });
+    let _ = std::fs::remove_dir_all(store.root());
+}
