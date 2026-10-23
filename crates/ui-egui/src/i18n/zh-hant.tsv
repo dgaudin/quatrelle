@@ -1214,3 +1214,9 @@ month	May	5月
 	Busy	忙碌
 	Out of office	外出
 	Working elsewhere	在其他地點工作
+	Open a network share?	開啟網路共用？
+	This link opens {path} on the server {server}.	此連結會開啟伺服器 {server} 上的 {path}。
+	The server can ask for your sign-in: open a share only when you trust the person who sent the link.	伺服器可能會要求你登入：只有在信任傳送連結的人時才開啟共用。
+	Don't ask again for this server	不再針對此伺服器詢問
+	The share couldn't be opened: {error}	無法開啟共用：{error}
+	Open this server's shares without asking	無需詢問即開啟此伺服器的共用

@@ -16,7 +16,7 @@ mod css;
 mod fonts;
 pub mod layout;
 mod links;
-pub use links::{find_links, link_written_addresses};
+pub use links::{find_links, link_written_addresses, share_link, share_parts};
 pub mod markup;
 pub mod office;
 pub mod rich;

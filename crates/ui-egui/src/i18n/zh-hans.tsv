@@ -1212,3 +1212,9 @@ month	May	5月
 	Busy	忙碌
 	Out of office	外出
 	Working elsewhere	在其他地点工作
+	Open a network share?	打开网络共享？
+	This link opens {path} on the server {server}.	此链接将打开服务器 {server} 上的 {path}。
+	The server can ask for your sign-in: open a share only when you trust the person who sent the link.	服务器可能会要求你登录：仅在信任发送链接的人时才打开共享。
+	Don't ask again for this server	不再针对此服务器询问
+	The share couldn't be opened: {error}	无法打开共享：{error}
+	Open this server's shares without asking	无需询问即打开此服务器的共享

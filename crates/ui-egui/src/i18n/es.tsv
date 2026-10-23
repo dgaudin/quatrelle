@@ -1215,3 +1215,9 @@ month	May	mayo
 	Busy	Ocupado
 	Out of office	Fuera de la oficina
 	Working elsewhere	Trabajando en otro lugar
+	Open a network share?	¿Abrir una carpeta compartida de red?
+	This link opens {path} on the server {server}.	Este enlace abre {path} en el servidor {server}.
+	The server can ask for your sign-in: open a share only when you trust the person who sent the link.	El servidor puede pedir tus credenciales: abre una carpeta compartida solo si confías en quien envió el enlace.
+	Don't ask again for this server	No volver a preguntar para este servidor
+	The share couldn't be opened: {error}	No se pudo abrir la carpeta compartida: {error}
+	Open this server's shares without asking	Abrir las carpetas compartidas de este servidor sin preguntar

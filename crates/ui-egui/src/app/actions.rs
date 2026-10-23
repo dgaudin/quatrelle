@@ -260,6 +260,7 @@ impl MailApp {
             Action::SetSystemAccent(on) => self.ui.system_accent = on,
             Action::SetLanguage(l) => self.ui.language = l,
             Action::OpenUrl(url) => self.open_link(&url),
+            Action::OpenShare(link) => self.open_share(&link),
             Action::SignInAgain(id) => self.sign_in_again(&id),
             Action::OpenInCraft(i, cmd) => {
                 let Some(app) = self.ui.craft_apps.iter().find(|(c, _)| *c == cmd).map(|(_, p)| p.clone()) else { return };
@@ -478,12 +479,28 @@ impl MailApp {
             let to = rest.split('?').next().unwrap_or("").replace("%40", "@");
             self.run("mail.new", json!({}));
             self.run("compose.update", json!({"to": to}));
+        } else if let Some(share) = quatrelle_engine::mime::share_link(u) {
+            // A network share: opened once the user says so, unless its server is trusted (one on
+            // a stranger's server can ask for their sign-in).
+            let Some((server, path)) = quatrelle_engine::mime::share_parts(&share) else { return };
+            if self.session.prefs.trusted_share_servers.contains(&server) {
+                self.open_share(&share);
+            } else {
+                self.ui.dialog = Some(Dialog::OpenShare { link: share, server, path, always: false });
+            }
         } else if lower.starts_with("https://") || lower.starts_with("http://") {
             if let Err(e) = self.services.open_url(u) {
                 self.session.notice(tf!("The link couldn't be opened: {error}", error = e), true);
             }
         } else {
             self.session.notice(tf!("Links like {link} aren't opened", link = widgets::shorten(u, 40)), true);
+        }
+    }
+
+    /// Open a network share (`file://server/share/…`) the way the system does.
+    pub(crate) fn open_share(&mut self, link: &str) {
+        if let Err(e) = self.services.open_url(link) {
+            self.session.notice(tf!("The share couldn't be opened: {error}", error = e), true);
         }
     }
 

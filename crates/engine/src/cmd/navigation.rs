@@ -108,6 +108,21 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             .when(has_reading),
         CommandSpec::new("message.blockPictures", "Don't show pictures from this sender", "Reading pane", |s, _| s.block_pictures())
             .when(has_reading),
+        // A network share's server whose links open without asking (`trust: false` asks again).
+        CommandSpec::new("link.trustShareServer", "Open this server's shares without asking", "Reading pane", |s, v| {
+            let server = p::req_str(v, "server")?.trim().to_ascii_lowercase();
+            if server.is_empty() || server.len() > 255 || !server.chars().all(|c| c.is_alphanumeric() || matches!(c, '.' | '-' | '_')) {
+                return Err(CmdError::Params(format!("`{server}` isn't a server's name")));
+            }
+            let trust = p::bool(v, "trust").unwrap_or(true);
+            if trust {
+                s.prefs.trusted_share_servers.insert(server.clone());
+            } else {
+                s.prefs.trusted_share_servers.remove(&server);
+            }
+            Ok(json!({ "server": server, "trusted": trust }))
+        })
+        .params(r#"{"server": string, "trust"?: bool (default true)}"#),
         CommandSpec::new("view.spelling", "Check the spelling as you type", "View › Messages", |s, v| {
             s.prefs.spell_check = p::bool(v, "on").unwrap_or(!s.prefs.spell_check);
             Ok(json!({"on": s.prefs.spell_check}))

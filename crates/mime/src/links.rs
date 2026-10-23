@@ -1,6 +1,9 @@
-//! Web and mail addresses written out in a message's text (`https://…`, `www.…`, `name@host`):
-//! found so they open as links do, the way Outlook makes them links though the message didn't
-//! (a plain-text message, or an HTML one whose sender typed the address without a link).
+//! Web and mail addresses written out in a message's text (`https://…`, `www.…`, `name@host`),
+//! and network shares (`\\server\share\folder`, Windows' way of naming a file on another
+//! computer): found so they open as links do, the way Outlook makes them links though the
+//! message didn't (a plain-text message, or an HTML one whose sender typed the address without
+//! a link). A share is kept as `file://server/share/folder`, whatever form it came in, and
+//! opened the way the system opens one (`smb://` on Linux and macOS).
 
 use std::ops::Range;
 
@@ -45,10 +48,132 @@ fn host_ok(host: &str) -> bool {
         && labels.last().is_some_and(|tld| tld.chars().count() >= 2 && tld.chars().all(char::is_alphabetic))
 }
 
-/// The addresses written in `text`: where each is (a byte range) and what it opens
-/// (`https://…` as written, `http://www.…`, `mailto:…`), in order, never overlapping.
-pub fn find_links(text: &str) -> Vec<(Range<usize>, String)> {
+/// `%xx` escapes undone (an address's path as its characters).
+fn unescape(s: &str) -> String {
+    let b = s.as_bytes();
+    let mut out: Vec<u8> = Vec::with_capacity(b.len());
+    let mut i = 0;
+    while let Some(&c) = b.get(i) {
+        let hex = |k: usize| b.get(k).and_then(|h| (*h as char).to_digit(16));
+        match (c, hex(i + 1), hex(i + 2)) {
+            (b'%', Some(h), Some(l)) => {
+                out.push(u8::try_from(h * 16 + l).unwrap_or(b'?'));
+                i += 3;
+            }
+            _ => {
+                out.push(c);
+                i += 1;
+            }
+        }
+    }
+    String::from_utf8(out).unwrap_or_else(|e| String::from_utf8_lossy(e.as_bytes()).into_owned())
+}
+
+/// A path part as it goes in an address: what would end or change one escaped.
+fn escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            ' ' => out.push_str("%20"),
+            '%' => out.push_str("%25"),
+            '#' => out.push_str("%23"),
+            '?' => out.push_str("%3F"),
+            c => out.push(c),
+        }
+    }
+    out
+}
+
+/// A network share as a link: `\\server\share\folder`, `file://server/share/folder`,
+/// `file:///\\server\share` (Outlook's HTML) or `smb://server/share`, as
+/// `file://server/share/folder`. `None` for anything else: a file on this computer
+/// (`file:///home/…`, `C:\…`), or a share without a server and a share name.
+pub fn share_link(target: &str) -> Option<String> {
+    let t = target.trim();
+    let lower = t.to_ascii_lowercase();
+    let rest = if let Some(r) = t.strip_prefix("\\\\") {
+        r
+    } else {
+        let after = if lower.starts_with("file:") {
+            t.get(5..)?
+        } else if lower.starts_with("smb:") {
+            t.get(4..)?
+        } else {
+            return None;
+        };
+        // `//server/…`; with no server (`file:///…`), a path on this computer, unless the path
+        // itself names one (`file:///\\server\share`, `file:////server/share`).
+        let s = after.strip_prefix("//")?;
+        let server_end = s.find(['/', '\\']).unwrap_or(s.len());
+        if server_end > 0 {
+            s
+        } else {
+            let path = s.get(1..)?;
+            if !path.starts_with(['/', '\\']) {
+                return None;
+            }
+            path.trim_start_matches(['/', '\\'])
+        }
+    };
+    let parts: Vec<String> = rest.split(['\\', '/']).filter(|p| !p.is_empty()).map(unescape).take(64).collect();
+    let (host, share) = (parts.first()?, parts.get(1)?);
+    let host_ok = !host.is_empty()
+        && host.len() < 256
+        && host.chars().all(|c| c.is_alphanumeric() || matches!(c, '.' | '-' | '_'))
+        && !host.eq_ignore_ascii_case("localhost")
+        && !host.starts_with("127.");
+    let names_ok = parts.iter().all(|p| p.len() < 256 && !p.contains(['<', '>', '"', '|', '*', '?', ':']) && !p.chars().any(char::is_control));
+    (host_ok && names_ok && !share.is_empty())
+        .then(|| format!("file://{}/{}", host.to_ascii_lowercase(), parts.iter().skip(1).map(|p| escape(p)).collect::<Vec<_>>().join("/")))
+}
+
+/// A share's link ([`share_link`]) as its server and Windows' way of writing it
+/// (`\\server\share\folder`): to show, and to open on Windows.
+pub fn share_parts(link: &str) -> Option<(String, String)> {
+    let rest = link.strip_prefix("file://")?;
+    let (host, path) = rest.split_once('/')?;
+    let unc = format!("\\\\{host}\\{}", path.split('/').map(unescape).collect::<Vec<_>>().join("\\"));
+    (!host.is_empty() && !path.is_empty()).then(|| (host.to_string(), unc))
+}
+
+/// The shares written in `text` (`\\server\share\…`, `<\\server\share\a folder>` with its
+/// spaces, `file://…`, `smb://…`), each with its link.
+fn find_shares(text: &str) -> Vec<(Range<usize>, String)> {
     let mut out: Vec<(Range<usize>, String)> = Vec::new();
+    let lower = text.to_ascii_lowercase();
+    for begin in ["\\\\", "file:", "smb://"] {
+        let mut at = 0;
+        while out.len() < MAX
+            && let Some(i) = lower.get(at..).and_then(|r| r.find(begin))
+        {
+            let start = at + i;
+            let before = text.get(..start).and_then(|b| b.chars().last());
+            let rest = text.get(start..).unwrap_or("");
+            // In angle brackets, as Outlook writes one with spaces: up to the closing one.
+            let closed = (before == Some('<')).then(|| rest.find('>')).flatten();
+            // (A share's path goes on through its backslashes, which end a web address.)
+            let end = closed.unwrap_or_else(|| rest.find(|c: char| c != '\\' && (ends(c) || c == '*')).unwrap_or(rest.len()));
+            let found = if closed.is_some() { rest.get(..end).unwrap_or("") } else { trim_end(rest.get(..end).unwrap_or("")) };
+            let word = before.is_none_or(|c| !(c.is_alphanumeric() || c == '\\'));
+            match share_link(found).filter(|_| word && found.len() <= MAX_LEN) {
+                Some(url) => {
+                    out.push((start..start + found.len(), url));
+                    at = start + found.len().max(1);
+                }
+                // Nothing further in this word starts one either.
+                None => at = start + end.max(begin.len()),
+            }
+        }
+    }
+    out
+}
+
+/// The addresses written in `text`: where each is (a byte range) and what it opens
+/// (`https://…` as written, `http://www.…`, `mailto:…`, `file://server/share/…`), in order,
+/// never overlapping.
+pub fn find_links(text: &str) -> Vec<(Range<usize>, String)> {
+    let mut out: Vec<(Range<usize>, String)> = if text.contains("\\\\") || text.contains(':') { find_shares(text) } else { Vec::new() };
+    let shares = out.len();
     let lower = text.to_ascii_lowercase();
     // A word starts here: the text's start, or after something that isn't part of a word.
     let word_start =
@@ -104,6 +229,14 @@ pub fn find_links(text: &str) -> Vec<(Range<usize>, String)> {
             _ => break,
         }
     }
+    // A web or mail address inside a share's path (`\\server\share\a@b.fr`) is the share's.
+    if shares > 0 {
+        let (shares, others) = out.split_at(shares);
+        let mut all: Vec<(Range<usize>, String)> = shares.to_vec();
+        all.extend(others.iter().filter(|(r, _)| !shares.iter().any(|(s, _)| s.start < r.end && r.start < s.end)).cloned());
+        all.sort_by_key(|(r, _)| r.start);
+        out = all;
+    }
     out
 }
 
@@ -111,8 +244,14 @@ pub fn find_links(text: &str) -> Vec<(Range<usize>, String)> {
 /// after as it was). Spans that are links, pictures or code already stay as they are.
 pub fn link_written_addresses(spans: Vec<Span>) -> Vec<Span> {
     let mut out: Vec<Span> = Vec::with_capacity(spans.len());
-    for sp in spans {
-        if sp.link.is_some() || sp.image.is_some() || sp.code || !(sp.text.contains("://") || sp.text.contains("www.") || sp.text.contains('@')) {
+    for mut sp in spans {
+        // A link to a share, however the message wrote it, as shares are kept.
+        if let Some(share) = sp.link.as_deref().and_then(share_link) {
+            sp.link = Some(share);
+        }
+        let maybe =
+            sp.text.contains("://") || sp.text.contains("www.") || sp.text.contains('@') || sp.text.contains("\\\\") || sp.text.contains("file:");
+        if sp.link.is_some() || sp.image.is_some() || sp.code || !maybe {
             out.push(sp);
             continue;
         }
@@ -181,6 +320,37 @@ mod tests {
         assert!(find_links(&junk).len() <= MAX);
         let accents = "Café — rendez-vous sur https://café.example/menu ou écrivez à zoé@café.example";
         assert_eq!(found(accents).len(), 2);
+    }
+
+    /// Network shares, Windows' `\\server\share\folder` as people write them (and Outlook's
+    /// HTML links to them), become `file://server/share/folder` links; files on this computer
+    /// and broken ones don't.
+    #[test]
+    fn shares_written_out_are_found() {
+        assert_eq!(
+            found(r"Les fichiers sont sur \\srv-fichiers\Commun\Projets\2026 et <\\nas.contoso.example\Partage RH\Mes docs\Note de frais.xlsx>."),
+            [
+                (r"\\srv-fichiers\Commun\Projets\2026", "file://srv-fichiers/Commun/Projets/2026".to_string()),
+                (
+                    r"\\nas.contoso.example\Partage RH\Mes docs\Note de frais.xlsx",
+                    "file://nas.contoso.example/Partage%20RH/Mes%20docs/Note%20de%20frais.xlsx".to_string()
+                ),
+            ]
+        );
+        assert_eq!(found("ouvrir file://srv/commun/a%20b, merci")[0].1, "file://srv/commun/a%20b");
+        assert_eq!(found("smb://nas/backup/2026")[0].1, "file://nas/backup/2026");
+        // Outlook's HTML link, and the address inside a share's path is the share's.
+        assert_eq!(share_link(r"file:///\\SRV\Commun\a.docx").as_deref(), Some("file://srv/Commun/a.docx"));
+        assert_eq!(found(r"\\srv\boites\jean@example.fr\notes").len(), 1);
+        // Shown, and opened on Windows, as Windows writes it.
+        assert_eq!(share_parts("file://nas/Partage%20RH/a.txt"), Some(("nas".to_string(), r"\\nas\Partage RH\a.txt".to_string())));
+        // Not shares: a file on this computer, no share name, junk.
+        for text in [r"C:\Users\me\file.txt", "file:///home/me/notes.txt", r"\\server", r"\\localhost\c$", r"\\\\\\", r"a\\b\c", "file:/x/y"] {
+            assert!(found(text).is_empty(), "{text}: {:?}", found(text));
+        }
+        // Hostile input stays linear and bounded.
+        let junk = r"\\".repeat(50_000) + &"file:".repeat(20_000) + &r"\\a\b ".repeat(5_000);
+        assert!(find_links(&junk).len() <= MAX * 2);
     }
 
     #[test]

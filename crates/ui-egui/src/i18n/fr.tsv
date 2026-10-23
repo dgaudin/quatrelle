@@ -1215,3 +1215,9 @@ month	May	mai
 	Busy	Occupé
 	Out of office	Absent du bureau
 	Working elsewhere	Travaille ailleurs
+	Open a network share?	Ouvrir un partage réseau ?
+	This link opens {path} on the server {server}.	Ce lien ouvre {path} sur le serveur {server}.
+	The server can ask for your sign-in: open a share only when you trust the person who sent the link.	Le serveur peut demander vos identifiants : n’ouvrez un partage que si vous faites confiance à la personne qui a envoyé le lien.
+	Don't ask again for this server	Ne plus demander pour ce serveur
+	The share couldn't be opened: {error}	Le partage n’a pas pu être ouvert : {error}
+	Open this server's shares without asking	Ouvrir les partages de ce serveur sans demander

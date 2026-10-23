@@ -19,6 +19,28 @@ pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &
             }
             !cancel
         }
+        Dialog::OpenShare { link, server, path, always } => {
+            ui.set_width(460.0);
+            title(ui, t, "Open a network share?");
+            ui.label(RichText::new(tf!("This link opens {path} on the server {server}.", path = path, server = server)).color(t.text));
+            ui.add_space(4.0);
+            ui.label(
+                RichText::new(tl!("The server can ask for your sign-in: open a share only when you trust the person who sent the link."))
+                    .color(t.dim)
+                    .small(),
+            );
+            ui.add_space(6.0);
+            ui.checkbox(always, tl!("Don't ask again for this server"));
+            let (ok, cancel) = buttons(ui, t, "Open", true);
+            if ok {
+                if *always {
+                    acts.push(Action::Run("link.trustShareServer", json!({"server": server})));
+                }
+                acts.push(Action::OpenShare(link.clone()));
+                return false;
+            }
+            !cancel
+        }
         Dialog::PicturePreview { key, index, name } => {
             let w = (ui.ctx().content_rect().width() * 0.75).clamp(360.0, 1200.0);
             let h = (ui.ctx().content_rect().height() * 0.7).max(240.0);

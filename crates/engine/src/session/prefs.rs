@@ -60,6 +60,11 @@ pub struct Prefs {
     pub show_html: bool,
     /// Senders whose pictures from the web load without asking (lower-case addresses).
     pub trusted_senders: BTreeSet<String>,
+    /// Servers whose network shares (`\\server\share` links) open without asking (lower
+    /// case): a share on any other is opened only once the user says so, as one on a stranger's
+    /// server can ask for their sign-in.
+    #[serde(skip_serializing_if = "BTreeSet::is_empty")]
+    pub trusted_share_servers: BTreeSet<String>,
     /// Junk Email: senders (a lower-case address, or `@domain`) whose mail goes to Junk as it
     /// arrives ([`junk`]).
     #[serde(skip_serializing_if = "BTreeSet::is_empty")]
@@ -154,6 +159,7 @@ impl Default for Prefs {
             focus_overrides: std::collections::BTreeMap::new(),
             show_html: true,
             trusted_senders: BTreeSet::new(),
+            trusted_share_servers: BTreeSet::new(),
             blocked_senders: BTreeSet::new(),
             safe_senders: BTreeSet::new(),
             new_mail_window: true,

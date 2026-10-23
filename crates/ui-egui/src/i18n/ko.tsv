@@ -1214,3 +1214,9 @@ month	May	5월
 	Busy	바쁨
 	Out of office	부재중
 	Working elsewhere	다른 곳에서 근무
+	Open a network share?	네트워크 공유를 여시겠습니까?
+	This link opens {path} on the server {server}.	이 링크는 서버 {server}의 {path}을(를) 엽니다.
+	The server can ask for your sign-in: open a share only when you trust the person who sent the link.	서버가 로그인 정보를 요청할 수 있습니다. 링크를 보낸 사람을 신뢰할 때만 공유를 여세요.
+	Don't ask again for this server	이 서버에 대해 다시 묻지 않기
+	The share couldn't be opened: {error}	공유를 열 수 없습니다: {error}
+	Open this server's shares without asking	이 서버의 공유를 묻지 않고 열기

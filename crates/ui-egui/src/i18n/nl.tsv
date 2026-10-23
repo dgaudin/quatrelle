@@ -1211,3 +1211,9 @@ month	May	mei
 	Busy	Bezet
 	Out of office	Afwezig
 	Working elsewhere	Werkt elders
+	Open a network share?	Netwerkshare openen?
+	This link opens {path} on the server {server}.	Deze koppeling opent {path} op de server {server}.
+	The server can ask for your sign-in: open a share only when you trust the person who sent the link.	De server kan om uw aanmelding vragen: open een share alleen als u de afzender van de koppeling vertrouwt.
+	Don't ask again for this server	Niet meer vragen voor deze server
+	The share couldn't be opened: {error}	De share kon niet worden geopend: {error}
+	Open this server's shares without asking	Shares van deze server openen zonder te vragen

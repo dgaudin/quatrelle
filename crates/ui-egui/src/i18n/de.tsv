@@ -1215,3 +1215,9 @@ month	May	Mai
 	Busy	Beschäftigt
 	Out of office	Abwesend
 	Working elsewhere	Arbeitet woanders
+	Open a network share?	Netzwerkfreigabe öffnen?
+	This link opens {path} on the server {server}.	Dieser Link öffnet {path} auf dem Server {server}.
+	The server can ask for your sign-in: open a share only when you trust the person who sent the link.	Der Server kann nach Ihrer Anmeldung fragen: Öffnen Sie eine Freigabe nur, wenn Sie dem Absender des Links vertrauen.
+	Don't ask again for this server	Für diesen Server nicht mehr fragen
+	The share couldn't be opened: {error}	Die Freigabe konnte nicht geöffnet werden: {error}
+	Open this server's shares without asking	Freigaben dieses Servers ohne Nachfrage öffnen
