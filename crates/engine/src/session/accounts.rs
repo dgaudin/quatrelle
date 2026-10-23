@@ -560,7 +560,7 @@ impl Session {
     /// start with it).
     pub fn apply_sync_prefs(&mut self) {
         self.jobs.retain(|j| !matches!(j, Job::SetSync { .. }));
-        self.jobs.insert(0, Job::SetSync { messages: self.prefs.keep_messages, offline: self.prefs.keep_offline });
+        self.jobs.insert(0, Job::SetSync { days: self.prefs.keep_days, messages: 0, full: true });
     }
 
     pub fn set_work_offline(&mut self, on: bool) {

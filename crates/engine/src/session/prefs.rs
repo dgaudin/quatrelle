@@ -2,6 +2,10 @@
 
 use super::*;
 
+/// Mail kept on this computer by default: what came in the last two years (the owner's choice;
+/// Outlook offers the same range).
+pub const KEEP_DAYS: u32 = 730;
+
 /// Settings the user changes from the View tab (saved by the app).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -28,11 +32,9 @@ pub struct Prefs {
     /// `all` (everyone written to or heard from, and contacts), `people` (every contact), or
     /// one address book (`book:<account>:<book id>`).
     pub address_book: String,
-    /// The newest messages of each folder kept on this computer (0: all of them), as Outlook's
-    /// "Mail to keep offline".
-    pub keep_messages: u32,
-    /// Of those, the newest downloaded in full ahead of reading (the rest when opened).
-    pub keep_offline: u32,
+    /// Mail received in the last this many days kept on this computer, whole (0: all of it), as
+    /// Outlook's "Mail to keep offline" in Cached Exchange Mode; older mail is read on the server.
+    pub keep_days: u32,
     /// With `ReadInPane::Shown`: after it's been shown this many seconds (0: at once).
     pub read_after_secs: u32,
     /// Show the first line of text under each message.
@@ -143,8 +145,7 @@ impl Default for Prefs {
             calendars_side_by_side: false,
             calendar_months: 2,
             address_book: "all".into(),
-            keep_messages: 1000,
-            keep_offline: 40,
+            keep_days: KEEP_DAYS,
             read_after_secs: 0,
             show_preview: true,
             compact: false,

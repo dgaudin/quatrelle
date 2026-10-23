@@ -730,29 +730,37 @@ fn options(s: &Session, st: &UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
         });
     });
 
-    // How much mail is kept on this computer, as Outlook's "Mail to keep offline".
+    // How much mail is kept on this computer, as Outlook's "Mail to keep offline" in Cached
+    // Exchange Mode: what came in the last so long, whole.
     group(
         ui,
         tl!("Mail kept on this computer"),
-        Some(tl!("New mail always comes in. Older mail past these stays on the server; the rest of each message is downloaded when it's opened.")),
+        Some(tl!(
+            "New mail always comes in. Mail kept here is downloaded whole, a little at a time; older mail stays on the server, where it can still be read."
+        )),
         &mut |ui| {
-            setting(ui, true, tl!("Of each folder, keep"), None, &mut |ui| {
-                let values = [1000u32, 5000, 20000, 0];
-                let now = values.iter().position(|v| *v == s.prefs.keep_messages).unwrap_or(0);
-                if let Some(i) = widgets::segmented(ui, &t, "keep", &["1,000", "5,000", "20,000", tl!("All")], now)
-                    && let Some(n) = values.get(i)
-                {
-                    acts.push(Action::Run("account.keepMail", json!({"messages": n})));
-                }
-            });
-            setting(ui, false, tl!("Download in full for reading offline"), None, &mut |ui| {
-                let values = [40u32, 200, 1000];
-                let now = values.iter().position(|v| *v == s.prefs.keep_offline).unwrap_or(0);
-                if let Some(i) = widgets::segmented(ui, &t, "offline", &["40", "200", "1,000"], now)
-                    && let Some(n) = values.get(i)
-                {
-                    acts.push(Action::Run("account.keepMail", json!({"offline": n})));
-                }
+            setting(ui, true, tl!("Keep mail from the last"), None, &mut |ui| {
+                let choices: [(u32, &str); 10] = [
+                    (3, tl!("3 days")),
+                    (7, tl!("1 week")),
+                    (14, tl!("2 weeks")),
+                    (30, tl!("1 month")),
+                    (91, tl!("3 months")),
+                    (182, tl!("6 months")),
+                    (365, tl!("1 year")),
+                    (730, tl!("2 years")),
+                    (1826, tl!("5 years")),
+                    (0, tl!("All")),
+                ];
+                let days = s.prefs.keep_days;
+                let current = choices.iter().find(|(d, _)| *d == days).map_or_else(|| tf!("{n} days", n = days), |(_, l)| (*l).to_string());
+                egui::ComboBox::from_id_salt("keep-days").width(160.0).selected_text(current).show_ui(ui, |ui| {
+                    for (d, label) in choices {
+                        if ui.selectable_label(d == days, label).clicked() && d != days {
+                            acts.push(Action::Run("account.keepMail", json!({"days": d})));
+                        }
+                    }
+                });
             });
             // Issue #4: an account kept online only has none of its mail here.
             let servers: Vec<&quatrelle_engine::model::AccountConfig> =

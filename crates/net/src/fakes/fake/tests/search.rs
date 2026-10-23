@@ -203,7 +203,7 @@ fn a_search_asks_the_imap_server_and_show_more_keeps() {
     let port = serve_tcp(&st);
     let store = store("worker-search");
     let mut pool = crate::worker::Pool::new(store.clone(), std::sync::Arc::new(crate::worker::MemoryCredentials::default()));
-    pool.submit(Job::SetSync { messages: 10, offline: 0 });
+    pool.submit(Job::SetSync { days: 0, messages: 10, full: false });
     let account = AccountConfig {
         id: "a1".into(),
         email: "me@studio.example".into(),
@@ -317,7 +317,7 @@ fn a_server_search_stops_when_its_no_longer_wanted() {
     let port = serve_tcp(&st);
     let store = store("search-stop");
     let mut pool = crate::worker::Pool::new(store.clone(), std::sync::Arc::new(crate::worker::MemoryCredentials::default()));
-    pool.submit(Job::SetSync { messages: 10, offline: 0 });
+    pool.submit(Job::SetSync { days: 0, messages: 10, full: false });
     let account = AccountConfig {
         id: "a1".into(),
         email: "me@studio.example".into(),
@@ -373,7 +373,7 @@ fn show_more_and_search(caps: &'static str) {
     let port = serve_tcp(&st);
     let store = store(if caps.contains("QRESYNC") { "worker-more-qresync" } else { "worker-more" });
     let mut pool = crate::worker::Pool::new(store.clone(), std::sync::Arc::new(crate::worker::MemoryCredentials::default()));
-    pool.submit(Job::SetSync { messages: 10, offline: 0 });
+    pool.submit(Job::SetSync { days: 0, messages: 10, full: false });
     let account = AccountConfig {
         id: "a1".into(),
         email: "me@studio.example".into(),

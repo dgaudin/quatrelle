@@ -149,16 +149,12 @@ pub(super) fn commands() -> Vec<CommandSpec> {
         })
         .params(r#"{"count": number (1 to 6)}"#),
         CommandSpec::new("account.keepMail", "Mail kept on this computer", "File › Options › Mail", |s, v| {
-            if let Some(n) = p::u64(v, "messages") {
-                s.prefs.keep_messages = u32::try_from(n.min(1_000_000)).unwrap_or(0);
-            }
-            if let Some(n) = p::u64(v, "offline") {
-                s.prefs.keep_offline = u32::try_from(n.min(100_000)).unwrap_or(0);
-            }
+            let days = p::u64(v, "days").ok_or_else(|| CmdError::Params("`days` is required (0: all)".into()))?;
+            s.prefs.keep_days = u32::try_from(days.min(36_500)).unwrap_or(0);
             s.apply_sync_prefs();
-            Ok(json!({"messages": s.prefs.keep_messages, "offline": s.prefs.keep_offline}))
+            Ok(json!({"days": s.prefs.keep_days}))
         })
-        .params(r#"{"messages"?: number (the newest of each folder kept; 0: all), "offline"?: number (of those, the newest downloaded in full)}"#),
+        .params(r#"{"days": number (mail received in the last days kept on this computer, whole; older mail is read on the server; 0: all)}"#),
         CommandSpec::new("account.onlineOnly", "Online only", "File › Options › Mail", |s, v| {
             let id = p::req_str(v, "account")?;
             let mut c = s.account(id).map(|a| a.config.clone()).ok_or_else(|| CmdError::Params(format!("no account `{id}`")))?;

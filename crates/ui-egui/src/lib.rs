@@ -392,7 +392,10 @@ pub struct MailApp {
 }
 
 impl MailApp {
-    pub fn new(session: Session, backend: Box<dyn Backend>, mut services: Box<dyn Services>) -> MailApp {
+    pub fn new(mut session: Session, backend: Box<dyn Backend>, mut services: Box<dyn Services>) -> MailApp {
+        // Mail kept as Outlook's Cached Exchange Mode keeps it, from the start (the saved
+        // choice, if any, follows with the rest of the preferences).
+        session.apply_sync_prefs();
         // The spelling dictionaries, read once in the background (nothing in the browser), with
         // the words added to them so far.
         spellcheck::start();
@@ -635,17 +638,13 @@ impl MailApp {
     pub fn restore_state(&mut self, v: &Value) {
         if let Some(p) = v.get("prefs").and_then(|p| serde_json::from_value::<quatrelle_engine::Prefs>(p.clone()).ok()) {
             let offline = p.work_offline;
-            let keep = (p.keep_messages, p.keep_offline);
             self.session.prefs = p;
             self.session.follow_public_favorites();
             spellcheck::set_personal(self.session.prefs.spelling.clone());
             self.session.note_new_calendars();
             self.session.refresh_list();
-            // How much mail to keep, before any account connects (when it isn't the default).
-            let d = quatrelle_engine::Prefs::default();
-            if keep != (d.keep_messages, d.keep_offline) {
-                self.session.apply_sync_prefs();
-            }
+            // How much mail to keep, before any account connects.
+            self.session.apply_sync_prefs();
             // Still working offline from last time: before any account connects.
             if offline {
                 self.session.set_work_offline(true);

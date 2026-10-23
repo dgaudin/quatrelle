@@ -187,10 +187,10 @@ impl Pool {
             }
             Job::ImportPst { account, path } => self.import_pst(account, path),
             Job::ExportPst { account, path, name } => self.export_pst(account, path, name),
-            Job::SetSync { messages, offline } => {
-                let opts =
-                    SyncOptions { window: if messages == 0 { usize::MAX } else { messages as usize }, prefetch: offline as usize, ..self.opts };
-                if opts.window != self.opts.window || opts.prefetch != self.opts.prefetch {
+            Job::SetSync { days, messages, full } => {
+                let window = if messages == 0 { usize::MAX } else { messages as usize };
+                let opts = SyncOptions { window, since_days: days, full, ..self.opts };
+                if opts.window != self.opts.window || opts.since_days != self.opts.since_days || opts.full != self.opts.full {
                     self.opts = opts;
                     // Connected accounts start again with it (a rare change, from Options).
                     let running: Vec<AccountConfig> = self.workers.keys().filter_map(|id| self.configs.get(id).cloned()).collect();

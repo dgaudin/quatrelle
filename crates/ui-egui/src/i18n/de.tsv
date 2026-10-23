@@ -793,9 +793,15 @@
 	Shown: click to hide it	Eingeblendet: zum Ausblenden klicken
 	Side by side	Nebeneinander
 	Mail kept on this computer	Auf diesem Computer behaltene E-Mails
-	Of each folder, keep	Aus jedem Ordner behalten
-	Download in full for reading offline	Vollständig für das Offline-Lesen herunterladen
-	New mail always comes in. Older mail past these stays on the server; the rest of each message is downloaded when it's opened.	Neue E-Mails kommen immer an. Ältere bleiben auf dem Server; der Rest einer Nachricht wird beim Öffnen geladen.
+	New mail always comes in. Mail kept here is downloaded whole, a little at a time; older mail stays on the server, where it can still be read.	Neue E-Mails kommen immer an. Hier aufbewahrte E-Mails werden nach und nach vollständig heruntergeladen; ältere bleiben auf dem Server, wo sie weiterhin gelesen werden können.
+	Keep mail from the last	Zeitraum der aufbewahrten E-Mails
+	3 days	3 Tage
+	2 weeks	2 Wochen
+	3 months	3 Monate
+	6 months	6 Monate
+	1 year	1 Jahr
+	2 years	2 Jahre
+	5 years	5 Jahre
 	the newest 1,000	die neuesten 1.000
 	the newest 40	die neuesten 40
 	all	alle

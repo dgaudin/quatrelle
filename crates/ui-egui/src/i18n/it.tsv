@@ -792,9 +792,15 @@
 	Shown: click to hide it	Visibile: fai clic per nasconderlo
 	Side by side	Affiancati
 	Mail kept on this computer	Posta conservata su questo computer
-	Of each folder, keep	Di ogni cartella, conserva
-	Download in full for reading offline	Scarica per intero per leggere offline
-	New mail always comes in. Older mail past these stays on the server; the rest of each message is downloaded when it's opened.	La posta nuova arriva sempre. Quella più vecchia resta sul server; il resto di ogni messaggio si scarica quando lo apri.
+	New mail always comes in. Mail kept here is downloaded whole, a little at a time; older mail stays on the server, where it can still be read.	La nuova posta arriva sempre. La posta conservata qui viene scaricata per intero, un po' alla volta; quella più vecchia resta sul server, dove si può ancora leggere.
+	Keep mail from the last	Periodo di posta conservata
+	3 days	3 giorni
+	2 weeks	2 settimane
+	3 months	3 mesi
+	6 months	6 mesi
+	1 year	1 anno
+	2 years	2 anni
+	5 years	5 anni
 	the newest 1,000	i 1.000 più recenti
 	the newest 40	i 40 più recenti
 	all	tutti

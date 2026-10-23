@@ -72,6 +72,9 @@ pub struct FolderMark {
     /// two folders of 100,000 reports each took a quarter of an hour.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub too_big: Option<i64>,
+    /// The age kept then ([`SyncOptions::since_days`]): another one lists the folder again.
+    #[serde(default)]
+    pub days: u32,
 }
 
 /// Messages a folder's search of the server brings in, at most.
@@ -307,11 +310,24 @@ pub struct SyncOptions {
     /// The newest `window` listed, nothing more: no state of the folder is asked for to follow
     /// its changes (a public folder opened but not followed, read again each time it's opened).
     pub list_only: bool,
+    /// Mail received in the last this many days is kept (0: all of it), as Outlook's "Mail to
+    /// keep offline" in Cached Exchange Mode; older mail stays on the server, read there.
+    pub since_days: u32,
+    /// Every message kept is downloaded whole in the end, a few at a time while nothing else
+    /// is asked (`prefetch` of the newest come with the folder's list, the rest after).
+    pub full: bool,
 }
 
 impl Default for SyncOptions {
     fn default() -> Self {
-        SyncOptions { window: 1000, prefetch: 40, prefetch_max_bytes: 2 << 20, parallel: 0, list_only: false }
+        SyncOptions { window: 1000, prefetch: 40, prefetch_max_bytes: 2 << 20, parallel: 0, list_only: false, since_days: 0, full: false }
+    }
+}
+
+impl SyncOptions {
+    /// The oldest a message kept may be (Unix seconds, as of `now`), if the age is limited.
+    pub fn since(&self, now: i64) -> Option<i64> {
+        (self.since_days > 0).then(|| now.saturating_sub(i64::from(self.since_days).saturating_mul(86_400)))
     }
 }
 

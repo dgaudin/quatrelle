@@ -318,7 +318,7 @@ pub(crate) fn search_the_server_past_the_window(name: &str, account: quatrelle_m
             other => panic!("{q}: {other:?}"),
         }
     };
-    pool.submit(Job::SetSync { messages: 10, offline: 0 });
+    pool.submit(Job::SetSync { days: 0, messages: 10, full: false });
     pool.submit(Job::Start { account, password: Some(Secret(secret.into())) });
     until(&pool, "online", &online);
     let end = std::time::Instant::now() + std::time::Duration::from_secs(20);

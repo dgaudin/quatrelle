@@ -229,7 +229,7 @@ pub(super) fn commands() -> Vec<CommandSpec> {
                     _ => return Err(CmdError::Disabled("open a folder first".into())),
                 },
             };
-            let step = if s.prefs.keep_messages == 0 { 1000 } else { s.prefs.keep_messages };
+            let step = 1000;
             let more = p::u64(v, "more").map_or(step, |n| u32::try_from(n.clamp(1, 100_000)).unwrap_or(step));
             s.show_more(&account, &folder, more)
         })
