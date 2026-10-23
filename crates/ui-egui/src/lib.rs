@@ -325,6 +325,8 @@ pub struct UiState {
     pub(crate) fonts: (Option<Vec<u8>>, Option<Vec<u8>>),
     /// A fallback font for Arabic and Hebrew (when the main font hasn't them).
     rtl_font: Option<Vec<u8>>,
+    /// The system was asked for its colour emoji font (`look/emoji.rs`), once.
+    emoji_asked: bool,
     /// The language whose CJK font is loaded.
     cjk_loaded: Option<&'static str>,
     /// The app's name in the window title (`Quatrelle`, or `Quatrelle – Sample mailbox`).
@@ -457,6 +459,7 @@ impl MailApp {
                 language: i18n::AUTO.into(),
                 fonts: (None, None),
                 rtl_font: None,
+                emoji_asked: false,
                 cjk_loaded: None,
                 title_base: "Quatrelle".into(),
                 places: Default::default(),
@@ -505,6 +508,10 @@ impl MailApp {
             self.ui.rtl_font = self.services.rtl_font();
         }
         theme::install_fonts_with(ctx, regular, bold, Vec::new(), self.ui.rtl_font.clone());
+        // Emoji as pictures, from the system's colour emoji font (kept by egui across font changes).
+        if !std::mem::replace(&mut self.ui.emoji_asked, true) {
+            look::emoji::install(ctx, &mut *self.services);
+        }
         self.ui.fonts_ready = true;
     }
 

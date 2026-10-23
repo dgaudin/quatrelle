@@ -133,6 +133,23 @@ their licences on the About page. It is an optional build input, never a Cargo d
 `CRAFT_FONTS_DIR=<checkout>` makes `crates/ui-egui/build.rs` embed what its manifest lists;
 unset, the table is empty and nothing changes.
 
+Emoji are pictures, not line drawings: egui draws text from outlines in the text's colour, so
+its own emoji fonts give black outlines. `ui-egui/src/look/emoji.rs` reads the system's colour
+emoji font once through `Services::emoji_font` (Noto Color Emoji on Linux, found by fontconfig's
+`emoji` or its packaged paths; Segoe UI Emoji on Windows; Apple Color Emoji on macOS;
+`QUATRELLE_EMOJI_FONT=<file>` to try another; `apps/quatrelle/src/appearance.rs`) and installs
+an egui glyph rasterizer asked about every grapheme cluster before any font. It answers only for
+clusters with Unicode's emoji presentation (UTS #51: 😀, 🇫🇷, 👨‍👩‍👧, 1️⃣, ☺️ with its selector; not ☺
+or ✔, which are text), shapes the cluster with the font (`harfrust`, egui's own shaper: a flag,
+a skin tone, a family or a keycap is a ligature in the font's tables) and draws its glyphs from
+the font's bitmaps (`CBDT`, `sbix`: PNGs scaled down with a proper filter, premultiplied) or
+its layered outlines (`COLR`, with `vello_cpu`, egui's own rasterizer). egui keeps each result
+in its glyph atlas, once per emoji and size, so every text egui draws — the message list, the
+reading pane, the editor, calendar chips — shows the picture at no cost per frame. A cluster
+the font can't draw (an emoji newer than it), an over-long cluster (a run of joiners) or a
+cluster past 256 pixels is left to the fonts, as before; so is everything when there's no colour
+font (the browser, a bare system).
+
 egui shapes each run of text in its script's direction but lays runs out left to right, with no
 bidirectional algorithm. `ui-egui/src/look/bidi.rs` orders right-to-left text itself: each line goes
 through the Unicode Bidirectional Algorithm (`unicode-bidi`), is cut where egui will cut it into
