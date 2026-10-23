@@ -30,6 +30,12 @@ impl Fake {
         st.log.push(rest.to_string());
         let upper = rest.to_ascii_uppercase();
         let ok = |s: &mut Fake, extra: &str| s.say(&format!("{tag} OK {extra}done"));
+        if upper == "NOOP"
+            && let Some(flood) = st.flood.clone()
+        {
+            self.flood = Some(flood);
+            return;
+        }
         if upper == "CAPABILITY" {
             self.say(&format!("* CAPABILITY {}", st.caps));
             ok(self, "");
