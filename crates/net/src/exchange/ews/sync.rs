@@ -177,7 +177,12 @@ pub fn sync_folder(c: &Client, st: &mut State, store: &Store, account: &str, fol
     let too_big = before.as_ref().and_then(|m| m.too_big).filter(|at| now - at < TOO_BIG_ASKED_AGAIN);
     // Mail kept from so long ago (Cached Exchange Mode's "Mail to keep offline").
     let oldest = opts.since(now);
-    let following = |m: &jmap::FolderMark| kept && !opts.list_only && !m.sync.is_empty() && m.window == opts.window && m.days == opts.since_days;
+    // Followed by its changes while what's kept is within what was (a shorter time lets go of
+    // the older there); a longer one lists it again for what it now keeps. All of it kept, then
+    // two years (the owner's change), listed every folder again from the start.
+    let within = |was: u32, now: u32| was == now || (now != 0 && (was == 0 || was > now));
+    let following =
+        |m: &jmap::FolderMark| kept && !opts.list_only && !m.sync.is_empty() && m.window == opts.window && within(m.days, opts.since_days);
     if let Some(since) = before.filter(following).map(|m| m.sync) {
         match changes(c, st, store, account, folder, &since, opts) {
             Ok((mut report, sync)) => {

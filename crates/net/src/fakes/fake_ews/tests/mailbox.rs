@@ -581,7 +581,8 @@ fn mail_is_kept_for_a_time_and_whole() {
     let seen = until(&pool, "its source", |e| matches!(e, Event::Body { key, .. } if *key == old));
     assert!(matches!(seen.last(), Some(Event::Body { raw, .. }) if raw.windows(9).any(|w| w == b"Last year")));
     assert!(!store.has_body(&old) && store.load_folder("a1", "INBOX").unwrap().find(old.uid).is_none(), "read, not kept");
-    // A shorter time: what's older goes, with its source.
+    // A shorter time: what's older goes, with its source, the folder still followed by its
+    // changes (not listed again).
     let ten = store.load_folder("a1", "INBOX").unwrap().messages.iter().find(|m| m.subject == "Ten days ago").map(|m| m.key.clone()).unwrap();
     pool.submit(Job::SetSync { days: 5, messages: 0, full: true });
     eventually("the older let go", || kept() == ["Forwarded long ago", "Just now", "Plans"] && !store.has_body(&ten));
