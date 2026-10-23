@@ -61,6 +61,12 @@ fn session_urls_dates_and_keywords() {
     for bad in ["", "2024-13-01T00:00:00Z", "yesterday", "2024-05-01"] {
         assert_eq!(utc_date(bad), None, "{bad}");
     }
+    // Written back as asked (`after`), within the years a UTCDate has.
+    assert_eq!(utc_date_string(utc_date("2024-02-29T23:59:58Z").unwrap()), "2024-02-29T23:59:58Z");
+    assert_eq!((utc_date_string(-5), utc_date_string(i64::MAX)), ("1970-01-01T00:00:00Z".to_string(), "9999-12-31T23:59:59Z".to_string()));
+    let two_years = SyncOptions { since_days: 730, ..Default::default() };
+    assert_eq!(two_years.since(1_000_000_000), Some(1_000_000_000 - 730 * 86_400));
+    assert_eq!(SyncOptions::default().since(1_000_000_000), None, "all of it");
     let f = keywords(Some(&json!({"$seen": true, "$Flagged": true, "$label1": true, "$draft": false, "bad word": true})));
     assert!(f.seen && f.flagged && !f.draft && f.has("$label1"));
     assert_eq!(flag_keyword(Flag::Deleted), None);
