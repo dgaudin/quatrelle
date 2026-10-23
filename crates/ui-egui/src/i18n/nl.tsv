@@ -794,9 +794,15 @@ month	May	mei
 	Shown: click to hide it	Getoond: klik om te verbergen
 	Side by side	Naast elkaar
 	Mail kept on this computer	E-mail op deze computer bewaard
-	Of each folder, keep	Van elke map bewaren
-	Download in full for reading offline	Volledig downloaden om offline te lezen
-	New mail always comes in. Older mail past these stays on the server; the rest of each message is downloaded when it's opened.	Nieuwe e-mail komt altijd binnen. Oudere e-mail blijft op de server; de rest van elk bericht wordt bij openen gedownload.
+	New mail always comes in. Mail kept here is downloaded whole, a little at a time; older mail stays on the server, where it can still be read.	Nieuwe e-mail komt altijd binnen. E-mail die hier wordt bewaard, wordt beetje bij beetje volledig gedownload; oudere e-mail blijft op de server, waar je die nog kunt lezen.
+	Keep mail from the last	Periode van bewaarde e-mail
+	3 days	3 dagen
+	2 weeks	2 weken
+	3 months	3 maanden
+	6 months	6 maanden
+	1 year	1 jaar
+	2 years	2 jaar
+	5 years	5 jaar
 	the newest 1,000	de nieuwste 1.000
 	the newest 40	de nieuwste 40
 	all	alle

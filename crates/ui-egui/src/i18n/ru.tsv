@@ -792,9 +792,15 @@
 	Shown: click to hide it	Показан: щёлкните, чтобы скрыть
 	Side by side	Рядом
 	Mail kept on this computer	Почта на этом компьютере
-	Of each folder, keep	Из каждой папки хранить
-	Download in full for reading offline	Загружать полностью для чтения без сети
-	New mail always comes in. Older mail past these stays on the server; the rest of each message is downloaded when it's opened.	Новая почта приходит всегда. Более старая остаётся на сервере; остальное в каждом письме загружается при открытии.
+	New mail always comes in. Mail kept here is downloaded whole, a little at a time; older mail stays on the server, where it can still be read.	Новая почта приходит всегда. Хранимая здесь почта постепенно загружается полностью; более старая остаётся на сервере, где её по-прежнему можно прочитать.
+	Keep mail from the last	Хранить почту за период
+	3 days	3 дня
+	2 weeks	2 недели
+	3 months	3 месяца
+	6 months	6 месяцев
+	1 year	1 год
+	2 years	2 года
+	5 years	5 лет
 	the newest 1,000	последние 1000
 	the newest 40	последние 40
 	all	все

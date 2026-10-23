@@ -621,21 +621,23 @@ fn a_microsoft_account_moves_to_graph() {
     let _ = std::fs::remove_dir_all(store.root());
 }
 
-/// Issue #1: how much mail is kept on this computer is a setting (Outlook's "Mail to keep
-/// offline"), told to the network side ahead of anything queued.
+/// Issue #1: how much mail is kept on this computer is a setting, as Outlook's Cached Exchange
+/// Mode keeps it: mail received in the last so many days (two years unless chosen), whole;
+/// told to the network side ahead of anything queued.
 #[test]
 fn how_much_mail_is_kept_is_a_setting() {
     let mut s = sample_session("keep-mail");
-    assert_eq!((s.prefs.keep_messages, s.prefs.keep_offline), (1000, 40));
+    assert_eq!(s.prefs.keep_days, 730, "two years");
     s.jobs_push_for_test(Job::SyncAll { account: "sample".into() });
-    s.run("account.keepMail", &json!({"messages": 0, "offline": 200})).unwrap();
+    s.run("account.keepMail", &json!({"days": 0})).unwrap();
     let jobs = s.take_jobs();
-    assert!(matches!(jobs.first(), Some(Job::SetSync { messages: 0, offline: 200 })), "{jobs:?}");
-    s.run("account.keepMail", &json!({"messages": 5000})).unwrap();
-    s.run("account.keepMail", &json!({"messages": 20000})).unwrap();
+    assert!(matches!(jobs.first(), Some(Job::SetSync { days: 0, messages: 0, full: true })), "{jobs:?}");
+    s.run("account.keepMail", &json!({"days": 30})).unwrap();
+    s.run("account.keepMail", &json!({"days": 365})).unwrap();
     let jobs = s.take_jobs();
     assert_eq!(jobs.iter().filter(|j| matches!(j, Job::SetSync { .. })).count(), 1, "the last one only");
-    assert!(matches!(jobs.first(), Some(Job::SetSync { messages: 20000, offline: 200 })));
+    assert!(matches!(jobs.first(), Some(Job::SetSync { days: 365, .. })));
+    assert!(s.run("account.keepMail", &json!({})).is_err(), "how long is needed");
 }
 
 /// Looking through a big mailbox (the address book reads every folder) keeps only so many

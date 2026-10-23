@@ -115,7 +115,17 @@ pub fn sync_folder(c: &Client, st: &mut State, store: &Store, account: &str, fol
     // ago): nothing to list. A pass over a hundred folders was a listing of each, up to its
     // whole window, every time — most of them unchanged since the last pass.
     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX));
-    let mut mark = jmap::FolderMark { stamp, total, unread, window: opts.window, at: now, ahead: opts.prefetch, sync: String::new(), too_big: None };
+    let mut mark = jmap::FolderMark {
+        stamp,
+        total,
+        unread,
+        window: opts.window,
+        at: now,
+        ahead: opts.prefetch,
+        sync: String::new(),
+        too_big: None,
+        days: opts.since_days,
+    };
     let same = |m: &jmap::FolderMark| {
         !mark.stamp.is_empty()
             && m.stamp == mark.stamp

@@ -208,9 +208,10 @@ pub enum Job {
     /// Work offline (every account's connection closed, changes and mail kept to send later), or
     /// connect again.
     WorkOffline { on: bool },
-    /// How much mail is kept on this computer: the newest `messages` of each folder (0: all of
-    /// them), and the newest `offline` of them downloaded in full ahead of reading.
-    SetSync { messages: u32, offline: u32 },
+    /// How much mail is kept on this computer, as Outlook's Cached Exchange Mode: what came in
+    /// the last `days` (0: all of it), at most the newest `messages` of each folder (0: as many
+    /// as the server lists); `full`: every message kept is downloaded whole in the end.
+    SetSync { days: u32, messages: u32, full: bool },
     /// Read the account's automatic replies from the server.
     GetVacation { account: String },
     /// Change them.

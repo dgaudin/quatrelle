@@ -793,9 +793,15 @@
 	Shown: click to hide it	Visível: clique para ocultar
 	Side by side	Lado a lado
 	Mail kept on this computer	E-mail mantido neste computador
-	Of each folder, keep	De cada pasta, manter
-	Download in full for reading offline	Baixar completos para ler offline
-	New mail always comes in. Older mail past these stays on the server; the rest of each message is downloaded when it's opened.	E-mails novos sempre chegam. Os mais antigos ficam no servidor; o restante de cada mensagem é baixado ao abri-la.
+	New mail always comes in. Mail kept here is downloaded whole, a little at a time; older mail stays on the server, where it can still be read.	Os e-mails novos sempre chegam. Os e-mails mantidos aqui são baixados por completo, aos poucos; os mais antigos ficam no servidor, onde ainda podem ser lidos.
+	Keep mail from the last	Período de e-mails mantidos
+	3 days	3 dias
+	2 weeks	2 semanas
+	3 months	3 meses
+	6 months	6 meses
+	1 year	1 ano
+	2 years	2 anos
+	5 years	5 anos
 	the newest 1,000	os 1.000 mais recentes
 	the newest 40	os 40 mais recentes
 	all	todos
