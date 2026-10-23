@@ -12,6 +12,11 @@
 #![cfg_attr(all(target_os = "windows", not(debug_assertions)), windows_subsystem = "windows")]
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
+/// See `Cargo.toml`: memory freed is given back to the system rather than kept by malloc.
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[global_allocator]
+static ALLOCATOR: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
+
 use quatrelle_ui_egui::backstage::{Backstage, Page};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -185,6 +190,21 @@ impl eframe::App for App {
     }
 }
 
+/// jemalloc purges freed pages only when the thread that freed them allocates again, so a sync
+/// thread that ends, or a window left alone, kept them; its background thread purges them after
+/// ten seconds unused. One is enough.
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+fn give_back_freed_memory() {
+    let _ = tikv_jemalloc_ctl::max_background_threads::write(1);
+    match tikv_jemalloc_ctl::background_thread::write(true) {
+        Ok(()) => log::info!("memory: freed memory goes back to the system"),
+        Err(e) => log::warn!("memory: freed memory stays with the app (no background thread: {e})"),
+    }
+}
+
+#[cfg(not(all(target_os = "linux", target_arch = "x86_64")))]
+fn give_back_freed_memory() {}
+
 fn main() -> eframe::Result {
     // `args()` panics on an argument that isn't Unicode (a file name in another encoding).
     let args: Vec<String> = std::env::args_os().skip(1).map(|a| a.to_string_lossy().into_owned()).collect();
@@ -246,6 +266,7 @@ fn main() -> eframe::Result {
     if let Some(path) = logfile::start(root.as_deref(), echo) {
         log::info!("{} started; log at {}", version_line(), path.display());
     }
+    give_back_freed_memory();
     if let Some(dir) = &portable.dir {
         log::info!("portable: everything is kept in {}", dir.display());
     }
@@ -521,6 +542,15 @@ fn run(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The allocator gives freed memory back by itself (Linux on x86-64).
+    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+    #[test]
+    fn freed_memory_goes_back_to_the_system() {
+        give_back_freed_memory();
+        assert_eq!(tikv_jemalloc_ctl::background_thread::read().ok(), Some(true));
+        assert_eq!(tikv_jemalloc_ctl::max_background_threads::read().ok(), Some(1));
+    }
     use quatrelle_ui_egui::VideoFrame;
 
     /// eframe is used without its default features, and copy and paste are one of them since

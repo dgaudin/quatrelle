@@ -54,3 +54,75 @@ fn big_mailbox() {
     step("address book", || s.address_book("all", "zo").len());
     step("rest", || std::thread::sleep(Duration::from_secs(2)));
 }
+
+fn rss() -> String {
+    let s = std::fs::read_to_string("/proc/self/status").unwrap_or_default();
+    let get = |k: &str| {
+        s.lines().find(|l| l.starts_with(k)).map(|l| l.split_whitespace().nth(1).unwrap_or("0").parse::<u64>().unwrap_or(0) / 1024).unwrap_or(0)
+    };
+    format!("rss {} MB, peak {} MB", get("VmRSS:"), get("VmHWM:"))
+}
+
+/// The owner's mailbox's size, seeded: what each step leaves in memory.
+#[test]
+#[ignore]
+fn seeded_big_mailbox_memory() {
+    let folders: usize = std::env::var("MC_FOLDERS").ok().and_then(|v| v.parse().ok()).unwrap_or(110);
+    let per: u32 = std::env::var("MC_PER").ok().and_then(|v| v.parse().ok()).unwrap_or(5000);
+    let dir = std::env::temp_dir().join(format!("mc-mem-{}", std::process::id()));
+    let store = Store::open_packed(dir.join("root"), dir.join("files")).unwrap();
+    let t = Instant::now();
+    crate::sample::seed_big_mailbox(&store, folders, per, 1_800_000_000).unwrap();
+    println!("seeded {} in {:.0} s; {}", folders * per as usize, t.elapsed().as_secs_f64(), rss());
+    drop(store);
+    let store = Store::open_packed(dir.join("root"), dir.join("files")).unwrap();
+    let mut s = Session::open(Some(store), Clock::new(1_800_000_000, 0));
+    println!("open: {}", rss());
+    s.run("folder.open", &json!({"account": "big", "folder": "INBOX"})).unwrap();
+    println!("inbox: {} messages; {}", s.list.len(), rss());
+    s.run("folder.open", &json!({"account": "big", "folder": "Folder50"})).unwrap();
+    println!("another folder: {}", rss());
+    let n = s.suggest_contacts_now("ann12", 8).len();
+    println!("suggestions ({n}): {}", rss());
+    let n = s.address_book_now("all", "zo").len();
+    println!("address book ({n}): {}", rss());
+    let n = s.run_search("Message 4242", crate::SearchScope::All);
+    println!("search everything ({n}): {}", rss());
+    s.run("folder.open", &json!({"account": "big", "folder": "INBOX"})).unwrap();
+    println!("back to the inbox: {}", rss());
+    drop(s);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A copy of a real cache (`MC_CACHE` holding `root/` and `files/`): what each step leaves in
+/// memory. Nothing is sent: the session's jobs are never run.
+#[test]
+#[ignore]
+fn real_cache_memory() {
+    let cache = PathBuf::from(std::env::var("MC_CACHE").expect("MC_CACHE"));
+    let store = Store::open_packed(cache.join("root"), cache.join("files")).unwrap();
+    let t = Instant::now();
+    let mut s = Session::open(Some(store), Clock::new(1_800_000_000, 0));
+    let total: u64 = s.accounts.iter().flat_map(|a| a.folders.iter()).map(|f| u64::from(f.total)).sum();
+    println!(
+        "open ({} folders, {total} messages) in {:.1} s: {}",
+        s.accounts.iter().map(|a| a.folders.len()).sum::<usize>(),
+        t.elapsed().as_secs_f64(),
+        rss()
+    );
+    let acc = s.accounts.first().map(|a| a.config.id.clone()).unwrap_or_default();
+    let t = Instant::now();
+    s.run("folder.open", &json!({"account": acc, "folder": "INBOX"})).unwrap();
+    println!("inbox: {} messages in {:.1} s; {}", s.list.len(), t.elapsed().as_secs_f64(), rss());
+    let t = Instant::now();
+    let n = s.suggest_contacts_now("ma", 8).len();
+    println!("suggestions ({n}) in {:.1} s: {}", t.elapsed().as_secs_f64(), rss());
+    let t = Instant::now();
+    let n = s.run_search("facture", crate::SearchScope::Current);
+    println!("search the inbox ({n}) in {:.1} s: {}", t.elapsed().as_secs_f64(), rss());
+    let t = Instant::now();
+    let n = s.run_search("facture", crate::SearchScope::All);
+    println!("search everything ({n}) in {:.1} s: {}", t.elapsed().as_secs_f64(), rss());
+    s.run("folder.open", &json!({"account": acc, "folder": "INBOX"})).unwrap();
+    println!("back to the inbox: {}", rss());
+}

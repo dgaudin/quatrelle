@@ -155,6 +155,19 @@ fn server_rules_go_to_the_server_and_keep_their_id() {
     // a hundred reads a pass on a big mailbox.
     s.apply(quatrelle_model::Event::Status { account: account.clone(), status: SyncStatus::Online { at: NOW + 60 } });
     assert_eq!(asked(&mut s), 0, "read on coming online, not on every Online");
+    // Each look for new mail goes through Syncing to Online again, every half minute: the
+    // rules were read on each, all day long.
+    for i in 1..4 {
+        s.apply(quatrelle_model::Event::Status { account: account.clone(), status: SyncStatus::Syncing { folder: "INBOX".into() } });
+        s.apply(quatrelle_model::Event::Status { account: account.clone(), status: SyncStatus::Online { at: NOW + 60 + i * 30 } });
+    }
+    assert_eq!(asked(&mut s), 0, "a look for new mail doesn't read the rules");
+    // Losing the server starts it over: read when it answers again, and once it's online.
+    s.apply(quatrelle_model::Event::Status { account: account.clone(), status: SyncStatus::Error { error: "timed out".into() } });
+    s.apply(quatrelle_model::Event::Status { account: account.clone(), status: SyncStatus::Syncing { folder: "INBOX".into() } });
+    assert_eq!(asked(&mut s), 1, "read again once the server answers");
+    s.apply(quatrelle_model::Event::Status { account: account.clone(), status: SyncStatus::Online { at: NOW + 300 } });
+    assert_eq!(asked(&mut s), 1, "and on coming online");
     // A refusal says nothing of what the server keeps: the list stays.
     s.apply(quatrelle_model::Event::ServerRules {
         account: account.clone(),
