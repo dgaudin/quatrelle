@@ -329,6 +329,13 @@ impl Data {
                         let since = cond.find("Constant").and_then(|c| c.attr("Value")).unwrap_or_default().to_string();
                         list.retain(|i| i.received.as_str() >= since.as_str());
                     }
+                    // And older than that (read on the server, past what's kept).
+                    if let Some(cond) = restriction.find("IsLessThan")
+                        && cond.find("FieldURI").and_then(|f| f.attr("FieldURI")) == Some("item:DateTimeReceived")
+                    {
+                        let before = cond.find("Constant").and_then(|c| c.attr("Value")).unwrap_or_default().to_string();
+                        list.retain(|i| i.received.as_str() < before.as_str());
+                    }
                     let mut all = Vec::new();
                     restriction.all("IsEqualTo", &mut all);
                     for cond in all {

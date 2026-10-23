@@ -178,6 +178,13 @@ pub enum Job {
     /// Keep `more` of a folder's older messages than it keeps now, fetched from the server
     /// (mail past what's kept on this computer, shown when asked for).
     MoreMail { account: String, folder: String, more: u32 },
+    /// A folder's mail older than what's kept on this computer, read on the server and held in
+    /// memory only (Cached Exchange Mode's "more on the server"): the next page from `offset`,
+    /// answered by [`Event::Older`].
+    Older { account: String, folder: String, offset: u32 },
+    /// A message's source read on the server for showing, not kept (mail older than what's
+    /// kept): answered by [`Event::Body`] as any.
+    ReadOnline { key: MessageKey },
     /// Search these folders on the server for `query` (the search box's words), for mail past
     /// what's kept here; the messages found come into their folders' lists, answered by
     /// [`Event::ServerSearched`], as they're found. `search` names the search: every account's
@@ -268,11 +275,12 @@ impl Job {
     pub fn account(&self) -> &str {
         match self {
             Job::Start { account, .. } | Job::SmtpPassword { account, .. } => &account.id,
-            Job::FetchBody { key } | Job::Vote { key, .. } => &key.account,
+            Job::FetchBody { key } | Job::ReadOnline { key } | Job::Vote { key, .. } => &key.account,
             Job::Remove { account }
             | Job::SyncAll { account }
             | Job::SyncFolder { account, .. }
             | Job::MoreMail { account, .. }
+            | Job::Older { account, .. }
             | Job::SearchServer { account, .. }
             | Job::Apply { account, .. }
             | Job::Send { account, .. }
@@ -360,6 +368,15 @@ pub enum Event {
     FolderChanged {
         account: String,
         folder: String,
+    },
+    /// A page of a folder's older mail read on the server ([`Job::Older`]), not kept; `more`
+    /// when the server has more past it; `error` when it couldn't be asked.
+    Older {
+        account: String,
+        folder: String,
+        items: Vec<crate::Summary>,
+        more: bool,
+        error: Option<String>,
     },
     /// What the server found for a search (whole messages, ready to show), merged with what the
     /// local index found; `error` when it couldn't be asked (offline, a transport without one).

@@ -4,6 +4,10 @@ use super::*;
 
 impl Session {
     pub fn open_view(&mut self, view: View) {
+        // Older mail read on the server belongs to the folder it was read for.
+        if !matches!((&view, &self.older), (View::Folder { account, folder }, Some((a, f, ..))) if a == account && f == folder) {
+            self.older = None;
+        }
         // A folder not kept on this computer (a public folder, a shared mailbox's when they
         // aren't kept) is read from the server when it's opened, as in Outlook: its newest few
         // hundred come in, and the list fills as they do.
@@ -78,7 +82,7 @@ impl Session {
         };
         match cached {
             Some(raw) => self.show_body(key, &raw),
-            None => self.jobs.push(Job::FetchBody { key: key.clone() }),
+            None => self.jobs.push(self.fetch_job(key)),
         }
         let unread = key.folder != OUTBOX && self.summary(key).is_some_and(|m| !m.flags.seen);
         if mark && unread && self.prefs.mark_read_on_open {
@@ -108,13 +112,24 @@ impl Session {
                     w.parsed = mime::parse(&raw);
                     w.error = w.parsed.is_none().then(|| "this message could not be read".to_string());
                 }
-                None => self.jobs.push(Job::FetchBody { key: key.clone() }),
+                None => self.jobs.push(self.fetch_job(key)),
             }
             self.windows.push(w);
             // Opened on its own (a double-click): read, whatever the reading pane does.
             self.mark_seen(key);
         }
         Ok(serde_json::json!({"key": key.to_id(), "windows": self.windows.len()}))
+    }
+
+    /// How a message not on this computer is brought: kept as it comes, or, older than what's
+    /// kept, read on the server for showing only.
+    pub(super) fn fetch_job(&self, key: &MessageKey) -> Job {
+        if self.is_older(key) { Job::ReadOnline { key: key.clone() } } else { Job::FetchBody { key: key.clone() } }
+    }
+
+    /// Whether a message is one of the older mail read on the server, not kept.
+    pub(super) fn is_older(&self, key: &MessageKey) -> bool {
+        self.older.as_ref().is_some_and(|(_, _, items, _)| items.iter().any(|m| &m.key == key))
     }
 
     pub fn close_window(&mut self, key: &MessageKey) {

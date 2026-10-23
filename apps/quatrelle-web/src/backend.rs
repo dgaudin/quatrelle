@@ -527,6 +527,9 @@ async fn job(sh: &Rcs, id: &str, j: Job) {
         | Job::ExportPst { .. }
         | Job::WorkOffline { .. }
         | Job::SetSync { .. }
+        // Older mail read online is Exchange's; the browser's accounts keep more instead.
+        | Job::Older { .. }
+        | Job::ReadOnline { .. }
         | Job::Search { .. } => {}
     }
 }

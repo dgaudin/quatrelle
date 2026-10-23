@@ -350,6 +350,8 @@ struct Worker {
 
 /// Where an account keeps its folders' own windows.
 const WINDOWS: &str = "windows.json";
+/// Older mail read on the server a page at a time (Cached Exchange Mode's "more on the server").
+const OLDER_PAGE: usize = 100;
 /// Messages downloaded whole in one step ahead of reading: a step is short, so whatever is
 /// asked meanwhile waits for one at most.
 const AHEAD_STEP: usize = 20;

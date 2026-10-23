@@ -41,6 +41,8 @@ impl Worker {
             }
             Job::SearchServer { folders, query, search, .. } => self.search_server(&folders, query, search),
             Job::FetchBody { key } => self.fetch(key),
+            Job::Older { folder, offset, .. } => self.older(&folder, offset),
+            Job::ReadOnline { key } => self.read_online_body(key),
             Job::Search { query, folder, .. } => self.search(query, folder),
             // Already in the cache and ops.json (the pool wrote them): push the queue.
             Job::Apply { op, .. } if self.acc.pop.is_none() => {

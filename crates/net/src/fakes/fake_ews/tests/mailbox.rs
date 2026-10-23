@@ -567,6 +567,20 @@ fn mail_is_kept_for_a_time_and_whole() {
     pool.submit(Job::SyncAll { account: "a1".into() });
     eventually("the new mail", || kept().contains(&"Just now".to_string()));
     assert!(kept().contains(&"Forwarded long ago".to_string()), "a message come lately stays, whatever its own date");
+    // What's older is read on the server, a page at a time, and not kept; nor is a message of
+    // it opened.
+    pool.submit(Job::Older { account: "a1".into(), folder: "INBOX".into(), offset: 0 });
+    let seen = until(&pool, "older mail", |e| matches!(e, Event::Older { .. }));
+    let (items, more, error) = match seen.last() {
+        Some(Event::Older { items, more, error, .. }) => (items.clone(), *more, error.clone()),
+        other => (Vec::new(), true, Some(format!("{other:?}"))),
+    };
+    assert_eq!((items.iter().map(|m| m.subject.as_str()).collect::<Vec<_>>(), more, error), (vec!["Last year"], false, None));
+    let old = items[0].key.clone();
+    pool.submit(Job::ReadOnline { key: old.clone() });
+    let seen = until(&pool, "its source", |e| matches!(e, Event::Body { key, .. } if *key == old));
+    assert!(matches!(seen.last(), Some(Event::Body { raw, .. }) if raw.windows(9).any(|w| w == b"Last year")));
+    assert!(!store.has_body(&old) && store.load_folder("a1", "INBOX").unwrap().find(old.uid).is_none(), "read, not kept");
     // A shorter time: what's older goes, with its source.
     let ten = store.load_folder("a1", "INBOX").unwrap().messages.iter().find(|m| m.subject == "Ten days ago").map(|m| m.key.clone()).unwrap();
     pool.submit(Job::SetSync { days: 5, messages: 0, full: true });
