@@ -340,6 +340,8 @@ struct Worker {
     /// still missing, to let go of a folder that no longer gets anywhere.
     ahead: VecDeque<String>,
     ahead_left: Option<(String, usize)>,
+    /// When the Inbox is next looked at while downloading ahead.
+    ahead_poll: Instant,
     /// The server search still wanted (the pool's).
     search: Arc<AtomicU64>,
     /// When the Inbox is next looked at, on a server that can't say when mail comes (no IDLE,
@@ -355,6 +357,11 @@ const OLDER_PAGE: usize = 100;
 /// Messages downloaded whole in one step ahead of reading: a step is short, so whatever is
 /// asked meanwhile waits for one at most.
 const AHEAD_STEP: usize = 20;
+/// How often the Inbox is looked at while messages are downloaded ahead (IDLE and push wait).
+#[cfg(not(test))]
+const AHEAD_POLL: Duration = Duration::from_secs(30);
+#[cfg(test)]
+const AHEAD_POLL: Duration = Duration::from_millis(300);
 /// The newest messages of a folder read on the server (a public folder not followed, a shared
 /// mailbox not kept) listed when it's opened (Show more asks for more, as for any folder).
 #[cfg(not(test))]
@@ -395,6 +402,7 @@ impl Worker {
             followed,
             ahead: VecDeque::new(),
             ahead_left: None,
+            ahead_poll: Instant::now(),
             queue: VecDeque::new(),
             backoff: Duration::from_secs(5),
             next_attempt: Instant::now(),
@@ -480,9 +488,14 @@ impl Worker {
                 self.sync_all(&rx);
                 continue;
             }
-            // Nothing asked, and the Inbox not due yet: a few more messages downloaded whole.
-            if !self.ahead.is_empty() && Instant::now() < self.next_poll {
-                self.ahead_step();
+            // Nothing asked: a few more messages downloaded whole, with a look at the Inbox every
+            // half minute meanwhile.
+            if !self.ahead.is_empty() {
+                if Instant::now() < self.ahead_poll {
+                    self.ahead_step();
+                } else {
+                    self.look_between_downloads();
+                }
                 continue;
             }
             self.wait_for_mail(&rx);

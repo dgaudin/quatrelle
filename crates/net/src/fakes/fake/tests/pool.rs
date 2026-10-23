@@ -13,6 +13,7 @@ fn mailbox_settings_over_imap_and_managesieve() {
 x"
         .to_vec(),
         modseq: 1,
+        received: RECEIVED,
     });
     st.lock().unwrap().mailbox("Archive").unwrap().uid_next = 2;
     let imap_port = serve_tcp(&st);
@@ -512,4 +513,48 @@ fn the_outgoing_server_signs_in_with_its_own_user_name_and_password() {
     assert!(!log.contains(&crate::imap::base64(b"\0me@studio.example\0pw")), "not as the IMAP user");
     pool.submit(Job::Remove { account: "a1".into() });
     let _ = std::fs::remove_dir_all(store.root());
+}
+
+/// An IMAP account keeps its mail whole, as Outlook's Cached Exchange Mode keeps it offline:
+/// the newest few with the folder's list, the rest downloaded ahead through the worker while
+/// nothing else is asked; and new mail still comes in meanwhile: the Inbox is looked at between
+/// downloads (IDLE and polls waited until they were done).
+#[test]
+fn imap_mail_kept_is_downloaded_whole_through_the_worker() {
+    let st = State::new();
+    {
+        let mut s = st.lock().unwrap();
+        for n in 1..=1000 {
+            s.add_raw("INBOX", format!("Subject: Message {n}\r\nMessage-ID: <w{n}@x>\r\n\r\nbody {n}\r\n").into_bytes());
+        }
+    }
+    let port = serve_tcp(&st);
+    let store = store("worker-ahead-imap");
+    let mut pool = crate::worker::Pool::new(store.clone(), std::sync::Arc::new(crate::worker::MemoryCredentials::default()));
+    pool.submit(Job::SetSync { days: 0, messages: 0, full: true });
+    let account = AccountConfig {
+        id: "a1".into(),
+        email: "me@studio.example".into(),
+        username: "me@studio.example".into(),
+        imap: ServerConfig { host: "127.0.0.1".into(), port, security: Security::None },
+        smtp: ServerConfig { host: "127.0.0.1".into(), port: 1, security: Security::None },
+        ..Default::default()
+    };
+    pool.submit(Job::Start { account, password: Some(Secret("pw".into())) });
+    until(&pool, "online", |e| matches!(e, Event::Status { status: SyncStatus::Online { .. }, .. }));
+    // New mail while the rest downloads: it comes before they're all in (a look at the Inbox
+    // between downloads, not the next poll two minutes on).
+    st.lock().unwrap().add_raw("INBOX", b"Subject: Just now\r\nMessage-ID: <now@x>\r\n\r\nhi\r\n".to_vec());
+    let missing =
+        |store: &Store| store.load_folder("a1", "INBOX").map(|f| f.messages.iter().filter(|m| !store.has_body(&m.key)).count()).unwrap_or(0);
+    let end = Instant::now() + Duration::from_secs(20);
+    while !store.load_folder("a1", "INBOX").unwrap().messages.iter().any(|m| m.subject == "Just now") {
+        assert!(Instant::now() < end, "new mail never came while downloading");
+        let _ = pool.wait(Duration::from_millis(20));
+    }
+    let end = Instant::now() + Duration::from_secs(60);
+    while missing(&store) > 0 {
+        assert!(Instant::now() < end, "never downloaded whole: {} missing", missing(&store));
+        let _ = pool.wait(Duration::from_millis(50));
+    }
 }

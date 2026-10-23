@@ -386,11 +386,19 @@ impl Worker {
         let Some(path) = self.ahead.front().cloned() else { return };
         let opts = self.options_for(&path);
         let (store, id) = (self.store.clone(), self.id());
-        let left = match self.conn.as_ref() {
+        let left = match self.conn.as_mut() {
             Some(Conn::Ews(c)) => crate::ews::download_ahead(c, &self.jstate, &store, &id, &path, &opts, AHEAD_STEP),
             Some(Conn::Graph(c)) => crate::graph::download_ahead(c, &self.jstate, &store, &id, &path, &opts, AHEAD_STEP),
+            Some(Conn::Jmap(c)) => jmap::download_ahead(c, &self.jstate, &store, &id, &path, &opts, AHEAD_STEP),
+            Some(Conn::Imap(c)) => crate::sync::download_ahead(c, &store, &id, &path, &opts, AHEAD_STEP),
             _ => Ok(0),
         };
+        // IMAP, JMAP and Graph write the folder's list with what the sources say: an edit made
+        // meanwhile (a read mark) is put back on it, as after a sync.
+        let lists = !matches!(self.conn, Some(Conn::Ews(_)));
+        if lists && self.reapply_waiting(&path) {
+            self.sink.emit(Event::FolderChanged { account: id.clone(), folder: path.clone() });
+        }
         let done = match left {
             Ok(0) => true,
             Ok(n) => {
@@ -406,6 +414,27 @@ impl Worker {
         if done {
             self.ahead.pop_front();
             self.ahead_left = None;
+            if lists {
+                self.sink.emit(Event::FolderChanged { account: id, folder: path });
+            }
+        }
+    }
+
+    /// While messages are downloaded ahead, the Inbox is looked at every half minute (IDLE and
+    /// push wait until it's done), and a folder asked for soon (Sent Items after a send) is read.
+    pub(super) fn look_between_downloads(&mut self) {
+        self.ahead_poll = Instant::now() + AHEAD_POLL;
+        self.next_poll = Instant::now() + self.poll_every();
+        if let Some(f) = self.inbox() {
+            self.sync_one(&f);
+        }
+        let now = Instant::now();
+        let (due, later): (Vec<_>, Vec<_>) = std::mem::take(&mut self.soon).into_iter().partition(|(at, _)| *at <= now);
+        self.soon = later;
+        let mut folders: Vec<String> = due.into_iter().map(|(_, f)| f).collect();
+        folders.dedup();
+        for f in folders {
+            self.sync_one(&f);
         }
     }
 
