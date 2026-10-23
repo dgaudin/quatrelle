@@ -370,6 +370,9 @@ pub struct Session {
     /// Accounts whose rules were read on coming online: a look for new mail (every half minute)
     /// goes back to Syncing and then Online without reading them again.
     rules_online: std::collections::BTreeSet<String>,
+    /// The public folders each Exchange account's sync was last told to follow
+    /// ([`Session::follow_public_favorites`]).
+    followed_public: HashMap<String, Vec<String>>,
     /// The last reason each account's server gave for refusing its rules that was told this
     /// session: the same one isn't told again on every try.
     rules_refused_told: HashMap<String, String>,
@@ -497,6 +500,7 @@ impl Session {
             flushed: BTreeSet::new(),
             rules_asked: std::collections::BTreeSet::new(),
             rules_online: std::collections::BTreeSet::new(),
+            followed_public: HashMap::new(),
             rules_refused_told: HashMap::new(),
             jobs: Vec::new(),
             cache: HashMap::new(),

@@ -2,8 +2,10 @@
 
 use super::*;
 
-/// A full sync walks the Inbox first, then what mail is about, then the rest, the archive
-/// last: a mailbox of public folders and years of archives must not hold the Inbox back.
+/// A full sync walks the Inbox first, then what mail is about, then the rest, the archive and
+/// the public folders followed last: a mailbox of public folders and years of archives must not
+/// hold the Inbox back, nor the user's folders named after "Public Folders". The public folders
+/// not followed aren't walked: they're listed when opened.
 #[test]
 fn a_full_sync_starts_with_the_inbox() {
     use quatrelle_model::FolderRole;
@@ -23,6 +25,9 @@ fn a_full_sync_starts_with_the_inbox() {
         f("ASP", FolderRole::Other),
         f("Archives/2025", FolderRole::Archive),
         f("Public Folders", FolderRole::Other),
+        f("Public Folders/Reports", FolderRole::Other),
+        f("Public Folders/Team", FolderRole::Other),
+        f("Support", FolderRole::Other),
         f("Éléments envoyés", FolderRole::Sent),
         f("Brouillons", FolderRole::Drafts),
         f("Corbeille", FolderRole::Trash),
@@ -30,9 +35,9 @@ fn a_full_sync_starts_with_the_inbox() {
         Folder { selectable: false, ..f("Conteneur", FolderRole::Other) },
     ];
     assert_eq!(
-        sync_order(&folders),
-        ["INBOX", "Brouillons", "Éléments envoyés", "Corbeille", "ASP", "Public Folders", "Archives/2025"],
-        "Inbox, drafts, sent, trash, the rest (by name), the archive last; no containers"
+        sync_order(&folders, &BTreeSet::from(["Public Folders/Team".to_string()])),
+        ["INBOX", "Brouillons", "Éléments envoyés", "Corbeille", "ASP", "Support", "Archives/2025", "Public Folders/Team"],
+        "Inbox, drafts, sent, trash, the rest (by name), the archive, the public folder followed; no containers"
     );
 }
 

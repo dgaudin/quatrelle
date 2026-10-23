@@ -298,6 +298,20 @@ impl Job {
     }
 }
 
+/// The folder Exchange's public folders are listed under. They are the organisation's, often
+/// huge (years of automatic reports): as in Outlook, only the ones made Favorites are kept in
+/// sync in the background; another is read from the server when it is opened.
+pub const PUBLIC_FOLDERS: &str = "Public Folders";
+
+/// An account's public folders kept in sync ([`PUBLIC_FOLDERS`]): the Favorites among them, a
+/// list of paths the session writes with the account for its sync to read.
+pub const FOLLOWED_PUBLIC_DOC: &str = "public-followed.json";
+
+/// Whether a folder path is one of Exchange's public folders (or the folder they're under).
+pub fn is_public_folder(path: &str) -> bool {
+    path.strip_prefix(PUBLIC_FOLDERS).is_some_and(|rest| rest.is_empty() || rest.starts_with('/'))
+}
+
 /// How an account's connection is doing.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "state", rename_all = "camelCase")]

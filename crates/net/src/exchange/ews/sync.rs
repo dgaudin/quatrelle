@@ -115,7 +115,7 @@ pub fn sync_folder(c: &Client, st: &mut State, store: &Store, account: &str, fol
     // ago): nothing to list. A pass over a hundred folders was a listing of each, up to its
     // whole window, every time — most of them unchanged since the last pass.
     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX));
-    let mut mark = jmap::FolderMark { stamp, total, unread, window: opts.window, at: now, ahead: opts.prefetch, sync: String::new() };
+    let mut mark = jmap::FolderMark { stamp, total, unread, window: opts.window, at: now, ahead: opts.prefetch, sync: String::new(), too_big: None };
     let same = |m: &jmap::FolderMark| {
         !mark.stamp.is_empty()
             && m.stamp == mark.stamp
@@ -132,7 +132,8 @@ pub fn sync_folder(c: &Client, st: &mut State, store: &Store, account: &str, fol
     let before = st.marks.remove(folder);
     // Its state as last read known: only what changed since is asked (new mail, read marks,
     // deletions), not a listing of the folder's whole window.
-    if let Some(since) = before.filter(|m| kept && !m.sync.is_empty() && m.window == opts.window).map(|m| m.sync) {
+    let too_big = before.as_ref().and_then(|m| m.too_big).filter(|at| now - at < TOO_BIG_ASKED_AGAIN);
+    if let Some(since) = before.filter(|m| kept && !opts.list_only && !m.sync.is_empty() && m.window == opts.window).map(|m| m.sync) {
         match changes(c, st, store, account, folder, &since, opts) {
             Ok((mut report, sync)) => {
                 mark.sync = sync;
@@ -147,11 +148,19 @@ pub fn sync_folder(c: &Client, st: &mut State, store: &Store, account: &str, fol
         }
     }
     // Listed in full; the folder's state taken first, so a change made while it's listed comes
-    // again next time rather than being missed.
-    mark.sync = state_now(c, &id).unwrap_or_else(|e| {
-        log::info!("{account}: {}: no sync state ({e}); listed in full next time too", utf7::decode(folder));
-        String::new()
-    });
+    // again next time rather than being missed. Not for a folder only listed, nor one known to
+    // be too big for it (asked again a week later).
+    mark.too_big = too_big;
+    if !opts.list_only && too_big.is_none() {
+        match state_now(c, &id) {
+            Ok(Some(state)) => mark.sync = state,
+            Ok(None) => {
+                log::info!("{account}: {}: too many messages to follow its changes; listed in full, asked again in a week", utf7::decode(folder));
+                mark.too_big = Some(now);
+            }
+            Err(e) => log::info!("{account}: {}: no sync state ({e}); listed in full next time too", utf7::decode(folder)),
+        }
+    }
     let newest = c.newest(&id, opts.window)?;
     let mut fs = store.load_folder(account, folder)?;
     let mut report = SyncReport::default();
@@ -213,20 +222,26 @@ pub fn sync_folder(c: &Client, st: &mut State, store: &Store, account: &str, fol
 const MARK_TRUSTED: i64 = 6 * 3600;
 
 /// Pages of changes read at most in one go (a folder with more catches up at the next read).
+#[cfg(not(test))]
 const CHANGE_PAGES: usize = 200;
+#[cfg(test)]
+const CHANGE_PAGES: usize = 3;
+
+/// How long a folder found too big to follow by its changes is listed without asking (seconds).
+const TOO_BIG_ASKED_AGAIN: i64 = 7 * 86_400;
 
 /// A folder's state as of now (`SyncFolderItems` from nothing, every page read and its items
-/// let go: only the state matters). Too big a folder is left without one.
-fn state_now(c: &Client, folder: &str) -> Result<String> {
+/// let go: only the state matters). Too big a folder has none (`None`).
+fn state_now(c: &Client, folder: &str) -> Result<Option<String>> {
     let mut state = String::new();
     for _ in 0..CHANGE_PAGES {
         let (_, next, last) = c.changes_since(folder, &state)?;
         state = next;
         if last {
-            return Ok(state);
+            return Ok(Some(state));
         }
     }
-    Err(NetError::No("too many messages to follow".into()))
+    Ok(None)
 }
 
 /// What changed in a folder since its state `since`, made on its list: new messages listed

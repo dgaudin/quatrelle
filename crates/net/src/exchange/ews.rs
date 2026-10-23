@@ -38,7 +38,7 @@ const MAX_FOLDERS: usize = 5000;
 const PUBLIC_DEPTH: usize = 6;
 const MAX_PUBLIC: usize = 500;
 /// The folder Exchange's public folders are listed under.
-pub const PUBLIC_FOLDERS: &str = "Public Folders";
+pub use quatrelle_model::PUBLIC_FOLDERS;
 /// Elements read from one answer at most, and how deep.
 const MAX_ELEMENTS: usize = 500_000;
 const MAX_DEPTH: usize = 64;
