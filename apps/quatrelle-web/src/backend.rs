@@ -263,7 +263,7 @@ async fn sync_one(sh: &Rcs, id: &str, path: &str) {
         (s.store.clone(), SyncOptions { window, ..s.opts })
     };
     let mut st = state(sh, id);
-    let r = quatrelle_jmap::sync_folder(&c, &mut st, &store, id, path, &opts).await;
+    let r = quatrelle_jmap::sync_folder(&c, &mut st, &store, id, path, &opts, now()).await;
     put_state(sh, id, st);
     match r {
         Ok(r) => {
