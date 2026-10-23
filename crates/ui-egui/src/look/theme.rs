@@ -270,6 +270,13 @@ pub fn box_color(bg: Option<[u8; 3]>, page: [u8; 3], t: &Tokens) -> Option<[u8; 
     bg.filter(|b| contrast(*b, page) > 1.06 && !(t.dark && luminance(*b) > 0.35 && saturation(*b) < 0.25))
 }
 
+/// The colour a message's border (a table's grid, a signature's rule) is drawn in on `page`:
+/// its own when that shows at all, else the theme's rule colour (a dark grey line on the dark
+/// theme's page would vanish).
+pub fn line_color(c: [u8; 3], page: [u8; 3], t: &Tokens) -> Color32 {
+    if contrast(c, page) >= 1.2 { Color32::from_rgb(c[0], c[1], c[2]) } else { t.border }
+}
+
 /// [`mail_colors`] for text on `page` (a coloured table cell's background).
 pub fn mail_colors_on(fg: Option<[u8; 3]>, bg: Option<[u8; 3]>, page: [u8; 3], t: &Tokens, default: Color32) -> (Color32, Option<Color32>) {
     let bg = box_color(bg, page, t);

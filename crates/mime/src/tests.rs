@@ -444,3 +444,27 @@ fn a_message_reads_in_its_own_sizes_and_typefaces() {
     assert!(picture.iter().all(|s| s.image.is_some()), "nothing beside the picture to push it down: {picture:?}");
     assert!(!rich.iter().flatten().any(|s| s.text.chars().any(|c| ('\u{E000}'..='\u{F8FF}').contains(&c))), "no marks left");
 }
+
+/// Underlined text comes through as such: `<u>`, `<ins>`, `text-decoration` set inline or by
+/// a style sheet rule; a link's own look stays unless its style underlines it; and the editor
+/// keeps the underline of a signature pasted with one.
+#[test]
+fn underlined_text_reads_underlined() {
+    let html = r#"<style>.key { text-decoration: underline }</style>
+        <p>Plain <u>tagged</u> and <ins>inserted</ins> and <span style="text-decoration: underline">styled</span>
+        and <span style="text-decoration-line: underline dotted">lined</span> and <b class="key">ruled</b>;
+        <a href="https://example.com/a">a link</a>, <a href="https://example.com/b" style="text-decoration:none">a plain one</a>,
+        <a href="https://example.com/c" style="text-decoration:underline">an underlined one</a>.</p>"#;
+    let rich = html_to_rich(&crate::layout::inline_css(html));
+    let span = |text: &str| rich.iter().flatten().find(|s| s.text.contains(text)).cloned().unwrap_or_else(|| panic!("{text} in {rich:?}"));
+    for word in ["tagged", "inserted", "styled", "lined", "ruled"] {
+        assert!(span(word).underline, "{word}: {rich:?}");
+    }
+    assert!(!span("Plain").underline && !span("and").underline);
+    assert!(!span("a link").underline && !span("a plain one").underline, "a link draws as a link, not underlined by the message");
+    assert!(span("an underlined one").underline && span("an underlined one").link.is_some());
+    // Pasted into the editor, the underline is a style of the text.
+    let (text, styles) = pasted_html("<p>Hello <u>there</u></p>");
+    assert_eq!(text.trim(), "Hello there");
+    assert!(styles.style(text.find("there").unwrap_or(0)).underline && !styles.style(0).underline);
+}

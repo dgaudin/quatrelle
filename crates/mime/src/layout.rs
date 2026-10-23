@@ -21,11 +21,15 @@ use crate::RichText;
 
 mod blocks;
 mod clean;
+mod edges;
 mod styling;
 pub(crate) use blocks::background_pictures;
 use blocks::*;
 pub use clean::clean_html;
+use edges::*;
+pub use edges::{Border, Edges, MAX_BORDER, MAX_PADDING, MAX_RADIUS, Padding, VAlign};
 pub use styling::inline_css;
+pub(crate) use styling::{font_attr_px, font_px};
 
 /// Tables nested deeper than this are flattened into text.
 const MAX_DEPTH: usize = 12;
@@ -74,10 +78,17 @@ pub struct Table {
     /// A picture behind it (`background`, `background-image: url(…)`), covering it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub background_image: Option<String>,
-    /// A line down its left edge, in this colour (`border-left`: a signature's rule between the
-    /// logo and the name).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub border_left: Option<[u8; 3]>,
+    /// The lines along its edges (`border`, `border-left`: a signature's rule between the logo
+    /// and the name; a table's `border="1"`).
+    #[serde(default, skip_serializing_if = "Edges::is_none")]
+    pub borders: Edges,
+    /// How round its corners are, in pixels (`border-radius`).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub radius: u8,
+}
+
+fn is_zero(v: &u8) -> bool {
+    *v == 0
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -100,6 +111,25 @@ pub struct Cell {
     /// Boxes placed over the content (`position: absolute` in a `position: relative` box).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub overlays: Vec<Overlay>,
+    /// The lines along its edges (`border` on the cell, or 1 pixel each from the table's
+    /// `border="1"`).
+    #[serde(default, skip_serializing_if = "Edges::is_none")]
+    pub borders: Edges,
+    /// How round its corners are, in pixels (`border-radius`: a newsletter's button).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub radius: u8,
+    /// Its padding (top, right, bottom, left, in pixels) when the message sets one (`padding`,
+    /// the table's `cellpadding`); `None`: the reader's own.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub padding: Option<Padding>,
+    /// Where its content sits in its row (`valign`, `vertical-align`): the middle for a table's
+    /// cell unless it says otherwise, the top for boxes laid out as columns with CSS.
+    #[serde(default, skip_serializing_if = "is_top")]
+    pub valign: VAlign,
+}
+
+fn is_top(v: &VAlign) -> bool {
+    *v == VAlign::Top
 }
 
 /// A box placed over its container: `x` pixels from its left edge (from the right when
@@ -327,19 +357,6 @@ impl Node {
         (px >= 1.0).then(|| Width::Px(px.min(4000.0) as u32))
     }
 
-    /// The colour of a line down its left edge (`border-left`, or its colour and style apart),
-    /// when it draws one.
-    fn border_left(&self) -> Option<[u8; 3]> {
-        let shorthand = self.style("border-left").unwrap_or_default();
-        let style = self.style("border-left-style").unwrap_or_default();
-        let words: Vec<&str> = shorthand.split_whitespace().collect();
-        let drawn = |w: &str| matches!(w, "solid" | "dotted" | "dashed" | "double" | "groove" | "ridge" | "inset" | "outset");
-        if !(words.iter().any(|w| drawn(w)) || drawn(style.trim())) || words.iter().any(|w| matches!(*w, "none" | "hidden" | "0" | "0px" | "0pt")) {
-            return None;
-        }
-        self.style("border-left-color").and_then(|c| color(&c)).or_else(|| words.iter().find_map(|w| color(w))).or(Some([0x99, 0x99, 0x99]))
-    }
-
     /// A floated box's content width when it's one picture of a known width (see [`Cell::fit`]).
     fn picture_width(&self, depth: usize) -> Option<u32> {
         let mut found: Option<u32> = None;
@@ -474,7 +491,7 @@ impl Node {
     }
 }
 
-/// `#rgb`, `#rrggbb`, `rgb(r, g, b)` or a few colour names.
+/// `#rgb`, `#rrggbb`, `rgb(r, g, b)` or a colour's name.
 fn color(v: &str) -> Option<[u8; 3]> {
     let v = v.trim().trim_end_matches(';');
     if let Some(hex) = v.strip_prefix('#') {
@@ -493,75 +510,12 @@ fn color(v: &str) -> Option<[u8; 3]> {
             args.trim_end_matches(')').split(',').take(3).filter_map(|p| p.trim().parse::<f32>().ok()).map(|f| f.clamp(0.0, 255.0) as u8).collect();
         return Some([*parts.first()?, *parts.get(1)?, *parts.get(2)?]);
     }
-    match v {
-        "white" => Some([255, 255, 255]),
-        "black" => Some([0, 0, 0]),
-        _ => None,
-    }
+    named_color(v)
 }
 
 /// Elements whose content is text taken as it is, not markup.
 fn raw_text(tag: &str) -> bool {
     matches!(tag, "style" | "script" | "title" | "textarea" | "xmp" | "noembed" | "noframes" | "iframe")
-}
-
-/// How big text is, in pixels, from a CSS `font-size` (`20px`, `15pt`, `1.5em`, `x-large`).
-pub(crate) fn font_px(v: &str) -> Option<f32> {
-    let v = v.trim().to_ascii_lowercase();
-    let num = |s: &str| s.trim().parse::<f32>().ok().filter(|n| n.is_finite() && *n > 0.0);
-    let px = if let Some(n) = v.strip_suffix("px") {
-        num(n)?
-    } else if let Some(n) = v.strip_suffix("pt") {
-        num(n)? * 4.0 / 3.0
-    } else if let Some(n) = v.strip_suffix("rem").or_else(|| v.strip_suffix("em")) {
-        num(n)? * 16.0
-    } else if let Some(n) = v.strip_suffix('%') {
-        num(n)? * 0.16
-    } else {
-        match v.as_str() {
-            "large" => 18.0,
-            "x-large" => 24.0,
-            "xx-large" => 32.0,
-            "xxx-large" => 48.0,
-            _ => return None,
-        }
-    };
-    Some(px.min(400.0))
-}
-
-/// `<font size="…">` in pixels (1 to 7, as browsers size them; `+n` and `-n` from 3).
-pub(crate) fn font_attr_px(v: &str) -> Option<f32> {
-    let v = v.trim();
-    let n: i32 = if let Some(d) = v.strip_prefix('+') {
-        3i32.saturating_add(d.parse::<i32>().ok()?)
-    } else if let Some(d) = v.strip_prefix('-') {
-        3i32.saturating_sub(d.parse::<i32>().ok()?)
-    } else {
-        v.parse().ok()?
-    };
-    Some(match n.clamp(1, 7) {
-        1 => 10.0,
-        2 => 13.0,
-        3 => 16.0,
-        4 => 18.0,
-        5 => 24.0,
-        6 => 32.0,
-        _ => 48.0,
-    })
-}
-
-/// The heading level text of this size reads as (`0`: body text): mail sizes its titles with
-/// CSS or `<font size>` rather than `<h1>`.
-fn heading_for(px: f32) -> u8 {
-    if px >= 26.0 {
-        1
-    } else if px >= 21.0 {
-        2
-    } else if px >= 18.0 {
-        3
-    } else {
-        0
-    }
 }
 
 /// Elements that start a block of their own (a heading can't hold them).
