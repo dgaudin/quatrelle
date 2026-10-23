@@ -290,6 +290,8 @@ pub struct UiState {
     previews: HashMap<(MessageKey, usize), Option<egui::TextureHandle>>,
     /// Decoded web pictures, by address.
     web_pictures: HashMap<String, Option<egui::TextureHandle>>,
+    /// The heights of HTML messages' table cells as last drawn, for their rows' alignment.
+    cell_heights: reading::CellHeights,
     pub toast: Option<(String, bool, f64)>,
     seen_notices: usize,
     scroll_to_focus: bool,
@@ -443,6 +445,7 @@ impl MailApp {
                 dialog: None,
                 previews: HashMap::new(),
                 web_pictures: HashMap::new(),
+                cell_heights: reading::CellHeights::default(),
                 toast: None,
                 seen_notices: seen,
                 scroll_to_focus: false,

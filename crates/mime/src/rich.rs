@@ -524,6 +524,7 @@ fn span_style(sp: &Span) -> Style {
     Style {
         bold: sp.bold || sp.heading > 0,
         italic: sp.italic,
+        underline: sp.underline,
         strike: sp.strike,
         mono: sp.code,
         // The size and typeface the HTML gave it (a signature's 10-point Arial).
