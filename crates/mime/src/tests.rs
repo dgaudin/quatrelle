@@ -444,3 +444,19 @@ fn a_message_reads_in_its_own_sizes_and_typefaces() {
     assert!(picture.iter().all(|s| s.image.is_some()), "nothing beside the picture to push it down: {picture:?}");
     assert!(!rich.iter().flatten().any(|s| s.text.chars().any(|c| ('\u{E000}'..='\u{F8FF}').contains(&c))), "no marks left");
 }
+
+/// Addresses an HTML message writes out without a link (`www.…`, `https://…`, `name@host`) open
+/// as links, keeping their formatting; a real link stays as it is.
+#[test]
+fn addresses_written_in_html_are_links() {
+    let rich = html_to_rich(
+        r#"<p>Le site <b>www.example.com</b> et https://docs.example.org/guide?x=1.</p><p><a href="https://link.example">ici</a> ou <i>support@example.com</i></p>"#,
+    );
+    let link = |text: &str| rich.iter().flatten().find(|s| s.text == text).unwrap_or_else(|| panic!("{text} in {rich:?}")).clone();
+    let site = link("www.example.com");
+    assert_eq!((site.link.as_deref(), site.bold), (Some("http://www.example.com"), true));
+    assert_eq!(link("https://docs.example.org/guide?x=1").link.as_deref(), Some("https://docs.example.org/guide?x=1"));
+    assert_eq!(link("ici").link.as_deref(), Some("https://link.example"));
+    let mail = link("support@example.com");
+    assert_eq!((mail.link.as_deref(), mail.italic), (Some("mailto:support@example.com"), true));
+}

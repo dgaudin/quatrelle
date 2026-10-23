@@ -259,6 +259,8 @@ pub fn html_to_rich(html: &str) -> RichText {
             }
         }
         spans.retain(|s| !s.text.is_empty() || s.image.is_some());
+        // Addresses written out without a link (`www.…`, `https://…`, `name@host`) open as links.
+        let mut spans = crate::links::link_written_addresses(spans);
         // White space alone beside a picture (the indent of the markup around it): it made the
         // line wider than the picture's box, and the picture went to the next line.
         if spans.iter().any(|s| s.image.is_some()) {
