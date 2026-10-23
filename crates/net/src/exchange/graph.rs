@@ -209,16 +209,23 @@ impl Client {
         Ok(out)
     }
 
-    /// The newest `limit` messages of a folder with their list details ([`LIST_FIELDS`]), and its
-    /// (total, unread).
-    fn newest(&self, folder: &str, window: usize, owner: Option<&str>) -> Result<(Vec<Value>, (u32, u32))> {
+    /// The newest `window` messages of a folder with their list details ([`LIST_FIELDS`]), only
+    /// those received since `since` (Unix seconds) when the age of mail kept is limited, and the
+    /// folder's (total, unread).
+    fn newest(&self, folder: &str, window: usize, since: Option<i64>, owner: Option<&str>) -> Result<(Vec<Value>, (u32, u32))> {
         let me = who(owner);
         let page = window.clamp(1, 1000);
+        // Graph sorts a filtered listing only by a property its filter names first: the received
+        // time is both. A time before 1970 asks for all of it.
+        let since = since.filter(|t| *t > 0);
+        let filter = since.map(|t| format!("$filter={}&", http::pct(&format!("receivedDateTime ge {}", utc(t))))).unwrap_or_default();
         let mut entries = self.all(
-            &format!("{me}/mailFolders/{}/messages?$top={page}&$orderby=receivedDateTime%20desc&$select={LIST_FIELDS}", seg(folder)),
+            &format!("{me}/mailFolders/{}/messages?{filter}$top={page}&$orderby=receivedDateTime%20desc&$select={LIST_FIELDS}", seg(folder)),
             window.min(100_000),
         )?;
-        entries.retain(|m| m["id"].is_string());
+        // Measured here as the server measures it, should it list older mail all the same: one
+        // whose received time can't be read is older than any (its summary would have none).
+        entries.retain(|m| m["id"].is_string() && since.is_none_or(|t| received(m).is_some_and(|r| r >= t)));
         let ids = entries;
         let f = self.get(&format!("{me}/mailFolders/{}?$select=totalItemCount,unreadItemCount", seg(folder)))?;
         let count = |k: &str| f.get(k).and_then(Value::as_u64).and_then(|n| u32::try_from(n).ok()).unwrap_or(0);
@@ -346,6 +353,18 @@ impl Client {
     }
 }
 
+/// When the server received a message (`receivedDateTime`), in Unix seconds.
+fn received(m: &Value) -> Option<i64> {
+    m.get("receivedDateTime").and_then(Value::as_str).and_then(jmap::utc_date)
+}
+
+/// Unix seconds as an ISO 8601 UTC time (`2026-10-23T09:00:00Z`), as `$filter` takes them.
+fn utc(t: i64) -> String {
+    let (y, m, d) = quatrelle_model::dates::civil_from_days(t.div_euclid(86_400));
+    let s = t.rem_euclid(86_400);
+    format!("{y:04}-{m:02}-{d:02}T{:02}:{:02}:{:02}Z", s / 3600, s / 60 % 60, s % 60)
+}
+
 /// A message's flags as the model knows them.
 fn flags(m: &Value) -> Flags {
     let mut names: Vec<&str> = Vec::new();
@@ -428,6 +447,7 @@ mod rules;
 mod sync;
 
 use requests::send_through_limits;
+pub(crate) use sync::download_ahead;
 pub use sync::{append, apply_remote, fetch_body, find_on_server, list_folders, send, sync_folder, vote};
 
 #[cfg(test)]
@@ -452,6 +472,15 @@ mod tests {
         assert_eq!(String::from_utf8(header_block(&own)).unwrap(), "Subject: Own\r\n\r\n");
         let f = flags(&json!({"isRead": true, "flag": {"flagStatus": "flagged"}, "isDraft": false}));
         assert!(f.seen && f.flagged && !f.draft);
+    }
+
+    #[test]
+    fn times_for_a_filter() {
+        assert_eq!(utc(0), "1970-01-01T00:00:00Z");
+        let t = jmap::utc_date("2026-10-23T09:05:07Z").unwrap();
+        assert_eq!(utc(t), "2026-10-23T09:05:07Z");
+        assert_eq!(received(&json!({"receivedDateTime": "2026-10-23T09:05:07Z"})), Some(t));
+        assert_eq!(received(&json!({"receivedDateTime": "soon"})), None);
     }
 
     #[test]

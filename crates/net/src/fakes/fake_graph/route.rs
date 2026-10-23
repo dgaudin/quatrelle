@@ -129,23 +129,51 @@ impl Data {
                     let inner = s.strip_prefix('"').and_then(|s| s.strip_suffix('"')).unwrap_or(&s).replace("\\\"", "\"");
                     list.retain(|m| words_match(&inner, &m.raw));
                 }
+                let bad = |code: &str, message: &str| {
+                    (400, json!({"error": {"code": code, "message": message}}).to_string().into_bytes(), "application/json")
+                };
+                let attached = |m: &Msg| quatrelle_mime::parse(&m.raw).is_some_and(|p| !p.attachments.is_empty());
                 if let Some(f) = q("$filter") {
                     let f = crate::oauth::unpct(&f);
+                    // Filtered and sorted, Graph sorts only by the property the filter names first.
+                    if let Some(by) = q("$orderby").map(|o| crate::oauth::unpct(&o)) {
+                        let first = f.split_whitespace().next().unwrap_or_default();
+                        if !by.split_whitespace().next().is_some_and(|p| p.eq_ignore_ascii_case(first)) {
+                            return bad("InefficientFilter", "The restriction or sort order is too complex for this operation.");
+                        }
+                    }
                     for cond in f.split(" and ") {
+                        if let Some(since) = received_since(cond) {
+                            let Some(since) = since else { return bad("BadRequest", "Invalid filter clause") };
+                            list.retain(|m| quatrelle_jmap::utc_date(&m.received).is_some_and(|r| r >= since));
+                            continue;
+                        }
                         match cond {
                             "isRead eq false" => list.retain(|m| !m.read),
                             "isRead eq true" => list.retain(|m| m.read),
                             "flag/flagStatus eq 'flagged'" => list.retain(|m| m.flagged),
                             "flag/flagStatus ne 'flagged'" => list.retain(|m| !m.flagged),
-                            "hasAttachments eq true" => list.clear(),
+                            "hasAttachments eq true" => list.retain(|m| attached(m)),
+                            "hasAttachments eq false" => list.retain(|m| !attached(m)),
                             _ => {}
                         }
                     }
                 }
                 list.sort_by(|a, b| b.received.cmp(&a.received));
                 let top: usize = q("$top").and_then(|t| t.parse().ok()).unwrap_or(10);
-                let list: Vec<Value> = list.into_iter().take(top).map(|m| self.message_json(m)).collect();
-                ok(json!({ "value": list }))
+                let Some(size) = self.page_messages.map(|n| n.min(top).max(1)) else {
+                    let list: Vec<Value> = list.into_iter().take(top).map(|m| self.message_json(m)).collect();
+                    return ok(json!({ "value": list }));
+                };
+                // A page, and the link to the next one (the same query, further on).
+                let skip: usize = q("$skip").and_then(|s| s.parse().ok()).unwrap_or(0);
+                let page: Vec<Value> = list.iter().skip(skip).take(size).map(|m| self.message_json(m)).collect();
+                let mut v = json!({ "value": page });
+                if skip + size < list.len() {
+                    let rest: String = query.split('&').filter(|kv| !kv.starts_with("$skip=")).collect::<Vec<_>>().join("&");
+                    v["@odata.nextLink"] = json!(format!("{base}{path}?{rest}&$skip={}", skip + size));
+                }
+                ok(v)
             }
             ("POST", ["me", "messages"]) => {
                 let raw = unbase64(body);
@@ -156,7 +184,14 @@ impl Data {
                 }
                 ok(json!({ "id": id, "parentFolderId": drafts }))
             }
-            ("GET", ["me", "messages", id]) => self.message(id).map_or_else(not_found, |m| ok(self.message_json(m))),
+            ("GET", ["me", "messages", id]) => self.message(id).map_or_else(not_found, |m| {
+                let mut v = self.message_json(m);
+                // Its own header lines, when asked for.
+                if q("$select").is_some_and(|s| s.split(',').any(|f| f == "internetMessageHeaders")) {
+                    v["internetMessageHeaders"] = header_lines(&m.raw);
+                }
+                ok(v)
+            }),
             ("PATCH", ["me", "messages", id]) => match self.messages.iter_mut().find(|m| m.id == plain_id(id)) {
                 Some(m) => {
                     if let Some(r) = input["isRead"].as_bool() {
