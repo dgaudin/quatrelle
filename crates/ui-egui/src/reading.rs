@@ -17,6 +17,7 @@ mod attachments;
 mod body;
 mod compose;
 mod people;
+mod plain;
 use attachments::*;
 pub(crate) use attachments::{big_picture, decode};
 use body::*;
@@ -526,14 +527,7 @@ fn message(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action
                 let r = crate::bidi::label(ui, &p.text, theme::regular(14.5), t.text);
                 rtl_copy_menu(&r, None, &p.text);
             } else {
-                let mut text = p.text.as_str();
-                ui.add(
-                    egui::TextEdit::multiline(&mut text)
-                        .frame(egui::Frame::NONE)
-                        .desired_width(f32::INFINITY)
-                        .font(theme::regular(14.5))
-                        .text_color(t.text),
-                );
+                plain::plain_body(&t, ui, &p.text, acts);
             }
         });
     });

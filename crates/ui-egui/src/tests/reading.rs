@@ -338,3 +338,35 @@ fn motion_plays_and_stops() {
     assert!(a.session.prefs.animations && crate::motion::enabled(&ctx));
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// A plain-text message's addresses written out are links: a click on one opens it (a mail
+/// address: a new message to it), as Outlook makes them links.
+#[test]
+fn addresses_in_a_plain_text_message_open_with_a_click() {
+    let (mut a, dir) = app("plain-links");
+    let raw = b"From: Zoe Park <zoe@studio.example>\r\nTo: riley@studio.example\r\nSubject: Links\r\nMessage-ID: <plain-links@x>\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nThe notes are on http://notes.example.fr/today.\r\nQuestions: support@example.com.\r\n";
+    let store = a.session.store.clone().unwrap();
+    let mut st = store.load_folder("sample", "INBOX").unwrap();
+    let uid = st.messages.iter().map(|m| m.key.uid).max().unwrap_or(0) + 1;
+    let key = quatrelle_engine::model::MessageKey { account: "sample".into(), folder: "INBOX".into(), validity: st.validity.max(1), uid };
+    st.messages.insert(0, quatrelle_engine::mime::summary_from_full(raw, key.clone(), Default::default(), raw.len() as u32, NOW));
+    store.write_body(&key, raw).unwrap();
+    store.save_folder("sample", "INBOX", &st).unwrap();
+    a.session.apply(quatrelle_engine::model::Event::FolderChanged { account: "sample".into(), folder: "INBOX".into() });
+    a.run("view.html", json!({"on": false}));
+    a.run("list.open", json!({"key": key.to_id()}));
+    let ctx = egui::Context::default();
+    for _ in 0..3 {
+        frame(&ctx, &mut a, vec![]);
+    }
+    let at: Vec<egui::Rect> = ctx.data(|d| d.get_temp(egui::Id::unique("plain-links"))).unwrap_or_default();
+    assert_eq!(at.len(), 2, "the web address and the mail address");
+    let p = at[1].left_center() + egui::vec2(4.0, 0.0);
+    let button = |pressed| Event::PointerButton { pos: p, button: egui::PointerButton::Primary, pressed, modifiers: Modifiers::NONE };
+    frame(&ctx, &mut a, vec![Event::PointerMoved(p)]);
+    frame(&ctx, &mut a, vec![button(true)]);
+    frame(&ctx, &mut a, vec![button(false)]);
+    frame(&ctx, &mut a, vec![]);
+    assert_eq!(a.session.compose.as_ref().map(|c| c.to.as_str()), Some("support@example.com"), "a new message to it");
+    let _ = std::fs::remove_dir_all(dir);
+}
