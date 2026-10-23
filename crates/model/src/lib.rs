@@ -739,6 +739,10 @@ pub struct Summary {
     /// Unix seconds (UTC) from the `Date` header, or the server's INTERNALDATE.
     #[serde(default)]
     pub date: i64,
+    /// When the server received it (Unix seconds; 0: not known), what mail kept for so long is
+    /// measured by, as the server measures it (a message's own date can be far older).
+    #[serde(default)]
+    pub received: i64,
     #[serde(default)]
     pub size: u32,
     #[serde(default)]
@@ -770,6 +774,11 @@ fn is_zero(n: &i8) -> bool {
 }
 
 impl Summary {
+    /// When it came in: the server's time it was received, else its own date.
+    pub fn received_at(&self) -> i64 {
+        if self.received != 0 { self.received } else { self.date }
+    }
+
     /// The subject with reply and forward prefixes removed, for conversation grouping.
     pub fn base_subject(&self) -> String {
         thread::base_subject(&self.subject)
