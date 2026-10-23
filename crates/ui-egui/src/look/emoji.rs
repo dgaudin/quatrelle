@@ -256,7 +256,7 @@ fn decode(data: &skrifa::bitmap::BitmapData<'_>, width: u32, height: u32) -> Opt
             // Premultiplied already, BGRA.
             let n = (width as usize).checked_mul(height as usize)?.checked_mul(4)?;
             let bytes = bytes.get(..n)?;
-            let rgba: Vec<u8> = bytes.chunks_exact(4).flat_map(|p| [p[2], p[1], p[0], p[3]]).collect();
+            let rgba: Vec<u8> = bytes.as_chunks::<4>().0.iter().flat_map(|p| [p[2], p[1], p[0], p[3]]).collect();
             image::RgbaImage::from_raw(width, height, rgba)
         }
         skrifa::bitmap::BitmapData::Mask(_) => None,
