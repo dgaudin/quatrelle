@@ -191,7 +191,15 @@ pub fn html_to_rich(html: &str) -> RichText {
                 .all(|ts| crate::fonts::only_marks(&ts.s) && !ts.tag.iter().any(|a| matches!(a, html2text::render::RichAnnotation::Image(_))));
         for ts in line.tagged_strings() {
             for (text, font) in crate::fonts::runs(&ts.s, &mut open, &fonts) {
-                let mut sp = Span { text, bold: font.bold, italic: font.italic, size: font.size, font: font.family, ..Default::default() };
+                let mut sp = Span {
+                    text,
+                    bold: font.bold,
+                    italic: font.italic,
+                    underline: font.underline,
+                    size: font.size,
+                    font: font.family,
+                    ..Default::default()
+                };
                 for a in &ts.tag {
                     match a {
                         html2text::render::RichAnnotation::Strong => sp.bold = true,

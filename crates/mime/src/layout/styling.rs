@@ -1,7 +1,66 @@
 //! Style sheets written into each element's `style`, and text sized as a title made a heading,
-//! before the layout and the text converter read the HTML.
+//! before the layout and the text converter read the HTML; font sizes as pixels.
 
 use super::*;
+
+/// How big text is, in pixels, from a CSS `font-size` (`20px`, `15pt`, `1.5em`, `x-large`).
+pub(crate) fn font_px(v: &str) -> Option<f32> {
+    let v = v.trim().to_ascii_lowercase();
+    let num = |s: &str| s.trim().parse::<f32>().ok().filter(|n| n.is_finite() && *n > 0.0);
+    let px = if let Some(n) = v.strip_suffix("px") {
+        num(n)?
+    } else if let Some(n) = v.strip_suffix("pt") {
+        num(n)? * 4.0 / 3.0
+    } else if let Some(n) = v.strip_suffix("rem").or_else(|| v.strip_suffix("em")) {
+        num(n)? * 16.0
+    } else if let Some(n) = v.strip_suffix('%') {
+        num(n)? * 0.16
+    } else {
+        match v.as_str() {
+            "large" => 18.0,
+            "x-large" => 24.0,
+            "xx-large" => 32.0,
+            "xxx-large" => 48.0,
+            _ => return None,
+        }
+    };
+    Some(px.min(400.0))
+}
+
+/// `<font size="…">` in pixels (1 to 7, as browsers size them; `+n` and `-n` from 3).
+pub(crate) fn font_attr_px(v: &str) -> Option<f32> {
+    let v = v.trim();
+    let n: i32 = if let Some(d) = v.strip_prefix('+') {
+        3i32.saturating_add(d.parse::<i32>().ok()?)
+    } else if let Some(d) = v.strip_prefix('-') {
+        3i32.saturating_sub(d.parse::<i32>().ok()?)
+    } else {
+        v.parse().ok()?
+    };
+    Some(match n.clamp(1, 7) {
+        1 => 10.0,
+        2 => 13.0,
+        3 => 16.0,
+        4 => 18.0,
+        5 => 24.0,
+        6 => 32.0,
+        _ => 48.0,
+    })
+}
+
+/// The heading level text of this size reads as (`0`: body text): mail sizes its titles with
+/// CSS or `<font size>` rather than `<h1>`.
+pub(super) fn heading_for(px: f32) -> u8 {
+    if px >= 26.0 {
+        1
+    } else if px >= 21.0 {
+        2
+    } else if px >= 18.0 {
+        3
+    } else {
+        0
+    }
+}
 
 /// The message with its style sheets' rules written into each element's `style` (inline
 /// declarations still win, `!important` ones over both), and text sized as a title made a

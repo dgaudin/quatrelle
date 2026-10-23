@@ -312,6 +312,10 @@ pub struct Span {
     pub italic: bool,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub strike: bool,
+    /// Underlined (`<u>`, `<ins>`, `text-decoration: underline`); a link is drawn as a link
+    /// whether or not its style says so.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub underline: bool,
     /// Code or preformatted text (shown in a monospace font).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub code: bool,

@@ -209,6 +209,31 @@ Message-ID, parent links from `References`/`In-Reply-To` without creating loops,
 promoted away, then replies that lost their references grouped by base subject. Every message
 appears in exactly one conversation.
 
+## HTML mail (`crates/mime`, `ui-egui/src/reading/body.rs`)
+
+There is no browser engine: an HTML body is read into Quatrelle's own model and drawn with
+egui. `layout::inline_css` first writes the message's `<style>` rules into each element's
+`style` (inline wins, `!important` over both). `layout::html_layout` then reads the HTML with
+html5ever's tokenizer and keeps what gives a message its shape as `Block`s: `Table`s of rows of
+`Cell`s (tables, and boxes laid out side by side with CSS: flexbox, grids, floats, Word's
+`align="left"` signatures), each with its width, colour, background picture, overlays
+(`position: absolute`), and since the receipt-and-newsletter round: borders on every edge
+(`Edges`: the `border` shorthand, its sides and parts, `border="1"`, in px/pt/cm…, capped at 8
+px), `border-radius`, per-cell `padding` (CSS or `cellpadding`), and `VAlign` (`valign` /
+`vertical-align`; a table cell's default is the middle, a CSS column's the top). Text inside is
+`html_to_rich`'s `RichText` (html2text with the message's CSS for colours and hidden parts);
+what html2text doesn't carry — font sizes, typefaces, CSS bold/italic, underline (`<u>`,
+`<ins>`, `text-decoration`) — `fonts.rs` marks in the HTML first and resolves into the
+`Span`s afterwards. The reader (`Body::blocks` / `row` / `lines` / `span`) draws the blocks:
+cells side by side sharing the width (stacked when too narrow; a table without a width that is
+one box of text, a button, is as wide as its text and centred when its cell centres), each cell
+a frame with its padding, fill, rounded corners and borders (drawn on whole pixels: top and left just outside,
+right and bottom just inside, so neighbours' lines overlap as a collapsed table's), and its
+content moved down to the row's middle or bottom from the height measured the frame before
+(`CellHeights`, by message and cell number: a lookup per cell, no second layout pass). The
+editor's pasted signatures read the same spans (`rich::span_style`), so what the reader keeps,
+the composer keeps too.
+
 ## Testing
 
 - `model`, `mime`, `store`: unit tests, including hostile inputs.

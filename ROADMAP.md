@@ -595,3 +595,19 @@ local-first, media-aware v1); the fuller request is
   (bitmaps); Segoe UI Emoji (layered outlines) and Apple Color Emoji (bitmaps in a collection)
   take the same path but weren't run. Without such a font nothing changes. The sample mailbox's
   Render farm message carries one of each kind to see them with.
+- **2026-10-23** — **v0.22**, the most visible gaps when reading HTML mail, closed
+  (`docs/architecture.md`, "HTML mail"): **underline** (`<u>`, `<ins>`, `text-decoration`, from
+  the message's own rules too) read into the spans through the font marks and drawn, and kept
+  by the editor for pasted signatures; **borders** on tables and cells from the `border`
+  shorthand, its sides and parts (px, pt, cm…, capped at 8 px) and `border="1"` (a grey line
+  around the table and each cell, as browsers draw it), Word's `border:none; border-left:…`
+  signature rule among them, drawn on whole pixels so a grid's lines meet once;
+  **`border-radius`** on filled cells and tables (a newsletter's rounded button, which, a table
+  without a width, is now as wide as its text and centred when its cell centres, as a browser
+  shrinks a table to fit); **cell padding**
+  from `padding` and `cellpadding` in place of the reader's; and **vertical alignment**
+  (`valign`, `vertical-align`; the middle by default for a table cell, as HTML has it): a row's
+  cells are measured as drawn and the shorter ones moved down on the next frame, a lookup per
+  cell rather than a second layout pass. Still approximate: `border-collapse: separate`'s double
+  lines draw as one, `dotted`/`dashed`/`double` styles draw solid, `currentColor` borders are
+  grey, and a cell's `vertical-align` within boxes laid out with CSS stays at the top.

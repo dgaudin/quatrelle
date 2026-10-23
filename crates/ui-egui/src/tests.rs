@@ -37,16 +37,57 @@ fn app_big(name: &str, folders: usize, per_folder: u32) -> (MailApp, std::path::
     (MailApp::new(s, Box::new(NullBackend), Box::new(NullServices(NOW))), dir)
 }
 
+/// The app over the sample mailbox with one more message in its Inbox: an HTML one, as a
+/// sender's program would write it.
+fn app_with_html(name: &str, subject: &str, html: &str) -> (MailApp, std::path::PathBuf) {
+    let dir = std::env::temp_dir().join(format!("quatrelle-ui-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let store = Store::open(&dir).unwrap();
+    sample::seed_if_empty(&store, NOW).unwrap();
+    let raw = format!(
+        "From: Studio Shop <shop@studio.example>\r\nTo: Riley Moreno <riley@studio.example>\r\nSubject: {subject}\r\n\
+         Date: Wed, 22 Oct 2026 10:00:00 +0200\r\nMessage-ID: <html-{name}@studio.example>\r\nMIME-Version: 1.0\r\n\
+         Content-Type: text/html; charset=utf-8\r\n\r\n{html}"
+    );
+    let account = quatrelle_engine::sample::SAMPLE_ACCOUNT;
+    let mut fs = store.load_folder(account, "INBOX").unwrap();
+    let uid = fs.uid_next.max(1);
+    let key = MessageKey { account: account.into(), folder: "INBOX".into(), validity: fs.validity.max(1), uid };
+    store.write_body(&key, raw.as_bytes()).unwrap();
+    let flags = quatrelle_engine::model::Flags { seen: true, ..Default::default() };
+    fs.messages.push(quatrelle_engine::mime::summary_from_full(raw.as_bytes(), key, flags, raw.len() as u32, NOW));
+    fs.uid_next = uid + 1;
+    store.save_folder(account, "INBOX", &fs).unwrap();
+    let s = Session::open(Some(store), Clock::new(NOW, 0));
+    (MailApp::new(s, Box::new(NullBackend), Box::new(NullServices(NOW))), dir)
+}
+
 fn frame(ctx: &egui::Context, app: &mut MailApp, events: Vec<Event>) {
     frame_sized(ctx, app, events, egui::vec2(1280.0, 800.0));
 }
 
 /// A frame in a window of `size`.
 fn frame_sized(ctx: &egui::Context, app: &mut MailApp, events: Vec<Event>, size: egui::Vec2) {
+    frame_shapes(ctx, app, events, size);
+}
+
+/// A frame in a window of `size`, and what it drew, every grouped shape taken apart.
+fn frame_shapes(ctx: &egui::Context, app: &mut MailApp, events: Vec<Event>, size: egui::Vec2) -> Vec<egui::Shape> {
     let input = RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, size)), events, ..Default::default() };
     let mut out = ctx.run_ui(input, |ui| app.ui(ui));
     // No renderer here: drop the texture uploads deliberately.
     out.textures_delta.clear();
+    fn flat(s: egui::Shape, out: &mut Vec<egui::Shape>) {
+        match s {
+            egui::Shape::Vec(v) => v.into_iter().for_each(|s| flat(s, out)),
+            s => out.push(s),
+        }
+    }
+    let mut shapes = Vec::new();
+    for s in out.shapes {
+        flat(s.shape, &mut shapes);
+    }
+    shapes
 }
 
 /// The Home ribbon fits the window: at a width that hasn't room for every group's large
