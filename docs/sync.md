@@ -31,13 +31,23 @@ Message sources live next to it as `<validity>/<uid>.eml`. A message is identifi
      changed, and the fetch is skipped entirely when HIGHESTMODSEQ hasn't moved;
    - without: `UID FETCH <cached range> (UID FLAGS)` and compare.
 4. **Deletions:** `UID SEARCH UID <cached range>` lists the survivors; everything else (and its cached
-   source) is removed.
+   source) is removed. With a time kept (`SyncOptions::since_days`, Outlook's Cached Exchange Mode
+   "Mail to keep offline"), what the server received before it goes too, with its source
+   (`Summary::received_at`, INTERNALDATE, not the message's own date), but for what a search of
+   the server brought in.
 5. **New mail:** `UID SEARCH UID <UIDNEXT>:*` (filtered, since `n:*` always returns the last message)
    then headers for those UIDs in chunks: `UID FETCH … (UID FLAGS RFC822.SIZE INTERNALDATE BODY.PEEK[HEADER])`.
-   The first sync of a folder fetches only the newest `window` messages (1000 by default).
-6. **Save** the new state atomically (temporary file + rename).
+   The first sync of a folder fetches only the newest `window` messages (1000 by default): of
+   `UID SEARCH ALL`, or with a time kept of `UID SEARCH SINCE <day>` (what was received from the
+   cutoff's day on; the few hours of that day before the cutoff aren't kept). A longer window, or
+   a longer time, lists the folder again, once.
+6. **Save** the new state atomically (temporary file + rename). Beside it, `kept.json` (IMAP's
+   own, gone with the folder's cache) keeps the time the folder was listed with and the UIDs a
+   search of the server brought in (newest 500), which stay however old while the server has them.
 7. **Prefetch** the newest sources (40 by default, up to 2 MB each) with `BODY.PEEK[]` so they open
    instantly, can be searched, and fill in previews. Bigger or older messages download when opened.
+   When every message kept is to be downloaded (`SyncOptions::full`), `sync::download_ahead`
+   brings the rest, newest first, a budget at a time, any size.
 8. **Counts:** `UID SEARCH UNSEEN` for the folder's unread count.
 
 `PEEK` is used everywhere so syncing never marks mail as read.
@@ -224,7 +234,8 @@ servers that don't offer IMAP. Every call is SOAP over HTTPS.
   date). A search of the server's finds stay while they're there. Every message kept is
   downloaded whole in the end (`SyncOptions::full`, no size limit): the newest few come with
   the folder's list, the rest twenty at a time while nothing else is asked (`ahead_step`,
-  between a full pass and the next look at the Inbox), only their sources written. What's older
+  every kind of account), the Inbox looked at every half minute meanwhile (IDLE and push wait
+  until it's done), only their sources written by Exchange. What's older
   than the time kept is read on the server when asked for (Show more: `Job::Older`, a hundred
   at a time, `FindItem` restricted to before then), held in memory by the session
   (`Session::older`) and shown after the folder's own list; one opened is read for showing

@@ -15,6 +15,17 @@ pub struct Msg {
     pub flags: Vec<String>,
     pub raw: Vec<u8>,
     pub modseq: u64,
+    /// When the server received it (INTERNALDATE, Unix seconds), what `SEARCH SINCE` compares.
+    pub received: i64,
+}
+
+/// What the fake says it received every message at unless told: 14 October 2026, 09:30 UTC.
+pub const RECEIVED: i64 = 1_791_970_200;
+
+/// A time as an INTERNALDATE (`14-Oct-2026 09:30:00 +0000`, the day padded to two).
+pub fn internal_date(t: i64) -> String {
+    let secs = t.rem_euclid(86_400);
+    format!("{:>11} {:02}:{:02}:{:02} +0000", crate::sync::imap_date(t), secs / 3600, secs % 3600 / 60, secs % 60)
 }
 
 pub struct Mailbox {
@@ -98,7 +109,21 @@ impl State {
         let Some(b) = self.mailbox(mailbox) else { return 0 };
         let uid = b.uid_next;
         b.uid_next += 1;
-        b.msgs.push(Msg { uid, flags: Vec::new(), raw, modseq });
+        b.msgs.push(Msg { uid, flags: Vec::new(), raw, modseq, received: RECEIVED });
+        uid
+    }
+
+    /// Put a message dated `date` (its `Date` header, Unix seconds) that the server received at
+    /// `received`.
+    pub fn add_dated(&mut self, mailbox: &str, subject: &str, date: i64, received: i64) -> u32 {
+        let raw = format!(
+            "From: Zoe <zoe@studio.example>\r\nTo: me@studio.example\r\nSubject: {subject}\r\nDate: {}\r\n\r\nBody of {subject}.\r\n",
+            internal_date(date).trim().replace('-', " ")
+        );
+        let uid = self.add_raw(mailbox, raw.into_bytes());
+        if let Some(msg) = self.mailbox(mailbox).and_then(|b| b.msgs.iter_mut().find(|x| x.uid == uid)) {
+            msg.received = received;
+        }
         uid
     }
 
@@ -112,7 +137,7 @@ impl State {
             "From: Zoe <zoe@studio.example>\r\nTo: me@studio.example\r\nSubject: {subject}\r\nMessage-ID: <{subject}-{uid}@studio.example>\r\nDate: Wed, 14 Oct 2026 09:{:02}:00 +0000\r\n\r\nBody of {subject}.\r\n",
             uid % 60
         );
-        b.msgs.push(Msg { uid, flags: flags.iter().map(|s| s.to_string()).collect(), raw: raw.into_bytes(), modseq });
+        b.msgs.push(Msg { uid, flags: flags.iter().map(|s| s.to_string()).collect(), raw: raw.into_bytes(), modseq, received: RECEIVED });
         uid
     }
 }

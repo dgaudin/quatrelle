@@ -95,6 +95,11 @@ fn search_key(ctx: &SearchCtx<'_>, keys: &[String], i: usize) -> (bool, usize) {
         "TO" => (ctx.header("to").contains(&arg), 2),
         "CC" => (ctx.header("cc").contains(&arg), 2),
         "KEYWORD" => (ctx.m.flags.iter().any(|f| f.eq_ignore_ascii_case(&arg)), 2),
+        // Received on that day or later, the time of day disregarded (`23-Oct-2024`).
+        "SINCE" => {
+            let day = crate::imap::parse_internal_date(&format!("{arg} 00:00:00 +0000")).map(|t| t.div_euclid(86_400));
+            (day.is_some_and(|d| ctx.m.received.div_euclid(86_400) >= d), 2)
+        }
         set if set.starts_with(|c: char| c.is_ascii_digit() || c == '*') => (in_set(ctx.seq, set, ctx.exists), 1),
         _ => (false, 1),
     }
