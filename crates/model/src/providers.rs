@@ -2,7 +2,7 @@
 //! rather than with a password, Microsoft's own addresses and its rules — and what Exchange
 //! Online needs: Graph's address, Autodiscover, and an account's own app registration.
 
-use crate::AccountConfig;
+use crate::{AccountConfig, Security, ServerConfig};
 
 /// The EWS address of an account whose Exchange server Autodiscover finds when it connects.
 pub const EWS_AUTODISCOVER: &str = "autodiscover";
@@ -67,6 +67,101 @@ pub fn microsoft_password_account(a: &AccountConfig) -> bool {
         && a.graph.is_none()
         && a.ews.is_none()
         && (oauth_provider_for(&a.imap.host) == Some("microsoft") || microsoft_consumer(&a.email))
+}
+
+impl AccountConfig {
+    /// Whose mailbox a folder is in, when it's another one opened here (`None`: this account's
+    /// own): its top folder is named after the mailbox's address.
+    pub fn folder_owner(&self, path: &str) -> Option<&str> {
+        self.shared_mailboxes
+            .iter()
+            .find(|m| {
+                path.eq_ignore_ascii_case(m)
+                    || path.get(..m.len()).is_some_and(|p| p.eq_ignore_ascii_case(m)) && path.get(m.len()..).is_some_and(|r| r.starts_with('/'))
+            })
+            .map(String::as_str)
+    }
+
+    /// Server settings guessed from an address, the way most hosts are laid out (`mail.<domain>`,
+    /// IMAPS 993, SMTPS 465). The account dialog shows them for the user to correct.
+    pub fn guess(email: &str) -> AccountConfig {
+        let email = email.trim();
+        let domain = email.rsplit_once('@').map(|(_, d)| d.to_ascii_lowercase()).unwrap_or_default();
+        let (imap_host, smtp_host) = match domain.as_str() {
+            "gmail.com" | "googlemail.com" => ("imap.gmail.com".to_string(), "smtp.gmail.com".to_string()),
+            _ if microsoft_consumer(email) => ("outlook.office365.com".to_string(), "smtp.office365.com".to_string()),
+            "yahoo.com" => ("imap.mail.yahoo.com".to_string(), "smtp.mail.yahoo.com".to_string()),
+            "icloud.com" | "me.com" => ("imap.mail.me.com".to_string(), "smtp.mail.me.com".to_string()),
+            "fastmail.com" => ("imap.fastmail.com".to_string(), "smtp.fastmail.com".to_string()),
+            "" => (String::new(), String::new()),
+            d => (format!("mail.{d}"), format!("mail.{d}")),
+        };
+        let smtp = if smtp_host.ends_with("office365.com") || smtp_host.ends_with("me.com") {
+            ServerConfig { host: smtp_host, port: 587, security: Security::StartTls }
+        } else {
+            ServerConfig { host: smtp_host, port: 465, security: Security::Tls }
+        };
+        AccountConfig {
+            id: String::new(),
+            name: email.split('@').next().unwrap_or_default().to_string(),
+            email: email.to_string(),
+            username: email.to_string(),
+            imap: ServerConfig { host: imap_host, port: 993, security: Security::Tls },
+            smtp,
+            smtp_username: None,
+            signature: String::new(),
+            signature_html: String::new(),
+            signature_styles: String::new(),
+            signature_raw_html: String::new(),
+            signature_pictures: Vec::new(),
+            signature_not_new: false,
+            signature_not_replies: false,
+            color: 0,
+            oauth: None,
+            jmap: None,
+            graph: None,
+            ews: None,
+            pop: None,
+            pop_delete: false,
+            pop_keep_days: None,
+            pop_delete_with_trash: false,
+            oauth_user: None,
+            shared_mailboxes: Vec::new(),
+            online_only: false,
+            shared_online: false,
+            public_favorites_kept: false,
+            oauth_client_id: None,
+            oauth_tenant: None,
+        }
+    }
+
+    /// Whether the account brings its own Microsoft app registration (an Application (client)
+    /// ID of its own), so it can sign in with Microsoft whether or not this copy has one built in.
+    pub fn own_oauth_app(&self) -> bool {
+        self.oauth_client_id.as_deref().is_some_and(valid_oauth_client_id)
+    }
+
+    /// Whether the account's mail is kept online only: asked for, and on a server that keeps it.
+    pub fn keeps_online(&self) -> bool {
+        self.online_only && self.can_be_online_only()
+    }
+
+    /// Whether the account can be kept online only: its mail lives on a server (IMAP, JMAP,
+    /// Graph, EWS), not only here (POP downloads it; the sample mailbox has no server).
+    pub fn can_be_online_only(&self) -> bool {
+        !self.is_local() && self.pop.is_none()
+    }
+
+    /// Kept on this computer only, with no server (the sample mailbox).
+    pub fn is_local(&self) -> bool {
+        self.imap.host.trim().is_empty() && self.jmap.is_none() && self.graph.is_none() && self.ews.is_none() && self.pop.is_none()
+    }
+
+    /// Whether the account works through a web API (JMAP, Graph or EWS) rather than IMAP and
+    /// SMTP.
+    pub fn is_api(&self) -> bool {
+        self.jmap.is_some() || self.graph.is_some() || self.ews.is_some()
+    }
 }
 
 #[cfg(test)]

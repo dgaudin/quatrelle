@@ -321,6 +321,14 @@ impl Data {
                         let want = value.trim_matches(['<', '>']).to_ascii_lowercase();
                         list.retain(|i| quatrelle_mime::parse(&i.raw).is_some_and(|p| p.message_id.to_ascii_lowercase() == want));
                     }
+                    // Mail received since then (Cached Exchange Mode's mail kept offline); the
+                    // times are all written alike, so they compare as text.
+                    if let Some(cond) = restriction.find("IsGreaterThanOrEqualTo")
+                        && cond.find("FieldURI").and_then(|f| f.attr("FieldURI")) == Some("item:DateTimeReceived")
+                    {
+                        let since = cond.find("Constant").and_then(|c| c.attr("Value")).unwrap_or_default().to_string();
+                        list.retain(|i| i.received.as_str() >= since.as_str());
+                    }
                     let mut all = Vec::new();
                     restriction.all("IsEqualTo", &mut all);
                     for cond in all {

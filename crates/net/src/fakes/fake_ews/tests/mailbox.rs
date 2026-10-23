@@ -252,7 +252,7 @@ fn public_folders_sync_only_when_followed() {
     // Opened: its newest listed, no state asked for.
     let from = data.lock().unwrap().calls.len();
     pool.submit(Job::SyncFolder { account: "a1".into(), folder: reports_path.into() });
-    eventually("the newest reports", || kept(reports_path) == crate::worker::PUBLIC_WINDOW);
+    eventually("the newest reports", || kept(reports_path) == crate::worker::ONLINE_WINDOW);
     assert_eq!(asked(from), 0, "an opened public folder is only listed");
     // Followed (made Favorites): synced with the mailbox, in full.
     store.save_account_doc("a1", quatrelle_model::FOLLOWED_PUBLIC_DOC, &vec![team_path, reports_path]).unwrap();
@@ -514,4 +514,101 @@ fn a_parallel_sync_keeps_the_numbers_and_takes_marks_at_once() {
     data.lock().unwrap().hold = None;
     drop(pool);
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Mail kept as Outlook's Cached Exchange Mode keeps it: what came in the time chosen, whole
+/// (however big, a few at a time once the folder is in), the older left on the server, as the
+/// server counts time (a message forwarded with an old date of its own but come lately stays);
+/// a shorter time lets go of what's older, with its source.
+#[test]
+fn mail_is_kept_for_a_time_and_whole() {
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as i64).unwrap();
+    let ago = |days: i64| crate::ews_pim::utc(now - days * 86_400);
+    let mut d = Data::default();
+    let inbox = d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    let big = format!("From: zoe@contoso.example\r\nSubject: Plans\r\nMessage-ID: <big@x>\r\n\r\n{}\r\n", "x".repeat(3 << 20));
+    d.deliver(&inbox, big.as_bytes(), false, &ago(1));
+    d.deliver(
+        &inbox,
+        b"From: a@contoso.example\r\nDate: Mon, 1 Jan 2001 00:00:00 +0000\r\nSubject: Forwarded long ago\r\nMessage-ID: <fw@x>\r\n\r\nOld.\r\n",
+        false,
+        &ago(2),
+    );
+    d.deliver(&inbox, b"From: a@contoso.example\r\nSubject: Ten days ago\r\nMessage-ID: <m10@x>\r\n\r\nHi.\r\n", false, &ago(10));
+    d.deliver(&inbox, b"From: a@contoso.example\r\nSubject: Last year\r\nMessage-ID: <m400@x>\r\n\r\nHi.\r\n", false, &ago(400));
+    let server = serve(d);
+    let store = crate::fake::tests_store("ews-keep-time");
+    let mut pool = crate::worker::Pool::new(store.clone(), Arc::new(crate::worker::MemoryCredentials::default()));
+    pool.submit(Job::SetSync { days: 30, messages: 0, full: true });
+    let account = AccountConfig {
+        id: "a1".into(),
+        email: "riley@contoso.example".into(),
+        username: format!("{DOMAIN}\\{USER}"),
+        ews: Some(server.url.clone()),
+        ..Default::default()
+    };
+    pool.submit(Job::Start { account, password: Some(Secret(PASSWORD.into())) });
+    until(&pool, "online", |e| matches!(e, Event::Status { status: SyncStatus::Online { .. }, .. }));
+    let kept = || {
+        let mut v: Vec<String> = store.load_folder("a1", "INBOX").unwrap().messages.iter().map(|m| m.subject.clone()).collect();
+        v.sort();
+        v
+    };
+    assert_eq!(kept(), ["Forwarded long ago", "Plans", "Ten days ago"], "the last 30 days, as the server counts them");
+    // Whole, however big: the 3 MB message comes too, once the folder is in.
+    eventually("everything kept, whole", || store.load_folder("a1", "INBOX").unwrap().messages.iter().all(|m| store.has_body(&m.key)));
+    // Followed by its changes (new mail came): what's kept is measured the same way.
+    server.data.lock().unwrap().deliver(
+        &inbox,
+        b"From: a@contoso.example\r\nSubject: Just now\r\nMessage-ID: <now@x>\r\n\r\nHi.\r\n",
+        false,
+        &ago(0),
+    );
+    pool.submit(Job::SyncAll { account: "a1".into() });
+    eventually("the new mail", || kept().contains(&"Just now".to_string()));
+    assert!(kept().contains(&"Forwarded long ago".to_string()), "a message come lately stays, whatever its own date");
+    // A shorter time: what's older goes, with its source.
+    let ten = store.load_folder("a1", "INBOX").unwrap().messages.iter().find(|m| m.subject == "Ten days ago").map(|m| m.key.clone()).unwrap();
+    pool.submit(Job::SetSync { days: 5, messages: 0, full: true });
+    eventually("the older let go", || kept() == ["Forwarded long ago", "Just now", "Plans"] && !store.has_body(&ten));
+    drop(pool);
+    let _ = std::fs::remove_dir_all(store.root());
+}
+
+/// A shared mailbox, as Outlook's Cached Exchange Mode keeps one: on this computer like the
+/// account's own mail, unless the account doesn't keep them ("Download shared folders" off);
+/// then it isn't walked, what was kept of it beyond what an opened folder shows is let go,
+/// and a folder of it is listed when it's opened.
+#[test]
+fn shared_mailboxes_are_kept_unless_read_online() {
+    let mut d = Data::default();
+    let inbox = d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    d.deliver(&inbox, &mail("Own", "o1"), false, "2026-10-19T08:00:00Z");
+    let sales =
+        d.shared_mailbox(SharedBox { address: "sales@contoso.example".into(), name: "Sales".into(), automap: true, legacy: false, granted: true });
+    for i in 0..40 {
+        d.deliver(&sales, &mail(&format!("Order {i}"), &format!("s{i}")), false, &format!("2026-10-{:02}T09:{:02}:00Z", 1 + i % 18, i));
+    }
+    let server = serve(d);
+    let store = crate::fake::tests_store("ews-shared-online");
+    let mut pool = crate::worker::Pool::new(store.clone(), Arc::new(crate::worker::MemoryCredentials::default()));
+    let account = AccountConfig {
+        id: "a1".into(),
+        email: "riley@contoso.example".into(),
+        username: format!("{DOMAIN}\\{USER}"),
+        ews: Some(server.url.clone()),
+        ..Default::default()
+    };
+    pool.submit(Job::Start { account: account.clone(), password: Some(Secret(PASSWORD.into())) });
+    until(&pool, "online", |e| matches!(e, Event::Status { status: SyncStatus::Online { .. }, .. }));
+    let path = store.load_folders("a1").unwrap().into_iter().find(|f| f.mailbox.is_some() && f.path.ends_with("/Inbox")).map(|f| f.path).unwrap();
+    let kept = |path: &str| store.load_folder("a1", path).map(|f| f.messages.len()).unwrap_or(0);
+    assert_eq!(kept(&path), 40, "kept like the account's own mail");
+    // Not kept: let go, then listed when opened (its newest few).
+    pool.submit(Job::Start { account: AccountConfig { shared_online: true, ..account }, password: Some(Secret(PASSWORD.into())) });
+    eventually("let go", || kept(&path) == 0);
+    pool.submit(Job::SyncFolder { account: "a1".into(), folder: path.clone() });
+    eventually("listed when opened", || kept(&path) == crate::worker::ONLINE_WINDOW);
+    drop(pool);
+    let _ = std::fs::remove_dir_all(store.root());
 }

@@ -1019,6 +1019,9 @@ month	May	Май
 	What's new	Что нового
 	You have the newest version.	У вас последняя версия.
 	Online only: keep none of this account's mail on this computer	Только в сети: не хранить почту этой учётной записи на этом компьютере
+	Keep shared mailboxes on this computer	Хранить общие почтовые ящики на этом компьютере
+	Keep the public folders in Favorites on this computer	Хранить на этом компьютере общие папки из избранного
+	Those not kept are read on the server when you open them.	То, что не хранится, читается на сервере при открытии.
 	Online only: none of this account's mail is kept on this computer.	Только в сети: почта этой учётной записи не хранится на этом компьютере.
 	Online only: {email}	Только в сети: {email}
 	New message	Новое сообщение

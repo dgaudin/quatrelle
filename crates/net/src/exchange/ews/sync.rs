@@ -133,6 +133,7 @@ pub fn sync_folder(c: &Client, st: &mut State, store: &Store, account: &str, fol
             && m.unread == unread
             && m.window == mark.window
             && m.ahead == mark.ahead
+            && m.days == mark.days
             && now - m.at < MARK_TRUSTED
     };
     let kept = store.folder_kept(account, folder, VALIDITY);
@@ -143,7 +144,10 @@ pub fn sync_folder(c: &Client, st: &mut State, store: &Store, account: &str, fol
     // Its state as last read known: only what changed since is asked (new mail, read marks,
     // deletions), not a listing of the folder's whole window.
     let too_big = before.as_ref().and_then(|m| m.too_big).filter(|at| now - at < TOO_BIG_ASKED_AGAIN);
-    if let Some(since) = before.filter(|m| kept && !opts.list_only && !m.sync.is_empty() && m.window == opts.window).map(|m| m.sync) {
+    // Mail kept from so long ago (Cached Exchange Mode's "Mail to keep offline").
+    let oldest = opts.since(now);
+    let following = |m: &jmap::FolderMark| kept && !opts.list_only && !m.sync.is_empty() && m.window == opts.window && m.days == opts.since_days;
+    if let Some(since) = before.filter(following).map(|m| m.sync) {
         match changes(c, st, store, account, folder, &since, opts) {
             Ok((mut report, sync)) => {
                 mark.sync = sync;
@@ -171,7 +175,7 @@ pub fn sync_folder(c: &Client, st: &mut State, store: &Store, account: &str, fol
             Err(e) => log::info!("{account}: {}: no sync state ({e}); listed in full next time too", utf7::decode(folder)),
         }
     }
-    let newest = c.newest(&id, opts.window)?;
+    let newest = c.newest(&id, opts.window, oldest)?;
     let mut fs = store.load_folder(account, folder)?;
     let mut report = SyncReport::default();
     if fs.validity != VALIDITY && (fs.validity != 0 || !fs.messages.is_empty()) {
@@ -321,6 +325,19 @@ fn changes(c: &Client, st: &mut State, store: &Store, account: &str, folder: &st
         fs.messages.push(item_summary(&it, key));
         report.new += 1;
     }
+    // Mail grown older than what's kept goes, as Outlook lets it go from the offline file (a
+    // search of the server's finds stay while they're there); followed by its changes, a
+    // folder kept everything it ever had.
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX));
+    if let Some(oldest) = opts.since(now) {
+        let (keep, old): (Vec<Summary>, Vec<Summary>) =
+            std::mem::take(&mut fs.messages).into_iter().partition(|m| m.received_at() >= oldest || st.was_found(folder, m.key.uid));
+        for m in &old {
+            store.remove_body(&m.key);
+        }
+        report.removed += old.len();
+        fs.messages = keep;
+    }
     if report.touched() {
         sort_newest_first(&mut fs.messages);
         fs.uid_next = fs.messages.iter().map(|m| m.key.uid).max().unwrap_or(0).saturating_add(1);
@@ -418,6 +435,41 @@ fn prefetch(c: &Client, st: &State, store: &Store, account: &str, folder: &str, 
     if wanted.is_empty() {
         return Ok(());
     }
+    download(c, store, account, folder, fs, wanted, true)?;
+    store.save_folder(account, folder, fs)?;
+    Ok(())
+}
+
+/// Download at most `budget` of a folder's kept messages not on this computer yet, newest
+/// first — whole, however big, when everything kept is to be ([`SyncOptions::full`], as Cached
+/// Exchange Mode keeps its offline file) — while nothing else is asked; how many are still
+/// missing. Only the sources are written: the folder's list stays as its sync saved it (written
+/// again for every few messages, a big folder's list was gigabytes).
+pub fn download_ahead(c: &Client, st: &State, store: &Store, account: &str, folder: &str, opts: &SyncOptions, budget: usize) -> Result<usize> {
+    let mut fs = store.load_folder(account, folder)?;
+    let cap = if opts.full { u64::MAX } else { u64::from(opts.prefetch_max_bytes) };
+    let missing: Vec<(u32, String, u64)> = fs
+        .messages
+        .iter()
+        .filter(|m| u64::from(m.size) <= cap && !store.has_body(&m.key))
+        .filter_map(|m| Some((m.key.uid, st.id(m.key.uid)?.to_string(), u64::from(m.size))))
+        .collect();
+    let now: Vec<(u32, String, u64)> = missing.iter().take(budget).cloned().collect();
+    let written = download(c, store, account, folder, &mut fs, now, false)?;
+    Ok(missing.len().saturating_sub(written))
+}
+
+/// Download these messages' sources (uid, item id, size) and keep them; with `fill`, their list
+/// entries take what the sources say. How many were written.
+fn download(
+    c: &Client,
+    store: &Store,
+    account: &str,
+    folder: &str,
+    fs: &mut FolderState,
+    wanted: Vec<(u32, String, u64)>,
+    fill: bool,
+) -> Result<usize> {
     // Batches of a few, kept small in bytes (one big message goes alone).
     let mut batches: Vec<Vec<(u32, String)>> = Vec::new();
     let mut bytes = 0u64;
@@ -433,6 +485,7 @@ fn prefetch(c: &Client, st: &State, store: &Store, account: &str, folder: &str, 
         }
     }
     let mut failures = crate::sync::AheadFailures::new();
+    let mut written = 0usize;
     for batch in batches {
         let ids: Vec<String> = batch.iter().map(|(_, id)| id.clone()).collect();
         let answers = match c.download_many(&ids) {
@@ -455,11 +508,13 @@ fn prefetch(c: &Client, st: &State, store: &Store, account: &str, folder: &str, 
             };
             let Some(m) = fs.find_mut(*n) else { continue };
             store.write_body(&m.key, &raw)?;
-            fill_from_source(m, &raw);
+            written += 1;
+            if fill {
+                fill_from_source(m, &raw);
+            }
         }
     }
-    store.save_folder(account, folder, fs)?;
-    Ok(())
+    Ok(written)
 }
 
 /// The item id of the message whose `Message-ID` is `mid`, in a folder (Exchange keeps it with

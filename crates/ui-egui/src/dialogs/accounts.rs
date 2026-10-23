@@ -624,6 +624,13 @@ pub(super) fn edit_account(ui: &mut Ui, f: &mut EditForm, s: &Session, t: &Token
     if f.pop.is_none() {
         online_only(ui, t, &mut f.online_only);
     }
+    // Exchange: what of other mailboxes is kept here, as Outlook's Cached Exchange Mode.
+    if f.ews.is_some() && !f.online_only {
+        ui.add_space(6.0);
+        ui.checkbox(&mut f.shared_kept, tl!("Keep shared mailboxes on this computer"));
+        ui.checkbox(&mut f.public_favorites_kept, tl!("Keep the public folders in Favorites on this computer"));
+        ui.add(egui::Label::new(RichText::new(tl!("Those not kept are read on the server when you open them.")).color(t.faint).small()).wrap());
+    }
     if let Some(e) = &f.error {
         ui.add_space(6.0);
         ui.label(RichText::new(e).color(t.danger));

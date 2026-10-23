@@ -151,9 +151,12 @@ fn another_mailbox_opens_in_an_exchange_account_with_its_own_deleted_items() {
     }
 }
 
-/// Exchange's public folders as Outlook keeps them: one opened is read from the server then,
-/// unless it's a Favorite, which the account's sync is told to keep in sync (and syncs at once
-/// when it becomes one). Favorites never set say nothing: the list kept stays.
+/// Exchange's public folders and shared mailboxes as Outlook's Cached Exchange Mode keeps
+/// them. A public folder opened is read from the server then; its Favorites are kept in sync
+/// only when the account keeps them ("Download Public Folder Favorites", off unless chosen),
+/// and the sync is told which (one followed syncs at once). Favorites never set say nothing:
+/// the list kept stays. A shared mailbox's folders are kept unless the account doesn't keep
+/// them ("Download shared folders"), then read on the server when opened.
 #[test]
 fn public_folders_are_read_when_opened_unless_favorites() {
     use quatrelle_model::{AccountConfig, FOLLOWED_PUBLIC_DOC, Folder};
@@ -164,6 +167,7 @@ fn public_folders_are_read_when_opened_unless_favorites() {
         email: "riley@contoso.example".into(),
         username: "riley".into(),
         ews: Some("https://mail.contoso.example/EWS/Exchange.asmx".into()),
+        public_favorites_kept: true,
         ..Default::default()
     };
     let id = s.add_account(config, Some("pw".into())).unwrap();
@@ -177,11 +181,13 @@ fn public_folders_are_read_when_opened_unless_favorites() {
         selectable: true,
         ..Default::default()
     };
+    let shared = Folder { mailbox: Some("support@contoso.example".into()), ..f("support@contoso.example/Inbox", FolderRole::Other) };
     let folders = vec![
         f("INBOX", FolderRole::Inbox),
         f("Public Folders", FolderRole::Other),
         f("Public Folders/Team", FolderRole::Other),
         f("Public Folders/Reports", FolderRole::Other),
+        shared,
     ];
     s.apply(Event::Folders { account: id.clone(), folders });
     s.take_jobs();
@@ -195,19 +201,29 @@ fn public_folders_are_read_when_opened_unless_favorites() {
             })
             .collect()
     };
-    // Opened: read from the server then. The user's own folders aren't.
+    // Opened: read from the server then. The user's own folders and shared mailboxes aren't.
     s.run("folder.open", &json!({"account": id, "folder": "Public Folders/Team"})).unwrap();
     assert_eq!(synced(s.take_jobs()), ["Public Folders/Team"]);
-    s.run("folder.open", &json!({"account": id, "folder": "INBOX"})).unwrap();
-    assert!(synced(s.take_jobs()).is_empty());
+    for kept in ["INBOX", "support@contoso.example/Inbox"] {
+        s.run("folder.open", &json!({"account": id, "folder": kept})).unwrap();
+        assert!(synced(s.take_jobs()).is_empty(), "{kept} is kept here");
+    }
     // A Favorite: kept in sync by the account's sync, at once; opened, nothing more is asked.
     s.run("folder.favorite", &json!({"account": id, "folder": "Public Folders/Team", "on": true})).unwrap();
     assert_eq!(followed(), Some(vec!["Public Folders/Team".to_string()]));
     assert_eq!(synced(s.take_jobs()), ["Public Folders/Team"], "synced as soon as it's followed");
     s.run("folder.open", &json!({"account": id, "folder": "Public Folders/Team"})).unwrap();
     assert!(synced(s.take_jobs()).is_empty(), "a followed folder is in sync already");
-    // No longer a Favorite: no longer followed.
-    s.run("folder.favorite", &json!({"account": id, "folder": "Public Folders/Team", "on": false})).unwrap();
+    // Public Favorites no longer kept (Outlook's default): none followed, each read when opened.
+    s.run("account.update", &json!({"account": id, "publicFavoritesKept": false})).unwrap();
     assert_eq!(followed(), Some(Vec::new()));
+    s.take_jobs();
+    s.run("folder.open", &json!({"account": id, "folder": "Public Folders/Team"})).unwrap();
+    assert_eq!(synced(s.take_jobs()), ["Public Folders/Team"], "a Favorite not kept is read when opened");
+    // Shared mailboxes not kept: read on the server when opened, and the sync starts again.
+    s.run("account.update", &json!({"account": id, "sharedOnline": true})).unwrap();
+    assert!(s.take_jobs().iter().any(|j| matches!(j, Job::Start { account, .. } if account.shared_online)));
+    s.run("folder.open", &json!({"account": id, "folder": "support@contoso.example/Inbox"})).unwrap();
+    assert_eq!(synced(s.take_jobs()), ["support@contoso.example/Inbox"]);
     let _ = std::fs::remove_dir_all(store.root());
 }

@@ -115,17 +115,23 @@ impl Client {
         Ok((count("TotalCount"), count("UnreadCount"), stamp))
     }
 
-    /// The newest `limit` messages of a folder with their flags.
     /// The newest `limit` messages' ids and flags, a page of up to a thousand at a time (EWS
-    /// pages by offset; it says when the last page is in).
-    pub(super) fn newest(&self, folder: &str, limit: usize) -> Result<Vec<(String, Flags)>> {
+    /// pages by offset; it says when the last page is in); with `since`, only those received
+    /// since then (Unix seconds), as Outlook keeps mail offline in Cached Exchange Mode.
+    pub(super) fn newest(&self, folder: &str, limit: usize, since: Option<i64>) -> Result<Vec<(String, Flags)>> {
         let limit = limit.clamp(1, MAX_KEPT);
+        let restriction = since.map_or_else(String::new, |t| {
+            format!(
+                "<m:Restriction><t:IsGreaterThanOrEqualTo><t:FieldURI FieldURI=\"item:DateTimeReceived\"/><t:FieldURIOrConstant><t:Constant Value=\"{}\"/></t:FieldURIOrConstant></t:IsGreaterThanOrEqualTo></m:Restriction>",
+                crate::ews_pim::utc(t)
+            )
+        });
         let mut out: Vec<(String, Flags)> = Vec::new();
         while out.len() < limit {
             let page = (limit - out.len()).min(1000);
             let m = self.call_one(&format!(
                 "<m:FindItem Traversal=\"Shallow\"><m:ItemShape><t:BaseShape>IdOnly</t:BaseShape><t:AdditionalProperties>{FLAG_FIELDS}</t:AdditionalProperties></m:ItemShape>\
-                 <m:IndexedPageItemView MaxEntriesReturned=\"{}\" Offset=\"{}\" BasePoint=\"Beginning\"/>\
+                 <m:IndexedPageItemView MaxEntriesReturned=\"{}\" Offset=\"{}\" BasePoint=\"Beginning\"/>{restriction}\
                  <m:SortOrder><t:FieldOrder Order=\"Descending\"><t:FieldURI FieldURI=\"item:DateTimeReceived\"/></t:FieldOrder></m:SortOrder>\
                  <m:ParentFolderIds><t:FolderId Id=\"{}\"/></m:ParentFolderIds></m:FindItem>",
                 page,

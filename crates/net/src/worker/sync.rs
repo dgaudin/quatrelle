@@ -176,8 +176,8 @@ impl Worker {
             return;
         }
         self.read_followed();
-        self.let_go_of_public();
-        let mut paths = sync_order(&self.folders, &self.followed);
+        self.let_go_of_online();
+        let mut paths = sync_order(&self.folders, |f: &Folder| !self.read_online(&f.path));
         if self.opts.parallel > 0 && paths.len() > 2 {
             paths = self.sync_parallel(paths, rx);
             if self.closed {
@@ -207,6 +207,12 @@ impl Worker {
             log::info!("{}: full sync done in {:.0} s", self.acc.id, began.elapsed().as_secs_f32());
             // Anything left from a failed attempt gets another try every full sync.
             self.flush_outbox();
+            // Then the messages kept are downloaded whole, folder after folder, while nothing
+            // else is asked.
+            if self.opts.full {
+                self.ahead = sync_order(&self.folders, |f: &Folder| !self.read_online(&f.path)).into_iter().collect();
+                self.ahead_left = None;
+            }
             log::info!("{}: synced {} folders in {:.1} s", self.acc.id, self.folders.len(), began.elapsed().as_secs_f32());
             self.status(SyncStatus::Online { at: now() });
         }
@@ -330,27 +336,32 @@ impl Worker {
         self.followed = self.store.load_account_doc(&self.acc.id, quatrelle_model::FOLLOWED_PUBLIC_DOC).unwrap_or_default();
     }
 
+    /// Whether a folder is read on the server when it's opened rather than kept here, as
+    /// Outlook's Cached Exchange Mode does: a public folder not followed (a Favorite, when public
+    /// Favorites are kept), and a shared mailbox's folder when shared mailboxes aren't kept.
+    pub(super) fn read_online(&self, path: &str) -> bool {
+        if quatrelle_model::is_public_folder(path) {
+            return !self.followed.contains(path);
+        }
+        self.acc.shared_online && self.folders.iter().any(|f| f.path == path && f.mailbox.is_some())
+    }
+
     /// How a folder is read: how many of its newest, and whether it's only listed. A folder
-    /// asked to keep more keeps them (the API servers keep only the newest window); a public
-    /// folder not followed is listed when opened, its newest few hundred, nothing downloaded.
+    /// asked to keep more keeps them (the API servers keep only the newest window); a folder
+    /// read on the server is listed when opened, its newest few hundred, nothing downloaded.
     pub(super) fn options_for(&self, path: &str) -> SyncOptions {
         let more = self.windows.get(path).copied().unwrap_or(0);
-        if quatrelle_model::is_public_folder(path) && !self.followed.contains(path) {
-            return SyncOptions { window: more.max(PUBLIC_WINDOW), prefetch: 0, list_only: true, ..self.opts };
+        if self.read_online(path) {
+            return SyncOptions { window: more.max(ONLINE_WINDOW), prefetch: 0, list_only: true, full: false, since_days: 0, ..self.opts };
         }
         SyncOptions { window: more.max(self.opts.window), ..self.opts }
     }
 
-    /// What earlier passes kept of public folders no longer followed (up to a hundred thousand
-    /// messages each, most of a big mailbox's cache) is let go: they keep what they show when
-    /// opened. Their message numbers go at the end of the pass.
-    pub(super) fn let_go_of_public(&mut self) {
-        let paths: Vec<String> = self
-            .folders
-            .iter()
-            .filter(|f| quatrelle_model::is_public_folder(&f.path) && !self.followed.contains(&f.path))
-            .map(|f| f.path.clone())
-            .collect();
+    /// What earlier passes kept of folders now read on the server (a public folder held up to a
+    /// hundred thousand messages, most of a big mailbox's cache) is let go: they keep what they
+    /// show when opened. Their message numbers go at the end of the pass.
+    pub(super) fn let_go_of_online(&mut self) {
+        let paths: Vec<String> = self.folders.iter().filter(|f| self.read_online(&f.path)).map(|f| f.path.clone()).collect();
         for path in paths {
             let window = self.options_for(&path).window;
             let kept = self.store.load_folder(&self.acc.id, &path).map(|f| f.messages.len()).unwrap_or(0);
@@ -365,6 +376,35 @@ impl Worker {
                 }
                 Err(e) => log::warn!("{}: {}: {e}", self.acc.id, quatrelle_model::utf7::decode(&path)),
             }
+        }
+    }
+
+    /// Download a few more of the first folder's kept messages whole; the folder leaves the
+    /// list when it has them all, when a step got none (a message the server won't give is
+    /// tried again at the next full sync, not forever), or when the server refused.
+    pub(super) fn ahead_step(&mut self) {
+        let Some(path) = self.ahead.front().cloned() else { return };
+        let opts = self.options_for(&path);
+        let (store, id) = (self.store.clone(), self.id());
+        let left = match self.conn.as_ref() {
+            Some(Conn::Ews(c)) => crate::ews::download_ahead(c, &self.jstate, &store, &id, &path, &opts, AHEAD_STEP),
+            _ => Ok(0),
+        };
+        let done = match left {
+            Ok(0) => true,
+            Ok(n) => {
+                let stuck = self.ahead_left.as_ref().is_some_and(|(p, before)| *p == path && *before <= n);
+                self.ahead_left = Some((path.clone(), n));
+                stuck
+            }
+            Err(e) => {
+                log::info!("{}: {}: downloading ahead stopped: {e}", self.acc.id, quatrelle_model::utf7::decode(&path));
+                true
+            }
+        };
+        if done {
+            self.ahead.pop_front();
+            self.ahead_left = None;
         }
     }
 

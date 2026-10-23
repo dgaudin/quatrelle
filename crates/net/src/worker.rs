@@ -335,6 +335,11 @@ struct Worker {
     /// The public folders kept in sync (the user's Favorites among them, written by the session
     /// as [`FOLLOWED_PUBLIC_DOC`]); the others are listed only when opened.
     followed: BTreeSet<String>,
+    /// Folders whose kept messages are still to be downloaded whole (Cached Exchange Mode's
+    /// offline file), a few at a time while nothing else is asked; and the last one's count
+    /// still missing, to let go of a folder that no longer gets anywhere.
+    ahead: VecDeque<String>,
+    ahead_left: Option<(String, usize)>,
     /// The server search still wanted (the pool's).
     search: Arc<AtomicU64>,
     /// When the Inbox is next looked at, on a server that can't say when mail comes (no IDLE,
@@ -345,12 +350,15 @@ struct Worker {
 
 /// Where an account keeps its folders' own windows.
 const WINDOWS: &str = "windows.json";
-/// The newest messages of a public folder not followed listed when it's opened (Show more
-/// asks for more, as for any folder).
+/// Messages downloaded whole in one step ahead of reading: a step is short, so whatever is
+/// asked meanwhile waits for one at most.
+const AHEAD_STEP: usize = 20;
+/// The newest messages of a folder read on the server (a public folder not followed, a shared
+/// mailbox not kept) listed when it's opened (Show more asks for more, as for any folder).
 #[cfg(not(test))]
-const PUBLIC_WINDOW: usize = 500;
+const ONLINE_WINDOW: usize = 500;
 #[cfg(test)]
-pub(crate) const PUBLIC_WINDOW: usize = 25;
+pub(crate) const ONLINE_WINDOW: usize = 25;
 /// The most messages of a folder a search of the server brings in.
 const FOUND_MAX: usize = 500;
 
@@ -367,7 +375,7 @@ impl Worker {
         let jstate = if acc.is_api() && numbering { jmap::State::load(&store, &acc.id) } else { jmap::State::default() };
         // Online only (issue #4): nothing downloaded in full ahead of reading; a message comes
         // when it's opened, and is held in memory only.
-        let opts = if acc.keeps_online() { SyncOptions { prefetch: 0, ..opts } } else { opts };
+        let opts = if acc.keeps_online() { SyncOptions { prefetch: 0, full: false, ..opts } } else { opts };
         let windows = store.load_account_doc(&acc.id, WINDOWS).unwrap_or_default();
         let followed = store.load_account_doc(&acc.id, FOLLOWED_PUBLIC_DOC).unwrap_or_default();
         Worker {
@@ -383,6 +391,8 @@ impl Worker {
             folders,
             windows,
             followed,
+            ahead: VecDeque::new(),
+            ahead_left: None,
             queue: VecDeque::new(),
             backoff: Duration::from_secs(5),
             next_attempt: Instant::now(),
@@ -466,6 +476,11 @@ impl Worker {
             }
             if self.last_full.is_none_or(|t| t.elapsed() >= FULL_SYNC_EVERY) {
                 self.sync_all(&rx);
+                continue;
+            }
+            // Nothing asked, and the Inbox not due yet: a few more messages downloaded whole.
+            if !self.ahead.is_empty() && Instant::now() < self.next_poll {
+                self.ahead_step();
                 continue;
             }
             self.wait_for_mail(&rx);
@@ -592,9 +607,9 @@ fn log_event(e: &Event) {
 /// The order a full sync walks the folders in: the Inbox first (the mailbox is usable as soon as
 /// it is in), then what mail is about, the rest, the archive, and the public folders followed
 /// last — an account with public folders and years of archives takes minutes, and the Inbox
-/// must not wait for them, nor the user's own folders named after "Public Folders". Public
-/// folders not followed aren't walked at all: they're listed when opened.
-fn sync_order(folders: &[Folder], followed: &BTreeSet<String>) -> Vec<String> {
+/// must not wait for them, nor the user's own folders named after "Public Folders". Folders not
+/// `walked` (read on the server) are listed when opened.
+fn sync_order(folders: &[Folder], walked: impl Fn(&Folder) -> bool) -> Vec<String> {
     let rank = |f: &Folder| match f.role {
         _ if is_public_folder(&f.path) => 7,
         quatrelle_model::FolderRole::Inbox => 0,
@@ -605,8 +620,7 @@ fn sync_order(folders: &[Folder], followed: &BTreeSet<String>) -> Vec<String> {
         quatrelle_model::FolderRole::Other => 5,
         quatrelle_model::FolderRole::Archive => 6,
     };
-    let walked = |f: &&Folder| f.selectable && (!is_public_folder(&f.path) || followed.contains(&f.path));
-    let mut v: Vec<(&Folder, u8)> = folders.iter().filter(walked).map(|f| (f, rank(f))).collect();
+    let mut v: Vec<(&Folder, u8)> = folders.iter().filter(|f| f.selectable && walked(f)).map(|f| (f, rank(f))).collect();
     v.sort_by(|a, b| a.1.cmp(&b.1).then_with(|| a.0.path.cmp(&b.0.path)));
     v.into_iter().map(|(f, _)| f.path.clone()).collect()
 }

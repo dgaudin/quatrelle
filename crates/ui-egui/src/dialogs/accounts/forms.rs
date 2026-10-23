@@ -283,6 +283,10 @@ pub struct EditForm {
     pub smtp_sign_in: SmtpSignIn,
     /// Keep none of its mail on this computer (issue #4; not for POP).
     pub online_only: bool,
+    /// Exchange, as Outlook's Cached Exchange Mode: shared mailboxes kept on this computer, and
+    /// the public folders among the Favorites.
+    pub shared_kept: bool,
+    pub public_favorites_kept: bool,
     /// The provider it signs in with in the browser (`microsoft`: its own registration can be
     /// given below), when it does.
     pub oauth: Option<String>,
@@ -298,6 +302,10 @@ impl EditForm {
         let mut p = self.server_params();
         if self.pop.is_none() {
             p["onlineOnly"] = json!(self.online_only);
+        }
+        if self.ews.is_some() {
+            p["sharedOnline"] = json!(!self.shared_kept);
+            p["publicFavoritesKept"] = json!(self.public_favorites_kept);
         }
         // Its own Microsoft registration, as given (emptied: the built-in one again).
         if self.oauth.as_deref() == Some("microsoft") {

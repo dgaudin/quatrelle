@@ -1016,6 +1016,9 @@ month	May	مايو
 	What's new	ما الجديد
 	You have the newest version.	لديك أحدث إصدار.
 	Online only: keep none of this account's mail on this computer	عبر الإنترنت فقط: عدم الاحتفاظ بأي بريد لهذا الحساب على هذا الكمبيوتر
+	Keep shared mailboxes on this computer	الاحتفاظ بصناديق البريد المشتركة على هذا الكمبيوتر
+	Keep the public folders in Favorites on this computer	الاحتفاظ بالمجلدات العامة الموجودة في المفضلة على هذا الكمبيوتر
+	Those not kept are read on the server when you open them.	ما لا يُحتفظ به يُقرأ على الخادم عند فتحه.
 	Online only: none of this account's mail is kept on this computer.	عبر الإنترنت فقط: لا يُحتفظ بأي بريد لهذا الحساب على هذا الكمبيوتر.
 	Online only: {email}	عبر الإنترنت فقط: {email}
 	New message	رسالة جديدة

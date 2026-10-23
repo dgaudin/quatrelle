@@ -35,7 +35,7 @@ fn a_full_sync_starts_with_the_inbox() {
         Folder { selectable: false, ..f("Conteneur", FolderRole::Other) },
     ];
     assert_eq!(
-        sync_order(&folders, &BTreeSet::from(["Public Folders/Team".to_string()])),
+        sync_order(&folders, |f| !is_public_folder(&f.path) || f.path == "Public Folders/Team"),
         ["INBOX", "Brouillons", "Éléments envoyés", "Corbeille", "ASP", "Support", "Archives/2025", "Public Folders/Team"],
         "Inbox, drafts, sent, trash, the rest (by name), the archive, the public folder followed; no containers"
     );
