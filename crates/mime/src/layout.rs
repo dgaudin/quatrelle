@@ -74,6 +74,10 @@ pub struct Table {
     /// A picture behind it (`background`, `background-image: url(…)`), covering it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub background_image: Option<String>,
+    /// A line down its left edge, in this colour (`border-left`: a signature's rule between the
+    /// logo and the name).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub border_left: Option<[u8; 3]>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -85,6 +89,11 @@ pub struct Cell {
     pub align: Align,
     /// Columns it spans.
     pub span: u16,
+    /// A floated box that sets no width is as wide as its content (CSS's shrink-to-fit): this,
+    /// in pixels, when that's a picture of a known width (a signature's logo), its padding not
+    /// counted. The others beside it share the rest.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fit: Option<u32>,
     /// A picture behind its content, covering the cell.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub background_image: Option<String>,
@@ -318,6 +327,46 @@ impl Node {
         (px >= 1.0).then(|| Width::Px(px.min(4000.0) as u32))
     }
 
+    /// The colour of a line down its left edge (`border-left`, or its colour and style apart),
+    /// when it draws one.
+    fn border_left(&self) -> Option<[u8; 3]> {
+        let shorthand = self.style("border-left").unwrap_or_default();
+        let style = self.style("border-left-style").unwrap_or_default();
+        let words: Vec<&str> = shorthand.split_whitespace().collect();
+        let drawn = |w: &str| matches!(w, "solid" | "dotted" | "dashed" | "double" | "groove" | "ridge" | "inset" | "outset");
+        if !(words.iter().any(|w| drawn(w)) || drawn(style.trim())) || words.iter().any(|w| matches!(*w, "none" | "hidden" | "0" | "0px" | "0pt")) {
+            return None;
+        }
+        self.style("border-left-color").and_then(|c| color(&c)).or_else(|| words.iter().find_map(|w| color(w))).or(Some([0x99, 0x99, 0x99]))
+    }
+
+    /// A floated box's content width when it's one picture of a known width (see [`Cell::fit`]).
+    fn picture_width(&self, depth: usize) -> Option<u32> {
+        let mut found: Option<u32> = None;
+        let mut pictures = 0usize;
+        fn walk(n: &Node, depth: usize, found: &mut Option<u32>, pictures: &mut usize) -> bool {
+            if depth > MAX_DEPTH * 4 || n.hidden() {
+                return depth <= MAX_DEPTH * 4;
+            }
+            if n.tag == "img" {
+                *pictures += 1;
+                // Its `width` in pixels first: Word writes it so, and its style in inches.
+                let attr = n.attr("width").and_then(|w| w.trim().trim_end_matches("px").trim().parse::<f32>().ok()).filter(|w| *w >= 1.0);
+                *found = match (attr, n.width()) {
+                    (Some(w), _) => Some(w.min(4000.0) as u32),
+                    (None, Some(Width::Px(px))) => Some(px),
+                    _ => None,
+                };
+                return true;
+            }
+            n.kids.iter().all(|k| match k {
+                Kid::Text(t) => t.chars().all(|c| c.is_whitespace() || c == '\u{a0}'),
+                Kid::El(e) => walk(e, depth + 1, found, pictures),
+            })
+        }
+        (walk(self, depth, &mut found, &mut pictures) && pictures == 1).then_some(found).flatten()
+    }
+
     fn background(&self) -> Option<[u8; 3]> {
         let v = self.style("background-color").or_else(|| self.style("background")).or_else(|| self.attr("bgcolor").map(str::to_ascii_lowercase))?;
         color(v.split_whitespace().next()?)
@@ -339,6 +388,18 @@ impl Node {
             return Align::Center;
         }
         self.align()
+    }
+
+    /// Whether nothing of it shows: no text but white space (non-breaking too), no picture, no
+    /// table, its hidden parts left out (Word's empty `<p><o:p>&nbsp;</o:p></p>`).
+    fn shows_nothing(&self, depth: usize) -> bool {
+        depth < MAX_DEPTH * 4
+            && !matches!(self.tag.as_str(), "img" | "table" | "hr" | "input" | "video" | "iframe")
+            && self.kids.iter().all(|k| match k {
+                // (The tokenizer has made `&nbsp;` the character it stands for.)
+                Kid::Text(t) => t.chars().all(|c| c.is_whitespace() || c == '\u{a0}'),
+                Kid::El(n) => n.hidden() || n.shows_nothing(depth + 1),
+            })
     }
 
     /// Whether a table or side-by-side boxes are somewhere inside.
