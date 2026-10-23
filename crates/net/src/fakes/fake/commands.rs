@@ -30,6 +30,18 @@ impl Fake {
         st.log.push(rest.to_string());
         let upper = rest.to_ascii_uppercase();
         let ok = |s: &mut Fake, extra: &str| s.say(&format!("{tag} OK {extra}done"));
+        if let Some((on, subject)) = st.deliver_on.clone()
+            && rest.contains(on.as_str())
+        {
+            st.deliver_on = None;
+            st.add("INBOX", &subject, &[]);
+        }
+        if upper == "IDLE" {
+            // RFC 2177, without pushing anything: what came before IDLE isn't said again.
+            self.idling = Some(tag.to_string());
+            self.say("+ idling");
+            return;
+        }
         if upper == "NOOP"
             && let Some(flood) = st.flood.clone()
         {
@@ -183,7 +195,10 @@ impl Fake {
                 let max = b.msgs.last().map_or(0, |m| m.uid);
                 let words: Vec<&str> = rest.split_whitespace().collect();
                 let verb = words.get(1).map(|s| s.to_ascii_uppercase()).unwrap_or_default();
-                if upper == "NOOP" || upper == "LOGOUT" {
+                if upper == "NOOP" {
+                    // What a real server says to a NOOP: the folder's size, now.
+                    lines.push(format!("* {} EXISTS", b.msgs.len()).into_bytes());
+                } else if upper == "LOGOUT" {
                 } else if verb == "SEARCH" {
                     // The keys after `SEARCH`, a literal last (as Quatrelle sends a UTF-8 word).
                     let after = rest.splitn(3, ' ').nth(2).unwrap_or("");
