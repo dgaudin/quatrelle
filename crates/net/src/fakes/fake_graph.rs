@@ -89,6 +89,9 @@ pub struct Data {
     /// Set per request from its `Prefer` header; without `IdType="ImmutableId"` message ids
     /// are returned in the other (prefixed) form.
     asked_immutable: bool,
+    /// A folder's messages listed at most this many a page (`None`: all of `$top` at once), the
+    /// rest through `@odata.nextLink`.
+    pub page_messages: Option<usize>,
     late: Vec<(std::time::Instant, Vec<u8>)>,
     next: u32,
 }
@@ -179,7 +182,7 @@ impl Data {
             "ccRecipients": [],
             "receivedDateTime": m.received,
             "bodyPreview": p.as_ref().map(|p| p.text.chars().take(60).collect::<String>()),
-            "hasAttachments": false,
+            "hasAttachments": p.as_ref().is_some_and(|p| !p.attachments.is_empty()),
             "internetMessageId": p.as_ref().map(|p| format!("<{}>", p.message_id)),
         });
         if !m.voting.is_empty() {
@@ -187,6 +190,26 @@ impl Data {
                 json!([{"id": "Binary {00062008-0000-0000-c000-000000000046} Id 0x8520", "value": crate::imap::base64(&m.voting)}]);
         }
         v
+    }
+}
+
+/// A message's header lines, as Graph's `internetMessageHeaders` gives them.
+fn header_lines(raw: &[u8]) -> Value {
+    let text = String::from_utf8_lossy(raw);
+    let head = text.split("\r\n\r\n").next().unwrap_or_default().replace("\r\n ", " ").replace("\r\n\t", " ");
+    let lines: Vec<Value> =
+        head.split("\r\n").filter_map(|l| l.split_once(':')).map(|(name, value)| json!({"name": name.trim(), "value": value.trim()})).collect();
+    json!(lines)
+}
+
+/// A `$filter` condition `receivedDateTime ge <ISO 8601 UTC time>`: the time in Unix seconds
+/// (`Some(None)`: that condition, with a time Graph wouldn't take; `None`: another condition).
+fn received_since(cond: &str) -> Option<Option<i64>> {
+    match cond.split_whitespace().collect::<Vec<_>>().as_slice() {
+        [name, op, at] if name.eq_ignore_ascii_case("receivedDateTime") && op.eq_ignore_ascii_case("ge") => {
+            Some(at.strip_suffix('Z').filter(|t| t.len() >= 19).and_then(|_| quatrelle_jmap::utc_date(at)))
+        }
+        _ => None,
     }
 }
 

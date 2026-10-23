@@ -388,6 +388,7 @@ impl Worker {
         let (store, id) = (self.store.clone(), self.id());
         let left = match self.conn.as_ref() {
             Some(Conn::Ews(c)) => crate::ews::download_ahead(c, &self.jstate, &store, &id, &path, &opts, AHEAD_STEP),
+            Some(Conn::Graph(c)) => crate::graph::download_ahead(c, &self.jstate, &store, &id, &path, &opts, AHEAD_STEP),
             _ => Ok(0),
         };
         let done = match left {

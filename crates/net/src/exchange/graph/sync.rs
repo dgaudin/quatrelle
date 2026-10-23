@@ -1,5 +1,7 @@
 //! Graph: the sync — the folder list, one folder's messages brought up to date, the server searched, sources, and changes applied.
 
+use std::collections::HashSet;
+
 use super::*;
 
 /// Refresh the folder list (and the folder ids behind it).
@@ -26,12 +28,21 @@ pub fn list_folders(c: &Client, st: &mut State, account: &str, shared: &[String]
     Ok(found.into_iter().map(|(f, _)| f).collect())
 }
 
-/// Bring one folder's cache up to date.
+/// Now, in Unix seconds.
+fn now() -> i64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX))
+}
+
+/// Bring one folder's cache up to date: its newest messages, those received in the time kept
+/// ([`SyncOptions::since_days`]) when it's limited, as Outlook's Cached Exchange Mode keeps
+/// them. Older mail goes, its source with it, at every sync (a folder nothing happened in
+/// too), except what a search of the server found: that stays while the folder has it.
 pub fn sync_folder(c: &Client, st: &mut State, store: &Store, account: &str, folder: &str, opts: &SyncOptions) -> Result<SyncReport> {
     let id = st.mailbox(folder)?.to_string();
     let owner = st.owner(folder).map(str::to_string);
     let owner = owner.as_deref();
-    let (listed, (total, unread)) = c.newest(&id, opts.window, owner)?;
+    let since = opts.since(now());
+    let (listed, (total, unread)) = c.newest(&id, opts.window, since, owner)?;
     let newest: Vec<(String, Flags)> = listed.iter().filter_map(|m| Some((m.get("id")?.as_str()?.to_string(), flags(m)))).collect();
     let mut fs = store.load_folder(account, folder)?;
     let mut report = SyncReport::default();
@@ -48,7 +59,19 @@ pub fn sync_folder(c: &Client, st: &mut State, store: &Store, account: &str, fol
         wanted.insert(st.number(&found), f);
     }
     st.keep_found(folder, |n| wanted.contains_key(&n));
-    let (kept, gone): (Vec<Summary>, Vec<Summary>) = std::mem::take(&mut fs.messages).into_iter().partition(|m| wanted.contains_key(&m.key.uid));
+    // Summaries kept from before they had it learn when the server received them, the time
+    // mail kept is measured by: a message whose own date is far older (a forward, mail imported)
+    // is listed by the server and stays here, not let go and listed again at each sync.
+    let received_of: HashMap<u32, i64> = listed.iter().filter_map(|m| Some((st.known(m.get("id")?.as_str()?)?, received(m)?))).collect();
+    for m in fs.messages.iter_mut().filter(|m| m.received == 0) {
+        if let Some(r) = received_of.get(&m.key.uid) {
+            m.received = *r;
+        }
+    }
+    // Past the window, or older than the time kept: gone, with its source.
+    let old = |m: &Summary| since.is_some_and(|t| m.received_at() < t) && !st.was_found(folder, m.key.uid);
+    let (kept, gone): (Vec<Summary>, Vec<Summary>) =
+        std::mem::take(&mut fs.messages).into_iter().partition(|m| wanted.contains_key(&m.key.uid) && !old(m));
     for m in &gone {
         store.remove_body(&m.key);
     }
@@ -161,39 +184,102 @@ pub fn find_on_server(
     Ok((numbers.iter().filter_map(|n| fs.find(*n).map(|m| m.key.clone())).collect(), new))
 }
 
+/// The newest sources, downloaded with the folder's list.
 fn prefetch(c: &Client, st: &State, store: &Store, account: &str, folder: &str, fs: &mut FolderState, opts: &SyncOptions) -> Result<()> {
-    let wanted: Vec<(u32, String)> = fs
+    let cap = ahead_cap(opts);
+    let wanted: Vec<(MessageKey, String)> = fs
         .messages
         .iter()
         .take(opts.prefetch)
-        // Graph lists no sizes: mail with attachments waits until it's opened.
-        .filter(|m| !m.has_attachments && !store.has_body(&m.key))
-        .filter_map(|m| Some((m.key.uid, st.id(m.key.uid)?.to_string())))
+        .filter(|m| worth_ahead(m, opts, cap) && !store.has_body(&m.key))
+        .filter_map(|m| Some((m.key.clone(), st.id(m.key.uid)?.to_string())))
         .collect();
     if wanted.is_empty() {
         return Ok(());
     }
+    let filled = download_into(c, st, store, fs, &wanted, cap)?;
+    // The same messages the sync just kept, a few of them filled in.
+    if !filled.is_empty() {
+        store.save_folder_changed(account, folder, fs, &filled)?;
+    }
+    Ok(())
+}
+
+/// The largest source kept ahead of reading: none when every message kept is downloaded whole.
+fn ahead_cap(opts: &SyncOptions) -> Option<usize> {
+    (!opts.full).then(|| usize::try_from(opts.prefetch_max_bytes).unwrap_or(usize::MAX))
+}
+
+/// Whether a message's source is downloaded ahead of reading. Graph lists no sizes: unless all
+/// of it is downloaded in the end, mail with attachments waits until it's opened, and so does
+/// one already found larger than `cap`.
+fn worth_ahead(m: &Summary, opts: &SyncOptions, cap: Option<usize>) -> bool {
+    opts.full || (!m.has_attachments && cap.is_none_or(|cap| m.size == 0 || usize::try_from(m.size).is_ok_and(|s| s <= cap)))
+}
+
+/// Download these messages' sources (key, server id) into the cache, and fill their list
+/// entries from them. A source larger than `cap` isn't kept, but its size is, so it isn't asked
+/// for again. The numbers of the entries filled.
+fn download_into(
+    c: &Client,
+    st: &State,
+    store: &Store,
+    fs: &mut FolderState,
+    wanted: &[(MessageKey, String)],
+    cap: Option<usize>,
+) -> Result<HashSet<u32>> {
+    let mut filled = HashSet::new();
     let mut failures = crate::sync::AheadFailures::new();
-    for (n, id) in &wanted {
-        let raw = match c.download(id, st.owner(folder)) {
+    for (key, id) in wanted {
+        let raw = match c.download(id, st.owner(&key.folder)) {
             Ok(raw) => {
                 failures.ok();
                 raw
             }
             Err(e) => {
-                failures.failed(&format!("{account}/{folder}: message {n}"), e)?;
+                failures.failed(&format!("{}/{}: message {}", key.account, key.folder, key.uid), e)?;
                 continue;
             }
         };
-        if raw.len() > usize::try_from(opts.prefetch_max_bytes).unwrap_or(usize::MAX) {
+        let Some(m) = fs.find_mut(key.uid) else { continue };
+        if cap.is_some_and(|cap| raw.len() > cap) {
+            if m.size == 0 {
+                m.size = u32::try_from(raw.len()).unwrap_or(u32::MAX);
+                filled.insert(key.uid);
+            }
             continue;
         }
-        let Some(m) = fs.find_mut(*n) else { continue };
         store.write_body(&m.key, &raw)?;
         fill_from_source(m, &raw);
+        filled.insert(key.uid);
     }
-    store.save_folder(account, folder, fs)?;
-    Ok(())
+    Ok(filled)
+}
+
+/// Whole downloads in the background, a few at a time while nothing else is asked: at most
+/// `budget` sources of the folder's cached messages not downloaded yet, the newest first. With
+/// [`SyncOptions::full`] every one comes, whatever its size, mail with attachments too; without
+/// it, those the folder's sync would download ahead ([`worth_ahead`]). How many of its cached
+/// messages are still to download after it (one the server won't give stays among them).
+pub(crate) fn download_ahead(c: &Client, st: &State, store: &Store, account: &str, folder: &str, opts: &SyncOptions, budget: usize) -> Result<usize> {
+    let mut fs = store.load_folder(account, folder)?;
+    if fs.validity != VALIDITY {
+        return Ok(0);
+    }
+    let cap = ahead_cap(opts);
+    // One look at the folder's sources, not one per message (a folder may keep 100,000).
+    let mut have: HashSet<u32> = store.cached_bodies(account, folder, VALIDITY).into_iter().collect();
+    let to_get = |m: &Summary, have: &HashSet<u32>| !have.contains(&m.key.uid) && worth_ahead(m, opts, cap) && st.id(m.key.uid).is_some();
+    let wanted: Vec<(MessageKey, String)> =
+        fs.messages.iter().filter(|m| to_get(m, &have)).take(budget).filter_map(|m| Some((m.key.clone(), st.id(m.key.uid)?.to_string()))).collect();
+    if !wanted.is_empty() {
+        let filled = download_into(c, st, store, &mut fs, &wanted, cap)?;
+        if !filled.is_empty() {
+            store.save_folder_changed(account, folder, &fs, &filled)?;
+        }
+        have.extend(wanted.iter().filter(|(k, _)| store.has_body(k)).map(|(k, _)| k.uid));
+    }
+    Ok(fs.messages.iter().filter(|m| to_get(m, &have)).count())
 }
 
 /// Download one message's source (and cache it).
