@@ -357,3 +357,75 @@ fn an_exchange_invitation_is_answered_on_the_servers_meeting() {
     assert!(s.take_jobs().iter().any(|j| matches!(j, Job::SyncDav { .. })));
     done(s);
 }
+
+/// A meeting is under one UID in the user's calendar and in each colleague's shared calendar
+/// that has it. Moved or deleted in the user's calendar, it's the user's copy that changes: the
+/// first one found was taken, a colleague's as often as not, and a deletion took them all (the
+/// server asked to delete each where the user may change the calendar). An occurrence changed
+/// here whose series the server no longer has can be deleted, and after a sync it's let go,
+/// said once, rather than refused at every sync.
+#[test]
+fn a_meeting_in_colleagues_calendars_changes_only_in_ones_own() {
+    use quatrelle_model::ical::CalEvent;
+    use quatrelle_model::pim::{CalendarInfo, DavSync, StoredEvent};
+    let mut s = Session::open(Some(temp("own-copy")), quatrelle_model::dates::Clock::new(NOW, 0));
+    let id = s
+        .run("account.add", &json!({"email": "zoe@contoso.example", "password": "pw", "ews": "https://mail.contoso.example/EWS/Exchange.asmx"}))
+        .unwrap()["account"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    s.take_jobs();
+    let (start, uid) = (1_792_569_600, "040000008200E00074C5B7101A82E008#1792569600");
+    let (mine, theirs) = ("ews:calendar", "shared:ana@contoso.example");
+    let copy = |calendar: &str, href: &str| StoredEvent {
+        calendar: calendar.into(),
+        href: href.into(),
+        etag: "e".into(),
+        event: CalEvent { uid: uid.into(), summary: "Safety board".into(), start, end: start + 3600, ..Default::default() },
+        ..Default::default()
+    };
+    {
+        let p = s.pim_mut(&id);
+        // A colleague's calendar the user may change, listed first.
+        p.calendars = vec![
+            CalendarInfo { id: theirs.into(), name: "Ana".into(), ..Default::default() },
+            CalendarInfo { id: mine.into(), name: "Calendar".into(), ..Default::default() },
+        ];
+        p.events = vec![copy(theirs, "ana-item"), copy(mine, "my-item")];
+    }
+    let in_cal = |s: &Session, cal: &str| s.pim[&id].events.iter().find(|e| e.calendar == cal && e.event.uid == uid).cloned();
+    s.run("event.move", &json!({"uid": uid, "start": start + 7200})).unwrap();
+    assert_eq!(in_cal(&s, mine).map(|e| (e.event.start, e.dirty)), Some((start + 7200, true)), "the user's copy moves");
+    assert_eq!(in_cal(&s, theirs).map(|e| (e.event.start, e.dirty)), Some((start, false)), "the colleague's copy is theirs");
+    s.run("event.delete", &json!({"uid": uid})).unwrap();
+    assert!(in_cal(&s, mine).is_none());
+    assert!(in_cal(&s, theirs).is_some(), "deleted in the user's calendar only");
+    let asked: Vec<&str> = s.pim[&id].deleted.iter().map(|t| t.href.as_str()).collect();
+    assert_eq!(asked, ["my-item"], "only the user's item is deleted on the server");
+    // An occurrence changed here, of the series as Exchange once read it; read since as single
+    // appointments, the series is no longer anywhere.
+    let lone = |at: i64| StoredEvent {
+        calendar: mine.into(),
+        dirty: true,
+        event: CalEvent {
+            uid: "040000008200E00074C5B7101A82E008".into(),
+            recurrence_id: Some(at),
+            summary: "Safety board".into(),
+            start: at,
+            end: at + 3600,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    s.pim_mut(&id).events.push(lone(start + 7 * 86_400));
+    s.run("event.delete", &json!({"uid": "040000008200E00074C5B7101A82E008", "occurrence": start + 7 * 86_400})).expect("deleted alone");
+    assert!(!s.pim[&id].events.iter().any(|e| e.event.recurrence_id.is_some()));
+    assert!(in_cal(&s, theirs).is_some(), "not the colleague's appointment under the series' name");
+    s.pim_mut(&id).events.push(lone(start + 14 * 86_400));
+    s.apply_dav(&id, &DavSync::default());
+    assert!(!s.pim[&id].events.iter().any(|e| e.event.recurrence_id.is_some()), "let go after a sync");
+    assert_eq!(s.notices.iter().filter(|n| n.text.contains("its series is no longer on the server")).count(), 1);
+    s.apply_dav(&id, &DavSync::default());
+    assert_eq!(s.notices.iter().filter(|n| n.text.contains("its series is no longer on the server")).count(), 1, "said once");
+}
