@@ -38,15 +38,19 @@ pub(super) fn blocks(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
     blocks_of(kids, ctx, depth)
 }
 
-/// Whether any table puts content side by side, or a picture behind it, or boxes over it: a
-/// layout worth keeping (otherwise the text flows).
+/// Whether any table puts content side by side, or a picture behind it, or boxes over it, or
+/// draws a border: a layout worth keeping (otherwise the text flows).
 pub(super) fn has_columns(b: &[Block]) -> bool {
     b.iter().any(|b| match b {
         Block::Text(_) => false,
         Block::Table(t) => {
             t.background_image.is_some()
+                || !t.borders.is_none()
                 || t.rows.iter().any(|r| r.iter().filter(|c| !c.blocks.is_empty()).count() > 1)
-                || t.rows.iter().flatten().any(|c| c.background_image.is_some() || !c.overlays.is_empty() || has_columns(&c.blocks))
+                || t.rows
+                    .iter()
+                    .flatten()
+                    .any(|c| c.background_image.is_some() || !c.overlays.is_empty() || !c.borders.is_none() || has_columns(&c.blocks))
         }
     })
 }
@@ -153,6 +157,10 @@ fn blocks_of(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
             Kid::El(n) if n.hidden() => {}
             Kid::El(n) if n.tag == "table" && depth < MAX_DEPTH => {
                 flush(&mut pending, &mut out, ctx);
+                // Its `border="1"`: a border around it, and one around each cell; its
+                // `cellpadding`: its cells' padding. Their own styles win over both.
+                let (table_border, cell_border) = n.border_attr();
+                let cellpadding = n.cellpadding();
                 let rows: Vec<Vec<Cell>> = colored(ctx, n, |ctx| {
                     n.rows()
                         .into_iter()
@@ -175,6 +183,10 @@ fn blocks_of(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
                                         background_image: c.background_image(),
                                         overlays: Vec::new(),
                                         fit: None,
+                                        borders: c.borders(cell_border),
+                                        radius: c.radius(),
+                                        padding: c.padding(cellpadding),
+                                        valign: c.valign(Some(tr)),
                                     }
                                 })
                                 .filter(|c| !c.blocks.is_empty() || c.background.is_some() || c.background_image.is_some())
@@ -192,7 +204,8 @@ fn blocks_of(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
                     align: n.table_align(),
                     background: n.background(),
                     background_image: n.background_image(),
-                    border_left: n.border_left(),
+                    borders: n.borders(table_border),
+                    radius: n.radius(),
                 }));
             }
             // A box with others placed over it: its content, and theirs on top.
@@ -265,6 +278,8 @@ fn blocks_of(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
                                         colored(ctx, c, |ctx| blocks(&c.kids, ctx, depth + 1))
                                     };
                                     let width = c.width();
+                                    // (A table in a column draws its own edges and padding.)
+                                    let own = c.tag != "table";
                                     Cell {
                                         blocks: if ctx.cells > MAX_CELLS { Vec::new() } else { content },
                                         width,
@@ -275,6 +290,10 @@ fn blocks_of(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
                                         overlays: Vec::new(),
                                         // A floated box as wide as its picture (a signature's logo).
                                         fit: width.is_none().then(|| c.picture_width(depth)).flatten().filter(|_| c.beside()),
+                                        borders: if own { c.borders(None) } else { Edges::default() },
+                                        radius: if own { c.radius() } else { 0 },
+                                        padding: if own { c.padding(None) } else { None },
+                                        valign: VAlign::Top,
                                     }
                                 })
                                 .filter(|c| !c.blocks.is_empty() || c.background.is_some() || c.background_image.is_some())
@@ -290,7 +309,8 @@ fn blocks_of(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
                         align: n.table_align(),
                         background: n.background(),
                         background_image: n.background_image(),
-                        border_left: n.border_left(),
+                        borders: n.borders(None),
+                        radius: n.radius(),
                     }));
                 }
             }
@@ -308,11 +328,8 @@ fn blocks_of(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
                 if !inner.is_empty() {
                     out.push(Block::Table(Table {
                         rows: vec![vec![Cell { blocks: inner, align: Align::Center, background: n.background(), span: 1, ..Default::default() }]],
-                        width: None,
                         align: Align::Center,
-                        background: None,
-                        background_image: None,
-                        border_left: None,
+                        ..Default::default()
                     }));
                 }
             }
@@ -327,8 +344,7 @@ fn blocks_of(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
                         width: n.width(),
                         align: Align::Center,
                         background: n.background(),
-                        background_image: None,
-                        border_left: None,
+                        ..Default::default()
                     }));
                 } else {
                     out.extend(inner);

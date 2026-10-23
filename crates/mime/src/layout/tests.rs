@@ -101,8 +101,15 @@ fn css_columns_are_columns_too() {
         .unwrap_or_else(|| panic!("logo and name side by side: {word:?}"));
     assert_eq!(row[0].fit, Some(194), "the logo's box as wide as the logo");
     assert_eq!(row[1].fit, None, "the name's takes the rest");
-    let ruled = row[1].blocks.iter().any(|b| matches!(b, Block::Table(t) if t.border_left == Some([0xcc, 0xcc, 0xcc])));
+    let rule = Some(Border { width: 1, color: [0xcc, 0xcc, 0xcc] });
+    let ruled =
+        row[1].blocks.iter().any(|b| matches!(b, Block::Table(t) if t.borders.left == rule && t.borders.right.is_none() && t.borders.top.is_none()));
     assert!(ruled, "the rule between them: {:?}", row[1].blocks);
+    // The name's cell: no border of its own (Word's `border:none` over the table's
+    // `border="1"`), and its padding in points and centimetres, 10 pixels on the left.
+    let Some(Block::Table(name)) = row[1].blocks.first() else { panic!("{:?}", row[1].blocks) };
+    assert!(name.rows[0][0].borders.is_none());
+    assert_eq!(name.rows[0][0].padding, Some([0, 0, 0, 10]));
     let floats = html_layout(r#"<div><div style="float:left">One</div><div style="float:right">Two</div></div>"#);
     assert!(!floats.is_empty());
     // Stacked flexbox, inline text with spans: no columns.
@@ -189,6 +196,68 @@ fn boxes_placed_over_others_are_kept() {
     let far = html_layout(r#"<div style="position:relative"><p>a</p><b style="position:absolute;top:99999999px;left:-50px">b</b></div>"#);
     let Block::Table(t) = &far[0] else { panic!("{far:?}") };
     assert_eq!((t.rows[0][0].overlays[0].x, t.rows[0][0].overlays[0].y), (0, MAX_OFFSET));
+}
+
+/// Borders (CSS and `border="1"`), round corners, padding (CSS and `cellpadding`) and where a
+/// cell's content sits in its row come with the cells, as a newsletter, a receipt and Word's
+/// signature set them.
+#[test]
+fn borders_padding_and_alignment_are_kept() {
+    let grey = Border { width: 1, color: [0x99, 0x99, 0x99] };
+    // A newsletter: a framed, rounded card with a rounded button (its link not underlined).
+    let news = html_layout(
+        r##"<table width="600" align="center" style="border:1px solid #dddddd; border-radius:8px; border-collapse:separate">
+        <tr><td style="padding:20px"><h1>Studio news</h1><p>What's on this month.</p></td></tr>
+        <tr><td align="center" style="padding:0 20px 20px">
+            <table cellpadding="0" cellspacing="0"><tr>
+            <td bgcolor="#1a73e8" style="border-radius:4px; padding:12px 24px"><a href="https://example.com/shop" style="color:#ffffff;text-decoration:none">Shop now</a></td>
+            </tr></table>
+        </td></tr></table>"##,
+    );
+    let Block::Table(card) = &news[0] else { panic!("{news:?}") };
+    assert_eq!(card.borders.uniform(), Some(Border { width: 1, color: [0xdd, 0xdd, 0xdd] }));
+    assert_eq!(card.radius, 8);
+    assert_eq!(card.rows[0][0].padding, Some([20; 4]));
+    assert!(card.rows[0][0].borders.is_none(), "the cells of a bordered table have none of their own");
+    assert_eq!(card.rows[1][0].padding, Some([0, 20, 20, 20]));
+    let Block::Table(inner) = &card.rows[1][0].blocks[0] else { panic!("{card:?}") };
+    let button = &inner.rows[0][0];
+    assert_eq!((button.background, button.radius, button.padding), (Some([0x1a, 0x73, 0xe8]), 4, Some([12, 24, 12, 24])));
+    assert_eq!(button.valign, VAlign::Middle, "a cell's content sits in the middle unless it says otherwise");
+    assert!(!format!("{button:?}").contains("underline: true"), "the button's link isn't underlined: {button:?}");
+    // A receipt: `border="1"` draws the table's edge and every cell's; `cellpadding` pads them.
+    let receipt = html_layout(
+        r#"<table border="1" cellpadding="4" cellspacing="0"><tr><th>Item</th><th>Price</th></tr>
+        <tr valign="bottom"><td valign="top" style="padding:0">Poster</td><td align="right" style="border-color:#ff0000">40</td></tr></table>"#,
+    );
+    let Block::Table(t) = &receipt[0] else { panic!("{receipt:?}") };
+    assert_eq!(t.borders.uniform(), Some(grey));
+    assert_eq!(t.rows[0][0].borders.uniform(), Some(grey));
+    assert_eq!(t.rows[0][0].padding, Some([4; 4]));
+    assert_eq!((t.rows[1][0].padding, t.rows[1][0].valign), (Some([0; 4]), VAlign::Top), "the cell's own padding and alignment");
+    assert_eq!(t.rows[1][1].valign, VAlign::Bottom, "the row's alignment");
+    assert_eq!(t.rows[1][1].borders.uniform(), Some(Border { width: 1, color: [255, 0, 0] }), "the attribute's border, recoloured");
+    assert_eq!(t.rows[1][1].radius, 0);
+    // A table of one column with a border is a layout worth keeping (the border shows);
+    // its style's `border:none` takes the attribute's away from the table, not from its cells.
+    let boxed = html_layout(r#"<table border="1" style="border:none"><tr><td>Note</td></tr></table>"#);
+    let Block::Table(t) = &boxed[0] else { panic!("{boxed:?}") };
+    assert!(t.borders.is_none());
+    assert_eq!(t.rows[0][0].borders.uniform(), Some(grey));
+    assert_eq!(html_layout(r#"<table border="2"><tr><td>Note</td></tr></table>"#).len(), 1);
+    // Boxes laid out with CSS keep their edges and padding too, at the top of their row.
+    let flex = html_layout(r#"<div style="display:flex"><div style="border-bottom:2px dashed #000;padding:4px 8px">a</div><div>b</div></div>"#);
+    let Block::Table(t) = &flex[0] else { panic!("{flex:?}") };
+    assert_eq!(t.rows[0][0].borders, Edges { bottom: Some(Border { width: 2, color: [0, 0, 0] }), ..Default::default() });
+    assert_eq!((t.rows[0][0].padding, t.rows[0][0].valign), (Some([4, 8, 4, 8]), VAlign::Top));
+    assert!(t.rows[0][1].borders.is_none() && t.rows[0][1].padding.is_none());
+    // Hostile values: widths and padding capped, nothing panics.
+    let huge =
+        html_layout(r#"<table style="border:99999px solid #000"><tr><td style="padding:99999px;border-radius:-5px">a</td><td>b</td></tr></table>"#);
+    let Block::Table(t) = &huge[0] else { panic!("{huge:?}") };
+    assert_eq!(t.borders.top.map(|b| b.width), Some(MAX_BORDER));
+    assert_eq!(t.rows[0][0].padding, Some([MAX_PADDING; 4]));
+    assert_eq!(t.rows[0][0].radius, 0);
 }
 
 #[test]

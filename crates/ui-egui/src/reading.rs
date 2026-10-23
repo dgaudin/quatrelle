@@ -19,6 +19,7 @@ mod compose;
 mod people;
 use attachments::*;
 pub(crate) use attachments::{big_picture, decode};
+pub(crate) use body::CellHeights;
 use body::*;
 pub use compose::compose_window;
 /// A picture cut to a circle: its middle square is kept (a picture that isn't square would
@@ -84,7 +85,7 @@ pub fn html_preview(s: &Session, st: &mut UiState, ui: &mut Ui, html: &str) {
     let mut acts: Vec<Action> = Vec::new();
     let width = ui.available_width();
     let faces = crate::look::typefaces::loaded(ui.ctx());
-    let mut body = Body { s, key: &key, p: &p, allowed: false, shown: &mut shown, acts: &mut acts, faces };
+    let mut body = Body { s, key: &key, p: &p, allowed: false, shown: &mut shown, acts: &mut acts, faces, cells: 0 };
     if p.layout.is_empty() {
         body.lines(st, ui, &p.rich, width, theme::surface_rgb(&t), Align::Min);
     } else {

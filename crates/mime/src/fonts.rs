@@ -1,8 +1,8 @@
 //! Font sizes and typefaces of HTML (a message read, a signature copied from Outlook or Word):
-//! the HTML converter keeps bold, colours and links but not sizes or fonts, so where each
-//! element with a `font-size` or `font-family` (or `<font size face>`, or bold or italic set
-//! with CSS) starts and ends is marked in its text first, and the marks become the spans'
-//! sizes and fonts afterwards ([`runs`]).
+//! the HTML converter keeps bold, colours and links but not sizes, fonts or underlines, so
+//! where each element with a `font-size` or `font-family` (or `<font size face>`, or bold,
+//! italic or underline set with CSS, or `<u>`) starts and ends is marked in its text first,
+//! and the marks become the spans' sizes, fonts and underlines afterwards ([`runs`]).
 
 use crate::rich::DEFAULT_SIZE;
 
@@ -14,14 +14,16 @@ const INDEX_BASE: u32 = 0xE100;
 /// Most marked elements (the rest keep the size around them).
 const MAX_MARKS: usize = 3000;
 
-/// What a marked element sets: its size in points and its typeface, and bold or italic when
-/// its style says so (`font-weight: bold`: the converter knows only `<b>`).
+/// What a marked element sets: its size in points and its typeface, and bold, italic or
+/// underlined when its style says so (`font-weight: bold`, `text-decoration: underline`: the
+/// converter knows only `<b>` and `<i>`) or the element does (`<u>`, `<ins>`).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct Font {
     pub size: Option<u8>,
     pub family: Option<String>,
     pub bold: bool,
     pub italic: bool,
+    pub underline: bool,
 }
 
 /// Elements that never hold anything (no end tag).
@@ -87,6 +89,8 @@ fn font_of(tag: &str, name: &str) -> Option<Font> {
                     f.bold = matches!(w.as_str(), "bold" | "bolder") || w.parse::<u16>().is_ok_and(|n| n >= 600);
                 }
                 "font-style" => f.italic = matches!(v.to_ascii_lowercase().as_str(), "italic" | "oblique"),
+                // (`none` inside an underlined element takes nothing away, as in CSS.)
+                "text-decoration" | "text-decoration-line" => f.underline = v.to_ascii_lowercase().split_whitespace().any(|w| w == "underline"),
                 "font" => {
                     // The shorthand: `[style] [weight] size[/line] family`.
                     for word in v.split_whitespace() {
@@ -112,6 +116,9 @@ fn font_of(tag: &str, name: &str) -> Option<Font> {
         if let Some(face) = attr(tag, "face") {
             f.family = family(&face).or(f.family);
         }
+    }
+    if name == "u" || name == "ins" {
+        f.underline = true;
     }
     (f != Font::default()).then_some(f)
 }
@@ -212,6 +219,7 @@ pub(crate) fn runs(text: &str, open: &mut Vec<usize>, fonts: &[Font]) -> Vec<(St
         family: open.iter().rev().find_map(|k| fonts.get(*k).and_then(|f| f.family.clone())),
         bold: open.iter().any(|k| fonts.get(*k).is_some_and(|f| f.bold)),
         italic: open.iter().any(|k| fonts.get(*k).is_some_and(|f| f.italic)),
+        underline: open.iter().any(|k| fonts.get(*k).is_some_and(|f| f.underline)),
     };
     let mut out: Vec<(String, Font)> = Vec::new();
     let mut piece = String::new();
@@ -267,5 +275,13 @@ mod tests {
             mark("<p style='font:bold 12pt/1.2 Georgia, serif'>x").1,
             vec![Font { size: Some(12), family: Some("Georgia".into()), bold: true, ..Default::default() }]
         );
+        // Underlined: the element, or its style; `none` isn't a mark.
+        let under = Font { underline: true, ..Default::default() };
+        assert_eq!(
+            mark("<u>a</u><ins>b</ins><span style='text-decoration: underline'>c</span>").1,
+            vec![under.clone(), under.clone(), under.clone()]
+        );
+        assert_eq!(mark("<span style='text-decoration-line: underline dotted'>c</span>").1, vec![under]);
+        assert!(mark("<a style='text-decoration:none'>c</a>").1.is_empty());
     }
 }

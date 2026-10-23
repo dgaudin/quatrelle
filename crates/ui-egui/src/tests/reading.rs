@@ -29,6 +29,119 @@ fn a_banner_and_a_placed_label_draw() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// A shop's receipt as HTML mail: a framed, rounded card, a receipt table with `border="1"` and
+/// `cellpadding`, a row whose short cell sits in the middle beside a tall one, a rounded
+/// button, underlined words.
+pub(crate) const RECEIPT_HTML: &str = r##"<table width="560" align="center" cellpadding="0" cellspacing="0" style="border:1px solid #dddddd; border-radius:8px">
+<tr><td style="padding:16px 20px; border-bottom:1px solid #dddddd"><h2>Your order is on its way</h2></td></tr>
+<tr><td style="padding:16px 20px">
+<p>Thanks for your order, <u>Riley</u>. Here is what we <span style="text-decoration:underline">packed</span>:</p>
+<table border="1" cellpadding="6" cellspacing="0" width="100%" style="border-collapse:collapse">
+<tr bgcolor="#f4f4f4"><th align="left">Item</th><th align="right">Qty</th><th align="right">Price</th></tr>
+<tr><td>Screen print, <i>Lantern</i> (A2)</td><td align="right">1</td><td align="right">40.00</td></tr>
+<tr><td>Postcards, set of 8</td><td align="right">2</td><td align="right">12.00</td></tr>
+<tr><td colspan="2" align="right"><b>Total</b></td><td align="right"><b>64.00</b></td></tr>
+</table>
+<table width="100%" cellpadding="8" cellspacing="0" style="margin-top:12px">
+<tr><td width="45%" bgcolor="#eef3ff" style="border-left:4px solid #1a73e8">Tall line 1<br>Tall line 2<br>Tall line 3<br>Tall line 4</td>
+<td bgcolor="#fff7e6">Short</td></tr>
+</table>
+</td></tr>
+<tr><td align="center" style="padding:0 20px 20px">
+<table cellpadding="0" cellspacing="0"><tr><td bgcolor="#1a73e8" style="border-radius:4px; padding:12px 24px"><a href="https://example.com/track" style="color:#ffffff; text-decoration:none"><b>Track your parcel</b></a></td></tr></table>
+</td></tr>
+</table>"##;
+
+/// Borders, round corners, cell padding and row alignment draw: the receipt's frame and grid
+/// are painted in their colours, its button is a rounded box, the short cell's text sits in
+/// the middle of its row from the second frame (the first measures), underlined words are
+/// underlined; in both themes, and in a narrow pane (its columns stacked) nothing breaks.
+#[test]
+fn bordered_tables_and_aligned_cells_draw() {
+    use egui::Shape;
+    let (mut a, dir) = app_with_html("borders", "Your order is on its way", RECEIPT_HTML);
+    let ctx = egui::Context::default();
+    // (The first frame sets the app up; a command run before it would be undone.)
+    frame(&ctx, &mut a, vec![]);
+    let k = a.session.list.iter().find(|m| m.subject.contains("Your order")).map(|m| m.key.clone()).unwrap();
+    a.run("list.open", json!({"key": k.to_id()}));
+    a.session.prefs.reading_pane = ReadingPane::Right;
+    let p = a.session.reading.as_ref().and_then(|r| r.parsed.clone()).unwrap();
+    assert!(!p.layout.is_empty(), "laid out as tables");
+    let rgb = |c: [u8; 3]| egui::Color32::from_rgb(c[0], c[1], c[2]);
+    // Every box drawn: its fill, its stroke's colour (a rounded frame draws its border so) and
+    // how round its corners are.
+    let boxes = |shapes: &[Shape]| {
+        shapes
+            .iter()
+            .filter_map(|s| if let Shape::Rect(r) = s { Some((r.fill, r.stroke.color, r.corner_radius.nw)) } else { None })
+            .collect::<Vec<_>>()
+    };
+    // Where a piece of the message's text is drawn (a whole label: the list's preview holds
+    // the same words).
+    let text_y = |shapes: &[Shape], text: &str| {
+        shapes.iter().find_map(|s| match s {
+            Shape::Text(t) if t.galley.text() == text => Some(t.pos.y),
+            _ => None,
+        })
+    };
+    // The first frame after opening draws the message out of sight (it fades in) and measures
+    // its cells; from the next, the short cell's content sits in the middle of its row.
+    frame(&ctx, &mut a, vec![]);
+    assert!((0..12).any(|n| a.ui.cell_heights.get(&k, n).is_some()), "the cells' heights are measured on the first frame");
+    // Faded in, its colours are whole.
+    let card = |shapes: &[Shape]| boxes(shapes).iter().any(|(_, stroke, r)| *stroke == rgb([0xdd, 0xdd, 0xdd]) && *r == 8);
+    let mut shown = Vec::new();
+    for _ in 0..40 {
+        shown = frame_shapes(&ctx, &mut a, vec![], egui::vec2(1280.0, 800.0));
+        if card(&shown) {
+            break;
+        }
+    }
+    let texts: Vec<String> =
+        shown.iter().filter_map(|s| if let Shape::Text(t) = s { Some(t.galley.text().chars().take(30).collect()) } else { None }).collect();
+    assert!(text_y(&shown, "Tall line 1").is_some(), "the message is drawn: {texts:?}");
+    let strokes: Vec<_> = boxes(&shown).iter().filter(|(_, s, _)| s.a() > 0).map(|(_, s, r)| (*s, *r)).collect();
+    assert!(card(&shown), "the card's rounded frame in its colour: {strokes:?}");
+    let drawn = |c: [u8; 3]| boxes(&shown).iter().any(|(fill, stroke, _)| *fill == rgb(c) || *stroke == rgb(c));
+    assert!(drawn([0x99, 0x99, 0x99]), "the receipt's grid (border=\"1\") in grey");
+    assert!(drawn([0x1a, 0x73, 0xe8]), "the rule down the tall cell, and the button");
+    assert!(
+        boxes(&shown).iter().any(|(fill, _, r)| *fill == rgb([0x1a, 0x73, 0xe8]) && *r == 4),
+        "the button's corners rounded: {:?}",
+        boxes(&shown)
+    );
+    let underlined = shown.iter().any(
+        |s| matches!(s, Shape::Text(t) if t.galley.text() == "Riley" && t.galley.job.sections.iter().any(|sec| sec.format.underline.width > 0.0)),
+    );
+    assert!(underlined, "the <u> word is underlined");
+    let (tall, short) = (text_y(&shown, "Tall line 1").unwrap(), text_y(&shown, "Short").unwrap());
+    assert!(short > tall + 15.0, "the short cell's text sits in the middle of its row: {short} vs {tall}");
+    let again = frame_shapes(&ctx, &mut a, vec![], egui::vec2(1280.0, 800.0));
+    assert_eq!(text_y(&again, "Short"), Some(short), "steady from then on");
+    for dark in [Some(true), Some(false)] {
+        a.ui.dark = dark;
+        for pane in [ReadingPane::Bottom, ReadingPane::Right] {
+            a.session.prefs.reading_pane = pane;
+            for _ in 0..2 {
+                frame(&ctx, &mut a, vec![]);
+            }
+        }
+        // Narrow (the pane under the list, the window 480 wide and tall enough to show the
+        // message, since what's scrolled out of sight isn't painted): the receipt's three
+        // columns stack, each cell's content at its own top, and the card still draws.
+        a.session.prefs.reading_pane = ReadingPane::Bottom;
+        let mut narrow = Vec::new();
+        for _ in 0..2 {
+            narrow = frame_shapes(&ctx, &mut a, vec![], egui::vec2(480.0, 1800.0));
+        }
+        let texts: Vec<String> =
+            narrow.iter().filter_map(|s| if let Shape::Text(t) = s { Some(t.galley.text().chars().take(30).collect()) } else { None }).collect();
+        assert!(card(&narrow) && text_y(&narrow, "Item").is_some(), "the card ({}) and the receipt's first cell, narrow: {texts:?}", card(&narrow));
+    }
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 /// Dialogs kept the size of the last big one (their buttons' row took all the room left): Add
 /// account stayed tall after Server settings closed, Remove account opened as tall as Options.
 #[test]
