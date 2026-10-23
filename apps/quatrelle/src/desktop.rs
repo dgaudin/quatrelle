@@ -294,6 +294,27 @@ impl Services for Desktop {
         Some(png)
     }
     fn open_url(&mut self, url: &str) -> Result<(), String> {
+        // A network share (`file://server/share/…`, as the reader keeps one): Windows opens it by
+        // its own name (`\\server\share\…`, Explorer for a folder); Linux, the BSDs and
+        // macOS by `smb://`, which their file managers (GVfs, KIO, Finder) know.
+        if let Some(rest) = url.strip_prefix("file://") {
+            let Some((_, unc)) = quatrelle_engine::mime::share_parts(url) else { return Err("not a network share".into()) };
+            #[cfg(windows)]
+            {
+                let _ = rest;
+                return shell_open(std::ffi::OsStr::new(&unc));
+            }
+            #[cfg(all(unix, not(target_os = "macos")))]
+            {
+                let _ = unc;
+                return show_share(format!("smb://{rest}"));
+            }
+            #[cfg(not(any(windows, all(unix, not(target_os = "macos")))))]
+            {
+                let _ = unc;
+                return shell_open(std::ffi::OsStr::new(&format!("smb://{rest}")));
+            }
+        }
         // Web addresses go to Windows' URL handler: ShellExec_RunDLL (right for files) started
         // and quietly showed nothing, so sign-in pages never reached the browser.
         #[cfg(windows)]
@@ -404,6 +425,39 @@ impl Services for Desktop {
             log::warn!("reminder notification: {e}");
         }
     }
+}
+
+/// A network share (`smb://server/share/…`) in the desktop's file manager, which mounts it
+/// (asking for a password when the server wants one): a folder opened, a file shown in its
+/// folder (not run). Through the file managers' common D-Bus interface (Nautilus, Dolphin,
+/// Nemo…), on a thread of its own as starting one can take a moment; without one, the system's
+/// handler for `smb://` (GNOME declares none: it went nowhere).
+#[cfg(all(unix, not(target_os = "macos")))]
+fn show_share(uri: String) -> Result<(), String> {
+    let file = uri.rsplit('/').next().is_some_and(|last| last.contains('.'));
+    std::thread::Builder::new()
+        .name("open-share".into())
+        .spawn(move || {
+            let method = if file { "ShowItems" } else { "ShowFolders" };
+            let shown = zbus::blocking::Connection::session().and_then(|bus| {
+                bus.call_method(
+                    Some("org.freedesktop.FileManager1"),
+                    "/org/freedesktop/FileManager1",
+                    Some("org.freedesktop.FileManager1"),
+                    method,
+                    &(vec![uri.as_str()], ""),
+                )
+                .map(drop)
+            });
+            if let Err(e) = shown {
+                log::info!("no file manager answered for {uri} ({e}): the system's handler opens it");
+                if let Err(e) = open::that_detached(&uri) {
+                    log::warn!("{uri} couldn't be opened: {e}");
+                }
+            }
+        })
+        .map(drop)
+        .map_err(|e| e.to_string())
 }
 
 /// Open a file or a web address with the system's choice of app, as Explorer would.

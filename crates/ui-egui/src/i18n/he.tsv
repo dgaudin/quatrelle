@@ -1211,3 +1211,9 @@ month	May	מאי
 	Busy	עסוק
 	Out of office	מחוץ למשרד
 	Working elsewhere	עובד במקום אחר
+	Open a network share?	לפתוח שיתוף רשת?
+	This link opens {path} on the server {server}.	קישור זה פותח את {path} בשרת {server}.
+	The server can ask for your sign-in: open a share only when you trust the person who sent the link.	השרת עשוי לבקש את פרטי ההתחברות שלך: פתח שיתוף רק כשאתה סומך על מי ששלח את הקישור.
+	Don't ask again for this server	אל תשאל שוב עבור שרת זה
+	The share couldn't be opened: {error}	לא ניתן היה לפתוח את השיתוף: {error}
+	Open this server's shares without asking	לפתוח שיתופים של שרת זה בלי לשאול

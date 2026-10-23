@@ -1212,3 +1212,9 @@ month	May	5月
 	Busy	予定あり
 	Out of office	外出中
 	Working elsewhere	別の場所で作業中
+	Open a network share?	ネットワーク共有を開きますか?
+	This link opens {path} on the server {server}.	このリンクはサーバー {server} 上の {path} を開きます。
+	The server can ask for your sign-in: open a share only when you trust the person who sent the link.	サーバーがサインイン情報を求める場合があります。リンクの送信者を信頼できる場合にのみ共有を開いてください。
+	Don't ask again for this server	このサーバーでは今後確認しない
+	The share couldn't be opened: {error}	共有を開けませんでした: {error}
+	Open this server's shares without asking	このサーバーの共有を確認せずに開く

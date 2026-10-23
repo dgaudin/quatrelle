@@ -1211,3 +1211,9 @@ month	May	مايو
 	Busy	مشغول
 	Out of office	خارج المكتب
 	Working elsewhere	يعمل في مكان آخر
+	Open a network share?	فتح مجلد مشترك على الشبكة؟
+	This link opens {path} on the server {server}.	يفتح هذا الرابط {path} على الخادم {server}.
+	The server can ask for your sign-in: open a share only when you trust the person who sent the link.	قد يطلب الخادم بيانات تسجيل دخولك: لا تفتح مجلدًا مشتركًا إلا إذا كنت تثق بمن أرسل الرابط.
+	Don't ask again for this server	لا تسأل مجددًا عن هذا الخادم
+	The share couldn't be opened: {error}	تعذّر فتح المجلد المشترك: {error}
+	Open this server's shares without asking	فتح مجلدات هذا الخادم المشتركة دون سؤال

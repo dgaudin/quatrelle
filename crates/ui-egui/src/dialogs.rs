@@ -52,6 +52,15 @@ pub enum Dialog {
         uid: String,
         name: String,
     },
+    /// A link to a network share on a server not trusted yet: opened once the user says so
+    /// (`link`: `file://server/share/…`; `path`: as Windows writes it), and from then on
+    /// without asking when `always` is ticked.
+    OpenShare {
+        link: String,
+        server: String,
+        path: String,
+        always: bool,
+    },
     MoveTo {
         filter: String,
     },
@@ -478,6 +487,7 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Act
             writing::draw(ui, d, s, t, acts)
         }
         Dialog::ConfirmDeleteContact { .. }
+        | Dialog::OpenShare { .. }
         | Dialog::PicturePreview { .. }
         | Dialog::Preview { .. }
         | Dialog::OpenSharedCalendar { .. }

@@ -370,3 +370,56 @@ fn addresses_in_a_plain_text_message_open_with_a_click() {
     assert_eq!(a.session.compose.as_ref().map(|c| c.to.as_str()), Some("support@example.com"), "a new message to it");
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// A network share written in a message (`\\server\share\folder`) is a link too; clicked, it
+/// asks first, naming the server (a share on a stranger's server can ask for the user's
+/// sign-in), and once trusted, that server's shares open without asking.
+#[test]
+fn a_network_share_asks_before_it_opens() {
+    let (mut a, dir) = app("share-links");
+    let raw = b"From: Zoe Park <zoe@studio.example>\r\nTo: riley@studio.example\r\nSubject: Share\r\nMessage-ID: <share@x>\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nThe files: \\\\files-01\\Common\\Projects\\2026 (and the rest).\r\n";
+    let store = a.session.store.clone().unwrap();
+    let mut st = store.load_folder("sample", "INBOX").unwrap();
+    let uid = st.messages.iter().map(|m| m.key.uid).max().unwrap_or(0) + 1;
+    let key = quatrelle_engine::model::MessageKey { account: "sample".into(), folder: "INBOX".into(), validity: st.validity.max(1), uid };
+    st.messages.insert(0, quatrelle_engine::mime::summary_from_full(raw, key.clone(), Default::default(), raw.len() as u32, NOW));
+    store.write_body(&key, raw).unwrap();
+    store.save_folder("sample", "INBOX", &st).unwrap();
+    a.session.apply(quatrelle_engine::model::Event::FolderChanged { account: "sample".into(), folder: "INBOX".into() });
+    a.run("view.html", json!({"on": false}));
+    a.run("list.open", json!({"key": key.to_id()}));
+    let ctx = egui::Context::default();
+    for _ in 0..3 {
+        frame(&ctx, &mut a, vec![]);
+    }
+    let click = |a: &mut MailApp| {
+        let at: Vec<egui::Rect> = ctx.data(|d| d.get_temp(egui::Id::unique("plain-links"))).unwrap_or_default();
+        let p = at.first().expect("the share is a link").left_center() + egui::vec2(6.0, 0.0);
+        let button = |pressed| Event::PointerButton { pos: p, button: egui::PointerButton::Primary, pressed, modifiers: Modifiers::NONE };
+        frame(&ctx, a, vec![Event::PointerMoved(p)]);
+        frame(&ctx, a, vec![button(true)]);
+        frame(&ctx, a, vec![button(false)]);
+        frame(&ctx, a, vec![]);
+    };
+    click(&mut a);
+    match a.ui.dialog.as_mut() {
+        Some(Dialog::OpenShare { link, server, path, always }) => {
+            assert_eq!(
+                (link.as_str(), server.as_str(), path.as_str()),
+                ("file://files-01/Common/Projects/2026", "files-01", r"\\files-01\Common\Projects\2026")
+            );
+            *always = true;
+        }
+        other => panic!("asked nothing: {other:?}"),
+    }
+    frame(&ctx, &mut a, vec![]);
+    // "Open", with "Don't ask again" ticked: the server is trusted from now on.
+    a.act(crate::Action::Run("link.trustShareServer", json!({"server": "files-01"})));
+    a.act(crate::Action::OpenShare("file://files-01/Common/Projects/2026".into()));
+    a.ui.dialog = None;
+    assert!(a.session.prefs.trusted_share_servers.contains("files-01"));
+    click(&mut a);
+    assert!(a.ui.dialog.is_none(), "a trusted server's share opens without asking");
+    assert!(a.session.run("link.trustShareServer", &json!({"server": "bad name/x"})).is_err());
+    let _ = std::fs::remove_dir_all(dir);
+}

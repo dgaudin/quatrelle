@@ -196,8 +196,11 @@ pub enum Action {
         account: String,
         insert: bool,
     },
-    /// A link in a message was clicked (web pages open in the browser; `mailto:` starts a message).
+    /// A link in a message was clicked (web pages open in the browser; `mailto:` starts a message;
+    /// a network share asks first, unless its server is trusted).
     OpenUrl(String),
+    /// A network share's link the user said to open ([`Dialog::OpenShare`]).
+    OpenShare(String),
     /// Run a command for the open dialog: it closes on success and shows the error otherwise.
     Submit(&'static str, Value),
     /// Bring the main window to the front (after acting from a message window).
