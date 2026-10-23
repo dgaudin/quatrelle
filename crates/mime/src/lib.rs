@@ -99,10 +99,11 @@ impl InlinePart for mail_parser::MessagePart<'_> {
 }
 
 /// Build a summary from a message's header (or its whole source). `fallback_date` is the
-/// server's INTERNALDATE, used when the `Date` header is missing or unparseable.
+/// server's INTERNALDATE (when it received the message), used when the `Date` header is
+/// missing or unparseable, and kept as `received`.
 pub fn summary_from_header(raw: &[u8], key: MessageKey, flags: Flags, size: u32, fallback_date: i64) -> Summary {
     let Some(m) = MessageParser::default().parse(raw) else {
-        return Summary { key, flags, size, date: fallback_date, subject: String::new(), ..Default::default() };
+        return Summary { key, flags, size, date: fallback_date, received: fallback_date, subject: String::new(), ..Default::default() };
     };
     summary_from_message(&m, key, flags, size, fallback_date)
 }
@@ -126,6 +127,8 @@ fn summary_from_message(m: &Message<'_>, key: MessageKey, flags: Flags, size: u3
         to: addrs(m.to()),
         cc: addrs(m.cc()),
         date,
+        // What every server gives here is when it received the message.
+        received: fallback_date,
         size,
         flags,
         has_attachments,
