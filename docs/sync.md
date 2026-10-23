@@ -79,6 +79,8 @@ still being read; it also takes a folder of its own when only one is left.
 - **Numbers (JMAP, Graph, EWS):** each reader gets `State::reserve` — its own copy with a block of
   message numbers kept for it — and `State::absorb`/`compact` give them back once it's done, so two
   connections never number two messages the same. Stored keys (folder states) stay valid.
+- **Each folder is read with its own options** (`Worker::options_for`): one asked to keep more
+  (Show more) keeps them on a reader too, rather than being cut back to the account's window.
 - **A server that takes one connection** (or says it's busy): the reader that can't connect says so
   (`SyncDone::Refused`), the account finishes the round on its main connection, and `parallel` is
   turned off for that account until it's started again.
@@ -211,6 +213,17 @@ servers that don't offer IMAP. Every call is SOAP over HTTPS.
   are numbered like JMAP's; Exchange gives a moved item a new id, so it shows up as a new message
   in its new folder. The Inbox is looked at every thirty seconds (one `GetFolder` when nothing
   came). The numbering is written only when it changed.
+  A folder too big for its state to be taken (more than 200 pages of changes) is listed without
+  one, and the mark says so (`too_big`): it isn't asked again for a week (asked at every pass,
+  two public folders of 100,000 reports each took a quarter of an hour).
+- **Public folders** (under `Public Folders`, `quatrelle_model::is_public_folder`) are kept as
+  Outlook keeps them: only the ones made Favorites are followed. The session writes them, per
+  account, as `public-followed.json` (only once Favorites were set: the defaults, or Favorites not
+  read yet, leave the list as it is); the worker reads it at each full pass and walks those last,
+  after the mailbox's own folders and its shared mailboxes. Another public folder isn't walked:
+  opening it asks for it (`Job::SyncFolder`), and it's listed only (`SyncOptions::list_only`: its
+  newest 500, Show more for more, nothing downloaded ahead, no state asked for). What an earlier
+  pass kept of one beyond that is let go at the next full pass, and its numbers with it.
 - **Changes** are `UpdateItem`, `MoveItem`, `DeleteItem` and the folder calls, fifty items a call.
 - **Sending** is `CreateItem` with the MIME source and `SendAndSaveCopy` (the copy goes to Sent
   Items); envelope-only recipients go in a `Bcc:` header. Drafts are `CreateItem` with `SaveOnly`,

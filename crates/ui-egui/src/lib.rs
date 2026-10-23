@@ -637,6 +637,7 @@ impl MailApp {
             let offline = p.work_offline;
             let keep = (p.keep_messages, p.keep_offline);
             self.session.prefs = p;
+            self.session.follow_public_favorites();
             spellcheck::set_personal(self.session.prefs.spelling.clone());
             self.session.note_new_calendars();
             self.session.refresh_list();

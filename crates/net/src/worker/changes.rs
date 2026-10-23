@@ -14,6 +14,7 @@ impl Worker {
                 self.last_full = None;
             }
             Job::SyncFolder { folder, .. } => {
+                self.read_followed();
                 if self.conn.is_none() {
                     self.next_attempt = Instant::now();
                     self.connect_and_sync();
@@ -24,7 +25,8 @@ impl Worker {
             }
             Job::MoreMail { folder, more, .. } => {
                 let kept = self.store.load_folder(&self.acc.id, &folder).map(|f| f.messages.len()).unwrap_or(0);
-                let now = self.windows.get(&folder).copied().unwrap_or(0).max(self.opts.window).max(kept);
+                self.read_followed();
+                let now = self.options_for(&folder).window.max(kept);
                 self.windows.insert(folder.clone(), now.saturating_add(more as usize).min(1_000_000));
                 if let Err(e) = self.store.save_account_doc(&self.acc.id, WINDOWS, &self.windows) {
                     log::warn!("{}: {WINDOWS}: {e}", self.acc.id);

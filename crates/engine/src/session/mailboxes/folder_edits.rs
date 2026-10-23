@@ -166,7 +166,41 @@ impl Session {
             list.retain(|x| *x != r);
         }
         self.prefs.favorites = Some(list);
+        self.follow_public_favorites();
         Ok(serde_json::json!({ "on": on }))
+    }
+
+    /// Whether an Exchange public folder is kept in sync: it's one of the user's Favorites.
+    pub fn follows_public(&self, account: &str, folder: &str) -> bool {
+        self.prefs.favorites.as_ref().is_some_and(|l| l.iter().any(|r| r.account == account && r.folder == folder))
+    }
+
+    /// Tell each Exchange account's sync which public folders to keep in sync: the Favorites
+    /// among them, as Outlook keeps public folders offline only through its Favorites; the
+    /// others are read when opened. Written when it changes; a public folder just made a
+    /// Favorite is synced at once. Favorites never set (the defaults, or before the saved ones
+    /// are read) say nothing: the list kept stays.
+    pub fn follow_public_favorites(&mut self) {
+        let (Some(favorites), Some(store)) = (self.prefs.favorites.clone(), self.store.clone()) else { return };
+        let ids: Vec<String> = self.accounts.iter().filter(|a| a.config.ews.is_some()).map(|a| a.config.id.clone()).collect();
+        for id in ids {
+            let list: Vec<String> =
+                favorites.iter().filter(|r| r.account == id && quatrelle_model::is_public_folder(&r.folder)).map(|r| r.folder.clone()).collect();
+            if self.followed_public.get(&id) == Some(&list) {
+                continue;
+            }
+            let before: Vec<String> = store.load_account_doc(&id, quatrelle_model::FOLLOWED_PUBLIC_DOC).unwrap_or_default();
+            if before != list {
+                if let Err(e) = store.save_account_doc(&id, quatrelle_model::FOLLOWED_PUBLIC_DOC, &list) {
+                    self.notice(format!("the public folders to keep in sync couldn't be saved: {e}"), true);
+                    continue;
+                }
+                for folder in list.iter().filter(|f| !before.contains(f)) {
+                    self.jobs.push(Job::SyncFolder { account: id.clone(), folder: folder.clone() });
+                }
+            }
+            self.followed_public.insert(id, list);
+        }
     }
 
     /// Count a local account's folders again (`only` these, or all of them).

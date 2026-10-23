@@ -67,6 +67,11 @@ pub struct FolderMark {
     /// changed since. Empty: unknown, the folder is listed.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub sync: String,
+    /// When the folder was found too big to follow by its changes (Exchange: more than a state
+    /// is read for): it's listed without asking again until a week later. Asked at every pass,
+    /// two folders of 100,000 reports each took a quarter of an hour.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub too_big: Option<i64>,
 }
 
 /// Messages a folder's search of the server brings in, at most.
@@ -299,11 +304,14 @@ pub struct SyncOptions {
     /// Folders read on connections of their own, beside the main one (0: one at a time). The
     /// main connection then stays free for what someone is waiting on.
     pub parallel: usize,
+    /// The newest `window` listed, nothing more: no state of the folder is asked for to follow
+    /// its changes (a public folder opened but not followed, read again each time it's opened).
+    pub list_only: bool,
 }
 
 impl Default for SyncOptions {
     fn default() -> Self {
-        SyncOptions { window: 1000, prefetch: 40, prefetch_max_bytes: 2 << 20, parallel: 0 }
+        SyncOptions { window: 1000, prefetch: 40, prefetch_max_bytes: 2 << 20, parallel: 0, list_only: false }
     }
 }
 

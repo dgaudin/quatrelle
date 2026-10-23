@@ -150,3 +150,64 @@ fn another_mailbox_opens_in_an_exchange_account_with_its_own_deleted_items() {
         let _ = std::fs::remove_dir_all(st.root());
     }
 }
+
+/// Exchange's public folders as Outlook keeps them: one opened is read from the server then,
+/// unless it's a Favorite, which the account's sync is told to keep in sync (and syncs at once
+/// when it becomes one). Favorites never set say nothing: the list kept stays.
+#[test]
+fn public_folders_are_read_when_opened_unless_favorites() {
+    use quatrelle_model::{AccountConfig, FOLLOWED_PUBLIC_DOC, Folder};
+    let store = temp("public-favorites");
+    let mut s = Session::open(Some(store.clone()), quatrelle_model::dates::Clock::new(NOW, 0));
+    let config = AccountConfig {
+        name: "Riley".into(),
+        email: "riley@contoso.example".into(),
+        username: "riley".into(),
+        ews: Some("https://mail.contoso.example/EWS/Exchange.asmx".into()),
+        ..Default::default()
+    };
+    let id = s.add_account(config, Some("pw".into())).unwrap();
+    // What an earlier session told the sync to follow.
+    store.save_account_doc(&id, FOLLOWED_PUBLIC_DOC, &vec!["Public Folders/Reports"]).unwrap();
+    let f = |path: &str, role: FolderRole| Folder {
+        account: id.clone(),
+        path: path.into(),
+        delimiter: Some('/'),
+        role,
+        selectable: true,
+        ..Default::default()
+    };
+    let folders = vec![
+        f("INBOX", FolderRole::Inbox),
+        f("Public Folders", FolderRole::Other),
+        f("Public Folders/Team", FolderRole::Other),
+        f("Public Folders/Reports", FolderRole::Other),
+    ];
+    s.apply(Event::Folders { account: id.clone(), folders });
+    s.take_jobs();
+    let followed = || store.load_account_doc::<Vec<String>>(&id, FOLLOWED_PUBLIC_DOC).ok();
+    assert_eq!(followed(), Some(vec!["Public Folders/Reports".to_string()]), "Favorites never set (not read yet) say nothing");
+    let synced = |jobs: Vec<Job>| -> Vec<String> {
+        jobs.into_iter()
+            .filter_map(|j| match j {
+                Job::SyncFolder { folder, .. } => Some(folder),
+                _ => None,
+            })
+            .collect()
+    };
+    // Opened: read from the server then. The user's own folders aren't.
+    s.run("folder.open", &json!({"account": id, "folder": "Public Folders/Team"})).unwrap();
+    assert_eq!(synced(s.take_jobs()), ["Public Folders/Team"]);
+    s.run("folder.open", &json!({"account": id, "folder": "INBOX"})).unwrap();
+    assert!(synced(s.take_jobs()).is_empty());
+    // A Favorite: kept in sync by the account's sync, at once; opened, nothing more is asked.
+    s.run("folder.favorite", &json!({"account": id, "folder": "Public Folders/Team", "on": true})).unwrap();
+    assert_eq!(followed(), Some(vec!["Public Folders/Team".to_string()]));
+    assert_eq!(synced(s.take_jobs()), ["Public Folders/Team"], "synced as soon as it's followed");
+    s.run("folder.open", &json!({"account": id, "folder": "Public Folders/Team"})).unwrap();
+    assert!(synced(s.take_jobs()).is_empty(), "a followed folder is in sync already");
+    // No longer a Favorite: no longer followed.
+    s.run("folder.favorite", &json!({"account": id, "folder": "Public Folders/Team", "on": false})).unwrap();
+    assert_eq!(followed(), Some(Vec::new()));
+    let _ = std::fs::remove_dir_all(store.root());
+}

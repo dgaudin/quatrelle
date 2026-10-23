@@ -175,7 +175,9 @@ impl Worker {
         if !self.relist() {
             return;
         }
-        let mut paths = sync_order(&self.folders);
+        self.read_followed();
+        self.let_go_of_public();
+        let mut paths = sync_order(&self.folders, &self.followed);
         if self.opts.parallel > 0 && paths.len() > 2 {
             paths = self.sync_parallel(paths, rx);
             if self.closed {
@@ -323,11 +325,52 @@ impl Worker {
         self.sink.emit(answer(Vec::new(), error, true));
     }
 
+    /// The public folders the session asks to follow, as it last wrote them.
+    pub(super) fn read_followed(&mut self) {
+        self.followed = self.store.load_account_doc(&self.acc.id, quatrelle_model::FOLLOWED_PUBLIC_DOC).unwrap_or_default();
+    }
+
+    /// How a folder is read: how many of its newest, and whether it's only listed. A folder
+    /// asked to keep more keeps them (the API servers keep only the newest window); a public
+    /// folder not followed is listed when opened, its newest few hundred, nothing downloaded.
+    pub(super) fn options_for(&self, path: &str) -> SyncOptions {
+        let more = self.windows.get(path).copied().unwrap_or(0);
+        if quatrelle_model::is_public_folder(path) && !self.followed.contains(path) {
+            return SyncOptions { window: more.max(PUBLIC_WINDOW), prefetch: 0, list_only: true, ..self.opts };
+        }
+        SyncOptions { window: more.max(self.opts.window), ..self.opts }
+    }
+
+    /// What earlier passes kept of public folders no longer followed (up to a hundred thousand
+    /// messages each, most of a big mailbox's cache) is let go: they keep what they show when
+    /// opened. Their message numbers go at the end of the pass.
+    pub(super) fn let_go_of_public(&mut self) {
+        let paths: Vec<String> = self
+            .folders
+            .iter()
+            .filter(|f| quatrelle_model::is_public_folder(&f.path) && !self.followed.contains(&f.path))
+            .map(|f| f.path.clone())
+            .collect();
+        for path in paths {
+            let window = self.options_for(&path).window;
+            let kept = self.store.load_folder(&self.acc.id, &path).map(|f| f.messages.len()).unwrap_or(0);
+            if kept <= window {
+                continue;
+            }
+            match self.store.clear_folder(&self.acc.id, &path) {
+                Ok(()) => {
+                    log::info!("{}: {}: not followed, {kept} messages let go", self.acc.id, quatrelle_model::utf7::decode(&path));
+                    self.jstate.marks.remove(&path);
+                    self.sink.emit(Event::FolderChanged { account: self.acc.id.clone(), folder: path });
+                }
+                Err(e) => log::warn!("{}: {}: {e}", self.acc.id, quatrelle_model::utf7::decode(&path)),
+            }
+        }
+    }
+
     pub(super) fn sync_one(&mut self, path: &str) {
         self.status(SyncStatus::Syncing { folder: path.to_string() });
-        // A folder asked to keep more keeps them (the API servers keep only the newest window).
-        let window = self.windows.get(path).copied().unwrap_or(0).max(self.opts.window);
-        let (store, opts, id) = (self.store.clone(), SyncOptions { window, ..self.opts }, self.id());
+        let (store, opts, id) = (self.store.clone(), self.options_for(path), self.id());
         let result = match self.conn.as_mut() {
             Some(Conn::Imap(c)) => sync_folder(c, &store, &id, path, &opts),
             Some(Conn::Jmap(c)) => {
@@ -402,7 +445,17 @@ impl Worker {
         let Ok(secret) = self.secret() else {
             return paths;
         };
-        let queue = Arc::new(Mutex::new(paths.into_iter().collect::<VecDeque<String>>()));
+        // Each folder with how it's read: one asked to keep more keeps them on a reader too
+        // (they read every folder with the account's window, and cut such a folder back to it).
+        let queue = Arc::new(Mutex::new(
+            paths
+                .into_iter()
+                .map(|p| {
+                    let o = self.options_for(&p);
+                    (p, o)
+                })
+                .collect::<VecDeque<(String, SyncOptions)>>(),
+        ));
         let (tx, done) = mpsc::channel::<SyncDone>();
         let mut running = 0usize;
         // The numbers given so far, one copy for every reader: they must know the messages
@@ -412,12 +465,8 @@ impl Worker {
             // The numbers it may give, kept apart from this connection's (see `State::reserve`).
             let state = self.jstate.reserve(1_000_000, &numbering);
             let (acc, store) = (self.acc.clone(), self.store.clone());
-            let (secret, opts, q, tx) = (secret.clone(), self.opts, queue.clone(), tx.clone());
-            if std::thread::Builder::new()
-                .name(format!("{} sync", acc.id))
-                .spawn(move || sync_folders(acc, store, secret, opts, state, q, tx))
-                .is_err()
-            {
+            let (secret, q, tx) = (secret.clone(), queue.clone(), tx.clone());
+            if std::thread::Builder::new().name(format!("{} sync", acc.id)).spawn(move || sync_folders(acc, store, secret, state, q, tx)).is_err() {
                 break;
             }
             running += 1;
@@ -458,8 +507,9 @@ impl Worker {
                         Err(e) if reader_stops(&e) => {
                             log::warn!("{}: reading {path} on a connection of its own: {e}; read on the main one", self.acc.id);
                             self.opts.parallel = 0;
+                            let opts = self.options_for(&path);
                             if let Ok(mut q) = queue.lock() {
-                                q.push_back(path);
+                                q.push_back((path, opts));
                             }
                         }
                         result => self.apply_report(&path, result),
@@ -483,7 +533,7 @@ impl Worker {
         self.save_jstate();
         // Whatever no connection took (a refusal, or a thread that couldn't start).
         let _ = refused;
-        queue.lock().map(|q| q.iter().cloned().collect()).unwrap_or_default()
+        queue.lock().map(|q| q.iter().map(|(p, _)| p.clone()).collect()).unwrap_or_default()
     }
 
     /// Sync calendars and address books with the account's CalDAV / CardDAV server (password

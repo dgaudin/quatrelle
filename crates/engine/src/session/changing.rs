@@ -254,5 +254,9 @@ impl Session {
             Op::SetFlag { .. } | Op::SetKeyword { .. } | Op::Move { .. } | Op::Expunge { .. } | Op::EmptyFolder { .. } => {}
         }
         self.index = None;
+        // A Favorite public folder renamed or deleted: its sync follows.
+        if matches!(op, Op::RenameFolder { .. } | Op::DeleteFolder { .. }) {
+            self.follow_public_favorites();
+        }
     }
 }

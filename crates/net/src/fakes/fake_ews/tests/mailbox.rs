@@ -192,6 +192,86 @@ fn public_folders_list_under_their_own_folder_and_sync() {
 
 /// A message whose source the server won't give doesn't stop the folder: the others
 /// download, and the folder syncs.
+/// Public folders as Outlook keeps them: only the ones followed (the Favorites) sync with the
+/// mailbox; another is listed when it's opened, its newest few, without asking for a state to
+/// follow; what an earlier version kept of one is let go; and a followed one too big to follow
+/// by its changes isn't asked again at every pass (two folders of reports took a quarter of an
+/// hour at each).
+#[test]
+fn public_folders_sync_only_when_followed() {
+    let mut d = Data {
+        pf_mailbox: Some("PFContent@contoso.example".into()),
+        pf_hierarchy: Some("PFHierarchy@contoso.example".into()),
+        // Pages of ten changes: three of them (the most a state is read for here) aren't enough
+        // for the reports.
+        sync_page: Some(10),
+        ..Default::default()
+    };
+    let inbox = d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    d.deliver(&inbox, b"From: zoe@contoso.example\r\nSubject: Hello\r\nMessage-ID: <m1@x>\r\n\r\nHi.\r\n", false, "2026-10-14T09:00:00Z");
+    let root = d.folder("IPM_SUBTREE", None, Some("publicfoldersroot"), "IPF.Note");
+    let team = d.folder("Team", Some(&root), None, "IPF.Note");
+    d.deliver(
+        &team,
+        b"From: hr@contoso.example\r\nSubject: Holiday hours\r\nMessage-ID: <h@x>\r\n\r\nClosed Friday.\r\n",
+        false,
+        "2026-10-14T09:00:00Z",
+    );
+    let reports = d.folder("Reports", Some(&root), None, "IPF.Note");
+    let report = |i: usize| format!("From: backup@contoso.example\r\nSubject: Report {i}\r\nMessage-ID: <r{i}@x>\r\n\r\nDone.\r\n").into_bytes();
+    for i in 0..40 {
+        d.deliver(&reports, &report(i), true, &format!("2026-09-{:02}T09:{:02}:00Z", 1 + i % 28, i % 60));
+    }
+    let server = serve(d);
+    let data = server.data.clone();
+    let store = crate::fake::tests_store("ews-public-followed");
+    let (team_path, reports_path) = ("Public Folders/Team", "Public Folders/Reports");
+    // What an earlier version kept of the reports: far more than they show when opened.
+    let old: Vec<quatrelle_model::Summary> = (1..=600)
+        .map(|uid| quatrelle_model::Summary {
+            key: quatrelle_model::MessageKey { account: "a1".into(), folder: reports_path.into(), validity: 1, uid },
+            ..Default::default()
+        })
+        .collect();
+    store.save_folder("a1", reports_path, &quatrelle_store::FolderState { validity: 1, messages: old, ..Default::default() }).unwrap();
+    let mut pool = crate::worker::Pool::new(store.clone(), Arc::new(crate::worker::MemoryCredentials::default()));
+    let account = AccountConfig {
+        id: "a1".into(),
+        email: "riley@contoso.example".into(),
+        username: format!("{DOMAIN}\\{USER}"),
+        ews: Some(server.url.clone()),
+        ..Default::default()
+    };
+    pool.submit(Job::Start { account, password: Some(Secret(PASSWORD.into())) });
+    until(&pool, "online", |e| matches!(e, Event::Status { status: SyncStatus::Online { .. }, .. }));
+    let kept = |path: &str| store.load_folder("a1", path).map(|f| f.messages.len()).unwrap_or(0);
+    assert_eq!(kept("INBOX"), 1);
+    assert_eq!(kept(team_path), 0, "not followed: not synced");
+    assert_eq!(kept(reports_path), 0, "what an earlier version kept is let go");
+    let asked = |from: usize| data.lock().unwrap().calls[from..].iter().filter(|c| *c == "SyncFolderItems").count();
+    // Opened: its newest listed, no state asked for.
+    let from = data.lock().unwrap().calls.len();
+    pool.submit(Job::SyncFolder { account: "a1".into(), folder: reports_path.into() });
+    eventually("the newest reports", || kept(reports_path) == crate::worker::PUBLIC_WINDOW);
+    assert_eq!(asked(from), 0, "an opened public folder is only listed");
+    // Followed (made Favorites): synced with the mailbox, in full.
+    store.save_account_doc("a1", quatrelle_model::FOLLOWED_PUBLIC_DOC, &vec![team_path, reports_path]).unwrap();
+    pool.submit(Job::SyncAll { account: "a1".into() });
+    eventually("the followed folders", || kept(team_path) == 1 && kept(reports_path) == 40);
+    // The reports are too big for a state (three pages): noted, and not asked again at the next
+    // pass, though a report came in.
+    {
+        let mut d = data.lock().unwrap();
+        d.deliver(&reports, &report(40), false, "2026-10-15T09:00:00Z");
+    }
+    let from = data.lock().unwrap().calls.len();
+    pool.submit(Job::SyncAll { account: "a1".into() });
+    eventually("the new report", || kept(reports_path) == 41);
+    assert_eq!(asked(from), 0, "a folder too big to follow isn't asked for its state at every pass");
+    drop(pool);
+    let _ = std::fs::remove_dir_all(store.root());
+}
+
 #[test]
 fn one_unreadable_message_holds_up_nothing() {
     let mut d = Data::default();
