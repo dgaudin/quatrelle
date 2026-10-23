@@ -473,7 +473,15 @@ impl Session {
         let id = cal.id.clone();
         let uid = e.uid.clone();
         p.events.retain(|x| x.event.uid != uid);
-        p.events.push(StoredEvent { calendar: id.clone(), href: String::new(), etag: String::new(), event: e, dirty: id != LOCAL, notify: false });
+        p.events.push(StoredEvent {
+            calendar: id.clone(),
+            href: String::new(),
+            etag: String::new(),
+            event: e,
+            dirty: id != LOCAL,
+            notify: false,
+            respond: None,
+        });
         self.after_pim_change(&account, id != LOCAL);
         Ok(serde_json::json!({"uid": uid, "account": account}))
     }
@@ -651,6 +659,10 @@ impl Session {
         p.ensure_defaults();
         for e in sync.errors.iter().take(3) {
             self.notice(format!("calendars and contacts: {e}"), true);
+        }
+        // Invitations the server answered, and copies of invitations to answer instead.
+        if self.settle_answers(account, sync) {
+            self.jobs.push(Job::SyncDav { account: account.to_string() });
         }
         self.save_pim(account);
     }

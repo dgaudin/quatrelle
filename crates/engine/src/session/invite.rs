@@ -3,7 +3,7 @@
 //! user's own events. Invitations travel as `text/calendar` parts with a `METHOD`.
 
 use quatrelle_model::ical::{self, Attendee, CalEvent, ICalendar};
-use quatrelle_model::pim::{LOCAL, StoredEvent, Tombstone};
+use quatrelle_model::pim::{LOCAL, StoredEvent, Tombstone, same_meeting};
 
 use super::*;
 
@@ -93,6 +93,9 @@ impl Session {
         for e in &mut events {
             set_answer(e, &self.my_addresses(), &me, stat);
         }
+        if self.server_answers(&account) {
+            return self.answer_by_server(&account, &uid, events.into_iter().find(|e| e.recurrence_id.is_none()), stat);
+        }
         // Into the calendar, replacing an earlier copy (an updated invitation); out if declined.
         let p = self.pim_mut(&account);
         let existing: Vec<StoredEvent> = p.events.iter().filter(|e| e.event.uid == uid).cloned().collect();
@@ -115,6 +118,7 @@ impl Session {
                     event: e.clone(),
                     dirty: calendar != LOCAL,
                     notify: false,
+                    respond: None,
                 });
                 remote |= calendar != LOCAL && i == 0;
             }
@@ -126,10 +130,90 @@ impl Session {
         Ok(serde_json::json!({"answer": stat, "uid": uid}))
     }
 
+    /// Whether the account's server answers invitations itself (Exchange: the meeting it placed
+    /// in the calendar is updated and the organizer told, as Outlook has it), rather than the
+    /// answer going by mail and the meeting into the calendar from here.
+    fn server_answers(&self, account: &str) -> bool {
+        self.account(account).is_some_and(|a| a.config.ews.is_some())
+    }
+
+    /// Answer an invitation through the server: on the meeting it placed in the calendar, found
+    /// by the invitation's UID (Exchange keeps a single one as `UID#start`); one not in the
+    /// calendar here yet waits, shown with the answer, for the calendar to be read, and is
+    /// answered there. Never a second copy of the meeting: answering one from the invitation
+    /// made one, with the user as its organizer, beside the server's. Nothing is mailed from
+    /// here: the server tells the organizer.
+    fn answer_by_server(&mut self, account: &str, uid: &str, invitation: Option<CalEvent>, stat: &str) -> CmdResult {
+        let (mine, me) = (self.my_addresses(), self.account(account).map(|a| a.config.email.clone()).unwrap_or_default());
+        let p = self.pim_mut(account);
+        let mut found = false;
+        for e in p.events.iter_mut().filter(|e| same_meeting(&e.event.uid, uid) && !e.href.is_empty() && e.event.recurrence_id.is_none()) {
+            set_answer(&mut e.event, &mine, &me, stat);
+            e.respond = Some(stat.to_string());
+            e.dirty = true;
+            found = true;
+        }
+        // An earlier answer still waiting, and copies of the invitation made before (never sent).
+        p.events.retain(|e| !(e.href.is_empty() && same_meeting(&e.event.uid, uid)));
+        if !found && let Some(event) = invitation {
+            let calendar = p.default_calendar().map(|c| c.id.clone()).unwrap_or_else(|| LOCAL.into());
+            p.events.push(StoredEvent { calendar, event, dirty: true, respond: Some(stat.to_string()), ..Default::default() });
+        }
+        self.after_pim_change(account, true);
+        Ok(serde_json::json!({"answer": stat, "uid": uid, "byServer": true}))
+    }
+
+    /// After a sync: the invitations the server answered take their answer (a declined one leaves
+    /// the calendar, as the server took it out), and what waited for it goes. Then copies of
+    /// invitations made here before the server answered them (accepted from the invitation,
+    /// never sent: they showed beside the server's meeting, twice) become the user's answer on
+    /// the server's meeting. Whether there's something new to send.
+    pub(super) fn settle_answers(&mut self, account: &str, sync: &quatrelle_model::pim::DavSync) -> bool {
+        if !self.server_answers(account) {
+            return false;
+        }
+        let (mine, me) = (self.my_addresses(), self.account(account).map(|a| a.config.email.clone()).unwrap_or_default());
+        let p = self.pim_mut(account);
+        for (uid, stat) in &sync.responded {
+            p.events.retain(|e| !(same_meeting(&e.event.uid, uid) && (e.href.is_empty() || stat == "DECLINED")));
+            for e in p.events.iter_mut().filter(|e| same_meeting(&e.event.uid, uid)) {
+                set_answer(&mut e.event, &mine, &me, stat);
+                e.respond = None;
+                e.dirty = false;
+            }
+        }
+        // Copies of invitations: an appointment never sent, someone else's meeting, answered by
+        // the user, whose meeting the server has.
+        let mine_answer = |e: &CalEvent| e.attendees.iter().find(|a| mine.contains(&a.email.to_ascii_lowercase())).map(|a| a.partstat.clone());
+        let copies: Vec<(String, String)> = p
+            .events
+            .iter()
+            .filter(|e| e.href.is_empty() && e.respond.is_none() && e.event.recurrence_id.is_none())
+            .filter(|e| e.event.organizer.as_ref().is_some_and(|o| !mine.contains(&o.email.to_ascii_lowercase())))
+            .filter_map(|e| {
+                mine_answer(&e.event).filter(|s| matches!(s.as_str(), "ACCEPTED" | "TENTATIVE" | "DECLINED")).map(|s| (e.event.uid.clone(), s))
+            })
+            .filter(|(uid, _)| p.events.iter().any(|x| !x.href.is_empty() && x.event.recurrence_id.is_none() && same_meeting(&x.event.uid, uid)))
+            .collect();
+        for (uid, stat) in &copies {
+            log::info!("{account}: an invitation's copy made here ({uid}) becomes the answer on the server's meeting");
+            p.events.retain(|e| !(e.href.is_empty() && same_meeting(&e.event.uid, uid)));
+            for e in p.events.iter_mut().filter(|e| !e.href.is_empty() && e.event.recurrence_id.is_none() && same_meeting(&e.event.uid, uid)) {
+                set_answer(&mut e.event, &mine, &me, stat);
+                e.respond = Some(stat.clone());
+                e.dirty = true;
+            }
+        }
+        !copies.is_empty()
+    }
+
     /// Answer an invitation already in the calendar (from the event form).
     pub fn respond_to_event(&mut self, uid: &str, answer: &str) -> CmdResult {
         let stat = partstat(answer).ok_or_else(|| CmdError::Params(format!("`{answer}`: answer accepted, tentative or declined")))?;
         let account = self.find_event(uid).map(|(a, _)| a.to_string()).ok_or_else(|| CmdError::Params(format!("no event `{uid}`")))?;
+        if self.server_answers(&account) {
+            return self.answer_by_server(&account, uid, None, stat);
+        }
         let me = self.account(&account).map(|a| a.config.email.clone()).unwrap_or_default();
         let mine = self.my_addresses();
         let mut master = None;
@@ -300,7 +384,7 @@ impl Session {
 
 /// Set the user's answer on an event (adding them as a guest when the invitation came through a
 /// list or an alias).
-fn set_answer(e: &mut CalEvent, mine: &[String], me: &str, stat: &str) {
+pub(super) fn set_answer(e: &mut CalEvent, mine: &[String], me: &str, stat: &str) {
     let mut found = false;
     for a in e.attendees.iter_mut().filter(|a| mine.contains(&a.email.to_ascii_lowercase())) {
         a.partstat = stat.to_string();

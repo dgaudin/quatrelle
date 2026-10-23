@@ -304,3 +304,56 @@ fn exchange_tells_the_guests_itself_and_mail_tells_them_once() {
     assert!(!item.movable && !item.organized, "a guest doesn't drag the organizer's meeting");
     done(s);
 }
+
+/// An Exchange account's invitations are answered by the server, on the meeting it placed in the
+/// calendar (kept here as `UID#start`): no second copy of the meeting, nothing mailed from here;
+/// the answer clears once the server gave it; and a copy made here before (accepted from the
+/// invitation, never sent, shown beside the server's meeting) becomes the answer on it.
+#[test]
+fn an_exchange_invitation_is_answered_on_the_servers_meeting() {
+    use quatrelle_model::ical::CalEvent;
+    use quatrelle_model::pim::{DavSync, StoredEvent};
+    let mut s = sample_session("ews-invite");
+    if let Some(a) = s.accounts.iter_mut().find(|a| a.config.id == "sample") {
+        a.config.ews = Some("https://mail.studio.example/EWS/Exchange.asmx".into());
+    }
+    // The server's meeting, as Exchange's is kept: `UID#start`, with its item's address.
+    let uid = "mix@sample.quatrelle";
+    let server_uid = {
+        let p = s.pim_mut("sample");
+        let e = p.events.iter_mut().find(|e| e.event.uid == uid).expect("the sample's meeting");
+        e.event.uid = format!("{uid}#{}", e.event.start);
+        e.href = "E1".into();
+        e.event.uid.clone()
+    };
+    let count = |s: &Session| s.pim["sample"].events.len();
+    let before = count(&s);
+    let k = s.list.iter().find(|m| m.subject == "Sound mix, version 3").map(|m| m.key.clone()).unwrap();
+    s.run("list.open", &json!({"key": k.to_id()})).unwrap();
+    s.take_jobs();
+    let r = s.run("invite.respond", &json!({"answer": "accepted"})).unwrap();
+    assert_eq!(r["byServer"], true);
+    assert_eq!(count(&s), before, "no second copy of the meeting");
+    let e = s.pim["sample"].events.iter().find(|e| e.event.uid == server_uid).unwrap().clone();
+    assert_eq!((e.respond.as_deref(), e.dirty), (Some("ACCEPTED"), true), "the server is to answer");
+    assert!(e.event.attendees.iter().any(|a| a.email == "riley@studio.example" && a.partstat == "ACCEPTED"));
+    let jobs = s.take_jobs();
+    assert!(!jobs.iter().any(|j| matches!(j, Job::Send { .. })), "nothing mailed from here: {jobs:?}");
+    assert!(jobs.iter().any(|j| matches!(j, Job::SyncDav { .. })));
+    // The server gave it.
+    s.apply_dav("sample", &DavSync { responded: vec![(server_uid.clone(), "ACCEPTED".into())], ..Default::default() });
+    let e = s.pim["sample"].events.iter().find(|e| e.event.uid == server_uid).unwrap().clone();
+    assert_eq!((e.respond.as_deref(), e.dirty), (None, false));
+    // A copy made by an older version (from the invitation, never sent), beside the server's.
+    let copy =
+        StoredEvent { calendar: e.calendar.clone(), event: CalEvent { uid: uid.into(), ..e.event.clone() }, dirty: true, ..Default::default() };
+    s.pim_mut("sample").events.push(copy);
+    s.take_jobs();
+    s.apply_dav("sample", &DavSync::default());
+    let p = &s.pim["sample"];
+    assert!(!p.events.iter().any(|e| e.href.is_empty() && e.event.uid == uid), "the copy goes");
+    let e = p.events.iter().find(|e| e.event.uid == server_uid).unwrap();
+    assert_eq!(e.respond.as_deref(), Some("ACCEPTED"), "its answer is given on the server's meeting");
+    assert!(s.take_jobs().iter().any(|j| matches!(j, Job::SyncDav { .. })));
+    done(s);
+}

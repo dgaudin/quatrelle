@@ -337,7 +337,7 @@ use contacts::{NOTE_COLOR, contact_xml, note_xml};
 pub use contacts::{card_of, note_of};
 use events::{event_fields, modified_occurrence_ids, occurrence_item_id};
 pub use events::{event_of, exception_of, own_organizer};
-use push::push_events;
+use push::{answer_pending, push_events};
 pub use sync::sync;
 
 #[cfg(test)]

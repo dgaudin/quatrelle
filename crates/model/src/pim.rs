@@ -32,6 +32,13 @@ pub struct CalendarInfo {
     pub group: String,
 }
 
+/// Whether two UIDs name the same meeting: as an invitation names it, or as Exchange's single
+/// appointments are kept here (`UID#start`, a series sent as separate items keeping its UID).
+pub fn same_meeting(a: &str, b: &str) -> bool {
+    let base = |u: &str| u.split('#').next().unwrap_or("").to_string();
+    !a.is_empty() && base(a) == base(b)
+}
+
 /// An event with where it lives.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StoredEvent {
@@ -51,6 +58,13 @@ pub struct StoredEvent {
     /// once the change is on the server.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub notify: bool,
+    /// The user's answer to this invitation (`ACCEPTED`, `TENTATIVE`, `DECLINED`), for the
+    /// server to give (Exchange's AcceptItem…): it updates the meeting it placed in the
+    /// calendar and tells the organizer itself, as Outlook has it. One not yet in the calendar
+    /// here (no address) is answered once the calendar is read and the meeting found there.
+    /// Cleared once given.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub respond: Option<String>,
 }
 
 /// An address book.
@@ -210,6 +224,9 @@ pub struct DavSync {
     pub pushed_notes: Vec<StoredNote>,
     /// Deletions done (by href).
     pub deleted: Vec<String>,
+    /// Invitations the server answered ([`StoredEvent::respond`]): their UID and the answer.
+    #[serde(default)]
+    pub responded: Vec<(String, String)>,
     /// What couldn't be stored or deleted (tried again next time).
     pub errors: Vec<String>,
     /// Only some calendars and address books were looked at ([`Pim::own_only`]): those not

@@ -444,6 +444,20 @@ impl Data {
                         out.push(err("ErrorAccessDenied"));
                         continue;
                     }
+                    // An answer to a meeting: noted; a declined one leaves the calendar.
+                    if matches!(m.name.as_str(), "AcceptItem" | "TentativelyAcceptItem" | "DeclineItem") {
+                        let reference = m.child("ReferenceItemId").and_then(|r| r.attr("Id")).unwrap_or_default().to_string();
+                        if !self.pim.iter().any(|(id, _, _)| *id == reference) {
+                            out.push(err("ErrorItemNotFound"));
+                            continue;
+                        }
+                        if m.name == "DeclineItem" {
+                            self.pim.retain(|(id, _, _)| *id != reference);
+                        }
+                        self.answers.push((reference, m.name.clone(), send));
+                        out.push(ok(String::new()));
+                        continue;
+                    }
                     if m.name == "CalendarItem" || m.name == "Contact" || sticky {
                         let id = self.id("P");
                         out.push(ok(format!("<m:Items><t:{0}><t:ItemId Id=\"{id}\" ChangeKey=\"ck\"/></t:{0}></m:Items>", m.name)));

@@ -1,12 +1,26 @@
 //! EWS calendars: the appointments changed here, sent to the server — new ones created, changed
 //! ones updated field by field, an occurrence changed on its own through the occurrence's own
-//! item — and the guests told when the change asks for it.
+//! item — and the guests told when the change asks for it; invitations answered as Outlook
+//! answers them, by the server.
 
 use super::*;
 
 /// Send every appointment changed here, noting each one's item on the server in `out`.
 pub(super) fn push_events(c: &Client, pim: &Pim, out: &mut DavSync) {
     for e in pim.events.iter().filter(|e| e.dirty) {
+        // An answer to an invitation: given by the server on the meeting it placed in the
+        // calendar; one not in the calendar here yet waits for it to be read
+        // ([`answer_pending`]). Never created as an appointment of the user's own: that made a
+        // second copy of the meeting, with the user as its organizer.
+        if let Some(answer) = &e.respond {
+            if !e.href.is_empty() && e.event.recurrence_id.is_none() {
+                match respond_item(c, &e.href, answer) {
+                    Ok(()) => out.responded.push((e.event.uid.clone(), answer.clone())),
+                    Err(x) => out.errors.push(format!("{}: {x}", e.event.summary)),
+                }
+            }
+            continue;
+        }
         let owner = quatrelle_model::pim::shared_calendar_owner(&e.calendar);
         let r = match e.event.recurrence_id.filter(|_| e.href.is_empty()) {
             // One occurrence of a series, changed on its own: the occurrence's item is asked for
@@ -29,10 +43,48 @@ pub(super) fn push_events(c: &Client, pim: &Pim, out: &mut DavSync) {
                 event: e.event.clone(),
                 dirty: false,
                 notify: false,
+                respond: None,
             }),
             Err(x) => out.errors.push(format!("{}: {x}", e.event.summary)),
         }
     }
+}
+
+/// Answers to invitations whose meeting wasn't in the calendar here yet: found in the calendar
+/// just read (by the invitation's UID, or Exchange's `UID#start` for a single one), and
+/// answered there. Not found yet: tried again at the next sync.
+pub(super) fn answer_pending(c: &Client, pim: &Pim, out: &mut DavSync) {
+    for e in pim.events.iter().filter(|e| e.dirty && e.href.is_empty() && e.event.recurrence_id.is_none()) {
+        let Some(answer) = &e.respond else { continue };
+        let found = out
+            .events
+            .iter()
+            .find(|x| x.calendar == CALENDAR && x.event.recurrence_id.is_none() && quatrelle_model::pim::same_meeting(&x.event.uid, &e.event.uid))
+            .map(|x| x.href.clone());
+        if let Some(href) = found {
+            match respond_item(c, &href, answer) {
+                Ok(()) => out.responded.push((e.event.uid.clone(), answer.clone())),
+                Err(x) => out.errors.push(format!("{}: {x}", e.event.summary)),
+            }
+        }
+    }
+}
+
+/// Answer an invitation (`ACCEPTED`, `TENTATIVE`, `DECLINED`) on the meeting's item: the server
+/// updates the meeting in the calendar (a declined one leaves it) and sends the organizer the
+/// answer, as Outlook's buttons do.
+fn respond_item(c: &Client, id: &str, answer: &str) -> Result<()> {
+    let kind = match answer {
+        "ACCEPTED" => "AcceptItem",
+        "TENTATIVE" => "TentativelyAcceptItem",
+        "DECLINED" => "DeclineItem",
+        other => return Err(NetError::No(format!("no answer `{other}`"))),
+    };
+    c.call_one(&format!(
+        "<m:CreateItem MessageDisposition=\"SendAndSaveCopy\"><m:Items><t:{kind}><t:ReferenceItemId Id=\"{}\"/></t:{kind}></m:Items></m:CreateItem>",
+        esc(id)
+    ))
+    .map(drop)
 }
 
 /// A series' item on the server and the series itself: as kept here, or as just created.

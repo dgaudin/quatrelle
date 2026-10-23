@@ -35,6 +35,7 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
     }
     // Then both folders, read again.
     read_calendar(c, items(c, "calendar", Some(now - CALENDAR_BACK))?, CALENDAR, c.email(), &mut out);
+    answer_pending(c, pim, &mut out);
     // Named as the server names it, in the mailbox's language ("Agenda"), as Outlook shows it.
     let own = folder_name(c, "calendar").unwrap_or_else(|| "Calendar".into());
     let mut calendars = vec![CalendarInfo { id: CALENDAR.into(), name: own, color: 0, read_only: false, ctag: String::new(), group: String::new() }];
@@ -198,7 +199,15 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
                     for it in found {
                         if let Some(event) = event_of(&it) {
                             let href = it.child("ItemId").and_then(|i| i.attr("Id")).unwrap_or("").to_string();
-                            out.events.push(StoredEvent { calendar: key.clone(), href, etag: String::new(), event, dirty: false, notify: false });
+                            out.events.push(StoredEvent {
+                                calendar: key.clone(),
+                                href,
+                                etag: String::new(),
+                                event,
+                                dirty: false,
+                                notify: false,
+                                respond: None,
+                            });
                         }
                     }
                     if let Some(cals) = out.calendars.as_mut() {
@@ -238,7 +247,7 @@ fn read_calendar(c: &Client, list: Vec<El>, calendar: &str, owner: &str, out: &m
         if let Some(mut event) = event_of(it) {
             own_organizer(&mut event, it, owner);
             let (href, etag) = id_of(it);
-            out.events.push(StoredEvent { calendar: calendar.into(), href, etag, event, dirty: false, notify: false });
+            out.events.push(StoredEvent { calendar: calendar.into(), href, etag, event, dirty: false, notify: false, respond: None });
             changed.extend(modified_occurrence_ids(it));
         }
     }
@@ -249,7 +258,7 @@ fn read_calendar(c: &Client, list: Vec<El>, calendar: &str, owner: &str, out: &m
                 if let Some(mut event) = exception_of(it) {
                     own_organizer(&mut event, it, owner);
                     let (href, etag) = id_of(it);
-                    out.events.push(StoredEvent { calendar: calendar.into(), href, etag, event, dirty: false, notify: false });
+                    out.events.push(StoredEvent { calendar: calendar.into(), href, etag, event, dirty: false, notify: false, respond: None });
                 }
             }
         }

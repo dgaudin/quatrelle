@@ -531,6 +531,7 @@ fn an_occurrence_moves_on_its_own_and_the_server_tells_the_guests() {
         },
         dirty: true,
         notify: false,
+        respond: None,
     });
     let second_sync = crate::ews_pim::sync(&c, &pim, 1_792_000_100).unwrap();
     assert!(second_sync.errors.is_empty(), "{:?}", second_sync.errors);
@@ -582,6 +583,7 @@ fn an_occurrence_moves_on_its_own_and_the_server_tells_the_guests() {
         },
         dirty: true,
         notify: true,
+        respond: None,
     });
     let made = crate::ews_pim::sync(&c, &pim, 1_792_000_300).unwrap();
     assert!(made.errors.is_empty(), "{:?}", made.errors);
@@ -594,4 +596,68 @@ fn an_occurrence_moves_on_its_own_and_the_server_tells_the_guests() {
     theirs.event.organizer = Some(who("Ana Lima", "ana@contoso.example"));
     theirs.event.attendees = vec![who("Riley", "riley@contoso.example")];
     assert!(crate::ews_pim::events::event_fields(&theirs.event, "riley@contoso.example").iter().all(|(uri, _)| *uri != "calendar:RequiredAttendees"));
+}
+
+/// Invitations are answered as Outlook answers them, by the server, on the meeting it placed in
+/// the calendar (never a second copy, which made each accepted meeting show twice with the user
+/// as its organizer): accepted on its item, answered once it's read when it wasn't in the
+/// calendar here yet, and declined out of the calendar.
+#[test]
+fn invitations_are_answered_by_the_server_on_its_meeting() {
+    use quatrelle_model::pim::{Pim, same_meeting};
+    let mut d = Data::default();
+    d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    let cal = d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
+    d.folder("Contacts", None, Some("contacts"), "IPF.Contact");
+    let meeting = |uid: &str, day: u32| {
+        parse(&format!(
+            "<t:CalendarItem><t:Subject>Review {uid}</t:Subject><t:Start>2026-10-{day}T09:00:00Z</t:Start><t:End>2026-10-{day}T10:00:00Z</t:End>\
+             <t:IsAllDayEvent>false</t:IsAllDayEvent><t:UID>{uid}</t:UID><t:CalendarItemType>Single</t:CalendarItemType>\
+             <t:Organizer><t:Mailbox><t:Name>Ana</t:Name><t:EmailAddress>ana@contoso.example</t:EmailAddress></t:Mailbox></t:Organizer>\
+             <t:RequiredAttendees><t:Attendee><t:Mailbox><t:EmailAddress>riley@contoso.example</t:EmailAddress></t:Mailbox><t:ResponseType>Unknown</t:ResponseType></t:Attendee></t:RequiredAttendees>\
+             <t:MyResponseType>NoResponseReceived</t:MyResponseType></t:CalendarItem>"
+        ))
+        .kids[0]
+            .clone()
+    };
+    d.pim.push(("E1".into(), cal.clone(), meeting("mtg-1", 27)));
+    let server = serve(d);
+    let data = server.data.clone();
+    let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
+    let first = crate::ews_pim::sync(&c, &Pim::default(), 1_792_000_000).unwrap();
+    let item_count = || data.lock().unwrap().pim.len();
+    // Accepted, with the meeting in the calendar here: answered on its item.
+    let mut pim = Pim { events: first.events.clone(), ..Default::default() };
+    let e = pim.events.iter_mut().find(|e| same_meeting(&e.event.uid, "mtg-1")).expect("the server's meeting");
+    assert_ne!(e.event.uid, "mtg-1", "a single one is kept as UID#start");
+    e.respond = Some("ACCEPTED".into());
+    e.dirty = true;
+    let before = item_count();
+    let out = crate::ews_pim::sync(&c, &pim, 1_792_000_100).unwrap();
+    assert_eq!(data.lock().unwrap().answers, [("E1".to_string(), "AcceptItem".to_string(), true)], "the organizer told by the server");
+    assert_eq!(out.responded.len(), 1);
+    assert!(out.errors.is_empty(), "{:?}", out.errors);
+    assert_eq!(item_count(), before, "no appointment created");
+    // A new invitation, answered before the calendar here had it: answered once it's read.
+    data.lock().unwrap().pim.push(("E2".into(), cal.clone(), meeting("mtg-2", 28)));
+    let placeholder = quatrelle_model::pim::StoredEvent {
+        calendar: crate::ews_pim::CALENDAR.into(),
+        event: quatrelle_model::ical::CalEvent { uid: "mtg-2".into(), summary: "Review mtg-2".into(), ..Default::default() },
+        dirty: true,
+        respond: Some("TENTATIVE".into()),
+        ..Default::default()
+    };
+    let pim = Pim { events: vec![placeholder], ..Default::default() };
+    let before = item_count();
+    let out = crate::ews_pim::sync(&c, &pim, 1_792_000_200).unwrap();
+    assert_eq!(data.lock().unwrap().answers.last().map(|a| (a.0.as_str(), a.1.as_str())), Some(("E2", "TentativelyAcceptItem")));
+    assert_eq!(out.responded, [("mtg-2".to_string(), "TENTATIVE".to_string())]);
+    assert_eq!(item_count(), before, "no appointment created for it either");
+    // Declined: the server takes it out of the calendar.
+    let mut pim = Pim { events: out.events.clone(), ..Default::default() };
+    let e = pim.events.iter_mut().find(|e| same_meeting(&e.event.uid, "mtg-2")).unwrap();
+    e.respond = Some("DECLINED".into());
+    e.dirty = true;
+    let out = crate::ews_pim::sync(&c, &pim, 1_792_000_300).unwrap();
+    assert!(!out.events.iter().any(|e| same_meeting(&e.event.uid, "mtg-2")), "declined: out of the calendar");
 }
