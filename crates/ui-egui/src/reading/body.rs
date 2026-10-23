@@ -264,6 +264,11 @@ impl Body<'_> {
                             if let Some(tex) = &behind {
                                 ui.painter().set(framed.inner, cover(tex, framed.response.rect));
                             }
+                            // A rule down its left edge (a signature's, between logo and name).
+                            if let Some(c) = table.border_left {
+                                let r = framed.response.rect;
+                                ui.painter().vline(r.left() + 0.5, r.y_range(), egui::Stroke::new(1.0, Color32::from_rgb(c[0], c[1], c[2])));
+                            }
                         });
                     });
                 }
@@ -353,7 +358,8 @@ impl Body<'_> {
                     let parts = columns.get(col..col + span)?;
                     (parts.len() == span && parts.iter().all(Option::is_some)).then(|| parts.iter().flatten().map(|w| px(*w)).sum::<f32>())
                 };
-                let w = c.width.map(px).or_else(from_columns);
+                // A floated picture's box (a signature's logo): as wide as the picture, padding added.
+                let w = c.width.map(px).or_else(from_columns).or_else(|| c.fit.map(|f| f as f32 + 2.0 * PAD));
                 col += span;
                 w
             })

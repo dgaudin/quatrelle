@@ -74,6 +74,35 @@ fn css_columns_are_columns_too() {
         })
         .expect("logo and name side by side");
     assert_eq!(row.len(), 2);
+    // The same signature as Outlook sends it, rewritten by Word: only the logo's table floats
+    // (`align="left"`), an empty paragraph (its content hidden) comes before the name's table,
+    // which draws a rule down its left edge; the logo's width is in pixels as an attribute and
+    // in inches in its style. The name's table sits beside the logo, which is as wide as its
+    // picture (it was laid out as text, one under the other).
+    let word = html_layout(
+        r#"<div class="WordSection1"><p class="MsoNormal">Merci,<o:p></o:p></p>
+        <p class="MsoNormal"><o:p>&nbsp;</o:p></p>
+        <table class="MsoNormalTable" border="0" cellspacing="0" cellpadding="0" align="left"><tbody><tr><td style="padding:0cm 0cm 0cm 0cm">
+        <p class="MsoNormal"><a href="https://www.example.com/"><span style="color:blue;text-decoration:none"><img border="0" width="194" height="75" style="width:2.0208in;height:.7812in" src="cid:image001.gif@01DD6260"></span></a><span><o:p></o:p></span></p>
+        </td></tr></tbody></table>
+        <p class="MsoNormal"><span style="font-size:11.0pt;display:none"><o:p>&nbsp;</o:p></span></p>
+        <table class="MsoNormalTable" border="1" cellspacing="0" cellpadding="0" style="border:none;border-left:solid #CCCCCC 1.0pt"><tbody><tr style="height:47.25pt">
+        <td nowrap="" style="border:none;padding:0cm 0cm 0cm 7.5pt;height:47.25pt"><p class="MsoNormal"><b><span style="font-size:10.5pt;font-family:&quot;Arial&quot;,sans-serif;color:#4B5763">Riley MORENO</span></b><br>
+        <span style="font-size:10.0pt;color:#4B5763">T&eacute;l.:&nbsp;+&nbsp;33(0)2&nbsp;00&nbsp;00&nbsp;00&nbsp;00</span><br>
+        <a href="mailto:riley@example.com"><span style="color:#333333">riley@example.com</span></a></p></td></tr></tbody></table>
+        <p class="MsoNormal"><o:p>&nbsp;</o:p></p></div>"#,
+    );
+    let row = word
+        .iter()
+        .find_map(|b| match b {
+            Block::Table(t) if t.rows.first().is_some_and(|r| r.len() == 2) => t.rows.first(),
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("logo and name side by side: {word:?}"));
+    assert_eq!(row[0].fit, Some(194), "the logo's box as wide as the logo");
+    assert_eq!(row[1].fit, None, "the name's takes the rest");
+    let ruled = row[1].blocks.iter().any(|b| matches!(b, Block::Table(t) if t.border_left == Some([0xcc, 0xcc, 0xcc])));
+    assert!(ruled, "the rule between them: {:?}", row[1].blocks);
     let floats = html_layout(r#"<div><div style="float:left">One</div><div style="float:right">Two</div></div>"#);
     assert!(!floats.is_empty());
     // Stacked flexbox, inline text with spans: no columns.

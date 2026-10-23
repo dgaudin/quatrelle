@@ -84,10 +84,16 @@ pub fn background_pictures(b: &[Block]) -> Vec<String> {
 }
 
 /// Boxes side by side among others (two floated tables in a signature, with a heading above):
-/// each run of two or more is put in a box of its own, which lays them out as columns.
+/// each run of two or more is put in a box of its own, which lays them out as columns. As in a
+/// browser, a table after floated boxes sits beside them too (it ends the run), and nothing
+/// shown between them keeps them apart: Outlook's signatures, rewritten by Word on sending,
+/// float only the logo's table, and put an empty paragraph before the name's table.
 fn group_beside(kids: &[Kid]) -> Option<Vec<Kid>> {
     let is_beside = |k: &Kid| matches!(k, Kid::El(n) if n.beside() && !n.hidden());
-    let blank = |k: &Kid| matches!(k, Kid::Text(t) if t.trim().is_empty());
+    let blank = |k: &Kid| match k {
+        Kid::Text(t) => t.trim().is_empty(),
+        Kid::El(n) => n.hidden() || n.shows_nothing(0),
+    };
     let mut out = Vec::new();
     let mut grouped = false;
     let mut i = 0;
@@ -101,13 +107,21 @@ fn group_beside(kids: &[Kid]) -> Option<Vec<Kid>> {
                 if is_beside(next) {
                     run.push(copy(next));
                     end = j + 1;
+                } else if matches!(next, Kid::El(n) if n.tag == "table" && !n.hidden()) {
+                    // A table beside the floats before it, taking the rest of the width.
+                    run.push(copy(next));
+                    end = j + 1;
+                    break;
                 } else if !blank(next) {
                     break;
                 }
                 j += 1;
             }
             if run.len() >= 2 {
-                out.push(Kid::El(Node { tag: "div".into(), attrs: Vec::new(), kids: run }));
+                // A row of its own (flexbox): read as columns whatever its boxes are, and never
+                // grouped again (a table in it isn't floated).
+                let row = vec![("style".to_string(), "display:flex".to_string())];
+                out.push(Kid::El(Node { tag: "div".into(), attrs: row, kids: run }));
                 grouped = true;
                 i = end;
                 continue;
@@ -160,6 +174,7 @@ fn blocks_of(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
                                         span: c.attr("colspan").and_then(|s| s.trim().parse::<u16>().ok()).unwrap_or(1).clamp(1, 50),
                                         background_image: c.background_image(),
                                         overlays: Vec::new(),
+                                        fit: None,
                                     }
                                 })
                                 .filter(|c| !c.blocks.is_empty() || c.background.is_some() || c.background_image.is_some())
@@ -177,6 +192,7 @@ fn blocks_of(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
                     align: n.table_align(),
                     background: n.background(),
                     background_image: n.background_image(),
+                    border_left: n.border_left(),
                 }));
             }
             // A box with others placed over it: its content, and theirs on top.
@@ -248,14 +264,17 @@ fn blocks_of(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
                                     } else {
                                         colored(ctx, c, |ctx| blocks(&c.kids, ctx, depth + 1))
                                     };
+                                    let width = c.width();
                                     Cell {
                                         blocks: if ctx.cells > MAX_CELLS { Vec::new() } else { content },
-                                        width: c.width(),
+                                        width,
                                         background: c.background(),
                                         align: c.align(),
                                         span: 1,
                                         background_image: c.background_image(),
                                         overlays: Vec::new(),
+                                        // A floated box as wide as its picture (a signature's logo).
+                                        fit: width.is_none().then(|| c.picture_width(depth)).flatten().filter(|_| c.beside()),
                                     }
                                 })
                                 .filter(|c| !c.blocks.is_empty() || c.background.is_some() || c.background_image.is_some())
@@ -271,6 +290,7 @@ fn blocks_of(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
                         align: n.table_align(),
                         background: n.background(),
                         background_image: n.background_image(),
+                        border_left: n.border_left(),
                     }));
                 }
             }
@@ -292,6 +312,7 @@ fn blocks_of(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
                         align: Align::Center,
                         background: None,
                         background_image: None,
+                        border_left: None,
                     }));
                 }
             }
@@ -307,6 +328,7 @@ fn blocks_of(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
                         align: Align::Center,
                         background: n.background(),
                         background_image: None,
+                        border_left: None,
                     }));
                 } else {
                     out.extend(inner);
