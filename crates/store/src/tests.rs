@@ -192,8 +192,8 @@ fn a_folder_saved_from_an_older_read_keeps_the_edits_waiting() {
     let _ = fs::remove_dir_all(s.root());
 }
 
-/// A folder's search index is kept beside its messages and goes with them: a folder
-/// cleared (its UIDVALIDITY changed, or it went) loses it.
+/// A folder's search index (and any document kept with it) is kept beside its messages and
+/// goes with them: a folder cleared (its UIDVALIDITY changed, or it went) loses it.
 #[test]
 fn a_search_index_is_kept_with_its_folder() {
     for packed in [false, true] {
@@ -208,8 +208,13 @@ fn a_search_index_is_kept_with_its_folder() {
         assert!(s.load_search_index("a2", "INBOX").is_none());
         s.save_search_index("a1", "Sent", b"sent").unwrap();
         assert_eq!(s.load_search_index("a1", "INBOX").as_deref(), Some(&b"MCFI\x01kept"[..]));
+        // So is a document kept with it.
+        s.save_folder_doc("a1", "INBOX", "kept.json", &vec![7u32]).unwrap();
+        assert_eq!(s.load_folder_doc::<Vec<u32>>("a1", "INBOX", "kept.json").unwrap(), vec![7]);
+        assert!(s.load_folder_doc::<Vec<u32>>("a1", "Sent", "kept.json").unwrap().is_empty());
         s.clear_folder("a1", "INBOX").unwrap();
         assert!(s.load_search_index("a1", "INBOX").is_none());
+        assert!(s.load_folder_doc::<Vec<u32>>("a1", "INBOX", "kept.json").unwrap().is_empty());
         assert!(s.load_search_index("a1", "Sent").is_some());
         s.remove_search_index("a1", "Sent");
         assert!(s.load_search_index("a1", "Sent").is_none());

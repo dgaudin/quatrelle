@@ -1,4 +1,5 @@
-//! Syncing with the fake IMAP server: sign-in, folders, flags, QRESYNC, the window, moves and keywords.
+//! Syncing with the fake IMAP server: sign-in, folders, flags, QRESYNC, the window and the age
+//! kept, downloading ahead, moves and keywords.
 
 use super::*;
 
@@ -173,6 +174,187 @@ fn first_sync_takes_a_window() {
     assert_eq!(sync_folder(&mut c, &store, "a1", "INBOX", &more).unwrap().new, 0, "once");
     let all = SyncOptions { window: usize::MAX, ..opts };
     assert_eq!(sync_folder(&mut c, &store, "a1", "INBOX", &all).unwrap().new, 3, "all of it");
+    let _ = std::fs::remove_dir_all(store.root());
+}
+
+const DAY: i64 = 86_400;
+
+fn now() -> i64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| i64::try_from(d.as_secs()).unwrap())
+}
+
+/// The subjects kept of a folder, sorted.
+fn kept_subjects(store: &Store, folder: &str) -> Vec<String> {
+    let mut v: Vec<String> = store.load_folder("a1", folder).unwrap().messages.iter().map(|m| m.subject.clone()).collect();
+    v.sort();
+    v
+}
+
+/// Mail kept for an age, as Outlook's Cached Exchange Mode keeps it: the first sync lists what
+/// the server received since the cutoff (`UID SEARCH SINCE`, by INTERNALDATE), the newest
+/// window of it. A message's own date doesn't count (an old one forwarded yesterday is kept, a
+/// recent one that came long ago isn't), nor what the cutoff's day lists from before it.
+#[test]
+fn a_first_sync_keeps_what_came_in_since_the_age() {
+    // The fake says when it received a message as IMAP writes it (RFC 3501 `date-time`).
+    assert_eq!(internal_date(RECEIVED), "14-Oct-2026 09:30:00 +0000");
+    assert_eq!(internal_date(3 * DAY + 5), " 4-Jan-1970 00:00:05 +0000");
+    let st = State::new();
+    let t = now();
+    let cutoff = t - 30 * DAY;
+    {
+        let mut s = st.lock().unwrap();
+        s.add_dated("INBOX", "a year ago", t - 400 * DAY, t - 400 * DAY);
+        s.add_dated("INBOX", "forty days ago", t - 40 * DAY, t - 40 * DAY);
+        s.add_dated("INBOX", "dated lately, came long ago", t - 2 * DAY, t - 60 * DAY);
+        // The cutoff's day, a few hours before it (unless the cutoff is that day's first second).
+        let early = cutoff.div_euclid(DAY) * DAY;
+        if early + 60 < cutoff {
+            s.add_dated("INBOX", "the cutoff's day, earlier", early, early);
+        }
+        s.add_dated("INBOX", "ten days ago", t - 10 * DAY, t - 10 * DAY);
+        s.add_dated("INBOX", "old, forwarded yesterday", t - 900 * DAY, t - DAY);
+        s.add_dated("INBOX", "today", t - 60, t - 60);
+    }
+    let wide = store("since");
+    let mut c = login(&st);
+    let r = sync_folder(&mut c, &wide, "a1", "INBOX", &SyncOptions { since_days: 30, ..Default::default() }).unwrap();
+    assert_eq!(r.new, 3);
+    assert_eq!(kept_subjects(&wide, "INBOX"), ["old, forwarded yesterday", "ten days ago", "today"]);
+    let log = st.lock().unwrap().log.clone();
+    assert!(log.contains(&format!("UID SEARCH SINCE {}", crate::sync::imap_date(cutoff))), "{log:?}");
+    assert!(!log.iter().any(|l| l.contains("SEARCH ALL")), "{log:?}");
+
+    // Still the newest window of it.
+    let small = store("since-window");
+    sync_folder(&mut c, &small, "a1", "INBOX", &SyncOptions { since_days: 30, window: 2, ..Default::default() }).unwrap();
+    assert_eq!(kept_subjects(&small, "INBOX"), ["old, forwarded yesterday", "today"]);
+    let _ = std::fs::remove_dir_all(wide.root());
+    let _ = std::fs::remove_dir_all(small.root());
+}
+
+/// Mail that grows older than the age kept goes with its source at the next sync, but for what
+/// a search of the server found; new mail comes in. Age is when the server received it (an
+/// old message forwarded lately stays). A longer age lists the folder again, once; a find the
+/// server no longer has is forgotten. With QRESYNC too.
+#[test]
+fn mail_older_than_the_age_goes_with_its_source() {
+    for caps in ["IMAP4rev1 UIDPLUS MOVE CONDSTORE ENABLE", "IMAP4rev1 UIDPLUS MOVE CONDSTORE QRESYNC ENABLE"] {
+        let st = State::new();
+        let t = now();
+        {
+            let mut s = st.lock().unwrap();
+            s.caps = caps;
+            s.add_dated("INBOX", "two years ago", t - 700 * DAY, t - 700 * DAY);
+            s.add_dated("INBOX", "forty days ago", t - 40 * DAY, t - 40 * DAY);
+            s.add_dated("INBOX", "ten days ago", t - 10 * DAY, t - 10 * DAY);
+            s.add_dated("INBOX", "old, forwarded lately", t - 900 * DAY, t - 5 * DAY);
+            s.add_dated("INBOX", "a year and a half ago", t - 550 * DAY, t - 550 * DAY);
+        }
+        let store = store(if caps.contains("QRESYNC") { "age-qresync" } else { "age" });
+        let mut c = login(&st);
+        let days = |since_days| SyncOptions { since_days, ..Default::default() };
+        sync_folder(&mut c, &store, "a1", "INBOX", &days(60)).unwrap();
+        assert_eq!(kept_subjects(&store, "INBOX"), ["forty days ago", "old, forwarded lately", "ten days ago"], "{caps}");
+        let forty = store.load_folder("a1", "INBOX").unwrap().find(2).unwrap().key.clone();
+        assert!(store.has_body(&forty));
+        // Searches of the server bring in older ones (the search box's, and the one by ranges).
+        let found = crate::sync::search_on_server(&mut c, &store, "a1", "INBOX", &crate::sync::imap_criteria("two").unwrap(), 500).unwrap();
+        assert_eq!(found.len(), 1);
+        let half = crate::sync::imap_criteria("half").unwrap();
+        assert_eq!(crate::sync::find_on_server(&mut c, &store, "a1", "INBOX", &half, 500, &mut |_, _| true).unwrap(), 1);
+
+        // Thirty days: the one forty days old goes, its source too; the find stays; new mail comes.
+        st.lock().unwrap().add_dated("INBOX", "new", t, t);
+        let r = sync_folder(&mut c, &store, "a1", "INBOX", &days(30)).unwrap();
+        assert_eq!((r.new, r.removed), (1, 1), "{caps}");
+        let now_kept = ["a year and a half ago", "new", "old, forwarded lately", "ten days ago", "two years ago"];
+        assert_eq!(kept_subjects(&store, "INBOX"), now_kept, "{caps}");
+        assert!(!store.has_body(&forty));
+        // Nothing more goes, and nothing is listed again.
+        st.lock().unwrap().log.clear();
+        assert!(!sync_folder(&mut c, &store, "a1", "INBOX", &days(30)).unwrap().touched(), "{caps}");
+        let log = st.lock().unwrap().log.clone();
+        assert!(!log.iter().any(|l| l.contains("SINCE") || l.contains("ALL")), "{log:?}");
+
+        // A year: the folder is listed again, once.
+        assert_eq!(sync_folder(&mut c, &store, "a1", "INBOX", &days(365)).unwrap().new, 1, "{caps}");
+        let now_kept = ["a year and a half ago", "forty days ago", "new", "old, forwarded lately", "ten days ago", "two years ago"];
+        assert_eq!(kept_subjects(&store, "INBOX"), now_kept, "{caps}");
+        assert_eq!(sync_folder(&mut c, &store, "a1", "INBOX", &days(365)).unwrap().new, 0, "once");
+
+        // A find goes on the server: here too, and it's no longer marked.
+        st.lock().unwrap().expunge("INBOX", 1);
+        sync_folder(&mut c, &store, "a1", "INBOX", &days(365)).unwrap();
+        let now_kept = ["a year and a half ago", "forty days ago", "new", "old, forwarded lately", "ten days ago"];
+        assert_eq!(kept_subjects(&store, "INBOX"), now_kept, "{caps}");
+        let kept: serde_json::Value = store.load_folder_doc("a1", "INBOX", "kept.json").unwrap();
+        assert_eq!(kept["found"], serde_json::json!([5]), "{kept}");
+        assert_eq!(kept["days"], 365);
+        let _ = std::fs::remove_dir_all(store.root());
+    }
+}
+
+/// No age (0: all of it) keeps what it kept before, however old: the newest window, listed
+/// with `SEARCH ALL`, nothing let go.
+#[test]
+fn without_an_age_all_of_it_is_kept() {
+    let st = State::new();
+    let t = now();
+    for (n, age) in [("ten years", 3650), ("a year", 400), ("a day", 1)] {
+        st.lock().unwrap().add_dated("INBOX", n, t - age * DAY, t - age * DAY);
+    }
+    let store = store("all-ages");
+    let mut c = login(&st);
+    let r = sync_folder(&mut c, &store, "a1", "INBOX", &SyncOptions::default()).unwrap();
+    assert_eq!(r.new, 3);
+    assert!(!sync_folder(&mut c, &store, "a1", "INBOX", &SyncOptions::default()).unwrap().touched());
+    assert_eq!(kept_subjects(&store, "INBOX"), ["a day", "a year", "ten years"]);
+    let log = st.lock().unwrap().log.clone();
+    assert!(log.iter().any(|l| l == "UID SEARCH ALL") && !log.iter().any(|l| l.contains("SINCE")), "{log:?}");
+    let _ = std::fs::remove_dir_all(store.root());
+}
+
+/// Downloading ahead: the sources of the newest kept messages not downloaded yet, `budget` at a
+/// time, up to the size downloaded ahead, or any size when every message kept is to be
+/// (`full`); how many are left after.
+#[test]
+fn downloading_ahead_goes_newest_first_within_its_budget() {
+    let st = State::new();
+    let t = now();
+    {
+        let mut s = st.lock().unwrap();
+        for i in 0..5 {
+            s.add_dated("INBOX", &format!("m{i}"), t - (10 - i) * DAY, t - (10 - i) * DAY);
+        }
+        let date = internal_date(t).trim().replace('-', " ");
+        s.add_raw("INBOX", format!("Subject: big\r\nDate: {date}\r\n\r\n{}\r\n", "x".repeat(5000)).into_bytes());
+    }
+    let store = store("ahead");
+    let mut c = login(&st);
+    let opts = SyncOptions { prefetch: 0, prefetch_max_bytes: 1000, ..Default::default() };
+    sync_folder(&mut c, &store, "a1", "INBOX", &opts).unwrap();
+    let has = |subject: &str| store.load_folder("a1", "INBOX").unwrap().messages.iter().any(|m| m.subject == subject && store.has_body(&m.key));
+    assert!(!has("m4") && !has("big"));
+
+    // Another folder selected: it's opened. Two, the newest small ones; three small ones left.
+    c.select("Sent", false).unwrap();
+    assert_eq!(crate::sync::download_ahead(&mut c, &store, "a1", "INBOX", &opts, 2).unwrap(), 3);
+    assert!(has("m4") && has("m3") && !has("m2") && !has("big"));
+    let folder = store.load_folder("a1", "INBOX").unwrap();
+    assert_eq!(folder.messages.iter().find(|m| m.subject == "m4").map(|m| m.preview.as_str()), Some("Body of m4."));
+    assert_eq!(crate::sync::download_ahead(&mut c, &store, "a1", "INBOX", &opts, 10).unwrap(), 0);
+    assert!(has("m0") && !has("big"));
+
+    // Every message kept: the big one too.
+    let full = SyncOptions { full: true, ..opts };
+    assert_eq!(crate::sync::download_ahead(&mut c, &store, "a1", "INBOX", &full, 0).unwrap(), 1, "none asked, one left");
+    assert_eq!(crate::sync::download_ahead(&mut c, &store, "a1", "INBOX", &full, 10).unwrap(), 0);
+    assert!(has("big"));
+    // All here: nothing asked of the server.
+    st.lock().unwrap().log.clear();
+    assert_eq!(crate::sync::download_ahead(&mut c, &store, "a1", "INBOX", &full, 10).unwrap(), 0);
+    assert!(st.lock().unwrap().log.is_empty());
     let _ = std::fs::remove_dir_all(store.root());
 }
 

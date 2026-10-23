@@ -13,6 +13,7 @@ fn mailbox_settings_over_imap_and_managesieve() {
 x"
         .to_vec(),
         modseq: 1,
+        received: RECEIVED,
     });
     st.lock().unwrap().mailbox("Archive").unwrap().uid_next = 2;
     let imap_port = serve_tcp(&st);
