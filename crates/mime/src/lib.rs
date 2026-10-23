@@ -328,6 +328,13 @@ pub struct Span {
     pub color: Option<[u8; 3]>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub background: Option<[u8; 3]>,
+    /// Its size in points and its typeface, as the message set them (`font-size`, `font-family`,
+    /// `<font size face>`, `<style>` rules): a signature in 10-point Arial reads as Outlook
+    /// shows it. `None`: the reader's own.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size: Option<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub font: Option<String>,
 }
 
 fn is_zero(v: &u8) -> bool {
@@ -827,8 +834,8 @@ pub fn reply_doc(p: &Parsed, mode: ReplyMode, me: &[String], clock: &Clock, sign
 /// [`rich::PICTURE`] stands.
 pub fn signature_html(html: &str) -> (String, rich::Styles) {
     const MARK: char = '\u{E000}';
-    let (marked, fonts) = fonts::mark(&word_paragraphs(html));
-    let mut lines = html_to_rich(&marked);
+    // Sizes and typefaces come with the spans (`html_to_rich` reads them).
+    let mut lines = html_to_rich(&word_paragraphs(html));
     let mut cids = Vec::new();
     for line in &mut lines {
         line.retain(|sp| sp.image.as_deref().is_none_or(|src| src.starts_with("cid:")));
@@ -845,8 +852,7 @@ pub fn signature_html(html: &str) -> (String, rich::Styles) {
     }
     let first = lines.iter().position(|l| !blank(l)).unwrap_or(lines.len());
     lines.drain(..first);
-    let (text, styles) = rich::from_rich(&lines);
-    let (mut text, mut styles) = fonts::apply(&text, &styles, &fonts);
+    let (mut text, mut styles) = rich::from_rich(&lines);
     let marks: Vec<usize> = text.chars().enumerate().filter(|(_, c)| *c == MARK).map(|(i, _)| i).collect();
     text = text.replace(MARK, &rich::PICTURE.to_string());
     for (at, cid) in marks.into_iter().zip(cids) {

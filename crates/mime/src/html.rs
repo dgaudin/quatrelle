@@ -38,8 +38,8 @@ pub(super) fn word_paragraphs(html: &str) -> String {
 /// page) as text and styles to put into a message: its formatting and links, without pictures
 /// (they'd point at the other program's files or the web) or the empty lines around it.
 pub fn pasted_html(html: &str) -> (String, rich::Styles) {
-    let (marked, fonts) = fonts::mark(&word_paragraphs(html));
-    let mut lines = html_to_rich(&marked);
+    // Sizes and typefaces come with the spans (`html_to_rich` reads them).
+    let mut lines = html_to_rich(&word_paragraphs(html));
     for line in &mut lines {
         line.retain(|sp| sp.image.is_none());
     }
@@ -49,8 +49,7 @@ pub fn pasted_html(html: &str) -> (String, rich::Styles) {
     }
     let first = lines.iter().position(|l| !blank(l)).unwrap_or(lines.len());
     lines.drain(..first);
-    let (text, styles) = rich::from_rich(&lines);
-    fonts::apply(&text, &styles, &fonts)
+    rich::from_rich(&lines)
 }
 
 /// Most pictures taken from pasted HTML, and the most each may weigh.
@@ -63,8 +62,8 @@ const PASTED_PICTURE_MAX: usize = 5 << 20;
 /// message has them) keep their id. Pictures on the web or in another program's files go.
 pub fn pasted_html_with_pictures(html: &str) -> (String, rich::Styles, Vec<InlinePicture>) {
     const MARK: char = '\u{E000}';
-    let (marked, fonts) = fonts::mark(&word_paragraphs(html));
-    let mut lines = html_to_rich(&marked);
+    // Sizes and typefaces come with the spans (`html_to_rich` reads them).
+    let mut lines = html_to_rich(&word_paragraphs(html));
     let mut pictures: Vec<InlinePicture> = Vec::new();
     let mut cids: Vec<String> = Vec::new();
     for line in &mut lines {
@@ -98,8 +97,7 @@ pub fn pasted_html_with_pictures(html: &str) -> (String, rich::Styles, Vec<Inlin
     }
     let first = lines.iter().position(|l| !blank(l)).unwrap_or(lines.len());
     lines.drain(..first);
-    let (text, styles) = rich::from_rich(&lines);
-    let (mut text, mut styles) = fonts::apply(&text, &styles, &fonts);
+    let (mut text, mut styles) = rich::from_rich(&lines);
     let marks: Vec<usize> = text.chars().enumerate().filter(|(_, c)| *c == MARK).map(|(i, _)| i).collect();
     text = text.replace(MARK, &rich::PICTURE.to_string());
     for (at, cid) in marks.into_iter().zip(cids) {
@@ -173,36 +171,47 @@ pub fn html_to_rich(html: &str) -> RichText {
         Some((i, _)) => html.get(..i).unwrap_or(html),
         None => html,
     };
-    // Wide enough that paragraphs stay one line each (the UI wraps them to the pane).
-    let marked = close_css_rules(&mark_pictures(&mark_headings(html)));
+    // Wide enough that paragraphs stay one line each (the UI wraps them to the pane). Sizes,
+    // typefaces and CSS bold are marked first: the converter keeps none of them.
+    let (fonts_marked, fonts) = crate::fonts::mark(html);
+    let marked = close_css_rules(&mark_pictures(&mark_headings(&fonts_marked)));
     // The message's own CSS is read for colours and hidden parts (`display: none`), nothing else.
     let result = std::panic::catch_unwind(|| html2text::config::rich().use_doc_css().lines_from_read(marked.as_bytes(), 2000));
     let Ok(Ok(lines)) = result else { return Vec::new() };
     let mut out: RichText = Vec::new();
     let mut blank = 0;
+    let mut open: Vec<usize> = Vec::new();
     for line in lines.into_iter().take(RICH_MAX_LINES) {
         let mut spans: Vec<Span> = Vec::new();
+        // A line that held only marks (where a sized paragraph starts, alone before a picture or
+        // a table) isn't a line of the message: it goes, not left as a blank one.
+        let only_marks = line.tagged_strings().any(|ts| crate::fonts::has_marks(&ts.s))
+            && line
+                .tagged_strings()
+                .all(|ts| crate::fonts::only_marks(&ts.s) && !ts.tag.iter().any(|a| matches!(a, html2text::render::RichAnnotation::Image(_))));
         for ts in line.tagged_strings() {
-            let mut sp = Span { text: ts.s.clone(), ..Default::default() };
-            for a in &ts.tag {
-                match a {
-                    html2text::render::RichAnnotation::Strong => sp.bold = true,
-                    html2text::render::RichAnnotation::Emphasis => sp.italic = true,
-                    html2text::render::RichAnnotation::Strikeout => sp.strike = true,
-                    html2text::render::RichAnnotation::Code | html2text::render::RichAnnotation::Preformat(_) => sp.code = true,
-                    html2text::render::RichAnnotation::Link(l) => sp.link = Some(l.clone()),
-                    html2text::render::RichAnnotation::Image(src) => sp.image = Some(src.clone()),
-                    html2text::render::RichAnnotation::Colour(c) => sp.color = Some([c.r, c.g, c.b]),
-                    html2text::render::RichAnnotation::BgColour(c) => sp.background = Some([c.r, c.g, c.b]),
-                    _ => {}
+            for (text, font) in crate::fonts::runs(&ts.s, &mut open, &fonts) {
+                let mut sp = Span { text, bold: font.bold, italic: font.italic, size: font.size, font: font.family, ..Default::default() };
+                for a in &ts.tag {
+                    match a {
+                        html2text::render::RichAnnotation::Strong => sp.bold = true,
+                        html2text::render::RichAnnotation::Emphasis => sp.italic = true,
+                        html2text::render::RichAnnotation::Strikeout => sp.strike = true,
+                        html2text::render::RichAnnotation::Code | html2text::render::RichAnnotation::Preformat(_) => sp.code = true,
+                        html2text::render::RichAnnotation::Link(l) => sp.link = Some(l.clone()),
+                        html2text::render::RichAnnotation::Image(src) => sp.image = Some(src.clone()),
+                        html2text::render::RichAnnotation::Colour(c) => sp.color = Some([c.r, c.g, c.b]),
+                        html2text::render::RichAnnotation::BgColour(c) => sp.background = Some([c.r, c.g, c.b]),
+                        _ => {}
+                    }
                 }
-            }
-            // Merge with the previous span when the formatting is the same.
-            match spans.last_mut() {
-                Some(last) if Span { text: String::new(), ..last.clone() } == Span { text: String::new(), ..sp.clone() } => {
-                    last.text.push_str(&sp.text)
+                // Merge with the previous span when the formatting is the same.
+                match spans.last_mut() {
+                    Some(last) if Span { text: String::new(), ..last.clone() } == Span { text: String::new(), ..sp.clone() } => {
+                        last.text.push_str(&sp.text)
+                    }
+                    _ => spans.push(sp),
                 }
-                _ => spans.push(sp),
             }
         }
         if let Some(last) = spans.last_mut() {
@@ -250,6 +259,14 @@ pub fn html_to_rich(html: &str) -> RichText {
             }
         }
         spans.retain(|s| !s.text.is_empty() || s.image.is_some());
+        // White space alone beside a picture (the indent of the markup around it): it made the
+        // line wider than the picture's box, and the picture went to the next line.
+        if spans.iter().any(|s| s.image.is_some()) {
+            spans.retain(|s| s.image.is_some() || !s.text.trim().is_empty());
+        }
+        if spans.is_empty() && only_marks {
+            continue;
+        }
         if spans.is_empty() {
             blank += 1;
             if blank > 1 || out.is_empty() {

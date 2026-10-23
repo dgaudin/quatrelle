@@ -1,9 +1,10 @@
-//! Font sizes and typefaces of pasted HTML (a signature copied from Outlook or Word): the HTML
-//! converter keeps bold, colours and links but not sizes or fonts, so where each element with
-//! a `font-size` or `font-family` (or `<font size face>`) starts and ends is marked in its text
-//! first, and the marks become the characters' sizes and fonts afterwards.
+//! Font sizes and typefaces of HTML (a message read, a signature copied from Outlook or Word):
+//! the HTML converter keeps bold, colours and links but not sizes or fonts, so where each
+//! element with a `font-size` or `font-family` (or `<font size face>`, or bold or italic set
+//! with CSS) starts and ends is marked in its text first, and the marks become the spans'
+//! sizes and fonts afterwards ([`runs`]).
 
-use crate::rich::{DEFAULT_SIZE, Style, Styles};
+use crate::rich::DEFAULT_SIZE;
 
 /// Starts a marked element; the next character (from [`INDEX_BASE`]) says which.
 const START: char = '\u{E020}';
@@ -13,11 +14,14 @@ const INDEX_BASE: u32 = 0xE100;
 /// Most marked elements (the rest keep the size around them).
 const MAX_MARKS: usize = 3000;
 
-/// What a marked element sets: its size in points and its typeface.
+/// What a marked element sets: its size in points and its typeface, and bold or italic when
+/// its style says so (`font-weight: bold`: the converter knows only `<b>`).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct Font {
     pub size: Option<u8>,
     pub family: Option<String>,
+    pub bold: bool,
+    pub italic: bool,
 }
 
 /// Elements that never hold anything (no end tag).
@@ -69,15 +73,26 @@ fn points(px: f32) -> Option<u8> {
 fn font_of(tag: &str, name: &str) -> Option<Font> {
     let mut f = Font::default();
     if let Some(style) = attr(tag, "style") {
+        // Its entities first: Word writes `font-family:&quot;Arial&quot;`, whose `;` would
+        // split the declaration.
+        let style = style.replace("&quot;", "\"").replace("&#39;", "'").replace("&apos;", "'").replace("&amp;", "&");
         for decl in style.split(';') {
             let Some((k, v)) = decl.split_once(':') else { continue };
             let v = v.trim().trim_end_matches("!important").trim();
             match k.trim().to_ascii_lowercase().as_str() {
                 "font-size" => f.size = crate::layout::font_px(v).and_then(points),
                 "font-family" => f.family = family(v),
+                "font-weight" => {
+                    let w = v.to_ascii_lowercase();
+                    f.bold = matches!(w.as_str(), "bold" | "bolder") || w.parse::<u16>().is_ok_and(|n| n >= 600);
+                }
+                "font-style" => f.italic = matches!(v.to_ascii_lowercase().as_str(), "italic" | "oblique"),
                 "font" => {
                     // The shorthand: `[style] [weight] size[/line] family`.
                     for word in v.split_whitespace() {
+                        let w = word.to_ascii_lowercase();
+                        f.bold |= matches!(w.as_str(), "bold" | "bolder") || w.parse::<u16>().is_ok_and(|n| (600..=1000).contains(&n));
+                        f.italic |= matches!(w.as_str(), "italic" | "oblique");
                         if let Some(px) = crate::layout::font_px(word.split('/').next().unwrap_or("")) {
                             f.size = points(px);
                             let rest = v.split_once(word).map(|(_, r)| r).unwrap_or("");
@@ -166,68 +181,62 @@ pub(crate) fn mark(html: &str) -> (String, Vec<Font>) {
     (out, fonts)
 }
 
-/// The marks in a converted text as its characters' sizes and typefaces: the text and styles
-/// without them (a line left holding only marks goes too).
-pub(crate) fn apply(text: &str, styles: &Styles, fonts: &[Font]) -> (String, Styles) {
-    let mut stack: Vec<usize> = Vec::new();
-    let mut lines: Vec<(Vec<(char, Style)>, bool)> = vec![(Vec::new(), false)];
-    let mut chars = text.chars().enumerate().peekable();
-    while let Some((i, c)) = chars.next() {
+/// Whether a piece of converted text holds marks.
+pub(crate) fn has_marks(text: &str) -> bool {
+    text.contains([START, END])
+}
+
+/// Whether a piece of converted text holds nothing but marks: not even a space (an empty
+/// paragraph's `&nbsp;` is a line of the message, Outlook's blank line).
+pub(crate) fn only_marks(text: &str) -> bool {
+    let mut chars = text.chars();
+    while let Some(c) = chars.next() {
         match c {
             START => {
-                if let Some((_, idx)) = chars.next() {
-                    stack.push((idx as u32).saturating_sub(INDEX_BASE) as usize);
-                }
-                if let Some(l) = lines.last_mut() {
-                    l.1 = true;
-                }
+                chars.next();
             }
-            END => {
-                stack.pop();
-                if let Some(l) = lines.last_mut() {
-                    l.1 = true;
-                }
-            }
-            '\n' => lines.push((Vec::new(), false)),
-            c => {
-                let mut st = styles.style(i);
-                if let Some(size) = stack.iter().rev().find_map(|k| fonts.get(*k).and_then(|f| f.size)) {
-                    st.size = (size != DEFAULT_SIZE).then_some(size);
-                }
-                if let Some(family) = stack.iter().rev().find_map(|k| fonts.get(*k).and_then(|f| f.family.clone())) {
-                    st.font = Some(family);
-                }
-                if let Some(l) = lines.last_mut() {
-                    l.0.push((c, st));
-                }
-            }
+            END => {}
+            _ => return false,
         }
     }
-    lines.retain(|(l, marked)| !(l.is_empty() && *marked));
-    let blank = |l: &(Vec<(char, Style)>, bool)| l.0.iter().all(|(c, _)| c.is_whitespace());
-    while lines.last().is_some_and(blank) {
-        lines.pop();
-    }
-    let first = lines.iter().position(|l| !blank(l)).unwrap_or(lines.len());
-    lines.drain(..first);
-    let mut out = String::new();
-    let mut st = Styles::plain("");
-    st.chars.clear();
-    st.paras.clear();
-    for (n, (line, _)) in lines.iter().enumerate() {
-        if n > 0 {
-            out.push('\n');
-            st.chars.push(0);
+    true
+}
+
+/// A converted text's marks as runs (the reader's): each piece of text, and what the marked
+/// elements around it set. `open`: the elements still open from the text before, carried from
+/// piece to piece and line to line. Marks out of order (text laid out in columns) are taken as
+/// they come: a piece may get its neighbour's size, nothing worse.
+pub(crate) fn runs(text: &str, open: &mut Vec<usize>, fonts: &[Font]) -> Vec<(String, Font)> {
+    let around = |open: &[usize]| Font {
+        size: open.iter().rev().find_map(|k| fonts.get(*k).and_then(|f| f.size)),
+        family: open.iter().rev().find_map(|k| fonts.get(*k).and_then(|f| f.family.clone())),
+        bold: open.iter().any(|k| fonts.get(*k).is_some_and(|f| f.bold)),
+        italic: open.iter().any(|k| fonts.get(*k).is_some_and(|f| f.italic)),
+    };
+    let mut out: Vec<(String, Font)> = Vec::new();
+    let mut piece = String::new();
+    let mut chars = text.chars();
+    while let Some(c) = chars.next() {
+        match c {
+            START | END => {
+                if !piece.is_empty() {
+                    out.push((std::mem::take(&mut piece), around(open)));
+                }
+                if c == END {
+                    open.pop();
+                } else if let Some(index) = chars.next()
+                    && open.len() < 500
+                {
+                    open.push((index as u32).saturating_sub(INDEX_BASE) as usize);
+                }
+            }
+            c => piece.push(c),
         }
-        st.paras.push(Default::default());
-        for (c, s) in line {
-            let id = st.intern(s.clone());
-            st.chars.push(id);
-            out.push(*c);
-        }
     }
-    st.fit(&out);
-    (out, st)
+    if !piece.is_empty() {
+        out.push((piece, around(open)));
+    }
+    out
 }
 
 #[cfg(test)]
@@ -239,7 +248,13 @@ mod tests {
         let (m, f) = mark(
             "<p style='font-size:7.5pt;font-family:\"Tahoma\",sans-serif'>a<br>b</p><span>c</span><font size=5 face=Arial>d</font><style>p{font-size:9pt}</style>",
         );
-        assert_eq!(f, vec![Font { size: Some(8), family: Some("Tahoma".into()) }, Font { size: Some(18), family: Some("Arial".into()) }]);
+        assert_eq!(
+            f,
+            vec![
+                Font { size: Some(8), family: Some("Tahoma".into()), ..Default::default() },
+                Font { size: Some(18), family: Some("Arial".into()), ..Default::default() }
+            ]
+        );
         assert_eq!(m.matches(START).count(), 2);
         assert_eq!(m.matches(END).count(), 2);
         assert!(m.find(END) < m.find("<span"), "closed with its element");
@@ -248,6 +263,9 @@ mod tests {
         for junk in ["<", "<p style=", "<p style='font-size:", "</p></p><p>", "<font size=x>", "<p style='font:bold 12pt/1.2 Georgia'>x"] {
             let _ = mark(junk);
         }
-        assert_eq!(mark("<p style='font:bold 12pt/1.2 Georgia, serif'>x").1, vec![Font { size: Some(12), family: Some("Georgia".into()) }]);
+        assert_eq!(
+            mark("<p style='font:bold 12pt/1.2 Georgia, serif'>x").1,
+            vec![Font { size: Some(12), family: Some("Georgia".into()), bold: true, ..Default::default() }]
+        );
     }
 }

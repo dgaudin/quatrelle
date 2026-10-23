@@ -54,7 +54,12 @@ pub(super) fn rich_body(s: &Session, st: &mut UiState, ui: &mut Ui, key: &Messag
     let allowed = s.pictures_allowed();
     let mut shown: Vec<String> = Vec::new();
     let width = ui.available_width();
-    let mut body = Body { s, key, p, allowed, shown: &mut shown, acts };
+    // The message's typefaces, loaded once each (it reads in them from the next frame).
+    for name in crate::look::typefaces::wanted(ui.ctx(), message_typefaces(p)) {
+        acts.push(Action::LoadTypeface(name));
+    }
+    let faces = crate::look::typefaces::loaded(ui.ctx());
+    let mut body = Body { s, key, p, allowed, shown: &mut shown, acts, faces };
     if p.layout.is_empty() {
         body.lines(st, ui, &p.rich, width, theme::surface_rgb(&t), Align::Min);
     } else {
@@ -83,12 +88,66 @@ pub(super) struct Body<'a> {
     /// Pictures drawn in place.
     pub(super) shown: &'a mut Vec<String>,
     pub(super) acts: &'a mut Vec<Action>,
+    /// The typefaces loaded, to draw the message's own in ([`span_font_in`]).
+    pub(super) faces: std::collections::BTreeSet<String>,
+}
+
+/// The typefaces a message's text is set in (`font-family`), a few at most: loaded from the
+/// system once each, so it reads in them (a signature in Arial, a body in Calibri).
+pub(super) fn message_typefaces(p: &mime::Parsed) -> Vec<String> {
+    const MOST: usize = 8;
+    fn add(out: &mut Vec<String>, lines: &mime::RichText) {
+        for sp in lines.iter().flatten() {
+            if out.len() >= MOST {
+                return;
+            }
+            if let Some(f) = &sp.font
+                && !out.contains(f)
+            {
+                out.push(f.clone());
+            }
+        }
+    }
+    fn blocks(out: &mut Vec<String>, b: &[mime::layout::Block], depth: usize) {
+        for b in b {
+            match b {
+                mime::layout::Block::Text(lines) => add(out, lines),
+                mime::layout::Block::Table(t) if depth < 16 => {
+                    for c in t.rows.iter().flatten() {
+                        blocks(out, &c.blocks, depth + 1);
+                    }
+                }
+                mime::layout::Block::Table(_) => {}
+            }
+        }
+    }
+    let mut out = Vec::new();
+    add(&mut out, &p.rich);
+    blocks(&mut out, &p.layout, 0);
+    out
 }
 
 /// Narrower than this, a table's columns go one under the other.
 pub(super) const MIN_COLUMN: f32 = 140.0;
 
-pub(super) fn span_font(sp: &mime::Span) -> egui::FontId {
+/// A span's font: the size the message gave it (points, as a page shows them), in its typeface
+/// when that's loaded (`faces`), else the reader's.
+pub(super) fn span_font_in(sp: &mime::Span, faces: &std::collections::BTreeSet<String>) -> egui::FontId {
+    if let Some(pt) = sp.size.filter(|_| !sp.code) {
+        let px = (f32::from(pt) * 4.0 / 3.0).clamp(8.0, 72.0);
+        let bold = sp.bold || sp.heading > 0;
+        let own = sp.font.as_deref().and_then(|name| crate::look::typefaces::family(faces, name, bold));
+        return match own {
+            Some(family) => egui::FontId::new(px, family),
+            None if bold => theme::bold(px),
+            None => theme::regular(px),
+        };
+    }
+    if let Some(family) =
+        sp.font.as_deref().filter(|_| !sp.code && sp.heading == 0).and_then(|name| crate::look::typefaces::family(faces, name, sp.bold))
+    {
+        return egui::FontId::new(14.5, family);
+    }
     if sp.heading > 0 {
         theme::bold(match sp.heading {
             1 => 22.0,
@@ -120,7 +179,7 @@ impl Body<'_> {
                 for sp in line {
                     let (fg, bg) = theme::mail_colors_on(sp.color, sp.background, page, &t, if sp.link.is_some() { t.accent } else { t.text });
                     let format = egui::TextFormat {
-                        font_id: span_font(sp),
+                        font_id: span_font_in(sp, &self.faces),
                         color: fg,
                         background: bg.unwrap_or(Color32::TRANSPARENT),
                         italics: sp.italic,
@@ -149,8 +208,10 @@ impl Body<'_> {
                     });
                     continue;
                 }
-                let line_w: f32 =
-                    line.iter().map(|sp| ui.fonts_mut(|f| f.layout_no_wrap(sp.text.clone(), span_font(sp), Color32::WHITE).size().x)).sum();
+                let line_w: f32 = line
+                    .iter()
+                    .map(|sp| ui.fonts_mut(|f| f.layout_no_wrap(sp.text.clone(), span_font_in(sp, &self.faces), Color32::WHITE).size().x))
+                    .sum();
                 if line.iter().all(|sp| sp.image.is_none()) && line_w < width {
                     let space = if align == Align::Center { (width - line_w) / 2.0 } else { width - line_w };
                     ui.horizontal(|ui| {
@@ -185,7 +246,7 @@ impl Body<'_> {
             }
             return;
         }
-        let mut rt = RichText::new(&sp.text).font(span_font(sp));
+        let mut rt = RichText::new(&sp.text).font(span_font_in(sp, &self.faces));
         if sp.italic {
             rt = rt.italics();
         }
@@ -448,13 +509,15 @@ pub(super) fn picture(s: &Session, st: &mut UiState, ui: &mut Ui, key: &MessageK
 /// How wide formatted text is unwrapped (its widest line); `None` for anything but text.
 pub(super) fn natural_width(ui: &Ui, blocks: &[mime::layout::Block]) -> Option<f32> {
     let mut widest: f32 = 0.0;
+    let faces = crate::look::typefaces::loaded(ui.ctx());
     for b in blocks {
         let mime::layout::Block::Text(lines) = b else { return None };
         for line in lines {
             if line.iter().any(|sp| sp.image.is_some()) {
                 return None;
             }
-            let w: f32 = line.iter().map(|sp| ui.fonts_mut(|f| f.layout_no_wrap(sp.text.clone(), span_font(sp), Color32::WHITE).size().x)).sum();
+            let w: f32 =
+                line.iter().map(|sp| ui.fonts_mut(|f| f.layout_no_wrap(sp.text.clone(), span_font_in(sp, &faces), Color32::WHITE).size().x)).sum();
             widest = widest.max(w);
         }
     }

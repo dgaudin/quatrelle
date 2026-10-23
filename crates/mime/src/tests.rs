@@ -418,3 +418,29 @@ fn helpers() {
     assert_eq!(preview("a\n\n  b   c\n> q\n-- \nsig"), "a b c");
     assert_eq!(preview(&"x".repeat(500)).chars().count(), PREVIEW_CHARS + 1);
 }
+
+/// A message reads in the sizes and typefaces it was written in (a signature in 10-point Arial
+/// under a 12-point body, as Outlook shows it): `font-size` / `font-family` (Word writes the
+/// family as `&quot;Arial&quot;`) and bold set with CSS come with the spans; the indent beside
+/// a picture doesn't push it to the next line.
+#[test]
+fn a_message_reads_in_its_own_sizes_and_typefaces() {
+    let html = r#"<style>p.MsoNormal { font-size:12.0pt; font-family:"Aptos",sans-serif }</style>
+        <p class="MsoNormal">Merci,</p>
+        <p class="MsoNormal"> <a href="https://www.example.com/"><img width="194" src="cid:logo@x"></a></p>
+        <p class="MsoNormal"><b><span style="font-size:10.5pt;font-family:&quot;Arial&quot;,sans-serif;color:#4B5763">Riley MORENO</span></b><br>
+        <span style="font-size:10.0pt;font-family:&quot;Arial&quot;,sans-serif">T&eacute;l. 01 02 03 04 05</span><br>
+        <span style="font-weight:bold;font-size:13px">Bold by style</span></p>"#;
+    let rich = html_to_rich(&crate::layout::inline_css(html));
+    let span = |text: &str| rich.iter().flatten().find(|s| s.text.contains(text)).cloned().unwrap_or_else(|| panic!("{text} in {rich:?}"));
+    let body = span("Merci");
+    assert_eq!(body.size, Some(12), "the body's 12 points (its own typeface, Aptos, is the reader's)");
+    let name = span("Riley MORENO");
+    assert_eq!((name.size, name.font.as_deref(), name.bold), (Some(11), Some("Arial"), true));
+    let tel = span("01 02 03");
+    assert_eq!((tel.size, tel.font.as_deref()), (Some(10), Some("Arial")));
+    assert!(span("Bold by style").bold, "bold set with CSS");
+    let picture = rich.iter().find(|l| l.iter().any(|s| s.image.is_some())).expect("the picture's line");
+    assert!(picture.iter().all(|s| s.image.is_some()), "nothing beside the picture to push it down: {picture:?}");
+    assert!(!rich.iter().flatten().any(|s| s.text.chars().any(|c| ('\u{E000}'..='\u{F8FF}').contains(&c))), "no marks left");
+}
