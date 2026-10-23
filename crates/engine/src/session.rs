@@ -279,9 +279,11 @@ const PENDING_MARKS: &str = "pending-marks.json";
 /// than reading every folder to count them.
 const RECOUNT_MAX: u64 = 50_000;
 
-/// Message summaries kept in memory at most, besides the folders on screen (a big data file's
-/// whole mailbox is several times this).
-const CACHE_MESSAGES: usize = 300_000;
+/// Message summaries kept in memory at most, besides the folders on screen. A summary takes about
+/// 1.4 KB (its recipients, references and preview): a search of everything or the address book
+/// reads every folder, and at 300,000 a 210,000-message Exchange mailbox stayed in memory whole
+/// (300 MB) for the rest of the day. A folder read again comes from the cache file in milliseconds.
+const CACHE_MESSAGES: usize = 50_000;
 
 /// Body words kept for search at most (bytes): enough for the messages a search looks at again.
 const BODY_WORDS_BYTES: usize = 48 << 20;
@@ -363,8 +365,11 @@ pub struct Session {
     pub outbox: Vec<(String, OutboxItem)>,
     /// Held-back Outbox messages already asked to be sent when their time came.
     flushed: BTreeSet<u64>,
-    /// Accounts whose server has been asked for its rules this session (once is enough).
+    /// Accounts whose server has been asked for its rules since it connected (once is enough).
     rules_asked: std::collections::BTreeSet<String>,
+    /// Accounts whose rules were read on coming online: a look for new mail (every half minute)
+    /// goes back to Syncing and then Online without reading them again.
+    rules_online: std::collections::BTreeSet<String>,
     /// The last reason each account's server gave for refusing its rules that was told this
     /// session: the same one isn't told again on every try.
     rules_refused_told: HashMap<String, String>,
@@ -491,6 +496,7 @@ impl Session {
             outbox: Vec::new(),
             flushed: BTreeSet::new(),
             rules_asked: std::collections::BTreeSet::new(),
+            rules_online: std::collections::BTreeSet::new(),
             rules_refused_told: HashMap::new(),
             jobs: Vec::new(),
             cache: HashMap::new(),

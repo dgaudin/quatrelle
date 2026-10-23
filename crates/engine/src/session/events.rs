@@ -32,10 +32,14 @@ impl Session {
                     }
                 }
                 // Coming online, not every "Online" after it: the sync says it after each folder
-                // and each check for new mail, and the rules were read (and a refused one sent
-                // again) that often — over a hundred times a pass on a big mailbox.
-                let was_online = self.account(&account).is_some_and(|a| matches!(a.status, SyncStatus::Online { .. }));
-                let online = matches!(status, SyncStatus::Online { .. }) && !was_online;
+                // and each check for new mail (Syncing, then Online, every half minute), and the
+                // rules were read (and a refused one sent again) that often — over a hundred
+                // times a pass on a big mailbox. Losing the server starts it over.
+                if matches!(status, SyncStatus::Offline | SyncStatus::Connecting | SyncStatus::Error { .. } | SyncStatus::NeedsPassword { .. }) {
+                    self.rules_asked.remove(&account);
+                    self.rules_online.remove(&account);
+                }
+                let online = matches!(status, SyncStatus::Online { .. }) && self.rules_online.insert(account.clone());
                 // A server that has started syncing is readable: its rules are asked for then,
                 // not once the whole mailbox (public folders and all) has been walked — that
                 // takes minutes, and the Rules dialog would sit empty until then.

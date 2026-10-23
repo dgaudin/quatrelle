@@ -36,6 +36,15 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 # Passwords live in the system keychain, never in Quatrelle's files.
 keyring = { version = "3.6", default-features = false }
 
+# Linux's own malloc keeps what it frees: a session that had searched everything kept 690 MB
+# after it was dropped, and a day's sync left 48 arenas of it, swapped out, in an Exchange user's
+# Quatrelle. jemalloc's background thread gives freed memory back within seconds. x86-64 only: a
+# jemalloc built for 4 KB pages stops at start on an ARM kernel with 16 or 64 KB ones; FreeBSD's
+# malloc is jemalloc already.
+[target.'cfg(all(target_os = "linux", target_arch = "x86_64"))'.dependencies]
+tikv-jemallocator = "0.6"
+tikv-jemalloc-ctl = "0.6"
+
 [build-dependencies]
 # Icon + VERSIONINFO for quatrelle.exe; build.rs only uses it when the target is Windows.
 winresource = "0.1"
