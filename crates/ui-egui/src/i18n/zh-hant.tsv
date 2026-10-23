@@ -1019,6 +1019,9 @@ month	May	5月
 	What's new	新功能
 	You have the newest version.	您使用的是最新版本。
 	Online only: keep none of this account's mail on this computer	僅限線上：不在此電腦上保留此帳戶的任何郵件
+	Keep shared mailboxes on this computer	在此電腦上保留共用信箱
+	Keep the public folders in Favorites on this computer	在此電腦上保留我的最愛中的公用資料夾
+	Those not kept are read on the server when you open them.	未保留的內容會在開啟時從伺服器讀取。
 	Online only: none of this account's mail is kept on this computer.	僅限線上：此帳戶的郵件不會保留在此電腦上。
 	Online only: {email}	僅限線上：{email}
 	New message	新郵件

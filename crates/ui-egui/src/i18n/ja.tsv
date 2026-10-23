@@ -1017,6 +1017,9 @@ month	May	5月
 	What's new	新機能
 	You have the newest version.	最新バージョンを使用しています。
 	Online only: keep none of this account's mail on this computer	オンラインのみ: このアカウントのメールをこのコンピューターに保存しない
+	Keep shared mailboxes on this computer	共有メールボックスをこのコンピューターに保持する
+	Keep the public folders in Favorites on this computer	お気に入りのパブリック フォルダーをこのコンピューターに保持する
+	Those not kept are read on the server when you open them.	保持しないものは、開いたときにサーバー上で読み込まれます。
 	Online only: none of this account's mail is kept on this computer.	オンラインのみ: このアカウントのメールはこのコンピューターに保存されません。
 	Online only: {email}	オンラインのみ: {email}
 	New message	新しいメッセージ

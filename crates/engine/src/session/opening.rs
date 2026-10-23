@@ -4,12 +4,11 @@ use super::*;
 
 impl Session {
     pub fn open_view(&mut self, view: View) {
-        // A public folder not kept in sync is read from the server when it's opened, as in
-        // Outlook: its newest few hundred come in, and the list fills as they do.
+        // A folder not kept on this computer (a public folder, a shared mailbox's when they
+        // aren't kept) is read from the server when it's opened, as in Outlook: its newest few
+        // hundred come in, and the list fills as they do.
         if let View::Folder { account, folder } = &view
-            && quatrelle_model::is_public_folder(folder)
-            && !self.follows_public(account, folder)
-            && self.account(account).is_some_and(|a| a.config.ews.is_some())
+            && self.read_on_server(account, folder)
         {
             self.jobs.push(Job::SyncFolder { account: account.clone(), folder: folder.clone() });
         }

@@ -170,22 +170,42 @@ impl Session {
         Ok(serde_json::json!({ "on": on }))
     }
 
-    /// Whether an Exchange public folder is kept in sync: it's one of the user's Favorites.
+    /// Whether an Exchange public folder is kept in sync: it's one of the user's Favorites, and
+    /// the account keeps them (Outlook's "Download Public Folder Favorites", off unless chosen).
     pub fn follows_public(&self, account: &str, folder: &str) -> bool {
-        self.prefs.favorites.as_ref().is_some_and(|l| l.iter().any(|r| r.account == account && r.folder == folder))
+        self.account(account).is_some_and(|a| a.config.public_favorites_kept)
+            && self.prefs.favorites.as_ref().is_some_and(|l| l.iter().any(|r| r.account == account && r.folder == folder))
+    }
+
+    /// Whether a folder is read on the server when it's opened rather than kept on this
+    /// computer, as Outlook's Cached Exchange Mode does: a public folder not followed, and a
+    /// shared mailbox's folder when the account doesn't keep them.
+    pub fn read_on_server(&self, account: &str, folder: &str) -> bool {
+        let Some(a) = self.account(account) else { return false };
+        if quatrelle_model::is_public_folder(folder) {
+            return a.config.ews.is_some() && !self.follows_public(account, folder);
+        }
+        a.config.shared_online && a.folders.iter().any(|f| f.path == folder && f.mailbox.is_some())
     }
 
     /// Tell each Exchange account's sync which public folders to keep in sync: the Favorites
-    /// among them, as Outlook keeps public folders offline only through its Favorites; the
-    /// others are read when opened. Written when it changes; a public folder just made a
-    /// Favorite is synced at once. Favorites never set (the defaults, or before the saved ones
-    /// are read) say nothing: the list kept stays.
+    /// among them when the account keeps them (Outlook's "Download Public Folder Favorites"),
+    /// none otherwise; the others are read when opened. Written when it changes; a public folder
+    /// just followed is synced at once. Favorites never set (the defaults, or before the saved
+    /// ones are read) say nothing: the list kept stays.
     pub fn follow_public_favorites(&mut self) {
-        let (Some(favorites), Some(store)) = (self.prefs.favorites.clone(), self.store.clone()) else { return };
-        let ids: Vec<String> = self.accounts.iter().filter(|a| a.config.ews.is_some()).map(|a| a.config.id.clone()).collect();
-        for id in ids {
-            let list: Vec<String> =
-                favorites.iter().filter(|r| r.account == id && quatrelle_model::is_public_folder(&r.folder)).map(|r| r.folder.clone()).collect();
+        let Some(store) = self.store.clone() else { return };
+        let favorites = self.prefs.favorites.clone();
+        let ids: Vec<(String, bool)> =
+            self.accounts.iter().filter(|a| a.config.ews.is_some()).map(|a| (a.config.id.clone(), a.config.public_favorites_kept)).collect();
+        for (id, kept) in ids {
+            let list: Vec<String> = match (&favorites, kept) {
+                (_, false) => Vec::new(),
+                (Some(f), true) => {
+                    f.iter().filter(|r| r.account == id && quatrelle_model::is_public_folder(&r.folder)).map(|r| r.folder.clone()).collect()
+                }
+                (None, true) => continue,
+            };
             if self.followed_public.get(&id) == Some(&list) {
                 continue;
             }

@@ -1016,6 +1016,9 @@ month	May	mei
 	What's new	Wat is er nieuw
 	You have the newest version.	U hebt de nieuwste versie.
 	Online only: keep none of this account's mail on this computer	Alleen online: geen e-mail van dit account op deze computer bewaren
+	Keep shared mailboxes on this computer	Gedeelde postvakken op deze computer bewaren
+	Keep the public folders in Favorites on this computer	Openbare mappen in Favorieten op deze computer bewaren
+	Those not kept are read on the server when you open them.	Wat niet wordt bewaard, wordt op de server gelezen wanneer je het opent.
 	Online only: none of this account's mail is kept on this computer.	Alleen online: er wordt geen e-mail van dit account op deze computer bewaard.
 	Online only: {email}	Alleen online: {email}
 	New message	Nieuw bericht

@@ -216,14 +216,27 @@ servers that don't offer IMAP. Every call is SOAP over HTTPS.
   A folder too big for its state to be taken (more than 200 pages of changes) is listed without
   one, and the mark says so (`too_big`): it isn't asked again for a week (asked at every pass,
   two public folders of 100,000 reports each took a quarter of an hour).
-- **Public folders** (under `Public Folders`, `quatrelle_model::is_public_folder`) are kept as
-  Outlook keeps them: only the ones made Favorites are followed. The session writes them, per
-  account, as `public-followed.json` (only once Favorites were set: the defaults, or Favorites not
-  read yet, leave the list as it is); the worker reads it at each full pass and walks those last,
-  after the mailbox's own folders and its shared mailboxes. Another public folder isn't walked:
-  opening it asks for it (`Job::SyncFolder`), and it's listed only (`SyncOptions::list_only`: its
-  newest 500, Show more for more, nothing downloaded ahead, no state asked for). What an earlier
-  pass kept of one beyond that is let go at the next full pass, and its numbers with it.
+- **Mail kept, as Outlook's Cached Exchange Mode** (the owner's rule): what came in the time
+  chosen in Options (`Prefs::keep_days`, two years unless chosen; `SyncOptions::since_days`).
+  The listing asks only for mail received since then (`FindItem` restricted on
+  `item:DateTimeReceived`), and a folder followed by its changes lets go of what has grown
+  older, with its source (`Summary::received_at`, the server's time, not the message's own
+  date). A search of the server's finds stay while they're there. Every message kept is
+  downloaded whole in the end (`SyncOptions::full`, no size limit): the newest few come with
+  the folder's list, the rest twenty at a time while nothing else is asked (`ahead_step`,
+  between a full pass and the next look at the Inbox), only their sources written.
+- **Public folders and shared mailboxes** (`Worker::read_online`): a shared mailbox is kept as
+  the account's own mail unless the account doesn't keep them (`AccountConfig::shared_online`,
+  Outlook's "Download shared folders" off); a public folder (under `Public Folders`,
+  `quatrelle_model::is_public_folder`) is kept only when it's a Favorite and the account keeps
+  public Favorites (`AccountConfig::public_favorites_kept`, Outlook's "Download Public Folder
+  Favorites", off unless chosen). The session writes the public folders followed, per account,
+  as `public-followed.json` (only once Favorites were set, unless public Favorites aren't kept:
+  then none); the worker reads it at each full pass and walks them last, after the mailbox's
+  own folders and its shared mailboxes. A folder read online isn't walked: opening it asks for
+  it (`Job::SyncFolder`), and it's listed only (`SyncOptions::list_only`: its newest 500, Show
+  more for more, nothing downloaded ahead, no state asked for). What an earlier pass kept of
+  one beyond that is let go at the next full pass, and its numbers with it.
 - **Changes** are `UpdateItem`, `MoveItem`, `DeleteItem` and the folder calls, fifty items a call.
 - **Sending** is `CreateItem` with the MIME source and `SendAndSaveCopy` (the copy goes to Sent
   Items); envelope-only recipients go in a `Bcc:` header. Drafts are `CreateItem` with `SaveOnly`,

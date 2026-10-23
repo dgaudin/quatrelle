@@ -1020,6 +1020,9 @@ month	May	mayo
 	What's new	Novedades
 	You have the newest version.	Tienes la versión más reciente.
 	Online only: keep none of this account's mail on this computer	Solo en línea: no guardar ningún correo de esta cuenta en este equipo
+	Keep shared mailboxes on this computer	Conservar los buzones compartidos en este equipo
+	Keep the public folders in Favorites on this computer	Conservar en este equipo las carpetas públicas de Favoritos
+	Those not kept are read on the server when you open them.	Lo que no se conserva se lee en el servidor al abrirlo.
 	Online only: none of this account's mail is kept on this computer.	Solo en línea: no se guarda ningún correo de esta cuenta en este equipo.
 	Online only: {email}	Solo en línea: {email}
 	New message	Mensaje nuevo

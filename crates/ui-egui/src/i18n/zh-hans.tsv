@@ -1017,6 +1017,9 @@ month	May	5月
 	What's new	新功能
 	You have the newest version.	你使用的是最新版本。
 	Online only: keep none of this account's mail on this computer	仅联机：不在此电脑上保留此帐户的任何邮件
+	Keep shared mailboxes on this computer	在此计算机上保留共享邮箱
+	Keep the public folders in Favorites on this computer	在此计算机上保留收藏夹中的公用文件夹
+	Those not kept are read on the server when you open them.	未保留的内容会在打开时从服务器读取。
 	Online only: none of this account's mail is kept on this computer.	仅联机：此帐户的邮件不会保留在此电脑上。
 	Online only: {email}	仅联机：{email}
 	New message	新邮件

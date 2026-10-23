@@ -519,6 +519,7 @@ impl Session {
             || a.config.smtp_username != config.smtp_username
             || a.config.shared_mailboxes != config.shared_mailboxes
             || a.config.online_only != config.online_only
+            || a.config.shared_online != config.shared_online
             || password.is_some();
         if config.online_only && !config.can_be_online_only() {
             return Err(CmdError::Params("a POP account keeps its mail on this computer: it can't be online only".into()));
@@ -536,6 +537,8 @@ impl Session {
         if reconnect && !local {
             self.jobs.push(Job::Start { account: config, password: password.map(Secret) });
         }
+        // Public Favorites kept, or no longer: the sync is told which to follow.
+        self.follow_public_favorites();
         Ok(serde_json::json!({ "updated": id }))
     }
 

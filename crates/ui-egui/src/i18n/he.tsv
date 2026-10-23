@@ -1016,6 +1016,9 @@ month	May	מאי
 	What's new	מה חדש
 	You have the newest version.	יש לך את הגרסה החדשה ביותר.
 	Online only: keep none of this account's mail on this computer	מקוון בלבד: לא לשמור דואר של חשבון זה במחשב הזה
+	Keep shared mailboxes on this computer	שמירת תיבות דואר משותפות במחשב זה
+	Keep the public folders in Favorites on this computer	שמירת התיקיות הציבוריות שבמועדפים במחשב זה
+	Those not kept are read on the server when you open them.	מה שלא נשמר נקרא בשרת כשפותחים אותו.
 	Online only: none of this account's mail is kept on this computer.	מקוון בלבד: שום דואר של חשבון זה אינו נשמר במחשב הזה.
 	Online only: {email}	מקוון בלבד: {email}
 	New message	הודעה חדשה

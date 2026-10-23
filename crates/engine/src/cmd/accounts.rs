@@ -241,6 +241,8 @@ pub(super) fn add_account(s: &mut Session, v: &Value) -> CmdResult {
         oauth_user: None,
         shared_mailboxes: Vec::new(),
         online_only: p::bool(v, "onlineOnly").unwrap_or(false),
+        shared_online: p::bool(v, "sharedOnline").unwrap_or(false),
+        public_favorites_kept: p::bool(v, "publicFavoritesKept").unwrap_or(false),
         oauth_client_id,
         oauth_tenant,
     };
@@ -353,6 +355,12 @@ pub(super) fn update_account(s: &mut Session, v: &Value) -> CmdResult {
     }
     if let Some(on) = p::bool(v, "onlineOnly") {
         c.online_only = on;
+    }
+    if let Some(on) = p::bool(v, "sharedOnline") {
+        c.shared_online = on;
+    }
+    if let Some(on) = p::bool(v, "publicFavoritesKept") {
+        c.public_favorites_kept = on;
     }
     // Its own Microsoft registration, changed or let go of (the built-in one again). The
     // sign-in kept for the old registration is no good for a new one: asked again when it fails.
