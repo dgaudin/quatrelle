@@ -335,6 +335,102 @@ pub fn typeface_files(family: &str) -> Option<(std::path::PathBuf, Option<std::p
     None
 }
 
+/// The system's colour emoji font, for emoji drawn as pictures: `QUATRELLE_EMOJI_FONT` (a font
+/// file, to try another), else Segoe UI Emoji on Windows, Apple Color Emoji on macOS, and on
+/// Linux and the BSDs fontconfig's answer for `emoji` and the places Noto Color Emoji is
+/// packaged in; the first that has colour glyphs. Its file and the face index in a collection.
+pub fn emoji_font_file() -> Option<(std::path::PathBuf, u32)> {
+    let mut candidates: Vec<std::path::PathBuf> = std::env::var_os("QUATRELLE_EMOJI_FONT").map(std::path::PathBuf::from).into_iter().collect();
+    if cfg!(target_os = "windows") {
+        let dir = std::env::var("WINDIR").unwrap_or_else(|_| "C:\\Windows".into());
+        candidates.push(std::path::PathBuf::from(dir).join("Fonts").join("seguiemj.ttf"));
+    } else if cfg!(target_os = "macos") {
+        candidates.push("/System/Library/Fonts/Apple Color Emoji.ttc".into());
+    } else {
+        #[cfg(all(unix, not(target_os = "macos")))]
+        candidates.extend(fc_match("emoji"));
+        candidates.extend(
+            [
+                "/usr/share/fonts/google-noto-color-emoji-fonts/NotoColorEmoji.ttf",
+                "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf",
+                "/usr/share/fonts/noto-emoji/NotoColorEmoji.ttf",
+                "/usr/share/fonts/noto/NotoColorEmoji.ttf",
+                "/usr/share/fonts/TTF/NotoColorEmoji.ttf",
+            ]
+            .map(std::path::PathBuf::from),
+        );
+    }
+    candidates.into_iter().find(|p| p.is_file() && std::fs::File::open(p).ok().is_some_and(|f| colour_font(f, 0))).map(|p| (p, 0))
+}
+
+/// Whether a font file's face `index` has colour glyphs (a `CBDT`, `sbix` or `COLR` table):
+/// read from its table directory, the first few kilobytes, so a monochrome font (fontconfig
+/// may answer `emoji` with one) costs no more than that.
+fn colour_font(mut file: impl std::io::Read, index: u32) -> bool {
+    let mut head = vec![0_u8; 16 << 10];
+    let mut read = 0;
+    while read < head.len() {
+        match file.read(&mut head[read..]) {
+            Ok(0) | Err(_) => break,
+            Ok(n) => read += n,
+        }
+    }
+    head.truncate(read);
+    has_colour_tables(&head, index)
+}
+
+/// Whether the font (or face `index` of a collection) in `bytes` lists a colour table.
+fn has_colour_tables(bytes: &[u8], index: u32) -> bool {
+    let u32_at = |at: usize| bytes.get(at..at + 4).map(|b| u32::from_be_bytes([b[0], b[1], b[2], b[3]]));
+    let u16_at = |at: usize| bytes.get(at..at + 2).map(|b| u16::from_be_bytes([b[0], b[1]]));
+    // A collection: its faces' offset tables are listed after the header.
+    let start = if bytes.starts_with(b"ttcf") { u32_at(12 + 4 * index as usize).map(|o| o as usize) } else { Some(0) };
+    let Some(start) = start else { return false };
+    let Some(count) = u16_at(start + 4) else { return false };
+    (0..usize::from(count).min(512))
+        .filter_map(|i| bytes.get(start + 12 + 16 * i..start + 16 + 16 * i))
+        .any(|tag| matches!(tag, b"CBDT" | b"sbix" | b"COLR"))
+}
+
+#[cfg(test)]
+mod colour_tests {
+    use super::*;
+
+    /// A font with a `COLR`, `sbix` or `CBDT` table in its directory is a colour font, in a
+    /// collection too; a text font, garbage or a truncated file is not.
+    #[test]
+    fn reads_colour_tables_from_the_directory() {
+        let sfnt = |tags: &[&[u8; 4]]| -> Vec<u8> {
+            let mut v = vec![0, 1, 0, 0];
+            v.extend_from_slice(&(tags.len() as u16).to_be_bytes());
+            v.extend_from_slice(&[0; 6]);
+            for t in tags {
+                v.extend_from_slice(*t);
+                v.extend_from_slice(&[0; 12]);
+            }
+            v
+        };
+        assert!(has_colour_tables(&sfnt(&[b"cmap", b"CBDT", b"glyf"]), 0));
+        assert!(has_colour_tables(&sfnt(&[b"COLR", b"CPAL"]), 0));
+        assert!(has_colour_tables(&sfnt(&[b"sbix"]), 0));
+        assert!(!has_colour_tables(&sfnt(&[b"cmap", b"glyf", b"hmtx"]), 0));
+        assert!(!has_colour_tables(b"not a font", 0));
+        assert!(!has_colour_tables(&sfnt(&[b"CBDT"])[..10], 0), "truncated");
+        // A collection of two: text, then colour.
+        let (text, colour) = (sfnt(&[b"glyf"]), sfnt(&[b"sbix"]));
+        let mut ttc = b"ttcf\0\x01\0\0\0\0\0\x02".to_vec();
+        let first = 12 + 8;
+        ttc.extend_from_slice(&(first as u32).to_be_bytes());
+        ttc.extend_from_slice(&((first + text.len()) as u32).to_be_bytes());
+        ttc.extend_from_slice(&text);
+        ttc.extend_from_slice(&colour);
+        assert!(!has_colour_tables(&ttc, 0));
+        assert!(has_colour_tables(&ttc, 1));
+        assert!(!has_colour_tables(&ttc, 2), "past the end");
+        assert!(colour_font(std::io::Cursor::new(&ttc), 1));
+    }
+}
+
 #[cfg(all(test, unix, not(target_os = "macos")))]
 mod tests {
     use super::*;

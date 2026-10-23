@@ -3,6 +3,7 @@
 
 pub mod bidi;
 pub mod craft_fonts;
+pub(crate) mod emoji;
 pub mod icons;
 pub mod motion;
 pub mod theme;

@@ -12,7 +12,7 @@ local-first, media-aware v1); the fuller request is
 |---|---|
 | Crates | 8 libraries + 3 apps + xtask |
 | Commands | 143 (`quatrelle-cli commands`) |
-| Tests | 388 (unit, in-memory IMAP, JMAP, Graph, EWS (mail, calendars, contacts, rooms and free/busy, Autodiscover), CalDAV/CardDAV and ManageSieve servers, NTLM test vectors, SMTP and HTTP stubs, data files, TCP end-to-end, an X server drag, headless UI) |
+| Tests | 393 (unit, in-memory IMAP, JMAP, Graph, EWS (mail, calendars, contacts, rooms and free/busy, Autodiscover), CalDAV/CardDAV and ManageSieve servers, NTLM test vectors, SMTP and HTTP stubs, data files, TCP end-to-end, an X server drag, headless UI) |
 | Languages | 14 (English, Spanish, French, German, Dutch, Brazilian Portuguese, Italian, Russian, Japanese, Korean, Simplified and Traditional Chinese, Arabic, Hebrew) |
 | Platforms | Windows, macOS, Linux; the browser (JMAP accounts) |
 
@@ -585,3 +585,13 @@ local-first, media-aware v1); the fuller request is
   `type: resource`), which Exchange books itself, and the place follows the rooms. Both are asked
   on the account's second connection, so a long sync never holds the form; loading and refusals
   are shown as such. The sample mailbox gains two rooms and a colleague's calendar to see it with.
+- **2026-10-23** — **v0.22**, emoji as pictures (the owner found them ugly: black line drawings,
+  egui's own monochrome emoji fonts drawn in the text's colour). The system's colour emoji font
+  (Noto Color Emoji, Segoe UI Emoji, Apple Color Emoji) is read once and egui given a glyph
+  rasterizer for the clusters Unicode calls emoji — shaped with the font (flags, skin tones,
+  families and keycaps are its ligatures) and drawn from its bitmaps or layered outlines — so
+  every text egui draws shows them in colour: the message list, the reading pane, the editor,
+  calendar chips (`docs/architecture.md`, Languages). Checked on Linux with Noto Color Emoji
+  (bitmaps); Segoe UI Emoji (layered outlines) and Apple Color Emoji (bitmaps in a collection)
+  take the same path but weren't run. Without such a font nothing changes. The sample mailbox's
+  Render farm message carries one of each kind to see them with.

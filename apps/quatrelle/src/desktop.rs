@@ -234,6 +234,12 @@ impl Services for Desktop {
         };
         candidates.iter().find_map(|p| std::fs::read(p).ok())
     }
+    fn emoji_font(&mut self) -> Option<(Vec<u8>, u32)> {
+        let (path, index) = appearance::emoji_font_file()?;
+        let bytes = std::fs::read(&path).ok()?;
+        log::info!("colour emoji from {}", path.display());
+        Some((bytes, index))
+    }
     fn can_drag_out(&self) -> bool {
         // Elsewhere, under X11 only: a Wayland window isn't an X window. A window on XWayland is
         // one, though `WAYLAND_DISPLAY` is set there too (testing it turned drag-out off on every

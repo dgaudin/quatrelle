@@ -95,6 +95,12 @@ pub trait Services {
     fn rtl_font(&mut self) -> Option<Vec<u8>> {
         None
     }
+    /// The system's colour emoji font (Noto Color Emoji, Segoe UI Emoji, Apple Color Emoji):
+    /// its bytes and the face index in a collection, for emoji drawn as the pictures they are
+    /// (`look/emoji.rs`). Asked once. `None` when there's none: emoji stay line drawings.
+    fn emoji_font(&mut self) -> Option<(Vec<u8>, u32)> {
+        None
+    }
     /// An installed typeface by name (`Arial`, `Calibri`), for the message editor to draw text
     /// set in it: its regular file, and its bold when there is one. `None` when the system
     /// hasn't it (nor, on Linux, a font standing in for it).
