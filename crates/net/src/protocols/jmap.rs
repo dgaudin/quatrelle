@@ -93,7 +93,18 @@ pub fn list_folders(c: &Client, st: &mut State, account: &str) -> Result<Vec<Fol
 
 /// Bring one folder's cache up to date.
 pub fn sync_folder(c: &Client, st: &mut State, store: &Store, account: &str, folder: &str, opts: &SyncOptions) -> Result<SyncReport> {
-    Ok(block_on(quatrelle_jmap::sync_folder(&c.0, st, store, account, folder, opts))?)
+    sync_folder_at(c, st, store, account, folder, opts, crate::worker::now())
+}
+
+/// [`sync_folder`] as of `now` (Unix seconds): what came in before the time kept leaves the cache.
+pub fn sync_folder_at(c: &Client, st: &mut State, store: &Store, account: &str, folder: &str, opts: &SyncOptions, now: i64) -> Result<SyncReport> {
+    Ok(block_on(quatrelle_jmap::sync_folder(&c.0, st, store, account, folder, opts, now))?)
+}
+
+/// Download, newest first, up to `budget` sources of a folder's kept messages that have none
+/// yet (whatever their size when `opts.full`); how many are still to download.
+pub fn download_ahead(c: &Client, st: &State, store: &Store, account: &str, folder: &str, opts: &SyncOptions, budget: usize) -> Result<usize> {
+    Ok(block_on(quatrelle_jmap::download_ahead(&c.0, st, store, account, folder, opts, budget))?)
 }
 
 /// What the server finds in a folder for a search (issue #4), brought into its list.

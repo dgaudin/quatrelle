@@ -13,10 +13,13 @@
 //! path of mailbox names (`Projects/Short film`, the Inbox is `INBOX`) like IMAP's, so moves,
 //! favourites and rules work unchanged. (The Microsoft Graph transport shares this numbering.)
 //!
-//! A folder sync asks for the newest [`SyncOptions::window`] ids with their keywords, a page of
-//! the server's `maxObjectsInGet` per round trip (the mailbox's counts with the first), then the
-//! headers of the ones not cached yet. Mail that falls out of the window leaves the cache, unless
-//! a search of the server found it ([`find_on_server`]): that stays while the mailbox has it.
+//! A folder sync asks for the newest [`SyncOptions::window`] ids with their keywords, of the mail
+//! received in the last [`SyncOptions::since_days`] when that's limited, a page of the server's
+//! `maxObjectsInGet` per round trip (the mailbox's counts with the first), then the headers of
+//! the ones not cached yet. Mail that falls out of the window, or came in before the time kept,
+//! leaves the cache with its source, unless a search of the server found it ([`find_on_server`]):
+//! that stays while the mailbox has it. What's kept is downloaded whole a few at a time
+//! ([`download_ahead`]).
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
 pub mod sse;
@@ -34,9 +37,11 @@ pub use url::{Url, base64, pct};
 
 mod search;
 mod state;
+mod syncing;
 pub use search::*;
 use state::*;
 pub use state::*;
+pub use syncing::{download_ahead, fetch_body, find_on_server, sync_folder};
 
 const CORE: &str = "urn:ietf:params:jmap:core";
 const MAIL: &str = "urn:ietf:params:jmap:mail";
@@ -279,73 +284,6 @@ impl<H: Http> Client<H> {
         Ok(list(r.first(), "list").iter().filter_map(Mailbox::from_json).collect())
     }
 
-    /// The newest `limit` ids in a mailbox with their keywords, and its (total, unread) counts.
-    /// A page of the server's `maxObjectsInGet` at a time (by position): asked at once, a folder
-    /// kept no more than that however many it was to keep.
-    async fn newest(&self, mailbox: &str, limit: usize) -> Result<(Vec<(String, Flags)>, Option<(u32, u32)>)> {
-        let limit = limit.clamp(1, 100_000);
-        let (mut ids, mut counts, mut seen, mut total) = (Vec::new(), None, 0usize, None);
-        for page in 0..1000 {
-            if seen >= limit {
-                break;
-            }
-            let want = (limit - seen).min(self.max_get);
-            let mut calls = vec![
-                (
-                    "Email/query",
-                    json!({"accountId": self.account, "filter": {"inMailbox": mailbox}, "sort": [{"property": "receivedAt", "isAscending": false}],
-                           "position": seen, "limit": want, "calculateTotal": page == 0}),
-                ),
-                (
-                    "Email/get",
-                    json!({"accountId": self.account, "#ids": {"resultOf": "c0", "name": "Email/query", "path": "/ids"}, "properties": ["id", "keywords"]}),
-                ),
-            ];
-            if page == 0 {
-                calls.push(("Mailbox/get", json!({"accountId": self.account, "ids": [mailbox], "properties": ["totalEmails", "unreadEmails"]})));
-            }
-            let r = self.mail(calls).await?;
-            let order: Vec<&str> = list(r.first(), "ids").iter().filter_map(Value::as_str).collect();
-            let got: HashMap<&str, Flags> =
-                list(r.get(1), "list").iter().filter_map(|e| Some((e.get("id")?.as_str()?, keywords(e.get("keywords"))))).collect();
-            ids.extend(order.iter().filter_map(|id| got.get(id).map(|f| (id.to_string(), f.clone()))));
-            if page == 0 {
-                counts = list(r.get(2), "list").first().map(|m| (count(m, "totalEmails"), count(m, "unreadEmails")));
-                total = r.first().and_then(|q| q.get("total")).and_then(Value::as_u64).and_then(|t| usize::try_from(t).ok());
-            }
-            seen += order.len();
-            // The end: nothing more, all there is, or (with no total) a short page.
-            if order.is_empty() || total.map_or(order.len() < want, |t| seen >= t) {
-                break;
-            }
-        }
-        Ok((ids, counts))
-    }
-
-    /// Headers and details of messages, for the list.
-    async fn headers(&self, ids: &[String]) -> Result<Vec<Value>> {
-        let mut out = Vec::new();
-        for chunk in ids.chunks(self.max_get.min(200)) {
-            let r = self
-                .mail(vec![(
-                    "Email/get",
-                    json!({"accountId": self.account, "ids": chunk, "properties": ["id", "keywords", "size", "receivedAt", "preview", "hasAttachment", "headers"]}),
-                )])
-                .await?;
-            out.extend(list(r.first(), "list").iter().cloned());
-        }
-        Ok(out)
-    }
-
-    /// The blob ids of messages' sources.
-    async fn blobs(&self, ids: &[String]) -> Result<HashMap<String, String>> {
-        let r = self.mail(vec![("Email/get", json!({"accountId": self.account, "ids": ids, "properties": ["id", "blobId"]}))]).await?;
-        Ok(list(r.first(), "list")
-            .iter()
-            .filter_map(|e| Some((e.get("id")?.as_str()?.to_string(), e.get("blobId")?.as_str()?.to_string())))
-            .collect())
-    }
-
     pub async fn download(&self, blob: &str) -> Result<Vec<u8>> {
         let url = expand(&self.download, &[("accountId", &self.account), ("blobId", blob), ("type", "message/rfc822"), ("name", "message.eml")]);
         let resp = self.http.send(Request::get(&url, MAX_BLOB).header("Authorization", &self.auth)).await?;
@@ -583,6 +521,14 @@ pub fn utc_date(s: &str) -> Option<i64> {
     Some(t)
 }
 
+/// Unix seconds as a UTCDate (`2024-05-01T09:30:00Z`), between 1970 and the end of 9999.
+pub fn utc_date_string(t: i64) -> String {
+    let t = t.clamp(0, 253_402_300_799);
+    let (y, m, d) = quatrelle_model::dates::civil_from_days(t.div_euclid(86_400));
+    let s = t.rem_euclid(86_400);
+    format!("{y:04}-{m:02}-{d:02}T{:02}:{:02}:{:02}Z", s / 3600, s / 60 % 60, s % 60)
+}
+
 /// A mailbox as the server describes it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Mailbox {
@@ -664,188 +610,6 @@ pub async fn list_folders<H: Http>(c: &Client<H>, st: &mut State, account: &str)
     let found = folders(account, &c.mailboxes().await?);
     st.mailboxes = found.iter().map(|(f, id)| (f.path.clone(), id.clone())).collect();
     Ok(found.into_iter().map(|(f, _)| f).collect())
-}
-
-/// Bring one folder's cache up to date.
-pub async fn sync_folder<H: Http>(
-    c: &Client<H>,
-    st: &mut State,
-    store: &Store,
-    account: &str,
-    folder: &str,
-    opts: &SyncOptions,
-) -> Result<SyncReport> {
-    let mailbox = st.mailbox(folder)?.to_string();
-    let (newest, counts) = c.newest(&mailbox, opts.window).await?;
-    let mut fs = store.load_folder(account, folder)?;
-    let mut report = SyncReport::default();
-    if fs.validity != VALIDITY && (fs.validity != 0 || !fs.messages.is_empty()) {
-        store.clear_folder(account, folder)?;
-        fs = FolderState::default();
-        report.reset = true;
-    }
-    fs.validity = VALIDITY;
-    let wanted: HashMap<u32, Flags> = newest.iter().map(|(id, f)| (st.number(id), f.clone())).collect();
-    let mut wanted = wanted;
-    // Found by a search of the server past the window: kept while still in the mailbox.
-    let extra = st.found_outside(folder, &fs.messages, &wanted);
-    for (id, f) in c.still_in(&mailbox, &extra).await? {
-        wanted.insert(st.number(&id), f);
-    }
-    st.keep_found(folder, |n| wanted.contains_key(&n));
-    // Gone (or out of the window), and flag changes.
-    let (kept, gone): (Vec<Summary>, Vec<Summary>) = std::mem::take(&mut fs.messages).into_iter().partition(|m| wanted.contains_key(&m.key.uid));
-    for m in &gone {
-        store.remove_body(&m.key);
-    }
-    report.removed = gone.len();
-    fs.messages = kept;
-    for m in &mut fs.messages {
-        if let Some(f) = wanted.get(&m.key.uid)
-            && m.flags != *f
-        {
-            m.flags = f.clone();
-            report.changed += 1;
-        }
-    }
-    // New.
-    let missing: Vec<String> = newest.iter().filter(|(id, _)| st.known(id).is_some_and(|n| fs.find(n).is_none())).map(|(id, _)| id.clone()).collect();
-    for e in c.headers(&missing).await? {
-        let Some(id) = e.get("id").and_then(Value::as_str) else { continue };
-        let key = MessageKey { account: account.to_string(), folder: folder.to_string(), validity: VALIDITY, uid: st.number(id) };
-        if fs.find(key.uid).is_some() {
-            continue;
-        }
-        fs.messages.push(email_summary(&e, key));
-        report.new += 1;
-    }
-    sort_newest_first(&mut fs.messages);
-    fs.uid_next = fs.messages.iter().map(|m| m.key.uid).max().unwrap_or(0).saturating_add(1);
-    store.save_folder(account, folder, &fs)?;
-    prefetch(c, st, store, account, folder, &mut fs, opts).await?;
-    let (total, unread) = counts.unwrap_or((u32::try_from(fs.messages.len()).unwrap_or(u32::MAX), fs.unread()));
-    report.total = total;
-    report.unread = unread;
-    Ok(report)
-}
-
-impl<H: Http> Client<H> {
-    /// The newest `limit` ids in a mailbox that `filter` matches.
-    async fn search(&self, mailbox: &str, filter: &Value, limit: usize) -> Result<Vec<String>> {
-        let filter = json!({"operator": "AND", "conditions": [{"inMailbox": mailbox}, filter]});
-        let r = self
-            .mail(vec![(
-                "Email/query",
-                json!({"accountId": self.account, "filter": filter, "sort": [{"property": "receivedAt", "isAscending": false}], "limit": limit.min(FOUND_MAX)}),
-            )])
-            .await?;
-        Ok(list(r.first(), "ids").iter().filter_map(Value::as_str).map(str::to_string).take(limit).collect())
-    }
-
-    /// Of these messages, those still in a mailbox, with their keywords.
-    async fn still_in(&self, mailbox: &str, ids: &[String]) -> Result<Vec<(String, Flags)>> {
-        let mut out = Vec::new();
-        for chunk in ids.chunks(self.max_get.clamp(1, 200)) {
-            let r = self
-                .mail(vec![("Email/get", json!({"accountId": self.account, "ids": chunk, "properties": ["id", "keywords", "mailboxIds"]}))])
-                .await?;
-            out.extend(
-                list(r.first(), "list")
-                    .iter()
-                    .filter(|e| e.get("mailboxIds").and_then(|m| m.get(mailbox)) == Some(&Value::Bool(true)))
-                    .filter_map(|e| Some((e.get("id")?.as_str()?.to_string(), keywords(e.get("keywords"))))),
-            );
-        }
-        Ok(out)
-    }
-}
-
-/// The messages of `folder` the server finds for `filter` ([`search_filter`]), the newest `cap`
-/// of them: those not kept yet come into its list, and stay there past the window while the
-/// server has them there (issue #4). Their keys, and how many came in. A folder never synced is
-/// left to its sync.
-pub async fn find_on_server<H: Http>(
-    c: &Client<H>,
-    st: &mut State,
-    store: &Store,
-    account: &str,
-    folder: &str,
-    filter: &Value,
-    cap: usize,
-) -> Result<(Vec<MessageKey>, usize)> {
-    let mailbox = st.mailbox(folder)?.to_string();
-    let mut fs = store.load_folder(account, folder)?;
-    if fs.validity != VALIDITY {
-        return Ok((Vec::new(), 0));
-    }
-    let ids = c.search(&mailbox, filter, cap.min(FOUND_MAX)).await?;
-    let numbers: Vec<u32> = ids.iter().map(|id| st.number(id)).collect();
-    let missing: Vec<String> = ids.iter().zip(&numbers).filter(|(_, n)| fs.find(**n).is_none()).map(|(id, _)| id.clone()).collect();
-    let mut new = 0;
-    for e in c.headers(&missing).await? {
-        let Some(id) = e.get("id").and_then(Value::as_str) else { continue };
-        let key = MessageKey { account: account.to_string(), folder: folder.to_string(), validity: VALIDITY, uid: st.number(id) };
-        if fs.find(key.uid).is_none() {
-            fs.messages.push(email_summary(&e, key));
-            new += 1;
-        }
-    }
-    st.add_found(folder, &numbers);
-    if new > 0 {
-        sort_newest_first(&mut fs.messages);
-        fs.uid_next = fs.messages.iter().map(|m| m.key.uid).max().unwrap_or(0).saturating_add(1);
-        store.save_folder(account, folder, &fs)?;
-    }
-    Ok((numbers.iter().filter_map(|n| fs.find(*n).map(|m| m.key.clone())).collect(), new))
-}
-
-async fn prefetch<H: Http>(
-    c: &Client<H>,
-    st: &State,
-    store: &Store,
-    account: &str,
-    folder: &str,
-    fs: &mut FolderState,
-    opts: &SyncOptions,
-) -> Result<()> {
-    let wanted: Vec<(u32, String)> = fs
-        .messages
-        .iter()
-        .take(opts.prefetch)
-        .filter(|m| m.size <= opts.prefetch_max_bytes && !store.has_body(&m.key))
-        .filter_map(|m| Some((m.key.uid, st.id(m.key.uid)?.to_string())))
-        .collect();
-    if wanted.is_empty() {
-        return Ok(());
-    }
-    let blobs = c.blobs(&wanted.iter().map(|(_, id)| id.clone()).collect::<Vec<_>>()).await?;
-    for (n, id) in &wanted {
-        let Some(blob) = blobs.get(id) else { continue };
-        let raw = c.download(blob).await?;
-        let Some(m) = fs.find_mut(*n) else { continue };
-        store.write_body(&m.key, &raw)?;
-        fill_from_source(m, &raw);
-    }
-    store.save_folder(account, folder, fs)?;
-    Ok(())
-}
-
-/// Download one message's source (and cache it).
-pub async fn fetch_body<H: Http>(c: &Client<H>, st: &State, store: &Store, key: &MessageKey) -> Result<Vec<u8>> {
-    if let Some(raw) = store.read_body(key) {
-        return Ok(raw);
-    }
-    let gone = || Error::No("the message is no longer on the server".into());
-    let id = st.id(key.uid).filter(|_| key.validity == VALIDITY).ok_or_else(gone)?.to_string();
-    let blob = c.blobs(std::slice::from_ref(&id)).await?.remove(&id).ok_or_else(gone)?;
-    let raw = c.download(&blob).await?;
-    store.write_body(key, &raw)?;
-    let mut fs = store.load_folder(&key.account, &key.folder)?;
-    if let Some(m) = fs.find_mut(key.uid) {
-        fill_from_source(m, &raw);
-        store.save_folder(&key.account, &key.folder, &fs)?;
-    }
-    Ok(raw)
 }
 
 /// Apply one change on the server.
