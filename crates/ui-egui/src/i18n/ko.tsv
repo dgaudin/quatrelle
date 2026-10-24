@@ -1275,3 +1275,113 @@ month	May	5월
 	Hide it again	다시 숨기기
 	Sent mail waiting for a reply	답장을 기다리는 보낸 메일
 	Awaiting reply	답장 대기
+	its certificate isn't from an authority this computer trusts	인증서가 이 컴퓨터가 신뢰하는 기관에서 발급되지 않았습니다
+	its certificate ran out on {date}	인증서가 {date}에 만료되었습니다
+	its certificate isn't valid until {date}	인증서가 {date}까지는 유효하지 않습니다
+	its certificate is for {addresses}, not for the sender	인증서가 보낸 사람이 아닌 {addresses}용입니다
+	its certificate isn't for signing email	인증서가 메일 서명용이 아닙니다
+	Encrypted. Decrypting it…	암호화되어 있습니다. 해독하는 중…
+	This message is encrypted, and it couldn't be decrypted: {error}	이 메시지는 암호화되어 있으며 해독할 수 없었습니다: {error}
+	It isn't signed, so it could have been changed on the way: be careful with what it asks.	서명되지 않아 전송 중에 바뀌었을 수 있습니다. 요청하는 내용에 주의하세요.
+	Encrypted: only you and its other recipients can read it.	암호화됨: 나와 다른 받는 사람만 읽을 수 있습니다.
+	Issued by {issuer}, valid until {date}	{issuer} 발급, {date}까지 유효
+	Signed {date}	서명 시각: {date}
+	Signed with SHA-1, which no longer proves much.	SHA-1으로 서명되어 더 이상 신뢰도가 높지 않습니다.
+	Signed by {signer}: the signature holds (certificate from {issuer}).	{signer}의 서명: 서명이 유효합니다 (인증서 발급: {issuer}).
+	Signed by {signer}, but {why}.	{signer}의 서명이지만 {why}.
+	The signature doesn't hold: {why}.	서명이 유효하지 않습니다: {why}.
+	Sign your messages so people can tell they're from you, and read and send encrypted mail, with a certificate (S/MIME).	인증서(S/MIME)로 메시지에 서명해 내가 보냈음을 알리고, 암호화된 메일을 읽고 보냅니다.
+	Security	보안
+	No certificate	인증서 없음
+	Import the .p12 or .pfx file your certificate came in.	인증서가 담긴 .p12 또는 .pfx 파일을 가져옵니다.
+	Import certificate…	인증서 가져오기…
+	It ran out on {date}: messages can't be signed with it any more.	{date}에 만료되어 더 이상 메시지에 서명할 수 없습니다.
+	Forget this certificate: its key goes from the keychain too	이 인증서를 지웁니다. 키도 키체인에서 삭제됩니다
+	Replace…	바꾸기…
+	Sign new messages	새 메시지에 서명
+	Encrypt new messages	새 메시지 암호화
+	Each recipient needs to have sent you a signed message first; replies to encrypted mail are always encrypted.	받는 사람마다 먼저 서명된 메시지를 보내 왔어야 합니다. 암호화된 메일에 대한 답장은 항상 암호화됩니다.
+	Certificates from signed mail: {n}	서명된 메일의 인증서: {n}
+	Import certificate	인증서 가져오기
+	The password {file} was saved with:	{file}을(를) 저장할 때 쓴 암호:
+	Its private key is kept in the system's keychain, not in Quatrelle's files.	개인 키는 Quatrelle의 파일이 아니라 시스템 키체인에 보관됩니다.
+	Import	가져오기
+	Sign	서명
+	Encrypt	암호화
+	Signed with your certificate: the recipients can tell it's from you and unchanged	내 인증서로 서명합니다. 받는 사람이 나에게서 왔고 바뀌지 않았음을 알 수 있습니다
+	Only the recipients can read it: each needs to have sent you a signed message	받는 사람만 읽을 수 있습니다. 각자 서명된 메시지를 보내 왔어야 합니다
+	the message was changed after it was signed, or the signature isn't the sender's	서명 후에 메시지가 바뀌었거나, 서명이 보낸 사람의 것이 아닙니다
+	this account has no certificate to decrypt it with (File › Info › Security)	이 계정에는 해독할 인증서가 없습니다 (파일 › 정보 › 보안)
+	it can't be decrypted with your certificate	내 인증서로는 해독할 수 없습니다
+	its account is gone	해당 계정이 더 이상 없습니다
+	Hide the subject of encrypted mail	암호화된 메일의 제목 숨기기
+	On the way it reads [...]; the real one is inside, for its recipients (header protection).	전송 중에는 [...]로 보이고, 실제 제목은 받는 사람을 위해 안에 들어 있습니다 (헤더 보호).
+	Its subject and addresses were protected inside it too.	제목과 주소도 안에서 보호되었습니다.
+	Check whether certificates were withdrawn	인증서가 철회되었는지 확인
+	As signed mail is shown, its certificate's authority is asked whether it withdrew it. Its authority then learns whose mail you're reading	서명된 메일을 표시할 때 인증서 발급 기관에 철회 여부를 묻습니다. 그러면 발급 기관은 누구의 메일을 읽고 있는지 알게 됩니다
+	Asking its authority whether the certificate was withdrawn…	인증서가 철회되었는지 발급 기관에 묻는 중…
+	Its authority says the certificate wasn't withdrawn.	발급 기관에 따르면 인증서는 철회되지 않았습니다.
+	Whether the certificate was withdrawn couldn't be checked: {why}.	인증서 철회 여부를 확인할 수 없습니다: {why}.
+	its authority withdrew its certificate on {date}	발급 기관이 {date}에 인증서를 철회했습니다
+	its certificate doesn't say where to ask	인증서에 문의할 곳이 나와 있지 않습니다
+	its authority's responder didn't answer	발급 기관의 응답 서비스가 응답하지 않았습니다
+	its authority's list of withdrawn certificates couldn't be had	발급 기관의 철회된 인증서 목록을 받을 수 없습니다
+	the certificate's authority isn't known	인증서 발급 기관을 알 수 없습니다
+	the list of withdrawn certificates can't be read	철회된 인증서 목록을 읽을 수 없습니다
+	the list isn't from the certificate's authority	목록이 인증서 발급 기관의 것이 아닙니다
+	the list's signature doesn't hold	목록의 서명이 올바르지 않습니다
+	the list is from the future	목록의 날짜가 미래입니다
+	the list is out of date	목록이 오래되었습니다
+	a certificate can't be read	인증서를 읽을 수 없습니다
+	the OCSP answer can't be read	OCSP 응답을 읽을 수 없습니다
+	the OCSP responder didn't answer	OCSP 서비스가 응답하지 않았습니다
+	the OCSP answer is of another kind	OCSP 응답이 다른 종류입니다
+	the OCSP answer isn't signed by the certificate's authority	OCSP 응답이 인증서 발급 기관의 서명이 아닙니다
+	the OCSP answer is about another certificate	OCSP 응답이 다른 인증서에 대한 것입니다
+	the OCSP answer is from the future	OCSP 응답의 날짜가 미래입니다
+	the OCSP answer is out of date	OCSP 응답이 오래되었습니다
+	the OCSP responder doesn't know the certificate	OCSP 서비스가 이 인증서를 모릅니다
+	Use a smart card	스마트 카드 사용
+	Use a smart card…	스마트 카드 사용…
+	Find certificates	인증서 찾기
+	Import the .p12 or .pfx file your certificate came in, or use one on a smart card.	인증서가 들어 있던 .p12 또는 .pfx 파일을 가져오거나, 스마트 카드의 인증서를 사용하세요.
+	Look in the Keychain	키체인에서 찾기
+	Looking…	찾는 중…
+	The card's PIN	카드 PIN
+	The key stays on the card; its PIN is kept in the system's keychain.	키는 카드에 남고, PIN은 시스템 키체인에 보관됩니다.
+	The module your card came with (OpenSC's reads most cards):	카드와 함께 제공된 모듈 (OpenSC 모듈은 대부분의 카드를 읽습니다):
+	Use	사용
+	no certificate with its key was found	키가 있는 인증서를 찾지 못했습니다
+	the PIN is wrong, or the card is locked	PIN이 틀렸거나 카드가 잠겨 있습니다
+	this system's keychain can't sign for Quatrelle: use a smart card's module, or import a .p12 file	이 시스템의 키체인은 Quatrelle를 위해 서명할 수 없습니다: 스마트 카드 모듈을 사용하거나 .p12 파일을 가져오세요
+	Unlock	잠금 해제
+	Unlock…	잠금 해제…
+	Unlock certificate	인증서 잠금 해제
+	Your certificate's password, to use it in this browser until the page is closed:	페이지를 닫을 때까지 이 브라우저에서 사용할 인증서 암호:
+	The browser keeps the file, locked with its password; the password itself isn't kept.	브라우저는 암호로 잠긴 파일을 보관하며, 암호 자체는 보관하지 않습니다.
+	Give its password again to sign and decrypt in this page	이 페이지에서 서명하고 복호화하려면 암호를 다시 입력하세요
+	your certificate is locked in this browser: unlock it with its password (File › Info › Security)	이 브라우저에서 인증서가 잠겨 있습니다: 암호로 잠금을 해제하세요 (파일 › 정보 › 보안)
+	there's no certificate kept in this browser: import its .p12 file	이 브라우저에 보관된 인증서가 없습니다: .p12 파일을 가져오세요
+	smart cards and the system's keychain are used by the Quatrelle desktop app, not in the browser	스마트 카드와 시스템 키체인은 브라우저가 아닌 Quatrelle 데스크톱 앱에서 사용됩니다
+	the browser can't ask a certificate's authority	브라우저는 인증서 발급 기관에 문의할 수 없습니다
+	A certificate this computer already has, its key staying where it is	이 컴퓨터에 이미 있는 인증서이며, 키는 그 자리에 남습니다
+	Look in Windows	Windows에서 찾기
+	The certificates for email in your Keychain. The key stays there; macOS may ask before it's used.	키체인에 있는 메일용 인증서입니다. 키는 그곳에 남으며, 사용하기 전에 macOS가 물을 수 있습니다.
+	The certificates for email in your Windows certificate store (Personal). The key stays in Windows; it may ask before it's used.	Windows 인증서 저장소(개인)에 있는 메일용 인증서입니다. 키는 Windows에 남으며, 사용하기 전에 물을 수 있습니다.
+	Use a certificate from Windows	Windows의 인증서 사용
+	Use a certificate from the Keychain	키체인의 인증서 사용
+	Use one from Windows…	Windows의 것 사용…
+	Use one from the Keychain…	키체인의 것 사용…
+	the certificate is in another computer's certificate store	인증서가 다른 컴퓨터의 인증서 저장소에 있습니다
+	Or use one this computer has	또는 이 컴퓨터에 있는 인증서 사용
+	On a smart card, or kept by the system: the key stays where it is.	스마트 카드에 있거나 시스템이 보관하는 것: 키는 그 자리에 남습니다.
+	Windows can't agree a key with this EC key (its provider may keep it for signing only)	Windows가 이 EC 키로 키를 합의할 수 없습니다 (공급자가 서명 전용으로 보관할 수 있습니다)
+	the card has few PIN tries left, so Quatrelle won't try it: give its PIN again (File › Info › Security › Use a smart card…)	카드의 PIN 시도 횟수가 얼마 남지 않아 Quatrelle가 시도하지 않습니다: PIN을 다시 입력하세요 (파일 › 정보 › 보안 › 스마트 카드 사용…)
+	the list holds only what changed since another one	목록에 다른 목록 이후 바뀐 것만 들어 있습니다
+	the list covers only some certificates or reasons	목록이 일부 인증서나 사유만 다룹니다
+	the list is for other certificates	목록이 다른 인증서용입니다
+	the list has a part Quatrelle can't read	목록에 Quatrelle가 읽을 수 없는 부분이 있습니다
+	the list's entry for the certificate can't be read	목록에서 이 인증서 항목을 읽을 수 없습니다
+	the certificate has no password, so the browser uses it until the page is closed and doesn't keep it	인증서에 암호가 없어 브라우저는 페이지를 닫을 때까지만 사용하고 보관하지 않습니다
+	the card needs its PIN (give it in File › Info › Security › Use a smart card…)	카드에 PIN이 필요합니다 (파일 › 정보 › 보안 › 스마트 카드 사용…)
+	the card refused its PIN, so Quatrelle forgot it: the card would lock if it were tried again (give it again in File › Info › Security › Use a smart card…)	카드가 PIN을 거부하여 Quatrelle가 PIN을 잊었습니다: 다시 시도하면 카드가 잠깁니다 (파일 › 정보 › 보안 › 스마트 카드 사용…)

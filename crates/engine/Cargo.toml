@@ -12,9 +12,15 @@ workspace = true
 [dependencies]
 quatrelle-model = { workspace = true }
 quatrelle-mime = { workspace = true }
+quatrelle-smime = { workspace = true }
 quatrelle-store = { workspace = true }
 quatrelle-print = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 log = { workspace = true }
 thiserror = { workspace = true }
+
+[dev-dependencies]
+# S/MIME tests read PEM and play the network layer's decrypting.
+der = { version = "0.7", features = ["pem"] }
+rand_core = { version = "0.6", features = ["getrandom"] }

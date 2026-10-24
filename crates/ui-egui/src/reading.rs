@@ -19,6 +19,7 @@ mod compose;
 mod people;
 mod pictures;
 mod plain;
+mod security;
 use attachments::*;
 pub(crate) use attachments::{big_picture, decode};
 pub(crate) use body::CellHeights;
@@ -417,6 +418,9 @@ fn message(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action
                 if let Some(w) = &r.warning {
                     sender_warning(&t, ui, w);
                 }
+                if let Some(sec) = &r.security {
+                    security::security_bar(s, &t, ui, sec);
+                }
                 if let Some((choices, voted)) = &voting {
                     vote_bar(ui, &t, &r.key, choices, voted, vote_sending.as_deref(), acts);
                     ui.add_space(8.0);
@@ -498,6 +502,11 @@ fn message(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action
                 if !in_window {
                     invite_card(s, st, ui, &r.key, acts);
                 }
+            }
+
+            // An encrypted message not decrypted: nothing of it (its smime.p7m) is shown.
+            if r.security.as_ref().is_some_and(security::still_locked) {
+                return;
             }
 
             // Attachments.

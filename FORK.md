@@ -298,6 +298,44 @@ l'origine est un parent de chaque fusion : la prochaine repartira de `1dc3ba7`.
 Preuves : `cargo xtask ci` vert à chaque étape (541 tests à la fin, fmt, `clippy -D warnings`,
 tailles, couches, ressources, wasm), et la fenêtre regardée sur la boîte d'exemple.
 
+### État de la récupération : reprises choisies de la v0.23 et de la v0.24 (2026-10-24)
+
+L'origine a ajouté 60 commits après `1dc3ba7` (jusqu'à `49ad25c`). Ils ne sont pas fusionnés :
+ils sont **repris un par un**, comme des *cherry-picks* des copies renommées
+(`refs/merge/r-<commit>`, faites par `renamed.sh`), le diff entre la copie d'un commit et celle de
+son parent appliqué à trois voies (`git apply -3`). La prochaine fusion complète repartira de
+`1dc3ba7` : les changements repris à l'identique s'y retrouveront des deux côtés.
+
+- **Repris** : les fuseaux horaires (`b9f0546`, `c4df00c`) et les invitations (`65d64b9`,
+  `b34d158`, `4889315`) ; la revue de durcissement (`44dae91`, `014c2e6`, `9dffd7e`, `406fe3f`,
+  `fd17e44`, `748b96d`, `e79ef90`, `1c0f7aa`, `303eda0`, `1a36d25`) ; le courrier plus sûr
+  (`c433c66`, `d354be7`, `9954938`, `249b9f7`, `8912219`, `29a2459`) ; `mailto:` et les fichiers
+  `.eml`/`.ics`/`.vcf` (`ebd873d`, `7db4066`, `f592eb9`, `0fbc402`) ; S/MIME de `a23eb9c` à
+  `3866bdb`, puis `44d9506` sans ses lignes Windows.
+- **S/MIME sans l'exception `unsafe`** (décision du propriétaire, 2026-10-24) : `1a30852` (le
+  magasin de certificats Windows et le déchiffrement EC du trousseau macOS, seuls fichiers
+  `unsafe` du crate `keys`) n'est pas repris, ni `897fb51` qui s'en sert. `crates/keys` garde les
+  lints de l'espace de travail (`unsafe_code = "forbid"`). Signer, chiffrer, lire, les `.p12`, les
+  cartes à puce (PKCS #11) et le trousseau macOS pour les clés RSA marchent.
+- **Laissés pour la fusion complète** : les plafonds et IDLE d'IMAP (`7fbd05e`, `9083d2f`,
+  `565f0bb`), qui visent la connexion IMAP que ce fork a remaniée ; le fuzz et `cargo-deny`
+  (`9418429`, `5bf776e`) ; le découpage du worker et le renouvellement OAuth (`6b7fc80`,
+  `d4eddd7`) ; les tests contre de vrais serveurs (`610c87c`) ; les numéros de version et la
+  documentation de l'origine.
+- **Déjà faits ici** : `7848644` (le fichier de données ouvert une seule fois) et `551f748` (la
+  page Options dans son propre fichier).
+- **Adaptations** : les rappels restent ceux de ce fork (dans `ical/alarms.rs`) ; les domaines
+  connus des alertes viennent du carnet d'adresses de ce fork ; Chiffrer et Signer sont dans
+  l'onglet Options du ruban du message, comme chez Outlook ; le `Keychain` reste
+  `desktop/keychain.rs` ; quelques fichiers de ce fork passent en sous-dossier pour la règle des
+  16 fichiers (`pim/scheduling.rs`, `addr/providers.rs`, `thread/voting.rs`,
+  `desktop/appearance.rs`, `desktop/keychain.rs`), joignables par les mêmes chemins. Les
+  certificats de test de l'origine gardent le nom « MailCraft Test CA » (signés, ils ne changent
+  pas d'un octet).
+- **Ajouté ici, côté Exchange** : le fuseau des séries lu et renvoyé (`StartTimeZone`, demandé
+  nommément : `AllProperties` ne le donne pas, vérifié sur le serveur du propriétaire), et les
+  champs d'un rendez-vous créé dans l'ordre du schéma EWS.
+
 
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 

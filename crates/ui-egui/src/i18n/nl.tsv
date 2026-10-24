@@ -1272,3 +1272,113 @@ month	May	mei
 	Hide it again	Weer verbergen
 	Sent mail waiting for a reply	Verzonden mail die op antwoord wacht
 	Awaiting reply	Wacht op antwoord
+	its certificate isn't from an authority this computer trusts	het certificaat komt niet van een instantie die deze computer vertrouwt
+	its certificate ran out on {date}	het certificaat is verlopen op {date}
+	its certificate isn't valid until {date}	het certificaat is pas geldig vanaf {date}
+	its certificate is for {addresses}, not for the sender	het certificaat is voor {addresses}, niet voor de afzender
+	its certificate isn't for signing email	het certificaat is niet bedoeld om e-mail te ondertekenen
+	Encrypted. Decrypting it…	Versleuteld. Wordt ontsleuteld…
+	This message is encrypted, and it couldn't be decrypted: {error}	Dit bericht is versleuteld en kon niet worden ontsleuteld: {error}
+	It isn't signed, so it could have been changed on the way: be careful with what it asks.	Het is niet ondertekend en kan onderweg zijn gewijzigd: wees voorzichtig met wat het vraagt.
+	Encrypted: only you and its other recipients can read it.	Versleuteld: alleen u en de andere ontvangers kunnen het lezen.
+	Issued by {issuer}, valid until {date}	Uitgegeven door {issuer}, geldig tot {date}
+	Signed {date}	Ondertekend: {date}
+	Signed with SHA-1, which no longer proves much.	Ondertekend met SHA-1, wat niet veel meer bewijst.
+	Signed by {signer}: the signature holds (certificate from {issuer}).	Ondertekend door {signer}: de handtekening klopt (certificaat van {issuer}).
+	Signed by {signer}, but {why}.	Ondertekend door {signer}, maar {why}.
+	The signature doesn't hold: {why}.	De handtekening klopt niet: {why}.
+	Sign your messages so people can tell they're from you, and read and send encrypted mail, with a certificate (S/MIME).	Onderteken uw berichten zodat men ziet dat ze van u zijn, en lees en verstuur versleutelde mail, met een certificaat (S/MIME).
+	Security	Beveiliging
+	No certificate	Geen certificaat
+	Import the .p12 or .pfx file your certificate came in.	Importeer het .p12- of .pfx-bestand waarin uw certificaat kwam.
+	Import certificate…	Certificaat importeren…
+	It ran out on {date}: messages can't be signed with it any more.	Het is verlopen op {date}: er kunnen geen berichten meer mee worden ondertekend.
+	Forget this certificate: its key goes from the keychain too	Dit certificaat vergeten: de sleutel verdwijnt ook uit de sleutelhanger
+	Replace…	Vervangen…
+	Sign new messages	Nieuwe berichten ondertekenen
+	Encrypt new messages	Nieuwe berichten versleutelen
+	Each recipient needs to have sent you a signed message first; replies to encrypted mail are always encrypted.	Elke ontvanger moet u eerst een ondertekend bericht hebben gestuurd; antwoorden op versleutelde mail worden altijd versleuteld.
+	Certificates from signed mail: {n}	Certificaten uit ondertekende mail: {n}
+	Import certificate	Certificaat importeren
+	The password {file} was saved with:	Het wachtwoord waarmee {file} is opgeslagen:
+	Its private key is kept in the system's keychain, not in Quatrelle's files.	De privésleutel wordt in de sleutelhanger van het systeem bewaard, niet in de bestanden van Quatrelle.
+	Import	Importeren
+	Sign	Ondertekenen
+	Encrypt	Versleutelen
+	Signed with your certificate: the recipients can tell it's from you and unchanged	Ondertekend met uw certificaat: de ontvangers zien dat het van u is en ongewijzigd
+	Only the recipients can read it: each needs to have sent you a signed message	Alleen de ontvangers kunnen het lezen: ieder moet u een ondertekend bericht hebben gestuurd
+	the message was changed after it was signed, or the signature isn't the sender's	het bericht is na het ondertekenen gewijzigd, of de handtekening is niet van de afzender
+	this account has no certificate to decrypt it with (File › Info › Security)	dit account heeft geen certificaat om het te ontsleutelen (Bestand › Info › Beveiliging)
+	it can't be decrypted with your certificate	het kan niet met uw certificaat worden ontsleuteld
+	its account is gone	het account bestaat niet meer
+	Hide the subject of encrypted mail	Het onderwerp van versleutelde mail verbergen
+	On the way it reads [...]; the real one is inside, for its recipients (header protection).	Onderweg staat er [...]; het echte staat binnenin, voor de ontvangers (headerbescherming).
+	Its subject and addresses were protected inside it too.	Het onderwerp en de adressen waren er ook binnenin beschermd.
+	Check whether certificates were withdrawn	Controleren of certificaten zijn ingetrokken
+	As signed mail is shown, its certificate's authority is asked whether it withdrew it. Its authority then learns whose mail you're reading	Als ondertekende mail wordt getoond, wordt de uitgever van het certificaat gevraagd of die het heeft ingetrokken. De uitgever weet dan wiens mail u leest
+	Asking its authority whether the certificate was withdrawn…	De uitgever wordt gevraagd of het certificaat is ingetrokken…
+	Its authority says the certificate wasn't withdrawn.	Volgens de uitgever is het certificaat niet ingetrokken.
+	Whether the certificate was withdrawn couldn't be checked: {why}.	Of het certificaat is ingetrokken, kon niet worden gecontroleerd: {why}.
+	its authority withdrew its certificate on {date}	de uitgever heeft het certificaat op {date} ingetrokken
+	its certificate doesn't say where to ask	het certificaat zegt niet waar het te vragen
+	its authority's responder didn't answer	de dienst van de uitgever gaf geen antwoord
+	its authority's list of withdrawn certificates couldn't be had	de lijst met ingetrokken certificaten van de uitgever was niet te krijgen
+	the certificate's authority isn't known	de uitgever van het certificaat is onbekend
+	the list of withdrawn certificates can't be read	de lijst met ingetrokken certificaten is niet te lezen
+	the list isn't from the certificate's authority	de lijst komt niet van de uitgever van het certificaat
+	the list's signature doesn't hold	de handtekening van de lijst klopt niet
+	the list is from the future	de lijst is in de toekomst gedateerd
+	the list is out of date	de lijst is verouderd
+	a certificate can't be read	een certificaat is niet te lezen
+	the OCSP answer can't be read	het OCSP-antwoord is niet te lezen
+	the OCSP responder didn't answer	de OCSP-dienst gaf geen antwoord
+	the OCSP answer is of another kind	het OCSP-antwoord is van een andere soort
+	the OCSP answer isn't signed by the certificate's authority	het OCSP-antwoord is niet door de uitgever van het certificaat ondertekend
+	the OCSP answer is about another certificate	het OCSP-antwoord gaat over een ander certificaat
+	the OCSP answer is from the future	het OCSP-antwoord is in de toekomst gedateerd
+	the OCSP answer is out of date	het OCSP-antwoord is verouderd
+	the OCSP responder doesn't know the certificate	de OCSP-dienst kent het certificaat niet
+	Use a smart card	Een smartcard gebruiken
+	Use a smart card…	Een smartcard gebruiken…
+	Find certificates	Certificaten zoeken
+	Import the .p12 or .pfx file your certificate came in, or use one on a smart card.	Importeer het .p12- of .pfx-bestand waarin uw certificaat kwam, of gebruik er een op een smartcard.
+	Look in the Keychain	In de sleutelhanger zoeken
+	Looking…	Zoeken…
+	The card's PIN	De pincode van de kaart
+	The key stays on the card; its PIN is kept in the system's keychain.	De sleutel blijft op de kaart; de pincode wordt in de sleutelhanger van het systeem bewaard.
+	The module your card came with (OpenSC's reads most cards):	De module die bij uw kaart hoort (die van OpenSC leest de meeste kaarten):
+	Use	Gebruiken
+	no certificate with its key was found	er is geen certificaat met zijn sleutel gevonden
+	the PIN is wrong, or the card is locked	de pincode is onjuist, of de kaart is geblokkeerd
+	this system's keychain can't sign for Quatrelle: use a smart card's module, or import a .p12 file	de sleutelhanger van dit systeem kan niet voor Quatrelle ondertekenen: gebruik de module van een smartcard, of importeer een .p12-bestand
+	Unlock	Ontgrendelen
+	Unlock…	Ontgrendelen…
+	Unlock certificate	Certificaat ontgrendelen
+	Your certificate's password, to use it in this browser until the page is closed:	Het wachtwoord van uw certificaat, om het in deze browser te gebruiken tot de pagina wordt gesloten:
+	The browser keeps the file, locked with its password; the password itself isn't kept.	De browser bewaart het bestand, vergrendeld met het wachtwoord; het wachtwoord zelf wordt niet bewaard.
+	Give its password again to sign and decrypt in this page	Geef het wachtwoord opnieuw om in deze pagina te ondertekenen en te ontsleutelen
+	your certificate is locked in this browser: unlock it with its password (File › Info › Security)	uw certificaat is in deze browser vergrendeld: ontgrendel het met het wachtwoord (Bestand › Info › Beveiliging)
+	there's no certificate kept in this browser: import its .p12 file	er is geen certificaat in deze browser bewaard: importeer het .p12-bestand
+	smart cards and the system's keychain are used by the Quatrelle desktop app, not in the browser	smartcards en de sleutelhanger van het systeem worden door de Quatrelle-desktopapp gebruikt, niet in de browser
+	the browser can't ask a certificate's authority	de browser kan de uitgever van een certificaat niets vragen
+	A certificate this computer already has, its key staying where it is	Een certificaat dat deze computer al heeft; de sleutel blijft waar hij is
+	Look in Windows	In Windows zoeken
+	The certificates for email in your Keychain. The key stays there; macOS may ask before it's used.	De certificaten voor e-mail in uw sleutelhanger. De sleutel blijft daar; macOS kan vragen voordat hij wordt gebruikt.
+	The certificates for email in your Windows certificate store (Personal). The key stays in Windows; it may ask before it's used.	De certificaten voor e-mail in uw Windows-certificaatarchief (Persoonlijk). De sleutel blijft in Windows; het kan vragen voordat hij wordt gebruikt.
+	Use a certificate from Windows	Een certificaat uit Windows gebruiken
+	Use a certificate from the Keychain	Een certificaat uit de sleutelhanger gebruiken
+	Use one from Windows…	Een uit Windows gebruiken…
+	Use one from the Keychain…	Een uit de sleutelhanger gebruiken…
+	the certificate is in another computer's certificate store	het certificaat staat in het certificaatarchief van een andere computer
+	Or use one this computer has	Of een gebruiken die deze computer heeft
+	On a smart card, or kept by the system: the key stays where it is.	Op een smartcard, of door het systeem bewaard: de sleutel blijft waar hij is.
+	Windows can't agree a key with this EC key (its provider may keep it for signing only)	Windows kan met deze EC-sleutel geen sleutel afspreken (de provider houdt hem misschien alleen voor ondertekenen)
+	the card has few PIN tries left, so Quatrelle won't try it: give its PIN again (File › Info › Security › Use a smart card…)	de kaart heeft nog maar weinig pinpogingen, dus Quatrelle probeert het niet: geef de pincode opnieuw (Bestand › Info › Beveiliging › Een smartcard gebruiken…)
+	the list holds only what changed since another one	de lijst bevat alleen wat sinds een andere is veranderd
+	the list covers only some certificates or reasons	de lijst dekt maar een deel van de certificaten of redenen
+	the list is for other certificates	de lijst is voor andere certificaten
+	the list has a part Quatrelle can't read	de lijst heeft een deel dat Quatrelle niet kan lezen
+	the list's entry for the certificate can't be read	de vermelding van het certificaat in de lijst is niet te lezen
+	the certificate has no password, so the browser uses it until the page is closed and doesn't keep it	het certificaat heeft geen wachtwoord, dus de browser gebruikt het tot de pagina wordt gesloten en bewaart het niet
+	the card needs its PIN (give it in File › Info › Security › Use a smart card…)	de kaart heeft de pincode nodig (geef die in Bestand › Info › Beveiliging › Een smartcard gebruiken…)
+	the card refused its PIN, so Quatrelle forgot it: the card would lock if it were tried again (give it again in File › Info › Security › Use a smart card…)	de kaart weigerde de pincode, dus Quatrelle is die vergeten: de kaart zou blokkeren als hij opnieuw werd geprobeerd (geef hem opnieuw in Bestand › Info › Beveiliging › Een smartcard gebruiken…)

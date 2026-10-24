@@ -1272,3 +1272,113 @@ month	May	مايو
 	Hide it again	إخفاؤه مجددًا
 	Sent mail waiting for a reply	بريد مُرسَل ينتظر ردًا
 	Awaiting reply	بانتظار الرد
+	its certificate isn't from an authority this computer trusts	شهادته ليست من جهة يثق بها هذا الحاسوب
+	its certificate ran out on {date}	انتهت صلاحية شهادته في {date}
+	its certificate isn't valid until {date}	شهادته غير صالحة حتى {date}
+	its certificate is for {addresses}, not for the sender	شهادته مخصصة لـ {addresses}، وليست للمرسل
+	its certificate isn't for signing email	شهادته ليست مخصصة لتوقيع البريد
+	Encrypted. Decrypting it…	مشفّرة. جارٍ فك تشفيرها…
+	This message is encrypted, and it couldn't be decrypted: {error}	هذه الرسالة مشفّرة، وتعذّر فك تشفيرها: {error}
+	It isn't signed, so it could have been changed on the way: be careful with what it asks.	إنها غير موقّعة، لذا ربما تغيّرت في الطريق: كن حذرًا مما تطلبه.
+	Encrypted: only you and its other recipients can read it.	مشفّرة: لا يقرؤها سواك وسوى بقية مستلميها.
+	Issued by {issuer}, valid until {date}	صادرة عن {issuer}، صالحة حتى {date}
+	Signed {date}	وُقّعت {date}
+	Signed with SHA-1, which no longer proves much.	موقّعة بـ SHA-1، الذي لم يعد يثبت الكثير.
+	Signed by {signer}: the signature holds (certificate from {issuer}).	موقّعة من {signer}: التوقيع صحيح (الشهادة من {issuer}).
+	Signed by {signer}, but {why}.	موقّعة من {signer}، لكن {why}.
+	The signature doesn't hold: {why}.	التوقيع غير صحيح: {why}.
+	Sign your messages so people can tell they're from you, and read and send encrypted mail, with a certificate (S/MIME).	وقّع رسائلك ليعرف الناس أنها منك، واقرأ البريد المشفّر وأرسله، باستخدام شهادة (S/MIME).
+	Security	الأمان
+	No certificate	لا شهادة
+	Import the .p12 or .pfx file your certificate came in.	استورد ملف ‎.p12 أو ‎.pfx الذي جاءت فيه شهادتك.
+	Import certificate…	استيراد شهادة…
+	It ran out on {date}: messages can't be signed with it any more.	انتهت صلاحيتها في {date}: لم يعد ممكنًا توقيع الرسائل بها.
+	Forget this certificate: its key goes from the keychain too	انسَ هذه الشهادة: يُحذف مفتاحها من سلسلة المفاتيح أيضًا
+	Replace…	استبدال…
+	Sign new messages	توقيع الرسائل الجديدة
+	Encrypt new messages	تشفير الرسائل الجديدة
+	Each recipient needs to have sent you a signed message first; replies to encrypted mail are always encrypted.	يجب أن يكون كل مستلم قد أرسل إليك رسالة موقّعة أولًا؛ والردود على البريد المشفّر تُشفّر دائمًا.
+	Certificates from signed mail: {n}	شهادات من البريد الموقّع: {n}
+	Import certificate	استيراد شهادة
+	The password {file} was saved with:	كلمة المرور التي حُفظ بها {file}:
+	Its private key is kept in the system's keychain, not in Quatrelle's files.	يُحفظ مفتاحها الخاص في سلسلة مفاتيح النظام، وليس في ملفات Quatrelle.
+	Import	استيراد
+	Sign	توقيع
+	Encrypt	تشفير
+	Signed with your certificate: the recipients can tell it's from you and unchanged	موقّعة بشهادتك: يعرف المستلمون أنها منك ولم تتغير
+	Only the recipients can read it: each needs to have sent you a signed message	لا يقرؤها سوى المستلمين: يجب أن يكون كل منهم قد أرسل إليك رسالة موقّعة
+	the message was changed after it was signed, or the signature isn't the sender's	تغيّرت الرسالة بعد توقيعها، أو أن التوقيع ليس للمرسل
+	this account has no certificate to decrypt it with (File › Info › Security)	ليس لهذا الحساب شهادة لفك تشفيرها (ملف › معلومات › الأمان)
+	it can't be decrypted with your certificate	تعذّر فك تشفيرها بشهادتك
+	its account is gone	حسابها لم يعد موجودًا
+	Hide the subject of encrypted mail	إخفاء موضوع البريد المشفّر
+	On the way it reads [...]; the real one is inside, for its recipients (header protection).	في الطريق يظهر [...]؛ والموضوع الحقيقي في الداخل لمستلميه (حماية الترويسة).
+	Its subject and addresses were protected inside it too.	كان موضوعها وعناوينها محميّة في داخلها أيضًا.
+	Check whether certificates were withdrawn	التحقق مما إذا كانت الشهادات قد سُحبت
+	As signed mail is shown, its certificate's authority is asked whether it withdrew it. Its authority then learns whose mail you're reading	عند عرض بريد موقّع، تُسأل جهة إصدار شهادته إن كانت قد سحبتها. وبذلك تعرف تلك الجهة بريدَ مَن تقرأ
+	Asking its authority whether the certificate was withdrawn…	جارٍ سؤال الجهة المصدرة إن كانت الشهادة قد سُحبت…
+	Its authority says the certificate wasn't withdrawn.	تقول الجهة المصدرة إن الشهادة لم تُسحب.
+	Whether the certificate was withdrawn couldn't be checked: {why}.	تعذّر التحقق مما إذا كانت الشهادة قد سُحبت: {why}.
+	its authority withdrew its certificate on {date}	سحبت الجهة المصدرة شهادته في {date}
+	its certificate doesn't say where to ask	لا تذكر شهادته أين يُسأل
+	its authority's responder didn't answer	لم يُجب خادم الجهة المصدرة
+	its authority's list of withdrawn certificates couldn't be had	تعذّر الحصول على قائمة الشهادات المسحوبة من الجهة المصدرة
+	the certificate's authority isn't known	الجهة المصدرة للشهادة غير معروفة
+	the list of withdrawn certificates can't be read	تتعذّر قراءة قائمة الشهادات المسحوبة
+	the list isn't from the certificate's authority	القائمة ليست من الجهة المصدرة للشهادة
+	the list's signature doesn't hold	توقيع القائمة غير صالح
+	the list is from the future	القائمة مؤرّخة في المستقبل
+	the list is out of date	القائمة قديمة
+	a certificate can't be read	تتعذّر قراءة شهادة
+	the OCSP answer can't be read	تتعذّر قراءة رد OCSP
+	the OCSP responder didn't answer	لم يُجب خادم OCSP
+	the OCSP answer is of another kind	رد OCSP من نوع آخر
+	the OCSP answer isn't signed by the certificate's authority	رد OCSP غير موقّع من الجهة المصدرة للشهادة
+	the OCSP answer is about another certificate	رد OCSP يخص شهادة أخرى
+	the OCSP answer is from the future	رد OCSP مؤرّخ في المستقبل
+	the OCSP answer is out of date	رد OCSP قديم
+	the OCSP responder doesn't know the certificate	لا يعرف خادم OCSP هذه الشهادة
+	Use a smart card	استخدام بطاقة ذكية
+	Use a smart card…	استخدام بطاقة ذكية…
+	Find certificates	البحث عن الشهادات
+	Import the .p12 or .pfx file your certificate came in, or use one on a smart card.	استورد ملف ‎.p12 أو ‎.pfx الذي جاءت فيه شهادتك، أو استخدم شهادة على بطاقة ذكية.
+	Look in the Keychain	البحث في سلسلة المفاتيح
+	Looking…	جارٍ البحث…
+	The card's PIN	رقم PIN الخاص بالبطاقة
+	The key stays on the card; its PIN is kept in the system's keychain.	يبقى المفتاح على البطاقة، ويُحفظ رقم PIN في سلسلة مفاتيح النظام.
+	The module your card came with (OpenSC's reads most cards):	الوحدة التي جاءت مع بطاقتك (وحدة OpenSC تقرأ معظم البطاقات):
+	Use	استخدام
+	no certificate with its key was found	لم يُعثر على شهادة معها مفتاحها
+	the PIN is wrong, or the card is locked	رقم PIN خاطئ، أو البطاقة مقفلة
+	this system's keychain can't sign for Quatrelle: use a smart card's module, or import a .p12 file	لا تستطيع سلسلة مفاتيح هذا النظام التوقيع لـ Quatrelle: استخدم وحدة بطاقة ذكية، أو استورد ملف ‎.p12
+	Unlock	فتح القفل
+	Unlock…	فتح القفل…
+	Unlock certificate	فتح قفل الشهادة
+	Your certificate's password, to use it in this browser until the page is closed:	كلمة مرور شهادتك، لاستخدامها في هذا المتصفح حتى تُغلق الصفحة:
+	The browser keeps the file, locked with its password; the password itself isn't kept.	يحتفظ المتصفح بالملف مقفلًا بكلمة مروره، ولا تُحفظ كلمة المرور نفسها.
+	Give its password again to sign and decrypt in this page	أدخل كلمة مرورها مرة أخرى للتوقيع وفك التشفير في هذه الصفحة
+	your certificate is locked in this browser: unlock it with its password (File › Info › Security)	شهادتك مقفلة في هذا المتصفح: افتح قفلها بكلمة مرورها (ملف › معلومات › الأمان)
+	there's no certificate kept in this browser: import its .p12 file	لا توجد شهادة محفوظة في هذا المتصفح: استورد ملف ‎.p12 الخاص بها
+	smart cards and the system's keychain are used by the Quatrelle desktop app, not in the browser	تُستخدم البطاقات الذكية وسلسلة مفاتيح النظام في تطبيق Quatrelle لسطح المكتب، لا في المتصفح
+	the browser can't ask a certificate's authority	لا يستطيع المتصفح سؤال الجهة المصدرة للشهادة
+	A certificate this computer already has, its key staying where it is	شهادة موجودة على هذا الكمبيوتر، ويبقى مفتاحها حيث هو
+	Look in Windows	البحث في Windows
+	The certificates for email in your Keychain. The key stays there; macOS may ask before it's used.	شهادات البريد في سلسلة مفاتيحك. يبقى المفتاح هناك، وقد يسأل macOS قبل استخدامه.
+	The certificates for email in your Windows certificate store (Personal). The key stays in Windows; it may ask before it's used.	شهادات البريد في مخزن شهادات Windows لديك (الشخصي). يبقى المفتاح في Windows، وقد يسأل قبل استخدامه.
+	Use a certificate from Windows	استخدام شهادة من Windows
+	Use a certificate from the Keychain	استخدام شهادة من سلسلة المفاتيح
+	Use one from Windows…	استخدام واحدة من Windows…
+	Use one from the Keychain…	استخدام واحدة من سلسلة المفاتيح…
+	the certificate is in another computer's certificate store	الشهادة في مخزن شهادات كمبيوتر آخر
+	Or use one this computer has	أو استخدم شهادة موجودة على هذا الكمبيوتر
+	On a smart card, or kept by the system: the key stays where it is.	على بطاقة ذكية، أو يحتفظ بها النظام: يبقى المفتاح حيث هو.
+	Windows can't agree a key with this EC key (its provider may keep it for signing only)	لا يستطيع Windows الاتفاق على مفتاح باستخدام مفتاح EC هذا (قد يحتفظ به موفّره للتوقيع فقط)
+	the card has few PIN tries left, so Quatrelle won't try it: give its PIN again (File › Info › Security › Use a smart card…)	تبقّت محاولات قليلة لرقم PIN على البطاقة، لذا لن يجرّبه Quatrelle: أدخل رقم PIN مرة أخرى (ملف › معلومات › الأمان › استخدام بطاقة ذكية…)
+	the list holds only what changed since another one	تحتوي القائمة فقط على ما تغيّر منذ قائمة أخرى
+	the list covers only some certificates or reasons	تغطي القائمة بعض الشهادات أو الأسباب فقط
+	the list is for other certificates	القائمة لشهادات أخرى
+	the list has a part Quatrelle can't read	في القائمة جزء لا يستطيع Quatrelle قراءته
+	the list's entry for the certificate can't be read	تتعذّر قراءة مدخل القائمة الخاص بالشهادة
+	the certificate has no password, so the browser uses it until the page is closed and doesn't keep it	ليست للشهادة كلمة مرور، لذا يستخدمها المتصفح حتى تُغلق الصفحة ولا يحتفظ بها
+	the card needs its PIN (give it in File › Info › Security › Use a smart card…)	تحتاج البطاقة إلى رقم PIN الخاص بها (أدخله في ملف › معلومات › الأمان › استخدام بطاقة ذكية…)
+	the card refused its PIN, so Quatrelle forgot it: the card would lock if it were tried again (give it again in File › Info › Security › Use a smart card…)	رفضت البطاقة رقم PIN، لذا نسيه Quatrelle: كانت البطاقة ستُقفل لو جُرّب مرة أخرى (أدخله مرة أخرى في ملف › معلومات › الأمان › استخدام بطاقة ذكية…)
