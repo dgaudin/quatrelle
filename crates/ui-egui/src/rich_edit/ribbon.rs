@@ -328,6 +328,18 @@ fn include(ui: &mut Ui, t: Tokens, ed: &mut Editor, c: &mut Compose, sel: &Range
     if widgets::big_button(ui, Icon::Attach, "Attach File", &t, !c.sending).clicked() {
         acts.push(Action::AttachFiles);
     }
+    // A message, a contact or an appointment, as a file (Outlook's Attach Item).
+    let r = widgets::big_button(ui, Icon::NewMail, "Attach Item", &t, !c.sending);
+    egui::Popup::menu(&r).show(|ui| {
+        use quatrelle_engine::ItemKind;
+        for (kind, label) in [(ItemKind::Message, tl!("Message…")), (ItemKind::Contact, tl!("Contact…")), (ItemKind::Event, tl!("Appointment…"))]
+        {
+            if ui.button(label).clicked() {
+                acts.push(Action::AttachItem(kind));
+                ui.close();
+            }
+        }
+    });
     if widgets::big_button(ui, Icon::Image, "Pictures", &t, !c.sending && !c.plain).clicked() {
         acts.push(Action::InsertPicture);
     }

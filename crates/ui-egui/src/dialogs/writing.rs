@@ -5,6 +5,7 @@ use super::*;
 pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Action>) -> bool {
     match d {
         Dialog::SelectNames(f) => select_names(ui, f, t, acts),
+        Dialog::AttachItem(f) => attach_item(ui, f, s, t, acts),
         Dialog::SaveChanges => {
             ui.set_width(380.0);
             title(ui, t, "Want to save your changes?");
@@ -141,6 +142,122 @@ pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &
         // Every other kind is shown by its own group (`body`).
         _ => true,
     }
+}
+
+/// Attach Item's choice: what kind of item, from where, and the ones picked.
+#[derive(Clone, Debug)]
+pub struct ItemForm {
+    pub kind: quatrelle_engine::ItemKind,
+    /// The folder messages are listed from, and the folders to choose from: (account, path,
+    /// name).
+    pub account: String,
+    pub folder: String,
+    pub folders: Vec<(String, String, String)>,
+    pub query: String,
+    /// The items listed (filled in after the frame, when `stale`), and the ids picked.
+    pub rows: Vec<quatrelle_engine::ItemChoice>,
+    pub picked: Vec<String>,
+    pub stale: bool,
+}
+
+impl Default for ItemForm {
+    fn default() -> Self {
+        ItemForm {
+            kind: quatrelle_engine::ItemKind::Message,
+            account: String::new(),
+            folder: String::new(),
+            folders: Vec::new(),
+            query: String::new(),
+            rows: Vec::new(),
+            picked: Vec::new(),
+            stale: true,
+        }
+    }
+}
+
+/// Attach Item: a kind of item, a folder for messages, words to look for; a click picks an item
+/// (and another click leaves it), a double-click attaches that one at once.
+fn attach_item(ui: &mut Ui, f: &mut ItemForm, s: &Session, t: &Tokens, acts: &mut Vec<Action>) -> bool {
+    use quatrelle_engine::ItemKind;
+    ui.set_width(640.0);
+    title(ui, t, "Attach Item");
+    ui.horizontal(|ui| {
+        for (kind, label) in [(ItemKind::Message, tl!("Messages")), (ItemKind::Contact, tl!("Contacts")), (ItemKind::Event, tl!("Calendar"))] {
+            if ui.selectable_label(f.kind == kind, label).clicked() && f.kind != kind {
+                f.kind = kind;
+                f.picked.clear();
+                f.stale = true;
+            }
+        }
+    });
+    ui.add_space(6.0);
+    ui.horizontal(|ui| {
+        if f.kind == ItemKind::Message {
+            ui.label(RichText::new(tl!("Folder")).strong());
+            let shown = f.folders.iter().find(|(a, p, _)| *a == f.account && *p == f.folder).map(|(_, _, n)| n.clone()).unwrap_or_default();
+            egui::ComboBox::from_id_salt("attach-item-folder").width(240.0).selected_text(shown).show_ui(ui, |ui| {
+                for (a, p, name) in &f.folders {
+                    if ui.selectable_label(f.account == *a && f.folder == *p, name).clicked() && (f.account != *a || f.folder != *p) {
+                        (f.account, f.folder) = (a.clone(), p.clone());
+                        f.picked.clear();
+                        f.stale = true;
+                    }
+                }
+            });
+            ui.add_space(12.0);
+        }
+        let r = ui.add(egui::TextEdit::singleline(&mut f.query).desired_width(220.0).hint_text(tl!("Search")));
+        if ui.memory(|m| m.focused().is_none()) {
+            r.request_focus();
+        }
+        if r.changed() {
+            f.stale = true;
+        }
+    });
+    ui.add_space(6.0);
+    let mut now: Option<String> = None;
+    egui::ScrollArea::vertical().max_height(360.0).min_scrolled_height(360.0).auto_shrink([false, false]).show(ui, |ui| {
+        if f.rows.is_empty() && !f.stale {
+            ui.add_space(20.0);
+            ui.vertical_centered(|ui| ui.label(RichText::new(tl!("Nothing to attach here.")).color(t.dim)));
+        }
+        for row in &f.rows {
+            let picked = f.picked.contains(&row.id);
+            let when = match (row.when, f.kind) {
+                (0, _) => String::new(),
+                (d, ItemKind::Event) => crate::i18n::date(&quatrelle_engine::model::dates::full_time(d, &s.clock)),
+                (d, _) => crate::i18n::date(&quatrelle_engine::model::dates::list_time(d, &s.clock)),
+            };
+            let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 36.0), Sense::click());
+            if picked || resp.hovered() {
+                ui.painter().rect_filled(rect, 4.0, if picked { t.accent_soft } else { t.hover_row });
+            }
+            let p = ui.painter_at(rect.shrink2(vec2(8.0, 0.0)));
+            let title = if row.title.trim().is_empty() { tl!("(no subject)").to_string() } else { row.title.clone() };
+            p.text(rect.left_top() + vec2(8.0, 4.0), egui::Align2::LEFT_TOP, title, theme::regular(13.0), t.text);
+            p.text(rect.left_bottom() + vec2(8.0, -4.0), egui::Align2::LEFT_BOTTOM, &row.detail, theme::regular(12.0), t.dim);
+            p.text(rect.right_top() + vec2(-8.0, 4.0), egui::Align2::RIGHT_TOP, when, theme::regular(12.0), t.dim);
+            if resp.double_clicked() {
+                now = Some(row.id.clone());
+            } else if resp.clicked() {
+                if picked {
+                    f.picked.retain(|id| *id != row.id);
+                } else {
+                    f.picked.push(row.id.clone());
+                }
+            }
+        }
+    });
+    let (ok, cancel) = buttons(ui, t, "Attach", !f.picked.is_empty());
+    let chosen = match now {
+        Some(id) => vec![id],
+        None if ok => f.picked.clone(),
+        None => Vec::new(),
+    };
+    for id in &chosen {
+        acts.push(Action::Run("compose.attachItem", json!({"kind": f.kind.code(), "id": id})));
+    }
+    chosen.is_empty() && !cancel
 }
 
 /// The address book being looked at.

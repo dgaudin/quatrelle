@@ -3,8 +3,10 @@
 use super::*;
 
 mod compose;
+mod items;
 use compose::with_html_signature;
 pub use compose::{Compose, add_pictures, signature_block, style_signature};
+pub use items::{ItemChoice, ItemKind};
 
 impl Session {
     pub(super) fn me(&self, account: &str) -> Vec<String> {

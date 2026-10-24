@@ -742,6 +742,12 @@ tester's does, a contact as Exchange keeps it, Outlook's clipboard), then fixed 
   tells what the mail says); and Advanced search under the chevron on its right (words, From, To, Subject,
   message text, has attachments, unread, flagged, high importance, and other terms kept as
   written), filled from what's in the box and written back to it.
+- **Attach Item and message headers:** Attach Item, beside Attach File in the message's ribbon,
+  sends a message (its source, an `.eml`), a contact (a `.vcf`) or an appointment with its
+  changed occurrences (an `.ics`) along as a file, chosen from a folder, the address book or
+  the calendar on this computer, words typed narrowing them. Message headers (the reading pane's
+  ⋯ and the File page) shows the open message's header lines, with Copy, as a message's
+  Properties do in Outlook.
 - Checked in the app against Dovecot 2.3 in Docker (3,000 messages, 25 kept, online only),
   the build before the fix first: Show more sent `SELECT … (QRESYNC …)` and nothing else, the
   list still 25; now it fetches the next 25 (`UID FETCH 2951:2975`), 50 shown. Search the server

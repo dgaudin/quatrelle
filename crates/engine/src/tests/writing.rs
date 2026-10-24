@@ -94,6 +94,38 @@ fn messages_save_as_eml_and_pdf() {
     done(s);
 }
 
+/// Attach Item: a message, a contact and an appointment on this computer go along as files
+/// (`.eml`, `.vcf`, `.ics`) that read back as what they were; words typed narrow the choice.
+#[test]
+fn items_attach_as_files() {
+    use crate::ItemKind;
+    let mut s = sample_session("attach-items");
+    let account = sample::SAMPLE_ACCOUNT;
+    s.run("mail.new", &json!({})).unwrap();
+    let mails = s.item_choices(ItemKind::Message, account, "INBOX", "");
+    assert!(mails.len() > 1 && mails.windows(2).all(|w| w[0].when >= w[1].when), "newest first");
+    let found = s.item_choices(ItemKind::Message, account, "INBOX", "storyboard");
+    assert!(!found.is_empty() && found.iter().all(|m| m.title.to_lowercase().contains("storyboard")), "{found:?}");
+    let mail = &found[0];
+    let contact = s.item_choices(ItemKind::Contact, "", "", "").into_iter().next().expect("the sample has contacts");
+    let event = s.item_choices(ItemKind::Event, "", "", "").into_iter().find(|e| !e.title.is_empty()).expect("the sample has appointments");
+    for (kind, id) in [("message", &mail.id), ("contact", &contact.id), ("event", &event.id)] {
+        s.run("compose.attachItem", &json!({"kind": kind, "id": id})).unwrap();
+    }
+    let att = s.compose.as_ref().unwrap().attachments.clone();
+    assert_eq!(att.iter().map(|a| a.mime.as_str()).collect::<Vec<_>>(), ["message/rfc822", "text/vcard", "text/calendar"]);
+    assert_eq!(att[0].name, quatrelle_mime::sanitize_filename(&format!("{}.eml", mail.title)), "named after it, safe to write");
+    assert_eq!(quatrelle_mime::parse(&att[0].data).unwrap().subject, mail.title);
+    let cards = quatrelle_model::vcard::parse(&String::from_utf8_lossy(&att[1].data));
+    assert_eq!(cards.first().map(|c| c.uid.as_str()), Some(contact.id.as_str()));
+    assert!(att[2].name.ends_with(".ics"));
+    let cal = quatrelle_model::ical::parse(&String::from_utf8_lossy(&att[2].data), 0);
+    assert!(cal.events.iter().any(|e| e.summary == event.title), "{:?}", cal.events);
+    assert!(s.run("compose.attachItem", &json!({"kind": "folder", "id": "x"})).is_err());
+    assert!(s.run("compose.attachItem", &json!({"kind": "contact", "id": "nobody"})).is_err());
+    done(s);
+}
+
 /// A message's headers, as its source carries them (who really sent it, the servers it passed
 /// through): the header lines alone, not its text; nothing without a message open.
 #[test]

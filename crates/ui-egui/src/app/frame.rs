@@ -357,6 +357,15 @@ impl MailApp {
             f.list = self.session.address_book_now(&f.source, &f.query);
             f.stale = false;
         }
+        // Attach Item's list: the items of the kind and folder chosen, matching the words typed.
+        if let Some(Dialog::AttachItem(f)) = self.ui.dialog.as_mut()
+            && f.stale
+        {
+            f.rows = self.session.item_choices(f.kind, &f.account, &f.folder, &f.query);
+            f.picked.retain(|id| f.rows.iter().any(|r| r.id == *id));
+            f.stale = false;
+            ctx.request_repaint();
+        }
         // A message window's own dialogs show in that window.
         let in_window = self.session.compose.as_ref().is_some_and(|c| !compose_inline(c, &ctx));
         if let Some(mut d) = self.ui.dialog.take() {

@@ -402,3 +402,58 @@ fn pictures_go_through_the_clipboard_whole() {
     assert_eq!((back.size, back.pixels[0]), ([40, 30], egui::Color32::from_rgb(10, 120, 200)));
     assert!(crate::reading::png_of(&egui::ColorImage::filled([0, 0], egui::Color32::RED)).is_none());
 }
+
+/// Attach Item: open on messages from the Inbox, a click picks one, Attach sends it along as a
+/// file and closes the dialog; Contacts lists the address book.
+#[test]
+fn attach_item_picks_a_message_and_attaches_it() {
+    let (mut a, dir) = app("attach-item");
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    a.run("mail.new", json!({}));
+    frame(&ctx, &mut a, vec![]);
+    let id = a.session.compose.as_ref().map(|c| c.id).unwrap();
+    a.act(crate::Action::ForCompose(id, Box::new(crate::Action::AttachItem(quatrelle_engine::ItemKind::Message))));
+    let size = egui::vec2(1280.0, 800.0);
+    // Where a text is drawn last: in the dialog, over the list that shows the same subjects.
+    let at = |shapes: &[egui::Shape], text: &str| {
+        shapes.iter().rev().find_map(|s| match s {
+            egui::Shape::Text(t) if t.galley.text() == text => Some(t.pos + egui::vec2(4.0, 6.0)),
+            _ => None,
+        })
+    };
+    let subject = "Storyboard review on Thursday";
+    // Listed, and still once it has faded in (it moves while it does).
+    let mut row = None;
+    for _ in 0..30 {
+        let now = at(&frame_shapes(&ctx, &mut a, vec![], size), subject);
+        if now.is_some() && now == row {
+            break;
+        }
+        row = now;
+    }
+    let row = row.expect("the Inbox's messages are listed");
+    let click = |a: &mut MailApp, pos: egui::Pos2| {
+        let button = |pressed| Event::PointerButton { pos, button: egui::PointerButton::Primary, pressed, modifiers: Modifiers::NONE };
+        frame(&ctx, a, vec![Event::PointerMoved(pos)]);
+        frame(&ctx, a, vec![button(true)]);
+        frame(&ctx, a, vec![button(false)]);
+    };
+    click(&mut a, row);
+    let Some(Dialog::AttachItem(f)) = &a.ui.dialog else { panic!("the dialog stays open") };
+    assert_eq!(f.picked.len(), 1, "picked");
+    let attach = at(&frame_shapes(&ctx, &mut a, vec![], size), "Attach").expect("Attach");
+    click(&mut a, attach);
+    frame(&ctx, &mut a, vec![]);
+    assert!(a.ui.dialog.is_none(), "closed");
+    let att = a.session.compose.as_ref().unwrap().attachments.clone();
+    assert_eq!(att.len(), 1);
+    assert_eq!(att[0].mime, "message/rfc822");
+    assert_eq!(quatrelle_engine::mime::parse(&att[0].data).unwrap().subject, subject);
+    // The address book, under Contacts.
+    a.act(crate::Action::ForCompose(id, Box::new(crate::Action::AttachItem(quatrelle_engine::ItemKind::Contact))));
+    frame(&ctx, &mut a, vec![]);
+    let Some(Dialog::AttachItem(f)) = &a.ui.dialog else { panic!("open again") };
+    assert!(!f.rows.is_empty() && f.rows.iter().all(|r| r.when == 0), "contacts listed: {:?}", f.rows);
+    let _ = std::fs::remove_dir_all(dir);
+}
