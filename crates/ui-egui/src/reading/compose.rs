@@ -9,7 +9,7 @@ pub(super) const CHIP_H: f32 = 42.0;
 /// own, or at once again.
 pub(crate) fn delay_menu(ui: &mut Ui, t: &Tokens, c: &mut quatrelle_engine::Compose, clock: &dates::Clock) {
     let today = dates::today(clock);
-    let at = |day: i64, minutes: i64| day.saturating_mul(86_400) - i64::from(clock.offset) + minutes * 60;
+    let at = |day: i64, minutes: i64| clock.utc(day.saturating_mul(86_400).saturating_add(minutes * 60));
     let weekday = (today + 3).rem_euclid(7);
     let presets = [
         ("In 1 hour", (clock.now + 3600) / 60 * 60),

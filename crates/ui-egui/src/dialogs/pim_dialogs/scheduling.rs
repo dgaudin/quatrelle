@@ -92,16 +92,15 @@ fn guests(typed: &str) -> Vec<(String, String)> {
 /// The view, under the form's fields.
 pub(super) fn view(ui: &mut Ui, f: &mut EventForm, s: &Session, t: &Tokens, acts: &mut Vec<Action>) {
     let account = f.account_id();
-    let off = i64::from(s.clock.offset);
     let Some((start, end)) = f.times(s) else {
         ui.label(RichText::new(tl!("Give the meeting a start and an end to see when everyone is free.")).color(t.dim));
         return;
     };
-    let today = s.clock.now.saturating_add(off).div_euclid(86_400);
-    let meeting_day = start.saturating_add(off).div_euclid(86_400);
+    let today = dates::today(&s.clock);
+    let meeting_day = s.clock.local(start).div_euclid(86_400);
     let day = f.sched_day.unwrap_or(meeting_day);
-    let day_from = day.saturating_mul(86_400) - off;
-    let day_to = day_from + 86_400;
+    let day_from = s.clock.midnight(day);
+    let day_to = s.clock.midnight(day.saturating_add(1));
     // The day shown, and the way to the others.
     ui.horizontal(|ui| {
         if widgets::tiny_icon_button(ui, Icon::ChevronLeft, "Previous day", t).clicked() {

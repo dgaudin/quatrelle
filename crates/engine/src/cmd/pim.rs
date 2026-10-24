@@ -52,10 +52,9 @@ pub(super) fn commands() -> Vec<CommandSpec> {
         CommandSpec::new("calendar.goto", "Go to a date", "Calendar › Go to", |s, v| s.cal_goto(p::str(v, "date"), p::i64(v, "step").unwrap_or(0)))
             .params(r#"{"date"?: "YYYY-MM-DD"|"today", "step"?: number (days, weeks or months, as on screen)}"#),
         CommandSpec::new("calendar.events", "Events", "Calendar", |s, v| {
-            let off = i64::from(s.clock.offset);
             let (d0, d1) = s.cal_days();
-            let from = p::str(v, "from").and_then(|x| parse_local(x, off)).map_or(s.local_midnight(d0), |(t, all_day)| if all_day { t - off } else { t });
-            let to = p::str(v, "to").and_then(|x| parse_local(x, off)).map_or(s.local_midnight(d1), |(t, all_day)| if all_day { t - off + 86_400 } else { t });
+            let from = p::str(v, "from").and_then(|x| parse_local(x, &s.clock)).map_or(s.local_midnight(d0), |(t, all_day)| if all_day { s.clock.utc(t) } else { t });
+            let to = p::str(v, "to").and_then(|x| parse_local(x, &s.clock)).map_or(s.local_midnight(d1), |(t, all_day)| if all_day { s.clock.utc(t + 86_400) } else { t });
             Ok(json!(s.agenda(from, to).iter().map(|i| json!({
                 "uid": i.uid, "summary": i.summary, "location": i.location, "start": i.start, "end": i.end, "allDay": i.all_day,
                 "occurrence": i.occurrence, "recurring": i.recurring, "account": i.account, "calendar": i.calendar,
@@ -144,10 +143,9 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             let current = occurrence
                 .and_then(|at| s.find_event(&uid).and_then(|(a, _)| s.pim.get(a)).and_then(|p| p.events.iter().find(|e| e.event.uid == master.uid && e.event.recurrence_id == Some(at))))
                 .map_or_else(|| master.clone(), |e| e.event.clone());
-            let off = i64::from(s.clock.offset);
             let when = |k: &str| -> Result<Option<(i64, bool)>, CmdError> {
                 match p::str(v, k) {
-                    Some(x) => parse_local(x, off).map(Some).ok_or_else(|| CmdError::Params(format!("`{x}` is not a date (YYYY-MM-DD or YYYY-MM-DDTHH:MM)"))),
+                    Some(x) => parse_local(x, &s.clock).map(Some).ok_or_else(|| CmdError::Params(format!("`{x}` is not a date (YYYY-MM-DD or YYYY-MM-DDTHH:MM)"))),
                     None => Ok(v.get(k).and_then(Value::as_i64).map(|n| (n, false))),
                 }
             };
@@ -292,10 +290,11 @@ pub(super) fn commands() -> Vec<CommandSpec> {
 
 /// An event from command params, starting from `e` (what's not given stays).
 pub(super) fn event_from(s: &Session, v: &Value, mut e: quatrelle_model::ical::CalEvent) -> Result<quatrelle_model::ical::CalEvent, CmdError> {
-    let off = i64::from(s.clock.offset);
     let when = |k: &str| -> Result<Option<(i64, bool)>, CmdError> {
         match p::str(v, k) {
-            Some(x) => parse_local(x, off).map(Some).ok_or_else(|| CmdError::Params(format!("`{x}` is not a date (YYYY-MM-DD or YYYY-MM-DDTHH:MM)"))),
+            Some(x) => {
+                parse_local(x, &s.clock).map(Some).ok_or_else(|| CmdError::Params(format!("`{x}` is not a date (YYYY-MM-DD or YYYY-MM-DDTHH:MM)")))
+            }
             None => Ok(v.get(k).and_then(Value::as_i64).map(|n| (n, false))),
         }
     };
@@ -314,6 +313,11 @@ pub(super) fn event_from(s: &Session, v: &Value, mut e: quatrelle_model::ical::C
     if e.all_day {
         e.start -= e.start.rem_euclid(86_400);
         e.end = (e.end - e.end.rem_euclid(86_400)).max(e.start + 86_400);
+    } else if e.tzid.is_empty()
+        && let Some(zone) = s.clock.zone.and_then(|z| z.name())
+    {
+        // In the user's zone: it repeats at the same time of day there, summer or winter.
+        e.tzid = zone.to_string();
     }
     for (k, field) in [("summary", &mut e.summary), ("location", &mut e.location), ("description", &mut e.description)] {
         if let Some(x) = p::str(v, k) {

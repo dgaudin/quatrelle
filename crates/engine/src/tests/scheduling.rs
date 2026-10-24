@@ -156,7 +156,7 @@ fn an_exchange_account_asks_its_server_once() {
     let r = s.run("calendar.rooms", &json!({})).unwrap();
     assert_eq!((r["state"].as_str(), r["error"].as_str()), (Some("failed"), Some("not on this server")));
     // Free/busy: asked for the window once; someone added later is asked for alone.
-    let from = crate::parse_local("2026-10-22", 0).unwrap().0;
+    let from = crate::parse_local("2026-10-22", &quatrelle_model::dates::Clock::new(0, 0)).unwrap().0;
     let ask = |s: &mut Session, emails: &[&str]| {
         s.run("calendar.availability", &json!({"account": id, "emails": emails, "from": from, "to": from + 86_400})).unwrap()
     };

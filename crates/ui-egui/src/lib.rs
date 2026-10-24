@@ -414,6 +414,7 @@ impl MailApp {
         let has_files = !services.downloads();
         let (data_folder, pending_move) = (services.data_folder(), services.pending_data_move());
         let mut session = session;
+        session.set_zone(services.zone().as_deref());
         match services.take_data_moved() {
             Some(Ok(to)) => session.notice(tf!("Your mail is now kept in {folder}", folder = to.display().to_string()), false),
             Some(Err(e)) => session.notice(tf!("Your mail couldn't be moved, so it stays where it was: {error}", error = e), true),
@@ -586,7 +587,12 @@ impl MailApp {
     /// changed, so the frame is drawn again at once rather than at the next idle tick).
     fn pump(&mut self) -> bool {
         let (now, offset) = self.services.clock();
+        let before = self.session.clock.offset;
         self.session.set_clock(now, offset);
+        // The offset changed (summer time, or the system's zone did): which zone it is, again.
+        if offset != before {
+            self.session.set_zone(self.services.zone().as_deref());
+        }
         let mut answered = false;
         let events = self.backend.poll();
         // A folder changed several times since the last look (a sync saves a folder more than

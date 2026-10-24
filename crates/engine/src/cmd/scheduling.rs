@@ -23,11 +23,10 @@ pub(super) fn commands() -> Vec<CommandSpec> {
                     .collect(),
                 _ => return Err(CmdError::Params("`emails` is needed: whose availability".into())),
             };
-            let off = i64::from(s.clock.offset);
             // A date alone is that whole local day.
             let when = |k: &str, end: bool| -> Option<i64> {
                 match p::str(v, k) {
-                    Some(x) => parse_local(x, off).map(|(t, all_day)| if all_day { t - off + if end { 86_400 } else { 0 } } else { t }),
+                    Some(x) => parse_local(x, &s.clock).map(|(t, all_day)| if all_day { s.clock.utc(t + if end { 86_400 } else { 0 }) } else { t }),
                     None => p::i64(v, k),
                 }
             };
