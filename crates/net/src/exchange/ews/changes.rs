@@ -63,13 +63,13 @@ fn set_category(c: &Client, ids: &[(String, String)], name: &str, on: bool) -> R
 /// Vote on a message (see [`Client::vote`]).
 pub fn vote(c: &Client, st: &State, key: &MessageKey, choice: &str, subject: &str) -> Result<()> {
     let id = st.id(key.uid).filter(|_| key.validity == VALIDITY).ok_or_else(|| NetError::No("the message is no longer on the server".into()))?;
-    c.vote(id, choice, subject)
+    c.vote(&id, choice, subject)
 }
 
 pub fn apply_remote(c: &Client, st: &State, op: &Op) -> Result<()> {
     let ids = |keys: &[MessageKey]| -> Vec<(String, String)> {
         let found: Vec<(String, String)> =
-            keys.iter().filter(|k| k.validity == VALIDITY).filter_map(|k| Some((st.id(k.uid)?.to_string(), k.folder.clone()))).collect();
+            keys.iter().filter(|k| k.validity == VALIDITY).filter_map(|k| Some((st.id(k.uid)?, k.folder.clone()))).collect();
         // Said, not passed over in silence: such a change is made here only, and the server's
         // state comes back over it at the next full read of the folder.
         if found.len() < keys.len() {

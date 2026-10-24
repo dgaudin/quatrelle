@@ -615,7 +615,7 @@ pub async fn list_folders<H: Http>(c: &Client<H>, st: &mut State, account: &str)
 /// Apply one change on the server.
 pub async fn apply_remote<H: Http>(c: &Client<H>, st: &State, op: &Op) -> Result<()> {
     let ids = |keys: &[MessageKey]| -> Vec<(String, String)> {
-        keys.iter().filter(|k| k.validity == VALIDITY).filter_map(|k| Some((st.id(k.uid)?.to_string(), k.folder.clone()))).collect()
+        keys.iter().filter(|k| k.validity == VALIDITY).filter_map(|k| Some((st.id(k.uid)?, k.folder.clone()))).collect()
     };
     let patch_all = |keys: &[MessageKey], field: &str, on: bool| -> Map<String, Value> {
         let value = if on { Value::Bool(true) } else { Value::Null };

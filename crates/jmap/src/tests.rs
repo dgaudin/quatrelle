@@ -12,7 +12,7 @@ fn an_empty_numbering_never_overwrites_the_one_on_disk() {
     // the numbering with it: the next sync would renumber every folder and delete the cache.
     State::default().save(&store, "a1").unwrap();
     let mut back = State::load(&store, "a1");
-    assert_eq!(back.id(1), Some("A"));
+    assert_eq!(back.id(1).as_deref(), Some("A"));
     assert_eq!(back.number("A"), 1, "and the same number");
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -91,12 +91,12 @@ fn numbers_reserved_for_connections_of_their_own() {
     let na = a.number("id-a");
     let nb = b.number("id-b");
     assert_ne!(na, nb, "two connections, two numbers");
-    assert!(!main.ids.contains_key("id-a") && !main.ids.contains_key("id-b"), "the main one saw neither yet");
+    assert!(main.known("id-a").is_none() && main.known("id-b").is_none(), "the main one saw neither yet");
     assert_eq!(a.mailbox("INBOX").unwrap(), "mb1", "the folders come with the copy");
     main.absorb(a);
     main.absorb(b);
-    assert_eq!(main.id(na), Some("id-a"));
-    assert_eq!(main.id(nb), Some("id-b"));
+    assert_eq!(main.id(na).as_deref(), Some("id-a"));
+    assert_eq!(main.id(nb).as_deref(), Some("id-b"));
     assert_eq!(main.number("id-a"), na, "absorbed ids keep their number");
     main.compact();
     assert_eq!(main.next, nb.max(na) + 1, "the counter is back to what's used");
@@ -110,13 +110,13 @@ fn numbers_reserved_for_connections_of_their_own() {
     // (a reader that didn't numbered a whole folder anew at every full read).
     assert_eq!(c.number("id-a"), na, "an old message, its old number");
     assert_eq!(c.known("id-b"), Some(nb));
-    assert_eq!(c.id(na), Some("id-a"));
+    assert_eq!(c.id(na).as_deref(), Some("id-a"));
     // What it gives is told as it goes, for the main one to know before the reader is done.
     let nd = c.number("id-d");
     assert_eq!(c.take_given(), vec![("id-c".to_string(), base + 1), ("id-d".to_string(), nd)], "only the new ones");
     assert!(c.take_given().is_empty(), "told once");
     main.learn(vec![("id-d".to_string(), nd)]);
-    assert_eq!(main.id(nd), Some("id-d"));
+    assert_eq!(main.id(nd).as_deref(), Some("id-d"));
     assert_eq!(main.number("id-d"), nd);
 }
 
@@ -149,7 +149,7 @@ fn mailbox_paths() {
     assert_eq!(f[2].0.display_name(), "Café");
     let mut st = State::default();
     let (a, b) = (st.number("M1"), st.number("M2"));
-    assert_eq!((a, b, st.number("M1"), st.id(b)), (1, 2, 1, Some("M2")));
+    assert_eq!((a, b, st.number("M1"), st.id(b).as_deref()), (1, 2, 1, Some("M2")));
     st.prune(&[b].into_iter().collect());
     assert_eq!(st.id(a), None);
     assert_eq!(st.number("M3"), 3, "numbers aren't reused");

@@ -504,7 +504,7 @@ fn prefetch(c: &Client, st: &State, store: &Store, account: &str, folder: &str, 
         .iter()
         .take(opts.prefetch)
         .filter(|m| u64::from(m.size) <= u64::from(opts.prefetch_max_bytes) && !store.has_body(&m.key))
-        .filter_map(|m| Some((m.key.uid, st.id(m.key.uid)?.to_string(), u64::from(m.size))))
+        .filter_map(|m| Some((m.key.uid, st.id(m.key.uid)?, u64::from(m.size))))
         .collect();
     if wanted.is_empty() {
         return Ok(());

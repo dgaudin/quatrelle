@@ -661,7 +661,7 @@ enum SyncDone {
     /// out must stop the sync, not pass for "no such folder"); with the numbers given meanwhile.
     Folder(String, std::result::Result<SyncReport, NetError>, Vec<(String, u32)>),
     /// The numbers it gave while reading, when it's done.
-    State(jmap::State),
+    State(Box<jmap::State>),
     /// It couldn't connect: this account syncs on one connection.
     Refused,
 }
@@ -718,7 +718,7 @@ fn sync_folders(
         Err(e) => {
             log::info!("{}: a second connection wasn't taken ({e}): the rest syncs on the first", acc.id);
             let _ = tx.send(SyncDone::Refused);
-            let _ = tx.send(SyncDone::State(state));
+            let _ = tx.send(SyncDone::State(Box::new(state)));
             return;
         }
     };
@@ -741,7 +741,7 @@ fn sync_folders(
     if let Conn::Imap(mut c) = conn {
         c.logout();
     }
-    let _ = tx.send(SyncDone::State(state));
+    let _ = tx.send(SyncDone::State(Box::new(state)));
 }
 
 /// A reader connection's error that ends it (the main connection reads its folder instead): its
