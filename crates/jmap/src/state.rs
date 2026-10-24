@@ -4,17 +4,20 @@ use std::sync::Arc;
 
 use super::*;
 
+mod ids;
+pub(crate) use ids::Ids;
+
 /// What an account keeps between syncs: the numbers given to message ids, and the mailbox id
 /// behind each folder path.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct State {
     #[serde(default)]
     pub(super) next: u32,
-    /// Each id is kept once, shared with `numbers` (and a reader's [`Numbering`]): an Exchange id
-    /// is some 160 characters, and a 530,000-message mailbox's ids were in memory twice, three
-    /// times during a full sync — some 500 MB.
+    /// Both ways, each id kept small ([`Ids`]): an Exchange id is some 150 characters, and a
+    /// 530,000-message mailbox's ids were in memory twice, three times during a full sync —
+    /// some 500 MB.
     #[serde(default)]
-    pub(super) ids: HashMap<Arc<str>, u32>,
+    pub(super) ids: Ids,
     #[serde(default)]
     pub mailboxes: BTreeMap<String, String>,
     /// The folders of other mailboxes opened in the account: folder path → the mailbox's
@@ -30,8 +33,6 @@ pub struct State {
     /// folder, every pass.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub marks: BTreeMap<String, FolderMark>,
-    #[serde(skip)]
-    pub(super) numbers: HashMap<u32, Arc<str>>,
     /// What was last written ([`State::fingerprint`]): the same isn't written again.
     #[serde(skip)]
     saved: std::cell::Cell<u64>,
@@ -47,8 +48,7 @@ pub struct State {
 /// one copy shared by them all.
 #[derive(Debug, Default)]
 pub struct Numbering {
-    ids: HashMap<Arc<str>, u32>,
-    numbers: HashMap<u32, Arc<str>>,
+    ids: Ids,
 }
 
 /// A folder as it was when last read in full: its last change as the server stamps it, its
@@ -94,8 +94,7 @@ impl State {
 
     pub fn load(store: &Store, account: &str) -> State {
         let mut s: State = store.load_account_doc(account, STATE_DOC).unwrap_or_default();
-        s.numbers = s.ids.iter().map(|(k, v)| (*v, k.clone())).collect();
-        s.next = s.next.max(s.numbers.keys().max().copied().unwrap_or(0));
+        s.next = s.next.max(s.ids.numbers().max().unwrap_or(0));
         s.saved.set(s.fingerprint());
         s
     }
@@ -107,7 +106,7 @@ impl State {
         use std::hash::{Hash, Hasher};
         let mut h = std::collections::hash_map::DefaultHasher::new();
         (self.next, self.ids.len()).hash(&mut h);
-        self.ids.values().fold(0u64, |a, n| a.wrapping_add(u64::from(*n).wrapping_mul(0x9e37_79b9_7f4a_7c15))).hash(&mut h);
+        self.ids.numbers().fold(0u64, |a, n| a.wrapping_add(u64::from(n).wrapping_mul(0x9e37_79b9_7f4a_7c15))).hash(&mut h);
         self.mailboxes.hash(&mut h);
         self.owners.hash(&mut h);
         self.found.hash(&mut h);
@@ -146,9 +145,7 @@ impl State {
 
     /// Give an id the number it had: a message found again after the numbering lost it.
     pub fn set_number(&mut self, id: &str, n: u32) {
-        let shared: Arc<str> = Arc::from(id);
-        self.ids.insert(shared.clone(), n);
-        self.numbers.insert(n, shared);
+        self.ids.insert(id, n);
         self.next = self.next.max(n);
         if self.base.is_some() {
             self.given.push((id.to_string(), n));
@@ -164,13 +161,14 @@ impl State {
         self.len() == 0
     }
 
-    pub fn id(&self, n: u32) -> Option<&str> {
-        self.numbers.get(&n).or_else(|| self.base.as_ref().and_then(|b| b.numbers.get(&n))).map(|id| &**id)
+    /// The message id a number stands for.
+    pub fn id(&self, n: u32) -> Option<String> {
+        self.ids.id(n).or_else(|| self.base.as_ref().and_then(|b| b.ids.id(n)))
     }
 
     /// The number a message id has, if it has one (none is given).
     pub fn known(&self, id: &str) -> Option<u32> {
-        self.ids.get(id).or_else(|| self.base.as_ref().and_then(|b| b.ids.get(id))).copied()
+        self.ids.get(id).or_else(|| self.base.as_ref().and_then(|b| b.ids.get(id)))
     }
 
     /// The mailbox id behind a folder path.
@@ -192,8 +190,7 @@ impl State {
         self.next = self.next.saturating_add(count);
         State {
             next: base,
-            ids: HashMap::new(),
-            numbers: HashMap::new(),
+            ids: Ids::default(),
             mailboxes: self.mailboxes.clone(),
             owners: self.owners.clone(),
             found: BTreeMap::new(),
@@ -204,10 +201,9 @@ impl State {
         }
     }
 
-    /// The numbering as it is, for readers of their own ([`State::reserve`]): the tables are
-    /// copied, the ids shared.
+    /// The numbering as it is, for readers of their own ([`State::reserve`]).
     pub fn numbering(&self) -> Arc<Numbering> {
-        Arc::new(Numbering { ids: self.ids.clone(), numbers: self.numbers.clone() })
+        Arc::new(Numbering { ids: self.ids.clone() })
     }
 
     /// A reader's: the numbers it gave since it last told, for the main connection to know them
@@ -220,16 +216,13 @@ impl State {
     /// The numbers a reader gave ([`State::take_given`]).
     pub fn learn(&mut self, given: Vec<(String, u32)>) {
         for (id, n) in given {
-            let shared: Arc<str> = Arc::from(id);
-            self.ids.insert(shared.clone(), n);
-            self.numbers.insert(n, shared);
+            self.ids.insert(&id, n);
         }
     }
 
     /// Take what a connection of its own numbered while it read folders.
     pub fn absorb(&mut self, other: State) {
-        self.ids.extend(other.ids);
-        self.numbers.extend(other.numbers);
+        self.ids.absorb(&other.ids);
         // A folder it listed for the first time, or another mailbox it met.
         for (path, id) in other.mailboxes {
             self.mailboxes.entry(path).or_insert(id);
@@ -247,13 +240,12 @@ impl State {
     /// Put the counter back after the numbers kept by [`State::reserve`], so a long run of
     /// parallel syncs doesn't walk the whole range.
     pub fn compact(&mut self) {
-        self.next = self.ids.values().copied().max().unwrap_or(0).saturating_add(1);
+        self.next = self.ids.numbers().max().unwrap_or(0).saturating_add(1);
     }
 
     /// Forget numbers no cached message uses any more.
     pub fn prune(&mut self, keep: &std::collections::HashSet<u32>) {
-        self.ids.retain(|_, n| keep.contains(n));
-        self.numbers.retain(|n, _| keep.contains(n));
+        self.ids.retain(|n| keep.contains(&n));
         for v in self.found.values_mut() {
             v.retain(|n| keep.contains(n));
         }
@@ -291,11 +283,7 @@ impl State {
     /// The server ids of a folder's cached messages that are there only because a search found
     /// them (out of the newest window `wanted`): to check they're still there, and their flags.
     pub fn found_outside(&self, folder: &str, cached: &[Summary], wanted: &HashMap<u32, Flags>) -> Vec<String> {
-        cached
-            .iter()
-            .filter(|m| !wanted.contains_key(&m.key.uid) && self.was_found(folder, m.key.uid))
-            .filter_map(|m| self.id(m.key.uid).map(str::to_string))
-            .collect()
+        cached.iter().filter(|m| !wanted.contains_key(&m.key.uid) && self.was_found(folder, m.key.uid)).filter_map(|m| self.id(m.key.uid)).collect()
     }
 }
 

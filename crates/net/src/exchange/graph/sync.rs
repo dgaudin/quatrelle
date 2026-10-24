@@ -192,7 +192,7 @@ fn prefetch(c: &Client, st: &State, store: &Store, account: &str, folder: &str, 
         .iter()
         .take(opts.prefetch)
         .filter(|m| worth_ahead(m, opts, cap) && !store.has_body(&m.key))
-        .filter_map(|m| Some((m.key.clone(), st.id(m.key.uid)?.to_string())))
+        .filter_map(|m| Some((m.key.clone(), st.id(m.key.uid)?)))
         .collect();
     if wanted.is_empty() {
         return Ok(());
@@ -271,7 +271,7 @@ pub(crate) fn download_ahead(c: &Client, st: &State, store: &Store, account: &st
     let mut have: HashSet<u32> = store.cached_bodies(account, folder, VALIDITY).into_iter().collect();
     let to_get = |m: &Summary, have: &HashSet<u32>| !have.contains(&m.key.uid) && worth_ahead(m, opts, cap) && st.id(m.key.uid).is_some();
     let wanted: Vec<(MessageKey, String)> =
-        fs.messages.iter().filter(|m| to_get(m, &have)).take(budget).filter_map(|m| Some((m.key.clone(), st.id(m.key.uid)?.to_string()))).collect();
+        fs.messages.iter().filter(|m| to_get(m, &have)).take(budget).filter_map(|m| Some((m.key.clone(), st.id(m.key.uid)?))).collect();
     if !wanted.is_empty() {
         let filled = download_into(c, st, store, &mut fs, &wanted, cap)?;
         if !filled.is_empty() {
@@ -288,7 +288,7 @@ pub fn fetch_body(c: &Client, st: &State, store: &Store, key: &MessageKey) -> Re
         return Ok(raw);
     }
     let id = st.id(key.uid).filter(|_| key.validity == VALIDITY).ok_or_else(|| NetError::No("the message is no longer on the server".into()))?;
-    let raw = c.download(id, st.owner(&key.folder))?;
+    let raw = c.download(&id, st.owner(&key.folder))?;
     store.write_body(key, &raw)?;
     let mut fs = store.load_folder(&key.account, &key.folder)?;
     if let Some(m) = fs.find_mut(key.uid) {
@@ -312,14 +312,14 @@ fn voting_choices(m: &Value) -> Vec<String> {
 /// Vote on a message (see [`Client::vote`]).
 pub fn vote(c: &Client, st: &State, key: &MessageKey, choice: &str, subject: &str) -> Result<()> {
     let id = st.id(key.uid).filter(|_| key.validity == VALIDITY).ok_or_else(|| NetError::No("the message is no longer on the server".into()))?;
-    c.vote(id, choice, subject, st.owner(&key.folder))
+    c.vote(&id, choice, subject, st.owner(&key.folder))
 }
 
 /// Apply one change on the server.
 pub fn apply_remote(c: &Client, st: &State, op: &Op) -> Result<()> {
     // Each message by its id, in its own mailbox (another one opened here is under `/users`).
     let ids = |keys: &[MessageKey]| -> Vec<(String, String)> {
-        keys.iter().filter(|k| k.validity == VALIDITY).filter_map(|k| Some((st.id(k.uid)?.to_string(), k.folder.clone()))).collect()
+        keys.iter().filter(|k| k.validity == VALIDITY).filter_map(|k| Some((st.id(k.uid)?, k.folder.clone()))).collect()
     };
     let at = |folder: &str| who(st.owner(folder));
     let patch_all = |keys: &[MessageKey], patch: Value| -> Result<()> {
