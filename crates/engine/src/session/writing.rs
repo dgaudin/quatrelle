@@ -1,5 +1,7 @@
 //! The session: messages being written, drafts and sending.
 
+use quatrelle_model::lookalike;
+
 use super::*;
 
 mod compose;
@@ -7,6 +9,23 @@ mod items;
 use compose::with_html_signature;
 pub use compose::{Compose, add_pictures, signature_block, style_signature};
 pub use items::{ItemChoice, ItemKind};
+
+/// From this many people (counted as [`SendCheck::Exposed`] says), sending to all of them in To
+/// and Cc asks first.
+const EXPOSED_FROM: usize = 8;
+
+/// Something to look at before a message goes (`compose.send` holds it and says what).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum SendCheck {
+    /// A recipient's domain looks like `like`, one the user deals with, but isn't it: a typo,
+    /// or a reply going to someone passing for a colleague.
+    Lookalike { address: String, like: String },
+    /// Everyone in To and Cc sees everyone else's address: `count` people who may not know each
+    /// other (each organisation outside the sender's own counted once, each address at a big mail
+    /// service on its own).
+    Exposed { count: usize },
+}
 
 impl Session {
     pub(super) fn me(&self, account: &str) -> Vec<String> {
@@ -79,6 +98,25 @@ impl Session {
                     .collect()
             })
             .unwrap_or_default()
+    }
+
+    /// A new message from a `mailto:` link (Quatrelle as the system's mail app): its addresses,
+    /// subject and first words, above the signature. Nothing is attached and nothing is sent.
+    pub fn mailto_compose(&mut self, m: &quatrelle_model::mailto::Mailto) -> CmdResult {
+        let c = self.new_compose(None)?;
+        let cap = |x: &str| x.chars().take(1 << 20).collect::<String>();
+        c.to = cap(&m.to);
+        c.cc = cap(&m.cc);
+        c.bcc = cap(&m.bcc);
+        c.show_cc |= !c.bcc.is_empty();
+        c.subject = cap(&m.subject);
+        if !m.body.is_empty() {
+            let text = format!("{}{}", cap(&m.body), c.body);
+            c.set_text(text);
+        }
+        let id = c.id;
+        self.style_signature();
+        Ok(serde_json::json!({"compose": id}))
     }
 
     /// Start writing `c`: the message being written, if any, is set aside in a window of its
@@ -219,17 +257,77 @@ impl Session {
         Ok((raw, email))
     }
 
-    pub fn send_compose(&mut self, allow_empty_subject: bool) -> CmdResult {
+    /// What to look at before `c` goes ([`SendCheck`]).
+    pub fn send_checks(&mut self, c: &Compose, d: &mime::Draft) -> Vec<SendCheck> {
+        let mut found = Vec::new();
+        let known = self.known_domains();
+        for a in d.to.iter().chain(&d.cc).chain(&d.bcc) {
+            if let Some(like) = lookalike::imitates(&lookalike::domain_of(&a.email), &known)
+                && found.len() < 20
+            {
+                found.push(SendCheck::Lookalike { address: a.email.trim().to_string(), like: like.to_string() });
+            }
+        }
+        let mine = self.account(&c.account).map(|a| lookalike::domain_of(&a.config.email)).unwrap_or_default();
+        let mut people = BTreeSet::new();
+        for a in d.to.iter().chain(&d.cc) {
+            let domain = lookalike::domain_of(&a.email);
+            if domain.is_empty() || domain == mine {
+                continue;
+            }
+            people.insert(if lookalike::is_mail_service(&domain) { a.email.trim().to_lowercase() } else { domain });
+        }
+        if people.len() >= EXPOSED_FROM {
+            found.push(SendCheck::Exposed { count: people.len() });
+        }
+        found
+    }
+
+    /// Everyone in To and Cc moved to Bcc, with the sender in To: each gets the message without
+    /// seeing who else did.
+    pub fn hide_recipients(&mut self) -> CmdResult {
+        let c = self.compose.as_ref().ok_or_else(|| CmdError::Disabled("no message is being written".into()))?;
+        let me = self.account(&c.account).map(|a| EmailAddress::new(a.config.name.clone(), a.config.email.clone()).to_string()).unwrap_or_default();
+        let c = self.compose.as_mut().ok_or_else(|| CmdError::Disabled("no message is being written".into()))?;
+        let moved: Vec<&str> = [c.to.as_str(), c.cc.as_str(), c.bcc.as_str()]
+            .into_iter()
+            .map(|f| f.trim().trim_end_matches(';').trim())
+            .filter(|f| !f.is_empty())
+            .collect();
+        c.bcc = moved.join("; ");
+        c.to = if me.is_empty() { String::new() } else { format!("{me}; ") };
+        c.cc.clear();
+        c.show_cc = true;
+        Ok(serde_json::json!({ "bcc": c.bcc }))
+    }
+
+    /// Send the message being written. Unless `checked`, it's held when [`Session::send_checks`]
+    /// finds anything, and the answer says what (`{"check": [...]}`).
+    pub fn send_compose(&mut self, allow_empty_subject: bool, checked: bool) -> CmdResult {
         let c = self.compose.clone().ok_or_else(|| CmdError::Disabled("nothing to send".into()))?;
         if c.sending {
             return Err(CmdError::Disabled("already sending".into()));
         }
-        let d = self.compose_draft(&c)?;
+        let mut d = self.compose_draft(&c)?;
         if d.recipients().is_empty() {
             return Err(CmdError::Params("add at least one recipient".into()));
         }
         if d.subject.is_empty() && !allow_empty_subject {
             return Err(CmdError::Params("the subject is empty (send with {\"allowEmptySubject\": true} to send anyway)".into()));
+        }
+        // Where the photos were taken stays with the sender (the draft keeps them as attached).
+        if !self.prefs.keep_photo_location {
+            for a in &mut d.attachments {
+                if let Some(clean) = mime::without_location(&a.data) {
+                    a.data = clean;
+                }
+            }
+        }
+        if !checked {
+            let found = self.send_checks(&c, &d);
+            if !found.is_empty() {
+                return Ok(serde_json::json!({ "check": found }));
+            }
         }
         let (raw, from) = self.compose_bytes(&c, &d)?;
         // Written to: suggested first from now on, as Outlook's AutoComplete list does.

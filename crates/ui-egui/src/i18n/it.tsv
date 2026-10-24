@@ -1243,3 +1243,35 @@ month	May	maggio
 	This update wasn't sent by the meeting's organizer, so it can't change your calendar.	Questo aggiornamento non è stato inviato dall'organizzatore della riunione, quindi non può modificare il tuo calendario.
 	This answer wasn't sent by the guest it's from, so it can't be recorded.	Questa risposta non è stata inviata dall'invitato a cui si riferisce, quindi non può essere registrata.
 	This invitation is out of date: your calendar has a newer version.	Questo invito non è aggiornato: il tuo calendario ne ha una versione più recente.
+	Left out because they couldn't be read: {n}	Esclusi perché non leggibili: {n}
+	Added to your calendar from {file}: {n}	Aggiunti al calendario da {file}: {n}
+	Added to your contacts from {file}: {n}	Aggiunti ai contatti da {file}: {n}
+	Add an account first: a new message needs an account to send from.	Aggiungi prima un account: un nuovo messaggio ha bisogno di un account da cui essere inviato.
+	Add an account first: events and people are kept with an account.	Aggiungi prima un account: eventi e persone vengono salvati in un account.
+	Couldn't open {file}: {error}	Impossibile aprire {file}: {error}
+	Safety	Sicurezza
+	Send where photos were taken	Invia il luogo in cui sono state scattate le foto
+	Off, the place a phone writes into a photo is taken out of JPEG and PNG files as they're sent	Se disattivato, il luogo che il telefono scrive in una foto viene tolto dai file JPEG e PNG all'invio
+	These photos say where they were taken, and go that way (File › Options › Safety)	Queste foto indicano dove sono state scattate e partono così (File › Opzioni › Sicurezza)
+	Where these photos were taken is left out as they're sent	Il luogo in cui sono state scattate queste foto viene omesso all'invio
+	Careful: this comes from {domain}, which looks like {like} but isn't it.	Attenzione: questo arriva da {domain}, che somiglia a {like} ma non lo è.
+	Careful: the sender's name shows {shown}, but this comes from {real}.	Attenzione: il nome del mittente mostra {shown}, ma questo arriva da {real}.
+	Don't open its links or attachments, or answer it, unless you're sure who sent it.	Non aprire i suoi collegamenti o allegati, né rispondere, se non sei sicuro di chi l'ha inviato.
+	Check before sending	Controlla prima di inviare
+	{address} looks like an address at {like}, but isn't one. Is it the right one?	{address} sembra un indirizzo di {like}, ma non lo è. È quello giusto?
+	{n} people who may not know each other will all see each other's addresses.	{n} persone che forse non si conoscono vedranno tutte gli indirizzi degli altri.
+	Put everyone in Bcc	Metti tutti in Ccn
+	Each of them gets the message without seeing who else did; you're in To	Ognuno riceve il messaggio senza vedere chi altro l'ha ricevuto; tu sei in A
+	Open links without their tracking	Apri i collegamenti senza il tracciamento
+	A link opens where it really goes: out of redirects that carry the real address, without the tags that say who clicked	Un collegamento si apre dove porta davvero: fuori dai reindirizzamenti che contengono l'indirizzo reale, senza i tag che dicono chi ha fatto clic
+	Links open as they are (File › Options › Safety)	I collegamenti si aprono così come sono (File › Opzioni › Sicurezza)
+	Links open without their tracking tags, and out of redirects that carry the real address	I collegamenti si aprono senza i tag di tracciamento e fuori dai reindirizzamenti che contengono l'indirizzo reale
+	Links that report clicks: {links}	Collegamenti che segnalano i clic: {links}
+	Tracking pictures, never loaded: {pictures}	Immagini di tracciamento, mai caricate: {pictures}
+	Tracking pictures, never loaded: {pictures} · Links that report clicks: {links}	Immagini di tracciamento, mai caricate: {pictures} · Collegamenti che segnalano i clic: {links}
+	This message hides text from you ({n} words).	Questo messaggio ti nasconde del testo ({n} parole).
+	Hidden text is a way to slip past spam filters, or to give instructions to tools and assistants that read mail for you.	Il testo nascosto serve a eludere i filtri antispam o a dare istruzioni a strumenti e assistenti che leggono la posta per te.
+	Show the hidden text	Mostra il testo nascosto
+	Hide it again	Nascondilo di nuovo
+	Sent mail waiting for a reply	Posta inviata in attesa di risposta
+	Awaiting reply	In attesa di risposta

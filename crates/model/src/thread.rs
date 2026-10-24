@@ -13,6 +13,8 @@ use std::collections::HashMap;
 
 use crate::Summary;
 
+pub mod voting;
+
 /// Strip `Re:`, `Fwd:`, `AW:`, `[list]` tags and the like from a subject.
 pub fn base_subject(subject: &str) -> String {
     let mut s = subject.trim();

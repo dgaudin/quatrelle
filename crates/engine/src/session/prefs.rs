@@ -130,6 +130,13 @@ pub struct Prefs {
     /// The last searches, newest first (the search box's list; cleared from it).
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub recent_searches: Vec<String>,
+    /// Photos go with where they were taken (the place a phone writes into them). Off, as at
+    /// first: it's taken out of every JPEG and PNG attached as the message is sent.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub keep_photo_location: bool,
+    /// Links from a message open where they really go: out of redirect wrappers, without the
+    /// tags that say who clicked ([`mime::clean_link`]). On at first.
+    pub clean_links: bool,
 }
 
 impl Default for Prefs {
@@ -174,6 +181,8 @@ impl Default for Prefs {
             animations: true,
             search_scope: SearchScope::Mailbox,
             recent_searches: Vec::new(),
+            keep_photo_location: false,
+            clean_links: true,
             quick_steps: Vec::new(),
             folder_pane_minimized: false,
             collapsed: BTreeSet::new(),

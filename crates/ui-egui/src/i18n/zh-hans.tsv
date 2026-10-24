@@ -1241,3 +1241,35 @@ month	May	5月
 	This update wasn't sent by the meeting's organizer, so it can't change your calendar.	此更新并非会议组织者发送，因此不能更改你的日历。
 	This answer wasn't sent by the guest it's from, so it can't be recorded.	此答复并非由对应的来宾发送，因此无法记录。
 	This invitation is out of date: your calendar has a newer version.	此邀请已过时：你的日历中有更新的版本。
+	Left out because they couldn't be read: {n}	因无法读取而略过：{n}
+	Added to your calendar from {file}: {n}	已从 {file} 添加到日历：{n}
+	Added to your contacts from {file}: {n}	已从 {file} 添加到联系人：{n}
+	Add an account first: a new message needs an account to send from.	请先添加帐户：新邮件需要一个用于发送的帐户。
+	Add an account first: events and people are kept with an account.	请先添加帐户：事件和联系人保存在帐户中。
+	Couldn't open {file}: {error}	无法打开 {file}：{error}
+	Safety	安全
+	Send where photos were taken	发送照片的拍摄地点
+	Off, the place a phone writes into a photo is taken out of JPEG and PNG files as they're sent	关闭时，手机写入照片的地点会在发送 JPEG 和 PNG 文件时去掉
+	These photos say where they were taken, and go that way (File › Options › Safety)	这些照片带有拍摄地点，并会照此发送（文件 › 选项 › 安全）
+	Where these photos were taken is left out as they're sent	发送时会去掉这些照片的拍摄地点
+	Careful: this comes from {domain}, which looks like {like} but isn't it.	当心：这封邮件来自 {domain}，它看起来像 {like}，但并不是。
+	Careful: the sender's name shows {shown}, but this comes from {real}.	当心：发件人姓名显示为 {shown}，但这封邮件来自 {real}。
+	Don't open its links or attachments, or answer it, unless you're sure who sent it.	除非确定发件人是谁，否则不要打开其中的链接或附件，也不要回复。
+	Check before sending	发送前检查
+	{address} looks like an address at {like}, but isn't one. Is it the right one?	{address} 看起来像 {like} 的地址，但其实不是。地址正确吗？
+	{n} people who may not know each other will all see each other's addresses.	{n} 个可能互不相识的人都会看到彼此的地址。
+	Put everyone in Bcc	把所有人放进密送
+	Each of them gets the message without seeing who else did; you're in To	每个人收到邮件时都看不到其他收件人；你在收件人栏
+	Open links without their tracking	打开链接时去掉跟踪
+	A link opens where it really goes: out of redirects that carry the real address, without the tags that say who clicked	链接会打开真正的目标：去掉包含真实地址的跳转，并去掉表明谁点击了的标记
+	Links open as they are (File › Options › Safety)	链接按原样打开（文件 › 选项 › 安全）
+	Links open without their tracking tags, and out of redirects that carry the real address	链接打开时会去掉跟踪标记，并去掉包含真实地址的跳转
+	Links that report clicks: {links}	会报告点击的链接：{links}
+	Tracking pictures, never loaded: {pictures}	跟踪图片，从不加载：{pictures}
+	Tracking pictures, never loaded: {pictures} · Links that report clicks: {links}	跟踪图片，从不加载：{pictures} · 会报告点击的链接：{links}
+	This message hides text from you ({n} words).	这封邮件向你隐藏了文字（{n} 个词）。
+	Hidden text is a way to slip past spam filters, or to give instructions to tools and assistants that read mail for you.	隐藏文字可用来绕过垃圾邮件过滤，或向替你读邮件的工具和助手下达指令。
+	Show the hidden text	显示隐藏的文字
+	Hide it again	再次隐藏
+	Sent mail waiting for a reply	等待回复的已发送邮件
+	Awaiting reply	等待回复

@@ -1240,3 +1240,35 @@ month	May	mei
 	This update wasn't sent by the meeting's organizer, so it can't change your calendar.	Deze update is niet door de organisator van de vergadering verstuurd en kan je agenda daarom niet wijzigen.
 	This answer wasn't sent by the guest it's from, so it can't be recorded.	Dit antwoord is niet verstuurd door de gast van wie het afkomstig zou zijn en kan daarom niet worden vastgelegd.
 	This invitation is out of date: your calendar has a newer version.	Deze uitnodiging is verouderd: je agenda heeft een nieuwere versie.
+	Left out because they couldn't be read: {n}	Weggelaten omdat ze niet gelezen konden worden: {n}
+	Added to your calendar from {file}: {n}	Aan je agenda toegevoegd uit {file}: {n}
+	Added to your contacts from {file}: {n}	Aan je contactpersonen toegevoegd uit {file}: {n}
+	Add an account first: a new message needs an account to send from.	Voeg eerst een account toe: een nieuw bericht heeft een account nodig om vanaf te verzenden.
+	Add an account first: events and people are kept with an account.	Voeg eerst een account toe: afspraken en personen worden bij een account bewaard.
+	Couldn't open {file}: {error}	{file} kon niet worden geopend: {error}
+	Safety	Veiligheid
+	Send where photos were taken	Meesturen waar foto's zijn genomen
+	Off, the place a phone writes into a photo is taken out of JPEG and PNG files as they're sent	Uit: de plaats die een telefoon in een foto schrijft, wordt bij het verzenden uit JPEG- en PNG-bestanden gehaald
+	These photos say where they were taken, and go that way (File › Options › Safety)	Deze foto's zeggen waar ze zijn genomen en gaan zo mee (Bestand › Opties › Veiligheid)
+	Where these photos were taken is left out as they're sent	Waar deze foto's zijn genomen, wordt bij het verzenden weggelaten
+	Careful: this comes from {domain}, which looks like {like} but isn't it.	Let op: dit komt van {domain}, dat op {like} lijkt maar het niet is.
+	Careful: the sender's name shows {shown}, but this comes from {real}.	Let op: de naam van de afzender toont {shown}, maar dit komt van {real}.
+	Don't open its links or attachments, or answer it, unless you're sure who sent it.	Open de koppelingen en bijlagen niet en antwoord niet, tenzij u zeker weet wie het heeft gestuurd.
+	Check before sending	Controleren voor verzenden
+	{address} looks like an address at {like}, but isn't one. Is it the right one?	{address} lijkt een adres bij {like}, maar is het niet. Is het het juiste adres?
+	{n} people who may not know each other will all see each other's addresses.	{n} mensen die elkaar misschien niet kennen, zien allemaal elkaars adres.
+	Put everyone in Bcc	Iedereen in Bcc zetten
+	Each of them gets the message without seeing who else did; you're in To	Ieder krijgt het bericht zonder te zien wie nog meer; u staat in Aan
+	Open links without their tracking	Koppelingen openen zonder tracking
+	A link opens where it really goes: out of redirects that carry the real address, without the tags that say who clicked	Een koppeling opent waar hij echt heen gaat: buiten omleidingen die het echte adres bevatten, zonder de tags die zeggen wie klikte
+	Links open as they are (File › Options › Safety)	Koppelingen openen zoals ze zijn (Bestand › Opties › Veiligheid)
+	Links open without their tracking tags, and out of redirects that carry the real address	Koppelingen openen zonder hun trackingtags en buiten omleidingen die het echte adres bevatten
+	Links that report clicks: {links}	Koppelingen die klikken melden: {links}
+	Tracking pictures, never loaded: {pictures}	Trackingafbeeldingen, nooit geladen: {pictures}
+	Tracking pictures, never loaded: {pictures} · Links that report clicks: {links}	Trackingafbeeldingen, nooit geladen: {pictures} · Koppelingen die klikken melden: {links}
+	This message hides text from you ({n} words).	Dit bericht verbergt tekst voor u ({n} woorden).
+	Hidden text is a way to slip past spam filters, or to give instructions to tools and assistants that read mail for you.	Verborgen tekst is een manier om langs spamfilters te komen, of om instructies te geven aan hulpmiddelen en assistenten die mail voor u lezen.
+	Show the hidden text	Verborgen tekst tonen
+	Hide it again	Weer verbergen
+	Sent mail waiting for a reply	Verzonden mail die op antwoord wacht
+	Awaiting reply	Wacht op antwoord

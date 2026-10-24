@@ -33,6 +33,8 @@ owner's own picture `assets/icon.png` when it is there (every size is sampled do
 | `assets/app-icon/hicolor/64x64/apps/ai.storyteller.quatrelle.png` | Quatrelle contributors | Rendered by `cargo xtask icons` (`xtask/src/icons.rs`) | MIT OR Apache-2.0 |
 | `assets/app-icon/hicolor/scalable/apps/ai.storyteller.quatrelle.svg` | Quatrelle contributors | Rendered by `cargo xtask icons` (`xtask/src/icons.rs`) | MIT OR Apache-2.0 |
 | `assets/app-icon/quatrelle-1024.png` | Quatrelle contributors | Rendered by `cargo xtask icons` (`xtask/src/icons.rs`) | MIT OR Apache-2.0 |
+| `fuzz/seeds/photo/geotagged.jpg` | Quatrelle contributors | Written byte by byte as a fuzzing seed (a few header bytes, no picture) | MIT OR Apache-2.0 |
+| `fuzz/seeds/photo/geotagged.png` | Quatrelle contributors | Written byte by byte as a fuzzing seed (a few header bytes, no picture) | MIT OR Apache-2.0 |
 | `assets/app-icon/quatrelle.icns` | Quatrelle contributors | Rendered by `cargo xtask icons` (`xtask/src/icons.rs`) | MIT OR Apache-2.0 |
 | `assets/app-icon/quatrelle.ico` | Quatrelle contributors | Rendered by `cargo xtask icons` (`xtask/src/icons.rs`) | MIT OR Apache-2.0 |
 | `assets/dictionaries/LICENSE.txt` | Quatrelle contributors | What the dictionaries below are licensed under, and where they come from | MIT OR Apache-2.0 |

@@ -1244,3 +1244,35 @@ month	May	maio
 	This update wasn't sent by the meeting's organizer, so it can't change your calendar.	Esta atualização não foi enviada pelo organizador da reunião, então não pode alterar seu calendário.
 	This answer wasn't sent by the guest it's from, so it can't be recorded.	Esta resposta não foi enviada pelo convidado a quem pertence, então não pode ser registrada.
 	This invitation is out of date: your calendar has a newer version.	Este convite está desatualizado: seu calendário tem uma versão mais recente.
+	Left out because they couldn't be read: {n}	Deixados de fora porque não puderam ser lidos: {n}
+	Added to your calendar from {file}: {n}	Adicionados ao seu calendário de {file}: {n}
+	Added to your contacts from {file}: {n}	Adicionados aos seus contatos de {file}: {n}
+	Add an account first: a new message needs an account to send from.	Adicione uma conta primeiro: uma nova mensagem precisa de uma conta para ser enviada.
+	Add an account first: events and people are kept with an account.	Adicione uma conta primeiro: eventos e pessoas ficam guardados em uma conta.
+	Couldn't open {file}: {error}	Não foi possível abrir {file}: {error}
+	Safety	Segurança
+	Send where photos were taken	Enviar onde as fotos foram tiradas
+	Off, the place a phone writes into a photo is taken out of JPEG and PNG files as they're sent	Desativado, o local que o celular grava na foto é retirado dos arquivos JPEG e PNG ao enviar
+	These photos say where they were taken, and go that way (File › Options › Safety)	Estas fotos dizem onde foram tiradas e vão assim (Arquivo › Opções › Segurança)
+	Where these photos were taken is left out as they're sent	O local onde estas fotos foram tiradas é retirado ao enviar
+	Careful: this comes from {domain}, which looks like {like} but isn't it.	Cuidado: isto vem de {domain}, que parece {like}, mas não é.
+	Careful: the sender's name shows {shown}, but this comes from {real}.	Cuidado: o nome do remetente mostra {shown}, mas isto vem de {real}.
+	Don't open its links or attachments, or answer it, unless you're sure who sent it.	Não abra os links ou anexos nem responda, a menos que tenha certeza de quem enviou.
+	Check before sending	Verificar antes de enviar
+	{address} looks like an address at {like}, but isn't one. Is it the right one?	{address} parece um endereço de {like}, mas não é. É o endereço certo?
+	{n} people who may not know each other will all see each other's addresses.	{n} pessoas que talvez não se conheçam verão o endereço umas das outras.
+	Put everyone in Bcc	Colocar todos em Cco
+	Each of them gets the message without seeing who else did; you're in To	Cada um recebe a mensagem sem ver quem mais recebeu; você fica em Para
+	Open links without their tracking	Abrir links sem o rastreamento
+	A link opens where it really goes: out of redirects that carry the real address, without the tags that say who clicked	Um link abre para onde realmente leva: fora dos redirecionamentos que contêm o endereço real, sem as marcas que dizem quem clicou
+	Links open as they are (File › Options › Safety)	Os links abrem como estão (Arquivo › Opções › Segurança)
+	Links open without their tracking tags, and out of redirects that carry the real address	Os links abrem sem as marcas de rastreamento e fora dos redirecionamentos que contêm o endereço real
+	Links that report clicks: {links}	Links que informam cliques: {links}
+	Tracking pictures, never loaded: {pictures}	Imagens de rastreamento, nunca carregadas: {pictures}
+	Tracking pictures, never loaded: {pictures} · Links that report clicks: {links}	Imagens de rastreamento, nunca carregadas: {pictures} · Links que informam cliques: {links}
+	This message hides text from you ({n} words).	Esta mensagem esconde texto de você ({n} palavras).
+	Hidden text is a way to slip past spam filters, or to give instructions to tools and assistants that read mail for you.	Texto oculto é um jeito de passar pelos filtros de spam ou de dar instruções a ferramentas e assistentes que leem e-mails por você.
+	Show the hidden text	Mostrar o texto oculto
+	Hide it again	Ocultar de novo
+	Sent mail waiting for a reply	E-mails enviados aguardando resposta
+	Awaiting reply	Aguardando resposta

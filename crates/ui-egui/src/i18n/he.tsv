@@ -1240,3 +1240,35 @@ month	May	מאי
 	This update wasn't sent by the meeting's organizer, so it can't change your calendar.	העדכון הזה לא נשלח על ידי מארגן הפגישה, ולכן אינו יכול לשנות את לוח השנה שלך.
 	This answer wasn't sent by the guest it's from, so it can't be recorded.	התשובה הזו לא נשלחה על ידי המוזמן שבשמו היא נכתבה, ולכן לא ניתן לרשום אותה.
 	This invitation is out of date: your calendar has a newer version.	ההזמנה הזו אינה עדכנית: בלוח השנה שלך יש גרסה חדשה יותר.
+	Left out because they couldn't be read: {n}	הושמטו כי לא ניתן היה לקרוא אותם: {n}
+	Added to your calendar from {file}: {n}	נוספו ללוח השנה מתוך {file}: {n}
+	Added to your contacts from {file}: {n}	נוספו לאנשי הקשר מתוך {file}: {n}
+	Add an account first: a new message needs an account to send from.	יש להוסיף חשבון קודם: הודעה חדשה צריכה חשבון לשליחה.
+	Add an account first: events and people are kept with an account.	יש להוסיף חשבון קודם: אירועים ואנשים נשמרים בחשבון.
+	Couldn't open {file}: {error}	לא ניתן לפתוח את {file}: {error}
+	Safety	בטיחות
+	Send where photos were taken	לשלוח את המקום שבו צולמו התמונות
+	Off, the place a phone writes into a photo is taken out of JPEG and PNG files as they're sent	כשכבוי, המקום שהטלפון כותב בתמונה מוסר מקובצי JPEG ו־PNG בעת שליחתם
+	These photos say where they were taken, and go that way (File › Options › Safety)	התמונות האלה מציינות היכן צולמו, וכך הן יישלחו (קובץ › אפשרויות › בטיחות)
+	Where these photos were taken is left out as they're sent	המקום שבו צולמו התמונות האלה יושמט בשליחה
+	Careful: this comes from {domain}, which looks like {like} but isn't it.	זהירות: ההודעה הגיעה מ־{domain}, שנראה כמו {like} אבל אינו הוא.
+	Careful: the sender's name shows {shown}, but this comes from {real}.	זהירות: שם השולח מציג {shown}, אבל ההודעה הגיעה מ־{real}.
+	Don't open its links or attachments, or answer it, unless you're sure who sent it.	אל תפתחו את הקישורים או הקבצים המצורפים ואל תשיבו, אלא אם אתם בטוחים מי שלח.
+	Check before sending	בדיקה לפני שליחה
+	{address} looks like an address at {like}, but isn't one. Is it the right one?	{address} נראית כמו כתובת ב־{like}, אבל היא לא. האם זו הכתובת הנכונה?
+	{n} people who may not know each other will all see each other's addresses.	{n} אנשים שאולי אינם מכירים זה את זה יראו כולם את הכתובות של כולם.
+	Put everyone in Bcc	להעביר את כולם ל־Bcc
+	Each of them gets the message without seeing who else did; you're in To	כל אחד מקבל את ההודעה בלי לראות מי עוד קיבל; אתם בשדה אל
+	Open links without their tracking	לפתוח קישורים בלי המעקב שלהם
+	A link opens where it really goes: out of redirects that carry the real address, without the tags that say who clicked	קישור נפתח במקום שאליו הוא באמת מוביל: מחוץ להפניות שמכילות את הכתובת האמיתית, בלי התגים שמגלים מי לחץ
+	Links open as they are (File › Options › Safety)	קישורים נפתחים כפי שהם (קובץ › אפשרויות › בטיחות)
+	Links open without their tracking tags, and out of redirects that carry the real address	קישורים נפתחים בלי תגי המעקב, ומחוץ להפניות שמכילות את הכתובת האמיתית
+	Links that report clicks: {links}	קישורים שמדווחים על לחיצות: {links}
+	Tracking pictures, never loaded: {pictures}	תמונות מעקב, לעולם לא נטענות: {pictures}
+	Tracking pictures, never loaded: {pictures} · Links that report clicks: {links}	תמונות מעקב, לעולם לא נטענות: {pictures} · קישורים שמדווחים על לחיצות: {links}
+	This message hides text from you ({n} words).	ההודעה הזו מסתירה ממך טקסט ({n} מילים).
+	Hidden text is a way to slip past spam filters, or to give instructions to tools and assistants that read mail for you.	טקסט מוסתר הוא דרך לעקוף מסנני דואר זבל, או לתת הוראות לכלים ולעוזרים שקוראים דואר בשבילך.
+	Show the hidden text	הצגת הטקסט המוסתר
+	Hide it again	להסתיר שוב
+	Sent mail waiting for a reply	דואר שנשלח וממתין לתשובה
+	Awaiting reply	ממתין לתשובה

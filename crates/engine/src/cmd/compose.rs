@@ -73,10 +73,13 @@ pub(super) fn commands() -> Vec<CommandSpec> {
         .params(r#"{"plain"?: bool}"#)
         .when(has_compose),
         CommandSpec::new("compose.removeAttachment", "Remove attachment", "Message › Insert", remove_attachment).params(r#"{"index": number}"#).when(has_compose),
-        CommandSpec::new("compose.send", "Send", "Message", |s, v| s.send_compose(p::bool(v, "allowEmptySubject").unwrap_or(false)))
-            .key("Mod+Enter / Alt+S")
-            .params(r#"{"allowEmptySubject"?: bool}"#)
-            .when(has_compose),
+        CommandSpec::new("compose.send", "Send", "Message", |s, v| {
+            s.send_compose(p::bool(v, "allowEmptySubject").unwrap_or(false), p::bool(v, "checked").unwrap_or(false))
+        })
+        .key("Mod+Enter / Alt+S")
+        .params(r#"{"allowEmptySubject"?: bool, "checked"?: bool (without it, a message to a lookalike address or showing many people each other's addresses is held, and the answer is {"check": [...]})}"#)
+        .when(has_compose),
+        CommandSpec::new("compose.hideRecipients", "Put everyone in Bcc", "Message", |s, _| s.hide_recipients()).when(has_compose),
         CommandSpec::new("compose.saveDraft", "Save draft", "Message", |s, _| s.save_draft()).key("Mod+S").when(has_compose),
         CommandSpec::new("compose.discard", "Discard", "Message", discard).when(has_compose),
         CommandSpec::new("compose.popOut", "Pop out", "Message", |s, _| {
@@ -529,9 +532,12 @@ pub(super) fn preview_attachment(s: &mut Session, v: &Value) -> CmdResult {
     let data = quatrelle_mime::attachment_data(&raw, index).ok_or_else(|| CmdError::Failed("the attachment can't be read".into()))?;
     if kind == "message" {
         let m = quatrelle_mime::parse(&data).ok_or_else(|| CmdError::Failed("the attached message can't be read".into()))?;
-        return Ok(
-            json!({"kind": "message", "name": a.name, "subject": m.subject, "from": m.from.to_string(), "to": quatrelle_model::addr::format_list(&m.to), "date": m.date, "text": m.text}),
-        );
+        let name = a.name.clone();
+        let warning = s.sender_warning(&m.from);
+        return Ok(json!({
+            "kind": "message", "name": name, "subject": m.subject, "from": m.from.to_string(), "to": quatrelle_model::addr::format_list(&m.to),
+            "date": m.date, "text": m.text, "warning": warning,
+        }));
     }
     // At most 512 KB, cut on a character boundary.
     const MAX: usize = 512 << 10;
