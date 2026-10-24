@@ -1,6 +1,6 @@
 //! Commands: Send / Receive, moving around, folders, search, Quick Steps and Search Folders.
 
-use super::compose::{export_pdf, message_headers, save_message};
+use super::compose::{export_pdf, message_headers, save_message, save_messages};
 use super::*;
 
 pub(super) fn commands() -> Vec<CommandSpec> {
@@ -104,6 +104,7 @@ pub(super) fn commands() -> Vec<CommandSpec> {
         CommandSpec::new("message.saveAs", "Save as", "File › Save As", save_message).params(r#"{"path": string}"#).when(has_reading),
         CommandSpec::new("message.exportPdf", "Save as PDF", "File › Save As", export_pdf).params(r#"{"path": string}"#).when(has_reading),
         CommandSpec::new("message.headers", "Message headers", "File › Info", message_headers).when(has_reading),
+        CommandSpec::new("messages.saveAs", "Save as", "Message list", save_messages).params(r#"{"keys"?: [string], "path"?: string, "dir"?: string}"#),
         CommandSpec::new("message.showPictures", "Show pictures", "Reading pane", |s, v| s.show_pictures(p::bool(v, "always").unwrap_or(false)))
             .params(r#"{"always"?: bool}"#)
             .when(has_reading),

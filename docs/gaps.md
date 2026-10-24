@@ -747,7 +747,8 @@ tester's does, a contact as Exchange keeps it, Outlook's clipboard), then fixed 
   changed occurrences (an `.ics`) along as a file, chosen from a folder, the address book or
   the calendar on this computer, words typed narrowing them. Message headers (the reading pane's
   ⋯ and the File page) shows the open message's header lines, with Copy, as a message's
-  Properties do in Outlook.
+  Properties do in Outlook. Save as… in the list's right-click menu saves the messages selected
+  as `.eml` files: one where asked, several in a folder, each under its subject.
 - Checked in the app against Dovecot 2.3 in Docker (3,000 messages, 25 kept, online only),
   the build before the fix first: Show more sent `SELECT … (QRESYNC …)` and nothing else, the
   list still 25; now it fetches the next 25 (`UID FETCH 2951:2975`), 50 shown. Search the server

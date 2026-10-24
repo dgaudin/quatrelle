@@ -1,5 +1,7 @@
 //! Commands: writing messages, and attachments.
 
+use quatrelle_model::MessageKey;
+
 use super::*;
 
 pub(super) fn commands() -> Vec<CommandSpec> {
@@ -409,12 +411,23 @@ impl Session {
     /// The open message's source (`.eml`).
     pub fn message_source(&self) -> Result<Vec<u8>, CmdError> {
         let r = self.reading.as_ref().ok_or_else(|| CmdError::Disabled("open a message first".into()))?;
-        if r.key.folder == crate::session::OUTBOX {
-            self.outbox_entry(&r.key).and_then(|(a, i)| self.store.as_ref().and_then(|st| st.outbox_raw(&a, i.id)))
+        self.source_of(&r.key).ok_or_else(|| CmdError::Failed("the message isn't downloaded".into()))
+    }
+
+    /// A message's source, when it's on this computer (an Outbox one's as it will go).
+    pub fn source_of(&self, key: &MessageKey) -> Option<Vec<u8>> {
+        if key.folder == crate::session::OUTBOX {
+            self.outbox_entry(key).and_then(|(a, i)| self.store.as_ref().and_then(|st| st.outbox_raw(&a, i.id)))
         } else {
-            self.store.as_ref().and_then(|st| st.read_body(&r.key))
+            self.store.as_ref().and_then(|st| st.read_body(key))
         }
-        .ok_or_else(|| CmdError::Failed("the message isn't downloaded".into()))
+    }
+
+    /// The file a message is saved as: its subject (`message` without one), safe to write.
+    pub fn message_file(&self, key: &MessageKey, ext: &str) -> String {
+        let subject = self.summary(key).map(|m| m.subject.trim().to_string()).unwrap_or_default();
+        let stem: String = sanitize_filename(if subject.is_empty() { "message" } else { &subject }).chars().take(80).collect();
+        format!("{stem}.{ext}")
     }
 
     /// The open message as a PDF: subject, header, text and the names of its attachments.
@@ -518,6 +531,43 @@ pub(super) fn message_headers(s: &mut Session, _: &Value) -> CmdResult {
     let head = raw.get(..end.min(MAX)).unwrap_or(&raw);
     let text = String::from_utf8_lossy(head).replace("\r\n", "\n");
     Ok(json!({"kind": "headers", "text": text, "truncated": end > MAX}))
+}
+
+/// The messages selected, as `.eml` files, as Outlook's Save As from the list: one to `path`, or
+/// each in `dir` under its subject (a name taken already gets a number). Those not on this
+/// computer are counted, not saved.
+pub(super) fn save_messages(s: &mut Session, v: &Value) -> CmdResult {
+    let keys: Vec<MessageKey> = match v.get("keys").and_then(Value::as_array) {
+        Some(list) => list.iter().filter_map(|k| k.as_str().and_then(MessageKey::from_id)).collect(),
+        None => s.selection.clone(),
+    };
+    if keys.is_empty() {
+        return Err(CmdError::Disabled("select messages first".into()));
+    }
+    let write = |path: &std::path::Path, raw: &[u8]| std::fs::write(path, raw).map_err(|e| CmdError::Failed(format!("{}: {e}", path.display())));
+    if let Some(path) = p::str(v, "path") {
+        let [key] = keys.as_slice() else { return Err(CmdError::Params("`path` is for one message; `dir` for several".into())) };
+        let raw = s.source_of(key).ok_or_else(|| CmdError::Failed("the message isn't downloaded".into()))?;
+        write(std::path::Path::new(path), &raw)?;
+        return Ok(json!({"saved": [path], "missing": 0}));
+    }
+    let dir = std::path::PathBuf::from(p::req_str(v, "dir")?);
+    let (mut saved, mut missing) = (Vec::new(), 0usize);
+    for key in &keys {
+        let Some(raw) = s.source_of(key) else {
+            missing += 1;
+            continue;
+        };
+        let name = s.message_file(key, "eml");
+        let stem = name.trim_end_matches(".eml").to_string();
+        let path = (1..1000)
+            .map(|n| dir.join(if n == 1 { name.clone() } else { format!("{stem} ({n}).eml") }))
+            .find(|p| !p.exists())
+            .unwrap_or_else(|| dir.join(&name));
+        write(&path, &raw)?;
+        saved.push(path.to_string_lossy().to_string());
+    }
+    Ok(json!({"saved": saved, "missing": missing}))
 }
 
 /// The open message as a PDF.
