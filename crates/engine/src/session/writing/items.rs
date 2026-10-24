@@ -53,7 +53,8 @@ impl Session {
         let hit = |c: &ItemChoice| q.is_empty() || c.title.to_lowercase().contains(&q) || c.detail.to_lowercase().contains(&q);
         match kind {
             ItemKind::Message => {
-                let mut kept: Vec<&Summary> = self.folder_state(account, folder).messages.iter().filter(|m| !m.flags.deleted).collect();
+                let mut kept: Vec<&Summary> =
+                    self.folder_state(account, folder).messages.iter().filter(|m| !m.flags.deleted).map(Arc::as_ref).collect();
                 kept.sort_by_key(|m| std::cmp::Reverse(m.date));
                 kept.into_iter()
                     .map(|m| ItemChoice { id: m.key.to_id(), title: m.subject.clone(), detail: m.from.display().to_string(), when: m.date })

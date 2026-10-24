@@ -341,8 +341,9 @@ pub struct Session {
     person_photos: BTreeMap<String, Option<Photo>>,
     /// Addresses a picture was asked for (even when the answer was "none").
     photo_asked: HashSet<String>,
-    /// The messages on screen, newest first.
-    pub list: Vec<Summary>,
+    /// The messages on screen, newest first: shared with the folders' cached lists (a message
+    /// changed there is copied, this one staying as it was until the list is made again).
+    pub list: Vec<Arc<Summary>>,
     /// Conversations over `list` (when [`Prefs::conversations`] is on).
     pub threads: Vec<Thread>,
     pub selection: Vec<MessageKey>,
@@ -381,7 +382,7 @@ pub struct Session {
     /// session: the same one isn't told again on every try.
     rules_refused_told: HashMap<String, String>,
     jobs: Vec<Job>,
-    pub(crate) cache: HashMap<(String, String), FolderState>,
+    pub(crate) cache: HashMap<(String, String), FolderState<Arc<Summary>>>,
     /// The cached folders, the least recently used first.
     pub(crate) cache_order: Vec<(String, String)>,
     /// Accounts whose other people's appointments are set aside (`pim/parking.rs`), and since

@@ -270,7 +270,7 @@ impl Session {
             let st = self.folder_state(&a, &f);
             let n = st.messages.len();
             let from = r.from;
-            let mut taken: Vec<Summary> = Vec::new();
+            let mut taken: Vec<Arc<Summary>> = Vec::new();
             while r.pos < n && done < budget {
                 if let Some(m) = self.folder_state(&a, &f).messages.get(r.pos) {
                     r.top = r.top.max(m.key.uid);

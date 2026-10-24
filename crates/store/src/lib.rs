@@ -49,9 +49,11 @@ fn io_err(path: &Path) -> impl FnOnce(io::Error) -> StoreError + '_ {
     move |source| StoreError::Io { path: path.display().to_string(), source }
 }
 
-/// What the cache knows about one folder (RFC 4549 §4.3 and RFC 7162 state).
+/// What the cache knows about one folder (RFC 4549 §4.3 and RFC 7162 state). The session keeps
+/// its messages shared ([`FolderState::shared`]) with the list on screen and search results,
+/// rather than copied into them.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct FolderState {
+pub struct FolderState<M = Summary> {
     /// UIDVALIDITY when the cache was filled; a different value on the server empties it.
     pub validity: u32,
     /// UIDNEXT at the last sync: messages at or above it are new.
@@ -59,7 +61,7 @@ pub struct FolderState {
     /// HIGHESTMODSEQ at the last sync (0 when the server lacks CONDSTORE).
     pub highest_modseq: u64,
     /// Newest first.
-    pub messages: Vec<Summary>,
+    pub messages: Vec<M>,
     /// How many of the newest messages it was filled with (the setting then): raised since,
     /// the older mail is fetched once.
     #[serde(default)]
@@ -174,17 +176,42 @@ fn page_hash(bytes: &[u8]) -> u64 {
     h
 }
 
-impl FolderState {
+impl<M: std::borrow::Borrow<Summary>> FolderState<M> {
     pub fn find(&self, uid: u32) -> Option<&Summary> {
-        self.messages.iter().find(|m| m.key.uid == uid)
+        self.messages.iter().map(M::borrow).find(|m| m.key.uid == uid)
     }
 
+    pub fn unread(&self) -> u32 {
+        u32::try_from(self.messages.iter().map(M::borrow).filter(|m| !m.flags.seen && !m.flags.deleted).count()).unwrap_or(u32::MAX)
+    }
+
+    /// The same state with other messages.
+    fn with<N>(&self, messages: Vec<N>) -> FolderState<N> {
+        FolderState { validity: self.validity, uid_next: self.uid_next, highest_modseq: self.highest_modseq, messages, window: self.window }
+    }
+}
+
+impl FolderState {
     pub fn find_mut(&mut self, uid: u32) -> Option<&mut Summary> {
         self.messages.iter_mut().find(|m| m.key.uid == uid)
     }
 
-    pub fn unread(&self) -> u32 {
-        u32::try_from(self.messages.iter().filter(|m| !m.flags.seen && !m.flags.deleted).count()).unwrap_or(u32::MAX)
+    /// Its messages shared, each copied only when changed (as the session keeps a folder).
+    pub fn shared(self) -> FolderState<Arc<Summary>> {
+        let head = self.with(Vec::new());
+        FolderState { messages: self.messages.into_iter().map(Arc::new).collect(), ..head }
+    }
+}
+
+impl FolderState<Arc<Summary>> {
+    /// A message to change: this one's alone (a list shown before keeps it as it was).
+    pub fn find_mut(&mut self, uid: u32) -> Option<&mut Summary> {
+        self.messages.iter_mut().find(|m| m.key.uid == uid).map(Arc::make_mut)
+    }
+
+    /// Its messages copied out, to be written.
+    pub fn owned(&self) -> FolderState {
+        self.with(self.messages.iter().map(|m| Summary::clone(m)).collect())
     }
 }
 

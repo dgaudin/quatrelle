@@ -71,10 +71,10 @@ impl Session {
     }
 
     /// The cached state of a folder, loaded from disk on first use.
-    pub fn folder_state(&mut self, account: &str, folder: &str) -> &FolderState {
+    pub fn folder_state(&mut self, account: &str, folder: &str) -> &FolderState<Arc<Summary>> {
         let k = (account.to_string(), folder.to_string());
         if !self.cache.contains_key(&k) {
-            let st = self.store.as_ref().and_then(|s| s.load_folder(account, folder).ok()).unwrap_or_default();
+            let st = self.store.as_ref().and_then(|s| s.load_folder(account, folder).ok()).unwrap_or_default().shared();
             self.cache.insert(k.clone(), st);
             self.cache_order.retain(|o| *o != k);
             self.cache_order.push(k.clone());
@@ -83,7 +83,7 @@ impl Session {
             self.cache_order.retain(|o| *o != k);
             self.cache_order.push(k.clone());
         }
-        static EMPTY: std::sync::OnceLock<FolderState> = std::sync::OnceLock::new();
+        static EMPTY: std::sync::OnceLock<FolderState<Arc<Summary>>> = std::sync::OnceLock::new();
         self.cache.get(&k).unwrap_or_else(|| EMPTY.get_or_init(FolderState::default))
     }
 
@@ -146,9 +146,13 @@ impl Session {
         let (validity, max) = (st.validity, st.messages.iter().map(|m| m.key.uid).max().unwrap_or(0));
         let k = (account.to_string(), folder.to_string());
         let arrived: Vec<Summary> = match self.seen_uid.get(&k) {
-            Some(&seen) => {
-                self.folder_state(account, folder).messages.iter().filter(|m| m.key.uid > seen && m.key.validity == validity).cloned().collect()
-            }
+            Some(&seen) => self
+                .folder_state(account, folder)
+                .messages
+                .iter()
+                .filter(|m| m.key.uid > seen && m.key.validity == validity)
+                .map(|m| Summary::clone(m))
+                .collect(),
             None => Vec::new(),
         };
         self.seen_uid.insert(k, max);
@@ -224,7 +228,7 @@ impl Session {
 
     /// Rebuild the list from the view, search and filter, keeping the selection where possible.
     pub fn refresh_list(&mut self) {
-        let mut list: Vec<Summary> = if let Some((q, scope)) = self.search.clone() {
+        let mut list: Vec<Arc<Summary>> = if let Some((q, scope)) = self.search.clone() {
             let mut found = self.search_results(&q, scope);
             // What the servers found: its words may be in mail not downloaded here.
             let hits: Vec<MessageKey> = self.server_search.iter().filter(|ss| ss.query == q).flat_map(|ss| ss.found.iter().cloned()).collect();
@@ -241,7 +245,7 @@ impl Session {
             sort_newest_first(&mut found);
             found
         } else if self.view == View::Outbox {
-            self.outbox_summaries()
+            self.outbox_summaries().into_iter().map(Arc::new).collect()
         } else {
             let mut v = Vec::new();
             for (a, f) in self.view_folders() {
@@ -258,7 +262,7 @@ impl Session {
             for m in found {
                 let known = list.iter().any(|x| x.key == m.key || (!x.message_id.is_empty() && x.message_id == m.message_id));
                 if !known {
-                    list.push(m.clone());
+                    list.push(Arc::new(m.clone()));
                 }
             }
         }
@@ -269,7 +273,7 @@ impl Session {
         {
             for m in older {
                 if !list.iter().any(|x| x.key == m.key) {
-                    list.push(m.clone());
+                    list.push(Arc::new(m.clone()));
                 }
             }
         }
@@ -327,7 +331,7 @@ impl Session {
                 Arrange::Date => Row::Header(DateGroup::of(date, &self.clock).label()),
                 Arrange::From => Row::Group(m.map(|m| person(Some(&m.from))).unwrap_or_default()),
                 Arrange::To => Row::Group(m.map(|m| person(m.to.first())).unwrap_or_default()),
-                Arrange::Subject => Row::Group(m.map(Summary::base_subject).unwrap_or_default()),
+                Arrange::Subject => Row::Group(m.map(|m| m.base_subject()).unwrap_or_default()),
                 Arrange::Size => Row::Header(size_group(m.map_or(0, |m| m.size))),
                 Arrange::Flag => Row::Header(if m.is_some_and(|m| m.flags.flagged) { "Flagged" } else { "Not flagged" }),
                 Arrange::Attachments => Row::Header(if m.is_some_and(|m| m.has_attachments) { "With attachments" } else { "Without attachments" }),
@@ -383,11 +387,11 @@ impl Session {
     }
 
     pub fn summary(&self, key: &MessageKey) -> Option<&Summary> {
-        self.list.iter().find(|m| &m.key == key)
+        self.list.iter().find(|m| &m.key == key).map(Arc::as_ref)
     }
 
     /// The selected messages (in list order).
-    pub fn selected(&self) -> Vec<Summary> {
+    pub fn selected(&self) -> Vec<Arc<Summary>> {
         if self.selection.len() < 8 {
             return self.list.iter().filter(|m| self.selection.contains(&m.key)).cloned().collect();
         }
