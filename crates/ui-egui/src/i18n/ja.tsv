@@ -1238,3 +1238,6 @@ month	May	5月
 	Nothing to attach here.	ここに添付できるものはありません。
 	Saved {n} messages in {folder}	{n} 件のメッセージを {folder} に保存しました
 	{n} not saved: not on this computer yet	{n} 件は保存されていません: まだこのコンピューターにありません
+	This update wasn't sent by the meeting's organizer, so it can't change your calendar.	この更新は会議の開催者から送られたものではないため、予定表を変更できません。
+	This answer wasn't sent by the guest it's from, so it can't be recorded.	この回答は本人の出席者から送られたものではないため、反映できません。
+	This invitation is out of date: your calendar has a newer version.	この招待は古くなっています。予定表にはより新しい版があります。

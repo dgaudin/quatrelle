@@ -26,7 +26,7 @@ pub use session::{
     ARRANGE_HEADINGS, AccountState, Arrange, Compose, FolderRef, ItemChoice, ItemKind, ListFilter, ListLayout, MoveTarget, NotesOrder, Notice,
     PaneSection, Picture, Prefs, ReadInPane, Reading, ReadingPane, Row, RulesScope, SearchScope, ServerSearch, Session, UpdateCheck, VacationState,
     View,
-    invite::Invite,
+    invite::{Invite, InviteProblem},
     junk::{JunkList, junk_entry},
     newer_release, parse_key,
     pim::{ACCOUNT_COLOR, AgendaItem, CalMode, DueReminder, Module, NoteRef, Person, parse_local},
