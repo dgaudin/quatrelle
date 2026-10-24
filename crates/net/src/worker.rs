@@ -245,6 +245,7 @@ pub(crate) fn now() -> i64 {
 
 mod changes;
 mod connect;
+mod listening;
 mod pool;
 mod scheduling;
 mod send;
@@ -344,6 +345,8 @@ struct Worker {
     ahead_poll: Instant,
     /// The server search still wanted (the pool's).
     search: Arc<AtomicU64>,
+    /// Exchange telling of changes as they happen.
+    listen: listening::Listening,
     /// When the Inbox is next looked at, on a server that can't say when mail comes (no IDLE,
     /// no push). A deadline, not a wait restarted by every job: while someone works (messages
     /// opened, pictures, read marks), the look kept being put off, and new mail with it.
@@ -416,6 +419,7 @@ impl Worker {
             soon: Vec::new(),
             search: Arc::new(AtomicU64::new(0)),
             next_poll: Instant::now() + POLL_EVERY,
+            listen: listening::Listening::default(),
         }
     }
 
@@ -491,6 +495,10 @@ impl Worker {
             // Nothing asked: a few more messages downloaded whole, with a look at the Inbox every
             // half minute meanwhile.
             if !self.ahead.is_empty() {
+                // Told of changes, what changed is read between two steps.
+                if self.listening() {
+                    self.hear(Duration::ZERO);
+                }
                 if Instant::now() < self.ahead_poll {
                     self.ahead_step();
                 } else {

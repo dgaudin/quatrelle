@@ -5,11 +5,21 @@ use super::*;
 impl Worker {
     /// How often the Inbox is looked at, on a server that can't say when mail comes.
     pub(super) fn poll_every(&self) -> Duration {
-        if self.acc.ews.is_some() { EWS_POLL_EVERY } else { POLL_EVERY }
+        if self.listen.on() {
+            listening::LISTEN_POLL_EVERY
+        } else if self.acc.ews.is_some() {
+            EWS_POLL_EVERY
+        } else {
+            POLL_EVERY
+        }
     }
 
     /// Wait for new mail: IDLE on the Inbox when the server supports it, else poll.
     pub(super) fn wait_for_mail(&mut self, rx: &Receiver<Job>) {
+        if self.listening() {
+            self.wait_for_changes(rx);
+            return;
+        }
         let inbox = self.inbox();
         if matches!(self.conn, Some(Conn::Jmap(_))) && !self.no_push && inbox.is_some() && self.wait_for_push(rx) {
             return;
@@ -18,20 +28,17 @@ impl Worker {
         if !idle || inbox.is_none() {
             let next_soon = self.soon.iter().map(|(at, _)| *at).min();
             let poll_in = self.next_poll.saturating_duration_since(Instant::now());
-            let wait = next_soon.map_or(poll_in, |at| at.saturating_duration_since(Instant::now()).min(poll_in));
+            let mut wait = next_soon.map_or(poll_in, |at| at.saturating_duration_since(Instant::now()).min(poll_in));
+            // Listening that stopped starts again at its time, not at the next look.
+            if let Some(retry) = self.listen.retry_in().filter(|_| self.main.is_none() && matches!(self.conn, Some(Conn::Ews(_)))) {
+                wait = wait.min(retry.max(Duration::from_millis(10)));
+            }
             match rx.recv_timeout(wait) {
                 Ok(j) => push_job(&mut self.queue, j),
                 Err(RecvTimeoutError::Disconnected) => self.closed = true,
-                Err(RecvTimeoutError::Timeout) if next_soon.is_some_and(|at| at <= Instant::now()) => {
-                    let now = Instant::now();
-                    let (due, later): (Vec<_>, Vec<_>) = std::mem::take(&mut self.soon).into_iter().partition(|(at, _)| *at <= now);
-                    self.soon = later;
-                    let mut folders: Vec<String> = due.into_iter().map(|(_, f)| f).collect();
-                    folders.dedup();
-                    for f in folders {
-                        self.sync_one(&f);
-                    }
-                }
+                Err(RecvTimeoutError::Timeout) if next_soon.is_some_and(|at| at <= Instant::now()) => self.sync_soon_due(),
+                // Listening's time to start again (it looks at the Inboxes itself).
+                Err(RecvTimeoutError::Timeout) if Instant::now() < self.next_poll => {}
                 Err(RecvTimeoutError::Timeout) => {
                     self.next_poll = Instant::now() + self.poll_every();
                     if let Some(f) = inbox {
@@ -424,18 +431,14 @@ impl Worker {
     /// push wait until it's done), and a folder asked for soon (Sent Items after a send) is read.
     pub(super) fn look_between_downloads(&mut self) {
         self.ahead_poll = Instant::now() + AHEAD_POLL;
-        self.next_poll = Instant::now() + self.poll_every();
-        if let Some(f) = self.inbox() {
-            self.sync_one(&f);
+        // Told of changes, the Inbox needn't be looked at but now and then.
+        if !self.listen.on() || Instant::now() >= self.next_poll {
+            self.next_poll = Instant::now() + self.poll_every();
+            if let Some(f) = self.inbox() {
+                self.sync_one(&f);
+            }
         }
-        let now = Instant::now();
-        let (due, later): (Vec<_>, Vec<_>) = std::mem::take(&mut self.soon).into_iter().partition(|(at, _)| *at <= now);
-        self.soon = later;
-        let mut folders: Vec<String> = due.into_iter().map(|(_, f)| f).collect();
-        folders.dedup();
-        for f in folders {
-            self.sync_one(&f);
-        }
+        self.sync_soon_due();
     }
 
     pub(super) fn sync_one(&mut self, path: &str) {
