@@ -75,6 +75,10 @@ pub struct FolderMark {
     /// The age kept then ([`SyncOptions::since_days`]): another one lists the folder again.
     #[serde(default)]
     pub days: u32,
+    /// Exchange: its messages' categories were read (they weren't before Quatrelle read
+    /// categories: those Outlook put on earlier are asked for once).
+    #[serde(default)]
+    pub categories: bool,
 }
 
 /// Messages a folder's search of the server brings in, at most.

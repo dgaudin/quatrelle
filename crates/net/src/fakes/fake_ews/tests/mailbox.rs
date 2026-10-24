@@ -704,6 +704,20 @@ fn categories_go_both_ways_as_outlook_keeps_them() {
     assert!(m.flags.has("work") && !m.flags.has("urgent") && m.flags.has(PINNED), "{:?}", m.flags.keywords);
     crate::ews::apply_remote(&c, &st, &set(false)).unwrap();
     assert_eq!(on_server(), ["Projet Été"]);
+    // A folder read before Quatrelle read categories: those Outlook had put on are asked for once,
+    // the categorized messages alone.
+    let mut fs = store.load_folder("a1", "INBOX").unwrap();
+    fs.messages[0].flags.keywords.retain(|k| k.starts_with('$'));
+    store.save_folder("a1", "INBOX", &fs).unwrap();
+    st.marks.get_mut("INBOX").unwrap().categories = false;
+    let calls = |op: &str| server.data.lock().unwrap().calls.iter().filter(|c| c.as_str() == op).count();
+    let (listed, searched) = (calls("FindItem"), calls("FindItem categorized"));
+    let m = sync(&mut st);
+    assert!(m.flags.has(&keyword_for("Projet Été")) && m.flags.has(PINNED), "{:?}", m.flags.keywords);
+    assert!(st.marks.get("INBOX").is_some_and(|m| m.categories), "once");
+    assert_eq!((calls("FindItem"), calls("FindItem categorized")), (listed + 1, searched + 1), "one search, not a listing");
+    sync(&mut st);
+    assert_eq!(calls("FindItem categorized"), searched + 1, "not asked again");
     // Outlook's list, with its colours: red, peach, and one without a colour.
     let list = crate::ews_pim::master_categories(&c).unwrap();
     assert_eq!(list, [("Urgent".to_string(), Some(0)), ("Projet Été".to_string(), Some(8)), ("Sans couleur".to_string(), None)]);

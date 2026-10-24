@@ -119,13 +119,31 @@ impl Client {
     /// pages by offset; it says when the last page is in); with `since`, only those received
     /// since then (Unix seconds), as Outlook keeps mail offline in Cached Exchange Mode.
     pub(super) fn newest(&self, folder: &str, limit: usize, since: Option<i64>) -> Result<Vec<(String, Flags)>> {
+        self.newest_where(folder, limit, since, false)
+    }
+
+    /// [`Client::newest`], those carrying categories only (what Outlook put on them).
+    pub(super) fn categorized(&self, folder: &str, limit: usize, since: Option<i64>) -> Result<Vec<(String, Flags)>> {
+        self.newest_where(folder, limit, since, true)
+    }
+
+    fn newest_where(&self, folder: &str, limit: usize, since: Option<i64>, categorized: bool) -> Result<Vec<(String, Flags)>> {
         let limit = limit.clamp(1, MAX_KEPT);
-        let restriction = since.map_or_else(String::new, |t| {
-            format!(
-                "<m:Restriction><t:IsGreaterThanOrEqualTo><t:FieldURI FieldURI=\"item:DateTimeReceived\"/><t:FieldURIOrConstant><t:Constant Value=\"{}\"/></t:FieldURIOrConstant></t:IsGreaterThanOrEqualTo></m:Restriction>",
+        let mut conditions = String::new();
+        if categorized {
+            conditions.push_str("<t:Exists><t:FieldURI FieldURI=\"item:Categories\"/></t:Exists>");
+        }
+        if let Some(t) = since {
+            conditions.push_str(&format!(
+                "<t:IsGreaterThanOrEqualTo><t:FieldURI FieldURI=\"item:DateTimeReceived\"/><t:FieldURIOrConstant><t:Constant Value=\"{}\"/></t:FieldURIOrConstant></t:IsGreaterThanOrEqualTo>",
                 crate::ews_pim::utc(t)
-            )
-        });
+            ));
+        }
+        let restriction = match (categorized, since.is_some()) {
+            (false, false) => String::new(),
+            (true, true) => format!("<m:Restriction><t:And>{conditions}</t:And></m:Restriction>"),
+            _ => format!("<m:Restriction>{conditions}</m:Restriction>"),
+        };
         let mut out: Vec<(String, Flags)> = Vec::new();
         while out.len() < limit {
             let page = (limit - out.len()).min(1000);

@@ -156,6 +156,8 @@ pub fn sync_folder(c: &Client, st: &mut State, store: &Store, account: &str, fol
         sync: String::new(),
         too_big: None,
         days: opts.since_days,
+        // A listing reads every message's categories.
+        categories: true,
     };
     let same = |m: &jmap::FolderMark| {
         !mark.stamp.is_empty()
@@ -165,6 +167,7 @@ pub fn sync_folder(c: &Client, st: &mut State, store: &Store, account: &str, fol
             && m.window == mark.window
             && m.ahead == mark.ahead
             && m.days == mark.days
+            && m.categories
             && now - m.at < MARK_TRUSTED
     };
     let kept = store.folder_kept(account, folder, VALIDITY);
@@ -183,9 +186,13 @@ pub fn sync_folder(c: &Client, st: &mut State, store: &Store, account: &str, fol
     let within = |was: u32, now: u32| was == now || (now != 0 && (was == 0 || was > now));
     let following =
         |m: &jmap::FolderMark| kept && !opts.list_only && !m.sync.is_empty() && m.window == opts.window && within(m.days, opts.since_days);
-    if let Some(since) = before.filter(following).map(|m| m.sync) {
+    if let Some((since, read)) = before.filter(following).map(|m| (m.sync, m.categories)) {
         match changes(c, st, store, account, folder, &since, opts) {
             Ok((mut report, sync)) => {
+                // Categories Outlook put on before they were read here: asked for once.
+                if !read {
+                    report.changed += catch_up_categories(c, store, st, account, folder, &id, opts.window, oldest)?;
+                }
                 mark.sync = sync;
                 st.marks.insert(folder.to_string(), mark);
                 report.total = total;
@@ -287,6 +294,47 @@ fn state_now(c: &Client, folder: &str) -> Result<Option<String>> {
         }
     }
     Ok(None)
+}
+
+/// The categories of a folder's kept messages, read once: those carrying any, asked for alone
+/// (all of them listed again is minutes on a big mailbox). How many changed.
+#[allow(clippy::too_many_arguments)]
+fn catch_up_categories(
+    c: &Client,
+    store: &Store,
+    st: &State,
+    account: &str,
+    folder: &str,
+    id: &str,
+    window: usize,
+    since: Option<i64>,
+) -> Result<usize> {
+    let found = match c.categorized(id, window, since) {
+        Ok(f) => f,
+        // A server that won't search so: they come as each message changes.
+        Err(NetError::No(e)) => {
+            log::info!("{account}: {}: categories not asked for ({e})", utf7::decode(folder));
+            return Ok(0);
+        }
+        Err(e) => return Err(e),
+    };
+    if found.is_empty() {
+        return Ok(0);
+    }
+    let mut fs = store.load_folder(account, folder)?;
+    let mut changed = std::collections::HashSet::new();
+    for (item, f) in &found {
+        if let Some(m) = st.known(item).and_then(|n| fs.find_mut(n))
+            && take_marks(&mut m.flags, f)
+        {
+            changed.insert(m.key.uid);
+        }
+    }
+    if !changed.is_empty() {
+        store.save_folder_changed(account, folder, &fs, &changed)?;
+    }
+    log::info!("{account}: {}: {} messages' categories read", utf7::decode(folder), changed.len());
+    Ok(changed.len())
 }
 
 /// What changed in a folder since its state `since`, made on its list: new messages listed
