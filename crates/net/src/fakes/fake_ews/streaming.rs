@@ -45,8 +45,10 @@ impl Data {
     }
 
     fn seen(&self, scope: &Option<Vec<String>>) -> Seen {
-        let items =
-            self.items.iter().filter(|i| self.covers(scope, &i.folder)).map(|i| (i.id.clone(), (i.folder.clone(), i.read, i.flagged))).collect();
+        // Mail, and the appointments and contacts of the folders it covers.
+        let mail = self.items.iter().filter(|i| self.covers(scope, &i.folder)).map(|i| (i.id.clone(), (i.folder.clone(), i.read, i.flagged)));
+        let pim = self.pim.iter().filter(|(_, f, _)| self.covers(scope, f)).map(|(id, f, _)| (id.clone(), (f.clone(), false, false)));
+        let items = mail.chain(pim).collect();
         let folders = self.folders.iter().filter(|f| self.covers(scope, &f.id)).map(|f| (f.id.clone(), f.parent.clone())).collect();
         (items, folders)
     }

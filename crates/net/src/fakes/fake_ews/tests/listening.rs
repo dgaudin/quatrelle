@@ -94,3 +94,28 @@ fn a_server_that_cant_tell_is_looked_at_as_before() {
     drop(pool);
     let _ = std::fs::remove_dir_all(store.root());
 }
+
+/// A meeting accepted on the phone, or one a colleague who may moved: the calendar is read as
+/// the server tells of it, not at the next full sync a quarter of an hour on.
+#[test]
+fn the_calendar_is_read_as_the_server_tells_of_its_changes() {
+    let mut d = Data { streaming: true, ..Default::default() };
+    d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    let cal = d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
+    d.folder("Contacts", None, Some("contacts"), "IPF.Contact");
+    let server = serve(d);
+    let store = crate::fake::tests_store("ews-listening-calendar");
+    let pool = start(&server, &store);
+    eventually("listening", || count(&server, "GetStreamingEvents") >= 2);
+    until(&pool, "the full sync's own read of the calendar", |e| matches!(e, Event::DavSynced { .. }));
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs() as i64);
+    let (start, end) = (crate::ews_pim::utc(now + 86_400), crate::ews_pim::utc(now + 90_000));
+    let it = parse(&format!(
+        "<t:CalendarItem><t:Subject>Budget review</t:Subject><t:Start>{start}</t:Start><t:End>{end}</t:End>\
+         <t:IsAllDayEvent>false</t:IsAllDayEvent><t:UID>budget-1</t:UID></t:CalendarItem>"
+    ));
+    server.data.lock().unwrap().pim.push(("N1".into(), cal, it.kids[0].clone()));
+    until(&pool, "the new meeting", |e| matches!(e, Event::DavSynced { sync, .. } if sync.events.iter().any(|x| x.event.summary == "Budget review")));
+    drop(pool);
+    let _ = std::fs::remove_dir_all(store.root());
+}

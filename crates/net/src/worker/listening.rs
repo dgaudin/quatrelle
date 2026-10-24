@@ -21,6 +21,17 @@ const LOOK: Duration = Duration::from_millis(250);
 /// What the server tells of together is read together (a rule filing fifty messages is fifty
 /// notifications): looked at again while more comes, this long at most.
 const GATHER: Duration = Duration::from_secs(1);
+/// A change told in the calendar or the contacts is read this long after (accepting a meeting is
+/// several changes), and their sync — every calendar ticked read again, seconds — runs this often
+/// at most.
+#[cfg(not(test))]
+const PIM_GATHER: Duration = Duration::from_secs(2);
+#[cfg(test)]
+const PIM_GATHER: Duration = Duration::from_millis(100);
+#[cfg(not(test))]
+const PIM_EVERY: Duration = Duration::from_secs(60);
+#[cfg(test)]
+const PIM_EVERY: Duration = Duration::from_millis(400);
 
 /// The account's ears on its server.
 #[derive(Default)]
@@ -34,6 +45,11 @@ pub(super) struct Listening {
     delay: Duration,
     /// The server can't tell of changes: the folders are looked at instead.
     unable: bool,
+    /// The account's own calendar and contacts, by id: a change in them is read by their sync.
+    pim: Vec<String>,
+    /// Their sync is due then (a change was told), and when it last ran.
+    pim_due: Option<Instant>,
+    pim_last: Option<Instant>,
 }
 
 impl Listening {
@@ -68,12 +84,13 @@ impl Worker {
             return false;
         }
         let shared = self.shared_to_listen();
-        let (own, others) = {
+        let (own, others, pim) = {
             let Some(Conn::Ews(c)) = self.conn.as_ref() else { return false };
             let own = c.listen(None, &[]);
             let others: Vec<_> =
                 if own.is_ok() { shared.iter().map(|(address, ids)| (address.clone(), c.listen(Some(address), ids))).collect() } else { Vec::new() };
-            (own, others)
+            let pim = if own.is_ok() { c.pim_folders() } else { Vec::new() };
+            (own, others, pim)
         };
         let mut ears = match own {
             Ok(l) => vec![l],
@@ -97,6 +114,7 @@ impl Worker {
         log::info!("{}: Exchange tells of changes as they happen ({} mailboxes)", self.acc.id, ears.len());
         let mailboxes: Vec<Option<String>> = ears.iter().map(|l| l.mailbox.clone()).collect();
         self.listen.ears = ears;
+        self.listen.pim = pim;
         self.listen.since = Some(Instant::now());
         self.next_poll = Instant::now() + LISTEN_POLL_EVERY;
         // What came between the last look and now wasn't told of: looked at once.
@@ -177,6 +195,9 @@ impl Worker {
         if !self.listen.on() {
             return false;
         }
+        if self.listen.pim_due.is_some_and(|at| Instant::now() >= at) {
+            self.sync_dav();
+        }
         let mut told: Vec<(Option<String>, crate::ews::Heard)> = Vec::new();
         let mut stopped = None;
         {
@@ -225,11 +246,13 @@ impl Worker {
         let path_of = |id: &str| self.jstate.mailboxes.iter().find(|(_, v)| v.as_str() == id).map(|(p, _)| p.clone());
         let mut folders: Vec<String> = Vec::new();
         let mut relist = false;
+        let mut pim = false;
         for (mailbox, heard) in &told {
             let mut unknown = false;
             for id in &heard.folders {
                 match path_of(id) {
                     Some(p) => folders.push(p),
+                    None if mailbox.is_none() && self.listen.pim.contains(id) => pim = true,
                     None => unknown = true,
                 }
             }
@@ -242,6 +265,11 @@ impl Worker {
             {
                 folders.push(inbox);
             }
+        }
+        // The calendar or the contacts: their sync, a moment later (and not too often).
+        if pim && self.listen.pim_due.is_none() {
+            let soon = Instant::now() + PIM_GATHER;
+            self.listen.pim_due = Some(self.listen.pim_last.map_or(soon, |last| soon.max(last + PIM_EVERY)));
         }
         if relist && !self.relist() {
             return;
@@ -256,6 +284,12 @@ impl Worker {
                 self.sync_one(&f);
             }
         }
+    }
+
+    /// The calendars' and contacts' sync ran: what was told of before is read.
+    pub(super) fn pim_synced(&mut self) {
+        self.listen.pim_due = None;
+        self.listen.pim_last = Some(Instant::now());
     }
 
     /// Listening stopped (the connection dropped, the subscription is gone, the server ended
