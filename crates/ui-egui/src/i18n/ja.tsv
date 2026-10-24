@@ -1227,3 +1227,5 @@ month	May	5月
 	Don't ask again for this server	このサーバーでは今後確認しない
 	The share couldn't be opened: {error}	共有を開けませんでした: {error}
 	Open this server's shares without asking	このサーバーの共有を確認せずに開く
+	Copy picture	画像をコピー
+	Save picture as…	名前を付けて画像を保存…
