@@ -67,4 +67,5 @@ mod safety;
 mod scheduling;
 mod searching;
 mod server_rules;
+mod smime;
 mod writing;

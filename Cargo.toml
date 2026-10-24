@@ -20,6 +20,8 @@ quatrelle-mime = { path = "crates/mime" }
 quatrelle-store = { path = "crates/store" }
 quatrelle-jmap = { path = "crates/jmap" }
 quatrelle-print = { path = "crates/print" }
+quatrelle-smime = { path = "crates/smime" }
+quatrelle-keys = { path = "crates/keys" }
 quatrelle-spell = { path = "crates/spell" }
 quatrelle-net = { path = "crates/net" }
 quatrelle-engine = { path = "crates/engine" }

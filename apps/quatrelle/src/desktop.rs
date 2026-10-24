@@ -275,6 +275,13 @@ impl Services for Desktop {
     fn pick_folder(&mut self) -> Option<PathBuf> {
         rfd::FileDialog::new().set_title("Save attachments to").pick_folder()
     }
+    fn pick_certificate(&mut self) -> Option<PathBuf> {
+        rfd::FileDialog::new()
+            .set_title("Import certificate")
+            .add_filter("Certificate with its key", &["p12", "pfx"])
+            .add_filter("All files", &["*"])
+            .pick_file()
+    }
     fn pick_rules_file(&mut self) -> Option<PathBuf> {
         rfd::FileDialog::new().set_title("Import rules").add_filter("Quatrelle rules", &["json"]).add_filter("All files", &["*"]).pick_file()
     }

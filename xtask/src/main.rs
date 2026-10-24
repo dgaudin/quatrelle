@@ -34,15 +34,17 @@ const LAYERS: &[(&str, u8)] = &[
     ("quatrelle-mime", 1),
     ("quatrelle-store", 1),
     ("quatrelle-print", 1),
+    ("quatrelle-smime", 1),
     ("quatrelle-spell", 1),
     ("quatrelle-jmap", 2),
+    ("quatrelle-keys", 2),
     ("quatrelle-net", 3),
     ("quatrelle-engine", 4),
     ("quatrelle-ui-egui", 6),
 ];
 
 /// Crates that never build for the web (sockets, threads, TLS).
-const NATIVE_ONLY: &[&str] = &["quatrelle-net"];
+const NATIVE_ONLY: &[&str] = &["quatrelle-keys", "quatrelle-net"];
 
 /// External crates that belong to one layer only.
 const RESTRICTED: &[(&str, &[&str])] = &[

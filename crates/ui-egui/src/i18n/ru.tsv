@@ -1275,3 +1275,113 @@ month	May	Май
 	Hide it again	Снова скрыть
 	Sent mail waiting for a reply	Отправленные письма, ждущие ответа
 	Awaiting reply	Ждёт ответа
+	its certificate isn't from an authority this computer trusts	его сертификат выдан не тем центром, которому доверяет этот компьютер
+	its certificate ran out on {date}	срок действия его сертификата истёк {date}
+	its certificate isn't valid until {date}	его сертификат действует только с {date}
+	its certificate is for {addresses}, not for the sender	его сертификат выдан для {addresses}, а не для отправителя
+	its certificate isn't for signing email	его сертификат не предназначен для подписи писем
+	Encrypted. Decrypting it…	Зашифровано. Расшифровка…
+	This message is encrypted, and it couldn't be decrypted: {error}	Это письмо зашифровано, и его не удалось расшифровать: {error}
+	It isn't signed, so it could have been changed on the way: be careful with what it asks.	Оно не подписано, поэтому могло быть изменено по пути: будьте осторожны с тем, о чём оно просит.
+	Encrypted: only you and its other recipients can read it.	Зашифровано: прочитать его можете только вы и другие получатели.
+	Issued by {issuer}, valid until {date}	Выдан: {issuer}, действует до {date}
+	Signed {date}	Подписано: {date}
+	Signed with SHA-1, which no longer proves much.	Подписано с SHA-1, который уже мало что доказывает.
+	Signed by {signer}: the signature holds (certificate from {issuer}).	Подписано: {signer}. Подпись верна (сертификат выдан: {issuer}).
+	Signed by {signer}, but {why}.	Подписано: {signer}, но {why}.
+	The signature doesn't hold: {why}.	Подпись неверна: {why}.
+	Sign your messages so people can tell they're from you, and read and send encrypted mail, with a certificate (S/MIME).	Подписывайте письма, чтобы было видно, что они от вас, и читайте и отправляйте зашифрованную почту с помощью сертификата (S/MIME).
+	Security	Безопасность
+	No certificate	Сертификата нет
+	Import the .p12 or .pfx file your certificate came in.	Импортируйте файл .p12 или .pfx, в котором пришёл ваш сертификат.
+	Import certificate…	Импортировать сертификат…
+	It ran out on {date}: messages can't be signed with it any more.	Срок действия истёк {date}: подписывать им письма больше нельзя.
+	Forget this certificate: its key goes from the keychain too	Забыть этот сертификат: его ключ тоже удаляется из связки ключей
+	Replace…	Заменить…
+	Sign new messages	Подписывать новые письма
+	Encrypt new messages	Шифровать новые письма
+	Each recipient needs to have sent you a signed message first; replies to encrypted mail are always encrypted.	Каждый получатель должен сначала прислать вам подписанное письмо; ответы на зашифрованные письма всегда шифруются.
+	Certificates from signed mail: {n}	Сертификаты из подписанных писем: {n}
+	Import certificate	Импорт сертификата
+	The password {file} was saved with:	Пароль, с которым сохранён {file}:
+	Its private key is kept in the system's keychain, not in Quatrelle's files.	Закрытый ключ хранится в системной связке ключей, а не в файлах Quatrelle.
+	Import	Импортировать
+	Sign	Подписать
+	Encrypt	Зашифровать
+	Signed with your certificate: the recipients can tell it's from you and unchanged	Подписывается вашим сертификатом: получатели увидят, что письмо от вас и не изменено
+	Only the recipients can read it: each needs to have sent you a signed message	Прочитать смогут только получатели: каждый должен был прислать вам подписанное письмо
+	the message was changed after it was signed, or the signature isn't the sender's	письмо изменено после подписи, или подпись не принадлежит отправителю
+	this account has no certificate to decrypt it with (File › Info › Security)	у этой учётной записи нет сертификата для расшифровки (Файл › Сведения › Безопасность)
+	it can't be decrypted with your certificate	его не удаётся расшифровать вашим сертификатом
+	its account is gone	его учётной записи больше нет
+	Hide the subject of encrypted mail	Скрывать тему зашифрованных писем
+	On the way it reads [...]; the real one is inside, for its recipients (header protection).	В пути видно [...]; настоящая тема внутри, для получателей (защита заголовков).
+	Its subject and addresses were protected inside it too.	Тема и адреса тоже были защищены внутри.
+	Check whether certificates were withdrawn	Проверять, не отозваны ли сертификаты
+	As signed mail is shown, its certificate's authority is asked whether it withdrew it. Its authority then learns whose mail you're reading	При показе подписанного письма у центра, выдавшего сертификат, спрашивается, не отозвал ли он его. Так центр узнаёт, чью почту вы читаете
+	Asking its authority whether the certificate was withdrawn…	Центр сертификации проверяет, не отозван ли сертификат…
+	Its authority says the certificate wasn't withdrawn.	Центр сертификации сообщает, что сертификат не отозван.
+	Whether the certificate was withdrawn couldn't be checked: {why}.	Не удалось проверить, отозван ли сертификат: {why}.
+	its authority withdrew its certificate on {date}	центр сертификации отозвал сертификат {date}
+	its certificate doesn't say where to ask	в сертификате не указано, где спросить
+	its authority's responder didn't answer	служба центра сертификации не ответила
+	its authority's list of withdrawn certificates couldn't be had	не удалось получить список отозванных сертификатов центра
+	the certificate's authority isn't known	центр, выдавший сертификат, неизвестен
+	the list of withdrawn certificates can't be read	список отозванных сертификатов не читается
+	the list isn't from the certificate's authority	список не от центра, выдавшего сертификат
+	the list's signature doesn't hold	подпись списка недействительна
+	the list is from the future	список датирован будущим
+	the list is out of date	список устарел
+	a certificate can't be read	сертификат не читается
+	the OCSP answer can't be read	ответ OCSP не читается
+	the OCSP responder didn't answer	служба OCSP не ответила
+	the OCSP answer is of another kind	ответ OCSP другого вида
+	the OCSP answer isn't signed by the certificate's authority	ответ OCSP не подписан центром, выдавшим сертификат
+	the OCSP answer is about another certificate	ответ OCSP относится к другому сертификату
+	the OCSP answer is from the future	ответ OCSP датирован будущим
+	the OCSP answer is out of date	ответ OCSP устарел
+	the OCSP responder doesn't know the certificate	служба OCSP не знает этот сертификат
+	Use a smart card	Использовать смарт-карту
+	Use a smart card…	Использовать смарт-карту…
+	Find certificates	Найти сертификаты
+	Import the .p12 or .pfx file your certificate came in, or use one on a smart card.	Импортируйте файл .p12 или .pfx, в котором пришёл сертификат, или используйте сертификат со смарт-карты.
+	Look in the Keychain	Искать в связке ключей
+	Looking…	Поиск…
+	The card's PIN	PIN-код карты
+	The key stays on the card; its PIN is kept in the system's keychain.	Ключ остаётся на карте; PIN-код хранится в связке ключей системы.
+	The module your card came with (OpenSC's reads most cards):	Модуль, который прилагается к карте (модуль OpenSC читает большинство карт):
+	Use	Использовать
+	no certificate with its key was found	сертификат с ключом не найден
+	the PIN is wrong, or the card is locked	неверный PIN-код или карта заблокирована
+	this system's keychain can't sign for Quatrelle: use a smart card's module, or import a .p12 file	связка ключей этой системы не может подписывать для Quatrelle: используйте модуль смарт-карты или импортируйте файл .p12
+	Unlock	Разблокировать
+	Unlock…	Разблокировать…
+	Unlock certificate	Разблокировать сертификат
+	Your certificate's password, to use it in this browser until the page is closed:	Пароль сертификата, чтобы пользоваться им в этом браузере, пока страница открыта:
+	The browser keeps the file, locked with its password; the password itself isn't kept.	Браузер хранит файл, закрытый паролем; сам пароль не хранится.
+	Give its password again to sign and decrypt in this page	Введите пароль снова, чтобы подписывать и расшифровывать на этой странице
+	your certificate is locked in this browser: unlock it with its password (File › Info › Security)	сертификат заблокирован в этом браузере: разблокируйте его паролем (Файл › Сведения › Безопасность)
+	there's no certificate kept in this browser: import its .p12 file	в этом браузере нет сохранённого сертификата: импортируйте его файл .p12
+	smart cards and the system's keychain are used by the Quatrelle desktop app, not in the browser	смарт-карты и связка ключей системы используются в настольном приложении Quatrelle, а не в браузере
+	the browser can't ask a certificate's authority	браузер не может обратиться к центру сертификации
+	A certificate this computer already has, its key staying where it is	Сертификат, который уже есть на этом компьютере; ключ остаётся на месте
+	Look in Windows	Искать в Windows
+	The certificates for email in your Keychain. The key stays there; macOS may ask before it's used.	Сертификаты для почты в вашей связке ключей. Ключ остаётся там; macOS может спросить перед его использованием.
+	The certificates for email in your Windows certificate store (Personal). The key stays in Windows; it may ask before it's used.	Сертификаты для почты в вашем хранилище сертификатов Windows (Личное). Ключ остаётся в Windows; перед использованием может появиться запрос.
+	Use a certificate from Windows	Использовать сертификат из Windows
+	Use a certificate from the Keychain	Использовать сертификат из связки ключей
+	Use one from Windows…	Взять из Windows…
+	Use one from the Keychain…	Взять из связки ключей…
+	the certificate is in another computer's certificate store	сертификат находится в хранилище сертификатов другого компьютера
+	Or use one this computer has	Или взять тот, что есть на этом компьютере
+	On a smart card, or kept by the system: the key stays where it is.	На смарт-карте или в хранилище системы: ключ остаётся на месте.
+	Windows can't agree a key with this EC key (its provider may keep it for signing only)	Windows не может согласовать ключ с этим EC-ключом (возможно, поставщик держит его только для подписи)
+	the card has few PIN tries left, so Quatrelle won't try it: give its PIN again (File › Info › Security › Use a smart card…)	у карты осталось мало попыток ввода PIN-кода, поэтому Quatrelle не будет пробовать: введите PIN-код снова (Файл › Сведения › Безопасность › Использовать смарт-карту…)
+	the list holds only what changed since another one	в списке только изменения с момента другого списка
+	the list covers only some certificates or reasons	список охватывает лишь часть сертификатов или причин
+	the list is for other certificates	список относится к другим сертификатам
+	the list has a part Quatrelle can't read	в списке есть часть, которую Quatrelle не может прочитать
+	the list's entry for the certificate can't be read	запись списка об этом сертификате не читается
+	the certificate has no password, so the browser uses it until the page is closed and doesn't keep it	у сертификата нет пароля, поэтому браузер использует его, пока страница открыта, и не сохраняет
+	the card needs its PIN (give it in File › Info › Security › Use a smart card…)	карте нужен PIN-код (введите его в Файл › Сведения › Безопасность › Использовать смарт-карту…)
+	the card refused its PIN, so Quatrelle forgot it: the card would lock if it were tried again (give it again in File › Info › Security › Use a smart card…)	карта отклонила PIN-код, поэтому Quatrelle забыл его: при повторной попытке карта заблокируется (введите его снова в Файл › Сведения › Безопасность › Использовать смарт-карту…)

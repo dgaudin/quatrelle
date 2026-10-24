@@ -1272,3 +1272,113 @@ month	May	מאי
 	Hide it again	להסתיר שוב
 	Sent mail waiting for a reply	דואר שנשלח וממתין לתשובה
 	Awaiting reply	ממתין לתשובה
+	its certificate isn't from an authority this computer trusts	התעודה שלו אינה מרשות שהמחשב הזה סומך עליה
+	its certificate ran out on {date}	תוקף התעודה שלו פג ב־{date}
+	its certificate isn't valid until {date}	התעודה שלו אינה בתוקף עד {date}
+	its certificate is for {addresses}, not for the sender	התעודה שלו מיועדת ל־{addresses}, לא לשולח
+	its certificate isn't for signing email	התעודה שלו אינה מיועדת לחתימת דואר
+	Encrypted. Decrypting it…	מוצפנת. מפענחים אותה…
+	This message is encrypted, and it couldn't be decrypted: {error}	ההודעה הזו מוצפנת, ולא ניתן היה לפענח אותה: {error}
+	It isn't signed, so it could have been changed on the way: be careful with what it asks.	היא אינה חתומה, ולכן ייתכן ששונתה בדרך: היזהרו במה שהיא מבקשת.
+	Encrypted: only you and its other recipients can read it.	מוצפנת: רק אתם ושאר הנמענים יכולים לקרוא אותה.
+	Issued by {issuer}, valid until {date}	הונפקה על ידי {issuer}, בתוקף עד {date}
+	Signed {date}	נחתמה: {date}
+	Signed with SHA-1, which no longer proves much.	נחתמה ב־SHA-1, שכבר אינו מוכיח הרבה.
+	Signed by {signer}: the signature holds (certificate from {issuer}).	נחתמה על ידי {signer}: החתימה תקפה (תעודה מ־{issuer}).
+	Signed by {signer}, but {why}.	נחתמה על ידי {signer}, אבל {why}.
+	The signature doesn't hold: {why}.	החתימה אינה תקפה: {why}.
+	Sign your messages so people can tell they're from you, and read and send encrypted mail, with a certificate (S/MIME).	חתמו על ההודעות כדי שידעו שהן מכם, וקראו ושלחו דואר מוצפן, בעזרת תעודה (S/MIME).
+	Security	אבטחה
+	No certificate	אין תעודה
+	Import the .p12 or .pfx file your certificate came in.	ייבאו את קובץ ה־‎.p12 או ה־‎.pfx שבו הגיעה התעודה.
+	Import certificate…	ייבוא תעודה…
+	It ran out on {date}: messages can't be signed with it any more.	תוקפה פג ב־{date}: אי אפשר עוד לחתום בה על הודעות.
+	Forget this certificate: its key goes from the keychain too	לשכוח את התעודה הזו: גם המפתח שלה יימחק ממחזיק המפתחות
+	Replace…	החלפה…
+	Sign new messages	לחתום על הודעות חדשות
+	Encrypt new messages	להצפין הודעות חדשות
+	Each recipient needs to have sent you a signed message first; replies to encrypted mail are always encrypted.	כל נמען צריך לשלוח לכם קודם הודעה חתומה; תשובות לדואר מוצפן תמיד מוצפנות.
+	Certificates from signed mail: {n}	תעודות מדואר חתום: {n}
+	Import certificate	ייבוא תעודה
+	The password {file} was saved with:	הסיסמה שבה נשמר {file}:
+	Its private key is kept in the system's keychain, not in Quatrelle's files.	המפתח הפרטי שלה נשמר במחזיק המפתחות של המערכת, לא בקבצים של Quatrelle.
+	Import	ייבוא
+	Sign	חתימה
+	Encrypt	הצפנה
+	Signed with your certificate: the recipients can tell it's from you and unchanged	חתומה בתעודה שלכם: הנמענים יידעו שהיא מכם ושלא שונתה
+	Only the recipients can read it: each needs to have sent you a signed message	רק הנמענים יכולים לקרוא אותה: כל אחד צריך לשלוח לכם הודעה חתומה
+	the message was changed after it was signed, or the signature isn't the sender's	ההודעה שונתה אחרי שנחתמה, או שהחתימה אינה של השולח
+	this account has no certificate to decrypt it with (File › Info › Security)	לחשבון הזה אין תעודה לפענוח (קובץ › מידע › אבטחה)
+	it can't be decrypted with your certificate	לא ניתן לפענח אותה בתעודה שלכם
+	its account is gone	החשבון שלה כבר לא קיים
+	Hide the subject of encrypted mail	להסתיר את הנושא של דואר מוצפן
+	On the way it reads [...]; the real one is inside, for its recipients (header protection).	בדרך כתוב [...]; הנושא האמיתי נמצא בפנים, לנמענים (הגנת כותרות).
+	Its subject and addresses were protected inside it too.	גם הנושא והכתובות שלה היו מוגנים בתוכה.
+	Check whether certificates were withdrawn	לבדוק אם תעודות נשללו
+	As signed mail is shown, its certificate's authority is asked whether it withdrew it. Its authority then learns whose mail you're reading	כשמוצג דואר חתום, נשאלת הרשות שהנפיקה את התעודה אם שללה אותה. כך הרשות יודעת של מי הדואר שאתה קורא
+	Asking its authority whether the certificate was withdrawn…	שואלים את הרשות אם התעודה נשללה…
+	Its authority says the certificate wasn't withdrawn.	הרשות אומרת שהתעודה לא נשללה.
+	Whether the certificate was withdrawn couldn't be checked: {why}.	לא ניתן היה לבדוק אם התעודה נשללה: {why}.
+	its authority withdrew its certificate on {date}	הרשות שללה את התעודה שלו ב־{date}
+	its certificate doesn't say where to ask	התעודה לא מציינת איפה לשאול
+	its authority's responder didn't answer	שירות הרשות לא ענה
+	its authority's list of withdrawn certificates couldn't be had	לא ניתן היה לקבל את רשימת התעודות שנשללו מהרשות
+	the certificate's authority isn't known	הרשות של התעודה אינה ידועה
+	the list of withdrawn certificates can't be read	לא ניתן לקרוא את רשימת התעודות שנשללו
+	the list isn't from the certificate's authority	הרשימה אינה מהרשות של התעודה
+	the list's signature doesn't hold	החתימה של הרשימה אינה תקפה
+	the list is from the future	הרשימה מתוארכת לעתיד
+	the list is out of date	הרשימה אינה עדכנית
+	a certificate can't be read	לא ניתן לקרוא תעודה
+	the OCSP answer can't be read	לא ניתן לקרוא את תשובת ה־OCSP
+	the OCSP responder didn't answer	שירות ה־OCSP לא ענה
+	the OCSP answer is of another kind	תשובת ה־OCSP מסוג אחר
+	the OCSP answer isn't signed by the certificate's authority	תשובת ה־OCSP אינה חתומה על ידי הרשות של התעודה
+	the OCSP answer is about another certificate	תשובת ה־OCSP עוסקת בתעודה אחרת
+	the OCSP answer is from the future	תשובת ה־OCSP מתוארכת לעתיד
+	the OCSP answer is out of date	תשובת ה־OCSP אינה עדכנית
+	the OCSP responder doesn't know the certificate	שירות ה־OCSP אינו מכיר את התעודה
+	Use a smart card	שימוש בכרטיס חכם
+	Use a smart card…	שימוש בכרטיס חכם…
+	Find certificates	חיפוש תעודות
+	Import the .p12 or .pfx file your certificate came in, or use one on a smart card.	ייבא את קובץ ה־‎.p12 או ה־‎.pfx שבו הגיעה התעודה שלך, או השתמש בתעודה שעל כרטיס חכם.
+	Look in the Keychain	חיפוש במחזיק המפתחות
+	Looking…	מחפשים…
+	The card's PIN	קוד ה־PIN של הכרטיס
+	The key stays on the card; its PIN is kept in the system's keychain.	המפתח נשאר על הכרטיס; קוד ה־PIN נשמר במחזיק המפתחות של המערכת.
+	The module your card came with (OpenSC's reads most cards):	המודול שהגיע עם הכרטיס (המודול של OpenSC קורא את רוב הכרטיסים):
+	Use	שימוש
+	no certificate with its key was found	לא נמצאה תעודה עם המפתח שלה
+	the PIN is wrong, or the card is locked	קוד ה־PIN שגוי, או שהכרטיס נעול
+	this system's keychain can't sign for Quatrelle: use a smart card's module, or import a .p12 file	מחזיק המפתחות של מערכת זו אינו יכול לחתום עבור Quatrelle: השתמש במודול של כרטיס חכם, או ייבא קובץ ‎.p12
+	Unlock	ביטול נעילה
+	Unlock…	ביטול נעילה…
+	Unlock certificate	ביטול נעילת התעודה
+	Your certificate's password, to use it in this browser until the page is closed:	הסיסמה של התעודה שלך, כדי להשתמש בה בדפדפן הזה עד שהדף ייסגר:
+	The browser keeps the file, locked with its password; the password itself isn't kept.	הדפדפן שומר את הקובץ, נעול בסיסמה שלו; הסיסמה עצמה לא נשמרת.
+	Give its password again to sign and decrypt in this page	הזן שוב את הסיסמה כדי לחתום ולפענח בדף הזה
+	your certificate is locked in this browser: unlock it with its password (File › Info › Security)	התעודה שלך נעולה בדפדפן הזה: בטל את הנעילה עם הסיסמה שלה (קובץ › מידע › אבטחה)
+	there's no certificate kept in this browser: import its .p12 file	אין תעודה שמורה בדפדפן הזה: ייבא את קובץ ה־‎.p12 שלה
+	smart cards and the system's keychain are used by the Quatrelle desktop app, not in the browser	כרטיסים חכמים ומחזיק המפתחות של המערכת משמשים באפליקציית Quatrelle לשולחן העבודה, לא בדפדפן
+	the browser can't ask a certificate's authority	הדפדפן אינו יכול לשאול את הרשות של תעודה
+	A certificate this computer already has, its key staying where it is	תעודה שכבר יש במחשב הזה; המפתח שלה נשאר במקומו
+	Look in Windows	חיפוש ב־Windows
+	The certificates for email in your Keychain. The key stays there; macOS may ask before it's used.	התעודות לדואר במחזיק המפתחות שלך. המפתח נשאר שם; ‏macOS עשויה לשאול לפני השימוש בו.
+	The certificates for email in your Windows certificate store (Personal). The key stays in Windows; it may ask before it's used.	התעודות לדואר במאגר התעודות של Windows שלך (אישי). המפתח נשאר ב־Windows; ייתכן שתופיע שאלה לפני השימוש בו.
+	Use a certificate from Windows	שימוש בתעודה מ־Windows
+	Use a certificate from the Keychain	שימוש בתעודה ממחזיק המפתחות
+	Use one from Windows…	שימוש בתעודה מ־Windows…
+	Use one from the Keychain…	שימוש בתעודה ממחזיק המפתחות…
+	the certificate is in another computer's certificate store	התעודה נמצאת במאגר התעודות של מחשב אחר
+	Or use one this computer has	או שימוש בתעודה שיש במחשב הזה
+	On a smart card, or kept by the system: the key stays where it is.	על כרטיס חכם, או שמור במערכת: המפתח נשאר במקומו.
+	Windows can't agree a key with this EC key (its provider may keep it for signing only)	Windows אינו יכול להסכים על מפתח עם מפתח ה־EC הזה (ייתכן שהספק שלו שומר אותו לחתימה בלבד)
+	the card has few PIN tries left, so Quatrelle won't try it: give its PIN again (File › Info › Security › Use a smart card…)	נותרו לכרטיס מעט ניסיונות PIN, ולכן Quatrelle לא ינסה: הזן שוב את ה־PIN (קובץ › מידע › אבטחה › שימוש בכרטיס חכם…)
+	the list holds only what changed since another one	הרשימה מכילה רק את מה שהשתנה מאז רשימה אחרת
+	the list covers only some certificates or reasons	הרשימה מכסה רק חלק מהתעודות או מהסיבות
+	the list is for other certificates	הרשימה מיועדת לתעודות אחרות
+	the list has a part Quatrelle can't read	ברשימה יש חלק ש־Quatrelle אינו יכול לקרוא
+	the list's entry for the certificate can't be read	לא ניתן לקרוא את רשומת הרשימה עבור התעודה
+	the certificate has no password, so the browser uses it until the page is closed and doesn't keep it	לתעודה אין סיסמה, ולכן הדפדפן משתמש בה עד שהדף ייסגר ואינו שומר אותה
+	the card needs its PIN (give it in File › Info › Security › Use a smart card…)	הכרטיס צריך את ה־PIN שלו (הזן אותו בקובץ › מידע › אבטחה › שימוש בכרטיס חכם…)
+	the card refused its PIN, so Quatrelle forgot it: the card would lock if it were tried again (give it again in File › Info › Security › Use a smart card…)	הכרטיס דחה את ה־PIN, ולכן Quatrelle שכח אותו: הכרטיס היה ננעל אילו נוסה שוב (הזן אותו שוב בקובץ › מידע › אבטחה › שימוש בכרטיס חכם…)

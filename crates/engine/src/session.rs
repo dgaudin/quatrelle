@@ -35,7 +35,7 @@ pub mod pim;
 mod prefs;
 pub mod scheduling;
 mod searching;
-mod vote;
+mod security;
 mod writing;
 // The list's, the settings', the message being written's and organizing mail's own parts,
 // named here as before.
@@ -44,6 +44,7 @@ use listing::{Preview, person, size_group};
 use mailboxes::Contacts;
 pub use organize::{RulesScope, junk, quick_steps, search_folders};
 pub use prefs::{ListLayout, NotesOrder, Prefs, ReadInPane, ReadingPane};
+pub use security::{CardSearch, KnownCert, Lock, RevocationCheck, SMIME_DOC, Seal, Security, SignedBy, SmimeSettings};
 pub use writing::{Compose, ItemChoice, ItemKind, SendCheck, add_pictures, style_signature};
 
 /// One account and what the session knows about it.
@@ -215,6 +216,8 @@ pub struct Reading {
     /// Who it says it's from doesn't add up: a lookalike of a domain the user deals with, or
     /// another address shown in the sender's name.
     pub warning: Option<quatrelle_model::lookalike::SenderWarning>,
+    /// Signed or encrypted (S/MIME), and how that went.
+    pub security: Option<Security>,
 }
 
 /// A status-bar message.
@@ -409,6 +412,17 @@ pub struct Session {
     /// The domains the user deals with ([`Session::known_domains`]), and the address book's
     /// revision they were counted from.
     known_domains: Option<(u64, BTreeSet<String>)>,
+    /// S/MIME: each account's settings, the roots trusted for email, decrypted messages (in
+    /// memory only: the MIME entity inside, and whether it was authenticated), the ones being
+    /// decrypted and why others couldn't be, and messages waiting to be signed or encrypted.
+    smime: HashMap<String, SmimeSettings>,
+    trust_roots: Vec<Vec<u8>>,
+    opened: HashMap<MessageKey, (Vec<u8>, bool)>,
+    opening: HashSet<MessageKey>,
+    decrypt_errors: HashMap<MessageKey, String>,
+    protecting: HashMap<u64, security::Protecting>,
+    revocation: security::Revocations,
+    cards: security::CardSearch,
     /// The highest UID seen per Inbox, so only mail that arrives later is announced.
     pub(crate) seen_uid: HashMap<(String, String), u32>,
     /// New mail to announce (desktop notifications), oldest first.
@@ -535,6 +549,14 @@ impl Session {
             cache_limit: CACHE_MESSAGES,
             contacts: Contacts::default(),
             known_domains: None,
+            smime: HashMap::new(),
+            trust_roots: Vec::new(),
+            opened: HashMap::new(),
+            opening: HashSet::new(),
+            decrypt_errors: HashMap::new(),
+            protecting: HashMap::new(),
+            revocation: Default::default(),
+            cards: Default::default(),
             seen_uid: HashMap::new(),
             new_mail: Vec::new(),
             rules: Vec::new(),
@@ -629,6 +651,7 @@ impl Session {
         }
         s.refresh_outbox();
         s.load_pim();
+        s.load_smime();
         s.view = s.default_view();
         s.refresh_list();
         s

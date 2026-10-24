@@ -1273,3 +1273,113 @@ month	May	5月
 	Hide it again	再次隐藏
 	Sent mail waiting for a reply	等待回复的已发送邮件
 	Awaiting reply	等待回复
+	its certificate isn't from an authority this computer trusts	其证书不是由这台电脑信任的机构颁发的
+	its certificate ran out on {date}	其证书已于 {date} 过期
+	its certificate isn't valid until {date}	其证书要到 {date} 才生效
+	its certificate is for {addresses}, not for the sender	其证书属于 {addresses}，而不是发件人
+	its certificate isn't for signing email	其证书不能用于签名邮件
+	Encrypted. Decrypting it…	已加密。正在解密…
+	This message is encrypted, and it couldn't be decrypted: {error}	这封邮件已加密，无法解密：{error}
+	It isn't signed, so it could have been changed on the way: be careful with what it asks.	它没有签名，可能在途中被改动过：请谨慎对待其中的要求。
+	Encrypted: only you and its other recipients can read it.	已加密：只有你和其他收件人能读。
+	Issued by {issuer}, valid until {date}	由 {issuer} 颁发，有效期至 {date}
+	Signed {date}	签名时间：{date}
+	Signed with SHA-1, which no longer proves much.	使用 SHA-1 签名，已不太可靠。
+	Signed by {signer}: the signature holds (certificate from {issuer}).	由 {signer} 签名：签名有效（证书来自 {issuer}）。
+	Signed by {signer}, but {why}.	由 {signer} 签名，但{why}。
+	The signature doesn't hold: {why}.	签名无效：{why}。
+	Sign your messages so people can tell they're from you, and read and send encrypted mail, with a certificate (S/MIME).	用证书（S/MIME）为邮件签名，让别人知道是你发的，并读写加密邮件。
+	Security	安全
+	No certificate	没有证书
+	Import the .p12 or .pfx file your certificate came in.	导入证书所在的 .p12 或 .pfx 文件。
+	Import certificate…	导入证书…
+	It ran out on {date}: messages can't be signed with it any more.	已于 {date} 过期：不能再用它签名邮件。
+	Forget this certificate: its key goes from the keychain too	忘记此证书：其密钥也会从钥匙串中删除
+	Replace…	替换…
+	Sign new messages	为新邮件签名
+	Encrypt new messages	加密新邮件
+	Each recipient needs to have sent you a signed message first; replies to encrypted mail are always encrypted.	每个收件人都需要先给你发过一封签名邮件；对加密邮件的回复总是加密。
+	Certificates from signed mail: {n}	来自签名邮件的证书：{n}
+	Import certificate	导入证书
+	The password {file} was saved with:	保存 {file} 时使用的密码：
+	Its private key is kept in the system's keychain, not in Quatrelle's files.	其私钥保存在系统钥匙串中，而不在 Quatrelle 的文件里。
+	Import	导入
+	Sign	签名
+	Encrypt	加密
+	Signed with your certificate: the recipients can tell it's from you and unchanged	用你的证书签名：收件人能确认是你发的且未被改动
+	Only the recipients can read it: each needs to have sent you a signed message	只有收件人能读：每个人都需要给你发过签名邮件
+	the message was changed after it was signed, or the signature isn't the sender's	邮件在签名后被改动过，或签名不是发件人的
+	this account has no certificate to decrypt it with (File › Info › Security)	此帐户没有可用于解密的证书（文件 › 信息 › 安全）
+	it can't be decrypted with your certificate	无法用你的证书解密
+	its account is gone	其帐户已不存在
+	Hide the subject of encrypted mail	隐藏加密邮件的主题
+	On the way it reads [...]; the real one is inside, for its recipients (header protection).	途中显示为 [...]；真正的主题在里面，只给收件人看（标头保护）。
+	Its subject and addresses were protected inside it too.	它的主题和地址也在里面受到了保护。
+	Check whether certificates were withdrawn	检查证书是否已被吊销
+	As signed mail is shown, its certificate's authority is asked whether it withdrew it. Its authority then learns whose mail you're reading	显示签名邮件时，会询问证书的颁发机构是否已吊销该证书。颁发机构因此会知道你在读谁的邮件
+	Asking its authority whether the certificate was withdrawn…	正在询问颁发机构证书是否已被吊销…
+	Its authority says the certificate wasn't withdrawn.	颁发机构表示该证书未被吊销。
+	Whether the certificate was withdrawn couldn't be checked: {why}.	无法检查证书是否已被吊销：{why}。
+	its authority withdrew its certificate on {date}	颁发机构已于 {date} 吊销其证书
+	its certificate doesn't say where to ask	证书未注明向何处查询
+	its authority's responder didn't answer	颁发机构的应答服务没有回应
+	its authority's list of withdrawn certificates couldn't be had	无法获取颁发机构的吊销证书列表
+	the certificate's authority isn't known	证书的颁发机构未知
+	the list of withdrawn certificates can't be read	无法读取吊销证书列表
+	the list isn't from the certificate's authority	该列表不是证书颁发机构发布的
+	the list's signature doesn't hold	列表的签名无效
+	the list is from the future	列表的日期在未来
+	the list is out of date	列表已过期
+	a certificate can't be read	无法读取证书
+	the OCSP answer can't be read	无法读取 OCSP 应答
+	the OCSP responder didn't answer	OCSP 服务没有回应
+	the OCSP answer is of another kind	OCSP 应答属于其他类型
+	the OCSP answer isn't signed by the certificate's authority	OCSP 应答不是证书颁发机构签名的
+	the OCSP answer is about another certificate	OCSP 应答针对的是另一张证书
+	the OCSP answer is from the future	OCSP 应答的日期在未来
+	the OCSP answer is out of date	OCSP 应答已过期
+	the OCSP responder doesn't know the certificate	OCSP 服务不认识该证书
+	Use a smart card	使用智能卡
+	Use a smart card…	使用智能卡…
+	Find certificates	查找证书
+	Import the .p12 or .pfx file your certificate came in, or use one on a smart card.	导入证书附带的 .p12 或 .pfx 文件，或使用智能卡上的证书。
+	Look in the Keychain	在钥匙串中查找
+	Looking…	正在查找…
+	The card's PIN	卡的 PIN 码
+	The key stays on the card; its PIN is kept in the system's keychain.	密钥留在卡上；PIN 码保存在系统钥匙串中。
+	The module your card came with (OpenSC's reads most cards):	卡附带的模块（OpenSC 的模块能读取大多数卡）：
+	Use	使用
+	no certificate with its key was found	未找到带有密钥的证书
+	the PIN is wrong, or the card is locked	PIN 码错误，或卡已被锁定
+	this system's keychain can't sign for Quatrelle: use a smart card's module, or import a .p12 file	此系统的钥匙串无法为 Quatrelle 签名：请使用智能卡的模块，或导入 .p12 文件
+	Unlock	解锁
+	Unlock…	解锁…
+	Unlock certificate	解锁证书
+	Your certificate's password, to use it in this browser until the page is closed:	证书的密码，用于在关闭页面之前在此浏览器中使用：
+	The browser keeps the file, locked with its password; the password itself isn't kept.	浏览器会保存该文件（用其密码锁定）；密码本身不会保存。
+	Give its password again to sign and decrypt in this page	再次输入密码，以便在此页面中签名和解密
+	your certificate is locked in this browser: unlock it with its password (File › Info › Security)	你的证书在此浏览器中已锁定：请用其密码解锁（文件 › 信息 › 安全）
+	there's no certificate kept in this browser: import its .p12 file	此浏览器中没有保存证书：请导入其 .p12 文件
+	smart cards and the system's keychain are used by the Quatrelle desktop app, not in the browser	智能卡和系统钥匙串由 Quatrelle 桌面应用使用，浏览器中不可用
+	the browser can't ask a certificate's authority	浏览器无法询问证书的颁发机构
+	A certificate this computer already has, its key staying where it is	这台电脑上已有的证书，其密钥保留在原处
+	Look in Windows	在 Windows 中查找
+	The certificates for email in your Keychain. The key stays there; macOS may ask before it's used.	你钥匙串中的电子邮件证书。密钥保留在那里；使用前 macOS 可能会询问。
+	The certificates for email in your Windows certificate store (Personal). The key stays in Windows; it may ask before it's used.	你的 Windows 证书存储（个人）中的电子邮件证书。密钥保留在 Windows 中；使用前可能会询问。
+	Use a certificate from Windows	使用 Windows 中的证书
+	Use a certificate from the Keychain	使用钥匙串中的证书
+	Use one from Windows…	使用 Windows 中的…
+	Use one from the Keychain…	使用钥匙串中的…
+	the certificate is in another computer's certificate store	该证书在另一台电脑的证书存储中
+	Or use one this computer has	或使用这台电脑上已有的证书
+	On a smart card, or kept by the system: the key stays where it is.	在智能卡上，或由系统保管：密钥保留在原处。
+	Windows can't agree a key with this EC key (its provider may keep it for signing only)	Windows 无法用此 EC 密钥协商密钥（其提供程序可能仅将其用于签名）
+	the card has few PIN tries left, so Quatrelle won't try it: give its PIN again (File › Info › Security › Use a smart card…)	这张卡剩余的 PIN 尝试次数不多，所以 Quatrelle 不会尝试：请再次输入 PIN（文件 › 信息 › 安全 › 使用智能卡…）
+	the list holds only what changed since another one	该列表只包含自另一列表以来的更改
+	the list covers only some certificates or reasons	该列表只涵盖部分证书或原因
+	the list is for other certificates	该列表针对的是其他证书
+	the list has a part Quatrelle can't read	该列表中有 Quatrelle 无法读取的部分
+	the list's entry for the certificate can't be read	无法读取列表中该证书的条目
+	the certificate has no password, so the browser uses it until the page is closed and doesn't keep it	该证书没有密码，所以浏览器只在关闭页面前使用它，不会保存
+	the card needs its PIN (give it in File › Info › Security › Use a smart card…)	这张卡需要 PIN（文件 › 信息 › 安全 › 使用智能卡…）
+	the card refused its PIN, so Quatrelle forgot it: the card would lock if it were tried again (give it again in File › Info › Security › Use a smart card…)	这张卡拒绝了 PIN，所以 Quatrelle 已将其忘记：再次尝试会锁定卡（文件 › 信息 › 安全 › 使用智能卡…）

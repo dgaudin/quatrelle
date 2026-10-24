@@ -36,6 +36,8 @@ pub(crate) struct RibbonInput<'a> {
     /// Delay Delivery (a server account), Voting Buttons (Exchange).
     pub can_delay: bool,
     pub can_vote: bool,
+    /// The sending account has an S/MIME certificate: Encrypt and Sign are offered.
+    pub has_cert: bool,
     /// Written in a window of its own; and windows can open at all (not the browser).
     pub in_window: bool,
     pub can_pop: bool,
@@ -371,12 +373,29 @@ fn tags(ui: &mut Ui, t: Tokens, c: &mut Compose) {
     }
 }
 
-/// Options: Bcc, a read receipt, voting buttons, delay delivery, where replies go, the format.
+/// Options: Bcc, encrypting and signing (S/MIME), a read receipt, voting buttons, delay delivery,
+/// where replies go, the format.
 fn options(ui: &mut Ui, t: Tokens, c: &mut Compose, input: &RibbonInput<'_>, groups: &mut Groups) {
     if widgets::big_toggle(ui, Icon::Bcc, "Bcc", &t, c.show_cc).on_hover_text(tl!("Hidden from the other recipients")).clicked() {
         c.show_cc = !c.show_cc;
     }
     groups.end(ui, &t, "Show Fields");
+    // Outlook's Encrypt group, for an account with a certificate.
+    if input.has_cert {
+        if widgets::big_toggle(ui, Icon::Lock, "Encrypt", &t, c.encrypt)
+            .on_hover_text(tl!("Only the recipients can read it: each needs to have sent you a signed message"))
+            .clicked()
+        {
+            c.encrypt = !c.encrypt;
+        }
+        if widgets::big_toggle(ui, Icon::Seal, "Sign", &t, c.sign)
+            .on_hover_text(tl!("Signed with your certificate: the recipients can tell it's from you and unchanged"))
+            .clicked()
+        {
+            c.sign = !c.sign;
+        }
+        groups.end(ui, &t, "Encrypt");
+    }
     if widgets::big_toggle(ui, Icon::Read, "Read receipt", &t, c.read_receipt)
         .on_hover_text(tl!("Ask the recipients to confirm they've read it (their mail app may not, or may ask them)"))
         .clicked()

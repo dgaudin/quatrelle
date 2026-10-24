@@ -58,6 +58,11 @@ pub struct Compose {
     /// The Replies to row is shown.
     #[serde(default)]
     pub show_reply_to: bool,
+    /// S/MIME: signed, and encrypted to its recipients, as it's sent.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub sign: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub encrypt: bool,
     /// The language its spelling is checked in (`fr`, `en`…, as the dictionaries are named;
     /// empty: the interface's, when there's a dictionary for it; `all`: every dictionary), as
     /// Outlook's Review › Language.

@@ -1273,3 +1273,113 @@ month	May	5月
 	Hide it again	もう一度隠す
 	Sent mail waiting for a reply	返信待ちの送信済みメール
 	Awaiting reply	返信待ち
+	its certificate isn't from an authority this computer trusts	証明書がこのコンピューターの信頼する発行元のものではありません
+	its certificate ran out on {date}	証明書は {date} に期限切れになりました
+	its certificate isn't valid until {date}	証明書は {date} まで有効になりません
+	its certificate is for {addresses}, not for the sender	証明書は {addresses} のもので、差出人のものではありません
+	its certificate isn't for signing email	証明書はメールの署名用ではありません
+	Encrypted. Decrypting it…	暗号化されています。復号しています…
+	This message is encrypted, and it couldn't be decrypted: {error}	このメッセージは暗号化されており、復号できませんでした: {error}
+	It isn't signed, so it could have been changed on the way: be careful with what it asks.	署名されていないため、途中で変更された可能性があります。求められている内容に注意してください。
+	Encrypted: only you and its other recipients can read it.	暗号化: あなたとほかの受信者だけが読めます。
+	Issued by {issuer}, valid until {date}	発行元 {issuer}、{date} まで有効
+	Signed {date}	署名日時: {date}
+	Signed with SHA-1, which no longer proves much.	SHA-1 で署名されており、今ではあまり証明になりません。
+	Signed by {signer}: the signature holds (certificate from {issuer}).	{signer} による署名: 署名は有効です (証明書の発行元 {issuer})。
+	Signed by {signer}, but {why}.	{signer} による署名ですが、{why}。
+	The signature doesn't hold: {why}.	署名が有効ではありません: {why}。
+	Sign your messages so people can tell they're from you, and read and send encrypted mail, with a certificate (S/MIME).	証明書 (S/MIME) を使って、メッセージに署名してあなたからだとわかるようにしたり、暗号化メールを読み書きしたりします。
+	Security	セキュリティ
+	No certificate	証明書なし
+	Import the .p12 or .pfx file your certificate came in.	証明書が入っている .p12 または .pfx ファイルを取り込みます。
+	Import certificate…	証明書を取り込む…
+	It ran out on {date}: messages can't be signed with it any more.	{date} に期限切れになりました。これ以上メッセージに署名できません。
+	Forget this certificate: its key goes from the keychain too	この証明書を削除します。キーもキーチェーンから削除されます
+	Replace…	置き換える…
+	Sign new messages	新しいメッセージに署名する
+	Encrypt new messages	新しいメッセージを暗号化する
+	Each recipient needs to have sent you a signed message first; replies to encrypted mail are always encrypted.	各受信者から先に署名付きメッセージを受け取っている必要があります。暗号化メールへの返信は常に暗号化されます。
+	Certificates from signed mail: {n}	署名付きメールの証明書: {n}
+	Import certificate	証明書の取り込み
+	The password {file} was saved with:	{file} の保存時のパスワード:
+	Its private key is kept in the system's keychain, not in Quatrelle's files.	秘密鍵は Quatrelle のファイルではなく、システムのキーチェーンに保管されます。
+	Import	取り込む
+	Sign	署名
+	Encrypt	暗号化
+	Signed with your certificate: the recipients can tell it's from you and unchanged	あなたの証明書で署名します。受信者はあなたからのもので変更されていないとわかります
+	Only the recipients can read it: each needs to have sent you a signed message	受信者だけが読めます。各受信者から署名付きメッセージを受け取っている必要があります
+	the message was changed after it was signed, or the signature isn't the sender's	署名後にメッセージが変更されたか、署名が差出人のものではありません
+	this account has no certificate to decrypt it with (File › Info › Security)	このアカウントには復号に使う証明書がありません (ファイル › 情報 › セキュリティ)
+	it can't be decrypted with your certificate	あなたの証明書では復号できません
+	its account is gone	そのアカウントはもうありません
+	Hide the subject of encrypted mail	暗号化メールの件名を隠す
+	On the way it reads [...]; the real one is inside, for its recipients (header protection).	途中では [...] と表示され、本当の件名は受信者向けに中に入っています (ヘッダー保護)。
+	Its subject and addresses were protected inside it too.	件名とアドレスも中で保護されていました。
+	Check whether certificates were withdrawn	証明書が取り消されたかどうかを確認する
+	As signed mail is shown, its certificate's authority is asked whether it withdrew it. Its authority then learns whose mail you're reading	署名付きメールを表示するとき、証明書の発行機関に取り消したかどうかを問い合わせます。発行機関には、だれのメールを読んでいるかが伝わります
+	Asking its authority whether the certificate was withdrawn…	証明書が取り消されたかどうかを発行機関に問い合わせています…
+	Its authority says the certificate wasn't withdrawn.	発行機関によると、証明書は取り消されていません。
+	Whether the certificate was withdrawn couldn't be checked: {why}.	証明書が取り消されたかどうかを確認できませんでした: {why}。
+	its authority withdrew its certificate on {date}	発行機関が {date} に証明書を取り消しました
+	its certificate doesn't say where to ask	証明書に問い合わせ先が書かれていません
+	its authority's responder didn't answer	発行機関の応答サービスが応答しませんでした
+	its authority's list of withdrawn certificates couldn't be had	発行機関の取り消し済み証明書の一覧を取得できませんでした
+	the certificate's authority isn't known	証明書の発行機関がわかりません
+	the list of withdrawn certificates can't be read	取り消し済み証明書の一覧を読み取れません
+	the list isn't from the certificate's authority	一覧が証明書の発行機関のものではありません
+	the list's signature doesn't hold	一覧の署名が正しくありません
+	the list is from the future	一覧の日付が未来になっています
+	the list is out of date	一覧が古くなっています
+	a certificate can't be read	証明書を読み取れません
+	the OCSP answer can't be read	OCSP の応答を読み取れません
+	the OCSP responder didn't answer	OCSP サービスが応答しませんでした
+	the OCSP answer is of another kind	OCSP の応答が別の種類です
+	the OCSP answer isn't signed by the certificate's authority	OCSP の応答が証明書の発行機関によって署名されていません
+	the OCSP answer is about another certificate	OCSP の応答は別の証明書についてのものです
+	the OCSP answer is from the future	OCSP の応答の日付が未来になっています
+	the OCSP answer is out of date	OCSP の応答が古くなっています
+	the OCSP responder doesn't know the certificate	OCSP サービスはこの証明書を知りません
+	Use a smart card	スマートカードを使う
+	Use a smart card…	スマートカードを使う…
+	Find certificates	証明書を探す
+	Import the .p12 or .pfx file your certificate came in, or use one on a smart card.	証明書が入っていた .p12 または .pfx ファイルをインポートするか、スマートカード上の証明書を使います。
+	Look in the Keychain	キーチェーンを探す
+	Looking…	探しています…
+	The card's PIN	カードの PIN
+	The key stays on the card; its PIN is kept in the system's keychain.	鍵はカードに残り、PIN はシステムのキーチェーンに保管されます。
+	The module your card came with (OpenSC's reads most cards):	カードに付属のモジュール (OpenSC のものはほとんどのカードを読めます):
+	Use	使う
+	no certificate with its key was found	鍵付きの証明書が見つかりませんでした
+	the PIN is wrong, or the card is locked	PIN が違うか、カードがロックされています
+	this system's keychain can't sign for Quatrelle: use a smart card's module, or import a .p12 file	このシステムのキーチェーンは Quatrelle のために署名できません。スマートカードのモジュールを使うか、.p12 ファイルをインポートしてください
+	Unlock	ロック解除
+	Unlock…	ロック解除…
+	Unlock certificate	証明書のロックを解除
+	Your certificate's password, to use it in this browser until the page is closed:	ページを閉じるまでこのブラウザーで使うための、証明書のパスワード:
+	The browser keeps the file, locked with its password; the password itself isn't kept.	ブラウザーはパスワードでロックされたファイルを保管します。パスワード自体は保管されません。
+	Give its password again to sign and decrypt in this page	このページで署名と復号をするには、パスワードをもう一度入力します
+	your certificate is locked in this browser: unlock it with its password (File › Info › Security)	このブラウザーでは証明書がロックされています。パスワードでロックを解除してください (ファイル › 情報 › セキュリティ)
+	there's no certificate kept in this browser: import its .p12 file	このブラウザーには証明書が保管されていません。.p12 ファイルをインポートしてください
+	smart cards and the system's keychain are used by the Quatrelle desktop app, not in the browser	スマートカードとシステムのキーチェーンは、ブラウザーではなく Quatrelle デスクトップ アプリで使います
+	the browser can't ask a certificate's authority	ブラウザーは証明書の発行機関に問い合わせできません
+	A certificate this computer already has, its key staying where it is	このコンピューターにすでにある証明書。鍵はその場所に残ります
+	Look in Windows	Windows を探す
+	The certificates for email in your Keychain. The key stays there; macOS may ask before it's used.	キーチェーン内のメール用証明書です。鍵はそこに残り、使う前に macOS が確認することがあります。
+	The certificates for email in your Windows certificate store (Personal). The key stays in Windows; it may ask before it's used.	Windows 証明書ストア (個人) 内のメール用証明書です。鍵は Windows に残り、使う前に確認されることがあります。
+	Use a certificate from Windows	Windows の証明書を使う
+	Use a certificate from the Keychain	キーチェーンの証明書を使う
+	Use one from Windows…	Windows のものを使う…
+	Use one from the Keychain…	キーチェーンのものを使う…
+	the certificate is in another computer's certificate store	証明書は別のコンピューターの証明書ストアにあります
+	Or use one this computer has	またはこのコンピューターにあるものを使う
+	On a smart card, or kept by the system: the key stays where it is.	スマートカード上、またはシステムが保管しているもの。鍵はその場所に残ります。
+	Windows can't agree a key with this EC key (its provider may keep it for signing only)	Windows はこの EC 鍵で鍵を合意できません (プロバイダーが署名専用にしている可能性があります)
+	the card has few PIN tries left, so Quatrelle won't try it: give its PIN again (File › Info › Security › Use a smart card…)	カードの PIN の残り回数が少ないため、Quatrelle は試しません。PIN をもう一度入力してください (ファイル › 情報 › セキュリティ › スマートカードを使う…)
+	the list holds only what changed since another one	この一覧には別の一覧以降の変更分しか含まれていません
+	the list covers only some certificates or reasons	この一覧は一部の証明書または理由しか対象にしていません
+	the list is for other certificates	この一覧は別の証明書のものです
+	the list has a part Quatrelle can't read	この一覧には Quatrelle が読めない部分があります
+	the list's entry for the certificate can't be read	一覧のこの証明書の項目を読み取れません
+	the certificate has no password, so the browser uses it until the page is closed and doesn't keep it	証明書にパスワードがないため、ブラウザーはページを閉じるまで使い、保管しません
+	the card needs its PIN (give it in File › Info › Security › Use a smart card…)	カードには PIN が必要です (ファイル › 情報 › セキュリティ › スマートカードを使う…)
+	the card refused its PIN, so Quatrelle forgot it: the card would lock if it were tried again (give it again in File › Info › Security › Use a smart card…)	カードが PIN を拒否したため、Quatrelle は PIN を消去しました。もう一度試すとカードがロックされます (ファイル › 情報 › セキュリティ › スマートカードを使う…)

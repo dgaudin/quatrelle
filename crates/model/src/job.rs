@@ -19,6 +19,18 @@ impl fmt::Debug for Secret {
     }
 }
 
+/// What a protected message says in clear (a message about to be signed or encrypted, a decrypted
+/// one), in transit between the engine and the network layer. Its `Debug` form gives only its
+/// size, so it never reaches a log.
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Private(pub Vec<u8>);
+
+impl fmt::Debug for Private {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Private(<{} bytes>)", self.0.len())
+    }
+}
+
 /// A change to the mailbox the user makes, applied to the local cache at once and replayed on
 /// the server when it can be reached (RFC 4549's "pending actions").
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -273,6 +285,38 @@ pub enum Job {
     /// more, two months at most), as the server's free/busy has it; answered by
     /// [`Event::Availability`]. Exchange and Microsoft 365 only.
     GetAvailability { account: String, emails: Vec<String>, from: i64, to: i64 },
+    /// Keep the certificate and private key in a `.p12` / `.pfx` file (opened with `password`)
+    /// for signing and decrypting the account's mail (S/MIME): the key goes to the system's
+    /// keychain only. Answered by [`Event::Identity`].
+    ImportIdentity { account: AccountConfig, data: Vec<u8>, password: Secret },
+    /// Forget the account's certificate and key (the keychain's copy goes).
+    ForgetIdentity { account: AccountConfig },
+    /// Sign (`sign`) and/or encrypt (to `encrypt_to`, certificates as DER, the account's own
+    /// among them; empty: not encrypted) a message about to be sent, with the account's key;
+    /// `gcm`: AES-GCM, every recipient reads it. Its header fields go inside too (RFC 9788);
+    /// encrypted with `hide_subject`, the Subject outside is `[...]`. Answered by
+    /// [`Event::Protected`].
+    Protect { account: AccountConfig, id: u64, raw: Private, sign: bool, encrypt_to: Vec<Vec<u8>>, gcm: bool, hide_subject: bool },
+    /// Decrypt an encrypted message (its `smime.p7m`, `cms`) with the account's key. Answered by
+    /// [`Event::Decrypted`].
+    Decrypt { account: AccountConfig, key: MessageKey, cms: Vec<u8> },
+    /// A draft of a message to be encrypted: encrypted to the account's own certificate first, so
+    /// the copy in Drafts is no more readable than what will be sent, then saved as
+    /// [`Job::SaveDraft`] (or kept as [`Job::KeepDraft`], `keep`).
+    SealDraft { account: AccountConfig, raw: Private, folder: String, replaces: Option<MessageKey>, keep: bool },
+    /// Ask a signer's certificate's authority whether it withdrew it (OCSP, else its CRL, where
+    /// the certificate says): `chain` is the certificate first, then each issuer. Only with File ›
+    /// Options › Safety's switch on: the authority learns whose mail is read. Answered by
+    /// [`Event::Revocation`].
+    CheckRevocation { chain: Vec<Vec<u8>> },
+    /// The certificates whose private keys are held where Quatrelle can't read them: on the smart
+    /// cards the PKCS #11 module at `module` sees (logging in with `pin`), or with no module in
+    /// the system's keychain (macOS). Answered by [`Event::HeldKeys`].
+    FindHeldKeys { module: Option<String>, pin: Option<Secret> },
+    /// Sign and decrypt the account's mail with a key [`Job::FindHeldKeys`] found (`at`, its
+    /// [`HeldKey::at`]; `pin` kept in the system's keychain for it). Answered by
+    /// [`Event::Identity`].
+    UseHeldKey { account: AccountConfig, at: String, cert: Vec<u8>, pin: Option<Secret> },
 }
 
 impl Job {
@@ -305,8 +349,21 @@ impl Job {
             | Job::ExportPst { account, .. }
             | Job::GetRooms { account }
             | Job::GetAvailability { account, .. } => account,
-            Job::FetchUrl { .. } | Job::Discover { .. } | Job::WorkOffline { .. } | Job::SetSync { .. } | Job::CheckUpdates | Job::StopSearch => "",
-            Job::SignIn { account } => &account.id,
+            Job::FetchUrl { .. }
+            | Job::Discover { .. }
+            | Job::WorkOffline { .. }
+            | Job::SetSync { .. }
+            | Job::CheckUpdates
+            | Job::StopSearch
+            | Job::CheckRevocation { .. }
+            | Job::FindHeldKeys { .. } => "",
+            Job::SignIn { account }
+            | Job::ImportIdentity { account, .. }
+            | Job::ForgetIdentity { account }
+            | Job::Protect { account, .. }
+            | Job::SealDraft { account, .. }
+            | Job::UseHeldKey { account, .. }
+            | Job::Decrypt { account, .. } => &account.id,
         }
     }
 }
@@ -549,6 +606,61 @@ pub enum Event {
         people: Vec<crate::scheduling::Availability>,
         error: Option<String>,
     },
+    /// What [`Job::ImportIdentity`] kept: the certificate and its issuers (DER), or why not.
+    Identity {
+        account: String,
+        chain: Vec<Vec<u8>>,
+        error: Option<String>,
+    },
+    /// A message [`Job::Protect`] signed and/or encrypted, ready to send, or why it couldn't be.
+    Protected {
+        account: String,
+        id: u64,
+        raw: Option<Private>,
+        error: Option<String>,
+    },
+    /// What [`Job::Decrypt`] found inside (a MIME entity); `authenticated`: it was encrypted with
+    /// AES-GCM, so it can't have been changed on the way.
+    Decrypted {
+        key: MessageKey,
+        content: Option<Private>,
+        authenticated: bool,
+        error: Option<String>,
+    },
+    /// What [`Job::FindHeldKeys`] found, or why it couldn't look.
+    HeldKeys {
+        keys: Vec<HeldKey>,
+        error: Option<String>,
+    },
+    /// What [`Job::CheckRevocation`] heard about `cert` (DER, the chain's first).
+    Revocation {
+        cert: Vec<u8>,
+        status: Revocation,
+    },
+}
+
+/// A certificate with its private key held where Quatrelle can't read it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HeldKey {
+    /// What it's called there (the card's label, the keychain's name).
+    pub label: String,
+    /// The certificate (DER).
+    pub cert: Vec<u8>,
+    /// Where the key is, for the network layer to find it again (opaque here).
+    pub at: String,
+}
+
+/// Whether a certificate's authority withdrew it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "status", rename_all = "camelCase")]
+pub enum Revocation {
+    /// Not withdrawn; the answer holds until `until` (Unix seconds), when it says.
+    Good { until: Option<i64> },
+    /// Withdrawn at `at` (Unix seconds).
+    Revoked { at: i64 },
+    /// No answer to go by (none given, or none to trust), and why.
+    Unknown { why: String },
 }
 
 #[cfg(test)]
@@ -559,6 +671,8 @@ mod tests {
     fn secrets_never_print() {
         let j = Job::Start { account: AccountConfig::default(), password: Some(Secret("hunter2".into())) };
         assert!(!format!("{j:?}").contains("hunter2"));
+        let e = Event::Decrypted { key: MessageKey::default(), content: Some(Private(b"the plan".to_vec())), authenticated: true, error: None };
+        assert!(!format!("{e:?}").contains("the plan"), "what decrypted mail says never prints");
     }
 
     #[test]

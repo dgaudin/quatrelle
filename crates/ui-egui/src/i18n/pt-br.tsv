@@ -1276,3 +1276,113 @@ month	May	maio
 	Hide it again	Ocultar de novo
 	Sent mail waiting for a reply	E-mails enviados aguardando resposta
 	Awaiting reply	Aguardando resposta
+	its certificate isn't from an authority this computer trusts	o certificado não é de uma autoridade em que este computador confia
+	its certificate ran out on {date}	o certificado expirou em {date}
+	its certificate isn't valid until {date}	o certificado só vale a partir de {date}
+	its certificate is for {addresses}, not for the sender	o certificado é para {addresses}, não para o remetente
+	its certificate isn't for signing email	o certificado não serve para assinar e-mails
+	Encrypted. Decrypting it…	Criptografada. Descriptografando…
+	This message is encrypted, and it couldn't be decrypted: {error}	Esta mensagem está criptografada e não foi possível descriptografá-la: {error}
+	It isn't signed, so it could have been changed on the way: be careful with what it asks.	Não está assinada, então pode ter sido alterada no caminho: cuidado com o que ela pede.
+	Encrypted: only you and its other recipients can read it.	Criptografada: só você e os outros destinatários podem lê-la.
+	Issued by {issuer}, valid until {date}	Emitido por {issuer}, válido até {date}
+	Signed {date}	Assinada: {date}
+	Signed with SHA-1, which no longer proves much.	Assinada com SHA-1, que já não prova muita coisa.
+	Signed by {signer}: the signature holds (certificate from {issuer}).	Assinada por {signer}: a assinatura é válida (certificado de {issuer}).
+	Signed by {signer}, but {why}.	Assinada por {signer}, mas {why}.
+	The signature doesn't hold: {why}.	A assinatura não é válida: {why}.
+	Sign your messages so people can tell they're from you, and read and send encrypted mail, with a certificate (S/MIME).	Assine suas mensagens para que saibam que são suas, e leia e envie e-mails criptografados, com um certificado (S/MIME).
+	Security	Segurança
+	No certificate	Nenhum certificado
+	Import the .p12 or .pfx file your certificate came in.	Importe o arquivo .p12 ou .pfx em que seu certificado veio.
+	Import certificate…	Importar certificado…
+	It ran out on {date}: messages can't be signed with it any more.	Expirou em {date}: não dá mais para assinar mensagens com ele.
+	Forget this certificate: its key goes from the keychain too	Esquecer este certificado: a chave também sai do chaveiro
+	Replace…	Substituir…
+	Sign new messages	Assinar mensagens novas
+	Encrypt new messages	Criptografar mensagens novas
+	Each recipient needs to have sent you a signed message first; replies to encrypted mail are always encrypted.	Cada destinatário precisa ter enviado antes uma mensagem assinada; respostas a e-mails criptografados são sempre criptografadas.
+	Certificates from signed mail: {n}	Certificados de e-mails assinados: {n}
+	Import certificate	Importar certificado
+	The password {file} was saved with:	A senha com que {file} foi salvo:
+	Its private key is kept in the system's keychain, not in Quatrelle's files.	A chave privada fica no chaveiro do sistema, não nos arquivos do Quatrelle.
+	Import	Importar
+	Sign	Assinar
+	Encrypt	Criptografar
+	Signed with your certificate: the recipients can tell it's from you and unchanged	Assinada com seu certificado: os destinatários sabem que é sua e que não mudou
+	Only the recipients can read it: each needs to have sent you a signed message	Só os destinatários podem lê-la: cada um precisa ter enviado uma mensagem assinada
+	the message was changed after it was signed, or the signature isn't the sender's	a mensagem foi alterada depois de assinada, ou a assinatura não é do remetente
+	this account has no certificate to decrypt it with (File › Info › Security)	esta conta não tem certificado para descriptografá-la (Arquivo › Informações › Segurança)
+	it can't be decrypted with your certificate	não dá para descriptografá-la com seu certificado
+	its account is gone	a conta dela não existe mais
+	Hide the subject of encrypted mail	Ocultar o assunto de e-mails criptografados
+	On the way it reads [...]; the real one is inside, for its recipients (header protection).	No caminho aparece [...]; o verdadeiro vai dentro, para os destinatários (proteção de cabeçalhos).
+	Its subject and addresses were protected inside it too.	O assunto e os endereços também estavam protegidos dentro dela.
+	Check whether certificates were withdrawn	Verificar se certificados foram revogados
+	As signed mail is shown, its certificate's authority is asked whether it withdrew it. Its authority then learns whose mail you're reading	Ao mostrar um e-mail assinado, a autoridade do certificado é consultada se o revogou. Assim, ela fica sabendo de quem é o e-mail que você está lendo
+	Asking its authority whether the certificate was withdrawn…	Consultando a autoridade se o certificado foi revogado…
+	Its authority says the certificate wasn't withdrawn.	A autoridade diz que o certificado não foi revogado.
+	Whether the certificate was withdrawn couldn't be checked: {why}.	Não foi possível verificar se o certificado foi revogado: {why}.
+	its authority withdrew its certificate on {date}	a autoridade revogou o certificado em {date}
+	its certificate doesn't say where to ask	o certificado não diz onde consultar
+	its authority's responder didn't answer	o serviço da autoridade não respondeu
+	its authority's list of withdrawn certificates couldn't be had	não foi possível obter a lista de certificados revogados da autoridade
+	the certificate's authority isn't known	a autoridade do certificado não é conhecida
+	the list of withdrawn certificates can't be read	não é possível ler a lista de certificados revogados
+	the list isn't from the certificate's authority	a lista não é da autoridade do certificado
+	the list's signature doesn't hold	a assinatura da lista não é válida
+	the list is from the future	a lista tem data futura
+	the list is out of date	a lista está desatualizada
+	a certificate can't be read	não é possível ler um certificado
+	the OCSP answer can't be read	não é possível ler a resposta OCSP
+	the OCSP responder didn't answer	o serviço OCSP não respondeu
+	the OCSP answer is of another kind	a resposta OCSP é de outro tipo
+	the OCSP answer isn't signed by the certificate's authority	a resposta OCSP não foi assinada pela autoridade do certificado
+	the OCSP answer is about another certificate	a resposta OCSP é sobre outro certificado
+	the OCSP answer is from the future	a resposta OCSP tem data futura
+	the OCSP answer is out of date	a resposta OCSP está desatualizada
+	the OCSP responder doesn't know the certificate	o serviço OCSP não conhece o certificado
+	Use a smart card	Usar um cartão inteligente
+	Use a smart card…	Usar um cartão inteligente…
+	Find certificates	Procurar certificados
+	Import the .p12 or .pfx file your certificate came in, or use one on a smart card.	Importe o arquivo .p12 ou .pfx em que seu certificado veio, ou use um em um cartão inteligente.
+	Look in the Keychain	Procurar nas Chaves
+	Looking…	Procurando…
+	The card's PIN	O PIN do cartão
+	The key stays on the card; its PIN is kept in the system's keychain.	A chave fica no cartão; o PIN é guardado no chaveiro do sistema.
+	The module your card came with (OpenSC's reads most cards):	O módulo que veio com o cartão (o do OpenSC lê a maioria):
+	Use	Usar
+	no certificate with its key was found	nenhum certificado com sua chave foi encontrado
+	the PIN is wrong, or the card is locked	o PIN está errado, ou o cartão está bloqueado
+	this system's keychain can't sign for Quatrelle: use a smart card's module, or import a .p12 file	o chaveiro deste sistema não pode assinar para o Quatrelle: use o módulo de um cartão inteligente ou importe um arquivo .p12
+	Unlock	Desbloquear
+	Unlock…	Desbloquear…
+	Unlock certificate	Desbloquear o certificado
+	Your certificate's password, to use it in this browser until the page is closed:	A senha do seu certificado, para usá-lo neste navegador até a página ser fechada:
+	The browser keeps the file, locked with its password; the password itself isn't kept.	O navegador guarda o arquivo, trancado com a senha; a senha em si não é guardada.
+	Give its password again to sign and decrypt in this page	Informe a senha de novo para assinar e descriptografar nesta página
+	your certificate is locked in this browser: unlock it with its password (File › Info › Security)	seu certificado está bloqueado neste navegador: desbloqueie-o com a senha (Arquivo › Informações › Segurança)
+	there's no certificate kept in this browser: import its .p12 file	não há certificado guardado neste navegador: importe o arquivo .p12
+	smart cards and the system's keychain are used by the Quatrelle desktop app, not in the browser	cartões inteligentes e o chaveiro do sistema são usados pelo aplicativo Quatrelle para desktop, não no navegador
+	the browser can't ask a certificate's authority	o navegador não pode consultar a autoridade de um certificado
+	A certificate this computer already has, its key staying where it is	Um certificado que este computador já tem; a chave fica onde está
+	Look in Windows	Procurar no Windows
+	The certificates for email in your Keychain. The key stays there; macOS may ask before it's used.	Os certificados de e-mail nas suas Chaves. A chave fica lá; o macOS pode perguntar antes de usá-la.
+	The certificates for email in your Windows certificate store (Personal). The key stays in Windows; it may ask before it's used.	Os certificados de e-mail no seu repositório de certificados do Windows (Pessoal). A chave fica no Windows; ele pode perguntar antes de usá-la.
+	Use a certificate from Windows	Usar um certificado do Windows
+	Use a certificate from the Keychain	Usar um certificado das Chaves
+	Use one from Windows…	Usar um do Windows…
+	Use one from the Keychain…	Usar um das Chaves…
+	the certificate is in another computer's certificate store	o certificado está no repositório de certificados de outro computador
+	Or use one this computer has	Ou usar um que este computador tem
+	On a smart card, or kept by the system: the key stays where it is.	Em um cartão inteligente, ou guardado pelo sistema: a chave fica onde está.
+	Windows can't agree a key with this EC key (its provider may keep it for signing only)	O Windows não consegue combinar uma chave com esta chave EC (o provedor pode guardá-la só para assinar)
+	the card has few PIN tries left, so Quatrelle won't try it: give its PIN again (File › Info › Security › Use a smart card…)	o cartão tem poucas tentativas de PIN, então o Quatrelle não vai tentar: informe o PIN de novo (Arquivo › Informações › Segurança › Usar um cartão inteligente…)
+	the list holds only what changed since another one	a lista contém só o que mudou desde outra
+	the list covers only some certificates or reasons	a lista cobre só alguns certificados ou motivos
+	the list is for other certificates	a lista é para outros certificados
+	the list has a part Quatrelle can't read	a lista tem uma parte que o Quatrelle não consegue ler
+	the list's entry for the certificate can't be read	não é possível ler a entrada da lista para o certificado
+	the certificate has no password, so the browser uses it until the page is closed and doesn't keep it	o certificado não tem senha, então o navegador o usa até a página ser fechada e não o guarda
+	the card needs its PIN (give it in File › Info › Security › Use a smart card…)	o cartão precisa do PIN (informe-o em Arquivo › Informações › Segurança › Usar um cartão inteligente…)
+	the card refused its PIN, so Quatrelle forgot it: the card would lock if it were tried again (give it again in File › Info › Security › Use a smart card…)	o cartão recusou o PIN, então o Quatrelle o esqueceu: o cartão bloquearia se ele fosse tentado de novo (informe-o de novo em Arquivo › Informações › Segurança › Usar um cartão inteligente…)

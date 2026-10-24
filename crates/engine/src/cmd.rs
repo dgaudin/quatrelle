@@ -61,6 +61,7 @@ mod home;
 mod navigation;
 mod pim;
 mod scheduling;
+mod security;
 mod view;
 
 /// Every command, in the order the CLI lists them: the Home tab's first, accounts' last.
@@ -76,6 +77,7 @@ pub fn registry() -> Registry {
     all.extend(pim::commands());
     all.extend(scheduling::commands());
     all.extend(files::commands());
+    all.extend(security::commands());
     all.extend(accounts::commands());
     Registry::new(all)
 }
@@ -98,7 +100,7 @@ fn key_param(s: &Session, v: &Value) -> Result<quatrelle_model::MessageKey, CmdE
 }
 
 /// A file's bytes, refused when it's bigger than `max` (read no further than that).
-fn read_capped(path: &str, max: u64) -> Result<Vec<u8>, CmdError> {
+pub(crate) fn read_capped(path: &str, max: u64) -> Result<Vec<u8>, CmdError> {
     use std::io::Read;
     // Only a plain file: a device (`/dev/zero`) reads forever and a pipe blocks on opening,
     // whatever size they report.

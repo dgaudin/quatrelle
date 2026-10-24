@@ -14,6 +14,8 @@ use quatrelle_ui_egui::Backend;
 
 use crate::fetch::{Fetch, events, sleep};
 
+mod smime;
+
 /// How often the Inbox is checked for new mail, and every how many checks everything is.
 const POLL_MS: i32 = 120_000;
 const FULL_EVERY: u32 = 8;
@@ -62,6 +64,8 @@ struct Shared {
     opts: SyncOptions,
     /// The server search still wanted (`Job::SearchServer`'s `search`; 0: none).
     search: u64,
+    /// Each account's certificate with its key, opened with its password: this page only.
+    smime: HashMap<String, quatrelle_engine::smime::Identity>,
 }
 
 type Rcs = Rc<RefCell<Shared>>;
@@ -73,7 +77,17 @@ pub struct WebBackend {
 impl WebBackend {
     pub fn new(store: Store, ctx: egui::Context) -> WebBackend {
         let opts = SyncOptions { window: 300, prefetch: 20, ..SyncOptions::default() };
-        WebBackend { shared: Rc::new(RefCell::new(Shared { store, events: Vec::new(), accounts: HashMap::new(), ctx, opts, search: 0 })) }
+        WebBackend {
+            shared: Rc::new(RefCell::new(Shared {
+                store,
+                events: Vec::new(),
+                accounts: HashMap::new(),
+                ctx,
+                opts,
+                search: 0,
+                smime: HashMap::new(),
+            })),
+        }
     }
 }
 
@@ -362,6 +376,11 @@ fn sent_folder(sh: &Rcs, id: &str, given: Option<String>) -> Option<String> {
     given.or_else(|| sh.borrow().accounts.get(id).and_then(|a| a.folders.iter().find(|f| f.role == FolderRole::Sent).map(|f| f.path.clone())))
 }
 
+/// What S/MIME can't do in the browser: smart cards and the system's keychain.
+const BROWSER_SMIME: &str = "smart cards and the system's keychain are used by the Quatrelle desktop app, not in the browser";
+/// Revocation servers don't let a web page ask them.
+const BROWSER_REVOCATION: &str = "the browser can't ask a certificate's authority";
+
 async fn job(sh: &Rcs, id: &str, j: Job) {
     let store = store(sh);
     match j {
@@ -515,6 +534,18 @@ async fn job(sh: &Rcs, id: &str, j: Job) {
             }
             sync_one(sh, id, &folder).await;
         }
+        j @ (Job::ImportIdentity { .. } | Job::ForgetIdentity { .. } | Job::Protect { .. } | Job::Decrypt { .. } | Job::SealDraft { .. }) => {
+            smime::job(sh, id, j)
+        }
+        Job::CheckRevocation { chain } => emit(
+            sh,
+            Event::Revocation {
+                cert: chain.into_iter().next().unwrap_or_default(),
+                status: quatrelle_engine::model::Revocation::Unknown { why: BROWSER_REVOCATION.into() },
+            },
+        ),
+        Job::FindHeldKeys { .. } => emit(sh, Event::HeldKeys { keys: Vec::new(), error: Some(BROWSER_SMIME.into()) }),
+        Job::UseHeldKey { .. } => emit(sh, Event::Identity { account: id.to_string(), chain: Vec::new(), error: Some(BROWSER_SMIME.into()) }),
         Job::Start { .. }
         | Job::SmtpPassword { .. }
         | Job::CheckUpdates

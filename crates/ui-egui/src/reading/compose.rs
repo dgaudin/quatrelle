@@ -396,6 +396,8 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
     // Delay Delivery holds mail in the Outbox, which only a server account's sends from.
     let can_delay = s.compose.as_ref().and_then(|c| s.account(&c.account)).is_some_and(|a| !a.is_local());
     let can_vote = s.compose.as_ref().and_then(|c| s.account(&c.account)).is_some_and(|a| a.config.ews.is_some());
+    // S/MIME's Encrypt and Sign, for an account with a certificate.
+    let has_cert = s.compose.as_ref().is_some_and(|c| s.identity(&c.account).is_some());
     let signature = s.compose.as_ref().and_then(|c| s.account(&c.account)).map(|a| a.config.signature.clone()).unwrap_or_default();
     let Some(c) = s.compose.as_mut() else { return };
     // The editor's state belongs to one message.
@@ -481,8 +483,15 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
         // The ribbon, as Outlook's message window has it: its tabs, with Save, Pop out (or in)
         // and Discard small at their right; where windows can't open (the browser), messages
         // stay in the reading pane.
-        let input =
-            rich_edit::RibbonInput { signature: &signature, clock: &clock, can_delay, can_vote, in_window, can_pop: !ui.ctx().embed_viewports() };
+        let input = rich_edit::RibbonInput {
+            signature: &signature,
+            clock: &clock,
+            can_delay,
+            can_vote,
+            has_cert,
+            in_window,
+            can_pop: !ui.ctx().embed_viewports(),
+        };
         egui::Frame::new().fill(t.chrome).corner_radius(6).inner_margin(Margin::symmetric(8, 4)).show(ui, |ui| {
             ui.set_width(ui.available_width());
             rich_edit::compose_ribbon(ui, &t, &mut ed, c, &input, acts);

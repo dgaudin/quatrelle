@@ -15,7 +15,7 @@
 mod css;
 mod fonts;
 pub mod layout;
-mod links;
+use html::links;
 pub use links::{find_links, link_written_addresses, share_link, share_parts};
 pub mod markup;
 pub mod office;
@@ -34,6 +34,7 @@ mod files;
 mod hidden;
 mod html;
 mod photos;
+pub mod smime;
 mod trackers;
 pub use files::{runs_code, sanitize_filename};
 pub use hidden::{HIDDEN_WORDS_MIN, hidden_text};
@@ -92,7 +93,12 @@ pub fn preview(text: &str) -> String {
 }
 
 fn has_real_attachments(m: &Message<'_>) -> bool {
-    m.attachments().any(|p| p.attachment_name().is_some() || !p.is_inline_part())
+    // S/MIME's signature and encrypted content are the message itself, not files in it.
+    let smime = |p: &mail_parser::MessagePart<'_>| {
+        let mime = p.content_type().map(|c| format!("{}/{}", c.ctype(), c.subtype().unwrap_or_default())).unwrap_or_default();
+        smime::is_smime_part(&mime, p.attachment_name().unwrap_or_default())
+    };
+    m.attachments().any(|p| (p.attachment_name().is_some() || !p.is_inline_part()) && !smime(p))
 }
 
 trait InlinePart {
@@ -143,6 +149,15 @@ fn summary_from_message(m: &Message<'_>, key: MessageKey, flags: Flags, size: u3
         preview: preview(&text),
         modseq: 0,
         bulk: is_bulk(m),
+        smime: m.root_part().content_type().map_or(quatrelle_model::Smime::None, |c| {
+            quatrelle_model::Smime::from_content_type(
+                c.ctype(),
+                c.subtype().unwrap_or_default(),
+                c.attribute("protocol"),
+                c.attribute("smime-type"),
+                c.attribute("name"),
+            )
+        }),
         importance: importance(m),
         voting: Vec::new(),
         voted: String::new(),
@@ -577,6 +592,10 @@ pub struct Draft {
     /// into Exchange's verb stream and takes the header out before the message goes.
     #[serde(default)]
     pub voting: String,
+    /// Every part 7-bit (an attached message in base64 when it has 8-bit text), as a signed
+    /// message must be to arrive byte for byte (RFC 8551 §3.1.2).
+    #[serde(skip)]
+    pub seven_bit: bool,
 }
 
 /// The header carrying voting buttons from the message written to the connection sending it:
@@ -725,6 +744,10 @@ pub fn build(d: &Draft, from: &EmailAddress, date: i64, message_id: &str) -> Res
             let mime = if a.mime.is_empty() { mime_from_name(&a.name).to_string() } else { a.mime.clone() };
             // An attached message goes as it is (RFC 2046 §5.2.1: 7bit or 8bit, never base64).
             if mime.eq_ignore_ascii_case("message/rfc822") {
+                // In a signed message: encoded (base64) by mail-builder, as binary.
+                if d.seven_bit && !a.data.is_ascii() {
+                    return MimePart::new(mime, a.data.clone()).attachment(sanitize_filename(&a.name));
+                }
                 let cte = if a.data.is_ascii() { "7bit" } else { "8bit" };
                 return MimePart::new(mime, a.data.clone())
                     .attachment(sanitize_filename(&a.name))

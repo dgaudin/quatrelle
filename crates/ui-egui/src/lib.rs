@@ -183,6 +183,12 @@ pub enum Action {
     /// The rules to a file, or rules from one (Outlook's Export and Import Rules).
     ExportRules,
     ImportRules,
+    /// Pick a `.p12` / `.pfx` file for an account's certificate, then ask its password.
+    ImportCertificate(String),
+    /// The browser: open the account's certificate it keeps, with its password, for this page.
+    UnlockCertificate(String),
+    /// Choose a certificate on a smart card (or in the system's keychain) for an account.
+    UseSmartCard(String),
     /// Sign an account in again: the browser for OAuth accounts, else the password dialog.
     SignInAgain(String),
     /// Insert a picture at the cursor of the message being written (from a file).
@@ -677,7 +683,9 @@ impl MailApp {
         }
         // Files chosen in the browser's picker.
         for (purpose, name, data) in self.services.take_picked() {
-            if purpose == "picture" {
+            if let Some(account) = purpose.strip_prefix("certificate:") {
+                self.ui.dialog = Some(Dialog::Certificate { account: account.to_string(), path: name, data: Some(data), password: String::new() });
+            } else if purpose == "picture" {
                 let r = self.session.run("compose.insertPicture", &json!({"name": name, "data": data, "at": self.picture_at()}));
                 self.place_picture(r);
             } else {
