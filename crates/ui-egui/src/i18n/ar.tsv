@@ -1240,3 +1240,35 @@ month	May	مايو
 	This update wasn't sent by the meeting's organizer, so it can't change your calendar.	لم يُرسل هذا التحديث منظّم الاجتماع، لذا لا يمكنه تغيير تقويمك.
 	This answer wasn't sent by the guest it's from, so it can't be recorded.	لم يُرسل هذا الرد الضيف الذي يُنسب إليه، لذا لا يمكن تسجيله.
 	This invitation is out of date: your calendar has a newer version.	هذه الدعوة قديمة: في تقويمك نسخة أحدث.
+	Left out because they couldn't be read: {n}	تم تخطيها لتعذّر قراءتها: {n}
+	Added to your calendar from {file}: {n}	أُضيفت إلى التقويم من {file}: {n}
+	Added to your contacts from {file}: {n}	أُضيفت إلى جهات الاتصال من {file}: {n}
+	Add an account first: a new message needs an account to send from.	أضف حسابًا أولًا: تحتاج الرسالة الجديدة إلى حساب لإرسالها منه.
+	Add an account first: events and people are kept with an account.	أضف حسابًا أولًا: تُحفظ الأحداث والأشخاص في حساب.
+	Couldn't open {file}: {error}	تعذّر فتح {file}: {error}
+	Safety	الأمان
+	Send where photos were taken	إرسال مكان التقاط الصور
+	Off, the place a phone writes into a photo is taken out of JPEG and PNG files as they're sent	عند الإيقاف، يُزال المكان الذي يكتبه الهاتف في الصورة من ملفات JPEG وPNG عند إرسالها
+	These photos say where they were taken, and go that way (File › Options › Safety)	تذكر هذه الصور مكان التقاطها، وتُرسل كذلك (ملف › الخيارات › الأمان)
+	Where these photos were taken is left out as they're sent	يُحذف مكان التقاط هذه الصور عند إرسالها
+	Careful: this comes from {domain}, which looks like {like} but isn't it.	انتبه: هذه الرسالة من {domain}، وهو يشبه {like} لكنه ليس هو.
+	Careful: the sender's name shows {shown}, but this comes from {real}.	انتبه: يُظهر اسم المرسل {shown}، لكن هذه الرسالة من {real}.
+	Don't open its links or attachments, or answer it, unless you're sure who sent it.	لا تفتح روابطها أو مرفقاتها ولا ترد عليها ما لم تكن متأكدًا من مرسلها.
+	Check before sending	تحقّق قبل الإرسال
+	{address} looks like an address at {like}, but isn't one. Is it the right one?	يبدو {address} كعنوان في {like}، لكنه ليس كذلك. هل هو العنوان الصحيح؟
+	{n} people who may not know each other will all see each other's addresses.	سيرى {n} أشخاص قد لا يعرف بعضهم بعضًا عناوينَ بعضهم.
+	Put everyone in Bcc	ضع الجميع في Bcc
+	Each of them gets the message without seeing who else did; you're in To	يتلقى كل منهم الرسالة دون أن يرى من تلقاها غيره؛ وتكون أنت في «إلى»
+	Open links without their tracking	فتح الروابط دون التتبّع
+	A link opens where it really goes: out of redirects that carry the real address, without the tags that say who clicked	يُفتح الرابط حيث يذهب فعلًا: خارج عمليات إعادة التوجيه التي تحمل العنوان الحقيقي، ودون الوسوم التي تكشف من نقر
+	Links open as they are (File › Options › Safety)	تُفتح الروابط كما هي (ملف › الخيارات › الأمان)
+	Links open without their tracking tags, and out of redirects that carry the real address	تُفتح الروابط دون وسوم التتبّع، وخارج عمليات إعادة التوجيه التي تحمل العنوان الحقيقي
+	Links that report clicks: {links}	روابط تُبلغ عن النقرات: {links}
+	Tracking pictures, never loaded: {pictures}	صور تتبّع، لا تُحمَّل أبدًا: {pictures}
+	Tracking pictures, never loaded: {pictures} · Links that report clicks: {links}	صور تتبّع، لا تُحمَّل أبدًا: {pictures} · روابط تُبلغ عن النقرات: {links}
+	This message hides text from you ({n} words).	تُخفي هذه الرسالة نصًا عنك ({n} كلمة).
+	Hidden text is a way to slip past spam filters, or to give instructions to tools and assistants that read mail for you.	النص المخفي طريقة لتجاوز مرشحات البريد العشوائي، أو لإعطاء تعليمات للأدوات والمساعدين الذين يقرؤون البريد نيابةً عنك.
+	Show the hidden text	إظهار النص المخفي
+	Hide it again	إخفاؤه مجددًا
+	Sent mail waiting for a reply	بريد مُرسَل ينتظر ردًا
+	Awaiting reply	بانتظار الرد

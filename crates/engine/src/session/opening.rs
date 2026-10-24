@@ -74,7 +74,7 @@ impl Session {
         self.selection = vec![key.clone()];
         self.focus = Some(key.clone());
         let thread = self.thread_of(key);
-        self.reading = Some(Reading { key: key.clone(), parsed: None, error: None, thread });
+        self.reading = Some(Reading { key: key.clone(), parsed: None, error: None, thread, warning: None });
         let cached = if key.folder == OUTBOX {
             self.outbox_entry(key).and_then(|(a, i)| self.store.as_ref().and_then(|s| s.outbox_raw(&a, i.id)))
         } else {
@@ -106,11 +106,12 @@ impl Session {
             } else {
                 self.store.as_ref().and_then(|s| s.read_body(key))
             };
-            let mut w = Reading { key: key.clone(), parsed: None, error: None, thread: Vec::new() };
+            let mut w = Reading { key: key.clone(), parsed: None, error: None, thread: Vec::new(), warning: None };
             match cached {
                 Some(raw) => {
                     w.parsed = mime::parse(&raw);
                     w.error = w.parsed.is_none().then(|| "this message could not be read".to_string());
+                    w.warning = w.parsed.as_ref().and_then(|p| self.sender_warning(&p.from));
                 }
                 None => self.jobs.push(self.fetch_job(key)),
             }
@@ -137,10 +138,13 @@ impl Session {
     }
 
     pub(super) fn show_body(&mut self, key: &MessageKey, raw: &[u8]) {
-        for w in self.windows.iter_mut().filter(|w| &w.key == key && w.parsed.is_none()) {
+        let mut windows = std::mem::take(&mut self.windows);
+        for w in windows.iter_mut().filter(|w| &w.key == key && w.parsed.is_none()) {
             w.parsed = mime::parse(raw);
             w.error = w.parsed.is_none().then(|| "this message could not be read".to_string());
+            w.warning = w.parsed.as_ref().and_then(|p| self.sender_warning(&p.from));
         }
+        self.windows = windows;
         // Only the open message is laid out (bodies downloaded ahead aren't, each costing time).
         if let Some(r) = self.reading.as_mut()
             && &r.key == key
@@ -149,7 +153,40 @@ impl Session {
             r.error = if parsed.is_none() { Some("this message could not be read".into()) } else { None };
             r.parsed = parsed;
         }
+        let from = self.reading.as_ref().filter(|r| &r.key == key).and_then(|r| r.parsed.as_ref()).map(|p| p.from.clone());
+        if let Some(from) = from {
+            let warning = self.sender_warning(&from);
+            if let Some(r) = self.reading.as_mut() {
+                r.warning = warning;
+            }
+        }
         self.request_pictures();
+    }
+
+    /// The domains the user deals with: their own accounts', and those of the people they write
+    /// to or keep in an address book.
+    pub fn known_domains(&mut self) -> BTreeSet<String> {
+        let revision = self.contacts_revision();
+        if let Some((at, known)) = &self.known_domains
+            && *at == revision
+        {
+            return known.clone();
+        }
+        let mut known: BTreeSet<String> = self.accounts.iter().map(|a| quatrelle_model::lookalike::domain_of(&a.config.email)).collect();
+        known.extend(self.written_domains());
+        known.remove("");
+        // As the book is now (reading it may have changed it).
+        self.known_domains = Some((self.contacts_revision(), known.clone()));
+        known
+    }
+
+    /// What doesn't add up about a sender (nothing for the user's own messages).
+    pub fn sender_warning(&mut self, from: &EmailAddress) -> Option<quatrelle_model::lookalike::SenderWarning> {
+        if self.accounts.iter().any(|a| a.config.email.eq_ignore_ascii_case(from.email.trim())) {
+            return None;
+        }
+        let known = self.known_domains();
+        quatrelle_model::lookalike::check_sender(from, &known)
     }
 
     /// A body that came in joins the search index there is (rather than throwing it away).

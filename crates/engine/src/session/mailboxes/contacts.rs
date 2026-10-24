@@ -163,6 +163,13 @@ impl Session {
         self.contacts.book.as_ref().and_then(|b| b.get(email))
     }
 
+    /// The domains of the people written to: the ones a lookalike sender would imitate. With no
+    /// book yet, the mail is read into one first, in one go (a book kept on disk answers at once).
+    pub(crate) fn written_domains(&mut self) -> Vec<String> {
+        self.contacts_whole();
+        self.contacts.book.as_ref().map(|b| b.written_domains().collect()).unwrap_or_default()
+    }
+
     /// Whether mail is left to read into the address book: the window calls
     /// [`Session::contacts_step`] with a slice each frame until there's none.
     pub fn contacts_pending(&self) -> bool {

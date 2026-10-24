@@ -2,6 +2,8 @@
 
 use std::fmt;
 
+pub(crate) mod providers;
+
 use serde::{Deserialize, Serialize};
 
 /// A display name and an address (`Zoe Park <zoe@example.org>`).

@@ -12,18 +12,19 @@ pub mod contacts;
 pub mod dates;
 pub mod ical;
 pub mod job;
+pub mod lookalike;
+pub mod mailto;
 pub mod organize;
 pub mod pim;
-mod providers;
 pub mod search;
 pub mod thread;
 pub mod utf7;
 pub mod vcard;
-pub mod voting;
 pub mod zone;
 
+pub use addr::providers::*;
 pub use pim::scheduling;
-pub use providers::*;
+pub use thread::voting;
 
 use serde::{Deserialize, Serialize};
 

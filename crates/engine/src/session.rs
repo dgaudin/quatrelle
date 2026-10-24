@@ -44,7 +44,7 @@ use listing::{Preview, person, size_group};
 use mailboxes::Contacts;
 pub use organize::{RulesScope, junk, quick_steps, search_folders};
 pub use prefs::{ListLayout, NotesOrder, Prefs, ReadInPane, ReadingPane};
-pub use writing::{Compose, ItemChoice, ItemKind, add_pictures, style_signature};
+pub use writing::{Compose, ItemChoice, ItemKind, SendCheck, add_pictures, style_signature};
 
 /// One account and what the session knows about it.
 #[derive(Clone, Debug, PartialEq)]
@@ -212,6 +212,9 @@ pub struct Reading {
     pub error: Option<String>,
     /// The other messages of its conversation in this list, oldest first.
     pub thread: Vec<MessageKey>,
+    /// Who it says it's from doesn't add up: a lookalike of a domain the user deals with, or
+    /// another address shown in the sender's name.
+    pub warning: Option<quatrelle_model::lookalike::SenderWarning>,
 }
 
 /// A status-bar message.
@@ -403,6 +406,9 @@ pub struct Session {
     /// The address book (recipient suggestions, Select Names, the Focused Inbox): kept on disk,
     /// and only the mail new in a folder read into it (see `session/mailboxes/contacts.rs`).
     contacts: Contacts,
+    /// The domains the user deals with ([`Session::known_domains`]), and the address book's
+    /// revision they were counted from.
+    known_domains: Option<(u64, BTreeSet<String>)>,
     /// The highest UID seen per Inbox, so only mail that arrives later is announced.
     pub(crate) seen_uid: HashMap<(String, String), u32>,
     /// New mail to announce (desktop notifications), oldest first.
@@ -528,6 +534,7 @@ impl Session {
             pending_marks: BTreeMap::new(),
             cache_limit: CACHE_MESSAGES,
             contacts: Contacts::default(),
+            known_domains: None,
             seen_uid: HashMap::new(),
             new_mail: Vec::new(),
             rules: Vec::new(),

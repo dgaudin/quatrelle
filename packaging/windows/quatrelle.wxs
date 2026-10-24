@@ -5,7 +5,8 @@
     wix build quatrelle.wxs -arch x64 -d Version=1.2.3 -d BinDir=... -d IconPath=... -o out.msi
 
   Per-machine install into Program Files, a Start Menu shortcut, and quatrelle.exe on the App
-  Paths list (so Win+R `quatrelle` starts it). Quatrelle opens no file types yet, so it registers none.
+  Paths list (so Win+R `quatrelle` starts it), and Quatrelle offered as the mail app and for
+  .eml, .ics and .vcf files (QuatrelleDefaultApp, below).
 
   UpgradeCode is fixed for Quatrelle forever (playbook §6); never change it.
 -->
@@ -66,6 +67,98 @@
           </Shortcut>
         </File>
         <RegistryValue Root="HKLM" Key="Software\Microsoft\Windows\CurrentVersion\App Paths\quatrelle.exe" Value="[#QuatrelleExe]" Type="string" />
+      </Component>
+
+      <!-- Lets Windows offer Quatrelle as a mail program. Nothing here makes it the default:
+           the Capabilities key puts it on the list in Settings > Apps > Default apps (under Email
+           and the .eml, .ics and .vcf types) for the user to choose, and each extension's
+           OpenWithProgids entry adds it to Explorer's "Open with" menu. A link or a file path is
+           passed as the one argument (apps/quatrelle/src/args.rs). Uninstalling removes it all. -->
+      <Component Id="QuatrelleDefaultApp" Guid="B74ACD47-7B2E-4DEA-8113-42A3B3D00FDE">
+        <RegistryKey Root="HKLM" Key="Software\RegisteredApplications">
+          <RegistryValue Name="Quatrelle" Type="string" Value="Software\Quatrelle\Capabilities" KeyPath="yes" />
+        </RegistryKey>
+        <RegistryKey Root="HKLM" Key="Software\Quatrelle\Capabilities">
+          <RegistryValue Name="ApplicationName" Type="string" Value="Quatrelle" />
+          <RegistryValue Name="ApplicationDescription" Type="string" Value="Local-first email client for IMAP and SMTP accounts, with calendar invitations and contact cards." />
+          <RegistryValue Name="ApplicationIcon" Type="string" Value="&quot;[#QuatrelleExe]&quot;,0" />
+          <RegistryKey Key="URLAssociations">
+            <RegistryValue Name="mailto" Type="string" Value="Quatrelle.mailto" />
+          </RegistryKey>
+          <RegistryKey Key="FileAssociations">
+            <RegistryValue Name=".eml" Type="string" Value="Quatrelle.eml" />
+            <RegistryValue Name=".ics" Type="string" Value="Quatrelle.ics" />
+            <RegistryValue Name=".vcf" Type="string" Value="Quatrelle.vcf" />
+          </RegistryKey>
+        </RegistryKey>
+
+        <!-- The program entry itself: its display name, its open command, the types it accepts. -->
+        <RegistryKey Root="HKLM" Key="Software\Classes\Applications\quatrelle.exe">
+          <RegistryValue Name="FriendlyAppName" Type="string" Value="Quatrelle" />
+          <RegistryKey Key="shell\open\command">
+            <RegistryValue Type="string" Value="&quot;[#QuatrelleExe]&quot; &quot;%1&quot;" />
+          </RegistryKey>
+          <RegistryKey Key="SupportedTypes">
+            <RegistryValue Name=".eml" Type="string" Value="" />
+            <RegistryValue Name=".ics" Type="string" Value="" />
+            <RegistryValue Name=".vcf" Type="string" Value="" />
+          </RegistryKey>
+        </RegistryKey>
+
+        <!-- mailto: links -->
+        <RegistryKey Root="HKLM" Key="Software\Classes\Quatrelle.mailto">
+          <RegistryValue Type="string" Value="URL:mailto (Quatrelle)" />
+          <RegistryValue Name="URL Protocol" Type="string" Value="" />
+          <RegistryValue Name="FriendlyTypeName" Type="string" Value="Email address link (Quatrelle)" />
+          <RegistryKey Key="DefaultIcon">
+            <RegistryValue Type="string" Value="&quot;[#QuatrelleExe]&quot;,0" />
+          </RegistryKey>
+          <RegistryKey Key="shell\open\command">
+            <RegistryValue Type="string" Value="&quot;[#QuatrelleExe]&quot; &quot;%1&quot;" />
+          </RegistryKey>
+        </RegistryKey>
+
+        <!-- .eml -->
+        <RegistryKey Root="HKLM" Key="Software\Classes\Quatrelle.eml">
+          <RegistryValue Type="string" Value="Saved email message" />
+          <RegistryKey Key="DefaultIcon">
+            <RegistryValue Type="string" Value="&quot;[#QuatrelleExe]&quot;,0" />
+          </RegistryKey>
+          <RegistryKey Key="shell\open\command">
+            <RegistryValue Type="string" Value="&quot;[#QuatrelleExe]&quot; &quot;%1&quot;" />
+          </RegistryKey>
+        </RegistryKey>
+        <RegistryKey Root="HKLM" Key="Software\Classes\.eml\OpenWithProgids">
+          <RegistryValue Name="Quatrelle.eml" Type="string" Value="" />
+        </RegistryKey>
+
+        <!-- .ics -->
+        <RegistryKey Root="HKLM" Key="Software\Classes\Quatrelle.ics">
+          <RegistryValue Type="string" Value="iCalendar events" />
+          <RegistryKey Key="DefaultIcon">
+            <RegistryValue Type="string" Value="&quot;[#QuatrelleExe]&quot;,0" />
+          </RegistryKey>
+          <RegistryKey Key="shell\open\command">
+            <RegistryValue Type="string" Value="&quot;[#QuatrelleExe]&quot; &quot;%1&quot;" />
+          </RegistryKey>
+        </RegistryKey>
+        <RegistryKey Root="HKLM" Key="Software\Classes\.ics\OpenWithProgids">
+          <RegistryValue Name="Quatrelle.ics" Type="string" Value="" />
+        </RegistryKey>
+
+        <!-- .vcf -->
+        <RegistryKey Root="HKLM" Key="Software\Classes\Quatrelle.vcf">
+          <RegistryValue Type="string" Value="vCard contacts" />
+          <RegistryKey Key="DefaultIcon">
+            <RegistryValue Type="string" Value="&quot;[#QuatrelleExe]&quot;,0" />
+          </RegistryKey>
+          <RegistryKey Key="shell\open\command">
+            <RegistryValue Type="string" Value="&quot;[#QuatrelleExe]&quot; &quot;%1&quot;" />
+          </RegistryKey>
+        </RegistryKey>
+        <RegistryKey Root="HKLM" Key="Software\Classes\.vcf\OpenWithProgids">
+          <RegistryValue Name="Quatrelle.vcf" Type="string" Value="" />
+        </RegistryKey>
       </Component>
 
       <Component Id="QuatrelleCli">

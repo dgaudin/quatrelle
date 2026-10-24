@@ -12,7 +12,10 @@ use quatrelle_ui_egui::{ReminderAction, Services, VideoFrame};
 use crate::toast;
 #[cfg(all(unix, not(target_os = "macos")))]
 use crate::xdnd;
-use crate::{appearance, display, self_update, video};
+use crate::{display, self_update, video};
+
+pub(crate) mod appearance;
+pub(crate) mod keychain;
 
 #[derive(Default)]
 pub(crate) struct Desktop {

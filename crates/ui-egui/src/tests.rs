@@ -171,6 +171,10 @@ pub(crate) fn tour() {
             Dialog::LostOnClose { unsent: 2, changes: 1 },
             Dialog::ConfirmDeleteContact { uid: "zoe".into(), name: "Zoe Park".into() },
             Dialog::EmptySubject,
+            Dialog::SendCheck(vec![
+                quatrelle_engine::SendCheck::Lookalike { address: "orders@printsh0p.example".into(), like: "printshop.example".into() },
+                quatrelle_engine::SendCheck::Exposed { count: 12 },
+            ]),
             Dialog::edit_account(&a.session.accounts[0].config),
             Dialog::vacation(
                 "sample",
@@ -241,6 +245,10 @@ pub(crate) fn tour() {
                 text: "line one
 line two"
                     .into(),
+                warning: Some(quatrelle_engine::model::lookalike::SenderWarning::Lookalike {
+                    domain: "printsh0p.example".into(),
+                    like: "printshop.example".into(),
+                }),
             },
             Dialog::MoveEvent(Box::new(crate::dialogs::MoveForm {
                 uid: "weekly".into(),
