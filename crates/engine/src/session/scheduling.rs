@@ -5,7 +5,7 @@
 //! was asked is kept, so the form draws from it frame after frame and asks once per window.
 
 use quatrelle_model::ical::{self, CalEvent};
-use quatrelle_model::pim::{shared_calendar_id, shared_calendar_owner};
+use quatrelle_model::pim::{StoredEvent, shared_calendar_id, shared_calendar_owner};
 use quatrelle_model::scheduling::{
     Availability, BusyKind, BusySlot, MAX_PEOPLE, MAX_ROOMS, MAX_SLOTS, MAX_WINDOW, Room, RoomList, is_rooms_group, merge_slots,
 };
@@ -175,8 +175,10 @@ impl Session {
                 }
                 self.jobs.push(Job::GetAvailability { account: account.to_string(), emails: wanted, from, to });
             } else {
+                // Other people's calendars, set aside away from the calendar: read for this.
+                let aside = self.set_aside(account);
                 for e in &wanted {
-                    let a = self.local_availability(account, e, from, to);
+                    let a = self.local_availability(account, e, from, to, &aside);
                     self.free_busy.insert(key(account, e, from, to), Fetched::Ready(a));
                 }
             }
@@ -241,7 +243,7 @@ impl Session {
     /// When someone is busy, from the calendars kept here: the account's own calendars for
     /// their owner, the calendar opened by their address for anyone else (a room's, a
     /// colleague's), and nothing for someone whose calendar isn't here.
-    fn local_availability(&self, account: &str, email: &str, from: i64, to: i64) -> Availability {
+    fn local_availability(&self, account: &str, email: &str, from: i64, to: i64, aside: &[StoredEvent]) -> Availability {
         let none = |why: &str| Availability { email: email.to_string(), slots: Vec::new(), error: Some(why.to_string()) };
         let Some(p) = self.pim.get(account) else { return none("no calendar on this computer") };
         let mine = self.account(account).is_some_and(|a| a.config.email.eq_ignore_ascii_case(email) || a.config.username.eq_ignore_ascii_case(email));
@@ -255,7 +257,8 @@ impl Session {
         if calendars.is_empty() {
             return none("their calendar isn't on this computer");
         }
-        let events: Vec<CalEvent> = p.events.iter().filter(|e| calendars.contains(&e.calendar.as_str())).map(|e| e.event.clone()).collect();
+        let events: Vec<CalEvent> =
+            p.events.iter().chain(aside).filter(|e| calendars.contains(&e.calendar.as_str())).map(|e| e.event.clone()).collect();
         let off = i64::from(self.clock.offset);
         let mut slots = Vec::new();
         for o in ical::occurrences(&events, from - 86_400, to + 86_400) {

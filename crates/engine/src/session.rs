@@ -384,6 +384,13 @@ pub struct Session {
     pub(crate) cache: HashMap<(String, String), FolderState>,
     /// The cached folders, the least recently used first.
     pub(crate) cache_order: Vec<(String, String)>,
+    /// Accounts whose other people's appointments are set aside (`pim/parking.rs`), and since
+    /// when the calendar isn't shown.
+    parked: HashSet<String>,
+    away_from_calendar: Option<i64>,
+    /// Other people's calendars read again while theirs were set aside, by account: what was
+    /// read wins over what was set aside.
+    read_aside: HashMap<String, HashSet<String>>,
     /// Previews worked out from sources for list rows that came without one
     /// ([`Session::fill_previews`]).
     previews: HashMap<MessageKey, Preview>,
@@ -514,6 +521,9 @@ impl Session {
             cache: HashMap::new(),
             cache_order: Vec::new(),
             previews: HashMap::new(),
+            parked: HashSet::new(),
+            away_from_calendar: None,
+            read_aside: HashMap::new(),
             pending_marks: BTreeMap::new(),
             cache_limit: CACHE_MESSAGES,
             contacts: Contacts::default(),

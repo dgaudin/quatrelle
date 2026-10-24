@@ -298,6 +298,13 @@ servers that don't offer IMAP. Every call is SOAP over HTTPS.
   Contacts folders, synced like CalDAV / CardDAV: changes here first (appointments updated field
   by field, contacts made again, never any meeting mail), then both folders read in full.
   Recurrences go through Graph's pattern-and-range shape, so one RRULE mapping serves both.
+  Away from the calendar, only the account's own calendar is read; other people's appointments
+  are set aside five minutes after it's left (at once at the start), as Outlook reads a shared
+  calendar from its offline file only to show it (`session/pim/parking.rs`): out of memory and
+  of `pim.json`, into `pim-parked.json`, read back when the calendar is shown (a calendar read
+  again meanwhile keeps what was read). One changed here and not yet sent stays. On the owner's
+  mailbox, 25,390 of 25,761 appointments: the session holds 49 MB rather than 105 away from
+  the calendar, and a save of the calendar and contacts writes 1.6 MB rather than 35.
 - **Rooms and free/busy** (`ews_pim/scheduling.rs`), on the account's second connection so a
   long sync never holds them: `GetRoomLists`, then `GetRooms` for each list (an empty answer
   where the organisation set no lists up: the engine then offers the rooms the calendar knows);
