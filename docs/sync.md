@@ -267,7 +267,11 @@ servers that don't offer IMAP. Every call is SOAP over HTTPS.
   folder and the one it left; a folder's own `ModifiedEvent` syncs it; a folder made, deleted or
   moved where the account has folders relists them first. So new mail, mail a server rule filed
   elsewhere, a read mark set on the phone and a shared mailbox's mail come at once, not at the
-  next full sync. On subscribing, the Inboxes are synced once (what came before isn't told).
+  next full sync. A change in the account's own calendar or contacts (their ids asked once with
+  `GetFolder`) runs their sync instead — a meeting accepted on the phone, or one a colleague moved,
+  is in the calendar seconds later: two seconds after it's told (accepting a meeting is several
+  changes), once a minute at most (the pass reads every calendar ticked again, seconds on a big
+  mailbox). On subscribing, the Inboxes are synced once (what came before isn't told).
   While listening, the Inbox is still looked at every five minutes in case the server went
   quiet. A server that refuses `Subscribe` (older than Exchange 2010 SP1) is polled every half
   minute as before; a stream that fails (dropped, a subscription forgotten, ended at once) is

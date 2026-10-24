@@ -559,6 +559,7 @@ impl Worker {
     /// Sync calendars and address books with the account's CalDAV / CardDAV server (password
     /// accounts: OAuth tokens are for mail only).
     pub(super) fn sync_dav(&mut self) {
+        self.pim_synced();
         // Exchange Online: its calendars and contacts through Graph.
         if let Some(Conn::Graph(c)) = &self.conn {
             let pim: quatrelle_model::pim::Pim = self.store.load_account_doc(&self.acc.id, quatrelle_model::pim::PIM_DOC).unwrap_or_default();

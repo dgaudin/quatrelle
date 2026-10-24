@@ -97,6 +97,27 @@ impl Client {
         Ok(Listener { mailbox: mailbox.map(str::to_string), subscription, cookie, body: None, opened: now, last: now })
     }
 
+    /// The ids of the account's own calendar and contacts: a change told in them is for the
+    /// calendars' and contacts' sync, not a mail folder's. Those the server won't name are left
+    /// out (their changes wait for the next full sync).
+    pub fn pim_folders(&self) -> Vec<String> {
+        let ids: String = ["calendar", "contacts"].iter().map(|d| format!("<t:DistinguishedFolderId Id=\"{d}\"/>")).collect();
+        let doc = match self.call(&format!(
+            "<m:GetFolder><m:FolderShape><t:BaseShape>IdOnly</t:BaseShape></m:FolderShape><m:FolderIds>{ids}</m:FolderIds></m:GetFolder>"
+        )) {
+            Ok(doc) => doc,
+            Err(e) => {
+                log::info!("the calendar's and contacts' folders weren't found: {e}");
+                return Vec::new();
+            }
+        };
+        messages(&doc)
+            .iter()
+            .filter(|m| m.attr("ResponseClass") != Some("Error"))
+            .filter_map(|m| m.find("FolderId").and_then(|f| f.attr("Id")).map(str::to_string))
+            .collect()
+    }
+
     /// The answer carrying a subscription's notifications, on a connection of its own, signed in
     /// for it.
     fn open_stream(&self, l: &Listener) -> Result<http::BodyStream<Stream>> {
