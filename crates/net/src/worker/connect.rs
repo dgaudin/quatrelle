@@ -200,6 +200,7 @@ impl Worker {
     }
 
     pub(super) fn connect_and_sync(&mut self) {
+        self.listen.reset();
         if let Err(e) = self.connect() {
             self.connect_failed(e);
             return;

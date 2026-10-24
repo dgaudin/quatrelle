@@ -252,6 +252,22 @@ servers that don't offer IMAP. Every call is SOAP over HTTPS.
   it (`Job::SyncFolder`), and it's listed only (`SyncOptions::list_only`: its newest 500, Show
   more for more, nothing downloaded ahead, no state asked for). What an earlier pass kept of
   one beyond that is let go at the next full pass, and its numbers with it.
+- **Told of changes as they happen** (`worker/listening.rs`, `ews/listening.rs`), as Outlook's
+  Cached Exchange Mode is: the account's main connection subscribes to every folder of its
+  mailbox (`Subscribe`, `SubscribeToAllFolders`) and to the folders of each shared mailbox kept
+  here (by id, anchored to that mailbox), then holds `GetStreamingEvents` open on a connection of
+  its own (signed in for it; ten minutes an answer, asked again when the server ends it or after
+  eleven silent minutes, of the server the subscription lives on: `X-BackEndOverrideCookie`).
+  The answer is SOAP envelopes one after the other, read a slice at a time
+  (`http::BodyStream`) between jobs and between two downloads ahead. A message's event syncs its
+  folder and the one it left; a folder's own `ModifiedEvent` syncs it; a folder made, deleted or
+  moved where the account has folders relists them first. So new mail, mail a server rule filed
+  elsewhere, a read mark set on the phone and a shared mailbox's mail come at once, not at the
+  next full sync. On subscribing, the Inboxes are synced once (what came before isn't told).
+  While listening, the Inbox is still looked at every five minutes in case the server went
+  quiet. A server that refuses `Subscribe` (older than Exchange 2010 SP1) is polled every half
+  minute as before; a stream that fails (dropped, a subscription forgotten, ended at once) is
+  tried again after 5 s, doubling up to 15 minutes, polled meanwhile.
 - **Changes** are `UpdateItem`, `MoveItem`, `DeleteItem` and the folder calls, fifty items a call.
 - **Sending** is `CreateItem` with the MIME source and `SendAndSaveCopy` (the copy goes to Sent
   Items); envelope-only recipients go in a `Bcc:` header. Drafts are `CreateItem` with `SaveOnly`,

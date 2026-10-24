@@ -10,7 +10,7 @@ pub struct Server {
     pub data: Arc<Mutex<Data>>,
 }
 
-fn respond(s: &mut impl Write, status: u16, headers: &[(&str, String)], body: &[u8]) {
+pub(super) fn respond(s: &mut impl Write, status: u16, headers: &[(&str, String)], body: &[u8]) {
     let mut head = format!("HTTP/1.1 {status} X\r\nContent-Type: text/xml; charset=utf-8\r\nContent-Length: {}\r\n", body.len());
     for (k, v) in headers {
         head.push_str(&format!("{k}: {v}\r\n"));
@@ -68,7 +68,7 @@ fn serve_connection(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>) {
             return;
         }
         answered += 1;
-        let (mut len, mut auth, mut routed, mut anchor) = (0usize, String::new(), String::new(), String::new());
+        let (mut len, mut auth, mut routed, mut anchor, mut cookie) = (0usize, String::new(), String::new(), String::new(), String::new());
         loop {
             let mut line = String::new();
             if reader.read_line(&mut line).unwrap_or(0) == 0 || line == "\r\n" {
@@ -86,6 +86,9 @@ fn serve_connection(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>) {
                 }
                 if k.eq_ignore_ascii_case("x-anchormailbox") {
                     anchor = v.trim().to_string();
+                }
+                if k.eq_ignore_ascii_case("cookie") {
+                    cookie = v.trim().to_string();
                 }
             }
         }
@@ -194,6 +197,26 @@ fn serve_connection(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>) {
             );
             continue;
         };
+        // Changes told as they happen: the subscription (the server it lives on said in a
+        // cookie), and the answer kept open that carries them, the connection's last.
+        if op.name == "Subscribe" {
+            let message = {
+                let mut d = shared.lock().unwrap();
+                d.calls.push(op.name.clone());
+                d.subscribe(&op)
+            };
+            let xml = format!(
+                "<?xml version=\"1.0\"?><s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\"><s:Body><m:SubscribeResponse xmlns:m=\"m\" xmlns:t=\"t\">\
+                 <m:ResponseMessages>{}</m:ResponseMessages></m:SubscribeResponse></s:Body></s:Envelope>",
+                message.replace("<m:R ", "<m:SubscribeResponseMessage ").replace("</m:R>", "</m:SubscribeResponseMessage>")
+            );
+            respond(&mut s, 200, &[("Set-Cookie", format!("{}; path=/", super::streaming::BACKEND))], xml.as_bytes());
+            continue;
+        }
+        if op.name == "GetStreamingEvents" {
+            super::streaming::stream_events(&mut s, shared, &op, &cookie);
+            return;
+        }
         // Slow answers: the fork holds every mail search (`slow_sync`), the shared version only
         // a mail folder's listing and not a PIM folder's (`hold`).
         let hold = {

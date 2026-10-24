@@ -432,6 +432,7 @@ fn mime_word(s: &str) -> String {
 
 mod autodiscover;
 mod changes;
+mod listening;
 mod mailbox;
 mod requests;
 mod rules;
@@ -442,6 +443,7 @@ mod xml;
 pub use autodiscover::autodiscover;
 use autodiscover::{alternative_mailboxes, autodiscover_public, autodiscover_smtp, autodiscover_urls};
 pub use changes::{append, apply_remote, send, vote};
+pub use listening::{Heard, Listener};
 use sync::restriction;
 pub use sync::{download_ahead, fetch_body, find_lost, find_on_server, list_folders, older, read_online, search, sync_folder};
 pub use xml::{El, esc, parse, unb64};

@@ -62,29 +62,47 @@ impl Client {
             self.set_signed_in();
             return self.send_on_conn(req, false);
         }
-        let fail = |e: NetError| (e, false);
-        let token = Client::offered(&first)
-            .iter()
-            .find_map(|v| v.strip_prefix(name).map(|t| t.trim().to_string()))
-            .filter(|t| !t.is_empty())
-            .ok_or_else(|| fail(NetError::Auth("the server didn't answer the sign-in".into())))?;
-        let challenge = crate::ntlm::challenge(&unb64(&token).ok_or_else(|| fail(NetError::Protocol("bad NTLM challenge".into())))?).map_err(fail)?;
-        let mut client_challenge = [0u8; 8];
-        ring::rand::SecureRandom::fill(&ring::rand::SystemRandom::new(), &mut client_challenge)
-            .map_err(|_| fail(NetError::Protocol("no randomness".into())))?;
-        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
-        let filetime = (now + 11_644_473_600) * 10_000_000;
-        let answer = crate::ntlm::authenticate(&challenge, &self.user, &self.password, filetime, client_challenge);
-        let resp = self.send_on_conn(&req.clone().header("Authorization", &format!("{name} {}", b64(&answer))), false)?;
+        let answer = self.ntlm_answer(&first, name).map_err(|e| (e, false))?;
+        let resp = self.send_on_conn(&req.clone().header("Authorization", &answer), false)?;
         if resp.status != 401 {
             self.set_signed_in();
         }
         Ok(resp)
     }
 
+    /// The `Authorization` answering the NTLM challenge in `first` (the server's 401).
+    pub(super) fn ntlm_answer(&self, first: &Response, name: &str) -> Result<String> {
+        let token = Client::offered(first)
+            .iter()
+            .find_map(|v| v.strip_prefix(name).map(|t| t.trim().to_string()))
+            .filter(|t| !t.is_empty())
+            .ok_or_else(|| NetError::Auth("the server didn't answer the sign-in".into()))?;
+        let challenge = crate::ntlm::challenge(&unb64(&token).ok_or_else(|| NetError::Protocol("bad NTLM challenge".into()))?)?;
+        let mut client_challenge = [0u8; 8];
+        ring::rand::SecureRandom::fill(&ring::rand::SystemRandom::new(), &mut client_challenge)
+            .map_err(|_| NetError::Protocol("no randomness".into()))?;
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+        let filetime = (now + 11_644_473_600) * 10_000_000;
+        let answer = crate::ntlm::authenticate(&challenge, &self.user, &self.password, filetime, client_challenge);
+        Ok(format!("{name} {}", b64(&answer)))
+    }
+
+    /// The `Authorization` of Basic sign-in.
+    pub(super) fn basic(&self) -> String {
+        format!("Basic {}", b64(format!("{}:{}", self.user, self.password).as_bytes()))
+    }
+
     /// Send a request signed in the way the server wants.
     pub(crate) fn post(&self, body: Vec<u8>) -> Result<Response> {
+        self.post_with(body, &[])
+    }
+
+    /// [`Client::post`] with headers of its own (where a subscription is to live).
+    pub(super) fn post_with(&self, body: Vec<u8>, extra: &[(&str, &str)]) -> Result<Response> {
         let mut base = Request::post(&self.url, "text/xml; charset=utf-8", body, MAX_ANSWER).header("Accept", "text/xml");
+        for (k, v) in extra {
+            base = base.header(k, v);
+        }
         if let Some(mailbox) = self.route.borrow().as_ref() {
             base = base.header("X-AnchorMailbox", mailbox).header("X-PublicFolderMailbox", mailbox);
         } else if let Some(mailbox) = self.anchor.borrow().as_ref() {
@@ -100,10 +118,7 @@ impl Client {
             let scheme = *self.scheme.borrow();
             let was_signed_in = matches!(scheme, Scheme::Ntlm(_)) && self.signed_in();
             let sent = match scheme {
-                Scheme::Basic => {
-                    let token = b64(format!("{}:{}", self.user, self.password).as_bytes());
-                    self.send_on_conn(&base.clone().header("Authorization", &format!("Basic {token}")), true)
-                }
+                Scheme::Basic => self.send_on_conn(&base.clone().header("Authorization", &self.basic()), true),
                 Scheme::Ntlm(name) if !was_signed_in => self.ntlm(&base, name),
                 Scheme::Ntlm(_) | Scheme::Unknown => self.send_on_conn(&base, true),
             };
@@ -197,6 +212,11 @@ impl Client {
 
     pub(super) fn call_once(&self, body: &str) -> std::result::Result<El, Busy> {
         let resp = self.post(envelope(body).into_bytes()).map_err(Busy::Failed)?;
+        Client::answer(&resp)
+    }
+
+    /// What an answer says: its elements, or why not (a SOAP fault, a busy server, HTTP).
+    pub(super) fn answer(resp: &Response) -> std::result::Result<El, Busy> {
         let text = String::from_utf8_lossy(&resp.body);
         let doc = parse(&text);
         if let Some(wait) = busy(&doc) {

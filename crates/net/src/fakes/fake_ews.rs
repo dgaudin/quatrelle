@@ -134,6 +134,19 @@ pub struct Data {
     pub taken: Vec<(String, String, String, String, String)>,
     /// The `GetUserAvailability` requests seen: the addresses asked about and the window.
     pub availability_asked: Vec<(Vec<String>, String, String)>,
+    /// The server tells of changes as they happen (streaming notifications); without it
+    /// `Subscribe` is refused, as by a server older than Exchange 2010 SP1.
+    pub streaming: bool,
+    /// The subscriptions it has: their ids and the folders each is for (`None`: all of the
+    /// account's own). One taken away is forgotten, as by a server restarted.
+    pub subscriptions: Vec<(String, Option<Vec<String>>)>,
+    /// How long one answer of notifications stays open.
+    pub stream_for: std::time::Duration,
+    /// The `Cookie` each answer of notifications was asked with.
+    pub stream_cookies: Vec<String>,
+    /// What each subscription last told of: what changed since is told when it's next asked,
+    /// as a subscription keeps its notifications between two answers.
+    told: std::collections::HashMap<String, streaming::Seen>,
     next: u32,
 }
 
@@ -213,6 +226,11 @@ impl Default for Data {
             no_freebusy: Vec::new(),
             taken: Vec::new(),
             availability_asked: Vec::new(),
+            streaming: false,
+            subscriptions: Vec::new(),
+            stream_for: std::time::Duration::from_secs(2),
+            stream_cookies: Vec::new(),
+            told: std::collections::HashMap::new(),
             next: 0,
         };
         d.folders.push(Fo {
@@ -530,6 +548,7 @@ fn xml(e: &El) -> String {
 
 mod route;
 mod server;
+mod streaming;
 
 pub use server::serve;
 
