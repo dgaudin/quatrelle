@@ -141,6 +141,10 @@ pub struct Prefs {
     /// signed mail is shown. Off at first: the authority learns whose mail is being read.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub check_revocation: bool,
+    /// The Webex personal room the appointment window's Webex Meeting button puts in
+    /// (`https://<site>.webex.com/meet/<name>`); empty until it's set in Options.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub webex_room: String,
 }
 
 impl Default for Prefs {
@@ -188,6 +192,7 @@ impl Default for Prefs {
             keep_photo_location: false,
             clean_links: true,
             check_revocation: false,
+            webex_room: String::new(),
             quick_steps: Vec::new(),
             folder_pane_minimized: false,
             collapsed: BTreeSet::new(),

@@ -1452,3 +1452,8 @@ month	May	Mai
 	The {nth} {weekday} of {month}, every {n} years	Am {nth} {weekday} im {month}, alle {n} Jahre
 	Every year on {day} {month}	Jedes Jahr am {day}. {month}
 	Every {n} years on {day} {month}	Alle {n} Jahre am {day}. {month}
+	Webex Meeting	Webex-Besprechung
+	Set your Webex personal room in File › Options first	Legen Sie zuerst Ihren persönlichen Webex-Raum unter Datei › Optionen fest
+	Join the Webex meeting:	An der Webex-Besprechung teilnehmen:
+	Webex personal room	Persönlicher Webex-Raum
+	Webex Meeting, in a new appointment's window, puts it in for the guests to join	Webex-Besprechung im Fenster eines neuen Termins fügt ihn ein, damit die Gäste teilnehmen können

@@ -1451,3 +1451,8 @@ month	May	5월
 	The {nth} {weekday} of {month}, every {n} years	{n}년마다 {month} {nth} {weekday}
 	Every year on {day} {month}	매년 {month} {day}일
 	Every {n} years on {day} {month}	{n}년마다 {month} {day}일
+	Webex Meeting	Webex 회의
+	Set your Webex personal room in File › Options first	먼저 파일 › 옵션에서 Webex 개인 회의실을 설정하세요
+	Join the Webex meeting:	Webex 회의 참가:
+	Webex personal room	Webex 개인 회의실
+	Webex Meeting, in a new appointment's window, puts it in for the guests to join	새 약속 창의 Webex 회의 단추가 참석자가 참가할 수 있도록 이를 넣습니다
