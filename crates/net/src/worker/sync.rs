@@ -536,7 +536,7 @@ impl Worker {
                     }
                 }
                 Ok(SyncDone::State(state)) => {
-                    self.jstate.absorb(state);
+                    self.jstate.absorb(*state);
                     running -= 1;
                 }
                 Ok(SyncDone::Refused) => {

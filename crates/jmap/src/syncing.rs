@@ -236,7 +236,7 @@ async fn prefetch<H: Http>(
         .iter()
         .take(opts.prefetch)
         .filter(|m| m.size <= opts.prefetch_max_bytes && !store.has_body(&m.key))
-        .filter_map(|m| Some((m.key.uid, st.id(m.key.uid)?.to_string())))
+        .filter_map(|m| Some((m.key.uid, st.id(m.key.uid)?)))
         .collect();
     download_sources(c, store, account, folder, fs, &wanted, wanted.len()).await.map(drop)
 }
@@ -269,7 +269,7 @@ pub async fn download_ahead<H: Http>(
         .collect();
     // As the list shows them: the newest at the top come down first.
     todo.sort_by(|a, b| b.date.cmp(&a.date).then_with(|| b.key.cmp(&a.key)));
-    let todo: Vec<(u32, String)> = todo.iter().filter_map(|m| Some((m.key.uid, st.id(m.key.uid)?.to_string()))).collect();
+    let todo: Vec<(u32, String)> = todo.iter().filter_map(|m| Some((m.key.uid, st.id(m.key.uid)?))).collect();
     let ahead = download_sources(c, store, account, folder, &mut fs, &todo, budget).await?;
     Ok(todo.len().saturating_sub(ahead.got.len().saturating_add(ahead.skipped)))
 }
@@ -363,7 +363,7 @@ pub async fn fetch_body<H: Http>(c: &Client<H>, st: &State, store: &Store, key: 
         return Ok(raw);
     }
     let gone = || Error::No("the message is no longer on the server".into());
-    let id = st.id(key.uid).filter(|_| key.validity == VALIDITY).ok_or_else(gone)?.to_string();
+    let id = st.id(key.uid).filter(|_| key.validity == VALIDITY).ok_or_else(gone)?;
     let blob = c.blobs(std::slice::from_ref(&id)).await?.remove(&id).ok_or_else(gone)?;
     let raw = c.download(&blob).await?;
     store.write_body(key, &raw)?;
