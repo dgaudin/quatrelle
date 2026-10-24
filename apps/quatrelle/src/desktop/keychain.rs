@@ -55,6 +55,16 @@ impl Credentials for Keychain {
     fn delete_smtp(&self, account: &AccountConfig) {
         secrets::remove(SERVICE, &smtp_entry(account));
     }
+    // Another secret of the account's (`smime`: its S/MIME certificate's private key).
+    fn get_secret(&self, account: &AccountConfig, what: &str) -> Option<String> {
+        secrets::load(SERVICE, &format!("{}|{what}", account.id))
+    }
+    fn set_secret(&self, account: &AccountConfig, what: &str, secret: &str) -> Result<(), String> {
+        secrets::store(SERVICE, &format!("{}|{what}", account.id), secret)
+    }
+    fn delete_secret(&self, account: &AccountConfig, what: &str) {
+        secrets::remove(SERVICE, &format!("{}|{what}", account.id));
+    }
 }
 
 #[cfg(all(test, windows))]

@@ -187,6 +187,18 @@ impl Pool {
                 }
             }
             Job::ImportPst { account, path } => self.import_pst(account, path),
+            j @ (Job::ImportIdentity { .. }
+            | Job::ForgetIdentity { .. }
+            | Job::Protect { .. }
+            | Job::Decrypt { .. }
+            | Job::CheckRevocation { .. }
+            | Job::FindHeldKeys { .. }
+            | Job::UseHeldKey { .. }) => self.smime(j),
+            Job::SealDraft { account, raw, folder, replaces, keep } => {
+                let raw = self.seal(&account, raw.0);
+                let account = account.id;
+                self.submit(if keep { Job::KeepDraft { account, raw, folder, replaces } } else { Job::SaveDraft { account, raw, folder, replaces } });
+            }
             Job::ExportPst { account, path, name } => self.export_pst(account, path, name),
             Job::SetSync { days, messages, full } => {
                 let window = if messages == 0 { usize::MAX } else { messages as usize };

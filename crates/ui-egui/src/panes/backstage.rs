@@ -18,6 +18,7 @@ mod about;
 mod info;
 mod open;
 mod options;
+mod security;
 
 use about::about;
 use info::info;

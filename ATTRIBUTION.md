@@ -35,6 +35,13 @@ owner's own picture `assets/icon.png` when it is there (every size is sampled do
 | `assets/app-icon/quatrelle-1024.png` | Quatrelle contributors | Rendered by `cargo xtask icons` (`xtask/src/icons.rs`) | MIT OR Apache-2.0 |
 | `fuzz/seeds/photo/geotagged.jpg` | Quatrelle contributors | Written byte by byte as a fuzzing seed (a few header bytes, no picture) | MIT OR Apache-2.0 |
 | `fuzz/seeds/photo/geotagged.png` | Quatrelle contributors | Written byte by byte as a fuzzing seed (a few header bytes, no picture) | MIT OR Apache-2.0 |
+| `crates/smime/testdata/encrypted-cbc.eml` | Quatrelle contributors | Made with `openssl cms` from Quatrelle's own test certificates (S/MIME tests) | MIT OR Apache-2.0 |
+| `crates/smime/testdata/encrypted-gcm.eml` | Quatrelle contributors | Made with `openssl cms` from Quatrelle's own test certificates (S/MIME tests) | MIT OR Apache-2.0 |
+| `crates/smime/testdata/signed-clear.eml` | Quatrelle contributors | Made with `openssl cms` from Quatrelle's own test certificates (S/MIME tests) | MIT OR Apache-2.0 |
+| `crates/smime/testdata/signed-ec.eml` | Quatrelle contributors | Made with `openssl cms` from Quatrelle's own test certificates (S/MIME tests) | MIT OR Apache-2.0 |
+| `crates/smime/testdata/signed-encrypted.eml` | Quatrelle contributors | Made with `openssl cms` from Quatrelle's own test certificates (S/MIME tests) | MIT OR Apache-2.0 |
+| `crates/smime/testdata/signed-opaque.eml` | Quatrelle contributors | Made with `openssl cms` from Quatrelle's own test certificates (S/MIME tests) | MIT OR Apache-2.0 |
+| `crates/smime/testdata/signed-tampered.eml` | Quatrelle contributors | Made with `openssl cms` from Quatrelle's own test certificates (S/MIME tests) | MIT OR Apache-2.0 |
 | `assets/app-icon/quatrelle.icns` | Quatrelle contributors | Rendered by `cargo xtask icons` (`xtask/src/icons.rs`) | MIT OR Apache-2.0 |
 | `assets/app-icon/quatrelle.ico` | Quatrelle contributors | Rendered by `cargo xtask icons` (`xtask/src/icons.rs`) | MIT OR Apache-2.0 |
 | `assets/dictionaries/LICENSE.txt` | Quatrelle contributors | What the dictionaries below are licensed under, and where they come from | MIT OR Apache-2.0 |
@@ -118,6 +125,8 @@ owner's own picture `assets/icon.png` when it is there (every size is sampled do
 | `assets/icons/fluent/vote_20_regular.svg` | Microsoft Corporation | Fluent UI System Icons, `@fluentui/svg-icons` 1.1.292, unchanged | MIT |
 | `assets/icons/fluent/arrow_down_20_regular.svg` | Microsoft Corporation | Fluent UI System Icons, `@fluentui/svg-icons` 1.1.292, unchanged | MIT |
 | `assets/icons/fluent/calendar_clock_20_regular.svg` | Microsoft Corporation | Fluent UI System Icons, `@fluentui/svg-icons` 1.1.292, unchanged | MIT |
+| `assets/icons/fluent/lock_closed_20_regular.svg` | Microsoft Corporation | Fluent UI System Icons, `@fluentui/svg-icons` 1.1.292, unchanged | MIT |
+| `assets/icons/fluent/ribbon_20_regular.svg` | Microsoft Corporation | Fluent UI System Icons, `@fluentui/svg-icons` 1.1.292, unchanged | MIT |
 | `assets/icons/fluent/clipboard_paste_20_regular.svg` | Microsoft Corporation | Fluent UI System Icons, `@fluentui/svg-icons` 1.1.292, unchanged | MIT |
 | `assets/icons/fluent/copy_20_regular.svg` | Microsoft Corporation | Fluent UI System Icons, `@fluentui/svg-icons` 1.1.292, unchanged | MIT |
 | `assets/icons/fluent/cut_20_regular.svg` | Microsoft Corporation | Fluent UI System Icons, `@fluentui/svg-icons` 1.1.292, unchanged | MIT |

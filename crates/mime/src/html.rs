@@ -2,6 +2,8 @@
 
 use super::*;
 
+pub(crate) mod links;
+
 /// Most lines kept of a rich rendering (the rest is shown as text).
 pub(super) const RICH_MAX_LINES: usize = 20_000;
 
