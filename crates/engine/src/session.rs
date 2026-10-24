@@ -40,7 +40,7 @@ mod writing;
 // The list's, the settings', the message being written's and organizing mail's own parts,
 // named here as before.
 pub use listing::{ARRANGE_HEADINGS, Arrange, FolderRef, ListFilter, OUTBOX, Row, View, arrange_list};
-use listing::{person, size_group};
+use listing::{Preview, person, size_group};
 use mailboxes::Contacts;
 pub use organize::{RulesScope, junk, quick_steps, search_folders};
 pub use prefs::{ListLayout, NotesOrder, Prefs, ReadInPane, ReadingPane};
@@ -384,6 +384,9 @@ pub struct Session {
     pub(crate) cache: HashMap<(String, String), FolderState>,
     /// The cached folders, the least recently used first.
     pub(crate) cache_order: Vec<(String, String)>,
+    /// Previews worked out from sources for list rows that came without one
+    /// ([`Session::fill_previews`]).
+    previews: HashMap<MessageKey, Preview>,
     /// Flags owed to originals, keyed by the Outbox id of the reply or forward that earns them:
     /// set when the server accepts that message. Saved to disk so a restart keeps them.
     pending_marks: BTreeMap<u64, (MessageKey, Flag)>,
@@ -510,6 +513,7 @@ impl Session {
             jobs: Vec::new(),
             cache: HashMap::new(),
             cache_order: Vec::new(),
+            previews: HashMap::new(),
             pending_marks: BTreeMap::new(),
             cache_limit: CACHE_MESSAGES,
             contacts: Contacts::default(),

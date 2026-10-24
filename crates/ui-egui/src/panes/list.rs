@@ -200,6 +200,9 @@ pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) 
             ui.scroll_to_rect(r, None);
         }
         let first = tops.partition_point(|&top| top + mh < viewport.min.y);
+        // Rows come without a preview when their source was downloaded ahead: worked out for
+        // the rows drawn, after the frame.
+        let previews = s.prefs.show_preview && !s.prefs.compact;
         for (i, row) in rows.iter().enumerate().skip(first) {
             let top = tops.get(i).copied().unwrap_or(0.0);
             if top > viewport.max.y {
@@ -217,6 +220,9 @@ pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) 
                 }
                 Row::Message { index, count, unread } => {
                     let Some(m) = s.list.get(*index) else { continue };
+                    if previews && s.preview_wanted(m) {
+                        st.want_previews.push(m.key.clone());
+                    }
                     let r = Rect::from_min_size(origin + vec2(0.0, top), vec2(width, mh));
                     if table {
                         table_row(s, &t, ui, r, &cols, m, *count, *unread, sent_view, acts);
@@ -584,13 +590,14 @@ fn table_row(
         }
     }
     // The preview under the sender and subject.
-    if two_lines && !m.preview.is_empty() {
+    let preview = s.preview_of(m);
+    if two_lines && !preview.is_empty() {
         let span = cols
             .iter()
             .filter(|(c, _, _)| matches!(c, Col::Who | Col::Subject))
             .fold((f32::MAX, 0.0f32), |(a, b), (_, x0, x1)| (a.min(*x0), b.max(*x1)));
         let inner = Rect::from_x_y_ranges(r.min.x + span.0 + 6.0..=r.min.x + span.1 - 6.0, r.y_range());
-        let (preview, _) = crate::bidi::shown(&m.preview);
+        let (preview, _) = crate::bidi::shown(preview);
         let g = p.layout_no_wrap(preview.into_owned(), theme::regular(12.0), t.dim);
         p.with_clip_rect(inner).galley(egui::pos2(inner.min.x, r.min.y + 20.0), g, t.dim);
     }
@@ -716,8 +723,9 @@ fn message_row(
     let subj_right = right - icons_w.max(if hovered { 70.0 } else { 0.0 }) - 4.0;
     let subj_x = if subj_rtl { (subj_right - subj_g.size().x).max(x) } else { x };
     p.with_clip_rect(Rect::from_x_y_ranges(x..=subj_right, r.y_range())).galley(egui::pos2(subj_x, line2), subj_g, subj_color);
-    if s.prefs.show_preview && !compact && !m.preview.is_empty() {
-        let (preview, pv_rtl) = crate::bidi::shown(&m.preview);
+    let preview = s.preview_of(m);
+    if s.prefs.show_preview && !compact && !preview.is_empty() {
+        let (preview, pv_rtl) = crate::bidi::shown(preview);
         let pv = p.layout_no_wrap(preview.into_owned(), theme::regular(12.5), t.dim);
         let pv_x = if pv_rtl { (right - pv.size().x).max(x) } else { x };
         p.with_clip_rect(Rect::from_x_y_ranges(x..=right, r.y_range())).galley(egui::pos2(pv_x, line2 + 19.0), pv, t.dim);

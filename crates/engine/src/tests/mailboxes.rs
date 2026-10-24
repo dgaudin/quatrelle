@@ -297,3 +297,45 @@ fn older_mail_is_read_on_the_server_not_kept() {
     assert_eq!(s.list.len(), 1);
     let _ = std::fs::remove_dir_all(store.root());
 }
+
+/// Mail downloaded ahead comes into the list without a preview (a big folder's list isn't
+/// written again for it): the rows drawn get theirs from their sources, a few at a time, and a
+/// row whose source isn't here yet is looked at again a minute later.
+#[test]
+fn rows_downloaded_ahead_get_their_preview_from_the_source() {
+    let store = temp("previews");
+    store.save_accounts(&[quatrelle_model::AccountConfig { id: "a1".into(), email: "me@studio.example".into(), ..Default::default() }]).unwrap();
+    let inbox =
+        quatrelle_model::Folder { account: "a1".into(), path: "INBOX".into(), role: FolderRole::Inbox, selectable: true, ..Default::default() };
+    store.save_folders("a1", &[inbox]).unwrap();
+    let key = |uid| MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 1, uid };
+    let mut st = quatrelle_store::FolderState { validity: 1, uid_next: 12, ..Default::default() };
+    for uid in 1..=11u32 {
+        let preview = if uid == 11 { "From its listing".to_string() } else { String::new() };
+        st.messages.push(Summary { key: key(uid), subject: format!("Report {uid}"), date: NOW - i64::from(uid), preview, ..Default::default() });
+        if uid <= 8 {
+            let raw = format!("From: a@x.example\r\nSubject: Report {uid}\r\n\r\nThe figures for week {uid}.\r\n\r\n-- \r\nA signature\r\n");
+            store.write_body(&key(uid), raw.as_bytes()).unwrap();
+        }
+    }
+    store.save_folder("a1", "INBOX", &st).unwrap();
+    let mut s = Session::open(Some(store.clone()), quatrelle_model::dates::Clock::new(NOW, 0));
+    s.run("folder.open", &json!({"account": "a1", "folder": "INBOX"})).unwrap();
+    let wanted = |s: &Session| s.list.iter().filter(|m| s.preview_wanted(m)).map(|m| m.key.clone()).collect::<Vec<_>>();
+    let rows = wanted(&s);
+    assert_eq!(rows.len(), 10, "the one listed with a preview keeps it");
+    assert!(s.fill_previews(&rows), "a few at a time: some are left");
+    assert!(!s.fill_previews(&wanted(&s)), "the rest in the next go");
+    assert!(wanted(&s).is_empty(), "the two without a source wait");
+    let preview = |s: &Session, uid| s.list.iter().find(|m| m.key == key(uid)).map(|m| s.preview_of(m).to_string()).unwrap_or_default();
+    assert_eq!(preview(&s, 3), "The figures for week 3.", "the signature isn't part of it");
+    assert_eq!(preview(&s, 9), "");
+    assert_eq!(preview(&s, 11), "From its listing");
+    // Its source downloaded meanwhile: a minute later the row is looked at again.
+    store.write_body(&key(9), b"From: a@x.example\r\nSubject: Report 9\r\n\r\nLate figures.\r\n").unwrap();
+    s.set_clock(NOW + 61, 0);
+    assert_eq!(wanted(&s), vec![key(9), key(10)]);
+    s.fill_previews(&wanted(&s));
+    assert_eq!(preview(&s, 9), "Late figures.");
+    done(s);
+}
