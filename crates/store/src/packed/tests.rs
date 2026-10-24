@@ -503,3 +503,43 @@ fn a_data_file_opened_by_threads_at_once_opens_once() {
         let _ = std::fs::remove_dir_all(&t);
     }
 }
+
+/// A data file whose writer stopped dead (a crash, a power cut) opens without being gone through
+/// first: each commit keeps what a repair would work out. Without it, the owner's 45 GB file took
+/// 72 s to open after Quatrelle was killed. The writer is this test run again, which writes and
+/// leaves without closing anything.
+#[test]
+fn a_data_file_left_by_a_crash_needs_no_repair() {
+    const WRITER: &str = "QUATRELLE_TEST_CRASHED_WRITER";
+    if let Some(dir) = std::env::var_os(WRITER) {
+        let dir = std::path::PathBuf::from(dir);
+        let store = Store::open_packed(dir.join("app"), dir.join("Files")).unwrap();
+        store.save_accounts(&[account("a1", "a1@example.org")]).unwrap();
+        let st = crate::FolderState { validity: 7, ..crate::FolderState::<Summary>::default() };
+        store.save_folder("a1", "INBOX", &st).unwrap();
+        // No destructor runs: the data file is left as a crash leaves it.
+        std::process::exit(3);
+    }
+    let t = temp("crashed");
+    let status = std::process::Command::new(std::env::current_exe().unwrap())
+        .args(["--exact", "packed::tests::a_data_file_left_by_a_crash_needs_no_repair", "--test-threads=1"])
+        .env(WRITER, &t)
+        .stdout(std::process::Stdio::null())
+        .status()
+        .unwrap();
+    assert_eq!(status.code(), Some(3), "the writer stopped dead after writing");
+    let file = std::fs::read_dir(t.join("Files"))
+        .unwrap()
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .find(|p| p.extension().is_some_and(|x| x == super::EXTENSION))
+        .unwrap();
+    let repaired = std::rc::Rc::new(std::cell::Cell::new(false));
+    let seen = repaired.clone();
+    let db = redb::Database::builder().set_repair_callback(move |_| seen.set(true)).create(&file).unwrap();
+    assert!(!repaired.get(), "no repair was needed");
+    drop(db);
+    let store = Store::open_packed(t.join("app"), t.join("Files")).unwrap();
+    assert_eq!(store.load_folder("a1", "INBOX").unwrap().validity, 7, "and what was written is there");
+    drop(store);
+    let _ = std::fs::remove_dir_all(&t);
+}
