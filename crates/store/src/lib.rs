@@ -653,6 +653,17 @@ impl Store {
         &self.root
     }
 
+    /// Where the cache writes on disk: its data files' folder, or the cache itself; `None` for
+    /// one kept in memory.
+    pub fn data_dir(&self) -> Option<PathBuf> {
+        match &self.files.main {
+            Files::Disk => Some(self.root.clone()),
+            #[cfg(not(target_arch = "wasm32"))]
+            Files::Packed(p) => Some(p.dir().to_path_buf()),
+            Files::Memory(..) => None,
+        }
+    }
+
     fn folder_dir(&self, account: &str, folder: &str) -> PathBuf {
         self.account_dir(account).join(format!("f{:016x}", fnv64(folder)))
     }

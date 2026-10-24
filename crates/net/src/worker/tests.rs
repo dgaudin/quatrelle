@@ -183,3 +183,21 @@ fn pool_without_password_asks_for_one() {
     assert!(matches!(p.poll().as_slice(), [Event::Body { .. }]));
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// Mail downloaded ahead never fills the disk: the larger of 5 GB and a fiftieth of it stays
+/// free; and the disk looked at is the one the mail is kept on.
+#[test]
+fn downloading_ahead_leaves_room_on_the_disk() {
+    const GB: u64 = 1 << 30;
+    assert!(ahead::enough_room(26 * GB, 394 * GB), "the owner's disk, 26 GB free of 394");
+    assert!(!ahead::enough_room(7 * GB, 394 * GB), "less than a fiftieth of a big disk");
+    assert!(!ahead::enough_room(4 * GB, 100 * GB), "less than 5 GB of a small one");
+    assert!(ahead::enough_room(6 * GB, 100 * GB));
+    let dir = std::env::temp_dir().join(format!("quatrelle-room-{}", std::process::id()));
+    let packed = Store::open_packed(dir.join("app"), dir.join("Files")).unwrap();
+    assert_eq!(packed.data_dir(), Some(dir.join("Files")), "a data file's folder");
+    assert_eq!(Store::open(dir.join("plain")).unwrap().data_dir(), Some(dir.join("plain")));
+    assert_eq!(Store::memory().data_dir(), None);
+    assert!(fs4::statvfs(dir.join("Files")).is_ok_and(|s| s.total_space() > 0), "its disk is read");
+    let _ = std::fs::remove_dir_all(dir);
+}

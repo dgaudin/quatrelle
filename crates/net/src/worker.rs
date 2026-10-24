@@ -243,6 +243,7 @@ pub(crate) fn now() -> i64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map(|d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX)).unwrap_or(0)
 }
 
+mod ahead;
 mod changes;
 mod connect;
 mod listening;
@@ -343,6 +344,8 @@ struct Worker {
     ahead_left: Option<(String, usize)>,
     /// What of the first one is still to download (an Exchange account's).
     ahead_todo: crate::ews::AheadTodo,
+    /// Downloading ahead paused for room on the disk: when it's looked at again.
+    room_again: Option<Instant>,
     /// When the Inbox is next looked at while downloading ahead.
     ahead_poll: Instant,
     /// The server search still wanted (the pool's).
@@ -408,6 +411,7 @@ impl Worker {
             ahead: VecDeque::new(),
             ahead_left: None,
             ahead_todo: crate::ews::AheadTodo::default(),
+            room_again: None,
             ahead_poll: Instant::now(),
             queue: VecDeque::new(),
             backoff: Duration::from_secs(5),
@@ -497,7 +501,7 @@ impl Worker {
             }
             // Nothing asked: a few more messages downloaded whole, with a look at the Inbox every
             // half minute meanwhile.
-            if !self.ahead.is_empty() {
+            if !self.ahead.is_empty() && self.room_to_download() {
                 // Told of changes, what changed is read between two steps.
                 if self.listening() {
                     self.hear(Duration::ZERO);
