@@ -1237,3 +1237,6 @@ month	May	mei
 	Nothing to attach here.	Hier is niets om bij te voegen.
 	Saved {n} messages in {folder}	{n} berichten opgeslagen in {folder}
 	{n} not saved: not on this computer yet	{n} niet opgeslagen: nog niet op deze computer
+	This update wasn't sent by the meeting's organizer, so it can't change your calendar.	Deze update is niet door de organisator van de vergadering verstuurd en kan je agenda daarom niet wijzigen.
+	This answer wasn't sent by the guest it's from, so it can't be recorded.	Dit antwoord is niet verstuurd door de gast van wie het afkomstig zou zijn en kan daarom niet worden vastgelegd.
+	This invitation is out of date: your calendar has a newer version.	Deze uitnodiging is verouderd: je agenda heeft een nieuwere versie.

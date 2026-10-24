@@ -1241,3 +1241,6 @@ month	May	mai
 	Nothing to attach here.	Rien à joindre ici.
 	Saved {n} messages in {folder}	{n} messages enregistrés dans {folder}
 	{n} not saved: not on this computer yet	{n} non enregistrés : pas encore sur cet ordinateur
+	This update wasn't sent by the meeting's organizer, so it can't change your calendar.	Cette mise à jour n'a pas été envoyée par l'organisateur de la réunion : elle ne peut pas modifier votre calendrier.
+	This answer wasn't sent by the guest it's from, so it can't be recorded.	Cette réponse n'a pas été envoyée par l'invité concerné : elle ne peut pas être enregistrée.
+	This invitation is out of date: your calendar has a newer version.	Cette invitation est périmée : votre calendrier en contient une version plus récente.

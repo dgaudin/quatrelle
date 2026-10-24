@@ -1238,3 +1238,6 @@ month	May	5月
 	Nothing to attach here.	这里没有可附加的内容。
 	Saved {n} messages in {folder}	已将 {n} 封邮件保存到 {folder}
 	{n} not saved: not on this computer yet	{n} 封未保存：尚未下载到这台电脑
+	This update wasn't sent by the meeting's organizer, so it can't change your calendar.	此更新并非会议组织者发送，因此不能更改你的日历。
+	This answer wasn't sent by the guest it's from, so it can't be recorded.	此答复并非由对应的来宾发送，因此无法记录。
+	This invitation is out of date: your calendar has a newer version.	此邀请已过时：你的日历中有更新的版本。
