@@ -284,7 +284,9 @@ servers that don't offer IMAP. Every call is SOAP over HTTPS.
   taken off here reads each item's list and writes it back with the name in or out
   (`SetItemField`, or `DeleteItemField` for none). After each PIM pass, the master category list
   (`GetUserConfiguration` `CategoryList` on the Calendar, MS-OXOCFG) gives each category Outlook's
-  colour and adds those not made here. Graph accounts keep categories on this computer still.
+  colour and adds those not made here. A folder read before categories were (its mark's
+  `categories` false) asks once for its categorized messages alone (`Exists item:Categories`)
+  rather than being listed again. Graph accounts keep categories on this computer still.
 - **Sending** is `CreateItem` with the MIME source and `SendAndSaveCopy` (the copy goes to Sent
   Items); envelope-only recipients go in a `Bcc:` header. Drafts are `CreateItem` with `SaveOnly`,
   marked unsent.

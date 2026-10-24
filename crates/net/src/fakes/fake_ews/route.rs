@@ -265,6 +265,11 @@ impl Data {
                         let since = cond.find("Constant").and_then(|c| c.attr("Value")).unwrap_or_default().to_string();
                         list.retain(|i| i.received.as_str() >= since.as_str());
                     }
+                    // Those carrying categories.
+                    if restriction.find("Exists").and_then(|e| e.find("FieldURI")).and_then(|f| f.attr("FieldURI")) == Some("item:Categories") {
+                        list.retain(|i| !i.categories.is_empty());
+                        self.calls.push("FindItem categorized".into());
+                    }
                     // And older than that (read on the server, past what's kept).
                     if let Some(cond) = restriction.find("IsLessThan")
                         && cond.find("FieldURI").and_then(|f| f.attr("FieldURI")) == Some("item:DateTimeReceived")
