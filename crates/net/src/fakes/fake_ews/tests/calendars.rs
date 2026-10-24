@@ -661,3 +661,61 @@ fn invitations_are_answered_by_the_server_on_its_meeting() {
     let out = crate::ews_pim::sync(&c, &pim, 1_792_000_300).unwrap();
     assert!(!out.events.iter().any(|e| same_meeting(&e.event.uid, "mtg-2")), "declined: out of the calendar");
 }
+
+/// A weekly meeting made here in Paris, with a reminder, reaches Exchange (its fields in the
+/// schema's order: the reminder, an item's field, before the start) with its zone, and comes
+/// back from it in that zone, still at 10:00 after the clocks go back.
+#[test]
+fn a_series_made_here_goes_to_exchange_in_its_zone() {
+    use quatrelle_model::ical::CalEvent;
+    use quatrelle_model::pim::{Pim, StoredEvent};
+    let mut d = Data::default();
+    d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
+    d.folder("Contacts", None, Some("contacts"), "IPF.Contact");
+    let server = serve(d);
+    let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
+    let at = |s: &str| quatrelle_jmap::utc_date(s).unwrap();
+    let weekly = CalEvent {
+        uid: "weekly-here".into(),
+        summary: "Weekly point".into(),
+        start: at("2026-10-19T08:00:00Z"),
+        end: at("2026-10-19T09:00:00Z"),
+        rrule: Some("FREQ=WEEKLY;BYDAY=MO;COUNT=3".into()),
+        tzid: "Europe/Paris".into(),
+        reminder: Some(15),
+        ..Default::default()
+    };
+    let pim = Pim {
+        events: vec![StoredEvent { calendar: crate::ews_pim::CALENDAR.into(), event: weekly, dirty: true, ..Default::default() }],
+        ..Default::default()
+    };
+    let first = crate::ews_pim::sync(&c, &pim, 1_792_000_000).unwrap();
+    assert!(first.errors.is_empty(), "{:?}", first.errors);
+    {
+        let data = server.data.lock().unwrap();
+        let (_, _, el) =
+            data.pim.iter().find(|(_, _, el)| el.text_of("UID") == Some("weekly-here") || el.text_of("Subject") == Some("Weekly point")).unwrap();
+        assert_eq!(el.child("StartTimeZone").and_then(|z| z.attr("Id")), Some("Romance Standard Time"));
+        assert_eq!(el.child("EndTimeZone").and_then(|z| z.attr("Id")), Some("Romance Standard Time"));
+        assert_eq!(el.find("StartDate").map(|d| d.text.as_str()), Some("2026-10-19"));
+    }
+    let again = crate::ews_pim::sync(&c, &Pim { events: first.pushed_events.clone(), ..Default::default() }, 1_792_000_100).unwrap();
+    let back = again.events.iter().find(|e| e.event.summary == "Weekly point").unwrap();
+    assert_eq!(back.event.tzid, "Romance Standard Time");
+    assert_eq!(quatrelle_model::ical::starts(&back.event, at("2026-10-27T00:00:00Z")).last(), Some(&at("2026-10-26T09:00:00Z")));
+}
+
+/// The test server refuses a new appointment whose fields are out of the schema's order, as
+/// Exchange does (a reminder written after the start failed so).
+#[test]
+fn an_appointment_out_of_the_schemas_order_is_refused() {
+    let good = parse(
+        "<t:CalendarItem><t:Subject>A</t:Subject><t:ReminderIsSet>true</t:ReminderIsSet><t:Start>2026-10-19T08:00:00Z</t:Start></t:CalendarItem>",
+    );
+    let bad = parse(
+        "<t:CalendarItem><t:Subject>A</t:Subject><t:Start>2026-10-19T08:00:00Z</t:Start><t:ReminderIsSet>true</t:ReminderIsSet></t:CalendarItem>",
+    );
+    assert!(super::super::route::in_schema_order(&good.kids[0]));
+    assert!(!super::super::route::in_schema_order(&bad.kids[0]));
+}

@@ -136,6 +136,13 @@ impl Zone {
         }
     }
 
+    /// Its Windows name (`Romance Standard Time`), as Exchange names zones, when it's the zone
+    /// CLDR gives a Windows name.
+    pub fn windows_name(&self) -> Option<&'static str> {
+        let name = self.name()?;
+        WINDOWS.iter().find(|(iana, _)| *iana == name).map(|(_, w)| *w)
+    }
+
     /// The offset (seconds east of UTC) in force at the instant `utc` (Unix seconds).
     pub fn offset_at(&self, utc: i64) -> i64 {
         match self {
