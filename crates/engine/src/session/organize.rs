@@ -141,7 +141,7 @@ impl Session {
         accounts.dedup();
         for a in accounts {
             let folder = self.snoozed_folder(&a)?;
-            let mine: Vec<&Summary> = sel.iter().filter(|m| m.key.account == a && m.key.folder != folder).collect();
+            let mine: Vec<&Summary> = sel.iter().filter(|m| m.key.account == a && m.key.folder != folder).map(Arc::as_ref).collect();
             for m in &mine {
                 self.snoozes.retain(|s| !(s.account == a && s.message_id == m.message_id));
                 self.snoozes.push(Snooze {
@@ -210,7 +210,7 @@ impl Session {
                 Some(key) => {
                     self.snoozes.retain(|x| x != &s);
                     self.wake(&s, key);
-                    if let Some(m) = self.list.iter().find(|m| m.message_id == s.message_id).cloned() {
+                    if let Some(m) = self.list.iter().find(|m| m.message_id == s.message_id).map(|m| Summary::clone(m)) {
                         self.new_mail.push(m);
                     } else {
                         self.notice(format!("Back from snooze: {}", s.subject), false);
@@ -474,7 +474,7 @@ impl Session {
         })?;
         let inbox = self.account(account).and_then(|a| a.folder(FolderRole::Inbox)).map(|x| x.path.clone());
         let Some(inbox) = inbox else { return Err(CmdError::Disabled("that account has no Inbox yet".into())) };
-        let msgs: Vec<Summary> = self.folder_state(account, &inbox).messages.iter().filter(|m| !m.flags.deleted).cloned().collect();
+        let msgs: Vec<Arc<Summary>> = self.folder_state(account, &inbox).messages.iter().filter(|m| !m.flags.deleted).cloned().collect();
         let saved = std::mem::replace(&mut self.rules, vec![Rule { enabled: true, account: Some(account.to_string()), ..rule }]);
         let n = msgs.iter().filter(|m| !actions_for(&self.rules, m).is_empty()).count();
         self.run_rules(&msgs);
@@ -591,13 +591,13 @@ impl Session {
         for m in &sel {
             let folder = self.folder_state(&m.key.account, &m.key.folder).messages.clone();
             for t in quatrelle_model::thread::threads(&folder) {
-                let msgs: Vec<&Summary> = t.messages.iter().filter_map(|&i| folder.get(i)).collect();
+                let msgs: Vec<&Summary> = t.messages.iter().filter_map(|&i| folder.get(i).map(Arc::as_ref)).collect();
                 if msgs.iter().any(|x| x.key == m.key) {
                     members.extend(msgs.into_iter().cloned());
                 }
             }
             if !members.iter().any(|x| x.key == m.key) {
-                members.push(m.clone());
+                members.push(Summary::clone(m));
             }
         }
         for m in &members {
@@ -640,13 +640,13 @@ impl Session {
 
     /// Run the rules on messages: their actions become ordinary changes. Returns the keys the
     /// rules marked read or sent to Deleted Items or Junk (no need to announce those).
-    pub(super) fn run_rules(&mut self, msgs: &[Summary]) -> Vec<MessageKey> {
+    pub(super) fn run_rules<M: std::borrow::Borrow<Summary>>(&mut self, msgs: &[M]) -> Vec<MessageKey> {
         let mut quiet = Vec::new();
         if self.rules.is_empty() {
             return quiet;
         }
         let rules = self.rules.clone();
-        for m in msgs {
+        for m in msgs.iter().map(M::borrow) {
             let actions = actions_for(&rules, m);
             if actions.is_empty() {
                 continue;
@@ -718,7 +718,7 @@ impl Session {
                 vec![(account, folder.clone())]
             }
         };
-        let msgs: Vec<Summary> = if matches!(scope, RulesScope::List) {
+        let msgs: Vec<Arc<Summary>> = if matches!(scope, RulesScope::List) {
             self.list.clone()
         } else {
             folders
@@ -785,9 +785,9 @@ impl Session {
             if self.folder(a, f).is_none_or(|x| matches!(x.role, FolderRole::Trash | FolderRole::Junk)) {
                 continue;
             }
-            let msgs: Vec<Summary> = self.folder_state(a, f).messages.iter().filter(|m| !m.flags.deleted).cloned().collect();
+            let msgs: Vec<Arc<Summary>> = self.folder_state(a, f).messages.iter().filter(|m| !m.flags.deleted).cloned().collect();
             for t in quatrelle_model::thread::threads(&msgs) {
-                let members: Vec<&Summary> = t.messages.iter().filter_map(|&i| msgs.get(i)).collect();
+                let members: Vec<&Summary> = t.messages.iter().filter_map(|&i| msgs.get(i).map(Arc::as_ref)).collect();
                 if members.len() < 2 || only.is_some_and(|keys| !members.iter().any(|m| keys.contains(&m.key))) {
                     continue;
                 }

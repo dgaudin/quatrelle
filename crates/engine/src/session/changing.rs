@@ -67,6 +67,7 @@ impl Session {
             match op {
                 Op::SetFlag { flag, on, .. } => {
                     for m in st.messages.iter_mut().filter(|m| mine.contains(&m.key.uid)) {
+                        let m = Arc::make_mut(m);
                         if *flag == Flag::Seen && m.flags.seen != *on {
                             *unread_delta.entry(f.clone()).or_default() += if *on { -1 } else { 1 };
                         }
@@ -75,7 +76,7 @@ impl Session {
                 }
                 Op::SetKeyword { keyword, on, name, .. } => {
                     for m in st.messages.iter_mut().filter(|m| mine.contains(&m.key.uid)) {
-                        m.flags.set_category(keyword, name.as_deref(), *on);
+                        Arc::make_mut(m).flags.set_category(keyword, name.as_deref(), *on);
                     }
                 }
                 Op::Move { to, .. } if to == f => {}

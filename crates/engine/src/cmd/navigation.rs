@@ -356,7 +356,7 @@ pub(super) fn list_messages(s: &mut Session, v: &Value) -> CmdResult {
     Ok(json!({
         "view": s.view_title(),
         "total": s.list.len(),
-        "messages": s.list.iter().take(limit).map(summary_json).collect::<Vec<_>>(),
+        "messages": s.list.iter().take(limit).map(|m| summary_json(m)).collect::<Vec<_>>(),
     }))
 }
 

@@ -92,7 +92,7 @@ impl Session {
                         b.index.add(doc, words);
                     }
                     b.has_body.push(words.is_some());
-                    b.keys.push(m.key);
+                    b.keys.push(m.key.clone());
                     ix.pos += 1;
                     added += 1;
                 }
@@ -207,7 +207,7 @@ impl Session {
         }
     }
 
-    pub(super) fn search_results(&mut self, q: &str, scope: SearchScope) -> Vec<Summary> {
+    pub(super) fn search_results(&mut self, q: &str, scope: SearchScope) -> Vec<Arc<Summary>> {
         let mut query = Query::parse(q);
         // `category:Work` means the Work category's keyword (`$label2`), or its name's as Exchange
         // keeps it (`work`). `is:categorized` means one of the categories.

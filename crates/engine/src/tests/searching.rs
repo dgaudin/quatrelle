@@ -22,7 +22,7 @@ fn what_the_server_finds_joins_what_the_index_found() {
     assert_eq!(s.list[0].subject, "Deepseek notes");
     assert_eq!(s.summary(&key).map(|m| m.subject.as_str()), Some("Deepseek notes"), "it can be opened from there");
     // Found twice (the index and the server): one row.
-    let again = s.list[0].clone();
+    let again = Summary::clone(&s.list[0]);
     s.apply(Event::Found { account: "sample".into(), query: "deepseek".into(), items: vec![again], error: None });
     assert_eq!(s.list.len(), 1);
     // Another search leaves them out.

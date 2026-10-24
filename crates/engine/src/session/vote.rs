@@ -38,7 +38,7 @@ impl Session {
         match error {
             None => {
                 for m in self.list.iter_mut().filter(|m| &m.key == key) {
-                    m.voted = choice.to_string();
+                    Arc::make_mut(m).voted = choice.to_string();
                 }
                 let k = (key.account.clone(), key.folder.clone());
                 if let Some(m) = self.cache.get_mut(&k).and_then(|f| f.find_mut(key.uid)) {

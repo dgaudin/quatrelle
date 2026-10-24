@@ -1,5 +1,7 @@
 //! The store: folders' lists of messages, and changes applied to them.
 
+use std::borrow::Borrow;
+
 use crate::*;
 
 impl Store {
@@ -46,24 +48,30 @@ impl Store {
     /// Keep a folder's list. A big one goes in pages of [`PAGE_MESSAGES`] by number, and only
     /// the pages that changed are written: one message marked read in a folder of hundreds of
     /// thousands rewrote all of it (hundreds of megabytes, held in memory twice over).
-    pub fn save_folder(&self, account: &str, folder: &str, state: &FolderState) -> Result<()> {
+    pub fn save_folder<M: Borrow<Summary>>(&self, account: &str, folder: &str, state: &FolderState<M>) -> Result<()> {
         self.save_folder_counted(account, folder, state, None).map(drop)
     }
 
     /// [`Store::save_folder`] after only these messages' flags changed (the same messages, in
     /// number): only their pages are made again (a big folder's other pages aren't even turned
     /// into text to see they're the same).
-    pub fn save_folder_changed(&self, account: &str, folder: &str, state: &FolderState, changed: &std::collections::HashSet<u32>) -> Result<()> {
+    pub fn save_folder_changed<M: Borrow<Summary>>(
+        &self,
+        account: &str,
+        folder: &str,
+        state: &FolderState<M>,
+        changed: &std::collections::HashSet<u32>,
+    ) -> Result<()> {
         self.save_folder_counted(account, folder, state, Some(changed)).map(drop)
     }
 
     /// [`Store::save_folder`], saying how many files it wrote (the list and the pages that
     /// changed).
-    pub(crate) fn save_folder_counted(
+    pub(crate) fn save_folder_counted<M: Borrow<Summary>>(
         &self,
         account: &str,
         folder: &str,
-        state: &FolderState,
+        state: &FolderState<M>,
         changed: Option<&std::collections::HashSet<u32>>,
     ) -> Result<usize> {
         // Edits still on their way to the server win over what this list was made from: a sync
@@ -72,14 +80,14 @@ impl Store {
         let pending = self.pending_edits(account, folder);
         let mutated;
         let widened;
-        let (state, changed) = if pending.is_empty() {
-            (state, changed)
+        let (messages, changed): (Vec<&Summary>, _) = if pending.is_empty() {
+            (state.messages.iter().map(M::borrow).collect(), changed)
         } else {
-            let mut st = state.clone();
+            let mut st = state.with(state.messages.iter().map(|m| m.borrow().clone()).collect());
             let touched = reapply(&mut st, account, folder, &pending);
             mutated = st;
             widened = changed.map(|c| c.union(&touched).copied().collect::<std::collections::HashSet<u32>>());
-            (&mutated, widened.as_ref())
+            (mutated.messages.iter().collect(), widened.as_ref())
         };
         let dir = self.folder_dir(account, folder);
         let head = dir.join("state.json");
@@ -98,10 +106,10 @@ impl Store {
             count: 0,
         };
         let mut writes: Vec<(PathBuf, Vec<u8>)> = Vec::new();
-        if state.messages.len() <= PAGE_MESSAGES {
-            file.messages = state.messages.clone();
+        if messages.len() <= PAGE_MESSAGES {
+            file.messages = messages.into_iter().cloned().collect();
         } else {
-            let mut by_number: Vec<&Summary> = state.messages.iter().collect();
+            let mut by_number = messages;
             by_number.sort_by_key(|m| m.key.uid);
             file.count = by_number.len();
             // The same messages as last time, some flags changed: the other pages stand.
