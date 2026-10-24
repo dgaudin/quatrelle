@@ -246,8 +246,7 @@ pub(super) fn paint(ui: &Ui, st: &UiState, s: &Session, t: &Tokens, area: &Area,
 /// questions (one occurrence or the series; the guests told or not).
 fn commit(s: &Session, item: &AgendaItem, start: i64, end: i64, acts: &mut Vec<Action>) {
     // All-day events keep their days as UTC midnights.
-    let off = if item.all_day { i64::from(s.clock.offset) } else { 0 };
-    let (start, end) = (start + off, end + off);
+    let (start, end) = if item.all_day { (s.clock.local(start), s.clock.local(end)) } else { (start, end) };
     if !item.recurring && !item.organized {
         acts.push(Action::Run("event.move", json!({"uid": item.uid, "start": start, "end": end})));
         return;

@@ -554,7 +554,7 @@ fn run(
                     "ui.newEvent" => {
                         let p: serde_json::Value = serde_json::from_str(params).unwrap_or_default();
                         let text = |k: &str| p.get(k).and_then(|v| v.as_str()).map(str::to_string);
-                        let at = text("at").and_then(|x| quatrelle_engine::parse_local(&x, i64::from(app.session.clock.offset))).map(|(t, _)| t);
+                        let at = text("at").and_then(|x| quatrelle_engine::parse_local(&x, &app.session.clock)).map(|(t, _)| t);
                         let mut d = quatrelle_ui_egui::Dialog::new_event(&app.session, at);
                         if let quatrelle_ui_egui::Dialog::Event(f) = &mut d {
                             if let Some(s) = text("summary") {

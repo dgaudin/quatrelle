@@ -142,7 +142,7 @@ pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) 
     // heights), so the row cache is keyed on it too.
     let mh = if table { table_row_height(s) } else { row_height(s) };
     let hh = if table { TABLE_HEADING_H } else { HEADER_H };
-    let key = (s.revision, (s.clock.now + i64::from(s.clock.offset)).div_euclid(86_400), mh.to_bits());
+    let key = (s.revision, dates::today(&s.clock), mh.to_bits());
     if st.list_rows.as_ref().is_none_or(|c| c.key != key) {
         let rows = s.rows();
         let mut tops = Vec::with_capacity(rows.len());

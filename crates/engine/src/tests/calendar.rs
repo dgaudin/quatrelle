@@ -169,7 +169,7 @@ fn one_occurrence_moves_on_its_own() {
         .as_str()
         .unwrap()
         .to_string();
-    let monday = crate::parse_local("2026-10-19T09:00", 0).unwrap().0;
+    let monday = crate::parse_local("2026-10-19T09:00", &quatrelle_model::dates::Clock::new(0, 0)).unwrap().0;
     let starts = |s: &Session| {
         let mut v: Vec<i64> = s.agenda(monday - 10, monday + 28 * 86_400).into_iter().filter(|i| i.summary == "Stand-up").map(|i| i.start).collect();
         v.sort_unstable();
@@ -247,7 +247,7 @@ fn exchange_tells_the_guests_itself_and_mail_tells_them_once() {
     let stored = |s: &Session| s.pim[&id].events.iter().find(|e| e.event.uid == uid).cloned().unwrap();
     assert!(stored(&s).notify && stored(&s).dirty, "the server sends the invitations");
     // Moved with "Send update": told by the server, still nothing by mail.
-    let at = crate::parse_local("2026-10-21T16:00", 0).unwrap().0;
+    let at = crate::parse_local("2026-10-21T16:00", &quatrelle_model::dates::Clock::new(0, 0)).unwrap().0;
     let r = s.run("event.move", &json!({"uid": uid, "start": at, "send": true})).unwrap();
     assert_eq!(r["told"], "server");
     assert!(!s.take_jobs().iter().any(|j| matches!(j, Job::Send { .. })));
@@ -287,7 +287,7 @@ fn exchange_tells_the_guests_itself_and_mail_tells_them_once() {
         v
     };
     assert_eq!(sent(&s), [("REQUEST".to_string(), 0)]);
-    let at = crate::parse_local("2026-10-21T16:00", 0).unwrap().0;
+    let at = crate::parse_local("2026-10-21T16:00", &quatrelle_model::dates::Clock::new(0, 0)).unwrap().0;
     let r = s.run("event.move", &json!({"uid": uid, "start": at, "send": true})).unwrap();
     assert_eq!(r["told"], "mail");
     assert_eq!(sent(&s), [("REQUEST".to_string(), 0), ("REQUEST".to_string(), 1)], "one update, its SEQUENCE raised");

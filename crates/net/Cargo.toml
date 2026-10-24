@@ -13,6 +13,8 @@ workspace = true
 quatrelle-model = { workspace = true }
 quatrelle-mime = { workspace = true }
 quatrelle-store = { workspace = true }
+# the system's time zone, for calendar times written without one
+iana-time-zone = "0.1"
 quatrelle-jmap = { workspace = true }
 imap-proto = { workspace = true }
 lettre = { workspace = true }

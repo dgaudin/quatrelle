@@ -259,14 +259,13 @@ impl Session {
         }
         let events: Vec<CalEvent> =
             p.events.iter().chain(aside).filter(|e| calendars.contains(&e.calendar.as_str())).map(|e| e.event.clone()).collect();
-        let off = i64::from(self.clock.offset);
         let mut slots = Vec::new();
         for o in ical::occurrences(&events, from - 86_400, to + 86_400) {
             let Some(e) = events.get(o.event) else { continue };
             if e.status.eq_ignore_ascii_case("CANCELLED") {
                 continue;
             }
-            let (start, end) = if e.all_day { (o.start - off, o.end - off) } else { (o.start, o.end) };
+            let (start, end) = if e.all_day { (self.clock.utc(o.start), self.clock.utc(o.end)) } else { (o.start, o.end) };
             if start >= to || end <= from {
                 continue;
             }

@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 use crate::ical::CalEvent;
 use crate::vcard::Card;
 
+pub mod scheduling;
+
 /// The id of a calendar or address book that lives on this computer only.
 pub const LOCAL: &str = "local";
 
