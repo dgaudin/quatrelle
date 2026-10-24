@@ -59,7 +59,7 @@ pub(super) fn rich_body(s: &Session, st: &mut UiState, ui: &mut Ui, key: &Messag
         acts.push(Action::LoadTypeface(name));
     }
     let faces = crate::look::typefaces::loaded(ui.ctx());
-    let mut body = Body { s, key, p, allowed, shown: &mut shown, acts, faces, cells: 0 };
+    let mut body = Body { s, key, p, allowed, shown: &mut shown, acts: &mut *acts, faces, cells: 0 };
     if p.layout.is_empty() {
         body.lines(st, ui, &p.rich, width, theme::surface_rgb(&t), Align::Min);
     } else {
@@ -72,7 +72,7 @@ pub(super) fn rich_body(s: &Session, st: &mut UiState, ui: &mut Ui, key: &Messag
             ui.add_space(8.0);
             ui.horizontal_wrapped(|ui| {
                 for src in rest {
-                    picture(s, st, ui, key, p, src, allowed, width);
+                    picture(s, st, ui, key, p, src, allowed, width, acts);
                 }
             });
         }
@@ -280,7 +280,7 @@ impl Body<'_> {
         let t = st.tokens;
         if let Some(src) = &sp.image {
             self.shown.push(src.clone());
-            if !picture(self.s, st, ui, self.key, self.p, src, self.allowed, width) {
+            if !picture(self.s, st, ui, self.key, self.p, src, self.allowed, width, self.acts) {
                 let alt = if sp.text.trim().is_empty() { "picture" } else { sp.text.trim() };
                 ui.label(RichText::new(format!("[{alt}]")).color(t.faint));
             }
@@ -654,27 +654,6 @@ fn edges(ui: &Ui, rect: Rect, e: &mime::layout::Edges, page: [u8; 3], t: &Tokens
     }
 }
 
-/// Draw one picture of an HTML message; `false` when it can't be shown (yet).
-#[allow(clippy::too_many_arguments)]
-pub(super) fn picture(s: &Session, st: &mut UiState, ui: &mut Ui, key: &MessageKey, p: &mime::Parsed, src: &str, allowed: bool, width: f32) -> bool {
-    let tex = match picture_texture(s, st, ui.ctx(), key, p, src, allowed) {
-        Pic::Ready(tex) => tex,
-        Pic::Loading => {
-            ui.spinner();
-            return true;
-        }
-        Pic::Missing => return false,
-    };
-    let sz = tex.size_vec2();
-    // Tracking pixels and spacers: nothing to see.
-    if sz.x <= 3.0 && sz.y <= 3.0 {
-        return true;
-    }
-    let scale = (width.min(900.0) / sz.x).min(1.0);
-    ui.add(egui::Image::new(&tex).fit_to_exact_size(sz * scale));
-    true
-}
-
 /// How wide formatted text is unwrapped (its widest line); `None` for anything but text.
 pub(super) fn natural_width(ui: &Ui, blocks: &[mime::layout::Block]) -> Option<f32> {
     let mut widest: f32 = 0.0;
@@ -710,15 +689,6 @@ pub(super) fn rtl_copy_menu(r: &egui::Response, line: Option<&str>, whole: &str)
     });
 }
 
-/// A message's picture, as far as it can be had now.
-pub(super) enum Pic {
-    Ready(egui::TextureHandle),
-    /// Being downloaded.
-    Loading,
-    /// Not in the message, not allowed yet, or not a picture.
-    Missing,
-}
-
 /// The width each column of a table asks for: the first cell of one column that sets one, in any
 /// row (HTML sizes a whole column so; only the first row set it in a report whose other rows then
 /// lined up elsewhere).
@@ -743,54 +713,4 @@ pub(super) fn column_widths(rows: &[Vec<mime::layout::Cell>]) -> Vec<Option<mime
         }
     }
     out
-}
-
-/// A picture of an HTML message: one inside it (`cid:`) always, one on the web once allowed.
-pub(super) fn picture_texture(
-    s: &Session,
-    st: &mut UiState,
-    ctx: &egui::Context,
-    key: &MessageKey,
-    p: &mime::Parsed,
-    src: &str,
-    allowed: bool,
-) -> Pic {
-    // One sent with the message: by `cid:`, or by the name or address it was sent under.
-    let lower = src.to_ascii_lowercase();
-    if !(lower.starts_with("http://") || lower.starts_with("https://")) {
-        return match mime::picture_attachment(p, src) {
-            Some(index) => preview(s, st, ctx, key, index).map_or(Pic::Missing, Pic::Ready),
-            None => Pic::Missing,
-        };
-    }
-    if !allowed {
-        return Pic::Missing;
-    }
-    match s.pictures.get(src) {
-        Some(quatrelle_engine::Picture::Ready(bytes)) => {
-            if let Some(t) = st.web_pictures.get(src) {
-                return t.clone().map_or(Pic::Missing, Pic::Ready);
-            }
-            if st.web_pictures.len() > 200 {
-                st.web_pictures.clear();
-            }
-            let t = decode(ctx, &format!("web-{src}"), bytes, 1200);
-            st.web_pictures.insert(src.to_string(), t.clone());
-            t.map_or(Pic::Missing, Pic::Ready)
-        }
-        Some(quatrelle_engine::Picture::Loading) => Pic::Loading,
-        _ => Pic::Missing,
-    }
-}
-
-/// A picture covering `rect`, cropped to keep its shape (CSS's `background-size: cover`).
-pub(super) fn cover(tex: &egui::TextureHandle, rect: egui::Rect) -> egui::Shape {
-    let sz = tex.size_vec2();
-    if sz.x < 1.0 || sz.y < 1.0 || rect.width() < 1.0 || rect.height() < 1.0 {
-        return egui::Shape::Noop;
-    }
-    let scale = (rect.width() / sz.x).max(rect.height() / sz.y);
-    let part = vec2((rect.width() / (sz.x * scale)).min(1.0), (rect.height() / (sz.y * scale)).min(1.0));
-    let uv = egui::Rect::from_center_size(egui::pos2(0.5, 0.5), part);
-    egui::Shape::image(tex.id(), rect, uv, Color32::WHITE)
 }

@@ -189,6 +189,8 @@ pub enum Action {
     InsertSignature,
     /// Paste a picture from the clipboard, if there is one.
     PastePicture,
+    /// Put a picture pasted (a screenshot: its PNG) in the message being written.
+    PasteImage(Vec<u8>),
     /// Choose the interface language (`auto` or a code).
     SetLanguage(String),
     /// Open the signature editor for an account (`insert`: from a message, putting it in).

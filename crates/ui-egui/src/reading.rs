@@ -17,12 +17,16 @@ mod attachments;
 mod body;
 mod compose;
 mod people;
+mod pictures;
 mod plain;
 use attachments::*;
 pub(crate) use attachments::{big_picture, decode};
 pub(crate) use body::CellHeights;
 use body::*;
 pub use compose::compose_window;
+#[cfg(test)]
+pub(crate) use compose::picture_alone;
+use pictures::*;
 /// A picture cut to a circle: its middle square is kept (a picture that isn't square would
 /// otherwise fill a square box stretched, its circle an oval), then everything outside the
 /// circle goes, with a pixel of smoothing at its edge.
@@ -55,7 +59,8 @@ pub(crate) fn decode_round(ctx: &egui::Context, name: &str, data: &[u8], max: u3
     decode_with(ctx, name, data, max, true)
 }
 
-fn decode_with(ctx: &egui::Context, name: &str, data: &[u8], max: u32, round: bool) -> Option<egui::TextureHandle> {
+/// A picture read, within limits: anything bigger than this is hostile, not a picture.
+fn decoded(data: &[u8]) -> Option<image::DynamicImage> {
     if data.len() > 30 << 20 {
         return None;
     }
@@ -65,7 +70,30 @@ fn decode_with(ctx: &egui::Context, name: &str, data: &[u8], max: u32, round: bo
     limits.max_alloc = Some(256 << 20);
     let mut reader = image::ImageReader::new(std::io::Cursor::new(data)).with_guessed_format().ok()?;
     reader.limits(limits);
-    let decoded = reader.decode().ok()?;
+    reader.decode().ok()
+}
+
+/// A picture's pixels, whole (to copy it).
+pub(crate) fn color_image(data: &[u8]) -> Option<egui::ColorImage> {
+    let img = decoded(data)?.to_rgba8();
+    Some(egui::ColorImage::from_rgba_unmultiplied([img.width() as usize, img.height() as usize], img.as_raw()))
+}
+
+/// Pixels pasted (a screenshot) as a PNG, to go in a message.
+pub(crate) fn png_of(img: &egui::ColorImage) -> Option<Vec<u8>> {
+    let [w, h] = img.size;
+    if w == 0 || h == 0 || w > 12_000 || h > 12_000 {
+        return None;
+    }
+    let bytes: Vec<u8> = img.pixels.iter().flat_map(|p| p.to_srgba_unmultiplied()).collect();
+    let rgba = image::RgbaImage::from_raw(u32::try_from(w).ok()?, u32::try_from(h).ok()?, bytes)?;
+    let mut png = Vec::new();
+    image::DynamicImage::ImageRgba8(rgba).write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png).ok()?;
+    Some(png)
+}
+
+fn decode_with(ctx: &egui::Context, name: &str, data: &[u8], max: u32, round: bool) -> Option<egui::TextureHandle> {
+    let decoded = decoded(data)?;
     // Shrink large pictures; never enlarge small ones (the painter scales them crisply).
     let img = if decoded.width() > max || decoded.height() > max { decoded.thumbnail(max, max) } else { decoded }.to_rgba8();
     let (size, pixels) = if round { round_pixels(img) } else { ([img.width() as usize, img.height() as usize], img.into_raw()) };

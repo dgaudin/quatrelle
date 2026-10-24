@@ -593,13 +593,26 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
             ui.painter().line_segment([sep.left_top(), sep.right_top()], egui::Stroke::new(1.0, t.border));
             ui.add_space(8.0);
             let body_id = rich_edit::body_id(c);
-            // A picture on the clipboard is pasted as a picture.
-            if ui.memory(|m| m.has_focus(body_id))
-                && ui.input(|i| {
-                    i.events.iter().any(|e| matches!(e, egui::Event::Key { key: egui::Key::V, pressed: true, modifiers, .. } if modifiers.command))
-                })
-            {
-                acts.push(Action::PastePicture);
+            // A picture pasted goes in as a picture: a screenshot (the window reads it off the
+            // clipboard when there's no text there, and Ctrl+V comes as the picture), or one
+            // copied from a web page, which comes with its HTML alone (a picture, no text).
+            if ui.memory(|m| m.has_focus(body_id)) {
+                let shots: Vec<Vec<u8>> = ui.input(|i| {
+                    i.events
+                        .iter()
+                        .filter_map(|e| match e {
+                            egui::Event::PasteImage(img) => crate::reading::png_of(img),
+                            _ => None,
+                        })
+                        .collect()
+                });
+                acts.extend(shots.into_iter().map(Action::PasteImage));
+                if ui.input(|i| i.events.iter().any(|e| matches!(e, egui::Event::Paste(_))))
+                    && crate::clipboard_html().is_some_and(|h| picture_alone(&h))
+                {
+                    ui.input_mut(|i| i.events.retain(|e| !matches!(e, egui::Event::Paste(_))));
+                    acts.push(Action::PastePicture);
+                }
             }
             egui::ScrollArea::vertical().auto_shrink(false).id_salt("compose-body").show(ui, |ui| {
                 // Replies start above the quoted text.
@@ -608,4 +621,11 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
         });
     });
     st.editor = Some(ed);
+}
+
+/// Whether HTML copied holds a picture and no text (a picture copied from a web page): the
+/// picture is what's meant, not its address.
+pub(crate) fn picture_alone(html: &str) -> bool {
+    html.to_ascii_lowercase().contains("<img")
+        && quatrelle_engine::mime::pasted_html(html).0.replace(quatrelle_engine::mime::rich::PICTURE, "").trim().is_empty()
 }

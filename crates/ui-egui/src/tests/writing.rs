@@ -187,6 +187,12 @@ fn the_editor_formats_as_you_see_it_with_outlooks_keys() {
     let html = html.unwrap();
     assert!(text.starts_with("• Hello world"), "{text}");
     assert!(html.contains("<ul>") && html.contains("<u>Hello</u>") && html.contains("text-align:center"), "{html}");
+    // A screenshot pasted: Ctrl+V comes as the picture itself (there's no text on the
+    // clipboard), and it goes in as a picture.
+    let shot = egui::ColorImage::filled([4, 3], egui::Color32::RED);
+    frame(&ctx, &mut a, vec![Event::PasteImage(std::sync::Arc::new(shot))]);
+    frame(&ctx, &mut a, vec![]);
+    assert_eq!(c(&a).inline.len(), 1, "the screenshot is in the message");
     // Ctrl+Shift+B: the address book.
     frame(&ctx, &mut a, vec![key(Key::B, Modifiers::COMMAND | Modifiers::SHIFT)]);
     frame(&ctx, &mut a, vec![]);
@@ -195,7 +201,7 @@ fn the_editor_formats_as_you_see_it_with_outlooks_keys() {
     // A pasted picture goes in at the cursor.
     a.act(crate::Action::PastePicture);
     frame(&ctx, &mut a, vec![]);
-    assert!(c(&a).body.contains(PICTURE) && c(&a).inline.len() == 1);
+    assert!(c(&a).body.contains(PICTURE) && c(&a).inline.len() == 2);
     a.run("compose.format", json!({"plain": true}));
     frame(&ctx, &mut a, vec![]);
     let _ = std::fs::remove_dir_all(dir);
@@ -379,4 +385,20 @@ fn the_compose_ribbon_has_outlooks_tabs() {
         assert!(a.ui.editor.as_ref().is_some_and(|e| e.tab == tab), "{tab:?}");
     }
     let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A picture copied from a web page comes with its HTML alone: it's pasted as the picture, not
+/// its address; HTML with text is pasted as text. A picture copied whole from a message is the
+/// picture as it was, and a screenshot goes in a message as a PNG.
+#[test]
+fn pictures_go_through_the_clipboard_whole() {
+    assert!(crate::reading::picture_alone("<html><body><img src=\"https://example.com/a.png\"></body></html>"));
+    assert!(!crate::reading::picture_alone("<p>Hello <img src=\"cid:x\"></p>"));
+    assert!(!crate::reading::picture_alone("<p>Just text</p>"));
+    let shot = egui::ColorImage::filled([40, 30], egui::Color32::from_rgb(10, 120, 200));
+    let png = crate::reading::png_of(&shot).unwrap();
+    assert!(png.starts_with(b"\x89PNG"));
+    let back = crate::reading::color_image(&png).unwrap();
+    assert_eq!((back.size, back.pixels[0]), ([40, 30], egui::Color32::from_rgb(10, 120, 200)));
+    assert!(crate::reading::png_of(&egui::ColorImage::filled([0, 0], egui::Color32::RED)).is_none());
 }

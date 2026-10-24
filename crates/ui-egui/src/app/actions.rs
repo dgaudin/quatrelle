@@ -393,6 +393,10 @@ impl MailApp {
                     self.place_picture(r);
                 }
             }
+            Action::PasteImage(png) => {
+                let r = self.session.run("compose.insertPicture", &json!({"name": "pasted.png", "data": png, "at": self.picture_at()}));
+                self.place_picture(r);
+            }
             // Read at the start of the next frame, which has the context the fonts belong to.
             Action::LoadTypeface(name) => self.ui.load_typefaces.push(name),
             Action::AttachFiles => {
