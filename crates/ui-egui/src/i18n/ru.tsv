@@ -1410,3 +1410,44 @@ month	May	Май
 	{subject} – Meeting	{subject} – Собрание
 	Title	Тема
 	Others who see your calendar see only that the time is taken	Те, кто видит ваш календарь, видят только, что время занято
+	Recurrence…	Повторение…
+	Appointment Recurrence	Повторение встречи
+	Recurrence pattern	Шаблон повторения
+	Daily	Ежедневно
+	Weekly	Еженедельно
+	Monthly	Ежемесячно
+	Yearly	Ежегодно
+	Range of recurrence	Пределы диапазона повторения
+	No end date	Без даты окончания
+	End after	Завершить после
+	occurrences	повторений
+	End by	Дата окончания
+	Remove Recurrence	Удалить повторение
+	Every	Каждые
+	Every few days	Каждые несколько дней
+	day(s)	дн.
+	week(s) on:	нед. в:
+	month(s)	мес.
+	year(s)	г.
+	On day	День
+	On the	В
+	first	первый
+	second	второй
+	third	третий
+	fourth	четвертый
+	last	последний
+	Every weekday	Каждый рабочий день
+	Every {n} days	Каждые {n} дн.
+	Every week on {days}	Каждую неделю: {days}
+	Every {n} weeks on {days}	Каждые {n} нед.: {days}
+	{what}, {n} times	{what}, {n} раз
+	{what}, until {date}	{what}, до {date}
+	Occurs: {what}	Повторяется: {what}
+	The {nth} {weekday} of every month	{nth} {weekday} каждого месяца
+	The {nth} {weekday} of every {n} months	{nth} {weekday} каждые {n} мес.
+	Day {day} of every month	{day}-го числа каждого месяца
+	Day {day} of every {n} months	{day}-го числа каждые {n} мес.
+	The {nth} {weekday} of {month}, every year	{nth} {weekday}, {month}, каждый год
+	The {nth} {weekday} of {month}, every {n} years	{nth} {weekday}, {month}, каждые {n} г.
+	Every year on {day} {month}	Каждый год, {day} {month}
+	Every {n} years on {day} {month}	Каждые {n} г., {day} {month}

@@ -1410,3 +1410,44 @@ month	May	maggio
 	{subject} – Meeting	{subject} – Riunione
 	Title	Oggetto
 	Others who see your calendar see only that the time is taken	Chi vede il tuo calendario vede solo che l’orario è occupato
+	Recurrence…	Ricorrenza…
+	Appointment Recurrence	Ricorrenza appuntamento
+	Recurrence pattern	Criterio ricorrenza
+	Daily	Giornaliera
+	Weekly	Settimanale
+	Monthly	Mensile
+	Yearly	Annuale
+	Range of recurrence	Intervallo ricorrenza
+	No end date	Nessuna data di fine
+	End after	Termina dopo
+	occurrences	occorrenze
+	End by	Termina il
+	Remove Recurrence	Rimuovi ricorrenza
+	Every	Ogni
+	Every few days	Ogni pochi giorni
+	day(s)	giorno/i
+	week(s) on:	settimana/e il:
+	month(s)	mese/i
+	year(s)	anno/i
+	On day	Il giorno
+	On the	Il
+	first	primo
+	second	secondo
+	third	terzo
+	fourth	quarto
+	last	ultimo
+	Every weekday	Ogni giorno feriale
+	Every {n} days	Ogni {n} giorni
+	Every week on {days}	Ogni settimana il {days}
+	Every {n} weeks on {days}	Ogni {n} settimane il {days}
+	{what}, {n} times	{what}, {n} volte
+	{what}, until {date}	{what}, fino al {date}
+	Occurs: {what}	Si ripete: {what}
+	The {nth} {weekday} of every month	Il {nth} {weekday} di ogni mese
+	The {nth} {weekday} of every {n} months	Il {nth} {weekday} ogni {n} mesi
+	Day {day} of every month	Il giorno {day} di ogni mese
+	Day {day} of every {n} months	Il giorno {day} ogni {n} mesi
+	The {nth} {weekday} of {month}, every year	Il {nth} {weekday} di {month}, ogni anno
+	The {nth} {weekday} of {month}, every {n} years	Il {nth} {weekday} di {month}, ogni {n} anni
+	Every year on {day} {month}	Ogni anno il {day} {month}
+	Every {n} years on {day} {month}	Ogni {n} anni il {day} {month}

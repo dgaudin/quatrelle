@@ -1408,3 +1408,44 @@ month	May	5月
 	{subject} – Meeting	{subject} – 会議
 	Title	件名
 	Others who see your calendar see only that the time is taken	予定表を見る人には、時間が埋まっていることだけが表示されます
+	Recurrence…	定期的なアイテム…
+	Appointment Recurrence	定期的な予定の設定
+	Recurrence pattern	パターンの設定
+	Daily	日
+	Weekly	週
+	Monthly	月
+	Yearly	年
+	Range of recurrence	期間
+	No end date	終了日未定
+	End after	終了までの回数
+	occurrences	回
+	End by	終了日
+	Remove Recurrence	定期的な設定を解除
+	Every	間隔
+	Every few days	数日ごと
+	day(s)	日ごと
+	week(s) on:	週ごと:
+	month(s)	か月ごと
+	year(s)	年ごと
+	On day	日付
+	On the	指定
+	first	第 1
+	second	第 2
+	third	第 3
+	fourth	第 4
+	last	最終
+	Every weekday	毎日 (平日のみ)
+	Every {n} days	{n} 日ごと
+	Every week on {days}	毎週 {days}
+	Every {n} weeks on {days}	{n} 週ごとの {days}
+	{what}, {n} times	{what}、{n} 回
+	{what}, until {date}	{what}、{date} まで
+	Occurs: {what}	繰り返し: {what}
+	The {nth} {weekday} of every month	毎月 {nth} {weekday}
+	The {nth} {weekday} of every {n} months	{n} か月ごとの {nth} {weekday}
+	Day {day} of every month	毎月 {day} 日
+	Day {day} of every {n} months	{n} か月ごとの {day} 日
+	The {nth} {weekday} of {month}, every year	毎年 {month} の {nth} {weekday}
+	The {nth} {weekday} of {month}, every {n} years	{n} 年ごとの {month} の {nth} {weekday}
+	Every year on {day} {month}	毎年 {month} {day} 日
+	Every {n} years on {day} {month}	{n} 年ごとの {month} {day} 日

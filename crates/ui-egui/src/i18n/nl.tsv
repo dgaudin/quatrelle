@@ -1407,3 +1407,44 @@ month	May	mei
 	{subject} – Meeting	{subject} – Vergadering
 	Title	Onderwerp
 	Others who see your calendar see only that the time is taken	Wie je agenda ziet, ziet alleen dat de tijd bezet is
+	Recurrence…	Terugkeerpatroon…
+	Appointment Recurrence	Terugkeerpatroon van afspraak
+	Recurrence pattern	Patroon
+	Daily	Dagelijks
+	Weekly	Wekelijks
+	Monthly	Maandelijks
+	Yearly	Jaarlijks
+	Range of recurrence	Bereik
+	No end date	Geen einddatum
+	End after	Eindigen na
+	occurrences	keer
+	End by	Eindigen op
+	Remove Recurrence	Terugkeerpatroon verwijderen
+	Every	Elke
+	Every few days	Om de paar dagen
+	day(s)	dag(en)
+	week(s) on:	week/weken op:
+	month(s)	maand(en)
+	year(s)	jaar
+	On day	Op dag
+	On the	Op de
+	first	eerste
+	second	tweede
+	third	derde
+	fourth	vierde
+	last	laatste
+	Every weekday	Elke werkdag
+	Every {n} days	Elke {n} dagen
+	Every week on {days}	Elke week op {days}
+	Every {n} weeks on {days}	Elke {n} weken op {days}
+	{what}, {n} times	{what}, {n} keer
+	{what}, until {date}	{what}, tot {date}
+	Occurs: {what}	Vindt plaats: {what}
+	The {nth} {weekday} of every month	De {nth} {weekday} van elke maand
+	The {nth} {weekday} of every {n} months	De {nth} {weekday} van elke {n} maanden
+	Day {day} of every month	Dag {day} van elke maand
+	Day {day} of every {n} months	Dag {day} van elke {n} maanden
+	The {nth} {weekday} of {month}, every year	De {nth} {weekday} van {month}, elk jaar
+	The {nth} {weekday} of {month}, every {n} years	De {nth} {weekday} van {month}, elke {n} jaar
+	Every year on {day} {month}	Elk jaar op {day} {month}
+	Every {n} years on {day} {month}	Elke {n} jaar op {day} {month}

@@ -565,7 +565,7 @@ fn run(
                     "ui.options" => app.ui.backstage = Some(Backstage::new(Page::Options)),
                     "ui.openExport" => app.ui.backstage = Some(Backstage::new(Page::Open)),
                     "ui.about" => app.ui.backstage = Some(Backstage::new(Page::About)),
-                    // Optionally `={"at":"YYYY-MM-DDTHH:MM","summary":…,"guests":"a@x, …","rooms":"Room <r@x>, …","scheduling":true,"finder":true}`.
+                    // Optionally `={"at":"YYYY-MM-DDTHH:MM","summary":…,"guests":"a@x, …","rooms":"Room <r@x>, …","scheduling":true,"finder":true,"repeat":RRULE,"recurrence":true}`.
                     "ui.newEvent" => {
                         let p: serde_json::Value = serde_json::from_str(params).unwrap_or_default();
                         let text = |k: &str| p.get(k).and_then(|v| v.as_str()).map(str::to_string);
@@ -584,6 +584,12 @@ fn run(
                             f.scheduling = p.get("scheduling").and_then(|v| v.as_bool()).unwrap_or(false);
                             if p.get("finder").and_then(|v| v.as_bool()).unwrap_or(false) {
                                 f.finder = Some(Default::default());
+                            }
+                            if let Some(r) = text("repeat") {
+                                f.repeat = r;
+                            }
+                            if p.get("recurrence").and_then(|v| v.as_bool()).unwrap_or(false) {
+                                f.open_recurrence();
                             }
                         }
                         app.ui.dialog = Some(d);
