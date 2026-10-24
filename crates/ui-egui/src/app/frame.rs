@@ -372,6 +372,7 @@ impl MailApp {
 
         self.message_windows(&ctx, &mut acts);
         self.compose_windows(&ctx, &mut acts);
+        self.event_windows(&ctx, &mut acts);
 
         // The address book reads the session's people: what is known now, listed again as the
         // book fills in (built a slice per frame, below).

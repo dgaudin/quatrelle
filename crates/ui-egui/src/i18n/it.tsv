@@ -1385,3 +1385,28 @@ month	May	maggio
 	the certificate has no password, so the browser uses it until the page is closed and doesn't keep it	il certificato non ha password, quindi il browser lo usa finché la pagina non viene chiusa e non lo conserva
 	the card needs its PIN (give it in File › Info › Security › Use a smart card…)	la carta ha bisogno del PIN (inseriscilo in File › Informazioni › Sicurezza › Usa una smart card…)
 	the card refused its PIN, so Quatrelle forgot it: the card would lock if it were tried again (give it again in File › Info › Security › Use a smart card…)	la carta ha rifiutato il PIN, quindi Quatrelle l'ha dimenticato: la carta si bloccherebbe se venisse riprovato (inseriscilo di nuovo in File › Informazioni › Sicurezza › Usa una smart card…)
+	Appointment	Appuntamento
+	Meeting	Riunione
+	Send Update	Invia aggiornamento
+	Save & Close	Salva e chiudi
+	Online meeting	Riunione online
+	Invite Attendees	Invita partecipanti
+	Response Options	Opzioni di risposta
+	Request Responses	Richiedi risposte
+	Allow New Time Proposals	Consenti nuove proposte di orario
+	Attendees	Partecipanti
+	Show As	Mostra come
+	Private	Privato
+	Required	Obbligatori
+	Optional	Facoltativi
+	Start time	Ora inizio
+	End time	Ora fine
+	All day event	Evento giornaliero
+	Pick a day	Scegli un giorno
+	Pick a time	Scegli un’ora
+	Working Elsewhere	Lavoro altrove
+	Out of Office	Fuori sede
+	{subject} – Appointment	{subject} – Appuntamento
+	{subject} – Meeting	{subject} – Riunione
+	Title	Oggetto
+	Others who see your calendar see only that the time is taken	Chi vede il tuo calendario vede solo che l’orario è occupato

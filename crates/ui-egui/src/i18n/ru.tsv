@@ -1385,3 +1385,28 @@ month	May	Май
 	the certificate has no password, so the browser uses it until the page is closed and doesn't keep it	у сертификата нет пароля, поэтому браузер использует его, пока страница открыта, и не сохраняет
 	the card needs its PIN (give it in File › Info › Security › Use a smart card…)	карте нужен PIN-код (введите его в Файл › Сведения › Безопасность › Использовать смарт-карту…)
 	the card refused its PIN, so Quatrelle forgot it: the card would lock if it were tried again (give it again in File › Info › Security › Use a smart card…)	карта отклонила PIN-код, поэтому Quatrelle забыл его: при повторной попытке карта заблокируется (введите его снова в Файл › Сведения › Безопасность › Использовать смарт-карту…)
+	Appointment	Встреча
+	Meeting	Собрание
+	Send Update	Отправить обновление
+	Save & Close	Сохранить и закрыть
+	Online meeting	Онлайн-собрание
+	Invite Attendees	Пригласить участников
+	Response Options	Параметры ответа
+	Request Responses	Запрашивать ответы
+	Allow New Time Proposals	Разрешить предложение нового времени
+	Attendees	Участники
+	Show As	Показывать как
+	Private	Частное
+	Required	Обязательные
+	Optional	Необязательные
+	Start time	Время начала
+	End time	Время окончания
+	All day event	Весь день
+	Pick a day	Выбрать день
+	Pick a time	Выбрать время
+	Working Elsewhere	Работаю в другом месте
+	Out of Office	Нет на работе
+	{subject} – Appointment	{subject} – Встреча
+	{subject} – Meeting	{subject} – Собрание
+	Title	Тема
+	Others who see your calendar see only that the time is taken	Те, кто видит ваш календарь, видят только, что время занято

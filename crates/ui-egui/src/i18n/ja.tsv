@@ -1383,3 +1383,28 @@ month	May	5月
 	the certificate has no password, so the browser uses it until the page is closed and doesn't keep it	証明書にパスワードがないため、ブラウザーはページを閉じるまで使い、保管しません
 	the card needs its PIN (give it in File › Info › Security › Use a smart card…)	カードには PIN が必要です (ファイル › 情報 › セキュリティ › スマートカードを使う…)
 	the card refused its PIN, so Quatrelle forgot it: the card would lock if it were tried again (give it again in File › Info › Security › Use a smart card…)	カードが PIN を拒否したため、Quatrelle は PIN を消去しました。もう一度試すとカードがロックされます (ファイル › 情報 › セキュリティ › スマートカードを使う…)
+	Appointment	予定
+	Meeting	会議
+	Send Update	更新を送信
+	Save & Close	保存して閉じる
+	Online meeting	オンライン会議
+	Invite Attendees	出席者を招待
+	Response Options	返信オプション
+	Request Responses	返信を要求する
+	Allow New Time Proposals	新しい日時の提案を許可する
+	Attendees	出席者
+	Show As	公開方法
+	Private	非公開
+	Required	必須
+	Optional	任意
+	Start time	開始時刻
+	End time	終了時刻
+	All day event	終日
+	Pick a day	日を選択
+	Pick a time	時刻を選択
+	Working Elsewhere	他の場所で作業中
+	Out of Office	外出中
+	{subject} – Appointment	{subject} – 予定
+	{subject} – Meeting	{subject} – 会議
+	Title	件名
+	Others who see your calendar see only that the time is taken	予定表を見る人には、時間が埋まっていることだけが表示されます

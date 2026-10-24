@@ -1382,3 +1382,28 @@ month	May	مايو
 	the certificate has no password, so the browser uses it until the page is closed and doesn't keep it	ليست للشهادة كلمة مرور، لذا يستخدمها المتصفح حتى تُغلق الصفحة ولا يحتفظ بها
 	the card needs its PIN (give it in File › Info › Security › Use a smart card…)	تحتاج البطاقة إلى رقم PIN الخاص بها (أدخله في ملف › معلومات › الأمان › استخدام بطاقة ذكية…)
 	the card refused its PIN, so Quatrelle forgot it: the card would lock if it were tried again (give it again in File › Info › Security › Use a smart card…)	رفضت البطاقة رقم PIN، لذا نسيه Quatrelle: كانت البطاقة ستُقفل لو جُرّب مرة أخرى (أدخله مرة أخرى في ملف › معلومات › الأمان › استخدام بطاقة ذكية…)
+	Appointment	موعد
+	Meeting	اجتماع
+	Send Update	إرسال التحديث
+	Save & Close	حفظ وإغلاق
+	Online meeting	اجتماع عبر الإنترنت
+	Invite Attendees	دعوة الحضور
+	Response Options	خيارات الاستجابة
+	Request Responses	طلب الاستجابات
+	Allow New Time Proposals	السماح باقتراح أوقات جديدة
+	Attendees	الحضور
+	Show As	إظهار كـ
+	Private	خاص
+	Required	مطلوب
+	Optional	اختياري
+	Start time	وقت البدء
+	End time	وقت الانتهاء
+	All day event	طوال اليوم
+	Pick a day	اختيار يوم
+	Pick a time	اختيار وقت
+	Working Elsewhere	العمل في مكان آخر
+	Out of Office	خارج المكتب
+	{subject} – Appointment	{subject} – موعد
+	{subject} – Meeting	{subject} – اجتماع
+	Title	الموضوع
+	Others who see your calendar see only that the time is taken	من يرى تقويمك يرى فقط أن الوقت محجوز

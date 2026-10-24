@@ -1382,3 +1382,28 @@ month	May	מאי
 	the certificate has no password, so the browser uses it until the page is closed and doesn't keep it	לתעודה אין סיסמה, ולכן הדפדפן משתמש בה עד שהדף ייסגר ואינו שומר אותה
 	the card needs its PIN (give it in File › Info › Security › Use a smart card…)	הכרטיס צריך את ה־PIN שלו (הזן אותו בקובץ › מידע › אבטחה › שימוש בכרטיס חכם…)
 	the card refused its PIN, so Quatrelle forgot it: the card would lock if it were tried again (give it again in File › Info › Security › Use a smart card…)	הכרטיס דחה את ה־PIN, ולכן Quatrelle שכח אותו: הכרטיס היה ננעל אילו נוסה שוב (הזן אותו שוב בקובץ › מידע › אבטחה › שימוש בכרטיס חכם…)
+	Appointment	פגישה
+	Meeting	ישיבה
+	Send Update	שלח עדכון
+	Save & Close	שמור וסגור
+	Online meeting	ישיבה מקוונת
+	Invite Attendees	הזמן משתתפים
+	Response Options	אפשרויות תגובה
+	Request Responses	בקש תגובות
+	Allow New Time Proposals	אפשר הצעות לשעות חדשות
+	Attendees	משתתפים
+	Show As	הצג כ
+	Private	פרטי
+	Required	נדרש
+	Optional	אופציונלי
+	Start time	שעת התחלה
+	End time	שעת סיום
+	All day event	כל היום
+	Pick a day	בחר יום
+	Pick a time	בחר שעה
+	Working Elsewhere	עובד ממקום אחר
+	Out of Office	מחוץ למשרד
+	{subject} – Appointment	{subject} – פגישה
+	{subject} – Meeting	{subject} – ישיבה
+	Title	נושא
+	Others who see your calendar see only that the time is taken	מי שרואה את לוח השנה שלך רואה רק שהזמן תפוס
