@@ -75,7 +75,7 @@ impl MailApp {
             // Done to the message whose window asked; a dialog it opens shows there.
             Action::ForCompose(id, inner) => {
                 if self.use_compose(id) {
-                    if matches!(*inner, Action::Dialog(ref d) if d.for_compose()) {
+                    if matches!(*inner, Action::Dialog(ref d) if d.for_compose()) || matches!(*inner, Action::AttachItem(_)) {
                         self.ui.dialog_for = Some(id);
                     }
                     self.act(*inner);
@@ -399,6 +399,11 @@ impl MailApp {
             }
             // Read at the start of the next frame, which has the context the fonts belong to.
             Action::LoadTypeface(name) => self.ui.load_typefaces.push(name),
+            Action::AttachItem(kind) => {
+                if let Some(c) = &self.session.compose {
+                    self.ui.dialog = Some(Dialog::attach_item(&self.session, c, kind));
+                }
+            }
             Action::AttachFiles => {
                 for p in self.services.pick_files() {
                     self.run("compose.attach", json!({"path": p.to_string_lossy()}));

@@ -57,6 +57,9 @@ pub(super) fn commands() -> Vec<CommandSpec> {
         })
         .params(r#"{"word": string}"#),
         CommandSpec::new("compose.attach", "Attach file", "Message › Insert", attach).params(r#"{"path": string} | {"name": string, "data": [bytes]}"#).when(has_compose),
+        CommandSpec::new("compose.attachItem", "Attach item", "Message › Insert", attach_item)
+            .params(r#"{"kind": "message" | "contact" | "event", "id": string}"#)
+            .when(has_compose),
         CommandSpec::new("compose.insertPicture", "Insert picture", "Message › Insert", insert_picture)
             .params(r#"{"path": string} | {"name": string, "data": [bytes]}, "insert"?: bool (default true), "at"?: number (character; default the end)"#)
             .when(has_compose),
@@ -222,6 +225,22 @@ pub(super) fn attach(s: &mut Session, v: &Value) -> CmdResult {
     let name = sanitize_filename(&name);
     let mime = mime_from_name(&name).to_string();
     c.attachments.push(OutAttachment { name: name.clone(), mime, data });
+    Ok(json!({"attached": name, "count": c.attachments.len()}))
+}
+
+/// Attach an item, as Outlook's Attach Item: a message (its key) as an `.eml`, a contact (its
+/// uid) as a `.vcf`, an appointment (its uid) as an `.ics`.
+pub(super) fn attach_item(s: &mut Session, v: &Value) -> CmdResult {
+    let kind =
+        p::str(v, "kind").and_then(crate::ItemKind::from_code).ok_or_else(|| CmdError::Params("`kind` is message, contact or event".into()))?;
+    let id = p::req_str(v, "id")?;
+    let a = s.item_attachment(kind, id)?;
+    let c = s.compose.as_mut().ok_or_else(|| CmdError::Disabled("no message is being written".into()))?;
+    if compose_size(c) + a.data.len() > ATTACH_MAX {
+        return Err(CmdError::Failed("attachments are limited to 25 MB in total".into()));
+    }
+    let name = a.name.clone();
+    c.attachments.push(a);
     Ok(json!({"attached": name, "count": c.attachments.len()}))
 }
 

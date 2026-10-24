@@ -44,7 +44,7 @@ use listing::{Preview, person, size_group};
 use mailboxes::Contacts;
 pub use organize::{RulesScope, junk, quick_steps, search_folders};
 pub use prefs::{ListLayout, NotesOrder, Prefs, ReadInPane, ReadingPane};
-pub use writing::{Compose, add_pictures, style_signature};
+pub use writing::{Compose, ItemChoice, ItemKind, add_pictures, style_signature};
 
 /// One account and what the session knows about it.
 #[derive(Clone, Debug, PartialEq)]

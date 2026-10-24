@@ -30,6 +30,8 @@ pub enum Dialog {
     AddAccount(Box<AccountForm>),
     /// Outlook's Select Names: the address book, to add people to To, Cc and Bcc.
     SelectNames(Box<NamesForm>),
+    /// Outlook's Attach Item: a message, a contact or an appointment, to go along as a file.
+    AttachItem(Box<ItemForm>),
     /// Closing a message window with something written in it.
     SaveChanges,
     Password {
@@ -195,10 +197,31 @@ impl Dialog {
         }))
     }
 
+    /// Attach Item, open on a kind of item; messages from the Inbox of the account writing.
+    pub fn attach_item(s: &Session, c: &Compose, kind: quatrelle_engine::ItemKind) -> Dialog {
+        let many = s.accounts.len() > 1;
+        let folders: Vec<(String, String, String)> = s
+            .accounts
+            .iter()
+            .flat_map(|a| {
+                a.folders.iter().filter(|f| f.selectable).map(move |f| {
+                    let name = f.display_name();
+                    let label = if many { format!("{name} ({})", a.config.email) } else { name };
+                    (a.config.id.clone(), f.path.clone(), label)
+                })
+            })
+            .collect();
+        let inbox = s.account(&c.account).and_then(|a| a.folder(FolderRole::Inbox)).map(|f| (c.account.clone(), f.path.clone()));
+        let (account, folder) = inbox.or_else(|| folders.first().map(|(a, f, _)| (a.clone(), f.clone()))).unwrap_or_default();
+        Dialog::AttachItem(Box::new(ItemForm { kind, account, folder, folders, stale: true, ..Default::default() }))
+    }
+
     /// Dialogs that belong to the message being written (shown in its window when it has one).
     pub fn for_compose(&self) -> bool {
-        matches!(self, Dialog::SelectNames(_) | Dialog::SaveChanges | Dialog::EmptySubject | Dialog::Spelling(_) | Dialog::WordCount(..))
-            || matches!(self, Dialog::Signature(f) if f.insert)
+        matches!(
+            self,
+            Dialog::SelectNames(_) | Dialog::AttachItem(_) | Dialog::SaveChanges | Dialog::EmptySubject | Dialog::Spelling(_) | Dialog::WordCount(..)
+        ) || matches!(self, Dialog::Signature(f) if f.insert)
     }
 
     /// The add-account dialog with the address filled in (servers guessed from it).
@@ -490,9 +513,12 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Act
         Dialog::NewCategory { .. } | Dialog::Rules | Dialog::EditRule(..) | Dialog::SearchFolder(..) | Dialog::QuickStep(..) => {
             organize::draw(ui, d, s, t, acts)
         }
-        Dialog::SelectNames(..) | Dialog::SaveChanges | Dialog::EmptySubject | Dialog::WordCount(..) | Dialog::Spelling(..) => {
-            writing::draw(ui, d, s, t, acts)
-        }
+        Dialog::SelectNames(..)
+        | Dialog::AttachItem(..)
+        | Dialog::SaveChanges
+        | Dialog::EmptySubject
+        | Dialog::WordCount(..)
+        | Dialog::Spelling(..) => writing::draw(ui, d, s, t, acts),
         Dialog::ConfirmDeleteContact { .. }
         | Dialog::OpenShare { .. }
         | Dialog::PicturePreview { .. }

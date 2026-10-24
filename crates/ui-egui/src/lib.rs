@@ -158,6 +158,8 @@ pub enum Action {
     OpenAttachment(usize),
     SaveAttachment(usize),
     AttachFiles,
+    /// Attach Item, open on a kind of item.
+    AttachItem(quatrelle_engine::ItemKind),
     FocusSearch,
     /// Make a note and write on it.
     NewNote,
