@@ -1240,3 +1240,6 @@ month	May	5月
 	Nothing to attach here.	這裡沒有可附加的內容。
 	Saved {n} messages in {folder}	已將 {n} 封郵件儲存到 {folder}
 	{n} not saved: not on this computer yet	{n} 封未儲存：尚未下載到這台電腦
+	This update wasn't sent by the meeting's organizer, so it can't change your calendar.	此更新並非會議召集人寄出，因此無法變更你的行事曆。
+	This answer wasn't sent by the guest it's from, so it can't be recorded.	此回覆並非由對應的來賓寄出，因此無法記錄。
+	This invitation is out of date: your calendar has a newer version.	此邀請已過時：你的行事曆中有較新的版本。

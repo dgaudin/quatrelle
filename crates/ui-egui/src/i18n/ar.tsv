@@ -1237,3 +1237,6 @@ month	May	مايو
 	Nothing to attach here.	لا شيء لإرفاقه هنا.
 	Saved {n} messages in {folder}	تم حفظ {n} رسائل في {folder}
 	{n} not saved: not on this computer yet	لم يُحفظ {n}: غير موجود على هذا الحاسوب بعد
+	This update wasn't sent by the meeting's organizer, so it can't change your calendar.	لم يُرسل هذا التحديث منظّم الاجتماع، لذا لا يمكنه تغيير تقويمك.
+	This answer wasn't sent by the guest it's from, so it can't be recorded.	لم يُرسل هذا الرد الضيف الذي يُنسب إليه، لذا لا يمكن تسجيله.
+	This invitation is out of date: your calendar has a newer version.	هذه الدعوة قديمة: في تقويمك نسخة أحدث.

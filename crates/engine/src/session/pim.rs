@@ -622,8 +622,9 @@ impl Session {
                         // The same item there (its address); and an appointment kept here that
                         // never went (no address). Two items may share a UID — some Exchange
                         // series arrive as separate items keeping the series' UID — and each
-                        // is kept, since the server's address tells them apart.
-                        p.events.retain(|e| x.href.is_empty() || e.href != x.href);
+                        // is kept, since the server's address tells them apart. One CalDAV item
+                        // holds a series and its moved occurrences: each is kept too.
+                        p.events.retain(|e| x.href.is_empty() || e.href != x.href || e.event.recurrence_id != x.event.recurrence_id);
                         p.events.retain(|e| {
                             !(e.href.is_empty() && e.event.uid == x.event.uid && e.event.recurrence_id == x.event.recurrence_id && !e.dirty)
                         });
