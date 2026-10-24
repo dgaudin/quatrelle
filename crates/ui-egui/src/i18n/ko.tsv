@@ -1385,3 +1385,28 @@ month	May	5월
 	the certificate has no password, so the browser uses it until the page is closed and doesn't keep it	인증서에 암호가 없어 브라우저는 페이지를 닫을 때까지만 사용하고 보관하지 않습니다
 	the card needs its PIN (give it in File › Info › Security › Use a smart card…)	카드에 PIN이 필요합니다 (파일 › 정보 › 보안 › 스마트 카드 사용…)
 	the card refused its PIN, so Quatrelle forgot it: the card would lock if it were tried again (give it again in File › Info › Security › Use a smart card…)	카드가 PIN을 거부하여 Quatrelle가 PIN을 잊었습니다: 다시 시도하면 카드가 잠깁니다 (파일 › 정보 › 보안 › 스마트 카드 사용…)
+	Appointment	약속
+	Meeting	모임
+	Send Update	업데이트 보내기
+	Save & Close	저장 후 닫기
+	Online meeting	온라인 모임
+	Invite Attendees	참석자 초대
+	Response Options	응답 옵션
+	Request Responses	응답 요청
+	Allow New Time Proposals	새 시간 제안 허용
+	Attendees	참석자
+	Show As	표시 방법
+	Private	비공개
+	Required	필수
+	Optional	선택
+	Start time	시작 시간
+	End time	종료 시간
+	All day event	종일
+	Pick a day	날짜 선택
+	Pick a time	시간 선택
+	Working Elsewhere	다른 곳에서 근무 중
+	Out of Office	부재 중
+	{subject} – Appointment	{subject} – 약속
+	{subject} – Meeting	{subject} – 모임
+	Title	제목
+	Others who see your calendar see only that the time is taken	일정을 보는 사람에게는 시간이 사용 중이라는 것만 표시됩니다

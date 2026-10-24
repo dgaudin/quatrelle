@@ -176,13 +176,12 @@ fn invitations_read_and_the_new_footers_draw() {
     a.ui.dialog = Some(d);
     frame(&ctx, &mut a, vec![]);
     frame(&ctx, &mut a, vec![]);
-    // However long, the dialog stays within the window (its body scrolls).
-    let shown = ctx.memory(|m| m.layer_ids().filter(|l| l.order == egui::Order::Foreground).count());
-    assert!(shown > 0, "the dialog is up");
+    // However long, the appointment's window stays on the screen (its notes scroll).
+    assert_eq!(a.ui.event_windows.len(), 1, "it opens in a window of its own");
     let screen = ctx.content_rect();
     let tallest = ctx.memory(|m| m.layer_ids().filter_map(|l| m.area_rect(l.id)).map(|r| r.height()).fold(0.0f32, f32::max));
     assert!(tallest <= screen.height() + 1.0, "{tallest} in {}", screen.height());
-    if let Some(Dialog::Event(f)) = &mut a.ui.dialog {
+    if let Some((_, f)) = a.ui.event_windows.first_mut() {
         assert_eq!(f.description, notes, "reading changes nothing");
         f.reading_notes = false;
     }

@@ -3,6 +3,7 @@
 
 use egui::Color32;
 use quatrelle_engine::model::addr;
+use quatrelle_engine::model::ical::ShowAs;
 
 use super::*;
 
@@ -63,6 +64,18 @@ pub struct EventForm {
     /// an invitation's (issue #1), or any with links.
     pub reading_notes: bool,
     pub error: Option<String>,
+    /// The optional guests, as typed (Outlook's Optional line).
+    pub optional: String,
+    /// The guests' lines are shown (Outlook's Invite Attendees: an appointment becomes a meeting).
+    pub inviting: bool,
+    /// Outlook's Show As and Private, and its Response Options: the guests are asked to answer,
+    /// and may propose another time.
+    pub show_as: ShowAs,
+    pub private: bool,
+    pub responses: bool,
+    pub new_times: bool,
+    /// The number of the window it's open in (0: none, as a dialog).
+    pub window: u64,
 }
 
 impl EventForm {
@@ -83,6 +96,8 @@ impl EventForm {
             all_categories: all_categories(s, &[]),
             // As Outlook sets a new appointment's reminder.
             reminder: Some(DEFAULT_REMINDER),
+            responses: true,
+            new_times: true,
             ..Default::default()
         }
     }
@@ -126,13 +141,13 @@ impl EventForm {
             organizer: e.organizer.as_ref().map(|o| if o.name.is_empty() { o.email.clone() } else { format!("{} <{}>", o.name, o.email) }),
             attendees: e.attendees.iter().filter(|a| !a.is_resource()).map(|a| (shown(a), a.partstat.clone())).collect(),
             needs_reply: e.attendees.iter().any(|a| mine.contains(&a.email.to_ascii_lowercase()) && a.partstat == "NEEDS-ACTION"),
-            guests: e
-                .attendees
-                .iter()
-                .filter(|a| !a.is_resource())
-                .map(|a| if a.name.is_empty() { a.email.clone() } else { format!("{} <{}>", a.name, a.email) })
-                .collect::<Vec<_>>()
-                .join(", "),
+            guests: guest_list(&e.attendees, false),
+            optional: guest_list(&e.attendees, true),
+            inviting: e.attendees.iter().any(|a| !a.is_resource()),
+            show_as: e.show_as,
+            private: e.private,
+            responses: !e.no_responses,
+            new_times: !e.no_new_times,
             rooms: e.attendees.iter().filter(|a| a.is_resource()).map(|a| (shown(a), a.email.clone())).collect(),
             can_invite: e.organizer.as_ref().is_none_or(|o| mine.contains(&o.email.to_ascii_lowercase())),
             links: e.links(),
@@ -221,9 +236,14 @@ impl EventForm {
             "repeat": if self.repeat.is_empty() { "none" } else { self.repeat.as_str() },
             "reminder": self.reminder.map_or_else(|| json!("none"), |m| json!(m)),
             "categories": self.categories,
+            "showAs": self.show_as.param(),
+            "private": self.private,
         });
         if self.can_invite {
             p["attendees"] = json!(self.guests.trim());
+            p["optional"] = json!(self.optional.trim());
+            p["responses"] = json!(self.responses);
+            p["newTimes"] = json!(self.new_times);
             let rooms: Vec<quatrelle_engine::model::EmailAddress> =
                 self.rooms.iter().map(|(name, email)| quatrelle_engine::model::EmailAddress::new(name.clone(), email.clone())).collect();
             p["rooms"] = json!(addr::format_list(&rooms));
@@ -239,6 +259,63 @@ impl EventForm {
         }
         p
     }
+}
+
+/// How a repeat reads: Outlook's simple choices, a rule set elsewhere as Custom.
+fn repeat_label(r: &str) -> String {
+    match r {
+        "" => tl!("Never").to_string(),
+        "daily" => tl!("Every day").to_string(),
+        "weekly" => tl!("Every week").to_string(),
+        "monthly" => tl!("Every month").to_string(),
+        "yearly" => tl!("Every year").to_string(),
+        _ => tl!("Custom").to_string(),
+    }
+}
+
+/// How it repeats, among Outlook's simple choices (one set elsewhere is kept as Custom).
+pub(super) fn repeat_choice(ui: &mut Ui, f: &mut EventForm, width: f32) {
+    egui::ComboBox::from_id_salt("event-repeat").width(width).selected_text(repeat_label(&f.repeat)).show_ui(ui, |ui| repeat_options(ui, f));
+}
+
+/// The repeats to pick from, the one chosen ticked (a menu or a list's).
+pub(super) fn repeat_options(ui: &mut Ui, f: &mut EventForm) {
+    let custom = !matches!(f.repeat.as_str(), "" | "daily" | "weekly" | "monthly" | "yearly");
+    for r in ["", "daily", "weekly", "monthly", "yearly"] {
+        ui.selectable_value(&mut f.repeat, r.to_string(), repeat_label(r));
+    }
+    if custom {
+        let keep = f.repeat.clone();
+        ui.selectable_value(&mut f.repeat, keep, tl!("Custom"));
+    }
+}
+
+/// Outlook's reminder: how long before it starts, or none.
+pub(super) fn reminder_choice(ui: &mut Ui, f: &mut EventForm, width: f32) {
+    let label = |m: Option<i64>| match m {
+        None => tl!("None").to_string(),
+        Some(m) => crate::calendar::reminder_text(m),
+    };
+    let mut choices: Vec<Option<i64>> = std::iter::once(None).chain(REMINDER_CHOICES.iter().map(|m| Some(*m))).collect();
+    // One set elsewhere (another app, a server) stays offered as it is.
+    if !choices.contains(&f.reminder) {
+        choices.push(f.reminder);
+    }
+    egui::ComboBox::from_id_salt("event-reminder").width(width).selected_text(label(f.reminder)).show_ui(ui, |ui| {
+        for c in choices {
+            ui.selectable_value(&mut f.reminder, c, label(c));
+        }
+    });
+}
+
+/// The required (or optional) guests, as the lines show them: `Name <address>, …`.
+fn guest_list(attendees: &[quatrelle_engine::model::ical::Attendee], optional: bool) -> String {
+    attendees
+        .iter()
+        .filter(|a| !a.is_resource() && a.is_optional() == optional)
+        .map(|a| if a.name.is_empty() { a.email.clone() } else { format!("{} <{}>", a.name, a.email) })
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 pub fn event(ui: &mut Ui, f: &mut EventForm, s: &Session, t: &Tokens, acts: &mut Vec<Action>) -> bool {
@@ -280,48 +357,12 @@ pub fn event(ui: &mut Ui, f: &mut EventForm, s: &Session, t: &Tokens, acts: &mut
                 ui.checkbox(&mut f.all_day, tl!("All day"));
             });
         });
-        let custom = !matches!(f.repeat.as_str(), "" | "daily" | "weekly" | "monthly" | "yearly");
-        let label = |r: &str| -> String {
-            match r {
-                "" => tl!("Never").to_string(),
-                "daily" => tl!("Every day").to_string(),
-                "weekly" => tl!("Every week").to_string(),
-                "monthly" => tl!("Every month").to_string(),
-                "yearly" => tl!("Every year").to_string(),
-                _ => tl!("Custom").to_string(),
-            }
-        };
         form_row(ui, t, true, Some(Icon::Sync), "Repeat", |ui| {
-            ui.allocate_ui_with_layout(vec2(200.0, FIELD_H), egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                egui::ComboBox::from_id_salt("event-repeat").width(194.0).selected_text(label(&f.repeat)).show_ui(ui, |ui| {
-                    for r in ["", "daily", "weekly", "monthly", "yearly"] {
-                        ui.selectable_value(&mut f.repeat, r.to_string(), label(r));
-                    }
-                    if custom {
-                        let keep = f.repeat.clone();
-                        ui.selectable_value(&mut f.repeat, keep, tl!("Custom"));
-                    }
-                });
-            });
+            ui.allocate_ui_with_layout(vec2(200.0, FIELD_H), egui::Layout::left_to_right(egui::Align::Center), |ui| repeat_choice(ui, f, 194.0));
         });
         // Outlook's reminder: how long before it starts (or none).
         form_row(ui, t, true, Some(Icon::Reminder), "Reminder", |ui| {
-            let label = |m: Option<i64>| match m {
-                None => tl!("None").to_string(),
-                Some(m) => crate::calendar::reminder_text(m),
-            };
-            ui.allocate_ui_with_layout(vec2(200.0, FIELD_H), egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                let mut choices: Vec<Option<i64>> = std::iter::once(None).chain(REMINDER_CHOICES.iter().map(|m| Some(*m))).collect();
-                // One set elsewhere (another app, a server) stays offered as it is.
-                if !choices.contains(&f.reminder) {
-                    choices.push(f.reminder);
-                }
-                egui::ComboBox::from_id_salt("event-reminder").width(194.0).selected_text(label(f.reminder)).show_ui(ui, |ui| {
-                    for c in choices {
-                        ui.selectable_value(&mut f.reminder, c, label(c));
-                    }
-                });
-            });
+            ui.allocate_ui_with_layout(vec2(200.0, FIELD_H), egui::Layout::left_to_right(egui::Align::Center), |ui| reminder_choice(ui, f, 194.0));
         });
         form_row(ui, t, true, Some(Icon::Location), "Location", |ui| {
             field(ui, &mut f.location, tl!("Add a place"), f32::INFINITY);

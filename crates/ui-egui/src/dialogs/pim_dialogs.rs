@@ -13,11 +13,14 @@ use crate::{Action, widgets};
 
 mod contact;
 mod event;
+mod meeting;
+mod pickers;
 mod rooms;
 pub(crate) mod scheduling;
 
 pub use contact::{ContactForm, contact};
 pub use event::{EventForm, event};
+pub use meeting::meeting;
 pub use rooms::RoomFinderUi;
 pub use scheduling::SchedDrag;
 

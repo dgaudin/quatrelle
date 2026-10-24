@@ -251,6 +251,19 @@ impl MailApp {
                     self.ui.drag_out = self.attachment_to_temp(i, false);
                 }
             }
+            Action::ForEvent(w, id, p) => match self.session.run(id, &p) {
+                Ok(v) => {
+                    if id == "event.move" {
+                        self.moved_event(&v);
+                    }
+                    self.ui.event_windows.retain(|(x, _)| *x != w);
+                }
+                Err(e) => {
+                    if let Some((_, f)) = self.ui.event_windows.iter_mut().find(|(x, _)| *x == w) {
+                        f.error = Some(e.to_string().trim_start_matches("bad parameters: ").to_string());
+                    }
+                }
+            },
             Action::Submit(id, p) => match self.session.run(id, &p) {
                 Ok(v) => {
                     if id == "contact.create" {
