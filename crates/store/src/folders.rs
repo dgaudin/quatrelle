@@ -30,6 +30,13 @@ impl Store {
         Ok(st)
     }
 
+    /// A number that changes whenever a folder's list does (read from its head alone: a big
+    /// folder's pages are named there by their hash), 0 when it has none: what was worked out
+    /// from a list can be trusted while its version stays the same.
+    pub fn folder_version(&self, account: &str, folder: &str) -> u64 {
+        self.files.read(&self.folder_dir(account, folder).join("state.json")).map(|b| page_hash(&b)).unwrap_or(0)
+    }
+
     /// Whether a folder's list is kept here, numbered under `validity`: read from its head alone
     /// (a big folder's pages aren't loaded to know).
     pub fn folder_kept(&self, account: &str, folder: &str, validity: u32) -> bool {

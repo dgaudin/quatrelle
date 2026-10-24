@@ -42,11 +42,16 @@ fn a_big_folder_list_is_kept_in_pages() {
         assert_eq!(s.save_folder_counted("a1", "INBOX", &st, None).unwrap(), 4, "three pages and the list");
         let back = s.load_folder("a1", "INBOX").unwrap();
         assert_eq!(back, st, "{packed}: read back newest first, as it was");
+        // Its version: the same while the list is, whatever sources are written.
+        let version = s.folder_version("a1", "INBOX");
+        s.write_body(&msg(7).key, b"Subject: x\r\n\r\nhi").unwrap();
+        assert_eq!((s.folder_version("a1", "INBOX"), version == 0), (version, false));
         // A flag: one page.
         if let Some(m) = st.messages.iter_mut().find(|m| m.key.uid == 10) {
             m.flags.seen = true;
         }
         assert_eq!(s.save_folder_counted("a1", "INBOX", &st, None).unwrap(), 2, "one page and the list");
+        assert_ne!(s.folder_version("a1", "INBOX"), version, "a page changed: so did the version");
         assert!(s.load_folder("a1", "INBOX").unwrap().find(10).unwrap().flags.seen);
         // Told which changed: the same, without looking at the rest.
         if let Some(m) = st.messages.iter_mut().find(|m| m.key.uid == 8000) {
@@ -72,6 +77,7 @@ fn a_big_folder_list_is_kept_in_pages() {
         s.save_folder("a1", "INBOX", &st).unwrap();
         assert_eq!(s.load_folder("a1", "INBOX").unwrap(), st);
         assert!(!s.files.is_file(&s.folder_dir("a1", "INBOX").join("state-0.json")));
+        assert_eq!(s.folder_version("a1", "Nowhere"), 0, "no list, no version");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
