@@ -80,7 +80,8 @@ pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) 
                     b.page = page;
                 }
             }
-            // The open message, as Outlook's File › Save As, Save Attachments and Print.
+            // The open message, as Outlook's File › Save As, Save Attachments, Print, and the
+            // headers its Properties show.
             ui.add_space(8.0);
             let open = s.reading.as_ref().and_then(|r| r.parsed.as_ref());
             let attachments = open.is_some_and(|p| !p.attachments.is_empty());
@@ -88,6 +89,7 @@ pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) 
                 (Icon::File, "Save As", open.is_some(), Action::SaveMessage),
                 (Icon::Attach, "Save Attachments", attachments, Action::SaveAll),
                 (Icon::Print, "Print", open.is_some(), Action::Print),
+                (Icon::Info, "Message headers", open.is_some(), Action::Run("message.headers", json!({}))),
             ] {
                 let r = ui.add_enabled_ui(on, |ui| rail_item(ui, &t, icon, label, false)).inner;
                 if on && r.clicked() {

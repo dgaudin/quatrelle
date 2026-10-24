@@ -94,6 +94,25 @@ fn messages_save_as_eml_and_pdf() {
     done(s);
 }
 
+/// A message's headers, as its source carries them (who really sent it, the servers it passed
+/// through): the header lines alone, not its text; nothing without a message open.
+#[test]
+fn a_message_shows_its_headers() {
+    let mut s = sample_session("headers");
+    assert!(s.run("message.headers", &json!({})).is_err(), "no message open");
+    let k = key_of(&s, "Storyboard review on Thursday");
+    s.run("list.open", &k).unwrap();
+    let v = s.run("message.headers", &json!({})).unwrap();
+    let text = v["text"].as_str().unwrap();
+    assert!(text.lines().any(|l| l == "Subject: Storyboard review on Thursday"), "{text}");
+    assert!(text.lines().any(|l| l.starts_with("Message-ID:")), "{text}");
+    assert!(!text.contains('\r') && !text.ends_with('\n'), "lines as written, without the blank one");
+    let body = quatrelle_mime::parse(&s.message_source().unwrap()).unwrap().text;
+    let first = body.lines().find(|l| !l.trim().is_empty()).unwrap();
+    assert!(!text.contains(first), "the text isn't part of it");
+    done(s);
+}
+
 #[test]
 fn attachments_preview_and_save_all() {
     let mut s = sample_session("attachments");

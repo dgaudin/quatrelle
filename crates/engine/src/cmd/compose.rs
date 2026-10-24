@@ -488,6 +488,19 @@ pub(super) fn save_message(s: &mut Session, v: &Value) -> CmdResult {
     Ok(json!({"saved": path, "bytes": raw.len()}))
 }
 
+/// The open message's Internet headers, as its source carries them: who really sent it, the
+/// servers it passed through, what they checked (Outlook shows them in a message's Properties).
+pub(super) fn message_headers(s: &mut Session, _: &Value) -> CmdResult {
+    let raw = s.message_source()?;
+    // Up to the blank line that ends them (a source without one is all header).
+    let end = raw.windows(4).position(|w| w == b"\r\n\r\n").or_else(|| raw.windows(2).position(|w| w == b"\n\n")).unwrap_or(raw.len());
+    // At most 256 KB (a header that long is a broken message, not one to read).
+    const MAX: usize = 256 << 10;
+    let head = raw.get(..end.min(MAX)).unwrap_or(&raw);
+    let text = String::from_utf8_lossy(head).replace("\r\n", "\n");
+    Ok(json!({"kind": "headers", "text": text, "truncated": end > MAX}))
+}
+
 /// The open message as a PDF.
 pub(super) fn export_pdf(s: &mut Session, v: &Value) -> CmdResult {
     let path = p::req_str(v, "path")?;

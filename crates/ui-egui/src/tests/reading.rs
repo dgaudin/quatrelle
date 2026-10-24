@@ -564,3 +564,25 @@ fn a_row_listed_without_a_preview_shows_one_from_its_source() {
     assert!(shown, "the row's preview comes from its source");
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// The More menu's Message headers: a dialog of the header lines, which can be copied whole.
+#[test]
+fn the_headers_open_in_a_dialog_with_copy() {
+    let (mut a, dir) = app("headers");
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    let key = a.session.list.iter().find(|m| m.subject == "Storyboard review on Thursday").map(|m| m.key.clone()).unwrap();
+    a.session.open_message(&key);
+    a.act(crate::Action::Run("message.headers", json!({})));
+    let Some(Dialog::Preview { title, text, .. }) = &a.ui.dialog else { panic!("no dialog: {:?}", a.ui.dialog.is_some()) };
+    assert_eq!(title, "Message headers");
+    assert!(text.lines().any(|l| l == "Subject: Storyboard review on Thursday"), "{text}");
+    // Drawn once it has faded in.
+    let buttons = |drawn: &[egui::Shape]| {
+        let labels: Vec<&str> = drawn.iter().filter_map(|s| if let egui::Shape::Text(t) = s { Some(t.galley.text()) } else { None }).collect();
+        labels.contains(&"Copy") && labels.contains(&"Close")
+    };
+    assert!((0..10).any(|_| buttons(&frame_shapes(&ctx, &mut a, vec![], egui::vec2(1280.0, 800.0)))), "Copy beside Close");
+    assert!(a.ui.dialog.is_some(), "still open");
+    let _ = std::fs::remove_dir_all(dir);
+}

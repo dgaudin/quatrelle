@@ -484,6 +484,10 @@ fn message(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action
                                 acts.push(Action::Run("mail.forwardAsAttachment", json!({})));
                                 ui.close();
                             }
+                            if ui.button(tl!("Message headers")).clicked() {
+                                acts.push(Action::Run("message.headers", json!({})));
+                                ui.close();
+                            }
                         });
                     });
                 }

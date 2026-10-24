@@ -90,7 +90,7 @@ impl MailApp {
                     self.ui.close_now = true;
                 }
             }
-            Action::Run("attachment.preview", p) => match self.session.run("attachment.preview", &p) {
+            Action::Run(id @ ("attachment.preview" | "message.headers"), p) => match self.session.run(id, &p) {
                 Ok(v) => self.ui.dialog = Some(Dialog::preview(&v, &self.session.clock)),
                 Err(e) => self.session.notice(e.to_string(), true),
             },
