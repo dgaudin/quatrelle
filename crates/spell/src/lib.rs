@@ -67,9 +67,14 @@ pub fn script_of(word: &str) -> Script {
     counts.into_iter().max_by_key(|(_, n)| *n).map_or(Script::Other, |(s, _)| s)
 }
 
+/// The words' hashing, the same at every start: with one picked at random each time, words the
+/// dictionary scores alike came in another order, and the last suggestions given changed from
+/// one run to the next (the closest word sometimes left out).
+type Fixed = std::hash::BuildHasherDefault<std::collections::hash_map::DefaultHasher>;
+
 /// One Hunspell dictionary.
 pub struct Dict {
-    inner: spellbook::Dictionary,
+    inner: spellbook::Dictionary<Fixed>,
     /// The script its words are in (from a sample of them).
     script: Script,
 }
@@ -78,7 +83,7 @@ impl Dict {
     /// A dictionary from its `.aff` and `.dic` text.
     pub fn new(aff: &str, dic: &str) -> Result<Dict, String> {
         let script = dic_script(dic);
-        spellbook::Dictionary::new(aff, dic).map(|inner| Dict { inner, script }).map_err(|e| e.to_string())
+        spellbook::Dictionary::new_with_hasher(aff, dic, Fixed::default()).map(|inner| Dict { inner, script }).map_err(|e| e.to_string())
     }
 
     /// Whether the dictionary knows the word (its affixes included).
@@ -214,6 +219,9 @@ impl Spell {
         self.suggest_in(word, &[], max)
     }
 
+    /// The suggestions taken from one dictionary, at most (it gives a dozen or two).
+    const SUGGESTIONS_MAX: usize = 100;
+
     /// [`Spell::suggest`] from the dictionaries of `langs` (all when empty): the suggestions of
     /// each, merged and put in order of how close they are to the word (the first language
     /// first among those as close, then as its dictionary ranked them).
@@ -223,7 +231,9 @@ impl Spell {
         // (distance, language rank, the dictionary's own rank, the word)
         let mut all: Vec<(usize, usize, usize, String)> = Vec::new();
         for (rank, d) in self.dicts_for(langs).into_iter().filter(|d| d.script == script).enumerate() {
-            for (i, s) in d.suggest(word, max.max(10)).into_iter().enumerate() {
+            // Every suggestion the dictionary has, put in order here: those of the same score
+            // come in no set order, so its first ten were sometimes without the closest word.
+            for (i, s) in d.suggest(word, Self::SUGGESTIONS_MAX).into_iter().enumerate() {
                 if all.iter().any(|(_, _, _, x)| *x == s) {
                     continue;
                 }
