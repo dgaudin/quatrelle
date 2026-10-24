@@ -219,6 +219,8 @@ impl Worker {
             if self.opts.full {
                 self.ahead = sync_order(&self.folders, |f: &Folder| !self.read_online(&f.path)).into_iter().collect();
                 self.ahead_left = None;
+                // Worked out again: what the server wouldn't give gets another try.
+                self.ahead_todo = crate::ews::AheadTodo::default();
             }
             log::info!("{}: synced {} folders in {:.1} s", self.acc.id, self.folders.len(), began.elapsed().as_secs_f32());
             self.status(SyncStatus::Online { at: now() });
@@ -394,7 +396,7 @@ impl Worker {
         let opts = self.options_for(&path);
         let (store, id) = (self.store.clone(), self.id());
         let left = match self.conn.as_mut() {
-            Some(Conn::Ews(c)) => crate::ews::download_ahead(c, &self.jstate, &store, &id, &path, &opts, AHEAD_STEP),
+            Some(Conn::Ews(c)) => crate::ews::download_ahead(c, &self.jstate, &store, &id, &path, &opts, AHEAD_STEP, &mut self.ahead_todo),
             Some(Conn::Graph(c)) => crate::graph::download_ahead(c, &self.jstate, &store, &id, &path, &opts, AHEAD_STEP),
             Some(Conn::Jmap(c)) => jmap::download_ahead(c, &self.jstate, &store, &id, &path, &opts, AHEAD_STEP),
             Some(Conn::Imap(c)) => crate::sync::download_ahead(c, &store, &id, &path, &opts, AHEAD_STEP),

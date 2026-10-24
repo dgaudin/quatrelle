@@ -627,3 +627,34 @@ fn shared_mailboxes_are_kept_unless_read_online() {
     drop(pool);
     let _ = std::fs::remove_dir_all(store.root());
 }
+
+/// Downloading ahead works out once what's missing and takes it a few at a time; a list that
+/// changed meanwhile (a message deleted) is worked out again: nothing is written for a message
+/// no longer there.
+#[test]
+fn downloading_ahead_follows_the_list() {
+    let mut d = Data::default();
+    let inbox = d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    for i in 0..3 {
+        d.deliver(&inbox, &mail(&format!("M{i}"), &format!("m{i}")), false, &format!("2026-10-2{i}T08:00:00Z"));
+    }
+    let server = serve(d);
+    let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
+    let mut st = crate::jmap::State::default();
+    crate::ews::list_folders(&c, &mut st, "a1").unwrap();
+    let store = crate::fake::tests_store("ews-ahead-todo");
+    let opts = crate::sync::SyncOptions { prefetch: 0, full: true, ..Default::default() };
+    crate::ews::sync_folder(&c, &mut st, &store, "a1", "INBOX", &opts).unwrap();
+    let mut todo = crate::ews::AheadTodo::default();
+    assert_eq!(crate::ews::download_ahead(&c, &st, &store, "a1", "INBOX", &opts, 1, &mut todo).unwrap(), 2);
+    let newest = store.load_folder("a1", "INBOX").unwrap().messages[0].key.clone();
+    assert!(store.has_body(&newest), "the newest first");
+    let mut fs = store.load_folder("a1", "INBOX").unwrap();
+    let gone = fs.messages[1].key.clone();
+    fs.messages.retain(|m| m.key != gone);
+    store.save_folder("a1", "INBOX", &fs).unwrap();
+    assert_eq!(crate::ews::download_ahead(&c, &st, &store, "a1", "INBOX", &opts, 10, &mut todo).unwrap(), 0);
+    assert!(!store.has_body(&gone), "nothing written for a message no longer listed");
+    assert!(store.load_folder("a1", "INBOX").unwrap().messages.iter().all(|m| store.has_body(&m.key)));
+    let _ = std::fs::remove_dir_all(store.root());
+}

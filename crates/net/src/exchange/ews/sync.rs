@@ -471,9 +471,20 @@ fn prefetch(c: &Client, st: &State, store: &Store, account: &str, folder: &str, 
     if wanted.is_empty() {
         return Ok(());
     }
-    download(c, store, account, folder, fs, wanted, true)?;
+    download(c, store, account, folder, Some(fs), wanted, true)?;
     store.save_folder(account, folder, fs)?;
     Ok(())
+}
+
+/// What of a folder is still to be downloaded ahead, worked out once — the whole list read and
+/// every message looked up took a third of a second in a folder of 50,000, at every step of
+/// twenty — and trusted while the folder's list stays the same ([`Store::folder_version`]).
+#[derive(Debug, Default)]
+pub struct AheadTodo {
+    folder: String,
+    version: u64,
+    /// Each message's number and size, the newest last (taken from the end).
+    left: Vec<(u32, u64)>,
 }
 
 /// Download at most `budget` of a folder's kept messages not on this computer yet, newest
@@ -481,28 +492,48 @@ fn prefetch(c: &Client, st: &State, store: &Store, account: &str, folder: &str, 
 /// Exchange Mode keeps its offline file) — while nothing else is asked; how many are still
 /// missing. Only the sources are written: the folder's list stays as its sync saved it (written
 /// again for every few messages, a big folder's list was gigabytes).
-pub fn download_ahead(c: &Client, st: &State, store: &Store, account: &str, folder: &str, opts: &SyncOptions, budget: usize) -> Result<usize> {
-    let mut fs = store.load_folder(account, folder)?;
-    let cap = if opts.full { u64::MAX } else { u64::from(opts.prefetch_max_bytes) };
-    let missing: Vec<(u32, String, u64)> = fs
-        .messages
-        .iter()
-        .filter(|m| u64::from(m.size) <= cap && !store.has_body(&m.key))
-        .filter_map(|m| Some((m.key.uid, st.id(m.key.uid)?.to_string(), u64::from(m.size))))
-        .collect();
-    let now: Vec<(u32, String, u64)> = missing.iter().take(budget).cloned().collect();
-    let written = download(c, store, account, folder, &mut fs, now, false)?;
-    Ok(missing.len().saturating_sub(written))
+#[allow(clippy::too_many_arguments)]
+pub fn download_ahead(
+    c: &Client,
+    st: &State,
+    store: &Store,
+    account: &str,
+    folder: &str,
+    opts: &SyncOptions,
+    budget: usize,
+    todo: &mut AheadTodo,
+) -> Result<usize> {
+    let version = store.folder_version(account, folder);
+    if todo.folder != folder || todo.version != version || version == 0 {
+        let fs = store.load_folder(account, folder)?;
+        let cap = if opts.full { u64::MAX } else { u64::from(opts.prefetch_max_bytes) };
+        let mut left: Vec<(u32, u64)> =
+            fs.messages.iter().filter(|m| u64::from(m.size) <= cap && !store.has_body(&m.key)).map(|m| (m.key.uid, u64::from(m.size))).collect();
+        left.reverse();
+        *todo = AheadTodo { folder: folder.to_string(), version, left };
+    }
+    let mut now: Vec<(u32, String, u64)> = Vec::new();
+    while now.len() < budget
+        && let Some((n, size)) = todo.left.pop()
+    {
+        // Opened meanwhile, or no longer numbered: nothing to do.
+        let key = MessageKey { account: account.to_string(), folder: folder.to_string(), validity: VALIDITY, uid: n };
+        if let Some(id) = st.id(n).filter(|_| !store.has_body(&key)) {
+            now.push((n, id.to_string(), size));
+        }
+    }
+    download(c, store, account, folder, None, now, false)?;
+    Ok(todo.left.len())
 }
 
 /// Download these messages' sources (uid, item id, size) and keep them; with `fill`, their list
-/// entries take what the sources say. How many were written.
+/// entries (in `fs`) take what the sources say. How many were written.
 fn download(
     c: &Client,
     store: &Store,
     account: &str,
     folder: &str,
-    fs: &mut FolderState,
+    mut fs: Option<&mut FolderState>,
     wanted: Vec<(u32, String, u64)>,
     fill: bool,
 ) -> Result<usize> {
@@ -542,12 +573,19 @@ fn download(
                     continue;
                 }
             };
-            let Some(m) = fs.find_mut(*n) else { continue };
-            store.write_body(&m.key, &raw)?;
-            written += 1;
-            if fill {
-                fill_from_source(m, &raw);
+            match fs.as_deref_mut() {
+                Some(fs) => {
+                    let Some(m) = fs.find_mut(*n) else { continue };
+                    store.write_body(&m.key, &raw)?;
+                    if fill {
+                        fill_from_source(m, &raw);
+                    }
+                }
+                None => {
+                    store.write_body(&MessageKey { account: account.to_string(), folder: folder.to_string(), validity: VALIDITY, uid: *n }, &raw)?
+                }
             }
+            written += 1;
         }
     }
     Ok(written)

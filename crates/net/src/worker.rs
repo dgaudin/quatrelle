@@ -341,6 +341,8 @@ struct Worker {
     /// still missing, to let go of a folder that no longer gets anywhere.
     ahead: VecDeque<String>,
     ahead_left: Option<(String, usize)>,
+    /// What of the first one is still to download (an Exchange account's).
+    ahead_todo: crate::ews::AheadTodo,
     /// When the Inbox is next looked at while downloading ahead.
     ahead_poll: Instant,
     /// The server search still wanted (the pool's).
@@ -405,6 +407,7 @@ impl Worker {
             followed,
             ahead: VecDeque::new(),
             ahead_left: None,
+            ahead_todo: crate::ews::AheadTodo::default(),
             ahead_poll: Instant::now(),
             queue: VecDeque::new(),
             backoff: Duration::from_secs(5),
