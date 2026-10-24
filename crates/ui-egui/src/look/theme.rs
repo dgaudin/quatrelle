@@ -158,7 +158,9 @@ pub fn account_color(i: u8) -> Color32 {
 
 /// Category colours (the category's `color` index).
 pub fn category_color(i: u8, dark: bool) -> Color32 {
-    const C: [Color32; 8] = [
+    // Quatrelle's eight, then the rest of Outlook's 25 by name (`organize::outlook_color`), in
+    // shades of Quatrelle's own.
+    const C: [Color32; quatrelle_engine::model::organize::CATEGORY_COLORS as usize] = [
         Color32::from_rgb(0xD1, 0x34, 0x38),
         Color32::from_rgb(0xE0, 0x7A, 0x1F),
         Color32::from_rgb(0x2E, 0x8B, 0x57),
@@ -167,6 +169,26 @@ pub fn category_color(i: u8, dark: bool) -> Color32 {
         Color32::from_rgb(0xC9, 0xA2, 0x00),
         Color32::from_rgb(0x1C, 0x95, 0x9F),
         Color32::from_rgb(0xB0, 0x4A, 0x8C),
+        // Peach, olive, maroon, steel, dark steel, gray, dark gray, black.
+        Color32::from_rgb(0xE8, 0xA3, 0x6A),
+        Color32::from_rgb(0x8C, 0x9A, 0x2E),
+        Color32::from_rgb(0xA3, 0x3A, 0x5F),
+        Color32::from_rgb(0x7C, 0x93, 0xA8),
+        Color32::from_rgb(0x4F, 0x6B, 0x82),
+        Color32::from_rgb(0x9A, 0xA0, 0xA6),
+        Color32::from_rgb(0x5F, 0x63, 0x68),
+        Color32::from_rgb(0x2B, 0x2B, 0x2B),
+        // The dark ones: red, orange, peach, yellow, green, teal, olive, blue, purple, maroon.
+        Color32::from_rgb(0x8E, 0x1F, 0x23),
+        Color32::from_rgb(0xA6, 0x54, 0x10),
+        Color32::from_rgb(0xA8, 0x6A, 0x3B),
+        Color32::from_rgb(0x8F, 0x74, 0x00),
+        Color32::from_rgb(0x1E, 0x5E, 0x3A),
+        Color32::from_rgb(0x13, 0x68, 0x70),
+        Color32::from_rgb(0x5B, 0x64, 0x20),
+        Color32::from_rgb(0x1F, 0x4A, 0x93),
+        Color32::from_rgb(0x5A, 0x34, 0x90),
+        Color32::from_rgb(0x6E, 0x22, 0x40),
     ];
     let c = C.get(usize::from(i) % C.len()).copied().unwrap_or(APP_COLOR);
     if dark { c.gamma_multiply(1.15) } else { c }

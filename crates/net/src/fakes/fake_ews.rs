@@ -49,6 +49,8 @@ pub struct It {
     pub voting: Vec<u8>,
     /// The choice a vote carries (`PidLidVerbResponse`).
     pub vote: String,
+    /// Its categories, by name (`item:Categories`).
+    pub categories: Vec<String>,
 }
 
 pub struct Data {
@@ -144,10 +146,20 @@ pub struct Data {
     pub stream_for: std::time::Duration,
     /// The `Cookie` each answer of notifications was asked with.
     pub stream_cookies: Vec<String>,
+    /// Outlook's master category list (the `CategoryList` configuration's XML), when it made one.
+    pub category_list: Option<String>,
     /// What each subscription last told of: what changed since is told when it's next asked,
     /// as a subscription keeps its notifications between two answers.
     told: std::collections::HashMap<String, streaming::Seen>,
     next: u32,
+}
+
+/// An item's categories as Exchange lists them (nothing for none).
+pub(super) fn categories_xml(names: &[String]) -> String {
+    if names.is_empty() {
+        return String::new();
+    }
+    format!("<t:Categories>{}</t:Categories>", names.iter().map(|n| format!("<t:String>{}</t:String>", esc(n))).collect::<String>())
 }
 
 /// A mailbox's Exchange address (its LegacyDN), as older servers name it.
@@ -230,6 +242,7 @@ impl Default for Data {
             subscriptions: Vec::new(),
             stream_for: std::time::Duration::from_secs(2),
             stream_cookies: Vec::new(),
+            category_list: None,
             told: std::collections::HashMap::new(),
             next: 0,
         };
@@ -320,6 +333,7 @@ impl Data {
             received: received.into(),
             voting: Vec::new(),
             vote: String::new(),
+            categories: Vec::new(),
         });
         id
     }
@@ -378,7 +392,7 @@ impl Data {
             use std::hash::{Hash, Hasher};
             let mut h = std::collections::hash_map::DefaultHasher::new();
             for i in self.items.iter().filter(|i| i.folder == f.id) {
-                (&i.id, i.read, i.flagged, i.draft).hash(&mut h);
+                (&i.id, i.read, i.flagged, i.draft, &i.categories).hash(&mut h);
             }
             format!(
                 "{replica}<t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"0x670a\" PropertyType=\"SystemTime\"/><t:Value>2026-01-01T00:00:00.{:x}Z</t:Value></t:ExtendedProperty>",
@@ -452,8 +466,28 @@ impl Data {
             x.push_str(&format!("<t:CcRecipients>{}</t:CcRecipients>", p.cc.iter().map(mb).collect::<String>()));
         }
         x.push_str(&format!("<t:From>{}</t:From>", mb(&p.from)));
-        x.push_str(&format!("<t:InternetMessageId>&lt;{}&gt;</t:InternetMessageId><t:IsRead>{}</t:IsRead></t:Message>", esc(&p.message_id), it.read));
+        x.push_str(&format!(
+            "<t:InternetMessageId>&lt;{}&gt;</t:InternetMessageId><t:IsRead>{}</t:IsRead>{}</t:Message>",
+            esc(&p.message_id),
+            it.read,
+            categories_xml(&it.categories)
+        ));
         x
+    }
+
+    /// `GetUserConfiguration`'s answer: the master category list when Outlook made one.
+    pub(super) fn user_configuration(&self, op: &El) -> String {
+        let name = op.find("UserConfigurationName").and_then(|n| n.attr("Name")).unwrap_or_default();
+        match self.category_list.as_ref().filter(|_| name == "CategoryList") {
+            Some(xml) => format!(
+                "<m:R ResponseClass=\"Success\"><m:ResponseCode>NoError</m:ResponseCode><m:UserConfiguration>\
+                 <t:UserConfigurationName Name=\"CategoryList\"/><t:XmlData>{}</t:XmlData></m:UserConfiguration></m:R>",
+                crate::imap::base64(xml.as_bytes())
+            ),
+            None => "<m:R ResponseClass=\"Error\"><m:MessageText>The specified object was not found in the store.</m:MessageText>\
+                     <m:ResponseCode>ErrorItemNotFound</m:ResponseCode></m:R>"
+                .into(),
+        }
     }
 
     /// The public folders root and everything under it.
@@ -549,6 +583,7 @@ fn xml(e: &El) -> String {
 mod route;
 mod server;
 mod streaming;
+mod syncing;
 
 pub use server::serve;
 

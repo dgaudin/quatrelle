@@ -236,3 +236,26 @@ fn the_search_box_drops_down_recent_and_advanced_search() {
     }
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// Outlook's 25 category colours each have one of their own here (after Quatrelle's eight), and
+/// the calendars keep theirs: the first eight in turn, as before there were more.
+#[test]
+fn categories_have_outlooks_colours_and_calendars_keep_theirs() {
+    use crate::theme::category_color;
+    use quatrelle_engine::model::organize::{CATEGORY_COLORS, outlook_color};
+    let all: Vec<egui::Color32> = (0..CATEGORY_COLORS).map(|i| category_color(i, false)).collect();
+    let mut distinct = all.clone();
+    distinct.sort_by_key(|c| c.to_array());
+    distinct.dedup();
+    assert_eq!(distinct.len(), usize::from(CATEGORY_COLORS));
+    let mapped: Vec<u8> = (0..25).filter_map(outlook_color).collect();
+    let mut once = mapped.clone();
+    once.sort();
+    once.dedup();
+    assert_eq!(once.len(), 25, "each of Outlook's its own");
+    assert_eq!((outlook_color(-1), outlook_color(25)), (None, None));
+    let t = crate::theme::Tokens::light();
+    for i in 1..40u8 {
+        assert_eq!(crate::panes::calendar::color(i, &t), category_color((i - 1) % 8, false), "calendar colour {i}");
+    }
+}

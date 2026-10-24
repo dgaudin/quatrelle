@@ -224,11 +224,11 @@ impl Store {
                         flag.set(&mut m.flags, *on);
                     }
                 }
-                Op::SetKeyword { keys, keyword, on } => {
+                Op::SetKeyword { keys, keyword, on, name } => {
                     // A set: every message of a folder may change at once (looked up in a list, that was quadratic).
                     let uids: HashSet<u32> = keys.iter().filter(|k| in_folder(k)).map(|k| k.uid).collect();
                     for m in st.messages.iter_mut().filter(|m| uids.contains(&m.key.uid)) {
-                        m.flags.set_keyword(keyword, *on);
+                        m.flags.set_category(keyword, name.as_deref(), *on);
                     }
                 }
                 Op::Move { keys, to } => {
@@ -330,11 +330,11 @@ fn reapply(st: &mut FolderState, account: &str, folder: &str, ops: &[Op]) -> Has
                     }
                 }
             }
-            Op::SetKeyword { keys, keyword, on } => {
+            Op::SetKeyword { keys, keyword, on, name } => {
                 let wanted = uids(keys);
                 for m in st.messages.iter_mut().filter(|m| wanted.contains(&m.key.uid)) {
                     let before = m.flags.clone();
-                    m.flags.set_keyword(keyword, *on);
+                    m.flags.set_category(keyword, name.as_deref(), *on);
                     if m.flags != before {
                         touched.insert(m.key.uid);
                     }

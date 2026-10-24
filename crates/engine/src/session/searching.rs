@@ -209,16 +209,20 @@ impl Session {
 
     pub(super) fn search_results(&mut self, q: &str, scope: SearchScope) -> Vec<Summary> {
         let mut query = Query::parse(q);
-        // `category:Work` means the Work category's keyword (`$label2`).
-        // `is:categorized` means one of the categories.
+        // `category:Work` means the Work category's keyword (`$label2`), or its name's as Exchange
+        // keeps it (`work`). `is:categorized` means one of the categories.
+        use quatrelle_model::search::Term;
+        let both = |c: &quatrelle_model::organize::Category| [c.keyword.clone(), quatrelle_model::keyword_for(&c.name)];
         for c in &mut query.clauses {
-            if let quatrelle_model::search::Term::Keyword(k) = &mut c.term
+            if let Term::Keyword(k) = &c.term
                 && let Some(cat) = self.category(k)
             {
-                *k = cat.keyword.clone();
+                c.term = Term::Categorized(both(cat).to_vec());
             }
-            if let quatrelle_model::search::Term::Categorized(ks) = &mut c.term {
-                *ks = self.prefs.categories.iter().map(|c| c.keyword.clone()).collect();
+            if let Term::Categorized(ks) = &mut c.term
+                && ks.is_empty()
+            {
+                *ks = self.prefs.categories.iter().flat_map(both).collect();
             }
         }
         if query.is_empty() {

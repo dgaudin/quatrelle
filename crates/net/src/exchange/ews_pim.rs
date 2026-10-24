@@ -327,12 +327,14 @@ fn public_items(c: &Client, id: &str, replica: Option<&str>, total: u32, since: 
     }
 }
 
+mod categories;
 mod contacts;
 pub(crate) mod events;
 mod push;
 pub mod scheduling;
 mod sync;
 
+pub use categories::master_categories;
 use contacts::{NOTE_COLOR, contact_xml, note_xml};
 pub use contacts::{card_of, note_of};
 use events::{event_fields, modified_occurrence_ids, occurrence_item_id};

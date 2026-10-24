@@ -1,7 +1,7 @@
 //! Organising mail: categories, pinning, snoozing, inbox rules and the Focused/Other split.
 
 use quatrelle_model::organize::{Category, Rule, RuleAction, Snooze, actions_for};
-use quatrelle_model::{PINNED, is_keyword};
+use quatrelle_model::{Flags, PINNED, is_keyword};
 
 use super::*;
 use quatrelle_model::organize::ServerKind;
@@ -35,27 +35,31 @@ pub enum RulesScope {
 impl Session {
     // ----- categories and pins -----
 
-    /// Add or remove a keyword on the selection (`on: None` toggles, following the first message).
-    fn keyword_selection(&mut self, keyword: &str, on: Option<bool>) -> CmdResult {
+    /// Add or remove a keyword on the selection (`on: None` toggles, following the first message);
+    /// a category's carries its name (Exchange keeps categories by name).
+    fn keyword_selection(&mut self, keyword: &str, category: Option<Category>, on: Option<bool>) -> CmdResult {
         if !is_keyword(keyword) {
             return Err(CmdError::Params(format!("`{keyword}` can't be used as a keyword")));
         }
+        let carries = |f: &Flags| category.as_ref().map_or_else(|| f.has(keyword), |c| c.marks(f));
+        let name = category.as_ref().map(|c| c.name.clone());
         let sel = self.selected();
         let first = sel.first().ok_or_else(|| CmdError::Disabled("no message selected".into()))?;
-        let on = on.unwrap_or(!first.flags.has(keyword));
+        let on = on.unwrap_or(!carries(&first.flags));
         let mut by_account: HashMap<String, Vec<MessageKey>> = HashMap::new();
         let mut changed: HashMap<String, Vec<MessageKey>> = HashMap::new();
         for m in &sel {
             by_account.entry(m.key.account.clone()).or_default().push(m.key.clone());
-            if m.flags.has(keyword) != on {
+            if carries(&m.flags) != on {
                 changed.entry(m.key.account.clone()).or_default().push(m.key.clone());
             }
         }
         for (a, keys) in changed {
-            self.remember(Undo::Ops { account: a, ops: vec![Op::SetKeyword { keys, keyword: keyword.to_string(), on: !on }] });
+            let undo = Op::SetKeyword { keys, keyword: keyword.to_string(), on: !on, name: name.clone() };
+            self.remember(Undo::Ops { account: a, ops: vec![undo] });
         }
         for (a, keys) in by_account {
-            self.apply_op(&a, Op::SetKeyword { keys, keyword: keyword.to_string(), on });
+            self.apply_op(&a, Op::SetKeyword { keys, keyword: keyword.to_string(), on, name: name.clone() });
         }
         Ok(serde_json::json!({ "on": on, "count": sel.len() }))
     }
@@ -67,16 +71,16 @@ impl Session {
 
     /// The categories a message carries, in the order the user keeps them.
     pub fn categories_of(&self, m: &Summary) -> Vec<&Category> {
-        self.prefs.categories.iter().filter(|c| m.flags.has(&c.keyword)).collect()
+        self.prefs.categories.iter().filter(|c| c.marks(&m.flags)).collect()
     }
 
     pub fn categorize_selection(&mut self, name: &str, on: Option<bool>) -> CmdResult {
-        let kw = self.category(name).map(|c| c.keyword.clone()).ok_or_else(|| CmdError::Params(format!("no category called {name}")))?;
-        self.keyword_selection(&kw, on)
+        let c = self.category(name).cloned().ok_or_else(|| CmdError::Params(format!("no category called {name}")))?;
+        self.keyword_selection(&c.keyword.clone(), Some(c), on)
     }
 
     pub fn pin_selection(&mut self, on: Option<bool>) -> CmdResult {
-        self.keyword_selection(PINNED, on)
+        self.keyword_selection(PINNED, None, on)
     }
 
     pub fn add_category(&mut self, name: &str, color: Option<u8>) -> CmdResult {
@@ -657,10 +661,10 @@ impl Session {
                         quiet.push(m.key.clone());
                     }
                     RuleAction::Flag => self.apply_op(&a, Op::SetFlag { keys: keys.clone(), flag: Flag::Flagged, on: true }),
-                    RuleAction::Pin => self.apply_op(&a, Op::SetKeyword { keys: keys.clone(), keyword: PINNED.into(), on: true }),
+                    RuleAction::Pin => self.apply_op(&a, Op::SetKeyword { keys: keys.clone(), keyword: PINNED.into(), on: true, name: None }),
                     RuleAction::Categorize(c) => {
-                        if let Some(kw) = self.category(&c).map(|c| c.keyword.clone()) {
-                            self.apply_op(&a, Op::SetKeyword { keys: keys.clone(), keyword: kw, on: true });
+                        if let Some(c) = self.category(&c).cloned() {
+                            self.apply_op(&a, Op::SetKeyword { keys: keys.clone(), keyword: c.keyword, on: true, name: Some(c.name) });
                         }
                     }
                     RuleAction::MoveTo(f) => dest = self.folder(&a, &f).map(|f| f.path.clone()).or(dest),

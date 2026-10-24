@@ -676,3 +676,50 @@ fn a_message_read_in_the_unread_filter_stays_until_another_is_opened() {
     s.run("list.filter", &json!({"value": "unread"})).unwrap();
     assert!(!s.list.iter().any(|m| m.key == unread[1]));
 }
+
+/// Categories as Exchange keeps them, by name: the server's list (Outlook's master list) gives
+/// each its colour and adds those not made here; a message carrying a category under its name's
+/// keyword (`work`, as Exchange's are read) counts as that category (Work is `$label2` here), is
+/// found and filtered by it, and taking it off here takes off both, the change carrying the name.
+#[test]
+fn categories_kept_by_name_as_exchange_keeps_them() {
+    let mut s = sample_session("categories-by-name");
+    let list = |names: &[(&str, Option<u8>)]| Event::Categories {
+        account: "sample".into(),
+        categories: names.iter().map(|(n, c)| (n.to_string(), *c)).collect(),
+    };
+    s.apply(list(&[("work", Some(5)), ("Projet Été", Some(8)), ("Sans couleur", None)]));
+    let work = s.category("Work").cloned().unwrap();
+    assert_eq!((work.keyword.as_str(), work.color), ("$label2", 5), "kept under its keyword, in Outlook's colour");
+    assert_eq!(s.category("Projet Été").map(|c| c.color), Some(8));
+    assert!(s.category("Sans couleur").is_some());
+    let before = s.prefs.categories.len();
+    s.apply(list(&[("WORK", Some(5))]));
+    assert_eq!(s.prefs.categories.len(), before, "not twice");
+    // A message read from Exchange with Work on it.
+    let k = key_of(&s, "Character turnarounds");
+    let store = s.store.clone().unwrap();
+    let mut fs = store.load_folder("sample", "INBOX").unwrap();
+    fs.messages.iter_mut().filter(|m| m.subject == "Character turnarounds").for_each(|m| m.flags.set_keyword("work", true));
+    store.save_folder("sample", "INBOX", &fs).unwrap();
+    s.apply(Event::FolderChanged { account: "sample".into(), folder: "INBOX".into() });
+    s.run("list.select", &k).unwrap();
+    let names: Vec<String> = s.categories_of(&s.selected()[0]).iter().map(|c| c.name.clone()).collect();
+    assert_eq!(names, ["Work"]);
+    assert_eq!(s.run("search.run", &json!({"query": "category:work"})).unwrap()["results"], 1);
+    s.run("search.clear", &json!({})).unwrap();
+    s.run("list.filter", &json!({"value": "categorized"})).unwrap();
+    assert!(s.list.iter().any(|m| m.subject == "Character turnarounds"));
+    s.run("list.filter", &json!({"value": "all"})).unwrap();
+    // Taken off here: under both keywords, and the change says which category by its name.
+    s.run("list.select", &k).unwrap();
+    s.run("mail.categorize", &json!({"category": "Work"})).unwrap();
+    let m = s.selected()[0].clone();
+    assert!(!m.flags.has("work") && !m.flags.has("$label2") && s.categories_of(&m).is_empty(), "{:?}", m.flags.keywords);
+    let undo = s.undo.last().cloned();
+    assert!(
+        matches!(&undo, Some(crate::session::Undo::Ops { ops, .. }) if matches!(ops.as_slice(), [Op::SetKeyword { on: true, name: Some(n), .. }] if n == "Work")),
+        "{undo:?}"
+    );
+    done(s);
+}

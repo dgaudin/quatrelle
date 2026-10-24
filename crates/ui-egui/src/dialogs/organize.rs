@@ -15,8 +15,8 @@ pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &
             if ui.memory(|m| m.focused().is_none()) {
                 r.request_focus();
             }
-            ui.horizontal(|ui| {
-                for c in 0..8u8 {
+            ui.horizontal_wrapped(|ui| {
+                for c in 0..quatrelle_engine::model::organize::CATEGORY_COLORS {
                     let (rect, resp) = ui.allocate_exact_size(vec2(22.0, 22.0), egui::Sense::click());
                     if resp.hovered() {
                         ui.painter().circle_filled(rect.center(), 11.0, t.hover);

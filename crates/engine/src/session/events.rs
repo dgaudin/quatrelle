@@ -122,6 +122,7 @@ impl Session {
             Event::Availability { account, from, to, people, error } => self.availability_answered(&account, from, to, people, error),
             Event::Imported { account, messages, skipped, done, error } => self.imported(&account, messages, skipped, done, error),
             Event::Exported { account, messages, skipped, done, error } => self.exported(&account, messages, skipped, done, error),
+            Event::Categories { account, categories } => self.take_master_categories(&account, categories),
             Event::Quota { account, used, limit } => {
                 if let Some(a) = self.account_mut(&account) {
                     a.quota = Some((used, limit));
@@ -298,6 +299,38 @@ impl Session {
                 let who = self.account(&account).map(|a| a.config.email.clone()).unwrap_or(account);
                 self.notice(format!("{who}: {message}"), true);
             }
+        }
+    }
+}
+
+impl Session {
+    /// The categories an account's server keeps (Exchange's master list, as Outlook made them):
+    /// each takes the colour Outlook gives it, and one not made here joins the list (as
+    /// Outlook's Categorize lists the master list). Those made here only stay.
+    fn take_master_categories(&mut self, account: &str, categories: Vec<(String, Option<u8>)>) {
+        let mut changed = 0usize;
+        for (name, color) in categories.into_iter().take(500) {
+            let name = name.trim().to_string();
+            if name.is_empty() || name.chars().count() > 255 {
+                continue;
+            }
+            let picked = self.category_color_of(&name);
+            match self.prefs.categories.iter_mut().find(|c| c.name.eq_ignore_ascii_case(&name)) {
+                Some(c) => {
+                    if let Some(color) = color.filter(|col| *col != c.color) {
+                        c.color = color;
+                        changed += 1;
+                    }
+                }
+                None => {
+                    self.prefs.categories.push(quatrelle_model::organize::Category::new(&name, color.unwrap_or(picked)));
+                    changed += 1;
+                }
+            }
+        }
+        if changed > 0 {
+            log::info!("{account}: {changed} categories taken from the server's list");
+            self.revision = self.revision.wrapping_add(1);
         }
     }
 }

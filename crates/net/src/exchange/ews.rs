@@ -326,9 +326,14 @@ pub(crate) enum Change {
 /// Changes asked for at a time (Exchange answers 512 at most).
 const CHANGES_PAGE: usize = 512;
 
+/// An item's marks: read, flagged, a draft, its categories. Every answer whose marks are taken
+/// asks for all of them (a category missing from one would be taken off).
 const FLAG_FIELDS: &str = "<t:FieldURI FieldURI=\"message:IsRead\"/>\
 <t:ExtendedFieldURI PropertyTag=\"0x1090\" PropertyType=\"Integer\"/>\
-<t:ExtendedFieldURI PropertyTag=\"0x0E07\" PropertyType=\"Integer\"/>";
+<t:ExtendedFieldURI PropertyTag=\"0x0E07\" PropertyType=\"Integer\"/>\
+<t:FieldURI FieldURI=\"item:Categories\"/>";
+/// Most categories taken from one item.
+const ITEM_CATEGORIES: usize = 50;
 const HEADER_FIELDS: &str = "<t:FieldURI FieldURI=\"item:Subject\"/><t:FieldURI FieldURI=\"message:From\"/>\
 <t:FieldURI FieldURI=\"message:ToRecipients\"/><t:FieldURI FieldURI=\"message:CcRecipients\"/>\
 <t:FieldURI FieldURI=\"message:ReplyTo\"/><t:FieldURI FieldURI=\"item:DateTimeReceived\"/>\
@@ -369,12 +374,37 @@ fn extended_text<'a>(it: &'a El, tag: &str) -> Option<&'a str> {
 }
 
 fn flags(it: &El) -> Flags {
+    let mut keywords: Vec<String> = it
+        .child("Categories")
+        .map(|c| c.children("String").map(|s| quatrelle_model::keyword_for(&s.text)).filter(|k| quatrelle_model::is_keyword(k)).collect())
+        .unwrap_or_default();
+    keywords.sort_by_key(|k| k.to_ascii_lowercase());
+    keywords.dedup_by(|a, b| a.eq_ignore_ascii_case(b));
+    keywords.truncate(ITEM_CATEGORIES);
     Flags {
         seen: it.text_of("IsRead").is_some_and(|v| v == "true"),
         flagged: extended(it, "0x1090") == Some(2),
         draft: extended(it, "0x0E07").is_some_and(|f| f & 8 != 0),
+        keywords,
         ..Default::default()
     }
+}
+
+/// A message's marks as the server has them now: read, flagged, a draft and its categories
+/// (Exchange keeps them by name, as [`flags`] reads them); the keywords that are Quatrelle's own
+/// (`$Pinned`, `$Junk`…) stay. Whether anything changed.
+fn take_marks(m: &mut Flags, server: &Flags) -> bool {
+    let mut next = m.clone();
+    next.seen = server.seen;
+    next.flagged = server.flagged;
+    next.draft = server.draft;
+    next.keywords.retain(|k| k.starts_with('$'));
+    for k in &server.keywords {
+        next.set_keyword(k, true);
+    }
+    let changed = next != *m;
+    *m = next;
+    changed
 }
 
 /// A mailbox element as an address (an Exchange-internal address keeps the name only).

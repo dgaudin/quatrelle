@@ -13,6 +13,52 @@ fn folder_ref(id: Option<&str>) -> String {
     }
 }
 
+/// Put a category on messages or take it off, as Outlook does: Exchange keeps an item's
+/// categories as a list of names, so each one's list is read and written back with the name in
+/// it, or without.
+fn set_category(c: &Client, ids: &[(String, String)], name: &str, on: bool) -> Result<()> {
+    for chunk in ids.chunks(BATCH) {
+        let wanted: Vec<String> = chunk.iter().map(|(id, _)| id.clone()).collect();
+        let doc = c.call(&format!(
+            "<m:GetItem><m:ItemShape><t:BaseShape>IdOnly</t:BaseShape><t:AdditionalProperties><t:FieldURI FieldURI=\"item:Categories\"/>\
+             </t:AdditionalProperties></m:ItemShape><m:ItemIds>{}</m:ItemIds></m:GetItem>",
+            item_ids(&wanted)
+        ))?;
+        let mut changes = String::new();
+        // One that's gone meanwhile is passed over.
+        for it in messages(&doc).iter().filter(|m| m.attr("ResponseClass") != Some("Error")).filter_map(|m| m.find("Items")?.kids.first()) {
+            let Some(id) = it.child("ItemId").and_then(|i| i.attr("Id")) else { continue };
+            let mut names: Vec<String> =
+                it.child("Categories").map(|l| l.children("String").map(|s| s.text.trim().to_string()).collect()).unwrap_or_default();
+            if names.iter().any(|n| n.eq_ignore_ascii_case(name)) == on {
+                continue;
+            }
+            if on {
+                names.push(name.to_string());
+            } else {
+                names.retain(|n| !n.eq_ignore_ascii_case(name));
+            }
+            let update = if names.is_empty() {
+                "<t:DeleteItemField><t:FieldURI FieldURI=\"item:Categories\"/></t:DeleteItemField>".to_string()
+            } else {
+                // The item as the server named its kind (a meeting request isn't a message).
+                let list: String = names.iter().map(|n| format!("<t:String>{}</t:String>", esc(n))).collect();
+                format!(
+                    "<t:SetItemField><t:FieldURI FieldURI=\"item:Categories\"/><t:{kind}><t:Categories>{list}</t:Categories></t:{kind}></t:SetItemField>",
+                    kind = it.name
+                )
+            };
+            changes.push_str(&format!("<t:ItemChange><t:ItemId Id=\"{}\"/><t:Updates>{update}</t:Updates></t:ItemChange>", esc(id)));
+        }
+        if !changes.is_empty() {
+            c.call_all(&format!(
+                "<m:UpdateItem MessageDisposition=\"SaveOnly\" ConflictResolution=\"AlwaysOverwrite\"><m:ItemChanges>{changes}</m:ItemChanges></m:UpdateItem>"
+            ))?;
+        }
+    }
+    Ok(())
+}
+
 /// Apply one change on the server.
 /// Vote on a message (see [`Client::vote`]).
 pub fn vote(c: &Client, st: &State, key: &MessageKey, choice: &str, subject: &str) -> Result<()> {
@@ -57,7 +103,9 @@ pub fn apply_remote(c: &Client, st: &State, op: &Op) -> Result<()> {
         Op::SetFlag { keys, flag: Flag::Flagged, on: false } => {
             update(keys, "<t:DeleteItemField><t:ExtendedFieldURI PropertyTag=\"0x1090\" PropertyType=\"Integer\"/></t:DeleteItemField>")
         }
-        // Answered and forwarded are Exchange's to set; categories stay on this computer.
+        Op::SetKeyword { keys, on, name: Some(name), .. } => set_category(c, &ids(keys), name, *on),
+        // Answered and forwarded are Exchange's to set; other keywords (`$Pinned`) are this
+        // computer's.
         Op::SetFlag { .. } | Op::SetKeyword { .. } => Ok(()),
         Op::Move { keys, to } => {
             let dest = st.mailbox(to)?.to_string();
