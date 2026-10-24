@@ -1407,3 +1407,44 @@ month	May	مايو
 	{subject} – Meeting	{subject} – اجتماع
 	Title	الموضوع
 	Others who see your calendar see only that the time is taken	من يرى تقويمك يرى فقط أن الوقت محجوز
+	Recurrence…	التكرار…
+	Appointment Recurrence	تكرار الموعد
+	Recurrence pattern	نمط التكرار
+	Daily	يومي
+	Weekly	أسبوعي
+	Monthly	شهري
+	Yearly	سنوي
+	Range of recurrence	نطاق التكرار
+	No end date	بدون تاريخ انتهاء
+	End after	الانتهاء بعد
+	occurrences	تكرارات
+	End by	الانتهاء في
+	Remove Recurrence	إزالة التكرار
+	Every	كل
+	Every few days	كل بضعة أيام
+	day(s)	يوم (أيام)
+	week(s) on:	أسبوع (أسابيع) في:
+	month(s)	شهر (أشهر)
+	year(s)	سنة (سنوات)
+	On day	في اليوم
+	On the	في
+	first	الأول
+	second	الثاني
+	third	الثالث
+	fourth	الرابع
+	last	الأخير
+	Every weekday	كل يوم عمل
+	Every {n} days	كل {n} أيام
+	Every week on {days}	كل أسبوع في {days}
+	Every {n} weeks on {days}	كل {n} أسابيع في {days}
+	{what}, {n} times	{what}، {n} مرات
+	{what}, until {date}	{what}، حتى {date}
+	Occurs: {what}	يتكرر: {what}
+	The {nth} {weekday} of every month	{weekday} {nth} من كل شهر
+	The {nth} {weekday} of every {n} months	{weekday} {nth} من كل {n} أشهر
+	Day {day} of every month	اليوم {day} من كل شهر
+	Day {day} of every {n} months	اليوم {day} من كل {n} أشهر
+	The {nth} {weekday} of {month}, every year	{weekday} {nth} من {month}، كل سنة
+	The {nth} {weekday} of {month}, every {n} years	{weekday} {nth} من {month}، كل {n} سنوات
+	Every year on {day} {month}	كل سنة في {day} {month}
+	Every {n} years on {day} {month}	كل {n} سنوات في {day} {month}
