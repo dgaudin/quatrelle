@@ -209,6 +209,18 @@ fn garbage_never_panics() {
     let _ = html_to_text("<table><tr><td><table><tr><td>x</td></tr></table></td></tr></table><<<>>>&#xFFFFFFFF;");
 }
 
+/// A message inside a message inside a multipart, ended by the outer boundary (found by
+/// `fuzz/`): mail-parser trips its own `debug_assert!`, a panic in every debug build until the
+/// workspace's profiles turned its debug assertions off (Cargo.toml).
+#[test]
+fn nested_messages_ended_by_the_outer_boundary_never_panic() {
+    let raw = b"Content-Type:multipart;boundary=b1\n\n--b1Content-Type:message/rfc822\n\nContent-Type:message/rfc822\n\n\n--b1--";
+    let _ = parse(raw);
+    let _ = summary_from_full(raw, key(), Flags::default(), 0, 0);
+    let _ = search_text(raw);
+    let _ = attachment_data(raw, 0);
+}
+
 #[test]
 fn rich_html_keeps_formatting_links_and_pictures() {
     let r = html_to_rich(
@@ -408,6 +420,24 @@ fn html_colours_and_hidden_parts() {
     assert!(find("preheader").is_none(), "display:none stays hidden");
 }
 
+/// A style sheet that stops inside an attribute selector (found by `fuzz/`): html2text panicked
+/// inside its fence and the message lost its formatting; now it reads, and the rules before it
+/// still apply.
+#[test]
+fn a_style_sheet_cut_off_in_a_selector_still_reads() {
+    for html in
+        ["<style>[s=", "<style>.w{color:#cc0000}[s=</style><p class=w>styled</p>", "<style>.w{color:#cc0000}\n[s= </style><p class=w>styled</p>"]
+    {
+        assert!(
+            std::panic::catch_unwind(|| html2text::config::rich().use_doc_css().lines_from_read(close_css_rules(html).as_bytes(), 80)).is_ok(),
+            "{html}"
+        );
+    }
+    let rich = html_to_rich("<style>.w{color:#cc0000}[s=</style><p class=w>styled</p>");
+    let styled = rich.iter().flatten().find(|s| s.text.contains("styled"));
+    assert_eq!(styled.and_then(|s| s.color), Some([0xcc, 0, 0]), "{rich:?}");
+}
+
 #[test]
 fn helpers() {
     assert_eq!(sanitize_filename("..\\..\\a:b?.txt"), "a_b_.txt");
@@ -483,4 +513,29 @@ fn underlined_text_reads_underlined() {
     let (text, styles) = pasted_html("<p>Hello <u>there</u></p>");
     assert_eq!(text.trim(), "Hello there");
     assert!(styles.style(text.find("there").unwrap_or(0)).underline && !styles.style(0).underline);
+}
+
+/// A hostile Message-ID with a bare CR inside its brackets: the reply's In-Reply-To and
+/// References carry the id without it, and nothing is written outside a line ending.
+#[test]
+fn a_message_id_cannot_break_a_replys_headers() {
+    let raw = b"From: Ana <ana@studio.example>\r\nTo: ann@studio.example\r\nSubject: hi\r\nMessage-ID: <abc\rBcc: x@evil.example@host>\r\nReferences: <r1\r@host> <r2@host>\r\n\r\nbody\r\n";
+    let p = parse(raw).unwrap();
+    assert!(!p.message_id.contains(['\r', '\n', ' ']), "{:?}", p.message_id);
+    let clock = Clock::new(1_792_000_000, 0);
+    let r = reply(&p, ReplyMode::Reply, &["ann@studio.example".to_string()], &clock, "");
+    let out = build(&r, &EmailAddress::new("Ann", "ann@studio.example"), 1_792_000_000, "n@studio.example").unwrap();
+    let text = String::from_utf8_lossy(&out);
+    let head = text.split("\r\n\r\n").next().unwrap_or_default();
+    for (i, w) in head.as_bytes().windows(2).enumerate() {
+        assert!(w[0] != b'\r' || w[1] == b'\n', "a bare CR at {i}: {head:?}");
+    }
+    assert!(!head.lines().any(|l| l.starts_with("Bcc:")), "no header smuggled in: {head}");
+    // A draft's ids, from anywhere, are cleaned as they're written too.
+    let mut d = r.clone();
+    d.in_reply_to = "<x\r\nBcc: y@evil.example>".into();
+    d.references = vec!["<\r\n>".into(), "<ok@host>".into()];
+    let out = build(&d, &EmailAddress::new("Ann", "ann@studio.example"), 1_792_000_000, "n2@studio.example").unwrap();
+    let text = String::from_utf8_lossy(&out);
+    assert!(!text.split("\r\n\r\n").next().unwrap_or_default().lines().any(|l| l.starts_with("Bcc:")), "{text}");
 }

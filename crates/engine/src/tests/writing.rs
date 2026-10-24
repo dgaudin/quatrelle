@@ -818,3 +818,23 @@ fn the_address_book_is_kept_and_reads_only_new_mail() {
     assert_eq!(back[0].sent, 1);
     done(s);
 }
+
+/// Attaching from a path reads a plain file only: a folder, a device that reads forever
+/// (`/dev/zero`, which reports a size of 0) or a pipe that blocks are refused, at once.
+#[test]
+fn attaching_reads_plain_files_only() {
+    let mut s = sample_session("attach-paths");
+    s.run("mail.new", &json!({})).unwrap();
+    let dir = s.store.as_ref().unwrap().root().to_path_buf();
+    let e = s.run("compose.attach", &json!({"path": dir.to_string_lossy()})).unwrap_err().to_string();
+    assert!(e.contains("isn't a file"), "{e}");
+    let device = if cfg!(windows) { r"\.\NUL" } else { "/dev/zero" };
+    let started = std::time::Instant::now();
+    assert!(s.run("compose.attach", &json!({"path": device})).is_err());
+    assert!(started.elapsed() < std::time::Duration::from_secs(5), "refused, not read");
+    let file = dir.join("ok.txt");
+    std::fs::write(&file, b"hi").unwrap();
+    s.run("compose.attach", &json!({"path": file.to_string_lossy()})).unwrap();
+    assert_eq!(s.compose.as_ref().map(|c| c.attachments.len()), Some(1));
+    done(s);
+}
