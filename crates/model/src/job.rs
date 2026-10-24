@@ -34,6 +34,10 @@ pub enum Op {
         keys: Vec<MessageKey>,
         keyword: String,
         on: bool,
+        /// A category's name, for the servers that keep categories by name (Exchange); none for
+        /// other keywords.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        name: Option<String>,
     },
     /// Move to another folder of the same account.
     Move {
@@ -510,6 +514,12 @@ pub enum Event {
     Notice {
         account: String,
         message: String,
+    },
+    /// The categories the account's server keeps, as Outlook made them (Exchange's master
+    /// category list): each name, and its colour in Quatrelle's palette when it has one.
+    Categories {
+        account: String,
+        categories: Vec<(String, Option<u8>)>,
     },
     /// What the server found for a [`Job::SearchServer`]: the messages, now in their folders'
     /// lists, or why it couldn't search. Sent as they're found (more to come until `done`).

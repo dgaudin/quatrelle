@@ -749,6 +749,11 @@ tester's does, a contact as Exchange keeps it, Outlook's clipboard), then fixed 
   ⋯ and the File page) shows the open message's header lines, with Copy, as a message's
   Properties do in Outlook. Save as… in the list's right-click menu saves the messages selected
   as `.eml` files: one where asked, several in a folder, each under its subject.
+- **Exchange categories as Outlook keeps them:** a category put on a message in Outlook shows here,
+  one put on here goes to Exchange (by its name, as Outlook writes it), and taking one off goes
+  both ways; Outlook's master category list gives each category its colour (all 25 of Outlook's:
+  the palette has Quatrelle's eight and Outlook's others) and adds the ones not made here. Pins
+  and Quatrelle's other keywords stay on this computer.
 - Checked in the app against Dovecot 2.3 in Docker (3,000 messages, 25 kept, online only),
   the build before the fix first: Show more sent `SELECT … (QRESYNC …)` and nothing else, the
   list still 25; now it fetches the next 25 (`UID FETCH 2951:2975`), 50 shown. Search the server

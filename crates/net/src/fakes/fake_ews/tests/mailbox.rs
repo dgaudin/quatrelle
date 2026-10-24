@@ -658,3 +658,56 @@ fn downloading_ahead_follows_the_list() {
     assert!(store.load_folder("a1", "INBOX").unwrap().messages.iter().all(|m| store.has_body(&m.key)));
     let _ = std::fs::remove_dir_all(store.root());
 }
+
+/// Categories as Outlook keeps them: those on a message come with it (by name, read as the
+/// name's keyword); one put on here goes to the server and comes off it again; one taken off in
+/// Outlook goes here too; Quatrelle's own keywords (a pin) stay on this computer; and Outlook's
+/// master list gives each its colour.
+#[test]
+fn categories_go_both_ways_as_outlook_keeps_them() {
+    use quatrelle_model::{Op, PINNED, keyword_for};
+    let mut d = Data::default();
+    let inbox = d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    let budget = d.deliver(&inbox, &mail("Budget", "c1"), false, "2026-10-01T09:00:00Z");
+    d.items.iter_mut().filter(|i| i.id == budget).for_each(|i| i.categories = vec!["Projet Été".into(), "Urgent".into()]);
+    d.category_list = Some(
+        "\u{feff}<?xml version=\"1.0\"?><categories default=\"Urgent\" xmlns=\"CategoryList.xsd\">\
+         <category name=\"Urgent\" color=\"0\" keyboardShortcut=\"0\"/><category name=\"Projet Été\" color=\"2\"/>\
+         <category name=\"Sans couleur\" color=\"-1\"/></categories>"
+            .into(),
+    );
+    let server = serve(d);
+    let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
+    let store = crate::fake::tests_store("ews-categories");
+    let mut st = crate::jmap::State::default();
+    crate::ews::list_folders(&c, &mut st, "a1").unwrap();
+    // As each full pass does: the folders listed (when each last changed), then read.
+    let sync = |st: &mut crate::jmap::State| {
+        crate::ews::list_folders(&c, st, "a1").unwrap();
+        crate::ews::sync_folder(&c, st, &store, "a1", "INBOX", &crate::sync::SyncOptions::default()).unwrap();
+        store.load_folder("a1", "INBOX").unwrap().messages.remove(0)
+    };
+    let m = sync(&mut st);
+    assert!(m.flags.has("urgent") && m.flags.has(&keyword_for("Projet Été")), "{:?}", m.flags.keywords);
+    let on_server = || server.data.lock().unwrap().items.iter().find(|i| i.id == budget).map(|i| i.categories.clone()).unwrap();
+    // Work, put on here (under this computer's keyword), goes to the server by its name.
+    let set = |on: bool| Op::SetKeyword { keys: vec![m.key.clone()], keyword: "$label2".into(), on, name: Some("Work".into()) };
+    crate::ews::apply_remote(&c, &st, &set(true)).unwrap();
+    assert_eq!(on_server(), ["Projet Été", "Urgent", "Work"]);
+    // Pinned here: a keyword of this computer's, which the server's marks leave alone.
+    let mut fs = store.load_folder("a1", "INBOX").unwrap();
+    fs.messages[0].flags.set_keyword(PINNED, true);
+    store.save_folder("a1", "INBOX", &fs).unwrap();
+    // Urgent taken off in Outlook: off here at the next sync.
+    server.data.lock().unwrap().items.iter_mut().filter(|i| i.id == budget).for_each(|i| i.categories.retain(|c| c != "Urgent"));
+    let m = sync(&mut st);
+    assert!(m.flags.has("work") && !m.flags.has("urgent") && m.flags.has(PINNED), "{:?}", m.flags.keywords);
+    crate::ews::apply_remote(&c, &st, &set(false)).unwrap();
+    assert_eq!(on_server(), ["Projet Été"]);
+    // Outlook's list, with its colours: red, peach, and one without a colour.
+    let list = crate::ews_pim::master_categories(&c).unwrap();
+    assert_eq!(list, [("Urgent".to_string(), Some(0)), ("Projet Été".to_string(), Some(8)), ("Sans couleur".to_string(), None)]);
+    server.data.lock().unwrap().category_list = None;
+    assert!(crate::ews_pim::master_categories(&c).unwrap().is_empty(), "no list: none, not a failure");
+    let _ = std::fs::remove_dir_all(store.root());
+}

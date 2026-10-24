@@ -22,9 +22,9 @@ pub(crate) const MONTHS: [&str; 12] =
     ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const DAYS: [&str; 7] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-/// A calendar's colour (the first one is the app's).
+/// A calendar's colour (the first one is the app's; then Quatrelle's eight categories' in turn).
 pub fn color(i: u8, t: &Tokens) -> Color32 {
-    if i == 0 { t.accent } else { theme::category_color(i.saturating_sub(1), t.dark) }
+    if i == 0 { t.accent } else { theme::category_color(i.saturating_sub(1) % 8, t.dark) }
 }
 
 fn today(s: &Session) -> i64 {

@@ -309,7 +309,7 @@ fn a_folder_read_once_asks_only_what_changed() {
     let listed = count("FindItem");
     assert_eq!(sync(&mut st).new, 1);
     assert!(count("FindItem") > listed, "listed in full");
-    assert!(st.marks.get("INBOX").is_some_and(|m| m.sync.starts_with("v1")), "a good state again");
+    assert!(st.marks.get("INBOX").is_some_and(|m| m.sync.starts_with("v2")), "a good state again");
     let _ = std::fs::remove_dir_all(&dir);
 }
 

@@ -9,7 +9,9 @@ impl Session {
         // Outbox entries aren't on a server: mail commands leave them alone.
         let op = match op {
             Op::SetFlag { keys, flag, on } => Op::SetFlag { keys: keys.into_iter().filter(|k| k.folder != OUTBOX).collect(), flag, on },
-            Op::SetKeyword { keys, keyword, on } => Op::SetKeyword { keys: keys.into_iter().filter(|k| k.folder != OUTBOX).collect(), keyword, on },
+            Op::SetKeyword { keys, keyword, on, name } => {
+                Op::SetKeyword { keys: keys.into_iter().filter(|k| k.folder != OUTBOX).collect(), keyword, on, name }
+            }
             Op::Move { keys, to } => Op::Move { keys: keys.into_iter().filter(|k| k.folder != OUTBOX).collect(), to },
             Op::Expunge { keys } => Op::Expunge { keys: keys.into_iter().filter(|k| k.folder != OUTBOX).collect() },
             other => other,
@@ -71,9 +73,9 @@ impl Session {
                         flag.set(&mut m.flags, *on);
                     }
                 }
-                Op::SetKeyword { keyword, on, .. } => {
+                Op::SetKeyword { keyword, on, name, .. } => {
                     for m in st.messages.iter_mut().filter(|m| mine.contains(&m.key.uid)) {
-                        m.flags.set_keyword(keyword, *on);
+                        m.flags.set_category(keyword, name.as_deref(), *on);
                     }
                 }
                 Op::Move { to, .. } if to == f => {}

@@ -225,71 +225,7 @@ impl Data {
             }
             // What changed since a state: here the state is the folder as it was (its messages'
             // ids and marks), and the changes are what differs now — as Exchange answers them.
-            "SyncFolderItems" => {
-                let Some(folder) = op.child("SyncFolderId").and_then(|f| f.kids.first()).and_then(|f| self.folder_id(f)) else {
-                    out.push(err("ErrorFolderNotFound"));
-                    return ("SyncFolderItemsResponse".into(), out);
-                };
-                let given = op.child("SyncState").map(|s| s.text.trim().to_string()).unwrap_or_default();
-                let Some(mut was) = sync_snapshot(&given) else {
-                    out.push(err("ErrorInvalidSyncStateData"));
-                    return ("SyncFolderItemsResponse".into(), out);
-                };
-                let max: usize =
-                    op.child("MaxChangesReturned").and_then(|m| m.text.trim().parse().ok()).unwrap_or(512).min(self.sync_page.unwrap_or(usize::MAX));
-                let now: Vec<(String, bool, bool, bool)> =
-                    self.items.iter().filter(|i| i.folder == folder).map(|i| (i.id.clone(), i.read, i.flagged, i.draft)).collect();
-                let mut changes = Vec::new();
-                for (id, read, flagged, draft) in &now {
-                    let marks = |r: bool, f: bool, d: bool| {
-                        let flag = if f {
-                            "<t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"0x1090\" PropertyType=\"Integer\"/><t:Value>2</t:Value></t:ExtendedProperty>"
-                        } else {
-                            ""
-                        };
-                        format!(
-                            "<t:Message><t:ItemId Id=\"{id}\" ChangeKey=\"ck\"/><t:IsRead>{r}</t:IsRead>{flag}<t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"0x0E07\" PropertyType=\"Integer\"/><t:Value>{}</t:Value></t:ExtendedProperty></t:Message>",
-                            if d { 8 } else { 1 }
-                        )
-                    };
-                    match was.iter().find(|w| w.0 == *id) {
-                        None => changes.push((
-                            format!("<t:Create>{}</t:Create>", marks(*read, *flagged, *draft)),
-                            (id.clone(), *read, *flagged, *draft),
-                            false,
-                        )),
-                        Some(w) if (w.2, w.3) != (*flagged, *draft) => changes.push((
-                            format!("<t:Update>{}</t:Update>", marks(*read, *flagged, *draft)),
-                            (id.clone(), *read, *flagged, *draft),
-                            false,
-                        )),
-                        Some(w) if w.1 != *read => changes.push((
-                            format!("<t:ReadFlagChange><t:ItemId Id=\"{id}\" ChangeKey=\"ck\"/><t:IsRead>{read}</t:IsRead></t:ReadFlagChange>"),
-                            (id.clone(), *read, *flagged, *draft),
-                            false,
-                        )),
-                        Some(_) => {}
-                    }
-                }
-                for w in &was {
-                    if !now.iter().any(|n| n.0 == w.0) {
-                        changes.push((format!("<t:Delete><t:ItemId Id=\"{}\" ChangeKey=\"ck\"/></t:Delete>", w.0), w.clone(), true));
-                    }
-                }
-                let last = changes.len() <= max;
-                let mut xml = String::new();
-                for (x, item, gone) in changes.into_iter().take(max) {
-                    xml.push_str(&x);
-                    was.retain(|w| w.0 != item.0);
-                    if !gone {
-                        was.push(item);
-                    }
-                }
-                out.push(ok(format!(
-                    "<m:SyncState>{}</m:SyncState><m:IncludesLastItemInRange>{last}</m:IncludesLastItemInRange><m:Changes>{xml}</m:Changes>",
-                    sync_state(&was)
-                )));
-            }
+            "SyncFolderItems" => out.extend(self.sync_folder_items(op)),
             "FindItem" => {
                 // A folder the mailbox hasn't (a Notes folder, say): as Exchange answers.
                 let wanted_folders: Vec<String> =
@@ -371,14 +307,15 @@ impl Data {
                             return x;
                         }
                         format!(
-                            "<t:Message><t:ItemId Id=\"{}\" ChangeKey=\"ck\"/><t:IsRead>{}</t:IsRead>{}</t:Message>",
+                            "<t:Message><t:ItemId Id=\"{}\" ChangeKey=\"ck\"/><t:IsRead>{}</t:IsRead>{}{}</t:Message>",
                             i.id,
                             i.read,
                             if i.flagged {
                                 "<t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"0x1090\" PropertyType=\"Integer\"/><t:Value>2</t:Value></t:ExtendedProperty>"
                             } else {
                                 ""
-                            }
+                            },
+                            super::categories_xml(&i.categories)
                         )
                     })
                     .collect();
@@ -502,6 +439,7 @@ impl Data {
                             received: "2026-10-15T12:00:00Z".into(),
                             voting: Vec::new(),
                             vote: String::new(),
+                            categories: Vec::new(),
                         });
                         out.push(ok(format!("<m:Items><t:Message><t:ItemId Id=\"{id}\" ChangeKey=\"ck\"/></t:Message></m:Items>")));
                         continue;
@@ -533,6 +471,7 @@ impl Data {
                         received: "2026-10-15T12:00:00Z".into(),
                         voting: verbs,
                         vote: String::new(),
+                        categories: Vec::new(),
                     });
                     out.push(ok(if send { String::new() } else { format!("<m:Items><t:Message><t:ItemId Id=\"{id}\"/></t:Message></m:Items>") }));
                 }
@@ -582,6 +521,10 @@ impl Data {
                         }
                         if u.find("ExtendedFieldURI").and_then(|e| e.attr("PropertyTag")) == Some("0x1090") {
                             it.flagged = u.name == "SetItemField";
+                        }
+                        if u.find("FieldURI").and_then(|f| f.attr("FieldURI")) == Some("item:Categories") {
+                            let set = u.find("Categories").filter(|_| u.name == "SetItemField");
+                            it.categories = set.map(|c| c.children("String").map(|s| s.text.clone()).collect()).unwrap_or_default();
                         }
                         if u.find("ExtendedFieldURI").and_then(|e| e.attr("PropertyId")) == Some("34084") {
                             it.vote = u.find("Value").map(|v| v.text.clone()).unwrap_or_default();
@@ -677,6 +620,7 @@ impl Data {
                     out.push(ok(String::new()));
                 }
             }
+            "GetUserConfiguration" => out.push(self.user_configuration(op)),
             "GetRoomLists" => {
                 if self.rooms_refused {
                     let refused = "<m:ResponseCode>ErrorInvalidOperation</m:ResponseCode><m:MessageText>not on this server</m:MessageText>";
@@ -830,29 +774,4 @@ impl Data {
         }
         format!("<m:FreeBusyResponseArray>{out}</m:FreeBusyResponseArray>")
     }
-}
-
-/// A folder as a sync state remembers it: its messages' ids and marks (read, flagged, draft).
-type Snapshot = Vec<(String, bool, bool, bool)>;
-
-/// A sync state for a snapshot (what the client keeps and sends back, opaque to it).
-fn sync_state(s: &Snapshot) -> String {
-    let lines: String = s.iter().map(|(id, r, f, d)| format!("{id}\t{}{}{}\n", u8::from(*r), u8::from(*f), u8::from(*d))).collect();
-    format!("v1{}", crate::imap::base64(lines.as_bytes()))
-}
-
-/// The snapshot a sync state stands for (empty: none); `None` for one this server didn't make.
-fn sync_snapshot(state: &str) -> Option<Snapshot> {
-    if state.is_empty() {
-        return Some(Vec::new());
-    }
-    let bytes = unb64(state.strip_prefix("v1")?)?;
-    let text = String::from_utf8(bytes).ok()?;
-    text.lines()
-        .map(|l| {
-            let (id, m) = l.split_once('\t')?;
-            let b: Vec<bool> = m.chars().map(|c| c == '1').collect();
-            Some((id.to_string(), *b.first()?, *b.get(1)?, *b.get(2)?))
-        })
-        .collect()
 }

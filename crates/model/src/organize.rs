@@ -21,6 +21,25 @@ impl Category {
     pub fn new(name: &str, color: u8) -> Category {
         Category { name: name.trim().to_string(), keyword: keyword_for(name), color }
     }
+
+    /// Whether a message carries it: by its keyword, or by its name as Exchange keeps it (read
+    /// back as [`keyword_for`] the name: `Important` is `$label1` here, `important` there).
+    pub fn marks(&self, f: &crate::Flags) -> bool {
+        !f.keywords.is_empty() && (f.has(&self.keyword) || f.has(&keyword_for(&self.name)))
+    }
+}
+
+/// The colours a category can have: Quatrelle's first eight, then the rest of Outlook's 25, so
+/// a category made in Outlook keeps its colour here.
+pub const CATEGORY_COLORS: u8 = 26;
+
+/// Quatrelle's colour for an Outlook category colour, as Exchange's master category list numbers
+/// them (MS-OXOCFG: 0 red, 1 orange, 2 peach, 3 yellow, 4 green, 5 teal, 6 olive, 7 blue,
+/// 8 purple, 9 maroon, 10 steel, 11 dark steel, 12 gray, 13 dark gray, 14 black, then 15 to 24
+/// the dark red to dark maroon); `None` for none (-1) or one unknown.
+pub fn outlook_color(preset: i32) -> Option<u8> {
+    const COLORS: [u8; 25] = [0, 1, 8, 5, 2, 6, 9, 3, 4, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25];
+    usize::try_from(preset).ok().and_then(|i| COLORS.get(i)).copied()
 }
 
 /// The categories a new profile starts with. Their keywords are the ones Thunderbird uses for its

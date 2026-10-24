@@ -234,15 +234,10 @@ pub fn sync_folder(c: &Client, st: &mut State, store: &Store, account: &str, fol
     report.removed = gone.len();
     fs.messages = kept;
     for m in &mut fs.messages {
-        if let Some(f) = wanted.get(&m.key.uid) {
-            let mut next = m.flags.clone();
-            next.seen = f.seen;
-            next.flagged = f.flagged;
-            next.draft = f.draft;
-            if next != m.flags {
-                m.flags = next;
-                report.changed += 1;
-            }
+        if let Some(f) = wanted.get(&m.key.uid)
+            && take_marks(&mut m.flags, f)
+        {
+            report.changed += 1;
         }
     }
     let missing: Vec<String> = newest.iter().filter(|(id, _)| fs.find(st.number(id)).is_none()).map(|(id, _)| id.clone()).collect();
@@ -304,12 +299,7 @@ fn changes(c: &Client, st: &mut State, store: &Store, account: &str, folder: &st
     let mut state = since.to_string();
     let mut created: Vec<String> = Vec::new();
     let set = |m: &mut Summary, f: &Flags, report: &mut SyncReport| {
-        let mut next = m.flags.clone();
-        next.seen = f.seen;
-        next.flagged = f.flagged;
-        next.draft = f.draft;
-        if next != m.flags {
-            m.flags = next;
+        if take_marks(&mut m.flags, f) {
             report.changed += 1;
         }
     };

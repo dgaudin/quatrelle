@@ -566,6 +566,15 @@ impl Flags {
         }
     }
 
+    /// A category set or taken off; taken off, under its name's keyword too: Exchange keeps
+    /// categories by name, and they're read back as [`keyword_for`] the name.
+    pub fn set_category(&mut self, keyword: &str, name: Option<&str>, on: bool) {
+        self.set_keyword(keyword, on);
+        if !on && let Some(alias) = name.map(keyword_for).filter(|a| !a.eq_ignore_ascii_case(keyword)) {
+            self.set_keyword(&alias, false);
+        }
+    }
+
     pub fn pinned(&self) -> bool {
         self.has(PINNED)
     }

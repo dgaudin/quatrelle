@@ -626,7 +626,7 @@ pub async fn apply_remote<H: Http>(c: &Client<H>, st: &State, op: &Op) -> Result
             Some(k) => c.set_emails(patch_all(keys, &format!("keywords/{k}"), *on), Vec::new()).await,
             None => Ok(()),
         },
-        Op::SetKeyword { keys, keyword, on } if quatrelle_model::is_keyword(keyword) => {
+        Op::SetKeyword { keys, keyword, on, .. } if quatrelle_model::is_keyword(keyword) => {
             c.set_emails(patch_all(keys, &format!("keywords/{}", keyword.to_ascii_lowercase()), *on), Vec::new()).await
         }
         Op::SetKeyword { .. } => Ok(()),

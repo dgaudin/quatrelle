@@ -277,6 +277,14 @@ servers that don't offer IMAP. Every call is SOAP over HTTPS.
   minute as before; a stream that fails (dropped, a subscription forgotten, ended at once) is
   tried again after 5 s, doubling up to 15 minutes, polled meanwhile.
 - **Changes** are `UpdateItem`, `MoveItem`, `DeleteItem` and the folder calls, fifty items a call.
+- **Categories** are kept by name, as Outlook keeps them: every answer that carries an item's marks
+  asks for `item:Categories` too, read as the name's keyword (`keyword_for`; a category of this
+  computer, `Work` as `$label2`, is matched by its name as well). The server's list replaces the
+  item's categories; Quatrelle's own keywords (`$Pinned`, `$Junk`…) stay. A category put on or
+  taken off here reads each item's list and writes it back with the name in or out
+  (`SetItemField`, or `DeleteItemField` for none). After each PIM pass, the master category list
+  (`GetUserConfiguration` `CategoryList` on the Calendar, MS-OXOCFG) gives each category Outlook's
+  colour and adds those not made here. Graph accounts keep categories on this computer still.
 - **Sending** is `CreateItem` with the MIME source and `SendAndSaveCopy` (the copy goes to Sent
   Items); envelope-only recipients go in a `Bcc:` header. Drafts are `CreateItem` with `SaveOnly`,
   marked unsent.

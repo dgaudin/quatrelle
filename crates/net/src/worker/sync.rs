@@ -576,6 +576,12 @@ impl Worker {
                 Ok(sync) => self.sink.emit(Event::DavSynced { account: self.id(), sync: Box::new(sync) }),
                 Err(e) => log::info!("{}: calendars and contacts: {e}", self.acc.id),
             }
+            // The categories Outlook offers, with its colours.
+            match crate::ews_pim::master_categories(c) {
+                Ok(categories) if !categories.is_empty() => self.sink.emit(Event::Categories { account: self.id(), categories }),
+                Ok(_) => {}
+                Err(e) => log::info!("{}: the category list: {e}", self.acc.id),
+            }
             return;
         }
         // OAuth tokens are for mail only.

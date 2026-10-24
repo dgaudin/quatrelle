@@ -19,7 +19,7 @@ pub fn dot(ui: &mut Ui, color: u8, dark: bool) {
 pub fn categorize_menu(ui: &mut Ui, s: &Session, t: &Tokens, acts: &mut Vec<Action>) {
     let first = s.selected().into_iter().next();
     for c in &s.prefs.categories {
-        let on = first.as_ref().is_some_and(|m| m.flags.has(&c.keyword));
+        let on = first.as_ref().is_some_and(|m| c.marks(&m.flags));
         let clicked = ui
             .horizontal(|ui| {
                 dot(ui, c.color, t.dark);
