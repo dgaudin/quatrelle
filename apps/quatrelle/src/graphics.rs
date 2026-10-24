@@ -92,7 +92,8 @@ pub fn device_limits(required: wgpu::Limits, supported: &wgpu::Limits) -> wgpu::
     limits
 }
 
-/// Every platform: the device's limits from the adapter; with `intel_mac`, no indirect-call
+/// Every platform: the device's limits from the adapter, graphics memory in small blocks
+/// ([`MEMORY_HINTS`]); with `intel_mac`, no indirect-call
 /// validation (`WGPU_VALIDATION_INDIRECT_CALL=1` turns it back on); with `desktop_gpu`, no power
 /// preference, so wgpu takes the GPU the desktop runs on (`WGPU_POWER_PREF` still chooses).
 fn common_setup(options: &mut eframe::NativeOptions, intel_mac: bool, desktop_gpu: bool) {
@@ -101,6 +102,7 @@ fn common_setup(options: &mut eframe::NativeOptions, intel_mac: bool, desktop_gp
     setup.device_descriptor = std::sync::Arc::new(move |adapter: &wgpu::Adapter| {
         let mut d = asked(adapter);
         d.required_limits = device_limits(d.required_limits, &adapter.limits());
+        d.memory_hints = MEMORY_HINTS;
         d
     });
     if intel_mac {
@@ -110,6 +112,11 @@ fn common_setup(options: &mut eframe::NativeOptions, intel_mac: bool, desktop_gp
         setup.power_preference = PowerPreference::from_env().unwrap_or(PowerPreference::None);
     }
 }
+
+/// The graphics memory wgpu takes for itself: in blocks of a few megabytes. Its default
+/// (`Performance`) takes blocks of 128 and 64 MB at the first texture — 237 MB on the graphics
+/// card for 2 MB of pictures (the window's), and an integrated GPU's memory is the computer's.
+pub const MEMORY_HINTS: wgpu::MemoryHints = wgpu::MemoryHints::MemoryUsage;
 
 /// How many frames the window draws before a wgpu error is only logged (see [`log_errors`]).
 pub const STARTUP_FRAMES: u32 = 3;
