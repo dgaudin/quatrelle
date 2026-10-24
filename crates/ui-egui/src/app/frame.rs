@@ -417,6 +417,13 @@ impl MailApp {
             ctx.request_repaint();
         }
         self.build_contacts(&ctx);
+        // The rows drawn without a preview: a few worked out, drawn in the next frame (which
+        // asks for the rest).
+        let previews = std::mem::take(&mut self.ui.want_previews);
+        if !previews.is_empty() {
+            self.session.fill_previews(&previews);
+            ctx.request_repaint();
+        }
         self.flush_jobs();
         if std::mem::take(&mut self.ui.focus_main) {
             ctx.send_viewport_cmd_to(egui::ViewportId::ROOT, egui::ViewportCommand::Focus);

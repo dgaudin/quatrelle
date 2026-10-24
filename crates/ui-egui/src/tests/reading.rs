@@ -536,3 +536,31 @@ fn a_network_share_asks_before_it_opens() {
     assert!(a.session.run("link.trustShareServer", &json!({"server": "bad name/x"})).is_err());
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// A message downloaded ahead is listed without a preview: drawn, its row asks for one, and the
+/// frames after show the words from its source under the subject.
+#[test]
+fn a_row_listed_without_a_preview_shows_one_from_its_source() {
+    let (mut a, dir) = app_with_html("row-preview", "Quarterly figures", "<p>The new figures are in the shared folder.</p>");
+    let account = quatrelle_engine::sample::SAMPLE_ACCOUNT;
+    let store = a.session.store.clone().unwrap();
+    let mut fs = store.load_folder(account, "INBOX").unwrap();
+    let m = fs.messages.iter_mut().find(|m| m.subject == "Quarterly figures").unwrap();
+    m.preview.clear();
+    store.save_folder(account, "INBOX", &fs).unwrap();
+    a.session = Session::open(Some(store), Clock::new(NOW, 0));
+    let ctx = egui::Context::default();
+    let shows = |shapes: &[egui::Shape]| {
+        shapes.iter().any(|s| matches!(s, egui::Shape::Text(t) if t.galley.text() == "The new figures are in the shared folder."))
+    };
+    assert!(!shows(&frame_shapes(&ctx, &mut a, vec![], egui::vec2(1280.0, 800.0))), "listed without one");
+    let mut shown = false;
+    for _ in 0..6 {
+        if shows(&frame_shapes(&ctx, &mut a, vec![], egui::vec2(1280.0, 800.0))) {
+            shown = true;
+            break;
+        }
+    }
+    assert!(shown, "the row's preview comes from its source");
+    let _ = std::fs::remove_dir_all(dir);
+}

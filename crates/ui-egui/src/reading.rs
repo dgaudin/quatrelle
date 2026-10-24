@@ -721,7 +721,7 @@ fn thread_list(s: &Session, t: &Tokens, ui: &mut Ui, thread: &[MessageKey], open
                 p.text(
                     rect.left_center() + vec2(170.0, 0.0),
                     egui::Align2::LEFT_CENTER,
-                    widgets::shorten(&m.preview, 70),
+                    widgets::shorten(s.preview_of(m), 70),
                     theme::regular(12.5),
                     t.dim,
                 );

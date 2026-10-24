@@ -359,6 +359,8 @@ pub struct UiState {
     pub(crate) people_book: Option<(String, String)>,
     /// The message list's rows and where each starts, kept while the list stays the same.
     pub(crate) list_rows: Option<list::ListRows>,
+    /// The rows drawn whose preview is still to be worked out from their source.
+    pub(crate) want_previews: Vec<MessageKey>,
     /// How People lays contacts out (Outlook's Change View).
     pub people_view: people::PeopleView,
     /// The People list's columns and sort.
@@ -485,6 +487,7 @@ impl MailApp {
                 people_query: String::new(),
                 people_book: None,
                 list_rows: None,
+                want_previews: Vec::new(),
                 people_view: people::PeopleView::default(),
                 people_list: people::ListSettings::default(),
                 list_columns: list::ColumnWidths::default(),

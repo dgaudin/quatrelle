@@ -204,3 +204,73 @@ pub enum Row {
     /// conversation and how many messages (and unread ones) it holds.
     Message { index: usize, count: usize, unread: usize },
 }
+
+/// Previews worked out in one go: a screenful takes a few frames, the window drawn between them
+/// (reading a big message's text out takes milliseconds).
+const PREVIEW_STEP: usize = 6;
+/// The sources read for previews in one go, at most (a bigger one goes alone).
+const PREVIEW_STEP_BYTES: usize = 4 << 20;
+/// Previews kept in memory (a couple of hundred bytes each); past it they're worked out again.
+const PREVIEWS_KEPT: usize = 5_000;
+/// A message whose source wasn't here is looked at again after this long (downloading ahead
+/// brings it meanwhile).
+const PREVIEW_AGAIN_SECS: i64 = 60;
+
+/// A list row's preview, worked out from its source.
+#[derive(Clone, Debug)]
+pub(super) enum Preview {
+    Text(String),
+    /// No source on this computer when looked (at that time).
+    Missing(i64),
+}
+
+impl Session {
+    /// A message's preview in the list: its list entry's, or the one worked out from its source
+    /// when it came without one ([`Session::fill_previews`]).
+    pub fn preview_of<'a>(&'a self, m: &'a Summary) -> &'a str {
+        if !m.preview.is_empty() {
+            return &m.preview;
+        }
+        match self.previews.get(&m.key) {
+            Some(Preview::Text(p)) => p,
+            _ => "",
+        }
+    }
+
+    /// Whether a row's preview is still to be worked out from its source.
+    pub fn preview_wanted(&self, m: &Summary) -> bool {
+        m.preview.is_empty()
+            && m.key.folder != OUTBOX
+            && match self.previews.get(&m.key) {
+                None => true,
+                Some(Preview::Text(_)) => false,
+                Some(Preview::Missing(at)) => self.clock.now.saturating_sub(*at) >= PREVIEW_AGAIN_SECS,
+            }
+    }
+
+    /// Work out the previews of rows shown without one from their sources here, as Outlook
+    /// writes a message's preview from its offline copy for the rows it draws: mail downloaded
+    /// ahead comes without one (a big folder's list isn't written again for it). A few at a
+    /// time; whether some of `keys` are left.
+    pub fn fill_previews(&mut self, keys: &[MessageKey]) -> bool {
+        let Some(store) = self.store.clone() else { return false };
+        if self.previews.len() >= PREVIEWS_KEPT {
+            self.previews.clear();
+        }
+        let (mut done, mut bytes) = (0usize, 0usize);
+        for key in keys {
+            if done >= PREVIEW_STEP || bytes >= PREVIEW_STEP_BYTES {
+                return true;
+            }
+            let Some(raw) = store.read_body(key) else {
+                self.previews.insert(key.clone(), Preview::Missing(self.clock.now));
+                continue;
+            };
+            done += 1;
+            bytes = bytes.saturating_add(raw.len());
+            let text = mime::parse(&raw).map(|p| mime::preview(&p.text)).unwrap_or_default();
+            self.previews.insert(key.clone(), Preview::Text(text));
+        }
+        false
+    }
+}
