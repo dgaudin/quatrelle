@@ -110,6 +110,16 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             Ok(json!({"on": s.prefs.reminders_on_top}))
         })
         .params(r#"{"on"?: bool} (the Reminders window in a window of its own, over every other)"#),
+        CommandSpec::new("calendar.webexRoom", "Webex personal room", "File › Options › Calendar", |s, v| {
+            let url = p::str(v, "url").unwrap_or_default().trim();
+            if !url.is_empty() && !quatrelle_model::ical::is_webex_link(url) {
+                let shown: String = url.chars().take(80).collect();
+                return Err(CmdError::Params(format!("`{shown}` is not a Webex personal room (https://<site>.webex.com/meet/<name>)")));
+            }
+            s.prefs.webex_room = url.to_string();
+            Ok(json!({"url": s.prefs.webex_room}))
+        })
+        .params(r#"{"url": "https://<site>.webex.com/meet/<name>" | "" (none)} (what the appointment window's Webex Meeting button puts in)"#),
         CommandSpec::new("view.newMailWindow", "New messages in their own window", "File › Options › Mail", |s, v| {
             s.prefs.new_mail_window = p::bool(v, "on").unwrap_or(!s.prefs.new_mail_window);
             Ok(json!({"on": s.prefs.new_mail_window}))

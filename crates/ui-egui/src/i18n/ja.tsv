@@ -1449,3 +1449,8 @@ month	May	5月
 	The {nth} {weekday} of {month}, every {n} years	{n} 年ごとの {month} の {nth} {weekday}
 	Every year on {day} {month}	毎年 {month} {day} 日
 	Every {n} years on {day} {month}	{n} 年ごとの {month} {day} 日
+	Webex Meeting	Webex 会議
+	Set your Webex personal room in File › Options first	先に [ファイル] › [オプション] で Webex のパーソナル会議室を設定してください
+	Join the Webex meeting:	Webex 会議に参加:
+	Webex personal room	Webex パーソナル会議室
+	Webex Meeting, in a new appointment's window, puts it in for the guests to join	新しい予定のウィンドウの [Webex 会議] で挿入され、出席者が参加できます

@@ -166,6 +166,17 @@ pub(super) fn bare_links(text: &str, out: &mut Vec<NotePart>) {
     push_text(out, rest);
 }
 
+/// Whether a web address is a Webex meeting or personal room (`https://<site>.webex.com/meet/<name>`
+/// or `…/join/<name>`), as the Webex Meeting button may put one in an appointment.
+pub fn is_webex_link(url: &str) -> bool {
+    let lower = url.to_ascii_lowercase();
+    let host = lower.strip_prefix("https://").and_then(|r| r.split(['/', ':', '?', '#']).next()).unwrap_or("");
+    url.len() <= 300
+        && !url.chars().any(|c| c.is_whitespace() || c.is_control() || c == '@')
+        && (host == "webex.com" || host.ends_with(".webex.com"))
+        && is_meeting_link(url)
+}
+
 /// Whether a web address joins an online meeting: Microsoft Teams, Zoom, Google Meet, Webex,
 /// GoTo Meeting, Jitsi, Whereby, Skype.
 pub fn is_meeting_link(url: &str) -> bool {
@@ -178,7 +189,7 @@ pub fn is_meeting_link(url: &str) -> bool {
         || (on("teams.live.com") && path.starts_with("meet"))
         || (on("zoom.us") && (path.starts_with("j/") || path.starts_with("w/") || path.starts_with("my/")))
         || on("meet.google.com")
-        || (on("webex.com") && (path.contains("j.php") || path.starts_with("meet") || path.contains("/meet")))
+        || (on("webex.com") && (path.contains("j.php") || path.starts_with("meet") || path.contains("/meet") || path.starts_with("join/")))
         || (on("gotomeeting.com") && path.starts_with("join"))
         || on("meet.goto.com")
         || on("meet.jit.si")

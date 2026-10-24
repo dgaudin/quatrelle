@@ -125,9 +125,26 @@ fn an_events_links_and_the_one_that_joins_it() {
         "https://us02web.zoom.us/j/123",
         "https://meet.google.com/abc-defg-hij",
         "https://acme.webex.com/acme/j.php?MTID=m1",
+        "https://acme.webex.com/meet/ana",
+        "https://acme.webex.com/join/ana",
         "https://meet.jit.si/Standup",
     ] {
         assert!(is_meeting_link(meeting), "{meeting}");
+    }
+    // A personal room the Webex Meeting button may put in; nothing else.
+    for room in ["https://acme.webex.com/meet/ana", "https://acme.my.webex.com/join/ana", "https://ACME.webex.com/meet/Ana"] {
+        assert!(is_webex_link(room), "{room}");
+    }
+    for not in [
+        "http://acme.webex.com/meet/ana",
+        "https://acme.webex.com/",
+        "https://evil.example/acme.webex.com/meet/ana",
+        "https://acme.webex.com.evil.example/meet/ana",
+        "https://x@acme.webex.com/meet/ana",
+        "https://acme.webex.com/meet/ana\nBcc: x",
+        "https://us02web.zoom.us/j/123",
+    ] {
+        assert!(!is_webex_link(not), "{not}");
     }
     for not in [
         "https://docs.example.org/deck",

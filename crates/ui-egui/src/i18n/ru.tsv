@@ -1451,3 +1451,8 @@ month	May	Май
 	The {nth} {weekday} of {month}, every {n} years	{nth} {weekday}, {month}, каждые {n} г.
 	Every year on {day} {month}	Каждый год, {day} {month}
 	Every {n} years on {day} {month}	Каждые {n} г., {day} {month}
+	Webex Meeting	Собрание Webex
+	Set your Webex personal room in File › Options first	Сначала укажите личную комнату Webex в разделе Файл › Параметры
+	Join the Webex meeting:	Присоединиться к собранию Webex:
+	Webex personal room	Личная комната Webex
+	Webex Meeting, in a new appointment's window, puts it in for the guests to join	Кнопка «Собрание Webex» в окне новой встречи вставляет её, чтобы гости могли присоединиться
