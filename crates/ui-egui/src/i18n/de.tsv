@@ -1411,3 +1411,44 @@ month	May	Mai
 	{subject} – Meeting	{subject} – Besprechung
 	Title	Betreff
 	Others who see your calendar see only that the time is taken	Wer Ihren Kalender sieht, sieht nur, dass die Zeit belegt ist
+	Recurrence…	Serie…
+	Appointment Recurrence	Terminserie
+	Recurrence pattern	Serienmuster
+	Daily	Täglich
+	Weekly	Wöchentlich
+	Monthly	Monatlich
+	Yearly	Jährlich
+	Range of recurrence	Seriendauer
+	No end date	Kein Enddatum
+	End after	Endet nach
+	occurrences	Terminen
+	End by	Endet am
+	Remove Recurrence	Serie entfernen
+	Every	Alle
+	Every few days	Alle paar Tage
+	day(s)	Tag(e)
+	week(s) on:	Woche(n) am:
+	month(s)	Monat(e)
+	year(s)	Jahr(e)
+	On day	Am Tag
+	On the	Am
+	first	ersten
+	second	zweiten
+	third	dritten
+	fourth	vierten
+	last	letzten
+	Every weekday	Jeden Arbeitstag
+	Every {n} days	Alle {n} Tage
+	Every week on {days}	Jede Woche am {days}
+	Every {n} weeks on {days}	Alle {n} Wochen am {days}
+	{what}, {n} times	{what}, {n}-mal
+	{what}, until {date}	{what}, bis {date}
+	Occurs: {what}	Findet statt: {what}
+	The {nth} {weekday} of every month	Am {nth} {weekday} jedes Monats
+	The {nth} {weekday} of every {n} months	Am {nth} {weekday} alle {n} Monate
+	Day {day} of every month	Am {day}. jedes Monats
+	Day {day} of every {n} months	Am {day}. alle {n} Monate
+	The {nth} {weekday} of {month}, every year	Am {nth} {weekday} im {month}, jedes Jahr
+	The {nth} {weekday} of {month}, every {n} years	Am {nth} {weekday} im {month}, alle {n} Jahre
+	Every year on {day} {month}	Jedes Jahr am {day}. {month}
+	Every {n} years on {day} {month}	Alle {n} Jahre am {day}. {month}

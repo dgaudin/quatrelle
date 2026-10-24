@@ -1411,3 +1411,44 @@ month	May	mai
 	{subject} – Meeting	{subject} – Réunion
 	Title	Objet
 	Others who see your calendar see only that the time is taken	Les personnes qui voient votre calendrier voient seulement que le créneau est pris
+	Recurrence…	Périodicité…
+	Appointment Recurrence	Périodicité du rendez-vous
+	Recurrence pattern	Modèle de périodicité
+	Daily	Quotidienne
+	Weekly	Hebdomadaire
+	Monthly	Mensuelle
+	Yearly	Annuelle
+	Range of recurrence	Plage de périodicité
+	No end date	Pas de date de fin
+	End after	Fin après
+	occurrences	occurrences
+	End by	Fin le
+	Remove Recurrence	Supprimer la périodicité
+	Every	Tous les
+	Every few days	Tous les quelques jours
+	day(s)	jour(s)
+	week(s) on:	semaine(s) le :
+	month(s)	mois
+	year(s)	an(s)
+	On day	Le jour
+	On the	Le
+	first	premier
+	second	deuxième
+	third	troisième
+	fourth	quatrième
+	last	dernier
+	Every weekday	Tous les jours ouvrables
+	Every {n} days	Tous les {n} jours
+	Every week on {days}	Chaque semaine ({days})
+	Every {n} weeks on {days}	Toutes les {n} semaines ({days})
+	{what}, {n} times	{what}, {n} fois
+	{what}, until {date}	{what}, jusqu’au {date}
+	Occurs: {what}	Se produit : {what}
+	The {nth} {weekday} of every month	Chaque {nth} {weekday} du mois
+	The {nth} {weekday} of every {n} months	Chaque {nth} {weekday}, tous les {n} mois
+	Day {day} of every month	Le jour {day} de chaque mois
+	Day {day} of every {n} months	Le jour {day}, tous les {n} mois
+	The {nth} {weekday} of {month}, every year	Chaque {nth} {weekday} en {month}
+	The {nth} {weekday} of {month}, every {n} years	Chaque {nth} {weekday} en {month}, tous les {n} ans
+	Every year on {day} {month}	Chaque année ({day} {month})
+	Every {n} years on {day} {month}	Tous les {n} ans ({day} {month})

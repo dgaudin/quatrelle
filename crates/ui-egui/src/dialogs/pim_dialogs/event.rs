@@ -76,9 +76,17 @@ pub struct EventForm {
     pub new_times: bool,
     /// The number of the window it's open in (0: none, as a dialog).
     pub window: u64,
+    /// Outlook's Appointment Recurrence, while it's open over the window.
+    pub recurrence: Option<super::recurrence::RecurrenceUi>,
 }
 
 impl EventForm {
+    /// Opens Outlook's Appointment Recurrence over its window, on how it repeats now.
+    pub fn open_recurrence(&mut self) {
+        let day = super::pickers::day_of(&self.date).unwrap_or(0);
+        self.recurrence = Some(super::recurrence::RecurrenceUi::open(&self.repeat, day));
+    }
+
     /// A new event at `at` (an hour long), or at the next full hour.
     pub fn new(s: &Session, at: Option<i64>) -> EventForm {
         let start = at.unwrap_or_else(|| (s.clock.now / 3600 + 1) * 3600);

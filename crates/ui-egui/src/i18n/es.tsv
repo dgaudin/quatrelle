@@ -1411,3 +1411,44 @@ month	May	mayo
 	{subject} – Meeting	{subject} – Reunión
 	Title	Asunto
 	Others who see your calendar see only that the time is taken	Quien vea su calendario solo verá que el tiempo está ocupado
+	Recurrence…	Periodicidad…
+	Appointment Recurrence	Periodicidad de la cita
+	Recurrence pattern	Patrón de periodicidad
+	Daily	Diariamente
+	Weekly	Semanalmente
+	Monthly	Mensualmente
+	Yearly	Anualmente
+	Range of recurrence	Intervalo de repetición
+	No end date	Sin fecha de finalización
+	End after	Finalizar después de
+	occurrences	repeticiones
+	End by	Finalizar el
+	Remove Recurrence	Quitar periodicidad
+	Every	Cada
+	Every few days	Cada pocos días
+	day(s)	día(s)
+	week(s) on:	semana(s) el:
+	month(s)	mes(es)
+	year(s)	año(s)
+	On day	El día
+	On the	El
+	first	primer
+	second	segundo
+	third	tercer
+	fourth	cuarto
+	last	último
+	Every weekday	Todos los días laborables
+	Every {n} days	Cada {n} días
+	Every week on {days}	Cada semana el {days}
+	Every {n} weeks on {days}	Cada {n} semanas el {days}
+	{what}, {n} times	{what}, {n} veces
+	{what}, until {date}	{what}, hasta el {date}
+	Occurs: {what}	Se repite: {what}
+	The {nth} {weekday} of every month	El {nth} {weekday} de cada mes
+	The {nth} {weekday} of every {n} months	El {nth} {weekday} cada {n} meses
+	Day {day} of every month	El día {day} de cada mes
+	Day {day} of every {n} months	El día {day} cada {n} meses
+	The {nth} {weekday} of {month}, every year	El {nth} {weekday} de {month}, cada año
+	The {nth} {weekday} of {month}, every {n} years	El {nth} {weekday} de {month}, cada {n} años
+	Every year on {day} {month}	Cada año el {day} de {month}
+	Every {n} years on {day} {month}	Cada {n} años el {day} de {month}

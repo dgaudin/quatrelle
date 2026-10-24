@@ -1410,3 +1410,44 @@ month	May	5月
 	{subject} – Meeting	{subject} – 會議
 	Title	主旨
 	Others who see your calendar see only that the time is taken	查看您行事曆的人只能看到該時間已被佔用
+	Recurrence…	週期性…
+	Appointment Recurrence	約會週期性
+	Recurrence pattern	週期性模式
+	Daily	每天
+	Weekly	每週
+	Monthly	每月
+	Yearly	每年
+	Range of recurrence	週期範圍
+	No end date	沒有結束日期
+	End after	重複
+	occurrences	次後結束
+	End by	結束日期
+	Remove Recurrence	移除週期性
+	Every	每
+	Every few days	每隔幾天
+	day(s)	天
+	week(s) on:	週的:
+	month(s)	個月
+	year(s)	年
+	On day	日期
+	On the	第
+	first	第一個
+	second	第二個
+	third	第三個
+	fourth	第四個
+	last	最後一個
+	Every weekday	每個工作日
+	Every {n} days	每 {n} 天
+	Every week on {days}	每週{days}
+	Every {n} weeks on {days}	每 {n} 週的{days}
+	{what}, {n} times	{what}，共 {n} 次
+	{what}, until {date}	{what}，直到 {date}
+	Occurs: {what}	發生: {what}
+	The {nth} {weekday} of every month	每月的{nth}{weekday}
+	The {nth} {weekday} of every {n} months	每 {n} 個月的{nth}{weekday}
+	Day {day} of every month	每月第 {day} 天
+	Day {day} of every {n} months	每 {n} 個月的第 {day} 天
+	The {nth} {weekday} of {month}, every year	每年{month}的{nth}{weekday}
+	The {nth} {weekday} of {month}, every {n} years	每 {n} 年{month}的{nth}{weekday}
+	Every year on {day} {month}	每年的{month}{day}日
+	Every {n} years on {day} {month}	每 {n} 年的{month}{day}日

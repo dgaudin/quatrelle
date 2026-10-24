@@ -1410,3 +1410,44 @@ month	May	5월
 	{subject} – Meeting	{subject} – 모임
 	Title	제목
 	Others who see your calendar see only that the time is taken	일정을 보는 사람에게는 시간이 사용 중이라는 것만 표시됩니다
+	Recurrence…	되풀이…
+	Appointment Recurrence	약속 되풀이
+	Recurrence pattern	되풀이 패턴
+	Daily	매일
+	Weekly	매주
+	Monthly	매월
+	Yearly	매년
+	Range of recurrence	되풀이 범위
+	No end date	종료 날짜 없음
+	End after	다음 횟수 후 종료
+	occurrences	회
+	End by	종료 날짜
+	Remove Recurrence	되풀이 제거
+	Every	간격
+	Every few days	며칠마다
+	day(s)	일마다
+	week(s) on:	주마다:
+	month(s)	개월마다
+	year(s)	년마다
+	On day	날짜
+	On the	요일 지정
+	first	첫째
+	second	둘째
+	third	셋째
+	fourth	넷째
+	last	마지막
+	Every weekday	평일마다
+	Every {n} days	{n}일마다
+	Every week on {days}	매주 {days}
+	Every {n} weeks on {days}	{n}주마다 {days}
+	{what}, {n} times	{what}, {n}회
+	{what}, until {date}	{what}, {date}까지
+	Occurs: {what}	되풀이: {what}
+	The {nth} {weekday} of every month	매월 {nth} {weekday}
+	The {nth} {weekday} of every {n} months	{n}개월마다 {nth} {weekday}
+	Day {day} of every month	매월 {day}일
+	Day {day} of every {n} months	{n}개월마다 {day}일
+	The {nth} {weekday} of {month}, every year	매년 {month} {nth} {weekday}
+	The {nth} {weekday} of {month}, every {n} years	{n}년마다 {month} {nth} {weekday}
+	Every year on {day} {month}	매년 {month} {day}일
+	Every {n} years on {day} {month}	{n}년마다 {month} {day}일

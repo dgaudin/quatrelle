@@ -24,6 +24,31 @@ pub fn meeting(ui: &mut Ui, f: &mut EventForm, s: &Session, t: &Tokens, acts: &m
     let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 1.0), Sense::hover());
     ui.painter().rect_filled(r, 0.0, t.border);
     ui.add_space(8.0);
+    // Outlook's Appointment Recurrence, over the window while it's open.
+    if let Some(st) = f.recurrence.as_mut() {
+        match super::recurrence::dialog(ui.ctx(), st, t, f.window, dates::today(&s.clock)) {
+            Some(super::recurrence::Closed::Rule(r)) => {
+                // Outlook moves the appointment to the first day the repeat falls on.
+                if let Some(day) = super::pickers::day_of(&f.date) {
+                    let shift = r.first_from(day) - day;
+                    if shift != 0 {
+                        f.date = super::pickers::text_of(day + shift);
+                        if let Some(end) = super::pickers::day_of(&f.end_date) {
+                            f.end_date = super::pickers::text_of(end + shift);
+                        }
+                    }
+                }
+                f.repeat = r.rule();
+                f.recurrence = None;
+            }
+            Some(super::recurrence::Closed::Removed) => {
+                f.repeat.clear();
+                f.recurrence = None;
+            }
+            Some(super::recurrence::Closed::Cancelled) => f.recurrence = None,
+            None => {}
+        }
+    }
     if f.scheduling && !f.all_day {
         super::scheduling::view(ui, f, s, t, acts);
         ui.add_space(8.0);
@@ -160,7 +185,14 @@ fn ribbon(ui: &mut Ui, t: &Tokens, f: &mut EventForm, acts: &mut Vec<Action>) ->
         }
     });
     let r = widgets::big_toggle(ui, Icon::Sync, "Repeat", &t, !f.repeat.is_empty());
-    egui::Popup::menu(&r).show(|ui| repeat_options(ui, f));
+    egui::Popup::menu(&r).show(|ui| {
+        repeat_options(ui, f);
+        ui.separator();
+        if ui.button(tl!("Recurrence…")).clicked() {
+            f.open_recurrence();
+            ui.close();
+        }
+    });
     if f.can_invite && !f.all_day && widgets::big_toggle(ui, Icon::Location, "Room Finder", &t, f.finder.is_some()).clicked() {
         f.finder = if f.finder.is_some() { None } else { Some(RoomFinderUi::default()) };
     }
@@ -290,6 +322,17 @@ fn times(ui: &mut Ui, t: &Tokens, f: &mut EventForm, s: &Session) {
             super::pickers::time(ui, t, &mut f.end);
         }
     });
+    // How it repeats, in words, as Outlook says it under the times.
+    if !f.repeat.is_empty() {
+        let rule = match f.repeat.as_str() {
+            r @ ("daily" | "weekly" | "monthly" | "yearly") => format!("FREQ={}", r.to_ascii_uppercase()),
+            r => r.to_string(),
+        };
+        let day = super::pickers::day_of(&f.date).unwrap_or(0);
+        let said = super::recurrence::Recurrence::from_rule(&rule, day).map_or_else(|| tl!("Custom").to_string(), |r| r.describe());
+        ui.label(RichText::new(tf!("Occurs: {what}", what = said)).color(t.dim).small());
+        ui.add_space(6.0);
+    }
 }
 
 /// The notes, the rest of the window tall: to read with their links (an invitation's), or to

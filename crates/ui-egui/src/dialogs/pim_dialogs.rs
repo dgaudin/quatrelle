@@ -15,6 +15,7 @@ mod contact;
 mod event;
 mod meeting;
 mod pickers;
+pub(crate) mod recurrence;
 mod rooms;
 pub(crate) mod scheduling;
 

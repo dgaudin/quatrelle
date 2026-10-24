@@ -1411,3 +1411,44 @@ month	May	maio
 	{subject} – Meeting	{subject} – Reunião
 	Title	Assunto
 	Others who see your calendar see only that the time is taken	Quem vê seu calendário vê apenas que o horário está ocupado
+	Recurrence…	Recorrência…
+	Appointment Recurrence	Recorrência do compromisso
+	Recurrence pattern	Padrão de recorrência
+	Daily	Diária
+	Weekly	Semanal
+	Monthly	Mensal
+	Yearly	Anual
+	Range of recurrence	Intervalo da recorrência
+	No end date	Sem data de término
+	End after	Terminar após
+	occurrences	ocorrências
+	End by	Terminar em
+	Remove Recurrence	Remover recorrência
+	Every	A cada
+	Every few days	A cada poucos dias
+	day(s)	dia(s)
+	week(s) on:	semana(s) em:
+	month(s)	mês(es)
+	year(s)	ano(s)
+	On day	No dia
+	On the	No(a)
+	first	primeiro(a)
+	second	segundo(a)
+	third	terceiro(a)
+	fourth	quarto(a)
+	last	último(a)
+	Every weekday	Todos os dias úteis
+	Every {n} days	A cada {n} dias
+	Every week on {days}	Toda semana em {days}
+	Every {n} weeks on {days}	A cada {n} semanas em {days}
+	{what}, {n} times	{what}, {n} vezes
+	{what}, until {date}	{what}, até {date}
+	Occurs: {what}	Ocorre: {what}
+	The {nth} {weekday} of every month	O(a) {nth} {weekday} de cada mês
+	The {nth} {weekday} of every {n} months	O(a) {nth} {weekday} a cada {n} meses
+	Day {day} of every month	Dia {day} de cada mês
+	Day {day} of every {n} months	Dia {day} a cada {n} meses
+	The {nth} {weekday} of {month}, every year	O(a) {nth} {weekday} de {month}, todo ano
+	The {nth} {weekday} of {month}, every {n} years	O(a) {nth} {weekday} de {month}, a cada {n} anos
+	Every year on {day} {month}	Todo ano em {day} de {month}
+	Every {n} years on {day} {month}	A cada {n} anos em {day} de {month}

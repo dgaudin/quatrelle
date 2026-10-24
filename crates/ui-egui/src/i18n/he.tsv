@@ -1407,3 +1407,44 @@ month	May	מאי
 	{subject} – Meeting	{subject} – ישיבה
 	Title	נושא
 	Others who see your calendar see only that the time is taken	מי שרואה את לוח השנה שלך רואה רק שהזמן תפוס
+	Recurrence…	מופע חוזר…
+	Appointment Recurrence	מופע חוזר של פגישה
+	Recurrence pattern	תבנית מופע חוזר
+	Daily	יומי
+	Weekly	שבועי
+	Monthly	חודשי
+	Yearly	שנתי
+	Range of recurrence	טווח מופע חוזר
+	No end date	ללא תאריך סיום
+	End after	סיום אחרי
+	occurrences	מופעים
+	End by	סיום בתאריך
+	Remove Recurrence	הסר מופע חוזר
+	Every	כל
+	Every few days	כל כמה ימים
+	day(s)	ימים
+	week(s) on:	שבועות ביום:
+	month(s)	חודשים
+	year(s)	שנים
+	On day	ביום
+	On the	ב
+	first	הראשון
+	second	השני
+	third	השלישי
+	fourth	הרביעי
+	last	האחרון
+	Every weekday	כל יום עבודה
+	Every {n} days	כל {n} ימים
+	Every week on {days}	כל שבוע ב{days}
+	Every {n} weeks on {days}	כל {n} שבועות ב{days}
+	{what}, {n} times	{what}, {n} פעמים
+	{what}, until {date}	{what}, עד {date}
+	Occurs: {what}	מתרחש: {what}
+	The {nth} {weekday} of every month	{weekday} {nth} בכל חודש
+	The {nth} {weekday} of every {n} months	{weekday} {nth} בכל {n} חודשים
+	Day {day} of every month	היום ה-{day} בכל חודש
+	Day {day} of every {n} months	היום ה-{day} בכל {n} חודשים
+	The {nth} {weekday} of {month}, every year	{weekday} {nth} ב{month}, כל שנה
+	The {nth} {weekday} of {month}, every {n} years	{weekday} {nth} ב{month}, כל {n} שנים
+	Every year on {day} {month}	כל שנה ב-{day} ב{month}
+	Every {n} years on {day} {month}	כל {n} שנים ב-{day} ב{month}
