@@ -87,7 +87,14 @@ pub fn recurrence_xml(rule: &str, start: i64) -> Option<String> {
 fn person(m: &El) -> Option<Attendee> {
     let mb = if m.name == "Mailbox" { m } else { m.find("Mailbox")? };
     let email = text(mb, "EmailAddress");
-    email.contains('@').then(|| Attendee { email, name: text(mb, "Name"), partstat: String::new(), rsvp: false, cutype: String::new() })
+    email.contains('@').then(|| Attendee {
+        email,
+        name: text(mb, "Name"),
+        partstat: String::new(),
+        rsvp: false,
+        cutype: String::new(),
+        role: String::new(),
+    })
 }
 
 /// The organizer of a meeting when Exchange names them by their internal (`EX`) address, which
@@ -189,6 +196,7 @@ fn appointment(it: &El) -> Option<CalEvent> {
     // The people invited, then the rooms and equipment booked (Exchange's resources, kept
     // apart as `RESOURCE`: a room's mailbox books itself and isn't a guest).
     for (list, resource) in [("RequiredAttendees", false), ("OptionalAttendees", false), ("Resources", true)] {
+        let optional = list == "OptionalAttendees";
         if let Some(l) = it.child(list) {
             for a in l.children("Attendee").take(500) {
                 if let Some(mut p) = person(a) {
@@ -202,6 +210,9 @@ fn appointment(it: &El) -> Option<CalEvent> {
                     p.rsvp = true;
                     if resource {
                         p.cutype = "RESOURCE".into();
+                    }
+                    if optional {
+                        p.role = quatrelle_model::ical::OPTIONAL.into();
                     }
                     attendees.push(p);
                 }
@@ -244,6 +255,11 @@ fn appointment(it: &El) -> Option<CalEvent> {
             .child("Categories")
             .map(|c| c.children("String").map(|s| s.text.trim().to_string()).filter(|s| !s.is_empty()).take(20).collect())
             .unwrap_or_default(),
+        // Outlook's Show As, Private and response options (EWS gives Busy, and the rest, unsaid).
+        show_as: it.text_of("LegacyFreeBusyStatus").and_then(ShowAs::from_cdo).unwrap_or_default(),
+        private: matches!(it.text_of("Sensitivity").map(str::trim), Some("Private" | "Confidential")),
+        no_responses: it.text_of("IsResponseRequested").map(str::trim) == Some("false"),
+        no_new_times: it.text_of("AllowNewTimeProposal").map(str::trim) == Some("false"),
         ..Default::default()
     })
 }
@@ -267,6 +283,7 @@ pub(crate) fn event_fields(e: &CalEvent, me: &str) -> Vec<(&'static str, String)
     let (start, end) = if e.all_day { (e.start, e.end.max(e.start + 86_400)) } else { (e.start, e.end.max(e.start)) };
     let mut f = vec![
         ("item:Subject", format!("<t:Subject>{}</t:Subject>", esc(&e.summary))),
+        ("item:Sensitivity", format!("<t:Sensitivity>{}</t:Sensitivity>", if e.private { "Private" } else { "Normal" })),
         ("item:Body", format!("<t:Body BodyType=\"Text\">{}</t:Body>", esc(&e.description))),
     ];
     // Categories come between the item's fields and the appointment's (EWS keeps the schema's
@@ -283,16 +300,27 @@ pub(crate) fn event_fields(e: &CalEvent, me: &str) -> Vec<(&'static str, String)
         ("calendar:Start", format!("<t:Start>{}</t:Start>", utc(start))),
         ("calendar:End", format!("<t:End>{}</t:End>", utc(end))),
         ("calendar:IsAllDayEvent", format!("<t:IsAllDayEvent>{}</t:IsAllDayEvent>", e.all_day)),
+        ("calendar:LegacyFreeBusyStatus", format!("<t:LegacyFreeBusyStatus>{}</t:LegacyFreeBusyStatus>", free_busy(e.show_as))),
         ("calendar:Location", format!("<t:Location>{}</t:Location>", esc(&e.location))),
     ]);
     // The guests (the organizer isn't one of them), between the place and the pattern, as the
     // schema has it; then the rooms and equipment booked (`Resources`, which the server asks
     // to book themselves), right after them.
     let mine = e.organizer.as_ref().is_none_or(|o| o.email.eq_ignore_ascii_case(me));
-    let list = |resource: bool| -> String {
+    let meeting = mine && e.attendees.iter().any(|a| !a.email.eq_ignore_ascii_case(me));
+    // Whether the guests are asked to answer, before them as the schema has it.
+    if meeting {
+        f.push(("calendar:IsResponseRequested", format!("<t:IsResponseRequested>{}</t:IsResponseRequested>", !e.no_responses)));
+    }
+    let list = |resource: bool, optional: bool| -> String {
         e.attendees
             .iter()
-            .filter(|a| mine && a.is_resource() == resource && !a.email.eq_ignore_ascii_case(me) && a.email.contains('@'))
+            .filter(|a| {
+                mine && a.is_resource() == resource
+                    && (resource || a.is_optional() == optional)
+                    && !a.email.eq_ignore_ascii_case(me)
+                    && a.email.contains('@')
+            })
             .take(500)
             .map(|a| {
                 format!(
@@ -303,11 +331,15 @@ pub(crate) fn event_fields(e: &CalEvent, me: &str) -> Vec<(&'static str, String)
             })
             .collect()
     };
-    let guests = list(false);
+    let guests = list(false, false);
     if !guests.is_empty() {
         f.push(("calendar:RequiredAttendees", format!("<t:RequiredAttendees>{guests}</t:RequiredAttendees>")));
     }
-    let resources = list(true);
+    let optional = list(false, true);
+    if !optional.is_empty() {
+        f.push(("calendar:OptionalAttendees", format!("<t:OptionalAttendees>{optional}</t:OptionalAttendees>")));
+    }
+    let resources = list(true, false);
     if !resources.is_empty() {
         f.push(("calendar:Resources", format!("<t:Resources>{resources}</t:Resources>")));
     }
@@ -324,5 +356,20 @@ pub(crate) fn event_fields(e: &CalEvent, me: &str) -> Vec<(&'static str, String)
         f.push(("calendar:StartTimeZone", format!("<t:StartTimeZone Id=\"{}\"/>", esc(id))));
         f.push(("calendar:EndTimeZone", format!("<t:EndTimeZone Id=\"{}\"/>", esc(id))));
     }
+    // Whether the guests may propose another time, after the zones.
+    if meeting {
+        f.push(("calendar:AllowNewTimeProposal", format!("<t:AllowNewTimeProposal>{}</t:AllowNewTimeProposal>", !e.no_new_times)));
+    }
     f
+}
+
+/// Show As as EWS names it. Working elsewhere came with Exchange 2013's schema, after the 2010 one
+/// asked for: it goes as busy, as an Outlook of that time sends it.
+fn free_busy(s: ShowAs) -> &'static str {
+    match s {
+        ShowAs::Free => "Free",
+        ShowAs::Tentative => "Tentative",
+        ShowAs::Busy | ShowAs::WorkingElsewhere => "Busy",
+        ShowAs::OutOfOffice => "OOF",
+    }
 }

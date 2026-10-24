@@ -71,7 +71,7 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             // With guests, the user organizes it.
             if !e.attendees.is_empty() && e.organizer.is_none() {
                 let me = s.account(&account).map(|a| (a.config.name.clone(), a.config.email.clone())).unwrap_or_default();
-                e.organizer = Some(quatrelle_model::ical::Attendee { email: me.1, name: me.0, partstat: "ACCEPTED".into(), rsvp: false, cutype: String::new() });
+                e.organizer = Some(quatrelle_model::ical::Attendee { email: me.1, name: me.0, partstat: "ACCEPTED".into(), rsvp: false, cutype: String::new(), role: String::new() });
             }
             let r = s.create_event(Some(&account), p::str(v, "calendar"), e.clone())?;
             // The guests are invited: by the server where it does that, else by mail.
@@ -80,7 +80,7 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             }
             Ok(r)
         })
-        .params(r#"{"summary": string, "start": "YYYY-MM-DD[THH:MM]", "end"?: …, "allDay"?: bool, "location"?: string, "description"?: string, "repeat"?: "daily"|"weekly"|"monthly"|"yearly"|RRULE, "attendees"?: "a@x, Name <b@y>" (invited by mail), "rooms"?: "Room <room@x>, …" (rooms booked, from calendar.rooms; the location unless given), "categories"?: [string] | "Work, Clients" (colour it as those categories), "reminder"?: number (minutes before the start; 0 when it starts, up to four weeks) | "none" | null (none), "account"?: string, "calendar"?: string}"#),
+        .params(r#"{"summary": string, "start": "YYYY-MM-DD[THH:MM]", "end"?: …, "allDay"?: bool, "location"?: string, "description"?: string, "repeat"?: "daily"|"weekly"|"monthly"|"yearly"|RRULE, "attendees"?: "a@x, Name <b@y>" (invited by mail), "optional"?: … (invited as optional), "rooms"?: "Room <room@x>, …" (rooms booked, from calendar.rooms; the location unless given), "categories"?: [string] | "Work, Clients" (colour it as those categories), "reminder"?: number (minutes before the start; 0 when it starts, up to four weeks) | "none" | null (none), "showAs"?: "free"|"workingElsewhere"|"tentative"|"busy"|"outOfOffice", "private"?: bool, "responses"?: bool (the guests are asked to answer; default true), "newTimes"?: bool (they may propose another time; default true), "account"?: string, "calendar"?: string}"#),
         CommandSpec::new("reminders.list", "Reminders", "File › Reminders", |s, _| {
             let now = s.clock.now;
             Ok(json!(s
@@ -324,13 +324,15 @@ pub(super) fn event_from(s: &Session, v: &Value, mut e: quatrelle_model::ical::C
             *field = x.chars().take(10_000).collect();
         }
     }
-    // The guests (people) and the rooms booked (resource attendees, which book themselves on
-    // Exchange): each list replaces its own kind and leaves the other as it was.
-    for (key, resource) in [("attendees", false), ("rooms", true)] {
+    // The guests (required and optional people) and the rooms booked (resource attendees, which
+    // book themselves on Exchange): each list replaces its own kind and leaves the others as they
+    // were.
+    for (key, resource, optional) in [("attendees", false, false), ("optional", false, true), ("rooms", true, false)] {
         let Some(list) = p::str(v, key) else { continue };
         let people = quatrelle_model::addr::parse_list(list).map_err(|bad| CmdError::Params(format!("not an email address: {bad}")))?;
         let before = std::mem::take(&mut e.attendees);
-        let (mine, others): (Vec<_>, Vec<_>) = before.into_iter().partition(|a| a.is_resource() == resource);
+        let kind = |a: &quatrelle_model::ical::Attendee| a.is_resource() == resource && (resource || a.is_optional() == optional);
+        let (mine, others): (Vec<_>, Vec<_>) = before.into_iter().partition(kind);
         let mut kept: Vec<quatrelle_model::ical::Attendee> = people
             .into_iter()
             .take(200)
@@ -340,6 +342,7 @@ pub(super) fn event_from(s: &Session, v: &Value, mut e: quatrelle_model::ical::C
                     partstat: known.map_or_else(|| "NEEDS-ACTION".to_string(), |k| k.partstat.clone()),
                     rsvp: known.is_none_or(|k| k.rsvp),
                     cutype: known.map_or_else(|| if resource { "ROOM".to_string() } else { String::new() }, |k| k.cutype.clone()),
+                    role: if optional { quatrelle_model::ical::OPTIONAL.to_string() } else { String::new() },
                     email: a.email,
                     name: a.name,
                 }
@@ -382,6 +385,20 @@ pub(super) fn event_from(s: &Session, v: &Value, mut e: quatrelle_model::ical::C
             _ => return Err(CmdError::Params("`reminder` is minutes before the start (0 to four weeks) or none".into())),
         },
         None => {}
+    }
+    // Outlook's Show As, Private, and what the guests are asked (Response Options).
+    if let Some(x) = p::str(v, "showAs") {
+        e.show_as = quatrelle_model::ical::ShowAs::from_param(x)
+            .ok_or_else(|| CmdError::Params(format!("`{x}`: show as free, workingElsewhere, tentative, busy or outOfOffice")))?;
+    }
+    if let Some(b) = p::bool(v, "private") {
+        e.private = b;
+    }
+    if let Some(b) = p::bool(v, "responses") {
+        e.no_responses = !b;
+    }
+    if let Some(b) = p::bool(v, "newTimes") {
+        e.no_new_times = !b;
     }
     match p::str(v, "repeat").map(str::trim) {
         Some("" | "none" | "never") => e.rrule = None,

@@ -409,7 +409,14 @@ impl Session {
         let mut reply = event.clone();
         reply.attendees.retain(|a| mine.contains(&a.email.to_ascii_lowercase()));
         if reply.attendees.is_empty() {
-            reply.attendees.push(Attendee { email: me.1.clone(), name: me.0.clone(), partstat: stat.into(), rsvp: false, cutype: String::new() });
+            reply.attendees.push(Attendee {
+                email: me.1.clone(),
+                name: me.0.clone(),
+                partstat: stat.into(),
+                rsvp: false,
+                cutype: String::new(),
+                role: String::new(),
+            });
         }
         reply.description.clear();
         reply.extra.retain(|x| !x.to_ascii_uppercase().starts_with("BEGIN:VALARM"));
@@ -502,7 +509,14 @@ pub(super) fn set_answer(e: &mut CalEvent, mine: &[String], me: &str, stat: &str
         found = true;
     }
     if !found && !me.is_empty() {
-        e.attendees.push(Attendee { email: me.to_string(), name: String::new(), partstat: stat.to_string(), rsvp: false, cutype: String::new() });
+        e.attendees.push(Attendee {
+            email: me.to_string(),
+            name: String::new(),
+            partstat: stat.to_string(),
+            rsvp: false,
+            cutype: String::new(),
+            role: String::new(),
+        });
     }
 }
 
