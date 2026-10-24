@@ -250,7 +250,28 @@ fn graphics_memory() -> u64 {
 #[cfg(not(all(target_os = "linux", target_arch = "x86_64")))]
 fn give_back_freed_memory() {}
 
+/// The system libraries' malloc (glibc's: the graphics driver's, X11's) keeps an arena for each
+/// thread that ever allocated, each holding on to what it freed: 25 of them held 54 MB in an
+/// Exchange user's Quatrelle, none of it Quatrelle's own (that's jemalloc's). Two are enough.
+/// glibc reads `MALLOC_ARENA_MAX` only as a process starts, so Quatrelle starts again with it,
+/// once, before anything else; one set already is left as it is, and the programs Quatrelle
+/// opens inherit it.
+#[cfg(all(target_os = "linux", target_env = "gnu"))]
+fn fewer_malloc_arenas() {
+    use std::os::unix::process::CommandExt;
+    if std::env::var_os("MALLOC_ARENA_MAX").is_some() {
+        return;
+    }
+    let Ok(exe) = std::env::current_exe() else { return };
+    // Returns only when it couldn't start again: then it goes on as it is.
+    let _ = std::process::Command::new(exe).args(std::env::args_os().skip(1)).env("MALLOC_ARENA_MAX", "2").exec();
+}
+
+#[cfg(not(all(target_os = "linux", target_env = "gnu")))]
+fn fewer_malloc_arenas() {}
+
 fn main() -> eframe::Result {
+    fewer_malloc_arenas();
     // `args()` panics on an argument that isn't Unicode (a file name in another encoding).
     let args: Vec<String> = std::env::args_os().skip(1).map(|a| a.to_string_lossy().into_owned()).collect();
     if args.iter().any(|a| a == "--version" || a == "-V") {
