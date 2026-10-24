@@ -566,6 +566,7 @@ fn an_occurrence_moves_on_its_own_and_the_server_tells_the_guests() {
         partstat: "NEEDS-ACTION".into(),
         rsvp: true,
         cutype: String::new(),
+        role: String::new(),
     };
     let mut pim = Pim::default();
     pim.events.push(StoredEvent {
@@ -718,4 +719,58 @@ fn an_appointment_out_of_the_schemas_order_is_refused() {
     );
     assert!(super::super::route::in_schema_order(&good.kids[0]));
     assert!(!super::super::route::in_schema_order(&bad.kids[0]));
+}
+
+/// What Outlook says of a meeting goes to Exchange with it and comes back: Private
+/// (`Sensitivity`), Show As (`LegacyFreeBusyStatus`), an optional guest (`OptionalAttendees`),
+/// and no new times proposed (`AllowNewTimeProposal`), all in the schema's order.
+#[test]
+fn a_meetings_show_as_privacy_and_optional_guests_reach_exchange() {
+    use quatrelle_model::ical::{Attendee, CalEvent, OPTIONAL, ShowAs};
+    use quatrelle_model::pim::{Pim, StoredEvent};
+    let mut d = Data::default();
+    d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
+    d.folder("Contacts", None, Some("contacts"), "IPF.Contact");
+    let server = serve(d);
+    let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
+    let guest = |email: &str, role: &str| Attendee {
+        email: email.into(),
+        name: String::new(),
+        partstat: "NEEDS-ACTION".into(),
+        rsvp: true,
+        cutype: String::new(),
+        role: role.into(),
+    };
+    let meeting = CalEvent {
+        uid: "review".into(),
+        summary: "Budget review".into(),
+        start: 1_792_000_000,
+        end: 1_792_003_600,
+        attendees: vec![guest("ana@contoso.example", ""), guest("zoe@contoso.example", OPTIONAL)],
+        show_as: ShowAs::OutOfOffice,
+        private: true,
+        no_new_times: true,
+        ..Default::default()
+    };
+    let pim = Pim {
+        events: vec![StoredEvent { calendar: crate::ews_pim::CALENDAR.into(), event: meeting, dirty: true, ..Default::default() }],
+        ..Default::default()
+    };
+    let first = crate::ews_pim::sync(&c, &pim, 1_792_000_000).unwrap();
+    assert!(first.errors.is_empty(), "{:?}", first.errors);
+    {
+        let data = server.data.lock().unwrap();
+        let (_, _, el) = data.pim.iter().find(|(_, _, el)| el.text_of("Subject") == Some("Budget review")).unwrap();
+        assert_eq!(el.text_of("Sensitivity"), Some("Private"));
+        assert_eq!(el.text_of("LegacyFreeBusyStatus"), Some("OOF"));
+        assert_eq!(el.text_of("AllowNewTimeProposal"), Some("false"));
+        assert_eq!(el.child("OptionalAttendees").map(|o| o.children("Attendee").count()), Some(1));
+        assert_eq!(el.child("RequiredAttendees").map(|o| o.children("Attendee").count()), Some(1));
+    }
+    let again = crate::ews_pim::sync(&c, &Pim { events: first.pushed_events.clone(), ..Default::default() }, 1_792_000_100).unwrap();
+    let back = &again.events.iter().find(|e| e.event.summary == "Budget review").unwrap().event;
+    assert_eq!((back.show_as, back.private, back.no_new_times, back.no_responses), (ShowAs::OutOfOffice, true, true, false));
+    let optional: Vec<&str> = back.attendees.iter().filter(|a| a.is_optional()).map(|a| a.email.as_str()).collect();
+    assert_eq!(optional, ["zoe@contoso.example"]);
 }

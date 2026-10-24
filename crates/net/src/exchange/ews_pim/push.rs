@@ -129,6 +129,10 @@ fn update_item(c: &Client, id: &str, change_key: &str, e: &CalEvent, notify: boo
     if mine && !e.attendees.is_empty() && !e.attendees.iter().any(|a| a.is_resource()) {
         updates.push_str("<t:DeleteItemField><t:FieldURI FieldURI=\"calendar:Resources\"/></t:DeleteItemField>");
     }
+    // So with its optional guests, all taken off (or all made required).
+    if mine && !e.attendees.is_empty() && !e.attendees.iter().any(|a| a.is_optional()) {
+        updates.push_str("<t:DeleteItemField><t:FieldURI FieldURI=\"calendar:OptionalAttendees\"/></t:DeleteItemField>");
+    }
     let send = if notify { "SendToAllAndSaveCopy" } else { "SendToNone" };
     let call = |resolution: &str, key: &str| {
         c.call_one(&format!(

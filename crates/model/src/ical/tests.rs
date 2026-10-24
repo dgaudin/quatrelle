@@ -172,7 +172,7 @@ SUMMARY:Storyboard review\\, scenes 4–7\r\nLOCATION:Room 2\\; upstairs\r\n\
 DESCRIPTION:Bring the revised frames.\\nAnd the colour key.\r\n\
 ORGANIZER;CN=\"Zoe Park\":mailto:zoe@studio.example\r\n\
 ATTENDEE;CN=Riley Moreno;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:riley@studio.example\r\n\
-X-MICROSOFT-CDO-BUSYSTATUS:BUSY\r\nBEGIN:VALARM\r\nTRIGGER:-PT15M\r\nACTION:DISPLAY\r\nEND:VALARM\r\n\
+X-MICROSOFT-CDO-BUSYSTATUS:TENTATIVE\r\nX-MICROSOFT-CDO-IMPORTANCE:1\r\nBEGIN:VALARM\r\nTRIGGER:-PT15M\r\nACTION:DISPLAY\r\nEND:VALARM\r\n\
 SEQUENCE:2\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
 
 /// Categories (which colour an event) come in and go out, commas inside a name escaped.
@@ -204,7 +204,8 @@ fn reads_an_invitation() {
     assert_eq!(e.attendees[0].partstat, "NEEDS-ACTION");
     assert!(e.attendees[0].rsvp);
     assert_eq!(e.sequence, 2);
-    assert!(e.extra.iter().any(|x| x.starts_with("X-MICROSOFT")), "unknown properties are kept");
+    assert!(e.extra.iter().any(|x| x.starts_with("X-MICROSOFT-CDO-IMPORTANCE")), "unknown properties are kept");
+    assert_eq!(e.show_as, ShowAs::Tentative, "Outlook's Show As, read rather than kept");
     assert_eq!(e.reminder, Some(15), "its alarm, as the reminder");
     // In winter the same zone is +1.
     let winter = INVITE.replace("20261015T140000", "20261215T140000").replace("20261015T153000", "20261215T153000");
@@ -379,4 +380,38 @@ fn the_stamp_of_an_invitation_is_kept() {
     assert_eq!(parse(&sent, 0).events[0].dtstamp, 1_900_000_000, "an invitation is stamped when sent");
     let fresh = CalEvent { dtstamp: 0, ..e };
     assert_eq!(parse(&write(&[fresh], None, 1_900_000_000), 0).events[0].dtstamp, 1_900_000_000);
+}
+
+/// What Outlook says of a meeting (Show As, Private, optional guests, no answers asked for, no
+/// new times) is read, written back as Outlook writes it, and nothing is written for the
+/// defaults; Microsoft's status says more than TRANSP, whichever comes first.
+#[test]
+fn a_meetings_show_as_privacy_and_options_both_ways() {
+    let ics = |props: &str| {
+        format!(
+            "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:m1\r\nDTSTART:20261016T140000Z\r\nDTEND:20261016T150000Z\r\n{props}\
+             ATTENDEE;CN=Ana;ROLE=OPT-PARTICIPANT;RSVP=TRUE:mailto:ana@studio.example\r\nATTENDEE;CN=Zoe;RSVP=TRUE:mailto:zoe@studio.example\r\n\
+             END:VEVENT\r\nEND:VCALENDAR\r\n"
+        )
+    };
+    let e =
+        &parse(&ics("TRANSP:TRANSPARENT\r\nX-MICROSOFT-CDO-BUSYSTATUS:OOF\r\nCLASS:PRIVATE\r\nX-MICROSOFT-DISALLOW-COUNTER:TRUE\r\n"), 0).events[0];
+    assert_eq!((e.show_as, e.private, e.no_new_times), (ShowAs::OutOfOffice, true, true));
+    assert!(e.attendees[0].is_optional() && !e.attendees[1].is_optional());
+    assert!(e.extra.is_empty(), "nothing left over: {:?}", e.extra);
+    let out = write(std::slice::from_ref(e), None, 0);
+    for line in ["X-MICROSOFT-CDO-BUSYSTATUS:OOF", "CLASS:PRIVATE", "X-MICROSOFT-DISALLOW-COUNTER:TRUE", "ROLE=OPT-PARTICIPANT"] {
+        assert!(out.contains(line), "{line} in {out}");
+    }
+    assert_eq!(&parse(&out, 0).events[0], e, "read back the same");
+    // TRANSP alone says free; after Microsoft's status it says nothing more.
+    assert_eq!(parse(&ics("TRANSP:TRANSPARENT\r\n"), 0).events[0].show_as, ShowAs::Free);
+    assert_eq!(parse(&ics("X-MICROSOFT-CDO-BUSYSTATUS:BUSY\r\nTRANSP:TRANSPARENT\r\n"), 0).events[0].show_as, ShowAs::Busy);
+    // No answers asked for: each guest's RSVP goes out false.
+    let quiet = CalEvent { no_responses: true, ..e.clone() };
+    assert!(!write(std::slice::from_ref(&quiet), None, 0).contains("RSVP=TRUE"));
+    // The defaults write none of it.
+    let plain = &parse(&ics(""), 0).events[0];
+    let out = write(std::slice::from_ref(plain), None, 0);
+    assert!(!out.contains("TRANSP") && !out.contains("CLASS") && !out.contains("X-MICROSOFT"), "{out}");
 }

@@ -55,6 +55,34 @@ fn a_reminder_is_set_kept_and_taken_off() {
     done(s);
 }
 
+/// Outlook's Show As, Private, optional guests and Response Options are set by the commands, kept
+/// with the event, and changed one at a time; nonsense is refused.
+#[test]
+fn a_meetings_show_as_privacy_optional_guests_and_options_are_kept() {
+    use quatrelle_model::ical::ShowAs;
+    let mut s = sample_session("meeting-options");
+    let made = s
+        .run(
+            "event.create",
+            &json!({"summary": "Budget", "start": "2026-10-23T11:00", "end": "2026-10-23T12:00", "attendees": "Ana <ana@studio.example>",
+                    "optional": "Zoe <zoe@studio.example>", "showAs": "outOfOffice", "private": true, "newTimes": false}),
+        )
+        .unwrap();
+    let uid = made["uid"].as_str().unwrap().to_string();
+    let e = s.find_event(&uid).unwrap().1.event.clone();
+    assert_eq!((e.show_as, e.private, e.no_new_times, e.no_responses), (ShowAs::OutOfOffice, true, true, false));
+    let optional: Vec<&str> = e.attendees.iter().filter(|a| a.is_optional()).map(|a| a.email.as_str()).collect();
+    let required: Vec<&str> = e.attendees.iter().filter(|a| !a.is_optional() && !a.is_resource()).map(|a| a.email.as_str()).collect();
+    assert_eq!((optional, required), (vec!["zoe@studio.example"], vec!["ana@studio.example"]));
+    // The optional guests alone, changed: the required one stays.
+    s.run("event.update", &json!({"uid": uid, "optional": "", "showAs": "free", "responses": false})).unwrap();
+    let e = s.find_event(&uid).unwrap().1.event.clone();
+    assert_eq!((e.show_as, e.no_responses), (ShowAs::Free, true));
+    assert_eq!(e.attendees.iter().map(|a| a.email.as_str()).collect::<Vec<_>>(), ["ana@studio.example"]);
+    assert!(s.run("event.update", &json!({"uid": uid, "showAs": "asleep"})).is_err(), "nonsense is refused");
+    done(s);
+}
+
 /// Two appointments the server keeps under one UID — some Exchange series arrive as separate
 /// items that all carry the series' UID — are both kept: Friday's meeting must not vanish
 /// behind its siblings, and a re-sync doesn't double them.
