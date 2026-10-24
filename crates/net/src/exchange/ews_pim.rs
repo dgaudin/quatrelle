@@ -118,14 +118,16 @@ fn items_in_from(c: &Client, parent: &str, extra: &str, restriction: Option<Stri
 }
 
 /// Items by id, with all their properties (bodies as text), in batches; one the server can't
-/// give (gone meanwhile) is left out.
+/// give (gone meanwhile) is left out. An appointment's pattern and time zone come only when
+/// asked for by name (`AllProperties` leaves them out).
 fn get_items(c: &Client, ids: &[String], extra: &str) -> Result<Vec<El>> {
     let mut out = Vec::new();
     for chunk in ids.chunks(BATCH) {
         let list: String = chunk.iter().map(|id| format!("<t:ItemId Id=\"{}\"/>", esc(id))).collect();
         let doc = c.call(&format!(
             "<m:GetItem><m:ItemShape><t:BaseShape>AllProperties</t:BaseShape><t:BodyType>Text</t:BodyType>\
-             <t:AdditionalProperties><t:FieldURI FieldURI=\"calendar:Recurrence\"/><t:FieldURI FieldURI=\"item:EffectiveRights\"/>{}</t:AdditionalProperties></m:ItemShape>\
+             <t:AdditionalProperties><t:FieldURI FieldURI=\"calendar:Recurrence\"/><t:FieldURI FieldURI=\"calendar:StartTimeZone\"/>\
+             <t:FieldURI FieldURI=\"item:EffectiveRights\"/>{}</t:AdditionalProperties></m:ItemShape>\
              <m:ItemIds>{list}</m:ItemIds></m:GetItem>",
             extra
         ))?;

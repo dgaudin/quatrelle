@@ -370,6 +370,10 @@ impl Data {
                         // Each item's own rights (`item:EffectiveRights`), when asked for.
                         let mut fields = Vec::new();
                         op.all("FieldURI", &mut fields);
+                        // An appointment's time zones only when asked for, as Exchange gives them.
+                        if !fields.iter().any(|f| f.attr("FieldURI") == Some("calendar:StartTimeZone")) {
+                            el.kids.retain(|k| k.name != "StartTimeZone" && k.name != "EndTimeZone");
+                        }
                         if fields.iter().any(|f| f.attr("FieldURI") == Some("item:EffectiveRights")) {
                             let edit = self.may_change(&id);
                             let rights = parse(&format!(
