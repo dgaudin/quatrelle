@@ -481,7 +481,7 @@ fn a_data_file_opened_by_threads_at_once_opens_once() {
         {
             let store = Store::open_packed(t.join("app"), t.join("Files")).unwrap();
             store.save_accounts(&[account("a1", "a1@example.org")]).unwrap();
-            store.save_folder("a1", "INBOX", &crate::FolderState::default()).unwrap();
+            store.save_folder("a1", "INBOX", &crate::FolderState::<quatrelle_model::Summary>::default()).unwrap();
         }
         // A fresh handle on the same folders (the first closed): nothing is open in it yet.
         let store = Store::open_packed(t.join("app"), t.join("Files")).unwrap();

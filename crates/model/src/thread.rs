@@ -155,10 +155,11 @@ pub struct Thread {
 
 /// Group messages into conversations. The result is sorted with the most recently active
 /// conversation first; every input index appears exactly once.
-pub fn threads(msgs: &[Summary]) -> Vec<Thread> {
+pub fn threads<M: std::borrow::Borrow<Summary>>(msgs: &[M]) -> Vec<Thread> {
+    let msg = |i: usize| msgs.get(i).map(M::borrow);
     let mut b = Builder { nodes: Vec::with_capacity(msgs.len() * 2), by_id: HashMap::with_capacity(msgs.len() * 2) };
     let mut own = Vec::with_capacity(msgs.len());
-    for (i, m) in msgs.iter().enumerate() {
+    for (i, m) in msgs.iter().map(M::borrow).enumerate() {
         let id = norm_id(&m.message_id);
         let mut n = if id.is_empty() { b.fresh() } else { b.node(&id) };
         if b.nodes.get(n).and_then(|c| c.msg).is_some() {
@@ -216,8 +217,8 @@ pub fn threads(msgs: &[Summary]) -> Vec<Thread> {
     let mut by_subject: HashMap<String, usize> = HashMap::new();
     let mut merged: Vec<Vec<usize>> = Vec::new();
     let first_subject = |g: &Vec<usize>| -> (String, bool) {
-        let oldest = g.iter().copied().min_by_key(|&i| msgs.get(i).map_or(0, |m| m.date)).unwrap_or(0);
-        let s = msgs.get(oldest).map(|m| m.subject.as_str()).unwrap_or_default();
+        let oldest = g.iter().copied().min_by_key(|&i| msg(i).map_or(0, |m| m.date)).unwrap_or(0);
+        let s = msg(oldest).map(|m| m.subject.as_str()).unwrap_or_default();
         (base_subject(s).to_lowercase(), is_reply_subject(s))
     };
     // Original posts first, so replies join them rather than the other way round.
@@ -241,9 +242,9 @@ pub fn threads(msgs: &[Summary]) -> Vec<Thread> {
     let mut out: Vec<Thread> = merged
         .into_iter()
         .map(|mut v| {
-            v.sort_by_key(|&i| (msgs.get(i).map_or(0, |m| m.date), i));
+            v.sort_by_key(|&i| (msg(i).map_or(0, |m| m.date), i));
             v.dedup();
-            let latest = v.iter().filter_map(|&i| msgs.get(i)).map(|m| m.date).max().unwrap_or(0);
+            let latest = v.iter().filter_map(|&i| msg(i)).map(|m| m.date).max().unwrap_or(0);
             Thread { messages: v, latest }
         })
         .collect();

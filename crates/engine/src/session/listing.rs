@@ -169,9 +169,10 @@ pub(super) fn size_group(size: u32) -> &'static str {
 
 /// Sort a list as `arrange` says (each one's natural order; `reverse` the other way), newest
 /// first among equals.
-pub fn arrange_list(list: &mut [Summary], arrange: Arrange, reverse: bool) {
+pub fn arrange_list<M: std::borrow::Borrow<Summary>>(list: &mut [M], arrange: Arrange, reverse: bool) {
     let text = |s: String| s.to_lowercase();
     list.sort_by(|a, b| {
+        let (a, b) = (a.borrow(), b.borrow());
         let primary = match arrange {
             Arrange::Date => b.date.cmp(&a.date),
             Arrange::From => text(person(Some(&a.from))).cmp(&text(person(Some(&b.from)))),
