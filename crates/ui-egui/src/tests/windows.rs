@@ -99,6 +99,14 @@ fn in_the_browser_files_download_and_attachments_come_from_the_picker() {
     let got = downloads.borrow().clone();
     assert!(got.len() >= 4, "{got:?}");
     assert!(got[0].0.ends_with(".eml") && got[1].0.ends_with(".pdf") && got.iter().all(|(_, n)| *n > 0), "{got:?}");
+    // Save As from the list: the messages selected, each downloaded under its subject.
+    let other = a.session.list.iter().find(|m| m.key != key).map(|m| m.key.clone()).unwrap();
+    a.session.selection = vec![key.clone(), other];
+    let before = downloads.borrow().len();
+    a.act(crate::Action::SaveSelected);
+    let got = downloads.borrow().clone();
+    assert_eq!(got.len(), before + 2, "{got:?}");
+    assert!(got[before..].iter().all(|(name, n)| name.ends_with(".eml") && *n > 0), "{got:?}");
 
     // Only JMAP accounts: the form asks for the session address, and nothing else is accepted.
     a.session.jmap_only = true;

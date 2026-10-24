@@ -178,6 +178,8 @@ pub enum Action {
     SaveAll,
     /// Save some attachments of the open message (by index) into a folder.
     SaveAttachments(Vec<usize>),
+    /// The messages selected in the list, as `.eml` files (one where asked; several in a folder).
+    SaveSelected,
     /// The rules to a file, or rules from one (Outlook's Export and Import Rules).
     ExportRules,
     ImportRules,

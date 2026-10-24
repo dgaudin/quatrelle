@@ -327,6 +327,7 @@ impl MailApp {
                     }
                 }
             }
+            Action::SaveSelected => self.save_selected(),
             Action::SaveAll | Action::SaveAttachments(_) => {
                 let indices = if let Action::SaveAttachments(v) = &a { json!(v) } else { Value::Null };
                 if let Some(dir) = self.services.pick_folder() {
@@ -514,6 +515,47 @@ impl MailApp {
     }
 
     /// A file name for the open message (its subject, made safe).
+    /// The messages selected (else the open one) as `.eml` files: one where the user says, several
+    /// in a folder chosen, each under its subject; in the browser, each downloaded.
+    fn save_selected(&mut self) {
+        let keys: Vec<MessageKey> = if self.session.selection.is_empty() {
+            self.session.reading.iter().map(|r| r.key.clone()).collect()
+        } else {
+            self.session.selection.clone()
+        };
+        let ids: Vec<String> = keys.iter().map(MessageKey::to_id).collect();
+        let saved = if self.services.downloads() {
+            let mut n = 0usize;
+            for k in &keys {
+                if let Some(raw) = self.session.source_of(k) {
+                    self.services.download(&self.session.message_file(k, "eml"), &raw);
+                    n += 1;
+                }
+            }
+            Ok(json!({"saved": vec![Value::Null; n], "missing": keys.len() - n}))
+        } else if let [k] = keys.as_slice() {
+            let Some(path) = self.services.save_path(&self.session.message_file(k, "eml")) else { return };
+            self.session.run("messages.saveAs", &json!({"keys": ids, "path": path.to_string_lossy()})).inspect(|_| {
+                self.session.notice(tf!("Saved {path}", path = path.display()), false);
+            })
+        } else {
+            let Some(dir) = (!keys.is_empty()).then(|| self.services.pick_folder()).flatten() else { return };
+            self.session.run("messages.saveAs", &json!({"keys": ids, "dir": dir.to_string_lossy()})).inspect(|v| {
+                let n = v.get("saved").and_then(Value::as_array).map_or(0, Vec::len);
+                self.session.notice(tf!("Saved {n} messages in {folder}", n = n, folder = dir.display()), false);
+            })
+        };
+        match saved {
+            Ok(v) => {
+                let missing = v.get("missing").and_then(Value::as_u64).unwrap_or(0);
+                if missing > 0 {
+                    self.session.notice(tf!("{n} not saved: not on this computer yet", n = missing), true);
+                }
+            }
+            Err(e) => self.session.notice(e.to_string(), true),
+        }
+    }
+
     pub(crate) fn message_file_name(&self) -> String {
         let subject = self.session.reading.as_ref().and_then(|r| r.parsed.as_ref()).map(|p| p.subject.clone()).unwrap_or_default();
         let name = quatrelle_engine::mime::sanitize_filename(if subject.trim().is_empty() { "message" } else { &subject });

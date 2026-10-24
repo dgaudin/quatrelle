@@ -145,6 +145,35 @@ fn a_message_shows_its_headers() {
     done(s);
 }
 
+/// Save As from the list: one message where asked, several in a folder each under its subject
+/// (a name taken gets a number), one not on this computer counted, not saved.
+#[test]
+fn messages_save_as_from_the_list() {
+    let mut s = sample_session("save-list");
+    let dir = s.store.as_ref().unwrap().root().join("saved");
+    std::fs::create_dir_all(&dir).unwrap();
+    let id = |s: &Session, subject: &str| key_of(s, subject)["key"].as_str().unwrap().to_string();
+    let (a, b) = (id(&s, "Storyboard review on Thursday"), id(&s, "Your proof for the festival poster is ready"));
+    let gone = MessageKey { uid: 99_999, ..MessageKey::from_id(&a).unwrap() }.to_id();
+    let one = dir.join("one.eml");
+    s.run("messages.saveAs", &json!({"keys": [a], "path": one.to_string_lossy()})).unwrap();
+    assert_eq!(quatrelle_mime::parse(&std::fs::read(&one).unwrap()).unwrap().subject, "Storyboard review on Thursday");
+    assert!(s.run("messages.saveAs", &json!({"keys": [a, b], "path": one.to_string_lossy()})).is_err(), "a path is for one");
+    let v = s.run("messages.saveAs", &json!({"keys": [a, b, a, gone], "dir": dir.to_string_lossy()})).unwrap();
+    assert_eq!(v["missing"], 1, "{v}");
+    let mut names: Vec<String> = std::fs::read_dir(&dir).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().to_string()).collect();
+    names.sort();
+    assert_eq!(
+        names,
+        ["Storyboard review on Thursday (2).eml", "Storyboard review on Thursday.eml", "Your proof for the festival poster is ready.eml", "one.eml"]
+    );
+    // Without keys: the messages selected.
+    s.run("list.open", &json!({"key": b})).unwrap();
+    let v = s.run("messages.saveAs", &json!({"dir": dir.to_string_lossy()})).unwrap();
+    assert!(v["saved"][0].as_str().unwrap().ends_with("Your proof for the festival poster is ready (2).eml"), "{v}");
+    done(s);
+}
+
 #[test]
 fn attachments_preview_and_save_all() {
     let mut s = sample_session("attachments");

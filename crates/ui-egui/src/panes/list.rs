@@ -832,6 +832,7 @@ fn row_input(
         item(ui, acts, tl!("Reply all"), Action::Run("mail.replyAll", json!({})));
         item(ui, acts, tl!("Forward"), Action::Run("mail.forward", json!({})));
         item(ui, acts, tl!("Quick print"), Action::Print);
+        item(ui, acts, tl!("Save as…"), Action::SaveSelected);
         ui.separator();
         item(
             ui,
