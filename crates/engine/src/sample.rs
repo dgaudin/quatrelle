@@ -684,6 +684,7 @@ pub fn sample_pim(now: i64, offset: i64) -> quatrelle_model::pim::Pim {
         partstat: partstat.into(),
         rsvp: false,
         cutype: String::new(),
+        role: String::new(),
     };
     let ev = |uid: &str, summary: &str, start: i64, end: i64| CalEvent {
         uid: format!("{uid}@sample.quatrelle"),

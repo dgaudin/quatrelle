@@ -807,6 +807,7 @@ const CALENDAR_ITEM_ORDER: &[&str] = &[
     "IsAllDayEvent",
     "LegacyFreeBusyStatus",
     "Location",
+    "IsResponseRequested",
     "RequiredAttendees",
     "OptionalAttendees",
     "Resources",
@@ -814,6 +815,7 @@ const CALENDAR_ITEM_ORDER: &[&str] = &[
     "MeetingTimeZone",
     "StartTimeZone",
     "EndTimeZone",
+    "AllowNewTimeProposal",
 ];
 
 /// Whether a new appointment's fields come in the schema's order (one it doesn't list is let be).

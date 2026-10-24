@@ -274,7 +274,16 @@ impl Session {
             if answer == "DECLINED" {
                 continue;
             }
-            let kind = if e.status.eq_ignore_ascii_case("TENTATIVE") || answer == "TENTATIVE" { BusyKind::Tentative } else { BusyKind::Busy };
+            // And how it shows (Outlook's Show As): free time isn't taken.
+            let kind = match e.show_as {
+                ical::ShowAs::Free => continue,
+                ical::ShowAs::OutOfOffice => BusyKind::OutOfOffice,
+                ical::ShowAs::WorkingElsewhere => BusyKind::WorkingElsewhere,
+                _ if e.show_as == ical::ShowAs::Tentative || e.status.eq_ignore_ascii_case("TENTATIVE") || answer == "TENTATIVE" => {
+                    BusyKind::Tentative
+                }
+                _ => BusyKind::Busy,
+            };
             slots.push(BusySlot { start, end, kind, subject: e.summary.clone() });
             if slots.len() >= MAX_SLOTS {
                 break;

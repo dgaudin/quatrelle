@@ -19,10 +19,12 @@ use serde::{Deserialize, Serialize};
 use crate::dates::{civil_from_days, days_from_civil};
 
 mod alarms;
+mod meeting;
 mod notes;
 mod recurrence;
 mod zones;
 pub use alarms::*;
+pub use meeting::{OPTIONAL, ShowAs};
 use notes::*;
 pub use notes::*;
 use recurrence::*;
@@ -53,6 +55,10 @@ pub struct Attendee {
     /// which book themselves).
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub cutype: String,
+    /// Its role (RFC 5545 `ROLE`): empty for a required guest, the default; [`OPTIONAL`] for an
+    /// optional one (Outlook's Optional line).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub role: String,
 }
 
 impl Attendee {
@@ -121,6 +127,18 @@ pub struct CalEvent {
     /// Graph's `onlineMeeting.joinUrl`); otherwise found in its notes ([`CalEvent::join_link`]).
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub join_url: String,
+    /// How its time shows to others (Outlook's Show As; busy by default).
+    #[serde(default, skip_serializing_if = "ShowAs::is_busy")]
+    pub show_as: ShowAs,
+    /// Private: others who can see the calendar see only that the time is taken.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub private: bool,
+    /// A meeting whose guests aren't asked to answer (Outlook's Request Responses off), and one
+    /// for which they can't propose another time (Allow New Time Proposals off).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub no_responses: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub no_new_times: bool,
 }
 
 fn is_zero(n: &i64) -> bool {
@@ -355,6 +373,7 @@ fn person(l: &Line) -> Attendee {
         rsvp: l.param("RSVP").is_some_and(|r| r.eq_ignore_ascii_case("TRUE")),
         // Only the kinds that matter here are kept: a person is the default.
         cutype: l.param("CUTYPE").map(str::to_ascii_uppercase).filter(|c| matches!(c.as_str(), "ROOM" | "RESOURCE")).unwrap_or_default(),
+        role: meeting::role_of(l.param("ROLE")),
     }
 }
 
@@ -375,6 +394,8 @@ pub fn parse_in(text: &str, local: crate::zone::Zone) -> ICalendar {
     let zones = FileZones::read(&all, local);
     // An exception's times wait for the event's zone (DTSTART may come after them).
     let mut pending: Vec<&Line> = Vec::new();
+    // The event's Microsoft busy status was read (`ical/meeting.rs`).
+    let mut busy_said = false;
     let mut ev: Option<(CalEvent, Option<i64>)> = None;
     let mut depth_in_event = 0usize;
     // The `VALARM` being read, as written: its trigger becomes the reminder, and an alarm
@@ -388,6 +409,7 @@ pub fn parse_in(text: &str, local: crate::zone::Zone) -> ICalendar {
                 ev = Some((CalEvent::default(), None));
                 depth_in_event = 0;
                 pending.clear();
+                busy_said = false;
                 continue;
             }
             if ev.is_some() {
@@ -512,6 +534,7 @@ pub fn parse_in(text: &str, local: crate::zone::Zone) -> ICalendar {
             }
             "DTSTAMP" => e.dtstamp = zones.time(l, "").map_or(0, |(t, _, _)| t),
             "CREATED" | "LAST-MODIFIED" => {}
+            _ if meeting::read(e, n, &l.value, &mut busy_said) => {}
             _ => {
                 if e.extra.len() < 200 {
                     e.extra.push(l.raw.clone());
@@ -560,6 +583,9 @@ fn mailbox(prop: &str, a: &Attendee) -> String {
     }
     if a.rsvp {
         s.push_str(";RSVP=TRUE");
+    }
+    if !a.role.is_empty() {
+        s.push_str(&format!(";ROLE={}", a.role.replace(|c: char| !c.is_ascii_alphanumeric() && c != '-', "")));
     }
     if a.is_resource() {
         s.push_str(&format!(";CUTYPE={}", a.cutype));
@@ -688,11 +714,14 @@ pub fn write_event(e: &CalEvent, now: i64, out: &mut String) {
     if e.sequence > 0 {
         lines.push(format!("SEQUENCE:{}", e.sequence));
     }
+    lines.extend(meeting::lines(e));
     if let Some(o) = &e.organizer {
         lines.push(mailbox("ORGANIZER", o));
     }
     for a in &e.attendees {
-        lines.push(mailbox("ATTENDEE", a));
+        // Answers asked for, unless the meeting asks for none.
+        let a = Attendee { rsvp: a.rsvp && !e.no_responses, ..a.clone() };
+        lines.push(mailbox("ATTENDEE", &a));
     }
     if let Some(m) = e.reminder {
         // Outlook's reminder: a display alarm, its trigger a plain duration from the start.

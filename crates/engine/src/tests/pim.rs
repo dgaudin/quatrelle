@@ -183,6 +183,7 @@ fn own_events_invite_and_cancel_guests() {
         partstat: "ACCEPTED".into(),
         rsvp: false,
         cutype: String::new(),
+        role: String::new(),
     }];
     let ics = quatrelle_model::ical::write(&[reply], Some("REPLY"), NOW);
     let d = quatrelle_mime::Draft {

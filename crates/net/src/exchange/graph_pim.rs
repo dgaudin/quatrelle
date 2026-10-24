@@ -165,7 +165,14 @@ fn partstat(response: &str) -> &'static str {
 fn person(v: &Value) -> Option<Attendee> {
     let e = v.get("emailAddress")?;
     let email = s(e, "address");
-    (!email.is_empty()).then(|| Attendee { email, name: s(e, "name"), partstat: String::new(), rsvp: false, cutype: String::new() })
+    (!email.is_empty()).then(|| Attendee {
+        email,
+        name: s(e, "name"),
+        partstat: String::new(),
+        rsvp: false,
+        cutype: String::new(),
+        role: String::new(),
+    })
 }
 
 /// A Graph event as an event.
@@ -189,6 +196,8 @@ pub fn event_of(v: &Value) -> Option<CalEvent> {
                     // A room or equipment booked (Graph's `resource` attendee), not a guest.
                     if s(x, "type").eq_ignore_ascii_case("resource") {
                         p.cutype = "RESOURCE".into();
+                    } else if s(x, "type").eq_ignore_ascii_case("optional") {
+                        p.role = quatrelle_model::ical::OPTIONAL.into();
                     }
                     Some(p)
                 })

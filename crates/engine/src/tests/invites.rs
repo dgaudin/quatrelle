@@ -37,7 +37,14 @@ fn deliver(s: &mut Session, n: u32, from: (&str, &str), method: &str, events: &[
 }
 
 fn me(partstat: &str) -> Attendee {
-    Attendee { email: "riley@studio.example".into(), name: "Riley".into(), partstat: partstat.into(), rsvp: true, cutype: String::new() }
+    Attendee {
+        email: "riley@studio.example".into(),
+        name: "Riley".into(),
+        partstat: partstat.into(),
+        rsvp: true,
+        cutype: String::new(),
+        role: String::new(),
+    }
 }
 
 fn parts<'a>(s: &'a Session, uid: &str) -> Vec<&'a StoredEvent> {
@@ -217,6 +224,7 @@ fn invitations_from_others_or_out_of_date_are_not_applied() {
         partstat: "DECLINED".into(),
         rsvp: false,
         cutype: String::new(),
+        role: String::new(),
     }];
     deliver(&mut s, 7, ("Mallory", "mallory@evil.example"), "REPLY", std::slice::from_ref(&reply), NOW);
     assert_eq!(s.invite().unwrap().problem, Some(InviteProblem::NotFromGuest));

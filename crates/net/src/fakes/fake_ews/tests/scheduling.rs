@@ -163,6 +163,7 @@ fn a_meeting_made_with_a_room_books_it_as_a_resource() {
         partstat: "NEEDS-ACTION".into(),
         rsvp: true,
         cutype: cutype.into(),
+        role: String::new(),
     };
     let mut pim = Pim::default();
     pim.events.push(StoredEvent {

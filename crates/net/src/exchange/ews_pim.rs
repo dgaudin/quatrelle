@@ -11,7 +11,7 @@
 
 use std::collections::HashMap;
 
-use quatrelle_model::ical::{Attendee, CalEvent};
+use quatrelle_model::ical::{Attendee, CalEvent, ShowAs};
 use quatrelle_model::pim::{BookInfo, CalendarInfo, DavSync, Note, Pim, StoredCard, StoredEvent, StoredNote};
 use quatrelle_model::vcard::{Card, PostalAddress, Typed};
 use quatrelle_model::zone::Zone;
