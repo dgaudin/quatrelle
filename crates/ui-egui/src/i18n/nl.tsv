@@ -1382,3 +1382,28 @@ month	May	mei
 	the certificate has no password, so the browser uses it until the page is closed and doesn't keep it	het certificaat heeft geen wachtwoord, dus de browser gebruikt het tot de pagina wordt gesloten en bewaart het niet
 	the card needs its PIN (give it in File › Info › Security › Use a smart card…)	de kaart heeft de pincode nodig (geef die in Bestand › Info › Beveiliging › Een smartcard gebruiken…)
 	the card refused its PIN, so Quatrelle forgot it: the card would lock if it were tried again (give it again in File › Info › Security › Use a smart card…)	de kaart weigerde de pincode, dus Quatrelle is die vergeten: de kaart zou blokkeren als hij opnieuw werd geprobeerd (geef hem opnieuw in Bestand › Info › Beveiliging › Een smartcard gebruiken…)
+	Appointment	Afspraak
+	Meeting	Vergadering
+	Send Update	Update verzenden
+	Save & Close	Opslaan en sluiten
+	Online meeting	Onlinevergadering
+	Invite Attendees	Deelnemers uitnodigen
+	Response Options	Antwoordopties
+	Request Responses	Antwoorden aanvragen
+	Allow New Time Proposals	Nieuwe tijdsvoorstellen toestaan
+	Attendees	Deelnemers
+	Show As	Weergeven als
+	Private	Privé
+	Required	Vereist
+	Optional	Optioneel
+	Start time	Begintijd
+	End time	Eindtijd
+	All day event	Hele dag
+	Pick a day	Kies een dag
+	Pick a time	Kies een tijd
+	Working Elsewhere	Elders aan het werk
+	Out of Office	Afwezig
+	{subject} – Appointment	{subject} – Afspraak
+	{subject} – Meeting	{subject} – Vergadering
+	Title	Onderwerp
+	Others who see your calendar see only that the time is taken	Wie je agenda ziet, ziet alleen dat de tijd bezet is

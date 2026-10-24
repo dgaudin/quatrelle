@@ -27,9 +27,10 @@ const SNAP: i64 = 15 * 60;
 /// Rows drawn at most (the people and rooms past that are still in the meeting).
 const MAX_ROWS: usize = 40;
 
-/// The timeline's id: the tests find its rectangle by it.
-pub fn timeline_id() -> egui::Id {
-    egui::Id::unique("event-scheduling-timeline")
+/// The timeline's id in the window numbered `window` (0: the dialog): the tests find its
+/// rectangle by it. One a window: two meetings can be open at once.
+pub fn timeline_id(window: u64) -> egui::Id {
+    egui::Id::unique(("event-scheduling-timeline", window))
 }
 
 /// The hours shown (from, to) for a meeting from `start` to `end` on a day starting at
@@ -210,7 +211,7 @@ pub(super) fn view(ui: &mut Ui, f: &mut EventForm, s: &Session, t: &Tokens, acts
     }
     // A click puts the meeting there; a drag carries it along, as long as it was.
     let timeline = Rect::from_min_max(pos2(rect.min.x + NAMES_W, rect.min.y + HEAD_H), rect.max);
-    let resp = ui.interact(timeline, timeline_id(), Sense::click_and_drag());
+    let resp = ui.interact(timeline, timeline_id(f.window), Sense::click_and_drag());
     let len = (end - start).max(SNAP);
     let place = |f: &mut EventForm, at: i64| {
         let new_start = snap(at).clamp(day_from, day_to - len);

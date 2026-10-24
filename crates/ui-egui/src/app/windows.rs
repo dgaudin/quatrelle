@@ -108,6 +108,77 @@ impl MailApp {
         }
     }
 
+    /// Each appointment or meeting in a window of its own, as Outlook opens them (several at once,
+    /// the main window free meanwhile). One opened as a dialog (from the calendar, a reminder,
+    /// Reply with Meeting) moves into a window of its own at once.
+    pub(crate) fn event_windows(&mut self, ctx: &egui::Context, acts: &mut Vec<Action>) {
+        if matches!(self.ui.dialog, Some(Dialog::Event(_)))
+            && let Some(Dialog::Event(mut f)) = self.ui.dialog.take()
+        {
+            self.ui.event_window_ids = self.ui.event_window_ids.wrapping_add(1);
+            f.window = self.ui.event_window_ids;
+            // Opened with guests (Reply with Meeting): a meeting, their lines shown.
+            f.inviting |= !f.guests.trim().is_empty() || !f.optional.trim().is_empty();
+            self.ui.event_windows.push((self.ui.event_window_ids, f));
+        }
+        let t = self.ui.tokens;
+        let mut windows = std::mem::take(&mut self.ui.event_windows);
+        let open = windows.len().saturating_sub(1);
+        let mut closed: Vec<u64> = Vec::new();
+        for (n, (wid, f)) in windows.iter_mut().enumerate() {
+            let title = if f.summary.trim().is_empty() { tl!("Untitled").to_string() } else { f.summary.trim().to_string() };
+            let title = if f.inviting {
+                i18n::as_written(|| tf!("{subject} – Meeting", subject = title))
+            } else {
+                i18n::as_written(|| tf!("{subject} – Appointment", subject = title))
+            };
+            let id = egui::ViewportId::from_hash_of(("event-window", *wid));
+            let mut builder = egui::ViewportBuilder::default().with_title(title).with_min_inner_size([640.0, 480.0]);
+            if first_frame(ctx, id) {
+                let step = 28.0 * ((n.min(open)) % 8) as f32;
+                builder = match self.ui.places.get("event") {
+                    Some(p) => WindowPlace { x: p.x + step, y: p.y + step, ..*p }.apply(builder),
+                    None => builder.with_inner_size([920.0, 700.0]),
+                };
+            }
+            let (session, places) = (&self.session, &mut self.ui.places);
+            let wid = *wid;
+            let mut mine: Vec<Action> = Vec::new();
+            let (keep, close) = ctx.show_viewport_immediate(id, builder, |ui, _| {
+                let mut place = places.get("event").copied();
+                after_open(ui, place);
+                trace_window(ui, "event");
+                WindowPlace::note(&mut place, ui);
+                if let Some(p) = place {
+                    places.insert("event".into(), p);
+                }
+                let mut keep = true;
+                egui::CentralPanel::default().frame(egui::Frame::new().fill(t.surface).inner_margin(egui::Margin::symmetric(14, 10))).show(
+                    ui,
+                    |ui| {
+                        keep = pim_dialogs::meeting(ui, f, session, &t, &mut mine);
+                    },
+                );
+                (keep, ui.input(|i| i.viewport().close_requested()))
+            });
+            // Its commands go to the engine as its own: done, the window closes.
+            for a in mine {
+                acts.push(match a {
+                    Action::Submit(cmd, p) => Action::ForEvent(wid, cmd, p),
+                    other => other,
+                });
+            }
+            if !keep || close {
+                forget_open(ctx, id);
+                closed.push(wid);
+            }
+        }
+        windows.retain(|(w, _)| !closed.contains(w));
+        // A window opened meanwhile (from an action of this frame) is kept too.
+        windows.append(&mut self.ui.event_windows);
+        self.ui.event_windows = windows;
+    }
+
     /// Show only one message, as its own window does (`key` from [`MessageKey::to_id`]).
     pub fn show_message_page(&mut self, key: &str) {
         let Some(k) = MessageKey::from_id(key) else { return };

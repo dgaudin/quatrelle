@@ -1383,3 +1383,28 @@ month	May	5月
 	the certificate has no password, so the browser uses it until the page is closed and doesn't keep it	该证书没有密码，所以浏览器只在关闭页面前使用它，不会保存
 	the card needs its PIN (give it in File › Info › Security › Use a smart card…)	这张卡需要 PIN（文件 › 信息 › 安全 › 使用智能卡…）
 	the card refused its PIN, so Quatrelle forgot it: the card would lock if it were tried again (give it again in File › Info › Security › Use a smart card…)	这张卡拒绝了 PIN，所以 Quatrelle 已将其忘记：再次尝试会锁定卡（文件 › 信息 › 安全 › 使用智能卡…）
+	Appointment	约会
+	Meeting	会议
+	Send Update	发送更新
+	Save & Close	保存并关闭
+	Online meeting	联机会议
+	Invite Attendees	邀请与会者
+	Response Options	响应选项
+	Request Responses	请求响应
+	Allow New Time Proposals	允许新的时间建议
+	Attendees	与会者
+	Show As	显示为
+	Private	私密
+	Required	必需
+	Optional	可选
+	Start time	开始时间
+	End time	结束时间
+	All day event	全天事件
+	Pick a day	选择日期
+	Pick a time	选择时间
+	Working Elsewhere	在其他地方工作
+	Out of Office	外出
+	{subject} – Appointment	{subject} – 约会
+	{subject} – Meeting	{subject} – 会议
+	Title	主题
+	Others who see your calendar see only that the time is taken	查看您日历的人只能看到该时间已被占用

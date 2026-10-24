@@ -155,6 +155,9 @@ pub enum Action {
     /// An action from one message's window: done to that message (several can be written at
     /// once, each in a window of its own).
     ForCompose(u64, Box<Action>),
+    /// A command from an appointment's window (its number): the window closes once it's done,
+    /// or says why it couldn't be.
+    ForEvent(u64, &'static str, Value),
     OpenAttachment(usize),
     SaveAttachment(usize),
     AttachFiles,
@@ -320,6 +323,10 @@ pub struct UiState {
     pub(crate) editors: HashMap<u64, rich_edit::Editor>,
     /// The message whose window a dialog for messages belongs to (Save changes, Address Book).
     pub(crate) dialog_for: Option<u64>,
+    /// The appointments and meetings open in windows of their own, each with its number, and
+    /// the last number given.
+    pub(crate) event_windows: Vec<(u64, Box<pim_dialogs::EventForm>)>,
+    pub(crate) event_window_ids: u64,
     /// The body's cursor (characters), where pictures go.
     /// The message editor's state (selection, undo, what's typed next).
     pub(crate) editor: Option<rich_edit::Editor>,
@@ -475,6 +482,8 @@ impl MailApp {
                 compose_shown: Default::default(),
                 editors: HashMap::new(),
                 dialog_for: None,
+                event_windows: Vec::new(),
+                event_window_ids: 0,
                 editor: None,
                 suggest_field: None,
                 suggest_index: 0,
