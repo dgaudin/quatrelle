@@ -378,7 +378,8 @@ impl Dialog {
         }))
     }
 
-    /// The preview of an attachment, from `attachment.preview`'s answer.
+    /// The preview of an attachment, from `attachment.preview`'s answer; or a message's
+    /// headers, from `message.headers`'.
     pub fn preview(v: &serde_json::Value, clock: &quatrelle_engine::model::dates::Clock) -> Dialog {
         let get = |k: &str| v.get(k).and_then(serde_json::Value::as_str).unwrap_or("").to_string();
         let mut header = Vec::new();
@@ -393,7 +394,11 @@ impl Dialog {
         if v.get("truncated").and_then(serde_json::Value::as_bool).unwrap_or(false) {
             text.push_str("\n… (the rest isn't shown: open the file to see it all)");
         }
-        let title = if get("kind") == "message" && !get("subject").is_empty() { get("subject") } else { get("name") };
+        let title = match get("kind").as_str() {
+            "headers" => tl!("Message headers").to_string(),
+            "message" if !get("subject").is_empty() => get("subject"),
+            _ => get("name"),
+        };
         Dialog::Preview { title, header, text }
     }
 

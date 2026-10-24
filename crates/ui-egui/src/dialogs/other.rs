@@ -84,7 +84,13 @@ pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &
                 );
             });
             ui.add_space(6.0);
-            close_row(ui)
+            button_row(ui, |ui| {
+                let keep = !ui.button(tl!("Close")).clicked();
+                if ui.button(tl!("Copy")).clicked() {
+                    ui.ctx().copy_text(text.clone());
+                }
+                keep
+            })
         }
         Dialog::OpenSharedCalendar { email, error } => {
             ui.set_width(420.0);
