@@ -18,7 +18,7 @@ pub fn meeting(ui: &mut Ui, f: &mut EventForm, s: &Session, t: &Tokens, acts: &m
     egui::ScrollArea::horizontal().id_salt("meeting-ribbon").show(ui, |ui| {
         ui.with_layout(egui::Layout::left_to_right(egui::Align::Min), |ui| {
             ui.spacing_mut().item_spacing.x = 2.0;
-            keep = ribbon(ui, t, f, acts);
+            keep = ribbon(ui, t, f, &s.prefs.webex_room, acts);
         });
     });
     let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 1.0), Sense::hover());
@@ -95,8 +95,22 @@ fn submit(f: &mut EventForm, acts: &mut Vec<Action>) {
     acts.push(Action::Submit(if f.uid.is_some() { "event.update" } else { "event.create" }, f.params()));
 }
 
+/// The Webex personal room in the appointment, as Webex's own add-in puts it: as the place (one
+/// typed is kept) and at the end of the notes, for the guests to join by.
+fn add_webex(f: &mut EventForm, url: &str) {
+    if f.location.trim().is_empty() {
+        f.location = url.to_string();
+    }
+    if !f.description.contains(url) {
+        let notes = f.description.trim_end();
+        let gap = if notes.is_empty() { "" } else { "\n\n" };
+        f.description = format!("{notes}{gap}{}\n{url}\n", tl!("Join the Webex meeting:"));
+    }
+    f.join = Some(url.to_string());
+}
+
 /// The Appointment (or Meeting) tab's groups. `false`: closed from it.
-fn ribbon(ui: &mut Ui, t: &Tokens, f: &mut EventForm, acts: &mut Vec<Action>) -> bool {
+fn ribbon(ui: &mut Ui, t: &Tokens, f: &mut EventForm, webex: &str, acts: &mut Vec<Action>) -> bool {
     let t = *t;
     let mut keep = true;
     let mut groups = Groups::new(ui);
@@ -134,10 +148,23 @@ fn ribbon(ui: &mut Ui, t: &Tokens, f: &mut EventForm, acts: &mut Vec<Action>) ->
         keep = false;
     }
     groups.end(ui, &t, "Actions");
-    // An online meeting (Teams, Webex, Zoom…): Join, as Outlook has it.
+    // An online meeting (Teams, Webex, Zoom…): Join, as Outlook has it; none yet, Webex
+    // Meeting puts the personal room in (Options open to set it, the first time).
     if let Some(url) = f.join.clone() {
-        if widgets::big_button(ui, Icon::People, "Join meeting", &t, true).on_hover_text(&url).clicked() {
+        if widgets::big_button(ui, Icon::Video, "Join meeting", &t, true).on_hover_text(&url).clicked() {
             acts.push(Action::OpenUrl(url));
+        }
+        groups.end(ui, &t, "Online meeting");
+    } else if writable {
+        let r = widgets::big_button(ui, Icon::Video, "Webex Meeting", &t, true);
+        let r =
+            if webex.is_empty() { r.on_hover_text(tl!("Set your Webex personal room in File › Options first")) } else { r.on_hover_text(webex) };
+        if r.clicked() {
+            if webex.is_empty() {
+                acts.push(Action::Backstage(crate::backstage::Page::Options));
+            } else {
+                add_webex(f, webex);
+            }
         }
         groups.end(ui, &t, "Online meeting");
     }
@@ -367,5 +394,29 @@ fn body(ui: &mut Ui, t: &Tokens, f: &mut EventForm, acts: &mut Vec<Action>) {
                 }
             }
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Webex Meeting puts the room as the place (one typed is kept) and at the end of the notes,
+    /// once however often it's pressed, and Join then shows.
+    #[test]
+    fn webex_meeting_puts_the_room_in_once() {
+        let room = "https://acme.webex.com/meet/ana";
+        let mut f = EventForm::default();
+        add_webex(&mut f, room);
+        assert_eq!((f.location.as_str(), f.join.as_deref()), (room, Some(room)));
+        assert!(f.description.starts_with(tl!("Join the Webex meeting:")) && f.description.ends_with(&format!("{room}\n")), "{:?}", f.description);
+        let mut f = EventForm { location: "Salle B".into(), description: "Ordre du jour\n".into(), ..Default::default() };
+        add_webex(&mut f, room);
+        add_webex(&mut f, room);
+        assert_eq!(f.location, "Salle B");
+        assert!(f.description.starts_with("Ordre du jour\n\n"), "{:?}", f.description);
+        assert_eq!(f.description.matches(room).count(), 1);
+        let e = quatrelle_engine::model::ical::CalEvent { location: f.location.clone(), description: f.description.clone(), ..Default::default() };
+        assert_eq!(e.join_link().as_deref(), Some(room), "what Join finds once it's saved");
     }
 }

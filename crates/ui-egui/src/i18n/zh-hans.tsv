@@ -1449,3 +1449,8 @@ month	May	5月
 	The {nth} {weekday} of {month}, every {n} years	每 {n} 年{month}的{nth}{weekday}
 	Every year on {day} {month}	每年的{month}{day}日
 	Every {n} years on {day} {month}	每 {n} 年的{month}{day}日
+	Webex Meeting	Webex 会议
+	Set your Webex personal room in File › Options first	请先在“文件 › 选项”中设置 Webex 个人会议室
+	Join the Webex meeting:	加入 Webex 会议:
+	Webex personal room	Webex 个人会议室
+	Webex Meeting, in a new appointment's window, puts it in for the guests to join	新约会窗口中的“Webex 会议”会将其插入，供与会者加入

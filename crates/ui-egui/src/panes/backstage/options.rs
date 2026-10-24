@@ -269,6 +269,26 @@ pub(super) fn options(s: &Session, st: &UiState, ui: &mut Ui, acts: &mut Vec<Act
         );
     });
 
+    // Online meetings: the Webex personal room the appointment window's Webex Meeting puts in,
+    // saved once it's typed (a link that isn't one says why and stays to be corrected).
+    group(ui, tl!("Calendar"), None, &mut |ui| {
+        setting(
+            ui,
+            true,
+            tl!("Webex personal room"),
+            Some(tl!("Webex Meeting, in a new appointment's window, puts it in for the guests to join")),
+            &mut |ui| {
+                let id = egui::Id::unique("options-webex-room");
+                let mut text: String = ui.data_mut(|d| d.get_temp::<String>(id)).unwrap_or_else(|| s.prefs.webex_room.clone());
+                let r = ui.add(egui::TextEdit::singleline(&mut text).hint_text("https://site.webex.com/meet/name").desired_width(320.0));
+                if r.lost_focus() && text.trim() != s.prefs.webex_room {
+                    acts.push(Action::Run("calendar.webexRoom", json!({"url": text.trim()})));
+                }
+                ui.data_mut(|d| d.insert_temp(id, text));
+            },
+        );
+    });
+
     // Junk Email: the blocked and safe senders, each list with a box to add to it.
     for (list, title, about) in [
         ("blocked", "Blocked senders", "Mail from these addresses and domains goes to Junk Email as it arrives."),

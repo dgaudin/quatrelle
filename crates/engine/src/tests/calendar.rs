@@ -519,3 +519,17 @@ fn other_peoples_calendars_are_set_aside_away_from_the_calendar() {
     assert_eq!(theirs(&s), 1 + 1 + 4, "the rooms' come back, the one kept not doubled");
     done(s);
 }
+
+/// The Webex personal room is kept as typed, only a Webex link, and taken off with nothing.
+#[test]
+fn a_webex_personal_room_is_set_and_taken_off() {
+    let mut s = sample_session("webex-room");
+    let r = s.run("calendar.webexRoom", &json!({"url": " https://acme.webex.com/meet/ana "})).unwrap();
+    assert_eq!((r["url"].as_str(), s.prefs.webex_room.as_str()), (Some("https://acme.webex.com/meet/ana"), "https://acme.webex.com/meet/ana"));
+    for not in ["https://evil.example/meet/ana", "http://acme.webex.com/meet/ana", "acme.webex.com/meet/ana", "https://us02web.zoom.us/j/1"] {
+        assert!(s.run("calendar.webexRoom", &json!({"url": not})).is_err(), "{not}");
+    }
+    assert_eq!(s.prefs.webex_room, "https://acme.webex.com/meet/ana", "a refused one leaves it be");
+    s.run("calendar.webexRoom", &json!({"url": ""})).unwrap();
+    assert!(s.prefs.webex_room.is_empty());
+}

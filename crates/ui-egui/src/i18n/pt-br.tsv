@@ -1452,3 +1452,8 @@ month	May	maio
 	The {nth} {weekday} of {month}, every {n} years	O(a) {nth} {weekday} de {month}, a cada {n} anos
 	Every year on {day} {month}	Todo ano em {day} de {month}
 	Every {n} years on {day} {month}	A cada {n} anos em {day} de {month}
+	Webex Meeting	Reunião do Webex
+	Set your Webex personal room in File › Options first	Defina primeiro sua sala pessoal do Webex em Arquivo › Opções
+	Join the Webex meeting:	Participar da reunião do Webex:
+	Webex personal room	Sala pessoal do Webex
+	Webex Meeting, in a new appointment's window, puts it in for the guests to join	Reunião do Webex, na janela de um novo compromisso, a insere para os convidados participarem

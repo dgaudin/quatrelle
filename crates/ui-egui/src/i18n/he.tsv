@@ -1448,3 +1448,8 @@ month	May	מאי
 	The {nth} {weekday} of {month}, every {n} years	{weekday} {nth} ב{month}, כל {n} שנים
 	Every year on {day} {month}	כל שנה ב-{day} ב{month}
 	Every {n} years on {day} {month}	כל {n} שנים ב-{day} ב{month}
+	Webex Meeting	פגישת Webex
+	Set your Webex personal room in File › Options first	הגדר תחילה את החדר האישי שלך ב-Webex בקובץ › אפשרויות
+	Join the Webex meeting:	הצטרף לפגישת Webex:
+	Webex personal room	חדר אישי ב-Webex
+	Webex Meeting, in a new appointment's window, puts it in for the guests to join	פגישת Webex, בחלון של פגישה חדשה, מוסיפה אותו כדי שהמוזמנים יצטרפו

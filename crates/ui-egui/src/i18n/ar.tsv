@@ -1448,3 +1448,8 @@ month	May	مايو
 	The {nth} {weekday} of {month}, every {n} years	{weekday} {nth} من {month}، كل {n} سنوات
 	Every year on {day} {month}	كل سنة في {day} {month}
 	Every {n} years on {day} {month}	كل {n} سنوات في {day} {month}
+	Webex Meeting	اجتماع Webex
+	Set your Webex personal room in File › Options first	عيّن أولاً غرفتك الشخصية في Webex من ملف › خيارات
+	Join the Webex meeting:	الانضمام إلى اجتماع Webex:
+	Webex personal room	غرفة Webex الشخصية
+	Webex Meeting, in a new appointment's window, puts it in for the guests to join	يدرجها زر اجتماع Webex في نافذة موعد جديد لينضم إليها الضيوف
