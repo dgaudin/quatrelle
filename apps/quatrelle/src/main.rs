@@ -74,6 +74,23 @@ fn app_icon() -> egui::IconData {
 }
 
 /// `--version`: the version, plus the commit and date of release builds (packaging/common.sh).
+/// What `--help` prints.
+const USAGE: &str = "Quatrelle: mail, calendar, contacts and notes.
+
+Usage: quatrelle [options]
+
+  --sample          open the sample mailbox (its own data, nothing of yours)
+  --data DIR        keep everything in DIR instead of the usual folders
+  --light, --dark   start in the light or dark theme
+  --cmd ID[=JSON]   run a command once the window opens (repeatable), e.g.
+                    --cmd 'list.open={\"key\":\"sample:1:1:INBOX\"}' --cmd mail.reply
+  --log             also write the log to the terminal
+  --version, -V     print the version
+  --help, -h        print this
+
+A portable copy keeps its data beside the app when portable.txt is there.
+The command-line client is quatrelle-cli (quatrelle-cli --help).";
+
 fn version_line() -> String {
     let v = format!("quatrelle {}", env!("CARGO_PKG_VERSION"));
     match (option_env!("QUATRELLE_BUILD_SHA"), option_env!("QUATRELLE_BUILD_DATE")) {
@@ -276,6 +293,11 @@ fn main() -> eframe::Result {
     let args: Vec<String> = std::env::args_os().skip(1).map(|a| a.to_string_lossy().into_owned()).collect();
     if args.iter().any(|a| a == "--version" || a == "-V") {
         say_out(&version_line());
+        return Ok(());
+    }
+    // Asking how to start it prints that, and no window opens.
+    if args.iter().any(|a| matches!(a.as_str(), "--help" | "-h" | "/?")) {
+        say_out(USAGE);
         return Ok(());
     }
     let cmd_args = args.clone();
