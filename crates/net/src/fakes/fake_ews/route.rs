@@ -415,6 +415,11 @@ impl Data {
                         out.push(ok(String::new()));
                         continue;
                     }
+                    // Exchange checks a new appointment's fields against the schema's order.
+                    if m.name == "CalendarItem" && !in_schema_order(&m) {
+                        out.push(err("ErrorSchemaValidation"));
+                        continue;
+                    }
                     if m.name == "CalendarItem" || m.name == "Contact" || sticky {
                         let id = self.id("P");
                         out.push(ok(format!("<m:Items><t:{0}><t:ItemId Id=\"{id}\" ChangeKey=\"ck\"/></t:{0}></m:Items>", m.name)));
@@ -779,4 +784,36 @@ impl Data {
         }
         format!("<m:FreeBusyResponseArray>{out}</m:FreeBusyResponseArray>")
     }
+}
+
+/// An appointment's fields as EWS's schema orders them (those Quatrelle writes): the item's
+/// (`ItemType`), then the appointment's (`CalendarItemType`).
+const CALENDAR_ITEM_ORDER: &[&str] = &[
+    "ItemClass",
+    "Subject",
+    "Sensitivity",
+    "Body",
+    "Categories",
+    "Importance",
+    "ReminderIsSet",
+    "ReminderMinutesBeforeStart",
+    "UID",
+    "Start",
+    "End",
+    "IsAllDayEvent",
+    "LegacyFreeBusyStatus",
+    "Location",
+    "RequiredAttendees",
+    "OptionalAttendees",
+    "Resources",
+    "Recurrence",
+    "MeetingTimeZone",
+    "StartTimeZone",
+    "EndTimeZone",
+];
+
+/// Whether a new appointment's fields come in the schema's order (one it doesn't list is let be).
+pub(super) fn in_schema_order(item: &El) -> bool {
+    let places: Vec<usize> = item.kids.iter().filter_map(|k| CALENDAR_ITEM_ORDER.iter().position(|n| *n == k.name)).collect();
+    places.windows(2).all(|w| w.first() <= w.get(1))
 }

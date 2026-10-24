@@ -215,8 +215,19 @@ fn appointment(it: &El) -> Option<CalEvent> {
     // kept alone would leave but one of them. The start makes each its own appointment — and
     // stays the same when the item moves to another calendar.
     let uid = if it.text_of("CalendarItemType") == Some("Single") { format!("{uid}#{start}") } else { uid };
+    // The zone it was set in (Exchange 2010 on names it the Windows way, `Romance Standard
+    // Time`): a series repeats at its time there, summer or winter, as Outlook shows it.
+    let tzid = it
+        .child("StartTimeZone")
+        .and_then(|z| z.attr("Id"))
+        .or_else(|| it.text_of("StartTimeZoneId"))
+        .map(str::trim)
+        .filter(|id| !all_day && Zone::named(id).is_some())
+        .unwrap_or_default()
+        .to_string();
     Some(CalEvent {
         uid,
+        tzid,
         summary: text(it, "Subject"),
         description: description.trim().to_string(),
         join_url,
@@ -237,16 +248,18 @@ fn appointment(it: &El) -> Option<CalEvent> {
     })
 }
 
-/// The fields of an appointment, in the order EWS wants them, each with the field URI that names
-/// it in an update.
+/// The fields of an appointment, in the order EWS's schema wants them (a new appointment's are
+/// sent in it, and a field out of place fails the schema's check), each with the field URI that
+/// names it in an update.
 ///
 /// The URI's prefix is the type the property is declared on, and Exchange refuses the whole
-/// `UpdateItem` with "The request is invalid." when one is wrong: `item:Subject`, `item:Body` and
-/// `item:Categories` are on `ItemType`, while `calendar:Start`, `calendar:End`,
-/// `calendar:IsAllDayEvent`, `calendar:Location` and `calendar:Recurrence` are on
-/// `CalendarItemType`. A reminder sent as `calendar:ReminderIsSet` (it's `item:`) did just that,
-/// and the change stayed on this computer, Outlook on the old day. Each field now carries its
-/// URI instead of it being guessed from the field's name.
+/// `UpdateItem` with "The request is invalid." when one is wrong: `item:Subject`, `item:Body`,
+/// `item:Categories` and the reminder's are on `ItemType`, which come first, while
+/// `calendar:Start`, `calendar:End`, `calendar:IsAllDayEvent`, `calendar:Location`,
+/// `calendar:Recurrence` and the time zones are on `CalendarItemType`, after them. A reminder
+/// sent as `calendar:ReminderIsSet` (it's `item:`) did just that, and the change stayed on this
+/// computer, Outlook on the old day. Each field now carries its URI instead of it being guessed
+/// from the field's name.
 ///
 /// `me`: this account's address; the guests of a meeting it organizes go with it (so the server
 /// can invite them, and tell them of a change), someone else's meeting keeps its own list.
@@ -261,6 +274,10 @@ pub(crate) fn event_fields(e: &CalEvent, me: &str) -> Vec<(&'static str, String)
     if !e.categories.is_empty() {
         let list: String = e.categories.iter().map(|c| format!("<t:String>{}</t:String>", esc(c))).collect();
         f.push(("item:Categories", format!("<t:Categories>{list}</t:Categories>")));
+    }
+    f.push(("item:ReminderIsSet", format!("<t:ReminderIsSet>{}</t:ReminderIsSet>", e.reminder.is_some())));
+    if let Some(m) = e.reminder {
+        f.push(("item:ReminderMinutesBeforeStart", format!("<t:ReminderMinutesBeforeStart>{m}</t:ReminderMinutesBeforeStart>")));
     }
     f.extend([
         ("calendar:Start", format!("<t:Start>{}</t:Start>", utc(start))),
@@ -294,13 +311,18 @@ pub(crate) fn event_fields(e: &CalEvent, me: &str) -> Vec<(&'static str, String)
     if !resources.is_empty() {
         f.push(("calendar:Resources", format!("<t:Resources>{resources}</t:Resources>")));
     }
-    if let Some(r) = e.rrule.as_deref().and_then(|r| recurrence_xml(r, e.start)) {
+    // The zone it's set in, by its Windows name: a series repeats at its time there, and Outlook
+    // shows it so (without one, Exchange keeps it in UTC, an hour off half the year).
+    let zone = Zone::named(&e.tzid).filter(|_| !e.all_day);
+    // The pattern starts on its first day there.
+    let first = zone.map_or(e.start, |z| z.local(e.start));
+    if let Some(r) = e.rrule.as_deref().and_then(|r| recurrence_xml(r, first)) {
         f.push(("calendar:Recurrence", r));
     }
-    // After Recurrence in EWS's schema, as Outlook writes it.
-    f.push(("item:ReminderIsSet", format!("<t:ReminderIsSet>{}</t:ReminderIsSet>", e.reminder.is_some())));
-    if let Some(m) = e.reminder {
-        f.push(("item:ReminderMinutesBeforeStart", format!("<t:ReminderMinutesBeforeStart>{m}</t:ReminderMinutesBeforeStart>")));
+    // After Recurrence in EWS's schema.
+    if let Some(id) = zone.and_then(|z| z.windows_name()) {
+        f.push(("calendar:StartTimeZone", format!("<t:StartTimeZone Id=\"{}\"/>", esc(id))));
+        f.push(("calendar:EndTimeZone", format!("<t:EndTimeZone Id=\"{}\"/>", esc(id))));
     }
     f
 }

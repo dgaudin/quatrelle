@@ -115,10 +115,49 @@ fn categories_both_ways() {
     // Each field carries the URI its property is declared on (`item:` for the item's own,
     // `calendar:` for the appointment's): Exchange refuses the request when one is wrong.
     let names: Vec<&str> = event_fields(&e, "riley@contoso.example").iter().map(|(uri, _)| *uri).collect();
-    assert_eq!(names.get(..4), Some(&["item:Subject", "item:Body", "item:Categories", "calendar:Start"][..]));
+    assert_eq!(names.get(..5), Some(&["item:Subject", "item:Body", "item:Categories", "item:ReminderIsSet", "calendar:Start"][..]));
     assert!(event_fields(&e, "riley@contoso.example").iter().any(|(_, x)| x.contains("<t:String>Red category</t:String>")));
     let plain = CalEvent { categories: Vec::new(), ..e };
     assert!(event_fields(&plain, "riley@contoso.example").iter().all(|(uri, _)| *uri != "item:Categories"));
+}
+
+/// A series set in Paris, read from Exchange, keeps its zone: its 10:00 stays 10:00 once the
+/// clocks go back (08:00 UTC in summer, 09:00 in winter; it moved to 09:00 local when series
+/// repeated in UTC), and it goes back out with its zone, by the Windows name Exchange knows.
+#[test]
+fn a_series_keeps_its_zone_across_the_winter_change() {
+    let item = |zone: &str| {
+        format!(
+            "<t:CalendarItem><t:ItemId Id=\"S1\"/><t:Subject>Weekly point</t:Subject>\
+             <t:Start>2026-10-19T08:00:00Z</t:Start><t:End>2026-10-19T09:00:00Z</t:End><t:IsAllDayEvent>false</t:IsAllDayEvent>\
+             <t:CalendarItemType>RecurringMaster</t:CalendarItemType><t:UID>weekly</t:UID>\
+             <t:Recurrence><t:WeeklyRecurrence><t:Interval>1</t:Interval><t:DaysOfWeek>Monday</t:DaysOfWeek></t:WeeklyRecurrence>\
+             <t:NumberedRecurrence><t:StartDate>2026-10-19</t:StartDate><t:NumberOfOccurrences>3</t:NumberOfOccurrences></t:NumberedRecurrence></t:Recurrence>\
+             {zone}</t:CalendarItem>"
+        )
+    };
+    let read = |zone: &str| event_of(parse(&item(zone)).find("CalendarItem").unwrap()).unwrap();
+    let e = read("<t:StartTimeZone Id=\"Romance Standard Time\" Name=\"(UTC+01:00) Brussels, Copenhagen, Madrid, Paris\"/>");
+    assert_eq!(e.tzid, "Romance Standard Time");
+    let at = |s: &str| quatrelle_jmap::utc_date(s).unwrap();
+    assert_eq!(
+        quatrelle_model::ical::starts(&e, at("2026-11-03T00:00:00Z")),
+        [at("2026-10-19T08:00:00Z"), at("2026-10-26T09:00:00Z"), at("2026-11-02T09:00:00Z")],
+        "10:00 in Paris each Monday"
+    );
+    let fields = event_fields(&e, "riley@contoso.example");
+    let place = |uri: &str| fields.iter().position(|(u, _)| *u == uri);
+    assert!(place("calendar:Recurrence") < place("calendar:StartTimeZone"), "the zone after the pattern, as the schema has it");
+    assert!(fields.iter().any(|(_, x)| x == "<t:StartTimeZone Id=\"Romance Standard Time\"/>"));
+    // One known by its IANA name (made here) goes out by its Windows one.
+    let made_here = CalEvent { tzid: "Europe/Paris".into(), ..e.clone() };
+    assert!(event_fields(&made_here, "riley@contoso.example").iter().any(|(_, x)| x == "<t:EndTimeZone Id=\"Romance Standard Time\"/>"));
+    // No zone, a zone nobody knows, or an all-day event: none goes out, and none is read.
+    assert_eq!(read("").tzid, "");
+    assert_eq!(read("<t:StartTimeZone Id=\"Nowhere Standard Time\"/>").tzid, "");
+    for e in [CalEvent { tzid: String::new(), ..e.clone() }, CalEvent { all_day: true, ..e.clone() }] {
+        assert!(event_fields(&e, "riley@contoso.example").iter().all(|(u, _)| !u.ends_with("TimeZone")), "{}", e.tzid);
+    }
 }
 
 /// The X.500 name comes out of an address book entry id; anything else (too short, another
