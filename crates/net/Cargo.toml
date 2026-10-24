@@ -32,6 +32,9 @@ pst_rw = { package = "outlook-pst-rw", version = "1.2.14" }
 md4 = "0.11"
 md-5 = "0.11"
 hmac = "0.13"
+# Room left on the disk, so downloading mail ahead never fills it (MIT / Apache-2.0; over
+# rustix and windows-sys, already here).
+fs4 = { version = "1.1", default-features = false }
 log = { workspace = true }
 thiserror = { workspace = true }
 

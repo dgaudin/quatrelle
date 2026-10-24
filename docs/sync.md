@@ -235,7 +235,11 @@ servers that don't offer IMAP. Every call is SOAP over HTTPS.
   downloaded whole in the end (`SyncOptions::full`, no size limit): the newest few come with
   the folder's list, the rest twenty at a time while nothing else is asked (`ahead_step`,
   every kind of account), the Inbox looked at every half minute meanwhile (IDLE and push wait
-  until it's done), only their sources written by Exchange. What's older
+  until it's done), only their sources written by Exchange (what of a folder is missing is
+  worked out once, `ews::AheadTodo`, and trusted while `Store::folder_version` says its list
+  is the same). Downloading ahead pauses while the disk the mail is kept on has less than the
+  larger of 5 GB and a fiftieth of it free (`worker/ahead.rs`, told once, looked at again every
+  ten minutes): two years of a support team's shared mailbox was 37 GB. What's older
   than the time kept is read on the server when asked for (Show more: `Job::Older`, a hundred
   at a time, `FindItem` restricted to before then), held in memory by the session
   (`Session::older`) and shown after the folder's own list; one opened is read for showing
