@@ -94,12 +94,7 @@ impl EventForm {
         let calendars = writable_calendars(s);
         let read_only = s.pim.get(account).is_some_and(|p| p.calendars.iter().any(|c| c.id == stored.calendar && c.read_only));
         // A recurring event is edited as a series: its first occurrence's dates.
-        let (start, end) = if e.all_day {
-            let off = i64::from(s.clock.offset);
-            (e.start - off, e.end - off - 86_400)
-        } else {
-            (e.start, e.end)
-        };
+        let (start, end) = if e.all_day { (s.clock.utc(e.start), s.clock.utc(e.end - 86_400)) } else { (e.start, e.end) };
         let mine: Vec<String> = s.accounts.iter().map(|a| a.config.email.to_ascii_lowercase()).collect();
         let shown = |a: &quatrelle_engine::model::ical::Attendee| if a.name.is_empty() { a.email.clone() } else { a.name.clone() };
         Some(EventForm {
@@ -192,14 +187,13 @@ impl EventForm {
 
     /// When it starts and ends, from the fields (`None` while they're not dates).
     pub fn times(&self, s: &Session) -> Option<(i64, i64)> {
-        let off = i64::from(s.clock.offset);
         if self.all_day {
-            let (a, _) = quatrelle_engine::parse_local(self.date.trim(), off)?;
-            let (b, _) = quatrelle_engine::parse_local(self.end_date.trim(), off)?;
-            return Some((a - off, (b - off + 86_400).max(a - off + 86_400)));
+            let (a, _) = quatrelle_engine::parse_local(self.date.trim(), &s.clock)?;
+            let (b, _) = quatrelle_engine::parse_local(self.end_date.trim(), &s.clock)?;
+            return Some((s.clock.utc(a), s.clock.utc(b + 86_400).max(s.clock.utc(a + 86_400))));
         }
-        let (a, _) = quatrelle_engine::parse_local(&format!("{}T{}", self.date.trim(), self.start.trim()), off)?;
-        let (b, _) = quatrelle_engine::parse_local(&format!("{}T{}", self.end_date.trim(), self.end.trim()), off)?;
+        let (a, _) = quatrelle_engine::parse_local(&format!("{}T{}", self.date.trim(), self.start.trim()), &s.clock)?;
+        let (b, _) = quatrelle_engine::parse_local(&format!("{}T{}", self.end_date.trim(), self.end.trim()), &s.clock)?;
         Some((a, b.max(a)))
     }
 

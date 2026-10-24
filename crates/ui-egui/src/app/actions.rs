@@ -435,7 +435,7 @@ impl MailApp {
         let when = if all_day {
             calendar::long_date(start.div_euclid(86_400))
         } else {
-            let day = start.saturating_add(i64::from(self.session.clock.offset)).div_euclid(86_400);
+            let day = self.session.clock.local(start).div_euclid(86_400);
             format!("{} {}", calendar::long_date(day), calendar::hm(start, &self.session))
         };
         self.session.notice(tf!("Moved to {when}. Ctrl+Z puts it back.", when = when), false);
