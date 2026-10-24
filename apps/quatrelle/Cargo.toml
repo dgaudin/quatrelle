@@ -43,7 +43,8 @@ keyring = { version = "3.6", default-features = false }
 # malloc is jemalloc already.
 [target.'cfg(all(target_os = "linux", target_arch = "x86_64"))'.dependencies]
 tikv-jemallocator = "0.6"
-tikv-jemalloc-ctl = "0.6"
+# `stats`: the memory in use, logged now and then.
+tikv-jemalloc-ctl = { version = "0.6", features = ["stats"] }
 
 [build-dependencies]
 # Icon + VERSIONINFO for quatrelle.exe; build.rs only uses it when the target is Windows.

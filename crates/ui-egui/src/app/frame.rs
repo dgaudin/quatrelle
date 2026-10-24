@@ -11,6 +11,7 @@ impl MailApp {
     /// announced nothing (and synced nothing new into view) until it was shown again.
     pub fn logic(&mut self, ctx: &egui::Context) {
         self.ui.logic_ran = true;
+        self.tell_textures(ctx);
         if self.pump() {
             ctx.request_repaint();
         }
@@ -61,6 +62,31 @@ impl MailApp {
         // Woken by the workers when they have news; this is for the clock (reminders, snoozed
         // mail coming back) when nothing else happens.
         ctx.request_repaint_after(std::time::Duration::from_secs(15));
+    }
+
+    /// The pictures the window keeps on the graphics card (the glyphs, mail pictures, icons), in
+    /// the log every ten minutes, beside the memory the app logs.
+    fn tell_textures(&mut self, ctx: &egui::Context) {
+        let now = self.session.clock.now;
+        // The first a minute after the start, once the window has drawn what it shows.
+        if self.ui.textures_told == 0 {
+            self.ui.textures_told = now.saturating_sub(540);
+        }
+        if now.saturating_sub(self.ui.textures_told) < 600 {
+            return;
+        }
+        self.ui.textures_told = now;
+        let tm = ctx.tex_manager();
+        let tm = tm.read();
+        let (mut count, mut bytes, mut biggest) = (0usize, 0usize, (0usize, [0usize; 2]));
+        for (_, meta) in tm.allocated() {
+            count += 1;
+            bytes = bytes.saturating_add(meta.bytes_used());
+            if meta.bytes_used() > biggest.0 {
+                biggest = (meta.bytes_used(), meta.size);
+            }
+        }
+        log::info!("memory: {count} pictures on the graphics card, {} MB (the biggest {}×{})", bytes >> 20, biggest.1[0], biggest.1[1]);
     }
 
     /// The address book (recipient suggestions, Select Names, the Focused Inbox), built the way

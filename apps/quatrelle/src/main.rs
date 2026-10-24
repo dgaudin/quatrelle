@@ -200,6 +200,51 @@ fn give_back_freed_memory() {
         Ok(()) => log::info!("memory: freed memory goes back to the system"),
         Err(e) => log::warn!("memory: freed memory stays with the app (no background thread: {e})"),
     }
+    // What the memory is, in the log now and then: what's in use, and the rest of what the
+    // process holds (pictures drawn, fonts, the program itself).
+    let _ = std::thread::Builder::new().name("memory".into()).spawn(|| {
+        std::thread::sleep(std::time::Duration::from_secs(60));
+        loop {
+            log_memory();
+            std::thread::sleep(std::time::Duration::from_secs(10 * 60));
+        }
+    });
+}
+
+/// One line on the memory: the process's resident size, and the allocator's share of it.
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+fn log_memory() {
+    use tikv_jemalloc_ctl::{epoch, stats};
+    if epoch::advance().is_err() {
+        return;
+    }
+    let mb = |r: Result<usize, tikv_jemalloc_ctl::Error>| r.map_or(0, |b| b >> 20);
+    let rss = std::fs::read_to_string("/proc/self/status")
+        .ok()
+        .and_then(|s| s.lines().find(|l| l.starts_with("VmRSS:")).and_then(|l| l.split_whitespace().nth(1)).and_then(|k| k.parse::<usize>().ok()))
+        .map_or(0, |kb| kb >> 10);
+    log::info!(
+        "memory: {rss} MB resident; the allocator's {} MB resident, {} MB in pages used, {} MB in use; {} MB on the graphics card",
+        mb(stats::resident::read()),
+        mb(stats::active::read()),
+        mb(stats::allocated::read()),
+        graphics_memory() >> 10
+    );
+}
+
+/// What the graphics driver holds for this process (KiB), as the kernel tells it for each of its
+/// clients (`/proc/self/fdinfo`, `drm-total-*`): an integrated GPU's memory is the computer's.
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+fn graphics_memory() -> u64 {
+    let Ok(fds) = std::fs::read_dir("/proc/self/fdinfo") else { return 0 };
+    let mut clients = std::collections::HashMap::new();
+    for fd in fds.flatten().take(4096) {
+        let Ok(info) = std::fs::read_to_string(fd.path()) else { continue };
+        let Some(client) = info.lines().find_map(|l| l.strip_prefix("drm-client-id:")).map(|c| c.trim().to_string()) else { continue };
+        let kib: u64 = info.lines().filter(|l| l.starts_with("drm-total-")).filter_map(|l| l.split_whitespace().nth(1)?.parse::<u64>().ok()).sum();
+        clients.insert(client, kib);
+    }
+    clients.values().sum()
 }
 
 #[cfg(not(all(target_os = "linux", target_arch = "x86_64")))]

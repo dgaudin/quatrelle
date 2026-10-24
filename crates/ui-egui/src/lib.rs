@@ -306,6 +306,8 @@ pub struct UiState {
     /// [`MailApp::logic`] ran for this frame already (the app calls it before each `ui`; a
     /// caller that only draws, the tests', gets it from `ui`).
     logic_ran: bool,
+    /// When the textures were last told in the log (session clock, seconds).
+    pub(crate) textures_told: i64,
     /// The messages being written that have been shown, to focus a new one's first field once.
     pub(crate) compose_shown: std::collections::HashSet<u64>,
     /// The editors of the messages being written other than the one acting now (`editor`).
@@ -462,6 +464,7 @@ impl MailApp {
                 scroll_to_focus: false,
                 fonts_ready: false,
                 logic_ran: false,
+                textures_told: 0,
                 compose_shown: Default::default(),
                 editors: HashMap::new(),
                 dialog_for: None,
