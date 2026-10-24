@@ -1243,3 +1243,35 @@ month	May	5月
 	This update wasn't sent by the meeting's organizer, so it can't change your calendar.	此更新並非會議召集人寄出，因此無法變更你的行事曆。
 	This answer wasn't sent by the guest it's from, so it can't be recorded.	此回覆並非由對應的來賓寄出，因此無法記錄。
 	This invitation is out of date: your calendar has a newer version.	此邀請已過時：你的行事曆中有較新的版本。
+	Left out because they couldn't be read: {n}	因無法讀取而略過：{n}
+	Added to your calendar from {file}: {n}	已從 {file} 新增到行事曆：{n}
+	Added to your contacts from {file}: {n}	已從 {file} 新增到連絡人：{n}
+	Add an account first: a new message needs an account to send from.	請先新增帳戶：新郵件需要一個用來傳送的帳戶。
+	Add an account first: events and people are kept with an account.	請先新增帳戶：活動和連絡人會儲存在帳戶中。
+	Couldn't open {file}: {error}	無法開啟 {file}：{error}
+	Safety	安全
+	Send where photos were taken	傳送相片的拍攝地點
+	Off, the place a phone writes into a photo is taken out of JPEG and PNG files as they're sent	關閉時，手機寫入相片的地點會在傳送 JPEG 和 PNG 檔案時移除
+	These photos say where they were taken, and go that way (File › Options › Safety)	這些相片帶有拍攝地點，並會照此傳送（檔案 › 選項 › 安全）
+	Where these photos were taken is left out as they're sent	傳送時會移除這些相片的拍攝地點
+	Careful: this comes from {domain}, which looks like {like} but isn't it.	小心：這封郵件來自 {domain}，看起來像 {like}，但並不是。
+	Careful: the sender's name shows {shown}, but this comes from {real}.	小心：寄件者名稱顯示為 {shown}，但這封郵件來自 {real}。
+	Don't open its links or attachments, or answer it, unless you're sure who sent it.	除非確定寄件者是誰，否則不要開啟其中的連結或附件，也不要回覆。
+	Check before sending	傳送前檢查
+	{address} looks like an address at {like}, but isn't one. Is it the right one?	{address} 看起來像 {like} 的地址，但其實不是。地址正確嗎？
+	{n} people who may not know each other will all see each other's addresses.	{n} 位可能互不相識的人都會看到彼此的地址。
+	Put everyone in Bcc	把所有人放進密件副本
+	Each of them gets the message without seeing who else did; you're in To	每個人收到郵件時都看不到其他收件人；你在收件者欄
+	Open links without their tracking	開啟連結時移除追蹤
+	A link opens where it really goes: out of redirects that carry the real address, without the tags that say who clicked	連結會開啟真正的目標：移除包含真實地址的轉址，並移除表明誰點擊的標記
+	Links open as they are (File › Options › Safety)	連結依原樣開啟（檔案 › 選項 › 安全）
+	Links open without their tracking tags, and out of redirects that carry the real address	連結開啟時會移除追蹤標記，並移除包含真實地址的轉址
+	Links that report clicks: {links}	會回報點擊的連結：{links}
+	Tracking pictures, never loaded: {pictures}	追蹤圖片，從不載入：{pictures}
+	Tracking pictures, never loaded: {pictures} · Links that report clicks: {links}	追蹤圖片，從不載入：{pictures} · 會回報點擊的連結：{links}
+	This message hides text from you ({n} words).	這封郵件對你隱藏了文字（{n} 個字詞）。
+	Hidden text is a way to slip past spam filters, or to give instructions to tools and assistants that read mail for you.	隱藏文字可用來繞過垃圾郵件篩選，或對替你讀郵件的工具和助理下達指令。
+	Show the hidden text	顯示隱藏的文字
+	Hide it again	再次隱藏
+	Sent mail waiting for a reply	等待回覆的寄件備份
+	Awaiting reply	等待回覆

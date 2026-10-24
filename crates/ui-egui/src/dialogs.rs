@@ -67,6 +67,9 @@ pub enum Dialog {
         filter: String,
     },
     EmptySubject,
+    /// What `compose.send` held the message for (a lookalike recipient, many people seeing each
+    /// other's addresses).
+    SendCheck(Vec<quatrelle_engine::SendCheck>),
     RemoveAccount {
         account: String,
         email: String,
@@ -161,6 +164,8 @@ pub enum Dialog {
         title: String,
         header: Vec<(String, String)>,
         text: String,
+        /// An email whose sender doesn't add up.
+        warning: Option<quatrelle_engine::model::lookalike::SenderWarning>,
     },
     /// Outlook's Spelling: the words the dictionaries don't know, one at a time.
     Spelling(Box<SpellForm>),
@@ -220,7 +225,13 @@ impl Dialog {
     pub fn for_compose(&self) -> bool {
         matches!(
             self,
-            Dialog::SelectNames(_) | Dialog::AttachItem(_) | Dialog::SaveChanges | Dialog::EmptySubject | Dialog::Spelling(_) | Dialog::WordCount(..)
+            Dialog::SelectNames(_)
+                | Dialog::AttachItem(_)
+                | Dialog::SaveChanges
+                | Dialog::EmptySubject
+                | Dialog::SendCheck(_)
+                | Dialog::Spelling(_)
+                | Dialog::WordCount(..)
         ) || matches!(self, Dialog::Signature(f) if f.insert)
     }
 
@@ -422,7 +433,8 @@ impl Dialog {
             "message" if !get("subject").is_empty() => get("subject"),
             _ => get("name"),
         };
-        Dialog::Preview { title, header, text }
+        let warning = v.get("warning").and_then(|w| serde_json::from_value(w.clone()).ok());
+        Dialog::Preview { title, header, text, warning }
     }
 
     pub fn new_folder(account: &str, parent: Option<&str>) -> Dialog {
@@ -517,6 +529,7 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Act
         | Dialog::AttachItem(..)
         | Dialog::SaveChanges
         | Dialog::EmptySubject
+        | Dialog::SendCheck(_)
         | Dialog::WordCount(..)
         | Dialog::Spelling(..) => writing::draw(ui, d, s, t, acts),
         Dialog::ConfirmDeleteContact { .. }

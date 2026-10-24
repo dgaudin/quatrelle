@@ -56,12 +56,14 @@ fn quatrelle_engine_day(s: &Session) -> i64 {
 
 mod accounts;
 mod calendar;
+mod files;
 mod invites;
 mod mail;
 mod mailboxes;
 mod organize;
 mod people;
 mod pim;
+mod safety;
 mod scheduling;
 mod searching;
 mod server_rules;
