@@ -429,3 +429,65 @@ fn a_meeting_in_colleagues_calendars_changes_only_in_ones_own() {
     s.apply_dav(&id, &DavSync::default());
     assert_eq!(s.notices.iter().filter(|n| n.text.contains("its series is no longer on the server")).count(), 1, "said once");
 }
+
+/// Other people's calendars set aside while the calendar isn't shown, as Outlook reads them from
+/// its offline file only to show them: out of memory and of the calendar's document (into a
+/// document of their own) when it's left, back when it's shown. One changed here and not yet on
+/// the server stays; a calendar read again meanwhile keeps what was read.
+#[test]
+fn other_peoples_calendars_are_set_aside_away_from_the_calendar() {
+    use quatrelle_model::pim::{Pim, StoredEvent};
+    let mut s = sample_session("parking");
+    let account = sample::SAMPLE_ACCOUNT;
+    let theirs = |s: &Session| s.pim.get(account).map_or(0, |p| p.events.iter().filter(|e| e.calendar.starts_with("shared:")).count());
+    let store = s.store.clone().unwrap();
+    let on_disk = |store: &Store| store.load_account_doc::<Pim>(account, crate::session::pim::PIM_DOC).unwrap().events.len();
+    let aside = |store: &Store| store.load_account_doc::<Vec<StoredEvent>>(account, "pim-parked.json").unwrap_or_default().len();
+    // Mail on screen from the start: set aside at once (the session's first jobs).
+    assert_eq!(theirs(&s), 0, "set aside at the start");
+    assert_eq!(aside(&store), 7);
+    let own = on_disk(&store);
+    // The calendar shown: back, and nothing left aside.
+    s.run("view.calendar", &json!({})).unwrap();
+    s.take_jobs();
+    assert_eq!(theirs(&s), 7);
+    assert_eq!(aside(&store), 0, "nothing left aside");
+    // The calendar's document takes them at its next save.
+    s.run("calendar.goto", &json!({"date": "2026-10-14"})).ok();
+    s.save_pim(account);
+    assert_eq!(on_disk(&store), own + 7);
+    let today = s.agenda(NOW - 86_400, NOW + 86_400);
+    assert!(today.iter().any(|i| i.summary == "Dailies"), "shown in the calendar");
+    // Left a moment: still there; five minutes: set aside, but for one changed here.
+    s.run("view.mail", &json!({})).unwrap();
+    s.take_jobs();
+    assert_eq!(theirs(&s), 7, "not at once");
+    if let Some(e) = s.pim.get_mut(account).and_then(|p| p.events.iter_mut().find(|e| e.event.summary == "Foley session")) {
+        e.dirty = true;
+    }
+    s.set_clock(NOW + 301, 0);
+    s.take_jobs();
+    assert_eq!((theirs(&s), aside(&store)), (1, 6), "the one to send stays");
+    // A calendar read again meanwhile (its pass came while aside) keeps what was read.
+    let zoe = quatrelle_model::pim::shared_calendar_id("zoe@studio.example");
+    let read = StoredEvent {
+        calendar: zoe.clone(),
+        event: quatrelle_model::ical::CalEvent { uid: "new".into(), summary: "Read since".into(), start: NOW, end: NOW + 3600, ..Default::default() },
+        href: "item:new".into(),
+        ..Default::default()
+    };
+    let sync = quatrelle_model::pim::DavSync {
+        events: vec![read],
+        synced_calendars: vec![zoe.clone()],
+        calendars: Some(Vec::new()),
+        partial: true,
+        ..Default::default()
+    };
+    s.apply(Event::DavSynced { account: account.into(), sync: Box::new(sync) });
+    s.run("view.calendar", &json!({})).unwrap();
+    s.take_jobs();
+    let zoes: Vec<String> = s.pim[account].events.iter().filter(|e| e.calendar == zoe).map(|e| e.event.summary.clone()).collect();
+    assert_eq!(zoes, ["Read since"]);
+    assert_eq!(theirs(&s), 1 + 1 + 4, "the rooms' come back, the one kept not doubled");
+    done(s);
+}

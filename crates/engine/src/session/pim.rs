@@ -14,6 +14,7 @@ pub use quatrelle_model::pim::PIM_DOC;
 mod deleting;
 mod moving;
 mod notes;
+mod parking;
 mod people;
 
 /// Whether a calendar is the user's own: not a colleague's shared one, nor a public folder's.
@@ -117,8 +118,15 @@ impl Session {
         for a in &self.accounts {
             let mut p: Pim = store.load_account_doc(&a.config.id, PIM_DOC).unwrap_or_default();
             p.ensure_defaults();
+            // Other people's appointments not among the calendar's: set aside when it was last
+            // left (brought back when it's shown; see `parking.rs`).
+            if p.events.iter().all(|e| own_calendar(&e.calendar)) {
+                self.parked.insert(a.config.id.clone());
+            }
             self.pim.insert(a.config.id.clone(), p);
         }
+        // Away from the calendar from the start: set aside at once.
+        self.away_from_calendar = Some(self.clock.now.saturating_sub(parking::PARK_AFTER));
     }
 
     pub(crate) fn save_pim(&mut self, account: &str) {
@@ -237,6 +245,7 @@ impl Session {
     /// calendar, its own calendar only; in it, the calendars ticked. Opening the calendar, or
     /// ticking one, reads what wasn't read at once.
     pub(crate) fn update_calendar_reading(&mut self) {
+        self.park_calendars();
         let own_only = self.module != crate::Module::Calendar;
         let accounts: Vec<String> =
             self.accounts.iter().filter(|a| a.config.ews.is_some() || a.config.graph.is_some()).map(|a| a.config.id.clone()).collect();
@@ -546,6 +555,7 @@ impl Session {
     /// Merge what a CalDAV / CardDAV sync found. Changes made here since stay (and go to the
     /// server next time); everything else follows the server.
     pub fn apply_dav(&mut self, account: &str, sync: &quatrelle_model::pim::DavSync) {
+        self.read_while_parked(account, sync);
         let p = self.pim_mut(account);
         p.caldav_home = sync.caldav_home.clone().or_else(|| Some(String::new()));
         p.carddav_home = sync.carddav_home.clone().or_else(|| Some(String::new()));
