@@ -256,6 +256,11 @@ impl Dialog {
     }
 
     /// Dialogs that belong to the message being written (shown in its window when it has one).
+    /// A question asked as Quatrelle closes.
+    pub fn about_closing(&self) -> bool {
+        matches!(self, Dialog::SaveOnClose(_) | Dialog::LostOnClose { .. } | Dialog::UpdateOnClose(_))
+    }
+
     pub fn for_compose(&self) -> bool {
         matches!(
             self,
