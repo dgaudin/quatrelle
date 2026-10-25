@@ -204,6 +204,7 @@ pub(crate) fn tour() {
             Dialog::folder_size(&a.session, "sample"),
             Dialog::FolderProperties {
                 name: "Inbox".into(),
+                id: "sample".into(),
                 account: "riley@studio.example".into(),
                 location: "INBOX".into(),
                 total: 7,
