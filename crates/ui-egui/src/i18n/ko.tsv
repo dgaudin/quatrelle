@@ -1546,3 +1546,7 @@ month	May	5월
 	Server address	서버 주소
 	Model	모델
 	Key (if the server needs one)	키(서버에서 요구하는 경우)
+	Suggest a reply	회신 제안
+	Ask the language model set in Options to write a reply to this message	옵션에서 설정한 언어 모델에 이 메시지에 대한 회신 작성을 요청합니다
+	Suggested reply	제안된 회신
+	Reply with this text	이 텍스트로 회신

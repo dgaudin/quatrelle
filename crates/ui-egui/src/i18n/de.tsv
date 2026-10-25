@@ -1547,3 +1547,7 @@ month	May	Mai
 	Server address	Serveradresse
 	Model	Modell
 	Key (if the server needs one)	Schlüssel (falls der Server einen verlangt)
+	Suggest a reply	Antwort vorschlagen
+	Ask the language model set in Options to write a reply to this message	Das in den Optionen eingestellte Sprachmodell eine Antwort auf diese Nachricht schreiben lassen
+	Suggested reply	Vorgeschlagene Antwort
+	Reply with this text	Mit diesem Text antworten
