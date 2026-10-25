@@ -1534,3 +1534,12 @@ month	May	mei
 	Replace Outlook's copy of the rules	De kopie van de regels van Outlook vervangen
 	the account is offline: connect it, then replace Outlook's copy of the rules	het account is offline: verbind het en vervang daarna de kopie van de regels van Outlook
 	Replace	Vervangen
+	Summarize	Samenvatten
+	Ask the language model set in Options for the gist of this message	De kern van dit bericht vragen aan het taalmodel dat in Opties is ingesteld
+	Summary	Samenvatting
+	Asking the language model…	Het taalmodel wordt gevraagd…
+	The language model couldn't answer: {error}	Het taalmodel kon niet antwoorden: {error}
+	Summarize a message with a language model. The text of the messages you ask about is sent to this server: use one you trust.	Een bericht samenvatten met een taalmodel. De tekst van de berichten waarover u het vraagt, wordt naar deze server gestuurd: gebruik er een die u vertrouwt.
+	Server address	Serveradres
+	Model	Model
+	Key (if the server needs one)	Sleutel (als de server er een vraagt)

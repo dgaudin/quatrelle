@@ -236,3 +236,36 @@ fn a_changed_folder_is_indexed_again() {
     assert_eq!(s.run("search.run", &json!({"query": "report"})).unwrap()["results"], 20);
     done(s);
 }
+
+/// The language model set in Options summarizes the message being read: the job carries its
+/// text; the answer (or why there's none) is kept for that question only.
+#[test]
+fn the_assistant_summarizes_the_message_being_read() {
+    let mut s = sample_session("assistant");
+    assert!(s.run("assistant.summarize", &json!({})).is_err(), "no model set");
+    assert!(s.run("assistant.settings", &json!({"url": "ftp://x"})).is_err());
+    s.run("assistant.settings", &json!({"url": "http://localhost:11434/v1", "model": "llama3", "key": "k1"})).unwrap();
+    assert!(s.take_jobs().iter().any(|j| matches!(j, Job::SetLlmKey { key } if key.0 == "k1")), "the key goes to the keychain");
+    assert_eq!((s.prefs.llm_url.as_str(), s.prefs.llm_model.as_str()), ("http://localhost:11434/v1", "llama3"));
+    assert!(s.run("assistant.summarize", &json!({})).is_err(), "no message open");
+    let key = s.list.first().map(|m| m.key.clone()).unwrap();
+    s.run("list.open", &json!({"key": key.to_id()})).unwrap();
+    s.take_jobs();
+    let id = s.run("assistant.summarize", &json!({})).unwrap()["asked"].as_u64().unwrap();
+    let asked = s.take_jobs().into_iter().find_map(|j| match j {
+        Job::AskLlm { id, model, messages, .. } => Some((id, model, messages)),
+        _ => None,
+    });
+    let (job_id, model, messages) = asked.unwrap();
+    assert_eq!((job_id, model.as_str(), messages.len()), (id, "llama3", 2));
+    assert!(messages[1].1.contains("Subject: "), "{:?}", messages[1]);
+    assert_eq!(s.assistant.as_ref().map(|a| (a.key.clone(), a.answer.is_none())), Some((key.clone(), true)));
+    // An answer to an older question is dropped; this one's kept.
+    s.apply(Event::LlmAnswered { id: id + 1000, text: "old".into(), error: None });
+    assert!(s.assistant.as_ref().unwrap().answer.is_none());
+    s.apply(Event::LlmAnswered { id, text: "- Review on Thursday".into(), error: None });
+    assert_eq!(s.assistant.as_ref().unwrap().answer, Some(Ok("- Review on Thursday".to_string())));
+    // No model any more: nothing shown.
+    s.run("assistant.settings", &json!({"url": ""})).unwrap();
+    assert!(s.assistant.is_none());
+}

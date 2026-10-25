@@ -213,6 +213,8 @@ impl Worker {
             | Job::SignIn { .. }
             | Job::ImportPst { .. }
             | Job::CompactDataFile { .. }
+            | Job::AskLlm { .. }
+            | Job::SetLlmKey { .. }
             | Job::LocalFolderSizes { .. }
             | Job::ExportPst { .. }
             | Job::ImportIdentity { .. }

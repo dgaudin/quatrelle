@@ -1535,3 +1535,12 @@ month	May	5月
 	Replace Outlook's copy of the rules	替换 Outlook 保留的规则副本
 	the account is offline: connect it, then replace Outlook's copy of the rules	帐户处于脱机状态：请连接后再替换 Outlook 保留的规则副本
 	Replace	替换
+	Summarize	摘要
+	Ask the language model set in Options for the gist of this message	向选项中设置的语言模型询问此邮件的要点
+	Summary	摘要
+	Asking the language model…	正在询问语言模型…
+	The language model couldn't answer: {error}	语言模型无法回答：{error}
+	Summarize a message with a language model. The text of the messages you ask about is sent to this server: use one you trust.	使用语言模型为邮件生成摘要。所询问邮件的正文会发送到此服务器：请使用您信任的服务器。
+	Server address	服务器地址
+	Model	模型
+	Key (if the server needs one)	密钥（如果服务器需要）

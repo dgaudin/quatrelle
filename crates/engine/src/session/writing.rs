@@ -4,9 +4,11 @@ use quatrelle_model::lookalike;
 
 use super::*;
 
+mod assistant;
 mod compose;
 mod items;
 mod vote;
+pub use assistant::Assistant;
 use compose::with_html_signature;
 pub use compose::{Compose, add_pictures, signature_block, style_signature};
 pub use items::{ItemChoice, ItemKind};

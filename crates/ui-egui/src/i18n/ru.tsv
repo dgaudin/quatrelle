@@ -1537,3 +1537,12 @@ month	May	Май
 	Replace Outlook's copy of the rules	Заменить копию правил Outlook
 	the account is offline: connect it, then replace Outlook's copy of the rules	учётная запись не в сети: подключите её, затем замените копию правил Outlook
 	Replace	Заменить
+	Summarize	Кратко
+	Ask the language model set in Options for the gist of this message	Попросить языковую модель из параметров кратко изложить это письмо
+	Summary	Краткое содержание
+	Asking the language model…	Запрос к языковой модели…
+	The language model couldn't answer: {error}	Языковая модель не смогла ответить: {error}
+	Summarize a message with a language model. The text of the messages you ask about is sent to this server: use one you trust.	Кратко излагать письма с помощью языковой модели. Текст писем, о которых вы спрашиваете, отправляется на этот сервер: используйте надёжный.
+	Server address	Адрес сервера
+	Model	Модель
+	Key (if the server needs one)	Ключ (если сервер его требует)

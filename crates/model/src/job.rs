@@ -338,6 +338,12 @@ pub enum Job {
     /// Look these people's certificates up in the organisation's address book (Exchange's), to
     /// encrypt to them as Outlook does; answered by [`Event::DirectoryCertificates`].
     FindCertificates { account: String, emails: Vec<String> },
+    /// Ask the language model set in Options: an OpenAI-compatible `chat/completions` under
+    /// `url`, with `model` (its key, when it needs one, is in the keychain); `messages` are
+    /// (role, text). Answered by [`Event::LlmAnswered`] with the same `id`.
+    AskLlm { id: u64, url: String, model: String, messages: Vec<(String, String)> },
+    /// Keep the language model's key in the keychain (empty: forget it).
+    SetLlmKey { key: Secret },
     /// Forget the account's certificate and key (the keychain's copy goes).
     ForgetIdentity { account: AccountConfig },
     /// Sign (`sign`) and/or encrypt (to `encrypt_to`, certificates as DER, the account's own
@@ -408,6 +414,8 @@ impl Job {
             | Job::WorkOffline { .. }
             | Job::SetSync { .. }
             | Job::CheckUpdates
+            | Job::AskLlm { .. }
+            | Job::SetLlmKey { .. }
             | Job::StopSearch
             | Job::CheckRevocation { .. }
             | Job::FindHeldKeys { .. } => "",
@@ -675,6 +683,12 @@ pub enum Event {
         from: i64,
         to: i64,
         people: Vec<crate::scheduling::Availability>,
+        error: Option<String>,
+    },
+    /// The language model's answer to [`Job::AskLlm`], or why there's none.
+    LlmAnswered {
+        id: u64,
+        text: String,
         error: Option<String>,
     },
     /// What the address book keeps for each address asked about ([`Job::FindCertificates`]):

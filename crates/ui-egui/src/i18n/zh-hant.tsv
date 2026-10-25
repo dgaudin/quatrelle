@@ -1537,3 +1537,12 @@ month	May	5月
 	Replace Outlook's copy of the rules	取代 Outlook 保留的規則副本
 	the account is offline: connect it, then replace Outlook's copy of the rules	帳戶已離線：請連線後再取代 Outlook 保留的規則副本
 	Replace	取代
+	Summarize	摘要
+	Ask the language model set in Options for the gist of this message	向選項中設定的語言模型詢問此郵件的重點
+	Summary	摘要
+	Asking the language model…	正在詢問語言模型…
+	The language model couldn't answer: {error}	語言模型無法回答：{error}
+	Summarize a message with a language model. The text of the messages you ask about is sent to this server: use one you trust.	使用語言模型為郵件產生摘要。所詢問郵件的內文會傳送到此伺服器：請使用您信任的伺服器。
+	Server address	伺服器位址
+	Model	模型
+	Key (if the server needs one)	金鑰（如果伺服器需要）

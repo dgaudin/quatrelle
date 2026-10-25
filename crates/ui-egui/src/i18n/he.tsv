@@ -1534,3 +1534,12 @@ month	May	מאי
 	Replace Outlook's copy of the rules	החלף את העותק של Outlook של הכללים
 	the account is offline: connect it, then replace Outlook's copy of the rules	החשבון במצב לא מקוון: חבר אותו ואז החלף את העותק של Outlook של הכללים
 	Replace	החלף
+	Summarize	סכם
+	Ask the language model set in Options for the gist of this message	בקש את עיקר ההודעה מהמודל השפתי שהוגדר באפשרויות
+	Summary	סיכום
+	Asking the language model…	שואל את המודל השפתי…
+	The language model couldn't answer: {error}	המודל השפתי לא הצליח לענות: {error}
+	Summarize a message with a language model. The text of the messages you ask about is sent to this server: use one you trust.	סיכום הודעה בעזרת מודל שפה. הטקסט של ההודעות שאתה שואל עליהן נשלח לשרת זה: השתמש בשרת שאתה סומך עליו.
+	Server address	כתובת השרת
+	Model	מודל
+	Key (if the server needs one)	מפתח (אם השרת דורש)

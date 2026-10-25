@@ -1535,3 +1535,12 @@ month	May	5月
 	Replace Outlook's copy of the rules	Outlook のルールのコピーを置き換える
 	the account is offline: connect it, then replace Outlook's copy of the rules	アカウントがオフラインです。接続してから Outlook のルールのコピーを置き換えてください
 	Replace	置き換え
+	Summarize	要約
+	Ask the language model set in Options for the gist of this message	オプションで設定した言語モデルにこのメッセージの要点を尋ねます
+	Summary	要約
+	Asking the language model…	言語モデルに問い合わせています…
+	The language model couldn't answer: {error}	言語モデルが応答できませんでした: {error}
+	Summarize a message with a language model. The text of the messages you ask about is sent to this server: use one you trust.	言語モデルでメッセージを要約します。尋ねたメッセージの本文はこのサーバーに送信されます。信頼できるサーバーを使ってください。
+	Server address	サーバーのアドレス
+	Model	モデル
+	Key (if the server needs one)	キー (サーバーが必要とする場合)

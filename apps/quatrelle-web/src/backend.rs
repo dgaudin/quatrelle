@@ -560,6 +560,8 @@ async fn job(sh: &Rcs, id: &str, j: Job) {
         | Job::ServerFolderSizes { .. }
         | Job::FindCertificates { .. }
         | Job::ReplaceOutlookRules { .. }
+        | Job::AskLlm { .. }
+        | Job::SetLlmKey { .. }
         | Job::ExportPst { .. }
         | Job::WorkOffline { .. }
         | Job::SetSync { .. }
@@ -693,6 +695,10 @@ impl Backend for WebBackend {
                 };
                 emit(sh, Event::FolderSizes { account, server: false, folders, quota: None, error })
             }
+            Job::AskLlm { id, .. } => {
+                emit(sh, Event::LlmAnswered { id, text: String::new(), error: Some("the language model needs the desktop app".into()) })
+            }
+            Job::SetLlmKey { .. } => {}
             Job::FindCertificates { account, .. } => {
                 let error = Some("only an Exchange account's address book keeps certificates".to_string());
                 emit(sh, Event::DirectoryCertificates { account, found: Vec::new(), error })
