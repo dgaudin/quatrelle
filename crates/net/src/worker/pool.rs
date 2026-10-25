@@ -223,6 +223,27 @@ impl Pool {
             }
             Job::ImportPst { account, path } => self.import_pst(account, path),
             Job::CompactDataFile { account } => self.compact(account),
+            Job::AskLlm { id, url, model, messages } => {
+                let sink = self.sink.clone();
+                let key = self.creds.get_secret(&crate::llm::keyring(), crate::llm::KEY);
+                let spawned = std::thread::Builder::new().name("language-model".into()).spawn(move || {
+                    let done = match crate::llm::ask(&url, &model, key.as_deref(), &messages) {
+                        Ok(text) => Event::LlmAnswered { id, text, error: None },
+                        Err(e) => Event::LlmAnswered { id, text: String::new(), error: Some(e.to_string()) },
+                    };
+                    sink.emit(done);
+                });
+                if let Err(e) = spawned {
+                    log::warn!("language model: {e}");
+                }
+            }
+            Job::SetLlmKey { key } => {
+                if key.0.trim().is_empty() {
+                    self.creds.delete_secret(&crate::llm::keyring(), crate::llm::KEY);
+                } else if let Err(e) = self.creds.set_secret(&crate::llm::keyring(), crate::llm::KEY, key.0.trim()) {
+                    self.sink.emit(Event::Notice { account: String::new(), message: format!("the language model's key couldn't be kept: {e}") });
+                }
+            }
             Job::LocalFolderSizes { account } => self.local_sizes(account),
             j @ (Job::ImportIdentity { .. }
             | Job::ForgetIdentity { .. }

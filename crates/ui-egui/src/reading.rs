@@ -13,6 +13,7 @@ use crate::rich_edit;
 use crate::theme::{self, Tokens};
 use crate::{Action, UiState, widgets};
 
+mod assistant;
 mod attachments;
 mod body;
 mod compose;
@@ -421,6 +422,7 @@ fn message(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action
                 if let Some(sec) = &r.security {
                     security::security_bar(s, &t, ui, sec);
                 }
+                assistant::panel(s, &t, ui, &r.key);
                 if let Some((choices, voted)) = &voting {
                     vote_bar(ui, &t, &r.key, choices, voted, vote_sending.as_deref(), acts);
                     ui.add_space(8.0);
@@ -465,6 +467,7 @@ fn message(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action
                         if widgets::pill_button(ui, Icon::Forward, "Forward", &t).clicked() {
                             acts.push(Action::Run("mail.forward", json!({})));
                         }
+                        assistant::button(s, &t, ui, acts);
                         ui.add_space(6.0);
                         if widgets::pill_button(ui, Icon::Print, "Print", &t).on_hover_text(tl!("Open as a PDF to print")).clicked() {
                             acts.push(Action::Print);

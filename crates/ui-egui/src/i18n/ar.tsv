@@ -1534,3 +1534,12 @@ month	May	مايو
 	Replace Outlook's copy of the rules	استبدال نسخة Outlook من القواعد
 	the account is offline: connect it, then replace Outlook's copy of the rules	الحساب غير متصل: اتصل به، ثم استبدل نسخة Outlook من القواعد
 	Replace	استبدال
+	Summarize	تلخيص
+	Ask the language model set in Options for the gist of this message	اطلب جوهر هذه الرسالة من النموذج اللغوي المعيَّن في الخيارات
+	Summary	الملخص
+	Asking the language model…	جارٍ سؤال النموذج اللغوي…
+	The language model couldn't answer: {error}	تعذّر على النموذج اللغوي الإجابة: {error}
+	Summarize a message with a language model. The text of the messages you ask about is sent to this server: use one you trust.	لخّص رسالة باستخدام نموذج لغوي. يُرسَل نص الرسائل التي تسأل عنها إلى هذا الخادم: استخدم خادمًا تثق به.
+	Server address	عنوان الخادم
+	Model	النموذج
+	Key (if the server needs one)	المفتاح (إن طلبه الخادم)

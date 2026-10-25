@@ -1538,3 +1538,12 @@ month	May	Mai
 	Replace Outlook's copy of the rules	Outlooks Kopie der Regeln ersetzen
 	the account is offline: connect it, then replace Outlook's copy of the rules	das Konto ist offline: Verbinden Sie es und ersetzen Sie dann Outlooks Kopie der Regeln
 	Replace	Ersetzen
+	Summarize	Zusammenfassen
+	Ask the language model set in Options for the gist of this message	Das Wesentliche dieser Nachricht vom in den Optionen eingestellten Sprachmodell erfragen
+	Summary	Zusammenfassung
+	Asking the language model…	Das Sprachmodell wird gefragt…
+	The language model couldn't answer: {error}	Das Sprachmodell konnte nicht antworten: {error}
+	Summarize a message with a language model. The text of the messages you ask about is sent to this server: use one you trust.	Eine Nachricht mit einem Sprachmodell zusammenfassen. Der Text der betreffenden Nachrichten wird an diesen Server gesendet: Verwenden Sie einen vertrauenswürdigen.
+	Server address	Serveradresse
+	Model	Modell
+	Key (if the server needs one)	Schlüssel (falls der Server einen verlangt)
