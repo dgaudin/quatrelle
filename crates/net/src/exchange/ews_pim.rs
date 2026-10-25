@@ -7,7 +7,8 @@
 //! appointments updated field by field (an occurrence changed on its own through the
 //! occurrence's own item), changed contacts made again, deletions done; the server mails the
 //! guests of a meeting only when the change asks it to ([`StoredEvent::notify`]). Then both
-//! folders are read again, a series' changed occurrences with it.
+//! folders are read again, a series' changed occurrences with it. Notes and tasks go with them
+//! (the Notes and Tasks folders).
 
 use std::collections::HashMap;
 
@@ -336,6 +337,7 @@ pub(crate) mod events;
 mod push;
 pub mod scheduling;
 mod sync;
+mod tasks;
 
 pub use categories::master_categories;
 use contacts::{NOTE_COLOR, contact_xml, note_xml};
@@ -344,6 +346,7 @@ use events::{event_fields, modified_occurrence_ids, occurrence_item_id};
 pub use events::{event_of, exception_of, own_organizer};
 use push::{answer_pending, push_events};
 pub use sync::sync;
+use tasks::read_tasks;
 
 #[cfg(test)]
 mod tests;

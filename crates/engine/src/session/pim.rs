@@ -16,6 +16,7 @@ mod moving;
 mod notes;
 mod parking;
 mod people;
+mod tasks;
 
 /// Whether a calendar is the user's own: not a colleague's shared one, nor a public folder's.
 pub(super) fn own_calendar(id: &str) -> bool {
@@ -23,6 +24,7 @@ pub(super) fn own_calendar(id: &str) -> bool {
 }
 pub use notes::NoteRef;
 pub use people::Person;
+pub use tasks::{TaskChange, TaskRef};
 
 /// The part of the app on screen.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -590,6 +592,7 @@ impl Session {
                 }
             }
         }
+        tasks::merge_tasks(p, sync);
         for x in &sync.pushed_cards {
             for c in p.cards.iter_mut().filter(|c| c.card.uid == x.card.uid) {
                 c.href = x.href.clone();

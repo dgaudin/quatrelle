@@ -419,12 +419,12 @@ impl Data {
                         out.push(ok(String::new()));
                         continue;
                     }
-                    // Exchange checks a new appointment's fields against the schema's order.
-                    if m.name == "CalendarItem" && !in_schema_order(&m) {
+                    // Exchange checks a new appointment's or task's fields against the schema's order.
+                    if (m.name == "CalendarItem" || m.name == "Task") && !in_schema_order(&m) {
                         out.push(err("ErrorSchemaValidation"));
                         continue;
                     }
-                    if m.name == "CalendarItem" || m.name == "Contact" || sticky {
+                    if m.name == "CalendarItem" || m.name == "Contact" || m.name == "Task" || sticky {
                         let id = self.id("P");
                         out.push(ok(format!("<m:Items><t:{0}><t:ItemId Id=\"{id}\" ChangeKey=\"ck\"/></t:{0}></m:Items>", m.name)));
                         self.pim.push((id, folder.clone(), m));
@@ -818,8 +818,28 @@ const CALENDAR_ITEM_ORDER: &[&str] = &[
     "AllowNewTimeProposal",
 ];
 
-/// Whether a new appointment's fields come in the schema's order (one it doesn't list is let be).
+/// A task's fields as EWS's schema orders them (those Quatrelle writes): the item's, then the
+/// task's (`TaskType`).
+const TASK_ORDER: &[&str] = &[
+    "ItemClass",
+    "Subject",
+    "Sensitivity",
+    "Body",
+    "Categories",
+    "Importance",
+    "ReminderDueBy",
+    "ReminderIsSet",
+    "CompleteDate",
+    "DueDate",
+    "PercentComplete",
+    "StartDate",
+    "Status",
+];
+
+/// Whether a new appointment's or task's fields come in the schema's order (one it doesn't
+/// list is let be).
 pub(super) fn in_schema_order(item: &El) -> bool {
-    let places: Vec<usize> = item.kids.iter().filter_map(|k| CALENDAR_ITEM_ORDER.iter().position(|n| *n == k.name)).collect();
+    let order = if item.name == "Task" { TASK_ORDER } else { CALENDAR_ITEM_ORDER };
+    let places: Vec<usize> = item.kids.iter().filter_map(|k| order.iter().position(|n| *n == k.name)).collect();
     places.windows(2).all(|w| w.first() <= w.get(1))
 }
