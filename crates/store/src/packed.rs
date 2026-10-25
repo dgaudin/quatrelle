@@ -15,7 +15,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
 
 use redb::{Database, ReadableDatabase, ReadableTable, TableDefinition};
 
@@ -205,6 +205,10 @@ pub(crate) struct Packs {
     dir: PathBuf,
     open: Mutex<HashMap<String, Arc<Database>>>,
     names: Mutex<BTreeMap<String, String>>,
+    /// The accounts whose data file is being compacted ([`Packs::compact`]): anything else that
+    /// wants it waits for `compacted`.
+    compacting: Mutex<std::collections::HashSet<String>>,
+    compacted: Condvar,
 }
 
 impl std::fmt::Debug for Packs {
@@ -218,7 +222,14 @@ impl Packs {
     pub(crate) fn open(root: &Path, dir: &Path) -> Result<Packs> {
         fs::create_dir_all(dir).map_err(io_err(dir))?;
         let names: BTreeMap<String, String> = fs::read(root.join(NAMES)).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default();
-        let p = Packs { root: root.to_path_buf(), dir: dir.to_path_buf(), open: Mutex::default(), names: Mutex::new(names) };
+        let p = Packs {
+            root: root.to_path_buf(),
+            dir: dir.to_path_buf(),
+            open: Mutex::default(),
+            names: Mutex::new(names),
+            compacting: Mutex::default(),
+            compacted: Condvar::new(),
+        };
         p.take_over_old_files();
         p.bring_in_folders()?;
         Ok(p)
@@ -321,6 +332,7 @@ impl Packs {
 
     /// An account's open data file; `create` makes it when there's none.
     fn db(&self, account: &str, create: bool) -> io::Result<Option<Arc<Database>>> {
+        self.wait_while_compacted(account)?;
         // Held until the file is open and noted: two threads that both found it not open yet
         // both opened it, and the second heard "open in another copy" (an account's sync
         // connections start at once).
@@ -704,5 +716,6 @@ pub(crate) fn read_data_file(path: &Path, tmp: &Path, each: &mut dyn FnMut(Vec<(
     read
 }
 
+mod compact;
 #[cfg(test)]
 mod tests;

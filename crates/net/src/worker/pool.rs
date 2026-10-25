@@ -106,6 +106,24 @@ impl Pool {
 
     /// Import a data file on a thread of its own: an Outlook one (`.pst`), or Quatrelle's own
     /// (`.quatrelle`, copied in as it is).
+    /// Compact a data file, on a thread of its own (a minute for 40 GB): whatever else wants
+    /// the account's file waits for it.
+    fn compact(&mut self, account: String) {
+        let sink = self.sink.clone();
+        let store = self.store.clone();
+        let spawned = std::thread::Builder::new().name("compact".into()).spawn(move || {
+            let done = match store.compact_data_file(&account) {
+                Ok(Some((before, after))) => Event::Compacted { account, before, after, error: None },
+                Ok(None) => Event::Compacted { account, before: 0, after: 0, error: Some("this account has no data file".into()) },
+                Err(e) => Event::Compacted { account, before: 0, after: 0, error: Some(e.to_string()) },
+            };
+            sink.emit(done);
+        });
+        if let Err(e) = spawned {
+            log::warn!("compact: {e}");
+        }
+    }
+
     fn import_pst(&mut self, account: String, path: String) {
         let sink = self.sink.clone();
         let store = self.store.clone();
@@ -187,6 +205,7 @@ impl Pool {
                 }
             }
             Job::ImportPst { account, path } => self.import_pst(account, path),
+            Job::CompactDataFile { account } => self.compact(account),
             j @ (Job::ImportIdentity { .. }
             | Job::ForgetIdentity { .. }
             | Job::Protect { .. }

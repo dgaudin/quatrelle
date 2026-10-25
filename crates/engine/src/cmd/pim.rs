@@ -259,6 +259,8 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             s.create_card(account.as_deref(), card)
         })
         .when(has_reading),
+        CommandSpec::new("account.compact", "Compact Now", "File › Info › Mailbox settings", |s, v| s.compact_data_file(p::str(v, "account")))
+            .params(r#"{"account"?: string} (its data file; the space freed inside it goes back to the disk, as Outlook's Compact Now)"#),
         CommandSpec::new("account.openMailbox", "Open another mailbox", "Folder pane › Account", |s, v| {
             s.open_shared_mailbox(p::str(v, "account"), p::req_str(v, "email")?, p::bool(v, "calendar").unwrap_or(true))
         })

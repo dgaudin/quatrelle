@@ -1493,3 +1493,9 @@ month	May	5月
 	This Week	本周
 	Next Week	下周
 	No Date	无日期
+	Compacting the data file…	正在压缩数据文件…
+	The space freed inside it goes back to the disk. It takes about a minute for 40 GB; Quatrelle carries on once it's done.	文件中腾出的空间将归还给磁盘。40 GB 大约需要一分钟；完成后 Quatrelle 会继续。
+	Compacted from {before} to {after}	已从 {before} 压缩到 {after}
+	Compact Now	立即压缩
+	Give the space freed inside the data file back to the disk	将数据文件中腾出的空间归还给磁盘
+	The data file was compacted.	数据文件已压缩。

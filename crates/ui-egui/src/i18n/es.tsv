@@ -1496,3 +1496,9 @@ month	May	mayo
 	This Week	Esta semana
 	Next Week	Próxima semana
 	No Date	Sin fecha
+	Compacting the data file…	Compactando el archivo de datos…
+	The space freed inside it goes back to the disk. It takes about a minute for 40 GB; Quatrelle carries on once it's done.	El espacio liberado dentro vuelve al disco. Tarda alrededor de un minuto por 40 GB; Quatrelle continúa en cuanto termina.
+	Compacted from {before} to {after}	Compactado de {before} a {after}
+	Compact Now	Compactar ahora
+	Give the space freed inside the data file back to the disk	Devolver al disco el espacio liberado dentro del archivo de datos
+	The data file was compacted.	Se compactó el archivo de datos.

@@ -199,6 +199,7 @@ impl Worker {
             | Job::Discover { .. }
             | Job::SignIn { .. }
             | Job::ImportPst { .. }
+            | Job::CompactDataFile { .. }
             | Job::ExportPst { .. }
             | Job::ImportIdentity { .. }
             | Job::ForgetIdentity { .. }

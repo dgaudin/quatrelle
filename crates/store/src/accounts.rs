@@ -149,6 +149,24 @@ impl Store {
         self.delete_account(account).map(|()| None)
     }
 
+    /// Compact an account's data file, as Outlook's Compact Now: the space freed inside it goes
+    /// back to the disk. Its size before and after; `None` when it has none (online only, or a
+    /// cache that keeps no data files). Whatever else reads or writes the account meanwhile
+    /// waits for it.
+    pub fn compact_data_file(&self, account: &str) -> Result<Option<(u64, u64)>> {
+        if self.is_online_only(account) {
+            return Ok(None);
+        }
+        match &self.files.main {
+            #[cfg(not(target_arch = "wasm32"))]
+            Files::Packed(x) => {
+                let file = x.file(&safe_segment(account)).unwrap_or_default();
+                x.compact(&safe_segment(account)).map_err(io_err(&file))
+            }
+            _ => Ok(None),
+        }
+    }
+
     /// Forget everything about an account, its data file too (one that never held anyone's mail:
     /// a file that failed to open, an account starting again).
     pub fn delete_account(&self, account: &str) -> Result<()> {

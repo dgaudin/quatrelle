@@ -1495,3 +1495,9 @@ month	May	Май
 	This Week	На этой неделе
 	Next Week	На следующей неделе
 	No Date	Без даты
+	Compacting the data file…	Сжатие файла данных…
+	The space freed inside it goes back to the disk. It takes about a minute for 40 GB; Quatrelle carries on once it's done.	Освободившееся внутри место возвращается на диск. На 40 ГБ уходит около минуты; Quatrelle продолжит работу, как только всё закончится.
+	Compacted from {before} to {after}	Сжато: {before} → {after}
+	Compact Now	Сжать сейчас
+	Give the space freed inside the data file back to the disk	Вернуть на диск место, освободившееся в файле данных
+	The data file was compacted.	Файл данных сжат.

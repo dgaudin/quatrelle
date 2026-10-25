@@ -543,3 +543,46 @@ fn a_data_file_left_by_a_crash_needs_no_repair() {
     drop(store);
     let _ = std::fs::remove_dir_all(&t);
 }
+
+/// Compact Now gives the space mail deleted took back to the disk, and what's left reads back
+/// whole; whatever wants the file meanwhile waits for it rather than failing.
+#[test]
+fn a_data_file_compacts_and_others_wait_for_it() {
+    let root = temp("compact");
+    let store = Store::open_packed(root.join("app"), root.join("Quatrelle Files")).unwrap();
+    store.save_accounts(&[account("a1", "ana@example.com")]).unwrap();
+    let key = |uid: u32| MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 1, uid };
+    let body = |uid: u32| noise(200_000, u64::from(uid));
+    for uid in 1..=300 {
+        store.write_body(&key(uid), &body(uid)).unwrap();
+    }
+    // Most of it deleted: the file keeps its size.
+    for uid in 1..=300 {
+        if uid % 4 != 0 {
+            store.remove_body(&key(uid));
+        }
+    }
+    let file = store.data_file("a1").unwrap();
+    let full = std::fs::metadata(&file).unwrap().len();
+    // Another thread reading while it's compacted waits, then reads.
+    let reader = {
+        let store = store.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(5));
+            (0..20).all(|_| store.read_body(&key(4)).is_some_and(|b| b == body(4)))
+        })
+    };
+    let (before, after) = store.compact_data_file("a1").unwrap().unwrap();
+    assert_eq!(before, full);
+    assert!(after < full / 2, "{full} → {after}");
+    assert_eq!(std::fs::metadata(&file).unwrap().len(), after);
+    assert!(reader.join().unwrap(), "read while it was compacted");
+    for uid in (4..=300).step_by(4) {
+        assert_eq!(store.read_body(&key(uid)).as_deref(), Some(body(uid).as_slice()), "{uid}");
+    }
+    // And written to after.
+    store.write_body(&key(1), b"again").unwrap();
+    assert_eq!(store.read_body(&key(1)).as_deref(), Some(&b"again"[..]));
+    assert_eq!(store.compact_data_file("nobody").unwrap(), None, "no data file");
+    let _ = std::fs::remove_dir_all(&root);
+}

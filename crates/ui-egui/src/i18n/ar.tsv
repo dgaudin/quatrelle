@@ -1492,3 +1492,9 @@ month	May	مايو
 	This Week	هذا الأسبوع
 	Next Week	الأسبوع القادم
 	No Date	بلا تاريخ
+	Compacting the data file…	جارٍ ضغط ملف البيانات…
+	The space freed inside it goes back to the disk. It takes about a minute for 40 GB; Quatrelle carries on once it's done.	تعود المساحة المحررة داخله إلى القرص. يستغرق ذلك نحو دقيقة لكل 40 غيغابايت؛ ويتابع Quatrelle فور الانتهاء.
+	Compacted from {before} to {after}	تم الضغط من {before} إلى {after}
+	Compact Now	ضغط الآن
+	Give the space freed inside the data file back to the disk	إعادة المساحة المحررة في ملف البيانات إلى القرص
+	The data file was compacted.	تم ضغط ملف البيانات.

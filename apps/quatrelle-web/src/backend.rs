@@ -555,6 +555,7 @@ async fn job(sh: &Rcs, id: &str, j: Job) {
         | Job::Discover { .. }
         | Job::SignIn { .. }
         | Job::ImportPst { .. }
+        | Job::CompactDataFile { .. }
         | Job::ExportPst { .. }
         | Job::WorkOffline { .. }
         | Job::SetSync { .. }
@@ -676,6 +677,10 @@ impl Backend for WebBackend {
                     error: Some("opening Outlook data files needs the desktop app".into()),
                 },
             ),
+            // The browser keeps no data files: nothing to compact.
+            Job::CompactDataFile { account } => {
+                emit(sh, Event::Compacted { account, before: 0, after: 0, error: Some("the browser keeps no data file".into()) })
+            }
             Job::ExportPst { account, .. } => emit(
                 sh,
                 Event::Exported {

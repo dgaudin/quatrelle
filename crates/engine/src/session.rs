@@ -445,6 +445,10 @@ pub struct Session {
     pub discovered: HashMap<String, Option<(Option<AccountConfig>, String)>>,
     /// Accounts waiting for a data file to come in before they connect (their start).
     held: HashMap<String, Job>,
+    /// The account whose data file is being compacted (Compact Now), and the last one
+    /// compacted here with its size before and after.
+    pub compacting: Option<String>,
+    pub compacted: Option<(String, u64, u64)>,
     /// OAuth providers this copy can sign in with (set by the app).
     pub oauth_available: Vec<String>,
     /// Running portable (set by the app): everything is kept beside it, passwords only in memory.
@@ -567,6 +571,8 @@ impl Session {
             pictures_for: BTreeSet::new(),
             discovered: HashMap::new(),
             held: HashMap::new(),
+            compacting: None,
+            compacted: None,
             oauth_available: Vec::new(),
             portable: false,
             jmap_only: false,

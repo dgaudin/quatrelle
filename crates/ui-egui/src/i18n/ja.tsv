@@ -1493,3 +1493,9 @@ month	May	5月
 	This Week	今週
 	Next Week	来週
 	No Date	日付なし
+	Compacting the data file…	データ ファイルを圧縮しています…
+	The space freed inside it goes back to the disk. It takes about a minute for 40 GB; Quatrelle carries on once it's done.	ファイル内で空いた領域をディスクに戻します。40 GB でおよそ 1 分かかります。終わり次第 Quatrelle は続行します。
+	Compacted from {before} to {after}	{before} から {after} に圧縮しました
+	Compact Now	今すぐ圧縮
+	Give the space freed inside the data file back to the disk	データ ファイル内で空いた領域をディスクに戻す
+	The data file was compacted.	データ ファイルを圧縮しました。

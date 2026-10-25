@@ -273,6 +273,8 @@ pub enum Job {
     CheckUpdates,
     /// Read an Outlook data file (`.pst`) into an account with no server.
     ImportPst { account: String, path: String },
+    /// Compact the account's data file (Outlook's Compact Now); answered by [`Event::Compacted`].
+    CompactDataFile { account: String },
     /// Write the account's mail to an Outlook data file, which opens as `name`.
     ExportPst { account: String, path: String, name: String },
     /// Answer a message's voting buttons with `choice`: a reply to its sender that names it, as
@@ -346,6 +348,7 @@ impl Job {
             | Job::Search { account, .. }
             | Job::SyncDav { account }
             | Job::ImportPst { account, .. }
+            | Job::CompactDataFile { account }
             | Job::ExportPst { account, .. }
             | Job::GetRooms { account }
             | Job::GetAvailability { account, .. } => account,
@@ -551,6 +554,13 @@ pub enum Event {
         messages: usize,
         skipped: usize,
         done: bool,
+        error: Option<String>,
+    },
+    /// A data file compacted: its size before and after, or why it couldn't be.
+    Compacted {
+        account: String,
+        before: u64,
+        after: u64,
         error: Option<String>,
     },
     /// How an export to a data file is going (`done`: finished, or failed with `error`).
