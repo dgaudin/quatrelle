@@ -295,7 +295,7 @@ mod tests {
 
     #[test]
     fn only_plain_file_names_are_downloaded_to() {
-        let base = "https://github.com/ZIDAN44/quatrelle/releases/download/v0.21.0-test.19/";
+        let base = "https://github.com/dgaudin/quatrelle/releases/download/v0.21.0-test.19/";
         assert_eq!(file_name(&format!("{base}quatrelle-0.21.0-windows-x64.msi")), Some("quatrelle-0.21.0-windows-x64.msi"));
         for bad in ["", "..", ".hidden.msi", "a%2F..%2Fb.msi", "x?y=1", "spaces in.msi"] {
             assert_eq!(file_name(&format!("{base}{bad}")), None, "{bad}");

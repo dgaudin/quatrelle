@@ -41,7 +41,7 @@ fn updates(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>) {
     });
 }
 
-pub(super) fn about(s: &Session, t: &Tokens, pending: Option<&str>, ui: &mut Ui, acts: &mut Vec<Action>) {
+pub(super) fn about(s: &Session, t: &Tokens, update: &crate::UpdateState, ui: &mut Ui, acts: &mut Vec<Action>) {
     heading(ui, t, "About Quatrelle");
     ui.horizontal(|ui| {
         let (r, _) = ui.allocate_exact_size(vec2(56.0, 56.0), Sense::hover());
@@ -55,16 +55,25 @@ pub(super) fn about(s: &Session, t: &Tokens, pending: Option<&str>, ui: &mut Ui,
     });
     ui.add_space(10.0);
     updates(s, t, ui, acts);
-    // A test build that updates itself, with the next one downloaded.
-    if let Some(tag) = pending {
-        ui.add_space(6.0);
-        ui.horizontal_wrapped(|ui| {
-            let version = tag.trim_start_matches('v');
-            ui.label(RichText::new(tf!("Quatrelle {version} is downloaded. It installs when you close Quatrelle.", version = version)).color(t.text));
-            if widgets::accent_button(ui, Icon::Sync, "Restart to update", t, true).clicked() {
-                acts.push(Action::RestartToUpdate);
-            }
-        });
+    // A test build that updates itself: its next version on the way, or downloaded.
+    match update {
+        crate::UpdateState::Ready { version, .. } => {
+            ui.add_space(6.0);
+            ui.horizontal_wrapped(|ui| {
+                ui.label(
+                    RichText::new(tf!("Quatrelle {version} is downloaded. It installs when you close Quatrelle.", version = version)).color(t.text),
+                );
+                if widgets::accent_button(ui, Icon::Sync, "Restart to update", t, true).clicked() {
+                    acts.push(Action::RestartToUpdate);
+                }
+            });
+        }
+        crate::UpdateState::Downloading { version, done, total } => {
+            ui.add_space(6.0);
+            let percent = if *total > 0 { (done.saturating_mul(100) / total).min(100) } else { 0 };
+            ui.label(RichText::new(tf!("Downloading Quatrelle {version}… {percent}%", version = version, percent = percent)).color(t.dim));
+        }
+        crate::UpdateState::None => {}
     }
     ui.add_space(14.0);
     for line in [
