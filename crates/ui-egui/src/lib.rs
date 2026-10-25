@@ -38,7 +38,7 @@ pub use look::thumbs::VideoFrame;
 pub use look::{bidi, craft_fonts, icons, motion, theme};
 use look::{thumbs, widgets};
 pub use panes::backstage;
-use panes::{calendar, list, nav, notes, organize, people, reminders};
+use panes::{calendar, list, nav, notes, organize, people, reminders, tasks};
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -166,6 +166,8 @@ pub enum Action {
     FocusSearch,
     /// Make a note and write on it.
     NewNote,
+    /// Show a task in Tasks (from its reminder).
+    OpenTask(String),
     /// Search every folder for this (shown in the box, with the Search tab).
     Search(String),
     SetDark(Option<bool>),
@@ -394,6 +396,8 @@ pub struct UiState {
     /// An appointment being dragged to another time ([`calendar::Drag`]).
     pub(crate) cal_drag: Option<calendar::Drag>,
     pub(crate) note_edit: Option<(String, String)>,
+    /// Tasks: the search, the one picked and its form, the task being typed in.
+    pub(crate) tasks: tasks::TasksUi,
     pub(crate) note_focus: bool,
     /// The person whose card is shown (uid).
     pub(crate) person: Option<String>,
@@ -518,6 +522,7 @@ impl MailApp {
                 months_drag: 0.0,
                 cal_drag: None,
                 note_edit: None,
+                tasks: Default::default(),
                 note_focus: false,
                 person: None,
                 invite: None,
@@ -819,32 +824,6 @@ const SEARCH_INDEX_BUDGET: usize = 500;
 /// fraction of a microsecond, reading a folder from disk the slice's real cost, so a slice is
 /// a folder or so (a 550,000-message mailbox is built in a hundred frames, a second or two).
 const CONTACTS_BUDGET: usize = 5_000;
-
-/// Mail, Calendar, People and Notes down the window's edge, as Outlook's: the module shown
-/// lit, with a bar at its edge.
-fn module_rail(ui: &mut Ui, t: &Tokens, module: Module, acts: &mut Vec<Action>) {
-    ui.spacing_mut().item_spacing.y = 4.0;
-    for (m, icon, label, code) in [
-        (Module::Mail, Icon::Unread, "Mail", "mail"),
-        (Module::Calendar, Icon::Calendar, "Calendar", "calendar"),
-        (Module::People, Icon::People, "People", "people"),
-        (Module::Notes, Icon::Note, "Notes", "notes"),
-    ] {
-        let (r, resp) = ui.allocate_exact_size(vec2(38.0, 38.0), Sense::click());
-        let on = m == module;
-        if on || resp.hovered() {
-            ui.painter().rect_filled(r, 4.0, if on { t.accent_soft } else { t.hover });
-        }
-        if on {
-            let edge = if i18n::current().rtl() { r.right() - 3.0 } else { r.left() };
-            ui.painter().rect_filled(egui::Rect::from_min_size(egui::pos2(edge, r.top() + 8.0), vec2(3.0, r.height() - 16.0)), 1.5, t.accent);
-        }
-        icons::paint(ui.painter(), icons::centered(r, 22.0), icon, if on { t.accent } else { t.dim });
-        if resp.on_hover_text(tl!(label)).clicked() {
-            acts.push(Action::Run("view.module", json!({"name": code})));
-        }
-    }
-}
 
 #[cfg(test)]
 mod tests;

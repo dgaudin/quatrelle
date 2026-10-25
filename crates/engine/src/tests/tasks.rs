@@ -111,3 +111,27 @@ fn an_exchange_accounts_tasks_go_to_its_tasks_folder() {
     assert!(s.pim[&id].deleted.iter().any(|t| t.href == "task:X1"), "deleted on the server next time");
     done(s);
 }
+
+/// A task's reminder comes in the Reminders with the appointments'; snoozed, it waits; dismissed,
+/// it's taken off the task (as Outlook does, and Exchange learns it); done, it never comes.
+#[test]
+fn a_tasks_reminder_comes_and_goes() {
+    let mut s = sample_session("tasks-reminders");
+    // NOW is 12:00 UTC on Wednesday 14 October 2026.
+    let uid = uid_of(&s.run("task.create", &json!({"subject": "Rappeler Ana", "due": "2026-10-14", "reminder": "2026-10-14T11:00"})).unwrap());
+    let due = |s: &Session| s.due_reminders(NOW).into_iter().find(|r| r.uid == uid);
+    let r = due(&s).expect("its time has come");
+    assert!(r.task && r.all_day && r.summary == "Rappeler Ana");
+    s.snooze_reminder(&r.key, NOW + 600);
+    assert!(due(&s).is_none(), "snoozed");
+    assert!(s.due_reminders(NOW + 700).iter().any(|x| x.uid == uid), "back after the snooze");
+    s.dismiss_reminders(Some(&r.key), NOW + 700);
+    assert!(s.find_task(&uid).unwrap().task.reminder.is_none(), "taken off the task");
+    assert!(s.due_reminders(NOW + 700).iter().all(|x| x.uid != uid));
+    // One done never reminds.
+    let other = uid_of(&s.run("task.create", &json!({"subject": "Fini", "reminder": "2026-10-14T10:00"})).unwrap());
+    assert!(s.due_reminders(NOW).iter().any(|x| x.uid == other));
+    s.run("task.complete", &json!({"uid": other})).unwrap();
+    assert!(s.due_reminders(NOW).iter().all(|x| x.uid != other));
+    done(s);
+}

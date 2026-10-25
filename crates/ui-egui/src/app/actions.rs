@@ -54,6 +54,7 @@ impl MailApp {
                 Module::Calendar => tl!("Calendar").to_string(),
                 Module::People => tl!("People").to_string(),
                 Module::Notes => tl!("Notes").to_string(),
+                Module::Tasks => tl!("Tasks").to_string(),
             };
             (view, tl!(&self.ui.title_base).to_string())
         });
@@ -124,6 +125,12 @@ impl MailApp {
                 }
                 Err(e) => self.session.notice(e.to_string(), true),
             },
+            Action::OpenTask(uid) => {
+                self.session.module = Module::Tasks;
+                self.ui.tasks.query.clear();
+                self.ui.tasks.selected = Some(uid.clone());
+                self.ui.focus_main = true;
+            }
             Action::Search(q) => {
                 self.ui.search_text = q.clone();
                 self.ui.tab = RibbonTab::Search;

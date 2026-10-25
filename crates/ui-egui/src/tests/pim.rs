@@ -156,6 +156,47 @@ fn notes_are_written_on_and_kept() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// Tasks: Ctrl+4 opens them; a task typed in the box at the top is added with Enter; the one
+/// picked shows its form beside the list; ticked, it goes (and comes back with the completed
+/// ones); its reminder's Open Item shows it.
+#[test]
+fn tasks_are_typed_in_picked_and_ticked() {
+    let (mut a, dir) = app("tasks-ui");
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    frame(&ctx, &mut a, vec![key(Key::Num4, Modifiers::COMMAND)]);
+    assert_eq!(a.session.module, quatrelle_engine::Module::Tasks);
+    frame(&ctx, &mut a, vec![]);
+    let before = a.session.tasks("", false).len();
+    assert!(before > 0, "the sample mailbox has tasks to show");
+    a.ui.tasks.focus_new = true;
+    frame(&ctx, &mut a, vec![]);
+    frame(&ctx, &mut a, vec![Event::Text("Call the printer".into())]);
+    frame(&ctx, &mut a, vec![key(Key::Enter, Modifiers::NONE)]);
+    frame(&ctx, &mut a, vec![]);
+    let made = a.session.tasks("printer", false);
+    assert_eq!(made.len(), 1, "added with Enter");
+    assert!(a.ui.tasks.new_text.is_empty(), "the box is cleared for the next one");
+    let uid = made[0].task.uid.clone();
+    // Picked: its form beside the list, in both themes.
+    a.ui.tasks.selected = Some(uid.clone());
+    frame(&ctx, &mut a, vec![]);
+    a.act(crate::Action::SetDark(Some(true)));
+    frame(&ctx, &mut a, vec![]);
+    a.run("task.complete", json!({"uid": uid}));
+    frame(&ctx, &mut a, vec![]);
+    assert!(a.ui.tasks.selected.is_none(), "done, it leaves the list of what's to do");
+    a.ui.tasks.completed = true;
+    frame(&ctx, &mut a, vec![]);
+    assert!(a.session.tasks("printer", true).iter().any(|r| r.task.is_complete()));
+    // From its reminder: Tasks, the task picked.
+    a.run("view.module", json!({"name": "mail"}));
+    a.act(crate::Action::OpenTask(uid.clone()));
+    frame(&ctx, &mut a, vec![]);
+    assert_eq!((a.session.module, a.ui.tasks.selected.as_deref()), (quatrelle_engine::Module::Tasks, Some(uid.as_str())));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 /// Issue #1: an invitation opens with its notes to read, its links under their words, and the
 /// dialog fits the window however long the notes are; Edit notes goes back to the box. Issue #4:
 /// the list's footer and the close warning draw.

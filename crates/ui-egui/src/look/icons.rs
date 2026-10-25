@@ -114,6 +114,10 @@ pub enum Icon {
     Seal,
     /// A video camera (an online meeting).
     Video,
+    /// A list with ticks (Outlook's Tasks).
+    Tasks,
+    /// A tick in a circle (Mark Complete).
+    Complete,
 }
 
 /// The Fluent UI icon drawn for each icon (its 20-pixel regular outline).
@@ -213,6 +217,8 @@ fn svg(icon: Icon) -> &'static str {
         Icon::Lock => f!("lock_closed"),
         Icon::Seal => f!("ribbon"),
         Icon::Video => f!("video"),
+        Icon::Tasks => f!("task_list_ltr"),
+        Icon::Complete => f!("checkmark_circle"),
     }
 }
 
@@ -358,6 +364,8 @@ mod tests {
             Lock,
             Seal,
             Video,
+            Tasks,
+            Complete,
         ];
         for icon in all {
             let img = render(icon, 32).unwrap_or_else(|| panic!("{icon:?} didn't render"));

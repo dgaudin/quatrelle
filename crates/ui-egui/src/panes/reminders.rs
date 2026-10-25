@@ -182,7 +182,12 @@ fn body(ui: &mut Ui, st: &mut State, s: &Session, t: &Tokens, acts: &mut Vec<Act
                 if widgets::accent_button(ui, crate::icons::Icon::Close, "Dismiss", t, true).clicked() {
                     acts.push(Action::Run("reminders.dismiss", json!({ "key": r.key })));
                 }
-                if ui.button(tl!("Open Item")).clicked()
+                if r.task {
+                    if ui.button(tl!("Open Item")).clicked() {
+                        acts.push(Action::OpenTask(r.uid.clone()));
+                        acts.push(Action::FocusMain);
+                    }
+                } else if ui.button(tl!("Open Item")).clicked()
                     && let Some(d) = Dialog::open_event(s, &r.uid, r.occurrence)
                 {
                     acts.push(Action::Dialog(d));

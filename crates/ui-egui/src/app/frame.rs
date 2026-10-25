@@ -214,7 +214,7 @@ impl MailApp {
                 .exact_size(48.0)
                 .frame(egui::Frame::new().fill(t.chrome).inner_margin(Margin::symmetric(4, 8)).stroke(egui::Stroke::new(1.0, t.border)))
                 .show(ui, |ui| {
-                    ui.vertical_centered(|ui| module_rail(ui, &t, self.session.module, &mut acts));
+                    ui.vertical_centered(|ui| super::bars::module_rail(ui, &t, self.session.module, &mut acts));
                 });
         }
         if self.ui.backstage.is_none() {
@@ -305,6 +305,7 @@ impl MailApp {
                     Module::Calendar => calendar::nav(&self.session, &mut self.ui, ui, &mut acts),
                     Module::People => people::nav(&self.session, &mut self.ui, ui, &mut acts),
                     Module::Notes => notes::nav(&self.session, &mut self.ui, ui, &mut acts),
+                    Module::Tasks => tasks::nav(&self.session, &mut self.ui, ui, &mut acts),
                 }
             });
             // Dragged narrower than it goes: minimized, as the button does.
@@ -338,6 +339,11 @@ impl MailApp {
                 (Module::Notes, _) => {
                     egui::CentralPanel::default().frame(egui::Frame::new().fill(t.surface)).show(ui, |ui| {
                         notes::show(&self.session, &mut self.ui, ui, &mut acts);
+                    });
+                }
+                (Module::Tasks, _) => {
+                    egui::CentralPanel::default().frame(egui::Frame::new().fill(t.surface)).show(ui, |ui| {
+                        tasks::show(&self.session, &mut self.ui, ui, &mut acts);
                     });
                 }
                 (Module::Mail, pane) => match pane {

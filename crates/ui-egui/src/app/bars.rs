@@ -37,14 +37,15 @@ impl MailApp {
                 ui.horizontal(|ui| {
                     let (r, _) = ui.allocate_exact_size(vec2(16.0, 16.0), Sense::hover());
                     icons::paint(ui.painter(), r, Icon::Search, t.dim);
-                    // In People and Notes it searches those (as Outlook's box searches where you are).
+                    // In People, Tasks and Notes it searches those (as Outlook's box searches where
+                    // you are).
                     let module = self.session.module;
-                    if matches!(module, Module::People | Module::Notes) {
+                    if matches!(module, Module::People | Module::Tasks | Module::Notes) {
                         let focus = std::mem::take(&mut self.ui.focus_search);
-                        let (query, hint) = if module == Module::People {
-                            (&mut self.ui.people_query, tl!("Search people"))
-                        } else {
-                            (&mut self.ui.notes_query, tl!("Search notes"))
+                        let (query, hint) = match module {
+                            Module::People => (&mut self.ui.people_query, tl!("Search people")),
+                            Module::Tasks => (&mut self.ui.tasks.query, tl!("Search tasks")),
+                            _ => (&mut self.ui.notes_query, tl!("Search notes")),
                         };
                         let resp = ui.add(
                             egui::TextEdit::singleline(query)
@@ -272,5 +273,32 @@ pub(crate) fn account_status(s: &Session, t: &Tokens, a: &quatrelle_engine::Acco
         SyncStatus::NeedsPassword { .. } if a.config.oauth.is_some() => (t.danger, tl!("Sign in again").to_string()),
         SyncStatus::NeedsPassword { .. } => (t.danger, tl!("Password needed").to_string()),
         SyncStatus::Error { error } => (t.warn, tf!("Disconnected: {error}", error = widgets::shorten(error, 60))),
+    }
+}
+
+/// Mail, Calendar, People, Tasks and Notes down the window's edge, as Outlook's: the module shown
+/// lit, with a bar at its edge.
+pub(super) fn module_rail(ui: &mut Ui, t: &Tokens, module: Module, acts: &mut Vec<Action>) {
+    ui.spacing_mut().item_spacing.y = 4.0;
+    for (m, icon, label, code) in [
+        (Module::Mail, Icon::Unread, "Mail", "mail"),
+        (Module::Calendar, Icon::Calendar, "Calendar", "calendar"),
+        (Module::People, Icon::People, "People", "people"),
+        (Module::Tasks, Icon::Tasks, "Tasks", "tasks"),
+        (Module::Notes, Icon::Note, "Notes", "notes"),
+    ] {
+        let (r, resp) = ui.allocate_exact_size(vec2(38.0, 38.0), Sense::click());
+        let on = m == module;
+        if on || resp.hovered() {
+            ui.painter().rect_filled(r, 4.0, if on { t.accent_soft } else { t.hover });
+        }
+        if on {
+            let edge = if i18n::current().rtl() { r.right() - 3.0 } else { r.left() };
+            ui.painter().rect_filled(egui::Rect::from_min_size(egui::pos2(edge, r.top() + 8.0), vec2(3.0, r.height() - 16.0)), 1.5, t.accent);
+        }
+        icons::paint(ui.painter(), icons::centered(r, 22.0), icon, if on { t.accent } else { t.dim });
+        if resp.on_hover_text(tl!(label)).clicked() {
+            acts.push(Action::Run("view.module", json!({"name": code})));
+        }
     }
 }

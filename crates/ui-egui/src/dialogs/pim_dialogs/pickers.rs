@@ -6,13 +6,13 @@ use quatrelle_engine::model::dates::{civil_from_days, days_from_civil};
 use super::*;
 
 /// A day typed as `YYYY-MM-DD`, and the days since 1970 it is.
-pub(super) fn day_of(text: &str) -> Option<i64> {
+pub(crate) fn day_of(text: &str) -> Option<i64> {
     let mut it = text.trim().split('-');
     let (y, m, d) = (it.next()?.parse::<i64>().ok()?, it.next()?.parse::<u32>().ok()?, it.next()?.parse::<u32>().ok()?);
     ((1..=12).contains(&m) && (1..=31).contains(&d) && (1900..=2200).contains(&y)).then(|| days_from_civil(y, m, d))
 }
 
-pub(super) fn text_of(day: i64) -> String {
+pub(crate) fn text_of(day: i64) -> String {
     let (y, m, d) = civil_from_days(day);
     format!("{y:04}-{m:02}-{d:02}")
 }

@@ -14,7 +14,7 @@ use crate::{Action, widgets};
 mod contact;
 mod event;
 mod meeting;
-mod pickers;
+pub(crate) mod pickers;
 pub(crate) mod recurrence;
 mod rooms;
 pub(crate) mod scheduling;

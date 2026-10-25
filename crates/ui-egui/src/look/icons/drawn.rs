@@ -284,6 +284,17 @@ pub(super) fn drawn(p: &Painter, rect: Rect, icon: Icon, color: Color32) {
             pen.closed(&[(3.0, 7.0), (13.0, 7.0), (13.0, 14.5), (3.0, 14.5)]);
             pen.line(&[(8.0, 9.8), (8.0, 11.8)]);
         }
+        Icon::Tasks => {
+            // Three ticked lines.
+            for y in [3.5, 8.0, 12.5] {
+                pen.line(&[(1.5, y), (2.7, y + 1.2), (4.8, y - 1.2)]);
+                pen.line(&[(7.0, y), (14.5, y)]);
+            }
+        }
+        Icon::Complete => {
+            pen.circle(8.0, 8.0, 6.5);
+            pen.line(&[(5.0, 8.2), (7.2, 10.4), (11.2, 6.0)]);
+        }
         Icon::Video => {
             // The camera's body, then its lens.
             pen.closed(&[(1.5, 4.5), (10.5, 4.5), (10.5, 11.5), (1.5, 11.5)]);

@@ -41,7 +41,7 @@ file at most 1000 lines and every folder at most 16 Rust files (`cargo xtask siz
 
 | Where | What |
 |---|---|
-| `engine/src/session.rs` + `session/` | `Session`'s state; its `impl` continued per area (`opening`, `changing`, `writing`, `outbox`, `searching`, `accounts`, `events`, `prefs`…; `organize/` for junk, Quick Steps, Search Folders; `mailboxes/` for folder edits, server-side mailbox settings and shared mailboxes; `pim/` for people and notes; `writing/` for the message being written) |
+| `engine/src/session.rs` + `session/` | `Session`'s state; its `impl` continued per area (`opening`, `changing`, `writing`, `outbox`, `searching`, `accounts`, `events`, `prefs`…; `organize/` for junk, Quick Steps, Search Folders; `mailboxes/` for folder edits, server-side mailbox settings and shared mailboxes; `pim/` for people, notes, tasks and reminders; `writing/` for the message being written) |
 | `engine/src/cmd.rs` + `cmd/` | the registry; each area (`home`, `navigation`, `compose`, `view`, `pim`, `accounts`) returns its commands |
 | `ui-egui/src/app.rs` + `app/` | `MailApp`, the window: `frame`, `ribbon`, `bars`, `search_box`, `keys`, `actions`, `windows` |
 | `ui-egui/src/panes/`, `dialogs/`, `reading/`, `rich_edit/`, `look/` | the panes, the dialogs by group, the reading pane and compose window, the editor, and theme/icons/motion/widgets |
