@@ -182,10 +182,12 @@ fn field_uri_is_known(uri: &str) -> bool {
         "LegacyFreeBusyStatus",
         "TimeZone",
     ];
+    const TASK: [&str; 5] = ["DueDate", "StartDate", "PercentComplete", "Status", "CompleteDate"];
     let Some((kind, name)) = uri.split_once(':') else { return false };
     match kind {
-        "item" => !CALENDAR.contains(&name),
+        "item" => !CALENDAR.contains(&name) && !TASK.contains(&name),
         "calendar" => !ITEM.contains(&name),
+        "task" => TASK.contains(&name),
         _ => true,
     }
 }

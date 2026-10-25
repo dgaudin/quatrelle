@@ -62,6 +62,7 @@ mod navigation;
 mod pim;
 mod scheduling;
 mod security;
+mod tasks;
 mod view;
 
 /// Every command, in the order the CLI lists them: the Home tab's first, accounts' last.
@@ -78,6 +79,7 @@ pub fn registry() -> Registry {
     all.extend(scheduling::commands());
     all.extend(files::commands());
     all.extend(security::commands());
+    all.extend(tasks::commands());
     all.extend(accounts::commands());
     Registry::new(all)
 }
