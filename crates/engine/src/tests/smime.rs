@@ -360,3 +360,49 @@ fn a_withdrawn_answer_outlives_a_full_cache() {
     assert_eq!(security(&s).signed.unwrap().seal, Seal::Untrusted(vec![smime::Problem::Revoked(LATER - 60)]));
     done(s);
 }
+
+/// An Exchange account looks a recipient's certificate up in its address book, as Outlook does:
+/// asked once, kept, and then the message goes encrypted to them.
+#[test]
+fn exchange_finds_certificates_in_the_address_book() {
+    let mut s = with_certificate("smime-directory");
+    if let Some(a) = s.accounts.iter_mut().find(|a| a.config.id == "sample") {
+        a.config.ews = Some("https://mail.posteo.example/EWS/Exchange.asmx".into());
+    }
+    s.run("mail.new", &json!({})).unwrap();
+    s.run("compose.update", &json!({"to": "ana@posteo.example, bo@posteo.example", "subject": "Plan"})).unwrap();
+    s.run("compose.security", &json!({"encrypt": true})).unwrap();
+    let err = s.run("compose.send", &json!({})).unwrap_err().to_string();
+    assert!(err.contains("address book"), "{err}");
+    let asked: Vec<Vec<String>> = s
+        .take_jobs()
+        .into_iter()
+        .filter_map(|j| match j {
+            Job::FindCertificates { emails, .. } => Some(emails),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(asked, [vec!["ana@posteo.example".to_string(), "bo@posteo.example".to_string()]]);
+    // Sent again before the answer: not asked twice.
+    assert!(s.run("compose.send", &json!({})).is_err());
+    assert!(!s.take_jobs().iter().any(|j| matches!(j, Job::FindCertificates { .. })));
+    // Ana's is there (a certificate for someone else beside it isn't taken); Bo has none.
+    let ana = der::pem::decode_vec(String::from_utf8(testdata("ana.pem")).unwrap().as_bytes()).unwrap().1;
+    let zoe = der::pem::decode_vec(String::from_utf8(testdata("zoe.pem")).unwrap().as_bytes()).unwrap().1;
+    s.apply(Event::DirectoryCertificates {
+        account: "sample".into(),
+        found: vec![("ana@posteo.example".into(), vec![zoe, ana.clone()]), ("bo@posteo.example".into(), Vec::new())],
+        error: None,
+    });
+    assert_eq!(s.smime_settings("sample").known.get("ana@posteo.example").map(|k| k.cert.clone()), Some(ana));
+    assert!(s.notices.iter().any(|n| !n.error && n.text.contains("found")) && s.notices.iter().any(|n| n.error));
+    // Bo stays without: said plainly, and the address book isn't asked again.
+    let err = s.run("compose.send", &json!({})).unwrap_err().to_string();
+    assert!(err.contains("bo@posteo.example") && !err.contains("address book"), "{err}");
+    assert!(!s.take_jobs().iter().any(|j| matches!(j, Job::FindCertificates { .. })));
+    // To Ana alone, it goes: encrypted to her and to Riley.
+    s.run("compose.update", &json!({"to": "ana@posteo.example"})).unwrap();
+    let sent = s.run("compose.send", &json!({})).unwrap();
+    assert!(sent.get("protecting").is_some(), "{sent}");
+    assert!(s.take_jobs().iter().any(|j| matches!(j, Job::Protect { encrypt_to, .. } if encrypt_to.len() == 2)));
+}

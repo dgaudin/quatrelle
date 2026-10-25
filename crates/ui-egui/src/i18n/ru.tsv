@@ -1300,7 +1300,6 @@ month	May	Май
 	Replace…	Заменить…
 	Sign new messages	Подписывать новые письма
 	Encrypt new messages	Шифровать новые письма
-	Each recipient needs to have sent you a signed message first; replies to encrypted mail are always encrypted.	Каждый получатель должен сначала прислать вам подписанное письмо; ответы на зашифрованные письма всегда шифруются.
 	Certificates from signed mail: {n}	Сертификаты из подписанных писем: {n}
 	Import certificate	Импорт сертификата
 	The password {file} was saved with:	Пароль, с которым сохранён {file}:
@@ -1526,3 +1525,8 @@ month	May	Май
 	Folder Size…	Размер папок…
 	How much space each folder takes, here and on the server	Сколько места занимает каждая папка здесь и на сервере
 	How much space each folder takes on this computer	Сколько места занимает каждая папка на этом компьютере
+	Looking for these recipients' certificates in the Exchange address book: send it again in a moment.	Поиск сертификатов этих получателей в адресной книге Exchange: отправьте сообщение ещё раз через минуту.
+	The Exchange address book couldn't be searched for certificates.	Не удалось найти сертификаты в адресной книге Exchange.
+	Certificates found in the Exchange address book: the message can be sent encrypted.	Сертификаты найдены в адресной книге Exchange: сообщение можно отправить зашифрованным.
+	Some recipients have no certificate in the Exchange address book: mail to them can't be encrypted.	У некоторых получателей нет сертификата в адресной книге Exchange: письма им нельзя зашифровать.
+	Each recipient's certificate comes from a signed message of theirs, or for an Exchange account from its address book; replies to encrypted mail are always encrypted.	Сертификат каждого получателя берётся из подписанного им письма или, для учётной записи Exchange, из её адресной книги; ответы на зашифрованные письма всегда шифруются.

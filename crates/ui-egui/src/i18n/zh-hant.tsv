@@ -1300,7 +1300,6 @@ month	May	5月
 	Replace…	取代…
 	Sign new messages	為新郵件簽署
 	Encrypt new messages	加密新郵件
-	Each recipient needs to have sent you a signed message first; replies to encrypted mail are always encrypted.	每個收件人都需要先寄給你一封簽署郵件；對加密郵件的回覆一律加密。
 	Certificates from signed mail: {n}	來自簽署郵件的憑證：{n}
 	Import certificate	匯入憑證
 	The password {file} was saved with:	儲存 {file} 時使用的密碼：
@@ -1526,3 +1525,8 @@ month	May	5月
 	Folder Size…	資料夾大小…
 	How much space each folder takes, here and on the server	每個資料夾佔用的空間（此處與伺服器上）
 	How much space each folder takes on this computer	每個資料夾在此電腦上佔用的空間
+	Looking for these recipients' certificates in the Exchange address book: send it again in a moment.	正在 Exchange 通訊錄中尋找這些收件者的憑證：請稍後再傳送一次。
+	The Exchange address book couldn't be searched for certificates.	無法在 Exchange 通訊錄中搜尋憑證。
+	Certificates found in the Exchange address book: the message can be sent encrypted.	已在 Exchange 通訊錄中找到憑證：郵件可以加密傳送。
+	Some recipients have no certificate in the Exchange address book: mail to them can't be encrypted.	部分收件者在 Exchange 通訊錄中沒有憑證：無法加密寄給他們的郵件。
+	Each recipient's certificate comes from a signed message of theirs, or for an Exchange account from its address book; replies to encrypted mail are always encrypted.	每位收件者的憑證來自對方寄來的簽署郵件，或對於 Exchange 帳戶來自其通訊錄；回覆加密郵件時一律加密。

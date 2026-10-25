@@ -331,6 +331,9 @@ pub enum Job {
     /// for signing and decrypting the account's mail (S/MIME): the key goes to the system's
     /// keychain only. Answered by [`Event::Identity`].
     ImportIdentity { account: AccountConfig, data: Vec<u8>, password: Secret },
+    /// Look these people's certificates up in the organisation's address book (Exchange's), to
+    /// encrypt to them as Outlook does; answered by [`Event::DirectoryCertificates`].
+    FindCertificates { account: String, emails: Vec<String> },
     /// Forget the account's certificate and key (the keychain's copy goes).
     ForgetIdentity { account: AccountConfig },
     /// Sign (`sign`) and/or encrypt (to `encrypt_to`, certificates as DER, the account's own
@@ -393,6 +396,7 @@ impl Job {
             | Job::ServerFolderSizes { account }
             | Job::ExportPst { account, .. }
             | Job::GetRooms { account }
+            | Job::FindCertificates { account, .. }
             | Job::GetAvailability { account, .. } => account,
             Job::FetchUrl { .. }
             | Job::Discover { .. }
@@ -666,6 +670,13 @@ pub enum Event {
         from: i64,
         to: i64,
         people: Vec<crate::scheduling::Availability>,
+        error: Option<String>,
+    },
+    /// What the address book keeps for each address asked about ([`Job::FindCertificates`]):
+    /// its certificates (DER, none when it has none), or why it couldn't be asked.
+    DirectoryCertificates {
+        account: String,
+        found: Vec<(String, Vec<Vec<u8>>)>,
         error: Option<String>,
     },
     /// What [`Job::ImportIdentity`] kept: the certificate and its issuers (DER), or why not.

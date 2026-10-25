@@ -1298,7 +1298,6 @@ month	May	5月
 	Replace…	替换…
 	Sign new messages	为新邮件签名
 	Encrypt new messages	加密新邮件
-	Each recipient needs to have sent you a signed message first; replies to encrypted mail are always encrypted.	每个收件人都需要先给你发过一封签名邮件；对加密邮件的回复总是加密。
 	Certificates from signed mail: {n}	来自签名邮件的证书：{n}
 	Import certificate	导入证书
 	The password {file} was saved with:	保存 {file} 时使用的密码：
@@ -1524,3 +1523,8 @@ month	May	5月
 	Folder Size…	文件夹大小…
 	How much space each folder takes, here and on the server	每个文件夹占用的空间（此处和服务器上）
 	How much space each folder takes on this computer	每个文件夹在此计算机上占用的空间
+	Looking for these recipients' certificates in the Exchange address book: send it again in a moment.	正在 Exchange 通讯簿中查找这些收件人的证书：请稍后再次发送。
+	The Exchange address book couldn't be searched for certificates.	无法在 Exchange 通讯簿中搜索证书。
+	Certificates found in the Exchange address book: the message can be sent encrypted.	已在 Exchange 通讯簿中找到证书：邮件可以加密发送。
+	Some recipients have no certificate in the Exchange address book: mail to them can't be encrypted.	部分收件人在 Exchange 通讯簿中没有证书：无法加密发给他们的邮件。
+	Each recipient's certificate comes from a signed message of theirs, or for an Exchange account from its address book; replies to encrypted mail are always encrypted.	每个收件人的证书来自其发来的签名邮件，或对于 Exchange 帐户来自其通讯簿；回复加密邮件时始终加密。

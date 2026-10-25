@@ -73,7 +73,12 @@ pub(super) fn security(s: &Session, t: &Tokens, ui: &mut Ui, a: &AccountState, a
             t,
             false,
             name(t, tl!("Encrypt new messages")),
-            Some(note(t, tl!("Each recipient needs to have sent you a signed message first; replies to encrypted mail are always encrypted."))),
+            Some(note(
+                t,
+                tl!(
+                    "Each recipient's certificate comes from a signed message of theirs, or for an Exchange account from its address book; replies to encrypted mail are always encrypted."
+                ),
+            )),
             |ui| {
                 let mut on = settings.encrypt;
                 if widgets::switch(ui, t, &mut on, tl!("Encrypt new messages")).changed() {

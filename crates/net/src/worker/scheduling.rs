@@ -1,5 +1,6 @@
 //! An account's worker: the rooms its server offers and when people and rooms are busy, for a
-//! meeting being written (on the second connection, so it never waits behind a sync).
+//! meeting being written, and the certificates its address book keeps, for a message to be
+//! encrypted (on the second connection, so they never wait behind a sync).
 
 use super::*;
 
@@ -27,6 +28,37 @@ impl Worker {
             }
         };
         self.sink.emit(Event::Rooms { account: self.id(), lists, rooms, error });
+    }
+
+    /// The certificates the address book keeps for these addresses (at most fifty), answered
+    /// with [`Event::DirectoryCertificates`].
+    pub(super) fn directory_certificates(&mut self, emails: &[String]) {
+        let r = (|| -> Result<Vec<(String, Vec<Vec<u8>>)>> {
+            if self.conn.is_none() {
+                self.connect()?;
+            }
+            match self.conn.as_ref() {
+                Some(Conn::Ews(c)) => emails.iter().take(50).map(|e| Ok((e.clone(), c.directory_certificates(e)?))).collect(),
+                _ => Err(NetError::No("only an Exchange account's address book keeps certificates".into())),
+            }
+        })();
+        let (found, error) = match r {
+            Ok(found) => (found, None),
+            Err(e) => {
+                let said = e.to_string();
+                if e.is_fatal() || matches!(e, NetError::Auth(_)) {
+                    self.conn = None;
+                }
+                (Vec::new(), Some(said))
+            }
+        };
+        log::info!(
+            "{}: certificates in the address book for {} of {} addresses",
+            self.id(),
+            found.iter().filter(|(_, c)| !c.is_empty()).count(),
+            emails.len()
+        );
+        self.sink.emit(Event::DirectoryCertificates { account: self.id(), found, error });
     }
 
     /// When these people and rooms are busy between `from` and `to`, answered with

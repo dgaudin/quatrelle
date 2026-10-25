@@ -24,7 +24,8 @@ impl Worker {
                 | Job::SetVacation { .. }
                 | Job::GetRooms { .. }
                 | Job::GetAvailability { .. }
-                | Job::ServerFolderSizes { .. }) => self.handle(j),
+                | Job::ServerFolderSizes { .. }
+                | Job::FindCertificates { .. }) => self.handle(j),
                 // Anything else belongs to the main connection.
                 other => {
                     if let Some(m) = &self.main {

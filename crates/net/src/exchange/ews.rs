@@ -475,6 +475,7 @@ fn mime_word(s: &str) -> String {
 
 mod autodiscover;
 mod changes;
+mod directory;
 mod listening;
 mod mailbox;
 mod requests;

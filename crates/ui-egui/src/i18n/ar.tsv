@@ -1297,7 +1297,6 @@ month	May	مايو
 	Replace…	استبدال…
 	Sign new messages	توقيع الرسائل الجديدة
 	Encrypt new messages	تشفير الرسائل الجديدة
-	Each recipient needs to have sent you a signed message first; replies to encrypted mail are always encrypted.	يجب أن يكون كل مستلم قد أرسل إليك رسالة موقّعة أولًا؛ والردود على البريد المشفّر تُشفّر دائمًا.
 	Certificates from signed mail: {n}	شهادات من البريد الموقّع: {n}
 	Import certificate	استيراد شهادة
 	The password {file} was saved with:	كلمة المرور التي حُفظ بها {file}:
@@ -1523,3 +1522,8 @@ month	May	مايو
 	Folder Size…	حجم المجلدات…
 	How much space each folder takes, here and on the server	المساحة التي يشغلها كل مجلد هنا وعلى الخادم
 	How much space each folder takes on this computer	المساحة التي يشغلها كل مجلد على هذا الكمبيوتر
+	Looking for these recipients' certificates in the Exchange address book: send it again in a moment.	جارٍ البحث عن شهادات هؤلاء المستلمين في دفتر عناوين Exchange: أعد الإرسال بعد لحظة.
+	The Exchange address book couldn't be searched for certificates.	تعذّر البحث عن الشهادات في دفتر عناوين Exchange.
+	Certificates found in the Exchange address book: the message can be sent encrypted.	عُثر على الشهادات في دفتر عناوين Exchange: يمكن إرسال الرسالة مشفّرة.
+	Some recipients have no certificate in the Exchange address book: mail to them can't be encrypted.	بعض المستلمين ليست لهم شهادة في دفتر عناوين Exchange: لا يمكن تشفير البريد المرسل إليهم.
+	Each recipient's certificate comes from a signed message of theirs, or for an Exchange account from its address book; replies to encrypted mail are always encrypted.	تأتي شهادة كل مستلم من رسالة موقّعة منه، أو لحساب Exchange من دفتر عناوينه؛ والردود على البريد المشفّر مشفّرة دائمًا.

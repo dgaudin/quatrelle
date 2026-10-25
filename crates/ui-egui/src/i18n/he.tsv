@@ -1297,7 +1297,6 @@ month	May	מאי
 	Replace…	החלפה…
 	Sign new messages	לחתום על הודעות חדשות
 	Encrypt new messages	להצפין הודעות חדשות
-	Each recipient needs to have sent you a signed message first; replies to encrypted mail are always encrypted.	כל נמען צריך לשלוח לכם קודם הודעה חתומה; תשובות לדואר מוצפן תמיד מוצפנות.
 	Certificates from signed mail: {n}	תעודות מדואר חתום: {n}
 	Import certificate	ייבוא תעודה
 	The password {file} was saved with:	הסיסמה שבה נשמר {file}:
@@ -1523,3 +1522,8 @@ month	May	מאי
 	Folder Size…	גודל תיקיות…
 	How much space each folder takes, here and on the server	כמה מקום תופסת כל תיקייה, כאן ובשרת
 	How much space each folder takes on this computer	כמה מקום תופסת כל תיקייה במחשב זה
+	Looking for these recipients' certificates in the Exchange address book: send it again in a moment.	מחפש את האישורים של נמענים אלה בפנקס הכתובות של Exchange: שלח שוב בעוד רגע.
+	The Exchange address book couldn't be searched for certificates.	לא ניתן היה לחפש אישורים בפנקס הכתובות של Exchange.
+	Certificates found in the Exchange address book: the message can be sent encrypted.	נמצאו אישורים בפנקס הכתובות של Exchange: ניתן לשלוח את ההודעה מוצפנת.
+	Some recipients have no certificate in the Exchange address book: mail to them can't be encrypted.	לחלק מהנמענים אין אישור בפנקס הכתובות של Exchange: לא ניתן להצפין דואר אליהם.
+	Each recipient's certificate comes from a signed message of theirs, or for an Exchange account from its address book; replies to encrypted mail are always encrypted.	האישור של כל נמען מגיע מהודעה חתומה שלו או, בחשבון Exchange, מפנקס הכתובות שלו; תשובות לדואר מוצפן תמיד מוצפנות.

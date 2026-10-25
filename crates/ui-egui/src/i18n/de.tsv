@@ -1301,7 +1301,6 @@ month	May	Mai
 	Replace…	Ersetzen…
 	Sign new messages	Neue Nachrichten signieren
 	Encrypt new messages	Neue Nachrichten verschlüsseln
-	Each recipient needs to have sent you a signed message first; replies to encrypted mail are always encrypted.	Jeder Empfänger muss Ihnen zuerst eine signierte Nachricht geschickt haben; Antworten auf verschlüsselte Mails werden immer verschlüsselt.
 	Certificates from signed mail: {n}	Zertifikate aus signierten Mails: {n}
 	Import certificate	Zertifikat importieren
 	The password {file} was saved with:	Das Kennwort, mit dem {file} gespeichert wurde:
@@ -1527,3 +1526,8 @@ month	May	Mai
 	Folder Size…	Ordnergröße…
 	How much space each folder takes, here and on the server	Wie viel Platz jeder Ordner belegt, hier und auf dem Server
 	How much space each folder takes on this computer	Wie viel Platz jeder Ordner auf diesem Computer belegt
+	Looking for these recipients' certificates in the Exchange address book: send it again in a moment.	Die Zertifikate dieser Empfänger werden im Exchange-Adressbuch gesucht: Senden Sie die Nachricht gleich noch einmal.
+	The Exchange address book couldn't be searched for certificates.	Das Exchange-Adressbuch konnte nicht nach Zertifikaten durchsucht werden.
+	Certificates found in the Exchange address book: the message can be sent encrypted.	Zertifikate im Exchange-Adressbuch gefunden: Die Nachricht kann verschlüsselt gesendet werden.
+	Some recipients have no certificate in the Exchange address book: mail to them can't be encrypted.	Einige Empfänger haben kein Zertifikat im Exchange-Adressbuch: E-Mails an sie können nicht verschlüsselt werden.
+	Each recipient's certificate comes from a signed message of theirs, or for an Exchange account from its address book; replies to encrypted mail are always encrypted.	Das Zertifikat jedes Empfängers stammt aus einer signierten Nachricht von ihm oder, bei einem Exchange-Konto, aus dessen Adressbuch; Antworten auf verschlüsselte E-Mails werden immer verschlüsselt.
