@@ -1527,3 +1527,10 @@ month	May	مايو
 	Certificates found in the Exchange address book: the message can be sent encrypted.	عُثر على الشهادات في دفتر عناوين Exchange: يمكن إرسال الرسالة مشفّرة.
 	Some recipients have no certificate in the Exchange address book: mail to them can't be encrypted.	بعض المستلمين ليست لهم شهادة في دفتر عناوين Exchange: لا يمكن تشفير البريد المرسل إليهم.
 	Each recipient's certificate comes from a signed message of theirs, or for an Exchange account from its address book; replies to encrypted mail are always encrypted.	تأتي شهادة كل مستلم من رسالة موقّعة منه، أو لحساب Exchange من دفتر عناوينه؛ والردود على البريد المشفّر مشفّرة دائمًا.
+	Exchange won't change the rules of the account {email} while Outlook keeps its own copy of them.	لن يغيّر Exchange قواعد الحساب {email} ما دام Outlook يحتفظ بنسخته الخاصة منها.
+	Replace Outlook's copy…	استبدال نسخة Outlook…
+	Replace Outlook's copy of the rules?	هل تريد استبدال نسخة Outlook من القواعد؟
+	Outlook keeps a copy of this mailbox's rules, and Exchange won't change them while it's there. Replacing it lets Quatrelle change them. The rules Outlook runs only while it's open on a computer will be lost; the rules on the server stay.	يحتفظ Outlook بنسخة من قواعد صندوق البريد هذا، ولن يغيّرها Exchange ما دامت موجودة. استبدالها يتيح لـ Quatrelle تغييرها. ستُفقد القواعد التي لا يطبقها Outlook إلا وهو مفتوح على كمبيوتر؛ وتبقى قواعد الخادم.
+	Replace Outlook's copy of the rules	استبدال نسخة Outlook من القواعد
+	the account is offline: connect it, then replace Outlook's copy of the rules	الحساب غير متصل: اتصل به، ثم استبدل نسخة Outlook من القواعد
+	Replace	استبدال

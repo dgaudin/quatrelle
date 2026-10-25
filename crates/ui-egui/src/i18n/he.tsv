@@ -1527,3 +1527,10 @@ month	May	מאי
 	Certificates found in the Exchange address book: the message can be sent encrypted.	נמצאו אישורים בפנקס הכתובות של Exchange: ניתן לשלוח את ההודעה מוצפנת.
 	Some recipients have no certificate in the Exchange address book: mail to them can't be encrypted.	לחלק מהנמענים אין אישור בפנקס הכתובות של Exchange: לא ניתן להצפין דואר אליהם.
 	Each recipient's certificate comes from a signed message of theirs, or for an Exchange account from its address book; replies to encrypted mail are always encrypted.	האישור של כל נמען מגיע מהודעה חתומה שלו או, בחשבון Exchange, מפנקס הכתובות שלו; תשובות לדואר מוצפן תמיד מוצפנות.
+	Exchange won't change the rules of the account {email} while Outlook keeps its own copy of them.	Exchange לא ישנה את הכללים של החשבון {email} כל עוד Outlook שומר עותק משלו שלהם.
+	Replace Outlook's copy…	החלף את העותק של Outlook…
+	Replace Outlook's copy of the rules?	להחליף את העותק של Outlook של הכללים?
+	Outlook keeps a copy of this mailbox's rules, and Exchange won't change them while it's there. Replacing it lets Quatrelle change them. The rules Outlook runs only while it's open on a computer will be lost; the rules on the server stay.	Outlook שומר עותק של הכללים של תיבת דואר זו, ו-Exchange לא ישנה אותם כל עוד הוא קיים. החלפתו מאפשרת ל-Quatrelle לשנות אותם. הכללים ש-Outlook מפעיל רק כשהוא פתוח במחשב יאבדו; הכללים בשרת נשארים.
+	Replace Outlook's copy of the rules	החלף את העותק של Outlook של הכללים
+	the account is offline: connect it, then replace Outlook's copy of the rules	החשבון במצב לא מקוון: חבר אותו ואז החלף את העותק של Outlook של הכללים
+	Replace	החלף

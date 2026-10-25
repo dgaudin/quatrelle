@@ -1528,3 +1528,10 @@ month	May	5月
 	Certificates found in the Exchange address book: the message can be sent encrypted.	已在 Exchange 通讯簿中找到证书：邮件可以加密发送。
 	Some recipients have no certificate in the Exchange address book: mail to them can't be encrypted.	部分收件人在 Exchange 通讯簿中没有证书：无法加密发给他们的邮件。
 	Each recipient's certificate comes from a signed message of theirs, or for an Exchange account from its address book; replies to encrypted mail are always encrypted.	每个收件人的证书来自其发来的签名邮件，或对于 Exchange 帐户来自其通讯簿；回复加密邮件时始终加密。
+	Exchange won't change the rules of the account {email} while Outlook keeps its own copy of them.	只要 Outlook 保留其自己的副本，Exchange 就不会更改帐户 {email} 的规则。
+	Replace Outlook's copy…	替换 Outlook 的副本…
+	Replace Outlook's copy of the rules?	替换 Outlook 保留的规则副本？
+	Outlook keeps a copy of this mailbox's rules, and Exchange won't change them while it's there. Replacing it lets Quatrelle change them. The rules Outlook runs only while it's open on a computer will be lost; the rules on the server stay.	Outlook 保留了此邮箱规则的副本，只要副本存在，Exchange 就不会更改这些规则。替换后 Quatrelle 即可更改它们。Outlook 仅在计算机上打开时运行的规则将丢失；服务器上的规则保留。
+	Replace Outlook's copy of the rules	替换 Outlook 保留的规则副本
+	the account is offline: connect it, then replace Outlook's copy of the rules	帐户处于脱机状态：请连接后再替换 Outlook 保留的规则副本
+	Replace	替换

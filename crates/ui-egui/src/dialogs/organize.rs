@@ -42,11 +42,44 @@ pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &
             }
             !cancel
         }
+        Dialog::ReplaceOutlookRules { account, email } => {
+            ui.set_width(440.0);
+            title(ui, t, "Replace Outlook's copy of the rules?");
+            ui.label(RichText::new(email.as_str()).color(t.dim));
+            ui.add_space(4.0);
+            ui.label(RichText::new(tl!(
+                "Outlook keeps a copy of this mailbox's rules, and Exchange won't change them while it's there. Replacing it lets Quatrelle change them. The rules Outlook runs only while it's open on a computer will be lost; the rules on the server stay."
+            )));
+            let (ok, cancel) = buttons(ui, t, "Replace", true);
+            if ok {
+                acts.push(Action::Run("rules.replaceOutlookCopy", json!({"account": account})));
+            }
+            if ok || cancel {
+                acts.push(Action::Dialog(Dialog::Rules));
+            }
+            !(ok || cancel)
+        }
         Dialog::Rules => {
             ui.set_width(560.0);
             title(ui, t, "Rules");
             ui.label(RichText::new(tl!("Rules run on new mail as it arrives in an Inbox, in this order.")).color(t.dim).small());
             ui.add_space(6.0);
+            // Exchange refuses every change while Outlook keeps its own copy of the rules: said,
+            // with the way out.
+            for a in s.accounts.iter().filter(|a| s.outlook_keeps_rules(&a.config.id)) {
+                egui::Frame::new().fill(t.warn.gamma_multiply(0.15)).corner_radius(6).inner_margin(egui::Margin::same(8)).show(ui, |ui| {
+                    ui.set_width(ui.available_width());
+                    let text = tf!(
+                        "Exchange won't change the rules of the account {email} while Outlook keeps its own copy of them.",
+                        email = a.config.email
+                    );
+                    ui.label(RichText::new(text).color(t.text));
+                    if ui.button(tl!("Replace Outlook's copy…")).clicked() {
+                        acts.push(Action::Dialog(Dialog::ReplaceOutlookRules { account: a.config.id.clone(), email: a.config.email.clone() }));
+                    }
+                });
+                ui.add_space(6.0);
+            }
             // Many rules: a box to find one by its name or what it does.
             let find_id = egui::Id::unique("rules-find");
             let mut find: String = ui.ctx().data(|d| d.get_temp(find_id)).unwrap_or_default();

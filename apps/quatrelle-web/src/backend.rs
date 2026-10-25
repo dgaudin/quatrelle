@@ -559,6 +559,7 @@ async fn job(sh: &Rcs, id: &str, j: Job) {
         | Job::LocalFolderSizes { .. }
         | Job::ServerFolderSizes { .. }
         | Job::FindCertificates { .. }
+        | Job::ReplaceOutlookRules { .. }
         | Job::ExportPst { .. }
         | Job::WorkOffline { .. }
         | Job::SetSync { .. }

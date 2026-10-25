@@ -122,6 +122,10 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             s.set_rules(rules)
         })
         .params(r#"{"rules": [Rule]} (see rules.add)"#),
+        CommandSpec::new("rules.replaceOutlookCopy", "Replace Outlook's copy of the rules", "Home › Rules", |s, v| {
+            s.replace_outlook_rules(p::req_str(v, "account")?)
+        })
+        .params(r#"{"account": string} (an Exchange account; the rules Outlook runs only on its computer are lost)"#),
         CommandSpec::new("rules.add", "New rule", "Home › Rules", |s, v| {
             let rule = v.get("rule").cloned().ok_or_else(|| CmdError::Params("`rule` is required".into()))?;
             let rule = serde_json::from_value(rule).map_err(|e| CmdError::Params(format!("rule: {e}")))?;

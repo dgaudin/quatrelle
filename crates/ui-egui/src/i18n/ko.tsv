@@ -1530,3 +1530,10 @@ month	May	5월
 	Certificates found in the Exchange address book: the message can be sent encrypted.	Exchange 주소록에서 인증서를 찾았습니다. 메시지를 암호화하여 보낼 수 있습니다.
 	Some recipients have no certificate in the Exchange address book: mail to them can't be encrypted.	일부 받는 사람은 Exchange 주소록에 인증서가 없습니다. 이들에게 보내는 메일은 암호화할 수 없습니다.
 	Each recipient's certificate comes from a signed message of theirs, or for an Exchange account from its address book; replies to encrypted mail are always encrypted.	각 받는 사람의 인증서는 그 사람이 보낸 서명된 메시지 또는 Exchange 계정의 경우 주소록에서 가져옵니다. 암호화된 메일에 대한 회신은 항상 암호화됩니다.
+	Exchange won't change the rules of the account {email} while Outlook keeps its own copy of them.	Outlook이 자체 사본을 보관하는 동안 Exchange는 계정 {email}의 규칙을 변경하지 않습니다.
+	Replace Outlook's copy…	Outlook 사본 바꾸기…
+	Replace Outlook's copy of the rules?	Outlook의 규칙 사본을 바꾸시겠습니까?
+	Outlook keeps a copy of this mailbox's rules, and Exchange won't change them while it's there. Replacing it lets Quatrelle change them. The rules Outlook runs only while it's open on a computer will be lost; the rules on the server stay.	Outlook은 이 사서함 규칙의 사본을 보관하며, 사본이 있는 동안 Exchange는 규칙을 변경하지 않습니다. 사본을 바꾸면 Quatrelle이 규칙을 변경할 수 있습니다. Outlook이 컴퓨터에서 열려 있을 때만 실행하는 규칙은 사라지고, 서버의 규칙은 유지됩니다.
+	Replace Outlook's copy of the rules	Outlook의 규칙 사본 바꾸기
+	the account is offline: connect it, then replace Outlook's copy of the rules	계정이 오프라인입니다. 연결한 다음 Outlook의 규칙 사본을 바꾸세요
+	Replace	바꾸기

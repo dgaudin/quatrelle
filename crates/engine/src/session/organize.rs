@@ -7,6 +7,7 @@ use super::*;
 use quatrelle_model::organize::ServerKind;
 
 pub mod junk;
+mod outlook_rules;
 pub mod quick_steps;
 pub mod search_folders;
 

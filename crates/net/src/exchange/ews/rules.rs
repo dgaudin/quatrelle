@@ -277,16 +277,31 @@ impl Client {
         Ok(m.find("InboxRules").and_then(|l| l.children("Rule").find(|r| rule_id(r) == id)).cloned())
     }
 
+    /// The next change of the rules removes the copy Outlook keeps of them, which makes
+    /// Exchange refuse every change while it's there (`RemoveOutlookRuleBlob`): the user agreed
+    /// to lose the rules Outlook runs only on its computer.
+    pub fn replace_outlook_rules(&self) {
+        self.replace_outlook_rules.set(true);
+    }
+
+    /// An `UpdateInboxRules` of these operations, removing Outlook's copy when asked to.
+    pub(super) fn update_request(&self, operations: &str) -> String {
+        let remove = if self.replace_outlook_rules.get() { "<m:RemoveOutlookRuleBlob>true</m:RemoveOutlookRuleBlob>" } else { "" };
+        format!("<m:UpdateInboxRules>{remove}<m:Operations>{operations}</m:Operations></m:UpdateInboxRules>")
+    }
+
     /// One `UpdateInboxRules`, its answer checked.
     pub(super) fn update_rules(&self, operations: &str) -> Result<()> {
-        let doc = self.call(&format!("<m:UpdateInboxRules><m:Operations>{operations}</m:Operations></m:UpdateInboxRules>"))?;
+        let doc = self.call(&self.update_request(operations))?;
         let messages = messages(&doc);
         if messages.is_empty() {
-            return check_message(operation(&doc, "UpdateInboxRulesResponse")?);
+            check_message(operation(&doc, "UpdateInboxRulesResponse")?)?;
         }
         for m in messages {
             check_message(m)?;
         }
+        // Done once: Outlook's copy is gone.
+        self.replace_outlook_rules.set(false);
         Ok(())
     }
 
@@ -318,7 +333,7 @@ impl Client {
             // older answer shape uses (this Exchange 2016 writes the text).
             ops.push_str(&format!("<t:DeleteRuleOperation><t:RuleId Id=\"{0}\">{0}</t:RuleId></t:DeleteRuleOperation>", esc(id)));
         }
-        let doc = self.call(&format!("<m:UpdateInboxRules><m:Operations>{ops}</m:Operations></m:UpdateInboxRules>"))?;
+        let doc = self.call(&self.update_request(&ops))?;
         // As with GetInboxRules: a server may answer with the response element itself.
         let messages = messages(&doc);
         if messages.is_empty() {
@@ -327,6 +342,7 @@ impl Client {
         for m in messages {
             check_message(m)?;
         }
+        self.replace_outlook_rules.set(false);
         // Read the ids back: creating a rule answers none. A rule we sent without one is the
         // rule that appeared, under that name.
         let after = self.inbox_rule_ids()?;

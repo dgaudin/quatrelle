@@ -78,6 +78,8 @@ pub struct Data {
     pub no_commit_time: bool,
     /// The mailbox's limits in kilobytes (warning, sending, receiving), on its root folder.
     pub limits: Option<(u64, u64, u64)>,
+    /// Outlook keeps its own copy of the rules: every change is refused until one removes it.
+    pub outlook_rules: bool,
     /// Changes a `SyncFolderItems` answers at most (fewer than asked: to see the pages).
     pub sync_page: Option<usize>,
     /// The next request on a connection already used is met with the connection closed, unread
@@ -217,6 +219,7 @@ impl Default for Data {
             drop_kept: 0,
             no_commit_time: false,
             limits: None,
+            outlook_rules: false,
             sync_page: None,
             busy: 0,
             url: String::new(),

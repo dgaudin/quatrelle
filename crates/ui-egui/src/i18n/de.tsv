@@ -1531,3 +1531,10 @@ month	May	Mai
 	Certificates found in the Exchange address book: the message can be sent encrypted.	Zertifikate im Exchange-Adressbuch gefunden: Die Nachricht kann verschlüsselt gesendet werden.
 	Some recipients have no certificate in the Exchange address book: mail to them can't be encrypted.	Einige Empfänger haben kein Zertifikat im Exchange-Adressbuch: E-Mails an sie können nicht verschlüsselt werden.
 	Each recipient's certificate comes from a signed message of theirs, or for an Exchange account from its address book; replies to encrypted mail are always encrypted.	Das Zertifikat jedes Empfängers stammt aus einer signierten Nachricht von ihm oder, bei einem Exchange-Konto, aus dessen Adressbuch; Antworten auf verschlüsselte E-Mails werden immer verschlüsselt.
+	Exchange won't change the rules of the account {email} while Outlook keeps its own copy of them.	Exchange ändert die Regeln des Kontos {email} nicht, solange Outlook eine eigene Kopie davon behält.
+	Replace Outlook's copy…	Outlooks Kopie ersetzen…
+	Replace Outlook's copy of the rules?	Outlooks Kopie der Regeln ersetzen?
+	Outlook keeps a copy of this mailbox's rules, and Exchange won't change them while it's there. Replacing it lets Quatrelle change them. The rules Outlook runs only while it's open on a computer will be lost; the rules on the server stay.	Outlook behält eine Kopie der Regeln dieses Postfachs, und Exchange ändert sie nicht, solange sie existiert. Wird sie ersetzt, kann Quatrelle sie ändern. Die Regeln, die Outlook nur ausführt, solange es auf einem Computer geöffnet ist, gehen verloren; die Regeln auf dem Server bleiben.
+	Replace Outlook's copy of the rules	Outlooks Kopie der Regeln ersetzen
+	the account is offline: connect it, then replace Outlook's copy of the rules	das Konto ist offline: Verbinden Sie es und ersetzen Sie dann Outlooks Kopie der Regeln
+	Replace	Ersetzen

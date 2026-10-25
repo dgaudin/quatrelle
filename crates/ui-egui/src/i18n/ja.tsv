@@ -1528,3 +1528,10 @@ month	May	5月
 	Certificates found in the Exchange address book: the message can be sent encrypted.	Exchange のアドレス帳で証明書が見つかりました。メッセージを暗号化して送信できます。
 	Some recipients have no certificate in the Exchange address book: mail to them can't be encrypted.	一部の受信者には Exchange のアドレス帳に証明書がありません。その受信者へのメールは暗号化できません。
 	Each recipient's certificate comes from a signed message of theirs, or for an Exchange account from its address book; replies to encrypted mail are always encrypted.	各受信者の証明書は、その人から届いた署名付きメッセージ、または Exchange アカウントではそのアドレス帳から取得されます。暗号化されたメールへの返信は常に暗号化されます。
+	Exchange won't change the rules of the account {email} while Outlook keeps its own copy of them.	Outlook が独自のコピーを保持している間、Exchange はアカウント {email} のルールを変更しません。
+	Replace Outlook's copy…	Outlook のコピーを置き換える…
+	Replace Outlook's copy of the rules?	Outlook のルールのコピーを置き換えますか?
+	Outlook keeps a copy of this mailbox's rules, and Exchange won't change them while it's there. Replacing it lets Quatrelle change them. The rules Outlook runs only while it's open on a computer will be lost; the rules on the server stay.	Outlook はこのメールボックスのルールのコピーを保持しており、それがある間は Exchange はルールを変更しません。置き換えると Quatrelle がルールを変更できるようになります。Outlook がコンピューター上で開いている間だけ実行するルールは失われます。サーバー上のルールは残ります。
+	Replace Outlook's copy of the rules	Outlook のルールのコピーを置き換える
+	the account is offline: connect it, then replace Outlook's copy of the rules	アカウントがオフラインです。接続してから Outlook のルールのコピーを置き換えてください
+	Replace	置き換え

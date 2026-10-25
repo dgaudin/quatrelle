@@ -192,6 +192,17 @@ impl Worker {
             Job::SetServerRuleEnabled { id, enabled, ours, .. } => self.change_server_rule(&id, Some(enabled), false, ours),
             Job::SetServerRule { id, rule, ours, .. } => self.edit_server_rule(&id, &rule, ours),
             Job::DeleteServerRule { id, ours, .. } => self.change_server_rule(&id, None, true, ours),
+            // The changes queued after it run on this connection with Outlook's copy removed.
+            Job::ReplaceOutlookRules { .. } => {
+                if self.conn.is_none()
+                    && let Err(e) = self.connect()
+                {
+                    log::warn!("{}: Outlook's copy of the rules: {e}", self.id());
+                }
+                if let Some(Conn::Ews(c)) = self.conn.as_ref() {
+                    c.replace_outlook_rules();
+                }
+            }
             Job::FetchPhoto { email, contact, .. } => self.fetch_photo(&email, contact.as_deref()),
             Job::GetRooms { .. } => self.rooms(),
             Job::GetAvailability { emails, from, to, .. } => self.availability(&emails, from, to),
