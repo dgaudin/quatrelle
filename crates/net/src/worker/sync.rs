@@ -609,8 +609,9 @@ impl Worker {
         let q = match self.conn.as_mut() {
             Some(Conn::Imap(c)) => c.quota(),
             Some(Conn::Jmap(c)) => c.quota(),
+            Some(Conn::Ews(c)) => sizes::ews_quota(c),
             // Graph doesn't tell a mailbox's size to the mailbox's owner.
-            Some(Conn::Graph(_) | Conn::Ews(_) | Conn::Pop) | None => return,
+            Some(Conn::Graph(_) | Conn::Pop) | None => return,
         };
         match q {
             Ok(Some((used, limit))) => self.sink.emit(Event::Quota { account: self.id(), used, limit }),

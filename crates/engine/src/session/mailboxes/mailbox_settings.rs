@@ -1,7 +1,50 @@
-//! The session: mailbox settings on the server (automatic replies), emptying folders, and the
-//! data file kept here (its size, Compact Now).
+//! The session: mailbox settings on the server (automatic replies), emptying folders, the data
+//! file kept here (its size, Compact Now), and each folder's size here and on the server.
+
+use quatrelle_model::{FolderSize, MailboxQuota};
 
 use super::*;
+
+/// Outlook's Folder Size for one account: each folder's size on this computer (Local Data) and
+/// on its server (Server Data), as each answer comes in ([`Session::folder_sizes`]).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct FolderSizes {
+    pub account: String,
+    pub local: Sizes,
+    pub server: Sizes,
+    /// The mailbox's limits, when the server told them.
+    pub quota: Option<MailboxQuota>,
+}
+
+/// One side of [`FolderSizes`].
+#[derive(Clone, Debug, Default, PartialEq)]
+pub enum Sizes {
+    /// Asked, not answered yet.
+    #[default]
+    Loading,
+    /// From the top down.
+    Loaded(Vec<FolderSize>),
+    /// Nothing of the account is kept on this computer (online only).
+    NotKept,
+    /// The account has no server (the sample mailbox, a data file).
+    NoServer,
+    /// The server doesn't tell each folder's size (only Exchange does).
+    NotTold,
+    Failed(String),
+}
+
+impl Sizes {
+    fn json(&self) -> serde_json::Value {
+        match self {
+            Sizes::Loading => serde_json::json!({"loading": true}),
+            Sizes::Loaded(f) => serde_json::json!({"folders": f}),
+            Sizes::NotKept => serde_json::json!({"error": "nothing of this account is kept on this computer"}),
+            Sizes::NoServer => serde_json::json!({"error": "this account has no server"}),
+            Sizes::NotTold => serde_json::json!({"error": "this server doesn't tell each folder's size"}),
+            Sizes::Failed(e) => serde_json::json!({"error": e}),
+        }
+    }
+}
 
 impl Session {
     /// Delete everything in a folder for good (only Deleted Items and Junk Email).
@@ -94,6 +137,56 @@ impl Session {
         self.compacting = Some(id.clone());
         self.jobs.push(Job::CompactDataFile { account: id.clone() });
         Ok(serde_json::json!({"compacting": id}))
+    }
+
+    /// Read how much space each of an account's folders takes (the current account's when none
+    /// is named), here and on its server, as Outlook's Folder Size: the answers come in as
+    /// events, into [`Session::sizes`].
+    pub fn folder_sizes(&mut self, account: Option<&str>) -> CmdResult {
+        let id = match account {
+            Some(a) => a.to_string(),
+            None => self.current_account().map(|a| a.config.id.clone()).ok_or_else(|| CmdError::Disabled("add an account first".into()))?,
+        };
+        let a = self.account(&id).ok_or_else(|| CmdError::Params(format!("no account `{id}`")))?;
+        let (local, online, ews) = (a.is_local(), a.config.keeps_online(), a.config.ews.is_some());
+        let mut v = FolderSizes { account: id.clone(), ..Default::default() };
+        if online || self.store.is_none() {
+            v.local = Sizes::NotKept;
+        } else {
+            self.jobs.push(Job::LocalFolderSizes { account: id.clone() });
+        }
+        if local {
+            v.server = Sizes::NoServer;
+        } else if ews {
+            self.jobs.push(Job::ServerFolderSizes { account: id.clone() });
+        } else {
+            v.server = Sizes::NotTold;
+        }
+        let out = serde_json::json!({"account": id, "local": v.local.json(), "server": v.server.json()});
+        self.sizes = Some(v);
+        Ok(out)
+    }
+
+    /// An answer to [`Session::folder_sizes`], for the account still being looked at.
+    pub(in crate::session) fn sizes_answered(
+        &mut self,
+        account: &str,
+        server: bool,
+        folders: Vec<FolderSize>,
+        quota: Option<MailboxQuota>,
+        error: Option<String>,
+    ) {
+        let Some(v) = self.sizes.as_mut().filter(|v| v.account == account) else { return };
+        let side = match error {
+            Some(e) => Sizes::Failed(e),
+            None => Sizes::Loaded(folders),
+        };
+        if server {
+            v.server = side;
+            v.quota = quota.or(v.quota);
+        } else {
+            v.local = side;
+        }
     }
 
     pub(in crate::session) fn compacted(&mut self, account: &str, before: u64, after: u64, error: Option<String>) {

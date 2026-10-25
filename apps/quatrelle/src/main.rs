@@ -8,7 +8,8 @@
 //! `ui.settings`), `ui.openExport`, `ui.options` and `ui.about` open the File page at that page;
 //! `ui.addAccount` (optionally `={"email":…,"advanced":true,"graph":true}` or `"pop":true`), `ui.newEvent`
 //! (optionally `={"at":"YYYY-MM-DDTHH:MM","summary":…,"guests":…,"rooms":…,"scheduling":true,"finder":true}`)
-//! and `ui.newContact` open those dialogs.
+//! and `ui.newContact` open those dialogs; `ui.folderSize` (optionally `={"account":…}`) opens
+//! Folder Size over the File page.
 #![cfg_attr(all(target_os = "windows", not(debug_assertions)), windows_subsystem = "windows")]
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
@@ -595,6 +596,15 @@ fn run(
                         app.ui.dialog = Some(d);
                     }
                     "ui.newContact" => app.ui.dialog = Some(quatrelle_ui_egui::Dialog::new_contact()),
+                    "ui.folderSize" => {
+                        let p: serde_json::Value = serde_json::from_str(params).unwrap_or_default();
+                        let first = app.session.accounts.first().map(|a| a.config.id.clone());
+                        if let Some(id) = p.get("account").and_then(|v| v.as_str()).map(str::to_string).or(first) {
+                            app.run("account.folderSizes", serde_json::json!({"account": id}));
+                            app.ui.backstage = Some(Backstage::new(Page::Info));
+                            app.ui.dialog = Some(quatrelle_ui_egui::Dialog::folder_size(&app.session, &id));
+                        }
+                    }
                     "ui.rules" => app.ui.dialog = Some(quatrelle_ui_egui::Dialog::Rules),
                     _ => match serde_json::from_str(params) {
                         Ok(p) => app.run(id, p),

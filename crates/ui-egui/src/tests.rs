@@ -201,6 +201,7 @@ pub(crate) fn tour() {
             ),
             Dialog::ConfirmEmpty { account: "sample".into(), folder: "Trash".into(), name: "Deleted Items".into(), for_good: true },
             Dialog::ConfirmEmpty { account: "sample".into(), folder: "INBOX".into(), name: "Inbox".into(), for_good: false },
+            Dialog::folder_size(&a.session, "sample"),
             Dialog::FolderProperties {
                 name: "Inbox".into(),
                 account: "riley@studio.example".into(),

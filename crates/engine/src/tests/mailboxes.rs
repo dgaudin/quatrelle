@@ -339,3 +339,45 @@ fn rows_downloaded_ahead_get_their_preview_from_the_source() {
     assert_eq!(preview(&s, 9), "Late figures.");
     done(s);
 }
+
+/// Outlook's Folder Size: each side is asked for where it can be answered (Exchange tells each
+/// folder's size, an IMAP server doesn't), and each answer fills its own side; one for an
+/// account no longer looked at is dropped.
+#[test]
+fn folder_size_asks_each_side_and_fills_it_as_it_answers() {
+    use crate::Sizes;
+    use quatrelle_model::{FolderSize, MailboxQuota};
+    let mut s = Session::open(Some(temp("folder-sizes")), quatrelle_model::dates::Clock::new(NOW, 0));
+    let ews = s
+        .run("account.add", &json!({"email": "riley@contoso.example", "ews": "mail.contoso.example", "username": "CONTOSO\\riley", "password": "pw"}))
+        .unwrap()["account"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let imap = s.run("account.add", &json!({"email": "zoe@example.org", "password": "pw"})).unwrap()["account"].as_str().unwrap().to_string();
+    s.take_jobs();
+
+    let out = s.run("account.folderSizes", &json!({"account": ews})).unwrap();
+    assert_eq!((&out["local"]["loading"], &out["server"]["loading"]), (&json!(true), &json!(true)));
+    let jobs = s.take_jobs();
+    assert!(
+        jobs.contains(&Job::LocalFolderSizes { account: ews.clone() }) && jobs.contains(&Job::ServerFolderSizes { account: ews.clone() }),
+        "{jobs:?}"
+    );
+    let inbox = FolderSize { path: vec!["Boîte de réception".into()], size: 4 << 20, items: 12, folder: None };
+    let quota = MailboxQuota { warning: 1 << 30, send: 3 << 29, receive: 2 << 30 };
+    s.apply(Event::FolderSizes { account: ews.clone(), server: true, folders: vec![inbox.clone()], quota: Some(quota), error: None });
+    let v = s.sizes.clone().unwrap();
+    assert_eq!((v.server, v.local, v.quota), (Sizes::Loaded(vec![inbox]), Sizes::Loading, Some(quota)));
+    s.apply(Event::FolderSizes { account: ews.clone(), server: false, folders: Vec::new(), quota: None, error: Some("damaged".into()) });
+    assert_eq!(s.sizes.as_ref().unwrap().local, Sizes::Failed("damaged".into()));
+
+    // An IMAP account: its server isn't asked, and Exchange's late answer is dropped.
+    let out = s.run("account.folderSizes", &json!({"account": imap})).unwrap();
+    assert!(out["server"]["error"].is_string());
+    assert_eq!(s.take_jobs(), vec![Job::LocalFolderSizes { account: imap.clone() }]);
+    s.apply(Event::FolderSizes { account: ews, server: true, folders: Vec::new(), quota: None, error: None });
+    let v = s.sizes.clone().unwrap();
+    assert_eq!((v.account, v.server, v.quota), (imap, Sizes::NotTold, None));
+    assert!(s.run("account.folderSizes", &json!({"account": "nobody"})).is_err());
+}

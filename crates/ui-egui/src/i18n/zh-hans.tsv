@@ -1499,3 +1499,28 @@ month	May	5月
 	Compact Now	立即压缩
 	Give the space freed inside the data file back to the disk	将数据文件中腾出的空间归还给磁盘
 	The data file was compacted.	数据文件已压缩。
+	{size} B	{size} 字节
+	{size} KB	{size} KB
+	{size} MB	{size} MB
+	{size} GB	{size} GB
+	Folder Size	文件夹大小
+	Local Data	本地数据
+	Server Data	服务器数据
+	Asking the server…	正在询问服务器…
+	Adding up what's kept here…	正在合计此处保存的内容…
+	This server doesn't tell each folder's size: only Exchange does.	此服务器不提供每个文件夹的大小：只有 Exchange 提供。
+	The sizes couldn't be read: {error}	无法读取大小：{error}
+	Refresh	刷新
+	Total size	总大小
+	Warning at	警告阈值
+	Sending stops at	停止发送阈值
+	Receiving stops at	停止接收阈值
+	The server doesn't tell this mailbox's limit.	服务器未提供此邮箱的限额。
+	Mail folders	邮件文件夹
+	Calendars, contacts, the search index and free space	日历、联系人、搜索索引和可用空间
+	In all on this computer	此计算机上的总计
+	Items	项目数
+	No folders.	没有文件夹。
+	Folder Size…	文件夹大小…
+	How much space each folder takes, here and on the server	每个文件夹占用的空间（此处和服务器上）
+	How much space each folder takes on this computer	每个文件夹在此计算机上占用的空间

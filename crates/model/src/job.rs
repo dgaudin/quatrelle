@@ -110,6 +110,39 @@ impl Vacation {
     }
 }
 
+/// A folder's size, as Outlook's Folder Size lists it: its place (its names from the top down),
+/// the bytes its own items take (its subfolders' not counted) and how many items it holds.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FolderSize {
+    pub path: Vec<String>,
+    pub size: u64,
+    #[serde(default)]
+    pub items: u32,
+    /// The folder as the account lists it (its [`Folder::path`]), for one kept on this computer.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub folder: Option<String>,
+}
+
+/// A mailbox's limits on its server, in bytes, as Exchange sets them (0: none set): when its
+/// owner is warned, when sending stops, and when mail stops coming in.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MailboxQuota {
+    #[serde(default)]
+    pub warning: u64,
+    #[serde(default)]
+    pub send: u64,
+    #[serde(default)]
+    pub receive: u64,
+}
+
+impl MailboxQuota {
+    /// The limit the mailbox is measured against, as Outlook's bar shows it: where mail stops
+    /// coming in, else where sending stops, else the warning (0: no limit at all).
+    pub fn limit(&self) -> u64 {
+        [self.receive, self.send, self.warning].into_iter().find(|n| *n > 0).unwrap_or(0)
+    }
+}
+
 /// A `YYYY-MM-DD` date that is a real day.
 pub fn is_day(s: &str) -> bool {
     let b = s.as_bytes();
@@ -275,6 +308,13 @@ pub enum Job {
     ImportPst { account: String, path: String },
     /// Compact the account's data file (Outlook's Compact Now); answered by [`Event::Compacted`].
     CompactDataFile { account: String },
+    /// How much space each of the account's folders takes on this computer (Outlook's Folder
+    /// Size, Local Data): the bytes its data file keeps for each. Answered by
+    /// [`Event::FolderSizes`].
+    LocalFolderSizes { account: String },
+    /// The same on the server (Server Data), with the mailbox's limits where the server tells
+    /// them. Exchange only; answered by [`Event::FolderSizes`].
+    ServerFolderSizes { account: String },
     /// Write the account's mail to an Outlook data file, which opens as `name`.
     ExportPst { account: String, path: String, name: String },
     /// Answer a message's voting buttons with `choice`: a reply to its sender that names it, as
@@ -349,6 +389,8 @@ impl Job {
             | Job::SyncDav { account }
             | Job::ImportPst { account, .. }
             | Job::CompactDataFile { account }
+            | Job::LocalFolderSizes { account }
+            | Job::ServerFolderSizes { account }
             | Job::ExportPst { account, .. }
             | Job::GetRooms { account }
             | Job::GetAvailability { account, .. } => account,
@@ -561,6 +603,16 @@ pub enum Event {
         account: String,
         before: u64,
         after: u64,
+        error: Option<String>,
+    },
+    /// The size of each of an account's folders ([`Job::LocalFolderSizes`], or with `server`
+    /// [`Job::ServerFolderSizes`]), from the top down, and the mailbox's limits where the
+    /// server tells them; or why they couldn't be read.
+    FolderSizes {
+        account: String,
+        server: bool,
+        folders: Vec<FolderSize>,
+        quota: Option<MailboxQuota>,
         error: Option<String>,
     },
     /// How an export to a data file is going (`done`: finished, or failed with `error`).

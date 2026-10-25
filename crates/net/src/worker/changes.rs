@@ -195,11 +195,13 @@ impl Worker {
             Job::FetchPhoto { email, contact, .. } => self.fetch_photo(&email, contact.as_deref()),
             Job::GetRooms { .. } => self.rooms(),
             Job::GetAvailability { emails, from, to, .. } => self.availability(&emails, from, to),
+            Job::ServerFolderSizes { .. } => self.folder_sizes(),
             Job::FetchUrl { .. }
             | Job::Discover { .. }
             | Job::SignIn { .. }
             | Job::ImportPst { .. }
             | Job::CompactDataFile { .. }
+            | Job::LocalFolderSizes { .. }
             | Job::ExportPst { .. }
             | Job::ImportIdentity { .. }
             | Job::ForgetIdentity { .. }

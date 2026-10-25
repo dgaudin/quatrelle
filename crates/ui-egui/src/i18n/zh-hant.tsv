@@ -1501,3 +1501,28 @@ month	May	5月
 	Compact Now	立即壓縮
 	Give the space freed inside the data file back to the disk	將資料檔中騰出的空間歸還給磁碟
 	The data file was compacted.	資料檔已壓縮。
+	{size} B	{size} 位元組
+	{size} KB	{size} KB
+	{size} MB	{size} MB
+	{size} GB	{size} GB
+	Folder Size	資料夾大小
+	Local Data	本機資料
+	Server Data	伺服器資料
+	Asking the server…	正在詢問伺服器…
+	Adding up what's kept here…	正在加總此處保存的內容…
+	This server doesn't tell each folder's size: only Exchange does.	此伺服器不提供每個資料夾的大小：只有 Exchange 提供。
+	The sizes couldn't be read: {error}	無法讀取大小：{error}
+	Refresh	重新整理
+	Total size	總大小
+	Warning at	警告門檻
+	Sending stops at	停止傳送門檻
+	Receiving stops at	停止接收門檻
+	The server doesn't tell this mailbox's limit.	伺服器未提供此信箱的限額。
+	Mail folders	郵件資料夾
+	Calendars, contacts, the search index and free space	行事曆、連絡人、搜尋索引與可用空間
+	In all on this computer	此電腦上的總計
+	Items	項目數
+	No folders.	沒有資料夾。
+	Folder Size…	資料夾大小…
+	How much space each folder takes, here and on the server	每個資料夾佔用的空間（此處與伺服器上）
+	How much space each folder takes on this computer	每個資料夾在此電腦上佔用的空間

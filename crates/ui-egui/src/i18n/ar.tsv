@@ -1498,3 +1498,28 @@ month	May	مايو
 	Compact Now	ضغط الآن
 	Give the space freed inside the data file back to the disk	إعادة المساحة المحررة في ملف البيانات إلى القرص
 	The data file was compacted.	تم ضغط ملف البيانات.
+	{size} B	{size} بايت
+	{size} KB	{size} كيلوبايت
+	{size} MB	{size} ميجابايت
+	{size} GB	{size} جيجابايت
+	Folder Size	حجم المجلدات
+	Local Data	البيانات المحلية
+	Server Data	بيانات الخادم
+	Asking the server…	جارٍ سؤال الخادم…
+	Adding up what's kept here…	جارٍ جمع ما هو محفوظ هنا…
+	This server doesn't tell each folder's size: only Exchange does.	لا يذكر هذا الخادم حجم كل مجلد: Exchange وحده يفعل ذلك.
+	The sizes couldn't be read: {error}	تعذّرت قراءة الأحجام: {error}
+	Refresh	تحديث
+	Total size	الحجم الكلي
+	Warning at	التحذير عند
+	Sending stops at	يتوقف الإرسال عند
+	Receiving stops at	يتوقف الاستلام عند
+	The server doesn't tell this mailbox's limit.	لا يذكر الخادم حدّ صندوق البريد هذا.
+	Mail folders	مجلدات البريد
+	Calendars, contacts, the search index and free space	التقويمات وجهات الاتصال وفهرس البحث والمساحة الحرة
+	In all on this computer	الإجمالي على هذا الكمبيوتر
+	Items	العناصر
+	No folders.	لا توجد مجلدات.
+	Folder Size…	حجم المجلدات…
+	How much space each folder takes, here and on the server	المساحة التي يشغلها كل مجلد هنا وعلى الخادم
+	How much space each folder takes on this computer	المساحة التي يشغلها كل مجلد على هذا الكمبيوتر

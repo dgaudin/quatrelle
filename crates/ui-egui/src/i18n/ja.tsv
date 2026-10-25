@@ -1499,3 +1499,28 @@ month	May	5月
 	Compact Now	今すぐ圧縮
 	Give the space freed inside the data file back to the disk	データ ファイル内で空いた領域をディスクに戻す
 	The data file was compacted.	データ ファイルを圧縮しました。
+	{size} B	{size} バイト
+	{size} KB	{size} KB
+	{size} MB	{size} MB
+	{size} GB	{size} GB
+	Folder Size	フォルダーのサイズ
+	Local Data	ローカル データ
+	Server Data	サーバー データ
+	Asking the server…	サーバーに問い合わせています…
+	Adding up what's kept here…	ここに保存されている分を合計しています…
+	This server doesn't tell each folder's size: only Exchange does.	このサーバーは各フォルダーのサイズを示しません。示すのは Exchange だけです。
+	The sizes couldn't be read: {error}	サイズを読み取れませんでした: {error}
+	Refresh	更新
+	Total size	合計サイズ
+	Warning at	警告の基準
+	Sending stops at	送信が停止する容量
+	Receiving stops at	受信が停止する容量
+	The server doesn't tell this mailbox's limit.	サーバーはこのメールボックスの上限を示していません。
+	Mail folders	メール フォルダー
+	Calendars, contacts, the search index and free space	予定表、連絡先、検索インデックス、空き領域
+	In all on this computer	このコンピューター上の合計
+	Items	アイテム数
+	No folders.	フォルダーはありません。
+	Folder Size…	フォルダーのサイズ…
+	How much space each folder takes, here and on the server	各フォルダーが使用している容量 (ここと、サーバー上)
+	How much space each folder takes on this computer	各フォルダーがこのコンピューターで使用している容量

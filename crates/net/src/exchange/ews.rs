@@ -308,7 +308,7 @@ const HIDDEN: &str = "<t:ExtendedFieldURI PropertyTag=\"0x10f4\" PropertyType=\"
 /// folders (Working Set, Yammer Root, Conversation Action Settings…), which Outlook hides.
 fn is_hidden(f: &El) -> bool {
     f.children("ExtendedProperty").any(|p| {
-        p.child("ExtendedFieldURI").and_then(|u| u.attr("PropertyTag")).is_some_and(|t| t.eq_ignore_ascii_case("0x10f4"))
+        p.child("ExtendedFieldURI").and_then(|u| u.attr("PropertyTag")).is_some_and(|t| is_tag(t, "0x10f4"))
             && p.text_of("Value").is_some_and(|v| v.trim().eq_ignore_ascii_case("true"))
     })
 }
@@ -358,10 +358,23 @@ fn voting_choices(it: &El) -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// Whether a property tag as the server writes it is `tag`: Exchange answers in its own
+/// spelling (`0xe08` for `0x0E08`, in hex for one asked in decimal).
+pub(crate) fn is_tag(said: &str, tag: &str) -> bool {
+    fn num(t: &str) -> Option<u32> {
+        let t = t.trim();
+        t.strip_prefix("0x").or_else(|| t.strip_prefix("0X")).map_or_else(|| t.parse().ok(), |h| u32::from_str_radix(h, 16).ok())
+    }
+    match (num(said), num(tag)) {
+        (Some(a), Some(b)) => a == b,
+        _ => said.eq_ignore_ascii_case(tag),
+    }
+}
+
 /// An extended property's value.
 fn extended(it: &El, tag: &str) -> Option<i64> {
     it.children("ExtendedProperty")
-        .find(|p| p.child("ExtendedFieldURI").and_then(|u| u.attr("PropertyTag")).is_some_and(|t| t.eq_ignore_ascii_case(tag)))
+        .find(|p| p.child("ExtendedFieldURI").and_then(|u| u.attr("PropertyTag")).is_some_and(|t| is_tag(t, tag)))
         .and_then(|p| p.text_of("Value"))
         .and_then(|v| v.trim().parse().ok())
 }
@@ -369,7 +382,7 @@ fn extended(it: &El, tag: &str) -> Option<i64> {
 /// An extended property's value as text.
 fn extended_text<'a>(it: &'a El, tag: &str) -> Option<&'a str> {
     it.children("ExtendedProperty")
-        .find(|p| p.child("ExtendedFieldURI").and_then(|u| u.attr("PropertyTag")).is_some_and(|t| t.eq_ignore_ascii_case(tag)))
+        .find(|p| p.child("ExtendedFieldURI").and_then(|u| u.attr("PropertyTag")).is_some_and(|t| is_tag(t, tag)))
         .and_then(|p| p.text_of("Value"))
 }
 
@@ -467,6 +480,7 @@ mod mailbox;
 mod requests;
 mod rules;
 mod shared;
+mod sizes;
 mod sync;
 mod xml;
 

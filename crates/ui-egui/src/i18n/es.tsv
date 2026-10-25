@@ -1502,3 +1502,28 @@ month	May	mayo
 	Compact Now	Compactar ahora
 	Give the space freed inside the data file back to the disk	Devolver al disco el espacio liberado dentro del archivo de datos
 	The data file was compacted.	Se compactó el archivo de datos.
+	{size} B	{size} B
+	{size} KB	{size} KB
+	{size} MB	{size} MB
+	{size} GB	{size} GB
+	Folder Size	Tamaño de carpeta
+	Local Data	Datos locales
+	Server Data	Datos del servidor
+	Asking the server…	Preguntando al servidor…
+	Adding up what's kept here…	Sumando lo guardado aquí…
+	This server doesn't tell each folder's size: only Exchange does.	Este servidor no indica el tamaño de cada carpeta: solo Exchange lo hace.
+	The sizes couldn't be read: {error}	No se pudieron leer los tamaños: {error}
+	Refresh	Actualizar
+	Total size	Tamaño total
+	Warning at	Advertencia a partir de
+	Sending stops at	El envío se detiene en
+	Receiving stops at	La recepción se detiene en
+	The server doesn't tell this mailbox's limit.	El servidor no indica el límite de este buzón.
+	Mail folders	Carpetas de correo
+	Calendars, contacts, the search index and free space	Calendarios, contactos, el índice de búsqueda y el espacio libre
+	In all on this computer	En total en este equipo
+	Items	Elementos
+	No folders.	No hay carpetas.
+	Folder Size…	Tamaño de carpeta…
+	How much space each folder takes, here and on the server	Cuánto espacio ocupa cada carpeta, aquí y en el servidor
+	How much space each folder takes on this computer	Cuánto espacio ocupa cada carpeta en este equipo

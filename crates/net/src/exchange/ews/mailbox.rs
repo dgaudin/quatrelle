@@ -2,6 +2,10 @@
 
 use super::*;
 
+/// The folders Exchange makes itself at the top of a mailbox, by name: some servers don't mark
+/// them hidden.
+pub(super) const SYSTEM_FOLDERS: [&str; 5] = ["Working Set", "Yammer Root", "PersonMetadata", "ExternalContacts", "Social Activity Notifications"];
+
 impl Client {
     /// The account's mail folders, with their roles and counts.
     pub fn mailboxes(&self) -> Result<Vec<Mailbox>> {
@@ -44,10 +48,8 @@ impl Client {
                 // Exchange's own hidden folders aren't the user's mail: Outlook doesn't show
                 // them, and some take long to read.
                 let hidden = is_hidden(f);
-                // Some servers don't mark them: the ones Exchange makes itself, by name, at the top.
-                let system = ["Working Set", "Yammer Root", "PersonMetadata", "ExternalContacts", "Social Activity Notifications"];
                 let top = f.child("ParentFolderId").and_then(|p| p.attr("Id")).is_some_and(|p| Some(p) == root.as_deref());
-                if hidden || (top && f.text_of("DisplayName").is_some_and(|n| system.contains(&n.trim()))) {
+                if hidden || (top && f.text_of("DisplayName").is_some_and(|n| SYSTEM_FOLDERS.contains(&n.trim()))) {
                     continue;
                 }
                 if !(class.is_empty() || class == "IPF.Note" || class.starts_with("IPF.Note.")) || skip.contains(&id) || out.len() >= MAX_FOLDERS {

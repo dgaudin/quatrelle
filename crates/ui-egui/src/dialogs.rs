@@ -11,6 +11,7 @@ use crate::theme::{self, Tokens};
 use crate::{Action, Icon, widgets};
 
 mod accounts;
+mod folder_sizes;
 mod folders;
 mod mailbox;
 mod moving;
@@ -20,6 +21,7 @@ pub(crate) mod pim_dialogs;
 mod writing;
 
 pub use accounts::*;
+pub use folder_sizes::SizeSort;
 pub use mailbox::*;
 pub use moving::MoveForm;
 pub use organize::*;
@@ -130,6 +132,14 @@ pub enum Dialog {
         total: usize,
         unread: usize,
         size: u64,
+    },
+    /// Outlook's Folder Size: each of an account's folders' sizes on this computer, or on its
+    /// server (`server`), as the session has them; `kept`: what the account takes here in all.
+    FolderSize {
+        account: String,
+        server: bool,
+        sort: SizeSort,
+        kept: u64,
     },
     Event(Box<crate::pim_dialogs::EventForm>),
     Contact(Box<crate::pim_dialogs::ContactForm>),
@@ -309,6 +319,12 @@ impl Dialog {
             unread,
             size: kept.messages.iter().map(|m| u64::from(m.size)).sum(),
         }
+    }
+
+    /// Folder Size for an account, open on its server's side when it has a server.
+    pub fn folder_size(s: &Session, account: &str) -> Dialog {
+        let server = s.account(account).is_some_and(|a| !a.is_local());
+        Dialog::FolderSize { account: account.to_string(), server, sort: SizeSort::Place, kept: s.cache_size(account) }
     }
 
     /// An event, opened at one of its occurrences.
@@ -529,6 +545,7 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Act
         | Dialog::EditAccount(..)
         | Dialog::OpenSharedMailbox { .. } => accounts::draw(ui, d, s, t, acts),
         Dialog::Signature(..) | Dialog::Vacation(..) => mailbox::draw(ui, d, s, t, acts),
+        Dialog::FolderSize { .. } => folder_sizes::draw(ui, d, s, t, acts),
         Dialog::ConfirmDelete { .. }
         | Dialog::MoveTo { .. }
         | Dialog::FolderName { .. }

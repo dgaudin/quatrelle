@@ -556,6 +556,8 @@ async fn job(sh: &Rcs, id: &str, j: Job) {
         | Job::SignIn { .. }
         | Job::ImportPst { .. }
         | Job::CompactDataFile { .. }
+        | Job::LocalFolderSizes { .. }
+        | Job::ServerFolderSizes { .. }
         | Job::ExportPst { .. }
         | Job::WorkOffline { .. }
         | Job::SetSync { .. }
@@ -680,6 +682,18 @@ impl Backend for WebBackend {
             // The browser keeps no data files: nothing to compact.
             Job::CompactDataFile { account } => {
                 emit(sh, Event::Compacted { account, before: 0, after: 0, error: Some("the browser keeps no data file".into()) })
+            }
+            // What the browser keeps of each folder; a JMAP server doesn't tell each one's size.
+            Job::LocalFolderSizes { account } => {
+                let (folders, error) = match store(sh).folder_sizes(&account) {
+                    Ok(f) => (f, None),
+                    Err(e) => (Vec::new(), Some(e.to_string())),
+                };
+                emit(sh, Event::FolderSizes { account, server: false, folders, quota: None, error })
+            }
+            Job::ServerFolderSizes { account } => {
+                let error = Some("this server doesn't tell each folder's size".to_string());
+                emit(sh, Event::FolderSizes { account, server: true, folders: Vec::new(), quota: None, error })
             }
             Job::ExportPst { account, .. } => emit(
                 sh,

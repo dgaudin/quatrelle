@@ -133,6 +133,24 @@ impl Store {
         self.files.size(&self.account_dir(account))
     }
 
+    /// The bytes each of an account's folders takes here (its list and the messages kept), as
+    /// Outlook's Folder Size shows a data file's (Local Data): each folder named by its place.
+    pub fn folder_sizes(&self, account: &str) -> Result<Vec<quatrelle_model::FolderSize>> {
+        let folders = self.load_folders(account)?;
+        Ok(folders
+            .iter()
+            .map(|f| {
+                let decoded = quatrelle_model::utf7::decode(&f.path);
+                let path = match f.delimiter {
+                    Some(d) => decoded.split(d).map(str::to_string).collect(),
+                    None => vec![decoded],
+                };
+                let size = self.files.size(&self.folder_dir(account, &f.path));
+                quatrelle_model::FolderSize { path, size, items: 0, folder: Some(f.path.clone()) }
+            })
+            .collect())
+    }
+
     /// An account removed, as Outlook removes one: its data file stays where it is, closed and
     /// no one's (returned, when there is one), and what's kept outside data files goes.
     pub fn remove_account(&self, account: &str) -> Result<Option<PathBuf>> {

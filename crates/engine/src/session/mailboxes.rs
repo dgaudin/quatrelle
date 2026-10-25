@@ -8,6 +8,7 @@ mod contacts;
 pub(crate) use contacts::Contacts;
 mod folder_edits;
 mod mailbox_settings;
+pub use mailbox_settings::{FolderSizes, Sizes};
 mod shared_mailboxes;
 
 impl Session {

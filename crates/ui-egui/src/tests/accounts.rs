@@ -269,3 +269,41 @@ fn an_account_is_kept_online_only_from_the_forms() {
     assert!(matches!(&a.ui.dialog, Some(Dialog::AddAccount(f)) if f.online_only == Some(false) && f.params().get("onlineOnly").is_none()));
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// Folder Size: each side is drawn while it's asked for, then as it comes in (the server's with
+/// the mailbox's limits), sorted by a heading, and asked again by Refresh.
+#[test]
+fn folder_size_shows_each_side_as_it_comes_in() {
+    use quatrelle_engine::model::{Event, FolderSize, Job, MailboxQuota};
+    let (mut a, dir) = app("folder-size");
+    let ctx = egui::Context::default();
+    let id = a
+        .session
+        .run("account.add", &json!({"email": "riley@contoso.example", "ews": "mail.contoso.example", "username": "CONTOSO\\riley", "password": "pw"}))
+        .unwrap()["account"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    a.session.take_jobs();
+    a.session.run("account.folderSizes", &json!({"account": id})).unwrap();
+    a.ui.dialog = Some(Dialog::folder_size(&a.session, &id));
+    assert!(matches!(a.ui.dialog, Some(Dialog::FolderSize { server: true, .. })), "an account with a server opens on its side");
+    frame(&ctx, &mut a, vec![]);
+    let f = |path: &[&str], size: u64| FolderSize { path: path.iter().map(|p| p.to_string()).collect(), size, items: 3, folder: None };
+    let folders = vec![f(&["Boîte de réception"], 3 << 30), f(&["Boîte de réception", "Projets"], 1 << 30), f(&["Calendrier"], 5 << 20)];
+    let quota = MailboxQuota { warning: 9 << 30, send: 19 << 29, receive: 10 << 30 };
+    a.session.apply(Event::FolderSizes { account: id.clone(), server: true, folders, quota: Some(quota), error: None });
+    frame(&ctx, &mut a, vec![]);
+    if let Some(Dialog::FolderSize { server, sort, .. }) = &mut a.ui.dialog {
+        *sort = crate::dialogs::SizeSort::Total;
+        *server = false;
+    }
+    frame(&ctx, &mut a, vec![]);
+    a.session.apply(Event::FolderSizes { account: id.clone(), server: false, folders: Vec::new(), quota: None, error: Some("damaged".into()) });
+    frame(&ctx, &mut a, vec![]);
+    assert!(a.ui.dialog.is_some(), "still open");
+    a.session.take_jobs();
+    a.act(crate::Action::Run("account.folderSizes", json!({"account": id})));
+    assert!(a.session.take_jobs().contains(&Job::ServerFolderSizes { account: id.clone() }), "Refresh asks again");
+    let _ = std::fs::remove_dir_all(dir);
+}

@@ -401,3 +401,36 @@ hi"
     let bad = Store::memory_from(vec![("rules.json".into(), b"{oops".to_vec())]);
     assert!(bad.load_doc::<Vec<i32>>("rules.json").unwrap().is_empty());
 }
+
+/// Folder Size (Local Data): what each folder's list and messages take here, named by its place,
+/// in a data file as in a folder of files.
+#[test]
+fn each_folder_tells_the_space_it_takes_here() {
+    for packed in [false, true] {
+        let dir = std::env::temp_dir().join(format!("quatrelle-sizes-{packed}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let s = if packed { Store::open_packed(dir.join("app"), dir.join("Files")).unwrap() } else { Store::open(&dir).unwrap() };
+        let folder = |path: &str| Folder { account: "a1".into(), path: path.into(), delimiter: Some('/'), selectable: true, ..Default::default() };
+        s.save_folders("a1", &[folder("INBOX"), folder("INBOX/Caf&AOk-")]).unwrap();
+        let key = MessageKey { account: "a1".into(), folder: "INBOX/Caf&AOk-".into(), validity: 1, uid: 1 };
+        // Bytes that don't compress (a data file keeps sources compressed: what's measured is
+        // the space they take).
+        let mut n: u32 = 7;
+        let raw: Vec<u8> = (0..5000)
+            .map(|_| {
+                n = n.wrapping_mul(1_103_515_245).wrapping_add(12345);
+                (n >> 16) as u8
+            })
+            .collect();
+        s.write_body(&key, &raw).unwrap();
+        let sizes = s.folder_sizes("a1").unwrap();
+        let paths: Vec<(Vec<String>, Option<String>)> = sizes.iter().map(|f| (f.path.clone(), f.folder.clone())).collect();
+        assert_eq!(
+            paths,
+            [(vec!["INBOX".to_string()], Some("INBOX".to_string())), (vec!["INBOX".into(), "Café".into()], Some("INBOX/Caf&AOk-".into()))]
+        );
+        assert_eq!(sizes[0].size, 0, "{packed}: nothing kept in the Inbox");
+        assert!(sizes[1].size >= 4000, "{packed}: {}", sizes[1].size);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}

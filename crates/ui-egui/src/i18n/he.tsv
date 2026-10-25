@@ -1498,3 +1498,28 @@ month	May	מאי
 	Compact Now	דחוס עכשיו
 	Give the space freed inside the data file back to the disk	החזר לדיסק את המקום שהתפנה בקובץ הנתונים
 	The data file was compacted.	קובץ הנתונים נדחס.
+	{size} B	{size} בתים
+	{size} KB	{size} KB
+	{size} MB	{size} MB
+	{size} GB	{size} GB
+	Folder Size	גודל תיקיות
+	Local Data	נתונים מקומיים
+	Server Data	נתוני השרת
+	Asking the server…	שואל את השרת…
+	Adding up what's kept here…	מסכם את מה שנשמר כאן…
+	This server doesn't tell each folder's size: only Exchange does.	שרת זה אינו מציין את גודל כל תיקייה: רק Exchange עושה זאת.
+	The sizes couldn't be read: {error}	לא ניתן היה לקרוא את הגדלים: {error}
+	Refresh	רענן
+	Total size	גודל כולל
+	Warning at	אזהרה החל מ
+	Sending stops at	השליחה נעצרת ב
+	Receiving stops at	הקבלה נעצרת ב
+	The server doesn't tell this mailbox's limit.	השרת אינו מציין את המגבלה של תיבת דואר זו.
+	Mail folders	תיקיות דואר
+	Calendars, contacts, the search index and free space	לוחות שנה, אנשי קשר, אינדקס החיפוש ושטח פנוי
+	In all on this computer	בסך הכול במחשב זה
+	Items	פריטים
+	No folders.	אין תיקיות.
+	Folder Size…	גודל תיקיות…
+	How much space each folder takes, here and on the server	כמה מקום תופסת כל תיקייה, כאן ובשרת
+	How much space each folder takes on this computer	כמה מקום תופסת כל תיקייה במחשב זה

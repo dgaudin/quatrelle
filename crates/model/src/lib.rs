@@ -29,7 +29,9 @@ pub use thread::voting;
 use serde::{Deserialize, Serialize};
 
 pub use addr::EmailAddress;
-pub use job::{Event, FOLLOWED_PUBLIC_DOC, HeldKey, Job, Op, PUBLIC_FOLDERS, Private, Revocation, Secret, SyncStatus, is_public_folder};
+pub use job::{
+    Event, FOLLOWED_PUBLIC_DOC, FolderSize, HeldKey, Job, MailboxQuota, Op, PUBLIC_FOLDERS, Private, Revocation, Secret, SyncStatus, is_public_folder,
+};
 
 /// How a connection to a server is secured.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
