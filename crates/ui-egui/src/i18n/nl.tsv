@@ -1527,3 +1527,10 @@ month	May	mei
 	Certificates found in the Exchange address book: the message can be sent encrypted.	Certificaten gevonden in het Exchange-adresboek: het bericht kan versleuteld worden verzonden.
 	Some recipients have no certificate in the Exchange address book: mail to them can't be encrypted.	Sommige geadresseerden hebben geen certificaat in het Exchange-adresboek: e-mail aan hen kan niet worden versleuteld.
 	Each recipient's certificate comes from a signed message of theirs, or for an Exchange account from its address book; replies to encrypted mail are always encrypted.	Het certificaat van elke geadresseerde komt uit een ondertekend bericht van hem of haar, of bij een Exchange-account uit het adresboek; antwoorden op versleutelde e-mail worden altijd versleuteld.
+	Exchange won't change the rules of the account {email} while Outlook keeps its own copy of them.	Exchange wijzigt de regels van het account {email} niet zolang Outlook er een eigen kopie van bewaart.
+	Replace Outlook's copy…	De kopie van Outlook vervangen…
+	Replace Outlook's copy of the rules?	De kopie van de regels van Outlook vervangen?
+	Outlook keeps a copy of this mailbox's rules, and Exchange won't change them while it's there. Replacing it lets Quatrelle change them. The rules Outlook runs only while it's open on a computer will be lost; the rules on the server stay.	Outlook bewaart een kopie van de regels van dit postvak, en Exchange wijzigt ze niet zolang die bestaat. Door ze te vervangen kan Quatrelle ze wijzigen. De regels die Outlook alleen uitvoert terwijl het op een computer geopend is, gaan verloren; de regels op de server blijven.
+	Replace Outlook's copy of the rules	De kopie van de regels van Outlook vervangen
+	the account is offline: connect it, then replace Outlook's copy of the rules	het account is offline: verbind het en vervang daarna de kopie van de regels van Outlook
+	Replace	Vervangen

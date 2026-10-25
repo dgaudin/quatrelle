@@ -291,6 +291,10 @@ servers that don't offer IMAP. Every call is SOAP over HTTPS.
   Items); envelope-only recipients go in a `Bcc:` header. Drafts are `CreateItem` with `SaveOnly`,
   marked unsent.
 - **Automatic replies** are `Get`/`SetUserOofSettings`.
+- **Outlook's copy of the rules:** while Outlook keeps its own copy of the Inbox rules in the
+  mailbox, `UpdateInboxRules` answers `ErrorOutlookRuleBlobExists`. The Rules dialog then offers
+  to replace it: once the user agrees (Outlook's client-only rules are lost), the account's rules
+  go again with `RemoveOutlookRuleBlob`, on that change only.
 - **Certificates from the address book:** a message to encrypt whose recipient has sent no
   signed mail asks `ResolveNames` (`ReturnFullContactData`, `ContactDataShape="AllProperties"`,
   the directory) once per address, as Outlook finds them in the GAL: `MSExchangeCertificate`

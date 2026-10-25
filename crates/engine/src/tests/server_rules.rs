@@ -334,3 +334,44 @@ fn sieve_rules_go_to_an_imap_account() {
     assert!(!s.rules[1].server, "Sieve can't see attachments");
     assert!(s.notices.iter().any(|n| n.text.contains("Attachments")), "{:?}", s.notices);
 }
+
+/// Exchange refuses every change while Outlook keeps its own copy of the rules: once the user
+/// says so, that copy is replaced and every rule of the account goes again.
+#[test]
+fn outlooks_copy_of_the_rules_is_replaced_when_the_user_says_so() {
+    use quatrelle_model::organize::{Condition, Rule, RuleAction};
+    let mut s = sample_session("outlook-rules");
+    let account = s.accounts[0].config.id.clone();
+    assert!(s.run("rules.replaceOutlookCopy", &json!({"account": account})).is_err(), "not an Exchange account");
+    s.accounts[0].config.ews = Some("https://mail.studio.example/EWS/Exchange.asmx".into());
+    let rule = Rule {
+        name: "Invoices".into(),
+        enabled: true,
+        account: Some(account.clone()),
+        conditions: vec![Condition::Subject("invoice".into())],
+        match_all: true,
+        actions: vec![RuleAction::MarkRead],
+        stop: false,
+        server: true,
+        remote_id: None,
+        priority: None,
+        refused: None,
+    };
+    s.run("rules.set", &json!({ "rules": [rule] })).unwrap();
+    s.take_jobs();
+    assert!(!s.outlook_keeps_rules(&account));
+    s.apply(quatrelle_model::Event::ServerRules {
+        account: account.clone(),
+        ids: Vec::new(),
+        others: Vec::new(),
+        cleared: Vec::new(),
+        error: Some("the server refused: Outlook keeps its own copy of this mailbox's rules".into()),
+    });
+    assert!(s.outlook_keeps_rules(&account) && s.rules[0].refused.is_some());
+    let out = s.run("rules.replaceOutlookCopy", &json!({"account": account})).unwrap();
+    assert_eq!(out["rules"], 1);
+    let jobs = s.take_jobs();
+    assert!(matches!(jobs.first(), Some(Job::ReplaceOutlookRules { account: a }) if *a == account), "the copy first: {jobs:?}");
+    assert!(matches!(jobs.get(1), Some(Job::SetServerRules { rules, .. }) if rules.len() == 1), "then the rules: {jobs:?}");
+    assert!(!s.outlook_keeps_rules(&account) && s.rules[0].refused.is_none());
+}
