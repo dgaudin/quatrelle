@@ -219,6 +219,8 @@ impl Worker {
             | Job::ExportPst { .. }
             | Job::ImportIdentity { .. }
             | Job::ForgetIdentity { .. }
+            | Job::ForgetOlderIdentity { .. }
+            | Job::UseOlderIdentity { .. }
             | Job::Protect { .. }
             | Job::Decrypt { .. }
             | Job::SealDraft { .. }
