@@ -1454,3 +1454,42 @@ month	May	5月
 	Join the Webex meeting:	Webex 会議に参加:
 	Webex personal room	Webex パーソナル会議室
 	Webex Meeting, in a new appointment's window, puts it in for the guests to join	新しい予定のウィンドウの [Webex 会議] で挿入され、出席者が参加できます
+	Tasks	タスク
+	New task	新しいタスク
+	{n} tasks to do	未完了のタスク {n} 件
+	{n} overdue	期限切れ {n} 件
+	Show completed tasks	完了したタスクを表示
+	Mark Complete	進捗状況を完了にする
+	Manage Task	タスクの管理
+	High Importance	重要度 - 高
+	Low Importance	重要度 - 低
+	Show completed	完了したものを表示
+	Current View	現在のビュー
+	Type a new task	新しいタスクを入力
+	Nothing to do: type a new task above.	タスクはありません: 上に新しいタスクを入力してください。
+	No task matches.	一致するタスクはありません。
+	{weekday} {day}/{month}	{month}/{day} ({weekday})
+	Mark as not complete	未完了に戻す
+	Completed on {date}	{date} に完了
+	Overdue: due {date}	期限切れ: 期限 {date}
+	Due today	今日が期限
+	Due {date}	期限: {date}
+	No due date	期限なし
+	Start date	開始日
+	Due date	期限
+	Status	進捗状況
+	Priority	優先度
+	High	高
+	Low	低
+	Normal	標準
+	% Complete	達成率
+	In {account}	{account} 内
+	Search tasks	タスクの検索
+	Not Started	未開始
+	In Progress	進行中
+	Completed	完了
+	Waiting on someone else	他の人の作業待ち
+	Deferred	延期
+	This Week	今週
+	Next Week	来週
+	No Date	日付なし

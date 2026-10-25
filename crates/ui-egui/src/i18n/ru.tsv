@@ -1456,3 +1456,42 @@ month	May	Май
 	Join the Webex meeting:	Присоединиться к собранию Webex:
 	Webex personal room	Личная комната Webex
 	Webex Meeting, in a new appointment's window, puts it in for the guests to join	Кнопка «Собрание Webex» в окне новой встречи вставляет её, чтобы гости могли присоединиться
+	Tasks	Задачи
+	New task	Новая задача
+	{n} tasks to do	Задач к выполнению: {n}
+	{n} overdue	Просрочено: {n}
+	Show completed tasks	Показать выполненные задачи
+	Mark Complete	Отметить как выполненную
+	Manage Task	Управление задачей
+	High Importance	Высокая важность
+	Low Importance	Низкая важность
+	Show completed	Показать выполненные
+	Current View	Текущее представление
+	Type a new task	Введите новую задачу
+	Nothing to do: type a new task above.	Делать нечего: введите новую задачу выше.
+	No task matches.	Нет подходящих задач.
+	{weekday} {day}/{month}	{weekday} {day}.{month}
+	Mark as not complete	Отметить как невыполненную
+	Completed on {date}	Выполнена {date}
+	Overdue: due {date}	Просрочена: срок {date}
+	Due today	Срок сегодня
+	Due {date}	Срок: {date}
+	No due date	Без срока
+	Start date	Дата начала
+	Due date	Срок
+	Status	Состояние
+	Priority	Приоритет
+	High	Высокий
+	Low	Низкий
+	Normal	Обычный
+	% Complete	% завершения
+	In {account}	В {account}
+	Search tasks	Поиск задач
+	Not Started	Не начата
+	In Progress	Выполняется
+	Completed	Завершена
+	Waiting on someone else	Ожидает другого
+	Deferred	Отложена
+	This Week	На этой неделе
+	Next Week	На следующей неделе
+	No Date	Без даты

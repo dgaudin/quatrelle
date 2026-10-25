@@ -1454,3 +1454,42 @@ month	May	5月
 	Join the Webex meeting:	加入 Webex 会议:
 	Webex personal room	Webex 个人会议室
 	Webex Meeting, in a new appointment's window, puts it in for the guests to join	新约会窗口中的“Webex 会议”会将其插入，供与会者加入
+	Tasks	任务
+	New task	新建任务
+	{n} tasks to do	{n} 项待办任务
+	{n} overdue	{n} 项已过期
+	Show completed tasks	显示已完成的任务
+	Mark Complete	标记为完成
+	Manage Task	管理任务
+	High Importance	重要性 - 高
+	Low Importance	重要性 - 低
+	Show completed	显示已完成
+	Current View	当前视图
+	Type a new task	键入新任务
+	Nothing to do: type a new task above.	无待办事项：请在上方键入新任务。
+	No task matches.	没有匹配的任务。
+	{weekday} {day}/{month}	{month}/{day} {weekday}
+	Mark as not complete	标记为未完成
+	Completed on {date}	完成于 {date}
+	Overdue: due {date}	已过期：截止于 {date}
+	Due today	今天到期
+	Due {date}	截止日期：{date}
+	No due date	无截止日期
+	Start date	开始日期
+	Due date	截止日期
+	Status	状态
+	Priority	优先级
+	High	高
+	Low	低
+	Normal	普通
+	% Complete	完成率
+	In {account}	位于 {account}
+	Search tasks	搜索任务
+	Not Started	未开始
+	In Progress	进行中
+	Completed	已完成
+	Waiting on someone else	等待其他人
+	Deferred	已推迟
+	This Week	本周
+	Next Week	下周
+	No Date	无日期

@@ -106,6 +106,8 @@ impl MailApp {
                     } else {
                         groups.last(ui, &t, "Arrange");
                     }
+                } else if s.module == Module::Tasks {
+                    tasks::ribbon(s, &mut self.ui, ui, &mut groups, acts);
                 } else if s.module == Module::Notes {
                     if widgets::big_accent(ui, Icon::Note, "New note", &t, !s.accounts.is_empty()).clicked() {
                         notes::new_note(&mut self.ui, acts);

@@ -1453,3 +1453,42 @@ month	May	مايو
 	Join the Webex meeting:	الانضمام إلى اجتماع Webex:
 	Webex personal room	غرفة Webex الشخصية
 	Webex Meeting, in a new appointment's window, puts it in for the guests to join	يدرجها زر اجتماع Webex في نافذة موعد جديد لينضم إليها الضيوف
+	Tasks	المهام
+	New task	مهمة جديدة
+	{n} tasks to do	{n} مهام للقيام بها
+	{n} overdue	{n} متأخرة
+	Show completed tasks	إظهار المهام المكتملة
+	Mark Complete	وضع علامة مكتملة
+	Manage Task	إدارة المهمة
+	High Importance	أهمية عالية
+	Low Importance	أهمية منخفضة
+	Show completed	إظهار المكتملة
+	Current View	طريقة العرض الحالية
+	Type a new task	اكتب مهمة جديدة
+	Nothing to do: type a new task above.	لا شيء للقيام به: اكتب مهمة جديدة أعلاه.
+	No task matches.	لا توجد مهمة مطابقة.
+	{weekday} {day}/{month}	{weekday} {day}/{month}
+	Mark as not complete	وضع علامة غير مكتملة
+	Completed on {date}	اكتملت في {date}
+	Overdue: due {date}	متأخرة: تاريخ الاستحقاق {date}
+	Due today	مستحقة اليوم
+	Due {date}	الاستحقاق: {date}
+	No due date	بلا تاريخ استحقاق
+	Start date	تاريخ البدء
+	Due date	تاريخ الاستحقاق
+	Status	الحالة
+	Priority	الأولوية
+	High	عالية
+	Low	منخفضة
+	Normal	عادية
+	% Complete	% مكتمل
+	In {account}	في {account}
+	Search tasks	البحث في المهام
+	Not Started	لم تبدأ
+	In Progress	قيد التقدم
+	Completed	مكتملة
+	Waiting on someone else	بانتظار شخص آخر
+	Deferred	مؤجلة
+	This Week	هذا الأسبوع
+	Next Week	الأسبوع القادم
+	No Date	بلا تاريخ

@@ -1457,3 +1457,42 @@ month	May	Mai
 	Join the Webex meeting:	An der Webex-Besprechung teilnehmen:
 	Webex personal room	Persönlicher Webex-Raum
 	Webex Meeting, in a new appointment's window, puts it in for the guests to join	Webex-Besprechung im Fenster eines neuen Termins fügt ihn ein, damit die Gäste teilnehmen können
+	Tasks	Aufgaben
+	New task	Neue Aufgabe
+	{n} tasks to do	{n} Aufgaben offen
+	{n} overdue	{n} überfällig
+	Show completed tasks	Erledigte Aufgaben anzeigen
+	Mark Complete	Als erledigt markieren
+	Manage Task	Aufgabe verwalten
+	High Importance	Wichtigkeit: hoch
+	Low Importance	Wichtigkeit: niedrig
+	Show completed	Erledigte anzeigen
+	Current View	Aktuelle Ansicht
+	Type a new task	Neue Aufgabe eingeben
+	Nothing to do: type a new task above.	Nichts zu tun: oben eine neue Aufgabe eingeben.
+	No task matches.	Keine Aufgabe gefunden.
+	{weekday} {day}/{month}	{weekday} {day}.{month}.
+	Mark as not complete	Als nicht erledigt markieren
+	Completed on {date}	Erledigt am {date}
+	Overdue: due {date}	Überfällig: fällig am {date}
+	Due today	Heute fällig
+	Due {date}	Fällig am {date}
+	No due date	Kein Fälligkeitsdatum
+	Start date	Beginnt am
+	Due date	Fälligkeitsdatum
+	Status	Status
+	Priority	Priorität
+	High	Hoch
+	Low	Niedrig
+	Normal	Normal
+	% Complete	% erledigt
+	In {account}	In {account}
+	Search tasks	Aufgaben durchsuchen
+	Not Started	Nicht begonnen
+	In Progress	In Bearbeitung
+	Completed	Erledigt
+	Waiting on someone else	Wartet auf jemand anderen
+	Deferred	Zurückgestellt
+	This Week	Diese Woche
+	Next Week	Nächste Woche
+	No Date	Kein Datum

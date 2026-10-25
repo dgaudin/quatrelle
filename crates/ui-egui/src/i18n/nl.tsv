@@ -1453,3 +1453,42 @@ month	May	mei
 	Join the Webex meeting:	Deelnemen aan de Webex-vergadering:
 	Webex personal room	Persoonlijke Webex-ruimte
 	Webex Meeting, in a new appointment's window, puts it in for the guests to join	Webex-vergadering, in het venster van een nieuwe afspraak, voegt deze in zodat de gasten kunnen deelnemen
+	Tasks	Taken
+	New task	Nieuwe taak
+	{n} tasks to do	{n} taken te doen
+	{n} overdue	{n} achterstallig
+	Show completed tasks	Voltooide taken weergeven
+	Mark Complete	Markeren als voltooid
+	Manage Task	Taak beheren
+	High Importance	Urgent
+	Low Importance	Lage urgentie
+	Show completed	Voltooide weergeven
+	Current View	Huidige weergave
+	Type a new task	Typ een nieuwe taak
+	Nothing to do: type a new task above.	Niets te doen: typ hierboven een nieuwe taak.
+	No task matches.	Geen taak gevonden.
+	{weekday} {day}/{month}	{weekday} {day}-{month}
+	Mark as not complete	Markeren als niet voltooid
+	Completed on {date}	Voltooid op {date}
+	Overdue: due {date}	Achterstallig: vervaldatum {date}
+	Due today	Vandaag te doen
+	Due {date}	Vervaldatum: {date}
+	No due date	Geen vervaldatum
+	Start date	Begindatum
+	Due date	Vervaldatum
+	Status	Status
+	Priority	Prioriteit
+	High	Hoog
+	Low	Laag
+	Normal	Normaal
+	% Complete	% voltooid
+	In {account}	In {account}
+	Search tasks	Taken zoeken
+	Not Started	Niet gestart
+	In Progress	Wordt uitgevoerd
+	Completed	Voltooid
+	Waiting on someone else	Wacht op iemand anders
+	Deferred	Uitgesteld
+	This Week	Deze week
+	Next Week	Volgende week
+	No Date	Geen datum

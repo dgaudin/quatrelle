@@ -4,8 +4,7 @@
 //! under the top of the mailbox becomes folders, and each mail item is written out again as a
 //! standard message (RFC 5322 / MIME) from its properties (MS-OXCMSG / MS-OXPROPS), keeping the
 //! original headers when the item has them. Contacts and calendar items go to the account's address
-//! book and calendar (see `pst_pim`), notes to its notes; tasks show in the calendar on their due
-//! day (Quatrelle has no task list), and those without one are left out.
+//! book and calendar (see `pst_pim`), notes to its notes, tasks to its tasks.
 //!
 //! A data file is hostile input like any other: the reader runs behind `catch_unwind`, items that
 //! can't be read are skipped and counted, and sizes are capped.
@@ -24,7 +23,7 @@ use outlook_pst::messaging::store::{AnsiStore, EntryId, Store as PstStore, Unico
 use outlook_pst::ndb::node_id::NodeId;
 use outlook_pst::{AnsiPstFile, UnicodePstFile};
 use quatrelle_mime::{self as mime, Draft, InlinePicture, OutAttachment};
-use quatrelle_model::pim::{LOCAL, NOTE_YELLOW, Note, PIM_DOC, Pim, StoredCard, StoredEvent, StoredNote};
+use quatrelle_model::pim::{LOCAL, NOTE_YELLOW, Note, PIM_DOC, Pim, StoredCard, StoredEvent, StoredNote, StoredTask, Task};
 use quatrelle_model::{EmailAddress, Flags, Folder, FolderRole, MessageKey, utf7};
 use quatrelle_store::{FolderState, Store};
 
@@ -42,10 +41,11 @@ const MAX_NESTING: usize = 3;
 pub struct Imported {
     pub folders: Vec<Folder>,
     pub messages: usize,
-    /// Contacts, calendar items and notes.
+    /// Contacts, calendar items, notes and tasks.
     pub contacts: usize,
     pub events: usize,
     pub notes: usize,
+    pub tasks: usize,
     /// Items that couldn't be read or written.
     pub skipped: usize,
 }
@@ -574,7 +574,7 @@ impl Out<'_> {
     /// A contact, calendar item or note (anything else in their folders is left out).
     fn add_pim(&mut self, it: Item) {
         let Some(x) = &it.extra else { return };
-        let n = self.pim.events.len() + self.pim.cards.len() + self.pim.notes.len();
+        let n = self.pim.events.len() + self.pim.cards.len() + self.pim.notes.len() + self.pim.tasks.len();
         let uid = format!("pst-{}-{n}@quatrelle.invalid", self.account);
         if it.class.to_ascii_lowercase().starts_with("ipm.stickynote") {
             // A note's text is its body (its subject is the first line of it).
@@ -587,16 +587,18 @@ impl Out<'_> {
                 Note { uid, text: text.trim_end().to_string(), color: x.note_color.unwrap_or(NOTE_YELLOW), modified: x.modified.unwrap_or(it.date) };
             self.pim.notes.push(StoredNote { note, ..Default::default() });
         } else if it.class.to_ascii_lowercase().starts_with("ipm.task") {
-            // Quatrelle has no task list: a task with a due date shows in the calendar that day.
-            let Some(due) = x.due else {
-                self.skipped += 1;
-                return;
+            // A task, done or not; its due day stored as local midnight, the nearest UTC midnight.
+            let due = x.due.map(|t| (t + 43_200).div_euclid(86_400));
+            let mut task = Task {
+                uid,
+                subject: it.subject.clone(),
+                notes: it.body.trim().to_string(),
+                due,
+                modified: x.modified.unwrap_or(it.date),
+                ..Default::default()
             };
-            let day = crate::pst_pim::Extra { start: Some(due), end: Some(due), all_day: true, ..Default::default() };
-            let summary = if x.done { format!("✓ {}", it.subject) } else { it.subject.clone() };
-            if let Some(event) = crate::pst_pim::event_of(&day, &summary, &it.body, &EmailAddress::default(), &[], uid) {
-                self.pim.events.push(StoredEvent { calendar: LOCAL.into(), event, ..Default::default() });
-            }
+            task.set_complete(x.done, due.unwrap_or(it.date.div_euclid(86_400)));
+            self.pim.tasks.push(StoredTask { task, ..Default::default() });
         } else if it.class.to_ascii_lowercase().starts_with("ipm.contact") {
             let card = crate::pst_pim::card_of(x, &it.body, uid);
             self.pim.cards.push(StoredCard { book: LOCAL.into(), card, ..Default::default() });
@@ -709,234 +711,17 @@ impl Out<'_> {
             self.save_folder(&p);
         }
         self.store.save_folders(self.account, &self.folders).map_err(|e| e.to_string())?;
-        let (contacts, events, notes) = (self.pim.cards.len(), self.pim.events.len(), self.pim.notes.len());
-        if contacts + events + notes > 0 {
+        let (contacts, events, notes, tasks) = (self.pim.cards.len(), self.pim.events.len(), self.pim.notes.len(), self.pim.tasks.len());
+        if contacts + events + notes + tasks > 0 {
             self.pim.ensure_defaults();
             self.store.save_account_doc(self.account, PIM_DOC, &self.pim).map_err(|e| e.to_string())?;
         }
-        Ok(Imported { folders: self.folders, messages: self.imported, contacts, events, notes, skipped: self.skipped })
+        Ok(Imported { folders: self.folders, messages: self.imported, contacts, events, notes, tasks, skipped: self.skipped })
     }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Outlook's notes come in as notes: their text, colour and time; an empty one doesn't.
-    #[test]
-    fn notes_come_in_as_notes() {
-        let dir = std::env::temp_dir().join(format!("quatrelle-pst-notes-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        let store = Store::open(&dir).unwrap();
-        let mut progress = |_| {};
-        let mut out = Out {
-            store: &store,
-            account: "d1",
-            folders: Vec::new(),
-            states: HashMap::new(),
-            imported: 0,
-            skipped: 0,
-            progress: &mut progress,
-            pim: Pim::default(),
-            pending: Vec::new(),
-            pending_bytes: 0,
-        };
-        let note = |body: &str, color: Option<u8>| Item {
-            class: "IPM.StickyNote".into(),
-            subject: body.lines().next().unwrap_or_default().into(),
-            body: body.into(),
-            date: 1_700_000_000,
-            extra: Some(crate::pst_pim::Extra { note_color: color, modified: Some(1_700_000_500), ..Default::default() }),
-            ..Default::default()
-        };
-        out.add_pim(note("Poster\r\nAsk about 170 gsm", Some(1)));
-        out.add_pim(note("Plain", None));
-        out.add_pim(note("  ", Some(2)));
-        let done = out.finish().unwrap();
-        assert_eq!((done.notes, done.skipped), (2, 1));
-        let pim: Pim = store.load_account_doc("d1", PIM_DOC).unwrap();
-        let n = &pim.notes[0].note;
-        assert_eq!((n.text.as_str(), n.color, n.modified), ("Poster\nAsk about 170 gsm", 1, 1_700_000_500));
-        assert_eq!(pim.notes[1].note.color, NOTE_YELLOW, "no colour: Outlook's yellow");
-        assert!(pim.notes.iter().all(|s| !s.dirty && s.href.is_empty()), "kept on this computer");
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn windows_1252_and_utf8() {
-        assert_eq!(decode(b"caf\xe9 \x80 \x93q\x94", 1252), "café € “q”");
-        assert_eq!(decode("café".as_bytes(), 0), "café");
-        assert_eq!(decode(b"\xff\xfe", 65001), "\u{FFFD}\u{FFFD}");
-    }
-
-    #[test]
-    fn filetime() {
-        // 2024-01-01T00:00:00Z
-        assert_eq!(time_of(&PropertyValue::Time(133_485_408_000_000_000)), Some(1_704_067_200));
-        assert_eq!(time_of(&PropertyValue::Time(0)), None);
-    }
-
-    #[test]
-    fn original_headers_are_kept_over_the_rebuilt_body() {
-        let it = Item {
-            subject: "Hello".into(),
-            from: EmailAddress::new("Ana", "ana@example.com"),
-            to: vec![EmailAddress::new("", "me@example.com")],
-            date: 1_704_067_200,
-            body: "Hi there".into(),
-            message_id: "<orig@example.com>".into(),
-            headers: "Received: from x\r\n by y\r\nFrom: Ana <ana@example.com>\r\nTo: me@example.com\r\nSubject: Hello\r\nList-Id: <l.example.com>\r\nContent-Type: multipart/mixed;\r\n boundary=zzz\r\nMIME-Version: 1.0\r\n"
-                .into(),
-            ..Default::default()
-        };
-        let raw = to_raw(&it, "fallback@x").unwrap();
-        let text = String::from_utf8_lossy(&raw);
-        assert!(text.contains("List-Id: <l.example.com>"));
-        assert!(text.contains("Received: from x\r\n by y"));
-        assert!(!text.contains("boundary=zzz"), "the original body's description goes");
-        assert_eq!(text.matches("MIME-Version").count(), 1);
-        let p = mime::parse(&raw).unwrap();
-        assert_eq!(p.subject, "Hello");
-        assert!(p.text.contains("Hi there"));
-    }
-
-    #[test]
-    fn a_sent_item_keeps_its_bcc_and_gets_an_id() {
-        let it = Item {
-            subject: "Plans".into(),
-            from: EmailAddress::new("Me", "me@example.com"),
-            bcc: vec![EmailAddress::new("", "secret@example.com")],
-            date: 1_704_067_200,
-            body: "Hi".into(),
-            ..Default::default()
-        };
-        let raw = to_raw(&it, "fallback@x").unwrap();
-        let text = String::from_utf8_lossy(&raw);
-        assert!(text.starts_with("Bcc: secret@example.com\r\n"));
-        assert!(text.contains("<fallback@x>"));
-    }
-
-    #[test]
-    fn an_offline_copy_is_explained() {
-        let dir = std::env::temp_dir().join(format!("quatrelle-ost-{}", std::process::id()));
-        let _ = std::fs::create_dir_all(&dir);
-        let file = dir.join("me@example.com.ost");
-        std::fs::write(&file, b"!BDN    SO$ rest").unwrap();
-        let store = Store::open(dir.join("cache")).unwrap();
-        let e = import(&file, &store, "a1", &mut |_| {}).unwrap_err();
-        assert!(e.contains(".ost") && e.contains("add the account"), "{e}");
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn junk_is_refused_and_nothing_is_written() {
-        let dir = std::env::temp_dir().join(format!("quatrelle-pst-junk-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        let file = dir.join("junk.pst");
-        std::fs::write(&file, b"!BDN this is not really a data file").unwrap();
-        let store = Store::open(dir.join("cache")).unwrap();
-        assert!(import(&file, &store, "a1", &mut |_| {}).is_err());
-        assert!(import(&dir.join("missing.pst"), &store, "a1", &mut |_| {}).is_err());
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    /// A contact's picture is one of its hidden attachments: taken when it is a picture of a
-    /// sane size, and never a visible file (an attachment the mail shows) or something else.
-    #[test]
-    fn a_contact_picture_is_a_hidden_picture() {
-        let jpeg = [0xFFu8, 0xD8, 0xFF, 0xE0, 1, 2, 3];
-        assert_eq!(
-            crate::pst_pim::contact_photo(true, "", Some(&jpeg)),
-            Some(("image/jpeg".to_string(), jpeg.to_vec())),
-            "the bytes say it's a JPEG, as Outlook's ContactPicture.jpg is"
-        );
-        assert_eq!(
-            crate::pst_pim::contact_photo(true, "image/png", Some(&jpeg)),
-            Some(("image/png".to_string(), jpeg.to_vec())),
-            "the item's own type wins"
-        );
-        assert_eq!(crate::pst_pim::contact_photo(false, "image/jpeg", Some(&jpeg)), None, "a visible attachment isn't the picture");
-        assert_eq!(crate::pst_pim::contact_photo(true, "text/plain", Some(b"hello")), None, "not a picture");
-        assert_eq!(crate::pst_pim::contact_photo(true, "", Some(b"")), None);
-        assert_eq!(crate::pst_pim::contact_photo(true, "", None), None);
-        // A picture bigger than a contact photo (512 KiB) is left out.
-        let mut big = vec![0xFFu8, 0xD8, 0xFF, 0xE0];
-        big.resize(quatrelle_model::vcard::MAX_PHOTO + 1, 0);
-        assert_eq!(crate::pst_pim::contact_photo(true, "image/jpeg", Some(&big)), None);
-    }
-
-    #[test]
-    fn imports_a_data_file() {
-        use pst_rw::{UnicodePstAttachment, UnicodePstFile as Writer, UnicodePstMessage, UnicodePstRecipient, UnicodePstRecipientType};
-        let dir = std::env::temp_dir().join(format!("quatrelle-pst-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        let file = dir.join("Archive 2024.pst");
-        let recipients = [
-            UnicodePstRecipient { name: "Ana Ruiz", email: "ana@example.com", recipient_type: UnicodePstRecipientType::To },
-            UnicodePstRecipient { name: "Ben", email: "ben@example.com", recipient_type: UnicodePstRecipientType::Cc },
-        ];
-        let message = UnicodePstMessage {
-            subject: "Quarterly plan — café",
-            sender_name: "Riley Moreno",
-            sender_email: "riley@example.com",
-            recipients: &recipients,
-            body: "Here is the plan.",
-            html_body: Some("<p>Here is <b>the plan</b>.</p><img src=\"cid:chart@example.com\">"),
-            message_id: "<plan@example.com>",
-            // 2024-01-01T00:00:00Z
-            delivery_time: 133_485_408_000_000_000,
-        };
-        let files = [
-            UnicodePstAttachment {
-                filename: "chart.png",
-                mime_type: "image/png",
-                content_id: Some("<chart@example.com>"),
-                data: b"\x89PNG\r\n\x1a\nfake",
-            },
-            UnicodePstAttachment { filename: "notes.txt", mime_type: "text/plain", content_id: None, data: b"remember the milk" },
-        ];
-        drop(Writer::create_with_attachments(&file, &message, &files).unwrap());
-        let nested = UnicodePstMessage { subject: "Old thread", message_id: "<old@example.com>", html_body: None, ..message };
-        drop(Writer::append_in_folder(&file, &["Projects", "2024"], &nested).unwrap());
-
-        let store = Store::open(dir.join("cache")).unwrap();
-        let mut ticks = 0;
-        let done = import(&file, &store, "a1", &mut |_| ticks += 1).unwrap();
-        assert_eq!(done.messages, 2, "{done:?}");
-        assert_eq!(done.skipped, 0);
-        let inbox = done.folders.iter().find(|f| f.role == FolderRole::Inbox).unwrap();
-        assert_eq!(inbox.path, "INBOX");
-        let all = store.load_folders("a1").unwrap();
-        assert_eq!(all, done.folders);
-        let nested_folder = all.iter().find(|f| f.path == "Projects/2024").unwrap();
-        assert_eq!(nested_folder.total, 1);
-        assert!(all.iter().any(|f| f.path == "Projects"));
-
-        // The message where the writer put it, with its addresses, body, picture and file.
-        let (path, st) = all
-            .iter()
-            .filter(|f| f.path != "Projects/2024")
-            .find_map(|f| store.load_folder("a1", &f.path).ok().filter(|s| !s.messages.is_empty()).map(|s| (f.path.clone(), s)))
-            .unwrap();
-        let s = &st.messages[0];
-        assert_eq!(s.subject, "Quarterly plan — café");
-        assert_eq!(s.date, 1_704_067_200);
-        let key = MessageKey { account: "a1".into(), folder: path, validity: 1, uid: s.key.uid };
-        let raw = store.read_body(&key).unwrap();
-        let p = mime::parse(&raw).unwrap();
-        assert_eq!(p.from.email, "riley@example.com");
-        assert_eq!(p.to.iter().map(|a| a.email.as_str()).collect::<Vec<_>>(), ["ana@example.com"]);
-        assert_eq!(p.cc.iter().map(|a| a.email.as_str()).collect::<Vec<_>>(), ["ben@example.com"]);
-        assert_eq!(p.message_id, "plan@example.com");
-        assert!(p.had_html && p.text.contains("the plan"), "{}", p.text);
-        let names: Vec<&str> = p.attachments.iter().map(|a| a.name.as_str()).collect();
-        assert!(names.contains(&"notes.txt"), "{names:?}");
-        assert!(!names.contains(&"chart.png"), "the picture goes inline: {names:?}");
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-}
+mod tests;
 
 #[cfg(test)]
 mod real_files {

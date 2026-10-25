@@ -1456,3 +1456,42 @@ month	May	5月
 	Join the Webex meeting:	加入 Webex 會議:
 	Webex personal room	Webex 個人會議室
 	Webex Meeting, in a new appointment's window, puts it in for the guests to join	新約會視窗中的「Webex 會議」會將其插入，供與會者加入
+	Tasks	工作
+	New task	新增工作
+	{n} tasks to do	{n} 項待辦工作
+	{n} overdue	{n} 項已逾期
+	Show completed tasks	顯示已完成的工作
+	Mark Complete	標示為完成
+	Manage Task	管理工作
+	High Importance	重要性 - 高
+	Low Importance	重要性 - 低
+	Show completed	顯示已完成
+	Current View	目前檢視
+	Type a new task	輸入新工作
+	Nothing to do: type a new task above.	沒有待辦事項：請在上方輸入新工作。
+	No task matches.	沒有符合的工作。
+	{weekday} {day}/{month}	{month}/{day} {weekday}
+	Mark as not complete	標示為未完成
+	Completed on {date}	完成於 {date}
+	Overdue: due {date}	已逾期：到期日 {date}
+	Due today	今天到期
+	Due {date}	到期日：{date}
+	No due date	無到期日
+	Start date	開始日期
+	Due date	到期日
+	Status	狀態
+	Priority	優先順序
+	High	高
+	Low	低
+	Normal	一般
+	% Complete	完成百分比
+	In {account}	位於 {account}
+	Search tasks	搜尋工作
+	Not Started	未開始
+	In Progress	進行中
+	Completed	已完成
+	Waiting on someone else	等待其他人
+	Deferred	已延遲
+	This Week	本週
+	Next Week	下週
+	No Date	無日期
