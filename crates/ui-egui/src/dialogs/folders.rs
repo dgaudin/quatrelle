@@ -147,7 +147,7 @@ pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &
             }
             !cancel
         }
-        Dialog::FolderProperties { name, account, location, total, unread, size } => {
+        Dialog::FolderProperties { name, id, account, location, total, unread, size } => {
             ui.set_width(380.0);
             title(ui, t, &tf!("{folder} Properties", folder = name));
             egui::Grid::new("folder-props").num_columns(2).spacing(vec2(16.0, 6.0)).show(ui, |ui| {
@@ -165,7 +165,16 @@ pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &
                 }
             });
             ui.add_space(8.0);
-            close_row(ui)
+            // As Outlook's: every folder's size, here and on the server.
+            button_row(ui, |ui| {
+                let close = ui.button(tl!("Close")).clicked();
+                let sizes = ui.button(tl!("Folder Size…")).on_hover_text(tl!("How much space each folder takes, here and on the server")).clicked();
+                if sizes {
+                    acts.push(Action::Run("account.folderSizes", json!({"account": id})));
+                    acts.push(Action::Dialog(Dialog::folder_size(s, id)));
+                }
+                !close && !sizes
+            })
         }
         Dialog::ConfirmEmpty { account, folder, name, for_good } => {
             ui.set_width(400.0);

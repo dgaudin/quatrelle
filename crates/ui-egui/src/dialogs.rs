@@ -124,9 +124,11 @@ pub enum Dialog {
     },
     /// Word count of the message being written (or its selection: the `bool`).
     WordCount(crate::rich_edit::Counts, bool),
-    /// A folder's Properties: where it is, how many messages, how much is on this computer.
+    /// A folder's Properties: where it is, how many messages, how much is on this computer;
+    /// `id`: its account's, for Folder Size.
     FolderProperties {
         name: String,
+        id: String,
         account: String,
         location: String,
         total: usize,
@@ -307,6 +309,7 @@ impl Dialog {
         let email = s.account(&f.account).map(|a| a.config.email.clone()).unwrap_or_default();
         Dialog::FolderProperties {
             name: crate::i18n::folder(f),
+            id: f.account.clone(),
             location: {
                 let decoded = quatrelle_engine::model::utf7::decode(&f.path);
                 match f.delimiter {
