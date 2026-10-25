@@ -1567,3 +1567,27 @@ month	May	Май
 	The language model found none of your folders or categories for it.	Языковая модель не нашла для него ни одной вашей папки или категории.
 	Move to {folder}	Переместить в {folder}
 	Categorize as {category}	Назначить категорию {category}
+	Close without updating	Закрыть без обновления
+	Downloading Quatrelle {version}…	Загрузка Quatrelle {version}…
+	Downloading Quatrelle {version}… {percent}%	Загрузка Quatrelle {version}… {percent}%
+	If you close Quatrelle now, the download pauses, and carries on from where it stopped the next time you open Quatrelle.	Если закрыть Quatrelle сейчас, загрузка приостановится и продолжится с того же места при следующем открытии Quatrelle.
+	Install Quatrelle {version} as it closes?	Установить Quatrelle {version} при закрытии?
+	It installs the next time you close Quatrelle.	Он установится при следующем закрытии Quatrelle.
+	It installs when you close Quatrelle.	Он установится при закрытии Quatrelle.
+	Keep Quatrelle open	Оставить Quatrelle открытым
+	Quatrelle {version} is downloading.	Quatrelle {version} загружается.
+	Quatrelle {version} is ready	Quatrelle {version} готов
+	Quatrelle {version} is ready. Restart now to install it, or it installs when you close Quatrelle.	Quatrelle {version} готов. Перезапустите сейчас, чтобы установить его, или он установится при закрытии Quatrelle.
+	Restart Quatrelle to install it now, or it installs when you close Quatrelle.	Перезапустите Quatrelle, чтобы установить его сейчас, или он установится при закрытии Quatrelle.
+	Restart now	Перезапустить сейчас
+	The update is downloaded and checked. It installs now, as Quatrelle closes, which takes a moment; open Quatrelle again when it's done.	Обновление загружено и проверено. Оно устанавливается сейчас, при закрытии Quatrelle, это займёт немного времени; затем откройте Quatrelle снова.
+	Update and close	Обновить и закрыть
+	Windows asks for an administrator's permission.	Windows запросит разрешение администратора.
+	An update is still downloading	Обновление ещё загружается
+	Quatrelle {version} is downloading ({done} of {total}).	Quatrelle {version} загружается ({done} из {total}).
+	Add another…	Добавить ещё…
+	A renewed certificate takes over signing and encrypting; an older one is kept to read old mail	Обновлённый сертификат берёт на себя подпись и шифрование; старый остаётся, чтобы читать прежние письма
+	Older certificate, valid until {date}: kept to read mail encrypted to it	Прежний сертификат, действует до {date}: хранится, чтобы читать письма, зашифрованные для него
+	Use for sending	Использовать для отправки
+	Sign and encrypt with this one again; the one in use is kept for reading	Снова подписывать и шифровать этим; текущий останется для чтения
+	Forget this certificate: mail encrypted to it can't be read any more	Забыть этот сертификат: письма, зашифрованные для него, больше не прочитать

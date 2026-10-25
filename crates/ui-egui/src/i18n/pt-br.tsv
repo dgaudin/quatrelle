@@ -1568,3 +1568,27 @@ month	May	maio
 	The language model found none of your folders or categories for it.	O modelo de linguagem não encontrou nenhuma das suas pastas ou categorias para ela.
 	Move to {folder}	Mover para {folder}
 	Categorize as {category}	Categorizar como {category}
+	Close without updating	Fechar sem atualizar
+	Downloading Quatrelle {version}…	Baixando o Quatrelle {version}…
+	Downloading Quatrelle {version}… {percent}%	Baixando o Quatrelle {version}… {percent}%
+	If you close Quatrelle now, the download pauses, and carries on from where it stopped the next time you open Quatrelle.	Se você fechar o Quatrelle agora, o download é pausado e continua de onde parou na próxima vez que você abrir o Quatrelle.
+	Install Quatrelle {version} as it closes?	Instalar o Quatrelle {version} ao fechá-lo?
+	It installs the next time you close Quatrelle.	Ele será instalado na próxima vez que você fechar o Quatrelle.
+	It installs when you close Quatrelle.	Ele será instalado quando você fechar o Quatrelle.
+	Keep Quatrelle open	Manter o Quatrelle aberto
+	Quatrelle {version} is downloading.	O Quatrelle {version} está sendo baixado.
+	Quatrelle {version} is ready	O Quatrelle {version} está pronto
+	Quatrelle {version} is ready. Restart now to install it, or it installs when you close Quatrelle.	O Quatrelle {version} está pronto. Reinicie agora para instalá-lo, ou ele será instalado quando você fechar o Quatrelle.
+	Restart Quatrelle to install it now, or it installs when you close Quatrelle.	Reinicie o Quatrelle para instalá-lo agora, ou ele será instalado quando você fechar o Quatrelle.
+	Restart now	Reiniciar agora
+	The update is downloaded and checked. It installs now, as Quatrelle closes, which takes a moment; open Quatrelle again when it's done.	A atualização foi baixada e verificada. Ela é instalada agora, ao fechar o Quatrelle, o que leva um instante; abra o Quatrelle de novo quando terminar.
+	Update and close	Atualizar e fechar
+	Windows asks for an administrator's permission.	O Windows pede a permissão de um administrador.
+	An update is still downloading	Uma atualização ainda está sendo baixada
+	Quatrelle {version} is downloading ({done} of {total}).	O Quatrelle {version} está sendo baixado ({done} de {total}).
+	Add another…	Adicionar outro…
+	A renewed certificate takes over signing and encrypting; an older one is kept to read old mail	Um certificado renovado passa a assinar e criptografar; o anterior fica guardado para ler e-mails antigos
+	Older certificate, valid until {date}: kept to read mail encrypted to it	Certificado anterior, válido até {date}: guardado para ler e-mails criptografados para ele
+	Use for sending	Usar para enviar
+	Sign and encrypt with this one again; the one in use is kept for reading	Voltar a assinar e criptografar com este; o que está em uso fica guardado para leitura
+	Forget this certificate: mail encrypted to it can't be read any more	Esquecer este certificado: e-mails criptografados para ele não poderão mais ser lidos
