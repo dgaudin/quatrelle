@@ -1565,3 +1565,27 @@ month	May	5月
 	The language model found none of your folders or categories for it.	语言模型没有为它找到您的任何文件夹或类别。
 	Move to {folder}	移到 {folder}
 	Categorize as {category}	归类为 {category}
+	Close without updating	关闭但不更新
+	Downloading Quatrelle {version}…	正在下载 Quatrelle {version}…
+	Downloading Quatrelle {version}… {percent}%	正在下载 Quatrelle {version}… {percent}%
+	If you close Quatrelle now, the download pauses, and carries on from where it stopped the next time you open Quatrelle.	如果现在关闭 Quatrelle，下载会暂停，并在你下次打开 Quatrelle 时从中断处继续。
+	Install Quatrelle {version} as it closes?	关闭时安装 Quatrelle {version}？
+	It installs the next time you close Quatrelle.	将在你下次关闭 Quatrelle 时安装。
+	It installs when you close Quatrelle.	关闭 Quatrelle 时将安装。
+	Keep Quatrelle open	保持 Quatrelle 打开
+	Quatrelle {version} is downloading.	正在下载 Quatrelle {version}。
+	Quatrelle {version} is ready	Quatrelle {version} 已准备就绪
+	Quatrelle {version} is ready. Restart now to install it, or it installs when you close Quatrelle.	Quatrelle {version} 已准备就绪。立即重新启动以安装，或在关闭 Quatrelle 时安装。
+	Restart Quatrelle to install it now, or it installs when you close Quatrelle.	重新启动 Quatrelle 即可立即安装，否则将在关闭 Quatrelle 时安装。
+	Restart now	立即重新启动
+	The update is downloaded and checked. It installs now, as Quatrelle closes, which takes a moment; open Quatrelle again when it's done.	更新已下载并通过校验。它现在会在 Quatrelle 关闭时安装，需要片刻；完成后请再次打开 Quatrelle。
+	Update and close	更新并关闭
+	Windows asks for an administrator's permission.	Windows 会请求管理员许可。
+	An update is still downloading	更新仍在下载
+	Quatrelle {version} is downloading ({done} of {total}).	正在下载 Quatrelle {version}（{done}/{total}）。
+	Add another…	添加另一个…
+	A renewed certificate takes over signing and encrypting; an older one is kept to read old mail	续期后的证书接管签名和加密；旧证书保留，用于阅读以前的邮件
+	Older certificate, valid until {date}: kept to read mail encrypted to it	旧证书，有效期至 {date}：保留用于阅读加密给它的邮件
+	Use for sending	用于发送
+	Sign and encrypt with this one again; the one in use is kept for reading	重新用此证书签名和加密；正在使用的证书保留用于阅读
+	Forget this certificate: mail encrypted to it can't be read any more	删除此证书：加密给它的邮件将无法再阅读

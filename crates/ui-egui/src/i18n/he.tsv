@@ -1564,3 +1564,27 @@ month	May	מאי
 	The language model found none of your folders or categories for it.	המודל השפתי לא מצא לה אף תיקייה או קטגוריה שלך.
 	Move to {folder}	העבר אל {folder}
 	Categorize as {category}	סווג כ-{category}
+	Close without updating	לסגור בלי לעדכן
+	Downloading Quatrelle {version}…	מוריד את Quatrelle {version}…
+	Downloading Quatrelle {version}… {percent}%	מוריד את Quatrelle {version}… {percent}%
+	If you close Quatrelle now, the download pauses, and carries on from where it stopped the next time you open Quatrelle.	אם תסגור את Quatrelle עכשיו, ההורדה תושהה ותמשיך מהמקום שבו נעצרה בפעם הבאה שתפתח את Quatrelle.
+	Install Quatrelle {version} as it closes?	להתקין את Quatrelle {version} בזמן הסגירה?
+	It installs the next time you close Quatrelle.	הוא יותקן בפעם הבאה שתסגור את Quatrelle.
+	It installs when you close Quatrelle.	הוא יותקן כשתסגור את Quatrelle.
+	Keep Quatrelle open	להשאיר את Quatrelle פתוח
+	Quatrelle {version} is downloading.	Quatrelle {version} מורד.
+	Quatrelle {version} is ready	Quatrelle {version} מוכן
+	Quatrelle {version} is ready. Restart now to install it, or it installs when you close Quatrelle.	Quatrelle {version} מוכן. הפעל מחדש עכשיו כדי להתקין אותו, או שהוא יותקן כשתסגור את Quatrelle.
+	Restart Quatrelle to install it now, or it installs when you close Quatrelle.	הפעל מחדש את Quatrelle כדי להתקין אותו עכשיו, או שהוא יותקן כשתסגור את Quatrelle.
+	Restart now	להפעיל מחדש עכשיו
+	The update is downloaded and checked. It installs now, as Quatrelle closes, which takes a moment; open Quatrelle again when it's done.	העדכון הורד ונבדק. הוא מותקן עכשיו, בזמן ש-Quatrelle נסגר, וזה לוקח רגע; פתח את Quatrelle שוב כשזה יסתיים.
+	Update and close	לעדכן ולסגור
+	Windows asks for an administrator's permission.	Windows יבקש אישור של מנהל מערכת.
+	An update is still downloading	עדכון עדיין בהורדה
+	Quatrelle {version} is downloading ({done} of {total}).	Quatrelle {version} מורד ({done} מתוך {total}).
+	Add another…	הוספת אישור נוסף…
+	A renewed certificate takes over signing and encrypting; an older one is kept to read old mail	אישור מחודש מקבל את החתימה וההצפנה; הישן נשמר לקריאת דואר קודם
+	Older certificate, valid until {date}: kept to read mail encrypted to it	אישור קודם, בתוקף עד {date}: נשמר לקריאת דואר שהוצפן עבורו
+	Use for sending	שימוש לשליחה
+	Sign and encrypt with this one again; the one in use is kept for reading	לחתום ולהצפין שוב עם אישור זה; האישור שבשימוש נשמר לקריאה
+	Forget this certificate: mail encrypted to it can't be read any more	שכחת אישור זה: לא ניתן יהיה עוד לקרוא דואר שהוצפן עבורו

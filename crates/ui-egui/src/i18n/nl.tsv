@@ -1564,3 +1564,27 @@ month	May	mei
 	The language model found none of your folders or categories for it.	Het taalmodel vond geen van uw mappen of categorieën ervoor.
 	Move to {folder}	Verplaatsen naar {folder}
 	Categorize as {category}	Categoriseren als {category}
+	Close without updating	Sluiten zonder bij te werken
+	Downloading Quatrelle {version}…	Quatrelle {version} downloaden…
+	Downloading Quatrelle {version}… {percent}%	Quatrelle {version} downloaden… {percent}%
+	If you close Quatrelle now, the download pauses, and carries on from where it stopped the next time you open Quatrelle.	Als u Quatrelle nu sluit, wordt de download gepauzeerd en gaat hij de volgende keer dat u Quatrelle opent verder waar hij was gebleven.
+	Install Quatrelle {version} as it closes?	Quatrelle {version} installeren bij het sluiten?
+	It installs the next time you close Quatrelle.	Het wordt geïnstalleerd wanneer u Quatrelle de volgende keer sluit.
+	It installs when you close Quatrelle.	Het wordt geïnstalleerd wanneer u Quatrelle sluit.
+	Keep Quatrelle open	Quatrelle open houden
+	Quatrelle {version} is downloading.	Quatrelle {version} wordt gedownload.
+	Quatrelle {version} is ready	Quatrelle {version} is klaar
+	Quatrelle {version} is ready. Restart now to install it, or it installs when you close Quatrelle.	Quatrelle {version} is klaar. Start nu opnieuw om het te installeren, of het wordt geïnstalleerd wanneer u Quatrelle sluit.
+	Restart Quatrelle to install it now, or it installs when you close Quatrelle.	Start Quatrelle opnieuw om het nu te installeren, of het wordt geïnstalleerd wanneer u Quatrelle sluit.
+	Restart now	Nu opnieuw starten
+	The update is downloaded and checked. It installs now, as Quatrelle closes, which takes a moment; open Quatrelle again when it's done.	De update is gedownload en gecontroleerd. Hij wordt nu geïnstalleerd, terwijl Quatrelle sluit, wat even duurt; open Quatrelle daarna opnieuw.
+	Update and close	Bijwerken en sluiten
+	Windows asks for an administrator's permission.	Windows vraagt toestemming van een beheerder.
+	An update is still downloading	Er wordt nog een update gedownload
+	Quatrelle {version} is downloading ({done} of {total}).	Quatrelle {version} wordt gedownload ({done} van {total}).
+	Add another…	Nog een toevoegen…
+	A renewed certificate takes over signing and encrypting; an older one is kept to read old mail	Een vernieuwd certificaat neemt ondertekenen en versleutelen over; een ouder certificaat blijft om oude e-mail te lezen
+	Older certificate, valid until {date}: kept to read mail encrypted to it	Ouder certificaat, geldig tot {date}: blijft om e-mail te lezen die ervoor versleuteld is
+	Use for sending	Gebruiken voor verzenden
+	Sign and encrypt with this one again; the one in use is kept for reading	Weer met dit certificaat ondertekenen en versleutelen; het huidige blijft om te lezen
+	Forget this certificate: mail encrypted to it can't be read any more	Dit certificaat vergeten: e-mail die ervoor versleuteld is, kan niet meer gelezen worden

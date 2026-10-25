@@ -1567,3 +1567,27 @@ month	May	5月
 	The language model found none of your folders or categories for it.	語言模型沒有為它找到您的任何資料夾或類別。
 	Move to {folder}	移到 {folder}
 	Categorize as {category}	歸類為 {category}
+	Close without updating	關閉但不更新
+	Downloading Quatrelle {version}…	正在下載 Quatrelle {version}…
+	Downloading Quatrelle {version}… {percent}%	正在下載 Quatrelle {version}… {percent}%
+	If you close Quatrelle now, the download pauses, and carries on from where it stopped the next time you open Quatrelle.	如果現在關閉 Quatrelle，下載會暫停，並在你下次開啟 Quatrelle 時從中斷處繼續。
+	Install Quatrelle {version} as it closes?	關閉時安裝 Quatrelle {version}？
+	It installs the next time you close Quatrelle.	將在你下次關閉 Quatrelle 時安裝。
+	It installs when you close Quatrelle.	關閉 Quatrelle 時將安裝。
+	Keep Quatrelle open	保持 Quatrelle 開啟
+	Quatrelle {version} is downloading.	正在下載 Quatrelle {version}。
+	Quatrelle {version} is ready	Quatrelle {version} 已準備就緒
+	Quatrelle {version} is ready. Restart now to install it, or it installs when you close Quatrelle.	Quatrelle {version} 已準備就緒。立即重新啟動以安裝，或在關閉 Quatrelle 時安裝。
+	Restart Quatrelle to install it now, or it installs when you close Quatrelle.	重新啟動 Quatrelle 即可立即安裝，否則將在關閉 Quatrelle 時安裝。
+	Restart now	立即重新啟動
+	The update is downloaded and checked. It installs now, as Quatrelle closes, which takes a moment; open Quatrelle again when it's done.	更新已下載並通過驗證。它現在會在 Quatrelle 關閉時安裝，需要片刻；完成後請再次開啟 Quatrelle。
+	Update and close	更新並關閉
+	Windows asks for an administrator's permission.	Windows 會要求系統管理員許可。
+	An update is still downloading	更新仍在下載
+	Quatrelle {version} is downloading ({done} of {total}).	正在下載 Quatrelle {version}（{done}/{total}）。
+	Add another…	新增另一個…
+	A renewed certificate takes over signing and encrypting; an older one is kept to read old mail	續期後的憑證接手簽署與加密；舊憑證保留，用於閱讀以前的郵件
+	Older certificate, valid until {date}: kept to read mail encrypted to it	舊憑證，有效期限至 {date}：保留用於閱讀加密給它的郵件
+	Use for sending	用於傳送
+	Sign and encrypt with this one again; the one in use is kept for reading	重新以此憑證簽署與加密；使用中的憑證保留用於閱讀
+	Forget this certificate: mail encrypted to it can't be read any more	刪除此憑證：加密給它的郵件將無法再閱讀
