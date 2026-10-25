@@ -1457,3 +1457,42 @@ month	May	mayo
 	Join the Webex meeting:	Unirse a la reunión de Webex:
 	Webex personal room	Sala personal de Webex
 	Webex Meeting, in a new appointment's window, puts it in for the guests to join	Reunión de Webex, en la ventana de una cita nueva, la inserta para que los invitados se unan
+	Tasks	Tareas
+	New task	Nueva tarea
+	{n} tasks to do	{n} tareas pendientes
+	{n} overdue	{n} vencidas
+	Show completed tasks	Mostrar tareas completadas
+	Mark Complete	Marcar como completada
+	Manage Task	Administrar tarea
+	High Importance	Importancia alta
+	Low Importance	Importancia baja
+	Show completed	Mostrar completadas
+	Current View	Vista actual
+	Type a new task	Escriba una nueva tarea
+	Nothing to do: type a new task above.	Nada que hacer: escriba una nueva tarea arriba.
+	No task matches.	Ninguna tarea coincide.
+	{weekday} {day}/{month}	{weekday} {day}/{month}
+	Mark as not complete	Marcar como no completada
+	Completed on {date}	Completada el {date}
+	Overdue: due {date}	Vencida: vencía el {date}
+	Due today	Vence hoy
+	Due {date}	Vence el {date}
+	No due date	Sin fecha de vencimiento
+	Start date	Fecha de inicio
+	Due date	Fecha de vencimiento
+	Status	Estado
+	Priority	Prioridad
+	High	Alta
+	Low	Baja
+	Normal	Normal
+	% Complete	% completado
+	In {account}	En {account}
+	Search tasks	Buscar tareas
+	Not Started	No comenzada
+	In Progress	En curso
+	Completed	Completada
+	Waiting on someone else	Esperando a otra persona
+	Deferred	Aplazada
+	This Week	Esta semana
+	Next Week	Próxima semana
+	No Date	Sin fecha

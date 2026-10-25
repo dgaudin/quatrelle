@@ -1453,3 +1453,42 @@ month	May	מאי
 	Join the Webex meeting:	הצטרף לפגישת Webex:
 	Webex personal room	חדר אישי ב-Webex
 	Webex Meeting, in a new appointment's window, puts it in for the guests to join	פגישת Webex, בחלון של פגישה חדשה, מוסיפה אותו כדי שהמוזמנים יצטרפו
+	Tasks	משימות
+	New task	משימה חדשה
+	{n} tasks to do	{n} משימות לביצוע
+	{n} overdue	{n} באיחור
+	Show completed tasks	הצג משימות שהושלמו
+	Mark Complete	סמן כהושלם
+	Manage Task	ניהול משימה
+	High Importance	חשיבות גבוהה
+	Low Importance	חשיבות נמוכה
+	Show completed	הצג שהושלמו
+	Current View	תצוגה נוכחית
+	Type a new task	הקלד משימה חדשה
+	Nothing to do: type a new task above.	אין מה לעשות: הקלד משימה חדשה למעלה.
+	No task matches.	אין משימה תואמת.
+	{weekday} {day}/{month}	{weekday} {day}/{month}
+	Mark as not complete	סמן כלא הושלם
+	Completed on {date}	הושלמה ב-{date}
+	Overdue: due {date}	באיחור: תאריך יעד {date}
+	Due today	לביצוע היום
+	Due {date}	תאריך יעד: {date}
+	No due date	ללא תאריך יעד
+	Start date	תאריך התחלה
+	Due date	תאריך יעד
+	Status	מצב
+	Priority	עדיפות
+	High	גבוהה
+	Low	נמוכה
+	Normal	רגילה
+	% Complete	% הושלם
+	In {account}	ב-{account}
+	Search tasks	חפש במשימות
+	Not Started	לא התחילה
+	In Progress	בתהליך
+	Completed	הושלמה
+	Waiting on someone else	ממתינה למישהו אחר
+	Deferred	נדחתה
+	This Week	השבוע
+	Next Week	בשבוע הבא
+	No Date	ללא תאריך

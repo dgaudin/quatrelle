@@ -1456,3 +1456,42 @@ month	May	5월
 	Join the Webex meeting:	Webex 회의 참가:
 	Webex personal room	Webex 개인 회의실
 	Webex Meeting, in a new appointment's window, puts it in for the guests to join	새 약속 창의 Webex 회의 단추가 참석자가 참가할 수 있도록 이를 넣습니다
+	Tasks	작업
+	New task	새 작업
+	{n} tasks to do	할 일 {n}개
+	{n} overdue	기한 지남 {n}개
+	Show completed tasks	완료된 작업 표시
+	Mark Complete	완료로 표시
+	Manage Task	작업 관리
+	High Importance	중요도 높음
+	Low Importance	중요도 낮음
+	Show completed	완료된 항목 표시
+	Current View	현재 보기
+	Type a new task	새 작업 입력
+	Nothing to do: type a new task above.	할 일이 없습니다: 위에 새 작업을 입력하세요.
+	No task matches.	일치하는 작업이 없습니다.
+	{weekday} {day}/{month}	{month}/{day} ({weekday})
+	Mark as not complete	완료되지 않음으로 표시
+	Completed on {date}	{date}에 완료됨
+	Overdue: due {date}	기한 지남: 기한 {date}
+	Due today	오늘 기한
+	Due {date}	기한: {date}
+	No due date	기한 없음
+	Start date	시작 날짜
+	Due date	기한
+	Status	상태
+	Priority	우선 순위
+	High	높음
+	Low	낮음
+	Normal	보통
+	% Complete	완료율
+	In {account}	{account}에 있음
+	Search tasks	작업 검색
+	Not Started	시작 안 함
+	In Progress	진행 중
+	Completed	완료됨
+	Waiting on someone else	다른 사람 대기 중
+	Deferred	연기됨
+	This Week	이번 주
+	Next Week	다음 주
+	No Date	날짜 없음
