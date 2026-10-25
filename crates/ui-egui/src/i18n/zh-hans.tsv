@@ -1544,3 +1544,7 @@ month	May	5月
 	Server address	服务器地址
 	Model	模型
 	Key (if the server needs one)	密钥（如果服务器需要）
+	Suggest a reply	建议回复
+	Ask the language model set in Options to write a reply to this message	请选项中设置的语言模型为此邮件撰写回复
+	Suggested reply	建议的回复
+	Reply with this text	使用此文本回复

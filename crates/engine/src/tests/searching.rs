@@ -269,3 +269,26 @@ fn the_assistant_summarizes_the_message_being_read() {
     s.run("assistant.settings", &json!({"url": ""})).unwrap();
     assert!(s.assistant.is_none());
 }
+
+/// A suggested reply: asked for on behalf of the account's owner, then a reply opens with it
+/// at the top, above the signature and the message quoted.
+#[test]
+fn the_assistant_suggests_a_reply_to_send_or_change() {
+    let mut s = sample_session("assistant-reply");
+    s.run("assistant.settings", &json!({"url": "http://localhost:11434/v1", "model": "llama3"})).unwrap();
+    let key = s.list.first().map(|m| m.key.clone()).unwrap();
+    s.run("list.open", &json!({"key": key.to_id()})).unwrap();
+    assert!(s.run("assistant.replyWithSuggestion", &json!({})).is_err(), "nothing suggested yet");
+    s.take_jobs();
+    let id = s.run("assistant.suggestReply", &json!({})).unwrap()["asked"].as_u64().unwrap();
+    let system = s.take_jobs().into_iter().find_map(|j| match j {
+        Job::AskLlm { messages, .. } => messages.first().map(|m| m.1.clone()),
+        _ => None,
+    });
+    assert!(system.as_deref().is_some_and(|p| p.contains("reply") && !p.contains("{me}")), "{system:?}");
+    s.apply(Event::LlmAnswered { id, text: "Bonjour Zoe,\n\nC'est noté pour jeudi.\n\nBonne journée,".into(), error: None });
+    s.run("assistant.replyWithSuggestion", &json!({})).unwrap();
+    let c = s.compose.as_ref().unwrap();
+    assert!(c.body.starts_with("Bonjour Zoe,\n\nC'est noté pour jeudi."), "{:?}", c.body);
+    assert!(c.subject.starts_with("Re:") || c.subject.starts_with("RE:"), "{}", c.subject);
+}

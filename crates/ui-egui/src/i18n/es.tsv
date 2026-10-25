@@ -1547,3 +1547,7 @@ month	May	mayo
 	Server address	Dirección del servidor
 	Model	Modelo
 	Key (if the server needs one)	Clave (si el servidor la pide)
+	Suggest a reply	Sugerir una respuesta
+	Ask the language model set in Options to write a reply to this message	Pedir al modelo de lenguaje configurado en Opciones que escriba una respuesta a este mensaje
+	Suggested reply	Respuesta sugerida
+	Reply with this text	Responder con este texto

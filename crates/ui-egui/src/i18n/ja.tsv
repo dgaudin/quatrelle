@@ -1544,3 +1544,7 @@ month	May	5月
 	Server address	サーバーのアドレス
 	Model	モデル
 	Key (if the server needs one)	キー (サーバーが必要とする場合)
+	Suggest a reply	返信を提案
+	Ask the language model set in Options to write a reply to this message	オプションで設定した言語モデルにこのメッセージへの返信を書いてもらいます
+	Suggested reply	提案された返信
+	Reply with this text	このテキストで返信

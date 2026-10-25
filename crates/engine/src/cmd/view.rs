@@ -126,6 +126,9 @@ pub(super) fn commands() -> Vec<CommandSpec> {
         .params(r#"{"url": string (an OpenAI-compatible server, …/v1; "" for none), "model"?: string, "key"?: string (kept in the keychain; "" forgets it)}"#),
         CommandSpec::new("assistant.summarize", "Summarize", "Reading pane", |s, _| s.summarize())
             .when(|s| if s.prefs.llm_url.trim().is_empty() { Some("set a language model in File › Options › Assistant first") } else { None }),
+        CommandSpec::new("assistant.suggestReply", "Suggest a reply", "Reading pane", |s, _| s.suggest_reply())
+            .when(|s| if s.prefs.llm_url.trim().is_empty() { Some("set a language model in File › Options › Assistant first") } else { None }),
+        CommandSpec::new("assistant.replyWithSuggestion", "Reply with this text", "Reading pane", |s, _| s.reply_with_suggestion()),
         CommandSpec::new("view.newMailWindow", "New messages in their own window", "File › Options › Mail", |s, v| {
             s.prefs.new_mail_window = p::bool(v, "on").unwrap_or(!s.prefs.new_mail_window);
             Ok(json!({"on": s.prefs.new_mail_window}))

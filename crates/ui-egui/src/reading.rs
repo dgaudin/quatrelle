@@ -422,7 +422,7 @@ fn message(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action
                 if let Some(sec) = &r.security {
                     security::security_bar(s, &t, ui, sec);
                 }
-                assistant::panel(s, &t, ui, &r.key);
+                assistant::panel(s, &t, ui, &r.key, acts);
                 if let Some((choices, voted)) = &voting {
                     vote_bar(ui, &t, &r.key, choices, voted, vote_sending.as_deref(), acts);
                     ui.add_space(8.0);
