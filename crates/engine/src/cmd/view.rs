@@ -120,6 +120,12 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             Ok(json!({"url": s.prefs.webex_room}))
         })
         .params(r#"{"url": "https://<site>.webex.com/meet/<name>" | "" (none)} (what the appointment window's Webex Meeting button puts in)"#),
+        CommandSpec::new("assistant.settings", "Assistant", "File › Options › Assistant", |s, v| {
+            s.set_assistant(p::str(v, "url").unwrap_or_default(), p::str(v, "model").unwrap_or_default(), p::str(v, "key"))
+        })
+        .params(r#"{"url": string (an OpenAI-compatible server, …/v1; "" for none), "model"?: string, "key"?: string (kept in the keychain; "" forgets it)}"#),
+        CommandSpec::new("assistant.summarize", "Summarize", "Reading pane", |s, _| s.summarize())
+            .when(|s| if s.prefs.llm_url.trim().is_empty() { Some("set a language model in File › Options › Assistant first") } else { None }),
         CommandSpec::new("view.newMailWindow", "New messages in their own window", "File › Options › Mail", |s, v| {
             s.prefs.new_mail_window = p::bool(v, "on").unwrap_or(!s.prefs.new_mail_window);
             Ok(json!({"on": s.prefs.new_mail_window}))

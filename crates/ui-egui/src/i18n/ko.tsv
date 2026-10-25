@@ -1537,3 +1537,12 @@ month	May	5월
 	Replace Outlook's copy of the rules	Outlook의 규칙 사본 바꾸기
 	the account is offline: connect it, then replace Outlook's copy of the rules	계정이 오프라인입니다. 연결한 다음 Outlook의 규칙 사본을 바꾸세요
 	Replace	바꾸기
+	Summarize	요약
+	Ask the language model set in Options for the gist of this message	옵션에서 설정한 언어 모델에 이 메시지의 요점을 요청합니다
+	Summary	요약
+	Asking the language model…	언어 모델에 묻는 중…
+	The language model couldn't answer: {error}	언어 모델이 응답할 수 없습니다: {error}
+	Summarize a message with a language model. The text of the messages you ask about is sent to this server: use one you trust.	언어 모델로 메시지를 요약합니다. 질문한 메시지의 본문이 이 서버로 전송되므로 신뢰할 수 있는 서버를 사용하세요.
+	Server address	서버 주소
+	Model	모델
+	Key (if the server needs one)	키(서버에서 요구하는 경우)

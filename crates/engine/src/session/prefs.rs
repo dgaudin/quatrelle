@@ -145,6 +145,12 @@ pub struct Prefs {
     /// (`https://<site>.webex.com/meet/<name>`); empty until it's set in Options.
     #[serde(skip_serializing_if = "String::is_empty")]
     pub webex_room: String,
+    /// The language model asked about mail (File › Options › Assistant): an OpenAI-compatible
+    /// server's address (`…/v1`; empty: none) and the model; its key is in the keychain.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub llm_url: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub llm_model: String,
 }
 
 impl Default for Prefs {
@@ -193,6 +199,8 @@ impl Default for Prefs {
             clean_links: true,
             check_revocation: false,
             webex_room: String::new(),
+            llm_url: String::new(),
+            llm_model: String::new(),
             quick_steps: Vec::new(),
             folder_pane_minimized: false,
             collapsed: BTreeSet::new(),
