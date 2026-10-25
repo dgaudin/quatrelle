@@ -13,7 +13,7 @@
 //!
 //! Answers are hostile input: sizes, depth and counts are capped, nothing here panics.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 
 use quatrelle_mime as mime;
@@ -103,6 +103,8 @@ pub struct Client {
     /// The folders of the shared mailboxes listed: the mailbox each is in (its address) and the
     /// role it has there (`Other` for its top folder and the folders that aren't special).
     shared_roles: RefCell<HashMap<String, (String, FolderRole)>>,
+    /// The next change of the rules removes Outlook's own copy of them (the user said so).
+    replace_outlook_rules: Cell<bool>,
 }
 
 /// Another mailbox the account opens (Outlook's shared mailboxes): its address and name.
@@ -273,6 +275,7 @@ impl Client {
             shared_open: RefCell::new(Vec::new()),
             discovered: RefCell::new(None),
             shared_roles: RefCell::new(HashMap::new()),
+            replace_outlook_rules: Cell::new(false),
         })
     }
 }

@@ -174,6 +174,11 @@ pub enum Dialog {
         error: Option<String>,
     },
     Rules,
+    /// Before Outlook's copy of an Exchange account's rules is replaced: what's lost.
+    ReplaceOutlookRules {
+        account: String,
+        email: String,
+    },
     EditRule(Box<RuleForm>),
     /// A Search Folder made or changed (Outlook's New Search Folder).
     SearchFolder(Box<SearchFolderForm>),
@@ -556,9 +561,12 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Act
         | Dialog::DeleteFolder { .. }
         | Dialog::FolderProperties { .. }
         | Dialog::ConfirmEmpty { .. } => folders::draw(ui, d, s, t, acts),
-        Dialog::NewCategory { .. } | Dialog::Rules | Dialog::EditRule(..) | Dialog::SearchFolder(..) | Dialog::QuickStep(..) => {
-            organize::draw(ui, d, s, t, acts)
-        }
+        Dialog::NewCategory { .. }
+        | Dialog::Rules
+        | Dialog::ReplaceOutlookRules { .. }
+        | Dialog::EditRule(..)
+        | Dialog::SearchFolder(..)
+        | Dialog::QuickStep(..) => organize::draw(ui, d, s, t, acts),
         Dialog::SelectNames(..)
         | Dialog::AttachItem(..)
         | Dialog::SaveChanges

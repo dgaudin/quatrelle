@@ -728,3 +728,34 @@ fn only_https_unless_local() {
     assert!(Client::new("https://mail.contoso.example/EWS/Exchange.asmx", "u", "p", "e").is_ok());
     assert!(Client::new("http://127.0.0.1:9/EWS/Exchange.asmx", "u", "p", "e").is_ok());
 }
+
+#[test]
+fn outlooks_copy_of_the_rules_is_replaced_only_when_asked() {
+    use quatrelle_model::organize::{Condition, Rule, RuleAction};
+    let mut d = crate::fakes::fake_ews::Data::default();
+    d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    d.outlook_rules = true;
+    let server = crate::fakes::fake_ews::serve(d);
+    let user = format!("{}\\{}", crate::fakes::fake_ews::DOMAIN, crate::fakes::fake_ews::USER);
+    let c = Client::connect(&server.url, &user, crate::fakes::fake_ews::PASSWORD, "riley@contoso.example").unwrap();
+    let rule = Rule {
+        name: "Invoices".into(),
+        enabled: true,
+        conditions: vec![Condition::Subject("invoice".into())],
+        match_all: true,
+        actions: vec![RuleAction::MarkRead],
+        stop: false,
+        server: true,
+        account: Some("a1".into()),
+        remote_id: None,
+        priority: None,
+        refused: None,
+    };
+    let refused = c.set_inbox_rules(&[(rule.clone(), None)], &[]).unwrap_err().to_string();
+    assert!(refused.contains("Outlook keeps its own copy"), "{refused}");
+    c.replace_outlook_rules();
+    let ids = c.set_inbox_rules(&[(rule.clone(), None)], &[]).unwrap();
+    assert_eq!(ids.len(), 1, "Outlook's copy removed, the rule made");
+    // Once: the next change goes as usual (and the copy is gone, so it passes).
+    assert!(!c.update_request("").contains("RemoveOutlookRuleBlob"));
+}

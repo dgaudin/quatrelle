@@ -53,7 +53,11 @@ impl Data {
                     .collect();
                 out.push(ok(format!("<m:OutlookRuleBlobExists>false</m:OutlookRuleBlobExists><m:InboxRules>{list}</m:InboxRules>")));
             }
+            "UpdateInboxRules" if self.outlook_rules && op.text_of("RemoveOutlookRuleBlob") != Some("true") => {
+                out.push(err("ErrorOutlookRuleBlobExists"));
+            }
             "UpdateInboxRules" => {
+                self.outlook_rules = false;
                 let mut problem = None;
                 if let Some(ops) = op.child("Operations") {
                     for o in &ops.kids {

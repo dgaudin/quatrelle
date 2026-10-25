@@ -294,6 +294,10 @@ pub enum Job {
     SetServerRule { account: String, id: String, rule: Rule, ours: Vec<String> },
     /// Remove one of the server's own rules.
     DeleteServerRule { account: String, id: String, ours: Vec<String> },
+    /// The user said so: the next change of the account's rules on Exchange removes the copy of
+    /// them Outlook keeps in the mailbox, which makes Exchange refuse every change (the rules
+    /// Outlook runs only on its computer go with it).
+    ReplaceOutlookRules { account: String },
     /// Fetch the picture kept for a person: the one their contact item carries (its id in
     /// `contact`, as the address book keeps it), or else the one the directory (Exchange,
     /// Microsoft 365) keeps for their address.
@@ -387,6 +391,7 @@ impl Job {
             | Job::SetServerRuleEnabled { account, .. }
             | Job::SetServerRule { account, .. }
             | Job::DeleteServerRule { account, .. }
+            | Job::ReplaceOutlookRules { account }
             | Job::FetchPhoto { account, .. }
             | Job::Search { account, .. }
             | Job::SyncDav { account }
