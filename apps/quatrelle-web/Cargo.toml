@@ -20,6 +20,7 @@ quatrelle-jmap = { workspace = true }
 quatrelle-ui-egui = { workspace = true }
 egui = { workspace = true }
 log = { workspace = true }
+serde = { workspace = true }
 serde_json = { workspace = true }
 # `wgpu` pulls egui-wgpu's defaults: WebGPU plus the WebGL2 fallback; `persistence` keeps
 # settings in the page's localStorage.

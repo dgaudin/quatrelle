@@ -4954,6 +4954,7 @@ dependencies = [
  "quatrelle-ui-egui",
  "rand_core 0.6.4",
  "rfd",
+ "serde",
  "serde_json",
  "wasm-bindgen",
  "wasm-bindgen-futures",
