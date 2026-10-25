@@ -1546,3 +1546,7 @@ month	May	Май
 	Server address	Адрес сервера
 	Model	Модель
 	Key (if the server needs one)	Ключ (если сервер его требует)
+	Suggest a reply	Предложить ответ
+	Ask the language model set in Options to write a reply to this message	Попросить языковую модель из параметров написать ответ на это письмо
+	Suggested reply	Предложенный ответ
+	Reply with this text	Ответить этим текстом

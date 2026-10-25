@@ -1543,3 +1543,7 @@ month	May	mei
 	Server address	Serveradres
 	Model	Model
 	Key (if the server needs one)	Sleutel (als de server er een vraagt)
+	Suggest a reply	Antwoord voorstellen
+	Ask the language model set in Options to write a reply to this message	Het taalmodel uit Opties een antwoord op dit bericht laten schrijven
+	Suggested reply	Voorgesteld antwoord
+	Reply with this text	Met deze tekst antwoorden

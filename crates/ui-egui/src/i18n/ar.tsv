@@ -1543,3 +1543,7 @@ month	May	مايو
 	Server address	عنوان الخادم
 	Model	النموذج
 	Key (if the server needs one)	المفتاح (إن طلبه الخادم)
+	Suggest a reply	اقتراح رد
+	Ask the language model set in Options to write a reply to this message	اطلب من النموذج اللغوي المعيَّن في الخيارات كتابة رد على هذه الرسالة
+	Suggested reply	الرد المقترح
+	Reply with this text	الرد بهذا النص
