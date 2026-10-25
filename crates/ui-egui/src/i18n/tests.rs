@@ -485,3 +485,20 @@ fn a_tour_in_the_pseudo_language_only_draws_known_strings() {
         .collect();
     assert!(wording.len() < 40, "{wording:?}");
 }
+
+#[test]
+fn sizes_and_counts_are_written_as_the_language_writes_them() {
+    use crate::widgets::{count_text, size_text};
+    set_current(Lang::EN);
+    assert_eq!(
+        (size_text(512), size_text(41 << 30), size_text(830 << 20), size_text(96 << 20)),
+        ("512 B".into(), "41.0 GB".into(), "830 MB".into(), "96.0 MB".into())
+    );
+    assert_eq!((count_text(18_412), count_text(999), count_text(0)), ("18,412".into(), "999".into(), "0".into()));
+    set_current(Lang::from_code("fr").unwrap());
+    assert_eq!(size_text((28 << 30) / 10), "2,8 Go");
+    assert_eq!(count_text(1_234_567), "1\u{202F}234\u{202F}567");
+    set_current(Lang::from_code("de").unwrap());
+    assert_eq!(count_text(18_412), "18.412");
+    set_current(Lang::EN);
+}

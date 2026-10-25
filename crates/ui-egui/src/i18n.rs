@@ -162,6 +162,20 @@ impl Lang {
     pub fn rtl(self) -> bool {
         self.0.rtl
     }
+    /// Writes a decimal comma (`3,4`) rather than a point.
+    pub fn decimal_comma(self) -> bool {
+        matches!(self.0.code, "es" | "fr" | "de" | "nl" | "pt-br" | "it" | "ru")
+    }
+    /// What sets thousands apart in a number: a point where the decimal is a comma (a narrow
+    /// space in French, a space in Russian), a comma elsewhere.
+    pub fn thousands(self) -> char {
+        match self.0.code {
+            "fr" => '\u{202F}',
+            "ru" => '\u{00A0}',
+            _ if self.decimal_comma() => '.',
+            _ => ',',
+        }
+    }
     pub fn all() -> impl Iterator<Item = Lang> {
         LANGUAGES.iter().map(Lang)
     }

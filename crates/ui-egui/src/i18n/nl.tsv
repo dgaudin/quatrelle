@@ -1498,3 +1498,28 @@ month	May	mei
 	Compact Now	Nu comprimeren
 	Give the space freed inside the data file back to the disk	De in het gegevensbestand vrijgekomen ruimte teruggeven aan de schijf
 	The data file was compacted.	Het gegevensbestand is gecomprimeerd.
+	{size} B	{size} B
+	{size} KB	{size} KB
+	{size} MB	{size} MB
+	{size} GB	{size} GB
+	Folder Size	Mapgrootte
+	Local Data	Lokale gegevens
+	Server Data	Servergegevens
+	Asking the server…	Server wordt gevraagd…
+	Adding up what's kept here…	Wat hier bewaard is, wordt opgeteld…
+	This server doesn't tell each folder's size: only Exchange does.	Deze server geeft de grootte van elke map niet door: alleen Exchange doet dat.
+	The sizes couldn't be read: {error}	De groottes konden niet worden gelezen: {error}
+	Refresh	Vernieuwen
+	Total size	Totale grootte
+	Warning at	Waarschuwing vanaf
+	Sending stops at	Verzenden stopt bij
+	Receiving stops at	Ontvangen stopt bij
+	The server doesn't tell this mailbox's limit.	De server geeft de limiet van dit postvak niet door.
+	Mail folders	E-mailmappen
+	Calendars, contacts, the search index and free space	Agenda's, contactpersonen, de zoekindex en vrije ruimte
+	In all on this computer	In totaal op deze computer
+	Items	Items
+	No folders.	Geen mappen.
+	Folder Size…	Mapgrootte…
+	How much space each folder takes, here and on the server	Hoeveel ruimte elke map inneemt, hier en op de server
+	How much space each folder takes on this computer	Hoeveel ruimte elke map op deze computer inneemt

@@ -1501,3 +1501,28 @@ month	May	5월
 	Compact Now	지금 압축
 	Give the space freed inside the data file back to the disk	데이터 파일 안에서 비워진 공간을 디스크에 돌려주기
 	The data file was compacted.	데이터 파일을 압축했습니다.
+	{size} B	{size} 바이트
+	{size} KB	{size} KB
+	{size} MB	{size} MB
+	{size} GB	{size} GB
+	Folder Size	폴더 크기
+	Local Data	로컬 데이터
+	Server Data	서버 데이터
+	Asking the server…	서버에 묻는 중…
+	Adding up what's kept here…	여기에 보관된 양을 합산하는 중…
+	This server doesn't tell each folder's size: only Exchange does.	이 서버는 각 폴더의 크기를 알려 주지 않습니다. Exchange만 알려 줍니다.
+	The sizes couldn't be read: {error}	크기를 읽을 수 없습니다: {error}
+	Refresh	새로 고침
+	Total size	전체 크기
+	Warning at	경고 기준
+	Sending stops at	보내기 중지 기준
+	Receiving stops at	받기 중지 기준
+	The server doesn't tell this mailbox's limit.	서버가 이 사서함의 한도를 알려 주지 않습니다.
+	Mail folders	메일 폴더
+	Calendars, contacts, the search index and free space	일정, 연락처, 검색 색인 및 여유 공간
+	In all on this computer	이 컴퓨터의 전체
+	Items	항목 수
+	No folders.	폴더가 없습니다.
+	Folder Size…	폴더 크기…
+	How much space each folder takes, here and on the server	각 폴더가 차지하는 공간 (여기와 서버)
+	How much space each folder takes on this computer	각 폴더가 이 컴퓨터에서 차지하는 공간

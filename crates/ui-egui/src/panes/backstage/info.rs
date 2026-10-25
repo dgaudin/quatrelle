@@ -146,8 +146,12 @@ pub(super) fn info(s: &Session, t: &Tokens, has_files: bool, ui: &mut Ui, b: &mu
                 None => (tl!("The server doesn't say how much space is used.").to_string(), None),
             };
             setting_row(ui, t, true, name(t, tl!("On the server")), Some(note(t, &line)), |ui| {
+                if ui.button(tl!("Folder Size…")).on_hover_text(tl!("How much space each folder takes, here and on the server")).clicked() {
+                    acts.push(Action::Run("account.folderSizes", json!({"account": id})));
+                    acts.push(Action::Dialog(Dialog::folder_size(s, &id)));
+                }
                 if let Some(frac) = frac {
-                    ui.add(egui::ProgressBar::new(frac).desired_width(200.0).fill(if frac > 0.9 { t.danger } else { t.accent }));
+                    widgets::meter(ui, t, frac, 200.0);
                 }
             });
             first = false;
@@ -165,6 +169,12 @@ pub(super) fn info(s: &Session, t: &Tokens, has_files: bool, ui: &mut Ui, b: &mu
             here.push_str(&tf!("Compacted from {before} to {after}", before = size(*before), after = size(*after)));
         }
         setting_row(ui, t, first, name(t, tl!("On this computer")), Some(note(t, &here)), |ui| {
+            // An account without a server has the button here.
+            if first && !online && ui.button(tl!("Folder Size…")).on_hover_text(tl!("How much space each folder takes on this computer")).clicked()
+            {
+                acts.push(Action::Run("account.folderSizes", json!({"account": id})));
+                acts.push(Action::Dialog(Dialog::folder_size(s, &id)));
+            }
             if let Some(file) = &file {
                 let busy = s.compacting.is_some();
                 if ui

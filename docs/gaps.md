@@ -61,8 +61,9 @@ mailbox; packaging for every desktop.
 - **Messages in windows:** double-click (or *Open in new window*) opens a message in a window of
   its own.
 - **The File page:** account information, server settings, automatic replies (Sieve vacation over
-  ManageSieve, JMAP's VacationResponse), the space used (IMAP QUOTA, JMAP Quota), emptying Deleted
-  Items and Junk, rules, Options and About.
+  ManageSieve, JMAP's VacationResponse), the space used (IMAP QUOTA, JMAP Quota, Exchange's folder
+  sizes and limits), Folder Size (each folder's size here and on the server, as Outlook's Local
+  Data and Server Data), emptying Deleted Items and Junk, rules, Options and About.
 - **Calendar and contacts:** day, week and month views, events with recurrences and time zones
   (iCalendar), people (vCard), synced with CalDAV / CardDAV (found through RFC 6764); meeting
   invitations by mail (iTIP/iMIP): accept, tentative, decline, and inviting guests.
