@@ -1298,7 +1298,6 @@ month	May	5月
 	Replace…	置き換える…
 	Sign new messages	新しいメッセージに署名する
 	Encrypt new messages	新しいメッセージを暗号化する
-	Each recipient needs to have sent you a signed message first; replies to encrypted mail are always encrypted.	各受信者から先に署名付きメッセージを受け取っている必要があります。暗号化メールへの返信は常に暗号化されます。
 	Certificates from signed mail: {n}	署名付きメールの証明書: {n}
 	Import certificate	証明書の取り込み
 	The password {file} was saved with:	{file} の保存時のパスワード:
@@ -1524,3 +1523,8 @@ month	May	5月
 	Folder Size…	フォルダーのサイズ…
 	How much space each folder takes, here and on the server	各フォルダーが使用している容量 (ここと、サーバー上)
 	How much space each folder takes on this computer	各フォルダーがこのコンピューターで使用している容量
+	Looking for these recipients' certificates in the Exchange address book: send it again in a moment.	Exchange のアドレス帳でこれらの受信者の証明書を探しています。少ししてからもう一度送信してください。
+	The Exchange address book couldn't be searched for certificates.	Exchange のアドレス帳で証明書を検索できませんでした。
+	Certificates found in the Exchange address book: the message can be sent encrypted.	Exchange のアドレス帳で証明書が見つかりました。メッセージを暗号化して送信できます。
+	Some recipients have no certificate in the Exchange address book: mail to them can't be encrypted.	一部の受信者には Exchange のアドレス帳に証明書がありません。その受信者へのメールは暗号化できません。
+	Each recipient's certificate comes from a signed message of theirs, or for an Exchange account from its address book; replies to encrypted mail are always encrypted.	各受信者の証明書は、その人から届いた署名付きメッセージ、または Exchange アカウントではそのアドレス帳から取得されます。暗号化されたメールへの返信は常に暗号化されます。

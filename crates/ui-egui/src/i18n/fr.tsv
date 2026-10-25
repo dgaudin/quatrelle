@@ -1301,7 +1301,6 @@ month	May	mai
 	Replace…	Remplacer…
 	Sign new messages	Signer les nouveaux messages
 	Encrypt new messages	Chiffrer les nouveaux messages
-	Each recipient needs to have sent you a signed message first; replies to encrypted mail are always encrypted.	Chaque destinataire doit d'abord vous avoir envoyé un message signé ; les réponses à un courrier chiffré sont toujours chiffrées.
 	Certificates from signed mail: {n}	Certificats reçus avec du courrier signé : {n}
 	Import certificate	Importer un certificat
 	The password {file} was saved with:	Le mot de passe avec lequel {file} a été enregistré :
@@ -1527,3 +1526,8 @@ month	May	mai
 	Folder Size…	Taille des dossiers…
 	How much space each folder takes, here and on the server	La place prise par chaque dossier, ici et sur le serveur
 	How much space each folder takes on this computer	La place prise par chaque dossier sur cet ordinateur
+	Looking for these recipients' certificates in the Exchange address book: send it again in a moment.	Recherche des certificats de ces destinataires dans le carnet d’adresses Exchange : renvoyez le message dans un instant.
+	The Exchange address book couldn't be searched for certificates.	Impossible de chercher les certificats dans le carnet d’adresses Exchange.
+	Certificates found in the Exchange address book: the message can be sent encrypted.	Certificats trouvés dans le carnet d’adresses Exchange : le message peut partir chiffré.
+	Some recipients have no certificate in the Exchange address book: mail to them can't be encrypted.	Certains destinataires n’ont pas de certificat dans le carnet d’adresses Exchange : le courrier qui leur est destiné ne peut pas être chiffré.
+	Each recipient's certificate comes from a signed message of theirs, or for an Exchange account from its address book; replies to encrypted mail are always encrypted.	Le certificat de chaque destinataire vient d’un message signé de sa part ou, pour un compte Exchange, de son carnet d’adresses ; les réponses aux courriers chiffrés sont toujours chiffrées.

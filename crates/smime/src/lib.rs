@@ -34,7 +34,7 @@ pub use cert::{CertInfo, Problem};
 pub use envelope::{Cipher, decrypt, decrypt_with, encrypt};
 pub use key::PrivateKey;
 pub use p12::read_p12;
-pub use sign::{Signed, carried, sign, sign_with, verify};
+pub use sign::{Signed, carried, certificates, sign, sign_with, verify};
 
 /// Larger CMS than this isn't read (a message's size limit is far below it).
 pub const CMS_MAX: usize = 64 << 20;

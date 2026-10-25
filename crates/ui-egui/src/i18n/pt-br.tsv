@@ -1301,7 +1301,6 @@ month	May	maio
 	Replace…	Substituir…
 	Sign new messages	Assinar mensagens novas
 	Encrypt new messages	Criptografar mensagens novas
-	Each recipient needs to have sent you a signed message first; replies to encrypted mail are always encrypted.	Cada destinatário precisa ter enviado antes uma mensagem assinada; respostas a e-mails criptografados são sempre criptografadas.
 	Certificates from signed mail: {n}	Certificados de e-mails assinados: {n}
 	Import certificate	Importar certificado
 	The password {file} was saved with:	A senha com que {file} foi salvo:
@@ -1527,3 +1526,8 @@ month	May	maio
 	Folder Size…	Tamanho da pasta…
 	How much space each folder takes, here and on the server	Quanto espaço cada pasta ocupa, aqui e no servidor
 	How much space each folder takes on this computer	Quanto espaço cada pasta ocupa neste computador
+	Looking for these recipients' certificates in the Exchange address book: send it again in a moment.	Procurando os certificados desses destinatários no catálogo de endereços do Exchange: envie de novo daqui a pouco.
+	The Exchange address book couldn't be searched for certificates.	Não foi possível procurar certificados no catálogo de endereços do Exchange.
+	Certificates found in the Exchange address book: the message can be sent encrypted.	Certificados encontrados no catálogo de endereços do Exchange: a mensagem pode ser enviada criptografada.
+	Some recipients have no certificate in the Exchange address book: mail to them can't be encrypted.	Alguns destinatários não têm certificado no catálogo de endereços do Exchange: o email para eles não pode ser criptografado.
+	Each recipient's certificate comes from a signed message of theirs, or for an Exchange account from its address book; replies to encrypted mail are always encrypted.	O certificado de cada destinatário vem de uma mensagem assinada por ele ou, numa conta do Exchange, do catálogo de endereços; respostas a emails criptografados são sempre criptografadas.

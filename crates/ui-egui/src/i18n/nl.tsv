@@ -1297,7 +1297,6 @@ month	May	mei
 	Replace…	Vervangen…
 	Sign new messages	Nieuwe berichten ondertekenen
 	Encrypt new messages	Nieuwe berichten versleutelen
-	Each recipient needs to have sent you a signed message first; replies to encrypted mail are always encrypted.	Elke ontvanger moet u eerst een ondertekend bericht hebben gestuurd; antwoorden op versleutelde mail worden altijd versleuteld.
 	Certificates from signed mail: {n}	Certificaten uit ondertekende mail: {n}
 	Import certificate	Certificaat importeren
 	The password {file} was saved with:	Het wachtwoord waarmee {file} is opgeslagen:
@@ -1523,3 +1522,8 @@ month	May	mei
 	Folder Size…	Mapgrootte…
 	How much space each folder takes, here and on the server	Hoeveel ruimte elke map inneemt, hier en op de server
 	How much space each folder takes on this computer	Hoeveel ruimte elke map op deze computer inneemt
+	Looking for these recipients' certificates in the Exchange address book: send it again in a moment.	De certificaten van deze geadresseerden worden gezocht in het Exchange-adresboek: verzend het bericht zo opnieuw.
+	The Exchange address book couldn't be searched for certificates.	Het Exchange-adresboek kon niet worden doorzocht op certificaten.
+	Certificates found in the Exchange address book: the message can be sent encrypted.	Certificaten gevonden in het Exchange-adresboek: het bericht kan versleuteld worden verzonden.
+	Some recipients have no certificate in the Exchange address book: mail to them can't be encrypted.	Sommige geadresseerden hebben geen certificaat in het Exchange-adresboek: e-mail aan hen kan niet worden versleuteld.
+	Each recipient's certificate comes from a signed message of theirs, or for an Exchange account from its address book; replies to encrypted mail are always encrypted.	Het certificaat van elke geadresseerde komt uit een ondertekend bericht van hem of haar, of bij een Exchange-account uit het adresboek; antwoorden op versleutelde e-mail worden altijd versleuteld.

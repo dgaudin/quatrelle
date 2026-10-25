@@ -196,6 +196,7 @@ impl Worker {
             Job::GetRooms { .. } => self.rooms(),
             Job::GetAvailability { emails, from, to, .. } => self.availability(&emails, from, to),
             Job::ServerFolderSizes { .. } => self.folder_sizes(),
+            Job::FindCertificates { emails, .. } => self.directory_certificates(&emails),
             Job::FetchUrl { .. }
             | Job::Discover { .. }
             | Job::SignIn { .. }
