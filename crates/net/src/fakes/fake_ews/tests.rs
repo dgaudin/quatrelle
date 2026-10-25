@@ -14,6 +14,7 @@ mod calendars;
 mod listening;
 mod mailbox;
 mod scheduling;
+mod tasks;
 
 fn until(pool: &crate::worker::Pool, what: &str, mut f: impl FnMut(&Event) -> bool) -> Vec<Event> {
     let end = Instant::now() + Duration::from_secs(20);

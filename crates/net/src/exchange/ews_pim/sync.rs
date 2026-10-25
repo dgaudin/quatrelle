@@ -6,7 +6,7 @@ use super::*;
 pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
     let mut out = DavSync { caldav_home: Some("ews".into()), carddav_home: Some("ews".into()), checked: now, ..Default::default() };
     for t in &pim.deleted {
-        match delete(c, t.href.trim_start_matches("contact:").trim_start_matches("note:")) {
+        match delete(c, t.href.trim_start_matches("contact:").trim_start_matches("note:").trim_start_matches("task:")) {
             Ok(()) | Err(NetError::No(_)) => out.deleted.push(t.href.clone()),
             Err(e) => out.errors.push(e.to_string()),
         }
@@ -51,6 +51,7 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
         out.calendars = Some(calendars);
         out.partial = true;
         read_notes(c, pim, &mut out);
+        read_tasks(c, pim, &mut out);
         return Ok(out);
     }
     // Opened here by their address, then the calendars of the shared mailboxes the account opens
@@ -230,6 +231,7 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
     }
     out.books = Some(books);
     read_notes(c, pim, &mut out);
+    read_tasks(c, pim, &mut out);
     Ok(out)
 }
 

@@ -7,6 +7,9 @@ use crate::ical::CalEvent;
 use crate::vcard::Card;
 
 pub mod scheduling;
+pub mod tasks;
+
+pub use tasks::{DueGroup, StoredTask, Task, TaskStatus};
 
 /// The id of a calendar or address book that lives on this computer only.
 pub const LOCAL: &str = "local";
@@ -176,6 +179,9 @@ pub struct Pim {
     /// Notes (Outlook's Notes): the server's (Exchange) and those kept here.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub notes: Vec<StoredNote>,
+    /// Tasks (Outlook's Tasks): the server's (Exchange) and those kept here.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tasks: Vec<StoredTask>,
     /// Where the server keeps the user's calendars and address books (found once); empty when
     /// it has none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -224,6 +230,12 @@ pub struct DavSync {
     pub notes: Option<Vec<StoredNote>>,
     #[serde(default)]
     pub pushed_notes: Vec<StoredNote>,
+    /// The server's tasks, read in full (`None`: it keeps none, so tasks stay on this
+    /// computer), and the tasks stored there this time.
+    #[serde(default)]
+    pub tasks: Option<Vec<StoredTask>>,
+    #[serde(default)]
+    pub pushed_tasks: Vec<StoredTask>,
     /// Deletions done (by href).
     pub deleted: Vec<String>,
     /// Invitations the server answered ([`StoredEvent::respond`]): their UID and the answer.

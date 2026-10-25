@@ -68,4 +68,5 @@ mod scheduling;
 mod searching;
 mod server_rules;
 mod smime;
+mod tasks;
 mod writing;

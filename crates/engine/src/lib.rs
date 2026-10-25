@@ -30,7 +30,7 @@ pub use session::{
     invite::{Invite, InviteProblem},
     junk::{JunkList, junk_entry},
     newer_release, parse_key,
-    pim::{ACCOUNT_COLOR, AgendaItem, CalMode, DueReminder, Module, NoteRef, Person, parse_local},
+    pim::{ACCOUNT_COLOR, AgendaItem, CalMode, DueReminder, Module, NoteRef, Person, TaskChange, TaskRef, parse_local},
     quick_steps::QuickStep,
     scheduling::{Fetched, RoomFinder},
     search_folders::SearchFolder,

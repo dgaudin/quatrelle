@@ -365,14 +365,8 @@ pub(super) fn event_from(s: &Session, v: &Value, mut e: quatrelle_model::ical::C
             e.location = names.join("; ");
         }
     }
-    let list: Option<Vec<String>> = match v.get("categories") {
-        Some(Value::String(x)) => Some(x.split([',', ';']).map(str::trim).filter(|c| !c.is_empty()).map(str::to_string).collect()),
-        Some(Value::Array(a)) => Some(a.iter().filter_map(Value::as_str).map(str::trim).filter(|c| !c.is_empty()).map(str::to_string).collect()),
-        _ => None,
-    };
-    if let Some(mut list) = list {
-        list.dedup();
-        e.categories = list.into_iter().take(20).map(|c| c.chars().take(100).collect()).collect();
+    if let Some(list) = categories(v) {
+        e.categories = list;
     }
     // Its reminder: minutes before the start (0: when it starts), `null` or "none" for none,
     // nothing for "leave it as it is". It's the event's own field (`CalEvent::reminder`: read and
@@ -408,6 +402,17 @@ pub(super) fn event_from(s: &Session, v: &Value, mut e: quatrelle_model::ical::C
         None => {}
     }
     Ok(e)
+}
+
+/// The categories given (`[string]` or `"Work, Clients"`), at most 20 of 100 characters.
+pub(super) fn categories(v: &Value) -> Option<Vec<String>> {
+    let mut list: Vec<String> = match v.get("categories")? {
+        Value::String(x) => x.split([',', ';']).map(str::trim).filter(|c| !c.is_empty()).map(str::to_string).collect(),
+        Value::Array(a) => a.iter().filter_map(Value::as_str).map(str::trim).filter(|c| !c.is_empty()).map(str::to_string).collect(),
+        _ => return None,
+    };
+    list.dedup();
+    Some(list.into_iter().take(20).map(|c| c.chars().take(100).collect()).collect())
 }
 
 /// A card from command params, starting from `c`.
