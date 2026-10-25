@@ -124,6 +124,7 @@ impl Session {
             Event::Rooms { account, lists, rooms, error } => self.rooms_answered(&account, lists, rooms, error),
             Event::Availability { account, from, to, people, error } => self.availability_answered(&account, from, to, people, error),
             Event::Imported { account, messages, skipped, done, error } => self.imported(&account, messages, skipped, done, error),
+            Event::Compacted { account, before, after, error } => self.compacted(&account, before, after, error),
             Event::Exported { account, messages, skipped, done, error } => self.exported(&account, messages, skipped, done, error),
             Event::Categories { account, categories } => self.take_master_categories(&account, categories),
             Event::Quota { account, used, limit } => {

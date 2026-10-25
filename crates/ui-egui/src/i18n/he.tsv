@@ -1492,3 +1492,9 @@ month	May	מאי
 	This Week	השבוע
 	Next Week	בשבוע הבא
 	No Date	ללא תאריך
+	Compacting the data file…	דוחס את קובץ הנתונים…
+	The space freed inside it goes back to the disk. It takes about a minute for 40 GB; Quatrelle carries on once it's done.	המקום שהתפנה בתוכו חוזר לדיסק. זה לוקח כדקה ל-40 GB; Quatrelle ימשיך ברגע שזה יסתיים.
+	Compacted from {before} to {after}	נדחס מ-{before} ל-{after}
+	Compact Now	דחוס עכשיו
+	Give the space freed inside the data file back to the disk	החזר לדיסק את המקום שהתפנה בקובץ הנתונים
+	The data file was compacted.	קובץ הנתונים נדחס.

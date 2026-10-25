@@ -111,6 +111,33 @@ impl MailApp {
     /// Each appointment or meeting in a window of its own, as Outlook opens them (several at once,
     /// the main window free meanwhile). One opened as a dialog (from the calendar, a reminder,
     /// Reply with Meeting) moves into a window of its own at once.
+    /// While a data file is compacted (Compact Now), a window over the rest says so: what
+    /// reads or writes the account waits for it, so nothing is to be done meanwhile.
+    pub(crate) fn compacting_window(&mut self, ctx: &egui::Context) {
+        let Some(account) = self.session.compacting.clone() else { return };
+        let t = self.ui.tokens;
+        let email = self.session.account(&account).map_or(account, |a| a.config.email.clone());
+        egui::Modal::new(egui::Id::unique("compacting")).frame(crate::dialogs::dialog_frame(&t)).show(ctx, |ui| {
+            ui.set_width(380.0);
+            ui.horizontal(|ui| {
+                ui.add(egui::Spinner::new().size(22.0).color(t.accent));
+                ui.add_space(6.0);
+                ui.vertical(|ui| {
+                    ui.label(RichText::new(tl!("Compacting the data file…")).font(theme::bold(15.0)).color(t.text));
+                    ui.label(RichText::new(email).color(t.dim));
+                });
+            });
+            ui.add_space(8.0);
+            ui.label(
+                RichText::new(tl!(
+                    "The space freed inside it goes back to the disk. It takes about a minute for 40 GB; Quatrelle carries on once it's done."
+                ))
+                .color(t.dim),
+            );
+        });
+        ctx.request_repaint_after(std::time::Duration::from_millis(250));
+    }
+
     pub(crate) fn event_windows(&mut self, ctx: &egui::Context, acts: &mut Vec<Action>) {
         if matches!(self.ui.dialog, Some(Dialog::Event(_)))
             && let Some(Dialog::Event(mut f)) = self.ui.dialog.take()

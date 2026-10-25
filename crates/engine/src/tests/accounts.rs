@@ -904,3 +904,33 @@ fn shared_mailboxes_are_mailboxes_of_their_own_in_the_pane() {
     assert_eq!(keys(&s), [a.clone(), format!("{a}|team@contoso.example"), "sample".to_string()]);
     done(s);
 }
+
+/// Compact Now: asks the worker for it once, the window knows it's going on, and its end says
+/// so; an account without a data file, or a second one meanwhile, is refused.
+#[test]
+fn a_data_file_is_compacted_on_demand() {
+    // A cache that keeps no data files has nothing to compact.
+    let mut plain = sample_session("compact-plain");
+    assert!(plain.run("account.compact", &json!({})).is_err(), "no data file: nothing to compact");
+    done(plain);
+    let dir = std::env::temp_dir().join(format!("quatrelle-engine-compact-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let store = Store::open_packed(dir.join("app"), dir.join("Quatrelle Files")).unwrap();
+    assert!(sample::seed_if_empty(&store, NOW).unwrap());
+    let mut s = Session::open(Some(store), quatrelle_model::dates::Clock::new(NOW, 0));
+    let id = s.accounts[0].config.id.clone();
+    s.take_jobs();
+    assert!(s.store.as_ref().and_then(|st| st.data_file(&id)).is_some(), "the sample mailbox in a data file");
+    s.run("account.compact", &json!({})).unwrap();
+    assert!(s.take_jobs().iter().any(|j| matches!(j, Job::CompactDataFile { account } if *account == id)));
+    assert_eq!(s.compacting.as_deref(), Some(id.as_str()));
+    assert!(s.run("account.compact", &json!({})).is_err(), "one at a time");
+    s.apply(Event::Compacted { account: id.clone(), before: 9_000, after: 3_000, error: None });
+    assert!(s.compacting.is_none());
+    assert_eq!(s.compacted, Some((id.clone(), 9_000, 3_000)));
+    s.run("account.compact", &json!({})).unwrap();
+    s.apply(Event::Compacted { account: id, before: 0, after: 0, error: Some("disk full".into()) });
+    assert!(s.compacting.is_none() && s.notices.last().is_some_and(|n| n.error));
+    drop(s);
+    let _ = std::fs::remove_dir_all(&dir);
+}

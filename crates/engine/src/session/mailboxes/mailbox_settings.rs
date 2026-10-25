@@ -1,4 +1,5 @@
-//! The session: mailbox settings on the server (automatic replies).
+//! The session: mailbox settings on the server (automatic replies), emptying folders, and the
+//! data file kept here (its size, Compact Now).
 
 use super::*;
 
@@ -72,5 +73,37 @@ impl Session {
     /// Bytes of mail cached on this computer for an account.
     pub fn cache_size(&self, account: &str) -> u64 {
         self.store.as_ref().map_or(0, |s| s.account_size(account))
+    }
+
+    /// Compact an account's data file, as Outlook's Compact Now (the current account's when none
+    /// is named): the space freed inside it goes back to the disk. The rest waits for it meanwhile.
+    pub fn compact_data_file(&mut self, account: Option<&str>) -> CmdResult {
+        let id = match account {
+            Some(a) => a.to_string(),
+            None => self.current_account().map(|a| a.config.id.clone()).ok_or_else(|| CmdError::Disabled("add an account first".into()))?,
+        };
+        if self.account(&id).is_none() {
+            return Err(CmdError::Params(format!("no account `{id}`")));
+        }
+        if self.compacting.is_some() {
+            return Err(CmdError::Disabled("a data file is being compacted already".into()));
+        }
+        if self.store.as_ref().and_then(|s| s.data_file(&id)).is_none() {
+            return Err(CmdError::Disabled("this account keeps no data file on this computer".into()));
+        }
+        self.compacting = Some(id.clone());
+        self.jobs.push(Job::CompactDataFile { account: id.clone() });
+        Ok(serde_json::json!({"compacting": id}))
+    }
+
+    pub(in crate::session) fn compacted(&mut self, account: &str, before: u64, after: u64, error: Option<String>) {
+        self.compacting = None;
+        match error {
+            None => {
+                self.compacted = Some((account.to_string(), before, after));
+                self.notice("The data file was compacted.".to_string(), false);
+            }
+            Some(e) => self.notice(format!("The data file could not be compacted: {e}"), true),
+        }
     }
 }

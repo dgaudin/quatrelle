@@ -127,7 +127,11 @@ pub(super) fn info(s: &Session, t: &Tokens, has_files: bool, ui: &mut Ui, b: &mu
         },
     );
 
-    // Mailbox: space used on the server and here, where the data file is, emptying.
+    // Mailbox: space used on the server and here, where the data file is, compacting it,
+    // emptying. Its size is looked at again once it's been compacted.
+    if s.compacting.as_deref() == Some(id.as_str()) {
+        b.cached.remove(&id);
+    }
     let cached = *b.cached.entry(id.clone()).or_insert_with(|| s.cache_size(&id));
     let size = |n: u64| widgets::human_size(usize::try_from(n).unwrap_or(usize::MAX));
     card(ui, t, tl!("Mailbox settings"), Some(tl!("See how much space your mail takes, and empty Deleted Items and Junk Email.")), |ui| {
@@ -151,13 +155,25 @@ pub(super) fn info(s: &Session, t: &Tokens, has_files: bool, ui: &mut Ui, b: &mu
         // Where, as Outlook shows a data file's place; and a copy as one.
         let online = a.config.keeps_online();
         let file = if has_files && !online { s.store.as_ref().map(|store| store.account_path(&id)) } else { None };
-        let here = match &file {
+        let mut here = match &file {
             _ if online => tl!("Online only: none of this account's mail is kept on this computer.").to_string(),
             Some(f) => format!("{}\n{}", tf!("Kept on this computer: {size}", size = size(cached)), f.display()),
             None => tf!("Kept on this computer: {size}", size = size(cached)),
         };
+        if let Some((_, before, after)) = s.compacted.as_ref().filter(|(a, _, _)| *a == id) {
+            here.push('\n');
+            here.push_str(&tf!("Compacted from {before} to {after}", before = size(*before), after = size(*after)));
+        }
         setting_row(ui, t, first, name(t, tl!("On this computer")), Some(note(t, &here)), |ui| {
             if let Some(file) = &file {
+                let busy = s.compacting.is_some();
+                if ui
+                    .add_enabled(!busy, egui::Button::new(tl!("Compact Now")))
+                    .on_hover_text(tl!("Give the space freed inside the data file back to the disk"))
+                    .clicked()
+                {
+                    acts.push(Action::Run("account.compact", json!({"account": id})));
+                }
                 if ui.button(tl!("Save as an Outlook data file…")).clicked() {
                     acts.push(Action::ExportDataFile(id.clone()));
                 }
