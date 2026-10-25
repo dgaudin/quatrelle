@@ -133,7 +133,7 @@ impl MailApp {
             self.ui.logic_ran = false;
         }
         self.settle_composes(&ctx);
-        self.ui.pending_update = self.services.pending_update();
+        self.follow_update(&ctx);
         // Closing with online-only accounts' unsent mail or changes held in memory: ask first.
         if self.ui.close_now {
             self.ui.close_now = false;
@@ -149,6 +149,10 @@ impl MailApp {
             } else if unsent + changes > 0 {
                 ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
                 self.ui.dialog = Some(Dialog::LostOnClose { unsent, changes });
+            } else if self.ask_about_update() {
+                // An update about to be installed, or still downloading: said first.
+                ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+                self.ask_update_on_close();
             }
         }
         // A search started by a command or agent shows its query in the box.
@@ -258,6 +262,12 @@ impl MailApp {
                     }
                     self.ui.ribbon_groups.insert(key, next);
                 });
+            // A newer Quatrelle ready to install (or a copy left from before): a bar of its own.
+            if self.update_bar_wanted() {
+                egui::Panel::top("update-bar")
+                    .frame(egui::Frame::new().fill(t.accent_soft).inner_margin(Margin::symmetric(12, 6)).stroke(egui::Stroke::new(1.0, t.border)))
+                    .show(ui, |ui| self.update_bar(ui, &mut acts));
+            }
         }
 
         if self.ui.backstage.is_some() {
