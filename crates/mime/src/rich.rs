@@ -387,8 +387,10 @@ fn para_html(line: &str, start: usize, styles: &Styles) -> String {
         if !css.is_empty() {
             h = format!("<span style=\"{}\">{h}</span>", css.join("; "));
         }
+        // Underlined whatever the reader's mail program does with links, as Outlook writes them
+        // (a link pasted without its underline gets it back, as the editor shows it).
         if let Some(l) = st.link.as_ref().filter(|l| safe_link(l)) {
-            h = format!("<a href=\"{}\">{h}</a>", esc(l.trim()));
+            h = format!("<a href=\"{}\" style=\"text-decoration:underline\">{h}</a>", esc(l.trim()));
         }
         out.push_str(&h);
         i = j;
@@ -715,7 +717,10 @@ mod tests {
         assert!(html.contains("<span style=\"color:#c80000\"><b>Hi</b></span>"), "{html}");
         assert!(html.contains("<span style=\"font-size:18pt; background-color:#ffff00\"><i><u>team</u></i></span>"), "{html}");
         assert!(html.contains("<ol>\n<li>first</li>\n<li>second</li>\n</ol>"), "{html}");
-        assert!(html.contains("<div style=\"text-align:center\">see <a href=\"https://a.example/\">site</a></div>"), "{html}");
+        assert!(
+            html.contains("<div style=\"text-align:center\">see <a href=\"https://a.example/\" style=\"text-decoration:underline\">site</a></div>"),
+            "{html}"
+        );
         assert!(html.contains("<div><br></div>") && html.contains("x<img src=\"cid:pic@x\""), "{html}");
         let t = to_text(text, &s);
         assert_eq!(t, "Hi team\n1. first\n2. second\n\nsee site <https://a.example/>\nx[picture]");
@@ -734,6 +739,17 @@ mod tests {
         let mut s = Styles::plain("a");
         s.restyle("a", 0..1, |st| Style { link: Some("javascript:alert(1)".into()), ..st.clone() });
         assert!(!to_html("a", &s).contains("javascript"));
+    }
+
+    /// A link pasted without its underline (Outlook's signatures often have one) keeps its
+    /// colour and goes out underlined, as the editor shows it.
+    #[test]
+    fn a_pasted_link_goes_out_underlined_in_its_colour() {
+        let pasted = r#"<p><a href="mailto:dgaudin@proginov.com" style="color:#4B5763;text-decoration:none">dgaudin@proginov.com</a></p>"#;
+        let (text, styles) = from_rich(&crate::html::html_to_rich(pasted));
+        let html = to_html(&text, &styles);
+        assert!(html.contains("<a href=\"mailto:dgaudin@proginov.com\" style=\"text-decoration:underline\">"), "{html}");
+        assert!(html.contains("color:#4b5763"), "{html}");
     }
 
     #[test]
