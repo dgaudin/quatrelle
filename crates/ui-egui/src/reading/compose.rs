@@ -417,6 +417,8 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
                     ui.label(RichText::new(tl!("Quatrelle")).font(theme::bold(16.0)).color(t.text));
                     let mut text = if msg == "add at least one recipient" {
                         tl!("Add at least one name in To, Cc or Bcc before sending.").to_string()
+                    } else if msg == "Looking for these recipients' certificates in the Exchange address book: send it again in a moment." {
+                        tl!("Looking for these recipients' certificates in the Exchange address book: send it again in a moment.").to_string()
                     } else {
                         msg.clone()
                     };

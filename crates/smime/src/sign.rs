@@ -147,6 +147,27 @@ fn single(attrs: &SetOfVec<Attribute>, oid: ObjectIdentifier) -> Option<&Any> {
 }
 
 /// Checks the signature `cms` (BER or DER `ContentInfo` of `SignedData`). `detached` is the
+/// The certificates a CMS SignedData carries, whatever it signs: also the bundle a directory
+/// keeps someone's certificates in (Active Directory's `userSMIMECertificate`), which signs
+/// nothing.
+pub fn certificates(cms: &[u8]) -> Result<Vec<Vec<u8>>, Error> {
+    let der_bytes = der_of(cms)?;
+    let ci = ContentInfo::from_der(&der_bytes).map_err(|_| Error::Malformed("not a signature"))?;
+    if ci.content_type != oids::SIGNED_DATA {
+        return Err(Error::Malformed("not a signature"));
+    }
+    let sd: SignedData = ci.content.decode_as().map_err(|_| Error::Malformed("the signature can't be read"))?;
+    Ok(sd
+        .certificates
+        .iter()
+        .flat_map(|s| s.0.iter())
+        .filter_map(|c| match c {
+            CertificateChoices::Certificate(c) => c.to_der().ok(),
+            CertificateChoices::Other(_) => None,
+        })
+        .collect())
+}
+
 /// content for a detached signature (the first part of a `multipart/signed`, as received); for
 /// one that carries its content (`application/pkcs7-mime; smime-type=signed-data`), it's `None`
 /// and the content comes back. The first signer whose signature holds is the one returned; none

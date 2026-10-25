@@ -42,7 +42,14 @@ pub struct SmimeSettings {
     /// Certificates of people who sent signed mail, by lower-case address.
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub known: BTreeMap<String, KnownCert>,
+    /// Addresses looked up in the Exchange address book since Quatrelle started (`true`: no
+    /// answer yet), so each is asked once.
+    #[serde(skip)]
+    pub looked_up: BTreeMap<String, bool>,
 }
+
+/// Said while the address book is asked for recipients' certificates.
+const LOOKING_UP: &str = "Looking for these recipients' certificates in the Exchange address book: send it again in a moment.";
 
 /// Someone's certificate, from a signed message of theirs.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -418,6 +425,21 @@ impl Session {
                     None => missing.push(r.clone()),
                 }
             }
+            // Exchange's address book may keep theirs, where Outlook finds them: asked once.
+            if !missing.is_empty() && config.ews.is_some() {
+                let s = self.smime.entry(c.account.clone()).or_default();
+                let ask: Vec<String> = missing.iter().map(|m| m.trim().to_lowercase()).filter(|m| !s.looked_up.contains_key(m)).collect();
+                let waiting = missing.iter().any(|m| s.looked_up.get(&m.trim().to_lowercase()) == Some(&true));
+                if !ask.is_empty() || waiting {
+                    for m in &ask {
+                        s.looked_up.insert(m.clone(), true);
+                    }
+                    if !ask.is_empty() {
+                        self.jobs.push(Job::FindCertificates { account: c.account.clone(), emails: ask });
+                    }
+                    return Err(CmdError::Params(LOOKING_UP.into()));
+                }
+            }
             if !missing.is_empty() {
                 return Err(CmdError::Params(format!(
                     "there's no certificate to encrypt to {}: a signed message from them brings one, or send it without encryption",
@@ -440,8 +462,47 @@ impl Session {
         Ok(Some(job))
     }
 
+    /// The address book's answer: for each address, its certificate for now (made out to that
+    /// address, valid today, the last to run out) is kept as one from a signed message would be.
+    fn directory_certificates(&mut self, account: &str, found: Vec<(String, Vec<Vec<u8>>)>, error: Option<String>) {
+        let now = self.clock.now;
+        let s = self.smime.entry(account.to_string()).or_default();
+        if let Some(e) = error {
+            // Asked again at the next try.
+            s.looked_up.retain(|_, waiting| !*waiting);
+            log::warn!("{account}: the address book's certificates: {e}");
+            self.notice("The Exchange address book couldn't be searched for certificates.", true);
+            return;
+        }
+        let (mut kept, mut none) = (0, 0);
+        for (email, certs) in found {
+            let email = email.trim().to_lowercase();
+            let best = certs
+                .into_iter()
+                .filter_map(|c| smime::cert::info(&c).ok().map(|i| (c, i)))
+                .filter(|(_, i)| i.emails.contains(&email) && i.not_before <= now && now <= i.not_after)
+                .max_by_key(|(_, i)| i.not_after);
+            s.looked_up.insert(email.clone(), false);
+            match best {
+                Some((cert, _)) => {
+                    s.known.insert(email, KnownCert { cert, gcm: false, seen: now });
+                    kept += 1;
+                }
+                None => none += 1,
+            }
+        }
+        if kept > 0 {
+            self.save_smime(account);
+            self.notice("Certificates found in the Exchange address book: the message can be sent encrypted.", false);
+        }
+        if none > 0 {
+            self.notice("Some recipients have no certificate in the Exchange address book: mail to them can't be encrypted.", true);
+        }
+    }
+
     pub(super) fn apply_smime(&mut self, e: Event) {
         match e {
+            Event::DirectoryCertificates { account, found, error } => self.directory_certificates(&account, found, error),
             Event::Identity { account, chain, error } => match error {
                 Some(e) => self.notice(format!("The certificate couldn't be kept: {e}"), true),
                 None => {

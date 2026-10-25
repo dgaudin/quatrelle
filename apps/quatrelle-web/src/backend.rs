@@ -558,6 +558,7 @@ async fn job(sh: &Rcs, id: &str, j: Job) {
         | Job::CompactDataFile { .. }
         | Job::LocalFolderSizes { .. }
         | Job::ServerFolderSizes { .. }
+        | Job::FindCertificates { .. }
         | Job::ExportPst { .. }
         | Job::WorkOffline { .. }
         | Job::SetSync { .. }
@@ -690,6 +691,10 @@ impl Backend for WebBackend {
                     Err(e) => (Vec::new(), Some(e.to_string())),
                 };
                 emit(sh, Event::FolderSizes { account, server: false, folders, quota: None, error })
+            }
+            Job::FindCertificates { account, .. } => {
+                let error = Some("only an Exchange account's address book keeps certificates".to_string());
+                emit(sh, Event::DirectoryCertificates { account, found: Vec::new(), error })
             }
             Job::ServerFolderSizes { account } => {
                 let error = Some("this server doesn't tell each folder's size".to_string());

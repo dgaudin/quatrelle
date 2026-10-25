@@ -291,6 +291,12 @@ servers that don't offer IMAP. Every call is SOAP over HTTPS.
   Items); envelope-only recipients go in a `Bcc:` header. Drafts are `CreateItem` with `SaveOnly`,
   marked unsent.
 - **Automatic replies** are `Get`/`SetUserOofSettings`.
+- **Certificates from the address book:** a message to encrypt whose recipient has sent no
+  signed mail asks `ResolveNames` (`ReturnFullContactData`, `ContactDataShape="AllProperties"`,
+  the directory) once per address, as Outlook finds them in the GAL: `MSExchangeCertificate`
+  (Active Directory's `userCertificate`, X.509) and `UserSMIMECertificate` (a PKCS #7 bundle).
+  The one made out to that address, valid today and the last to run out, is kept like one from
+  signed mail; the message is sent again once it's there.
 - **Folder Size and the quota:** one `FindFolder` (deep, from `msgfolderroot`) asks each folder's
   `PidTagMessageSizeExtended` (0x0E08, its own items' bytes) with the hidden mark, so Exchange's
   own folders stay out as Outlook leaves them out; a `GetFolder` of `root` and `msgfolderroot`
