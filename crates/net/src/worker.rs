@@ -151,6 +151,7 @@ fn quick_job(j: &Job, acc: &AccountConfig) -> bool {
         Job::Send { .. } => acc.pop.is_none() && acc.jmap.is_none(),
         Job::GetVacation { .. } | Job::SetVacation { .. } => acc.pop.is_none(),
         Job::GetRooms { .. } | Job::GetAvailability { .. } => acc.ews.is_some() || acc.graph.is_some(),
+        Job::ServerFolderSizes { .. } => acc.ews.is_some(),
         _ => false,
     }
 }
@@ -271,6 +272,7 @@ mod listening;
 mod pool;
 mod scheduling;
 mod send;
+mod sizes;
 mod smime;
 mod sync;
 
@@ -640,6 +642,9 @@ fn log_event(e: &Event) {
             Some(e) => log::warn!("{account}: availability: {e}"),
             None => log::info!("{account}: availability of {} read ({} refused)", people.len(), people.iter().filter(|p| p.error.is_some()).count()),
         },
+        Event::FolderSizes { account, server, error: Some(e), .. } => {
+            log::warn!("{account}: folder sizes ({}): {e}", if *server { "server" } else { "here" })
+        }
         Event::Notice { account, message } => log::info!("{account}: {message}"),
         Event::DavSynced { account, sync } => {
             let names: Vec<&str> = sync.calendars.iter().flatten().map(|c| c.name.as_str()).collect();
@@ -780,6 +785,7 @@ fn jumps_queue(j: &Job) -> bool {
             | Job::GetServerRules { .. }
             | Job::GetVacation { .. }
             | Job::SetVacation { .. }
+            | Job::ServerFolderSizes { .. }
             | Job::SyncDav { .. }
             | Job::SyncFolder { .. }
     )

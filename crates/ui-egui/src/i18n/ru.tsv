@@ -1501,3 +1501,28 @@ month	May	Май
 	Compact Now	Сжать сейчас
 	Give the space freed inside the data file back to the disk	Вернуть на диск место, освободившееся в файле данных
 	The data file was compacted.	Файл данных сжат.
+	{size} B	{size} Б
+	{size} KB	{size} КБ
+	{size} MB	{size} МБ
+	{size} GB	{size} ГБ
+	Folder Size	Размер папок
+	Local Data	Локальные данные
+	Server Data	Данные на сервере
+	Asking the server…	Запрос к серверу…
+	Adding up what's kept here…	Подсчёт хранящегося здесь…
+	This server doesn't tell each folder's size: only Exchange does.	Этот сервер не сообщает размер каждой папки: это делает только Exchange.
+	The sizes couldn't be read: {error}	Не удалось прочитать размеры: {error}
+	Refresh	Обновить
+	Total size	Общий размер
+	Warning at	Предупреждение с
+	Sending stops at	Отправка прекращается при
+	Receiving stops at	Получение прекращается при
+	The server doesn't tell this mailbox's limit.	Сервер не сообщает предел этого почтового ящика.
+	Mail folders	Почтовые папки
+	Calendars, contacts, the search index and free space	Календари, контакты, поисковый индекс и свободное место
+	In all on this computer	Всего на этом компьютере
+	Items	Элементы
+	No folders.	Нет папок.
+	Folder Size…	Размер папок…
+	How much space each folder takes, here and on the server	Сколько места занимает каждая папка здесь и на сервере
+	How much space each folder takes on this computer	Сколько места занимает каждая папка на этом компьютере

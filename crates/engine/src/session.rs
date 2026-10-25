@@ -42,6 +42,7 @@ mod writing;
 pub use listing::{ARRANGE_HEADINGS, Arrange, FolderRef, ListFilter, OUTBOX, Row, View, arrange_list};
 use listing::{Preview, person, size_group};
 use mailboxes::Contacts;
+pub use mailboxes::{FolderSizes, Sizes};
 pub use organize::{RulesScope, junk, quick_steps, search_folders};
 pub use prefs::{ListLayout, NotesOrder, Prefs, ReadInPane, ReadingPane};
 pub use security::{CardSearch, KnownCert, Lock, RevocationCheck, SMIME_DOC, Seal, Security, SignedBy, SmimeSettings};
@@ -449,6 +450,8 @@ pub struct Session {
     /// compacted here with its size before and after.
     pub compacting: Option<String>,
     pub compacted: Option<(String, u64, u64)>,
+    /// Folder Size: each of an account's folders' sizes here and on its server.
+    pub sizes: Option<FolderSizes>,
     /// OAuth providers this copy can sign in with (set by the app).
     pub oauth_available: Vec<String>,
     /// Running portable (set by the app): everything is kept beside it, passwords only in memory.
@@ -573,6 +576,7 @@ impl Session {
             held: HashMap::new(),
             compacting: None,
             compacted: None,
+            sizes: None,
             oauth_available: Vec::new(),
             portable: false,
             jmap_only: false,

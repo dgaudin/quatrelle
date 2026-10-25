@@ -616,14 +616,56 @@ pub fn avatar(ui: &Ui, center: egui::Pos2, radius: f32, initials: &str, color: C
     ui.painter().text(center, egui::Align2::CENTER_CENTER, initials, theme::bold(radius * 0.8), Color32::WHITE);
 }
 
+/// How full something is, as a bar on its track (red past nine tenths): the mailbox on its
+/// server.
+pub fn meter(ui: &mut Ui, t: &Tokens, frac: f32, width: f32) -> Response {
+    let frac = if frac.is_finite() { frac.clamp(0.0, 1.0) } else { 0.0 };
+    let (r, resp) = ui.allocate_exact_size(vec2(width, 8.0), Sense::hover());
+    ui.painter().rect_filled(r, 4.0, t.border);
+    if frac > 0.0 {
+        let full = egui::Rect::from_min_size(r.min, vec2((r.width() * frac).max(r.height()), r.height()));
+        ui.painter().rect_filled(full, 4.0, if frac > 0.9 { t.danger } else { t.accent });
+    }
+    resp
+}
+
+/// A whole number with its thousands set apart, as the interface's language writes them
+/// (`18,412`, `18 412`, `18.412`).
+pub fn count_text(n: u64) -> String {
+    let digits = n.to_string();
+    let sep = crate::i18n::current().thousands();
+    let mut out = String::with_capacity(digits.len() + digits.len() / 3 * sep.len_utf8());
+    for (i, c) in digits.chars().enumerate() {
+        if i > 0 && (digits.len() - i).is_multiple_of(3) {
+            out.push(sep);
+        }
+        out.push(c);
+    }
+    out
+}
+
 pub fn human_size(bytes: usize) -> String {
+    size_text(u64::try_from(bytes).unwrap_or(u64::MAX))
+}
+
+/// A size as people read it, in the interface's language: `12 KB`, `3.4 MB`, `41.2 GB` (`Ko`,
+/// `Mo`, `Go` in French, with a decimal comma where the language writes one).
+pub fn size_text(bytes: u64) -> String {
+    const K: f64 = 1024.0;
     let b = bytes as f64;
-    if b < 1024.0 {
-        format!("{bytes} B")
-    } else if b < 1024.0 * 1024.0 {
-        format!("{:.0} KB", b / 1024.0)
+    // Three figures at most: 2.8 GB, 96.0 MB, 830 MB.
+    let tenths = |v: f64| {
+        let s = if v < 100.0 { format!("{v:.1}") } else { format!("{v:.0}") };
+        if crate::i18n::current().decimal_comma() { s.replace('.', ",") } else { s }
+    };
+    if b < K {
+        tf!("{size} B", size = bytes)
+    } else if b < K * K {
+        tf!("{size} KB", size = format!("{:.0}", b / K))
+    } else if b < K * K * K {
+        tf!("{size} MB", size = tenths(b / K / K))
     } else {
-        format!("{:.1} MB", b / 1024.0 / 1024.0)
+        tf!("{size} GB", size = tenths(b / K / K / K))
     }
 }
 

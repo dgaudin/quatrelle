@@ -76,6 +76,8 @@ pub struct Data {
     pub forget_sign_in: bool,
     /// Folders listed without their last change (as a server that doesn't keep it).
     pub no_commit_time: bool,
+    /// The mailbox's limits in kilobytes (warning, sending, receiving), on its root folder.
+    pub limits: Option<(u64, u64, u64)>,
     /// Changes a `SyncFolderItems` answers at most (fewer than asked: to see the pages).
     pub sync_page: Option<usize>,
     /// The next request on a connection already used is met with the connection closed, unread
@@ -214,6 +216,7 @@ impl Default for Data {
             forget_sign_in: false,
             drop_kept: 0,
             no_commit_time: false,
+            limits: None,
             sync_page: None,
             busy: 0,
             url: String::new(),
@@ -401,6 +404,23 @@ impl Data {
                 h.finish()
             )
         };
+        // The bytes its items take (PidTagMessageSizeExtended), and on the root the mailbox's
+        // limits (PidTagStorageQuotaLimit, PidTagProhibitSendQuota, PidTagProhibitReceiveQuota).
+        let bytes: usize = self.items.iter().filter(|i| i.folder == f.id).map(|i| i.raw.len()).sum();
+        let prop = |tag: &str, kind: &str, v: u64| {
+            format!(
+                "<t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"{tag}\" PropertyType=\"{kind}\"/><t:Value>{v}</t:Value></t:ExtendedProperty>"
+            )
+        };
+        let mut replica = format!("{replica}{}", prop("0xe08", "Long", bytes as u64));
+        if let (Some((warning, send, receive)), Some("msgfolderroot")) = (self.limits, f.known.as_deref()) {
+            replica.push_str(&format!(
+                "{}{}{}",
+                prop("0x3ff5", "Integer", warning),
+                prop("0x666e", "Integer", send),
+                prop("0x666a", "Integer", receive)
+            ));
+        }
         // As Exchange answers: each folder in an element of its kind (EWS's folder array).
         let kind = match f.class.as_str() {
             c if c.starts_with("IPF.Contact") => "ContactsFolder",

@@ -290,7 +290,15 @@ servers that don't offer IMAP. Every call is SOAP over HTTPS.
 - **Sending** is `CreateItem` with the MIME source and `SendAndSaveCopy` (the copy goes to Sent
   Items); envelope-only recipients go in a `Bcc:` header. Drafts are `CreateItem` with `SaveOnly`,
   marked unsent.
-- **Automatic replies** are `Get`/`SetUserOofSettings`. There is no quota over EWS.
+- **Automatic replies** are `Get`/`SetUserOofSettings`.
+- **Folder Size and the quota:** one `FindFolder` (deep, from `msgfolderroot`) asks each folder's
+  `PidTagMessageSizeExtended` (0x0E08, its own items' bytes) with the hidden mark, so Exchange's
+  own folders stay out as Outlook leaves them out; a `GetFolder` of `root` and `msgfolderroot`
+  asks the mailbox's limits (`PidTagStorageQuotaLimit` 0x3FF5, `PidTagProhibitSendQuota` 0x666E,
+  `PidTagProhibitReceiveQuota` 0x666A, in KB), which a server may keep on the mailbox alone. The
+  sizes added up are the space used on File › Info, measured against the receiving limit (else
+  sending's, else the warning). Exchange spells tags its own way (`0xe08`): they're compared as
+  numbers.
 - **Finding the server:** an account added without one asks Autodiscover (POX, MS-OXDSCLI) at the
   domain's `autodiscover.` host and the domain itself, signed in as the user, following one
   redirect; the EWS address found is kept with the account.

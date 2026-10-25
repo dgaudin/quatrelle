@@ -232,15 +232,8 @@ pub(crate) fn calendar_links(c: &Client) -> Result<Vec<CalendarLink>> {
 
 /// An extended property's value, by its tag (`0x6851`, as EWS gives it back).
 fn ext_text<'a>(it: &'a El, tag: &str) -> Option<&'a str> {
-    let want = u32::from_str_radix(tag.trim_start_matches("0x"), 16).ok()?;
     it.children("ExtendedProperty")
-        .find(|p| {
-            p.child("ExtendedFieldURI").and_then(|u| u.attr("PropertyTag")).is_some_and(|t| {
-                let t = t.trim();
-                t.strip_prefix("0x").or_else(|| t.strip_prefix("0X")).map_or_else(|| t.parse().ok(), |h| u32::from_str_radix(h, 16).ok())
-                    == Some(want)
-            })
-        })
+        .find(|p| p.child("ExtendedFieldURI").and_then(|u| u.attr("PropertyTag")).is_some_and(|t| crate::ews::is_tag(t, tag)))
         .and_then(|p| p.text_of("Value"))
 }
 

@@ -124,6 +124,23 @@ impl Pool {
         }
     }
 
+    /// Each folder's size on this computer, worked out on a thread of its own (a big data file
+    /// has hundreds of thousands of entries to add up).
+    fn local_sizes(&mut self, account: String) {
+        let sink = self.sink.clone();
+        let store = self.store.clone();
+        let spawned = std::thread::Builder::new().name("folder-sizes".into()).spawn(move || {
+            let done = match store.folder_sizes(&account) {
+                Ok(folders) => Event::FolderSizes { account, server: false, folders, quota: None, error: None },
+                Err(e) => Event::FolderSizes { account, server: false, folders: Vec::new(), quota: None, error: Some(e.to_string()) },
+            };
+            sink.emit(done);
+        });
+        if let Err(e) = spawned {
+            log::warn!("folder sizes: {e}");
+        }
+    }
+
     fn import_pst(&mut self, account: String, path: String) {
         let sink = self.sink.clone();
         let store = self.store.clone();
@@ -206,6 +223,7 @@ impl Pool {
             }
             Job::ImportPst { account, path } => self.import_pst(account, path),
             Job::CompactDataFile { account } => self.compact(account),
+            Job::LocalFolderSizes { account } => self.local_sizes(account),
             j @ (Job::ImportIdentity { .. }
             | Job::ForgetIdentity { .. }
             | Job::Protect { .. }
@@ -323,6 +341,10 @@ impl Pool {
             }
             Job::GetVacation { account } | Job::SetVacation { account, .. } if !self.workers.contains_key(&account) => {
                 self.sink.emit(Event::Vacation { account, vacation: None, error: Some("the account is offline".into()) });
+            }
+            Job::ServerFolderSizes { account } if !self.workers.contains_key(&account) => {
+                let error = Some("the account is offline".to_string());
+                self.sink.emit(Event::FolderSizes { account, server: true, folders: Vec::new(), quota: None, error });
             }
             Job::GetRooms { account } if !self.workers.contains_key(&account) => {
                 self.sink.emit(Event::Rooms { account, lists: Vec::new(), rooms: Vec::new(), error: Some("the account is offline".into()) });

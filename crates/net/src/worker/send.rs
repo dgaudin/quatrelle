@@ -20,7 +20,11 @@ impl Worker {
                 Job::Send { account, id, raw, from, recipients, sent_folder } => {
                     self.send_quick(Job::Send { account, id, raw, from, recipients, sent_folder });
                 }
-                j @ (Job::GetVacation { .. } | Job::SetVacation { .. } | Job::GetRooms { .. } | Job::GetAvailability { .. }) => self.handle(j),
+                j @ (Job::GetVacation { .. }
+                | Job::SetVacation { .. }
+                | Job::GetRooms { .. }
+                | Job::GetAvailability { .. }
+                | Job::ServerFolderSizes { .. }) => self.handle(j),
                 // Anything else belongs to the main connection.
                 other => {
                     if let Some(m) = &self.main {

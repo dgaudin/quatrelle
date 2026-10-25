@@ -376,11 +376,7 @@ impl Client {
                 let class = f.text_of("FolderClass").unwrap_or("").to_string();
                 let replica = f
                     .children("ExtendedProperty")
-                    .find(|p| {
-                        p.child("ExtendedFieldURI")
-                            .and_then(|u| u.attr("PropertyTag"))
-                            .is_some_and(|t| t.eq_ignore_ascii_case("0x6698") || t == "26264")
-                    })
+                    .find(|p| p.child("ExtendedFieldURI").and_then(|u| u.attr("PropertyTag")).is_some_and(|t| is_tag(t, "0x6698")))
                     .and_then(|p| p.text_of("Value"))
                     .and_then(replica_guid);
                 if let Some(g) = &replica {
