@@ -90,6 +90,43 @@ fn frame_shapes(ctx: &egui::Context, app: &mut MailApp, events: Vec<Event>, size
     shapes
 }
 
+/// Where the text `text` was last drawn (the one on top), in the middle of it.
+fn text_at(shapes: &[egui::Shape], text: &str) -> Option<egui::Pos2> {
+    shapes.iter().rev().find_map(|s| match s {
+        egui::Shape::Text(t) if t.galley.text() == text => Some(t.pos + t.galley.rect.center().to_vec2()),
+        _ => None,
+    })
+}
+
+/// Where the text `text` is drawn on top once it stays put (a window or dialog fading in moves
+/// a little while it does).
+fn settled_text_at(ctx: &egui::Context, a: &mut MailApp, text: &str, size: egui::Vec2) -> Option<egui::Pos2> {
+    let mut at = None;
+    for _ in 0..40 {
+        let now = text_at(&frame_shapes(ctx, a, vec![], size), text);
+        if now.is_some() && now == at {
+            return now;
+        }
+        at = now;
+    }
+    None
+}
+
+/// Clicks at `at` (`times` in a row: two make a double-click), a frame after. A moment passes
+/// first, so a click just before doesn't make them a double- or triple-click.
+fn click_at(ctx: &egui::Context, a: &mut MailApp, at: egui::Pos2, times: usize, size: egui::Vec2) {
+    let press = |pressed| Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: Modifiers::NONE };
+    for _ in 0..20 {
+        frame_sized(ctx, a, vec![], size);
+    }
+    frame_sized(ctx, a, vec![Event::PointerMoved(at)], size);
+    for _ in 0..times {
+        frame_sized(ctx, a, vec![press(true)], size);
+        frame_sized(ctx, a, vec![press(false)], size);
+    }
+    frame_sized(ctx, a, vec![], size);
+}
+
 /// The Home ribbon fits the window: at a width that hasn't room for every group's large
 /// buttons (1320 px, since Quick Steps came in, and 1100), the last groups are drawn compact —
 /// small buttons stacked — as many as it takes, and every group ends within the window; given

@@ -1619,3 +1619,11 @@ month	May	5月
 	Cc:	副本:
 	Subject:	主旨:
 	[Draft]	[草稿]
+	Send from another account, a shared mailbox or another address	從其他帳戶、共用信箱或其他地址傳送
+	Sent through {account}	透過 {account} 傳送
+	Other email address…	其他電子郵件地址…
+	Other email address	其他電子郵件地址
+	Exchange sends from it when your account may send as it or on its behalf.	如果您的帳戶有權以該地址的身分或代表該地址傳送，Exchange 會從該地址傳送。
+	Name <address>	姓名 <地址>
+	Send from it	從此地址傳送
+	Some names weren't found in your contacts or among the people you've written to	部分姓名在您的連絡人和您寫過信的人中均未找到

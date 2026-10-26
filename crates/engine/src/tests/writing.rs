@@ -3,6 +3,7 @@
 use super::*;
 
 mod drafts;
+mod senders;
 
 #[test]
 fn compose_reply_and_send_locally() {

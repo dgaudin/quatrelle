@@ -168,9 +168,13 @@ impl Session {
         // A reply's message gets its Replied mark once it's sent, as when it was started here.
         let source = self.find_message(&key.account, &p.in_reply_to);
         let mode = source.as_ref().map(|_| ReplyMode::Reply);
+        // From another address than the account's own: still from it.
+        let own = self.account(&key.account).map(|a| a.config.email.clone()).unwrap_or_default();
+        let from = if p.from.email.is_empty() || p.from.email.eq_ignore_ascii_case(&own) { String::new() } else { p.from.to_string() };
         self.bring_back(Compose {
             id,
             account: key.account.clone(),
+            from,
             to: addr::format_field(&p.to),
             cc: addr::format_field(&p.cc),
             subject: p.subject.clone(),

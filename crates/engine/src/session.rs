@@ -46,7 +46,9 @@ pub use mailboxes::{FolderSizes, Sizes};
 pub use organize::{RulesScope, junk, quick_steps, search_folders};
 pub use prefs::{ListLayout, NotesOrder, Prefs, ReadInPane, ReadingPane};
 pub use security::{CardSearch, KnownCert, Lock, RevocationCheck, SMIME_DOC, Seal, Security, SignedBy, SmimeSettings};
-pub use writing::{AssistKind, Assistant, Compose, Filing, ItemChoice, ItemKind, LlmModels, Rewrite, SendCheck, add_pictures, style_signature};
+pub use writing::{
+    AssistKind, Assistant, Compose, Filing, ItemChoice, ItemKind, LlmModels, Rewrite, SendCheck, Sender, add_pictures, style_signature,
+};
 
 /// One account and what the session knows about it.
 #[derive(Clone, Debug, PartialEq)]

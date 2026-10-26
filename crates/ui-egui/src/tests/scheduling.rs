@@ -220,43 +220,6 @@ fn a_meeting_is_written_in_a_window_of_its_own() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
-/// Where the text `text` was last drawn (the one on top), in the middle of it.
-fn text_at(shapes: &[egui::Shape], text: &str) -> Option<egui::Pos2> {
-    shapes.iter().rev().find_map(|s| match s {
-        egui::Shape::Text(t) if t.galley.text() == text => Some(t.pos + t.galley.rect.center().to_vec2()),
-        _ => None,
-    })
-}
-
-/// Where the text `text` is drawn on top once it stays put (a window or dialog fading in moves
-/// a little while it does).
-fn settled_text_at(ctx: &egui::Context, a: &mut crate::MailApp, text: &str, size: egui::Vec2) -> Option<egui::Pos2> {
-    let mut at = None;
-    for _ in 0..40 {
-        let now = text_at(&frame_shapes(ctx, a, vec![], size), text);
-        if now.is_some() && now == at {
-            return now;
-        }
-        at = now;
-    }
-    None
-}
-
-/// Clicks at `at` (`times` in a row: two make a double-click), a frame after. A moment passes
-/// first, so a click just before doesn't make them a double- or triple-click.
-fn click_at(ctx: &egui::Context, a: &mut crate::MailApp, at: egui::Pos2, times: usize, size: egui::Vec2) {
-    let press = |pressed| Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: Modifiers::NONE };
-    for _ in 0..20 {
-        frame_sized(ctx, a, vec![], size);
-    }
-    frame_sized(ctx, a, vec![Event::PointerMoved(at)], size);
-    for _ in 0..times {
-        frame_sized(ctx, a, vec![press(true)], size);
-        frame_sized(ctx, a, vec![press(false)], size);
-    }
-    frame_sized(ctx, a, vec![], size);
-}
-
 /// Required and Optional open the address book over the meeting's window, aimed at their
 /// line: it lists the people known, a double-click adds one to that line, and OK puts the lines
 /// back in the meeting, the rooms being those in Resources (a resource that isn't an address

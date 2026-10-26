@@ -206,6 +206,10 @@ pub(crate) fn check_message(m: &El) -> Result<()> {
                         .into(),
                 ),
                 "ErrorAccessDenied" => NetError::No(text.to_string()),
+                // From an address the account may not send from.
+                "ErrorSendAsDenied" => NetError::No(
+                    "this account isn't allowed to send from that address: Exchange's administrator gives Send As or Send on Behalf on it".into(),
+                ),
                 _ => NetError::No(text.to_string()),
             })
         }

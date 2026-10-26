@@ -91,6 +91,10 @@ pub struct Data {
     pub url: String,
     /// People whose calendars this account may change (delegates with editor rights).
     pub editors: Vec<String>,
+    /// Addresses this account may send from (Send As or Send on Behalf on them).
+    pub send_as: Vec<String>,
+    /// The address each message sent said it was from (`t:From`; empty: the account's own).
+    pub sent_from: Vec<String>,
     /// The folder's rights say nothing of that (as some servers answer for another mailbox's
     /// calendar): only each item's rights do.
     pub item_rights_only: bool,
@@ -228,6 +232,8 @@ impl Default for Data {
             busy: 0,
             url: String::new(),
             editors: Vec::new(),
+            send_as: Vec::new(),
+            sent_from: Vec::new(),
             item_rights_only: false,
             hold: None,
             flagged_hidden: Vec::new(),

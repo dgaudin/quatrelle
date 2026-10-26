@@ -240,6 +240,7 @@ pub(super) fn add_account(s: &mut Session, v: &Value) -> CmdResult {
         pop_delete_with_trash: p::bool(v, "popDeleteWithTrash").unwrap_or(false),
         oauth_user: None,
         shared_mailboxes: Vec::new(),
+        send_from: Vec::new(),
         online_only: p::bool(v, "onlineOnly").unwrap_or(false),
         shared_online: p::bool(v, "sharedOnline").unwrap_or(false),
         public_favorites_kept: p::bool(v, "publicFavoritesKept").unwrap_or(false),
