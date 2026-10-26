@@ -1589,3 +1589,8 @@ month	May	5月
 	Use for sending	用于发送
 	Sign and encrypt with this one again; the one in use is kept for reading	重新用此证书签名和加密；正在使用的证书保留用于阅读
 	Forget this certificate: mail encrypted to it can't be read any more	删除此证书：加密给它的邮件将无法再阅读
+	From:	发件人:
+	Sent:	发送时间:
+	To:	收件人:
+	Cc:	抄送:
+	Subject:	主题:

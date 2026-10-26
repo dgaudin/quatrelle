@@ -151,6 +151,18 @@ fn new_mail_writes_in_its_own_window_and_replies_pop_out() {
     frame(&ctx, &mut a, vec![]);
     let c = a.session.compose.as_ref().unwrap();
     assert!(!c.window && c.body.contains("\nSent: "));
+    // In French, the original's header is written in French.
+    a.run("compose.discard", json!({}));
+    a.ui.language = "fr".into();
+    frame(&ctx, &mut a, vec![]);
+    a.run("mail.reply", json!({}));
+    let c = a.session.compose.as_ref().unwrap();
+    assert!(c.body.contains("\nDe : ") && c.body.contains("\nEnvoyé : ") && c.body.contains("\nObjet : "), "{}", c.body);
+    // Another message read: the reading pane shows it (a reply left as it came goes).
+    let other = a.session.list.get(1).map(|m| m.key.clone()).unwrap();
+    a.act(crate::Action::Open(other.clone()));
+    frame(&ctx, &mut a, vec![]);
+    assert!(a.session.compose.is_none() && a.session.reading.as_ref().is_some_and(|r| r.key == other));
     let _ = std::fs::remove_dir_all(dir);
 }
 

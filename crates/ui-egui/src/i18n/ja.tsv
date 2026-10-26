@@ -1589,3 +1589,8 @@ month	May	5月
 	Use for sending	送信に使う
 	Sign and encrypt with this one again; the one in use is kept for reading	この証明書で再び署名・暗号化します。使用中の証明書は読むために残ります
 	Forget this certificate: mail encrypted to it can't be read any more	この証明書を削除: この証明書宛てに暗号化されたメールは読めなくなります
+	From:	差出人:
+	Sent:	送信日時:
+	To:	宛先:
+	Cc:	CC:
+	Subject:	件名:

@@ -364,6 +364,12 @@ pub struct Session {
     /// open): starting another sets the current one aside here rather than losing it.
     /// [`Session::activate_compose`] brings one back to act on.
     pub composes: Vec<Compose>,
+    /// Replies written in the reading pane and left for another message, as Outlook leaves them:
+    /// kept in Drafts, and back in the pane when their message is read again (oldest first).
+    pub set_aside: Vec<Compose>,
+    /// The words the original's header is written with under a reply, in the interface's
+    /// language (the app sets them; English without it).
+    pub quote_words: mime::QuoteWords,
     pub prefs: Prefs,
     pub clock: Clock,
     pub notices: Vec<Notice>,
@@ -535,6 +541,8 @@ impl Session {
             windows: Vec::new(),
             compose: None,
             composes: Vec::new(),
+            set_aside: Vec::new(),
+            quote_words: mime::QuoteWords::default(),
             prefs: Prefs::default(),
             clock,
             notices: Vec::new(),

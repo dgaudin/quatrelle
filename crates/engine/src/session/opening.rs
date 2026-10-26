@@ -4,6 +4,8 @@ use super::*;
 
 impl Session {
     pub fn open_view(&mut self, view: View) {
+        // A reply written in the reading pane is set aside (in Drafts) for the folder.
+        self.set_compose_aside(None);
         // Older mail read on the server belongs to the folder it was read for.
         if !matches!((&view, &self.older), (View::Folder { account, folder }, Some((a, f, ..))) if a == account && f == folder) {
             self.older = None;
@@ -69,6 +71,10 @@ impl Session {
 
     /// Select one message and show it; `mark`: as the reading options say (else left as it is).
     pub(super) fn show_message(&mut self, key: &MessageKey, mark: bool) {
+        // A reply written in the reading pane is set aside (in Drafts) for another message, and
+        // one set aside for this message comes back.
+        self.set_compose_aside(Some(key));
+        self.take_up(key);
         self.leave_reading(Some(key));
         self.filter_keep = Some(key.clone());
         self.selection = vec![key.clone()];

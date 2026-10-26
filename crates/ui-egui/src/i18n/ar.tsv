@@ -1588,3 +1588,8 @@ month	May	مايو
 	Use for sending	استخدامها للإرسال
 	Sign and encrypt with this one again; the one in use is kept for reading	التوقيع والتشفير بهذه الشهادة مجددًا؛ وتُحفظ المستخدمة حاليًا للقراءة
 	Forget this certificate: mail encrypted to it can't be read any more	نسيان هذه الشهادة: لن يمكن قراءة البريد المشفّر لها بعد الآن
+	From:	من:
+	Sent:	تاريخ الإرسال:
+	To:	إلى:
+	Cc:	نسخة:
+	Subject:	الموضوع:

@@ -1592,3 +1592,8 @@ month	May	Mai
 	Use for sending	Zum Senden verwenden
 	Sign and encrypt with this one again; the one in use is kept for reading	Wieder mit diesem signieren und verschlüsseln; das bisherige bleibt zum Lesen
 	Forget this certificate: mail encrypted to it can't be read any more	Dieses Zertifikat vergessen: damit verschlüsselte E-Mails lassen sich nicht mehr lesen
+	From:	Von:
+	Sent:	Gesendet:
+	To:	An:
+	Cc:	Cc:
+	Subject:	Betreff:
