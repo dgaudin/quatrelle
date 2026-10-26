@@ -2,7 +2,7 @@
 //! servers' errors, its statuses, how long syncing took). `quatrelle.log` in the data folder:
 //! a new one each time Quatrelle starts (the last run's renamed `quatrelle.old.log`), up to
 //! [`MAX`] a run. Quatrelle's own lines from Info up, other
-//! libraries' warnings. Lines name accounts, folders and errors; never a message's content or a
+//! libraries' warnings (the HTML reader's errors only). Lines name accounts, folders and errors; never a message's content or a
 //! password (Quatrelle doesn't log either anywhere).
 
 use std::fs::File;
@@ -73,9 +73,17 @@ impl log::Log for FileLog {
     }
 }
 
-/// Whether a line is kept: Quatrelle's from Info up, everyone else's warnings.
+/// Whether a line is kept: Quatrelle's from Info up, everyone else's warnings — but the HTML
+/// reader's, which warns of every table a message's HTML lays out loosely (hundreds of lines a
+/// quarter of an hour, nothing wrong).
 fn enabled(target: &str, level: Level) -> bool {
-    if target.starts_with("quatrelle") { level <= Level::Info } else { level <= Level::Warn }
+    if target.starts_with("quatrelle") {
+        level <= Level::Info
+    } else if target.starts_with("html5ever") {
+        level <= Level::Error
+    } else {
+        level <= Level::Warn
+    }
 }
 
 /// One line as written: when (UTC), how serious, where from, what (a message over several lines
@@ -85,13 +93,14 @@ fn line(stamp: &str, level: Level, target: &str, msg: &str) -> String {
     format!("{stamp} {level:<5} {target}: {msg}\n")
 }
 
-/// Now, as `2026-10-19 14:03:07` (UTC).
+/// Now, as `2026-10-19 14:03:07.250` (UTC, to the millisecond: how soon new mail is read after
+/// the server tells of it is a matter of a few hundred).
 fn stamp() -> String {
-    let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
-    let secs = i64::try_from(secs).unwrap_or(0);
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default();
+    let secs = i64::try_from(now.as_secs()).unwrap_or(0);
     let (y, m, d) = quatrelle_engine::model::dates::civil_from_days(secs.div_euclid(86_400));
     let t = secs.rem_euclid(86_400);
-    format!("{y:04}-{m:02}-{d:02} {:02}:{:02}:{:02}", t / 3600, t % 3600 / 60, t % 60)
+    format!("{y:04}-{m:02}-{d:02} {:02}:{:02}:{:02}.{:03}", t / 3600, t % 3600 / 60, t % 60, now.subsec_millis())
 }
 
 /// Start logging into `dir` (the previous run's log kept as the old one). Without a folder, or
@@ -146,9 +155,11 @@ mod tests {
         assert!(!enabled("quatrelle_net::worker", Level::Debug));
         assert!(!enabled("rustls::client", Level::Info));
         assert!(enabled("rustls::client", Level::Warn));
+        assert!(!enabled("html5ever::tree_builder", Level::Warn));
+        assert!(enabled("html5ever::tree_builder", Level::Error));
         assert_eq!(line("2026-10-19 14:03:07", Level::Warn, "x", "a\r\nb\n"), "2026-10-19 14:03:07 WARN  x: a\n    b\n");
         let s = stamp();
-        assert_eq!((s.len(), s.as_bytes()[4], s.as_bytes()[13]), (19, b'-', b':'));
+        assert_eq!((s.len(), s.as_bytes()[4], s.as_bytes()[13], s.as_bytes()[19]), (23, b'-', b':', b'.'));
     }
 
     #[test]
