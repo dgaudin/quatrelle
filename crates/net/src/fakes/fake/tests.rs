@@ -9,6 +9,7 @@ use super::*;
 use crate::worker::apply_remote;
 
 mod hostile;
+mod idle;
 mod pool;
 mod search;
 mod sync;
