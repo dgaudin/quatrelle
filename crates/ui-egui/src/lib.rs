@@ -367,8 +367,9 @@ pub struct UiState {
     rtl_font: Option<Vec<u8>>,
     /// The system was asked for its colour emoji font (`look/emoji.rs`), once.
     emoji_asked: bool,
-    /// The language whose CJK font is loaded.
+    /// The language whose CJK font is loaded, and the one replies quote their original in.
     cjk_loaded: Option<&'static str>,
+    quoted_in: Option<&'static str>,
     /// The app's name in the window title (`Quatrelle`, or `Quatrelle – Sample mailbox`).
     pub title_base: String,
     /// This page is a message's own window (the browser): only that message is shown.
@@ -518,6 +519,7 @@ impl MailApp {
                 rtl_font: None,
                 emoji_asked: false,
                 cjk_loaded: None,
+                quoted_in: None,
                 title_base: "Quatrelle".into(),
                 places: Default::default(),
                 page_message: None,
@@ -580,6 +582,7 @@ impl MailApp {
     fn apply_language(&mut self, ctx: &egui::Context) {
         let lang = i18n::Lang::from_pref(&self.ui.language);
         i18n::set_current(lang);
+        self.sync_quote_words();
         let first = if lang.cjk() { lang.code() } else { "zh-hans" };
         if self.ui.cjk_loaded != Some(first) {
             self.ui.cjk_loaded = Some(first);
@@ -604,9 +607,19 @@ impl MailApp {
         }
     }
 
+    /// Replies quote their original's header in the interface's language (commands given at
+    /// start-up run before the first frame sets it).
+    fn sync_quote_words(&mut self) {
+        let lang = i18n::Lang::from_pref(&self.ui.language);
+        if self.ui.quoted_in.replace(lang.code()) != Some(lang.code()) {
+            self.session.quote_words = i18n::quote_words(lang);
+        }
+    }
+
     /// Run a command, reporting failures in a toast.
     pub fn run(&mut self, id: &str, params: Value) {
         use quatrelle_engine::CmdError;
+        self.sync_quote_words();
         match self.session.run(id, &params) {
             // Held to be looked at first: said in the message's window when it has one.
             Ok(v) if id == "compose.send" && v.get("check").is_some() => {

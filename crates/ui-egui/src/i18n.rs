@@ -311,6 +311,25 @@ pub fn folder(f: &quatrelle_engine::model::Folder) -> String {
     }
 }
 
+/// The words a reply quotes its original's header with in `lang`, as written (they go into
+/// the message): `From:`, `Sent:`… and the date written out as the calendar writes it.
+pub fn quote_words(lang: Lang) -> quatrelle_engine::mime::QuoteWords {
+    const WEEKDAYS: [&str; 7] = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+    let before = CURRENT.replace(lang);
+    let words = as_written(|| quatrelle_engine::mime::QuoteWords {
+        from: tl!("From:").to_string(),
+        sent: tl!("Sent:").to_string(),
+        to: tl!("To:").to_string(),
+        cc: tl!("Cc:").to_string(),
+        subject: tl!("Subject:").to_string(),
+        weekdays: WEEKDAYS.map(|d| t(d).to_string()),
+        months: crate::panes::calendar::MONTHS.map(|m| tc("month", m).to_string()),
+        date: tr(lang, "{weekday}, {day} {month} {year}").to_string(),
+    });
+    CURRENT.set(before);
+    words
+}
+
 /// `s` in `lang` (unchanged without a translation).
 pub fn tr(lang: Lang, s: &str) -> &str {
     #[cfg(test)]

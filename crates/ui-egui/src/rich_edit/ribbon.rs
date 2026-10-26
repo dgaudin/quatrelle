@@ -1,6 +1,6 @@
 //! The message window's ribbon, as Outlook's: the tabs Message, Insert, Options, Format Text
 //! and Review, each a row of named groups of big buttons (the main window's widgets), with
-//! Save, Pop out and Discard small at the right of the tabs.
+//! Save small at the right of the tabs (and in a window Pop in and Discard).
 
 use serde_json::json;
 
@@ -168,7 +168,7 @@ pub(crate) fn compose_ribbon(ui: &mut Ui, tokens: &Tokens, ed: &mut Editor, c: &
     }
 }
 
-/// The tab strip: the tabs at the left; Save, Pop out (or in) and Discard small at the right.
+/// The tab strip: the tabs at the left; Save at the right, and in a window Pop in and Discard.
 fn tabs(ui: &mut Ui, t: Tokens, ed: &mut Editor, c: &Compose, input: &RibbonInput<'_>, acts: &mut Vec<Action>) {
     ui.horizontal(|ui| {
         for (tab, label) in ComposeTab::ALL {
@@ -195,17 +195,13 @@ fn tabs(ui: &mut Ui, t: Tokens, ed: &mut Editor, c: &Compose, input: &RibbonInpu
             }
         }
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if widgets::tiny_icon_button(ui, Icon::Delete, "Discard", &t).clicked() {
-                acts.push(Action::Run("compose.discard", json!({})));
-            }
-            if input.can_pop {
-                let (icon, tip, id) = if input.in_window {
-                    (Icon::PopIn, "Back to the reading pane", "compose.popIn")
-                } else {
-                    (Icon::PopOut, "Write it in a window of its own", "compose.popOut")
-                };
-                if widgets::tiny_icon_button(ui, icon, tip, &t).clicked() {
-                    acts.push(Action::Run(id, json!({})));
+            // In the reading pane, Pop out and Discard have buttons of their own above.
+            if input.in_window {
+                if widgets::tiny_icon_button(ui, Icon::Delete, "Discard", &t).clicked() {
+                    acts.push(Action::Run("compose.discard", json!({})));
+                }
+                if input.can_pop && widgets::tiny_icon_button(ui, Icon::PopIn, "Back to the reading pane", &t).clicked() {
+                    acts.push(Action::Run("compose.popIn", json!({})));
                 }
             }
             if !c.sending && widgets::tiny_icon_button(ui, Icon::Drafts, "Save draft (Ctrl+S)", &t).clicked() {

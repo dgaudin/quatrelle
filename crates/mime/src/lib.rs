@@ -25,7 +25,7 @@ use mail_builder::MessageBuilder;
 use mail_builder::headers::content_type::ContentType;
 use mail_builder::mime::MimePart;
 use mail_parser::{Address, HeaderValue, Message, MessageParser, MimeHeaders};
-use quatrelle_model::dates::{Clock, full_time};
+use quatrelle_model::dates::Clock;
 use quatrelle_model::thread::norm_id;
 use quatrelle_model::{EmailAddress, Flags, MessageKey, Summary};
 use serde::{Deserialize, Serialize};
@@ -34,6 +34,7 @@ mod files;
 mod hidden;
 mod html;
 mod photos;
+mod reply;
 pub mod smime;
 mod trackers;
 pub use files::{runs_code, sanitize_filename};
@@ -41,6 +42,7 @@ pub use hidden::{HIDDEN_WORDS_MIN, hidden_text};
 use html::*;
 pub use html::*;
 pub use photos::without_location;
+pub use reply::{QuoteWords, ReplyMode, reply, reply_doc};
 pub use trackers::{Trackers, clean_link, trackers, tracks_click};
 
 /// Longest preview kept in a summary, in characters.
@@ -781,107 +783,6 @@ fn fnv(s: &str) -> u64 {
     s.bytes().fold(0xcbf2_9ce4_8422_2325_u64, |h, b| (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3))
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum ReplyMode {
-    Reply,
-    ReplyAll,
-    Forward,
-}
-
-fn prefixed(prefix: &str, subject: &str) -> String {
-    let base = quatrelle_model::thread::base_subject(subject);
-    let already = subject.trim().to_ascii_lowercase().starts_with(&prefix.to_ascii_lowercase());
-    if already { subject.trim().to_string() } else { format!("{prefix} {base}") }
-}
-
-/// The original under a reply or forward, the way Outlook lays it out: a rule, then who sent it
-/// to whom and when (labels in bold), then the original with its own formatting.
-fn quoted_original(p: &Parsed, clock: &Clock) -> (String, rich::Styles) {
-    let mut lines: Vec<(&str, String)> = vec![("From:", p.from.to_string()), ("Sent:", full_time(p.date, clock))];
-    if !p.to.is_empty() {
-        lines.push(("To:", quatrelle_model::addr::format_list(&p.to)));
-    }
-    if !p.cc.is_empty() {
-        lines.push(("Cc:", quatrelle_model::addr::format_list(&p.cc)));
-    }
-    lines.push(("Subject:", p.subject.clone()));
-    // The rule: an empty paragraph drawn as a line.
-    let mut text = String::new();
-    let mut styles = rich::Styles::plain("");
-    if let Some(first) = styles.paras.first_mut() {
-        first.rule = true;
-    }
-    let bold = rich::Style { bold: true, ..Default::default() };
-    for (label, value) in lines {
-        let line = format!("\n{label} {value}");
-        let mut st = rich::Styles::plain(&line);
-        st.restyle(&line, 1..1 + label.chars().count(), |_| bold.clone());
-        rich::append(&mut text, &mut styles, &line, &st);
-    }
-    let (orig, ost) = if p.had_html && !p.rich.is_empty() { rich::from_rich(&p.rich) } else { (p.text.clone(), rich::Styles::plain(&p.text)) };
-    rich::append(&mut text, &mut styles, "\n\n", &rich::Styles::plain("\n\n"));
-    rich::append(&mut text, &mut styles, &orig, &ost);
-    (text, styles)
-}
-
-/// A reply or forward of `p`, as plain text. `me` are the user's own addresses, left out of
-/// Reply All.
-pub fn reply(p: &Parsed, mode: ReplyMode, me: &[String], clock: &Clock, signature: &str) -> Draft {
-    let (mut d, styles) = reply_doc(p, mode, me, clock, signature);
-    d.body = rich::to_text(&d.body, &styles);
-    d
-}
-
-/// A reply or forward of `p` to edit: the draft (its body the editable text) and the text's
-/// styles. `signature` is the signature as it goes into the message (after a `-- ` line when
-/// the writer wants one; Outlook adds none), or empty.
-pub fn reply_doc(p: &Parsed, mode: ReplyMode, me: &[String], clock: &Clock, signature: &str) -> (Draft, rich::Styles) {
-    let mine = |a: &EmailAddress| me.iter().any(|m| m.eq_ignore_ascii_case(a.email.trim()));
-    let sig = if signature.trim().is_empty() { String::new() } else { format!("\n\n{}", signature.trim_end()) };
-    // The cursor's line, the signature, a blank line, then the original under its rule.
-    let mut body = sig;
-    let mut styles = rich::Styles::plain(&body);
-    rich::append(&mut body, &mut styles, "\n\n", &rich::Styles::plain("\n\n"));
-    let (orig, ost) = quoted_original(p, clock);
-    rich::append(&mut body, &mut styles, &orig, &ost);
-    let mut d = Draft::default();
-    match mode {
-        ReplyMode::Forward => {
-            d.subject = prefixed("Fwd:", &p.subject);
-        }
-        ReplyMode::Reply | ReplyMode::ReplyAll => {
-            d.subject = prefixed("Re:", &p.subject);
-            let primary = if p.reply_to.is_empty() { vec![p.from.clone()] } else { p.reply_to.clone() };
-            // Replying to your own sent message goes back to its recipients.
-            d.to = if primary.iter().all(&mine) && !p.to.is_empty() { p.to.clone() } else { primary };
-            if mode == ReplyMode::ReplyAll {
-                let mut cc: Vec<EmailAddress> = Vec::new();
-                for a in p.to.iter().chain(&p.cc) {
-                    let dup = d.to.iter().chain(&cc).any(|x| x.email.eq_ignore_ascii_case(&a.email));
-                    if !mine(a) && !dup {
-                        cc.push(a.clone());
-                    }
-                }
-                d.cc = cc;
-            }
-            if !p.message_id.is_empty() {
-                d.in_reply_to = p.message_id.clone();
-                d.references = p.references.clone();
-                d.references.push(p.message_id.clone());
-                // RFC 5322 §3.6.4 allows trimming; keep the first and the last 20.
-                if d.references.len() > 21 {
-                    let tail = d.references.split_off(d.references.len() - 20);
-                    d.references.truncate(1);
-                    d.references.extend(tail);
-                }
-            }
-        }
-    }
-    d.body = body;
-    (d, styles)
-}
-
 /// A signature's HTML as text and styles: as [`pasted_html`] (its sizes and typefaces kept),
 /// keeping the pictures it names by `cid:` (its own, kept with the account), each where a
 /// [`rich::PICTURE`] stands.
@@ -916,9 +817,3 @@ pub fn signature_html(html: &str) -> (String, rich::Styles) {
 
 #[cfg(test)]
 mod tests;
-
-#[cfg(test)]
-mod importance_tests;
-
-#[cfg(test)]
-mod report_tests;

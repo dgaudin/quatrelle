@@ -483,9 +483,9 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
     // The subject's spelling is checked as the message's is (its language, the words let be).
     let subject_check = crate::spellcheck::Check { skip: Vec::new(), ..rich_edit::check_for(c) };
     egui::Frame::new().inner_margin(Margin { left: 16, right: 16, top: 8, bottom: 12 }).show(ui, |ui| {
-        // The ribbon, as Outlook's message window has it: its tabs, with Save, Pop out (or in)
-        // and Discard small at their right; where windows can't open (the browser), messages
-        // stay in the reading pane.
+        // The ribbon, as Outlook's message window has it: its tabs, with Save (and in a window
+        // Pop in and Discard) small at their right; where windows can't open (the browser),
+        // messages stay in the reading pane.
         let input = rich_edit::RibbonInput {
             signature: &signature,
             clock: &clock,
@@ -496,6 +496,22 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
             can_pop: !ui.ctx().embed_viewports(),
             assistant,
         };
+        // In the reading pane, Pop out and Discard where they're seen, as Outlook's reply there
+        // has them (a window has them small beside its tabs).
+        if !in_window {
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 6.0;
+                if input.can_pop
+                    && widgets::pill_button(ui, Icon::PopOut, "Pop out", &t).on_hover_text(tl!("Write it in a window of its own")).clicked()
+                {
+                    acts.push(Action::Run("compose.popOut", json!({})));
+                }
+                if widgets::pill_button(ui, Icon::Delete, "Discard", &t).clicked() {
+                    acts.push(Action::Run("compose.discard", json!({})));
+                }
+            });
+            ui.add_space(6.0);
+        }
         egui::Frame::new().fill(t.chrome).corner_radius(6).inner_margin(Margin::symmetric(8, 4)).show(ui, |ui| {
             ui.set_width(ui.available_width());
             rich_edit::compose_ribbon(ui, &t, &mut ed, c, &input, acts);

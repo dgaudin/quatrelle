@@ -33,6 +33,9 @@ fn a_teams_invitations_join_link_survives_as_text() {
 
 use super::*;
 
+mod importance;
+mod report;
+
 /// Issue #1: a signature copied from Outlook (Word's HTML on the clipboard, only the copied
 /// fragment) keeps its look when pasted.
 #[test]
@@ -359,7 +362,7 @@ fn replies() {
     assert!(!p.had_html, "plain text is not HTML");
     let clock = Clock::new(1_792_000_000, 0);
     let me = vec!["ann@studio.example".to_string()];
-    let r = reply(&p, ReplyMode::Reply, &me, &clock, "");
+    let r = reply(&p, ReplyMode::Reply, &me, &clock, "", &QuoteWords::default());
     assert_eq!(r.subject, "Re: Café plans");
     assert_eq!(r.to, vec![p.from.clone()]);
     assert!(r.cc.is_empty());
@@ -379,18 +382,59 @@ fn replies() {
     assert!(html.contains("Hello team,") && !html.contains("<b>Hello"));
     assert!(markup::has_formatting(&r.body));
     assert_eq!(markup::header_lines("x\n____________\nFrom: a\n  b\nTo: c\n\nFrom: not a header"), [false, false, true, true, true, false, false]);
-    let all = reply(&p, ReplyMode::ReplyAll, &me, &clock, "-- \nAnn");
+    let all = reply(&p, ReplyMode::ReplyAll, &me, &clock, "-- \nAnn", &QuoteWords::default());
     let cc: Vec<&str> = all.cc.iter().map(|a| a.email.as_str()).collect();
     assert_eq!(cc, vec!["ops@studio.example", "kim@studio.example"]);
     assert!(all.body.starts_with("\n\n-- \nAnn"));
-    let f = reply(&p, ReplyMode::Forward, &me, &clock, "");
+    let f = reply(&p, ReplyMode::Forward, &me, &clock, "", &QuoteWords::default());
     assert_eq!(f.subject, "Fwd: Café plans");
     assert!(f.to.is_empty() && f.in_reply_to.is_empty());
     assert!(f.body.contains("Subject: Café plans"));
-    let rr = reply(&parse(&build(&r, &EmailAddress::new("", "ann@studio.example"), 0, "r@x").unwrap()).unwrap(), ReplyMode::Reply, &me, &clock, "");
+    let rr = reply(
+        &parse(&build(&r, &EmailAddress::new("", "ann@studio.example"), 0, "r@x").unwrap()).unwrap(),
+        ReplyMode::Reply,
+        &me,
+        &clock,
+        "",
+        &QuoteWords::default(),
+    );
     assert_eq!(rr.subject, "Re: Café plans");
     // Replying to my own message addresses its recipients.
     assert_eq!(rr.to[0].email, "zoe@studio.example");
+}
+
+/// The original's header in the language the reply is written in (the interface's), its date
+/// written out as the interface writes it.
+#[test]
+fn the_quoted_header_is_in_the_replys_language() {
+    let p = parse(SIMPLE).unwrap();
+    let clock = Clock::new(1_792_000_000, 0);
+    let english = reply(&p, ReplyMode::Reply, &[], &clock, "", &QuoteWords::default());
+    let sent = QuoteWords::default().when(p.date, &clock);
+    assert!(english.body.contains(&format!("\nSent: {sent}\n")), "{}", english.body);
+    assert!(
+        sent.starts_with(&format!("{}, ", QuoteWords::default().weekdays[quatrelle_model::dates::civil(p.date, &clock).weekday as usize])),
+        "{sent}"
+    );
+    let french = QuoteWords {
+        from: "De :".into(),
+        sent: "Envoyé :".into(),
+        to: "À :".into(),
+        cc: "Cc :".into(),
+        subject: "Objet :".into(),
+        weekdays: ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"].map(String::from),
+        months: ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"]
+            .map(String::from),
+        date: "{weekday} {day} {month} {year}".into(),
+    };
+    assert_eq!(french.when(1_793_006_400, &Clock::new(0, 3600)), "lundi 26 octobre 2026 10:20");
+    let (d, styles) = reply_doc(&p, ReplyMode::Reply, &[], &clock, "", &french);
+    let tail = &d.body[d.body.find("De :").unwrap()..];
+    assert!(tail.starts_with("De : Zoe Park <zoe@studio.example>\nEnvoyé : "), "{tail}");
+    assert!(tail.contains("\nÀ : Ann <ann@studio.example>; ops@studio.example\nCc : Kim <kim@studio.example>\nObjet : Café plans\n"), "{tail}");
+    // The labels are bold, as the English ones are.
+    let html = rich::to_html(&d.body, &styles);
+    assert!(html.contains("<b>Objet :</b> Café plans") && html.contains("<b>Envoyé :</b> "), "{html}");
 }
 
 #[test]
@@ -523,7 +567,7 @@ fn a_message_id_cannot_break_a_replys_headers() {
     let p = parse(raw).unwrap();
     assert!(!p.message_id.contains(['\r', '\n', ' ']), "{:?}", p.message_id);
     let clock = Clock::new(1_792_000_000, 0);
-    let r = reply(&p, ReplyMode::Reply, &["ann@studio.example".to_string()], &clock, "");
+    let r = reply(&p, ReplyMode::Reply, &["ann@studio.example".to_string()], &clock, "", &QuoteWords::default());
     let out = build(&r, &EmailAddress::new("Ann", "ann@studio.example"), 1_792_000_000, "n@studio.example").unwrap();
     let text = String::from_utf8_lossy(&out);
     let head = text.split("\r\n\r\n").next().unwrap_or_default();
