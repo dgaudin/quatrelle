@@ -4,8 +4,9 @@ use std::collections::HashSet;
 
 use super::*;
 
-/// Download these messages' sources, ten to a `UID FETCH`, filling in what only a source tells
-/// (preview, attachments) and saving the list after each ten. How many came.
+/// Download these messages' sources, ten to a `UID FETCH` and no more than one literal's worth
+/// together ([`body_chunks`]: each command stays well inside IMAP's per-command cap), filling in
+/// what only a source tells (preview, attachments) and saving the list after each. How many came.
 pub(super) fn download<S: Read + Write>(
     c: &mut Client<S>,
     store: &Store,
@@ -15,7 +16,8 @@ pub(super) fn download<S: Read + Write>(
     uids: &[u32],
 ) -> Result<usize> {
     let mut n = 0;
-    for chunk in uid_chunks(uids, 10) {
+    let sized: Vec<(u32, u32)> = uids.iter().map(|u| (*u, st.find(*u).map_or(0, |m| m.size))).collect();
+    for chunk in body_chunks(&sized) {
         let mut came = HashSet::new();
         for f in c.uid_fetch(&uid_set(&chunk), "UID BODY.PEEK[]", "")? {
             let Some(raw) = &f.body else { continue };

@@ -56,6 +56,10 @@ pub struct State {
     /// connections shows).
     pub open: usize,
     pub peak: usize,
+    /// A hostile server: after the next `NOOP`, this is sent over and over, forever.
+    pub flood: Option<Vec<u8>>,
+    /// How long each read of the connection waits (a server trickling its answer).
+    pub trickle: std::time::Duration,
 }
 
 impl State {
@@ -75,6 +79,8 @@ impl State {
             search_delay: std::time::Duration::ZERO,
             open: 0,
             peak: 0,
+            flood: None,
+            trickle: std::time::Duration::ZERO,
         }))
     }
 
@@ -153,6 +159,8 @@ pub struct Fake {
     sasl: Option<(String, bool)>,
     /// Signed in, but every command is refused (see `State::not_connected`).
     refused: bool,
+    /// Sent forever once the output runs dry (see `State::flood`).
+    flood: Option<Vec<u8>>,
 }
 
 /// The only access token the fake accepts.
@@ -160,7 +168,8 @@ pub const GOOD_TOKEN: &str = "good-token";
 
 impl Fake {
     pub fn connect(st: &Arc<Mutex<State>>) -> Fake {
-        let mut f = Fake { st: st.clone(), selected: None, inbuf: Vec::new(), out: VecDeque::new(), literal: None, sasl: None, refused: false };
+        let mut f =
+            Fake { st: st.clone(), selected: None, inbuf: Vec::new(), out: VecDeque::new(), literal: None, sasl: None, refused: false, flood: None };
         f.say("* OK fake ready");
         f
     }
@@ -226,6 +235,15 @@ impl Fake {
 
 impl Read for Fake {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let trickle = self.st.lock().map(|s| s.trickle).unwrap_or_default();
+        if !trickle.is_zero() {
+            std::thread::sleep(trickle);
+        }
+        if self.out.is_empty()
+            && let Some(f) = &self.flood
+        {
+            self.out.extend(f.iter());
+        }
         let n = buf.len().min(self.out.len()).min(11);
         for b in buf.iter_mut().take(n) {
             *b = self.out.pop_front().unwrap_or(0);
