@@ -108,6 +108,8 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 # Executable and icon carry the display name (CFBundleExecutable / CFBundleIconFile).
 cp "$WORK/bin/quatrelle" "$APP/Contents/MacOS/Quatrelle"
 cp "$ROOT/assets/app-icon/quatrelle.icns" "$APP/Contents/Resources/Quatrelle.icns"
+# The licences and README, as in the CLI zip. Before signing, so the seal covers them.
+copy_docs "$APP/Contents/Resources"
 sed -e "s/@VERSION@/$VERSION/g" -e "s/@SHORT_VERSION@/$SHORT_VERSION/g" \
   -e "s/@BUILD_SHA@/${QUATRELLE_BUILD_SHA:-unknown}/g" \
   "$HERE/Info.plist.in" >"$APP/Contents/Info.plist"
