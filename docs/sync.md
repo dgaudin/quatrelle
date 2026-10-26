@@ -263,11 +263,17 @@ servers that don't offer IMAP. Every call is SOAP over HTTPS.
   its own (signed in for it; ten minutes an answer, asked again when the server ends it or after
   eleven silent minutes, of the server the subscription lives on: `X-BackEndOverrideCookie`).
   The answer is SOAP envelopes one after the other, read a slice at a time
-  (`http::BodyStream`) between jobs and between two downloads ahead. A message's event syncs its
-  folder and the one it left; a folder's own `ModifiedEvent` syncs it; a folder made, deleted or
-  moved where the account has folders relists them first. So new mail, mail a server rule filed
-  elsewhere, a read mark set on the phone and a shared mailbox's mail come at once, not at the
-  next full sync. A change in the account's own calendar or contacts (their ids asked once with
+  (`http::BodyStream`) between jobs, between two downloads ahead and between two folders of the
+  full sync (seconds over a hundred folders). What came with a notification is taken with it,
+  without waiting for more: what comes while the folders are read is read next. A message's
+  event syncs its folder and the one it left; a folder's own `ModifiedEvent` syncs it; a folder
+  made, deleted or moved where the account has folders relists them first. So new mail, mail a
+  server rule filed elsewhere, a read mark set on the phone and a shared mailbox's mail come at
+  once, not at the next full sync. The list is told of as soon as it's saved
+  (`ews::sync_folder_then`), before the newest messages are downloaded whole: new mail shows
+  once its header is in, three requests after the notification (`GetFolder`, `SyncFolderItems`,
+  `GetItem`), its preview a moment later. The log says how long each read took once told
+  (`told of changes in INBOX, read in 412 ms`, its lines to the millisecond). A change in the account's own calendar or contacts (their ids asked once with
   `GetFolder`) runs their sync instead — a meeting accepted on the phone, or one a colleague moved,
   is in the calendar seconds later: two seconds after it's told (accepting a meeting is several
   changes), once a minute at most (the pass reads every calendar ticked again, seconds on a big

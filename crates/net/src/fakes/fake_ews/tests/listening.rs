@@ -119,3 +119,50 @@ fn the_calendar_is_read_as_the_server_tells_of_its_changes() {
     drop(pool);
     let _ = std::fs::remove_dir_all(store.root());
 }
+
+/// New mail shows as soon as its header is in, as Outlook shows it: the list is told of before
+/// the message is downloaded whole (a megabyte or two took as long again).
+#[test]
+fn new_mail_shows_before_it_is_downloaded_whole() {
+    let mut d = Data { streaming: true, ..Default::default() };
+    let inbox = d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    let server = serve(d);
+    let store = crate::fake::tests_store("ews-listening-shown");
+    let pool = start(&server, &store);
+    eventually("listening", || count(&server, "GetStreamingEvents") >= 1);
+    server.data.lock().unwrap().slow_sources = Some(Duration::from_secs(3));
+    server.data.lock().unwrap().deliver(&inbox, &mail("Just now", "n1"), false, "2026-10-24T08:00:00Z");
+    let new = || store.load_folder("a1", "INBOX").ok().and_then(|f| f.messages.iter().find(|m| m.subject == "Just now").map(|m| m.key.clone()));
+    until(&pool, "the new mail in the list", |e| matches!(e, Event::FolderChanged { folder, .. } if folder == "INBOX") && new().is_some());
+    let key = new().unwrap();
+    assert!(!store.has_body(&key), "shown before its source came");
+    eventually("then downloaded whole", || store.has_body(&key));
+    drop(pool);
+    let _ = std::fs::remove_dir_all(store.root());
+}
+
+/// The full sync every quarter of an hour reads a hundred folders: what the server tells of
+/// meanwhile is read between two of them, not once the pass is done.
+#[test]
+fn new_mail_is_read_during_a_full_sync() {
+    let mut d = Data { streaming: true, ..Default::default() };
+    let inbox = d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    for n in 1..=5 {
+        d.folder(&format!("F{n}"), None, None, "IPF.Note");
+    }
+    let server = serve(d);
+    let store = crate::fake::tests_store("ews-listening-pass");
+    let mut pool = start(&server, &store);
+    eventually("listening", || count(&server, "GetStreamingEvents") >= 1);
+    server.data.lock().unwrap().slow_counts = Some(Duration::from_millis(300));
+    pool.submit(Job::SyncAll { account: "a1".into() });
+    let syncing = |e: &Event, f: &str| matches!(e, Event::Status { status: SyncStatus::Syncing { folder }, .. } if folder == f);
+    until(&pool, "the pass under way", |e| syncing(e, "F2"));
+    server.data.lock().unwrap().deliver(&inbox, &mail("During the pass", "n1"), false, "2026-10-24T08:00:00Z");
+    let seen = until(&pool, "the pass's last folder", |e| syncing(e, "F5"));
+    assert!(seen.iter().any(|e| syncing(e, "INBOX")), "the Inbox read during the pass: {seen:?}");
+    let has = || store.load_folder("a1", "INBOX").is_ok_and(|f| f.messages.iter().any(|m| m.subject == "During the pass"));
+    eventually("the new mail", has);
+    drop(pool);
+    let _ = std::fs::remove_dir_all(store.root());
+}

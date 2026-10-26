@@ -140,6 +140,22 @@ pub fn list_folders(c: &Client, st: &mut State, account: &str) -> Result<Vec<Fol
 
 /// Bring one folder's cache up to date.
 pub fn sync_folder(c: &Client, st: &mut State, store: &Store, account: &str, folder: &str, opts: &SyncOptions) -> Result<SyncReport> {
+    sync_folder_then(c, st, store, account, folder, opts, &mut || {})
+}
+
+/// [`sync_folder`], `listed` told when the folder's list changed and is saved, before its newest
+/// messages are downloaded whole: new mail shows as soon as its header is in, as Outlook shows
+/// it, rather than once all of it came (as long again for a message of a megabyte or two).
+#[allow(clippy::too_many_arguments)]
+pub fn sync_folder_then(
+    c: &Client,
+    st: &mut State,
+    store: &Store,
+    account: &str,
+    folder: &str,
+    opts: &SyncOptions,
+    listed: &mut dyn FnMut(),
+) -> Result<SyncReport> {
     let id = st.mailbox(folder)?.to_string();
     let (total, unread, stamp) = c.counts(&id)?;
     // As it was when last read in full (same last change, same counts, same window, not long
@@ -187,7 +203,7 @@ pub fn sync_folder(c: &Client, st: &mut State, store: &Store, account: &str, fol
     let following =
         |m: &jmap::FolderMark| kept && !opts.list_only && !m.sync.is_empty() && m.window == opts.window && within(m.days, opts.since_days);
     if let Some((since, read)) = before.filter(following).map(|m| (m.sync, m.categories)) {
-        match changes(c, st, store, account, folder, &since, opts) {
+        match changes(c, st, store, account, folder, &since, opts, listed) {
             Ok((mut report, sync)) => {
                 // Categories Outlook put on before they were read here: asked for once.
                 if !read {
@@ -260,7 +276,11 @@ pub fn sync_folder(c: &Client, st: &mut State, store: &Store, account: &str, fol
     sort_newest_first(&mut fs.messages);
     fs.uid_next = fs.messages.iter().map(|m| m.key.uid).max().unwrap_or(0).saturating_add(1);
     store.save_folder(account, folder, &fs)?;
-    prefetch(c, st, store, account, folder, &mut fs, opts)?;
+    if report.touched() {
+        prefetch(c, st, store, account, folder, &mut fs, opts, listed)?;
+    } else {
+        prefetch(c, st, store, account, folder, &mut fs, opts, &mut || {})?;
+    }
     // Read in full: noted as it was, for the next pass to leave alone if nothing changes.
     st.marks.insert(folder.to_string(), mark);
     report.total = total;
@@ -340,7 +360,17 @@ fn catch_up_categories(
 /// What changed in a folder since its state `since`, made on its list: new messages listed
 /// (their details asked for), read and flag marks set, deleted ones taken out. The report, and
 /// the folder's state now.
-fn changes(c: &Client, st: &mut State, store: &Store, account: &str, folder: &str, since: &str, opts: &SyncOptions) -> Result<(SyncReport, String)> {
+#[allow(clippy::too_many_arguments)]
+fn changes(
+    c: &Client,
+    st: &mut State,
+    store: &Store,
+    account: &str,
+    folder: &str,
+    since: &str,
+    opts: &SyncOptions,
+    listed: &mut dyn FnMut(),
+) -> Result<(SyncReport, String)> {
     let id = st.mailbox(folder)?.to_string();
     let mut fs = store.load_folder(account, folder)?;
     let mut report = SyncReport::default();
@@ -416,8 +446,10 @@ fn changes(c: &Client, st: &mut State, store: &Store, account: &str, folder: &st
         sort_newest_first(&mut fs.messages);
         fs.uid_next = fs.messages.iter().map(|m| m.key.uid).max().unwrap_or(0).saturating_add(1);
         store.save_folder(account, folder, &fs)?;
+        prefetch(c, st, store, account, folder, &mut fs, opts, listed)?;
+    } else {
+        prefetch(c, st, store, account, folder, &mut fs, opts, &mut || {})?;
     }
-    prefetch(c, st, store, account, folder, &mut fs, opts)?;
     Ok((report, state))
 }
 
@@ -498,7 +530,19 @@ pub(super) fn restriction(q: &WordQuery) -> String {
 const AHEAD_BATCH: usize = 10;
 const AHEAD_BATCH_BYTES: u64 = 8 << 20;
 
-fn prefetch(c: &Client, st: &State, store: &Store, account: &str, folder: &str, fs: &mut FolderState, opts: &SyncOptions) -> Result<()> {
+/// The newest messages downloaded whole (those not too big), `listed` told first when there are
+/// any (the list just saved shows meanwhile).
+#[allow(clippy::too_many_arguments)]
+fn prefetch(
+    c: &Client,
+    st: &State,
+    store: &Store,
+    account: &str,
+    folder: &str,
+    fs: &mut FolderState,
+    opts: &SyncOptions,
+    listed: &mut dyn FnMut(),
+) -> Result<()> {
     let wanted: Vec<(u32, String, u64)> = fs
         .messages
         .iter()
@@ -509,6 +553,7 @@ fn prefetch(c: &Client, st: &State, store: &Store, account: &str, folder: &str, 
     if wanted.is_empty() {
         return Ok(());
     }
+    listed();
     download(c, store, account, folder, Some(fs), wanted, true)?;
     store.save_folder(account, folder, fs)?;
     Ok(())

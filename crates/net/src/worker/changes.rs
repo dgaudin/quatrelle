@@ -690,16 +690,16 @@ impl Worker {
     pub(super) fn reapply_waiting(&mut self, path: &str) -> bool {
         let mut any = false;
         for op in self.store.load_ops(&self.acc.id).unwrap_or_default() {
-            let touches = match &op {
-                Op::EmptyFolder { path: p } => p == path,
-                o if o.is_folder_op() => false,
-                o => o.keys().iter().any(|k| k.folder == path),
-            };
-            if touches && self.store.apply_op(&self.acc.id, &op).is_ok_and(|c| !c.is_empty()) {
+            if touches(&op, path) && self.store.apply_op(&self.acc.id, &op).is_ok_and(|c| !c.is_empty()) {
                 any = true;
             }
         }
         any
+    }
+
+    /// Whether an edit still waiting to go out touches the folder `path`.
+    pub(super) fn waiting_in(&self, path: &str) -> bool {
+        self.store.load_ops(&self.acc.id).unwrap_or_default().iter().any(|op| touches(op, path))
     }
 
     /// Replay offline changes on the server, oldest first.
@@ -800,4 +800,13 @@ impl Worker {
 /// Whether a change names a folder by its path (one a listing may not know yet).
 fn op_names_folder(op: &Op) -> bool {
     op.is_folder_op() || matches!(op, Op::Move { .. } | Op::EmptyFolder { .. })
+}
+
+/// Whether `op` changes something in the folder `path`.
+fn touches(op: &Op, path: &str) -> bool {
+    match op {
+        Op::EmptyFolder { path: p } => p == path,
+        o if o.is_folder_op() => false,
+        o => o.keys().iter().any(|k| k.folder == path),
+    }
 }

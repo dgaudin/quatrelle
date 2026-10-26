@@ -19,7 +19,8 @@ pub(super) const LISTEN_POLL_EVERY: Duration = Duration::from_secs(5 * 60);
 /// How long one look waits for the server to say something.
 const LOOK: Duration = Duration::from_millis(250);
 /// What the server tells of together is read together (a rule filing fifty messages is fifty
-/// notifications): looked at again while more comes, this long at most.
+/// notifications): what came with it is taken too, without waiting for more (what comes while
+/// the folders are read is read next), this long at most.
 const GATHER: Duration = Duration::from_secs(1);
 /// A change told in the calendar or the contacts is read this long after (accepting a meeting is
 /// several changes), and their sync — every calendar ticked read again, seconds — runs this often
@@ -208,7 +209,7 @@ impl Worker {
             loop {
                 let mut more = false;
                 for ear in &mut self.listen.ears {
-                    match ear.heard(c, if first { each } else { Duration::from_millis(100) }) {
+                    match ear.heard(c, if first { each } else { Duration::ZERO }) {
                         Ok(h) if h.is_empty() => {}
                         Ok(h) => {
                             more = true;
@@ -276,13 +277,19 @@ impl Worker {
         }
         folders.sort();
         folders.dedup();
-        for f in folders {
+        let began = Instant::now();
+        for f in &folders {
             if self.conn.is_none() {
                 return;
             }
-            if !self.read_online(&f) && self.folders.iter().any(|x| x.path == f) {
-                self.sync_one(&f);
+            if !self.read_online(f) && self.folders.iter().any(|x| x.path == *f) {
+                self.sync_one(f);
             }
+        }
+        // How long Quatrelle took once told, to set beside how soon the server told.
+        if !folders.is_empty() {
+            let names: Vec<String> = folders.iter().map(|f| quatrelle_model::utf7::decode(f)).collect();
+            log::info!("{}: told of changes in {}, read in {} ms", self.acc.id, names.join(", "), began.elapsed().as_millis());
         }
     }
 
