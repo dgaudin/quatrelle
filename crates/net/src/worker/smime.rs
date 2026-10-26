@@ -341,4 +341,30 @@ MIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Transfer
         let signed = protect(raw, &Me::from(riley.clone()), true, &[], false, true).unwrap();
         assert!(matches!(quatrelle_mime::smime::protection(&signed), quatrelle_mime::smime::Protection::Signed { .. }));
     }
+
+    /// Found against docker-mailserver: its Postfix strips `X-Mailer` and `User-Agent` for
+    /// privacy, from every MIME part's header too. A clear-signed message still verifies after
+    /// that, since what sent it isn't copied into the signed part (the outer one keeps it).
+    #[test]
+    fn a_relay_that_strips_what_sent_it_leaves_the_signature_whole() {
+        let riley = smime::read_p12(&testdata("riley-aes.p12"), "secret").unwrap();
+        let raw = b"From: Riley <riley@studio.example>\r\nTo: zoe@posteo.example\r\nSubject: Signed\r\nDate: Sun, 25 Oct 2026 09:00:00 +0000\r\n\
+X-Mailer: Quatrelle 0.26.0\r\nUser-Agent: Quatrelle\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nSigned through a relay.\r\n";
+        let sent = protect(raw, &Me::from(riley.clone()), true, &[], false, true).unwrap();
+        let text = String::from_utf8_lossy(&sent).to_string();
+        assert_eq!(text.matches("X-Mailer").count(), 1, "outside only: {text}");
+        // Postfix's header_checks with mime_header_checks = header_checks: gone wherever it is.
+        let relayed: String =
+            text.split("\r\n").filter(|l| !l.starts_with("X-Mailer:") && !l.starts_with("User-Agent:")).collect::<Vec<_>>().join("\r\n");
+        let quatrelle_mime::smime::Protection::Signed { content, signature } = quatrelle_mime::smime::protection(relayed.as_bytes()) else {
+            panic!("{relayed}")
+        };
+        let (signed, _) = smime::verify(&signature, Some(&content)).expect("the signature holds after the relay");
+        assert_eq!(signed.signer, riley.chain[0]);
+        // And encrypted too: nothing of what sent it inside, nor in the HP-Outer list.
+        let sealed = protect(raw, &Me::from(riley.clone()), true, std::slice::from_ref(&riley.chain[0]), true, true).unwrap();
+        let quatrelle_mime::smime::Protection::Encrypted(cms) = quatrelle_mime::smime::protection(&sealed) else { panic!() };
+        let (entity, _) = smime::decrypt(&cms, &riley, &mut rand_core::OsRng).unwrap();
+        assert!(!String::from_utf8_lossy(&entity).contains("X-Mailer"));
+    }
 }
