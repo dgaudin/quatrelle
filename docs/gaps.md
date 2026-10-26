@@ -791,3 +791,11 @@ tester's does, a contact as Exchange keeps it, Outlook's clipboard), then fixed 
 - **The original quoted under a reply** has its header in the interface's language (`De :`,
   `Envoyé : lundi 26 octobre 2026 10:07`…); the subject keeps `Re:` and `Fwd:`, which every mail
   program reads.
+- **The reading pane's header stays put** while the message scrolls under it, as Outlook's: the
+  subject, who it's from and to and when, what's to know about it and Reply… (it scrolls itself
+  past nearly half the pane, a long list of recipients).
+- **A table of figures stays a table:** four columns or more of text are laid out as a browser
+  lays them out, each column as wide as its content, the table as wide as they are, scrolling
+  sideways when it's wider than the pane, as Outlook shows it. Their cells went one under the
+  other (no column of twelve could be 140 wide). Only a layout's two or three columns squeezed
+  narrower than that stack now; one the message asks narrow (a signature's logo) no longer does.
