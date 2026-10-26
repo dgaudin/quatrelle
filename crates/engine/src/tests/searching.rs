@@ -265,6 +265,13 @@ fn the_assistant_summarizes_the_message_being_read() {
     assert!(s.assistant.as_ref().unwrap().answer.is_none());
     s.apply(Event::LlmAnswered { id, text: "- Review on Thursday".into(), error: None });
     assert_eq!(s.assistant.as_ref().unwrap().answer, Some(Ok("- Review on Thursday".to_string())));
+    // Closed unused: gone, and an answer still out for it is dropped when it comes.
+    s.run("assistant.close", &json!({})).unwrap();
+    assert!(s.assistant.is_none());
+    let again = s.run("assistant.summarize", &json!({})).unwrap()["asked"].as_u64().unwrap();
+    s.run("assistant.close", &json!({})).unwrap();
+    s.apply(Event::LlmAnswered { id: again, text: "late".into(), error: None });
+    assert!(s.assistant.is_none());
     // No model any more: nothing shown.
     s.run("assistant.settings", &json!({"url": ""})).unwrap();
     assert!(s.assistant.is_none());
