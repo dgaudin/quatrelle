@@ -48,6 +48,8 @@ pub struct Data {
     pub vacation: Value,
     /// Open event streams (push).
     pub listeners: Vec<std::sync::mpsc::Sender<String>>,
+    /// The next so many `Mailbox/get` calls fail (a server that didn't answer).
+    pub fail_mailbox_get: u32,
     next: u32,
 }
 
@@ -170,6 +172,10 @@ impl Data {
             args.get("ids")?.as_array().map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_string)).collect())
         };
         match name {
+            "Mailbox/get" if self.fail_mailbox_get > 0 => {
+                self.fail_mailbox_get -= 1;
+                ("error".into(), json!({"type": "serverUnavailable"}))
+            }
             "Mailbox/get" => {
                 let want = ids(args);
                 let list: Vec<Value> =
