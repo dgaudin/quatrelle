@@ -292,3 +292,41 @@ fn the_assistant_suggests_a_reply_to_send_or_change() {
     assert!(c.body.starts_with("Bonjour Zoe,\n\nC'est noté pour jeudi."), "{:?}", c.body);
     assert!(c.subject.starts_with("Re:") || c.subject.starts_with("RE:"), "{}", c.subject);
 }
+
+/// Rewrite: only the text written goes to the model (not the signature nor the message
+/// quoted), and the new text takes its place only when the user says so.
+#[test]
+fn the_assistant_rewrites_the_text_written_only() {
+    let mut s = sample_session("assistant-rewrite");
+    s.run("assistant.settings", &json!({"url": "http://localhost:11434/v1", "model": "llama3"})).unwrap();
+    let key = s.list.first().map(|m| m.key.clone()).unwrap();
+    s.run("list.open", &json!({"key": key.to_id()})).unwrap();
+    s.run("mail.reply", &json!({})).unwrap();
+    let body = s.compose.as_ref().unwrap().body.clone();
+    assert!(body.contains("From: "), "a reply quotes: {body:?}");
+    assert!(s.run("assistant.rewrite", &json!({"how": "fix"})).is_err(), "nothing written yet");
+    if let Some(c) = s.compose.as_mut() {
+        c.body = format!("bonjour zoé, c'est note pour jeudi\n\n{body}");
+        c.styles = quatrelle_mime::rich::Styles::plain(&c.body);
+    }
+    assert!(s.run("assistant.rewrite", &json!({"how": "louder"})).is_err());
+    s.take_jobs();
+    let id = s.run("assistant.rewrite", &json!({"how": "fix"})).unwrap()["asked"].as_u64().unwrap();
+    let sent = s.take_jobs().into_iter().find_map(|j| match j {
+        Job::AskLlm { messages, .. } => messages.get(1).map(|m| m.1.clone()),
+        _ => None,
+    });
+    assert_eq!(sent.as_deref(), Some("bonjour zoé, c'est note pour jeudi"), "the text written alone");
+    s.apply(Event::LlmAnswered { id, text: "Bonjour Zoé, c'est noté pour jeudi.".into(), error: None });
+    assert!(matches!(&s.compose.as_ref().unwrap().rewrite, Some(r) if r.answer.is_some()));
+    s.run("assistant.endRewrite", &json!({"use": true})).unwrap();
+    let c = s.compose.as_ref().unwrap();
+    assert!(c.body.starts_with("Bonjour Zoé, c'est noté pour jeudi.\n\n") && c.body.ends_with(&body), "{:?}", c.body);
+    assert!(c.rewrite.is_none());
+    // Let go: nothing changes.
+    let before = c.body.clone();
+    let id = s.run("assistant.rewrite", &json!({"how": "shorter"})).unwrap()["asked"].as_u64().unwrap();
+    s.apply(Event::LlmAnswered { id, text: "Noté pour jeudi.".into(), error: None });
+    s.run("assistant.endRewrite", &json!({"use": false})).unwrap();
+    assert_eq!(s.compose.as_ref().unwrap().body, before);
+}
