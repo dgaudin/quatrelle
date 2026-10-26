@@ -38,19 +38,22 @@ fn write_pointer(file: &Path, path: &Path) -> Result<(), String> {
 /// Support/Quatrelle` on macOS, `$XDG_DATA_HOME/quatrelle` (or `~/.local/share/quatrelle`)
 /// elsewhere.
 pub fn base_root() -> Option<PathBuf> {
+    // A relative value (`APPDATA=data`, an empty `HOME`) would put the mail wherever Quatrelle was
+    // started from; the XDG spec says to ignore one (craft-libs' app folders found this).
+    let var = |name: &str| std::env::var_os(name).map(PathBuf::from).filter(|p| p.is_absolute());
     // The folder this app was forked from is taken over the first time (see `legacy`): its
     // settings, its accounts and its mail stay where they were.
     if cfg!(target_os = "windows") {
-        let appdata = std::env::var_os("APPDATA").map(PathBuf::from)?;
+        let appdata = var("APPDATA")?;
         return Some(crate::legacy::take_over(&appdata, "Quatrelle", crate::legacy::OLD_APP));
     }
-    let home = std::env::var_os("HOME").map(PathBuf::from)?;
+    let home = var("HOME")?;
     if cfg!(target_os = "macos") {
         let support = home.join("Library").join("Application Support");
         return Some(crate::legacy::take_over(&support, "Quatrelle", crate::legacy::OLD_APP));
     }
-    let base = match std::env::var_os("XDG_DATA_HOME").filter(|d| !d.is_empty()) {
-        Some(x) => PathBuf::from(x),
+    let base = match var("XDG_DATA_HOME") {
+        Some(x) => x,
         None => home.join(".local").join("share"),
     };
     Some(crate::legacy::take_over(&base, "quatrelle", crate::legacy::OLD_APP))
