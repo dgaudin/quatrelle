@@ -337,6 +337,28 @@ son parent appliqué à trois voies (`git apply -3`). La prochaine fusion compl�
   champs d'un rendez-vous créé dans l'ordre du schéma EWS.
 
 
+### État de la récupération : reprises choisies de la v0.25 et de la v0.26 (2026-10-26)
+
+L'origine a ajouté 32 commits après `49ad25c` (jusqu'à `e46504c`). Même méthode : repris un par un
+depuis les copies renommées, avec `~/mailcraft/merge-tools/pick.sh <commit>` (le diff de `refs/merge/r-<parent>` à
+`refs/merge/r-<commit>`, appliqué par `git apply -3`).
+
+- **Repris** : la synchronisation qui ne perd plus une modification faite après un renommage
+  quand la liste des dossiers échoue (`e46504c`) ; S/MIME : pour quel certificat un message
+  chiffré a été écrit (`eadd066`), les anciens certificats gardés pour lire le courrier qui leur
+  était chiffré, listés dans Fichier › Informations › Sécurité, aussi dans le navigateur (`6a2eb5f`,
+  `b8d4b9e`, `681542b`, `554901b`, `eac2ab2`, issue #6), et les signatures qui restent valides
+  quand un relais retire `X-Mailer` (`47b89f1`).
+- **Adaptations** : sans les boutons du magasin de certificats Windows et du trousseau macOS
+  (`681542b`), ni les tests Windows ou contre de vrais serveurs, que ce fork n'a pas repris ; le
+  bouton de carte à puce reste où il était.
+- **Laissés** (décision du propriétaire, 2026-10-22 : l'apparence et le calendrier de ce fork
+  restent) : le ruban « classique » et le mode sombre de l'origine (`b273cf8`, `b048d72`,
+  `1cacf30`, issue #8) ; le serveur CalDAV donné à la main (`95c8779`, `695972d`, `fadbcc7`,
+  `f6d66c5`, issue #7). **À voir** : la mise à jour qui reprend un téléchargement et prévient
+  quand elle est prête (`2e4b4ed` à `18a8a97`), qui touche le moteur de mise à jour de ce fork ;
+  le fuzz (`bab68ee`) ; la CI et la documentation de l'origine.
+
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
 Quatre chantiers, chacun dans son commit, à la suite d'un audit de l'éditeur HTML.
