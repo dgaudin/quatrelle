@@ -38,7 +38,15 @@ pub(super) fn panel(s: &Session, t: &Tokens, ui: &mut Ui, key: &MessageKey, acts
             AssistKind::Reply => "Suggested reply",
             AssistKind::Filing => "Where it goes",
         };
-        ui.label(RichText::new(tl!(title)).font(theme::bold(13.0)).color(t.text));
+        // Its name, and a cross to put it away unused (a question still out with it).
+        ui.horizontal(|ui| {
+            ui.label(RichText::new(tl!(title)).font(theme::bold(13.0)).color(t.text));
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if widgets::tiny_icon_button(ui, Icon::Close, "Close", t).clicked() {
+                    acts.push(Action::Run("assistant.close", json!({})));
+                }
+            });
+        });
         ui.add_space(2.0);
         match &a.answer {
             None => {

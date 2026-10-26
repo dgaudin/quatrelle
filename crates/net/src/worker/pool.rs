@@ -224,9 +224,11 @@ impl Pool {
             Job::ImportPst { account, path } => self.import_pst(account, path),
             Job::CompactDataFile { account } => self.compact(account),
             Job::AskLlm { id, url, model, messages } => {
-                let sink = self.sink.clone();
-                let key = self.creds.get_secret(&crate::llm::keyring(), crate::llm::KEY);
+                let (sink, creds) = (self.sink.clone(), self.creds.clone());
+                // The key read on the request's thread: a keychain slow to answer (or waiting
+                // to be unlocked) mustn't hold the window.
                 let spawned = std::thread::Builder::new().name("language-model".into()).spawn(move || {
+                    let key = creds.get_secret(&crate::llm::keyring(), crate::llm::KEY);
                     let done = match crate::llm::ask(&url, &model, key.as_deref(), &messages) {
                         Ok(text) => Event::LlmAnswered { id, text, error: None },
                         Err(e) => Event::LlmAnswered { id, text: String::new(), error: Some(e.to_string()) },
@@ -238,9 +240,10 @@ impl Pool {
                 }
             }
             Job::ListLlmModels { url } => {
-                let sink = self.sink.clone();
-                let key = self.creds.get_secret(&crate::llm::keyring(), crate::llm::KEY);
+                // The key read on the request's thread, as for a question.
+                let (sink, creds) = (self.sink.clone(), self.creds.clone());
                 let spawned = std::thread::Builder::new().name("language-models".into()).spawn(move || {
+                    let key = creds.get_secret(&crate::llm::keyring(), crate::llm::KEY);
                     let done = match crate::llm::models(&url, key.as_deref()) {
                         Ok(models) => Event::LlmModels { url, models, error: None },
                         Err(e) => Event::LlmModels { url, models: Vec::new(), error: Some(e.to_string()) },
