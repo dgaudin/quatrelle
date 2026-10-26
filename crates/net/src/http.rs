@@ -15,7 +15,7 @@ use crate::{NetError, Result};
 mod events;
 mod streamed;
 pub use events::{BodyStream, EventStream, Sse, Streamed, open_events};
-pub use streamed::get_into;
+pub use streamed::{exchange_into, get_into};
 
 /// Longest header block accepted.
 const MAX_HEAD: usize = 64 << 10;
