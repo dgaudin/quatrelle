@@ -41,6 +41,8 @@ pub(crate) struct RibbonInput<'a> {
     /// Written in a window of its own; and windows can open at all (not the browser).
     pub in_window: bool,
     pub can_pop: bool,
+    /// A language model is set in Options: Rewrite is offered.
+    pub assistant: bool,
 }
 
 /// Typefaces offered (Outlook's usual ones); the first is the message's own.
@@ -128,7 +130,30 @@ pub(crate) fn compose_ribbon(ui: &mut Ui, tokens: &Tokens, ed: &mut Editor, c: &
                         let text: String = c.body.chars().skip(range.start).take(range.end - range.start).filter(|ch| *ch != rich::PICTURE).collect();
                         acts.push(Action::Dialog(Dialog::WordCount(count_words(&text), !sel.is_empty())));
                     }
-                    groups.last(ui, &t, "Proofing");
+                    if input.assistant {
+                        groups.end(ui, &t, "Proofing");
+                        // The text written, rewritten by the language model set in Options.
+                        let busy = c.rewrite.as_ref().is_some_and(|r| r.answer.is_none());
+                        let r = widgets::big_button(ui, Icon::Drafts, "Rewrite", &t, !c.sending && !busy)
+                            .on_hover_text(tl!("Have the language model set in Options rewrite what you wrote"));
+                        egui::Popup::menu(&r).show(|ui| {
+                            for (how, label) in [
+                                ("fix", "Correct spelling and grammar"),
+                                ("shorter", "Shorter"),
+                                ("formal", "More formal"),
+                                ("friendly", "Friendlier"),
+                                ("english", "In English"),
+                            ] {
+                                if ui.button(tl!(label)).clicked() {
+                                    acts.push(Action::Run("assistant.rewrite", json!({"how": how})));
+                                    ui.close();
+                                }
+                            }
+                        });
+                        groups.last(ui, &t, "Assistant");
+                    } else {
+                        groups.last(ui, &t, "Proofing");
+                    }
                 }
             }
         });

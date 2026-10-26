@@ -1548,3 +1548,14 @@ month	May	5月
 	Ask the language model set in Options to write a reply to this message	请选项中设置的语言模型为此邮件撰写回复
 	Suggested reply	建议的回复
 	Reply with this text	使用此文本回复
+	Rewrite	改写
+	Have the language model set in Options rewrite what you wrote	让选项中设置的语言模型改写您写的内容
+	Correct spelling and grammar	更正拼写和语法
+	Shorter	更简短
+	More formal	更正式
+	Friendlier	更友好
+	In English	译成英文
+	Rewritten text	改写后的文本
+	Use this text	使用此文本
+	In place of what you wrote (its formatting goes)	替换您写的内容（格式会丢失）
+	Keep mine	保留我的

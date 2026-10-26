@@ -398,6 +398,7 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
     let can_vote = s.compose.as_ref().and_then(|c| s.account(&c.account)).is_some_and(|a| a.config.ews.is_some());
     // S/MIME's Encrypt and Sign, for an account with a certificate.
     let has_cert = s.compose.as_ref().is_some_and(|c| s.identity(&c.account).is_some());
+    let assistant = !s.prefs.llm_url.trim().is_empty();
     let signature = s.compose.as_ref().and_then(|c| s.account(&c.account)).map(|a| a.config.signature.clone()).unwrap_or_default();
     let Some(c) = s.compose.as_mut() else { return };
     // The editor's state belongs to one message.
@@ -493,11 +494,13 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
             has_cert,
             in_window,
             can_pop: !ui.ctx().embed_viewports(),
+            assistant,
         };
         egui::Frame::new().fill(t.chrome).corner_radius(6).inner_margin(Margin::symmetric(8, 4)).show(ui, |ui| {
             ui.set_width(ui.available_width());
             rich_edit::compose_ribbon(ui, &t, &mut ed, c, &input, acts);
         });
+        super::assistant::rewrite_panel(&t, ui, c, acts);
         if let Some(e) = &c.error {
             ui.add_space(4.0);
             egui::Frame::new().fill(t.danger.gamma_multiply(0.12)).corner_radius(6).inner_margin(Margin::symmetric(10, 6)).show(ui, |ui| {

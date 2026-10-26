@@ -1550,3 +1550,14 @@ month	May	5월
 	Ask the language model set in Options to write a reply to this message	옵션에서 설정한 언어 모델에 이 메시지에 대한 회신 작성을 요청합니다
 	Suggested reply	제안된 회신
 	Reply with this text	이 텍스트로 회신
+	Rewrite	다시 쓰기
+	Have the language model set in Options rewrite what you wrote	옵션에서 설정한 언어 모델에 작성한 내용을 다시 쓰도록 요청합니다
+	Correct spelling and grammar	맞춤법 및 문법 수정
+	Shorter	더 짧게
+	More formal	더 격식 있게
+	Friendlier	더 친근하게
+	In English	영어로
+	Rewritten text	다시 쓴 텍스트
+	Use this text	이 텍스트 사용
+	In place of what you wrote (its formatting goes)	작성한 내용 대신 사용 (서식은 사라짐)
+	Keep mine	내 글 유지

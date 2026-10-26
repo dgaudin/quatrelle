@@ -17,6 +17,41 @@ Write in the language the email is written in, in the same register (formal or i
 Begin with a greeting and end with a closing formula, but write no signature: it is added after. \
 Where you don't know a fact or a decision, put a placeholder in [square brackets]. Write only the reply's text.";
 
+/// How the model is asked to rewrite the text written, by the choice offered.
+fn rewrite_prompt(how: &str) -> Option<&'static str> {
+    Some(match how {
+        "fix" => "Correct the spelling, grammar and punctuation of this text, changing nothing else, in its own language.",
+        "shorter" => "Make this text shorter and clearer, keeping everything it says, in its own language.",
+        "formal" => "Rewrite this text in a more formal, professional tone, in its own language.",
+        "friendly" => "Rewrite this text in a warmer, friendlier tone, in its own language.",
+        "english" => "Translate this text into English.",
+        _ => return None,
+    })
+}
+
+/// The language model's rewrite of the text written in a message, once it came.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Rewrite {
+    pub id: u64,
+    /// `None` while it's working; the new text, or why there's none.
+    pub answer: Option<Result<String, String>>,
+}
+
+/// Where the text the user wrote ends in a message being written: before its signature, or for
+/// a reply or a forward without one, before the message quoted (its `From:` line).
+pub fn own_text_end(c: &Compose) -> usize {
+    let body = c.body.as_str();
+    let sig = Some(c.signature.trim()).filter(|s| !s.is_empty()).and_then(|s| body.find(s));
+    let quote = c.mode.and_then(|_| body.find("\nFrom: ").map(|i| i + 1));
+    let end = match (sig, quote) {
+        (Some(a), Some(b)) => a.min(b),
+        (a, b) => a.or(b).unwrap_or(body.len()),
+    };
+    // Up to its last word: the blank lines before the signature stay.
+    let end = body.get(..end).map_or(end, |t| t.trim_end().len());
+    body.get(..end).map_or(0, |t| t.chars().count())
+}
+
 /// What the language model was asked, and its answer once it came.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Assistant {
@@ -86,14 +121,65 @@ impl Session {
         Ok(serde_json::json!({ "asked": id }))
     }
 
-    /// The language model's answer, for the question still on view.
+    /// The language model's answer, for the question still on view (about the message being
+    /// read, or the text of one being written).
     pub(in crate::session) fn llm_answered(&mut self, id: u64, text: String, error: Option<String>) {
+        let answer = match error {
+            Some(e) => Err(e),
+            None => Ok(text),
+        };
         if let Some(a) = self.assistant.as_mut().filter(|a| a.id == id) {
-            a.answer = Some(match error {
-                Some(e) => Err(e),
-                None => Ok(text),
-            });
+            a.answer = Some(answer);
+        } else if let Some(r) = self.compose.iter_mut().chain(self.composes.iter_mut()).filter_map(|c| c.rewrite.as_mut()).find(|r| r.id == id) {
+            r.answer = Some(answer);
         }
+    }
+
+    /// Ask the language model to rewrite the text written in the message being written (up to
+    /// its signature or the message quoted): `how` is `fix`, `shorter`, `formal`, `friendly` or
+    /// `english`. The new text is offered beside it, to put in place or not.
+    pub fn rewrite(&mut self, how: &str) -> CmdResult {
+        let url = self.prefs.llm_url.trim().to_string();
+        if url.is_empty() {
+            return Err(CmdError::Disabled("set a language model in File › Options › Assistant first".into()));
+        }
+        let prompt = rewrite_prompt(how).ok_or_else(|| CmdError::Params(format!("no rewrite `{how}`")))?;
+        let c = self.compose.as_ref().ok_or_else(|| CmdError::Disabled("write a message first".into()))?;
+        let text: String = c.body.chars().take(own_text_end(c)).collect();
+        if text.trim().is_empty() {
+            return Err(CmdError::Params("write something first".into()));
+        }
+        let prompt =
+            format!("{prompt} It is part of an email: keep its greeting and closing if it has them. Write only the new text, with no comment.");
+        let id = self.fresh_id();
+        if let Some(c) = self.compose.as_mut() {
+            c.rewrite = Some(Rewrite { id, answer: None });
+        }
+        self.jobs.push(Job::AskLlm {
+            id,
+            url,
+            model: self.prefs.llm_model.trim().to_string(),
+            messages: vec![("system".into(), prompt), ("user".into(), text)],
+        });
+        Ok(serde_json::json!({ "asked": id }))
+    }
+
+    /// Put the rewritten text in place of the text written (`use`), or let it go.
+    pub fn end_rewrite(&mut self, use_it: bool) -> CmdResult {
+        let c = self.compose.as_mut().ok_or_else(|| CmdError::Disabled("write a message first".into()))?;
+        let text = match c.rewrite.take() {
+            Some(Rewrite { answer: Some(Ok(text)), .. }) => text,
+            _ if !use_it => return Ok(serde_json::json!({ "dropped": true })),
+            _ => return Err(CmdError::Disabled("the rewritten text hasn't come yet".into())),
+        };
+        if !use_it {
+            return Ok(serde_json::json!({ "dropped": true }));
+        }
+        let end = own_text_end(c);
+        let add = text.trim().to_string();
+        let add_styles = quatrelle_mime::rich::Styles::plain(&add);
+        quatrelle_mime::rich::splice(&mut c.body, &mut c.styles, 0..end, &add, &add_styles);
+        Ok(serde_json::json!({ "replaced": end }))
     }
 
     /// Set the language model: an OpenAI-compatible server's address (`…/v1`; empty: none) and
