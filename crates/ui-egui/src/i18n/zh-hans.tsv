@@ -1544,6 +1544,12 @@ month	May	5月
 	Server address	服务器地址
 	Model	模型
 	Key (if the server needs one)	密钥（如果服务器需要）
+	Looking for the server's models…	正在查找服务器的模型…
+	The models couldn't be listed: {error}	无法列出模型：{error}
+	Models on this server: {n}	此服务器上的模型: {n}
+	Choose or type a model	选择或输入模型
+	Choose from the server's models	从服务器的模型中选择
+	Load the server's models again	重新加载服务器的模型
 	Suggest a reply	建议回复
 	Ask the language model set in Options to write a reply to this message	请选项中设置的语言模型为此邮件撰写回复
 	Suggested reply	建议的回复

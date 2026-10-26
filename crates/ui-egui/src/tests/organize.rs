@@ -259,3 +259,34 @@ fn categories_have_outlooks_colours_and_calendars_keep_theirs() {
         assert_eq!(crate::panes::calendar::color(i, &t), category_color((i - 1) % 8, false), "calendar colour {i}");
     }
 }
+
+/// Options › Assistant: the page asks the server for its models, and says how many it has (or
+/// why there are none) under the model's box.
+#[test]
+fn the_assistants_options_list_the_servers_models() {
+    use quatrelle_engine::model::Event as MailEvent;
+    let (mut a, dir) = app("llm-models");
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    let url = "http://localhost:11434/v1";
+    a.run("assistant.settings", json!({"url": url, "model": "llama3.1"}));
+    a.session.llm_models = None;
+    a.act(crate::Action::Backstage(crate::backstage::Page::Options));
+    let tall = egui::vec2(1280.0, 5000.0);
+    let texts = |shapes: &[egui::Shape]| -> Vec<String> {
+        shapes.iter().filter_map(|s| if let egui::Shape::Text(t) = s { Some(t.galley.text().to_string()) } else { None }).collect()
+    };
+    let shown = texts(&frame_shapes(&ctx, &mut a, vec![], tall));
+    assert!(a.session.llm_models.as_ref().is_some_and(|m| m.asking && m.url == url), "the page asks for them");
+    let shown = [shown, texts(&frame_shapes(&ctx, &mut a, vec![], tall))].concat();
+    assert!(shown.iter().any(|t| t == "Looking for the server's models…"), "{shown:?}");
+    a.session.apply(MailEvent::LlmModels { url: url.into(), models: vec!["gemma2".into(), "llama3.1".into()], error: None });
+    let shown = texts(&frame_shapes(&ctx, &mut a, vec![], tall));
+    assert!(shown.iter().any(|t| t == "Models on this server: 2"), "{shown:?}");
+    a.run("assistant.models", json!({}));
+    a.session.apply(MailEvent::LlmModels { url: url.into(), models: Vec::new(), error: Some("HTTP 404".into()) });
+    let shown = texts(&frame_shapes(&ctx, &mut a, vec![], tall));
+    assert!(shown.iter().any(|t| t == "The models couldn't be listed: HTTP 404"), "{shown:?}");
+    assert_eq!(a.session.llm_models.as_ref().map(|m| m.names.len()), Some(2), "the list before stays to pick from");
+    let _ = std::fs::remove_dir_all(dir);
+}

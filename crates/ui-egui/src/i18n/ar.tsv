@@ -1543,6 +1543,12 @@ month	May	مايو
 	Server address	عنوان الخادم
 	Model	النموذج
 	Key (if the server needs one)	المفتاح (إن طلبه الخادم)
+	Looking for the server's models…	جارٍ البحث عن نماذج الخادم…
+	The models couldn't be listed: {error}	تعذّر سرد النماذج: {error}
+	Models on this server: {n}	النماذج على هذا الخادم: {n}
+	Choose or type a model	اختر نموذجًا أو اكتبه
+	Choose from the server's models	الاختيار من نماذج الخادم
+	Load the server's models again	إعادة تحميل نماذج الخادم
 	Suggest a reply	اقتراح رد
 	Ask the language model set in Options to write a reply to this message	اطلب من النموذج اللغوي المعيَّن في الخيارات كتابة رد على هذه الرسالة
 	Suggested reply	الرد المقترح
