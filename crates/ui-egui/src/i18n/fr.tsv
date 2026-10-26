@@ -1568,3 +1568,27 @@ month	May	mai
 	The language model found none of your folders or categories for it.	Le modèle de langage n’a trouvé aucun de vos dossiers ni aucune de vos catégories pour ce message.
 	Move to {folder}	Déplacer vers {folder}
 	Categorize as {category}	Catégoriser comme {category}
+	Close without updating	Fermer sans mettre à jour
+	Downloading Quatrelle {version}…	Téléchargement de Quatrelle {version}…
+	Downloading Quatrelle {version}… {percent}%	Téléchargement de Quatrelle {version}… {percent} %
+	If you close Quatrelle now, the download pauses, and carries on from where it stopped the next time you open Quatrelle.	Si vous fermez Quatrelle maintenant, le téléchargement s'interrompt et reprend là où il s'est arrêté à la prochaine ouverture de Quatrelle.
+	Install Quatrelle {version} as it closes?	Installer Quatrelle {version} à sa fermeture ?
+	It installs the next time you close Quatrelle.	Il s'installera la prochaine fois que vous fermerez Quatrelle.
+	It installs when you close Quatrelle.	Il s'installera à la fermeture de Quatrelle.
+	Keep Quatrelle open	Garder Quatrelle ouvert
+	Quatrelle {version} is downloading.	Quatrelle {version} est en cours de téléchargement.
+	Quatrelle {version} is ready	Quatrelle {version} est prêt
+	Quatrelle {version} is ready. Restart now to install it, or it installs when you close Quatrelle.	Quatrelle {version} est prêt. Redémarrez maintenant pour l'installer, ou il s'installera à la fermeture de Quatrelle.
+	Restart Quatrelle to install it now, or it installs when you close Quatrelle.	Redémarrez Quatrelle pour l'installer maintenant, ou il s'installera à la fermeture de Quatrelle.
+	Restart now	Redémarrer maintenant
+	The update is downloaded and checked. It installs now, as Quatrelle closes, which takes a moment; open Quatrelle again when it's done.	La mise à jour est téléchargée et vérifiée. Elle s'installe maintenant, à la fermeture de Quatrelle, ce qui prend un instant ; rouvrez Quatrelle une fois terminé.
+	Update and close	Mettre à jour et fermer
+	Windows asks for an administrator's permission.	Windows demande l'autorisation d'un administrateur.
+	An update is still downloading	Une mise à jour est encore en cours de téléchargement
+	Quatrelle {version} is downloading ({done} of {total}).	Quatrelle {version} est en cours de téléchargement ({done} sur {total}).
+	Add another…	En ajouter un autre…
+	A renewed certificate takes over signing and encrypting; an older one is kept to read old mail	Un certificat renouvelé prend le relais pour signer et chiffrer ; l’ancien est conservé pour lire les anciens messages
+	Older certificate, valid until {date}: kept to read mail encrypted to it	Ancien certificat, valable jusqu’au {date} : conservé pour lire les messages chiffrés pour lui
+	Use for sending	Utiliser pour l’envoi
+	Sign and encrypt with this one again; the one in use is kept for reading	Signer et chiffrer de nouveau avec celui-ci ; celui en service est conservé pour la lecture
+	Forget this certificate: mail encrypted to it can't be read any more	Oublier ce certificat : les messages chiffrés pour lui ne pourront plus être lus

@@ -1564,3 +1564,27 @@ month	May	مايو
 	The language model found none of your folders or categories for it.	لم يجد النموذج اللغوي أيًا من مجلداتك أو فئاتك لها.
 	Move to {folder}	نقل إلى {folder}
 	Categorize as {category}	تصنيف كـ {category}
+	Close without updating	إغلاق دون تحديث
+	Downloading Quatrelle {version}…	جارٍ تنزيل Quatrelle {version}…
+	Downloading Quatrelle {version}… {percent}%	جارٍ تنزيل Quatrelle {version}… {percent}%
+	If you close Quatrelle now, the download pauses, and carries on from where it stopped the next time you open Quatrelle.	إذا أغلقت Quatrelle الآن، يتوقف التنزيل مؤقتًا ويُستأنف من حيث توقف في المرة التالية التي تفتح فيها Quatrelle.
+	Install Quatrelle {version} as it closes?	هل تريد تثبيت Quatrelle {version} عند إغلاقه؟
+	It installs the next time you close Quatrelle.	سيُثبَّت في المرة التالية التي تغلق فيها Quatrelle.
+	It installs when you close Quatrelle.	سيُثبَّت عند إغلاق Quatrelle.
+	Keep Quatrelle open	إبقاء Quatrelle مفتوحًا
+	Quatrelle {version} is downloading.	جارٍ تنزيل Quatrelle {version}.
+	Quatrelle {version} is ready	Quatrelle {version} جاهز
+	Quatrelle {version} is ready. Restart now to install it, or it installs when you close Quatrelle.	Quatrelle {version} جاهز. أعد التشغيل الآن لتثبيته، أو سيُثبَّت عند إغلاق Quatrelle.
+	Restart Quatrelle to install it now, or it installs when you close Quatrelle.	أعد تشغيل Quatrelle لتثبيته الآن، أو سيُثبَّت عند إغلاق Quatrelle.
+	Restart now	إعادة التشغيل الآن
+	The update is downloaded and checked. It installs now, as Quatrelle closes, which takes a moment; open Quatrelle again when it's done.	تم تنزيل التحديث والتحقق منه. يُثبَّت الآن أثناء إغلاق Quatrelle، وهذا يستغرق لحظة؛ افتح Quatrelle مجددًا عند انتهائه.
+	Update and close	تحديث وإغلاق
+	Windows asks for an administrator's permission.	سيطلب Windows إذن المسؤول.
+	An update is still downloading	لا يزال التحديث قيد التنزيل
+	Quatrelle {version} is downloading ({done} of {total}).	جارٍ تنزيل Quatrelle {version} ({done} من {total}).
+	Add another…	إضافة شهادة أخرى…
+	A renewed certificate takes over signing and encrypting; an older one is kept to read old mail	تتولى الشهادة المجدَّدة التوقيع والتشفير، وتُحفظ القديمة لقراءة البريد السابق
+	Older certificate, valid until {date}: kept to read mail encrypted to it	شهادة سابقة، صالحة حتى {date}: محفوظة لقراءة البريد المشفّر لها
+	Use for sending	استخدامها للإرسال
+	Sign and encrypt with this one again; the one in use is kept for reading	التوقيع والتشفير بهذه الشهادة مجددًا؛ وتُحفظ المستخدمة حاليًا للقراءة
+	Forget this certificate: mail encrypted to it can't be read any more	نسيان هذه الشهادة: لن يمكن قراءة البريد المشفّر لها بعد الآن

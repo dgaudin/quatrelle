@@ -1568,3 +1568,27 @@ month	May	Mai
 	The language model found none of your folders or categories for it.	Das Sprachmodell fand keinen Ihrer Ordner und keine Ihrer Kategorien dafür.
 	Move to {folder}	Verschieben nach {folder}
 	Categorize as {category}	Kategorisieren als {category}
+	Close without updating	Ohne Aktualisieren schließen
+	Downloading Quatrelle {version}…	Quatrelle {version} wird heruntergeladen…
+	Downloading Quatrelle {version}… {percent}%	Quatrelle {version} wird heruntergeladen… {percent} %
+	If you close Quatrelle now, the download pauses, and carries on from where it stopped the next time you open Quatrelle.	Wenn Sie Quatrelle jetzt schließen, wird der Download angehalten und beim nächsten Öffnen von Quatrelle dort fortgesetzt, wo er aufgehört hat.
+	Install Quatrelle {version} as it closes?	Quatrelle {version} beim Schließen installieren?
+	It installs the next time you close Quatrelle.	Es wird installiert, wenn Sie Quatrelle das nächste Mal schließen.
+	It installs when you close Quatrelle.	Es wird installiert, wenn Sie Quatrelle schließen.
+	Keep Quatrelle open	Quatrelle geöffnet lassen
+	Quatrelle {version} is downloading.	Quatrelle {version} wird heruntergeladen.
+	Quatrelle {version} is ready	Quatrelle {version} ist bereit
+	Quatrelle {version} is ready. Restart now to install it, or it installs when you close Quatrelle.	Quatrelle {version} ist bereit. Starten Sie jetzt neu, um es zu installieren, oder es wird installiert, wenn Sie Quatrelle schließen.
+	Restart Quatrelle to install it now, or it installs when you close Quatrelle.	Starten Sie Quatrelle neu, um es jetzt zu installieren, oder es wird installiert, wenn Sie Quatrelle schließen.
+	Restart now	Jetzt neu starten
+	The update is downloaded and checked. It installs now, as Quatrelle closes, which takes a moment; open Quatrelle again when it's done.	Das Update ist heruntergeladen und geprüft. Es wird jetzt beim Schließen von Quatrelle installiert, was einen Moment dauert; öffnen Sie Quatrelle danach wieder.
+	Update and close	Aktualisieren und schließen
+	Windows asks for an administrator's permission.	Windows fragt nach der Erlaubnis eines Administrators.
+	An update is still downloading	Ein Update wird noch heruntergeladen
+	Quatrelle {version} is downloading ({done} of {total}).	Quatrelle {version} wird heruntergeladen ({done} von {total}).
+	Add another…	Weiteres hinzufügen…
+	A renewed certificate takes over signing and encrypting; an older one is kept to read old mail	Ein erneuertes Zertifikat übernimmt Signieren und Verschlüsseln; ein älteres bleibt, um alte E-Mails zu lesen
+	Older certificate, valid until {date}: kept to read mail encrypted to it	Älteres Zertifikat, gültig bis {date}: bleibt, um damit verschlüsselte E-Mails zu lesen
+	Use for sending	Zum Senden verwenden
+	Sign and encrypt with this one again; the one in use is kept for reading	Wieder mit diesem signieren und verschlüsseln; das bisherige bleibt zum Lesen
+	Forget this certificate: mail encrypted to it can't be read any more	Dieses Zertifikat vergessen: damit verschlüsselte E-Mails lassen sich nicht mehr lesen

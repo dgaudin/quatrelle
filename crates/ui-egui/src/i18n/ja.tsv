@@ -1565,3 +1565,27 @@ month	May	5月
 	The language model found none of your folders or categories for it.	言語モデルは、このメッセージに合うフォルダーも分類も見つけられませんでした。
 	Move to {folder}	{folder} へ移動
 	Categorize as {category}	{category} に分類
+	Close without updating	更新せずに閉じる
+	Downloading Quatrelle {version}…	Quatrelle {version} をダウンロードしています…
+	Downloading Quatrelle {version}… {percent}%	Quatrelle {version} をダウンロードしています… {percent}%
+	If you close Quatrelle now, the download pauses, and carries on from where it stopped the next time you open Quatrelle.	今 Quatrelle を閉じるとダウンロードは一時停止し、次に Quatrelle を開いたときに中断したところから再開します。
+	Install Quatrelle {version} as it closes?	閉じるときに Quatrelle {version} をインストールしますか?
+	It installs the next time you close Quatrelle.	次に Quatrelle を閉じたときにインストールされます。
+	It installs when you close Quatrelle.	Quatrelle を閉じるとインストールされます。
+	Keep Quatrelle open	Quatrelle を開いたままにする
+	Quatrelle {version} is downloading.	Quatrelle {version} をダウンロードしています。
+	Quatrelle {version} is ready	Quatrelle {version} の準備ができました
+	Quatrelle {version} is ready. Restart now to install it, or it installs when you close Quatrelle.	Quatrelle {version} の準備ができました。今すぐ再起動してインストールするか、Quatrelle を閉じたときにインストールされます。
+	Restart Quatrelle to install it now, or it installs when you close Quatrelle.	Quatrelle を再起動すると今すぐインストールされます。再起動しない場合は Quatrelle を閉じたときにインストールされます。
+	Restart now	今すぐ再起動
+	The update is downloaded and checked. It installs now, as Quatrelle closes, which takes a moment; open Quatrelle again when it's done.	更新はダウンロードされ、確認済みです。Quatrelle を閉じる今インストールされ、少し時間がかかります。終わったら Quatrelle をもう一度開いてください。
+	Update and close	更新して閉じる
+	Windows asks for an administrator's permission.	Windows が管理者の許可を求めます。
+	An update is still downloading	更新をまだダウンロードしています
+	Quatrelle {version} is downloading ({done} of {total}).	Quatrelle {version} をダウンロードしています ({done} / {total})。
+	Add another…	別の証明書を追加…
+	A renewed certificate takes over signing and encrypting; an older one is kept to read old mail	更新した証明書が署名と暗号化を引き継ぎ、古い証明書は過去のメールを読むために残ります
+	Older certificate, valid until {date}: kept to read mail encrypted to it	以前の証明書（{date} まで有効）: この証明書宛てに暗号化されたメールを読むために保持
+	Use for sending	送信に使う
+	Sign and encrypt with this one again; the one in use is kept for reading	この証明書で再び署名・暗号化します。使用中の証明書は読むために残ります
+	Forget this certificate: mail encrypted to it can't be read any more	この証明書を削除: この証明書宛てに暗号化されたメールは読めなくなります
