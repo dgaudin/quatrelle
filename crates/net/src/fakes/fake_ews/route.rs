@@ -145,7 +145,28 @@ impl Data {
                     .or_else(|| {
                         self.directory.iter().find(|(dn, _)| dn.eq_ignore_ascii_case(&want)).map(|(_, email)| (email.clone(), email.clone()))
                     });
-                match found {
+                // Otherwise a name or an address begun (Exchange's ambiguous name resolution).
+                let w = want.to_lowercase();
+                let begun = |(name, email): &&(String, String)| {
+                    !w.is_empty() && (email.to_lowercase().starts_with(&w) || name.to_lowercase().split(' ').any(|p| p.starts_with(&w)))
+                };
+                let many: Vec<&(String, String)> = if found.is_none() { self.people.iter().filter(begun).collect() } else { Vec::new() };
+                if many.len() > 1 {
+                    let mailbox = |(n, e): &&(String, String)| {
+                        format!(
+                            "<t:Resolution><t:Mailbox><t:Name>{}</t:Name><t:EmailAddress>{}</t:EmailAddress></t:Mailbox></t:Resolution>",
+                            esc(n),
+                            esc(e)
+                        )
+                    };
+                    let set: String = many.iter().map(mailbox).collect();
+                    out.push(format!(
+                        "<m:R ResponseClass=\"Warning\"><m:ResponseCode>ErrorNameResolutionMultipleResults</m:ResponseCode>\
+                         <m:ResolutionSet IncludesLastItemInRange=\"true\">{set}</m:ResolutionSet></m:R>"
+                    ));
+                    return ("ResolveNamesResponse".into(), out);
+                }
+                match found.or_else(|| many.first().map(|p| (*p).clone())) {
                     Some((name, email)) => out.push(ok(format!(
                         "<m:ResolutionSet TotalItemsInView=\"1\" IncludesLastItemInRange=\"true\"><t:Resolution><t:Mailbox><t:Name>{}</t:Name>\
                          <t:EmailAddress>{}</t:EmailAddress><t:RoutingType>SMTP</t:RoutingType></t:Mailbox></t:Resolution></m:ResolutionSet>",

@@ -3,6 +3,7 @@
 use super::*;
 
 mod drafts;
+mod names;
 mod senders;
 
 #[test]

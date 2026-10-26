@@ -1624,6 +1624,12 @@ month	May	maggio
 	Other email address…	Altro indirizzo di posta…
 	Other email address	Altro indirizzo di posta
 	Exchange sends from it when your account may send as it or on its behalf.	Exchange invia da questo indirizzo se il tuo account può inviare come esso o per suo conto.
-	Name <address>	Nome <indirizzo>
 	Send from it	Invia da questo indirizzo
 	Some names weren't found in your contacts or among the people you've written to	Alcuni nomi non sono stati trovati né nei tuoi contatti né tra le persone a cui hai scritto
+	Global Address List	Elenco indirizzi globale
+	Your organisation's directory, searched on the server for the name typed	La directory della tua organizzazione, interrogata sul server per il nome digitato
+	Type a name or an address to search the directory.	Digita un nome o un indirizzo per cercare nella directory.
+	Searching the directory…	Ricerca nella directory…
+	The directory couldn't be searched: {error}	Impossibile interrogare la directory: {error}
+	More people match: type more of the name.	Altre persone corrispondono: digita altre lettere del nome.
+	More than one person fits “{name}”. Choose who you meant:	Più persone corrispondono a «{name}». Scegli quella che intendevi:

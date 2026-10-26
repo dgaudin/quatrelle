@@ -26,7 +26,8 @@ impl Worker {
                 | Job::GetRooms { .. }
                 | Job::GetAvailability { .. }
                 | Job::ServerFolderSizes { .. }
-                | Job::FindCertificates { .. }) => self.handle(j),
+                | Job::FindCertificates { .. }
+                | Job::SearchDirectory { .. }) => self.handle(j),
                 // Anything else belongs to the main connection.
                 other => {
                     if let Some(m) = &self.main {

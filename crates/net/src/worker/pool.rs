@@ -395,6 +395,10 @@ impl Pool {
             Job::FindCertificates { account, .. } if !self.workers.contains_key(&account) => {
                 self.sink.emit(Event::DirectoryCertificates { account, found: Vec::new(), error: Some("the account is offline".into()) });
             }
+            Job::SearchDirectory { account, query } if !self.workers.contains_key(&account) => {
+                let error = Some("the account is offline".to_string());
+                self.sink.emit(Event::DirectoryPeople { account, query, people: Vec::new(), more: false, error });
+            }
             Job::GetRooms { account } if !self.workers.contains_key(&account) => {
                 self.sink.emit(Event::Rooms { account, lists: Vec::new(), rooms: Vec::new(), error: Some("the account is offline".into()) });
             }

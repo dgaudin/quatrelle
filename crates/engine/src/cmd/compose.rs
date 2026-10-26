@@ -35,6 +35,12 @@ pub(super) fn commands() -> Vec<CommandSpec> {
         .params(r#"{"language": string (`fr`, `en`… as the dictionaries are named; `all`: every dictionary; empty: the interface's language)}"#)
         .when(has_compose),
         CommandSpec::new("compose.checkNames", "Check Names", "Message › Names", check_names).when(has_compose),
+        CommandSpec::new("compose.chooseName", "Choose who a name means", "Message › Names", choose_name)
+            .params(r#"{"token": string (the name as typed), "email"?: string (the person meant; none: leave the name as typed), "name"?: string}"#)
+            .when(has_compose),
+        CommandSpec::new("contacts.directory", "Search the directory", "Message › Names", search_directory).params(
+            r#"{"query": string (the start of a name, a first or last name, an alias or an address), "account"?: string (an Exchange account)}"#,
+        ),
         CommandSpec::new("compose.replaceText", "Replace a stretch of the message", "Message", compose_replace_text)
             .params(
                 r#"{"from": number (byte offset), "to": number, "text": string, "field"?: "body" (default) | "subject" (the subject: byte offsets into it)}"#,
@@ -326,54 +332,35 @@ pub(super) fn insert_signature(s: &mut Session, v: &Value) -> CmdResult {
     Ok(json!({"inserted": at, "end": end}))
 }
 
-/// What Check Names says when a name is left as it was typed.
-pub const NAMES_NOT_FOUND: &str = "Some names weren't found in your contacts or among the people you've written to";
+/// Look a name up in the organisation's directory (Exchange's Global Address List): who it has,
+/// once it has answered (`searching` until then).
+fn search_directory(s: &mut Session, v: &Value) -> CmdResult {
+    let query = p::req_str(v, "query")?.trim().to_string();
+    if query.is_empty() {
+        return Err(CmdError::Params("`query` is empty".into()));
+    }
+    let account = s.directory_account(p::str(v, "account")).ok_or_else(|| CmdError::Disabled("the directory is an Exchange account's".into()))?;
+    s.search_directory(&account, &query, false);
+    Ok(match s.directory_found(&account, &query) {
+        Some(f) if !s.directory_searching(&account, &query) => json!({"account": account, "people": f.people, "more": f.more, "error": f.error}),
+        _ => json!({"account": account, "searching": true}),
+    })
+}
 
-/// Outlook's Check Names: each name typed in To, Cc or Bcc without an address is looked up
-/// among the contacts and the people written to or heard from, and written out with its
-/// address when one person matches it. The names left are answered as `unresolved`.
+/// Outlook's Check Names ([`Session::check_names`]).
 pub(super) fn check_names(s: &mut Session, _: &Value) -> CmdResult {
-    let Some(c) = s.compose.as_ref() else { return Err(CmdError::Disabled("no message is being written".into())) };
-    let fields = [c.to.clone(), c.cc.clone(), c.bcc.clone()];
-    let mut out: Vec<String> = Vec::new();
-    let mut unresolved: Vec<String> = Vec::new();
-    let mut resolved = 0usize;
-    for field in &fields {
-        let mut parts: Vec<String> = Vec::new();
-        for token in field.split([';', ',']).map(str::trim).filter(|t| !t.is_empty()).take(500) {
-            if token.contains('@') {
-                parts.push(token.to_string());
-                continue;
-            }
-            let found = s.suggest_contacts(token, 2);
-            let lower = token.to_lowercase();
-            // One person it fits (by name or address), and no second one as close.
-            let fits = |a: &quatrelle_model::EmailAddress| a.name.to_lowercase().contains(&lower) || a.email.to_lowercase().starts_with(&lower);
-            let matches: Vec<&quatrelle_model::EmailAddress> = found.iter().map(|x| &x.address).filter(|a| fits(a)).collect();
-            match matches.as_slice() {
-                [one] => {
-                    parts.push(one.to_string());
-                    resolved += 1;
-                }
-                _ => {
-                    parts.push(token.to_string());
-                    unresolved.push(token.to_string());
-                }
-            }
-        }
-        out.push(if parts.is_empty() { String::new() } else { format!("{}; ", parts.join("; ")) });
-    }
-    let c = s.compose.as_mut().ok_or_else(|| CmdError::Disabled("no message is being written".into()))?;
-    if let [to, cc, bcc] = out.as_slice() {
-        c.to = to.clone();
-        c.cc = cc.clone();
-        c.bcc = bcc.clone();
-    }
-    // Each name left is pointed out under its field once the cursor leaves it.
-    if !unresolved.is_empty() {
-        s.notice(NAMES_NOT_FOUND, true);
-    }
-    Ok(json!({"resolved": resolved, "unresolved": unresolved}))
+    s.check_names()
+}
+
+/// The person meant by a name several people fit ([`Session::choose_name`]).
+fn choose_name(s: &mut Session, v: &Value) -> CmdResult {
+    let token = p::req_str(v, "token")?.to_string();
+    let person = match p::str(v, "email").map(str::trim).filter(|e| !e.is_empty()) {
+        Some(email) if email.contains('@') => Some(quatrelle_model::EmailAddress::new(p::str(v, "name").unwrap_or("").trim(), email)),
+        Some(email) => return Err(CmdError::Params(format!("not an email address: {email}"))),
+        None => None,
+    };
+    s.choose_name(&token, person)
 }
 
 /// Put picture `cid` into the text at character `at`.

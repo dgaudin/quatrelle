@@ -41,13 +41,15 @@ mod writing;
 // named here as before.
 pub use listing::{ARRANGE_HEADINGS, Arrange, FolderRef, ListFilter, OUTBOX, Row, View, arrange_list};
 use listing::{Preview, person, size_group};
-use mailboxes::Contacts;
-pub use mailboxes::{FolderSizes, Sizes};
+use mailboxes::{Contacts, directory_key};
+pub use mailboxes::{DirectoryAnswer, FolderSizes, Sizes};
 pub use organize::{RulesScope, junk, quick_steps, search_folders};
 pub use prefs::{ListLayout, NotesOrder, Prefs, ReadInPane, ReadingPane};
 pub use security::{CardSearch, KnownCert, Lock, RevocationCheck, SMIME_DOC, Seal, Security, SignedBy, SmimeSettings};
+use writing::NameCheck;
 pub use writing::{
-    AssistKind, Assistant, Compose, Filing, ItemChoice, ItemKind, LlmModels, Rewrite, SendCheck, Sender, add_pictures, style_signature,
+    AssistKind, Assistant, Compose, Filing, ItemChoice, ItemKind, LlmModels, NAMES_NOT_FOUND, NameChoice, Rewrite, SendCheck, Sender, add_pictures,
+    style_signature,
 };
 
 /// One account and what the session knows about it.

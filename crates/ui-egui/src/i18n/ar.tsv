@@ -1621,6 +1621,12 @@ month	May	مايو
 	Other email address…	عنوان بريد إلكتروني آخر…
 	Other email address	عنوان بريد إلكتروني آخر
 	Exchange sends from it when your account may send as it or on its behalf.	يرسل Exchange من هذا العنوان إذا كان حسابك مسموحًا له بالإرسال باسمه أو نيابةً عنه.
-	Name <address>	الاسم <العنوان>
 	Send from it	الإرسال من هذا العنوان
 	Some names weren't found in your contacts or among the people you've written to	لم يُعثر على بعض الأسماء في جهات اتصالك ولا بين الأشخاص الذين راسلتهم
+	Global Address List	قائمة العناوين العمومية
+	Your organisation's directory, searched on the server for the name typed	دليل مؤسستك، يُبحث فيه على الخادم عن الاسم المكتوب
+	Type a name or an address to search the directory.	اكتب اسمًا أو عنوانًا للبحث في الدليل.
+	Searching the directory…	جارٍ البحث في الدليل…
+	The directory couldn't be searched: {error}	تعذّر البحث في الدليل: {error}
+	More people match: type more of the name.	يطابق أشخاص آخرون: اكتب المزيد من الاسم.
+	More than one person fits “{name}”. Choose who you meant:	يطابق أكثر من شخص «{name}». اختر الشخص الذي تقصده:

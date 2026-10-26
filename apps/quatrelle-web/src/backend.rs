@@ -566,6 +566,7 @@ async fn job(sh: &Rcs, id: &str, j: Job) {
         | Job::LocalFolderSizes { .. }
         | Job::ServerFolderSizes { .. }
         | Job::FindCertificates { .. }
+        | Job::SearchDirectory { .. }
         | Job::ReplaceOutlookRules { .. }
         | Job::AskLlm { .. }
         | Job::ListLlmModels { .. }
@@ -713,6 +714,10 @@ impl Backend for WebBackend {
             Job::FindCertificates { account, .. } => {
                 let error = Some("only an Exchange account's address book keeps certificates".to_string());
                 emit(sh, Event::DirectoryCertificates { account, found: Vec::new(), error })
+            }
+            Job::SearchDirectory { account, query } => {
+                let error = Some("only an Exchange account's directory is searched".to_string());
+                emit(sh, Event::DirectoryPeople { account, query, people: Vec::new(), more: false, error })
             }
             Job::ServerFolderSizes { account } => {
                 let error = Some("this server doesn't tell each folder's size".to_string());
