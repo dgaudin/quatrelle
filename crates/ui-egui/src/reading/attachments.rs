@@ -53,7 +53,8 @@ pub(super) fn pdf_preview(s: &Session, st: &mut UiState, ctx: &egui::Context, ke
     let tex = (|| {
         let raw = s.store.as_ref()?.read_body(key)?;
         let data = mime::attachment_data(&raw, index)?;
-        let img = crate::thumbs::pdf_first_page(&data, 260, st.fonts.clone())?;
+        let limit = ctx.input(|i| i.max_texture_side).try_into().unwrap_or(u32::MAX);
+        let img = crate::thumbs::pdf_page(&data, 0, crate::thumbs::Fit::Longer(260), limit, st.fonts.clone()).map(|(img, _)| img)?;
         Some(ctx.load_texture(format!("pdf-{}-{index}", key.to_id()), img, egui::TextureOptions::LINEAR))
     })();
     st.previews.insert((key.clone(), index), tex.clone());
@@ -454,7 +455,8 @@ pub(super) fn pdf_pages(s: &Session, st: &UiState, ui: &mut Ui, key: &MessageKey
             None => {
                 rendered_one = true;
                 let data = s.store.as_ref().and_then(|st| st.read_body(key)).and_then(|raw| mime::attachment_data(&raw, a.index));
-                let page = data.and_then(|d| crate::thumbs::pdf_page(&d, n, crate::thumbs::Fit::Width(px), st.fonts.clone()));
+                let limit = ui.ctx().input(|i| i.max_texture_side).try_into().unwrap_or(u32::MAX);
+                let page = data.and_then(|d| crate::thumbs::pdf_page(&d, n, crate::thumbs::Fit::Width(px), limit, st.fonts.clone()));
                 let tex = page.map(|(img, total)| {
                     ui.ctx().data_mut(|d| d.insert_temp(count_id, total));
                     ui.ctx().load_texture(format!("pdf-{}-{}-{n}", key.to_id(), a.index), img, egui::TextureOptions::LINEAR)
