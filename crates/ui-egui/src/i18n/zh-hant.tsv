@@ -1643,3 +1643,7 @@ month	May	5月
 	Rules as a file	規則檔案
 	Save your rules in a file, to keep them or to use them on another computer, and add the ones from a file saved by Quatrelle. A rule for an account this computer doesn't have comes in turned off.	將規則儲存到檔案中，以便保留或在另一台電腦上使用，並新增 Quatrelle 儲存的檔案中的規則。此電腦上沒有的帳戶的規則會以關閉狀態加入。
 	Write an account's mail, with its folders, to an Outlook data file (.pst) that Outlook and other mail apps can open. Mail that was never downloaded is left out.	將帳戶的郵件連同其資料夾寫入 Outlook 資料檔 (.pst)，Outlook 和其他郵件應用程式可以開啟該檔案。從未下載的郵件不包括在內。
+	Left empty: Quatrelle's own	留空：使用 Quatrelle 自己的
+	Only if your organisation's server refuses Quatrelle: the name of a mail program it lets in.	僅當組織的伺服器拒絕 Quatrelle 時填寫：它允許的郵件程式名稱。
+	Only letters, digits, spaces and punctuation, up to 256 characters.	只能包含字母、數字、空格和標點，最多 256 個字元。
+	User-Agent (optional)	User-Agent（選用）

@@ -1643,3 +1643,7 @@ month	May	5월
 	Rules as a file	파일로 된 규칙
 	Save your rules in a file, to keep them or to use them on another computer, and add the ones from a file saved by Quatrelle. A rule for an account this computer doesn't have comes in turned off.	규칙을 파일에 저장해 보관하거나 다른 컴퓨터에서 사용하고, Quatrelle이 저장한 파일의 규칙을 추가할 수 있습니다. 이 컴퓨터에 없는 계정의 규칙은 꺼진 상태로 들어옵니다.
 	Write an account's mail, with its folders, to an Outlook data file (.pst) that Outlook and other mail apps can open. Mail that was never downloaded is left out.	계정의 메일을 폴더와 함께 Outlook과 다른 메일 앱에서 열 수 있는 Outlook 데이터 파일(.pst)에 씁니다. 한 번도 다운로드하지 않은 메일은 포함되지 않습니다.
+	Left empty: Quatrelle's own	비워 두면: Quatrelle 기본값
+	Only if your organisation's server refuses Quatrelle: the name of a mail program it lets in.	조직 서버가 Quatrelle를 거부할 때만: 서버가 허용하는 메일 프로그램 이름.
+	Only letters, digits, spaces and punctuation, up to 256 characters.	문자, 숫자, 공백, 문장 부호만 최대 256자까지.
+	User-Agent (optional)	User-Agent(선택 사항)

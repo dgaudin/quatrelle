@@ -69,6 +69,7 @@ fn serve_connection(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>) {
         }
         answered += 1;
         let (mut len, mut auth, mut routed, mut anchor, mut cookie) = (0usize, String::new(), String::new(), String::new(), String::new());
+        let mut agent = String::new();
         loop {
             let mut line = String::new();
             if reader.read_line(&mut line).unwrap_or(0) == 0 || line == "\r\n" {
@@ -90,10 +91,22 @@ fn serve_connection(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>) {
                 if k.eq_ignore_ascii_case("cookie") {
                     cookie = v.trim().to_string();
                 }
+                if k.eq_ignore_ascii_case("user-agent") {
+                    agent = v.trim().to_string();
+                }
             }
         }
         let mut body = vec![0u8; len];
         let _ = reader.read_exact(&mut body);
+        let only = {
+            let mut d = shared.lock().unwrap();
+            d.agents.push(agent.clone());
+            d.only_agent.clone()
+        };
+        if only.is_some_and(|o| o != agent) {
+            respond(&mut s, 403, &[], b"Forbidden");
+            continue;
+        }
         let basic = shared.lock().unwrap().basic;
         if basic {
             let expected = format!("Basic {}", crate::imap::base64(format!("{DOMAIN}\\{USER}:{PASSWORD}").as_bytes()));

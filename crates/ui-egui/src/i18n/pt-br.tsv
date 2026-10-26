@@ -1644,3 +1644,7 @@ month	May	maio
 	Rules as a file	Regras em um arquivo
 	Save your rules in a file, to keep them or to use them on another computer, and add the ones from a file saved by Quatrelle. A rule for an account this computer doesn't have comes in turned off.	Salve suas regras em um arquivo, para guardá-las ou usá-las em outro computador, e adicione as de um arquivo salvo pelo Quatrelle. Uma regra de uma conta que este computador não tem chega desativada.
 	Write an account's mail, with its folders, to an Outlook data file (.pst) that Outlook and other mail apps can open. Mail that was never downloaded is left out.	Grave o email de uma conta, com suas pastas, em um arquivo de dados do Outlook (.pst) que o Outlook e outros apps de email podem abrir. O email nunca baixado fica de fora.
+	Left empty: Quatrelle's own	Vazio: o do próprio Quatrelle
+	Only if your organisation's server refuses Quatrelle: the name of a mail program it lets in.	Só se o servidor da sua organização recusar o Quatrelle: o nome de um programa de e-mail que ele aceita.
+	Only letters, digits, spaces and punctuation, up to 256 characters.	Apenas letras, dígitos, espaços e pontuação, até 256 caracteres.
+	User-Agent (optional)	User-Agent (opcional)

@@ -934,3 +934,29 @@ fn a_data_file_is_compacted_on_demand() {
     drop(s);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// An Exchange account's own User-Agent: kept, refused when it can't go in a header, cleared by
+/// an empty one (Quatrelle's own again). A user name with a line break is refused.
+#[test]
+fn an_exchange_account_names_its_own_user_agent() {
+    let mut s = Session::open(Some(temp("user-agent")), quatrelle_model::dates::Clock::new(NOW, 0));
+    let add = |s: &mut Session, extra: Value| {
+        let mut v = json!({"email": "riley@contoso.example", "ews": "mail.contoso.example", "username": "CONTOSO\\riley", "password": "pw"});
+        for (k, x) in extra.as_object().unwrap() {
+            v[k] = x.clone();
+        }
+        s.run("account.add", &v)
+    };
+    assert!(add(&mut s, json!({"userAgent": "Evil\r\nX: 1"})).is_err());
+    assert!(add(&mut s, json!({"username": "CONTOSO\\riley\r"})).is_err(), "a line break in the user name");
+    let id = add(&mut s, json!({"userAgent": " Evolution/3.46.4 "})).unwrap()["account"].as_str().unwrap().to_string();
+    assert_eq!(s.account(&id).unwrap().config.user_agent.as_deref(), Some("Evolution/3.46.4"));
+    s.take_jobs();
+    s.run("account.update", &json!({"account": id, "userAgent": ""})).unwrap();
+    assert_eq!(s.account(&id).unwrap().config.user_agent, None);
+    assert!(s.take_jobs().iter().any(|j| matches!(j, Job::Start { account, .. } if account.user_agent.is_none())), "it reconnects as Quatrelle");
+    assert!(s.run("account.update", &json!({"account": id, "username": "a\tb"})).is_err());
+    if let Some(st) = &s.store {
+        let _ = std::fs::remove_dir_all(st.root());
+    }
+}
