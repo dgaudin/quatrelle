@@ -71,6 +71,27 @@ impl MailApp {
         ctx.request_repaint_after(std::time::Duration::from_secs(15));
     }
 
+    /// Where the platform has a quit of its own (macOS: `terminate:`, `quit` returning true), a
+    /// close of the main window that nothing held open goes that way instead: call it last in
+    /// `logic`. Leaving a Mac by closing the eframe window can crash in AppKit's Touch Bar code
+    /// once the window is gone, and `terminate:` ends the process before that runs (craft-libs'
+    /// quit crate). Whether it took the close over.
+    pub fn quit_instead_of_close(ctx: &egui::Context, quit: impl FnOnce() -> bool) -> bool {
+        if ctx.viewport_id() != egui::ViewportId::ROOT || !ctx.input(|i| i.viewport().close_requested()) {
+            return false;
+        }
+        // A question (save what's being written?) holds the window open.
+        if ctx.viewport(|v| v.commands.contains(&egui::ViewportCommand::CancelClose)) {
+            return false;
+        }
+        if !quit() {
+            return false;
+        }
+        // The window stays for the quit to close.
+        ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+        true
+    }
+
     /// Closing with messages being written, online-only accounts' unsent mail or changes held in
     /// memory, or an update waiting: ask first. Decided in [`MailApp::logic`], which eframe runs
     /// with the window minimized too, and closes the window after unless it cancels (craft-libs'
