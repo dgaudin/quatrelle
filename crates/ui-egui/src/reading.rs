@@ -99,6 +99,8 @@ pub(crate) fn png_of(img: &egui::ColorImage) -> Option<Vec<u8>> {
 
 fn decode_with(ctx: &egui::Context, name: &str, data: &[u8], max: u32, round: bool) -> Option<egui::TextureHandle> {
     let decoded = decoded(data)?;
+    // Never bigger than the graphics card takes (a software or browser one may take 2048 only).
+    let max = max.min(ctx.input(|i| i.max_texture_side).try_into().unwrap_or(u32::MAX)).max(1);
     // Shrink large pictures; never enlarge small ones (the painter scales them crisply).
     let img = if decoded.width() > max || decoded.height() > max { decoded.thumbnail(max, max) } else { decoded }.to_rgba8();
     let (size, pixels) = if round { round_pixels(img) } else { ([img.width() as usize, img.height() as usize], img.into_raw()) };
