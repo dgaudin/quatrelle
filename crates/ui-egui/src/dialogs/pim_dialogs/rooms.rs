@@ -15,6 +15,8 @@ pub struct RoomFinderUi {
     pub list: Option<String>,
     /// An address typed in by hand, for a room no list offers.
     pub address: String,
+    /// The room whose day is shown under the list (name, address): the one clicked.
+    pub shown: Option<(String, String)>,
 }
 
 /// The rooms row: each room booked with its ×, and the Room Finder's button.
@@ -40,8 +42,10 @@ pub(super) fn row(ui: &mut Ui, f: &mut EventForm, t: &Tokens) {
 }
 
 /// The Room Finder under its row: the list to choose from (when the server has lists), a
-/// filter, the rooms (ticked when booked: a click books or frees one), and an address for a
-/// room no list offers. The rooms are asked for once, the first time it opens.
+/// filter, the rooms (ticked when booked), and an address for a room no list offers. A click on
+/// a room shows its day under the list, the meeting over it, with a button to book it; a
+/// double-click books it (or frees it) at once. The rooms are asked for once, the first time it
+/// opens.
 pub(super) fn finder(ui: &mut Ui, f: &mut EventForm, s: &Session, t: &Tokens, acts: &mut Vec<Action>) {
     let account = f.account_id();
     let known = s.rooms_now(&account);
@@ -96,16 +100,18 @@ pub(super) fn finder(ui: &mut Ui, f: &mut EventForm, s: &Session, t: &Tokens, ac
                         ui.set_width(ui.available_width());
                         for r in rooms {
                             let booked = f.rooms.iter().any(|(_, e)| *e == r.email);
+                            let shown = st.shown.as_ref().is_some_and(|(_, e)| *e == r.email);
                             let label = if r.list.is_empty() || chosen.is_some() { r.name.clone() } else { format!("{} · {}", r.name, r.list) };
-                            if ui.selectable_label(booked, label).on_hover_text(&r.email).clicked() {
-                                if booked {
-                                    f.remove_room(&r.email);
-                                } else {
-                                    f.add_room(&r.name, &r.email);
-                                }
+                            let row = room_row(ui, t, room_row_id(f.window, &r.email), &label, booked, shown).on_hover_text(&r.email);
+                            if row.clicked() {
+                                st.shown = Some((r.name.clone(), r.email.clone()));
+                            }
+                            if row.double_clicked() {
+                                toggle(f, &r.name, &r.email);
                             }
                         }
                     });
+                    ui.label(RichText::new(tl!("Click a room to see when it's free; double-click it to book it.")).color(t.faint).small());
                     if finder.from_calendar {
                         ui.label(
                             RichText::new(tl!("From your calendar: the rooms booked in your meetings and those in Outlook's Rooms group."))
@@ -115,6 +121,26 @@ pub(super) fn finder(ui: &mut Ui, f: &mut EventForm, s: &Session, t: &Tokens, ac
                     }
                 }
             }
+        }
+        // The room clicked: its day, and its button.
+        if let Some((name, email)) = st.shown.clone() {
+            ui.add_space(6.0);
+            ui.separator();
+            ui.horizontal(|ui| {
+                ui.label(RichText::new(&name).font(theme::bold(13.0)).color(t.text));
+                ui.label(RichText::new(&email).color(t.dim).small());
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if widgets::tiny_icon_button(ui, Icon::Close, "Hide its day", t).clicked() {
+                        st.shown = None;
+                    }
+                    let booked = f.rooms.iter().any(|(_, e)| *e == email);
+                    let label = if booked { "Remove this room" } else { "Book this room" };
+                    if ui.button(tl!(label)).clicked() {
+                        toggle(f, &name, &email);
+                    }
+                });
+            });
+            super::scheduling::room_day(ui, f, s, t, acts, &name, &email);
         }
         // A room no list offers, by its address.
         ui.add_space(4.0);
@@ -131,4 +157,34 @@ pub(super) fn finder(ui: &mut Ui, f: &mut EventForm, s: &Session, t: &Tokens, ac
         });
     });
     f.finder = Some(st);
+}
+
+/// Book a room, or free it when it's booked.
+fn toggle(f: &mut EventForm, name: &str, email: &str) {
+    if f.rooms.iter().any(|(_, e)| e.eq_ignore_ascii_case(email)) {
+        f.remove_room(email);
+    } else {
+        f.add_room(name, email);
+    }
+}
+
+/// A room's row in the Room Finder of the window numbered `window`: the tests find it by it.
+pub fn room_row_id(window: u64, email: &str) -> egui::Id {
+    egui::Id::unique(("room-finder-room", window, email.to_ascii_lowercase()))
+}
+
+/// A room in the list (`id`): ticked when booked, highlighted when its day is the one shown.
+fn room_row(ui: &mut Ui, t: &Tokens, id: egui::Id, label: &str, booked: bool, shown: bool) -> egui::Response {
+    let (rect, _) = ui.allocate_exact_size(vec2(ui.available_width(), 24.0), Sense::hover());
+    let resp = ui.interact(rect, id, Sense::click());
+    if shown || resp.hovered() {
+        ui.painter().rect_filled(rect, 3.0, if shown { t.accent_soft } else { t.hover_row });
+    }
+    let tick = egui::Rect::from_center_size(egui::pos2(rect.min.x + 13.0, rect.center().y), vec2(16.0, 16.0));
+    if booked {
+        icons::paint(ui.painter(), tick, Icon::Complete, t.accent);
+    }
+    let text = widgets::one_line(ui, label, theme::regular(13.0), t.text, rect.width() - 34.0);
+    ui.painter().galley(egui::pos2(rect.min.x + 28.0, rect.center().y - text.size().y / 2.0), text, t.text);
+    resp
 }

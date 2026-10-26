@@ -16,6 +16,7 @@ mod folder_sizes;
 mod folders;
 mod mailbox;
 mod moving;
+mod names;
 mod organize;
 mod other;
 pub(crate) mod pim_dialogs;
@@ -25,6 +26,7 @@ pub use accounts::*;
 pub use folder_sizes::SizeSort;
 pub use mailbox::*;
 pub use moving::MoveForm;
+pub use names::{AddressSearch, NamesForm};
 pub use organize::*;
 pub use writing::*;
 
@@ -227,12 +229,11 @@ impl Dialog {
     /// The address book for the message being written; a double-click adds to `field`.
     pub fn select_names(c: &quatrelle_engine::Compose, field: &'static str) -> Dialog {
         Dialog::SelectNames(Box::new(NamesForm {
+            search: AddressSearch::new(),
             target: field,
             to: c.to.clone(),
             cc: c.cc.clone(),
             bcc: c.bcc.clone(),
-            stale: true,
-            ..Default::default()
         }))
     }
 

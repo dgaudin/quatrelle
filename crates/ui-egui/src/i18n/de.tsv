@@ -1218,7 +1218,6 @@ month	May	Mai
 	Scheduling Assistant	Terminplanungs-Assistent
 	The rooms couldn't be read: {error}	Die Räume konnten nicht gelesen werden: {error}
 	Organizer	Organisator
-	Guest	Gast
 	Room	Raum
 	Free	Frei
 	Busy	Beschäftigt
@@ -1452,7 +1451,24 @@ month	May	Mai
 	Every year on {day} {month}	Jedes Jahr am {day}. {month}
 	Every {n} years on {day} {month}	Alle {n} Jahre am {day}. {month}
 	Webex Meeting	Webex-Besprechung
-	Set your Webex personal room in File › Options first	Legen Sie zuerst Ihren persönlichen Webex-Raum unter Datei › Optionen fest
+	Add Attendees…	Teilnehmer hinzufügen…
+	Add to the meeting	Zur Besprechung hinzufügen
+	Choose from the address book	Aus dem Adressbuch auswählen
+	Click a room to see when it's free; double-click it to book it.	Klicken Sie auf einen Raum, um zu sehen, wann er frei ist; ein Doppelklick bucht ihn.
+	Hide its day	Tag ausblenden
+	Its link is on your Webex profile, under Personal Room. It's kept in File › Options › Calendar for the next meetings.	Der Link steht in Ihrem Webex-Profil unter „Persönlicher Raum“. Er wird für die nächsten Besprechungen unter Datei › Optionen › Kalender gespeichert.
+	Not a Webex personal room: https://<site>.webex.com/meet/<name>	Kein persönlicher Webex-Raum: https://<site>.webex.com/meet/<name>
+	Not an address: {what}	Keine Adresse: {what}
+	Puts your Webex personal room in the meeting	Fügt Ihren persönlichen Webex-Raum in die Besprechung ein
+	Select Attendees and Resources	Teilnehmer und Ressourcen auswählen
+	Your Webex personal room	Ihr persönlicher Webex-Raum
+	Required ->	Erforderlich ->
+	Optional ->	Optional ->
+	Resources ->	Ressourcen ->
+	Required attendee	Erforderlicher Teilnehmer
+	Optional attendee	Optionaler Teilnehmer
+	Book this room	Diesen Raum buchen
+	Remove this room	Diesen Raum entfernen
 	Join the Webex meeting:	An der Webex-Besprechung teilnehmen:
 	Webex personal room	Persönlicher Webex-Raum
 	Webex Meeting, in a new appointment's window, puts it in for the guests to join	Webex-Besprechung im Fenster eines neuen Termins fügt ihn ein, damit die Gäste teilnehmen können

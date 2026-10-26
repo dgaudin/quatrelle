@@ -1218,7 +1218,6 @@ month	May	mayo
 	Scheduling Assistant	Asistente para programación
 	The rooms couldn't be read: {error}	No se pudieron leer las salas: {error}
 	Organizer	Organizador
-	Guest	Invitado
 	Room	Sala
 	Free	Libre
 	Busy	Ocupado
@@ -1452,7 +1451,24 @@ month	May	mayo
 	Every year on {day} {month}	Cada año el {day} de {month}
 	Every {n} years on {day} {month}	Cada {n} años el {day} de {month}
 	Webex Meeting	Reunión de Webex
-	Set your Webex personal room in File › Options first	Indique primero su sala personal de Webex en Archivo › Opciones
+	Add Attendees…	Agregar asistentes…
+	Add to the meeting	Agregar a la reunión
+	Choose from the address book	Elegir en la libreta de direcciones
+	Click a room to see when it's free; double-click it to book it.	Haga clic en una sala para ver cuándo está libre; con doble clic la reserva.
+	Hide its day	Ocultar su día
+	Its link is on your Webex profile, under Personal Room. It's kept in File › Options › Calendar for the next meetings.	El enlace está en su perfil de Webex, en Sala personal. Se guarda en Archivo › Opciones › Calendario para las próximas reuniones.
+	Not a Webex personal room: https://<site>.webex.com/meet/<name>	No es una sala personal de Webex: https://<site>.webex.com/meet/<nombre>
+	Not an address: {what}	No es una dirección: {what}
+	Puts your Webex personal room in the meeting	Inserta su sala personal de Webex en la reunión
+	Select Attendees and Resources	Seleccionar asistentes y recursos
+	Your Webex personal room	Su sala personal de Webex
+	Required ->	Obligatorio ->
+	Optional ->	Opcional ->
+	Resources ->	Recursos ->
+	Required attendee	Asistente obligatorio
+	Optional attendee	Asistente opcional
+	Book this room	Reservar esta sala
+	Remove this room	Quitar esta sala
 	Join the Webex meeting:	Unirse a la reunión de Webex:
 	Webex personal room	Sala personal de Webex
 	Webex Meeting, in a new appointment's window, puts it in for the guests to join	Reunión de Webex, en la ventana de una cita nueva, la inserta para que los invitados se unan

@@ -78,6 +78,8 @@ pub struct EventForm {
     pub window: u64,
     /// Outlook's Appointment Recurrence, while it's open over the window.
     pub recurrence: Option<super::recurrence::RecurrenceUi>,
+    /// Outlook's Select Attendees and Resources, while it's open over the window.
+    pub attendees_book: Option<Box<super::AttendeesUi>>,
 }
 
 impl EventForm {

@@ -153,6 +153,10 @@ impl MailApp {
         let open = windows.len().saturating_sub(1);
         let mut closed: Vec<u64> = Vec::new();
         for (n, (wid, f)) in windows.iter_mut().enumerate() {
+            // Its address book, listed from the session's (which the window only reads).
+            if let Some(book) = f.attendees_book.as_mut() {
+                book.search.refresh(&mut self.session);
+            }
             let title = if f.summary.trim().is_empty() { tl!("Untitled").to_string() } else { f.summary.trim().to_string() };
             let title = if f.inviting {
                 i18n::as_written(|| tf!("{subject} – Meeting", subject = title))

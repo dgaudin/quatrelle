@@ -1217,7 +1217,6 @@ month	May	maggio
 	Scheduling Assistant	Assistente pianificazione
 	The rooms couldn't be read: {error}	Impossibile leggere le sale: {error}
 	Organizer	Organizzatore
-	Guest	Invitato
 	Room	Sala
 	Free	Libero
 	Busy	Occupato
@@ -1451,7 +1450,24 @@ month	May	maggio
 	Every year on {day} {month}	Ogni anno il {day} {month}
 	Every {n} years on {day} {month}	Ogni {n} anni il {day} {month}
 	Webex Meeting	Riunione Webex
-	Set your Webex personal room in File › Options first	Imposta prima la tua stanza personale Webex in File › Opzioni
+	Add Attendees…	Aggiungi partecipanti…
+	Add to the meeting	Aggiungi alla riunione
+	Choose from the address book	Scegli dalla rubrica
+	Click a room to see when it's free; double-click it to book it.	Fai clic su una sala per vedere quando è libera; con un doppio clic la prenoti.
+	Hide its day	Nascondi la giornata
+	Its link is on your Webex profile, under Personal Room. It's kept in File › Options › Calendar for the next meetings.	Il link si trova nel tuo profilo Webex, alla voce Stanza personale. Viene conservato in File › Opzioni › Calendario per le prossime riunioni.
+	Not a Webex personal room: https://<site>.webex.com/meet/<name>	Non è una stanza personale Webex: https://<site>.webex.com/meet/<nome>
+	Not an address: {what}	Non è un indirizzo: {what}
+	Puts your Webex personal room in the meeting	Inserisce la tua stanza personale Webex nella riunione
+	Select Attendees and Resources	Seleziona partecipanti e risorse
+	Your Webex personal room	La tua stanza personale Webex
+	Required ->	Obbligatori ->
+	Optional ->	Facoltativi ->
+	Resources ->	Risorse ->
+	Required attendee	Partecipante obbligatorio
+	Optional attendee	Partecipante facoltativo
+	Book this room	Prenota questa sala
+	Remove this room	Rimuovi questa sala
 	Join the Webex meeting:	Partecipa alla riunione Webex:
 	Webex personal room	Stanza personale Webex
 	Webex Meeting, in a new appointment's window, puts it in for the guests to join	Riunione Webex, nella finestra di un nuovo appuntamento, la inserisce perché gli invitati vi partecipino
