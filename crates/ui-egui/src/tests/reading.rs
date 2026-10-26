@@ -691,3 +691,44 @@ fn the_header_stays_while_the_message_scrolls() {
     assert!(moved, "the text scrolled up: {first} → {:?}", text_y(&after, "Paragraph 1 of a long message."));
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// The language model's answer above the message closes with the cross at its top right,
+/// unused.
+#[test]
+fn the_assistants_answer_closes_with_its_cross() {
+    let (mut a, dir) = app("assistant-close");
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    a.run("assistant.settings", json!({"url": "http://localhost:11434/v1", "model": "llama3.1"}));
+    a.run("list.open", json!({"key": "sample:1:1:INBOX"}));
+    a.run("assistant.suggestReply", json!({}));
+    let id = a.session.assistant.as_ref().map(|x| x.id).unwrap();
+    a.session.apply(quatrelle_engine::model::Event::LlmAnswered { id, text: "Bonjour, c'est noté.".into(), error: None });
+    frame(&ctx, &mut a, vec![]);
+    let shapes = frame_shapes(&ctx, &mut a, vec![], egui::vec2(1280.0, 800.0));
+    let title = shapes
+        .iter()
+        .find_map(|s| match s {
+            egui::Shape::Text(t) if t.galley.text() == "Suggested reply" => Some(t.pos),
+            _ => None,
+        })
+        .unwrap();
+    // Its background: the least painted box around its title (still fading in, so not by colour).
+    let panel = shapes
+        .iter()
+        .filter_map(|s| match s {
+            egui::Shape::Rect(r) if r.fill.a() > 0 && r.rect.contains(title) => Some(r.rect),
+            _ => None,
+        })
+        .min_by(|x, y| x.area().total_cmp(&y.area()))
+        .unwrap();
+    let cross = panel.right_top() + egui::vec2(-21.0, 21.0);
+    let button = |pressed| Event::PointerButton { pos: cross, button: egui::PointerButton::Primary, pressed, modifiers: Modifiers::NONE };
+    frame(&ctx, &mut a, vec![Event::PointerMoved(cross)]);
+    frame(&ctx, &mut a, vec![button(true)]);
+    frame(&ctx, &mut a, vec![button(false)]);
+    frame(&ctx, &mut a, vec![]);
+    assert!(a.session.assistant.is_none(), "closed");
+    assert!(a.session.compose.is_none(), "no reply started");
+    let _ = std::fs::remove_dir_all(dir);
+}

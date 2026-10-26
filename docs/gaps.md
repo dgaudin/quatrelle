@@ -777,7 +777,8 @@ tester's does, a contact as Exchange keeps it, Outlook's clipboard), then fixed 
   then the model: picked from the ones the server lists (`GET …/models`, asked again when the
   address or key changes, or with the button beside), or typed. In the reading pane:
   Summarize (the whole conversation for a message in one), Suggest a reply (then Reply with this
-  text), File it (one of the account's folders and categories, as buttons). In the message
+  text), File it (one of the account's folders and categories, as buttons); the answer closes
+  with the cross at its top right, unused. In the message
   window's Review tab: Rewrite the text written (correct, shorter, more formal, friendlier, in
   English), to use in its place or not. Azure OpenAI's own addresses and key header aren't.
 - **A reply in the reading pane, as Outlook's:** reading another message (or opening another

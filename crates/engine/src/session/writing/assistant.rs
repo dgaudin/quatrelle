@@ -392,6 +392,11 @@ impl Session {
         Ok(serde_json::json!({ "url": self.prefs.llm_url, "model": self.prefs.llm_model }))
     }
 
+    /// Put the language model's answer away, unused; one still coming is dropped when it comes.
+    pub fn close_assistant(&mut self) -> CmdResult {
+        Ok(serde_json::json!({ "closed": self.assistant.take().is_some() }))
+    }
+
     /// Ask the language model's server which models it offers; they come in as
     /// [`Session::llm_models`].
     pub fn list_llm_models(&mut self) -> CmdResult {
