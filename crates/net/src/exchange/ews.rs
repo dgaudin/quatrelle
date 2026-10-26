@@ -103,6 +103,9 @@ pub struct Client {
     /// The folders of the shared mailboxes listed: the mailbox each is in (its address) and the
     /// role it has there (`Other` for its top folder and the folders that aren't special).
     shared_roles: RefCell<HashMap<String, (String, FolderRole)>>,
+    /// The User-Agent every request names, instead of Quatrelle's (a server that lets in only the
+    /// clients it knows).
+    user_agent: Option<String>,
     /// The next change of the rules removes Outlook's own copy of them (the user said so).
     replace_outlook_rules: Cell<bool>,
 }
@@ -280,7 +283,16 @@ impl Client {
             discovered: RefCell::new(None),
             shared_roles: RefCell::new(HashMap::new()),
             replace_outlook_rules: Cell::new(false),
+            user_agent: None,
         })
+    }
+
+    /// The same session naming itself `agent` to the server (`None`, or nothing usable: as
+    /// Quatrelle).
+    #[must_use]
+    pub fn with_agent(mut self, agent: Option<&str>) -> Client {
+        self.user_agent = agent.and_then(quatrelle_model::user_agent);
+        self
     }
 }
 
@@ -492,8 +504,8 @@ mod sizes;
 mod sync;
 mod xml;
 
-pub use autodiscover::autodiscover;
 use autodiscover::{alternative_mailboxes, autodiscover_public, autodiscover_smtp, autodiscover_urls};
+pub use autodiscover::{autodiscover, autodiscover_as};
 pub use changes::{append, apply_remote, send, vote};
 pub use listening::{Heard, Listener};
 use sync::restriction;

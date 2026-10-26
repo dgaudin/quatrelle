@@ -124,6 +124,11 @@ pub struct Data {
     pub directory: Vec<(String, String)>,
     /// The Global Address List: (name, address), found by the start of a name or an address.
     pub people: Vec<(String, String)>,
+    /// The `User-Agent` of each request.
+    pub agents: Vec<String>,
+    /// Refuse (HTTP 403) every request naming another `User-Agent`: a server that lets in only
+    /// the clients it knows.
+    pub only_agent: Option<String>,
     /// Answer item searches (the mail sync) only after this long: a mailbox taking minutes.
     pub slow_sync: Option<std::time::Duration>,
     /// Give messages' whole sources only after this long (a big attachment on a slow line).
@@ -249,6 +254,8 @@ impl Default for Data {
             wlinks: Vec::new(),
             directory: Vec::new(),
             people: Vec::new(),
+            agents: Vec::new(),
+            only_agent: None,
             slow_sync: None,
             slow_sources: None,
             slow_counts: None,

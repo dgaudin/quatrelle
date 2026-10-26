@@ -172,6 +172,10 @@ pub struct AccountConfig {
     /// typed in Other E-mail Address), the last used first.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub send_from: Vec<String>,
+    /// The User-Agent its Exchange (EWS) requests name instead of Quatrelle's, for a server that
+    /// lets in only the clients it knows. Checked by [`user_agent`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user_agent: Option<String>,
     /// Online only (issue #4): none of the account's mail is kept on this computer. Its folders,
     /// messages, changes waiting for the server and Outbox are held in memory while Quatrelle
     /// runs, and a message is downloaded when it's opened. Not for POP, whose mail has no other
@@ -198,6 +202,17 @@ pub struct AccountConfig {
     /// account).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub oauth_tenant: Option<String>,
+}
+
+/// Longest User-Agent an account can name.
+pub const MAX_USER_AGENT: usize = 256;
+
+/// A User-Agent as an account may name it (RFC 9110 10.1.5: visible ASCII and spaces), trimmed;
+/// `None` when it's empty, too long or has anything else (a line break would end the header).
+pub fn user_agent(s: &str) -> Option<String> {
+    let s = s.trim();
+    let ok = !s.is_empty() && s.len() <= MAX_USER_AGENT && s.bytes().all(|b| b == b' ' || b.is_ascii_graphic());
+    ok.then(|| s.to_string())
 }
 
 /// What a folder is for (RFC 6154 special-use attributes, or the usual names when a server has
