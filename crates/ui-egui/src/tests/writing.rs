@@ -219,12 +219,12 @@ fn the_address_book_adds_people_to_to_cc_and_bcc() {
     a.ui.dialog = Some(Dialog::select_names(&c, "to"));
     frame(&ctx, &mut a, vec![]);
     let Some(Dialog::SelectNames(f)) = a.ui.dialog.as_mut() else { panic!("no dialog") };
-    assert!(f.list.iter().any(|x| x.email == "zoe@studio.example"), "everyone mail was exchanged with: {:?}", f.list);
-    f.query = "zoe".into();
-    f.stale = true;
+    assert!(f.search.list.iter().any(|x| x.email == "zoe@studio.example"), "everyone mail was exchanged with: {:?}", f.search.list);
+    f.search.query = "zoe".into();
+    f.search.stale = true;
     frame(&ctx, &mut a, vec![]);
     let Some(Dialog::SelectNames(f)) = a.ui.dialog.as_mut() else { panic!("no dialog") };
-    assert!(!f.list.is_empty() && f.list.iter().all(|x| x.email.contains("zoe") || x.name.to_lowercase().contains("zoe")));
+    assert!(!f.search.list.is_empty() && f.search.list.iter().all(|x| x.email.contains("zoe") || x.name.to_lowercase().contains("zoe")));
     f.to = "Zoe Park <zoe@studio.example>; ".into();
     f.cc = "ann@x.example".into();
     // OK: the fields go to the message.

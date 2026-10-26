@@ -1,6 +1,6 @@
 //! The event and contact forms: what they share (their rows, fields and headings), the event
-//! form in `event` (with its Room Finder in `rooms` and its Scheduling Assistant in
-//! `scheduling`), the contact form in `contact`.
+//! form in `event` (with its Room Finder in `rooms`, its Scheduling Assistant in `scheduling`
+//! and its address book in `attendees`), the contact form in `contact`.
 
 use egui::{Margin, RichText, Sense, Ui, vec2};
 use quatrelle_engine::Session;
@@ -11,14 +11,16 @@ use crate::icons::{self, Icon};
 use crate::theme::{self, Tokens};
 use crate::{Action, widgets};
 
+mod attendees;
 mod contact;
 mod event;
 mod meeting;
 pub(crate) mod pickers;
 pub(crate) mod recurrence;
-mod rooms;
+pub(crate) mod rooms;
 pub(crate) mod scheduling;
 
+pub use attendees::{AttendeesUi, Line, line_button_id};
 pub use contact::{ContactForm, contact};
 pub use event::{EventForm, event};
 pub use meeting::meeting;
@@ -148,6 +150,25 @@ pub(super) fn form_row(ui: &mut Ui, t: &Tokens, icons_used: bool, icon: Option<I
         add(ui);
     });
     ui.add_space(8.0);
+}
+
+/// A form row whose label is a button (`id`), as Outlook's Required and Optional open the
+/// address book. `true`: the button was pressed.
+pub(super) fn button_row(ui: &mut Ui, t: &Tokens, id: egui::Id, label: &str, tip: &str, add: impl FnOnce(&mut Ui)) -> bool {
+    let mut pressed = false;
+    ui.horizontal_top(|ui| {
+        let (r, _) = ui.allocate_exact_size(vec2(LABEL_W, FIELD_H), Sense::hover());
+        let button = egui::Rect::from_min_size(r.min, vec2(LABEL_W - 12.0, FIELD_H));
+        let resp = ui.interact(button, id, Sense::click()).on_hover_text(tip);
+        let enabled = ui.is_enabled();
+        let fill = if enabled && resp.hovered() { t.hover } else { t.surface };
+        ui.painter().rect(button, 4.0, fill, egui::Stroke::new(1.0, t.border), egui::StrokeKind::Inside);
+        ui.painter().text(button.center(), egui::Align2::CENTER_CENTER, tl!(label), theme::regular(13.0), if enabled { t.text } else { t.dim });
+        pressed = enabled && resp.clicked();
+        add(ui);
+    });
+    ui.add_space(8.0);
+    pressed
 }
 
 /// A one-line field of a form, `width` wide (the rest of the row when infinite).

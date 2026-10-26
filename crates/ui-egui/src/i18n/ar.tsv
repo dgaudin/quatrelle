@@ -1214,7 +1214,6 @@ month	May	مايو
 	Scheduling Assistant	مساعد الجدولة
 	The rooms couldn't be read: {error}	تعذّرت قراءة الغرف: {error}
 	Organizer	المنظّم
-	Guest	مدعو
 	Room	غرفة
 	Free	متاح
 	Busy	مشغول
@@ -1448,7 +1447,24 @@ month	May	مايو
 	Every year on {day} {month}	كل سنة في {day} {month}
 	Every {n} years on {day} {month}	كل {n} سنوات في {day} {month}
 	Webex Meeting	اجتماع Webex
-	Set your Webex personal room in File › Options first	عيّن أولاً غرفتك الشخصية في Webex من ملف › خيارات
+	Add Attendees…	إضافة حضور…
+	Add to the meeting	إضافة إلى الاجتماع
+	Choose from the address book	الاختيار من دفتر العناوين
+	Click a room to see when it's free; double-click it to book it.	انقر غرفة لترى متى تكون متاحة، وانقر نقرًا مزدوجًا لحجزها.
+	Hide its day	إخفاء يومها
+	Its link is on your Webex profile, under Personal Room. It's kept in File › Options › Calendar for the next meetings.	رابطها موجود في ملفك الشخصي على Webex، ضمن الغرفة الشخصية. ويُحفظ في ملف › خيارات › التقويم للاجتماعات التالية.
+	Not a Webex personal room: https://<site>.webex.com/meet/<name>	ليست غرفة Webex شخصية: https://<site>.webex.com/meet/<name>
+	Not an address: {what}	ليس عنوانًا: {what}
+	Puts your Webex personal room in the meeting	يضيف غرفتك الشخصية في Webex إلى الاجتماع
+	Select Attendees and Resources	تحديد الحضور والموارد
+	Your Webex personal room	غرفتك الشخصية في Webex
+	Required ->	مطلوب ->
+	Optional ->	اختياري ->
+	Resources ->	الموارد ->
+	Required attendee	حاضر مطلوب
+	Optional attendee	حاضر اختياري
+	Book this room	حجز هذه الغرفة
+	Remove this room	إزالة هذه الغرفة
 	Join the Webex meeting:	الانضمام إلى اجتماع Webex:
 	Webex personal room	غرفة Webex الشخصية
 	Webex Meeting, in a new appointment's window, puts it in for the guests to join	يدرجها زر اجتماع Webex في نافذة موعد جديد لينضم إليها الضيوف

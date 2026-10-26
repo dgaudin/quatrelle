@@ -1217,7 +1217,6 @@ month	May	Май
 	Scheduling Assistant	Помощник по планированию
 	The rooms couldn't be read: {error}	Не удалось получить переговорные: {error}
 	Organizer	Организатор
-	Guest	Участник
 	Room	Переговорная
 	Free	Свободен
 	Busy	Занят
@@ -1451,7 +1450,24 @@ month	May	Май
 	Every year on {day} {month}	Каждый год, {day} {month}
 	Every {n} years on {day} {month}	Каждые {n} г., {day} {month}
 	Webex Meeting	Собрание Webex
-	Set your Webex personal room in File › Options first	Сначала укажите личную комнату Webex в разделе Файл › Параметры
+	Add Attendees…	Добавить участников…
+	Add to the meeting	Добавить в собрание
+	Choose from the address book	Выбрать в адресной книге
+	Click a room to see when it's free; double-click it to book it.	Щёлкните переговорную, чтобы увидеть, когда она свободна; двойной щелчок бронирует её.
+	Hide its day	Скрыть день
+	Its link is on your Webex profile, under Personal Room. It's kept in File › Options › Calendar for the next meetings.	Ссылка есть в вашем профиле Webex, в разделе «Персональная комната». Она сохраняется в Файл › Параметры › Календарь для следующих собраний.
+	Not a Webex personal room: https://<site>.webex.com/meet/<name>	Это не личная комната Webex: https://<site>.webex.com/meet/<имя>
+	Not an address: {what}	Не адрес: {what}
+	Puts your Webex personal room in the meeting	Вставляет вашу личную комнату Webex в собрание
+	Select Attendees and Resources	Выбор участников и ресурсов
+	Your Webex personal room	Ваша личная комната Webex
+	Required ->	Обязательные ->
+	Optional ->	Необязательные ->
+	Resources ->	Ресурсы ->
+	Required attendee	Обязательный участник
+	Optional attendee	Необязательный участник
+	Book this room	Забронировать эту переговорную
+	Remove this room	Убрать эту переговорную
 	Join the Webex meeting:	Присоединиться к собранию Webex:
 	Webex personal room	Личная комната Webex
 	Webex Meeting, in a new appointment's window, puts it in for the guests to join	Кнопка «Собрание Webex» в окне новой встречи вставляет её, чтобы гости могли присоединиться

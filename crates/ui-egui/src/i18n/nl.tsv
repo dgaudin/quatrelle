@@ -1214,7 +1214,6 @@ month	May	mei
 	Scheduling Assistant	Planningsassistent
 	The rooms couldn't be read: {error}	De ruimtes konden niet worden gelezen: {error}
 	Organizer	Organisator
-	Guest	Gast
 	Room	Ruimte
 	Free	Vrij
 	Busy	Bezet
@@ -1448,7 +1447,24 @@ month	May	mei
 	Every year on {day} {month}	Elk jaar op {day} {month}
 	Every {n} years on {day} {month}	Elke {n} jaar op {day} {month}
 	Webex Meeting	Webex-vergadering
-	Set your Webex personal room in File › Options first	Stel eerst uw persoonlijke Webex-ruimte in via Bestand › Opties
+	Add Attendees…	Deelnemers toevoegen…
+	Add to the meeting	Aan de vergadering toevoegen
+	Choose from the address book	Kiezen uit het adresboek
+	Click a room to see when it's free; double-click it to book it.	Klik op een ruimte om te zien wanneer die vrij is; dubbelklik om hem te boeken.
+	Hide its day	Dag verbergen
+	Its link is on your Webex profile, under Personal Room. It's kept in File › Options › Calendar for the next meetings.	De link staat in uw Webex-profiel, onder Persoonlijke ruimte. Hij wordt voor volgende vergaderingen bewaard in Bestand › Opties › Agenda.
+	Not a Webex personal room: https://<site>.webex.com/meet/<name>	Geen persoonlijke Webex-ruimte: https://<site>.webex.com/meet/<naam>
+	Not an address: {what}	Geen adres: {what}
+	Puts your Webex personal room in the meeting	Voegt uw persoonlijke Webex-ruimte toe aan de vergadering
+	Select Attendees and Resources	Deelnemers en middelen selecteren
+	Your Webex personal room	Uw persoonlijke Webex-ruimte
+	Required ->	Vereist ->
+	Optional ->	Optioneel ->
+	Resources ->	Middelen ->
+	Required attendee	Vereiste deelnemer
+	Optional attendee	Optionele deelnemer
+	Book this room	Deze ruimte boeken
+	Remove this room	Deze ruimte verwijderen
 	Join the Webex meeting:	Deelnemen aan de Webex-vergadering:
 	Webex personal room	Persoonlijke Webex-ruimte
 	Webex Meeting, in a new appointment's window, puts it in for the guests to join	Webex-vergadering, in het venster van een nieuwe afspraak, voegt deze in zodat de gasten kunnen deelnemen

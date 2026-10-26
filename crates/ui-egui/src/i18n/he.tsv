@@ -1214,7 +1214,6 @@ month	May	מאי
 	Scheduling Assistant	עוזר התזמון
 	The rooms couldn't be read: {error}	לא ניתן היה לקרוא את החדרים: {error}
 	Organizer	מארגן
-	Guest	אורח
 	Room	חדר
 	Free	פנוי
 	Busy	עסוק
@@ -1448,7 +1447,24 @@ month	May	מאי
 	Every year on {day} {month}	כל שנה ב-{day} ב{month}
 	Every {n} years on {day} {month}	כל {n} שנים ב-{day} ב{month}
 	Webex Meeting	פגישת Webex
-	Set your Webex personal room in File › Options first	הגדר תחילה את החדר האישי שלך ב-Webex בקובץ › אפשרויות
+	Add Attendees…	הוסף משתתפים…
+	Add to the meeting	הוסף לפגישה
+	Choose from the address book	בחר מפנקס הכתובות
+	Click a room to see when it's free; double-click it to book it.	לחץ על חדר כדי לראות מתי הוא פנוי; לחיצה כפולה מזמינה אותו.
+	Hide its day	הסתר את היום
+	Its link is on your Webex profile, under Personal Room. It's kept in File › Options › Calendar for the next meetings.	הקישור נמצא בפרופיל ה-Webex שלך, תחת חדר אישי. הוא נשמר בקובץ › אפשרויות › לוח שנה לפגישות הבאות.
+	Not a Webex personal room: https://<site>.webex.com/meet/<name>	זה אינו חדר אישי ב-Webex: https://<site>.webex.com/meet/<name>
+	Not an address: {what}	אינה כתובת: {what}
+	Puts your Webex personal room in the meeting	מוסיף את החדר האישי שלך ב-Webex לפגישה
+	Select Attendees and Resources	בחירת משתתפים ומשאבים
+	Your Webex personal room	החדר האישי שלך ב-Webex
+	Required ->	נדרש ->
+	Optional ->	אופציונלי ->
+	Resources ->	משאבים ->
+	Required attendee	משתתף נדרש
+	Optional attendee	משתתף אופציונלי
+	Book this room	הזמן את החדר הזה
+	Remove this room	הסר את החדר הזה
 	Join the Webex meeting:	הצטרף לפגישת Webex:
 	Webex personal room	חדר אישי ב-Webex
 	Webex Meeting, in a new appointment's window, puts it in for the guests to join	פגישת Webex, בחלון של פגישה חדשה, מוסיפה אותו כדי שהמוזמנים יצטרפו

@@ -405,18 +405,8 @@ impl MailApp {
 
         // The address book reads the session's people: what is known now, listed again as the
         // book fills in (built a slice per frame, below).
-        if let Some(Dialog::SelectNames(f)) = self.ui.dialog.as_mut()
-            && (f.stale || self.session.contacts_pending())
-        {
-            // Opened: with the address book chosen to open with (one gone is everyone).
-            if f.source.is_empty() {
-                f.books = self.session.address_books();
-                f.default_source = self.session.prefs.address_book.clone();
-                let known = f.default_source == "people" || f.books.iter().any(|(b, _, _)| *b == f.default_source);
-                f.source = if known { f.default_source.clone() } else { "all".into() };
-            }
-            f.list = self.session.address_book_now(&f.source, &f.query);
-            f.stale = false;
+        if let Some(Dialog::SelectNames(f)) = self.ui.dialog.as_mut() {
+            f.search.refresh(&mut self.session);
         }
         // Attach Item's list: the items of the kind and folder chosen, matching the words typed.
         if let Some(Dialog::AttachItem(f)) = self.ui.dialog.as_mut()

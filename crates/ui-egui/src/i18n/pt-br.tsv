@@ -1218,7 +1218,6 @@ month	May	maio
 	Scheduling Assistant	Assistente de agendamento
 	The rooms couldn't be read: {error}	Não foi possível ler as salas: {error}
 	Organizer	Organizador
-	Guest	Convidado
 	Room	Sala
 	Free	Livre
 	Busy	Ocupado
@@ -1452,7 +1451,24 @@ month	May	maio
 	Every year on {day} {month}	Todo ano em {day} de {month}
 	Every {n} years on {day} {month}	A cada {n} anos em {day} de {month}
 	Webex Meeting	Reunião do Webex
-	Set your Webex personal room in File › Options first	Defina primeiro sua sala pessoal do Webex em Arquivo › Opções
+	Add Attendees…	Adicionar participantes…
+	Add to the meeting	Adicionar à reunião
+	Choose from the address book	Escolher no catálogo de endereços
+	Click a room to see when it's free; double-click it to book it.	Clique em uma sala para ver quando ela está livre; um clique duplo a reserva.
+	Hide its day	Ocultar o dia
+	Its link is on your Webex profile, under Personal Room. It's kept in File › Options › Calendar for the next meetings.	O link está no seu perfil do Webex, em Sala pessoal. Ele fica guardado em Arquivo › Opções › Calendário para as próximas reuniões.
+	Not a Webex personal room: https://<site>.webex.com/meet/<name>	Não é uma sala pessoal do Webex: https://<site>.webex.com/meet/<nome>
+	Not an address: {what}	Não é um endereço: {what}
+	Puts your Webex personal room in the meeting	Insere sua sala pessoal do Webex na reunião
+	Select Attendees and Resources	Selecionar participantes e recursos
+	Your Webex personal room	Sua sala pessoal do Webex
+	Required ->	Obrigatório ->
+	Optional ->	Opcional ->
+	Resources ->	Recursos ->
+	Required attendee	Participante obrigatório
+	Optional attendee	Participante opcional
+	Book this room	Reservar esta sala
+	Remove this room	Remover esta sala
 	Join the Webex meeting:	Participar da reunião do Webex:
 	Webex personal room	Sala pessoal do Webex
 	Webex Meeting, in a new appointment's window, puts it in for the guests to join	Reunião do Webex, na janela de um novo compromisso, a insere para os convidados participarem

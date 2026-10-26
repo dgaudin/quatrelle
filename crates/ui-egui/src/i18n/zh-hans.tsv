@@ -1215,7 +1215,6 @@ month	May	5月
 	Scheduling Assistant	日程安排助理
 	The rooms couldn't be read: {error}	无法读取会议室：{error}
 	Organizer	组织者
-	Guest	与会者
 	Room	会议室
 	Free	空闲
 	Busy	忙碌
@@ -1449,7 +1448,24 @@ month	May	5月
 	Every year on {day} {month}	每年的{month}{day}日
 	Every {n} years on {day} {month}	每 {n} 年的{month}{day}日
 	Webex Meeting	Webex 会议
-	Set your Webex personal room in File › Options first	请先在“文件 › 选项”中设置 Webex 个人会议室
+	Add Attendees…	添加与会者…
+	Add to the meeting	添加到会议
+	Choose from the address book	从通讯簿中选择
+	Click a room to see when it's free; double-click it to book it.	单击会议室可查看其空闲时间；双击即可预订。
+	Hide its day	隐藏当天
+	Its link is on your Webex profile, under Personal Room. It's kept in File › Options › Calendar for the next meetings.	链接位于你的 Webex 个人资料的“个人会议室”中。它会保存在“文件 › 选项 › 日历”中，供以后的会议使用。
+	Not a Webex personal room: https://<site>.webex.com/meet/<name>	不是 Webex 个人会议室: https://<site>.webex.com/meet/<name>
+	Not an address: {what}	不是地址: {what}
+	Puts your Webex personal room in the meeting	将你的 Webex 个人会议室插入会议
+	Select Attendees and Resources	选择与会者和资源
+	Your Webex personal room	你的 Webex 个人会议室
+	Required ->	必需 ->
+	Optional ->	可选 ->
+	Resources ->	资源 ->
+	Required attendee	必需与会者
+	Optional attendee	可选与会者
+	Book this room	预订此会议室
+	Remove this room	移除此会议室
 	Join the Webex meeting:	加入 Webex 会议:
 	Webex personal room	Webex 个人会议室
 	Webex Meeting, in a new appointment's window, puts it in for the guests to join	新约会窗口中的“Webex 会议”会将其插入，供与会者加入

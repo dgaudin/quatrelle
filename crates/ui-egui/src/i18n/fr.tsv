@@ -1218,7 +1218,6 @@ month	May	mai
 	Scheduling Assistant	Assistant de planification
 	The rooms couldn't be read: {error}	Les salles n'ont pas pu être lues : {error}
 	Organizer	Organisateur
-	Guest	Invité
 	Room	Salle
 	Free	Libre
 	Busy	Occupé
@@ -1452,7 +1451,24 @@ month	May	mai
 	Every year on {day} {month}	Chaque année ({day} {month})
 	Every {n} years on {day} {month}	Tous les {n} ans ({day} {month})
 	Webex Meeting	Réunion Webex
-	Set your Webex personal room in File › Options first	Indiquez d’abord votre salle personnelle Webex dans Fichier › Options
+	Add Attendees…	Ajouter des participants…
+	Add to the meeting	Ajouter à la réunion
+	Choose from the address book	Choisir dans le carnet d’adresses
+	Click a room to see when it's free; double-click it to book it.	Un clic sur une salle montre quand elle est libre ; un double-clic la réserve.
+	Hide its day	Masquer sa journée
+	Its link is on your Webex profile, under Personal Room. It's kept in File › Options › Calendar for the next meetings.	Son lien figure dans votre profil Webex, sous Salle personnelle. Il est gardé dans Fichier › Options › Calendrier pour les réunions suivantes.
+	Not a Webex personal room: https://<site>.webex.com/meet/<name>	Ce n’est pas une salle personnelle Webex : https://<site>.webex.com/meet/<nom>
+	Not an address: {what}	Adresse non valide : {what}
+	Puts your Webex personal room in the meeting	Ajoute votre salle personnelle Webex à la réunion
+	Select Attendees and Resources	Choisir les participants et les ressources
+	Your Webex personal room	Votre salle personnelle Webex
+	Required ->	Obligatoire ->
+	Optional ->	Facultatif ->
+	Resources ->	Ressources ->
+	Required attendee	Participant obligatoire
+	Optional attendee	Participant facultatif
+	Book this room	Réserver cette salle
+	Remove this room	Retirer cette salle
 	Join the Webex meeting:	Rejoindre la réunion Webex :
 	Webex personal room	Salle personnelle Webex
 	Webex Meeting, in a new appointment's window, puts it in for the guests to join	Réunion Webex, dans la fenêtre d’un nouveau rendez-vous, l’insère pour que les invités la rejoignent
