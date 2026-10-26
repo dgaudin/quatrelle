@@ -520,7 +520,7 @@ fn close_row(ui: &mut Ui) -> bool {
     button_row(ui, |ui| !ui.button(tl!("Close")).clicked())
 }
 
-fn buttons(ui: &mut Ui, t: &Tokens, ok: &str, ok_enabled: bool) -> (bool, bool) {
+pub(crate) fn buttons(ui: &mut Ui, t: &Tokens, ok: &str, ok_enabled: bool) -> (bool, bool) {
     let mut res = (false, false);
     ui.add_space(10.0);
     button_row(ui, |ui| {

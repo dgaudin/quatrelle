@@ -537,3 +537,41 @@ fn sending_from_a_shared_mailbox_tells_exchange() {
     assert!(matches!(&refused, Event::SendFailed { error, .. } if error.contains("Send As")), "{refused:?}");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// The directory is searched by the start of a name or an address, on the second connection:
+/// several people, one, or none.
+#[test]
+fn the_directory_is_searched_by_name() {
+    let mut d = Data::default();
+    d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    d.people = vec![
+        ("Proginov Reseau".into(), "reseaux@contoso.example".into()),
+        ("Rémi Restout".into(), "remi.restout@contoso.example".into()),
+        ("Zoe Park".into(), "zoe@contoso.example".into()),
+    ];
+    let server = serve(d);
+    let dir = std::env::temp_dir().join(format!("quatrelle-ews-gal-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let mut pool = crate::worker::Pool::new(Store::open(&dir).unwrap(), Arc::new(crate::worker::MemoryCredentials::default()));
+    let account = AccountConfig {
+        id: "a1".into(),
+        email: "riley@contoso.example".into(),
+        username: format!("{DOMAIN}\\{USER}"),
+        ews: Some(server.url.clone()),
+        ..Default::default()
+    };
+    pool.submit(Job::Start { account, password: Some(Secret(PASSWORD.into())) });
+    until(&pool, "listed", |e| matches!(e, Event::Folders { .. }));
+    let mut ask = |query: &str| {
+        pool.submit(Job::SearchDirectory { account: "a1".into(), query: query.into() });
+        match until(&pool, query, |e| matches!(e, Event::DirectoryPeople { query: q, .. } if q == query)).pop().unwrap() {
+            Event::DirectoryPeople { people, error: None, .. } => people.into_iter().map(|p| p.email).collect::<Vec<_>>(),
+            other => panic!("{other:?}"),
+        }
+    };
+    assert_eq!(ask("re"), ["reseaux@contoso.example", "remi.restout@contoso.example"]);
+    assert_eq!(ask("Reseau"), ["reseaux@contoso.example"]);
+    assert_eq!(ask("zoe@"), ["zoe@contoso.example"]);
+    assert!(ask("nobody").is_empty());
+    let _ = std::fs::remove_dir_all(&dir);
+}

@@ -576,3 +576,89 @@ fn ctrl_k_checks_the_names_typed() {
     assert_eq!(a.session.notices.len(), notices, "the link form, not Check Names (\"nobody here\" would be said again)");
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// The sample with an Exchange account beside it (its directory is searched), and its id.
+fn with_exchange(a: &mut MailApp) -> String {
+    let config = quatrelle_engine::model::AccountConfig {
+        name: "Riley".into(),
+        email: "riley@contoso.example".into(),
+        username: "riley".into(),
+        ews: Some("https://mail.contoso.example/EWS/Exchange.asmx".into()),
+        ..Default::default()
+    };
+    a.session.add_account(config, Some("pw".into())).unwrap()
+}
+
+fn directory_answers(a: &mut MailApp, account: &str, query: &str, people: &[(&str, &str)]) {
+    let people = people.iter().map(|(n, e)| quatrelle_engine::model::EmailAddress::new(*n, *e)).collect();
+    a.session.apply(quatrelle_engine::model::Event::DirectoryPeople {
+        account: account.into(),
+        query: query.into(),
+        people,
+        more: false,
+        error: None,
+    });
+}
+
+/// Ctrl+K on a name several people in the directory fit: Check Names asks which one was meant,
+/// and the one picked is written out.
+#[test]
+fn check_names_asks_which_person_a_name_means() {
+    let (mut a, dir) = app("check-names-choice");
+    let gal = with_exchange(&mut a);
+    let ctx = egui::Context::default();
+    let size = egui::vec2(1280.0, 800.0);
+    frame(&ctx, &mut a, vec![]);
+    a.run("mail.new", json!({}));
+    frame(&ctx, &mut a, vec![]);
+    frame(&ctx, &mut a, vec![]);
+    frame(&ctx, &mut a, vec![Event::Text("dupont".into())]);
+    frame(&ctx, &mut a, vec![key(Key::K, Modifiers::COMMAND)]);
+    frame(&ctx, &mut a, vec![]);
+    assert!(a.session.directory_searching(&gal, "dupont"), "asked of the directory");
+    directory_answers(&mut a, &gal, "dupont", &[("Anne Dupont", "anne.dupont@contoso.example"), ("Marc Dupont", "marc.dupont@contoso.example")]);
+    assert!(settled_text_at(&ctx, &mut a, "More than one person fits “dupont”. Choose who you meant:", size).is_some(), "the choice is asked");
+    let marc = settled_text_at(&ctx, &mut a, "Marc Dupont", size).expect("Marc offered");
+    click_at(&ctx, &mut a, marc, 2, size);
+    frame_sized(&ctx, &mut a, vec![], size);
+    assert_eq!(a.session.compose.as_ref().unwrap().to, "Marc Dupont <marc.dupont@contoso.example>; ");
+    assert!(settled_text_at(&ctx, &mut a, "Marc Dupont", size).is_none(), "the dialog closed");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// From's other address: a name typed offers the people the directory has for it; Enter takes
+/// the only one.
+#[test]
+fn from_finds_another_address_by_its_name() {
+    let (mut a, dir) = app("send-from-name");
+    let gal = with_exchange(&mut a);
+    let ctx = egui::Context::default();
+    let size = egui::vec2(1280.0, 800.0);
+    frame(&ctx, &mut a, vec![]);
+    a.run("mail.new", json!({}));
+    let own = a.session.senders().first().unwrap().label.clone();
+    let row = settled_text_at(&ctx, &mut a, &own, size).expect("who it's from");
+    let from = frame_shapes(&ctx, &mut a, vec![], size)
+        .iter()
+        .find_map(|s| match s {
+            egui::Shape::Text(t) if t.galley.text() == "From" => {
+                let at = t.pos + t.galley.rect.center().to_vec2();
+                ((at.y - row.y).abs() < 4.0 && at.x < row.x).then_some(at)
+            }
+            _ => None,
+        })
+        .expect("the From button");
+    click_at(&ctx, &mut a, from, 1, size);
+    let other = settled_text_at(&ctx, &mut a, "Other email address…", size).expect("another address offered");
+    click_at(&ctx, &mut a, other, 1, size);
+    frame_sized(&ctx, &mut a, vec![Event::Text("proginov".into())], size);
+    frame_sized(&ctx, &mut a, vec![], size);
+    assert!(a.session.directory_searching(&gal, "proginov"), "asked as it's typed");
+    assert!(settled_text_at(&ctx, &mut a, "Searching the directory…", size).is_some());
+    directory_answers(&mut a, &gal, "proginov", &[("Proginov Reseau", "reseaux@proginov.example")]);
+    assert!(settled_text_at(&ctx, &mut a, "Proginov Reseau <reseaux@proginov.example>", size).is_some(), "offered");
+    frame_sized(&ctx, &mut a, vec![key(Key::Enter, Modifiers::NONE)], size);
+    frame_sized(&ctx, &mut a, vec![], size);
+    assert_eq!(a.session.compose.as_ref().unwrap().from, "Proginov Reseau <reseaux@proginov.example>");
+    let _ = std::fs::remove_dir_all(dir);
+}

@@ -1,6 +1,7 @@
 //! An account's worker: the rooms its server offers and when people and rooms are busy, for a
-//! meeting being written, and the certificates its address book keeps, for a message to be
-//! encrypted (on the second connection, so they never wait behind a sync).
+//! meeting being written, and its address book: the people it has for a name, and the
+//! certificates it keeps, for a message to be encrypted (on the second connection, so they never
+//! wait behind a sync).
 
 use super::*;
 
@@ -28,6 +29,30 @@ impl Worker {
             }
         };
         self.sink.emit(Event::Rooms { account: self.id(), lists, rooms, error });
+    }
+
+    /// The people the directory has for `query`, answered with [`Event::DirectoryPeople`].
+    pub(super) fn search_directory(&mut self, query: &str) {
+        let r = (|| -> Result<(Vec<quatrelle_model::EmailAddress>, bool)> {
+            if self.conn.is_none() {
+                self.connect()?;
+            }
+            match self.conn.as_ref() {
+                Some(Conn::Ews(c)) => c.search_directory(query),
+                _ => Err(NetError::No("only an Exchange account's directory is searched".into())),
+            }
+        })();
+        let (people, more, error) = match r {
+            Ok((people, more)) => (people, more, None),
+            Err(e) => {
+                let said = e.to_string();
+                if e.is_fatal() || matches!(e, NetError::Auth(_)) {
+                    self.conn = None;
+                }
+                (Vec::new(), false, Some(said))
+            }
+        };
+        self.sink.emit(Event::DirectoryPeople { account: self.id(), query: query.to_string(), people, more, error });
     }
 
     /// The certificates the address book keeps for these addresses (at most fifty), answered

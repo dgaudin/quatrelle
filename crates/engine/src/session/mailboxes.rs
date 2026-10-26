@@ -6,6 +6,9 @@ use super::*;
 
 mod contacts;
 pub(crate) use contacts::Contacts;
+mod directory;
+pub use directory::DirectoryAnswer;
+pub(crate) use directory::{Directory, directory_key};
 mod folder_edits;
 mod mailbox_settings;
 pub use mailbox_settings::{FolderSizes, Sizes};

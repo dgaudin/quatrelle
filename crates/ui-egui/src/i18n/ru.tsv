@@ -1624,6 +1624,12 @@ month	May	Май
 	Other email address…	Другой адрес электронной почты…
 	Other email address	Другой адрес электронной почты
 	Exchange sends from it when your account may send as it or on its behalf.	Exchange отправляет с этого адреса, если вашей учётной записи разрешено отправлять от его имени или по его поручению.
-	Name <address>	Имя <адрес>
 	Send from it	Отправить с этого адреса
 	Some names weren't found in your contacts or among the people you've written to	Некоторые имена не найдены ни в ваших контактах, ни среди тех, кому вы писали
+	Global Address List	Глобальный список адресов
+	Your organisation's directory, searched on the server for the name typed	Справочник вашей организации, поиск по введённому имени на сервере
+	Type a name or an address to search the directory.	Введите имя или адрес для поиска в справочнике.
+	Searching the directory…	Поиск в справочнике…
+	The directory couldn't be searched: {error}	Не удалось выполнить поиск в справочнике: {error}
+	More people match: type more of the name.	Подходят и другие люди: введите имя полнее.
+	More than one person fits “{name}”. Choose who you meant:	Имени «{name}» соответствуют несколько человек. Выберите нужного:

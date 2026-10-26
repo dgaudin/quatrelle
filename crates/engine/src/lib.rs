@@ -24,10 +24,10 @@ pub use quatrelle_model as model;
 pub use quatrelle_smime as smime;
 pub use quatrelle_store as store;
 pub use session::{
-    ARRANGE_HEADINGS, AccountState, Arrange, AssistKind, Assistant, CardSearch, Compose, Filing, FolderRef, FolderSizes, ItemChoice, ItemKind,
-    KnownCert, ListFilter, ListLayout, Lock, MoveTarget, NotesOrder, Notice, PaneSection, Picture, Prefs, ReadInPane, Reading, ReadingPane,
-    RevocationCheck, Rewrite, Row, RulesScope, SMIME_DOC, Seal, SearchScope, Security, SendCheck, Sender, ServerSearch, Session, SignedBy, Sizes,
-    SmimeSettings, UpdateCheck, VacationState, View,
+    ARRANGE_HEADINGS, AccountState, Arrange, AssistKind, Assistant, CardSearch, Compose, DirectoryAnswer, Filing, FolderRef, FolderSizes, ItemChoice,
+    ItemKind, KnownCert, ListFilter, ListLayout, Lock, MoveTarget, NAMES_NOT_FOUND, NameChoice, NotesOrder, Notice, PaneSection, Picture, Prefs,
+    ReadInPane, Reading, ReadingPane, RevocationCheck, Rewrite, Row, RulesScope, SMIME_DOC, Seal, SearchScope, Security, SendCheck, Sender,
+    ServerSearch, Session, SignedBy, Sizes, SmimeSettings, UpdateCheck, VacationState, View,
     invite::{Invite, InviteProblem},
     junk::{JunkList, junk_entry},
     newer_release, parse_key,

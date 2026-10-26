@@ -1624,6 +1624,12 @@ month	May	5月
 	Other email address…	其他電子郵件地址…
 	Other email address	其他電子郵件地址
 	Exchange sends from it when your account may send as it or on its behalf.	如果您的帳戶有權以該地址的身分或代表該地址傳送，Exchange 會從該地址傳送。
-	Name <address>	姓名 <地址>
 	Send from it	從此地址傳送
 	Some names weren't found in your contacts or among the people you've written to	部分姓名在您的連絡人和您寫過信的人中均未找到
+	Global Address List	全域通訊清單
+	Your organisation's directory, searched on the server for the name typed	您組織的目錄，在伺服器上依輸入的姓名搜尋
+	Type a name or an address to search the directory.	輸入姓名或地址以在目錄中搜尋。
+	Searching the directory…	正在搜尋目錄…
+	The directory couldn't be searched: {error}	無法搜尋目錄: {error}
+	More people match: type more of the name.	還有其他人符合：請輸入更多姓名。
+	More than one person fits “{name}”. Choose who you meant:	有多個人符合「{name}」。請選擇您要找的人：

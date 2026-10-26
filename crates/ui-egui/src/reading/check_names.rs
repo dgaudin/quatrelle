@@ -1,0 +1,69 @@
+//! Check Names' choice, as Outlook's: several people fit a name typed in To, Cc or Bcc, and the
+//! one meant is picked from them (or the name is left as typed).
+
+use quatrelle_engine::NameChoice;
+
+use super::*;
+
+/// The dialog over the message being written while a name waits for its person.
+pub(super) fn choice_dialog(ctx: &egui::Context, t: &Tokens, choice: &NameChoice, acts: &mut Vec<Action>) {
+    let id = egui::Id::unique(("check-names", choice.compose));
+    let picked_id = id.with(("picked", choice.token.as_str()));
+    let mut picked: Option<usize> = ctx.data(|d| d.get_temp(picked_id)).flatten();
+    // `Some(None)`: left as typed.
+    let mut done: Option<Option<usize>> = None;
+    egui::Modal::new(id).frame(crate::dialogs::dialog_frame(t)).show(ctx, |ui| {
+        ui.set_width(540.0);
+        ui.label(RichText::new(tl!("Check Names")).font(theme::bold(18.0)).color(t.text));
+        ui.add_space(4.0);
+        ui.label(RichText::new(tf!("More than one person fits “{name}”. Choose who you meant:", name = choice.token)).color(t.text));
+        ui.add_space(6.0);
+        egui::Frame::new().stroke(egui::Stroke::new(1.0, t.border)).corner_radius(4).inner_margin(Margin::same(2)).show(ui, |ui| {
+            egui::ScrollArea::vertical().id_salt(id.with("people")).max_height(260.0).auto_shrink([false, true]).show(ui, |ui| {
+                for (i, p) in choice.people.iter().enumerate() {
+                    let (rect, r) = ui.allocate_exact_size(vec2(ui.available_width(), 24.0), Sense::click());
+                    let on = picked == Some(i);
+                    if on || r.hovered() {
+                        ui.painter().rect_filled(rect, 3.0, if on { t.accent_soft } else { t.hover_row });
+                    }
+                    let name = if p.name.is_empty() { p.email.as_str() } else { p.name.as_str() };
+                    let mid = rect.center().y;
+                    let name_clip = Rect::from_min_max(rect.min, egui::pos2(rect.left() + 240.0, rect.bottom()));
+                    ui.painter().with_clip_rect(name_clip).text(
+                        egui::pos2(rect.left() + 8.0, mid),
+                        egui::Align2::LEFT_CENTER,
+                        name,
+                        theme::regular(13.5),
+                        t.text,
+                    );
+                    ui.painter().text(egui::pos2(rect.left() + 250.0, mid), egui::Align2::LEFT_CENTER, &p.email, theme::regular(13.0), t.dim);
+                    if r.clicked() {
+                        picked = Some(i);
+                    }
+                    if r.double_clicked() {
+                        done = Some(Some(i));
+                    }
+                }
+            });
+        });
+        let (ok, cancel) = crate::dialogs::buttons(ui, t, "OK", picked.is_some());
+        if ok && picked.is_some() {
+            done = Some(picked);
+        } else if cancel {
+            done = Some(None);
+        }
+    });
+    if done.is_none() && ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+        done = Some(None);
+    }
+    ctx.data_mut(|d| d.insert_temp(picked_id, picked));
+    match done {
+        Some(Some(i)) => {
+            if let Some(p) = choice.people.get(i) {
+                acts.push(Action::Run("compose.chooseName", json!({"token": choice.token, "name": p.name, "email": p.email})));
+            }
+        }
+        Some(None) => acts.push(Action::Run("compose.chooseName", json!({"token": choice.token}))),
+        None => {}
+    }
+}

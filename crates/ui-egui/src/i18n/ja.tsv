@@ -1622,6 +1622,12 @@ month	May	5月
 	Other email address…	その他のメール アドレス…
 	Other email address	その他のメール アドレス
 	Exchange sends from it when your account may send as it or on its behalf.	アカウントにこのアドレスとして、または代理として送信する権限がある場合、Exchange はこのアドレスから送信します。
-	Name <address>	名前 <アドレス>
 	Send from it	このアドレスから送信
 	Some names weren't found in your contacts or among the people you've written to	一部の名前が連絡先にも、これまでにメールを送った相手にも見つかりませんでした
+	Global Address List	グローバル アドレス一覧
+	Your organisation's directory, searched on the server for the name typed	組織のディレクトリ。入力した名前をサーバーで検索します
+	Type a name or an address to search the directory.	ディレクトリを検索するには、名前またはアドレスを入力してください。
+	Searching the directory…	ディレクトリを検索しています…
+	The directory couldn't be searched: {error}	ディレクトリを検索できませんでした: {error}
+	More people match: type more of the name.	ほかにも該当する人がいます。名前をさらに入力してください。
+	More than one person fits “{name}”. Choose who you meant:	「{name}」に該当する人が複数います。目的の人を選んでください:

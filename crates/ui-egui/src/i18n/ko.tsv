@@ -1624,6 +1624,12 @@ month	May	5월
 	Other email address…	다른 전자 메일 주소…
 	Other email address	다른 전자 메일 주소
 	Exchange sends from it when your account may send as it or on its behalf.	계정에 이 주소로 또는 이 주소를 대신하여 보낼 권한이 있으면 Exchange가 이 주소에서 보냅니다.
-	Name <address>	이름 <주소>
 	Send from it	이 주소에서 보내기
 	Some names weren't found in your contacts or among the people you've written to	일부 이름을 연락처나 메일을 보낸 사람들 중에서 찾지 못했습니다
+	Global Address List	전체 주소 목록
+	Your organisation's directory, searched on the server for the name typed	입력한 이름을 서버에서 검색하는 조직의 디렉터리
+	Type a name or an address to search the directory.	디렉터리에서 검색하려면 이름이나 주소를 입력하세요.
+	Searching the directory…	디렉터리를 검색하는 중…
+	The directory couldn't be searched: {error}	디렉터리를 검색할 수 없습니다: {error}
+	More people match: type more of the name.	일치하는 사람이 더 있습니다. 이름을 더 입력하세요.
+	More than one person fits “{name}”. Choose who you meant:	"{name}"에 해당하는 사람이 여러 명입니다. 원하는 사람을 선택하세요:

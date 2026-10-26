@@ -358,6 +358,11 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
         });
     }
     let senders = s.senders();
+    // Who the other address typed in From may be, and the name a Check Names waits on.
+    let (others, choice) = match s.compose.as_ref().map(|c| (c.id, c.account.clone())) {
+        Some((id, account)) => (candidates(s, ui.ctx(), id, &account), s.name_choice(id).cloned()),
+        None => (Candidates::default(), None),
+    };
     // Suggestions for the recipient box being typed in (computed before the form borrows it):
     // from what the address book knows now — it is built a slice per frame, never whole in one
     // go — and worked out again only as the text or the book changes.
@@ -523,9 +528,15 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
             });
         }
         // Ctrl+K: Outlook's Check Names, anywhere but in the text (where it makes a link).
-        if !c.sending && !ui.memory(|m| m.has_focus(rich_edit::body_id(c))) && ui.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::K))
+        if !c.sending
+            && !ui.memory(|m| m.has_focus(rich_edit::body_id(c)) || m.has_focus(box_id(c.id)))
+            && ui.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::K))
         {
             acts.push(Action::Run("compose.checkNames", json!({})));
+        }
+        // Several people fit a name it checked: the one meant is chosen.
+        if let Some(choice) = &choice {
+            super::check_names::choice_dialog(ui.ctx(), &t, choice, acts);
         }
         ui.add_space(6.0);
         ui.add_enabled_ui(!c.sending, |ui| {
@@ -539,7 +550,7 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
                 }
                 ui.add_space(10.0);
                 ui.vertical(|ui| {
-                    ui.horizontal(|ui| from_row(ui, &t, c, &senders));
+                    ui.horizontal(|ui| from_row(ui, &t, c, &senders, &others));
                     // To, Cc and Bcc open the address book, as in Outlook.
                     for (name, label, hint) in
                         [("to", "To", "Names <addresses>, separated by ; or ,"), ("cc", "Cc", ""), ("bcc", "Bcc", "Hidden from the other recipients")]

@@ -1,6 +1,7 @@
 //! Outlook's address book: what's typed to find someone, the book looked in and who's found,
 //! shared by Select Names (a message's To, Cc and Bcc, here) and Select Attendees and Resources
-//! (a meeting's, over its window).
+//! (a meeting's, over its window). An Exchange account's directory (the Global Address List) is
+//! one of the books: it's asked on the server for the name typed.
 
 use quatrelle_engine::model::EmailAddress;
 
@@ -24,6 +25,11 @@ pub struct AddressSearch {
     /// again as it fills in.
     pub revision: u64,
     pub selected: Option<usize>,
+    /// The directory (`directory:<account>`): still being asked, has more than it gave, or
+    /// couldn't be asked.
+    pub searching: bool,
+    pub more: bool,
+    pub error: Option<String>,
 }
 
 impl AddressSearch {
@@ -46,6 +52,13 @@ impl AddressSearch {
             self.source = if known { self.default_source.clone() } else { "all".into() };
         }
         self.list = s.address_book_now(&self.source, &self.query);
+        (self.searching, self.more, self.error) = match self.source.strip_prefix("directory:") {
+            Some(account) => {
+                let found = s.directory_found(account, &self.query);
+                (s.directory_searching(account, &self.query), found.is_some_and(|f| f.more), found.and_then(|f| f.error.clone()))
+            }
+            None => (false, false, None),
+        };
         self.revision = s.contacts_revision();
         self.stale = false;
     }
@@ -99,11 +112,21 @@ pub(crate) fn search(ui: &mut Ui, id: egui::Id, f: &mut AddressSearch, t: &Token
             ("all".into(), tl!("All addresses").to_string(), tl!("Everyone you've written to or heard from, and your contacts")),
             ("people".into(), tl!("All contacts").to_string(), tl!("Every contact, in every address book")),
         ];
-        if f.books.len() > 1 {
-            for (source, name, account) in &f.books {
-                let name = if name.is_empty() || name == "Contacts" { tl!("Contacts").to_string() } else { name.clone() };
-                choices.push((source.clone(), if accounts > 1 { format!("{name} ({account})") } else { name }, ""));
+        // Each account's address books when there are several, and each Exchange account's
+        // directory.
+        let books = f.books.iter().filter(|(s, _, _)| !s.starts_with("directory:")).count();
+        for (source, name, account) in &f.books {
+            let directory = source.starts_with("directory:");
+            if !directory && books < 2 {
+                continue;
             }
+            let name = match name.as_str() {
+                _ if directory => tl!("Global Address List").to_string(),
+                "" | "Contacts" => tl!("Contacts").to_string(),
+                _ => name.clone(),
+            };
+            let tip = if directory { tl!("Your organisation's directory, searched on the server for the name typed") } else { "" };
+            choices.push((source.clone(), if accounts > 1 { format!("{name} ({account})") } else { name }, tip));
         }
         let shown = choices.iter().find(|(s, _, _)| *s == f.source).map_or_else(|| tl!("All addresses").to_string(), |(_, l, _)| l.clone());
         egui::ComboBox::from_id_salt(id.with("address-book")).width(220.0).selected_text(shown).show_ui(ui, |ui| {
@@ -140,8 +163,15 @@ pub(crate) fn search(ui: &mut Ui, id: egui::Id, f: &mut AddressSearch, t: &Token
         });
         ui.separator();
         egui::ScrollArea::vertical().id_salt(id.with("names")).max_height(210.0).auto_shrink([false, false]).show(ui, |ui| {
+            let directory = f.source.starts_with("directory:");
             if f.list.is_empty() && !f.stale {
-                ui.label(RichText::new(tl!("No one found.")).color(t.faint));
+                let said = match &f.error {
+                    _ if directory && f.query.trim().is_empty() => tl!("Type a name or an address to search the directory.").to_string(),
+                    _ if f.searching => tl!("Searching the directory…").to_string(),
+                    Some(e) => tf!("The directory couldn't be searched: {error}", error = e),
+                    None => tl!("No one found.").to_string(),
+                };
+                ui.label(RichText::new(said).color(t.faint));
             }
             for (i, a) in f.list.iter().enumerate() {
                 let on = f.selected == Some(i);
@@ -179,6 +209,9 @@ pub(crate) fn search(ui: &mut Ui, id: egui::Id, f: &mut AddressSearch, t: &Token
                     f.selected = Some(i);
                     chosen = true;
                 }
+            }
+            if directory && f.more && !f.list.is_empty() {
+                ui.label(RichText::new(tl!("More people match: type more of the name.")).color(t.faint).small());
             }
         });
     });

@@ -16,6 +16,7 @@ use crate::{Action, UiState, widgets};
 mod assistant;
 mod attachments;
 mod body;
+mod check_names;
 mod compose;
 mod header;
 mod people;
