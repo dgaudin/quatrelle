@@ -211,6 +211,18 @@ impl Worker {
             if self.closed || self.conn.is_none() {
                 return;
             }
+            // Told of changes, new mail is read between two folders rather than once the pass
+            // is done (seconds over a hundred folders, every quarter of an hour).
+            if self.listen.on() {
+                self.hear(Duration::ZERO);
+                if self.conn.is_none() {
+                    return;
+                }
+            }
+            // A folder that went from the server meanwhile (told while listening) is passed over.
+            if !self.folders.iter().any(|f| f.path == path) {
+                continue;
+            }
             self.sync_one(&path);
         }
         // "Online" is said once the mail is current: the calendars and contacts can take far
@@ -400,6 +412,9 @@ impl Worker {
     pub(super) fn sync_one(&mut self, path: &str) {
         self.status(SyncStatus::Syncing { folder: path.to_string() });
         let (store, opts, id) = (self.store.clone(), self.options_for(path), self.id());
+        // An edit still waiting is put back on the list once it's read (`apply_report`): the
+        // list isn't shown before then, or it would show the server's old state a moment.
+        let early = matches!(self.conn, Some(Conn::Ews(_))) && !self.waiting_in(path);
         let result = match self.conn.as_mut() {
             Some(Conn::Imap(c)) => sync_folder(c, &store, &id, path, &opts),
             Some(Conn::Jmap(c)) => {
@@ -413,7 +428,14 @@ impl Worker {
                 r
             }
             Some(Conn::Ews(c)) => {
-                let r = crate::ews::sync_folder(c, &mut self.jstate, &store, &id, path, &opts);
+                // New mail shows once its header is in, while it's downloaded whole.
+                let sink = &self.sink;
+                let mut listed = || {
+                    if early {
+                        sink.emit(Event::FolderChanged { account: id.clone(), folder: path.to_string() });
+                    }
+                };
+                let r = crate::ews::sync_folder_then(c, &mut self.jstate, &store, &id, path, &opts, &mut listed);
                 self.save_jstate();
                 r
             }

@@ -120,6 +120,10 @@ pub struct Data {
     pub directory: Vec<(String, String)>,
     /// Answer item searches (the mail sync) only after this long: a mailbox taking minutes.
     pub slow_sync: Option<std::time::Duration>,
+    /// Give messages' whole sources only after this long (a big attachment on a slow line).
+    pub slow_sources: Option<std::time::Duration>,
+    /// Answer `GetFolder` (a folder's counts, the first step of reading it) only after this long.
+    pub slow_counts: Option<std::time::Duration>,
     /// Folders Exchange keeps hidden (PidTagAttributeHidden), by id.
     pub hidden: Vec<String>,
     /// How each appointment created or changed asked the guests to be told
@@ -237,6 +241,8 @@ impl Default for Data {
             wlinks: Vec::new(),
             directory: Vec::new(),
             slow_sync: None,
+            slow_sources: None,
+            slow_counts: None,
             hidden: Vec::new(),
             meeting_sends: Vec::new(),
             answers: Vec::new(),
