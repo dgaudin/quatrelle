@@ -1,6 +1,9 @@
 //! Drafts: the copies of a message being written kept in Drafts, found again by their
 //! `Message-ID`; a reply written in the reading pane set aside when another message is read, as
-//! Outlook sets it aside, and taken up again; a draft from Drafts carried on.
+//! Outlook sets it aside, and taken up again; a draft from Drafts carried on; the messages a
+//! reply waits for, marked in the list.
+
+use quatrelle_model::thread::norm_id;
 
 use super::*;
 
@@ -53,6 +56,40 @@ impl Session {
         if let Some(account) = keys.first().map(|k| k.account.clone()) {
             self.apply_op(&account, Op::Expunge { keys });
         }
+        self.note_drafts();
+    }
+
+    /// The messages a reply waits for, from the replies set aside and every account's Drafts
+    /// (their `In-Reply-To`, read with their source): the list marks them, as Outlook marks a
+    /// message with a reply not sent yet.
+    pub(crate) fn note_drafts(&mut self) {
+        let mut ids: HashSet<String> = self.set_aside.iter().map(|c| norm_id(&c.in_reply_to)).filter(|m| !m.is_empty()).collect();
+        let drafts: Vec<(String, String)> =
+            self.accounts.iter().filter_map(|a| a.folder(FolderRole::Drafts).map(|f| (a.config.id.clone(), f.path.clone()))).collect();
+        for (account, path) in drafts {
+            ids.extend(self.folder_state(&account, &path).messages.iter().map(|m| norm_id(&m.in_reply_to)).filter(|m| !m.is_empty()));
+        }
+        self.drafted = ids;
+    }
+
+    /// Whether a reply to `m` waits in Drafts (or set aside).
+    pub fn has_draft_reply(&self, m: &Summary) -> bool {
+        !m.message_id.is_empty() && self.drafted.contains(&m.message_id)
+    }
+
+    /// The message going by `Message-ID` `mid` in the account: among its folders read so far,
+    /// else in its Inbox.
+    fn find_message(&mut self, account: &str, mid: &str) -> Option<MessageKey> {
+        let wanted = norm_id(mid);
+        if wanted.is_empty() {
+            return None;
+        }
+        let read = self.cache.iter().filter(|((a, _), _)| a == account).find_map(|(_, st)| st.messages.iter().find(|m| m.message_id == wanted));
+        if let Some(m) = read {
+            return Some(m.key.clone());
+        }
+        let inbox = self.account(account)?.folder(FolderRole::Inbox)?.path.clone();
+        self.folder_state(account, &inbox).messages.iter().find(|m| m.message_id == wanted).map(|m| m.key.clone())
     }
 
     /// The reading pane moves on to `next` (another message, or another folder: `None`) while a
@@ -80,6 +117,7 @@ impl Session {
             // It can't go in Drafts (the account has none): in a window of its own, not lost.
             Err(_) => self.composes.push(Compose { window: true, ..c }),
         }
+        self.note_drafts();
     }
 
     /// A reply set aside for the message `key` (or the draft `key` itself), taken up again in
@@ -92,6 +130,7 @@ impl Session {
         let Some(at) = at else { return false };
         let c = self.set_aside.remove(at);
         self.bring_back(c);
+        self.note_drafts();
         true
     }
 
@@ -126,6 +165,9 @@ impl Session {
             if p.had_html && !p.rich.is_empty() { mime::rich::from_rich(&p.rich) } else { (p.text.clone(), mime::rich::Styles::plain(&p.text)) };
         let id = self.fresh_id();
         let window = self.prefs.new_mail_window;
+        // A reply's message gets its Replied mark once it's sent, as when it was started here.
+        let source = self.find_message(&key.account, &p.in_reply_to);
+        let mode = source.as_ref().map(|_| ReplyMode::Reply);
         self.bring_back(Compose {
             id,
             account: key.account.clone(),
@@ -140,6 +182,8 @@ impl Session {
             draft: Some(key.clone()),
             saved_id: p.message_id.clone(),
             window,
+            source,
+            mode,
             ..Default::default()
         });
         Ok(serde_json::json!({ "compose": id }))
