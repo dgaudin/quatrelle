@@ -339,7 +339,7 @@ fn names(ui: &mut Ui, t: Tokens, c: &Compose, acts: &mut Vec<Action>) {
         acts.push(Action::Dialog(Dialog::select_names(c, "to")));
     }
     if widgets::big_button(ui, Icon::CheckNames, "Check Names", &t, !c.sending)
-        .on_hover_text(tl!("Fill in the addresses of the names typed, from your contacts and the people you've written to"))
+        .on_hover_text(format!("{} (Ctrl+K)", tl!("Fill in the addresses of the names typed, from your contacts and the people you've written to")))
         .clicked()
     {
         acts.push(Action::Run("compose.checkNames", json!({})));

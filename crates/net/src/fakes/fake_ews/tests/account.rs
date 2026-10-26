@@ -497,3 +497,43 @@ fn serve_ews_for_the_app() {
         std::thread::park();
     }
 }
+
+/// From a shared mailbox: Exchange is told who it's from (`t:From`), and refuses an address the
+/// account may not send from, saying why.
+#[test]
+fn sending_from_a_shared_mailbox_tells_exchange() {
+    let mut d = Data::default();
+    d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    d.folder("Sent Items", None, Some("sentitems"), "IPF.Note");
+    d.send_as = vec!["support@contoso.example".into()];
+    let server = serve(d);
+    let dir = std::env::temp_dir().join(format!("quatrelle-ews-sendas-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let mut pool = crate::worker::Pool::new(Store::open(&dir).unwrap(), Arc::new(crate::worker::MemoryCredentials::default()));
+    let account = AccountConfig {
+        id: "a1".into(),
+        email: "riley@contoso.example".into(),
+        username: format!("{DOMAIN}\\{USER}"),
+        ews: Some(server.url.clone()),
+        ..Default::default()
+    };
+    pool.submit(Job::Start { account, password: Some(Secret(PASSWORD.into())) });
+    until(&pool, "listed", |e| matches!(e, Event::Folders { .. }));
+    let send = |id: u64, from: &str| Job::Send {
+        account: "a1".into(),
+        id,
+        raw: format!("From: {from}\r\nTo: zoe@contoso.example\r\nSubject: Re: Ticket {id}\r\n\r\nDone.\r\n").into_bytes(),
+        from: "riley@contoso.example".into(),
+        recipients: vec!["zoe@contoso.example".into()],
+        sent_folder: None,
+    };
+    pool.submit(send(1, "Support <Support@contoso.example>"));
+    until(&pool, "sent as support", |e| matches!(e, Event::Sent { id: 1, .. }));
+    pool.submit(send(2, "Riley <riley@contoso.example>"));
+    until(&pool, "sent as riley", |e| matches!(e, Event::Sent { id: 2, .. }));
+    assert_eq!(server.data.lock().unwrap().sent_from, ["support@contoso.example", ""], "only another address is said");
+    pool.submit(send(3, "sales@contoso.example"));
+    let refused = until(&pool, "refused", |e| matches!(e, Event::SendFailed { id: 3, .. })).pop().unwrap();
+    assert!(matches!(&refused, Event::SendFailed { error, .. } if error.contains("Send As")), "{refused:?}");
+    let _ = std::fs::remove_dir_all(&dir);
+}

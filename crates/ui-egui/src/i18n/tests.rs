@@ -241,6 +241,7 @@ pub(crate) fn interface_strings() -> BTreeSet<String> {
         "Other",
         "Message sent",
         "Draft saved",
+        "Some names weren't found in your contacts or among the people you've written to",
         "Saved in the Outbox: it will be sent when you're back online",
         "Opened as a PDF: print it from the viewer",
         "Reply",

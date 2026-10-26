@@ -21,7 +21,7 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             Ok(json!({ "kept": kept }))
         }),
         CommandSpec::new("compose.update", "Edit message", "Message", compose_update)
-            .params(r#"{"to"?: string, "cc"?: string, "bcc"?: string, "subject"?: string, "body"?: string, "marks"?: bool (the body uses **bold**, *italic*, - lists…), "account"?: string, "importance"?: "high"|"normal"|"low", "readReceipt"?: bool, "replyTo"?: string (where replies go), "sendAfter"?: number (Unix seconds: held in the Outbox until then; 0 sends at once), "voting"?: string (voting buttons, `;`-separated: "Approve;Reject"; Exchange accounts)}"#)
+            .params(r#"{"to"?: string, "cc"?: string, "bcc"?: string, "subject"?: string, "body"?: string, "marks"?: bool (the body uses **bold**, *italic*, - lists…), "account"?: string, "from"?: string (who it's from: a shared mailbox the account opens, or another address it may send from; empty: the account's own), "importance"?: "high"|"normal"|"low", "readReceipt"?: bool, "replyTo"?: string (where replies go), "sendAfter"?: number (Unix seconds: held in the Outbox until then; 0 sends at once), "voting"?: string (voting buttons, `;`-separated: "Approve;Reject"; Exchange accounts)}"#)
             .when(has_compose),
         CommandSpec::new("compose.language", "Language", "Message › Review", |s, v| {
             let c = s.compose.as_mut().ok_or_else(|| CmdError::Disabled("no message is being written".into()))?;
@@ -185,10 +185,16 @@ pub(super) fn compose_update(s: &mut Session, v: &Value) -> CmdResult {
     if let Some(at) = p::i64(v, "sendAfter") {
         c.send_after = (at > 0).then_some(at);
     }
-    if let Some(a) = account {
-        c.account = a;
+    // Another account: from its own address, unless `from` says otherwise.
+    if let Some(a) = &account {
+        c.account = a.clone();
+        c.from.clear();
     }
-    Ok(json!({"compose": c.id}))
+    let id = c.id;
+    if let Some(from) = p::str(v, "from") {
+        s.set_compose_from(None, from)?;
+    }
+    Ok(json!({"compose": id}))
 }
 
 /// Largest attachment accepted (most servers refuse messages over 25–35 MB).
@@ -320,6 +326,9 @@ pub(super) fn insert_signature(s: &mut Session, v: &Value) -> CmdResult {
     Ok(json!({"inserted": at, "end": end}))
 }
 
+/// What Check Names says when a name is left as it was typed.
+pub const NAMES_NOT_FOUND: &str = "Some names weren't found in your contacts or among the people you've written to";
+
 /// Outlook's Check Names: each name typed in To, Cc or Bcc without an address is looked up
 /// among the contacts and the people written to or heard from, and written out with its
 /// address when one person matches it. The names left are answered as `unresolved`.
@@ -359,6 +368,10 @@ pub(super) fn check_names(s: &mut Session, _: &Value) -> CmdResult {
         c.to = to.clone();
         c.cc = cc.clone();
         c.bcc = bcc.clone();
+    }
+    // Each name left is pointed out under its field once the cursor leaves it.
+    if !unresolved.is_empty() {
+        s.notice(NAMES_NOT_FOUND, true);
     }
     Ok(json!({"resolved": resolved, "unresolved": unresolved}))
 }

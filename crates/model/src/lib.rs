@@ -168,6 +168,10 @@ pub struct AccountConfig {
     /// mailbox of its own, its folders under it.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub shared_mailboxes: Vec<String>,
+    /// Other addresses mail was sent from through this account (Outlook's From list keeps those
+    /// typed in Other E-mail Address), the last used first.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub send_from: Vec<String>,
     /// Online only (issue #4): none of the account's mail is kept on this computer. Its folders,
     /// messages, changes waiting for the server and Outbox are held in memory while Quatrelle
     /// runs, and a message is downloaded when it's opened. Not for POP, whose mail has no other
