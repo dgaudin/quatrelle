@@ -3,6 +3,11 @@
 
 use super::*;
 
+/// Whether the list marks the message `subject` as having a reply waiting (`[Draft]`).
+fn marked(s: &Session, subject: &str) -> bool {
+    s.list.iter().find(|m| m.subject == subject).is_some_and(|m| s.has_draft_reply(m))
+}
+
 fn drafts(s: &mut Session) -> Vec<String> {
     s.run("folder.open", &json!({"account": "sample", "folder": "Drafts"})).unwrap();
     let subjects = s.list.iter().map(|m| m.subject.clone()).collect();
@@ -29,6 +34,8 @@ fn a_reply_in_the_reading_pane_is_set_aside_for_another_message() {
     assert_eq!(s.reading.as_ref().map(|r| r.key.to_id()).as_deref(), mix["key"].as_str());
     assert_eq!(s.set_aside.len(), 1);
     assert!(s.notices.last().is_some_and(|n| n.text == "Draft saved"));
+    assert!(marked(&s, "Your proof for the festival poster is ready"), "its message is marked [Draft]");
+    assert!(!marked(&s, "Sound mix, version 3"));
     assert!(drafts(&mut s).contains(&"Re: Your proof for the festival poster is ready".to_string()), "kept in Drafts");
     s.run("list.open", &poster).unwrap();
     let c = s.compose.clone().expect("the reply comes back");
@@ -43,6 +50,7 @@ fn a_reply_in_the_reading_pane_is_set_aside_for_another_message() {
     s.run("compose.discard", &json!({})).unwrap();
     assert!(s.compose.is_none());
     assert!(!drafts(&mut s).iter().any(|d| d.starts_with("Re: Your proof")), "discarded with its copy in Drafts");
+    assert!(!marked(&s, "Your proof for the festival poster is ready"), "and no longer marked");
     // A reply left as it came simply goes.
     s.run("list.open", &poster).unwrap();
     s.run("mail.reply", &json!({})).unwrap();
@@ -63,15 +71,21 @@ fn a_draft_from_drafts_is_carried_on_and_goes_once_sent() {
     s.run("compose.update", &json!({"body": "Approved, *thanks*!\n"})).unwrap();
     s.run("compose.saveDraft", &json!({})).unwrap();
     s.compose = None;
+    // Kept in Drafts (Quatrelle closed meanwhile): the message is marked all the same.
+    s.run("folder.open", &json!({"account": "sample", "folder": "INBOX"})).unwrap();
+    assert!(marked(&s, "Your proof for the festival poster is ready"));
     s.run("folder.open", &json!({"account": "sample", "folder": "Drafts"})).unwrap();
     let draft = key_of(&s, "Re: Your proof for the festival poster is ready");
     s.run("draft.edit", &draft).unwrap();
     let c = s.compose.clone().unwrap();
     assert_eq!(c.to, "Print Shop <orders@printshop.example>; ");
     assert!(c.body.starts_with("Approved,") && !c.saved_id.is_empty());
+    assert_eq!(c.source.as_ref().map(|k| k.to_id()).as_deref(), poster["key"].as_str(), "the message it answers, found by its Message-ID");
     s.run("compose.send", &json!({})).unwrap();
     assert!(s.compose.is_none());
     assert!(drafts(&mut s).is_empty(), "sent: the draft goes");
+    let original = s.list.iter().find(|m| m.subject == "Your proof for the festival poster is ready").unwrap();
+    assert!(original.flags.answered && !s.has_draft_reply(original), "marked Replied, and no longer [Draft]");
     done(s);
 }
 

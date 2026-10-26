@@ -367,6 +367,9 @@ pub struct Session {
     /// Replies written in the reading pane and left for another message, as Outlook leaves them:
     /// kept in Drafts, and back in the pane when their message is read again (oldest first).
     pub set_aside: Vec<Compose>,
+    /// The messages a reply waits for, in Drafts or set aside, by `Message-ID`
+    /// ([`Session::has_draft_reply`]).
+    pub(crate) drafted: HashSet<String>,
     /// The words the original's header is written with under a reply, in the interface's
     /// language (the app sets them; English without it).
     pub quote_words: mime::QuoteWords,
@@ -542,6 +545,7 @@ impl Session {
             compose: None,
             composes: Vec::new(),
             set_aside: Vec::new(),
+            drafted: HashSet::new(),
             quote_words: mime::QuoteWords::default(),
             prefs: Prefs::default(),
             clock,

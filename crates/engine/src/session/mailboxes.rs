@@ -304,6 +304,7 @@ impl Session {
             self.reading = None;
         }
         self.list = list;
+        self.note_drafts();
         self.revision = self.revision.wrapping_add(1);
     }
 
