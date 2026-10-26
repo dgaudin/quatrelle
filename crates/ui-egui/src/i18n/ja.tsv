@@ -1548,3 +1548,14 @@ month	May	5月
 	Ask the language model set in Options to write a reply to this message	オプションで設定した言語モデルにこのメッセージへの返信を書いてもらいます
 	Suggested reply	提案された返信
 	Reply with this text	このテキストで返信
+	Rewrite	書き直し
+	Have the language model set in Options rewrite what you wrote	オプションで設定した言語モデルに書いた文章を書き直してもらいます
+	Correct spelling and grammar	スペルと文法を修正
+	Shorter	短く
+	More formal	よりフォーマルに
+	Friendlier	より親しみやすく
+	In English	英語で
+	Rewritten text	書き直した文章
+	Use this text	この文章を使う
+	In place of what you wrote (its formatting goes)	書いた文章の代わりに使います (書式は失われます)
+	Keep mine	自分の文章を残す

@@ -68,6 +68,9 @@ pub struct Compose {
     /// Outlook's Review › Language.
     #[serde(default)]
     pub language: String,
+    /// The language model asked to rewrite the text written (not kept with the draft).
+    #[serde(skip)]
+    pub rewrite: Option<super::assistant::Rewrite>,
 }
 
 impl Compose {
