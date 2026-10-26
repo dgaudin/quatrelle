@@ -128,7 +128,7 @@ pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) 
                     Page::Info => info(s, &t, st.has_files, ui, &mut b, acts),
                     Page::Open => open(s, &t, ui, &mut b, acts),
                     Page::Options => options(s, st, ui, acts),
-                    Page::About => about(s, &t, st.pending_update.as_deref(), ui, acts),
+                    Page::About => about(s, &t, &st.update, ui, acts),
                 }
             });
         });
