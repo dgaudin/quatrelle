@@ -1558,3 +1558,9 @@ month	May	מאי
 	Use this text	השתמש בטקסט זה
 	In place of what you wrote (its formatting goes)	במקום מה שכתבת (העיצוב שלו אובד)
 	Keep mine	השאר את שלי
+	File it	תייק
+	Ask the language model set in Options which of your folders and categories this message belongs in	שאל את המודל השפתי שהוגדר באפשרויות לאיזו מהתיקיות והקטגוריות שלך שייכת הודעה זו
+	Where it goes	לאן היא שייכת
+	The language model found none of your folders or categories for it.	המודל השפתי לא מצא לה אף תיקייה או קטגוריה שלך.
+	Move to {folder}	העבר אל {folder}
+	Categorize as {category}	סווג כ-{category}

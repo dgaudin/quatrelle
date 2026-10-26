@@ -1562,3 +1562,9 @@ month	May	Mai
 	Use this text	Diesen Text verwenden
 	In place of what you wrote (its formatting goes)	Anstelle Ihres Textes (seine Formatierung geht verloren)
 	Keep mine	Meinen behalten
+	File it	Einordnen
+	Ask the language model set in Options which of your folders and categories this message belongs in	Das in den Optionen eingestellte Sprachmodell fragen, in welchen Ihrer Ordner und Kategorien diese Nachricht gehört
+	Where it goes	Wohin damit
+	The language model found none of your folders or categories for it.	Das Sprachmodell fand keinen Ihrer Ordner und keine Ihrer Kategorien dafür.
+	Move to {folder}	Verschieben nach {folder}
+	Categorize as {category}	Kategorisieren als {category}

@@ -1559,3 +1559,9 @@ month	May	5月
 	Use this text	この文章を使う
 	In place of what you wrote (its formatting goes)	書いた文章の代わりに使います (書式は失われます)
 	Keep mine	自分の文章を残す
+	File it	整理
+	Ask the language model set in Options which of your folders and categories this message belongs in	オプションで設定した言語モデルに、このメッセージを入れるフォルダーと分類を尋ねます
+	Where it goes	整理先
+	The language model found none of your folders or categories for it.	言語モデルは、このメッセージに合うフォルダーも分類も見つけられませんでした。
+	Move to {folder}	{folder} へ移動
+	Categorize as {category}	{category} に分類

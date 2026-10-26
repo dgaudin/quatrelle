@@ -1561,3 +1561,9 @@ month	May	5월
 	Use this text	이 텍스트 사용
 	In place of what you wrote (its formatting goes)	작성한 내용 대신 사용 (서식은 사라짐)
 	Keep mine	내 글 유지
+	File it	정리
+	Ask the language model set in Options which of your folders and categories this message belongs in	옵션에서 설정한 언어 모델에 이 메시지가 들어갈 폴더와 범주를 묻습니다
+	Where it goes	정리할 위치
+	The language model found none of your folders or categories for it.	언어 모델이 이 메시지에 맞는 폴더나 범주를 찾지 못했습니다.
+	Move to {folder}	{folder}(으)로 이동
+	Categorize as {category}	{category}(으)로 분류

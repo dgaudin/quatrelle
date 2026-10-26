@@ -330,3 +330,53 @@ fn the_assistant_rewrites_the_text_written_only() {
     s.run("assistant.endRewrite", &json!({"use": false})).unwrap();
     assert_eq!(s.compose.as_ref().unwrap().body, before);
 }
+
+/// A message in a conversation: its summary is the conversation's, each message's own part
+/// oldest first.
+#[test]
+fn the_assistant_summarizes_a_whole_conversation() {
+    let mut s = sample_session("assistant-thread");
+    s.run("assistant.settings", &json!({"url": "http://localhost:11434/v1", "model": "llama3"})).unwrap();
+    let key = s.list.iter().find(|m| m.subject.starts_with("Re: Storyboard")).map(|m| m.key.clone()).unwrap();
+    s.run("list.open", &json!({"key": key.to_id()})).unwrap();
+
+    s.take_jobs();
+    s.run("assistant.summarize", &json!({})).unwrap();
+    let asked = s.take_jobs().into_iter().find_map(|j| match j {
+        Job::AskLlm { messages, .. } => Some(messages),
+        _ => None,
+    });
+    let messages = asked.unwrap();
+    assert!(messages[0].1.contains("conversation"), "{}", messages[0].1);
+    let text = &messages[1].1;
+    let (zoe, sam) = (text.find("Zoe Park").unwrap(), text.find("Sam Okafor").unwrap());
+    assert!(zoe < sam, "oldest first: {text}");
+}
+
+/// Where a message goes: the model chooses among the account's folders and categories, and
+/// only what it names among them is offered (a folder by its last name too, when it's alone).
+#[test]
+fn the_assistant_suggests_where_a_message_goes() {
+    let mut s = sample_session("assistant-filing");
+    s.run("assistant.settings", &json!({"url": "http://localhost:11434/v1", "model": "llama3"})).unwrap();
+    s.run("category.create", &json!({"name": "Clients", "color": 2})).unwrap();
+    let key = s.list.first().map(|m| m.key.clone()).unwrap();
+    s.run("list.open", &json!({"key": key.to_id()})).unwrap();
+    s.take_jobs();
+    let id = s.run("assistant.suggestFiling", &json!({})).unwrap()["asked"].as_u64().unwrap();
+    let system = s.take_jobs().into_iter().find_map(|j| match j {
+        Job::AskLlm { messages, .. } => messages.first().map(|m| m.1.clone()),
+        _ => None,
+    });
+    let system = system.unwrap();
+    assert!(system.contains("- Projects/Short film") && system.contains("- Clients"), "{system}");
+    assert!(!system.contains("- Deleted Items") && !system.contains("- Drafts"), "{system}");
+    s.apply(Event::LlmAnswered { id, text: "Here: {\"folder\": \"short film\", \"category\": \"clients\"}".into(), error: None });
+    let f = s.assistant.as_ref().and_then(|a| a.filing.clone()).unwrap();
+    assert_eq!(f.folder.map(|(path, shown)| (path.contains("Short"), shown)), Some((true, "Projects/Short film".to_string())));
+    assert_eq!(f.category.as_deref(), Some("Clients"));
+    // Names it doesn't have aren't offered.
+    let id = s.run("assistant.suggestFiling", &json!({})).unwrap()["asked"].as_u64().unwrap();
+    s.apply(Event::LlmAnswered { id, text: "{\"folder\": \"Invoices\", \"category\": \"\"}".into(), error: None });
+    assert_eq!(s.assistant.as_ref().and_then(|a| a.filing.clone()), Some(Default::default()));
+}

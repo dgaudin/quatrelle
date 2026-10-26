@@ -1562,3 +1562,9 @@ month	May	mai
 	Use this text	Utiliser ce texte
 	In place of what you wrote (its formatting goes)	À la place de ce que vous avez écrit (sa mise en forme est perdue)
 	Keep mine	Garder le mien
+	File it	Classer
+	Ask the language model set in Options which of your folders and categories this message belongs in	Demander au modèle de langage réglé dans les Options dans quel dossier et quelle catégorie ranger ce message
+	Where it goes	Où le ranger
+	The language model found none of your folders or categories for it.	Le modèle de langage n’a trouvé aucun de vos dossiers ni aucune de vos catégories pour ce message.
+	Move to {folder}	Déplacer vers {folder}
+	Categorize as {category}	Catégoriser comme {category}
