@@ -764,3 +764,17 @@ tester's does, a contact as Exchange keeps it, Outlook's clipboard), then fixed 
   for annotations on mailboxes, not for searching; a server's own text index (Dovecot's FTS) is
   used by the same `SEARCH` without Quatrelle asking anything else, and a fuzzy search (RFC 6203)
   is left for when a server that offers it can be tested.
+- **Folder Size** (File › Info and a folder's Properties): each folder's size here (Local Data)
+  and on Exchange (Server Data), its items and its size with its subfolders', the mailbox's
+  limits where the server tells them; Exchange 2016 tells none over EWS.
+- **Certificates from the Exchange address book:** encrypting to someone who never sent signed
+  mail looks their certificate up (`ResolveNames`, `UserSMIMECertificate`/`MSExchangeCertificate`).
+- **Outlook's copy of the rules:** when Exchange refuses a change because of it, the Rules dialog
+  offers to replace it (`RemoveOutlookRuleBlob`), saying what's lost.
+- **Assistant:** a language model the user sets in Options (an OpenAI-compatible
+  `chat/completions`: Ollama, LM Studio, vLLM, OpenAI, Mistral…; the key in the keychain; the
+  Options say the text of the messages asked about is sent there). In the reading pane:
+  Summarize (the whole conversation for a message in one), Suggest a reply (then Reply with this
+  text), File it (one of the account's folders and categories, as buttons). In the message
+  window's Review tab: Rewrite the text written (correct, shorter, more formal, friendlier, in
+  English), to use in its place or not. Azure OpenAI's own addresses and key header aren't.
