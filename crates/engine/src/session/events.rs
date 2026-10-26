@@ -92,6 +92,10 @@ impl Session {
                 }
                 self.reload_folder(&account, &folder);
                 self.note_new_mail(&account, &folder);
+                // A reply saved in Drafts (or gone from there): the list's marks follow.
+                if self.folder(&account, &folder).is_some_and(|f| f.role == FolderRole::Drafts) {
+                    self.note_drafts();
+                }
                 let visible = self.search.is_some() || self.view_folders().iter().any(|(a, f)| *a == account && *f == folder);
                 if visible {
                     self.refresh_list();

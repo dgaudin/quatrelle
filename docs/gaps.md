@@ -782,8 +782,12 @@ tester's does, a contact as Exchange keeps it, Outlook's clipboard), then fixed 
   folder) sets it aside in Drafts and shows that message; read again, its message brings the
   reply back as it was left (one left as it came, nothing typed, goes). Pop out and Discard are
   buttons above it; Discard takes its copy out of Drafts too. A draft in Drafts opens to carry on
-  writing it (double-click). A server account's copies go by one `Message-ID`, found in Drafts
-  by it once listed: replaced at each save, and gone once the message is sent (they stayed).
+  writing it (double-click), its message found again by its `In-Reply-To` (marked Replied once
+  it's sent). A message a reply waits for is marked `[Draft]` in red in the list, as Outlook's
+  (from the replies set aside and each account's Drafts, by `In-Reply-To`: read from a draft's
+  source, which a server's Drafts downloads with its list). A server account's copies go by one
+  `Message-ID`, found in Drafts by it once listed: replaced at each save, and gone once the
+  message is sent (they stayed).
 - **The original quoted under a reply** has its header in the interface's language (`De :`,
   `Envoyé : lundi 26 octobre 2026 10:07`…); the subject keeps `Re:` and `Fwd:`, which every mail
   program reads.
