@@ -50,6 +50,10 @@ pub struct Data {
     pub listeners: Vec<std::sync::mpsc::Sender<String>>,
     /// The next so many `Mailbox/get` calls fail (a server that didn't answer).
     pub fail_mailbox_get: u32,
+    /// The account starts with no identity to send from (Stalwart's new accounts); those made
+    /// with `Identity/set` are listed (their addresses).
+    pub no_identity: bool,
+    pub made_identities: Vec<String>,
     next: u32,
 }
 
@@ -297,7 +301,20 @@ impl Data {
                 self.vacation = patch;
                 (name.into(), json!({"accountId": ACCOUNT, "updated": {"singleton": null}}))
             }
-            "Identity/get" => (name.into(), json!({"accountId": ACCOUNT, "list": [{"id": "I1", "email": USER, "name": "Me"}]})),
+            "Identity/get" => {
+                let mut list: Vec<Value> = if self.no_identity { Vec::new() } else { vec![json!({"id": "I1", "email": USER, "name": "Me"})] };
+                list.extend(self.made_identities.iter().enumerate().map(|(i, e)| json!({"id": format!("M{i}"), "email": e, "name": ""})));
+                (name.into(), json!({"accountId": ACCOUNT, "list": list}))
+            }
+            "Identity/set" => {
+                let mut created = Map::new();
+                for (k, v) in args.get("create").and_then(Value::as_object).cloned().unwrap_or_default() {
+                    let email = v["email"].as_str().unwrap_or_default().to_string();
+                    created.insert(k, json!({"id": format!("M{}", self.made_identities.len())}));
+                    self.made_identities.push(email);
+                }
+                (name.into(), json!({"accountId": ACCOUNT, "created": created}))
+            }
             "EmailSubmission/set" => {
                 let mut created = Map::new();
                 let mut not_created = Map::new();
