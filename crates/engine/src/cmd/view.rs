@@ -124,6 +124,8 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             s.set_assistant(p::str(v, "url").unwrap_or_default(), p::str(v, "model").unwrap_or_default(), p::str(v, "key"))
         })
         .params(r#"{"url": string (an OpenAI-compatible server, …/v1; "" for none), "model"?: string, "key"?: string (kept in the keychain; "" forgets it)}"#),
+        CommandSpec::new("assistant.models", "List the models", "File › Options › Assistant", |s, _| s.list_llm_models())
+            .when(|s| if s.prefs.llm_url.trim().is_empty() { Some("set the language model's server first") } else { None }),
         CommandSpec::new("assistant.summarize", "Summarize", "Reading pane", |s, _| s.summarize())
             .when(|s| if s.prefs.llm_url.trim().is_empty() { Some("set a language model in File › Options › Assistant first") } else { None }),
         CommandSpec::new("assistant.suggestReply", "Suggest a reply", "Reading pane", |s, _| s.suggest_reply())

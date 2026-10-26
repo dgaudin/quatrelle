@@ -35,16 +35,59 @@ pub fn ask(url: &str, model: &str, key: Option<&str>, messages: &[(String, Strin
     answer(resp.status, &resp.body)
 }
 
+/// The most model names kept from a list.
+const MAX_MODELS: usize = 1000;
+
+/// The models the server at `url` (as for [`ask`]) offers: `GET …/models`, as OpenAI's API and
+/// the servers copying it answer (Ollama's own list too); sorted, each once.
+pub fn models(url: &str, key: Option<&str>) -> Result<Vec<String>> {
+    let base = url.trim().trim_end_matches('/');
+    let base = base.strip_suffix("/chat/completions").unwrap_or(base);
+    let mut req = Request::get(&format!("{base}/models"), MAX_ANSWER);
+    if let Some(k) = key.map(str::trim).filter(|k| !k.is_empty()) {
+        req = req.header("Authorization", &format!("Bearer {k}"));
+    }
+    let resp = http::send(&req)?;
+    model_names(resp.status, &resp.body)
+}
+
+/// The names in a list of models, or why there's none.
+fn model_names(status: u16, body: &[u8]) -> Result<Vec<String>> {
+    let v: serde_json::Value = serde_json::from_slice(body).unwrap_or_default();
+    if !(200..300).contains(&status) {
+        return Err(refusal(status, &v, body));
+    }
+    let listed = v.get("data").or_else(|| v.get("models")).and_then(|l| l.as_array());
+    let Some(listed) = listed else {
+        return Err(NetError::Protocol("the language model's server didn't list its models".into()));
+    };
+    let mut names: Vec<String> = listed
+        .iter()
+        .filter_map(|m| m.get("id").or_else(|| m.get("name")).and_then(|n| n.as_str()))
+        .map(|n| n.trim().chars().take(200).collect::<String>())
+        .filter(|n| !n.is_empty())
+        .take(MAX_MODELS)
+        .collect();
+    names.sort_by_key(|n| n.to_lowercase());
+    names.dedup();
+    Ok(names)
+}
+
+/// Why the server said no: its own words when it gave some.
+fn refusal(status: u16, v: &serde_json::Value, body: &[u8]) -> NetError {
+    let said = v
+        .pointer("/error/message")
+        .and_then(|m| m.as_str())
+        .map(|m| m.chars().take(300).collect::<String>())
+        .unwrap_or_else(|| String::from_utf8_lossy(body).chars().take(200).collect());
+    NetError::No(format!("the language model answered HTTP {status}: {}", said.trim()))
+}
+
 /// The text of a `chat/completions` answer, or why there's none.
 fn answer(status: u16, body: &[u8]) -> Result<String> {
     let v: serde_json::Value = serde_json::from_slice(body).unwrap_or_default();
     if !(200..300).contains(&status) {
-        let said = v
-            .pointer("/error/message")
-            .and_then(|m| m.as_str())
-            .map(|m| m.chars().take(300).collect::<String>())
-            .unwrap_or_else(|| String::from_utf8_lossy(body).chars().take(200).collect());
-        return Err(NetError::No(format!("the language model answered HTTP {status}: {}", said.trim())));
+        return Err(refusal(status, &v, body));
     }
     v.pointer("/choices/0/message/content")
         .and_then(|c| c.as_str())
@@ -67,6 +110,18 @@ mod tests {
         assert!(answer(502, b"Bad Gateway").unwrap_err().to_string().contains("Bad Gateway"));
         assert!(answer(200, br#"{"choices":[]}"#).is_err());
         assert!(answer(200, b"not json").is_err());
+    }
+
+    #[test]
+    fn a_list_of_models_gives_their_names() {
+        let openai = br#"{"object":"list","data":[{"id":"mistral-small","object":"model"},{"id":"Llama3.1:8b"},{"id":"mistral-small"},{"id":" "}]}"#;
+        assert_eq!(model_names(200, openai).unwrap(), ["Llama3.1:8b", "mistral-small"]);
+        let ollama = br#"{"models":[{"name":"qwen2.5:7b","size":1},{"name":"gemma2"}]}"#;
+        assert_eq!(model_names(200, ollama).unwrap(), ["gemma2", "qwen2.5:7b"]);
+        let refused = br#"{"error":{"message":"Incorrect API key provided"}}"#;
+        assert!(model_names(401, refused).unwrap_err().to_string().contains("Incorrect API key"));
+        assert!(model_names(200, b"{}").is_err());
+        assert!(model_names(200, b"not json").is_err());
     }
 
     /// A server on this computer, answering as Ollama or llama.cpp's do.

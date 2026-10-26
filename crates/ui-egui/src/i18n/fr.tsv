@@ -1547,6 +1547,12 @@ month	May	mai
 	Server address	Adresse du serveur
 	Model	Modèle
 	Key (if the server needs one)	Clé (si le serveur en demande une)
+	Looking for the server's models…	Recherche des modèles du serveur…
+	The models couldn't be listed: {error}	Impossible de lister les modèles : {error}
+	Models on this server: {n}	Modèles sur ce serveur : {n}
+	Choose or type a model	Choisir ou saisir un modèle
+	Choose from the server's models	Choisir parmi les modèles du serveur
+	Load the server's models again	Recharger les modèles du serveur
 	Suggest a reply	Proposer une réponse
 	Ask the language model set in Options to write a reply to this message	Demander au modèle de langage réglé dans les Options d’écrire une réponse à ce message
 	Suggested reply	Réponse proposée

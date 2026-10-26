@@ -237,6 +237,20 @@ impl Pool {
                     log::warn!("language model: {e}");
                 }
             }
+            Job::ListLlmModels { url } => {
+                let sink = self.sink.clone();
+                let key = self.creds.get_secret(&crate::llm::keyring(), crate::llm::KEY);
+                let spawned = std::thread::Builder::new().name("language-models".into()).spawn(move || {
+                    let done = match crate::llm::models(&url, key.as_deref()) {
+                        Ok(models) => Event::LlmModels { url, models, error: None },
+                        Err(e) => Event::LlmModels { url, models: Vec::new(), error: Some(e.to_string()) },
+                    };
+                    sink.emit(done);
+                });
+                if let Err(e) = spawned {
+                    log::warn!("language model: {e}");
+                }
+            }
             Job::SetLlmKey { key } => {
                 if key.0.trim().is_empty() {
                     self.creds.delete_secret(&crate::llm::keyring(), crate::llm::KEY);

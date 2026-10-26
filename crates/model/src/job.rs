@@ -342,6 +342,9 @@ pub enum Job {
     /// `url`, with `model` (its key, when it needs one, is in the keychain); `messages` are
     /// (role, text). Answered by [`Event::LlmAnswered`] with the same `id`.
     AskLlm { id: u64, url: String, model: String, messages: Vec<(String, String)> },
+    /// List the models the language model's server at `url` offers (with the keychain's key,
+    /// when there's one); answered by [`Event::LlmModels`].
+    ListLlmModels { url: String },
     /// Keep the language model's key in the keychain (empty: forget it).
     SetLlmKey { key: Secret },
     /// Forget the account's certificate and key (the keychain's copy goes). Older ones kept for
@@ -422,6 +425,7 @@ impl Job {
             | Job::SetSync { .. }
             | Job::CheckUpdates
             | Job::AskLlm { .. }
+            | Job::ListLlmModels { .. }
             | Job::SetLlmKey { .. }
             | Job::StopSearch
             | Job::CheckRevocation { .. }
@@ -698,6 +702,12 @@ pub enum Event {
     LlmAnswered {
         id: u64,
         text: String,
+        error: Option<String>,
+    },
+    /// The models the server at `url` offers ([`Job::ListLlmModels`]), or why they're not known.
+    LlmModels {
+        url: String,
+        models: Vec<String>,
         error: Option<String>,
     },
     /// What the address book keeps for each address asked about ([`Job::FindCertificates`]):

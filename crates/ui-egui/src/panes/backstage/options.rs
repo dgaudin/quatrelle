@@ -2,6 +2,8 @@
 
 use super::*;
 
+mod assistant;
+
 pub(super) fn options(s: &Session, st: &UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
     let t = st.tokens;
     heading(ui, &t, "Options");
@@ -289,41 +291,7 @@ pub(super) fn options(s: &Session, st: &UiState, ui: &mut Ui, acts: &mut Vec<Act
         );
     });
 
-    // The language model asked about mail: an OpenAI-compatible server (on this computer, the
-    // organisation's, or a service), each field saved once it's left; the key goes to the
-    // keychain and is never shown again.
-    group(
-        ui,
-        tl!("Assistant"),
-        Some(tl!("Summarize a message with a language model. The text of the messages you ask about is sent to this server: use one you trust.")),
-        &mut |ui| {
-            for (first, field, label, hint) in [
-                (true, "url", "Server address", "http://localhost:11434/v1"),
-                (false, "model", "Model", "llama3.1"),
-                (false, "key", "Key (if the server needs one)", ""),
-            ] {
-                setting(ui, first, tl!(label), None, &mut |ui| {
-                    let id = egui::Id::unique(("options-llm", field));
-                    let current = match field {
-                        "url" => s.prefs.llm_url.clone(),
-                        "model" => s.prefs.llm_model.clone(),
-                        _ => String::new(),
-                    };
-                    let mut text: String = ui.data_mut(|d| d.get_temp::<String>(id)).unwrap_or_else(|| current.clone());
-                    let r = ui.add(egui::TextEdit::singleline(&mut text).hint_text(hint).password(field == "key").desired_width(320.0));
-                    if r.lost_focus() && text.trim() != current {
-                        let mut p = json!({"url": s.prefs.llm_url, "model": s.prefs.llm_model});
-                        p[field] = json!(text.trim());
-                        acts.push(Action::Run("assistant.settings", p));
-                        if field == "key" {
-                            text.clear();
-                        }
-                    }
-                    ui.data_mut(|d| d.insert_temp(id, text));
-                });
-            }
-        },
-    );
+    assistant::assistant(s, &t, ui, acts);
 
     // Junk Email: the blocked and safe senders, each list with a box to add to it.
     for (list, title, about) in [

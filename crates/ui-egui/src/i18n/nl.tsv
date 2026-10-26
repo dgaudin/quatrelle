@@ -1543,6 +1543,12 @@ month	May	mei
 	Server address	Serveradres
 	Model	Model
 	Key (if the server needs one)	Sleutel (als de server er een vraagt)
+	Looking for the server's models…	Modellen van de server zoeken…
+	The models couldn't be listed: {error}	De modellen konden niet worden opgehaald: {error}
+	Models on this server: {n}	Modellen op deze server: {n}
+	Choose or type a model	Kies of typ een model
+	Choose from the server's models	Kiezen uit de modellen van de server
+	Load the server's models again	Modellen van de server opnieuw laden
 	Suggest a reply	Antwoord voorstellen
 	Ask the language model set in Options to write a reply to this message	Het taalmodel uit Opties een antwoord op dit bericht laten schrijven
 	Suggested reply	Voorgesteld antwoord

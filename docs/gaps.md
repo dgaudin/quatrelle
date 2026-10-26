@@ -773,7 +773,9 @@ tester's does, a contact as Exchange keeps it, Outlook's clipboard), then fixed 
   offers to replace it (`RemoveOutlookRuleBlob`), saying what's lost.
 - **Assistant:** a language model the user sets in Options (an OpenAI-compatible
   `chat/completions`: Ollama, LM Studio, vLLM, OpenAI, Mistral…; the key in the keychain; the
-  Options say the text of the messages asked about is sent there). In the reading pane:
+  Options say the text of the messages asked about is sent there). Its address, then its key,
+  then the model: picked from the ones the server lists (`GET …/models`, asked again when the
+  address or key changes, or with the button beside), or typed. In the reading pane:
   Summarize (the whole conversation for a message in one), Suggest a reply (then Reply with this
   text), File it (one of the account's folders and categories, as buttons). In the message
   window's Review tab: Rewrite the text written (correct, shorter, more formal, friendlier, in

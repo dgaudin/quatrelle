@@ -134,6 +134,7 @@ impl Session {
             Event::Compacted { account, before, after, error } => self.compacted(&account, before, after, error),
             Event::FolderSizes { account, server, folders, quota, error } => self.sizes_answered(&account, server, folders, quota, error),
             Event::LlmAnswered { id, text, error } => self.llm_answered(id, text, error),
+            Event::LlmModels { url, models, error } => self.llm_models_answered(url, models, error),
             Event::Exported { account, messages, skipped, done, error } => self.exported(&account, messages, skipped, done, error),
             Event::Categories { account, categories } => self.take_master_categories(&account, categories),
             Event::Quota { account, used, limit } => {

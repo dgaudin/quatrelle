@@ -270,6 +270,34 @@ fn the_assistant_summarizes_the_message_being_read() {
     assert!(s.assistant.is_none());
 }
 
+/// The server's models are asked for once its address or key is set, and kept for that
+/// server only; a list that couldn't be had keeps the one before.
+#[test]
+fn the_language_models_server_lists_its_models() {
+    let mut s = sample_session("models");
+    assert!(s.run("assistant.models", &json!({})).is_err(), "no server set");
+    s.run("assistant.settings", &json!({"url": "http://localhost:11434/v1"})).unwrap();
+    assert!(s.take_jobs().iter().any(|j| matches!(j, Job::ListLlmModels { url } if url == "http://localhost:11434/v1")));
+    assert!(s.llm_models.as_ref().is_some_and(|m| m.asking));
+    let listed = |names: &[&str]| names.iter().map(|n| n.to_string()).collect::<Vec<_>>();
+    s.apply(Event::LlmModels { url: "http://elsewhere/v1".into(), models: listed(&["old"]), error: None });
+    assert!(s.llm_models.as_ref().is_some_and(|m| m.asking && m.names.is_empty()), "another server's answer");
+    s.apply(Event::LlmModels { url: "http://localhost:11434/v1".into(), models: listed(&["gemma2", "llama3.1"]), error: None });
+    assert_eq!(s.llm_models.as_ref().map(|m| (m.asking, m.names.len())), Some((false, 2)));
+    // Picking a model doesn't ask again; a key does (the key kept first).
+    s.run("assistant.settings", &json!({"url": "http://localhost:11434/v1", "model": "gemma2"})).unwrap();
+    assert!(s.take_jobs().is_empty());
+    s.run("assistant.settings", &json!({"url": "http://localhost:11434/v1", "model": "gemma2", "key": "k1"})).unwrap();
+    let jobs = s.take_jobs();
+    let order: Vec<bool> = jobs.iter().map(|j| matches!(j, Job::SetLlmKey { .. })).collect();
+    assert_eq!(order, [true, false], "{jobs:?}");
+    s.apply(Event::LlmModels { url: "http://localhost:11434/v1".into(), models: Vec::new(), error: Some("HTTP 401".into()) });
+    let m = s.llm_models.clone().unwrap();
+    assert_eq!((m.names.len(), m.error.as_deref()), (2, Some("HTTP 401")));
+    s.run("assistant.settings", &json!({"url": ""})).unwrap();
+    assert!(s.llm_models.is_none());
+}
+
 /// A suggested reply: asked for on behalf of the account's owner, then a reply opens with it
 /// at the top, above the signature and the message quoted.
 #[test]

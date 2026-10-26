@@ -1546,6 +1546,12 @@ month	May	Май
 	Server address	Адрес сервера
 	Model	Модель
 	Key (if the server needs one)	Ключ (если сервер его требует)
+	Looking for the server's models…	Поиск моделей на сервере…
+	The models couldn't be listed: {error}	Не удалось получить список моделей: {error}
+	Models on this server: {n}	Моделей на этом сервере: {n}
+	Choose or type a model	Выберите или введите модель
+	Choose from the server's models	Выбрать из моделей сервера
+	Load the server's models again	Заново загрузить модели сервера
 	Suggest a reply	Предложить ответ
 	Ask the language model set in Options to write a reply to this message	Попросить языковую модель из параметров написать ответ на это письмо
 	Suggested reply	Предложенный ответ

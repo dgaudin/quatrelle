@@ -118,6 +118,19 @@ pub struct Assistant {
     pub answer: Option<Result<String, String>>,
 }
 
+/// The models the language model's server offers, to pick from in Options (one can still be
+/// typed): asked for when its address or key changes.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct LlmModels {
+    /// The server asked.
+    pub url: String,
+    /// Still being asked.
+    pub asking: bool,
+    pub names: Vec<String>,
+    /// Why the last answer gave none.
+    pub error: Option<String>,
+}
+
 impl Session {
     /// Summarize the message being read with the language model set in Options; the answer
     /// comes in as [`Session::assistant`].
@@ -362,6 +375,7 @@ impl Session {
             let shown: String = url.chars().take(80).collect();
             return Err(CmdError::Params(format!("`{shown}` isn't a web address (https://… or http://…)")));
         }
+        let moved = url != self.prefs.llm_url;
         self.prefs.llm_url = url.to_string();
         self.prefs.llm_model = model.trim().chars().take(200).collect();
         if let Some(k) = key {
@@ -369,8 +383,37 @@ impl Session {
         }
         if url.is_empty() {
             self.assistant = None;
+            self.llm_models = None;
+        } else if moved || key.is_some() {
+            // Another server, or the key it may have wanted: its models again (after the key's
+            // kept, the jobs going in order).
+            self.list_llm_models()?;
         }
         Ok(serde_json::json!({ "url": self.prefs.llm_url, "model": self.prefs.llm_model }))
+    }
+
+    /// Ask the language model's server which models it offers; they come in as
+    /// [`Session::llm_models`].
+    pub fn list_llm_models(&mut self) -> CmdResult {
+        let url = self.prefs.llm_url.trim().to_string();
+        if url.is_empty() {
+            return Err(CmdError::Disabled("set the language model's server first".into()));
+        }
+        let names = self.llm_models.as_ref().filter(|m| m.url == url).map(|m| m.names.clone()).unwrap_or_default();
+        self.llm_models = Some(LlmModels { url: url.clone(), asking: true, names, error: None });
+        self.jobs.push(Job::ListLlmModels { url });
+        Ok(serde_json::json!({ "asking": true }))
+    }
+
+    /// The server's models, for the server still set.
+    pub(in crate::session) fn llm_models_answered(&mut self, url: String, names: Vec<String>, error: Option<String>) {
+        if let Some(m) = self.llm_models.as_mut().filter(|m| m.url == url) {
+            m.asking = false;
+            if error.is_none() {
+                m.names = names;
+            }
+            m.error = error;
+        }
     }
 }
 

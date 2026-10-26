@@ -568,6 +568,7 @@ async fn job(sh: &Rcs, id: &str, j: Job) {
         | Job::FindCertificates { .. }
         | Job::ReplaceOutlookRules { .. }
         | Job::AskLlm { .. }
+        | Job::ListLlmModels { .. }
         | Job::SetLlmKey { .. }
         | Job::ExportPst { .. }
         | Job::WorkOffline { .. }
@@ -704,6 +705,9 @@ impl Backend for WebBackend {
             }
             Job::AskLlm { id, .. } => {
                 emit(sh, Event::LlmAnswered { id, text: String::new(), error: Some("the language model needs the desktop app".into()) })
+            }
+            Job::ListLlmModels { url } => {
+                emit(sh, Event::LlmModels { url, models: Vec::new(), error: Some("the language model needs the desktop app".into()) })
             }
             Job::SetLlmKey { .. } => {}
             Job::FindCertificates { account, .. } => {
