@@ -61,6 +61,7 @@ A mail client that crashes loses drafts and trust. **This outranks feature work.
   8620/8621, OAuth for native apps 8252 + PKCE 7636, SRV discovery 6186.
 - Never copy GPL/LGPL/AGPL code (Thunderbird, Evolution, Stalwart server…). Permissive crates only;
   `deny.toml` (cargo-deny, `.github/workflows/deny.yml`) checks licences, advisories and sources.
+  Named exceptions there are the owner's decision (spellbook's MPL-2.0, 2026-10-26).
 
 ## Architecture
 | Layer | Crate | Job |

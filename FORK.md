@@ -362,6 +362,14 @@ depuis les copies renommées, avec `~/mailcraft/merge-tools/pick.sh <commit>` (l
   `9e33e21`, `0533388`, `18a8a97`). Les fichiers du moteur de mise à jour sont ceux de l'origine,
   avec les versions de ce fork (`dgaudin/quatrelle`) ; la page À propos dans
   `backstage/about.rs`. `f6119f0` (les services du bureau dans `desktop.rs`) était déjà fait ici.
+- **Les reprises laissées en v0.23 et v0.24, faites** (demande du propriétaire, 2026-10-26, avant
+  d'y brancher Gmail et Yahoo) : les plafonds d'IMAP par commande (`7fbd05e` ; le téléchargement
+  d'avance de ce fork, `sync/ahead.rs`, prend les mêmes lots bornés en taille), IDLE et la boîte de
+  réception synchronisée à l'instant (`9083d2f`), le code de réponse suivi d'un texte non ASCII
+  (`565f0bb`), le jeton OAuth renouvelé une fois avant de redemander la connexion (`d4eddd7`),
+  cargo-deny (`5bf776e`), le fuzz (`9418429`, `bab68ee`, ses cibles IMAP et JMAP adaptées à ce
+  fork) et les tests contre de vrais serveurs (`610c87c`). Le découpage du worker de l'origine
+  (`6b7fc80`) n'est pas repris : celui de ce fork l'est déjà, autrement.
 
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
