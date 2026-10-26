@@ -586,3 +586,108 @@ fn the_headers_open_in_a_dialog_with_copy() {
     assert!(a.ui.dialog.is_some(), "still open");
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// A report's table of figures (twelve columns, a dark heading row) stays a table, as Outlook
+/// shows it: its cells side by side, its columns sized to their content, scrolling sideways in a
+/// pane too narrow for its words. Each cell went on a line of its own (twelve columns can't each
+/// be 140 wide).
+#[test]
+fn a_table_of_figures_stays_a_table() {
+    use egui::Shape;
+    let heads = [
+        "Serveur",
+        "Statut",
+        "vCPU",
+        "RAM (Go)",
+        "CPU moyen (%)",
+        "CPU p95 (%)",
+        "CPU max (%)",
+        "Heures CPU > 90%",
+        "RAM moyenne (%)",
+        "RAM p95 (%)",
+        "Heures RAM > 90%",
+        "File CPU p95 / cœur",
+    ];
+    let row = ["D4BATCHVN001", "Saturé", "10", "36", "34,6", "99", "99,7", "50,9", "14,2", "19,2", "0", "2,7"];
+    let cells = |tag: &str, texts: &[&str]| {
+        texts.iter().map(|t| format!("<{tag} style=\"padding:2px 6px\">{}</{tag}>", t.replace('>', "&gt;"))).collect::<String>()
+    };
+    let html = format!(
+        "<p>Pour les Batch voici une première analyse :</p><table style=\"border-collapse:collapse\"><tr style=\"background:#1f5f8b;color:#ffffff\">{}</tr>{}</table>",
+        cells("th", &heads),
+        (0..20).map(|_| format!("<tr>{}</tr>", cells("td", &row))).collect::<String>()
+    );
+    let (mut a, dir) = app_with_html("figures", "CR Astreinte : Semaine 43", &html);
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    let k = a.session.list.iter().find(|m| m.subject.starts_with("CR Astreinte")).map(|m| m.key.clone()).unwrap();
+    a.run("list.open", json!({"key": k.to_id()}));
+    let text_y = |shapes: &[Shape], text: &str| {
+        shapes.iter().find_map(|s| match s {
+            Shape::Text(t) if t.galley.text() == text => Some(t.pos.y),
+            _ => None,
+        })
+    };
+    // Wide, the whole table in the pane (some headings over two lines); narrow, its words can't
+    // all fit: it scrolls sideways, its first columns in sight.
+    for (size, last, fits) in [(egui::vec2(2400.0, 900.0), "File CPU p95 / cœur", true), (egui::vec2(900.0, 900.0), "Statut", false)] {
+        let mut shown = Vec::new();
+        for _ in 0..30 {
+            shown = frame_shapes(&ctx, &mut a, vec![], size);
+        }
+        let texts: Vec<String> =
+            shown.iter().filter_map(|s| if let Shape::Text(t) = s { Some(t.galley.text().chars().take(20).collect()) } else { None }).collect();
+        // On one row (a heading over two lines sits in the middle of it); stacked, they were a
+        // row apart each.
+        let (serveur, other) = (text_y(&shown, "Serveur"), text_y(&shown, last));
+        let side_by_side = serveur.zip(other).is_some_and(|(a, b)| (a - b).abs() < 30.0);
+        assert!(side_by_side, "the headings side by side at {size:?}: {serveur:?}, {other:?} in {texts:?}");
+        assert_eq!(text_y(&shown, "D4BATCHVN001"), text_y(&shown, "Saturé"), "a row's cells side by side at {size:?}");
+        assert_eq!(text_y(&shown, "File CPU p95 / cœur").is_some(), fits, "the last column in sight at {size:?}: {texts:?}");
+    }
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// As Outlook's, the header stays put while the message scrolls under it: the subject, who it's
+/// from and to, and Reply… (they went up and away with the text).
+#[test]
+fn the_header_stays_while_the_message_scrolls() {
+    use egui::{Event, Shape};
+    let html: String = (1..=80).map(|n| format!("<p>Paragraph {n} of a long message.</p>")).collect();
+    let (mut a, dir) = app_with_html("header-stays", "A long message", &html);
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    let k = a.session.list.iter().find(|m| m.subject == "A long message").map(|m| m.key.clone()).unwrap();
+    a.run("list.open", json!({"key": k.to_id()}));
+    let size = egui::vec2(1280.0, 800.0);
+    let text_y = |shapes: &[Shape], text: &str| {
+        shapes.iter().rev().find_map(|s| match s {
+            Shape::Text(t) if t.galley.text() == text => Some(t.pos.y),
+            _ => None,
+        })
+    };
+    let mut before = Vec::new();
+    for _ in 0..30 {
+        before = frame_shapes(&ctx, &mut a, vec![], size);
+    }
+    let (subject, first) = (text_y(&before, "A long message").unwrap(), text_y(&before, "Paragraph 1 of a long message.").unwrap());
+    // The wheel over the message's text.
+    let over = egui::pos2(1000.0, 600.0);
+    let wheel = Event::MouseWheel {
+        unit: egui::MouseWheelUnit::Point,
+        delta: egui::vec2(0.0, -400.0),
+        phase: egui::TouchPhase::Move,
+        source: egui::MouseWheelSource::Trackpad,
+        modifiers: egui::Modifiers::NONE,
+    };
+    frame_shapes(&ctx, &mut a, vec![Event::PointerMoved(over)], size);
+    let mut after = frame_shapes(&ctx, &mut a, vec![Event::PointerMoved(over), wheel], size);
+    for _ in 0..30 {
+        after = frame_shapes(&ctx, &mut a, vec![Event::PointerMoved(over)], size);
+    }
+    assert_eq!(text_y(&after, "A long message"), Some(subject), "the subject stays put");
+    assert!(text_y(&after, "Reply").is_some(), "Reply too");
+    let moved = text_y(&after, "Paragraph 1 of a long message.").is_none_or(|y| y < first - 100.0);
+    assert!(moved, "the text scrolled up: {first} → {:?}", text_y(&after, "Paragraph 1 of a long message."));
+    let _ = std::fs::remove_dir_all(dir);
+}
