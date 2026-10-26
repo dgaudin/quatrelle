@@ -44,6 +44,8 @@ pub(crate) struct Contacts {
     /// Bumped whenever what the book answers changes: the window works its suggestions out
     /// again only then.
     revision: u64,
+    /// The organisation's directory, asked on the server.
+    pub(crate) directory: super::Directory,
 }
 
 /// A folder being read into the book, a slice at a time.
@@ -86,6 +88,11 @@ impl Contacts {
             saved_changed: true,
             ..Default::default()
         }
+    }
+
+    /// What the book answers changed (the directory answered).
+    pub(super) fn changed(&mut self) {
+        self.revision += 1;
     }
 
     fn queue(&mut self, folder: (String, String)) {
@@ -133,6 +140,14 @@ impl Session {
     /// the window's, listed again as the book fills in.
     pub fn address_book_now(&mut self, source: &str, query: &str) -> Vec<EmailAddress> {
         const MAX: usize = 2000;
+        // The organisation's directory: what it has for the name typed (asked as it's typed).
+        if let Some(account) = source.strip_prefix("directory:") {
+            if query.trim().is_empty() {
+                return Vec::new();
+            }
+            self.search_directory(account, query, true);
+            return self.directory_found(account, query).map(|f| f.people.clone()).unwrap_or_default();
+        }
         let book = source.strip_prefix("book:").and_then(|b| b.split_once(':'));
         if source == "people" || book.is_some() {
             let mut v: Vec<EmailAddress> = self
@@ -145,17 +160,48 @@ impl Session {
             return v;
         }
         self.contacts_step(0);
-        self.contacts.book.as_ref().map(|b| b.list(query, MAX).into_iter().map(|c| c.address).collect()).unwrap_or_default()
+        let mut v: Vec<EmailAddress> =
+            self.contacts.book.as_ref().map(|b| b.list(query, MAX).into_iter().map(|c| c.address).collect()).unwrap_or_default();
+        // The user's own addresses too (the mail read leaves them out).
+        let lower = query.trim().to_lowercase();
+        let mine: Vec<EmailAddress> = self
+            .own_addresses()
+            .into_iter()
+            .filter(|a| a.name.to_lowercase().contains(&lower) || a.email.to_lowercase().contains(&lower))
+            .filter(|a| !v.iter().any(|x| x.email.eq_ignore_ascii_case(&a.email)))
+            .collect();
+        if !mine.is_empty() {
+            v.extend(mine);
+            let shown = |a: &EmailAddress| if a.name.is_empty() { a.email.to_lowercase() } else { a.name.to_lowercase() };
+            v.sort_by_cached_key(shown);
+        }
+        v
+    }
+
+    /// The user's own addresses, as their accounts name them.
+    pub(crate) fn own_addresses(&self) -> Vec<EmailAddress> {
+        self.accounts
+            .iter()
+            .filter(|a| a.config.email.contains('@'))
+            .map(|a| EmailAddress::new(a.config.name.clone(), a.config.email.clone()))
+            .collect()
     }
 
     /// The address books Select Names can show besides everyone (`all`) and every contact
-    /// (`people`): each account's, as (source, name, the account's address).
+    /// (`people`), as (source, name, the account's address): each account's, and each Exchange
+    /// account's directory (`directory:<account>`, named `Global Address List`).
     pub fn address_books(&self) -> Vec<(String, String, String)> {
-        self.accounts
+        let books = self
+            .accounts
             .iter()
             .filter_map(|a| self.pim.get(&a.config.id).map(|p| (a, p)))
-            .flat_map(|(a, p)| p.books.iter().map(move |b| (format!("book:{}:{}", a.config.id, b.id), b.name.clone(), a.config.email.clone())))
-            .collect()
+            .flat_map(|(a, p)| p.books.iter().map(move |b| (format!("book:{}:{}", a.config.id, b.id), b.name.clone(), a.config.email.clone())));
+        let directories = self
+            .accounts
+            .iter()
+            .filter(|a| a.config.ews.is_some())
+            .map(|a| (format!("directory:{}", a.config.id), "Global Address List".to_string(), a.config.email.clone()));
+        books.chain(directories).collect()
     }
 
     /// What the address book knows about an address.

@@ -209,6 +209,7 @@ impl Worker {
             Job::GetAvailability { emails, from, to, .. } => self.availability(&emails, from, to),
             Job::ServerFolderSizes { .. } => self.folder_sizes(),
             Job::FindCertificates { emails, .. } => self.directory_certificates(&emails),
+            Job::SearchDirectory { query, .. } => self.search_directory(&query),
             Job::FetchUrl { .. }
             | Job::Discover { .. }
             | Job::SignIn { .. }

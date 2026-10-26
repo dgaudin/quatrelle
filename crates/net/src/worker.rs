@@ -151,7 +151,7 @@ fn quick_job(j: &Job, acc: &AccountConfig) -> bool {
         Job::Send { .. } => acc.pop.is_none() && acc.jmap.is_none(),
         Job::GetVacation { .. } | Job::SetVacation { .. } => acc.pop.is_none(),
         Job::GetRooms { .. } | Job::GetAvailability { .. } => acc.ews.is_some() || acc.graph.is_some(),
-        Job::ServerFolderSizes { .. } | Job::FindCertificates { .. } => acc.ews.is_some(),
+        Job::ServerFolderSizes { .. } | Job::FindCertificates { .. } | Job::SearchDirectory { .. } => acc.ews.is_some(),
         _ => false,
     }
 }
@@ -791,6 +791,7 @@ fn jumps_queue(j: &Job) -> bool {
             | Job::SetVacation { .. }
             | Job::ServerFolderSizes { .. }
             | Job::FindCertificates { .. }
+            | Job::SearchDirectory { .. }
             | Job::SyncDav { .. }
             | Job::SyncFolder { .. }
     )

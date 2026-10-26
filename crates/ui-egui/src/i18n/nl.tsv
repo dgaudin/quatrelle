@@ -1621,6 +1621,12 @@ month	May	mei
 	Other email address…	Ander e-mailadres…
 	Other email address	Ander e-mailadres
 	Exchange sends from it when your account may send as it or on its behalf.	Exchange verzendt vanaf dit adres als uw account als dit adres of namens dit adres mag verzenden.
-	Name <address>	Naam <adres>
 	Send from it	Vanaf dit adres verzenden
 	Some names weren't found in your contacts or among the people you've written to	Sommige namen zijn niet gevonden in uw contactpersonen of bij de mensen aan wie u hebt geschreven
+	Global Address List	Algemene adreslijst
+	Your organisation's directory, searched on the server for the name typed	De adreslijst van uw organisatie, op de server doorzocht op de getypte naam
+	Type a name or an address to search the directory.	Typ een naam of adres om in de adreslijst te zoeken.
+	Searching the directory…	Adreslijst wordt doorzocht…
+	The directory couldn't be searched: {error}	De adreslijst kon niet worden doorzocht: {error}
+	More people match: type more of the name.	Er passen meer mensen: typ meer van de naam.
+	More than one person fits “{name}”. Choose who you meant:	Meerdere mensen passen bij ‘{name}’. Kies wie u bedoelde:

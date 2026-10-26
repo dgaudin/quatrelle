@@ -12,6 +12,7 @@ impl Session {
             | Event::Revocation { .. }
             | Event::HeldKeys { .. }
             | Event::DirectoryCertificates { .. }) => self.apply_smime(e),
+            Event::DirectoryPeople { account, query, people, more, error } => self.apply_directory(account, query, people, more, error),
             Event::Status { account, status } => {
                 // Show more ended (with nothing new, or failing): its footer can be asked again.
                 if !matches!(status, SyncStatus::Syncing { .. } | SyncStatus::Connecting)
