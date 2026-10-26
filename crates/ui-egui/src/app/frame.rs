@@ -52,7 +52,7 @@ impl MailApp {
             let start = quatrelle_engine::model::dates::civil(r.start, &self.session.clock);
             let when = if r.all_day { String::new() } else { format!("{:02}:{:02}", start.hour, start.minute) };
             let body = if r.location.is_empty() { when } else { format!("{when} · {}", r.location) };
-            let (snooze, dismiss) = i18n::as_written(|| (tl!("Snooze 5 minutes").to_string(), tl!("Dismiss").to_string()));
+            let (snooze, dismiss) = (tl!("Snooze 5 minutes").to_string(), tl!("Dismiss").to_string());
             self.services.notify_reminder(&r.key, &r.summary, &body, &snooze, &dismiss);
         }
         // Answered or past: their notifications go, so none is left with buttons that fail.
