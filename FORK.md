@@ -355,9 +355,13 @@ depuis les copies renommées, avec `~/mailcraft/merge-tools/pick.sh <commit>` (l
 - **Laissés** (décision du propriétaire, 2026-10-22 : l'apparence et le calendrier de ce fork
   restent) : le ruban « classique » et le mode sombre de l'origine (`b273cf8`, `b048d72`,
   `1cacf30`, issue #8) ; le serveur CalDAV donné à la main (`95c8779`, `695972d`, `fadbcc7`,
-  `f6d66c5`, issue #7). **À voir** : la mise à jour qui reprend un téléchargement et prévient
-  quand elle est prête (`2e4b4ed` à `18a8a97`), qui touche le moteur de mise à jour de ce fork ;
-  le fuzz (`bab68ee`) ; la CI et la documentation de l'origine.
+  `f6d66c5`, issue #7) ; le fuzz (`bab68ee`) ; la CI et la documentation de l'origine.
+- **La mise à jour intégrée** (accord du propriétaire, 2026-10-26) : le téléchargement qui reprend
+  où il s'était arrêté, la barre « prête » avec Redémarrer maintenant, la question à la fermeture,
+  les AppImages là où l'utilisateur peut écrire (`2e4b4ed`, `e79f121`, `2b2ccb9`, `5e0620b`,
+  `9e33e21`, `0533388`, `18a8a97`). Les fichiers du moteur de mise à jour sont ceux de l'origine,
+  avec les versions de ce fork (`dgaudin/quatrelle`) ; la page À propos dans
+  `backstage/about.rs`. `f6119f0` (les services du bureau dans `desktop.rs`) était déjà fait ici.
 
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
