@@ -1588,3 +1588,8 @@ month	May	מאי
 	Use for sending	שימוש לשליחה
 	Sign and encrypt with this one again; the one in use is kept for reading	לחתום ולהצפין שוב עם אישור זה; האישור שבשימוש נשמר לקריאה
 	Forget this certificate: mail encrypted to it can't be read any more	שכחת אישור זה: לא ניתן יהיה עוד לקרוא דואר שהוצפן עבורו
+	From:	מאת:
+	Sent:	נשלח:
+	To:	אל:
+	Cc:	עותק:
+	Subject:	נושא:

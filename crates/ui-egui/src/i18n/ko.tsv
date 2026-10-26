@@ -1591,3 +1591,8 @@ month	May	5월
 	Use for sending	보내기에 사용
 	Sign and encrypt with this one again; the one in use is kept for reading	이 인증서로 다시 서명하고 암호화합니다. 사용 중인 인증서는 읽기용으로 보관됩니다
 	Forget this certificate: mail encrypted to it can't be read any more	이 인증서 삭제: 이 인증서로 암호화된 메일을 더 이상 읽을 수 없습니다
+	From:	보낸 사람:
+	Sent:	보낸 날짜:
+	To:	받는 사람:
+	Cc:	참조:
+	Subject:	제목:

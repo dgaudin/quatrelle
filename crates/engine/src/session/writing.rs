@@ -6,6 +6,7 @@ use super::*;
 
 mod assistant;
 mod compose;
+mod drafts;
 mod items;
 mod vote;
 pub use assistant::{AssistKind, Assistant, Filing, Rewrite};
@@ -176,7 +177,7 @@ impl Session {
         let parsed = r.parsed.ok_or_else(|| CmdError::Disabled("the message is still downloading".into()))?;
         let account = r.key.account.clone();
         let sig = self.signature_in_message(&self.signature_when(&account, true));
-        let (d, styles) = mime::reply_doc(&parsed, mode, &self.me(&account), &self.clock, &sig);
+        let (d, styles) = mime::reply_doc(&parsed, mode, &self.me(&account), &self.clock, &sig, &self.quote_words);
         let id = self.fresh_id();
         let mut attachments = Vec::new();
         if mode == ReplyMode::Forward
@@ -208,6 +209,9 @@ impl Session {
             ..Default::default()
         });
         self.style_signature();
+        if let Some(c) = self.compose.as_mut() {
+            c.started = Some(c.fingerprint());
+        }
         Ok(serde_json::json!({ "compose": id }))
     }
 
@@ -257,13 +261,21 @@ impl Session {
     }
 
     pub(super) fn compose_bytes(&mut self, c: &Compose, d: &mime::Draft) -> Result<(Vec<u8>, String), CmdError> {
+        self.compose_bytes_as(c, d, None).map(|(raw, email, _)| (raw, email))
+    }
+
+    /// [`Session::compose_bytes`] under the `Message-ID` given (a new one without), and that id.
+    fn compose_bytes_as(&mut self, c: &Compose, d: &mime::Draft, mid: Option<&str>) -> Result<(Vec<u8>, String, String), CmdError> {
         let acc = self.account(&c.account).ok_or_else(|| CmdError::Failed("the sending account is gone".into()))?;
         let from = quatrelle_model::EmailAddress::new(acc.config.name.clone(), acc.config.email.clone());
         let email = acc.config.email.clone();
         let now = self.clock.now;
-        let mid = mime::new_message_id(&email, now, self.random());
+        let mid = match mid {
+            Some(m) => m.to_string(),
+            None => mime::new_message_id(&email, now, self.random()),
+        };
         let raw = mime::build(d, &from, now, &mid).map_err(CmdError::Failed)?;
-        Ok((raw, email))
+        Ok((raw, email, mid))
     }
 
     /// What to look at before `c` goes ([`SendCheck`]).
@@ -413,34 +425,22 @@ impl Session {
                 self.save_pending_marks();
             }
         }
-        if let Some(draft) = &c.draft {
-            self.apply_op(&draft.account.clone(), Op::Expunge { keys: vec![draft.clone()] });
-        }
+        self.remove_saved_copies(c);
         if self.compose.as_ref().is_some_and(|x| x.id == c.id) {
             self.compose = None;
         }
         self.composes.retain(|x| x.id != c.id);
+        self.set_aside.retain(|x| x.id != c.id);
         self.notice("Message sent", false);
     }
 
     /// Save the message being written to Drafts.
     pub fn save_draft(&mut self) -> CmdResult {
         let c = self.compose.clone().ok_or_else(|| CmdError::Disabled("nothing to save".into()))?;
-        let (raw, folder) = self.draft_bytes(&c)?;
-        if self.account(&c.account).is_none_or(AccountState::is_local) {
-            if let Some(old) = &c.draft {
-                self.apply_op(&c.account.clone(), Op::Expunge { keys: vec![old.clone()] });
-            }
-            let key = self.file_locally(&c.account, &folder, &raw, false);
-            if let Some(cm) = self.compose.as_mut() {
-                cm.draft = key;
-            }
-        } else {
-            self.jobs.push(self.draft_job(&c, raw, folder, false));
-            if let Some(cm) = self.compose.as_mut() {
-                // The server assigns the new copy's UID; the old one is replaced by the worker.
-                cm.draft = None;
-            }
+        let (draft, saved_id) = self.file_draft(&c, false)?;
+        if let Some(cm) = self.compose.as_mut() {
+            cm.draft = draft;
+            cm.saved_id = saved_id;
         }
         self.notice("Draft saved", false);
         Ok(serde_json::json!({ "saved": c.id }))
@@ -452,37 +452,30 @@ impl Session {
         let written: Vec<Compose> = self.all_composes().filter(|c| self.written(c) && !c.sending).cloned().collect();
         let mut kept = 0;
         for c in written {
-            let Ok((raw, folder)) = self.draft_bytes(&c) else { continue };
-            if self.account(&c.account).is_none_or(AccountState::is_local) {
-                if let Some(old) = &c.draft {
-                    self.apply_op(&c.account.clone(), Op::Expunge { keys: vec![old.clone()] });
-                }
-                self.file_locally(&c.account, &folder, &raw, false);
-            } else {
-                let job = self.draft_job(&c, raw, folder, true);
-                self.jobs.push(job);
+            if self.file_draft(&c, true).is_ok() {
+                kept += 1;
             }
-            kept += 1;
         }
         kept
     }
 
-    /// The job filing `c`'s draft `raw` in `folder` on the server (`keep`: kept on this computer
-    /// first, as Quatrelle closes): encrypted to the account's own certificate first when the
-    /// message is to be encrypted.
-    fn draft_job(&self, c: &Compose, raw: Vec<u8>, folder: String, keep: bool) -> Job {
+    /// The job filing `c`'s draft `raw` in `folder` on the server in place of `replaces`
+    /// (`keep`: kept on this computer first, as Quatrelle closes): encrypted to the account's
+    /// own certificate first when the message is to be encrypted.
+    fn draft_job(&self, c: &Compose, raw: Vec<u8>, folder: String, keep: bool, replaces: Option<MessageKey>) -> Job {
         let config = self.account(&c.account).map(|a| a.config.clone());
         match config {
             Some(account) if c.encrypt && self.identity(&c.account).is_some() => {
-                Job::SealDraft { account, raw: quatrelle_model::Private(raw), folder, replaces: c.draft.clone(), keep }
+                Job::SealDraft { account, raw: quatrelle_model::Private(raw), folder, replaces, keep }
             }
-            _ if keep => Job::KeepDraft { account: c.account.clone(), raw, folder, replaces: c.draft.clone() },
-            _ => Job::SaveDraft { account: c.account.clone(), raw, folder, replaces: c.draft.clone() },
+            _ if keep => Job::KeepDraft { account: c.account.clone(), raw, folder, replaces },
+            _ => Job::SaveDraft { account: c.account.clone(), raw, folder, replaces },
         }
     }
 
-    /// A message as a draft's source, and the Drafts folder it goes in.
-    pub(super) fn draft_bytes(&mut self, c: &Compose) -> Result<(Vec<u8>, String), CmdError> {
+    /// A message as a draft's source, the Drafts folder it goes in, and the `Message-ID` it goes
+    /// by (the one its earlier copies went by, so that they're found).
+    pub(super) fn draft_bytes(&mut self, c: &Compose) -> Result<(Vec<u8>, String, String), CmdError> {
         // Drafts may hold unfinished addresses: keep only the valid ones.
         let lenient = |s: &str| s.split([',', ';']).filter_map(|p| addr::parse_list(p).ok()).flatten().collect::<Vec<_>>();
         let (body, html, inline) = c.bodies();
@@ -508,8 +501,9 @@ impl Session {
             .and_then(|a| a.folder(FolderRole::Drafts))
             .map(|f| f.path.clone())
             .ok_or_else(|| CmdError::Failed("this account has no Drafts folder".into()))?;
-        let (raw, _) = self.compose_bytes(c, &d)?;
-        Ok((raw, folder))
+        let earlier = Some(c.saved_id.as_str()).filter(|m| !m.is_empty());
+        let (raw, _, mid) = self.compose_bytes_as(c, &d, earlier)?;
+        Ok((raw, folder, mid))
     }
 
     /// File a message in a local account's folder; returns its key.

@@ -1592,3 +1592,8 @@ month	May	mayo
 	Use for sending	Usar para enviar
 	Sign and encrypt with this one again; the one in use is kept for reading	Volver a firmar y cifrar con este; el que está en uso se conserva para leer
 	Forget this certificate: mail encrypted to it can't be read any more	Olvidar este certificado: el correo cifrado para él ya no se podrá leer
+	From:	De:
+	Sent:	Enviado:
+	To:	Para:
+	Cc:	CC:
+	Subject:	Asunto:

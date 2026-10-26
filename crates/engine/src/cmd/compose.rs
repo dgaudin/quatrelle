@@ -95,6 +95,11 @@ pub(super) fn commands() -> Vec<CommandSpec> {
         })
         .when(has_compose),
         CommandSpec::new("compose.close", "Close", "Message", close_compose).params(r#"{"save"?: bool (keep it in Drafts; default true)}"#).when(has_compose),
+        CommandSpec::new("draft.edit", "Edit draft", "Message list › Drafts", |s, v| {
+            let k = key_param(s, v)?;
+            s.edit_draft(&k)
+        })
+        .params(r#"{"key": "account:validity:uid:folder"}"#),
         CommandSpec::new("contacts.suggest", "Suggest recipients", "Message › To", |s, v| {
             let q = p::req_str(v, "query")?.to_string();
             let limit = p::u64(v, "limit").map_or(8, |n| usize::try_from(n).unwrap_or(8).clamp(1, 100));
@@ -399,8 +404,12 @@ pub(super) fn close_compose(s: &mut Session, v: &Value) -> CmdResult {
     Ok(json!({"closed": c.id, "saved": saved}))
 }
 
+/// Discard the message being written, as Outlook's Discard: the copies kept in Drafts go too.
 pub(super) fn discard(s: &mut Session, _: &Value) -> CmdResult {
     let c = s.compose.take();
+    if let Some(c) = &c {
+        s.remove_saved_copies(c);
+    }
     Ok(json!({"discarded": c.map(|c| c.id)}))
 }
 

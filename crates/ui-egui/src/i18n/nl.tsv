@@ -1588,3 +1588,8 @@ month	May	mei
 	Use for sending	Gebruiken voor verzenden
 	Sign and encrypt with this one again; the one in use is kept for reading	Weer met dit certificaat ondertekenen en versleutelen; het huidige blijft om te lezen
 	Forget this certificate: mail encrypted to it can't be read any more	Dit certificaat vergeten: e-mail die ervoor versleuteld is, kan niet meer gelezen worden
+	From:	Van:
+	Sent:	Verzonden:
+	To:	Aan:
+	Cc:	CC:
+	Subject:	Onderwerp:

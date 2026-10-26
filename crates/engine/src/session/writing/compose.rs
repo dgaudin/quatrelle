@@ -26,6 +26,15 @@ pub struct Compose {
     pub error: Option<String>,
     /// The copy saved in Drafts, replaced on the next save.
     pub draft: Option<MessageKey>,
+    /// The `Message-ID` every copy saved in Drafts goes by: a server account's copy is found
+    /// there by it once it's listed (its key isn't known when it's saved), to be replaced at the
+    /// next save and removed once the message is sent or discarded.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub saved_id: String,
+    /// What it held as it was started ([`Compose::fingerprint`]): a reply left as it came isn't
+    /// kept when another message is read.
+    #[serde(skip)]
+    pub started: Option<u64>,
     /// The Bcc row is shown.
     pub show_cc: bool,
     /// Send as plain text only (lists written out, the rest of the formatting dropped).
@@ -74,6 +83,22 @@ pub struct Compose {
 }
 
 impl Compose {
+    /// What's been written, digested: the recipients, subject, text and attachments.
+    pub fn fingerprint(&self) -> u64 {
+        use std::hash::{Hash, Hasher};
+        let mut h = std::hash::DefaultHasher::new();
+        (&self.to, &self.cc, &self.bcc, &self.subject, &self.body).hash(&mut h);
+        for a in &self.attachments {
+            (&a.name, a.data.len()).hash(&mut h);
+        }
+        h.finish()
+    }
+
+    /// Nothing changed since it was started (a reply as it came).
+    pub fn untouched(&self) -> bool {
+        self.started == Some(self.fingerprint())
+    }
+
     /// The text, HTML and pictures to send: formatted when the text uses formatting or has
     /// pictures (and the message isn't set to plain text), else plain text alone.
     pub fn bodies(&self) -> (String, Option<String>, Vec<mime::InlinePicture>) {

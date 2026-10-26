@@ -778,3 +778,12 @@ tester's does, a contact as Exchange keeps it, Outlook's clipboard), then fixed 
   text), File it (one of the account's folders and categories, as buttons). In the message
   window's Review tab: Rewrite the text written (correct, shorter, more formal, friendlier, in
   English), to use in its place or not. Azure OpenAI's own addresses and key header aren't.
+- **A reply in the reading pane, as Outlook's:** reading another message (or opening another
+  folder) sets it aside in Drafts and shows that message; read again, its message brings the
+  reply back as it was left (one left as it came, nothing typed, goes). Pop out and Discard are
+  buttons above it; Discard takes its copy out of Drafts too. A draft in Drafts opens to carry on
+  writing it (double-click). A server account's copies go by one `Message-ID`, found in Drafts
+  by it once listed: replaced at each save, and gone once the message is sent (they stayed).
+- **The original quoted under a reply** has its header in the interface's language (`De :`,
+  `Envoyé : lundi 26 octobre 2026 10:07`…); the subject keeps `Re:` and `Fwd:`, which every mail
+  program reads.

@@ -1591,3 +1591,8 @@ month	May	Май
 	Use for sending	Использовать для отправки
 	Sign and encrypt with this one again; the one in use is kept for reading	Снова подписывать и шифровать этим; текущий останется для чтения
 	Forget this certificate: mail encrypted to it can't be read any more	Забыть этот сертификат: письма, зашифрованные для него, больше не прочитать
+	From:	От:
+	Sent:	Отправлено:
+	To:	Кому:
+	Cc:	Копия:
+	Subject:	Тема:
