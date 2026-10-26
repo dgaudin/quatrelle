@@ -1217,7 +1217,6 @@ month	May	5월
 	Scheduling Assistant	일정 도우미
 	The rooms couldn't be read: {error}	회의실을 읽을 수 없습니다: {error}
 	Organizer	주최자
-	Guest	참석자
 	Room	회의실
 	Free	비어 있음
 	Busy	바쁨
@@ -1451,7 +1450,24 @@ month	May	5월
 	Every year on {day} {month}	매년 {month} {day}일
 	Every {n} years on {day} {month}	{n}년마다 {month} {day}일
 	Webex Meeting	Webex 회의
-	Set your Webex personal room in File › Options first	먼저 파일 › 옵션에서 Webex 개인 회의실을 설정하세요
+	Add Attendees…	참석자 추가…
+	Add to the meeting	회의에 추가
+	Choose from the address book	주소록에서 선택
+	Click a room to see when it's free; double-click it to book it.	회의실을 클릭하면 비어 있는 시간이 표시되고, 두 번 클릭하면 예약됩니다.
+	Hide its day	이 날 숨기기
+	Its link is on your Webex profile, under Personal Room. It's kept in File › Options › Calendar for the next meetings.	링크는 Webex 프로필의 개인 회의실에 있습니다. 다음 회의를 위해 파일 › 옵션 › 일정에 저장됩니다.
+	Not a Webex personal room: https://<site>.webex.com/meet/<name>	Webex 개인 회의실이 아닙니다: https://<site>.webex.com/meet/<name>
+	Not an address: {what}	주소가 아닙니다: {what}
+	Puts your Webex personal room in the meeting	Webex 개인 회의실을 회의에 넣습니다
+	Select Attendees and Resources	참석자 및 리소스 선택
+	Your Webex personal room	내 Webex 개인 회의실
+	Required ->	필수 ->
+	Optional ->	선택 ->
+	Resources ->	리소스 ->
+	Required attendee	필수 참석자
+	Optional attendee	선택 참석자
+	Book this room	이 회의실 예약
+	Remove this room	이 회의실 제거
 	Join the Webex meeting:	Webex 회의 참가:
 	Webex personal room	Webex 개인 회의실
 	Webex Meeting, in a new appointment's window, puts it in for the guests to join	새 약속 창의 Webex 회의 단추가 참석자가 참가할 수 있도록 이를 넣습니다

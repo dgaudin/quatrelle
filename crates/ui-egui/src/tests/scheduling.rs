@@ -219,3 +219,213 @@ fn a_meeting_is_written_in_a_window_of_its_own() {
     frame_sized(&ctx, &mut a, vec![], size);
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// Where the text `text` was last drawn (the one on top), in the middle of it.
+fn text_at(shapes: &[egui::Shape], text: &str) -> Option<egui::Pos2> {
+    shapes.iter().rev().find_map(|s| match s {
+        egui::Shape::Text(t) if t.galley.text() == text => Some(t.pos + t.galley.rect.center().to_vec2()),
+        _ => None,
+    })
+}
+
+/// Where the text `text` is drawn on top once it stays put (a window or dialog fading in moves
+/// a little while it does).
+fn settled_text_at(ctx: &egui::Context, a: &mut crate::MailApp, text: &str, size: egui::Vec2) -> Option<egui::Pos2> {
+    let mut at = None;
+    for _ in 0..40 {
+        let now = text_at(&frame_shapes(ctx, a, vec![], size), text);
+        if now.is_some() && now == at {
+            return now;
+        }
+        at = now;
+    }
+    None
+}
+
+/// Clicks at `at` (`times` in a row: two make a double-click), a frame after. A moment passes
+/// first, so a click just before doesn't make them a double- or triple-click.
+fn click_at(ctx: &egui::Context, a: &mut crate::MailApp, at: egui::Pos2, times: usize, size: egui::Vec2) {
+    let press = |pressed| Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: Modifiers::NONE };
+    for _ in 0..20 {
+        frame_sized(ctx, a, vec![], size);
+    }
+    frame_sized(ctx, a, vec![Event::PointerMoved(at)], size);
+    for _ in 0..times {
+        frame_sized(ctx, a, vec![press(true)], size);
+        frame_sized(ctx, a, vec![press(false)], size);
+    }
+    frame_sized(ctx, a, vec![], size);
+}
+
+/// Required and Optional open the address book over the meeting's window, aimed at their
+/// line: it lists the people known, a double-click adds one to that line, and OK puts the lines
+/// back in the meeting, the rooms being those in Resources (a resource that isn't an address
+/// keeps it open, saying so). Escape leaves the meeting as it was. Optional guests have their
+/// row in the Scheduling Assistant.
+#[test]
+fn required_and_optional_open_the_address_book() {
+    use crate::pim_dialogs::{Line, line_button_id};
+    let (mut a, dir) = app("attendees-book");
+    let ctx = egui::Context::default();
+    let size = egui::vec2(1280.0, 900.0);
+    frame_sized(&ctx, &mut a, vec![], size);
+    a.ui.dialog = Some(Dialog::new_event(&a.session, Some(NOW + 2 * 3600)));
+    frame_sized(&ctx, &mut a, vec![], size);
+    let w = a.ui.event_windows[0].0;
+    {
+        let f = &mut a.ui.event_windows[0].1;
+        f.inviting = true;
+        f.guests = "sam@studio.example".into();
+        f.add_room("Sound Lab", "sound.lab@studio.example");
+    }
+    frame_sized(&ctx, &mut a, vec![], size);
+    frame_sized(&ctx, &mut a, vec![], size);
+    let book = |a: &crate::MailApp| a.ui.event_windows[0].1.attendees_book.clone();
+    let at = ctx.read_response(line_button_id(w, Line::Optional)).map(|r| r.rect.center()).expect("the Optional button");
+    click_at(&ctx, &mut a, at, 1, size);
+    let b = book(&a).expect("the address book opened");
+    assert_eq!(b.target, Line::Optional);
+    assert_eq!((b.required.as_str(), b.resources.as_str()), ("sam@studio.example", "Sound Lab <sound.lab@studio.example>"));
+    // Listed as the address book is read, a slice a frame.
+    for _ in 0..10 {
+        frame_sized(&ctx, &mut a, vec![], size);
+    }
+    let b = book(&a).unwrap();
+    assert!(b.search.list.iter().any(|x| x.email == "zoe@studio.example"), "everyone mail was exchanged with: {:?}", b.search.list);
+    // Looked for (the search box has the focus), then double-clicked: in Optional, the line it
+    // was opened from.
+    frame_sized(&ctx, &mut a, vec![Event::Text("zoe".into())], size);
+    frame_sized(&ctx, &mut a, vec![], size);
+    let b = book(&a).unwrap();
+    assert!(b.search.query == "zoe" && b.search.list.iter().all(|x| x.email.contains("zoe")), "{:?}", b.search);
+    let zoe = settled_text_at(&ctx, &mut a, "Zoe Park", size).expect("Zoe in the list");
+    click_at(&ctx, &mut a, zoe, 2, size);
+    let b = book(&a).unwrap();
+    assert!(b.optional.contains("zoe@studio.example") && !b.required.contains("zoe"), "{b:?}");
+    // A resource that isn't an address: OK keeps the dialog, saying so.
+    a.ui.event_windows[0].1.attendees_book.as_mut().unwrap().resources = "Sound Lab <sound.lab@studio.example>; the big room".into();
+    let at = settled_text_at(&ctx, &mut a, "OK", size).expect("OK");
+    click_at(&ctx, &mut a, at, 1, size);
+    let b = book(&a).expect("still open");
+    assert!(b.error.as_deref().is_some_and(|e| e.contains("the big room")), "{:?}", b.error);
+    assert_eq!(a.ui.event_windows[0].1.optional, "", "nothing changed yet");
+    // Fixed: OK puts the lines in the meeting, the rooms those in Resources.
+    a.ui.event_windows[0].1.attendees_book.as_mut().unwrap().resources = "projector@studio.example".into();
+    let at = settled_text_at(&ctx, &mut a, "OK", size).expect("OK");
+    click_at(&ctx, &mut a, at, 1, size);
+    {
+        let f = &a.ui.event_windows[0].1;
+        assert!(f.attendees_book.is_none(), "closed");
+        assert!(f.optional.contains("zoe@studio.example") && !f.optional.ends_with(';'), "{}", f.optional);
+        assert_eq!(f.guests, "sam@studio.example");
+        assert_eq!(f.rooms, [("projector@studio.example".to_string(), "projector@studio.example".to_string())]);
+        assert_eq!(f.location, "projector@studio.example", "the place follows the rooms");
+    }
+    // Required, then Escape: the meeting as it was.
+    let at = ctx.read_response(line_button_id(w, Line::Required)).map(|r| r.rect.center()).expect("the Required button");
+    click_at(&ctx, &mut a, at, 1, size);
+    assert_eq!(book(&a).map(|b| b.target), Some(Line::Required));
+    a.ui.event_windows[0].1.attendees_book.as_mut().unwrap().required.clear();
+    frame_sized(&ctx, &mut a, vec![key(Key::Escape, Modifiers::NONE)], size);
+    frame_sized(&ctx, &mut a, vec![], size);
+    assert!(book(&a).is_none() && a.ui.event_windows[0].1.guests == "sam@studio.example");
+    // The Scheduling Assistant: a row for the optional guest too.
+    a.ui.event_windows[0].1.scheduling = true;
+    for _ in 0..3 {
+        frame_sized(&ctx, &mut a, vec![], size);
+    }
+    let day_from = NOW - NOW.rem_euclid(86_400);
+    assert!(a.session.availability_now("sample", "zoe@studio.example", day_from, day_from + 86_400).is_some(), "Zoe's hours asked for");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// In the Room Finder a click on a room shows its day under the list (its busy hours, the
+/// meeting over them) without booking it; a double-click books it, another frees it; the
+/// button beside its day does the same.
+#[test]
+fn a_click_shows_a_rooms_day_and_a_double_click_books_it() {
+    use crate::pim_dialogs::rooms::room_row_id;
+    use crate::pim_dialogs::scheduling::room_timeline_id;
+    let (mut a, dir) = app("room-day");
+    let ctx = egui::Context::default();
+    let size = egui::vec2(1280.0, 900.0);
+    frame_sized(&ctx, &mut a, vec![], size);
+    let mut d = Dialog::new_event(&a.session, Some(NOW + 2 * 3600));
+    if let Dialog::Event(f) = &mut d {
+        f.finder = Some(crate::pim_dialogs::RoomFinderUi::default());
+    }
+    a.ui.dialog = Some(d);
+    for _ in 0..3 {
+        frame_sized(&ctx, &mut a, vec![], size);
+    }
+    let w = a.ui.event_windows[0].0;
+    let lab = "sound.lab@studio.example";
+    let row = ctx.read_response(room_row_id(w, lab)).map(|r| r.rect.center()).expect("the Sound Lab in the list");
+    click_at(&ctx, &mut a, row, 1, size);
+    {
+        let f = &a.ui.event_windows[0].1;
+        assert_eq!(f.finder.as_ref().and_then(|st| st.shown.clone()), Some(("Sound Lab".to_string(), lab.to_string())));
+        assert!(f.rooms.is_empty(), "a click only shows it");
+    }
+    for _ in 0..2 {
+        frame_sized(&ctx, &mut a, vec![], size);
+    }
+    let day_from = NOW - NOW.rem_euclid(86_400);
+    let known = a.session.availability_now("sample", lab, day_from, day_from + 86_400);
+    assert!(matches!(known, Some(quatrelle_engine::Fetched::Ready(x)) if x.slots.iter().any(|s| s.subject == "Foley session")), "{known:?}");
+    assert!(ctx.read_response(room_timeline_id(w)).is_some(), "its day drawn");
+    // A double-click books it; another frees it.
+    let row = ctx.read_response(room_row_id(w, lab)).map(|r| r.rect.center()).unwrap();
+    click_at(&ctx, &mut a, row, 2, size);
+    assert_eq!(a.ui.event_windows[0].1.rooms, [("Sound Lab".to_string(), lab.to_string())]);
+    click_at(&ctx, &mut a, row, 2, size);
+    assert!(a.ui.event_windows[0].1.rooms.is_empty(), "freed");
+    // The button beside its day.
+    let at = settled_text_at(&ctx, &mut a, "Book this room", size).expect("its button");
+    click_at(&ctx, &mut a, at, 1, size);
+    assert_eq!(a.ui.event_windows[0].1.rooms.len(), 1);
+    let at = settled_text_at(&ctx, &mut a, "Remove this room", size).expect("its button, the other way");
+    click_at(&ctx, &mut a, at, 1, size);
+    assert!(a.ui.event_windows[0].1.rooms.is_empty());
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Webex Meeting with no personal room set asks for it under the button (in the meeting's
+/// window, not in Options behind it): a link that isn't a personal room's is refused, one that
+/// is goes in the meeting and is kept for the next ones.
+#[test]
+fn webex_meeting_asks_for_the_personal_room_under_its_button() {
+    let (mut a, dir) = app("webex-ask");
+    let ctx = egui::Context::default();
+    let size = egui::vec2(1280.0, 900.0);
+    frame_sized(&ctx, &mut a, vec![], size);
+    assert!(a.session.prefs.webex_room.is_empty());
+    a.ui.dialog = Some(Dialog::new_event(&a.session, Some(NOW + 2 * 3600)));
+    frame_sized(&ctx, &mut a, vec![], size);
+    let at = settled_text_at(&ctx, &mut a, "Webex Meeting", size).expect("the button");
+    click_at(&ctx, &mut a, at, 1, size);
+    let shapes = frame_shapes(&ctx, &mut a, vec![], size);
+    assert!(text_at(&shapes, "Your Webex personal room").is_some(), "asked for under the button");
+    assert!(a.ui.backstage.is_none(), "not in Options");
+    frame_sized(&ctx, &mut a, vec![Event::Text("https://evil.example/meet/ana".into())], size);
+    let shapes = frame_shapes(&ctx, &mut a, vec![], size);
+    assert!(text_at(&shapes, "Not a Webex personal room: https://<site>.webex.com/meet/<name>").is_some());
+    frame_sized(&ctx, &mut a, vec![key(Key::Enter, Modifiers::NONE)], size);
+    frame_sized(&ctx, &mut a, vec![], size);
+    assert!(a.ui.event_windows[0].1.join.is_none() && a.session.prefs.webex_room.is_empty(), "refused");
+    // Typed again, right this time.
+    let shapes = frame_shapes(&ctx, &mut a, vec![], size);
+    if text_at(&shapes, "Your Webex personal room").is_none() {
+        click_at(&ctx, &mut a, text_at(&shapes, "Webex Meeting").expect("the button"), 1, size);
+    }
+    let room = "https://acme.webex.com/meet/ana";
+    let typed = egui::Id::unique(("webex-room-typed", a.ui.event_windows[0].0));
+    ctx.data_mut(|d| d.insert_temp(typed, String::new()));
+    frame_sized(&ctx, &mut a, vec![Event::Text(room.into())], size);
+    frame_sized(&ctx, &mut a, vec![key(Key::Enter, Modifiers::NONE)], size);
+    frame_sized(&ctx, &mut a, vec![], size);
+    let f = &a.ui.event_windows[0].1;
+    assert_eq!((f.join.as_deref(), f.location.as_str()), (Some(room), room));
+    assert_eq!(a.session.prefs.webex_room, room, "kept for the next meetings");
+    let _ = std::fs::remove_dir_all(dir);
+}

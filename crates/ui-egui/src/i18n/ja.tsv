@@ -1215,7 +1215,6 @@ month	May	5月
 	Scheduling Assistant	スケジュール アシスタント
 	The rooms couldn't be read: {error}	会議室を読み取れませんでした：{error}
 	Organizer	開催者
-	Guest	招待者
 	Room	会議室
 	Free	空き
 	Busy	予定あり
@@ -1449,7 +1448,24 @@ month	May	5月
 	Every year on {day} {month}	毎年 {month} {day} 日
 	Every {n} years on {day} {month}	{n} 年ごとの {month} {day} 日
 	Webex Meeting	Webex 会議
-	Set your Webex personal room in File › Options first	先に [ファイル] › [オプション] で Webex のパーソナル会議室を設定してください
+	Add Attendees…	出席者を追加…
+	Add to the meeting	会議に追加
+	Choose from the address book	アドレス帳から選択
+	Click a room to see when it's free; double-click it to book it.	会議室をクリックすると空き時間が表示され、ダブルクリックすると予約されます。
+	Hide its day	この日を非表示
+	Its link is on your Webex profile, under Personal Room. It's kept in File › Options › Calendar for the next meetings.	リンクは Webex のプロフィールの [パーソナル会議室] にあります。次回以降の会議のために [ファイル] › [オプション] › [予定表] に保存されます。
+	Not a Webex personal room: https://<site>.webex.com/meet/<name>	Webex パーソナル会議室ではありません: https://<site>.webex.com/meet/<name>
+	Not an address: {what}	アドレスではありません: {what}
+	Puts your Webex personal room in the meeting	Webex パーソナル会議室を会議に挿入します
+	Select Attendees and Resources	出席者とリソースの選択
+	Your Webex personal room	あなたの Webex パーソナル会議室
+	Required ->	必須 ->
+	Optional ->	任意 ->
+	Resources ->	リソース ->
+	Required attendee	必須出席者
+	Optional attendee	任意出席者
+	Book this room	この会議室を予約
+	Remove this room	この会議室を削除
 	Join the Webex meeting:	Webex 会議に参加:
 	Webex personal room	Webex パーソナル会議室
 	Webex Meeting, in a new appointment's window, puts it in for the guests to join	新しい予定のウィンドウの [Webex 会議] で挿入され、出席者が参加できます

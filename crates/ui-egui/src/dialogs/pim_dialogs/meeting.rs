@@ -49,6 +49,15 @@ pub fn meeting(ui: &mut Ui, f: &mut EventForm, s: &Session, t: &Tokens, acts: &m
             None => {}
         }
     }
+    // Outlook's Select Attendees and Resources, over the window while it's open.
+    if let Some(mut st) = f.attendees_book.take() {
+        match super::attendees::dialog(ui.ctx(), &mut st, t, f.window, acts) {
+            // People added make it a meeting (from the Scheduling Assistant, an appointment).
+            Some(true) if st.apply(f) => f.inviting |= !f.guests.is_empty() || !f.optional.is_empty(),
+            Some(false) => {}
+            _ => f.attendees_book = Some(st),
+        }
+    }
     if f.scheduling && !f.all_day {
         super::scheduling::view(ui, f, s, t, acts);
         ui.add_space(8.0);
@@ -109,6 +118,43 @@ fn add_webex(f: &mut EventForm, url: &str) {
     f.join = Some(url.to_string());
 }
 
+/// The Webex personal room asked for under Webex Meeting, the first time (the window is
+/// `window`): its link, once one is given that is a personal room's.
+fn webex_room(ui: &mut Ui, t: &Tokens, window: u64) -> Option<String> {
+    let id = egui::Id::unique(("webex-room-typed", window));
+    let mut typed: String = ui.data_mut(|d| d.get_temp(id)).unwrap_or_default();
+    ui.set_width(400.0);
+    ui.label(RichText::new(tl!("Your Webex personal room")).font(theme::bold(13.0)).color(t.text));
+    ui.label(
+        RichText::new(tl!("Its link is on your Webex profile, under Personal Room. It's kept in File › Options › Calendar for the next meetings."))
+            .color(t.dim)
+            .small(),
+    );
+    ui.add_space(4.0);
+    let link = typed.trim().to_string();
+    let good = quatrelle_engine::model::ical::is_webex_link(&link);
+    let mut taken = None;
+    ui.horizontal(|ui| {
+        let r = ui.add(egui::TextEdit::singleline(&mut typed).hint_text("https://site.webex.com/meet/name").desired_width(270.0));
+        if ui.memory(|m| m.focused().is_none()) {
+            r.request_focus();
+        }
+        // In a menu the box keeps the focus on Enter: Enter while typing in it.
+        let enter = (r.has_focus() || r.lost_focus()) && ui.input(|i| i.key_pressed(egui::Key::Enter));
+        if (ui.add_enabled(good, egui::Button::new(tl!("Add to the meeting"))).clicked() || enter) && good {
+            taken = Some(link.clone());
+        }
+    });
+    if !link.is_empty() && !good {
+        ui.label(RichText::new(tl!("Not a Webex personal room: https://<site>.webex.com/meet/<name>")).color(t.danger).small());
+    }
+    if taken.is_some() {
+        typed.clear();
+    }
+    ui.data_mut(|d| d.insert_temp(id, typed));
+    taken
+}
+
 /// The Appointment (or Meeting) tab's groups. `false`: closed from it.
 fn ribbon(ui: &mut Ui, t: &Tokens, f: &mut EventForm, webex: &str, acts: &mut Vec<Action>) -> bool {
     let t = *t;
@@ -149,7 +195,8 @@ fn ribbon(ui: &mut Ui, t: &Tokens, f: &mut EventForm, webex: &str, acts: &mut Ve
     }
     groups.end(ui, &t, "Actions");
     // An online meeting (Teams, Webex, Zoom…): Join, as Outlook has it; none yet, Webex
-    // Meeting puts the personal room in (Options open to set it, the first time).
+    // Meeting puts the personal room in, asked for under the button the first time (kept in
+    // Options from then on).
     if let Some(url) = f.join.clone() {
         if widgets::big_button(ui, Icon::Video, "Join meeting", &t, true).on_hover_text(&url).clicked() {
             acts.push(Action::OpenUrl(url));
@@ -157,14 +204,17 @@ fn ribbon(ui: &mut Ui, t: &Tokens, f: &mut EventForm, webex: &str, acts: &mut Ve
         groups.end(ui, &t, "Online meeting");
     } else if writable {
         let r = widgets::big_button(ui, Icon::Video, "Webex Meeting", &t, true);
-        let r =
-            if webex.is_empty() { r.on_hover_text(tl!("Set your Webex personal room in File › Options first")) } else { r.on_hover_text(webex) };
-        if r.clicked() {
-            if webex.is_empty() {
-                acts.push(Action::Backstage(crate::backstage::Page::Options));
-            } else {
-                add_webex(f, webex);
-            }
+        if webex.is_empty() {
+            let r = r.on_hover_text(tl!("Puts your Webex personal room in the meeting"));
+            egui::Popup::menu(&r).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
+                if let Some(url) = webex_room(ui, &t, f.window) {
+                    acts.push(Action::Run("calendar.webexRoom", json!({"url": url})));
+                    add_webex(f, &url);
+                    ui.close();
+                }
+            });
+        } else if r.on_hover_text(webex).clicked() {
+            add_webex(f, webex);
         }
         groups.end(ui, &t, "Online meeting");
     }
@@ -276,13 +326,25 @@ fn header(ui: &mut Ui, t: &Tokens, f: &mut EventForm, s: &Session, acts: &mut Ve
         form_row(ui, t, false, None, "Title", |ui| {
             field(ui, &mut f.summary, tl!("Add a title"), f32::INFINITY);
         });
+        // Required and Optional open the address book, as in Outlook.
         if f.inviting && f.can_invite {
-            form_row(ui, t, false, None, "Required", |ui| {
-                field(ui, &mut f.guests, tl!("Names <addresses>, separated by ; or ,"), f32::INFINITY);
-            });
-            form_row(ui, t, false, None, "Optional", |ui| {
-                field(ui, &mut f.optional, tl!("Names <addresses>, separated by ; or ,"), f32::INFINITY);
-            });
+            let tip = tl!("Choose from the address book");
+            let hint = tl!("Names <addresses>, separated by ; or ,");
+            let mut open = None;
+            let id = |line| super::line_button_id(f.window, line);
+            if button_row(ui, t, id(super::Line::Required), "Required", tip, |ui| {
+                field(ui, &mut f.guests, hint, f32::INFINITY);
+            }) {
+                open = Some(super::Line::Required);
+            }
+            if button_row(ui, t, id(super::Line::Optional), "Optional", tip, |ui| {
+                field(ui, &mut f.optional, hint, f32::INFINITY);
+            }) {
+                open = Some(super::Line::Optional);
+            }
+            if let Some(line) = open {
+                f.attendees_book = Some(Box::new(super::AttendeesUi::open(f, line)));
+            }
         }
         times(ui, t, f, s);
         form_row(ui, t, false, None, "Location", |ui| {

@@ -72,15 +72,15 @@ fn kind_label(kind: BusyKind) -> &'static str {
 }
 
 /// A row of the view: who, their address, and what they are to the meeting.
-struct Row {
-    name: String,
-    email: String,
-    kind: &'static str,
+pub(super) struct Row {
+    pub name: String,
+    pub email: String,
+    pub kind: &'static str,
 }
 
 /// The guests as typed, each piece read on its own, so a name still being typed doesn't hide
 /// the others.
-fn guests(typed: &str) -> Vec<(String, String)> {
+pub(super) fn guests(typed: &str) -> Vec<(String, String)> {
     typed
         .split([',', ';'])
         .map(str::trim)
@@ -90,19 +90,60 @@ fn guests(typed: &str) -> Vec<(String, String)> {
         .collect()
 }
 
+/// The timeline of a room's day in the Room Finder (`window`: the meeting's window): the tests
+/// find its rectangle by it.
+pub fn room_timeline_id(window: u64) -> egui::Id {
+    egui::Id::unique(("room-finder-timeline", window))
+}
+
 /// The view, under the form's fields.
 pub(super) fn view(ui: &mut Ui, f: &mut EventForm, s: &Session, t: &Tokens, acts: &mut Vec<Action>) {
     let account = f.account_id();
-    let Some((start, end)) = f.times(s) else {
+    let Some(day) = day_bar(ui, f, s, t, true) else { return };
+    ui.add_space(4.0);
+    // Who: the organizer, the guests as typed (required, then optional), the rooms.
+    let me = s.account(&account).map(|a| (a.config.name.clone(), a.config.email.clone())).unwrap_or_default();
+    let mut rows = vec![Row { name: if me.0.trim().is_empty() { me.1.clone() } else { me.0.clone() }, email: me.1.clone(), kind: "Organizer" }];
+    for (typed, kind) in [(&f.guests, "Required attendee"), (&f.optional, "Optional attendee")] {
+        for (name, email) in guests(typed) {
+            if !email.eq_ignore_ascii_case(&me.1) && !rows.iter().any(|r| r.email.eq_ignore_ascii_case(&email)) {
+                rows.push(Row { name, email, kind });
+            }
+        }
+    }
+    rows.extend(f.rooms.iter().map(|(name, email)| Row { name: name.clone(), email: email.clone(), kind: "Room" }));
+    rows.truncate(MAX_ROWS);
+    grid(ui, f, s, t, acts, &rows, day, timeline_id(f.window));
+    legend(ui, t);
+    // Outlook's Add Attendees: the address book.
+    if f.can_invite && !f.read_only {
+        ui.add_space(4.0);
+        if ui.button(tl!("Add Attendees…")).clicked() {
+            f.select_attendees();
+        }
+    }
+}
+
+/// One room's day (the meeting's, or the one the Scheduling Assistant shows), the meeting over
+/// it: when it's free, as its row in the Scheduling Assistant.
+pub(super) fn room_day(ui: &mut Ui, f: &mut EventForm, s: &Session, t: &Tokens, acts: &mut Vec<Action>, name: &str, email: &str) {
+    let Some(day) = day_bar(ui, f, s, t, false) else { return };
+    ui.add_space(2.0);
+    let rows = [Row { name: name.to_string(), email: email.to_string(), kind: "Room" }];
+    grid(ui, f, s, t, acts, &rows, day, room_timeline_id(f.window));
+    legend(ui, t);
+}
+
+/// The day shown, and the way to the others (`today_too`: back to today as well). `None`, said:
+/// the meeting has no times to show.
+fn day_bar(ui: &mut Ui, f: &mut EventForm, s: &Session, t: &Tokens, today_too: bool) -> Option<i64> {
+    let Some((start, _)) = f.times(s) else {
         ui.label(RichText::new(tl!("Give the meeting a start and an end to see when everyone is free.")).color(t.dim));
-        return;
+        return None;
     };
     let today = dates::today(&s.clock);
     let meeting_day = s.clock.local(start).div_euclid(86_400);
     let day = f.sched_day.unwrap_or(meeting_day);
-    let day_from = s.clock.midnight(day);
-    let day_to = s.clock.midnight(day.saturating_add(1));
-    // The day shown, and the way to the others.
     ui.horizontal(|ui| {
         if widgets::tiny_icon_button(ui, Icon::ChevronLeft, "Previous day", t).clicked() {
             f.sched_day = Some(day - 1);
@@ -114,24 +155,24 @@ pub(super) fn view(ui: &mut Ui, f: &mut EventForm, s: &Session, t: &Tokens, acts
         if day != meeting_day && ui.small_button(tl!("Meeting day")).clicked() {
             f.sched_day = None;
         }
-        if day != today && ui.small_button(tl!("Today")).clicked() {
+        if today_too && day != today && ui.small_button(tl!("Today")).clicked() {
             f.sched_day = Some(today);
         }
     });
-    ui.add_space(4.0);
-    // Who: the organizer, the guests as typed, the rooms.
-    let me = s.account(&account).map(|a| (a.config.name.clone(), a.config.email.clone())).unwrap_or_default();
-    let mut rows = vec![Row { name: if me.0.trim().is_empty() { me.1.clone() } else { me.0.clone() }, email: me.1.clone(), kind: "Organizer" }];
-    rows.extend(guests(&f.guests).into_iter().filter(|(_, e)| !e.eq_ignore_ascii_case(&me.1)).map(|(name, email)| Row {
-        name,
-        email,
-        kind: "Guest",
-    }));
-    rows.extend(f.rooms.iter().map(|(name, email)| Row { name: name.clone(), email: email.clone(), kind: "Room" }));
-    rows.truncate(MAX_ROWS);
+    Some(day)
+}
+
+/// The rows' busy hours on a local day, the hours across, and the meeting over them: a click
+/// puts it there, a drag carries it (`id`: the timeline's).
+#[allow(clippy::too_many_arguments)]
+fn grid(ui: &mut Ui, f: &mut EventForm, s: &Session, t: &Tokens, acts: &mut Vec<Action>, rows: &[Row], day: i64, id: egui::Id) {
+    let account = f.account_id();
+    let Some((start, end)) = f.times(s) else { return };
+    let day_from = s.clock.midnight(day);
+    let day_to = s.clock.midnight(day.saturating_add(1));
     // What isn't known for the day yet is asked for (once: the engine marks it as asked).
     let mut missing: Vec<String> = Vec::new();
-    for r in &rows {
+    for r in rows {
         if r.email.contains('@') && s.availability_now(&account, &r.email, day_from, day_to).is_none() && !missing.contains(&r.email) {
             missing.push(r.email.clone());
         }
@@ -165,7 +206,7 @@ pub(super) fn view(ui: &mut Ui, f: &mut EventForm, s: &Session, t: &Tokens, acts
         let name_rect = Rect::from_min_size(row.min, vec2(NAMES_W - 8.0, ROW_H));
         let label = widgets::one_line(ui, &r.name, theme::regular(12.0), t.text, NAMES_W - 14.0);
         p.galley(pos2(name_rect.min.x + 4.0, row.center().y - label.size().y / 2.0), label, t.text);
-        ui.interact(name_rect, ui.scope_id().with(("sched-who", i)), Sense::hover()).on_hover_text(format!("{} · {}", tl!(r.kind), r.email));
+        ui.interact(name_rect, id.with(("sched-who", i)), Sense::hover()).on_hover_text(format!("{} · {}", tl!(r.kind), r.email));
         // Their hours.
         let lane = Rect::from_min_max(pos2(x_of(shown_from), row.min.y + 4.0), pos2(x_of(shown_to), row.max.y - 4.0));
         let said = |text: &str, why: Option<&str>| {
@@ -173,7 +214,7 @@ pub(super) fn view(ui: &mut Ui, f: &mut EventForm, s: &Session, t: &Tokens, acts
             p.rect_filled(lane, 2.0, fill);
             p.text(pos2(lane.min.x + 6.0, lane.center().y), egui::Align2::LEFT_CENTER, text, theme::regular(11.0), t.dim);
             if let Some(w) = why {
-                ui.interact(lane, ui.scope_id().with(("sched-why", i)), Sense::hover()).on_hover_text(w);
+                ui.interact(lane, id.with(("sched-why", i)), Sense::hover()).on_hover_text(w);
             }
         };
         match s.availability_now(&account, &r.email, day_from, day_to) {
@@ -196,7 +237,7 @@ pub(super) fn view(ui: &mut Ui, f: &mut EventForm, s: &Session, t: &Tokens, acts
                     } else {
                         format!("{} · {}", slot.subject, tl!(kind_label(slot.kind)))
                     };
-                    ui.interact(block, ui.scope_id().with(("sched-slot", i, n)), Sense::hover()).on_hover_text(format!("{what}\n{when}"));
+                    ui.interact(block, id.with(("sched-slot", i, n)), Sense::hover()).on_hover_text(format!("{what}\n{when}"));
                 }
             }
         }
@@ -211,7 +252,7 @@ pub(super) fn view(ui: &mut Ui, f: &mut EventForm, s: &Session, t: &Tokens, acts
     }
     // A click puts the meeting there; a drag carries it along, as long as it was.
     let timeline = Rect::from_min_max(pos2(rect.min.x + NAMES_W, rect.min.y + HEAD_H), rect.max);
-    let resp = ui.interact(timeline, timeline_id(f.window), Sense::click_and_drag());
+    let resp = ui.interact(timeline, id, Sense::click_and_drag());
     let len = (end - start).max(SNAP);
     let place = |f: &mut EventForm, at: i64| {
         let new_start = snap(at).clamp(day_from, day_to - len);
@@ -236,7 +277,10 @@ pub(super) fn view(ui: &mut Ui, f: &mut EventForm, s: &Session, t: &Tokens, acts
     {
         place(f, time_of(pos.x));
     }
-    // What the colours mean.
+}
+
+/// What the colours mean.
+fn legend(ui: &mut Ui, t: &Tokens) {
     ui.add_space(4.0);
     ui.horizontal_wrapped(|ui| {
         for kind in [BusyKind::Busy, BusyKind::Tentative, BusyKind::OutOfOffice, BusyKind::WorkingElsewhere, BusyKind::NoData] {
