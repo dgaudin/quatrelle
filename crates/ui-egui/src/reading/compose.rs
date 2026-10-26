@@ -357,8 +357,7 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
             }
         });
     }
-    let accounts: Vec<(String, String)> =
-        s.accounts.iter().map(|a| (a.config.id.clone(), EmailAddress::new(a.config.name.clone(), a.config.email.clone()).to_string())).collect();
+    let senders = s.senders();
     // Suggestions for the recipient box being typed in (computed before the form borrows it):
     // from what the address book knows now — it is built a slice per frame, never whole in one
     // go — and worked out again only as the text or the book changes.
@@ -523,6 +522,11 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
                 ui.label(RichText::new(tf!("Not sent: {error}", error = e)).color(t.danger));
             });
         }
+        // Ctrl+K: Outlook's Check Names, anywhere but in the text (where it makes a link).
+        if !c.sending && !ui.memory(|m| m.has_focus(rich_edit::body_id(c))) && ui.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::K))
+        {
+            acts.push(Action::Run("compose.checkNames", json!({})));
+        }
         ui.add_space(6.0);
         ui.add_enabled_ui(!c.sending, |ui| {
             ui.spacing_mut().item_spacing.y = 6.0;
@@ -535,21 +539,7 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
                 }
                 ui.add_space(10.0);
                 ui.vertical(|ui| {
-                    ui.horizontal(|ui| {
-                        let current = accounts.iter().find(|(id, _)| *id == c.account).map(|(_, l)| l.clone()).unwrap_or_default();
-                        let many = accounts.len() > 1;
-                        let b = label_button_menu(ui, &t, "From", many, many);
-                        if many {
-                            egui::Popup::menu(&b).show(|ui| {
-                                for (id, label) in &accounts {
-                                    ui.selectable_value(&mut c.account, id.clone(), label);
-                                }
-                            });
-                        }
-                        ui.allocate_ui_with_layout(vec2(ui.available_width(), ROW_H), egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                            ui.add(egui::Label::new(RichText::new(current).color(t.dim)).truncate());
-                        });
-                    });
+                    ui.horizontal(|ui| from_row(ui, &t, c, &senders));
                     // To, Cc and Bcc open the address book, as in Outlook.
                     for (name, label, hint) in
                         [("to", "To", "Names <addresses>, separated by ; or ,"), ("cc", "Cc", ""), ("bcc", "Bcc", "Hidden from the other recipients")]

@@ -7,6 +7,10 @@ use super::*;
 pub struct Compose {
     pub id: u64,
     pub account: String,
+    /// Who it's from when not the account's own address (`Name <address>`), as Outlook's From:
+    /// a mailbox the account opens (a shared one), or another address it may send from.
+    #[serde(default)]
+    pub from: String,
     /// The signature in the text as it was put there (`-- ` and the signature): replaced when
     /// another goes in, while it's still there unchanged.
     #[serde(default)]

@@ -1617,3 +1617,11 @@ month	May	5月
 	Cc:	CC:
 	Subject:	件名:
 	[Draft]	[下書き]
+	Send from another account, a shared mailbox or another address	別のアカウント、共有メールボックス、または別のアドレスから送信します
+	Sent through {account}	{account} 経由で送信
+	Other email address…	その他のメール アドレス…
+	Other email address	その他のメール アドレス
+	Exchange sends from it when your account may send as it or on its behalf.	アカウントにこのアドレスとして、または代理として送信する権限がある場合、Exchange はこのアドレスから送信します。
+	Name <address>	名前 <アドレス>
+	Send from it	このアドレスから送信
+	Some names weren't found in your contacts or among the people you've written to	一部の名前が連絡先にも、これまでにメールを送った相手にも見つかりませんでした

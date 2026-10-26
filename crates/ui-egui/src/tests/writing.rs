@@ -500,3 +500,79 @@ fn files_dropped_on_a_message_are_attached() {
     assert_eq!(names, ["dropped notes.txt"], "the file with no path to read is left");
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// From offers the account's own address and the mailboxes it opens (a shared one); another
+/// address is typed under the menu's list, checked as it's typed, and taken with Enter.
+#[test]
+fn from_offers_shared_mailboxes_and_another_address() {
+    let (mut a, dir) = app("send-from");
+    let ctx = egui::Context::default();
+    let size = egui::vec2(1280.0, 800.0);
+    // The Inbox as a shared mailbox's (Exchange marks such folders).
+    for f in a.session.accounts.iter_mut().flat_map(|x| x.folders.iter_mut()).filter(|f| f.path == "INBOX") {
+        f.mailbox = Some("support@studio.example".into());
+    }
+    frame(&ctx, &mut a, vec![]);
+    a.run("mail.new", json!({}));
+    let own = a.session.senders().first().unwrap().label.clone();
+    // The From button, on the row of the address it's from.
+    let button = |ctx: &egui::Context, a: &mut MailApp, shown: &str| {
+        let row = settled_text_at(ctx, a, shown, size).expect("who it's from");
+        frame_shapes(ctx, a, vec![], size)
+            .iter()
+            .find_map(|s| match s {
+                egui::Shape::Text(t) if t.galley.text() == "From" => {
+                    let at = t.pos + t.galley.rect.center().to_vec2();
+                    ((at.y - row.y).abs() < 4.0 && at.x < row.x).then_some(at)
+                }
+                _ => None,
+            })
+            .expect("the From button")
+    };
+    let from = button(&ctx, &mut a, &own);
+    click_at(&ctx, &mut a, from, 1, size);
+    let shared = settled_text_at(&ctx, &mut a, "support@studio.example", size).expect("the shared mailbox offered");
+    click_at(&ctx, &mut a, shared, 1, size);
+    assert_eq!(a.session.compose.as_ref().unwrap().from, "support@studio.example");
+    let from = button(&ctx, &mut a, "support@studio.example");
+    click_at(&ctx, &mut a, from, 1, size);
+    let other = settled_text_at(&ctx, &mut a, "Other email address…", size).expect("another address offered");
+    click_at(&ctx, &mut a, other, 1, size);
+    frame_sized(&ctx, &mut a, vec![Event::Text("nope".into())], size);
+    assert!(settled_text_at(&ctx, &mut a, "Not an address: nope", size).is_some(), "said as it's typed");
+    for _ in 0..4 {
+        frame_sized(&ctx, &mut a, vec![key(Key::Backspace, Modifiers::NONE)], size);
+    }
+    frame_sized(&ctx, &mut a, vec![Event::Text("Bookings <bookings@studio.example>".into())], size);
+    frame_sized(&ctx, &mut a, vec![key(Key::Enter, Modifiers::NONE)], size);
+    frame_sized(&ctx, &mut a, vec![], size);
+    assert_eq!(a.session.compose.as_ref().unwrap().from, "Bookings <bookings@studio.example>");
+    assert!(settled_text_at(&ctx, &mut a, "Other email address…", size).is_none(), "the menu closed");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Ctrl+K checks the names typed, as Outlook's: one known is written out with its address, one
+/// unknown is said; in the text, Ctrl+K is still a link.
+#[test]
+fn ctrl_k_checks_the_names_typed() {
+    let (mut a, dir) = app("ctrl-k");
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    a.run("mail.new", json!({}));
+    frame(&ctx, &mut a, vec![]);
+    frame(&ctx, &mut a, vec![]);
+    frame(&ctx, &mut a, vec![Event::Text("Zoe Park; nobody here".into())]);
+    frame(&ctx, &mut a, vec![key(Key::K, Modifiers::COMMAND)]);
+    frame(&ctx, &mut a, vec![]);
+    assert_eq!(a.session.compose.as_ref().unwrap().to, "Zoe Park <zoe@studio.example>; nobody here; ");
+    assert!(a.session.notices.last().is_some_and(|n| n.error && n.text.starts_with("Some names weren't found")), "{:?}", a.session.notices.last());
+    // In the text, a link.
+    let body = crate::rich_edit::body_id(a.session.compose.as_ref().unwrap());
+    ctx.memory_mut(|m| m.request_focus(body));
+    frame(&ctx, &mut a, vec![]);
+    let notices = a.session.notices.len();
+    frame(&ctx, &mut a, vec![key(Key::K, Modifiers::COMMAND)]);
+    frame(&ctx, &mut a, vec![]);
+    assert_eq!(a.session.notices.len(), notices, "the link form, not Check Names (\"nobody here\" would be said again)");
+    let _ = std::fs::remove_dir_all(dir);
+}

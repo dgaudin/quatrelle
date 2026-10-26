@@ -127,6 +127,7 @@ impl AccountConfig {
             pop_delete_with_trash: false,
             oauth_user: None,
             shared_mailboxes: Vec::new(),
+            send_from: Vec::new(),
             online_only: false,
             shared_online: false,
             public_favorites_kept: false,

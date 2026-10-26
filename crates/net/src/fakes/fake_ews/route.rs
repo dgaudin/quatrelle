@@ -475,9 +475,16 @@ impl Data {
                         .and_then(|p| p.text_of("Value"))
                         .and_then(unb64)
                         .unwrap_or_default();
+                    // From another address: only one the account may send from.
+                    let author = m.child("From").and_then(|f| f.find("EmailAddress")).map(|e| e.text.to_ascii_lowercase()).unwrap_or_default();
+                    if send && !author.is_empty() && !self.send_as.contains(&author) {
+                        out.push(err("ErrorSendAsDenied"));
+                        continue;
+                    }
                     let id = self.id("I");
                     if send {
                         self.sent.push(raw.clone());
+                        self.sent_from.push(author);
                     }
                     self.items.push(It {
                         id: id.clone(),

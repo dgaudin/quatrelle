@@ -8,11 +8,13 @@ mod assistant;
 mod compose;
 mod drafts;
 mod items;
+mod senders;
 mod vote;
 pub use assistant::{AssistKind, Assistant, Filing, LlmModels, Rewrite};
 use compose::with_html_signature;
 pub use compose::{Compose, add_pictures, signature_block, style_signature};
 pub use items::{ItemChoice, ItemKind};
+pub use senders::Sender;
 
 /// From this many people (counted as [`SendCheck::Exposed`] says), sending to all of them in To
 /// and Cc asks first.
@@ -177,7 +179,11 @@ impl Session {
         let parsed = r.parsed.ok_or_else(|| CmdError::Disabled("the message is still downloading".into()))?;
         let account = r.key.account.clone();
         let sig = self.signature_in_message(&self.signature_when(&account, true));
-        let (d, styles) = mime::reply_doc(&parsed, mode, &self.me(&account), &self.clock, &sig, &self.quote_words);
+        // In another mailbox's folder (a shared one): from that mailbox, which isn't written to.
+        let from = self.reply_from(&r.key, &parsed);
+        let mut me = self.me(&account);
+        me.extend(addr::parse_list(&from).unwrap_or_default().into_iter().map(|a| a.email));
+        let (d, styles) = mime::reply_doc(&parsed, mode, &me, &self.clock, &sig, &self.quote_words);
         let id = self.fresh_id();
         let mut attachments = Vec::new();
         if mode == ReplyMode::Forward
@@ -192,6 +198,7 @@ impl Session {
         self.open_compose(Compose {
             id,
             account,
+            from,
             signature: sig,
             to: addr::format_field(&d.to),
             cc: addr::format_field(&d.cc),
@@ -267,8 +274,9 @@ impl Session {
     /// [`Session::compose_bytes`] under the `Message-ID` given (a new one without), and that id.
     fn compose_bytes_as(&mut self, c: &Compose, d: &mime::Draft, mid: Option<&str>) -> Result<(Vec<u8>, String, String), CmdError> {
         let acc = self.account(&c.account).ok_or_else(|| CmdError::Failed("the sending account is gone".into()))?;
-        let from = quatrelle_model::EmailAddress::new(acc.config.name.clone(), acc.config.email.clone());
+        // The account signs in and hands it over (the envelope's sender), whoever it's from.
         let email = acc.config.email.clone();
+        let from = self.compose_from(c);
         let now = self.clock.now;
         let mid = match mid {
             Some(m) => m.to_string(),
@@ -308,7 +316,7 @@ impl Session {
     /// seeing who else did.
     pub fn hide_recipients(&mut self) -> CmdResult {
         let c = self.compose.as_ref().ok_or_else(|| CmdError::Disabled("no message is being written".into()))?;
-        let me = self.account(&c.account).map(|a| EmailAddress::new(a.config.name.clone(), a.config.email.clone()).to_string()).unwrap_or_default();
+        let me = self.compose_from(c).to_string();
         let c = self.compose.as_mut().ok_or_else(|| CmdError::Disabled("no message is being written".into()))?;
         let moved: Vec<&str> = [c.to.as_str(), c.cc.as_str(), c.bcc.as_str()]
             .into_iter()
@@ -358,6 +366,7 @@ impl Session {
         // Written to: suggested first from now on, as Outlook's AutoComplete list does.
         let written: Vec<EmailAddress> = d.to.iter().chain(&d.cc).chain(&d.bcc).cloned().collect();
         self.contacts_sent(&written);
+        self.remember_sender(&c);
         let recipients = d.recipients();
         if let Some(job) = self.protect_job(&c, &raw, &recipients, &from)? {
             self.jobs.push(job);

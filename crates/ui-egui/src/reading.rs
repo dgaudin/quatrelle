@@ -22,6 +22,7 @@ mod people;
 mod pictures;
 mod plain;
 mod security;
+mod sender;
 use attachments::*;
 pub(crate) use attachments::{big_picture, decode};
 pub(crate) use body::CellHeights;
@@ -165,6 +166,7 @@ pub(crate) use compose::delay_menu;
 pub(crate) use compose::parse_local;
 use compose::*;
 use people::*;
+use sender::*;
 
 pub fn show(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
     if s.compose.as_ref().is_some_and(|c| crate::compose_inline(c, ui.ctx())) {

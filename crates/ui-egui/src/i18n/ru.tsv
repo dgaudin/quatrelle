@@ -1619,3 +1619,11 @@ month	May	Май
 	Cc:	Копия:
 	Subject:	Тема:
 	[Draft]	[Черновик]
+	Send from another account, a shared mailbox or another address	Отправить из другой учётной записи, общего почтового ящика или с другого адреса
+	Sent through {account}	Отправлено через {account}
+	Other email address…	Другой адрес электронной почты…
+	Other email address	Другой адрес электронной почты
+	Exchange sends from it when your account may send as it or on its behalf.	Exchange отправляет с этого адреса, если вашей учётной записи разрешено отправлять от его имени или по его поручению.
+	Name <address>	Имя <адрес>
+	Send from it	Отправить с этого адреса
+	Some names weren't found in your contacts or among the people you've written to	Некоторые имена не найдены ни в ваших контактах, ни среди тех, кому вы писали

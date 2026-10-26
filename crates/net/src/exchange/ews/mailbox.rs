@@ -404,9 +404,19 @@ impl Client {
                 b64(&voting::stream(&names))
             )
         };
+        // From another address (a shared mailbox, Outlook's Other E-mail Address): said to
+        // Exchange, which sends as it or on its behalf, as the account is allowed to, and files
+        // the copy in the account's own Sent Items, as Outlook leaves it.
+        let author = mime::summary_from_header(&raw, Default::default(), Default::default(), 0, 0).from;
+        let from = if author.email.is_empty() || author.email.eq_ignore_ascii_case(&self.email) {
+            String::new()
+        } else {
+            let name = if author.name.is_empty() { String::new() } else { format!("<t:Name>{}</t:Name>", esc(&author.name)) };
+            format!("<t:From><t:Mailbox>{name}<t:EmailAddress>{}</t:EmailAddress></t:Mailbox></t:From>", esc(&author.email))
+        };
         self.call_one(&format!(
             "<m:CreateItem MessageDisposition=\"SendAndSaveCopy\"><m:SavedItemFolderId><t:DistinguishedFolderId Id=\"sentitems\"/></m:SavedItemFolderId>\
-             <m:Items><t:Message><t:MimeContent CharacterSet=\"UTF-8\">{}</t:MimeContent>{verbs}</t:Message></m:Items></m:CreateItem>",
+             <m:Items><t:Message><t:MimeContent CharacterSet=\"UTF-8\">{}</t:MimeContent>{verbs}{from}</t:Message></m:Items></m:CreateItem>",
             b64(&raw)
         ))
         .map(drop)
