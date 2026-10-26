@@ -117,6 +117,11 @@ impl Client {
         Ok(c)
     }
 
+    /// Carry a new access token from now on (the old one ran out).
+    pub fn set_token(&mut self, token: &str) {
+        self.auth = format!("Bearer {token}");
+    }
+
     /// The mail folders, with roles for the well-known ones; the Outbox and Exchange's own
     /// bookkeeping folders are left out.
     pub fn mailboxes(&self) -> Result<Vec<Mailbox>> {

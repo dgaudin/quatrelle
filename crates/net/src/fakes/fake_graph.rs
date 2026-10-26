@@ -86,6 +86,8 @@ pub struct Data {
     pub no_freebusy: Vec<String>,
     /// The `getSchedule` bodies seen.
     pub schedule_asked: Vec<Value>,
+    /// The one bearer token taken, when not [`TOKEN`] (a test renews it as tokens expire).
+    pub token: Option<String>,
     /// Set per request from its `Prefer` header; without `IdType="ImmutableId"` message ids
     /// are returned in the other (prefixed) form.
     asked_immutable: bool,
@@ -320,6 +322,7 @@ pub fn serve(data: Data) -> Server {
                 continue;
             }
             let (mut len, mut authorized, mut immutable) = (0usize, false, false);
+            let bearer = format!("Bearer {}", shared.lock().unwrap().token.clone().unwrap_or_else(|| TOKEN.into()));
             loop {
                 let mut line = String::new();
                 if reader.read_line(&mut line).unwrap_or(0) == 0 || line == "\r\n" {
@@ -329,8 +332,7 @@ pub fn serve(data: Data) -> Server {
                 if let Some(v) = lower.strip_prefix("content-length:") {
                     len = v.trim().parse().unwrap_or(0);
                 }
-                authorized |=
-                    line.split_once(':').is_some_and(|(k, v)| k.eq_ignore_ascii_case("authorization") && v.trim() == format!("Bearer {TOKEN}"));
+                authorized |= line.split_once(':').is_some_and(|(k, v)| k.eq_ignore_ascii_case("authorization") && v.trim() == bearer);
                 immutable |= line.starts_with("Prefer: IdType=\"ImmutableId\"");
             }
             let mut body = vec![0u8; len];

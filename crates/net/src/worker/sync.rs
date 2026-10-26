@@ -437,6 +437,8 @@ impl Worker {
     pub(super) fn apply_report(&mut self, path: &str, result: std::result::Result<SyncReport, NetError>) {
         match result {
             Ok(mut r) => {
+                // The token worked: a later refusal gets a fresh one again.
+                self.token_retried = false;
                 // The listing predates an edit still waiting: re-apply it to what was just saved,
                 // or the folder shows the server's old state until the edit goes out.
                 if self.reapply_waiting(path) {
