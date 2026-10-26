@@ -140,6 +140,7 @@ pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) 
 
 fn rail_item(ui: &mut Ui, t: &Tokens, icon: Icon, label: &str, on: bool) -> egui::Response {
     let (r, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 38.0), Sense::click());
+    crate::widgets::named(ui, &resp, tl!(label), true, Some(on));
     if on || resp.hovered() {
         ui.painter().rect_filled(r, 0.0, if on { t.accent_soft } else { t.hover_row });
     }
@@ -181,6 +182,7 @@ fn tile(ui: &mut Ui, t: &Tokens, icon: Icon, label: &str, title: &str, about: &s
     let mut out = None;
     ui.horizontal_top(|ui| {
         let (r, resp) = ui.allocate_exact_size(vec2(104.0, 92.0), Sense::click());
+        crate::widgets::named(ui, &resp, tl!(label), true, None);
         let fill = if resp.hovered() { t.hover } else { t.surface };
         ui.painter().rect(r, 6.0, fill, egui::Stroke::new(1.0, t.border), egui::StrokeKind::Inside);
         // The icon over its label, the two centred in the tile together (a label in two lines,

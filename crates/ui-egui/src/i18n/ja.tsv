@@ -1631,3 +1631,8 @@ month	May	5月
 	The directory couldn't be searched: {error}	ディレクトリを検索できませんでした: {error}
 	More people match: type more of the name.	ほかにも該当する人がいます。名前をさらに入力してください。
 	More than one person fits “{name}”. Choose who you meant:	「{name}」に該当する人が複数います。目的の人を選んでください:
+	Calendars and contacts	予定表と連絡先
+	Scope	範囲
+	Appearance	外観
+	Expand	展開
+	Collapse	折りたたむ
