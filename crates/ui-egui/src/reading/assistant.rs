@@ -1,6 +1,8 @@
 //! The reading pane: Summarize, with the language model set in Options, and its answer above
 //! the message.
 
+use quatrelle_engine::AssistKind;
+
 use super::*;
 
 /// Summarize, beside Forward, once a language model is set.
@@ -19,6 +21,11 @@ pub(super) fn button(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action
     if reply.clicked() && !busy {
         acts.push(Action::Run("assistant.suggestReply", json!({})));
     }
+    let filing = widgets::pill_button(ui, Icon::Move, "File it", t)
+        .on_hover_text(tl!("Ask the language model set in Options which of your folders and categories this message belongs in"));
+    if filing.clicked() && !busy {
+        acts.push(Action::Run("assistant.suggestFiling", json!({})));
+    }
 }
 
 /// The language model's answer about this message, or that it's working on it.
@@ -26,7 +33,12 @@ pub(super) fn panel(s: &Session, t: &Tokens, ui: &mut Ui, key: &MessageKey, acts
     let Some(a) = s.assistant.as_ref().filter(|a| a.key == *key) else { return };
     egui::Frame::new().fill(t.accent_soft).corner_radius(8).inner_margin(egui::Margin::same(10)).show(ui, |ui| {
         ui.set_width(ui.available_width());
-        ui.label(RichText::new(tl!(if a.reply { "Suggested reply" } else { "Summary" })).font(theme::bold(13.0)).color(t.text));
+        let title = match a.kind {
+            AssistKind::Summary => "Summary",
+            AssistKind::Reply => "Suggested reply",
+            AssistKind::Filing => "Where it goes",
+        };
+        ui.label(RichText::new(tl!(title)).font(theme::bold(13.0)).color(t.text));
         ui.add_space(2.0);
         match &a.answer {
             None => {
@@ -35,9 +47,27 @@ pub(super) fn panel(s: &Session, t: &Tokens, ui: &mut Ui, key: &MessageKey, acts
                     ui.label(RichText::new(tl!("Asking the language model…")).color(t.dim));
                 });
             }
+            Some(Ok(_)) if a.kind == AssistKind::Filing => {
+                let f = a.filing.clone().unwrap_or_default();
+                if f.folder.is_none() && f.category.is_none() {
+                    ui.label(RichText::new(tl!("The language model found none of your folders or categories for it.")).color(t.dim));
+                }
+                ui.horizontal_wrapped(|ui| {
+                    if let Some((path, shown)) = &f.folder
+                        && widgets::pill_button(ui, Icon::Move, &tf!("Move to {folder}", folder = shown), t).clicked()
+                    {
+                        acts.push(Action::Run("mail.move", json!({"folder": path})));
+                    }
+                    if let Some(c) = &f.category
+                        && widgets::pill_button(ui, Icon::Tag, &tf!("Categorize as {category}", category = c), t).clicked()
+                    {
+                        acts.push(Action::Run("mail.categorize", json!({"category": c, "on": true})));
+                    }
+                });
+            }
             Some(Ok(text)) => {
                 ui.add(egui::Label::new(RichText::new(text).color(t.text)).selectable(true));
-                if a.reply {
+                if a.kind == AssistKind::Reply {
                     ui.add_space(4.0);
                     if widgets::pill_button(ui, Icon::Reply, "Reply with this text", t).clicked() {
                         acts.push(Action::Run("assistant.replyWithSuggestion", json!({})));

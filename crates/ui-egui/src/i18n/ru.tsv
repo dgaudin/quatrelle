@@ -1561,3 +1561,9 @@ month	May	Май
 	Use this text	Использовать этот текст
 	In place of what you wrote (its formatting goes)	Вместо написанного вами (форматирование теряется)
 	Keep mine	Оставить мой
+	File it	Разложить
+	Ask the language model set in Options which of your folders and categories this message belongs in	Спросить языковую модель из параметров, в какую из ваших папок и категорий положить это письмо
+	Where it goes	Куда положить
+	The language model found none of your folders or categories for it.	Языковая модель не нашла для него ни одной вашей папки или категории.
+	Move to {folder}	Переместить в {folder}
+	Categorize as {category}	Назначить категорию {category}

@@ -1559,3 +1559,9 @@ month	May	5月
 	Use this text	使用此文本
 	In place of what you wrote (its formatting goes)	替换您写的内容（格式会丢失）
 	Keep mine	保留我的
+	File it	归档
+	Ask the language model set in Options which of your folders and categories this message belongs in	询问选项中设置的语言模型此邮件应放入哪个文件夹和类别
+	Where it goes	放在哪里
+	The language model found none of your folders or categories for it.	语言模型没有为它找到您的任何文件夹或类别。
+	Move to {folder}	移到 {folder}
+	Categorize as {category}	归类为 {category}

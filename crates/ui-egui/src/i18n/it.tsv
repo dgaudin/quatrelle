@@ -1561,3 +1561,9 @@ month	May	maggio
 	Use this text	Usa questo testo
 	In place of what you wrote (its formatting goes)	Al posto di ciò che hai scritto (la formattazione si perde)
 	Keep mine	Tieni il mio
+	File it	Archivia
+	Ask the language model set in Options which of your folders and categories this message belongs in	Chiedi al modello linguistico impostato nelle Opzioni in quale cartella e categoria va questo messaggio
+	Where it goes	Dove va
+	The language model found none of your folders or categories for it.	Il modello linguistico non ha trovato nessuna delle tue cartelle o categorie per questo messaggio.
+	Move to {folder}	Sposta in {folder}
+	Categorize as {category}	Categorizza come {category}
