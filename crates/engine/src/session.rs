@@ -46,7 +46,7 @@ pub use mailboxes::{FolderSizes, Sizes};
 pub use organize::{RulesScope, junk, quick_steps, search_folders};
 pub use prefs::{ListLayout, NotesOrder, Prefs, ReadInPane, ReadingPane};
 pub use security::{CardSearch, KnownCert, Lock, RevocationCheck, SMIME_DOC, Seal, Security, SignedBy, SmimeSettings};
-pub use writing::{AssistKind, Assistant, Compose, Filing, ItemChoice, ItemKind, Rewrite, SendCheck, add_pictures, style_signature};
+pub use writing::{AssistKind, Assistant, Compose, Filing, ItemChoice, ItemKind, LlmModels, Rewrite, SendCheck, add_pictures, style_signature};
 
 /// One account and what the session knows about it.
 #[derive(Clone, Debug, PartialEq)]
@@ -463,6 +463,8 @@ pub struct Session {
     pub sizes: Option<FolderSizes>,
     /// What the language model was last asked about the message being read.
     pub assistant: Option<Assistant>,
+    /// The models the language model's server offers (File › Options › Assistant).
+    pub llm_models: Option<LlmModels>,
     /// OAuth providers this copy can sign in with (set by the app).
     pub oauth_available: Vec<String>,
     /// Running portable (set by the app): everything is kept beside it, passwords only in memory.
@@ -592,6 +594,7 @@ impl Session {
             compacted: None,
             sizes: None,
             assistant: None,
+            llm_models: None,
             oauth_available: Vec::new(),
             portable: false,
             jmap_only: false,

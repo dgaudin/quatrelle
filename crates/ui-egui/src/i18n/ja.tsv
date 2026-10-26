@@ -1544,6 +1544,12 @@ month	May	5月
 	Server address	サーバーのアドレス
 	Model	モデル
 	Key (if the server needs one)	キー (サーバーが必要とする場合)
+	Looking for the server's models…	サーバーのモデルを探しています…
+	The models couldn't be listed: {error}	モデルの一覧を取得できませんでした: {error}
+	Models on this server: {n}	このサーバーのモデル数: {n}
+	Choose or type a model	モデルを選択または入力
+	Choose from the server's models	サーバーのモデルから選択
+	Load the server's models again	サーバーのモデルを再読み込み
 	Suggest a reply	返信を提案
 	Ask the language model set in Options to write a reply to this message	オプションで設定した言語モデルにこのメッセージへの返信を書いてもらいます
 	Suggested reply	提案された返信

@@ -1546,6 +1546,12 @@ month	May	5월
 	Server address	서버 주소
 	Model	모델
 	Key (if the server needs one)	키(서버에서 요구하는 경우)
+	Looking for the server's models…	서버의 모델을 찾는 중…
+	The models couldn't be listed: {error}	모델 목록을 가져올 수 없습니다: {error}
+	Models on this server: {n}	이 서버의 모델: {n}
+	Choose or type a model	모델 선택 또는 입력
+	Choose from the server's models	서버의 모델에서 선택
+	Load the server's models again	서버의 모델 다시 불러오기
 	Suggest a reply	회신 제안
 	Ask the language model set in Options to write a reply to this message	옵션에서 설정한 언어 모델에 이 메시지에 대한 회신 작성을 요청합니다
 	Suggested reply	제안된 회신

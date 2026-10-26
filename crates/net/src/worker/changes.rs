@@ -215,6 +215,7 @@ impl Worker {
             | Job::ImportPst { .. }
             | Job::CompactDataFile { .. }
             | Job::AskLlm { .. }
+            | Job::ListLlmModels { .. }
             | Job::SetLlmKey { .. }
             | Job::LocalFolderSizes { .. }
             | Job::ExportPst { .. }
