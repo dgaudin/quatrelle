@@ -1,6 +1,6 @@
 //! The message editor's text laid out: each run in its style, pictures, lists' indents, alignment.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 
 use super::*;
 
@@ -33,20 +33,64 @@ pub(super) fn format(s: &Style, t: &Tokens, typefaces: &BTreeSet<String>) -> Tex
     }
 }
 
-/// Room for a picture: an invisible, wide character the picture is drawn over, and
-/// [`PICTURE_GAP`] after it.
-pub(super) fn picture_format() -> TextFormat {
-    TextFormat { font_id: theme::regular(PICTURE_PX), color: Color32::TRANSPARENT, ..Default::default() }
+/// The size of the character a picture stands on: small (it's drawn see-through), the picture's
+/// height coming from the line it's given rather than from a glyph as tall as the picture.
+const PICTURE_FONT: f32 = 14.0;
+
+/// A picture's place in the text: the height of its line, and the room after its character (an
+/// empty run right after it, so the room stays on the picture's line when what follows goes to
+/// the next), the two making the picture's size. (As letter spacing the room went before the
+/// character, and not at all at the start of a line.)
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) struct Room {
+    pub height: f32,
+    pub gap: f32,
 }
 
-/// Room a picture takes after its character, put before what follows it. (As letter spacing it
-/// went before the character, and not at all at the start of a line: the picture sat some 60
-/// points right of its room, or squeezed into the character's 36 at a line's start.)
-const PICTURE_GAP: f32 = PICTURE_PX * 0.8;
+/// Room for a picture: an invisible character the picture is drawn over, on a line `height`
+/// tall.
+pub(super) fn picture_format(height: f32) -> TextFormat {
+    TextFormat { font_id: theme::regular(PICTURE_FONT), color: Color32::TRANSPARENT, line_height: Some(height), ..Default::default() }
+}
+
+/// The size a picture whose own isn't known yet shows at.
+const UNKNOWN_PICTURE: Vec2 = Vec2::new(PICTURE_PX * 1.4, PICTURE_PX);
+
+/// The size a picture shows at in text `wrap` wide: its own (`size`, in points, as Outlook
+/// shows a picture; [`UNKNOWN_PICTURE`] when it isn't known), brought down to the width.
+pub(super) fn shown_size(size: Option<Vec2>, wrap: f32) -> Vec2 {
+    let size = size.unwrap_or(UNKNOWN_PICTURE);
+    let widest = if wrap.is_finite() { (wrap - 4.0).max(24.0) } else { f32::INFINITY };
+    let scale = (widest / size.x.max(1.0)).min(1.0);
+    vec2(size.x * scale, (size.y * scale).max(8.0))
+}
+
+/// Each picture's room ([`shown_size`]); one not in `sizes` gets [`UNKNOWN_PICTURE`]'s (`""`
+/// in the map).
+pub(super) fn rooms(ui: &Ui, sizes: &HashMap<String, Vec2>, wrap: f32) -> HashMap<String, Room> {
+    let advance = ui.fonts_mut(|f| f.layout_no_wrap(PICTURE.to_string(), theme::regular(PICTURE_FONT), Color32::TRANSPARENT)).size().x;
+    let room = |size: Option<Vec2>| {
+        let s = shown_size(size, wrap);
+        Room { height: s.y, gap: (s.x - advance).max(0.0) }
+    };
+    let mut out: HashMap<String, Room> = sizes.iter().map(|(cid, s)| (cid.clone(), room(Some(*s)))).collect();
+    out.insert(String::new(), room(None));
+    out
+}
 
 /// The text laid out with its styles; `check` says how its spelling is checked, `typefaces`
 /// which typefaces can be drawn.
-pub(super) fn job(text: &str, st: &Styles, plain: bool, t: &Tokens, wrap: f32, check: &Check, typefaces: &BTreeSet<String>) -> LayoutJob {
+pub(super) fn job(
+    text: &str,
+    st: &Styles,
+    plain: bool,
+    t: &Tokens,
+    wrap: f32,
+    check: &Check,
+    typefaces: &BTreeSet<String>,
+    rooms: &HashMap<String, Room>,
+) -> LayoutJob {
+    let unknown = rooms.get("").copied().unwrap_or(Room { height: PICTURE_PX, gap: PICTURE_PX });
     let mut job = LayoutJob::default();
     job.wrap.max_width = wrap;
     // Where a paragraph goes is decided here (`layout_aligned`), against the editor's width;
@@ -72,22 +116,21 @@ pub(super) fn job(text: &str, st: &Styles, plain: bool, t: &Tokens, wrap: f32, c
                 let from = chars.get(run_start).map_or(line.len(), |(b, _)| *b);
                 let to = chars.get(k + 1).map_or(line.len(), |(b, _)| *b);
                 let piece = line.get(from..to).unwrap_or("");
-                let picture = !plain && piece.starts_with(PICTURE) && st.style(i + run_start).picture.is_some();
-                let f = if plain {
-                    plain_fmt.clone()
-                } else if picture {
-                    picture_format()
-                } else {
-                    format(&st.style(i + run_start), t, typefaces)
+                let cid = if plain || !piece.starts_with(PICTURE) { None } else { st.style(i + run_start).picture };
+                let room = cid.as_ref().map(|c| rooms.get(c).copied().unwrap_or(unknown));
+                let f = match room {
+                    _ if plain => plain_fmt.clone(),
+                    Some(r) => picture_format(r.height),
+                    None => format(&st.style(i + run_start), t, typefaces),
                 };
                 job.append(piece, lead, f);
-                lead = if picture { PICTURE_GAP } else { 0.0 };
+                lead = 0.0;
+                // The picture's room, on its line whatever comes next.
+                if let Some(r) = room {
+                    job.append("", r.gap, picture_format(r.height));
+                }
                 run_start = k + 1;
             }
-        }
-        // A picture last in its line: its room after it still.
-        if !chars.is_empty() && lead > 0.0 {
-            job.append("", lead, picture_format());
         }
         if chars.is_empty() && lead > 0.0 {
             let f = if plain { plain_fmt.clone() } else { format(&st.style(i), t, typefaces) };
@@ -133,15 +176,35 @@ pub(super) fn indent_empty_rows(g: Arc<Galley>, st: &Styles, plain: bool) -> Arc
 }
 
 /// Lay the text out; centred and right-aligned paragraphs are moved over, row by row.
-pub(super) fn layout(ui: &Ui, text: &str, st: &Styles, plain: bool, t: &Tokens, wrap: f32, check: &Check) -> Arc<Galley> {
-    indent_empty_rows(layout_aligned(ui, text, st, plain, t, wrap, check), st, plain)
+/// `pictures`: each picture's own size (points), for its room.
+pub(super) fn layout(
+    ui: &Ui,
+    text: &str,
+    st: &Styles,
+    plain: bool,
+    t: &Tokens,
+    wrap: f32,
+    check: &Check,
+    pictures: &HashMap<String, Vec2>,
+) -> Arc<Galley> {
+    indent_empty_rows(layout_aligned(ui, text, st, plain, t, wrap, check, pictures), st, plain)
 }
 
 /// The text laid out, each row of a centred or right-aligned paragraph moved over by what's
 /// left of the width (every row, so a paragraph longer than a line is aligned whole).
-pub(super) fn layout_aligned(ui: &Ui, text: &str, st: &Styles, plain: bool, t: &Tokens, wrap: f32, check: &Check) -> Arc<Galley> {
+pub(super) fn layout_aligned(
+    ui: &Ui,
+    text: &str,
+    st: &Styles,
+    plain: bool,
+    t: &Tokens,
+    wrap: f32,
+    check: &Check,
+    pictures: &HashMap<String, Vec2>,
+) -> Arc<Galley> {
     let typefaces = crate::look::typefaces::loaded(ui.ctx());
-    let first = ui.painter().layout_job(job(text, st, plain, t, wrap, check, &typefaces));
+    let rooms = rooms(ui, pictures, wrap);
+    let first = ui.painter().layout_job(job(text, st, plain, t, wrap, check, &typefaces, &rooms));
     // A right-to-left paragraph left as it was sits against the right edge, in plain text too
     // (which has no alignment of its own).
     let lines: Vec<&str> = text.split('\n').collect();
