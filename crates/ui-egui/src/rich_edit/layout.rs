@@ -43,6 +43,9 @@ pub(super) fn picture_format() -> TextFormat {
 pub(super) fn job(text: &str, st: &Styles, plain: bool, t: &Tokens, wrap: f32, check: &Check, typefaces: &BTreeSet<String>) -> LayoutJob {
     let mut job = LayoutJob::default();
     job.wrap.max_width = wrap;
+    // Where a paragraph goes is decided here (`layout_aligned`), against the editor's width;
+    // egui would put a right-to-left one against the widest line instead.
+    job.halign_min_is_start = false;
     let plain_fmt = TextFormat { font_id: theme::regular(14.5), color: t.text, ..Default::default() };
     let mut i = 0usize;
     for (n, line) in text.split('\n').enumerate() {
@@ -128,12 +131,14 @@ pub(super) fn layout(ui: &Ui, text: &str, st: &Styles, plain: bool, t: &Tokens, 
 pub(super) fn layout_aligned(ui: &Ui, text: &str, st: &Styles, plain: bool, t: &Tokens, wrap: f32, check: &Check) -> Arc<Galley> {
     let typefaces = crate::look::typefaces::loaded(ui.ctx());
     let first = ui.painter().layout_job(job(text, st, plain, t, wrap, check, &typefaces));
-    // A right-to-left paragraph left as it was sits against the right edge.
+    // A right-to-left paragraph left as it was sits against the right edge, in plain text too
+    // (which has no alignment of its own).
     let lines: Vec<&str> = text.split('\n').collect();
     let align_of = |n: usize, a: Align| {
+        let a = if plain { Align::Left } else { a };
         if a == Align::Left && lines.get(n).is_some_and(|l| crate::bidi::has_rtl(l) && crate::bidi::paragraph_rtl(l)) { Align::Right } else { a }
     };
-    if plain || !wrap.is_finite() || st.paras.iter().enumerate().all(|(n, p)| align_of(n, p.align) == Align::Left) {
+    if !wrap.is_finite() || st.paras.iter().enumerate().all(|(n, p)| align_of(n, p.align) == Align::Left) {
         return first;
     }
     let mut out = (*first).clone();
