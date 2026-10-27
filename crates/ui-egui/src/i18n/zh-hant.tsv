@@ -1647,3 +1647,7 @@ month	May	5月
 	Only if your organisation's server refuses Quatrelle: the name of a mail program it lets in.	僅當組織的伺服器拒絕 Quatrelle 時填寫：它允許的郵件程式名稱。
 	Only letters, digits, spaces and punctuation, up to 256 characters.	只能包含字母、數字、空格和標點，最多 256 個字元。
 	User-Agent (optional)	User-Agent（選用）
+	{percent}%	{percent}%
+	Zoom in	放大
+	Zoom out	縮小
+	Message zoom: click for 100%	郵件縮放：按一下恢復為 100%

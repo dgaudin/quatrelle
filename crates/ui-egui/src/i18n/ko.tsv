@@ -1647,3 +1647,7 @@ month	May	5월
 	Only if your organisation's server refuses Quatrelle: the name of a mail program it lets in.	조직 서버가 Quatrelle를 거부할 때만: 서버가 허용하는 메일 프로그램 이름.
 	Only letters, digits, spaces and punctuation, up to 256 characters.	문자, 숫자, 공백, 문장 부호만 최대 256자까지.
 	User-Agent (optional)	User-Agent(선택 사항)
+	{percent}%	{percent}%
+	Zoom in	확대
+	Zoom out	축소
+	Message zoom: click for 100%	메시지 확대/축소: 클릭하면 100%로 돌아갑니다

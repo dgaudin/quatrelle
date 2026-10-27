@@ -1647,3 +1647,7 @@ month	May	Май
 	Only if your organisation's server refuses Quatrelle: the name of a mail program it lets in.	Только если сервер вашей организации не пускает Quatrelle: название почтовой программы, которую он пропускает.
 	Only letters, digits, spaces and punctuation, up to 256 characters.	Только буквы, цифры, пробелы и знаки препинания, не более 256 символов.
 	User-Agent (optional)	User-Agent (необязательно)
+	{percent}%	{percent}%
+	Zoom in	Увеличить
+	Zoom out	Уменьшить
+	Message zoom: click for 100%	Масштаб сообщения: щёлкните, чтобы вернуть 100%

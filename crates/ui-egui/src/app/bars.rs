@@ -83,6 +83,7 @@ impl MailApp {
         let s = &self.session;
         let mut again: Option<String> = None;
         let mut restart = false;
+        let mut zoom_to: Option<u16> = None;
         ui.horizontal_centered(|ui| {
             // The items of what's shown: the list's mail, or (in People) the contacts.
             if s.module == Module::People {
@@ -112,6 +113,11 @@ impl MailApp {
             // A test build's next version: how far it's downloaded, then restart into it.
             restart = self.update_status(ui);
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                // The message read's zoom, at the far right as in Outlook's status bar.
+                if s.module == Module::Mail && s.reading.is_some() {
+                    zoom_to = zoom_control(ui, &t, s.prefs.reading_zoom);
+                    ui.add_space(12.0);
+                }
                 let dot = |ui: &mut Ui, color: egui::Color32| {
                     let (r, _) = ui.allocate_exact_size(vec2(10.0, 10.0), Sense::hover());
                     ui.painter().circle_filled(r.center(), 4.0, color);
@@ -196,6 +202,9 @@ impl MailApp {
         }
         if restart {
             self.act(Action::RestartToUpdate);
+        }
+        if let Some(percent) = zoom_to {
+            self.act(Action::Run("view.zoom", json!({"percent": percent})));
         }
     }
 
@@ -323,4 +332,23 @@ pub(super) fn module_rail(ui: &mut Ui, t: &Tokens, module: Module, acts: &mut Ve
             acts.push(Action::Run("view.module", json!({"name": code})));
         }
     }
+}
+
+/// The status bar's zoom of the message read (drawn right to left: +, the percent, −); what it
+/// was changed to. The percent goes back to 100.
+fn zoom_control(ui: &mut Ui, t: &Tokens, percent: u16) -> Option<u16> {
+    let (low, high) = (*quatrelle_engine::READING_ZOOM.start(), *quatrelle_engine::READING_ZOOM.end());
+    let button = |text: String| egui::Button::new(RichText::new(text).color(t.dim).small()).frame_when_inactive(false);
+    let tens = percent.saturating_add(5) / 10;
+    let mut to = None;
+    if ui.add_enabled(percent < high, button("+".into())).on_hover_text(tl!("Zoom in")).clicked() {
+        to = Some(tens.saturating_add(1).saturating_mul(10));
+    }
+    if ui.add(button(tf!("{percent}%", percent = percent))).on_hover_text(tl!("Message zoom: click for 100%")).clicked() {
+        to = Some(100);
+    }
+    if ui.add_enabled(percent > low, button("−".into())).on_hover_text(tl!("Zoom out")).clicked() {
+        to = Some(tens.saturating_sub(1).saturating_mul(10));
+    }
+    to.map(|n| n.clamp(low, high)).filter(|n| *n != percent)
 }

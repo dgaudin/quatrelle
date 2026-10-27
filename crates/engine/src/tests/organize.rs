@@ -1,4 +1,5 @@
-//! Engine tests: categories, rules, junk lists, Clean Up, Search Folders and Quick Steps.
+//! Engine tests: categories, rules, junk lists, Clean Up, Search Folders, Quick Steps and the
+//! message read's zoom.
 
 use super::*;
 
@@ -721,5 +722,26 @@ fn categories_kept_by_name_as_exchange_keeps_them() {
         matches!(&undo, Some(crate::session::Undo::Ops { ops, .. }) if matches!(ops.as_slice(), [Op::SetKeyword { on: true, name: Some(n), .. }] if n == "Work")),
         "{undo:?}"
     );
+    done(s);
+}
+
+#[test]
+fn the_message_read_zooms_within_bounds_and_keeps_it() {
+    let mut s = sample_session("reading-zoom");
+    assert_eq!(s.prefs.reading_scale(), 1.0, "as written at first");
+    assert_eq!(s.run("view.zoom", &json!({"percent": 150})).unwrap(), json!({"percent": 150}));
+    assert_eq!(s.prefs.reading_scale(), 1.5);
+    s.run("view.zoom", &json!({"percent": 9000})).unwrap();
+    assert_eq!(s.prefs.reading_zoom, 400, "at most 400 %");
+    s.run("view.zoom", &json!({"percent": 0})).unwrap();
+    assert_eq!(s.prefs.reading_zoom, 50, "at least 50 %");
+    assert!(s.run("view.zoom", &json!({})).is_err());
+    // Kept from one start to the next; a settings file out of bounds reads within them.
+    let back: crate::Prefs = serde_json::from_value(serde_json::to_value(&s.prefs).unwrap()).unwrap();
+    assert_eq!(back.reading_zoom, 50);
+    let odd: crate::Prefs = serde_json::from_value(json!({"readingZoom": 7})).unwrap();
+    assert_eq!(odd.reading_scale(), 0.5);
+    let before: crate::Prefs = serde_json::from_value(json!({})).unwrap();
+    assert_eq!(before.reading_zoom, 100, "settings from before the zoom: as written");
     done(s);
 }

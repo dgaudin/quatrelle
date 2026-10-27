@@ -1645,3 +1645,7 @@ month	May	5月
 	Only if your organisation's server refuses Quatrelle: the name of a mail program it lets in.	組織のサーバーが Quatrelle を拒否する場合のみ: そのサーバーが受け入れるメールソフトの名前。
 	Only letters, digits, spaces and punctuation, up to 256 characters.	英字、数字、スペース、句読点のみ、256 文字まで。
 	User-Agent (optional)	User-Agent (任意)
+	{percent}%	{percent}%
+	Zoom in	拡大
+	Zoom out	縮小
+	Message zoom: click for 100%	メッセージの拡大率: クリックで 100% に戻ります

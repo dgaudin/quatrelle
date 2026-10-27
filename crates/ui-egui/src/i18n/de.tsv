@@ -1648,3 +1648,7 @@ month	May	Mai
 	Only if your organisation's server refuses Quatrelle: the name of a mail program it lets in.	Nur wenn der Server Ihrer Organisation Quatrelle abweist: der Name eines Mailprogramms, das er zulässt.
 	Only letters, digits, spaces and punctuation, up to 256 characters.	Nur Buchstaben, Ziffern, Leerzeichen und Satzzeichen, höchstens 256 Zeichen.
 	User-Agent (optional)	User-Agent (optional)
+	{percent}%	{percent} %
+	Zoom in	Vergrößern
+	Zoom out	Verkleinern
+	Message zoom: click for 100%	Zoom der Nachricht: klicken für 100 %

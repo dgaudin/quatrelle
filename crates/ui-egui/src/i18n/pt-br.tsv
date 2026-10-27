@@ -1648,3 +1648,7 @@ month	May	maio
 	Only if your organisation's server refuses Quatrelle: the name of a mail program it lets in.	Só se o servidor da sua organização recusar o Quatrelle: o nome de um programa de e-mail que ele aceita.
 	Only letters, digits, spaces and punctuation, up to 256 characters.	Apenas letras, dígitos, espaços e pontuação, até 256 caracteres.
 	User-Agent (optional)	User-Agent (opcional)
+	{percent}%	{percent}%
+	Zoom in	Ampliar
+	Zoom out	Reduzir
+	Message zoom: click for 100%	Zoom da mensagem: clique para voltar a 100%

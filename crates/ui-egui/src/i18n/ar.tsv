@@ -1644,3 +1644,7 @@ month	May	مايو
 	Only if your organisation's server refuses Quatrelle: the name of a mail program it lets in.	فقط إذا رفض خادم مؤسستك Quatrelle: اسم برنامج بريد يقبله الخادم.
 	Only letters, digits, spaces and punctuation, up to 256 characters.	أحرف وأرقام ومسافات وعلامات ترقيم فقط، حتى 256 حرفًا.
 	User-Agent (optional)	User-Agent (اختياري)
+	{percent}%	{percent}%
+	Zoom in	تكبير
+	Zoom out	تصغير
+	Message zoom: click for 100%	تكبير الرسالة: انقر للعودة إلى 100%
