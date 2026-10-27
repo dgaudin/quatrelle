@@ -320,8 +320,8 @@ pub struct UiState {
     ribbon_groups: HashMap<String, RibbonGroups>,
     pub dialog: Option<Dialog>,
     previews: HashMap<(MessageKey, usize), Option<egui::TextureHandle>>,
-    /// Decoded web pictures, by address.
-    web_pictures: HashMap<String, Option<egui::TextureHandle>>,
+    /// Messages' pictures as shown (texture, own size): by address, or by message and attachment.
+    shown_pictures: HashMap<String, Option<(egui::TextureHandle, egui::Vec2)>>,
     /// The heights of HTML messages' table cells as last drawn, for their rows' alignment.
     cell_heights: reading::CellHeights,
     pub toast: Option<(String, bool, f64)>,
@@ -499,7 +499,7 @@ impl MailApp {
                 ribbon_groups: HashMap::new(),
                 dialog: None,
                 previews: HashMap::new(),
-                web_pictures: HashMap::new(),
+                shown_pictures: HashMap::new(),
                 cell_heights: reading::CellHeights::default(),
                 toast: None,
                 seen_notices: seen,
