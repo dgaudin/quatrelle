@@ -1,7 +1,7 @@
 //! The reading pane (the open message with its conversation and attachments) and the inline
 //! compose form that replaces it while a message is being written.
 
-use egui::{Align, Color32, Margin, Rect, RichText, Sense, Ui, vec2};
+use egui::{Align, Color32, Margin, Rect, RichText, Sense, Ui, Vec2, vec2};
 use quatrelle_engine::mime::{self, AttachmentKind};
 use quatrelle_engine::model::contacts::Contact;
 use quatrelle_engine::model::{MessageKey, addr, dates};
@@ -98,7 +98,18 @@ pub(crate) fn png_of(img: &egui::ColorImage) -> Option<Vec<u8>> {
 }
 
 fn decode_with(ctx: &egui::Context, name: &str, data: &[u8], max: u32, round: bool) -> Option<egui::TextureHandle> {
+    decode_sized_with(ctx, name, data, max, round).map(|(tex, _)| tex)
+}
+
+/// [`attachments::decode`], with the picture's own size (in pixels, the texture's being smaller
+/// when it was shrunk).
+pub(crate) fn decode_sized(ctx: &egui::Context, name: &str, data: &[u8], max: u32) -> Option<(egui::TextureHandle, Vec2)> {
+    decode_sized_with(ctx, name, data, max, false)
+}
+
+fn decode_sized_with(ctx: &egui::Context, name: &str, data: &[u8], max: u32, round: bool) -> Option<(egui::TextureHandle, Vec2)> {
     let decoded = decoded(data)?;
+    let own = vec2(decoded.width() as f32, decoded.height() as f32);
     // Never bigger than the graphics card takes (a software or browser one may take 2048 only).
     let max = max.min(ctx.input(|i| i.max_texture_side).try_into().unwrap_or(u32::MAX)).max(1);
     // Shrink large pictures; never enlarge small ones (the painter scales them crisply).
@@ -107,7 +118,7 @@ fn decode_with(ctx: &egui::Context, name: &str, data: &[u8], max: u32, round: bo
     let ci = egui::ColorImage::from_rgba_unmultiplied(size, &pixels);
     // Pixel art and tiny swatches stay crisp when scaled up.
     let filter = if size[0].max(size[1]) < 96 { egui::TextureOptions::NEAREST } else { egui::TextureOptions::LINEAR };
-    Some(ctx.load_texture(name, ci, filter))
+    Some((ctx.load_texture(name, ci, filter), own))
 }
 
 /// HTML written by hand (a signature) as a message shows it: its layout, text and links, pictures

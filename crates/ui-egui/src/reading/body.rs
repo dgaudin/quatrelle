@@ -411,7 +411,7 @@ impl Body<'_> {
             self.shown.push(src.to_string());
         }
         match picture_texture(self.s, st, ctx, self.key, self.p, src, self.allowed) {
-            Pic::Ready(tex) => Some(tex),
+            Pic::Ready(tex, _) => Some(tex),
             Pic::Loading | Pic::Missing => None,
         }
     }
