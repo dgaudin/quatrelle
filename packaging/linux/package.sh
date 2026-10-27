@@ -94,6 +94,19 @@ if has deb || has rpm; then
   export GLIBC_FLOOR="${GLIBC_FLOOR:-2.35}"
   # nfpm expands env vars in fields like `version` and `arch`, but not in `contents[].src`.
   sed "s|\${STAGE}|$STAGE|g" "$HERE/nfpm.yaml" >"$WORK/nfpm.yaml"
+  # nfpm writes a variable that isn't set as nothing, without a word: test builds 78 to 80 asked
+  # for libc.so.6(GLIBC_)(64bit), which nothing provides, so dnf refused them. Each one named
+  # must be set.
+  for var in $(grep -o '\${[A-Za-z_]*}' "$WORK/nfpm.yaml" | tr -d '${}' | sort -u); do
+    if [ -z "${!var:-}" ]; then
+      echo "error: nfpm.yaml uses \${$var}, which isn't set" >&2
+      exit 1
+    fi
+  done
+  if ! [[ "$GLIBC_FLOOR" =~ ^[0-9]+\.[0-9]+$ ]]; then
+    echo "error: GLIBC_FLOOR is '$GLIBC_FLOOR', not a glibc version like 2.35" >&2
+    exit 1
+  fi
   for fmt in deb rpm; do
     if has "$fmt"; then (cd "$ROOT" && nfpm package -f "$WORK/nfpm.yaml" -p "$fmt" -t "$DIST/$BASENAME.$fmt"); fi
   done

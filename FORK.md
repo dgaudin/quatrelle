@@ -399,6 +399,10 @@ compile et committe chaque reprise propre, et s'arrête au premier conflit).
   refusé sont repris de `9ade2bb` sans sa recherche dans l'annuaire, ce fork ayant la sienne
   (Vérifier les noms, Liste d'adresses globale, l'autre adresse du champ De) ; le User-Agent va
   aussi sur les requêtes propres à ce fork (boîtes partagées, notifications).
+- **Rattrapé** : `ca7c5e6` (de la v0.26, passé inaperçu alors), dont `ccfacd8` avait besoin : il
+  donne à `GLIBC_FLOOR` sa valeur par défaut (2.35). Sans lui, le .rpm des tests 78 à 80 demandait
+  `libc.so.6(GLIBC_)(64bit)`, que rien ne fournit, et dnf le refusait. `package.sh` refuse
+  désormais toute variable de `nfpm.yaml` restée vide.
 - **Laissés** : la mise en miroir de la fenêtre en arabe et en hébreu (`d2e280e` : elle réécrit la
   liste, les dossiers, la lecture et la rédaction, que ce fork dessine à sa façon) ; la couleur
   d'accent, la barre du haut sobre et les bordures (`cf15073`, l'apparence de ce fork reste) ;
