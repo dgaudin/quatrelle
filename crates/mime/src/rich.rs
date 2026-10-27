@@ -13,6 +13,10 @@ use crate::{RichText, Span};
 /// Where a picture sits in the text.
 pub const PICTURE: char = '\u{FFFC}';
 
+/// Where a signature written in HTML stands in a message being written: drawn, and sent, as it
+/// was written (its layout: a logo beside the name), which the text and its styles can't hold.
+pub const SIGNATURE: char = '\u{E002}';
+
 /// Font sizes offered, in points.
 pub const SIZES: [u8; 12] = [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 36];
 /// The size text has unless set.

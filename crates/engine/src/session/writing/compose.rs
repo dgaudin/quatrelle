@@ -15,6 +15,10 @@ pub struct Compose {
     /// another goes in, while it's still there unchanged.
     #[serde(default)]
     pub signature: String,
+    /// The signature written in HTML that stands where [`mime::rich::SIGNATURE`] is in the text
+    /// (its pictures among [`Compose::inline`]).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub signature_html: String,
     pub to: String,
     pub cc: String,
     pub bcc: String,
@@ -104,17 +108,29 @@ impl Compose {
     }
 
     /// The text, HTML and pictures to send: formatted when the text uses formatting or has
-    /// pictures (and the message isn't set to plain text), else plain text alone.
+    /// pictures (and the message isn't set to plain text), else plain text alone. A signature
+    /// written in HTML goes as it was written where it stands, and as text in the text.
     pub fn bodies(&self) -> (String, Option<String>, Vec<mime::InlinePicture>) {
         let mut styles = self.styles.clone();
         styles.fit(&self.body);
-        let used = mime::rich::pictures(&self.body, &styles);
+        let mut used = mime::rich::pictures(&self.body, &styles);
+        let signed = self.body.contains(mime::rich::SIGNATURE);
+        if signed {
+            used.extend(self.inline.iter().filter(|p| self.signature_html.contains(&format!("cid:{}", p.cid))).map(|p| p.cid.clone()));
+        }
         let pictures: Vec<mime::InlinePicture> = self.inline.iter().filter(|p| used.contains(&p.cid)).cloned().collect();
-        let text = mime::rich::to_text(&self.body, &styles);
-        if self.plain || (styles.is_plain() && pictures.is_empty()) {
+        let mut text = mime::rich::to_text(&self.body, &styles);
+        if signed {
+            text = text.replace(mime::rich::SIGNATURE, &signature_text(&self.signature_html));
+        }
+        if self.plain || (styles.is_plain() && pictures.is_empty() && !signed) {
             (text, None, Vec::new())
         } else {
-            (text, Some(mime::rich::to_html(&self.body, &styles)), pictures)
+            let mut html = mime::rich::to_html(&self.body, &styles);
+            if signed {
+                html = html.replace(mime::rich::SIGNATURE, &format!("<div>{}</div>", self.signature_html));
+            }
+            (text, Some(html), pictures)
         }
     }
 
@@ -150,6 +166,15 @@ impl Compose {
         self.subject.replace_range(from..to, with);
         Ok(())
     }
+}
+
+/// A signature written in HTML as plain text (for a message's text part): its words, without
+/// its pictures.
+pub fn signature_text(html: &str) -> String {
+    let (text, styles) = mime::signature_html(html);
+    let text = mime::rich::to_text(&text, &styles).replace("[picture]", "");
+    let lines: Vec<&str> = text.lines().map(str::trim_end).collect();
+    lines.join("\n").trim().to_string()
 }
 
 /// A signature as it goes into a message: after the `-- ` line (RFC 3676's delimiter) when the

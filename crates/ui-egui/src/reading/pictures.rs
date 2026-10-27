@@ -136,6 +136,22 @@ pub(super) fn picture_texture(
     }
 }
 
+/// A picture carried with what's drawn (a signature's, by `cid:`), as a message's: its own size
+/// up to `width`, `zoom` times.
+pub(super) fn carried_picture(st: &mut UiState, ui: &mut Ui, pic: &mime::InlinePicture, width: f32, zoom: f32) {
+    let ctx = ui.ctx().clone();
+    let most = shown_pixels(&ctx, zoom);
+    let name = format!("carried-{}-{}-{most}", pic.cid, pic.data.len());
+    match shown_picture(st, &name, || decode_sized(&ctx, &name, &pic.data, most)) {
+        Pic::Ready(tex, own) => {
+            ui.add(egui::Image::new(&tex).fit_to_exact_size(shown_size(own, width) * zoom));
+        }
+        Pic::Loading | Pic::Missing => {
+            ui.label(RichText::new(format!("[{}]", pic.name)).color(st.tokens.faint));
+        }
+    }
+}
+
 /// A picture decoded once (`decode`) and kept by `name` while messages are read.
 fn shown_picture(st: &mut UiState, name: &str, decode: impl FnOnce() -> Option<(egui::TextureHandle, Vec2)>) -> Pic {
     if let Some(t) = st.shown_pictures.get(name) {

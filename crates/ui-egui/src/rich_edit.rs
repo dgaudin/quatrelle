@@ -24,12 +24,14 @@ use crate::{Action, Dialog};
 mod layout;
 mod links;
 mod ribbon;
+mod signature;
 mod toolbar;
 use layout::*;
 pub(crate) use links::link_dialog;
 use links::*;
 use ribbon::*;
 pub(crate) use ribbon::{ComposeTab, RibbonInput, compose_ribbon};
+pub(crate) use signature::draw as draw_signature;
 pub use toolbar::Counts;
 use toolbar::*;
 #[cfg(test)]
@@ -92,6 +94,8 @@ pub(crate) struct Editor {
     pictures: HashMap<String, Option<egui::TextureHandle>>,
     /// Each picture's own size in points (read from its header once), for its room in the text.
     picture_sizes: HashMap<String, Vec2>,
+    /// A signature written in HTML: its size as drawn, and where it goes.
+    signature: signature::Placed,
     /// Give the keyboard back to the text (after a ribbon button took the click), with this
     /// selection.
     pub(crate) refocus: Option<Range<usize>>,
@@ -126,6 +130,7 @@ impl Editor {
             menu_open: false,
             pictures: HashMap::new(),
             picture_sizes: HashMap::new(),
+            signature: signature::Placed::default(),
             refocus: None,
             menu_word: None,
             suggestions: Vec::new(),
@@ -494,7 +499,7 @@ pub(crate) fn body(ui: &mut Ui, t: &Tokens, ed: &mut Editor, c: &mut Compose, st
     let plain = c.plain;
     let tokens = *t;
     let check = check_for(c);
-    let sizes = picture_sizes(ed, c);
+    let sizes = signature::with_room(picture_sizes(ed, c), &ed.signature);
     let mut layouter = |ui: &Ui, buf: &dyn egui::TextBuffer, wrap: f32| layout(ui, buf.as_str(), &styles, plain, &tokens, wrap, &check, &sizes);
     let height = ui.available_height().max(220.0);
     // A right-click inside the selection keeps it (egui's text box moves the cursor on any
@@ -567,6 +572,7 @@ pub(crate) fn body(ui: &mut Ui, t: &Tokens, ed: &mut Editor, c: &mut Compose, st
     if !c.plain {
         decorate(ui, t, ed, c, &out.galley, out.galley_pos);
     }
+    signature::place(ui, ed, c, &out.galley, out.galley_pos);
     if !out.response.has_focus() && !ed.sel.is_empty() {
         let color = ui.visuals().selection.bg_fill.gamma_multiply(0.45);
         let shapes: Vec<egui::Shape> = selection_rects(&out.galley, ed.sel.clone())
