@@ -131,7 +131,7 @@ pub fn show(ctx: &egui::Context, st: &mut State, s: &Session, t: &Tokens, acts: 
     if s.prefs.reminders_on_top && !ctx.embed_viewports() {
         let id = egui::ViewportId::from_hash_of("reminders-window");
         let builder = egui::ViewportBuilder::default()
-            .with_title(crate::i18n::as_written(|| title.clone()))
+            .with_title(title.clone())
             .with_inner_size([480.0, 330.0])
             .with_min_inner_size([360.0, 240.0])
             .with_always_on_top()

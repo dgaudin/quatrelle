@@ -54,9 +54,8 @@ impl MailApp {
         let t = self.ui.tokens;
         let subject = if c.subject.trim().is_empty() { tl!("Untitled").to_string() } else { c.subject.trim().to_string() };
         let id = egui::ViewportId::from_hash_of(("compose-window", c.id));
-        let mut builder = egui::ViewportBuilder::default()
-            .with_title(i18n::as_written(|| tf!("{subject} – Message", subject = subject)))
-            .with_min_inner_size([520.0, 420.0]);
+        let mut builder =
+            egui::ViewportBuilder::default().with_title(tf!("{subject} – Message", subject = subject)).with_min_inner_size([520.0, 420.0]);
         // Where the last one was, and its size: at its opening only (see `first_frame`); each
         // further one a step down and right.
         if first_frame(ctx, id) {
@@ -158,11 +157,7 @@ impl MailApp {
                 book.search.refresh(&mut self.session);
             }
             let title = if f.summary.trim().is_empty() { tl!("Untitled").to_string() } else { f.summary.trim().to_string() };
-            let title = if f.inviting {
-                i18n::as_written(|| tf!("{subject} – Meeting", subject = title))
-            } else {
-                i18n::as_written(|| tf!("{subject} – Appointment", subject = title))
-            };
+            let title = if f.inviting { tf!("{subject} – Meeting", subject = title) } else { tf!("{subject} – Appointment", subject = title) };
             let id = egui::ViewportId::from_hash_of(("event-window", *wid));
             let mut builder = egui::ViewportBuilder::default().with_title(title).with_min_inner_size([640.0, 480.0]);
             if first_frame(ctx, id) {
@@ -237,7 +232,7 @@ impl MailApp {
         };
         let subject =
             w.parsed.as_ref().map(|p| p.subject.clone()).filter(|s| !s.trim().is_empty()).unwrap_or_else(|| tl!("(no subject)").to_string());
-        let title = i18n::as_written(|| tf!("{subject} – Message", subject = subject));
+        let title = tf!("{subject} – Message", subject = subject);
         if title != self.ui.title_shown {
             ui.ctx().send_viewport_cmd(egui::ViewportCommand::Title(title.clone()));
             self.ui.title_shown = title;
@@ -266,9 +261,8 @@ impl MailApp {
             let subject =
                 w.parsed.as_ref().map(|p| p.subject.clone()).filter(|s| !s.trim().is_empty()).unwrap_or_else(|| tl!("(no subject)").to_string());
             let id = egui::ViewportId::from_hash_of(("message-window", key.to_id()));
-            let mut builder = egui::ViewportBuilder::default()
-                .with_title(i18n::as_written(|| tf!("{subject} – Message", subject = subject)))
-                .with_min_inner_size([480.0, 360.0]);
+            let mut builder =
+                egui::ViewportBuilder::default().with_title(tf!("{subject} – Message", subject = subject)).with_min_inner_size([480.0, 360.0]);
             // Where the last one was, and its size: at its opening only (see `first_frame`).
             if first_frame(ctx, id) {
                 builder = match self.ui.places.get("message") {
