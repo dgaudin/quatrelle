@@ -113,10 +113,15 @@ fn common_setup(options: &mut eframe::NativeOptions, intel_mac: bool, desktop_gp
     }
 }
 
-/// The graphics memory wgpu takes for itself: in blocks of a few megabytes. Its default
+/// The graphics memory wgpu takes for itself: in blocks of 4 to 8 MB, anything bigger (the font
+/// atlas, a large picture) in an allocation of its own, given back when it goes. Its default
 /// (`Performance`) takes blocks of 128 and 64 MB at the first texture — 237 MB on the graphics
 /// card for 2 MB of pictures (the window's), and an integrated GPU's memory is the computer's.
-pub const MEMORY_HINTS: wgpu::MemoryHints = wgpu::MemoryHints::MemoryUsage;
+/// `MemoryUsage` starts at 8 MB but lets each new block grow to 64 MB (32 MB for uploads): on
+/// the owner's mailbox, 120 to 148 MB after a day for 4 to 19 MB of pictures. Played on the
+/// owner's Iris Xe (icons, small pictures, the font atlas growing, messages with photos read):
+/// 164 MB while reading and 100 MB after, against 116 and 68 with these blocks.
+pub const MEMORY_HINTS: wgpu::MemoryHints = wgpu::MemoryHints::Manual { suballocated_device_memory_block_size: (4 << 20)..(8 << 20) };
 
 /// How many frames the window draws before a wgpu error is only logged (see [`log_errors`]).
 pub const STARTUP_FRAMES: u32 = 3;
