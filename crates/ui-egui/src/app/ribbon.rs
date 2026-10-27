@@ -87,17 +87,29 @@ impl MailApp {
                         }
                     }
                     // Each calendar in a column of its own (Outlook's side by side), or together;
-                    // and Outlook's Open Calendar: someone's calendar shared with an Exchange account.
+                    // and Outlook's Add Calendar: someone's shared with an Exchange account (From
+                    // Address Book), or one published at a link (From Internet, issue #7).
                     let several = s.pim.values().map(|p| p.calendars.len()).sum::<usize>() > 1;
                     let exchange = s.accounts.iter().any(|a| a.config.graph.is_some() || a.config.ews.is_some());
-                    if several || exchange {
+                    if several || !s.accounts.is_empty() {
                         groups.end(ui, &t, "Arrange");
-                        if exchange
-                            && widgets::big_button(ui, Icon::CalendarAdd, "Open calendar", &t, true)
-                                .on_hover_text(tl!("Open someone's calendar shared with you in Exchange"))
-                                .clicked()
-                        {
-                            acts.push(Action::Dialog(Dialog::OpenSharedCalendar { email: String::new(), error: None }));
+                        if !s.accounts.is_empty() {
+                            let r = widgets::big_button(ui, Icon::CalendarAdd, "Add calendar", &t, true);
+                            egui::Popup::menu(&r).show(|ui| {
+                                if exchange
+                                    && ui
+                                        .button(tl!("From address book…"))
+                                        .on_hover_text(tl!("Open someone's calendar shared with you in Exchange"))
+                                        .clicked()
+                                {
+                                    acts.push(Action::Dialog(Dialog::OpenSharedCalendar { email: String::new(), error: None }));
+                                    ui.close();
+                                }
+                                if ui.button(tl!("From the Internet…")).clicked() {
+                                    acts.push(Action::Dialog(Dialog::SubscribeCalendar { url: String::new(), name: String::new(), error: None }));
+                                    ui.close();
+                                }
+                            });
                         }
                         if several && widgets::big_toggle(ui, Icon::Calendar, "Side by side", &t, s.prefs.calendars_side_by_side).clicked() {
                             acts.push(Action::Run("calendar.sideBySide", json!({})));

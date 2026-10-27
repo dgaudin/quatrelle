@@ -926,7 +926,6 @@ month	May	5월
 	Open its calendar too	일정도 열기
 	Open another mailbox…	다른 사서함 열기…
 	Close this mailbox	이 사서함 닫기
-	Open calendar	일정 열기
 	Open someone's calendar shared with you in Exchange	Exchange에서 공유된 다른 사람의 일정을 엽니다
 	Other user's folder	다른 사용자의 폴더
 	Voting buttons	투표 단추
@@ -1651,3 +1650,15 @@ month	May	5월
 	Zoom in	확대
 	Zoom out	축소
 	Message zoom: click for 100%	메시지 확대/축소: 클릭하면 100%로 돌아갑니다
+	Subscribe to a calendar	일정 구독
+	Subscribe to a calendar…	일정 구독…
+	Paste the calendar's link (iCal or webcal://). It shows beside yours, read-only, and is read again every few hours.	일정 링크(iCal 또는 webcal://)를 붙여 넣으세요. 읽기 전용으로 내 일정 옆에 표시되며 몇 시간마다 다시 읽습니다.
+	Name (optional)	이름(선택 사항)
+	Subscribe	구독
+	Couldn't be read: {error}	읽을 수 없음: {error}
+	Reading it…	읽는 중…
+	Read {time}	{time}에 읽음
+	couldn't be read	읽을 수 없음
+	Add calendar	일정 추가
+	From address book…	주소록에서…
+	From the Internet…	인터넷에서…

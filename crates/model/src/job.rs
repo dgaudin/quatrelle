@@ -257,6 +257,9 @@ pub enum Job {
     FlushOutbox { account: String },
     /// Download a picture a message links to (only after the user asked to see pictures).
     FetchUrl { url: String },
+    /// Read a calendar subscribed to by its link (issue #7), unless it's unchanged since the
+    /// version named by `etag` / `modified`; answered by [`Event::CalendarFetched`].
+    FetchCalendar { account: String, calendar: String, url: String, etag: String, modified: String },
     /// Look up the server settings for an address (autoconfiguration).
     Discover { email: String },
     /// Sign an OAuth account in through the browser; it starts once signed in.
@@ -422,6 +425,7 @@ impl Job {
             | Job::GetRooms { account }
             | Job::FindCertificates { account, .. }
             | Job::SearchDirectory { account, .. }
+            | Job::FetchCalendar { account, .. }
             | Job::GetAvailability { account, .. } => account,
             Job::FetchUrl { .. }
             | Job::Discover { .. }

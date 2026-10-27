@@ -46,7 +46,11 @@ impl Session {
             if self.account(account).is_none() {
                 continue;
             }
-            for cal in p.calendars.iter().filter(|c| quatrelle_model::pim::shared_calendar_owner(&c.id).is_none()) {
+            // Not others' calendars, nor ones subscribed to (a holiday list's alarms are its own).
+            let own = |c: &&quatrelle_model::pim::CalendarInfo| {
+                quatrelle_model::pim::shared_calendar_owner(&c.id).is_none() && !quatrelle_model::pim::is_web_calendar(&c.id)
+            };
+            for cal in p.calendars.iter().filter(own) {
                 // Only the series with a reminder somewhere (an exception may have its own).
                 let with: std::collections::BTreeSet<&str> =
                     p.events.iter().filter(|e| e.calendar == cal.id && reminder_of(&e.event).is_some()).map(|e| e.event.uid.as_str()).collect();

@@ -62,12 +62,15 @@ impl Session {
     /// After a sync: occurrences changed here whose series the server no longer has (deleted,
     /// or read since as single appointments) are let go, and the user told once — sent again
     /// at every sync, each was refused with "the series isn't on the server yet", forever.
+    /// (A calendar subscribed to by its link never goes to the server: an occurrence it
+    /// publishes without its series stays.)
     pub(super) fn drop_lone_occurrences(&mut self, account: &str) {
         let Some(p) = self.pim.get_mut(account) else { return };
         let lone = |e: &StoredEvent, all: &[StoredEvent]| {
             e.event.recurrence_id.is_some()
                 && e.href.is_empty()
                 && e.calendar != LOCAL
+                && !quatrelle_model::pim::is_web_calendar(&e.calendar)
                 && !all.iter().any(|m| m.calendar == e.calendar && m.event.uid == e.event.uid && m.event.recurrence_id.is_none())
         };
         let gone: Vec<String> = p.events.iter().filter(|e| lone(e, &p.events)).map(|e| e.event.summary.clone()).collect();

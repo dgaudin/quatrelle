@@ -80,6 +80,17 @@ pub enum Event {
         data: Option<Vec<u8>>,
         error: Option<String>,
     },
+    /// What [`Job::FetchCalendar`] read: the calendar (`ics`) with the version the server named,
+    /// unchanged since the one asked about, or why it couldn't be read.
+    CalendarFetched {
+        account: String,
+        calendar: String,
+        ics: Option<String>,
+        etag: String,
+        modified: String,
+        unchanged: bool,
+        error: Option<String>,
+    },
     /// Server settings found for an address (`None`: nothing published; guess instead).
     Discovered {
         email: String,

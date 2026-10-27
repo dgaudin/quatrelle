@@ -865,7 +865,6 @@ month	May	mei
 	Open its calendar too	Ook de agenda openen
 	Open another mailbox…	Ander postvak openen…
 	Close this mailbox	Dit postvak sluiten
-	Open calendar	Agenda openen
 	Open someone's calendar shared with you in Exchange	De agenda openen van iemand die deze in Exchange met u heeft gedeeld
 	Other user's folder	Map van een andere gebruiker
 	Voting buttons	Stemknoppen
@@ -1648,3 +1647,15 @@ month	May	mei
 	Zoom in	Inzoomen
 	Zoom out	Uitzoomen
 	Message zoom: click for 100%	Zoom van het bericht: klik voor 100%
+	Subscribe to a calendar	Abonneren op een agenda
+	Subscribe to a calendar…	Abonneren op een agenda…
+	Paste the calendar's link (iCal or webcal://). It shows beside yours, read-only, and is read again every few hours.	Plak de link van de agenda (iCal of webcal://). Hij staat naast de jouwe, alleen-lezen, en wordt om de paar uur opnieuw gelezen.
+	Name (optional)	Naam (optioneel)
+	Subscribe	Abonneren
+	Couldn't be read: {error}	Kon niet worden gelezen: {error}
+	Reading it…	Bezig met lezen…
+	Read {time}	Gelezen {time}
+	couldn't be read	kon niet worden gelezen
+	Add calendar	Agenda toevoegen
+	From address book…	Uit het adresboek…
+	From the Internet…	Van internet…

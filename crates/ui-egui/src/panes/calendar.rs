@@ -145,6 +145,13 @@ pub fn nav(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
                 acts.push(Action::Dialog(Dialog::OpenSharedCalendar { email: String::new(), error: None }));
             }
         }
+        // Outlook's Add Calendar › From Internet (issue #7).
+        if !s.accounts.is_empty() {
+            ui.add_space(4.0);
+            if ui.link(RichText::new(tl!("Subscribe to a calendar…")).small()).clicked() {
+                acts.push(Action::Dialog(Dialog::SubscribeCalendar { url: String::new(), name: String::new(), error: None }));
+            }
+        }
     });
 }
 
@@ -179,7 +186,8 @@ fn section_heading(s: &Session, t: &Tokens, ui: &mut Ui, key: &str) {
 }
 
 /// A calendar in the side pane: ticked (in its colour) when shown, a click on the box hides or
-/// shows it; someone else's closes from its right-click menu.
+/// shows it; someone else's closes from its right-click menu, one subscribed to by its link
+/// (issue #7) is read again or removed from it.
 fn calendar_row(
     s: &Session,
     t: &Tokens,
@@ -190,6 +198,8 @@ fn calendar_row(
 ) {
     let shared = c.id.strip_prefix("shared:").map(str::to_string);
     let shown = s.calendar_shown(&a.config.id, &c.id);
+    // Subscribed to by its link: where it's read from, and how that went.
+    let web = s.pim.get(&a.config.id).and_then(|p| p.subscribed.iter().find(|w| w.id == c.id));
     let row = ui.horizontal(|ui| {
         let (r, resp) = ui.allocate_exact_size(vec2(14.0, 14.0), Sense::click());
         let c32 = color(c.color, t);
@@ -212,13 +222,39 @@ fn calendar_row(
                 tf!("Shared mailbox {address}, opened by {email}", address = owner, email = a.config.email)
             }
             (Some(_), _) => tf!("Shared with you, opened from {account}", account = a.config.email),
-            (None, _) => a.config.email.clone(),
+            (None, _) => match web {
+                Some(w) => {
+                    let state = match &w.error {
+                        Some(e) => tf!("Couldn't be read: {error}", error = e),
+                        None if w.fetched == 0 => tl!("Reading it…").to_string(),
+                        None => tf!("Read {time}", time = crate::i18n::date(&dates::list_time(w.fetched, &s.clock))),
+                    };
+                    format!("{}\n{state}", w.url)
+                }
+                None => a.config.email.clone(),
+            },
         };
         ui.add(egui::Label::new(RichText::new(name).color(t.text)).truncate()).on_hover_text(tip);
-        if c.read_only {
+        if web.is_some_and(|w| w.error.is_some()) {
+            ui.label(RichText::new(tl!("couldn't be read")).color(t.danger).small());
+        } else if c.read_only {
             ui.label(RichText::new(tl!("read-only")).color(t.faint).small());
         }
     });
+    // Subscribed to: right-click reads it again, or removes it.
+    if web.is_some() {
+        let id = c.id.clone();
+        row.response.interact(Sense::click()).context_menu(|ui| {
+            if ui.button(tl!("Refresh")).clicked() {
+                acts.push(Action::Run("calendar.refreshSubscribed", json!({"calendar": id})));
+                ui.close();
+            }
+            if ui.button(tl!("Remove this calendar")).clicked() {
+                acts.push(Action::Run("calendar.unsubscribe", json!({"calendar": id})));
+                ui.close();
+            }
+        });
+    }
     if let Some(email) = shared
         && s.pim.get(&a.config.id).is_some_and(|p| p.shared.iter().any(|x| x.eq_ignore_ascii_case(&email)))
     {
