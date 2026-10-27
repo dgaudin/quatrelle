@@ -5,12 +5,21 @@ use super::*;
 /// Most people named in To or Cc above a message (the rest say how many more).
 pub(super) const MAX_PEOPLE_SHOWN: usize = 50;
 
-/// The contact someone is saved as, if they are (by address).
-pub(super) fn known_contact(s: &Session, email: &str) -> Option<quatrelle_engine::model::vcard::Card> {
+/// The contact someone is saved as, if they are (by address): looked up once, then kept until
+/// the address books change (drawn on every frame for each name above a message).
+pub(super) fn known_contact(ctx: &egui::Context, s: &Session, email: &str) -> Option<quatrelle_engine::model::vcard::Card> {
     if email.trim().is_empty() {
         return None;
     }
-    s.people(email).into_iter().find(|x| x.card.emails.iter().any(|e| e.value.eq_ignore_ascii_case(email))).map(|x| x.card)
+    let id = egui::Id::unique(("known-contact", email.trim().to_ascii_lowercase()));
+    if let Some((revision, card)) = ctx.data(|d| d.get_temp::<(u64, Option<quatrelle_engine::model::vcard::Card>)>(id))
+        && revision == s.pim_revision
+    {
+        return card;
+    }
+    let card = s.person_by_email(email).map(|p| p.card);
+    ctx.data_mut(|d| d.insert_temp(id, (s.pim_revision, card.clone())));
+    card
 }
 
 /// Someone's name above a message, as a link: lit and underlined under the pointer.
@@ -28,7 +37,7 @@ pub(super) fn person_menus(s: &Session, t: &Tokens, r: &egui::Response, a: &Emai
     if a.email.trim().is_empty() {
         return;
     }
-    let known = known_contact(s, &a.email);
+    let known = known_contact(&r.ctx, s, &a.email);
     egui::Popup::menu(r).id(r.id.with("card")).show(|ui| contact_card(s, ui, t, a, known.as_ref(), acts));
     r.context_menu(|ui| {
         if ui.button(tl!("Send email")).clicked() {
