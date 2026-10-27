@@ -371,6 +371,45 @@ depuis les copies renommées, avec `~/mailcraft/merge-tools/pick.sh <commit>` (l
   fork) et les tests contre de vrais serveurs (`610c87c`). Le découpage du worker de l'origine
   (`6b7fc80`) n'est pas repris : celui de ce fork l'est déjà, autrement.
 
+### État de la récupération : reprises choisies de la v0.27 (2026-10-27)
+
+L'origine a ajouté 50 commits après `e46504c` (jusqu'à `d826960`). Même méthode, un par un depuis
+les copies renommées (`~/mailcraft/merge-tools/pick.sh`, puis `run_picks.sh` qui applique,
+compile et committe chaque reprise propre, et s'arrête au premier conflit).
+
+- **Repris** : l'accessibilité (chaque contrôle dessiné a un nom pour les lecteurs d'écran ; les
+  boutons propres à ce fork aussi, `633fd44`), la fermeture demandée même fenêtre réduite
+  (`519dee1`, dans le `logic` de ce fork, qui lit l'état de la mise à jour d'abord), ⌘Q sur Mac
+  (`3eab186`), le cache qui réécrit un fichier tenu un instant par un autre programme (`aec0eb1`,
+  `f436878`), les dossiers relatifs ignorés (`7a7466b`), les noms de périphériques Windows
+  (`7880728`), la boîte de dialogue qui rouvre le dernier dossier (`bab188a`), les images et pages
+  PDF jamais plus grandes que la carte graphique (`4a04574`), le défilement du ruban par onglet
+  (`e0c2d64`), le curseur au-delà du texte (`ebd2856`), l'hébreu et l'arabe dans les champs
+  (`25e6033`, `ea13b4e`), sélectionnés et copiés dans un message (`8b77776`), les paragraphes de
+  droite à gauche contre le bord droit (`754ab47`, en texte brut aussi), la place d'une image dans
+  le texte (`156cd84`), la barre d'état aux nombreux comptes en attente (`fcdfbff`), le test « au
+  hasard » de la fenêtre (`0d830b1`), des traductions (`c63c587`, `7800e8d`), l'exemple rempli de
+  nouveau (`e3ccec5`), l'identité JMAP créée quand il n'y en a pas (`37a5ff0`), l'empaquetage et les
+  polices du navigateur (`ff097b1`, `f1e7465`, `8e7d9b8`, `ccfacd8`, `8d9679b`, `8955bb3`,
+  `3927f7e`, `42eba80`, `4799f8a`, `7342667`, `f95d2f3`, `82542f4`).
+- **winit et egui partagés** : winit vient de `storytold/winit` (révision `5506b1a9`, la copie de
+  `vendor/` est retirée, `4177c89`), egui de `storytold/egui` (`8f6d82d`), comme les autres
+  applications Craft. Le winit partagé apporte le dépôt de fichiers sous Wayland (W15).
+- **Adaptés** : le User-Agent propre à un compte Exchange et le nom d'utilisateur à saut de ligne
+  refusé sont repris de `9ade2bb` sans sa recherche dans l'annuaire, ce fork ayant la sienne
+  (Vérifier les noms, Liste d'adresses globale, l'autre adresse du champ De) ; le User-Agent va
+  aussi sur les requêtes propres à ce fork (boîtes partagées, notifications).
+- **Laissés** : la mise en miroir de la fenêtre en arabe et en hébreu (`d2e280e` : elle réécrit la
+  liste, les dossiers, la lecture et la rédaction, que ce fork dessine à sa façon) ; la couleur
+  d'accent, la barre du haut sobre et les bordures (`cf15073`, l'apparence de ce fork reste) ;
+  Kerberos (`c2f1788` : il réécrit la boucle de connexion EWS, que ce fork a renforcée autrement,
+  et c'est le chemin NTLM du propriétaire) ; l'annuaire de Microsoft 365 (`81fa8d4`, posé sur le
+  moteur d'annuaire de l'origine) ; les certificats gardés dans le navigateur (`41f42af`) ;
+  l'agenda et les contacts EWS lus séparément (de `9ade2bb` : l'agenda de ce fork est le sien) ;
+  ce qui était déjà fait ici (`500e2fc`, le thème du bureau ; `217325c`, Ctrl+V d'une image) ; la
+  CI, la version et la documentation de l'origine (`2d8b274`, `baa180a`, `daadfd6`, `db8851c`,
+  `763cb9f`, `d826960`).
+
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
 Quatre chantiers, chacun dans son commit, à la suite d'un audit de l'éditeur HTML.
