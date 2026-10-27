@@ -533,3 +533,114 @@ fn a_webex_personal_room_is_set_and_taken_off() {
     s.run("calendar.webexRoom", &json!({"url": ""})).unwrap();
     assert!(s.prefs.webex_room.is_empty());
 }
+
+/// A sync that finds nothing new writes nothing: the calendar isn't saved again, nor the address
+/// book worked out again (25,000 other people's appointments were written again, compressed, on
+/// the window's thread, every minute or two while the calendar was shown); one that changes an
+/// appointment is saved. Each appointment read is found by an index: it was looked for through
+/// all of those kept, twice.
+#[test]
+fn a_sync_that_finds_nothing_new_writes_nothing() {
+    use quatrelle_model::ical::CalEvent;
+    use quatrelle_model::pim::{CalendarInfo, DavSync, StoredEvent};
+    let mut s = Session::open(Some(temp("sync-nothing-new")), quatrelle_model::dates::Clock::new(NOW, 0));
+    let id = s
+        .run("account.add", &json!({"email": "zoe@contoso.example", "password": "pw", "ews": "https://mail.contoso.example/EWS/Exchange.asmx"}))
+        .unwrap()["account"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    s.take_jobs();
+    let event = |cal: &str, n: i64, etag: &str| StoredEvent {
+        calendar: cal.into(),
+        href: format!("{cal}/I{n}"),
+        etag: etag.into(),
+        event: CalEvent {
+            uid: format!("{cal}/U{n}"),
+            summary: format!("Meeting {n}"),
+            start: NOW + n * 3_600,
+            end: NOW + n * 3_600 + 1_800,
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let mut ids = vec!["calendar".to_string()];
+    ids.extend((0..25).map(|k| format!("shared:{k}")));
+    let events: Vec<StoredEvent> = ids.iter().flat_map(|c| (0..if c == "calendar" { 700 } else { 1_000 }).map(move |n| event(c, n, "1"))).collect();
+    let sync = |events: Vec<StoredEvent>| DavSync {
+        calendars: Some(ids.iter().map(|c| CalendarInfo { id: c.clone(), name: c.clone(), ..Default::default() }).collect()),
+        synced_calendars: ids.clone(),
+        events,
+        checked: NOW,
+        ..Default::default()
+    };
+    s.apply_dav(&id, &sync(events.clone()));
+    let kept = s.pim.get(&id).map_or(0, |p| p.events.len());
+    assert_eq!(kept, 25_700);
+    // The same again: nothing written, quickly.
+    for _ in 0..1_000 {
+        if !s.contacts_pending() {
+            break;
+        }
+        s.contacts_step(10_000);
+    }
+    assert!(!s.contacts_pending());
+    let again = sync(events.clone());
+    let (revision, began) = (s.pim_revision, std::time::Instant::now());
+    s.apply_dav(&id, &again);
+    let took = began.elapsed();
+    assert_eq!(s.pim_revision, revision, "nothing new: not saved");
+    assert!(!s.contacts_pending(), "nor the address book worked out again");
+    assert_eq!(s.pim.get(&id).map_or(0, |p| p.events.len()), kept);
+    assert!(took < std::time::Duration::from_secs(3), "25,700 appointments merged in {took:?}");
+    // One changed on the server: saved, and shown as it is now.
+    let mut changed = events;
+    if let Some(e) = changed.iter_mut().find(|e| e.calendar == "calendar" && e.event.summary == "Meeting 3") {
+        e.etag = "2".into();
+        e.event.summary = "Meeting 3, moved room".into();
+    }
+    s.apply_dav(&id, &sync(changed));
+    assert_ne!(s.pim_revision, revision, "a change is saved");
+    let titles: Vec<String> = s.agenda(NOW, NOW + 5 * 3_600).into_iter().filter(|a| a.calendar == "calendar").map(|a| a.summary).collect();
+    assert!(titles.iter().any(|t| t == "Meeting 3, moved room"), "{titles:?}");
+    assert_eq!(s.pim.get(&id).map_or(0, |p| p.events.len()), kept, "in place of the one it was");
+    done(s);
+}
+
+/// Showing the calendar and leaving it changes which calendars the next sync reads: kept in a
+/// document of its own, the calendar isn't written again for it, nor the address book worked out
+/// again (a second at each switch, with 25,000 other people's appointments in the calendar).
+#[test]
+fn leaving_the_calendar_writes_only_what_to_read() {
+    use quatrelle_model::pim::{CalendarInfo, DavSync, PIM_READING_DOC, PimReading};
+    let mut s = Session::open(Some(temp("reading-doc")), quatrelle_model::dates::Clock::new(NOW, 0));
+    let id = s
+        .run("account.add", &json!({"email": "zoe@contoso.example", "password": "pw", "ews": "https://mail.contoso.example/EWS/Exchange.asmx"}))
+        .unwrap()["account"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let cal = CalendarInfo { id: "calendar".into(), name: "Calendar".into(), ..Default::default() };
+    s.apply_dav(&id, &DavSync { calendars: Some(vec![cal]), checked: NOW, ..Default::default() });
+    s.run("view.module", &json!({"name": "calendar"})).unwrap();
+    s.take_jobs();
+    for _ in 0..1_000 {
+        if !s.contacts_pending() {
+            break;
+        }
+        s.contacts_step(10_000);
+    }
+    let revision = s.pim_revision;
+    s.run("view.module", &json!({"name": "mail"})).unwrap();
+    s.take_jobs();
+    assert_eq!(s.pim_revision, revision, "the calendar isn't written again");
+    assert!(!s.contacts_pending(), "nor the address book worked out again");
+    let store = s.store.clone().unwrap();
+    let kept: Option<PimReading> = store.load_account_doc(&id, PIM_READING_DOC).unwrap();
+    assert_eq!(kept.map(|r| r.own_only), Some(true), "the next sync reads the account's own calendar only");
+    // Started again: read as it was left.
+    drop(s);
+    let again = Session::open(Some(store), quatrelle_model::dates::Clock::new(NOW, 0));
+    assert!(again.pim.get(&id).is_some_and(|p| p.own_only));
+    done(again);
+}

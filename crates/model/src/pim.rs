@@ -17,6 +17,22 @@ pub const LOCAL: &str = "local";
 /// Where an account's calendars and address books are kept in its cache.
 pub const PIM_DOC: &str = "pim.json";
 
+/// Where what an account's next calendar sync reads is kept ([`PimReading`]).
+pub const PIM_READING_DOC: &str = "pim-reading.json";
+
+/// What an account's next calendar sync reads ([`Pim::own_only`], [`Pim::not_read`]), kept in a
+/// document of its own: it changes each time the calendar is shown or left, and the whole
+/// calendar written again for it (25,000 other people's appointments, compressed) held the window
+/// up a second at each change (27/10). It's newer than what the calendar's document says.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PimReading {
+    #[serde(default)]
+    pub own_only: bool,
+    #[serde(default)]
+    pub not_read: Vec<String>,
+}
+
 /// A calendar.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CalendarInfo {
@@ -250,6 +266,20 @@ pub struct DavSync {
 }
 
 impl Pim {
+    /// What the next sync reads.
+    pub fn reading(&self) -> PimReading {
+        PimReading { own_only: self.own_only, not_read: self.not_read.clone() }
+    }
+
+    /// Reading as `r` says, when there's one ([`PIM_READING_DOC`]): it's newer than what the
+    /// calendar's document says.
+    pub fn read_as(&mut self, r: Option<PimReading>) {
+        if let Some(r) = r {
+            self.own_only = r.own_only;
+            self.not_read = r.not_read;
+        }
+    }
+
     /// Make sure there is somewhere to put events and people.
     pub fn ensure_defaults(&mut self) {
         if self.calendars.is_empty() {

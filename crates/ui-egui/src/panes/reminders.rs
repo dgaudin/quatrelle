@@ -39,7 +39,9 @@ pub struct State {
     pub signature: u64,
 }
 
-/// A digest of what decides the due list: the answers given and the events.
+/// A digest of what decides the due list: the answers given and the events, by the calendar's
+/// revision (each change to it counts one) rather than by the events themselves: worked out on
+/// every frame, a pass through 25,000 appointments took 3 % of the window's time (27/10).
 fn signature(s: &Session) -> u64 {
     let mut h: u64 = 0xcbf2_9ce4_8422_2325;
     let mut mix = |v: u64| h = (h ^ v).wrapping_mul(0x0100_0000_01b3);
@@ -48,11 +50,9 @@ fn signature(s: &Session) -> u64 {
         mix(k.len() as u64);
         mix(*v as u64);
     }
+    mix(s.pim_revision);
     for p in s.pim.values() {
         mix(p.events.len() as u64);
-        for e in &p.events {
-            mix(e.event.start as u64 ^ (e.event.extra.len() as u64).rotate_left(32) ^ (e.event.status.len() as u64).rotate_left(48));
-        }
     }
     h
 }
