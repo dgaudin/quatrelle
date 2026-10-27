@@ -373,6 +373,8 @@ pub struct UiState {
     /// The language whose CJK font is loaded, and the one replies quote their original in.
     cjk_loaded: Option<&'static str>,
     quoted_in: Option<&'static str>,
+    /// Shown text has Chinese characters none of the fonts has (`reading::han_missing`).
+    pub(crate) han_missing: bool,
     /// The app's name in the window title (`Quatrelle`, or `Quatrelle – Sample mailbox`).
     pub title_base: String,
     /// This page is a message's own window (the browser): only that message is shown.
@@ -524,6 +526,7 @@ impl MailApp {
                 emoji_asked: false,
                 cjk_loaded: None,
                 quoted_in: None,
+                han_missing: false,
                 title_base: "Quatrelle".into(),
                 places: Default::default(),
                 page_message: None,
@@ -588,6 +591,15 @@ impl MailApp {
         i18n::set_current(lang);
         self.sync_quote_words();
         let first = if lang.cjk() { lang.code() } else { "zh-hans" };
+        // Shown text with Chinese characters no font has (the browser has only the fonts it
+        // brought; Simplified Chinese's is too large to bring, so it's fetched when wanted).
+        if std::mem::take(&mut self.ui.han_missing) {
+            self.services.want_font("zh-hans");
+            self.ui.cjk_loaded = None;
+        }
+        if lang.code() == "zh-hans" {
+            self.services.want_font("zh-hans");
+        }
         if self.ui.cjk_loaded != Some(first) {
             self.ui.cjk_loaded = Some(first);
             // Korean has its own font; Simplified Chinese's covers Japanese kana too.
@@ -604,6 +616,9 @@ impl MailApp {
                 let (r, b) = self.ui.fonts.clone();
                 theme::install_fonts_with(ctx, r, b, cjk, self.ui.rtl_font.clone());
                 ctx.request_repaint();
+            } else if self.services.font_pending() {
+                // Asked again once it has come.
+                self.ui.cjk_loaded = None;
             } else if lang.cjk() && !(craft_fonts::has_script("Jpan") || craft_fonts::has_script("Hans")) {
                 // (Otherwise the built-in fallbacks, installed with the other fonts, draw them.)
                 log::warn!("no Chinese/Japanese/Korean font found: those characters can't be drawn");
