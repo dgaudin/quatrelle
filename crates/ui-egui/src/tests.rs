@@ -594,6 +594,7 @@ mod pim;
 mod reading;
 mod rtl;
 mod scheduling;
+mod soak;
 mod updates;
 mod windows;
 mod writing;
