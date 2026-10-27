@@ -2,6 +2,8 @@
 
 use super::*;
 
+mod web;
+
 /// An appointment read from Exchange carries its start in its name (`…#<start>`), and a dialog
 /// opened before it moved still holds the old one: it finds the appointment all the same, when
 /// only one answers to the name without its start, instead of "no event `…`".

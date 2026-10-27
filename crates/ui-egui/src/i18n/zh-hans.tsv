@@ -866,7 +866,6 @@ month	May	5月
 	Open its calendar too	同时打开其日历
 	Open another mailbox…	打开其他邮箱…
 	Close this mailbox	关闭此邮箱
-	Open calendar	打开日历
 	Open someone's calendar shared with you in Exchange	打开别人在 Exchange 中与你共享的日历
 	Other user's folder	其他用户的文件夹
 	Voting buttons	投票按钮
@@ -1649,3 +1648,15 @@ month	May	5月
 	Zoom in	放大
 	Zoom out	缩小
 	Message zoom: click for 100%	邮件缩放：单击恢复为 100%
+	Subscribe to a calendar	订阅日历
+	Subscribe to a calendar…	订阅日历…
+	Paste the calendar's link (iCal or webcal://). It shows beside yours, read-only, and is read again every few hours.	粘贴日历链接（iCal 或 webcal://）。它以只读方式显示在你的日历旁边，每隔几小时重新读取一次。
+	Name (optional)	名称（可选）
+	Subscribe	订阅
+	Couldn't be read: {error}	无法读取：{error}
+	Reading it…	正在读取…
+	Read {time}	读取于 {time}
+	couldn't be read	无法读取
+	Add calendar	添加日历
+	From address book…	从通讯簿…
+	From the Internet…	从 Internet…

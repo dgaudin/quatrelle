@@ -926,7 +926,6 @@ month	May	5月
 	Open its calendar too	同時開啟其行事曆
 	Open another mailbox…	開啟其他信箱…
 	Close this mailbox	關閉此信箱
-	Open calendar	開啟行事曆
 	Open someone's calendar shared with you in Exchange	開啟別人在 Exchange 中與你共用的行事曆
 	Other user's folder	其他使用者的資料夾
 	Voting buttons	投票按鈕
@@ -1651,3 +1650,15 @@ month	May	5月
 	Zoom in	放大
 	Zoom out	縮小
 	Message zoom: click for 100%	郵件縮放：按一下恢復為 100%
+	Subscribe to a calendar	訂閱行事曆
+	Subscribe to a calendar…	訂閱行事曆…
+	Paste the calendar's link (iCal or webcal://). It shows beside yours, read-only, and is read again every few hours.	貼上行事曆連結（iCal 或 webcal://）。它會以唯讀方式顯示在你的行事曆旁邊，每隔幾小時重新讀取一次。
+	Name (optional)	名稱（選填）
+	Subscribe	訂閱
+	Couldn't be read: {error}	無法讀取：{error}
+	Reading it…	正在讀取…
+	Read {time}	讀取於 {time}
+	couldn't be read	無法讀取
+	Add calendar	新增行事曆
+	From address book…	從通訊錄…
+	From the Internet…	從網際網路…

@@ -476,3 +476,27 @@ fn appointments_are_dragged_to_another_time() {
     assert_eq!(a.session.find_event(&mix.uid).unwrap().1.event.start, mix.start);
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// Subscribe to a calendar (issue #7): a link that isn't a calendar's keeps the dialog open with
+/// the reason; a good one subscribes, closes it, and the calendar is listed, read-only, with a
+/// read asked for.
+#[test]
+fn the_subscribe_dialog_says_why_a_link_is_refused() {
+    let (mut a, dir) = app("subscribe-calendar");
+    let ctx = egui::Context::default();
+    a.ui.dialog = Some(Dialog::SubscribeCalendar { url: "ftp://x.example/a.ics".into(), name: String::new(), error: None });
+    frame(&ctx, &mut a, vec![]);
+    a.act(crate::Action::Submit("calendar.subscribe", json!({"url": "ftp://x.example/a.ics", "name": ""})));
+    match &a.ui.dialog {
+        Some(Dialog::SubscribeCalendar { error: Some(e), .. }) => assert!(e.contains("not a calendar link"), "{e}"),
+        other => panic!("the dialog should stay open with the reason: {other:?}"),
+    }
+    frame(&ctx, &mut a, vec![]);
+    a.act(crate::Action::Submit("calendar.subscribe", json!({"url": "webcal://holidays.example/de.ics", "name": "Holidays"})));
+    assert!(a.ui.dialog.is_none(), "subscribed and closed");
+    let listed = a.session.pim.values().flat_map(|p| p.calendars.iter()).find(|c| c.name == "Holidays").expect("listed");
+    assert!(listed.read_only && quatrelle_engine::model::pim::is_web_calendar(&listed.id));
+    assert!(a.session.take_jobs().iter().any(|j| matches!(j, quatrelle_engine::model::Job::FetchCalendar { .. })), "read at once");
+    frame(&ctx, &mut a, vec![]);
+    let _ = std::fs::remove_dir_all(dir);
+}

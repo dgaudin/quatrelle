@@ -113,6 +113,12 @@ pub enum Dialog {
         email: String,
         error: Option<String>,
     },
+    /// Subscribe to a calendar by its link (Outlook's Add Calendar › From Internet, issue #7).
+    SubscribeCalendar {
+        url: String,
+        name: String,
+        error: Option<String>,
+    },
     /// The password of a certificate file being imported (S/MIME): from `path`, or `data` as the
     /// browser's picker gives it; neither, the one the browser keeps, unlocked.
     Certificate {
@@ -446,7 +452,9 @@ impl Dialog {
             Dialog::Contact(f) => f.error = Some(e),
             Dialog::MoveEvent(f) => f.error = Some(e),
             Dialog::Vacation(f) => f.error = Some(e),
-            Dialog::OpenSharedCalendar { error, .. } | Dialog::OpenSharedMailbox { error, .. } => *error = Some(e),
+            Dialog::OpenSharedCalendar { error, .. } | Dialog::SubscribeCalendar { error, .. } | Dialog::OpenSharedMailbox { error, .. } => {
+                *error = Some(e)
+            }
             _ => {}
         }
     }
@@ -632,6 +640,7 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Act
         | Dialog::PicturePreview { .. }
         | Dialog::Preview { .. }
         | Dialog::OpenSharedCalendar { .. }
+        | Dialog::SubscribeCalendar { .. }
         | Dialog::Certificate { .. }
         | Dialog::SmartCard { .. }
         | Dialog::Event(..)

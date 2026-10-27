@@ -211,6 +211,7 @@ impl Worker {
             Job::FindCertificates { emails, .. } => self.directory_certificates(&emails),
             Job::SearchDirectory { query, .. } => self.search_directory(&query),
             Job::FetchUrl { .. }
+            | Job::FetchCalendar { .. }
             | Job::Discover { .. }
             | Job::SignIn { .. }
             | Job::ImportPst { .. }

@@ -251,6 +251,7 @@ pub(crate) fn tour() {
                 size: 20_480,
             },
             Dialog::OpenSharedCalendar { email: "ana@contoso.example".into(), error: Some("no access".into()) },
+            Dialog::SubscribeCalendar { url: "webcal://holidays.example/de.ics".into(), name: String::new(), error: Some("HTTP 404".into()) },
             Dialog::OpenSharedMailbox {
                 account: "a1".into(),
                 email: "support@contoso.example".into(),

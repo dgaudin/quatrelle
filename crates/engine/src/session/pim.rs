@@ -19,10 +19,13 @@ mod people;
 mod reminders;
 mod syncing;
 mod tasks;
+pub(crate) mod web;
 
-/// Whether a calendar is the user's own: not a colleague's shared one, nor a public folder's.
+/// Whether a calendar is the user's own: not a colleague's shared one, nor a public folder's,
+/// nor one subscribed to by its link (a holiday list is someone else's, as Outlook has it: set
+/// aside away from the calendar, its alarms not reminders).
 pub(super) fn own_calendar(id: &str) -> bool {
-    quatrelle_model::pim::shared_calendar_owner(id).is_none() && !id.starts_with("public:")
+    quatrelle_model::pim::shared_calendar_owner(id).is_none() && !id.starts_with("public:") && !quatrelle_model::pim::is_web_calendar(id)
 }
 pub use notes::NoteRef;
 pub use people::Person;
