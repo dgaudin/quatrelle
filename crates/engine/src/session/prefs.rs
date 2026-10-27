@@ -6,6 +6,9 @@ use super::*;
 /// Outlook offers the same range).
 pub const KEEP_DAYS: u32 = 730;
 
+/// How far the message read can be zoomed, in percent.
+pub const READING_ZOOM: std::ops::RangeInclusive<u16> = 50..=400;
+
 /// Settings the user changes from the View tab (saved by the app).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -60,6 +63,9 @@ pub struct Prefs {
     pub focus_overrides: std::collections::BTreeMap<String, bool>,
     /// Show HTML mail formatted (`false`: as plain text).
     pub show_html: bool,
+    /// The message read shown bigger or smaller (Ctrl+wheel over it, or the status bar's zoom,
+    /// as Outlook's), in percent: 100 as written ([`Prefs::reading_scale`]).
+    pub reading_zoom: u16,
     /// Senders whose pictures from the web load without asking (lower-case addresses).
     pub trusted_senders: BTreeSet<String>,
     /// Servers whose network shares (`\\server\share` links) open without asking (lower
@@ -180,6 +186,7 @@ impl Default for Prefs {
             focused_inbox: false,
             focus_overrides: std::collections::BTreeMap::new(),
             show_html: true,
+            reading_zoom: 100,
             trusted_senders: BTreeSet::new(),
             trusted_share_servers: BTreeSet::new(),
             blocked_senders: BTreeSet::new(),
@@ -209,6 +216,14 @@ impl Default for Prefs {
             signature_dashes: false,
             pane_order: Vec::new(),
         }
+    }
+}
+
+impl Prefs {
+    /// The message read's zoom as a factor (1.0 as written), within [`READING_ZOOM`] whatever
+    /// the settings file says.
+    pub fn reading_scale(&self) -> f32 {
+        f32::from(self.reading_zoom.clamp(*READING_ZOOM.start(), *READING_ZOOM.end())) / 100.0
     }
 }
 

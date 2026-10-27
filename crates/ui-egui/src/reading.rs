@@ -132,7 +132,7 @@ pub fn html_preview(s: &Session, st: &mut UiState, ui: &mut Ui, html: &str) {
     let mut acts: Vec<Action> = Vec::new();
     let width = ui.available_width();
     let faces = crate::look::typefaces::loaded(ui.ctx());
-    let mut body = Body { s, key: &key, p: &p, allowed: false, shown: &mut shown, acts: &mut acts, faces, cells: 0 };
+    let mut body = Body { s, key: &key, p: &p, allowed: false, shown: &mut shown, acts: &mut acts, faces, zoom: 1.0, cells: 0 };
     if p.layout.is_empty() {
         body.lines(st, ui, &p.rich, width, theme::surface_rgb(&t), Align::Min);
     } else {
@@ -276,7 +276,9 @@ fn message(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action
         });
     }
     let top = ui.cursor().top();
-    let scrolled = egui::ScrollArea::vertical().auto_shrink(false).id_salt(("reading", in_window, r.key.to_id(), viewing)).show(ui, |ui| {
+    // Zoomed in, a picture can be wider than the pane: it scrolls sideways (the text still wraps).
+    let zoomed = s.prefs.reading_scale() > 1.0;
+    let scrolled = egui::ScrollArea::new([zoomed, true]).auto_shrink(false).id_salt(("reading", in_window, r.key.to_id(), viewing)).show(ui, |ui| {
         egui::Frame::new().inner_margin(Margin { left: 24, right: 24, top: if headed { 8 } else { 18 }, bottom: 24 }).show(ui, |ui| {
             let Some(p) = &r.parsed else {
                 ui.add_space(30.0);
@@ -404,11 +406,55 @@ fn message(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action
             }
         });
     });
+    // Ctrl+wheel (or a pinch) over the message zooms it, as Outlook's.
+    if r.parsed.is_some()
+        && viewing.is_none()
+        && ui.rect_contains_pointer(scrolled.inner_rect)
+        && let Some(percent) = zoom_step(ui.ctx(), s.prefs.reading_zoom)
+    {
+        acts.push(Action::Run("view.zoom", json!({"percent": percent})));
+    }
     // The message scrolled under the header: a line between them.
     if headed && scrolled.state.clamped_offset().y > 0.5 {
         let r = scrolled.inner_rect;
         ui.painter().line_segment([egui::pos2(r.left(), top), egui::pos2(r.right(), top)], egui::Stroke::new(1.0, t.border));
     }
+}
+
+/// The zoom Ctrl+wheel (or a pinch) asks for this frame, from `percent`: ten percent a step. egui
+/// spreads a wheel's notch over a dozen frames, so a step is taken once it has moved enough and
+/// the rest of it let go (until it stops, or for 0.3 s): a notch is one step whatever its size, a
+/// pinch a step every 0.3 s.
+fn zoom_step(ctx: &egui::Context, percent: u16) -> Option<u16> {
+    let (delta, now) = ctx.input(|i| (i.zoom_delta(), i.time));
+    let frame = ctx.cumulative_frame_nr();
+    let id = egui::Id::unique("reading-zoom");
+    // The frame last looked at (egui can draw one twice), the movement added up, and when the
+    // last step was taken.
+    let (seen, pending, stepped) = ctx.data(|d| d.get_temp::<(u64, f32, Option<f64>)>(id)).unwrap_or((u64::MAX, 0.0, None));
+    if seen == frame {
+        return None;
+    }
+    let keep = |pending: f32, stepped: Option<f64>| ctx.data_mut(|d| d.insert_temp(id, (frame, pending, stepped)));
+    if !delta.is_finite() || delta <= 0.0 || (delta - 1.0).abs() < 1e-4 {
+        // Stopped: the next movement starts afresh.
+        keep(0.0, None);
+        return None;
+    }
+    if stepped.is_some_and(|t| now - t < 0.3) {
+        keep(0.0, stepped);
+        return None;
+    }
+    let pending = pending + delta.ln();
+    if pending.abs() < 1.05f32.ln() {
+        keep(pending, stepped);
+        return None;
+    }
+    keep(0.0, Some(now));
+    let tens = percent.saturating_add(5) / 10;
+    let next = if pending > 0.0 { tens.saturating_add(1) } else { tens.saturating_sub(1) }.saturating_mul(10);
+    let (low, high) = (*quatrelle_engine::READING_ZOOM.start(), *quatrelle_engine::READING_ZOOM.end());
+    Some(next.clamp(low, high)).filter(|n| *n != percent)
 }
 
 /// Who the message says it's from doesn't add up: said plainly, above everything it asks for.

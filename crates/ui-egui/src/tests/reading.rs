@@ -692,6 +692,68 @@ fn the_header_stays_while_the_message_scrolls() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// Ctrl+wheel over the message zooms it, as Outlook's: a notch is ten percent, the text grows
+/// and stays where it was (no scrolling), and the status bar says how far; over the list it
+/// doesn't.
+#[test]
+fn ctrl_wheel_zooms_the_message_read() {
+    use egui::{Event, Shape};
+    let (mut a, dir) = app_with_html("reading-zoom", "A zoomed message", "<p>Some words to read.</p>");
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    let k = a.session.list.iter().find(|m| m.subject == "A zoomed message").map(|m| m.key.clone()).unwrap();
+    a.run("list.open", json!({"key": k.to_id()}));
+    let size = egui::vec2(1280.0, 800.0);
+    let text = |shapes: &[Shape], text: &str| {
+        shapes.iter().rev().find_map(|s| match s {
+            Shape::Text(t) if t.galley.text() == text => Some((t.pos.y, t.galley.job.sections.first().map_or(0.0, |s| s.format.font_id.size))),
+            _ => None,
+        })
+    };
+    let wheel = |at: egui::Pos2, lines: f32| {
+        let notch = Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Line,
+            delta: egui::vec2(0.0, lines),
+            phase: egui::TouchPhase::Move,
+            source: egui::MouseWheelSource::Wheel,
+            modifiers: egui::Modifiers::CTRL,
+        };
+        vec![Event::PointerMoved(at), notch]
+    };
+    let mut before = Vec::new();
+    for _ in 0..10 {
+        before = frame_shapes(&ctx, &mut a, vec![], size);
+    }
+    let (y, written) = text(&before, "Some words to read.").unwrap();
+    // Over the list: nothing.
+    frame_shapes(&ctx, &mut a, wheel(egui::pos2(300.0, 400.0), 1.0), size);
+    frame(&ctx, &mut a, vec![]);
+    assert_eq!(a.session.prefs.reading_zoom, 100, "the list isn't the message");
+    // Over the message: one notch, ten percent.
+    let over = egui::pos2(1000.0, 500.0);
+    frame_shapes(&ctx, &mut a, vec![Event::PointerMoved(over)], size);
+    frame_shapes(&ctx, &mut a, wheel(over, 1.0), size);
+    let mut after = Vec::new();
+    for _ in 0..10 {
+        after = frame_shapes(&ctx, &mut a, vec![Event::PointerMoved(over)], size);
+    }
+    assert_eq!(a.session.prefs.reading_zoom, 110);
+    let (y2, zoomed) = text(&after, "Some words to read.").unwrap();
+    assert!((zoomed - written * 1.1).abs() < 0.01, "the text is 10 % bigger: {written} → {zoomed}");
+    assert!((y2 - y).abs() < 1.0, "and wasn't scrolled: {y} → {y2}");
+    assert!(after.iter().any(|s| matches!(s, Shape::Text(t) if t.galley.text() == "110%")), "the status bar says how far");
+    // A notch the other way once the first has died away (egui spreads one over frames): back.
+    for _ in 0..20 {
+        frame_shapes(&ctx, &mut a, vec![Event::PointerMoved(over)], size);
+    }
+    frame_shapes(&ctx, &mut a, wheel(over, -1.0), size);
+    for _ in 0..30 {
+        frame_shapes(&ctx, &mut a, vec![Event::PointerMoved(over)], size);
+    }
+    assert_eq!(a.session.prefs.reading_zoom, 100, "one notch, one step");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 /// The language model's answer above the message closes with the cross at its top right,
 /// unused.
 #[test]

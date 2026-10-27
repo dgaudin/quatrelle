@@ -120,7 +120,8 @@ pub(super) fn rich_body(s: &Session, st: &mut UiState, ui: &mut Ui, key: &Messag
         acts.push(Action::LoadTypeface(name));
     }
     let faces = crate::look::typefaces::loaded(ui.ctx());
-    let mut body = Body { s, key, p, allowed, shown: &mut shown, acts: &mut *acts, faces, cells: 0 };
+    let zoom = s.prefs.reading_scale();
+    let mut body = Body { s, key, p, allowed, shown: &mut shown, acts: &mut *acts, faces, zoom, cells: 0 };
     if p.layout.is_empty() {
         body.lines(st, ui, &p.rich, width, theme::surface_rgb(&t), Align::Min);
     } else {
@@ -133,7 +134,7 @@ pub(super) fn rich_body(s: &Session, st: &mut UiState, ui: &mut Ui, key: &Messag
             ui.add_space(8.0);
             ui.horizontal_wrapped(|ui| {
                 for src in rest {
-                    picture(s, st, ui, key, p, src, allowed, width, acts);
+                    picture(s, st, ui, key, p, src, allowed, width, zoom, acts);
                 }
             });
         }
@@ -151,6 +152,8 @@ pub(super) struct Body<'a> {
     pub(super) acts: &'a mut Vec<Action>,
     /// The typefaces loaded, to draw the message's own in ([`span_font_in`]).
     pub(super) faces: std::collections::BTreeSet<String>,
+    /// The message's zoom (1.0 as written): its text, pictures and set widths ([`Prefs::reading_scale`]).
+    pub(super) zoom: f32,
     /// Table cells drawn so far: each one's number, the same from frame to frame, keys its
     /// height as last drawn ([`CellHeights`]) for its row's alignment.
     pub(super) cells: usize,
@@ -229,8 +232,14 @@ pub(super) fn message_typefaces(p: &mime::Parsed) -> Vec<String> {
 }
 
 /// A span's font: the size the message gave it (points, as a page shows them), in its typeface
-/// when that's loaded (`faces`), else the reader's.
-pub(super) fn span_font_in(sp: &mime::Span, faces: &std::collections::BTreeSet<String>) -> egui::FontId {
+/// when that's loaded (`faces`), else the reader's; `zoom` times bigger.
+pub(super) fn span_font_in(sp: &mime::Span, faces: &std::collections::BTreeSet<String>, zoom: f32) -> egui::FontId {
+    let mut font = span_font_written(sp, faces);
+    font.size *= zoom;
+    font
+}
+
+fn span_font_written(sp: &mime::Span, faces: &std::collections::BTreeSet<String>) -> egui::FontId {
     if let Some(pt) = sp.size.filter(|_| !sp.code) {
         let px = (f32::from(pt) * 4.0 / 3.0).clamp(8.0, 72.0);
         let bold = sp.bold || sp.heading > 0;
@@ -268,7 +277,7 @@ impl Body<'_> {
         let t = st.tokens;
         for line in lines {
             if line.is_empty() {
-                ui.add_space(9.0);
+                ui.add_space(9.0 * self.zoom);
                 continue;
             }
             // A line with right-to-left text is laid out whole, egui putting it in order (its links
@@ -278,7 +287,7 @@ impl Body<'_> {
                 for sp in line {
                     let (fg, bg) = theme::mail_colors_on(sp.color, sp.background, page, &t, if sp.link.is_some() { t.accent } else { t.text });
                     let format = egui::TextFormat {
-                        font_id: span_font_in(sp, &self.faces),
+                        font_id: span_font_in(sp, &self.faces, self.zoom),
                         color: fg,
                         background: bg.unwrap_or(Color32::TRANSPARENT),
                         italics: sp.italic,
@@ -312,7 +321,7 @@ impl Body<'_> {
                 }
                 let line_w: f32 = line
                     .iter()
-                    .map(|sp| ui.fonts_mut(|f| f.layout_no_wrap(sp.text.clone(), span_font_in(sp, &self.faces), Color32::WHITE).size().x))
+                    .map(|sp| ui.fonts_mut(|f| f.layout_no_wrap(sp.text.clone(), span_font_in(sp, &self.faces, self.zoom), Color32::WHITE).size().x))
                     .sum();
                 if line.iter().all(|sp| sp.image.is_none()) && line_w < width {
                     let space = if align == Align::Center { (width - line_w) / 2.0 } else { width - line_w };
@@ -342,13 +351,13 @@ impl Body<'_> {
         let t = st.tokens;
         if let Some(src) = &sp.image {
             self.shown.push(src.clone());
-            if !picture(self.s, st, ui, self.key, self.p, src, self.allowed, width, self.acts) {
+            if !picture(self.s, st, ui, self.key, self.p, src, self.allowed, width, self.zoom, self.acts) {
                 let alt = if sp.text.trim().is_empty() { "picture" } else { sp.text.trim() };
                 ui.label(RichText::new(format!("[{alt}]")).color(t.faint));
             }
             return;
         }
-        let mut rt = RichText::new(&sp.text).font(span_font_in(sp, &self.faces));
+        let mut rt = RichText::new(&sp.text).font(span_font_in(sp, &self.faces, self.zoom));
         if sp.italic {
             rt = rt.italics();
         }
@@ -410,7 +419,7 @@ impl Body<'_> {
         if !self.shown.iter().any(|x| x == src) {
             self.shown.push(src.to_string());
         }
-        match picture_texture(self.s, st, ctx, self.key, self.p, src, self.allowed) {
+        match picture_texture(self.s, st, ctx, self.key, self.p, src, self.allowed, 1.0) {
             Pic::Ready(tex, _) => Some(tex),
             Pic::Loading | Pic::Missing => None,
         }
@@ -420,12 +429,12 @@ impl Body<'_> {
     pub(super) fn overlay(&mut self, st: &mut UiState, ui: &mut Ui, o: &mime::layout::Overlay, over: egui::Rect, page: [u8; 3], depth: usize) -> f32 {
         use mime::layout::Width;
         const PAD: f32 = 4.0;
-        let x = o.x as f32;
+        let x = o.x as f32 * self.zoom;
         let w = match o.width {
-            Some(Width::Px(px)) => px as f32,
+            Some(Width::Px(px)) => px as f32 * self.zoom,
             Some(Width::Percent(pc)) => over.width() * f32::from(pc) / 100.0,
             // As wide as its text (CSS's shrink-to-fit), at most what's left of the box.
-            None => natural_width(ui, &o.blocks).map_or(over.width() - x, |n| n + 2.0 * PAD + 1.0).min(over.width() - x).max(24.0),
+            None => natural_width(ui, &o.blocks, self.zoom).map_or(over.width() - x, |n| n + 2.0 * PAD + 1.0).min(over.width() - x).max(24.0),
         }
         .clamp(1.0, over.width().max(1.0));
         let left = if o.from_right { over.right() - x - w } else { over.left() + x }.max(over.left() - w);
