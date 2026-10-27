@@ -1640,5 +1640,6 @@ month	May	5月
 	Collapse	摺疊
 	Sent To	傳送給
 	Has Attachments	有附件
-	To:	收件者:
-	Cc:	副本:
+	Rules as a file	規則檔案
+	Save your rules in a file, to keep them or to use them on another computer, and add the ones from a file saved by Quatrelle. A rule for an account this computer doesn't have comes in turned off.	將規則儲存到檔案中，以便保留或在另一台電腦上使用，並新增 Quatrelle 儲存的檔案中的規則。此電腦上沒有的帳戶的規則會以關閉狀態加入。
+	Write an account's mail, with its folders, to an Outlook data file (.pst) that Outlook and other mail apps can open. Mail that was never downloaded is left out.	將帳戶的郵件連同其資料夾寫入 Outlook 資料檔 (.pst)，Outlook 和其他郵件應用程式可以開啟該檔案。從未下載的郵件不包括在內。
