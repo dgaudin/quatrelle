@@ -96,7 +96,8 @@ if has deb || has rpm; then
   sed "s|\${STAGE}|$STAGE|g" "$HERE/nfpm.yaml" >"$WORK/nfpm.yaml"
   # nfpm writes a variable that isn't set as nothing, without a word: test builds 78 to 80 asked
   # for libc.so.6(GLIBC_)(64bit), which nothing provides, so dnf refused them. Each one named
-  # must be set.
+  # must be set. (The single quotes are meant: they match the text `${NAME}`.)
+  # shellcheck disable=SC2016
   for var in $(grep -o '\${[A-Za-z_]*}' "$WORK/nfpm.yaml" | tr -d '${}' | sort -u); do
     if [ -z "${!var:-}" ]; then
       echo "error: nfpm.yaml uses \${$var}, which isn't set" >&2
