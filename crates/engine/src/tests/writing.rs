@@ -663,7 +663,9 @@ fn an_html_signatures_web_logo_is_fetched_and_kept() {
     s.run("mail.new", &json!({})).unwrap();
     let c = s.compose.clone().unwrap();
     assert!(c.inline.iter().any(|p| p.cid == "signature-1@quatrelle" && p.data == gif), "the logo goes with the message");
-    assert!(c.body.contains(quatrelle_mime::rich::PICTURE), "and shows where it stands");
+    assert!(c.body.contains(quatrelle_mime::rich::SIGNATURE), "it stands as written (its logo beside the name)");
+    assert!(c.signature_html.contains("cid:signature-1@quatrelle"));
+    assert!(!s.compose_written(), "nothing written yet, beside the signature");
     s.run("compose.update", &json!({"to": "zoe@example.org", "subject": "Hello"})).unwrap();
     s.take_jobs();
     s.run("compose.send", &json!({})).unwrap();
@@ -675,6 +677,9 @@ fn an_html_signatures_web_logo_is_fetched_and_kept() {
     let p = quatrelle_mime::parse(&raw).unwrap();
     assert!(!p.images.iter().any(|u| u.starts_with("https://")), "nothing on the web: {:?}", p.images);
     assert!(String::from_utf8_lossy(&raw).contains("Content-ID: <signature-1@quatrelle>"), "the logo goes in the message");
+    assert!(!p.layout.is_empty() && p.images.iter().any(|u| u == "cid:signature-1@quatrelle"), "as it was written, laid out");
+    assert!(p.text.contains("Didier GAUDIN"), "and as text in the text part: {}", p.text);
+    assert!(!String::from_utf8_lossy(&raw).contains(quatrelle_mime::rich::SIGNATURE), "nothing of where it stood");
     // Started again: nothing fetched again.
     let store = s.store.clone().unwrap();
     drop(s);

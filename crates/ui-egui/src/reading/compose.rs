@@ -672,6 +672,11 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
             });
         });
     });
+    // A signature written in HTML, drawn where it stands in the text (with the whole session at
+    // hand again).
+    if let Some(c) = s.compose.as_ref() {
+        rich_edit::draw_signature(s, st, ui, &mut ed, c);
+    }
     st.editor = Some(ed);
 }
 

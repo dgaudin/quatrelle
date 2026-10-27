@@ -73,7 +73,17 @@ pub(super) fn rooms(ui: &Ui, sizes: &HashMap<String, Vec2>, wrap: f32) -> HashMa
         let s = shown_size(size, wrap);
         Room { height: s.y, gap: (s.x - advance).max(0.0) }
     };
-    let mut out: HashMap<String, Room> = sizes.iter().map(|(cid, s)| (cid.clone(), room(Some(*s)))).collect();
+    let mut out: HashMap<String, Room> = sizes
+        .iter()
+        .map(|(cid, s)| {
+            if cid == signature::ROOM {
+                let s = signature::room(*s, wrap);
+                (cid.clone(), Room { height: s.y, gap: (s.x - advance).max(0.0) })
+            } else {
+                (cid.clone(), room(Some(*s)))
+            }
+        })
+        .collect();
     out.insert(String::new(), room(None));
     out
 }
@@ -111,16 +121,24 @@ pub(super) fn job(
         for k in 0..chars.len() {
             let cur = st.chars.get(i + k).copied();
             let next = st.chars.get(i + k + 1).copied();
-            let pic = chars.get(k).is_some_and(|(_, ch)| *ch == PICTURE) || chars.get(k + 1).is_some_and(|(_, ch)| *ch == PICTURE);
+            // A picture, or a signature written in HTML, on a run of its own.
+            let stands = |ch: &char| *ch == PICTURE || *ch == rich::SIGNATURE;
+            let pic = chars.get(k).is_some_and(|(_, ch)| stands(ch)) || chars.get(k + 1).is_some_and(|(_, ch)| stands(ch));
             if k + 1 == chars.len() || cur != next || pic {
                 let from = chars.get(run_start).map_or(line.len(), |(b, _)| *b);
                 let to = chars.get(k + 1).map_or(line.len(), |(b, _)| *b);
                 let piece = line.get(from..to).unwrap_or("");
-                let cid = if plain || !piece.starts_with(PICTURE) { None } else { st.style(i + run_start).picture };
+                let cid = if piece.starts_with(rich::SIGNATURE) {
+                    Some(signature::ROOM.to_string())
+                } else if plain || !piece.starts_with(PICTURE) {
+                    None
+                } else {
+                    st.style(i + run_start).picture
+                };
                 let room = cid.as_ref().map(|c| rooms.get(c).copied().unwrap_or(unknown));
                 let f = match room {
-                    _ if plain => plain_fmt.clone(),
                     Some(r) => picture_format(r.height),
+                    None if plain => plain_fmt.clone(),
                     None => format(&st.style(i + run_start), t, typefaces),
                 };
                 job.append(piece, lead, f);
