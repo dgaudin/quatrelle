@@ -41,8 +41,8 @@ mod writing;
 // named here as before.
 pub use listing::{ARRANGE_HEADINGS, Arrange, FolderRef, ListFilter, OUTBOX, Row, View, arrange_list};
 use listing::{Preview, person, size_group};
-use mailboxes::{Contacts, directory_key};
-pub use mailboxes::{DirectoryAnswer, FolderSizes, Sizes};
+use mailboxes::{Contacts, bare_name, directory_key};
+pub use mailboxes::{DirectoryAnswer, FolderSizes, Sizes, fill_name};
 pub use organize::{RulesScope, junk, quick_steps, search_folders};
 pub use prefs::{ListLayout, NotesOrder, Prefs, READING_ZOOM, ReadInPane, ReadingPane};
 pub use security::{CardSearch, KnownCert, Lock, RevocationCheck, SMIME_DOC, Seal, Security, SignedBy, SmimeSettings};

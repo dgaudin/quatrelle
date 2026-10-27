@@ -82,6 +82,9 @@ impl Session {
                 }
                 let here = self.local_names(token);
                 match (here.as_slice(), &directory) {
+                    // Known here by its address alone, with a directory to ask: its full name
+                    // from there (issue #9), as Outlook checks the address list first.
+                    ([one], Some(_)) if bare_name(one) => searching.push(token.to_string()),
                     ([one], _) => {
                         parts.push(one.to_string());
                         resolved += 1;
@@ -131,8 +134,10 @@ impl Session {
         for check in now {
             let mut people = self.local_names(&check.token);
             for p in self.directory_found(account, &check.token).map(|f| f.people.clone()).unwrap_or_default() {
-                if !people.iter().any(|x| x.email.eq_ignore_ascii_case(&p.email)) {
-                    people.push(p);
+                // Known here by its address alone: the directory's full name for it.
+                match people.iter_mut().find(|x| x.email.eq_ignore_ascii_case(&p.email)) {
+                    Some(known) => fill_name(known, &p),
+                    None => people.push(p),
                 }
             }
             match people.as_slice() {
