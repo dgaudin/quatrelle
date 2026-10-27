@@ -10,6 +10,7 @@ mod drafts;
 mod items;
 mod names;
 mod senders;
+mod signature_web;
 mod vote;
 pub use assistant::{AssistKind, Assistant, Filing, LlmModels, Rewrite};
 use compose::with_html_signature;
