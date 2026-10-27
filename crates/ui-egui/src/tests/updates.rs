@@ -29,7 +29,7 @@ impl crate::Services for Updating {
         None
     }
     fn open_path(&mut self, _: &std::path::Path) -> Result<(), String> {
-        Err("no".into())
+        Err("refused".into())
     }
     fn update_state(&mut self) -> UpdateState {
         self.0.borrow().state.clone()

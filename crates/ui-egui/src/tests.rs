@@ -308,7 +308,7 @@ line two"
                 summary: "Review".into(),
                 meeting: true,
                 quiet_allowed: true,
-                error: Some("no".into()),
+                error: Some("refused".into()),
                 ..Default::default()
             })),
         ] {
@@ -358,7 +358,7 @@ line two"
     // Statuses and a notice toast.
     for st in [
         SyncStatus::Connecting,
-        SyncStatus::NeedsPassword { error: "no".into() },
+        SyncStatus::NeedsPassword { error: "refused".into() },
         SyncStatus::Error { error: "x".repeat(300) },
         SyncStatus::Online { at: NOW },
     ] {
@@ -415,7 +415,7 @@ impl crate::Services for PageServices {
         None
     }
     fn open_path(&mut self, _: &std::path::Path) -> Result<(), String> {
-        Err("no".into())
+        Err("refused".into())
     }
     fn open_message_window(&mut self, key: &str) -> bool {
         self.0.borrow_mut().push(key.to_string());
