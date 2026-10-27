@@ -345,3 +345,46 @@ fn jmap_number(store: &Store, id: &str) -> Option<u32> {
     let known = st.id(1).is_some() || st.id(2).is_some();
     known.then(|| st.number(id))
 }
+
+/// A JMAP account the server made with no identity to send from (Stalwart's new accounts):
+/// one is made for the address, and the mail goes; the next sends use it.
+#[test]
+fn an_account_with_no_identity_gets_one_and_sends() {
+    let mut d = Data { no_identity: true, ..Default::default() };
+    d.mailbox("Inbox", None, Some("inbox"));
+    d.mailbox("Sent", None, Some("sent"));
+    let server = serve(d);
+    let data = server.data.clone();
+    let dir = std::env::temp_dir().join(format!("quatrelle-jmap-identity-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let store = Store::open(&dir).unwrap();
+    let mut pool = crate::worker::Pool::new(store.clone(), Arc::new(crate::worker::MemoryCredentials::default()));
+    let account = AccountConfig {
+        id: "a1".into(),
+        name: "Me".into(),
+        email: USER.into(),
+        username: USER.into(),
+        jmap: Some(server.base.clone()),
+        ..Default::default()
+    };
+    pool.submit(Job::Start { account, password: Some(Secret(PASSWORD.into())) });
+    until(&pool, "online", |e| matches!(e, Event::Status { status: SyncStatus::Online { .. }, .. }));
+    let raw = b"From: me@studio.example\r\nTo: zoe@studio.example\r\nSubject: first\r\nMessage-ID: <id1@x>\r\n\r\nhi\r\n".to_vec();
+    for id in [1, 2] {
+        pool.submit(Job::Send {
+            account: "a1".into(),
+            id,
+            raw: raw.clone(),
+            from: USER.into(),
+            recipients: vec!["zoe@studio.example".into()],
+            sent_folder: Some("Sent".into()),
+        });
+        until(&pool, "sent", |e| matches!(e, Event::Sent { id: i, .. } if *i == id));
+    }
+    let d = data.lock().unwrap();
+    assert_eq!(d.made_identities, [USER.to_string()], "made once, then used");
+    assert_eq!(d.submissions.len(), 2);
+    drop(d);
+    drop(pool);
+    let _ = std::fs::remove_dir_all(dir);
+}
