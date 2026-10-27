@@ -121,10 +121,13 @@ fn decode_sized_with(ctx: &egui::Context, name: &str, data: &[u8], max: u32, rou
     Some((ctx.load_texture(name, ci, filter), own))
 }
 
-/// HTML written by hand (a signature) as a message shows it: its layout, text and links, pictures
-/// on the web only as their place (nothing is loaded). The text above is its plain twin.
-pub fn html_preview(s: &Session, st: &mut UiState, ui: &mut Ui, html: &str) {
-    let raw = format!("Content-Type: text/html; charset=utf-8\r\n\r\n{html}");
+/// HTML written by hand (a signature) as a message shows it: its layout, text and links, its
+/// pictures from `pictures` (by `cid:`), those on the web only as their place (nothing is
+/// loaded). The text above is its plain twin.
+pub fn html_preview(s: &Session, st: &mut UiState, ui: &mut Ui, html: &str, pictures: &[mime::InlinePicture]) {
+    // In a box of its own, as a message carries it: its floated boxes (a logo, the name) side by
+    // side in it.
+    let raw = format!("Content-Type: text/html; charset=utf-8\r\n\r\n<div>{html}</div>");
     let Some(p) = mime::parse(raw.as_bytes()) else { return };
     let t = st.tokens;
     let key = MessageKey::default();
@@ -132,7 +135,7 @@ pub fn html_preview(s: &Session, st: &mut UiState, ui: &mut Ui, html: &str) {
     let mut acts: Vec<Action> = Vec::new();
     let width = ui.available_width();
     let faces = crate::look::typefaces::loaded(ui.ctx());
-    let mut body = Body { s, key: &key, p: &p, allowed: false, shown: &mut shown, acts: &mut acts, faces, zoom: 1.0, cells: 0 };
+    let mut body = Body { s, key: &key, p: &p, allowed: false, shown: &mut shown, acts: &mut acts, faces, zoom: 1.0, inline: pictures, cells: 0 };
     if p.layout.is_empty() {
         body.lines(st, ui, &p.rich, width, theme::surface_rgb(&t), Align::Min);
     } else {

@@ -487,7 +487,8 @@ impl MailApp {
                                     ui.set_width(560.0);
                                     ui.label(RichText::new(tl!("Preview (pictures on the web aren't loaded here)")).color(t.dim).small());
                                     ui.add_space(6.0);
-                                    reading::html_preview(&self.session, &mut self.ui, ui, &html);
+                                    let pictures = self.session.signature_pictures(&f.account);
+                                    reading::html_preview(&self.session, &mut self.ui, ui, &html, &pictures);
                                 });
                         });
                 }

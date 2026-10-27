@@ -46,8 +46,17 @@ impl Session {
         v
     }
 
+    /// An account's signature as it goes into a message: its text, or where one written in HTML
+    /// stands ([`mime::rich::SIGNATURE`], drawn and sent as it was written).
     pub(super) fn signature(&self, account: &str) -> String {
-        self.signature_rich(account).0
+        if self.html_signature(account).is_some() { mime::rich::SIGNATURE.to_string() } else { self.signature_rich(account).0 }
+    }
+
+    /// An account's signature written in HTML (Signatures… › HTML code), when it has one with
+    /// words in it.
+    pub(crate) fn html_signature(&self, account: &str) -> Option<String> {
+        let c = &self.account(account)?.config;
+        (!c.signature_raw_html.trim().is_empty() && !c.signature.trim().is_empty()).then(|| c.signature_raw_html.clone())
     }
 
     /// The signature added when a message starts: a new one (`reply` false) or a reply or
@@ -85,14 +94,22 @@ impl Session {
         if sig.trim().is_empty() { String::new() } else { signature_block(sig, self.prefs.signature_dashes) }
     }
 
-    /// The signature in the message being made, given its look (the text went in plain).
+    /// The signature in the message being made, given its look (the text went in plain), or the
+    /// HTML it stands for.
     pub(super) fn style_signature(&mut self) {
         let Some(account) = self.compose.as_ref().map(|c| c.account.clone()) else { return };
         let sig = self.signature_rich(&account);
         let pictures = self.signature_pictures(&account);
+        let html = self.html_signature(&account);
         let dashes = self.prefs.signature_dashes;
         if let Some(c) = self.compose.as_mut() {
-            style_signature(c, &sig, dashes);
+            if c.body.contains(mime::rich::SIGNATURE)
+                && let Some(html) = html
+            {
+                c.signature_html = html;
+            } else {
+                style_signature(c, &sig, dashes);
+            }
             add_pictures(c, pictures);
         }
     }
@@ -248,9 +265,11 @@ impl Session {
     pub(super) fn compose_draft(&self, c: &Compose) -> Result<mime::Draft, CmdError> {
         let parse = |field: &str, s: &str| addr::parse_list(s).map_err(|bad| CmdError::Params(format!("{field}: not an email address: {bad}")));
         let (body, html, inline) = c.bodies();
-        // A signature written in HTML goes as it was written, where its text stands.
+        // A signature written in HTML goes as it was written, where its text stands (one that
+        // stands as itself already went in).
         let raw = self.account(&c.account).map(|a| a.config.signature_raw_html.clone()).unwrap_or_default();
-        let html = if raw.trim().is_empty() || c.plain { html } else { with_html_signature(c, &raw).or(html) };
+        let html =
+            if raw.trim().is_empty() || c.plain || c.body.contains(mime::rich::SIGNATURE) { html } else { with_html_signature(c, &raw).or(html) };
         Ok(mime::Draft {
             reply_to: parse("Replies to", &c.reply_to)?,
             to: parse("To", &c.to)?,

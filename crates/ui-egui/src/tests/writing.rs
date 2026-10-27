@@ -729,3 +729,52 @@ fn from_finds_another_address_by_its_name() {
     assert_eq!(a.session.compose.as_ref().unwrap().from, "Proginov Reseau <reseaux@proginov.example>");
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// A signature written in HTML (a logo beside the name, as Outlook's are made) shows in a new
+/// message as it's sent: the name beside the logo, not under it.
+#[test]
+fn an_html_signature_shows_in_the_message_as_its_sent() {
+    use egui::Shape;
+    let (mut a, dir) = app("html-signature");
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    let id = a.session.accounts.first().map(|x| x.config.id.clone()).unwrap();
+    let logo = "https://logo.example/logo.png";
+    let html = format!(
+        r#"<table align="left" border="0" cellpadding="0" cellspacing="0" style="float:left"><tr><td valign="middle" style="vertical-align:middle"><img src="{logo}" width="120px" border="0" style="width:120px;height:48px"></td></tr></table><table border="0" cellpadding="0" cellspacing="0" style="float:left;padding:0px;padding-left:10px;border-left:1px solid #ccc;height:63px"><tr><td style="height:63px;vertical-align:middle"><p>Didier GAUDIN<br>01 02 03 04 05<br>didier@example.org</p></td></tr></table>"#
+    );
+    a.run("account.setSignature", json!({"account": id, "signature": "", "rawHtml": html}));
+    let mut png = Vec::new();
+    image::DynamicImage::ImageRgba8(image::RgbaImage::from_pixel(120, 48, image::Rgba([20, 90, 160, 255])))
+        .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
+        .unwrap();
+    a.session.apply(quatrelle_engine::model::Event::Fetched { url: logo.into(), data: Some(png), error: None });
+    // Written in the reading pane (the window drawn here).
+    a.session.prefs.new_mail_window = false;
+    a.run("mail.new", json!({}));
+    let c = a.session.compose.clone().unwrap();
+    assert!(c.body.contains(quatrelle_engine::mime::rich::SIGNATURE) && c.signature_html.contains("cid:"), "{:?}", c.body);
+    let size = egui::vec2(1280.0, 800.0);
+    let mut shapes = Vec::new();
+    for _ in 0..6 {
+        shapes = frame_shapes(&ctx, &mut a, vec![], size);
+    }
+    let pictures: Vec<egui::Rect> = shapes
+        .iter()
+        .filter_map(|s| match s {
+            Shape::Mesh(m) if m.texture_id != egui::TextureId::default() => Some(m.calc_bounds()),
+            Shape::Rect(r) if r.brush.is_some() => Some(r.rect),
+            _ => None,
+        })
+        .collect();
+    let logo_at = pictures.iter().find(|r| (r.width() - 120.0).abs() < 1.0 && (r.height() - 48.0).abs() < 1.0).copied();
+    let logo_at = logo_at.unwrap_or_else(|| panic!("the logo is drawn at its size: {pictures:?}"));
+    let name = shapes.iter().find_map(|s| match s {
+        Shape::Text(t) if t.galley.text().contains("Didier GAUDIN") => Some(t.pos),
+        _ => None,
+    });
+    let name = name.unwrap_or_else(|| panic!("the name is drawn"));
+    assert!(name.x > logo_at.right(), "beside the logo, not under it: {name:?}, logo {logo_at:?}");
+    assert!(name.y < logo_at.bottom(), "at its height: {name:?}, logo {logo_at:?}");
+    let _ = std::fs::remove_dir_all(dir);
+}

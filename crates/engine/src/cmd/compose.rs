@@ -299,10 +299,12 @@ pub(super) fn insert_signature(s: &mut Session, v: &Value) -> CmdResult {
     let account = s.compose.as_ref().map(|c| c.account.clone()).ok_or_else(|| CmdError::Disabled("no message is being written".into()))?;
     let rich = s.signature_rich(&account);
     let pictures = s.signature_pictures(&account);
-    let sig = rich.0.trim_end().to_string();
-    if sig.trim().is_empty() {
+    if rich.0.trim().is_empty() {
         return Err(CmdError::Params("this account has no signature yet: make one with Signatures…".into()));
     }
+    // One written in HTML stands as itself, drawn and sent as written.
+    let html = s.html_signature(&account);
+    let sig = if html.is_some() { quatrelle_mime::rich::SIGNATURE.to_string() } else { rich.0.trim_end().to_string() };
     let block = s.signature_in_message(&sig);
     let dashes = s.prefs.signature_dashes;
     let c = s.compose.as_mut().ok_or_else(|| CmdError::Disabled("no message is being written".into()))?;
@@ -327,7 +329,10 @@ pub(super) fn insert_signature(s: &mut Session, v: &Value) -> CmdResult {
     let mut styles = std::mem::take(&mut c.styles);
     styles.edit_at(&old, &c.body, &Style::default(), Some(end));
     c.styles = styles;
-    crate::session::style_signature(c, &rich, dashes);
+    match html {
+        Some(html) => c.signature_html = html,
+        None => crate::session::style_signature(c, &rich, dashes),
+    }
     crate::session::add_pictures(c, pictures);
     Ok(json!({"inserted": at, "end": end}))
 }

@@ -121,7 +121,7 @@ pub(super) fn rich_body(s: &Session, st: &mut UiState, ui: &mut Ui, key: &Messag
     }
     let faces = crate::look::typefaces::loaded(ui.ctx());
     let zoom = s.prefs.reading_scale();
-    let mut body = Body { s, key, p, allowed, shown: &mut shown, acts: &mut *acts, faces, zoom, cells: 0 };
+    let mut body = Body { s, key, p, allowed, shown: &mut shown, acts: &mut *acts, faces, zoom, inline: &[], cells: 0 };
     if p.layout.is_empty() {
         body.lines(st, ui, &p.rich, width, theme::surface_rgb(&t), Align::Min);
     } else {
@@ -154,6 +154,8 @@ pub(super) struct Body<'a> {
     pub(super) faces: std::collections::BTreeSet<String>,
     /// The message's zoom (1.0 as written): its text, pictures and set widths ([`Prefs::reading_scale`]).
     pub(super) zoom: f32,
+    /// Pictures carried along with what's drawn (a signature's), by their `cid:`.
+    pub(super) inline: &'a [mime::InlinePicture],
     /// Table cells drawn so far: each one's number, the same from frame to frame, keys its
     /// height as last drawn ([`CellHeights`]) for its row's alignment.
     pub(super) cells: usize,
@@ -351,6 +353,10 @@ impl Body<'_> {
         let t = st.tokens;
         if let Some(src) = &sp.image {
             self.shown.push(src.clone());
+            if let Some(pic) = src.strip_prefix("cid:").and_then(|cid| self.inline.iter().find(|p| p.cid == cid)) {
+                carried_picture(st, ui, pic, width, self.zoom);
+                return;
+            }
             if !picture(self.s, st, ui, self.key, self.p, src, self.allowed, width, self.zoom, self.acts) {
                 let alt = if sp.text.trim().is_empty() { "picture" } else { sp.text.trim() };
                 ui.label(RichText::new(format!("[{alt}]")).color(t.faint));
