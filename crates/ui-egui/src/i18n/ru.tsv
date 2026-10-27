@@ -1640,5 +1640,6 @@ month	May	Май
 	Collapse	Свернуть
 	Sent To	Кому
 	Has Attachments	С вложениями
-	To:	Кому:
-	Cc:	Копия:
+	Rules as a file	Правила в файле
+	Save your rules in a file, to keep them or to use them on another computer, and add the ones from a file saved by Quatrelle. A rule for an account this computer doesn't have comes in turned off.	Сохраните правила в файл, чтобы хранить их или использовать на другом компьютере, и добавьте правила из файла, сохранённого Quatrelle. Правило для учётной записи, которой нет на этом компьютере, приходит выключенным.
+	Write an account's mail, with its folders, to an Outlook data file (.pst) that Outlook and other mail apps can open. Mail that was never downloaded is left out.	Запишите почту учётной записи с её папками в файл данных Outlook (.pst), который могут открыть Outlook и другие почтовые программы. Почта, которая не была загружена, не попадает в него.

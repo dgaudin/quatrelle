@@ -1641,5 +1641,6 @@ month	May	Mai
 	Collapse	Reduzieren
 	Sent To	Gesendet an
 	Has Attachments	Mit Anlagen
-	To:	An:
-	Cc:	Cc:
+	Rules as a file	Regeln als Datei
+	Save your rules in a file, to keep them or to use them on another computer, and add the ones from a file saved by Quatrelle. A rule for an account this computer doesn't have comes in turned off.	Speichern Sie Ihre Regeln in einer Datei, um sie aufzubewahren oder auf einem anderen Computer zu verwenden, und fügen Sie die aus einer von Quatrelle gespeicherten Datei hinzu. Eine Regel für ein Konto, das dieser Computer nicht hat, kommt deaktiviert an.
+	Write an account's mail, with its folders, to an Outlook data file (.pst) that Outlook and other mail apps can open. Mail that was never downloaded is left out.	Schreiben Sie die E-Mails eines Kontos mit seinen Ordnern in eine Outlook-Datendatei (.pst), die Outlook und andere E-Mail-Programme öffnen können. Nie heruntergeladene E-Mails bleiben außen vor.
