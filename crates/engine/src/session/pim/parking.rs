@@ -76,6 +76,7 @@ impl Session {
         }
         log::info!("{account}: {} of other people's appointments set aside while the calendar isn't shown", doc.len());
         self.parked.insert(account.to_string());
+        self.pim_revision = self.pim_revision.wrapping_add(1);
     }
 
     /// An account's appointments set aside now (none when they're in memory): read, not

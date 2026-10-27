@@ -591,11 +591,20 @@ impl Worker {
 
     /// Sync calendars and address books with the account's CalDAV / CardDAV server (password
     /// accounts: OAuth tokens are for mail only).
+    /// The account's calendars and address books as the window last kept them, reading what it
+    /// last asked for ([`quatrelle_model::pim::PIM_READING_DOC`]).
+    fn load_pim(&self) -> quatrelle_model::pim::Pim {
+        use quatrelle_model::pim::{PIM_DOC, PIM_READING_DOC, Pim, PimReading};
+        let mut pim: Pim = self.store.load_account_doc(&self.acc.id, PIM_DOC).unwrap_or_default();
+        pim.read_as(self.store.load_account_doc::<Option<PimReading>>(&self.acc.id, PIM_READING_DOC).unwrap_or_default());
+        pim
+    }
+
     pub(super) fn sync_dav(&mut self) {
         self.pim_synced();
         // Exchange Online: its calendars and contacts through Graph.
         if let Some(Conn::Graph(c)) = &self.conn {
-            let pim: quatrelle_model::pim::Pim = self.store.load_account_doc(&self.acc.id, quatrelle_model::pim::PIM_DOC).unwrap_or_default();
+            let pim = self.load_pim();
             match crate::graph_pim::sync(c, &pim, now()) {
                 Ok(sync) => self.sink.emit(Event::DavSynced { account: self.id(), sync: Box::new(sync) }),
                 Err(e) => log::info!("{}: calendars and contacts: {e}", self.acc.id),
@@ -604,7 +613,7 @@ impl Worker {
         }
         // On-premises Exchange: its calendar and contacts through EWS.
         if let Some(Conn::Ews(c)) = &self.conn {
-            let pim: quatrelle_model::pim::Pim = self.store.load_account_doc(&self.acc.id, quatrelle_model::pim::PIM_DOC).unwrap_or_default();
+            let pim = self.load_pim();
             match crate::ews_pim::sync(c, &pim, now()) {
                 Ok(sync) => self.sink.emit(Event::DavSynced { account: self.id(), sync: Box::new(sync) }),
                 Err(e) => log::info!("{}: calendars and contacts: {e}", self.acc.id),
@@ -621,7 +630,7 @@ impl Worker {
         if self.acc.oauth.is_some() || self.acc.ews.is_some() {
             return;
         }
-        let pim: quatrelle_model::pim::Pim = self.store.load_account_doc(&self.acc.id, quatrelle_model::pim::PIM_DOC).unwrap_or_default();
+        let pim = self.load_pim();
         let user = if self.acc.username.is_empty() { self.acc.email.clone() } else { self.acc.username.clone() };
         let password = self.auth.lock().unwrap_or_else(std::sync::PoisonError::into_inner).secret.clone();
         let dav = crate::dav::Dav::new(&user, &password);

@@ -17,6 +17,7 @@ mod notes;
 mod parking;
 mod people;
 mod reminders;
+mod syncing;
 mod tasks;
 
 /// Whether a calendar is the user's own: not a colleague's shared one, nor a public folder's.
@@ -94,6 +95,7 @@ impl Session {
         let Some(store) = self.store.clone() else { return };
         for a in &self.accounts {
             let mut p: Pim = store.load_account_doc(&a.config.id, PIM_DOC).unwrap_or_default();
+            p.read_as(store.load_account_doc(&a.config.id, quatrelle_model::pim::PIM_READING_DOC).unwrap_or_default());
             p.ensure_defaults();
             // Other people's appointments not among the calendar's: set aside when it was last
             // left (brought back when it's shown; see `parking.rs`).
@@ -108,6 +110,12 @@ impl Session {
 
     pub(crate) fn save_pim(&mut self, account: &str) {
         self.forget_contacts();
+        self.write_pim(account);
+    }
+
+    /// [`Session::save_pim`] when the contacts didn't change: the address book isn't worked out
+    /// again.
+    pub(crate) fn write_pim(&mut self, account: &str) {
         self.pim_revision = self.pim_revision.wrapping_add(1);
         let (Some(store), Some(p)) = (&self.store, self.pim.get(account)) else { return };
         if let Err(e) = store.save_account_doc(account, PIM_DOC, p) {
@@ -236,7 +244,17 @@ impl Session {
             let p = self.pim_mut(&a);
             p.own_only = own_only;
             p.not_read = not_read;
-            self.after_pim_change(&a, more);
+            // In a document of its own: the calendar isn't written again for it (nor the address
+            // book worked out again), at each switch between the calendar and the mail.
+            let reading = p.reading();
+            if let Some(store) = &self.store
+                && let Err(e) = store.save_account_doc(&a, quatrelle_model::pim::PIM_READING_DOC, &reading)
+            {
+                log::warn!("{a}: which calendars to read couldn't be kept: {e}");
+            }
+            if more {
+                self.jobs.push(Job::SyncDav { account: a.clone() });
+            }
         }
     }
 
@@ -437,127 +455,6 @@ impl Session {
         if remote && self.account(account).is_some_and(|a| !a.is_local()) {
             self.jobs.push(Job::SyncDav { account: account.to_string() });
         }
-    }
-
-    // ----- syncing with the server -----
-
-    /// Merge what a CalDAV / CardDAV sync found. Changes made here since stay (and go to the
-    /// server next time); everything else follows the server.
-    pub fn apply_dav(&mut self, account: &str, sync: &quatrelle_model::pim::DavSync) {
-        self.read_while_parked(account, sync);
-        let p = self.pim_mut(account);
-        p.caldav_home = sync.caldav_home.clone().or_else(|| Some(String::new()));
-        p.carddav_home = sync.carddav_home.clone().or_else(|| Some(String::new()));
-        p.dav_checked = Some(sync.checked);
-        p.deleted.retain(|t| !sync.deleted.contains(&t.href));
-        // What was stored: its address and version, and no longer to send (unless it changed
-        // again meanwhile).
-        for x in &sync.pushed_events {
-            for e in p.events.iter_mut().filter(|e| e.event.uid == x.event.uid && e.event.recurrence_id == x.event.recurrence_id) {
-                e.href = x.href.clone();
-                e.etag = x.etag.clone();
-                // Stored in another calendar (a new event goes to the server's default one).
-                e.calendar = x.calendar.clone();
-                e.dirty &= e.event != x.event;
-                // The server told the guests with that change; a later change asks again.
-                e.notify &= e.dirty;
-            }
-        }
-        // Notes stored on the server: their item there, and no longer to send.
-        for x in &sync.pushed_notes {
-            for n in p.notes.iter_mut().filter(|n| n.note.uid == x.note.uid) {
-                n.href = x.href.clone();
-                n.etag = x.etag.clone();
-                n.dirty &= n.note != x.note;
-            }
-        }
-        // The server's notes, by their item there; those changed here (and those never sent)
-        // stay.
-        if let Some(server) = &sync.notes {
-            p.notes.retain(|n| n.dirty || n.href.is_empty());
-            for x in server {
-                if !p.notes.iter().any(|n| !n.href.is_empty() && n.href == x.href) {
-                    p.notes.push(x.clone());
-                }
-            }
-        }
-        tasks::merge_tasks(p, sync);
-        for x in &sync.pushed_cards {
-            for c in p.cards.iter_mut().filter(|c| c.card.uid == x.card.uid) {
-                c.href = x.href.clone();
-                c.etag = x.etag.clone();
-                c.book = x.book.clone();
-                c.dirty &= c.card != x.card;
-            }
-        }
-        if let Some(server) = &sync.calendars {
-            // The calendar on this computer goes once the server has calendars, unless it holds
-            // events (they stay there).
-            let keep_local = server.is_empty() || p.events.iter().any(|e| e.calendar == LOCAL);
-            let mut list: Vec<quatrelle_model::pim::CalendarInfo> = server.clone();
-            if keep_local && let Some(l) = p.calendars.iter().find(|c| c.id == LOCAL) {
-                list.push(l.clone());
-            }
-            // Only some looked at: the others stay, with their events.
-            if sync.partial {
-                let kept: Vec<_> = p.calendars.iter().filter(|c| c.id != LOCAL && !list.iter().any(|x| x.id == c.id)).cloned().collect();
-                list.extend(kept);
-            }
-            p.events.retain(|e| e.calendar == LOCAL || list.iter().any(|c| c.id == e.calendar) || e.dirty);
-            for cal in &sync.synced_calendars {
-                p.events.retain(|e| &e.calendar != cal || e.dirty || e.href.is_empty() || sync.kept.contains(&e.href));
-                for x in sync.events.iter().filter(|x| &x.calendar == cal) {
-                    let edited_here = p.events.iter().any(|e| e.dirty && (e.href == x.href || (e.href.is_empty() && e.event.uid == x.event.uid)));
-                    if !edited_here {
-                        // The same item there (its address); and an appointment kept here that
-                        // never went (no address). Two items may share a UID — some Exchange
-                        // series arrive as separate items keeping the series' UID — and each
-                        // is kept, since the server's address tells them apart. One CalDAV item
-                        // holds a series and its moved occurrences: each is kept too.
-                        p.events.retain(|e| x.href.is_empty() || e.href != x.href || e.event.recurrence_id != x.event.recurrence_id);
-                        p.events.retain(|e| {
-                            !(e.href.is_empty() && e.event.uid == x.event.uid && e.event.recurrence_id == x.event.recurrence_id && !e.dirty)
-                        });
-                        p.events.push(x.clone());
-                    }
-                }
-            }
-            p.calendars = list;
-        }
-        self.note_new_calendars();
-        let p = self.pim_mut(account);
-        if let Some(server) = &sync.books {
-            let keep_local = server.is_empty() || p.cards.iter().any(|c| c.book == LOCAL);
-            let mut list: Vec<quatrelle_model::pim::BookInfo> = server.clone();
-            if keep_local && let Some(l) = p.books.iter().find(|b| b.id == LOCAL) {
-                list.push(l.clone());
-            }
-            if sync.partial {
-                let kept: Vec<_> = p.books.iter().filter(|b| b.id != LOCAL && !list.iter().any(|x| x.id == b.id)).cloned().collect();
-                list.extend(kept);
-            }
-            p.cards.retain(|c| c.book == LOCAL || list.iter().any(|b| b.id == c.book) || c.dirty);
-            for book in &sync.synced_books {
-                p.cards.retain(|c| &c.book != book || c.dirty || c.href.is_empty() || sync.kept.contains(&c.href));
-                for x in sync.cards.iter().filter(|x| &x.book == book) {
-                    if !p.cards.iter().any(|c| c.dirty && c.card.uid == x.card.uid) {
-                        p.cards.retain(|c| c.card.uid != x.card.uid);
-                        p.cards.push(x.clone());
-                    }
-                }
-            }
-            p.books = list;
-        }
-        p.ensure_defaults();
-        self.drop_lone_occurrences(account);
-        for e in sync.errors.iter().take(3) {
-            self.notice(format!("calendars and contacts: {e}"), true);
-        }
-        // Invitations the server answered, and copies of invitations to answer instead.
-        if self.settle_answers(account, sync) {
-            self.jobs.push(Job::SyncDav { account: account.to_string() });
-        }
-        self.save_pim(account);
     }
 }
 
