@@ -1,5 +1,8 @@
 //! People: the address books, searchable, with a card for the person picked.
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use egui::{Margin, RichText, Sense, Ui, vec2};
 use quatrelle_engine::Session;
 use serde_json::json;
@@ -179,14 +182,36 @@ fn index_letter(name: &str) -> char {
     }
 }
 
+/// The people shown, and what they were worked out from (the address books' revision, the search,
+/// the book chosen).
+type Shown = (u64, String, Option<(String, String)>, Rc<Vec<quatrelle_engine::Person>>);
+
+thread_local! {
+    /// The people last shown ([`shown`]), drawn on every frame from the same search.
+    static SHOWN: RefCell<Option<Shown>> = const { RefCell::new(None) };
+}
+
 /// The side pane: everyone, A to Z (searched from the box at the top).
-/// The people shown: those matching the search, in the address book chosen.
-pub(crate) fn shown(s: &Session, st: &UiState) -> Vec<quatrelle_engine::Person> {
-    let mut people = s.people(&st.people_query);
-    if let Some((account, book)) = &st.people_book {
-        people.retain(|p| p.account == *account && p.book == *book);
-    }
-    people
+/// The people shown: those matching the search, in the address book chosen. Worked out again
+/// only when the address books, the search or the book change: every frame, it read every card of
+/// every book (the public folders' thousands) twice, the list and the status bar's count.
+pub(crate) fn shown(s: &Session, st: &UiState) -> Rc<Vec<quatrelle_engine::Person>> {
+    SHOWN.with_borrow_mut(|kept| {
+        if let Some((revision, query, book, people)) = kept.as_ref()
+            && *revision == s.pim_revision
+            && *query == st.people_query
+            && *book == st.people_book
+        {
+            return Rc::clone(people);
+        }
+        let mut people = s.people(&st.people_query);
+        if let Some((account, book)) = &st.people_book {
+            people.retain(|p| p.account == *account && p.book == *book);
+        }
+        let people = Rc::new(people);
+        *kept = Some((s.pim_revision, st.people_query.clone(), st.people_book.clone(), Rc::clone(&people)));
+        people
+    })
 }
 
 /// Each account's address books, as Outlook lists contact folders (its Contacts, an
@@ -322,7 +347,7 @@ pub fn nav(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
         ui.allocate_ui_with_layout(vec2(list_w, ui.available_height()), egui::Layout::top_down(egui::Align::Min), |ui| {
             egui::ScrollArea::vertical().auto_shrink(false).id_salt("people").show(ui, |ui| {
                 let mut letter: Option<char> = None;
-                for p in &people {
+                for p in people.iter() {
                     let name = p.card.display();
                     let first = Some(index_letter(&name));
                     if first != letter {
@@ -663,7 +688,7 @@ fn cards(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
 /// header), sorted by the column clicked.
 fn phone_list(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
     let t = st.tokens;
-    let mut people = shown(s, st);
+    let mut people = (*shown(s, st)).clone();
     let list = st.people_list.clone();
     if let Some(col) = list.sort {
         people.sort_by_cached_key(|p| (col.text(s, p).to_lowercase(), p.card.display().to_lowercase()));

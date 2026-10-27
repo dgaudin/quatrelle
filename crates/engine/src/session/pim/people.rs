@@ -24,6 +24,27 @@ impl Session {
         out
     }
 
+    /// The contact saved with this address (any case), the first by name when there are several:
+    /// what a message's header names, looked up as it's drawn. Only addresses are compared, and
+    /// only the one found copied (a search, every card's every field in lower case, every match
+    /// copied and sorted, took 40 % of the window's time for a message's header, 27/10).
+    pub fn person_by_email(&self, email: &str) -> Option<Person> {
+        let email = email.trim();
+        if email.is_empty() {
+            return None;
+        }
+        let mut found: Option<(&String, &StoredCard)> = None;
+        for (a, p) in &self.pim {
+            for c in p.cards.iter().filter(|c| c.card.emails.iter().any(|e| e.value.trim().eq_ignore_ascii_case(email))) {
+                let first = found.is_none_or(|(_, f)| c.card.display().to_lowercase() < f.card.display().to_lowercase());
+                if first {
+                    found = Some((a, c));
+                }
+            }
+        }
+        found.map(|(a, c)| Person { account: a.clone(), book: c.book.clone(), card: c.card.clone() })
+    }
+
     pub fn find_person(&self, uid: &str) -> Option<Person> {
         self.pim.iter().find_map(|(a, p)| {
             p.cards.iter().find(|c| c.card.uid == uid).map(|c| Person { account: a.clone(), book: c.book.clone(), card: c.card.clone() })

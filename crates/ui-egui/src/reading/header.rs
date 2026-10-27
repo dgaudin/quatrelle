@@ -80,7 +80,7 @@ pub(super) fn header(
                 if !p.from.name.is_empty() {
                     ui.label(RichText::new(format!("<{}>", p.from.email)).color(t.dim));
                 }
-                let known = known_contact(s, &p.from.email).is_some();
+                let known = known_contact(ui.ctx(), s, &p.from.email).is_some();
                 if !known && !p.from.email.is_empty() && widgets::tiny_icon_button(ui, Icon::Person, "Add to contacts", &t).clicked() {
                     acts.push(Action::Dialog(crate::Dialog::contact_from(&p.from)));
                 }
