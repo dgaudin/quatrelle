@@ -11,7 +11,7 @@ use std::ops::Range;
 use std::sync::Arc;
 
 use egui::text::{CCursor, CCursorRange, LayoutJob, TextFormat};
-use egui::{Color32, FontId, Galley, Key, Modifiers, Rect, RichText, Sense, Stroke, Ui, vec2};
+use egui::{Color32, FontId, Galley, Key, Modifiers, Rect, RichText, Sense, Stroke, Ui, Vec2, vec2};
 use quatrelle_engine::Compose;
 use quatrelle_engine::mime::rich::{self, Align, List, PICTURE, Style, Styles};
 use quatrelle_engine::model::dates::Clock;
@@ -39,8 +39,11 @@ pub(crate) use toolbar::{count_words, date_choices};
 const PX: f32 = 4.0 / 3.0;
 /// One indent step (and the room for a bullet or number).
 const INDENT: f32 = 28.0;
-/// The tallest a picture shows in the text.
+/// The height a picture whose size isn't known yet shows at in the text.
 const PICTURE_PX: f32 = 72.0;
+/// The largest side a picture in the text is decoded at (it shows at its own size, up to the
+/// text's width).
+const PICTURE_DECODED: u32 = 2048;
 /// Most undo steps kept.
 const UNDO_MAX: usize = 200;
 
@@ -87,6 +90,8 @@ pub(crate) struct Editor {
     /// The right-click menu was open last frame (closing it gives the text the keyboard back).
     menu_open: bool,
     pictures: HashMap<String, Option<egui::TextureHandle>>,
+    /// Each picture's own size in points (read from its header once), for its room in the text.
+    picture_sizes: HashMap<String, Vec2>,
     /// Give the keyboard back to the text (after a ribbon button took the click), with this
     /// selection.
     pub(crate) refocus: Option<Range<usize>>,
@@ -120,6 +125,7 @@ impl Editor {
             paste: false,
             menu_open: false,
             pictures: HashMap::new(),
+            picture_sizes: HashMap::new(),
             refocus: None,
             menu_word: None,
             suggestions: Vec::new(),
@@ -488,7 +494,8 @@ pub(crate) fn body(ui: &mut Ui, t: &Tokens, ed: &mut Editor, c: &mut Compose, st
     let plain = c.plain;
     let tokens = *t;
     let check = check_for(c);
-    let mut layouter = |ui: &Ui, buf: &dyn egui::TextBuffer, wrap: f32| layout(ui, buf.as_str(), &styles, plain, &tokens, wrap, &check);
+    let sizes = picture_sizes(ed, c);
+    let mut layouter = |ui: &Ui, buf: &dyn egui::TextBuffer, wrap: f32| layout(ui, buf.as_str(), &styles, plain, &tokens, wrap, &check, &sizes);
     let height = ui.available_height().max(220.0);
     // A right-click inside the selection keeps it (egui's text box moves the cursor on any
     // press); one outside it moves the cursor there, as Outlook does.
@@ -749,6 +756,21 @@ fn text_menu(resp: &egui::Response, ed: &mut Editor, c: &mut Compose, acts: &mut
     ed.menu_open = open;
 }
 
+/// Each picture's own size in points (one pixel a point, as Outlook shows a picture), read from
+/// its header the first time; one that can't be read gets none (a placeholder's room).
+fn picture_sizes(ed: &mut Editor, c: &Compose) -> HashMap<String, Vec2> {
+    for p in &c.inline {
+        if ed.picture_sizes.contains_key(&p.cid) {
+            continue;
+        }
+        let read = image::ImageReader::new(std::io::Cursor::new(&p.data)).with_guessed_format().ok().and_then(|r| r.into_dimensions().ok());
+        if let Some((w, h)) = read.filter(|(w, h)| *w > 0 && *h > 0) {
+            ed.picture_sizes.insert(p.cid.clone(), vec2(w as f32, h as f32));
+        }
+    }
+    ed.picture_sizes.clone()
+}
+
 /// Bullets and numbers, rules and pictures.
 fn decorate(ui: &mut Ui, t: &Tokens, ed: &mut Editor, c: &Compose, g: &Galley, origin: egui::Pos2) {
     let painter = ui.painter().clone();
@@ -795,10 +817,15 @@ fn decorate(ui: &mut Ui, t: &Tokens, ed: &mut Editor, c: &Compose, g: &Galley, o
                 continue;
             }
             let Some(cid) = c.styles.style(i + k).picture else { continue };
-            let (a, b) = (at(i + k), at(i + k + 1));
-            let room = Rect::from_min_max(egui::pos2(a.min.x + 2.0, a.min.y), egui::pos2(b.min.x.max(a.min.x + 8.0) - 2.0, a.max.y));
+            // Its own size up to the text's width, from where its character is.
+            let a = at(i + k);
+            let shown = layout::shown_size(ed.picture_sizes.get(&cid).copied(), g.job.wrap.max_width);
+            let room = Rect::from_min_size(egui::pos2(a.min.x + 2.0, a.max.y - shown.y), shown - vec2(4.0, 0.0));
             let tex = ed.pictures.entry(cid.clone()).or_insert_with(|| {
-                c.inline.iter().find(|p| p.cid == cid).and_then(|p| crate::reading::decode(ui.ctx(), &format!("compose-{cid}"), &p.data, 400))
+                c.inline
+                    .iter()
+                    .find(|p| p.cid == cid)
+                    .and_then(|p| crate::reading::decode(ui.ctx(), &format!("compose-{cid}"), &p.data, PICTURE_DECODED))
             });
             match tex {
                 Some(tex) => {
