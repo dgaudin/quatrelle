@@ -86,7 +86,7 @@ fn long_aligned_paragraphs_are_aligned_whole() {
     let ctx = egui::Context::default();
     let tokens = theme::Tokens::light();
     let mut out = ctx.run_ui(Default::default(), |ui| {
-        let g = layout_aligned(ui, text, &st, false, &tokens, 120.0, &Check::default());
+        let g = layout_aligned(ui, text, &st, false, &tokens, 120.0, &Check::default(), &HashMap::new());
         let centred: Vec<_> = g.rows.iter().take_while(|r| !r.ends_with_newline).collect();
         assert!(centred.len() >= 3, "{} rows", centred.len());
         // Each row sits in the middle of what's left (a row that fills the width stays).
@@ -98,7 +98,7 @@ fn long_aligned_paragraphs_are_aligned_whole() {
         assert!(g.rows.last().is_some_and(|r| r.pos.x == 0.0), "the left-aligned one stays");
         // Right-aligned: against the edge, each row.
         st.relayout(text, 0..1, |p| p.align = Align::Right);
-        let g = layout_aligned(ui, text, &st, false, &tokens, 120.0, &Check::default());
+        let g = layout_aligned(ui, text, &st, false, &tokens, 120.0, &Check::default(), &HashMap::new());
         for r in g.rows.iter().take_while(|r| !r.ends_with_newline) {
             assert!((r.rect().max.x - 120.0).abs() < 1.0, "{:?}", r.rect());
         }
@@ -140,7 +140,7 @@ English stays left.
     for plain in [false, true] {
         let mut rows = Vec::new();
         let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
-            let g = layout::layout(ui, text, &Styles::plain(text), plain, &t, wrap, &Check::default());
+            let g = layout::layout(ui, text, &Styles::plain(text), plain, &t, wrap, &Check::default(), &HashMap::new());
             rows = g
                 .rows
                 .iter()
@@ -180,12 +180,47 @@ fn a_picture_sits_where_it_is_in_the_text() {
             }
         }
         let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
-            let g = layout::layout(ui, body, &st, false, &t, 600.0, &Check::default());
+            let g = layout::layout(ui, body, &st, false, &t, 600.0, &Check::default(), &HashMap::new());
             let (a, b) = (g.pos_from_cursor(CCursor::new(at)), g.pos_from_cursor(CCursor::new(at + 1)));
             let mut glyphs = g.rows.iter().flat_map(|r| r.row.glyphs.iter().map(move |gl| (r.pos.x + gl.pos.x, r.rect().center().y, gl.chr)));
             let here = glyphs.any(|(x, y, c)| c == PICTURE && (x - a.min.x).abs() < 1.0 && (y - a.center().y).abs() < 40.0);
             assert!(here, "{body:?}: the picture's character where its room starts");
             assert!(b.min.x - a.min.x >= PICTURE_PX * 1.2, "{body:?} at {at}: a room {} wide", b.min.x - a.min.x);
+        });
+        out.textures_delta.clear();
+    }
+}
+
+/// A picture takes its own size in the text, as Outlook shows it (a screenshot pasted showed as
+/// a 72-point thumbnail), brought down to the text's width when it's wider; its line is as tall,
+/// and a word after it goes to the next line when there's no room. One whose size isn't known
+/// keeps a placeholder's room.
+#[test]
+fn a_picture_shows_at_its_own_size_up_to_the_width() {
+    let ctx = egui::Context::default();
+    let t = Tokens::light();
+    let body = "\u{FFFC} b";
+    let mut st = Styles::plain(body);
+    st.restyle(body, 0..1, |s| Style { picture: Some("shot".into()), ..s.clone() });
+    let sizes: HashMap<String, Vec2> = [("shot".to_string(), vec2(600.0, 300.0))].into();
+    assert_eq!(layout::shown_size(Some(vec2(600.0, 300.0)), 1000.0), vec2(600.0, 300.0));
+    assert_eq!(layout::shown_size(Some(vec2(600.0, 300.0)), 404.0), vec2(400.0, 200.0));
+    for (wrap, want, b_beside) in [(1000.0, vec2(600.0, 300.0), true), (404.0, vec2(400.0, 200.0), false)] {
+        let mut out = ctx.run_ui(egui::RawInput::default(), |ui| {
+            let g = layout::layout(ui, body, &st, false, &t, wrap, &Check::default(), &sizes);
+            let (a, b) = (g.pos_from_cursor(CCursor::new(0)), g.pos_from_cursor(CCursor::new(2)));
+            assert!((a.height() - want.y).abs() < 2.0, "wrap {wrap}: a line {} tall, not {}", a.height(), want.y);
+            if b_beside {
+                let after = b.min.x - a.min.x;
+                assert!(after >= want.x && after < want.x + 10.0, "wrap {wrap}: b {after} after the picture");
+            } else {
+                // (The cursor between the space and b is at the end of the first line.)
+                let rows: Vec<f32> = g.rows.iter().map(|r| r.pos.y).collect();
+                assert!(rows.len() == 2 && rows[1] >= a.max.y - 1.0, "wrap {wrap}: b on the next line, under the picture: {rows:?}");
+            }
+            let unknown = layout::layout(ui, body, &st, false, &t, wrap, &Check::default(), &HashMap::new());
+            let (a, b) = (unknown.pos_from_cursor(CCursor::new(0)), unknown.pos_from_cursor(CCursor::new(1)));
+            assert!(b.min.x - a.min.x >= PICTURE_PX && a.height() >= PICTURE_PX - 1.0, "a placeholder's room");
         });
         out.textures_delta.clear();
     }
