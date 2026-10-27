@@ -106,3 +106,18 @@ fn a_directory_picture_is_asked_for_once_and_kept() {
     assert!(s.person_photo_known("ghost@studio.example"), "a person without a picture isn't asked for again");
     assert!(s.person_photo("ghost@studio.example").is_none());
 }
+
+/// The contact a message's header names is found by its address alone, whatever its case, and
+/// not by a name or part of an address (a search found those, reading every field of every card).
+#[test]
+fn a_contact_is_found_by_its_address() {
+    let mut s = sample_session("person-by-email");
+    s.run("contact.create", &json!({"name": "Ana Lima", "emails": ["Ana.Lima@Contoso.example"]})).unwrap();
+    s.run("contact.create", &json!({"name": "Analyst Desk", "emails": ["desk@contoso.example"]})).unwrap();
+    let found = s.person_by_email(" ana.lima@contoso.example ").map(|p| p.card.display());
+    assert_eq!(found.as_deref(), Some("Ana Lima"));
+    assert!(s.person_by_email("ana").is_none(), "not by a name");
+    assert!(s.person_by_email("contoso.example").is_none(), "nor by part of an address");
+    assert!(s.person_by_email("").is_none());
+    done(s);
+}
