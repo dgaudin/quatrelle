@@ -687,6 +687,7 @@ impl Session {
             s.mark_junk(&id);
         }
         s.refresh_outbox();
+        s.fetch_signature_pictures();
         s.load_pim();
         s.load_smime();
         s.view = s.default_view();

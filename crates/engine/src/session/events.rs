@@ -308,7 +308,11 @@ impl Session {
                     (Some(d), _) => Picture::Ready(Arc::new(d)),
                     (None, e) => Picture::Failed(e.unwrap_or_default()),
                 };
+                let signature = self.accounts.iter().any(|a| a.config.signature_raw_html.contains(url.split('?').next().unwrap_or(&url)));
                 self.pictures.insert(url, p);
+                if signature {
+                    self.keep_signature_pictures();
+                }
             }
             Event::Notice { account, message } => {
                 let who = self.account(&account).map(|a| a.config.email.clone()).unwrap_or(account);

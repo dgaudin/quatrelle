@@ -628,6 +628,61 @@ fn an_html_signature_goes_as_written() {
     assert!(p.text.contains("Hi Zoe") && p.text.contains("Didier GAUDIN") && !p.text.contains("x()"), "{}", p.text);
 }
 
+/// The web picture of a signature written in HTML (a company logo by its address) is fetched
+/// once and kept with it, as Outlook keeps a signature's pictures: a message shows it while it's
+/// written and carries it, nothing left on the web for whoever reads it.
+#[test]
+fn an_html_signatures_web_logo_is_fetched_and_kept() {
+    let mut s = Session::open(Some(temp("signature-web-logo")), quatrelle_model::dates::Clock::new(NOW, 0));
+    let id = s.run("account.add", &json!({"email": "dgaudin@example.org", "password": "pw"})).unwrap()["account"].as_str().unwrap().to_string();
+    s.take_jobs();
+    let logo = "https://www.proginov.com/images/logo.gif";
+    let html = format!(
+        r#"<table><tr><td><a href="https://www.proginov.com"><img src="{logo}" width="194"></a></td><td><b>Didier GAUDIN</b></td></tr></table>"#
+    );
+    s.run("account.setSignature", &json!({"account": id, "signature": "", "rawHtml": html})).unwrap();
+    let asked: Vec<String> = s
+        .take_jobs()
+        .into_iter()
+        .filter_map(|j| match j {
+            Job::FetchUrl { url } => Some(url),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(asked, [logo.to_string()], "fetched once");
+    let gif = b"GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xff\xff\xff!\xf9\x04\x01\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;".to_vec();
+    s.apply(Event::Fetched { url: logo.into(), data: Some(gif.clone()), error: None });
+    let config = s.account(&id).unwrap().config.clone();
+    assert_eq!(config.signature_pictures.len(), 1);
+    assert!(
+        config.signature_raw_html.contains("src=\"cid:signature-1@quatrelle\"")
+            && config.signature_raw_html.contains("href=\"https://www.proginov.com\"")
+    );
+    assert!(config.signature.contains("Didier GAUDIN"));
+    // A new message shows it, and carries it.
+    s.run("mail.new", &json!({})).unwrap();
+    let c = s.compose.clone().unwrap();
+    assert!(c.inline.iter().any(|p| p.cid == "signature-1@quatrelle" && p.data == gif), "the logo goes with the message");
+    assert!(c.body.contains(quatrelle_mime::rich::PICTURE), "and shows where it stands");
+    s.run("compose.update", &json!({"to": "zoe@example.org", "subject": "Hello"})).unwrap();
+    s.take_jobs();
+    s.run("compose.send", &json!({})).unwrap();
+    let raw = s.take_jobs().into_iter().find_map(|j| match j {
+        Job::Send { raw, .. } => Some(raw),
+        _ => None,
+    });
+    let raw = raw.unwrap();
+    let p = quatrelle_mime::parse(&raw).unwrap();
+    assert!(!p.images.iter().any(|u| u.starts_with("https://")), "nothing on the web: {:?}", p.images);
+    assert!(String::from_utf8_lossy(&raw).contains("Content-ID: <signature-1@quatrelle>"), "the logo goes in the message");
+    // Started again: nothing fetched again.
+    let store = s.store.clone().unwrap();
+    drop(s);
+    let mut again = Session::open(Some(store), quatrelle_model::dates::Clock::new(NOW, 0));
+    assert!(!again.take_jobs().iter().any(|j| matches!(j, Job::FetchUrl { .. })));
+    done(again);
+}
+
 /// Check Names writes out the address of a name typed alone, from the people known, and leaves
 /// (and names) the ones it can't tell; the language a message's spelling is checked in is kept
 /// with it.

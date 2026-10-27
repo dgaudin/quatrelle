@@ -473,7 +473,10 @@ pub(super) fn set_signature(s: &mut Session, v: &Value) -> CmdResult {
         config.signature_html = if styles.is_plain() { String::new() } else { quatrelle_mime::rich::to_html(&text, &styles) };
         config.signature_styles.clear();
         config.signature_pictures.clear();
-        return s.update_account(config, None);
+        let out = s.update_account(config, None)?;
+        // Its pictures on the web: fetched and kept with it.
+        s.fetch_signature_pictures();
+        return Ok(out);
     }
     // When it's added, as Outlook's New messages and Replies/forwards.
     if let Some(on) = p::bool(v, "newMessages") {
