@@ -136,10 +136,10 @@ impl eframe::App for App {
         }
         #[cfg(target_os = "macos")]
         apple_events::deliver(&self.finder, &mut self.app, ctx);
-        // Mail, notifications and reminders keep going while the window is minimized or hidden.
+        // Mail, notifications, reminders and an update ready keep going while the window is
+        // minimized or hidden, and a close from the taskbar or the Dock then is asked about here,
+        // as `ui` doesn't run.
         self.app.logic(ctx);
-        // An update ready while the window is minimized or behind others: the system says so.
-        self.app.follow_update(ctx);
     }
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
         self.frames = self.frames.saturating_add(1);

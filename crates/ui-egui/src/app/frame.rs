@@ -11,6 +11,13 @@ impl MailApp {
     /// announced nothing (and synced nothing new into view) until it was shown again.
     pub fn logic(&mut self, ctx: &egui::Context) {
         self.ui.logic_ran = true;
+        // An update ready while the window is minimized or behind others: the system says so
+        // (and a close below says what becomes of it).
+        self.follow_update(ctx);
+        // A close, decided here too: `ui` doesn't run while the window is minimized. In a pass
+        // that draws, `ui` then leaves it be (egui gives `logic` alone the last pass's input time).
+        self.ui.close_checked = Some(ctx.input(|i| i.time));
+        self.decide_close(ctx);
         self.tell_textures(ctx);
         if self.pump() {
             ctx.request_repaint();
@@ -62,6 +69,51 @@ impl MailApp {
         // Woken by the workers when they have news; this is for the clock (reminders, snoozed
         // mail coming back) when nothing else happens.
         ctx.request_repaint_after(std::time::Duration::from_secs(15));
+    }
+
+    /// Closing with messages being written, online-only accounts' unsent mail or changes held in
+    /// memory, or an update waiting: ask first. Decided in [`MailApp::logic`], which eframe runs
+    /// with the window minimized too, and closes the window after unless it cancels (craft-libs'
+    /// quit crate found this: a close from the taskbar lost the messages being written).
+    fn decide_close(&mut self, ctx: &egui::Context) {
+        self.forget_cancelled_close();
+        // Closing with online-only accounts' unsent mail or changes held in memory: ask first.
+        if self.ui.close_now {
+            self.ui.close_now = false;
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        } else if ctx.input(|i| i.viewport().close_requested()) {
+            // Messages being written: kept as drafts if wanted, as Outlook asks; never lost.
+            let written = self.session.all_composes().filter(|c| self.session.written(c) && !c.sending).count();
+            let (unsent, changes) = self.session.lost_on_close();
+            let asked = if self.ui.closing_anyway {
+                false
+            } else if written > 0 {
+                self.ui.dialog = Some(Dialog::SaveOnClose(written));
+                self.ui.dialog_for = None;
+                true
+            } else if unsent + changes > 0 {
+                self.ui.dialog = Some(Dialog::LostOnClose { unsent, changes });
+                true
+            } else if self.ask_about_update() {
+                // An update about to be installed, or still downloading: said first.
+                self.ask_update_on_close();
+                true
+            } else {
+                false
+            };
+            if asked {
+                ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+                self.ui.close_asked = true;
+                // Closed from the taskbar or the Dock while minimized: the window comes back to ask.
+                if ctx.input(|i| i.viewport().minimized == Some(true)) {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+                }
+            } else if self.ui.restart_wanted {
+                // Restart now, and nothing stopped the close: the new version opens once installed.
+                self.services.restart_to_update();
+            }
+        }
     }
 
     /// The pictures the window keeps on the graphics card (the glyphs, mail pictures, icons), in
@@ -133,39 +185,8 @@ impl MailApp {
             self.ui.logic_ran = false;
         }
         self.settle_composes(&ctx);
-        self.follow_update(&ctx);
-        self.forget_cancelled_close();
-        // Closing with online-only accounts' unsent mail or changes held in memory: ask first.
-        if self.ui.close_now {
-            self.ui.close_now = false;
-            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
-        } else if ctx.input(|i| i.viewport().close_requested()) {
-            // Messages being written: kept as drafts if wanted, as Outlook asks; never lost.
-            let written = self.session.all_composes().filter(|c| self.session.written(c) && !c.sending).count();
-            let (unsent, changes) = self.session.lost_on_close();
-            let asked = if self.ui.closing_anyway {
-                false
-            } else if written > 0 {
-                self.ui.dialog = Some(Dialog::SaveOnClose(written));
-                self.ui.dialog_for = None;
-                true
-            } else if unsent + changes > 0 {
-                self.ui.dialog = Some(Dialog::LostOnClose { unsent, changes });
-                true
-            } else if self.ask_about_update() {
-                // An update about to be installed, or still downloading: said first.
-                self.ask_update_on_close();
-                true
-            } else {
-                false
-            };
-            if asked {
-                ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
-                self.ui.close_asked = true;
-            } else if self.ui.restart_wanted {
-                // Restart now, and nothing stopped the close: the new version opens once installed.
-                self.services.restart_to_update();
-            }
+        if self.ui.close_checked != Some(ctx.input(|i| i.time)) {
+            self.decide_close(&ctx);
         }
         // A search started by a command or agent shows its query in the box.
         if let Some((q, _)) = &self.session.search
