@@ -1634,3 +1634,8 @@ month	May	mai
 	The directory couldn't be searched: {error}	L’annuaire n’a pas pu être interrogé : {error}
 	More people match: type more of the name.	D’autres personnes correspondent : tapez la suite du nom.
 	More than one person fits “{name}”. Choose who you meant:	Plusieurs personnes correspondent à « {name} ». Choisissez celle que vous vouliez :
+	Calendars and contacts	Calendriers et contacts
+	Scope	Étendue
+	Appearance	Apparence
+	Expand	Développer
+	Collapse	Réduire

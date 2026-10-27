@@ -73,6 +73,16 @@ fn hover_fill(ui: &Ui, resp: &Response, rect: egui::Rect, t: &Tokens, enabled: b
     }
 }
 
+/// What a drawn button is to a screen reader: a button (or a toggle, `on` given) named `label`
+/// (translated), as egui's own buttons say; without it, AccessKit reads an unnamed button.
+pub(crate) fn named(ui: &Ui, resp: &Response, label: &str, enabled: bool, on: Option<bool>) {
+    let enabled = enabled && ui.is_enabled();
+    resp.widget_info(|| match on {
+        Some(on) => egui::WidgetInfo::selected(egui::Role::Button, enabled, on, label),
+        None => egui::WidgetInfo::labeled(egui::Role::Button, enabled, label),
+    });
+}
+
 fn icon_button(ui: &mut Ui, icon: Icon, label: &str, t: &Tokens, enabled: bool, on: bool) -> Response {
     let (rect, resp) = ui.allocate_exact_size(vec2(32.0, 30.0), if enabled { Sense::click() } else { Sense::hover() });
     reached(ui, rect);
@@ -91,10 +101,13 @@ pub fn tool_button(ui: &mut Ui, icon: Icon, label: &str, t: &Tokens, enabled: bo
     let font = theme::regular(13.0);
     let galley = ui.painter().layout_no_wrap(label.to_string(), font, t.text);
     if ribbon_button(ui, galley.size().x) {
-        return icon_button(ui, icon, label, t, enabled, false);
+        let resp = icon_button(ui, icon, label, t, enabled, false);
+        named(ui, &resp, label, enabled, None);
+        return resp;
     }
     let size = vec2(galley.size().x + 36.0, 30.0);
     let (rect, resp) = ui.allocate_exact_size(size, if enabled { Sense::click() } else { Sense::hover() });
+    named(ui, &resp, label, enabled, None);
     reached(ui, rect);
     let color = if enabled { t.text } else { t.faint };
     hover_fill(ui, &resp, rect, t, enabled);
@@ -107,6 +120,7 @@ pub fn tool_button(ui: &mut Ui, icon: Icon, label: &str, t: &Tokens, enabled: bo
 /// A "⋯" button in the style of [`pill_button`], for a menu of more actions.
 pub fn more_pill(ui: &mut Ui, tip: &str, t: &Tokens) -> Response {
     let (rect, resp) = ui.allocate_exact_size(vec2(34.0, 28.0), Sense::click());
+    named(ui, &resp, tl!(tip), true, None);
     let fill = if resp.hovered() { t.hover } else { t.surface };
     ui.painter().rect(rect, 6.0, fill, Stroke::new(1.0, t.border), egui::StrokeKind::Inside);
     for dx in [-6.0, 0.0, 6.0] {
@@ -122,6 +136,7 @@ pub fn accent_button(ui: &mut Ui, icon: Icon, label: &str, t: &Tokens, enabled: 
     let galley = ui.painter().layout_no_wrap(label.to_string(), font, t.on_accent);
     let size = vec2(galley.size().x + 40.0, 30.0);
     let (rect, resp) = ui.allocate_exact_size(size, if enabled { Sense::click() } else { Sense::hover() });
+    named(ui, &resp, label, enabled, None);
     let fill = if !enabled {
         t.faint
     } else if resp.hovered() {
@@ -142,6 +157,7 @@ pub fn primary_button(ui: &mut Ui, label: &str, t: &Tokens, enabled: bool) -> Re
     let galley = ui.painter().layout_no_wrap(label.to_string(), theme::bold(13.0), t.on_accent);
     let size = vec2((galley.size().x + 28.0).max(76.0), 30.0);
     let (rect, resp) = ui.allocate_exact_size(size, if enabled { Sense::click() } else { Sense::hover() });
+    named(ui, &resp, label, enabled, None);
     let fill = if !enabled {
         t.faint
     } else if resp.hovered() {
@@ -157,6 +173,7 @@ pub fn primary_button(ui: &mut Ui, label: &str, t: &Tokens, enabled: bool) -> Re
 /// An icon button on the coloured title bar.
 pub fn bar_icon_button(ui: &mut Ui, icon: Icon, tip: &str, t: &Tokens) -> Response {
     let (rect, resp) = ui.allocate_exact_size(vec2(28.0, 28.0), Sense::click());
+    named(ui, &resp, tl!(tip), true, None);
     if resp.hovered() {
         ui.painter().rect_filled(rect, 4.0, t.hover);
     }
@@ -167,6 +184,7 @@ pub fn bar_icon_button(ui: &mut Ui, icon: Icon, tip: &str, t: &Tokens) -> Respon
 /// A small icon button inside panes.
 pub fn tiny_icon_button(ui: &mut Ui, icon: Icon, tip: &str, t: &Tokens) -> Response {
     let (rect, resp) = ui.allocate_exact_size(vec2(22.0, 22.0), Sense::click());
+    named(ui, &resp, tl!(tip), true, None);
     if resp.hovered() {
         ui.painter().rect_filled(rect, 4.0, t.hover);
     }
@@ -226,6 +244,7 @@ pub fn pill_button(ui: &mut Ui, icon: Icon, label: &str, t: &Tokens) -> Response
     let galley = ui.painter().layout_no_wrap(label.to_string(), theme::regular(13.0), t.text);
     let size = vec2(galley.size().x + 34.0, 28.0);
     let (rect, resp) = ui.allocate_exact_size(size, Sense::click());
+    named(ui, &resp, label, true, None);
     let fill = if resp.hovered() { t.hover } else { t.surface };
     ui.painter().rect(rect, 6.0, fill, Stroke::new(1.0, t.border), egui::StrokeKind::Inside);
     icons::paint(ui.painter(), egui::Rect::from_min_size(rect.min + vec2(9.0, 6.0), vec2(16.0, 16.0)), icon, t.accent);
@@ -350,6 +369,7 @@ fn small(ui: &mut Ui, icon: Icon, galley: std::sync::Arc<egui::Galley>, t: &Toke
     let enabled = kind != Big::Off;
     let id = ui.scope_id().with(("ribbon-small", rect.min.x as i32, rect.min.y as i32));
     let resp = ui.interact(rect, id, if enabled { Sense::click() } else { Sense::hover() });
+    named(ui, &resp, galley.text(), enabled, (kind == Big::On).then_some(true));
     let pressed = enabled && resp.is_pointer_button_down_on();
     if kind == Big::On {
         ui.painter().rect(rect, 4.0, t.accent_soft, Stroke::new(1.0, t.accent.gamma_multiply(0.5)), egui::StrokeKind::Inside);
@@ -408,6 +428,7 @@ fn big(ui: &mut Ui, icon: Icon, label: &str, t: &Tokens, kind: Big) -> Response 
         return small(ui, icon, line, t, kind, rect);
     }
     let (rect, resp) = ui.allocate_exact_size(vec2(w, RIBBON_BUTTON_H), if enabled { Sense::click() } else { Sense::hover() });
+    named(ui, &resp, label, enabled, (kind == Big::On).then_some(true));
     let pressed = enabled && resp.is_pointer_button_down_on();
     if kind == Big::On {
         ui.painter().rect(rect, 4.0, t.accent_soft, Stroke::new(1.0, t.accent.gamma_multiply(0.5)), egui::StrokeKind::Inside);
@@ -433,6 +454,7 @@ pub fn big_more(ui: &mut Ui, tip: &str, t: &Tokens) -> Response {
     if let Some(rect) = group_item(ui, 16.0, 14.0, true) {
         let id = ui.scope_id().with(("ribbon-small-more", rect.min.x as i32, rect.min.y as i32));
         let resp = ui.interact(rect, id, Sense::click());
+        named(ui, &resp, tl!(tip), true, None);
         if resp.hovered() {
             ui.painter().rect_filled(rect, 4.0, t.hover);
         }
@@ -440,6 +462,7 @@ pub fn big_more(ui: &mut Ui, tip: &str, t: &Tokens) -> Response {
         return resp.on_hover_text(tl!(tip));
     }
     let (rect, resp) = ui.allocate_exact_size(vec2(16.0, RIBBON_BUTTON_H), Sense::click());
+    named(ui, &resp, tl!(tip), true, None);
     if resp.hovered() {
         ui.painter().rect_filled(rect, 4.0, t.hover);
     }

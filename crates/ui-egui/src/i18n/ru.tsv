@@ -1633,3 +1633,8 @@ month	May	Май
 	The directory couldn't be searched: {error}	Не удалось выполнить поиск в справочнике: {error}
 	More people match: type more of the name.	Подходят и другие люди: введите имя полнее.
 	More than one person fits “{name}”. Choose who you meant:	Имени «{name}» соответствуют несколько человек. Выберите нужного:
+	Calendars and contacts	Календари и контакты
+	Scope	Область
+	Appearance	Оформление
+	Expand	Развернуть
+	Collapse	Свернуть
