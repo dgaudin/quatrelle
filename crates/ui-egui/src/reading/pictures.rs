@@ -3,8 +3,9 @@
 
 use super::*;
 
-/// Draw one picture of an HTML message; `false` when it can't be shown (yet). Right-clicked, it
-/// is copied — whole, not as shrunk to fit — or, one sent with the message, saved.
+/// Draw one picture of an HTML message, `zoom` times its size in `width` (wider than that when
+/// zoomed in); `false` when it can't be shown (yet). Right-clicked, it is copied — whole, not as
+/// shrunk to fit — or, one sent with the message, saved.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn picture(
     s: &Session,
@@ -15,9 +16,10 @@ pub(super) fn picture(
     src: &str,
     allowed: bool,
     width: f32,
+    zoom: f32,
     acts: &mut Vec<Action>,
 ) -> bool {
-    let (tex, own) = match picture_texture(s, st, ui.ctx(), key, p, src, allowed) {
+    let (tex, own) = match picture_texture(s, st, ui.ctx(), key, p, src, allowed, zoom) {
         Pic::Ready(tex, own) => (tex, own),
         Pic::Loading => {
             ui.spinner();
@@ -29,7 +31,7 @@ pub(super) fn picture(
     if own.x <= 3.0 && own.y <= 3.0 {
         return true;
     }
-    let r = ui.add(egui::Image::new(&tex).fit_to_exact_size(shown_size(own, width)).sense(Sense::click()));
+    let r = ui.add(egui::Image::new(&tex).fit_to_exact_size(shown_size(own, width) * zoom).sense(Sense::click()));
     r.context_menu(|ui| {
         if ui.button(tl!("Copy picture")).clicked() {
             if let Some(img) = picture_bytes(s, key, p, src).and_then(|b| color_image(&b)) {
@@ -79,9 +81,9 @@ fn shown_size(own: Vec2, width: f32) -> Vec2 {
 }
 
 /// The most pixels on a side a picture is decoded at to be shown: no more than it can be shown
-/// at on this screen.
-fn shown_pixels(ctx: &egui::Context) -> u32 {
-    (WIDEST * ctx.pixels_per_point()).clamp(WIDEST, 4096.0) as u32
+/// at on this screen, `zoom` times its size.
+fn shown_pixels(ctx: &egui::Context, zoom: f32) -> u32 {
+    (WIDEST * ctx.pixels_per_point() * zoom.max(1.0)).clamp(WIDEST, 4096.0) as u32
 }
 
 /// A message's picture, as far as it can be had now.
@@ -94,7 +96,9 @@ pub(super) enum Pic {
     Missing,
 }
 
-/// A picture of an HTML message: one inside it (`cid:`) always, one on the web once allowed.
+/// A picture of an HTML message: one inside it (`cid:`) always, one on the web once allowed;
+/// decoded for `zoom`.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn picture_texture(
     s: &Session,
     st: &mut UiState,
@@ -103,18 +107,20 @@ pub(super) fn picture_texture(
     p: &mime::Parsed,
     src: &str,
     allowed: bool,
+    zoom: f32,
 ) -> Pic {
+    let most = shown_pixels(ctx, zoom);
     // One sent with the message: by `cid:`, or by the name or address it was sent under.
     // At the size it's shown at, not as an attachment's thumbnail (a screenshot was drawn 480
     // points wide).
     let lower = src.to_ascii_lowercase();
     if !(lower.starts_with("http://") || lower.starts_with("https://")) {
         let Some(index) = sent_with(p, src) else { return Pic::Missing };
-        let name = format!("att-{}-{index}-shown", key.to_id());
+        let name = format!("att-{}-{index}-{most}", key.to_id());
         return shown_picture(st, &name, || {
             let raw = s.store.as_ref()?.read_body(key)?;
             let data = mime::attachment_data(&raw, index)?;
-            decode_sized(ctx, &name, &data, shown_pixels(ctx))
+            decode_sized(ctx, &name, &data, most)
         });
     }
     if !allowed {
@@ -122,8 +128,8 @@ pub(super) fn picture_texture(
     }
     match s.pictures.get(src) {
         Some(quatrelle_engine::Picture::Ready(bytes)) => {
-            let name = format!("web-{src}");
-            shown_picture(st, &name, || decode_sized(ctx, &name, bytes, shown_pixels(ctx)))
+            let name = format!("web-{most}-{src}");
+            shown_picture(st, &name, || decode_sized(ctx, &name, bytes, most))
         }
         Some(quatrelle_engine::Picture::Loading) => Pic::Loading,
         _ => Pic::Missing,
@@ -173,7 +179,7 @@ mod tests {
         image::DynamicImage::ImageRgba8(image::RgbaImage::new(2000, 1000))
             .write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png)
             .unwrap();
-        let (tex, own) = decode_sized(&ctx, "big", &png, shown_pixels(&ctx)).unwrap();
+        let (tex, own) = decode_sized(&ctx, "big", &png, shown_pixels(&ctx, 1.0)).unwrap();
         assert_eq!(own, vec2(2000.0, 1000.0));
         assert_eq!(tex.size(), [900, 450]);
     }

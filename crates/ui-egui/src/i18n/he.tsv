@@ -1644,3 +1644,7 @@ month	May	מאי
 	Only if your organisation's server refuses Quatrelle: the name of a mail program it lets in.	רק אם השרת של הארגון שלך דוחה את Quatrelle: שם של תוכנת דואר שהוא מקבל.
 	Only letters, digits, spaces and punctuation, up to 256 characters.	רק אותיות, ספרות, רווחים וסימני פיסוק, עד 256 תווים.
 	User-Agent (optional)	User-Agent (אופציונלי)
+	{percent}%	{percent}%
+	Zoom in	הגדל
+	Zoom out	הקטן
+	Message zoom: click for 100%	הגדלת ההודעה: לחץ כדי לחזור ל-100%

@@ -29,7 +29,7 @@ impl Body<'_> {
         use mime::layout::{Align as A, Width};
         let mut columns = column_widths(&table.rows);
         let asked = |w: Option<Width>| match w {
-            Some(Width::Px(px)) => Some(px as f32),
+            Some(Width::Px(px)) => Some(px as f32 * self.zoom),
             Some(Width::Percent(pc)) => Some(width * f32::from(pc) / 100.0),
             None => None,
         };
@@ -37,7 +37,7 @@ impl Body<'_> {
         // on one line when they all fit (or the table asks for more: widened alike), else
         // between that and its longest word, its text wrapping; when even its words can't fit,
         // it scrolls sideways.
-        let figures = figure_columns(ui, table, &columns);
+        let figures = figure_columns(ui, table, &columns, self.zoom);
         let tw = match &figures {
             Some(f) => {
                 let (least, most) = f.iter().fold((0.0f32, 0.0f32), |(a, b), (lo, hi)| (a + lo, b + hi));
@@ -56,9 +56,9 @@ impl Body<'_> {
                 widths.iter().sum()
             }
             None => match table.width {
-                Some(Width::Px(px)) => (px as f32).min(width),
+                Some(Width::Px(px)) => (px as f32 * self.zoom).min(width),
                 Some(Width::Percent(pc)) => width * f32::from(pc) / 100.0,
-                None => shrunk(ui, table).map_or(width, |w| w.min(width)),
+                None => shrunk(ui, table, self.zoom).map_or(width, |w| w.min(width)),
             },
         }
         .max(1.0);
@@ -144,7 +144,7 @@ impl Body<'_> {
     ) {
         use mime::layout::{VAlign, Width};
         let px = |w: Width| match w {
-            Width::Px(px) => px as f32,
+            Width::Px(px) => px as f32 * self.zoom,
             Width::Percent(pc) => width * f32::from(pc) / 100.0,
         };
         let pads: Vec<Margin> = row.iter().map(padding_of).collect();
@@ -160,7 +160,7 @@ impl Body<'_> {
                     (parts.len() == span && parts.iter().all(Option::is_some)).then(|| parts.iter().flatten().map(|w| px(*w)).sum::<f32>())
                 };
                 // A floated picture's box (a signature's logo): as wide as the picture, padding added.
-                let w = c.width.map(px).or_else(from_columns).or_else(|| c.fit.map(|f| f as f32 + pad.sum().x));
+                let w = c.width.map(px).or_else(from_columns).or_else(|| c.fit.map(|f| f as f32 * self.zoom + pad.sum().x));
                 col += span;
                 w
             })
@@ -274,7 +274,7 @@ const PAD: i8 = 6;
 /// A table without a width that is one box of text (a newsletter's button, a note in a frame,
 /// a signature's name beside its rule): as wide as its text, padding added, as a browser
 /// shrinks a table to fit its content; `None` for any other (it takes the whole width).
-fn shrunk(ui: &Ui, table: &mime::layout::Table) -> Option<f32> {
+fn shrunk(ui: &Ui, table: &mime::layout::Table, zoom: f32) -> Option<f32> {
     let [row] = table.rows.as_slice() else { return None };
     let [cell] = row.as_slice() else { return None };
     let boxed = cell.background.is_some()
@@ -286,7 +286,7 @@ fn shrunk(ui: &Ui, table: &mime::layout::Table) -> Option<f32> {
     if !boxed || cell.width.is_some() || cell.background_image.is_some() || table.background_image.is_some() || !cell.overlays.is_empty() {
         return None;
     }
-    Some(natural_width(ui, &cell.blocks)? + padding_of(cell).sum().x + 2.0)
+    Some(natural_width(ui, &cell.blocks, zoom)? + padding_of(cell).sum().x + 2.0)
 }
 
 /// A cell's padding: the message's when it sets one (`padding`, `cellpadding`; the layout caps
@@ -299,8 +299,9 @@ fn padding_of(c: &mime::layout::Cell) -> Margin {
     }
 }
 
-/// How wide formatted text is unwrapped (its widest line); `None` for anything but text.
-pub(super) fn natural_width(ui: &Ui, blocks: &[mime::layout::Block]) -> Option<f32> {
+/// How wide formatted text is unwrapped (its widest line) at `zoom`; `None` for anything but
+/// text.
+pub(super) fn natural_width(ui: &Ui, blocks: &[mime::layout::Block], zoom: f32) -> Option<f32> {
     let mut widest: f32 = 0.0;
     let faces = crate::look::typefaces::loaded(ui.ctx());
     for b in blocks {
@@ -309,8 +310,10 @@ pub(super) fn natural_width(ui: &Ui, blocks: &[mime::layout::Block]) -> Option<f
             if line.iter().any(|sp| sp.image.is_some()) {
                 return None;
             }
-            let w: f32 =
-                line.iter().map(|sp| ui.fonts_mut(|f| f.layout_no_wrap(sp.text.clone(), span_font_in(sp, &faces), Color32::WHITE).size().x)).sum();
+            let w: f32 = line
+                .iter()
+                .map(|sp| ui.fonts_mut(|f| f.layout_no_wrap(sp.text.clone(), span_font_in(sp, &faces, zoom), Color32::WHITE).size().x))
+                .sum();
             widest = widest.max(w);
         }
     }
@@ -346,7 +349,7 @@ pub(super) fn column_widths(rows: &[Vec<mime::layout::Cell>]) -> Vec<Option<mime
 /// each column's least width (its longest word) and its width on one line (its widest content
 /// unwrapped), padding added; the width it asks for is both. `None` for any other table (a
 /// layout's), whose columns share its width as before.
-fn figure_columns(ui: &Ui, table: &mime::layout::Table, asked: &[Option<mime::layout::Width>]) -> Option<Vec<(f32, f32)>> {
+fn figure_columns(ui: &Ui, table: &mime::layout::Table, asked: &[Option<mime::layout::Width>], zoom: f32) -> Option<Vec<(f32, f32)>> {
     use mime::layout::Width;
     let columns = table.rows.iter().map(|r| r.iter().map(|c| usize::from(c.span.max(1))).sum::<usize>()).max()?;
     if !(4..=MAX_COLUMNS).contains(&columns) {
@@ -363,7 +366,7 @@ fn figure_columns(ui: &Ui, table: &mime::layout::Table, asked: &[Option<mime::la
             if span == 1 && !c.blocks.is_empty() {
                 // Padding, and a few pixels to spare: a word short of one is cut in two.
                 let pad = padding_of(c).sum().x + 6.0;
-                let (lo, hi) = (longest_word(ui, &c.blocks)? + pad, natural_width(ui, &c.blocks)? + pad);
+                let (lo, hi) = (longest_word(ui, &c.blocks, zoom)? + pad, natural_width(ui, &c.blocks, zoom)? + pad);
                 if let Some((a, b)) = widths.get_mut(col) {
                     (*a, *b) = (a.max(lo), b.max(hi));
                 }
@@ -373,7 +376,7 @@ fn figure_columns(ui: &Ui, table: &mime::layout::Table, asked: &[Option<mime::la
     }
     for (i, w) in widths.iter_mut().enumerate() {
         match asked.get(i).copied().flatten() {
-            Some(Width::Px(px)) => *w = (px as f32, px as f32),
+            Some(Width::Px(px)) => *w = (px as f32 * zoom, px as f32 * zoom),
             Some(Width::Percent(_)) => return None,
             None => {
                 let least = f32::from(PAD) * 2.0;
@@ -386,7 +389,7 @@ fn figure_columns(ui: &Ui, table: &mime::layout::Table, asked: &[Option<mime::la
 
 /// How wide formatted text's longest word is (what it can't be narrower than, wrapped); `None`
 /// for anything but text.
-fn longest_word(ui: &Ui, blocks: &[mime::layout::Block]) -> Option<f32> {
+fn longest_word(ui: &Ui, blocks: &[mime::layout::Block], zoom: f32) -> Option<f32> {
     let faces = crate::look::typefaces::loaded(ui.ctx());
     let mut widest: f32 = 0.0;
     for b in blocks {
@@ -396,7 +399,7 @@ fn longest_word(ui: &Ui, blocks: &[mime::layout::Block]) -> Option<f32> {
             let mut words: Vec<&str> = sp.text.split_whitespace().collect();
             words.sort_by_key(|w| std::cmp::Reverse(w.chars().count()));
             for word in words.into_iter().take(3) {
-                let w = ui.fonts_mut(|f| f.layout_no_wrap(word.to_string(), span_font_in(sp, &faces), Color32::WHITE).size().x);
+                let w = ui.fonts_mut(|f| f.layout_no_wrap(word.to_string(), span_font_in(sp, &faces, zoom), Color32::WHITE).size().x);
                 widest = widest.max(w);
             }
         }

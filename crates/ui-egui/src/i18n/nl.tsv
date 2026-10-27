@@ -1644,3 +1644,7 @@ month	May	mei
 	Only if your organisation's server refuses Quatrelle: the name of a mail program it lets in.	Alleen als de server van je organisatie Quatrelle weigert: de naam van een mailprogramma dat hij wel toelaat.
 	Only letters, digits, spaces and punctuation, up to 256 characters.	Alleen letters, cijfers, spaties en leestekens, hooguit 256 tekens.
 	User-Agent (optional)	User-Agent (optioneel)
+	{percent}%	{percent}%
+	Zoom in	Inzoomen
+	Zoom out	Uitzoomen
+	Message zoom: click for 100%	Zoom van het bericht: klik voor 100%

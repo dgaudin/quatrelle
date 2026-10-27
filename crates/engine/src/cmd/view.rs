@@ -7,6 +7,13 @@ pub(super) fn commands() -> Vec<CommandSpec> {
     vec![
         // View
         CommandSpec::new("view.readingPane", "Reading pane", "View › Layout", reading_pane).params(r#"{"value": "right"|"bottom"|"off"}"#),
+        CommandSpec::new("view.zoom", "Zoom", "View › Zoom", |s, v| {
+            let percent = p::u64(v, "percent").ok_or_else(|| CmdError::Params("`percent` is required (50 to 400)".into()))?;
+            let (low, high) = (u64::from(*crate::READING_ZOOM.start()), u64::from(*crate::READING_ZOOM.end()));
+            s.prefs.reading_zoom = u16::try_from(percent.clamp(low, high)).unwrap_or(100);
+            Ok(json!({"percent": s.prefs.reading_zoom}))
+        })
+        .params(r#"{"percent": number (the message read, 50 to 400; 100 as written)}"#),
         CommandSpec::new("view.conversations", "Show as conversations", "View › Messages", |s, v| {
             s.prefs.conversations = p::bool(v, "on").unwrap_or(!s.prefs.conversations);
             s.refresh_list();
