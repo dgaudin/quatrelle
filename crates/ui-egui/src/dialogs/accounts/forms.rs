@@ -27,6 +27,8 @@ pub struct AccountForm {
     /// An organisation's own Exchange server through EWS, at this address or server name.
     pub ews: bool,
     pub ews_url: String,
+    /// The User-Agent EWS requests name; empty for Quatrelle's.
+    pub user_agent: String,
     /// Downloads mail over POP3 into folders on this computer (sends over SMTP).
     pub pop: bool,
     pub pop_host: String,
@@ -209,6 +211,7 @@ impl AccountForm {
                 "username": if self.username.trim().is_empty() { self.email.trim() } else { self.username.trim() },
                 // No server named: Autodiscover finds it.
                 "ews": if self.ews_url.trim().is_empty() { json!(true) } else { json!(self.ews_url.trim()) },
+                "userAgent": self.user_agent.trim(),
             });
         }
         if self.jmap {
@@ -269,6 +272,8 @@ pub struct EditForm {
     pub jmap_url: String,
     /// An Exchange server's EWS address (EWS accounts only).
     pub ews: Option<String>,
+    /// The User-Agent its EWS requests name; empty for Quatrelle's.
+    pub user_agent: String,
     /// A POP account's POP3 server (host, port, security).
     pub pop: Option<(String, String, Security)>,
     /// POP: when the server's copy of downloaded mail goes.
@@ -318,7 +323,13 @@ impl EditForm {
     pub(crate) fn server_params(&self) -> serde_json::Value {
         let port = |s: &str| s.trim().parse::<u64>().unwrap_or(0);
         if let Some(u) = &self.ews {
-            return json!({"account": self.account, "name": self.name.trim(), "username": self.username.trim(), "ews": u.trim()});
+            return json!({
+                "account": self.account,
+                "name": self.name.trim(),
+                "username": self.username.trim(),
+                "ews": u.trim(),
+                "userAgent": self.user_agent.trim(),
+            });
         }
         if self.jmap {
             return json!({"account": self.account, "name": self.name.trim(), "username": self.username.trim(), "jmap": self.jmap_url.trim()});

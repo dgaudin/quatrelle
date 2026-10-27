@@ -133,6 +133,9 @@ impl Client {
         if let Some(cookie) = &l.cookie {
             req = req.header("Cookie", cookie);
         }
+        if let Some(agent) = &self.user_agent {
+            req = req.header("User-Agent", agent);
+        }
         let mut conn = Conn::open(&self.url)?;
         let scheme = *self.scheme.borrow();
         let req = match scheme {

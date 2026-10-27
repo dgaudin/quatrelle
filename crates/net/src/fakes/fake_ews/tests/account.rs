@@ -575,3 +575,54 @@ fn the_directory_is_searched_by_name() {
     assert!(ask("nobody").is_empty());
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+const EVOLUTION: &str = "Evolution/3.46.4";
+
+/// A server that answers 403 to clients it doesn't know (it lets in `Evolution/3.46.4`): refused
+/// as Quatrelle, let in naming the User-Agent the account gives, on every request, Autodiscover's
+/// too; and through the worker, the account's own User-Agent on every request.
+#[test]
+fn a_server_that_lets_in_only_known_clients() {
+    let mut d = Data { only_agent: Some(EVOLUTION.into()), ..Default::default() };
+    d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    let server = serve(d);
+    let user = format!("{DOMAIN}\\{USER}");
+    match crate::ews::Client::connect(&server.url, &user, PASSWORD, "riley@contoso.example") {
+        Err(crate::NetError::Protocol(m)) => assert!(m.contains("HTTP 403"), "{m}"),
+        Err(e) => panic!("refused, but as {e:?}"),
+        Ok(_) => panic!("the server lets in Quatrelle"),
+    }
+    assert!(server.data.lock().unwrap().agents.iter().all(|a| a.starts_with("Quatrelle/")));
+    let c = crate::ews::Client::connect_as(&server.url, &user, PASSWORD, "riley@contoso.example", Some(EVOLUTION)).unwrap();
+    assert_eq!(c.mailboxes().unwrap().len(), 1);
+    assert_eq!(crate::ews::autodiscover_as("riley@contoso.example", &user, PASSWORD, Some(&server.url), Some(EVOLUTION)).unwrap(), server.url);
+    {
+        let d = server.data.lock().unwrap();
+        let after: Vec<&String> = d.agents.iter().skip_while(|a| a.starts_with("Quatrelle/")).collect();
+        assert!(!after.is_empty() && after.iter().all(|a| *a == EVOLUTION), "{after:?}");
+    }
+    // What can't go in a header is never sent: Quatrelle's own name instead.
+    for bad in ["", "   ", "Evil\r\nX-Injected: 1", "tab\tbed", "émoji 📧"] {
+        assert_eq!(quatrelle_model::user_agent(bad), None, "{bad:?}");
+    }
+    assert_eq!(quatrelle_model::user_agent(&"x".repeat(257)), None);
+    assert_eq!(quatrelle_model::user_agent("  Evolution/3.46.4 (Linux)  ").as_deref(), Some("Evolution/3.46.4 (Linux)"));
+
+    // Through the worker: the account's own User-Agent, from the start.
+    server.data.lock().unwrap().agents.clear();
+    let dir = std::env::temp_dir().join(format!("quatrelle-ews-agent-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let mut pool = crate::worker::Pool::new(Store::open(&dir).unwrap(), Arc::new(crate::worker::MemoryCredentials::default()));
+    let account = AccountConfig {
+        id: "a1".into(),
+        email: "riley@contoso.example".into(),
+        username: user.clone(),
+        ews: Some(server.url.clone()),
+        user_agent: Some(EVOLUTION.into()),
+        ..Default::default()
+    };
+    pool.submit(Job::Start { account, password: Some(Secret(PASSWORD.into())) });
+    until(&pool, "listed", |e| matches!(e, Event::Folders { .. }));
+    assert!(server.data.lock().unwrap().agents.iter().all(|a| a == EVOLUTION));
+    let _ = std::fs::remove_dir_all(&dir);
+}

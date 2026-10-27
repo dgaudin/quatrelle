@@ -75,6 +75,11 @@ pub(super) fn autodiscover_answer(xml: &str) -> (Option<String>, Option<String>)
 /// Find a mailbox's EWS address with Autodiscover, signed in as the account. `base`: where to
 /// ask instead of the usual addresses (tests).
 pub fn autodiscover(email: &str, user: &str, password: &str, base: Option<&str>) -> Result<String> {
+    autodiscover_as(email, user, password, base, None)
+}
+
+/// [`autodiscover`], naming itself `agent` to the servers asked.
+pub fn autodiscover_as(email: &str, user: &str, password: &str, base: Option<&str>, agent: Option<&str>) -> Result<String> {
     let mut address = email.to_string();
     for _ in 0..3 {
         let body = format!(
@@ -87,7 +92,7 @@ pub fn autodiscover(email: &str, user: &str, password: &str, base: Option<&str>)
         let mut last = NetError::No("Autodiscover found no Exchange server for this address".into());
         for url in urls {
             let c = match Client::new(&url, user, password, email) {
-                Ok(c) => c,
+                Ok(c) => c.with_agent(agent),
                 Err(e) => {
                     last = e;
                     continue;

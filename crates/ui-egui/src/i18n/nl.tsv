@@ -1640,3 +1640,7 @@ month	May	mei
 	Rules as a file	Regels als bestand
 	Save your rules in a file, to keep them or to use them on another computer, and add the ones from a file saved by Quatrelle. A rule for an account this computer doesn't have comes in turned off.	Sla uw regels op in een bestand, om ze te bewaren of op een andere computer te gebruiken, en voeg die uit een door Quatrelle opgeslagen bestand toe. Een regel voor een account dat deze computer niet heeft, komt uitgeschakeld binnen.
 	Write an account's mail, with its folders, to an Outlook data file (.pst) that Outlook and other mail apps can open. Mail that was never downloaded is left out.	Schrijf de mail van een account, met de mappen, naar een Outlook-gegevensbestand (.pst) dat Outlook en andere mailapps kunnen openen. Mail die nooit is gedownload, blijft buiten.
+	Left empty: Quatrelle's own	Leeg: die van Quatrelle zelf
+	Only if your organisation's server refuses Quatrelle: the name of a mail program it lets in.	Alleen als de server van je organisatie Quatrelle weigert: de naam van een mailprogramma dat hij wel toelaat.
+	Only letters, digits, spaces and punctuation, up to 256 characters.	Alleen letters, cijfers, spaties en leestekens, hooguit 256 tekens.
+	User-Agent (optional)	User-Agent (optioneel)

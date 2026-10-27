@@ -5,7 +5,12 @@ use super::*;
 impl Client {
     /// Connect and check the password (asks for the Inbox).
     pub fn connect(url: &str, user: &str, password: &str, email: &str) -> Result<Client> {
-        let c = Client::new(url, user, password, email)?;
+        Client::connect_as(url, user, password, email, None)
+    }
+
+    /// [`Client::connect`], naming itself `agent` to the server.
+    pub fn connect_as(url: &str, user: &str, password: &str, email: &str, agent: Option<&str>) -> Result<Client> {
+        let c = Client::new(url, user, password, email)?.with_agent(agent);
         c.call("<m:GetFolder><m:FolderShape><t:BaseShape>IdOnly</t:BaseShape></m:FolderShape><m:FolderIds><t:DistinguishedFolderId Id=\"inbox\"/></m:FolderIds></m:GetFolder>")?;
         Ok(c)
     }
@@ -100,6 +105,9 @@ impl Client {
     /// [`Client::post`] with headers of its own (where a subscription is to live).
     pub(super) fn post_with(&self, body: Vec<u8>, extra: &[(&str, &str)]) -> Result<Response> {
         let mut base = Request::post(&self.url, "text/xml; charset=utf-8", body, MAX_ANSWER).header("Accept", "text/xml");
+        if let Some(agent) = &self.user_agent {
+            base = base.header("User-Agent", agent);
+        }
         for (k, v) in extra {
             base = base.header(k, v);
         }

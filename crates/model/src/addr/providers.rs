@@ -128,6 +128,7 @@ impl AccountConfig {
             oauth_user: None,
             shared_mailboxes: Vec::new(),
             send_from: Vec::new(),
+            user_agent: None,
             online_only: false,
             shared_online: false,
             public_favorites_kept: false,
