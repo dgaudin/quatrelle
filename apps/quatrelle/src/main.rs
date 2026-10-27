@@ -94,6 +94,8 @@ struct App {
     looked: std::time::Instant,
     /// `QUATRELLE_SCREENSHOT`: the window saved as a picture, then closed.
     screenshot: Option<screenshot::Shot>,
+    /// Frames that don't wait for the screen kept to 60 a second (`graphics::Pacing`).
+    pacing: graphics::Pacing,
 }
 
 /// How often changed settings are written while Quatrelle runs.
@@ -128,6 +130,7 @@ impl eframe::App for App {
     // Every frame, the window minimized or hidden too (when eframe runs no `ui`): started again,
     // this window comes forward instead of a second one, and opens what that launch handed over.
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        self.pacing.frame();
         if let Some(handed) = self.instance.as_ref().and_then(single_instance::Server::take) {
             single_instance::show(ctx, self.native_wayland);
             for h in &handed {
@@ -494,6 +497,7 @@ fn run(
     // The guard stays here, outside the closure, so the handlers live as long as the loop.
     #[cfg(target_os = "macos")]
     let (_finder_guard, finder) = apple_events::listen();
+    let pacing = graphics::Pacing::new(options.wgpu_options.surface.present_mode);
     eframe::run_native(
         "Quatrelle",
         options,
@@ -664,6 +668,7 @@ fn run(
                 saved: Vec::new(),
                 looked: std::time::Instant::now(),
                 screenshot: screenshot::Shot::wanted(),
+                pacing,
             }))
         }),
     )

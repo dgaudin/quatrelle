@@ -23,7 +23,9 @@
 //! - on Linux and the BSDs the window is drawn on the GPU the desktop runs on, not always the
 //!   discrete one, which on a PRIME laptop showed stale or garbled frames;
 //! - once the window has drawn its first frames, a wgpu error is logged rather than ending the app
-//!   ([`log_errors`]); before that it still ends the start, which then says why.
+//!   ([`log_errors`]); before that it still ends the start, which then says why;
+//! - on Linux and the BSDs a frame goes to the screen without waiting for it ([`present_mode`]),
+//!   and [`Pacing`] keeps the window to 60 frames a second instead.
 
 use eframe::wgpu::{self, DeviceType, PowerPreference};
 
@@ -81,6 +83,55 @@ pub fn configure(options: &mut eframe::NativeOptions) {
         windows_setup(options, wgpu::Backends::from_env(), wgpu::Dx12Compiler::from_env(), software_only());
     }
     common_setup(options, cfg!(target_os = "macos") && cfg!(target_arch = "x86_64"), cfg!(all(unix, not(target_os = "macos"))));
+    options.wgpu_options.surface.present_mode = present_mode(cfg!(all(unix, not(target_os = "macos"))), vsync_asked());
+}
+
+/// How a frame goes to the screen. On Linux and the BSDs without waiting for it to be shown
+/// (`AutoNoVsync`: the driver's mailbox, else at once): with vsync, a window the compositor
+/// doesn't show (a message's window behind the main one, or minimized) made each frame wait up to
+/// wgpu's 1 s for it, XWayland showing such a window once a second, and every window is drawn in
+/// the main window's frame (egui's immediate viewports): the owner's main window answered about
+/// once a second while a message was open in its own window (27/10, GNOME 49 and Mesa 25.2;
+/// OpenGL waited the same way). [`Pacing`] keeps the frames to 60 a second instead.
+/// `QUATRELLE_VSYNC=1` waits again; elsewhere, vsync as before.
+pub fn present_mode(free_unix: bool, vsync_asked: bool) -> wgpu::PresentMode {
+    if free_unix && !vsync_asked { wgpu::PresentMode::AutoNoVsync } else { wgpu::PresentMode::AutoVsync }
+}
+
+/// Whether `QUATRELLE_VSYNC` asks for frames to wait for the screen.
+fn vsync_asked() -> bool {
+    std::env::var("QUATRELLE_VSYNC").is_ok_and(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes"))
+}
+
+/// The shortest time between two frames when they don't wait for the screen: 60 a second.
+pub const FRAME_EVERY: std::time::Duration = std::time::Duration::from_micros(16_667);
+
+/// Keeps frames that don't wait for the screen ([`present_mode`]) to 60 a second: something
+/// animating (a spinner while mail comes in) would otherwise be drawn as fast as the GPU goes.
+pub struct Pacing {
+    /// When the last frame started; `None` while frames wait for the screen (nothing to keep).
+    last: Option<std::time::Instant>,
+}
+
+impl Pacing {
+    /// Pacing for frames presented in `mode` ([`present_mode`]).
+    pub fn new(mode: wgpu::PresentMode) -> Pacing {
+        Pacing { last: (mode == wgpu::PresentMode::AutoNoVsync).then(std::time::Instant::now) }
+    }
+
+    /// Called as a frame starts: waits for what's left of [`FRAME_EVERY`] since the last one.
+    pub fn frame(&mut self) {
+        let Some(last) = self.last else { return };
+        if let Some(rest) = wait_for(last.elapsed()) {
+            std::thread::sleep(rest);
+        }
+        self.last = Some(std::time::Instant::now());
+    }
+}
+
+/// How long a frame waits when `since` went by since the last one started.
+pub fn wait_for(since: std::time::Duration) -> Option<std::time::Duration> {
+    FRAME_EVERY.checked_sub(since).filter(|d| !d.is_zero())
 }
 
 /// The limits to ask the device for: egui-wgpu's `required`, no more than the adapter has
@@ -181,6 +232,18 @@ fn windows_setup(options: &mut eframe::NativeOptions, backends: Option<wgpu::Bac
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// On Linux and the BSDs frames don't wait for the screen (unless asked), and are kept to 60
+    /// a second instead; elsewhere they wait, as before.
+    #[test]
+    fn frames_go_without_waiting_on_linux_kept_to_sixty() {
+        assert_eq!(present_mode(true, false), wgpu::PresentMode::AutoNoVsync);
+        assert_eq!(present_mode(true, true), wgpu::PresentMode::AutoVsync, "QUATRELLE_VSYNC");
+        assert_eq!(present_mode(false, false), wgpu::PresentMode::AutoVsync);
+        assert_eq!(wait_for(std::time::Duration::from_millis(4)), Some(FRAME_EVERY - std::time::Duration::from_millis(4)));
+        assert_eq!(wait_for(std::time::Duration::from_millis(40)), None, "a slow frame isn't held back");
+        assert!(Pacing::new(wgpu::PresentMode::AutoVsync).last.is_none(), "waiting for the screen paces already");
+    }
 
     fn found(list: &[(&str, DeviceType)]) -> Vec<Candidate> {
         list.iter().map(|(n, d)| Candidate { name: (*n).to_string(), device: *d, draws: true }).collect()
