@@ -592,6 +592,7 @@ mod accounts;
 mod organize;
 mod pim;
 mod reading;
+mod rtl;
 mod scheduling;
 mod updates;
 mod windows;
