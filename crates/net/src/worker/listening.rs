@@ -46,7 +46,7 @@ pub(super) struct Listening {
     delay: Duration,
     /// The server can't tell of changes: the folders are looked at instead.
     unable: bool,
-    /// The account's own calendar and contacts, by id: a change in them is read by their sync.
+    /// The account's own calendar, contacts and tasks, by id: a change in them is read by their sync.
     pim: Vec<String>,
     /// Their sync is due then (a change was told), and when it last ran.
     pim_due: Option<Instant>,
