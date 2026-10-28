@@ -23,12 +23,16 @@ use crate::{Action, Dialog};
 
 mod layout;
 mod links;
+mod pictures;
 mod ribbon;
 mod signature;
 mod toolbar;
 use layout::*;
 pub(crate) use links::link_dialog;
 use links::*;
+#[cfg(test)]
+pub(crate) use pictures::FIT_WIDTH;
+pub(crate) use pictures::{own_size, own_size_of, placement};
 use ribbon::*;
 pub(crate) use ribbon::{ComposeTab, RibbonInput, compose_ribbon};
 pub(crate) use signature::draw as draw_signature;
@@ -94,6 +98,10 @@ pub(crate) struct Editor {
     pictures: HashMap<String, Option<egui::TextureHandle>>,
     /// Each picture's own size in points (read from its header once), for its room in the text.
     picture_sizes: HashMap<String, Vec2>,
+    /// Where each picture was drawn this frame (its character, its place, its `cid:`), and the
+    /// one whose corner handle is being dragged.
+    placed: Vec<(usize, Rect, String)>,
+    resizing: Option<usize>,
     /// A signature written in HTML: its size as drawn, and where it goes.
     signature: signature::Placed,
     /// Give the keyboard back to the text (after a ribbon button took the click), with this
@@ -130,6 +138,8 @@ impl Editor {
             menu_open: false,
             pictures: HashMap::new(),
             picture_sizes: HashMap::new(),
+            placed: Vec::new(),
+            resizing: None,
             signature: signature::Placed::default(),
             refocus: None,
             menu_word: None,
@@ -499,7 +509,7 @@ pub(crate) fn body(ui: &mut Ui, t: &Tokens, ed: &mut Editor, c: &mut Compose, st
     let plain = c.plain;
     let tokens = *t;
     let check = check_for(c);
-    let sizes = signature::with_room(picture_sizes(ed, c), &ed.signature);
+    let sizes = signature::with_room(pictures::sizes_as_set(picture_sizes(ed, c), c), &ed.signature);
     let mut layouter = |ui: &Ui, buf: &dyn egui::TextBuffer, wrap: f32| layout(ui, buf.as_str(), &styles, plain, &tokens, wrap, &check, &sizes);
     let height = ui.available_height().max(220.0);
     // A right-click inside the selection keeps it (egui's text box moves the cursor on any
@@ -571,6 +581,7 @@ pub(crate) fn body(ui: &mut Ui, t: &Tokens, ed: &mut Editor, c: &mut Compose, st
     }
     if !c.plain {
         decorate(ui, t, ed, c, &out.galley, out.galley_pos);
+        pictures::interact(ui, t, ed, c, out.galley.job.wrap.max_width);
     }
     signature::place(ui, ed, c, &out.galley, out.galley_pos);
     if !out.response.has_focus() && !ed.sel.is_empty() {
@@ -823,28 +834,8 @@ fn decorate(ui: &mut Ui, t: &Tokens, ed: &mut Editor, c: &Compose, g: &Galley, o
                 continue;
             }
             let Some(cid) = c.styles.style(i + k).picture else { continue };
-            // Its own size up to the text's width, from where its character is.
-            let a = at(i + k);
-            let shown = layout::shown_size(ed.picture_sizes.get(&cid).copied(), g.job.wrap.max_width);
-            let room = Rect::from_min_size(egui::pos2(a.min.x + 2.0, a.max.y - shown.y), shown - vec2(4.0, 0.0));
-            let tex = ed.pictures.entry(cid.clone()).or_insert_with(|| {
-                c.inline
-                    .iter()
-                    .find(|p| p.cid == cid)
-                    .and_then(|p| crate::reading::decode(ui.ctx(), &format!("compose-{cid}"), &p.data, PICTURE_DECODED))
-            });
-            match tex {
-                Some(tex) => {
-                    let size = tex.size_vec2();
-                    let scale = (room.width() / size.x).min(room.height() / size.y).min(1.0);
-                    let r = Rect::from_min_size(room.min, size * scale);
-                    painter.image(tex.id(), r, Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)), Color32::WHITE);
-                }
-                None => {
-                    painter.rect_stroke(room, 4.0, Stroke::new(1.0, t.border), egui::StrokeKind::Inside);
-                    icons::paint(&painter, icons::centered(room, 22.0), Icon::Image, t.dim);
-                }
-            }
+            // At its size up to the text's width, from where its character is.
+            pictures::draw(ui, t, ed, c, i + k, &cid, at(i + k), g.job.wrap.max_width);
         }
         i += line.chars().count() + 1;
     }

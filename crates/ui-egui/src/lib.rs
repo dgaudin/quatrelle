@@ -763,8 +763,8 @@ impl MailApp {
             if let Some(account) = purpose.strip_prefix("certificate:") {
                 self.ui.dialog = Some(Dialog::Certificate { account: account.to_string(), path: name, data: Some(data), password: String::new() });
             } else if purpose == "picture" {
-                let r = self.session.run("compose.insertPicture", &json!({"name": name, "data": data, "at": self.picture_at()}));
-                self.place_picture(r);
+                let size = rich_edit::own_size(&data);
+                self.insert_picture(json!({"name": name, "data": data}), size);
             } else {
                 self.run("compose.attach", json!({"name": name, "data": data}));
             }

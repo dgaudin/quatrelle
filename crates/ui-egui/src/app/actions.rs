@@ -475,14 +475,14 @@ impl MailApp {
                     if let Some(Dialog::Signature(f)) = self.ui.dialog.as_mut() {
                         let at = f.compose.body.chars().count();
                         f.compose.inline.push(quatrelle_engine::mime::InlinePicture { cid: cid.clone(), name, mime: mime.to_string(), data });
-                        quatrelle_engine::cmd::insert_picture_at(&mut f.compose, at, &cid);
+                        quatrelle_engine::cmd::insert_picture_at(&mut f.compose, at, &cid, None);
                     }
                 }
             }
             Action::InsertPicture => {
                 for p in self.services.pick_pictures() {
-                    let r = self.session.run("compose.insertPicture", &json!({"path": p.to_string_lossy(), "at": self.picture_at()}));
-                    self.place_picture(r);
+                    let size = rich_edit::own_size_of(&p);
+                    self.insert_picture(json!({"path": p.to_string_lossy()}), size);
                 }
             }
             Action::PastePicture => {
@@ -490,13 +490,13 @@ impl MailApp {
                 // as text.
                 let text = clipboard_html().is_some_and(|h| !quatrelle_engine::mime::pasted_html(&h).0.trim().is_empty());
                 if !text && let Some(png) = self.services.clipboard_picture() {
-                    let r = self.session.run("compose.insertPicture", &json!({"name": "pasted.png", "data": png, "at": self.picture_at()}));
-                    self.place_picture(r);
+                    let size = rich_edit::own_size(&png);
+                    self.insert_picture(json!({"name": "pasted.png", "data": png}), size);
                 }
             }
             Action::PasteImage(png) => {
-                let r = self.session.run("compose.insertPicture", &json!({"name": "pasted.png", "data": png, "at": self.picture_at()}));
-                self.place_picture(r);
+                let size = rich_edit::own_size(&png);
+                self.insert_picture(json!({"name": "pasted.png", "data": png}), size);
             }
             // Read at the start of the next frame, which has the context the fonts belong to.
             Action::LoadTypeface(name) => self.ui.load_typefaces.push(name),
@@ -568,12 +568,31 @@ impl MailApp {
         self.ui.editor.as_ref().filter(|e| self.session.compose.as_ref().is_some_and(|c| c.id == e.id)).map_or(n, |e| e.sel.start.min(n))
     }
 
+    /// A picture into the message being written, at the cursor (`params`: its `path`, or its
+    /// `name` and `data`; `size`: its own, from its header): one wider than a page at a page's
+    /// width, and a wide one on a line of its own, as Outlook puts a screenshot in (from
+    /// upstream 865a712); the cursor then goes after it.
+    pub(crate) fn insert_picture(&mut self, mut params: serde_json::Value, size: Option<(u32, u32)>) {
+        let (width, line) = rich_edit::placement(size);
+        params["at"] = json!(self.picture_at());
+        if let Some(w) = width {
+            params["width"] = json!(w);
+        }
+        if line {
+            params["line"] = json!(true);
+        }
+        let r = self.session.run("compose.insertPicture", &params);
+        self.place_picture(r);
+    }
+
     pub(crate) fn place_picture(&mut self, r: quatrelle_engine::CmdResult) {
         match r {
-            // In place: the cursor goes after it.
-            Ok(_) => {
+            // In place: the cursor goes after it (after the line break that follows a picture
+            // on a line of its own, where the command says it ends).
+            Ok(v) => {
                 if let Some(e) = self.ui.editor.as_mut() {
-                    e.sel = e.sel.start + 1..e.sel.start + 1;
+                    let end = v["end"].as_u64().and_then(|n| usize::try_from(n).ok()).unwrap_or(e.sel.start + 1);
+                    e.sel = end..end;
                 }
             }
             Err(e) => self.session.notice(e.to_string(), true),

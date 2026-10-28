@@ -69,9 +69,10 @@ pub(super) fn shown_size(size: Option<Vec2>, wrap: f32) -> Vec2 {
 /// in the map).
 pub(super) fn rooms(ui: &Ui, sizes: &HashMap<String, Vec2>, wrap: f32) -> HashMap<String, Room> {
     let advance = ui.fonts_mut(|f| f.layout_no_wrap(PICTURE.to_string(), theme::regular(PICTURE_FONT), Color32::TRANSPARENT)).size().x;
+    // The picture and a margin of 2 points each side of it.
     let room = |size: Option<Vec2>| {
         let s = shown_size(size, wrap);
-        Room { height: s.y, gap: (s.x - advance).max(0.0) }
+        Room { height: s.y, gap: (s.x + 4.0 - advance).max(0.0) }
     };
     let mut out: HashMap<String, Room> = sizes
         .iter()
