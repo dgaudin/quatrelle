@@ -120,6 +120,34 @@ fn the_calendar_is_read_as_the_server_tells_of_its_changes() {
     let _ = std::fs::remove_dir_all(store.root());
 }
 
+/// A task made in Outlook is read as the server tells of it, as a meeting is: it showed only at
+/// the next full sync, a quarter of an hour on (27/10).
+#[test]
+fn a_task_is_read_as_the_server_tells_of_it() {
+    let mut d = Data { streaming: true, ..Default::default() };
+    d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
+    d.folder("Contacts", None, Some("contacts"), "IPF.Contact");
+    let tasks = d.folder("Tasks", None, Some("tasks"), "IPF.Task");
+    let server = serve(d);
+    let store = crate::fake::tests_store("ews-listening-tasks");
+    let pool = start(&server, &store);
+    eventually("listening", || count(&server, "GetStreamingEvents") >= 2);
+    until(&pool, "the full sync's own read of the tasks", |e| matches!(e, Event::DavSynced { .. }));
+    let it = parse(
+        "<t:Task><t:ItemClass>IPM.Task</t:ItemClass><t:Subject>Rappeler le client</t:Subject><t:Status>NotStarted</t:Status>\
+         <t:PercentComplete>0</t:PercentComplete></t:Task>",
+    );
+    server.data.lock().unwrap().pim.push(("T9".into(), tasks, it.kids[0].clone()));
+    until(
+        &pool,
+        "the new task",
+        |e| matches!(e, Event::DavSynced { sync, .. } if sync.tasks.as_ref().is_some_and(|t| t.iter().any(|x| x.task.subject == "Rappeler le client"))),
+    );
+    drop(pool);
+    let _ = std::fs::remove_dir_all(store.root());
+}
+
 /// New mail shows as soon as its header is in, as Outlook shows it: the list is told of before
 /// the message is downloaded whole (a megabyte or two took as long again).
 #[test]
