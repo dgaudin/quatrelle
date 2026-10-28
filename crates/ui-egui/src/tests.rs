@@ -598,6 +598,7 @@ impl crate::Services for Ticking {
 mod access;
 mod accounts;
 mod organize;
+mod pictures;
 mod pim;
 mod reading;
 mod rtl;
