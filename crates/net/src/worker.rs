@@ -652,7 +652,10 @@ fn log_event(e: &Event) {
         Event::Notice { account, message } => log::info!("{account}: {message}"),
         Event::DavSynced { account, sync } => {
             let names: Vec<&str> = sync.calendars.iter().flatten().map(|c| c.name.as_str()).collect();
-            log::info!("{account}: calendars {names:?}, {} events", sync.events.len());
+            match (&sync.calendars, &sync.tasks) {
+                (None, Some(tasks)) => log::info!("{account}: {} tasks", tasks.len()),
+                _ => log::info!("{account}: calendars {names:?}, {} events", sync.events.len()),
+            }
             for err in &sync.errors {
                 log::warn!("{account}: {err}");
             }

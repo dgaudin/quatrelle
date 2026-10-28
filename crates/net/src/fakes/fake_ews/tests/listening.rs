@@ -121,7 +121,9 @@ fn the_calendar_is_read_as_the_server_tells_of_its_changes() {
 }
 
 /// A task made in Outlook is read as the server tells of it, as a meeting is: it showed only at
-/// the next full sync, a quarter of an hour on (27/10).
+/// the next full sync, a quarter of an hour on (27/10). The Tasks folder alone, at once: the
+/// calendars' and contacts' sync runs once a minute at most, and a task made just after one
+/// waited for the next (28/10).
 #[test]
 fn a_task_is_read_as_the_server_tells_of_it() {
     let mut d = Data { streaming: true, ..Default::default() };
@@ -139,11 +141,10 @@ fn a_task_is_read_as_the_server_tells_of_it() {
          <t:PercentComplete>0</t:PercentComplete></t:Task>",
     );
     server.data.lock().unwrap().pim.push(("T9".into(), tasks, it.kids[0].clone()));
-    until(
-        &pool,
-        "the new task",
-        |e| matches!(e, Event::DavSynced { sync, .. } if sync.tasks.as_ref().is_some_and(|t| t.iter().any(|x| x.task.subject == "Rappeler le client"))),
-    );
+    until(&pool, "the new task, the calendar not read again", |e| {
+        matches!(e, Event::DavSynced { sync, .. }
+                if sync.calendars.is_none() && sync.tasks.as_ref().is_some_and(|t| t.iter().any(|x| x.task.subject == "Rappeler le client")))
+    });
     drop(pool);
     let _ = std::fs::remove_dir_all(store.root());
 }

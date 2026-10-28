@@ -646,6 +646,16 @@ impl Worker {
         }
     }
 
+    /// The Tasks folder alone (on-premises Exchange), read as the server tells of a change in it:
+    /// a tenth of a second, where the calendars' and contacts' sync takes seconds.
+    pub(super) fn sync_tasks(&mut self) {
+        self.tasks_synced();
+        let Some(Conn::Ews(c)) = &self.conn else { return };
+        let pim = self.load_pim();
+        let sync = crate::ews_pim::sync_tasks(c, &pim, now());
+        self.sink.emit(Event::DavSynced { account: self.id(), sync: Box::new(sync) });
+    }
+
     /// Report the space used on the server (when it publishes a quota).
     pub(super) fn report_quota(&mut self) {
         let q = match self.conn.as_mut() {

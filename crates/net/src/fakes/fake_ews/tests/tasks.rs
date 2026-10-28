@@ -86,4 +86,12 @@ fn tasks_sync_with_the_tasks_folder() {
     let sync = crate::ews_pim::sync(&c, &refused, 1_792_000_000).unwrap();
     assert_eq!(sync.deleted, ["task:B1"]);
     assert!(sync.errors.iter().any(|e| e.starts_with("not deleted on the server")), "{:?}", sync.errors);
+
+    // Read alone, as the server tells of a change in the Tasks folder: the folder read again,
+    // nothing else; a contact deleted here waits for the calendars' and contacts' sync.
+    let contact = Pim { deleted: vec![quatrelle_model::pim::Tombstone { href: "contact:C1".into(), ..Default::default() }], ..Default::default() };
+    let alone = crate::ews_pim::sync_tasks(&c, &contact, 1_792_000_000);
+    assert!(alone.errors.is_empty(), "{:?}", alone.errors);
+    assert!(alone.calendars.is_none() && alone.books.is_none() && alone.notes.is_none() && alone.deleted.is_empty());
+    assert!(alone.tasks.unwrap().iter().any(|s| s.href == made), "the Tasks folder read");
 }

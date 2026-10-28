@@ -97,13 +97,14 @@ impl Client {
         Ok(Listener { mailbox: mailbox.map(str::to_string), subscription, cookie, body: None, opened: now, last: now })
     }
 
-    /// The ids of the account's own calendar, contacts and tasks: a change told in them is for
-    /// the calendars' and contacts' sync (which reads the tasks too), not a mail folder's. Those the server won't name are left
-    /// out (their changes wait for the next full sync).
-    pub fn pim_folders(&self) -> Vec<String> {
+    /// The ids of the account's own calendar, contacts and tasks, each with its distinguished
+    /// name: a change told in them is for their sync, not a mail folder's. Those the server won't
+    /// name are left out (their changes wait for the next full sync).
+    pub fn pim_folders(&self) -> Vec<(&'static str, String)> {
         // Tasks too: one made in Outlook showed here only at the next full sync, a quarter of an
         // hour on (27/10).
-        let ids: String = ["calendar", "contacts", "tasks"].iter().map(|d| format!("<t:DistinguishedFolderId Id=\"{d}\"/>")).collect();
+        const NAMES: [&str; 3] = ["calendar", "contacts", "tasks"];
+        let ids: String = NAMES.iter().map(|d| format!("<t:DistinguishedFolderId Id=\"{d}\"/>")).collect();
         let doc = match self.call(&format!(
             "<m:GetFolder><m:FolderShape><t:BaseShape>IdOnly</t:BaseShape></m:FolderShape><m:FolderIds>{ids}</m:FolderIds></m:GetFolder>"
         )) {
@@ -113,10 +114,12 @@ impl Client {
                 return Vec::new();
             }
         };
+        // Answered in the order asked.
         messages(&doc)
             .iter()
-            .filter(|m| m.attr("ResponseClass") != Some("Error"))
-            .filter_map(|m| m.find("FolderId").and_then(|f| f.attr("Id")).map(str::to_string))
+            .zip(NAMES)
+            .filter(|(m, _)| m.attr("ResponseClass") != Some("Error"))
+            .filter_map(|(m, name)| m.find("FolderId").and_then(|f| f.attr("Id")).map(|id| (name, id.to_string())))
             .collect()
     }
 
