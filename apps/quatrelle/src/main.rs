@@ -543,6 +543,11 @@ fn run(
                         let ctx = cc.egui_ctx.clone();
                         move || ctx.request_repaint()
                     })),
+                    // The envelope clicked wakes the window to come forward on the Inbox.
+                    envelope: desktop::tray::Envelope::new(Arc::new({
+                        let ctx = cc.egui_ctx.clone();
+                        move || ctx.request_repaint()
+                    })),
                     ..Default::default()
                 }),
             );

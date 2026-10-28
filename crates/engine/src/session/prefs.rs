@@ -52,6 +52,9 @@ pub struct Prefs {
     pub confirm_permanent_delete: bool,
     /// Desktop notifications for new mail in an Inbox.
     pub notify: bool,
+    /// An envelope in the notification area while mail that arrived in an Inbox is unread, as
+    /// Outlook shows one.
+    pub envelope: bool,
     /// The Reminders window opens in a window of its own, over every other, when a reminder
     /// comes (the main window minimized or behind others too), as Outlook's does.
     pub reminders_on_top: bool,
@@ -181,6 +184,7 @@ impl Default for Prefs {
             confirm_permanent_delete: true,
             favorites: None,
             notify: true,
+            envelope: true,
             reminders_on_top: true,
             categories: quatrelle_model::organize::default_categories(),
             focused_inbox: false,
