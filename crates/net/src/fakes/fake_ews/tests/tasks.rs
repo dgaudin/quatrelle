@@ -43,10 +43,24 @@ fn tasks_sync_with_the_tasks_folder() {
     assert_eq!(sync.pushed_tasks[0].href, "task:T1", "updated in place, not made again");
     let now = sync.tasks.unwrap().into_iter().find(|s| s.href == "task:T1").unwrap();
     assert_eq!((now.task.status, now.task.percent), (TaskStatus::Completed, 100));
+    let on_server = |id: &str| server.data.lock().unwrap().pim.iter().find(|(i, _, _)| i == id).map(|(_, _, el)| el.clone()).unwrap();
     {
         let data = server.data.lock().unwrap();
         assert_eq!(data.pim.iter().filter(|(_, f, _)| *f == tasks).count(), 2, "nothing made twice");
     }
+    assert_eq!(on_server("T1").text_of("IsComplete"), Some("true"), "ticked in Outlook");
+
+    // Un-ticked here (the owner's slip): un-ticked in Outlook too, not only its status put back,
+    // which leaves Outlook's flag, and the task struck through there.
+    let mut undone = now.clone();
+    undone.task.set_complete(false, day(2026, 10, 27));
+    undone.dirty = true;
+    let sync = crate::ews_pim::sync(&c, &Pim { tasks: vec![undone], ..Default::default() }, 1_792_000_000).unwrap();
+    assert!(sync.errors.is_empty(), "{:?}", sync.errors);
+    let back = sync.tasks.unwrap().into_iter().find(|s| s.href == "task:T1").unwrap();
+    assert_eq!((back.task.status, back.task.percent, back.task.completed), (TaskStatus::NotStarted, 0, None));
+    let t1 = on_server("T1");
+    assert_eq!((t1.text_of("IsComplete"), t1.text_of("CompleteDate"), t1.text_of("Status")), (Some("false"), None, Some("NotStarted")));
 
     // Deleted in Outlook meanwhile, then changed here: made again rather than lost.
     server.data.lock().unwrap().pim.retain(|(id, _, _)| id != "T1");

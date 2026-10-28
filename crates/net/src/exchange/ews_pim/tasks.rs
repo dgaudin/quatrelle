@@ -10,6 +10,19 @@ use quatrelle_model::pim::{StoredTask, Task, TaskStatus};
 
 use super::*;
 
+/// Outlook's "complete" flag (PidLidTaskComplete, [MS-OXOTASK] 2.2.2.2.20), what it ticks and
+/// strikes a task through by. Exchange sets it with a Completed status but leaves it set when the
+/// status goes back, so it's written both ways.
+const TASK_COMPLETE: &str = "<t:ExtendedFieldURI DistinguishedPropertySetId=\"Task\" PropertyId=\"33052\" PropertyType=\"Boolean\"/>";
+
+/// The day a task was done (PidLidTaskDateCompleted, 2.2.2.2.9): taken off a task no longer done.
+const DATE_COMPLETED: &str = "<t:ExtendedFieldURI DistinguishedPropertySetId=\"Task\" PropertyId=\"33039\" PropertyType=\"SystemTime\"/>";
+
+/// The element that names a field in an update: EWS's own (`task:Status`), or a MAPI property.
+fn path(uri: &str) -> String {
+    if uri.starts_with('<') { uri.to_string() } else { format!("<t:FieldURI FieldURI=\"{uri}\"/>") }
+}
+
 /// The day (since 1970) a task's date is.
 fn day_of(text: &str) -> Option<i64> {
     quatrelle_jmap::utc_date(text.trim()).map(|t| (t + 43_200).div_euclid(86_400))
@@ -23,7 +36,12 @@ pub fn task_of(it: &El) -> Option<StoredTask> {
     }
     let id = it.child("ItemId")?;
     let href = format!("task:{}", id.attr("Id")?);
-    let status = it.text_of("Status").and_then(TaskStatus::named).unwrap_or_default();
+    // Done as Outlook shows it, by its "complete" flag (EWS's IsComplete), even with the status
+    // put back without it (as Quatrelle did before writing the flag too).
+    let status = match it.text_of("Status").and_then(TaskStatus::named).unwrap_or_default() {
+        _ if it.text_of("IsComplete").map(str::trim) == Some("true") => TaskStatus::Completed,
+        status => status,
+    };
     let percent = it.text_of("PercentComplete").and_then(|p| p.trim().parse::<f64>().ok()).map_or(0, |p| p.clamp(0.0, 100.0).round() as u8);
     let reminder = (it.text_of("ReminderIsSet") == Some("true")).then(|| it.text_of("ReminderDueBy").and_then(quatrelle_jmap::utc_date)).flatten();
     let categories = it
@@ -78,6 +96,11 @@ fn task_fields(t: &Task) -> (Vec<(&'static str, String)>, Vec<&'static str>) {
         f.push(("item:ReminderDueBy", format!("<t:ReminderDueBy>{}</t:ReminderDueBy>", utc(at))));
     }
     f.push(("item:ReminderIsSet", format!("<t:ReminderIsSet>{}</t:ReminderIsSet>", t.reminder.is_some())));
+    let done = t.status == TaskStatus::Completed;
+    f.push((TASK_COMPLETE, format!("<t:ExtendedProperty>{TASK_COMPLETE}<t:Value>{done}</t:Value></t:ExtendedProperty>")));
+    if !done {
+        absent.push(DATE_COMPLETED);
+    }
     match t.due {
         Some(d) => f.push(("task:DueDate", format!("<t:DueDate>{}</t:DueDate>", utc(d.saturating_mul(86_400))))),
         None => absent.push("task:DueDate"),
@@ -105,10 +128,9 @@ fn create_task(c: &Client, t: &Task) -> Result<(String, String)> {
 /// one is to be told).
 fn update_task(c: &Client, id: &str, t: &Task) -> Result<(String, String)> {
     let (fields, absent) = task_fields(t);
-    let mut updates: String =
-        fields.iter().map(|(uri, x)| format!("<t:SetItemField><t:FieldURI FieldURI=\"{uri}\"/><t:Task>{x}</t:Task></t:SetItemField>")).collect();
+    let mut updates: String = fields.iter().map(|(uri, x)| format!("<t:SetItemField>{}<t:Task>{x}</t:Task></t:SetItemField>", path(uri))).collect();
     for uri in absent {
-        updates.push_str(&format!("<t:DeleteItemField><t:FieldURI FieldURI=\"{uri}\"/></t:DeleteItemField>"));
+        updates.push_str(&format!("<t:DeleteItemField>{}</t:DeleteItemField>", path(uri)));
     }
     c.call_one(&format!(
         "<m:UpdateItem ConflictResolution=\"AlwaysOverwrite\"><m:ItemChanges><t:ItemChange><t:ItemId Id=\"{}\"/>\
@@ -175,6 +197,10 @@ mod tests {
         );
         let done = task_of(&utc.kids[0]).unwrap().task;
         assert_eq!((done.due, done.percent, done.reminder), (Some(day(2026, 10, 27)), 100, None));
+        // Ticked in Outlook, whatever its status says: done, as Outlook shows it.
+        let ticked = parse("<t:Task><t:ItemId Id=\"T4\"/><t:IsComplete>true</t:IsComplete><t:Status>NotStarted</t:Status></t:Task>");
+        let ticked = task_of(&ticked.kids[0]).unwrap().task;
+        assert_eq!((ticked.status, ticked.percent), (TaskStatus::Completed, 100));
         let request = parse("<t:Task><t:ItemId Id=\"T3\"/><t:ItemClass>IPM.TaskRequest</t:ItemClass></t:Task>");
         assert!(task_of(&request.kids[0]).is_none());
         assert!(task_of(&parse("<t:Message><t:ItemId Id=\"M\"/></t:Message>").kids[0]).is_none());
@@ -194,6 +220,7 @@ mod tests {
                 "item:Body",
                 "item:Importance",
                 "item:ReminderIsSet",
+                TASK_COMPLETE,
                 "task:DueDate",
                 "task:PercentComplete",
                 "task:Status"
@@ -201,6 +228,11 @@ mod tests {
         );
         assert_eq!(absent, ["item:Categories", "task:StartDate"]);
         assert!(fields[0].1.contains("A &amp; B"));
-        assert_eq!(fields[5].1, "<t:DueDate>2026-10-27T00:00:00Z</t:DueDate>");
+        assert!(fields[5].1.ends_with("<t:Value>true</t:Value></t:ExtendedProperty>"), "{}", fields[5].1);
+        assert_eq!(fields[6].1, "<t:DueDate>2026-10-27T00:00:00Z</t:DueDate>");
+        // Not done: the flag goes down and the day it was done goes.
+        let (fields, absent) = task_fields(&Task { status: TaskStatus::NotStarted, ..t });
+        assert!(fields[5].1.ends_with("<t:Value>false</t:Value></t:ExtendedProperty>"), "{}", fields[5].1);
+        assert_eq!(absent, ["item:Categories", DATE_COMPLETED, "task:StartDate"]);
     }
 }
