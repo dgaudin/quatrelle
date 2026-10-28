@@ -424,7 +424,7 @@ impl Data {
                     self.meeting_sends.push(how.to_string());
                 }
                 let folder = op.child("SavedItemFolderId").and_then(|s| s.kids.first()).and_then(|f| self.folder_id(f)).unwrap_or_default();
-                for m in op.child("Items").map(|i| i.kids.clone()).unwrap_or_default() {
+                for mut m in op.child("Items").map(|i| i.kids.clone()).unwrap_or_default() {
                     let sticky = m.text_of("ItemClass").is_some_and(|c| c.starts_with("IPM.StickyNote"));
                     if folder.strip_prefix("mailbox:").is_some_and(|who| !self.editors.iter().any(|e| e == who)) {
                         out.push(err("ErrorAccessDenied"));
@@ -450,6 +450,9 @@ impl Data {
                         continue;
                     }
                     if m.name == "CalendarItem" || m.name == "Contact" || m.name == "Task" || sticky {
+                        if m.name == "Task" {
+                            super::tasks::after_create(&mut m);
+                        }
                         let id = self.id("P");
                         out.push(ok(format!("<m:Items><t:{0}><t:ItemId Id=\"{id}\" ChangeKey=\"ck\"/></t:{0}></m:Items>", m.name)));
                         self.pim.push((id, folder.clone(), m));
@@ -552,6 +555,9 @@ impl Data {
                                 && let Some(new) = u.kids.iter().find(|k| k.name != "FieldURI").and_then(|w| w.kids.first())
                             {
                                 el.kids.push(new.clone());
+                            }
+                            if el.name == "Task" {
+                                super::tasks::after_update(el, &u);
                             }
                         }
                         out.push(ok(format!("<m:Items><t:CalendarItem><t:ItemId Id=\"{id}\" ChangeKey=\"ck2\"/></t:CalendarItem></m:Items>")));

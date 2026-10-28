@@ -631,6 +631,7 @@ mod route;
 mod server;
 mod streaming;
 mod syncing;
+mod tasks;
 
 pub use server::serve;
 
