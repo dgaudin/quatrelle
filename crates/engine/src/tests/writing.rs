@@ -4,6 +4,7 @@ use super::*;
 
 mod drafts;
 mod names;
+mod pictures;
 mod senders;
 
 #[test]
