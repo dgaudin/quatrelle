@@ -1,6 +1,8 @@
 //! Attachment names from a message, before anything is written to disk or handed to another app:
-//! [`sanitize_filename`] turns whatever the sender wrote into a plain name we can save under, and
-//! [`runs_code`] says whether opening that file would start a program.
+//! [`sanitize_filename`] turns whatever the sender wrote into a plain name we can save under,
+//! [`attachment_name`] gives it the extension its type has when it has none, [`runs_code`] says
+//! whether opening that file would start a program, and [`TYPES`] goes between a file's extension
+//! and its MIME type.
 
 /// Longest name we keep, in characters (file systems allow 255 bytes; this leaves room for UTF-8
 /// and for a ` (2)` added on a clash).
@@ -105,6 +107,42 @@ const EXECUTABLE_EXTENSIONS: &[&[&str]] = &[
     &["jar", "apk", "py", "pyw", "pl", "rb", "php", "lua"],
 ];
 
+/// The extension of the picture or PDF that `data` is, from its first bytes: for one sent as just
+/// bytes (`application/octet-stream`) with nothing else to go by.
+fn sniffed_ext(data: &[u8]) -> &'static str {
+    match data {
+        [0x89, b'P', b'N', b'G', ..] => ".png",
+        [0xFF, 0xD8, 0xFF, ..] => ".jpg",
+        [b'G', b'I', b'F', b'8', ..] => ".gif",
+        [b'R', b'I', b'F', b'F', _, _, _, _, b'W', b'E', b'B', b'P', ..] => ".webp",
+        [b'%', b'P', b'D', b'F', ..] => ".pdf",
+        _ => "",
+    }
+}
+
+/// Whether a (plain) name ends in an extension: a dot and up to 8 letters or digits.
+fn has_extension(name: &str) -> bool {
+    name.rsplit_once('.').is_some_and(|(stem, ext)| !stem.is_empty() && (1..=8).contains(&ext.len()) && ext.chars().all(|c| c.is_alphanumeric()))
+}
+
+/// A received attachment's name: the sender's, made plain, with the extension its type has when
+/// it has none (`photo` sent as `image/webp` is `photo.webp`: without one the system couldn't open
+/// it, nor the file it was saved as, issue #11); with no name, `attachment-N` with that
+/// extension. A type that says nothing (`application/octet-stream`) goes by the first bytes.
+pub(crate) fn attachment_name(given: Option<&str>, mime: &str, data: &[u8], index: usize) -> String {
+    let ext = match ext_for_mime(mime) {
+        "" => sniffed_ext(data),
+        e => e,
+    };
+    match given {
+        Some(g) => {
+            let name = sanitize_filename(g);
+            if ext.is_empty() || has_extension(&name) { name } else { format!("{name}{ext}") }
+        }
+        None => format!("attachment-{}{ext}", index.saturating_add(1)),
+    }
+}
+
 /// Whether opening this attachment would run code: a program, script, installer, shortcut, disk
 /// image and so on. Quatrelle never asks another app to open such a file; the user may still save
 /// it. As with the operating system, only the last extension decides, so `report.pdf.exe` counts.
@@ -115,9 +153,94 @@ pub fn runs_code(name: &str) -> bool {
     EXECUTABLE_EXTENSIONS.iter().any(|group| group.contains(&extension))
 }
 
+/// File types: an extension (with its dot) and its MIME type. A type's first extension is the one an attachment
+/// sent without a name (or with a name without one) is saved with; the types after a type's own
+/// are other names senders use for it.
+const TYPES: &[(&str, &str)] = &[
+    (".png", "image/png"),
+    (".jpg", "image/jpeg"),
+    (".jpeg", "image/jpeg"),
+    (".gif", "image/gif"),
+    (".webp", "image/webp"),
+    (".bmp", "image/bmp"),
+    (".tif", "image/tiff"),
+    (".tiff", "image/tiff"),
+    (".heic", "image/heic"),
+    (".avif", "image/avif"),
+    (".svg", "image/svg+xml"),
+    (".pdf", "application/pdf"),
+    (".txt", "text/plain"),
+    (".md", "text/plain"),
+    (".html", "text/html"),
+    (".htm", "text/html"),
+    (".csv", "text/csv"),
+    (".ics", "text/calendar"),
+    (".vcf", "text/vcard"),
+    (".zip", "application/zip"),
+    (".mp4", "video/mp4"),
+    (".mov", "video/quicktime"),
+    (".mp3", "audio/mpeg"),
+    (".wav", "audio/wav"),
+    (".docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+    (".xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+    (".pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation"),
+    (".doc", "application/msword"),
+    (".xls", "application/vnd.ms-excel"),
+    (".ppt", "application/vnd.ms-powerpoint"),
+    (".odt", "application/vnd.oasis.opendocument.text"),
+    (".ods", "application/vnd.oasis.opendocument.spreadsheet"),
+    (".odp", "application/vnd.oasis.opendocument.presentation"),
+    (".rtf", "application/rtf"),
+    (".eml", "message/rfc822"),
+    // Other names for the types above.
+    (".jpg", "image/jpg"),
+    (".jpg", "image/pjpeg"),
+    (".png", "image/x-png"),
+    (".bmp", "image/x-ms-bmp"),
+    (".bmp", "image/x-bmp"),
+    (".wav", "audio/x-wav"),
+    (".vcf", "text/x-vcard"),
+    (".zip", "application/x-zip-compressed"),
+    (".heic", "image/heif"),
+    (".ico", "image/x-icon"),
+    (".ico", "image/vnd.microsoft.icon"),
+];
+
+/// The MIME type for an attachment, from its file name.
+pub fn mime_from_name(name: &str) -> &'static str {
+    let ext = name.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase()).unwrap_or_default();
+    TYPES.iter().find(|(e, _)| e.get(1..) == Some(ext.as_str())).map_or("application/octet-stream", |(_, m)| m)
+}
+
+/// The extension, with its dot, a file of this MIME type is saved with (empty for a type not
+/// known here).
+pub(crate) fn ext_for_mime(mime: &str) -> &'static str {
+    let mime = mime.split(';').next().unwrap_or_default().trim().to_ascii_lowercase();
+    TYPES.iter().find(|(_, m)| *m == mime).map_or("", |(e, _)| e)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Issue #11: an attachment with no name, or a name without an extension, gets the one its
+    /// type has (else the one its first bytes say), so the system can open it and the file saved;
+    /// a name with one keeps it, and nothing that runs code is ever added.
+    #[test]
+    fn attachments_get_the_extension_their_type_has() {
+        let webp = b"RIFF\x10\0\0\0WEBPVP8 ";
+        assert_eq!(attachment_name(None, "image/webp", webp, 0), "attachment-1.webp");
+        assert_eq!(attachment_name(Some("photo"), "image/webp", webp, 0), "photo.webp");
+        assert_eq!(attachment_name(Some("photo.webp"), "image/webp", webp, 0), "photo.webp");
+        assert_eq!(attachment_name(Some("photo.jpg"), "image/webp", webp, 0), "photo.jpg", "the sender's extension stays");
+        assert_eq!(attachment_name(None, "application/octet-stream", webp, 2), "attachment-3.webp");
+        assert_eq!(attachment_name(Some("scan"), "application/octet-stream", b"%PDF-1.7", 0), "scan.pdf");
+        assert_eq!(attachment_name(Some("Q3 v1.2 final"), "image/png", b"\x89PNG", 0), "Q3 v1.2 final.png");
+        assert_eq!(attachment_name(Some("setup"), "application/x-msdownload", b"MZ\x90\0", 0), "setup", "nothing that runs");
+        assert_eq!(attachment_name(None, "application/octet-stream", b"", usize::MAX), format!("attachment-{}", usize::MAX));
+        assert_eq!(attachment_name(Some("../../x"), "image/gif", b"GIF89a", 0), "x.gif");
+        assert!(!runs_code(&attachment_name(Some("tool"), "application/octet-stream", b"MZ", 0)));
+    }
 
     /// Paths, refused characters, disguising characters and device names all come out plain;
     /// ordinary names, accents and dashes included, are left alone.
@@ -191,6 +314,29 @@ mod tests {
         ];
         for name in safe {
             assert!(!runs_code(name), "{name} should not count as code");
+        }
+    }
+
+    /// Types from names and names from types, the other names senders use for a type included;
+    /// a name keeps an extension it has, and gets its type's when it has none.
+    #[test]
+    fn extensions_and_types_go_both_ways() {
+        assert_eq!(mime_from_name("Beach.WEBP"), "image/webp");
+        assert_eq!(mime_from_name("scan.bmp"), "image/bmp");
+        assert_eq!(mime_from_name("notes.md"), "text/plain");
+        assert_eq!(mime_from_name("no-extension"), "application/octet-stream");
+        assert_eq!(ext_for_mime("image/webp"), ".webp");
+        assert_eq!(ext_for_mime("Image/WebP; name=x"), ".webp");
+        assert_eq!(ext_for_mime("image/jpeg"), ".jpg");
+        assert_eq!(ext_for_mime("image/jpg"), ".jpg");
+        assert_eq!(ext_for_mime("text/plain"), ".txt");
+        assert_eq!(ext_for_mime("application/x-unknown"), "");
+        assert_eq!(attachment_name(Some("holiday"), "image/heic", b"", 0), "holiday.heic");
+        assert_eq!(attachment_name(Some("report.final.pdf"), "image/webp", b"", 0), "report.final.pdf");
+        assert_eq!(attachment_name(Some("data"), "application/octet-stream", b"", 0), "data");
+        // Every type's own extension names it, and is named by it.
+        for (ext, mime) in TYPES.iter().filter(|(e, m)| TYPES.iter().find(|(_, m2)| m2 == m).is_some_and(|(e2, _)| e2 == e)) {
+            assert_eq!(ext_for_mime(mime), *ext);
         }
     }
 }
