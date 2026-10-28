@@ -260,6 +260,14 @@ fn appointment(it: &El) -> Option<CalEvent> {
         private: matches!(it.text_of("Sensitivity").map(str::trim), Some("Private" | "Confidential")),
         no_responses: it.text_of("IsResponseRequested").map(str::trim) == Some("false"),
         no_new_times: it.text_of("AllowNewTimeProposal").map(str::trim) == Some("false"),
+        my_answer: match it.text_of("MyResponseType").map(str::trim) {
+            Some("Accept") => "ACCEPTED",
+            Some("Tentative") => "TENTATIVE",
+            Some("Decline") => "DECLINED",
+            Some("NoResponseReceived" | "Unknown") => "NEEDS-ACTION",
+            _ => "",
+        }
+        .to_string(),
         ..Default::default()
     })
 }

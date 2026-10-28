@@ -296,3 +296,39 @@ fn ctrl_q_marks_read_and_keeps_the_window() {
     }
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// An invitation opened in a window of its own has its Accept, Tentative and Decline buttons
+/// there too (only the reading pane had them), and answering it there answers that message:
+/// the window closes and the invitation leaves the Inbox, as Outlook does.
+#[test]
+fn an_invitation_in_a_window_can_be_answered_there() {
+    use egui::Shape;
+    let (mut a, dir) = app("window-invite");
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    let invitation = a.session.list.iter().find(|m| m.subject == "Sound mix, version 3").map(|m| m.key.clone()).unwrap();
+    let other = a.session.list.iter().find(|m| m.key != invitation).map(|m| m.key.clone()).unwrap();
+    a.run("message.popOut", json!({"key": invitation.to_id()}));
+    a.run("list.open", json!({"key": other.to_id()}));
+    let size = egui::vec2(1280.0, 800.0);
+    let mut shapes = Vec::new();
+    for _ in 0..4 {
+        shapes = frame_shapes(&ctx, &mut a, vec![], size);
+    }
+    let texts: Vec<String> = shapes
+        .iter()
+        .filter_map(|s| match s {
+            Shape::Text(t) => Some(t.galley.text().to_string()),
+            _ => None,
+        })
+        .collect();
+    for label in ["Accept", "Tentative", "Decline"] {
+        assert!(texts.iter().any(|t| t == label), "{label} in the window: {texts:?}");
+    }
+    // What a click there sends: that window's message first, then the answer.
+    a.act(crate::Action::Open(invitation.clone()));
+    a.act(crate::Action::Run("invite.respond", json!({"answer": "accepted"})));
+    assert!(a.session.windows.is_empty(), "its window closes");
+    assert!(!a.session.list.iter().any(|m| m.key == invitation), "and it leaves the Inbox");
+    let _ = std::fs::remove_dir_all(dir);
+}

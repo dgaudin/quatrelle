@@ -139,6 +139,12 @@ pub struct CalEvent {
     pub no_responses: bool,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub no_new_times: bool,
+    /// The user's own answer to it as the server keeps it (Exchange's `MyResponseType`:
+    /// `ACCEPTED`, `TENTATIVE`, `DECLINED`, `NEEDS-ACTION`; empty when not said, or the user's
+    /// own meeting): an invitation sent to a group the user is in names the group among its
+    /// guests, not them.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub my_answer: String,
 }
 
 fn is_zero(n: &i64) -> bool {
