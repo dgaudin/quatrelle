@@ -1,14 +1,14 @@
-# Unsigned test builds for every platform the Craft release covers, published as a pre-release
-# of this repository so people can try Quatrelle. Run by hand only (Actions › Release (unsigned
-# test build) › Run workflow); nothing starts it on a push.
+# Unsigned test builds for Linux and the web, published as a pre-release of this repository so
+# people can try Quatrelle. Run by hand only (Actions › Release (unsigned test build) › Run
+# workflow); nothing starts it on a push.
 #
-# The same platforms as release.yml (storytold/craft-common-actions): macOS universal, Windows
-# x64/x86/arm64, Linux x86_64/aarch64 (AppImage, deb, rpm, tar.gz), Flatpak x86_64/aarch64, Linux
-# riscv64, FreeBSD and the web. Differences: free GitHub-hosted runners only (macos-15, not
-# macos-15-xlarge), no `release` environment and no signing secrets, so Windows installers are
-# unsigned and the macOS app is ad-hoc signed and not notarized (the packaging scripts fall back
-# to that by themselves); and the result is a published pre-release `v<version>-test.<run>`,
-# never the `v<version>` tag a signed release uses.
+# Linux x86_64/aarch64 (AppImage, deb, rpm, tar.gz), Flatpak x86_64/aarch64, Linux riscv64 and
+# the web, built as release.yml (storytold/craft-common-actions) builds them. Windows, macOS and
+# FreeBSD come with the stable releases only (the owner's decision, 28/10): their builds took
+# the longest (FreeBSD 18 minutes, macOS 15, Windows 12, against Linux's 8), and a test build
+# waited on them. ci.yml still checks Windows and macOS at every push. Differences from
+# release.yml: no `release` environment and no signing secrets; and the result is a published
+# pre-release `v<version>-test.<run>`, never the `v<version>` tag a signed release uses.
 name: Release (unsigned test build)
 
 on:
@@ -63,87 +63,6 @@ jobs:
       - id: tag
         name: Tag
         run: echo "tag=v${{ steps.v.outputs.version }}-test.${{ github.run_number }}" >>"$GITHUB_OUTPUT"
-
-  macos:
-    name: macOS universal
-    needs: version
-    runs-on: macos-26
-    env:
-      VERSION: ${{ needs.version.outputs.version }}
-      BUILD_DATE: ${{ needs.version.outputs.date }}
-      BUILD_SHA: ${{ github.sha }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: storytold/craft-common-actions/actions/checkout-craft-fonts@main
-        with:
-          ref: ${{ env.CRAFT_FONTS_REF }}
-      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
-        with:
-          toolchain: stable
-          targets: aarch64-apple-darwin, x86_64-apple-darwin
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-        with:
-          key: wip-macos-universal
-      - name: Apply version override
-        if: inputs.version != ''
-        run: cargo xtask version set "$VERSION"
-      - name: Build and package (ad-hoc signed, not notarized)
-        env:
-          CRAFT_FONTS_DIR: ${{ github.workspace }}/craft-fonts
-          CRAFT_FONTS_REQUIRED: "1"
-        run: packaging/macos/package.sh --arch universal
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: release-macos
-          path: dist/release/*
-          if-no-files-found: error
-
-  windows:
-    name: Windows ${{ matrix.arch }}
-    needs: version
-    runs-on: windows-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { arch: x64, target: x86_64-pc-windows-msvc }
-          - { arch: x86, target: i686-pc-windows-msvc }
-          - { arch: arm64, target: aarch64-pc-windows-msvc }
-    env:
-      VERSION: ${{ needs.version.outputs.version }}
-      BUILD_DATE: ${{ needs.version.outputs.date }}
-      BUILD_SHA: ${{ github.sha }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: storytold/craft-common-actions/actions/checkout-craft-fonts@main
-        with:
-          ref: ${{ env.CRAFT_FONTS_REF }}
-      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
-        with:
-          toolchain: stable
-          targets: ${{ matrix.target }}
-      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-        with:
-          key: wip-windows-${{ matrix.arch }}
-      - name: Apply version override
-        if: inputs.version != ''
-        shell: bash
-        run: cargo xtask version set "$VERSION"
-      - name: Install WiX
-        uses: storytold/craft-common-actions/actions/install-wix@main
-        with:
-          wix-version: "5.0.2"
-      - name: Build and package (unsigned)
-        shell: pwsh
-        env:
-          CRAFT_FONTS_DIR: ${{ github.workspace }}/craft-fonts
-          CRAFT_FONTS_REQUIRED: "1"
-        run: ./packaging/windows/package.ps1 -Arch ${{ matrix.arch }}
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: release-windows-${{ matrix.arch }}
-          path: dist/release/*
-          if-no-files-found: error
 
   linux:
     name: Linux ${{ matrix.arch }}
@@ -282,46 +201,6 @@ jobs:
           path: dist/release/*
           if-no-files-found: error
 
-  freebsd:
-    name: FreeBSD x86_64
-    needs: version
-    runs-on: ubuntu-latest
-    timeout-minutes: 180
-    env:
-      VERSION: ${{ needs.version.outputs.version }}
-      BUILD_DATE: ${{ needs.version.outputs.date }}
-      BUILD_SHA: ${{ github.sha }}
-      INPUT_VERSION: ${{ inputs.version }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: storytold/craft-common-actions/actions/checkout-craft-fonts@main
-        with:
-          ref: ${{ env.CRAFT_FONTS_REF }}
-      - name: Build and package in a FreeBSD VM
-        uses: vmactions/freebsd-vm@c46abacb49f09938ca4e1702d15d836285d694cc # v1.5.9
-        with:
-          release: "15.1"
-          usesh: true
-          cpu: 4
-          mem: 12288
-          envs: "VERSION BUILD_DATE BUILD_SHA INPUT_VERSION"
-          prepare: |
-            pkg install -y bash git curl pkgconf cmake python3 libxkbcommon wayland libX11 libXcursor libXrandr libXi libxcb mesa-libs vulkan-loader gtk3 fontconfig freetype2 alsa-lib
-            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable
-          run: |
-            set -e
-            . "$HOME/.cargo/env"
-            git config --global --add safe.directory "*"
-            export CARGO_TARGET_DIR=/var/tmp/craft-target CARGO_BUILD_JOBS=4
-            if [ -n "$INPUT_VERSION" ]; then cargo xtask version set "$VERSION"; fi
-            export CRAFT_FONTS_DIR="$PWD/craft-fonts" CRAFT_FONTS_REQUIRED=1
-            bash packaging/freebsd/package.sh
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: release-freebsd-x86_64
-          path: dist/release/*
-          if-no-files-found: error
-
   web:
     name: Web (wasm)
     needs: version
@@ -362,7 +241,7 @@ jobs:
   release:
     name: Publish the test pre-release
     if: "!cancelled() && !contains(needs.*.result, 'failure')"
-    needs: [version, macos, windows, linux, linux-riscv64, flatpak, freebsd, web]
+    needs: [version, linux, linux-riscv64, flatpak, web]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -386,23 +265,17 @@ jobs:
           cat >../notes.md <<EOF
           **Unsigned test build** of Quatrelle $VERSION (\`${GITHUB_SHA::9}\`), for trying it out.
 
-          These builds aren't code-signed:
-          - **Windows:** SmartScreen may say "Windows protected your PC": choose *More info › Run anyway*.
-          - **macOS:** the app is ad-hoc signed, not notarized: right-click it and choose *Open* the first time (or run \`xattr -dr com.apple.quarantine /Applications/Quatrelle.app\`).
-          - **Linux, FreeBSD, web:** nothing extra.
+          Test builds are for Linux and the web; Windows, macOS and FreeBSD come with the stable releases.
 
           | Platform | Files |
           |---|---|
-          | Windows x64 / x86 / ARM64 | \`.msi\` installer, or the \`-portable.zip\` |
-          | macOS (Apple silicon and Intel) | \`.dmg\` |
           | Linux x86_64 / aarch64 | \`.AppImage\`, \`.deb\`, \`.rpm\`, \`.flatpak\`, \`.tar.gz\` |
           | Linux riscv64 | \`.deb\`, \`.rpm\`, \`.tar.gz\` |
-          | FreeBSD x86_64 | \`.tar.gz\` |
           | Web | \`quatrelle-web-*.zip\` (a static site; see HOSTING.md inside) |
 
           Check a download against \`SHA256SUMS.txt\`.
 
-          Installed from the \`.msi\`, the portable \`.zip\`, the \`.dmg\` or the \`.AppImage\`, a test build updates itself: it downloads the next one in the background (a download cut off carries on next time), checks it against its SHA-256, says when it's ready, and installs it at once with *Restart now* or as Quatrelle closes (you're asked). \`QUATRELLE_NO_AUTO_UPDATE=1\` turns that off.
+          Installed from the \`.AppImage\`, a test build updates itself: it downloads the next one in the background (a download cut off carries on next time), checks it against its SHA-256, says when it's ready, and installs it at once with *Restart now* or as Quatrelle closes (you're asked). \`QUATRELLE_NO_AUTO_UPDATE=1\` turns that off.
           EOF
           gh release create "$TAG" --prerelease --target "$GITHUB_SHA" \
             --title "Quatrelle $VERSION (unsigned test build ${{ github.run_number }})" \

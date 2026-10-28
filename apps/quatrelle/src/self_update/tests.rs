@@ -183,3 +183,23 @@ fn the_window_sees_where_the_update_is() {
     assert!(!u.shared.started.load(Ordering::SeqCst) && u.shared.stop.load(Ordering::SeqCst));
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Test builds are Linux's only since 28/10 (Windows, macOS and FreeBSD have the stable releases):
+/// a copy installed from a Windows test build passes over one without its installer, rather than
+/// failing to update every hour, and takes the next one that has it.
+#[test]
+fn a_test_build_without_this_installer_is_passed_over() {
+    let build = |n: u32, download: &str| Release {
+        tag: format!("v0.22.0-test.{n}"),
+        version: "0.22.0".into(),
+        build: n,
+        commit: format!("{n}{n}{n}{n}abcdef"),
+        download: download.into(),
+        ..Default::default()
+    };
+    let mine = "88888888abcdef";
+    let linux_only = [build(88, "https://example.com/quatrelle-0.22.0-windows-x64.msi"), build(89, "")];
+    assert_eq!(pick("0.22.0", Some(mine), &linux_only), None, "nothing newer to install");
+    let later = [linux_only[0].clone(), linux_only[1].clone(), build(90, "https://example.com/quatrelle-0.22.0-windows-x64.msi")];
+    assert_eq!(pick("0.22.0", Some(mine), &later).map(|r| r.tag), Some("v0.22.0-test.90".into()));
+}

@@ -164,7 +164,10 @@ Trois ajouts (2026-10-22) pour Microsoft 365 (Graph), détaillés dans `docs/oau
 - **Sur GitHub.** Les Actions sont activées sur ce fork. Le workflow
   **Release (unsigned test build)** (`.github/workflows/release-wip.yml`) se lance à la main :
   Actions › Run workflow, en choisissant la branche. Il publie une pré-version
-  `v<version>-test.<n>` avec tous les paquets, non signés.
+  `v<version>-test.<n>` non signée, pour Linux (rpm, deb, AppImage, Flatpak, tar.gz) et le Web.
+  Windows, macOS et FreeBSD ne sont construits que pour les versions stables (décision du
+  28/10/2026 : leurs constructions étaient les plus longues et faisaient attendre chaque
+  version de test).
 - **En local.** Avec [nfpm](https://nfpm.goreleaser.com) installé :
   `packaging/linux/package.sh --formats rpm`. Le paquet sort dans `dist/release/`.
 

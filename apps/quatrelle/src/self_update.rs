@@ -368,10 +368,7 @@ impl Updater {
                 list
             }
         };
-        let Some(release) = newer_release(&current_version(), build_sha, &releases) else { return Ok(()) };
-        if release.download.is_empty() {
-            return Err(format!("{} has no {} to update with", release.tag, self.kind.suffix().trim_start_matches('-')));
-        }
+        let Some(release) = pick(&current_version(), build_sha, &releases) else { return Ok(()) };
         if just_installed(&self.data, &release.tag, now()) {
             return Ok(());
         }
@@ -380,7 +377,7 @@ impl Updater {
         {
             return Ok(());
         }
-        self.download(release)
+        self.download(&release)
     }
 
     /// Fetch and check `release`'s installer into the downloads folder, carrying on from what an
@@ -455,6 +452,14 @@ fn current_version() -> String {
         .map(|v| v.trim().to_string())
         .filter(|v| v.split('.').count() == 3 && v.split('.').all(|p| !p.is_empty() && p.len() < 7 && p.bytes().all(|b| b.is_ascii_digit())))
         .unwrap_or_else(|| env!("CARGO_PKG_VERSION").to_string())
+}
+
+/// The newest test build newer than this one with an installer of this copy's kind: since
+/// 28/10 the test builds are Linux's only (Windows, macOS and FreeBSD have the stable releases),
+/// and one without it is passed over rather than failed on at every check.
+fn pick(version: &str, build_sha: Option<&str>, releases: &[Release]) -> Option<Release> {
+    let usable: Vec<Release> = releases.iter().filter(|r| !r.download.is_empty()).cloned().collect();
+    newer_release(version, build_sha, &usable).cloned()
 }
 
 /// Whether a download was left part way in `dir`.
