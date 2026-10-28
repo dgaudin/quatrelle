@@ -75,6 +75,7 @@ impl Session {
         // one set aside for this message comes back.
         self.set_compose_aside(Some(key));
         self.take_up(key);
+        let kept_before = self.filter_keep.clone().filter(|k| k != key);
         self.leave_reading(Some(key));
         self.filter_keep = Some(key.clone());
         self.selection = vec![key.clone()];
@@ -97,6 +98,13 @@ impl Session {
                 (ReadInPane::Shown, secs) => self.read_due = Some((key.clone(), self.clock.now.saturating_add(i64::from(secs.min(3600))))),
                 (ReadInPane::Left, _) => self.read_on_leave = Some(key.clone()),
             }
+        }
+        // The one kept under the filter while it was read goes, now that another is: marked read
+        // as it was left, it stayed under Unread (from upstream aaed8d6).
+        if let Some(prev) = kept_before
+            && self.list.iter().any(|m| m.key == prev && !self.filter_keeps(self.filter, m))
+        {
+            self.refresh_list();
         }
     }
 
