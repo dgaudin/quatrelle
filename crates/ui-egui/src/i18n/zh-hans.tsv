@@ -1661,3 +1661,6 @@ month	May	5月
 	Add calendar	添加日历
 	From address book…	从通讯簿…
 	From the Internet…	从 Internet…
+	Open Quatrelle	打开 Quatrelle
+	Keep Quatrelle running in the notification area when its window is closed	关闭窗口时让 Quatrelle 在通知区域继续运行
+	Its icon there brings the window back; File › Exit closes Quatrelle	点击那里的图标可恢复窗口；“文件 › 退出”会关闭 Quatrelle

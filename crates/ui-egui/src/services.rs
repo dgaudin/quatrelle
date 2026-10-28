@@ -34,6 +34,30 @@ pub enum ReminderAction {
     Open,
 }
 
+/// Quatrelle's icon in the notification area, as [`Services::show_tray`] is told to show it.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct TrayIcon {
+    /// Shown at all: always while closing the window leaves Quatrelle running, or while new mail
+    /// is unread.
+    pub shown: bool,
+    /// New messages unread: the icon carries the red dot (the envelope).
+    pub new: usize,
+    /// What hovering it says under Quatrelle's name (empty: nothing more).
+    pub tip: String,
+    /// Its menu: bring the window back, and quit.
+    pub open: String,
+    pub quit: String,
+}
+
+/// What was done with the icon in the notification area ([`Services::take_tray_action`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TrayAction {
+    /// Clicked, or its menu's Open: the window comes back (on the Inbox, for new mail).
+    Open,
+    /// Its menu's Exit: Quatrelle closes, asking first as File › Exit does.
+    Quit,
+}
+
 /// Where a build that updates itself is with the next version (`apps/quatrelle/src/self_update.rs`).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub enum UpdateState {
@@ -97,11 +121,16 @@ pub trait Services {
     /// another notification) or its time has passed, so its buttons have nothing left to do.
     /// The default does nothing.
     fn withdraw_reminder(&mut self, _key: &str) {}
-    /// Show the envelope in the notification area while `new` messages that arrived are unread
-    /// (`tip`: what hovering it says), and take it away at 0. The default does nothing.
-    fn show_envelope(&mut self, _new: usize, _tip: &str) {}
-    /// Whether the envelope was clicked since the last call.
-    fn take_envelope_click(&mut self) -> bool {
+    /// Show Quatrelle's icon in the notification area as `icon` says, or take it away. The
+    /// default does nothing.
+    fn show_tray(&mut self, _icon: &TrayIcon) {}
+    /// What was done with the icon since the last call.
+    fn take_tray_action(&mut self) -> Option<TrayAction> {
+        None
+    }
+    /// Whether the icon is in a notification area now, there to bring the window back: closing
+    /// the window then leaves Quatrelle running. The default: no.
+    fn tray_shown(&self) -> bool {
         false
     }
     /// Where an installed Craft app is (`pdfcraft`, `wordcraft`…), if it is.

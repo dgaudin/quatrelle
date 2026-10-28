@@ -55,6 +55,10 @@ pub struct Prefs {
     /// An envelope in the notification area while mail that arrived in an Inbox is unread, as
     /// Outlook shows one.
     pub envelope: bool,
+    /// Closing the main window leaves Quatrelle running, its icon in the notification area there
+    /// to bring the window back (File › Exit quits). Where there's no notification area, closing
+    /// quits.
+    pub keep_running: bool,
     /// The Reminders window opens in a window of its own, over every other, when a reminder
     /// comes (the main window minimized or behind others too), as Outlook's does.
     pub reminders_on_top: bool,
@@ -185,6 +189,7 @@ impl Default for Prefs {
             favorites: None,
             notify: true,
             envelope: true,
+            keep_running: true,
             reminders_on_top: true,
             categories: quatrelle_model::organize::default_categories(),
             focused_inbox: false,

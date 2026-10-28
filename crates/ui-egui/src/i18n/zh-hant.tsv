@@ -1663,3 +1663,6 @@ month	May	5月
 	Add calendar	新增行事曆
 	From address book…	從通訊錄…
 	From the Internet…	從網際網路…
+	Open Quatrelle	開啟 Quatrelle
+	Keep Quatrelle running in the notification area when its window is closed	關閉視窗時讓 Quatrelle 在通知區域繼續執行
+	Its icon there brings the window back; File › Exit closes Quatrelle	點選那裡的圖示可恢復視窗；「檔案 › 結束」會關閉 Quatrelle

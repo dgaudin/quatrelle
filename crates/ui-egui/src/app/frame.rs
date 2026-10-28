@@ -40,8 +40,7 @@ impl MailApp {
                 ReminderAction::Open => {
                     self.ui.reminders.closed.remove(&key);
                     self.ui.reminders.selected = Some(key);
-                    ctx.send_viewport_cmd_to(egui::ViewportId::ROOT, egui::ViewportCommand::Minimized(false));
-                    self.ui.focus_main = true;
+                    self.bring_forward(ctx);
                 }
             }
             ctx.request_repaint();
@@ -102,6 +101,12 @@ impl MailApp {
         if self.ui.close_now {
             self.ui.close_now = false;
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        } else if ctx.input(|i| i.viewport().close_requested()) && self.keeps_running() {
+            // The window goes, Quatrelle stays: its icon in the notification area brings it back.
+            // Nothing is lost, so nothing is asked.
+            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+            ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
+            self.ui.put_away = true;
         } else if ctx.input(|i| i.viewport().close_requested()) {
             // Messages being written: kept as drafts if wanted, as Outlook asks; never lost.
             let written = self.session.all_composes().filter(|c| self.session.written(c) && !c.sending).count();
@@ -125,16 +130,23 @@ impl MailApp {
             if asked {
                 ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
                 self.ui.close_asked = true;
-                // Closed from the taskbar or the Dock while minimized: the window comes back to ask.
-                if ctx.input(|i| i.viewport().minimized == Some(true)) {
-                    ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
-                    ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+                // Closed from the taskbar or the Dock while minimized, or from the icon in the
+                // notification area while the window is put away there: it comes back to ask.
+                if self.ui.put_away || ctx.input(|i| i.viewport().minimized == Some(true)) {
+                    self.bring_forward(ctx);
                 }
             } else if self.ui.restart_wanted {
                 // Restart now, and nothing stopped the close: the new version opens once installed.
                 self.services.restart_to_update();
             }
         }
+    }
+
+    /// Whether a close of the main window only puts it away, Quatrelle running on: the icon in the
+    /// notification area is there to bring it back, and the close isn't a quit. An update ready
+    /// is installed as Quatrelle closes, so then the close asks about it as it always did.
+    fn keeps_running(&self) -> bool {
+        self.session.prefs.keep_running && !self.ui.quitting && !self.ui.closing_anyway && !self.update_bar_wanted() && self.services.tray_shown()
     }
 
     /// The pictures the window keeps on the graphics card (the glyphs, mail pictures, icons), in

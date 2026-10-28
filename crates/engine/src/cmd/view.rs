@@ -117,6 +117,11 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             Ok(json!({"on": s.prefs.envelope}))
         })
         .params(r#"{"on"?: bool} (an envelope in the notification area while new mail is unread)"#),
+        CommandSpec::new("view.keepRunning", "Keep running in the notification area", "File › Options › Mail", |s, v| {
+            s.prefs.keep_running = p::bool(v, "on").unwrap_or(!s.prefs.keep_running);
+            Ok(json!({"on": s.prefs.keep_running}))
+        })
+        .params(r#"{"on"?: bool} (closing the window leaves Quatrelle running, its icon in the notification area bringing it back)"#),
         CommandSpec::new("view.remindersOnTop", "Show reminders on top of other windows", "File › Options › Mail", |s, v| {
             s.prefs.reminders_on_top = p::bool(v, "on").unwrap_or(!s.prefs.reminders_on_top);
             Ok(json!({"on": s.prefs.reminders_on_top}))

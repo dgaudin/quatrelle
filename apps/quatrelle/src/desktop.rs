@@ -50,8 +50,8 @@ pub(crate) struct Desktop {
     /// The folder of the last file picked or saved: the next file dialog opens there (attaching
     /// several files from one folder, saving attachments beside each other), as figcraft's do.
     pub(crate) last_dir: Option<PathBuf>,
-    /// The envelope in the notification area while new mail is unread.
-    pub(crate) envelope: tray::Envelope,
+    /// Quatrelle's icon in the notification area, the envelope on it while new mail is unread.
+    pub(crate) tray: tray::Tray,
 }
 
 impl Desktop {
@@ -468,11 +468,14 @@ impl Services for Desktop {
             self.notify(title, body);
         }
     }
-    fn show_envelope(&mut self, new: usize, tip: &str) {
-        self.envelope.show(new, tip);
+    fn show_tray(&mut self, icon: &quatrelle_ui_egui::TrayIcon) {
+        self.tray.show(icon);
     }
-    fn take_envelope_click(&mut self) -> bool {
-        self.envelope.take_click()
+    fn take_tray_action(&mut self) -> Option<quatrelle_ui_egui::TrayAction> {
+        self.tray.take_action()
+    }
+    fn tray_shown(&self) -> bool {
+        self.tray.shown()
     }
     fn take_reminder_actions(&mut self) -> Vec<(String, ReminderAction)> {
         std::mem::take(&mut *self.reminder_answers.lock().unwrap_or_else(std::sync::PoisonError::into_inner))
