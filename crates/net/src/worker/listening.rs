@@ -22,8 +22,8 @@ const LOOK: Duration = Duration::from_millis(250);
 /// notifications): what came with it is taken too, without waiting for more (what comes while
 /// the folders are read is read next), this long at most.
 const GATHER: Duration = Duration::from_secs(1);
-/// A change told in the calendar or the contacts is read this long after (accepting a meeting is
-/// several changes), and their sync — every calendar ticked read again, seconds — runs this often
+/// A change told in the calendar, the contacts or the tasks is read this long after (accepting a
+/// meeting is several changes), and the calendars' and contacts' sync — every calendar ticked read again, seconds — runs this often
 /// at most.
 #[cfg(not(test))]
 const PIM_GATHER: Duration = Duration::from_secs(2);
@@ -46,11 +46,15 @@ pub(super) struct Listening {
     delay: Duration,
     /// The server can't tell of changes: the folders are looked at instead.
     unable: bool,
-    /// The account's own calendar, contacts and tasks, by id: a change in them is read by their sync.
+    /// The account's own calendar and contacts, by id: a change in them is read by their sync.
     pim: Vec<String>,
     /// Their sync is due then (a change was told), and when it last ran.
     pim_due: Option<Instant>,
     pim_last: Option<Instant>,
+    /// The account's own Tasks folder, by id, and when it's next read alone (a change was told
+    /// in it).
+    tasks: Option<String>,
+    tasks_due: Option<Instant>,
 }
 
 impl Listening {
@@ -115,7 +119,8 @@ impl Worker {
         log::info!("{}: Exchange tells of changes as they happen ({} mailboxes)", self.acc.id, ears.len());
         let mailboxes: Vec<Option<String>> = ears.iter().map(|l| l.mailbox.clone()).collect();
         self.listen.ears = ears;
-        self.listen.pim = pim;
+        self.listen.tasks = pim.iter().find(|(name, _)| *name == "tasks").map(|(_, id)| id.clone());
+        self.listen.pim = pim.into_iter().filter(|(name, _)| *name != "tasks").map(|(_, id)| id).collect();
         self.listen.since = Some(Instant::now());
         self.next_poll = Instant::now() + LISTEN_POLL_EVERY;
         // What came between the last look and now wasn't told of: looked at once.
@@ -199,6 +204,9 @@ impl Worker {
         if self.listen.pim_due.is_some_and(|at| Instant::now() >= at) {
             self.sync_dav();
         }
+        if self.listen.tasks_due.is_some_and(|at| Instant::now() >= at) {
+            self.sync_tasks();
+        }
         let mut told: Vec<(Option<String>, crate::ews::Heard)> = Vec::new();
         let mut stopped = None;
         {
@@ -247,12 +255,13 @@ impl Worker {
         let path_of = |id: &str| self.jstate.mailboxes.iter().find(|(_, v)| v.as_str() == id).map(|(p, _)| p.clone());
         let mut folders: Vec<String> = Vec::new();
         let mut relist = false;
-        let mut pim = false;
+        let (mut pim, mut tasks) = (false, false);
         for (mailbox, heard) in &told {
             let mut unknown = false;
             for id in &heard.folders {
                 match path_of(id) {
                     Some(p) => folders.push(p),
+                    None if mailbox.is_none() && self.listen.tasks.as_ref() == Some(id) => tasks = true,
                     None if mailbox.is_none() && self.listen.pim.contains(id) => pim = true,
                     None => unknown = true,
                 }
@@ -269,8 +278,15 @@ impl Worker {
         }
         // The calendar or the contacts: their sync, a moment later (and not too often).
         if pim && self.listen.pim_due.is_none() {
+            log::info!("{}: told of changes in the calendar or the contacts", self.acc.id);
             let soon = Instant::now() + PIM_GATHER;
             self.listen.pim_due = Some(self.listen.pim_last.map_or(soon, |last| soon.max(last + PIM_EVERY)));
+        }
+        // The tasks: their folder alone, a moment later however soon after the last sync, as it
+        // reads in a tenth of a second (a task made in Outlook just after one waited a minute).
+        if tasks && self.listen.tasks_due.is_none() {
+            log::info!("{}: told of changes in the tasks", self.acc.id);
+            self.listen.tasks_due = Some(Instant::now() + PIM_GATHER);
         }
         if relist && !self.relist() {
             return;
@@ -293,10 +309,16 @@ impl Worker {
         }
     }
 
-    /// The calendars' and contacts' sync ran: what was told of before is read.
+    /// The calendars' and contacts' sync ran: what was told of before is read, the tasks too.
     pub(super) fn pim_synced(&mut self) {
         self.listen.pim_due = None;
         self.listen.pim_last = Some(Instant::now());
+        self.listen.tasks_due = None;
+    }
+
+    /// The Tasks folder was read alone: what was told of in it before is read.
+    pub(super) fn tasks_synced(&mut self) {
+        self.listen.tasks_due = None;
     }
 
     /// Listening stopped (the connection dropped, the subscription is gone, the server ended
