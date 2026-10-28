@@ -149,9 +149,12 @@ fn new_id(m: &El) -> (String, String) {
     (id.and_then(|i| i.attr("Id")).unwrap_or("").to_string(), id.and_then(|i| i.attr("ChangeKey")).unwrap_or("").to_string())
 }
 
-fn delete(c: &Client, id: &str) -> Result<()> {
+/// An item deleted (to Deleted Items, as Outlook deletes). Exchange won't delete a task without
+/// being told which of its occurrences go: all of them, as Outlook deletes a task.
+fn delete(c: &Client, id: &str, task: bool) -> Result<()> {
+    let occurrences = if task { " AffectedTaskOccurrences=\"AllOccurrences\"" } else { "" };
     c.call_one(&format!(
-        "<m:DeleteItem DeleteType=\"MoveToDeletedItems\" SendMeetingCancellations=\"SendToNone\"><m:ItemIds><t:ItemId Id=\"{}\"/></m:ItemIds></m:DeleteItem>",
+        "<m:DeleteItem DeleteType=\"MoveToDeletedItems\" SendMeetingCancellations=\"SendToNone\"{occurrences}><m:ItemIds><t:ItemId Id=\"{}\"/></m:ItemIds></m:DeleteItem>",
         esc(id)
     ))
     .map(drop)

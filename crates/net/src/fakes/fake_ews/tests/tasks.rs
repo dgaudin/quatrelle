@@ -69,5 +69,21 @@ fn tasks_sync_with_the_tasks_folder() {
     again.dirty = true;
     let sync = crate::ews_pim::sync(&c, &Pim { tasks: vec![again], ..Default::default() }, 1_792_000_000).unwrap();
     assert!(sync.errors.is_empty(), "{:?}", sync.errors);
-    assert!(sync.tasks.unwrap().iter().any(|s| s.task.subject == "Devis Martin (relancé)"));
+    let remade = sync.tasks.unwrap().into_iter().find(|s| s.task.subject == "Devis Martin (relancé)").unwrap().href;
+
+    // Deleted here: deleted in Outlook too (Exchange deletes a task only when told which of its
+    // occurrences go), and not read back.
+    let deleted = Pim { deleted: vec![quatrelle_model::pim::Tombstone { href: remade.clone(), ..Default::default() }], ..Default::default() };
+    let sync = crate::ews_pim::sync(&c, &deleted, 1_792_000_000).unwrap();
+    assert!(sync.errors.is_empty(), "{:?}", sync.errors);
+    assert_eq!(sync.deleted, std::slice::from_ref(&remade));
+    assert!(!sync.tasks.unwrap().iter().any(|s| s.href == remade), "gone from the Tasks folder");
+    // Refused by the server (someone else's, which this account may only read): said, and not
+    // tried again.
+    let theirs = parse("<t:Task><t:ItemClass>IPM.Task</t:ItemClass><t:Subject>Leur tâche</t:Subject></t:Task>");
+    server.data.lock().unwrap().pim.push(("B1".into(), "mailbox:boss@contoso.example".into(), theirs.kids[0].clone()));
+    let refused = Pim { deleted: vec![quatrelle_model::pim::Tombstone { href: "task:B1".into(), ..Default::default() }], ..Default::default() };
+    let sync = crate::ews_pim::sync(&c, &refused, 1_792_000_000).unwrap();
+    assert_eq!(sync.deleted, ["task:B1"]);
+    assert!(sync.errors.iter().any(|e| e.starts_with("not deleted on the server")), "{:?}", sync.errors);
 }
