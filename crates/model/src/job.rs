@@ -309,7 +309,8 @@ pub enum Job {
     /// made here first).
     SyncDav { account: String },
     /// Read these calendars of other people alone (just ticked), not everything again: the sync
-    /// says it looked at no more ([`DavSync::partial`](crate::pim::DavSync)).
+    /// says it looked at no more ([`DavSync::partial`](crate::pim::DavSync)). None named: every
+    /// calendar ticked (the calendar just opened), without the address books, notes and tasks.
     SyncCalendars { account: String, calendars: Vec<String> },
     /// Ask where Quatrelle is published for its recent releases (File › About › Check for
     /// updates); answered by [`Event::Releases`].
