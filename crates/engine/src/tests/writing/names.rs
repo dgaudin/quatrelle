@@ -99,3 +99,33 @@ fn the_global_address_list_is_searched_as_a_name_is_typed() {
     assert!(all.iter().any(|a| a.email == "riley@studio.example") && all.iter().any(|a| a.email == "riley@contoso.example"), "{all:?}");
     done(s);
 }
+
+/// Issue #9 (follow-up): someone known here by an address alone (a contact saved with no name)
+/// is checked against the directory and written out with its full name; a name of one's own is
+/// kept, even when the directory names that person otherwise.
+#[test]
+fn check_names_takes_the_directorys_name_for_an_address_known_alone() {
+    let (mut s, gal) = with_exchange("check-names-fill");
+    s.run("contact.create", &json!({"emails": "john.doe@contoso.example"})).unwrap();
+    s.run("contact.create", &json!({"name": "Jo (from the gym)", "emails": "jo@contoso.example"})).unwrap();
+    s.run("mail.new", &json!({})).unwrap();
+    s.run("compose.update", &json!({"to": "john.doe; gym"})).unwrap();
+    let out = s.run("compose.checkNames", &json!({})).unwrap();
+    assert_eq!((out["resolved"].as_u64(), &out["searching"]), (Some(1), &json!(["john.doe"])), "the bare one waits on the directory");
+    assert_eq!(asked(&mut s), ["john.doe"]);
+    answer(&mut s, &gal, "john.doe", &[("John Doe", "John.Doe@contoso.example")]);
+    assert_eq!(s.compose.as_ref().unwrap().to, "John Doe <john.doe@contoso.example>; Jo (from the gym) <jo@contoso.example>; ");
+    // Two known here answer to "jo": offered to choose from, the one with a name of its own
+    // keeping it whatever the directory says, the bare one named by it.
+    s.run("compose.update", &json!({"cc": "jo"})).unwrap();
+    s.run("compose.checkNames", &json!({})).unwrap();
+    assert_eq!(asked(&mut s), ["jo"]);
+    answer(&mut s, &gal, "jo", &[("Joanna Smith", "jo@contoso.example"), ("John Doe", "john.doe@contoso.example")]);
+    let id = s.compose.as_ref().unwrap().id;
+    let choice = s.name_choice(id).cloned().expect("two people to choose from");
+    let name = |email: &str| choice.people.iter().find(|a| a.email.eq_ignore_ascii_case(email)).map(|a| a.name.clone());
+    assert_eq!(name("jo@contoso.example").as_deref(), Some("Jo (from the gym)"), "{:?}", choice.people);
+    assert_eq!(name("john.doe@contoso.example").as_deref(), Some("John Doe"));
+    assert_eq!(choice.people.len(), 2, "listed once each");
+    done(s);
+}

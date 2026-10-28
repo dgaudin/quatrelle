@@ -123,3 +123,18 @@ impl Session {
         self.directory_checked(&account, &q);
     }
 }
+
+/// Whether an address has no real name: none, the address itself, or its user part, as some
+/// directories and senders give (issue #9).
+pub(crate) fn bare_name(a: &EmailAddress) -> bool {
+    let name = a.name.trim();
+    let user = a.email.split('@').next().unwrap_or("");
+    name.is_empty() || name.eq_ignore_ascii_case(&a.email) || name.eq_ignore_ascii_case(user)
+}
+
+/// A known address with no real name ([`bare_name`]) takes the directory's full name for it.
+pub fn fill_name(known: &mut EmailAddress, directory: &EmailAddress) {
+    if bare_name(known) && !directory.name.trim().is_empty() {
+        known.name = directory.name.clone();
+    }
+}

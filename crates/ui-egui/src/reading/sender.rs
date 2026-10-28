@@ -49,8 +49,10 @@ pub(super) fn candidates(s: &mut Session, ctx: &egui::Context, compose: u64, acc
         s.search_directory(&gal, typed, true);
         searching = s.directory_searching(&gal, typed);
         for p in s.directory_found(&gal, typed).map(|f| f.people.clone()).unwrap_or_default() {
-            if !people.iter().any(|x| x.email.eq_ignore_ascii_case(&p.email)) {
-                people.push(p);
+            // Known here by its address alone: the directory's full name for it.
+            match people.iter_mut().find(|x| x.email.eq_ignore_ascii_case(&p.email)) {
+                Some(known) => quatrelle_engine::fill_name(known, &p),
+                None => people.push(p),
             }
         }
     }
