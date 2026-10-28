@@ -6,8 +6,17 @@ use super::*;
 pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
     let mut out = DavSync { caldav_home: Some("ews".into()), carddav_home: Some("ews".into()), checked: now, ..Default::default() };
     for t in &pim.deleted {
-        match delete(c, t.href.trim_start_matches("contact:").trim_start_matches("note:").trim_start_matches("task:")) {
-            Ok(()) | Err(NetError::No(_)) => out.deleted.push(t.href.clone()),
+        let task = t.href.starts_with("task:");
+        match delete(c, t.href.trim_start_matches("contact:").trim_start_matches("note:").trim_start_matches("task:"), task) {
+            // Deleted, or gone already (deleted in Outlook too).
+            Ok(()) => out.deleted.push(t.href.clone()),
+            Err(NetError::No(why)) if why.starts_with("not on the server") => out.deleted.push(t.href.clone()),
+            // Refused: it stays on the server, so it comes back here, and why is said.
+            Err(NetError::No(why)) => {
+                out.deleted.push(t.href.clone());
+                out.errors.push(format!("not deleted on the server: {why}"));
+            }
+            // Not now (offline, the server busy): tried again next time, still deleted here.
             Err(e) => out.errors.push(e.to_string()),
         }
     }
@@ -15,7 +24,7 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
     for k in pim.cards.iter().filter(|k| k.dirty) {
         // Made again: a contact's addresses and numbers are simplest replaced whole.
         if let Some(old) = k.href.strip_prefix("contact:")
-            && let Err(e) = delete(c, old)
+            && let Err(e) = delete(c, old, false)
             && !matches!(e, NetError::No(_))
         {
             out.errors.push(format!("{}: {e}", k.card.display()));
@@ -288,7 +297,7 @@ fn read_notes(c: &Client, pim: &Pim, out: &mut DavSync) {
     // then the folder is read again. A mailbox without one keeps notes on this computer.
     for n in pim.notes.iter().filter(|n| n.dirty) {
         if let Some(old) = n.href.strip_prefix("note:")
-            && let Err(e) = delete(c, old)
+            && let Err(e) = delete(c, old, false)
             && !matches!(e, NetError::No(_))
         {
             out.errors.push(format!("{}: {e}", n.note.title()));
