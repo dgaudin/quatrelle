@@ -56,7 +56,9 @@ impl Session {
         if let Some(server) = &sync.notes {
             p.notes.retain(|n| n.dirty || n.href.is_empty());
             for x in server {
-                if !p.notes.iter().any(|n| !n.href.is_empty() && n.href == x.href) {
+                // Deleted here, the server not told yet (offline): it stays deleted.
+                let deleting = p.deleted.iter().any(|d| d.href == x.href);
+                if !deleting && !p.notes.iter().any(|n| !n.href.is_empty() && n.href == x.href) {
                     p.notes.push(x.clone());
                 }
             }

@@ -195,7 +195,9 @@ pub(super) fn merge_tasks(p: &mut Pim, sync: &DavSync) {
     if let Some(server) = &sync.tasks {
         p.tasks.retain(|t| t.dirty || t.href.is_empty());
         for x in server {
-            if !p.tasks.iter().any(|t| !t.href.is_empty() && t.href == x.href) {
+            // Deleted here, the server not told yet (offline): it stays deleted.
+            let deleting = p.deleted.iter().any(|d| d.href == x.href);
+            if !deleting && !p.tasks.iter().any(|t| !t.href.is_empty() && t.href == x.href) {
                 p.tasks.push(x.clone());
             }
         }

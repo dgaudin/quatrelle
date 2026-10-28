@@ -630,6 +630,12 @@ impl Data {
                         out.push(err("ErrorAccessDenied"));
                         continue;
                     }
+                    // A task goes only when told which of its occurrences do.
+                    let task = self.pim.iter().any(|(i, _, el)| *i == id && el.name == "Task");
+                    if task && op.attr("AffectedTaskOccurrences").is_none() {
+                        out.push(err("ErrorInvalidRequest"));
+                        continue;
+                    }
                     self.items.retain(|i| i.id != id);
                     self.pim.retain(|(i, _, _)| *i != id);
                     out.push(ok(String::new()));

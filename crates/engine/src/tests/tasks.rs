@@ -109,6 +109,21 @@ fn an_exchange_accounts_tasks_go_to_its_tasks_folder() {
     assert!(x2.dirty && x2.task.is_complete());
     s.run("task.delete", &json!({"uid": "task:X1"})).unwrap();
     assert!(s.pim[&id].deleted.iter().any(|t| t.href == "task:X1"), "deleted on the server next time");
+    // The server not told yet (it was busy) while its folder was read: still deleted here.
+    let x2 = s.pim[&id].tasks.iter().find(|t| t.href == "task:X2").unwrap().clone();
+    let read = |href: &str| quatrelle_model::pim::StoredTask {
+        href: href.into(),
+        task: quatrelle_model::pim::Task { uid: href.into(), subject: href.into(), ..Default::default() },
+        ..Default::default()
+    };
+    let not_yet = quatrelle_model::pim::DavSync { tasks: Some(vec![read("task:X1"), x2.clone()]), ..Default::default() };
+    s.apply_dav(&id, &not_yet);
+    assert!(s.find_task("task:X1").is_none(), "doesn't come back");
+    assert!(s.pim[&id].deleted.iter().any(|t| t.href == "task:X1"), "still to delete there");
+    // Deleted there: forgotten.
+    let gone = quatrelle_model::pim::DavSync { deleted: vec!["task:X1".into()], tasks: Some(vec![x2]), ..Default::default() };
+    s.apply_dav(&id, &gone);
+    assert!(s.pim[&id].deleted.is_empty() && s.find_task("task:X1").is_none());
     done(s);
 }
 
