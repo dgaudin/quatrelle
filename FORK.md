@@ -414,6 +414,46 @@ compile et committe chaque reprise propre, et s'arrête au premier conflit).
   CI, la version et la documentation de l'origine (`2d8b274`, `baa180a`, `daadfd6`, `db8851c`,
   `763cb9f`, `d826960`).
 
+### État de la récupération : v0.28 (2026-10-28)
+
+L'origine a publié la v0.28 : onze commits après `d826960`. Même méthode, un par un.
+
+- **Repris tels quels** (le jour même) : l'empaquetage et la CI (`df0f10a`, l'icône de Quatrelle
+  épinglée gardée après une mise à jour sous Windows ; `6df62e5`, une version sans craft-fonts
+  refusée ; `3c2a9fa`, libxkbcommon-x11 dans le .deb et le .rpm ; `7dc8276`, les panneaux
+  d'ouverture et d'enregistrement du Mac dans la langue de l'interface ; `7ce73f5`, le certificat
+  de signature décodé dans un dossier privé ; `0619fe9`, l'écriture réservée au travail qui
+  rédige la version ; `b21aa6a`, FreeBSD et Windows ARM64 aux seules publications et chaque
+  semaine).
+- **Adapté** : l'abonnement à un calendrier par son lien iCal ou `webcal://` (`29f1bec`, Ajouter
+  un calendrier › Depuis Internet d'Outlook). Le modèle (`WebCalendar`, `calendar_link`), le
+  protocole (`net/protocols/web_calendar.rs`, ETag et Last-Modified), les commandes
+  (`calendar.subscribe`, `calendar.unsubscribe`, `calendar.refreshSubscribed`), la boîte de
+  dialogue et la ligne du volet (lien et état au survol, Actualiser et Supprimer au clic droit)
+  viennent de l'origine ; la lecture tourne dans `worker/pool.rs` de ce fork (l'origine a
+  `threads.rs`). Décisions du propriétaire, dans le sillage d'Outlook : un lien vers un serveur
+  du réseau local est permis (le lecteur `http::send`, pas celui des images réservé à
+  l'Internet) ; un calendrier abonné **n'est pas** un calendrier du compte (`own_calendar`),
+  donc ses rendez-vous sont mis de côté avec ceux des autres hors du calendrier (`parking.rs` ;
+  une lecture survenue pendant qu'ils étaient de côté l'emporte au retour) et ses alarmes ne
+  sonnent jamais ; le point d'entrée du ruban est un menu Ajouter un calendrier (Depuis le
+  carnet d'adresses… — l'ancien bouton Ouvrir un calendrier — et Depuis Internet…), avec le
+  lien S'abonner à un calendrier… du volet. La fusion de synchronisation de ce fork
+  (`syncing.rs`) garde le calendrier abonné et ses rendez-vous à travers une synchronisation
+  complète EWS/CalDAV, même quand un rendez-vous du serveur porte le même UID, et une occurrence
+  publiée sans sa série n'est pas jetée comme orpheline. Le refus de supprimer dans un
+  calendrier en lecture seule, que l'origine corrige au passage, était déjà là.
+- **Adapté** : de `2f57946` (les personnes trouvées dans l'annuaire montrées par leur nom
+  complet), seule la moitié moteur : un contact connu ici par sa seule adresse (ou nommé par
+  elle, ou par sa partie utilisateur) prend le nom que donne l'annuaire (`fill_name`), dans
+  Vérifier les noms — qui interroge désormais l'annuaire pour un tel contact au lieu de
+  l'écrire aussitôt, comme Outlook consulte d'abord la liste d'adresses — et dans l'autre
+  adresse du champ De ; un nom qu'on a donné soi-même est gardé.
+- **Laissés** : la moitié EWS de `2f57946` (`ReturnFullContactData`, le nom d'affichage
+  préféré au nom de la boîte) : ce fork a sa propre recherche dans l'annuaire, et le serveur du
+  propriétaire nomme déjà les gens correctement ; la documentation et la version de l'origine
+  (`70b6257`, `3345a18`).
+
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
 Quatre chantiers, chacun dans son commit, à la suite d'un audit de l'éditeur HTML.
