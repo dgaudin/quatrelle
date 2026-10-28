@@ -130,7 +130,7 @@ impl eframe::App for App {
     // Every frame, the window minimized or hidden too (when eframe runs no `ui`): started again,
     // this window comes forward instead of a second one, and opens what that launch handed over.
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        self.pacing.frame();
+        self.pacing.frame(ctx);
         if let Some(handed) = self.instance.as_ref().and_then(single_instance::Server::take) {
             single_instance::show(ctx, self.native_wayland);
             for h in &handed {

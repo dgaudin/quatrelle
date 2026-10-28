@@ -111,22 +111,45 @@ pub const FRAME_EVERY: std::time::Duration = std::time::Duration::from_micros(16
 pub struct Pacing {
     /// When the last frame started; `None` while frames wait for the screen (nothing to keep).
     last: Option<std::time::Instant>,
+    /// The main window's passes when the last frame started: a frame that runs no pass (the
+    /// window hidden) still sees the last pass's input, already answered.
+    pass: u64,
 }
 
 impl Pacing {
     /// Pacing for frames presented in `mode` ([`present_mode`]).
     pub fn new(mode: wgpu::PresentMode) -> Pacing {
-        Pacing { last: (mode == wgpu::PresentMode::AutoNoVsync).then(std::time::Instant::now) }
+        Pacing { last: (mode == wgpu::PresentMode::AutoNoVsync).then(std::time::Instant::now), pass: 0 }
     }
 
-    /// Called as a frame starts: waits for what's left of [`FRAME_EVERY`] since the last one.
-    pub fn frame(&mut self) {
+    /// Called as a frame starts: waits for what's left of [`FRAME_EVERY`] since the last one,
+    /// unless the frame answers a click, a key or the wheel in the main window: kept back, it would
+    /// show that much later while something animates.
+    pub fn frame(&mut self, ctx: &egui::Context) {
         let Some(last) = self.last else { return };
-        if let Some(rest) = wait_for(last.elapsed()) {
+        let pass = ctx.cumulative_pass_nr();
+        let answers = pass != self.pass && ctx.input(|i| answers_input(&i.events));
+        self.pass = pass;
+        if let Some(rest) = wait_for(last.elapsed()).filter(|_| !answers) {
             std::thread::sleep(rest);
         }
         self.last = Some(std::time::Instant::now());
     }
+}
+
+/// Whether `events` hold something the user did, that a frame answers at once: anything but the
+/// pointer going over the window (it moves many times a frame) and the window's focus.
+pub fn answers_input(events: &[egui::Event]) -> bool {
+    events.iter().any(|e| {
+        !matches!(
+            e,
+            egui::Event::PointerMoved(_)
+                | egui::Event::MouseMoved(_)
+                | egui::Event::PointerGone
+                | egui::Event::ModifiersChanged(_)
+                | egui::Event::WindowFocused(_)
+        )
+    })
 }
 
 /// How long a frame waits when `since` went by since the last one started.
@@ -243,6 +266,31 @@ mod tests {
         assert_eq!(wait_for(std::time::Duration::from_millis(4)), Some(FRAME_EVERY - std::time::Duration::from_millis(4)));
         assert_eq!(wait_for(std::time::Duration::from_millis(40)), None, "a slow frame isn't held back");
         assert!(Pacing::new(wgpu::PresentMode::AutoVsync).last.is_none(), "waiting for the screen paces already");
+    }
+
+    /// A click, a key or the wheel is answered without waiting; the pointer going over the window
+    /// waits its turn.
+    #[test]
+    fn a_click_or_a_key_is_answered_without_waiting() {
+        let moved = egui::Event::PointerMoved(egui::pos2(3.0, 4.0));
+        assert!(!answers_input(&[]));
+        assert!(!answers_input(&[moved.clone(), egui::Event::WindowFocused(true)]));
+        let click = egui::Event::PointerButton {
+            pos: egui::pos2(3.0, 4.0),
+            button: egui::PointerButton::Primary,
+            pressed: true,
+            modifiers: egui::Modifiers::NONE,
+        };
+        assert!(answers_input(&[moved, click]));
+        assert!(answers_input(&[egui::Event::Text("a".into())]));
+        let wheel = egui::Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Line,
+            delta: egui::vec2(0.0, 1.0),
+            phase: egui::TouchPhase::Move,
+            source: egui::MouseWheelSource::Unknown,
+            modifiers: egui::Modifiers::NONE,
+        };
+        assert!(answers_input(&[wheel]));
     }
 
     fn found(list: &[(&str, DeviceType)]) -> Vec<Candidate> {
