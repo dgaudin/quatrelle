@@ -251,6 +251,9 @@ impl MailApp {
 
         let mut acts: Vec<Action> = Vec::new();
         let t = self.ui.tokens;
+        if self.ui.page_message.is_none() {
+            self.files_dropped_on_window(&ctx, &mut acts);
+        }
         if let Some(key) = self.ui.page_message.clone() {
             self.message_page(ui, &key, &mut acts);
             if let Some(mut d) = self.ui.dialog.take() {
