@@ -159,6 +159,7 @@ impl Worker {
             }
             Job::FlushOutbox { .. } => self.flush_outbox(),
             Job::SyncDav { .. } => self.sync_dav(),
+            Job::SyncCalendars { calendars, .. } => self.sync_calendars(&calendars),
             Job::GetVacation { .. } => {
                 let r = self.vacation(None);
                 self.report_vacation(r, None);

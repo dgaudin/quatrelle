@@ -341,7 +341,7 @@ pub use contacts::{card_of, note_of};
 use events::{event_fields, modified_occurrence_ids, occurrence_item_id};
 pub use events::{event_of, exception_of, own_organizer};
 use push::{answer_pending, push_events};
-pub use sync::{sync, sync_tasks};
+pub use sync::{sync, sync_calendars, sync_tasks};
 use tasks::read_tasks;
 
 #[cfg(test)]

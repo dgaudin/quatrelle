@@ -162,7 +162,10 @@ fn calendars_are_read_when_shown() {
         .to_string();
     let ana = shared_calendar_id("ana@contoso.example");
     let cal = |id: &str, group: &str| CalendarInfo { id: id.into(), name: id.into(), group: group.into(), ..Default::default() };
-    s.apply_dav(&id, &DavSync { calendars: Some(vec![cal("calendar", ""), cal(&ana, "Équipe")]), checked: NOW, ..Default::default() });
+    s.apply_dav(
+        &id,
+        &DavSync { calendars: Some(vec![cal("calendar", ""), cal(&ana, "Équipe"), cal("public:AQ1", "")]), checked: NOW, ..Default::default() },
+    );
     s.take_jobs();
     let pim = |s: &Session| s.pim.get(&id).cloned().unwrap_or_default();
     assert!(pim(&s).own_only, "in Mail");
@@ -172,11 +175,16 @@ fn calendars_are_read_when_shown() {
     let jobs = s.take_jobs();
     assert!(!pim(&s).own_only);
     assert!(jobs.iter().any(|j| matches!(j, Job::SyncDav { account } if *account == id)), "{jobs:?}");
-    // Ticking Ana's reads it.
+    // Ticking Ana's reads hers alone, at once (not everything again, half a minute: 28/10).
     s.run("calendar.show", &json!({"account": id, "calendar": ana, "shown": true})).unwrap();
     let jobs = s.take_jobs();
+    assert_eq!(pim(&s).not_read, ["public:AQ1"]);
+    assert_eq!(jobs, [Job::SyncCalendars { account: id.clone(), calendars: vec![ana.clone()] }]);
+    // A public folder's is read with the rest (where it is takes the folders' list).
+    s.run("calendar.show", &json!({"account": id, "calendar": "public:AQ1", "shown": true})).unwrap();
+    let jobs = s.take_jobs();
     assert!(pim(&s).not_read.is_empty());
-    assert!(jobs.iter().any(|j| matches!(j, Job::SyncDav { .. })));
+    assert!(jobs.iter().any(|j| matches!(j, Job::SyncDav { .. })), "{jobs:?}");
     // Back to Mail: nothing more to read until the calendar opens again.
     s.run("view.module", &json!({"name": "mail"})).unwrap();
     let jobs = s.take_jobs();
@@ -185,6 +193,51 @@ fn calendars_are_read_when_shown() {
     // A sync that read this account's own calendar only keeps the others as they were.
     s.apply_dav(&id, &DavSync { calendars: Some(vec![cal("calendar", "")]), partial: true, checked: NOW, ..Default::default() });
     assert!(pim(&s).calendars.iter().any(|c| c.id == ana));
+}
+
+/// A calendar read alone (just ticked) brings its own appointments: the other calendars stay,
+/// with theirs, where the side pane lists them.
+#[test]
+fn a_calendar_read_alone_leaves_the_others_in_place() {
+    use quatrelle_model::ical::CalEvent;
+    use quatrelle_model::pim::{CalendarInfo, DavSync, StoredEvent, shared_calendar_id};
+    let mut s = Session::open(Some(temp("cal-read-alone")), quatrelle_model::dates::Clock::new(NOW, 0));
+    let id = s
+        .run("account.add", &json!({"email": "riley@contoso.example", "ews": "mail.contoso.example", "username": "CONTOSO\\riley", "password": "pw"}))
+        .unwrap()["account"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let (ana, tom) = (shared_calendar_id("ana@contoso.example"), shared_calendar_id("tom@contoso.example"));
+    let cal = |id: &str| CalendarInfo { id: id.into(), name: id.into(), ..Default::default() };
+    let event = |calendar: &str, uid: &str| StoredEvent {
+        calendar: calendar.into(),
+        href: format!("{calendar}/{uid}"),
+        event: CalEvent { uid: uid.into(), summary: uid.into(), start: NOW, end: NOW + 3600, ..Default::default() },
+        ..Default::default()
+    };
+    let full = DavSync {
+        calendars: Some(vec![cal("calendar"), cal(&ana), cal(&tom)]),
+        events: vec![event("calendar", "mine"), event(&ana, "ana-1")],
+        synced_calendars: vec!["calendar".into(), ana.clone()],
+        checked: NOW,
+        ..Default::default()
+    };
+    s.apply_dav(&id, &full);
+    let alone = DavSync {
+        calendars: Some(vec![CalendarInfo { read_only: true, ..cal(&tom) }]),
+        events: vec![event(&tom, "tom-1")],
+        synced_calendars: vec![tom.clone()],
+        partial: true,
+        checked: NOW,
+        ..Default::default()
+    };
+    s.apply_dav(&id, &alone);
+    let p = &s.pim[&id];
+    assert_eq!(p.calendars.iter().map(|c| c.id.as_str()).collect::<Vec<_>>(), ["calendar", ana.as_str(), tom.as_str()]);
+    assert!(p.calendars.iter().find(|c| c.id == tom).is_some_and(|c| c.read_only));
+    let uids: Vec<&str> = p.events.iter().map(|e| e.event.uid.as_str()).collect();
+    assert!(uids.contains(&"mine") && uids.contains(&"ana-1") && uids.contains(&"tom-1"), "{uids:?}");
 }
 
 /// Dragged to another hour, one occurrence of a series becomes an instance of its own
