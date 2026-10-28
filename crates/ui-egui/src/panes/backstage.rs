@@ -116,7 +116,8 @@ pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) 
             }
             // Close Quatrelle (the desktop app; a browser tab is closed by the browser).
             if st.has_files && rail_item(ui, &t, Icon::Close, "Exit", false).clicked() {
-                ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
+                acts.push(Action::Quit);
+                close = true;
             }
         },
     );

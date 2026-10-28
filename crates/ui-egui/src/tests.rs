@@ -603,6 +603,7 @@ mod reading;
 mod rtl;
 mod scheduling;
 mod soak;
+mod tray;
 mod updates;
 mod windows;
 mod writing;

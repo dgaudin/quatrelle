@@ -52,7 +52,7 @@ pub(crate) use app::{SearchDrop, junk_menu, scope_label};
 pub use app::{WindowPlace, after_open};
 pub use dialogs::Dialog;
 use icons::Icon;
-pub use services::{Backend, NullBackend, NullServices, ReminderAction, Services, UpdateState};
+pub use services::{Backend, NullBackend, NullServices, ReminderAction, Services, TrayAction, TrayIcon, UpdateState};
 use theme::Tokens;
 
 /// Whether the message being written shows in the reading pane: when it isn't popped out, or
@@ -146,6 +146,8 @@ pub enum RibbonTab {
 /// Something a pane asks for; run after drawing so panes only borrow what they read.
 pub enum Action {
     Run(&'static str, Value),
+    /// Close Quatrelle (File › Exit), asking first as any close does.
+    Quit,
     /// Close Quatrelle though online-only accounts hold unsent mail or changes (issue #4).
     CloseAnyway,
     /// Close, install the downloaded version, and open it.
@@ -256,6 +258,12 @@ pub struct UiState {
     /// the window is to close on the next frame.
     pub closing_anyway: bool,
     pub close_now: bool,
+    /// The close asked for quits (File › Exit, the icon's Exit, a script): it goes ahead rather
+    /// than leaving Quatrelle in the notification area.
+    pub quitting: bool,
+    /// The main window was put away in the notification area (its close button): it comes back
+    /// for a question as Quatrelle quits.
+    pub(crate) put_away: bool,
     /// When the close was last decided (the input's time): [`MailApp::logic`] decides it, and
     /// `ui` in the same pass doesn't again.
     pub(crate) close_checked: Option<f64>,
@@ -380,8 +388,8 @@ pub struct UiState {
     /// This page is a message's own window (the browser): only that message is shown.
     pub page_message: Option<MessageKey>,
     pub(crate) title_shown: String,
-    /// The new messages the envelope in the notification area was last shown for.
-    envelope_shown: usize,
+    /// What the icon in the notification area was last shown as.
+    tray_shown: TrayIcon,
     /// Raise the main window on the next frame.
     focus_main: bool,
     /// Video attachments written out for the platform to take a frame from, and the frames.
@@ -469,6 +477,8 @@ impl MailApp {
                 tokens: Tokens::light(),
                 closing_anyway: false,
                 close_now: false,
+                quitting: false,
+                put_away: false,
                 close_checked: None,
                 update: UpdateState::None,
                 update_later: None,
@@ -533,7 +543,7 @@ impl MailApp {
                 places: Default::default(),
                 page_message: None,
                 title_shown: String::new(),
-                envelope_shown: 0,
+                tray_shown: TrayIcon::default(),
                 focus_main: false,
                 video_files: HashMap::new(),
                 video_frames: HashMap::new(),
@@ -772,7 +782,7 @@ impl MailApp {
 
     /// Preferences and theme for the app to save.
     pub fn saved_state(&self) -> Value {
-        json!({ "prefs": self.session.prefs, "dark": self.ui.dark, "systemAccent": self.ui.system_accent, "ribbonCollapsed": self.ui.ribbon_collapsed, "language": self.ui.language, "windows": self.ui.places, "peopleView": self.ui.people_view, "peopleList": self.ui.people_list, "listColumns": self.ui.list_columns })
+        json!({ "prefs": self.session.prefs, "dark": self.ui.dark, "systemAccent": self.ui.system_accent, "ribbonCollapsed": self.ui.ribbon_collapsed, "language": self.ui.language, "windows": self.ui.places, "peopleView": self.ui.people_view, "peopleList": self.ui.people_list, "listColumns": self.ui.list_columns, "envelope": self.session.envelope_keys() })
     }
 
     pub fn restore_state(&mut self, v: &Value) {
@@ -789,6 +799,10 @@ impl MailApp {
             if offline {
                 self.session.set_work_offline(true);
             }
+        }
+        // New mail still unread as Quatrelle closed: the envelope shows again.
+        if let Some(keys) = v.get("envelope").and_then(|k| serde_json::from_value(k.clone()).ok()) {
+            self.session.restore_envelope(keys);
         }
         self.ui.dark = v.get("dark").and_then(Value::as_bool);
         self.ui.system_accent = v.get("systemAccent").and_then(Value::as_bool).unwrap_or(true);
