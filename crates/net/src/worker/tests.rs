@@ -79,6 +79,11 @@ fn a_calendar_sync_waiting_isnt_queued_twice() {
     push_job(&mut q, ticked("shared:ana@contoso.example"));
     let both = Job::SyncCalendars { account: "a".into(), calendars: vec!["shared:ana@contoso.example".into(), "shared:tom@contoso.example".into()] };
     assert_eq!(q, [both]);
+    // The calendar opened (every calendar ticked) takes them all in, before or after.
+    let opened = Job::SyncCalendars { account: "a".into(), calendars: Vec::new() };
+    push_job(&mut q, opened.clone());
+    push_job(&mut q, ticked("shared:eve@contoso.example"));
+    assert_eq!(q, [opened]);
 }
 
 /// A server's rules split by whose they are: the ones Quatrelle holds the id of, and the

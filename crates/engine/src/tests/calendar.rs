@@ -170,21 +170,21 @@ fn calendars_are_read_when_shown() {
     let pim = |s: &Session| s.pim.get(&id).cloned().unwrap_or_default();
     assert!(pim(&s).own_only, "in Mail");
     assert!(pim(&s).not_read.contains(&ana), "unticked");
-    // The calendar opens: the ticked ones are read now.
+    // The calendar opens: the ticked ones are read now (the calendars, not the address books).
     s.run("view.module", &json!({"name": "calendar"})).unwrap();
     let jobs = s.take_jobs();
     assert!(!pim(&s).own_only);
-    assert!(jobs.iter().any(|j| matches!(j, Job::SyncDav { account } if *account == id)), "{jobs:?}");
+    assert_eq!(jobs, [Job::SyncCalendars { account: id.clone(), calendars: Vec::new() }]);
     // Ticking Ana's reads hers alone, at once (not everything again, half a minute: 28/10).
     s.run("calendar.show", &json!({"account": id, "calendar": ana, "shown": true})).unwrap();
     let jobs = s.take_jobs();
     assert_eq!(pim(&s).not_read, ["public:AQ1"]);
     assert_eq!(jobs, [Job::SyncCalendars { account: id.clone(), calendars: vec![ana.clone()] }]);
-    // A public folder's is read with the rest (where it is takes the folders' list).
+    // A public folder's is read with the other calendars (where it is takes the folders' list).
     s.run("calendar.show", &json!({"account": id, "calendar": "public:AQ1", "shown": true})).unwrap();
     let jobs = s.take_jobs();
     assert!(pim(&s).not_read.is_empty());
-    assert!(jobs.iter().any(|j| matches!(j, Job::SyncDav { .. })), "{jobs:?}");
+    assert_eq!(jobs, [Job::SyncCalendars { account: id.clone(), calendars: Vec::new() }]);
     // Back to Mail: nothing more to read until the calendar opens again.
     s.run("view.module", &json!({"name": "mail"})).unwrap();
     let jobs = s.take_jobs();

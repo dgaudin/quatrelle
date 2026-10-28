@@ -4,10 +4,18 @@ use super::*;
 
 /// Send what changed here, then read the calendar and contacts again.
 pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
+    sync_as(c, pim, now, false)
+}
+
+/// The sync, or (`calendars_only`, the calendar just opened) the calendars alone: the address
+/// books, notes and tasks left as they are (the owner's public address books, 1,400 contacts,
+/// took longer than every calendar ticked, 28/10).
+fn sync_as(c: &Client, pim: &Pim, now: i64, calendars_only: bool) -> Result<DavSync> {
     let mut out = DavSync { caldav_home: Some("ews".into()), carddav_home: Some("ews".into()), checked: now, ..Default::default() };
-    delete_gone(c, pim.deleted.iter(), &mut out);
+    let others = |t: &&quatrelle_model::pim::Tombstone| ["contact:", "note:", "task:"].iter().any(|p| t.href.starts_with(p));
+    delete_gone(c, pim.deleted.iter().filter(|t| !calendars_only || !others(t)), &mut out);
     push_events(c, pim, &mut out);
-    for k in pim.cards.iter().filter(|k| k.dirty) {
+    for k in pim.cards.iter().filter(|k| k.dirty && !calendars_only) {
         // Made again: a contact's addresses and numbers are simplest replaced whole.
         if let Some(old) = k.href.strip_prefix("contact:")
             && let Err(e) = delete(c, old, false)
@@ -40,13 +48,14 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
     // is read where the permissions they gave allow, and changed where they let this account.
     // Contacts first: People shows them, and a first sync's whole address book mustn't wait
     // behind a dozen colleagues' calendars.
-    read_contacts(c, &mut out)?;
+    if !calendars_only {
+        read_contacts(c, &mut out)?;
+    }
     if pim.own_only {
         // The calendar isn't shown: this account's own is enough (the others are read once it is).
         out.calendars = Some(calendars);
         out.partial = true;
-        read_notes(c, pim, &mut out);
-        read_tasks(c, pim, &mut out);
+        finish(c, pim, &mut out, calendars_only);
         return Ok(out);
     }
     // Opened here by their address, then the calendars of the shared mailboxes the account opens
@@ -125,6 +134,9 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
             log::info!("public folders: {contacts} address books, {} calendars", list.len() - contacts);
             for (n, f) in list.into_iter().take(MAX_PUBLIC_PIM).enumerate() {
                 let (id, name, class) = (f.id, f.path, f.class);
+                if calendars_only && class.starts_with("IPF.Contact") {
+                    continue;
+                }
                 let key = format!("public:{id}");
                 // An unticked public calendar: listed, not read.
                 if !class.starts_with("IPF.Contact") && pim.not_read.contains(&key) {
@@ -196,16 +208,31 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
         Err(e) if c.public_hierarchy_mailbox().is_some() => out.errors.push(format!("Public folders: {e}")),
         Err(e) => log::info!("no public contacts or calendars: {e}"),
     }
-    out.books = Some(books);
-    read_notes(c, pim, &mut out);
-    read_tasks(c, pim, &mut out);
+    if !calendars_only {
+        out.books = Some(books);
+    }
+    finish(c, pim, &mut out, calendars_only);
     Ok(out)
+}
+
+/// The notes and tasks read with the rest; the calendars alone, their appointments told apart.
+fn finish(c: &Client, pim: &Pim, out: &mut DavSync, calendars_only: bool) {
+    if calendars_only {
+        quatrelle_model::pim::separate_shared_uids(&mut out.events);
+    } else {
+        read_notes(c, pim, out);
+        read_tasks(c, pim, out);
+    }
 }
 
 /// Other people's calendars alone (just ticked), not everything again: their appointments and
 /// their entries in the list, the rest left as it is (`partial`). A few seconds, where a full
-/// sync of the owner's took half a minute.
-pub fn sync_calendars(c: &Client, pim: &Pim, ids: &[String], now: i64) -> DavSync {
+/// sync of the owner's took half a minute. None named: every calendar ticked (the calendar just
+/// opened), without the address books.
+pub fn sync_calendars(c: &Client, pim: &Pim, ids: &[String], now: i64) -> Result<DavSync> {
+    if ids.is_empty() {
+        return sync_as(c, pim, now, true);
+    }
     let mut out = DavSync { caldav_home: Some("ews".into()), carddav_home: Some("ews".into()), checked: now, partial: true, ..Default::default() };
     let mut calendars = Vec::new();
     for id in ids {
@@ -224,7 +251,7 @@ pub fn sync_calendars(c: &Client, pim: &Pim, ids: &[String], now: i64) -> DavSyn
     }
     out.calendars = Some(calendars);
     quatrelle_model::pim::separate_shared_uids(&mut out.events);
-    out
+    Ok(out)
 }
 
 /// `email`'s calendar read into `out` (from six months back), and its entry in the list as
