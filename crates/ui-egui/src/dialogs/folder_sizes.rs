@@ -8,14 +8,15 @@ use quatrelle_engine::model::{FolderSize, MailboxQuota};
 
 use super::*;
 
-/// How the folders are listed: by their place, or the biggest first (by their own size, or with
-/// their subfolders').
+/// How the folders are listed: by their place, the biggest first (by their own size, or with
+/// their subfolders'), or the fullest first (the server's, which says how many items each holds).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum SizeSort {
     #[default]
     Place,
     Size,
     Total,
+    Items,
 }
 
 /// A line of the list: where the folder is (its names from the top down), the space its own
@@ -175,9 +176,11 @@ fn lines(s: &Session, account: &str, folders: &[FolderSize], server: bool, sort:
         l.total = under.get(&l.path).copied().unwrap_or(l.size);
     }
     match sort {
-        SizeSort::Place => lines.sort_by_cached_key(|l| l.path.iter().map(|p| alphabetical(p)).collect::<Vec<_>>()),
         SizeSort::Size => lines.sort_by_key(|l| std::cmp::Reverse(l.size)),
         SizeSort::Total => lines.sort_by_key(|l| std::cmp::Reverse(l.total)),
+        SizeSort::Items if server => lines.sort_by_key(|l| std::cmp::Reverse(l.items)),
+        // This computer's side doesn't count the items: by place there.
+        SizeSort::Place | SizeSort::Items => lines.sort_by_cached_key(|l| l.path.iter().map(|p| alphabetical(p)).collect::<Vec<_>>()),
     }
     lines
 }
@@ -227,7 +230,7 @@ fn table(ui: &mut Ui, t: &Tokens, lines: &[Line], sort: &mut SizeSort, server: b
     let mut x = head.left() + 6.0;
     let mut cols: Vec<(&str, f32, Option<SizeSort>, bool)> = vec![("Folder", name_w, Some(SizeSort::Place), false)];
     if server {
-        cols.push(("Items", ITEMS_W, None, true));
+        cols.push(("Items", ITEMS_W, Some(SizeSort::Items), true));
     }
     cols.push(("Size", SIZE_W, Some(SizeSort::Size), true));
     cols.push(("Total size", SIZE_W, Some(SizeSort::Total), true));
@@ -273,4 +276,26 @@ fn table(ui: &mut Ui, t: &Tokens, lines: &[Line], sort: &mut SizeSort, server: b
             ui.label(RichText::new(tl!("No folders.")).color(t.dim));
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Each heading sorts: the folders by their place, by their size, with their subfolders', and
+    /// (the server's, which says how many items each holds) the fullest first (the owner, 28/10).
+    #[test]
+    fn the_folders_sort_by_each_heading() {
+        let s = Session::open(None, quatrelle_engine::model::dates::Clock::new(0, 0));
+        let f = |path: &[&str], size: u64, items: u32| FolderSize { path: path.iter().map(|p| p.to_string()).collect(), size, items, folder: None };
+        let folders =
+            vec![f(&["Archives"], 9 << 20, 40), f(&["Boîte de réception"], 3 << 20, 900), f(&["Boîte de réception", "Projets"], 8 << 20, 7)];
+        let order = |sort| lines(&s, "a1", &folders, true, sort).into_iter().map(|l| l.path.join("/")).collect::<Vec<_>>();
+        assert_eq!(order(SizeSort::Place), ["Archives", "Boîte de réception", "Boîte de réception/Projets"]);
+        assert_eq!(order(SizeSort::Size), ["Archives", "Boîte de réception/Projets", "Boîte de réception"]);
+        assert_eq!(order(SizeSort::Total), ["Boîte de réception", "Archives", "Boîte de réception/Projets"]);
+        assert_eq!(order(SizeSort::Items), ["Boîte de réception", "Archives", "Boîte de réception/Projets"]);
+        let here = lines(&s, "a1", &folders, false, SizeSort::Items).into_iter().map(|l| l.path.join("/")).collect::<Vec<_>>();
+        assert_eq!(here, order(SizeSort::Place), "this computer's side, without the column, by place");
+    }
 }
