@@ -137,6 +137,15 @@ fn invitations_are_answered_and_sent() {
     assert!(s.run("invite.respond", &json!({"answer": "maybe"})).is_err());
 
     s.run("invite.respond", &json!({"answer": "accepted"})).unwrap();
+    // Answered: as Outlook does, the invitation leaves the Inbox for Deleted Items, the calendar
+    // has the answer, and it shows there, open again.
+    assert!(!s.list.iter().any(|m| m.key == k), "out of the Inbox");
+    let e = s.find_event("mix@sample.quatrelle").unwrap().1.event.clone();
+    assert!(e.attendees.iter().any(|a| a.email == "riley@studio.example" && a.partstat == "ACCEPTED"));
+    let trash = s.account("sample").and_then(|a| a.folder(FolderRole::Trash)).map(|f| f.path.clone()).unwrap();
+    s.run("folder.open", &json!({"account": "sample", "folder": trash})).unwrap();
+    let moved = s.list.iter().find(|m| m.subject == "Sound mix, version 3").map(|m| m.key.clone()).expect("in Deleted Items");
+    s.run("list.open", &json!({"key": moved.to_id()})).unwrap();
     assert_eq!(s.invite().unwrap().answer, "ACCEPTED");
     let (method, raw) = sent_calendar(&s, "Sent", "Accepted: Sound mix playback");
     assert_eq!(method, "REPLY");

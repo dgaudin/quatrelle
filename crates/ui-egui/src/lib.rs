@@ -419,8 +419,8 @@ pub struct UiState {
     pub(crate) note_focus: bool,
     /// The person whose card is shown (uid).
     pub(crate) person: Option<String>,
-    /// The invitation in the open message, worked out once per message and calendar change.
-    pub(crate) invite: Option<(MessageKey, u64, Option<quatrelle_engine::Invite>)>,
+    /// The invitations of the messages shown (the reading pane's, those in windows), each worked out once per calendar change.
+    pub(crate) invite: Vec<(MessageKey, u64, Option<quatrelle_engine::Invite>)>,
     /// A file to drag out of the window (the app starts the system drag).
     drag_out: Option<PathBuf>,
     /// The platform can drag files out.
@@ -551,7 +551,7 @@ impl MailApp {
                 tasks: Default::default(),
                 note_focus: false,
                 person: None,
-                invite: None,
+                invite: Vec::new(),
                 drag_out: None,
                 can_drag_out: false,
                 load_typefaces: Vec::new(),
@@ -647,7 +647,8 @@ impl MailApp {
                 self.ui.dialog = Some(Dialog::SendCheck(found));
             }
             Ok(_) => {}
-            Err(CmdError::Disabled(_)) => {}
+            // Not possible now (a button that does nothing to do): logged, never shown.
+            Err(CmdError::Disabled(m)) => log::info!("{id}: {m}"),
             // What went wrong with the message being written is said over it, in its own
             // window if it has one, as Outlook does (not in the main window's corner).
             Err(CmdError::Params(m) | CmdError::Failed(m)) if id.starts_with("compose.") && self.session.compose.is_some() => {
