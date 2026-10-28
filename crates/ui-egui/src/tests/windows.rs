@@ -332,3 +332,57 @@ fn an_invitation_in_a_window_can_be_answered_there() {
     assert!(!a.session.list.iter().any(|m| m.key == invitation), "and it leaves the Inbox");
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// Files dropped on the main window with nothing being written there start a message with them
+/// attached, as Outlook does (from upstream 865a712); while they're held over it, it says so; a
+/// folder alone starts none, and a file dropped once the message is there is attached to it.
+#[test]
+fn files_dropped_on_the_main_window_start_a_message() {
+    use std::path::{Path, PathBuf};
+    /// What the desktop hands over for one file let go over the window.
+    #[derive(Debug)]
+    struct LetGo(PathBuf);
+    impl egui::DroppedFile for LetGo {
+        fn bytes(&self) -> Result<Vec<u8>, String> {
+            std::fs::read(&self.0).map_err(|why| format!("{}: {why}", self.0.display()))
+        }
+
+        fn path(&self) -> &Path {
+            self.0.as_path()
+        }
+    }
+    let attached = |a: &MailApp| -> Vec<String> { a.session.all_composes().flat_map(|c| c.attachments.iter().map(|x| x.name.clone())).collect() };
+    let (mut a, dir) = app("drop-main");
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    assert!(a.session.compose.is_none());
+    let file = dir.join("brief.pdf");
+    std::fs::write(&file, b"%PDF-1.4").unwrap();
+    let screen = Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1280.0, 800.0)));
+    let held = RawInput {
+        screen_rect: screen,
+        hovered_files: vec![egui::HoveredFile { path: Some(file.clone()), mime: String::new() }],
+        ..Default::default()
+    };
+    let mut out = ctx.run_ui(held, |ui| a.ui(ui));
+    out.textures_delta.clear();
+    assert!(a.session.compose.is_none(), "held over it, nothing yet");
+    let drop = |a: &mut MailApp, files: Vec<PathBuf>| {
+        let dropped: Vec<egui::DroppedFileHandle> = files.into_iter().map(|f| std::sync::Arc::new(LetGo(f)) as egui::DroppedFileHandle).collect();
+        let mut out = ctx.run_ui(RawInput { screen_rect: screen, dropped_files: dropped, ..Default::default() }, |ui| a.ui(ui));
+        out.textures_delta.clear();
+        frame(&ctx, a, vec![]);
+    };
+    // A folder alone: nothing to attach, no message.
+    drop(&mut a, vec![dir.clone()]);
+    assert!(a.session.all_composes().next().is_none(), "a folder starts no message");
+    drop(&mut a, vec![file, "relative.txt".into()]);
+    assert_eq!(attached(&a), ["brief.pdf"], "the file with no path to read is left");
+    // Dropped again while it's being written: attached to it, not another message.
+    let again = dir.join("notes.txt");
+    std::fs::write(&again, b"n").unwrap();
+    drop(&mut a, vec![again]);
+    assert_eq!(a.session.all_composes().count(), 1);
+    assert_eq!(attached(&a), ["brief.pdf", "notes.txt"]);
+    let _ = std::fs::remove_dir_all(dir);
+}
