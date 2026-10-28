@@ -394,7 +394,7 @@ impl Pool {
                 }
             }
             // Offline: changes wait in the cache for the next sync.
-            Job::SyncDav { account } if !self.workers.contains_key(&account) => {}
+            Job::SyncDav { account } | Job::SyncCalendars { account, .. } if !self.workers.contains_key(&account) => {}
             Job::SearchServer { account, query, .. } if !self.workers.contains_key(&account) => {
                 self.sink.emit(Event::ServerSearched { account, query, keys: Vec::new(), error: Some("the account is offline".into()), done: true });
             }

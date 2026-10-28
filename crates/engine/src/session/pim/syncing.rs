@@ -80,10 +80,21 @@ impl Session {
             if keep_local && let Some(l) = p.calendars.iter().find(|c| c.id == LOCAL) {
                 list.push(l.clone());
             }
-            // Only some looked at: the others stay, with their events.
+            // Only some looked at (this account's own, or a calendar just ticked): the others
+            // stay, with their events, where the side pane lists them.
             if sync.partial {
-                let kept: Vec<_> = p.calendars.iter().filter(|c| c.id != LOCAL && !list.iter().any(|x| x.id == c.id)).cloned().collect();
-                list.extend(kept);
+                let mut merged: Vec<quatrelle_model::pim::CalendarInfo> = p
+                    .calendars
+                    .iter()
+                    .filter(|c| c.id != LOCAL || list.iter().any(|x| x.id == LOCAL))
+                    .map(|c| list.iter().find(|x| x.id == c.id).cloned().unwrap_or_else(|| c.clone()))
+                    .collect();
+                for x in list {
+                    if !merged.iter().any(|m| m.id == x.id) {
+                        merged.push(x);
+                    }
+                }
+                list = merged;
             }
             // Calendars subscribed to by their links aren't the server's: they stay (issue #7).
             let web: Vec<_> = p.calendars.iter().filter(|c| is_web_calendar(&c.id) && !list.iter().any(|x| x.id == c.id)).cloned().collect();

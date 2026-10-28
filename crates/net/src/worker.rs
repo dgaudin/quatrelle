@@ -137,6 +137,22 @@ fn push_job(queue: &mut VecDeque<Job>, j: Job) {
     if matches!(j, Job::SyncFolder { .. } | Job::SyncDav { .. }) && queue.contains(&j) {
         return;
     }
+    // Calendars just ticked: the sync waiting reads them too, else those waiting take them in.
+    if let Job::SyncCalendars { account, calendars } = &j {
+        if queue.iter().any(|q| matches!(q, Job::SyncDav { account: a } if a == account)) {
+            return;
+        }
+        if let Some(Job::SyncCalendars { calendars: waiting, .. }) =
+            queue.iter_mut().find(|q| matches!(q, Job::SyncCalendars { account: a, .. } if a == account))
+        {
+            for c in calendars {
+                if !waiting.contains(c) {
+                    waiting.push(c.clone());
+                }
+            }
+            return;
+        }
+    }
     // A newer search makes a waiting one pointless.
     if let Job::Search { account, .. } = &j {
         queue.retain(|q| !matches!(q, Job::Search { account: a, .. } if a == account));
@@ -797,6 +813,7 @@ fn jumps_queue(j: &Job) -> bool {
             | Job::FindCertificates { .. }
             | Job::SearchDirectory { .. }
             | Job::SyncDav { .. }
+            | Job::SyncCalendars { .. }
             | Job::SyncFolder { .. }
     )
 }

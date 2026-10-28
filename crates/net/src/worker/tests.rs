@@ -69,6 +69,16 @@ fn a_calendar_sync_waiting_isnt_queued_twice() {
     // Another account's is its own.
     push_job(&mut q, Job::SyncDav { account: "b".into() });
     assert_eq!(q.len(), 3);
+    // Calendars just ticked: read by the sync waiting, else together.
+    push_job(&mut q, Job::SyncCalendars { account: "a".into(), calendars: vec!["shared:ana@contoso.example".into()] });
+    assert_eq!(q.len(), 3, "the sync waiting reads them");
+    let mut q = VecDeque::new();
+    let ticked = |c: &str| Job::SyncCalendars { account: "a".into(), calendars: vec![c.to_string()] };
+    push_job(&mut q, ticked("shared:ana@contoso.example"));
+    push_job(&mut q, ticked("shared:tom@contoso.example"));
+    push_job(&mut q, ticked("shared:ana@contoso.example"));
+    let both = Job::SyncCalendars { account: "a".into(), calendars: vec!["shared:ana@contoso.example".into(), "shared:tom@contoso.example".into()] };
+    assert_eq!(q, [both]);
 }
 
 /// A server's rules split by whose they are: the ones Quatrelle holds the id of, and the

@@ -646,6 +646,15 @@ impl Worker {
         }
     }
 
+    /// Other people's calendars just ticked, read alone (on-premises Exchange): seconds, where
+    /// the calendars' and contacts' sync, which reads them elsewhere, takes half a minute.
+    pub(super) fn sync_calendars(&mut self, calendars: &[String]) {
+        let Some(Conn::Ews(c)) = &self.conn else { return self.sync_dav() };
+        let pim = self.load_pim();
+        let sync = crate::ews_pim::sync_calendars(c, &pim, calendars, now());
+        self.sink.emit(Event::DavSynced { account: self.id(), sync: Box::new(sync) });
+    }
+
     /// The Tasks folder alone (on-premises Exchange), read as the server tells of a change in it:
     /// a tenth of a second, where the calendars' and contacts' sync takes seconds.
     pub(super) fn sync_tasks(&mut self) {
