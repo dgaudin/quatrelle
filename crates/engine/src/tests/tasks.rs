@@ -127,6 +127,60 @@ fn an_exchange_accounts_tasks_go_to_its_tasks_folder() {
     done(s);
 }
 
+/// A change Exchange tells of in the Tasks folder reads that folder alone (28/10): the calendar,
+/// the contacts and the notes it brings nothing of stay as they were.
+#[test]
+fn a_read_of_the_tasks_alone_leaves_the_rest() {
+    use quatrelle_model::ical::CalEvent;
+    use quatrelle_model::pim::{BookInfo, CalendarInfo, DavSync, Note, StoredCard, StoredEvent, StoredNote, StoredTask, Task};
+    use quatrelle_model::vcard::Card;
+    let mut s = Session::open(Some(temp("tasks-alone")), quatrelle_model::dates::Clock::new(NOW, 0));
+    let id = s
+        .run("account.add", &json!({"email": "zoe@contoso.example", "password": "pw", "ews": "https://mail.contoso.example/EWS/Exchange.asmx"}))
+        .unwrap()["account"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let ews = || Some("ews".to_string());
+    let event = CalEvent { uid: "e1".into(), summary: "Budget".into(), start: NOW + 3600, end: NOW + 7200, ..Default::default() };
+    let full = DavSync {
+        caldav_home: ews(),
+        carddav_home: ews(),
+        checked: NOW,
+        calendars: Some(vec![CalendarInfo { id: "ews:calendar".into(), name: "Calendar".into(), ..Default::default() }]),
+        events: vec![StoredEvent { calendar: "ews:calendar".into(), href: "E1".into(), event, ..Default::default() }],
+        synced_calendars: vec!["ews:calendar".into()],
+        books: Some(vec![BookInfo { id: "ews:contacts".into(), name: "Contacts".into(), ..Default::default() }]),
+        cards: vec![StoredCard {
+            book: "ews:contacts".into(),
+            href: "contact:c1".into(),
+            card: Card { uid: "c1".into(), ..Default::default() },
+            ..Default::default()
+        }],
+        synced_books: vec!["ews:contacts".into()],
+        notes: Some(vec![StoredNote { href: "note:n1".into(), note: Note { uid: "n1".into(), ..Default::default() }, ..Default::default() }]),
+        tasks: Some(Vec::new()),
+        ..Default::default()
+    };
+    s.apply_dav(&id, &full);
+    let before = s.pim[&id].clone();
+    assert_eq!((before.events.len(), before.cards.len(), before.notes.len()), (1, 1, 1));
+    let made = StoredTask {
+        href: "task:T3".into(),
+        task: Task { uid: "task:T3".into(), subject: "test3".into(), ..Default::default() },
+        ..Default::default()
+    };
+    let alone = DavSync { caldav_home: ews(), carddav_home: ews(), checked: NOW + 60, tasks: Some(vec![made]), ..Default::default() };
+    s.apply_dav(&id, &alone);
+    assert!(s.find_task("task:T3").is_some(), "the task made in Outlook");
+    let p = &s.pim[&id];
+    assert_eq!(
+        (&p.calendars, &p.events, &p.books, &p.cards, &p.notes),
+        (&before.calendars, &before.events, &before.books, &before.cards, &before.notes)
+    );
+    done(s);
+}
+
 /// A task's reminder comes in the Reminders with the appointments'; snoozed, it waits; dismissed,
 /// it's taken off the task (as Outlook does, and Exchange learns it); done, it never comes.
 #[test]

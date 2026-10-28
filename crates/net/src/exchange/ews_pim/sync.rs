@@ -5,21 +5,7 @@ use super::*;
 /// Send what changed here, then read the calendar and contacts again.
 pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
     let mut out = DavSync { caldav_home: Some("ews".into()), carddav_home: Some("ews".into()), checked: now, ..Default::default() };
-    for t in &pim.deleted {
-        let task = t.href.starts_with("task:");
-        match delete(c, t.href.trim_start_matches("contact:").trim_start_matches("note:").trim_start_matches("task:"), task) {
-            // Deleted, or gone already (deleted in Outlook too).
-            Ok(()) => out.deleted.push(t.href.clone()),
-            Err(NetError::No(why)) if why.starts_with("not on the server") => out.deleted.push(t.href.clone()),
-            // Refused: it stays on the server, so it comes back here, and why is said.
-            Err(NetError::No(why)) => {
-                out.deleted.push(t.href.clone());
-                out.errors.push(format!("not deleted on the server: {why}"));
-            }
-            // Not now (offline, the server busy): tried again next time, still deleted here.
-            Err(e) => out.errors.push(e.to_string()),
-        }
-    }
+    delete_gone(c, pim.deleted.iter(), &mut out);
     push_events(c, pim, &mut out);
     for k in pim.cards.iter().filter(|k| k.dirty) {
         // Made again: a contact's addresses and numbers are simplest replaced whole.
@@ -242,6 +228,35 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
     read_notes(c, pim, &mut out);
     read_tasks(c, pim, &mut out);
     Ok(out)
+}
+
+/// The tasks alone, as the server tells of a change in their folder: those deleted and changed
+/// here sent, then the folder read again. The calendars and address books aren't in it (`None`):
+/// they stay as they are.
+pub fn sync_tasks(c: &Client, pim: &Pim, now: i64) -> DavSync {
+    let mut out = DavSync { caldav_home: Some("ews".into()), carddav_home: Some("ews".into()), checked: now, ..Default::default() };
+    delete_gone(c, pim.deleted.iter().filter(|t| t.href.starts_with("task:")), &mut out);
+    read_tasks(c, pim, &mut out);
+    out
+}
+
+/// What was deleted here, deleted on the server.
+fn delete_gone<'a>(c: &Client, gone: impl Iterator<Item = &'a quatrelle_model::pim::Tombstone>, out: &mut DavSync) {
+    for t in gone {
+        let task = t.href.starts_with("task:");
+        match delete(c, t.href.trim_start_matches("contact:").trim_start_matches("note:").trim_start_matches("task:"), task) {
+            // Deleted, or gone already (deleted in Outlook too).
+            Ok(()) => out.deleted.push(t.href.clone()),
+            Err(NetError::No(why)) if why.starts_with("not on the server") => out.deleted.push(t.href.clone()),
+            // Refused: it stays on the server, so it comes back here, and why is said.
+            Err(NetError::No(why)) => {
+                out.deleted.push(t.href.clone());
+                out.errors.push(format!("not deleted on the server: {why}"));
+            }
+            // Not now (offline, the server busy): tried again next time, still deleted here.
+            Err(e) => out.errors.push(e.to_string()),
+        }
+    }
 }
 
 /// A calendar's items, read, into `out`: each appointment and series as an event, and the
