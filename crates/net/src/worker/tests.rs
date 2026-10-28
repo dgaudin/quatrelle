@@ -54,6 +54,23 @@ fn a_folder_waiting_to_be_read_isnt_queued_twice() {
     assert_eq!(q.len(), 4, "only the folder read is merged");
 }
 
+/// A dozen calendars ticked, or tasks changed, in a row each ask for the calendars' and contacts'
+/// sync: one waiting reads them all (it reads what's kept when it starts), where each ran a full
+/// pass in turn, half a minute each, for a quarter of an hour (28/10).
+#[test]
+fn a_calendar_sync_waiting_isnt_queued_twice() {
+    let mut q = VecDeque::new();
+    let dav = Job::SyncDav { account: "a".into() };
+    push_job(&mut q, dav.clone());
+    push_job(&mut q, Job::SyncFolder { account: "a".into(), folder: "INBOX".into() });
+    push_job(&mut q, dav.clone());
+    push_job(&mut q, dav.clone());
+    assert_eq!(q.len(), 2, "{q:?}");
+    // Another account's is its own.
+    push_job(&mut q, Job::SyncDav { account: "b".into() });
+    assert_eq!(q.len(), 3);
+}
+
 /// A server's rules split by whose they are: the ones Quatrelle holds the id of, and the
 /// ones it didn't make (Outlook's own, the server's web page).
 #[test]
