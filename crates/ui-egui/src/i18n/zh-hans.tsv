@@ -1664,3 +1664,5 @@ month	May	5月
 	Open Quatrelle	打开 Quatrelle
 	Keep Quatrelle running in the notification area when its window is closed	关闭窗口时让 Quatrelle 在通知区域继续运行
 	Its icon there brings the window back; File › Exit closes Quatrelle	点击那里的图标可恢复窗口；“文件 › 退出”会关闭 Quatrelle
+	Write replies and forwards in a window of their own	在单独的窗口中撰写回复和转发
+	Show Favorites at the top of the folder pane	在文件夹窗格顶部显示收藏夹
