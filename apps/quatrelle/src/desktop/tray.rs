@@ -1,16 +1,21 @@
-//! The envelope in the notification area while new mail is unread (`Services::show_envelope`),
-//! as Outlook shows one: Quatrelle's icon, an envelope already, with a red dot, its tip saying
-//! how many messages; clicking it brings the window forward on the Inbox.
+//! Quatrelle's icon in the notification area (`Services::show_tray`): there while closing the
+//! window leaves Quatrelle running, and the envelope Outlook shows while new mail is unread: the
+//! icon, an envelope already, with a red dot, its tip saying how many messages. Clicked, it
+//! brings the window back (on the Inbox for new mail); its menu opens Quatrelle or quits.
 //!
 //! - **Linux and the BSDs:** a StatusNotifierItem (KDE, Xfce, Cinnamon, and GNOME with the
 //!   AppIndicator extension), served from a thread of its own; a desktop without a notification
-//!   area shows nothing.
+//!   area shows nothing, and closing the window then quits.
 //! - **Windows:** an icon in the notification area.
 //! - **macOS:** the count on the Dock's icon, where Mail and Outlook put it; the Dock's icon
-//!   already brings the window forward.
+//!   already brings the window forward, and closing the window quits as it did.
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+#[cfg(all(unix, not(target_os = "macos")))]
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicU8, Ordering};
+
+use quatrelle_ui_egui::{TrayAction, TrayIcon};
 
 /// The sizes the icon is offered in (the committed app icons): the desktop picks.
 #[cfg(not(target_os = "macos"))]
@@ -26,105 +31,190 @@ const SIZES: [(u32, &[u8]); 5] = [
 #[cfg(not(target_os = "macos"))]
 const DOT: [u8; 3] = [0xC4, 0x2B, 0x1C];
 
-/// The envelope, shown and taken away as the window says.
+/// What was done with the icon, as [`Tray::take_action`] hands it over.
+const NOTHING: u8 = 0;
+const OPEN: u8 = 1;
+const QUIT: u8 = 2;
+
+/// The icon, shown, changed and taken away as the window says.
 #[derive(Default)]
-pub(crate) struct Envelope {
-    /// Set when the envelope is clicked, until the window takes it.
-    clicked: Arc<AtomicBool>,
+pub(crate) struct Tray {
+    /// What was done with the icon ([`NOTHING`], [`OPEN`], [`QUIT`]), until the window takes it.
+    done: Arc<AtomicU8>,
     /// Wakes the window, so a click is answered at once (the Dock's icon needs none).
     #[cfg(not(target_os = "macos"))]
     waker: Option<Arc<dyn Fn() + Send + Sync>>,
-    /// The thread serving the item: told the tip to show, or `None` to take it away (dropped,
-    /// the thread takes it away and ends).
+    /// Whether the window can be put away: not on Wayland itself, where a window can't hide.
+    #[cfg(not(target_os = "macos"))]
+    hides: bool,
+    /// The thread serving the item: told what to show, or `None` to take it away (dropped, the
+    /// thread takes it away and ends).
     #[cfg(all(unix, not(target_os = "macos")))]
-    item: Option<std::sync::mpsc::Sender<Option<String>>>,
+    item: Option<std::sync::mpsc::Sender<Option<TrayIcon>>>,
+    /// Whether a notification area has the item: GNOME takes its AppIndicator extension away
+    /// while the screen is locked, and the item waits for it to come back.
+    #[cfg(all(unix, not(target_os = "macos")))]
+    hosted: Arc<AtomicBool>,
     #[cfg(windows)]
-    icon: Option<tray_icon::TrayIcon>,
+    icon: Option<WindowsIcon>,
 }
 
-impl Envelope {
-    pub(crate) fn new(waker: Arc<dyn Fn() + Send + Sync>) -> Envelope {
+/// The icon in Windows' notification area, and its menu's items (their text follows the language).
+#[cfg(windows)]
+struct WindowsIcon {
+    icon: tray_icon::TrayIcon,
+    open: tray_icon::menu::MenuItem,
+    quit: tray_icon::menu::MenuItem,
+    dotted: bool,
+}
+
+impl Tray {
+    /// `hides`: whether the window can be put away (`Visible(false)`) for the icon to bring back.
+    pub(crate) fn new(waker: Arc<dyn Fn() + Send + Sync>, hides: bool) -> Tray {
         #[cfg(target_os = "macos")]
-        drop(waker);
-        Envelope {
+        drop((waker, hides));
+        Tray {
             #[cfg(not(target_os = "macos"))]
             waker: Some(waker),
+            #[cfg(not(target_os = "macos"))]
+            hides,
             ..Default::default()
         }
     }
 
-    /// Whether the envelope was clicked since the last call.
-    pub(crate) fn take_click(&self) -> bool {
-        self.clicked.swap(false, Ordering::Relaxed)
+    /// What was done with the icon since the last call.
+    pub(crate) fn take_action(&self) -> Option<TrayAction> {
+        match self.done.swap(NOTHING, Ordering::Relaxed) {
+            OPEN => Some(TrayAction::Open),
+            QUIT => Some(TrayAction::Quit),
+            _ => None,
+        }
     }
 
-    /// Shown while `new` messages are unread, `tip` on hovering it; taken away at 0.
+    /// Whether the icon is in a notification area, there to bring a window put away back.
     #[cfg(all(unix, not(target_os = "macos")))]
-    pub(crate) fn show(&mut self, new: usize, tip: &str) {
+    pub(crate) fn shown(&self) -> bool {
+        self.hides && self.item.is_some() && self.hosted.load(Ordering::Relaxed)
+    }
+
+    #[cfg(windows)]
+    pub(crate) fn shown(&self) -> bool {
+        self.hides && self.icon.is_some()
+    }
+
+    #[cfg(not(any(windows, all(unix, not(target_os = "macos")))))]
+    pub(crate) fn shown(&self) -> bool {
+        false
+    }
+
+    /// Shown as `shown` says: with the dot while new mail is unread, taken away when not shown.
+    #[cfg(all(unix, not(target_os = "macos")))]
+    pub(crate) fn show(&mut self, shown: &TrayIcon) {
         if self.item.is_none() {
-            if new == 0 {
+            if !shown.shown {
                 return;
             }
-            self.item = serve(self.clicked.clone(), self.waker.clone());
+            self.item = serve(self.done.clone(), self.waker.clone(), self.hosted.clone());
         }
         if let Some(item) = &self.item
-            && item.send((new > 0).then(|| tip.to_string())).is_err()
+            && item.send(shown.shown.then(|| shown.clone())).is_err()
         {
             self.item = None;
         }
     }
 
     #[cfg(windows)]
-    pub(crate) fn show(&mut self, new: usize, tip: &str) {
-        if new == 0 {
+    pub(crate) fn show(&mut self, shown: &TrayIcon) {
+        use tray_icon::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
+        use tray_icon::{MouseButton, MouseButtonState, TrayIconEvent};
+        if !shown.shown {
             // Dropped, it leaves the notification area.
             self.icon = None;
             return;
         }
-        if let Some(icon) = &self.icon {
-            if let Err(e) = icon.set_tooltip(Some(tip)) {
-                log::warn!("envelope: {e}");
+        let tip = if shown.tip.is_empty() { "Quatrelle".to_string() } else { format!("Quatrelle\n{}", shown.tip) };
+        let dotted = shown.new > 0;
+        if let Some(w) = &mut self.icon {
+            if let Err(e) = w.icon.set_tooltip(Some(&tip)) {
+                log::warn!("tray: {e}");
+            }
+            w.open.set_text(&shown.open);
+            w.quit.set_text(&shown.quit);
+            if w.dotted != dotted
+                && let Some(picture) = picture(dotted)
+            {
+                match w.icon.set_icon(Some(picture)) {
+                    Ok(()) => w.dotted = dotted,
+                    Err(e) => log::warn!("tray: {e}"),
+                }
             }
             return;
         }
-        let (clicked, waker) = (self.clicked.clone(), self.waker.clone());
-        tray_icon::TrayIconEvent::set_event_handler(Some(move |e: tray_icon::TrayIconEvent| {
-            use tray_icon::{MouseButton, MouseButtonState, TrayIconEvent};
+        // Set once for the app's life (later calls are ignored), so they share `done`.
+        let (done, waker) = (self.done.clone(), self.waker.clone());
+        TrayIconEvent::set_event_handler(Some(move |e: TrayIconEvent| {
             if matches!(
                 e,
                 TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. }
                     | TrayIconEvent::DoubleClick { button: MouseButton::Left, .. }
             ) {
-                clicked.store(true, Ordering::Relaxed);
-                if let Some(wake) = &waker {
-                    wake();
-                }
+                tell(&done, waker.as_ref(), OPEN);
             }
         }));
-        let Some((width, height, rgba)) = pictures().into_iter().find(|(w, ..)| *w == 32) else { return };
-        let built = tray_icon::Icon::from_rgba(rgba, width, height)
-            .map_err(|e| e.to_string())
-            .and_then(|icon| tray_icon::TrayIconBuilder::new().with_icon(icon).with_tooltip(tip).build().map_err(|e| e.to_string()));
+        let (done, waker) = (self.done.clone(), self.waker.clone());
+        MenuEvent::set_event_handler(Some(move |e: MenuEvent| match e.id.0.as_str() {
+            "open" => tell(&done, waker.as_ref(), OPEN),
+            "quit" => tell(&done, waker.as_ref(), QUIT),
+            _ => {}
+        }));
+        let open = MenuItem::with_id("open", &shown.open, true, None);
+        let quit = MenuItem::with_id("quit", &shown.quit, true, None);
+        let built = Menu::with_items(&[&open, &PredefinedMenuItem::separator(), &quit]).map_err(|e| e.to_string()).and_then(|menu| {
+            let icon = picture(dotted).ok_or_else(|| "no picture".to_string())?;
+            tray_icon::TrayIconBuilder::new()
+                .with_icon(icon)
+                .with_tooltip(&tip)
+                .with_menu(Box::new(menu))
+                .with_menu_on_left_click(false)
+                .build()
+                .map_err(|e| e.to_string())
+        });
         match built {
-            Ok(icon) => self.icon = Some(icon),
-            Err(e) => log::warn!("envelope: {e}"),
+            Ok(icon) => self.icon = Some(WindowsIcon { icon, open, quit, dotted }),
+            Err(e) => log::warn!("tray: {e}"),
         }
     }
 
     #[cfg(target_os = "macos")]
-    pub(crate) fn show(&mut self, new: usize, _tip: &str) {
+    pub(crate) fn show(&mut self, shown: &TrayIcon) {
         let Some(mtm) = objc2::MainThreadMarker::new() else { return };
-        let label = (new > 0).then(|| objc2_foundation::NSString::from_str(&new.to_string()));
+        let label = (shown.new > 0).then(|| objc2_foundation::NSString::from_str(&shown.new.to_string()));
         objc2_app_kit::NSApplication::sharedApplication(mtm).dockTile().setBadgeLabel(label.as_deref());
     }
 
     #[cfg(not(any(unix, windows)))]
-    pub(crate) fn show(&mut self, _new: usize, _tip: &str) {}
+    pub(crate) fn show(&mut self, _shown: &TrayIcon) {}
 }
 
-/// The app icon in each of [`SIZES`] with the dot: (width, height, RGBA).
+/// Something done with the icon: kept for the window, woken to take it.
 #[cfg(not(target_os = "macos"))]
-fn pictures() -> Vec<(u32, u32, Vec<u8>)> {
+fn tell(done: &AtomicU8, waker: Option<&Arc<dyn Fn() + Send + Sync>>, what: u8) {
+    done.store(what, Ordering::Relaxed);
+    if let Some(wake) = waker {
+        wake();
+    }
+}
+
+/// The 32-pixel icon Windows shows, with the dot or without.
+#[cfg(windows)]
+fn picture(dotted: bool) -> Option<tray_icon::Icon> {
+    let (width, height, rgba) = pictures(dotted).into_iter().find(|(w, ..)| *w == 32)?;
+    tray_icon::Icon::from_rgba(rgba, width, height).map_err(|e| log::warn!("tray: {e}")).ok()
+}
+
+/// The app icon in each of [`SIZES`], with the dot (`dotted`) or as it is: (width, height, RGBA).
+#[cfg(not(target_os = "macos"))]
+fn pictures(dotted: bool) -> Vec<(u32, u32, Vec<u8>)> {
     SIZES
         .iter()
         .filter_map(|(_, png)| image::load_from_memory_with_format(png, image::ImageFormat::Png).ok())
@@ -132,7 +222,9 @@ fn pictures() -> Vec<(u32, u32, Vec<u8>)> {
             let img = img.into_rgba8();
             let (w, h) = img.dimensions();
             let mut rgba = img.into_raw();
-            dot(&mut rgba, w, h);
+            if dotted {
+                dot(&mut rgba, w, h);
+            }
             (w, h, rgba)
         })
         .collect()
@@ -174,40 +266,58 @@ fn over(px: &mut [u8], color: [u8; 3], cover: f32) {
 
 /// Serves the StatusNotifierItem from a thread of its own, told by the window what to show.
 #[cfg(all(unix, not(target_os = "macos")))]
-fn serve(clicked: Arc<AtomicBool>, waker: Option<Arc<dyn Fn() + Send + Sync>>) -> Option<std::sync::mpsc::Sender<Option<String>>> {
+fn serve(
+    done: Arc<AtomicU8>,
+    waker: Option<Arc<dyn Fn() + Send + Sync>>,
+    hosted: Arc<AtomicBool>,
+) -> Option<std::sync::mpsc::Sender<Option<TrayIcon>>> {
     use ksni::blocking::TrayMethods;
-    let (tx, rx) = std::sync::mpsc::channel::<Option<String>>();
-    let spawned = std::thread::Builder::new().name("envelope".into()).spawn(move || {
-        let icons: Vec<ksni::Icon> = pictures().into_iter().map(|(w, h, rgba)| argb(w, h, &rgba)).collect();
+    let (tx, rx) = std::sync::mpsc::channel::<Option<TrayIcon>>();
+    let spawned = std::thread::Builder::new().name("tray".into()).spawn(move || {
+        let icons = |dotted| pictures(dotted).into_iter().map(|(w, h, rgba)| argb(w, h, &rgba)).collect::<Vec<_>>();
+        let (plain, dotted) = (icons(false), icons(true));
         let mut served: Option<ksni::blocking::Handle<Item>> = None;
         let mut told = false;
         while let Ok(shown) = rx.recv() {
             match (shown, &served) {
-                (Some(tip), Some(handle)) => {
-                    handle.update(|item| item.tip = tip);
+                (Some(shown), Some(handle)) => {
+                    handle.update(|item| item.shown = shown);
                 }
-                (Some(tip), None) => {
-                    let item = Item { tip, icons: icons.clone(), clicked: clicked.clone(), waker: waker.clone() };
+                (Some(shown), None) => {
+                    // Until the desktop says otherwise (as the item registers, or later).
+                    hosted.store(true, Ordering::Relaxed);
+                    let item = Item {
+                        shown,
+                        plain: plain.clone(),
+                        dotted: dotted.clone(),
+                        done: done.clone(),
+                        waker: waker.clone(),
+                        hosted: hosted.clone(),
+                    };
                     // A Flatpak can't own the item's bus name (the specification's way); hosts
                     // find it by its connection then. The notification area can be away (GNOME
                     // takes its AppIndicator extension away while the screen is locked, when mail
                     // often comes): the item waits for it rather than giving up.
                     match item.disable_dbus_name(std::env::var_os("FLATPAK_ID").is_some()).assume_sni_available(true).spawn() {
                         Ok(handle) => served = Some(handle),
-                        Err(e) if !told => {
-                            told = true;
-                            log::info!("envelope: not shown ({e})");
+                        Err(e) => {
+                            hosted.store(false, Ordering::Relaxed);
+                            if !told {
+                                told = true;
+                                log::info!("tray: not shown ({e})");
+                            }
                         }
-                        Err(_) => {}
                     }
                 }
                 (None, _) => {
+                    hosted.store(false, Ordering::Relaxed);
                     if let Some(handle) = served.take() {
                         handle.shutdown().wait();
                     }
                 }
             }
         }
+        hosted.store(false, Ordering::Relaxed);
         if let Some(handle) = served.take() {
             handle.shutdown().wait();
         }
@@ -215,7 +325,7 @@ fn serve(clicked: Arc<AtomicBool>, waker: Option<Arc<dyn Fn() + Send + Sync>>) -
     match spawned {
         Ok(_) => Some(tx),
         Err(e) => {
-            log::warn!("envelope: {e}");
+            log::warn!("tray: {e}");
             None
         }
     }
@@ -228,13 +338,16 @@ fn argb(width: u32, height: u32, rgba: &[u8]) -> ksni::Icon {
     ksni::Icon { width: i32::try_from(width).unwrap_or(0), height: i32::try_from(height).unwrap_or(0), data }
 }
 
-/// The StatusNotifierItem: Quatrelle's icon with the dot, and how many messages on hovering it.
+/// The StatusNotifierItem: Quatrelle's icon (with the dot while new mail is unread), how many
+/// messages on hovering it, and its menu.
 #[cfg(all(unix, not(target_os = "macos")))]
 struct Item {
-    tip: String,
-    icons: Vec<ksni::Icon>,
-    clicked: Arc<AtomicBool>,
+    shown: TrayIcon,
+    plain: Vec<ksni::Icon>,
+    dotted: Vec<ksni::Icon>,
+    done: Arc<AtomicU8>,
     waker: Option<Arc<dyn Fn() + Send + Sync>>,
+    hosted: Arc<AtomicBool>,
 }
 
 #[cfg(all(unix, not(target_os = "macos")))]
@@ -249,16 +362,40 @@ impl ksni::Tray for Item {
         ksni::Category::Communications
     }
     fn icon_pixmap(&self) -> Vec<ksni::Icon> {
-        self.icons.clone()
+        if self.shown.new > 0 { self.dotted.clone() } else { self.plain.clone() }
     }
     fn tool_tip(&self) -> ksni::ToolTip {
-        ksni::ToolTip { title: "Quatrelle".into(), description: self.tip.clone(), ..Default::default() }
+        ksni::ToolTip { title: "Quatrelle".into(), description: self.shown.tip.clone(), ..Default::default() }
     }
     fn activate(&mut self, _x: i32, _y: i32) {
-        self.clicked.store(true, Ordering::Relaxed);
-        if let Some(wake) = &self.waker {
-            wake();
-        }
+        tell(&self.done, self.waker.as_ref(), OPEN);
+    }
+    fn menu(&self) -> Vec<ksni::MenuItem<Self>> {
+        use ksni::menu::StandardItem;
+        // An underscore marks the access key there: one written stays one.
+        let label = |s: &str| s.replace('_', "__");
+        vec![
+            StandardItem {
+                label: label(&self.shown.open),
+                activate: Box::new(|item: &mut Item| tell(&item.done, item.waker.as_ref(), OPEN)),
+                ..Default::default()
+            }
+            .into(),
+            ksni::MenuItem::Separator,
+            StandardItem {
+                label: label(&self.shown.quit),
+                activate: Box::new(|item: &mut Item| tell(&item.done, item.waker.as_ref(), QUIT)),
+                ..Default::default()
+            }
+            .into(),
+        ]
+    }
+    fn watcher_online(&self) {
+        self.hosted.store(true, Ordering::Relaxed);
+    }
+    fn watcher_offline(&self, _reason: ksni::OfflineReason) -> bool {
+        self.hosted.store(false, Ordering::Relaxed);
+        true
     }
 }
 
@@ -267,10 +404,15 @@ mod tests {
     use super::*;
 
     /// The icon comes in every size, with the red dot in its top right corner and the envelope
-    /// left as it was.
+    /// left as it was; without new mail, it's the app icon as it is.
     #[test]
     fn the_envelope_is_the_app_icon_with_a_red_dot() {
-        let pictures = pictures();
+        for (w, h, rgba) in pictures(false) {
+            let plain = image::load_from_memory(SIZES.iter().find(|(s, _)| *s == w).unwrap().1).unwrap().into_rgba8();
+            assert_eq!((w, h), plain.dimensions());
+            assert_eq!(rgba, plain.into_raw(), "{w} px: as it is");
+        }
+        let pictures = pictures(true);
         assert_eq!(pictures.iter().map(|(w, ..)| *w).collect::<Vec<_>>(), vec![16, 24, 32, 48, 64]);
         for (w, h, rgba) in &pictures {
             let at = |x: u32, y: u32| rgba[((y * w + x) * 4) as usize..][..4].to_vec();
@@ -285,11 +427,11 @@ mod tests {
     }
 
     /// On a desktop with a notification area (run by hand: `cargo test -p quatrelle
-    /// envelope_registers -- --ignored`): the item is registered while shown, and gone after.
+    /// icon_registers -- --ignored`): the item is registered while shown, and gone after.
     #[cfg(all(unix, not(target_os = "macos")))]
     #[test]
     #[ignore = "needs a desktop session with a StatusNotifierWatcher"]
-    fn the_envelope_registers_with_the_desktop() {
+    fn the_icon_registers_with_the_desktop() {
         let items = || -> Vec<String> {
             let bus = zbus::blocking::Connection::session().unwrap();
             let watcher =
@@ -298,13 +440,20 @@ mod tests {
         };
         let mine = format!("StatusNotifierItem-{}-", std::process::id());
         let before = items().iter().filter(|i| i.contains(&mine)).count();
-        let mut envelope = Envelope::new(Arc::new(|| {}));
-        envelope.show(2, "2 new messages");
+        let mut tray = Tray::new(Arc::new(|| {}), true);
+        let shown = TrayIcon { shown: true, new: 0, tip: String::new(), open: "Open Quatrelle".into(), quit: "Exit".into() };
+        tray.show(&shown);
         std::thread::sleep(std::time::Duration::from_secs(2));
         assert_eq!(items().iter().filter(|i| i.contains(&mine)).count(), before + 1, "{:?}", items());
-        envelope.show(0, "");
+        assert!(tray.shown(), "hosted: closing the window can put it away");
+        // New mail: the same item, with the dot.
+        tray.show(&TrayIcon { new: 2, tip: "2 new messages".into(), ..shown });
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        assert_eq!(items().iter().filter(|i| i.contains(&mine)).count(), before + 1);
+        tray.show(&TrayIcon::default());
         std::thread::sleep(std::time::Duration::from_secs(2));
         assert_eq!(items().iter().filter(|i| i.contains(&mine)).count(), before);
+        assert!(!tray.shown());
     }
 
     /// Painted over a transparent pixel, a colour keeps its own value; half covered, it's half

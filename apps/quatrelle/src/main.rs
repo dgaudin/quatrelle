@@ -160,6 +160,10 @@ impl eframe::App for App {
         if let Some(path) = self.app.take_drag_out() {
             drag_out(frame, path);
         }
+        // Its picture saved, the window closes for good, not into the notification area.
+        if self.screenshot.is_some() {
+            self.app.ui.quitting = true;
+        }
         if let Some(shot) = &mut self.screenshot
             && shot.step(ui.ctx(), self.frames)
         {
@@ -526,6 +530,11 @@ fn run(
                 let ctx = cc.egui_ctx.clone();
                 u.set_waker(Arc::new(move || ctx.request_repaint()));
             }
+            // A Wayland window can't bring itself forward (it asks for attention instead), nor
+            // hide for the icon in the notification area to bring it back.
+            let native_wayland = cfg!(all(unix, not(target_os = "macos")))
+                && std::env::var_os("WAYLAND_DISPLAY").is_some_and(|v| !v.is_empty())
+                && display::choose_from_env() != display::Choice::X11;
             let mut app = MailApp::new(
                 session,
                 backend,
@@ -543,11 +552,14 @@ fn run(
                         let ctx = cc.egui_ctx.clone();
                         move || ctx.request_repaint()
                     })),
-                    // The envelope clicked wakes the window to come forward on the Inbox.
-                    envelope: desktop::tray::Envelope::new(Arc::new({
-                        let ctx = cc.egui_ctx.clone();
-                        move || ctx.request_repaint()
-                    })),
+                    // The icon clicked wakes the window to come back (on the Inbox for new mail).
+                    tray: desktop::tray::Tray::new(
+                        Arc::new({
+                            let ctx = cc.egui_ctx.clone();
+                            move || ctx.request_repaint()
+                        }),
+                        !native_wayland,
+                    ),
                     ..Default::default()
                 }),
             );
@@ -648,10 +660,6 @@ fn run(
             if let Some(server) = &instance {
                 server.connect(&cc.egui_ctx);
             }
-            // A Wayland window can't bring itself forward: it asks for attention instead.
-            let native_wayland = cfg!(all(unix, not(target_os = "macos")))
-                && std::env::var_os("WAYLAND_DISPLAY").is_some_and(|v| !v.is_empty())
-                && display::choose_from_env() != display::Choice::X11;
             Ok(Box::new(App {
                 app,
                 state_path,

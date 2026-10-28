@@ -251,6 +251,21 @@ pub(super) fn options(s: &Session, st: &UiState, ui: &mut Ui, acts: &mut Vec<Act
         setting(
             ui,
             false,
+            tl!("Keep Quatrelle running in the notification area when its window is closed"),
+            Some(tl!("Its icon there brings the window back; File › Exit closes Quatrelle")),
+            &mut |ui| {
+                switch(
+                    ui,
+                    s.prefs.keep_running,
+                    tl!("Keep Quatrelle running in the notification area when its window is closed"),
+                    "view.keepRunning",
+                    acts,
+                );
+            },
+        );
+        setting(
+            ui,
+            false,
             tl!("Show reminders on top of other windows"),
             Some(tl!("The Reminders window opens in a window of its own when a reminder comes, even while Quatrelle is minimized")),
             &mut |ui| {

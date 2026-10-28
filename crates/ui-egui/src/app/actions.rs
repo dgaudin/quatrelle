@@ -65,20 +65,56 @@ impl MailApp {
             ctx.send_viewport_cmd(egui::ViewportCommand::Title(title.clone()));
             self.ui.title_shown = title;
         }
-        // The envelope in the notification area, while mail that arrived is unread; clicked, the
-        // window comes forward on the Inbox, as Outlook's does.
+        // Quatrelle's icon in the notification area: there while closing the window leaves
+        // Quatrelle running, and the envelope (its red dot) while mail that arrived is unread.
+        // Clicked, the window comes back, on the Inbox for new mail, as Outlook's envelope does.
         let new = self.session.new_unread();
-        if new != self.ui.envelope_shown {
-            self.ui.envelope_shown = new;
-            let tip = if new == 1 { tl!("New message").to_string() } else { tf!("{n} new messages", n = new) };
-            self.services.show_envelope(new, &tip);
+        let icon = TrayIcon {
+            shown: self.session.prefs.keep_running || new > 0,
+            new,
+            tip: match new {
+                0 => String::new(),
+                1 => tl!("New message").to_string(),
+                n => tf!("{n} new messages", n = n),
+            },
+            open: tl!("Open Quatrelle").to_string(),
+            quit: tl!("Exit").to_string(),
+        };
+        if icon != self.ui.tray_shown {
+            self.services.show_tray(&icon);
+            self.ui.tray_shown = icon;
         }
-        if self.services.take_envelope_click() {
-            self.run("mail.showNew", json!({}));
-            ctx.send_viewport_cmd_to(egui::ViewportId::ROOT, egui::ViewportCommand::Minimized(false));
-            self.ui.focus_main = true;
-            ctx.request_repaint();
+        match self.services.take_tray_action() {
+            Some(TrayAction::Open) => {
+                if new > 0 {
+                    self.run("mail.showNew", json!({}));
+                }
+                self.bring_forward(ctx);
+            }
+            Some(TrayAction::Quit) => {
+                self.quit();
+                ctx.request_repaint();
+            }
+            None => {}
         }
+    }
+
+    /// The main window back in front: shown again if it was closed into the notification area,
+    /// out of the taskbar if minimized.
+    pub(crate) fn bring_forward(&mut self, ctx: &egui::Context) {
+        for c in [egui::ViewportCommand::Visible(true), egui::ViewportCommand::Minimized(false), egui::ViewportCommand::Focus] {
+            ctx.send_viewport_cmd_to(egui::ViewportId::ROOT, c);
+        }
+        self.ui.focus_main = true;
+        self.ui.put_away = false;
+        ctx.request_repaint();
+    }
+
+    /// Close Quatrelle (File › Exit, the icon's Exit): what's being written is asked about first,
+    /// as for any close, and the window doesn't stay in the notification area.
+    pub fn quit(&mut self) {
+        self.ui.quitting = true;
+        self.ui.close_now = true;
     }
 
     pub(crate) fn act(&mut self, a: Action) {
@@ -92,6 +128,7 @@ impl MailApp {
                     self.act(*inner);
                 }
             }
+            Action::Quit => self.quit(),
             Action::CloseAnyway => {
                 // What becomes of an update is still said before Quatrelle goes; its answer closes
                 // (and Cancel there leaves the next close asking everything again).

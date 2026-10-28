@@ -51,6 +51,25 @@ impl Session {
         self.envelope.keys.len()
     }
 
+    /// The new mail the envelope stands for, for the app to keep as Quatrelle closes.
+    pub fn envelope_keys(&self) -> &[MessageKey] {
+        &self.envelope.keys
+    }
+
+    /// The new mail kept as Quatrelle last closed: still unread, the envelope shows again, as the
+    /// mail is as new as it was.
+    pub fn restore_envelope(&mut self, mut keys: Vec<MessageKey>) {
+        if !self.prefs.envelope {
+            return;
+        }
+        // Older than what arrived since Quatrelle opened.
+        keys.retain(|k| !self.envelope.keys.contains(k));
+        keys.append(&mut self.envelope.keys);
+        let excess = keys.len().saturating_sub(MAX_FOLLOWED);
+        keys.drain(..excess);
+        self.envelope.keys = keys;
+    }
+
     /// Clicking the envelope: the Inbox the new mail is in (All Inboxes when it came to several).
     pub(crate) fn show_new_mail(&mut self) -> CmdResult {
         self.module = crate::Module::Mail;

@@ -45,13 +45,15 @@ impl MailApp {
     }
 
     /// A question about closing put away without closing (Cancel, Escape): Restart now, and what
-    /// was answered about the update, go with it, so a later close asks again.
+    /// was answered about the update, go with it, so a later close asks again (and a later click
+    /// on the window's close button puts it in the notification area again).
     pub(crate) fn forget_cancelled_close(&mut self) {
         let asking = self.ui.dialog.as_ref().is_some_and(Dialog::about_closing);
         if self.ui.close_asked && !asking && !self.ui.close_now && !self.ui.closing_anyway {
             self.ui.close_asked = false;
             self.ui.restart_wanted = false;
             self.ui.update_answered = false;
+            self.ui.quitting = false;
         }
     }
 

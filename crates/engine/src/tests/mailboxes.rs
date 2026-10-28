@@ -435,3 +435,63 @@ fn the_envelope_shows_while_new_mail_is_unread() {
     assert_eq!(s.new_unread(), 0);
     let _ = std::fs::remove_dir_all(store.root());
 }
+
+/// Quatrelle closed and opened again with the new mail still unread: the envelope shows again;
+/// read elsewhere meanwhile, it doesn't.
+#[test]
+fn the_envelope_outlives_a_restart() {
+    let store = temp("envelope-restart");
+    let mut s = Session::open(Some(store.clone()), quatrelle_model::dates::Clock::new(NOW, 0));
+    let id = s.run("account.add", &json!({"email": "zoe@example.org", "password": "pw"})).unwrap()["account"].as_str().unwrap().to_string();
+    let inbox =
+        quatrelle_model::Folder { account: id.clone(), path: "INBOX".into(), role: FolderRole::Inbox, selectable: true, ..Default::default() };
+    s.apply(Event::Folders { account: id.clone(), folders: vec![inbox] });
+    let m = |uid: u32, seen: bool| quatrelle_model::Summary {
+        key: quatrelle_model::MessageKey { account: id.clone(), folder: "INBOX".into(), validity: 9, uid },
+        subject: format!("m{uid}"),
+        date: NOW - 60,
+        flags: quatrelle_model::Flags { seen, ..Default::default() },
+        ..Default::default()
+    };
+    let synced = |s: &mut Session, msgs: Vec<quatrelle_model::Summary>| {
+        store
+            .save_folder(&id, "INBOX", &quatrelle_store::FolderState { validity: 9, uid_next: 99, highest_modseq: 0, messages: msgs, window: 0 })
+            .unwrap();
+        s.apply(Event::FolderChanged { account: id.clone(), folder: "INBOX".into() });
+    };
+    synced(&mut s, vec![m(1, false)]);
+    synced(&mut s, vec![m(3, false), m(2, false), m(1, false)]);
+    assert_eq!(s.new_unread(), 2);
+    let kept = s.envelope_keys().to_vec();
+    drop(s);
+
+    let reopen = |kept: &[quatrelle_model::MessageKey]| {
+        let mut s = Session::open(Some(store.clone()), quatrelle_model::dates::Clock::new(NOW, 0));
+        s.restore_envelope(kept.to_vec());
+        s
+    };
+    let mut s = reopen(&kept);
+    assert_eq!(s.new_unread(), 2, "still unread, still new");
+    // One read in Outlook while Quatrelle was closed.
+    drop(s);
+    store
+        .save_folder(
+            &id,
+            "INBOX",
+            &quatrelle_store::FolderState {
+                validity: 9,
+                uid_next: 99,
+                highest_modseq: 0,
+                messages: vec![m(3, true), m(2, false), m(1, false)],
+                window: 0,
+            },
+        )
+        .unwrap();
+    let mut s = reopen(&kept);
+    assert_eq!(s.new_unread(), 1);
+    // Switched off: nothing comes back.
+    s.run("view.envelope", &json!({"on": false})).unwrap();
+    s.restore_envelope(kept);
+    assert_eq!(s.new_unread(), 0);
+    let _ = std::fs::remove_dir_all(store.root());
+}
