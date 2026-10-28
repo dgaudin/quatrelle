@@ -37,7 +37,8 @@ mod photos;
 mod reply;
 pub mod smime;
 mod trackers;
-pub use files::{runs_code, sanitize_filename};
+use files::{attachment_name, ext_for_mime};
+pub use files::{mime_from_name, runs_code, sanitize_filename};
 pub use hidden::{HIDDEN_WORDS_MIN, hidden_text};
 use html::*;
 pub use html::*;
@@ -245,7 +246,8 @@ pub enum AttachmentKind {
 pub fn kind_of(mime: &str, name: &str) -> AttachmentKind {
     let mime = mime.to_ascii_lowercase();
     let ext = name.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase()).unwrap_or_default();
-    if mime.starts_with("image/") {
+    // Sent as `application/octet-stream`, a picture this can show is still one (by its name).
+    if mime.starts_with("image/") || ["png", "jpg", "jpeg", "gif", "webp", "bmp"].contains(&ext.as_str()) {
         AttachmentKind::Image
     } else if mime.starts_with("video/") {
         AttachmentKind::Video
@@ -431,7 +433,7 @@ pub fn parse(raw: &[u8]) -> Option<Parsed> {
                 .content_type()
                 .map(|c| format!("{}/{}", c.ctype(), c.subtype().unwrap_or("octet-stream")).to_ascii_lowercase())
                 .unwrap_or_else(|| "application/octet-stream".into());
-            let name = p.attachment_name().map(sanitize_filename).unwrap_or_else(|| format!("attachment-{}{}", index + 1, ext_for_mime(&mime)));
+            let name = attachment_name(p.attachment_name(), &mime, p.contents(), index);
             AttachmentInfo {
                 index,
                 name,
@@ -510,46 +512,6 @@ pub fn html_body(raw: &[u8]) -> Option<String> {
 pub fn attachment_data(raw: &[u8], index: usize) -> Option<Vec<u8>> {
     let m = MessageParser::default().parse(raw)?;
     m.attachments().nth(index).map(|p| p.contents().to_vec())
-}
-
-fn ext_for_mime(mime: &str) -> &'static str {
-    match mime {
-        "image/png" => ".png",
-        "image/jpeg" => ".jpg",
-        "image/gif" => ".gif",
-        "application/pdf" => ".pdf",
-        "text/plain" => ".txt",
-        "text/calendar" => ".ics",
-        "message/rfc822" => ".eml",
-        _ => "",
-    }
-}
-
-/// The MIME type for an attachment, from its file name.
-pub fn mime_from_name(name: &str) -> &'static str {
-    match name.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase()).unwrap_or_default().as_str() {
-        "png" => "image/png",
-        "jpg" | "jpeg" => "image/jpeg",
-        "gif" => "image/gif",
-        "webp" => "image/webp",
-        "svg" => "image/svg+xml",
-        "pdf" => "application/pdf",
-        "txt" | "md" => "text/plain",
-        "html" | "htm" => "text/html",
-        "csv" => "text/csv",
-        "ics" => "text/calendar",
-        "zip" => "application/zip",
-        "mp4" => "video/mp4",
-        "mov" => "video/quicktime",
-        "mp3" => "audio/mpeg",
-        "wav" => "audio/wav",
-        "docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "xlsx" => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "pptx" => "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-        "odt" => "application/vnd.oasis.opendocument.text",
-        "eml" => "message/rfc822",
-        _ => "application/octet-stream",
-    }
 }
 
 /// A file attached to an outgoing message.
