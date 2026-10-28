@@ -154,18 +154,18 @@ impl Session {
         let event = cal.events.iter().find(|e| e.recurrence_id.is_none()).or_else(|| cal.events.first())?.clone();
         let mine = self.my_addresses();
         let parts = self.stored_parts(&event.uid).map(|(_, p)| p).unwrap_or_default();
-        let stored = parts
-            .iter()
-            .find(|e| e.event.recurrence_id == event.recurrence_id)
-            .or_else(|| parts.iter().find(|e| e.event.recurrence_id.is_none()))
-            .map(|e| e.event.clone());
-        let answer = stored
-            .as_ref()
-            .unwrap_or(&event)
-            .attendees
-            .iter()
-            .find(|a| mine.contains(&a.email.to_ascii_lowercase()))
-            .map(|a| a.partstat.clone())
+        let kept =
+            parts.iter().find(|e| e.event.recurrence_id == event.recurrence_id).or_else(|| parts.iter().find(|e| e.event.recurrence_id.is_none()));
+        let stored = kept.map(|e| e.event.clone());
+        // The answer: one given and on its way, else the user's among the guests, else the one
+        // the server keeps (an invitation sent to a group the user is in names the group, not
+        // them: answered, it showed no answer at all).
+        let answer = kept
+            .and_then(|e| e.respond.clone())
+            .or_else(|| {
+                stored.as_ref().unwrap_or(&event).attendees.iter().find(|a| mine.contains(&a.email.to_ascii_lowercase())).map(|a| a.partstat.clone())
+            })
+            .or_else(|| stored.as_ref().map(|e| e.my_answer.clone()).filter(|a| !a.is_empty()))
             .unwrap_or_else(|| "NEEDS-ACTION".into());
         let replier = (method == "REPLY")
             .then(|| event.attendees.iter().find(|a| same_address(&a.email, &sender)).or_else(|| event.attendees.first()).cloned())
@@ -178,9 +178,26 @@ impl Session {
     /// it, when declined) and the organizer gets the answer. An invitation to some occurrences
     /// of a series changes those occurrences only.
     pub fn respond_to_invite(&mut self, answer: &str) -> CmdResult {
-        let stat = partstat(answer).ok_or_else(|| CmdError::Params(format!("`{answer}`: answer accepted, tentative or declined")))?;
         let key = self.reading.as_ref().map(|r| r.key.clone()).ok_or_else(|| CmdError::Disabled("open the invitation first".into()))?;
-        let (cal, sender) = self.message_invitation(&key).ok_or_else(|| CmdError::Disabled("this message has no invitation".into()))?;
+        let out = self.answer_invite(&key, answer)?;
+        // Answered: as Outlook does by default, the invitation goes to Deleted Items and its
+        // window closes (it stayed in the Inbox, and nothing said the answer had gone).
+        // One answered again from Deleted Items stays there.
+        self.close_window(&key);
+        let in_trash = self.account(&key.account).and_then(|a| a.folder(FolderRole::Trash)).is_some_and(|t| t.path == key.folder);
+        if !in_trash {
+            self.selection = vec![key];
+            if let Err(e) = self.move_selection(MoveTarget::Role(FolderRole::Trash)) {
+                log::info!("the invitation answered stays where it is: {e}");
+            }
+        }
+        Ok(out)
+    }
+
+    /// [`Session::respond_to_invite`]'s answer, to the invitation in message `key`.
+    fn answer_invite(&mut self, key: &MessageKey, answer: &str) -> CmdResult {
+        let stat = partstat(answer).ok_or_else(|| CmdError::Params(format!("`{answer}`: answer accepted, tentative or declined")))?;
+        let (cal, sender) = self.message_invitation(key).ok_or_else(|| CmdError::Disabled("this message has no invitation".into()))?;
         if cal.method.as_deref() != Some("REQUEST") {
             return Err(CmdError::Disabled("this message isn't an invitation".into()));
         }
@@ -259,6 +276,7 @@ impl Session {
         let mut found = false;
         for e in p.events.iter_mut().filter(|e| same_meeting(&e.event.uid, uid) && !e.href.is_empty() && e.event.recurrence_id.is_none()) {
             set_answer(&mut e.event, &mine, &me, stat);
+            e.event.my_answer = stat.to_string();
             e.respond = Some(stat.to_string());
             e.dirty = true;
             found = true;
@@ -288,6 +306,7 @@ impl Session {
             p.events.retain(|e| !(same_meeting(&e.event.uid, uid) && (e.href.is_empty() || stat == "DECLINED")));
             for e in p.events.iter_mut().filter(|e| same_meeting(&e.event.uid, uid)) {
                 set_answer(&mut e.event, &mine, &me, stat);
+                e.event.my_answer = stat.clone();
                 e.respond = None;
                 e.dirty = false;
             }

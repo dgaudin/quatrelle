@@ -237,3 +237,62 @@ fn invitations_from_others_or_out_of_date_are_not_applied() {
     assert_eq!(zoe(&s), "DECLINED");
     done(s);
 }
+
+/// An invitation sent to a group the user is in names the group among its guests, not them. On
+/// Exchange the server answers it: the answer shows at once and stays (as the server keeps it,
+/// `MyResponseType`), and the invitation goes to Deleted Items, as Outlook does. It showed no
+/// answer at all, and stayed in the Inbox: the owner found nothing happened (27/10).
+#[test]
+fn a_group_invitation_shows_its_answer_and_goes() {
+    let mut s = sample_session("invite-group");
+    if let Some(a) = s.accounts.iter_mut().find(|a| a.config.id == "sample") {
+        a.config.ews = Some("https://mail.studio.example/EWS/Exchange.asmx".into());
+    }
+    let group =
+        Attendee { email: "team@studio.example".into(), name: "Team".into(), partstat: "NEEDS-ACTION".into(), rsvp: true, ..Default::default() };
+    let meeting = CalEvent {
+        uid: "plan@soundlab.example".into(),
+        summary: "Planning".into(),
+        start: NOW + 86_400,
+        end: NOW + 86_400 + 3600,
+        organizer: Some(Attendee { email: ANA.1.into(), name: ANA.0.into(), ..Default::default() }),
+        attendees: vec![group],
+        sequence: 1,
+        ..Default::default()
+    };
+    // Exchange placed it in the calendar, unanswered.
+    let cal = "calendar".to_string();
+    let read = |etag: &str, answer: &str| DavSync {
+        calendars: Some(vec![CalendarInfo { id: cal.clone(), name: "Calendar".into(), ..Default::default() }]),
+        events: vec![StoredEvent {
+            calendar: cal.clone(),
+            href: "AAMk-plan".into(),
+            etag: etag.into(),
+            event: CalEvent { my_answer: answer.into(), ..meeting.clone() },
+            ..Default::default()
+        }],
+        synced_calendars: vec![cal.clone()],
+        checked: NOW,
+        ..Default::default()
+    };
+    s.apply(Event::DavSynced { account: "sample".into(), sync: Box::new(read("ck1", "NEEDS-ACTION")) });
+    deliver(&mut s, 7, ANA, "REQUEST", std::slice::from_ref(&meeting), NOW);
+    let key = s.reading.as_ref().map(|r| r.key.clone()).unwrap();
+    assert_eq!(s.invite().map(|i| i.answer), Some("NEEDS-ACTION".into()));
+    s.take_jobs();
+    s.run("invite.respond", &json!({"answer": "accepted"})).unwrap();
+    // Gone from the Inbox to Deleted Items (the server moves it), the answer on its way.
+    assert!(!s.list.iter().any(|m| m.key == key), "gone from the Inbox");
+    let trash = s.account("sample").and_then(|a| a.folder(FolderRole::Trash)).map(|f| f.path.clone()).unwrap();
+    let jobs = s.take_jobs();
+    assert!(jobs.iter().any(|j| matches!(j, Job::Apply { op: Op::Move { to, .. }, .. } if *to == trash)), "{jobs:?}");
+    assert!(parts(&s, &meeting.uid).iter().any(|e| e.respond.as_deref() == Some("ACCEPTED") && e.event.my_answer == "ACCEPTED"));
+    // The server answered, and keeps the answer: the invitation shows it (sent again, say).
+    let mut answered = read("ck2", "ACCEPTED");
+    answered.responded = vec![(meeting.uid.clone(), "ACCEPTED".into())];
+    s.apply(Event::DavSynced { account: "sample".into(), sync: Box::new(answered) });
+    assert!(parts(&s, &meeting.uid).iter().all(|e| e.respond.is_none() && !e.dirty));
+    deliver(&mut s, 8, ANA, "REQUEST", std::slice::from_ref(&meeting), NOW);
+    assert_eq!(s.invite().map(|i| i.answer), Some("ACCEPTED".into()), "the server's answer, the group's guests aside");
+    done(s);
+}

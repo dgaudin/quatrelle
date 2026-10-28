@@ -327,9 +327,8 @@ fn message(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action
                     vote_bar(ui, &t, &r.key, choices, voted, vote_sending.as_deref(), acts);
                     ui.add_space(8.0);
                 }
-                if !in_window {
-                    invite_card(s, st, ui, &r.key, acts);
-                }
+                // In a window too: the answer goes to that window's message.
+                invite_card(s, st, ui, &r.key, acts);
             }
 
             // An encrypted message not decrypted: nothing of it (its smime.p7m) is shown.
@@ -343,7 +342,7 @@ fn message(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action
             let shown: Vec<usize> = if formatted { p.images.iter().filter_map(|i| mime::picture_attachment(p, i)).collect() } else { Vec::new() };
             let in_place = |a: &mime::AttachmentInfo| shown.contains(&a.index);
             // An invitation is shown as its card above, not as a file.
-            let invitation = st.invite.as_ref().is_some_and(|(k, _, i)| k == &r.key && i.is_some()) && !in_window;
+            let invitation = st.invite.iter().any(|(k, _, i)| k == &r.key && i.is_some());
             let is_invite_file = |a: &mime::AttachmentInfo| {
                 invitation && (a.mime.to_ascii_lowercase().starts_with("text/calendar") || a.name.to_ascii_lowercase().ends_with(".ics"))
             };
@@ -489,11 +488,21 @@ pub(crate) fn sender_warning(t: &Tokens, ui: &mut Ui, w: &quatrelle_engine::mode
 
 /// A meeting invitation (or an answer to one, or a cancellation) carried by the message.
 fn invite_card(s: &Session, st: &mut UiState, ui: &mut Ui, key: &MessageKey, acts: &mut Vec<Action>) {
-    let fresh = st.invite.as_ref().is_some_and(|(k, rev, _)| k == key && *rev == s.pim_revision);
-    if !fresh {
-        st.invite = Some((key.clone(), s.pim_revision, s.invite()));
-    }
-    let Some(inv) = st.invite.as_ref().and_then(|(_, _, i)| i.clone()) else { return };
+    // Worked out once per message (the reading pane's and each window's) and calendar change.
+    let kept = st.invite.iter().find(|(k, rev, _)| k == key && *rev == s.pim_revision).map(|(_, _, i)| i.clone());
+    let invite = match kept {
+        Some(i) => i,
+        None => {
+            let i = s.invite();
+            st.invite.retain(|(k, _, _)| k != key);
+            if st.invite.len() >= 8 {
+                st.invite.remove(0);
+            }
+            st.invite.push((key.clone(), s.pim_revision, i.clone()));
+            i
+        }
+    };
+    let Some(inv) = invite else { return };
     let t = st.tokens;
     let e = &inv.event;
     egui::Frame::new().fill(t.accent_soft).corner_radius(8).inner_margin(Margin::same(12)).show(ui, |ui| {
