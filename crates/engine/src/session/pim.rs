@@ -256,6 +256,7 @@ impl Session {
                 log::warn!("{a}: which calendars to read couldn't be kept: {e}");
             }
             if more {
+                log::info!("{a}: calendars to read now (the calendar opened, or one ticked)");
                 self.jobs.push(Job::SyncDav { account: a.clone() });
             }
         }
@@ -456,6 +457,7 @@ impl Session {
     pub(crate) fn after_pim_change(&mut self, account: &str, remote: bool) {
         self.save_pim(account);
         if remote && self.account(account).is_some_and(|a| !a.is_local()) {
+            log::info!("{account}: a change to send to the calendars, contacts or tasks");
             self.jobs.push(Job::SyncDav { account: account.to_string() });
         }
     }
