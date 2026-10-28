@@ -290,6 +290,51 @@ fn only_the_calendars_shown_are_read() {
     assert!(cal.synced_calendars.contains(&ana) && !cal.synced_calendars.contains(&tom));
 }
 
+/// A calendar left unticked costs the server nothing at a full sync, its rights kept from before
+/// (each of the owner's fifty colleagues' was asked about at every sync); and one just ticked is
+/// read alone, the others left as they are (28/10: a ticked calendar waited for a full pass of
+/// everything, half a minute).
+#[test]
+fn a_calendar_ticked_is_read_alone_and_one_unticked_costs_nothing() {
+    use quatrelle_model::pim::{CalendarInfo, Pim, shared_calendar_id};
+    let mut d = Data::default();
+    d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
+    d.folder("Contacts", None, Some("contacts"), "IPF.Contact");
+    let ev = parse(
+        "<t:CalendarItem><t:Subject>Budget review</t:Subject><t:Start>2026-10-06T13:00:00Z</t:Start><t:End>2026-10-06T14:00:00Z</t:End>\
+         <t:IsAllDayEvent>false</t:IsAllDayEvent><t:UID>budget-1</t:UID></t:CalendarItem>",
+    );
+    d.pim.push(("S1".into(), "mailbox:ana@contoso.example".into(), ev.kids[0].clone()));
+    d.pim.push(("S2".into(), "mailbox:tom@contoso.example".into(), ev.kids[0].clone()));
+    let server = serve(d);
+    let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
+    let (ana, tom) = (shared_calendar_id("ana@contoso.example"), shared_calendar_id("tom@contoso.example"));
+    let shared = vec!["ana@contoso.example".to_string(), "tom@contoso.example".to_string()];
+    let info = |id: &str, read_only| CalendarInfo { id: id.into(), name: id.into(), read_only, ..Default::default() };
+    let known = vec![info(crate::ews_pim::CALENDAR, false), info(&ana, true), info(&tom, false)];
+    let folders = || server.data.lock().unwrap().calls.iter().filter(|c| c.as_str() == "GetFolder").count();
+    // Both unticked: listed as they were (Tom's lets this account edit), nothing asked of them.
+    let before = folders();
+    let pim = Pim { shared: shared.clone(), not_read: vec![ana.clone(), tom.clone()], calendars: known.clone(), ..Default::default() };
+    let none = crate::ews_pim::sync(&c, &pim, 1_792_000_000).unwrap();
+    let unticked = folders() - before;
+    let listed = none.calendars.unwrap_or_default();
+    assert_eq!(listed.iter().find(|x| x.id == tom).map(|x| x.read_only), Some(false), "kept from before: {listed:?}");
+    assert!(listed.iter().any(|x| x.id == ana) && none.synced_calendars == [crate::ews_pim::CALENDAR]);
+    let before = folders();
+    crate::ews_pim::sync(&c, &Pim { shared: shared.clone(), calendars: known.clone(), ..Default::default() }, 1_792_000_000).unwrap();
+    assert_eq!(folders() - before, unticked + 2, "each ticked one's rights asked, the unticked ones' not");
+    // Tom's just ticked: his calendar read alone.
+    let pim = Pim { shared, not_read: vec![ana.clone()], calendars: known, ..Default::default() };
+    let alone = crate::ews_pim::sync_calendars(&c, &pim, std::slice::from_ref(&tom), 1_792_000_000);
+    assert!(alone.errors.is_empty(), "{:?}", alone.errors);
+    assert!(alone.partial && alone.books.is_none() && alone.tasks.is_none() && alone.notes.is_none() && alone.cards.is_empty());
+    assert_eq!(alone.synced_calendars, std::slice::from_ref(&tom));
+    assert_eq!(alone.calendars.iter().flatten().map(|x| x.id.as_str()).collect::<Vec<_>>(), [tom.as_str()]);
+    assert!(!alone.events.is_empty() && alone.events.iter().all(|e| e.calendar == tom), "{:?}", alone.events);
+}
+
 /// A calendar is read from six months back (and its recurring series whenever they began):
 /// reading every meeting since a calendar began, for each colleague's, never ended.
 #[test]

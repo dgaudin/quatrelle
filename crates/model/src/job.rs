@@ -308,6 +308,9 @@ pub enum Job {
     /// Sync the account's calendars and address books with its CalDAV / CardDAV server (changes
     /// made here first).
     SyncDav { account: String },
+    /// Read these calendars of other people alone (just ticked), not everything again: the sync
+    /// says it looked at no more ([`DavSync::partial`](crate::pim::DavSync)).
+    SyncCalendars { account: String, calendars: Vec<String> },
     /// Ask where Quatrelle is published for its recent releases (File › About › Check for
     /// updates); answered by [`Event::Releases`].
     CheckUpdates,
@@ -417,6 +420,7 @@ impl Job {
             | Job::FetchPhoto { account, .. }
             | Job::Search { account, .. }
             | Job::SyncDav { account }
+            | Job::SyncCalendars { account, .. }
             | Job::ImportPst { account, .. }
             | Job::CompactDataFile { account }
             | Job::LocalFolderSizes { account }

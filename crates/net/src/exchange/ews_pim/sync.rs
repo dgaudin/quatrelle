@@ -86,60 +86,32 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
         log::info!("{} other people's calendars, {ticked} ticked{}", others.len(), if known { " and read" } else { " (listed, none read yet)" });
     }
     for (n, (email, name, group, asked)) in others.iter().enumerate() {
-        let id = quatrelle_model::pim::shared_calendar_id(email);
-        if !*asked && !known {
-            calendars.push(CalendarInfo {
-                id,
-                name: name.clone(),
-                color: u8::try_from((n + 1) % 8).unwrap_or(0),
-                read_only: true,
-                ctag: String::new(),
-                group: group.clone(),
-            });
-            continue;
-        }
-        let parent = calendar_folder(Some(&c.address_of(email)));
-        // Editable when the folder's rights say so, or (some servers say nothing useful about
-        // another mailbox's folder) when its events do, as Outlook finds by trying.
-        let folder_rights = may_edit(c, &parent);
-        let mut can_edit = matches!(&folder_rights, Ok(true));
-        // Unticked: listed as it was, not read (the fork keeps Outlook's ticks).
-        if pim.not_read.contains(&id) {
-            calendars.push(CalendarInfo {
-                id,
-                name: name.clone(),
-                color: u8::try_from((n + 1) % 8).unwrap_or(0),
-                read_only: !can_edit,
-                ctag: String::new(),
-                group: group.clone(),
-            });
-            continue;
-        }
-        match items_in(c, &parent, "", Some(now - CALENDAR_BACK)) {
-            Ok(list) => {
-                can_edit |= list.iter().any(item_may_change);
-                if !can_edit && let Err(e) = &folder_rights {
-                    log::info!("{email}'s calendar rights: {e}");
-                }
-                read_calendar(c, list, &id, email, &mut out);
-                out.synced_calendars.push(id.clone());
-            }
-            // One asked for by hand says why it's missing; a shared mailbox whose calendar
-            // isn't shared with the account just has none here.
-            Err(e) if *asked => out.errors.push(format!("{email}'s calendar: {e}")),
-            Err(e) => {
-                log::info!("shared mailbox {email}: no calendar ({e})");
-                continue;
-            }
-        }
-        calendars.push(CalendarInfo {
-            id,
+        let entry = CalendarInfo {
+            id: quatrelle_model::pim::shared_calendar_id(email),
             name: name.clone(),
             color: u8::try_from((n + 1) % 8).unwrap_or(0),
-            read_only: !can_edit,
+            read_only: true,
             ctag: String::new(),
             group: group.clone(),
-        });
+        };
+        if !*asked && !known {
+            calendars.push(entry);
+            continue;
+        }
+        // Unticked: listed as it was, not read (the fork keeps Outlook's ticks), whether this
+        // account may change it as known from before: asked of the server only the first time
+        // (each of the owner's fifty colleagues' was, at every sync, 28/10).
+        if pim.not_read.contains(&entry.id) {
+            let read_only = match pim.calendars.iter().find(|k| k.id == entry.id) {
+                Some(k) => k.read_only,
+                None => !matches!(may_edit(c, &calendar_folder(Some(&c.address_of(email)))), Ok(true)),
+            };
+            calendars.push(CalendarInfo { read_only, ..entry });
+            continue;
+        }
+        if let Some(info) = read_other(c, email, *asked, entry, now, &mut out) {
+            calendars.push(info);
+        }
     }
     out.calendars = Some(calendars);
     let mut books = out.books.take().unwrap_or_default();
@@ -228,6 +200,59 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
     read_notes(c, pim, &mut out);
     read_tasks(c, pim, &mut out);
     Ok(out)
+}
+
+/// Other people's calendars alone (just ticked), not everything again: their appointments and
+/// their entries in the list, the rest left as it is (`partial`). A few seconds, where a full
+/// sync of the owner's took half a minute.
+pub fn sync_calendars(c: &Client, pim: &Pim, ids: &[String], now: i64) -> DavSync {
+    let mut out = DavSync { caldav_home: Some("ews".into()), carddav_home: Some("ews".into()), checked: now, partial: true, ..Default::default() };
+    let mut calendars = Vec::new();
+    for id in ids {
+        let Some(email) = quatrelle_model::pim::shared_calendar_owner(id) else { continue };
+        // As the list has it (its name, colour and group).
+        let entry = pim.calendars.iter().find(|k| k.id == *id).cloned().unwrap_or_else(|| CalendarInfo {
+            id: id.clone(),
+            name: email.to_string(),
+            read_only: true,
+            ..Default::default()
+        });
+        let asked = pim.shared.iter().any(|e| e.eq_ignore_ascii_case(email));
+        if let Some(info) = read_other(c, email, asked, entry, now, &mut out) {
+            calendars.push(info);
+        }
+    }
+    out.calendars = Some(calendars);
+    quatrelle_model::pim::separate_shared_uids(&mut out.events);
+    out
+}
+
+/// `email`'s calendar read into `out` (from six months back), and its entry in the list as
+/// `entry` has it, editable or not as the server says. `None`: a shared mailbox whose calendar
+/// isn't shared with this account (said in the log); one opened by hand (`asked`) says why it's
+/// missing, and stays listed.
+fn read_other(c: &Client, email: &str, asked: bool, entry: CalendarInfo, now: i64, out: &mut DavSync) -> Option<CalendarInfo> {
+    let parent = calendar_folder(Some(&c.address_of(email)));
+    // Editable when the folder's rights say so, or (some servers say nothing useful about
+    // another mailbox's folder) when its events do, as Outlook finds by trying.
+    let folder_rights = may_edit(c, &parent);
+    let mut can_edit = matches!(&folder_rights, Ok(true));
+    match items_in(c, &parent, "", Some(now - CALENDAR_BACK)) {
+        Ok(list) => {
+            can_edit |= list.iter().any(item_may_change);
+            if !can_edit && let Err(e) = &folder_rights {
+                log::info!("{email}'s calendar rights: {e}");
+            }
+            read_calendar(c, list, &entry.id, email, out);
+            out.synced_calendars.push(entry.id.clone());
+        }
+        Err(e) if asked => out.errors.push(format!("{email}'s calendar: {e}")),
+        Err(e) => {
+            log::info!("shared mailbox {email}: no calendar ({e})");
+            return None;
+        }
+    }
+    Some(CalendarInfo { read_only: !can_edit, ..entry })
 }
 
 /// The tasks alone, as the server tells of a change in their folder: those deleted and changed

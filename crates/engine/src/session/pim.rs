@@ -243,7 +243,15 @@ impl Session {
             if p.own_only == own_only && p.not_read == not_read {
                 continue;
             }
-            let more = (p.not_read.iter().any(|c| !not_read.contains(c)) || p.own_only) && !own_only;
+            // Opening the calendar reads every calendar ticked; one just ticked is read alone (a
+            // colleague's), or with the rest (a public folder's), and one subscribed to by its
+            // link isn't the server's to read.
+            let opened = p.own_only && !own_only;
+            let ticked: Vec<String> = if own_only {
+                Vec::new()
+            } else {
+                p.not_read.iter().filter(|c| !not_read.contains(c) && !quatrelle_model::pim::is_web_calendar(c)).cloned().collect()
+            };
             let p = self.pim_mut(&a);
             p.own_only = own_only;
             p.not_read = not_read;
@@ -255,9 +263,12 @@ impl Session {
             {
                 log::warn!("{a}: which calendars to read couldn't be kept: {e}");
             }
-            if more {
+            if opened || ticked.iter().any(|c| quatrelle_model::pim::shared_calendar_owner(c).is_none()) {
                 log::info!("{a}: calendars to read now (the calendar opened, or one ticked)");
                 self.jobs.push(Job::SyncDav { account: a.clone() });
+            } else if !ticked.is_empty() {
+                log::info!("{a}: {} calendars ticked, read alone", ticked.len());
+                self.jobs.push(Job::SyncCalendars { account: a.clone(), calendars: ticked });
             }
         }
     }

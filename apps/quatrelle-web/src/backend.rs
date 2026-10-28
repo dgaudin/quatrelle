@@ -516,7 +516,7 @@ async fn job(sh: &Rcs, id: &str, j: Job) {
             emit(sh, Event::Availability { account, from, to, people, error: Some(error) });
         }
         // Nothing to do in the browser: no Outbox (sending needs the server), no CalDAV.
-        Job::FlushOutbox { .. } | Job::SyncDav { .. } => {}
+        Job::FlushOutbox { .. } | Job::SyncDav { .. } | Job::SyncCalendars { .. } => {}
         // Mail past what's kept (issue #4).
         Job::SearchServer { folders, query, search, .. } => search_server(sh, id, &folders, query, search).await,
         Job::MoreMail { folder, more, .. } => {
