@@ -137,7 +137,8 @@ fn push_job(queue: &mut VecDeque<Job>, j: Job) {
     if matches!(j, Job::SyncFolder { .. } | Job::SyncDav { .. }) && queue.contains(&j) {
         return;
     }
-    // Calendars just ticked: the sync waiting reads them too, else those waiting take them in.
+    // Calendars just ticked: the sync waiting reads them too, else those waiting take them in
+    // (none named stands for every calendar ticked, as the calendar opens).
     if let Job::SyncCalendars { account, calendars } = &j {
         if queue.iter().any(|q| matches!(q, Job::SyncDav { account: a } if a == account)) {
             return;
@@ -145,9 +146,13 @@ fn push_job(queue: &mut VecDeque<Job>, j: Job) {
         if let Some(Job::SyncCalendars { calendars: waiting, .. }) =
             queue.iter_mut().find(|q| matches!(q, Job::SyncCalendars { account: a, .. } if a == account))
         {
-            for c in calendars {
-                if !waiting.contains(c) {
-                    waiting.push(c.clone());
+            if calendars.is_empty() {
+                waiting.clear();
+            } else if !waiting.is_empty() {
+                for c in calendars {
+                    if !waiting.contains(c) {
+                        waiting.push(c.clone());
+                    }
                 }
             }
             return;

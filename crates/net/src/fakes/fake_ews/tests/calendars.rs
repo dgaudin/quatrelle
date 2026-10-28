@@ -291,16 +291,19 @@ fn only_the_calendars_shown_are_read() {
 }
 
 /// A calendar left unticked costs the server nothing at a full sync, its rights kept from before
-/// (each of the owner's fifty colleagues' was asked about at every sync); and one just ticked is
-/// read alone, the others left as they are (28/10: a ticked calendar waited for a full pass of
-/// everything, half a minute).
+/// (each of the owner's fifty colleagues' was asked about at every sync); one just ticked is read
+/// alone, the others left as they are; and the calendar opened reads the calendars, not the
+/// address books (28/10: a ticked calendar waited for a full pass of everything, half a minute,
+/// and opening the calendar read 1,400 public contacts first).
 #[test]
 fn a_calendar_ticked_is_read_alone_and_one_unticked_costs_nothing() {
     use quatrelle_model::pim::{CalendarInfo, Pim, shared_calendar_id};
     let mut d = Data::default();
     d.folder("Inbox", None, Some("inbox"), "IPF.Note");
     d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
-    d.folder("Contacts", None, Some("contacts"), "IPF.Contact");
+    let contacts = d.folder("Contacts", None, Some("contacts"), "IPF.Contact");
+    let card = parse("<t:Contact><t:FileAs>Ana Lima</t:FileAs><t:DisplayName>Ana Lima</t:DisplayName><t:GivenName>Ana</t:GivenName></t:Contact>");
+    d.pim.push(("C1".into(), contacts, card.kids[0].clone()));
     let ev = parse(
         "<t:CalendarItem><t:Subject>Budget review</t:Subject><t:Start>2026-10-06T13:00:00Z</t:Start><t:End>2026-10-06T14:00:00Z</t:End>\
          <t:IsAllDayEvent>false</t:IsAllDayEvent><t:UID>budget-1</t:UID></t:CalendarItem>",
@@ -325,9 +328,18 @@ fn a_calendar_ticked_is_read_alone_and_one_unticked_costs_nothing() {
     let before = folders();
     crate::ews_pim::sync(&c, &Pim { shared: shared.clone(), calendars: known.clone(), ..Default::default() }, 1_792_000_000).unwrap();
     assert_eq!(folders() - before, unticked + 2, "each ticked one's rights asked, the unticked ones' not");
+    // The calendar opened: the calendars read (its own, Ana's and Tom's), not the contacts.
+    let opened =
+        crate::ews_pim::sync_calendars(&c, &Pim { shared: shared.clone(), calendars: known.clone(), ..Default::default() }, &[], 1_792_000_000)
+            .unwrap();
+    assert!(!opened.partial && opened.books.is_none() && opened.cards.is_empty() && opened.tasks.is_none() && opened.notes.is_none());
+    for id in [crate::ews_pim::CALENDAR, ana.as_str(), tom.as_str()] {
+        assert!(opened.synced_calendars.iter().any(|x| x == id), "{id}: {:?}", opened.synced_calendars);
+    }
+    assert!(opened.events.iter().any(|e| e.calendar == ana) && opened.events.iter().any(|e| e.calendar == tom));
     // Tom's just ticked: his calendar read alone.
     let pim = Pim { shared, not_read: vec![ana.clone()], calendars: known, ..Default::default() };
-    let alone = crate::ews_pim::sync_calendars(&c, &pim, std::slice::from_ref(&tom), 1_792_000_000);
+    let alone = crate::ews_pim::sync_calendars(&c, &pim, std::slice::from_ref(&tom), 1_792_000_000).unwrap();
     assert!(alone.errors.is_empty(), "{:?}", alone.errors);
     assert!(alone.partial && alone.books.is_none() && alone.tasks.is_none() && alone.notes.is_none() && alone.cards.is_empty());
     assert_eq!(alone.synced_calendars, std::slice::from_ref(&tom));

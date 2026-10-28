@@ -264,8 +264,8 @@ impl Session {
                 log::warn!("{a}: which calendars to read couldn't be kept: {e}");
             }
             if opened || ticked.iter().any(|c| quatrelle_model::pim::shared_calendar_owner(c).is_none()) {
-                log::info!("{a}: calendars to read now (the calendar opened, or one ticked)");
-                self.jobs.push(Job::SyncDav { account: a.clone() });
+                log::info!("{a}: the calendars to read now (the calendar opened, or a public folder's ticked)");
+                self.jobs.push(Job::SyncCalendars { account: a.clone(), calendars: Vec::new() });
             } else if !ticked.is_empty() {
                 log::info!("{a}: {} calendars ticked, read alone", ticked.len());
                 self.jobs.push(Job::SyncCalendars { account: a.clone(), calendars: ticked });
