@@ -926,7 +926,6 @@ month	May	Май
 	Open its calendar too	Открыть и его календарь
 	Open another mailbox…	Открыть другой почтовый ящик…
 	Close this mailbox	Закрыть этот почтовый ящик
-	Open calendar	Открыть календарь
 	Open someone's calendar shared with you in Exchange	Открыть календарь человека, который поделился им с вами в Exchange
 	Other user's folder	Папка другого пользователя
 	Voting buttons	Кнопки голосования
@@ -1651,3 +1650,15 @@ month	May	Май
 	Zoom in	Увеличить
 	Zoom out	Уменьшить
 	Message zoom: click for 100%	Масштаб сообщения: щёлкните, чтобы вернуть 100%
+	Subscribe to a calendar	Подписаться на календарь
+	Subscribe to a calendar…	Подписаться на календарь…
+	Paste the calendar's link (iCal or webcal://). It shows beside yours, read-only, and is read again every few hours.	Вставьте ссылку на календарь (iCal или webcal://). Он появится рядом с вашим, только для чтения, и будет перечитываться каждые несколько часов.
+	Name (optional)	Название (необязательно)
+	Subscribe	Подписаться
+	Couldn't be read: {error}	Не удалось прочитать: {error}
+	Reading it…	Чтение…
+	Read {time}	Прочитан {time}
+	couldn't be read	не удалось прочитать
+	Add calendar	Добавить календарь
+	From address book…	Из адресной книги…
+	From the Internet…	Из Интернета…

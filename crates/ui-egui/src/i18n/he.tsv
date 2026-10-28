@@ -865,7 +865,6 @@ month	May	מאי
 	Open its calendar too	פתיחת לוח השנה שלה גם כן
 	Open another mailbox…	פתיחת תיבת דואר אחרת…
 	Close this mailbox	סגירת תיבת דואר זו
-	Open calendar	פתיחת לוח שנה
 	Open someone's calendar shared with you in Exchange	פתיחת לוח השנה של מישהו ששיתף אותו איתך ב-Exchange
 	Other user's folder	תיקייה של משתמש אחר
 	Voting buttons	לחצני הצבעה
@@ -1648,3 +1647,15 @@ month	May	מאי
 	Zoom in	הגדל
 	Zoom out	הקטן
 	Message zoom: click for 100%	הגדלת ההודעה: לחץ כדי לחזור ל-100%
+	Subscribe to a calendar	הירשם ללוח שנה
+	Subscribe to a calendar…	הירשם ללוח שנה…
+	Paste the calendar's link (iCal or webcal://). It shows beside yours, read-only, and is read again every few hours.	הדבק את הקישור ללוח השנה (iCal או webcal://). הוא יוצג לצד שלך, לקריאה בלבד, וייקרא מחדש כל כמה שעות.
+	Name (optional)	שם (לא חובה)
+	Subscribe	הירשם
+	Couldn't be read: {error}	לא ניתן לקרוא: {error}
+	Reading it…	קורא…
+	Read {time}	נקרא {time}
+	couldn't be read	לא ניתן לקרוא
+	Add calendar	הוסף לוח שנה
+	From address book…	מפנקס הכתובות…
+	From the Internet…	מהאינטרנט…

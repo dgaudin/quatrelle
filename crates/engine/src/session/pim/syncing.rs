@@ -10,6 +10,8 @@
 
 use std::collections::{HashMap, HashSet};
 
+use quatrelle_model::pim::is_web_calendar;
+
 use super::*;
 
 impl Session {
@@ -81,6 +83,9 @@ impl Session {
                 let kept: Vec<_> = p.calendars.iter().filter(|c| c.id != LOCAL && !list.iter().any(|x| x.id == c.id)).cloned().collect();
                 list.extend(kept);
             }
+            // Calendars subscribed to by their links aren't the server's: they stay (issue #7).
+            let web: Vec<_> = p.calendars.iter().filter(|c| is_web_calendar(&c.id) && !list.iter().any(|x| x.id == c.id)).cloned().collect();
+            list.extend(web);
             let listed: HashSet<&str> = list.iter().map(|c| c.id.as_str()).collect();
             p.events.retain(|e| e.calendar == LOCAL || listed.contains(e.calendar.as_str()) || e.dirty);
             merge_events(p, sync);
@@ -177,7 +182,9 @@ fn merge_events(p: &mut Pim, sync: &quatrelle_model::pim::DavSync) {
                 if e.href.is_empty() {
                     edited_uid.insert(&e.event.uid);
                 }
-            } else if e.href.is_empty() {
+            } else if e.href.is_empty() && !is_web_calendar(&e.calendar) {
+                // (One of a calendar subscribed to by its link never goes to the server: it
+                // isn't replaced by the server's with the same UID.)
                 unsent.entry((&e.event.uid, e.event.recurrence_id)).or_default().push(i);
             }
             by_href.entry((&e.href, e.event.recurrence_id)).or_default().push(i);

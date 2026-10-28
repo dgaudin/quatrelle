@@ -865,7 +865,6 @@ month	May	مايو
 	Open its calendar too	فتح تقويمها أيضًا
 	Open another mailbox…	فتح علبة بريد أخرى…
 	Close this mailbox	إغلاق علبة البريد هذه
-	Open calendar	فتح تقويم
 	Open someone's calendar shared with you in Exchange	افتح تقويم شخص شاركه معك في Exchange
 	Other user's folder	مجلد مستخدم آخر
 	Voting buttons	أزرار التصويت
@@ -1648,3 +1647,15 @@ month	May	مايو
 	Zoom in	تكبير
 	Zoom out	تصغير
 	Message zoom: click for 100%	تكبير الرسالة: انقر للعودة إلى 100%
+	Subscribe to a calendar	الاشتراك في تقويم
+	Subscribe to a calendar…	الاشتراك في تقويم…
+	Paste the calendar's link (iCal or webcal://). It shows beside yours, read-only, and is read again every few hours.	الصق رابط التقويم (iCal أو webcal://). يظهر بجانب تقويمك للقراءة فقط، ويُقرأ من جديد كل بضع ساعات.
+	Name (optional)	الاسم (اختياري)
+	Subscribe	اشتراك
+	Couldn't be read: {error}	تعذّرت القراءة: {error}
+	Reading it…	جارٍ القراءة…
+	Read {time}	قُرئ {time}
+	couldn't be read	تعذّرت القراءة
+	Add calendar	إضافة تقويم
+	From address book…	من دفتر العناوين…
+	From the Internet…	من الإنترنت…

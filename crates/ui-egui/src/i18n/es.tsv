@@ -927,7 +927,6 @@ month	May	mayo
 	Open its calendar too	Abrir también su calendario
 	Open another mailbox…	Abrir otro buzón…
 	Close this mailbox	Cerrar este buzón
-	Open calendar	Abrir calendario
 	Open someone's calendar shared with you in Exchange	Abrir el calendario de alguien que lo ha compartido con usted en Exchange
 	Other user's folder	Carpeta de otro usuario
 	Voting buttons	Botones de voto
@@ -1652,3 +1651,15 @@ month	May	mayo
 	Zoom in	Acercar
 	Zoom out	Alejar
 	Message zoom: click for 100%	Zoom del mensaje: haga clic para volver al 100 %
+	Subscribe to a calendar	Suscribirse a un calendario
+	Subscribe to a calendar…	Suscribirse a un calendario…
+	Paste the calendar's link (iCal or webcal://). It shows beside yours, read-only, and is read again every few hours.	Pega el enlace del calendario (iCal o webcal://). Se muestra junto al tuyo, de solo lectura, y se vuelve a leer cada pocas horas.
+	Name (optional)	Nombre (opcional)
+	Subscribe	Suscribirse
+	Couldn't be read: {error}	No se pudo leer: {error}
+	Reading it…	Leyéndolo…
+	Read {time}	Leído {time}
+	couldn't be read	no se pudo leer
+	Add calendar	Agregar calendario
+	From address book…	Desde la libreta de direcciones…
+	From the Internet…	Desde Internet…

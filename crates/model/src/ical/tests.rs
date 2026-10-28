@@ -432,3 +432,18 @@ fn a_meetings_show_as_privacy_and_options_both_ways() {
     let out = write(std::slice::from_ref(plain), None, 0);
     assert!(!out.contains("TRANSP") && !out.contains("CLASS") && !out.contains("X-MICROSOFT"), "{out}");
 }
+
+/// A calendar published to subscribe to names itself and says how often to read it (RFC 7986,
+/// and the older `X-WR-CALNAME` / `X-PUBLISHED-TTL`); an event's own properties aren't taken for
+/// the calendar's.
+#[test]
+fn a_published_calendar_names_itself() {
+    let head = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\n";
+    let ev = "BEGIN:VEVENT\r\nUID:a\r\nDTSTART:20270101T090000Z\r\nNAME:Not the calendar\r\nEND:VEVENT\r\n";
+    let c = parse(&format!("{head}NAME:Feiertage\\, Bayern\r\nREFRESH-INTERVAL;VALUE=DURATION:P1D\r\n{ev}END:VCALENDAR\r\n"), 0);
+    assert_eq!((c.name.as_deref(), c.refresh), (Some("Feiertage, Bayern"), Some(86_400)));
+    let c = parse(&format!("{head}{ev}X-WR-CALNAME:Team\r\nX-PUBLISHED-TTL:PT1H\r\nEND:VCALENDAR\r\n"), 0);
+    assert_eq!((c.name.as_deref(), c.refresh), (Some("Team"), Some(3600)));
+    let c = parse(&format!("{head}X-WR-CALNAME: \u{7} \r\nX-PUBLISHED-TTL:junk\r\n{ev}END:VCALENDAR\r\n"), 0);
+    assert_eq!((c.name, c.refresh), (None, None));
+}

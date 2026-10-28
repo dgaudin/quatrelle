@@ -129,6 +129,15 @@ impl Session {
                 }
             }
             Event::DavSynced { account, sync } => self.apply_dav(&account, &sync),
+            Event::CalendarFetched { account, calendar, ics, etag, modified, unchanged, error } => {
+                let read = match (ics, error) {
+                    (_, Some(e)) => pim::web::WebRead::Failed(e),
+                    (Some(ics), None) => pim::web::WebRead::Read { ics, etag, modified },
+                    (None, None) if unchanged => pim::web::WebRead::Unchanged,
+                    (None, None) => pim::web::WebRead::Failed("nothing came back".into()),
+                };
+                self.apply_web_calendar(&account, &calendar, read);
+            }
             Event::Rooms { account, lists, rooms, error } => self.rooms_answered(&account, lists, rooms, error),
             Event::Availability { account, from, to, people, error } => self.availability_answered(&account, from, to, people, error),
             Event::Imported { account, messages, skipped, done, error } => self.imported(&account, messages, skipped, done, error),
