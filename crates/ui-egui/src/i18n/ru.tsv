@@ -253,6 +253,7 @@
 	Servers: {imap} (IMAP {imap_port}), {smtp} (SMTP {smtp_port})	Серверы: {imap} (IMAP {imap_port}), {smtp} (SMTP {smtp_port})
 	Settings found: {source}	Параметры найдены: {source}
 	Show a desktop notification when new mail arrives	Показывать уведомление на рабочем столе при новой почте
+	Show an envelope in the notification area while new mail is unread	Показывать конверт в области уведомлений, пока новая почта не прочитана
 	Show as plain text	Показать как обычный текст
 	Show formatted	Показать с форматированием
 	Show in Favorites	Показать в избранном

@@ -253,6 +253,7 @@
 	Servers: {imap} (IMAP {imap_port}), {smtp} (SMTP {smtp_port})	Servers: {imap} (IMAP {imap_port}), {smtp} (SMTP {smtp_port})
 	Settings found: {source}	Instellingen gevonden: {source}
 	Show a desktop notification when new mail arrives	Een bureaubladmelding tonen wanneer er nieuwe mail binnenkomt
+	Show an envelope in the notification area while new mail is unread	Een envelop in het systeemvak tonen zolang er nieuwe mail ongelezen is
 	Show as plain text	Als platte tekst weergeven
 	Show formatted	Met opmaak weergeven
 	Show in Favorites	In Favorieten weergeven

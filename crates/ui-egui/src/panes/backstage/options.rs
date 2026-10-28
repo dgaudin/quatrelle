@@ -245,6 +245,9 @@ pub(super) fn options(s: &Session, st: &UiState, ui: &mut Ui, acts: &mut Vec<Act
         setting(ui, true, tl!("Show a desktop notification when new mail arrives"), None, &mut |ui| {
             switch(ui, s.prefs.notify, tl!("Show a desktop notification when new mail arrives"), "view.notifications", acts);
         });
+        setting(ui, false, tl!("Show an envelope in the notification area while new mail is unread"), None, &mut |ui| {
+            switch(ui, s.prefs.envelope, tl!("Show an envelope in the notification area while new mail is unread"), "view.envelope", acts);
+        });
         setting(
             ui,
             false,

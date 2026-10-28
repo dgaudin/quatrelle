@@ -12,7 +12,9 @@ pub use directory::{DirectoryAnswer, fill_name};
 mod folder_edits;
 mod mailbox_settings;
 pub use mailbox_settings::{FolderSizes, Sizes};
+mod envelope;
 mod shared_mailboxes;
+pub(crate) use envelope::Envelope;
 
 impl Session {
     pub fn account(&self, id: &str) -> Option<&AccountState> {
@@ -175,6 +177,7 @@ impl Session {
         // Mail older than a day (a resync after a long time away) isn't "new" any more.
         let cutoff = self.clock.now - 86_400;
         let fresh: Vec<Summary> = arrived.into_iter().filter(|m| !m.flags.seen && m.date >= cutoff && !quiet.contains(&m.key)).collect();
+        self.add_to_envelope(&fresh);
         if self.prefs.notify {
             self.new_mail.extend(fresh.into_iter().rev());
             // A burst (a first sync, a long time offline) is summed up by the UI; keep it bounded.

@@ -380,6 +380,8 @@ pub struct UiState {
     /// This page is a message's own window (the browser): only that message is shown.
     pub page_message: Option<MessageKey>,
     pub(crate) title_shown: String,
+    /// The new messages the envelope in the notification area was last shown for.
+    envelope_shown: usize,
     /// Raise the main window on the next frame.
     focus_main: bool,
     /// Video attachments written out for the platform to take a frame from, and the frames.
@@ -531,6 +533,7 @@ impl MailApp {
                 places: Default::default(),
                 page_message: None,
                 title_shown: String::new(),
+                envelope_shown: 0,
                 focus_main: false,
                 video_files: HashMap::new(),
                 video_frames: HashMap::new(),

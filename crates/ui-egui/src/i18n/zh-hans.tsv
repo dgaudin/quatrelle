@@ -253,6 +253,7 @@
 	Servers: {imap} (IMAP {imap_port}), {smtp} (SMTP {smtp_port})	服务器: {imap} (IMAP {imap_port})，{smtp} (SMTP {smtp_port})
 	Settings found: {source}	已找到设置: {source}
 	Show a desktop notification when new mail arrives	收到新邮件时显示桌面通知
+	Show an envelope in the notification area while new mail is unread	有未读新邮件时在通知区域显示信封
 	Show as plain text	以纯文本显示
 	Show formatted	显示格式
 	Show in Favorites	在收藏夹中显示
