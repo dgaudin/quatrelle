@@ -65,6 +65,20 @@ impl MailApp {
             ctx.send_viewport_cmd(egui::ViewportCommand::Title(title.clone()));
             self.ui.title_shown = title;
         }
+        // The envelope in the notification area, while mail that arrived is unread; clicked, the
+        // window comes forward on the Inbox, as Outlook's does.
+        let new = self.session.new_unread();
+        if new != self.ui.envelope_shown {
+            self.ui.envelope_shown = new;
+            let tip = if new == 1 { tl!("New message").to_string() } else { tf!("{n} new messages", n = new) };
+            self.services.show_envelope(new, &tip);
+        }
+        if self.services.take_envelope_click() {
+            self.run("mail.showNew", json!({}));
+            ctx.send_viewport_cmd_to(egui::ViewportId::ROOT, egui::ViewportCommand::Minimized(false));
+            self.ui.focus_main = true;
+            ctx.request_repaint();
+        }
     }
 
     pub(crate) fn act(&mut self, a: Action) {

@@ -29,6 +29,8 @@ finish-args:
   - --share=network
   # Passwords live in the user's keyring (Secret Service: GNOME Keyring, KWallet, KeePassXC).
   - --talk-name=org.freedesktop.secrets
+  # The envelope in the notification area while new mail is unread (a StatusNotifierItem).
+  - --talk-name=org.kde.StatusNotifierWatcher
   # Attach and Save dialogs go through the file-chooser portal (rfd), and attachments open with
   # the OpenURI portal, so picked files work anywhere without broad filesystem access.
   # Downloads is granted so saved attachments land in the usual place.

@@ -16,6 +16,7 @@ use crate::{display, self_update, video};
 
 pub(crate) mod appearance;
 pub(crate) mod keychain;
+pub(crate) mod tray;
 
 #[derive(Default)]
 pub(crate) struct Desktop {
@@ -49,6 +50,8 @@ pub(crate) struct Desktop {
     /// The folder of the last file picked or saved: the next file dialog opens there (attaching
     /// several files from one folder, saving attachments beside each other), as figcraft's do.
     pub(crate) last_dir: Option<PathBuf>,
+    /// The envelope in the notification area while new mail is unread.
+    pub(crate) envelope: tray::Envelope,
 }
 
 impl Desktop {
@@ -464,6 +467,12 @@ impl Services for Desktop {
             let _ = (key, snooze, dismiss);
             self.notify(title, body);
         }
+    }
+    fn show_envelope(&mut self, new: usize, tip: &str) {
+        self.envelope.show(new, tip);
+    }
+    fn take_envelope_click(&mut self) -> bool {
+        self.envelope.take_click()
     }
     fn take_reminder_actions(&mut self) -> Vec<(String, ReminderAction)> {
         std::mem::take(&mut *self.reminder_answers.lock().unwrap_or_else(std::sync::PoisonError::into_inner))

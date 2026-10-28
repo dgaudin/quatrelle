@@ -26,6 +26,7 @@ pub(super) fn commands() -> Vec<CommandSpec> {
         // Navigation
         CommandSpec::new("folder.open", "Open folder", "Folder pane", open_folder).params(r#"{"account": string, "folder": string}"#),
         CommandSpec::new("folder.unified", "All inboxes", "Folder pane › Favorites", unified).params(r#"{"role"?: "inbox"|"sent"|"drafts"|…}"#),
+        CommandSpec::new("mail.showNew", "Show new mail", "Notification area", |s, _| s.show_new_mail()),
         CommandSpec::new("folder.outbox", "Outbox", "Folder pane", |s, _| {
             s.refresh_outbox();
             s.open_view(View::Outbox);

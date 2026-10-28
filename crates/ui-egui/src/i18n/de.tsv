@@ -253,6 +253,7 @@
 	Servers: {imap} (IMAP {imap_port}), {smtp} (SMTP {smtp_port})	Server: {imap} (IMAP {imap_port}), {smtp} (SMTP {smtp_port})
 	Settings found: {source}	Einstellungen gefunden: {source}
 	Show a desktop notification when new mail arrives	Bei neuen E-Mails eine Desktopbenachrichtigung anzeigen
+	Show an envelope in the notification area while new mail is unread	Einen Briefumschlag im Infobereich anzeigen, solange neue E-Mails ungelesen sind
 	Show as plain text	Als Nur-Text anzeigen
 	Show formatted	Formatiert anzeigen
 	Show in Favorites	In Favoriten anzeigen

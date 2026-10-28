@@ -253,6 +253,7 @@
 	Servers: {imap} (IMAP {imap_port}), {smtp} (SMTP {smtp_port})	サーバー: {imap} (IMAP {imap_port})、{smtp} (SMTP {smtp_port})
 	Settings found: {source}	設定が見つかりました: {source}
 	Show a desktop notification when new mail arrives	新しいメールが届いたらデスクトップ通知を表示する
+	Show an envelope in the notification area while new mail is unread	新しいメールが未読の間、通知領域に封筒を表示する
 	Show as plain text	プレーン テキストで表示
 	Show formatted	書式付きで表示
 	Show in Favorites	お気に入りに表示

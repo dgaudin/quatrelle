@@ -253,6 +253,7 @@
 	Servers: {imap} (IMAP {imap_port}), {smtp} (SMTP {smtp_port})	서버: {imap} (IMAP {imap_port}), {smtp} (SMTP {smtp_port})
 	Settings found: {source}	설정을 찾았습니다: {source}
 	Show a desktop notification when new mail arrives	새 메일이 오면 데스크톱 알림 표시
+	Show an envelope in the notification area while new mail is unread	새 메일을 읽지 않은 동안 알림 영역에 봉투 표시
 	Show as plain text	일반 텍스트로 표시
 	Show formatted	서식 있게 표시
 	Show in Favorites	즐겨찾기에 표시

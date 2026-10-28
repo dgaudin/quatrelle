@@ -253,6 +253,7 @@
 	Servers: {imap} (IMAP {imap_port}), {smtp} (SMTP {smtp_port})	שרתים: {imap} (IMAP {imap_port}), {smtp} (SMTP {smtp_port})
 	Settings found: {source}	נמצאו הגדרות: {source}
 	Show a desktop notification when new mail arrives	הצג התראה בשולחן העבודה כשמגיע דואר חדש
+	Show an envelope in the notification area while new mail is unread	הצג מעטפה באזור ההודעות כל עוד יש דואר חדש שלא נקרא
 	Show as plain text	הצג כטקסט רגיל
 	Show formatted	הצג מעוצב
 	Show in Favorites	הצג במועדפים

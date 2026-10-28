@@ -446,6 +446,8 @@ pub struct Session {
     pub(crate) seen_uid: HashMap<(String, String), u32>,
     /// New mail to announce (desktop notifications), oldest first.
     pub new_mail: Vec<Summary>,
+    /// New mail still unread, for the envelope in the notification area.
+    pub(crate) envelope: mailboxes::Envelope,
     /// Inbox rules, run on mail as it arrives (`rules.json`).
     pub rules: Vec<quatrelle_model::organize::Rule>,
     /// The rules the accounts' servers run that Quatrelle didn't make (Outlook's own, the
@@ -591,6 +593,7 @@ impl Session {
             cards: Default::default(),
             seen_uid: HashMap::new(),
             new_mail: Vec::new(),
+            envelope: Default::default(),
             rules: Vec::new(),
             foreign_rules: Vec::new(),
             snoozes: Vec::new(),

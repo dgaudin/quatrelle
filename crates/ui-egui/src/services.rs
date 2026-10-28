@@ -97,6 +97,13 @@ pub trait Services {
     /// another notification) or its time has passed, so its buttons have nothing left to do.
     /// The default does nothing.
     fn withdraw_reminder(&mut self, _key: &str) {}
+    /// Show the envelope in the notification area while `new` messages that arrived are unread
+    /// (`tip`: what hovering it says), and take it away at 0. The default does nothing.
+    fn show_envelope(&mut self, _new: usize, _tip: &str) {}
+    /// Whether the envelope was clicked since the last call.
+    fn take_envelope_click(&mut self) -> bool {
+        false
+    }
     /// Where an installed Craft app is (`pdfcraft`, `wordcraft`…), if it is.
     fn craft_app(&mut self, _command: &str) -> Option<PathBuf> {
         None

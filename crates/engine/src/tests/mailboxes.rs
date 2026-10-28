@@ -1,4 +1,5 @@
-//! Engine tests: downloading a whole mailbox, and other mailboxes opened in an account.
+//! Engine tests: downloading a whole mailbox, other mailboxes opened in an account, and the
+//! envelope that stands for new mail.
 
 use super::*;
 
@@ -380,4 +381,57 @@ fn folder_size_asks_each_side_and_fills_it_as_it_answers() {
     let v = s.sizes.clone().unwrap();
     assert_eq!((v.account, v.server, v.quota), (imap, Sizes::NotTold, None));
     assert!(s.run("account.folderSizes", &json!({"account": "nobody"})).is_err());
+}
+
+/// Outlook's envelope in the notification area: it stands for mail that arrived in an Inbox and
+/// is still unread, goes when that mail is read (here or elsewhere), and clicking it opens the
+/// Inbox. Mail already there at the first sync, or read on arrival, doesn't bring it.
+#[test]
+fn the_envelope_shows_while_new_mail_is_unread() {
+    let store = temp("envelope");
+    let mut s = Session::open(Some(store.clone()), quatrelle_model::dates::Clock::new(NOW, 0));
+    let id = s.run("account.add", &json!({"email": "zoe@example.org", "password": "pw"})).unwrap()["account"].as_str().unwrap().to_string();
+    let inbox =
+        quatrelle_model::Folder { account: id.clone(), path: "INBOX".into(), role: FolderRole::Inbox, selectable: true, ..Default::default() };
+    s.apply(Event::Folders { account: id.clone(), folders: vec![inbox] });
+    let m = |uid: u32, seen: bool| quatrelle_model::Summary {
+        key: quatrelle_model::MessageKey { account: id.clone(), folder: "INBOX".into(), validity: 9, uid },
+        subject: format!("m{uid}"),
+        date: NOW - 60,
+        flags: quatrelle_model::Flags { seen, ..Default::default() },
+        ..Default::default()
+    };
+    let synced = |s: &mut Session, msgs: Vec<quatrelle_model::Summary>| {
+        store
+            .save_folder(&id, "INBOX", &quatrelle_store::FolderState { validity: 9, uid_next: 99, highest_modseq: 0, messages: msgs, window: 0 })
+            .unwrap();
+        s.apply(Event::FolderChanged { account: id.clone(), folder: "INBOX".into() });
+    };
+    synced(&mut s, vec![m(2, false), m(1, false)]);
+    assert_eq!(s.new_unread(), 0, "the first sync's backlog isn't new");
+    synced(&mut s, vec![m(4, false), m(3, true), m(2, false), m(1, false)]);
+    assert_eq!(s.new_unread(), 1);
+    // Read in Outlook: the next sync says so.
+    synced(&mut s, vec![m(4, true), m(3, true), m(2, false), m(1, false)]);
+    assert_eq!(s.new_unread(), 0);
+
+    // Clicking it opens that Inbox, from wherever Quatrelle was.
+    synced(&mut s, vec![m(5, false), m(4, true), m(3, true), m(2, false), m(1, false)]);
+    assert_eq!(s.new_unread(), 1);
+    s.run("view.calendar", &json!({})).unwrap();
+    s.run("folder.outbox", &json!({})).unwrap();
+    s.run("mail.showNew", &json!({})).unwrap();
+    assert_eq!(s.module, crate::Module::Mail);
+    assert_eq!(s.view, View::Folder { account: id.clone(), folder: "INBOX".into() });
+    // Read here: gone.
+    let key = quatrelle_model::MessageKey { account: id.clone(), folder: "INBOX".into(), validity: 9, uid: 5 };
+    s.run("message.read", &json!({"key": key.to_id()})).unwrap();
+    s.run("mail.markRead", &json!({})).unwrap();
+    assert_eq!(s.new_unread(), 0);
+
+    // Switched off: nothing is followed.
+    s.run("view.envelope", &json!({"on": false})).unwrap();
+    synced(&mut s, vec![m(6, false), m(5, true), m(4, true)]);
+    assert_eq!(s.new_unread(), 0);
+    let _ = std::fs::remove_dir_all(store.root());
 }
