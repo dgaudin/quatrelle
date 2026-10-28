@@ -20,7 +20,7 @@ mod check_names;
 mod compose;
 mod header;
 mod people;
-mod pictures;
+pub(crate) mod pictures;
 mod plain;
 mod security;
 mod sender;

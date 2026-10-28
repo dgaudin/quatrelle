@@ -134,7 +134,7 @@ pub(super) fn rich_body(s: &Session, st: &mut UiState, ui: &mut Ui, key: &Messag
             ui.add_space(8.0);
             ui.horizontal_wrapped(|ui| {
                 for src in rest {
-                    picture(s, st, ui, key, p, src, allowed, width, zoom, acts);
+                    picture(s, st, ui, key, p, src, allowed, width, None, zoom, acts);
                 }
             });
         }
@@ -354,10 +354,10 @@ impl Body<'_> {
         if let Some(src) = &sp.image {
             self.shown.push(src.clone());
             if let Some(pic) = src.strip_prefix("cid:").and_then(|cid| self.inline.iter().find(|p| p.cid == cid)) {
-                carried_picture(st, ui, pic, width, self.zoom);
+                carried_picture(st, ui, pic, width, sp.image_size, self.zoom);
                 return;
             }
-            if !picture(self.s, st, ui, self.key, self.p, src, self.allowed, width, self.zoom, self.acts) {
+            if !picture(self.s, st, ui, self.key, self.p, src, self.allowed, width, sp.image_size, self.zoom, self.acts) {
                 let alt = if sp.text.trim().is_empty() { "picture" } else { sp.text.trim() };
                 ui.label(RichText::new(format!("[{alt}]")).color(t.faint));
             }

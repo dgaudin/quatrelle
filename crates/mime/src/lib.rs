@@ -37,7 +37,7 @@ mod photos;
 mod reply;
 pub mod smime;
 mod trackers;
-use files::{attachment_name, ext_for_mime};
+use files::attachment_name;
 pub use files::{mime_from_name, runs_code, sanitize_filename};
 pub use hidden::{HIDDEN_WORDS_MIN, hidden_text};
 use html::*;
@@ -380,6 +380,9 @@ pub struct Span {
     pub size: Option<u8>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub font: Option<String>,
+    /// A picture's size as the message sets it (issue #10).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image_size: Option<ImageSize>,
 }
 
 fn is_none(v: &usize) -> bool {

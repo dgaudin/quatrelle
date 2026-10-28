@@ -3,9 +3,9 @@
 
 use super::*;
 
-/// Draw one picture of an HTML message, `zoom` times its size in `width` (wider than that when
-/// zoomed in); `false` when it can't be shown (yet). Right-clicked, it is copied — whole, not as
-/// shrunk to fit — or, one sent with the message, saved.
+/// Draw one picture of an HTML message at the size the message sets (`size`), in `width`, `zoom`
+/// times (wider than that when zoomed in); `false` when it can't be shown (yet). Right-clicked, it
+/// is copied — whole, not as shrunk to fit — or, one sent with the message, saved.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn picture(
     s: &Session,
@@ -16,6 +16,7 @@ pub(super) fn picture(
     src: &str,
     allowed: bool,
     width: f32,
+    size: Option<mime::ImageSize>,
     zoom: f32,
     acts: &mut Vec<Action>,
 ) -> bool {
@@ -27,11 +28,9 @@ pub(super) fn picture(
         }
         Pic::Missing => return false,
     };
-    // Tracking pixels and spacers: nothing to see.
-    if own.x <= 3.0 && own.y <= 3.0 {
-        return true;
-    }
-    let r = ui.add(egui::Image::new(&tex).fit_to_exact_size(shown_size(own, width) * zoom).sense(Sense::click()));
+    // Tracking pixels and spacers that set no size: nothing to see.
+    let Some(at) = shown_size(own, size, width) else { return true };
+    let r = ui.add(egui::Image::new(&tex).fit_to_exact_size(at * zoom).maintain_aspect_ratio(false).sense(Sense::click()));
     r.context_menu(|ui| {
         if ui.button(tl!("Copy picture")).clicked() {
             if let Some(img) = picture_bytes(s, key, p, src).and_then(|b| color_image(&b)) {
@@ -74,10 +73,37 @@ fn picture_bytes(s: &Session, key: &MessageKey, p: &mime::Parsed, src: &str) -> 
 /// The widest a picture in a message is shown, in points.
 const WIDEST: f32 = 900.0;
 
-/// The size a picture shows at in a message `width` wide: its own (a pixel a point, as Outlook
-/// shows one), brought down to the width.
-fn shown_size(own: Vec2, width: f32) -> Vec2 {
-    own * (width.min(WIDEST) / own.x.max(1.0)).min(1.0)
+/// How big a picture of its own size `own` shows in room `width` wide: at the size the message
+/// sets (`size`: both sides as set, as Outlook and browsers stretch it; one side, the other keeping
+/// its shape), else its own (a pixel a point, as Outlook shows one, at most [`WIDEST`]); no wider
+/// than `max-width` or the room, its shape kept. `None` for a tracking pixel or spacer that sets
+/// no size: nothing to see. (Every picture showed at its own size: a logo made twice as sharp as it
+/// says came out twice as big, and what was laid out around it moved: upstream 1721d72.)
+pub(crate) fn shown_size(own: Vec2, size: Option<mime::ImageSize>, width: f32) -> Option<Vec2> {
+    use mime::layout::Width;
+    let set = size.filter(|z| z.width.is_some() || z.height.is_some());
+    if set.is_none() && own.x <= 3.0 && own.y <= 3.0 {
+        return None;
+    }
+    let shape = own.y.max(1.0) / own.x.max(1.0);
+    let w = set.and_then(|z| z.width).map(|w| match w {
+        Width::Px(px) => px as f32,
+        Width::Percent(pc) => width * f32::from(pc) / 100.0,
+    });
+    let h = set.and_then(|z| z.height).map(|h| h as f32);
+    let (mut w, mut h) = match (w, h) {
+        (Some(w), Some(h)) => (w, h),
+        (Some(w), None) => (w, w * shape),
+        (None, Some(h)) => (h / shape, h),
+        (None, None) => (own.x, own.y),
+    };
+    let room = if set.is_some() { width } else { width.min(WIDEST) };
+    let most = size.and_then(|z| z.max_width).map_or(f32::INFINITY, |m| m as f32).min(room);
+    if w > most {
+        h *= most / w;
+        w = most;
+    }
+    (w >= 0.5 && h >= 0.5).then(|| egui::vec2(w, h.min(8000.0)))
 }
 
 /// The most pixels on a side a picture is decoded at to be shown: no more than it can be shown
@@ -136,15 +162,17 @@ pub(super) fn picture_texture(
     }
 }
 
-/// A picture carried with what's drawn (a signature's, by `cid:`), as a message's: its own size
-/// up to `width`, `zoom` times.
-pub(super) fn carried_picture(st: &mut UiState, ui: &mut Ui, pic: &mime::InlinePicture, width: f32, zoom: f32) {
+/// A picture carried with what's drawn (a signature's, by `cid:`), as a message's: at the size
+/// its HTML sets (a signature's logo often does), else its own, up to `width`, `zoom` times.
+pub(super) fn carried_picture(st: &mut UiState, ui: &mut Ui, pic: &mime::InlinePicture, width: f32, size: Option<mime::ImageSize>, zoom: f32) {
     let ctx = ui.ctx().clone();
     let most = shown_pixels(&ctx, zoom);
     let name = format!("carried-{}-{}-{most}", pic.cid, pic.data.len());
     match shown_picture(st, &name, || decode_sized(&ctx, &name, &pic.data, most)) {
         Pic::Ready(tex, own) => {
-            ui.add(egui::Image::new(&tex).fit_to_exact_size(shown_size(own, width) * zoom));
+            if let Some(at) = shown_size(own, size, width) {
+                ui.add(egui::Image::new(&tex).fit_to_exact_size(at * zoom).maintain_aspect_ratio(false));
+            }
         }
         Pic::Loading | Pic::Missing => {
             ui.label(RichText::new(format!("[{}]", pic.name)).color(st.tokens.faint));
@@ -186,9 +214,9 @@ mod tests {
     fn a_picture_shows_at_its_own_size_up_to_the_width() {
         // A screenshot wider than the reading pane fills it, its shape kept (it was drawn as its
         // 480-pixel thumbnail); a small one keeps its size.
-        assert_eq!(shown_size(vec2(1920.0, 1080.0), 640.0), vec2(640.0, 360.0));
-        assert_eq!(shown_size(vec2(1920.0, 1080.0), 2000.0), vec2(900.0, 506.25));
-        assert_eq!(shown_size(vec2(300.0, 200.0), 640.0), vec2(300.0, 200.0));
+        assert_eq!(shown_size(vec2(1920.0, 1080.0), None, 640.0), Some(vec2(640.0, 360.0)));
+        assert_eq!(shown_size(vec2(1920.0, 1080.0), None, 2000.0), Some(vec2(900.0, 506.25)));
+        assert_eq!(shown_size(vec2(300.0, 200.0), None, 640.0), Some(vec2(300.0, 200.0)));
         // Decoded smaller than it is, it keeps its own size.
         let ctx = egui::Context::default();
         let mut png = Vec::new();
