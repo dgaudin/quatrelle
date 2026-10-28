@@ -464,6 +464,13 @@ impl MailApp {
                         if widgets::big_toggle(ui, Icon::Folder, "Folder pane", &t, !s.prefs.folder_pane_minimized).clicked() {
                             acts.push(Action::Run("view.folderPane", json!({})));
                         }
+                        // Favorites at the top of the folder pane, hidden or shown (from upstream cb9f01c).
+                        if widgets::big_toggle(ui, Icon::Star, "Favorites", &t, s.prefs.show_favorites)
+                            .on_hover_text(tl!("Show Favorites at the top of the folder pane"))
+                            .clicked()
+                        {
+                            acts.push(Action::Run("view.favorites", json!({})));
+                        }
                         if widgets::big_toggle(ui, Icon::CalendarToday, "To-Do bar", &t, s.prefs.todo_bar)
                             .on_hover_text(tl!("The month and your coming appointments beside the mail"))
                             .clicked()
