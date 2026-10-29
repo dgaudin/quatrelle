@@ -121,6 +121,8 @@ impl Fake {
             let name = quoted_arg(rest);
             if st.mailbox(&name).is_some() {
                 self.say(&format!("{tag} NO [ALREADYEXISTS] exists"));
+            } else if st.create_under.as_ref().is_some_and(|p| !name.starts_with(p.as_str())) {
+                self.say(&format!("{tag} NO Client tried to access nonexistent namespace."));
             } else {
                 let validity = 500 + u32::try_from(st.boxes.len()).unwrap_or(0);
                 st.boxes.push(Mailbox { name, attr: "", validity, uid_next: 1, msgs: Vec::new(), expunged: Vec::new() });
