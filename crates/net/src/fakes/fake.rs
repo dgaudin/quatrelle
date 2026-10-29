@@ -295,6 +295,9 @@ pub fn serve_tcp(st: &Arc<Mutex<State>>) -> u16 {
     std::thread::spawn(move || {
         for sock in listener.incoming().flatten() {
             let st = st.clone();
+            // Each answer at once, as the client sends (stream.rs): held for the client's delayed
+            // acknowledgement, a thousand messages took over a minute on Windows, a test timed out.
+            let _ = sock.set_nodelay(true);
             std::thread::spawn(move || {
                 let mut fake = Fake::connect(&st);
                 let mut sock = sock;
