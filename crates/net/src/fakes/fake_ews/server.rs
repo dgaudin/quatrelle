@@ -243,6 +243,22 @@ fn serve_connection(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>) {
         if let Some(h) = hold {
             std::thread::sleep(h);
         }
+        // Items' properties, slowly: how many are asked at the same time is kept.
+        let slow = {
+            let mut d = shared.lock().unwrap();
+            let asked =
+                op.name == "GetItem" && op.find("BaseShape").is_some_and(|b| b.text.trim() != "IdOnly" || op.find("AdditionalProperties").is_some());
+            let slow = d.slow_items.filter(|_| asked);
+            if slow.is_some() {
+                d.items_in_flight += 1;
+                d.most_items_in_flight = d.most_items_in_flight.max(d.items_in_flight);
+            }
+            slow
+        };
+        if let Some(h) = slow {
+            std::thread::sleep(h);
+            shared.lock().unwrap().items_in_flight -= 1;
+        }
         // A mailbox without a picture, as Exchange 2016 tells of it: HTTP 404, nothing else.
         if op.name == "GetUserPhoto" && op.text_of("Email").is_some_and(|e| e.ends_with("@http404.example")) {
             respond(&mut s, 404, &[], b"");
@@ -250,6 +266,24 @@ fn serve_connection(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>) {
         }
         let mut d = shared.lock().unwrap();
         d.calls.push(op.name.clone());
+        // How the items were asked for; a field the schema doesn't know refuses the whole request.
+        if op.name == "GetItem" {
+            let base = op.find("BaseShape").map(|b| b.text.trim().to_string()).unwrap_or_default();
+            let fields = base == "IdOnly"
+                && op
+                    .find("AdditionalProperties")
+                    .is_some_and(|a| a.kids.iter().any(|f| f.attr("FieldURI").is_some_and(|u| u.starts_with("calendar:"))));
+            d.item_shapes.push(if fields { "fields".into() } else { base });
+            if fields && d.refuse_fields {
+                drop(d);
+                let fault = "<?xml version=\"1.0\"?><s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\"><s:Body><s:Fault>\
+                    <faultcode>a:ErrorSchemaValidation</faultcode><faultstring>The request failed schema validation.</faultstring>\
+                    <detail><e:ResponseCode xmlns:e=\"http://schemas.microsoft.com/exchange/services/2006/errors\">ErrorSchemaValidation</e:ResponseCode>\
+                    </detail></s:Fault></s:Body></s:Envelope>";
+                respond(&mut s, 500, &[], fault.as_bytes());
+                continue;
+            }
+        }
         d.routed = routed;
         if !anchor.is_empty() && d.anchors.len() < 1000 {
             d.anchors.push(anchor);

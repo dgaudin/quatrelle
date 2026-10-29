@@ -362,7 +362,7 @@ fn read_calendar(c: &Client, list: Vec<El>, calendar: &str, owner: &str, since: 
     // Said in the log with what they cost, as the calendar's own items are.
     let all: usize = list.iter().filter_map(|it| it.child("ModifiedOccurrences")).map(|m| m.children("Occurrence").count()).sum();
     let (began, before) = (std::time::Instant::now(), c.spent());
-    let found = get_items(c, &changed, "").unwrap_or_else(|e| {
+    let found = get_items(c, &changed, Shape::Appointment).unwrap_or_else(|e| {
         out.errors.push(format!("changed occurrences: {e}"));
         Vec::new()
     });

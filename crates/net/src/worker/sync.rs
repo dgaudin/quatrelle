@@ -593,7 +593,7 @@ impl Worker {
     /// accounts: OAuth tokens are for mail only).
     /// The account's calendars and address books as the window last kept them, reading what it
     /// last asked for ([`quatrelle_model::pim::PIM_READING_DOC`]).
-    fn load_pim(&self) -> quatrelle_model::pim::Pim {
+    pub(super) fn load_pim(&self) -> quatrelle_model::pim::Pim {
         use quatrelle_model::pim::{PIM_DOC, PIM_READING_DOC, Pim, PimReading};
         let mut pim: Pim = self.store.load_account_doc(&self.acc.id, PIM_DOC).unwrap_or_default();
         pim.read_as(self.store.load_account_doc::<Option<PimReading>>(&self.acc.id, PIM_READING_DOC).unwrap_or_default());

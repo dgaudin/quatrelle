@@ -46,8 +46,9 @@ fn a_big_calendar_is_read_over_several_connections() {
     assert!((1..=3).contains(&more), "more connections, each signed in: {more}");
 }
 
-/// Two calendars ticked one after the other, read together: each is shown as soon as it's read,
-/// not when both are.
+/// Calendars ticked one after the other: each is shown as soon as it's read, not when all are,
+/// and the second doesn't wait for the first to be read (one ticked as the one before was being
+/// read showed 5.7 s later, where alone it took 3, 29/10); two at a time, the third waits.
 #[test]
 fn each_calendar_ticked_shows_as_soon_as_it_is_read() {
     use quatrelle_model::pim::shared_calendar_id;
@@ -57,6 +58,8 @@ fn each_calendar_ticked_shows_as_soon_as_it_is_read() {
     d.folder("Contacts", None, Some("contacts"), "IPF.Contact");
     d.pim.push(("S1".into(), "mailbox:ana@contoso.example".into(), appointment("Budget review", 6, 13)));
     d.pim.push(("S2".into(), "mailbox:tom@contoso.example".into(), appointment("Site visit", 7, 9)));
+    d.pim.push(("S3".into(), "mailbox:lee@contoso.example".into(), appointment("Board", 8, 10)));
+    d.slow_items = Some(std::time::Duration::from_millis(600));
     let server = serve(d);
     let store = crate::fake::tests_store("ews-calendars-each");
     let mut pool = crate::worker::Pool::new(store.clone(), Arc::new(crate::worker::MemoryCredentials::default()));
@@ -69,11 +72,20 @@ fn each_calendar_ticked_shows_as_soon_as_it_is_read() {
     };
     pool.submit(Job::Start { account, password: Some(Secret(PASSWORD.into())) });
     until(&pool, "online", |e| matches!(e, Event::Status { status: SyncStatus::Online { .. }, .. }));
-    let (ana, tom) = (shared_calendar_id("ana@contoso.example"), shared_calendar_id("tom@contoso.example"));
-    pool.submit(Job::SyncCalendars { account: "a1".into(), calendars: vec![ana.clone(), tom.clone()] });
+    let left = ["ana", "tom", "lee"].map(|n| shared_calendar_id(&format!("{n}@contoso.example")));
+    for id in &left {
+        pool.submit(Job::SyncCalendars { account: "a1".into(), calendars: vec![id.clone()] });
+    }
     let alone = |e: &Event, id: &str| matches!(e, Event::DavSynced { sync, .. } if sync.partial && sync.synced_calendars == [id] && sync.events.iter().all(|x| x.calendar == id));
-    until(&pool, "Ana's calendar alone", |e| alone(e, &ana));
-    until(&pool, "then Tom's", |e| alone(e, &tom));
+    let mut left = left.to_vec();
+    while !left.is_empty() {
+        until(&pool, "each calendar alone", |e| {
+            let was = left.len();
+            left.retain(|id| !alone(e, id));
+            left.len() < was
+        });
+    }
+    assert_eq!(server.data.lock().unwrap().most_items_in_flight, 2, "read at the same time, two at most");
     drop(pool);
     let _ = std::fs::remove_dir_all(store.root());
 }
@@ -181,4 +193,60 @@ fn an_occurrence_the_server_refuses_shows_from_its_series() {
     assert_eq!((refused.start, refused.end), (at("2026-10-12T14:00:00Z"), at("2026-10-12T15:00:00Z")), "at its own times");
     assert_eq!((refused.summary.as_str(), refused.rrule.as_deref()), ("Weekly", None), "under the series' subject, once");
     assert_eq!(sync.events.iter().filter(|e| e.event.recurrence_id.is_some()).count(), 2, "each once");
+}
+
+/// A calendar's appointments, and a series' occurrences changed on their own, are asked for by
+/// the fields read of them, not all their properties (a colleague's 870 appointments cost the
+/// server 10 s, 29/10), and come as whole as before.
+#[test]
+fn an_appointment_is_asked_for_by_the_fields_read_of_it() {
+    use quatrelle_model::pim::Pim;
+    let mut d = Data::default();
+    d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    let cal = d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
+    d.folder("Contacts", None, Some("contacts"), "IPF.Contact");
+    for i in 0..120u32 {
+        d.pim.push((format!("E{i}"), cal.clone(), appointment(&format!("Meeting {i:03}"), 1 + i % 28, 8 + i / 28)));
+    }
+    let server = serve(d);
+    let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
+    let sync = crate::ews_pim::sync_calendars(&c, &Pim::default(), &[], 1_792_000_000).unwrap();
+    assert_eq!(sync.events.iter().filter(|e| e.calendar == crate::ews_pim::CALENDAR).count(), 120, "every one");
+    let shapes = server.data.lock().unwrap().item_shapes.clone();
+    assert!(!shapes.is_empty() && shapes.iter().all(|s| s == "fields"), "by their fields: {shapes:?}");
+}
+
+/// A server whose schema doesn't know a field named (it refuses the whole request, or each item
+/// of it) is asked for all the properties instead, and so for the rest of the session: the
+/// calendar comes whole.
+#[test]
+fn a_server_refusing_the_fields_named_is_asked_for_everything() {
+    refusing_the_fields(false);
+    refusing_the_fields(true);
+}
+
+fn refusing_the_fields(each: bool) {
+    use quatrelle_model::pim::Pim;
+    let mut d = Data::default();
+    d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    let cal = d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
+    d.folder("Contacts", None, Some("contacts"), "IPF.Contact");
+    for i in 0..230u32 {
+        d.pim.push((format!("E{i}"), cal.clone(), appointment(&format!("Meeting {i:03}"), 1 + i % 28, 8 + i / 28)));
+    }
+    (d.refuse_fields, d.refuse_fields_each) = (!each, each);
+    let server = serve(d);
+    let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
+    let read = |c: &crate::ews::Client| {
+        let sync = crate::ews_pim::sync_calendars(c, &Pim::default(), &[], 1_792_000_000).unwrap();
+        sync.events.iter().filter(|e| e.calendar == crate::ews_pim::CALENDAR).count()
+    };
+    assert_eq!(read(&c), 230, "whole, all their properties asked");
+    let first = std::mem::take(&mut server.data.lock().unwrap().item_shapes);
+    assert!(first.iter().any(|s| s == "fields") && first.iter().any(|s| s == "AllProperties"), "{first:?}");
+    // Each connection asks once at most before it knows.
+    assert!(first.iter().filter(|s| *s == "fields").count() <= 4, "{first:?}");
+    assert_eq!(read(&c), 230, "whole again");
+    let again = server.data.lock().unwrap().item_shapes.clone();
+    assert!(again.iter().all(|s| s == "AllProperties"), "not asked by their fields again: {again:?}");
 }
