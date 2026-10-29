@@ -209,6 +209,8 @@ impl Worker {
         }
         let mut told: Vec<(Option<String>, crate::ews::Heard)> = Vec::new();
         let mut stopped = None;
+        // When the first of it came here, by this computer's clock (milliseconds since 1970).
+        let mut heard_at = None;
         {
             let Some(Conn::Ews(c)) = self.conn.as_ref() else { return false };
             let each = wait / u32::try_from(self.listen.ears.len()).unwrap_or(1).max(1);
@@ -221,6 +223,7 @@ impl Worker {
                         Ok(h) if h.is_empty() => {}
                         Ok(h) => {
                             more = true;
+                            heard_at = heard_at.or_else(|| SystemTime::now().duration_since(UNIX_EPOCH).ok().map(|d| d.as_millis()));
                             told.push((ear.mailbox.clone(), h));
                         }
                         Err(e) => {
@@ -235,7 +238,7 @@ impl Worker {
                 }
             }
         }
-        self.read_told(told);
+        self.read_told(told, heard_at);
         if let Some(e) = stopped {
             self.listen_stopped(e);
             return false;
@@ -247,8 +250,8 @@ impl Worker {
     }
 
     /// The folders the server told of, read (those kept on this computer); the folder list
-    /// first when the tree changed where the account has folders.
-    fn read_told(&mut self, told: Vec<(Option<String>, crate::ews::Heard)>) {
+    /// first when the tree changed where the account has folders. `heard_at`: when it came here.
+    fn read_told(&mut self, told: Vec<(Option<String>, crate::ews::Heard)>, heard_at: Option<u128>) {
         if told.is_empty() {
             return;
         }
@@ -302,10 +305,25 @@ impl Worker {
                 self.sync_one(f);
             }
         }
-        // How long Quatrelle took once told, to set beside how soon the server told.
+        // How long Quatrelle took once told, to set beside how soon the server told: a new
+        // mail, by the server's clock, set beside when it was told of here (Outlook showed one
+        // 4 s sooner, 29/10).
         if !folders.is_empty() {
             let names: Vec<String> = folders.iter().map(|f| quatrelle_model::utf7::decode(f)).collect();
-            log::info!("{}: told of changes in {}, read in {} ms", self.acc.id, names.join(", "), began.elapsed().as_millis());
+            let clock = match &self.conn {
+                Some(Conn::Ews(c)) => c.clock_ahead(),
+                _ => None,
+            };
+            let new_mail = told.iter().filter_map(|(_, h)| h.new_mail).max();
+            let late = match (new_mail, heard_at, clock) {
+                (Some(came), Some(at), Some(ahead)) => format!(
+                    "; a new mail the server had at {} (its clock {ahead:+} s from this one's), told of {:.1} s later (to the second)",
+                    crate::ews_pim::utc(came).get(11..19).unwrap_or(""),
+                    told_after(came, ahead, at)
+                ),
+                _ => String::new(),
+            };
+            log::info!("{}: told of changes in {}, read in {} ms{late}", self.acc.id, names.join(", "), began.elapsed().as_millis());
         }
     }
 
@@ -333,4 +351,11 @@ impl Worker {
         self.listen.delay = (delay * 2).min(RETRY_MAX);
         self.next_poll = Instant::now();
     }
+}
+
+/// How long after a new mail came to the server (`came`, by its clock, `ahead` seconds from this
+/// computer's) it was told of here (`at`, milliseconds since 1970 by this computer's), in seconds.
+pub(super) fn told_after(came: i64, ahead: i64, at: u128) -> f64 {
+    let came_here = i128::from(came.saturating_sub(ahead)).saturating_mul(1000);
+    (i128::try_from(at).unwrap_or(i128::MAX).saturating_sub(came_here)) as f64 / 1000.0
 }

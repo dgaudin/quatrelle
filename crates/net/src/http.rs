@@ -131,6 +131,24 @@ impl Response {
     pub fn ok(&self) -> bool {
         (200..300).contains(&self.status)
     }
+
+    /// When the server answered by its own clock (its `Date`, `Thu, 29 Oct 2026 11:30:24 GMT`),
+    /// in seconds since 1970.
+    pub fn date(&self) -> Option<i64> {
+        const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        let mut p = self.header("Date")?.split_whitespace().skip(1);
+        let day: u32 = p.next()?.parse().ok()?;
+        let name = p.next()?;
+        let month = MONTHS.iter().position(|m| name.eq_ignore_ascii_case(m))?;
+        let year: i64 = p.next()?.parse().ok()?;
+        let hms: Vec<i64> = p.next()?.split(':').map(|x| x.parse().ok()).collect::<Option<_>>()?;
+        let &[h, m, s] = hms.as_slice() else { return None };
+        if !(1970..=9999).contains(&year) || !(1..=31).contains(&day) || !(0..24).contains(&h) || !(0..60).contains(&m) || !(0..=60).contains(&s) {
+            return None;
+        }
+        let days = quatrelle_model::dates::days_from_civil(year, u32::try_from(month).ok()?.checked_add(1)?, day);
+        Some(days * 86_400 + h * 3600 + m * 60 + s)
+    }
 }
 
 /// A request.
@@ -575,6 +593,24 @@ pub(crate) mod tests {
             seen
         });
         (base, h)
+    }
+
+    /// The server's clock, from its answer: hostile values are none, never a panic.
+    #[test]
+    fn the_servers_date() {
+        let with = |d: &str| Response { status: 200, headers: vec![("date".into(), d.into())], body: Vec::new(), head_at: None }.date();
+        assert_eq!(with("Thu, 29 Oct 2026 11:30:24 GMT"), Some(1_793_273_424));
+        assert_eq!(with("Thu, 01 Jan 1970 00:00:00 GMT"), Some(0));
+        for junk in [
+            "",
+            "Thu,",
+            "Thu, 29 Foo 2026 11:30:24 GMT",
+            "Thu, 29 Oct 99999999999 11:30:24 GMT",
+            "Thu, 29 Oct 2026 11:30",
+            "Thu, 99 Oct 2026 25:00:00 GMT",
+        ] {
+            assert_eq!(with(junk), None, "{junk}");
+        }
     }
 
     #[test]
