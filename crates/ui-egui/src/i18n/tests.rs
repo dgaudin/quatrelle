@@ -640,7 +640,8 @@ fn sizes_and_counts_are_written_as_the_language_writes_them() {
 /// over lines, `\` at a line's end, read as one), or their translation would stop showing.
 #[test]
 fn the_errors_translated_whole_are_what_the_network_says() {
-    let ews = include_str!("../../../net/src/exchange/ews.rs");
+    // Checked out on Windows, the lines end in CR LF.
+    let ews = include_str!("../../../net/src/exchange/ews.rs").replace("\r\n", "\n");
     let joined: String = ews.split("\\\n").enumerate().map(|(i, part)| if i == 0 { part } else { part.trim_start() }).collect();
     for e in KNOWN_ERRORS {
         assert!(joined.contains(&format!("\"{e}\"")), "not in ews.rs any more: {e}");
