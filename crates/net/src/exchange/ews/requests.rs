@@ -222,6 +222,11 @@ impl Client {
         let asked = std::time::Instant::now();
         let resp = self.post(envelope(body).into_bytes()).map_err(Busy::Failed)?;
         let received = std::time::Instant::now();
+        if self.clock.get().is_none()
+            && let (Some(there), Ok(here)) = (resp.date(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH))
+        {
+            self.clock.set(Some(there.saturating_sub(i64::try_from(here.as_secs()).unwrap_or(i64::MAX))));
+        }
         let answer = Client::answer(&resp);
         let head = resp.head_at.unwrap_or(received);
         self.count_spent(Timing {

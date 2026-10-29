@@ -246,3 +246,15 @@ fn downloading_ahead_leaves_room_on_the_disk() {
     assert!(fs4::statvfs(dir.join("Files")).is_ok_and(|s| s.total_space() > 0), "its disk is read");
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// A new mail told of here, set beside when it came to the server by the server's clock, that
+/// clock behind or ahead of this computer's.
+#[test]
+fn how_long_after_a_new_mail_came_it_was_told_of() {
+    let came = 1_793_273_424;
+    assert!((listening::told_after(came, 0, 1_793_273_427_500) - 3.5).abs() < 1e-9);
+    // The server's clock 2 s ahead: it came at 22 by this one's.
+    assert!((listening::told_after(came, 2, 1_793_273_424_000) - 2.0).abs() < 1e-9);
+    // Hostile times give a number, never a panic.
+    assert!(listening::told_after(i64::MIN, i64::MAX, u128::MAX).is_finite());
+}

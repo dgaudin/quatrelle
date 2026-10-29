@@ -43,11 +43,13 @@ pub struct Listener {
 }
 
 /// What the server told of: the folders whose content changed, and the folders a change of the
-/// folder tree touched (one made, deleted or moved, and its parents) — by their ids.
+/// folder tree touched (one made, deleted or moved, and its parents) — by their ids; and when
+/// the newest mail it told of came, by its clock (seconds since 1970).
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct Heard {
     pub folders: BTreeSet<String>,
     pub tree: BTreeSet<String>,
+    pub new_mail: Option<i64>,
 }
 
 impl Heard {
@@ -256,6 +258,11 @@ fn told(doc: &El, heard: &mut Heard) -> Result<bool> {
             if !e.name.ends_with("Event") || e.name == "StatusEvent" {
                 continue;
             }
+            if e.name == "NewMailEvent"
+                && let Some(t) = e.text_of("TimeStamp").and_then(quatrelle_jmap::utc_date)
+            {
+                heard.new_mail = heard.new_mail.max(Some(t));
+            }
             let id = |name: &str| e.child(name).and_then(|f| f.attr("Id")).map(str::to_string);
             match id("FolderId") {
                 // A folder's own counts changed.
@@ -290,7 +297,8 @@ mod tests {
 
     /// The envelopes of an answer are read one by one however the connection cut them, and what
     /// each tells of is the folders that changed — a message's, the one it left, a folder's own
-    /// counts — or the tree; keep-alives and the server's goodbye tell of nothing.
+    /// counts — or the tree, and when a new mail came; keep-alives and the server's goodbye tell
+    /// of nothing.
     #[test]
     fn notifications_are_read_as_they_come() {
         let new_mail = envelope_of(
@@ -319,6 +327,7 @@ mod tests {
             assert_eq!(ends, [false, false, false, true], "cut every {cut}");
             assert_eq!(heard.folders.iter().map(String::as_str).collect::<Vec<_>>(), ["FILED", "INBOX"]);
             assert_eq!(heard.tree.iter().map(String::as_str).collect::<Vec<_>>(), ["NEW", "ROOT"]);
+            assert_eq!(heard.new_mail, quatrelle_jmap::utc_date("2026-10-24T08:00:00Z"), "when the new mail came, by the server's clock");
         }
         // A subscription the server no longer has is an error (it's made again).
         let gone = "<Envelope><Body><m:GetStreamingEventsResponse><m:ResponseMessages><m:GetStreamingEventsResponseMessage ResponseClass=\"Error\">\
