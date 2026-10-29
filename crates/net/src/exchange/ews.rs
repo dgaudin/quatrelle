@@ -68,6 +68,44 @@ struct Kept {
 /// before the request is tried again here; longer, and it's left for later.
 const MAX_BACK_OFF: std::time::Duration = std::time::Duration::from_secs(60);
 
+/// What requests cost, added up: how many, the time waiting for the server (from asking to the
+/// first line of its answer), receiving the answers, and reading them; and their size. Said in
+/// the log for what takes long (a calendar read), to tell the server's part from Quatrelle's.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub(crate) struct Timing {
+    pub requests: u32,
+    pub server: std::time::Duration,
+    pub receiving: std::time::Duration,
+    pub reading: std::time::Duration,
+    pub bytes: usize,
+}
+
+impl Timing {
+    /// Both added up.
+    #[must_use]
+    pub fn and(self, o: Timing) -> Timing {
+        Timing {
+            requests: self.requests.saturating_add(o.requests),
+            server: self.server.saturating_add(o.server),
+            receiving: self.receiving.saturating_add(o.receiving),
+            reading: self.reading.saturating_add(o.reading),
+            bytes: self.bytes.saturating_add(o.bytes),
+        }
+    }
+
+    /// What was spent since `before` (taken from the same session).
+    #[must_use]
+    pub fn since(self, before: Timing) -> Timing {
+        Timing {
+            requests: self.requests.saturating_sub(before.requests),
+            server: self.server.saturating_sub(before.server),
+            receiving: self.receiving.saturating_sub(before.receiving),
+            reading: self.reading.saturating_sub(before.reading),
+            bytes: self.bytes.saturating_sub(before.bytes),
+        }
+    }
+}
+
 /// An EWS session: the address, who signs in, and the connection (kept open for NTLM).
 pub struct Client {
     url: String,
@@ -108,6 +146,12 @@ pub struct Client {
     user_agent: Option<String>,
     /// The next change of the rules removes Outlook's own copy of them (the user said so).
     replace_outlook_rules: Cell<bool>,
+    /// The shared mailboxes found without a calendar this session (their addresses): not asked
+    /// again at each calendar read (three of the owner's, 2.6 s of the 9 the calendar took to
+    /// open, 29/10).
+    no_calendar: RefCell<Vec<String>>,
+    /// What this session's requests cost, added up.
+    spent: Cell<Timing>,
 }
 
 /// Another mailbox the account opens (Outlook's shared mailboxes): its address and name.
@@ -284,7 +328,48 @@ impl Client {
             shared_roles: RefCell::new(HashMap::new()),
             replace_outlook_rules: Cell::new(false),
             user_agent: None,
+            no_calendar: RefCell::new(Vec::new()),
+            spent: Cell::new(Timing::default()),
         })
+    }
+
+    /// Another session like this one, on a connection of its own (NTLM signs in a connection),
+    /// to ask several things of the server at once: what this one has learnt (how to sign in,
+    /// other people's addresses, where shared mailboxes and public folders are, where requests
+    /// are routed now) goes with it.
+    pub(crate) fn sibling(&self) -> Client {
+        Client {
+            url: self.url.clone(),
+            user: self.user.clone(),
+            password: self.password.clone(),
+            conn: RefCell::new(None),
+            scheme: self.scheme.clone(),
+            email: self.email.clone(),
+            route: self.route.clone(),
+            pf_mailboxes: self.pf_mailboxes.clone(),
+            addresses: self.addresses.clone(),
+            pf_hierarchy: self.pf_hierarchy.clone(),
+            pf_replicas: self.pf_replicas.clone(),
+            anchor: self.anchor.clone(),
+            shared_added: self.shared_added.clone(),
+            shared_open: self.shared_open.clone(),
+            discovered: self.discovered.clone(),
+            shared_roles: self.shared_roles.clone(),
+            replace_outlook_rules: Cell::new(false),
+            user_agent: self.user_agent.clone(),
+            no_calendar: self.no_calendar.clone(),
+            spent: Cell::new(Timing::default()),
+        }
+    }
+
+    /// What this session's requests have cost so far.
+    pub(crate) fn spent(&self) -> Timing {
+        self.spent.get()
+    }
+
+    /// Requests made elsewhere (a sibling's) counted as this session's.
+    pub(crate) fn count_spent(&self, t: Timing) {
+        self.spent.set(self.spent.get().and(t));
     }
 
     /// The same session naming itself `agent` to the server (`None`, or nothing usable: as

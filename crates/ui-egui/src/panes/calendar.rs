@@ -503,15 +503,37 @@ pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) 
         });
     });
     let (d0, d1) = s.cal_days();
+    let began = web_time::Instant::now();
     let items = s.agenda(s.local_midnight(d0), s.local_midnight(d1));
+    let found = began.elapsed();
     match s.cal_mode {
         CalMode::Month => month(s, st, ui, &items, d0, acts),
         CalMode::Day | CalMode::WorkWeek | CalMode::Week => days(s, st, ui, &items, d0, d1, acts),
     }
+    slow_drawing(ui, began.elapsed(), found, items.len());
     // A drag whose chip is no longer drawn (the view changed under it) is let go of.
     if st.cal_drag.is_some() && !ui.input(|i| i.pointer.primary_down()) {
         st.cal_drag = None;
     }
+}
+
+/// A frame of the calendar this long or longer is said in the log.
+const SLOW_DRAWING: web_time::Duration = web_time::Duration::from_millis(50);
+
+/// The calendar drawn slowly (`took`, of which `found` finding what it shows): said in the log,
+/// once every ten seconds at most, to tell where a slow calendar spends its time.
+fn slow_drawing(ui: &Ui, took: web_time::Duration, found: web_time::Duration, shown: usize) {
+    if took < SLOW_DRAWING {
+        return;
+    }
+    let id = egui::Id::unique("calendar-slow-drawing");
+    let now = ui.input(|i| i.time);
+    let last = ui.ctx().data(|d| d.get_temp::<f64>(id));
+    if last.is_some_and(|t| now - t < 10.0) {
+        return;
+    }
+    ui.ctx().data_mut(|d| d.insert_temp(id, now));
+    log::info!("calendar: drawn in {} ms ({} ms finding the {shown} appointments shown)", took.as_millis(), found.as_millis());
 }
 
 /// Open an item (its event).

@@ -41,7 +41,7 @@ pub fn exchange_into<S: Read + Write, W: Write>(
 ) -> Result<Response> {
     write_request(s, req, url, false)?;
     let (status, headers, rest) = read_head(s)?;
-    let head = Response { status, headers, body: Vec::new() };
+    let head = Response { status, headers, body: Vec::new(), head_at: None };
     if redirect(&head).is_some() {
         return Ok(head);
     }

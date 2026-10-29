@@ -118,6 +118,9 @@ pub struct Response {
     pub status: u16,
     pub headers: Vec<(String, String)>,
     pub body: Vec<u8>,
+    /// When its status line and headers were in: the server had answered, and the body came
+    /// after (what a slow request spent waiting for the server, told from what it spent receiving).
+    pub head_at: Option<Instant>,
 }
 
 impl Response {
@@ -420,7 +423,8 @@ fn read_head<S: Read>(s: &mut S) -> Result<(u16, Vec<(String, String)>, Vec<u8>)
 fn read_response<S: Read>(s: &mut S, max: usize, head_only: bool) -> Result<Response> {
     let mut tmp = [0u8; 16 << 10];
     let (status, headers, mut rest) = read_head(s)?;
-    let resp = |body| Response { status, headers: headers.clone(), body };
+    let head_at = Some(Instant::now());
+    let resp = |body| Response { status, headers: headers.clone(), body, head_at };
     let get = |n: &str| headers.iter().find(|(k, _)| k.eq_ignore_ascii_case(n)).map(|(_, v)| v.to_ascii_lowercase());
     if head_only || status == 204 || status == 304 || (100..200).contains(&status) {
         return Ok(resp(Vec::new()));
