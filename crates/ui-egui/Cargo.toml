@@ -34,6 +34,9 @@ harfrust = "0.12"
 vello_cpu = { version = "0.2", default-features = false, features = ["std", "u8_pipeline", "text"] }
 # The system's interface language.
 sys-locale = "0.3"
+# The emoji picker's list (Insert › Emoji): Unicode's emoji, their groups, names and GitHub
+# shortcodes, as data (no font: they're drawn as the rest of the text, look/emoji.rs).
+emojis = "0.9"
 # A clock that also runs in the browser (std's panics there): how long a calendar read takes to
 # merge, and the calendar to draw, said in the log (the version winit and egui use).
 web-time = "1.1"

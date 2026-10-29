@@ -118,6 +118,8 @@ pub enum Icon {
     Tasks,
     /// A tick in a circle (Mark Complete).
     Complete,
+    /// A smiling face (Insert › Emoji).
+    Emoji,
 }
 
 /// The Fluent UI icon drawn for each icon (its 20-pixel regular outline).
@@ -219,6 +221,7 @@ fn svg(icon: Icon) -> &'static str {
         Icon::Video => f!("video"),
         Icon::Tasks => f!("task_list_ltr"),
         Icon::Complete => f!("checkmark_circle"),
+        Icon::Emoji => f!("emoji"),
     }
 }
 
@@ -366,6 +369,7 @@ mod tests {
             Video,
             Tasks,
             Complete,
+            Emoji,
         ];
         for icon in all {
             let img = render(icon, 32).unwrap_or_else(|| panic!("{icon:?} didn't render"));
