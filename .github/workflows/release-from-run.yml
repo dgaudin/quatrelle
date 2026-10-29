@@ -1,0 +1,78 @@
+name: Release from a run
+
+# Drafts the GitHub Release from the packages a release run built, when that run couldn't draft it
+# itself because a platform failed for a reason outside the code (no macOS runner for the
+# account, a package missing from FreeBSD's repository): the same files the run would have put
+# there and their checksums, as storytold/craft-common-actions' draft-release makes them, the
+# failed platforms left out. By hand only; the draft stays private until it's published.
+on:
+  workflow_dispatch:
+    inputs:
+      run-id:
+        description: "The release run whose packages to take (its id, from its address)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  draft:
+    name: Draft the release
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: The run's commit
+        id: run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN: ${{ inputs.run-id }}
+        run: |
+          set -euo pipefail
+          workflow=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN" --jq .path)
+          if [ "$workflow" != ".github/workflows/release.yml" ]; then
+            echo "::error::run $RUN is $workflow, not a release run"
+            exit 1
+          fi
+          echo "sha=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN" --jq .head_sha)" >>"$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.run.outputs.sha }}
+      - name: Its version
+        id: version
+        run: |
+          set -euo pipefail
+          version=$(awk '/^\[workspace.package\]/ { on = 1; next } /^\[/ { on = 0 } on && /^version *=/ { gsub(/"/, "", $3); print $3; exit }' Cargo.toml)
+          test -n "$version"
+          echo "version=$version" >>"$GITHUB_OUTPUT"
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: release-*
+          path: artifacts
+          merge-multiple: true
+          run-id: ${{ inputs.run-id }}
+          github-token: ${{ github.token }}
+      - name: Checksums and the draft
+        working-directory: artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          SHA: ${{ steps.run.outputs.sha }}
+          RUN: ${{ inputs.run-id }}
+        run: |
+          set -euo pipefail
+          sha256sum -- * | tee SHA256SUMS.txt
+          tag="v$VERSION"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "::error::$tag exists already: delete its draft first, or bump the version"
+            exit 1
+          fi
+          pre=()
+          case "$VERSION" in *-*) pre=(--prerelease) ;; esac
+          gh release create "$tag" --draft --title "Quatrelle v$VERSION" --target "$SHA" --generate-notes "${pre[@]}" -- *
+          {
+            echo "Draft release **Quatrelle v$VERSION** at \`${SHA::9}\`, from run $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$RUN:"
+            echo
+            sed 's/^/    /' SHA256SUMS.txt
+          } >>"$GITHUB_STEP_SUMMARY"
