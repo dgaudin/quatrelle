@@ -155,7 +155,10 @@ pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &
                                 let dim = egui::TextFormat { font_id: theme::regular(12.0), color: t.dim, ..Default::default() };
                                 job.append(&what, 10.0, dim);
                                 job.wrap = egui::text::TextWrapping::truncate_at_width(ui.available_width());
-                                ui.add(egui::Label::new(job).selectable(false)).on_hover_text(format!("{}\n{}", r.name, what));
+                                // Cut at the buttons: a label in a row otherwise runs on as far as
+                                // its text goes, whatever its job says (a rule with a long sender
+                                // ran under its buttons and out of the dialog, 29/10).
+                                ui.add(egui::Label::new(job).truncate().selectable(false)).on_hover_text(format!("{}\n{}", r.name, what));
                             });
                         });
                     }
@@ -195,7 +198,7 @@ pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &
                                 String::new()
                             };
                             let text = if who.is_empty() { f.name.clone() } else { format!("{} — {}", f.name, who) };
-                            ui.label(RichText::new(text).color(if f.enabled { t.text } else { t.faint }).small()).on_hover_text(&f.summary);
+                            // Its buttons first, at the right; its name in what's left, cut there.
                             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                 ui.spacing_mut().item_spacing.x = 2.0;
                                 if widgets::tiny_icon_button(ui, Icon::Delete, "Delete", t).clicked() {
@@ -216,6 +219,10 @@ pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &
                                 } else {
                                     ui.label(RichText::new(tl!("Quatrelle doesn't know every part of this rule yet")).color(t.faint).small());
                                 }
+                                ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                                    let name = RichText::new(text).color(if f.enabled { t.text } else { t.faint }).small();
+                                    ui.add(egui::Label::new(name).truncate()).on_hover_text(&f.summary);
+                                });
                             });
                         });
                     }

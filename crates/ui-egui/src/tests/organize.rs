@@ -52,6 +52,50 @@ fn organising_renders_and_rules_save() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// A rule whose name and description are longer than its line is cut at its buttons, not drawn
+/// under them and out of the dialog (one with a long sender ran 350 points past it, 29/10).
+#[test]
+fn a_long_rule_stays_inside_the_rules_dialog() {
+    let (mut a, dir) = app("rule-long");
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    let name = "New message — from: postmaster@a-rather-long-mail-domain-name.example";
+    a.act(crate::Action::Submit(
+        "rules.set",
+        json!({"rules": [{"name": name, "conditions": [{"if": "from", "value": "postmaster@a-rather-long-mail-domain-name.example"}], "actions": [{"do": "delete"}]}]}),
+    ));
+    // And one of the server's, made in Outlook, as long.
+    a.session.foreign_rules.push(quatrelle_engine::model::organize::ForeignRule {
+        account: "sample".into(),
+        id: "R9".into(),
+        name: "Outlook rule: everything from the monitoring robots of the datacentre to its folder, then a copy to the team's archive, flagged"
+            .into(),
+        enabled: true,
+        runnable: false,
+        rule: None,
+        summary: "from robots → move".into(),
+    });
+    a.ui.dialog = Some(Dialog::Rules);
+    let size = egui::vec2(1280.0, 800.0);
+    let title = settled_text_at(&ctx, &mut a, "Rules", size).expect("the dialog's title");
+    let shapes = frame_shapes(&ctx, &mut a, vec![], size);
+    let ends = |start: &str| {
+        shapes
+            .iter()
+            .find_map(|s| match s {
+                egui::Shape::Text(t) if t.galley.text().starts_with(start) => Some(t.pos.x + t.galley.rect.max.x),
+                _ => None,
+            })
+            .unwrap_or_else(|| panic!("the line of {start}"))
+    };
+    // The dialog's content is 560 points wide, from about where its title starts.
+    for start in ["New message", "Outlook rule"] {
+        let line = ends(start);
+        assert!(line < title.x + 560.0, "{start}: the line ends at {line}, the dialog's content at about {}", title.x + 560.0);
+    }
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 /// Create rule… on a message in another folder: the form offers to run the rule on that folder's
 /// mail (the Inbox alone seemed to do nothing), and saving runs it there; from the Inbox, or
 /// with no folder, on the Inbox.
