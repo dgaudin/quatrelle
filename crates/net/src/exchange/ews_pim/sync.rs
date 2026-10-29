@@ -37,7 +37,7 @@ fn sync_as(c: &Client, pim: &Pim, now: i64, calendars_only: bool) -> Result<DavS
         }
     }
     // Then both folders, read again.
-    read_calendar(c, items(c, "calendar", Some(now - CALENDAR_BACK))?, CALENDAR, c.email(), &mut out);
+    read_calendar(c, items(c, "calendar", Some(now - CALENDAR_BACK))?, CALENDAR, c.email(), now - CALENDAR_BACK, &mut out);
     answer_pending(c, pim, &mut out);
     // Named as the server names it, in the mailbox's language ("Agenda"), as Outlook shows it.
     let own = folder_name(c, "calendar").unwrap_or_else(|| "Calendar".into());
@@ -273,7 +273,7 @@ fn read_other(c: &Client, email: &str, asked: bool, entry: CalendarInfo, now: i6
             if !can_edit && let Err(e) = &folder_rights {
                 log::info!("{email}'s calendar rights: {e}");
             }
-            read_calendar(c, list, &entry.id, email, out);
+            read_calendar(c, list, &entry.id, email, now - CALENDAR_BACK, out);
             out.synced_calendars.push(entry.id.clone());
         }
         Err(e) if asked => out.errors.push(format!("{email}'s calendar: {e}")),
@@ -322,8 +322,9 @@ fn delete_gone<'a>(c: &Client, gone: impl Iterator<Item = &'a quatrelle_model::p
 /// occurrences of a series changed on their own (moved, renamed) as instances of their own —
 /// the series lists their items, which are read in a batch — so that a meeting moved in
 /// Outlook, or dragged here, shows on its new day rather than its old one.
-/// `owner`: the calendar's mailbox (the organizer of the meetings it organizes).
-fn read_calendar(c: &Client, list: Vec<El>, calendar: &str, owner: &str, out: &mut DavSync) {
+/// `owner`: the calendar's mailbox (the organizer of the meetings it organizes); `since`: what
+/// the calendar is read from (the occurrences changed before then aren't).
+fn read_calendar(c: &Client, list: Vec<El>, calendar: &str, owner: &str, since: i64, out: &mut DavSync) {
     let id_of = |it: &El| {
         it.child("ItemId").map(|i| (i.attr("Id").unwrap_or("").to_string(), i.attr("ChangeKey").unwrap_or("").to_string())).unwrap_or_default()
     };
@@ -333,10 +334,16 @@ fn read_calendar(c: &Client, list: Vec<El>, calendar: &str, owner: &str, out: &m
             own_organizer(&mut event, it, owner);
             let (href, etag) = id_of(it);
             out.events.push(StoredEvent { calendar: calendar.into(), href, etag, event, dirty: false, notify: false, respond: None });
-            changed.extend(modified_occurrence_ids(it));
+            changed.extend(modified_occurrence_ids(it, Some(since)));
         }
     }
     changed.truncate(MAX_ITEMS);
+    if changed.is_empty() {
+        return;
+    }
+    // Said in the log with what they cost, as the calendar's own items are.
+    let all: usize = list.iter().filter_map(|it| it.child("ModifiedOccurrences")).map(|m| m.children("Occurrence").count()).sum();
+    let (began, before) = (std::time::Instant::now(), c.spent());
     match get_items(c, &changed, "") {
         Ok(found) => {
             for it in &found {
@@ -349,6 +356,14 @@ fn read_calendar(c: &Client, list: Vec<El>, calendar: &str, owner: &str, out: &m
         }
         Err(e) => out.errors.push(format!("changed occurrences: {e}")),
     }
+    let t = c.spent().since(before);
+    log::info!(
+        "{} occurrences changed on their own read in {:.1} s ({} older left out): {:.1} s waiting for the server",
+        changed.len(),
+        began.elapsed().as_secs_f32(),
+        all.saturating_sub(changed.len()),
+        t.server.as_secs_f32()
+    );
 }
 
 /// This account's contacts, read again: its address book in `out`.

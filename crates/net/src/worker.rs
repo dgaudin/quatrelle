@@ -167,13 +167,16 @@ fn push_job(queue: &mut VecDeque<Job>, j: Job) {
 
 /// Whether a job goes on the account's second connection: sending (not over JMAP, whose filing
 /// needs the main connection's mailbox ids), automatic replies, and what a meeting being
-/// written waits on (rooms, free/busy), which must not sit behind a long sync.
+/// written waits on (rooms, free/busy), which must not sit behind a long sync; and a colleague's
+/// calendar just ticked (on-premises Exchange), which waited behind the sync of everything as
+/// the app started and the calendar's own read of every calendar (15 s, 29/10).
 fn quick_job(j: &Job, acc: &AccountConfig) -> bool {
     match j {
         Job::Send { .. } => acc.pop.is_none() && acc.jmap.is_none(),
         Job::GetVacation { .. } | Job::SetVacation { .. } => acc.pop.is_none(),
         Job::GetRooms { .. } | Job::GetAvailability { .. } => acc.ews.is_some() || acc.graph.is_some(),
         Job::ServerFolderSizes { .. } | Job::FindCertificates { .. } | Job::SearchDirectory { .. } => acc.ews.is_some(),
+        Job::SyncCalendars { calendars, .. } => acc.ews.is_some() && !calendars.is_empty(),
         _ => false,
     }
 }
