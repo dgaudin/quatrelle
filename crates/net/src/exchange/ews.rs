@@ -153,6 +153,9 @@ pub struct Client {
     /// The server refused an appointment's fields asked by name: all their properties are asked
     /// this session, as before (see `ews_pim`'s `get_items`).
     fields_refused: Cell<bool>,
+    /// How far the server's clock is ahead of this computer's, in seconds (from its first
+    /// answer's `Date`): the times it gives (a new mail's) set beside this computer's.
+    clock: Cell<Option<i64>>,
     /// What this session's requests cost, added up.
     spent: Cell<Timing>,
 }
@@ -333,6 +336,7 @@ impl Client {
             user_agent: None,
             no_calendar: RefCell::new(Vec::new()),
             fields_refused: Cell::new(false),
+            clock: Cell::new(None),
             spent: Cell::new(Timing::default()),
         })
     }
@@ -363,6 +367,7 @@ impl Client {
             user_agent: self.user_agent.clone(),
             no_calendar: self.no_calendar.clone(),
             fields_refused: self.fields_refused.clone(),
+            clock: self.clock.clone(),
             spent: Cell::new(Timing::default()),
         }
     }
@@ -375,6 +380,11 @@ impl Client {
     /// The server refused an appointment's fields asked by name: all their properties from now on.
     pub(crate) fn note_fields_refused(&self) {
         self.fields_refused.set(true);
+    }
+
+    /// How far the server's clock is ahead of this computer's, in seconds, once it answered.
+    pub fn clock_ahead(&self) -> Option<i64> {
+        self.clock.get()
     }
 
     /// What this session's requests have cost so far.
