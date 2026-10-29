@@ -378,6 +378,10 @@ impl Data {
                         out.push(err("ErrorItemNotFound"));
                         continue;
                     }
+                    if self.refused.contains(&id) {
+                        out.push(err("ErrorAccessDenied"));
+                        continue;
+                    }
                     if let Some((_, _, el)) = self.pim.iter().find(|(i, _, _)| *i == id) {
                         let mut el = el.clone();
                         // A series lists the occurrences that became items of their own.

@@ -104,6 +104,9 @@ pub struct Data {
     pub flagged_hidden: Vec<String>,
     /// Messages whose source can't be had (the server fails on it).
     pub unreadable: Vec<String>,
+    /// Appointments `GetItem` refuses (`ErrorAccessDenied`), by id: a colleague's occurrences
+    /// Exchange wouldn't give, though their series came.
+    pub refused: Vec<String>,
     /// The public folder mailbox holding the public folders' content (Exchange 2013 and
     /// later): reading inside them is only answered when routed there.
     pub pf_mailbox: Option<String>,
@@ -245,6 +248,7 @@ impl Default for Data {
             hold: None,
             flagged_hidden: Vec::new(),
             unreadable: Vec::new(),
+            refused: Vec::new(),
             pf_mailbox: None,
             pf_hierarchy: None,
             rules: Vec::new(),

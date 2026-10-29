@@ -10,7 +10,7 @@
 //! folders are read again, a series' changed occurrences with it. Notes and tasks go with them
 //! (the Notes and Tasks folders).
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::time::{Duration, Instant};
 
 use quatrelle_model::ical::{Attendee, CalEvent, ShowAs};
@@ -270,13 +270,21 @@ fn get_batch(c: &Client, chunk: &[String], extra: &str) -> Result<Vec<El>> {
          <m:ItemIds>{list}</m:ItemIds></m:GetItem>",
         extra
     ))?;
+    // What the server refused, by its code: said in the log (a colleague's occurrences were
+    // all refused, without a word, 29/10).
+    let mut refused: BTreeMap<String, usize> = BTreeMap::new();
     for m in crate::ews::messages(&doc) {
         if m.attr("ResponseClass") == Some("Error") {
+            *refused.entry(m.text_of("ResponseCode").unwrap_or("no code").trim().to_string()).or_default() += 1;
             continue;
         }
         if let Some(items) = m.child("Items") {
             out.extend(items.kids.iter().cloned());
         }
+    }
+    if !refused.is_empty() {
+        let said: Vec<String> = refused.iter().map(|(code, n)| format!("{code} ×{n}")).collect();
+        log::info!("ews: {} of {} items not given: {}", refused.values().sum::<usize>(), chunk.len(), said.join(", "));
     }
     Ok(out)
 }
@@ -475,7 +483,7 @@ mod tasks;
 pub use categories::master_categories;
 use contacts::{NOTE_COLOR, contact_xml, note_xml};
 pub use contacts::{card_of, note_of};
-use events::{event_fields, modified_occurrence_ids, occurrence_item_id};
+use events::{event_fields, listed_exception, modified_occurrences, occurrence_item_id};
 pub use events::{event_of, exception_of, own_organizer};
 use push::{answer_pending, push_events};
 pub use sync::{sync, sync_calendars, sync_tasks};
