@@ -658,7 +658,7 @@ fn a_list_gone_from_the_engine_says_it_couldnt_be_expanded() {
 /// person picked by name in Rooms stops it with why.
 #[test]
 fn a_meetings_send_waits_for_its_names_then_goes() {
-    let (mut a, dir) = app("meeting-send-waits");
+    let (mut a, dir) = app("meeting-send-waits-names");
     let gal = with_exchange(&mut a);
     let wid = 3;
     let window = MEETING_WINDOWS | wid;
