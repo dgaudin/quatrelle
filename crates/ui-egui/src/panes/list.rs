@@ -290,6 +290,20 @@ fn footer(s: &Session, t: &theme::Tokens, ui: &mut Ui, acts: &mut Vec<Action>) {
     }
 }
 
+/// A line along the bottom of `r`, on its last row of pixels. Drawn on the bottom edge itself, it
+/// was put on the pixel below, outside the row it's clipped to: the line between two messages
+/// never showed.
+pub(super) fn bottom_line(p: &egui::Painter, r: Rect, inset: f32, color: Color32) {
+    let ppp = p.pixels_per_point();
+    let y = ((r.max.y * ppp).floor() - 0.5) / ppp;
+    p.line_segment([pos2(r.min.x + inset, y), pos2(r.max.x - inset, y)], egui::Stroke::new(1.0, color));
+}
+
+/// The line between two messages: Outlook's, a little lighter, as the owner asked (29/10).
+pub(super) fn row_line(p: &egui::Painter, t: &theme::Tokens, r: Rect, inset: f32) {
+    bottom_line(p, r, inset, t.border.gamma_multiply(0.7));
+}
+
 /// A date (or other) heading between the rows.
 fn heading(ui: &Ui, t: &theme::Tokens, r: Rect, text: &str, table: bool) {
     if table {
@@ -360,8 +374,7 @@ fn message_row(
     if unread {
         p.rect_filled(Rect::from_min_size(r.min + vec2(4.0, 8.0), vec2(3.0, r.height() - 16.0)), 2.0, t.accent);
     }
-    // A line between two messages, as Outlook's: light, but plain to see, and across the row.
-    p.line_segment([r.left_bottom() + vec2(8.0, 0.0), r.right_bottom() - vec2(8.0, 0.0)], egui::Stroke::new(1.0, t.border));
+    row_line(&p, t, r, 8.0);
 
     let compact = s.prefs.compact;
     let mut x = r.min.x + 14.0;

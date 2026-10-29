@@ -121,7 +121,7 @@ pub(super) fn table_header(
 ) {
     let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), TABLE_HEADER_H), Sense::hover());
     let p = ui.painter_at(r);
-    p.line_segment([r.left_bottom(), r.right_bottom()], egui::Stroke::new(1.0, t.border));
+    bottom_line(&p, r, 0.0, t.border);
     for &(c, x0, x1) in cols {
         let cell = Rect::from_x_y_ranges(r.min.x + x0..=r.min.x + x1, r.y_range());
         let arrange = column_arrange(c, sent_view);
@@ -229,7 +229,7 @@ pub(super) fn table_row(
     if unread {
         p.rect_filled(Rect::from_min_size(r.min + vec2(1.0, 4.0), vec2(3.0, r.height() - 8.0)), 1.5, t.accent);
     }
-    p.line_segment([r.left_bottom(), r.right_bottom()], egui::Stroke::new(1.0, t.border));
+    row_line(&p, t, r, 0.0);
     let two_lines = r.height() > 30.0;
     let line1 = if two_lines { r.min.y + 11.0 } else { r.center().y };
     let font = |size: f32| if unread { theme::bold(size) } else { theme::regular(size) };
