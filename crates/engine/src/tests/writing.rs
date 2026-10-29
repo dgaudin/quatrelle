@@ -3,6 +3,7 @@
 use super::*;
 
 mod drafts;
+mod emoji;
 mod names;
 mod pictures;
 mod senders;

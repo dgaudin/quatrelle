@@ -406,6 +406,7 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
     // S/MIME's Encrypt and Sign, for an account with a certificate.
     let has_cert = s.compose.as_ref().is_some_and(|c| s.identity(&c.account).is_some());
     let assistant = !s.prefs.llm_url.trim().is_empty();
+    let recent_emoji = s.prefs.recent_emoji.clone();
     let signature = s.compose.as_ref().and_then(|c| s.account(&c.account)).map(|a| a.config.signature.clone()).unwrap_or_default();
     let Some(c) = s.compose.as_mut() else { return };
     // The editor's state belongs to one message.
@@ -502,6 +503,7 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
             in_window,
             can_pop: !ui.ctx().embed_viewports(),
             assistant,
+            recent_emoji: &recent_emoji,
         };
         // In the reading pane, Pop out and Discard where they're seen, as Outlook's reply there
         // has them (a window has them small beside its tabs).
