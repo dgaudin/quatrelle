@@ -1,0 +1,54 @@
+name: Pages
+
+# The browser version of the latest stable release on GitHub Pages, opened on the sample mailbox:
+# https://dgaudin.github.io/quatrelle/?sample (the README's "Try it in your browser"). It takes
+# the release's own web zip rather than building again, so the demo is exactly what was released.
+# Runs when a stable release is published (pre-releases, the test builds, are left out), or by
+# hand for the latest stable one.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Put the web app on Pages
+    if: github.event_name == 'workflow_dispatch' || !github.event.release.prerelease
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}?sample
+    steps:
+      - name: Take the release's web app
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          # By hand: the latest stable release.
+          if [ -z "${TAG}" ]; then
+            TAG=$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)
+          fi
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern 'quatrelle-web-*.zip' --dir web
+          unzip -q web/quatrelle-web-*.zip -d web
+          # The zip holds one folder, quatrelle-web-<version>/, with the page at its top.
+          page=$(find web -mindepth 2 -maxdepth 2 -name index.html | head -n 1)
+          test -n "$page"
+          mv "$(dirname "$page")" site
+          echo "Quatrelle $TAG for the web: $(du -sh site | cut -f1)"
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
