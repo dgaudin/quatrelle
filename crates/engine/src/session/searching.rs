@@ -441,7 +441,7 @@ impl Session {
             self.showing_more = None;
         }
         if let Some(e) = error {
-            self.notice(format!("older mail couldn't be read on the server: {e}"), true);
+            self.notice_with("older mail couldn't be read on the server: {error}", &[("error", &e)], true);
             return;
         }
         if !self.older.as_ref().is_some_and(|(a, f, ..)| a == account && f == folder) {
@@ -486,7 +486,7 @@ impl Session {
             && on_screen
             && self.list.is_empty()
         {
-            self.notice(format!("{account}: the server's search failed ({e})"), true);
+            self.notice_with("{account}: the server's search failed ({error})", &[("account", account), ("error", &e)], true);
         }
     }
 

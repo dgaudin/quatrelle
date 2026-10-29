@@ -1668,3 +1668,91 @@ month	May	5月
 	Show Favorites at the top of the folder pane	フォルダー ウィンドウの上部にお気に入りを表示
 	Drop to attach them to a new message	ここにドロップすると新しいメッセージに添付します
 	Original size	元のサイズ
+
+# The engine's notices, and the wording of errors that come up to the status bar (i18n::notice, i18n::error).
+	A message couldn't be sent: {error}	メッセージを送信できませんでした: {error}
+	Back from snooze: {subject}	再通知の時刻になりました: {subject}
+	Clean Up moved 1 message to Deleted Items	クリーンアップで 1 件のメッセージを削除済みアイテムに移動しました
+	Clean Up moved {n} messages to Deleted Items	クリーンアップで {n} 件のメッセージを削除済みアイテムに移動しました
+	Downloading {total} messages…	{total} 件のメッセージをダウンロードしています…
+	Every message is already on this computer	すべてのメッセージがすでにこのコンピューターにあります
+	It will be sent {when}	{when} に送信されます
+	Mail from {n} senders is never treated as junk	{n} 人の差出人からのメールは迷惑メールとして扱われません
+	Mail from {n} senders now goes to Junk Email	{n} 人の差出人からのメールは今後、迷惑メールに移動されます
+	Mail from {sender} is never treated as junk	{sender} からのメールは迷惑メールとして扱われません
+	Mail from {sender} now goes to Junk Email	{sender} からのメールは今後、迷惑メールに移動されます
+	Outlook keeps its own copy of this mailbox's rules, and Exchange won't change them while it's there. Change this rule in Outlook, or let Quatrelle replace Outlook's copy (Outlook's rules that run only on its computer would be lost)	Outlook はこのメールボックスのルールのコピーを独自に保持しており、それがある間は Exchange はルールを変更しません。このルールを Outlook で変更するか、Quatrelle に Outlook のコピーを置き換えさせてください (Outlook のコンピューター上でのみ実行されるルールは失われます)
+	Rules ran on the mail there now: 1 message matched	現在のメールにルールを適用しました: 1 件のメッセージが一致しました
+	Rules ran on the mail there now: {n} messages matched	現在のメールにルールを適用しました: {n} 件のメッセージが一致しました
+	The certificate couldn't be kept: {error}	証明書を保持できませんでした: {error}
+	The certificate for {who} (valid until {until}) is older than the one in use, so it's kept to read mail encrypted to it	{who} の証明書 ({until} まで有効) は使用中のものより古いため、その証明書で暗号化されたメールを読むために保持されます
+	The data file could not be compacted: {error}	データ ファイルを圧縮できませんでした: {error}
+	The rule ran on the mail there now: 1 message matched	現在のメールにこのルールを適用しました: 1 件のメッセージが一致しました
+	The rule ran on the mail there now: {n} messages matched	現在のメールにこのルールを適用しました: {n} 件のメッセージが一致しました
+	The server refused a change: {error}	サーバーが変更を拒否しました: {error}
+	Your certificate for {who} is ready: it signs and encrypts from now on	{who} の証明書の準備ができました: 今後は署名と暗号化を行います
+	Your certificate for {who} is ready: new messages are signed	{who} の証明書の準備ができました: 新しいメッセージに署名します
+	Your vote was sent: {choice}	投票を送信しました: {choice}
+	Your vote wasn't sent: {error}	投票を送信できませんでした: {error}
+	account settings could not be saved: {error}	アカウント設定を保存できませんでした: {error}
+	automatic replies weren't changed: {error}	自動応答は変更されませんでした: {error}
+	bad parameters: {error}	パラメーターが正しくありません: {error}
+	calendar and contacts could not be saved: {error}	予定表と連絡先を保存できませんでした: {error}
+	calendars and contacts: {error}	予定表と連絡先: {error}
+	export: {error}	エクスポート: {error}
+	import: {error}	インポート: {error}
+	network: {error}	ネットワーク: {error}
+	not available: {error}	利用できません: {error}
+	older mail couldn't be read on the server: {error}	サーバー上の古いメールを読み込めませんでした: {error}
+	secure connection: {error}	セキュリティで保護された接続: {error}
+	sending failed: {error}	送信に失敗しました: {error}
+	sent, but no copy was saved in Sent Items: {error}	送信しましたが、送信済みアイテムにコピーを保存できませんでした: {error}
+	sign-in failed: {error}	サインインに失敗しました: {error}
+	snoozed mail couldn't be saved: {error}	再通知のメールを保存できませんでした: {error}
+	the S/MIME settings could not be saved: {error}	S/MIME 設定を保存できませんでした: {error}
+	the certificate isn't on the card or in the keychain any more	証明書がカードにもキーチェーンにもありません
+	the draft couldn't be encrypted, so it's saved as it is: {error}	下書きを暗号化できなかったため、そのまま保存します: {error}
+	the draft couldn't be kept: {error}	下書きを保持できませんでした: {error}
+	the draft couldn't be saved to the server; it's kept on this computer and saved there when the account connects	下書きをサーバーに保存できませんでした。このコンピューターに保持し、アカウントが接続したときにサーバーに保存します
+	the draft couldn't be saved: {error}	下書きを保存できませんでした: {error}
+	the file has no private key with its certificate	このファイルには証明書と対になる秘密キーがありません
+	the keychain: {error}	キーチェーン: {error}
+	the language model's key couldn't be kept: {error}	言語モデルのキーを保持できませんでした: {error}
+	the new sign-in couldn't be saved in the keychain: {error}	新しいサインインをキーチェーンに保存できませんでした: {error}
+	the outgoing server's password could not be saved in the keychain: {error}	送信サーバーのパスワードをキーチェーンに保存できませんでした: {error}
+	the password could not be saved in the keychain: {error}	パスワードをキーチェーンに保存できませんでした: {error}
+	the password is wrong, or it isn't a certificate file	パスワードが間違っているか、証明書ファイルではありません
+	the public folders to keep in sync couldn't be saved: {error}	同期するパブリック フォルダーを保存できませんでした: {error}
+	the rules couldn't be saved: {error}	ルールを保存できませんでした: {error}
+	the server asked to try again later: {error}	サーバーから後でやり直すよう求められました: {error}
+	the server closed the connection: {error}	サーバーが接続を閉じました: {error}
+	the server refused: {error}	サーバーに拒否されました: {error}
+	the server rejected the command: {error}	サーバーがコマンドを拒否しました: {error}
+	the server's rules weren't changed: {error}	サーバーのルールは変更されませんでした: {error}
+	the signature doesn't match the message	署名がメッセージと一致しません
+	the smart card: {error}	スマートカード: {error}
+	this account isn't allowed to send from that address: Exchange's administrator gives Send As or Send on Behalf on it	このアカウントはそのアドレスから送信できません: Exchange の管理者がそのアドレスに Send As または Send on Behalf の権限を付与します
+	unexpected server response: {error}	予期しないサーバーの応答: {error}
+	{account}: the server's search failed ({error})	{account}: サーバーでの検索に失敗しました ({error})
+	{done} messages downloaded	{done} 件のメッセージをダウンロードしました
+	{done} messages downloaded, {failed} failed	{done} 件のメッセージをダウンロードしました。{failed} 件は失敗しました
+	{email} opens under {account}	{email} は {account} の下に開きます
+	{email} removed. Its data file stays at {path}	{email} を削除しました。データ ファイルは {path} に残っています
+	{event}: a change to one occurrence couldn't be sent: its series is no longer on the server	{event}: 1 回分の変更を送信できませんでした: その定期的な予定はサーバーにもうありません
+	{name} could not be exported: {error}	{name} をエクスポートできませんでした: {error}
+	{name} couldn't be read: {error}	{name} を読み込めませんでした: {error}
+	{name}: the data file could not be opened: {error}	{name}: データ ファイルを開けませんでした: {error}
+	{name}: {messages} messages exported	{name}: {messages} 件のメッセージをエクスポートしました
+	{name}: {messages} messages exported ({skipped} not on this computer were left out)	{name}: {messages} 件のメッセージをエクスポートしました (このコンピューターにない {skipped} 件は除外しました)
+	{name}: {messages} messages exported so far…	{name}: これまでに {messages} 件のメッセージをエクスポートしました…
+	{name}: {messages} messages imported	{name}: {messages} 件のメッセージをインポートしました
+	{name}: {messages} messages imported ({skipped} could not be read)	{name}: {messages} 件のメッセージをインポートしました ({skipped} 件は読み込めませんでした)
+	{name}: {messages} messages imported so far…	{name}: これまでに {messages} 件のメッセージをインポートしました…
+	{rules} stay on this computer: the server can't run them	{rules} はこのコンピューターに残ります: サーバーでは実行できません
+	{rule} stays on this computer: the server can't run it	{rule} はこのコンピューターに残ります: サーバーでは実行できません
+	{who} is signed in	{who} はサインインしています
+	{who} is signed in (as {user})	{who} はサインインしています ({user} として)
+	{who} needs its password	{who} にはパスワードが必要です
+	{who} needs its password: {error}	{who} にはパスワードが必要です: {error}
+	{who} needs you to sign in again	{who} はもう一度サインインする必要があります
+	{who} needs you to sign in again: {error}	{who} はもう一度サインインする必要があります: {error}

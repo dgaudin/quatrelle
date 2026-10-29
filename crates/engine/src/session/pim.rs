@@ -122,7 +122,7 @@ impl Session {
         self.pim_revision = self.pim_revision.wrapping_add(1);
         let (Some(store), Some(p)) = (&self.store, self.pim.get(account)) else { return };
         if let Err(e) = store.save_account_doc(account, PIM_DOC, p) {
-            self.notice(format!("calendar and contacts could not be saved: {e}"), true);
+            self.notice_with("calendar and contacts could not be saved: {error}", &[("error", &e.to_string())], true);
         }
     }
 
