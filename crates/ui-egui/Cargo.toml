@@ -34,6 +34,9 @@ harfrust = "0.12"
 vello_cpu = { version = "0.2", default-features = false, features = ["std", "u8_pipeline", "text"] }
 # The system's interface language.
 sys-locale = "0.3"
+# A clock that also runs in the browser (std's panics there): how long a calendar read takes to
+# merge, and the calendar to draw, said in the log (the version winit and egui use).
+web-time = "1.1"
 # The interface icons (Fluent UI System Icons, SVG): drawn with a pure-Rust SVG renderer.
 resvg = { version = "0.45", default-features = false }
 # PDF attachment thumbnails: a pure-Rust rasterizer (no unsafe code).

@@ -28,6 +28,8 @@ pub const CONTACTS: &str = "ews:contacts";
 /// Items read from a folder at most, and per `GetItem`.
 const MAX_ITEMS: usize = 5000;
 const BATCH: usize = 50;
+/// Connections a read of many items is shared among (see [`get_items`]).
+const LANES: usize = 4;
 const MONTHS: [&str; 12] = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const DAYS: [&str; 7] = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -94,6 +96,7 @@ fn items_in(c: &Client, parent: &str, extra: &str, since: Option<i64>) -> Result
 fn items_in_from(c: &Client, parent: &str, extra: &str, restriction: Option<String>) -> Result<Vec<El>> {
     let folder = parent;
     let began = std::time::Instant::now();
+    let before = c.spent();
     let restriction = restriction.unwrap_or_default();
     let mut ids: Vec<String> = Vec::new();
     let mut offset = 0;
@@ -114,31 +117,99 @@ fn items_in_from(c: &Client, parent: &str, extra: &str, restriction: Option<Stri
         }
     }
     let out = get_items(c, &ids, extra)?;
-    log::info!("{} items read in {:.1} s", out.len(), began.elapsed().as_secs_f32());
+    // Where the time went, the connections' added up: the server's part, and Quatrelle's.
+    let t = c.spent().since(before);
+    log::info!(
+        "{} items read in {:.1} s: {} requests over {} connections, {:.1} s waiting for the server, {:.1} s receiving {:.1} MB, {:.1} s reading it",
+        out.len(),
+        began.elapsed().as_secs_f32(),
+        t.requests,
+        ids.len().div_ceil(BATCH).clamp(1, LANES),
+        t.server.as_secs_f32(),
+        t.receiving.as_secs_f32(),
+        t.bytes as f64 / 1e6,
+        t.reading.as_secs_f32()
+    );
     Ok(out)
 }
 
 /// Items by id, with all their properties (bodies as text), in batches; one the server can't
 /// give (gone meanwhile) is left out. An appointment's pattern and time zone come only when
 /// asked for by name (`AllProperties` leaves them out).
+///
+/// Many batches are asked over [`LANES`] connections at once, each taking every fourth: asked
+/// one after the other, a colleague's calendar (700 items) took 8 s, and a calendar just ticked
+/// showed a quarter of a minute later (29/10). Each answer is in the order asked, whatever the
+/// connection; a batch one of the others couldn't ask (it didn't sign in, say) is asked on this
+/// one.
 fn get_items(c: &Client, ids: &[String], extra: &str) -> Result<Vec<El>> {
+    let batches: Vec<&[String]> = ids.chunks(BATCH).collect();
+    let lanes = batches.len().min(LANES);
+    if lanes <= 1 {
+        return get_batches(c, &batches, extra);
+    }
+    // Lane `n` asks batches `n`, `n + lanes`, `n + 2 × lanes`…; this connection is lane 0.
+    let lane = |n: usize| batches.iter().copied().skip(n).step_by(lanes).collect::<Vec<&[String]>>();
+    let mut answers: Vec<Option<Vec<El>>> = vec![None; batches.len()];
+    std::thread::scope(|s| -> Result<()> {
+        let others: Vec<_> = (1..lanes)
+            .map(|n| {
+                let (sibling, mine) = (c.sibling(), lane(n));
+                s.spawn(move || (mine.iter().map(|b| get_batch(&sibling, b, extra).ok()).collect::<Vec<Option<Vec<El>>>>(), sibling.spent()))
+            })
+            .collect();
+        for (k, b) in lane(0).into_iter().enumerate() {
+            if let Some(slot) = answers.get_mut(k * lanes) {
+                *slot = Some(get_batch(c, b, extra)?);
+            }
+        }
+        for (i, h) in others.into_iter().enumerate() {
+            let (answered, spent) = h.join().unwrap_or_default();
+            c.count_spent(spent);
+            for (k, got) in answered.into_iter().enumerate() {
+                if let Some(slot) = answers.get_mut(i + 1 + k * lanes) {
+                    *slot = got;
+                }
+            }
+        }
+        Ok(())
+    })?;
     let mut out = Vec::new();
-    for chunk in ids.chunks(BATCH) {
-        let list: String = chunk.iter().map(|id| format!("<t:ItemId Id=\"{}\"/>", esc(id))).collect();
-        let doc = c.call(&format!(
-            "<m:GetItem><m:ItemShape><t:BaseShape>AllProperties</t:BaseShape><t:BodyType>Text</t:BodyType>\
-             <t:AdditionalProperties><t:FieldURI FieldURI=\"calendar:Recurrence\"/><t:FieldURI FieldURI=\"calendar:StartTimeZone\"/>\
-             <t:FieldURI FieldURI=\"item:EffectiveRights\"/>{}</t:AdditionalProperties></m:ItemShape>\
-             <m:ItemIds>{list}</m:ItemIds></m:GetItem>",
-            extra
-        ))?;
-        for m in crate::ews::messages(&doc) {
-            if m.attr("ResponseClass") == Some("Error") {
-                continue;
-            }
-            if let Some(items) = m.child("Items") {
-                out.extend(items.kids.iter().cloned());
-            }
+    for (a, b) in answers.into_iter().zip(&batches) {
+        match a {
+            Some(items) => out.extend(items),
+            None => out.extend(get_batch(c, b, extra)?),
+        }
+    }
+    Ok(out)
+}
+
+/// Batches of item ids asked one after the other, on one connection.
+fn get_batches(c: &Client, batches: &[&[String]], extra: &str) -> Result<Vec<El>> {
+    let mut out = Vec::new();
+    for b in batches {
+        out.extend(get_batch(c, b, extra)?);
+    }
+    Ok(out)
+}
+
+/// One batch of items by id, with all their properties.
+fn get_batch(c: &Client, chunk: &[String], extra: &str) -> Result<Vec<El>> {
+    let mut out = Vec::new();
+    let list: String = chunk.iter().map(|id| format!("<t:ItemId Id=\"{}\"/>", esc(id))).collect();
+    let doc = c.call(&format!(
+        "<m:GetItem><m:ItemShape><t:BaseShape>AllProperties</t:BaseShape><t:BodyType>Text</t:BodyType>\
+         <t:AdditionalProperties><t:FieldURI FieldURI=\"calendar:Recurrence\"/><t:FieldURI FieldURI=\"calendar:StartTimeZone\"/>\
+         <t:FieldURI FieldURI=\"item:EffectiveRights\"/>{}</t:AdditionalProperties></m:ItemShape>\
+         <m:ItemIds>{list}</m:ItemIds></m:GetItem>",
+        extra
+    ))?;
+    for m in crate::ews::messages(&doc) {
+        if m.attr("ResponseClass") == Some("Error") {
+            continue;
+        }
+        if let Some(items) = m.child("Items") {
+            out.extend(items.kids.iter().cloned());
         }
     }
     Ok(out)

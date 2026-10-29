@@ -648,13 +648,18 @@ impl Worker {
 
     /// Other people's calendars just ticked, read alone, or (none named) every calendar ticked
     /// as the calendar opens, without the address books (on-premises Exchange): seconds, where
-    /// the calendars' and contacts' sync, which reads them elsewhere, takes half a minute.
+    /// the calendars' and contacts' sync, which reads them elsewhere, takes half a minute. Each
+    /// calendar ticked is shown as soon as it's read, not with the last of those ticked
+    /// together (two ticked in a row showed after 15 s, 29/10).
     pub(super) fn sync_calendars(&mut self, calendars: &[String]) {
         let Some(Conn::Ews(c)) = &self.conn else { return self.sync_dav() };
         let pim = self.load_pim();
-        match crate::ews_pim::sync_calendars(c, &pim, calendars, now()) {
-            Ok(sync) => self.sink.emit(Event::DavSynced { account: self.id(), sync: Box::new(sync) }),
-            Err(e) => log::info!("{}: calendars: {e}", self.acc.id),
+        let each: Vec<&[String]> = if calendars.is_empty() { vec![calendars] } else { calendars.chunks(1).collect() };
+        for ids in each {
+            match crate::ews_pim::sync_calendars(c, &pim, ids, now()) {
+                Ok(sync) => self.sink.emit(Event::DavSynced { account: self.id(), sync: Box::new(sync) }),
+                Err(e) => log::info!("{}: calendars: {e}", self.acc.id),
+            }
         }
     }
 

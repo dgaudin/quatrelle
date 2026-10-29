@@ -256,9 +256,12 @@ pub fn sync_calendars(c: &Client, pim: &Pim, ids: &[String], now: i64) -> Result
 
 /// `email`'s calendar read into `out` (from six months back), and its entry in the list as
 /// `entry` has it, editable or not as the server says. `None`: a shared mailbox whose calendar
-/// isn't shared with this account (said in the log); one opened by hand (`asked`) says why it's
-/// missing, and stays listed.
+/// isn't shared with this account (said in the log, then not asked again this session); one
+/// opened by hand (`asked`) says why it's missing, and stays listed.
 fn read_other(c: &Client, email: &str, asked: bool, entry: CalendarInfo, now: i64, out: &mut DavSync) -> Option<CalendarInfo> {
+    if !asked && c.has_no_calendar(email) {
+        return None;
+    }
     let parent = calendar_folder(Some(&c.address_of(email)));
     // Editable when the folder's rights say so, or (some servers say nothing useful about
     // another mailbox's folder) when its events do, as Outlook finds by trying.
@@ -276,6 +279,10 @@ fn read_other(c: &Client, email: &str, asked: bool, entry: CalendarInfo, now: i6
         Err(e) if asked => out.errors.push(format!("{email}'s calendar: {e}")),
         Err(e) => {
             log::info!("shared mailbox {email}: no calendar ({e})");
+            // Refused (not a server busy or out of reach): no calendar there this session.
+            if matches!(e, NetError::No(_)) {
+                c.note_no_calendar(email);
+            }
             return None;
         }
     }

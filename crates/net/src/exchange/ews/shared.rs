@@ -2,10 +2,27 @@
 
 use super::*;
 
+/// Mailboxes remembered without a calendar, at most (other people's calendars are listed by the
+/// few hundred at most).
+const MAX_WITHOUT_CALENDAR: usize = 500;
+
 impl Client {
     /// The shared mailboxes added to the account by hand.
     pub fn set_shared(&self, addresses: &[String]) {
         *self.shared_added.borrow_mut() = addresses.iter().map(|a| a.trim().to_string()).filter(|a| a.contains('@')).take(MAX_SHARED).collect();
+    }
+
+    /// Whether shared mailbox `address` was found without a calendar this session.
+    pub(crate) fn has_no_calendar(&self, address: &str) -> bool {
+        self.no_calendar.borrow().iter().any(|a| a.eq_ignore_ascii_case(address))
+    }
+
+    /// Shared mailbox `address` found without a calendar: not asked again this session.
+    pub(crate) fn note_no_calendar(&self, address: &str) {
+        let mut list = self.no_calendar.borrow_mut();
+        if list.len() < MAX_WITHOUT_CALENDAR && !list.iter().any(|a| a.eq_ignore_ascii_case(address)) {
+            list.push(address.to_string());
+        }
     }
 
     /// The account's Autodiscover answer, asked once.

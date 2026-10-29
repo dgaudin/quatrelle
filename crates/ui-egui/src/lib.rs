@@ -750,7 +750,11 @@ impl MailApp {
                 continue;
             }
             answered |= matches!(e, quatrelle_engine::model::Event::Found { .. });
+            let merging = app::Merging::of(&e);
             self.session.apply(e);
+            if let Some(m) = merging {
+                m.done();
+            }
         }
         // Sign-in pages go to the browser.
         for url in std::mem::take(&mut self.session.open_urls) {

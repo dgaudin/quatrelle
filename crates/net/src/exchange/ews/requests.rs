@@ -219,8 +219,19 @@ impl Client {
     }
 
     pub(super) fn call_once(&self, body: &str) -> std::result::Result<El, Busy> {
+        let asked = std::time::Instant::now();
         let resp = self.post(envelope(body).into_bytes()).map_err(Busy::Failed)?;
-        Client::answer(&resp)
+        let received = std::time::Instant::now();
+        let answer = Client::answer(&resp);
+        let head = resp.head_at.unwrap_or(received);
+        self.count_spent(Timing {
+            requests: 1,
+            server: head.saturating_duration_since(asked),
+            receiving: received.saturating_duration_since(head),
+            reading: received.elapsed(),
+            bytes: resp.body.len(),
+        });
+        answer
     }
 
     /// What an answer says: its elements, or why not (a SOAP fault, a busy server, HTTP).
