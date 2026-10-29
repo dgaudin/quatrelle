@@ -155,6 +155,9 @@ pub struct Prefs {
     /// Links from a message open where they really go: out of redirect wrappers, without the
     /// tags that say who clicked ([`mime::clean_link`]). On at first.
     pub clean_links: bool,
+    /// When a message's pictures from the web load without being asked for: from the people
+    /// known at first (File › Options › Privacy).
+    pub pictures: PictureLoading,
     /// Ask a signer's certificate's authority whether it was withdrawn (OCSP or its CRL), as
     /// signed mail is shown. Off at first: the authority learns whose mail is being read.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
@@ -220,6 +223,7 @@ impl Default for Prefs {
             recent_searches: Vec::new(),
             keep_photo_location: false,
             clean_links: true,
+            pictures: PictureLoading::Known,
             check_revocation: false,
             webex_room: String::new(),
             llm_url: String::new(),
@@ -250,6 +254,38 @@ pub enum ReadingPane {
     Right,
     Bottom,
     Off,
+}
+
+/// When a message's pictures from the web load without being asked for. Whatever it says, mail
+/// in Junk Email waits to be asked, tracking pictures never load and encrypted mail never reaches
+/// the web.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PictureLoading {
+    /// Only when asked: for the message, or for everything from its sender.
+    Ask,
+    /// Also from the people known: saved in Contacts or written to, and the safe senders. A
+    /// stranger doesn't learn that the message was opened.
+    #[default]
+    Known,
+    /// Always, as Outlook can.
+    Always,
+}
+
+impl PictureLoading {
+    pub const ALL: [PictureLoading; 3] = [PictureLoading::Ask, PictureLoading::Known, PictureLoading::Always];
+
+    pub fn code(self) -> &'static str {
+        match self {
+            PictureLoading::Ask => "ask",
+            PictureLoading::Known => "known",
+            PictureLoading::Always => "always",
+        }
+    }
+
+    pub fn from_code(s: &str) -> Option<PictureLoading> {
+        PictureLoading::ALL.into_iter().find(|p| p.code() == s)
+    }
 }
 
 /// How the message list lays out its messages.

@@ -393,7 +393,6 @@
 	On from {from} until {until}	Activées du {from} au {until}
 	On until {until}	Activées jusqu’au {until}
 	Only between these days	Uniquement entre ces dates
-	Pictures from the web load only when you ask. These senders' pictures always load:	Les images du Web ne se chargent que si vous le demandez. Celles de ces expéditeurs se chargent toujours :
 	Privacy	Confidentialité
 	Reading	Lecture
 	Rules: {n}	Règles : {n}
@@ -1759,3 +1758,9 @@ month	May	mai
 	{who} needs its password: {error}	{who} a besoin de son mot de passe : {error}
 	{who} needs you to sign in again	{who} doit se reconnecter
 	{who} needs you to sign in again: {error}	{who} doit se reconnecter : {error}
+	A picture from the web can tell its sender that you read the message, and when. Mail in Junk Email waits to be asked, and tracking pictures never load.	Une image venue du web peut indiquer à son expéditeur que vous avez lu le message, et quand. Le courrier indésirable attend votre demande, et les images de pistage ne se chargent jamais.
+	Only when I ask	Seulement quand je le demande
+	From my contacts and the senders I trust	De mes contacts et des expéditeurs de confiance
+	Always	Toujours
+	Load pictures from the web	Charger les images du web
+	These senders' pictures always load:	Les images de ces expéditeurs se chargent toujours :

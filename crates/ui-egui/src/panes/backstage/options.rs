@@ -388,18 +388,43 @@ pub(super) fn options(s: &Session, st: &UiState, ui: &mut Ui, acts: &mut Vec<Act
         );
     });
 
-    group(ui, tl!("Privacy"), Some(tl!("Pictures from the web load only when you ask. These senders' pictures always load:")), &mut |ui| {
-        if s.prefs.trusted_senders.is_empty() {
-            ui.add_space(4.0);
-            ui.label(RichText::new(tl!("No senders yet.")).color(t.faint).small());
-            ui.add_space(8.0);
-        }
-        for (i, who) in s.prefs.trusted_senders.iter().enumerate() {
-            setting(ui, i == 0, who, None, &mut |ui| {
-                if ui.button(tl!("Remove")).clicked() {
-                    acts.push(Action::Run("view.trustSender", json!({"address": who, "on": false})));
-                }
+    group(
+        ui,
+        tl!("Privacy"),
+        Some(tl!(
+            "A picture from the web can tell its sender that you read the message, and when. Mail in Junk Email waits to be asked, and tracking pictures never load."
+        )),
+        &mut |ui| {
+            use quatrelle_engine::PictureLoading;
+            let named = |p: PictureLoading| match p {
+                PictureLoading::Ask => tl!("Only when I ask"),
+                PictureLoading::Known => tl!("From my contacts and the senders I trust"),
+                PictureLoading::Always => tl!("Always"),
+            };
+            setting(ui, true, tl!("Load pictures from the web"), None, &mut |ui| {
+                let now = s.prefs.pictures;
+                egui::ComboBox::from_id_salt("pictures").width(280.0).selected_text(named(now)).show_ui(ui, |ui| {
+                    for p in PictureLoading::ALL {
+                        if ui.selectable_label(p == now, named(p)).clicked() && p != now {
+                            acts.push(Action::Run("view.pictures", json!({"value": p.code()})));
+                        }
+                    }
+                });
             });
-        }
-    });
+            ui.add_space(4.0);
+            ui.label(RichText::new(tl!("These senders' pictures always load:")).color(t.dim).small());
+            if s.prefs.trusted_senders.is_empty() {
+                ui.add_space(4.0);
+                ui.label(RichText::new(tl!("No senders yet.")).color(t.faint).small());
+                ui.add_space(8.0);
+            }
+            for who in &s.prefs.trusted_senders {
+                setting(ui, false, who, None, &mut |ui| {
+                    if ui.button(tl!("Remove")).clicked() {
+                        acts.push(Action::Run("view.trustSender", json!({"address": who, "on": false})));
+                    }
+                });
+            }
+        },
+    );
 }

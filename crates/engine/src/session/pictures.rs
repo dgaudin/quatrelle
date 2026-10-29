@@ -25,12 +25,33 @@ impl Session {
             .unwrap_or_default()
     }
 
-    /// Whether the open message's web pictures may load: the user asked, for this message or
-    /// for everything from its sender.
+    /// Whether the open message's web pictures may load: asked for this message; else, but for
+    /// mail in Junk Email, as File › Options › Privacy says ([`PictureLoading`]): from a sender
+    /// trusted or safe, also from the people known (saved in Contacts or written to), or always.
     pub fn pictures_allowed(&self) -> bool {
         let Some(r) = &self.reading else { return false };
+        if self.pictures_for.contains(&r.key) {
+            return true;
+        }
+        if self.folder(&r.key.account, &r.key.folder).is_some_and(|f| f.role == FolderRole::Junk) {
+            return false;
+        }
         let sender = r.parsed.as_ref().map(|p| p.from.email.trim().to_ascii_lowercase()).unwrap_or_default();
-        self.pictures_for.contains(&r.key) || (!sender.is_empty() && (self.prefs.trusted_senders.contains(&sender) || self.sender_safe(&sender)))
+        let trusted = !sender.is_empty() && (self.prefs.trusted_senders.contains(&sender) || self.sender_safe(&sender));
+        match self.prefs.pictures {
+            PictureLoading::Ask => trusted,
+            // From the address book as it's read (no search through every card each frame): one
+            // who only ever wrote here is in it too, and isn't known for that.
+            PictureLoading::Known => trusted || (!sender.is_empty() && self.known_contact(&sender).is_some_and(|c| c.saved || c.sent > 0)),
+            PictureLoading::Always => true,
+        }
+    }
+
+    /// When pictures from the web load by themselves; the open message's load now if they may.
+    pub fn set_picture_loading(&mut self, to: PictureLoading) -> CmdResult {
+        self.prefs.pictures = to;
+        self.request_pictures();
+        Ok(serde_json::json!({ "value": to.code(), "allowed": self.pictures_allowed() }))
     }
 
     /// Ask the network layer for the open message's pictures, when allowed.
