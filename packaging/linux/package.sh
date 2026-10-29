@@ -37,7 +37,7 @@ case "$ARCH" in
   aarch64 | arm64) ARCH=aarch64; DEB_ARCH=arm64 ;;
   *) echo "unsupported architecture $ARCH" >&2; exit 2 ;;
 esac
-export QUATRELLE_MAINTAINER="${QUATRELLE_MAINTAINER:-Quatrelle maintainers <quatrelle@storyteller.ai>}"
+export QUATRELLE_MAINTAINER="${QUATRELLE_MAINTAINER:-Didier Gaudin <didier.gaudin@gmail.com>}"
 BASENAME="quatrelle-$VERSION-linux-$ARCH"
 
 echo "==> Quatrelle $VERSION for Linux $ARCH ($FORMATS)"

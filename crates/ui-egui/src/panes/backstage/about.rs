@@ -50,7 +50,7 @@ pub(super) fn about(s: &Session, t: &Tokens, update: &crate::UpdateState, ui: &m
         ui.add_space(10.0);
         ui.vertical(|ui| {
             ui.label(RichText::new(tf!("Quatrelle {version}", version = env!("CARGO_PKG_VERSION"))).font(theme::bold(18.0)).color(t.text));
-            ui.label(RichText::new(tl!("An ArtCraft app · MIT OR Apache-2.0")).color(t.dim));
+            ui.label(RichText::new(tf!("By {author} · MIT OR Apache-2.0", author = "Didier Gaudin")).color(t.dim));
         });
     });
     ui.add_space(10.0);

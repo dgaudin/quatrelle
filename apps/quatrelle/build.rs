@@ -24,7 +24,7 @@ fn main() {
         .set_manifest(windows_manifest::WINDOWS_MANIFEST)
         .set("ProductName", "Quatrelle")
         .set("FileDescription", "Quatrelle email")
-        .set("CompanyName", "Learning Machines LLC")
+        .set("CompanyName", "Didier Gaudin")
         .set("LegalCopyright", "Copyright (c) the Quatrelle authors. MIT OR Apache-2.0.")
         .set("OriginalFilename", "quatrelle.exe")
         .set("InternalName", "quatrelle");

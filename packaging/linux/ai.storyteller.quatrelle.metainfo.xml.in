@@ -7,8 +7,8 @@
   <project_license>MIT OR Apache-2.0</project_license>
   <name>Quatrelle</name>
   <summary>Local-first email over IMAP and SMTP</summary>
-  <developer id="ai.storyteller">
-    <name>Learning Machines LLC</name>
+  <developer id="io.github.dgaudin">
+    <name>Didier Gaudin</name>
   </developer>
   <description>
     <p>
@@ -33,7 +33,7 @@
   <url type="homepage">https://github.com/dgaudin/quatrelle</url>
   <url type="bugtracker">https://github.com/dgaudin/quatrelle/issues</url>
   <url type="help">https://github.com/dgaudin/quatrelle</url>
-  <url type="contact">https://discord.gg/artcraft</url>
+  <url type="contact">https://github.com/dgaudin/quatrelle/issues</url>
   <categories>
     <category>Network</category>
     <category>Email</category>
