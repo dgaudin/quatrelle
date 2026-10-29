@@ -22,6 +22,18 @@ pub fn oauth_provider_for(imap_host: &str) -> Option<&'static str> {
     }
 }
 
+/// Whether the mail service at this IMAP server is known to keep no ManageSieve (RFC 5804):
+/// Gmail's, Microsoft's, Yahoo's, iCloud's and AOL's. Its port isn't tried: Gmail's drops what
+/// it's sent, and reading the rules waited the whole connect timeout (29 s) while the first
+/// sync's folders waited behind it.
+pub fn without_managesieve(imap_host: &str) -> bool {
+    let h = imap_host.trim().trim_end_matches('.').to_ascii_lowercase();
+    matches!(
+        h.as_str(),
+        "imap.gmail.com" | "imap.googlemail.com" | "outlook.office365.com" | "imap.mail.yahoo.com" | "imap.mail.me.com" | "imap.aol.com"
+    ) || h.ends_with(".outlook.com")
+}
+
 /// Microsoft's own addresses (Outlook.com, Hotmail, Live, MSN). Since September 2024 they
 /// take no passwords from other mail apps over IMAP, POP or SMTP: only Microsoft sign-in.
 pub fn microsoft_consumer(email: &str) -> bool {
@@ -188,5 +200,24 @@ mod tests {
         let mut work = AccountConfig::guess("zoe@contoso.example");
         work.imap.host = "outlook.office365.com".into();
         assert!(microsoft_password_account(&work));
+    }
+
+    #[test]
+    fn the_big_services_keep_no_managesieve() {
+        for h in [
+            "imap.gmail.com",
+            "IMAP.GMAIL.COM.",
+            " imap.googlemail.com",
+            "outlook.office365.com",
+            "imap-mail.outlook.com",
+            "imap.mail.yahoo.com",
+            "imap.mail.me.com",
+        ] {
+            assert!(without_managesieve(h), "{h}");
+        }
+        for h in ["imap.fastmail.com", "mail.studio.example", "imap.gmail.com.example", "outlook.com.example", ""] {
+            assert!(!without_managesieve(h), "{h}");
+        }
+        assert_eq!(AccountConfig::guess("someone@gmail.com").imap.host, "imap.gmail.com", "what the account is given");
     }
 }

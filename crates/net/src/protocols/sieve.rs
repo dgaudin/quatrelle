@@ -312,6 +312,10 @@ impl Client<Stream> {
     /// Connect to the account's Sieve server: the IMAP host on port 4190, encrypted with
     /// STARTTLS unless the account is plain (local test servers).
     pub fn connect(imap: &ServerConfig, port: u16) -> Result<Client<Stream>> {
+        // Not tried where it's known not to be: as a server that has none says.
+        if quatrelle_model::without_managesieve(&imap.host) {
+            return Err(NetError::Io(std::io::Error::new(std::io::ErrorKind::ConnectionRefused, format!("{} keeps no ManageSieve", imap.host))));
+        }
         let sock = stream::tcp(&imap.host, port)?;
         let mut c = Client::from_stream(Stream::Plain(sock))?;
         if imap.security == Security::None {
@@ -509,6 +513,20 @@ pub(crate) mod tests {
     use std::sync::{Arc, Mutex};
 
     use super::*;
+
+    /// Gmail keeps no ManageSieve and its port drops what it's sent: reading the rules waited
+    /// 29 s for the connect timeout, and the first sync's folders behind it. It isn't tried.
+    #[test]
+    fn a_service_known_to_keep_no_managesieve_is_not_tried() {
+        let gmail = ServerConfig { host: "imap.gmail.com".into(), port: 993, security: Security::Tls };
+        let at = std::time::Instant::now();
+        let refused = Client::connect(&gmail, PORT).err();
+        assert!(at.elapsed() < std::time::Duration::from_secs(1), "{:?}", at.elapsed());
+        assert!(
+            matches!(&refused, Some(NetError::Io(e)) if e.kind() == std::io::ErrorKind::ConnectionRefused && e.to_string().contains("keeps no ManageSieve")),
+            "{refused:?}"
+        );
+    }
 
     #[test]
     fn scripts() {
