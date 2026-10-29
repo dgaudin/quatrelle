@@ -392,7 +392,6 @@
 	On from {from} until {until}	تعمل من {from} حتى {until}
 	On until {until}	تعمل حتى {until}
 	Only between these days	فقط بين هذين اليومين
-	Pictures from the web load only when you ask. These senders' pictures always load:	لا تُحمّل الصور من الويب إلا عندما تطلب. صور هؤلاء المرسلين تُحمّل دائمًا:
 	Privacy	الخصوصية
 	Reading	القراءة
 	Rules: {n}	القواعد: {n}
@@ -1755,3 +1754,9 @@ month	May	مايو
 	{who} needs its password: {error}	يحتاج {who} إلى كلمة المرور: {error}
 	{who} needs you to sign in again	يجب تسجيل الدخول إلى {who} مجددًا
 	{who} needs you to sign in again: {error}	يجب تسجيل الدخول إلى {who} مجددًا: {error}
+	A picture from the web can tell its sender that you read the message, and when. Mail in Junk Email waits to be asked, and tracking pictures never load.	قد تُخبر صورةٌ من الويب مُرسلها بأنك قرأت الرسالة ومتى قرأتها. ينتظر البريد العشوائي أن تطلب، ولا تُحمَّل صور التتبع أبدًا.
+	Only when I ask	فقط عندما أطلب
+	From my contacts and the senders I trust	من جهات اتصالي والمرسلين الموثوقين
+	Always	دائمًا
+	Load pictures from the web	تحميل الصور من الويب
+	These senders' pictures always load:	تُحمَّل صور هؤلاء المرسلين دائمًا:

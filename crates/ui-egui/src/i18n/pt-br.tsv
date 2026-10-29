@@ -393,7 +393,6 @@
 	On from {from} until {until}	Ativadas de {from} até {until}
 	On until {until}	Ativadas até {until}
 	Only between these days	Somente entre estes dias
-	Pictures from the web load only when you ask. These senders' pictures always load:	As imagens da web só são carregadas quando você pede. As imagens destes remetentes sempre são carregadas:
 	Privacy	Privacidade
 	Reading	Leitura
 	Rules: {n}	Regras: {n}
@@ -1759,3 +1758,9 @@ month	May	maio
 	{who} needs its password: {error}	{who} precisa da senha: {error}
 	{who} needs you to sign in again	{who} precisa que você entre de novo
 	{who} needs you to sign in again: {error}	{who} precisa que você entre de novo: {error}
+	A picture from the web can tell its sender that you read the message, and when. Mail in Junk Email waits to be asked, and tracking pictures never load.	Uma imagem da web pode avisar o remetente de que você leu a mensagem, e quando. O lixo eletrônico espera você pedir, e as imagens de rastreamento nunca são carregadas.
+	Only when I ask	Só quando eu pedir
+	From my contacts and the senders I trust	Dos meus contatos e dos remetentes confiáveis
+	Always	Sempre
+	Load pictures from the web	Carregar imagens da web
+	These senders' pictures always load:	As imagens destes remetentes sempre são carregadas:

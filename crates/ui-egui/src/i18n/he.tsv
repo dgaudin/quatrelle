@@ -392,7 +392,6 @@
 	On from {from} until {until}	פועל מ-{from} עד {until}
 	On until {until}	פועל עד {until}
 	Only between these days	רק בין הימים האלה
-	Pictures from the web load only when you ask. These senders' pictures always load:	תמונות מהאינטרנט נטענות רק כשאתה מבקש. התמונות של השולחים האלה נטענות תמיד:
 	Privacy	פרטיות
 	Reading	קריאה
 	Rules: {n}	כללים: {n}
@@ -1755,3 +1754,9 @@ month	May	מאי
 	{who} needs its password: {error}	{who} צריך את הסיסמה שלו: {error}
 	{who} needs you to sign in again	יש להיכנס שוב אל {who}
 	{who} needs you to sign in again: {error}	יש להיכנס שוב אל {who}: {error}
+	A picture from the web can tell its sender that you read the message, and when. Mail in Junk Email waits to be asked, and tracking pictures never load.	תמונה מהאינטרנט יכולה לספר לשולח שקראת את ההודעה, ומתי. דואר זבל ממתין לבקשה, ותמונות מעקב לעולם לא נטענות.
+	Only when I ask	רק כשאני מבקש
+	From my contacts and the senders I trust	מאנשי הקשר שלי ומשולחים מהימנים
+	Always	תמיד
+	Load pictures from the web	טעינת תמונות מהאינטרנט
+	These senders' pictures always load:	התמונות של שולחים אלה נטענות תמיד:

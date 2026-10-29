@@ -240,3 +240,68 @@ fn a_hollow_sample_mailbox_is_filled_again() {
     assert_eq!(store.load_accounts().unwrap().len(), 2);
     let _ = std::fs::remove_dir_all(store.root());
 }
+
+/// "Load pictures from the web": only when asked, from the people known (saved in Contacts or
+/// written to, and the safe senders) as at first, or always (the owner's Outlook loaded them,
+/// 27/10). Mail in Junk Email never loads them by itself, whatever the setting.
+#[test]
+fn web_pictures_follow_the_setting() {
+    let mut s = sample_session("pictures-setting");
+    s.run("mail.new", &json!({})).unwrap();
+    s.run("compose.update", &json!({"to": "pal@studio.example", "subject": "Hi"})).unwrap();
+    s.run("compose.send", &json!({})).unwrap();
+    s.run("contact.create", &json!({"name": "Fern", "emails": ["fern@studio.example"]})).unwrap();
+    let store = s.store.clone().unwrap();
+    let junk = s.account("sample").and_then(|a| a.folder(FolderRole::Junk)).map(|f| f.path.clone()).unwrap();
+    // A message with a picture from the web, from `from`, into `folder`.
+    let put = |folder: &str, from: &str| {
+        let mut st = store.load_folder("sample", folder).unwrap();
+        let key = MessageKey { account: "sample".into(), folder: folder.into(), validity: st.validity, uid: st.uid_next };
+        st.uid_next += 1;
+        st.messages.insert(0, quatrelle_model::Summary { key: key.clone(), subject: "Pictures".into(), date: NOW, ..Default::default() });
+        store.save_folder("sample", folder, &st).unwrap();
+        let raw = format!(
+            "From: {from}\r\nSubject: Pictures\r\nContent-Type: text/html\r\n\r\n<p>Look</p><img src=\"https://cdn.example/{}.png\">",
+            key.uid
+        );
+        store.write_body(&key, raw.as_bytes()).unwrap();
+        key
+    };
+    let (shop, pal, fern, fern_junk) = (
+        put("INBOX", "news@shop.example"),
+        put("INBOX", "pal@studio.example"),
+        put("INBOX", "fern@studio.example"),
+        put(&junk, "fern@studio.example"),
+    );
+    for f in ["INBOX".to_string(), junk] {
+        s.apply(Event::FolderChanged { account: "sample".into(), folder: f });
+    }
+    s.contacts_step(usize::MAX);
+    let open = |s: &mut Session, k: &MessageKey| {
+        s.run("folder.open", &json!({"account": k.account, "folder": k.folder})).unwrap();
+        s.run("list.open", &json!({"key": k.to_id()})).unwrap();
+        s.pictures_allowed()
+    };
+    assert_eq!(s.prefs.pictures, crate::PictureLoading::Known, "at first");
+    assert!(!open(&mut s, &shop), "a stranger: when asked");
+    assert!(open(&mut s, &pal), "written to");
+    assert!(open(&mut s, &fern), "saved in Contacts");
+    assert!(!open(&mut s, &fern_junk), "Junk Email: never by itself");
+    s.run("view.pictures", &json!({"value": "ask"})).unwrap();
+    assert!(!open(&mut s, &pal) && !open(&mut s, &fern));
+    s.run("view.pictures", &json!({"value": "always"})).unwrap();
+    s.take_jobs();
+    assert!(open(&mut s, &shop));
+    assert!(
+        s.take_jobs().iter().any(|j| matches!(j, Job::FetchUrl { url } if url == &format!("https://cdn.example/{}.png", shop.uid))),
+        "loading as it opens"
+    );
+    assert!(!open(&mut s, &fern_junk), "Junk Email, even always");
+    s.run("message.showPictures", &json!({})).unwrap();
+    assert!(s.pictures_allowed(), "asked for, in Junk Email too");
+    assert!(s.run("view.pictures", &json!({"value": "sometimes"})).is_err());
+    // A settings file from before the setting: the people known.
+    let before: crate::Prefs = serde_json::from_str("{}").unwrap();
+    assert_eq!(before.pictures, crate::PictureLoading::Known);
+    done(s);
+}

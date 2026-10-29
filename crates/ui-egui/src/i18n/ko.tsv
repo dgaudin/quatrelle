@@ -392,7 +392,6 @@
 	On from {from} until {until}	{from}부터 {until}까지 켜짐
 	On until {until}	{until}까지 켜짐
 	Only between these days	이 기간에만
-	Pictures from the web load only when you ask. These senders' pictures always load:	웹의 그림은 요청할 때만 불러옵니다. 다음 보낸 사람의 그림은 항상 불러옵니다:
 	Privacy	개인 정보
 	Reading	읽기
 	Rules: {n}	규칙: {n}
@@ -1758,3 +1757,9 @@ month	May	5월
 	{who} needs its password: {error}	{who}의 암호가 필요합니다: {error}
 	{who} needs you to sign in again	{who}에 다시 로그인해야 합니다
 	{who} needs you to sign in again: {error}	{who}에 다시 로그인해야 합니다: {error}
+	A picture from the web can tell its sender that you read the message, and when. Mail in Junk Email waits to be asked, and tracking pictures never load.	웹 이미지는 메시지를 읽었다는 사실과 시간을 보낸 사람에게 알릴 수 있습니다. 정크 메일은 요청할 때까지 기다리며, 추적 이미지는 절대 불러오지 않습니다.
+	Only when I ask	요청할 때만
+	From my contacts and the senders I trust	내 연락처와 신뢰하는 보낸 사람
+	Always	항상
+	Load pictures from the web	웹 이미지 불러오기
+	These senders' pictures always load:	이 보낸 사람의 이미지는 항상 불러옵니다:
