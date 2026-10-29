@@ -27,7 +27,8 @@ impl Worker {
                 | Job::GetAvailability { .. }
                 | Job::ServerFolderSizes { .. }
                 | Job::FindCertificates { .. }
-                | Job::SearchDirectory { .. }) => self.handle(j),
+                | Job::SearchDirectory { .. }
+                | Job::SyncCalendars { .. }) => self.handle(j),
                 // Anything else belongs to the main connection.
                 other => {
                     if let Some(m) = &self.main {

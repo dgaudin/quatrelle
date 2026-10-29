@@ -652,6 +652,14 @@ impl Worker {
     /// calendar ticked is shown as soon as it's read, not with the last of those ticked
     /// together (two ticked in a row showed after 15 s, 29/10).
     pub(super) fn sync_calendars(&mut self, calendars: &[String]) {
+        // On the second connection (`main` names the first), connected as it's needed.
+        if self.conn.is_none()
+            && self.main.is_some()
+            && let Err(e) = self.connect()
+        {
+            log::info!("{}: calendars: {e}", self.acc.id);
+            return;
+        }
         let Some(Conn::Ews(c)) = &self.conn else { return self.sync_dav() };
         let pim = self.load_pim();
         let each: Vec<&[String]> = if calendars.is_empty() { vec![calendars] } else { calendars.chunks(1).collect() };

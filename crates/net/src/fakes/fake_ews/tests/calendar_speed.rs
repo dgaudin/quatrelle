@@ -102,3 +102,39 @@ fn a_shared_mailbox_without_a_calendar_is_asked_about_once() {
     let first = read();
     assert_eq!(first - read(), 3, "its calendar asked for three ways the first time, not again");
 }
+
+/// A series' occurrences changed on their own are read from six months back, as the rest of the
+/// calendar: a colleague's meetings moved now and then for years were hundreds, read one batch
+/// after another once the calendar was (2.3 s of 6, 29/10).
+#[test]
+fn only_the_occurrences_changed_lately_are_read() {
+    use quatrelle_model::pim::Pim;
+    let mut d = Data::default();
+    d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    let cal = d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
+    d.folder("Contacts", None, Some("contacts"), "IPF.Contact");
+    let weekly = parse(
+        "<t:CalendarItem><t:Subject>Weekly</t:Subject><t:Start>2019-01-07T09:00:00Z</t:Start><t:End>2019-01-07T09:30:00Z</t:End>\
+         <t:IsAllDayEvent>false</t:IsAllDayEvent><t:UID>weekly</t:UID><t:CalendarItemType>RecurringMaster</t:CalendarItemType>\
+         <t:Recurrence><t:WeeklyRecurrence><t:Interval>1</t:Interval><t:DaysOfWeek>Monday</t:DaysOfWeek></t:WeeklyRecurrence>\
+         <t:NoEndRecurrence><t:StartDate>2019-01-07</t:StartDate></t:NoEndRecurrence></t:Recurrence></t:CalendarItem>",
+    );
+    d.pim.push(("M1".into(), cal.clone(), weekly.kids[0].clone()));
+    let moved = |day: &str| {
+        parse(&format!(
+            "<t:CalendarItem><t:Subject>Weekly</t:Subject><t:Start>{day}T10:00:00Z</t:Start><t:End>{day}T10:30:00Z</t:End>\
+             <t:OriginalStart>{day}T09:00:00Z</t:OriginalStart><t:IsAllDayEvent>false</t:IsAllDayEvent><t:UID>weekly</t:UID>\
+             <t:CalendarItemType>Exception</t:CalendarItemType></t:CalendarItem>"
+        ))
+        .kids
+        .remove(0)
+    };
+    d.pim.push(("M1:occ2".into(), cal.clone(), moved("2019-01-14")));
+    d.pim.push(("M1:occ406".into(), cal, moved("2026-10-12")));
+    let server = serve(d);
+    let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
+    let sync = crate::ews_pim::sync_calendars(&c, &Pim::default(), &[], 1_792_000_000).unwrap();
+    let moved: Vec<&str> = sync.events.iter().filter(|e| e.event.recurrence_id.is_some()).map(|e| e.href.as_str()).collect();
+    assert_eq!(moved, ["M1:occ406"], "the one of 2019 isn't read");
+    assert!(sync.events.iter().any(|e| e.href == "M1" && e.event.recurrence_id.is_none()), "the series is");
+}

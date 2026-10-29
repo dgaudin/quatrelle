@@ -86,6 +86,19 @@ fn a_calendar_sync_waiting_isnt_queued_twice() {
     assert_eq!(q, [opened]);
 }
 
+/// A colleague's calendar just ticked goes on the second connection (on-premises Exchange), not
+/// behind the main one's sync (15 s, 29/10); the calendar opened (every calendar ticked) stays on
+/// the main one.
+#[test]
+fn a_calendar_ticked_goes_on_the_second_connection() {
+    let ews = AccountConfig { ews: Some("https://mail.contoso.example/EWS/Exchange.asmx".into()), ..Default::default() };
+    let ticked = Job::SyncCalendars { account: "a".into(), calendars: vec!["shared:ana@contoso.example".into()] };
+    let opened = Job::SyncCalendars { account: "a".into(), calendars: Vec::new() };
+    assert!(quick_job(&ticked, &ews));
+    assert!(!quick_job(&opened, &ews));
+    assert!(!quick_job(&ticked, &AccountConfig::default()), "not over CalDAV");
+}
+
 /// A server's rules split by whose they are: the ones Quatrelle holds the id of, and the
 /// ones it didn't make (Outlook's own, the server's web page).
 #[test]

@@ -144,10 +144,24 @@ pub fn exception_of(it: &El) -> Option<CalEvent> {
     Some(e)
 }
 
-/// The items of a series' occurrences changed on their own, as the series lists them.
-pub fn modified_occurrence_ids(it: &El) -> Vec<String> {
+/// The items of a series' occurrences changed on their own, as the series lists them: from
+/// `since` on, those ending then or later or that stood then or later (one whose times aren't
+/// said is kept). The older ones aren't shown, as the appointments before then aren't read: a
+/// colleague's meetings moved now and then for years were hundreds, and reading them took
+/// longer than the rest of the calendar (29/10).
+pub fn modified_occurrence_ids(it: &El, since: Option<i64>) -> Vec<String> {
+    let recent = |o: &El| {
+        let Some(since) = since else { return true };
+        let at = |name: &str| quatrelle_jmap::utc_date(&text(o, name));
+        match (at("End"), at("OriginalStart")) {
+            (None, None) => true,
+            (end, original) => end.is_some_and(|t| t >= since) || original.is_some_and(|t| t >= since),
+        }
+    };
     it.child("ModifiedOccurrences")
-        .map(|m| m.children("Occurrence").filter_map(|o| o.child("ItemId")?.attr("Id").map(str::to_string)).take(1000).collect())
+        .map(|m| {
+            m.children("Occurrence").filter(|o| recent(o)).filter_map(|o| o.child("ItemId")?.attr("Id").map(str::to_string)).take(1000).collect()
+        })
         .unwrap_or_default()
 }
 
