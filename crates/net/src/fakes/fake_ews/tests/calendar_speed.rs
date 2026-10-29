@@ -140,3 +140,45 @@ fn only_the_occurrences_changed_lately_are_read() {
     assert_eq!(moved, ["M1:occ406"], "the one of 2019 isn't read");
     assert!(sync.events.iter().any(|e| e.href == "M1" && e.event.recurrence_id.is_none()), "the series is");
 }
+
+/// An occurrence changed on its own the server refuses (it refused a colleague's 41, though
+/// their series came, 29/10) shows from what its series says of it: on its new day, not its old.
+#[test]
+fn an_occurrence_the_server_refuses_shows_from_its_series() {
+    use quatrelle_model::pim::Pim;
+    let mut d = Data::default();
+    d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    let cal = d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
+    d.folder("Contacts", None, Some("contacts"), "IPF.Contact");
+    let weekly = parse(
+        "<t:CalendarItem><t:Subject>Weekly</t:Subject><t:Start>2026-09-07T09:00:00Z</t:Start><t:End>2026-09-07T09:30:00Z</t:End>\
+         <t:IsAllDayEvent>false</t:IsAllDayEvent><t:UID>weekly</t:UID><t:CalendarItemType>RecurringMaster</t:CalendarItemType>\
+         <t:Recurrence><t:WeeklyRecurrence><t:Interval>1</t:Interval><t:DaysOfWeek>Monday</t:DaysOfWeek></t:WeeklyRecurrence>\
+         <t:NoEndRecurrence><t:StartDate>2026-09-07</t:StartDate></t:NoEndRecurrence></t:Recurrence></t:CalendarItem>",
+    );
+    d.pim.push(("M1".into(), cal.clone(), weekly.kids[0].clone()));
+    let moved = |day: &str, subject: &str| {
+        parse(&format!(
+            "<t:CalendarItem><t:Subject>{subject}</t:Subject><t:Start>{day}T14:00:00Z</t:Start><t:End>{day}T15:00:00Z</t:End>\
+             <t:OriginalStart>{day}T09:00:00Z</t:OriginalStart><t:IsAllDayEvent>false</t:IsAllDayEvent><t:UID>weekly</t:UID>\
+             <t:CalendarItemType>Exception</t:CalendarItemType></t:CalendarItem>"
+        ))
+        .kids
+        .remove(0)
+    };
+    d.pim.push(("M1:occ5".into(), cal.clone(), moved("2026-10-05", "Weekly, later")));
+    d.pim.push(("M1:occ6".into(), cal, moved("2026-10-12", "Weekly, later")));
+    d.refused.push("M1:occ6".into());
+    let server = serve(d);
+    let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
+    let sync = crate::ews_pim::sync_calendars(&c, &Pim::default(), &[], 1_792_000_000).unwrap();
+    let at = |t: &str| quatrelle_jmap::utc_date(t).unwrap();
+    let instance = |href: &str| sync.events.iter().find(|e| e.href == href).map(|e| &e.event).unwrap();
+    let given = instance("M1:occ5");
+    assert_eq!((given.summary.as_str(), given.start), ("Weekly, later", at("2026-10-05T14:00:00Z")), "given: as the server has it");
+    let refused = instance("M1:occ6");
+    assert_eq!(refused.recurrence_id, Some(at("2026-10-12T09:00:00Z")), "in its place in the series");
+    assert_eq!((refused.start, refused.end), (at("2026-10-12T14:00:00Z"), at("2026-10-12T15:00:00Z")), "at its own times");
+    assert_eq!((refused.summary.as_str(), refused.rrule.as_deref()), ("Weekly", None), "under the series' subject, once");
+    assert_eq!(sync.events.iter().filter(|e| e.event.recurrence_id.is_some()).count(), 2, "each once");
+}
