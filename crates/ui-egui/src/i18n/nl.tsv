@@ -392,7 +392,6 @@
 	On from {from} until {until}	Aan van {from} tot {until}
 	On until {until}	Aan tot {until}
 	Only between these days	Alleen tussen deze dagen
-	Pictures from the web load only when you ask. These senders' pictures always load:	Afbeeldingen van het web worden alleen geladen als je erom vraagt. Afbeeldingen van deze afzenders worden altijd geladen:
 	Privacy	Privacy
 	Reading	Lezen
 	Rules: {n}	Regels: {n}
@@ -1755,3 +1754,9 @@ month	May	mei
 	{who} needs its password: {error}	{who} heeft het wachtwoord nodig: {error}
 	{who} needs you to sign in again	{who} moet opnieuw worden aangemeld
 	{who} needs you to sign in again: {error}	{who} moet opnieuw worden aangemeld: {error}
+	A picture from the web can tell its sender that you read the message, and when. Mail in Junk Email waits to be asked, and tracking pictures never load.	Een afbeelding van het web kan de afzender laten weten dat je het bericht hebt gelezen, en wanneer. Ongewenste e-mail wacht tot je erom vraagt, en trackingafbeeldingen worden nooit geladen.
+	Only when I ask	Alleen als ik erom vraag
+	From my contacts and the senders I trust	Van mijn contactpersonen en vertrouwde afzenders
+	Always	Altijd
+	Load pictures from the web	Afbeeldingen van het web laden
+	These senders' pictures always load:	Afbeeldingen van deze afzenders worden altijd geladen:

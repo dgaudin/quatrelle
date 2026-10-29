@@ -382,3 +382,20 @@ fn the_file_pages_buttons_never_cover_their_words() {
     crate::i18n::set_current(crate::i18n::Lang::EN);
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// File › Options › Privacy chooses when pictures from the web load: from the people known at
+/// first, always in two clicks (the owner's Outlook loaded them all, 27/10).
+#[test]
+fn the_options_choose_when_pictures_load() {
+    let (mut a, dir) = app("options-pictures");
+    let ctx = egui::Context::default();
+    a.act(crate::Action::Backstage(crate::backstage::Page::Options));
+    let size = egui::vec2(1100.0, 3200.0);
+    let now = settled_text_at(&ctx, &mut a, "From my contacts and the senders I trust", size).expect("the setting, as at first");
+    click_at(&ctx, &mut a, now, 1, size);
+    let always = settled_text_at(&ctx, &mut a, "Always", size).expect("its choices");
+    click_at(&ctx, &mut a, always, 1, size);
+    frame_sized(&ctx, &mut a, vec![], size);
+    assert_eq!(a.session.prefs.pictures, quatrelle_engine::PictureLoading::Always);
+    let _ = std::fs::remove_dir_all(dir);
+}

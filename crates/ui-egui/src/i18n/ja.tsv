@@ -392,7 +392,6 @@
 	On from {from} until {until}	{from} から {until} までオン
 	On until {until}	{until} までオン
 	Only between these days	この期間だけ
-	Pictures from the web load only when you ask. These senders' pictures always load:	Web 上の画像は指示したときだけ読み込まれます。次の送信者の画像は常に読み込まれます:
 	Privacy	プライバシー
 	Reading	閲覧
 	Rules: {n}	ルール: {n}
@@ -1756,3 +1755,9 @@ month	May	5月
 	{who} needs its password: {error}	{who} にはパスワードが必要です: {error}
 	{who} needs you to sign in again	{who} はもう一度サインインする必要があります
 	{who} needs you to sign in again: {error}	{who} はもう一度サインインする必要があります: {error}
+	A picture from the web can tell its sender that you read the message, and when. Mail in Junk Email waits to be asked, and tracking pictures never load.	Web 上の画像は、メッセージを読んだことと日時を差出人に知らせることがあります。迷惑メールの画像は要求するまで読み込まず、追跡用の画像は決して読み込みません。
+	Only when I ask	要求したときのみ
+	From my contacts and the senders I trust	連絡先と信頼する差出人から
+	Always	常に
+	Load pictures from the web	Web の画像を読み込む
+	These senders' pictures always load:	これらの差出人の画像は常に読み込みます:

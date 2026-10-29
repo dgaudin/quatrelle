@@ -392,7 +392,6 @@
 	On from {from} until {until}	Включены с {from} по {until}
 	On until {until}	Включены до {until}
 	Only between these days	Только в эти дни
-	Pictures from the web load only when you ask. These senders' pictures always load:	Изображения из интернета загружаются только по вашей просьбе. Изображения этих отправителей загружаются всегда:
 	Privacy	Конфиденциальность
 	Reading	Чтение
 	Rules: {n}	Правил: {n}
@@ -1758,3 +1757,9 @@ month	May	Май
 	{who} needs its password: {error}	{who}: нужен пароль: {error}
 	{who} needs you to sign in again	{who}: нужно войти снова
 	{who} needs you to sign in again: {error}	{who}: нужно войти снова: {error}
+	A picture from the web can tell its sender that you read the message, and when. Mail in Junk Email waits to be asked, and tracking pictures never load.	Картинка из интернета может сообщить отправителю, что вы прочитали письмо, и когда. Нежелательная почта ждёт вашего запроса, а следящие картинки не загружаются никогда.
+	Only when I ask	Только по запросу
+	From my contacts and the senders I trust	От моих контактов и доверенных отправителей
+	Always	Всегда
+	Load pictures from the web	Загружать картинки из интернета
+	These senders' pictures always load:	Картинки этих отправителей загружаются всегда:

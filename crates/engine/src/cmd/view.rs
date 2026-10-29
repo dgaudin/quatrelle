@@ -271,6 +271,12 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             Ok(json!({ "on": s.prefs.check_revocation }))
         })
         .params(r#"{"on"?: bool (none: switch; on, a signed message's certificate is checked with its authority as it's shown, which tells the authority)}"#),
+        CommandSpec::new("view.pictures", "Load pictures from the web", "File › Options › Privacy", |s, v| {
+            let value = p::req_str(v, "value")?;
+            let to = crate::PictureLoading::from_code(value).ok_or_else(|| CmdError::Params(format!("`{value}` isn't ask, known or always")))?;
+            s.set_picture_loading(to)
+        })
+        .params(r#"{"value": "ask" (only when asked, for a message or a sender)|"known" (also from the people saved in Contacts or written to, and the safe senders)|"always"; mail in Junk Email waits to be asked whatever it says}"#),
         CommandSpec::new("view.trustSender", "Show pictures from a sender", "File › Options › Privacy", |s, v| {
             let who = p::req_str(v, "address")?.trim().to_ascii_lowercase();
             if !quatrelle_model::addr::is_valid_email(&who) {

@@ -392,7 +392,6 @@
 	On from {from} until {until}	从 {from} 到 {until} 开启
 	On until {until}	开启至 {until}
 	Only between these days	仅在这些日期之间
-	Pictures from the web load only when you ask. These senders' pictures always load:	来自网络的图片只在你要求时加载。这些发件人的图片始终加载:
 	Privacy	隐私
 	Reading	阅读
 	Rules: {n}	规则: {n}
@@ -1756,3 +1755,9 @@ month	May	5月
 	{who} needs its password: {error}	{who} 需要密码: {error}
 	{who} needs you to sign in again	{who} 需要重新登录
 	{who} needs you to sign in again: {error}	{who} 需要重新登录: {error}
+	A picture from the web can tell its sender that you read the message, and when. Mail in Junk Email waits to be asked, and tracking pictures never load.	来自网络的图片可能会告诉发件人你读了邮件，以及何时读的。垃圾邮件中的图片要等你请求才加载，跟踪图片从不加载。
+	Only when I ask	仅在我请求时
+	From my contacts and the senders I trust	来自我的联系人和信任的发件人
+	Always	始终
+	Load pictures from the web	加载来自网络的图片
+	These senders' pictures always load:	这些发件人的图片始终加载：
