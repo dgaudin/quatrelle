@@ -107,6 +107,14 @@ pub struct Data {
     /// Appointments `GetItem` refuses (`ErrorAccessDenied`), by id: a colleague's occurrences
     /// Exchange wouldn't give, though their series came.
     pub refused: Vec<String>,
+    /// How each `GetItem` asked for its items: `AllProperties`, `IdOnly`, or `fields` (an
+    /// appointment's fields named, `IdOnly` with them).
+    pub item_shapes: Vec<String>,
+    /// Refuse a `GetItem` naming an appointment's fields, as a server whose schema doesn't know
+    /// one of them does: the whole request (a SOAP fault, `ErrorSchemaValidation`), or (`each`)
+    /// every item of it (`ErrorInvalidPropertyRequest`).
+    pub refuse_fields: bool,
+    pub refuse_fields_each: bool,
     /// The public folder mailbox holding the public folders' content (Exchange 2013 and
     /// later): reading inside them is only answered when routed there.
     pub pf_mailbox: Option<String>,
@@ -138,6 +146,11 @@ pub struct Data {
     pub slow_sources: Option<std::time::Duration>,
     /// Answer `GetFolder` (a folder's counts, the first step of reading it) only after this long.
     pub slow_counts: Option<std::time::Duration>,
+    /// Answer `GetItem` asking for items' properties only after this long (a busy server); how
+    /// many are being answered so, and the most at the same time.
+    pub slow_items: Option<std::time::Duration>,
+    pub items_in_flight: usize,
+    pub most_items_in_flight: usize,
     /// Folders Exchange keeps hidden (PidTagAttributeHidden), by id.
     pub hidden: Vec<String>,
     /// How each appointment created or changed asked the guests to be told
@@ -249,6 +262,9 @@ impl Default for Data {
             flagged_hidden: Vec::new(),
             unreadable: Vec::new(),
             refused: Vec::new(),
+            item_shapes: Vec::new(),
+            refuse_fields: false,
+            refuse_fields_each: false,
             pf_mailbox: None,
             pf_hierarchy: None,
             rules: Vec::new(),
@@ -263,6 +279,9 @@ impl Default for Data {
             slow_sync: None,
             slow_sources: None,
             slow_counts: None,
+            slow_items: None,
+            items_in_flight: 0,
+            most_items_in_flight: 0,
             hidden: Vec::new(),
             meeting_sends: Vec::new(),
             answers: Vec::new(),

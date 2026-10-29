@@ -70,22 +70,71 @@ fn calendar_restriction(since: i64, strict: bool) -> String {
     )
 }
 
+/// What a read asks of each item.
+#[derive(Clone, Copy)]
+enum Shape<'a> {
+    /// All its properties (`AllProperties`, bodies as text), and these (`AdditionalProperties`).
+    All(&'a str),
+    /// An appointment's fields read here ([`APPOINTMENT_FIELDS`]).
+    Appointment,
+}
+
+/// An appointment's fields that are read (`events::appointment`, [`events::event_of`],
+/// [`events::exception_of`], [`events::modified_occurrences`] and [`item_may_change`]), asked by
+/// name. `AllProperties` gives much besides, some of it worked out for each appointment as it's
+/// asked (how many meetings it conflicts with, and is next to), and a colleague's 870
+/// appointments cost the server 10 s that way, 12 ms each (29/10).
+const APPOINTMENT_FIELDS: [&str; 27] = [
+    "item:Subject",
+    "item:Body",
+    "item:Categories",
+    "item:Sensitivity",
+    "item:ReminderIsSet",
+    "item:ReminderMinutesBeforeStart",
+    "item:EffectiveRights",
+    "calendar:UID",
+    "calendar:Start",
+    "calendar:End",
+    "calendar:OriginalStart",
+    "calendar:IsAllDayEvent",
+    "calendar:LegacyFreeBusyStatus",
+    "calendar:Location",
+    "calendar:IsCancelled",
+    "calendar:IsResponseRequested",
+    "calendar:CalendarItemType",
+    "calendar:MyResponseType",
+    "calendar:Organizer",
+    "calendar:RequiredAttendees",
+    "calendar:OptionalAttendees",
+    "calendar:Resources",
+    "calendar:Recurrence",
+    "calendar:ModifiedOccurrences",
+    "calendar:DeletedOccurrences",
+    "calendar:StartTimeZone",
+    "calendar:AllowNewTimeProposal",
+];
+
+/// The codes of a server refusing a field asked by name, rather than the item.
+const FIELD_REFUSED: [&str; 3] = ["ErrorInvalidPropertyRequest", "ErrorInvalidPropertyForOperation", "ErrorSchemaValidation"];
+
 /// Every item of a distinguished folder, with all its properties (bodies as text); a
-/// calendar's from `since` on.
+/// calendar's from `since` on, with the fields read of an appointment.
 fn items(c: &Client, folder: &str, since: Option<i64>) -> Result<Vec<El>> {
     items_in(c, &format!("<t:DistinguishedFolderId Id=\"{folder}\"/>"), if folder == "notes" { NOTE_COLOR } else { "" }, since)
 }
 
-/// Every item of a folder (given as its EWS folder id element), with all its properties.
+/// Every item of a folder (given as its EWS folder id element), with all its properties; a
+/// calendar's (`since` given), with the fields read of an appointment.
 fn items_in(c: &Client, parent: &str, extra: &str, since: Option<i64>) -> Result<Vec<El>> {
-    match (since, items_in_from(c, parent, extra, since.map(|t| calendar_restriction(t, false)))) {
+    let shape = if since.is_some() { Shape::Appointment } else { Shape::All(extra) };
+    match (since, items_in_from(c, parent, shape, since.map(|t| calendar_restriction(t, false)))) {
         // A server that won't search so: what ends from then on, then everything.
         (Some(t), Err(NetError::No(e) | NetError::Protocol(e))) => {
             log::info!("calendar search refused ({e}): asking more simply");
-            match items_in_from(c, parent, extra, Some(calendar_restriction(t, true))) {
+            match items_in_from(c, parent, shape, Some(calendar_restriction(t, true))) {
                 Err(NetError::No(e) | NetError::Protocol(e)) => {
                     log::info!("calendar search refused again ({e}): reading it all");
-                    items_in_from(c, parent, extra, None)
+                    items_in_from(c, parent, shape, None)
                 }
                 r => r,
             }
@@ -94,7 +143,7 @@ fn items_in(c: &Client, parent: &str, extra: &str, since: Option<i64>) -> Result
     }
 }
 
-fn items_in_from(c: &Client, parent: &str, extra: &str, restriction: Option<String>) -> Result<Vec<El>> {
+fn items_in_from(c: &Client, parent: &str, shape: Shape, restriction: Option<String>) -> Result<Vec<El>> {
     let folder = parent;
     let began = Instant::now();
     let before = c.spent();
@@ -117,7 +166,7 @@ fn items_in_from(c: &Client, parent: &str, extra: &str, restriction: Option<Stri
             break;
         }
     }
-    let out = get_items(c, &ids, extra)?;
+    let out = get_items(c, &ids, shape)?;
     // Where the time went, the connections' added up: the server's part, and Quatrelle's.
     let t = c.spent().since(before);
     log::info!(
@@ -134,9 +183,10 @@ fn items_in_from(c: &Client, parent: &str, extra: &str, restriction: Option<Stri
     Ok(out)
 }
 
-/// Items by id, with all their properties (bodies as text), in batches; one the server can't
-/// give (gone meanwhile) is left out. An appointment's pattern and time zone come only when
-/// asked for by name (`AllProperties` leaves them out).
+/// Items by id, with all their properties (bodies as text) or an appointment's fields read
+/// (`shape`), in batches; one the server can't give (gone meanwhile) is left out. An
+/// appointment's pattern and time zone come only when asked for by name (`AllProperties` leaves
+/// them out).
 ///
 /// Many batches are asked over [`LANES`] connections at once: asked one after the other, a
 /// colleague's calendar (700 items) took 8 s, and a calendar just ticked showed a quarter of a
@@ -146,12 +196,12 @@ fn items_in_from(c: &Client, parent: &str, extra: &str, restriction: Option<Stri
 /// give each connection the same share (241 occurrences in five had one connection ask two, 6.5 s
 /// where 4 do). Each answer is in the order asked, whatever the connection; a batch one of the
 /// others couldn't ask (it didn't sign in, say) is asked on this one.
-fn get_items(c: &Client, ids: &[String], extra: &str) -> Result<Vec<El>> {
+fn get_items(c: &Client, ids: &[String], shape: Shape) -> Result<Vec<El>> {
     use std::sync::atomic::{AtomicUsize, Ordering};
     let batches = batches(ids);
     let lanes = batches.len().min(LANES);
     if lanes <= 1 {
-        return get_batches(c, &batches, extra);
+        return get_batches(c, &batches, shape);
     }
     let next = AtomicUsize::new(0);
     let take = || {
@@ -169,7 +219,7 @@ fn get_items(c: &Client, ids: &[String], extra: &str) -> Result<Vec<El>> {
                     let (mut got, mut times) = (Vec::new(), Vec::new());
                     while let Some((i, b)) = take() {
                         let began = Instant::now();
-                        let answer = get_batch(&sibling, b, extra);
+                        let answer = get_batch(&sibling, b, shape);
                         times.push(began.elapsed());
                         match answer {
                             Ok(items) => got.push((i, items)),
@@ -180,14 +230,14 @@ fn get_items(c: &Client, ids: &[String], extra: &str) -> Result<Vec<El>> {
                             }
                         }
                     }
-                    (got, times, sibling.spent())
+                    (got, times, sibling.spent(), sibling.fields_refused())
                 })
             })
             .collect();
         let (mut mine, mut failed) = (Vec::new(), None);
         while let Some((i, b)) = take() {
             let began = Instant::now();
-            let answer = get_batch(c, b, extra);
+            let answer = get_batch(c, b, shape);
             mine.push(began.elapsed());
             match answer {
                 Ok(items) => {
@@ -205,8 +255,11 @@ fn get_items(c: &Client, ids: &[String], extra: &str) -> Result<Vec<El>> {
         }
         took.push(mine);
         for h in others {
-            let (got, times, spent) = h.join().unwrap_or_default();
+            let (got, times, spent, refused) = h.join().unwrap_or_default();
             c.count_spent(spent);
+            if refused {
+                c.note_fields_refused();
+            }
             took.push(times);
             for (i, items) in got {
                 if let Some(slot) = answers.get_mut(i) {
@@ -222,7 +275,7 @@ fn get_items(c: &Client, ids: &[String], extra: &str) -> Result<Vec<El>> {
     for (a, b) in answers.into_iter().zip(&batches) {
         match a {
             Some(items) => out.extend(items),
-            None => out.extend(get_batch(c, b, extra)?),
+            None => out.extend(get_batch(c, b, shape)?),
         }
     }
     Ok(out)
@@ -251,25 +304,47 @@ fn lanes_said(took: &[Vec<Duration>], again: usize) -> String {
 }
 
 /// Batches of item ids asked one after the other, on one connection.
-fn get_batches(c: &Client, batches: &[&[String]], extra: &str) -> Result<Vec<El>> {
+fn get_batches(c: &Client, batches: &[&[String]], shape: Shape) -> Result<Vec<El>> {
     let mut out = Vec::new();
     for b in batches {
-        out.extend(get_batch(c, b, extra)?);
+        out.extend(get_batch(c, b, shape)?);
     }
     Ok(out)
 }
 
-/// One batch of items by id, with all their properties.
-fn get_batch(c: &Client, chunk: &[String], extra: &str) -> Result<Vec<El>> {
+/// One batch of items by id, with all their properties or an appointment's fields read. A
+/// server that refuses those fields (one its schema doesn't know) is asked for all the
+/// properties, as before, for the rest of the session.
+fn get_batch(c: &Client, chunk: &[String], shape: Shape) -> Result<Vec<El>> {
+    let shape = if c.fields_refused() { Shape::All("") } else { shape };
+    match ask_batch(c, chunk, shape) {
+        Err(NetError::No(e)) if matches!(shape, Shape::Appointment) => {
+            log::info!("ews: an appointment's fields asked by name refused ({e}): all their properties asked");
+            c.note_fields_refused();
+            ask_batch(c, chunk, Shape::All(""))
+        }
+        r => r,
+    }
+}
+
+/// One batch of items by id, asked as `shape` says.
+fn ask_batch(c: &Client, chunk: &[String], shape: Shape) -> Result<Vec<El>> {
     let mut out = Vec::new();
     let list: String = chunk.iter().map(|id| format!("<t:ItemId Id=\"{}\"/>", esc(id))).collect();
-    let doc = c.call(&format!(
-        "<m:GetItem><m:ItemShape><t:BaseShape>AllProperties</t:BaseShape><t:BodyType>Text</t:BodyType>\
-         <t:AdditionalProperties><t:FieldURI FieldURI=\"calendar:Recurrence\"/><t:FieldURI FieldURI=\"calendar:StartTimeZone\"/>\
-         <t:FieldURI FieldURI=\"item:EffectiveRights\"/>{}</t:AdditionalProperties></m:ItemShape>\
-         <m:ItemIds>{list}</m:ItemIds></m:GetItem>",
-        extra
-    ))?;
+    let field = |uri: &str| format!("<t:FieldURI FieldURI=\"{uri}\"/>");
+    let asked = match shape {
+        Shape::All(extra) => format!(
+            "<t:BaseShape>AllProperties</t:BaseShape><t:BodyType>Text</t:BodyType><t:AdditionalProperties>{}{}{}{extra}</t:AdditionalProperties>",
+            field("calendar:Recurrence"),
+            field("calendar:StartTimeZone"),
+            field("item:EffectiveRights")
+        ),
+        Shape::Appointment => format!(
+            "<t:BaseShape>IdOnly</t:BaseShape><t:BodyType>Text</t:BodyType><t:AdditionalProperties>{}</t:AdditionalProperties>",
+            APPOINTMENT_FIELDS.iter().map(|u| field(u)).collect::<String>()
+        ),
+    };
+    let doc = c.call(&format!("<m:GetItem><m:ItemShape>{asked}</m:ItemShape><m:ItemIds>{list}</m:ItemIds></m:GetItem>"))?;
     // What the server refused, by its code: said in the log (a colleague's occurrences were
     // all refused, without a word, 29/10).
     let mut refused: BTreeMap<String, usize> = BTreeMap::new();
@@ -281,6 +356,10 @@ fn get_batch(c: &Client, chunk: &[String], extra: &str) -> Result<Vec<El>> {
         if let Some(items) = m.child("Items") {
             out.extend(items.kids.iter().cloned());
         }
+    }
+    // Every one refused for a field asked: the fields are what the server refuses.
+    if matches!(shape, Shape::Appointment) && out.is_empty() && !refused.is_empty() && refused.keys().all(|k| FIELD_REFUSED.contains(&k.as_str())) {
+        return Err(NetError::No(refused.keys().cloned().collect::<Vec<_>>().join(", ")));
     }
     if !refused.is_empty() {
         let said: Vec<String> = refused.iter().map(|(code, n)| format!("{code} ×{n}")).collect();

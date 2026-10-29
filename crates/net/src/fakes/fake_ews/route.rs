@@ -382,6 +382,10 @@ impl Data {
                         out.push(err("ErrorAccessDenied"));
                         continue;
                     }
+                    if self.refuse_fields_each && self.item_shapes.last().is_some_and(|s| s == "fields") {
+                        out.push(err("ErrorInvalidPropertyRequest"));
+                        continue;
+                    }
                     if let Some((_, _, el)) = self.pim.iter().find(|(i, _, _)| *i == id) {
                         let mut el = el.clone();
                         // A series lists the occurrences that became items of their own.

@@ -150,6 +150,9 @@ pub struct Client {
     /// again at each calendar read (three of the owner's, 2.6 s of the 9 the calendar took to
     /// open, 29/10).
     no_calendar: RefCell<Vec<String>>,
+    /// The server refused an appointment's fields asked by name: all their properties are asked
+    /// this session, as before (see `ews_pim`'s `get_items`).
+    fields_refused: Cell<bool>,
     /// What this session's requests cost, added up.
     spent: Cell<Timing>,
 }
@@ -329,6 +332,7 @@ impl Client {
             replace_outlook_rules: Cell::new(false),
             user_agent: None,
             no_calendar: RefCell::new(Vec::new()),
+            fields_refused: Cell::new(false),
             spent: Cell::new(Timing::default()),
         })
     }
@@ -358,8 +362,19 @@ impl Client {
             replace_outlook_rules: Cell::new(false),
             user_agent: self.user_agent.clone(),
             no_calendar: self.no_calendar.clone(),
+            fields_refused: self.fields_refused.clone(),
             spent: Cell::new(Timing::default()),
         }
+    }
+
+    /// Whether the server refused an appointment's fields asked by name this session.
+    pub(crate) fn fields_refused(&self) -> bool {
+        self.fields_refused.get()
+    }
+
+    /// The server refused an appointment's fields asked by name: all their properties from now on.
+    pub(crate) fn note_fields_refused(&self) {
+        self.fields_refused.set(true);
     }
 
     /// What this session's requests have cost so far.
