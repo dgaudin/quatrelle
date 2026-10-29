@@ -80,7 +80,26 @@ impl Worker {
             })
         })();
         match result {
-            Ok(true) => self.sync_one(&inbox),
+            // How soon new mail was told of, and read, as Exchange's is (the log had nothing
+            // for an IMAP account: a Gmail message that seemed not to come couldn't be followed).
+            Ok(true) => {
+                let (began, heard_at) = (Instant::now(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).ok());
+                let newest = self.sync_one_newest(&inbox);
+                let late = match (newest, heard_at) {
+                    (Some(came), Some(at)) => format!(
+                        "; the newest the server had at {}, told of {:.1} s later (by this computer's clock, to the second)",
+                        crate::ews_pim::utc(came).get(11..19).unwrap_or(""),
+                        listening::told_after(came, 0, at.as_millis())
+                    ),
+                    _ => String::new(),
+                };
+                log::info!(
+                    "{}: new mail in {}, read in {} ms{late}",
+                    self.acc.id,
+                    quatrelle_model::utf7::decode(&inbox),
+                    began.elapsed().as_millis()
+                );
+            }
             Ok(false) => {}
             Err(e) => self.failed(e),
         }
@@ -190,6 +209,9 @@ impl Worker {
         let began = Instant::now();
         if !self.relist() {
             return;
+        }
+        if began.elapsed() > crate::stream::SLOW_CONNECT {
+            log::info!("{}: the folders listed in {:.1} s", self.acc.id, began.elapsed().as_secs_f32());
         }
         self.read_followed();
         self.let_go_of_online();
@@ -410,6 +432,12 @@ impl Worker {
     }
 
     pub(super) fn sync_one(&mut self, path: &str) {
+        self.sync_one_newest(path);
+    }
+
+    /// [`Self::sync_one`], and when the server received the newest message that came in, if one
+    /// did (for the log).
+    pub(super) fn sync_one_newest(&mut self, path: &str) -> Option<i64> {
         self.status(SyncStatus::Syncing { folder: path.to_string() });
         let (store, opts, id) = (self.store.clone(), self.options_for(path), self.id());
         // An edit still waiting is put back on the list once it's read (`apply_report`): the
@@ -452,7 +480,9 @@ impl Worker {
             Some(Conn::Pop) => Ok(crate::pop::local_counts(&store, &id, path)),
             None => Err(NetError::Closed("not connected".into())),
         };
+        let newest = result.as_ref().ok().and_then(|r| r.newest);
         self.apply_report(path, result);
+        newest
     }
 
     /// What a folder's sync changed: its counts, its list if any, and the account's state.

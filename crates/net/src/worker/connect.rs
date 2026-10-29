@@ -185,13 +185,20 @@ impl Worker {
             self.backoff = Duration::from_secs(5);
             return Ok(());
         }
-        let c = if self.acc.oauth.is_some() {
-            self.imap_with_token(&user, &secret)?
+        // Where a slow start went (a Gmail account took 18 s before its first folder, 29/10).
+        let began = Instant::now();
+        let (c, connected) = if self.acc.oauth.is_some() {
+            (self.imap_with_token(&user, &secret)?, None)
         } else {
             let mut c = Client::connect(&self.acc.imap)?;
+            let connected = began.elapsed();
             c.login(&user, &secret)?;
-            c
+            (c, Some(connected))
         };
+        if began.elapsed() > crate::stream::SLOW_CONNECT {
+            let of_it = connected.map(|d| format!(" ({:.1} s of it connecting)", d.as_secs_f32())).unwrap_or_default();
+            log::info!("{}: signed in after {:.1} s{of_it}", self.acc.id, began.elapsed().as_secs_f32());
+        }
         self.conn = Some(Conn::Imap(c));
         self.backoff = Duration::from_secs(5);
         Ok(())
