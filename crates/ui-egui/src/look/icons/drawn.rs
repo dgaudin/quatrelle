@@ -515,5 +515,12 @@ pub(super) fn drawn(p: &Painter, rect: Rect, icon: Icon, color: Color32) {
             pen.line(&[(1.5, 14.0), (2.0, 11.0), (4.5, 9.0), (8.5, 9.0), (10.0, 10.0)]);
             pen.line(&[(10.5, 12.5), (12.0, 14.0), (15.0, 10.5)]);
         }
+        Icon::Emoji => {
+            // A smiling face.
+            pen.circle(8.0, 8.0, 6.5);
+            pen.dot(5.8, 6.3, 0.9);
+            pen.dot(10.2, 6.3, 0.9);
+            pen.arc(8.0, 8.4, 3.4, 0.35, std::f32::consts::PI - 0.35);
+        }
     }
 }

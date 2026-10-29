@@ -154,7 +154,7 @@ pub(crate) fn interface_strings() -> BTreeSet<String> {
     // Every UI source file, wherever it sits (a file split into a folder stays covered); tests
     // and the catalogs' own code left out.
     let sources = ui_sources();
-    let prefixes: [(&str, &[usize]); 27] = [
+    let prefixes: [(&str, &[usize]); 28] = [
         ("big_button(ui, Icon::", &[0]),
         ("big_toggle(ui, Icon::", &[0]),
         ("big_accent(ui, Icon::", &[0]),
@@ -183,6 +183,8 @@ pub(crate) fn interface_strings() -> BTreeSet<String> {
         ("check(ui, s.prefs.", &[0]),
         // Labels in tables of buttons drawn in a loop: `(Icon::Send, "Sent To", "to:")`.
         ("(Icon::", &[0]),
+        // The emoji picker's tabs: `(Group::Flags, "Flags")`.
+        ("(Group::", &[0]),
     ];
     let mut out = literals_after(&sources, &prefixes);
     out.extend(notice_wordings());

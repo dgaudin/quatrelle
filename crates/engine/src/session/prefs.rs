@@ -148,6 +148,10 @@ pub struct Prefs {
     /// The last searches, newest first (the search box's list; cleared from it).
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub recent_searches: Vec<String>,
+    /// The emoji put in a message last, newest first (Insert › Emoji's Recent row), at most
+    /// [`RECENT_EMOJI`].
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub recent_emoji: Vec<String>,
     /// Photos go with where they were taken (the place a phone writes into them). Off, as at
     /// first: it's taken out of every JPEG and PNG attached as the message is sent.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
@@ -221,6 +225,7 @@ impl Default for Prefs {
             animations: true,
             search_scope: SearchScope::Mailbox,
             recent_searches: Vec::new(),
+            recent_emoji: Vec::new(),
             keep_photo_location: false,
             clean_links: true,
             pictures: PictureLoading::Known,
@@ -254,6 +259,24 @@ pub enum ReadingPane {
     Right,
     Bottom,
     Off,
+}
+
+/// How many emoji Insert › Emoji keeps as recent.
+pub const RECENT_EMOJI: usize = 24;
+
+impl Prefs {
+    /// `emoji` put in a message: first among the recent ones. Not one (empty, a space or a
+    /// control character in it, longer than any emoji sequence): left out.
+    pub fn emoji_used(&mut self, emoji: &str) -> bool {
+        let e = emoji.trim();
+        if e.is_empty() || e.len() > 64 || e.chars().count() > 12 || e.chars().any(|c| c.is_control() || c.is_whitespace()) {
+            return false;
+        }
+        self.recent_emoji.retain(|r| r != e);
+        self.recent_emoji.insert(0, e.to_string());
+        self.recent_emoji.truncate(RECENT_EMOJI);
+        true
+    }
 }
 
 /// When a message's pictures from the web load without being asked for. Whatever it says, mail

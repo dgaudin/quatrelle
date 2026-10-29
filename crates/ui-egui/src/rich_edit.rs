@@ -21,6 +21,7 @@ use crate::spellcheck::Check;
 use crate::theme::{self, Tokens};
 use crate::{Action, Dialog};
 
+mod emoji;
 mod layout;
 mod links;
 mod pictures;
@@ -115,6 +116,8 @@ pub(crate) struct Editor {
     pub(crate) tab: ComposeTab,
     /// The next paste goes in as text alone (Paste › Keep text only).
     paste_plain: bool,
+    /// Insert › Emoji's search and tab.
+    emoji: emoji::Picker,
 }
 
 #[derive(Clone)]
@@ -146,6 +149,7 @@ impl Editor {
             suggestions: Vec::new(),
             tab: ComposeTab::Message,
             paste_plain: false,
+            emoji: emoji::Picker::default(),
         }
     }
 

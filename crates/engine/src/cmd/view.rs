@@ -271,6 +271,14 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             Ok(json!({ "on": s.prefs.check_revocation }))
         })
         .params(r#"{"on"?: bool (none: switch; on, a signed message's certificate is checked with its authority as it's shown, which tells the authority)}"#),
+        CommandSpec::new("emoji.used", "Emoji", "Message › Insert › Emoji", |s, v| {
+            let emoji = p::req_str(v, "emoji")?;
+            if !s.prefs.emoji_used(emoji) {
+                return Err(CmdError::Params(format!("`{emoji}` isn't an emoji")));
+            }
+            Ok(json!({ "recent": s.prefs.recent_emoji }))
+        })
+        .params(r#"{"emoji": string (put in a message: first among the recent ones Insert › Emoji shows)}"#),
         CommandSpec::new("view.pictures", "Load pictures from the web", "File › Options › Privacy", |s, v| {
             let value = p::req_str(v, "value")?;
             let to = crate::PictureLoading::from_code(value).ok_or_else(|| CmdError::Params(format!("`{value}` isn't ask, known or always")))?;

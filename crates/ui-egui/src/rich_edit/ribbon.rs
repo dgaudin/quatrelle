@@ -43,6 +43,8 @@ pub(crate) struct RibbonInput<'a> {
     pub can_pop: bool,
     /// A language model is set in Options: Rewrite is offered.
     pub assistant: bool,
+    /// The emoji put in last, newest first (Insert › Emoji's Recent row).
+    pub recent_emoji: &'a [String],
 }
 
 /// Typefaces offered (Outlook's usual ones); the first is the message's own.
@@ -368,6 +370,17 @@ fn include(ui: &mut Ui, t: Tokens, ed: &mut Editor, c: &mut Compose, sel: &Range
     }
     if widgets::big_button(ui, Icon::Link, "Link", &t, !c.sending && !c.plain).on_hover_text(tl!("Ctrl+K")).clicked() {
         ed.link = Some(LinkForm::open(c, sel.clone()));
+    }
+    // Emoji at the cursor, in colour (Outlook's Insert › Emoji): the picker stays open for the
+    // next one, and the text keeps where it was.
+    let r = widgets::big_button(ui, Icon::Emoji, "Emoji", &t, !c.sending);
+    let mut chosen = None;
+    egui::Popup::menu(&r).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
+        chosen = emoji::picker(ui, &t, input.recent_emoji, &mut ed.emoji);
+    });
+    if let Some(e) = chosen {
+        apply(ed, c, Op::Insert(e.clone()));
+        acts.push(Action::Run("emoji.used", json!({ "emoji": e })));
     }
     // The account's signature at the cursor, or making and changing it, from the message
     // (Outlook's Signature menu).

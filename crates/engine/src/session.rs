@@ -44,7 +44,7 @@ use listing::{Preview, person, size_group};
 use mailboxes::{Contacts, bare_name, directory_key};
 pub use mailboxes::{DirectoryAnswer, FolderSizes, Sizes, fill_name};
 pub use organize::{RulesScope, junk, quick_steps, search_folders};
-pub use prefs::{ListLayout, NotesOrder, PictureLoading, Prefs, READING_ZOOM, ReadInPane, ReadingPane};
+pub use prefs::{ListLayout, NotesOrder, PictureLoading, Prefs, READING_ZOOM, RECENT_EMOJI, ReadInPane, ReadingPane};
 pub use security::{CardSearch, KnownCert, Lock, RevocationCheck, SMIME_DOC, Seal, Security, SignedBy, SmimeSettings};
 use writing::NameCheck;
 pub use writing::{
