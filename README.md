@@ -14,6 +14,11 @@
 </p>
 
 <p align="center">
+  <a href="https://dgaudin.github.io/quatrelle/?sample"><b>▶ Try it in your browser</b></a>:
+  the sample mailbox, nothing to install, nothing sent anywhere.
+</p>
+
+<p align="center">
   <a href="https://github.com/dgaudin/quatrelle/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/dgaudin/quatrelle/actions/workflows/ci.yml/badge.svg"></a>
   <img alt="Written in Rust" src="https://img.shields.io/badge/written%20in-Rust-0e7c86?style=flat-square&logo=rust&logoColor=white">
   <img alt="Runs on Windows, macOS and Linux" src="https://img.shields.io/badge/runs%20on-Windows%20%C2%B7%20macOS%20%C2%B7%20Linux-1f9aa6?style=flat-square">
@@ -130,7 +135,9 @@ The browser version (JMAP accounts; see [packaging/web/README.md](packaging/web/
 cd apps/quatrelle-web && trunk serve
 ```
 
-Then open http://127.0.0.1:8774/?sample for the sample mailbox.
+Then open http://127.0.0.1:8774/?sample for the sample mailbox. The latest stable release's
+browser version is also at https://dgaudin.github.io/quatrelle/?sample (`.github/workflows/pages.yml`
+puts it there when a release is published).
 
 The desktop app and the CLI share the cache (`%APPDATA%\Quatrelle`, `~/Library/Application Support/Quatrelle`
 or `~/.local/share/quatrelle`; override with `--data DIR` or `QUATRELLE_DATA`).
@@ -170,6 +177,7 @@ and the GitHub workflows run them through the shared Craft pipelines in
 | `windows-arm64.yml` | pushes to `main`, weekly | cross-build the ARM64 MSI, install and run it on Windows 11 ARM |
 | `packaging-lint.yml` | packaging or workflow changes | actionlint, shellcheck, PowerShell, WiX, desktop entry, AppStream, Flatpak |
 | `release.yml` | a push to the `release` branch, or by hand | sign, notarize and package every platform, then draft a GitHub Release |
+| `pages.yml` | a stable release published, or by hand | the release's browser version on GitHub Pages: the demo |
 
 The version lives only in `[workspace.package]` of `Cargo.toml` (`cargo xtask version`,
 `cargo xtask version set 0.2.0`). App icons are drawn by `cargo xtask icons`; put a square picture
