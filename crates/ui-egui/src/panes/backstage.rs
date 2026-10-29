@@ -229,35 +229,63 @@ fn card(ui: &mut Ui, t: &Tokens, title: &str, about: Option<&str>, body: impl Fn
 }
 
 /// One row of a card: its name (and a line under it) on the left, its controls against the
-/// right edge, centred on each other; a thin line above every row but the first.
+/// right edge, centred on each other; a thin line above every row but the first. Controls that
+/// would take more than about half the row go under the words instead, still against the right
+/// edge: beside them, the data file's buttons (three in French, four for a mailbox with no
+/// server) were drawn over its words and widened the card past the others.
 fn setting_row(ui: &mut Ui, t: &Tokens, first: bool, label: RichText, about: Option<RichText>, control: impl FnOnce(&mut Ui)) {
     if !first {
         let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 1.0), Sense::hover());
         ui.painter().rect_filled(r, 0.0, t.border.gamma_multiply(0.6));
     }
     ui.add_space(7.0);
-    let left = (ui.available_width() - 300.0).max(ui.available_width() * 0.45);
-    egui::Sides::new().height(if about.is_some() { 38.0 } else { 28.0 }).show(
-        ui,
-        |ui| match about {
-            // One line, cut short before the controls (all of it on hover).
-            None => {
-                ui.scope(|ui| {
-                    ui.set_max_width(left);
-                    ui.add(egui::Label::new(label).truncate());
-                });
-            }
-            Some(about) => {
-                ui.vertical(|ui| {
-                    ui.set_max_width(left);
-                    ui.spacing_mut().item_spacing.y = 2.0;
-                    ui.label(label);
-                    ui.label(about);
-                });
-            }
-        },
-        control,
-    );
+    // How wide the controls were beside the words (the last frame they were), for this row.
+    let id = ui.scope_id().with(("setting-row", label.text()));
+    let wide: f32 = ui.data(|d| d.get_temp(id)).unwrap_or(0.0);
+    let under = wide > ui.available_width() * 0.55;
+    let height = if about.is_some() { 38.0 } else { 28.0 };
+    let words = |ui: &mut Ui, width: f32| match about {
+        // One line, cut short before the controls (all of it on hover).
+        None => {
+            ui.scope(|ui| {
+                ui.set_max_width(width);
+                ui.add(egui::Label::new(label).truncate());
+            });
+        }
+        Some(about) => {
+            ui.vertical(|ui| {
+                ui.set_max_width(width);
+                ui.spacing_mut().item_spacing.y = 2.0;
+                ui.label(label);
+                ui.label(about);
+            });
+        }
+    };
+    if under {
+        words(ui, ui.available_width());
+        ui.add_space(4.0);
+        // From the top, as tall as the controls (a layout centred on the cross axis took the
+        // whole page's height in a scrolled page).
+        ui.allocate_ui_with_layout(vec2(ui.available_width(), 0.0), egui::Layout::right_to_left(egui::Align::Min).with_main_wrap(true), control);
+        if wide <= ui.available_width() * 0.55 {
+            ui.ctx().request_discard("a card's row has room for its controls beside its words again");
+        }
+    } else {
+        let left = (ui.available_width() - 300.0).max(ui.available_width() * 0.45);
+        let mut used = 0.0;
+        egui::Sides::new().shrink_left().height(height).show(
+            ui,
+            |ui| words(ui, left.min(ui.available_width())),
+            |ui| {
+                control(ui);
+                used = ui.min_rect().width();
+            },
+        );
+        ui.data_mut(|d| d.insert_temp(id, used));
+        if used > ui.available_width() * 0.55 {
+            ui.ctx().request_discard("a card's row's controls go under its words");
+        }
+    }
     ui.add_space(7.0);
 }
 
