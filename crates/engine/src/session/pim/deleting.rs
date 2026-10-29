@@ -80,7 +80,11 @@ impl Session {
         let all = p.events.clone();
         p.events.retain(|e| !lone(e, &all));
         for what in gone {
-            self.notice(format!("{what}: a change to one occurrence couldn't be sent: its series is no longer on the server"), true);
+            self.notice_with(
+                "{event}: a change to one occurrence couldn't be sent: its series is no longer on the server",
+                &[("event", &what)],
+                true,
+            );
         }
     }
 }

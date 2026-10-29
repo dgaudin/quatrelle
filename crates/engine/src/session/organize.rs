@@ -215,7 +215,7 @@ impl Session {
                     if let Some(m) = self.list.iter().find(|m| m.message_id == s.message_id).map(|m| Summary::clone(m)) {
                         self.new_mail.push(m);
                     } else {
-                        self.notice(format!("Back from snooze: {}", s.subject), false);
+                        self.notice_with("Back from snooze: {subject}", &[("subject", &s.subject)], false);
                     }
                     changed = true;
                 }
@@ -245,7 +245,7 @@ impl Session {
         if let Some(store) = &self.store
             && let Err(e) = store.save_doc("snoozes.json", &kept)
         {
-            self.notice(format!("snoozed mail couldn't be saved: {e}"), true);
+            self.notice_with("snoozed mail couldn't be saved: {error}", &[("error", &e.to_string())], true);
         }
     }
 
@@ -279,8 +279,10 @@ impl Session {
                 kept_home.push(r.name.clone());
             }
         }
-        if !kept_home.is_empty() {
-            self.notice(format!("{} stays on this computer: the server can't run it", kept_home.join(", ")), false);
+        match kept_home.as_slice() {
+            [] => {}
+            [one] => self.notice_with("{rule} stays on this computer: the server can't run it", &[("rule", one)], false),
+            more => self.notice_with("{rules} stay on this computer: the server can't run them", &[("rules", &more.join(", "))], false),
         }
         // The server copies that must go: rules removed here, turned off, or no longer sent.
         let mut delete: BTreeMap<String, Vec<String>> = BTreeMap::new();
@@ -354,7 +356,7 @@ impl Session {
         if let Some(store) = &self.store
             && let Err(e) = store.save_doc("rules.json", &self.rules)
         {
-            self.notice(format!("the rules couldn't be saved: {e}"), true);
+            self.notice_with("the rules couldn't be saved: {error}", &[("error", &e.to_string())], true);
         }
     }
 
@@ -389,7 +391,7 @@ impl Session {
         }
         if self.rules_refused_told.get(account) != Some(&why) {
             self.rules_refused_told.insert(account.to_string(), why.clone());
-            self.notice(format!("the server's rules weren't changed: {why}"), true);
+            self.notice_with("the server's rules weren't changed: {error}", &[("error", &why)], true);
         }
     }
 
@@ -481,8 +483,11 @@ impl Session {
         let n = msgs.iter().filter(|m| !actions_for(&self.rules, m).is_empty()).count();
         self.run_rules(&msgs);
         self.rules = saved;
-        let what = if n == 1 { "1 message".to_string() } else { format!("{n} messages") };
-        self.notice(format!("The rule ran on the mail there now: {what} matched"), false);
+        if n == 1 {
+            self.notice("The rule ran on the mail there now: 1 message matched", false);
+        } else {
+            self.notice_with("The rule ran on the mail there now: {n} messages matched", &[("n", &n.to_string())], false);
+        }
         Ok(serde_json::json!({ "matched": n }))
     }
 
@@ -731,8 +736,11 @@ impl Session {
         let n = msgs.iter().filter(|m| !actions_for(&self.rules, m).is_empty()).count();
         self.run_rules(&msgs);
         self.rules = saved;
-        let what = if n == 1 { "1 message".to_string() } else { format!("{n} messages") };
-        self.notice(format!("Rules ran on the mail there now: {what} matched"), false);
+        if n == 1 {
+            self.notice("Rules ran on the mail there now: 1 message matched", false);
+        } else {
+            self.notice_with("Rules ran on the mail there now: {n} messages matched", &[("n", &n.to_string())], false);
+        }
         Ok(serde_json::json!({ "matched": n }))
     }
 
@@ -806,16 +814,22 @@ impl Session {
             }
         }
         if gone.is_empty() {
-            let why = if looked == 0 { "No conversations to clean up" } else { "Nothing to clean up: no message is quoted in full by a later reply" };
-            self.notice(why.to_string(), false);
+            if looked == 0 {
+                self.notice("No conversations to clean up", false);
+            } else {
+                self.notice("Nothing to clean up: no message is quoted in full by a later reply", false);
+            }
             return Ok(serde_json::json!({ "moved": 0, "conversations": looked }));
         }
         // Through the selection, so it can be undone like any move.
         let n = gone.len();
         self.selection = gone;
         self.move_selection(MoveTarget::Role(FolderRole::Trash))?;
-        let what = if n == 1 { "1 message".to_string() } else { format!("{n} messages") };
-        self.notice(format!("Clean Up moved {what} to Deleted Items"), false);
+        if n == 1 {
+            self.notice("Clean Up moved 1 message to Deleted Items", false);
+        } else {
+            self.notice_with("Clean Up moved {n} messages to Deleted Items", &[("n", &n.to_string())], false);
+        }
         Ok(serde_json::json!({ "moved": n, "conversations": looked }))
     }
 }

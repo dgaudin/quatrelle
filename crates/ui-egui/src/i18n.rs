@@ -251,6 +251,58 @@ pub fn tfmt(template: &str, args: &[(&str, &str)]) -> String {
     fmt(tr(current(), template), args)
 }
 
+/// A notice from the engine in the current language: its wording from the catalogs, an error's
+/// text and a date in it translated as far as their wording is Quatrelle's, any other value (a
+/// name, a number, a subject) put in as it is. A notice given whole is read as an error's text,
+/// which a fixed wording also is.
+pub fn notice(n: &quatrelle_engine::Notice) -> String {
+    if n.template.is_empty() {
+        return error(&n.text);
+    }
+    let values: Vec<(&str, String)> = n
+        .values
+        .iter()
+        .map(|(k, v)| {
+            (
+                *k,
+                match *k {
+                    "error" => error(v),
+                    "when" | "until" => date(v),
+                    _ => v.clone(),
+                },
+            )
+        })
+        .collect();
+    let values: Vec<(&str, &str)> = values.iter().map(|(k, v)| (*k, v.as_str())).collect();
+    tfmt(n.template, &values)
+}
+
+/// An error's text in the current language as far as its wording is Quatrelle's: a whole
+/// message the catalogs know, or a known wording before `: ` (`the server refused: {error}`,
+/// `sign-in failed: {error}`) with what follows read the same way. A server's or the system's
+/// own words stay as they came.
+pub fn error(s: &str) -> String {
+    let catalog = current().0.catalog();
+    let mut around: Vec<&str> = Vec::new();
+    let mut rest = s;
+    let inner = loop {
+        if let Some(whole) = catalog.get(rest) {
+            break whole.as_str();
+        }
+        let Some((head, tail)) = rest.split_once(": ") else { break rest };
+        // A server's text can say "x: y: z" as often as it likes: only so many wordings are
+        // looked for.
+        match catalog.get(&format!("{head}: {{error}}")) {
+            Some(t) if around.len() < 8 => {
+                around.push(t);
+                rest = tail;
+            }
+            _ => break rest,
+        }
+    };
+    around.iter().rev().fold(inner.to_string(), |acc, t| fmt(t, &[("error", &acc)]))
+}
+
 /// Separates a context from the English in catalog keys.
 const CTX: char = '\u{4}';
 
@@ -309,32 +361,14 @@ pub fn tr(lang: Lang, s: &str) -> &str {
 /// 550". Text with no right-to-left letters is left as it is.
 pub fn fmt(template: &str, args: &[(&str, &str)]) -> String {
     let rtl_template = crate::bidi::has_rtl(template);
-    let mut out = String::with_capacity(template.len() + 16);
-    let mut rest = template;
-    while let Some((before, after)) = rest.split_once('{') {
-        out.push_str(before);
-        let Some((name, tail)) = after.split_once('}') else {
-            out.push('{');
-            out.push_str(after);
-            return out;
-        };
-        match args.iter().find(|(k, _)| *k == name) {
-            Some((_, v)) if !v.is_empty() && (rtl_template || crate::bidi::has_rtl(v)) => {
-                out.push('\u{2068}');
-                out.push_str(v);
-                out.push('\u{2069}');
-            }
-            Some((_, v)) => out.push_str(v),
-            None => {
-                out.push('{');
-                out.push_str(name);
-                out.push('}');
-            }
-        }
-        rest = tail;
-    }
-    out.push_str(rest);
-    out
+    let isolated: Vec<(&str, std::borrow::Cow<str>)> = args
+        .iter()
+        .map(|(k, v)| {
+            (*k, if !v.is_empty() && (rtl_template || crate::bidi::has_rtl(v)) { format!("\u{2068}{v}\u{2069}").into() } else { (*v).into() })
+        })
+        .collect();
+    let values: Vec<(&str, &str)> = isolated.iter().map(|(k, v)| (*k, v.as_ref())).collect();
+    quatrelle_engine::fill(template, &values)
 }
 
 /// A date or time from `dates` with its English day and month names translated.

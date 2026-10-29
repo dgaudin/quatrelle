@@ -107,12 +107,16 @@ impl Session {
     pub(super) fn exported(&mut self, account: &str, messages: usize, skipped: usize, done: bool, error: Option<String>) {
         let name = self.account(account).map(|a| a.config.email.clone()).unwrap_or_default();
         match (done, error) {
-            (false, _) => self.notice(format!("{name}: {messages} messages exported so far…"), false),
-            (true, Some(e)) => self.notice(format!("{name} could not be exported: {e}"), true),
-            (true, None) => {
-                let more = if skipped > 0 { format!(" ({skipped} not on this computer were left out)") } else { String::new() };
-                self.notice(format!("{name}: {messages} messages exported{more}"), false);
+            (false, _) => {
+                self.notice_with("{name}: {messages} messages exported so far…", &[("name", &name), ("messages", &messages.to_string())], false)
             }
+            (true, Some(e)) => self.notice_with("{name} could not be exported: {error}", &[("name", &name), ("error", &e)], true),
+            (true, None) if skipped > 0 => self.notice_with(
+                "{name}: {messages} messages exported ({skipped} not on this computer were left out)",
+                &[("name", &name), ("messages", &messages.to_string()), ("skipped", &skipped.to_string())],
+                false,
+            ),
+            (true, None) => self.notice_with("{name}: {messages} messages exported", &[("name", &name), ("messages", &messages.to_string())], false),
         }
     }
 
@@ -141,7 +145,7 @@ impl Session {
     pub(super) fn imported(&mut self, account: &str, messages: usize, skipped: usize, done: bool, error: Option<String>) {
         let Some(name) = self.account(account).map(|a| a.config.email.clone()) else { return };
         if !done {
-            self.notice(format!("{name}: {messages} messages imported so far…"), false);
+            self.notice_with("{name}: {messages} messages imported so far…", &[("name", &name), ("messages", &messages.to_string())], false);
             return;
         }
         if let Some(a) = self.account_mut(account) {
@@ -151,7 +155,7 @@ impl Session {
         if let Some(start) = self.held.remove(account) {
             self.jobs.push(start);
             if let Some(e) = &error {
-                self.notice(format!("{name}: the data file could not be opened: {e}"), true);
+                self.notice_with("{name}: the data file could not be opened: {error}", &[("name", &name), ("error", e)], true);
                 return;
             }
         }
@@ -159,7 +163,7 @@ impl Session {
             Some(e) => {
                 // Nothing came in: the account goes again, and the file it was starting.
                 let _ = self.drop_account(account, false);
-                self.notice(format!("{name} could not be opened: {e}"), true);
+                self.notice_with("{name} could not be opened: {error}", &[("name", &name), ("error", &e)], true);
             }
             None => {
                 // The file's contacts and calendar came in too.
@@ -171,8 +175,17 @@ impl Session {
                     self.forget_contacts();
                     self.pim_revision = self.pim_revision.wrapping_add(1);
                 }
-                let more = if skipped > 0 { format!(" ({skipped} could not be read)") } else { String::new() };
-                self.notice(format!("{name}: {messages} messages imported{more}"), false);
+                let messages = messages.to_string();
+                if skipped > 0 {
+                    let skipped = skipped.to_string();
+                    self.notice_with(
+                        "{name}: {messages} messages imported ({skipped} could not be read)",
+                        &[("name", &name), ("messages", &messages), ("skipped", &skipped)],
+                        false,
+                    );
+                } else {
+                    self.notice_with("{name}: {messages} messages imported", &[("name", &name), ("messages", &messages)], false);
+                }
                 if let Some(inbox) = self.account(account).and_then(|a| a.folder(FolderRole::Inbox)).map(|f| f.path.clone()) {
                     self.open_view(View::Folder { account: account.to_string(), folder: inbox });
                 }
@@ -260,7 +273,7 @@ impl Session {
             }
         }
         if let Some(f) = &kept {
-            self.notice(format!("{email} removed. Its data file stays at {}", f.display()), false);
+            self.notice_with("{email} removed. Its data file stays at {path}", &[("email", &email), ("path", &f.display().to_string())], false);
         }
         self.save_accounts();
         self.jobs.push(Job::Remove { account: id.to_string() });
@@ -437,7 +450,7 @@ impl Session {
         let total = keys.len();
         self.download_all = Some(DownloadAll { keys, next: 0, in_flight: HashSet::new(), done: 0, failed: 0 });
         self.pump_download();
-        self.notice(format!("Downloading {total} messages…"), false);
+        self.notice_with("Downloading {total} messages…", &[("total", &total.to_string())], false);
         Ok(serde_json::json!({"total": total}))
     }
 
@@ -457,10 +470,15 @@ impl Session {
         }
         if d.next >= d.keys.len() && d.in_flight.is_empty() {
             let (done, failed) = (d.done, d.failed);
-            self.notice(
-                if failed == 0 { format!("{done} messages downloaded") } else { format!("{done} messages downloaded, {failed} failed") },
-                failed > 0,
-            );
+            if failed == 0 {
+                self.notice_with("{done} messages downloaded", &[("done", &done.to_string())], false);
+            } else {
+                self.notice_with(
+                    "{done} messages downloaded, {failed} failed",
+                    &[("done", &done.to_string()), ("failed", &failed.to_string())],
+                    true,
+                );
+            }
         } else {
             self.download_all = Some(d);
         }
@@ -570,7 +588,7 @@ impl Session {
         if let Some(store) = &self.store
             && let Err(e) = store.save_accounts(&configs)
         {
-            self.notice(format!("account settings could not be saved: {e}"), true);
+            self.notice_with("account settings could not be saved: {error}", &[("error", &e.to_string())], true);
         }
     }
 

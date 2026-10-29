@@ -17,7 +17,7 @@ use quatrelle_store::{FolderState, OutboxItem, Store};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{CmdError, CmdResult, Registry};
+use crate::{CmdError, CmdResult, Notice, Registry};
 use quatrelle_model::search::FolderIndex;
 use quatrelle_model::vcard::Photo;
 
@@ -223,14 +223,6 @@ pub struct Reading {
     pub warning: Option<quatrelle_model::lookalike::SenderWarning>,
     /// Signed or encrypted (S/MIME), and how that went.
     pub security: Option<Security>,
-}
-
-/// A status-bar message.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Notice {
-    pub text: String,
-    pub at: i64,
-    pub error: bool,
 }
 
 struct SearchIndex {
@@ -521,7 +513,6 @@ pub struct Session {
     pub update: UpdateCheck,
 }
 
-const NOTICE_MAX: usize = 50;
 const ACCOUNT_COLORS: u8 = 8;
 
 impl Session {
@@ -748,13 +739,6 @@ impl Session {
     pub fn set_zone(&mut self, name: Option<&str>) {
         let (now, offset) = (self.clock.now, i64::from(self.clock.offset));
         self.clock.zone = name.and_then(quatrelle_model::zone::Zone::named).filter(|z| z.offset_at(now) == offset);
-    }
-
-    pub fn notice(&mut self, text: impl Into<String>, error: bool) {
-        self.notices.push(Notice { text: text.into(), at: self.clock.now, error });
-        if self.notices.len() > NOTICE_MAX {
-            self.notices.remove(0);
-        }
     }
 
     fn fresh_id(&mut self) -> u64 {

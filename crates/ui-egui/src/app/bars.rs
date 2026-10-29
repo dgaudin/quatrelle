@@ -215,7 +215,7 @@ impl MailApp {
             self.ui.seen_notices = 0;
         }
         if let Some(n) = self.session.notices.get(self.ui.seen_notices..).and_then(|v| v.last()) {
-            self.ui.toast = Some((n.text.clone(), n.error, now));
+            self.ui.toast = Some((crate::i18n::notice(n), n.error, now));
         }
         self.ui.seen_notices = self.session.notices.len();
         let Some((text, error, at)) = self.ui.toast.clone() else { return };
@@ -253,8 +253,8 @@ impl MailApp {
                     .shadow(egui::epaint::Shadow { offset: [0, 2], blur: 10, spread: 0, color: Color32::from_black_alpha(60) })
                     .show(ui, |ui| {
                         ui.set_max_width(420.0);
-                        // Notices from the engine are English; the ones with a fixed text have a translation.
-                        ui.label(RichText::new(tl!(&text)).color(if error { Color32::WHITE } else { t.surface }));
+                        // Already in the interface's language (`i18n::notice`).
+                        ui.label(RichText::new(text).color(if error { Color32::WHITE } else { t.surface }));
                     });
             });
     }

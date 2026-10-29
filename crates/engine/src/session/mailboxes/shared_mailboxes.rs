@@ -52,7 +52,8 @@ impl Session {
         if calendar && let Err(e) = self.open_shared_calendar(Some(&account), &email) {
             log::info!("{email}'s calendar: {e}");
         }
-        self.notice(format!("{email} opens under {}", self.account(&account).map(|a| a.config.email.clone()).unwrap_or_default()), false);
+        let under = self.account(&account).map(|a| a.config.email.clone()).unwrap_or_default();
+        self.notice_with("{email} opens under {account}", &[("email", &email), ("account", &under)], false);
         Ok(serde_json::json!({ "account": account, "folder": email }))
     }
 

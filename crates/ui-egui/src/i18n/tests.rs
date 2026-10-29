@@ -2,8 +2,8 @@ use std::collections::BTreeSet;
 
 use super::*;
 
-/// The UI crate's own Rust files, read from disk.
-fn ui_sources() -> Vec<String> {
+/// The Rust files under `dir`, read from disk: tests and the catalogs' own code left out.
+fn rust_sources(dir: &std::path::Path) -> Vec<String> {
     fn walk(dir: &std::path::Path, out: &mut Vec<String>) {
         let Ok(entries) = std::fs::read_dir(dir) else { return };
         let mut paths: Vec<std::path::PathBuf> = entries.filter_map(|e| e.ok().map(|e| e.path())).collect();
@@ -11,7 +11,7 @@ fn ui_sources() -> Vec<String> {
         for p in paths {
             let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
             if p.is_dir() {
-                if name != "i18n" && name != "tests" {
+                if !matches!(name, "i18n" | "tests" | "fakes") {
                     walk(&p, out);
                 }
             } else if name.ends_with(".rs") && name != "tests.rs" {
@@ -20,51 +20,23 @@ fn ui_sources() -> Vec<String> {
         }
     }
     let mut out = Vec::new();
-    walk(&std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src"), &mut out);
+    walk(dir, &mut out);
+    out
+}
+
+/// The UI crate's own Rust files.
+fn ui_sources() -> Vec<String> {
+    let out = rust_sources(&std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src"));
     assert!(out.len() > 20, "the UI's sources weren't found");
     out
 }
 
-/// Every interface string: literals in the UI code (`tl!`, `tf!` and the helpers that translate
-/// their label), the names the model hands up, and whatever a tour of the interface looks up.
-pub(crate) fn interface_strings() -> BTreeSet<String> {
-    // Every UI source file, wherever it sits (a file split into a folder stays covered); tests
-    // and the catalogs' own code left out.
-    let sources = ui_sources();
-    // (prefix, which string literals after it are interface text)
-    let prefixes: [(&str, &[usize]); 27] = [
-        ("big_button(ui, Icon::", &[0]),
-        ("big_toggle(ui, Icon::", &[0]),
-        ("big_accent(ui, Icon::", &[0]),
-        ("big_more(ui, ", &[0]),
-        ("groups.end(ui, &t, ", &[0]),
-        ("groups.last(ui, &t, ", &[0]),
-        ("tl!(", &[0]),
-        ("tf!(", &[0]),
-        ("tool_button(ui, Icon::", &[0]),
-        ("accent_button(ui, Icon::", &[0]),
-        ("pill_button(ui, Icon::", &[0]),
-        ("bar_icon_button(ui, ", &[0]),
-        ("tiny_icon_button(ui, Icon::", &[0]),
-        ("title(ui, t, ", &[0]),
-        ("buttons(ui, t, ", &[0]),
-        ("row(ui, t, Icon::", &[0]),
-        ("section(ui, t, ", &[0]),
-        ("empty(ui, &t, ", &[0]),
-        ("label(ui, ", &[0]),
-        ("field(ui, &t, ", &[0, 1]),
-        ("recipient_field(ui, st, ", &[1, 2]),
-        ("tile(ui, t, Icon::", &[0, 1, 2]),
-        ("rail_item(ui, &t, Icon::", &[0]),
-        ("heading(ui, ", &[0]),
-        ("group(ui, ", &[0]),
-        ("check(ui, s.prefs.", &[0]),
-        // Labels in tables of buttons drawn in a loop: `(Icon::Send, "Sent To", "to:")`.
-        ("(Icon::", &[0]),
-    ];
+/// The string literals that are interface text after each of `prefixes` in `sources`:
+/// (prefix, which string literals after it on its line, or on the next when it ends there).
+fn literals_after(sources: &[String], prefixes: &[(&str, &[usize])]) -> BTreeSet<String> {
     let mut out = BTreeSet::new();
     for src in sources.iter().map(String::as_str) {
-        for (p, which) in prefixes {
+        for &(p, which) in prefixes {
             let mut rest = src;
             while let Some(i) = rest.find(p) {
                 rest = &rest[i + p.len()..];
@@ -108,6 +80,112 @@ pub(crate) fn interface_strings() -> BTreeSet<String> {
             }
         }
     }
+    out
+}
+
+/// Whether a template has words of its own, outside its `{name}` placeholders (`{who}: {error}`
+/// has none to translate).
+fn has_words(template: &str) -> bool {
+    let mut inside = false;
+    let mut letters = 0;
+    for c in template.chars() {
+        match c {
+            '{' => inside = true,
+            '}' => inside = false,
+            c if !inside && c.is_alphabetic() => letters += 1,
+            _ => {}
+        }
+    }
+    letters >= 2
+}
+
+/// An error's wording as the catalogs key it (`i18n::error`): whole, or what comes before the
+/// error it ends in, as `…: {error}`. `None` for one with a value anywhere else in it.
+fn error_wording(text: &str) -> Option<String> {
+    let (head, ends_in_error) = match text.rsplit_once(": {") {
+        Some((head, name)) if name.ends_with('}') && !name.trim_end_matches('}').contains(['{', '}']) => (head, true),
+        _ => (text, false),
+    };
+    if head.contains(['{', '}']) || !has_words(head) {
+        return None;
+    }
+    Some(if ends_in_error { format!("{head}: {{error}}") } else { head.to_string() })
+}
+
+/// Errors in Quatrelle's own words that reach the status bar often enough to be translated
+/// whole (`i18n::error`); the others show in English until they're added here.
+const KNOWN_ERRORS: [&str; 2] = [
+    "Outlook keeps its own copy of this mailbox's rules, and Exchange won't change them while it's there. Change this rule in Outlook, or let Quatrelle replace Outlook's copy (Outlook's rules that run only on its computer would be lost)",
+    "this account isn't allowed to send from that address: Exchange's administrator gives Send As or Send on Behalf on it",
+];
+
+/// What the engine says in the status bar (`Session::notice`, `notice_with`) and the wording of
+/// the errors that come up to it (`the server refused: {error}`): the interface translates both
+/// (`i18n::notice`, `i18n::error`), so every catalog must have them.
+fn notice_wordings() -> BTreeSet<String> {
+    let crates = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    let engine = rust_sources(&crates.join("engine/src"));
+    assert!(engine.len() > 20, "the engine's sources weren't found");
+    let mut out: BTreeSet<String> =
+        literals_after(&engine, &[("notice(", &[0]), ("notice_with(", &[0])]).into_iter().filter(|l| has_words(l)).collect();
+    // The network's own notices come up after the account's name (`{who}: {error}`): the ones
+    // that end in what went wrong are read as errors are.
+    let net = rust_sources(&crates.join("net/src"));
+    assert!(net.len() > 20, "the network's sources weren't found");
+    out.extend(literals_after(&net, &[("notice(", &[0]), ("message: format!(", &[0])]).iter().filter_map(|l| error_wording(l)));
+    // The kinds of error each layer says (`#[error("the server refused: {0}")]`).
+    for src in [
+        include_str!("../../../net/src/lib.rs"),
+        include_str!("../../../jmap/src/lib.rs"),
+        include_str!("../../../engine/src/lib.rs"),
+        include_str!("../../../keys/src/lib.rs"),
+        include_str!("../../../smime/src/lib.rs"),
+    ] {
+        out.extend(literals_after(&[src.to_string()], &[("#[error(", &[0])]).iter().filter_map(|l| error_wording(&l.replace("{0}", "{error}"))));
+    }
+    out.extend(KNOWN_ERRORS.map(str::to_string));
+    out.insert(quatrelle_engine::NAMES_NOT_FOUND.to_string());
+    out
+}
+
+/// Every interface string: literals in the UI code (`tl!`, `tf!` and the helpers that translate
+/// their label), the names the model hands up, and whatever a tour of the interface looks up.
+pub(crate) fn interface_strings() -> BTreeSet<String> {
+    // Every UI source file, wherever it sits (a file split into a folder stays covered); tests
+    // and the catalogs' own code left out.
+    let sources = ui_sources();
+    let prefixes: [(&str, &[usize]); 27] = [
+        ("big_button(ui, Icon::", &[0]),
+        ("big_toggle(ui, Icon::", &[0]),
+        ("big_accent(ui, Icon::", &[0]),
+        ("big_more(ui, ", &[0]),
+        ("groups.end(ui, &t, ", &[0]),
+        ("groups.last(ui, &t, ", &[0]),
+        ("tl!(", &[0]),
+        ("tf!(", &[0]),
+        ("tool_button(ui, Icon::", &[0]),
+        ("accent_button(ui, Icon::", &[0]),
+        ("pill_button(ui, Icon::", &[0]),
+        ("bar_icon_button(ui, ", &[0]),
+        ("tiny_icon_button(ui, Icon::", &[0]),
+        ("title(ui, t, ", &[0]),
+        ("buttons(ui, t, ", &[0]),
+        ("row(ui, t, Icon::", &[0]),
+        ("section(ui, t, ", &[0]),
+        ("empty(ui, &t, ", &[0]),
+        ("label(ui, ", &[0]),
+        ("field(ui, &t, ", &[0, 1]),
+        ("recipient_field(ui, st, ", &[1, 2]),
+        ("tile(ui, t, Icon::", &[0, 1, 2]),
+        ("rail_item(ui, &t, Icon::", &[0]),
+        ("heading(ui, ", &[0]),
+        ("group(ui, ", &[0]),
+        ("check(ui, s.prefs.", &[0]),
+        // Labels in tables of buttons drawn in a loop: `(Icon::Send, "Sent To", "to:")`.
+        ("(Icon::", &[0]),
+    ];
+    let mut out = literals_after(&sources, &prefixes);
+    out.extend(notice_wordings());
     use quatrelle_engine::model::dates::DateGroup;
     use quatrelle_engine::model::organize::SnoozeUntil;
     for g in [
@@ -556,4 +634,46 @@ fn sizes_and_counts_are_written_as_the_language_writes_them() {
     set_current(Lang::from_code("de").unwrap());
     assert_eq!(count_text(18_412), "18.412");
     set_current(Lang::EN);
+}
+
+/// The errors translated whole are still word for word what the network says (a literal carried
+/// over lines, `\` at a line's end, read as one), or their translation would stop showing.
+#[test]
+fn the_errors_translated_whole_are_what_the_network_says() {
+    let ews = include_str!("../../../net/src/exchange/ews.rs");
+    let joined: String = ews.split("\\\n").enumerate().map(|(i, part)| if i == 0 { part } else { part.trim_start() }).collect();
+    for e in KNOWN_ERRORS {
+        assert!(joined.contains(&format!("\"{e}\"")), "not in ews.rs any more: {e}");
+    }
+    assert_eq!(error_wording("the draft couldn't be saved: {k}").as_deref(), Some("the draft couldn't be saved: {error}"));
+    assert_eq!(error_wording("the disk is almost full ({left} GB left): mail waits"), None);
+    assert_eq!(error_wording("{path}: {source}"), None);
+    assert!(!has_words("{who}: {error}") && has_words("Not sent: {error}"));
+}
+
+/// The engine's notices are said in the interface's language: the wording, the error's wording
+/// in it as far as it is Quatrelle's (a server's own words stay as they came), and a date's
+/// names. Notices with values in them showed in English (« the server's rules weren't changed:
+/// the server refused: Outlook keeps its own copy… »).
+#[test]
+fn a_notice_is_said_in_the_interfaces_language() {
+    use quatrelle_engine::Session;
+    let mut s = Session::open(None, quatrelle_engine::model::dates::Clock::default());
+    set_current(Lang::from_code("fr").unwrap_or(Lang::EN));
+    let refused = format!("the server refused: {}", KNOWN_ERRORS[0]);
+    s.notice_with("the server's rules weren't changed: {error}", &[("error", &refused)], true);
+    let said = s.notices.last().map(notice).unwrap_or_default();
+    assert!(said.starts_with("Les règles du serveur") && said.contains("le serveur a refusé") && said.contains("Outlook garde"), "{said}");
+    assert_eq!(error("the server refused: Mailbox is full"), "le serveur a refusé : Mailbox is full", "the server's words stay");
+    assert_eq!(error("a1: the server refused: x"), "a1: the server refused: x", "not Quatrelle's wording first: as it came");
+    assert_eq!(error(&"the server refused: ".repeat(40)), error(&"the server refused: ".repeat(40)), "a server repeating itself");
+    s.notice("Every message is already on this computer", false);
+    assert_ne!(s.notices.last().map(notice).as_deref(), Some("Every message is already on this computer"), "a fixed wording");
+    s.notice_with("It will be sent {when}", &[("when", "Wed 29 Oct 14:30")], false);
+    let said = s.notices.last().map(notice).unwrap_or_default();
+    assert!(!said.contains("Wed") && !said.contains("It will"), "{said}");
+    s.notice_with("{name}: {messages} messages imported", &[("name", "Didier"), ("messages", "12")], false);
+    assert!(s.notices.last().map(notice).is_some_and(|n| n.contains("Didier") && n.contains("12") && !n.contains("imported")));
+    set_current(Lang::EN);
+    assert_eq!(s.notices.last().map(notice).as_deref(), Some("Didier: 12 messages imported"), "English as the engine wrote it");
 }

@@ -143,7 +143,7 @@ impl Session {
     fn save_smime(&mut self, account: &str) {
         let (Some(store), Some(s)) = (&self.store, self.smime.get(account)) else { return };
         if let Err(e) = store.save_account_doc(account, SMIME_DOC, s) {
-            self.notice(format!("the S/MIME settings could not be saved: {e}"), true);
+            self.notice_with("the S/MIME settings could not be saved: {error}", &[("error", &e.to_string())], true);
         }
     }
 
@@ -538,7 +538,7 @@ impl Session {
         match e {
             Event::DirectoryCertificates { account, found, error } => self.directory_certificates(&account, found, error),
             Event::Identity { account, chain, older, for_reading, error } => match error {
-                Some(e) => self.notice(format!("The certificate couldn't be kept: {e}"), true),
+                Some(e) => self.notice_with("The certificate couldn't be kept: {error}", &[("error", &e)], true),
                 None => {
                     let s = self.smime.entry(account.clone()).or_default();
                     // The one just kept for reading is put first among the older ones.
@@ -564,18 +564,19 @@ impl Session {
                     match reading.and_then(|c| smime::cert::info(&c).ok()) {
                         Some(old) => {
                             let until = quatrelle_model::dates::full_time(old.not_after, &self.clock);
-                            self.notice(
-                                format!(
-                                    "The certificate for {} (valid until {until}) is older than the one in use, so it's kept to read mail encrypted to it",
-                                    who(old)
-                                ),
+                            self.notice_with(
+                                "The certificate for {who} (valid until {until}) is older than the one in use, so it's kept to read mail encrypted to it",
+                                &[("who", &who(old)), ("until", &until)],
                                 false,
                             );
                         }
                         None => {
                             let who = self.identity(&account).map(who).unwrap_or_default();
-                            let then = if signing { "new messages are signed" } else { "it signs and encrypts from now on" };
-                            self.notice(format!("Your certificate for {who} is ready: {then}"), false);
+                            if signing {
+                                self.notice_with("Your certificate for {who} is ready: new messages are signed", &[("who", &who)], false);
+                            } else {
+                                self.notice_with("Your certificate for {who} is ready: it signs and encrypts from now on", &[("who", &who)], false);
+                            }
                         }
                     }
                 }
@@ -636,7 +637,7 @@ impl Session {
             found = true;
         }
         if !found {
-            self.notice(format!("A message couldn't be sent: {error}"), true);
+            self.notice_with("A message couldn't be sent: {error}", &[("error", &error)], true);
         }
     }
 

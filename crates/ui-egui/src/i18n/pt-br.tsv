@@ -1671,3 +1671,91 @@ month	May	maio
 	Show Favorites at the top of the folder pane	Mostrar Favoritos no topo do painel de pastas
 	Drop to attach them to a new message	Solte aqui para anexá-los a uma nova mensagem
 	Original size	Tamanho original
+
+# The engine's notices, and the wording of errors that come up to the status bar (i18n::notice, i18n::error).
+	A message couldn't be sent: {error}	Não foi possível enviar uma mensagem: {error}
+	Back from snooze: {subject}	Fim do adiamento: {subject}
+	Clean Up moved 1 message to Deleted Items	Limpar moveu 1 mensagem para Itens excluídos
+	Clean Up moved {n} messages to Deleted Items	Limpar moveu {n} mensagens para Itens excluídos
+	Downloading {total} messages…	Baixando {total} mensagens…
+	Every message is already on this computer	Todas as mensagens já estão neste computador
+	It will be sent {when}	Será enviada em {when}
+	Mail from {n} senders is never treated as junk	Os emails de {n} remetentes nunca são tratados como lixo eletrônico
+	Mail from {n} senders now goes to Junk Email	Os emails de {n} remetentes agora vão para Lixo eletrônico
+	Mail from {sender} is never treated as junk	Os emails de {sender} nunca são tratados como lixo eletrônico
+	Mail from {sender} now goes to Junk Email	Os emails de {sender} agora vão para Lixo eletrônico
+	Outlook keeps its own copy of this mailbox's rules, and Exchange won't change them while it's there. Change this rule in Outlook, or let Quatrelle replace Outlook's copy (Outlook's rules that run only on its computer would be lost)	O Outlook mantém uma cópia própria das regras desta caixa de correio, e o Exchange não as altera enquanto ela existir. Altere esta regra no Outlook, ou deixe o Quatrelle substituir a cópia do Outlook (as regras do Outlook que só rodam no computador dele seriam perdidas)
+	Rules ran on the mail there now: 1 message matched	As regras foram aplicadas aos emails que estão lá: 1 mensagem correspondeu
+	Rules ran on the mail there now: {n} messages matched	As regras foram aplicadas aos emails que estão lá: {n} mensagens corresponderam
+	The certificate couldn't be kept: {error}	Não foi possível guardar o certificado: {error}
+	The certificate for {who} (valid until {until}) is older than the one in use, so it's kept to read mail encrypted to it	O certificado de {who} (válido até {until}) é mais antigo que o que está em uso, então ele é guardado para ler os emails criptografados com ele
+	The data file could not be compacted: {error}	Não foi possível compactar o arquivo de dados: {error}
+	The rule ran on the mail there now: 1 message matched	A regra foi aplicada aos emails que estão lá: 1 mensagem correspondeu
+	The rule ran on the mail there now: {n} messages matched	A regra foi aplicada aos emails que estão lá: {n} mensagens corresponderam
+	The server refused a change: {error}	O servidor recusou uma alteração: {error}
+	Your certificate for {who} is ready: it signs and encrypts from now on	Seu certificado para {who} está pronto: ele assina e criptografa a partir de agora
+	Your certificate for {who} is ready: new messages are signed	Seu certificado para {who} está pronto: as novas mensagens são assinadas
+	Your vote was sent: {choice}	Seu voto foi enviado: {choice}
+	Your vote wasn't sent: {error}	Seu voto não foi enviado: {error}
+	account settings could not be saved: {error}	Não foi possível salvar as configurações da conta: {error}
+	automatic replies weren't changed: {error}	As respostas automáticas não foram alteradas: {error}
+	bad parameters: {error}	parâmetros inválidos: {error}
+	calendar and contacts could not be saved: {error}	Não foi possível salvar o calendário e os contatos: {error}
+	calendars and contacts: {error}	calendários e contatos: {error}
+	export: {error}	exportação: {error}
+	import: {error}	importação: {error}
+	network: {error}	rede: {error}
+	not available: {error}	indisponível: {error}
+	older mail couldn't be read on the server: {error}	Não foi possível ler os emails mais antigos no servidor: {error}
+	secure connection: {error}	conexão segura: {error}
+	sending failed: {error}	falha no envio: {error}
+	sent, but no copy was saved in Sent Items: {error}	enviada, mas nenhuma cópia foi salva em Itens enviados: {error}
+	sign-in failed: {error}	falha ao entrar: {error}
+	snoozed mail couldn't be saved: {error}	Não foi possível salvar os emails adiados: {error}
+	the S/MIME settings could not be saved: {error}	Não foi possível salvar as configurações de S/MIME: {error}
+	the certificate isn't on the card or in the keychain any more	o certificado não está mais no cartão nem no chaveiro
+	the draft couldn't be encrypted, so it's saved as it is: {error}	não foi possível criptografar o rascunho, então ele é salvo como está: {error}
+	the draft couldn't be kept: {error}	não foi possível guardar o rascunho: {error}
+	the draft couldn't be saved to the server; it's kept on this computer and saved there when the account connects	não foi possível salvar o rascunho no servidor; ele fica neste computador e será salvo lá quando a conta se conectar
+	the draft couldn't be saved: {error}	não foi possível salvar o rascunho: {error}
+	the file has no private key with its certificate	o arquivo não tem chave privada junto com o certificado
+	the keychain: {error}	o chaveiro: {error}
+	the language model's key couldn't be kept: {error}	não foi possível guardar a chave do modelo de linguagem: {error}
+	the new sign-in couldn't be saved in the keychain: {error}	não foi possível salvar o novo login no chaveiro: {error}
+	the outgoing server's password could not be saved in the keychain: {error}	não foi possível salvar no chaveiro a senha do servidor de saída: {error}
+	the password could not be saved in the keychain: {error}	não foi possível salvar a senha no chaveiro: {error}
+	the password is wrong, or it isn't a certificate file	a senha está errada, ou não é um arquivo de certificado
+	the public folders to keep in sync couldn't be saved: {error}	Não foi possível salvar as pastas públicas a sincronizar: {error}
+	the rules couldn't be saved: {error}	Não foi possível salvar as regras: {error}
+	the server asked to try again later: {error}	o servidor pediu para tentar de novo mais tarde: {error}
+	the server closed the connection: {error}	o servidor fechou a conexão: {error}
+	the server refused: {error}	o servidor recusou: {error}
+	the server rejected the command: {error}	o servidor rejeitou o comando: {error}
+	the server's rules weren't changed: {error}	As regras do servidor não foram alteradas: {error}
+	the signature doesn't match the message	a assinatura não corresponde à mensagem
+	the smart card: {error}	o cartão inteligente: {error}
+	this account isn't allowed to send from that address: Exchange's administrator gives Send As or Send on Behalf on it	esta conta não tem permissão para enviar desse endereço: o administrador do Exchange concede para isso Enviar como ou Enviar em nome de
+	unexpected server response: {error}	resposta inesperada do servidor: {error}
+	{account}: the server's search failed ({error})	{account}: a pesquisa no servidor falhou ({error})
+	{done} messages downloaded	{done} mensagens baixadas
+	{done} messages downloaded, {failed} failed	{done} mensagens baixadas, {failed} com falha
+	{email} opens under {account}	{email} abre em {account}
+	{email} removed. Its data file stays at {path}	{email} foi removido. O arquivo de dados continua em {path}
+	{event}: a change to one occurrence couldn't be sent: its series is no longer on the server	{event}: não foi possível enviar uma alteração em uma ocorrência: a série dela não está mais no servidor
+	{name} could not be exported: {error}	Não foi possível exportar {name}: {error}
+	{name} couldn't be read: {error}	Não foi possível ler {name}: {error}
+	{name}: the data file could not be opened: {error}	{name}: não foi possível abrir o arquivo de dados: {error}
+	{name}: {messages} messages exported	{name}: {messages} mensagens exportadas
+	{name}: {messages} messages exported ({skipped} not on this computer were left out)	{name}: {messages} mensagens exportadas ({skipped} que não estão neste computador ficaram de fora)
+	{name}: {messages} messages exported so far…	{name}: {messages} mensagens exportadas até agora…
+	{name}: {messages} messages imported	{name}: {messages} mensagens importadas
+	{name}: {messages} messages imported ({skipped} could not be read)	{name}: {messages} mensagens importadas ({skipped} não puderam ser lidas)
+	{name}: {messages} messages imported so far…	{name}: {messages} mensagens importadas até agora…
+	{rules} stay on this computer: the server can't run them	{rules} ficam neste computador: o servidor não consegue executá-las
+	{rule} stays on this computer: the server can't run it	{rule} fica neste computador: o servidor não consegue executá-la
+	{who} is signed in	{who} entrou
+	{who} is signed in (as {user})	{who} entrou (como {user})
+	{who} needs its password	{who} precisa da senha
+	{who} needs its password: {error}	{who} precisa da senha: {error}
+	{who} needs you to sign in again	{who} precisa que você entre de novo
+	{who} needs you to sign in again: {error}	{who} precisa que você entre de novo: {error}

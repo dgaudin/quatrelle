@@ -26,14 +26,18 @@ impl Session {
                     && self.account(&account).is_some_and(|a| a.status != status)
                 {
                     let who = self.account(&account).map(|a| a.config.email.clone()).unwrap_or_default();
-                    self.notice(format!("{who}: {error}"), true);
+                    self.notice_with("{who}: {error}", &[("who", &who), ("error", error)], true);
                 }
                 if let SyncStatus::NeedsPassword { error } = &status {
                     let (who, browser) = self.account(&account).map(|a| (a.config.email.clone(), a.config.oauth.is_some())).unwrap_or_default();
-                    let why = if error.is_empty() { String::new() } else { format!(": {error}") };
                     // An account that signs in in the browser has no password to ask for.
-                    let what = if browser { "needs you to sign in again" } else { "needs its password" };
-                    self.notice(format!("{who} {what}{why}"), true);
+                    let values = [("who", who.as_str()), ("error", error.as_str())];
+                    match (browser, error.is_empty()) {
+                        (true, true) => self.notice_with("{who} needs you to sign in again", &values, true),
+                        (true, false) => self.notice_with("{who} needs you to sign in again: {error}", &values, true),
+                        (false, true) => self.notice_with("{who} needs its password", &values, true),
+                        (false, false) => self.notice_with("{who} needs its password: {error}", &values, true),
+                    }
                     if !browser && self.asked_password.insert(account.clone()) {
                         self.ask_password.push(account.clone());
                     }
@@ -166,7 +170,7 @@ impl Session {
                     };
                 }
                 if let Some(e) = failed {
-                    self.notice(format!("automatic replies weren't changed: {e}"), true);
+                    self.notice_with("automatic replies weren't changed: {error}", &[("error", &e)], true);
                 }
             }
             Event::ServerRules { account, ids, others, cleared, error } => {
@@ -271,10 +275,10 @@ impl Session {
                     c.sending = false;
                     c.error = Some(error.clone());
                 }
-                self.notice(format!("Not sent: {error}"), true);
+                self.notice_with("Not sent: {error}", &[("error", &error)], true);
                 self.after_outbox_change();
             }
-            Event::OpFailed { error, .. } => self.notice(format!("The server refused a change: {error}"), true),
+            Event::OpFailed { error, .. } => self.notice_with("The server refused a change: {error}", &[("error", &error)], true),
             Event::OpenUrl { url } => {
                 if self.open_urls.len() < 8 {
                     self.open_urls.push(url);
@@ -295,8 +299,8 @@ impl Session {
                     }
                     self.jobs.push(Job::Start { account: config, password: None });
                     match other {
-                        Some(o) => self.notice(format!("{who} is signed in (as {o})"), false),
-                        None => self.notice(format!("{who} is signed in"), false),
+                        Some(o) => self.notice_with("{who} is signed in (as {user})", &[("who", &who), ("user", &o)], false),
+                        None => self.notice_with("{who} is signed in", &[("who", &who)], false),
                     }
                 }
             }
@@ -324,8 +328,12 @@ impl Session {
                 }
             }
             Event::Notice { account, message } => {
-                let who = self.account(&account).map(|a| a.config.email.clone()).unwrap_or(account);
-                self.notice(format!("{who}: {message}"), true);
+                // Said whole when no account says it (an export, the keychain).
+                match self.account(&account).map(|a| a.config.email.clone()).filter(|w| !w.is_empty()) {
+                    Some(who) => self.notice_with("{who}: {error}", &[("who", &who), ("error", &message)], true),
+                    None if account.is_empty() => self.notice(message, true),
+                    None => self.notice_with("{who}: {error}", &[("who", &account), ("error", &message)], true),
+                }
             }
         }
     }

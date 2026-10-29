@@ -212,7 +212,7 @@ impl Session {
             let before: Vec<String> = store.load_account_doc(&id, quatrelle_model::FOLLOWED_PUBLIC_DOC).unwrap_or_default();
             if before != list {
                 if let Err(e) = store.save_account_doc(&id, quatrelle_model::FOLLOWED_PUBLIC_DOC, &list) {
-                    self.notice(format!("the public folders to keep in sync couldn't be saved: {e}"), true);
+                    self.notice_with("the public folders to keep in sync couldn't be saved: {error}", &[("error", &e.to_string())], true);
                     continue;
                 }
                 for folder in list.iter().filter(|f| !before.contains(f)) {

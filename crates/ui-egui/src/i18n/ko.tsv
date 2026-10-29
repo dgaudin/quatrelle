@@ -1670,3 +1670,91 @@ month	May	5월
 	Show Favorites at the top of the folder pane	폴더 창 맨 위에 즐겨찾기 표시
 	Drop to attach them to a new message	여기에 놓으면 새 메시지에 첨부됩니다
 	Original size	원래 크기
+
+# The engine's notices, and the wording of errors that come up to the status bar (i18n::notice, i18n::error).
+	A message couldn't be sent: {error}	메시지를 보내지 못했습니다: {error}
+	Back from snooze: {subject}	다시 알림 시간입니다: {subject}
+	Clean Up moved 1 message to Deleted Items	정리에서 메시지 1개를 지운 편지함으로 옮겼습니다
+	Clean Up moved {n} messages to Deleted Items	정리에서 메시지 {n}개를 지운 편지함으로 옮겼습니다
+	Downloading {total} messages…	메시지 {total}개를 다운로드하는 중…
+	Every message is already on this computer	모든 메시지가 이미 이 컴퓨터에 있습니다
+	It will be sent {when}	{when}에 보내집니다
+	Mail from {n} senders is never treated as junk	보낸 사람 {n}명의 메일은 정크로 처리되지 않습니다
+	Mail from {n} senders now goes to Junk Email	보낸 사람 {n}명의 메일은 이제 정크 메일로 갑니다
+	Mail from {sender} is never treated as junk	{sender}의 메일은 정크로 처리되지 않습니다
+	Mail from {sender} now goes to Junk Email	{sender}의 메일은 이제 정크 메일로 갑니다
+	Outlook keeps its own copy of this mailbox's rules, and Exchange won't change them while it's there. Change this rule in Outlook, or let Quatrelle replace Outlook's copy (Outlook's rules that run only on its computer would be lost)	Outlook이 이 사서함의 규칙 사본을 따로 보관하고 있으며, 그 사본이 있는 동안 Exchange는 규칙을 바꾸지 않습니다. 이 규칙을 Outlook에서 바꾸거나, Quatrelle이 Outlook의 사본을 바꾸도록 하세요 (Outlook 컴퓨터에서만 실행되는 Outlook 규칙은 사라집니다)
+	Rules ran on the mail there now: 1 message matched	지금 있는 메일에 규칙을 적용했습니다: 메시지 1개가 일치했습니다
+	Rules ran on the mail there now: {n} messages matched	지금 있는 메일에 규칙을 적용했습니다: 메시지 {n}개가 일치했습니다
+	The certificate couldn't be kept: {error}	인증서를 보관하지 못했습니다: {error}
+	The certificate for {who} (valid until {until}) is older than the one in use, so it's kept to read mail encrypted to it	{who}의 인증서({until}까지 유효)는 사용 중인 인증서보다 오래되어, 그 인증서로 암호화된 메일을 읽기 위해 보관됩니다
+	The data file could not be compacted: {error}	데이터 파일을 압축하지 못했습니다: {error}
+	The rule ran on the mail there now: 1 message matched	지금 있는 메일에 이 규칙을 적용했습니다: 메시지 1개가 일치했습니다
+	The rule ran on the mail there now: {n} messages matched	지금 있는 메일에 이 규칙을 적용했습니다: 메시지 {n}개가 일치했습니다
+	The server refused a change: {error}	서버가 변경을 거부했습니다: {error}
+	Your certificate for {who} is ready: it signs and encrypts from now on	{who}의 인증서가 준비되었습니다: 이제부터 서명하고 암호화합니다
+	Your certificate for {who} is ready: new messages are signed	{who}의 인증서가 준비되었습니다: 새 메시지에 서명합니다
+	Your vote was sent: {choice}	투표를 보냈습니다: {choice}
+	Your vote wasn't sent: {error}	투표를 보내지 못했습니다: {error}
+	account settings could not be saved: {error}	계정 설정을 저장하지 못했습니다: {error}
+	automatic replies weren't changed: {error}	자동 회신을 바꾸지 못했습니다: {error}
+	bad parameters: {error}	잘못된 매개변수: {error}
+	calendar and contacts could not be saved: {error}	일정과 연락처를 저장하지 못했습니다: {error}
+	calendars and contacts: {error}	일정과 연락처: {error}
+	export: {error}	내보내기: {error}
+	import: {error}	가져오기: {error}
+	network: {error}	네트워크: {error}
+	not available: {error}	사용할 수 없음: {error}
+	older mail couldn't be read on the server: {error}	서버에서 이전 메일을 읽지 못했습니다: {error}
+	secure connection: {error}	보안 연결: {error}
+	sending failed: {error}	보내기 실패: {error}
+	sent, but no copy was saved in Sent Items: {error}	보냈지만 보낸 편지함에 사본을 저장하지 못했습니다: {error}
+	sign-in failed: {error}	로그인 실패: {error}
+	snoozed mail couldn't be saved: {error}	다시 알림 메일을 저장하지 못했습니다: {error}
+	the S/MIME settings could not be saved: {error}	S/MIME 설정을 저장하지 못했습니다: {error}
+	the certificate isn't on the card or in the keychain any more	인증서가 더 이상 카드나 키체인에 없습니다
+	the draft couldn't be encrypted, so it's saved as it is: {error}	임시 보관 메시지를 암호화하지 못해 그대로 저장합니다: {error}
+	the draft couldn't be kept: {error}	임시 보관 메시지를 보관하지 못했습니다: {error}
+	the draft couldn't be saved to the server; it's kept on this computer and saved there when the account connects	임시 보관 메시지를 서버에 저장하지 못했습니다. 이 컴퓨터에 보관했다가 계정이 연결되면 서버에 저장합니다
+	the draft couldn't be saved: {error}	임시 보관 메시지를 저장하지 못했습니다: {error}
+	the file has no private key with its certificate	파일에 인증서와 짝을 이루는 개인 키가 없습니다
+	the keychain: {error}	키체인: {error}
+	the language model's key couldn't be kept: {error}	언어 모델 키를 보관하지 못했습니다: {error}
+	the new sign-in couldn't be saved in the keychain: {error}	새 로그인 정보를 키체인에 저장하지 못했습니다: {error}
+	the outgoing server's password could not be saved in the keychain: {error}	보내는 메일 서버의 암호를 키체인에 저장하지 못했습니다: {error}
+	the password could not be saved in the keychain: {error}	암호를 키체인에 저장하지 못했습니다: {error}
+	the password is wrong, or it isn't a certificate file	암호가 틀렸거나 인증서 파일이 아닙니다
+	the public folders to keep in sync couldn't be saved: {error}	동기화할 공용 폴더를 저장하지 못했습니다: {error}
+	the rules couldn't be saved: {error}	규칙을 저장하지 못했습니다: {error}
+	the server asked to try again later: {error}	서버가 나중에 다시 시도하라고 했습니다: {error}
+	the server closed the connection: {error}	서버가 연결을 닫았습니다: {error}
+	the server refused: {error}	서버가 거부했습니다: {error}
+	the server rejected the command: {error}	서버가 명령을 거부했습니다: {error}
+	the server's rules weren't changed: {error}	서버의 규칙이 바뀌지 않았습니다: {error}
+	the signature doesn't match the message	서명이 메시지와 일치하지 않습니다
+	the smart card: {error}	스마트 카드: {error}
+	this account isn't allowed to send from that address: Exchange's administrator gives Send As or Send on Behalf on it	이 계정은 그 주소로 보낼 권한이 없습니다. Exchange 관리자가 그 주소에 Send As 또는 Send on Behalf 권한을 줍니다
+	unexpected server response: {error}	예기치 않은 서버 응답: {error}
+	{account}: the server's search failed ({error})	{account}: 서버 검색에 실패했습니다({error})
+	{done} messages downloaded	메시지 {done}개를 다운로드했습니다
+	{done} messages downloaded, {failed} failed	메시지 {done}개를 다운로드했습니다. {failed}개는 실패했습니다
+	{email} opens under {account}	{email}은(는) {account} 아래에 열립니다
+	{email} removed. Its data file stays at {path}	{email}을(를) 제거했습니다. 데이터 파일은 {path}에 남아 있습니다
+	{event}: a change to one occurrence couldn't be sent: its series is no longer on the server	{event}: 반복 일정 중 한 번의 변경을 보내지 못했습니다. 반복 일정이 더 이상 서버에 없습니다
+	{name} could not be exported: {error}	{name}을(를) 내보내지 못했습니다: {error}
+	{name} couldn't be read: {error}	{name}을(를) 읽지 못했습니다: {error}
+	{name}: the data file could not be opened: {error}	{name}: 데이터 파일을 열지 못했습니다: {error}
+	{name}: {messages} messages exported	{name}: 메시지 {messages}개를 내보냈습니다
+	{name}: {messages} messages exported ({skipped} not on this computer were left out)	{name}: 메시지 {messages}개를 내보냈습니다(이 컴퓨터에 없는 {skipped}개는 제외)
+	{name}: {messages} messages exported so far…	{name}: 지금까지 메시지 {messages}개를 내보냈습니다…
+	{name}: {messages} messages imported	{name}: 메시지 {messages}개를 가져왔습니다
+	{name}: {messages} messages imported ({skipped} could not be read)	{name}: 메시지 {messages}개를 가져왔습니다({skipped}개는 읽을 수 없음)
+	{name}: {messages} messages imported so far…	{name}: 지금까지 메시지 {messages}개를 가져왔습니다…
+	{rules} stay on this computer: the server can't run them	{rules}은(는) 이 컴퓨터에 남습니다: 서버에서 실행할 수 없습니다
+	{rule} stays on this computer: the server can't run it	{rule}은(는) 이 컴퓨터에 남습니다: 서버에서 실행할 수 없습니다
+	{who} is signed in	{who} 로그인됨
+	{who} is signed in (as {user})	{who} 로그인됨({user}(으)로)
+	{who} needs its password	{who}의 암호가 필요합니다
+	{who} needs its password: {error}	{who}의 암호가 필요합니다: {error}
+	{who} needs you to sign in again	{who}에 다시 로그인해야 합니다
+	{who} needs you to sign in again: {error}	{who}에 다시 로그인해야 합니다: {error}

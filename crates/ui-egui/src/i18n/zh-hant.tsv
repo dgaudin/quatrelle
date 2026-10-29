@@ -1670,3 +1670,91 @@ month	May	5月
 	Show Favorites at the top of the folder pane	在資料夾窗格頂端顯示我的最愛
 	Drop to attach them to a new message	拖放到此處，附加到新郵件
 	Original size	原始大小
+
+# The engine's notices, and the wording of errors that come up to the status bar (i18n::notice, i18n::error).
+	A message couldn't be sent: {error}	有一封郵件無法傳送: {error}
+	Back from snooze: {subject}	延後提醒已結束: {subject}
+	Clean Up moved 1 message to Deleted Items	清理已將 1 封郵件移至刪除的郵件
+	Clean Up moved {n} messages to Deleted Items	清理已將 {n} 封郵件移至刪除的郵件
+	Downloading {total} messages…	正在下載 {total} 封郵件…
+	Every message is already on this computer	所有郵件都已在這台電腦上
+	It will be sent {when}	將於 {when} 傳送
+	Mail from {n} senders is never treated as junk	來自 {n} 個寄件者的郵件永遠不會被視為垃圾郵件
+	Mail from {n} senders now goes to Junk Email	來自 {n} 個寄件者的郵件現在會進入垃圾郵件
+	Mail from {sender} is never treated as junk	來自 {sender} 的郵件永遠不會被視為垃圾郵件
+	Mail from {sender} now goes to Junk Email	來自 {sender} 的郵件現在會進入垃圾郵件
+	Outlook keeps its own copy of this mailbox's rules, and Exchange won't change them while it's there. Change this rule in Outlook, or let Quatrelle replace Outlook's copy (Outlook's rules that run only on its computer would be lost)	Outlook 在這個信箱中保留了一份自己的規則副本，只要它還在，Exchange 就不會變更這些規則。請在 Outlook 中變更此規則，或讓 Quatrelle 取代 Outlook 的副本（只在 Outlook 所在電腦上執行的 Outlook 規則會遺失）
+	Rules ran on the mail there now: 1 message matched	規則已套用至現有郵件: 有 1 封郵件符合
+	Rules ran on the mail there now: {n} messages matched	規則已套用至現有郵件: 有 {n} 封郵件符合
+	The certificate couldn't be kept: {error}	無法保留憑證: {error}
+	The certificate for {who} (valid until {until}) is older than the one in use, so it's kept to read mail encrypted to it	{who} 的憑證（有效期限至 {until}）比使用中的憑證舊，因此保留它以閱讀用它加密的郵件
+	The data file could not be compacted: {error}	無法壓縮資料檔: {error}
+	The rule ran on the mail there now: 1 message matched	此規則已套用至現有郵件: 有 1 封郵件符合
+	The rule ran on the mail there now: {n} messages matched	此規則已套用至現有郵件: 有 {n} 封郵件符合
+	The server refused a change: {error}	伺服器拒絕了一項變更: {error}
+	Your certificate for {who} is ready: it signs and encrypts from now on	你的 {who} 憑證已就緒: 從現在起會簽署並加密
+	Your certificate for {who} is ready: new messages are signed	你的 {who} 憑證已就緒: 新郵件會簽署
+	Your vote was sent: {choice}	你的投票已傳送: {choice}
+	Your vote wasn't sent: {error}	你的投票未傳送: {error}
+	account settings could not be saved: {error}	無法儲存帳戶設定: {error}
+	automatic replies weren't changed: {error}	自動回覆未變更: {error}
+	bad parameters: {error}	參數錯誤: {error}
+	calendar and contacts could not be saved: {error}	無法儲存行事曆和連絡人: {error}
+	calendars and contacts: {error}	行事曆和連絡人: {error}
+	export: {error}	匯出: {error}
+	import: {error}	匯入: {error}
+	network: {error}	網路: {error}
+	not available: {error}	無法使用: {error}
+	older mail couldn't be read on the server: {error}	無法在伺服器上讀取較舊的郵件: {error}
+	secure connection: {error}	安全連線: {error}
+	sending failed: {error}	傳送失敗: {error}
+	sent, but no copy was saved in Sent Items: {error}	已傳送，但未在寄件備份中儲存副本: {error}
+	sign-in failed: {error}	登入失敗: {error}
+	snoozed mail couldn't be saved: {error}	無法儲存延後提醒的郵件: {error}
+	the S/MIME settings could not be saved: {error}	無法儲存 S/MIME 設定: {error}
+	the certificate isn't on the card or in the keychain any more	憑證已不在智慧卡或鑰匙圈中
+	the draft couldn't be encrypted, so it's saved as it is: {error}	無法加密草稿，因此按原樣儲存: {error}
+	the draft couldn't be kept: {error}	無法保留草稿: {error}
+	the draft couldn't be saved to the server; it's kept on this computer and saved there when the account connects	無法將草稿儲存到伺服器；草稿保留在這台電腦上，帳戶連線後再儲存到伺服器
+	the draft couldn't be saved: {error}	無法儲存草稿: {error}
+	the file has no private key with its certificate	檔案中沒有與憑證配對的私密金鑰
+	the keychain: {error}	鑰匙圈: {error}
+	the language model's key couldn't be kept: {error}	無法保留語言模型的金鑰: {error}
+	the new sign-in couldn't be saved in the keychain: {error}	無法將新的登入資訊儲存到鑰匙圈: {error}
+	the outgoing server's password could not be saved in the keychain: {error}	無法將外寄伺服器的密碼儲存到鑰匙圈: {error}
+	the password could not be saved in the keychain: {error}	無法將密碼儲存到鑰匙圈: {error}
+	the password is wrong, or it isn't a certificate file	密碼錯誤，或這不是憑證檔
+	the public folders to keep in sync couldn't be saved: {error}	無法儲存要同步的公用資料夾: {error}
+	the rules couldn't be saved: {error}	無法儲存規則: {error}
+	the server asked to try again later: {error}	伺服器要求稍後再試: {error}
+	the server closed the connection: {error}	伺服器關閉了連線: {error}
+	the server refused: {error}	伺服器拒絕: {error}
+	the server rejected the command: {error}	伺服器拒絕了該命令: {error}
+	the server's rules weren't changed: {error}	伺服器上的規則未變更: {error}
+	the signature doesn't match the message	簽章與郵件不符
+	the smart card: {error}	智慧卡: {error}
+	this account isn't allowed to send from that address: Exchange's administrator gives Send As or Send on Behalf on it	此帳戶無權從該地址傳送: 需要 Exchange 管理員為該地址授予 Send As 或 Send on Behalf 權限
+	unexpected server response: {error}	非預期的伺服器回應: {error}
+	{account}: the server's search failed ({error})	{account}: 伺服器搜尋失敗（{error}）
+	{done} messages downloaded	已下載 {done} 封郵件
+	{done} messages downloaded, {failed} failed	已下載 {done} 封郵件，{failed} 封失敗
+	{email} opens under {account}	{email} 在 {account} 下開啟
+	{email} removed. Its data file stays at {path}	已移除 {email}。其資料檔仍在 {path}
+	{event}: a change to one occurrence couldn't be sent: its series is no longer on the server	{event}: 無法傳送對其中一次的變更: 其系列已不在伺服器上
+	{name} could not be exported: {error}	無法匯出 {name}: {error}
+	{name} couldn't be read: {error}	無法讀取 {name}: {error}
+	{name}: the data file could not be opened: {error}	{name}: 無法開啟資料檔: {error}
+	{name}: {messages} messages exported	{name}: 已匯出 {messages} 封郵件
+	{name}: {messages} messages exported ({skipped} not on this computer were left out)	{name}: 已匯出 {messages} 封郵件（{skipped} 封不在這台電腦上，已略過）
+	{name}: {messages} messages exported so far…	{name}: 目前已匯出 {messages} 封郵件…
+	{name}: {messages} messages imported	{name}: 已匯入 {messages} 封郵件
+	{name}: {messages} messages imported ({skipped} could not be read)	{name}: 已匯入 {messages} 封郵件（{skipped} 封無法讀取）
+	{name}: {messages} messages imported so far…	{name}: 目前已匯入 {messages} 封郵件…
+	{rules} stay on this computer: the server can't run them	{rules} 留在這台電腦上: 伺服器無法執行它們
+	{rule} stays on this computer: the server can't run it	{rule} 留在這台電腦上: 伺服器無法執行它
+	{who} is signed in	{who} 已登入
+	{who} is signed in (as {user})	{who} 已登入（身分為 {user}）
+	{who} needs its password	{who} 需要密碼
+	{who} needs its password: {error}	{who} 需要密碼: {error}
+	{who} needs you to sign in again	{who} 需要重新登入
+	{who} needs you to sign in again: {error}	{who} 需要重新登入: {error}

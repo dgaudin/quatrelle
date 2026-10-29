@@ -194,9 +194,9 @@ impl Session {
         match error {
             None => {
                 self.compacted = Some((account.to_string(), before, after));
-                self.notice("The data file was compacted.".to_string(), false);
+                self.notice("The data file was compacted.", false);
             }
-            Some(e) => self.notice(format!("The data file could not be compacted: {e}"), true),
+            Some(e) => self.notice_with("The data file could not be compacted: {error}", &[("error", &e)], true),
         }
     }
 }

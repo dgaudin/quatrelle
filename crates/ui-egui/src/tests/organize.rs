@@ -359,3 +359,24 @@ fn favorites_can_be_hidden() {
     assert!(headings(&mut a) > 0, "shown again");
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// What the engine says with something filled in shows in the interface's language, the
+/// wording of the error in it too: a rule Exchange refused was said in English in a French
+/// window (« the server's rules weren't changed: the server refused: Outlook keeps its own
+/// copy… »). A server's own words stay as they came.
+#[test]
+fn a_notice_shows_in_the_interfaces_language() {
+    let (mut a, dir) = app("notice-fr");
+    let ctx = egui::Context::default();
+    a.ui.language = "fr".into();
+    frame(&ctx, &mut a, vec![]);
+    a.session.notice_with("the server's rules weren't changed: {error}", &[("error", "the server refused: Mailbox is full")], true);
+    let said = "Les règles du serveur n’ont pas été modifiées : le serveur a refusé : Mailbox is full";
+    assert!(settled_text_at(&ctx, &mut a, said, egui::vec2(1280.0, 800.0)).is_some(), "{:?}", a.ui.toast);
+    // From the network, with no account to name: said whole.
+    a.session.apply(MailEvent::Notice { account: String::new(), message: "export: the server closed the connection: bye".into() });
+    let said = "exportation : le serveur a fermé la connexion : bye";
+    assert!(settled_text_at(&ctx, &mut a, said, egui::vec2(1280.0, 800.0)).is_some(), "{:?}", a.ui.toast);
+    crate::i18n::set_current(crate::i18n::Lang::EN);
+    let _ = std::fs::remove_dir_all(dir);
+}

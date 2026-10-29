@@ -44,9 +44,9 @@ impl Session {
                 if let Some(m) = self.cache.get_mut(&k).and_then(|f| f.find_mut(key.uid)) {
                     m.voted = choice.to_string();
                 }
-                self.notice(format!("Your vote was sent: {choice}"), false);
+                self.notice_with("Your vote was sent: {choice}", &[("choice", choice)], false);
             }
-            Some(e) => self.notice(format!("Your vote wasn't sent: {e}"), true),
+            Some(e) => self.notice_with("Your vote wasn't sent: {error}", &[("error", &e)], true),
         }
     }
 }

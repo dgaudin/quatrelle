@@ -102,14 +102,23 @@ impl Session {
         if added.is_empty() {
             return Err(CmdError::Failed("the selected mail has no sender address to add".into()));
         }
-        let what = if added.len() == 1 { added.first().cloned().unwrap_or_default() } else { format!("{} senders", added.len()) };
+        let (one, n) = (added.first().cloned().unwrap_or_default(), added.len().to_string());
+        let values = [("sender", one.as_str()), ("n", n.as_str())];
         let moved = match which {
             JunkList::Blocked => {
-                self.notice(format!("Mail from {what} now goes to Junk Email"), false);
+                if added.len() == 1 {
+                    self.notice_with("Mail from {sender} now goes to Junk Email", &values, false);
+                } else {
+                    self.notice_with("Mail from {n} senders now goes to Junk Email", &values, false);
+                }
                 self.move_selection(MoveTarget::Role(FolderRole::Junk)).ok()
             }
             JunkList::Safe => {
-                self.notice(format!("Mail from {what} is never treated as junk"), false);
+                if added.len() == 1 {
+                    self.notice_with("Mail from {sender} is never treated as junk", &values, false);
+                } else {
+                    self.notice_with("Mail from {n} senders is never treated as junk", &values, false);
+                }
                 // Out of Junk, as Outlook does when the sender is trusted from there.
                 let in_junk = sel.iter().all(|m| self.folder(&m.key.account, &m.key.folder).is_some_and(|f| f.role == FolderRole::Junk));
                 if in_junk { self.move_selection(MoveTarget::Role(FolderRole::Inbox)).ok() } else { None }
