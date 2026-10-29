@@ -1827,3 +1827,4 @@ month	May	maggio
 	From one of these	Il mittente è uno di questi
 	To or Cc one of these	A o Cc è uno di questi
 	Subject has one of these (comma-separated)	L'oggetto contiene una di queste parole (separate da virgole)
+	Messages still being sent: {n}. They may not go if Quatrelle closes now: wait a moment, or close anyway.	Messaggi ancora in invio: {n}. Potrebbero non partire se Quatrelle si chiude ora: attendi un momento o chiudi comunque.

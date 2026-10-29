@@ -1828,3 +1828,4 @@ month	May	Mai
 	From one of these	Absender ist einer dieser
 	To or Cc one of these	An oder Cc ist einer dieser
 	Subject has one of these (comma-separated)	Betreff enthält eines dieser Wörter (durch Kommas getrennt)
+	Messages still being sent: {n}. They may not go if Quatrelle closes now: wait a moment, or close anyway.	Nachrichten, die noch gesendet werden: {n}. Sie gehen eventuell nicht hinaus, wenn Quatrelle jetzt geschlossen wird: kurz warten oder trotzdem schließen.

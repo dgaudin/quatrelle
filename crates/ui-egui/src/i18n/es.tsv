@@ -1828,3 +1828,4 @@ month	May	mayo
 	From one of these	El remitente es uno de estos
 	To or Cc one of these	Para o CC es uno de estos
 	Subject has one of these (comma-separated)	El asunto contiene una de estas palabras (separadas por comas)
+	Messages still being sent: {n}. They may not go if Quatrelle closes now: wait a moment, or close anyway.	Mensajes que aún se están enviando: {n}. Puede que no salgan si Quatrelle se cierra ahora: espera un momento o ciérralo de todos modos.
