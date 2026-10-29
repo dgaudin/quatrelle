@@ -124,7 +124,7 @@ impl Session {
         p.ensure_defaults();
         self.drop_lone_occurrences(account);
         for e in sync.errors.iter().take(3) {
-            self.notice(format!("calendars and contacts: {e}"), true);
+            self.notice_with("calendars and contacts: {error}", &[("error", e)], true);
         }
         // Invitations the server answered, and copies of invitations to answer instead.
         if self.settle_answers(account, sync) {

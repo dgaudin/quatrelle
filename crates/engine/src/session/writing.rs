@@ -421,7 +421,7 @@ impl Session {
             self.finish_sent(c, false);
             // finish_sent says "sent"; it isn't yet.
             self.notices.pop();
-            self.notice(format!("It will be sent {}", quatrelle_model::dates::full_time(at, &self.clock)), false);
+            self.notice_with("It will be sent {when}", &[("when", &quatrelle_model::dates::full_time(at, &self.clock))], false);
             return Ok(serde_json::json!({ "queued": c.id, "sendAfter": at }));
         }
         if local {

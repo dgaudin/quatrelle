@@ -197,7 +197,7 @@ impl Session {
         let name = p.calendars.iter().find(|c| c.id == id).map(|c| c.name.clone()).unwrap_or_default();
         w.error = failed.clone();
         if let (Some(e), true) = (failed, first) {
-            self.notice(format!("{name} couldn't be read: {e}"), true);
+            self.notice_with("{name} couldn't be read: {error}", &[("name", &name), ("error", &e)], true);
         }
         self.write_pim(account);
     }

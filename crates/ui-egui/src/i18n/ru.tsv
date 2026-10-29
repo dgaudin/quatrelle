@@ -1670,3 +1670,91 @@ month	May	Май
 	Show Favorites at the top of the folder pane	Показывать «Избранное» вверху области папок
 	Drop to attach them to a new message	Отпустите, чтобы вложить их в новое письмо
 	Original size	Исходный размер
+
+# The engine's notices, and the wording of errors that come up to the status bar (i18n::notice, i18n::error).
+	A message couldn't be sent: {error}	Не удалось отправить письмо: {error}
+	Back from snooze: {subject}	Отложенное письмо вернулось: {subject}
+	Clean Up moved 1 message to Deleted Items	Очистка переместила 1 письмо в «Удалённые»
+	Clean Up moved {n} messages to Deleted Items	Очистка переместила в «Удалённые» писем: {n}
+	Downloading {total} messages…	Загрузка писем: {total}…
+	Every message is already on this computer	Все письма уже есть на этом компьютере
+	It will be sent {when}	Будет отправлено {when}
+	Mail from {n} senders is never treated as junk	Почта от этих отправителей ({n}) никогда не считается нежелательной
+	Mail from {n} senders now goes to Junk Email	Почта от этих отправителей ({n}) теперь попадает в «Нежелательную почту»
+	Mail from {sender} is never treated as junk	Почта от {sender} никогда не считается нежелательной
+	Mail from {sender} now goes to Junk Email	Почта от {sender} теперь попадает в «Нежелательную почту»
+	Outlook keeps its own copy of this mailbox's rules, and Exchange won't change them while it's there. Change this rule in Outlook, or let Quatrelle replace Outlook's copy (Outlook's rules that run only on its computer would be lost)	Outlook хранит в этом почтовом ящике собственную копию правил, и Exchange не меняет их, пока она там есть. Измените это правило в Outlook или позвольте Quatrelle заменить копию Outlook (правила Outlook, работающие только на его компьютере, будут потеряны)
+	Rules ran on the mail there now: 1 message matched	Правила применены к имеющейся там почте: подошло 1 письмо
+	Rules ran on the mail there now: {n} messages matched	Правила применены к имеющейся там почте, подошло писем: {n}
+	The certificate couldn't be kept: {error}	Не удалось сохранить сертификат: {error}
+	The certificate for {who} (valid until {until}) is older than the one in use, so it's kept to read mail encrypted to it	Сертификат для {who} (действителен до {until}) старше используемого, поэтому он сохранён для чтения зашифрованной им почты
+	The data file could not be compacted: {error}	Не удалось сжать файл данных: {error}
+	The rule ran on the mail there now: 1 message matched	Правило применено к имеющейся там почте: подошло 1 письмо
+	The rule ran on the mail there now: {n} messages matched	Правило применено к имеющейся там почте, подошло писем: {n}
+	The server refused a change: {error}	Сервер отклонил изменение: {error}
+	Your certificate for {who} is ready: it signs and encrypts from now on	Ваш сертификат для {who} готов: теперь письма подписываются и шифруются
+	Your certificate for {who} is ready: new messages are signed	Ваш сертификат для {who} готов: новые письма подписываются
+	Your vote was sent: {choice}	Ваш голос отправлен: {choice}
+	Your vote wasn't sent: {error}	Ваш голос не отправлен: {error}
+	account settings could not be saved: {error}	Не удалось сохранить настройки учётной записи: {error}
+	automatic replies weren't changed: {error}	Автоответы не изменены: {error}
+	bad parameters: {error}	неверные параметры: {error}
+	calendar and contacts could not be saved: {error}	Не удалось сохранить календарь и контакты: {error}
+	calendars and contacts: {error}	календари и контакты: {error}
+	export: {error}	экспорт: {error}
+	import: {error}	импорт: {error}
+	network: {error}	сеть: {error}
+	not available: {error}	недоступно: {error}
+	older mail couldn't be read on the server: {error}	Не удалось прочитать на сервере более старую почту: {error}
+	secure connection: {error}	защищённое соединение: {error}
+	sending failed: {error}	отправка не удалась: {error}
+	sent, but no copy was saved in Sent Items: {error}	отправлено, но копия не сохранена в «Отправленных»: {error}
+	sign-in failed: {error}	вход не удался: {error}
+	snoozed mail couldn't be saved: {error}	Не удалось сохранить отложенную почту: {error}
+	the S/MIME settings could not be saved: {error}	Не удалось сохранить настройки S/MIME: {error}
+	the certificate isn't on the card or in the keychain any more	сертификата больше нет ни на карте, ни в связке ключей
+	the draft couldn't be encrypted, so it's saved as it is: {error}	не удалось зашифровать черновик, поэтому он сохранён как есть: {error}
+	the draft couldn't be kept: {error}	не удалось сберечь черновик: {error}
+	the draft couldn't be saved to the server; it's kept on this computer and saved there when the account connects	не удалось сохранить черновик на сервере; он остаётся на этом компьютере и будет сохранён там, когда учётная запись подключится
+	the draft couldn't be saved: {error}	не удалось сохранить черновик: {error}
+	the file has no private key with its certificate	в файле нет закрытого ключа к его сертификату
+	the keychain: {error}	связка ключей: {error}
+	the language model's key couldn't be kept: {error}	не удалось сберечь ключ языковой модели: {error}
+	the new sign-in couldn't be saved in the keychain: {error}	не удалось сохранить новый вход в связке ключей: {error}
+	the outgoing server's password could not be saved in the keychain: {error}	не удалось сохранить пароль сервера исходящей почты в связке ключей: {error}
+	the password could not be saved in the keychain: {error}	не удалось сохранить пароль в связке ключей: {error}
+	the password is wrong, or it isn't a certificate file	неверный пароль, или это не файл сертификата
+	the public folders to keep in sync couldn't be saved: {error}	Не удалось сохранить список общедоступных папок для синхронизации: {error}
+	the rules couldn't be saved: {error}	Не удалось сохранить правила: {error}
+	the server asked to try again later: {error}	сервер просит повторить попытку позже: {error}
+	the server closed the connection: {error}	сервер закрыл соединение: {error}
+	the server refused: {error}	сервер отказал: {error}
+	the server rejected the command: {error}	сервер отверг команду: {error}
+	the server's rules weren't changed: {error}	Правила на сервере не изменены: {error}
+	the signature doesn't match the message	подпись не соответствует письму
+	the smart card: {error}	смарт-карта: {error}
+	this account isn't allowed to send from that address: Exchange's administrator gives Send As or Send on Behalf on it	этой учётной записи нельзя отправлять с этого адреса: администратор Exchange выдаёт для этого права «Отправить как» или «Отправить от имени»
+	unexpected server response: {error}	неожиданный ответ сервера: {error}
+	{account}: the server's search failed ({error})	{account}: поиск на сервере не удался ({error})
+	{done} messages downloaded	Загружено писем: {done}
+	{done} messages downloaded, {failed} failed	Загружено писем: {done}, с ошибкой: {failed}
+	{email} opens under {account}	{email} открывается в {account}
+	{email} removed. Its data file stays at {path}	Учётная запись {email} удалена. Её файл данных остаётся в {path}
+	{event}: a change to one occurrence couldn't be sent: its series is no longer on the server	{event}: не удалось отправить изменение одного повторения: его серии больше нет на сервере
+	{name} could not be exported: {error}	Не удалось экспортировать {name}: {error}
+	{name} couldn't be read: {error}	Не удалось прочитать {name}: {error}
+	{name}: the data file could not be opened: {error}	{name}: не удалось открыть файл данных: {error}
+	{name}: {messages} messages exported	{name}: экспортировано писем: {messages}
+	{name}: {messages} messages exported ({skipped} not on this computer were left out)	{name}: экспортировано писем: {messages} (пропущено отсутствующих на этом компьютере: {skipped})
+	{name}: {messages} messages exported so far…	{name}: пока экспортировано писем: {messages}…
+	{name}: {messages} messages imported	{name}: импортировано писем: {messages}
+	{name}: {messages} messages imported ({skipped} could not be read)	{name}: импортировано писем: {messages} (не удалось прочитать: {skipped})
+	{name}: {messages} messages imported so far…	{name}: пока импортировано писем: {messages}…
+	{rules} stay on this computer: the server can't run them	{rules} остаются на этом компьютере: сервер не может их выполнять
+	{rule} stays on this computer: the server can't run it	{rule} остаётся на этом компьютере: сервер не может его выполнять
+	{who} is signed in	{who}: вход выполнен
+	{who} is signed in (as {user})	{who}: вход выполнен (как {user})
+	{who} needs its password	{who}: нужен пароль
+	{who} needs its password: {error}	{who}: нужен пароль: {error}
+	{who} needs you to sign in again	{who}: нужно войти снова
+	{who} needs you to sign in again: {error}	{who}: нужно войти снова: {error}

@@ -1667,3 +1667,91 @@ month	May	mei
 	Show Favorites at the top of the folder pane	Favorieten bovenaan het mappenvenster tonen
 	Drop to attach them to a new message	Laat ze hier los om ze aan een nieuw bericht toe te voegen
 	Original size	Oorspronkelijke grootte
+
+# The engine's notices, and the wording of errors that come up to the status bar (i18n::notice, i18n::error).
+	A message couldn't be sent: {error}	Een bericht kon niet worden verzonden: {error}
+	Back from snooze: {subject}	Uitstel voorbij: {subject}
+	Clean Up moved 1 message to Deleted Items	Opruimen heeft 1 bericht naar Verwijderde items verplaatst
+	Clean Up moved {n} messages to Deleted Items	Opruimen heeft {n} berichten naar Verwijderde items verplaatst
+	Downloading {total} messages…	{total} berichten downloaden…
+	Every message is already on this computer	Alle berichten staan al op deze computer
+	It will be sent {when}	Het wordt verzonden op {when}
+	Mail from {n} senders is never treated as junk	Mail van {n} afzenders wordt nooit als ongewenst behandeld
+	Mail from {n} senders now goes to Junk Email	Mail van {n} afzenders gaat nu naar Ongewenste e-mail
+	Mail from {sender} is never treated as junk	Mail van {sender} wordt nooit als ongewenst behandeld
+	Mail from {sender} now goes to Junk Email	Mail van {sender} gaat nu naar Ongewenste e-mail
+	Outlook keeps its own copy of this mailbox's rules, and Exchange won't change them while it's there. Change this rule in Outlook, or let Quatrelle replace Outlook's copy (Outlook's rules that run only on its computer would be lost)	Outlook houdt een eigen kopie van de regels van dit postvak bij, en Exchange wijzigt ze niet zolang die er is. Wijzig deze regel in Outlook, of laat Quatrelle de kopie van Outlook vervangen (Outlook-regels die alleen op de computer van Outlook draaien, gaan dan verloren)
+	Rules ran on the mail there now: 1 message matched	De regels zijn toegepast op de mail die er nu staat: 1 bericht kwam overeen
+	Rules ran on the mail there now: {n} messages matched	De regels zijn toegepast op de mail die er nu staat: {n} berichten kwamen overeen
+	The certificate couldn't be kept: {error}	Het certificaat kon niet worden bewaard: {error}
+	The certificate for {who} (valid until {until}) is older than the one in use, so it's kept to read mail encrypted to it	Het certificaat voor {who} (geldig tot {until}) is ouder dan het certificaat dat in gebruik is, dus het wordt bewaard om mail te lezen die ermee is versleuteld
+	The data file could not be compacted: {error}	Het gegevensbestand kon niet worden gecomprimeerd: {error}
+	The rule ran on the mail there now: 1 message matched	De regel is toegepast op de mail die er nu staat: 1 bericht kwam overeen
+	The rule ran on the mail there now: {n} messages matched	De regel is toegepast op de mail die er nu staat: {n} berichten kwamen overeen
+	The server refused a change: {error}	De server heeft een wijziging geweigerd: {error}
+	Your certificate for {who} is ready: it signs and encrypts from now on	Je certificaat voor {who} is klaar: vanaf nu wordt er ondertekend en versleuteld
+	Your certificate for {who} is ready: new messages are signed	Je certificaat voor {who} is klaar: nieuwe berichten worden ondertekend
+	Your vote was sent: {choice}	Je stem is verzonden: {choice}
+	Your vote wasn't sent: {error}	Je stem is niet verzonden: {error}
+	account settings could not be saved: {error}	De accountinstellingen konden niet worden opgeslagen: {error}
+	automatic replies weren't changed: {error}	De automatische antwoorden zijn niet gewijzigd: {error}
+	bad parameters: {error}	onjuiste parameters: {error}
+	calendar and contacts could not be saved: {error}	Agenda en contactpersonen konden niet worden opgeslagen: {error}
+	calendars and contacts: {error}	agenda's en contactpersonen: {error}
+	export: {error}	export: {error}
+	import: {error}	import: {error}
+	network: {error}	netwerk: {error}
+	not available: {error}	niet beschikbaar: {error}
+	older mail couldn't be read on the server: {error}	Oudere mail kon niet op de server worden gelezen: {error}
+	secure connection: {error}	beveiligde verbinding: {error}
+	sending failed: {error}	verzenden mislukt: {error}
+	sent, but no copy was saved in Sent Items: {error}	verzonden, maar er is geen kopie opgeslagen in Verzonden items: {error}
+	sign-in failed: {error}	aanmelden mislukt: {error}
+	snoozed mail couldn't be saved: {error}	Uitgestelde mail kon niet worden opgeslagen: {error}
+	the S/MIME settings could not be saved: {error}	De S/MIME-instellingen konden niet worden opgeslagen: {error}
+	the certificate isn't on the card or in the keychain any more	het certificaat staat niet meer op de kaart of in de sleutelhanger
+	the draft couldn't be encrypted, so it's saved as it is: {error}	het concept kon niet worden versleuteld en wordt dus opgeslagen zoals het is: {error}
+	the draft couldn't be kept: {error}	het concept kon niet worden bewaard: {error}
+	the draft couldn't be saved to the server; it's kept on this computer and saved there when the account connects	het concept kon niet op de server worden opgeslagen; het blijft op deze computer en wordt daar opgeslagen zodra het account verbinding maakt
+	the draft couldn't be saved: {error}	het concept kon niet worden opgeslagen: {error}
+	the file has no private key with its certificate	het bestand bevat geen privésleutel bij het certificaat
+	the keychain: {error}	de sleutelhanger: {error}
+	the language model's key couldn't be kept: {error}	de sleutel van het taalmodel kon niet worden bewaard: {error}
+	the new sign-in couldn't be saved in the keychain: {error}	de nieuwe aanmelding kon niet in de sleutelhanger worden opgeslagen: {error}
+	the outgoing server's password could not be saved in the keychain: {error}	het wachtwoord van de server voor uitgaande mail kon niet in de sleutelhanger worden opgeslagen: {error}
+	the password could not be saved in the keychain: {error}	het wachtwoord kon niet in de sleutelhanger worden opgeslagen: {error}
+	the password is wrong, or it isn't a certificate file	het wachtwoord is onjuist, of het is geen certificaatbestand
+	the public folders to keep in sync couldn't be saved: {error}	De openbare mappen om te synchroniseren konden niet worden opgeslagen: {error}
+	the rules couldn't be saved: {error}	De regels konden niet worden opgeslagen: {error}
+	the server asked to try again later: {error}	de server vraagt het later opnieuw te proberen: {error}
+	the server closed the connection: {error}	de server heeft de verbinding verbroken: {error}
+	the server refused: {error}	de server weigerde: {error}
+	the server rejected the command: {error}	de server wees de opdracht af: {error}
+	the server's rules weren't changed: {error}	De regels op de server zijn niet gewijzigd: {error}
+	the signature doesn't match the message	de handtekening komt niet overeen met het bericht
+	the smart card: {error}	de smartcard: {error}
+	this account isn't allowed to send from that address: Exchange's administrator gives Send As or Send on Behalf on it	dit account mag niet verzenden vanaf dat adres: de beheerder van Exchange geeft daarvoor Verzenden als of Verzenden namens
+	unexpected server response: {error}	onverwacht antwoord van de server: {error}
+	{account}: the server's search failed ({error})	{account}: zoeken op de server is mislukt ({error})
+	{done} messages downloaded	{done} berichten gedownload
+	{done} messages downloaded, {failed} failed	{done} berichten gedownload, {failed} mislukt
+	{email} opens under {account}	{email} wordt geopend onder {account}
+	{email} removed. Its data file stays at {path}	{email} verwijderd. Het gegevensbestand blijft in {path}
+	{event}: a change to one occurrence couldn't be sent: its series is no longer on the server	{event}: een wijziging aan één exemplaar kon niet worden verzonden: de reeks staat niet meer op de server
+	{name} could not be exported: {error}	{name} kon niet worden geëxporteerd: {error}
+	{name} couldn't be read: {error}	{name} kon niet worden gelezen: {error}
+	{name}: the data file could not be opened: {error}	{name}: het gegevensbestand kon niet worden geopend: {error}
+	{name}: {messages} messages exported	{name}: {messages} berichten geëxporteerd
+	{name}: {messages} messages exported ({skipped} not on this computer were left out)	{name}: {messages} berichten geëxporteerd ({skipped} die niet op deze computer staan, zijn overgeslagen)
+	{name}: {messages} messages exported so far…	{name}: tot nu toe {messages} berichten geëxporteerd…
+	{name}: {messages} messages imported	{name}: {messages} berichten geïmporteerd
+	{name}: {messages} messages imported ({skipped} could not be read)	{name}: {messages} berichten geïmporteerd ({skipped} konden niet worden gelezen)
+	{name}: {messages} messages imported so far…	{name}: tot nu toe {messages} berichten geïmporteerd…
+	{rules} stay on this computer: the server can't run them	{rules} blijven op deze computer: de server kan ze niet uitvoeren
+	{rule} stays on this computer: the server can't run it	{rule} blijft op deze computer: de server kan deze niet uitvoeren
+	{who} is signed in	{who} is aangemeld
+	{who} is signed in (as {user})	{who} is aangemeld (als {user})
+	{who} needs its password	{who} heeft het wachtwoord nodig
+	{who} needs its password: {error}	{who} heeft het wachtwoord nodig: {error}
+	{who} needs you to sign in again	{who} moet opnieuw worden aangemeld
+	{who} needs you to sign in again: {error}	{who} moet opnieuw worden aangemeld: {error}

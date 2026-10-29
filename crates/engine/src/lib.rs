@@ -12,6 +12,7 @@
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
 pub mod cmd;
+mod notice;
 pub mod sample;
 mod session;
 
@@ -19,15 +20,16 @@ use std::collections::HashMap;
 
 use serde_json::Value;
 
+pub use notice::{Notice, fill};
 pub use quatrelle_mime as mime;
 pub use quatrelle_model as model;
 pub use quatrelle_smime as smime;
 pub use quatrelle_store as store;
 pub use session::{
     ARRANGE_HEADINGS, AccountState, Arrange, AssistKind, Assistant, CardSearch, Compose, DirectoryAnswer, Filing, FolderRef, FolderSizes, ItemChoice,
-    ItemKind, KnownCert, ListFilter, ListLayout, Lock, MoveTarget, NAMES_NOT_FOUND, NameChoice, NotesOrder, Notice, PANICS_CAUGHT, PaneSection,
-    Picture, Prefs, READING_ZOOM, ReadInPane, Reading, ReadingPane, RevocationCheck, Rewrite, Row, RulesScope, SMIME_DOC, Seal, SearchScope,
-    Security, SendCheck, Sender, ServerSearch, Session, SignedBy, Sizes, SmimeSettings, UpdateCheck, VacationState, View, fill_name,
+    ItemKind, KnownCert, ListFilter, ListLayout, Lock, MoveTarget, NAMES_NOT_FOUND, NameChoice, NotesOrder, PANICS_CAUGHT, PaneSection, Picture,
+    Prefs, READING_ZOOM, ReadInPane, Reading, ReadingPane, RevocationCheck, Rewrite, Row, RulesScope, SMIME_DOC, Seal, SearchScope, Security,
+    SendCheck, Sender, ServerSearch, Session, SignedBy, Sizes, SmimeSettings, UpdateCheck, VacationState, View, fill_name,
     invite::{Invite, InviteProblem},
     junk::{JunkList, junk_entry},
     newer_release, parse_key,
