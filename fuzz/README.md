@@ -15,6 +15,7 @@ libFuzzer. `.github/workflows/fuzz.yml` runs every target weekly on Linux.
 | `jmap` | a JMAP server's answers (split at form feeds) through sign-in, folder list and folder sync; push events; URLs |
 | `search` | the search box: the query language, the Advanced form, JMAP filters, modified UTF-7 |
 | `pst` | an Outlook data file: a good exported file with the input as byte patches, or a whole file |
+| `tnef` | Outlook's `winmail.dat`: its files, body and attached messages, compressed RTF and the HTML or text in it, and as a message's attachment |
 
 ## Running
 
