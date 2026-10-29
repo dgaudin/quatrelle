@@ -11,6 +11,7 @@
 //! (the Notes and Tasks folders).
 
 use std::collections::HashMap;
+use std::time::{Duration, Instant};
 
 use quatrelle_model::ical::{Attendee, CalEvent, ShowAs};
 use quatrelle_model::pim::{BookInfo, CalendarInfo, DavSync, Note, Pim, StoredCard, StoredEvent, StoredNote};
@@ -95,7 +96,7 @@ fn items_in(c: &Client, parent: &str, extra: &str, since: Option<i64>) -> Result
 
 fn items_in_from(c: &Client, parent: &str, extra: &str, restriction: Option<String>) -> Result<Vec<El>> {
     let folder = parent;
-    let began = std::time::Instant::now();
+    let began = Instant::now();
     let before = c.spent();
     let restriction = restriction.unwrap_or_default();
     let mut ids: Vec<String> = Vec::new();
@@ -124,7 +125,7 @@ fn items_in_from(c: &Client, parent: &str, extra: &str, restriction: Option<Stri
         out.len(),
         began.elapsed().as_secs_f32(),
         t.requests,
-        ids.len().div_ceil(BATCH).clamp(1, LANES),
+        batches(&ids).len().clamp(1, LANES),
         t.server.as_secs_f32(),
         t.receiving.as_secs_f32(),
         t.bytes as f64 / 1e6,
@@ -137,43 +138,86 @@ fn items_in_from(c: &Client, parent: &str, extra: &str, restriction: Option<Stri
 /// give (gone meanwhile) is left out. An appointment's pattern and time zone come only when
 /// asked for by name (`AllProperties` leaves them out).
 ///
-/// Many batches are asked over [`LANES`] connections at once, each taking every fourth: asked
-/// one after the other, a colleague's calendar (700 items) took 8 s, and a calendar just ticked
-/// showed a quarter of a minute later (29/10). Each answer is in the order asked, whatever the
-/// connection; a batch one of the others couldn't ask (it didn't sign in, say) is asked on this
-/// one.
+/// Many batches are asked over [`LANES`] connections at once: asked one after the other, a
+/// colleague's calendar (700 items) took 8 s, and a calendar just ticked showed a quarter of a
+/// minute later (29/10). Each connection takes the next batch not yet asked, so a batch the
+/// server is slow to answer holds back only its own (each taking every fourth, one held for ten
+/// seconds kept four more waiting: 869 items in 15 s); and the batches are made alike, as many as
+/// give each connection the same share (241 occurrences in five had one connection ask two, 6.5 s
+/// where 4 do). Each answer is in the order asked, whatever the connection; a batch one of the
+/// others couldn't ask (it didn't sign in, say) is asked on this one.
 fn get_items(c: &Client, ids: &[String], extra: &str) -> Result<Vec<El>> {
-    let batches: Vec<&[String]> = ids.chunks(BATCH).collect();
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    let batches = batches(ids);
     let lanes = batches.len().min(LANES);
     if lanes <= 1 {
         return get_batches(c, &batches, extra);
     }
-    // Lane `n` asks batches `n`, `n + lanes`, `n + 2 × lanes`…; this connection is lane 0.
-    let lane = |n: usize| batches.iter().copied().skip(n).step_by(lanes).collect::<Vec<&[String]>>();
+    let next = AtomicUsize::new(0);
+    let take = || {
+        let i = next.fetch_add(1, Ordering::Relaxed);
+        batches.get(i).map(|b| (i, *b))
+    };
     let mut answers: Vec<Option<Vec<El>>> = vec![None; batches.len()];
+    // How long each batch took, connection by connection (this one first), for the log.
+    let mut took: Vec<Vec<Duration>> = Vec::with_capacity(lanes);
     std::thread::scope(|s| -> Result<()> {
         let others: Vec<_> = (1..lanes)
             .map(|n| {
-                let (sibling, mine) = (c.sibling(), lane(n));
-                s.spawn(move || (mine.iter().map(|b| get_batch(&sibling, b, extra).ok()).collect::<Vec<Option<Vec<El>>>>(), sibling.spent()))
+                let (sibling, take) = (c.sibling(), &take);
+                s.spawn(move || {
+                    let (mut got, mut times) = (Vec::new(), Vec::new());
+                    while let Some((i, b)) = take() {
+                        let began = Instant::now();
+                        let answer = get_batch(&sibling, b, extra);
+                        times.push(began.elapsed());
+                        match answer {
+                            Ok(items) => got.push((i, items)),
+                            // It stops there: the batch is asked again on the first.
+                            Err(e) => {
+                                log::info!("ews: connection {} of {lanes} couldn't read {} items ({e})", n + 1, b.len());
+                                break;
+                            }
+                        }
+                    }
+                    (got, times, sibling.spent())
+                })
             })
             .collect();
-        for (k, b) in lane(0).into_iter().enumerate() {
-            if let Some(slot) = answers.get_mut(k * lanes) {
-                *slot = Some(get_batch(c, b, extra)?);
-            }
-        }
-        for (i, h) in others.into_iter().enumerate() {
-            let (answered, spent) = h.join().unwrap_or_default();
-            c.count_spent(spent);
-            for (k, got) in answered.into_iter().enumerate() {
-                if let Some(slot) = answers.get_mut(i + 1 + k * lanes) {
-                    *slot = got;
+        let (mut mine, mut failed) = (Vec::new(), None);
+        while let Some((i, b)) = take() {
+            let began = Instant::now();
+            let answer = get_batch(c, b, extra);
+            mine.push(began.elapsed());
+            match answer {
+                Ok(items) => {
+                    if let Some(slot) = answers.get_mut(i) {
+                        *slot = Some(items);
+                    }
+                }
+                // The others stop too: the read fails.
+                Err(e) => {
+                    next.store(batches.len(), Ordering::Relaxed);
+                    failed = Some(e);
+                    break;
                 }
             }
         }
-        Ok(())
+        took.push(mine);
+        for h in others {
+            let (got, times, spent) = h.join().unwrap_or_default();
+            c.count_spent(spent);
+            took.push(times);
+            for (i, items) in got {
+                if let Some(slot) = answers.get_mut(i) {
+                    *slot = Some(items);
+                }
+            }
+        }
+        failed.map_or(Ok(()), Err)
     })?;
+    let again = answers.iter().filter(|a| a.is_none()).count();
+    log::info!("ews: {} batches over {lanes} connections: {}", batches.len(), lanes_said(&took, again));
     let mut out = Vec::new();
     for (a, b) in answers.into_iter().zip(&batches) {
         match a {
@@ -182,6 +226,28 @@ fn get_items(c: &Client, ids: &[String], extra: &str) -> Result<Vec<El>> {
         }
     }
     Ok(out)
+}
+
+/// The batches `ids` are asked in: at most [`BATCH`] items each and, more than one, as many as
+/// give each of the [`LANES`] connections the same share, sized alike.
+fn batches(ids: &[String]) -> Vec<&[String]> {
+    let n = ids.len().div_ceil(BATCH);
+    if n <= 1 {
+        return ids.chunks(BATCH).collect();
+    }
+    ids.chunks(ids.len().div_ceil(n.next_multiple_of(LANES))).collect()
+}
+
+/// What each connection of [`get_items`] did, for the log: how long its batches took and how
+/// many it asked, the slowest batch, and how many are asked again on the first.
+fn lanes_said(took: &[Vec<Duration>], again: usize) -> String {
+    let each: Vec<String> = took.iter().map(|t| format!("{:.1} s ({})", t.iter().sum::<Duration>().as_secs_f32(), t.len())).collect();
+    let slowest = took.iter().flatten().max().copied().unwrap_or_default();
+    let mut said = format!("each done in {} (batches in brackets), the slowest batch in {:.1} s", each.join(", "), slowest.as_secs_f32());
+    if again > 0 {
+        said.push_str(&format!("; {again} asked again on the first"));
+    }
+    said
 }
 
 /// Batches of item ids asked one after the other, on one connection.

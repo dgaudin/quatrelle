@@ -222,3 +222,22 @@ fn ones_own_meeting_is_known_by_the_answer_organizer() {
     own_organizer(&mut e, it, "riley@contoso.example");
     assert!(e.organizer.is_none(), "someone else's: not made the owner's");
 }
+
+/// Many items are asked in batches alike, as many as give each connection the same share; the
+/// log says what each did.
+#[test]
+fn batches_share_the_connections_alike() {
+    let ids = |n: usize| (0..n).map(|i| i.to_string()).collect::<Vec<String>>();
+    for (n, count) in [(0, 0), (1, 1), (50, 1), (51, 4), (241, 8), (869, 20), (5000, 100)] {
+        let ids = ids(n);
+        let b = batches(&ids);
+        assert_eq!(b.len(), count, "{n} items");
+        assert_eq!(b.concat(), ids, "{n} items, whole and in order");
+        assert!(b.iter().all(|x| x.len() <= BATCH), "{n} items, at most {BATCH} a batch");
+        let (big, small) = (b.iter().map(|x| x.len()).max().unwrap_or(0), b.iter().map(|x| x.len()).min().unwrap_or(0));
+        assert!(big - small <= big.div_ceil(2), "{n} items, alike: {big} and {small}");
+    }
+    let s = |t: f32| Duration::from_secs_f32(t);
+    let said = lanes_said(&[vec![s(1.0), s(2.0)], vec![s(10.5)], vec![]], 1);
+    assert_eq!(said, "each done in 3.0 s (2), 10.5 s (1), 0.0 s (0) (batches in brackets), the slowest batch in 10.5 s; 1 asked again on the first");
+}
