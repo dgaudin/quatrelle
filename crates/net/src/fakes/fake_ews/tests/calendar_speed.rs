@@ -17,8 +17,8 @@ fn appointment(subject: &str, day: u32, hour: u32) -> El {
     .remove(0)
 }
 
-/// A calendar of 230 appointments (five batches) is asked over four connections at once, and
-/// comes whole, in the server's order.
+/// A calendar of 230 appointments is asked over four connections at once, in eight batches alike
+/// (two each), and comes whole, in the server's order.
 #[test]
 fn a_big_calendar_is_read_over_several_connections() {
     use quatrelle_model::pim::Pim;
@@ -40,8 +40,10 @@ fn a_big_calendar_is_read_over_several_connections() {
     let sync = crate::ews_pim::sync_calendars(&c, &Pim::default(), &[], 1_792_000_000).unwrap();
     let read: Vec<&str> = sync.events.iter().filter(|e| e.calendar == crate::ews_pim::CALENDAR).map(|e| e.event.summary.as_str()).collect();
     assert_eq!(read, names, "whole, in order");
-    assert_eq!(calls(&server, "GetItem") - items, 5, "fifty at a time, as before");
-    assert_eq!(server.data.lock().unwrap().handshakes - handshakes, 3, "three more connections, each signed in");
+    assert_eq!(calls(&server, "GetItem") - items, 8, "eight batches, a share of two for each connection");
+    // Each connection takes the next batch: one started late may find none left.
+    let more = server.data.lock().unwrap().handshakes - handshakes;
+    assert!((1..=3).contains(&more), "more connections, each signed in: {more}");
 }
 
 /// Two calendars ticked one after the other, read together: each is shown as soon as it's read,
