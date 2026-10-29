@@ -1,12 +1,11 @@
 //! A message's header in the reading pane (or its window), which stays put while the message
 //! scrolls under it, as Outlook's does: the subject and categories, who it's from and to and
 //! when, what's to know about it (follow-up, importance, a doubtful sender, its signature or
-//! encryption), and what can be done with it (Reply… or, in the Outbox, Send now…).
+//! encryption), and under it what can be done with it (Reply… or, in the Outbox, Send now…).
 
 use super::*;
 use quatrelle_engine::model::Summary;
 
-#[allow(clippy::too_many_arguments)]
 pub(super) fn header(
     s: &mut Session,
     t: Tokens,
@@ -14,7 +13,6 @@ pub(super) fn header(
     r: &quatrelle_engine::Reading,
     p: &mime::Parsed,
     summary: &Option<Summary>,
-    in_window: bool,
     acts: &mut Vec<Action>,
 ) {
     // Subject.
@@ -151,6 +149,20 @@ pub(super) fn header(
     if let Some(sec) = &r.security {
         security::security_bar(s, &t, ui, sec);
     }
+}
+
+/// What can be done with the message (Reply… or, in the Outbox, Send now…): under the header
+/// and outside its scrolling, so a long header never hides it (a reading pane at the bottom, too
+/// short for the whole header, cut the buttons in half).
+pub(super) fn actions(
+    s: &mut Session,
+    t: Tokens,
+    ui: &mut Ui,
+    r: &quatrelle_engine::Reading,
+    p: &mime::Parsed,
+    in_window: bool,
+    acts: &mut Vec<Action>,
+) {
     if let Some((_, item)) = s.outbox_entry(&r.key) {
         egui::Frame::new().fill(t.warn.gamma_multiply(0.12)).corner_radius(6).inner_margin(Margin::symmetric(10, 6)).show(ui, |ui| {
             let why = match item.error.as_deref() {
