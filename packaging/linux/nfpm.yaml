@@ -13,7 +13,7 @@ release: 1
 section: mail
 priority: optional
 maintainer: ${QUATRELLE_MAINTAINER}
-vendor: Learning Machines LLC
+vendor: Didier Gaudin
 homepage: https://github.com/dgaudin/quatrelle
 license: MIT OR Apache-2.0
 description: |-
