@@ -572,11 +572,27 @@ fn chip(ui: &mut Ui, s: &Session, t: &Tokens, rect: Rect, item: &AgendaItem, tex
     // cut in half by the box's edge read badly).
     let font = theme::regular(12.0);
     let row = ui.fonts_mut(|f| f.row_height(&font)).max(1.0);
-    let mut job = egui::text::LayoutJob::simple(text.to_string(), font, t.text, (rect.width() - 8.0).max(4.0));
-    job.wrap.max_rows = ((rect.height() - 4.0) / row).floor().max(1.0) as usize;
-    job.wrap.overflow_character = Some('…');
-    let galley = ui.fonts_mut(|f| f.layout_job(job));
-    ui.painter().with_clip_rect(rect.shrink(1.0)).galley(rect.min + vec2(6.0, 2.0), galley, t.text);
+    let (width, rows) = ((rect.width() - 8.0).max(4.0), ((rect.height() - 4.0) / row).floor().max(1.0) as usize);
+    let lay = |ui: &mut Ui, text: String, rows: usize| {
+        let mut job = egui::text::LayoutJob::simple(text, font.clone(), t.text, width);
+        job.wrap.max_rows = rows;
+        job.wrap.overflow_character = Some('…');
+        ui.fonts_mut(|f| f.layout_job(job))
+    };
+    let painter = ui.painter().with_clip_rect(rect.shrink(1.0));
+    let words: Vec<&str> = text.split_whitespace().collect();
+    let narrow = words.iter().any(|w| ui.fonts_mut(|f| f.layout_no_wrap((*w).to_string(), font.clone(), t.text)).size().x > width);
+    if narrow {
+        // Too narrow for its words (appointments side by side): a word a line, cut with "…",
+        // rather than broken letter by letter ("Dail / ie").
+        for (i, w) in words.iter().take(rows).enumerate() {
+            let more = i + 1 == rows && words.len() > rows;
+            let galley = lay(ui, if more { format!("{w}…") } else { (*w).to_string() }, 1);
+            painter.galley(rect.min + vec2(6.0, 2.0 + row * i as f32), galley, t.text);
+        }
+    } else {
+        painter.galley(rect.min + vec2(6.0, 2.0), lay(ui, text.to_string(), rows), t.text);
+    }
     // Outlook's card when the pointer rests on it: what it is, when, where, and its calendar
     // (not while something is dragged: the card would hide where it's going).
     if !resp.dragged() && !ui.input(|i| i.pointer.primary_down()) {

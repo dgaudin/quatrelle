@@ -500,3 +500,41 @@ fn the_subscribe_dialog_says_why_a_link_is_refused() {
     frame(&ctx, &mut a, vec![]);
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// An appointment's box too narrow for its words (several side by side in the week) shows a
+/// word a line, cut with "…", never a word broken letter by letter ("Dail / ie").
+#[test]
+fn a_narrow_appointment_never_breaks_a_word() {
+    let (mut a, dir) = app("narrow-chips");
+    let ctx = egui::Context::default();
+    a.run("view.module", json!({"name": "calendar"}));
+    a.run("calendar.view", json!({"mode": "week"}));
+    let size = egui::vec2(1280.0, 800.0);
+    for _ in 0..4 {
+        frame_sized(&ctx, &mut a, vec![], size);
+    }
+    let input = RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, size)), ..Default::default() };
+    let mut out = ctx.run_ui(input, |ui| a.ui(ui));
+    out.textures_delta.clear();
+    fn texts(clip: egui::Rect, s: &egui::Shape, found: &mut Vec<std::sync::Arc<egui::Galley>>) {
+        match s {
+            egui::Shape::Vec(v) => v.iter().for_each(|s| texts(clip, s, found)),
+            // An appointment's words, clipped to its box: the narrow ones.
+            egui::Shape::Text(t) if clip.width() < 60.0 && clip.height() > 20.0 => found.push(t.galley.clone()),
+            _ => {}
+        }
+    }
+    let mut narrow = Vec::new();
+    for c in &out.shapes {
+        texts(c.clip_rect, &c.shape, &mut narrow);
+    }
+    assert!(narrow.len() > 5, "{} narrow appointments' words", narrow.len());
+    for g in narrow {
+        let rows: Vec<String> = g.rows.iter().map(|r| r.row.glyphs.iter().map(|x| x.chr).collect()).collect();
+        for pair in rows.windows(2) {
+            let (Some(before), Some(after)) = (pair[0].chars().last(), pair[1].chars().next()) else { continue };
+            assert!(!(before.is_alphanumeric() && after.is_alphanumeric()), "a word broken: {rows:?}");
+        }
+    }
+    let _ = std::fs::remove_dir_all(dir);
+}
