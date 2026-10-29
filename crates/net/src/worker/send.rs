@@ -1,12 +1,18 @@
-//! An account's worker: sending (on a second connection when it's free), the copy in Sent Items, and the Outbox.
+//! An account's worker: sending (on a second connection when it's free), the copy in Sent Items, and the Outbox;
+//! and the second connection's other work (other people's calendars just ticked, read at once).
 
 use super::*;
+
+/// Calendars just ticked read at the same time, at most (each over `ews_pim`'s four
+/// connections): the next waits for the first of them.
+const TICKED_AT_ONCE: usize = 2;
 
 impl Worker {
     /// The account's second connection: sends mail, reads or changes the automatic replies, and
     /// answers for rooms and free/busy, whatever the main connection is doing. It connects when
     /// there's something to do, and lets go of an idle connection after a while.
     pub(super) fn run_quick(mut self, rx: Receiver<Job>) {
+        let mut reading = Vec::new();
         loop {
             let job = match rx.recv_timeout(QUICK_IDLE) {
                 Ok(j) => j,
@@ -21,6 +27,7 @@ impl Worker {
                 Job::Send { account, id, raw, from, recipients, sent_folder } => {
                     self.send_quick(Job::Send { account, id, raw, from, recipients, sent_folder });
                 }
+                Job::SyncCalendars { calendars, .. } if !calendars.is_empty() => self.read_ticked(calendars, &mut reading),
                 j @ (Job::GetVacation { .. }
                 | Job::SetVacation { .. }
                 | Job::GetRooms { .. }
@@ -37,7 +44,41 @@ impl Worker {
                 }
             }
         }
+        for r in reading {
+            let _ = r.join();
+        }
         self.let_go();
+    }
+
+    /// Other people's calendars just ticked (on-premises Exchange), each read on a connection of
+    /// its own, while the next is ticked: one ticked as the one before was being read waited for
+    /// it, and showed 5.7 s later where alone it took 3 (29/10). [`TICKED_AT_ONCE`] at most;
+    /// `reading`, those being read.
+    pub(super) fn read_ticked(&mut self, calendars: Vec<String>, reading: &mut Vec<JoinHandle<()>>) {
+        if self.conn.is_none()
+            && let Err(e) = self.connect()
+        {
+            log::info!("{}: calendars: {e}", self.acc.id);
+            return;
+        }
+        let Some(Conn::Ews(c)) = &self.conn else { return self.sync_calendars(&calendars) };
+        let pim = Arc::new(self.load_pim());
+        for id in calendars {
+            reading.retain(|r| !r.is_finished());
+            while reading.len() >= TICKED_AT_ONCE {
+                let _ = reading.remove(0).join();
+            }
+            let (sibling, pim_there, sink, account, there) = (c.sibling(), Arc::clone(&pim), self.sink.clone(), self.id(), id.clone());
+            let read = move || read_calendar(&sibling, &pim_there, &there, &sink, account);
+            match std::thread::Builder::new().name(format!("calendar-{}", self.acc.id)).spawn(read) {
+                Ok(r) => reading.push(r),
+                // Read here instead, the next waiting for it.
+                Err(e) => {
+                    log::info!("{}: a calendar ticked read on this connection ({e})", self.acc.id);
+                    read_calendar(c, &pim, &id, &self.sink, self.id());
+                }
+            }
+        }
     }
 
     /// Close an idle connection (servers drop them anyway).
@@ -285,5 +326,13 @@ impl Worker {
                 Err(e) => self.notice(format!("sent, but no copy was saved in Sent Items: {e}")),
             }
         }
+    }
+}
+
+/// Someone else's calendar, read, and told.
+fn read_calendar(c: &crate::ews::Client, pim: &quatrelle_model::pim::Pim, id: &str, sink: &Sink, account: String) {
+    match crate::ews_pim::sync_calendars(c, pim, &[id.to_string()], now()) {
+        Ok(sync) => sink.emit(Event::DavSynced { account, sync: Box::new(sync) }),
+        Err(e) => log::info!("{account}: calendars: {e}"),
     }
 }
