@@ -13,6 +13,8 @@ use crate::{NetError, Result};
 
 pub const CONNECT_TIMEOUT: Duration = Duration::from_secs(20);
 pub const IO_TIMEOUT: Duration = Duration::from_secs(60);
+/// A connection that takes longer than this is detailed in the log: where the time went.
+pub const SLOW_CONNECT: Duration = Duration::from_secs(2);
 /// Per-address budget while more candidates remain. With a black-holed IPv6 route each AAAA
 /// record used to cost the full [`CONNECT_TIMEOUT`] before any A record was tried.
 const SHORT_TRY: Duration = Duration::from_secs(3);
@@ -190,6 +192,12 @@ fn connect(host: &str, port: u16, public_only: bool) -> Result<TcpStream> {
             }
             Err(e) => {
                 v6_missed |= a.is_ipv6();
+                // Said, for a connection that took long: an IPv6 route that goes nowhere cost
+                // each first connection seconds (Gmail on the owner's network, 29/10). Not for
+                // what a message makes Quatrelle fetch.
+                if left > 0 && !public_only {
+                    log::info!("{host}:{port}: {a} didn't answer ({e}); the next address is tried");
+                }
                 last = e;
             }
         }

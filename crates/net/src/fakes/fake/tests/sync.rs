@@ -562,3 +562,25 @@ fn remote_folder_changes() {
     assert_eq!(s.boxes.iter().find(|b| b.name == "Clients/Old").unwrap().msgs.len(), 1, "the mail moved with the folder");
     assert!(s.log.iter().any(|l| l.starts_with("SUBSCRIBE \"Clients\"")));
 }
+
+/// A sync says when the server received the newest message that came in, for the log to say how
+/// soon new mail was told of: an IMAP account's said nothing (a Gmail message seemed not to come,
+/// 29/10).
+#[test]
+fn a_sync_says_when_the_newest_message_came_to_the_server() {
+    let st = State::new();
+    {
+        let mut s = st.lock().unwrap();
+        s.add("INBOX", "first", &[]);
+        s.add("INBOX", "second", &[]);
+        // The first listed came to the server last.
+        s.mailbox("INBOX").unwrap().msgs[0].received = RECEIVED + 60;
+    }
+    let store = store("newest");
+    let opts = SyncOptions::default();
+    let mut c = login(&st);
+    assert_eq!(sync_folder(&mut c, &store, "a1", "INBOX", &opts).unwrap().newest, Some(RECEIVED + 60));
+    assert_eq!(sync_folder(&mut c, &store, "a1", "INBOX", &opts).unwrap().newest, None, "nothing came");
+    st.lock().unwrap().add("INBOX", "third", &[]);
+    assert_eq!(sync_folder(&mut c, &store, "a1", "INBOX", &opts).unwrap().newest, Some(RECEIVED));
+}

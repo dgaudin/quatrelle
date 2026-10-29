@@ -481,6 +481,7 @@ fn fetch_headers<S: Read + Write>(
                 if cutoff.is_some_and(|t| m.received_at() < t) {
                     continue;
                 }
+                report.newest = report.newest.max(Some(m.received_at()));
                 st.messages.push(m);
                 report.new += 1;
             }

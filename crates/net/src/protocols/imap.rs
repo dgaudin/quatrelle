@@ -189,7 +189,23 @@ fn caps_from(list: &[Capability<'_>]) -> HashSet<String> {
 impl Client<Stream> {
     /// Connect and read the greeting, upgrading with STARTTLS when configured.
     pub fn connect(cfg: &ServerConfig) -> Result<Client<Stream>> {
+        let began = Instant::now();
         let sock = stream::tcp(&cfg.host, cfg.port)?;
+        let reached = began.elapsed();
+        let c = Client::secured(cfg, sock)?;
+        if began.elapsed() > stream::SLOW_CONNECT {
+            log::info!(
+                "{}: connected in {:.1} s ({:.1} s to reach it, {:.1} s for encryption and its greeting)",
+                cfg.host,
+                began.elapsed().as_secs_f32(),
+                reached.as_secs_f32(),
+                (began.elapsed().saturating_sub(reached)).as_secs_f32()
+            );
+        }
+        Ok(c)
+    }
+
+    fn secured(cfg: &ServerConfig, sock: std::net::TcpStream) -> Result<Client<Stream>> {
         match cfg.security {
             quatrelle_model::Security::Tls => Client::from_stream(stream::tls(sock, &cfg.host)?),
             quatrelle_model::Security::None => Client::from_stream(Stream::Plain(sock)),

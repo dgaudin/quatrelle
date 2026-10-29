@@ -333,6 +333,9 @@ pub struct SyncReport {
     pub unread: u32,
     /// The cache was emptied because UIDVALIDITY changed.
     pub reset: bool,
+    /// When the server received the newest of the messages that came in (Unix seconds, IMAP's
+    /// INTERNALDATE), for the log to say how soon it was told of; the others leave it out.
+    pub newest: Option<i64>,
 }
 
 impl SyncReport {
