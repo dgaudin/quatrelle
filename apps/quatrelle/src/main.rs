@@ -8,8 +8,8 @@
 //! `ui.settings`), `ui.openExport`, `ui.options` and `ui.about` open the File page at that page;
 //! `ui.addAccount` (optionally `={"email":…,"advanced":true,"graph":true}` or `"pop":true`), `ui.newEvent`
 //! (optionally `={"at":"YYYY-MM-DDTHH:MM","summary":…,"guests":…,"rooms":…,"scheduling":true,"finder":true}`)
-//! and `ui.newContact` open those dialogs; `ui.folderSize` (optionally `={"account":…}`) opens
-//! Folder Size over the File page.
+//! and `ui.newContact` open those dialogs, `ui.rules` the Rules dialog; `ui.folderSize`
+//! (optionally `={"account":…}`) opens Folder Size over the File page.
 #![cfg_attr(all(target_os = "windows", not(debug_assertions)), windows_subsystem = "windows")]
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
