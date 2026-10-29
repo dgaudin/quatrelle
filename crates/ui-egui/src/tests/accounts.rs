@@ -344,3 +344,41 @@ fn many_accounts_waiting_dont_cover_the_counts() {
     assert!(waiting.iter().all(|(_, l, _)| *l > counts_end), "nothing over the counts: {texts:?}");
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// On the File page, a row's buttons stay beside its words, never over them, whatever the
+/// language: in French the data file's three buttons were drawn over « Conservé sur cet
+/// ordinateur » and its path, and widened their card past the others.
+#[test]
+fn the_file_pages_buttons_never_cover_their_words() {
+    let (mut a, dir) = app("file-page-fr");
+    let ctx = egui::Context::default();
+    a.ui.language = "fr".into();
+    a.act(crate::Action::Backstage(crate::backstage::Page::Info));
+    let size = egui::vec2(1100.0, 2400.0);
+    for _ in 0..10 {
+        frame_sized(&ctx, &mut a, vec![], size);
+    }
+    let drawn: Vec<(String, egui::Rect)> = frame_shapes(&ctx, &mut a, vec![], size)
+        .into_iter()
+        .filter_map(|s| match s {
+            egui::Shape::Text(t) if !t.galley.text().trim().is_empty() => {
+                Some((t.galley.text().to_string(), t.galley.rect.translate(t.pos.to_vec2())))
+            }
+            _ => None,
+        })
+        .collect();
+    // The buttons that went under their words stay right under them (centred in the page's
+    // height, they were 700 points further down).
+    let at = |text: &str| drawn.iter().find(|(t, _)| t == text).map(|(_, r)| *r);
+    let (Some(words), Some(button)) = (at("Sur cet ordinateur"), at("Compacter maintenant")) else { panic!("the data file's row") };
+    assert!(button.min.y > words.min.y && button.min.y - words.min.y < 100.0, "{words:?} {button:?}");
+    let texts: Vec<egui::Rect> = drawn.iter().map(|(_, r)| r.shrink(1.0)).collect();
+    assert!(texts.len() > 20, "{} texts", texts.len());
+    for (i, x) in texts.iter().enumerate() {
+        for y in texts.iter().skip(i + 1) {
+            assert!(!x.intersects(*y), "words over words: {x:?} and {y:?}");
+        }
+    }
+    crate::i18n::set_current(crate::i18n::Lang::EN);
+    let _ = std::fs::remove_dir_all(dir);
+}
