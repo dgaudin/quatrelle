@@ -1,4 +1,4 @@
-//! UI tests: the message list.
+//! UI tests: the message list, and the reading pane beside it.
 
 use super::*;
 
@@ -45,4 +45,38 @@ fn the_line_between_two_messages_is_inside_its_row() {
         }
         let _ = std::fs::remove_dir_all(dir);
     }
+}
+
+/// What can be done with a message stays whole under its header: in a reading pane at the
+/// bottom, too short for the whole header, Reply, Reply all, Forward, Print and Save were cut in
+/// half by the header's scrolling.
+#[test]
+fn the_reading_panes_buttons_stay_whole_at_the_bottom() {
+    let (mut a, dir) = app("bottom-buttons");
+    let ctx = egui::Context::default();
+    a.run("view.readingPane", json!({"value": "bottom"}));
+    let k = a.session.list.first().map(|m| m.key.clone()).unwrap();
+    a.run("list.open", json!({"key": k.to_id()}));
+    let size = egui::vec2(1280.0, 800.0);
+    assert!(settled_text_at(&ctx, &mut a, "Reply all", size).is_some());
+    let input = RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, size)), ..Default::default() };
+    let mut out = ctx.run_ui(input, |ui| a.ui(ui));
+    out.textures_delta.clear();
+    fn texts(clip: egui::Rect, s: &egui::Shape, found: &mut Vec<(egui::Rect, egui::Rect)>) {
+        match s {
+            egui::Shape::Vec(v) => v.iter().for_each(|s| texts(clip, s, found)),
+            egui::Shape::Text(t) if t.galley.text() == "Reply all" => found.push((clip, t.galley.rect.translate(t.pos.to_vec2()))),
+            _ => {}
+        }
+    }
+    let mut found = Vec::new();
+    for c in &out.shapes {
+        texts(c.clip_rect, &c.shape, &mut found);
+    }
+    // The reading pane's (the ribbon has one too): each whole inside what it's clipped to.
+    assert!(found.len() >= 2, "{found:?}");
+    for (clip, text) in found {
+        assert!(clip.contains_rect(text), "Reply all at {text:?}, cut by {clip:?}");
+    }
+    let _ = std::fs::remove_dir_all(dir);
 }
