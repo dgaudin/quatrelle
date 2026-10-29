@@ -1,19 +1,16 @@
 <h1 align="center">Quatrelle</h1>
 
-> **Ce fork (dgaudin/quatrelle)** s'écarte de l'original sur les icônes (Fluent UI de Microsoft,
-> MIT), le style de la fenêtre et l'apparence d'Outlook : voir [FORK.md](FORK.md).
-
 <p align="center">
-  <b>Local-first email for creators; an open-source, clean-room alternative to Microsoft Outlook, rebuilt in pure Rust.</b>
+  <b>Local-first email: an open-source, clean-room alternative to Microsoft Outlook, rebuilt in pure Rust.</b>
 </p>
 
 <p align="center">
   The mail workflow you already know (folders, a message list grouped by date, a reading pane,
-  Reply / Reply all / Forward, flags, Archive, Delete, Send / Receive) over IMAP and SMTP, JMAP or
-  Exchange Online, with a calendar and people beside it.
-  Mail is cached on your computer, so it opens instantly, searches fast and stays readable offline.
-  Your password stays in the system keychain and only ever goes to your own mail server.<br>
-  <i>By the ArtCraft team. Tracked in <a href="https://github.com/storytold/artcraft/issues/2177">storytold/artcraft#2177</a>.</i>
+  Reply / Reply all / Forward, flags, Archive, Delete, Send / Receive) over IMAP and SMTP, JMAP, or
+  Exchange (your organisation's own server, or Exchange Online), with a calendar, people and tasks
+  beside it. Mail is kept on your computer, so it opens instantly, searches fast and stays readable
+  offline. Your password stays in the system keychain and only ever goes to your own mail server.<br>
+  <i>By Didier Gaudin. Quatrelle started as a fork of <a href="https://github.com/ZIDAN44/mailcraft">ZIDAN44/mailcraft</a>.</i>
 </p>
 
 <p align="center">
@@ -25,13 +22,17 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/reading.png" alt="Quatrelle with the sample mailbox: the folder pane on the left with Favorites and the account's folders and unread counts, the ribbon with Categorize, Pin and Snooze, the Inbox grouped under Today, Yesterday, Monday and Last week, and the reading pane showing a flagged message with its two-message conversation, sender card, Reply, Print and Save buttons and a picture attachment with a preview" width="100%">
+  <img src="docs/images/reading.png" alt="Quatrelle with the sample mailbox: the folder pane on the left with Favorites and the account's folders and unread counts, the ribbon with Reply, Quick steps, Flag, Categorize, Pin and Snooze, the Inbox grouped under Today, Yesterday, Monday and Last week, and the reading pane showing a flagged message with its follow-up, Reply, Reply all, Forward, Print and Save buttons and a picture attachment" width="100%">
 </p>
 
 <table>
 <tr>
 <td width="50%"><img src="docs/images/search-dark.png" alt="Dark mode with a search for storyboard across all folders, both messages of the conversation found and the reply open" width="100%"><p align="center"><sub><b>Search</b> across every folder, offline, with <code>from:</code>, <code>subject:</code>, <code>has:attachment</code>, <code>is:unread</code>; conversations; dark mode.</sub></p></td>
-<td width="50%"><img src="docs/images/compose.png" alt="Writing a reply in the reading pane: the formatting toolbar, Attach File, Link and Pictures, Save draft, Bcc, Discard and Pop out, the From, To and Subject fields filled in, the cursor above the signature and the original message below" width="100%"><p align="center"><sub><b>Write</b> in place: replies quote the original under your signature, with attachments, Cc/Bcc and drafts.</sub></p></td>
+<td width="50%"><img src="docs/images/compose.png" alt="Writing a reply in the reading pane: the Message, Insert, Options, Format Text and Review tabs, the font and paragraph buttons, Pop out and Discard, the From, To and Subject fields filled in, the signature and the original message below" width="100%"><p align="center"><sub><b>Write</b> in place: replies quote the original under your signature, with attachments, Cc/Bcc and drafts.</sub></p></td>
+</tr>
+<tr>
+<td width="50%"><img src="docs/images/calendar.png" alt="The calendar's week view: the date navigator on the left, the ribbon with Day, Work week, Week and Month, and a week of appointments in their calendars' colours, several side by side on Thursday" width="100%"><p align="center"><sub><b>Calendar</b>: day, week and month views, invitations, meetings with the Scheduling Assistant; Exchange, CalDAV or this computer.</sub></p></td>
+<td width="50%"><img src="docs/images/table.png" alt="The classic layout: the message list as a table with From, Subject, Received, Size and Categories columns, the reading pane at the bottom, and the To-Do bar's month and coming appointments on the right" width="100%"><p align="center"><sub><b>Classic layout</b>: the list as a table, the reading pane at the bottom or off, the To-Do bar beside it.</sub></p></td>
 </tr>
 </table>
 
@@ -71,11 +72,13 @@ the point: Rust is the language underneath, and the rust is what keeps it from f
 
 | Area | Highlights |
 |---|---|
-| **Accounts** | Any IMAP + SMTP or POP + SMTP provider (POP mail is kept in folders on this computer, starting from an existing `.pst` if wanted), JMAP (RFC 8620/8621), Exchange Online through Microsoft Graph, or an organisation's own Exchange server through EWS (NTLM or Basic sign-in, found with Autodiscover, calendars and contacts included); several accounts with an *All Inboxes* favorite; server settings found from the address (the domain's autoconfig, the Mozilla ISPDB, MX and SRV records); Gmail and Microsoft 365 sign-in through the browser (OAuth 2.0); SSL/TLS or STARTTLS; passwords in the system keychain; Outlook data files (`.pst`) open as mailboxes of their own, with their contacts and calendar, and any account exports to one |
+| **Accounts** | Any IMAP + SMTP or POP + SMTP provider (POP mail is kept in folders on this computer, starting from an existing `.pst` if wanted), JMAP (RFC 8620/8621), Exchange Online through Microsoft Graph, or an organisation's own Exchange server through EWS (NTLM or Basic sign-in, found with Autodiscover, calendars and contacts included); several accounts with an *All Inboxes* favorite; server settings found from the address (the domain's autoconfig, the Mozilla ISPDB, MX and SRV records); sign-in through the browser (OAuth 2.0) for Microsoft 365 with your organisation's own app registration, and for Gmail and Outlook.com in builds that carry one ([docs/oauth.md](docs/oauth.md)), an app password otherwise; SSL/TLS or STARTTLS; passwords in the system keychain; Outlook data files (`.pst`) open as mailboxes of their own, with their contacts and calendar, and any account exports to one |
 | **Sync** | Folder list with special-use roles (RFC 6154); per-folder incremental sync (new mail, flag changes via CONDSTORE, deletions via QRESYNC); UIDVALIDITY resets; IDLE on the Inbox for instant new mail; newest messages prefetched for offline reading; changes made offline replayed; back-off reconnects; desktop notifications for new mail |
 | **Reading** | Date-grouped list (Today, Yesterday, weekdays, Last week…), unread bars and bold, flags, attachment and replied markers, previews; reading pane right, bottom or off; double-click opens a message in its own window; conversations (JWZ threading); HTML shown formatted (headings, lists, links, quotes, colours, tables) with web pictures on request, remembered per sender; picture, PDF and video thumbnails; attachments dragged out to other apps; Print, Save as PDF, Save as `.eml`; arranged by date, sender, recipient, subject, size, flag or attachments, either way round; filters for unread, flagged, files, categorized, important and to or Cc me; a minimizable folder pane |
 | **Organising** | Delete (to Deleted Items; permanent there, with confirmation), Archive, Report junk / Not junk, Move to (dialog or drag), Read / Unread, Flag, Pin, Snooze, colour categories, Mark all as read; Focused / Other; inbox rules; filters: Unread, Flagged, Has files; multi-select with Ctrl and Shift; folders created, renamed, moved and deleted; favourites; Undo (Ctrl+Z); Ignore a conversation (its later replies go to Deleted Items) |
-| **Writing** | New, Reply, Reply all, Forward (with attachments); formatting (bold, italic, lists, headings, quotes, links) sent with a plain-text alternative; pictures inserted or pasted inline; To / Cc / Bcc suggested from mail you've seen; attachments up to 25 MB; signatures; drafts saved to the server; an Outbox for mail written offline; High / Low importance and read receipts; drafts that can't reach the server are kept and saved when it's back |
+| **Writing** | New, Reply, Reply all, Forward (with attachments); formatting (bold, italic, lists, headings, quotes, links) sent with a plain-text alternative; pictures inserted or pasted inline; To / Cc / Bcc suggested from mail you've seen; attachments up to 25 MB; signatures; drafts saved to the server; an Outbox for mail written offline; Delay Delivery; voting buttons; High / Low importance and read receipts; drafts that can't reach the server are kept and saved when it's back; S/MIME signing and encryption, with a certificate file or a smart card |
+| **Exchange** | An organisation's own Exchange server through EWS, kept on this computer as Outlook's Cached Exchange Mode keeps it; shared mailboxes and calendars; public folders; the server's rules, Outlook's included; automatic replies inside and outside the organisation; the Scheduling Assistant and the Room Finder; folder sizes on the server |
+| **Assistant** | Optional, through any OpenAI-compatible server (OpenAI, Mistral, Ollama, LM Studio…): summarize a message or a conversation, propose a reply, suggest a folder and a category, rephrase what you write; its key stays in the keychain, and nothing is sent until you ask |
 | **Calendar and people** | Day, week and month views; events with recurrences and time zones; meeting invitations by mail (accept, tentative, decline, inviting guests); an address book; synced with CalDAV / CardDAV |
 | **Mailbox** | The File page: account settings, automatic replies (Sieve, JMAP or Exchange), the space used, emptying Deleted Items and Junk Email, rules, Options; Work offline; each account in one `.quatrelle` data file in Documents\Quatrelle Files, movable as Outlook's are |
 | **Search** | Offline, all folders or this folder; bare words match word prefixes; `"phrases"`, `from:`, `to:`, `subject:`, `body:`, `has:attachment`, `is:unread`, `is:flagged`, `-negation` |
@@ -86,10 +89,13 @@ The full list of what's missing, ranked, is in [docs/gaps.md](docs/gaps.md).
 
 ## Quick start
 
-Installers come from the [Releases](https://github.com/dgaudin/quatrelle/releases) page once a
-release is cut: `.msi` and a portable zip for Windows (x64, x86, ARM64), a `.dmg` for macOS
-(universal), AppImage, `.deb`, `.rpm`, Flatpak and `.tar.gz` for Linux (x86_64, aarch64, riscv64),
-and a FreeBSD tarball. To run from source:
+Installers come from the [Releases](https://github.com/dgaudin/quatrelle/releases) page: `.msi`
+and a portable zip for Windows (x64, x86, ARM64), a `.dmg` for macOS (universal), AppImage,
+`.deb`, `.rpm`, Flatpak and `.tar.gz` for Linux (x86_64, aarch64, riscv64), and a FreeBSD
+tarball. The Windows and macOS installers aren't signed yet: Windows SmartScreen asks you to
+confirm (*More info › Run anyway*), and macOS to allow the app in *System Settings › Privacy &
+Security*. Versions: `1.0.x` are the stable releases and their fixes; `1.1.x` test builds come
+first as pre-releases. To run from source:
 
 ```bash
 cargo run --release -p quatrelle -- --sample
@@ -171,7 +177,11 @@ of your own in `assets/icon.png` and run it again to use that instead.
 
 ## License and credits
 
-MIT OR Apache-2.0. Built on [`mail-parser`](https://github.com/stalwartlabs/mail-parser) and
+MIT OR Apache-2.0. Quatrelle started as a fork of [ZIDAN44/mailcraft](https://github.com/ZIDAN44/mailcraft)
+(© the ArtCraft Team and the MailCraft contributors); what it changed from it, and why, is in
+[FORK.md](FORK.md) (in French). The rest is © Didier Gaudin.
+
+Built on [`mail-parser`](https://github.com/stalwartlabs/mail-parser) and
 [`mail-builder`](https://github.com/stalwartlabs/mail-builder) (Stalwart Labs, Apache-2.0 / MIT),
 [`imap-proto`](https://github.com/djc/tokio-imap) (MIT / Apache-2.0), [`lettre`](https://github.com/lettre/lettre) (MIT),
 [`rustls`](https://github.com/rustls/rustls) and [`ring`](https://github.com/briansmith/ring), [`html2text`](https://github.com/jugglerchris/rust-html2text) (MIT),
@@ -179,4 +189,5 @@ MIT OR Apache-2.0. Built on [`mail-parser`](https://github.com/stalwartlabs/mail
 [`quick-xml`](https://github.com/tafia/quick-xml) (MIT), [`hayro`](https://github.com/LaurenzV/hayro) (MIT / Apache-2.0),
 [`outlook-pst`](https://github.com/microsoft/outlook-pst-rs) (Microsoft, MIT), [`outlook-pst-rw`](https://github.com/dongs0104/outlook-pst-rs) (MIT), [`drag`](https://github.com/crabnebula-dev/drag-rs) (MIT / Apache-2.0), [`x11rb`](https://github.com/psychon/x11rb) (MIT / Apache-2.0) and
 [`egui`](https://github.com/emilk/egui). Microsoft Outlook is a trademark of Microsoft; Quatrelle is
-not affiliated with it and uses none of its code, icons or assets.
+not affiliated with it and uses none of its code or assets; its interface icons are Microsoft's
+Fluent UI System Icons, published under the MIT licence.
