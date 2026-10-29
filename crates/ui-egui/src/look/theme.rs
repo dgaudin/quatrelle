@@ -338,6 +338,20 @@ pub fn install_fonts(ctx: &egui::Context, regular: Option<Vec<u8>>, bold: Option
 /// when the main font hasn't them.
 pub fn install_fonts_with(ctx: &egui::Context, regular: Option<Vec<u8>>, bold: Option<Vec<u8>>, cjk: Vec<(Vec<u8>, u32)>, rtl: Option<Vec<u8>>) {
     crate::bidi::set_coverage(regular.as_deref());
+    ctx.set_fonts(definitions(regular, bold, cjk, rtl));
+    // The editor's typefaces (Arial, Calibri…) went with the old definitions.
+    crate::look::typefaces::forget(ctx);
+}
+
+/// The fonts [`install_fonts_with`] installs: of those the system gave, each egui can read (a
+/// file it can't, a PostScript font say, would stop the window at its next frame), then egui's
+/// own.
+fn definitions(regular: Option<Vec<u8>>, bold: Option<Vec<u8>>, cjk: Vec<(Vec<u8>, u32)>, rtl: Option<Vec<u8>>) -> FontDefinitions {
+    use crate::look::typefaces::readable;
+    let regular = regular.filter(|b| readable("the interface font", b, 0));
+    let bold = bold.filter(|b| readable("the interface font (bold)", b, 0));
+    let rtl = rtl.filter(|b| readable("the font for Arabic and Hebrew", b, 0));
+    let cjk = cjk.into_iter().filter(|(b, index)| readable("a font for Chinese, Japanese and Korean", b, *index));
     let mut fonts = FontDefinitions::default();
     if let Some(bytes) = rtl {
         fonts.font_data.insert("rtl".into(), Arc::new(FontData::from_owned(bytes)));
@@ -347,7 +361,7 @@ pub fn install_fonts_with(ctx: &egui::Context, regular: Option<Vec<u8>>, bold: O
             }
         }
     }
-    for (i, (bytes, index)) in cjk.into_iter().enumerate() {
+    for (i, (bytes, index)) in cjk.enumerate() {
         let mut data = FontData::from_owned(bytes);
         data.index = index;
         let name = format!("cjk-{i}");
@@ -373,9 +387,7 @@ pub fn install_fonts_with(ctx: &egui::Context, regular: Option<Vec<u8>>, bold: O
     }
     bold_list.extend(fonts.families.get(&FontFamily::Proportional).cloned().unwrap_or_default());
     fonts.families.insert(bold_family, bold_list);
-    ctx.set_fonts(fonts);
-    // The editor's typefaces (Arial, Calibri…) went with the old definitions.
-    crate::look::typefaces::forget(ctx);
+    fonts
 }
 
 /// Last of all, the fonts built in from craft-fonts (none unless built with them).
@@ -457,5 +469,21 @@ mod tests {
             }
             assert!(short.is_empty(), "{which}: {}", short.join("; "));
         }
+    }
+
+    /// Fonts from the system egui can't read (a PostScript Type 1 file, as fontconfig gives on
+    /// Linux for some names) are left out: the window draws in egui's own instead of stopping.
+    #[test]
+    fn a_system_font_egui_cant_read_is_left_out() {
+        let junk = || Some(b"%!PS-AdobeFont-1.0: StandardSymbolsPS 1.00".to_vec());
+        let ctx = egui::Context::default();
+        ctx.set_fonts(definitions(junk(), junk(), vec![(b"%!PS".to_vec(), 0)], junk()));
+        let mut out = ctx.run_ui(Default::default(), |ui| {
+            for family in [FontFamily::Proportional, FontFamily::Monospace, FontFamily::Name("bold".into())] {
+                let g = ui.fonts_mut(|f| f.layout_no_wrap("Hello".into(), egui::FontId::new(14.0, family), Color32::WHITE));
+                assert!(g.size().x > 0.0);
+            }
+        });
+        out.textures_delta.clear();
     }
 }

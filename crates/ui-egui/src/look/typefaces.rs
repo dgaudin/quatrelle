@@ -60,6 +60,13 @@ pub(crate) fn load(ctx: &egui::Context, services: &mut dyn crate::Services, name
     st.tried.insert(name.to_string());
     ctx.data_mut(|d| d.insert_temp(id(), st.clone()));
     let Some((regular, bold)) = services.typeface(name) else { return };
+    // A file egui can't read stops the window when the typeface is drawn with: it's drawn in
+    // the usual font instead (fontconfig's Symbol on Linux is a PostScript Type 1 file, and a
+    // message written in it closed the window, 29/10).
+    if !readable(&format!("the typeface {name}"), &regular, 0) {
+        return;
+    }
+    let bold = bold.filter(|b| readable(&format!("the typeface {name} (bold)"), b, 0));
     let usual: Vec<String> = defs.families.get(&FontFamily::Proportional).cloned().unwrap_or_default();
     let usual_bold: Vec<String> = defs.families.get(&FontFamily::Name("bold".into())).cloned().unwrap_or_else(|| usual.clone());
     let key = format!("typeface-{name}");
@@ -83,6 +90,19 @@ pub(crate) fn load(ctx: &egui::Context, services: &mut dyn crate::Services, name
     ctx.data_mut(|d| d.insert_temp(id(), st));
 }
 
+/// Whether egui can read `bytes` as a font (the face at `index` of a collection), said in the
+/// log when it can't (`what`: which font it is). egui reads TrueType and OpenType, as skrifa
+/// does here, and stops at the next frame on anything else.
+pub(crate) fn readable(what: &str, bytes: &[u8], index: u32) -> bool {
+    match skrifa::FontRef::from_index(bytes, index) {
+        Ok(_) => true,
+        Err(e) => {
+            log::warn!("{what}: not a font Quatrelle can draw with ({e}), left out");
+            false
+        }
+    }
+}
+
 /// The usual fonts were installed anew (the desktop's font changed): what was loaded went with
 /// them, and is asked for again when needed.
 pub(crate) fn forget(ctx: &egui::Context) {
@@ -93,31 +113,38 @@ pub(crate) fn forget(ctx: &egui::Context) {
 mod tests {
     use super::*;
 
+    struct Fonts;
+    impl crate::Services for Fonts {
+        fn clock(&self) -> (i64, i32) {
+            (0, 0)
+        }
+        fn pick_files(&mut self) -> Vec<std::path::PathBuf> {
+            Vec::new()
+        }
+        fn save_path(&mut self, _: &str) -> Option<std::path::PathBuf> {
+            None
+        }
+        fn open_path(&mut self, _: &std::path::Path) -> Result<(), String> {
+            Ok(())
+        }
+        fn typeface(&mut self, family: &str) -> Option<(Vec<u8>, Option<Vec<u8>>)> {
+            // egui's own font stands in for Arial; Symbol is a PostScript Type 1 file, as
+            // fontconfig gives on Linux; nothing else is installed.
+            match family {
+                "Arial" => Some((
+                    egui::FontDefinitions::default().font_data.values().next().map(|d| d.font.as_ref().as_ref().to_vec()).unwrap_or_default(),
+                    None,
+                )),
+                "Symbol" => Some((b"%!PS-AdobeFont-1.0: StandardSymbolsPS 1.00".to_vec(), Some(b"%!PS".to_vec()))),
+                _ => None,
+            }
+        }
+    }
+
     /// A typeface the system has becomes a family the editor can draw with, asked for once;
     /// one it hasn't is left alone (and not asked for again).
     #[test]
     fn a_typeface_is_loaded_once_and_drawn_with() {
-        struct Fonts;
-        impl crate::Services for Fonts {
-            fn clock(&self) -> (i64, i32) {
-                (0, 0)
-            }
-            fn pick_files(&mut self) -> Vec<std::path::PathBuf> {
-                Vec::new()
-            }
-            fn save_path(&mut self, _: &str) -> Option<std::path::PathBuf> {
-                None
-            }
-            fn open_path(&mut self, _: &std::path::Path) -> Result<(), String> {
-                Ok(())
-            }
-            fn typeface(&mut self, family: &str) -> Option<(Vec<u8>, Option<Vec<u8>>)> {
-                // egui's own font stands in for Arial; nothing else is installed.
-                (family == "Arial").then(|| {
-                    (egui::FontDefinitions::default().font_data.values().next().map(|d| d.font.as_ref().as_ref().to_vec()).unwrap_or_default(), None)
-                })
-            }
-        }
         let ctx = egui::Context::default();
         let mut services = Fonts;
         assert_eq!(wanted(&ctx, ["Arial".to_string(), "Arial".to_string(), String::new(), "Nope".to_string()]), ["Arial", "Nope"]);
@@ -140,5 +167,24 @@ mod tests {
         out.textures_delta.clear();
         forget(&ctx);
         assert!(loaded(&ctx).is_empty());
+    }
+
+    /// A typeface the system gives as a file egui can't read is left out: the editor draws it
+    /// in the usual font, and the window goes on (a message written in Symbol closed it, 29/10).
+    #[test]
+    fn a_typeface_egui_cant_read_is_left_out() {
+        let ctx = egui::Context::default();
+        let mut out = ctx.run_ui(Default::default(), |_| {});
+        out.textures_delta.clear();
+        load(&ctx, &mut Fonts, "Symbol");
+        let have = loaded(&ctx);
+        assert!(!have.contains("Symbol"), "{have:?}");
+        let mut out = ctx.run_ui(Default::default(), |ui| {
+            for family in [family(&have, "Symbol", false), family(&have, "Symbol", true), Some(FontFamily::Proportional)].into_iter().flatten() {
+                let g = ui.fonts_mut(|f| f.layout_no_wrap("Hello".into(), egui::FontId::new(14.0, family), egui::Color32::WHITE));
+                assert!(g.size().x > 0.0);
+            }
+        });
+        out.textures_delta.clear();
     }
 }
