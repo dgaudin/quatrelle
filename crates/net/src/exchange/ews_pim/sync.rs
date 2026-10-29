@@ -321,20 +321,38 @@ fn delete_gone<'a>(c: &Client, gone: impl Iterator<Item = &'a quatrelle_model::p
 /// A calendar's items, read, into `out`: each appointment and series as an event, and the
 /// occurrences of a series changed on their own (moved, renamed) as instances of their own —
 /// the series lists their items, which are read in a batch — so that a meeting moved in
-/// Outlook, or dragged here, shows on its new day rather than its old one.
+/// Outlook, or dragged here, shows on its new day rather than its old one. One the server
+/// doesn't give is made from what its series says of it (its own times).
 /// `owner`: the calendar's mailbox (the organizer of the meetings it organizes); `since`: what
 /// the calendar is read from (the occurrences changed before then aren't).
 fn read_calendar(c: &Client, list: Vec<El>, calendar: &str, owner: &str, since: i64, out: &mut DavSync) {
     let id_of = |it: &El| {
         it.child("ItemId").map(|i| (i.attr("Id").unwrap_or("").to_string(), i.attr("ChangeKey").unwrap_or("").to_string())).unwrap_or_default()
     };
+    let stored = |href: String, etag: String, event: CalEvent| StoredEvent {
+        calendar: calendar.into(),
+        href,
+        etag,
+        event,
+        dirty: false,
+        notify: false,
+        respond: None,
+    };
     let mut changed: Vec<String> = Vec::new();
+    // Each of those as its series says of it, for one the server doesn't give.
+    let mut listed: Vec<(String, String, CalEvent)> = Vec::new();
     for it in &list {
         if let Some(mut event) = event_of(it) {
             own_organizer(&mut event, it, owner);
+            for o in modified_occurrences(it, Some(since)) {
+                let (href, etag) = id_of(o);
+                if let Some(e) = listed_exception(&event, o) {
+                    listed.push((href.clone(), etag, e));
+                }
+                changed.push(href);
+            }
             let (href, etag) = id_of(it);
-            out.events.push(StoredEvent { calendar: calendar.into(), href, etag, event, dirty: false, notify: false, respond: None });
-            changed.extend(modified_occurrence_ids(it, Some(since)));
+            out.events.push(stored(href, etag, event));
         }
     }
     changed.truncate(MAX_ITEMS);
@@ -344,24 +362,34 @@ fn read_calendar(c: &Client, list: Vec<El>, calendar: &str, owner: &str, since: 
     // Said in the log with what they cost, as the calendar's own items are.
     let all: usize = list.iter().filter_map(|it| it.child("ModifiedOccurrences")).map(|m| m.children("Occurrence").count()).sum();
     let (began, before) = (std::time::Instant::now(), c.spent());
-    match get_items(c, &changed, "") {
-        Ok(found) => {
-            for it in &found {
-                if let Some(mut event) = exception_of(it) {
-                    own_organizer(&mut event, it, owner);
-                    let (href, etag) = id_of(it);
-                    out.events.push(StoredEvent { calendar: calendar.into(), href, etag, event, dirty: false, notify: false, respond: None });
-                }
-            }
+    let found = get_items(c, &changed, "").unwrap_or_else(|e| {
+        out.errors.push(format!("changed occurrences: {e}"));
+        Vec::new()
+    });
+    // The occurrences given, by series and place in it.
+    let mut given: std::collections::HashSet<(String, i64)> = std::collections::HashSet::new();
+    for it in &found {
+        if let Some(mut event) = exception_of(it) {
+            own_organizer(&mut event, it, owner);
+            given.extend(event.recurrence_id.map(|r| (event.uid.clone(), r)));
+            let (href, etag) = id_of(it);
+            out.events.push(stored(href, etag, event));
         }
-        Err(e) => out.errors.push(format!("changed occurrences: {e}")),
+    }
+    let mut from_series = 0;
+    for (href, etag, event) in listed {
+        if event.recurrence_id.is_some_and(|r| !given.contains(&(event.uid.clone(), r))) {
+            from_series += 1;
+            out.events.push(stored(href, etag, event));
+        }
     }
     let t = c.spent().since(before);
     log::info!(
-        "{} occurrences changed on their own read in {:.1} s ({} older left out): {:.1} s waiting for the server",
+        "{} occurrences changed on their own read in {:.1} s ({} older left out{}): {:.1} s waiting for the server",
         changed.len(),
         began.elapsed().as_secs_f32(),
         all.saturating_sub(changed.len()),
+        if from_series > 0 { format!("; {from_series} not given, shown from their series") } else { String::new() },
         t.server.as_secs_f32()
     );
 }

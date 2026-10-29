@@ -144,12 +144,28 @@ pub fn exception_of(it: &El) -> Option<CalEvent> {
     Some(e)
 }
 
-/// The items of a series' occurrences changed on their own, as the series lists them: from
-/// `since` on, those ending then or later or that stood then or later (one whose times aren't
-/// said is kept). The older ones aren't shown, as the appointments before then aren't read: a
-/// colleague's meetings moved now and then for years were hundreds, and reading them took
-/// longer than the rest of the calendar (29/10).
-pub fn modified_occurrence_ids(it: &El, since: Option<i64>) -> Vec<String> {
+/// An occurrence changed on its own as its series says of it (`o`, one of its
+/// `ModifiedOccurrences`): the series' event at the occurrence's own times. For one the server
+/// doesn't give when asked (it refused a colleague's 41, 29/10): the meeting shows on its new day,
+/// under the series' subject, rather than on its old one.
+pub fn listed_exception(master: &CalEvent, o: &El) -> Option<CalEvent> {
+    let start = quatrelle_jmap::utc_date(&text(o, "Start"))?;
+    let original = quatrelle_jmap::utc_date(&text(o, "OriginalStart"))?;
+    let end = quatrelle_jmap::utc_date(&text(o, "End")).unwrap_or_else(|| start.saturating_add(master.end.saturating_sub(master.start))).max(start);
+    let mut e = master.clone();
+    (e.start, e.end) = if e.all_day { (day(start), day(end).max(day(start) + 86_400)) } else { (start, end) };
+    e.recurrence_id = Some(if e.all_day { day(original) } else { original });
+    e.rrule = None;
+    e.exdates.clear();
+    Some(e)
+}
+
+/// A series' occurrences changed on their own, as the series lists them (each with its item):
+/// from `since` on, those ending then or later or that stood then or later (one whose times
+/// aren't said is kept). The older ones aren't shown, as the appointments before then aren't
+/// read: a colleague's meetings moved now and then for years were hundreds, and reading them
+/// took longer than the rest of the calendar (29/10).
+pub fn modified_occurrences(it: &El, since: Option<i64>) -> Vec<&El> {
     let recent = |o: &El| {
         let Some(since) = since else { return true };
         let at = |name: &str| quatrelle_jmap::utc_date(&text(o, name));
@@ -159,9 +175,7 @@ pub fn modified_occurrence_ids(it: &El, since: Option<i64>) -> Vec<String> {
         }
     };
     it.child("ModifiedOccurrences")
-        .map(|m| {
-            m.children("Occurrence").filter(|o| recent(o)).filter_map(|o| o.child("ItemId")?.attr("Id").map(str::to_string)).take(1000).collect()
-        })
+        .map(|m| m.children("Occurrence").filter(|o| recent(o) && o.child("ItemId").and_then(|i| i.attr("Id")).is_some()).take(1000).collect())
         .unwrap_or_default()
 }
 
