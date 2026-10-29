@@ -1829,3 +1829,4 @@ kind	Address	地址
 	From one of these	寄件者是以下之一
 	To or Cc one of these	收件者或副本是以下之一
 	Subject has one of these (comma-separated)	主旨包含以下任一詞語（以逗號分隔）
+	Messages still being sent: {n}. They may not go if Quatrelle closes now: wait a moment, or close anyway.	仍在傳送的郵件：{n}。如果現在關閉 Quatrelle，它們可能無法送出：請稍候，或仍然關閉。

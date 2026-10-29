@@ -1827,3 +1827,4 @@ month	May	Май
 	From one of these	Отправитель — один из этих
 	To or Cc one of these	Кому или копия — один из этих
 	Subject has one of these (comma-separated)	Тема содержит одно из этих слов (через запятую)
+	Messages still being sent: {n}. They may not go if Quatrelle closes now: wait a moment, or close anyway.	Сообщения, которые ещё отправляются: {n}. Они могут не уйти, если закрыть Quatrelle сейчас: подождите немного или всё равно закройте.

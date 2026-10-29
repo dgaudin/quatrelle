@@ -1828,3 +1828,4 @@ month	May	maio
 	From one of these	O remetente é um destes
 	To or Cc one of these	Para ou Cc é um destes
 	Subject has one of these (comma-separated)	O assunto contém uma destas palavras (separadas por vírgulas)
+	Messages still being sent: {n}. They may not go if Quatrelle closes now: wait a moment, or close anyway.	Mensagens ainda sendo enviadas: {n}. Elas podem não sair se o Quatrelle fechar agora: aguarde um momento ou feche mesmo assim.

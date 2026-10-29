@@ -206,7 +206,7 @@ pub(crate) fn tour() {
             Dialog::add_account(),
             Dialog::move_to(),
             Dialog::ConfirmDelete { count: 2 },
-            Dialog::LostOnClose { unsent: 2, changes: 1 },
+            Dialog::LostOnClose { unsent: 2, changes: 1, sending: 1 },
             Dialog::ConfirmDeleteContact { uid: "zoe".into(), name: "Zoe Park".into() },
             Dialog::EmptySubject,
             Dialog::SendCheck(vec![

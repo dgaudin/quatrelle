@@ -1824,3 +1824,4 @@ month	May	mei
 	From one of these	Van is een van deze
 	To or Cc one of these	Aan of CC is een van deze
 	Subject has one of these (comma-separated)	Onderwerp bevat een van deze woorden (gescheiden door komma’s)
+	Messages still being sent: {n}. They may not go if Quatrelle closes now: wait a moment, or close anyway.	Berichten die nog worden verzonden: {n}. Ze gaan misschien niet weg als Quatrelle nu sluit: wacht even, of sluit toch.

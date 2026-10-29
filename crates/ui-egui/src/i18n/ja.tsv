@@ -1825,3 +1825,4 @@ month	May	5月
 	From one of these	差出人が次のいずれか
 	To or Cc one of these	宛先または CC が次のいずれか
 	Subject has one of these (comma-separated)	件名に次のいずれかの語を含む（コンマ区切り）
+	Messages still being sent: {n}. They may not go if Quatrelle closes now: wait a moment, or close anyway.	送信中のメッセージ: {n}。今 Quatrelle を閉じると送信されない場合があります。少し待つか、そのまま閉じてください。
