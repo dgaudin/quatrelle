@@ -300,6 +300,20 @@ fn a_429_waits_and_is_counted() {
 }
 
 #[test]
+fn a_post_is_not_retried_on_503() {
+    // A 503 to a post may come after the message was made: posting again could make it twice.
+    let busy = || b"HTTP/1.1 503 X\r\nRetry-After: 0\r\nContent-Length: 0\r\n\r\n".to_vec();
+    let (base, h) = crate::http::tests::serve(vec![answer(200, ME_JSON), busy(), busy(), answer(204, "")]);
+    let (c, _) = TeamsClient::connect(&base, "t").unwrap();
+    assert!(matches!(c.send_text(CHAT, "hi"), Err(NetError::Closed(m)) if m == "HTTP 503"));
+    assert_eq!(c.stats().requests, 2, "sent once");
+    // What can be repeated is: a 503 to a reaction is waited out.
+    c.set_reaction(CHAT, "1", "like").unwrap();
+    assert_eq!(c.stats().requests, 4);
+    assert_eq!(h.join().unwrap().len(), 4);
+}
+
+#[test]
 fn forbidden_post_is_a_protocol_error_with_403() {
     let closed = "19:closed@thread.v2";
     let mut t = teams_with(vec![chat(closed, T0, 1)]);
