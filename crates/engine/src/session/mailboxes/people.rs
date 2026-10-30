@@ -60,8 +60,9 @@ pub(crate) struct People {
     pub(crate) pending: Vec<NameCheck>,
     /// Names several people fit, for the one meant to be chosen.
     pub(crate) choices: Vec<NameChoice>,
-    /// What each field's names came to, until the field takes them.
-    pub(crate) outcomes: HashMap<FieldId, Vec<(String, Outcome)>>,
+    /// What each field's names came to, until the field takes them; the field recorded to
+    /// longest ago first.
+    pub(crate) outcomes: Vec<(FieldId, Vec<(String, Outcome)>)>,
 }
 
 /// An entry of the directory index, with its name in lower case (matched on every key typed).
@@ -174,6 +175,11 @@ impl Session {
                 p.index.remove(&old);
             }
         }
+    }
+
+    /// A window closed: its fields' last suggestions go.
+    pub(crate) fn forget_window_suggestions(&mut self, window: u64) {
+        self.people.suggest_cache.retain(|f, _| f.window != window);
     }
 
     /// An account is gone: what its directory answered goes too (the index doesn't say whose
