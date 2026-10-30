@@ -121,10 +121,17 @@ pub(crate) fn launch(program: &Path, url: &str) -> Result<(), String> {
         // No console window flashing up.
         cmd.creation_flags(0x0800_0000);
     }
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        // A group of its own, as `open::that_detached` does: Ctrl-C on the terminal Quatrelle was
+        // started from, or a kill of its group, leaves the meeting open.
+        cmd.process_group(0);
+    }
     let mut child = cmd.spawn().map_err(|e| e.to_string())?;
     // A browser already running takes the link and this process ends at once; reaped here, so it
-    // isn't left a zombie.
-    std::thread::spawn(move || {
+    // isn't left a zombie. A thread the OS refuses only leaves that zombie until Quatrelle exits.
+    let _ = std::thread::Builder::new().name("browser-reaper".into()).spawn(move || {
         let _ = child.wait();
     });
     Ok(())
@@ -237,6 +244,50 @@ mod tests {
         assert!(launch(Path::new("/bin/true"), "https://x.example/a b").is_err());
         assert!(launch(Path::new("/bin/true"), "file:///etc/passwd").is_err());
         assert!(launch(Path::new("/bin/true"), "https://x.example/a\n--disable-web-security").is_err());
+    }
+
+    /// The group id `ps` reports for a process (works on Linux and macOS).
+    #[cfg(unix)]
+    fn group_of(pid: &str) -> Option<u32> {
+        let out = Command::new("ps").args(["-o", "pgid=", "-p", pid]).output().ok()?;
+        String::from_utf8_lossy(&out.stdout).trim().parse().ok()
+    }
+
+    /// A meeting window is a process group of its own: Ctrl-C on a terminal Quatrelle was started
+    /// from, or a kill of its group, must not take the meeting with it.
+    #[cfg(unix)]
+    #[test]
+    fn the_browser_is_a_process_group_of_its_own() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = TempDir::new("browsers-group");
+        let report = dir.0.join("group");
+        let program = dir.0.join("fake-browser");
+        let script = format!("#!/bin/sh\nps -o pgid= -p $$ > '{}'\n", report.display());
+        let _ = std::fs::write(&program, script);
+        let _ = std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o755));
+        // Another test forking at the very moment the script was written can hold it open for an
+        // instant ("text file busy"): try again a few times.
+        let mut launched = launch(&program, "https://x.example/a");
+        for _ in 0..20 {
+            if launched.is_ok() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+            launched = launch(&program, "https://x.example/a");
+        }
+        assert!(launched.is_ok(), "{launched:?}");
+        // Bounded wait for the fake browser to write its group id.
+        let mut theirs = None;
+        for _ in 0..100 {
+            theirs = std::fs::read_to_string(&report).ok().and_then(|t| t.trim().parse::<u32>().ok());
+            if theirs.is_some() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        let theirs = theirs.expect("the fake browser reported its process group");
+        let ours = group_of(&std::process::id().to_string()).expect("our process group");
+        assert_ne!(theirs, ours, "the browser stayed in Quatrelle's process group");
     }
 
     /// A program that isn't there: an error, not a crash.
