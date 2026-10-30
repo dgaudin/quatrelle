@@ -1,7 +1,7 @@
 //! The contacts field's glue with the session. [`PeopleFields`] keeps every field's state by
 //! [`FieldId`] (the message's To, Cc, Bcc and Replies to; the Select Names dialog's rows), turns a
 //! field's text into pieces and the widget's events back into text and actions, asks the engine for
-//! suggestions.
+//! suggestions, and holds the wait Send makes for the names still being resolved.
 //!
 //! The work is bounded as the engine's is (the search bug of 2026-10-30): a field's text is parsed
 //! when it changes (fed in, or the engine writing a name found), never on a frame where nothing
@@ -18,8 +18,11 @@ use quatrelle_engine::{Fetched, FieldId, Outcome, Session, Suggestion, group_ent
 use serde_json::{Value, json};
 
 use crate::Action;
-use crate::look::people_field::{self, FieldInput, FieldState, PeopleEvent, Piece, PieceError, text_of};
+use crate::look::people_field::{self, FieldInput, FieldState, PeopleEvent, Piece, PieceError, error_text, text_of};
 use crate::theme::Tokens;
+
+/// How long Send waits for the directory: a request's own timeout (`IO_TIMEOUT`, `net/src/stream.rs`).
+pub const SEND_WAIT_SECS: f64 = 60.0;
 
 /// The message's own fields, in the order Check Names goes through them.
 pub(crate) const COMPOSE_FIELDS: [&str; 4] = ["to", "cc", "bcc", "replyTo"];
@@ -31,6 +34,25 @@ pub(crate) const BOOK_FIELDS: [&str; 3] = ["book-to", "book-cc", "book-bcc"];
 /// it): one per field, two message windows apart.
 pub(crate) fn egui_id(field: FieldId) -> egui::Id {
     egui::Id::unique(("people-field", field.window, field.name))
+}
+
+/// A send held for the fields' names: the message, the command's parameters, and since when.
+struct SendWait {
+    compose: u64,
+    params: Value,
+    since: f64,
+}
+
+/// What a send held comes to.
+enum SendState {
+    /// Every entry is a chip: it can go.
+    Ready,
+    /// Names wait on the directory, lists on their members, or a name on its choice.
+    Waiting,
+    /// An entry nothing can send to, and why.
+    Stopped(String),
+    /// An entry left as typed with nothing to wait for (its choice cancelled): the send is off.
+    Cancelled,
 }
 
 /// One field: the widget's state, and what the glue keeps beside it.
@@ -61,6 +83,7 @@ pub(crate) struct PeopleFields {
     fields: HashMap<FieldId, Field>,
     /// The field whose input has the keyboard.
     open: Option<FieldId>,
+    send_wait: Option<SendWait>,
     /// The messages being written as of the last frame (one gone takes its fields with it).
     windows: HashSet<u64>,
 }
@@ -73,6 +96,11 @@ fn same_list(a: &Addressee, b: &Addressee) -> bool {
     } else {
         a.address.eq_ignore_ascii_case(&b.address)
     }
+}
+
+/// A contact group's chip: it has no address, only its members have.
+fn is_group(who: &Addressee) -> bool {
+    who.kind == AddresseeKind::ContactGroup && who.address.is_empty()
 }
 
 /// The pieces of a field's text, cut to [`MAX_ENTRIES`]: a chip for an address (its kind and, when
@@ -124,6 +152,17 @@ fn compose_text(s: &Session, field: FieldId) -> Option<&String> {
         "cc" => Some(&c.cc),
         "bcc" => Some(&c.bcc),
         "replyTo" => Some(&c.reply_to),
+        _ => None,
+    }
+}
+
+fn compose_text_mut(s: &mut Session, field: FieldId) -> Option<&mut String> {
+    let c = s.compose.iter_mut().chain(s.composes.iter_mut()).find(|c| c.id == field.window)?;
+    match field.name {
+        "to" => Some(&mut c.to),
+        "cc" => Some(&mut c.cc),
+        "bcc" => Some(&mut c.bcc),
+        "replyTo" => Some(&mut c.reply_to),
         _ => None,
     }
 }
@@ -330,6 +369,17 @@ impl Field {
         }
         self.note = None;
     }
+
+    /// A contact group's members asked for (once).
+    fn expand(&mut self, s: &mut Session, account: Option<&str>, who: &Addressee) {
+        if self.expanding.iter().any(|w| same_list(w, who)) {
+            return;
+        }
+        match s.people_expand(account, who) {
+            Ok(_) => self.expanding.push(who.clone()),
+            Err(e) => self.note = Some(tf!("This list couldn't be expanded: {error}", error = e.to_string())),
+        }
+    }
 }
 
 impl PeopleFields {
@@ -462,8 +512,6 @@ impl PeopleFields {
         self.open
     }
 
-    /// (Read by the tests until Send reads it to see what it can send to.)
-    #[cfg(test)]
     pub(crate) fn pieces(&self, field: FieldId) -> &[Piece] {
         self.fields.get(&field).map_or(&[], |f| f.st.pieces.as_slice())
     }
@@ -486,7 +534,7 @@ impl PeopleFields {
     }
 
     /// Housekeeping each frame: the fields of messages gone, and a closed dialog's rows, go
-    /// (here and in the engine).
+    /// (here and in the engine); a send held for a message gone is off.
     pub(crate) fn settle(&mut self, s: &mut Session, live: &HashSet<u64>, book_open_for: Option<u64>) {
         for window in self.windows.difference(live) {
             s.forget_people_window(*window);
@@ -504,6 +552,150 @@ impl PeopleFields {
         self.fields.retain(|f, _| live.contains(&f.window) && (!BOOK_FIELDS.contains(&f.name) || book_open_for == Some(f.window)));
         if self.open.is_some_and(|f| !self.fields.contains_key(&f)) {
             self.open = None;
+        }
+        if self.send_wait.as_ref().is_some_and(|w| !live.contains(&w.compose)) {
+            self.send_wait = None;
+        }
+    }
+
+    /// A message's own field brought up to date with the engine's text (parsed when it changed,
+    /// the names settled taken, the lists expanded), and the text written back when the pieces
+    /// spell it otherwise.
+    fn sync_compose(&mut self, s: &mut Session, field: FieldId, account: &str) {
+        let Some(text) = compose_text(s, field).cloned() else { return };
+        self.prepare_with(s, field, Some(account), &Accepts::RECIPIENTS, Some(&text));
+        self.write_back(s, field);
+    }
+
+    fn write_back(&mut self, s: &mut Session, field: FieldId) {
+        let Some(f) = self.fields.get_mut(&field) else { return };
+        if !f.dirty {
+            return;
+        }
+        if let Some(t) = compose_text_mut(s, field) {
+            *t = text_of(&f.st.pieces, &f.st.input);
+            f.st.synced.clone_from(t);
+            f.dirty = false;
+        }
+    }
+
+    /// `compose.send` asked: what's typed is closed, every entry of the message's four fields is
+    /// checked (an address here alone; a name in the directory, once), and a contact group's
+    /// members are asked for. `false`: nothing waits and nothing is wrong, send now. `true`: the
+    /// send is held ([`PeopleFields::send_when_resolved`] says when it goes, or why it can't).
+    pub(crate) fn gate_send(&mut self, s: &mut Session, params: &Value, now: f64) -> bool {
+        let Some((id, account)) = s.compose.as_ref().filter(|c| !c.sending).map(|c| (c.id, c.account.clone())) else { return false };
+        self.send_wait = None;
+        for name in COMPOSE_FIELDS {
+            let field = FieldId { window: id, name };
+            if self.fields.get_mut(&field).is_some_and(Field::close_input) {
+                if let Some(f) = self.fields.get_mut(&field) {
+                    f.dirty = true;
+                }
+                self.write_back(s, field);
+            }
+            self.sync_compose(s, field, &account);
+            let _ = s.people_resolve(field, Some(&account), &Accepts::RECIPIENTS, None);
+            self.sync_compose(s, field, &account);
+            let groups: Vec<Addressee> = self
+                .pieces(field)
+                .iter()
+                .filter_map(|p| match p {
+                    Piece::Chip { who, refused: None } if is_group(who) => Some(who.clone()),
+                    _ => None,
+                })
+                .collect();
+            if let Some(f) = self.fields.get_mut(&field) {
+                for who in &groups {
+                    f.expand(s, Some(&account), who);
+                }
+            }
+        }
+        match self.send_state(s, id) {
+            SendState::Ready => false,
+            _ => {
+                self.send_wait = Some(SendWait { compose: id, params: params.clone(), since: now });
+                true
+            }
+        }
+    }
+
+    /// Each frame while a send is held: `Ok(Some((message, params)))` once every name is settled
+    /// and every group expanded, `Err(why)` when an entry can't be sent to or the directory hasn't
+    /// answered within [`SEND_WAIT_SECS`], `Ok(None)` while it waits (or when nothing is held).
+    pub(crate) fn send_when_resolved(&mut self, s: &mut Session, now: f64) -> Result<Option<(u64, Value)>, String> {
+        let Some((id, since)) = self.send_wait.as_ref().map(|w| (w.compose, w.since)) else { return Ok(None) };
+        let Some(account) = s.all_composes().find(|c| c.id == id).map(|c| c.account.clone()) else {
+            self.send_wait = None;
+            return Ok(None);
+        };
+        for name in COMPOSE_FIELDS {
+            self.sync_compose(s, FieldId { window: id, name }, &account);
+        }
+        match self.send_state(s, id) {
+            SendState::Ready => Ok(self.send_wait.take().map(|w| (w.compose, w.params))),
+            SendState::Waiting if now - since >= SEND_WAIT_SECS => {
+                self.send_wait = None;
+                self.mark_unreached(s, id);
+                Err(tl!("The directory can't be reached").to_string())
+            }
+            SendState::Waiting => Ok(None),
+            SendState::Stopped(why) => {
+                self.send_wait = None;
+                Err(why)
+            }
+            SendState::Cancelled => {
+                self.send_wait = None;
+                Ok(None)
+            }
+        }
+    }
+
+    /// How long a held send has left before it gives up.
+    pub(crate) fn send_wait_left(&self, now: f64) -> Option<f64> {
+        self.send_wait.as_ref().map(|w| w.since + SEND_WAIT_SECS - now)
+    }
+
+    /// Where a held send stands. A piece left as typed is settled by nothing but the engine: it
+    /// waits while a name of its field waits on the directory or on its choice, whatever the
+    /// pending count alone would say.
+    fn send_state(&self, s: &Session, id: u64) -> SendState {
+        let mut waiting = false;
+        for name in COMPOSE_FIELDS {
+            let field = FieldId { window: id, name };
+            let Some(f) = self.fields.get(&field) else { continue };
+            let pending = s.people_pending(field) > 0 || s.name_choice_for(field).is_some();
+            waiting |= pending || !f.expanding.is_empty();
+            for p in &f.st.pieces {
+                match p {
+                    Piece::Chip { refused: Some(why), .. } => return SendState::Stopped(why.clone()),
+                    Piece::Chip { who, .. } if is_group(who) && !f.expanding.iter().any(|w| same_list(w, who)) => {
+                        return SendState::Stopped(f.note.clone().unwrap_or_else(|| tl!("This list has no members").to_string()));
+                    }
+                    Piece::Chip { .. } => {}
+                    Piece::Text { text, error: Some(e) } => return SendState::Stopped(error_text(text, e)),
+                    Piece::Text { error: None, .. } if pending => {}
+                    Piece::Text { error: None, .. } => return SendState::Cancelled,
+                }
+            }
+        }
+        if waiting { SendState::Waiting } else { SendState::Ready }
+    }
+
+    /// The names still waiting when the send gave up: said unreached under the field.
+    fn mark_unreached(&mut self, s: &Session, id: u64) {
+        for name in COMPOSE_FIELDS {
+            let field = FieldId { window: id, name };
+            if s.people_pending(field) == 0 {
+                continue;
+            }
+            if let Some(f) = self.fields.get_mut(&field) {
+                for p in &mut f.st.pieces {
+                    if let Piece::Text { error: error @ None, .. } = p {
+                        *error = Some(PieceError::Unreached);
+                    }
+                }
+            }
         }
     }
 }

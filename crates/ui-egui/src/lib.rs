@@ -649,8 +649,21 @@ impl MailApp {
         }
     }
 
-    /// Run a command, reporting failures in a toast.
+    /// Run a command, reporting failures in a toast. Send first waits for the names its fields
+    /// are still resolving ([`dialogs::people_field::PeopleFields::gate_send`]; `logic` runs it
+    /// once they're settled, or says why it can't go).
     pub fn run(&mut self, id: &str, params: Value) {
+        if id == "compose.send" {
+            let now = self.ui.close_checked.unwrap_or(0.0);
+            if self.ui.people.gate_send(&mut self.session, &params, now) {
+                return;
+            }
+        }
+        self.run_now(id, params);
+    }
+
+    /// Run a command now, whatever its fields are still resolving.
+    pub(crate) fn run_now(&mut self, id: &str, params: Value) {
         use quatrelle_engine::CmdError;
         self.sync_quote_words();
         match self.session.run(id, &params) {
