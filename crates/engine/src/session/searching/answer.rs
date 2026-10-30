@@ -320,6 +320,6 @@ impl Session {
 
     /// The messages waiting for a reply, when the query asks about them.
     fn awaiting_for(&mut self, query: &Query) -> HashSet<MessageKey> {
-        if query.clauses.iter().any(|c| asks_awaiting(&c.term)) { self.awaiting_replies() } else { HashSet::new() }
+        if query.clauses.iter().any(|c| asks_awaiting(&c.term)) { self.awaiting_now() } else { HashSet::new() }
     }
 }

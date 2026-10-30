@@ -242,7 +242,7 @@ impl Session {
             let hits: Vec<MessageKey> = self.server_search.iter().filter(|ss| ss.query == q).flat_map(|ss| ss.found.iter().cloned()).collect();
             let have: HashSet<MessageKey> = found.iter().map(|m| m.key.clone()).collect();
             // The servers can't tell what's waiting for a reply: checked here.
-            let awaiting = super::searching::awaiting_wanted(&q).map(|on| (on, self.awaiting_replies()));
+            let awaiting = super::searching::awaiting_wanted(&q).map(|on| (on, self.awaiting_now()));
             let hits = hits.into_iter().filter(|k| awaiting.as_ref().is_none_or(|(on, set)| set.contains(k) == *on));
             for key in hits.filter(|k| !have.contains(k)) {
                 if let Some(m) = self.folder_state(&key.account, &key.folder).messages.iter().find(|m| m.key.uid == key.uid).cloned() {
@@ -311,6 +311,7 @@ impl Session {
             self.reading = None;
         }
         self.list = list;
+        self.awaiting_memo = None;
         self.note_drafts();
         self.revision = self.revision.wrapping_add(1);
     }
