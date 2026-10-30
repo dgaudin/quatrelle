@@ -132,10 +132,11 @@ impl Session {
     pub(super) fn reload_folder(&mut self, account: &str, folder: &str) {
         let k = (account.to_string(), folder.to_string());
         self.cache.remove(&k);
-        // Only an index that covers this folder is out of date (a sync touches folder after
-        // folder: each dropped the whole index, built again from scratch while searching).
-        if self.index.as_ref().is_some_and(|ix| ix.covers(account, folder)) {
-            self.index = None;
+        // The search index adds what came in, if it read the folder already, and its answer looks
+        // again at what it found there. (Dropping the index, as this once did, made the search of
+        // a busy mailbox start over at each change a sync told of: it never ended.)
+        if let Some(ix) = self.index.as_mut() {
+            ix.changed(account, folder, true);
         }
         // The address book reads the folder's new mail (a slice at a time, by the window).
         self.contacts_folder_changed(account, folder);

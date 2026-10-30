@@ -88,7 +88,12 @@ impl Session {
                     self.refresh_list();
                 }
                 self.mark_junk(&account);
-                self.index = None;
+                // The folder list comes again every few seconds, mostly the same: the search
+                // index follows what changed in it (the list shows the search again then), rather
+                // than starting over.
+                if self.rescope_index() && self.search.is_some() {
+                    self.refresh_list();
+                }
                 self.follow_public_favorites();
             }
             Event::FolderChanged { account, folder } => {
