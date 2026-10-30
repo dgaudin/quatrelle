@@ -265,6 +265,7 @@ impl Session {
         self.accounts.retain(|a| a.config.id != id);
         self.cache.retain(|(a, _), _| a != id);
         self.pim.remove(id);
+        self.forget_rooms(id);
         let mut kept = None;
         if let Some(store) = &self.store {
             let gone = if keep { store.remove_account(id).map(|f| kept = f) } else { store.delete_account(id) };

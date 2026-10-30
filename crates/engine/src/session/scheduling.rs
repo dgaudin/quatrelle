@@ -96,7 +96,7 @@ impl Session {
         if refresh || !self.rooms.contains_key(account) {
             if self.server_schedules(account) {
                 self.rooms.insert(account.to_string(), Fetched::Loading);
-                self.jobs.push(Job::GetRooms { account: account.to_string() });
+                self.ask_rooms(account);
             } else {
                 let rooms = self.calendar_rooms(account);
                 self.rooms.insert(account.to_string(), Fetched::Ready(RoomFinder { lists: Vec::new(), rooms, from_calendar: true }));
@@ -118,8 +118,7 @@ impl Session {
             .iter()
             .filter(|a| matches!(a.status, SyncStatus::Online { .. } | SyncStatus::Syncing { .. }) && self.server_schedules(&a.config.id))
             .filter(|a| match self.people.rooms_asked.get(&a.config.id) {
-                // The Room Finder's own ask is on its way: its answer is noted.
-                None => !matches!(self.rooms.get(&a.config.id), Some(Fetched::Loading)),
+                None => true,
                 Some(&(at, failed)) => now.saturating_sub(at) >= if failed { ROOMS_RETRY } else { ROOMS_EVERY },
             })
             .map(|a| a.config.id.clone())
@@ -129,7 +128,7 @@ impl Session {
             if !self.rooms.contains_key(&account) {
                 self.rooms.insert(account.clone(), Fetched::Loading);
             }
-            self.jobs.push(Job::GetRooms { account });
+            self.ask_rooms(&account);
         }
     }
 
@@ -152,23 +151,30 @@ impl Session {
     /// The server's answer about rooms, the calendar's added after them: a server with no
     /// lists set up (or one that refused) still offers what the calendar knows.
     pub(crate) fn rooms_answered(&mut self, account: &str, lists: Vec<RoomList>, mut rooms: Vec<Room>, error: Option<String>) {
+        // An answer for an account removed meanwhile.
+        if self.account(account).is_none() {
+            return;
+        }
         let failed = error.is_some() && rooms.is_empty();
+        self.people.rooms_out.remove(account);
         self.people.rooms_asked.insert(account.to_string(), (self.clock.now, failed));
         let known = self.calendar_rooms(account);
-        if let Some(e) = &error {
-            // A failed refresh keeps what the server last said: the Room Finder and the room set.
-            if rooms.is_empty() && matches!(self.rooms.get(account), Some(Fetched::Ready(f)) if !f.from_calendar) {
-                log::info!("{account}: rooms from the server: {e}; the last are kept");
+        // A failed ask never touches a room set the server gave: rooms stay rooms.
+        let keep_set = failed && self.people.rooms_from_server.contains(account);
+        if failed {
+            // The server's text is not logged: it can carry names.
+            log::info!("{account}: rooms from the server failed; {} the calendar knows", known.len());
+            // A Room Finder holding the server's rooms keeps them too.
+            if matches!(self.rooms.get(account), Some(Fetched::Ready(f)) if !f.from_calendar) {
                 return;
             }
-            if rooms.is_empty() && known.is_empty() {
+            if known.is_empty() {
                 // Nothing known: refused, unless a Room Finder already holds something.
                 if !matches!(self.rooms.get(account), Some(Fetched::Ready(_))) {
-                    self.rooms.insert(account.to_string(), Fetched::Failed(e.clone()));
+                    self.rooms.insert(account.to_string(), Fetched::Failed(error.unwrap_or_default()));
                 }
                 return;
             }
-            log::info!("{account}: rooms from the server: {e}; the calendar's are offered");
         }
         let from_calendar = rooms.is_empty();
         for r in known {
@@ -176,7 +182,9 @@ impl Session {
                 rooms.push(r);
             }
         }
-        self.set_room_set(account, &rooms);
+        if !keep_set {
+            self.set_room_set(account, &rooms, !from_calendar);
+        }
         self.rooms.insert(account.to_string(), Fetched::Ready(RoomFinder { lists, rooms, from_calendar }));
     }
 
