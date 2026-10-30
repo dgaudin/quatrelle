@@ -211,6 +211,7 @@ impl Worker {
             Job::ServerFolderSizes { .. } => self.folder_sizes(),
             Job::FindCertificates { emails, .. } => self.directory_certificates(&emails),
             Job::SearchDirectory { query, .. } => self.search_directory(&query),
+            Job::ExpandList { address, item_id, .. } => self.expand_list(address, item_id),
             Job::FetchUrl { .. }
             | Job::FetchCalendar { .. }
             | Job::Discover { .. }

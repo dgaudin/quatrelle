@@ -137,7 +137,8 @@ pub fn parse_group_ref(s: &str) -> Option<&str> {
     s.trim().strip_prefix(GROUP_PREFIX).filter(|id| valid_item_id(id))
 }
 
-fn valid_item_id(id: &str) -> bool {
+/// Whether an Exchange item id is usable: 1 to 512 of the characters item ids are made of.
+pub fn valid_item_id(id: &str) -> bool {
     (1..=512).contains(&id.len()) && id.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'+' | b'/' | b'=' | b'_' | b'-'))
 }
 

@@ -30,7 +30,7 @@ pub use session::{
     ItemKind, KnownCert, ListFilter, ListLayout, Lock, MEETINGS_PROFILE, MoveTarget, NAMES_NOT_FOUND, NameChoice, NotesOrder, PANICS_CAUGHT,
     PaneSection, Picture, PictureLoading, Prefs, READING_ZOOM, RECENT_EMOJI, ReadInPane, Reading, ReadingPane, RevocationCheck, Rewrite, Row,
     RulesScope, SMIME_DOC, Seal, SearchScope, Security, SendCheck, Sender, ServerSearch, Session, SignedBy, Sizes, SmimeSettings, UpdateCheck,
-    VacationState, View, fill_name,
+    VacationState, View, directory_people, fill_name,
     invite::{Invite, InviteProblem},
     is_profile_dir,
     junk::{JunkList, junk_entry},

@@ -5,6 +5,8 @@
 
 use std::collections::VecDeque;
 
+use quatrelle_model::Addressee;
+
 use super::*;
 
 /// Answers kept (the oldest go first).
@@ -19,7 +21,7 @@ const RETRY_AFTER: i64 = 60;
 /// What the directory answered for a name.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct DirectoryAnswer {
-    pub people: Vec<EmailAddress>,
+    pub people: Vec<Addressee>,
     /// It has more than it gave.
     pub more: bool,
     /// Why it couldn't be asked.
@@ -99,7 +101,7 @@ impl Session {
     }
 
     /// The directory answered: kept, the next name asked, and Check Names told.
-    pub(crate) fn apply_directory(&mut self, account: String, query: String, people: Vec<EmailAddress>, more: bool, error: Option<String>) {
+    pub(crate) fn apply_directory(&mut self, account: String, query: String, people: Vec<Addressee>, more: bool, error: Option<String>) {
         let q = directory_key(&query);
         if let Some(e) = &error {
             log::info!("{account}: the directory: {e}");
@@ -122,6 +124,13 @@ impl Session {
         self.ask_directory(&account);
         self.directory_checked(&account, &q);
     }
+}
+
+/// The entries of a directory answer that have an internet address, as addresses: those Check
+/// Names and the address book take (a contact group, which has none, is left to the contacts
+/// field).
+pub fn directory_people(people: &[Addressee]) -> Vec<EmailAddress> {
+    people.iter().filter(|p| !p.address.is_empty()).map(Addressee::email).collect()
 }
 
 /// Whether an address has no real name: none, the address itself, or its user part, as some

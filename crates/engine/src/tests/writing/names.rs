@@ -2,7 +2,7 @@
 //! Address List).
 
 use super::*;
-use quatrelle_model::{AccountConfig, EmailAddress};
+use quatrelle_model::{AccountConfig, Addressee, AddresseeKind, EmailAddress};
 
 /// The sample with an Exchange account beside it, and that account's id.
 fn with_exchange(name: &str) -> (Session, String) {
@@ -31,7 +31,7 @@ fn asked(s: &mut Session) -> Vec<String> {
 }
 
 fn answer(s: &mut Session, account: &str, query: &str, people: &[(&str, &str)]) {
-    let people = people.iter().map(|(n, e)| EmailAddress::new(*n, *e)).collect();
+    let people = people.iter().map(|(n, e)| Addressee::from(EmailAddress::new(*n, *e))).collect();
     s.apply(Event::DirectoryPeople { account: account.into(), query: query.into(), people, more: false, error: None });
 }
 
@@ -127,5 +127,27 @@ fn check_names_takes_the_directorys_name_for_an_address_known_alone() {
     assert_eq!(name("jo@contoso.example").as_deref(), Some("Jo (from the gym)"), "{:?}", choice.people);
     assert_eq!(name("john.doe@contoso.example").as_deref(), Some("John Doe"));
     assert_eq!(choice.people.len(), 2, "listed once each");
+    done(s);
+}
+
+/// The directory searched with the account's contacts answers with contact groups too, which have
+/// no address: Check Names and the Global Address List take only the entries with one, so a group
+/// beside one person still writes that person out, and a group alone is no one found.
+#[test]
+fn check_names_leaves_out_a_contact_group_the_directory_gives() {
+    let (mut s, gal) = with_exchange("check-names-group");
+    let group = || Addressee { item_id: "AAMk=".into(), ..Addressee::new("Dupont family", "", AddresseeKind::ContactGroup) };
+    s.run("mail.new", &json!({})).unwrap();
+    s.run("compose.update", &json!({"to": "dupont; family"})).unwrap();
+    s.run("compose.checkNames", &json!({})).unwrap();
+    assert_eq!(asked(&mut s), ["dupont"]);
+    let anne = Addressee::new("Anne Dupont", "anne.dupont@contoso.example", AddresseeKind::Person);
+    s.apply(Event::DirectoryPeople { account: gal.clone(), query: "dupont".into(), people: vec![group(), anne], more: false, error: None });
+    assert_eq!(s.compose.as_ref().unwrap().to, "Anne Dupont <anne.dupont@contoso.example>; family; ");
+    assert_eq!(asked(&mut s), ["family"]);
+    let notices = s.notices.len();
+    s.apply(Event::DirectoryPeople { account: gal.clone(), query: "family".into(), people: vec![group()], more: false, error: None });
+    assert!(s.notices.len() > notices && s.notices.last().is_some_and(|n| n.text == crate::NAMES_NOT_FOUND));
+    assert!(s.address_book_now(&format!("directory:{gal}"), "family").is_empty(), "the Global Address List lists no group");
     done(s);
 }

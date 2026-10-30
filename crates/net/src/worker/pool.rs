@@ -438,6 +438,10 @@ impl Pool {
                 let error = Some("the account is offline".to_string());
                 self.sink.emit(Event::DirectoryPeople { account, query, people: Vec::new(), more: false, error });
             }
+            Job::ExpandList { account, address, item_id } if !self.workers.contains_key(&account) => {
+                let error = Some("the account is offline".to_string());
+                self.sink.emit(Event::ListExpanded { account, address, item_id, members: Vec::new(), more: false, total: 0, error });
+            }
             Job::GetRooms { account } if !self.workers.contains_key(&account) => {
                 self.sink.emit(Event::Rooms { account, lists: Vec::new(), rooms: Vec::new(), error: Some("the account is offline".into()) });
             }

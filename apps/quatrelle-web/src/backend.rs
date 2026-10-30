@@ -568,6 +568,7 @@ async fn job(sh: &Rcs, id: &str, j: Job) {
         | Job::ServerFolderSizes { .. }
         | Job::FindCertificates { .. }
         | Job::SearchDirectory { .. }
+        | Job::ExpandList { .. }
         | Job::ReplaceOutlookRules { .. }
         | Job::AskLlm { .. }
         | Job::ListLlmModels { .. }
@@ -739,6 +740,10 @@ impl Backend for WebBackend {
             Job::SearchDirectory { account, query } => {
                 let error = Some("only an Exchange account's directory is searched".to_string());
                 emit(sh, Event::DirectoryPeople { account, query, people: Vec::new(), more: false, error })
+            }
+            Job::ExpandList { account, address, item_id } => {
+                let error = Some("only an Exchange account's lists are expanded".to_string());
+                emit(sh, Event::ListExpanded { account, address, item_id, members: Vec::new(), more: false, total: 0, error })
             }
             Job::ServerFolderSizes { account } => {
                 let error = Some("this server doesn't tell each folder's size".to_string());

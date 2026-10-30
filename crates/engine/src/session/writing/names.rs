@@ -133,7 +133,7 @@ impl Session {
         let mut missing = false;
         for check in now {
             let mut people = self.local_names(&check.token);
-            for p in self.directory_found(account, &check.token).map(|f| f.people.clone()).unwrap_or_default() {
+            for p in self.directory_found(account, &check.token).map(|f| directory_people(&f.people)).unwrap_or_default() {
                 // Known here by its address alone: the directory's full name for it.
                 match people.iter_mut().find(|x| x.email.eq_ignore_ascii_case(&p.email)) {
                     Some(known) => fill_name(known, &p),

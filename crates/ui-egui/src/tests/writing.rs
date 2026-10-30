@@ -657,7 +657,7 @@ fn with_exchange(a: &mut MailApp) -> String {
 }
 
 fn directory_answers(a: &mut MailApp, account: &str, query: &str, people: &[(&str, &str)]) {
-    let people = people.iter().map(|(n, e)| quatrelle_engine::model::EmailAddress::new(*n, *e)).collect();
+    let people = people.iter().map(|(n, e)| quatrelle_engine::model::Addressee::from(quatrelle_engine::model::EmailAddress::new(*n, *e))).collect();
     a.session.apply(quatrelle_engine::model::Event::DirectoryPeople {
         account: account.into(),
         query: query.into(),

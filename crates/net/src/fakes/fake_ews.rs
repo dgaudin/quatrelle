@@ -135,6 +135,15 @@ pub struct Data {
     pub directory: Vec<(String, String)>,
     /// The Global Address List: (name, address), found by the start of a name or an address.
     pub people: Vec<(String, String)>,
+    /// Each address's `MailboxType` (`PublicDL`, `GroupMailbox`…), as (address, type): `Mailbox`
+    /// for one not listed.
+    pub mailbox_types: Vec<(String, String)>,
+    /// The account's contact groups (`PrivateDL`, no address of their own): (name, item id).
+    pub contact_groups: Vec<(String, String)>,
+    /// The members of each list, by the list's address or a contact group's item id: (name, address).
+    pub list_members: Vec<(String, Vec<(String, String)>)>,
+    /// The `SearchScope` of each `ResolveNames` asked.
+    pub scopes: Vec<String>,
     /// The `User-Agent` of each request.
     pub agents: Vec<String>,
     /// Refuse (HTTP 403) every request naming another `User-Agent`: a server that lets in only
@@ -274,6 +283,10 @@ impl Default for Data {
             wlinks: Vec::new(),
             directory: Vec::new(),
             people: Vec::new(),
+            mailbox_types: Vec::new(),
+            contact_groups: Vec::new(),
+            list_members: Vec::new(),
+            scopes: Vec::new(),
             agents: Vec::new(),
             only_agent: None,
             slow_sync: None,
@@ -650,6 +663,7 @@ fn xml(e: &El) -> String {
     format!("<t:{0}{attrs}>{1}{inner}</t:{0}>", e.name, esc(&e.text))
 }
 
+mod directory;
 mod route;
 mod server;
 mod streaming;

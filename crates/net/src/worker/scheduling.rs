@@ -33,7 +33,7 @@ impl Worker {
 
     /// The people the directory has for `query`, answered with [`Event::DirectoryPeople`].
     pub(super) fn search_directory(&mut self, query: &str) {
-        let r = (|| -> Result<(Vec<quatrelle_model::EmailAddress>, bool)> {
+        let r = (|| -> Result<(Vec<quatrelle_model::Addressee>, bool)> {
             if self.conn.is_none() {
                 self.connect()?;
             }
@@ -53,6 +53,32 @@ impl Worker {
             }
         };
         self.sink.emit(Event::DirectoryPeople { account: self.id(), query: query.to_string(), people, more, error });
+    }
+
+    /// The members of a list (a distribution list by its address, a contact group by its item
+    /// id), answered with [`Event::ListExpanded`].
+    pub(super) fn expand_list(&mut self, address: String, item_id: Option<String>) {
+        let r = (|| -> Result<(Vec<quatrelle_model::Addressee>, bool, usize)> {
+            if self.conn.is_none() {
+                self.connect()?;
+            }
+            match self.conn.as_ref() {
+                Some(Conn::Ews(c)) => c.expand_list(&address, item_id.as_deref()),
+                _ => Err(NetError::No("only an Exchange account's lists are expanded".into())),
+            }
+        })();
+        let (members, more, total, error) = match r {
+            Ok((members, more, total)) => (members, more, total, None),
+            Err(e) => {
+                let said = e.to_string();
+                if e.is_fatal() || matches!(e, NetError::Auth(_)) {
+                    self.conn = None;
+                }
+                (Vec::new(), false, 0, Some(said))
+            }
+        };
+        log::info!("{}: a list expanded: {} members of {total}{}", self.id(), members.len(), if error.is_some() { ", failed" } else { "" });
+        self.sink.emit(Event::ListExpanded { account: self.id(), address, item_id, members, more, total, error });
     }
 
     /// The certificates the address book keeps for these addresses (at most fifty), answered

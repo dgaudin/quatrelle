@@ -404,7 +404,10 @@ fn search_directory(s: &mut Session, v: &Value) -> CmdResult {
     let account = s.directory_account(p::str(v, "account")).ok_or_else(|| CmdError::Disabled("the directory is an Exchange account's".into()))?;
     s.search_directory(&account, &query, false);
     Ok(match s.directory_found(&account, &query) {
-        Some(f) if !s.directory_searching(&account, &query) => json!({"account": account, "people": f.people, "more": f.more, "error": f.error}),
+        Some(f) if !s.directory_searching(&account, &query) => {
+            let people: Vec<Value> = f.people.iter().map(|p| json!({"name": p.name, "email": p.address, "kind": p.kind.code()})).collect();
+            json!({"account": account, "people": people, "more": f.more, "error": f.error})
+        }
         _ => json!({"account": account, "searching": true}),
     })
 }

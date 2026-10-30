@@ -12,6 +12,7 @@ use super::*;
 mod account;
 mod calendar_speed;
 mod calendars;
+mod directory;
 mod listening;
 mod mailbox;
 mod scheduling;
