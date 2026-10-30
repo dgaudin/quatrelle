@@ -63,6 +63,8 @@ pub(crate) struct People {
     /// What each field's names came to, until the field takes them; the field recorded to
     /// longest ago first.
     pub(crate) outcomes: Vec<(FieldId, Vec<(String, Outcome)>)>,
+    /// Names looked up here (`local_names`), counted for the tests of bounded work.
+    pub(crate) lookups: u64,
 }
 
 /// An entry of the directory index, with its name in lower case (matched on every key typed).
