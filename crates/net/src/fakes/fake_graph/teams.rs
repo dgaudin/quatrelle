@@ -90,6 +90,10 @@ pub(crate) struct FakeTeams {
     pub(crate) throttle_every: Option<u32>,
     /// Chats (their ids) where posting is refused with 403.
     pub(crate) forbid_post: Vec<String>,
+    /// The next n requests of a route (by route name) answered 500, then the route works again.
+    pub(crate) fail_next: HashMap<String, u32>,
+    /// Every read of a chat's messages: (chat id, its `$filter` as sent, empty when none).
+    pub(crate) message_reads: Vec<(String, String)>,
     /// Shared files' bytes, by the `contentUrl` an attachment carries.
     pub(crate) shares: HashMap<String, Vec<u8>>,
     /// Requests received, per route name.
@@ -116,21 +120,23 @@ pub(crate) fn rfc3339(ms: i64) -> String {
     format!("{y:04}-{m:02}-{d:02}T{:02}:{:02}:{:02}.{milli:03}Z", s / 3600, s / 60 % 60, s % 60)
 }
 
-/// One answer: status, body, content type, and where a redirect points.
+/// One answer: status, body, content type, where a redirect points, and the fake's clock when
+/// it answered (Unix seconds, sent as `Date`).
 pub(super) struct Reply {
     pub(super) status: u16,
     pub(super) body: Vec<u8>,
     pub(super) kind: &'static str,
     pub(super) location: Option<String>,
+    pub(super) date: Option<i64>,
 }
 
 impl Reply {
     fn json(status: u16, v: &Value) -> Self {
-        Self { status, body: v.to_string().into_bytes(), kind: "application/json", location: None }
+        Self { status, body: v.to_string().into_bytes(), kind: "application/json", location: None, date: None }
     }
 
     fn empty(status: u16) -> Self {
-        Self { status, body: Vec::new(), kind: "application/json", location: None }
+        Self { status, body: Vec::new(), kind: "application/json", location: None, date: None }
     }
 
     fn error(status: u16, code: &str, message: &str) -> Self {
@@ -360,10 +366,10 @@ impl FakeTeams {
             let Some(key) = p.get(1).and_then(|id| share_key(self, id)) else { return not_found() };
             if name == "shares" {
                 let token = p.get(1).copied().unwrap_or_default();
-                return Reply { status: 302, body: Vec::new(), kind: "text/plain", location: Some(format!("{base}/download/{token}")) };
+                return Reply { status: 302, body: Vec::new(), kind: "text/plain", location: Some(format!("{base}/download/{token}")), date: None };
             }
             let bytes = self.shares.get(&key).cloned().unwrap_or_default();
-            return Reply { status: 200, body: bytes, kind: "application/octet-stream", location: None };
+            return Reply { status: 200, body: bytes, kind: "application/octet-stream", location: None, date: None };
         }
         let Some(ci) = p.get(1).and_then(|id| self.chats.iter().position(|c| c.id == *id)) else { return not_found() };
         let now = rfc3339(self.now());
@@ -387,7 +393,9 @@ impl FakeTeams {
                 Reply::json(200, &json!({ "value": members }))
             }
             "messages" => {
-                let chat = chat.clone();
+                let filter = q.get("$filter").cloned().unwrap_or_default();
+                self.message_reads.push((chat.id.clone(), filter));
+                let Some(chat) = self.chats.get(ci).cloned() else { return not_found() };
                 self.messages(&chat, &q, raw_path, query, base)
             }
             "post" if forbidden => Reply::error(403, "Forbidden", "Posting in this chat is not allowed."),
@@ -437,8 +445,8 @@ impl FakeTeams {
 
 impl Data {
     /// A Teams request answered, or `None` when it isn't one (or the fake has no Teams). Each is
-    /// counted in `hits` and its headers kept in `last_headers`; a download needs no token and
-    /// is never throttled (it is another server than Graph).
+    /// counted in `hits` and its headers kept in `last_headers`, and dated by the fake's clock; a
+    /// download needs no token and is never throttled (it is another server than Graph).
     pub(super) fn teams_request(
         &mut self,
         method: &str,
@@ -464,19 +472,39 @@ impl Data {
         let name = route_name(method, &p)?;
         *t.hits.entry(name.to_string()).or_default() += 1;
         t.last_headers.insert(name.to_string(), headers.to_vec());
-        if name != "download" {
-            let counted: u32 = t.hits.iter().filter(|(k, _)| *k != "download").map(|(_, n)| *n).sum();
-            if t.throttle_every.is_some_and(|n| n > 0 && counted.is_multiple_of(n)) {
-                return Some(Reply::error(429, "TooManyRequests", "Too many requests."));
+        let mut reply = match t.refusal(name, authorized, someone_else) {
+            Some(r) => r,
+            None => {
+                let input: Value = serde_json::from_slice(body).unwrap_or(Value::Null);
+                t.answer(name, &p, query, raw_path, &input, base)
             }
-            if !authorized {
-                return Some(Reply::error(401, "InvalidAuthenticationToken", "Access token is empty."));
-            }
-            if someone_else {
-                return Some(Reply::error(403, "Forbidden", "Only the signed-in user's chats."));
-            }
+        };
+        reply.date = Some(t.now().div_euclid(1000));
+        Some(reply)
+    }
+}
+
+impl FakeTeams {
+    /// Why a request isn't answered, if it isn't: throttled, no token, someone else's chats, or
+    /// a failure asked for in `fail_next`. A download is never refused (it is another server).
+    fn refusal(&mut self, name: &str, authorized: bool, someone_else: bool) -> Option<Reply> {
+        if name == "download" {
+            return None;
         }
-        let input: Value = serde_json::from_slice(body).unwrap_or(Value::Null);
-        Some(t.answer(name, &p, query, raw_path, &input, base))
+        let counted: u32 = self.hits.iter().filter(|(k, _)| *k != "download").map(|(_, n)| *n).sum();
+        if self.throttle_every.is_some_and(|n| n > 0 && counted.is_multiple_of(n)) {
+            return Some(Reply::error(429, "TooManyRequests", "Too many requests."));
+        }
+        if !authorized {
+            return Some(Reply::error(401, "InvalidAuthenticationToken", "Access token is empty."));
+        }
+        if someone_else {
+            return Some(Reply::error(403, "Forbidden", "Only the signed-in user's chats."));
+        }
+        if let Some(n) = self.fail_next.get_mut(name).filter(|n| **n > 0) {
+            *n -= 1;
+            return Some(Reply::error(500, "InternalServerError", "Failed, as the test asked."));
+        }
+        None
     }
 }
