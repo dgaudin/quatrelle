@@ -394,7 +394,7 @@ impl Services for Desktop {
         let Some(browser) = browsers::found().into_iter().find(|b| b.program.display().to_string() == program) else { return Vec::new() };
         let home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" }).map(PathBuf::from);
         let env = |v: &str| std::env::var_os(v).filter(|p| !p.is_empty()).map(PathBuf::from);
-        profiles::user_data_dir(browser.name, profiles::Platform::HERE, home.as_deref(), env)
+        profiles::user_data_dir(browser.name, &browser.program, profiles::Platform::HERE, home.as_deref(), env)
             .map(|dir| profiles::read_profiles(&dir))
             .unwrap_or_default()
     }

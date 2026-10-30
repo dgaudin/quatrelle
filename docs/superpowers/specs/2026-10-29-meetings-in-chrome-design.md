@@ -97,7 +97,8 @@ as an anonymous guest and the window stayed white.
 - **The profiles.** Each browser lists them in `<user data folder>/Local State`
   (`profile.info_cache`: folder → `name`, `user_name`). The user data folder is a pure function
   per platform: `$XDG_CONFIG_HOME` (a full path) or `~/.config`, then `google-chrome`,
-  `chromium`, `microsoft-edge`; `%LOCALAPPDATA%\Google\Chrome\User Data`, `…\Chromium\User Data`,
+  `chromium`, `microsoft-edge` (Chromium run from under `/snap`, Ubuntu's: `~/snap/chromium/common/chromium`,
+  told by the program's path); `%LOCALAPPDATA%\Google\Chrome\User Data`, `…\Chromium\User Data`,
   `…\Microsoft\Edge\User Data`; `~/Library/Application Support/Google/Chrome`, `…/Chromium`,
   `…/Microsoft Edge`. The file is another program's: only read, a plain file of at most 8 MiB;
   anything not as expected gives no profiles, folders failing `is_profile_dir` are left out, names
