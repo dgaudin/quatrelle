@@ -478,7 +478,7 @@ pub(super) fn options(s: &Session, st: &UiState, ui: &mut Ui, acts: &mut Vec<Act
                     ui,
                     false,
                     tl!("Profile"),
-                    Some(tl!("Teams needs the one signed in to Microsoft 365, else it joins you as a guest.")),
+                    Some(tl!("Teams needs the profile signed in to Microsoft 365, else it joins you as a guest.")),
                     &mut |ui| {
                         let current = match profile {
                             None => tl!("The last profile used").to_string(),
