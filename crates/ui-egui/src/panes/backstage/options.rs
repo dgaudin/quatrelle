@@ -1,6 +1,6 @@
 //! The File page: Options.
 
-use quatrelle_engine::MEETINGS_PROFILE;
+use quatrelle_engine::{MEETINGS_PROFILE, is_profile_dir};
 
 use super::*;
 use crate::BrowserProfile;
@@ -489,7 +489,8 @@ pub(super) fn options(s: &Session, st: &UiState, ui: &mut Ui, acts: &mut Vec<Act
                             if ui.selectable_label(profile.is_none(), tl!("The last profile used")).clicked() {
                                 acts.push(Action::Run("view.meetingProfile", json!({"dir": null})));
                             }
-                            for p in profiles {
+                            // Only folders that are one name, whoever listed them.
+                            for p in profiles.iter().filter(|p| is_profile_dir(&p.dir)) {
                                 if ui.selectable_label(profile == Some(p.dir.as_str()), label(p)).clicked() {
                                     acts.push(Action::Run("view.meetingProfile", json!({"dir": p.dir})));
                                 }
