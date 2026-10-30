@@ -45,10 +45,20 @@ impl Platform {
     };
 }
 
-/// The user data folder of the browser shown as `browser` on `platform`: `home` is the user's
-/// folder, `env` reads an environment variable. `None` for a browser not known, or when what
-/// it takes isn't set.
-pub(crate) fn user_data_dir(browser: &str, platform: Platform, home: Option<&Path>, env: impl Fn(&str) -> Option<PathBuf>) -> Option<PathBuf> {
+/// The user data folder of the browser shown as `browser`, run as `program`, on `platform`:
+/// `home` is the user's folder, `env` reads an environment variable. `None` for a browser not
+/// known, or when what it takes isn't set. Chromium installed as a snap (a program under
+/// `/snap`, as Ubuntu's is) keeps its data in the snap's own folder instead.
+pub(crate) fn user_data_dir(
+    browser: &str,
+    program: &Path,
+    platform: Platform,
+    home: Option<&Path>,
+    env: impl Fn(&str) -> Option<PathBuf>,
+) -> Option<PathBuf> {
+    if platform == Platform::Unix && browser == CHROMIUM && program.starts_with("/snap") {
+        return Some(home?.join("snap").join("chromium").join("common").join("chromium"));
+    }
     let tail: &[&str] = match (platform, browser) {
         (Platform::Unix, CHROME) => &["google-chrome"],
         (Platform::Unix, CHROMIUM) => &["chromium"],
@@ -246,8 +256,10 @@ mod tests {
     #[test]
     fn each_browser_keeps_its_data_where_its_platform_says() {
         let home = Path::new("/home/me");
+        // A program installed anywhere but a snap.
+        let elsewhere = Path::new("/usr/bin/browser");
         let no_env = |_: &str| None;
-        let unix = |browser: &str, env: &dyn Fn(&str) -> Option<PathBuf>| user_data_dir(browser, Platform::Unix, Some(home), env);
+        let unix = |browser: &str, env: &dyn Fn(&str) -> Option<PathBuf>| user_data_dir(browser, elsewhere, Platform::Unix, Some(home), env);
         // Linux and the BSDs: under ~/.config, or $XDG_CONFIG_HOME when it's a full path.
         assert_eq!(unix(CHROME, &no_env), Some(home.join(".config").join("google-chrome")));
         assert_eq!(unix(CHROMIUM, &no_env), Some(home.join(".config").join("chromium")));
@@ -258,23 +270,43 @@ mod tests {
         assert_eq!(unix(CHROMIUM, &relative), Some(home.join(".config").join("chromium")));
         let empty = |v: &str| (v == "XDG_CONFIG_HOME").then(PathBuf::new);
         assert_eq!(unix(EDGE, &empty), Some(home.join(".config").join("microsoft-edge")));
-        assert_eq!(user_data_dir(CHROME, Platform::Unix, None, no_env), None, "no home");
-        assert_eq!(user_data_dir(CHROME, Platform::Unix, None, xdg), Some(Path::new("/data/conf").join("google-chrome")));
+        assert_eq!(user_data_dir(CHROME, elsewhere, Platform::Unix, None, no_env), None, "no home");
+        assert_eq!(user_data_dir(CHROME, elsewhere, Platform::Unix, None, xdg), Some(Path::new("/data/conf").join("google-chrome")));
         // Windows: under %LOCALAPPDATA%.
         let local = PathBuf::from("C:/Users/me/AppData/Local");
         let win = |v: &str| (v == "LOCALAPPDATA").then(|| local.clone());
-        assert_eq!(user_data_dir(CHROME, Platform::Windows, None, win), Some(local.join("Google").join("Chrome").join("User Data")));
-        assert_eq!(user_data_dir(CHROMIUM, Platform::Windows, None, win), Some(local.join("Chromium").join("User Data")));
-        assert_eq!(user_data_dir(EDGE, Platform::Windows, None, win), Some(local.join("Microsoft").join("Edge").join("User Data")));
-        assert_eq!(user_data_dir(CHROME, Platform::Windows, Some(home), no_env), None, "no %LOCALAPPDATA%");
+        assert_eq!(user_data_dir(CHROME, elsewhere, Platform::Windows, None, win), Some(local.join("Google").join("Chrome").join("User Data")));
+        assert_eq!(user_data_dir(CHROMIUM, elsewhere, Platform::Windows, None, win), Some(local.join("Chromium").join("User Data")));
+        assert_eq!(user_data_dir(EDGE, elsewhere, Platform::Windows, None, win), Some(local.join("Microsoft").join("Edge").join("User Data")));
+        assert_eq!(user_data_dir(CHROME, elsewhere, Platform::Windows, Some(home), no_env), None, "no %LOCALAPPDATA%");
         // macOS: under ~/Library/Application Support.
         let mac = Path::new("/Users/me");
         let support = mac.join("Library").join("Application Support");
-        assert_eq!(user_data_dir(CHROME, Platform::Mac, Some(mac), no_env), Some(support.join("Google").join("Chrome")));
-        assert_eq!(user_data_dir(CHROMIUM, Platform::Mac, Some(mac), no_env), Some(support.join("Chromium")));
-        assert_eq!(user_data_dir(EDGE, Platform::Mac, Some(mac), no_env), Some(support.join("Microsoft Edge")));
-        assert_eq!(user_data_dir(CHROME, Platform::Mac, None, no_env), None, "no home");
+        assert_eq!(user_data_dir(CHROME, elsewhere, Platform::Mac, Some(mac), no_env), Some(support.join("Google").join("Chrome")));
+        assert_eq!(user_data_dir(CHROMIUM, elsewhere, Platform::Mac, Some(mac), no_env), Some(support.join("Chromium")));
+        assert_eq!(user_data_dir(EDGE, elsewhere, Platform::Mac, Some(mac), no_env), Some(support.join("Microsoft Edge")));
+        assert_eq!(user_data_dir(CHROME, elsewhere, Platform::Mac, None, no_env), None, "no home");
+        // Chromium as a snap (Ubuntu's): its data is in the snap's own folder, whatever
+        // $XDG_CONFIG_HOME says. Only the program's path tells.
+        let snap = Path::new("/snap/bin/chromium");
+        let snap_data = home.join("snap").join("chromium").join("common").join("chromium");
+        assert_eq!(user_data_dir(CHROMIUM, snap, Platform::Unix, Some(home), no_env), Some(snap_data.clone()));
+        assert_eq!(user_data_dir(CHROMIUM, snap, Platform::Unix, Some(home), xdg), Some(snap_data.clone()));
+        assert_eq!(
+            user_data_dir(CHROMIUM, Path::new("/snap/chromium/current/usr/lib/chromium-browser/chrome"), Platform::Unix, Some(home), no_env),
+            Some(snap_data.clone())
+        );
+        assert_eq!(user_data_dir(CHROMIUM, snap, Platform::Unix, None, xdg), None, "no home");
+        // A folder only named like it, and the other browsers: as before.
+        assert_eq!(
+            user_data_dir(CHROMIUM, Path::new("/snapshots/chromium"), Platform::Unix, Some(home), no_env),
+            Some(home.join(".config").join("chromium"))
+        );
+        assert_eq!(
+            user_data_dir(CHROME, Path::new("/snap/bin/google-chrome"), Platform::Unix, Some(home), no_env),
+            Some(home.join(".config").join("google-chrome"))
+        );
         // A browser not known.
-        assert_eq!(user_data_dir("Firefox", Platform::Unix, Some(home), no_env), None);
+        assert_eq!(user_data_dir("Firefox", elsewhere, Platform::Unix, Some(home), no_env), None);
     }
 }
