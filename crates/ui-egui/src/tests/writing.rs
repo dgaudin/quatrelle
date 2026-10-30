@@ -2,6 +2,8 @@
 
 use super::*;
 
+mod people_field;
+
 /// A name typed into To over a big mailbox (16 folders of 4,000 messages, too many to count
 /// again at the start): no frame reads the mailbox whole. The message's first frame starts the
 /// address book's build; every frame after takes a slice, reading a folder or two, the window

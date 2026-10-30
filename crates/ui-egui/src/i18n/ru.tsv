@@ -1791,3 +1791,20 @@ month	May	Май
 	Sign in to Microsoft 365 in the window that opens. The browser names the new profile itself; it can be renamed there.	Войдите в Microsoft 365 в открывшемся окне. Браузер сам даст новому профилю имя; его можно изменить там же.
 	Create a profile for meetings	Создать профиль для собраний
 	{browser} couldn't be opened: {error}	Не удалось открыть {browser}: {error}
+# The contacts field: the kinds of its entries, where a suggestion comes from, a chip read out.
+	Person	Человек
+	Distribution list	Список рассылки
+	Contact group	Группа контактов
+	Equipment	Оборудование
+	Shared mailbox	Общий почтовый ящик
+	Public folder	Общедоступная папка
+	Microsoft 365 group	Группа Microsoft 365
+	Directory (cached)	Справочник (кэш)
+	Room list	Список переговорных
+	and {n} more were left out	и ещё {n} не добавлено
+	and {n} more	и ещё {n}
+	This list has no members	В этом списке нет участников
+	Not found: {name}	Не найдено: {name}
+	The directory can't be reached	Справочник недоступен
+	Matched as typed	Сравнивается как введено
+	{name}, {kind}, remove with Delete	{name}, {kind}, удалить клавишей Delete

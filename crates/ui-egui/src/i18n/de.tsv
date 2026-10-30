@@ -1792,3 +1792,20 @@ month	May	Mai
 	Sign in to Microsoft 365 in the window that opens. The browser names the new profile itself; it can be renamed there.	Melden Sie sich im sich öffnenden Fenster bei Microsoft 365 an. Der Browser benennt das neue Profil selbst; dort lässt es sich umbenennen.
 	Create a profile for meetings	Profil für Besprechungen anlegen
 	{browser} couldn't be opened: {error}	{browser} konnte nicht geöffnet werden: {error}
+# The contacts field: the kinds of its entries, where a suggestion comes from, a chip read out.
+	Person	Person
+	Distribution list	Verteilerliste
+	Contact group	Kontaktgruppe
+	Equipment	Gerät
+	Shared mailbox	Freigegebenes Postfach
+	Public folder	Öffentlicher Ordner
+	Microsoft 365 group	Microsoft 365-Gruppe
+	Directory (cached)	Verzeichnis (zwischengespeichert)
+	Room list	Raumliste
+	and {n} more were left out	und {n} weitere wurden ausgelassen
+	and {n} more	und {n} weitere
+	This list has no members	Diese Liste hat keine Mitglieder
+	Not found: {name}	Nicht gefunden: {name}
+	The directory can't be reached	Das Verzeichnis ist nicht erreichbar
+	Matched as typed	Wie eingegeben verglichen
+	{name}, {kind}, remove with Delete	{name}, {kind}, mit Entf entfernen

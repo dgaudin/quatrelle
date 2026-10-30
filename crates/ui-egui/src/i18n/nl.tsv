@@ -1788,3 +1788,20 @@ month	May	mei
 	Sign in to Microsoft 365 in the window that opens. The browser names the new profile itself; it can be renamed there.	Meld u aan bij Microsoft 365 in het venster dat opent. De browser geeft het nieuwe profiel zelf een naam; daar kunt u die wijzigen.
 	Create a profile for meetings	Een profiel voor vergaderingen maken
 	{browser} couldn't be opened: {error}	{browser} kon niet worden geopend: {error}
+# The contacts field: the kinds of its entries, where a suggestion comes from, a chip read out.
+	Person	Persoon
+	Distribution list	Distributielijst
+	Contact group	Contactgroep
+	Equipment	Apparatuur
+	Shared mailbox	Gedeeld postvak
+	Public folder	Openbare map
+	Microsoft 365 group	Microsoft 365-groep
+	Directory (cached)	Adreslijst (in cache)
+	Room list	Ruimtelijst
+	and {n} more were left out	en nog {n} zijn weggelaten
+	and {n} more	en nog {n}
+	This list has no members	Deze lijst heeft geen leden
+	Not found: {name}	Niet gevonden: {name}
+	The directory can't be reached	De adreslijst is niet bereikbaar
+	Matched as typed	Vergeleken zoals getypt
+	{name}, {kind}, remove with Delete	{name}, {kind}, verwijderen met Delete

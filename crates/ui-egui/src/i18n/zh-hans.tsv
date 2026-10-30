@@ -1789,3 +1789,20 @@ month	May	5月
 	Sign in to Microsoft 365 in the window that opens. The browser names the new profile itself; it can be renamed there.	请在打开的窗口中登录 Microsoft 365。新配置文件的名称由浏览器自行设定，可在浏览器中重命名。
 	Create a profile for meetings	创建用于会议的配置文件
 	{browser} couldn't be opened: {error}	无法打开 {browser}: {error}
+# The contacts field: the kinds of its entries, where a suggestion comes from, a chip read out.
+	Person	个人
+	Distribution list	通讯组列表
+	Contact group	联系人组
+	Equipment	设备
+	Shared mailbox	共享邮箱
+	Public folder	公用文件夹
+	Microsoft 365 group	Microsoft 365 组
+	Directory (cached)	目录(缓存)
+	Room list	会议室列表
+	and {n} more were left out	另有 {n} 个未添加
+	and {n} more	另有 {n} 个
+	This list has no members	此列表没有成员
+	Not found: {name}	未找到: {name}
+	The directory can't be reached	无法连接到目录
+	Matched as typed	按输入内容匹配
+	{name}, {kind}, remove with Delete	{name}，{kind}，按 Delete 键移除

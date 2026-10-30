@@ -120,6 +120,17 @@ pub enum Icon {
     Complete,
     /// A smiling face (Insert › Emoji).
     Emoji,
+    /// The kinds of a contacts field's entries (a person is `Person`): a distribution list, a
+    /// contact group, a room, equipment, a shared mailbox, a public folder, a Microsoft 365
+    /// group, and an address alone.
+    DistributionList,
+    ContactGroup,
+    Room,
+    Equipment,
+    SharedMailbox,
+    PublicFolder,
+    Group365,
+    Address,
 }
 
 /// The Fluent UI icon drawn for each icon (its 20-pixel regular outline).
@@ -222,6 +233,14 @@ fn svg(icon: Icon) -> &'static str {
         Icon::Tasks => f!("task_list_ltr"),
         Icon::Complete => f!("checkmark_circle"),
         Icon::Emoji => f!("emoji"),
+        Icon::DistributionList => f!("people_list"),
+        Icon::ContactGroup => f!("people_team"),
+        Icon::Room => f!("conference_room"),
+        Icon::Equipment => f!("projection_screen"),
+        Icon::SharedMailbox => f!("mail_multiple"),
+        Icon::PublicFolder => f!("folder_mail"),
+        Icon::Group365 => f!("people_community"),
+        Icon::Address => f!("mail"),
     }
 }
 
@@ -370,6 +389,14 @@ mod tests {
             Tasks,
             Complete,
             Emoji,
+            DistributionList,
+            ContactGroup,
+            Room,
+            Equipment,
+            SharedMailbox,
+            PublicFolder,
+            Group365,
+            Address,
         ];
         for icon in all {
             let img = render(icon, 32).unwrap_or_else(|| panic!("{icon:?} didn't render"));

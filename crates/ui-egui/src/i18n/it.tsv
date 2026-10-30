@@ -1791,3 +1791,20 @@ month	May	maggio
 	Sign in to Microsoft 365 in the window that opens. The browser names the new profile itself; it can be renamed there.	Accedi a Microsoft 365 nella finestra che si apre. Il browser dà da sé un nome al nuovo profilo; puoi rinominarlo lì.
 	Create a profile for meetings	Crea un profilo per le riunioni
 	{browser} couldn't be opened: {error}	Impossibile aprire {browser}: {error}
+# The contacts field: the kinds of its entries, where a suggestion comes from, a chip read out.
+	Person	Persona
+	Distribution list	Lista di distribuzione
+	Contact group	Gruppo di contatti
+	Equipment	Attrezzatura
+	Shared mailbox	Cassetta postale condivisa
+	Public folder	Cartella pubblica
+	Microsoft 365 group	Gruppo di Microsoft 365
+	Directory (cached)	Directory (in cache)
+	Room list	Elenco sale
+	and {n} more were left out	e altri {n} sono stati esclusi
+	and {n} more	e altri {n}
+	This list has no members	Questo elenco non ha membri
+	Not found: {name}	Non trovato: {name}
+	The directory can't be reached	Impossibile raggiungere la directory
+	Matched as typed	Confrontato come digitato
+	{name}, {kind}, remove with Delete	{name}, {kind}, rimuovi con Canc

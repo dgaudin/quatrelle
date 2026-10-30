@@ -59,7 +59,7 @@ pub(super) fn drawn(p: &Painter, rect: Rect, icon: Icon, color: Color32) {
             pen.line(&[(13.0, 1.5), (13.0, 6.5)]);
             pen.line(&[(10.5, 4.0), (15.5, 4.0)]);
         }
-        Icon::Unread => {
+        Icon::Unread | Icon::Address => {
             pen.rect(2.0, 4.0, 14.0, 13.0);
             pen.line(&[(2.0, 4.5), (8.0, 9.0), (14.0, 4.5)]);
         }
@@ -521,6 +521,57 @@ pub(super) fn drawn(p: &Painter, rect: Rect, icon: Icon, color: Color32) {
             pen.dot(5.8, 6.3, 0.9);
             pen.dot(10.2, 6.3, 0.9);
             pen.arc(8.0, 8.4, 3.4, 0.35, std::f32::consts::PI - 0.35);
+        }
+        Icon::DistributionList => {
+            // A person, and the lines of a list beside them.
+            pen.circle(5.0, 5.0, 2.4);
+            pen.arc(5.0, 14.0, 4.5, PI, 2.0 * PI);
+            pen.line(&[(10.5, 5.5), (15.0, 5.5)]);
+            pen.line(&[(10.5, 9.0), (15.0, 9.0)]);
+            pen.line(&[(10.5, 12.5), (15.0, 12.5)]);
+        }
+        Icon::ContactGroup => {
+            // Three people side by side, the middle one ahead.
+            pen.circle(8.0, 5.0, 2.2);
+            pen.arc(8.0, 14.5, 4.2, PI, 2.0 * PI);
+            pen.circle(3.2, 6.5, 1.6);
+            pen.arc(3.2, 13.0, 2.6, PI, PI * 1.6);
+            pen.circle(12.8, 6.5, 1.6);
+            pen.arc(12.8, 13.0, 2.6, PI * 1.4, 2.0 * PI);
+        }
+        Icon::Room => {
+            // A door, its handle, and the floor.
+            pen.closed(&[(4.5, 2.5), (11.5, 1.5), (11.5, 14.5), (4.5, 13.5)]);
+            pen.dot(9.5, 8.0, 0.8);
+            pen.line(&[(2.0, 14.5), (14.0, 14.5)]);
+        }
+        Icon::Equipment => {
+            // A projection screen on its stand.
+            pen.line(&[(1.5, 3.0), (14.5, 3.0)]);
+            pen.rect(2.5, 3.0, 13.5, 10.5);
+            pen.line(&[(8.0, 10.5), (8.0, 14.0)]);
+            pen.line(&[(5.5, 14.0), (10.5, 14.0)]);
+        }
+        Icon::SharedMailbox => {
+            // Two envelopes, one behind the other.
+            pen.line(&[(4.0, 3.5), (4.0, 2.5), (15.0, 2.5), (15.0, 10.5), (14.0, 10.5)]);
+            pen.rect(1.5, 5.0, 12.5, 13.5);
+            pen.line(&[(1.5, 5.5), (7.0, 9.5), (12.5, 5.5)]);
+        }
+        Icon::PublicFolder => {
+            // A folder with an envelope over its corner.
+            pen.line(&[(7.0, 13.5), (1.5, 13.5), (1.5, 3.0), (6.0, 3.0), (7.5, 4.8), (14.5, 4.8), (14.5, 8.0)]);
+            pen.rect(8.5, 9.5, 15.0, 14.5);
+            pen.line(&[(8.5, 10.0), (11.75, 12.2), (15.0, 10.0)]);
+        }
+        Icon::Group365 => {
+            // A community: one person ahead, two behind.
+            pen.circle(8.0, 4.0, 2.0);
+            pen.circle(3.5, 7.5, 1.7);
+            pen.circle(12.5, 7.5, 1.7);
+            pen.arc(8.0, 15.0, 4.5, PI, 2.0 * PI);
+            pen.line(&[(1.0, 13.0), (1.5, 11.0), (3.5, 10.0), (5.0, 10.5)]);
+            pen.line(&[(15.0, 13.0), (14.5, 11.0), (12.5, 10.0), (11.0, 10.5)]);
         }
     }
 }

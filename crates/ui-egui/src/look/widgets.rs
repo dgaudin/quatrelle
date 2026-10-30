@@ -170,6 +170,33 @@ pub fn primary_button(ui: &mut Ui, label: &str, t: &Tokens, enabled: bool) -> Re
     resp
 }
 
+/// Width of the labels and label buttons left of a form's fields (the message's To, Cc…).
+pub(crate) const FIELD_LABEL_W: f32 = 76.0;
+/// Height of a form's row: a field and the label button naming it.
+pub(crate) const FIELD_ROW_H: f32 = 30.0;
+
+/// A small framed button naming a field (To, Cc…), as in Outlook's message window; with `menu`, a
+/// small drawn chevron after its label, the two centred together. `label` is translated here.
+pub(crate) fn field_button(ui: &mut Ui, t: &Tokens, label: &str, enabled: bool, menu: bool) -> Response {
+    let (rect, resp) = ui.allocate_exact_size(vec2(FIELD_LABEL_W - 8.0, FIELD_ROW_H - 4.0), if enabled { Sense::click() } else { Sense::hover() });
+    named(ui, &resp, tl!(label), enabled, None);
+    let fill = if resp.hovered() && enabled { t.hover } else { t.surface };
+    ui.painter().rect(rect, 3.0, fill, Stroke::new(1.0, t.border), egui::StrokeKind::Inside);
+    let color = if enabled { t.text } else { t.dim };
+    let galley = ui.painter().layout_no_wrap(tl!(label).to_string(), theme::regular(13.0), color);
+    let chevron = if menu { 14.0 } else { 0.0 };
+    let left = rect.center().x - (galley.size().x + chevron) / 2.0;
+    let text_pos = egui::pos2(left, rect.center().y - galley.size().y / 2.0);
+    let text_w = galley.size().x;
+    ui.painter().galley(text_pos, galley, color);
+    if menu {
+        let r = egui::Rect::from_center_size(egui::pos2(left + text_w + 4.0 + 5.0, rect.center().y + 0.5), vec2(10.0, 10.0));
+        icons::paint(ui.painter(), r, Icon::ChevronDown, t.dim);
+    }
+    ui.add_space(8.0);
+    resp
+}
+
 /// An icon button on the coloured title bar.
 pub fn bar_icon_button(ui: &mut Ui, icon: Icon, tip: &str, t: &Tokens) -> Response {
     let (rect, resp) = ui.allocate_exact_size(vec2(28.0, 28.0), Sense::click());

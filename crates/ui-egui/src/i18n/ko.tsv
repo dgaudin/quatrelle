@@ -1791,3 +1791,20 @@ month	May	5월
 	Sign in to Microsoft 365 in the window that opens. The browser names the new profile itself; it can be renamed there.	열리는 창에서 Microsoft 365에 로그인하세요. 새 프로필의 이름은 브라우저가 정하며, 브라우저에서 바꿀 수 있습니다.
 	Create a profile for meetings	모임용 프로필 만들기
 	{browser} couldn't be opened: {error}	{browser}을(를) 열 수 없습니다: {error}
+# The contacts field: the kinds of its entries, where a suggestion comes from, a chip read out.
+	Person	사람
+	Distribution list	배포 목록
+	Contact group	연락처 그룹
+	Equipment	장비
+	Shared mailbox	공유 사서함
+	Public folder	공용 폴더
+	Microsoft 365 group	Microsoft 365 그룹
+	Directory (cached)	디렉터리(캐시)
+	Room list	회의실 목록
+	and {n} more were left out	외 {n}개는 제외되었습니다
+	and {n} more	외 {n}개
+	This list has no members	이 목록에 구성원이 없습니다
+	Not found: {name}	찾을 수 없음: {name}
+	The directory can't be reached	디렉터리에 연결할 수 없습니다
+	Matched as typed	입력한 대로 비교
+	{name}, {kind}, remove with Delete	{name}, {kind}, Delete 키로 제거
