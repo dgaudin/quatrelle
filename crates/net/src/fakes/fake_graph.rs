@@ -97,6 +97,8 @@ pub struct Data {
     /// A folder's messages listed at most this many a page (`None`: all of `$top` at once), the
     /// rest through `@odata.nextLink`.
     pub page_messages: Option<usize>,
+    /// Teams (chats, their messages, shared files); `None`: the fake answers no Teams route.
+    pub(crate) teams: Option<FakeTeams>,
     late: Vec<(std::time::Instant, Vec<u8>)>,
     next: u32,
 }
@@ -300,10 +302,13 @@ fn plain_id(id: &str) -> &str {
     id.strip_prefix(REGULAR).unwrap_or(id)
 }
 
-fn respond(s: &mut impl Write, status: u16, body: &[u8], kind: &str) {
+fn respond(s: &mut impl Write, status: u16, body: &[u8], kind: &str, location: Option<&str>) {
     let mut head = format!("HTTP/1.1 {status} X\r\nContent-Type: {kind}\r\nContent-Length: {}\r\n", body.len());
     if status == 429 {
         head.push_str("Retry-After: 1\r\n");
+    }
+    if let Some(to) = location {
+        head.push_str(&format!("Location: {to}\r\n"));
     }
     head.push_str("Connection: close\r\n\r\n");
     let _ = s.write_all(head.as_bytes());
@@ -325,6 +330,7 @@ pub fn serve(data: Data) -> Server {
                 continue;
             }
             let (mut len, mut authorized, mut immutable) = (0usize, false, false);
+            let mut headers = Vec::new();
             if first.contains("/$value") {
                 let wait = shared.lock().unwrap().source_delay;
                 std::thread::sleep(wait);
@@ -341,17 +347,26 @@ pub fn serve(data: Data) -> Server {
                 }
                 authorized |= line.split_once(':').is_some_and(|(k, v)| k.eq_ignore_ascii_case("authorization") && v.trim() == bearer);
                 immutable |= line.starts_with("Prefer: IdType=\"ImmutableId\"");
+                if let Some((k, v)) = line.split_once(':') {
+                    headers.push((k.trim().to_ascii_lowercase(), v.trim().to_string()));
+                }
             }
             let mut body = vec![0u8; len];
             let _ = reader.read_exact(&mut body);
-            if !authorized {
-                respond(&mut s, 401, br#"{"error": {"code": "InvalidAuthenticationToken"}}"#, "application/json");
-                continue;
-            }
-            assert!(immutable, "ids are asked for in their immutable form");
             let mut words = first.split(' ');
             let (method, target) = (words.next().unwrap_or("GET").to_string(), words.next().unwrap_or("/").to_string());
             let target = target.strip_prefix("/v1.0").unwrap_or(&target).to_string();
+            // Teams first: its client asks for no immutable ids, and a download carries no token.
+            let teams = shared.lock().unwrap().teams_request(&method, &target, &headers, authorized, &body, &b);
+            if let Some(r) = teams {
+                respond(&mut s, r.status, &r.body, r.kind, r.location.as_deref());
+                continue;
+            }
+            if !authorized {
+                respond(&mut s, 401, br#"{"error": {"code": "InvalidAuthenticationToken"}}"#, "application/json", None);
+                continue;
+            }
+            assert!(immutable, "ids are asked for in their immutable form");
             let (status, out, kind) = {
                 let mut d = shared.lock().unwrap();
                 if d.throttle > 0 {
@@ -362,13 +377,16 @@ pub fn serve(data: Data) -> Server {
                     d.route(&method, &target, &body, &b)
                 }
             };
-            respond(&mut s, status, &out, kind);
+            respond(&mut s, status, &out, kind, None);
         }
     });
     Server { base, data }
 }
 
 mod route;
+mod teams;
+
+pub(crate) use teams::{FakeChat, FakeMessage, FakeTeams, FakeUser, rfc3339};
 
 #[cfg(test)]
 mod tests;
