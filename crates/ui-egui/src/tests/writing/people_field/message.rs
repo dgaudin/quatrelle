@@ -622,7 +622,8 @@ fn a_draft_keeps_a_contact_group_here_and_the_server_gets_its_addresses() {
     let ctx = egui::Context::default();
     frame(&ctx, &mut a, vec![]);
     a.run("mail.new", json!({}));
-    a.run("compose.update", json!({"account": gal, "to": "Zoe Park <zoe@studio.example>; Dupont family <group:AAMk=>", "subject": "Draft"}));
+    let to_text = "\"Dupont, Marc\" <m@contoso.example>; Zoe Park <zoe@studio.example>; Dupont family <group:AAMk=>";
+    a.run("compose.update", json!({"account": gal, "to": to_text, "subject": "Draft"}));
     frame(&ctx, &mut a, vec![]);
     a.session.take_jobs();
     a.run("compose.saveDraft", json!({}));
@@ -632,7 +633,8 @@ fn a_draft_keeps_a_contact_group_here_and_the_server_gets_its_addresses() {
         _ => None,
     });
     let parsed = quatrelle_engine::mime::parse(&raw.expect("the draft goes to the server")).unwrap();
-    assert_eq!(parsed.to, [EmailAddress::new("Zoe Park", "zoe@studio.example")], "the valid addresses alone");
+    let kept = [EmailAddress::new("Dupont, Marc", "m@contoso.example"), EmailAddress::new("Zoe Park", "zoe@studio.example")];
+    assert_eq!(parsed.to, kept, "the valid addresses alone, a comma name whole");
     assert_eq!(parsed.subject, "Draft", "nothing else lost");
     assert!(to(&a).contains("Dupont family <group:AAMk=>"), "the message being written keeps the group: {}", to(&a));
     let _ = std::fs::remove_dir_all(dir);
