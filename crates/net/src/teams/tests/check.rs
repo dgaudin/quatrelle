@@ -192,6 +192,39 @@ fn check_write_probes_clean_up_after_a_failure() {
 }
 
 #[test]
+fn check_sweeps_a_send_whose_answer_was_lost() {
+    // The first post is made but its answer lost (503): the check can't know its id, so it
+    // looks for its own text among the chat's newest messages and deletes it.
+    let server = write_server(|t| _ = t.answer_lost.insert("post".into(), 1));
+    let (r, lines) = check(&server, &write_opts());
+    r.unwrap();
+    assert_eq!(line(&lines, "write, send (1/2):"), "write, send (1/2): no (503)");
+    assert_eq!(line(&lines, "write, send (2/2):"), "write, send (2/2): yes");
+    assert_eq!(line(&lines, "write, stray test messages swept:"), "write, stray test messages swept: 1");
+    assert_eq!(line(&lines, "write, test messages left undeleted:"), "write, test messages left undeleted: 0");
+    let sent = mine(&server);
+    assert_eq!(sent.len(), 2, "posted once each: {sent:?}");
+    assert!(sent.iter().all(|(_, deleted)| *deleted), "{sent:?}");
+    // Ana's message, and one of mine from before the check, are left alone.
+    let server = write_server(|t| {
+        _ = t.answer_lost.insert("post".into(), 2);
+        let c = &mut t.chats[0];
+        c.messages.push(FakeMessage::new("old-mine", Some(ME), &rfc3339(T0 + MINUTE), "Quatrelle check, please ignore (1/2)"));
+    });
+    let (r, lines) = check(&server, &write_opts());
+    r.unwrap();
+    assert_eq!(line(&lines, "write, stray test messages swept:"), "write, stray test messages swept: 2");
+    let t = teams_of(&server);
+    let deleted: Vec<&str> = t.chat(CHAT).unwrap().messages.iter().filter(|m| m.deleted.is_some()).map(|m| m.id.as_str()).collect();
+    assert_eq!(deleted.len(), 2, "{deleted:?}");
+    assert!(!deleted.contains(&"old-mine"));
+    // Without a lost answer, nothing is swept, and the line isn't said.
+    let server = write_server(|_| {});
+    let (_, lines) = check(&server, &write_opts());
+    assert!(!lines.iter().any(|l| l.starts_with("write, stray")), "{lines:#?}");
+}
+
+#[test]
 fn check_says_nothing_private() {
     let secret_tenant = "tenant-7f3e-zq";
     let me_secret = FakeUser {
