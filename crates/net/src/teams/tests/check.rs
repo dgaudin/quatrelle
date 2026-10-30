@@ -370,3 +370,22 @@ fn check_without_a_date_uses_graphs_newest_time() {
     );
     assert_eq!(line(&lines, "messages in the newest chat:"), "messages in the newest chat: 0");
 }
+
+#[test]
+fn check_hour_goes_on_past_a_failing_chat() {
+    // One active chat's reads fail every time: the other active chats are read all the same.
+    let now = clock();
+    let recent = |id: &str, ago_min: i64| chat(id, now - ago_min * MINUTE, 2);
+    let chats = vec![recent("19:newest@thread.v2", 1), recent("19:broken@thread.v2", 2), recent("19:b@thread.v2", 3), recent("19:c@thread.v2", 4)];
+    let mut t = teams_with(chats);
+    t.fail_reads.push("19:broken@thread.v2".into());
+    let server = serve_teams(t);
+    let opts = CheckOptions { hour: Some(Duration::from_millis(500)), sleep: |d| std::thread::sleep(d.min(Duration::from_millis(50))), ..opts() };
+    let (r, lines) = check(&server, &opts);
+    r.unwrap();
+    let t = teams_of(&server);
+    let reads = |chat: &str| t.message_reads.iter().filter(|(c, _)| c == chat).count();
+    assert_eq!((reads("19:broken@thread.v2"), reads("19:b@thread.v2"), reads("19:c@thread.v2")), (1, 1, 1), "{:?}", t.message_reads);
+    assert!(line(&lines, "hour, ").contains(", failed 1, "), "{lines:#?}");
+    assert!(!line(&lines, "hour, ").contains("cut short"), "{lines:#?}");
+}
