@@ -109,6 +109,11 @@ impl Session {
             return;
         }
         if let Some(e) = error {
+            // A failure settles a question still out, never an answer got since (a slow first
+            // ask failing after a second one was answered).
+            if !matches!(self.people.expansions.get(&k), Some(Fetched::Loading)) {
+                return;
+            }
             log::info!("{account}: a list's members couldn't be had");
             let e = e.chars().take(MAX_ERROR).collect();
             // When it failed, for the retry.
@@ -117,9 +122,11 @@ impl Session {
             return;
         }
         self.people.expansions_out.remove(&k);
+        // The total holds at least what came, not only what is kept.
+        let received = members.len();
         members.truncate(MAX_SHOWN_MEMBERS);
         self.index_directory(&members);
-        let total = total.min(MAX_TOTAL).max(members.len());
+        let total = total.min(MAX_TOTAL).max(received.min(MAX_TOTAL));
         let more = more || total > members.len();
         self.people.expansions.insert(k, Fetched::Ready(Expansion { members, more, total }));
         // The members may be suggested now.
