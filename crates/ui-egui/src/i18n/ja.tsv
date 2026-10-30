@@ -1782,7 +1782,7 @@ month	May	5月
 	Teams meetings open in a window of their own: Chrome, Chromium or Edge, which Teams needs for calls on Linux.	Teams の会議は専用のウィンドウで開きます: Chrome、Chromium、Edge のいずれかで、Linux で Teams の通話に必要です。
 	The profile “{profile}” is no longer in {browser}; the meeting opens in the last profile used	プロファイル「{profile}」は {browser} にもうありません。会議は最後に使ったプロファイルで開きます
 	Profile	プロファイル
-	Teams needs the one signed in to Microsoft 365, else it joins you as a guest.	Teams には Microsoft 365 にサインインしているプロファイルが必要です。そうでないとゲストとして参加します。
+	Teams needs the profile signed in to Microsoft 365, else it joins you as a guest.	Teams には Microsoft 365 にサインインしているプロファイルが必要です。そうでないとゲストとして参加します。
 	The last profile used	最後に使ったプロファイル
 	Meetings profile (made by Quatrelle)	会議用プロファイル (Quatrelle が作成)
 	A profile for meetings	会議用のプロファイル

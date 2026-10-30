@@ -1784,7 +1784,7 @@ month	May	5월
 	Teams meetings open in a window of their own: Chrome, Chromium or Edge, which Teams needs for calls on Linux.	Teams 모임은 별도의 창에서 열립니다: Linux에서 Teams 통화에 필요한 Chrome, Chromium 또는 Edge입니다.
 	The profile “{profile}” is no longer in {browser}; the meeting opens in the last profile used	"{profile}" 프로필이 더 이상 {browser}에 없습니다. 모임은 마지막으로 사용한 프로필에서 열립니다
 	Profile	프로필
-	Teams needs the one signed in to Microsoft 365, else it joins you as a guest.	Teams에는 Microsoft 365에 로그인된 프로필이 필요합니다. 그렇지 않으면 게스트로 참가합니다.
+	Teams needs the profile signed in to Microsoft 365, else it joins you as a guest.	Teams에는 Microsoft 365에 로그인된 프로필이 필요합니다. 그렇지 않으면 게스트로 참가합니다.
 	The last profile used	마지막으로 사용한 프로필
 	Meetings profile (made by Quatrelle)	모임용 프로필 (Quatrelle에서 만듦)
 	A profile for meetings	모임용 프로필
