@@ -1809,6 +1809,7 @@ month	May	mayo
 	The directory can't be reached	No se puede acceder al directorio
 	and others	y otros
 	This list couldn't be expanded: {error}	Esta lista no se pudo expandir: {error}
+	Some names need checking before sending	Algunos nombres deben comprobarse antes de enviar
 	Matched as typed	Se compara tal como se escribió
 	{name}, {kind}, remove with Delete	{name}, {kind}, quitar con Supr
 	{name}, {kind}, {why}, remove with Delete	{name}, {kind}, {why}, quitar con Supr

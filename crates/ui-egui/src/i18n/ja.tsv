@@ -1806,6 +1806,7 @@ month	May	5月
 	The directory can't be reached	ディレクトリに接続できません
 	and others	ほか
 	This list couldn't be expanded: {error}	このリストを展開できませんでした: {error}
+	Some names need checking before sending	送信前に確認が必要な名前があります
 	Matched as typed	入力どおりに照合
 	{name}, {kind}, remove with Delete	{name}、{kind}、Delete キーで削除
 	{name}, {kind}, {why}, remove with Delete	{name}、{kind}、{why}、Delete キーで削除
