@@ -104,6 +104,10 @@ pub(crate) struct FakeTeams {
     pub(crate) hits: HashMap<String, u32>,
     /// The headers of the last request per route name, their names lowercased.
     pub(crate) last_headers: HashMap<String, Vec<(String, String)>>,
+    /// The token runs out: (route name, its n-th request, the one token taken from then on).
+    pub(crate) token_expires: Option<(&'static str, u32, String)>,
+    /// Whether it has run out.
+    pub(crate) expired: bool,
 }
 
 impl FakeTeams {
@@ -477,8 +481,18 @@ impl Data {
             _ => {}
         }
         let name = route_name(method, &p)?;
-        *t.hits.entry(name.to_string()).or_default() += 1;
+        let hit = t.hits.entry(name.to_string()).or_default();
+        *hit += 1;
+        let hit = *hit;
         t.last_headers.insert(name.to_string(), headers.to_vec());
+        let mut authorized = authorized;
+        if let Some((route, nth, renewed)) = t.token_expires.clone() {
+            t.expired |= route == name && hit >= nth;
+            if t.expired {
+                let bearer = format!("Bearer {renewed}");
+                authorized = headers.iter().any(|(k, v)| k == "authorization" && *v == bearer);
+            }
+        }
         let mut reply = match t.refusal(name, authorized, someone_else) {
             Some(r) => r,
             None => {
