@@ -4939,6 +4939,7 @@ dependencies = [
  "html5ever",
  "mail-builder",
  "mail-parser",
+ "proptest",
  "quatrelle-model",
  "serde",
 ]
