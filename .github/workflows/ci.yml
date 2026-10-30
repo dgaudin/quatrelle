@@ -28,6 +28,9 @@ jobs:
         # differs per OS (release.yml builds the installers).
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    # A run takes 5 to 35 minutes: one stuck (a test that hung, 29/10) stops here rather than
+    # holding the runner for six hours.
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Linux build dependencies

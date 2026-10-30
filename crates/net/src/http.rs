@@ -562,15 +562,32 @@ pub(crate) mod tests {
 
     use super::*;
 
+    /// How long [`serve`] waits for a request, or for the rest of one, before it gives up.
+    const WAIT: Duration = Duration::from_secs(20);
+
     /// Serve `responses` (one per connection, in order) on localhost; returns the base URL and
-    /// the requests received.
+    /// the requests received. A request that doesn't come within [`WAIT`] ends it, the requests
+    /// seen so far returned: a test expecting more fails in seconds rather than hanging the run
+    /// (a race in a Graph renewal test hung CI for four hours, 29/10).
     pub(crate) fn serve(responses: Vec<Vec<u8>>) -> (String, std::thread::JoinHandle<Vec<String>>) {
         let l = TcpListener::bind("127.0.0.1:0").unwrap();
+        l.set_nonblocking(true).unwrap();
         let base = format!("http://127.0.0.1:{}", l.local_addr().unwrap().port());
         let h = std::thread::spawn(move || {
             let mut seen = Vec::new();
             for r in responses {
-                let (mut s, _) = l.accept().unwrap();
+                let end = Instant::now() + WAIT;
+                let mut s = loop {
+                    match l.accept() {
+                        Ok((s, _)) => break s,
+                        Err(e) if e.kind() == std::io::ErrorKind::WouldBlock && Instant::now() < end => {
+                            std::thread::sleep(Duration::from_millis(5));
+                        }
+                        Err(_) => return seen,
+                    }
+                };
+                s.set_nonblocking(false).unwrap();
+                s.set_read_timeout(Some(WAIT)).unwrap();
                 let mut reader = BufReader::new(s.try_clone().unwrap());
                 let mut req = String::new();
                 let mut len = 0usize;
