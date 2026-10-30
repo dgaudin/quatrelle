@@ -26,12 +26,36 @@ pub struct Contact {
     /// Saved in an address book (laid over the mail counted; not kept with the book).
     #[serde(skip)]
     pub saved: bool,
+    /// The name in lower case, kept with it so a suggestion pass doesn't lower every name of
+    /// the book on every key typed (made again when the book is read from disk).
+    #[serde(skip)]
+    name_lower: String,
 }
 
 /// What being saved in Contacts counts for: as many messages written to them.
 const SAVED_WEIGHT: f64 = 32.0;
 
 impl Contact {
+    /// The name in lower case.
+    pub fn name_lower(&self) -> &str {
+        &self.name_lower
+    }
+
+    fn set_name(&mut self, name: &str) {
+        self.address.name = name.to_string();
+        self.name_lower = name.to_lowercase();
+    }
+
+    /// Whether `q` (trimmed, in lower case, not empty) starts the address, the name, any word of
+    /// the name or any part of the address.
+    pub fn matches(&self, q: &str) -> bool {
+        let (name, email) = (self.name_lower.as_str(), self.address.email.as_str());
+        email.starts_with(q)
+            || name.starts_with(q)
+            || name.split(|ch: char| ch.is_whitespace() || ch == '-' || ch == '.').any(|w| w.starts_with(q))
+            || email.split(['.', '_', '-', '@']).any(|w| w.starts_with(q))
+    }
+
     pub fn score(&self, now: i64) -> f64 {
         let counted = 4.0 * f64::from(self.sent) + f64::from(self.received);
         // Someone saved in Contacts doesn't fade with time.
@@ -51,7 +75,7 @@ const MAX_FORGOTTEN: usize = 5_000;
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct ContactBook {
-    #[serde(default)]
+    #[serde(default, deserialize_with = "read_contacts")]
     by_email: HashMap<String, Contact>,
     /// Taken out of the suggestions: mail from them doesn't bring them back, writing to them does.
     #[serde(default)]
@@ -93,7 +117,7 @@ impl ContactBook {
         let c = self.by_email.entry(email.clone()).or_insert_with(|| Contact { address: EmailAddress::new("", email), ..Default::default() });
         // The newest non-empty name wins (people fix their display names).
         if !a.name.trim().is_empty() && (c.address.name.is_empty() || date >= c.last) {
-            c.address.name = a.name.trim().to_string();
+            c.set_name(a.name.trim());
         }
         if sent {
             c.sent = c.sent.saturating_add(1);
@@ -116,7 +140,7 @@ impl ContactBook {
         }
         let c = self.by_email.entry(email.clone()).or_insert_with(|| Contact { address: EmailAddress::new("", email), ..Default::default() });
         if c.address.name.is_empty() && !a.name.trim().is_empty() {
-            c.address.name = a.name.trim().to_string();
+            c.set_name(a.name.trim());
         }
         c.saved = true;
     }
@@ -175,28 +199,29 @@ impl ContactBook {
         self.by_email.values().filter(|c| c.sent > 0).map(|c| crate::lookalike::domain_of(&c.address.email)).filter(|d| !d.is_empty())
     }
 
+    /// The contacts `q` (trimmed, in lower case) matches ([`Contact::matches`]), in no order;
+    /// nothing for an empty one.
+    pub fn matches<'a>(&'a self, q: &'a str) -> impl Iterator<Item = &'a Contact> + 'a {
+        self.by_email.values().filter(move |c| !q.is_empty() && c.matches(q))
+    }
+
     /// Up to `limit` contacts matching `query` (the start of the address, of the name, or of any
     /// word of the name; case-insensitive), best first.
     pub fn suggest(&self, query: &str, limit: usize, now: i64) -> Vec<Contact> {
         let q = query.trim().to_lowercase();
-        if q.is_empty() {
-            return Vec::new();
-        }
-        let mut hits: Vec<(&Contact, f64)> = self
-            .by_email
-            .values()
-            .filter(|c| {
-                let name = c.address.name.to_lowercase();
-                c.address.email.starts_with(&q)
-                    || name.starts_with(&q)
-                    || name.split(|ch: char| ch.is_whitespace() || ch == '-' || ch == '.').any(|w| w.starts_with(&q))
-                    || c.address.email.split(['.', '_', '-', '@']).any(|w| w.starts_with(&q))
-            })
-            .map(|c| (c, c.score(now)))
-            .collect();
+        let mut hits: Vec<(&Contact, f64)> = self.matches(&q).map(|c| (c, c.score(now))).collect();
         hits.sort_by(|a, b| b.1.total_cmp(&a.1).then_with(|| a.0.address.email.cmp(&b.0.address.email)));
         hits.into_iter().take(limit).map(|(c, _)| c.clone()).collect()
     }
+}
+
+/// The book as read from disk, each name's lower case made again.
+fn read_contacts<'de, D: serde::Deserializer<'de>>(d: D) -> Result<HashMap<String, Contact>, D::Error> {
+    let mut by_email = HashMap::<String, Contact>::deserialize(d)?;
+    for c in by_email.values_mut() {
+        c.name_lower = c.address.name.to_lowercase();
+    }
+    Ok(by_email)
 }
 
 impl ContactBook {
@@ -340,6 +365,17 @@ mod tests {
         assert_eq!(b.suggest("news", 5, now).len(), 1);
         assert!(b.suggest("  ", 5, now).is_empty());
         assert!(b.suggest("q", 5, now).is_empty());
+    }
+
+    #[test]
+    fn a_book_read_from_disk_still_matches_by_name() {
+        let mut b = ContactBook::new();
+        b.add_sent(&[EmailAddress::new("Prosper Martin", "pm@x.example")], 1, &[]);
+        let json = serde_json::to_string(&b).unwrap();
+        assert!(!json.contains("name_lower"), "the lower case isn't kept on disk");
+        let back: ContactBook = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.matches("mart").count(), 1);
+        assert_eq!(back.suggest("Pros", 8, 1).len(), 1);
     }
 
     #[test]
