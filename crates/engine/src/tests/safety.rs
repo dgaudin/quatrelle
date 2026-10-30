@@ -331,3 +331,44 @@ fn the_meeting_browser_is_kept() {
     assert_eq!(before.meeting_browser, None);
     done(s);
 }
+
+/// The profile folder Teams meetings open in: none (the one the browser used last) or a folder.
+#[test]
+fn the_meeting_profile_is_kept() {
+    let mut s = sample_session("meeting-profile");
+    assert_eq!(s.prefs.meeting_profile, None, "at first");
+    let r = s.run("view.meetingProfile", &json!({"dir": "Profile 2"})).unwrap();
+    assert_eq!(r["dir"], "Profile 2");
+    assert_eq!(s.prefs.meeting_profile.as_deref(), Some("Profile 2"));
+    s.run("view.meetingProfile", &json!({"dir": crate::MEETINGS_PROFILE})).unwrap();
+    assert_eq!(s.prefs.meeting_profile.as_deref(), Some("Quatrelle"), "Quatrelle's own");
+    s.run("view.meetingProfile", &json!({"dir": null})).unwrap();
+    assert_eq!(s.prefs.meeting_profile, None, "the last profile used");
+    s.run("view.meetingProfile", &json!({"dir": "Default"})).unwrap();
+    s.run("view.meetingProfile", &json!({})).unwrap();
+    assert_eq!(s.prefs.meeting_profile, None, "no folder is none");
+    s.run("view.meetingProfile", &json!({"dir": "Default"})).unwrap();
+    for junk in
+        [json!(""), json!("../x"), json!("a/b"), json!("a\\b"), json!(".."), json!("x\ny"), json!(" Default"), json!("a".repeat(256)), json!(5)]
+    {
+        assert!(s.run("view.meetingProfile", &json!({ "dir": junk })).is_err(), "{junk}");
+    }
+    assert_eq!(s.prefs.meeting_profile.as_deref(), Some("Default"), "refusals change nothing");
+    // Saved with the settings, and a settings file from before the setting.
+    let saved: crate::Prefs = serde_json::from_value(serde_json::to_value(&s.prefs).unwrap()).unwrap();
+    assert_eq!(saved.meeting_profile.as_deref(), Some("Default"));
+    let before: crate::Prefs = serde_json::from_str("{}").unwrap();
+    assert_eq!(before.meeting_profile, None);
+    done(s);
+}
+
+/// A browser profile folder's name: one folder of the browser's own, never a path out of it.
+#[test]
+fn a_profile_folder_is_one_name() {
+    for good in ["Default", "Profile 1", "Quatrelle", "Personne 3", "é", &"a".repeat(255)] {
+        assert!(crate::is_profile_dir(good), "{good}");
+    }
+    for bad in ["", ".", "..", "a/b", "/abs", "a\\b", "C:\\x", "x\0y", "x\ny", "x\u{7f}", " x", "x ", "\tx", &"a".repeat(256), &"é".repeat(128)] {
+        assert!(!crate::is_profile_dir(bad), "{bad:?}");
+    }
+}
