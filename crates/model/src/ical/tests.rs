@@ -447,3 +447,49 @@ fn a_published_calendar_names_itself() {
     let c = parse(&format!("{head}X-WR-CALNAME: \u{7} \r\nX-PUBLISHED-TTL:junk\r\n{ev}END:VCALENDAR\r\n"), 0);
     assert_eq!((c.name, c.refresh), (None, None));
 }
+
+/// Teams is told from look-alikes by the host the browser would really go to, and only a plain
+/// web address of reasonable size is launched at all.
+#[test]
+fn a_teams_meeting_link_is_told_from_look_alikes() {
+    for yes in [
+        "https://teams.microsoft.com/l/meetup-join/19%3ameeting_x%40thread.v2/0?context=%7b%7d",
+        "HTTPS://Teams.Microsoft.com/meet/123?p=abc",
+        "https://eu.teams.microsoft.com/l/meetup-join/x",
+        "https://teams.live.com/meet/9876",
+        "https://teams.microsoft.com:443/meet/1",
+    ] {
+        assert!(is_teams_link(yes), "{yes}");
+        assert!(is_meeting_link(yes), "{yes}");
+    }
+    for no in [
+        "https://teams.microsoft.com/v2/",
+        "https://teams.microsoft.com.evil.example/meet/1",
+        "https://evil.example/teams.microsoft.com/meet/1",
+        "https://zoom.us/j/123",
+        "teams.microsoft.com/meet/1",
+        "https://evil.example?.teams.microsoft.com/meet/1",
+        "https://evil.example#.teams.microsoft.com/meet/1",
+        "https://evil.example\\.teams.microsoft.com/meet/1",
+        "https://teams.microsoft.com@evil.example/meet/1",
+    ] {
+        assert!(!is_teams_link(no), "{no}");
+        // Zoom is a meeting, only not Teams; every look-alike is neither.
+        assert_eq!(is_meeting_link(no), no.contains("zoom.us"), "{no}");
+    }
+    assert!(launchable_link("https://teams.microsoft.com/meet/1"));
+    assert!(launchable_link("HTTP://Host.example:8080/a?b#c"));
+    for bad in [
+        "https://teams.microsoft.com/meet/1 x",
+        "https://teams.microsoft.com/meet/1\n",
+        "javascript:alert(1)",
+        "file:///etc/passwd",
+        "https://",
+        "https:///meet/1",
+        "https://:8080/x",
+        "https://user@a.example/x",
+        &format!("https://a.example/{}", "x".repeat(2048)),
+    ] {
+        assert!(!launchable_link(bad), "{bad:?}");
+    }
+}
