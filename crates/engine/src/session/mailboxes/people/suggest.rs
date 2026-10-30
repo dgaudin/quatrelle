@@ -74,17 +74,36 @@ pub struct Suggestion {
     pub source: Source,
 }
 
-/// A field's last answer, and what it was worked out from.
+/// A field's last answer, what it was worked out from, and when.
 pub(crate) struct Cached {
     text: String,
     account: Option<String>,
     kinds: Vec<AddresseeKind>,
     revision: u64,
+    at: i64,
     list: Vec<Suggestion>,
 }
 
-/// A candidate and what orders it: how well it fits, how much it's used, where its kind comes
-/// in what the field takes, its address.
+/// While the book is being read (a slice per frame, each changing it), the same text is worked
+/// out again at most this often (seconds); once it's read, at once.
+const READING_EVERY: i64 = 1;
+
+/// A candidate, not yet cloned: how well it fits, how much it's used, its address in lower case
+/// (or a contact group's reference), and where it comes from.
+struct Candidate<'a> {
+    fit: u8,
+    score: f64,
+    key: &'a str,
+    from: From<'a>,
+}
+
+enum From<'a> {
+    Book(&'a quatrelle_model::contacts::Contact),
+    Index(&'a Addressee),
+    Room(&'a String),
+}
+
+/// A suggestion kept, and what orders it among the others.
 struct Hit {
     s: Suggestion,
     fit: u8,
@@ -93,32 +112,24 @@ struct Hit {
     address: String,
 }
 
-impl Hit {
-    fn new(who: Addressee, source: Source, score: f64, q: &str, kinds: &[AddresseeKind]) -> Hit {
-        let place = kinds.iter().position(|k| *k == who.kind).unwrap_or(kinds.len());
-        Hit { fit: fit(&who, q), score, place, address: who.address.to_lowercase(), s: Suggestion { who, source } }
-    }
-}
-
-/// Whether a name or an address starts with `q` (lower case): the address, the name, or any word
-/// of the name.
+/// Whether a name (in lower case) or an address (in lower case) starts with `q`: the address,
+/// the name, or any word of the name.
 fn starts_with(name: &str, address: &str, q: &str) -> bool {
-    let name = name.to_lowercase();
-    address.to_lowercase().starts_with(q) || name.starts_with(q) || words(&name).any(|w| w.starts_with(q))
+    address.starts_with(q) || name.starts_with(q) || words(name).any(|w| w.starts_with(q))
 }
 
 fn words(name: &str) -> impl Iterator<Item = &str> {
     name.split(|c: char| c.is_whitespace() || matches!(c, '-' | '.' | ',')).filter(|w| !w.is_empty())
 }
 
-/// How well a suggestion fits `q`: 0 an exact name or address, 1 the start of the first or the
-/// last name or of the address, 2 anything else that matched.
-fn fit(who: &Addressee, q: &str) -> u8 {
-    let (name, address) = (who.name.trim().to_lowercase(), who.address.trim().to_lowercase());
+/// How well a name and an address (in lower case) fit `q`: 0 one of them exactly, 1 the start of
+/// the first or the last name or of the address, 2 anything else that matched.
+fn fit(name: &str, address: &str, q: &str) -> u8 {
+    let name = name.trim();
     if name == q || address == q {
         return 0;
     }
-    let mut w = words(&name);
+    let mut w = words(name);
     let first = w.next();
     let last = w.last().or(first);
     if address.starts_with(q) || first.is_some_and(|f| f.starts_with(q)) || last.is_some_and(|l| l.starts_with(q)) { 1 } else { 2 }
@@ -127,7 +138,8 @@ fn fit(who: &Addressee, q: &str) -> u8 {
 impl Session {
     /// Up to [`MAX_SUGGESTIONS`] people for a contacts field, best first, from what is on this
     /// computer: nothing for a blank text; the field's last answer when neither its text nor the
-    /// book changed since; else one pass ([`Session::people_suggest_passes`]).
+    /// book changed since (or the book is being read, and the last pass is under a second old);
+    /// else one pass ([`Session::people_suggest_passes`]).
     pub fn people_suggest(&mut self, field: FieldId, account: Option<&str>, accepts: &Accepts, text: &str) -> Vec<Suggestion> {
         self.people_suggest_kinds(field, account, accepts.kinds, text)
     }
@@ -138,12 +150,13 @@ impl Session {
         if q.is_empty() {
             return Vec::new();
         }
-        let revision = self.contacts_revision();
+        let (revision, now) = (self.contacts_revision(), self.clock.now);
+        let reading = self.contacts_pending();
         if let Some(c) = self.people.suggest_cache.get(&field)
             && c.text == q
-            && c.revision == revision
             && c.account.as_deref() == account
             && c.kinds == kinds
+            && (c.revision == revision || (reading && now.saturating_sub(c.at) < READING_EVERY))
         {
             return c.list.clone();
         }
@@ -154,7 +167,7 @@ impl Session {
         }
         // The revision after the pass: starting the book may have changed it.
         let revision = self.contacts_revision();
-        let cached = Cached { text: q, account: account.map(str::to_string), kinds: kinds.to_vec(), revision, list: list.clone() };
+        let cached = Cached { text: q, account: account.map(str::to_string), kinds: kinds.to_vec(), revision, at: now, list: list.clone() };
         self.people.suggest_cache.insert(field, cached);
         list
     }
@@ -164,54 +177,65 @@ impl Session {
         (self.people.passes, self.people.scanned)
     }
 
-    /// One pass: the book's best, the directory's answers, the rooms and the shared mailboxes
-    /// that start with `q` (lower case), of the kinds taken, each address once, ordered, cut.
+    /// One pass: the book's people, the directory's answers, the rooms and the shared mailboxes
+    /// that `q` (lower case) matches, of the kinds taken, each address once, ordered, cut. Every
+    /// match is ranked (how well it fits, then how much it's used) before anything is cut, and
+    /// only what is kept is cloned.
     fn suggestion_pass(&mut self, account: Option<&str>, kinds: &[AddresseeKind], q: &str) -> Vec<Suggestion> {
-        let takes = |k: AddresseeKind| k == AddresseeKind::Unknown || kinds.contains(&k);
-        let book = self.suggest_contacts_now(q, MAX_SUGGESTIONS * 4);
-        let mut seen: HashSet<String> = HashSet::new();
-        let mut hits: Vec<Hit> = Vec::new();
+        self.contacts_step(0);
         let now = self.clock.now;
-        for c in book {
-            let kind = self.addressee_kind(account, &c.address.email);
-            if takes(kind) && seen.insert(c.address.email.trim().to_ascii_lowercase()) {
-                // Mail exchanged counts first: Contacts is for someone known from there alone.
-                let source = if c.saved && c.sent == 0 && c.received == 0 { Source::Contacts } else { Source::Recent };
-                let who = Addressee::new(c.address.name.clone(), c.address.email.clone(), kind);
-                hits.push(Hit::new(who, source, c.score(now), q, kinds));
-            }
-        }
-        for (key, a) in &self.people.index {
-            if !starts_with(&a.name, &a.address, q) || seen.contains(key) {
-                continue;
-            }
-            // The room lists, and the mailboxes opened, know better than the directory.
-            let kind = if a.address.is_empty() { a.kind } else { self.addressee_kind(account, &a.address) };
-            if takes(kind) {
-                seen.insert(key.clone());
-                hits.push(Hit::new(Addressee { kind, ..a.clone() }, Source::Directory, 0.0, q, kinds));
-            }
-        }
+        let book: Vec<Candidate> = self
+            .contacts_book()
+            .map(|b| {
+                b.matches(q)
+                    .map(|c| Candidate {
+                        fit: fit(c.name_lower(), &c.address.email, q),
+                        score: c.score(now),
+                        key: &c.address.email,
+                        from: From::Book(c),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        let index: Vec<Candidate> = self
+            .people
+            .index
+            .iter()
+            .filter_map(|(key, e)| {
+                // A contact group's key is its reference, not an address.
+                let address = if e.who.address.is_empty() { "" } else { key.as_str() };
+                starts_with(&e.name_lower, address, q).then(|| Candidate {
+                    fit: fit(&e.name_lower, address, q),
+                    score: 0.0,
+                    key,
+                    from: From::Index(&e.who),
+                })
+            })
+            .collect();
         let mut rooms_scanned = 0usize;
-        let room_sets = self.people.rooms.iter().filter(|(a, _)| account.is_none_or(|x| x == a.as_str()));
-        for (_, set) in room_sets {
+        let mut rooms: Vec<Candidate> = Vec::new();
+        for (_, set) in self.people.rooms.iter().filter(|(a, _)| account.is_none_or(|x| x == a.as_str())) {
             rooms_scanned = rooms_scanned.saturating_add(set.len());
-            if !takes(AddresseeKind::Room) {
-                continue;
-            }
-            for (address, name) in set {
-                if starts_with(name, address, q) && seen.insert(address.clone()) {
-                    let who = Addressee::new(name.clone(), address.clone(), AddresseeKind::Room);
-                    hits.push(Hit::new(who, Source::RoomList, 0.0, q, kinds));
+            if Accepts::taken_by(kinds, AddresseeKind::Room) {
+                for (address, name) in set {
+                    let lower = name.to_lowercase();
+                    if starts_with(&lower, address, q) {
+                        rooms.push(Candidate { fit: fit(&lower, address, q), score: 0.0, key: address, from: From::Room(name) });
+                    }
                 }
             }
         }
-        if takes(AddresseeKind::SharedMailbox) {
+        let mut seen: HashSet<String> = HashSet::new();
+        let mut hits: Vec<Hit> = Vec::new();
+        for candidates in [book, index, rooms] {
+            hits.extend(self.best_of(candidates, account, kinds, &mut seen));
+        }
+        if Accepts::taken_by(kinds, AddresseeKind::SharedMailbox) {
             for m in self.accounts.iter().flat_map(|a| &a.config.shared_mailboxes) {
                 let address = m.trim().to_ascii_lowercase();
                 if starts_with("", &address, q) && seen.insert(address.clone()) {
                     let who = Addressee::new("", address, AddresseeKind::SharedMailbox);
-                    hits.push(Hit::new(who, Source::Recent, 0.0, q, kinds));
+                    hits.push(hit(who, Source::Recent, fit("", m, q), 0.0, kinds));
                 }
             }
         }
@@ -225,4 +249,45 @@ impl Session {
         p.scanned = p.scanned.saturating_add(u64::try_from(scanned).unwrap_or(u64::MAX));
         hits.into_iter().map(|h| h.s).collect()
     }
+
+    /// The best [`MAX_SUGGESTIONS`] of one source's candidates whose kind the field takes, best
+    /// first (how well they fit, how much they're used, the address), not already offered. A
+    /// kind is looked up only for the candidates walked (ties of fit and use across kinds are
+    /// told apart by the address here, by the kind among the sources).
+    fn best_of(&self, mut candidates: Vec<Candidate>, account: Option<&str>, kinds: &[AddresseeKind], seen: &mut HashSet<String>) -> Vec<Hit> {
+        candidates.sort_by(|a, b| a.fit.cmp(&b.fit).then_with(|| b.score.total_cmp(&a.score)).then_with(|| a.key.cmp(b.key)));
+        let mut out = Vec::new();
+        for c in candidates {
+            if out.len() >= MAX_SUGGESTIONS {
+                break;
+            }
+            if seen.contains(c.key) {
+                continue;
+            }
+            let (who, source) = match c.from {
+                From::Book(b) => {
+                    // Mail exchanged counts first: Contacts is for someone known from there alone.
+                    let s = if b.saved && b.sent == 0 && b.received == 0 { Source::Contacts } else { Source::Recent };
+                    let kind = self.kind_lower(account, c.key);
+                    (Addressee::new(b.address.name.clone(), b.address.email.clone(), kind), s)
+                }
+                // The room lists, and the mailboxes opened, know better than the directory.
+                From::Index(a) => {
+                    let kind = if a.address.is_empty() { a.kind } else { self.kind_lower(account, c.key) };
+                    (Addressee { kind, ..a.clone() }, Source::Directory)
+                }
+                From::Room(name) => (Addressee::new(name.as_str(), c.key, AddresseeKind::Room), Source::RoomList),
+            };
+            if Accepts::taken_by(kinds, who.kind) {
+                seen.insert(c.key.to_string());
+                out.push(hit(who, source, c.fit, c.score, kinds));
+            }
+        }
+        out
+    }
+}
+
+fn hit(who: Addressee, source: Source, fit: u8, score: f64, kinds: &[AddresseeKind]) -> Hit {
+    let place = kinds.iter().position(|k| *k == who.kind).unwrap_or(kinds.len());
+    Hit { fit, score, place, address: who.address.to_lowercase(), s: Suggestion { who, source } }
 }

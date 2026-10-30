@@ -208,13 +208,16 @@ fn suggestions_run_one_pass_per_change_of_text_over_a_book_at_its_cap() {
     assert_eq!(s.people_suggest_passes().0, 3, "another field is another pass");
     s.contacts_sent(&[EmailAddress::new("Ann New", "ann12new@big.example")]);
     s.people_suggest(f, None, &Accepts::RECIPIENTS, "ann12");
-    assert_eq!(s.people_suggest_passes().0, 4, "the book changed: the same text is worked out again");
+    assert_eq!(s.people_suggest_passes().0, 3, "the book is being read: under a second, the last answer stands");
+    s.set_clock(NOW + 1, 0);
+    s.people_suggest(f, None, &Accepts::RECIPIENTS, "ann12");
+    assert_eq!(s.people_suggest_passes().0, 4, "the book changed: a second on, the same text is worked out again");
     done(s);
 }
 
 /// The directory's answers fill an index that suggestions and kinds read; suggestions never
-/// write it, and it holds at most [`INDEX_MAX`] entries, the oldest going first, and is cleared
-/// with the answers kept.
+/// write it, and it holds at most [`INDEX_MAX`] entries, the oldest going first (not cut with
+/// the answers kept), until the account goes.
 #[test]
 fn the_directory_index_feeds_suggestions_and_is_never_filled_by_them() {
     let (mut s, gal) = with_exchange("suggest-index");
@@ -238,10 +241,14 @@ fn the_directory_index_feeds_suggestions_and_is_never_filled_by_them() {
     assert!(s.directory_known("p0@dir.example").is_none(), "the oldest gone");
     assert!(s.directory_known("p30000@dir.example").is_some());
     assert_eq!(s.addressee_kind(Some(&gal), "p30000@dir.example"), AddresseeKind::Person, "the index tells the kind");
-    // A new name asked past the answers kept: the oldest answer goes, and the index with it.
+    // A new name asked past the answers kept: the oldest answer goes, the index keeps its own
+    // order (only its FIFO cuts it).
     answer(&mut s, &gal, "fresh", &[("Fresh Face", "fresh@dir.example")]);
-    assert!(s.directory_known("p30000@dir.example").is_none());
+    assert!(s.directory_known("p30000@dir.example").is_some(), "not cleared with the answers");
+    assert!(s.directory_known("p100@dir.example").is_some());
+    assert!(s.directory_known("p1@dir.example").is_none(), "the next oldest made room");
     assert!(s.directory_known("fresh@dir.example").is_some());
+    assert_eq!(s.people.index.len(), INDEX_MAX);
     // The command.
     let r = s.run("people.suggest", &json!({"window": 3, "field": "to", "text": "zo"})).unwrap();
     assert_eq!(r[0]["email"], "zoe@studio.example");
@@ -259,5 +266,63 @@ fn the_directory_index_feeds_suggestions_and_is_never_filled_by_them() {
     assert_eq!(r[0]["address"], "Zoe Park <zoe@studio.example>");
     assert_eq!(r[0]["kind"], "person");
     assert_eq!(r[0]["source"], "recent");
+    // The account goes: so does what its directory answered.
+    s.run("account.remove", &json!({"account": gal})).unwrap();
+    assert!(s.directory_known("fresh@dir.example").is_none() && s.people.index.is_empty());
+    let r = s.run("people.suggest", &json!({"window": 3, "field": "to", "text": "fresh"})).unwrap();
+    assert_eq!(r, json!([]));
+    done(s);
+}
+
+/// A book being read a slice per frame changes on every frame: the same text is worked out
+/// again at most once a second meanwhile, and once more when the reading is done.
+#[test]
+fn a_book_being_read_redoes_the_same_text_at_most_once_a_second() {
+    let store = temp("suggest-reading");
+    sample::seed_big_mailbox(&store, 4, 100, NOW).unwrap();
+    let mut s = Session::open(Some(store), quatrelle_model::dates::Clock::new(NOW, 0));
+    s.take_jobs();
+    let f = FieldId { window: 1, name: "to" };
+    s.people_suggest(f, None, &Accepts::RECIPIENTS, "a");
+    assert!(s.contacts_pending(), "the first pass only starts the book");
+    let (mut frames, mut read) = (0i64, false);
+    while !read {
+        // Ten frames a second.
+        s.set_clock(NOW + frames / 10, 0);
+        let before = s.people_suggest_passes().0;
+        read = s.contacts_step(5);
+        s.people_suggest(f, None, &Accepts::RECIPIENTS, "a");
+        frames += 1;
+        if read {
+            assert_eq!(s.people_suggest_passes().0, before + 1, "the book read: one pass more");
+        } else {
+            let passes = s.people_suggest_passes().0;
+            assert!(passes <= 1 + (frames / 10) as u64, "{passes} passes in {frames} frames");
+        }
+    }
+    assert!(frames >= 30, "the reading took {frames} frames");
+    let passes = s.people_suggest_passes().0;
+    for _ in 0..5 {
+        s.people_suggest(f, None, &Accepts::RECIPIENTS, "a");
+    }
+    assert_eq!(s.people_suggest_passes().0, passes, "read: nothing changes, nothing is worked out");
+    s.people_suggest(f, None, &Accepts::RECIPIENTS, "an");
+    assert_eq!(s.people_suggest_passes().0, passes + 1, "a change of text always runs a pass");
+    done(s);
+}
+
+/// The book's best by score aren't cut before the match is ranked: thousands of colleagues
+/// whose address has "pro" in it (`@proginov.fr`) don't push out the one whose name starts with it.
+#[test]
+fn a_name_that_starts_with_the_text_beats_many_addresses_that_merely_contain_it() {
+    let mut s = sample_session("suggest-prefix");
+    s.contacts_step(usize::MAX);
+    let colleagues: Vec<EmailAddress> = (0..2_000).map(|i| EmailAddress::new(format!("Colleague {i}"), format!("c{i}@proginov.fr"))).collect();
+    for _ in 0..3 {
+        s.contacts_sent(&colleagues);
+    }
+    s.contacts_sent(&[EmailAddress::new("Prosper Martin", "pmartin@elsewhere.example")]);
+    let got = s.people_suggest(FieldId { window: 1, name: "to" }, None, &Accepts::RECIPIENTS, "pro");
+    assert_eq!(got.first().map(|x| x.who.address.as_str()), Some("pmartin@elsewhere.example"), "{got:?}");
     done(s);
 }
