@@ -19,3 +19,7 @@ html5ever = "0.40"
 serde = { workspace = true }
 # Office attachments (zip archives) for the reading pane's preview: pure Rust, wasm too.
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
+
+[dev-dependencies]
+# Property tests of what a server says (attachments/text_first.rs).
+proptest = "1"

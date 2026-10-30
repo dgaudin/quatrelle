@@ -7,7 +7,18 @@ use super::*;
 use tnef::{Budget, is_tnef, read_with, shown_cids};
 pub use tnef::{Tnef, TnefBody, TnefFile, decompress_rtf, read_tnef, rtf_body};
 
+mod text_first;
 mod tnef;
+pub use text_first::{MOST_PENDING_FILES, PendingFile, is_protected_file, text_first};
+
+/// A part's size: its bytes, or, with none yet (a message's text that came first), the size its
+/// `Content-Disposition` gives (RFC 2183's `size`).
+fn shown_size(p: &mail_parser::MessagePart<'_>) -> usize {
+    if !p.is_empty() {
+        return p.len();
+    }
+    p.content_disposition().and_then(|d| d.attribute("size")).and_then(|s| s.trim().parse::<usize>().ok()).unwrap_or(0)
+}
 
 /// One of a message's attachments, with its bytes.
 pub(super) struct Attached<'a> {
@@ -76,7 +87,7 @@ pub(super) fn attached<'a>(m: &'a Message<'a>) -> (Vec<Attached<'a>>, TnefBody) 
             index,
             name,
             mime,
-            size: p.len(),
+            size: shown_size(p),
             inline: p.is_inline_part(),
             content_id: p.content_id().map(|c| c.trim().trim_matches(['<', '>']).to_string()),
             content_location: p.content_location().map(|c| c.trim().trim_matches(['<', '>', '"']).to_string()).filter(|c| !c.is_empty()),

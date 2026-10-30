@@ -39,8 +39,8 @@ mod reply;
 pub mod smime;
 mod trackers;
 pub use attachments::{
-    AttachmentInfo, AttachmentKind, Tnef, TnefBody, TnefFile, attachment_data, craft_app_for, decompress_rtf, kind_of, quoted_pictures, read_tnef,
-    rtf_body, text_preview_kind,
+    AttachmentInfo, AttachmentKind, MOST_PENDING_FILES, PendingFile, Tnef, TnefBody, TnefFile, attachment_data, craft_app_for, decompress_rtf,
+    is_protected_file, kind_of, quoted_pictures, read_tnef, rtf_body, text_first, text_preview_kind,
 };
 use attachments::{attached, has_real_attachments};
 use files::attachment_name;
@@ -57,9 +57,15 @@ pub const PREVIEW_CHARS: usize = 200;
 /// HTML larger than this is cut before conversion (the rest is rarely more than markup).
 pub(crate) const HTML_MAX: usize = 4 << 20;
 
+/// A header's addresses. A name alone stays (an empty `email`: not known yet); one with neither is dropped.
 fn addrs(a: Option<&Address<'_>>) -> Vec<EmailAddress> {
-    a.map(|a| a.iter().filter_map(|x| x.address().map(|e| EmailAddress::new(x.name().unwrap_or_default().trim(), e.trim()))).collect())
-        .unwrap_or_default()
+    a.map(|a| {
+        a.iter()
+            .map(|x| EmailAddress::new(x.name().unwrap_or_default().trim(), x.address().unwrap_or_default().trim()))
+            .filter(|x| !x.name.is_empty() || !x.email.is_empty())
+            .collect()
+    })
+    .unwrap_or_default()
 }
 
 fn ids(v: &HeaderValue<'_>) -> Vec<String> {
