@@ -199,7 +199,7 @@ fn ribbon(ui: &mut Ui, t: &Tokens, f: &mut EventForm, webex: &str, acts: &mut Ve
     // Options from then on).
     if let Some(url) = f.join.clone() {
         if widgets::big_button(ui, Icon::Video, "Join meeting", &t, true).on_hover_text(&url).clicked() {
-            acts.push(Action::OpenUrl(url));
+            acts.push(Action::OpenMeeting(url));
         }
         groups.end(ui, &t, "Online meeting");
     } else if writable {
@@ -452,7 +452,7 @@ fn body(ui: &mut Ui, t: &Tokens, f: &mut EventForm, acts: &mut Vec<Action>) {
             for url in &f.links {
                 let shown = url.split_once("://").map_or(url.as_str(), |(_, r)| r);
                 if ui.link(RichText::new(crate::widgets::shorten(shown, 48)).small()).on_hover_text(url).clicked() {
-                    acts.push(Action::OpenUrl(url.clone()));
+                    acts.push(Action::OpenMeeting(url.clone()));
                 }
             }
         });

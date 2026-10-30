@@ -1774,3 +1774,5 @@ month	May	5月
 	Objects	物
 	Symbols	記号
 	Flags	旗
+	This meeting link can't be opened	この会議のリンクは開けません
+	{browser} couldn't open the meeting: {error}	{browser} で会議を開けませんでした: {error}

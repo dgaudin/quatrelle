@@ -221,6 +221,10 @@ pub enum Action {
     /// A link in a message was clicked (web pages open in the browser; `mailto:` starts a message;
     /// a network share asks first, unless its server is trusted).
     OpenUrl(String),
+    /// A meeting's link was clicked in an event or meeting (its Join button, its notes): a Teams
+    /// meeting joins in a browser's app window, as File › Options › Applications says; any other
+    /// link opens as [`Action::OpenUrl`] does.
+    OpenMeeting(String),
     /// A network share's link the user said to open ([`Dialog::OpenShare`]).
     OpenShare(String),
     /// Run a command for the open dialog: it closes on success and shows the error otherwise.

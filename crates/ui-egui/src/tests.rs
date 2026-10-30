@@ -599,6 +599,7 @@ mod access;
 mod accounts;
 mod inserting;
 mod list;
+mod meetings;
 mod organize;
 mod pictures;
 mod pim;

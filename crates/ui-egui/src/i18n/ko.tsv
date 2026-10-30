@@ -1776,3 +1776,5 @@ month	May	5월
 	Objects	사물
 	Symbols	기호
 	Flags	깃발
+	This meeting link can't be opened	이 모임 링크를 열 수 없습니다
+	{browser} couldn't open the meeting: {error}	{browser}에서 모임을 열 수 없습니다: {error}

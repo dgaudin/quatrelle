@@ -1777,3 +1777,5 @@ month	May	mayo
 	Objects	Objetos
 	Symbols	Símbolos
 	Flags	Banderas
+	This meeting link can't be opened	No se puede abrir este vínculo de reunión
+	{browser} couldn't open the meeting: {error}	{browser} no pudo abrir la reunión: {error}

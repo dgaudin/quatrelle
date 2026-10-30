@@ -1773,3 +1773,5 @@ month	May	מאי
 	Objects	חפצים
 	Symbols	סמלים
 	Flags	דגלים
+	This meeting link can't be opened	לא ניתן לפתוח את קישור הפגישה הזה
+	{browser} couldn't open the meeting: {error}	{browser} לא הצליח לפתוח את הפגישה: {error}

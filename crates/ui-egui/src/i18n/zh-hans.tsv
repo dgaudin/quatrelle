@@ -1774,3 +1774,5 @@ month	May	5月
 	Objects	物品
 	Symbols	符号
 	Flags	旗帜
+	This meeting link can't be opened	无法打开此会议链接
+	{browser} couldn't open the meeting: {error}	{browser} 无法打开会议: {error}

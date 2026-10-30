@@ -1773,3 +1773,5 @@ month	May	مايو
 	Objects	الأشياء
 	Symbols	الرموز
 	Flags	الأعلام
+	This meeting link can't be opened	يتعذّر فتح رابط الاجتماع هذا
+	{browser} couldn't open the meeting: {error}	تعذّر على {browser} فتح الاجتماع: {error}
