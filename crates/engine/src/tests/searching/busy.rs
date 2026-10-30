@@ -19,7 +19,7 @@ fn folder_path(i: usize) -> String {
 
 /// A message of a busy mailbox: every hundredth one says "needle".
 fn message(folder: &str, uid: u32, date: i64) -> Summary {
-    let subject = if uid % 100 == 0 { format!("needle {folder} {uid}") } else { format!("Report {folder} {uid}") };
+    let subject = if uid.is_multiple_of(100) { format!("needle {folder} {uid}") } else { format!("Report {folder} {uid}") };
     Summary {
         key: MessageKey { account: "a1".into(), folder: folder.to_string(), validity: 1, uid },
         subject,
@@ -206,7 +206,8 @@ fn mail_moved_or_deleted_during_a_search_is_not_found_where_it_was() {
 }
 
 /// A folder made during a search of the mailbox is searched too; one deleted or renamed no
-/// longer answers under its old name.
+/// longer answers under its old name; one missing from a folder list for a while answers again
+/// once it's back.
 #[test]
 fn folders_added_or_removed_during_a_search_follow() {
     let (folders, per) = (12, 1200);
@@ -214,6 +215,15 @@ fn folders_added_or_removed_during_a_search_follow() {
     let mut s = open(&store);
     let calls = drive(&mut s, "needle", 200, |s, step| {
         folders_again(s);
+        // A folder list sent without one read already, then whole again: it answers again.
+        if step == 4 {
+            let all = s.account("a1").unwrap().folders.clone();
+            let short: Vec<Folder> = all.iter().filter(|f| f.path != folder_path(0)).cloned().collect();
+            s.apply(Event::Folders { account: "a1".into(), folders: short });
+            s.run("search.run", &json!({"query": "needle", "index": SLICE})).unwrap();
+            assert!(!s.list.iter().any(|m| m.key.folder == folder_path(0)), "a folder gone doesn't answer");
+            s.apply(Event::Folders { account: "a1".into(), folders: all });
+        }
         if step == 6 {
             // Made on the server: the folder list says so.
             let store = s.store.clone().unwrap();
@@ -272,13 +282,16 @@ fn a_search_in_slices_answers_what_a_whole_one_does() {
 /// ```
 ///
 /// `QUATRELLE_SLICE_FOLDERS` and `QUATRELLE_SLICE_PER` set the mailbox's size (100 × 2000),
-/// `QUATRELLE_SLICE_QUERY` the query (`needle`: one message in a hundred).
+/// `QUATRELLE_SLICE_QUERY` the query (`needle`: one message in a hundred); with
+/// `QUATRELLE_SLICE_BUSY` set, the folder list comes again after each slice and the Inbox
+/// changes every four (the time those take isn't counted).
 #[test]
 #[ignore]
 fn slices_cost_the_same_from_first_to_last() {
     let env = |k: &str, d: usize| std::env::var(k).ok().and_then(|v| v.parse().ok()).unwrap_or(d);
     let (folders, per) = (env("QUATRELLE_SLICE_FOLDERS", 100), env("QUATRELLE_SLICE_PER", 2000));
     let q = std::env::var("QUATRELLE_SLICE_QUERY").unwrap_or_else(|_| "needle".into());
+    let busy = std::env::var_os("QUATRELLE_SLICE_BUSY").is_some();
     let store = busy_store("busy-cost", folders, u32::try_from(per).unwrap());
     let mut s = open(&store);
     let mut times = Vec::new();
@@ -289,6 +302,12 @@ fn slices_cost_the_same_from_first_to_last() {
         times.push(t.elapsed().as_secs_f64() * 1000.0);
         if v["pending"] == false {
             break;
+        }
+        if busy {
+            folders_again(&mut s);
+            if times.len() % 4 == 0 {
+                s.apply(Event::FolderChanged { account: "a1".into(), folder: "INBOX".into() });
+            }
         }
         assert!(times.len() < 100 * folders * per / SLICE as usize, "the search must finish");
     }
