@@ -13,7 +13,7 @@ mod updates;
 mod windows;
 
 pub(crate) use costs::Merging;
-pub(crate) use meetings::meeting_browser;
+pub(crate) use meetings::{meeting_browser, meeting_profile};
 pub(crate) use ribbon::junk_menu;
 pub(crate) use search_box::{SearchDrop, scope_label};
 pub use windows::{WindowPlace, after_open};

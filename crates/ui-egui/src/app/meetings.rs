@@ -47,7 +47,22 @@ impl MailApp {
             self.open_link(u);
         }
     }
+
+    /// Teams in the meeting browser's app window, in Quatrelle's own profile
+    /// ([`MEETINGS_PROFILE`]): the browser makes the profile as it opens, under a name of its
+    /// own, and the user signs in to Microsoft 365 there once. Nothing when meetings open in the
+    /// default browser, which has no profile to name.
+    pub(crate) fn make_meeting_profile(&mut self) {
+        let browsers = self.services.browsers();
+        let Some((name, program)) = meeting_browser(self.session.prefs.meeting_browser.as_deref(), &browsers) else { return };
+        if let Err(e) = self.services.open_app_window(program, Some(MEETINGS_PROFILE), TEAMS_HOME) {
+            self.session.notice(tf!("{browser} couldn't be opened: {error}", browser = name, error = e), true);
+        }
+    }
 }
+
+/// Where a new meetings profile opens, for the user to sign in to Microsoft 365.
+const TEAMS_HOME: &str = "https://teams.microsoft.com/";
 
 /// The browser (shown name, program) Teams meetings open in, from the setting and the browsers
 /// found: `None` is the default browser. Nothing chosen, or a choice no longer installed: the
