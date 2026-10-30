@@ -172,6 +172,12 @@ impl Session {
         self.search_budget = budget;
         if q.is_empty() {
             self.search_pending = false;
+            // The index stays (the next search is quick), not the answer: what it would have
+            // to look at again piles up while no search is shown, and a later one starts its
+            // answer from the index.
+            if let Some(ix) = self.index.as_mut() {
+                ix.answer = None;
+            }
         }
         if self.server_search.as_ref().is_some_and(|ss| ss.query != q) {
             self.stop_server_search();
