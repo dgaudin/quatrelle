@@ -15,6 +15,7 @@ use crate::xdnd;
 use crate::{display, self_update, video};
 
 pub(crate) mod appearance;
+pub(crate) mod browsers;
 pub(crate) mod keychain;
 pub(crate) mod tray;
 
@@ -383,6 +384,12 @@ impl Services for Desktop {
                 .map_err(|e| e.to_string());
         }
         shell_open(std::ffi::OsStr::new(url))
+    }
+    fn browsers(&mut self) -> Vec<(String, String)> {
+        browsers::found().into_iter().map(|b| (b.name.to_string(), b.program.display().to_string())).collect()
+    }
+    fn open_app_window(&mut self, program: &str, url: &str) -> Result<(), String> {
+        browsers::launch(Path::new(program), url)
     }
     fn notify(&mut self, title: &str, body: &str) {
         let (title, body) = (title.to_string(), body.to_string());
