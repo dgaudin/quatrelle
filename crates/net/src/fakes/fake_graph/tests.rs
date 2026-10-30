@@ -9,6 +9,7 @@ use quatrelle_store::Store;
 use super::*;
 
 mod cached_mode;
+mod teams;
 
 fn until(pool: &crate::worker::Pool, what: &str, mut f: impl FnMut(&Event) -> bool) -> Vec<Event> {
     let end = Instant::now() + Duration::from_secs(20);
