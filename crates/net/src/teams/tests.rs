@@ -109,8 +109,11 @@ fn server_time_is_the_servers_date() {
     c.chats(None).unwrap();
     assert_eq!(c.server_time(), Some(1_793_273_424));
     h.join().unwrap();
+    // The fake's clock, as its Date says it: not before this computer's.
     let server = serve_teams(teams_with(Vec::new()));
-    assert_eq!(client(&server).server_time(), None, "the fake sends no Date");
+    let clock = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() as i64;
+    let date = client(&server).server_time().unwrap();
+    assert!((clock..clock + 5).contains(&date), "{date} vs {clock}");
 }
 
 #[test]

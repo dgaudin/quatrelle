@@ -302,8 +302,23 @@ fn plain_id(id: &str) -> &str {
     id.strip_prefix(REGULAR).unwrap_or(id)
 }
 
-fn respond(s: &mut impl Write, status: u16, body: &[u8], kind: &str, location: Option<&str>) {
+/// Unix seconds as an HTTP date: `Thu, 29 Oct 2026 11:30:24 GMT`.
+fn http_date(t: i64) -> String {
+    const DAYS: [&str; 7] = ["Thu", "Fri", "Sat", "Sun", "Mon", "Tue", "Wed"];
+    const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    let days = t.div_euclid(86_400);
+    let (y, m, d) = quatrelle_model::dates::civil_from_days(days);
+    let s = t.rem_euclid(86_400);
+    let day = DAYS[days.rem_euclid(7) as usize];
+    let month = MONTHS[(m as usize).saturating_sub(1).min(11)];
+    format!("{day}, {d:02} {month} {y:04} {:02}:{:02}:{:02} GMT", s / 3600, s / 60 % 60, s % 60)
+}
+
+fn respond(s: &mut impl Write, status: u16, body: &[u8], kind: &str, location: Option<&str>, date: Option<i64>) {
     let mut head = format!("HTTP/1.1 {status} X\r\nContent-Type: {kind}\r\nContent-Length: {}\r\n", body.len());
+    if let Some(t) = date {
+        head.push_str(&format!("Date: {}\r\n", http_date(t)));
+    }
     if status == 429 {
         head.push_str("Retry-After: 1\r\n");
     }
@@ -359,11 +374,11 @@ pub fn serve(data: Data) -> Server {
             // Teams first: its client asks for no immutable ids, and a download carries no token.
             let teams = shared.lock().unwrap().teams_request(&method, &target, &headers, authorized, &body, &b);
             if let Some(r) = teams {
-                respond(&mut s, r.status, &r.body, r.kind, r.location.as_deref());
+                respond(&mut s, r.status, &r.body, r.kind, r.location.as_deref(), r.date);
                 continue;
             }
             if !authorized {
-                respond(&mut s, 401, br#"{"error": {"code": "InvalidAuthenticationToken"}}"#, "application/json", None);
+                respond(&mut s, 401, br#"{"error": {"code": "InvalidAuthenticationToken"}}"#, "application/json", None, None);
                 continue;
             }
             assert!(immutable, "ids are asked for in their immutable form");
@@ -377,7 +392,7 @@ pub fn serve(data: Data) -> Server {
                     d.route(&method, &target, &body, &b)
                 }
             };
-            respond(&mut s, status, &out, kind, None);
+            respond(&mut s, status, &out, kind, None, None);
         }
     });
     Server { base, data }
