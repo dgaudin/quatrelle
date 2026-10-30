@@ -271,8 +271,6 @@ impl Session {
             }
             Op::SetFlag { .. } | Op::SetKeyword { .. } | Op::Move { .. } | Op::Expunge { .. } | Op::EmptyFolder { .. } => {}
         }
-        // The search follows the folders (a folder renamed is searched under its new name).
-        self.rescope_index();
         // A Favorite public folder renamed or deleted: its sync follows.
         if matches!(op, Op::RenameFolder { .. } | Op::DeleteFolder { .. }) {
             self.follow_public_favorites();

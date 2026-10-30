@@ -38,7 +38,7 @@ pub(crate) struct SearchIndex {
 impl SearchIndex {
     /// Whether the folder at `n` in the scan is read, or being read.
     fn read(&self, n: usize) -> bool {
-        n < self.folder || (n == self.folder && (self.building.is_some() || self.pos > 0))
+        n < self.folder || (n == self.folder && self.building.is_some())
     }
 
     /// Whether a message's folder is no longer searched.
