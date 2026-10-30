@@ -91,8 +91,8 @@ impl Contacts {
     }
 
     /// What the book answers changed (the directory answered).
-    pub(super) fn changed(&mut self) {
-        self.revision += 1;
+    pub(crate) fn changed(&mut self) {
+        self.revision = self.revision.wrapping_add(1);
     }
 
     fn queue(&mut self, folder: (String, String)) {
@@ -202,6 +202,11 @@ impl Session {
             .filter(|a| a.config.ews.is_some())
             .map(|a| (format!("directory:{}", a.config.id), "Global Address List".to_string(), a.config.email.clone()));
         books.chain(directories).collect()
+    }
+
+    /// The address book, once it's first wanted.
+    pub(crate) fn contacts_book(&self) -> Option<&ContactBook> {
+        self.contacts.book.as_ref()
     }
 
     /// How many people the address book holds (none before it's first wanted).
