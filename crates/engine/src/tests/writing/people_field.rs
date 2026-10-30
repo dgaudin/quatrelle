@@ -742,3 +742,72 @@ fn people_expand_survives_junk_params_with_a_directory() {
     assert!(expand_jobs(&mut s).is_empty(), "nothing asked about junk");
     done(s);
 }
+
+/// A late failure never replaces an answer got since: a first ask slow to fail, a second one
+/// answered, then the first one's error arrives.
+#[test]
+fn a_late_error_never_replaces_an_answer() {
+    let (mut s, gal) = with_exchange("expand-late-error");
+    let team = json!({"email": "team@contoso.example"});
+    s.run("people.expand", &team).unwrap();
+    s.set_clock(NOW + 61, 0);
+    s.run("people.expand", &team).unwrap();
+    assert_eq!(expand_jobs(&mut s).len(), 2, "asked again after a minute");
+    s.apply(expanded(&gal, "team@contoso.example", None, vec![person("Ann", "ann@contoso.example")], false, 1));
+    s.set_clock(NOW + 90, 0);
+    s.apply(Event::ListExpanded {
+        account: gal.clone(),
+        address: "team@contoso.example".into(),
+        item_id: None,
+        members: Vec::new(),
+        more: false,
+        total: 0,
+        error: Some("timeout".into()),
+    });
+    let out = s.run("people.expand", &team).unwrap();
+    assert_eq!((out["state"].clone(), out["members"].as_array().map(Vec::len)), (json!("ready"), Some(1)));
+    assert!(out.get("error").is_none());
+    done(s);
+}
+
+/// The total is held to what came, not to what was kept: 600 members received are 600 in all
+/// (100 more) whatever the server's total says.
+#[test]
+fn the_total_is_at_least_the_members_received_not_the_members_kept() {
+    let (mut s, gal) = with_exchange("expand-total-received");
+    let who = Addressee::new("", "big@contoso.example", AddresseeKind::DistributionList);
+    for (addr, claimed) in [("big@contoso.example", 0), ("big2@contoso.example", 300)] {
+        let who = Addressee { address: addr.into(), ..who.clone() };
+        s.people_expand(None, &who).unwrap();
+        s.take_jobs();
+        let members = (0..600).map(|i| person(&format!("P{i}"), &format!("p{i}@contoso.example"))).collect();
+        s.apply(expanded(&gal, addr, None, members, false, claimed));
+        match s.expansion_now(&gal, &who) {
+            Some(Fetched::Ready(x)) => assert_eq!((x.members.len(), x.more, x.total), (MAX_SHOWN_MEMBERS, true, 600), "claimed {claimed}"),
+            other => panic!("{other:?}"),
+        }
+    }
+    done(s);
+}
+
+/// Item ids keep their case: two contact groups whose ids differ only by case are two lists.
+#[test]
+fn contact_groups_whose_ids_differ_by_case_are_two_lists() {
+    let (mut s, gal) = with_exchange("expand-id-case");
+    for id in ["AAMk=", "aamk="] {
+        s.run("people.expand", &json!({"itemId": id, "kind": "contactGroup"})).unwrap();
+    }
+    assert_eq!(
+        s.take_jobs(),
+        [
+            Job::ExpandList { account: gal.clone(), address: String::new(), item_id: Some("AAMk=".into()) },
+            Job::ExpandList { account: gal.clone(), address: String::new(), item_id: Some("aamk=".into()) },
+        ]
+    );
+    s.apply(expanded(&gal, "", Some("AAMk="), vec![person("Ann", "ann@contoso.example")], false, 1));
+    let group = |id: &str| Addressee { item_id: id.into(), ..Addressee::new("", "", AddresseeKind::ContactGroup) };
+    assert!(matches!(s.expansion_now(&gal, &group("AAMk=")), Some(Fetched::Ready(x)) if x.members.len() == 1));
+    assert_eq!(s.expansion_now(&gal, &group("aamk=")), Some(&Fetched::Loading), "the other one is still out");
+    assert_eq!(s.people.expansions.len(), 2);
+    done(s);
+}
