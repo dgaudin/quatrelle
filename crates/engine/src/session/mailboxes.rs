@@ -14,6 +14,7 @@ mod mailbox_settings;
 pub(super) mod people;
 pub use mailbox_settings::{FolderSizes, Sizes};
 pub(crate) use people::People;
+pub use people::{FIELD_NAMES, FieldId, INDEX_MAX, MAX_SUGGESTIONS, Source, Suggestion};
 mod envelope;
 mod shared_mailboxes;
 pub(crate) use envelope::Envelope;

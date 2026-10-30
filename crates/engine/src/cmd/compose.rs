@@ -111,15 +111,27 @@ pub(super) fn commands() -> Vec<CommandSpec> {
         .params(r#"{"key": "account:validity:uid:folder"}"#),
         CommandSpec::new("contacts.suggest", "Suggest recipients", "Message › To", |s, v| {
             let q = p::req_str(v, "query")?.to_string();
-            let limit = p::u64(v, "limit").map_or(8, |n| usize::try_from(n).unwrap_or(8).clamp(1, 100));
-            let list: Vec<Value> = s
-                .suggest_contacts(&q, limit)
-                .into_iter()
-                .map(|c| json!({"name": c.address.name, "email": c.address.email, "address": c.address.to_string(), "sent": c.sent, "received": c.received}))
+            let max = crate::MAX_SUGGESTIONS;
+            let limit = p::u64(v, "limit").map_or(max, |n| usize::try_from(n).unwrap_or(max).clamp(1, max));
+            // The whole book first, as a command has no frames to read it a slice at a time by.
+            s.contacts_whole();
+            let field = crate::FieldId { window: 0, name: "cli" };
+            let found = s.people_suggest(field, None, &quatrelle_model::addr::Accepts::RECIPIENTS, &q);
+            let list: Vec<Value> = found
+                .iter()
+                .take(limit)
+                .map(|x| {
+                    let mut o = super::people::suggestion_json(x);
+                    let c = s.known_contact(&x.who.address);
+                    o["address"] = json!(x.who.text());
+                    o["sent"] = json!(c.map_or(0, |c| c.sent));
+                    o["received"] = json!(c.map_or(0, |c| c.received));
+                    o
+                })
                 .collect();
             Ok(json!(list))
         })
-        .params(r#"{"query": string, "limit"?: number}"#),
+        .params(r#"{"query": string, "limit"?: number (at most 8)} → [{"name", "email", "address", "sent", "received", "kind", "source"}]"#),
         // Outlook's × beside a suggestion.
         CommandSpec::new("contacts.forget", "Remove from suggestions", "Message › To", |s, v| {
             let email = p::req_str(v, "email")?.trim().to_string();

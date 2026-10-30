@@ -1,11 +1,13 @@
 //! Engine tests: what an address stands for (the contacts field): rooms, from the room lists.
 
-use super::names::with_exchange;
+use super::names::{answer, with_exchange};
 use super::*;
 use crate::session::scheduling::Fetched;
-use quatrelle_model::AddresseeKind;
+use crate::{FieldId, INDEX_MAX, Source};
+use quatrelle_model::addr::Accepts;
 use quatrelle_model::pim::{CalendarInfo, DavSync, shared_calendar_id};
 use quatrelle_model::scheduling::{Room, RoomList};
+use quatrelle_model::{Addressee, AddresseeKind};
 
 /// The accounts whose room lists are being asked.
 fn asked_rooms(s: &mut Session) -> Vec<String> {
@@ -130,5 +132,132 @@ fn the_owners_refresh_and_the_quiet_one_never_ask_twice() {
     s.request_rooms(&gal, true).unwrap();
     s.tick();
     assert_eq!(asked_rooms(&mut s).len(), 1, "the owner's ask is out and the quiet one is due: one ask");
+    done(s);
+}
+
+/// Suggestions come from the book, the directory's answers kept, the room lists and the shared
+/// mailboxes: an exact match first, then a name or an address that starts with the text, then the
+/// most used; a field that takes only rooms is offered only rooms, and never more than eight.
+#[test]
+fn suggestions_are_ordered_exact_then_prefix_then_most_used_and_only_accepted_kinds() {
+    let (mut s, gal) = with_exchange("suggest-order");
+    // The window reads the mail into the book a slice per frame (a pass only starts it): here,
+    // in one go.
+    s.contacts_step(usize::MAX);
+    answer(&mut s, &gal, "res", &[("Proginov Reseau", "reseaux@contoso.example")]);
+    let team = Addressee::new("Team", "team@contoso.example", AddresseeKind::DistributionList);
+    s.apply(Event::DirectoryPeople { account: gal.clone(), query: "team".into(), people: vec![team], more: false, error: None });
+    s.apply(seine(&gal));
+    let f = FieldId { window: 1, name: "to" };
+    let got = s.people_suggest(f, Some(&gal), &Accepts::RECIPIENTS, "zoe");
+    assert_eq!(got[0].who.address, "zoe@studio.example");
+    assert_eq!(got[0].source, Source::Recent, "saved in Contacts, and written to: the mail counts first");
+    s.run("contact.create", &json!({"name": "Quentin Saved", "emails": ["quentin@saved.example"]})).unwrap();
+    s.contacts_step(usize::MAX);
+    let got = s.people_suggest(f, Some(&gal), &Accepts::RECIPIENTS, "quentin");
+    assert_eq!((got[0].who.address.as_str(), got[0].source), ("quentin@saved.example", Source::Contacts), "known from Contacts alone");
+    // Written to, so ranked above anything from the directory, but neither exact nor the start of
+    // a first or last name.
+    s.contacts_sent(&[EmailAddress::new("Old Reseaux", "reseaux@contoso.example.org"), EmailAddress::new("Anna Teresa Lopez", "alopez@x.example")]);
+    let got = s.people_suggest(f, Some(&gal), &Accepts::RECIPIENTS, "reseaux@contoso.example");
+    assert_eq!((got[0].who.name.as_str(), got[0].source), ("Proginov Reseau", Source::Directory), "an exact match first");
+    assert_eq!(got.get(1).map(|x| x.who.address.as_str()), Some("reseaux@contoso.example.org"));
+    let got = s.people_suggest(f, Some(&gal), &Accepts::RECIPIENTS, "te");
+    let at = |a: &str| got.iter().position(|x| x.who.address == a);
+    assert!(at("team@contoso.example").is_some() && got.iter().any(|x| x.who.kind == AddresseeKind::DistributionList), "{got:?}");
+    assert!(at("alopez@x.example").is_none_or(|l| at("team@contoso.example") < Some(l)), "a first name before a middle one: {got:?}");
+    // Equal otherwise, the kind the field lists first comes first.
+    let sales = vec![
+        Addressee::new("Sales List", "a-sales@contoso.example", AddresseeKind::DistributionList),
+        Addressee::new("Sales Person", "b-sales@contoso.example", AddresseeKind::Person),
+    ];
+    s.apply(Event::DirectoryPeople { account: gal.clone(), query: "sales".into(), people: sales, more: false, error: None });
+    let got = s.people_suggest(f, Some(&gal), &Accepts::RECIPIENTS, "sales");
+    assert_eq!(got.iter().map(|x| x.who.kind).collect::<Vec<_>>(), [AddresseeKind::Person, AddresseeKind::DistributionList]);
+    let lists_first = Accepts { kinds: &[AddresseeKind::DistributionList, AddresseeKind::Person], one: false };
+    assert_eq!(s.people_suggest(f, Some(&gal), &lists_first, "sales")[0].who.kind, AddresseeKind::DistributionList);
+    let only_rooms = Accepts { kinds: &[AddresseeKind::Room, AddresseeKind::Equipment], one: false };
+    let got = s.people_suggest(f, Some(&gal), &only_rooms, "s");
+    assert!(!got.is_empty() && got.iter().all(|x| x.who.kind == AddresseeKind::Room) && got[0].source == Source::RoomList, "{got:?}");
+    assert!(s.people_suggest(f, Some(&gal), &Accepts::RECIPIENTS, "zzzz-nobody").is_empty());
+    assert!(s.people_suggest(f, Some(&gal), &Accepts::RECIPIENTS, "z").len() <= 8);
+    assert!(s.people_suggest(f, Some(&gal), &Accepts::RECIPIENTS, "  ").is_empty(), "nothing typed, nothing offered");
+    done(s);
+}
+
+/// The search bug of 2026-10-30 again would be a pass per frame: a text typed once costs one
+/// pass, however often the window asks, over at most the book, the index and the rooms.
+#[test]
+fn suggestions_run_one_pass_per_change_of_text_over_a_book_at_its_cap() {
+    let mut s = sample_session("suggest-bounded");
+    let many: Vec<EmailAddress> = (0..20_000).map(|i| EmailAddress::new(format!("Ann {i}"), format!("ann{i}@big.example"))).collect();
+    s.contacts_sent(&many);
+    let f = FieldId { window: 1, name: "to" };
+    let first = s.people_suggest(f, None, &Accepts::RECIPIENTS, "ann1");
+    let after_one = s.people_suggest_passes();
+    for _ in 0..9 {
+        assert_eq!(s.people_suggest(f, None, &Accepts::RECIPIENTS, "ann1"), first);
+    }
+    let (passes, scanned) = s.people_suggest_passes();
+    assert_eq!(passes, 1, "one pass for one text");
+    assert_eq!(scanned, after_one.1, "the frames after it scan nothing");
+    assert!(scanned <= 20_000 + 30_000 + 2_000, "{scanned}");
+    s.people_suggest(f, None, &Accepts::RECIPIENTS, "ann12");
+    assert_eq!(s.people_suggest_passes().0, 2);
+    s.people_suggest(FieldId { window: 2, name: "to" }, None, &Accepts::RECIPIENTS, "ann12");
+    assert_eq!(s.people_suggest_passes().0, 3, "another field is another pass");
+    s.contacts_sent(&[EmailAddress::new("Ann New", "ann12new@big.example")]);
+    s.people_suggest(f, None, &Accepts::RECIPIENTS, "ann12");
+    assert_eq!(s.people_suggest_passes().0, 4, "the book changed: the same text is worked out again");
+    done(s);
+}
+
+/// The directory's answers fill an index that suggestions and kinds read; suggestions never
+/// write it, and it holds at most [`INDEX_MAX`] entries, the oldest going first, and is cleared
+/// with the answers kept.
+#[test]
+fn the_directory_index_feeds_suggestions_and_is_never_filled_by_them() {
+    let (mut s, gal) = with_exchange("suggest-index");
+    s.contacts_step(usize::MAX);
+    answer(&mut s, &gal, "res", &[("Proginov Reseau", "reseaux@contoso.example")]);
+    assert!(s.directory_known("RESEAUX@contoso.example").is_some());
+    let f = FieldId { window: 1, name: "to" };
+    assert!(!s.people_suggest(f, Some(&gal), &Accepts::RECIPIENTS, "zo").is_empty());
+    assert!(s.directory_known("zoe@studio.example").is_none(), "a suggestion never fills the index");
+    // 300 answers of 100 (the answers kept, the index full), then one more person in an answer
+    // asked again: the oldest goes.
+    let person = |i: usize| Addressee::new(format!("Person {i}"), format!("p{i}@dir.example"), AddresseeKind::Person);
+    for q in 0..299 {
+        let people = (q * 100..q * 100 + 100).map(person).collect();
+        s.apply(Event::DirectoryPeople { account: gal.clone(), query: format!("q{q}"), people, more: false, error: None });
+    }
+    assert!(s.directory_known("p0@dir.example").is_some());
+    let people = (29_900..30_001).map(person).collect();
+    s.apply(Event::DirectoryPeople { account: gal.clone(), query: "q0".into(), people, more: false, error: None });
+    assert!(s.people.index.len() <= INDEX_MAX, "{}", s.people.index.len());
+    assert!(s.directory_known("p0@dir.example").is_none(), "the oldest gone");
+    assert!(s.directory_known("p30000@dir.example").is_some());
+    assert_eq!(s.addressee_kind(Some(&gal), "p30000@dir.example"), AddresseeKind::Person, "the index tells the kind");
+    // A new name asked past the answers kept: the oldest answer goes, and the index with it.
+    answer(&mut s, &gal, "fresh", &[("Fresh Face", "fresh@dir.example")]);
+    assert!(s.directory_known("p30000@dir.example").is_none());
+    assert!(s.directory_known("fresh@dir.example").is_some());
+    // The command.
+    let r = s.run("people.suggest", &json!({"window": 3, "field": "to", "text": "zo"})).unwrap();
+    assert_eq!(r[0]["email"], "zoe@studio.example");
+    assert_eq!(r[0]["name"], "Zoe Park");
+    assert_eq!(r[0]["kind"], "person");
+    assert_eq!(r[0]["source"], "recent");
+    let r = s.run("people.suggest", &json!({"window": 3, "field": "to", "text": "fresh", "accepts": ["room"]})).unwrap();
+    assert_eq!((r[0]["kind"].as_str(), r[0]["source"].as_str()), (Some("unknown"), Some("directory")), "an unknown kind is always taken");
+    let r = s.run("people.suggest", &json!({"window": 3, "field": "to", "text": "zo", "accepts": ["room"]})).unwrap();
+    assert_eq!(r, json!([]), "a person isn't offered where only rooms go");
+    assert!(matches!(s.run("people.suggest", &json!({"window": 3, "field": "nope", "text": "zo"})), Err(CmdError::Params(_))));
+    assert!(matches!(s.run("people.suggest", &json!({"window": 3, "field": "to", "text": "zo", "accepts": ["nope"]})), Err(CmdError::Params(_))));
+    // contacts.suggest answers through the same pass, its keys kept and the kind and source added.
+    let r = s.run("contacts.suggest", &json!({"query": "zo"})).unwrap();
+    assert_eq!(r[0]["address"], "Zoe Park <zoe@studio.example>");
+    assert_eq!(r[0]["kind"], "person");
+    assert_eq!(r[0]["source"], "recent");
     done(s);
 }

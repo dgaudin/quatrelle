@@ -45,6 +45,8 @@ impl Session {
         }
         let config = a.config.clone();
         self.save_accounts();
+        // Suggested from now on.
+        self.contacts.changed();
         // The worker starts again with the mailbox in its list, and lists its folders.
         if !self.prefs.work_offline {
             self.jobs.push(Job::Start { account: config, password: None });
@@ -79,6 +81,7 @@ impl Session {
         a.config.shared_mailboxes.retain(|m| !m.eq_ignore_ascii_case(&email));
         a.folders.retain(|f| !gone.contains(&f.path));
         let config = a.config.clone();
+        self.contacts.changed();
         if let Some(store) = &self.store {
             for path in &gone {
                 let _ = store.clear_folder(&account, path);

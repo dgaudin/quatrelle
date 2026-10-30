@@ -30,7 +30,7 @@ fn asked(s: &mut Session) -> Vec<String> {
         .collect()
 }
 
-fn answer(s: &mut Session, account: &str, query: &str, people: &[(&str, &str)]) {
+pub(super) fn answer(s: &mut Session, account: &str, query: &str, people: &[(&str, &str)]) {
     let people = people.iter().map(|(n, e)| Addressee::from(EmailAddress::new(*n, *e))).collect();
     s.apply(Event::DirectoryPeople { account: account.into(), query: query.into(), people, more: false, error: None });
 }

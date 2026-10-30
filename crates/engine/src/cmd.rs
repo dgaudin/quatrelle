@@ -59,6 +59,7 @@ mod compose;
 mod files;
 mod home;
 mod navigation;
+mod people;
 mod pim;
 mod scheduling;
 mod security;
@@ -74,6 +75,7 @@ pub fn registry() -> Registry {
     all.extend(home::commands());
     all.extend(navigation::commands());
     all.extend(compose::commands());
+    all.extend(people::commands());
     all.extend(view::commands());
     all.extend(pim::commands());
     all.extend(scheduling::commands());
