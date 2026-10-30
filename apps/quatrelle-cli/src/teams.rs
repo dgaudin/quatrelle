@@ -28,8 +28,14 @@ const SIGN_IN: Duration = Duration::from_secs(5 * 60);
 const HOUR: Duration = Duration::from_secs(3600);
 /// Longest chat id taken.
 const MAX_CHAT_ID: usize = 200;
-/// Where a chat's link points (Teams' "Copy link"), on either of Teams' web addresses.
-const CHAT_LINKS: [&str; 2] = ["https://teams.microsoft.com/l/chat/", "https://teams.cloud.microsoft/l/chat/"];
+/// Where a link to a chat, or to a message in it (Teams' "Copy link" on a message), points, on
+/// either of Teams' web addresses: the chat id is the first segment after these.
+const CHAT_LINKS: [&str; 4] = [
+    "https://teams.microsoft.com/l/chat/",
+    "https://teams.cloud.microsoft/l/chat/",
+    "https://teams.microsoft.com/l/message/",
+    "https://teams.cloud.microsoft/l/message/",
+];
 const CLIENT_VAR: &str = "QUATRELLE_TEAMS_CLIENT_ID";
 const TENANT_VAR: &str = "QUATRELLE_TEAMS_TENANT";
 const USAGE: &str = "usage: quatrelle-cli teams check [--client ID] [--tenant ID-OR-DOMAIN] [--write CHAT] [--hour] [--call CHAT]";
@@ -132,8 +138,8 @@ fn parse(args: &[String]) -> Result<Asked, String> {
         match a.as_str() {
             "--client" => asked.client = Some(value()?),
             "--tenant" => asked.tenant = Some(value()?),
-            "--write" => asked.write = Some(chat_id(&value()?).ok_or("--write: not a Teams chat's link or id (Teams: the chat's … › Copy link)")?),
-            "--call" => asked.call = Some(chat_id(&value()?).ok_or("--call: not a Teams chat's link or id (Teams: the chat's … › Copy link)")?),
+            "--write" => asked.write = Some(chat_id(&value()?).ok_or("--write: not a Teams chat's link or id (Teams: a message's … › Copy link)")?),
+            "--call" => asked.call = Some(chat_id(&value()?).ok_or("--call: not a Teams chat's link or id (Teams: a message's … › Copy link)")?),
             "--hour" => asked.hour = true,
             _ => return Err(USAGE.into()),
         }
@@ -141,9 +147,10 @@ fn parse(args: &[String]) -> Result<Asked, String> {
     Ok(asked)
 }
 
-/// A chat's id, from the id itself (`19:…`) or a link to the chat
-/// (`https://teams.microsoft.com/l/chat/<id, percent-encoded>/…`, its query and fragment
-/// ignored). `None` for anything else.
+/// A chat's id, from the id itself (`19:…`), a link to the chat
+/// (`https://teams.microsoft.com/l/chat/<id, percent-encoded>/…`) or a link to a message in it
+/// (`…/l/message/<chat id>/<message id>?context=…`), the query and fragment ignored. `None` for
+/// anything else.
 fn chat_id(arg: &str) -> Option<String> {
     let arg = arg.trim();
     let id = match CHAT_LINKS.iter().find_map(|l| arg.strip_prefix(l)) {
@@ -303,6 +310,11 @@ mod tests {
         assert_eq!(chat_id("https://teams.microsoft.com/l/chat/19%3Aabc_def%40unq.gbl.spaces/0?tenantId=x#y").as_deref(), Some(id));
         assert_eq!(chat_id(" https://teams.microsoft.com/l/chat/19:abc_def@unq.gbl.spaces ").as_deref(), Some(id));
         assert_eq!(chat_id("19:meeting_NjQ3ZGE@thread.v2").as_deref(), Some("19:meeting_NjQ3ZGE@thread.v2"));
+        // A message's "Copy link": the chat id is the first segment, the message id the second.
+        let message =
+            "https://teams.microsoft.com/l/message/19%3Aabc_def%40unq.gbl.spaces/1730000000000?context=%7B%22contextType%22%3A%22chat%22%7D";
+        assert_eq!(chat_id(message).as_deref(), Some(id));
+        assert_eq!(chat_id("https://teams.cloud.microsoft/l/message/19:abc_def@unq.gbl.spaces/1730000000000").as_deref(), Some(id));
         let long = format!("19:{}", "a".repeat(198));
         assert_eq!(long.len(), 201);
         for bad in [
@@ -310,6 +322,11 @@ mod tests {
             "http://teams.microsoft.com/l/chat/19:a@b/0",
             "https://teams.microsoft.com.evil.example/l/chat/19:a@b/0",
             "https://teams.microsoft.com/l/call/19:a@b/0",
+            "https://evil.example/l/message/19:a@b/1730000000000",
+            "https://teams.microsoft.com.evil.example/l/message/19:a@b/1730000000000",
+            "http://teams.cloud.microsoft/l/message/19:a@b/1730000000000",
+            "https://teams.microsoft.com/l/message/48:notes/1730000000000",
+            "48:notes",
             "https://teams.microsoft.com/l/chat/19%3Aa%20b/0",
             "19:a b",
             "\"; rm -rf /\"",

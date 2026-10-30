@@ -139,7 +139,7 @@ missing or the action isn't allowed, `404` not found, `429` throttled, `5xx` Gra
 ## 4. `--write <chat>`: the writes
 
 ```sh
-quatrelle-cli teams check --client … --tenant … --write "https://teams.microsoft.com/l/chat/19%3A…/0?tenantId=…"
+quatrelle-cli teams check --client … --tenant … --write "https://teams.microsoft.com/l/message/19%3A…/…?context=…"
 ```
 
 It tries, in the chat given, each write Quatrelle needs, about one a second:
@@ -153,14 +153,17 @@ It tries, in the chat given, each write Quatrelle needs, about one a second:
    offers;
 6. marks the chat read.
 
-Whatever fails in between, every test message it posted is deleted before it ends (the last
-`write` line says how many couldn't be). **The others in the chat may still see them come and go,
-and get a notification**: pick a chat with a colleague who knows, or your own notes chat (the chat
-with yourself). Nothing else in the chat is touched.
+It posts two short messages and deletes each at once; whatever fails in between, every test
+message it posted is deleted before it ends (the last `write` line says how many couldn't be).
+**The others in the chat may still see them come and go, and get a notification**: pick a
+one-to-one chat with a colleague who knows. Nothing else in the chat is touched. (The chat with
+yourself won't do: its id isn't a `19:…` one, and the check refuses it.)
 
-To get the chat's link: in Teams, hover the chat in the list, **… (More options) › Copy link**.
-Paste it in quotes. The chat's id (`19:…@thread.v2` or `19:…@unq.gbl.spaces`) is taken too. A
-link or id that isn't one is refused before anything is sent.
+To get the chat's link: in Teams, point to any message in the chat, **… (More options) › Copy
+link**. That link (`https://teams.microsoft.com/l/message/19%3A…/…`) carries the chat's id, which
+is what the check takes from it. Paste it in quotes. The chat's id itself (`19:…@thread.v2` or
+`19:…@unq.gbl.spaces`) is taken too: in Teams on the web, it is in the address bar after
+`/conversations/`. A link or id that isn't one is refused before anything is sent.
 
 ## 5. `--hour`: the throttling rate
 
