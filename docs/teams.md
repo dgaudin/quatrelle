@@ -16,11 +16,10 @@ an address, a chat's topic, a message's text or an id. Its output can be pasted 
 Done by an administrator of the Microsoft 365 tenant, in the
 [Microsoft Entra admin center](https://entra.microsoft.com).
 
-1. **Identity › Applications › App registrations › New registration** (on the newer menu:
-   **Entra ID › App registrations › New registration**).
+1. **Entra ID › App registrations › New registration**.
    - *Name*: `Quatrelle` (anything; people see it on the consent page).
-   - *Supported account types*: **Accounts in this organizational directory only** (single
-     tenant).
+   - *Supported account types*: **Single tenant only - \<your tenant\>** (also written
+     *Accounts in this organizational directory only*).
    - *Redirect URI*: platform **Public client/native (mobile & desktop)**, value
      `http://localhost`.
    - **Register**.
@@ -28,8 +27,8 @@ Done by an administrator of the Microsoft 365 tenant, in the
    `http://127.0.0.1:<port>/`: Microsoft ignores the port of a loopback redirect but matches its
    host and path, and the portal's form refuses an `http` address other than `localhost`, so the
    other two go in through the manifest.
-   - **Manifest** (in the app's menu). In the *Microsoft Graph App Manifest* tab, the
-     `publicClient` entry becomes:
+   - **Manifest** (in the app's menu, the Microsoft Graph app manifest): the `publicClient`
+     entry becomes:
 
      ```json
      "publicClient": {
@@ -41,10 +40,10 @@ Done by an administrator of the Microsoft 365 tenant, in the
      },
      ```
 
-     (In the older *AAD Graph App Manifest* tab, the same three are entries of
-     `replyUrlsWithType`, each `{"url": "http://127.0.0.1", "type": "InstalledClient"}`.)
      **Save**.
-   - **Authentication** › *Advanced settings* › **Allow public client flows**: **Yes**. **Save**.
+   - **Authentication** › *Advanced settings* › **Allow public client flows**: the toggle
+     **Enable the following mobile and desktop flows: Yes**. **Save**. (In the manifest it is
+     `"isFallbackPublicClient": true`.)
    - No client secret and no certificate: **Certificates & secrets** stays empty.
 
    These are the same settings as [docs/oauth.md](oauth.md), step 2, for mail.
@@ -62,10 +61,11 @@ Done by an administrator of the Microsoft 365 tenant, in the
 
    **Add permissions**. Quatrelle asks for exactly these at sign-in, nothing more.
 4. Optional: **Grant admin consent for \<your organisation\>** on the same page, then **Yes**.
-   None of these permissions needs an administrator's consent, so without it each person approves
-   them once on Microsoft's consent page. Granting it spares everyone that page, and is
-   **required** when the tenant doesn't let users consent to apps (Entra ID › Enterprise
-   applications › Consent and permissions). If the check prints
+   Microsoft documents `Chat.ReadWrite` as not needing admin consent; the others normally don't
+   either, so without this step each person approves them once on Microsoft's consent page. If
+   the check says consent is needed, step 4 grants it for everyone. It is **required** when the
+   tenant doesn't let users consent to apps (**Entra ID › Enterprise apps › Consent and
+   permissions**). If the check prints
    `Microsoft asks for consent to these permissions: see docs/teams.md, step 4`, this is the step
    to do.
 5. **Overview**: copy the **Application (client) ID** and the **Directory (tenant) ID**. They are
