@@ -390,6 +390,8 @@ pub struct Session {
     /// The address book (recipient suggestions, Select Names, the Focused Inbox): kept on disk,
     /// and only the mail new in a folder read into it (see `session/mailboxes/contacts.rs`).
     contacts: Contacts,
+    /// What addresses stand for: each account's rooms, from its room lists (`mailboxes/people.rs`).
+    pub(crate) people: mailboxes::People,
     /// The domains the user deals with ([`Session::known_domains`]), and the address book's
     /// revision they were counted from.
     known_domains: Option<(u64, BTreeSet<String>)>,
@@ -544,6 +546,7 @@ impl Session {
             pending_marks: BTreeMap::new(),
             cache_limit: CACHE_MESSAGES,
             contacts: Contacts::default(),
+            people: mailboxes::People::default(),
             known_domains: None,
             smime: HashMap::new(),
             trust_roots: Vec::new(),
