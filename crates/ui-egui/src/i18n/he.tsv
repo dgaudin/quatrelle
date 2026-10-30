@@ -1805,6 +1805,7 @@ month	May	מאי
 	The directory can't be reached	אין גישה לספרייה
 	and others	ואחרים
 	This list couldn't be expanded: {error}	לא ניתן להרחיב רשימה זו: {error}
+	Some names need checking before sending	יש לבדוק כמה שמות לפני השליחה
 	Matched as typed	הותאם כפי שהוקלד
 	{name}, {kind}, remove with Delete	{name}, {kind}, להסרה הקש Delete
 	{name}, {kind}, {why}, remove with Delete	{name}, {kind}, {why}, להסרה הקש Delete

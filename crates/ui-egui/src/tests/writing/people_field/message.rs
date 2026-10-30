@@ -134,14 +134,15 @@ fn recipient_boxes_suggest_people() {
     a.session.compose.as_mut().unwrap().to = "Zoe Park <zoe@studio.example>; ".into();
 
     // The next address starts fresh; Escape hides the list; Enter then leaves the field, and the
-    // text typed is closed as the field is left (it stays text: nothing here is "sh").
+    // text typed is closed and checked as the field is left: "sh" fits one person here.
     frame(&ctx, &mut a, vec![Event::Text("sh".into())]);
     frame(&ctx, &mut a, vec![key(Key::ArrowDown, Modifiers::NONE), key(Key::Escape, Modifiers::NONE)]);
     assert!(list_rect(&ctx).is_none(), "Escape hid the list");
     frame(&ctx, &mut a, vec![key(Key::Enter, Modifiers::NONE)]);
     frame(&ctx, &mut a, vec![]);
-    assert_eq!(to(&a), "Zoe Park <zoe@studio.example>; sh; ");
-    assert!(text_with(&a.ui.people.pieces(field(&a, "to"))[1], "sh", None), "{:?}", a.ui.people.pieces(field(&a, "to")));
+    frame(&ctx, &mut a, vec![]);
+    assert_eq!(to(&a), "Zoe Park <zoe@studio.example>; Print Shop <orders@printshop.example>; ");
+    assert!(chip_named(&a.ui.people.pieces(field(&a, "to"))[1], "Print Shop"), "{:?}", a.ui.people.pieces(field(&a, "to")));
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -637,5 +638,188 @@ fn a_draft_keeps_a_contact_group_here_and_the_server_gets_its_addresses() {
     assert_eq!(parsed.to, kept, "the valid addresses alone, a comma name whole");
     assert_eq!(parsed.subject, "Draft", "nothing else lost");
     assert!(to(&a).contains("Dupont family <group:AAMk=>"), "the message being written keeps the group: {}", to(&a));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A name left with Tab, or closed with `;`, is checked as Ctrl+K would check it: the directory is
+/// asked at once, not only at Send.
+#[test]
+fn a_name_left_or_closed_is_asked_of_the_directory_at_once() {
+    let (mut a, dir) = app("resolve-on-close");
+    let taken = Taken::default();
+    let jobs = taken.0.clone();
+    a.backend = Box::new(taken);
+    let gal = with_exchange(&mut a);
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    a.run("mail.new", json!({}));
+    a.run("compose.update", json!({"account": gal}));
+    frame(&ctx, &mut a, vec![]);
+    let f = field(&a, "to");
+    focus_field(&ctx, f);
+    frame(&ctx, &mut a, vec![]);
+    frame(&ctx, &mut a, vec![Event::Text("dupont".into())]);
+    frame(&ctx, &mut a, vec![key(Key::Tab, Modifiers::NONE)]);
+    frame(&ctx, &mut a, vec![]);
+    assert!(a.session.directory_searching(&gal, "dupont"), "asked as the field was left");
+    assert_eq!(a.session.people_pending(f), 1);
+    assert!(a.ui.people.pieces(f).iter().any(|p| text_with(p, "dupont", None)), "{:?}", a.ui.people.pieces(f));
+    // Back in the field, a name closed with `;` is asked too; what's settled isn't asked again.
+    focus_field(&ctx, f);
+    frame(&ctx, &mut a, vec![]);
+    directory_answers(&mut a, &gal, "dupont", &[("Marc Dupont", "marc@contoso.example")]);
+    frame(&ctx, &mut a, vec![]);
+    handed(&jobs);
+    frame(&ctx, &mut a, vec![Event::Text("smith;".into())]);
+    frame(&ctx, &mut a, vec![]);
+    assert!(a.session.directory_searching(&gal, "smith"), "asked as the name was closed");
+    let asked: Vec<String> = handed(&jobs)
+        .into_iter()
+        .filter_map(|j| match j {
+            Job::SearchDirectory { query, .. } => Some(query),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(asked, ["smith"], "Marc, found already, isn't asked again");
+    assert_eq!(to(&a), "Marc Dupont <marc@contoso.example>; smith; ");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// The directory was down when Ctrl+K asked ("The directory can't be reached"), and it is back
+/// when Send asks again a minute later: the name is pending again, not stopped on its old error.
+#[test]
+fn an_old_unreached_name_asked_again_at_send_waits_instead_of_stopping() {
+    let (mut a, dir) = app("send-retries-unreached");
+    let taken = Taken::default();
+    let jobs = taken.0.clone();
+    a.backend = Box::new(taken);
+    let gal = with_exchange(&mut a);
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    new_message_on(&mut a, &gal, "smith");
+    frame(&ctx, &mut a, vec![]);
+    let f = field(&a, "to");
+    focus_field(&ctx, f);
+    frame(&ctx, &mut a, vec![]);
+    frame(&ctx, &mut a, vec![key(Key::K, Modifiers::COMMAND)]);
+    frame(&ctx, &mut a, vec![]);
+    directory_fails(&mut a, &gal, "smith", "offline");
+    frame(&ctx, &mut a, vec![]);
+    assert!(a.ui.people.pieces(f).iter().any(|p| text_with(p, "smith", Some(PieceError::Unreached))), "{:?}", a.ui.people.pieces(f));
+    // A minute later the directory is asked again at Send.
+    a.session.clock.now += 61;
+    handed(&jobs);
+    a.run("compose.send", json!({}));
+    frame(&ctx, &mut a, vec![]);
+    assert!(a.session.directory_searching(&gal, "smith"), "asked again");
+    assert_eq!(a.ui.compose_alert, None, "pending again, not stopped on the old error");
+    assert!(!has_send(&handed(&jobs)));
+    directory_answers(&mut a, &gal, "smith", &[("Jo Smith", "jo@contoso.example")]);
+    frame(&ctx, &mut a, vec![]);
+    assert!(has_send(&handed(&jobs)), "sent once the directory answered");
+    assert_eq!(to(&a), "Jo Smith <jo@contoso.example>; ");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Several messages can wait at once: one sent meanwhile (addresses alone) doesn't lose the
+/// others' waits, and each goes exactly once when its own names settle.
+#[test]
+fn two_messages_waiting_each_go_once_when_their_names_settle() {
+    let (mut a, dir) = app("two-waits");
+    let taken = Taken::default();
+    let jobs = taken.0.clone();
+    a.backend = Box::new(taken);
+    let gal = with_exchange(&mut a);
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    new_message_on(&mut a, &gal, "dupont");
+    let first = a.session.compose.as_ref().unwrap().id;
+    frame(&ctx, &mut a, vec![]);
+    a.run("compose.send", json!({}));
+    new_message_on(&mut a, &gal, "zoe@studio.example");
+    let second = a.session.compose.as_ref().unwrap().id;
+    frame(&ctx, &mut a, vec![]);
+    handed(&jobs);
+    a.run("compose.send", json!({}));
+    frame(&ctx, &mut a, vec![]);
+    let sent_ids = |jobs: &[Job]| {
+        jobs.iter()
+            .filter_map(|j| match j {
+                Job::Send { id, .. } => Some(*id),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(sent_ids(&handed(&jobs)), [second], "addresses alone go at once");
+    new_message_on(&mut a, &gal, "smith");
+    let third = a.session.compose.as_ref().unwrap().id;
+    frame(&ctx, &mut a, vec![]);
+    a.run("compose.send", json!({}));
+    frame(&ctx, &mut a, vec![]);
+    assert!(sent_ids(&handed(&jobs)).is_empty(), "both wait");
+    directory_answers(&mut a, &gal, "dupont", &[("Marc Dupont", "marc@contoso.example")]);
+    frame(&ctx, &mut a, vec![]);
+    assert_eq!(sent_ids(&handed(&jobs)), [first], "the first goes when its name is found");
+    directory_answers(&mut a, &gal, "smith", &[("Jo Smith", "jo@contoso.example")]);
+    frame(&ctx, &mut a, vec![]);
+    assert_eq!(sent_ids(&handed(&jobs)), [third], "the third too, once");
+    for _ in 0..3 {
+        frame(&ctx, &mut a, vec![]);
+    }
+    assert!(sent_ids(&handed(&jobs)).is_empty(), "nothing goes twice");
+    assert_eq!(a.ui.compose_alert, None);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// While the choice dialog is open, the directory's timeout doesn't run: a slow choice never reads
+/// "The directory can't be reached", and the message goes once the person is picked.
+#[test]
+fn the_timeout_waits_while_the_choice_dialog_is_open() {
+    let (mut a, dir) = app("send-choice-slow");
+    let taken = Taken::default();
+    let jobs = taken.0.clone();
+    a.backend = Box::new(taken);
+    let gal = with_exchange(&mut a);
+    let ctx = egui::Context::default();
+    frame_at(&ctx, &mut a, vec![], 1.0);
+    new_message_on(&mut a, &gal, "dupont");
+    frame_at(&ctx, &mut a, vec![], 2.0);
+    a.run("compose.send", json!({}));
+    directory_answers(&mut a, &gal, "dupont", &[("Anne Dupont", "anne@contoso.example"), ("Marc Dupont", "marc@contoso.example")]);
+    frame_at(&ctx, &mut a, vec![], 3.0);
+    frame_at(&ctx, &mut a, vec![], 70.0);
+    frame_at(&ctx, &mut a, vec![], 130.0);
+    assert_eq!(a.ui.compose_alert, None, "the clock waits for the choice");
+    assert!(settled_text_at(&ctx, &mut a, "More than one person fits “dupont”. Choose who you meant:", SIZE).is_some(), "still asked");
+    let marc = settled_text_at(&ctx, &mut a, "Marc Dupont", SIZE).expect("Marc offered");
+    click_at(&ctx, &mut a, marc, 2, SIZE);
+    frame(&ctx, &mut a, vec![]);
+    assert!(has_send(&handed(&jobs)), "sent once chosen");
+    assert_eq!(to(&a), "Marc Dupont <marc@contoso.example>; ");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A stop that isn't the user's doing is said: the choice answered "as typed" by a command (not by
+/// the dialog's Cancel) leaves a name nothing waits for, and the send stops with a word.
+#[test]
+fn a_name_left_unsettled_by_something_else_stops_the_send_with_a_word() {
+    let (mut a, dir) = app("send-unsettled");
+    let taken = Taken::default();
+    let jobs = taken.0.clone();
+    a.backend = Box::new(taken);
+    let gal = with_exchange(&mut a);
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    new_message_on(&mut a, &gal, "dupont");
+    frame(&ctx, &mut a, vec![]);
+    let f = field(&a, "to");
+    a.run("compose.send", json!({}));
+    directory_answers(&mut a, &gal, "dupont", &[("Anne Dupont", "anne@contoso.example"), ("Marc Dupont", "marc@contoso.example")]);
+    frame(&ctx, &mut a, vec![]);
+    a.run("people.choose", json!({"window": f.window, "field": "to", "token": "dupont"}));
+    frame(&ctx, &mut a, vec![]);
+    assert_eq!(a.ui.compose_alert.as_deref(), Some("Some names need checking before sending"));
+    assert!(!has_send(&handed(&jobs)));
+    assert!(a.ui.people.send_wait_left(0.0).is_none(), "the wait is off");
     let _ = std::fs::remove_dir_all(dir);
 }

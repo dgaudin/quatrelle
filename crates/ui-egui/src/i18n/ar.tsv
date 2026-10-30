@@ -1805,6 +1805,7 @@ month	May	مايو
 	The directory can't be reached	تعذّر الوصول إلى الدليل
 	and others	وآخرون
 	This list couldn't be expanded: {error}	تعذّر توسيع هذه القائمة: {error}
+	Some names need checking before sending	بعض الأسماء تحتاج إلى التحقق قبل الإرسال
 	Matched as typed	مطابقة كما كُتب
 	{name}, {kind}, remove with Delete	{name}، {kind}، للإزالة اضغط Delete
 	{name}, {kind}, {why}, remove with Delete	{name}، {kind}، {why}، للإزالة اضغط Delete

@@ -1808,6 +1808,7 @@ month	May	Май
 	The directory can't be reached	Справочник недоступен
 	and others	и другие
 	This list couldn't be expanded: {error}	Этот список не удалось развернуть: {error}
+	Some names need checking before sending	Некоторые имена нужно проверить перед отправкой
 	Matched as typed	Сравнивается как введено
 	{name}, {kind}, remove with Delete	{name}, {kind}, удалить клавишей Delete
 	{name}, {kind}, {why}, remove with Delete	{name}, {kind}, {why}, удалить клавишей Delete

@@ -1805,6 +1805,7 @@ month	May	mei
 	The directory can't be reached	De adreslijst is niet bereikbaar
 	and others	en anderen
 	This list couldn't be expanded: {error}	Deze lijst kon niet worden uitgevouwen: {error}
+	Some names need checking before sending	Enkele namen moeten vóór het verzenden worden gecontroleerd
 	Matched as typed	Vergeleken zoals getypt
 	{name}, {kind}, remove with Delete	{name}, {kind}, verwijderen met Delete
 	{name}, {kind}, {why}, remove with Delete	{name}, {kind}, {why}, verwijderen met Delete

@@ -79,18 +79,16 @@ impl MailApp {
     /// answering within its timeout).
     fn send_when_resolved(&mut self, ctx: &egui::Context) {
         let now = ctx.input(|i| i.time);
-        match self.ui.people.send_when_resolved(&mut self.session, now) {
-            Ok(Some((id, params))) => {
-                if self.use_compose(id) {
-                    self.run_now("compose.send", params);
+        for (id, done) in self.ui.people.send_when_resolved(&mut self.session, now) {
+            match done {
+                Ok(params) => {
+                    if self.use_compose(id) {
+                        self.run_now("compose.send", params);
+                    }
                 }
-                ctx.request_repaint();
+                Err(why) => self.ui.compose_alert = Some(why),
             }
-            Ok(None) => {}
-            Err(why) => {
-                self.ui.compose_alert = Some(why);
-                ctx.request_repaint();
-            }
+            ctx.request_repaint();
         }
         if let Some(left) = self.ui.people.send_wait_left(now) {
             ctx.request_repaint_after(std::time::Duration::from_secs_f64(left.clamp(0.05, 1.0)));
