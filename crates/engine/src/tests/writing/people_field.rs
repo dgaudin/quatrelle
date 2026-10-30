@@ -4,7 +4,7 @@
 use super::names::{answer, asked, with_exchange};
 use super::*;
 use crate::session::scheduling::Fetched;
-use crate::{FieldId, INDEX_MAX, Outcome, Source};
+use crate::{FieldId, INDEX_MAX, MAX_SHOWN_MEMBERS, MAX_TOTAL, Outcome, Source};
 use quatrelle_model::addr::Accepts;
 use quatrelle_model::pim::{CalendarInfo, DavSync, shared_calendar_id};
 use quatrelle_model::scheduling::{Room, RoomList};
@@ -574,5 +574,171 @@ fn a_name_repeated_in_a_field_is_looked_up_once() {
     assert_eq!(r.text, "Zoe Park <zoe@studio.example>; Zoe Park <zoe@studio.example>; Zoe Park <zoe@studio.example>; ");
     assert_eq!(r.resolved, 3);
     assert_eq!(s.people.lookups - before, 1);
+    done(s);
+}
+
+/// The jobs asking for a list's members, whatever else was asked.
+fn expand_jobs(s: &mut Session) -> Vec<Job> {
+    s.take_jobs().into_iter().filter(|j| matches!(j, Job::ExpandList { .. })).collect()
+}
+
+fn person(name: &str, email: &str) -> Addressee {
+    Addressee::new(name, email, AddresseeKind::Person)
+}
+
+fn expanded(account: &str, address: &str, item_id: Option<&str>, members: Vec<Addressee>, more: bool, total: usize) -> Event {
+    Event::ListExpanded { account: account.into(), address: address.into(), item_id: item_id.map(String::from), members, more, total, error: None }
+}
+
+/// A list is asked once and kept; a nested list stays a list (its members found in the index);
+/// a contact group is asked by its item id; an empty list is said, a refusal is said and asked
+/// again after a minute; the sample account has no directory.
+#[test]
+fn a_list_is_expanded_by_address_a_group_by_item_id_a_nested_list_stays_a_list_and_an_empty_one_is_said() {
+    let (mut s, gal) = with_exchange("expand-lists");
+    let team = json!({"email": "team@contoso.example"});
+    let out = s.run("people.expand", &team).unwrap();
+    assert_eq!(out["state"], "loading");
+    assert_eq!(s.take_jobs(), [Job::ExpandList { account: gal.clone(), address: "team@contoso.example".into(), item_id: None }]);
+    assert_eq!(s.run("people.expand", &team).unwrap()["state"], "loading");
+    assert!(s.take_jobs().is_empty(), "asked once");
+
+    let sub = Addressee::new("Sub team", "sub@contoso.example", AddresseeKind::DistributionList);
+    s.apply(expanded(&gal, "team@contoso.example", None, vec![person("Ann Lee", "ann@contoso.example"), sub.clone()], true, 700));
+    let out = s.run("people.expand", &team).unwrap();
+    assert_eq!(out["state"], "ready");
+    assert_eq!(out["members"][0]["email"], "ann@contoso.example");
+    assert_eq!(out["members"][1]["kind"], "distributionList");
+    assert_eq!((out["more"].clone(), out["total"].clone()), (json!(true), json!(700)));
+    assert_eq!(s.directory_known("sub@contoso.example"), Some(&sub));
+    assert!(expand_jobs(&mut s).is_empty(), "an answer is kept");
+    let who = Addressee::new("", "TEAM@contoso.example", AddresseeKind::DistributionList);
+    assert!(matches!(s.expansion_now(&gal, &who), Some(Fetched::Ready(x)) if x.members.len() == 2), "found by the address in any case");
+
+    // A contact group has no address: asked by its item id.
+    let family = json!({"itemId": "AAMk=", "name": "Family", "kind": "contactGroup"});
+    assert_eq!(s.run("people.expand", &family).unwrap()["state"], "loading");
+    assert_eq!(s.take_jobs(), [Job::ExpandList { account: gal.clone(), address: String::new(), item_id: Some("AAMk=".into()) }]);
+    s.apply(expanded(&gal, "", Some("AAMk="), Vec::new(), false, 0));
+    let out = s.run("people.expand", &family).unwrap();
+    assert_eq!(
+        (out["state"].clone(), out["members"].clone(), out["more"].clone(), out["total"].clone()),
+        (json!("ready"), json!([]), json!(false), json!(0))
+    );
+
+    // A refusal is said, and the next ask tries again.
+    let closed = json!({"email": "closed@contoso.example"});
+    s.run("people.expand", &closed).unwrap();
+    s.take_jobs();
+    s.apply(Event::ListExpanded {
+        account: gal.clone(),
+        address: "closed@contoso.example".into(),
+        item_id: None,
+        members: Vec::new(),
+        more: false,
+        total: 0,
+        error: Some("ErrorAccessDenied".into()),
+    });
+    let out = s.run("people.expand", &closed).unwrap();
+    assert_eq!((out["state"].clone(), out["error"].clone()), (json!("failed"), json!("ErrorAccessDenied")));
+    assert!(expand_jobs(&mut s).is_empty(), "a failure is said, not asked again at once");
+    s.set_clock(NOW + 61, 0);
+    assert_eq!(s.run("people.expand", &closed).unwrap()["state"], "loading", "asked again after a minute");
+    assert_eq!(expand_jobs(&mut s).len(), 1);
+
+    // Not a list, or nothing to ask by.
+    assert!(matches!(s.run("people.expand", &json!({"email": "ann@contoso.example", "kind": "person"})), Err(CmdError::Params(_))));
+    assert!(matches!(s.run("people.expand", &json!({"kind": "distributionList"})), Err(CmdError::Params(_))));
+    assert!(matches!(s.run("people.expand", &json!({"itemId": "not an id!", "kind": "contactGroup"})), Err(CmdError::Params(_))));
+    done(s);
+
+    let mut s = sample_session("expand-sample");
+    assert!(matches!(s.run("people.expand", &team), Err(CmdError::Disabled(_))));
+    assert!(s.take_jobs().is_empty());
+    done(s);
+}
+
+/// At most 500 members are kept; what is left out is counted from the total, whatever `more`
+/// says: members without an address never reach the answer, so fewer than the total may come
+/// with `more` unset. A hostile total is clamped.
+#[test]
+fn an_expansion_keeps_500_members_and_says_how_many_more_from_the_total() {
+    let (mut s, gal) = with_exchange("expand-caps");
+    let who = |addr: &str| Addressee::new("", addr, AddresseeKind::DistributionList);
+    let ask = |s: &mut Session, addr: &str| {
+        s.people_expand(None, &who(addr)).unwrap();
+        s.take_jobs();
+    };
+    let many = |n: usize| (0..n).map(|i| person(&format!("P{i}"), &format!("p{i}@contoso.example"))).collect::<Vec<_>>();
+    let got = |s: &Session, addr: &str| match s.expansion_now(&gal, &who(addr)) {
+        Some(Fetched::Ready(x)) => (x.members.len(), x.more, x.total),
+        other => panic!("{other:?}"),
+    };
+
+    ask(&mut s, "big@contoso.example");
+    s.apply(expanded(&gal, "big@contoso.example", None, many(600), false, 600));
+    assert_eq!(got(&s, "big@contoso.example"), (MAX_SHOWN_MEMBERS, true, 600), "100 left out are counted");
+
+    // Three came, ten are said: the seven without an address are not shown, but counted.
+    ask(&mut s, "gaps@contoso.example");
+    s.apply(expanded(&gal, "gaps@contoso.example", None, many(3), false, 10));
+    assert_eq!(got(&s, "gaps@contoso.example"), (3, true, 10));
+
+    // A total below what came is raised to it; one that agrees leaves nothing more.
+    ask(&mut s, "low@contoso.example");
+    s.apply(expanded(&gal, "low@contoso.example", None, many(2), false, 0));
+    assert_eq!(got(&s, "low@contoso.example"), (2, false, 2));
+
+    // A hostile total is clamped.
+    ask(&mut s, "huge@contoso.example");
+    s.apply(expanded(&gal, "huge@contoso.example", None, many(1), false, usize::MAX));
+    assert_eq!(got(&s, "huge@contoso.example"), (1, true, MAX_TOTAL));
+
+    // 500 members indexed, no more.
+    assert!(s.directory_known("p499@contoso.example").is_some());
+    done(s);
+}
+
+/// A late answer (an account gone, a list nobody asked about) brings nothing back, and an ask
+/// unanswered for a minute is asked again.
+#[test]
+fn a_late_or_unasked_expansion_is_ignored_and_a_lost_ask_is_retried() {
+    let (mut s, gal) = with_exchange("expand-late");
+    let team = json!({"email": "team@contoso.example"});
+    s.apply(expanded(&gal, "unasked@contoso.example", None, vec![person("Ann", "ann@contoso.example")], false, 1));
+    assert!(s.directory_known("ann@contoso.example").is_none(), "nobody asked");
+    s.run("people.expand", &team).unwrap();
+    s.take_jobs();
+    s.set_clock(NOW + 30, 0);
+    s.run("people.expand", &team).unwrap();
+    assert!(s.take_jobs().is_empty());
+    s.set_clock(NOW + 61, 0);
+    s.run("people.expand", &team).unwrap();
+    assert_eq!(s.take_jobs().len(), 1, "a lost ask is asked again");
+    s.run("account.remove", &json!({"account": gal})).unwrap();
+    assert!(s.people.expansions.is_empty());
+    s.apply(expanded(&gal, "team@contoso.example", None, vec![person("Ann", "ann@contoso.example")], false, 1));
+    assert!(s.people.expansions.is_empty() && s.directory_known("ann@contoso.example").is_none());
+    done(s);
+}
+
+/// Junk params to `people.expand` on an Exchange account (the sample account refuses first):
+/// refused, never a crash, and no ask goes out without a real list.
+#[test]
+fn people_expand_survives_junk_params_with_a_directory() {
+    let (mut s, _gal) = with_exchange("expand-junk");
+    for p in [
+        json!(null),
+        json!({}),
+        json!({"email": "@"}),
+        json!({"email": 5, "itemId": [], "kind": {"a": 1}}),
+        json!({"itemId": "AAMk=", "kind": "room"}),
+        json!({"email": format!("{}@contoso.example", "x".repeat(100_000))}),
+        json!({"itemId": "A".repeat(600), "kind": "contactGroup"}),
+        json!({"account": "nobody", "email": "team@contoso.example"}),
+    ] {
+        let _ = s.run("people.expand", &p);
+    }
+    assert!(expand_jobs(&mut s).is_empty(), "nothing asked about junk");
     done(s);
 }

@@ -14,6 +14,9 @@ pub(super) fn commands() -> Vec<CommandSpec> {
         CommandSpec::new("people.resolve", "Check Names", "Message › Names", resolve).params(
             r#"{"window": number, "field": string (as people.suggest), "text"?: string (a field that isn't a message's: its text; a message's To, Cc, Bcc or Reply-To is checked in the message), "account"?: string (whose directory), "accepts"?: [kind codes] (of several that fit, these first)} → {"text", "resolved", "unresolved", "searching"}"#,
         ),
+        CommandSpec::new("people.expand", "Expand a list", "Message › Names", expand).params(
+            r#"{"account"?: string (whose directory), "email"?: string (a distribution list's address), "itemId"?: string (a contact group's), "name"?: string, "kind"?: kind code (default distributionList)} → {"account", "state": "loading"|"ready"|"failed", "members": [{"name", "email", "kind", "itemId"?}], "more", "total", "error"?}"#,
+        ),
         CommandSpec::new("people.choose", "Choose who a name means", "Message › Names", choose).params(
             r#"{"window": number, "field": string, "token": string (the name as typed), "email"?: string (the person meant; neither it nor itemId: leave the name as typed), "name"?: string, "kind"?: kind code, "itemId"?: string (a contact group's)} → {"token", "written"}"#,
         ),
@@ -66,6 +69,27 @@ fn choose(s: &mut Session, v: &Value) -> CmdResult {
     let token = p::req_str(v, "token")?.to_string();
     let person = chosen(v)?;
     s.people_choose(field, &token, person)
+}
+
+/// The members of a distribution list or a contact group ([`Session::people_expand`]).
+fn expand(s: &mut Session, v: &Value) -> CmdResult {
+    let account = account_of(s, v)?;
+    let kind = match p::str(v, "kind") {
+        Some(k) => AddresseeKind::from_code(k).ok_or_else(|| CmdError::Params(format!("there's no kind `{k}`")))?,
+        None => AddresseeKind::DistributionList,
+    };
+    let item_id = match p::str(v, "itemId").map(str::trim).filter(|i| !i.is_empty()) {
+        Some(id) if valid_item_id(id) => id.to_string(),
+        Some(_) => return Err(CmdError::Params("`itemId` isn't an item id".into())),
+        None => String::new(),
+    };
+    let who = Addressee {
+        name: p::str(v, "name").unwrap_or("").trim().to_string(),
+        address: p::str(v, "email").unwrap_or("").trim().to_string(),
+        kind,
+        item_id,
+    };
+    s.people_expand(account.as_deref(), &who)
 }
 
 /// The person a choice names: an address (`email`, with its `name`), or a contact group by its
