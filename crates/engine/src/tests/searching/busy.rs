@@ -274,6 +274,16 @@ fn a_search_in_slices_answers_what_a_whole_one_does() {
     done(s);
 }
 
+/// A test's mailbox folder, emptied when the test is over (pass or fail).
+struct Emptied(std::path::PathBuf);
+
+impl Drop for Emptied {
+    fn drop(&mut self) {
+        // Leftovers in the temporary folder are harmless; a failed clean-up isn't a failed test.
+        std::fs::remove_dir_all(&self.0).ok();
+    }
+}
+
 /// What each slice costs from the first to the last over a big mailbox: it must not grow with
 /// what's indexed already. Run by hand (release build):
 ///
@@ -293,6 +303,8 @@ fn slices_cost_the_same_from_first_to_last() {
     let q = std::env::var("QUATRELLE_SLICE_QUERY").unwrap_or_else(|_| "needle".into());
     let busy = std::env::var_os("QUATRELLE_SLICE_BUSY").is_some();
     let store = busy_store("busy-cost", folders, u32::try_from(per).unwrap());
+    // A mailbox this big is about 100 MB: gone when the test is, passed or failed.
+    let _gone = Emptied(store.root().to_path_buf());
     let mut s = open(&store);
     let mut times = Vec::new();
     let started = std::time::Instant::now();
