@@ -1806,3 +1806,4 @@ month	May	5月
 	The directory can't be reached	ディレクトリに接続できません
 	Matched as typed	入力どおりに照合
 	{name}, {kind}, remove with Delete	{name}、{kind}、Delete キーで削除
+	{name}, {kind}, {why}, remove with Delete	{name}、{kind}、{why}、Delete キーで削除

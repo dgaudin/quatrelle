@@ -1808,3 +1808,4 @@ month	May	5월
 	The directory can't be reached	디렉터리에 연결할 수 없습니다
 	Matched as typed	입력한 대로 비교
 	{name}, {kind}, remove with Delete	{name}, {kind}, Delete 키로 제거
+	{name}, {kind}, {why}, remove with Delete	{name}, {kind}, {why}, Delete 키로 제거

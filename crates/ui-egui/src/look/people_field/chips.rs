@@ -1,7 +1,7 @@
 //! The field's body: its pieces (chips with their kind's icon, text not yet recognised) laid line
 //! after line with the input after them, growing to [`MAX_LINES`] lines, then scrolling.
 
-use egui::{Align, Layout, Response, Sense, Stroke, TextWrapMode, UiBuilder, pos2};
+use egui::{Align, Layout, Response, Sense, Stroke, StrokeKind, TextWrapMode, UiBuilder, pos2};
 
 use super::*;
 use crate::{bidi, icons, theme, widgets};
@@ -28,7 +28,8 @@ pub(super) struct Laid {
     pub(super) refocus: bool,
 }
 
-pub(super) fn body(ui: &mut Ui, t: &Tokens, st: &mut FieldState, input: &FieldInput<'_>, edit_id: Id) -> Laid {
+/// The body; `label_id` is the book button, which names the input to a screen reader.
+pub(super) fn body(ui: &mut Ui, t: &Tokens, st: &mut FieldState, input: &FieldInput<'_>, edit_id: Id, label_id: Id) -> Laid {
     let FieldState { pieces, input: typed, selected, card, .. } = st;
     let card_open = card.is_some();
     let mut rects = Vec::with_capacity(pieces.len());
@@ -44,7 +45,7 @@ pub(super) fn body(ui: &mut Ui, t: &Tokens, st: &mut FieldState, input: &FieldIn
                 for (i, piece) in pieces.iter().enumerate() {
                     let on = *selected == Some(i);
                     let resp = match piece {
-                        Piece::Chip(a) => chip(ui, t, a, input.id.with(("people-chip", i)), on, card_open),
+                        Piece::Chip { who, refused } => chip(ui, t, who, refused.as_deref(), input.id.with(("people-chip", i)), on, card_open),
                         Piece::Text { text, error } => text_piece(ui, t, text, error.as_ref(), input.id.with(("people-text", i)), on),
                     };
                     if resp.clicked() {
@@ -64,7 +65,8 @@ pub(super) fn body(ui: &mut Ui, t: &Tokens, st: &mut FieldState, input: &FieldIn
                     .hint_text(hint)
                     .desired_width(w)
                     .align(egui::Align2::LEFT_CENTER);
-                let r = ui.add_sized(vec2(w, CHIP_H), edit);
+                // Named by the field's button ("To"): its hint goes once there are chips.
+                let r = ui.add_sized(vec2(w, CHIP_H), edit).labelled_by(label_id);
                 if input.pending > 0 {
                     ui.add(egui::Spinner::new().size(ICON).color(t.dim)).on_hover_text(tl!("Checking…"));
                 }
@@ -81,17 +83,18 @@ pub(super) fn body(ui: &mut Ui, t: &Tokens, st: &mut FieldState, input: &FieldIn
         *selected = Some(i);
         // A chip's card opens on a click, and closes on a second.
         *card = match pieces.get(i) {
-            Some(Piece::Chip(_)) if *card != Some(i) => Some(i),
+            Some(Piece::Chip { .. }) if *card != Some(i) => Some(i),
             _ => None,
         };
     }
     Laid { edit, view, rects, refocus: clicked.is_some() }
 }
 
-/// A slot for a piece whose text is `w` wide, and its response.
+/// A slot for a piece whose text is `w` wide, and its response. It takes clicks but isn't a Tab
+/// stop (a field holds up to 500): the keyboard selects pieces from the input, with Backspace.
 fn slot(ui: &mut Ui, id: Id, w: f32) -> (egui::Rect, Response) {
     let (rect, _) = ui.allocate_exact_size(vec2(w, CHIP_H), Sense::hover());
-    let resp = ui.interact(rect, id, Sense::click());
+    let resp = ui.interact(rect, id, Sense::CLICK);
     (rect, resp)
 }
 
@@ -109,13 +112,17 @@ fn text_width(ui: &Ui, text: &str) -> f32 {
 }
 
 /// A chip: a pill with the kind's icon and the name; the address shows on hover (not while a card
-/// is open: one at a time).
-fn chip(ui: &mut Ui, t: &Tokens, a: &Addressee, id: Id, selected: bool, card_open: bool) -> Response {
+/// is open: one at a time). A refused one is red, and says why on hover and to a screen reader.
+fn chip(ui: &mut Ui, t: &Tokens, a: &Addressee, refused: Option<&str>, id: Id, selected: bool, card_open: bool) -> Response {
     let name = a.display();
     let text_w = text_width(ui, name).min(MAX_CHIP_W - PAD_LEFT - ICON - 5.0 - PAD_RIGHT);
     let (rect, resp) = slot(ui, id, PAD_LEFT + ICON + 5.0 + text_w + PAD_RIGHT);
     let kind = kind_name(a.kind);
-    widgets::named(ui, &resp, &tf!("{name}, {kind}, remove with Delete", name = name, kind = kind), true, None);
+    let said = match refused {
+        Some(why) => tf!("{name}, {kind}, {why}, remove with Delete", name = name, kind = kind, why = why),
+        None => tf!("{name}, {kind}, remove with Delete", name = name, kind = kind),
+    };
+    widgets::named(ui, &resp, &said, true, Some(selected));
     // A field holds up to 500: those scrolled out of its lines take their place and aren't drawn.
     if !ui.is_rect_visible(rect) {
         return resp;
@@ -128,12 +135,26 @@ fn chip(ui: &mut Ui, t: &Tokens, a: &Addressee, id: Id, selected: bool, card_ope
     } else {
         t.hover
     };
-    ui.painter().rect_filled(pill, pill.height() / 2.0, fill);
+    let (ink, text_color) = match refused {
+        Some(_) => {
+            let red = if selected { t.danger.gamma_multiply(0.22) } else { t.danger.gamma_multiply(0.1) };
+            ui.painter().rect(pill, pill.height() / 2.0, red, Stroke::new(1.0, t.danger), StrokeKind::Inside);
+            (t.danger, t.danger)
+        }
+        None => {
+            ui.painter().rect_filled(pill, pill.height() / 2.0, fill);
+            (t.accent, t.text)
+        }
+    };
     let icon = egui::Rect::from_center_size(pos2(pill.left() + PAD_LEFT + ICON / 2.0, pill.center().y), vec2(ICON, ICON));
-    icons::paint(ui.painter(), icon, kind_icon(a.kind), t.accent);
+    icons::paint(ui.painter(), icon, kind_icon(a.kind), ink);
     let text = egui::Rect::from_min_max(pos2(icon.right() + 5.0, pill.top()), pos2(pill.right() - PAD_RIGHT, pill.bottom()));
-    name_in(ui, text, name, t.text);
-    let tip = if a.address.is_empty() { kind } else { a.address.as_str() };
+    name_in(ui, text, name, text_color);
+    let tip = match refused {
+        Some(why) => why,
+        None if a.address.is_empty() => kind,
+        None => a.address.as_str(),
+    };
     if card_open { resp } else { resp.on_hover_text(tip) }
 }
 
@@ -147,7 +168,7 @@ fn text_piece(ui: &mut Ui, t: &Tokens, text: &str, error: Option<&PieceError>, i
         (Some(PieceError::NotAnAddress | PieceError::NotFound), Some(m)) => m.as_str(),
         _ => text,
     };
-    widgets::named(ui, &resp, said, true, None);
+    widgets::named(ui, &resp, said, true, Some(selected));
     let pill = rect.shrink2(vec2(0.0, 2.0));
     if selected || resp.hovered() {
         ui.painter().rect_filled(pill, 4.0, if selected { t.accent_soft } else { t.hover_row });

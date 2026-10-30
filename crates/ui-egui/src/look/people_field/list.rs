@@ -68,14 +68,15 @@ enum Pick {
 
 /// One suggestion's row; what a press on it asks for.
 fn row(ui: &mut Ui, t: &Tokens, s: &Suggestion, on: bool, w: f32, id: Id) -> Option<Pick> {
-    let (rect, resp) = ui.allocate_exact_size(vec2(w, ROW_H), Sense::click());
+    // Rows take clicks without being Tab stops: the keyboard moves in the list with the arrows.
+    let (rect, resp) = ui.allocate_exact_size(vec2(w, ROW_H), Sense::CLICK);
     let name = s.who.display().to_string();
     widgets::named(ui, &resp, &name, true, None);
     let forgets = s.source == Source::Recent;
     // The × (Recent ones only), its own target so it's the one under the pointer, not the row.
     let x = Rect::from_center_size(pos2(rect.right() - X_W / 2.0, rect.center().y), vec2(20.0, 20.0));
     let on_x = forgets && {
-        let r = ui.interact(x, id.with("x"), Sense::click()).on_hover_text(tl!("Remove from suggestions"));
+        let r = ui.interact(x, id.with("x"), Sense::CLICK).on_hover_text(tl!("Remove from suggestions"));
         widgets::named(ui, &r, tl!("Remove from suggestions"), true, None);
         r.hovered()
     };
@@ -109,7 +110,8 @@ fn row(ui: &mut Ui, t: &Tokens, s: &Suggestion, on: bool, w: f32, id: Id) -> Opt
         }
         icons::paint(p, x.shrink(3.0), Icon::Close, t.danger);
     }
-    // On the press: the input loses the focus on the same click, before a release would count.
+    // Taken on the press, as the list answers at once; the field holds the input's focus and text
+    // until the click is over (`people_field`).
     if pointed && ui.input(|i| i.pointer.primary_pressed()) {
         return Some(if on_x { Pick::Forget } else { Pick::Take });
     }

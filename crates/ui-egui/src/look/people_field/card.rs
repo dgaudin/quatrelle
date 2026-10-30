@@ -1,5 +1,6 @@
-//! A chip's card, open on a click: the name, the address and the kind, "Remove", and "Expand" for a
-//! distribution list or a contact group when the account can expand one.
+//! A chip's card, open on a click: the name, the address and the kind (and why a refused one is
+//! refused), "Remove", and "Expand" for a distribution list or a contact group when the account can
+//! expand one.
 
 use egui::{Margin, RichText, Sense};
 
@@ -10,7 +11,7 @@ use crate::{bidi, icons, theme, widgets};
 /// pressed on the card. A press anywhere else closes it.
 pub(super) fn show(ui: &Ui, t: &Tokens, st: &mut FieldState, input: &FieldInput<'_>, rects: &[egui::Rect], ev: &mut Vec<PeopleEvent>) -> bool {
     let Some(i) = st.card else { return false };
-    let (Some(Piece::Chip(a)), Some(&chip)) = (st.pieces.get(i), rects.get(i)) else {
+    let (Some(Piece::Chip { who: a, refused }), Some(&chip)) = (st.pieces.get(i), rects.get(i)) else {
         st.card = None;
         return false;
     };
@@ -30,12 +31,16 @@ pub(super) fn show(ui: &Ui, t: &Tokens, st: &mut FieldState, input: &FieldInput<
                     bidi::selectable_label(ui, &a.address, theme::regular(12.5), t.dim);
                 }
                 ui.label(RichText::new(kind_name(a.kind)).font(theme::regular(12.0)).color(t.faint));
+                if let Some(why) = refused {
+                    bidi::label(ui, why, theme::regular(12.5), t.danger);
+                }
                 ui.add_space(8.0);
                 ui.horizontal(|ui| {
                     if widgets::pill_button(ui, Icon::Delete, "Remove", t).clicked() {
                         asked = Some(PeopleEvent::RemoveChip(i));
                     }
-                    if a.kind.is_list() && input.can_expand && widgets::pill_button(ui, Icon::People, "Expand", t).clicked() {
+                    // A refused list is only removed: its members would be refused with it.
+                    if a.kind.is_list() && input.can_expand && refused.is_none() && widgets::pill_button(ui, Icon::People, "Expand", t).clicked() {
                         asked = Some(PeopleEvent::Expand(i));
                     }
                 });

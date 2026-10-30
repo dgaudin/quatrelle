@@ -1808,3 +1808,4 @@ month	May	maggio
 	The directory can't be reached	Impossibile raggiungere la directory
 	Matched as typed	Confrontato come digitato
 	{name}, {kind}, remove with Delete	{name}, {kind}, rimuovi con Canc
+	{name}, {kind}, {why}, remove with Delete	{name}, {kind}, {why}, rimuovi con Canc
