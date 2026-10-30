@@ -267,6 +267,7 @@ impl Session {
         self.pim.remove(id);
         self.forget_rooms(id);
         self.clear_directory_index();
+        self.forget_expansions(id);
         self.forget_name_checks(id);
         let mut kept = None;
         if let Some(store) = &self.store {
