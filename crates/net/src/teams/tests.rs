@@ -7,6 +7,9 @@ use super::*;
 use crate::NetError;
 use crate::fake_graph::{Data, FakeChat, FakeMessage, FakeTeams, FakeUser, Server, TOKEN, rfc3339, serve};
 
+/// The step 0 check.
+mod check;
+
 /// 2026-10-01T00:00:00Z in milliseconds.
 const T0: i64 = 1_790_812_800_000;
 const MINUTE: i64 = 60_000;
