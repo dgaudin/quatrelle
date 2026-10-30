@@ -1,7 +1,7 @@
 //! The contacts field drawn alone (`look/people_field.rs`), with no `Session`: its keys, its
 //! chips and their kinds, the suggestion list under the input, and a chip's card.
 
-use egui::accesskit::Node;
+use egui::accesskit::{Role, Toggled};
 use quatrelle_engine::model::addr::Accepts;
 use quatrelle_engine::model::{Addressee, AddresseeKind};
 use quatrelle_engine::{Source, Suggestion};
@@ -182,8 +182,15 @@ fn a_separator_closes_the_text_and_backspace_takes_a_chip_in_two_presses() {
     draw(&ctx, &mut st, &input, vec![key(Key::Backspace, Modifiers::NONE)]);
     assert!(st.input.is_empty() && st.selected.is_none(), "a letter goes first");
 
-    st.pieces = vec![Piece::Chip(person("Ann Lee", "ann@studio.example"))];
+    st.pieces = vec![Piece::chip(person("Ann Lee", "ann@studio.example"))];
     assert_eq!(draw(&ctx, &mut st, &input, vec![key(Key::Backspace, Modifiers::NONE)]), vec![]);
+    assert_eq!(st.selected, Some(0));
+    // Typing lets go of it; Backspace takes the letter, then selects the chip again.
+    assert_eq!(draw(&ctx, &mut st, &input, vec![Event::Text("x".into())]), vec![PeopleEvent::Changed]);
+    assert_eq!(st.selected, None);
+    draw(&ctx, &mut st, &input, vec![key(Key::Backspace, Modifiers::NONE)]);
+    assert!(st.input.is_empty() && st.selected.is_none());
+    draw(&ctx, &mut st, &input, vec![key(Key::Backspace, Modifiers::NONE)]);
     assert_eq!(st.selected, Some(0));
     // Ctrl+C copies the chip selected.
     let d = draw_in(&ctx, &mut st, &input, vec![Event::Copy], 600.0);
@@ -194,7 +201,7 @@ fn a_separator_closes_the_text_and_backspace_takes_a_chip_in_two_presses() {
     // Nothing selected and nothing typed: Ctrl+C copies every entry (a contact group by its name).
     let mut group = Addressee::new("Dupont family", "", AddresseeKind::ContactGroup);
     group.item_id = "AAMk=".into();
-    st.pieces = vec![Piece::Chip(person("Ann Lee", "ann@studio.example")), Piece::Chip(group), Piece::Text { text: "dupont".into(), error: None }];
+    st.pieces = vec![Piece::chip(person("Ann Lee", "ann@studio.example")), Piece::chip(group), Piece::Text { text: "dupont".into(), error: None }];
     let d = draw_in(&ctx, &mut st, &input, vec![Event::Copy], 600.0);
     assert_eq!(copied(&d.out).as_deref(), Some("Ann Lee <ann@studio.example>; Dupont family; dupont"));
     st.pieces.clear();
@@ -227,12 +234,12 @@ fn chips_wrap_and_scroll_past_four_lines() {
     draw_in(&ctx, &mut st, &input, vec![], 400.0);
     // Where a line starts: where the input is with nothing before it.
     let line_start = edit_rect().left();
-    st.pieces = vec![Piece::Chip(person("Pat Pierce", "pat@studio.example"))];
+    st.pieces = vec![Piece::chip(person("Pat Pierce", "pat@studio.example"))];
     let d = draw_in(&ctx, &mut st, &input, vec![], 400.0);
     assert!(d.rect.height() <= CHIP_ROW_H + 8.0, "one line: {}", d.rect.height());
 
     // Sixty chips, or a few fewer so that the input shares the last line with chips.
-    let chips = |n: usize| (0..n).map(|i| Piece::Chip(person(&format!("Person {i}"), &format!("p{i}@studio.example")))).collect::<Vec<_>>();
+    let chips = |n: usize| (0..n).map(|i| Piece::chip(person(&format!("Person {i}"), &format!("p{i}@studio.example")))).collect::<Vec<_>>();
     let mut d = draw_in(&ctx, &mut st, &input, vec![], 400.0);
     for n in (54..=60).rev() {
         st.pieces = chips(n);
@@ -259,50 +266,83 @@ fn chips_wrap_and_scroll_past_four_lines() {
     assert!((list.left() - edit.left()).abs() <= 1.0, "the list starts at the input, not at the line's start: {list:?}, {edit:?}");
 }
 
-/// A chip says its name, kind and how to remove it to a screen reader; a refused piece is drawn
-/// red-underlined; a click opens the chip's card, which offers Expand for a list when the account
-/// can expand one.
+/// A chip says its name, kind and how to remove it to a screen reader, and whether it's selected;
+/// hovering shows its address. A refused one is a red chip that says why; text that isn't an
+/// address is red-underlined. A click opens the chip's card, Esc closes it, and the card offers
+/// Expand for a list when the account can expand one.
 #[test]
 fn a_chip_is_a_named_widget_with_its_kind_and_a_refused_one_is_red() {
     let ctx = egui::Context::default();
     ctx.enable_accesskit();
     let input = field("rooms", &[]);
     let seine = Addressee::new("Salle Seine", "room.seine@contoso.example", AddresseeKind::Room);
-    let refused = PieceError::Refused("This isn't a room".into());
-    let mut st = FieldState { pieces: vec![Piece::Chip(seine), Piece::Text { text: "Seine B".into(), error: Some(refused) }], ..Default::default() };
+    let annex = Addressee::new("Studio Annex", "annex@contoso.example", AddresseeKind::Room);
+    let refused = Piece::Chip { who: annex, refused: Some("This isn't a room".into()) };
+    let bad = Piece::Text { text: "a@".into(), error: Some(PieceError::NotAnAddress) };
+    let mut st = FieldState { pieces: vec![Piece::chip(seine), refused, bad], ..Default::default() };
     draw_in(&ctx, &mut st, &input, vec![], 600.0);
     let d = draw_in(&ctx, &mut st, &input, vec![], 600.0);
     let tree = d.out.accesskit_update.as_ref().expect("AccessKit is on");
-    let label = |n: &Node| n.label().map(str::to_string);
-    assert!(
-        tree.nodes.iter().any(|(_, n)| label(n).as_deref() == Some("Salle Seine, Room, remove with Delete")),
-        "{:?}",
-        tree.nodes.iter().filter_map(|(_, n)| label(n)).collect::<Vec<_>>()
-    );
-    let text = drawn_at(&d.shapes, "Seine B").expect("the refused piece is drawn");
+    let node = |name: &str| tree.nodes.iter().find(|(_, n)| n.label() == Some(name)).map(|(_, n)| n.clone());
+    let labels = || tree.nodes.iter().filter_map(|(_, n)| n.label().map(str::to_string)).collect::<Vec<_>>();
+    let seine_node = node("Salle Seine, Room, remove with Delete").unwrap_or_else(|| panic!("{:?}", labels()));
+    assert_eq!(seine_node.toggled(), Some(Toggled::False), "not selected");
+    assert!(node("Studio Annex, Room, This isn't a room, remove with Delete").is_some(), "{:?}", labels());
+    let edit = tree.nodes.iter().find(|(_, n)| n.role() == Role::TextInput).map(|(_, n)| n.clone()).expect("the input");
+    assert!(!edit.labelled_by().is_empty() || edit.label().is_some(), "the input has a name with chips before it");
+
     let danger = Tokens::light().danger;
+    // The refused chip: a pill drawn in red around its name.
+    let annex_at = drawn_at(&d.shapes, "Studio Annex").expect("the refused chip keeps its name");
+    let red_pill = d.shapes.iter().any(|s| match s {
+        egui::Shape::Rect(r) => r.stroke.color == danger && r.rect.contains(annex_at.center()),
+        _ => false,
+    });
+    assert!(red_pill, "the refused chip is red");
+    // Text that isn't an address: a red line under it.
+    let text = drawn_at(&d.shapes, "a@").expect("the text is drawn");
     let under = d.shapes.iter().any(|s| match s {
         egui::Shape::LineSegment { points, stroke } => {
             stroke.color == danger && points[0].y >= text.center().y && points[0].y <= text.bottom() + 6.0 && points[1].x > text.left()
         }
         _ => false,
     });
-    assert!(under, "a red line under the refused piece");
+    assert!(under, "a red line under the text");
 
-    // A click on the chip opens its card: Remove, and no Expand for a room.
+    // Hovering a chip shows its address; a refused one says why.
+    let hover = |st: &mut FieldState, at: egui::Pos2| {
+        draw(&ctx, st, &input, vec![Event::PointerMoved(at)]);
+        let mut d = draw_in(&ctx, st, &input, vec![], 600.0);
+        for _ in 0..60 {
+            d = draw_in(&ctx, st, &input, vec![], 600.0);
+        }
+        d
+    };
     let chip = drawn_at(&d.shapes, "Salle Seine").expect("the chip's name is drawn").center();
+    assert!(drawn_at(&hover(&mut st, chip).shapes, "room.seine@contoso.example").is_some(), "the address on hover");
+    assert!(drawn_at(&hover(&mut st, annex_at.center()).shapes, "This isn't a room").is_some(), "the reason on hover");
+
+    // A click on the chip selects it and opens its card: Remove, and no Expand for a room.
     draw(&ctx, &mut st, &input, vec![Event::PointerMoved(chip), press(chip, true)]);
     draw(&ctx, &mut st, &input, vec![press(chip, false)]);
-    assert_eq!(st.card, Some(0));
+    assert_eq!((st.card, st.selected), (Some(0), Some(0)));
     let d = draw_in(&ctx, &mut st, &input, vec![], 600.0);
     assert!(drawn_at(&d.shapes, "Remove").is_some() && drawn_at(&d.shapes, "Expand").is_none());
     assert!(drawn_at(&d.shapes, "room.seine@contoso.example").is_some() && drawn_at(&d.shapes, "Room").is_some(), "the address and the kind");
+    let tree = d.out.accesskit_update.as_ref().expect("AccessKit is on");
+    let selected = tree.nodes.iter().find(|(_, n)| n.label() == Some("Salle Seine, Room, remove with Delete")).map(|(_, n)| n.toggled());
+    assert_eq!(selected, Some(Some(Toggled::True)), "a screen reader hears it's selected");
+    // Esc closes the card (the field kept the keyboard).
+    assert_eq!(draw(&ctx, &mut st, &input, vec![key(Key::Escape, Modifiers::NONE)]), vec![]);
+    assert_eq!(st.card, None);
+    assert!(ctx.memory(|m| m.has_focus(input_id(input.id))));
 
     // A list's card offers Expand when the account can, and it asks for the expansion.
     let list = Addressee::new("Design team", "design@contoso.example", AddresseeKind::DistributionList);
-    st.pieces[0] = Piece::Chip(list);
+    st.pieces[0] = Piece::chip(list);
+    st.card = Some(0);
     let d = draw_in(&ctx, &mut st, &input, vec![], 600.0);
-    assert!(drawn_at(&d.shapes, "Expand").is_none(), "no Expand without a directory");
+    assert!(drawn_at(&d.shapes, "Remove").is_some() && drawn_at(&d.shapes, "Expand").is_none(), "no Expand without a directory");
     let can = FieldInput { can_expand: true, ..field("rooms", &[]) };
     draw_in(&ctx, &mut st, &can, vec![], 600.0);
     let d = draw_in(&ctx, &mut st, &can, vec![], 600.0);
@@ -311,8 +351,74 @@ fn a_chip_is_a_named_widget_with_its_kind_and_a_refused_one_is_red() {
     seen.extend(draw(&ctx, &mut st, &can, vec![press(expand, false)]));
     assert_eq!(seen, vec![PeopleEvent::Expand(0)]);
     assert_eq!(st.card, None, "the card closes");
+    assert!(ctx.memory(|m| m.has_focus(input_id(input.id))), "the field keeps the keyboard");
     assert_eq!(kind_name(AddresseeKind::Unknown), "Address");
     assert_eq!(source_name(Source::Directory), "Directory (cached)");
+}
+
+/// A click on a suggestion or on its × keeps the keyboard in the field: no text closed, and what's
+/// typed next lands in the input.
+#[test]
+fn a_click_in_the_list_keeps_the_field_and_its_text() {
+    let ctx = egui::Context::default();
+    let two = [recent(person("Zoe Park", "zoe@studio.example")), recent(person("Zoey Lane", "zoey@studio.example"))];
+    let mut st = FieldState::default();
+    draw(&ctx, &mut st, &field("to", &two), vec![]);
+    let input = FieldInput { focus: false, ..field("to", &two) };
+    draw(&ctx, &mut st, &input, vec![Event::Text("zo".into())]);
+    draw(&ctx, &mut st, &input, vec![]);
+    let list = list_rect(&ctx).expect("the list shows");
+    let click = |st: &mut FieldState, at: egui::Pos2| {
+        let mut seen = draw(&ctx, st, &input, vec![Event::PointerMoved(at)]);
+        seen.extend(draw(&ctx, st, &input, vec![press(at, true)]));
+        seen.extend(draw(&ctx, st, &input, vec![press(at, false)]));
+        seen.extend(draw(&ctx, st, &input, vec![]));
+        seen
+    };
+    // The × at the end of the first row (a Recent one).
+    let x = egui::pos2(list.right() - 4.0 - 13.0, list.top() + 4.0 + 20.0);
+    assert_eq!(click(&mut st, x), vec![PeopleEvent::Forget("zoe@studio.example".into())]);
+    assert_eq!(st.input, "zo", "the text typed stays typed");
+    assert!(ctx.memory(|m| m.has_focus(input_id(input.id))), "the field keeps the keyboard");
+    assert_eq!(draw(&ctx, &mut st, &input, vec![Event::Text("e".into())]), vec![PeopleEvent::Changed]);
+    assert_eq!(st.input, "zoe");
+
+    // The second row taken with the mouse.
+    draw(&ctx, &mut st, &input, vec![]);
+    let list = list_rect(&ctx).expect("the list shows");
+    let row = egui::pos2(list.left() + 80.0, list.top() + 4.0 + 40.0 + 20.0);
+    assert_eq!(click(&mut st, row), vec![PeopleEvent::Take(1)]);
+    assert!(ctx.memory(|m| m.has_focus(input_id(input.id))), "the field keeps the keyboard");
+    draw(&ctx, &mut st, &input, vec![Event::Text("x".into())]);
+    assert_eq!(st.input, "x", "typed straight on");
+}
+
+/// The chips aren't Tab stops: Tab from the book button goes to the input, however many chips;
+/// Shift+Tab with the list open goes back without taking a suggestion.
+#[test]
+fn tab_from_the_book_button_lands_in_the_input() {
+    let ctx = egui::Context::default();
+    let one = [recent(person("Pat Pierce", "pat@studio.example"))];
+    let input = FieldInput { focus: false, ..field("to", &one) };
+    let chips = (0..30).map(|i| Piece::chip(person(&format!("Person {i}"), &format!("p{i}@studio.example")))).collect();
+    let mut st = FieldState { pieces: chips, ..Default::default() };
+    draw(&ctx, &mut st, &input, vec![]);
+    // Nothing has the focus: the first Tab gives it to the book button, the second to the input.
+    draw(&ctx, &mut st, &input, vec![key(Key::Tab, Modifiers::NONE)]);
+    draw(&ctx, &mut st, &input, vec![]);
+    assert!(ctx.memory(|m| m.focused().is_some() && !m.has_focus(input_id(input.id))), "the book button");
+    draw(&ctx, &mut st, &input, vec![key(Key::Tab, Modifiers::NONE)]);
+    draw(&ctx, &mut st, &input, vec![]);
+    assert!(ctx.memory(|m| m.has_focus(input_id(input.id))), "Tab went past every chip to the input");
+
+    draw(&ctx, &mut st, &input, vec![Event::Text("pa".into())]);
+    draw(&ctx, &mut st, &input, vec![]);
+    assert!(list_rect(&ctx).is_some());
+    let shift = Modifiers { shift: true, ..Modifiers::NONE };
+    let seen = draw(&ctx, &mut st, &input, vec![key(Key::Tab, shift)]);
+    assert!(!seen.iter().any(|e| matches!(e, PeopleEvent::Take(_))), "{seen:?}");
+    draw(&ctx, &mut st, &input, vec![]);
+    assert!(!ctx.memory(|m| m.has_focus(input_id(input.id))), "Shift+Tab went back");
 }
 
 /// The field's text is what Check Names writes: its entries joined by "; ", then "; " and what's
@@ -320,11 +426,15 @@ fn a_chip_is_a_named_widget_with_its_kind_and_a_refused_one_is_red() {
 #[test]
 fn text_of_round_trips_check_names_output() {
     let zoe = person("Zoe Park", "zoe@studio.example");
-    let pieces = [Piece::Chip(zoe), Piece::Text { text: "nobody here".into(), error: Some(PieceError::NotFound) }];
+    let pieces = [Piece::chip(zoe), Piece::Text { text: "nobody here".into(), error: Some(PieceError::NotFound) }];
     assert_eq!(text_of(&pieces, ""), "Zoe Park <zoe@studio.example>; nobody here; ");
     assert_eq!(text_of(&pieces, "ann"), "Zoe Park <zoe@studio.example>; nobody here; ann");
     assert_eq!(text_of(&[], "dup"), "dup");
     let mut group = Addressee::new("Dupont family", "", AddresseeKind::ContactGroup);
     group.item_id = "AAMk=".into();
-    assert_eq!(text_of(&[Piece::Chip(group)], ""), "Dupont family <group:AAMk=>; ");
+    assert_eq!(text_of(&[Piece::chip(group)], ""), "Dupont family <group:AAMk=>; ");
+    // A refused chip keeps its text: the place refuses it at OK or Send.
+    let annex =
+        Piece::Chip { who: Addressee::new("Studio Annex", "annex@contoso.example", AddresseeKind::Room), refused: Some("This isn't a room".into()) };
+    assert_eq!(text_of(&[annex], ""), "Studio Annex <annex@contoso.example>; ");
 }

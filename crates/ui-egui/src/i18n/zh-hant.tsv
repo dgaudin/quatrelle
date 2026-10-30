@@ -1808,5 +1808,6 @@ month	May	5月
 	The directory can't be reached	無法連線到目錄
 	Matched as typed	依輸入內容比對
 	{name}, {kind}, remove with Delete	{name}，{kind}，按 Delete 鍵移除
+	{name}, {kind}, {why}, remove with Delete	{name}，{kind}，{why}，按 Delete 鍵移除
 # A kind of entry in a contacts field: an e-mail address (the plain entry is a web address).
 kind	Address	地址

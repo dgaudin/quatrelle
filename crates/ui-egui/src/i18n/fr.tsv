@@ -1807,5 +1807,6 @@ month	May	mai
 	This list has no members	Cette liste n’a aucun membre
 	Not found: {name}	Introuvable : {name}
 	The directory can't be reached	L’annuaire est injoignable
-	Matched as typed	Recherché tel que tapé
+	Matched as typed	Comparé tel que saisi
 	{name}, {kind}, remove with Delete	{name}, {kind}, retirer avec Suppr
+	{name}, {kind}, {why}, remove with Delete	{name}, {kind}, {why}, retirer avec Suppr
