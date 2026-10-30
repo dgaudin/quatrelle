@@ -13,6 +13,8 @@ impl Session {
             | Event::HeldKeys { .. }
             | Event::DirectoryCertificates { .. }) => self.apply_smime(e),
             Event::DirectoryPeople { account, query, people, more, error } => self.apply_directory(account, query, people, more, error),
+            // Nothing asks for a list's members yet: the contacts field will.
+            Event::ListExpanded { .. } => {}
             Event::Status { account, status } => {
                 // Show more ended (with nothing new, or failing): its footer can be asked again.
                 if !matches!(status, SyncStatus::Syncing { .. } | SyncStatus::Connecting)

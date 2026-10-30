@@ -1,7 +1,7 @@
 //! What the network layer reports back to the engine.
 
 use super::*;
-use crate::EmailAddress;
+use crate::Addressee;
 
 /// What the network layer reports back.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -249,8 +249,20 @@ pub enum Event {
     DirectoryPeople {
         account: String,
         query: String,
-        people: Vec<EmailAddress>,
+        people: Vec<Addressee>,
         more: bool,
+        error: Option<String>,
+    },
+    /// The members of the list [`Job::ExpandList`] asked about (its `address` or `item_id`, as
+    /// asked), each with its kind (a list in it stays a list); `more` when the server gave only
+    /// part of them, `total` how many it says the list has; or why it couldn't be asked.
+    ListExpanded {
+        account: String,
+        address: String,
+        item_id: Option<String>,
+        members: Vec<Addressee>,
+        more: bool,
+        total: usize,
         error: Option<String>,
     },
     /// What [`Job::ImportIdentity`] kept: the certificate that signs and encrypts and its issuers

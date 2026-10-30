@@ -8,7 +8,7 @@ mod contacts;
 pub(crate) use contacts::Contacts;
 mod directory;
 pub(crate) use directory::{Directory, bare_name, directory_key};
-pub use directory::{DirectoryAnswer, fill_name};
+pub use directory::{DirectoryAnswer, directory_people, fill_name};
 mod folder_edits;
 mod mailbox_settings;
 pub use mailbox_settings::{FolderSizes, Sizes};
