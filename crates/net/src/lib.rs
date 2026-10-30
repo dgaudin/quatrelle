@@ -21,7 +21,10 @@ mod data_files;
 pub mod dns;
 mod exchange;
 #[cfg(any(test, feature = "fakes"))]
-#[allow(dead_code, unused_imports, clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+// Test servers: `cfg(any(…))` hides from clippy that they are test code, hence its allows. Built
+// for other crates' tests, only the Teams sample is used: the rest isn't dead in net's own.
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+#[cfg_attr(not(test), allow(dead_code, unused_imports))]
 mod fakes;
 pub mod http;
 pub mod llm;
