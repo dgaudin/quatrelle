@@ -28,7 +28,7 @@ pub use thread::voting;
 
 use serde::{Deserialize, Serialize};
 
-pub use addr::EmailAddress;
+pub use addr::{Addressee, AddresseeKind, EmailAddress};
 pub use job::{
     Event, FOLLOWED_PUBLIC_DOC, FolderSize, HeldKey, Job, MailboxQuota, Op, PUBLIC_FOLDERS, Private, Revocation, Secret, SyncStatus, is_public_folder,
 };

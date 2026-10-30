@@ -32,7 +32,7 @@ pub struct Contact {
 const SAVED_WEIGHT: f64 = 32.0;
 
 impl Contact {
-    fn score(&self, now: i64) -> f64 {
+    pub fn score(&self, now: i64) -> f64 {
         let counted = 4.0 * f64::from(self.sent) + f64::from(self.received);
         // Someone saved in Contacts doesn't fade with time.
         if self.saved {
