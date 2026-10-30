@@ -194,6 +194,14 @@ pub trait Services {
     fn open_url(&mut self, _url: &str) -> Result<(), String> {
         Err("not available".into())
     }
+    /// The Chromium-family browsers installed, for meetings: (the name shown, the program).
+    fn browsers(&mut self) -> Vec<(String, String)> {
+        Vec::new()
+    }
+    /// Open a web address in a browser `program` as an app window of its own. The default can't.
+    fn open_app_window(&mut self, _program: &str, _url: &str) -> Result<(), String> {
+        Err("not available".into())
+    }
     /// Open a message (its key) in a browser window of its own, as web mail does; `false` when windows are
     /// windows here.
     fn open_message_window(&mut self, _key: &str) -> bool {
