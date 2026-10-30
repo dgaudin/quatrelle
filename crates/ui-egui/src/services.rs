@@ -49,6 +49,17 @@ pub struct TrayIcon {
     pub quit: String,
 }
 
+/// A profile of a meeting browser ([`Services::browser_profiles`]): each keeps its own sign-ins.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct BrowserProfile {
+    /// Its folder in the browser's data (`Default`, `Profile 1`…): what the browser is told.
+    pub dir: String,
+    /// The name the browser shows for it.
+    pub name: String,
+    /// The Google account signed in to it (empty: none).
+    pub account: String,
+}
+
 /// What was done with the icon in the notification area ([`Services::take_tray_action`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TrayAction {
@@ -196,6 +207,11 @@ pub trait Services {
     }
     /// The Chromium-family browsers installed, for meetings: (the name shown, the program).
     fn browsers(&mut self) -> Vec<(String, String)> {
+        Vec::new()
+    }
+    /// The profiles of the browser `program` (one of [`Self::browsers`]), as it lists them. The
+    /// default has none.
+    fn browser_profiles(&mut self, _program: &str) -> Vec<BrowserProfile> {
         Vec::new()
     }
     /// Open a web address in a browser `program` as an app window of its own. The default can't.
