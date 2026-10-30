@@ -17,6 +17,7 @@ mod listening;
 mod mailbox;
 mod scheduling;
 mod tasks;
+mod text_first;
 mod trust;
 
 fn until(pool: &crate::worker::Pool, what: &str, mut f: impl FnMut(&Event) -> bool) -> Vec<Event> {

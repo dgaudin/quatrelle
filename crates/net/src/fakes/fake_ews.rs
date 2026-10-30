@@ -51,6 +51,8 @@ pub struct It {
     pub vote: String,
     /// Its categories, by name (`item:Categories`).
     pub categories: Vec<String>,
+    /// `item:ItemClass`.
+    pub class: String,
 }
 
 pub struct Data {
@@ -107,14 +109,16 @@ pub struct Data {
     /// Appointments `GetItem` refuses (`ErrorAccessDenied`), by id: a colleague's occurrences
     /// Exchange wouldn't give, though their series came.
     pub refused: Vec<String>,
-    /// How each `GetItem` asked for its items: `AllProperties`, `IdOnly`, or `fields` (an
-    /// appointment's fields named, `IdOnly` with them).
+    /// How each `GetItem` asked for its items: `AllProperties`, `IdOnly`, `fields` (an
+    /// appointment's fields named, `IdOnly` with them), or `MimeContent` (their whole sources).
     pub item_shapes: Vec<String>,
     /// Refuse a `GetItem` naming an appointment's fields, as a server whose schema doesn't know
     /// one of them does: the whole request (a SOAP fault, `ErrorSchemaValidation`), or (`each`)
     /// every item of it (`ErrorInvalidPropertyRequest`).
     pub refuse_fields: bool,
     pub refuse_fields_each: bool,
+    /// Refuse a `GetItem` naming `item:Body` as a whole, the way `refuse_fields` does.
+    pub refuse_text: bool,
     /// The public folder mailbox holding the public folders' content (Exchange 2013 and
     /// later): reading inside them is only answered when routed there.
     pub pf_mailbox: Option<String>,
@@ -279,6 +283,7 @@ impl Default for Data {
             item_shapes: Vec::new(),
             refuse_fields: false,
             refuse_fields_each: false,
+            refuse_text: false,
             pf_mailbox: None,
             pf_hierarchy: None,
             rules: Vec::new(),
@@ -407,6 +412,7 @@ impl Data {
             voting: Vec::new(),
             vote: String::new(),
             categories: Vec::new(),
+            class: "IPM.Note".into(),
         });
         id
     }
@@ -517,7 +523,9 @@ impl Data {
         self.pf_mailbox.as_ref().is_some_and(|m| *m != self.routed) && self.public_ids().iter().any(|p| p == folder)
     }
 
-    fn item_xml(&self, it: &It, mime_content: bool) -> String {
+    /// An item as an answer has it: with its whole source when `mime_content`, with its text and
+    /// the list of its files when `text` (`item:Body` asked for).
+    fn item_xml(&self, it: &It, mime_content: bool, text: bool) -> String {
         let p = quatrelle_mime::parse(&it.raw).unwrap_or_default();
         let mb = |a: &quatrelle_model::EmailAddress| {
             format!(
@@ -536,11 +544,15 @@ impl Data {
             x.push_str(&format!("<t:MimeContent CharacterSet=\"UTF-8\">{}</t:MimeContent>", crate::imap::base64(&it.raw)));
         }
         x.push_str(&format!(
-            "<t:Subject>{}</t:Subject><t:DateTimeReceived>{}</t:DateTimeReceived><t:Size>{}</t:Size><t:HasAttachments>false</t:HasAttachments>",
+            "<t:Subject>{}</t:Subject><t:DateTimeReceived>{}</t:DateTimeReceived><t:Size>{}</t:Size><t:HasAttachments>{}</t:HasAttachments>",
             esc(&p.subject),
             it.received,
-            it.raw.len()
+            it.raw.len(),
+            !p.attachments.is_empty()
         ));
+        if text {
+            x.push_str(&text_fields(it, &p));
+        }
         if it.flagged {
             x.push_str(&ext("0x1090", 2));
         }
@@ -671,12 +683,14 @@ fn xml(e: &El) -> String {
 }
 
 mod directory;
+mod fields;
 mod route;
 mod server;
 mod streaming;
 mod syncing;
 mod tasks;
 
+use fields::{MICROSOFT_FIELDS, fields_named, text_fields};
 pub use server::serve;
 
 #[cfg(test)]

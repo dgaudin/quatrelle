@@ -287,7 +287,7 @@ impl Data {
                     .take(max)
                     .map(|i| {
                         if with_fields {
-                            let mut x = self.item_xml(i, false);
+                            let mut x = self.item_xml(i, false, false);
                             if with_parent {
                                 x = x.replace("</t:Message>", &format!("<t:ParentFolderId Id=\"{}\"/></t:Message>", i.folder));
                             }
@@ -313,6 +313,7 @@ impl Data {
             }
             "GetItem" => {
                 let mime = op.find("IncludeMimeContent").is_some_and(|m| m.text == "true");
+                let text = super::fields_named(op).contains(&"item:Body");
                 // An occurrence of a series by its place in it: its own item, made on demand.
                 let occurrences: Vec<(String, usize)> = op
                     .child("ItemIds")
@@ -378,7 +379,7 @@ impl Data {
                     match self.items.iter().find(|i| i.id == id) {
                         Some(i) if self.unrouted(&i.folder) => out.push(err("ErrorItemNotFound")),
                         Some(i) if mime && self.unreadable.contains(&i.id) => out.push(err("ErrorInternalServerError")),
-                        Some(i) => out.push(ok(format!("<m:Items>{}</m:Items>", self.item_xml(i, mime)))),
+                        Some(i) => out.push(ok(format!("<m:Items>{}</m:Items>", self.item_xml(i, mime, text)))),
                         None => out.push(err("ErrorItemNotFound")),
                     }
                 }
@@ -447,6 +448,7 @@ impl Data {
                             voting: Vec::new(),
                             vote: String::new(),
                             categories: Vec::new(),
+                            class: "IPM.Note".into(),
                         });
                         out.push(ok(format!("<m:Items><t:Message><t:ItemId Id=\"{id}\" ChangeKey=\"ck\"/></t:Message></m:Items>")));
                         continue;
@@ -486,6 +488,7 @@ impl Data {
                         voting: verbs,
                         vote: String::new(),
                         categories: Vec::new(),
+                        class: "IPM.Note".into(),
                     });
                     out.push(ok(if send { String::new() } else { format!("<m:Items><t:Message><t:ItemId Id=\"{id}\"/></t:Message></m:Items>") }));
                 }
