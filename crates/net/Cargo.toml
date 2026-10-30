@@ -50,6 +50,10 @@ thiserror = { workspace = true }
 # The system's DNS resolvers (account autoconfiguration).
 ipconfig = "0.3"
 
+[features]
+# The fake Graph server, for other crates' tests (`teams_sample`): a dev-dependency only.
+fakes = []
+
 [dev-dependencies]
 # The S/MIME round trip reads the test certificates (PEM).
 der = { version = "0.7", features = ["pem"] }

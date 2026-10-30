@@ -20,3 +20,7 @@ quatrelle-net = { workspace = true }
 serde_json = { workspace = true }
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 iana-time-zone = "0.1"
+
+[dev-dependencies]
+# The fake Graph server, for `teams check`'s test.
+quatrelle-net = { workspace = true, features = ["fakes"] }

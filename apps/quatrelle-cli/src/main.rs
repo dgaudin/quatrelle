@@ -17,6 +17,9 @@
 //!   commands                       every engine command, as JSON
 //!   run ID [JSON]                  run an engine command against the cache (its changes
 //!                                  to mail go to the server with the next `sync`)
+//!   teams check [--client ID] [--tenant ID] [--write CHAT] [--hour] [--call CHAT]
+//!                                  sign in to Microsoft 365 and check what Graph gives of
+//!                                  Teams chats: numbers only (docs/teams.md)
 //!   --version                      print the version
 //! ```
 //!
@@ -36,6 +39,8 @@ use quatrelle_engine::model::{Event, Job, SyncStatus};
 use quatrelle_engine::store::Store;
 use quatrelle_net::worker::{MemoryCredentials, Pool};
 use serde_json::{Value, json};
+
+mod teams;
 
 // Output that a closed pipe can't turn into a panic (`quatrelle-cli list | head` closes it
 // early; `println!` panicked there).
@@ -183,6 +188,12 @@ fn run() -> Result<(), String> {
         return Ok(());
     }
     let args = Args { rest: raw };
+    // Teams' check touches no data folder: nothing of it is written to disk.
+    if args.positional(0).as_deref() == Some("teams")
+        && let Some(at) = args.rest.iter().position(|a| a == "teams")
+    {
+        return teams::run(args.rest.get(at + 1..).unwrap_or_default());
+    }
     let root =
         args.opt("--data").map(std::path::PathBuf::from).or_else(quatrelle_engine::store::default_root).ok_or("no data folder: pass --data DIR")?;
     // The same data files as the app: in Documents\Quatrelle Files (or where they were moved),

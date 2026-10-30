@@ -20,7 +20,8 @@ pub mod autoconfig;
 mod data_files;
 pub mod dns;
 mod exchange;
-#[cfg(test)]
+#[cfg(any(test, feature = "fakes"))]
+#[allow(dead_code, unused_imports, clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 mod fakes;
 pub mod http;
 pub mod llm;
@@ -51,6 +52,8 @@ use data_files::pst_pim;
 pub use data_files::{pst, pst_export};
 use exchange::ews_pim;
 pub use exchange::{ews, graph, graph_pim, ntlm};
+#[cfg(feature = "fakes")]
+pub use fakes::{TeamsSample, teams_sample};
 #[cfg(test)]
 use fakes::{fake, fake_graph};
 pub use protocols::{dav, imap, jmap, pop, sieve, smtp, web_calendar};
