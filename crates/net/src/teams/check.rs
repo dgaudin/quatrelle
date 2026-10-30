@@ -61,7 +61,8 @@ pub struct CheckOptions {
 /// Run the check, saying what it finds one line at a time. Refusals are said and the check goes
 /// on; it fails only when the token is refused from the start.
 pub fn run_check(client: &TeamsClient, me: &Me, opts: &CheckOptions, say: &mut dyn FnMut(&str)) -> Result<()> {
-    let mut ck = Check { client, me, opts, say, seen: None };
+    let started = client.server_time().and_then(|s| s.checked_mul(1000));
+    let mut ck = Check { client, me, opts, say, seen: None, started, sent: Vec::new() };
     let listed = ck.chats()?;
     let tally = ck.newest_messages(listed.newest.as_deref());
     ck.reactions_and_files(&tally);
@@ -83,6 +84,10 @@ struct Check<'a> {
     say: &'a mut dyn FnMut(&str),
     /// The newest time Graph wrote in what was read (milliseconds), for want of its `Date`.
     seen: Option<i64>,
+    /// Graph's clock when the check began (milliseconds), by its `Date`.
+    started: Option<i64>,
+    /// The test messages posted (their ids).
+    sent: Vec<String>,
 }
 
 /// What the chat list gave.
@@ -271,9 +276,10 @@ impl Tally {
 /// 5. The writes, on the chat the owner named.
 impl Check<'_> {
     fn write(&mut self, chat: &str, listed_tenant: Option<String>) {
-        // Sent and not yet deleted, and sent without an id to delete it by.
+        // Sent and not yet deleted; and sends whose outcome isn't known (made or not, no id).
         let mut left: Vec<String> = Vec::new();
         let mut lost = 0usize;
+        let since = self.started.or(self.seen);
         let first = self.send(chat, FIRST, "(1/2)", &mut left, &mut lost);
         match &first {
             Some((id, at)) => {
@@ -316,8 +322,46 @@ impl Check<'_> {
         self.pace();
         self.mark_read(chat, listed_tenant);
         // Whatever failed above, nothing of the check stays in the chat.
-        left.retain(|id| self.client.soft_delete(chat, id, Some(&self.me.id)).is_err() && self.client.soft_delete(chat, id, None).is_err());
-        self.say(format!("write, test messages left undeleted: {}", left.len() + lost));
+        let known = std::mem::take(&mut self.sent);
+        left.retain(|id| !self.delete(chat, id));
+        let mut undeleted = left.len();
+        if lost > 0 {
+            match self.sweep(chat, since, &known) {
+                Ok((swept, failed)) => {
+                    self.say(format!("write, stray test messages swept: {swept}"));
+                    undeleted += failed;
+                }
+                Err(why) => {
+                    self.say(format!("write, stray test messages swept: no ({why})"));
+                    undeleted += lost;
+                }
+            }
+        }
+        self.say(format!("write, test messages left undeleted: {undeleted}"));
+    }
+
+    /// Soft-delete a message of the check's, by `/users/{oid}` and else by `/me`: whether it is.
+    fn delete(&self, chat: &str, id: &str) -> bool {
+        self.client.soft_delete(chat, id, Some(&self.me.id)).is_ok() || self.client.soft_delete(chat, id, None).is_ok()
+    }
+
+    /// After a send whose outcome isn't known: the chat's newest messages that are the check's
+    /// own (from the signed-in user, with one of its texts, made since the check began), deleted.
+    /// How many were, and how many couldn't be.
+    fn sweep(&mut self, chat: &str, since: Option<i64>, known: &[String]) -> std::result::Result<(usize, usize), String> {
+        let since = since.ok_or_else(|| "no server time".to_string())?;
+        let page = self.client.messages(chat, Range::After(&rfc3339(since.saturating_sub(1000))), None).map_err(|e| why(&e))?;
+        let ours = |m: &&Value| {
+            let text = m.pointer("/body/content").and_then(Value::as_str).unwrap_or_default().trim();
+            let text = text.strip_prefix("<p>").and_then(|t| t.strip_suffix("</p>")).unwrap_or(text);
+            m.pointer("/from/user/id").and_then(Value::as_str) == Some(self.me.id.as_str())
+                && [FIRST, EDITED, SECOND].contains(&text)
+                && m.get("deletedDateTime").is_none_or(Value::is_null)
+                && m.get("createdDateTime").and_then(Value::as_str).and_then(ms_of).is_some_and(|t| t >= since)
+        };
+        let stray: Vec<String> = page.items.iter().filter(ours).filter_map(id_of).filter(|id| !known.contains(id)).collect();
+        let swept = stray.iter().filter(|id| self.delete(chat, id)).count();
+        Ok((swept, stray.len().saturating_sub(swept)))
     }
 
     /// Post a test message: its id and change time, noted in `left` until it is deleted.
@@ -330,11 +374,15 @@ impl Check<'_> {
                     return None;
                 };
                 left.push(id.clone());
+                self.sent.push(id.clone());
                 let at = ["lastModifiedDateTime", "createdDateTime"].iter().find_map(|k| m.get(*k).and_then(Value::as_str).and_then(ms_of));
                 Some((id, at))
             }
             Err(e) => {
                 self.say(format!("write, send {which}: no ({})", why(&e)));
+                if uncertain(&e) {
+                    *lost += 1;
+                }
                 None
             }
         }
@@ -535,6 +583,17 @@ fn why(e: &NetError) -> String {
         _ => "unexpected answer",
     }
     .into()
+}
+
+/// Whether a post that failed may have been made all the same: anything but a refusal said
+/// before acting (a 4xx, a 429 after its waits, a refused sign-in, a refusal before sending).
+fn uncertain(e: &NetError) -> bool {
+    match e {
+        NetError::Auth(_) | NetError::Refused(_) => false,
+        NetError::Protocol(m) => !m.starts_with("HTTP 4"),
+        NetError::Closed(m) => !m.starts_with("HTTP 429"),
+        _ => true,
+    }
 }
 
 /// An item's `id`, when it is a plausible one.
