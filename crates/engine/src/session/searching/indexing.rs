@@ -47,9 +47,35 @@ impl SearchIndex {
     }
 
     /// Whether more is left to do: folders to read, folders to top up, or messages the answer
-    /// looks at again.
+    /// hasn't looked at yet.
     pub(super) fn pending(&self) -> bool {
-        !self.done || !self.stale.is_empty() || self.answer.as_ref().is_some_and(|a| !a.again.is_empty())
+        !self.done
+            || !self.stale.is_empty()
+            || self.answer.as_ref().is_some_and(|a| a.checked < self.total() || !a.again.is_empty() || !a.todo.is_empty())
+    }
+
+    /// The candidates for a query numbered within `docs`: the index's, then the folder being
+    /// read's after them.
+    pub(super) fn candidates_in(&self, query: &Query, docs: Range<u32>) -> Vec<u32> {
+        let offset = u32::try_from(self.keys.len()).unwrap_or(u32::MAX);
+        let mut out: Vec<u32> = self.index.candidates_in(query, docs.start..docs.end.min(offset)).into_iter().collect();
+        if let Some(b) = &self.building
+            && docs.end > offset
+        {
+            let inside = docs.start.saturating_sub(offset)..docs.end - offset;
+            out.extend(b.index.candidates_in(query, inside).into_iter().map(|d| d.saturating_add(offset)));
+        }
+        out
+    }
+
+    /// Where a folder's messages are in the index (the folder being read's too).
+    fn docs_of(&self, k: &(String, String)) -> Vec<Range<u32>> {
+        let mut out: Vec<Range<u32>> = self.ranges.get(k).cloned().unwrap_or_default();
+        if self.building.is_some() && self.scan.get(self.folder) == Some(k) {
+            let offset = u32::try_from(self.keys.len()).unwrap_or(u32::MAX);
+            out.push(offset..self.total());
+        }
+        out
     }
 
     /// The message an index number stands for (the folder being read numbered after the index),
@@ -81,8 +107,16 @@ impl SearchIndex {
     }
 
     /// A folder's list changed: one read already is topped up (`words`: messages came or went;
-    /// otherwise only their flags did), and the answer looks again at what it found there.
-    pub(crate) fn changed(&mut self, account: &str, folder: &str, words: bool) {
+    /// otherwise only their flags did), and the answer looks again at what it found there and at
+    /// the messages that changed (`keys`, when known; otherwise all the folder's): one marked
+    /// unread, flagged or filed in a category answers `is:unread` or `category:` now with no word
+    /// of it changed.
+    ///
+    /// A message whose words change under the same key keeps its old words in the index until
+    /// its folder is read again (the next run: its stamp no longer matches). Exchange and IMAP
+    /// never change a summary's text in place (previews are worked out apart, in
+    /// `Session::previews`); a draft edited and synced is the case that waits.
+    pub(crate) fn changed(&mut self, account: &str, folder: &str, words: bool, keys: Option<&[MessageKey]>) {
         let k = (account.to_string(), folder.to_string());
         if words
             && let Some(n) = self.scan.iter().position(|f| *f == k)
@@ -92,8 +126,30 @@ impl SearchIndex {
         {
             self.stale.push(k.clone());
         }
+        if self.answer.is_none() {
+            return;
+        }
+        let ranges = self.docs_of(&k);
+        let again: Vec<Range<u32>> = match keys {
+            None => ranges,
+            Some(keys) => {
+                let wanted: HashSet<(u32, u32)> =
+                    keys.iter().filter(|m| m.account == account && m.folder == folder).map(|m| (m.validity, m.uid)).collect();
+                if wanted.is_empty() {
+                    Vec::new()
+                } else {
+                    ranges
+                        .into_iter()
+                        .flatten()
+                        .filter(|&d| self.doc(d).is_some_and(|(m, _)| wanted.contains(&(m.validity, m.uid))))
+                        .map(|d| d..d.saturating_add(1))
+                        .collect()
+                }
+            }
+        };
         if let Some(a) = self.answer.as_mut() {
             a.recheck.insert(k);
+            a.again.extend(again);
         }
     }
 

@@ -33,6 +33,7 @@ impl Session {
         }
         touched.sort();
         touched.dedup();
+        let keys: Vec<MessageKey> = op.keys().to_vec();
         self.apply_op_memory(account, &op);
         if local {
             self.apply_op_local(account, &op);
@@ -43,7 +44,7 @@ impl Session {
             self.rescope_index();
         } else if let Some(ix) = self.index.as_mut() {
             for f in &touched {
-                ix.changed(account, f, words_change);
+                ix.changed(account, f, words_change, Some(&keys));
             }
         }
         self.refresh_list();

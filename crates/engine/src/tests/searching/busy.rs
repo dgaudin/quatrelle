@@ -328,3 +328,49 @@ fn slices_cost_the_same_from_first_to_last() {
     assert!(last <= 2.0 * first.max(0.5), "slices get slower: {first:.2} ms then {last:.2} ms");
     done(s);
 }
+
+/// Every message of a busy mailbox read, but the needles: `is:unread` finds them.
+fn read_but_needles(store: &Store, folders: usize) {
+    for i in 0..folders {
+        let mut st = store.load_folder("a1", &folder_path(i)).unwrap();
+        for m in &mut st.messages {
+            m.flags.seen = !m.subject.starts_with("needle");
+        }
+        store.save_folder("a1", &folder_path(i), &st).unwrap();
+    }
+}
+
+/// A message that comes to answer the search without a word of it changing (marked unread
+/// here, or on the server and synced) is found, under the same query; one marked read goes.
+#[test]
+fn a_message_marked_unread_answers_is_unread() {
+    let store = busy_store("busy-unread", 6, 1200);
+    read_but_needles(&store, 6);
+    let mut s = open(&store);
+    assert!(drive(&mut s, "is:unread", 100, |_, _| {}).is_some());
+    assert_eq!(s.list.len(), 6 * 12);
+    // Here: a message of the Inbox, read and indexed already, marked unread.
+    let here = MessageKey { account: "a1".into(), folder: folder_path(0), validity: 1, uid: 5 };
+    s.apply_op("a1", Op::SetFlag { keys: vec![here.clone()], flag: Flag::Seen, on: false });
+    // On the server: one of another folder, synced.
+    let there = MessageKey { account: "a1".into(), folder: folder_path(3), validity: 1, uid: 7 };
+    let mut st = store.load_folder("a1", &there.folder).unwrap();
+    st.messages.iter_mut().filter(|m| m.key == there).for_each(|m| m.flags.seen = false);
+    store.save_folder("a1", &there.folder, &st).unwrap();
+    s.apply(Event::FolderChanged { account: "a1".into(), folder: there.folder.clone() });
+    // And a needle marked read.
+    let read = MessageKey { account: "a1".into(), folder: folder_path(1), validity: 1, uid: 100 };
+    s.apply_op("a1", Op::SetFlag { keys: vec![read.clone()], flag: Flag::Seen, on: true });
+    assert!(drive(&mut s, "is:unread", 100, |_, _| {}).is_some());
+    let found = listed(&s);
+    assert!(found.contains(&here), "marked unread here: found");
+    assert!(found.contains(&there), "marked unread on the server: found");
+    assert!(!found.contains(&read), "marked read: gone");
+    assert_eq!(found.len(), 6 * 12 + 1);
+    // A whole search in the same session answers the same as one in a new session.
+    s.run_search("is:unread", SearchScope::Mailbox);
+    let mut fresh = open(&store);
+    fresh.run_search("is:unread", SearchScope::Mailbox);
+    assert_eq!(listed(&s), listed(&fresh));
+    done(s);
+}
