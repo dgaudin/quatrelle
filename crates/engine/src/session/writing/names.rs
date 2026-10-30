@@ -101,6 +101,7 @@ impl Settled {
 }
 
 /// What one entry of a field came to, and how it's written and counted.
+#[derive(Clone)]
 enum Step {
     /// Found, and written out.
     Written(Addressee),
@@ -165,6 +166,7 @@ impl Session {
     /// The people here a name fits: by name, or the start of an address, among the contacts,
     /// the people written to or heard from, and the user's own addresses.
     fn local_names(&mut self, token: &str) -> Vec<EmailAddress> {
+        self.people.lookups = self.people.lookups.saturating_add(1);
         let lower = token.to_lowercase();
         let fits = |a: &EmailAddress| a.name.to_lowercase().contains(&lower) || a.email.to_lowercase().starts_with(&lower);
         let mut out: Vec<EmailAddress> = self.suggest_contacts(token, 10).into_iter().map(|c| c.address).filter(|a| fits(a)).collect();
@@ -265,8 +267,18 @@ impl Session {
         let rooms_of = directory.clone().or_else(|| account.map(str::to_string));
         let (mut r, mut not_found) = (Resolved::default(), false);
         let mut parts: Vec<String> = Vec::new();
+        // A name typed again in the field is looked up once.
+        let mut seen: HashMap<&str, Step> = HashMap::new();
         for (i, token) in split_entries(&typed).into_iter().enumerate() {
-            let step = if i < MAX_NAMES { self.resolve_entry(field, token, directory.as_deref(), rooms_of.as_deref(), kinds) } else { Step::Past };
+            let step = match seen.get(token) {
+                _ if i >= MAX_NAMES => Step::Past,
+                Some(step) => step.clone(),
+                None => {
+                    let step = self.resolve_entry(field, token, directory.as_deref(), rooms_of.as_deref(), kinds);
+                    seen.insert(token, step.clone());
+                    step
+                }
+            };
             let outcome = match step {
                 Step::Written(who) => {
                     parts.push(who.text());

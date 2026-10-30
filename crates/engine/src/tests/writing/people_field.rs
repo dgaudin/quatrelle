@@ -564,3 +564,15 @@ fn one_name_in_two_fields_is_asked_once_and_settled_in_each() {
     assert!(asked(&mut s).is_empty());
     done(s);
 }
+
+/// A name typed several times in a field is looked up once.
+#[test]
+fn a_name_repeated_in_a_field_is_looked_up_once() {
+    let mut s = sample_session("repeated-name");
+    let before = s.people.lookups;
+    let r = s.people_resolve(FieldId { window: 1, name: "cli" }, None, &Accepts::RECIPIENTS, Some("zoe; zoe; zoe")).unwrap();
+    assert_eq!(r.text, "Zoe Park <zoe@studio.example>; Zoe Park <zoe@studio.example>; Zoe Park <zoe@studio.example>; ");
+    assert_eq!(r.resolved, 3);
+    assert_eq!(s.people.lookups - before, 1);
+    done(s);
+}
