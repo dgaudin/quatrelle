@@ -1809,3 +1809,4 @@ month	May	Mai
 	The directory can't be reached	Das Verzeichnis ist nicht erreichbar
 	Matched as typed	Wie eingegeben verglichen
 	{name}, {kind}, remove with Delete	{name}, {kind}, mit Entf entfernen
+	{name}, {kind}, {why}, remove with Delete	{name}, {kind}, {why}, mit Entf entfernen

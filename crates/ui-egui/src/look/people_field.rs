@@ -9,7 +9,7 @@
 //! changes the input and its own view of the field (the list, the selection, the card); the
 //! pieces are the glue's to change, from the events.
 
-use egui::{EventFilter, Id, Key, KeyboardShortcut, Modifiers, Ui, vec2};
+use egui::{EventFilter, FocusDirection, Id, Key, KeyboardShortcut, Modifiers, Ui, vec2};
 use quatrelle_engine::model::addr::{Accepts, Addressee, AddresseeKind};
 use quatrelle_engine::{Source, Suggestion};
 
@@ -36,15 +36,28 @@ pub enum PieceError {
     NotFound,
     /// The directory couldn't be asked (offline, unreachable).
     Unreached,
-    /// The place doesn't take what it is; the reason, translated.
-    Refused(String),
 }
 
 /// One entry of the field: a chip, or text not (yet) recognised.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Piece {
-    Chip(Addressee),
-    Text { text: String, error: Option<PieceError> },
+    /// Someone or something recognised; `refused` is why the place doesn't take what it is
+    /// (translated), drawn as a red chip that blocks OK or Send until it's removed.
+    Chip {
+        who: Addressee,
+        refused: Option<String>,
+    },
+    Text {
+        text: String,
+        error: Option<PieceError>,
+    },
+}
+
+impl Piece {
+    /// A chip the place takes.
+    pub fn chip(who: Addressee) -> Piece {
+        Piece::Chip { who, refused: None }
+    }
 }
 
 /// A field's state between frames.
@@ -164,7 +177,6 @@ pub fn error_text(text: &str, error: &PieceError) -> String {
         PieceError::NotAnAddress => tf!("Not an address: {what}", what = text),
         PieceError::NotFound => tf!("Not found: {name}", name = text),
         PieceError::Unreached => tl!("The directory can't be reached").to_string(),
-        PieceError::Refused(why) => why.clone(),
     }
 }
 
@@ -174,7 +186,7 @@ pub fn text_of(pieces: &[Piece], input: &str) -> String {
     let mut out = String::new();
     for p in pieces {
         match p {
-            Piece::Chip(a) => out.push_str(&a.text()),
+            Piece::Chip { who, .. } => out.push_str(&who.text()),
             Piece::Text { text, .. } => out.push_str(text),
         }
         out.push_str("; ");
@@ -187,8 +199,8 @@ pub fn text_of(pieces: &[Piece], input: &str) -> String {
 /// reference means nothing outside Quatrelle).
 fn copy_text(p: &Piece) -> String {
     match p {
-        Piece::Chip(a) if a.kind == AddresseeKind::ContactGroup && a.address.is_empty() => a.display().to_string(),
-        Piece::Chip(a) => a.text(),
+        Piece::Chip { who, .. } if who.kind == AddresseeKind::ContactGroup && who.address.is_empty() => who.display().to_string(),
+        Piece::Chip { who, .. } => who.text(),
         Piece::Text { text, .. } => text.clone(),
     }
 }
@@ -243,10 +255,11 @@ pub fn people_field(ui: &mut Ui, t: &Tokens, st: &mut FieldState, input: &FieldI
     let typed_from = st.input.clone();
     let mut laid = None;
     ui.horizontal_top(|ui| {
-        if crate::widgets::field_button(ui, t, input.label, true, false).clicked() {
+        let book = crate::widgets::field_button(ui, t, input.label, true, false);
+        if book.clicked() {
             ev.push(PeopleEvent::OpenBook);
         }
-        laid = Some(ui.vertical(|ui| chips::body(ui, t, st, input, edit)).inner);
+        laid = Some(ui.vertical(|ui| chips::body(ui, t, st, input, edit, book.id)).inner);
     });
     let Some(laid) = laid else { return ev };
     refocus |= laid.refocus;
@@ -266,10 +279,19 @@ pub fn people_field(ui: &mut Ui, t: &Tokens, st: &mut FieldState, input: &FieldI
         }
     }
     on_popup |= card::show(ui, t, st, input, &laid.rects, &mut ev);
-    refocus |= on_popup;
+    // egui takes the focus from the input when a click ends elsewhere, so a press on the list or
+    // the card holds the field until the click is over: the input keeps the keyboard and its text.
+    let hold = input.id.with("people-held");
+    let held = ui.data(|d| d.get_temp::<bool>(hold)).unwrap_or(false);
+    let clicking = ui.input(|i| i.pointer.any_down() || i.pointer.any_released());
+    ui.data_mut(|d| d.insert_temp(hold, on_popup || (held && clicking)));
+    refocus |= on_popup || held;
 
-    // Leaving the input with text in it closes the text (it's checked as the field is left).
-    if !refocus && laid.edit.lost_focus() && !st.input.trim().is_empty() {
+    // Leaving the field lets go of its card and selection, and closes the text left in the input
+    // (it's checked as the field is left).
+    if !refocus && laid.edit.lost_focus() {
+        st.card = None;
+        st.selected = None;
         let text = closed(&st.input);
         st.input.clear();
         st.open = false;
@@ -277,7 +299,7 @@ pub fn people_field(ui: &mut Ui, t: &Tokens, st: &mut FieldState, input: &FieldI
             ev.push(PeopleEvent::Closed(text));
         }
     }
-    if refocus {
+    if refocus && !ui.memory(|m| m.has_focus(edit)) {
         ui.memory_mut(|m| m.request_focus(edit));
     }
     // While the list, a card or a selection is up, Tab and Esc are the field's (taking, closing),
@@ -301,6 +323,7 @@ pub fn people_field(ui: &mut Ui, t: &Tokens, st: &mut FieldState, input: &FieldI
 fn keys(ui: &mut Ui, st: &mut FieldState, input: &FieldInput<'_>, rows: &[usize], ev: &mut Vec<PeopleEvent>) -> bool {
     let n = rows.len();
     let mut took = false;
+    let mut back = false;
     let mut copy = None;
     ui.input_mut(|i| {
         if i.consume_shortcut(&KeyboardShortcut::new(Modifiers::COMMAND, Key::K)) {
@@ -313,7 +336,11 @@ fn keys(ui: &mut Ui, st: &mut FieldState, input: &FieldInput<'_>, rows: &[usize]
             if i.consume_key(Modifiers::NONE, Key::ArrowUp) {
                 st.highlighted = (st.highlighted + n - 1) % n;
             }
-            if (i.consume_key(Modifiers::NONE, Key::Enter) || i.consume_key(Modifiers::NONE, Key::Tab))
+            // Shift+Tab goes back to the field before, taking nothing (a plain Tab's key would match it).
+            if i.consume_key(Modifiers::SHIFT, Key::Tab) {
+                st.open = false;
+                back = true;
+            } else if (i.consume_key(Modifiers::NONE, Key::Enter) || i.consume_key(Modifiers::NONE, Key::Tab))
                 && let Some(&k) = rows.get(st.highlighted)
             {
                 ev.push(PeopleEvent::Take(k));
@@ -376,6 +403,9 @@ fn keys(ui: &mut Ui, st: &mut FieldState, input: &FieldInput<'_>, rows: &[usize]
     });
     if let Some(text) = copy {
         ui.ctx().copy_text(text);
+    }
+    if back {
+        ui.memory_mut(|m| m.move_focus(FocusDirection::Previous));
     }
     took
 }

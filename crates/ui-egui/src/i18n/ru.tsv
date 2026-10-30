@@ -1808,3 +1808,4 @@ month	May	Май
 	The directory can't be reached	Справочник недоступен
 	Matched as typed	Сравнивается как введено
 	{name}, {kind}, remove with Delete	{name}, {kind}, удалить клавишей Delete
+	{name}, {kind}, {why}, remove with Delete	{name}, {kind}, {why}, удалить клавишей Delete

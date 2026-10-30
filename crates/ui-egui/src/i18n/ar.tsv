@@ -1805,3 +1805,4 @@ month	May	مايو
 	The directory can't be reached	تعذّر الوصول إلى الدليل
 	Matched as typed	مطابقة كما كُتب
 	{name}, {kind}, remove with Delete	{name}، {kind}، للإزالة اضغط Delete
+	{name}, {kind}, {why}, remove with Delete	{name}، {kind}، {why}، للإزالة اضغط Delete

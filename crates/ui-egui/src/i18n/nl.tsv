@@ -1805,3 +1805,4 @@ month	May	mei
 	The directory can't be reached	De adreslijst is niet bereikbaar
 	Matched as typed	Vergeleken zoals getypt
 	{name}, {kind}, remove with Delete	{name}, {kind}, verwijderen met Delete
+	{name}, {kind}, {why}, remove with Delete	{name}, {kind}, {why}, verwijderen met Delete

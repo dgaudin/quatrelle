@@ -1809,3 +1809,4 @@ month	May	mayo
 	The directory can't be reached	No se puede acceder al directorio
 	Matched as typed	Se compara tal como se escribió
 	{name}, {kind}, remove with Delete	{name}, {kind}, quitar con Supr
+	{name}, {kind}, {why}, remove with Delete	{name}, {kind}, {why}, quitar con Supr
