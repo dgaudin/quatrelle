@@ -374,3 +374,21 @@ fn a_message_marked_unread_answers_is_unread() {
     assert_eq!(listed(&s), listed(&fresh));
     done(s);
 }
+
+/// A body that comes in after the search is done, holding the word looked for, brings its
+/// message in: the search says it has more to do, and the next slice finds it.
+#[test]
+fn a_body_that_comes_in_after_the_search_brings_its_message_in() {
+    let store = busy_store("busy-body", 3, 1200);
+    let mut s = open(&store);
+    assert!(drive(&mut s, "watermelon", 100, |_, _| {}).is_some());
+    assert!(s.list.is_empty());
+    let key = MessageKey { account: "a1".into(), folder: folder_path(2), validity: 1, uid: 17 };
+    let raw = b"From: a@x.example\r\nSubject: Report\r\n\r\nwatermelon in the body\r\n".to_vec();
+    store.write_body(&key, &raw).unwrap();
+    s.apply(Event::Body { key: key.clone(), raw });
+    assert!(s.search_pending, "the window is asked for a slice");
+    assert!(drive(&mut s, "watermelon", 10, |_, _| {}).is_some());
+    assert_eq!(listed(&s), BTreeSet::from([key]));
+    done(s);
+}
