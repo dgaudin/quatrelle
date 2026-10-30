@@ -1788,3 +1788,20 @@ month	May	מאי
 	Sign in to Microsoft 365 in the window that opens. The browser names the new profile itself; it can be renamed there.	התחברו ל־Microsoft 365 בחלון שנפתח. הדפדפן נותן לפרופיל החדש שם בעצמו; אפשר לשנות אותו שם.
 	Create a profile for meetings	יצירת פרופיל לפגישות
 	{browser} couldn't be opened: {error}	לא ניתן לפתוח את {browser}: {error}
+# The contacts field: the kinds of its entries, where a suggestion comes from, a chip read out.
+	Person	אדם
+	Distribution list	רשימת תפוצה
+	Contact group	קבוצת אנשי קשר
+	Equipment	ציוד
+	Shared mailbox	תיבת דואר משותפת
+	Public folder	תיקיה ציבורית
+	Microsoft 365 group	קבוצת Microsoft 365
+	Directory (cached)	ספרייה (מטמון)
+	Room list	רשימת חדרים
+	and {n} more were left out	ועוד {n} לא נוספו
+	and {n} more	ועוד {n}
+	This list has no members	אין חברים ברשימה זו
+	Not found: {name}	לא נמצא: {name}
+	The directory can't be reached	אין גישה לספרייה
+	Matched as typed	הותאם כפי שהוקלד
+	{name}, {kind}, remove with Delete	{name}, {kind}, להסרה הקש Delete

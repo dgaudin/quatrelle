@@ -1791,3 +1791,22 @@ month	May	5月
 	Sign in to Microsoft 365 in the window that opens. The browser names the new profile itself; it can be renamed there.	請在開啟的視窗中登入 Microsoft 365。新設定檔的名稱由瀏覽器自行決定，可在瀏覽器中重新命名。
 	Create a profile for meetings	建立用於會議的設定檔
 	{browser} couldn't be opened: {error}	無法開啟 {browser}: {error}
+# The contacts field: the kinds of its entries, where a suggestion comes from, a chip read out.
+	Person	個人
+	Distribution list	通訊群組清單
+	Contact group	連絡人群組
+	Equipment	設備
+	Shared mailbox	共用信箱
+	Public folder	公用資料夾
+	Microsoft 365 group	Microsoft 365 群組
+	Directory (cached)	目錄(快取)
+	Room list	會議室清單
+	and {n} more were left out	另有 {n} 個未加入
+	and {n} more	另有 {n} 個
+	This list has no members	此清單沒有成員
+	Not found: {name}	找不到: {name}
+	The directory can't be reached	無法連線到目錄
+	Matched as typed	依輸入內容比對
+	{name}, {kind}, remove with Delete	{name}，{kind}，按 Delete 鍵移除
+# A kind of entry in a contacts field: an e-mail address (the plain entry is a web address).
+kind	Address	地址

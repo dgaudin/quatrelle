@@ -1,0 +1,420 @@
+//! The contacts field (To, Cc, Bcc, and later a meeting's attendees, a rule's senders…), drawn the
+//! way Outlook draws it: the book button naming the field, each recognised entry a chip with its
+//! kind's icon and any text not yet recognised beside them, the input after them, the suggestions
+//! in a list under the input, and a clicked chip's card. The field wraps and grows to
+//! [`MAX_LINES`] lines, then scrolls inside itself.
+//!
+//! Pure UI: it's handed its state and the suggestions already worked out, and says what happened
+//! as [`PeopleEvent`]s. It never sees the `Session` (`dialogs/people_field.rs` is its glue). It
+//! changes the input and its own view of the field (the list, the selection, the card); the
+//! pieces are the glue's to change, from the events.
+
+use egui::{EventFilter, Id, Key, KeyboardShortcut, Modifiers, Ui, vec2};
+use quatrelle_engine::model::addr::{Accepts, Addressee, AddresseeKind};
+use quatrelle_engine::{Source, Suggestion};
+
+use crate::icons::Icon;
+use crate::theme::Tokens;
+
+mod card;
+mod chips;
+mod list;
+
+/// The lines the field grows to before it scrolls.
+pub const MAX_LINES: usize = 4;
+/// The height of a line of chips, the gap under it included.
+pub const CHIP_ROW_H: f32 = 30.0;
+/// A chip's slot in its line (its pill is drawn inside), and the input's height.
+const CHIP_H: f32 = CHIP_ROW_H - 4.0;
+
+/// Why a piece of text didn't become a chip.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PieceError {
+    /// It has an `@` but isn't an address.
+    NotAnAddress,
+    /// Nothing matched the name.
+    NotFound,
+    /// The directory couldn't be asked (offline, unreachable).
+    Unreached,
+    /// The place doesn't take what it is; the reason, translated.
+    Refused(String),
+}
+
+/// One entry of the field: a chip, or text not (yet) recognised.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Piece {
+    Chip(Addressee),
+    Text { text: String, error: Option<PieceError> },
+}
+
+/// A field's state between frames.
+#[derive(Default)]
+pub struct FieldState {
+    pub pieces: Vec<Piece>,
+    /// What is being typed after the pieces.
+    pub input: String,
+    /// The piece selected (Backspace in an empty input, a click): Backspace or Delete removes it.
+    pub selected: Option<usize>,
+    /// Whether the suggestions are wanted (something typed, not dismissed since).
+    pub open: bool,
+    /// The suggestion highlighted, among those shown.
+    pub highlighted: usize,
+    /// The piece whose card is open.
+    pub card: Option<usize>,
+    /// The input the list was closed for with Esc: it stays closed until the input changes.
+    pub dismissed_for: Option<String>,
+    /// How many entries a paste or a text fed in left out (past the field's cap).
+    pub left_out: Option<usize>,
+    /// The text last written back (the glue's).
+    pub synced: String,
+    /// How many times the text was parsed (the glue's).
+    pub syncs: u32,
+}
+
+/// What a field is drawn with this frame.
+pub struct FieldInput<'a> {
+    /// The field's id: its input, list, card and scroll are kept under it.
+    pub id: egui::Id,
+    /// The book button's label and the input's hint (English, translated here).
+    pub label: &'a str,
+    pub hint: &'a str,
+    pub accepts: &'a Accepts,
+    /// The suggestions for the input, best first (only the kinds `accepts` takes are shown).
+    pub suggestions: &'a [Suggestion],
+    /// Whether a list can be expanded (an account with a directory): the card offers Expand.
+    pub can_expand: bool,
+    /// Give the input the keyboard focus.
+    pub focus: bool,
+    /// Names still being looked up: a spinner shows while there are.
+    pub pending: usize,
+}
+
+/// What happened in the field.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PeopleEvent {
+    /// The input's text changed by typing (the glue asks for its suggestions).
+    Changed,
+    /// Text closed by `;` or `,`, a paste of a list or an address, or the input losing the focus
+    /// with text in it: the glue makes it into pieces. The input is left with what follows.
+    Closed(String),
+    /// A suggestion taken (by its index in `suggestions`): Enter, Tab while the list is open, or a
+    /// click. The input is emptied for it.
+    Take(usize),
+    /// A Recent suggestion to forget, by its address (Delete on it, or its ×).
+    Forget(String),
+    /// Remove the piece (Backspace twice, Delete, or the card's Remove).
+    RemoveChip(usize),
+    /// Expand the list or contact group (its card's Expand).
+    Expand(usize),
+    /// Ctrl+K with the focus in the field: check the names typed.
+    Resolve,
+    /// The book button: open the address book for the field.
+    OpenBook,
+}
+
+/// The id of a field's input (`TextEdit`), from the field's id.
+pub fn input_id(field: Id) -> Id {
+    field.with("people-input")
+}
+
+/// The icon for a kind of entry.
+pub fn kind_icon(kind: AddresseeKind) -> Icon {
+    match kind {
+        AddresseeKind::Person => Icon::Person,
+        AddresseeKind::DistributionList => Icon::DistributionList,
+        AddresseeKind::ContactGroup => Icon::ContactGroup,
+        AddresseeKind::Room => Icon::Room,
+        AddresseeKind::Equipment => Icon::Equipment,
+        AddresseeKind::SharedMailbox => Icon::SharedMailbox,
+        AddresseeKind::PublicFolder => Icon::PublicFolder,
+        AddresseeKind::Microsoft365Group => Icon::Group365,
+        AddresseeKind::Unknown => Icon::Address,
+    }
+}
+
+/// A kind's name, translated (an unknown kind is an address alone).
+pub fn kind_name(kind: AddresseeKind) -> &'static str {
+    match kind {
+        AddresseeKind::Person => tl!("Person"),
+        AddresseeKind::DistributionList => tl!("Distribution list"),
+        AddresseeKind::ContactGroup => tl!("Contact group"),
+        AddresseeKind::Room => tl!("Room"),
+        AddresseeKind::Equipment => tl!("Equipment"),
+        AddresseeKind::SharedMailbox => tl!("Shared mailbox"),
+        AddresseeKind::PublicFolder => tl!("Public folder"),
+        AddresseeKind::Microsoft365Group => tl!("Microsoft 365 group"),
+        // An e-mail address, where the plain "Address" may be a web address (Chinese).
+        AddresseeKind::Unknown => crate::i18n::tc("kind", "Address"),
+    }
+}
+
+/// Where a suggestion comes from, translated.
+pub fn source_name(source: Source) -> &'static str {
+    match source {
+        Source::Recent => tl!("Recent"),
+        Source::Contacts => tl!("Contacts"),
+        Source::Directory => tl!("Directory (cached)"),
+        Source::RoomList => tl!("Room list"),
+    }
+}
+
+/// What a piece of text that didn't become a chip says, translated.
+pub fn error_text(text: &str, error: &PieceError) -> String {
+    match error {
+        PieceError::NotAnAddress => tf!("Not an address: {what}", what = text),
+        PieceError::NotFound => tf!("Not found: {name}", name = text),
+        PieceError::Unreached => tl!("The directory can't be reached").to_string(),
+        PieceError::Refused(why) => why.clone(),
+    }
+}
+
+/// The field's text: its entries (a chip as [`Addressee::text`] writes it, text as typed) joined
+/// by `"; "`, then `"; "` and the input when there are entries, as Check Names writes it.
+pub fn text_of(pieces: &[Piece], input: &str) -> String {
+    let mut out = String::new();
+    for p in pieces {
+        match p {
+            Piece::Chip(a) => out.push_str(&a.text()),
+            Piece::Text { text, .. } => out.push_str(text),
+        }
+        out.push_str("; ");
+    }
+    out.push_str(input);
+    out
+}
+
+/// A piece as Ctrl+C copies it: the text it is written as, a contact group by its name (its
+/// reference means nothing outside Quatrelle).
+fn copy_text(p: &Piece) -> String {
+    match p {
+        Piece::Chip(a) if a.kind == AddresseeKind::ContactGroup && a.address.is_empty() => a.display().to_string(),
+        Piece::Chip(a) => a.text(),
+        Piece::Text { text, .. } => text.clone(),
+    }
+}
+
+/// Where the last `;` or `,` outside quotes and `<…>` is (a byte offset).
+fn last_separator(s: &str) -> Option<usize> {
+    let (mut quoted, mut angle, mut last) = (false, false, None);
+    for (i, c) in s.char_indices() {
+        match c {
+            '"' => quoted = !quoted,
+            '<' if !quoted => angle = true,
+            '>' if !quoted => angle = false,
+            ';' | ',' if !quoted && !angle => last = Some(i),
+            _ => {}
+        }
+    }
+    last
+}
+
+/// Closed text as it's handed on: trimmed, without separators at its end.
+fn closed(s: &str) -> String {
+    s.trim_end_matches(|c: char| c == ';' || c == ',' || c.is_whitespace()).trim_start().to_string()
+}
+
+/// Whether a paste is closed at once: a list, or an address (a name alone is typed in, for its
+/// suggestions).
+fn closes(paste: &str) -> bool {
+    paste.contains([';', ',', '\n', '\r', '@'])
+}
+
+/// Draw the field; what happened in it.
+pub fn people_field(ui: &mut Ui, t: &Tokens, st: &mut FieldState, input: &FieldInput<'_>) -> Vec<PeopleEvent> {
+    let mut ev = Vec::new();
+    let edit = input_id(input.id);
+    if st.selected.is_some_and(|i| i >= st.pieces.len()) {
+        st.selected = None;
+    }
+    if st.card.is_some_and(|i| i >= st.pieces.len()) {
+        st.card = None;
+    }
+    if input.focus && !ui.memory(|m| m.has_focus(edit)) {
+        ui.memory_mut(|m| m.request_focus(edit));
+    }
+    let focused = ui.memory(|m| m.has_focus(edit));
+    // The list as it stands before this frame's keys and clicks: they act on what was shown.
+    let rows = list::rows(st, input, focused);
+    st.highlighted = st.highlighted.min(rows.len().saturating_sub(1));
+    let mut refocus = false;
+    if focused {
+        refocus |= keys(ui, st, input, &rows, &mut ev);
+    }
+    let typed_from = st.input.clone();
+    let mut laid = None;
+    ui.horizontal_top(|ui| {
+        if crate::widgets::field_button(ui, t, input.label, true, false).clicked() {
+            ev.push(PeopleEvent::OpenBook);
+        }
+        laid = Some(ui.vertical(|ui| chips::body(ui, t, st, input, edit)).inner);
+    });
+    let Some(laid) = laid else { return ev };
+    refocus |= laid.refocus;
+    typed(st, &typed_from, &mut ev);
+
+    // The list under the input (inside the lines shown, when the input is scrolled out of them).
+    let mut on_popup = false;
+    if !rows.is_empty() && !refocus {
+        let at = egui::pos2(laid.edit.rect.left().max(laid.view.left()), laid.edit.rect.bottom().min(laid.view.bottom()) + 2.0);
+        let (picked, hit) = list::show(ui, t, st, input, &rows, at, laid.edit.rect.width(), &mut ev);
+        on_popup |= hit;
+        if picked {
+            st.input.clear();
+            st.open = false;
+            st.highlighted = 0;
+            refocus = true;
+        }
+    }
+    on_popup |= card::show(ui, t, st, input, &laid.rects, &mut ev);
+    refocus |= on_popup;
+
+    // Leaving the input with text in it closes the text (it's checked as the field is left).
+    if !refocus && laid.edit.lost_focus() && !st.input.trim().is_empty() {
+        let text = closed(&st.input);
+        st.input.clear();
+        st.open = false;
+        if !text.is_empty() {
+            ev.push(PeopleEvent::Closed(text));
+        }
+    }
+    if refocus {
+        ui.memory_mut(|m| m.request_focus(edit));
+    }
+    // While the list, a card or a selection is up, Tab and Esc are the field's (taking, closing),
+    // not egui's (moving the focus, dropping it).
+    let listing = !list::rows(st, input, true).is_empty();
+    let held = listing || st.card.is_some() || st.selected.is_some();
+    ui.memory_mut(|m| m.set_focus_lock_filter(edit, EventFilter { tab: listing, horizontal_arrows: true, vertical_arrows: true, escape: held }));
+
+    if let Some(n) = st.left_out {
+        ui.horizontal(|ui| {
+            ui.add_space(crate::widgets::FIELD_LABEL_W);
+            let n = crate::widgets::count_text(n as u64);
+            ui.label(egui::RichText::new(tf!("and {n} more were left out", n = n)).color(t.warn).font(crate::theme::regular(12.0)));
+        });
+    }
+    ev
+}
+
+/// The keys the field takes before its input sees them; whether the input is to get the focus
+/// back (a suggestion was taken).
+fn keys(ui: &mut Ui, st: &mut FieldState, input: &FieldInput<'_>, rows: &[usize], ev: &mut Vec<PeopleEvent>) -> bool {
+    let n = rows.len();
+    let mut took = false;
+    let mut copy = None;
+    ui.input_mut(|i| {
+        if i.consume_shortcut(&KeyboardShortcut::new(Modifiers::COMMAND, Key::K)) {
+            ev.push(PeopleEvent::Resolve);
+        }
+        if n > 0 {
+            if i.consume_key(Modifiers::NONE, Key::ArrowDown) {
+                st.highlighted = (st.highlighted + 1) % n;
+            }
+            if i.consume_key(Modifiers::NONE, Key::ArrowUp) {
+                st.highlighted = (st.highlighted + n - 1) % n;
+            }
+            if (i.consume_key(Modifiers::NONE, Key::Enter) || i.consume_key(Modifiers::NONE, Key::Tab))
+                && let Some(&k) = rows.get(st.highlighted)
+            {
+                ev.push(PeopleEvent::Take(k));
+                st.input.clear();
+                st.open = false;
+                st.highlighted = 0;
+                took = true;
+            } else if i.consume_key(Modifiers::NONE, Key::Escape) {
+                st.open = false;
+                st.dismissed_for = Some(st.input.clone());
+            } else if let Some(s) = rows.get(st.highlighted).and_then(|&k| input.suggestions.get(k))
+                && s.source == Source::Recent
+                && i.consume_key(Modifiers::NONE, Key::Delete)
+            {
+                ev.push(PeopleEvent::Forget(s.who.address.clone()));
+            }
+        } else if (st.card.is_some() || st.selected.is_some()) && i.consume_key(Modifiers::NONE, Key::Escape) {
+            st.card = None;
+            st.selected = None;
+        }
+        if n == 0 && st.input.is_empty() {
+            // Backspace selects the last piece, a second removes it; Delete removes the one selected.
+            if let Some(k) = st.selected {
+                if i.consume_key(Modifiers::NONE, Key::Backspace) || i.consume_key(Modifiers::NONE, Key::Delete) {
+                    ev.push(PeopleEvent::RemoveChip(k));
+                    st.selected = None;
+                    st.card = None;
+                }
+            } else if !st.pieces.is_empty() && i.consume_key(Modifiers::NONE, Key::Backspace) {
+                st.selected = Some(st.pieces.len() - 1);
+            }
+        }
+        // Ctrl+C: the piece selected, or every entry when nothing is typed (text selected in the
+        // input is the input's to copy).
+        if i.events.iter().any(|e| matches!(e, egui::Event::Copy)) {
+            copy = match st.selected.and_then(|k| st.pieces.get(k)) {
+                Some(p) => Some(copy_text(p)),
+                None if st.input.is_empty() && !st.pieces.is_empty() => Some(st.pieces.iter().map(copy_text).collect::<Vec<_>>().join("; ")),
+                None => None,
+            };
+            if copy.is_some() {
+                i.events.retain(|e| !matches!(e, egui::Event::Copy));
+            }
+        }
+        // A pasted list or address is closed at once, after what was typed.
+        let pasted = i.events.iter().find_map(|e| match e {
+            egui::Event::Paste(p) if closes(p) => Some(p.clone()),
+            _ => None,
+        });
+        if let Some(p) = pasted {
+            i.events.retain(|e| !matches!(e, egui::Event::Paste(_)));
+            let text = closed(&format!("{}{}", st.input, p.replace("\r\n", "\n").replace(['\n', '\r'], "; ")));
+            st.input.clear();
+            st.open = false;
+            st.selected = None;
+            if !text.is_empty() {
+                ev.push(PeopleEvent::Closed(text));
+            }
+        }
+    });
+    if let Some(text) = copy {
+        ui.ctx().copy_text(text);
+    }
+    took
+}
+
+/// After the input saw this frame's typing: text closed by a separator goes on as `Closed`, the
+/// rest stays typed; a changed input opens the list again.
+fn typed(st: &mut FieldState, from: &str, ev: &mut Vec<PeopleEvent>) {
+    if st.input == from {
+        return;
+    }
+    if let Some(at) = last_separator(&st.input) {
+        let text = closed(st.input.get(..at).unwrap_or_default());
+        let rest = st.input.get(at + 1..).unwrap_or_default().trim_start().to_string();
+        if !text.is_empty() {
+            ev.push(PeopleEvent::Closed(text));
+        }
+        st.input = rest;
+    }
+    if st.input != from {
+        ev.push(PeopleEvent::Changed);
+        st.open = !st.input.trim().is_empty();
+        st.highlighted = 0;
+        st.dismissed_for = None;
+        st.selected = None;
+        st.card = None;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn separators_count_outside_quotes_and_angle_brackets() {
+        assert_eq!(last_separator("ann;"), Some(3));
+        assert_eq!(last_separator("\"Doe, John\" <j"), None);
+        assert_eq!(last_separator("<a,b@x>"), None);
+        assert_eq!(last_separator("a; b, c"), Some(4));
+        assert_eq!(closed(" a@x.fr; ;"), "a@x.fr");
+        assert!(closes("a@x.fr") && closes("a\nb") && !closes("Dupont"));
+    }
+}

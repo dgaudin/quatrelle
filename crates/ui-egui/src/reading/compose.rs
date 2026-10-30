@@ -74,9 +74,9 @@ pub(crate) fn parse_local(day: &str, time: &str) -> Option<(i64, i64)> {
 }
 
 /// Width of the labels and label buttons left of the message's fields.
-pub(super) const LABEL_W: f32 = 76.0;
+pub(super) const LABEL_W: f32 = crate::widgets::FIELD_LABEL_W;
 
-pub(super) const ROW_H: f32 = 30.0;
+pub(super) const ROW_H: f32 = crate::widgets::FIELD_ROW_H;
 /// The width the × beside each recipient suggestion takes.
 const X_W: f32 = 26.0;
 
@@ -96,23 +96,7 @@ pub(super) fn label_button(ui: &mut Ui, t: &Tokens, label: &str, enabled: bool) 
 
 /// A label button that opens a menu: its label and a small drawn chevron, centred together.
 pub(super) fn label_button_menu(ui: &mut Ui, t: &Tokens, label: &str, enabled: bool, menu: bool) -> egui::Response {
-    let (rect, resp) = ui.allocate_exact_size(vec2(LABEL_W - 8.0, ROW_H - 4.0), if enabled { Sense::click() } else { Sense::hover() });
-    crate::widgets::named(ui, &resp, tl!(label), enabled, None);
-    let fill = if resp.hovered() && enabled { t.hover } else { t.surface };
-    ui.painter().rect(rect, 3.0, fill, egui::Stroke::new(1.0, t.border), egui::StrokeKind::Inside);
-    let color = if enabled { t.text } else { t.dim };
-    let galley = ui.painter().layout_no_wrap(tl!(label).to_string(), theme::regular(13.0), color);
-    let chevron = if menu { 14.0 } else { 0.0 };
-    let left = rect.center().x - (galley.size().x + chevron) / 2.0;
-    let text_pos = egui::pos2(left, rect.center().y - galley.size().y / 2.0);
-    let text_w = galley.size().x;
-    ui.painter().galley(text_pos, galley, color);
-    if menu {
-        let r = egui::Rect::from_center_size(egui::pos2(left + text_w + 4.0 + 5.0, rect.center().y + 0.5), vec2(10.0, 10.0));
-        icons::paint(ui.painter(), r, Icon::ChevronDown, t.dim);
-    }
-    ui.add_space(8.0);
-    resp
+    crate::widgets::field_button(ui, t, label, enabled, menu)
 }
 
 /// Outlook's tall Send button beside the address rows.
