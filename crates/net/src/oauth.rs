@@ -360,7 +360,13 @@ pub fn authorize(p: &Provider, login_hint: &str, open: &mut dyn FnMut(&str) -> s
         );
         match (get("code"), get("error")) {
             (Some(c), _) => break c,
-            (None, e) => return Err(NetError::Auth(format!("{} sign-in was cancelled ({})", p.name, e.unwrap_or_default()))),
+            (None, e) => {
+                // Microsoft's reason is an AADSTS code at the start of the description, whose
+                // words can name the account: the code alone is kept.
+                let code = get("error_description").and_then(|d| aadsts_code(&d));
+                let said = [e, code].into_iter().flatten().collect::<Vec<_>>().join(", ");
+                return Err(NetError::Auth(format!("{} sign-in was cancelled ({said})", p.name)));
+            }
         }
     };
     token_request(
@@ -368,6 +374,13 @@ pub fn authorize(p: &Provider, login_hint: &str, open: &mut dyn FnMut(&str) -> s
         vec![("grant_type", "authorization_code".into()), ("code", code), ("redirect_uri", redirect), ("code_verifier", verifier)],
         identity_scope(p),
     )
+}
+
+/// The first `AADSTS<digits>` code in Microsoft's words, if any.
+fn aadsts_code(text: &str) -> Option<String> {
+    text.split(|c: char| !c.is_ascii_alphanumeric())
+        .find(|w| w.len() > 6 && w.len() <= 12 && w.strip_prefix("AADSTS").is_some_and(|n| n.bytes().all(|b| b.is_ascii_digit())))
+        .map(str::to_string)
 }
 
 /// The SASL XOAUTH2 initial response (base64 of `user=…^Aauth=Bearer …^A^A`).
@@ -551,5 +564,26 @@ pub(crate) mod tests {
             Ok(())
         };
         assert!(matches!(authorize(&p, "", &mut deny, Duration::from_secs(10)), Err(NetError::Auth(m)) if m.contains("access_denied")));
+    }
+
+    #[test]
+    fn a_refused_redirect_keeps_its_aadsts_code_only() {
+        // A tenant that forbids user consent: `access_denied`, the reason in the description,
+        // which also names the account. The code is kept; Microsoft's words aren't.
+        let p = local("http://127.0.0.1:9/token");
+        let mut deny = |url: &str| -> std::result::Result<(), String> {
+            let params = query_params(url);
+            let get = |k: &str| params.iter().find(|(n, _)| n == k).map(|(_, v)| v.clone()).unwrap_or_default();
+            let (redirect, state) = (get("redirect_uri"), get("state"));
+            std::thread::spawn(move || {
+                let description = "AADSTS65004%3A+User+ana%40contoso.example+declined+to+consent+to+access+the+app.+Trace+ID%3A+x";
+                let _ = crate::http::get(&format!("{redirect}?error=access_denied&error_description={description}&state={state}"), 10_000);
+            });
+            Ok(())
+        };
+        match authorize(&p, "", &mut deny, Duration::from_secs(10)) {
+            Err(NetError::Auth(m)) => assert_eq!(m, format!("{} sign-in was cancelled (access_denied, AADSTS65004)", p.name)),
+            other => panic!("{:?}", other.map(|t| t.access)),
+        }
     }
 }
