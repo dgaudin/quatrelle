@@ -472,6 +472,8 @@ fn a_teams_meeting_link_is_told_from_look_alikes() {
         "https://evil.example#.teams.microsoft.com/meet/1",
         "https://evil.example\\.teams.microsoft.com/meet/1",
         "https://teams.microsoft.com@evil.example/meet/1",
+        "https://teams.microsoft.com:443@evil.example/meet/1",
+        "https://teams.microsoft.com:x@evil.example/meet/1",
     ] {
         assert!(!is_teams_link(no), "{no}");
         // Zoom is a meeting, only not Teams; every look-alike is neither.
@@ -488,6 +490,9 @@ fn a_teams_meeting_link_is_told_from_look_alikes() {
         "https:///meet/1",
         "https://:8080/x",
         "https://user@a.example/x",
+        "https://teams.microsoft.com:443@evil.example/meet/1",
+        "https://teams.microsoft.com:x@evil.example/meet/1",
+        "https://a.example:/x",
         &format!("https://a.example/{}", "x".repeat(2048)),
     ] {
         assert!(!launchable_link(bad), "{bad:?}");
