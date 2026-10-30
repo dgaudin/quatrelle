@@ -3,7 +3,6 @@
 
 use egui::{Align, Color32, Margin, Rect, RichText, Sense, Ui, Vec2, vec2};
 use quatrelle_engine::mime::{self, AttachmentKind};
-use quatrelle_engine::model::contacts::Contact;
 use quatrelle_engine::model::{MessageKey, addr, dates};
 use quatrelle_engine::{InviteProblem, Session, model::EmailAddress};
 use serde_json::json;
@@ -16,7 +15,7 @@ use crate::{Action, UiState, widgets};
 mod assistant;
 mod attachments;
 mod body;
-mod check_names;
+pub(crate) mod check_names;
 mod compose;
 mod header;
 mod people;

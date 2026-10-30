@@ -12,6 +12,8 @@ use crate::look::people_field::{
 };
 use crate::theme::Tokens;
 
+mod message;
+
 /// What one frame of the field gave: its events, the rect it took, what was drawn, and what egui
 /// was told (the clipboard, the screen reader's tree).
 struct Drawn {
@@ -65,6 +67,7 @@ fn field<'a>(id: &str, suggestions: &'a [Suggestion]) -> FieldInput<'a> {
         id: egui::Id::unique(id),
         label: "To",
         hint: "Add recipients",
+        book: true,
         accepts: &Accepts::RECIPIENTS,
         suggestions,
         can_expand: false,

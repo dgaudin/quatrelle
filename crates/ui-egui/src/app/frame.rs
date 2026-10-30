@@ -1,5 +1,7 @@
 //! The window, frame by frame: what comes in, the panes, the windows, what was asked.
 
+use quatrelle_engine::model::addr::Accepts;
+
 use crate::*;
 
 use super::ribbon::RIBBON_H;
@@ -257,7 +259,7 @@ impl MailApp {
         if let Some(key) = self.ui.page_message.clone() {
             self.message_page(ui, &key, &mut acts);
             if let Some(mut d) = self.ui.dialog.take() {
-                let keep = dialogs::show(&ctx, &mut d, &self.session, &t, &mut acts);
+                let keep = dialogs::show(&ctx, &mut d, &self.session, &mut self.ui.people, &t, &mut acts);
                 if keep && self.ui.dialog.is_none() {
                     self.ui.dialog = Some(d);
                 }
@@ -484,9 +486,14 @@ impl MailApp {
         self.compacting_window(&ctx);
 
         // The address book reads the session's people: what is known now, listed again as the
-        // book fills in (built a slice per frame, below).
+        // book fills in (built a slice per frame, below); its rows are contacts fields, made
+        // ready (chips from their text, the names settled, suggestions for what's typed).
         if let Some(Dialog::SelectNames(f)) = self.ui.dialog.as_mut() {
             f.search.refresh(&mut self.session);
+            for (name, text) in [("book-to", &f.to), ("book-cc", &f.cc), ("book-bcc", &f.bcc)] {
+                let field = quatrelle_engine::FieldId { window: f.compose, name };
+                self.ui.people.prepare(&mut self.session, field, Some(&f.account), &Accepts::RECIPIENTS, text);
+            }
         }
         // Attach Item's list: the items of the kind and folder chosen, matching the words typed.
         if let Some(Dialog::AttachItem(f)) = self.ui.dialog.as_mut()
@@ -503,7 +510,7 @@ impl MailApp {
             if in_window && d.for_compose() {
                 self.ui.dialog = Some(d);
             } else {
-                let keep = dialogs::show(&ctx, &mut d, &self.session, &t, &mut acts);
+                let keep = dialogs::show(&ctx, &mut d, &self.session, &mut self.ui.people, &t, &mut acts);
                 // A signature written in HTML: how it looks, under the dialog.
                 if let Dialog::Signature(f) = &d
                     && f.code

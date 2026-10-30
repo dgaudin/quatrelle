@@ -44,96 +44,6 @@ fn a_name_typed_into_to_never_reads_a_big_mailbox_in_one_frame() {
 }
 
 #[test]
-fn recipient_boxes_suggest_people() {
-    let (mut a, dir) = app("suggest");
-    let ctx = egui::Context::default();
-    frame(&ctx, &mut a, vec![]);
-    a.run("mail.new", json!({}));
-    frame(&ctx, &mut a, vec![]);
-    frame(&ctx, &mut a, vec![]);
-    frame(&ctx, &mut a, vec![Event::Text("zo".into())]);
-    assert_eq!(a.session.compose.as_ref().unwrap().to, "zo");
-    assert_eq!(a.ui.suggest_field, Some("to"));
-    frame(&ctx, &mut a, vec![]);
-    frame(&ctx, &mut a, vec![key(Key::Enter, Modifiers::NONE)]);
-    assert_eq!(a.session.compose.as_ref().unwrap().to, "Zoe Park <zoe@studio.example>, ");
-    // Picked with the mouse: the box keeps the cursor after the click, so the next address is
-    // typed straight in.
-    frame(&ctx, &mut a, vec![Event::Text("sh".into())]);
-    frame(&ctx, &mut a, vec![]);
-    let list =
-        ctx.memory(|m| m.areas().visible_layer_ids().into_iter().filter(|l| l.order == egui::Order::Foreground).find_map(|l| m.area_rect(l.id)));
-    let row = list.map(|r| r.left_top() + egui::vec2(20.0, 16.0)).expect("the suggestions show");
-    let button = |pressed| Event::PointerButton { pos: row, button: egui::PointerButton::Primary, pressed, modifiers: Modifiers::NONE };
-    frame(&ctx, &mut a, vec![Event::PointerMoved(row)]);
-    frame(&ctx, &mut a, vec![button(true)]);
-    frame(&ctx, &mut a, vec![button(false)]);
-    frame(&ctx, &mut a, vec![]);
-    frame(&ctx, &mut a, vec![Event::Text("x".into())]);
-    let to = a.session.compose.as_ref().unwrap().to.clone();
-    assert!(to.starts_with("Zoe Park <zoe@studio.example>, ") && to.ends_with(">, x") && to.matches('@').count() == 2, "{to}");
-    a.session.compose.as_mut().unwrap().to = "Zoe Park <zoe@studio.example>, ".into();
-
-    // The next address starts fresh; Escape hides the list.
-    frame(&ctx, &mut a, vec![Event::Text("sh".into())]);
-    frame(&ctx, &mut a, vec![key(Key::ArrowDown, Modifiers::NONE), key(Key::Escape, Modifiers::NONE)]);
-    frame(&ctx, &mut a, vec![key(Key::Enter, Modifiers::NONE)]);
-    assert!(a.session.compose.as_ref().unwrap().to.ends_with(", sh"), "{}", a.session.compose.as_ref().unwrap().to);
-
-    let _ = std::fs::remove_dir_all(dir);
-}
-
-/// Outlook's × beside a suggestion: red on the row pointed at, it takes the address out of the
-/// suggestions (out of the address book until it's written to), the text typed staying as it
-/// was; Delete does the same to the one highlighted.
-#[test]
-fn a_suggestion_is_taken_out_with_its_cross() {
-    let (mut a, dir) = app("suggest-forget");
-    let ctx = egui::Context::default();
-    frame(&ctx, &mut a, vec![]);
-    a.run("mail.new", json!({}));
-    frame(&ctx, &mut a, vec![]);
-    frame(&ctx, &mut a, vec![]);
-    frame(&ctx, &mut a, vec![Event::Text("zo".into())]);
-    frame(&ctx, &mut a, vec![]);
-    let suggested = |a: &mut MailApp| a.session.suggest_contacts_now("zo", 8).into_iter().map(|c| c.address.email).collect::<Vec<_>>();
-    assert!(suggested(&mut a).contains(&"zoe@studio.example".to_string()));
-    // Where the list is once the message's layout has settled.
-    let shown = |ctx: &egui::Context| {
-        ctx.memory(|m| m.areas().visible_layer_ids().into_iter().filter(|l| l.order == egui::Order::Foreground).find_map(|l| m.area_rect(l.id)))
-    };
-    let mut list = shown(&ctx).expect("the suggestions show");
-    for _ in 0..10 {
-        frame(&ctx, &mut a, vec![]);
-        let now = shown(&ctx).expect("the suggestions show");
-        if now == list {
-            break;
-        }
-        list = now;
-    }
-    // The first row's ×, at its right end.
-    let x = egui::pos2(list.right() - 4.0 - 13.0, list.top() + 4.0 + 14.0);
-    let button = |pressed| Event::PointerButton { pos: x, button: egui::PointerButton::Primary, pressed, modifiers: Modifiers::NONE };
-    frame(&ctx, &mut a, vec![Event::PointerMoved(x)]);
-    frame(&ctx, &mut a, vec![button(true)]);
-    frame(&ctx, &mut a, vec![button(false)]);
-    frame(&ctx, &mut a, vec![]);
-    assert_eq!(a.session.compose.as_ref().unwrap().to, "zo", "the text typed as it was, not the address picked");
-    assert!(!suggested(&mut a).contains(&"zoe@studio.example".to_string()), "taken out");
-    assert_eq!(a.ui.suggest_field, Some("to"), "the box keeps the cursor");
-    // Delete takes out the one highlighted.
-    a.session.compose.as_mut().unwrap().to.clear();
-    frame(&ctx, &mut a, vec![]);
-    frame(&ctx, &mut a, vec![Event::Text("sh".into())]);
-    frame(&ctx, &mut a, vec![]);
-    let first = a.session.suggest_contacts_now("sh", 8).first().map(|c| c.address.email.clone()).expect("someone for sh");
-    frame(&ctx, &mut a, vec![key(Key::Delete, Modifiers::NONE)]);
-    frame(&ctx, &mut a, vec![]);
-    assert!(!a.session.suggest_contacts_now("sh", 8).iter().any(|c| c.address.email == first), "{first} taken out");
-    let _ = std::fs::remove_dir_all(dir);
-}
-
-#[test]
 fn the_editor_formats_as_you_see_it_with_outlooks_keys() {
     use quatrelle_engine::mime::rich::{Align, List, PICTURE};
     let (mut a, dir) = app("editor");
@@ -647,7 +557,7 @@ fn ctrl_k_checks_the_names_typed() {
 }
 
 /// The sample with an Exchange account beside it (its directory is searched), and its id.
-fn with_exchange(a: &mut MailApp) -> String {
+pub(super) fn with_exchange(a: &mut MailApp) -> String {
     let config = quatrelle_engine::model::AccountConfig {
         name: "Riley".into(),
         email: "riley@contoso.example".into(),
@@ -658,7 +568,7 @@ fn with_exchange(a: &mut MailApp) -> String {
     a.session.add_account(config, Some("pw".into())).unwrap()
 }
 
-fn directory_answers(a: &mut MailApp, account: &str, query: &str, people: &[(&str, &str)]) {
+pub(super) fn directory_answers(a: &mut MailApp, account: &str, query: &str, people: &[(&str, &str)]) {
     let people = people.iter().map(|(n, e)| quatrelle_engine::model::Addressee::from(quatrelle_engine::model::EmailAddress::new(*n, *e))).collect();
     a.session.apply(quatrelle_engine::model::Event::DirectoryPeople {
         account: account.into(),
@@ -691,7 +601,8 @@ fn check_names_asks_which_person_a_name_means() {
     click_at(&ctx, &mut a, marc, 2, size);
     frame_sized(&ctx, &mut a, vec![], size);
     assert_eq!(a.session.compose.as_ref().unwrap().to, "Marc Dupont <marc.dupont@contoso.example>; ");
-    assert!(settled_text_at(&ctx, &mut a, "Marc Dupont", size).is_none(), "the dialog closed");
+    // (Marc is now a chip in To, drawn by his name: the question is what's gone.)
+    assert!(settled_text_at(&ctx, &mut a, "More than one person fits “dupont”. Choose who you meant:", size).is_none(), "the dialog closed");
     let _ = std::fs::remove_dir_all(dir);
 }
 

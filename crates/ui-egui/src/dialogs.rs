@@ -19,6 +19,7 @@ mod moving;
 mod names;
 mod organize;
 mod other;
+pub(crate) mod people_field;
 pub(crate) mod pim_dialogs;
 mod writing;
 
@@ -236,6 +237,8 @@ impl Dialog {
     pub fn select_names(c: &quatrelle_engine::Compose, field: &'static str) -> Dialog {
         Dialog::SelectNames(Box::new(NamesForm {
             search: AddressSearch::new(),
+            compose: c.id,
+            account: c.account.clone(),
             target: field,
             to: c.to.clone(),
             cc: c.cc.clone(),
@@ -566,8 +569,9 @@ pub(crate) fn buttons(ui: &mut Ui, t: &Tokens, ok: &str, ok_enabled: bool) -> (b
     res
 }
 
-/// Show the dialog; returns whether it stays open.
-pub fn show(ctx: &egui::Context, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Action>) -> bool {
+/// Show the dialog; returns whether it stays open. `people` draws the contacts fields a dialog
+/// has (Select Names' rows).
+pub fn show(ctx: &egui::Context, d: &mut Dialog, s: &Session, people: &mut people_field::PeopleFields, t: &Tokens, acts: &mut Vec<Action>) -> bool {
     let frame = dialog_frame(t);
     // Each kind of dialog keeps its own size: one id for all let a small one open at the size
     // of the last big one.
@@ -585,7 +589,7 @@ pub fn show(ctx: &egui::Context, d: &mut Dialog, s: &Session, t: &Tokens, acts: 
                 .id_salt("dialog-body")
                 .max_height(max)
                 .min_scrolled_height(max)
-                .show(ui, |ui| body(ui, d, s, t, acts))
+                .show(ui, |ui| body(ui, d, s, people, t, acts))
                 .inner;
             (keep, ui.unique_id())
         })
@@ -603,7 +607,7 @@ pub fn show(ctx: &egui::Context, d: &mut Dialog, s: &Session, t: &Tokens, acts: 
     keep && !modal.should_close()
 }
 
-fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Action>) -> bool {
+fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, people: &mut people_field::PeopleFields, t: &Tokens, acts: &mut Vec<Action>) -> bool {
     // Each kind is drawn by its group; listing them all here keeps the match exhaustive.
     match d {
         Dialog::LostOnClose { .. } | Dialog::SaveOnClose(..) | Dialog::UpdateOnClose(..) => closing::draw(ui, d, s, t, acts),
@@ -634,7 +638,7 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Act
         | Dialog::EmptySubject
         | Dialog::SendCheck(_)
         | Dialog::WordCount(..)
-        | Dialog::Spelling(..) => writing::draw(ui, d, s, t, acts),
+        | Dialog::Spelling(..) => writing::draw(ui, d, s, people, t, acts),
         Dialog::ConfirmDeleteContact { .. }
         | Dialog::OpenShare { .. }
         | Dialog::PicturePreview { .. }

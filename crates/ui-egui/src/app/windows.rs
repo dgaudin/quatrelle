@@ -21,6 +21,12 @@ impl MailApp {
         if self.ui.dialog_for.is_some_and(|id| !live.contains(&id)) {
             self.ui.dialog_for = None;
         }
+        // Their contacts fields go with them, and Select Names' rows with the dialog.
+        let book = match &self.ui.dialog {
+            Some(Dialog::SelectNames(f)) => Some(f.compose),
+            _ => None,
+        };
+        self.ui.people.settle(&mut self.session, &live, book);
         let inline = self.session.all_composes().find(|c| compose_inline(c, ctx)).map(|c| c.id);
         if let Some(id) = inline {
             self.use_compose(id);
@@ -90,7 +96,7 @@ impl MailApp {
             let here = st.dialog_for.is_none_or(|f| f == mine);
             if let Some(mut d) = st.dialog.take() {
                 if d.for_compose() && here {
-                    let keep = dialogs::show(ui.ctx(), &mut d, session, &t, &mut mine_acts);
+                    let keep = dialogs::show(ui.ctx(), &mut d, session, &mut st.people, &t, &mut mine_acts);
                     if keep && st.dialog.is_none() {
                         st.dialog = Some(d);
                     }

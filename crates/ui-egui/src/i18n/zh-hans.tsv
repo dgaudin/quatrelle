@@ -1804,6 +1804,8 @@ month	May	5月
 	This list has no members	此列表没有成员
 	Not found: {name}	未找到: {name}
 	The directory can't be reached	无法连接到目录
+	and others	及其他
+	This list couldn't be expanded: {error}	无法展开此列表: {error}
 	Matched as typed	按输入内容匹配
 	{name}, {kind}, remove with Delete	{name}，{kind}，按 Delete 键移除
 	{name}, {kind}, {why}, remove with Delete	{name}，{kind}，{why}，按 Delete 键移除

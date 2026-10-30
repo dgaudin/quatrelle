@@ -1,6 +1,10 @@
 //! The message being written: its form (from, to, cc, bcc, subject), its ribbon and its body.
 
+use quatrelle_engine::FieldId;
+use quatrelle_engine::model::addr::Accepts;
+
 use super::*;
+use crate::dialogs::people_field::COMPOSE_FIELDS;
 
 /// Height of an attachment chip.
 pub(super) const CHIP_H: f32 = 42.0;
@@ -77,8 +81,6 @@ pub(crate) fn parse_local(day: &str, time: &str) -> Option<(i64, i64)> {
 pub(super) const LABEL_W: f32 = crate::widgets::FIELD_LABEL_W;
 
 pub(super) const ROW_H: f32 = crate::widgets::FIELD_ROW_H;
-/// The width the × beside each recipient suggestion takes.
-const X_W: f32 = 26.0;
 
 /// A field box drawn the way Outlook's are: no frame, a line under it (the accent while typing).
 pub(super) fn underlined(ui: &mut Ui, t: &Tokens, edit: egui::TextEdit<'_>) -> egui::Response {
@@ -87,11 +89,6 @@ pub(super) fn underlined(ui: &mut Ui, t: &Tokens, edit: egui::TextEdit<'_>) -> e
     let color = if r.has_focus() { t.accent } else { t.border };
     ui.painter().line_segment([egui::pos2(r.rect.left(), y), egui::pos2(r.rect.right(), y)], egui::Stroke::new(1.0, color));
     r
-}
-
-/// A small framed button naming a field (To, Cc…), as in Outlook's message window.
-pub(super) fn label_button(ui: &mut Ui, t: &Tokens, label: &str, enabled: bool) -> egui::Response {
-    label_button_menu(ui, t, label, enabled, false)
 }
 
 /// A label button that opens a menu: its label and a small drawn chevron, centred together.
@@ -113,16 +110,7 @@ pub(super) fn send_button(ui: &mut Ui, t: &Tokens, height: f32, sending: bool) -
 }
 
 /// A labelled field; its spelling is checked when `spell` says how.
-pub(super) fn field(
-    ui: &mut Ui,
-    t: &Tokens,
-    label: &str,
-    value: &mut String,
-    hint: &str,
-    check_addresses: bool,
-    focus: bool,
-    spell: Option<&crate::spellcheck::Check>,
-) {
+pub(super) fn field(ui: &mut Ui, t: &Tokens, label: &str, value: &mut String, hint: &str, focus: bool, spell: Option<&crate::spellcheck::Check>) {
     ui.horizontal(|ui| {
         ui.add_sized(vec2(LABEL_W, ROW_H), egui::Label::new(RichText::new(tl!(label)).color(t.dim)));
         let id = ui.make_persistent_id(("field", label));
@@ -134,189 +122,33 @@ pub(super) fn field(
             r.request_focus();
         }
     });
-    address_check(ui, t, value, check_addresses);
 }
 
-/// A recipient box (To, Cc, Bcc) that suggests people from mail already seen: ↑/↓ choose,
-/// Enter or Tab takes the highlighted one, a click takes any.
+/// To, Cc, Bcc or Replies to: the contacts field over the message's own text (`name` is the
+/// field's, as Check Names knows it). Whether its book button was pressed.
 #[allow(clippy::too_many_arguments)]
-pub(super) fn recipient_field(
+fn people_row(
     ui: &mut Ui,
     st: &mut UiState,
+    c: &mut quatrelle_engine::Compose,
     name: &'static str,
     label: &str,
-    value: &mut String,
     hint: &str,
     focus: bool,
-    suggestions: &[Contact],
+    can_expand: bool,
+    acts: &mut Vec<Action>,
 ) -> bool {
     let t = st.tokens;
-    let showing = st.suggest_field == Some(name) && !suggestions.is_empty();
-    let mut take: Option<usize> = None;
-    // Taken out of the suggestions (the × beside one, or Delete on the one highlighted).
-    let mut forget: Option<usize> = None;
-    if showing {
-        let n = suggestions.len();
-        // Before the text box sees them: arrows move the highlight, Enter/Tab accept.
-        ui.input_mut(|i| {
-            if i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowDown) {
-                st.suggest_index = (st.suggest_index + 1) % n;
-            }
-            if i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowUp) {
-                st.suggest_index = (st.suggest_index + n - 1) % n;
-            }
-            if i.consume_key(egui::Modifiers::NONE, egui::Key::Enter) || i.consume_key(egui::Modifiers::NONE, egui::Key::Tab) {
-                take = Some(st.suggest_index.min(n - 1));
-            }
-            if i.consume_key(egui::Modifiers::NONE, egui::Key::Escape) {
-                st.suggest_dismissed = Some(value.clone());
-            }
-            if i.consume_key(egui::Modifiers::NONE, egui::Key::Delete) {
-                forget = Some(st.suggest_index.min(n - 1));
-            }
-        });
-    }
-    // Backspace right after a whole recipient takes all of it, as Outlook does with a resolved
-    // name (a half-typed one loses a character as usual).
-    let edit_id = ui.scope_id().with(("recipient", name));
-    if ui.memory(|m| m.has_focus(edit_id))
-        && let Some(mut state) = egui::TextEdit::load_state(ui.ctx(), edit_id)
-        && let Some(range) = state.cursor.char_range().filter(|r| r.is_empty())
-        && let Some((rest, at)) = quatrelle_engine::model::contacts::remove_recipient(value, range.primary.index.0)
-        && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Backspace))
-    {
-        *value = rest;
-        state.cursor.set_char_range(Some(egui::text::CCursorRange::one(egui::text::CCursor::new(at))));
-        state.store(ui.ctx(), edit_id);
-        st.suggest_dismissed = Some(value.clone());
-    }
-    let (pressed, r) = ui
-        .horizontal(|ui| {
-            // The field's button opens the address book (the caller's to show).
-            let b = label_button(ui, &t, label, true);
-            (b.clicked(), underlined(ui, &t, egui::TextEdit::singleline(value).id(edit_id).hint_text(tl!(hint))))
-        })
-        .inner;
-    if focus {
-        r.request_focus();
-    }
-    // Picked from the suggestions: the box stays the one being typed in, cursor at the end,
-    // until the click that picked is over.
-    if st.suggest_refocus == Some(name) {
-        r.request_focus();
-        if ui.input(|i| !i.pointer.any_down() && !i.pointer.any_released()) {
-            st.suggest_refocus = None;
-        }
-    }
-    if r.changed() {
-        st.suggest_index = 0;
-        st.suggest_dismissed = None;
-    }
-    if showing && take.is_none() {
-        let area =
-            egui::Area::new(ui.scope_id().with(("suggest", name))).order(egui::Order::Foreground).fixed_pos(r.rect.left_bottom() + vec2(0.0, 2.0));
-        area.show(ui.ctx(), |ui| {
-            egui::Frame::popup(ui.style()).inner_margin(egui::Margin::same(4)).show(ui, |ui| {
-                // As wide as the longest suggestion (within the box's width), every row taking
-                // a click anywhere on it: the name, and the address dimmer beside it.
-                let name_font = theme::regular(13.5);
-                let mail_font = theme::regular(12.5);
-                let text_w = |text: &str, font: &egui::FontId| ui.fonts_mut(|f| f.layout_no_wrap(text.to_string(), font.clone(), t.text).size().x);
-                let widest = suggestions
-                    .iter()
-                    .map(|c| {
-                        let name = if c.address.name.is_empty() { 0.0 } else { text_w(&c.address.name, &name_font) + 12.0 };
-                        name + text_w(&c.address.email, &mail_font)
-                    })
-                    .fold(0.0_f32, f32::max);
-                // Room for the × at the end of each row.
-                let w = (widest + 24.0 + X_W).clamp(200.0, r.rect.width().clamp(200.0, 520.0));
-                ui.spacing_mut().item_spacing.y = 0.0;
-                for (i, c) in suggestions.iter().enumerate() {
-                    let on = i == st.suggest_index;
-                    let (row, resp) = ui.allocate_exact_size(vec2(w, 28.0), egui::Sense::click());
-                    // The × at its end (Outlook's), clickable so it's the one under the pointer
-                    // rather than the row beneath it.
-                    let x = egui::Rect::from_center_size(egui::pos2(row.right() - X_W / 2.0, row.center().y), vec2(20.0, 20.0));
-                    let on_x = ui
-                        .interact(x, ui.scope_id().with(("forget", i)), egui::Sense::click())
-                        .on_hover_text(tl!("Remove from suggestions"))
-                        .hovered();
-                    let pointed = resp.hovered() || on_x;
-                    if on || pointed {
-                        ui.painter().rect_filled(row, 4.0, if on { t.accent_soft } else { t.hover_row });
-                    }
-                    let clip = ui.painter().with_clip_rect(row.shrink2(vec2(8.0, 0.0)).with_max_x(row.right() - X_W));
-                    let mut tx = row.left() + 10.0;
-                    if !c.address.name.is_empty() {
-                        let g = clip.layout_no_wrap(c.address.name.clone(), name_font.clone(), t.text);
-                        let gw = g.size().x;
-                        clip.galley(egui::pos2(tx, row.center().y - g.size().y / 2.0), g, t.text);
-                        tx += gw + 12.0;
-                    }
-                    let g = clip.layout_no_wrap(c.address.email.clone(), mail_font.clone(), t.dim);
-                    clip.galley(egui::pos2(tx, row.center().y - g.size().y / 2.0), g, t.dim);
-                    // Red, on the row pointed at or highlighted.
-                    if on || pointed {
-                        if on_x {
-                            ui.painter().rect_filled(x, 4.0, t.danger.gamma_multiply(0.15));
-                        }
-                        crate::icons::paint(ui.painter(), x.shrink(3.0), crate::icons::Icon::Close, t.danger);
-                    }
-                    // On press: the box loses focus on the same click, before a release would count.
-                    if pointed && ui.input(|i| i.pointer.primary_pressed()) {
-                        if on_x {
-                            forget = Some(i);
-                        } else {
-                            take = Some(i);
-                        }
-                    }
-                }
-            });
-        });
-    }
-    if let Some(i) = forget
-        && let Some(c) = suggestions.get(i)
-    {
-        st.suggest_forget = Some(c.address.email.clone());
-        st.suggest_index = 0;
-        // The box keeps the cursor, the text as typed: the next suggestions come.
-        st.suggest_refocus = Some(name);
-        r.request_focus();
-    }
-    if let Some(i) = take
-        && let Some(c) = suggestions.get(i)
-    {
-        *value = quatrelle_engine::model::contacts::complete(value, &c.address);
-        st.suggest_index = 0;
-        st.suggest_refocus = Some(name);
-        r.request_focus();
-        if let Some(mut state) = egui::TextEdit::load_state(ui.ctx(), r.id) {
-            let end = egui::text::CCursor::new(value.chars().count());
-            state.cursor.set_char_range(Some(egui::text::CCursorRange::one(end)));
-            state.store(ui.ctx(), r.id);
-        }
-    }
-    if r.has_focus() || take.is_some() || st.suggest_refocus == Some(name) {
-        st.suggest_field = Some(name);
-    } else if st.suggest_field == Some(name) {
-        st.suggest_field = None;
-    }
-    // Half-typed addresses are fine while typing; check once the box is left.
-    address_check(ui, &t, value, !r.has_focus() && st.suggest_refocus != Some(name));
-    pressed
-}
-
-pub(super) fn address_check(ui: &mut Ui, t: &Tokens, value: &str, check_addresses: bool) {
-    if check_addresses
-        && !value.trim().is_empty()
-        && let Err(bad) = addr::parse_list(value)
-    {
-        ui.horizontal(|ui| {
-            ui.add_space(LABEL_W);
-            ui.label(RichText::new(tf!("Not an email address: {address}", address = bad)).color(t.danger).small());
-        });
-    }
+    let field = FieldId { window: c.id, name };
+    let value = match name {
+        "to" => &mut c.to,
+        "cc" => &mut c.cc,
+        "bcc" => &mut c.bcc,
+        _ => &mut c.reply_to,
+    };
+    // Select Names has rows for To, Cc and Bcc: Replies to keeps its label alone.
+    let book = name != "replyTo";
+    st.people.draw(ui, &t, field, Some(&c.account), &Accepts::RECIPIENTS, label, hint, value, focus, can_expand, book, acts)
 }
 
 /// The message being written, in a window of its own.
@@ -326,10 +158,6 @@ pub fn compose_window(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
 
 pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>, in_window: bool) {
     let t = st.tokens;
-    // A suggestion taken out with its × (or Delete): out of the address book for good.
-    if let Some(email) = st.suggest_forget.take() {
-        acts.push(Action::Run("contacts.forget", json!({ "email": email })));
-    }
     attach_dropped(ui, &t, acts);
     // Where there are no windows of their own (the browser), the other messages being written
     // are a click away above this one.
@@ -345,44 +173,19 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
         });
     }
     let senders = s.senders();
-    // Who the other address typed in From may be, and the name a Check Names waits on.
-    let (others, choice) = match s.compose.as_ref().map(|c| (c.id, c.account.clone())) {
-        Some((id, account)) => (candidates(s, ui.ctx(), id, &account), s.name_choice(id).cloned()),
-        None => (Candidates::default(), None),
-    };
-    // Suggestions for the recipient box being typed in (computed before the form borrows it):
-    // from what the address book knows now — it is built a slice per frame, never whole in one
-    // go — and worked out again only as the text or the book changes.
-    let suggestions: Vec<Contact> = match (st.suggest_field, s.compose.as_ref()) {
-        (Some(f), Some(c)) => {
-            let text = match f {
-                "to" => c.to.clone(),
-                "cc" => c.cc.clone(),
-                _ => c.bcc.clone(),
-            };
-            let token = quatrelle_engine::model::contacts::last_token(&text).to_string();
-            if token.chars().count() < 1 || st.suggest_dismissed.as_deref() == Some(text.as_str()) {
-                Vec::new()
-            } else {
-                let key = (f, text.clone(), s.contacts_revision());
-                match &st.suggest_cache {
-                    Some((k, found)) if *k == key => found.clone(),
-                    _ => {
-                        let present = text.to_lowercase();
-                        let found: Vec<Contact> = s
-                            .suggest_contacts_now(&token, 8)
-                            .into_iter()
-                            .filter(|x| !present.contains(&x.address.email.to_lowercase()))
-                            .take(6)
-                            .collect();
-                        st.suggest_cache = Some((key, found.clone()));
-                        found
-                    }
-                }
-            }
+    // Who the other address typed in From may be; the message's fields made ready (chips from
+    // their text, the names the directory settled, suggestions for what's typed), and the
+    // choice a name several people fit waits for.
+    let others = match s.compose.as_ref().map(|c| (c.id, c.account.clone())) {
+        Some((id, account)) => {
+            st.people.prepare_compose(s, id, &account);
+            st.people.choice_dialog(ui.ctx(), &t, s, id, &COMPOSE_FIELDS, acts);
+            candidates(s, ui.ctx(), id, &account)
         }
-        _ => Vec::new(),
+        None => Candidates::default(),
     };
+    // A list's card offers Expand only where there's a directory to ask (an Exchange account).
+    let can_expand = s.compose.as_ref().is_some_and(|c| s.directory_account(Some(&c.account)).is_some());
     let clock = s.clock;
     // Delay Delivery holds mail in the Outbox, which only a server account's sends from.
     let can_delay = s.compose.as_ref().and_then(|c| s.account(&c.account)).is_some_and(|a| !a.is_local());
@@ -516,16 +319,14 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
                 ui.label(RichText::new(tf!("Not sent: {error}", error = e)).color(t.danger));
             });
         }
-        // Ctrl+K: Outlook's Check Names, anywhere but in the text (where it makes a link).
+        // Ctrl+K: Outlook's Check Names on every field, anywhere but in the text (where it makes
+        // a link), the other sender's box, and a contacts field (which checks itself).
         if !c.sending
+            && st.people.open_field().is_none()
             && !ui.memory(|m| m.has_focus(rich_edit::body_id(c)) || m.has_focus(box_id(c.id)))
             && ui.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::K))
         {
             acts.push(Action::Run("compose.checkNames", json!({})));
-        }
-        // Several people fit a name it checked: the one meant is chosen.
-        if let Some(choice) = &choice {
-            super::check_names::choice_dialog(ui.ctx(), &t, choice, acts);
         }
         ui.add_space(6.0);
         ui.add_enabled_ui(!c.sending, |ui| {
@@ -540,34 +341,34 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
                 ui.add_space(10.0);
                 ui.vertical(|ui| {
                     ui.horizontal(|ui| from_row(ui, &t, c, &senders, &others));
-                    // To, Cc and Bcc open the address book, as in Outlook.
-                    for (name, label, hint) in
-                        [("to", "To", "Names <addresses>, separated by ; or ,"), ("cc", "Cc", ""), ("bcc", "Bcc", "Hidden from the other recipients")]
-                    {
-                        if name == "bcc" && !c.show_cc {
-                            continue;
-                        }
-                        let value = match name {
-                            "to" => &mut c.to,
-                            "cc" => &mut c.cc,
-                            _ => &mut c.bcc,
-                        };
-                        if recipient_field(ui, st, name, label, value, hint, name == "to" && focus_to, &suggestions) {
-                            let d = crate::Dialog::select_names(c, name);
-                            acts.push(Action::Dialog(d));
-                        }
+                    // To, Cc and Bcc are the contacts field; their buttons open the address book,
+                    // as in Outlook.
+                    let mut book = None;
+                    if people_row(ui, st, c, "to", "To", "Names <addresses>, separated by ; or ,", focus_to, can_expand, acts) {
+                        book = Some("to");
+                    }
+                    if people_row(ui, st, c, "cc", "Cc", "", false, can_expand, acts) {
+                        book = Some("cc");
+                    }
+                    if c.show_cc && people_row(ui, st, c, "bcc", "Bcc", "Hidden from the other recipients", false, can_expand, acts) {
+                        book = Some("bcc");
+                    }
+                    if let Some(name) = book {
+                        acts.push(Action::Dialog(crate::Dialog::select_names(c, name)));
                     }
                 });
             });
             if c.show_reply_to || !c.reply_to.is_empty() {
                 ui.horizontal(|ui| {
                     ui.add_space(76.0);
-                    ui.vertical(|ui| field(ui, &t, "Replies to", &mut c.reply_to, "Where replies go instead of to you", true, false, None));
+                    ui.vertical(|ui| {
+                        people_row(ui, st, c, "replyTo", "Replies to", "Where replies go instead of to you", false, can_expand, acts);
+                    });
                 });
             }
             ui.horizontal(|ui| {
                 ui.add_space(76.0);
-                ui.vertical(|ui| field(ui, &t, "Subject", &mut c.subject, "Add a subject", false, false, Some(&subject_check)));
+                ui.vertical(|ui| field(ui, &t, "Subject", &mut c.subject, "Add a subject", false, Some(&subject_check)));
             });
             if !c.attachments.is_empty() {
                 ui.horizontal(|ui| {

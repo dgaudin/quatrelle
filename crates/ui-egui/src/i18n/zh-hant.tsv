@@ -1806,6 +1806,8 @@ month	May	5月
 	This list has no members	此清單沒有成員
 	Not found: {name}	找不到: {name}
 	The directory can't be reached	無法連線到目錄
+	and others	及其他
+	This list couldn't be expanded: {error}	無法展開此清單: {error}
 	Matched as typed	依輸入內容比對
 	{name}, {kind}, remove with Delete	{name}，{kind}，按 Delete 鍵移除
 	{name}, {kind}, {why}, remove with Delete	{name}，{kind}，{why}，按 Delete 鍵移除
