@@ -279,6 +279,9 @@ pub struct Session {
     pub search_pending: bool,
     /// Messages the search index adds per call (`usize::MAX`: no limit).
     search_budget: usize,
+    /// The messages waiting for a reply, worked out once for a search call and the list it
+    /// shows (it walks every folder), forgotten when they're done.
+    awaiting_memo: Option<HashSet<MessageKey>>,
     /// What the server found for the search on screen: Exchange's own index answers for the
     /// messages whose body was never downloaded, and those are merged with the local answer the
     /// way Outlook does.
@@ -494,6 +497,7 @@ impl Session {
             search: None,
             search_pending: false,
             search_budget: usize::MAX,
+            awaiting_memo: None,
             found: None,
             older: None,
             server_asked: None,
