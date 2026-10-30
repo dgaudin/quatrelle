@@ -285,6 +285,21 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             s.set_picture_loading(to)
         })
         .params(r#"{"value": "ask" (only when asked, for a message or a sender)|"known" (also from the people saved in Contacts or written to, and the safe senders)|"always"; mail in Junk Email waits to be asked whatever it says}"#),
+        CommandSpec::new("view.meetingBrowser", "Browser for Teams meetings", "File › Options › Applications", |s, v| {
+            let path = match v.get("path") {
+                None | Some(Value::Null) => None,
+                Some(Value::String(path)) => Some(path.clone()),
+                Some(_) => return Err(CmdError::Params("`path` must be a string or null".into())),
+            };
+            if let Some(path) = &path
+                && (path.len() > 4096 || path.chars().any(char::is_control))
+            {
+                return Err(CmdError::Params("`path` is too long or has control characters".into()));
+            }
+            s.prefs.meeting_browser = path;
+            Ok(json!({ "path": s.prefs.meeting_browser }))
+        })
+        .params(r#"{"path"?: string|null (none or null: the first Chrome, Chromium or Edge found; empty: the default browser; otherwise the program to run; Teams meetings open in its app window)}"#),
         CommandSpec::new("view.trustSender", "Show pictures from a sender", "File › Options › Privacy", |s, v| {
             let who = p::req_str(v, "address")?.trim().to_ascii_lowercase();
             if !quatrelle_model::addr::is_valid_email(&who) {
