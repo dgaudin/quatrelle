@@ -118,6 +118,25 @@ pub fn provider_for_account(account: &quatrelle_model::AccountConfig) -> Option<
 /// added here makes Microsoft ask everyone to approve the app again on their next sign-in.
 const GRAPH_SCOPE: &str = "https://graph.microsoft.com/Mail.ReadWrite https://graph.microsoft.com/Mail.ReadWrite.Shared https://graph.microsoft.com/Mail.Send https://graph.microsoft.com/Mail.Send.Shared https://graph.microsoft.com/MailboxSettings.ReadWrite https://graph.microsoft.com/Calendars.ReadWrite https://graph.microsoft.com/Calendars.ReadWrite.Shared https://graph.microsoft.com/Contacts.ReadWrite offline_access";
 
+/// Teams' permissions, through Graph: who the person is and the people around them, their chats
+/// (read and write), presence, and the files shared in conversations. They are the
+/// organisation's to approve (its administrator may have to): see `docs/teams.md`.
+pub const TEAMS_SCOPE: &str = "https://graph.microsoft.com/User.Read https://graph.microsoft.com/User.ReadBasic.All https://graph.microsoft.com/Chat.ReadWrite https://graph.microsoft.com/Presence.Read.All https://graph.microsoft.com/Files.ReadWrite https://graph.microsoft.com/Files.Read.All offline_access";
+
+/// Teams' sign-in with the organisation's own registration, at its tenant. `None` when the
+/// client id or the tenant couldn't be one (they are typed or pasted by a person): nothing is
+/// sent anywhere for them. The id stays `microsoft`, so the ID token is asked for too.
+pub fn teams_provider(client_id: &str, tenant: &str) -> Option<Provider> {
+    let (client_id, tenant) = (client_id.trim(), tenant.trim());
+    if !quatrelle_model::valid_oauth_client_id(client_id) || !quatrelle_model::valid_oauth_tenant(tenant) {
+        return None;
+    }
+    let mut p = microsoft(client_id.to_string(), tenant);
+    p.scope = TEAMS_SCOPE.into();
+    p.name = "Microsoft Teams".into();
+    Some(p)
+}
+
 /// The providers with a registration, so sign-in can be offered.
 pub fn available() -> Vec<String> {
     ["google", "microsoft"].into_iter().filter(|id| provider(id).is_some()).map(str::to_string).collect()
@@ -161,6 +180,8 @@ pub struct Tokens {
     /// Who signed in, from the ID token (its `email`, else `preferred_username`): only after a
     /// browser sign-in that asked for it.
     pub user: Option<String>,
+    /// The directory the account signed in at, from the ID token's `tid`, as `user` is.
+    pub tenant: Option<String>,
 }
 
 /// What the browser sign-in asks for besides the mail permissions: who signed in (an ID token),
@@ -174,14 +195,20 @@ fn identity_scope(p: &Provider) -> &'static str {
 /// The address in an ID token (a JWT: its middle part is base64url JSON). It came straight from
 /// the provider over TLS, so it isn't checked further; it's only ever compared with the account.
 pub fn id_token_user(id_token: &str) -> Option<String> {
-    let claims = crate::ews::unb64(id_token.split('.').nth(1)?)?;
-    let v: Value = serde_json::from_slice(&claims).ok()?;
     ["email", "preferred_username"]
         .iter()
-        .filter_map(|k| v.get(*k).and_then(Value::as_str))
-        .map(str::trim)
-        .find(|a| a.contains('@') && a.len() < 320)
-        .map(str::to_string)
+        .filter_map(|k| id_token_claim(id_token, k))
+        .find(|a| a.trim().contains('@') && a.trim().len() < 320)
+        .map(|a| a.trim().to_string())
+}
+
+/// A string claim of an ID token's payload (`tid`, `email`…): `None` when the token isn't a
+/// JWT, its payload isn't base64url JSON, or the claim isn't there or isn't a string. Same
+/// trust as `id_token_user`.
+pub fn id_token_claim(id_token: &str, claim: &str) -> Option<String> {
+    let payload = crate::ews::unb64(id_token.split('.').nth(1)?)?;
+    let v: Value = serde_json::from_slice(&payload).ok()?;
+    v.get(claim).and_then(Value::as_str).map(str::to_string)
 }
 
 impl std::fmt::Debug for Tokens {
@@ -222,6 +249,7 @@ fn token_request(p: &Provider, mut fields: Vec<(&str, String)>, extra_scope: &st
         refresh: v.get("refresh_token").and_then(Value::as_str).map(str::to_string),
         granted: v.get("scope").and_then(Value::as_str).unwrap_or_default().to_string(),
         user: v.get("id_token").and_then(Value::as_str).and_then(id_token_user),
+        tenant: v.get("id_token").and_then(Value::as_str).and_then(|t| id_token_claim(t, "tid")),
         // A minute early, so a token never runs out mid-command.
         expires_at: now_unix().saturating_add(i64::try_from(expires - 60).unwrap_or(0)),
     })
@@ -422,13 +450,58 @@ pub(crate) mod tests {
         assert_eq!(provider_for_account(&a).is_some(), provider("google").is_some(), "Google takes no registration from the account");
     }
 
+    /// Teams signs in with the organisation's own registration, at its tenant, for Teams'
+    /// Graph permissions (the id stays `microsoft`: the ID token is asked for too).
+    #[test]
+    fn teams_provider_signs_in_at_the_tenant_with_teams_scopes() {
+        let p = teams_provider("11111111-2222-3333-4444-555555555555", "contoso.onmicrosoft.com").unwrap();
+        assert_eq!(p.auth_url, "https://login.microsoftonline.com/contoso.onmicrosoft.com/oauth2/v2.0/authorize");
+        assert_eq!(p.token_url, "https://login.microsoftonline.com/contoso.onmicrosoft.com/oauth2/v2.0/token");
+        assert_eq!(p.scope, TEAMS_SCOPE);
+        assert_eq!(p.client_secret, None);
+        assert_eq!(p.id, "microsoft");
+        assert_eq!(p.name, "Microsoft Teams");
+        assert_eq!(p.client_id, "11111111-2222-3333-4444-555555555555");
+        assert_eq!(identity_scope(&p), " openid email");
+        // Surrounding blanks (a pasted value) are not part of the id.
+        assert!(teams_provider(" 11111111-2222-3333-4444-555555555555 ", " contoso.com ").unwrap().auth_url.contains("/contoso.com/"));
+    }
+
+    #[test]
+    fn teams_provider_refuses_what_cant_be_an_id() {
+        let valid = "11111111-2222-3333-4444-555555555555";
+        assert_eq!(teams_provider("not a guid", "contoso.com"), None);
+        assert_eq!(teams_provider(valid, "a/b"), None);
+        assert_eq!(teams_provider(valid, ""), None);
+    }
+
+    #[test]
+    fn id_token_claim_reads_tid_and_survives_junk() {
+        let token = |claims: &str| format!("e30.{}.sig", b64url(claims.as_bytes()));
+        let t = token(r#"{"tid":"t-1","email":"a@b.example"}"#);
+        assert_eq!(id_token_claim(&t, "tid").as_deref(), Some("t-1"));
+        assert_eq!(id_token_claim(&t, "email").as_deref(), Some("a@b.example"));
+        assert_eq!(id_token_claim(&t, "oid"), None);
+        assert_eq!(id_token_claim(&token(r#"{"tid":42}"#), "tid"), None, "a number is not a string claim");
+        assert_eq!(id_token_claim(&token(r#"[1,2]"#), "tid"), None, "a payload that isn't an object");
+        for junk in ["", "x", "a.b.c", "a.!!!.c", "a.e30"] {
+            assert_eq!(id_token_claim(junk, "tid"), None, "{junk}");
+        }
+    }
+
     #[test]
     fn browser_sign_in_then_refresh() {
         let json = |status: &str, body: &str| {
             format!("HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}", body.len()).into_bytes()
         };
         let (base, seen) = crate::http::tests::serve(vec![
-            json("200 OK", r#"{"access_token":"good-token","refresh_token":"r1","expires_in":3600}"#),
+            json(
+                "200 OK",
+                &format!(
+                    r#"{{"access_token":"good-token","refresh_token":"r1","expires_in":3600,"id_token":"e30.{}.sig"}}"#,
+                    b64url(br#"{"tid":"tenant-1","email":"zoe@x.example"}"#)
+                ),
+            ),
             json("200 OK", r#"{"access_token":"fresh","expires_in":3600}"#),
             json("400 Bad Request", r#"{"error":"invalid_grant"}"#),
         ]);
@@ -449,12 +522,14 @@ pub(crate) mod tests {
         };
         let t = authorize(&p, "zoe@x.example", &mut browser, Duration::from_secs(10)).unwrap();
         assert_eq!((t.access.as_str(), t.refresh.as_deref()), ("good-token", Some("r1")));
+        // The tenant and the address come from the ID token (the refresh below carries none).
+        assert_eq!((t.tenant.as_deref(), t.user.as_deref()), (Some("tenant-1"), Some("zoe@x.example")));
         assert!(opened.contains("code_challenge_method=S256") && opened.contains("login_hint=zoe%40x.example"), "{opened}");
         let t = refresh(&p, "r1").unwrap();
         // Expiry is wall-clock time (it goes on while the computer sleeps), a minute early.
         assert!((now_unix() + 3500..=now_unix() + 3540).contains(&t.expires_at), "{}", t.expires_at);
         assert!(!t.expired() && Tokens { expires_at: now_unix() - 1, ..t.clone() }.expired());
-        assert_eq!((t.access.as_str(), t.refresh), ("fresh", None));
+        assert_eq!((t.access.as_str(), t.refresh, t.tenant), ("fresh", None, None));
         assert!(matches!(refresh(&p, "revoked"), Err(NetError::Auth(m)) if m.contains("invalid_grant")));
         let seen = seen.join().unwrap();
         assert!(
