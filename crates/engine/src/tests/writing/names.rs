@@ -5,7 +5,7 @@ use super::*;
 use quatrelle_model::{AccountConfig, Addressee, AddresseeKind, EmailAddress};
 
 /// The sample with an Exchange account beside it, and that account's id.
-fn with_exchange(name: &str) -> (Session, String) {
+pub(super) fn with_exchange(name: &str) -> (Session, String) {
     let mut s = sample_session(name);
     let config = AccountConfig {
         name: "Riley".into(),
