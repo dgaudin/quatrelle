@@ -514,7 +514,7 @@ impl Session {
         // or on the server carries the addresses alone, with no error, and the group stays only
         // in the message being written. Expanding it at every save would make saving wait on the
         // server; a draft reopened from Drafts has its addresses, and the group is typed again.
-        let lenient = |s: &str| s.split([',', ';']).filter_map(|p| addr::parse_list(p).ok()).flatten().collect::<Vec<_>>();
+        let lenient = |s: &str| addr::split_entries(s).into_iter().filter_map(addr::parse_one).collect::<Vec<_>>();
         let (body, html, inline) = c.bodies();
         let d = mime::Draft {
             reply_to: lenient(&c.reply_to),
