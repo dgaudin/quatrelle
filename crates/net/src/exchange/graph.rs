@@ -123,6 +123,13 @@ impl Client {
         self.auth = format!("Bearer {token}");
     }
 
+    /// A copy of this session, with its address and its current token, to ask the server for
+    /// something on a thread of its own (a message's whole source, while the main session goes
+    /// on). A token renewed here later isn't known to the copy.
+    pub(crate) fn sibling(&self) -> Client {
+        Client { base: self.base.clone(), auth: self.auth.clone() }
+    }
+
     /// The mail folders, with roles for the well-known ones; the Outbox and Exchange's own
     /// bookkeeping folders are left out.
     pub fn mailboxes(&self) -> Result<Vec<Mailbox>> {
@@ -451,11 +458,13 @@ fn importance_header(m: &Value) -> String {
 mod requests;
 mod rules;
 mod sync;
+mod text_first;
 
 pub(crate) use requests::backoff_secs;
 use requests::send_through_limits;
 pub(crate) use sync::download_ahead;
 pub use sync::{append, apply_remote, fetch_body, find_on_server, list_folders, send, sync_folder, vote};
+pub use text_first::fetch_text;
 
 #[cfg(test)]
 mod tests {

@@ -184,6 +184,19 @@ impl Data {
                 }
                 ok(json!({ "id": id, "parentFolderId": drafts }))
             }
+            // With its body and the list of its files, names and sizes but no bytes (a message's
+            // text first); another mailbox's message comes the same way, through `/users/…`.
+            ("GET", ["me", "messages", id]) if query.contains("$expand=attachments") => self.message(id).map_or_else(not_found, |m| {
+                let mut v = self.message_json(m);
+                let p = quatrelle_mime::parse(&m.raw);
+                v["body"] = json!({"contentType": "text", "content": p.as_ref().map(|p| p.text.clone())});
+                let file = |a: &quatrelle_mime::AttachmentInfo| {
+                    let kind = if a.mime == "message/rfc822" { "itemAttachment" } else { "fileAttachment" };
+                    json!({"@odata.type": format!("#microsoft.graph.{kind}"), "name": a.name, "contentType": a.mime, "size": a.size, "isInline": a.inline})
+                };
+                v["attachments"] = json!(p.map(|p| p.attachments.iter().map(file).collect::<Vec<_>>()).unwrap_or_default());
+                ok(v)
+            }),
             ("GET", ["me", "messages", id]) => self.message(id).map_or_else(not_found, |m| {
                 let mut v = self.message_json(m);
                 // Its own header lines, when asked for.

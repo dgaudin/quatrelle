@@ -14,13 +14,16 @@ const DIED: &str = "the download stopped unexpectedly";
 
 /// What a whole message comes over: a connection of its own, copied when it's asked for.
 pub(super) enum Whole {
-    Ews(crate::ews::Client),
+    Ews(Box<crate::ews::Client>),
+    /// With the mailbox it is in, when another than the account's own.
+    Graph(crate::graph::Client, Option<String>),
 }
 
 impl Whole {
     fn download(&self, id: &str) -> Result<Vec<u8>> {
         match self {
             Whole::Ews(c) => c.download(id),
+            Whole::Graph(c, owner) => c.download(id, owner.as_deref()),
         }
     }
 }
@@ -190,6 +193,15 @@ fn bring(entry: Waiting, stopped: &AtomicBool, store: &Store) -> Event {
 }
 
 impl Worker {
+    /// A message that can't come: told of, and a trouble with the connection (a refused sign-in,
+    /// a connection lost) is the account's.
+    fn body_failed(&mut self, key: MessageKey, e: NetError) {
+        self.sink.emit(Event::BodyFailed { key, error: e.to_string() });
+        if e.is_fatal() || matches!(e, NetError::Auth(_)) {
+            self.failed(e);
+        }
+    }
+
     /// A big message's text on this connection, then the whole of it on a copy. Whatever can't
     /// go that way is brought whole here ([`Worker::fetch`]), which tells of any failure.
     pub(super) fn fetch_text_first(&mut self, key: MessageKey) {
@@ -204,21 +216,22 @@ impl Worker {
         if self.conn.is_none()
             && let Err(e) = self.connect()
         {
-            self.sink.emit(Event::BodyFailed { key, error: e.to_string() });
-            if e.is_fatal() || matches!(e, NetError::Auth(_)) {
-                self.failed(e);
-            }
-            return;
+            return self.body_failed(key, e);
         }
-        let Some(Conn::Ews(c)) = self.conn.as_ref() else { return self.fetch(key) };
         let (asked, numbered) = (Instant::now(), self.jstate.len());
-        let text = crate::ews::fetch_text(c, &mut self.jstate, &self.store, &key);
-        let how = Whole::Ews(c.sibling());
+        // The copy of the connection is taken once the text is had: it carries what that learnt.
+        let text = match self.conn.as_ref() {
+            Some(Conn::Ews(c)) => crate::ews::fetch_text(c, &mut self.jstate, &self.store, &key)
+                .map(|found| found.map(|(raw, id)| (raw, id, Whole::Ews(Box::new(c.sibling()))))),
+            Some(Conn::Graph(c)) => crate::graph::fetch_text(c, &self.jstate, &self.store, &key)
+                .map(|found| found.map(|(raw, id)| (raw, id, Whole::Graph(c.sibling(), self.jstate.owner(&key.folder).map(str::to_string))))),
+            _ => return self.fetch(key),
+        };
         if self.jstate.len() != numbered {
             // A message found again by its Message-ID: the numbering is worth keeping.
             self.save_jstate();
         }
-        let (raw, id) = match text {
+        let (raw, id, how) = match text {
             Ok(Some(found)) => found,
             Ok(None) => {
                 log::info!("{}: a message comes whole, without its text first", self.acc.id);
@@ -229,6 +242,10 @@ impl Worker {
                 log::warn!("{}: the server refuses a message's text alone ({e}): messages come whole from now on", self.acc.id);
                 return self.fetch(key);
             }
+            // The same trouble as a failed connection, told the same way: `fetch` would ask the
+            // server again, and a password changed meanwhile would cost two refused sign-ins for
+            // each message.
+            Err(e) if e.is_fatal() || matches!(e, NetError::Auth(_)) => return self.body_failed(key, e),
             Err(e) => {
                 log::info!("{}: a message's text didn't come ({e}): it comes whole", self.acc.id);
                 return self.fetch(key);
@@ -251,7 +268,11 @@ mod text_first_tests {
 
     fn entry(uid: u32, id: &str) -> Waiting {
         let client = crate::ews::Client::new("https://nowhere.invalid/EWS/Exchange.asmx", "user", "pw", "user@nowhere.invalid").unwrap();
-        Waiting { key: MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 1, uid }, id: id.into(), how: Whole::Ews(client) }
+        Waiting {
+            key: MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 1, uid },
+            id: id.into(),
+            how: Whole::Ews(Box::new(client)),
+        }
     }
 
     fn waiting(q: &Queue) -> Vec<(u32, &str)> {
