@@ -70,6 +70,8 @@ pub struct Data {
     pub group_calendars: Vec<(String, String, String, bool)>,
     /// Messages whose source can't be had (the server fails on it).
     pub unreadable: Vec<String>,
+    /// Messages that are meeting invitations: Graph types them `eventMessage`, unasked.
+    pub invitations: Vec<String>,
     /// Per-batch concurrency cap: entries past this index get a 429 with Retry-After.
     pub at_once: Option<usize>,
     /// Number of upcoming top-level requests to refuse with 429.
@@ -192,6 +194,9 @@ impl Data {
             "hasAttachments": p.as_ref().is_some_and(|p| !p.attachments.is_empty()),
             "internetMessageId": p.as_ref().map(|p| format!("<{}>", p.message_id)),
         });
+        if self.invitations.contains(&m.id) {
+            v["@odata.type"] = json!("#microsoft.graph.eventMessage");
+        }
         if !m.voting.is_empty() {
             v["singleValueExtendedProperties"] =
                 json!([{"id": "Binary {00062008-0000-0000-c000-000000000046} Id 0x8520", "value": crate::imap::base64(&m.voting)}]);

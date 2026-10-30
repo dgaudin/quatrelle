@@ -561,6 +561,31 @@ fn a_refused_sign_in_is_tried_once_for_a_message() {
     let _ = std::fs::remove_dir_all(store.root());
 }
 
+/// A password changed while the account is open: the text request is refused, and that is told as
+/// the connection's failure. A second request for the whole message would cost a second refused
+/// sign-in, which on Active Directory counts toward locking the account.
+#[test]
+fn a_password_changed_meanwhile_costs_one_refused_sign_in_for_a_message() {
+    let (d, _) = inbox_of(1);
+    let server = serve(d);
+    let store = crate::fake::tests_store("ews-text-first-changed");
+    let mut pool = start(&server, &store);
+    let key = key_of(&store, "M0");
+    {
+        let mut d = server.data.lock().unwrap();
+        d.password_changed = true;
+        d.forget_sign_in = true;
+    }
+    // The sync's own requests meet the refusal too: only the message's are counted.
+    let refused = || server.data.lock().unwrap().refused_sign_ins.iter().filter(|op| *op == "GetItem").count();
+    open(&mut pool, &key);
+    let seen = until(&pool, "the failure", |e| is_failed(e, &key));
+    assert!(!seen.iter().any(|e| matches!(e, Event::TextFirst { .. } | Event::Body { .. })), "{seen:?}");
+    assert_eq!(refused(), 1, "one request for the text, none for the whole message");
+    drop(pool);
+    let _ = std::fs::remove_dir_all(store.root());
+}
+
 /// Only the source is written: a sync saving the folder can't be raced, and nothing tells of a
 /// change to it.
 #[test]

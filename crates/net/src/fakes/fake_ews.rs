@@ -76,6 +76,12 @@ pub struct Data {
     /// The next request on a signed-in connection is told to sign in again (a recycled
     /// connection), once.
     pub forget_sign_in: bool,
+    /// The password was changed since: no sign-in succeeds any more (a connection already signed in
+    /// goes on until `forget_sign_in`).
+    pub password_changed: bool,
+    /// The operation of each request whose sign-in was refused (the last step of an NTLM handshake
+    /// whose password is wrong).
+    pub refused_sign_ins: Vec<String>,
     /// Folders listed without their last change (as a server that doesn't keep it).
     pub no_commit_time: bool,
     /// The mailbox's limits in kilobytes (warning, sending, receiving), on its root folder.
@@ -276,6 +282,8 @@ impl Default for Data {
             calls: Vec::new(),
             handshakes: 0,
             forget_sign_in: false,
+            password_changed: false,
+            refused_sign_ins: Vec::new(),
             drop_kept: 0,
             no_commit_time: false,
             limits: None,

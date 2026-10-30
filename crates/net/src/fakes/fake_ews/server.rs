@@ -135,8 +135,14 @@ fn serve_connection(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>) {
                         continue;
                     }
                     Some(m) if m.get(8) == Some(&3) => {
-                        let ok = challenge.as_ref().is_some_and(|c| crate::ntlm::verify(c, &m, USER, DOMAIN, PASSWORD));
+                        let changed = shared.lock().unwrap().password_changed;
+                        let ok = !changed && challenge.as_ref().is_some_and(|c| crate::ntlm::verify(c, &m, USER, DOMAIN, PASSWORD));
                         if !ok {
+                            let text = String::from_utf8_lossy(&body);
+                            let op = text
+                                .split_once("<soap:Body><m:")
+                                .map(|(_, o)| o.chars().take_while(|c| c.is_ascii_alphanumeric()).collect::<String>());
+                            shared.lock().unwrap().refused_sign_ins.push(op.unwrap_or_default());
                             respond(&mut s, 401, &[("WWW-Authenticate", "NTLM".into()), ("WWW-Authenticate", "Negotiate".into())], b"");
                             continue;
                         }
