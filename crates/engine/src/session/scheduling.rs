@@ -10,6 +10,7 @@ use quatrelle_model::scheduling::{
     Availability, BusyKind, BusySlot, MAX_PEOPLE, MAX_ROOMS, MAX_SLOTS, MAX_WINDOW, Room, RoomList, is_rooms_group, merge_slots,
 };
 
+use super::mailboxes::people::{ROOMS_EVERY, ROOMS_RETRY};
 use super::*;
 
 /// Something asked of the server: on its way, here, or refused.
@@ -104,6 +105,34 @@ impl Session {
         Ok(self.rooms_json(account))
     }
 
+    /// Ask the room lists of the accounts that are online and haven't been asked for a day (or,
+    /// after a failure, for ten minutes): they tell rooms from people. Quiet: a Room Finder that
+    /// holds rooms stays as it is while they come.
+    pub(crate) fn refresh_rooms_due(&mut self) {
+        if self.prefs.work_offline {
+            return;
+        }
+        let now = self.clock.now;
+        let due: Vec<String> = self
+            .accounts
+            .iter()
+            .filter(|a| matches!(a.status, SyncStatus::Online { .. } | SyncStatus::Syncing { .. }) && self.server_schedules(&a.config.id))
+            .filter(|a| match self.people.rooms_asked.get(&a.config.id) {
+                // The Room Finder's own ask is on its way: its answer is noted.
+                None => !matches!(self.rooms.get(&a.config.id), Some(Fetched::Loading)),
+                Some(&(at, failed)) => now.saturating_sub(at) >= if failed { ROOMS_RETRY } else { ROOMS_EVERY },
+            })
+            .map(|a| a.config.id.clone())
+            .collect();
+        for account in due {
+            self.people.rooms_asked.insert(account.clone(), (now, false));
+            if !self.rooms.contains_key(&account) {
+                self.rooms.insert(account.clone(), Fetched::Loading);
+            }
+            self.jobs.push(Job::GetRooms { account });
+        }
+    }
+
     fn rooms_json(&self, account: &str) -> Value {
         let mut v = serde_json::json!({"account": account, "state": self.rooms.get(account).map_or("none", Fetched::state)});
         match self.rooms.get(account) {
@@ -123,10 +152,20 @@ impl Session {
     /// The server's answer about rooms, the calendar's added after them: a server with no
     /// lists set up (or one that refused) still offers what the calendar knows.
     pub(crate) fn rooms_answered(&mut self, account: &str, lists: Vec<RoomList>, mut rooms: Vec<Room>, error: Option<String>) {
+        let failed = error.is_some() && rooms.is_empty();
+        self.people.rooms_asked.insert(account.to_string(), (self.clock.now, failed));
         let known = self.calendar_rooms(account);
         if let Some(e) = &error {
+            // A failed refresh keeps what the server last said: the Room Finder and the room set.
+            if rooms.is_empty() && matches!(self.rooms.get(account), Some(Fetched::Ready(f)) if !f.from_calendar) {
+                log::info!("{account}: rooms from the server: {e}; the last are kept");
+                return;
+            }
             if rooms.is_empty() && known.is_empty() {
-                self.rooms.insert(account.to_string(), Fetched::Failed(e.clone()));
+                // Nothing known: refused, unless a Room Finder already holds something.
+                if !matches!(self.rooms.get(account), Some(Fetched::Ready(_))) {
+                    self.rooms.insert(account.to_string(), Fetched::Failed(e.clone()));
+                }
                 return;
             }
             log::info!("{account}: rooms from the server: {e}; the calendar's are offered");
@@ -137,6 +176,7 @@ impl Session {
                 rooms.push(r);
             }
         }
+        self.set_room_set(account, &rooms);
         self.rooms.insert(account.to_string(), Fetched::Ready(RoomFinder { lists, rooms, from_calendar }));
     }
 

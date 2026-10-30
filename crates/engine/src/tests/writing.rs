@@ -5,6 +5,7 @@ use super::*;
 mod drafts;
 mod emoji;
 mod names;
+mod people_field;
 mod pictures;
 mod senders;
 
