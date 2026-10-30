@@ -2,9 +2,12 @@
 
 use std::fmt;
 
+pub mod entries;
 pub(crate) mod providers;
 
 use serde::{Deserialize, Serialize};
+
+pub use entries::*;
 
 /// A display name and an address (`Zoe Park <zoe@example.org>`).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -73,7 +76,7 @@ pub fn is_valid_email(s: &str) -> bool {
 pub fn parse_list(input: &str) -> Result<Vec<EmailAddress>, String> {
     let mut out = Vec::new();
     let mut bad = Vec::new();
-    for part in split_outside_quotes(input) {
+    for part in split_entries(input) {
         let part = part.trim();
         if part.is_empty() {
             continue;
@@ -98,27 +101,6 @@ fn parse_one(s: &str) -> Option<EmailAddress> {
     }
     let a = EmailAddress { name: String::new(), email: s.trim().to_string() };
     a.is_valid().then_some(a)
-}
-
-fn split_outside_quotes(s: &str) -> Vec<&str> {
-    let mut parts = Vec::new();
-    let mut quoted = false;
-    let mut angle = false;
-    let mut start = 0;
-    for (i, c) in s.char_indices() {
-        match c {
-            '"' => quoted = !quoted,
-            '<' if !quoted => angle = true,
-            '>' if !quoted => angle = false,
-            ',' | ';' if !quoted && !angle => {
-                parts.push(s.get(start..i).unwrap_or_default());
-                start = i + c.len_utf8();
-            }
-            _ => {}
-        }
-    }
-    parts.push(s.get(start..).unwrap_or_default());
-    parts
 }
 
 /// Format a list for a header-like line (`Zoe Park <zoe@…>; ops@…`).
