@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use quatrelle_engine::store::location;
-use quatrelle_ui_egui::{ReminderAction, Services, VideoFrame};
+use quatrelle_ui_egui::{BrowserProfile, ReminderAction, Services, VideoFrame};
 
 #[cfg(windows)]
 use crate::toast;
@@ -17,6 +17,7 @@ use crate::{display, self_update, video};
 pub(crate) mod appearance;
 pub(crate) mod browsers;
 pub(crate) mod keychain;
+pub(crate) mod profiles;
 pub(crate) mod tray;
 
 #[derive(Default)]
@@ -387,6 +388,15 @@ impl Services for Desktop {
     }
     fn browsers(&mut self) -> Vec<(String, String)> {
         browsers::found().into_iter().map(|b| (b.name.to_string(), b.program.display().to_string())).collect()
+    }
+    fn browser_profiles(&mut self, program: &str) -> Vec<BrowserProfile> {
+        // Which browser the program is says where its data is; a program not found has none.
+        let Some(browser) = browsers::found().into_iter().find(|b| b.program.display().to_string() == program) else { return Vec::new() };
+        let home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" }).map(PathBuf::from);
+        let env = |v: &str| std::env::var_os(v).filter(|p| !p.is_empty()).map(PathBuf::from);
+        profiles::user_data_dir(browser.name, profiles::Platform::HERE, home.as_deref(), env)
+            .map(|dir| profiles::read_profiles(&dir))
+            .unwrap_or_default()
     }
     fn open_app_window(&mut self, program: &str, url: &str) -> Result<(), String> {
         browsers::launch(Path::new(program), url)
