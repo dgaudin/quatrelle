@@ -2,6 +2,7 @@
 //! Address List).
 
 use super::*;
+use crate::{FieldId, Outcome};
 use quatrelle_model::{AccountConfig, Addressee, AddresseeKind, EmailAddress};
 
 /// The sample with an Exchange account beside it, and that account's id.
@@ -20,7 +21,7 @@ pub(super) fn with_exchange(name: &str) -> (Session, String) {
 }
 
 /// The names the directory is being asked about, in order.
-fn asked(s: &mut Session) -> Vec<String> {
+pub(super) fn asked(s: &mut Session) -> Vec<String> {
     s.take_jobs()
         .into_iter()
         .filter_map(|j| match j {
@@ -123,7 +124,7 @@ fn check_names_takes_the_directorys_name_for_an_address_known_alone() {
     answer(&mut s, &gal, "jo", &[("Joanna Smith", "jo@contoso.example"), ("John Doe", "john.doe@contoso.example")]);
     let id = s.compose.as_ref().unwrap().id;
     let choice = s.name_choice(id).cloned().expect("two people to choose from");
-    let name = |email: &str| choice.people.iter().find(|a| a.email.eq_ignore_ascii_case(email)).map(|a| a.name.clone());
+    let name = |email: &str| choice.people.iter().find(|a| a.address.eq_ignore_ascii_case(email)).map(|a| a.name.clone());
     assert_eq!(name("jo@contoso.example").as_deref(), Some("Jo (from the gym)"), "{:?}", choice.people);
     assert_eq!(name("john.doe@contoso.example").as_deref(), Some("John Doe"));
     assert_eq!(choice.people.len(), 2, "listed once each");
@@ -131,23 +132,36 @@ fn check_names_takes_the_directorys_name_for_an_address_known_alone() {
 }
 
 /// The directory searched with the account's contacts answers with contact groups too, which have
-/// no address: Check Names and the Global Address List take only the entries with one, so a group
-/// beside one person still writes that person out, and a group alone is no one found.
+/// no address: Check Names takes them like anyone else (a group beside a person is offered beside
+/// them, and once chosen is written as its reference, kept as it is when checked again), while
+/// the Global Address List, a list of addresses, still lists none.
 #[test]
-fn check_names_leaves_out_a_contact_group_the_directory_gives() {
+fn check_names_offers_a_contact_group_the_directory_gives() {
     let (mut s, gal) = with_exchange("check-names-group");
-    let group = || Addressee { item_id: "AAMk=".into(), ..Addressee::new("Dupont family", "", AddresseeKind::ContactGroup) };
+    let group = Addressee { item_id: "AAMk=".into(), ..Addressee::new("Dupont family", "", AddresseeKind::ContactGroup) };
     s.run("mail.new", &json!({})).unwrap();
-    s.run("compose.update", &json!({"to": "dupont; family"})).unwrap();
+    s.run("compose.update", &json!({"to": "dupont"})).unwrap();
     s.run("compose.checkNames", &json!({})).unwrap();
     assert_eq!(asked(&mut s), ["dupont"]);
     let anne = Addressee::new("Anne Dupont", "anne.dupont@contoso.example", AddresseeKind::Person);
-    s.apply(Event::DirectoryPeople { account: gal.clone(), query: "dupont".into(), people: vec![group(), anne], more: false, error: None });
-    assert_eq!(s.compose.as_ref().unwrap().to, "Anne Dupont <anne.dupont@contoso.example>; family; ");
-    assert_eq!(asked(&mut s), ["family"]);
-    let notices = s.notices.len();
-    s.apply(Event::DirectoryPeople { account: gal.clone(), query: "family".into(), people: vec![group()], more: false, error: None });
-    assert!(s.notices.len() > notices && s.notices.last().is_some_and(|n| n.text == crate::NAMES_NOT_FOUND));
-    assert!(s.address_book_now(&format!("directory:{gal}"), "family").is_empty(), "the Global Address List lists no group");
+    s.apply(Event::DirectoryPeople { account: gal.clone(), query: "dupont".into(), people: vec![group.clone(), anne], more: false, error: None });
+    assert_eq!(s.compose.as_ref().unwrap().to, "dupont; ", "two to choose from: nothing written yet");
+    let id = s.compose.as_ref().unwrap().id;
+    let choice = s.name_choice(id).cloned().expect("the group and Anne to choose from");
+    assert!(choice.people.len() == 2 && choice.people.contains(&group), "{:?}", choice.people);
+    let out = s.run("compose.chooseName", &json!({"token": "dupont", "name": "Dupont family", "itemId": "AAMk="})).unwrap();
+    assert_eq!(out["written"], true);
+    assert_eq!(s.compose.as_ref().unwrap().to, "Dupont family <group:AAMk=>; ");
+    let out = s.run("compose.checkNames", &json!({})).unwrap();
+    assert_eq!(out["resolved"], 1);
+    assert!(asked(&mut s).is_empty(), "a group's reference is never asked");
+    assert_eq!(s.compose.as_ref().unwrap().to, "Dupont family <group:AAMk=>; ");
+    // A reference without its name takes the one the directory gave (an item id keeps its case).
+    assert_eq!(s.directory_known("group:AAMk=").map(|g| g.name.as_str()), Some("Dupont family"));
+    s.run("compose.update", &json!({"cc": "<group:AAMk=>"})).unwrap();
+    s.run("compose.checkNames", &json!({})).unwrap();
+    assert_eq!(s.take_people_outcomes(FieldId { window: id, name: "cc" }), [("<group:AAMk=>".to_string(), Outcome::Found(group))]);
+    let gal_list = s.address_book_now(&format!("directory:{gal}"), "dupont");
+    assert_eq!(gal_list, [EmailAddress::new("Anne Dupont", "anne.dupont@contoso.example")], "the Global Address List lists no group");
     done(s);
 }

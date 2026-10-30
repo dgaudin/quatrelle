@@ -29,7 +29,8 @@ pub struct DirectoryAnswer {
     at: i64,
 }
 
-/// The directory's questions and answers, and what Check Names waits on.
+/// The directory's questions and answers (what fields wait on them is kept by field, in
+/// `People`).
 #[derive(Default)]
 pub(crate) struct Directory {
     /// (account, the name as asked) → the answer, and the order they came in.
@@ -39,10 +40,6 @@ pub(crate) struct Directory {
     asked: HashMap<String, String>,
     /// What waits its turn, per account: (the name, typed rather than checked).
     waiting: HashMap<String, VecDeque<(String, bool)>>,
-    /// Names Check Names waits on the directory for.
-    pub(crate) checks: Vec<NameCheck>,
-    /// Names several people fit, for the one meant to be chosen.
-    pub(crate) choices: Vec<NameChoice>,
 }
 
 /// A name as it's asked: trimmed, in lower case, cut to a length.

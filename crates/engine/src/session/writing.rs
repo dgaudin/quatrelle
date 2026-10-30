@@ -17,7 +17,7 @@ use compose::with_html_signature;
 pub use compose::{Compose, add_pictures, signature_block, style_signature};
 pub use items::{ItemChoice, ItemKind};
 pub(crate) use names::NameCheck;
-pub use names::{NAMES_NOT_FOUND, NameChoice};
+pub use names::{NAMES_NOT_FOUND, NameChoice, Outcome, Resolved};
 pub use senders::Sender;
 
 /// From this many people (counted as [`SendCheck::Exposed`] says), sending to all of them in To

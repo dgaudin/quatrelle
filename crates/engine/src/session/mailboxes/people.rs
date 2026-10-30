@@ -9,10 +9,13 @@
 //! ([`INDEX_MAX`], the oldest out first), not by the answers kept: an entry the directory no
 //! longer has may be suggested until newer ones push it out, the account goes or Quatrelle starts
 //! again (the index isn't kept on disk). Check Names (Ctrl+K) still asks the server.
+//!
+//! What a field's names wait on, the choices they offer and what they came to are kept here by
+//! field ([`FieldId`]); Check Names itself is `writing/names.rs`.
 
 use std::collections::VecDeque;
 
-use quatrelle_model::addr::{group_ref, valid_item_id};
+use quatrelle_model::addr::{group_ref, parse_group_ref, valid_item_id};
 use quatrelle_model::scheduling::Room;
 use quatrelle_model::{Addressee, AddresseeKind};
 
@@ -53,6 +56,12 @@ pub(crate) struct People {
     /// Suggestion passes run, and the entries they looked at.
     passes: u64,
     scanned: u64,
+    /// Names fields wait on the directory for (Check Names, [`Session::people_resolve`]).
+    pub(crate) pending: Vec<NameCheck>,
+    /// Names several people fit, for the one meant to be chosen.
+    pub(crate) choices: Vec<NameChoice>,
+    /// What each field's names came to, until the field takes them.
+    pub(crate) outcomes: HashMap<FieldId, Vec<(String, Outcome)>>,
 }
 
 /// An entry of the directory index, with its name in lower case (matched on every key typed).
@@ -141,9 +150,12 @@ impl Session {
         }
     }
 
-    /// What the directory answered for an address (a contact group: for its `group:<item id>`).
+    /// What the directory answered for an address (a contact group: for its `group:<item id>`,
+    /// whose item id keeps its case).
     pub fn directory_known(&self, email: &str) -> Option<&Addressee> {
-        self.people.index.get(&email.trim().to_ascii_lowercase()).map(|e| &e.who)
+        let key = email.trim();
+        let key = if parse_group_ref(key).is_some() { key.to_string() } else { key.to_ascii_lowercase() };
+        self.people.index.get(&key).map(|e| &e.who)
     }
 
     /// Keep what the directory answered in the index (only answers fill it, never suggestions):

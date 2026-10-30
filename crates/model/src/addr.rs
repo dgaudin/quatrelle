@@ -92,7 +92,9 @@ pub fn parse_list(input: &str) -> Result<Vec<EmailAddress>, String> {
     if bad.is_empty() { Ok(out) } else { Err(bad.join(", ")) }
 }
 
-fn parse_one(s: &str) -> Option<EmailAddress> {
+/// One entry typed (`zoe@x`, `Zoe Park <zoe@x>`, `"Park, Zoe" <zoe@x>`) as an address; `None`
+/// when it isn't one (a contact group's reference included).
+pub fn parse_one(s: &str) -> Option<EmailAddress> {
     if let (Some(lt), Some(gt)) = (s.rfind('<'), s.rfind('>')) {
         if gt < lt {
             return None;

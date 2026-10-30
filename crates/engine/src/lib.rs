@@ -28,9 +28,9 @@ pub use quatrelle_store as store;
 pub use session::{
     ARRANGE_HEADINGS, AccountState, Arrange, AssistKind, Assistant, CardSearch, Compose, DirectoryAnswer, FIELD_NAMES, FieldId, Filing, FolderRef,
     FolderSizes, INDEX_MAX, ItemChoice, ItemKind, KnownCert, ListFilter, ListLayout, Lock, MAX_SUGGESTIONS, MEETINGS_PROFILE, MoveTarget,
-    NAMES_NOT_FOUND, NameChoice, NotesOrder, PANICS_CAUGHT, PaneSection, Picture, PictureLoading, Prefs, READING_ZOOM, RECENT_EMOJI, ReadInPane,
-    Reading, ReadingPane, RevocationCheck, Rewrite, Row, RulesScope, SMIME_DOC, Seal, SearchScope, Security, SendCheck, Sender, ServerSearch,
-    Session, SignedBy, Sizes, SmimeSettings, Source, Suggestion, UpdateCheck, VacationState, View, directory_people, fill_name,
+    NAMES_NOT_FOUND, NameChoice, NotesOrder, Outcome, PANICS_CAUGHT, PaneSection, Picture, PictureLoading, Prefs, READING_ZOOM, RECENT_EMOJI,
+    ReadInPane, Reading, ReadingPane, Resolved, RevocationCheck, Rewrite, Row, RulesScope, SMIME_DOC, Seal, SearchScope, Security, SendCheck, Sender,
+    ServerSearch, Session, SignedBy, Sizes, SmimeSettings, Source, Suggestion, UpdateCheck, VacationState, View, directory_people, fill_name,
     invite::{Invite, InviteProblem},
     is_profile_dir,
     junk::{JunkList, junk_entry},
