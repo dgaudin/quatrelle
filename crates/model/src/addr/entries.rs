@@ -160,7 +160,13 @@ impl Accepts {
 
     /// Whether the field takes the kind (`Unknown`, an address alone, always).
     pub fn takes(&self, kind: AddresseeKind) -> bool {
-        kind == AddresseeKind::Unknown || self.kinds.contains(&kind)
+        Accepts::taken_by(self.kinds, kind)
+    }
+
+    /// Whether a field taking `kinds` (given at run time, as a command does) takes the kind: the
+    /// rule of [`Accepts::takes`].
+    pub fn taken_by(kinds: &[AddresseeKind], kind: AddresseeKind) -> bool {
+        kind == AddresseeKind::Unknown || kinds.contains(&kind)
     }
 }
 
