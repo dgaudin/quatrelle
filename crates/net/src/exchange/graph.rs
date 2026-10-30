@@ -33,7 +33,7 @@ const MAX_MIME: usize = 64 << 20;
 /// per-app, per-mailbox concurrency limit is 4, so larger batches mostly came back as 429s.
 const BATCH: usize = 4;
 /// Attempts per request (or batch entry) while the server keeps answering 429.
-const BUSY_ROUNDS: u32 = 4;
+pub(crate) const BUSY_ROUNDS: u32 = 4;
 /// Upper bound in seconds on a single back-off, whatever `Retry-After` says.
 const BUSY_WAIT_CAP: u64 = 20;
 /// Up to this many uncached messages are fetched individually (with internet headers); above
@@ -100,7 +100,8 @@ fn json_body(body: &[u8]) -> Result<Value> {
     serde_json::from_slice(body).map_err(|e| NetError::Protocol(format!("Graph: {e}")))
 }
 
-fn seg(id: &str) -> String {
+/// A path segment: an id percent-encoded (Graph's ids carry `/`, `:`, `@`, `=`…).
+pub(crate) fn seg(id: &str) -> String {
     http::pct(id)
 }
 
@@ -364,7 +365,7 @@ fn received(m: &Value) -> Option<i64> {
 }
 
 /// Unix seconds as an ISO 8601 UTC time (`2026-10-23T09:00:00Z`), as `$filter` takes them.
-fn utc(t: i64) -> String {
+pub(crate) fn utc(t: i64) -> String {
     let (y, m, d) = quatrelle_model::dates::civil_from_days(t.div_euclid(86_400));
     let s = t.rem_euclid(86_400);
     format!("{y:04}-{m:02}-{d:02}T{:02}:{:02}:{:02}Z", s / 3600, s / 60 % 60, s % 60)
@@ -451,6 +452,7 @@ mod requests;
 mod rules;
 mod sync;
 
+pub(crate) use requests::backoff_secs;
 use requests::send_through_limits;
 pub(crate) use sync::download_ahead;
 pub use sync::{append, apply_remote, fetch_body, find_on_server, list_folders, send, sync_folder, vote};

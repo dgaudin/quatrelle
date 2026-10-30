@@ -147,7 +147,7 @@ pub(super) fn send_through_limits(r: &Request) -> Result<Response> {
 
 /// Seconds to pause before attempt `round + 1`: a numeric `Retry-After` hint if present,
 /// otherwise 2 s per round so far; clamped to 1..=[`BUSY_WAIT_CAP`].
-fn backoff_secs(hint: Option<&str>, round: u32) -> u64 {
+pub(crate) fn backoff_secs(hint: Option<&str>, round: u32) -> u64 {
     let fallback = 2 * u64::from(round.max(1));
     hint.and_then(|h| h.trim().parse().ok()).unwrap_or(fallback).clamp(1, BUSY_WAIT_CAP)
 }
