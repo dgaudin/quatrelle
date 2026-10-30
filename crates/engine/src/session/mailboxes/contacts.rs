@@ -114,7 +114,7 @@ impl Session {
     /// The book with all the mail read: in one go, when there's no book yet. One already there
     /// answers as it is (the mail new since is read a slice at a time by the window): a command
     /// run from it (Send, resolving names) doesn't read a big folder whole.
-    fn contacts_whole(&mut self) {
+    pub(crate) fn contacts_whole(&mut self) {
         if self.contacts.book.is_none() || self.contacts.marks.is_empty() {
             self.contacts_step(usize::MAX);
         }
@@ -202,6 +202,11 @@ impl Session {
             .filter(|a| a.config.ews.is_some())
             .map(|a| (format!("directory:{}", a.config.id), "Global Address List".to_string(), a.config.email.clone()));
         books.chain(directories).collect()
+    }
+
+    /// How many people the address book holds (none before it's first wanted).
+    pub(crate) fn contacts_len(&self) -> usize {
+        self.contacts.book.as_ref().map_or(0, ContactBook::len)
     }
 
     /// What the address book knows about an address.

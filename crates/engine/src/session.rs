@@ -42,7 +42,9 @@ mod writing;
 pub use listing::{ARRANGE_HEADINGS, Arrange, FolderRef, ListFilter, OUTBOX, Row, View, arrange_list};
 use listing::{Preview, person, size_group};
 use mailboxes::{Contacts, bare_name, directory_key};
-pub use mailboxes::{DirectoryAnswer, FolderSizes, Sizes, directory_people, fill_name};
+pub use mailboxes::{
+    DirectoryAnswer, FIELD_NAMES, FieldId, FolderSizes, INDEX_MAX, MAX_SUGGESTIONS, Sizes, Source, Suggestion, directory_people, fill_name,
+};
 pub use organize::{RulesScope, junk, quick_steps, search_folders};
 pub use prefs::{
     ListLayout, MEETINGS_PROFILE, NotesOrder, PictureLoading, Prefs, READING_ZOOM, RECENT_EMOJI, ReadInPane, ReadingPane, is_profile_dir,
