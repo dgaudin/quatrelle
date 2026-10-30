@@ -369,19 +369,9 @@ pub struct UiState {
     /// The body's cursor (characters), where pictures go.
     /// The message editor's state (selection, undo, what's typed next).
     pub(crate) editor: Option<rich_edit::Editor>,
-    /// The recipient box showing suggestions (`to`, `cc`, `bcc`), the highlighted one, and the
-    /// text for which Escape hid them.
-    pub(crate) suggest_field: Option<&'static str>,
-    pub(crate) suggest_index: usize,
-    pub(crate) suggest_dismissed: Option<String>,
-    /// The recipient box a suggestion was just picked into: it keeps the cursor through the rest
-    /// of that click (the release lands outside the box, which would otherwise end its focus).
-    pub(crate) suggest_refocus: Option<&'static str>,
-    /// The suggestions last worked out, for which box, text and address book (its revision):
-    /// looking through a book of thousands is for a change, not for every frame.
-    pub(crate) suggest_cache: Option<((&'static str, String, u64), Vec<quatrelle_engine::model::contacts::Contact>)>,
-    /// A suggestion taken out with its × (its address): the address book is told.
-    pub(crate) suggest_forget: Option<String>,
+    /// The contacts fields on screen (To, Cc, Bcc, Replies to, Select Names' rows), by field, and
+    /// the send held for the names still being resolved.
+    pub(crate) people: dialogs::people_field::PeopleFields,
     /// Installed Craft apps (command, path), found at start-up.
     pub(crate) craft_apps: Vec<(&'static str, PathBuf)>,
     /// The interface language setting (`auto` or a language code).
@@ -541,12 +531,7 @@ impl MailApp {
                 event_windows: Vec::new(),
                 event_window_ids: 0,
                 editor: None,
-                suggest_field: None,
-                suggest_index: 0,
-                suggest_dismissed: None,
-                suggest_refocus: None,
-                suggest_cache: None,
-                suggest_forget: None,
+                people: Default::default(),
                 craft_apps: Vec::new(),
                 language: i18n::AUTO.into(),
                 fonts: (None, None),

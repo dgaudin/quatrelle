@@ -1803,6 +1803,8 @@ month	May	مايو
 	This list has no members	لا تحتوي هذه القائمة على أعضاء
 	Not found: {name}	غير موجود: {name}
 	The directory can't be reached	تعذّر الوصول إلى الدليل
+	and others	وآخرون
+	This list couldn't be expanded: {error}	تعذّر توسيع هذه القائمة: {error}
 	Matched as typed	مطابقة كما كُتب
 	{name}, {kind}, remove with Delete	{name}، {kind}، للإزالة اضغط Delete
 	{name}, {kind}, {why}, remove with Delete	{name}، {kind}، {why}، للإزالة اضغط Delete

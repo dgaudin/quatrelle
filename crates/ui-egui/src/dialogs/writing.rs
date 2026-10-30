@@ -2,9 +2,9 @@
 
 use super::*;
 
-pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Action>) -> bool {
+pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, people: &mut people_field::PeopleFields, t: &Tokens, acts: &mut Vec<Action>) -> bool {
     match d {
-        Dialog::SelectNames(f) => names::select_names(ui, f, t, acts),
+        Dialog::SelectNames(f) => names::select_names(ui, f, s, people, t, acts),
         Dialog::AttachItem(f) => attach_item(ui, f, s, t, acts),
         Dialog::SaveChanges => {
             ui.set_width(380.0);

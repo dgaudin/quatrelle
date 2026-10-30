@@ -1,14 +1,15 @@
-//! Check Names' choice, as Outlook's: several people fit a name typed in a field (To, Cc, Bcc…),
-//! and the one meant is picked from them (or the name is left as typed).
+//! Check Names' choice, as Outlook's: several people fit a name typed in a contacts field (To,
+//! Cc, Bcc, a dialog's row…), and the one meant is picked from them (or the name is left as typed).
 
 use quatrelle_engine::NameChoice;
 
 use super::*;
 
-/// The dialog over the message being written while a name waits for its person.
-pub(super) fn choice_dialog(ctx: &egui::Context, t: &Tokens, choice: &NameChoice, acts: &mut Vec<Action>) {
-    let id = egui::Id::unique(("check-names", choice.field.window));
-    let picked_id = id.with(("picked", choice.field.name, choice.token.as_str()));
+/// The dialog over the field's window while a name waits for its person: the choice is answered
+/// to its field (`people.choose`).
+pub(crate) fn choice_dialog(ctx: &egui::Context, t: &Tokens, choice: &NameChoice, acts: &mut Vec<Action>) {
+    let id = egui::Id::unique(("check-names", choice.field.window, choice.field.name));
+    let picked_id = id.with(("picked", choice.token.as_str()));
     let mut picked: Option<usize> = ctx.data(|d| d.get_temp(picked_id)).flatten();
     // `Some(None)`: left as typed.
     let mut done: Option<Option<usize>> = None;
@@ -57,18 +58,24 @@ pub(super) fn choice_dialog(ctx: &egui::Context, t: &Tokens, choice: &NameChoice
         done = Some(None);
     }
     ctx.data_mut(|d| d.insert_temp(picked_id, picked));
+    let field = json!({"window": choice.field.window, "field": choice.field.name, "token": choice.token});
     match done {
         Some(Some(i)) => {
             if let Some(p) = choice.people.get(i) {
+                let mut person = field;
+                person["name"] = json!(p.name);
+                person["kind"] = json!(p.kind.code());
                 // A contact group has no address: it's chosen by its item id.
-                let mut person = json!({"token": choice.token, "name": p.name, "email": p.address, "kind": p.kind.code()});
+                if !p.address.is_empty() {
+                    person["email"] = json!(p.address);
+                }
                 if !p.item_id.is_empty() {
                     person["itemId"] = json!(p.item_id);
                 }
-                acts.push(Action::Run("compose.chooseName", person));
+                acts.push(Action::Run("people.choose", person));
             }
         }
-        Some(None) => acts.push(Action::Run("compose.chooseName", json!({"token": choice.token}))),
+        Some(None) => acts.push(Action::Run("people.choose", field)),
         None => {}
     }
 }

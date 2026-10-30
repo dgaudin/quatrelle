@@ -1807,6 +1807,8 @@ month	May	maio
 	This list has no members	Esta lista não tem membros
 	Not found: {name}	Não encontrado: {name}
 	The directory can't be reached	Não é possível acessar o diretório
+	and others	e outros
+	This list couldn't be expanded: {error}	Esta lista não pôde ser expandida: {error}
 	Matched as typed	Comparado como digitado
 	{name}, {kind}, remove with Delete	{name}, {kind}, remover com Delete
 	{name}, {kind}, {why}, remove with Delete	{name}, {kind}, {why}, remover com Delete

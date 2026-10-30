@@ -3,8 +3,11 @@
 //! (a meeting's, over its window). An Exchange account's directory (the Global Address List) is
 //! one of the books: it's asked on the server for the name typed.
 
+use quatrelle_engine::FieldId;
 use quatrelle_engine::model::EmailAddress;
+use quatrelle_engine::model::addr::Accepts;
 
+use super::people_field::{BOOK_FIELDS, PeopleFields};
 use super::*;
 
 /// The address book being looked at.
@@ -69,10 +72,14 @@ impl AddressSearch {
     }
 }
 
-/// The address book for a message, and its To, Cc and Bcc as they'll go back to it.
+/// The address book for a message, and its To, Cc and Bcc as they'll go back to it. The rows are
+/// contacts fields of the message's window (`book-to`, `book-cc`, `book-bcc`).
 #[derive(Clone, Debug, Default)]
 pub struct NamesForm {
     pub search: AddressSearch,
+    /// The message it was opened for, and its account (whose directory).
+    pub compose: u64,
+    pub account: String,
     /// The field a double-click adds to (`to`, `cc`, `bcc`).
     pub target: &'static str,
     pub to: String,
@@ -232,21 +239,26 @@ pub(crate) fn field_row(ui: &mut Ui, label: &str, field: &mut String) -> bool {
     .inner
 }
 
-pub(super) fn select_names(ui: &mut Ui, f: &mut NamesForm, t: &Tokens, acts: &mut Vec<Action>) -> bool {
+pub(super) fn select_names(ui: &mut Ui, f: &mut NamesForm, s: &Session, people: &mut PeopleFields, t: &Tokens, acts: &mut Vec<Action>) -> bool {
     ui.set_width(620.0);
     title(ui, t, "Select Names");
     let mut add = search(ui, egui::Id::unique("select-names"), &mut f.search, t, acts).then_some(f.target);
     ui.add_space(8.0);
-    for (name, label) in [("to", "To ->"), ("cc", "Cc ->"), ("bcc", "Bcc ->")] {
-        let field = match name {
+    // The rows are the contacts field (chips, suggestions, Ctrl+K); the button before each adds
+    // the person picked to it, as Outlook's `To ->` does.
+    let can_expand = s.directory_account(Some(&f.account)).is_some();
+    for (name, target, label) in [("book-to", "to", "To ->"), ("book-cc", "cc", "Cc ->"), ("book-bcc", "bcc", "Bcc ->")] {
+        let field = match target {
             "to" => &mut f.to,
             "cc" => &mut f.cc,
             _ => &mut f.bcc,
         };
-        if field_row(ui, label, field) {
-            add = Some(name);
+        let id = FieldId { window: f.compose, name };
+        if people.draw(ui, t, id, Some(&f.account), &Accepts::RECIPIENTS, label, "", field, false, can_expand, true, acts) {
+            add = Some(target);
         }
     }
+    people.choice_dialog(ui.ctx(), t, s, f.compose, &BOOK_FIELDS, acts);
     if let (Some(target), Some(a)) = (add, f.search.picked().cloned()) {
         let field = match target {
             "to" => &mut f.to,

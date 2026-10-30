@@ -1803,6 +1803,8 @@ month	May	mei
 	This list has no members	Deze lijst heeft geen leden
 	Not found: {name}	Niet gevonden: {name}
 	The directory can't be reached	De adreslijst is niet bereikbaar
+	and others	en anderen
+	This list couldn't be expanded: {error}	Deze lijst kon niet worden uitgevouwen: {error}
 	Matched as typed	Vergeleken zoals getypt
 	{name}, {kind}, remove with Delete	{name}, {kind}, verwijderen met Delete
 	{name}, {kind}, {why}, remove with Delete	{name}, {kind}, {why}, verwijderen met Delete
