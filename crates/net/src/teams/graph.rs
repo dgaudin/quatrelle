@@ -6,7 +6,8 @@
 //! followed with the token: a Graph answer that redirects is an error, except a shared file's
 //! content, whose one redirect (to SharePoint's pre-signed download address) is followed by
 //! hand without it. A 429 or a 503 is waited out ([`BUSY_ROUNDS`] rounds at most, `Retry-After`
-//! capped at 20 s) and every 429 counted in [`Stats`]. Errors say the HTTP status and Graph's
+//! capped at 20 s; a post of a message only on a 429, as a 503 may come after it was made) and
+//! every 429 counted in [`Stats`]. Errors say the HTTP status and Graph's
 //! error code, never its message, which can quote a chat's content.
 
 use std::cell::Cell;
@@ -157,10 +158,11 @@ impl TeamsClient {
         page(self.json("GET", &url, None, true)?)
     }
 
-    /// Post a plain-text message in a chat: the message Graph made.
+    /// Post a plain-text message in a chat: the message Graph made. Waited out on a 429 only
+    /// (nothing was done); a 503 may come after the message was made, so it isn't posted again.
     pub fn send_text(&self, chat: &str, text: &str) -> Result<Value> {
         let body = json!({"body": {"contentType": "text", "content": text}});
-        self.json("POST", &self.at(&format!("/chats/{}/messages", seg(chat))), Some(&body), false)
+        self.request("POST", &self.at(&format!("/chats/{}/messages", seg(chat))), Some(&body), false, false)
     }
 
     /// Replace a message's text (one the signed-in user sent).
@@ -261,6 +263,11 @@ impl TeamsClient {
     /// A request to Graph with the token, waited out while busy: its JSON answer (`Null` when
     /// empty).
     fn json(&self, method: &str, url: &str, body: Option<&Value>, prefer: bool) -> Result<Value> {
+        self.request(method, url, body, prefer, true)
+    }
+
+    /// [`Self::json`], a 503 waited out only when `again` (the request can be repeated).
+    fn request(&self, method: &str, url: &str, body: Option<&Value>, prefer: bool, again: bool) -> Result<Value> {
         let mut req = match body {
             Some(b) => {
                 let bytes = serde_json::to_vec(b).map_err(|e| NetError::Protocol(e.to_string()))?;
@@ -277,7 +284,7 @@ impl TeamsClient {
         let resp = loop {
             round += 1;
             let resp = self.once(&req)?;
-            if !busy(resp.status) || round >= BUSY_ROUNDS {
+            if !busy(resp.status) || (resp.status == 503 && !again) || round >= BUSY_ROUNDS {
                 break resp;
             }
             pause(backoff_secs(resp.header("Retry-After"), round));
