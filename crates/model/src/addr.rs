@@ -61,6 +61,9 @@ impl fmt::Display for EmailAddress {
 
 pub fn is_valid_email(s: &str) -> bool {
     let s = s.trim();
+    if entries::is_group_ref_text(s) {
+        return false;
+    }
     let Some((local, domain)) = s.rsplit_once('@') else { return false };
     !local.is_empty()
         && !domain.is_empty()
