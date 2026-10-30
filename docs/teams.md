@@ -25,8 +25,8 @@ Done by an administrator of the Microsoft 365 tenant, in the
    - **Register**.
 2. The loopback addresses, and public client flows. Quatrelle listens for the sign-in's answer on
    `http://127.0.0.1:<port>/`: Microsoft ignores the port of a loopback redirect but matches its
-   host and path, and the portal's form refuses an `http` address other than `localhost`, so the
-   other two go in through the manifest.
+   host and path. The other two addresses can be added in the same form; if the form refuses
+   them, add them in the manifest instead:
    - **Manifest** (in the app's menu, the Microsoft Graph app manifest): the `publicClient`
      entry becomes:
 
@@ -74,8 +74,12 @@ Done by an administrator of the Microsoft 365 tenant, in the
 
 ## 2. Running the check
 
-`quatrelle-cli` comes with Quatrelle's Linux packages (`.deb`, `.rpm`) and the macOS CLI zip; from
-the sources it is `cargo run --release -p quatrelle-cli -- teams check …`.
+`quatrelle-cli` comes with Quatrelle's packages: the Linux packages (`.deb`, `.rpm`, the `.tar`
+archive, Flatpak), the macOS CLI zip, FreeBSD's, and on Windows both the installer and the portable zip.
+The Windows installer puts `quatrelle-cli.exe` beside `quatrelle.exe` in
+`C:\Program Files\Quatrelle\` but not on the `PATH`: run it from that folder
+(`& "C:\Program Files\Quatrelle\quatrelle-cli.exe" teams check …` in PowerShell). From the
+sources it is `cargo run --release -p quatrelle-cli -- teams check …`.
 
 ```sh
 quatrelle-cli teams check --client <Application (client) ID> --tenant <Directory (tenant) ID>
