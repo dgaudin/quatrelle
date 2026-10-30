@@ -1803,6 +1803,8 @@ month	May	מאי
 	This list has no members	אין חברים ברשימה זו
 	Not found: {name}	לא נמצא: {name}
 	The directory can't be reached	אין גישה לספרייה
+	and others	ואחרים
+	This list couldn't be expanded: {error}	לא ניתן להרחיב רשימה זו: {error}
 	Matched as typed	הותאם כפי שהוקלד
 	{name}, {kind}, remove with Delete	{name}, {kind}, להסרה הקש Delete
 	{name}, {kind}, {why}, remove with Delete	{name}, {kind}, {why}, להסרה הקש Delete

@@ -191,6 +191,11 @@ impl Session {
         self.people.suggest_cache.retain(|f, _| f.window != window);
     }
 
+    /// One field closed: its last suggestions go.
+    pub(crate) fn forget_field_suggestions(&mut self, field: FieldId) {
+        self.people.suggest_cache.remove(&field);
+    }
+
     /// An account is gone: what its directory answered goes too (the index doesn't say whose
     /// directory an entry came from, so it goes whole).
     pub(crate) fn clear_directory_index(&mut self) {

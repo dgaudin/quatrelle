@@ -17,7 +17,7 @@ use compose::with_html_signature;
 pub use compose::{Compose, add_pictures, signature_block, style_signature};
 pub use items::{ItemChoice, ItemKind};
 pub(crate) use names::NameCheck;
-pub use names::{NAMES_NOT_FOUND, NameChoice, Outcome, Resolved};
+pub use names::{NAMES_NOT_FOUND, NameChoice, Outcome, Resolved, group_entry};
 pub use senders::Sender;
 
 /// From this many people (counted as [`SendCheck::Exposed`] says), sending to all of them in To
@@ -509,7 +509,11 @@ impl Session {
     /// A message as a draft's source, the Drafts folder it goes in, and the `Message-ID` it goes
     /// by (the one its earlier copies went by, so that they're found).
     pub(super) fn draft_bytes(&mut self, c: &Compose) -> Result<(Vec<u8>, String, String), CmdError> {
-        // Drafts may hold unfinished addresses: keep only the valid ones.
+        // Drafts may hold unfinished addresses: keep only the valid ones. A contact group not yet
+        // expanded (`Team <group:ID>`, which has no address) is one of them: the copy filed here
+        // or on the server carries the addresses alone, with no error, and the group stays only
+        // in the message being written. Expanding it at every save would make saving wait on the
+        // server; a draft reopened from Drafts has its addresses, and the group is typed again.
         let lenient = |s: &str| s.split([',', ';']).filter_map(|p| addr::parse_list(p).ok()).flatten().collect::<Vec<_>>();
         let (body, html, inline) = c.bodies();
         let d = mime::Draft {

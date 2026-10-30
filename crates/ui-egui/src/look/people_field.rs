@@ -91,6 +91,8 @@ pub struct FieldInput<'a> {
     /// The book button's label and the input's hint (English, translated here).
     pub label: &'a str,
     pub hint: &'a str,
+    /// The button opens the address book (a field with no book to open keeps the label alone).
+    pub book: bool,
     pub accepts: &'a Accepts,
     /// The suggestions for the input, best first (only the kinds `accepts` takes are shown).
     pub suggestions: &'a [Suggestion],
@@ -255,8 +257,8 @@ pub fn people_field(ui: &mut Ui, t: &Tokens, st: &mut FieldState, input: &FieldI
     let typed_from = st.input.clone();
     let mut laid = None;
     ui.horizontal_top(|ui| {
-        let book = crate::widgets::field_button(ui, t, input.label, true, false);
-        if book.clicked() {
+        let book = crate::widgets::field_button(ui, t, input.label, input.book, false);
+        if input.book && book.clicked() {
             ev.push(PeopleEvent::OpenBook);
         }
         laid = Some(ui.vertical(|ui| chips::body(ui, t, st, input, edit, book.id)).inner);

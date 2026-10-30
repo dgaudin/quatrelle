@@ -175,7 +175,7 @@ pub(crate) fn interface_strings() -> BTreeSet<String> {
         ("empty(ui, &t, ", &[0]),
         ("label(ui, ", &[0]),
         ("field(ui, &t, ", &[0, 1]),
-        ("recipient_field(ui, st, ", &[1, 2]),
+        ("people_row(ui, st, c, ", &[1, 2]),
         ("tile(ui, t, Icon::", &[0, 1, 2]),
         ("rail_item(ui, &t, Icon::", &[0]),
         ("heading(ui, ", &[0]),

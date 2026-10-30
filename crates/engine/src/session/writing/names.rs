@@ -142,7 +142,7 @@ fn replaced(field: &str, token: &str, with: &str) -> Option<String> {
 
 /// A contact group's reference typed as an entry (`Team <group:ID>`, `<group:ID>`): its name
 /// (empty when it has none) and its item id.
-fn group_entry(token: &str) -> Option<(String, &str)> {
+pub fn group_entry(token: &str) -> Option<(String, &str)> {
     if let (Some(lt), Some(gt)) = (token.rfind('<'), token.rfind('>'))
         && lt < gt
     {
@@ -209,6 +209,13 @@ impl Session {
             fill_name(&mut a, &EmailAddress::new(name.as_str(), ""));
         }
         (Addressee::new(a.name, a.email, kind), known)
+    }
+
+    /// An address typed, as a field shows it: with what it is and, when it has no name of its
+    /// own, the name the room lists, the book or the directory know it by (`account`: whose
+    /// rooms). The book is read as it stands: build it first ([`Session::contacts_step`]).
+    pub fn known_addressee(&self, account: Option<&str>, typed: EmailAddress) -> Addressee {
+        self.known_address(account, typed).0
     }
 
     /// The text of a message's own field, when `field` is one: To, Cc, Bcc or Reply-To of a
@@ -456,6 +463,16 @@ impl Session {
         p.choices.retain(|c| c.field.window != window);
         p.outcomes.retain(|(f, _)| f.window != window);
         self.forget_window_suggestions(window);
+    }
+
+    /// One field closed (a dialog's rows, whose window is the message's own): its waits, choices,
+    /// outcomes and last suggestions go, the window's other fields untouched.
+    pub fn forget_people_field(&mut self, field: FieldId) {
+        let p = &mut self.people;
+        p.pending.retain(|c| c.field != field);
+        p.choices.retain(|c| c.field != field);
+        p.outcomes.retain(|(f, _)| *f != field);
+        self.forget_field_suggestions(field);
     }
 
     /// An account is gone: the names waiting on its directory are given up, unreached.
