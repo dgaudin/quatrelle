@@ -94,6 +94,8 @@ pub(crate) struct FakeTeams {
     pub(crate) fail_next: HashMap<String, u32>,
     /// The next n requests of a route carried out, but answered 503 (the answer lost on the way).
     pub(crate) answer_lost: HashMap<String, u32>,
+    /// Chats (their ids) whose message reads are answered 500.
+    pub(crate) fail_reads: Vec<String>,
     /// Every read of a chat's messages: (chat id, its `$filter` as sent, empty when none).
     pub(crate) message_reads: Vec<(String, String)>,
     /// Shared files' bytes, by the `contentUrl` an attachment carries.
@@ -397,6 +399,9 @@ impl FakeTeams {
             "messages" => {
                 let filter = q.get("$filter").cloned().unwrap_or_default();
                 self.message_reads.push((chat.id.clone(), filter));
+                if self.fail_reads.contains(&chat.id) {
+                    return Reply::error(500, "InternalServerError", "This chat's messages fail, as the test asked.");
+                }
                 let Some(chat) = self.chats.get(ci).cloned() else { return not_found() };
                 self.messages(&chat, &q, raw_path, query, base)
             }
