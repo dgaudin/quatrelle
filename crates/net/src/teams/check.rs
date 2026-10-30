@@ -516,9 +516,10 @@ impl Check<'_> {
                     .collect();
                 for chat in &active {
                     let r = self.incremental(chat, &mut marks, from, end);
-                    let done = matches!(r, Ok(true));
+                    // The end of the hour stops the pass; a chat that fails doesn't.
+                    let ended = matches!(r, Ok(false));
                     outcome.push(r);
-                    if !done {
+                    if ended {
                         break;
                     }
                 }
