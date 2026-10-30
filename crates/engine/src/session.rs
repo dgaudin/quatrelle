@@ -53,8 +53,8 @@ use searching::SearchIndex;
 pub use security::{CardSearch, KnownCert, Lock, RevocationCheck, SMIME_DOC, Seal, Security, SignedBy, SmimeSettings};
 use writing::NameCheck;
 pub use writing::{
-    AssistKind, Assistant, Compose, Filing, ItemChoice, ItemKind, LlmModels, NAMES_NOT_FOUND, NameChoice, Rewrite, SendCheck, Sender, add_pictures,
-    style_signature,
+    AssistKind, Assistant, Compose, Filing, ItemChoice, ItemKind, LlmModels, NAMES_NOT_FOUND, NameChoice, Outcome, Resolved, Rewrite, SendCheck,
+    Sender, add_pictures, style_signature,
 };
 
 /// One account and what the session knows about it.

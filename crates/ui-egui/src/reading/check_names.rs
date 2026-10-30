@@ -1,5 +1,5 @@
-//! Check Names' choice, as Outlook's: several people fit a name typed in To, Cc or Bcc, and the
-//! one meant is picked from them (or the name is left as typed).
+//! Check Names' choice, as Outlook's: several people fit a name typed in a field (To, Cc, Bcc…),
+//! and the one meant is picked from them (or the name is left as typed).
 
 use quatrelle_engine::NameChoice;
 
@@ -7,8 +7,8 @@ use super::*;
 
 /// The dialog over the message being written while a name waits for its person.
 pub(super) fn choice_dialog(ctx: &egui::Context, t: &Tokens, choice: &NameChoice, acts: &mut Vec<Action>) {
-    let id = egui::Id::unique(("check-names", choice.compose));
-    let picked_id = id.with(("picked", choice.token.as_str()));
+    let id = egui::Id::unique(("check-names", choice.field.window));
+    let picked_id = id.with(("picked", choice.field.name, choice.token.as_str()));
     let mut picked: Option<usize> = ctx.data(|d| d.get_temp(picked_id)).flatten();
     // `Some(None)`: left as typed.
     let mut done: Option<Option<usize>> = None;
@@ -26,7 +26,7 @@ pub(super) fn choice_dialog(ctx: &egui::Context, t: &Tokens, choice: &NameChoice
                     if on || r.hovered() {
                         ui.painter().rect_filled(rect, 3.0, if on { t.accent_soft } else { t.hover_row });
                     }
-                    let name = if p.name.is_empty() { p.email.as_str() } else { p.name.as_str() };
+                    let name = p.display();
                     let mid = rect.center().y;
                     let name_clip = Rect::from_min_max(rect.min, egui::pos2(rect.left() + 240.0, rect.bottom()));
                     ui.painter().with_clip_rect(name_clip).text(
@@ -36,7 +36,7 @@ pub(super) fn choice_dialog(ctx: &egui::Context, t: &Tokens, choice: &NameChoice
                         theme::regular(13.5),
                         t.text,
                     );
-                    ui.painter().text(egui::pos2(rect.left() + 250.0, mid), egui::Align2::LEFT_CENTER, &p.email, theme::regular(13.0), t.dim);
+                    ui.painter().text(egui::pos2(rect.left() + 250.0, mid), egui::Align2::LEFT_CENTER, &p.address, theme::regular(13.0), t.dim);
                     if r.clicked() {
                         picked = Some(i);
                     }
@@ -60,7 +60,12 @@ pub(super) fn choice_dialog(ctx: &egui::Context, t: &Tokens, choice: &NameChoice
     match done {
         Some(Some(i)) => {
             if let Some(p) = choice.people.get(i) {
-                acts.push(Action::Run("compose.chooseName", json!({"token": choice.token, "name": p.name, "email": p.email})));
+                // A contact group has no address: it's chosen by its item id.
+                let mut person = json!({"token": choice.token, "name": p.name, "email": p.address, "kind": p.kind.code()});
+                if !p.item_id.is_empty() {
+                    person["itemId"] = json!(p.item_id);
+                }
+                acts.push(Action::Run("compose.chooseName", person));
             }
         }
         Some(None) => acts.push(Action::Run("compose.chooseName", json!({"token": choice.token}))),

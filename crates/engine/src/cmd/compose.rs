@@ -36,7 +36,7 @@ pub(super) fn commands() -> Vec<CommandSpec> {
         .when(has_compose),
         CommandSpec::new("compose.checkNames", "Check Names", "Message › Names", check_names).when(has_compose),
         CommandSpec::new("compose.chooseName", "Choose who a name means", "Message › Names", choose_name)
-            .params(r#"{"token": string (the name as typed), "email"?: string (the person meant; none: leave the name as typed), "name"?: string}"#)
+            .params(r#"{"token": string (the name as typed), "email"?: string (the person meant; neither it nor itemId: leave the name as typed), "name"?: string, "kind"?: kind code, "itemId"?: string (a contact group's)}"#)
             .when(has_compose),
         CommandSpec::new("contacts.directory", "Search the directory", "Message › Names", search_directory).params(
             r#"{"query": string (the start of a name, a first or last name, an alias or an address), "account"?: string (an Exchange account)}"#,
@@ -432,11 +432,7 @@ pub(super) fn check_names(s: &mut Session, _: &Value) -> CmdResult {
 /// The person meant by a name several people fit ([`Session::choose_name`]).
 fn choose_name(s: &mut Session, v: &Value) -> CmdResult {
     let token = p::req_str(v, "token")?.to_string();
-    let person = match p::str(v, "email").map(str::trim).filter(|e| !e.is_empty()) {
-        Some(email) if email.contains('@') => Some(quatrelle_model::EmailAddress::new(p::str(v, "name").unwrap_or("").trim(), email)),
-        Some(email) => return Err(CmdError::Params(format!("not an email address: {email}"))),
-        None => None,
-    };
+    let person = super::people::chosen(v)?;
     s.choose_name(&token, person)
 }
 
