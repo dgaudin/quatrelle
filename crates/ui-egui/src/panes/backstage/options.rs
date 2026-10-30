@@ -1,6 +1,9 @@
 //! The File page: Options.
 
+use quatrelle_engine::MEETINGS_PROFILE;
+
 use super::*;
+use crate::BrowserProfile;
 
 mod assistant;
 
@@ -453,6 +456,62 @@ pub(super) fn options(s: &Session, st: &UiState, ui: &mut Ui, acts: &mut Vec<Act
                         }
                     });
                 });
+                // The chosen browser's profiles, once they're read for it: the default browser has
+                // none Quatrelle can name.
+                let Some((_, program)) = now else { return };
+                let Some((_, profiles)) = st.meeting_profiles.as_ref().filter(|(read, _)| read == program) else { return };
+                let chosen = s.prefs.meeting_profile.as_deref();
+                // What "Join meeting" will really use: a profile gone is the last one used.
+                let profile = crate::meeting_profile(chosen, profiles);
+                let has_own = profiles.iter().any(|p| p.dir == MEETINGS_PROFILE);
+                let own = || tl!("Meetings profile (made by Quatrelle)").to_string();
+                let label = |p: &BrowserProfile| {
+                    if p.dir == MEETINGS_PROFILE {
+                        own()
+                    } else if p.account.is_empty() {
+                        p.name.clone()
+                    } else {
+                        format!("{} ({})", p.name, p.account)
+                    }
+                };
+                setting(
+                    ui,
+                    false,
+                    tl!("Profile"),
+                    Some(tl!("Teams needs the one signed in to Microsoft 365, else it joins you as a guest.")),
+                    &mut |ui| {
+                        let current = match profile {
+                            None => tl!("The last profile used").to_string(),
+                            Some(dir) => profiles.iter().find(|p| p.dir == dir).map_or_else(own, label),
+                        };
+                        // Every click writes, as for the browser: the setting may name a profile gone.
+                        egui::ComboBox::from_id_salt("meeting-profile").width(280.0).selected_text(current).show_ui(ui, |ui| {
+                            if ui.selectable_label(profile.is_none(), tl!("The last profile used")).clicked() {
+                                acts.push(Action::Run("view.meetingProfile", json!({"dir": null})));
+                            }
+                            for p in profiles {
+                                if ui.selectable_label(profile == Some(p.dir.as_str()), label(p)).clicked() {
+                                    acts.push(Action::Run("view.meetingProfile", json!({"dir": p.dir})));
+                                }
+                            }
+                            // Chosen, but not made yet: the browser makes it at the next meeting.
+                            if !has_own && profile == Some(MEETINGS_PROFILE) && ui.selectable_label(true, own()).clicked() {
+                                acts.push(Action::Run("view.meetingProfile", json!({"dir": MEETINGS_PROFILE})));
+                            }
+                        });
+                    },
+                );
+                // A profile of its own for meetings, until there is one or it's chosen.
+                if !has_own && chosen != Some(MEETINGS_PROFILE) {
+                    let about =
+                        tl!("Sign in to Microsoft 365 in the window that opens. The browser names the new profile itself; it can be renamed there.");
+                    setting(ui, false, tl!("A profile for meetings"), Some(about), &mut |ui| {
+                        if ui.button(tl!("Create a profile for meetings")).clicked() {
+                            acts.push(Action::Run("view.meetingProfile", json!({"dir": MEETINGS_PROFILE})));
+                            acts.push(Action::MakeMeetingProfile);
+                        }
+                    });
+                }
             },
         );
     }

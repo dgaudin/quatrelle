@@ -344,3 +344,117 @@ fn the_meetings_profile_is_always_named() {
     assert!(a.session.notices.is_empty(), "{:?}", a.session.notices);
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// The File page opened on Options, drawn tall enough for every card.
+fn open_options(ctx: &egui::Context, a: &mut MailApp) -> egui::Vec2 {
+    let tall = egui::vec2(1280.0, 5000.0);
+    a.act(crate::Action::Backstage(crate::backstage::Page::Info));
+    let options = settled_text_at(ctx, a, "Options", tall).unwrap();
+    click_at(ctx, a, options, 1, tall);
+    tall
+}
+
+/// Clicks the combo showing `shown`, then its entry `entry`.
+fn choose(ctx: &egui::Context, a: &mut MailApp, shown: &str, entry: &str, size: egui::Vec2) {
+    let combo = settled_text_at(ctx, a, shown, size).unwrap_or_else(|| panic!("no “{shown}”"));
+    click_at(ctx, a, combo, 1, size);
+    let at = settled_text_at(ctx, a, entry, size).unwrap_or_else(|| panic!("no “{entry}”"));
+    click_at(ctx, a, at, 1, size);
+}
+
+/// File › Options › Applications: the profile Teams meetings open in, from those of the browser
+/// chosen, each with its Google account; the last one used until one is chosen.
+#[test]
+fn the_options_choose_the_meeting_profile() {
+    let profiles = [profile("Default", "Personne 1", ""), profile("Profile 2", "Work", "me@studio.example")];
+    let (mut a, dir, o) = launching_with("meet-options-profile", &[("Google Chrome", "/opt/chrome")], &profiles, false);
+    let ctx = egui::Context::default();
+    let tall = open_options(&ctx, &mut a);
+    assert!(settled_text_at(&ctx, &mut a, "Profile", tall).is_some());
+    choose(&ctx, &mut a, "The last profile used", "Work (me@studio.example)", tall);
+    assert_eq!(a.session.prefs.meeting_profile.as_deref(), Some("Profile 2"));
+    choose(&ctx, &mut a, "Work (me@studio.example)", "Personne 1", tall);
+    assert_eq!(a.session.prefs.meeting_profile.as_deref(), Some("Default"));
+    choose(&ctx, &mut a, "Personne 1", "The last profile used", tall);
+    assert_eq!(a.session.prefs.meeting_profile, None);
+    assert!(opened(&o).is_empty(), "{:?}", opened(&o));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A profile deleted in the browser since it was chosen: the Options show what Join will do, the
+/// last profile used, and choosing that entry writes it.
+#[test]
+fn a_profile_gone_shows_as_the_last_used() {
+    let (mut a, dir, _) = launching_with("meet-options-gone", &[("Google Chrome", "/opt/chrome")], &[profile("Default", "Me", "")], false);
+    a.session.prefs.meeting_profile = Some("Profile 9".into());
+    let ctx = egui::Context::default();
+    let tall = open_options(&ctx, &mut a);
+    choose(&ctx, &mut a, "The last profile used", "The last profile used", tall);
+    assert_eq!(a.session.prefs.meeting_profile, None);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// The default browser has no profiles Quatrelle can name: neither the choice nor the button.
+#[test]
+fn the_default_browser_has_no_profile_choice() {
+    let (mut a, dir, _) = launching_with("meet-options-default", &[("Google Chrome", "/opt/chrome")], &[profile("Default", "Me", "")], false);
+    a.session.prefs.meeting_browser = Some(String::new());
+    let ctx = egui::Context::default();
+    let tall = open_options(&ctx, &mut a);
+    assert!(settled_text_at(&ctx, &mut a, "The default browser", tall).is_some());
+    for gone in ["Profile", "The last profile used", "Create a profile for meetings"] {
+        assert!(settled_text_at(&ctx, &mut a, gone, tall).is_none(), "{gone}");
+    }
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// "Create a profile for meetings" chooses Quatrelle's own profile and opens Teams in it, where
+/// the user signs in once (the browser makes the profile as it opens); then the button is gone.
+#[test]
+fn a_profile_for_meetings_is_made_from_the_options() {
+    let (mut a, dir, o) = launching_with("meet-options-make", &[("Chromium", "/usr/bin/chromium")], &[profile("Default", "Me", "")], false);
+    let ctx = egui::Context::default();
+    let tall = open_options(&ctx, &mut a);
+    let make = settled_text_at(&ctx, &mut a, "Create a profile for meetings", tall).unwrap();
+    click_at(&ctx, &mut a, make, 1, tall);
+    assert_eq!(a.session.prefs.meeting_profile.as_deref(), Some(MEETINGS_PROFILE));
+    assert_eq!(opened(&o), ["app /usr/bin/chromium --profile-directory=Quatrelle https://teams.microsoft.com/"]);
+    assert!(settled_text_at(&ctx, &mut a, "Create a profile for meetings", tall).is_none());
+    assert!(settled_text_at(&ctx, &mut a, "Meetings profile (made by Quatrelle)", tall).is_some());
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// The browser has Quatrelle's profile already (made before, whatever it named it): no button,
+/// and the profile is offered under Quatrelle's name for it.
+#[test]
+fn a_meetings_profile_there_is_offered() {
+    let profiles = [profile("Default", "Me", ""), profile(MEETINGS_PROFILE, "Personne 2", "")];
+    let (mut a, dir, _) = launching_with("meet-options-there", &[("Google Chrome", "/opt/chrome")], &profiles, false);
+    let ctx = egui::Context::default();
+    let tall = open_options(&ctx, &mut a);
+    assert!(settled_text_at(&ctx, &mut a, "Create a profile for meetings", tall).is_none());
+    choose(&ctx, &mut a, "The last profile used", "Meetings profile (made by Quatrelle)", tall);
+    assert_eq!(a.session.prefs.meeting_profile.as_deref(), Some(MEETINGS_PROFILE));
+    assert!(settled_text_at(&ctx, &mut a, "Personne 2", tall).is_none(), "the browser's name for it");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Another browser chosen: its own profiles are read and offered.
+#[test]
+fn the_profiles_follow_the_browser_chosen() {
+    let (mut a, dir, _) = launching_with(
+        "meet-options-switch",
+        &[("Google Chrome", "/opt/chrome"), ("Chromium", "/usr/bin/chromium")],
+        &[profile("Default", "Me", "")],
+        false,
+    );
+    let ctx = egui::Context::default();
+    let tall = open_options(&ctx, &mut a);
+    choose(&ctx, &mut a, "Google Chrome", "Chromium", tall);
+    assert_eq!(a.ui.meeting_profiles.as_ref().map(|(program, _)| program.as_str()), Some("/usr/bin/chromium"));
+    // Closed, the File page forgets them.
+    a.ui.backstage = None;
+    frame_shapes(&ctx, &mut a, vec![], tall);
+    assert!(a.ui.meeting_profiles.is_none());
+    let _ = std::fs::remove_dir_all(dir);
+}

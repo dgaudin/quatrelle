@@ -1783,3 +1783,11 @@ month	May	5月
 	The default browser	預設瀏覽器
 	Teams meetings open in a window of their own: Chrome, Chromium or Edge, which Teams needs for calls on Linux.	Teams 會議會在獨立的視窗中開啟：Chrome、Chromium 或 Edge，在 Linux 上 Teams 通話需要它們。
 	The profile “{profile}” is no longer in {browser}; the meeting opens in the last profile used	設定檔「{profile}」已不在 {browser} 中；會議將在上次使用的設定檔中開啟
+	Profile	設定檔
+	Teams needs the one signed in to Microsoft 365, else it joins you as a guest.	Teams 需要已登入 Microsoft 365 的設定檔，否則會以來賓身分加入。
+	The last profile used	上次使用的設定檔
+	Meetings profile (made by Quatrelle)	會議設定檔（由 Quatrelle 建立）
+	A profile for meetings	用於會議的設定檔
+	Sign in to Microsoft 365 in the window that opens. The browser names the new profile itself; it can be renamed there.	請在開啟的視窗中登入 Microsoft 365。新設定檔的名稱由瀏覽器自行決定，可在瀏覽器中重新命名。
+	Create a profile for meetings	建立用於會議的設定檔
+	{browser} couldn't be opened: {error}	無法開啟 {browser}: {error}

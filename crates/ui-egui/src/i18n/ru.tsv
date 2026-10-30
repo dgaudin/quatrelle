@@ -1783,3 +1783,11 @@ month	May	Май
 	The default browser	Браузер по умолчанию
 	Teams meetings open in a window of their own: Chrome, Chromium or Edge, which Teams needs for calls on Linux.	Собрания Teams открываются в отдельном окне: Chrome, Chromium или Edge — они нужны Teams для звонков в Linux.
 	The profile “{profile}” is no longer in {browser}; the meeting opens in the last profile used	Профиля «{profile}» больше нет в {browser}; собрание откроется в последнем использованном профиле
+	Profile	Профиль
+	Teams needs the one signed in to Microsoft 365, else it joins you as a guest.	Teams нужен профиль, в котором выполнен вход в Microsoft 365, иначе вы войдёте как гость.
+	The last profile used	Последний использованный профиль
+	Meetings profile (made by Quatrelle)	Профиль для собраний (создан Quatrelle)
+	A profile for meetings	Профиль для собраний
+	Sign in to Microsoft 365 in the window that opens. The browser names the new profile itself; it can be renamed there.	Войдите в Microsoft 365 в открывшемся окне. Браузер сам даст новому профилю имя; его можно изменить там же.
+	Create a profile for meetings	Создать профиль для собраний
+	{browser} couldn't be opened: {error}	Не удалось открыть {browser}: {error}

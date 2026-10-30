@@ -1784,3 +1784,11 @@ month	May	Mai
 	The default browser	Der Standardbrowser
 	Teams meetings open in a window of their own: Chrome, Chromium or Edge, which Teams needs for calls on Linux.	Teams-Besprechungen öffnen sich in einem eigenen Fenster: Chrome, Chromium oder Edge, die Teams unter Linux für Anrufe braucht.
 	The profile “{profile}” is no longer in {browser}; the meeting opens in the last profile used	Das Profil „{profile}“ gibt es in {browser} nicht mehr; die Besprechung öffnet sich im zuletzt verwendeten Profil
+	Profile	Profil
+	Teams needs the one signed in to Microsoft 365, else it joins you as a guest.	Teams braucht das bei Microsoft 365 angemeldete Profil, sonst nehmen Sie als Gast teil.
+	The last profile used	Das zuletzt verwendete Profil
+	Meetings profile (made by Quatrelle)	Besprechungsprofil (von Quatrelle angelegt)
+	A profile for meetings	Ein Profil für Besprechungen
+	Sign in to Microsoft 365 in the window that opens. The browser names the new profile itself; it can be renamed there.	Melden Sie sich im sich öffnenden Fenster bei Microsoft 365 an. Der Browser benennt das neue Profil selbst; dort lässt es sich umbenennen.
+	Create a profile for meetings	Profil für Besprechungen anlegen
+	{browser} couldn't be opened: {error}	{browser} konnte nicht geöffnet werden: {error}

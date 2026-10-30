@@ -340,11 +340,20 @@ impl MailApp {
         }
 
         // The browsers for meetings, looked for once as the File page opens (whichever way it
-        // does: the rail's Options sets its page itself), not at every frame.
+        // does: the rail's Options sets its page itself), not at every frame; the chosen one's
+        // profiles with them, and again when another is chosen.
         if self.ui.backstage.is_none() {
             self.ui.browsers = None;
-        } else if self.ui.browsers.is_none() {
-            self.ui.browsers = Some(self.services.browsers());
+            self.ui.meeting_profiles = None;
+        } else {
+            let browsers = self.ui.browsers.get_or_insert_with(|| self.services.browsers());
+            let chosen = crate::meeting_browser(self.session.prefs.meeting_browser.as_deref(), browsers).map(|(_, program)| program.clone());
+            if let Some(program) = chosen
+                && self.ui.meeting_profiles.as_ref().is_none_or(|(read, _)| *read != program)
+            {
+                let profiles = self.services.browser_profiles(&program);
+                self.ui.meeting_profiles = Some((program, profiles));
+            }
         }
         if self.ui.backstage.is_some() {
             backstage::show(&self.session, &mut self.ui, ui, &mut acts);
