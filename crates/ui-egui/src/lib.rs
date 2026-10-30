@@ -48,7 +48,7 @@ use quatrelle_engine::model::{MessageKey, SyncStatus};
 use quatrelle_engine::{CalMode, Module, ReadingPane, SearchScope, Session};
 use serde_json::{Value, json};
 
-pub(crate) use app::{SearchDrop, junk_menu, meeting_browser, scope_label};
+pub(crate) use app::{SearchDrop, junk_menu, meeting_browser, meeting_profile, scope_label};
 pub use app::{WindowPlace, after_open};
 pub use dialogs::Dialog;
 use icons::Icon;
@@ -225,6 +225,9 @@ pub enum Action {
     /// meeting joins in a browser's app window, as File › Options › Applications says; any other
     /// link opens as [`Action::OpenUrl`] does.
     OpenMeeting(String),
+    /// File › Options › Applications' "Create a profile for meetings": the meeting browser opens
+    /// Teams in Quatrelle's own profile, which it makes, for the user to sign in to once.
+    MakeMeetingProfile,
     /// A network share's link the user said to open ([`Dialog::OpenShare`]).
     OpenShare(String),
     /// Run a command for the open dialog: it closes on success and shows the error otherwise.
@@ -290,6 +293,9 @@ pub struct UiState {
     /// The browsers Teams meetings can open in (shown name, program), asked of the system as the
     /// File page opens (its Options say which one), and forgotten as it closes.
     pub(crate) browsers: Option<Vec<(String, String)>>,
+    /// The profiles of the browser chosen for meetings (its program, and them), read as the File
+    /// page opens and again when another browser is chosen; forgotten as it closes.
+    pub(crate) meeting_profiles: Option<(String, Vec<BrowserProfile>)>,
     /// Where the data is kept and whether it can be moved; where it moves at the next start.
     pub data_folder: Option<(PathBuf, bool)>,
     pub pending_move: Option<PathBuf>,
@@ -496,6 +502,7 @@ impl MailApp {
                 reminders: reminders::State::default(),
                 has_files,
                 browsers: None,
+                meeting_profiles: None,
                 data_folder,
                 pending_move,
                 dark: None,
