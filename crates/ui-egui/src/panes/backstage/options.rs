@@ -441,13 +441,14 @@ pub(super) fn options(s: &Session, st: &UiState, ui: &mut Ui, acts: &mut Vec<Act
                 let now = crate::meeting_browser(s.prefs.meeting_browser.as_deref(), browsers);
                 setting(ui, true, tl!("Open Teams meetings and calls in"), None, &mut |ui| {
                     let current = now.map_or_else(|| tl!("The default browser").to_string(), |(name, _)| name.clone());
+                    // Choosing the entry already shown still writes it: the setting may be a stale path.
                     egui::ComboBox::from_id_salt("meeting-browser").width(280.0).selected_text(current).show_ui(ui, |ui| {
                         for b in browsers {
-                            if ui.selectable_label(now == Some(b), &b.0).clicked() && now != Some(b) {
+                            if ui.selectable_label(now == Some(b), &b.0).clicked() {
                                 acts.push(Action::Run("view.meetingBrowser", json!({"path": b.1})));
                             }
                         }
-                        if ui.selectable_label(now.is_none(), tl!("The default browser")).clicked() && now.is_some() {
+                        if ui.selectable_label(now.is_none(), tl!("The default browser")).clicked() {
                             acts.push(Action::Run("view.meetingBrowser", json!({"path": ""})));
                         }
                     });
