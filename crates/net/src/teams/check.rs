@@ -9,6 +9,10 @@
 //! (an error is said by its status alone, never its text, which carries the address asked).
 //! Every message it posts is soft-deleted before it returns, whatever failed in between.
 //!
+//! The hour outlives an access token (60 to 90 minutes): a request refused for its token is
+//! made once more with a new one from [`CheckOptions::renew`]; refused again, or with no new
+//! token to be had, the hour stops there, without asking anything more.
+//!
 //! Ages are measured on Graph's own clock (its `Date` header, or failing that the newest time
 //! Graph wrote in what was read), never on this computer's.
 
@@ -62,6 +66,9 @@ pub struct CheckOptions {
     pub hour: Option<Duration>,
     /// How to wait: `std::thread::sleep`, or something shorter in tests.
     pub sleep: fn(Duration),
+    /// A new access token when Graph refuses the one in use during the hour (it lasts 60 to 90
+    /// minutes): `None` when there is none to be had. Called at most once per refused request.
+    pub renew: Option<Box<dyn Fn() -> Option<String>>>,
 }
 
 /// Run the check, saying what it finds one line at a time. Refusals are said and the check goes
@@ -472,31 +479,39 @@ impl Check<'_> {
         let mut list: Vec<(String, Option<i64>)> = Vec::new();
         let every = report_every();
         let (mut at_list, mut at_open, mut at_active, mut at_report) = (Duration::ZERO, Duration::ZERO, Duration::ZERO, every);
-        let (mut failed, mut cut) = (0u32, false);
-        let mut stopped = String::new();
+        let mut h = Hourly::default();
         loop {
             let t = start.elapsed();
             if t >= d {
                 break;
             }
-            let mut outcome: Vec<Result<bool>> = Vec::new();
             if t >= at_list {
                 at_list = t.saturating_add(LIST_EVERY);
-                outcome.push(self.client.chats(None).map(|p| {
+                let mut r = self.client.chats(None);
+                if self.renewed(&r, &mut h) {
+                    r = self.client.chats(None);
+                }
+                let r = r.map(|p| {
                     list = p
                         .items
                         .iter()
                         .filter_map(|c| Some((id_of(c)?, c.pointer("/lastMessagePreview/createdDateTime")?.as_str().and_then(ms_of))))
                         .collect();
                     true
-                }));
+                });
                 let newest_at = list.iter().filter_map(|(_, at)| *at).max();
                 self.saw(newest_at);
+                if !h.settle(r) {
+                    break;
+                }
             }
             if t >= at_open {
                 at_open = t.saturating_add(OPEN_EVERY);
                 if let Some(chat) = &newest {
-                    outcome.push(self.incremental(chat, &mut marks, from, end));
+                    let r = self.incremental_renewing(chat, &mut marks, from, end, &mut h);
+                    if !h.settle(r) {
+                        break;
+                    }
                 }
             }
             if t >= at_active {
@@ -508,35 +523,23 @@ impl Check<'_> {
                     .take(ACTIVE_MAX)
                     .map(|(id, _)| id.clone())
                     .collect();
+                // The end of the hour, or a token refused for good, stops the pass; a chat that
+                // fails otherwise doesn't.
                 for chat in &active {
-                    let r = self.incremental(chat, &mut marks, from, end);
-                    // The end of the hour stops the pass; a chat that fails doesn't.
-                    let ended = matches!(r, Ok(false));
-                    outcome.push(r);
-                    if ended {
+                    let r = self.incremental_renewing(chat, &mut marks, from, end, &mut h);
+                    if !h.settle(r) {
                         break;
                     }
                 }
             }
-            for r in outcome {
-                match r {
-                    Ok(done) => cut |= !done,
-                    Err(e) => {
-                        failed = failed.saturating_add(1);
-                        if matches!(e, NetError::Auth(_)) {
-                            stopped = format!(", stopped ({})", why(&e));
-                        }
-                    }
-                }
-            }
-            if !stopped.is_empty() || cut {
+            if h.over() {
                 break;
             }
             if t >= at_report {
                 at_report = at_report.saturating_add(every);
                 let s = self.client.stats();
                 let (requests, throttled) = (s.requests.saturating_sub(before.requests), s.throttled.saturating_sub(before.throttled));
-                self.say(format!("hour, after {} min: requests {requests}, throttled {throttled}, failed {failed}", t.as_secs() / 60));
+                self.say(format!("hour, after {} min: requests {requests}, throttled {throttled}, failed {}", t.as_secs() / 60, h.failed));
             }
             let wake = at_list.min(at_open).min(at_active).min(at_report).min(d);
             let wait = wake.saturating_sub(start.elapsed());
@@ -547,11 +550,39 @@ impl Check<'_> {
         let s = self.client.stats();
         let (requests, throttled) = (s.requests.saturating_sub(before.requests), s.throttled.saturating_sub(before.throttled));
         let rate = if requests == 0 { 0.0 } else { f64::from(throttled) * 100.0 / f64::from(requests) };
-        let cut = if cut { ", cut short at the end" } else { "" };
+        let cut = if h.cut { ", cut short at the end" } else { "" };
+        let renewed = if h.renewed > 0 { format!(", sign-in renewed {}", h.renewed) } else { String::new() };
         self.say(format!(
-            "hour, {} s: requests {requests}, throttled {throttled}, failed {failed}, 429 rate {rate:.1} %{stopped}{cut}",
-            start.elapsed().as_secs()
+            "hour, {} s: requests {requests}, throttled {throttled}, failed {}, 429 rate {rate:.1} %{}{cut}{renewed}",
+            start.elapsed().as_secs(),
+            h.failed,
+            h.stopped
         ));
+    }
+
+    /// When `r` is a refused token and [`CheckOptions::renew`] gives a new one: the client takes
+    /// it, and the request is to be made once more. Once only: a second refusal stops the hour.
+    fn renewed<T>(&self, r: &Result<T>, h: &mut Hourly) -> bool {
+        if !matches!(r, Err(NetError::Auth(_))) {
+            return false;
+        }
+        let Some(token) = self.opts.renew.as_ref().and_then(|renew| renew()) else { return false };
+        self.client.set_token(&token);
+        h.renewed = h.renewed.saturating_add(1);
+        true
+    }
+
+    /// [`Self::incremental`], made once more after a refused token is renewed.
+    fn incremental_renewing(
+        &mut self,
+        chat: &str,
+        marks: &mut HashMap<String, i64>,
+        from: Option<i64>,
+        end: Instant,
+        h: &mut Hourly,
+    ) -> Result<bool> {
+        let r = self.incremental(chat, marks, from, end);
+        if self.renewed(&r, h) { self.incremental(chat, marks, from, end) } else { r }
     }
 
     /// A chat's messages changed after its watermark, every page; the watermark moved to the
@@ -576,6 +607,39 @@ impl Check<'_> {
         }
         marks.insert(chat.to_string(), newest);
         Ok(true)
+    }
+}
+
+/// How the hour's requests went.
+#[derive(Default)]
+struct Hourly {
+    failed: u32,
+    /// The hour's end came in the middle of a pass.
+    cut: bool,
+    /// Why the hour stopped before its end (`, stopped (401)`), or empty.
+    stopped: String,
+    /// Tokens renewed.
+    renewed: u32,
+}
+
+impl Hourly {
+    /// Note how a request went: whether the hour goes on.
+    fn settle(&mut self, r: Result<bool>) -> bool {
+        match r {
+            Ok(done) => self.cut |= !done,
+            Err(e) => {
+                self.failed = self.failed.saturating_add(1);
+                if matches!(e, NetError::Auth(_)) {
+                    self.stopped = format!(", stopped ({})", why(&e));
+                }
+            }
+        }
+        !self.over()
+    }
+
+    /// Whether the hour is over before its time: cut at the end, or the token refused for good.
+    fn over(&self) -> bool {
+        self.cut || !self.stopped.is_empty()
     }
 }
 

@@ -7,7 +7,7 @@ use super::*;
 use crate::teams::check;
 
 fn opts() -> CheckOptions {
-    CheckOptions { tenant: None, write_chat: None, hour: None, sleep: |_| {} }
+    CheckOptions { tenant: None, write_chat: None, hour: None, sleep: |_| {}, renew: None }
 }
 
 /// The check run on a fresh client: its result and the lines it said.
@@ -253,6 +253,7 @@ fn check_says_nothing_private() {
         write_chat: Some("19:quixote-chat@thread.v2".into()),
         hour: Some(Duration::from_millis(1500)),
         sleep: |d| std::thread::sleep(d.min(Duration::from_millis(50))),
+        renew: None,
     };
     let (r, mut lines) = check(&server, &all);
     r.unwrap();
@@ -426,4 +427,89 @@ fn check_without_a_date_sweeps_nothing() {
     assert_eq!(line(&lines, "write, stray test messages swept:"), "write, stray test messages swept: no (no server time)");
     assert_eq!(line(&lines, "write, test messages left undeleted:"), "write, test messages left undeleted: 2");
     assert_eq!(h.join().unwrap().len(), 6, "no read of the chat for the sweep");
+}
+
+/// Chats for the hour: the newest, then three more active this week.
+fn hour_chats() -> Vec<FakeChat> {
+    let now = clock();
+    let recent = |id: &str, ago_min: i64| chat(id, now - ago_min * MINUTE, 2);
+    vec![recent("19:newest@thread.v2", 1), recent("19:a@thread.v2", 2), recent("19:b@thread.v2", 3), recent("19:c@thread.v2", 4)]
+}
+
+/// A short hour, renewing the token with `renew` (its calls counted).
+fn renewing(renew: impl Fn() -> Option<String> + 'static) -> (CheckOptions, std::rc::Rc<std::cell::Cell<u32>>) {
+    let calls = std::rc::Rc::new(std::cell::Cell::new(0));
+    let counted = calls.clone();
+    let opts = CheckOptions {
+        hour: Some(Duration::from_millis(500)),
+        sleep: |d| std::thread::sleep(d.min(Duration::from_millis(50))),
+        renew: Some(Box::new(move || {
+            counted.set(counted.get() + 1);
+            renew()
+        })),
+        ..opts()
+    };
+    (opts, calls)
+}
+
+#[test]
+fn check_hour_renews_an_expired_token_and_goes_on() {
+    // The token runs out at the hour's first list: renewed, the list is asked again and the
+    // hour reads its chats.
+    let mut t = teams_with(hour_chats());
+    t.token_expires = Some(("chats", 2, "renewed".into()));
+    let server = serve_teams(t);
+    let (opts, calls) = renewing(|| Some("renewed".into()));
+    let (r, lines) = check(&server, &opts);
+    r.unwrap();
+    let end = line(&lines, "hour, ");
+    assert!(end.contains(", failed 0, ") && end.ends_with(", sign-in renewed 1"), "{end}");
+    assert_eq!(calls.get(), 1);
+    let t = teams_of(&server);
+    let reads = |chat: &str| t.message_reads.iter().filter(|(c, _)| c == chat).count();
+    assert_eq!((reads("19:newest@thread.v2"), reads("19:a@thread.v2"), reads("19:c@thread.v2")), (2, 1, 1), "{:?}", t.message_reads);
+
+    // Run out in the middle of the active chats' pass: renewed there, the pass goes on.
+    let mut t = teams_with(hour_chats());
+    t.token_expires = Some(("messages", 4, "renewed".into()));
+    let server = serve_teams(t);
+    let (opts, calls) = renewing(|| Some("renewed".into()));
+    let (r, lines) = check(&server, &opts);
+    r.unwrap();
+    assert!(line(&lines, "hour, ").ends_with(", failed 0, 429 rate 0.0 %, sign-in renewed 1"), "{lines:#?}");
+    assert_eq!(calls.get(), 1);
+    let t = teams_of(&server);
+    let reads = |chat: &str| t.message_reads.iter().filter(|(c, _)| c == chat).count();
+    assert_eq!((reads("19:a@thread.v2"), reads("19:b@thread.v2"), reads("19:c@thread.v2")), (1, 1, 1), "{:?}", t.message_reads);
+    assert_eq!(hits(&server, "messages"), 6, "the check's, the open chat's, a, b refused, b again, c");
+}
+
+#[test]
+fn check_hour_stops_at_once_when_the_token_cant_be_renewed() {
+    // The token runs out at the first active chat's read, and can't be renewed: the hour stops
+    // there, without asking for the other chats with a token refused.
+    let mut t = teams_with(hour_chats());
+    t.token_expires = Some(("messages", 3, "renewed".into()));
+    let server = serve_teams(t);
+    let (opts, calls) = renewing(|| None);
+    let (r, lines) = check(&server, &opts);
+    r.unwrap();
+    assert!(line(&lines, "hour, ").contains(", failed 1, 429 rate 0.0 %, stopped (401)"), "{lines:#?}");
+    assert_eq!(calls.get(), 1);
+    let t = teams_of(&server);
+    assert_eq!(t.message_reads.len(), 2, "the check's and the open chat's: {:?}", t.message_reads);
+    assert_eq!(hits(&server, "messages"), 3, "and the refused one, no other");
+    assert_eq!(hits(&server, "chats"), 2);
+
+    // Renewed, but the new token is refused too: a second 401 in a row stops the hour.
+    let mut t = teams_with(hour_chats());
+    t.token_expires = Some(("chats", 2, "renewed".into()));
+    let server = serve_teams(t);
+    let (opts, calls) = renewing(|| Some("not-the-one".into()));
+    let (r, lines) = check(&server, &opts);
+    r.unwrap();
+    assert!(line(&lines, "hour, ").contains(", failed 1, 429 rate 0.0 %, stopped (401)"), "{lines:#?}");
+    assert_eq!(calls.get(), 1);
+    assert_eq!(hits(&server, "chats"), 3, "the check's list, the refused one, its one retry");
+    assert_eq!(teams_of(&server).message_reads.len(), 1, "the check's read only");
 }
