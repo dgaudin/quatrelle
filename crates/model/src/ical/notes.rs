@@ -179,7 +179,7 @@ pub fn is_webex_link(url: &str) -> bool {
 
 /// The host a browser would really go to, lower-cased, and the path after it, of an `http(s)`
 /// address (the scheme in any case). The host ends at the first `/`, `?`, `#` or `\`, loses its
-/// `:port`, and is refused unless it is only letters, digits, `.` and `-`: an `@` (user
+/// `:port` (digits only), and is refused unless it is only letters, digits, `.` and `-`: an `@` (user
 /// information) or any other character could point the browser somewhere else than the text
 /// suggests. The path is empty unless the host ended at a `/`.
 fn web_host_and_path(url: &str) -> Option<(String, &str)> {
@@ -189,7 +189,11 @@ fn web_host_and_path(url: &str) -> Option<(String, &str)> {
     })?;
     let end = rest.find(['/', '?', '#', '\\']).unwrap_or(rest.len());
     let authority = rest.get(..end)?;
-    let host = authority.split(':').next().unwrap_or(authority);
+    // `host` or `host:<digits>`; anything else after a colon (`:443@evil.example`) is user information.
+    let (host, port) = authority.split_once(':').map_or((authority, None), |(h, p)| (h, Some(p)));
+    if port.is_some_and(|p| p.is_empty() || !p.bytes().all(|b| b.is_ascii_digit())) {
+        return None;
+    }
     let plain = !host.is_empty() && host.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-');
     if !plain {
         return None;
