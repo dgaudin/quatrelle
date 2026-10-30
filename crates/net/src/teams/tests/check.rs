@@ -309,22 +309,45 @@ fn check_hour_runs_the_cadences() {
         recent("19:last-month@thread.v2", 30 * 24 * 60),
     ];
     let server = serve_teams(teams_with(chats));
-    let opts = CheckOptions { hour: Some(Duration::from_millis(3500)), sleep: |d| std::thread::sleep(d.min(Duration::from_millis(50))), ..opts() };
+    let opts = CheckOptions { hour: Some(Duration::from_millis(2500)), sleep: |d| std::thread::sleep(d.min(Duration::from_millis(50))), ..opts() };
+    super::super::check::REPORT_EVERY_IN_TESTS.set(Some(Duration::from_secs(1)));
     let (r, lines) = check(&server, &opts);
+    super::super::check::REPORT_EVERY_IN_TESTS.set(None);
     r.unwrap();
     let hour: Vec<&String> = lines.iter().filter(|l| l.starts_with("hour")).collect();
-    assert_eq!(hour.len(), 1, "no ten-minute report in 3.5 s, one at the end: {lines:#?}");
-    assert!(hour[0].starts_with("hour, 3 s: requests ") && hour[0].contains(", failed 0, 429 rate 0.0 %"), "{}", hour[0]);
+    let (reports, end) = hour.split_at(hour.len() - 1);
+    assert!(!reports.is_empty() && reports.iter().all(|l| l.starts_with("hour, after ") && l.contains(" min: requests ")), "{lines:#?}");
+    assert!(end[0].starts_with("hour, 2 s: requests ") && end[0].ends_with(", failed 0, 429 rate 0.0 %"), "{}", end[0]);
+    // What happens at the start is certain; what the clock adds after depends on the machine.
     let t = teams_of(&server);
     let lists = hits(&server, "chats");
     assert!(lists >= 2, "the check's list, then the cadence's: {lists}");
     let reads = |chat: &str| t.message_reads.iter().filter(|(c, _)| c == chat).count();
     assert!(t.message_reads.iter().all(|(_, f)| f.starts_with("lastModifiedDateTime gt ") || f.starts_with("lastModifiedDateTime lt ")));
-    assert!(reads("19:newest@thread.v2") >= 3, "the check's read, then every 3 s: {:?}", t.message_reads);
+    assert!(reads("19:newest@thread.v2") >= 2, "the check's read, then the cadence's: {:?}", t.message_reads);
     assert_eq!((reads("19:yesterday@thread.v2"), reads("19:last-week@thread.v2"), reads("19:last-month@thread.v2")), (1, 1, 0));
     for c in &t.chats {
         assert!(reads(&c.id) <= lists as usize * 4, "{}: {} reads for {lists} lists", c.id, reads(&c.id));
     }
+}
+
+#[test]
+fn check_hour_stops_at_its_deadline() {
+    // Every request throttled once (a second each): the first pass alone, over twenty active
+    // chats, would take twenty seconds. The hour stops at its end, one request late at most.
+    let now = clock();
+    let chats = (0..22).map(|i| chat(&format!("19:busy{i}@thread.v2"), now - (i + 1) * MINUTE, 1)).collect();
+    let mut t = teams_with(chats);
+    t.throttle_every = Some(2);
+    let server = serve_teams(t);
+    let opts = CheckOptions { hour: Some(Duration::from_secs(2)), sleep: |d| std::thread::sleep(d.min(Duration::from_millis(50))), ..opts() };
+    let (r, lines) = check(&server, &opts);
+    r.unwrap();
+    let end = line(&lines, "hour, ");
+    let secs: u64 = end.trim_start_matches("hour, ").split(' ').next().unwrap().parse().unwrap();
+    assert!(secs <= 2 + 1, "a request's wait past the end at most: {end}");
+    assert!(end.ends_with(", cut short at the end"), "{end}");
+    assert!(teams_of(&server).message_reads.len() < 10, "{}", teams_of(&server).message_reads.len());
 }
 
 #[test]
