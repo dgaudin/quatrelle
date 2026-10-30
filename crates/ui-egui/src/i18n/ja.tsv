@@ -1776,3 +1776,7 @@ month	May	5月
 	Flags	旗
 	This meeting link can't be opened	この会議のリンクは開けません
 	{browser} couldn't open the meeting: {error}	{browser} で会議を開けませんでした: {error}
+	Applications	アプリケーション
+	Open Teams meetings and calls in	Teams の会議と通話を開くブラウザー
+	The default browser	既定のブラウザー
+	Teams meetings open in a window of their own: Chrome, Chromium or Edge, which Teams needs for calls on Linux.	Teams の会議は専用のウィンドウで開きます: Chrome、Chromium、Edge のいずれかで、Linux で Teams の通話に必要です。

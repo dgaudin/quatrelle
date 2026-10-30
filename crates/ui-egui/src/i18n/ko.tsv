@@ -1778,3 +1778,7 @@ month	May	5월
 	Flags	깃발
 	This meeting link can't be opened	이 모임 링크를 열 수 없습니다
 	{browser} couldn't open the meeting: {error}	{browser}에서 모임을 열 수 없습니다: {error}
+	Applications	응용 프로그램
+	Open Teams meetings and calls in	Teams 모임과 통화를 열 브라우저
+	The default browser	기본 브라우저
+	Teams meetings open in a window of their own: Chrome, Chromium or Edge, which Teams needs for calls on Linux.	Teams 모임은 별도의 창에서 열립니다: Linux에서 Teams 통화에 필요한 Chrome, Chromium 또는 Edge입니다.

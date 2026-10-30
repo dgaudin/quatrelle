@@ -1775,3 +1775,7 @@ month	May	mei
 	Flags	Vlaggen
 	This meeting link can't be opened	Deze vergaderkoppeling kan niet worden geopend
 	{browser} couldn't open the meeting: {error}	{browser} kon de vergadering niet openen: {error}
+	Applications	Toepassingen
+	Open Teams meetings and calls in	Teams-vergaderingen en -gesprekken openen in
+	The default browser	De standaardbrowser
+	Teams meetings open in a window of their own: Chrome, Chromium or Edge, which Teams needs for calls on Linux.	Teams-vergaderingen openen in een eigen venster: Chrome, Chromium of Edge, die Teams op Linux nodig heeft voor gesprekken.
