@@ -85,8 +85,9 @@ as an anonymous guest and the window stayed white.
     Quatrelle's own meetings profile, labelled "Meetings profile (made by Quatrelle)" whatever the
     browser calls it. Every click runs `view.meetingProfile`, the entry already shown included.
   - **Create a profile for meetings**, while the browser has no such profile and it isn't chosen:
-    it chooses it and opens `https://teams.microsoft.com/` in it as an app window, for the user to
-    sign in to Microsoft 365 once. The browser creates a profile folder it's asked for and names
+    it opens `https://teams.microsoft.com/` in it as an app window, for the user to sign in to
+    Microsoft 365 once, and chooses it only once the browser opened (a failed launch chooses
+    nothing and says so; the button stays). The browser creates a profile folder it's asked for and names
     it itself ("Person N"; no flag sets the name); the note under the button says it can be
     renamed there.
 - **The setting.** `Prefs.meeting_profile: Option<String>`: `None`, the last-used profile; else a
@@ -106,8 +107,10 @@ as an anonymous guest and the window stayed white.
   name. Nothing else in that folder is read.
 - **Which profile.** `meeting_profile()`, beside `meeting_browser()`, used by Join and Options:
   none chosen, no flag; `MEETINGS_PROFILE`, always that folder; another folder, only while the
-  browser lists it. A folder gone isn't passed (the browser would create an empty profile in its
-  place): the meeting opens in the last profile used, Join says so in a notice, and Options shows
+  browser lists it; a folder failing `is_profile_dir` never (the UI checks too, and leaves such
+  folders out of the list). A folder gone isn't passed (the browser would create an empty profile in its
+  place): the meeting opens in the last profile used, Join says so in a notice (the folder's name
+  without control characters, cut at 40 characters), and Options shows
   "The last profile used".
 - **The launch.** `Services::open_app_window(program, profile, url)`: `--profile-directory=<folder>`
   before `--app=<url>`; a profile failing `is_profile_dir` is refused before anything runs.
