@@ -501,6 +501,11 @@ impl Session {
         };
         if let Some(a) = ix.answer.as_mut() {
             a.again.push(doc..doc.saturating_add(1));
+            // The window takes a slice more, and the answer looks at the message then (nothing
+            // else would ask, a search done).
+            if self.search.is_some() {
+                self.search_pending = true;
+            }
         }
     }
 }
