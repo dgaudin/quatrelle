@@ -146,7 +146,7 @@ impl Session {
                 return Vec::new();
             }
             self.search_directory(account, query, true);
-            return self.directory_found(account, query).map(|f| f.people.clone()).unwrap_or_default();
+            return self.directory_found(account, query).map(|f| directory_people(&f.people)).unwrap_or_default();
         }
         let book = source.strip_prefix("book:").and_then(|b| b.split_once(':'));
         if source == "people" || book.is_some() {

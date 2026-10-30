@@ -348,6 +348,10 @@ pub enum Job {
     /// Look `query` up in the organisation's directory (Exchange's Global Address List), by name
     /// or address as Outlook's Check Names does; answered by [`Event::DirectoryPeople`].
     SearchDirectory { account: String, query: String },
+    /// The members of a list: a distribution list by its `address`, or a contact group by its
+    /// `item_id` (one of the two set), as Outlook's "+" before a list shows them; answered by
+    /// [`Event::ListExpanded`]. Exchange only.
+    ExpandList { account: String, address: String, item_id: Option<String> },
     /// Ask the language model set in Options: an OpenAI-compatible `chat/completions` under
     /// `url`, with `model` (its key, when it needs one, is in the keychain); `messages` are
     /// (role, text). Answered by [`Event::LlmAnswered`] with the same `id`.
@@ -430,6 +434,7 @@ impl Job {
             | Job::GetRooms { account }
             | Job::FindCertificates { account, .. }
             | Job::SearchDirectory { account, .. }
+            | Job::ExpandList { account, .. }
             | Job::FetchCalendar { account, .. }
             | Job::GetAvailability { account, .. } => account,
             Job::FetchUrl { .. }

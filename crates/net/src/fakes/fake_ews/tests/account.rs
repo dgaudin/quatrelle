@@ -565,7 +565,7 @@ fn the_directory_is_searched_by_name() {
     let mut ask = |query: &str| {
         pool.submit(Job::SearchDirectory { account: "a1".into(), query: query.into() });
         match until(&pool, query, |e| matches!(e, Event::DirectoryPeople { query: q, .. } if q == query)).pop().unwrap() {
-            Event::DirectoryPeople { people, error: None, .. } => people.into_iter().map(|p| p.email).collect::<Vec<_>>(),
+            Event::DirectoryPeople { people, error: None, .. } => people.into_iter().map(|p| p.address).collect::<Vec<_>>(),
             other => panic!("{other:?}"),
         }
     };

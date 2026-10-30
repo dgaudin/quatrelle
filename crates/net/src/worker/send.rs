@@ -35,6 +35,7 @@ impl Worker {
                 | Job::ServerFolderSizes { .. }
                 | Job::FindCertificates { .. }
                 | Job::SearchDirectory { .. }
+                | Job::ExpandList { .. }
                 | Job::SyncCalendars { .. }) => self.handle(j),
                 // Anything else belongs to the main connection.
                 other => {
