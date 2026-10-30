@@ -77,6 +77,16 @@ impl Session {
         sent.into_iter().filter(|(_, id)| !answered.contains(id)).map(|(k, _)| k).collect()
     }
 
+    /// The messages waiting for a reply, worked out once for a search call and its list.
+    pub(super) fn awaiting_now(&mut self) -> HashSet<MessageKey> {
+        if let Some(memo) = &self.awaiting_memo {
+            return memo.clone();
+        }
+        let set = self.awaiting_replies();
+        self.awaiting_memo = Some(set.clone());
+        set
+    }
+
     /// The servers' search is no longer wanted (the search box cleared or changed, issue #4):
     /// the accounts still searching stop; what they found stays in the folders' lists.
     pub(crate) fn stop_server_search(&mut self) {
@@ -179,6 +189,7 @@ impl Session {
         if show || !same {
             self.refresh_list();
         }
+        self.awaiting_memo = None;
         self.ask_server(q, scope);
         self.list.len()
     }
