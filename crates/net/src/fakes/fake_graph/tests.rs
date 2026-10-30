@@ -684,7 +684,8 @@ fn a_refused_token_is_renewed_once_before_asking_to_sign_in() {
     p.id = "test-graph-renew".into();
     crate::oauth::TEST_PROVIDERS.lock().unwrap().push(p);
 
-    let mut d = Data { token: Some("t1".into()), ..Default::default() };
+    // Sources come slowly: the list a sync saves is seen well before the sync ends.
+    let mut d = Data { token: Some("t1".into()), source_delay: Duration::from_millis(300), ..Default::default() };
     let inbox = d.folder("Inbox", None, Some("inbox"));
     d.deliver(&inbox, &mail("Before", "m1"), true, "2024-05-06T09:00:00Z");
     let server = serve(d);
@@ -707,20 +708,24 @@ fn a_refused_token_is_renewed_once_before_asking_to_sign_in() {
         d.deliver(&inbox, &mail("After", "m2"), false, "2024-05-06T10:00:00Z");
     }
     pool.submit(Job::SyncFolder { account: "a1".into(), folder: "INBOX".into() });
+    // Waited for until the Inbox's sync with t2 has ended (its `FolderChanged` is said then), not
+    // until "After" shows: the list is saved before the sources are asked for, and t2 refused
+    // before the sync ended would be the renewed token refused too, rightly asking to sign in
+    // without a third token request (CI hung on that, waiting for it, 29/10).
+    let asked = |e: &Event| matches!(e, Event::Status { status: SyncStatus::NeedsPassword { .. }, .. });
+    let seen = until(&pool, "the Inbox synced with the renewed token", |e| {
+        asked(e) || matches!(e, Event::FolderChanged { folder, .. } if folder == "INBOX")
+    });
+    assert!(!seen.iter().any(asked), "asked to sign in again: {seen:?}");
     let has = |s: &str| store.load_folder("a1", "INBOX").is_ok_and(|f| f.messages.iter().any(|m| m.subject == s));
-    let end = Instant::now() + Duration::from_secs(20);
-    while !has("After") {
-        assert!(Instant::now() < end, "never synced with the renewed token");
-        if let Some(Event::Status { status: SyncStatus::NeedsPassword { error }, .. }) = pool.wait(Duration::from_millis(100)) {
-            panic!("asked to sign in again: {error}");
-        }
-    }
+    assert!(has("After"), "never synced with the renewed token");
 
     // Refused again, and the refresh token is refused too: now it's signing in again.
     server.data.lock().unwrap().token = Some("t3".into());
     pool.submit(Job::SyncFolder { account: "a1".into(), folder: "INBOX".into() });
     until(&pool, "sign in again", |e| matches!(e, Event::Status { status: SyncStatus::NeedsPassword { .. }, .. }));
     let seen = token_requests.join().unwrap();
+    assert_eq!(seen.len(), 3, "sign-in, then a renewal each time a token was refused: {seen:?}");
     assert!(seen.iter().all(|r| r.contains("grant_type=refresh_token&refresh_token=r1")), "{seen:?}");
     pool.submit(Job::Remove { account: "a1".into() });
     let _ = std::fs::remove_dir_all(store.root());
