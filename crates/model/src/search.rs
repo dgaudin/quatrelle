@@ -13,6 +13,7 @@
 //! candidate with [`Query::matches`], so the index may over-approximate but never misses.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::ops::{Bound, RangeBounds};
 
 use unicode_segmentation::UnicodeSegmentation;
 
@@ -397,16 +398,18 @@ impl Index {
 
     /// Documents containing a word starting with `prefix`.
     pub fn prefix(&self, prefix: &str) -> BTreeSet<u32> {
-        self.prefix_from(prefix, 0)
+        self.prefix_in(prefix, ..)
     }
 
-    /// Documents numbered `from` on containing a word starting with `prefix` (each word's list
-    /// is sorted: the ones before are skipped, not read).
-    fn prefix_from(&self, prefix: &str, from: u32) -> BTreeSet<u32> {
+    /// Documents numbered within `docs` containing a word starting with `prefix` (each word's
+    /// list is sorted: the ones outside are skipped, not read).
+    fn prefix_in(&self, prefix: &str, docs: impl RangeBounds<u32>) -> BTreeSet<u32> {
+        let (start, end) = span(&docs);
         let mut out = BTreeSet::new();
-        for (_, docs) in self.postings.range(prefix.to_string()..).take_while(|(k, _)| k.starts_with(prefix)) {
-            let at = docs.partition_point(|&d| d < from);
-            out.extend(docs.get(at..).unwrap_or_default().iter().copied());
+        for (_, list) in self.postings.range(prefix.to_string()..).take_while(|(k, _)| k.starts_with(prefix)) {
+            let lo = list.partition_point(|&d| u64::from(d) < start);
+            let hi = list.partition_point(|&d| u64::from(d) < end);
+            out.extend(list.get(lo..hi.max(lo)).unwrap_or_default().iter().copied());
         }
         out
     }
@@ -541,19 +544,33 @@ impl Index {
     /// Candidates for a query: documents with every index word as a prefix of some word, or all
     /// documents when the query has no words (flag-only queries).
     pub fn candidates(&self, q: &Query) -> BTreeSet<u32> {
-        self.candidates_from(q, 0)
+        self.candidates_in(q, ..)
     }
 
     /// Candidates numbered `from` on: a search carried on while the index grows looks at the
     /// documents added since it last looked, not at all of them again.
     pub fn candidates_from(&self, q: &Query, from: u32) -> BTreeSet<u32> {
+        self.candidates_in(q, from..)
+    }
+
+    /// Candidates numbered within `docs`: a search looks again at the messages of a folder that
+    /// changed (one marked unread may answer it now), not at the whole index.
+    pub fn candidates_in(&self, q: &Query, docs: impl RangeBounds<u32> + Clone) -> BTreeSet<u32> {
+        let (start, end) = span(&docs);
+        if start >= end {
+            return BTreeSet::new();
+        }
         let ws = q.index_words();
         if ws.is_empty() {
-            return self.docs.range(from..).copied().collect();
+            let from = u32::try_from(start).unwrap_or(u32::MAX);
+            return match u32::try_from(end) {
+                Ok(end) => self.docs.range(from..end).copied().collect(),
+                Err(_) => self.docs.range(from..).copied().collect(),
+            };
         }
         let mut acc: Option<BTreeSet<u32>> = None;
         for w in ws {
-            let hits = self.prefix_from(&w, from);
+            let hits = self.prefix_in(&w, docs.clone());
             acc = Some(match acc {
                 None => hits,
                 Some(a) => a.intersection(&hits).copied().collect(),
@@ -564,6 +581,22 @@ impl Index {
         }
         acc.unwrap_or_default()
     }
+}
+
+/// A range of document numbers as `start..end` (`end` past the last number when unbounded): an
+/// empty or reversed range is simply empty, never a panic.
+fn span(docs: &impl RangeBounds<u32>) -> (u64, u64) {
+    let start = match docs.start_bound() {
+        Bound::Included(&s) => u64::from(s),
+        Bound::Excluded(&s) => u64::from(s) + 1,
+        Bound::Unbounded => 0,
+    };
+    let end = match docs.end_bound() {
+        Bound::Included(&e) => u64::from(e) + 1,
+        Bound::Excluded(&e) => u64::from(e),
+        Bound::Unbounded => u64::from(u32::MAX) + 1,
+    };
+    (start, end)
 }
 
 /// What [`Index::to_bytes`] writes first, and the format's version.
