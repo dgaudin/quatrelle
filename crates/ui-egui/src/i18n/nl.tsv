@@ -1773,3 +1773,5 @@ month	May	mei
 	Objects	Objecten
 	Symbols	Symbolen
 	Flags	Vlaggen
+	This meeting link can't be opened	Deze vergaderkoppeling kan niet worden geopend
+	{browser} couldn't open the meeting: {error}	{browser} kon de vergadering niet openen: {error}
