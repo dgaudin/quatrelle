@@ -46,9 +46,10 @@ impl SearchIndex {
         !self.gone.is_empty() && self.gone.iter().any(|(a, f)| *a == key.account && *f == key.folder)
     }
 
-    /// Whether more is left to do: folders to read, or folders to top up.
+    /// Whether more is left to do: folders to read, folders to top up, or messages the answer
+    /// looks at again.
     pub(super) fn pending(&self) -> bool {
-        !self.done || !self.stale.is_empty()
+        !self.done || !self.stale.is_empty() || self.answer.as_ref().is_some_and(|a| !a.again.is_empty())
     }
 
     /// The message an index number stands for (the folder being read numbered after the index),
@@ -305,7 +306,9 @@ impl Session {
         if all {
             ix.stale.retain(|s| s != k);
         }
-        n + 1
+        // Looking through what the index has of the folder counts too (a few of its messages
+        // cost what one indexed does), so a slice doesn't top up many big folders at once.
+        n + have.len() / 8 + 1
     }
 
     /// The folders a search covers changed (the folder list came again, a folder was made,

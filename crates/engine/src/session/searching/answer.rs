@@ -104,8 +104,9 @@ impl Session {
             return true;
         }
         self.ensure_index(scope);
-        let done = self.index_step(budget);
+        self.index_step(budget);
         self.update_answer(&query);
+        let done = !self.index.as_ref().is_some_and(SearchIndex::pending);
         self.search_pending = !done;
         let Some(a) = self.index.as_ref().and_then(|ix| ix.answer.as_ref()) else { return true };
         let more = a.found.len().saturating_sub(a.shown);
@@ -198,7 +199,19 @@ impl Session {
             Some(a) if a.query == *query && a.awaiting == awaiting => a,
             _ => Answer { query: query.clone(), awaiting: awaiting.clone(), changed: true, ..Default::default() },
         };
-        let again: BTreeSet<u32> = std::mem::take(&mut answer.again).into_iter().flatten().collect();
+        // A slice's worth at most (a folder back again may be a big one).
+        let mut again = BTreeSet::new();
+        let room = self.search_budget.max(1);
+        while again.len() < room
+            && let Some(r) = answer.again.first_mut()
+        {
+            let take = u32::try_from(room - again.len()).unwrap_or(u32::MAX).min(r.end.saturating_sub(r.start));
+            again.extend(r.start..r.start.saturating_add(take));
+            r.start = r.start.saturating_add(take);
+            if r.start >= r.end {
+                answer.again.remove(0);
+            }
+        }
         let total = ix.total();
         let fresh = answer.checked < total;
         if answer.recheck.is_empty() && again.is_empty() && !fresh {
