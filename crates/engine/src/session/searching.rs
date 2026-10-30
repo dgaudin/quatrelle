@@ -2,7 +2,9 @@
 
 use super::*;
 
+mod answer;
 mod indexing;
+use answer::Answer;
 pub(crate) use indexing::SearchIndex;
 
 /// Sent at least this long ago with nothing back, a message is waiting for a reply
@@ -36,76 +38,6 @@ impl Session {
             (SearchScope::Mailbox, View::Folder { account, .. }) => self.account(account).map(every).unwrap_or_default(),
             (SearchScope::Mailbox | SearchScope::All, _) => self.accounts.iter().flat_map(every).collect(),
         }
-    }
-
-    pub(super) fn search_results(&mut self, q: &str, scope: SearchScope) -> Vec<Arc<Summary>> {
-        let mut query = Query::parse(q);
-        // `category:Work` means the Work category's keyword (`$label2`), or its name's as Exchange
-        // keeps it (`work`). `is:categorized` means one of the categories.
-        use quatrelle_model::search::Term;
-        let both = |c: &quatrelle_model::organize::Category| [c.keyword.clone(), quatrelle_model::keyword_for(&c.name)];
-        for c in &mut query.clauses {
-            if let Term::Keyword(k) = &c.term
-                && let Some(cat) = self.category(k)
-            {
-                c.term = Term::Categorized(both(cat).to_vec());
-            }
-            if let Term::Categorized(ks) = &mut c.term
-                && ks.is_empty()
-            {
-                *ks = self.prefs.categories.iter().flat_map(both).collect();
-            }
-        }
-        if query.is_empty() {
-            self.search_pending = false;
-            return Vec::new();
-        }
-        let awaiting = if query.clauses.iter().any(|c| asks_awaiting(&c.term)) { self.awaiting_replies() } else { HashSet::new() };
-        self.ensure_index(scope);
-        let budget = self.search_budget;
-        self.search_pending = !self.index_step(budget);
-        let Some(ix) = self.index.take() else { return Vec::new() };
-        let mut out = Vec::new();
-        // Each folder's messages by number, made once: looked up one by one in the list, a search
-        // finding most of a big folder was quadratic.
-        let mut by_uid: HashMap<(String, String), HashMap<u32, usize>> = HashMap::new();
-        let needs_body = query.needs_body();
-        // The folder being read isn't part of the whole index yet; it answers too, so results
-        // come as it goes rather than when the last folder is done.
-        let mut candidates = ix.index.candidates(&query);
-        let offset = u32::try_from(ix.keys.len()).unwrap_or(u32::MAX);
-        if let Some(b) = &ix.building {
-            for d in b.index.candidates(&query) {
-                candidates.insert(d.saturating_add(offset));
-            }
-        }
-        for doc in candidates {
-            let (key, has_body) = if doc >= offset {
-                let at = (doc - offset) as usize;
-                match ix.building.as_ref().and_then(|b| Some((b.keys.get(at)?, b.has_body.get(at).copied().unwrap_or(false)))) {
-                    Some((k, h)) => (k.clone(), h),
-                    None => continue,
-                }
-            } else {
-                let Some(key) = ix.keys.get(doc as usize) else { continue };
-                (key.clone(), ix.has_body.get(doc as usize) == Some(&true))
-            };
-            let folder = (key.account.clone(), key.folder.clone());
-            if !by_uid.contains_key(&folder) {
-                // Where each message is in its folder's list (not a copy of every summary).
-                let map = self.folder_state(&key.account, &key.folder).messages.iter().enumerate().map(|(i, m)| (m.key.uid, i)).collect();
-                by_uid.insert(folder.clone(), map);
-            }
-            let Some(&at) = by_uid.get(&folder).and_then(|f| f.get(&key.uid)) else { continue };
-            let Some(m) = self.folder_state(&key.account, &key.folder).messages.get(at).filter(|m| m.key.uid == key.uid).cloned() else { continue };
-            // The body read again only when the index can't settle the query.
-            let body = if needs_body && has_body { self.words_of(&key) } else { None };
-            if query.matches(&Doc { summary: &m, body: body.as_deref(), indexed: true, awaiting: awaiting.contains(&m.key) }) {
-                out.push(m);
-            }
-        }
-        self.index = Some(ix);
-        out
     }
 
     /// The user's messages still waiting for a reply: in a Sent folder, sent between
@@ -240,7 +172,13 @@ impl Session {
             self.reading = None;
             self.found = None;
         }
-        self.refresh_list();
+        // A slice more of the index; carrying the same search on, the list shows the answer
+        // again only when the slice says so (a big mailbox's list sorted at every frame made
+        // each slice dearer than the last).
+        let show = self.search_step(q, scope, budget);
+        if show || !same {
+            self.refresh_list();
+        }
         self.ask_server(q, scope);
         self.list.len()
     }
