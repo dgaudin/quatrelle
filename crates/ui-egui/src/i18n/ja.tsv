@@ -1789,3 +1789,20 @@ month	May	5月
 	Sign in to Microsoft 365 in the window that opens. The browser names the new profile itself; it can be renamed there.	開いたウィンドウで Microsoft 365 にサインインしてください。新しいプロファイルの名前はブラウザーが付けます。名前はブラウザーで変更できます。
 	Create a profile for meetings	会議用のプロファイルを作成
 	{browser} couldn't be opened: {error}	{browser} を開けませんでした: {error}
+# The contacts field: the kinds of its entries, where a suggestion comes from, a chip read out.
+	Person	個人
+	Distribution list	配布リスト
+	Contact group	連絡先グループ
+	Equipment	備品
+	Shared mailbox	共有メールボックス
+	Public folder	パブリック フォルダー
+	Microsoft 365 group	Microsoft 365 グループ
+	Directory (cached)	ディレクトリ (キャッシュ)
+	Room list	会議室リスト
+	and {n} more were left out	ほか {n} 件は追加されませんでした
+	and {n} more	ほか {n} 件
+	This list has no members	このリストにはメンバーがいません
+	Not found: {name}	見つかりません: {name}
+	The directory can't be reached	ディレクトリに接続できません
+	Matched as typed	入力どおりに照合
+	{name}, {kind}, remove with Delete	{name}、{kind}、Delete キーで削除

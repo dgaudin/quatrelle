@@ -1788,3 +1788,20 @@ month	May	مايو
 	Sign in to Microsoft 365 in the window that opens. The browser names the new profile itself; it can be renamed there.	سجِّل الدخول إلى Microsoft 365 في النافذة التي تُفتح. يسمّي المتصفح الملف الشخصي الجديد بنفسه، ويمكن تغيير اسمه فيه.
 	Create a profile for meetings	إنشاء ملف شخصي للاجتماعات
 	{browser} couldn't be opened: {error}	تعذّر فتح {browser}: {error}
+# The contacts field: the kinds of its entries, where a suggestion comes from, a chip read out.
+	Person	شخص
+	Distribution list	قائمة توزيع
+	Contact group	مجموعة جهات اتصال
+	Equipment	معدات
+	Shared mailbox	صندوق بريد مشترك
+	Public folder	مجلد عام
+	Microsoft 365 group	مجموعة Microsoft 365
+	Directory (cached)	الدليل (مخزّن مؤقتًا)
+	Room list	قائمة الغرف
+	and {n} more were left out	و{n} أخرى لم تُضف
+	and {n} more	و{n} أخرى
+	This list has no members	لا تحتوي هذه القائمة على أعضاء
+	Not found: {name}	غير موجود: {name}
+	The directory can't be reached	تعذّر الوصول إلى الدليل
+	Matched as typed	مطابقة كما كُتب
+	{name}, {kind}, remove with Delete	{name}، {kind}، للإزالة اضغط Delete
