@@ -210,32 +210,4 @@ impl Session {
         let known = self.known_domains();
         quatrelle_model::lookalike::check_sender(from, &known)
     }
-
-    /// A body that came in joins the search index there is (rather than throwing it away).
-    pub(super) fn index_body(&mut self, key: &MessageKey, raw: &[u8]) {
-        let words: Arc<str> = Arc::from(mime::search_text(raw));
-        // Kept even without an index: a search made later needs no reading again.
-        self.keep_words(key, words.clone());
-        let Some(ix) = self.index.as_mut() else { return };
-        // The folder being read numbers its messages from zero, the whole index after it.
-        if let Some(b) = ix.building.as_mut()
-            && let Some(doc) = b.keys.iter().position(|k| k == key)
-        {
-            if b.has_body.get(doc) != Some(&true) {
-                b.index.add(u32::try_from(doc).unwrap_or(u32::MAX), &words);
-                if let Some(seen) = b.has_body.get_mut(doc) {
-                    *seen = true;
-                }
-            }
-            return;
-        }
-        if let Some(doc) = ix.keys.iter().position(|k| k == key)
-            && ix.has_body.get(doc) == Some(&false)
-        {
-            ix.index.add(u32::try_from(doc).unwrap_or(u32::MAX), &words);
-            if let Some(seen) = ix.has_body.get_mut(doc) {
-                *seen = true;
-            }
-        }
-    }
 }
