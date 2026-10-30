@@ -50,13 +50,16 @@ impl MailApp {
 
     /// Teams in the meeting browser's app window, in Quatrelle's own profile
     /// ([`MEETINGS_PROFILE`]): the browser makes the profile as it opens, under a name of its
-    /// own, and the user signs in to Microsoft 365 there once. Nothing when meetings open in the
-    /// default browser, which has no profile to name.
+    /// own, and the user signs in to Microsoft 365 there once. Only then is it the one meetings
+    /// open in: a browser that didn't open has made nothing, and the next meeting would open in a
+    /// profile signed in to nothing. Nothing when meetings open in the default browser, which has
+    /// no profile to name.
     pub(crate) fn make_meeting_profile(&mut self) {
         let browsers = self.services.browsers();
         let Some((name, program)) = meeting_browser(self.session.prefs.meeting_browser.as_deref(), &browsers) else { return };
-        if let Err(e) = self.services.open_app_window(program, Some(MEETINGS_PROFILE), TEAMS_HOME) {
-            self.session.notice(tf!("{browser} couldn't be opened: {error}", browser = name, error = e), true);
+        match self.services.open_app_window(program, Some(MEETINGS_PROFILE), TEAMS_HOME) {
+            Ok(()) => self.run("view.meetingProfile", json!({ "dir": MEETINGS_PROFILE })),
+            Err(e) => self.session.notice(tf!("{browser} couldn't be opened: {error}", browser = name, error = e), true),
         }
     }
 }
@@ -82,4 +85,16 @@ pub(crate) fn meeting_browser<'a>(chosen: Option<&str>, browsers: &'a [(String, 
 /// create an empty profile in its place. "Join meeting" and File › Options both ask here.
 pub(crate) fn meeting_profile<'a>(chosen: Option<&'a str>, profiles: &[BrowserProfile]) -> Option<&'a str> {
     chosen.filter(|dir| *dir == MEETINGS_PROFILE || profiles.iter().any(|p| p.dir == *dir))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The sign-in page passes the check every link handed to a browser passes (the desktop's
+    /// launcher refuses any other).
+    #[test]
+    fn the_sign_in_page_can_be_launched() {
+        assert!(quatrelle_engine::model::ical::launchable_link(TEAMS_HOME));
+    }
 }

@@ -226,7 +226,8 @@ pub enum Action {
     /// link opens as [`Action::OpenUrl`] does.
     OpenMeeting(String),
     /// File › Options › Applications' "Create a profile for meetings": the meeting browser opens
-    /// Teams in Quatrelle's own profile, which it makes, for the user to sign in to once.
+    /// Teams in Quatrelle's own profile, which it makes, for the user to sign in to once; once it
+    /// has opened, that profile is the one meetings open in.
     MakeMeetingProfile,
     /// A network share's link the user said to open ([`Dialog::OpenShare`]).
     OpenShare(String),

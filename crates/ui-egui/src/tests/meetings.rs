@@ -458,3 +458,21 @@ fn the_profiles_follow_the_browser_chosen() {
     assert!(a.ui.meeting_profiles.is_none());
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// The browser fails to open for the new profile: nothing is chosen (the next meeting would
+/// otherwise open in a profile made empty, signed in to nothing), the user is told, and the button
+/// stays for another try.
+#[test]
+fn a_profile_for_meetings_not_opened_is_not_chosen() {
+    let (mut a, dir, o) = launching_with("meet-options-make-fails", &[("Chromium", "/usr/bin/chromium")], &[profile("Default", "Me", "")], true);
+    let ctx = egui::Context::default();
+    let tall = open_options(&ctx, &mut a);
+    let make = settled_text_at(&ctx, &mut a, "Create a profile for meetings", tall).unwrap();
+    click_at(&ctx, &mut a, make, 1, tall);
+    assert_eq!(opened(&o), ["app /usr/bin/chromium --profile-directory=Quatrelle https://teams.microsoft.com/"]);
+    assert_eq!(a.session.prefs.meeting_profile, None);
+    let last = a.session.notices.last();
+    assert!(last.is_some_and(|n| n.error && n.text == "Chromium couldn't be opened: boom"), "{last:?}");
+    assert!(settled_text_at(&ctx, &mut a, "Create a profile for meetings", tall).is_some());
+    let _ = std::fs::remove_dir_all(dir);
+}
