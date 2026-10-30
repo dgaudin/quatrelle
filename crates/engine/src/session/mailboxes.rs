@@ -134,7 +134,7 @@ impl Session {
         self.cache.remove(&k);
         // Only an index that covers this folder is out of date (a sync touches folder after
         // folder: each dropped the whole index, built again from scratch while searching).
-        if self.index.as_ref().is_some_and(|ix| ix.scan.iter().any(|(a, f)| a == account && f == folder)) {
+        if self.index.as_ref().is_some_and(|ix| ix.covers(account, folder)) {
             self.index = None;
         }
         // The address book reads the folder's new mail (a slice at a time, by the window).
