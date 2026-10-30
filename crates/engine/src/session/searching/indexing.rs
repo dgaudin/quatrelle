@@ -51,7 +51,7 @@ impl SearchIndex {
     pub(super) fn pending(&self) -> bool {
         !self.done
             || !self.stale.is_empty()
-            || self.answer.as_ref().is_some_and(|a| a.checked < self.total() || !a.again.is_empty() || !a.todo.is_empty())
+            || self.answer.as_ref().is_some_and(|a| a.checked < self.total() || !a.dirty.is_empty() || !a.again.is_empty() || !a.todo.is_empty())
     }
 
     /// The candidates for a query numbered within `docs`: the index's, then the folder being
@@ -69,7 +69,7 @@ impl SearchIndex {
     }
 
     /// Where a folder's messages are in the index (the folder being read's too).
-    fn docs_of(&self, k: &(String, String)) -> Vec<Range<u32>> {
+    pub(super) fn docs_of(&self, k: &(String, String)) -> Vec<Range<u32>> {
         let mut out: Vec<Range<u32>> = self.ranges.get(k).cloned().unwrap_or_default();
         if self.building.is_some() && self.scan.get(self.folder) == Some(k) {
             let offset = u32::try_from(self.keys.len()).unwrap_or(u32::MAX);
@@ -129,25 +129,27 @@ impl SearchIndex {
         if self.answer.is_none() {
             return;
         }
-        let ranges = self.docs_of(&k);
-        let again: Vec<Range<u32>> = match keys {
-            None => ranges,
+        // The messages changed here, by number (a sync marks the whole folder instead).
+        let again: Vec<u32> = match keys {
+            None => Vec::new(),
             Some(keys) => {
                 let wanted: HashSet<(u32, u32)> =
                     keys.iter().filter(|m| m.account == account && m.folder == folder).map(|m| (m.validity, m.uid)).collect();
                 if wanted.is_empty() {
                     Vec::new()
                 } else {
-                    ranges
+                    self.docs_of(&k)
                         .into_iter()
                         .flatten()
                         .filter(|&d| self.doc(d).is_some_and(|(m, _)| wanted.contains(&(m.validity, m.uid))))
-                        .map(|d| d..d.saturating_add(1))
                         .collect()
                 }
             }
         };
         if let Some(a) = self.answer.as_mut() {
+            if keys.is_none() {
+                a.dirty.insert(k.clone());
+            }
             a.recheck.insert(k);
             a.again.extend(again);
         }
@@ -192,7 +194,7 @@ impl SearchIndex {
         for k in wanted {
             if self.gone.remove(&k) {
                 if let Some(a) = self.answer.as_mut() {
-                    a.again.extend(self.ranges.get(&k).into_iter().flatten().cloned());
+                    a.dirty.insert(k.clone());
                 }
                 self.stale.push(k);
                 changed = true;
@@ -500,7 +502,7 @@ impl Session {
             doc
         };
         if let Some(a) = ix.answer.as_mut() {
-            a.again.push(doc..doc.saturating_add(1));
+            a.again.insert(doc);
             // The window takes a slice more, and the answer looks at the message then (nothing
             // else would ask, a search done).
             if self.search.is_some() {

@@ -6,7 +6,6 @@
 //! found is looked up again where something changed: a folder told of changes, a body that came
 //! in, a folder that came back.
 
-use std::collections::VecDeque;
 use std::ops::Range;
 
 use super::*;
@@ -26,13 +25,16 @@ pub(crate) struct Answer {
     pub(super) have: Keys,
     /// Folders whose messages found are looked up again: their list changed, or they went.
     pub(super) recheck: HashSet<(String, String)>,
-    /// Messages to look at again, by number: their folder changed (one marked unread may answer
-    /// `is:unread` now), a body came in, or their folder came back.
-    pub(super) again: Vec<Range<u32>>,
+    /// Folders whose messages are all looked at again (a sync changed the folder: one marked
+    /// unread may answer `is:unread` now, or it came back to the search). A set: a busy folder
+    /// changing a hundred times is looked at once.
+    pub(super) dirty: HashSet<(String, String)>,
+    /// Messages looked at again, by number: changed here, or a body came in.
+    pub(super) again: BTreeSet<u32>,
     /// The messages the index found for the query and not looked at yet: a slice's worth is
     /// looked at a call (a new query over a big index, or a big folder that changed, doesn't
-    /// load every folder in one frame).
-    pub(super) todo: VecDeque<u32>,
+    /// load every folder in one frame). A set: queued twice, a message is looked at once.
+    pub(super) todo: BTreeSet<u32>,
     /// How many were found when the list last showed them.
     pub(super) shown: usize,
     /// Something found went or changed since the list last showed them.
@@ -218,7 +220,7 @@ impl Session {
             _ => Answer { query: query.clone(), awaiting: awaiting.clone(), changed: true, ..Default::default() },
         };
         let total = ix.total();
-        if answer.recheck.is_empty() && answer.again.is_empty() && answer.todo.is_empty() && answer.checked >= total {
+        if answer.recheck.is_empty() && answer.dirty.is_empty() && answer.again.is_empty() && answer.todo.is_empty() && answer.checked >= total {
             ix.answer = Some(answer);
             self.index = Some(ix);
             return;
@@ -228,8 +230,23 @@ impl Session {
         self.recheck_found(&mut ix, &mut answer, &looking, folders);
         // Finding the candidates costs their words, not their messages: they queue up whole (once
         // each), and the messages are looked at a slice's worth a call.
-        for r in std::mem::take(&mut answer.again) {
-            answer.todo.extend(ix.candidates_in(query, r));
+        for k in std::mem::take(&mut answer.dirty) {
+            for r in ix.docs_of(&k) {
+                answer.todo.extend(ix.candidates_in(query, r));
+            }
+        }
+        // Single messages, in runs of numbers (an operation on a whole folder's selection).
+        let mut run: Option<Range<u32>> = None;
+        for d in std::mem::take(&mut answer.again).into_iter().map(Some).chain([None]) {
+            match (&mut run, d) {
+                (Some(r), Some(d)) if r.end == d => r.end = d.saturating_add(1),
+                _ => {
+                    if let Some(r) = run.take() {
+                        answer.todo.extend(ix.candidates_in(query, r));
+                    }
+                    run = d.map(|d| d..d.saturating_add(1));
+                }
+            }
         }
         if answer.checked < total {
             answer.todo.extend(ix.candidates_in(query, answer.checked..total));
@@ -239,7 +256,7 @@ impl Session {
         let mut looked = 0;
         let mut lists = Lists::new();
         while looked < room
-            && let Some(d) = answer.todo.pop_front()
+            && let Some(d) = answer.todo.pop_first()
         {
             // Found already or gone from the search: nothing to look at (and nothing counted).
             let Some((key, has_body)) = ix.doc(d) else { continue };
@@ -316,6 +333,15 @@ impl Session {
             .get(&key.uid)
             .copied()?;
         st.messages.get(at).filter(|m| m.key == *key).map(|m| (m.clone(), at))
+    }
+
+    /// How many messages the search's answer has queued to look at (again or for the first
+    /// time), for the tests of what a cleared search keeps.
+    #[cfg(test)]
+    pub(crate) fn search_queue_len(&self) -> usize {
+        let Some(a) = self.index.as_ref().and_then(|ix| ix.answer.as_ref()) else { return 0 };
+        let ix = self.index.as_ref().map_or(0, |ix| a.dirty.iter().flat_map(|k| ix.docs_of(k)).map(|r| r.len()).sum::<usize>());
+        ix + a.again.len() + a.todo.len()
     }
 
     /// The messages waiting for a reply, when the query asks about them.
