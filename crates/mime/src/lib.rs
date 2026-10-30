@@ -44,7 +44,7 @@ pub use attachments::{
 };
 use attachments::{attached, has_real_attachments};
 use files::attachment_name;
-pub use files::{mime_from_name, runs_code, sanitize_filename};
+pub use files::{alt_code_char, alt_code_pages, mime_from_name, runs_code, sanitize_filename};
 pub use hidden::{HIDDEN_WORDS_MIN, hidden_text};
 use html::*;
 pub use html::*;

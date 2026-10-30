@@ -3,6 +3,7 @@
 use super::*;
 
 mod people_field;
+mod typing;
 
 /// A name typed into To over a big mailbox (16 folders of 4,000 messages, too many to count
 /// again at the start): no frame reads the mailbox whole. The message's first frame starts the
