@@ -448,6 +448,35 @@ fn a_body_that_comes_in_after_the_search_brings_its_message_in() {
     done(s);
 }
 
+/// A search cleared from the box keeps the index, not what it would have to look at again: an
+/// hour of syncs of a big folder meanwhile queues nothing, and the same search typed again is
+/// done in a few calls, with what changed meanwhile (a message marked unread on the server).
+#[test]
+fn syncs_while_no_search_is_shown_queue_nothing() {
+    let store = busy_store("busy-cleared", 3, 1200);
+    read_but_needles(&store, 3);
+    let mut s = open(&store);
+    assert!(drive(&mut s, "is:unread", 100, |_, _| {}).is_some());
+    assert_eq!(s.list.len(), 36);
+    s.run("search.clear", &json!({})).unwrap();
+    let unread = MessageKey { account: "a1".into(), folder: folder_path(0), validity: 1, uid: 5 };
+    for n in 0..200 {
+        if n == 100 {
+            let mut st = store.load_folder("a1", "INBOX").unwrap();
+            st.messages.iter_mut().filter(|m| m.key == unread).for_each(|m| m.flags.seen = false);
+            store.save_folder("a1", "INBOX", &st).unwrap();
+        }
+        s.apply(Event::FolderChanged { account: "a1".into(), folder: "INBOX".into() });
+    }
+    assert_eq!(s.search_queue_len(), 0, "a cleared search keeps nothing to look at");
+    let calls = drive(&mut s, "is:unread", 100, |_, _| {});
+    assert!(calls.is_some_and(|n| n <= 3), "the same search again is done at once: {calls:?}");
+    let found = listed(&s);
+    assert!(found.contains(&unread), "marked unread while the search was cleared: found");
+    assert_eq!(found.len(), 37);
+    done(s);
+}
+
 /// A folder synced again and again while a search is shown, faster than the answer looks at its
 /// messages, is queued once: what's waiting stays the folder's size, whatever the number of syncs.
 #[test]
