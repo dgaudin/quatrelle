@@ -1,9 +1,10 @@
 //! The contacts field wired to the session (`dialogs/people_field.rs`): the message's To, Cc,
-//! Bcc and Replies to, and the Select Names dialog's rows.
+//! Bcc and Replies to, the Select Names dialog's rows, and a Send that waits for the names still
+//! being resolved.
 
 use quatrelle_engine::FieldId;
 use quatrelle_engine::model::scheduling::Room;
-use quatrelle_engine::model::{AddresseeKind, EmailAddress, Job};
+use quatrelle_engine::model::{Addressee, AddresseeKind, EmailAddress, Job};
 
 use super::*;
 use crate::dialogs::people_field::egui_id;
@@ -25,6 +26,13 @@ fn focus_field(ctx: &egui::Context, f: FieldId) {
     ctx.memory_mut(|m| m.request_focus(input_id(egui_id(f))));
 }
 
+/// A frame at `time` seconds (the clock a send's wait is measured by).
+fn frame_at(ctx: &egui::Context, a: &mut MailApp, events: Vec<Event>, time: f64) {
+    let input = RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, SIZE)), time: Some(time), events, ..Default::default() };
+    let mut out = ctx.run_ui(input, |ui| a.ui(ui));
+    out.textures_delta.clear();
+}
+
 /// The suggestion list's rect once it stays put (the chips' line settles a frame after a chip
 /// comes in, and the list follows the input).
 fn settled_list_rect(ctx: &egui::Context, a: &mut MailApp) -> Option<egui::Rect> {
@@ -38,6 +46,26 @@ fn settled_list_rect(ctx: &egui::Context, a: &mut MailApp) -> Option<egui::Rect>
         last = now;
     }
     None
+}
+
+/// A backend that keeps the jobs handed to it (`NullBackend` drops them, and `logic` hands them
+/// over every frame).
+#[derive(Default)]
+struct Taken(std::rc::Rc<std::cell::RefCell<Vec<Job>>>);
+
+impl crate::Backend for Taken {
+    fn submit(&mut self, job: Job) {
+        self.0.borrow_mut().push(job);
+    }
+
+    fn poll(&mut self) -> Vec<MailEvent> {
+        Vec::new()
+    }
+}
+
+/// The jobs the app handed its backend so far, taken.
+fn handed(taken: &std::rc::Rc<std::cell::RefCell<Vec<Job>>>) -> Vec<Job> {
+    std::mem::take(&mut *taken.borrow_mut())
 }
 
 /// A click at `at` (press, release, a frame).
@@ -65,6 +93,16 @@ fn directory_fails(a: &mut MailApp, account: &str, query: &str, error: &str) {
         more: false,
         error: Some(error.into()),
     });
+}
+
+fn has_send(jobs: &[Job]) -> bool {
+    jobs.iter().any(|j| matches!(j, Job::Send { .. }))
+}
+
+/// A message on the Exchange account, with a subject so that it can go.
+fn new_message_on(a: &mut MailApp, account: &str, to: &str) {
+    a.run("mail.new", json!({}));
+    a.run("compose.update", json!({"account": account, "to": to, "subject": "Hello"}));
 }
 
 /// Typing in To opens suggestions; Enter takes the highlighted one as a chip; a click on a
@@ -295,6 +333,165 @@ fn ctrl_k_in_the_field_resolves_and_marks_what_it_cant() {
         tip = tip.or_else(|| text_at(&frame_shapes(&ctx, &mut a, vec![], SIZE), "The directory can't be reached"));
     }
     assert!(tip.is_some(), "the reason on hover");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Send waits for a name still being looked up, then goes once the directory has answered; a
+/// name the directory doesn't know stops the send with "Not found"; a message to addresses alone
+/// goes without asking the directory at all.
+#[test]
+fn sending_waits_for_a_pending_name_then_stops_on_one_not_found() {
+    let (mut a, dir) = app("send-waits");
+    let taken = Taken::default();
+    let jobs = taken.0.clone();
+    a.backend = Box::new(taken);
+    let gal = with_exchange(&mut a);
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    new_message_on(&mut a, &gal, "zoe@studio.example; dupont");
+    frame(&ctx, &mut a, vec![]);
+    handed(&jobs);
+    a.run("compose.send", json!({}));
+    assert!(!a.session.compose.as_ref().unwrap().sending, "held for the name");
+    frame(&ctx, &mut a, vec![]);
+    let out = handed(&jobs);
+    assert!(!has_send(&out), "nothing sent: {out:?}");
+    assert!(a.session.directory_searching(&gal, "dupont"), "asked of the directory");
+    frame(&ctx, &mut a, vec![]);
+    assert!(!has_send(&handed(&jobs)), "still held");
+    directory_answers(&mut a, &gal, "dupont", &[("Marc Dupont", "marc@contoso.example")]);
+    frame(&ctx, &mut a, vec![]);
+    let out = handed(&jobs);
+    assert!(has_send(&out), "sent once the name was found: {out:?}");
+    assert_eq!(to(&a), "Zoe Park <zoe@studio.example>; Marc Dupont <marc@contoso.example>; ");
+    assert!(a.session.compose.as_ref().unwrap().sending);
+    assert!(a.ui.compose_alert.is_none(), "{:?}", a.ui.compose_alert);
+
+    // A name nobody knows stops the send.
+    new_message_on(&mut a, &gal, "nobody");
+    frame(&ctx, &mut a, vec![]);
+    a.run("compose.send", json!({}));
+    directory_answers(&mut a, &gal, "nobody", &[]);
+    frame(&ctx, &mut a, vec![]);
+    assert_eq!(a.ui.compose_alert.as_deref(), Some("Not found: nobody"));
+    assert!(!has_send(&handed(&jobs)));
+    assert!(!a.session.compose.as_ref().unwrap().sending);
+    a.ui.compose_alert = None;
+
+    // Addresses alone never need the directory: the message goes, offline or not.
+    new_message_on(&mut a, &gal, "zoe@studio.example");
+    for acc in a.session.accounts.iter_mut().filter(|x| x.config.id == gal) {
+        acc.status = quatrelle_engine::model::SyncStatus::Offline;
+    }
+    frame(&ctx, &mut a, vec![]);
+    handed(&jobs);
+    a.run("compose.send", json!({}));
+    frame(&ctx, &mut a, vec![]);
+    let out = handed(&jobs);
+    assert!(has_send(&out), "{out:?}");
+    assert!(!out.iter().any(|j| matches!(j, Job::SearchDirectory { .. })), "the directory wasn't asked: {out:?}");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Several people fit a name at Send: the choice is asked before the message goes, and Cancel
+/// (or Escape) there leaves the name as typed and the message unsent, with nothing to say.
+#[test]
+fn cancelling_the_choice_asked_at_send_leaves_the_message_unsent() {
+    let (mut a, dir) = app("send-choice-cancel");
+    let taken = Taken::default();
+    let jobs = taken.0.clone();
+    a.backend = Box::new(taken);
+    let gal = with_exchange(&mut a);
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    new_message_on(&mut a, &gal, "dupont");
+    frame(&ctx, &mut a, vec![]);
+    a.run("compose.send", json!({}));
+    directory_answers(&mut a, &gal, "dupont", &[("Anne Dupont", "anne@contoso.example"), ("Marc Dupont", "marc@contoso.example")]);
+    assert!(settled_text_at(&ctx, &mut a, "More than one person fits “dupont”. Choose who you meant:", SIZE).is_some(), "asked before it goes");
+    assert!(!has_send(&handed(&jobs)), "held for the choice");
+    frame(&ctx, &mut a, vec![key(Key::Escape, Modifiers::NONE)]);
+    for _ in 0..3 {
+        frame(&ctx, &mut a, vec![]);
+    }
+    assert!(settled_text_at(&ctx, &mut a, "More than one person fits “dupont”. Choose who you meant:", SIZE).is_none(), "the dialog closed");
+    assert_eq!(a.ui.compose_alert, None, "nothing to say: the send was called off");
+    assert!(!has_send(&handed(&jobs)), "not sent");
+    assert!(!a.session.compose.as_ref().unwrap().sending);
+    assert!(a.ui.people.send_wait_left(0.0).is_none(), "no send waits any more");
+    let f = field(&a, "to");
+    assert!(a.ui.people.pieces(f).iter().any(|p| text_with(p, "dupont", None)), "the name as typed: {:?}", a.ui.people.pieces(f));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A directory that never answers doesn't hold Send forever: past its timeout the send stops
+/// with "The directory can't be reached".
+#[test]
+fn sending_gives_up_after_the_directorys_timeout() {
+    let (mut a, dir) = app("send-timeout");
+    let taken = Taken::default();
+    let jobs = taken.0.clone();
+    a.backend = Box::new(taken);
+    let gal = with_exchange(&mut a);
+    let ctx = egui::Context::default();
+    frame_at(&ctx, &mut a, vec![], 1.0);
+    new_message_on(&mut a, &gal, "dupont");
+    frame_at(&ctx, &mut a, vec![], 2.0);
+    a.run("compose.send", json!({}));
+    frame_at(&ctx, &mut a, vec![], 30.0);
+    assert!(a.ui.compose_alert.is_none(), "still waiting at 30 s");
+    frame_at(&ctx, &mut a, vec![], 63.0);
+    assert_eq!(a.ui.compose_alert.as_deref(), Some("The directory can't be reached"));
+    assert!(!has_send(&handed(&jobs)));
+    assert!(!a.session.compose.as_ref().unwrap().sending);
+    let f = field(&a, "to");
+    assert!(a.ui.people.pieces(f).iter().any(|p| text_with(p, "dupont", Some(PieceError::Unreached))), "{:?}", a.ui.people.pieces(f));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A contact group has no address: Send asks the server for its members first, and the message
+/// goes to them once they're known.
+#[test]
+fn a_contact_group_is_expanded_before_the_message_goes() {
+    let (mut a, dir) = app("send-group");
+    let taken = Taken::default();
+    let jobs = taken.0.clone();
+    a.backend = Box::new(taken);
+    let gal = with_exchange(&mut a);
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    new_message_on(&mut a, &gal, "Dupont family <group:AAMk=>");
+    frame(&ctx, &mut a, vec![]);
+    handed(&jobs);
+    a.run("compose.send", json!({}));
+    frame(&ctx, &mut a, vec![]);
+    let out = handed(&jobs);
+    assert!(out.iter().any(|j| matches!(j, Job::ExpandList { item_id: Some(id), .. } if id == "AAMk=")), "{out:?}");
+    assert!(!has_send(&out));
+    let members = vec![
+        Addressee::new("Anne Dupont", "anne@contoso.example", AddresseeKind::Person),
+        Addressee::new("Marc Dupont", "marc@contoso.example", AddresseeKind::Person),
+    ];
+    a.session.apply(MailEvent::ListExpanded {
+        account: gal.clone(),
+        address: String::new(),
+        item_id: Some("AAMk=".into()),
+        members,
+        more: false,
+        total: 2,
+        error: None,
+    });
+    frame(&ctx, &mut a, vec![]);
+    let f = field(&a, "to");
+    let p = a.ui.people.pieces(f).to_vec();
+    assert!(p.len() == 2 && chip_named(&p[0], "Anne Dupont") && chip_named(&p[1], "Marc Dupont"), "{p:?}");
+    let out = handed(&jobs);
+    let sent = out.iter().find_map(|j| match j {
+        Job::Send { recipients, .. } => Some(recipients.clone()),
+        _ => None,
+    });
+    assert_eq!(sent, Some(vec!["anne@contoso.example".to_string(), "marc@contoso.example".to_string()]));
+    assert_eq!(to(&a), "Anne Dupont <anne@contoso.example>; Marc Dupont <marc@contoso.example>; ");
     let _ = std::fs::remove_dir_all(dir);
 }
 

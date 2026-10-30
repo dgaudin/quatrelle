@@ -24,6 +24,8 @@ impl MailApp {
         if self.pump() {
             ctx.request_repaint();
         }
+        // A send held for names being resolved goes once they are, or says why it can't.
+        self.send_when_resolved(ctx);
         self.announce(ctx);
         // Reminders answered from their notification: as from the window's buttons; clicked:
         // the window comes forward, the Reminders window with it. (Before the due list is
@@ -70,6 +72,29 @@ impl MailApp {
         // Woken by the workers when they have news; this is for the clock (reminders, snoozed
         // mail coming back) when nothing else happens.
         ctx.request_repaint_after(std::time::Duration::from_secs(15));
+    }
+
+    /// A send held for the names its fields are still resolving: run once they're settled, or
+    /// said over the message when one can't be sent to (a name not found, the directory not
+    /// answering within its timeout).
+    fn send_when_resolved(&mut self, ctx: &egui::Context) {
+        let now = ctx.input(|i| i.time);
+        match self.ui.people.send_when_resolved(&mut self.session, now) {
+            Ok(Some((id, params))) => {
+                if self.use_compose(id) {
+                    self.run_now("compose.send", params);
+                }
+                ctx.request_repaint();
+            }
+            Ok(None) => {}
+            Err(why) => {
+                self.ui.compose_alert = Some(why);
+                ctx.request_repaint();
+            }
+        }
+        if let Some(left) = self.ui.people.send_wait_left(now) {
+            ctx.request_repaint_after(std::time::Duration::from_secs_f64(left.clamp(0.05, 1.0)));
+        }
     }
 
     /// Where the platform has a quit of its own (macOS: `terminate:`, `quit` returning true), a
