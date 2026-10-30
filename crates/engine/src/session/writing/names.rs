@@ -26,9 +26,13 @@ const MAX_NAMES: usize = 500;
 const MAX_PENDING: usize = 2_000;
 const MAX_CHOICES: usize = 200;
 
-/// The fields whose outcomes are kept; past them, all are forgotten (a window closed takes its
-/// fields with it, and nothing says so).
+/// The fields whose outcomes are kept; past them, the one recorded to longest ago is forgotten
+/// (a window closed says so: [`Session::forget_people_window`]).
 const OUTCOME_FIELDS: usize = 64;
+
+/// Why a name given up while it waited is unreached: past [`MAX_PENDING`], or its account gone.
+const TOO_MANY_WAITING: &str = "too many names waiting";
+const ACCOUNT_GONE: &str = "the account was removed";
 
 /// The message's own fields, in the order Check Names goes through them.
 const COMPOSE_FIELDS: [&str; 4] = ["to", "cc", "bcc", "replyTo"];
@@ -387,8 +391,8 @@ impl Session {
         }
     }
 
-    /// Wait on the directory for a name (once per field), the oldest given up past
-    /// [`MAX_PENDING`].
+    /// Wait on the directory for a name (once per field). Past [`MAX_PENDING`] the oldest is
+    /// given up, and unreached: a name never settles silently.
     fn wait_for(&mut self, check: NameCheck) {
         let pending = &mut self.people.pending;
         if let Some(c) = pending.iter_mut().find(|c| c.field == check.field && c.account == check.account && c.token == check.token) {
@@ -397,7 +401,8 @@ impl Session {
         }
         pending.push(check);
         if pending.len() > MAX_PENDING {
-            pending.remove(0);
+            let old = pending.remove(0);
+            self.record_outcome(old.field, &old.token, Outcome::Unreached(TOO_MANY_WAITING.into()));
         }
     }
 
@@ -431,9 +436,23 @@ impl Session {
         }
     }
 
-    /// An account is gone: the names waiting on its directory are given up.
+    /// A window closed: its fields' waits, choices, outcomes and last suggestions go. A question
+    /// already out stays (another field may wait on it too), but settles nothing there.
+    pub fn forget_people_window(&mut self, window: u64) {
+        let p = &mut self.people;
+        p.pending.retain(|c| c.field.window != window);
+        p.choices.retain(|c| c.field.window != window);
+        p.outcomes.retain(|(f, _)| f.window != window);
+        self.forget_window_suggestions(window);
+    }
+
+    /// An account is gone: the names waiting on its directory are given up, unreached.
     pub(crate) fn forget_name_checks(&mut self, account: &str) {
-        self.people.pending.retain(|c| c.account != account);
+        let (gone, kept): (Vec<NameCheck>, Vec<NameCheck>) = std::mem::take(&mut self.people.pending).into_iter().partition(|c| c.account == account);
+        self.people.pending = kept;
+        for c in gone {
+            self.record_outcome(c.field, &c.token, Outcome::Unreached(ACCOUNT_GONE.into()));
+        }
     }
 
     /// Write the name `token` out as `with` in a message's own field (nothing for another
@@ -449,23 +468,26 @@ impl Session {
         }
     }
 
-    /// Keep what a name came to until its field takes it (the newest for a name).
+    /// Keep what a name came to until its field takes it (the newest for a name). The field
+    /// goes last; past [`OUTCOME_FIELDS`], the one recorded to longest ago is forgotten.
     fn record_outcome(&mut self, field: FieldId, token: &str, outcome: Outcome) {
         let all = &mut self.people.outcomes;
-        if all.len() >= OUTCOME_FIELDS && !all.contains_key(&field) {
-            all.clear();
-        }
-        let list = all.entry(field).or_default();
+        let mut list = all.iter().position(|(f, _)| *f == field).map(|at| all.remove(at).1).unwrap_or_default();
         list.retain(|(t, _)| t != token);
         list.push((token.to_string(), outcome));
         if list.len() > MAX_NAMES {
             list.remove(0);
         }
+        all.push((field, list));
+        if all.len() > OUTCOME_FIELDS {
+            all.remove(0);
+        }
     }
 
     /// What a field's names came to since it last asked, in the order they were settled.
     pub fn take_people_outcomes(&mut self, field: FieldId) -> Vec<(String, Outcome)> {
-        self.people.outcomes.remove(&field).unwrap_or_default()
+        let all = &mut self.people.outcomes;
+        all.iter().position(|(f, _)| *f == field).map(|at| all.remove(at).1).unwrap_or_default()
     }
 
     /// How many of a field's names still wait on the directory.

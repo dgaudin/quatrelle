@@ -450,3 +450,117 @@ fn of_several_that_fit_a_field_keeps_the_kinds_it_takes() {
     assert_eq!(s.take_people_outcomes(to), [("seine".to_string(), Outcome::Ambiguous)]);
     done(s);
 }
+
+/// A window closed takes its fields' state with it: what waited is no longer settled there when
+/// the answer comes (the question already out stays, another field may share it), and its
+/// choices and outcomes are gone.
+#[test]
+fn a_window_forgotten_keeps_nothing_and_a_late_answer_settles_nothing_there() {
+    let (mut s, gal) = with_exchange("forget-window");
+    s.run("mail.new", &json!({})).unwrap();
+    let id = s.compose.as_ref().unwrap().id;
+    let to = FieldId { window: id, name: "to" };
+    s.run("compose.update", &json!({"to": "dupont; martin; a@"})).unwrap();
+    s.run("compose.checkNames", &json!({})).unwrap();
+    assert_eq!(asked(&mut s), ["dupont"]);
+    answer(&mut s, &gal, "dupont", &[("Anne Dupont", "anne.dupont@contoso.example"), ("Marc Dupont", "marc.dupont@contoso.example")]);
+    assert_eq!(asked(&mut s), ["martin"]);
+    assert!(s.name_choice(id).is_some() && s.people_pending(to) == 1);
+    s.forget_people_window(id);
+    assert!(s.name_choice(id).is_none(), "its choices go");
+    assert_eq!(s.people_pending(to), 0, "what it waited on goes");
+    assert!(s.take_people_outcomes(to).is_empty(), "its outcomes go");
+    answer(&mut s, &gal, "martin", &[("Paul Martin", "paul.martin@contoso.example")]);
+    assert_eq!(s.compose.as_ref().unwrap().to, "dupont; martin; a@; ", "nothing written");
+    assert!(s.take_people_outcomes(to).is_empty() && s.name_choice(id).is_none(), "nothing recorded");
+    done(s);
+}
+
+/// Past the fields whose outcomes are kept, only the one whose outcomes were recorded longest
+/// ago goes; a field still recording keeps its place.
+#[test]
+fn past_the_fields_kept_only_the_oldest_fields_outcomes_go() {
+    let mut s = sample_session("outcome-fields");
+    let field = |window: u64| FieldId { window, name: "cli" };
+    for w in 1..=64 {
+        s.people_resolve(field(w), None, &Accepts::RECIPIENTS, Some("a@")).unwrap();
+    }
+    // The first field records again: now the second is the oldest.
+    s.people_resolve(field(1), None, &Accepts::RECIPIENTS, Some("b@")).unwrap();
+    s.people_resolve(field(65), None, &Accepts::RECIPIENTS, Some("a@")).unwrap();
+    assert!(s.take_people_outcomes(field(2)).is_empty(), "the oldest went");
+    assert_eq!(s.take_people_outcomes(field(1)).len(), 2, "recording again kept it");
+    for w in [3, 64, 65] {
+        assert_eq!(s.take_people_outcomes(field(w)), [("a@".to_string(), Outcome::NotAnAddress)], "window {w}");
+    }
+    done(s);
+}
+
+/// A name given up past the names that may wait (or whose account goes) is unreached, never
+/// silently settled: the send gate reads `people_pending` and the outcomes.
+#[test]
+fn a_name_given_up_while_waiting_is_unreached() {
+    let (mut s, gal) = with_exchange("pending-evicted");
+    let field = |window: u64| FieldId { window, name: "cli" };
+    s.people_resolve(field(1), Some(&gal), &Accepts::RECIPIENTS, Some("n0")).unwrap();
+    for w in 2..=5u64 {
+        let text: Vec<String> = (0..500).map(|i| format!("m{w}x{i}")).collect();
+        let r = s.people_resolve(field(w), Some(&gal), &Accepts::RECIPIENTS, Some(&text.join("; "))).unwrap();
+        assert_eq!(r.searching.len(), 500);
+    }
+    assert_eq!(s.people_pending(field(1)), 0, "the oldest was given up");
+    assert_eq!(s.take_people_outcomes(field(1)), [("n0".to_string(), Outcome::Unreached("too many names waiting".into()))]);
+    assert_eq!(s.people_pending(field(5)), 500);
+    s.run("account.remove", &json!({"account": gal})).unwrap();
+    assert_eq!(s.people_pending(field(5)), 0);
+    let out = s.take_people_outcomes(field(5));
+    assert!(out.len() == 500 && out.iter().all(|(_, o)| matches!(o, Outcome::Unreached(_))), "{:?}", out.first());
+    done(s);
+}
+
+/// The directory unreachable is never "not found": neither when its answer comes, nor when the
+/// failure kept is read again (within the minute it isn't asked again).
+#[test]
+fn a_directory_that_cant_be_reached_never_says_names_not_found() {
+    let (mut s, gal) = with_exchange("unreached-not-found");
+    s.run("mail.new", &json!({})).unwrap();
+    let id = s.compose.as_ref().unwrap().id;
+    s.run("compose.update", &json!({"to": "dupont"})).unwrap();
+    s.run("compose.checkNames", &json!({})).unwrap();
+    assert_eq!(asked(&mut s), ["dupont"]);
+    let notices = s.notices.len();
+    s.apply(Event::DirectoryPeople { account: gal.clone(), query: "dupont".into(), people: Vec::new(), more: false, error: Some("offline".into()) });
+    let out = s.run("compose.checkNames", &json!({})).unwrap();
+    assert!(asked(&mut s).is_empty(), "the failure is kept a minute");
+    assert_eq!(out["unresolved"], json!(["dupont"]));
+    let said: Vec<&str> = s.notices[notices..].iter().map(|n| n.text.as_str()).collect();
+    assert!(!said.contains(&crate::NAMES_NOT_FOUND), "{said:?}");
+    let to = s.take_people_outcomes(FieldId { window: id, name: "to" });
+    assert_eq!(to, [("dupont".to_string(), Outcome::Unreached("offline".into()))]);
+    done(s);
+}
+
+/// The same name waiting in two fields (the message's To and its Select Names row) is one
+/// question to the server, settled in each field apart.
+#[test]
+fn one_name_in_two_fields_is_asked_once_and_settled_in_each() {
+    let (mut s, gal) = with_exchange("two-fields-one-question");
+    s.run("mail.new", &json!({})).unwrap();
+    let id = s.compose.as_ref().unwrap().id;
+    let (to, book) = (FieldId { window: id, name: "to" }, FieldId { window: id, name: "book-to" });
+    s.run("compose.update", &json!({"to": "dupont"})).unwrap();
+    s.run("compose.checkNames", &json!({})).unwrap();
+    let r = s.people_resolve(book, Some(&gal), &Accepts::RECIPIENTS, Some("dupont")).unwrap();
+    assert_eq!(r.searching, ["dupont"]);
+    assert_eq!(asked(&mut s), ["dupont"], "one question");
+    assert_eq!((s.people_pending(to), s.people_pending(book)), (1, 1));
+    answer(&mut s, &gal, "dupont", &[("Marc Dupont", "marc.dupont@contoso.example")]);
+    assert_eq!((s.people_pending(to), s.people_pending(book)), (0, 0));
+    assert_eq!(s.compose.as_ref().unwrap().to, "Marc Dupont <marc.dupont@contoso.example>; ");
+    for f in [to, book] {
+        let out = s.take_people_outcomes(f);
+        assert!(matches!(out.as_slice(), [(t, Outcome::Found(a))] if t == "dupont" && a.address == "marc.dupont@contoso.example"), "{f:?}: {out:?}");
+    }
+    assert!(asked(&mut s).is_empty());
+    done(s);
+}
