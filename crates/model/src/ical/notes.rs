@@ -177,17 +177,53 @@ pub fn is_webex_link(url: &str) -> bool {
         && is_meeting_link(url)
 }
 
-/// Whether a web address joins an online meeting: Microsoft Teams, Zoom, Google Meet, Webex,
-/// GoTo Meeting, Jitsi, Whereby, Skype.
-pub fn is_meeting_link(url: &str) -> bool {
-    let lower = url.to_ascii_lowercase();
-    let Some(rest) = lower.strip_prefix("https://").or_else(|| lower.strip_prefix("http://")) else { return false };
-    let (host, path) = rest.split_once('/').unwrap_or((rest, ""));
-    let host = host.split(':').next().unwrap_or(host);
+/// The host a browser would really go to, lower-cased, and the path after it, of an `http(s)`
+/// address (the scheme in any case). The host ends at the first `/`, `?`, `#` or `\`, loses its
+/// `:port`, and is refused unless it is only letters, digits, `.` and `-`: an `@` (user
+/// information) or any other character could point the browser somewhere else than the text
+/// suggests. The path is empty unless the host ended at a `/`.
+fn web_host_and_path(url: &str) -> Option<(String, &str)> {
+    let rest = ["https://", "http://"].iter().find_map(|s| {
+        let head = url.get(..s.len())?;
+        head.eq_ignore_ascii_case(s).then(|| url.get(s.len()..)).flatten()
+    })?;
+    let end = rest.find(['/', '?', '#', '\\']).unwrap_or(rest.len());
+    let authority = rest.get(..end)?;
+    let host = authority.split(':').next().unwrap_or(authority);
+    let plain = !host.is_empty() && host.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-');
+    if !plain {
+        return None;
+    }
+    let path = if rest.as_bytes().get(end) == Some(&b'/') { rest.get(end + 1..).unwrap_or("") } else { "" };
+    Some((host.to_ascii_lowercase(), path))
+}
+
+/// Whether a web address is a Microsoft Teams meeting (`…teams.microsoft.com/l/meetup-join…` or
+/// `…/meet/…`, `teams.live.com/meet…`), by the host the browser would really go to.
+pub fn is_teams_link(url: &str) -> bool {
+    let Some((host, path)) = web_host_and_path(url) else { return false };
+    let path = path.to_ascii_lowercase();
     let on = |domain: &str| host == domain || host.ends_with(&format!(".{domain}"));
     (on("teams.microsoft.com") && (path.starts_with("l/meetup-join") || path.starts_with("meet/")))
         || (on("teams.live.com") && path.starts_with("meet"))
-        || (on("zoom.us") && (path.starts_with("j/") || path.starts_with("w/") || path.starts_with("my/")))
+}
+
+/// Whether a web address may be handed to a browser to open: `http` or `https`, no whitespace or
+/// control character, at most 2,048 bytes, and a plain host ([`web_host_and_path`]).
+pub fn launchable_link(url: &str) -> bool {
+    url.len() <= 2048 && !url.chars().any(|c| c.is_whitespace() || c.is_control()) && web_host_and_path(url).is_some()
+}
+
+/// Whether a web address joins an online meeting: Microsoft Teams, Zoom, Google Meet, Webex,
+/// GoTo Meeting, Jitsi, Whereby, Skype.
+pub fn is_meeting_link(url: &str) -> bool {
+    if is_teams_link(url) {
+        return true;
+    }
+    let Some((host, path)) = web_host_and_path(url) else { return false };
+    let path = path.to_ascii_lowercase();
+    let on = |domain: &str| host == domain || host.ends_with(&format!(".{domain}"));
+    (on("zoom.us") && (path.starts_with("j/") || path.starts_with("w/") || path.starts_with("my/")))
         || on("meet.google.com")
         || (on("webex.com") && (path.contains("j.php") || path.starts_with("meet") || path.contains("/meet") || path.starts_with("join/")))
         || (on("gotomeeting.com") && path.starts_with("join"))
