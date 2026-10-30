@@ -79,8 +79,8 @@ pub enum Range<'a> {
 pub struct TeamsClient {
     /// The API address, without a trailing `/`.
     base: String,
-    /// `Bearer <token>`: held in memory only, never printed.
-    auth: String,
+    /// `Bearer <token>`: held in memory only, never printed; replaced by [`TeamsClient::set_token`].
+    auth: Cell<String>,
     stats: Cell<Stats>,
     /// The server's clock at its last answer that said it (Unix seconds).
     date: Cell<Option<i64>>,
@@ -94,7 +94,7 @@ impl TeamsClient {
         if !url.https && !loopback(&url) {
             return Err(NetError::Tls("the Graph address isn't https".into()));
         }
-        let c = TeamsClient { base, auth: format!("Bearer {token}"), stats: Cell::new(Stats::default()), date: Cell::new(None) };
+        let c = TeamsClient { base, auth: Cell::new(format!("Bearer {token}")), stats: Cell::new(Stats::default()), date: Cell::new(None) };
         let v = c.json("GET", &c.at("/me?$select=id,displayName,mail,userPrincipalName"), None, false)?;
         let text = |k: &str| v.get(k).and_then(Value::as_str).unwrap_or_default().chars().take(320).collect::<String>();
         let me = Me { id: text("id"), display_name: text("displayName"), mail: text("mail"), upn: text("userPrincipalName") };
@@ -102,6 +102,18 @@ impl TeamsClient {
             return Err(NetError::Protocol("Graph: the signed-in user has no id".into()));
         }
         Ok((c, me))
+    }
+
+    /// Use this access token from now on (the one in use has run out).
+    pub fn set_token(&self, token: &str) {
+        self.auth.set(format!("Bearer {token}"));
+    }
+
+    /// The `Authorization` header's value.
+    fn bearer(&self) -> String {
+        let auth = self.auth.take();
+        self.auth.set(auth.clone());
+        auth
     }
 
     /// What this client has sent so far.
@@ -209,7 +221,7 @@ impl TeamsClient {
         }
         let share = crate::imap::base64(content_url.as_bytes()).trim_end_matches('=').replace('/', "_").replace('+', "-");
         let first = self.at(&format!("/shares/u!{share}/driveItem/content"));
-        let req = Request::get(&first, max).header("Authorization", &self.auth);
+        let req = Request::get(&first, max).header("Authorization", &self.bearer());
         let mut round = 0;
         let (head, tally) = loop {
             round += 1;
@@ -276,7 +288,7 @@ impl TeamsClient {
             None => Request::get(url, MAX_JSON),
         };
         req.method = method.into();
-        req = req.header("Authorization", &self.auth).header("Accept", "application/json");
+        req = req.header("Authorization", &self.bearer()).header("Accept", "application/json");
         if prefer {
             req = req.header("Prefer", PREFER_ENUMS);
         }
