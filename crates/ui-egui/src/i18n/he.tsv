@@ -1781,7 +1781,7 @@ month	May	מאי
 	Teams meetings open in a window of their own: Chrome, Chromium or Edge, which Teams needs for calls on Linux.	פגישות Teams נפתחות בחלון משלהן: Chrome, Chromium או Edge, שבהם Teams צריך לשיחות ב־Linux.
 	The profile “{profile}” is no longer in {browser}; the meeting opens in the last profile used	הפרופיל „{profile}” כבר לא קיים ב־{browser}; הפגישה תיפתח בפרופיל האחרון שהיה בשימוש
 	Profile	פרופיל
-	Teams needs the one signed in to Microsoft 365, else it joins you as a guest.	Teams צריך את הפרופיל שמחובר ל־Microsoft 365, אחרת תצטרפו כאורחים.
+	Teams needs the profile signed in to Microsoft 365, else it joins you as a guest.	Teams צריך את הפרופיל שמחובר ל־Microsoft 365, אחרת תצטרפו כאורחים.
 	The last profile used	הפרופיל האחרון שהיה בשימוש
 	Meetings profile (made by Quatrelle)	פרופיל פגישות (נוצר על ידי Quatrelle)
 	A profile for meetings	פרופיל לפגישות

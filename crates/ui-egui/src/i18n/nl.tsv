@@ -1781,7 +1781,7 @@ month	May	mei
 	Teams meetings open in a window of their own: Chrome, Chromium or Edge, which Teams needs for calls on Linux.	Teams-vergaderingen openen in een eigen venster: Chrome, Chromium of Edge, die Teams op Linux nodig heeft voor gesprekken.
 	The profile “{profile}” is no longer in {browser}; the meeting opens in the last profile used	Het profiel “{profile}” staat niet meer in {browser}; de vergadering opent in het laatst gebruikte profiel
 	Profile	Profiel
-	Teams needs the one signed in to Microsoft 365, else it joins you as a guest.	Teams heeft het profiel nodig dat bij Microsoft 365 is aangemeld, anders neemt u deel als gast.
+	Teams needs the profile signed in to Microsoft 365, else it joins you as a guest.	Teams heeft het profiel nodig dat bij Microsoft 365 is aangemeld, anders neemt u deel als gast.
 	The last profile used	Het laatst gebruikte profiel
 	Meetings profile (made by Quatrelle)	Vergaderprofiel (gemaakt door Quatrelle)
 	A profile for meetings	Een profiel voor vergaderingen

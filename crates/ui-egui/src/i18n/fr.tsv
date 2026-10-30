@@ -1785,7 +1785,7 @@ month	May	mai
 	Teams meetings open in a window of their own: Chrome, Chromium or Edge, which Teams needs for calls on Linux.	Les réunions Teams s’ouvrent dans une fenêtre à part : Chrome, Chromium ou Edge, dont Teams a besoin pour les appels sous Linux.
 	The profile “{profile}” is no longer in {browser}; the meeting opens in the last profile used	Le profil « {profile} » n’est plus dans {browser} ; la réunion s’ouvre dans le dernier profil utilisé
 	Profile	Profil
-	Teams needs the one signed in to Microsoft 365, else it joins you as a guest.	Teams a besoin de celui qui est connecté à Microsoft 365 ; sinon, vous rejoignez la réunion en tant qu’invité.
+	Teams needs the profile signed in to Microsoft 365, else it joins you as a guest.	Teams a besoin du profil connecté à Microsoft 365 ; sinon, vous rejoignez la réunion en tant qu’invité.
 	The last profile used	Le dernier profil utilisé
 	Meetings profile (made by Quatrelle)	Profil des réunions (créé par Quatrelle)
 	A profile for meetings	Un profil pour les réunions

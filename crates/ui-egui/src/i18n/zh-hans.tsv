@@ -1782,7 +1782,7 @@ month	May	5月
 	Teams meetings open in a window of their own: Chrome, Chromium or Edge, which Teams needs for calls on Linux.	Teams 会议在单独的窗口中打开：Chrome、Chromium 或 Edge，在 Linux 上 Teams 通话需要它们。
 	The profile “{profile}” is no longer in {browser}; the meeting opens in the last profile used	配置文件“{profile}”已不在 {browser} 中；会议将在上次使用的配置文件中打开
 	Profile	配置文件
-	Teams needs the one signed in to Microsoft 365, else it joins you as a guest.	Teams 需要已登录 Microsoft 365 的配置文件，否则会以访客身份加入。
+	Teams needs the profile signed in to Microsoft 365, else it joins you as a guest.	Teams 需要已登录 Microsoft 365 的配置文件，否则会以访客身份加入。
 	The last profile used	上次使用的配置文件
 	Meetings profile (made by Quatrelle)	会议配置文件（由 Quatrelle 创建）
 	A profile for meetings	用于会议的配置文件
