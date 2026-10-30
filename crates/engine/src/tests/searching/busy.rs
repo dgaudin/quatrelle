@@ -375,6 +375,61 @@ fn a_message_marked_unread_answers_is_unread() {
     done(s);
 }
 
+/// While the scan goes on, the list follows at a pace: each slice's finds while few are found,
+/// then each time a quarter more are; a message found that goes leaves the list at once; the
+/// whole answer shows once the scan is done.
+#[test]
+fn the_list_follows_a_long_search_at_a_pace() {
+    let (folders, per) = (12, 1200);
+    let store = busy_store("busy-pace", folders, per);
+    let mut s = open(&store);
+    let mut shown = vec![];
+    let mut gone = None;
+    let calls = drive(&mut s, "report", 200, |s, _| {
+        if shown.last() != Some(&s.list.len()) {
+            shown.push(s.list.len());
+        }
+        // Past the first few hundred, a message found is deleted: it leaves the list at once.
+        if gone.is_none() && s.list.len() > 1500 {
+            let key = s.list[0].key.clone();
+            s.apply_op("a1", Op::Expunge { keys: vec![key.clone()] });
+            assert!(!s.list.iter().any(|m| m.key == key), "a message deleted leaves the list at once");
+            gone = Some(key);
+        }
+    });
+    assert!(calls.is_some_and(|n| n > 2 * shown.len()), "the list isn't shown again at each slice: {shown:?} in {calls:?} calls");
+    for w in shown.windows(2) {
+        // (A message deleted shows at once, the list one shorter.)
+        if w[0] > 500 && w[1] > w[0] {
+            assert!(w[1] >= w[0] + w[0] / 4 - 1, "past 500, shown again a quarter more on: {shown:?}");
+        }
+    }
+    assert!(shown.first().is_some_and(|&n| n > 0 && n < 1000), "the first finds show at once: {shown:?}");
+    let found = listed(&s);
+    assert!(!found.contains(&gone.unwrap()));
+    let all = folders * per as usize;
+    assert_eq!(found.len(), all - all / 100 - 1);
+    done(s);
+}
+
+/// A message found that changes in the list in memory without the search being told (as a vote
+/// sent changes it) is checked again when the list is shown: marked read, it leaves `is:unread`.
+#[test]
+fn a_message_found_changed_in_memory_is_checked_again() {
+    let store = busy_store("busy-redo", 3, 1200);
+    read_but_needles(&store, 3);
+    let mut s = open(&store);
+    assert!(drive(&mut s, "is:unread", 100, |_, _| {}).is_some());
+    assert_eq!(s.list.len(), 36);
+    let key = MessageKey { account: "a1".into(), folder: folder_path(1), validity: 1, uid: 200 };
+    let st = s.cache.get_mut(&("a1".to_string(), key.folder.clone())).unwrap();
+    st.find_mut(key.uid).unwrap().flags.seen = true;
+    s.refresh_list();
+    assert!(!s.list.iter().any(|m| m.key == key), "read now: no longer found");
+    assert_eq!(s.list.len(), 35);
+    done(s);
+}
+
 /// A body that comes in after the search is done, holding the word looked for, brings its
 /// message in: the search says it has more to do, and the next slice finds it.
 #[test]
