@@ -240,7 +240,7 @@ impl TeamsClient {
             return Err(NetError::Protocol(format!("HTTP {}", head.status)));
         };
         let to = Url::parse(&first)?.join(location)?;
-        if !to.https && !loopback(&to) {
+        if !hop_allowed(&self.base, &to) {
             return Err(NetError::Tls("the shared file's download isn't https".into()));
         }
         // A request of its own: the token stays with Graph.
@@ -398,6 +398,13 @@ fn too_large(max: usize) -> NetError {
 fn connect(url: &Url) -> Result<Stream> {
     let sock = stream::tcp(&url.host, url.port)?;
     if url.https { stream::tls(sock, &url.host) } else { Ok(Stream::Plain(sock)) }
+}
+
+/// Whether a download's redirect to `to` may be followed by a client whose API is at `base`:
+/// https, or plain HTTP to this computer only when the client's own API is there too (the
+/// tests' servers). Graph itself never sends the download to a local port.
+pub(super) fn hop_allowed(base: &str, to: &Url) -> bool {
+    to.https || (loopback(to) && Url::parse(base).is_ok_and(|b| !b.https && loopback(&b)))
 }
 
 /// This computer: the only place plain HTTP is spoken to (the tests' servers).

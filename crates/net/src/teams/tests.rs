@@ -409,6 +409,21 @@ fn download_shared_counts_bytes_and_drops_the_bearer_on_redirect() {
 }
 
 #[test]
+fn a_plain_download_hop_is_followed_only_by_a_loopback_client() {
+    let url = |u: &str| crate::http::Url::parse(u).unwrap();
+    let base = "https://graph.microsoft.com/v1.0";
+    // Graph itself can't send the token's client to this computer, nor anywhere in plain HTTP.
+    assert!(!graph::hop_allowed(base, &url("http://127.0.0.1:8080/x")));
+    assert!(!graph::hop_allowed(base, &url("http://localhost/x")));
+    assert!(!graph::hop_allowed(base, &url("http://files.example.com/x")));
+    assert!(graph::hop_allowed(base, &url("https://contoso.sharepoint.com/x")));
+    // The tests' server, on this computer, may send its own plain hop; still not elsewhere.
+    assert!(graph::hop_allowed("http://127.0.0.1:9000", &url("http://127.0.0.1:9000/hop")));
+    assert!(!graph::hop_allowed("http://127.0.0.1:9000", &url("http://files.example.com/x")));
+    assert!(!graph::hop_allowed("not a url", &url("http://127.0.0.1:9000/hop")));
+}
+
+#[test]
 fn download_shared_refuses_past_max() {
     let server = with_share(&[1u8; 1000]);
     let c = client(&server);
