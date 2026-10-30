@@ -339,6 +339,13 @@ impl MailApp {
             }
         }
 
+        // The browsers for meetings, looked for once as the File page opens (whichever way it
+        // does: the rail's Options sets its page itself), not at every frame.
+        if self.ui.backstage.is_none() {
+            self.ui.browsers = None;
+        } else if self.ui.browsers.is_none() {
+            self.ui.browsers = Some(self.services.browsers());
+        }
         if self.ui.backstage.is_some() {
             backstage::show(&self.session, &mut self.ui, ui, &mut acts);
         } else if self.session.accounts.is_empty() {

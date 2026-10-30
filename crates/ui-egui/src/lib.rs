@@ -48,7 +48,7 @@ use quatrelle_engine::model::{MessageKey, SyncStatus};
 use quatrelle_engine::{CalMode, Module, ReadingPane, SearchScope, Session};
 use serde_json::{Value, json};
 
-pub(crate) use app::{SearchDrop, junk_menu, scope_label};
+pub(crate) use app::{SearchDrop, junk_menu, meeting_browser, scope_label};
 pub use app::{WindowPlace, after_open};
 pub use dialogs::Dialog;
 use icons::Icon;
@@ -287,6 +287,9 @@ pub struct UiState {
     pub tokens: Tokens,
     /// The platform has files (temporary ones for other apps): not in the browser.
     pub has_files: bool,
+    /// The browsers Teams meetings can open in (shown name, program), asked of the system as the
+    /// File page opens (its Options say which one), and forgotten as it closes.
+    pub(crate) browsers: Option<Vec<(String, String)>>,
     /// Where the data is kept and whether it can be moved; where it moves at the next start.
     pub data_folder: Option<(PathBuf, bool)>,
     pub pending_move: Option<PathBuf>,
@@ -492,6 +495,7 @@ impl MailApp {
                 close_asked: false,
                 reminders: reminders::State::default(),
                 has_files,
+                browsers: None,
                 data_folder,
                 pending_move,
                 dark: None,

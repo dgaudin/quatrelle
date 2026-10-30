@@ -1779,3 +1779,7 @@ month	May	Mai
 	Flags	Flaggen
 	This meeting link can't be opened	Dieser Besprechungslink kann nicht geöffnet werden
 	{browser} couldn't open the meeting: {error}	{browser} konnte die Besprechung nicht öffnen: {error}
+	Applications	Anwendungen
+	Open Teams meetings and calls in	Teams-Besprechungen und -Anrufe öffnen in
+	The default browser	Der Standardbrowser
+	Teams meetings open in a window of their own: Chrome, Chromium or Edge, which Teams needs for calls on Linux.	Teams-Besprechungen öffnen sich in einem eigenen Fenster: Chrome, Chromium oder Edge, die Teams unter Linux für Anrufe braucht.

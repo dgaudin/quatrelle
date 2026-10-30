@@ -1775,3 +1775,7 @@ month	May	מאי
 	Flags	דגלים
 	This meeting link can't be opened	לא ניתן לפתוח את קישור הפגישה הזה
 	{browser} couldn't open the meeting: {error}	{browser} לא הצליח לפתוח את הפגישה: {error}
+	Applications	יישומים
+	Open Teams meetings and calls in	לפתוח פגישות ושיחות Teams ב־
+	The default browser	דפדפן ברירת המחדל
+	Teams meetings open in a window of their own: Chrome, Chromium or Edge, which Teams needs for calls on Linux.	פגישות Teams נפתחות בחלון משלהן: Chrome, Chromium או Edge, שבהם Teams צריך לשיחות ב־Linux.

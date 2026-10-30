@@ -427,4 +427,32 @@ pub(super) fn options(s: &Session, st: &UiState, ui: &mut Ui, acts: &mut Vec<Act
             }
         },
     );
+
+    // The browser Teams meetings open in: on the desktop only (in the browser, a meeting opens in
+    // a tab of its own).
+    if st.has_files {
+        group(
+            ui,
+            tl!("Applications"),
+            Some(tl!("Teams meetings open in a window of their own: Chrome, Chromium or Edge, which Teams needs for calls on Linux.")),
+            &mut |ui| {
+                let browsers = st.browsers.as_deref().unwrap_or_default();
+                // What "Join meeting" will really use, the default browser being `None`.
+                let now = crate::meeting_browser(s.prefs.meeting_browser.as_deref(), browsers);
+                setting(ui, true, tl!("Open Teams meetings and calls in"), None, &mut |ui| {
+                    let current = now.map_or_else(|| tl!("The default browser").to_string(), |(name, _)| name.clone());
+                    egui::ComboBox::from_id_salt("meeting-browser").width(280.0).selected_text(current).show_ui(ui, |ui| {
+                        for b in browsers {
+                            if ui.selectable_label(now == Some(b), &b.0).clicked() && now != Some(b) {
+                                acts.push(Action::Run("view.meetingBrowser", json!({"path": b.1})));
+                            }
+                        }
+                        if ui.selectable_label(now.is_none(), tl!("The default browser")).clicked() && now.is_some() {
+                            acts.push(Action::Run("view.meetingBrowser", json!({"path": ""})));
+                        }
+                    });
+                });
+            },
+        );
+    }
 }
