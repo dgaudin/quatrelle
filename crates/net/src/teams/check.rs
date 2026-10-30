@@ -46,6 +46,12 @@ const ACTIVE_MAX: usize = 20;
 /// How often the hour says how it is going.
 const REPORT_EVERY: Duration = Duration::from_secs(600);
 
+#[cfg(test)]
+thread_local! {
+    /// Tests: how often the hour says how it is going, in place of [`REPORT_EVERY`].
+    pub(super) static REPORT_EVERY_IN_TESTS: std::cell::Cell<Option<Duration>> = const { std::cell::Cell::new(None) };
+}
+
 /// What the check does besides reading.
 pub struct CheckOptions {
     /// The tenant to mark a chat read in (else the one Graph gives for the signed-in user).
@@ -460,6 +466,8 @@ impl Check<'_> {
     fn hour(&mut self, d: Duration, newest: Option<String>, watermark: Option<i64>) {
         let before = self.client.stats();
         let start = Instant::now();
+        // No request starts past the end: only one already sent (its waits on a 429) can overrun.
+        let end = start.checked_add(d).unwrap_or(start);
         let from = self.now();
         // Each chat's watermark (milliseconds): what its incremental reads start after.
         let mut marks: HashMap<String, i64> = HashMap::new();
@@ -468,15 +476,16 @@ impl Check<'_> {
         }
         // The list's chats, with when their last message came.
         let mut list: Vec<(String, Option<i64>)> = Vec::new();
-        let (mut at_list, mut at_open, mut at_active, mut at_report) = (Duration::ZERO, Duration::ZERO, Duration::ZERO, REPORT_EVERY);
-        let mut failed = 0u32;
+        let every = report_every();
+        let (mut at_list, mut at_open, mut at_active, mut at_report) = (Duration::ZERO, Duration::ZERO, Duration::ZERO, every);
+        let (mut failed, mut cut) = (0u32, false);
         let mut stopped = String::new();
         loop {
             let t = start.elapsed();
             if t >= d {
                 break;
             }
-            let mut outcome: Vec<Result<()>> = Vec::new();
+            let mut outcome: Vec<Result<bool>> = Vec::new();
             if t >= at_list {
                 at_list = t.saturating_add(LIST_EVERY);
                 outcome.push(self.client.chats(None).map(|p| {
@@ -485,6 +494,7 @@ impl Check<'_> {
                         .iter()
                         .filter_map(|c| Some((id_of(c)?, c.pointer("/lastMessagePreview/createdDateTime")?.as_str().and_then(ms_of))))
                         .collect();
+                    true
                 }));
                 let newest_at = list.iter().filter_map(|(_, at)| *at).max();
                 self.saw(newest_at);
@@ -492,7 +502,7 @@ impl Check<'_> {
             if t >= at_open {
                 at_open = t.saturating_add(OPEN_EVERY);
                 if let Some(chat) = &newest {
-                    outcome.push(self.incremental(chat, &mut marks, from));
+                    outcome.push(self.incremental(chat, &mut marks, from, end));
                 }
             }
             if t >= at_active {
@@ -505,22 +515,30 @@ impl Check<'_> {
                     .map(|(id, _)| id.clone())
                     .collect();
                 for chat in &active {
-                    outcome.push(self.incremental(chat, &mut marks, from));
-                }
-            }
-            for r in outcome {
-                if let Err(e) = r {
-                    failed = failed.saturating_add(1);
-                    if matches!(e, NetError::Auth(_)) {
-                        stopped = format!(", stopped ({})", why(&e));
+                    let r = self.incremental(chat, &mut marks, from, end);
+                    let done = matches!(r, Ok(true));
+                    outcome.push(r);
+                    if !done {
+                        break;
                     }
                 }
             }
-            if !stopped.is_empty() {
+            for r in outcome {
+                match r {
+                    Ok(done) => cut |= !done,
+                    Err(e) => {
+                        failed = failed.saturating_add(1);
+                        if matches!(e, NetError::Auth(_)) {
+                            stopped = format!(", stopped ({})", why(&e));
+                        }
+                    }
+                }
+            }
+            if !stopped.is_empty() || cut {
                 break;
             }
             if t >= at_report {
-                at_report = at_report.saturating_add(REPORT_EVERY);
+                at_report = at_report.saturating_add(every);
                 let s = self.client.stats();
                 let (requests, throttled) = (s.requests.saturating_sub(before.requests), s.throttled.saturating_sub(before.throttled));
                 self.say(format!("hour, after {} min: requests {requests}, throttled {throttled}, failed {failed}", t.as_secs() / 60));
@@ -534,20 +552,24 @@ impl Check<'_> {
         let s = self.client.stats();
         let (requests, throttled) = (s.requests.saturating_sub(before.requests), s.throttled.saturating_sub(before.throttled));
         let rate = if requests == 0 { 0.0 } else { f64::from(throttled) * 100.0 / f64::from(requests) };
+        let cut = if cut { ", cut short at the end" } else { "" };
         self.say(format!(
-            "hour, {} s: requests {requests}, throttled {throttled}, failed {failed}, 429 rate {rate:.1} %{stopped}",
+            "hour, {} s: requests {requests}, throttled {throttled}, failed {failed}, 429 rate {rate:.1} %{stopped}{cut}",
             start.elapsed().as_secs()
         ));
     }
 
     /// A chat's messages changed after its watermark, every page; the watermark moved to the
-    /// newest change seen.
-    fn incremental(&mut self, chat: &str, marks: &mut HashMap<String, i64>, from: Option<i64>) -> Result<()> {
-        let Some(mark) = marks.get(chat).copied().or(from) else { return Ok(()) };
+    /// newest change seen. `false` when `end` came first (no page is asked for past it).
+    fn incremental(&mut self, chat: &str, marks: &mut HashMap<String, i64>, from: Option<i64>, end: Instant) -> Result<bool> {
+        let Some(mark) = marks.get(chat).copied().or(from) else { return Ok(true) };
         let after = rfc3339(mark);
         let mut newest = mark;
         let mut next: Option<String> = None;
         for _ in 0..PAGES {
+            if Instant::now() >= end {
+                return Ok(false);
+            }
             let page = self.client.messages(chat, Range::After(&after), next.as_deref())?;
             for m in &page.items {
                 newest = newest.max(m.get("lastModifiedDateTime").and_then(Value::as_str).and_then(ms_of).unwrap_or(newest));
@@ -558,8 +580,17 @@ impl Check<'_> {
             }
         }
         marks.insert(chat.to_string(), newest);
-        Ok(())
+        Ok(true)
     }
+}
+
+/// How often the hour says how it is going.
+fn report_every() -> Duration {
+    #[cfg(test)]
+    if let Some(d) = REPORT_EVERY_IN_TESTS.with(std::cell::Cell::get) {
+        return d;
+    }
+    REPORT_EVERY
 }
 
 /// An error said without its text (which can carry the address asked): its HTTP status, or
