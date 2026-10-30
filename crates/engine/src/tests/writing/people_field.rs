@@ -1,9 +1,10 @@
-//! Engine tests: what an address stands for (the contacts field): rooms, from the room lists.
+//! Engine tests: the contacts field: what an address stands for (rooms, from the room lists),
+//! suggestions, and names resolved for any field (Check Names generalised).
 
-use super::names::{answer, with_exchange};
+use super::names::{answer, asked, with_exchange};
 use super::*;
 use crate::session::scheduling::Fetched;
-use crate::{FieldId, INDEX_MAX, Source};
+use crate::{FieldId, INDEX_MAX, Outcome, Source};
 use quatrelle_model::addr::Accepts;
 use quatrelle_model::pim::{CalendarInfo, DavSync, shared_calendar_id};
 use quatrelle_model::scheduling::{Room, RoomList};
@@ -324,5 +325,128 @@ fn a_name_that_starts_with_the_text_beats_many_addresses_that_merely_contain_it(
     s.contacts_sent(&[EmailAddress::new("Prosper Martin", "pmartin@elsewhere.example")]);
     let got = s.people_suggest(FieldId { window: 1, name: "to" }, None, &Accepts::RECIPIENTS, "pro");
     assert_eq!(got.first().map(|x| x.who.address.as_str()), Some("pmartin@elsewhere.example"), "{got:?}");
+    done(s);
+}
+
+/// Check Names with the new search scope (the directory, then the Contacts folder): a person both
+/// have is one match, written once, and a contact group found alone is written as its reference.
+#[test]
+fn check_names_with_the_contacts_scope_finds_a_person_once_and_offers_a_contact_group() {
+    let (mut s, gal) = with_exchange("scope-contacts");
+    s.run("mail.new", &json!({})).unwrap();
+    s.run("compose.update", &json!({"to": "joanna; family"})).unwrap();
+    s.run("compose.checkNames", &json!({})).unwrap();
+    assert_eq!(asked(&mut s), ["joanna"]);
+    // The directory and the Contacts folder both have her: one person, written once.
+    answer(&mut s, &gal, "joanna", &[("Joanna Smith", "jo@contoso.example"), ("Joanna Smith", "JO@contoso.example")]);
+    assert_eq!(s.compose.as_ref().unwrap().to, "Joanna Smith <jo@contoso.example>; family; ");
+    assert_eq!(asked(&mut s), ["family"]);
+    let group = Addressee { name: "Dupont family".into(), address: String::new(), kind: AddresseeKind::ContactGroup, item_id: "AAMk=".into() };
+    s.apply(Event::DirectoryPeople { account: gal.clone(), query: "family".into(), people: vec![group.clone()], more: false, error: None });
+    // Nothing here knows jo@contoso.example by a name of its own: she keeps the directory's.
+    assert_eq!(
+        s.compose.as_ref().unwrap().to,
+        "Joanna Smith <jo@contoso.example>; Dupont family <group:AAMk=>; ",
+        "a group found alone is written as its reference"
+    );
+    let id = s.compose.as_ref().unwrap().id;
+    assert!(s.name_choice(id).is_none());
+    assert_eq!(
+        s.take_people_outcomes(FieldId { window: id, name: "to" }).last().map(|(t, o)| (t.as_str(), o.clone())),
+        Some(("family", Outcome::Found(group)))
+    );
+    done(s);
+}
+
+/// Review focus 2: the on-prem Exchange unreachable. Addresses never need the directory (one
+/// known takes its name), a malformed one is said, and a name the directory couldn't be asked
+/// about is told apart from one it doesn't have; the text stays as typed.
+#[test]
+fn addresses_alone_resolve_without_the_directory_and_a_name_unreached_is_said() {
+    let (mut s, gal) = with_exchange("resolve-offline");
+    s.run("mail.new", &json!({})).unwrap();
+    let id = s.compose.as_ref().unwrap().id;
+    let f = FieldId { window: id, name: "to" };
+    s.run("compose.update", &json!({"to": "zoe@studio.example; a@; dupont"})).unwrap();
+    let r = s.people_resolve(f, Some(&gal), &Accepts::RECIPIENTS, None).unwrap();
+    assert_eq!((r.resolved, r.unresolved.as_slice(), r.searching.as_slice()), (1, &["a@".to_string()][..], &["dupont".to_string()][..]));
+    assert_eq!(s.compose.as_ref().unwrap().to, "Zoe Park <zoe@studio.example>; a@; dupont; ", "a known address takes its name; nothing asked for it");
+    assert_eq!(asked(&mut s), ["dupont"]);
+    assert_eq!(s.people_pending(f), 1);
+    s.apply(Event::DirectoryPeople { account: gal.clone(), query: "dupont".into(), people: Vec::new(), more: false, error: Some("offline".into()) });
+    let out = s.take_people_outcomes(f);
+    assert!(out.contains(&("a@".into(), Outcome::NotAnAddress)) && out.contains(&("dupont".into(), Outcome::Unreached("offline".into()))), "{out:?}");
+    assert_eq!(s.people_pending(f), 0);
+    assert_eq!(s.compose.as_ref().unwrap().to, "Zoe Park <zoe@studio.example>; a@; dupont; ", "the text stays");
+    done(s);
+}
+
+/// A field outside the message being written (the address book's To row) hands its text in and
+/// gets the rewrite back; its choices and outcomes are kept by its window and name, apart from
+/// the message's.
+#[test]
+fn a_dialogs_field_resolves_its_own_text_and_chooses_by_field() {
+    let (mut s, gal) = with_exchange("resolve-dialog");
+    s.run("mail.new", &json!({})).unwrap();
+    s.run("compose.update", &json!({"to": "dupont"})).unwrap();
+    let f = FieldId { window: 7, name: "book-to" };
+    let r = s.run("people.resolve", &json!({"window": 7, "field": "book-to", "text": "Zoe Park; dupont", "account": gal})).unwrap();
+    assert_eq!(r["text"], "Zoe Park <zoe@studio.example>; dupont; ");
+    assert_eq!((r["resolved"].as_u64(), &r["unresolved"], &r["searching"]), (Some(1), &json!([]), &json!(["dupont"])));
+    assert_eq!(s.compose.as_ref().unwrap().to, "dupont", "the message being written is untouched");
+    assert_eq!(asked(&mut s), ["dupont"]);
+    answer(&mut s, &gal, "dupont", &[("Anne Dupont", "anne.dupont@contoso.example"), ("Marc Dupont", "marc.dupont@contoso.example")]);
+    assert_eq!(s.compose.as_ref().unwrap().to, "dupont", "still untouched");
+    let choice = s.name_choice_for(f).cloned().expect("two people to choose from");
+    assert_eq!((choice.field, choice.token.as_str(), choice.people.len()), (f, "dupont", 2));
+    assert_eq!(s.name_choice(7), Some(&choice));
+    let marc = json!({"field": "book-to", "token": "dupont", "name": "Marc Dupont", "email": "marc.dupont@contoso.example"});
+    let mut other = marc.clone();
+    other["window"] = json!(8);
+    assert!(matches!(s.run("people.choose", &other), Err(CmdError::Params(_))), "no choice in window 8");
+    let mut chosen = marc.clone();
+    chosen["window"] = json!(7);
+    let out = s.run("people.choose", &chosen).unwrap();
+    assert_eq!(out["token"], "dupont");
+    let found = s.take_people_outcomes(f);
+    assert!(
+        found
+            .iter()
+            .any(|(t, o)| t == "dupont" && matches!(o, Outcome::Found(a) if a.name == "Marc Dupont" && a.address == "marc.dupont@contoso.example")),
+        "{found:?}"
+    );
+    assert!(s.name_choice(7).is_none());
+    assert!(s.take_people_outcomes(f).is_empty(), "taken once");
+    assert!(
+        matches!(s.run("people.resolve", &json!({"window": 7, "field": "book-to"})), Err(CmdError::Params(_))),
+        "a dialog's field hands its text in"
+    );
+    done(s);
+}
+
+/// Of several that fit a name, a field keeps the kinds it takes when any is left (Salle Seine in
+/// a field for rooms); a field that takes everyone asks which was meant.
+#[test]
+fn of_several_that_fit_a_field_keeps_the_kinds_it_takes() {
+    let (mut s, gal) = with_exchange("resolve-kinds");
+    s.apply(seine(&gal));
+    let rooms = Accepts { kinds: &[AddresseeKind::Room, AddresseeKind::Equipment], one: false };
+    let f = FieldId { window: 9, name: "cli" };
+    let r = s.people_resolve(f, Some(&gal), &rooms, Some("seine")).unwrap();
+    assert_eq!(r.searching, ["seine"]);
+    assert_eq!(asked(&mut s), ["seine"]);
+    let people = vec![
+        Addressee::new("Salle Seine", "room.seine@contoso.example", AddresseeKind::Person),
+        Addressee::new("Seine Martin", "seine.martin@contoso.example", AddresseeKind::Person),
+    ];
+    s.apply(Event::DirectoryPeople { account: gal.clone(), query: "seine".into(), people, more: false, error: None });
+    let room = Addressee::new("Salle Seine", "room.seine@contoso.example", AddresseeKind::Room);
+    assert_eq!(s.take_people_outcomes(f), [("seine".to_string(), Outcome::Found(room))], "the room lists tell it's a room");
+    // Answered before: settled at once, from what the directory said.
+    let to = FieldId { window: 9, name: "to" };
+    let r = s.people_resolve(to, Some(&gal), &Accepts::RECIPIENTS, Some("seine")).unwrap();
+    assert!(r.searching.is_empty() && asked(&mut s).is_empty());
+    assert_eq!(s.name_choice_for(to).map(|c| c.people.len()), Some(2));
+    assert_eq!(s.take_people_outcomes(to), [("seine".to_string(), Outcome::Ambiguous)]);
     done(s);
 }
