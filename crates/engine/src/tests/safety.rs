@@ -305,3 +305,29 @@ fn web_pictures_follow_the_setting() {
     assert_eq!(before.pictures, crate::PictureLoading::Known);
     done(s);
 }
+
+/// The browser Teams meetings open in: none (the first found), "" (the default browser) or a program.
+#[test]
+fn the_meeting_browser_is_kept() {
+    let mut s = sample_session("meeting-browser");
+    assert_eq!(s.prefs.meeting_browser, None, "at first");
+    let r = s.run("view.meetingBrowser", &json!({"path": "/usr/bin/chromium"})).unwrap();
+    assert_eq!(r["path"], "/usr/bin/chromium");
+    assert_eq!(s.prefs.meeting_browser.as_deref(), Some("/usr/bin/chromium"));
+    s.run("view.meetingBrowser", &json!({"path": ""})).unwrap();
+    assert_eq!(s.prefs.meeting_browser.as_deref(), Some(""), "the default browser");
+    s.run("view.meetingBrowser", &json!({"path": null})).unwrap();
+    assert_eq!(s.prefs.meeting_browser, None);
+    s.run("view.meetingBrowser", &json!({"path": "/usr/bin/chromium"})).unwrap();
+    s.run("view.meetingBrowser", &json!({})).unwrap();
+    assert_eq!(s.prefs.meeting_browser, None, "no path is none");
+    s.run("view.meetingBrowser", &json!({"path": "/usr/bin/chromium"})).unwrap();
+    assert!(s.run("view.meetingBrowser", &json!({"path": "x\ny"})).is_err(), "control characters");
+    assert!(s.run("view.meetingBrowser", &json!({"path": "a".repeat(4097)})).is_err(), "too long");
+    assert!(s.run("view.meetingBrowser", &json!({"path": 5})).is_err(), "not a string");
+    assert_eq!(s.prefs.meeting_browser.as_deref(), Some("/usr/bin/chromium"), "refusals change nothing");
+    // A settings file from before the setting.
+    let before: crate::Prefs = serde_json::from_str("{}").unwrap();
+    assert_eq!(before.meeting_browser, None);
+    done(s);
+}
