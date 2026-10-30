@@ -252,3 +252,25 @@ fn the_options_choose_the_meeting_browser() {
     assert_eq!(a.session.prefs.meeting_browser.as_deref(), Some(""));
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// A setting that points at a browser since uninstalled shows the first one found; choosing that
+/// very entry still writes it, so the dead path is gone and a reinstall of the old browser doesn't
+/// take the meetings back unasked.
+#[test]
+fn choosing_the_entry_already_shown_overwrites_a_stale_path() {
+    let (mut a, dir, _) = launching("meet-stale", &[("Google Chrome", "/opt/chrome")], false);
+    a.session.prefs.meeting_browser = Some("/gone".into());
+    let ctx = egui::Context::default();
+    let tall = egui::vec2(1280.0, 5000.0);
+    a.act(crate::Action::Backstage(crate::backstage::Page::Info));
+    let options = settled_text_at(&ctx, &mut a, "Options", tall).unwrap();
+    click_at(&ctx, &mut a, options, 1, tall);
+    // The combo shows Chrome, though the setting still says "/gone".
+    let combo = settled_text_at(&ctx, &mut a, "Google Chrome", tall).unwrap();
+    click_at(&ctx, &mut a, combo, 1, tall);
+    // The list is open: the same entry again.
+    let entry = settled_text_at(&ctx, &mut a, "Google Chrome", tall).unwrap();
+    click_at(&ctx, &mut a, entry, 1, tall);
+    assert_eq!(a.session.prefs.meeting_browser.as_deref(), Some("/opt/chrome"));
+    let _ = std::fs::remove_dir_all(dir);
+}
