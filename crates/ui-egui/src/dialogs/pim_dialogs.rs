@@ -222,7 +222,7 @@ pub(super) fn notes(ui: &mut Ui, t: &Tokens, text: &str, acts: &mut Vec<Action>)
                                 let shown =
                                     if label == url { widgets::shorten(url.split_once("://").map_or(url.as_str(), |(_, r)| r), 56) } else { label };
                                 if ui.link(shown).on_hover_text(&url).clicked() {
-                                    acts.push(Action::OpenUrl(url));
+                                    acts.push(Action::OpenMeeting(url));
                                 }
                             }
                         }

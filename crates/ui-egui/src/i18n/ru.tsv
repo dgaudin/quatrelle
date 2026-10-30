@@ -1776,3 +1776,5 @@ month	May	Май
 	Objects	Предметы
 	Symbols	Символы
 	Flags	Флаги
+	This meeting link can't be opened	Не удаётся открыть эту ссылку на собрание
+	{browser} couldn't open the meeting: {error}	Не удалось открыть собрание в {browser}: {error}

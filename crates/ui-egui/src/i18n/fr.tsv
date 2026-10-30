@@ -1777,3 +1777,5 @@ month	May	mai
 	Objects	Objets
 	Symbols	Symboles
 	Flags	Drapeaux
+	This meeting link can't be opened	Impossible d’ouvrir ce lien de réunion
+	{browser} couldn't open the meeting: {error}	{browser} n’a pas pu ouvrir la réunion : {error}

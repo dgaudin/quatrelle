@@ -335,7 +335,7 @@ pub fn event(ui: &mut Ui, f: &mut EventForm, s: &Session, t: &Tokens, acts: &mut
     // An online meeting (Teams, Zoom…): Join, as Outlook has it, read-only calendar or not.
     if let Some(url) = f.join.clone() {
         if ui.add(egui::Button::new(RichText::new(tl!("Join meeting")).color(t.on_accent).strong()).fill(t.accent)).on_hover_text(&url).clicked() {
-            acts.push(Action::OpenUrl(url));
+            acts.push(Action::OpenMeeting(url));
         }
         ui.add_space(8.0);
     }
@@ -463,7 +463,7 @@ pub fn event(ui: &mut Ui, f: &mut EventForm, s: &Session, t: &Tokens, acts: &mut
             for url in &f.links {
                 let shown = url.split_once("://").map_or(url.as_str(), |(_, r)| r);
                 if ui.link(RichText::new(crate::widgets::shorten(shown, 48)).small()).on_hover_text(url).clicked() {
-                    acts.push(Action::OpenUrl(url.clone()));
+                    acts.push(Action::OpenMeeting(url.clone()));
                 }
             }
         });

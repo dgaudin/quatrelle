@@ -1777,3 +1777,5 @@ month	May	Mai
 	Objects	Objekte
 	Symbols	Symbole
 	Flags	Flaggen
+	This meeting link can't be opened	Dieser Besprechungslink kann nicht geöffnet werden
+	{browser} couldn't open the meeting: {error}	{browser} konnte die Besprechung nicht öffnen: {error}

@@ -360,6 +360,7 @@ impl MailApp {
             Action::SetSystemAccent(on) => self.ui.system_accent = on,
             Action::SetLanguage(l) => self.ui.language = l,
             Action::OpenUrl(url) => self.open_link(&url),
+            Action::OpenMeeting(url) => self.open_meeting(&url),
             Action::OpenShare(link) => self.open_share(&link),
             Action::SignInAgain(id) => self.sign_in_again(&id),
             Action::OpenInCraft(i, cmd) => {
@@ -625,6 +626,40 @@ impl MailApp {
             }
         } else {
             self.session.notice(tf!("Links like {link} aren't opened", link = widgets::shorten(u, 40)), true);
+        }
+    }
+
+    /// Join a meeting from its link: a Teams meeting in a browser's app window (a window of its
+    /// own, which Teams needs for calls on Linux), any other link as [`Self::open_link`] does. The
+    /// browser is the one chosen in Options while it's installed, else the first found; the
+    /// default browser when that's the choice, when none is found, or when the one tried fails.
+    /// Only a program the system lists is launched: the setting alone never names what runs.
+    pub(crate) fn open_meeting(&mut self, url: &str) {
+        let cleaned = if self.session.prefs.clean_links { quatrelle_engine::mime::clean_link(url) } else { url.to_string() };
+        let u = cleaned.trim();
+        if !quatrelle_engine::model::ical::is_teams_link(u) {
+            self.open_link(url);
+            return;
+        }
+        // A Teams address with a space or a control character in it, or far too long: not handed
+        // to a browser.
+        if !quatrelle_engine::model::ical::launchable_link(u) {
+            self.session.notice(tl!("This meeting link can't be opened"), true);
+            return;
+        }
+        let browsers = self.services.browsers();
+        let browser = match self.session.prefs.meeting_browser.as_deref() {
+            Some("") => None,
+            Some(chosen) => browsers.iter().find(|(_, program)| program == chosen).or_else(|| browsers.first()),
+            None => browsers.first(),
+        };
+        let Some((name, program)) = browser else {
+            self.open_link(u);
+            return;
+        };
+        if let Err(e) = self.services.open_app_window(program, u) {
+            self.session.notice(tf!("{browser} couldn't open the meeting: {error}", browser = name, error = e), true);
+            self.open_link(u);
         }
     }
 
