@@ -9,6 +9,17 @@ pub const KEEP_DAYS: u32 = 730;
 /// How far the message read can be zoomed, in percent.
 pub const READING_ZOOM: std::ops::RangeInclusive<u16> = 50..=400;
 
+/// The profile folder Quatrelle may have the meeting browser make (File › Options ›
+/// Applications), kept for Teams meetings: the browser creates it when asked for it.
+pub const MEETINGS_PROFILE: &str = "Quatrelle";
+
+/// Whether `dir` can be a browser profile's folder: one name inside the browser's own folder
+/// (1 to 255 bytes, no slash or backslash, no control character, not `.` or `..`, no space at
+/// either end), never a way out of it.
+pub fn is_profile_dir(dir: &str) -> bool {
+    (1..=255).contains(&dir.len()) && dir != "." && dir != ".." && dir.trim() == dir && !dir.chars().any(|c| c == '/' || c == '\\' || c.is_control())
+}
+
 /// Settings the user changes from the View tab (saved by the app).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -166,6 +177,10 @@ pub struct Prefs {
     /// the default browser; otherwise that program (File › Options › Applications).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub meeting_browser: Option<String>,
+    /// The browser profile Teams meetings open in: none, the one the browser used last;
+    /// otherwise that profile's folder ([`MEETINGS_PROFILE`]: one the browser makes for them).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub meeting_profile: Option<String>,
     /// Ask a signer's certificate's authority whether it was withdrawn (OCSP or its CRL), as
     /// signed mail is shown. Off at first: the authority learns whose mail is being read.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
@@ -234,6 +249,7 @@ impl Default for Prefs {
             clean_links: true,
             pictures: PictureLoading::Known,
             meeting_browser: None,
+            meeting_profile: None,
             check_revocation: false,
             webex_room: String::new(),
             llm_url: String::new(),

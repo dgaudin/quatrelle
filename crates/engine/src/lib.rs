@@ -27,10 +27,12 @@ pub use quatrelle_smime as smime;
 pub use quatrelle_store as store;
 pub use session::{
     ARRANGE_HEADINGS, AccountState, Arrange, AssistKind, Assistant, CardSearch, Compose, DirectoryAnswer, Filing, FolderRef, FolderSizes, ItemChoice,
-    ItemKind, KnownCert, ListFilter, ListLayout, Lock, MoveTarget, NAMES_NOT_FOUND, NameChoice, NotesOrder, PANICS_CAUGHT, PaneSection, Picture,
-    PictureLoading, Prefs, READING_ZOOM, RECENT_EMOJI, ReadInPane, Reading, ReadingPane, RevocationCheck, Rewrite, Row, RulesScope, SMIME_DOC, Seal,
-    SearchScope, Security, SendCheck, Sender, ServerSearch, Session, SignedBy, Sizes, SmimeSettings, UpdateCheck, VacationState, View, fill_name,
+    ItemKind, KnownCert, ListFilter, ListLayout, Lock, MEETINGS_PROFILE, MoveTarget, NAMES_NOT_FOUND, NameChoice, NotesOrder, PANICS_CAUGHT,
+    PaneSection, Picture, PictureLoading, Prefs, READING_ZOOM, RECENT_EMOJI, ReadInPane, Reading, ReadingPane, RevocationCheck, Rewrite, Row,
+    RulesScope, SMIME_DOC, Seal, SearchScope, Security, SendCheck, Sender, ServerSearch, Session, SignedBy, Sizes, SmimeSettings, UpdateCheck,
+    VacationState, View, fill_name,
     invite::{Invite, InviteProblem},
+    is_profile_dir,
     junk::{JunkList, junk_entry},
     newer_release, parse_key,
     pim::{ACCOUNT_COLOR, AgendaItem, CalMode, DueReminder, Module, NoteRef, Person, TaskChange, TaskRef, parse_local},
