@@ -1780,3 +1780,4 @@ month	May	5月
 	Open Teams meetings and calls in	在以下浏览器中打开 Teams 会议和通话
 	The default browser	默认浏览器
 	Teams meetings open in a window of their own: Chrome, Chromium or Edge, which Teams needs for calls on Linux.	Teams 会议在单独的窗口中打开：Chrome、Chromium 或 Edge，在 Linux 上 Teams 通话需要它们。
+	The profile “{profile}” is no longer in {browser}; the meeting opens in the last profile used	配置文件“{profile}”已不在 {browser} 中；会议将在上次使用的配置文件中打开

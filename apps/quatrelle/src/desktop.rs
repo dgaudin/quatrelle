@@ -398,8 +398,8 @@ impl Services for Desktop {
             .map(|dir| profiles::read_profiles(&dir))
             .unwrap_or_default()
     }
-    fn open_app_window(&mut self, program: &str, url: &str) -> Result<(), String> {
-        browsers::launch(Path::new(program), url)
+    fn open_app_window(&mut self, program: &str, profile: Option<&str>, url: &str) -> Result<(), String> {
+        browsers::launch(Path::new(program), profile, url)
     }
     fn notify(&mut self, title: &str, body: &str) {
         let (title, body) = (title.to_string(), body.to_string());

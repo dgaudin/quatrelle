@@ -5,12 +5,17 @@ use super::*;
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use crate::BrowserProfile;
+use quatrelle_engine::MEETINGS_PROFILE;
+
 const TEAMS: &str = "https://teams.microsoft.com/l/meetup-join/19%3ameeting_x%40thread.v2/0?context=%7b%7d";
 
-/// Services that offer `browsers` for meetings and remember what was opened: `url <link>` for the
-/// default browser, `app <program> <link>` for an app window (which fails when `fails`).
+/// Services that offer `browsers` for meetings, each with `profiles`, and remember what was
+/// opened: `url <link>` for the default browser, `app <program> <link>` for an app window (which
+/// fails when `fails`), with `--profile-directory=<folder>` before the link when one is given.
 struct Launching {
     browsers: Vec<(String, String)>,
+    profiles: Vec<BrowserProfile>,
     fails: bool,
     opened: Rc<RefCell<Vec<String>>>,
 }
@@ -35,14 +40,33 @@ impl crate::Services for Launching {
     fn browsers(&mut self) -> Vec<(String, String)> {
         self.browsers.clone()
     }
-    fn open_app_window(&mut self, program: &str, url: &str) -> Result<(), String> {
-        self.opened.borrow_mut().push(format!("app {program} {url}"));
+    fn browser_profiles(&mut self, program: &str) -> Vec<BrowserProfile> {
+        if self.browsers.iter().any(|(_, p)| p == program) { self.profiles.clone() } else { Vec::new() }
+    }
+    fn open_app_window(&mut self, program: &str, profile: Option<&str>, url: &str) -> Result<(), String> {
+        let flag = profile.map(|p| format!("--profile-directory={p} ")).unwrap_or_default();
+        self.opened.borrow_mut().push(format!("app {program} {flag}{url}"));
         if self.fails { Err("boom".into()) } else { Ok(()) }
     }
 }
 
 /// The app over the sample mailbox with `browsers` installed, and what it opens.
 fn launching(name: &str, browsers: &[(&str, &str)], fails: bool) -> (MailApp, std::path::PathBuf, Rc<RefCell<Vec<String>>>) {
+    launching_with(name, browsers, &[], fails)
+}
+
+/// A profile as a browser lists it: (folder, name, Google account).
+fn profile(dir: &str, name: &str, account: &str) -> BrowserProfile {
+    BrowserProfile { dir: dir.into(), name: name.into(), account: account.into() }
+}
+
+/// [`launching`], each browser having `profiles`.
+fn launching_with(
+    name: &str,
+    browsers: &[(&str, &str)],
+    profiles: &[BrowserProfile],
+    fails: bool,
+) -> (MailApp, std::path::PathBuf, Rc<RefCell<Vec<String>>>) {
     let dir = std::env::temp_dir().join(format!("quatrelle-ui-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let store = Store::open(&dir).unwrap();
@@ -50,7 +74,7 @@ fn launching(name: &str, browsers: &[(&str, &str)], fails: bool) -> (MailApp, st
     let s = Session::open(Some(store), Clock::new(NOW, 0));
     let opened = Rc::new(RefCell::new(Vec::new()));
     let browsers = browsers.iter().map(|(n, p)| (n.to_string(), p.to_string())).collect();
-    let services = Launching { browsers, fails, opened: opened.clone() };
+    let services = Launching { browsers, profiles: profiles.to_vec(), fails, opened: opened.clone() };
     (MailApp::new(s, Box::new(NullBackend), Box::new(services)), dir, opened)
 }
 
@@ -272,5 +296,51 @@ fn choosing_the_entry_already_shown_overwrites_a_stale_path() {
     let entry = settled_text_at(&ctx, &mut a, "Google Chrome", tall).unwrap();
     click_at(&ctx, &mut a, entry, 1, tall);
     assert_eq!(a.session.prefs.meeting_browser.as_deref(), Some("/opt/chrome"));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// The profile chosen in Options is the one the meeting opens in; none chosen, the browser's
+/// last used (no profile named).
+#[test]
+fn a_meeting_joins_in_the_profile_chosen() {
+    let profiles = [profile("Default", "Personne 1", ""), profile("Profile 2", "Work", "me@studio.example")];
+    let (mut a, dir, o) = launching_with("meet-profile", &[("Google Chrome", "/opt/chrome")], &profiles, false);
+    a.session.prefs.meeting_profile = Some("Profile 2".into());
+    a.act(crate::Action::OpenMeeting(TEAMS.into()));
+    a.session.prefs.meeting_profile = None;
+    a.act(crate::Action::OpenMeeting(TEAMS.into()));
+    assert_eq!(opened(&o), [format!("app /opt/chrome --profile-directory=Profile 2 {TEAMS}"), format!("app /opt/chrome {TEAMS}")]);
+    assert!(a.session.notices.is_empty(), "{:?}", a.session.notices);
+    // The default browser has no profiles to choose from.
+    a.session.prefs.meeting_profile = Some("Profile 2".into());
+    a.session.prefs.meeting_browser = Some(String::new());
+    a.act(crate::Action::OpenMeeting(TEAMS.into()));
+    assert_eq!(opened(&o).last(), Some(&format!("url {TEAMS}")));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A profile since deleted in the browser isn't named (the browser would make an empty one in
+/// its place): the meeting opens in the last profile used, and the user is told.
+#[test]
+fn a_profile_gone_gives_way_to_the_last_used() {
+    let (mut a, dir, o) = launching_with("meet-profile-gone", &[("Google Chrome", "/opt/chrome")], &[profile("Default", "Me", "")], false);
+    a.session.prefs.meeting_profile = Some("Profile 9".into());
+    a.act(crate::Action::OpenMeeting(TEAMS.into()));
+    assert_eq!(opened(&o), [format!("app /opt/chrome {TEAMS}")]);
+    let last = a.session.notices.last();
+    let said = "The profile “Profile 9” is no longer in Google Chrome; the meeting opens in the last profile used";
+    assert!(last.is_some_and(|n| n.text == said), "{last:?}");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Quatrelle's own meetings profile is named even before the browser lists it: the browser makes
+/// it when asked for it.
+#[test]
+fn the_meetings_profile_is_always_named() {
+    let (mut a, dir, o) = launching_with("meet-profile-own", &[("Chromium", "/usr/bin/chromium")], &[profile("Default", "Me", "")], false);
+    a.session.prefs.meeting_profile = Some(MEETINGS_PROFILE.into());
+    a.act(crate::Action::OpenMeeting(TEAMS.into()));
+    assert_eq!(opened(&o), [format!("app /usr/bin/chromium --profile-directory=Quatrelle {TEAMS}")]);
+    assert!(a.session.notices.is_empty(), "{:?}", a.session.notices);
     let _ = std::fs::remove_dir_all(dir);
 }

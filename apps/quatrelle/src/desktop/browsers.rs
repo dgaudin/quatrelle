@@ -13,6 +13,7 @@ use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
+use quatrelle_engine::is_profile_dir;
 use quatrelle_engine::model::ical::launchable_link;
 
 /// A browser found: the name shown, and the program to run.
@@ -108,12 +109,20 @@ pub(crate) fn found() -> Vec<Browser> {
 }
 
 /// Open `url` in `program` as an app window (`--app=<url>`), without a shell and without
-/// waiting. A link that isn't a plain web address with a host is refused before anything runs.
-pub(crate) fn launch(program: &Path, url: &str) -> Result<(), String> {
+/// waiting: in the `profile` folder when one is given (`--profile-directory`, before the link),
+/// else in the profile the browser used last. A link that isn't a plain web address with a host,
+/// or a profile that isn't one folder's name, is refused before anything runs.
+pub(crate) fn launch(program: &Path, profile: Option<&str>, url: &str) -> Result<(), String> {
     if !launchable_link(url) {
         return Err("This meeting link can't be opened".into());
     }
+    if profile.is_some_and(|p| !is_profile_dir(p)) {
+        return Err("This browser profile can't be used".into());
+    }
     let mut cmd = Command::new(program);
+    if let Some(profile) = profile {
+        cmd.arg(format!("--profile-directory={profile}"));
+    }
     cmd.arg(format!("--app={url}")).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
     #[cfg(windows)]
     {
@@ -241,9 +250,9 @@ mod tests {
 
     #[test]
     fn a_doubtful_link_is_never_launched() {
-        assert!(launch(Path::new("/bin/true"), "https://x.example/a b").is_err());
-        assert!(launch(Path::new("/bin/true"), "file:///etc/passwd").is_err());
-        assert!(launch(Path::new("/bin/true"), "https://x.example/a\n--disable-web-security").is_err());
+        assert!(launch(Path::new("/bin/true"), None, "https://x.example/a b").is_err());
+        assert!(launch(Path::new("/bin/true"), None, "file:///etc/passwd").is_err());
+        assert!(launch(Path::new("/bin/true"), None, "https://x.example/a\n--disable-web-security").is_err());
     }
 
     /// The group id `ps` reports for a process (works on Linux and macOS).
@@ -253,47 +262,98 @@ mod tests {
         String::from_utf8_lossy(&out.stdout).trim().parse().ok()
     }
 
-    /// A meeting window is a process group of its own: Ctrl-C on a terminal Quatrelle was started
-    /// from, or a kill of its group, must not take the meeting with it.
+    /// A fake browser in `dir` running `body` (a shell script's), and `launch` until it starts:
+    /// another test forking at the very moment the script was written can hold it open for an
+    /// instant ("text file busy").
     #[cfg(unix)]
-    #[test]
-    fn the_browser_is_a_process_group_of_its_own() {
+    fn fake_browser(dir: &Path, body: &str) -> PathBuf {
         use std::os::unix::fs::PermissionsExt;
-        let dir = TempDir::new("browsers-group");
-        let report = dir.0.join("group");
-        let program = dir.0.join("fake-browser");
-        let script = format!("#!/bin/sh\nps -o pgid= -p $$ > '{}'\n", report.display());
-        let _ = std::fs::write(&program, script);
+        let program = dir.join("fake-browser");
+        let _ = std::fs::write(&program, format!("#!/bin/sh\n{body}\n"));
         let _ = std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o755));
-        // Another test forking at the very moment the script was written can hold it open for an
-        // instant ("text file busy"): try again a few times.
-        let mut launched = launch(&program, "https://x.example/a");
+        program
+    }
+
+    #[cfg(unix)]
+    fn launch_until_started(program: &Path, profile: Option<&str>, url: &str) -> Result<(), String> {
+        let mut launched = launch(program, profile, url);
         for _ in 0..20 {
             if launched.is_ok() {
                 break;
             }
             std::thread::sleep(std::time::Duration::from_millis(50));
-            launched = launch(&program, "https://x.example/a");
+            launched = launch(program, profile, url);
         }
-        assert!(launched.is_ok(), "{launched:?}");
-        // Bounded wait for the fake browser to write its group id.
-        let mut theirs = None;
+        launched
+    }
+
+    /// What the fake browser wrote to `report`, waited for (bounded).
+    #[cfg(unix)]
+    fn reported(report: &Path) -> Option<String> {
         for _ in 0..100 {
-            theirs = std::fs::read_to_string(&report).ok().and_then(|t| t.trim().parse::<u32>().ok());
-            if theirs.is_some() {
-                break;
+            if let Ok(text) = std::fs::read_to_string(report)
+                && text.ends_with('\n')
+            {
+                return Some(text);
             }
             std::thread::sleep(std::time::Duration::from_millis(50));
         }
+        None
+    }
+
+    /// A meeting window is a process group of its own: Ctrl-C on a terminal Quatrelle was started
+    /// from, or a kill of its group, must not take the meeting with it.
+    #[cfg(unix)]
+    #[test]
+    fn the_browser_is_a_process_group_of_its_own() {
+        let dir = TempDir::new("browsers-group");
+        let report = dir.0.join("group");
+        let program = fake_browser(&dir.0, &format!("ps -o pgid= -p $$ > '{}'", report.display()));
+        let launched = launch_until_started(&program, None, "https://x.example/a");
+        assert!(launched.is_ok(), "{launched:?}");
+        let theirs = reported(&report).and_then(|t| t.trim().parse::<u32>().ok());
         let theirs = theirs.expect("the fake browser reported its process group");
         let ours = group_of(&std::process::id().to_string()).expect("our process group");
         assert_ne!(theirs, ours, "the browser stayed in Quatrelle's process group");
+    }
+
+    /// The profile chosen is named before the link (a browser reads its flags before the
+    /// address); none chosen, no flag: the profile the browser used last.
+    #[cfg(unix)]
+    #[test]
+    fn the_profile_comes_before_the_link() {
+        let dir = TempDir::new("browsers-profile");
+        let report = dir.0.join("args");
+        // Written whole, then renamed: never read half-written.
+        let program = fake_browser(&dir.0, &format!("printf '%s\\n' \"$@\" > '{0}.part' && mv '{0}.part' '{0}'", report.display()));
+        let launched = launch_until_started(&program, Some("Profile 2"), "https://x.example/a");
+        assert!(launched.is_ok(), "{launched:?}");
+        assert_eq!(reported(&report).as_deref(), Some("--profile-directory=Profile 2\n--app=https://x.example/a\n"));
+        let _ = std::fs::remove_file(&report);
+        let launched = launch_until_started(&program, None, "https://x.example/b");
+        assert!(launched.is_ok(), "{launched:?}");
+        assert_eq!(reported(&report).as_deref(), Some("--app=https://x.example/b\n"));
+    }
+
+    /// A profile that isn't one folder's name never reaches the browser: refused before anything
+    /// runs.
+    #[cfg(unix)]
+    #[test]
+    fn a_doubtful_profile_is_never_launched() {
+        let dir = TempDir::new("browsers-bad-profile");
+        let report = dir.0.join("ran");
+        let program = fake_browser(&dir.0, &format!("touch '{}'", report.display()));
+        for profile in ["../../x", "a/b", "", "..", "x\n--disable-web-security", " Default"] {
+            assert!(launch(&program, Some(profile), "https://x.example/a").is_err(), "{profile:?}");
+        }
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        assert!(!report.exists(), "the browser ran");
     }
 
     /// A program that isn't there: an error, not a crash.
     #[test]
     fn a_missing_browser_is_an_error() {
         let dir = TempDir::new("browsers-missing");
-        assert!(launch(&dir.0.join("no-such-browser"), "https://x.example/a").is_err());
+        assert!(launch(&dir.0.join("no-such-browser"), None, "https://x.example/a").is_err());
     }
 }

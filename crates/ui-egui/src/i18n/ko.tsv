@@ -1782,3 +1782,4 @@ month	May	5월
 	Open Teams meetings and calls in	Teams 모임과 통화를 열 브라우저
 	The default browser	기본 브라우저
 	Teams meetings open in a window of their own: Chrome, Chromium or Edge, which Teams needs for calls on Linux.	Teams 모임은 별도의 창에서 열립니다: Linux에서 Teams 통화에 필요한 Chrome, Chromium 또는 Edge입니다.
+	The profile “{profile}” is no longer in {browser}; the meeting opens in the last profile used	"{profile}" 프로필이 더 이상 {browser}에 없습니다. 모임은 마지막으로 사용한 프로필에서 열립니다

@@ -1,6 +1,8 @@
 //! Joining an online meeting: a Teams one in a browser's app window (File › Options ›
 //! Applications says which browser).
 
+use quatrelle_engine::MEETINGS_PROFILE;
+
 use crate::*;
 
 impl MailApp {
@@ -8,7 +10,9 @@ impl MailApp {
     /// own, which Teams needs for calls on Linux), any other link as [`Self::open_link`] does. The
     /// browser is the one chosen in Options while it's installed, else the first found; the
     /// default browser when that's the choice, when none is found, or when the one tried fails.
-    /// Only a program the system lists is launched: the setting alone never names what runs.
+    /// Only a program the system lists is launched: the setting alone never names what runs. The
+    /// app window opens in the profile chosen ([`meeting_profile`]); one the browser no longer
+    /// has gives way to the one it used last, and the user is told.
     pub(crate) fn open_meeting(&mut self, url: &str) {
         let cleaned = if self.session.prefs.clean_links { quatrelle_engine::mime::clean_link(url) } else { url.to_string() };
         let u = cleaned.trim();
@@ -27,7 +31,18 @@ impl MailApp {
             self.open_link(u);
             return;
         };
-        if let Err(e) = self.services.open_app_window(program, u) {
+        // The browser's profiles as they are now: one may have been deleted since Options showed it.
+        let profiles = self.services.browser_profiles(program);
+        let chosen = self.session.prefs.meeting_profile.clone();
+        let profile = meeting_profile(chosen.as_deref(), &profiles);
+        if let Some(gone) = chosen.as_deref()
+            && profile.is_none()
+        {
+            let text =
+                tf!("The profile “{profile}” is no longer in {browser}; the meeting opens in the last profile used", profile = gone, browser = name);
+            self.session.notice(text, false);
+        }
+        if let Err(e) = self.services.open_app_window(program, profile, u) {
             self.session.notice(tf!("{browser} couldn't open the meeting: {error}", browser = name, error = e), true);
             self.open_link(u);
         }
@@ -43,4 +58,13 @@ pub(crate) fn meeting_browser<'a>(chosen: Option<&str>, browsers: &'a [(String, 
         Some(chosen) => browsers.iter().find(|(_, program)| program == chosen).or_else(|| browsers.first()),
         None => browsers.first(),
     }
+}
+
+/// The browser profile folder a Teams meeting opens in, from the setting and the chosen
+/// browser's `profiles`: `None`, the one the browser used last. Quatrelle's own
+/// ([`MEETINGS_PROFILE`]) is always named, the browser making it when it isn't there yet; any
+/// other only while the browser lists it, since naming a folder gone would make the browser
+/// create an empty profile in its place. "Join meeting" and File › Options both ask here.
+pub(crate) fn meeting_profile<'a>(chosen: Option<&'a str>, profiles: &[BrowserProfile]) -> Option<&'a str> {
+    chosen.filter(|dir| *dir == MEETINGS_PROFILE || profiles.iter().any(|p| p.dir == *dir))
 }

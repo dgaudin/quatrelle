@@ -1783,3 +1783,4 @@ month	May	maio
 	Open Teams meetings and calls in	Abrir reuniões e chamadas do Teams em
 	The default browser	O navegador padrão
 	Teams meetings open in a window of their own: Chrome, Chromium or Edge, which Teams needs for calls on Linux.	As reuniões do Teams abrem em uma janela própria: Chrome, Chromium ou Edge, de que o Teams precisa para chamadas no Linux.
+	The profile “{profile}” is no longer in {browser}; the meeting opens in the last profile used	O perfil “{profile}” não está mais no {browser}; a reunião abre no último perfil usado

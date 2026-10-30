@@ -1780,3 +1780,4 @@ month	May	5月
 	Open Teams meetings and calls in	Teams の会議と通話を開くブラウザー
 	The default browser	既定のブラウザー
 	Teams meetings open in a window of their own: Chrome, Chromium or Edge, which Teams needs for calls on Linux.	Teams の会議は専用のウィンドウで開きます: Chrome、Chromium、Edge のいずれかで、Linux で Teams の通話に必要です。
+	The profile “{profile}” is no longer in {browser}; the meeting opens in the last profile used	プロファイル「{profile}」は {browser} にもうありません。会議は最後に使ったプロファイルで開きます
