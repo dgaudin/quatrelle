@@ -286,12 +286,18 @@ fn serve_connection(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>) {
         // How the items were asked for; a field the schema doesn't know refuses the whole request.
         if op.name == "GetItem" {
             let base = op.find("BaseShape").map(|b| b.text.trim().to_string()).unwrap_or_default();
-            let fields = base == "IdOnly"
-                && op
-                    .find("AdditionalProperties")
-                    .is_some_and(|a| a.kids.iter().any(|f| f.attr("FieldURI").is_some_and(|u| u.starts_with("calendar:"))));
-            d.item_shapes.push(if fields { "fields".into() } else { base });
-            if fields && d.refuse_fields {
+            let named = super::fields_named(&op);
+            let fields = base == "IdOnly" && named.iter().any(|u| u.starts_with("calendar:"));
+            let source = op.find("IncludeMimeContent").is_some_and(|m| m.text == "true");
+            d.item_shapes.push(if fields {
+                "fields".into()
+            } else if source {
+                "MimeContent".into()
+            } else {
+                base
+            });
+            let unknown = named.iter().any(|u| (u.starts_with("item:") || u.starts_with("message:")) && !super::MICROSOFT_FIELDS.contains(u));
+            if unknown || (fields && d.refuse_fields) || (d.refuse_text && named.contains(&"item:Body")) {
                 drop(d);
                 let fault = "<?xml version=\"1.0\"?><s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\"><s:Body><s:Fault>\
                     <faultcode>a:ErrorSchemaValidation</faultcode><faultstring>The request failed schema validation.</faultstring>\

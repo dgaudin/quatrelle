@@ -577,19 +577,24 @@ fn addresses(it: &El, name: &str) -> String {
     it.child(name).map(|l| l.children("Mailbox").filter_map(address).collect::<Vec<_>>().join(", ")).unwrap_or_default()
 }
 
+/// Who an item is from, as an address. A colleague's mail comes from an Exchange-internal address,
+/// kept as a name alone: the sender's SMTP address (`PidTagSenderSmtpAddress`) is theirs, so a
+/// rule, a reply or the address book has an address to go by.
+fn sender(it: &El) -> Option<String> {
+    let f = it.child("From").and_then(|f| f.child("Mailbox")).and_then(address)?;
+    if let Some(name) = f.strip_suffix(" <>")
+        && let Some(smtp) = extended_text(it, "0x5D01").filter(|a| a.contains('@') && !a.contains(['<', '>', '"', '\r', '\n']))
+    {
+        return Some(format!("{name} <{}>", smtp.trim()));
+    }
+    Some(f)
+}
+
 /// A header block for the list, from an item's details (its date is the received one).
 fn header_block(it: &El) -> Vec<u8> {
     let mut h = String::new();
     let clean = |s: &str| s.replace(['\r', '\n'], " ");
-    if let Some(mut f) = it.child("From").and_then(|f| f.child("Mailbox")).and_then(address) {
-        // A colleague's mail comes from an Exchange-internal address, kept as a name alone:
-        // the sender's SMTP address (`PidTagSenderSmtpAddress`) is theirs, so a rule, a reply
-        // or the address book has an address to go by.
-        if let Some(name) = f.strip_suffix(" <>")
-            && let Some(smtp) = extended_text(it, "0x5D01").filter(|a| a.contains('@') && !a.contains(['<', '>', '"', '\r', '\n']))
-        {
-            f = format!("{name} <{}>", smtp.trim());
-        }
+    if let Some(f) = sender(it) {
         h.push_str(&format!("From: {}\r\n", clean(&f)));
     }
     for (field, name) in [("ToRecipients", "To"), ("CcRecipients", "Cc"), ("ReplyTo", "Reply-To")] {
@@ -623,6 +628,7 @@ mod rules;
 mod shared;
 mod sizes;
 mod sync;
+mod text_first;
 mod xml;
 
 #[cfg(test)]
@@ -635,6 +641,7 @@ use sync::restriction;
 pub use sync::{
     AheadTodo, download_ahead, fetch_body, find_lost, find_on_server, list_folders, older, read_online, search, sync_folder, sync_folder_then,
 };
+pub use text_first::{fetch_text, text_first};
 pub use xml::{El, esc, parse, unb64};
 use xml::{b64, envelope};
 
