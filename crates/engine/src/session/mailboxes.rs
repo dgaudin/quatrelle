@@ -136,7 +136,7 @@ impl Session {
         // again at what it found there. (Dropping the index, as this once did, made the search of
         // a busy mailbox start over at each change a sync told of: it never ended.)
         if let Some(ix) = self.index.as_mut() {
-            ix.changed(account, folder, true);
+            ix.changed(account, folder, true, None);
         }
         // The address book reads the folder's new mail (a slice at a time, by the window).
         self.contacts_folder_changed(account, folder);
