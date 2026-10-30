@@ -103,6 +103,24 @@ fn index_narrows_without_missing() {
     assert_eq!(ix.candidates(&Query::parse("late")), BTreeSet::from([1]));
 }
 
+/// A search carried on while the index grows asks only about the documents added since: the
+/// same answer, from a number on.
+#[test]
+fn candidates_from_a_number_on() {
+    let mut ix = Index::new();
+    for d in 0..10u32 {
+        ix.add(d, if d % 3 == 0 { "storyboard review" } else { "budget story" });
+    }
+    let q = Query::parse("story");
+    assert_eq!(ix.candidates_from(&q, 0), ix.candidates(&q));
+    assert_eq!(ix.candidates_from(&q, 7).into_iter().collect::<Vec<_>>(), [7, 8, 9]);
+    let q = Query::parse("storyboard review");
+    assert_eq!(ix.candidates_from(&q, 4).into_iter().collect::<Vec<_>>(), [6, 9]);
+    assert!(ix.candidates_from(&q, 10).is_empty());
+    assert_eq!(ix.candidates_from(&Query::parse("is:unread"), 8).into_iter().collect::<Vec<_>>(), [8, 9]);
+    assert!(ix.candidates_from(&Query::parse("budget"), u32::MAX).is_empty());
+}
+
 /// The index keeps each word's documents sorted and once, whatever order they come in; plain
 /// words found through it need no body, while phrases, missing words and addresses do.
 #[test]
