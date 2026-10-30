@@ -47,6 +47,7 @@ pub use organize::{RulesScope, junk, quick_steps, search_folders};
 pub use prefs::{
     ListLayout, MEETINGS_PROFILE, NotesOrder, PictureLoading, Prefs, READING_ZOOM, RECENT_EMOJI, ReadInPane, ReadingPane, is_profile_dir,
 };
+use searching::SearchIndex;
 pub use security::{CardSearch, KnownCert, Lock, RevocationCheck, SMIME_DOC, Seal, Security, SignedBy, SmimeSettings};
 use writing::NameCheck;
 pub use writing::{
@@ -225,42 +226,6 @@ pub struct Reading {
     pub warning: Option<quatrelle_model::lookalike::SenderWarning>,
     /// Signed or encrypted (S/MIME), and how that went.
     pub security: Option<Security>,
-}
-
-struct SearchIndex {
-    index: Index,
-    keys: Vec<MessageKey>,
-    /// Whether each message's body words are in the index (the words themselves aren't kept: a
-    /// big mailbox's would fill the memory; they're read again for the messages a search finds).
-    has_body: Vec<bool>,
-    scope: SearchScope,
-    view: View,
-    /// The folders this index covers and how far the scan has got: the build goes on a slice at a
-    /// time (see [`Session::index_step`]), so searching a big mailbox never freezes the window.
-    scan: Vec<(String, String)>,
-    folder: usize,
-    pos: usize,
-    done: bool,
-    /// The folder being read, numbered from zero: it is kept on disk once read, so a later run
-    /// takes it as it is, and it answers searches while it is being read too.
-    building: Option<FolderIndex>,
-}
-
-/// A folder's messages take their place in the mailbox's index after the ones before them.
-fn join_folder(ix: &mut SearchIndex, folder: FolderIndex) {
-    let offset = u32::try_from(ix.keys.len()).unwrap_or(u32::MAX);
-    ix.index.absorb(folder.index, offset);
-    ix.keys.extend(folder.keys);
-    ix.has_body.extend(folder.has_body);
-}
-
-/// A folder's index stamp is a hash kept on disk, so it is the same from one run to the next (the
-/// standard library's hasher makes no such promise).
-fn fnv(h: &mut u64, bytes: &[u8]) {
-    for &b in bytes {
-        *h ^= u64::from(b);
-        *h = h.wrapping_mul(0x100000001b3);
-    }
 }
 
 /// Outlook's "Download all": the messages still to bring onto this computer, the ones asked for
