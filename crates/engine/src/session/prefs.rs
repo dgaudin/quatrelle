@@ -162,6 +162,10 @@ pub struct Prefs {
     /// When a message's pictures from the web load without being asked for: from the people
     /// known at first (File › Options › Privacy).
     pub pictures: PictureLoading,
+    /// The browser Teams meetings open in: none, the first Chrome, Chromium or Edge found; empty,
+    /// the default browser; otherwise that program (File › Options › Applications).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub meeting_browser: Option<String>,
     /// Ask a signer's certificate's authority whether it was withdrawn (OCSP or its CRL), as
     /// signed mail is shown. Off at first: the authority learns whose mail is being read.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
@@ -229,6 +233,7 @@ impl Default for Prefs {
             keep_photo_location: false,
             clean_links: true,
             pictures: PictureLoading::Known,
+            meeting_browser: None,
             check_revocation: false,
             webex_room: String::new(),
             llm_url: String::new(),
