@@ -43,7 +43,8 @@ pub use listing::{ARRANGE_HEADINGS, Arrange, FolderRef, ListFilter, OUTBOX, Row,
 use listing::{Preview, person, size_group};
 use mailboxes::{Contacts, bare_name, directory_key};
 pub use mailboxes::{
-    DirectoryAnswer, FIELD_NAMES, FieldId, FolderSizes, INDEX_MAX, MAX_SUGGESTIONS, Sizes, Source, Suggestion, directory_people, fill_name,
+    DirectoryAnswer, Expansion, FIELD_NAMES, FieldId, FolderSizes, INDEX_MAX, MAX_SHOWN_MEMBERS, MAX_SUGGESTIONS, MAX_TOTAL, Sizes, Source,
+    Suggestion, directory_people, fill_name,
 };
 pub use organize::{RulesScope, junk, quick_steps, search_folders};
 pub use prefs::{

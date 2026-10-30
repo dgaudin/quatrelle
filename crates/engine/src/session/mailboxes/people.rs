@@ -20,8 +20,11 @@ use quatrelle_model::scheduling::Room;
 use quatrelle_model::{Addressee, AddresseeKind};
 
 use super::*;
+use crate::session::scheduling::Fetched;
 
+mod expand;
 mod suggest;
+pub use expand::{Expansion, MAX_SHOWN_MEMBERS, MAX_TOTAL};
 use suggest::Cached;
 pub use suggest::{FIELD_NAMES, FieldId, MAX_SUGGESTIONS, Source, Suggestion};
 
@@ -51,6 +54,10 @@ pub(crate) struct People {
     /// `group:<item id>`), and the order the entries came in.
     pub(crate) index: HashMap<String, Indexed>,
     pub(crate) index_order: VecDeque<String>,
+    /// Each list's members, by (account, the list's address in lower case or `group:<item id>`),
+    /// and when each ask still out went.
+    pub(crate) expansions: HashMap<(String, String), Fetched<Expansion>>,
+    pub(crate) expansions_out: HashMap<(String, String), i64>,
     /// Each field's last suggestions, worked out again only when its text or the book changes.
     suggest_cache: HashMap<FieldId, Cached>,
     /// Suggestion passes run, and the entries they looked at.
