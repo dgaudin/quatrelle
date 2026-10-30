@@ -23,9 +23,9 @@ pub(crate) struct Browser {
 }
 
 /// The names shown, in the order offered.
-const CHROME: &str = "Google Chrome";
-const CHROMIUM: &str = "Chromium";
-const EDGE: &str = "Microsoft Edge";
+pub(super) const CHROME: &str = "Google Chrome";
+pub(super) const CHROMIUM: &str = "Chromium";
+pub(super) const EDGE: &str = "Microsoft Edge";
 
 /// Linux and the BSDs: each family's programs, the preferred first.
 const ON_PATH: [(&str, &[&str]); 3] = [
