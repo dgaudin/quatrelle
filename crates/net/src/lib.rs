@@ -9,6 +9,7 @@
 //! * [`dav`]: calendars and address books, CalDAV and CardDAV.
 //! * [`pst`]: importing Outlook data files (`.pst`) into an account on this computer.
 //! * [`sieve`]: automatic replies on IMAP servers, through ManageSieve (RFC 5804).
+//! * [`teams`]: Microsoft Teams chats through Graph (the Teams worker's client).
 //! * [`smtp`]: message submission through `lettre` (RFC 6409, implicit TLS per RFC 8314).
 //! * [`worker`]: one thread per account that runs the engine's [`Job`](quatrelle_model::Job)s
 //!   and reports [`Event`](quatrelle_model::Event)s, keeping a connection open, idling on the
@@ -27,6 +28,7 @@ pub mod oauth;
 mod protocols;
 pub mod stream;
 pub mod sync;
+pub mod teams;
 pub mod updates;
 pub mod worker;
 
