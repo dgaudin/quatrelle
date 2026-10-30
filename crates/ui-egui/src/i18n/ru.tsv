@@ -1778,3 +1778,7 @@ month	May	Май
 	Flags	Флаги
 	This meeting link can't be opened	Не удаётся открыть эту ссылку на собрание
 	{browser} couldn't open the meeting: {error}	Не удалось открыть собрание в {browser}: {error}
+	Applications	Приложения
+	Open Teams meetings and calls in	Открывать собрания и звонки Teams в
+	The default browser	Браузер по умолчанию
+	Teams meetings open in a window of their own: Chrome, Chromium or Edge, which Teams needs for calls on Linux.	Собрания Teams открываются в отдельном окне: Chrome, Chromium или Edge — они нужны Teams для звонков в Linux.

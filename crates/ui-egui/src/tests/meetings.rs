@@ -228,3 +228,27 @@ fn the_appointment_form_joins_too() {
     assert_eq!(asked, [format!("meeting {TEAMS}"), meet.clone(), meet]);
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// File › Options › Applications: the browser Teams meetings open in, the one "Join meeting" uses
+/// (the first found until one is chosen), or the default browser. The list is asked for as the
+/// File page opens, here by its rail's "Options".
+#[test]
+fn the_options_choose_the_meeting_browser() {
+    let (mut a, dir, _) = launching("meet-options", &[("Google Chrome", "/opt/chrome"), ("Chromium", "/usr/bin/chromium")], false);
+    let ctx = egui::Context::default();
+    let tall = egui::vec2(1280.0, 5000.0);
+    a.act(crate::Action::Backstage(crate::backstage::Page::Info));
+    let options = settled_text_at(&ctx, &mut a, "Options", tall).unwrap();
+    click_at(&ctx, &mut a, options, 1, tall);
+    let combo = settled_text_at(&ctx, &mut a, "Google Chrome", tall).unwrap();
+    click_at(&ctx, &mut a, combo, 1, tall);
+    let chromium = settled_text_at(&ctx, &mut a, "Chromium", tall).unwrap();
+    click_at(&ctx, &mut a, chromium, 1, tall);
+    assert_eq!(a.session.prefs.meeting_browser.as_deref(), Some("/usr/bin/chromium"));
+    let combo = settled_text_at(&ctx, &mut a, "Chromium", tall).unwrap();
+    click_at(&ctx, &mut a, combo, 1, tall);
+    let default = settled_text_at(&ctx, &mut a, "The default browser", tall).unwrap();
+    click_at(&ctx, &mut a, default, 1, tall);
+    assert_eq!(a.session.prefs.meeting_browser.as_deref(), Some(""));
+    let _ = std::fs::remove_dir_all(dir);
+}

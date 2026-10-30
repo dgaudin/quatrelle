@@ -11,6 +11,7 @@ mod search_box;
 mod updates;
 mod windows;
 
+pub(crate) use actions::meeting_browser;
 pub(crate) use costs::Merging;
 pub(crate) use ribbon::junk_menu;
 pub(crate) use search_box::{SearchDrop, scope_label};

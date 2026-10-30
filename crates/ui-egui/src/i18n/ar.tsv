@@ -1775,3 +1775,7 @@ month	May	مايو
 	Flags	الأعلام
 	This meeting link can't be opened	يتعذّر فتح رابط الاجتماع هذا
 	{browser} couldn't open the meeting: {error}	تعذّر على {browser} فتح الاجتماع: {error}
+	Applications	التطبيقات
+	Open Teams meetings and calls in	فتح اجتماعات Teams ومكالماته في
+	The default browser	المتصفح الافتراضي
+	Teams meetings open in a window of their own: Chrome, Chromium or Edge, which Teams needs for calls on Linux.	تُفتح اجتماعات Teams في نافذة خاصة بها: Chrome أو Chromium أو Edge، وهي ما يحتاجه Teams للمكالمات على Linux.

@@ -1778,3 +1778,7 @@ month	May	maggio
 	Flags	Bandiere
 	This meeting link can't be opened	Impossibile aprire questo collegamento alla riunione
 	{browser} couldn't open the meeting: {error}	{browser} non è riuscito ad aprire la riunione: {error}
+	Applications	Applicazioni
+	Open Teams meetings and calls in	Apri le riunioni e le chiamate di Teams in
+	The default browser	Il browser predefinito
+	Teams meetings open in a window of their own: Chrome, Chromium or Edge, which Teams needs for calls on Linux.	Le riunioni di Teams si aprono in una finestra a sé: Chrome, Chromium o Edge, che servono a Teams per le chiamate su Linux.

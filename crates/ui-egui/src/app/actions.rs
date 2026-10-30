@@ -648,12 +648,7 @@ impl MailApp {
             return;
         }
         let browsers = self.services.browsers();
-        let browser = match self.session.prefs.meeting_browser.as_deref() {
-            Some("") => None,
-            Some(chosen) => browsers.iter().find(|(_, program)| program == chosen).or_else(|| browsers.first()),
-            None => browsers.first(),
-        };
-        let Some((name, program)) = browser else {
+        let Some((name, program)) = meeting_browser(self.session.prefs.meeting_browser.as_deref(), &browsers) else {
             self.open_link(u);
             return;
         };
@@ -754,5 +749,16 @@ impl MailApp {
         let Some(r) = self.session.reading.as_ref() else { return };
         let all: Vec<usize> = r.parsed.as_ref().map(|p| p.attachments.iter().filter(|a| !a.inline).map(|a| a.index).collect()).unwrap_or_default();
         self.ui.attachment_selected = Some((r.key.clone(), all));
+    }
+}
+
+/// The browser (shown name, program) Teams meetings open in, from the setting and the browsers
+/// found: `None` is the default browser. Nothing chosen, or a choice no longer installed: the
+/// first one found. "Join meeting" and File › Options both ask here, so they never disagree.
+pub(crate) fn meeting_browser<'a>(chosen: Option<&str>, browsers: &'a [(String, String)]) -> Option<&'a (String, String)> {
+    match chosen {
+        Some("") => None,
+        Some(chosen) => browsers.iter().find(|(_, program)| program == chosen).or_else(|| browsers.first()),
+        None => browsers.first(),
     }
 }

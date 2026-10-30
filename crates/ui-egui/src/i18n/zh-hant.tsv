@@ -1778,3 +1778,7 @@ month	May	5月
 	Flags	旗幟
 	This meeting link can't be opened	無法開啟此會議連結
 	{browser} couldn't open the meeting: {error}	{browser} 無法開啟會議: {error}
+	Applications	應用程式
+	Open Teams meetings and calls in	在以下瀏覽器開啟 Teams 會議和通話
+	The default browser	預設瀏覽器
+	Teams meetings open in a window of their own: Chrome, Chromium or Edge, which Teams needs for calls on Linux.	Teams 會議會在獨立的視窗中開啟：Chrome、Chromium 或 Edge，在 Linux 上 Teams 通話需要它們。
