@@ -20,17 +20,31 @@ impl Session {
             return;
         }
         let local = self.account(account).is_none_or(AccountState::is_local);
-        // Marking mail read or filing it in a category leaves the words where they were: the
-        // index stays. Moving or deleting messages changes what it covers.
+        // Marking mail read or filing it in a category leaves the words where they were; moving
+        // or deleting messages changes what the folders hold. Either way the search index stays:
+        // it adds what came into a folder, and its answer looks again at what it found there.
         let words_change = !matches!(op, Op::SetFlag { .. } | Op::SetKeyword { .. });
+        let folder_op = op.is_folder_op();
+        let mut touched: Vec<String> = op.keys().iter().map(|k| k.folder.clone()).collect();
+        match &op {
+            Op::Move { to, .. } => touched.push(to.clone()),
+            Op::EmptyFolder { path } => touched.push(path.clone()),
+            _ => {}
+        }
+        touched.sort();
+        touched.dedup();
         self.apply_op_memory(account, &op);
         if local {
             self.apply_op_local(account, &op);
         } else {
             self.jobs.push(Job::Apply { account: account.to_string(), op });
         }
-        if words_change {
-            self.index = None;
+        if folder_op {
+            self.rescope_index();
+        } else if let Some(ix) = self.index.as_mut() {
+            for f in &touched {
+                ix.changed(account, f, words_change);
+            }
         }
         self.refresh_list();
     }
@@ -256,7 +270,8 @@ impl Session {
             }
             Op::SetFlag { .. } | Op::SetKeyword { .. } | Op::Move { .. } | Op::Expunge { .. } | Op::EmptyFolder { .. } => {}
         }
-        self.index = None;
+        // The search follows the folders (a folder renamed is searched under its new name).
+        self.rescope_index();
         // A Favorite public folder renamed or deleted: its sync follows.
         if matches!(op, Op::RenameFolder { .. } | Op::DeleteFolder { .. }) {
             self.follow_public_favorites();
