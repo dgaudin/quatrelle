@@ -507,7 +507,6 @@ pub(super) fn options(s: &Session, st: &UiState, ui: &mut Ui, acts: &mut Vec<Act
                         tl!("Sign in to Microsoft 365 in the window that opens. The browser names the new profile itself; it can be renamed there.");
                     setting(ui, false, tl!("A profile for meetings"), Some(about), &mut |ui| {
                         if ui.button(tl!("Create a profile for meetings")).clicked() {
-                            acts.push(Action::Run("view.meetingProfile", json!({"dir": MEETINGS_PROFILE})));
                             acts.push(Action::MakeMeetingProfile);
                         }
                     });
