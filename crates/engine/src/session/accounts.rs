@@ -266,6 +266,7 @@ impl Session {
         self.cache.retain(|(a, _), _| a != id);
         self.pim.remove(id);
         self.forget_rooms(id);
+        self.clear_directory_index();
         let mut kept = None;
         if let Some(store) = &self.store {
             let gone = if keep { store.remove_account(id).map(|f| kept = f) } else { store.delete_account(id) };
@@ -573,8 +574,13 @@ impl Session {
             store.set_online_only(&id, config.keeps_online()).map_err(|e| CmdError::Failed(e.to_string()))?;
         }
         let Some(a) = self.account_mut(&id) else { return Err(CmdError::Params(format!("no account `{id}`"))) };
+        let shared_changed = a.config.shared_mailboxes != config.shared_mailboxes;
         a.config = config.clone();
         let local = a.is_local();
+        // The shared mailboxes are suggested: what was worked out for a field is out of date.
+        if shared_changed {
+            self.contacts.changed();
+        }
         self.save_accounts();
         if reconnect && !local {
             self.jobs.push(Job::Start { account: config, password: password.map(Secret) });

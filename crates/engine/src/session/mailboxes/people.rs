@@ -5,7 +5,10 @@
 //!
 //! The directory's answers are kept in an index by address (a contact group, which has none, by
 //! its item id), filled only by what the directory answered, never by a suggestion: it tells an
-//! address's kind and feeds the suggestions ([`suggest`]).
+//! address's kind and feeds the suggestions ([`suggest`]). It is bounded by its own order
+//! ([`INDEX_MAX`], the oldest out first), not by the answers kept: an entry the directory no
+//! longer has may be suggested until newer ones push it out, the account goes or Quatrelle starts
+//! again (the index isn't kept on disk). Check Names (Ctrl+K) still asks the server.
 
 use std::collections::VecDeque;
 
@@ -43,13 +46,19 @@ pub(crate) struct People {
     pub(crate) rooms_out: HashMap<String, i64>,
     /// What the directory answered, by address in lower case (a contact group by
     /// `group:<item id>`), and the order the entries came in.
-    pub(crate) index: HashMap<String, Addressee>,
+    pub(crate) index: HashMap<String, Indexed>,
     pub(crate) index_order: VecDeque<String>,
     /// Each field's last suggestions, worked out again only when its text or the book changes.
     suggest_cache: HashMap<FieldId, Cached>,
     /// Suggestion passes run, and the entries they looked at.
     passes: u64,
     scanned: u64,
+}
+
+/// An entry of the directory index, with its name in lower case (matched on every key typed).
+pub(crate) struct Indexed {
+    pub(crate) who: Addressee,
+    pub(crate) name_lower: String,
 }
 
 /// An entry's place in the index: its address in lower case, or a contact group's reference.
@@ -110,18 +119,22 @@ impl Session {
     /// account, what the directory said it is, a person written to or heard from, or nothing
     /// known. `account` narrows the rooms to those of one account.
     pub fn addressee_kind(&self, account: Option<&str>, email: &str) -> AddresseeKind {
-        let email = email.trim().to_ascii_lowercase();
+        self.kind_lower(account, &email.trim().to_ascii_lowercase())
+    }
+
+    /// [`Session::addressee_kind`] of an address already trimmed and in lower case.
+    pub(crate) fn kind_lower(&self, account: Option<&str>, email: &str) -> AddresseeKind {
         let is_room = match account {
-            Some(a) => self.people.rooms.get(a).is_some_and(|r| r.contains_key(&email)),
-            None => self.people.rooms.values().any(|r| r.contains_key(&email)),
+            Some(a) => self.people.rooms.get(a).is_some_and(|r| r.contains_key(email)),
+            None => self.people.rooms.values().any(|r| r.contains_key(email)),
         };
         if is_room {
             AddresseeKind::Room
-        } else if self.accounts.iter().any(|a| a.config.shared_mailboxes.iter().any(|m| m.eq_ignore_ascii_case(&email))) {
+        } else if self.accounts.iter().any(|a| a.config.shared_mailboxes.iter().any(|m| m.eq_ignore_ascii_case(email))) {
             AddresseeKind::SharedMailbox
-        } else if let Some(kind) = self.directory_known(&email).map(|a| a.kind).filter(|k| *k != AddresseeKind::Unknown) {
+        } else if let Some(kind) = self.people.index.get(email).map(|e| e.who.kind).filter(|k| *k != AddresseeKind::Unknown) {
             kind
-        } else if self.known_contact(&email).is_some() {
+        } else if self.known_contact(email).is_some() {
             AddresseeKind::Person
         } else {
             AddresseeKind::Unknown
@@ -130,7 +143,7 @@ impl Session {
 
     /// What the directory answered for an address (a contact group: for its `group:<item id>`).
     pub fn directory_known(&self, email: &str) -> Option<&Addressee> {
-        self.people.index.get(&email.trim().to_ascii_lowercase())
+        self.people.index.get(&email.trim().to_ascii_lowercase()).map(|e| &e.who)
     }
 
     /// Keep what the directory answered in the index (only answers fill it, never suggestions):
@@ -140,7 +153,8 @@ impl Session {
         let p = &mut self.people;
         for a in people {
             let Some(key) = index_key(a) else { continue };
-            if p.index.insert(key.clone(), a.clone()).is_none() {
+            let entry = Indexed { who: a.clone(), name_lower: a.name.to_lowercase() };
+            if p.index.insert(key.clone(), entry).is_none() {
                 p.index_order.push_back(key);
             }
             while p.index.len() > INDEX_MAX {
@@ -150,7 +164,8 @@ impl Session {
         }
     }
 
-    /// The answers kept were cut: the index goes with them, whole.
+    /// An account is gone: what its directory answered goes too (the index doesn't say whose
+    /// directory an entry came from, so it goes whole).
     pub(crate) fn clear_directory_index(&mut self) {
         self.people.index.clear();
         self.people.index_order.clear();

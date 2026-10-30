@@ -116,17 +116,12 @@ impl Session {
         if d.found.insert(k.clone(), DirectoryAnswer { people, more, error, at }).is_none() {
             d.order.push_back(k);
         }
-        let mut cut = false;
         while d.order.len() > KEPT {
             if let Some(old) = d.order.pop_front() {
                 d.found.remove(&old);
-                cut = true;
             }
         }
-        // The index goes with the answers cut (whole), and keeps this one.
-        if cut {
-            self.clear_directory_index();
-        }
+        // The index keeps its own order (`people.rs`): an answer cut here stays in it.
         self.index_directory(&indexed);
         self.contacts.changed();
         self.ask_directory(&account);
