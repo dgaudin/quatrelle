@@ -300,6 +300,16 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             Ok(json!({ "path": s.prefs.meeting_browser }))
         })
         .params(r#"{"path"?: string|null (none or null: the first Chrome, Chromium or Edge found; empty: the default browser; otherwise the program to run; Teams meetings open in its app window)}"#),
+        CommandSpec::new("view.meetingProfile", "Browser profile for Teams meetings", "File › Options › Applications", |s, v| {
+            let dir = match v.get("dir") {
+                None | Some(Value::Null) => None,
+                Some(Value::String(dir)) if crate::is_profile_dir(dir) => Some(dir.clone()),
+                Some(_) => return Err(CmdError::Params("`dir` must be a profile folder's name or null".into())),
+            };
+            s.prefs.meeting_profile = dir;
+            Ok(json!({ "dir": s.prefs.meeting_profile }))
+        })
+        .params(r#"{"dir"?: string|null (none or null: the profile the browser used last; otherwise that profile's folder, as "Default" or "Profile 1"; "Quatrelle": one the browser makes for meetings; Teams meetings open in it)}"#),
         CommandSpec::new("view.trustSender", "Show pictures from a sender", "File › Options › Privacy", |s, v| {
             let who = p::req_str(v, "address")?.trim().to_ascii_lowercase();
             if !quatrelle_model::addr::is_valid_email(&who) {
