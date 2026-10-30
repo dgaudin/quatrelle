@@ -6,6 +6,7 @@
 //! found is looked up again where something changed: a folder told of changes, a body that came
 //! in, a folder that came back.
 
+use std::collections::VecDeque;
 use std::ops::Range;
 
 use super::*;
@@ -25,8 +26,13 @@ pub(crate) struct Answer {
     pub(super) have: Keys,
     /// Folders whose messages found are looked up again: their list changed, or they went.
     pub(super) recheck: HashSet<(String, String)>,
-    /// Messages looked at again: a body came in, or their folder came back.
+    /// Messages to look at again, by number: their folder changed (one marked unread may answer
+    /// `is:unread` now), a body came in, or their folder came back.
     pub(super) again: Vec<Range<u32>>,
+    /// The messages the index found for the query and not looked at yet: a slice's worth is
+    /// looked at a call (a new query over a big index, or a big folder that changed, doesn't
+    /// load every folder in one frame).
+    pub(super) todo: VecDeque<u32>,
     /// How many were found when the list last showed them.
     pub(super) shown: usize,
     /// Something found went or changed since the list last showed them.
@@ -67,6 +73,16 @@ impl Keys {
 /// While few are found, the list shows each slice's finds; past this, each time a quarter more
 /// are found (showing it sorts all of them: each slice's would grow with what's found).
 const SHOW_EACH_UP_TO: usize = 500;
+
+/// Messages looked at for one indexed, in a slice: looking at one (found where it was in its
+/// list, checked against the query) costs a small part of indexing one.
+const LOOKS_PER_MESSAGE_INDEXED: usize = 8;
+
+/// What a message is checked against: the query, and what's waiting for a reply.
+struct Looking<'a> {
+    query: &'a Query,
+    awaiting: &'a HashSet<MessageKey>,
+}
 
 /// Each folder's messages by number, made once a call when a message isn't where it was.
 type Lists = HashMap<(String, String), HashMap<u32, usize>>;
@@ -158,12 +174,13 @@ impl Session {
         }
         if !redo.is_empty() || !moved.is_empty() {
             let awaiting = answer.awaiting.clone();
+            let looking = Looking { query: &query, awaiting: &awaiting };
             let mut drop = HashSet::new();
             for (i, m) in redo {
                 let Some(f) = answer.found.get_mut(i) else { continue };
                 let has_body = ix.doc(f.doc).is_some_and(|(_, b)| b);
                 f.summary = m;
-                if !self.answers(&query, &f.summary, has_body, true, &awaiting) {
+                if !self.answers(&looking, &f.summary, has_body) {
                     drop.insert(i);
                 }
             }
@@ -178,7 +195,7 @@ impl Session {
                     keep
                 });
             }
-            self.recheck_found(&mut ix, &mut answer, &query, moved, &awaiting);
+            self.recheck_found(&mut ix, &mut answer, &looking, moved);
         }
         let out = answer.found.iter().map(|f| f.summary.clone()).collect();
         answer.shown = answer.found.len();
@@ -188,10 +205,11 @@ impl Session {
         out
     }
 
-    /// Bring the answer up to date: what it found in folders that changed is looked up again,
-    /// the messages to look at again are, and so are those indexed since it last looked. A new
-    /// query starts a new answer (looking at the whole index once), and so does a change in what
-    /// is waiting for a reply when it asks about that.
+    /// Bring the answer up to date: what it found in folders that changed is looked up again;
+    /// the messages to look at again (a folder that changed, a body that came in, a folder back)
+    /// and those indexed since it last looked queue up as the index finds them; a slice's worth
+    /// of the queue is looked at. A new query starts a new answer, and so does a change in what is
+    /// waiting for a reply when it asks about that.
     fn update_answer(&mut self, query: &Query) {
         let awaiting = self.awaiting_for(query);
         let Some(mut ix) = self.index.take() else { return };
@@ -199,51 +217,41 @@ impl Session {
             Some(a) if a.query == *query && a.awaiting == awaiting => a,
             _ => Answer { query: query.clone(), awaiting: awaiting.clone(), changed: true, ..Default::default() },
         };
-        // A slice's worth at most (a folder back again may be a big one).
-        let mut again = BTreeSet::new();
-        let room = self.search_budget.max(1);
-        while again.len() < room
-            && let Some(r) = answer.again.first_mut()
-        {
-            let take = u32::try_from(room - again.len()).unwrap_or(u32::MAX).min(r.end.saturating_sub(r.start));
-            again.extend(r.start..r.start.saturating_add(take));
-            r.start = r.start.saturating_add(take);
-            if r.start >= r.end {
-                answer.again.remove(0);
-            }
-        }
         let total = ix.total();
-        let fresh = answer.checked < total;
-        if answer.recheck.is_empty() && again.is_empty() && !fresh {
+        if answer.recheck.is_empty() && answer.again.is_empty() && answer.todo.is_empty() && answer.checked >= total {
             ix.answer = Some(answer);
             self.index = Some(ix);
             return;
         }
+        let looking = Looking { query, awaiting: &awaiting };
         let folders = std::mem::take(&mut answer.recheck);
-        self.recheck_found(&mut ix, &mut answer, query, folders, &awaiting);
-        // A body that came in or a folder back again: the message is looked at whole (the index
-        // can't say which of its words were there before).
-        let mut lists = Lists::new();
-        for d in again {
-            if let Some(f) = self.look_at(&ix, &answer, &mut lists, d, query, false, &awaiting) {
-                answer.have.insert(&f.summary.key);
-                answer.found.push(f);
-                answer.changed = true;
-            }
+        self.recheck_found(&mut ix, &mut answer, &looking, folders);
+        // Finding the candidates costs their words, not their messages: they queue up whole (once
+        // each), and the messages are looked at a slice's worth a call.
+        for r in std::mem::take(&mut answer.again) {
+            answer.todo.extend(ix.candidates_in(query, r));
         }
-        // What was indexed since: the index's candidates numbered from where it stopped.
-        if fresh {
-            let offset = u32::try_from(ix.keys.len()).unwrap_or(u32::MAX);
-            let mut docs = ix.index.candidates_from(query, answer.checked);
-            if let Some(b) = &ix.building {
-                docs.extend(b.index.candidates_from(query, answer.checked.saturating_sub(offset)).into_iter().map(|d| d.saturating_add(offset)));
-            }
+        if answer.checked < total {
+            answer.todo.extend(ix.candidates_in(query, answer.checked..total));
             answer.checked = total;
-            for d in docs {
-                if let Some(f) = self.look_at(&ix, &answer, &mut lists, d, query, true, &awaiting) {
-                    answer.have.insert(&f.summary.key);
-                    answer.found.push(f);
-                }
+        }
+        let room = self.search_budget.max(1).saturating_mul(LOOKS_PER_MESSAGE_INDEXED);
+        let mut looked = 0;
+        let mut lists = Lists::new();
+        while looked < room
+            && let Some(d) = answer.todo.pop_front()
+        {
+            // Found already or gone from the search: nothing to look at (and nothing counted).
+            let Some((key, has_body)) = ix.doc(d) else { continue };
+            if answer.have.contains(key) || ix.is_gone(key) {
+                continue;
+            }
+            looked += 1;
+            let key = key.clone();
+            let Some((m, pos)) = self.look_up(&mut lists, &key, ix.hint(d, &key)) else { continue };
+            if self.answers(&looking, &m, has_body) {
+                answer.have.insert(&key);
+                answer.found.push(Found { summary: m, pos, doc: d });
             }
         }
         ix.answer = Some(answer);
@@ -252,14 +260,7 @@ impl Session {
 
     /// The messages found in these folders, looked up again in their lists: gone from there (or
     /// their folder gone from the search), they go; changed, they're checked again.
-    fn recheck_found(
-        &mut self,
-        ix: &mut SearchIndex,
-        answer: &mut Answer,
-        query: &Query,
-        folders: HashSet<(String, String)>,
-        awaiting: &HashSet<MessageKey>,
-    ) {
+    fn recheck_found(&mut self, ix: &mut SearchIndex, answer: &mut Answer, looking: &Looking<'_>, folders: HashSet<(String, String)>) {
         if folders.is_empty() {
             return;
         }
@@ -278,7 +279,7 @@ impl Session {
                 Some((m, pos)) => {
                     let has_body = ix.doc(f.doc).is_some_and(|(_, b)| b);
                     answer.changed = true;
-                    if self.answers(query, &m, has_body, true, awaiting) {
+                    if self.answers(looking, &m, has_body) {
                         f.summary = m;
                         f.pos = pos;
                         kept.push(f);
@@ -295,33 +296,11 @@ impl Session {
         answer.found = kept;
     }
 
-    /// A message of the index, found when it answers the query (and isn't found already, nor
-    /// gone from its folder or from the search). `indexed`: the index found its words.
-    #[allow(clippy::too_many_arguments)]
-    fn look_at(
-        &mut self,
-        ix: &SearchIndex,
-        answer: &Answer,
-        lists: &mut Lists,
-        d: u32,
-        query: &Query,
-        indexed: bool,
-        awaiting: &HashSet<MessageKey>,
-    ) -> Option<Found> {
-        let (key, has_body) = ix.doc(d)?;
-        if answer.have.contains(key) || ix.is_gone(key) {
-            return None;
-        }
-        let key = key.clone();
-        let (m, pos) = self.look_up(lists, &key, ix.hint(d, &key))?;
-        self.answers(query, &m, has_body, indexed, awaiting).then_some(Found { summary: m, pos, doc: d })
-    }
-
-    /// Whether a message answers the query, its body read again only when the index can't settle
-    /// it.
-    fn answers(&mut self, query: &Query, m: &Summary, has_body: bool, indexed: bool, awaiting: &HashSet<MessageKey>) -> bool {
-        let body = if has_body && (query.needs_body() || !indexed) { self.words_of(&m.key) } else { None };
-        query.matches(&Doc { summary: m, body: body.as_deref(), indexed, awaiting: awaiting.contains(&m.key) })
+    /// Whether a message the index found for the query's words answers it, its body read again
+    /// only when the index can't settle it.
+    fn answers(&mut self, looking: &Looking<'_>, m: &Summary, has_body: bool) -> bool {
+        let body = if has_body && looking.query.needs_body() { self.words_of(&m.key) } else { None };
+        looking.query.matches(&Doc { summary: m, body: body.as_deref(), indexed: true, awaiting: looking.awaiting.contains(&m.key) })
     }
 
     /// A message as its folder's list has it now, and where: looked at where it was first, else
@@ -339,7 +318,7 @@ impl Session {
         st.messages.get(at).filter(|m| m.key == *key).map(|m| (m.clone(), at))
     }
 
-    /// The messages waiting for a reply, when the query asks about them (worked out once a call).
+    /// The messages waiting for a reply, when the query asks about them.
     fn awaiting_for(&mut self, query: &Query) -> HashSet<MessageKey> {
         if query.clauses.iter().any(|c| asks_awaiting(&c.term)) { self.awaiting_replies() } else { HashSet::new() }
     }
