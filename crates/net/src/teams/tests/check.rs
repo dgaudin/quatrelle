@@ -404,7 +404,10 @@ fn the_sweep_matches_only_the_sent_texts() {
     // The edited text comes only from a message the check knows: a lost send never carries it.
     assert!(!check::stray(&msg(ME, "Quatrelle check, please ignore (1/2, edited)", since), ME, since));
     assert!(!check::stray(&msg("u-ana", "Quatrelle check, please ignore (1/2)", since), ME, since));
-    assert!(!check::stray(&msg(ME, "Quatrelle check, please ignore (1/2)", since - 1), ME, since));
+    // Graph's front ends may disagree by a few seconds: up to 10 s before `since` still counts.
+    assert!(check::stray(&msg(ME, "Quatrelle check, please ignore (1/2)", since - 1), ME, since));
+    assert!(check::stray(&msg(ME, "Quatrelle check, please ignore (1/2)", since - 10_000), ME, since));
+    assert!(!check::stray(&msg(ME, "Quatrelle check, please ignore (1/2)", since - 10_001), ME, since));
     assert!(!check::stray(&msg(ME, "Quatrelle check, please ignore (1/2) and more", since), ME, since));
     let mut deleted = msg(ME, "Quatrelle check, please ignore (1/2)", since);
     deleted["deletedDateTime"] = serde_json::json!(rfc3339(since));

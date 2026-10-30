@@ -38,6 +38,9 @@ const FIRST: &str = "Quatrelle check, please ignore (1/2)";
 const EDITED: &str = "Quatrelle check, please ignore (1/2, edited)";
 const SECOND: &str = "Quatrelle check, please ignore (2/2)";
 const THUMBS_UP: &str = "\u{1f44d}";
+/// How far before the writes began the sweep looks (ms): Graph's front ends can disagree by a
+/// few seconds, and a lost send's message may carry a time just before the `Date` read.
+const SWEEP_SLACK: i64 = 10_000;
 /// Between two writes in the chat (Graph takes one a second per chat).
 const PACE: Duration = Duration::from_secs(1);
 /// The approved cadences: the chat list, the open chat, the chats active lately.
@@ -364,7 +367,8 @@ impl Check<'_> {
     /// How many were, and how many couldn't be.
     fn sweep(&mut self, chat: &str, since: Option<i64>, known: &[String]) -> std::result::Result<(usize, usize), String> {
         let since = since.ok_or_else(|| "no server time".to_string())?;
-        let page = self.client.messages(chat, Range::After(&rfc3339(since.saturating_sub(1000))), None).map_err(|e| why(&e))?;
+        let floor = since.saturating_sub(SWEEP_SLACK).saturating_sub(1000);
+        let page = self.client.messages(chat, Range::After(&rfc3339(floor)), None).map_err(|e| why(&e))?;
         let me = self.me.id.as_str();
         let stray: Vec<String> = page.items.iter().filter(|m| stray(m, me, since)).filter_map(id_of).filter(|id| !known.contains(id)).collect();
         let swept = stray.iter().filter(|id| self.delete(chat, id)).count();
@@ -676,15 +680,16 @@ fn why(e: &NetError) -> String {
 }
 
 /// Whether a message is one the check may have posted without knowing it: from the signed-in
-/// user (`me`), not deleted, made at or after `since`, with one of the two texts it posts
-/// exactly (never the edited one: only a message the check knows the id of is edited).
+/// user (`me`), not deleted, made after `since` or at most [`SWEEP_SLACK`] before it, with one of
+/// the two texts it posts exactly (never the edited one: only a message the check knows the id
+/// of is edited).
 pub(super) fn stray(m: &Value, me: &str, since: i64) -> bool {
     let text = m.pointer("/body/content").and_then(Value::as_str).unwrap_or_default().trim();
     let text = text.strip_prefix("<p>").and_then(|t| t.strip_suffix("</p>")).unwrap_or(text);
     m.pointer("/from/user/id").and_then(Value::as_str) == Some(me)
         && [FIRST, SECOND].contains(&text)
         && m.get("deletedDateTime").is_none_or(Value::is_null)
-        && m.get("createdDateTime").and_then(Value::as_str).and_then(ms_of).is_some_and(|t| t >= since)
+        && m.get("createdDateTime").and_then(Value::as_str).and_then(ms_of).is_some_and(|t| t >= since.saturating_sub(SWEEP_SLACK))
 }
 
 /// Whether a post that failed may have been made all the same: anything but a refusal said
