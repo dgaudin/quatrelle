@@ -1,7 +1,7 @@
 //! Joining an online meeting: a Teams one in a browser's app window (File › Options ›
 //! Applications says which browser).
 
-use quatrelle_engine::MEETINGS_PROFILE;
+use quatrelle_engine::{MEETINGS_PROFILE, is_profile_dir};
 
 use crate::*;
 
@@ -38,6 +38,9 @@ impl MailApp {
         if let Some(gone) = chosen.as_deref()
             && profile.is_none()
         {
+            // The setting comes from a file: said cut short, without control characters.
+            let gone: String = gone.chars().filter(|c| !c.is_control()).collect();
+            let gone = widgets::shorten(&gone, 40);
             let text =
                 tf!("The profile “{profile}” is no longer in {browser}; the meeting opens in the last profile used", profile = gone, browser = name);
             self.session.notice(text, false);
@@ -82,9 +85,10 @@ pub(crate) fn meeting_browser<'a>(chosen: Option<&str>, browsers: &'a [(String, 
 /// browser's `profiles`: `None`, the one the browser used last. Quatrelle's own
 /// ([`MEETINGS_PROFILE`]) is always named, the browser making it when it isn't there yet; any
 /// other only while the browser lists it, since naming a folder gone would make the browser
-/// create an empty profile in its place. "Join meeting" and File › Options both ask here.
+/// create an empty profile in its place. A folder that isn't one name is never named, whoever
+/// lists it. "Join meeting" and File › Options both ask here.
 pub(crate) fn meeting_profile<'a>(chosen: Option<&'a str>, profiles: &[BrowserProfile]) -> Option<&'a str> {
-    chosen.filter(|dir| *dir == MEETINGS_PROFILE || profiles.iter().any(|p| p.dir == *dir))
+    chosen.filter(|dir| is_profile_dir(dir) && (*dir == MEETINGS_PROFILE || profiles.iter().any(|p| p.dir == *dir)))
 }
 
 #[cfg(test)]

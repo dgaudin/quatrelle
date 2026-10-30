@@ -330,6 +330,39 @@ fn a_profile_gone_gives_way_to_the_last_used() {
     let last = a.session.notices.last();
     let said = "The profile “Profile 9” is no longer in Google Chrome; the meeting opens in the last profile used";
     assert!(last.is_some_and(|n| n.text == said), "{last:?}");
+    // A settings file damaged or edited by hand: the name is said cut short, without its control
+    // characters.
+    let long = format!("Wo\nrk{}", "é".repeat(300));
+    a.session.prefs.meeting_profile = Some(long);
+    a.act(crate::Action::OpenMeeting(TEAMS.into()));
+    assert_eq!(opened(&o).last(), Some(&format!("app /opt/chrome {TEAMS}")));
+    let short = format!("Work{}…", "é".repeat(35));
+    let said = format!("The profile “{short}” is no longer in Google Chrome; the meeting opens in the last profile used");
+    let last = a.session.notices.last();
+    assert!(last.is_some_and(|n| n.text == said), "{last:?}");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A profile folder that isn't one name (a path out of the browser's folder) is never named,
+/// though the services list it and the setting says it: the UI checks too, not only the parser
+/// and the launcher.
+#[test]
+fn a_doubtful_profile_is_never_named_or_offered() {
+    let profiles = [profile("Default", "Me", ""), profile("../x", "Evil", "")];
+    let (mut a, dir, o) = launching_with("meet-profile-doubtful", &[("Google Chrome", "/opt/chrome")], &profiles, false);
+    a.session.prefs.meeting_profile = Some("../x".into());
+    a.act(crate::Action::OpenMeeting(TEAMS.into()));
+    assert_eq!(opened(&o), [format!("app /opt/chrome {TEAMS}")]);
+    let said = "The profile “../x” is no longer in Google Chrome; the meeting opens in the last profile used";
+    let last = a.session.notices.last();
+    assert!(last.is_some_and(|n| n.text == said), "{last:?}");
+    // Options: shown as the last profile used, and not offered.
+    let ctx = egui::Context::default();
+    let tall = open_options(&ctx, &mut a);
+    let combo = settled_text_at(&ctx, &mut a, "The last profile used", tall).unwrap();
+    click_at(&ctx, &mut a, combo, 1, tall);
+    assert!(settled_text_at(&ctx, &mut a, "Me", tall).is_some(), "the list is open");
+    assert!(settled_text_at(&ctx, &mut a, "Evil", tall).is_none());
     let _ = std::fs::remove_dir_all(dir);
 }
 
