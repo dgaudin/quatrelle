@@ -447,3 +447,22 @@ fn a_body_that_comes_in_after_the_search_brings_its_message_in() {
     assert_eq!(listed(&s), BTreeSet::from([key]));
     done(s);
 }
+
+/// A folder synced again and again while a search is shown, faster than the answer looks at its
+/// messages, is queued once: what's waiting stays the folder's size, whatever the number of syncs.
+#[test]
+fn a_folder_synced_again_and_again_is_queued_once() {
+    let store = busy_store("busy-dedupe", 3, 1200);
+    read_but_needles(&store, 3);
+    let mut s = open(&store);
+    assert!(drive(&mut s, "is:unread", 100, |_, _| {}).is_some());
+    // A slice of one message: the answer looks at a few a call, far fewer than a sync queues.
+    s.run("search.run", &json!({"query": "is:unread", "index": 1})).unwrap();
+    for _ in 0..200 {
+        s.apply(Event::FolderChanged { account: "a1".into(), folder: "INBOX".into() });
+    }
+    assert!(s.search_queue_len() <= 1200, "queued: {} for a folder of 1200", s.search_queue_len());
+    assert!(drive(&mut s, "is:unread", 100, |_, _| {}).is_some_and(|n| n <= 3));
+    assert_eq!(s.list.len(), 36);
+    done(s);
+}
