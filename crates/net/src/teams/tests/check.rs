@@ -4,6 +4,7 @@
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use super::*;
+use crate::teams::check;
 
 fn opts() -> CheckOptions {
     CheckOptions { tenant: None, write_chat: None, hour: None, sleep: |_| {} }
@@ -388,4 +389,41 @@ fn check_hour_goes_on_past_a_failing_chat() {
     assert_eq!((reads("19:broken@thread.v2"), reads("19:b@thread.v2"), reads("19:c@thread.v2")), (1, 1, 1), "{:?}", t.message_reads);
     assert!(line(&lines, "hour, ").contains(", failed 1, "), "{lines:#?}");
     assert!(!line(&lines, "hour, ").contains("cut short"), "{lines:#?}");
+}
+
+#[test]
+fn the_sweep_matches_only_the_sent_texts() {
+    let since = T0;
+    let msg = |from: &str, text: &str, at: i64| {
+        serde_json::json!({"id": "1", "from": {"user": {"id": from}}, "body": {"contentType": "text", "content": text},
+            "createdDateTime": rfc3339(at), "deletedDateTime": null})
+    };
+    assert!(check::stray(&msg(ME, "Quatrelle check, please ignore (1/2)", since), ME, since));
+    assert!(check::stray(&msg(ME, "<p>Quatrelle check, please ignore (2/2)</p>", since + 1), ME, since));
+    // The edited text comes only from a message the check knows: a lost send never carries it.
+    assert!(!check::stray(&msg(ME, "Quatrelle check, please ignore (1/2, edited)", since), ME, since));
+    assert!(!check::stray(&msg("u-ana", "Quatrelle check, please ignore (1/2)", since), ME, since));
+    assert!(!check::stray(&msg(ME, "Quatrelle check, please ignore (1/2)", since - 1), ME, since));
+    assert!(!check::stray(&msg(ME, "Quatrelle check, please ignore (1/2) and more", since), ME, since));
+    let mut deleted = msg(ME, "Quatrelle check, please ignore (1/2)", since);
+    deleted["deletedDateTime"] = serde_json::json!(rfc3339(since));
+    assert!(!check::stray(&deleted, ME, since));
+}
+
+#[test]
+fn check_without_a_date_sweeps_nothing() {
+    // No `Date`: the check can't say when it began, so a lost send isn't looked for among the
+    // chat's messages (Graph's older times would let a real message in); it is said as left.
+    let chats =
+        r#"{"value": [{"id": "19:new@thread.v2", "chatType": "oneOnOne", "lastMessagePreview": {"createdDateTime": "2026-10-20T10:00:00Z"}}]}"#;
+    let lost = || b"HTTP/1.1 503 X\r\nContent-Length: 0\r\n\r\n".to_vec();
+    let (base, h) =
+        crate::http::tests::serve(vec![answer(200, ME_JSON), answer(200, chats), answer(200, r#"{"value": []}"#), lost(), lost(), answer(204, "")]);
+    let (c, me) = TeamsClient::connect(&base, "t").unwrap();
+    let mut lines = Vec::new();
+    let opts = CheckOptions { tenant: Some(TENANT.into()), ..write_opts() };
+    run_check(&c, &me, &opts, &mut |l| lines.push(l.to_string())).unwrap();
+    assert_eq!(line(&lines, "write, stray test messages swept:"), "write, stray test messages swept: no (no server time)");
+    assert_eq!(line(&lines, "write, test messages left undeleted:"), "write, test messages left undeleted: 2");
+    assert_eq!(h.join().unwrap().len(), 6, "no read of the chat for the sweep");
 }

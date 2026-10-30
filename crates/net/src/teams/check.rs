@@ -67,8 +67,7 @@ pub struct CheckOptions {
 /// Run the check, saying what it finds one line at a time. Refusals are said and the check goes
 /// on; it fails only when the token is refused from the start.
 pub fn run_check(client: &TeamsClient, me: &Me, opts: &CheckOptions, say: &mut dyn FnMut(&str)) -> Result<()> {
-    let started = client.server_time().and_then(|s| s.checked_mul(1000));
-    let mut ck = Check { client, me, opts, say, seen: None, started, sent: Vec::new() };
+    let mut ck = Check { client, me, opts, say, seen: None, sent: Vec::new() };
     let listed = ck.chats()?;
     let tally = ck.newest_messages(listed.newest.as_deref());
     ck.reactions_and_files(&tally);
@@ -90,8 +89,6 @@ struct Check<'a> {
     say: &'a mut dyn FnMut(&str),
     /// The newest time Graph wrote in what was read (milliseconds), for want of its `Date`.
     seen: Option<i64>,
-    /// Graph's clock when the check began (milliseconds), by its `Date`.
-    started: Option<i64>,
     /// The test messages posted (their ids).
     sent: Vec<String>,
 }
@@ -285,7 +282,11 @@ impl Check<'_> {
         // Sent and not yet deleted; and sends whose outcome isn't known (made or not, no id).
         let mut left: Vec<String> = Vec::new();
         let mut lost = 0usize;
-        let since = self.started.or(self.seen);
+        // When the writes began, by Graph's clock: what a lost send's message is made after. Its
+        // `Date` is needed: a time Graph wrote in what was read can be days old, and a window
+        // that wide could take in a real message. Without it there is no sweep at all (matching
+        // on ids instead adds nothing: the ids known are deleted by the clean-up already).
+        let since = self.client.server_time().and_then(|s| s.checked_mul(1000)).map(|d| self.seen.map_or(d, |t| t.max(d)));
         let first = self.send(chat, FIRST, "(1/2)", &mut left, &mut lost);
         match &first {
             Some((id, at)) => {
@@ -352,20 +353,13 @@ impl Check<'_> {
     }
 
     /// After a send whose outcome isn't known: the chat's newest messages that are the check's
-    /// own (from the signed-in user, with one of its texts, made since the check began), deleted.
+    /// own (from the signed-in user, with one of its texts, made since the writes began), deleted.
     /// How many were, and how many couldn't be.
     fn sweep(&mut self, chat: &str, since: Option<i64>, known: &[String]) -> std::result::Result<(usize, usize), String> {
         let since = since.ok_or_else(|| "no server time".to_string())?;
         let page = self.client.messages(chat, Range::After(&rfc3339(since.saturating_sub(1000))), None).map_err(|e| why(&e))?;
-        let ours = |m: &&Value| {
-            let text = m.pointer("/body/content").and_then(Value::as_str).unwrap_or_default().trim();
-            let text = text.strip_prefix("<p>").and_then(|t| t.strip_suffix("</p>")).unwrap_or(text);
-            m.pointer("/from/user/id").and_then(Value::as_str) == Some(self.me.id.as_str())
-                && [FIRST, EDITED, SECOND].contains(&text)
-                && m.get("deletedDateTime").is_none_or(Value::is_null)
-                && m.get("createdDateTime").and_then(Value::as_str).and_then(ms_of).is_some_and(|t| t >= since)
-        };
-        let stray: Vec<String> = page.items.iter().filter(ours).filter_map(id_of).filter(|id| !known.contains(id)).collect();
+        let me = self.me.id.as_str();
+        let stray: Vec<String> = page.items.iter().filter(|m| stray(m, me, since)).filter_map(id_of).filter(|id| !known.contains(id)).collect();
         let swept = stray.iter().filter(|id| self.delete(chat, id)).count();
         Ok((swept, stray.len().saturating_sub(swept)))
     }
@@ -615,6 +609,18 @@ fn why(e: &NetError) -> String {
         _ => "unexpected answer",
     }
     .into()
+}
+
+/// Whether a message is one the check may have posted without knowing it: from the signed-in
+/// user (`me`), not deleted, made at or after `since`, with one of the two texts it posts
+/// exactly (never the edited one: only a message the check knows the id of is edited).
+pub(super) fn stray(m: &Value, me: &str, since: i64) -> bool {
+    let text = m.pointer("/body/content").and_then(Value::as_str).unwrap_or_default().trim();
+    let text = text.strip_prefix("<p>").and_then(|t| t.strip_suffix("</p>")).unwrap_or(text);
+    m.pointer("/from/user/id").and_then(Value::as_str) == Some(me)
+        && [FIRST, SECOND].contains(&text)
+        && m.get("deletedDateTime").is_none_or(Value::is_null)
+        && m.get("createdDateTime").and_then(Value::as_str).and_then(ms_of).is_some_and(|t| t >= since)
 }
 
 /// Whether a post that failed may have been made all the same: anything but a refusal said
