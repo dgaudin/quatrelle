@@ -1779,3 +1779,4 @@ month	May	מאי
 	Open Teams meetings and calls in	לפתוח פגישות ושיחות Teams ב־
 	The default browser	דפדפן ברירת המחדל
 	Teams meetings open in a window of their own: Chrome, Chromium or Edge, which Teams needs for calls on Linux.	פגישות Teams נפתחות בחלון משלהן: Chrome, Chromium או Edge, שבהם Teams צריך לשיחות ב־Linux.
+	The profile “{profile}” is no longer in {browser}; the meeting opens in the last profile used	הפרופיל „{profile}” כבר לא קיים ב־{browser}; הפגישה תיפתח בפרופיל האחרון שהיה בשימוש

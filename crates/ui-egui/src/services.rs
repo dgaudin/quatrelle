@@ -214,8 +214,9 @@ pub trait Services {
     fn browser_profiles(&mut self, _program: &str) -> Vec<BrowserProfile> {
         Vec::new()
     }
-    /// Open a web address in a browser `program` as an app window of its own. The default can't.
-    fn open_app_window(&mut self, _program: &str, _url: &str) -> Result<(), String> {
+    /// Open a web address in a browser `program` as an app window of its own, in its `profile`
+    /// folder (`None`: the one the browser used last). The default can't.
+    fn open_app_window(&mut self, _program: &str, _profile: Option<&str>, _url: &str) -> Result<(), String> {
         Err("not available".into())
     }
     /// Open a message (its key) in a browser window of its own, as web mail does; `false` when windows are

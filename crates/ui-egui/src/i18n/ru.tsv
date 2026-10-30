@@ -1782,3 +1782,4 @@ month	May	Май
 	Open Teams meetings and calls in	Открывать собрания и звонки Teams в
 	The default browser	Браузер по умолчанию
 	Teams meetings open in a window of their own: Chrome, Chromium or Edge, which Teams needs for calls on Linux.	Собрания Teams открываются в отдельном окне: Chrome, Chromium или Edge — они нужны Teams для звонков в Linux.
+	The profile “{profile}” is no longer in {browser}; the meeting opens in the last profile used	Профиля «{profile}» больше нет в {browser}; собрание откроется в последнем использованном профиле
