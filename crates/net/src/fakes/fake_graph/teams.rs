@@ -92,6 +92,8 @@ pub(crate) struct FakeTeams {
     pub(crate) forbid_post: Vec<String>,
     /// The next n requests of a route (by route name) answered 500, then the route works again.
     pub(crate) fail_next: HashMap<String, u32>,
+    /// The next n requests of a route carried out, but answered 503 (the answer lost on the way).
+    pub(crate) answer_lost: HashMap<String, u32>,
     /// Every read of a chat's messages: (chat id, its `$filter` as sent, empty when none).
     pub(crate) message_reads: Vec<(String, String)>,
     /// Shared files' bytes, by the `contentUrl` an attachment carries.
@@ -476,7 +478,14 @@ impl Data {
             Some(r) => r,
             None => {
                 let input: Value = serde_json::from_slice(body).unwrap_or(Value::Null);
-                t.answer(name, &p, query, raw_path, &input, base)
+                let done = t.answer(name, &p, query, raw_path, &input, base);
+                match t.answer_lost.get_mut(name).filter(|n| **n > 0) {
+                    Some(n) => {
+                        *n -= 1;
+                        Reply::error(503, "ServiceUnavailable", "Done, but the answer was lost.")
+                    }
+                    None => done,
+                }
             }
         };
         reply.date = Some(t.now().div_euclid(1000));
