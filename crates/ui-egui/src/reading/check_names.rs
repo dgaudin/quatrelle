@@ -6,8 +6,8 @@ use quatrelle_engine::NameChoice;
 use super::*;
 
 /// The dialog over the field's window while a name waits for its person: the choice is answered
-/// to its field (`people.choose`).
-pub(crate) fn choice_dialog(ctx: &egui::Context, t: &Tokens, choice: &NameChoice, acts: &mut Vec<Action>) {
+/// to its field (`people.choose`). `true`: the user left the name as typed (Cancel, Escape).
+pub(crate) fn choice_dialog(ctx: &egui::Context, t: &Tokens, choice: &NameChoice, acts: &mut Vec<Action>) -> bool {
     let id = egui::Id::unique(("check-names", choice.field.window, choice.field.name));
     let picked_id = id.with(("picked", choice.token.as_str()));
     let mut picked: Option<usize> = ctx.data(|d| d.get_temp(picked_id)).flatten();
@@ -75,7 +75,11 @@ pub(crate) fn choice_dialog(ctx: &egui::Context, t: &Tokens, choice: &NameChoice
                 acts.push(Action::Run("people.choose", person));
             }
         }
-        Some(None) => acts.push(Action::Run("people.choose", field)),
+        Some(None) => {
+            acts.push(Action::Run("people.choose", field));
+            return true;
+        }
         None => {}
     }
+    false
 }

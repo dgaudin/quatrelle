@@ -1,7 +1,8 @@
 //! The contacts field's glue with the session. [`PeopleFields`] keeps every field's state by
 //! [`FieldId`] (the message's To, Cc, Bcc and Replies to; the Select Names dialog's rows), turns a
 //! field's text into pieces and the widget's events back into text and actions, asks the engine for
-//! suggestions, and holds the wait Send makes for the names still being resolved.
+//! suggestions, and holds the waits Send makes for the names still being resolved (one per
+//! message).
 //!
 //! The work is bounded as the engine's is (the search bug of 2026-10-30): a field's text is parsed
 //! when it changes (fed in, or the engine writing a name found), never on a frame where nothing
@@ -36,9 +37,9 @@ pub(crate) fn egui_id(field: FieldId) -> egui::Id {
     egui::Id::unique(("people-field", field.window, field.name))
 }
 
-/// A send held for the fields' names: the message, the command's parameters, and since when.
+/// A send held for the fields' names: the command's parameters, and since when (the clock
+/// restarts while a choice dialog is open).
 struct SendWait {
-    compose: u64,
     params: Value,
     since: f64,
 }
@@ -51,7 +52,8 @@ enum SendState {
     Waiting,
     /// An entry nothing can send to, and why.
     Stopped(String),
-    /// An entry left as typed with nothing to wait for (its choice cancelled): the send is off.
+    /// An entry left as typed with nothing to wait for, by the user's own doing (the choice
+    /// dialog cancelled): the send is off, with nothing to say.
     Cancelled,
 }
 
@@ -83,7 +85,11 @@ pub(crate) struct PeopleFields {
     fields: HashMap<FieldId, Field>,
     /// The field whose input has the keyboard.
     open: Option<FieldId>,
-    send_wait: Option<SendWait>,
+    /// The sends held, by message.
+    send_wait: HashMap<u64, SendWait>,
+    /// The names whose choice the user cancelled (the field and the name as typed): a send that
+    /// finds them unsettled stops quietly.
+    cancelled: HashSet<(FieldId, String)>,
     /// The messages being written as of the last frame (one gone takes its fields with it).
     windows: HashSet<u64>,
 }
@@ -265,7 +271,9 @@ impl Field {
                 }
             }
         }
-        if let Some(dir) = s.directory_account(account) {
+        if !self.expanding.is_empty()
+            && let Some(dir) = s.directory_account(account)
+        {
             self.settle_expansions(s, &dir);
         }
         let (revision, reading) = (s.contacts_revision(), s.contacts_pending());
@@ -360,6 +368,38 @@ impl Field {
         true
     }
 
+    /// Whether a piece is left to check: text with no error, or one the directory couldn't be
+    /// asked for (asked again, as the directory may be back).
+    fn needs_resolve(&self) -> bool {
+        self.st.pieces.iter().any(|p| matches!(p, Piece::Text { error: None | Some(PieceError::Unreached), .. }))
+    }
+
+    /// The pieces left to check, as a dialog's row hands them in (what's settled isn't asked again).
+    fn unresolved_text(&self) -> String {
+        let parts: Vec<&str> = self
+            .st
+            .pieces
+            .iter()
+            .filter_map(|p| match p {
+                Piece::Text { text, error: None | Some(PieceError::Unreached) } => Some(text.as_str()),
+                _ => None,
+            })
+            .collect();
+        parts.join("; ")
+    }
+
+    /// The errors of the pieces about to be asked again go: a name pending again isn't stopped on
+    /// what the directory said last time (the answer puts them back if nothing changed).
+    fn clear_errors(&mut self, kinds: &[PieceError]) {
+        for p in &mut self.st.pieces {
+            if let Piece::Text { error: error @ Some(_), .. } = p
+                && error.as_ref().is_some_and(|e| kinds.contains(e))
+            {
+                *error = None;
+            }
+        }
+    }
+
     fn add_chip(&mut self, who: Addressee) {
         if self.st.pieces.len() < MAX_ENTRIES {
             self.st.pieces.push(Piece::chip(who));
@@ -445,12 +485,13 @@ impl PeopleFields {
             self.open = None;
         }
         let mut changed = std::mem::take(&mut f.dirty);
-        let (mut opened, mut resolve) = (false, false);
+        let (mut opened, mut resolve, mut closed_any) = (false, false, false);
         for e in events {
             match e {
                 PeopleEvent::Changed => changed = true,
                 PeopleEvent::Closed(closed) => {
                     f.close(&closed);
+                    closed_any = true;
                     changed = true;
                 }
                 PeopleEvent::Take(k) => {
@@ -483,12 +524,19 @@ impl PeopleFields {
             f.close_input();
             changed = true;
         }
+        // Text closed with the input left empty (the field left, a name closed by `;`, a paste)
+        // is checked as Ctrl+K checks it; with something still being typed, the check waits for
+        // it (typing never asks the server). Ctrl+K checks whatever is there.
+        let ask = resolve || (closed_any && f.st.input.trim().is_empty() && f.needs_resolve());
+        if ask {
+            f.clear_errors(&[PieceError::Unreached]);
+        }
         if changed {
             *text = text_of(&f.st.pieces, &f.st.input);
             f.st.synced.clone_from(text);
         }
-        if resolve {
-            acts.push(Action::Run("people.resolve", resolve_params(field, account, text)));
+        if ask {
+            acts.push(Action::Run("people.resolve", resolve_params(field, account, &f.unresolved_text())));
         }
         if let Some(note) = &f.note {
             ui.horizontal(|ui| {
@@ -500,10 +548,21 @@ impl PeopleFields {
     }
 
     /// The choice dialog for a name several people fit in one of `names` of a window
-    /// (`check_names::choice_dialog`), when one waits.
-    pub(crate) fn choice_dialog(&self, ctx: &egui::Context, t: &Tokens, s: &Session, window: u64, names: &[&'static str], acts: &mut Vec<Action>) {
-        if let Some(choice) = names.iter().find_map(|name| s.name_choice_for(FieldId { window, name })) {
-            crate::reading::check_names::choice_dialog(ctx, t, choice, acts);
+    /// (`check_names::choice_dialog`), when one waits. A cancel there is the user's: a send held
+    /// for that name stops quietly.
+    pub(crate) fn choice_dialog(
+        &mut self,
+        ctx: &egui::Context,
+        t: &Tokens,
+        s: &Session,
+        window: u64,
+        names: &[&'static str],
+        acts: &mut Vec<Action>,
+    ) {
+        if let Some(choice) = names.iter().find_map(|name| s.name_choice_for(FieldId { window, name }))
+            && crate::reading::check_names::choice_dialog(ctx, t, choice, acts)
+        {
+            self.cancelled.insert((choice.field, choice.token.clone()));
         }
     }
 
@@ -553,9 +612,8 @@ impl PeopleFields {
         if self.open.is_some_and(|f| !self.fields.contains_key(&f)) {
             self.open = None;
         }
-        if self.send_wait.as_ref().is_some_and(|w| !live.contains(&w.compose)) {
-            self.send_wait = None;
-        }
+        self.send_wait.retain(|id, _| live.contains(id));
+        self.cancelled.retain(|(f, _)| live.contains(&f.window));
     }
 
     /// A message's own field brought up to date with the engine's text (parsed when it changed,
@@ -585,7 +643,8 @@ impl PeopleFields {
     /// send is held ([`PeopleFields::send_when_resolved`] says when it goes, or why it can't).
     pub(crate) fn gate_send(&mut self, s: &mut Session, params: &Value, now: f64) -> bool {
         let Some((id, account)) = s.compose.as_ref().filter(|c| !c.sending).map(|c| (c.id, c.account.clone())) else { return false };
-        self.send_wait = None;
+        self.send_wait.remove(&id);
+        self.cancelled.retain(|(f, _)| f.window != id);
         for name in COMPOSE_FIELDS {
             let field = FieldId { window: id, name };
             if self.fields.get_mut(&field).is_some_and(Field::close_input) {
@@ -595,6 +654,11 @@ impl PeopleFields {
                 self.write_back(s, field);
             }
             self.sync_compose(s, field, &account);
+            // Every name is asked again (an answer kept settles it at once): what the directory
+            // said last time doesn't stop a name it is being asked for now.
+            if let Some(f) = self.fields.get_mut(&field) {
+                f.clear_errors(&[PieceError::NotFound, PieceError::Unreached]);
+            }
             let _ = s.people_resolve(field, Some(&account), &Accepts::RECIPIENTS, None);
             self.sync_compose(s, field, &account);
             let groups: Vec<Addressee> = self
@@ -614,51 +678,70 @@ impl PeopleFields {
         match self.send_state(s, id) {
             SendState::Ready => false,
             _ => {
-                self.send_wait = Some(SendWait { compose: id, params: params.clone(), since: now });
+                self.send_wait.insert(id, SendWait { params: params.clone(), since: now });
                 true
             }
         }
     }
 
-    /// Each frame while a send is held: `Ok(Some((message, params)))` once every name is settled
-    /// and every group expanded, `Err(why)` when an entry can't be sent to or the directory hasn't
-    /// answered within [`SEND_WAIT_SECS`], `Ok(None)` while it waits (or when nothing is held).
-    pub(crate) fn send_when_resolved(&mut self, s: &mut Session, now: f64) -> Result<Option<(u64, Value)>, String> {
-        let Some((id, since)) = self.send_wait.as_ref().map(|w| (w.compose, w.since)) else { return Ok(None) };
-        let Some(account) = s.all_composes().find(|c| c.id == id).map(|c| c.account.clone()) else {
-            self.send_wait = None;
-            return Ok(None);
-        };
-        for name in COMPOSE_FIELDS {
-            self.sync_compose(s, FieldId { window: id, name }, &account);
+    /// Each frame while sends are held: for each message whose wait concluded, `Ok(params)` once
+    /// every name is settled and every group expanded, `Err(why)` when an entry can't be sent to
+    /// or the directory hasn't answered within [`SEND_WAIT_SECS`] (the clock doesn't run while a
+    /// choice dialog is open). A wait cancelled by the user concludes with nothing to say.
+    pub(crate) fn send_when_resolved(&mut self, s: &mut Session, now: f64) -> Vec<(u64, Result<Value, String>)> {
+        let mut out = Vec::new();
+        let ids: Vec<u64> = self.send_wait.keys().copied().collect();
+        for id in ids {
+            let Some(account) = s.all_composes().find(|c| c.id == id).map(|c| c.account.clone()) else {
+                self.send_wait.remove(&id);
+                continue;
+            };
+            for name in COMPOSE_FIELDS {
+                self.sync_compose(s, FieldId { window: id, name }, &account);
+            }
+            // A choice open: the user's time, not the directory's.
+            let choosing = COMPOSE_FIELDS.iter().any(|name| s.name_choice_for(FieldId { window: id, name }).is_some());
+            let Some(w) = self.send_wait.get_mut(&id) else { continue };
+            if choosing {
+                w.since = now;
+            }
+            let since = w.since;
+            let done = match self.send_state(s, id) {
+                SendState::Ready => self.send_wait.remove(&id).map(|w| Ok(w.params)),
+                SendState::Waiting if now - since >= SEND_WAIT_SECS => {
+                    self.send_wait.remove(&id);
+                    self.mark_unreached(s, id);
+                    Some(Err(tl!("The directory can't be reached").to_string()))
+                }
+                SendState::Waiting => None,
+                SendState::Stopped(why) => {
+                    self.send_wait.remove(&id);
+                    Some(Err(why))
+                }
+                SendState::Cancelled => {
+                    self.send_wait.remove(&id);
+                    None
+                }
+            };
+            if !self.send_wait.contains_key(&id) {
+                self.cancelled.retain(|(f, _)| f.window != id);
+            }
+            if let Some(r) = done {
+                out.push((id, r));
+            }
         }
-        match self.send_state(s, id) {
-            SendState::Ready => Ok(self.send_wait.take().map(|w| (w.compose, w.params))),
-            SendState::Waiting if now - since >= SEND_WAIT_SECS => {
-                self.send_wait = None;
-                self.mark_unreached(s, id);
-                Err(tl!("The directory can't be reached").to_string())
-            }
-            SendState::Waiting => Ok(None),
-            SendState::Stopped(why) => {
-                self.send_wait = None;
-                Err(why)
-            }
-            SendState::Cancelled => {
-                self.send_wait = None;
-                Ok(None)
-            }
-        }
+        out
     }
 
-    /// How long a held send has left before it gives up.
+    /// How long the held send nearest its end has left before it gives up.
     pub(crate) fn send_wait_left(&self, now: f64) -> Option<f64> {
-        self.send_wait.as_ref().map(|w| w.since + SEND_WAIT_SECS - now)
+        self.send_wait.values().map(|w| w.since + SEND_WAIT_SECS - now).min_by(f64::total_cmp)
     }
 
     /// Where a held send stands. A piece left as typed is settled by nothing but the engine: it
     /// waits while a name of its field waits on the directory or on its choice, whatever the
-    /// pending count alone would say.
+    /// pending count alone would say; with nothing to wait for, the send is off: quietly when the
+    /// user cancelled its choice, with a word otherwise (a choice evicted, a name a command left).
     fn send_state(&self, s: &Session, id: u64) -> SendState {
         let mut waiting = false;
         for name in COMPOSE_FIELDS {
@@ -675,7 +758,13 @@ impl PeopleFields {
                     Piece::Chip { .. } => {}
                     Piece::Text { text, error: Some(e) } => return SendState::Stopped(error_text(text, e)),
                     Piece::Text { error: None, .. } if pending => {}
-                    Piece::Text { error: None, .. } => return SendState::Cancelled,
+                    Piece::Text { text, error: None } => {
+                        return if self.cancelled.iter().any(|(f, t)| *f == field && t == text) {
+                            SendState::Cancelled
+                        } else {
+                            SendState::Stopped(tl!("Some names need checking before sending").to_string())
+                        };
+                    }
                 }
             }
         }

@@ -1808,6 +1808,7 @@ month	May	5월
 	The directory can't be reached	디렉터리에 연결할 수 없습니다
 	and others	외 다수
 	This list couldn't be expanded: {error}	이 목록을 확장할 수 없습니다: {error}
+	Some names need checking before sending	보내기 전에 확인해야 할 이름이 있습니다
 	Matched as typed	입력한 대로 비교
 	{name}, {kind}, remove with Delete	{name}, {kind}, Delete 키로 제거
 	{name}, {kind}, {why}, remove with Delete	{name}, {kind}, {why}, Delete 키로 제거
