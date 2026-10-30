@@ -21,8 +21,9 @@ owner on 2026-10-29):
 
 - "Join meeting" on a Teams meeting (the event dialog, the meeting window, wherever Quatrelle
   offers it) opens a separate window of Google Chrome, Chromium or Microsoft Edge in app mode:
-  no tabs, no address bar. It uses the browser's usual profile, so a Microsoft 365 sign-in
-  already there carries over, and a browser already running adds the window to itself.
+  no tabs, no address bar. It uses the profile chosen in Options (at first, the one the browser
+  used last; see [Profile](#profile)), so a Microsoft 365 sign-in already there carries over, and
+  a browser already running adds the window to itself.
 - Other meeting links (Zoom, Google Meet, Webex, GoTo, Jitsi, Whereby, Skype) keep opening as
   they do now, in the default browser (which hands them to their own apps).
 - File › Options › Applications has "Open Teams meetings and calls in": the Chromium-family
@@ -55,7 +56,7 @@ longer there falls back to the first found, then the default browser.
 
 ## How it's opened
 
-`Services::open_app_window(program, url) -> Result<(), String>` (the UI picks the program from
+`Services::open_app_window(program, profile, url) -> Result<(), String>` (the UI picks the program from
 `browsers()`): the desktop app runs `<program> --app=<url>` directly (`std::process::Command`, no shell), detached, without waiting.
 The browser's windows and processes are its own: Quatrelle doesn't watch or close them.
 
@@ -71,14 +72,55 @@ The Options › Applications card is desktop-only.
 The browser version (`quatrelle-web`) has no such service: Teams links open as other links do
 there.
 
+## Profile
+
+Added on 2026-10-30, approved by the owner. A Chromium browser opens an `--app` window in its
+**last-used profile**; with several profiles, one not signed in to Microsoft 365 made Teams join
+as an anonymous guest and the window stayed white.
+
+- **What the user sees.** Under "Open Teams meetings and calls in", while that is a Chromium-family
+  browser (not "The default browser"):
+  - a **Profile** combo: "The last profile used" (at first: the behaviour above), each of that
+    browser's profiles, labelled `name (account)` when a Google account is signed in to it, and
+    Quatrelle's own meetings profile, labelled "Meetings profile (made by Quatrelle)" whatever the
+    browser calls it. Every click runs `view.meetingProfile`, the entry already shown included.
+  - **Create a profile for meetings**, while the browser has no such profile and it isn't chosen:
+    it chooses it and opens `https://teams.microsoft.com/` in it as an app window, for the user to
+    sign in to Microsoft 365 once. The browser creates a profile folder it's asked for and names
+    it itself ("Person N"; no flag sets the name); the note under the button says it can be
+    renamed there.
+- **The setting.** `Prefs.meeting_profile: Option<String>`: `None`, the last-used profile; else a
+  profile folder. Command `view.meetingProfile {"dir": string|null}`; a folder must pass
+  `is_profile_dir` (1 to 255 bytes, no `/` or `\`, no control character, not `.` or `..`, no
+  space at either end). `MEETINGS_PROFILE = "Quatrelle"` is the folder Quatrelle has the browser
+  create.
+- **The profiles.** Each browser lists them in `<user data folder>/Local State`
+  (`profile.info_cache`: folder → `name`, `user_name`). The user data folder is a pure function
+  per platform: `$XDG_CONFIG_HOME` (a full path) or `~/.config`, then `google-chrome`,
+  `chromium`, `microsoft-edge`; `%LOCALAPPDATA%\Google\Chrome\User Data`, `…\Chromium\User Data`,
+  `…\Microsoft\Edge\User Data`; `~/Library/Application Support/Google/Chrome`, `…/Chromium`,
+  `…/Microsoft Edge`. The file is another program's: only read, a plain file of at most 8 MiB;
+  anything not as expected gives no profiles, folders failing `is_profile_dir` are left out, names
+  lose their control characters and are cut at 100 characters, at most 100 profiles, sorted by
+  name. Nothing else in that folder is read.
+- **Which profile.** `meeting_profile()`, beside `meeting_browser()`, used by Join and Options:
+  none chosen, no flag; `MEETINGS_PROFILE`, always that folder; another folder, only while the
+  browser lists it. A folder gone isn't passed (the browser would create an empty profile in its
+  place): the meeting opens in the last profile used, Join says so in a notice, and Options shows
+  "The last profile used".
+- **The launch.** `Services::open_app_window(program, profile, url)`: `--profile-directory=<folder>`
+  before `--app=<url>`; a profile failing `is_profile_dir` is refused before anything runs.
+  `Services::browser_profiles(program) -> Vec<BrowserProfile>` (default: none); Join reads them
+  fresh, Options when the File page opens and when another browser is chosen.
+
 ## Where it lives
 
 | Layer | What |
 |---|---|
 | `model` | `is_teams_link` beside `is_meeting_link` (pure, wasm) |
-| `engine` | `Prefs.meeting_browser: Option<String>` (the program chosen; `None`: first found; the empty string: the default browser); command `view.meetingBrowser {"path": string \| ""}` |
-| `ui-egui` | `Services::open_app_window(program, url)` (default: an error, so the caller opens the default browser), `Services::browsers() -> Vec<(String, String)>` (default: none); the "Join meeting" buttons push `Action::OpenMeeting(url)`, which picks app window or default browser; the Options › Applications card |
-| `apps/quatrelle` | the desktop `Services`: finding the browsers (the pure function over `PATH` and the known paths) and launching |
+| `engine` | `Prefs.meeting_browser: Option<String>` (the program chosen; `None`: first found; the empty string: the default browser); command `view.meetingBrowser {"path": string \| ""}`; `Prefs.meeting_profile`, `view.meetingProfile`, `MEETINGS_PROFILE`, `is_profile_dir` |
+| `ui-egui` | `Services::open_app_window(program, profile, url)` (default: an error, so the caller opens the default browser), `Services::browsers() -> Vec<(String, String)>` and `Services::browser_profiles(program) -> Vec<BrowserProfile>` (default: none); `meeting_browser()` and `meeting_profile()` in `app/meetings.rs`; the "Join meeting" buttons push `Action::OpenMeeting(url)`, which picks app window or default browser; the Options › Applications card |
+| `apps/quatrelle` | the desktop `Services`: finding the browsers (the pure function over `PATH` and the known paths), reading their profiles (`desktop/profiles.rs`) and launching |
 
 ## Never crash, privacy
 
@@ -100,6 +142,5 @@ there.
 
 ## Out of scope (for now)
 
-- A browser profile of Quatrelle's own (the usual profile is used).
 - Watching the call window, or telling Teams anything.
 - A1 and A2, each with its own spec.
