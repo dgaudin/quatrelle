@@ -121,6 +121,27 @@ fn candidates_from_a_number_on() {
     assert!(ix.candidates_from(&Query::parse("budget"), u32::MAX).is_empty());
 }
 
+/// A search looks again at a folder's messages only: the candidates numbered within a range,
+/// and nothing (never a panic) for an empty or reversed one.
+#[test]
+fn candidates_in_a_range() {
+    let mut ix = Index::new();
+    for d in 0..10u32 {
+        ix.add(d, if d % 3 == 0 { "storyboard review" } else { "budget story" });
+    }
+    let q = Query::parse("story");
+    assert_eq!(ix.candidates_in(&q, ..), ix.candidates(&q));
+    assert_eq!(ix.candidates_in(&q, 2..5).into_iter().collect::<Vec<_>>(), [2, 3, 4]);
+    assert_eq!(ix.candidates_in(&Query::parse("review"), 1..=6).into_iter().collect::<Vec<_>>(), [3, 6]);
+    assert_eq!(ix.candidates_in(&Query::parse("is:unread"), 8..20).into_iter().collect::<Vec<_>>(), [8, 9]);
+    #[allow(clippy::reversed_empty_ranges)]
+    let reversed = 7..3;
+    assert!(ix.candidates_in(&q, reversed.clone()).is_empty());
+    assert!(ix.candidates_in(&Query::parse("is:unread"), reversed).is_empty());
+    assert!(ix.candidates_in(&q, 4..4).is_empty());
+    assert_eq!(ix.candidates_in(&Query::parse("is:unread"), u32::MAX..).len(), 0);
+}
+
 /// The index keeps each word's documents sorted and once, whatever order they come in; plain
 /// words found through it need no body, while phrases, missing words and addresses do.
 #[test]
