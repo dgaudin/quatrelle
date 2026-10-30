@@ -34,6 +34,9 @@ const CLIENT_VAR: &str = "QUATRELLE_TEAMS_CLIENT_ID";
 const TENANT_VAR: &str = "QUATRELLE_TEAMS_TENANT";
 const USAGE: &str = "usage: quatrelle-cli teams check [--client ID] [--tenant ID-OR-DOMAIN] [--write CHAT] [--hour] [--call CHAT]";
 const CONSENT: &str = "Microsoft asks for consent to these permissions: see docs/teams.md, step 4";
+/// What means consent is needed: OAuth's codes, and Microsoft's (AADSTS65001 not consented,
+/// 65004 consent declined, 70011 a scope refused, 90094 admin consent required).
+const CONSENT_CODES: [&str; 6] = ["consent_required", "invalid_scope", "AADSTS65001", "AADSTS65004", "AADSTS70011", "AADSTS90094"];
 /// OAuth's error codes (RFC 6749, OpenID Connect), said as they come.
 const OAUTH_ERRORS: [&str; 13] = [
     "access_denied",
@@ -168,11 +171,20 @@ fn call_link(me: &str, upns: &[String]) -> Option<String> {
     launchable_link(&link).then_some(link)
 }
 
+/// Why [`call_link`] gave none.
+fn why_no_call(me: &str, upns: &[String]) -> &'static str {
+    if upns.iter().any(|u| !u.trim().is_empty() && !u.trim().eq_ignore_ascii_case(me.trim())) {
+        "the chat has too many members for a call link"
+    } else {
+        "nobody else in the chat has an address"
+    }
+}
+
 /// A failed sign-in, said without Microsoft's words (which can name the account): consent to
 /// ask for, or the error's codes.
 fn sign_in_error(e: &NetError) -> String {
     let NetError::Auth(text) = e else { return format!("sign-in: {e}") };
-    if ["consent_required", "AADSTS65001", "invalid_scope"].iter().any(|c| text.contains(c)) {
+    if CONSENT_CODES.iter().any(|c| text.contains(c)) {
         return CONSENT.into();
     }
     if text.contains("wasn't finished in time") {
@@ -216,7 +228,7 @@ fn check_with(
                     .collect();
                 let mine = if me.upn.is_empty() { me.mail.as_str() } else { me.upn.as_str() };
                 match call_link(mine, &upns) {
-                    None => "call: no (nobody else in the chat has an address)".into(),
+                    None => format!("call: no ({})", why_no_call(mine, &upns)),
                     Some(link) => match open(&link) {
                         Ok(()) => "call: opened".into(),
                         Err(e) => format!("call: no ({e})"),
@@ -248,14 +260,17 @@ fn sign_in_page(url: &str) -> Result<(), String> {
 
 /// Open an address in the system's browser, without a shell.
 fn launch(url: &str) -> Result<(), String> {
-    let opener = if cfg!(windows) {
-        "explorer"
+    // Windows: the URL handler itself (`explorer` can split an address at its commas, and a
+    // call link has them); the address goes as one argument, with no shell between.
+    let (opener, first): (&str, &[&str]) = if cfg!(windows) {
+        ("rundll32.exe", &["url.dll,FileProtocolHandler"])
     } else if cfg!(target_os = "macos") {
-        "open"
+        ("open", &[])
     } else {
-        "xdg-open"
+        ("xdg-open", &[])
     };
     let mut child = std::process::Command::new(opener)
+        .args(first)
         .arg(url)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())
@@ -318,6 +333,11 @@ mod tests {
         assert_eq!(call_link("me@contoso.example", &["me@contoso.example".to_string()]), None);
         assert_eq!(call_link("me@contoso.example", &[]), None);
         assert_eq!(call_link("me@contoso.example", &[String::new()]), None);
+        // A big group's link is too long to open: said as such, not as nobody to call.
+        let many: Vec<String> = (0..120).map(|i| format!("someone.with.a.long.name{i}@contoso.example")).collect();
+        assert_eq!(call_link("me@contoso.example", &many), None);
+        assert_eq!(why_no_call("me@contoso.example", &many), "the chat has too many members for a call link");
+        assert_eq!(why_no_call("me@contoso.example", &[]), "nobody else in the chat has an address");
     }
 
     #[test]
@@ -343,6 +363,12 @@ mod tests {
     fn consent_errors_point_to_step_4() {
         let consent = "Microsoft asks for consent to these permissions: see docs/teams.md, step 4";
         for text in [
+            // As `token_request` says them: the provider's name, then `error_description`.
+            "Microsoft Teams: AADSTS70011: The provided value for the input parameter 'scope' is not valid. Trace ID: x",
+            "Microsoft Teams: AADSTS90094: An administrator of Contoso has set a policy that prevents you from granting Quatrelle the permissions it is requesting.",
+            // As `authorize` says a refused redirect: its `error`, then the AADSTS code of its description.
+            "Microsoft Teams sign-in was cancelled (access_denied, AADSTS65004)",
+            "Microsoft Teams sign-in was cancelled (access_denied, AADSTS90094)",
             "Microsoft Teams: AADSTS65001: The user or administrator has not consented to use the application with ID 'x'.",
             "Microsoft Teams sign-in was cancelled (consent_required)",
             "Microsoft Teams: AADSTS70011: The provided request must include a 'scope' input parameter. (invalid_scope)",
