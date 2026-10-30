@@ -88,6 +88,9 @@ pub struct Data {
     pub schedule_asked: Vec<Value>,
     /// The one bearer token taken, when not [`TOKEN`] (a test renews it as tokens expire).
     pub token: Option<String>,
+    /// How long a request for a message's source (`$value`) waits before its token is checked:
+    /// what a sync saves before it asks for the sources is seen while the sync goes on.
+    pub source_delay: std::time::Duration,
     /// Set per request from its `Prefer` header; without `IdType="ImmutableId"` message ids
     /// are returned in the other (prefixed) form.
     asked_immutable: bool,
@@ -322,6 +325,10 @@ pub fn serve(data: Data) -> Server {
                 continue;
             }
             let (mut len, mut authorized, mut immutable) = (0usize, false, false);
+            if first.contains("/$value") {
+                let wait = shared.lock().unwrap().source_delay;
+                std::thread::sleep(wait);
+            }
             let bearer = format!("Bearer {}", shared.lock().unwrap().token.clone().unwrap_or_else(|| TOKEN.into()));
             loop {
                 let mut line = String::new();
