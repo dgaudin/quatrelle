@@ -397,9 +397,16 @@ impl Index {
 
     /// Documents containing a word starting with `prefix`.
     pub fn prefix(&self, prefix: &str) -> BTreeSet<u32> {
+        self.prefix_from(prefix, 0)
+    }
+
+    /// Documents numbered `from` on containing a word starting with `prefix` (each word's list
+    /// is sorted: the ones before are skipped, not read).
+    fn prefix_from(&self, prefix: &str, from: u32) -> BTreeSet<u32> {
         let mut out = BTreeSet::new();
         for (_, docs) in self.postings.range(prefix.to_string()..).take_while(|(k, _)| k.starts_with(prefix)) {
-            out.extend(docs.iter().copied());
+            let at = docs.partition_point(|&d| d < from);
+            out.extend(docs.get(at..).unwrap_or_default().iter().copied());
         }
         out
     }
@@ -534,13 +541,19 @@ impl Index {
     /// Candidates for a query: documents with every index word as a prefix of some word, or all
     /// documents when the query has no words (flag-only queries).
     pub fn candidates(&self, q: &Query) -> BTreeSet<u32> {
+        self.candidates_from(q, 0)
+    }
+
+    /// Candidates numbered `from` on: a search carried on while the index grows looks at the
+    /// documents added since it last looked, not at all of them again.
+    pub fn candidates_from(&self, q: &Query, from: u32) -> BTreeSet<u32> {
         let ws = q.index_words();
         if ws.is_empty() {
-            return self.docs.clone();
+            return self.docs.range(from..).copied().collect();
         }
         let mut acc: Option<BTreeSet<u32>> = None;
         for w in ws {
-            let hits = self.prefix(&w);
+            let hits = self.prefix_from(&w, from);
             acc = Some(match acc {
                 None => hits,
                 Some(a) => a.intersection(&hits).copied().collect(),
