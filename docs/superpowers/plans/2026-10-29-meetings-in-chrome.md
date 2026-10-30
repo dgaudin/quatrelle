@@ -129,7 +129,7 @@ for bad in ["https://teams.microsoft.com/meet/1 x", "https://teams.microsoft.com
 - Test: `crates/ui-egui/src/tests/meetings.rs`
 
 **Interfaces:**
-- Consumes: Task 2's `view.meetingBrowser`; Task 3's `Services::browsers` (read once per frame the page is drawn, through `UiState` set by the app each time Options opens — `st.browsers: Vec<(String, String)>`, filled in `MailApp` when `Action::Backstage(Page::Options)` runs).
+- Consumes: Task 2's `view.meetingBrowser`; Task 3's `Services::browsers` (read once per frame the page is drawn, through `UiState` set by the app — `st.browsers: Option<Vec<(String, String)>>`, filled the first frame the File page is open, by any route, and cleared when it closes).
 - Produces: a combo "Open Teams meetings and calls in" listing each browser's name and "The default browser"; picking one runs `view.meetingBrowser` with its program, or `""`.
 
 - [ ] **Step 1: Write the failing test** `the_options_choose_the_meeting_browser`: with `Launching` offering Chrome and Chromium, open Options, the combo shows "Google Chrome" (the first found, nothing chosen yet), click it, click "Chromium" → `prefs.meeting_browser == Some("/usr/bin/chromium")`; click "The default browser" → `Some("")`.

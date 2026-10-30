@@ -55,13 +55,18 @@ longer there falls back to the first found, then the default browser.
 
 ## How it's opened
 
-`Services::open_app_window(url) -> Result<(), String>`: the desktop app runs
-`<browser> --app=<url>` directly (`std::process::Command`, no shell), detached, without waiting.
+`Services::open_app_window(program, url) -> Result<(), String>` (the UI picks the program from
+`browsers()`): the desktop app runs `<program> --app=<url>` directly (`std::process::Command`, no shell), detached, without waiting.
 The browser's windows and processes are its own: Quatrelle doesn't watch or close them.
 
 Before running anything the URL is checked: `https://` or `http://` only, no whitespace or control
 characters, at most 2,048 bytes, and it must parse as a URL with a host. A link that fails is
 not opened and the user is told (a notice: "This meeting link can't be opened").
+
+Links clicked in the event and meeting dialogs (the Join buttons, "Links:", the notes' links) all take
+this path; links in a mail body don't.
+
+The Options › Applications card is desktop-only.
 
 The browser version (`quatrelle-web`) has no such service: Teams links open as other links do
 there.
@@ -72,7 +77,7 @@ there.
 |---|---|
 | `model` | `is_teams_link` beside `is_meeting_link` (pure, wasm) |
 | `engine` | `Prefs.meeting_browser: Option<String>` (the program chosen; `None`: first found; the empty string: the default browser); command `view.meetingBrowser {"path": string \| ""}` |
-| `ui-egui` | `Services::open_app_window` (default: `open_url`), `Services::browsers() -> Vec<(String, String)>` (default: none); the "Join meeting" buttons push `Action::OpenMeeting(url)`, which picks app window or default browser; the Options › Applications card |
+| `ui-egui` | `Services::open_app_window(program, url)` (default: an error, so the caller opens the default browser), `Services::browsers() -> Vec<(String, String)>` (default: none); the "Join meeting" buttons push `Action::OpenMeeting(url)`, which picks app window or default browser; the Options › Applications card |
 | `apps/quatrelle` | the desktop `Services`: finding the browsers (the pure function over `PATH` and the known paths) and launching |
 
 ## Never crash, privacy
