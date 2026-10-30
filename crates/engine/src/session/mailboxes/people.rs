@@ -21,15 +21,49 @@ pub(crate) struct People {
     pub(crate) rooms: HashMap<String, HashMap<String, String>>,
     /// When each account's room lists were last asked or answered, and whether that failed.
     pub(crate) rooms_asked: HashMap<String, (i64, bool)>,
+    /// The accounts whose room set comes from the server's lists (a failed ask leaves it as it
+    /// is), not from the calendar alone.
+    pub(crate) rooms_from_server: HashSet<String>,
+    /// The accounts with an ask out, and when it went: one at a time, whoever asks (an ask
+    /// unanswered for [`ROOMS_RETRY`] is given up).
+    pub(crate) rooms_out: HashMap<String, i64>,
 }
 
 impl Session {
-    /// Replace an account's room set with these rooms; what the book answers changed.
-    pub(crate) fn set_room_set(&mut self, account: &str, rooms: &[Room]) {
+    /// Replace an account's room set with these rooms (`from_server`: the server's lists gave
+    /// them); what the book answers changed.
+    pub(crate) fn set_room_set(&mut self, account: &str, rooms: &[Room], from_server: bool) {
         let set: HashMap<String, String> =
             rooms.iter().map(|r| (r.email.trim().to_ascii_lowercase(), r.name.clone())).filter(|(e, _)| !e.is_empty()).collect();
         self.people.rooms.insert(account.to_string(), set);
+        if from_server {
+            self.people.rooms_from_server.insert(account.to_string());
+        } else {
+            self.people.rooms_from_server.remove(account);
+        }
         self.contacts.changed();
+    }
+
+    /// An account is gone: so are its rooms.
+    pub(crate) fn forget_rooms(&mut self, account: &str) {
+        let had = self.people.rooms.remove(account).is_some();
+        self.people.rooms_asked.remove(account);
+        self.people.rooms_from_server.remove(account);
+        self.people.rooms_out.remove(account);
+        self.rooms.remove(account);
+        if had {
+            self.contacts.changed();
+        }
+    }
+
+    /// Ask the server for an account's room lists, unless an ask is already out.
+    pub(crate) fn ask_rooms(&mut self, account: &str) {
+        let now = self.clock.now;
+        if self.people.rooms_out.get(account).is_some_and(|&at| now.saturating_sub(at) < ROOMS_RETRY) {
+            return;
+        }
+        self.people.rooms_out.insert(account.to_string(), now);
+        self.jobs.push(Job::GetRooms { account: account.to_string() });
     }
 
     /// The name of a room, when the address is one of an account's rooms.
