@@ -49,12 +49,12 @@ pub fn alt_code_char(code: &str, ansi: u16, oem: u16) -> Option<char> {
         Ok(0) => return None,
         Ok(b) if code.starts_with('0') && b < 0x80 => char::from(b),
         Ok(b) if code.starts_with('0') => page_byte(&format!("windows-{ansi}"), b).or_else(|| page_byte("windows-1252", b))?,
-        Ok(b @ 0x01..=0x1F) => OEM_GLYPHS.get(usize::from(b - 1)).and_then(|u| char::from_u32(u32::from(*u)))?,
+        Ok(b @ 0x01..=0x1F) => b.checked_sub(1).and_then(|i| OEM_GLYPHS.get(usize::from(i))).and_then(|u| char::from_u32(u32::from(*u)))?,
         Ok(0x7F) => '\u{2302}',
         Ok(b) if b < 0x80 => char::from(b),
         Ok(b) => match oem {
             850 | 866 => page_byte(&format!("cp{oem}"), b)?,
-            _ => CP437.get(usize::from(b - 0x80)).and_then(|u| char::from_u32(u32::from(*u)))?,
+            _ => b.checked_sub(0x80).and_then(|i| CP437.get(usize::from(i))).and_then(|u| char::from_u32(u32::from(*u)))?,
         },
         Err(_) => char::from_u32(value)?,
     };
