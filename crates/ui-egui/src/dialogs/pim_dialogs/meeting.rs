@@ -12,19 +12,20 @@ use crate::dialogs::people_field::{MEETING_FIELDS, MEETING_WINDOWS, PeopleFields
 use crate::widgets::Groups;
 
 /// The window's contacts fields made ready before it's drawn (where the session can be changed:
-/// the window only reads it). Its account's rooms are asked once it invites or finds rooms, so
-/// that a room is known as one in every line. Required, Optional and Rooms are read from the
-/// form's texts; a room entered among the guests is booked, with a word under its line (or kept
-/// there, with why, when Rooms can't take it). While Select Attendees and Resources is open, its
-/// rows too, a room among their guests going to its Resources.
+/// the window only reads it). Its account's rooms are asked once it invites, finds rooms or opens
+/// Select Attendees and Resources, so that a room is known as one in every line. Required,
+/// Optional and Rooms are read from the form's texts; a room entered among the guests is booked,
+/// with a word under its line (or kept there, with why, when Rooms can't take it). While Select
+/// Attendees and Resources is open, its rows too, a room among their guests going to its
+/// Resources.
 pub(crate) fn prepare(f: &mut EventForm, s: &mut Session, people: &mut PeopleFields) {
     if !f.can_invite {
         return;
     }
     let account = f.account_id();
-    // The rooms are asked for where they're used, a meeting or the Room Finder (on Exchange, a
-    // request to the server): an appointment opened asks nothing.
-    if (f.inviting || f.finder.is_some()) && s.rooms_now(&account).is_none() {
+    // The rooms are asked for where they're used, a meeting, the Room Finder or Select Attendees
+    // and Resources (on Exchange, a request to the server): an appointment opened asks nothing.
+    if (f.inviting || f.finder.is_some() || f.attendees_book.is_some()) && s.rooms_now(&account).is_none() {
         let _ = s.request_rooms(&account, false);
     }
     let a = Some(account.as_str());
