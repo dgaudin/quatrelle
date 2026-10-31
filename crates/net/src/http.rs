@@ -17,6 +17,7 @@ mod redirect;
 mod streamed;
 pub use events::{BodyStream, EventStream, Sse, Streamed, open_events};
 use redirect::Chain;
+pub(crate) use redirect::{is_credential, same_origin};
 pub use streamed::{exchange_into, get_into};
 
 /// Longest header block accepted.
