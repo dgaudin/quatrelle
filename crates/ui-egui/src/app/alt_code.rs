@@ -7,7 +7,15 @@
 /// A code another key ended, while Alt is still held.
 const INTERRUPTED: &str = "-";
 
-/// The digits typed so far with Alt held, in a window.
+/// A window's code: the digits typed so far with Alt held, and the digit keys down now (one bit
+/// each), whose repeats add nothing.
+#[derive(Clone, Default)]
+struct Typed {
+    code: String,
+    held: u16,
+}
+
+/// Where a window's [`Typed`] is kept.
 fn typed(viewport: egui::ViewportId) -> egui::Id {
     egui::Id::unique("alt-code").with(viewport)
 }
@@ -24,21 +32,22 @@ pub fn alt_code_pages() -> (u16, u16) {
 pub fn alt_codes(ctx: &egui::Context, raw: &mut egui::RawInput, pages: (u16, u16)) {
     use egui::Key;
     let id = typed(raw.viewport_id);
-    let mut code: String = ctx.data(|d| d.get_temp(id)).unwrap_or_default();
+    let Typed { mut code, mut held } = ctx.data(|d| d.get_temp(id)).unwrap_or_default();
     let alt_only = |m: &egui::Modifiers| m.alt && !m.ctrl && !m.shift && !m.command && !m.mac_cmd;
     let digit = |k: Key| match k {
-        Key::Num0 => Some('0'),
-        Key::Num1 => Some('1'),
-        Key::Num2 => Some('2'),
-        Key::Num3 => Some('3'),
-        Key::Num4 => Some('4'),
-        Key::Num5 => Some('5'),
-        Key::Num6 => Some('6'),
-        Key::Num7 => Some('7'),
-        Key::Num8 => Some('8'),
-        Key::Num9 => Some('9'),
+        Key::Num0 => Some(0u8),
+        Key::Num1 => Some(1),
+        Key::Num2 => Some(2),
+        Key::Num3 => Some(3),
+        Key::Num4 => Some(4),
+        Key::Num5 => Some(5),
+        Key::Num6 => Some(6),
+        Key::Num7 => Some(7),
+        Key::Num8 => Some(8),
+        Key::Num9 => Some(9),
         _ => None,
     };
+    let bit = |d: u8| 1u16.checked_shl(u32::from(d)).unwrap_or(0);
     let mut out = Vec::with_capacity(raw.events.len());
     // A digit taken out just before: the text egui-winit sends right after its key is its own.
     let mut took_digit = false;
@@ -48,11 +57,26 @@ pub fn alt_codes(ctx: &egui::Context, raw: &mut egui::RawInput, pages: (u16, u16
         match &e {
             egui::Event::Key { key, pressed, repeat, modifiers, .. } if alt_only(modifiers) && digit(*key).is_some() => {
                 took_digit = *pressed;
-                // A held digit's repeat adds nothing (as on Windows); codes past seven digits
-                // name nothing, so collecting stops.
-                if let Some(d) = digit(*key).filter(|_| *pressed && !*repeat && code.len() < 8 && code != INTERRUPTED) {
-                    code.push(d);
+                let Some(d) = digit(*key) else { continue };
+                // A held digit's repeat adds nothing (as on Windows): egui-winit sends it as
+                // another press, so a press counts only after its key was let go. Codes past
+                // seven digits name nothing, so collecting stops.
+                let again = held & bit(d) != 0;
+                if *pressed {
+                    held |= bit(d);
+                } else {
+                    held &= !bit(d);
                 }
+                if *pressed && !again && !*repeat && code.len() < 8 && code != INTERRUPTED {
+                    code.push(char::from(b'0'.saturating_add(d)));
+                }
+            }
+            // A digit let go after Alt: it's down no more.
+            egui::Event::Key { key, pressed: false, .. } if digit(*key).is_some() => {
+                if let Some(d) = digit(*key) {
+                    held &= !bit(d);
+                }
+                out.push(e);
             }
             // Its digits' text, where a platform sends it with Alt held: never typed as digits,
             // also after another key ended the code.
@@ -76,13 +100,14 @@ pub fn alt_codes(ctx: &egui::Context, raw: &mut egui::RawInput, pages: (u16, u16
             }
             egui::Event::WindowFocused(false) => {
                 code.clear();
+                held = 0;
                 out.push(e);
             }
             _ => out.push(e),
         }
     }
     raw.events = out;
-    ctx.data_mut(|d| d.insert_temp(id, code));
+    ctx.data_mut(|d| d.insert_temp(id, Typed { code, held }));
 }
 
 #[cfg(test)]
@@ -132,10 +157,27 @@ mod tests {
                 assert!(!out.iter().any(|e| matches!(e, Event::Key { key: Key::Num0 | Key::Num1 | Key::Num2, .. })), "Alt+{digits}: {out:?}");
             }
         }
-        // A held digit's repeat adds nothing: Alt+0201 with the 2 held is still É.
-        let mut held = code("0201", false);
-        held.insert(4, Event::Key { key: Key::Num2, physical_key: Some(Key::Num2), pressed: true, repeat: true, modifiers: Modifiers::ALT });
-        assert_eq!(texts(&through(&ctx, held)), "É");
+    }
+
+    /// A digit held down adds itself once: egui-winit sends its repeats as more presses, with
+    /// `repeat: false` and their text (egui works the repeat out later, after the hook), so
+    /// Alt+0201 with the 2 held still types É, also when its repeats come in later frames.
+    #[test]
+    fn a_held_digit_counts_once() {
+        let ctx = egui::Context::default();
+        let two = |pressed| key(Key::Num2, pressed, Modifiers::ALT);
+        let mut held = vec![Event::ModifiersChanged(Modifiers::ALT), key(Key::Num0, true, Modifiers::ALT), key(Key::Num0, false, Modifiers::ALT)];
+        for _ in 0..3 {
+            held.extend([two(true), Event::Text("2".into())]);
+        }
+        let out = through(&ctx, held);
+        assert_eq!(texts(&out), "", "{out:?}");
+        // More repeats in the next frame, then the 2 let go, the 0 and the 1, Alt let go.
+        let mut rest = vec![two(true), Event::Text("2".into()), two(false)];
+        rest.extend(code("01", true).into_iter().skip(1));
+        assert_eq!(texts(&through(&ctx, rest)), "É");
+        // A digit pressed again after being let go counts again: Alt+0233 is é.
+        assert_eq!(texts(&through(&ctx, code("0233", true))), "é");
     }
 
     /// A code that names nothing types nothing: 0, a control character, a code too long, past
