@@ -1817,7 +1817,7 @@ month	May	mai
 	This isn't a room	Ce n’est pas une salle
 	Only people, lists and groups can be invited	On ne peut inviter que des personnes, des listes et des groupes
 	Send from a person, a shared mailbox or a list	Envoyez de la part d’une personne, d’une boîte aux lettres partagée ou d’une liste
-	{room} was moved to Rooms	{room} a été déplacé vers Salles
+	{room} was moved to Rooms	{room} est maintenant dans Salles
 	This list is no longer available	Cette liste n’est plus disponible
 	Checking names…	Vérification des noms…
-	{room} can't be booked: a meeting books {max} rooms at most	{room} ne peut pas être réservé : une réunion réserve {max} salles au plus
+	{room} can't be booked: a meeting books {max} rooms at most	Impossible de réserver {room} : une réunion réserve {max} salles au plus
