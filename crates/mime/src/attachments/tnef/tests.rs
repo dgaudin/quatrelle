@@ -584,3 +584,28 @@ fn a_winmail_dat_with_only_a_body_has_no_paperclip() {
     assert!(real(outlook_stream()));
     assert!(real(b"not a winmail.dat".to_vec()));
 }
+
+/// A reply quoting a winmail.dat's pictures reads the message once, not once per picture.
+#[test]
+fn quoting_a_winmail_dats_pictures_reads_it_once() {
+    let mut a = Vec::new();
+    let html = "<p>See</p><img src=\"cid:p1@x\"><img src=\"cid:p2@x\"><img src=\"cid:p3@x\">";
+    attr(&mut a, 1, ATT_MSG_PROPS, &props(&[(0x0102, PR_HTML, binary(html.as_bytes()))]));
+    for i in 1..=3 {
+        attr(&mut a, 2, ATT_REND_DATA, &[]);
+        attr(
+            &mut a,
+            2,
+            ATT_ATTACHMENT,
+            &props(&[(0x001E, PR_ATTACH_LONG_FILENAME, str8(&format!("p{i}.png"))), (0x001E, PR_ATTACH_CONTENT_ID, str8(&format!("p{i}@x")))]),
+        );
+        attr(&mut a, 2, ATT_DATA, format!("picture {i}").as_bytes());
+    }
+    let raw = outlook_message(stream(&a));
+    let mut p = crate::parse(&raw).unwrap_or_default();
+    TNEF_READ.with(|n| n.set(0));
+    let (pictures, used) = crate::quoted_pictures(&mut p, &raw);
+    assert_eq!(pictures.iter().map(|q| q.data.as_slice()).collect::<Vec<_>>(), [&b"picture 1"[..], b"picture 2", b"picture 3"]);
+    assert_eq!(used.len(), 3);
+    assert_eq!(TNEF_READ.with(|n| n.get()), 1);
+}
