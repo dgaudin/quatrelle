@@ -4,7 +4,7 @@
 //! calendar's, Open another mailbox's, a rule's and a Search Folder's), turns a field's text
 //! into pieces and the widget's events back into text and actions, asks the engine for
 //! suggestions, and holds the waits Send (or a dialog's OK) makes for the names still being
-//! resolved (one per window).
+//! resolved (one per window: a message's, a meeting's, or the open dialog's).
 //!
 //! The work is bounded as the engine's is (the search bug of 2026-10-30): a field's text is parsed
 //! when it changes (fed in, or the engine writing a name found), never on a frame where nothing
@@ -122,8 +122,8 @@ pub(crate) struct PeopleFields {
     /// The names whose choice the user cancelled (the field and the name as typed): a send that
     /// finds them unsettled stops quietly.
     cancelled: HashSet<(FieldId, String)>,
-    /// The windows open as of the last frame, messages' and meetings' (one gone takes its fields
-    /// with it).
+    /// The windows open as of the last frame, messages', meetings' and the open dialog's (one
+    /// gone takes its fields with it).
     windows: HashSet<u64>,
 }
 
@@ -446,7 +446,7 @@ impl PeopleFields {
 
     /// Whether something in the field stops it: a chip its place refuses, or text with an error.
     pub(crate) fn blocked(&self, field: FieldId) -> bool {
-        self.pieces(field).iter().any(|p| matches!(p, Piece::Chip { refused: Some(_), .. } | Piece::Text { error: Some(_), .. }))
+        self.pieces(field).iter().any(Piece::is_red)
     }
 
     /// An entry picked by name, as a book's button gives it: a chip (red when the place takes its

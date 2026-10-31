@@ -64,6 +64,12 @@ impl Piece {
     pub fn chip(who: Addressee) -> Piece {
         Piece::Chip { who, refused: None }
     }
+
+    /// Whether the entry is red: a chip its place refuses, or text with an error. It stops the
+    /// field's OK or Send until it's removed.
+    pub fn is_red(&self) -> bool {
+        matches!(self, Piece::Chip { refused: Some(_), .. } | Piece::Text { error: Some(_), .. })
+    }
 }
 
 /// A field's state between frames.

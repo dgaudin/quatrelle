@@ -8,7 +8,7 @@ use quatrelle_engine::model::Addressee;
 use super::names::{self, AddressSearch};
 use super::people_field::{DIALOG_WINDOWS, PeopleFields, accepts_of, dialog_field, egui_id};
 use super::*;
-use crate::look::people_field::{Piece, input_id};
+use crate::look::people_field::input_id;
 
 /// The address book, and the people whose calendars to open (the field's text).
 #[derive(Clone, Debug, Default)]
@@ -17,11 +17,6 @@ pub struct CalendarsForm {
     pub text: String,
     /// What the wait came to when it isn't about one entry (the directory not answering).
     pub error: Option<String>,
-}
-
-/// Whether an entry is red: refused by the place, or text with an error.
-fn red(p: &Piece) -> bool {
-    matches!(p, Piece::Chip { refused: Some(_), .. } | Piece::Text { error: Some(_), .. })
 }
 
 pub(super) fn draw(ui: &mut Ui, f: &mut CalendarsForm, s: &Session, people: &mut PeopleFields, t: &Tokens, acts: &mut Vec<Action>) -> bool {
@@ -58,7 +53,7 @@ pub(super) fn draw(ui: &mut Ui, f: &mut CalendarsForm, s: &Session, people: &mut
         ui.add_space(4.0);
         ui.label(RichText::new(tl!("Checking names…")).color(t.faint).small());
     }
-    let something = people.pieces(field).iter().any(|p| !red(p)) || !people.typing(field).trim().is_empty();
+    let something = people.pieces(field).iter().any(|p| !p.is_red()) || !people.typing(field).trim().is_empty();
     let ready = something && !held;
     let (ok, cancel) = buttons(ui, t, "Open", ready);
     if (ok || enter) && ready {
