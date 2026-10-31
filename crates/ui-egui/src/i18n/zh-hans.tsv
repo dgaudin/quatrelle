@@ -1814,6 +1814,9 @@ month	May	5月
 	This isn't a room	这不是会议室
 	Only people, lists and groups can be invited	只能邀请个人、列表和组
 	Send from a person, a shared mailbox or a list	请从个人、共享邮箱或列表发送
+	A distribution list's calendar can't be opened	无法打开通讯组列表的日历
+	Only a person's, a room's or a shared mailbox can be opened	只能打开个人、会议室或共享邮箱
+	A contact group has no address: expand it	联系人组没有地址：请将其展开
 	{room} was moved to Rooms	{room} 已移至“会议室”
 	This list is no longer available	此列表已不可用
 	Checking names…	正在检查名称…

@@ -1814,6 +1814,9 @@ month	May	5月
 	This isn't a room	これは会議室ではありません
 	Only people, lists and groups can be invited	招待できるのは個人、リスト、グループのみです
 	Send from a person, a shared mailbox or a list	個人、共有メールボックス、またはリストから送信してください
+	A distribution list's calendar can't be opened	配布リストの予定表は開けません
+	Only a person's, a room's or a shared mailbox can be opened	開けるのは個人、会議室、または共有メールボックスのみです
+	A contact group has no address: expand it	連絡先グループにはアドレスがありません。展開してください
 	{room} was moved to Rooms	{room} を会議室に移動しました
 	This list is no longer available	このリストは利用できなくなりました
 	Checking names…	名前を確認しています…

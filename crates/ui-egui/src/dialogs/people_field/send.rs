@@ -1,7 +1,7 @@
 //! Send and the contacts fields: a send held while its fields' names are resolved and its
-//! contact groups expanded — a message's ([`PeopleFields::gate_send`]) or a meeting's
-//! ([`PeopleFields::gate_meeting`]) — and what it comes to each frame
-//! ([`PeopleFields::send_when_resolved`]).
+//! contact groups expanded — a message's ([`PeopleFields::gate_send`]), a meeting's
+//! ([`PeopleFields::gate_meeting`]) or a dialog's OK ([`PeopleFields::gate_dialog`]) — and what
+//! it comes to each frame ([`PeopleFields::send_when_resolved`]).
 
 use quatrelle_engine::model::Addressee;
 use quatrelle_engine::{FieldId, Session};
@@ -9,17 +9,21 @@ use serde_json::Value;
 
 use super::field::{is_group, same_list};
 use super::{
-    COMPOSE_FIELDS, MEETING_FIELDS, MEETING_WINDOWS, PeopleFields, SEND_WAIT_SECS, accepts_of, compose_text, compose_text_mut, is_meeting_window,
+    COMPOSE_FIELDS, DIALOG_FIELDS, DIALOG_WINDOWS, MEETING_FIELDS, MEETING_WINDOWS, PeopleFields, SEND_WAIT_SECS, accepts_of, compose_text,
+    compose_text_mut, dialog_field, is_dialog_window, is_meeting_window,
 };
 use crate::look::people_field::{Piece, PieceError, error_text, text_of};
 
-/// A send held for the fields' names: the command's parameters (none for a meeting's: its caller
-/// builds the command from the form once it can go), since when (the clock restarts while a
-/// choice dialog is open), and the window's fields it waits on.
+/// A send held for the fields' names: the command's parameters (none for a meeting's or a
+/// dialog's: its caller builds the command from the form once it can go), since when (the clock
+/// restarts while a choice dialog is open), the window's fields it waits on, and whether it waits
+/// only on what's pending, never stopping on an entry (`lenient`: a dialog's OK that does what it
+/// can with each entry, as Add calendar does).
 pub(super) struct SendWait {
     params: Value,
     since: f64,
     fields: &'static [&'static str],
+    lenient: bool,
 }
 
 /// What a send held comes to.
@@ -64,7 +68,7 @@ impl PeopleFields {
     }
 
     /// Each contact group of the field asked for its members (a send needs their addresses).
-    fn expand_groups(&mut self, s: &mut Session, field: FieldId, account: &str) {
+    fn expand_groups(&mut self, s: &mut Session, field: FieldId, account: Option<&str>) {
         let groups: Vec<Addressee> = self
             .pieces(field)
             .iter()
@@ -75,17 +79,18 @@ impl PeopleFields {
             .collect();
         if let Some(f) = self.fields.get_mut(&field) {
             for who in &groups {
-                f.expand(s, Some(account), who);
+                f.expand(s, account, who);
             }
         }
     }
 
-    /// The send held for the window's `fields`, unless it can go now (`false`).
-    fn hold(&mut self, s: &Session, window: u64, params: Value, fields: &'static [&'static str], now: f64) -> bool {
-        match self.send_state(s, window, fields) {
+    /// The send held for the window's `fields`, unless it can go now (`false`); `lenient`, it
+    /// waits only on what's pending ([`SendWait`]).
+    fn hold(&mut self, s: &Session, window: u64, params: Value, fields: &'static [&'static str], lenient: bool, now: f64) -> bool {
+        match self.send_state(s, window, fields, lenient) {
             SendState::Ready => false,
             _ => {
-                self.send_wait.insert(window, SendWait { params, since: now, fields });
+                self.send_wait.insert(window, SendWait { params, since: now, fields, lenient });
                 true
             }
         }
@@ -116,23 +121,24 @@ impl PeopleFields {
             }
             let _ = s.people_resolve(field, Some(&account), accepts, None);
             self.sync_compose(s, field, &account);
-            self.expand_groups(s, field, &account);
+            self.expand_groups(s, field, Some(&account));
         }
-        self.hold(s, id, params.clone(), &COMPOSE_FIELDS, now)
+        self.hold(s, id, params.clone(), &COMPOSE_FIELDS, false, now)
     }
 
     /// Each frame while sends are held: for each window whose wait concluded, `Ok(params)` once
     /// every name is settled and every group expanded, `Err(why)` when an entry can't be sent to
     /// or the directory hasn't answered within [`SEND_WAIT_SECS`] (the clock doesn't run while a
-    /// choice dialog is open). A wait cancelled by the user concludes with nothing to say.
+    /// choice dialog is open). A wait cancelled by the user concludes with nothing to say. A
+    /// lenient wait concludes `Ok` once nothing is pending, whatever its entries are.
     pub(crate) fn send_when_resolved(&mut self, s: &mut Session, now: f64) -> Vec<(u64, Result<Value, String>)> {
         let mut out = Vec::new();
         let windows: Vec<u64> = self.send_wait.keys().copied().collect();
         for window in windows {
-            let Some(fields) = self.send_wait.get(&window).map(|w| w.fields) else { continue };
+            let Some((fields, lenient)) = self.send_wait.get(&window).map(|w| (w.fields, w.lenient)) else { continue };
             // A message's fields are its text in the engine, brought up to date here; a meeting's
-            // are its form's, made ready by its window each frame.
-            if !is_meeting_window(window) {
+            // and a dialog's are its form's, made ready by its window or dialog each frame.
+            if !is_meeting_window(window) && !is_dialog_window(window) {
                 let Some(account) = s.all_composes().find(|c| c.id == window).map(|c| c.account.clone()) else {
                     self.send_wait.remove(&window);
                     continue;
@@ -148,7 +154,7 @@ impl PeopleFields {
                 w.since = now;
             }
             let since = w.since;
-            let done = match self.send_state(s, window, fields) {
+            let done = match self.send_state(s, window, fields, lenient) {
                 SendState::Ready => self.send_wait.remove(&window).map(|w| Ok(w.params)),
                 SendState::Waiting if now - since >= SEND_WAIT_SECS => {
                     self.send_wait.remove(&window);
@@ -184,13 +190,17 @@ impl PeopleFields {
     /// waits while a name of its field waits on the directory or on its choice, whatever the
     /// pending count alone would say; with nothing to wait for, the send is off: quietly when the
     /// user cancelled its choice, with a word otherwise (a choice evicted, a name a command left).
-    fn send_state(&self, s: &Session, window: u64, fields: &[&'static str]) -> SendState {
+    /// `lenient`, only what's pending counts: an entry never stops it.
+    fn send_state(&self, s: &Session, window: u64, fields: &[&'static str], lenient: bool) -> SendState {
         let mut waiting = false;
         for &name in fields {
             let field = FieldId { window, name };
             let Some(f) = self.fields.get(&field) else { continue };
             let pending = s.people_pending(field) > 0 || s.name_choice_for(field).is_some();
             waiting |= pending || !f.expanding.is_empty();
+            if lenient {
+                continue;
+            }
             // The field shows at most 500 entries; nothing goes to part of what was meant.
             if f.has_losses() {
                 return SendState::Stopped(left_out_stop());
@@ -262,37 +272,76 @@ impl PeopleFields {
         self.send_wait.remove(&window);
         self.cancelled.retain(|(f, _)| f.window != window);
         for (name, line) in lines {
-            let field = FieldId { window, name };
-            let accepts = accepts_of(name);
-            // The line as the form holds it (parsed only when it changed), what's typed closed.
-            self.prepare_with(s, field, Some(account), accepts, Some(line.as_str()));
-            if let Some(f) = self.fields.get_mut(&field)
-                && f.close_input(accepts)
-            {
-                f.dirty = true;
-                self.write_line(field, line);
-                self.prepare_with(s, field, Some(account), accepts, Some(line.as_str()));
-            }
-            let Some(f) = self.fields.get_mut(&field) else { continue };
-            // Asked again, as a message's names are: last time's answer doesn't stop them now, nor
-            // a room the meeting couldn't book then (one may have been freed).
-            f.clear_errors(|e| matches!(e, PieceError::NotFound | PieceError::Unreached | PieceError::RoomsFull(_)));
-            let unresolved = f.unresolved_text();
-            if !unresolved.is_empty() {
-                let _ = s.people_resolve(field, Some(account), accepts, Some(&unresolved));
-                // What the check settled at once (an address, a name answered before), taken now.
-                self.prepare_with(s, field, Some(account), accepts, None);
-            }
-            self.write_line(field, line);
-            self.expand_groups(s, field, account);
+            self.gate_line(s, FieldId { window, name }, Some(account), line);
         }
-        self.hold(s, window, Value::Null, &MEETING_FIELDS, now)
+        self.hold(s, window, Value::Null, &MEETING_FIELDS, false, now)
+    }
+
+    /// One field whose text is its form's (a meeting's line, a dialog's field), as its Send or OK
+    /// goes: its typing closed and written back into `line` at once, the names left in it
+    /// checked (handed in: the text is the form's, not the engine's), and each contact group's
+    /// members asked for.
+    fn gate_line(&mut self, s: &mut Session, field: FieldId, account: Option<&str>, line: &mut String) {
+        let accepts = accepts_of(field.name);
+        // The line as the form holds it (parsed only when it changed), what's typed closed.
+        self.prepare_with(s, field, account, accepts, Some(line.as_str()));
+        if let Some(f) = self.fields.get_mut(&field)
+            && f.close_input(accepts)
+        {
+            f.dirty = true;
+            self.write_line(field, line);
+            self.prepare_with(s, field, account, accepts, Some(line.as_str()));
+        }
+        let Some(f) = self.fields.get_mut(&field) else { return };
+        // Asked again, as a message's names are: last time's answer doesn't stop them now, nor
+        // a room the meeting couldn't book then (one may have been freed).
+        f.clear_errors(|e| matches!(e, PieceError::NotFound | PieceError::Unreached | PieceError::RoomsFull(_)));
+        let unresolved = f.unresolved_text();
+        if !unresolved.is_empty() {
+            let _ = s.people_resolve(field, account, accepts, Some(&unresolved));
+            // What the check settled at once (an address, a name answered before), taken now.
+            self.prepare_with(s, field, account, accepts, None);
+        }
+        self.write_line(field, line);
+        self.expand_groups(s, field, account);
     }
 
     /// Meeting window `wid`'s Send held on its fields as they stand, nothing closed or asked
     /// again (its lines just written after [`PeopleFields::gate_meeting`] let it go: a room Rooms
     /// couldn't book is back among the guests, and the send stops on it). `false`: it can go.
     pub(crate) fn hold_meeting(&mut self, s: &Session, wid: u64, now: f64) -> bool {
-        self.hold(s, MEETING_WINDOWS | wid, Value::Null, &MEETING_FIELDS, now)
+        self.hold(s, MEETING_WINDOWS | wid, Value::Null, &MEETING_FIELDS, false, now)
+    }
+}
+
+/// A dialog's OK, held as a meeting's Send is: its field's text is the dialog's, handed in.
+impl PeopleFields {
+    /// The OK of dialog field `dialog_field(0, name)` asked (`name` one of [`DIALOG_FIELDS`],
+    /// `text` its text as the dialog holds it): its typing closed and written into `text`, the
+    /// names left in it checked, its contact groups' members asked for, as a meeting's line at
+    /// its Send. `false`: it can go now. `true`: held; [`PeopleFields::send_when_resolved`]
+    /// gives `(DIALOG_WINDOWS, Ok(Value::Null))` once it can go — the dialog then does what its
+    /// field's entries say — or why it can't. `lenient` waits only on what's pending (names on
+    /// the directory or a choice, a group's members) and never stops on an entry: the dialog
+    /// does what it can with each. Strict, an entry nothing can be done with stops it, as a
+    /// meeting's Send stops. A field no OK is held for (not one of [`DIALOG_FIELDS`]) has
+    /// nothing to wait on: `false`.
+    #[cfg_attr(not(test), expect(dead_code, reason = "the dialogs draw their fields from the next commit"))]
+    pub(crate) fn gate_dialog(
+        &mut self,
+        s: &mut Session,
+        name: &'static str,
+        account: Option<&str>,
+        text: &mut String,
+        lenient: bool,
+        now: f64,
+    ) -> bool {
+        // Each name's own slice, for the wait to keep.
+        static ONE_EACH: [&str; DIALOG_FIELDS.len()] = DIALOG_FIELDS;
+        let Some(fields) = ONE_EACH.iter().find(|n| **n == name).map(std::slice::from_ref) else { return false };
+        self.send_wait.remove(&DIALOG_WINDOWS);
+        self.cancelled.retain(|(f, _)| f.window != DIALOG_WINDOWS);
+        self.gate_line(s, dialog_field(0, name), account, text);
+        self.hold(s, DIALOG_WINDOWS, Value::Null, fields, lenient, now)
     }
 }
