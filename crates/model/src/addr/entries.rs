@@ -147,6 +147,17 @@ pub(super) fn is_group_ref_text(s: &str) -> bool {
     s.trim().starts_with(GROUP_PREFIX)
 }
 
+/// Everything that has an address (all but a contact group).
+const MATCHED_KINDS: [AddresseeKind; 7] = [
+    AddresseeKind::Person,
+    AddresseeKind::DistributionList,
+    AddresseeKind::Room,
+    AddresseeKind::Equipment,
+    AddresseeKind::SharedMailbox,
+    AddresseeKind::PublicFolder,
+    AddresseeKind::Microsoft365Group,
+];
+
 /// What a field takes: the kinds it accepts and whether it holds one entry or several.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Accepts {
@@ -155,11 +166,14 @@ pub struct Accepts {
     /// The kinds the field takes only when they were typed as a full address, never when picked
     /// by name (a person's address typed in Rooms is accepted; the same person picked is not).
     pub typed: &'static [AddresseeKind],
+    /// Text that nothing matches is valid as typed: no error on it, and nothing resolved unless
+    /// asked (a rule's or a Search Folder's field, which looks for text as much as for people).
+    pub as_typed: bool,
 }
 
 impl Accepts {
     /// To, Cc and Bcc: everyone, several.
-    pub const RECIPIENTS: Accepts = Accepts { kinds: &AddresseeKind::ALL, one: false, typed: &[] };
+    pub const RECIPIENTS: Accepts = Accepts { kinds: &AddresseeKind::ALL, one: false, typed: &[], as_typed: false };
 
     /// A meeting's required and optional attendees: people, lists, groups and shared mailboxes.
     pub const ATTENDEES: Accepts = Accepts {
@@ -172,6 +186,7 @@ impl Accepts {
         ],
         one: false,
         typed: &[],
+        as_typed: false,
     };
 
     /// A meeting's rooms: rooms and equipment, and a person or a shared mailbox only typed in full.
@@ -179,11 +194,35 @@ impl Accepts {
         kinds: &[AddresseeKind::Room, AddresseeKind::Equipment],
         one: false,
         typed: &[AddresseeKind::Person, AddresseeKind::SharedMailbox],
+        as_typed: false,
     };
 
     /// The From of a message: one person, shared mailbox or list.
-    pub const ONE_SENDER: Accepts =
-        Accepts { kinds: &[AddresseeKind::Person, AddresseeKind::SharedMailbox, AddresseeKind::DistributionList], one: true, typed: &[] };
+    pub const ONE_SENDER: Accepts = Accepts {
+        kinds: &[AddresseeKind::Person, AddresseeKind::SharedMailbox, AddresseeKind::DistributionList],
+        one: true,
+        typed: &[],
+        as_typed: false,
+    };
+
+    /// The calendars to add (Add calendar > From Address Book): people, rooms, equipment and shared
+    /// mailboxes. A list has no calendar.
+    pub const CALENDARS: Accepts = Accepts {
+        kinds: &[AddresseeKind::Person, AddresseeKind::Room, AddresseeKind::Equipment, AddresseeKind::SharedMailbox],
+        one: false,
+        typed: &[],
+        as_typed: false,
+    };
+
+    /// The mailbox to open (Open another mailbox): a person's, a shared one or a room's.
+    pub const MAILBOX: Accepts =
+        Accepts { kinds: &[AddresseeKind::Person, AddresseeKind::SharedMailbox, AddresseeKind::Room], one: true, typed: &[], as_typed: false };
+
+    /// A rule's or a Search Folder's people, several: whatever has an address, and text as typed.
+    pub const MATCHED: Accepts = Accepts { kinds: &MATCHED_KINDS, one: false, typed: &[], as_typed: true };
+
+    /// A rule's single person (Sent only to…): the kinds of [`Accepts::MATCHED`], one entry.
+    pub const MATCHED_ONE: Accepts = Accepts { kinds: &MATCHED_KINDS, one: true, typed: &[], as_typed: true };
 
     /// Whether the field takes the kind (`Unknown`, an address alone, always).
     pub fn takes(&self, kind: AddresseeKind) -> bool {
@@ -248,6 +287,25 @@ pub fn split_entries(input: &str) -> Vec<&str> {
         out.push(part);
     }
     out
+}
+
+/// A field's text as a rule or a Search Folder takes it: the entries of [`split_entries`]; one that
+/// reads as an address gives that address alone (`Doe, John <j@x.fr>` is `j@x.fr`), any other gives
+/// itself, with one pair of surrounding `"` removed (`@proginov.com`, `"Doe, John"`).
+pub fn matched(text: &str) -> Vec<String> {
+    split_entries(text)
+        .into_iter()
+        .map(|e| match super::parse_one(e) {
+            Some(a) => a.email,
+            None => e.strip_prefix('"').and_then(|r| r.strip_suffix('"')).unwrap_or(e).to_string(),
+        })
+        .collect()
+}
+
+/// The reverse of [`matched`]: the pieces joined by `"; "`, one holding `,` or `;` written `"…"`
+/// (its own `"` removed), so [`matched`] reads the same pieces back.
+pub fn matched_text(pieces: &[String]) -> String {
+    pieces.iter().map(|p| if p.contains([',', ';']) { format!("\"{}\"", p.replace('"', "")) } else { p.clone() }).collect::<Vec<_>>().join("; ")
 }
 
 #[cfg(test)]
@@ -346,5 +404,31 @@ mod tests {
             assert_eq!(serde_json::from_str::<AddresseeKind>(&format!("\"{}\"", k.code())).unwrap(), k);
             assert_eq!(AddresseeKind::from_code(k.code()), Some(k));
         }
+    }
+
+    #[test]
+    fn the_new_places_take_what_the_spec_says() {
+        use AddresseeKind::*;
+        assert!(Accepts::CALENDARS.takes(Room) && Accepts::CALENDARS.takes(SharedMailbox) && Accepts::CALENDARS.takes(Equipment));
+        assert!(!Accepts::CALENDARS.takes(DistributionList) && !Accepts::CALENDARS.takes(ContactGroup) && !Accepts::CALENDARS.takes(PublicFolder));
+        assert!(
+            Accepts::MAILBOX.one
+                && Accepts::MAILBOX.takes(Room)
+                && !Accepts::MAILBOX.takes(DistributionList)
+                && !Accepts::MAILBOX.takes(Microsoft365Group)
+        );
+        const { assert!(Accepts::MATCHED.as_typed && Accepts::MATCHED_ONE.as_typed && Accepts::MATCHED_ONE.one && !Accepts::MATCHED.one) };
+        assert!(Accepts::MATCHED.takes(PublicFolder) && Accepts::MATCHED.takes(DistributionList) && !Accepts::MATCHED.takes(ContactGroup));
+        const { assert!(!Accepts::RECIPIENTS.as_typed && !Accepts::ROOMS.as_typed) };
+    }
+
+    #[test]
+    fn a_rule_takes_addresses_alone_and_text_as_typed() {
+        assert_eq!(matched("Doe, John <j@x.fr>; @proginov.com"), vec!["j@x.fr", "@proginov.com"]);
+        assert_eq!(matched("\"Doe, John\"; Dupont"), vec!["Doe, John", "Dupont"]);
+        assert_eq!(matched(" ; "), Vec::<String>::new());
+        let v: Vec<String> = vec!["Doe, John".into(), "@proginov.com".into(), "j@x.fr".into(), "a;b".into()];
+        assert_eq!(matched_text(&v), "\"Doe, John\"; @proginov.com; j@x.fr; \"a;b\"");
+        assert_eq!(matched(&matched_text(&v)), v);
     }
 }

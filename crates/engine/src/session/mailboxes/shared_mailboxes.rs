@@ -33,6 +33,12 @@ impl Session {
         if !ok || email.contains('/') {
             return Err(CmdError::Params(format!("not an email address: {email}")));
         }
+        // Best effort, by the field's own rule: a kind the session knows that Open another mailbox
+        // doesn't take (a list, a folder, a group) is no mailbox. An address it doesn't know goes
+        // through, the server has the last word.
+        if !quatrelle_model::addr::Accepts::MAILBOX.takes(self.addressee_kind(Some(&account), &email)) {
+            return Err(CmdError::Params(format!("not a mailbox to open: {email}")));
+        }
         let Some(a) = self.account_mut(&account) else { return Err(CmdError::Params(format!("no account `{account}`"))) };
         if a.config.email.eq_ignore_ascii_case(&email) {
             return Err(CmdError::Params("that's this account's own mailbox".into()));

@@ -163,9 +163,9 @@ fn size(value: &str) -> Option<u64> {
     Some(bytes.min(1024f64.powi(4)) as u64)
 }
 
-/// A field that may hold a list: `from:ana,jun` is any of them.
-fn list_term(field: Field, value: &str) -> Option<Term> {
-    // Split at commas outside quotes: `"park, zoe",ann` is two.
+/// Split a list value at commas outside quotes: `"park, zoe",ann` is two. The parts keep their
+/// quotes and spaces.
+fn split_list(value: &str) -> Vec<String> {
     let mut parts = vec![String::new()];
     let mut quoted = false;
     for c in value.chars() {
@@ -178,6 +178,32 @@ fn list_term(field: Field, value: &str) -> Option<Term> {
             c => parts.last_mut().map(|p| p.push(c)).unwrap_or_default(),
         }
     }
+    parts
+}
+
+/// The people of a query that is only `from:a,"b c",…` (what "Mail from specific people" writes):
+/// each trimmed and unquoted, empties dropped. `None` when the query has anything else, or no one.
+pub fn from_people(query: &str) -> Option<Vec<String>> {
+    let tokens = split_tokens(query);
+    let [token] = tokens.as_slice() else { return None };
+    let (key, value) = token.split_once(':')?;
+    if !key.eq_ignore_ascii_case("from") {
+        return None;
+    }
+    let people: Vec<String> = split_list(value)
+        .iter()
+        .map(|p| {
+            let p = p.trim();
+            p.strip_prefix('"').map(|r| r.strip_suffix('"').unwrap_or(r)).unwrap_or(p).trim().to_string()
+        })
+        .filter(|p| !p.is_empty())
+        .collect();
+    (!people.is_empty()).then_some(people)
+}
+
+/// A field that may hold a list: `from:ana,jun` is any of them.
+fn list_term(field: Field, value: &str) -> Option<Term> {
+    let parts = split_list(value);
     if parts.len() < 2 {
         return text_term(field, value);
     }

@@ -265,3 +265,12 @@ fn a_folder_index_is_kept_and_read_back() {
     version[4] = FOLDER_VERSION + 1;
     assert!(FolderIndex::from_bytes("a1", "INBOX", &version).is_none());
 }
+
+#[test]
+fn a_people_search_gives_its_people_back() {
+    assert_eq!(from_people("from:zoe@studio.example,\"Ana Lima\",x"), Some(vec!["zoe@studio.example".to_string(), "Ana Lima".into(), "x".into()]));
+    assert_eq!(from_people("FROM:ana"), Some(vec!["ana".to_string()]));
+    assert_eq!(from_people("from:ana subject:invoice"), None);
+    assert_eq!(from_people("is:unread"), None);
+    assert_eq!(from_people("from:"), None);
+}

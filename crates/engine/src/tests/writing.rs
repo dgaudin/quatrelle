@@ -8,6 +8,7 @@ mod emoji;
 mod names;
 mod people_field;
 mod pictures;
+mod places;
 mod senders;
 
 #[test]
