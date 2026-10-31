@@ -315,7 +315,7 @@ impl PeopleFields {
         }
         if let Some(note) = &f.note {
             ui.horizontal(|ui| {
-                ui.add_space(people_field::label_w(label));
+                ui.add_space(people_field::label_w(ui, label));
                 ui.label(RichText::new(note).color(t.dim).small());
             });
         }
