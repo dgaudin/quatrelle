@@ -1,7 +1,7 @@
 //! Commands: calendar, people and notes.
 
 use super::*;
-use quatrelle_model::AddresseeKind;
+use quatrelle_model::addr::Accepts;
 
 pub(super) fn commands() -> Vec<CommandSpec> {
     vec![
@@ -352,16 +352,10 @@ pub(super) fn event_from(s: &Session, v: &Value, mut e: quatrelle_model::ical::C
     for (key, resource, optional) in [("attendees", false, false), ("optional", false, true), ("rooms", true, false)] {
         let Some(list) = p::str(v, key) else { continue };
         let people = quatrelle_model::addr::parse_list(list).map_err(|bad| CmdError::Params(format!("not an email address: {bad}")))?;
-        // Best effort: a list, a group or a folder the session knows is no room. An address it
-        // doesn't know goes through (the server has the last word).
-        if resource
-            && let Some(a) = people.iter().find(|a| {
-                matches!(
-                    s.addressee_kind(None, &a.email),
-                    AddresseeKind::DistributionList | AddresseeKind::ContactGroup | AddresseeKind::PublicFolder | AddresseeKind::Microsoft365Group
-                )
-            })
-        {
+        // Best effort, by the rooms field's own rule: a kind the session knows that Rooms doesn't
+        // take, even typed in full (a list, a group, a folder), is no room. An address it doesn't
+        // know goes through (the server has the last word).
+        if resource && let Some(a) = people.iter().find(|a| !Accepts::ROOMS.takes_typed(s.addressee_kind(None, &a.email))) {
             return Err(CmdError::Params(format!("not a room: {}", a.email)));
         }
         let before = std::mem::take(&mut e.attendees);
