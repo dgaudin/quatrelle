@@ -11,6 +11,8 @@
 //! Everything here is hostile input: lengths are checked against what's there, counts and
 //! nesting are capped, and a damaged stream gives what was read before the damage (or `None`).
 
+use std::collections::HashSet;
+
 use mail_builder::MessageBuilder;
 use mail_builder::headers::content_type::ContentType;
 use mail_builder::mime::MimePart;
@@ -313,16 +315,40 @@ fn to_eml(t: &Tnef) -> Option<Vec<u8>> {
         TnefBody::None => MimePart::new(ContentType::new("text/plain").attribute("charset", "utf-8"), String::new()),
     };
     let mut parts = vec![body];
+    let shown = shown_cids(&t.body, t.attachments.iter().filter_map(|f| f.content_id.as_deref()));
     for f in &t.attachments {
         let mut part = MimePart::new(ContentType::new(f.mime.clone()), f.data.clone());
         part = match &f.content_id {
-            Some(cid) if f.hidden || matches!(&t.body, TnefBody::Html(h) if h.contains(&format!("cid:{cid}"))) => part.inline().cid(cid.clone()),
+            Some(cid) if f.hidden || shown.contains(cid) => part.inline().cid(cid.clone()),
             _ => part.attachment(f.name.clone()),
         };
         parts.push(part);
     }
     b = if parts.len() == 1 { b.body(parts.remove(0)) } else { b.body(MimePart::new(ContentType::new("multipart/mixed"), parts)) };
     b.write_to_vec().ok()
+}
+
+/// Which of `cids` an HTML body shows (`cid:` references), in one pass over it: looking for each
+/// one through the whole body cost the files times the body (500 files, 16 MB).
+pub(crate) fn shown_cids<'a>(body: &TnefBody, cids: impl IntoIterator<Item = &'a str>) -> HashSet<String> {
+    let TnefBody::Html(html) = body else { return HashSet::new() };
+    let wanted: HashSet<&str> = cids.into_iter().collect();
+    let longest = wanted.iter().map(|c| c.len()).max().unwrap_or(0);
+    let mut shown = HashSet::new();
+    if longest == 0 {
+        return shown;
+    }
+    let delimiter = |b: &u8| b.is_ascii_whitespace() || matches!(b, b'"' | b'\'' | b'<' | b'>' | b'(' | b')' | b'\\');
+    for (i, _) in html.match_indices("cid:") {
+        // A reference longer than every Content-ID names none: look no further than that.
+        let rest = html.as_bytes().get(i + 4..).unwrap_or_default();
+        let window = rest.get(..rest.len().min(longest + 1)).unwrap_or_default();
+        let end = window.iter().position(delimiter).unwrap_or(window.len());
+        if let Some(c) = window.get(..end).and_then(|t| std::str::from_utf8(t).ok()).filter(|t| wanted.contains(t)) {
+            shown.insert(c.to_string());
+        }
+    }
+    shown
 }
 
 fn trim_nul(b: &[u8]) -> &[u8] {

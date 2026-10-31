@@ -4,8 +4,8 @@
 use std::borrow::Cow;
 
 use super::*;
-use tnef::is_tnef;
 pub use tnef::{Tnef, TnefBody, TnefFile, decompress_rtf, read_tnef, rtf_body};
+use tnef::{is_tnef, shown_cids};
 
 mod tnef;
 
@@ -32,10 +32,10 @@ pub(super) fn attached<'a>(m: &'a Message<'a>) -> (Vec<Attached<'a>>, TnefBody) 
                 body = t.body;
             }
             // A picture the body shows is in it, whether or not Outlook marked it hidden.
-            let shown = |cid: &str| matches!(&body, TnefBody::Html(h) if h.contains(&format!("cid:{cid}")));
+            let shown = shown_cids(&body, t.attachments.iter().filter_map(|f| f.content_id.as_deref()));
             for f in t.attachments {
                 let index = out.len();
-                let inline = f.content_id.as_deref().is_some_and(|c| f.hidden || shown(c));
+                let inline = f.content_id.as_deref().is_some_and(|c| f.hidden || shown.contains(c));
                 let name = attachment_name(Some(&f.name), &f.mime, &f.data, index);
                 let info = AttachmentInfo { index, name, mime: f.mime, size: f.data.len(), inline, content_id: f.content_id, content_location: None };
                 out.push(Attached { info, data: Cow::Owned(f.data) });
