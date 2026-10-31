@@ -40,6 +40,7 @@ impl From<NetError> for quatrelle_jmap::Error {
             NetError::Closed(m) => E::Closed(m),
             NetError::Smtp(m) | NetError::Later(m) => E::Send(m),
             NetError::Store(e) => E::Store(e),
+            e @ NetError::Untrusted { .. } => E::No(e.to_string()),
         }
     }
 }
@@ -49,7 +50,7 @@ pub struct Blocking;
 
 impl quatrelle_jmap::Http for Blocking {
     async fn send(&self, req: quatrelle_jmap::Request) -> quatrelle_jmap::Result<quatrelle_jmap::Response> {
-        let r = http::Request { method: req.method, url: req.url, headers: req.headers, body: req.body, max: req.max };
+        let r = http::Request { method: req.method, url: req.url, headers: req.headers, body: req.body, max: req.max, ..Default::default() };
         let resp = http::send(&r)?;
         Ok(quatrelle_jmap::Response { status: resp.status, body: resp.body })
     }

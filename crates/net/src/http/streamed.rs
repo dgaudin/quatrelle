@@ -26,7 +26,7 @@ pub fn get_into<W: Write>(req: &Request, open: impl FnOnce(&Response) -> Result<
                 chain.follow(&next);
                 url = next;
             }
-            None => return Ok(head),
+            None => return Ok(Response { url: Some(format!("{}{}", url.origin(), url.path)), ..head }),
         }
     }
     Err(NetError::Protocol("too many redirects".into()))
@@ -43,7 +43,7 @@ pub fn exchange_into<S: Read + Write, W: Write>(
 ) -> Result<Response> {
     write_request(s, req, url, false)?;
     let (status, headers, rest) = read_head(s)?;
-    let head = Response { status, headers, body: Vec::new(), head_at: None };
+    let head = Response { status, headers, body: Vec::new(), head_at: None, url: None };
     if redirect(&head).is_some() {
         return Ok(head);
     }
@@ -202,21 +202,23 @@ mod tests {
         got
     }
 
-    /// As [`send`]: the token and the cookie go with a redirect within the origin, and with none
-    /// that leaves it, nor with the redirect back to the first site after that.
+    /// As [`send`]: the token and the cookie go with a redirect within the site, and with none
+    /// that leaves it (here `localhost`, the same server under another site's name), nor with the redirect back to the first site after that.
     #[test]
-    fn a_redirect_to_another_origin_carries_no_credentials() {
+    fn a_redirect_to_another_site_carries_no_credentials() {
         let ok = || b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok".to_vec();
         let (a, ha) = serve(vec![b"HTTP/1.1 302 Found\r\nLocation: /two\r\n\r\n".to_vec(), ok()]);
         assert_eq!(fetch_with_credentials(&format!("{a}/one")), b"ok");
         let seen = ha.join().unwrap();
         assert!(seen.iter().all(|r| credentials_seen(r) == (true, true)), "{seen:?}");
         let (b, hb) = serve(vec![ok()]);
+        let b = b.replace("127.0.0.1", "localhost");
         let (a, ha) = serve(vec![format!("HTTP/1.1 307 Temporary Redirect\r\nLocation: {b}/file\r\n\r\n").into_bytes()]);
         assert_eq!(fetch_with_credentials(&format!("{a}/one")), b"ok");
         assert_eq!(credentials_seen(&ha.join().unwrap()[0]), (true, true));
         assert_eq!(credentials_seen(&hb.join().unwrap()[0]), (false, false));
         let ((la, a), (lb, b)) = (bind(), bind());
+        let b = b.replace("127.0.0.1", "localhost");
         let ha = serve_on(la, vec![format!("HTTP/1.1 302 Found\r\nLocation: {b}/two\r\n\r\n").into_bytes(), ok()]);
         let hb = serve_on(lb, vec![format!("HTTP/1.1 302 Found\r\nLocation: {a}/three\r\n\r\n").into_bytes()]);
         assert_eq!(fetch_with_credentials(&format!("{a}/one")), b"ok");
