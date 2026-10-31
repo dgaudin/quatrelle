@@ -228,3 +228,47 @@ fn an_attached_message_never_takes_the_count_below_zero() {
     assert_eq!(first.attachments.len() + second.attachments.len(), MAX_FILES);
     assert!(!budget.files_left());
 }
+
+/// A message with many winmail.dat parts, each with a picture: the body is looked through once for
+/// all of them (before: once a part, 13 s a pass for 100 parts with a 16 MB body).
+#[test]
+fn a_body_is_looked_through_once_for_every_parts_pictures() {
+    let mut first = Vec::new();
+    attr(&mut first, 1, ATT_MSG_PROPS, &props(&[(0x0102, PR_HTML, binary(b"<img src=\"cid:p7@x\">"))]));
+    let mut builder =
+        MessageBuilder::new().from("a@b.example").subject("x").text_body("").attachment("application/ms-tnef", "winmail.dat", stream(&first));
+    for i in 0..100 {
+        let mut a = Vec::new();
+        attr(&mut a, 2, ATT_REND_DATA, &[]);
+        attr(&mut a, 2, ATT_ATTACHMENT, &props(&[(0x001E, PR_ATTACH_CONTENT_ID, str8(&format!("p{i}@x")))]));
+        attr(&mut a, 2, ATT_DATA, b"x");
+        builder = builder.attachment("application/ms-tnef", "winmail.dat", stream(&a));
+    }
+    let raw = builder.write_to_vec().unwrap_or_default();
+    CID_SCANS.with(|n| n.set(0));
+    let p = crate::parse(&raw).unwrap_or_default();
+    assert_eq!(CID_SCANS.with(|n| n.get()), 1);
+    assert_eq!(p.attachments.len(), 100);
+    assert_eq!(p.attachments.iter().filter(|a| a.inline).map(|a| a.content_id.as_deref()).collect::<Vec<_>>(), [Some("p7@x")]);
+}
+
+/// A body of nothing but `cid:` and a Content-ID of 700 KB: each reference is read no further
+/// than `CID_MAX` and the search goes on after it, so the bytes read stay under the body's
+/// length (before: up to the longest Content-ID for each reference, 53 s for 700 KB); a
+/// Content-ID past `CID_MAX` is never shown.
+#[test]
+fn long_content_ids_keep_the_search_linear() {
+    let body = TnefBody::Html("cid:".repeat(256 << 10));
+    let long = "a".repeat(700 << 10);
+    CID_BYTES.with(|n| n.set(0));
+    assert!(shown_cids(&body, [long.as_str(), "b@x"]).is_empty());
+    let Some(len) = (match &body {
+        TnefBody::Html(h) => Some(h.len()),
+        _ => None,
+    }) else {
+        return;
+    };
+    assert!(CID_BYTES.with(|n| n.get()) <= len, "{} bytes read", CID_BYTES.with(|n| n.get()));
+    let body = TnefBody::Html(format!("<img src=\"cid:{long}\">"));
+    assert!(shown_cids(&body, [long.as_str()]).is_empty());
+}

@@ -10,6 +10,9 @@ thread_local! {
     pub(crate) static RTF_READ: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     /// winmail.dat parts read on this thread.
     pub(crate) static TNEF_READ: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    /// Passes over a body looking for its pictures, and the bytes of references read in them.
+    pub(crate) static CID_SCANS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    pub(crate) static CID_BYTES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 /// One attribute: level, id, length, data, checksum.
