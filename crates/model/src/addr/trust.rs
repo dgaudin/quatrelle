@@ -30,6 +30,12 @@ pub fn site(host: &str) -> String {
 /// `None` for an empty, over-long or unreadable one (spaces, control characters).
 pub fn url_host(url: &str) -> Option<String> {
     let url = url.trim();
+    // A WHATWG parser reads `\` as `/` and drops tabs and line breaks, so `https://good.com\@evil.com/`
+    // goes to good.com there but has the host evil.com here: anything that two parsers can read
+    // differently is unreadable.
+    if url.contains('\\') || url.chars().any(char::is_control) {
+        return None;
+    }
     let rest = match url.split_once("://") {
         Some((scheme, rest)) if !scheme.is_empty() && scheme.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.')) => rest,
         Some(_) => return None,
@@ -37,17 +43,16 @@ pub fn url_host(url: &str) -> Option<String> {
     };
     let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
     let hostport = authority.rsplit_once('@').map_or(authority, |(_, h)| h);
-    let host = if let Some(inner) = hostport.strip_prefix('[') {
+    if let Some(inner) = hostport.strip_prefix('[') {
         let (addr, after) = inner.split_once(']')?;
-        if !(after.is_empty() || after.starts_with(':')) || addr.parse::<Ipv6Addr>().is_err() {
-            return None;
-        }
-        format!("[{addr}]")
-    } else {
-        hostport.split(':').next().unwrap_or_default().to_string()
-    };
-    let ok = !host.is_empty() && host.len() <= MAX_HOST && !host.chars().any(|c| c.is_whitespace() || c.is_control());
-    ok.then_some(host)
+        let ok = (after.is_empty() || after.starts_with(':')) && addr.parse::<Ipv6Addr>().is_ok();
+        return ok.then(|| format!("[{addr}]"));
+    }
+    let host = hostport.split(':').next().unwrap_or_default();
+    // Letters, digits, `.`, `-`, `_` and non-ASCII only: no `%`, `@`, `\`, `;` or the like.
+    let char_ok = |c: char| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_') || (!c.is_ascii() && !c.is_whitespace() && !c.is_control());
+    let ok = !host.is_empty() && host.len() <= MAX_HOST && host.chars().all(char_ok);
+    ok.then(|| host.to_string())
 }
 
 /// The sites an account sends its credentials to.
@@ -144,6 +149,14 @@ mod tests {
             ("http://[::1/", None),
             ("http://[nope]/", None),
             ("://x.example/", None),
+            // Two parsers must agree: a WHATWG one sends these to good.com.
+            ("https://good.com\\@evil.com/", None),
+            ("https://evil.com\\.good.com/", None),
+            ("https://good.com\t@evil.com/", None),
+            ("https://good.com%2f@evil.com/", Some("evil.com")),
+            ("https://ev%69l.com/", None),
+            ("https://a;b.example/", None),
+            ("https://b\u{fc}cher.example/", Some("b\u{fc}cher.example")),
         ] {
             assert_eq!(url_host(url).as_deref(), want, "{url}");
         }
