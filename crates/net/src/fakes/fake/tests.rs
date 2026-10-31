@@ -12,6 +12,7 @@ mod hostile;
 mod idle;
 mod pool;
 mod search;
+mod sent;
 mod sync;
 
 /// The ids a `ServerRules` event carries.

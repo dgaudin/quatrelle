@@ -63,6 +63,9 @@ pub struct State {
     /// Mail delivered to the Inbox (this subject) when a command containing this text first
     /// comes: mail arriving at a set point of a sync.
     pub deliver_on: Option<(String, String)>,
+    /// Folders can only be made inside this one (`INBOX/`), as cPanel's and Courier's servers
+    /// keep every folder in the Inbox.
+    pub create_under: Option<String>,
 }
 
 impl State {
@@ -85,6 +88,7 @@ impl State {
             flood: None,
             trickle: std::time::Duration::ZERO,
             deliver_on: None,
+            create_under: None,
         }))
     }
 
