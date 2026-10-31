@@ -72,6 +72,11 @@ impl Session {
                 // not once the whole mailbox (public folders and all) has been walked — that
                 // takes minutes, and the Rules dialog would sit empty until then.
                 let connecting = matches!(status, SyncStatus::Syncing { .. }) && self.rules_asked.insert(account.clone());
+                // Its mail synced in full: an Inbox empty until now (so never said to have
+                // changed) is marked, so its first message counts as arriving, not as the backlog.
+                if matches!(status, SyncStatus::Online { .. }) {
+                    self.mark_inbox(&account);
+                }
                 if let Some(a) = self.account_mut(&account) {
                     a.status = status;
                 }
