@@ -169,11 +169,13 @@ fn text_piece(ui: &mut Ui, t: &Tokens, text: &str, error: Option<&PieceError>, a
     let (rect, resp) = slot(ui, id, PAD_LEFT + text_w + PAD_LEFT);
     let message = error.map(|e| error_text(text, e));
     // The reason is in what's read out when it names the text; otherwise the text is.
+    // A failure's reason doesn't name the text (the server's words, as said): it's read after it.
     let said = match (error, &message) {
-        (Some(PieceError::NotAnAddress | PieceError::NotFound | PieceError::RoomsFull(_)), Some(m)) => m.as_str(),
-        _ => text,
+        (Some(PieceError::NotAnAddress | PieceError::NotFound | PieceError::RoomsFull(_)), Some(m)) => m.clone(),
+        (Some(PieceError::Failed(_)), Some(m)) => format!("{text}: {m}"),
+        _ => text.to_string(),
     };
-    widgets::named(ui, &resp, said, true, Some(selected));
+    widgets::named(ui, &resp, &said, true, Some(selected));
     let pill = rect.shrink2(vec2(0.0, 2.0));
     if selected || resp.hovered() {
         ui.painter().rect_filled(pill, 4.0, if selected { t.accent_soft } else { t.hover_row });

@@ -1,5 +1,6 @@
 //! The dialogs' contacts fields, made ready before they draw: Add calendar's (with its address
-//! book), Open another mailbox's, a rule's conditions' and the Search Folder's, numbered apart as dialog window 0 ([`DIALOG_WINDOWS`]).
+//! book), Open another mailbox's, a rule's conditions' and the Search Folder's, numbered apart as
+//! dialog window 0 ([`DIALOG_WINDOWS`]).
 
 use quatrelle_engine::Session;
 
