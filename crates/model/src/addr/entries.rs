@@ -152,15 +152,48 @@ pub(super) fn is_group_ref_text(s: &str) -> bool {
 pub struct Accepts {
     pub kinds: &'static [AddresseeKind],
     pub one: bool,
+    /// The kinds the field takes only when they were typed as a full address, never when picked
+    /// by name (a person's address typed in Rooms is accepted; the same person picked is not).
+    pub typed: &'static [AddresseeKind],
 }
 
 impl Accepts {
     /// To, Cc and Bcc: everyone, several.
-    pub const RECIPIENTS: Accepts = Accepts { kinds: &AddresseeKind::ALL, one: false };
+    pub const RECIPIENTS: Accepts = Accepts { kinds: &AddresseeKind::ALL, one: false, typed: &[] };
+
+    /// A meeting's required and optional attendees: people, lists, groups and shared mailboxes.
+    pub const ATTENDEES: Accepts = Accepts {
+        kinds: &[
+            AddresseeKind::Person,
+            AddresseeKind::DistributionList,
+            AddresseeKind::ContactGroup,
+            AddresseeKind::Microsoft365Group,
+            AddresseeKind::SharedMailbox,
+        ],
+        one: false,
+        typed: &[],
+    };
+
+    /// A meeting's rooms: rooms and equipment, and a person or a shared mailbox only typed in full.
+    pub const ROOMS: Accepts = Accepts {
+        kinds: &[AddresseeKind::Room, AddresseeKind::Equipment],
+        one: false,
+        typed: &[AddresseeKind::Person, AddresseeKind::SharedMailbox],
+    };
+
+    /// The From of a message: one person, shared mailbox or list.
+    pub const ONE_SENDER: Accepts =
+        Accepts { kinds: &[AddresseeKind::Person, AddresseeKind::SharedMailbox, AddresseeKind::DistributionList], one: true, typed: &[] };
 
     /// Whether the field takes the kind (`Unknown`, an address alone, always).
     pub fn takes(&self, kind: AddresseeKind) -> bool {
         Accepts::taken_by(self.kinds, kind)
+    }
+
+    /// Whether the field takes the kind picked by name or typed in full: [`Accepts::takes`] or one
+    /// of the kinds it takes only typed.
+    pub fn takes_typed(&self, kind: AddresseeKind) -> bool {
+        self.takes(kind) || self.typed.contains(&kind)
     }
 
     /// Whether a field taking `kinds` (given at run time, as a command does) takes the kind: the
@@ -248,6 +281,24 @@ mod tests {
         assert!(parse_list(&g.text()).is_err(), "a group isn't an address to send to");
         assert!(Accepts::RECIPIENTS.takes(AddresseeKind::Unknown) && Accepts::RECIPIENTS.takes(AddresseeKind::ContactGroup));
         assert_eq!(Addressee::from(EmailAddress::new("Zoe", "z@x")).kind, AddresseeKind::Unknown);
+    }
+
+    #[test]
+    fn places_take_what_the_spec_says() {
+        use AddresseeKind::*;
+        assert!(Accepts::ROOMS.takes(Room) && Accepts::ROOMS.takes(Equipment));
+        assert!(!Accepts::ROOMS.takes(Person));
+        assert!(Accepts::ROOMS.takes_typed(Person) && Accepts::ROOMS.takes_typed(SharedMailbox));
+        assert!(!Accepts::ROOMS.takes_typed(DistributionList));
+        assert!(Accepts::ATTENDEES.takes(SharedMailbox) && Accepts::ATTENDEES.takes(Microsoft365Group));
+        assert!(!Accepts::ATTENDEES.takes(PublicFolder) && !Accepts::ATTENDEES.takes(Room));
+        assert!(!Accepts::ATTENDEES.takes_typed(Room), "attendees type nothing more");
+        assert_eq!([Accepts::ONE_SENDER.one, Accepts::ATTENDEES.one, Accepts::ROOMS.one], [true, false, false]);
+        assert!(!Accepts::ONE_SENDER.takes(Room) && Accepts::ONE_SENDER.takes(DistributionList));
+        assert!(!Accepts::ONE_SENDER.takes(ContactGroup));
+        for a in [Accepts::RECIPIENTS, Accepts::ATTENDEES, Accepts::ROOMS, Accepts::ONE_SENDER] {
+            assert!(a.takes(Unknown) && a.takes_typed(Unknown));
+        }
     }
 
     #[test]
