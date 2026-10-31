@@ -95,6 +95,9 @@ pub(crate) struct PeopleFields {
     fields: HashMap<FieldId, Field>,
     /// The field whose input has the keyboard.
     open: Option<FieldId>,
+    /// The fields drawn since the last [`PeopleFields::settle`]: one not drawn (its menu closed,
+    /// its message set aside) has let go of the keyboard.
+    drawn: HashSet<FieldId>,
     /// The sends held, by window (a message's id, or a meeting's [`MEETING_WINDOWS`] one).
     send_wait: HashMap<u64, SendWait>,
     /// The names whose choice the user cancelled (the field and the name as typed): a send that
@@ -213,6 +216,7 @@ impl PeopleFields {
         let input = FieldInput { id, label, hint, book, accepts, suggestions: &f.suggestions, can_expand, focus, pending: f.pending };
         let events = people_field::people_field(ui, t, &mut f.st, &input);
         let focused = ui.memory(|m| m.has_focus(people_field::input_id(id)));
+        self.drawn.insert(field);
         if focused {
             self.open = Some(field);
         } else if self.open == Some(field) {
@@ -329,14 +333,6 @@ impl PeopleFields {
         self.open
     }
 
-    /// A field not drawn this frame (its menu closed) has let go of the keyboard: it no longer
-    /// holds the window's keys (Ctrl+K is Check Names' again).
-    pub(crate) fn let_go(&mut self, field: FieldId) {
-        if self.open == Some(field) {
-            self.open = None;
-        }
-    }
-
     pub(crate) fn pieces(&self, field: FieldId) -> &[Piece] {
         self.fields.get(&field).map_or(&[], |f| f.st.pieces.as_slice())
     }
@@ -379,7 +375,9 @@ impl PeopleFields {
     /// Housekeeping each frame: the fields of windows gone go, here and in the engine (`live`:
     /// the messages' ids and the meetings' [`MEETING_WINDOWS`] ones), and so do a book's rows once
     /// it's closed (`open_books`: the window of an open Select Names, and of each meeting whose
-    /// Select Attendees is open); a send held for a window gone is off.
+    /// Select Attendees is open); a send held for a window gone is off. A field not drawn last
+    /// frame (its menu closed, its message set aside or hidden) has let go of the keyboard: it no
+    /// longer holds the window's keys, and Ctrl+K is Check Names' again.
     pub(crate) fn settle(&mut self, s: &mut Session, live: &HashSet<u64>, open_books: &HashSet<u64>) {
         for window in self.windows.difference(live) {
             s.forget_people_window(*window);
@@ -392,9 +390,10 @@ impl PeopleFields {
             s.forget_people_field(f);
         }
         self.fields.retain(|f, _| live.contains(&f.window) && (!book_row(f) || open_books.contains(&f.window)));
-        if self.open.is_some_and(|f| !self.fields.contains_key(&f)) {
+        if self.open.is_some_and(|f| !self.fields.contains_key(&f) || !self.drawn.contains(&f)) {
             self.open = None;
         }
+        self.drawn.clear();
         self.send_wait.retain(|id, _| live.contains(id));
         self.cancelled.retain(|(f, _)| live.contains(&f.window));
     }
