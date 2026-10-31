@@ -430,25 +430,36 @@ fn to_eml(t: &Tnef) -> Option<Vec<u8>> {
     b.write_to_vec().ok()
 }
 
+/// Longest Content-ID matched with a body's `cid:` references (Outlook's are under 100 bytes).
+const CID_MAX: usize = 1024;
+
 /// Which of `cids` an HTML body shows (`cid:` references), in one pass over it: looking for each
-/// one through the whole body cost the files times the body (500 files, 16 MB).
+/// one through the whole body cost the files times the body (500 files, 16 MB). Each reference is
+/// read up to [`CID_MAX`] bytes and the search goes on after it, so the pass stays linear however
+/// the body and the Content-IDs are made; longer Content-IDs are never shown.
 pub(crate) fn shown_cids<'a>(body: &TnefBody, cids: impl IntoIterator<Item = &'a str>) -> HashSet<String> {
-    let TnefBody::Html(html) = body else { return HashSet::new() };
-    let wanted: HashSet<&str> = cids.into_iter().collect();
-    let longest = wanted.iter().map(|c| c.len()).max().unwrap_or(0);
     let mut shown = HashSet::new();
-    if longest == 0 {
+    let TnefBody::Html(html) = body else { return shown };
+    let wanted: HashSet<&str> = cids.into_iter().filter(|c| c.len() <= CID_MAX).collect();
+    if wanted.is_empty() {
         return shown;
     }
+    #[cfg(test)]
+    tests::CID_SCANS.with(|n| n.set(n.get() + 1));
     let delimiter = |b: &u8| b.is_ascii_whitespace() || matches!(b, b'"' | b'\'' | b'<' | b'>' | b'(' | b')' | b'\\');
-    for (i, _) in html.match_indices("cid:") {
-        // A reference longer than every Content-ID names none: look no further than that.
-        let rest = html.as_bytes().get(i + 4..).unwrap_or_default();
-        let window = rest.get(..rest.len().min(longest + 1)).unwrap_or_default();
+    let bytes = html.as_bytes();
+    let mut at = 0;
+    while let Some(i) = bytes.get(at..).and_then(|h| h.windows(4).position(|w| w == b"cid:")) {
+        let start = at.saturating_add(i).saturating_add(4);
+        let rest = bytes.get(start..).unwrap_or_default();
+        let window = rest.get(..rest.len().min(CID_MAX + 1)).unwrap_or_default();
         let end = window.iter().position(delimiter).unwrap_or(window.len());
+        #[cfg(test)]
+        tests::CID_BYTES.with(|n| n.set(n.get() + end));
         if let Some(c) = window.get(..end).and_then(|t| std::str::from_utf8(t).ok()).filter(|t| wanted.contains(t)) {
             shown.insert(c.to_string());
         }
+        at = start.saturating_add(end);
     }
     shown
 }
