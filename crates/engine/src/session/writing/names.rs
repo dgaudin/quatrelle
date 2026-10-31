@@ -273,6 +273,8 @@ impl Session {
         // Rooms are an Exchange account's: those of the directory asked.
         let rooms_of = directory.clone().or_else(|| account.map(str::to_string));
         let (mut r, mut not_found) = (Resolved::default(), false);
+        // A place that keeps a name as typed (a rule's) looks for it as text: none is "not found".
+        let kept_as_typed = field.accepts().as_typed;
         let mut parts: Vec<String> = Vec::new();
         // A name typed again in the field is looked up once.
         let mut seen: HashMap<&str, Step> = HashMap::new();
@@ -304,7 +306,7 @@ impl Session {
                 Step::Left(why) => {
                     parts.push(token.to_string());
                     r.unresolved.push(token.to_string());
-                    not_found |= why == Outcome::NotFound;
+                    not_found |= !kept_as_typed && why == Outcome::NotFound;
                     why
                 }
                 Step::Waiting => {
@@ -444,7 +446,8 @@ impl Session {
                     self.offer_name(NameChoice { field: check.field, token: check.token, people });
                 }
                 Settled::No(None) => {
-                    missing = true;
+                    // Said, unless its place keeps it as typed (a rule's: looked for as text).
+                    missing |= !check.field.accepts().as_typed;
                     self.record_outcome(check.field, &check.token, Outcome::NotFound);
                 }
                 Settled::No(Some(why)) => self.record_outcome(check.field, &check.token, Outcome::Unreached(why)),

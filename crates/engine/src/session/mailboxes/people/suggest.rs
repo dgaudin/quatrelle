@@ -62,6 +62,26 @@ impl FieldId {
     pub fn parse(window: u64, name: &str) -> Option<FieldId> {
         FIELD_NAMES.iter().find(|n| **n == name).map(|&name| FieldId { window, name })
     }
+
+    /// What the field named `name` takes: the one place that says it (a name not among
+    /// [`FIELD_NAMES`]' places of their own: To's, everyone).
+    pub fn accepts_of(name: &str) -> &'static Accepts {
+        match name {
+            "required" | "optional" | "att-required" | "att-optional" => &Accepts::ATTENDEES,
+            "rooms" | "att-rooms" => &Accepts::ROOMS,
+            "from" => &Accepts::ONE_SENDER,
+            "calendar" => &Accepts::CALENDARS,
+            "mailbox" => &Accepts::MAILBOX,
+            "rule-one" => &Accepts::MATCHED_ONE,
+            "rule-any" | "search-people" => &Accepts::MATCHED,
+            _ => &Accepts::RECIPIENTS,
+        }
+    }
+
+    /// What this field takes ([`FieldId::accepts_of`]).
+    pub fn accepts(&self) -> &'static Accepts {
+        Self::accepts_of(self.name)
+    }
 }
 
 /// Where a suggestion comes from.
