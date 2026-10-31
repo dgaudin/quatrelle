@@ -460,3 +460,26 @@ fn open_mailbox_stops_on_a_list_and_says_why() {
     assert!(mailboxes(&a, &gal).is_empty(), "nothing opened");
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// Two people fit the name typed in Open another mailbox: OK asks which one is meant, and the
+/// mailbox picked opens.
+#[test]
+fn open_mailbox_asks_which_person_a_name_means_then_opens() {
+    let (mut a, dir) = app("open-mailbox-choice");
+    let gal = with_exchange(&mut a);
+    let ctx = egui::Context::default();
+    open_dialog(&ctx, &mut a, open_mailbox(&gal));
+    type_in(&ctx, &mut a, dialog_field(0, "mailbox"), "Dupont");
+    press(&ctx, &mut a, "Open");
+    assert!(a.ui.people.holding(DIALOG_WINDOWS), "held for the name");
+    directory_answers(&mut a, &gal, "Dupont", &[("Anne Dupont", "anne@contoso.example"), ("Marc Dupont", "marc@contoso.example")]);
+    let asked = "More than one person fits “Dupont”. Choose who you meant:";
+    assert!(settled_text_at(&ctx, &mut a, asked, SIZE).is_some(), "asked which one");
+    assert!(mailboxes(&a, &gal).is_empty(), "held for the choice");
+    let marc = settled_text_at(&ctx, &mut a, "Marc Dupont", SIZE).expect("Marc offered");
+    click_at(&ctx, &mut a, marc, 2, SIZE);
+    frames(&ctx, &mut a, 3);
+    assert_eq!(mailboxes(&a, &gal), ["marc@contoso.example"]);
+    assert!(a.ui.dialog.is_none(), "opened, and the dialog closed");
+    let _ = std::fs::remove_dir_all(dir);
+}
