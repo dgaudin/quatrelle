@@ -11,17 +11,19 @@ use super::*;
 /// a body cut short is an error, after what came of it was written.
 pub fn get_into<W: Write>(req: &Request, open: impl FnOnce(&Response) -> Result<Option<W>>) -> Result<Response> {
     let mut url = Url::parse(&req.url)?;
+    let mut chain = Chain::new(req, &url);
     let mut open = Some(open);
     for _ in 0..=MAX_REDIRECTS {
         let sock = stream::tcp(&url.host, url.port)?;
         let mut s = if url.https { stream::tls(sock, &url.host)? } else { Stream::Plain(sock) };
-        let head = exchange_into(&mut s, req, &url, |head| open.take().map_or(Ok(None), |open| open(head)))?;
+        let head = exchange_into(&mut s, chain.current(), &url, |head| open.take().map_or(Ok(None), |open| open(head)))?;
         match redirect(&head) {
             Some(loc) => {
                 let next = url.join(loc)?;
                 if url.https && !next.https {
                     return Err(NetError::Tls("redirected from https to http".into()));
                 }
+                chain.follow(&next);
                 url = next;
             }
             None => return Ok(head),
@@ -152,7 +154,7 @@ impl<S: Read> Ahead<'_, S> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::tests::serve;
+    use super::super::tests::{bind, credentials_seen, serve, serve_on};
     use super::*;
 
     fn fetch(url: &str, max: usize) -> (Result<Response>, Vec<u8>) {
@@ -191,5 +193,37 @@ mod tests {
         assert_eq!(r.status, 404);
         let seen = h.join().unwrap();
         assert!(seen[1].starts_with("GET /file "), "redirect followed: {}", seen[1]);
+    }
+
+    fn fetch_with_credentials(url: &str) -> Vec<u8> {
+        let mut got = Vec::new();
+        let req = Request::get(url, 1000).header("Authorization", "Bearer x").header("cookie", "s=1");
+        get_into(&req, |_| Ok(Some(&mut got))).unwrap();
+        got
+    }
+
+    /// As [`send`]: the token and the cookie go with a redirect within the origin, and with none
+    /// that leaves it, nor with the redirect back to the first site after that.
+    #[test]
+    fn a_redirect_to_another_origin_carries_no_credentials() {
+        let ok = || b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok".to_vec();
+        let (a, ha) = serve(vec![b"HTTP/1.1 302 Found\r\nLocation: /two\r\n\r\n".to_vec(), ok()]);
+        assert_eq!(fetch_with_credentials(&format!("{a}/one")), b"ok");
+        let seen = ha.join().unwrap();
+        assert!(seen.iter().all(|r| credentials_seen(r) == (true, true)), "{seen:?}");
+        let (b, hb) = serve(vec![ok()]);
+        let (a, ha) = serve(vec![format!("HTTP/1.1 307 Temporary Redirect\r\nLocation: {b}/file\r\n\r\n").into_bytes()]);
+        assert_eq!(fetch_with_credentials(&format!("{a}/one")), b"ok");
+        assert_eq!(credentials_seen(&ha.join().unwrap()[0]), (true, true));
+        assert_eq!(credentials_seen(&hb.join().unwrap()[0]), (false, false));
+        let ((la, a), (lb, b)) = (bind(), bind());
+        let ha = serve_on(la, vec![format!("HTTP/1.1 302 Found\r\nLocation: {b}/two\r\n\r\n").into_bytes(), ok()]);
+        let hb = serve_on(lb, vec![format!("HTTP/1.1 302 Found\r\nLocation: {a}/three\r\n\r\n").into_bytes()]);
+        assert_eq!(fetch_with_credentials(&format!("{a}/one")), b"ok");
+        let (seen_a, seen_b) = (ha.join().unwrap(), hb.join().unwrap());
+        assert_eq!(credentials_seen(&seen_a[0]), (true, true));
+        assert_eq!(credentials_seen(&seen_b[0]), (false, false));
+        assert!(seen_a[1].starts_with("GET /three "), "{}", seen_a[1]);
+        assert_eq!(credentials_seen(&seen_a[1]), (false, false), "back on the first site, still none: {}", seen_a[1]);
     }
 }
