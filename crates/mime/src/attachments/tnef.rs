@@ -298,9 +298,12 @@ fn read_at(data: &[u8], depth: u8, budget: &mut Budget, want_body: bool) -> Opti
             budget.cut = true;
             break;
         }
-        if let Some(f) = file(f, i, oem, cp, depth, budget) {
-            budget.files -= 1;
-            attachments.push(f);
+        // Counted before it's read: an attached message counts its own files meanwhile, and the
+        // last one left must stay this one's.
+        budget.files -= 1;
+        match file(f, i, oem, cp, depth, budget) {
+            Some(f) => attachments.push(f),
+            None => budget.files += 1,
         }
     }
     let (from_name, from_email, date) = sender_and_date(&msg, cp);
