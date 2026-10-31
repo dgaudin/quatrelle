@@ -79,6 +79,9 @@ pub struct Task {
     pub categories: Vec<String>,
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub private: bool,
+    /// Which kind of private it is, while it's private.
+    #[serde(skip_serializing_if = "crate::ical::PrivateKind::is_plain")]
+    pub private_kind: crate::ical::PrivateKind,
     /// When it was last changed (Unix seconds).
     pub modified: i64,
 }

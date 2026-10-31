@@ -64,7 +64,8 @@ pub fn task_of(it: &El) -> Option<StoredTask> {
         },
         reminder,
         categories,
-        private: matches!(it.text_of("Sensitivity").map(str::trim), Some("Private" | "Confidential")),
+        private: private_kind(it).is_some(),
+        private_kind: private_kind(it).unwrap_or_default(),
         modified: it.text_of("LastModifiedTime").and_then(quatrelle_jmap::utc_date).unwrap_or(0),
     };
     Some(StoredTask { href, etag: id.attr("ChangeKey").unwrap_or("").to_string(), task, dirty: false })
@@ -73,10 +74,10 @@ pub fn task_of(it: &El) -> Option<StoredTask> {
 /// A task's fields in the order EWS's schema wants them (the item's, then the task's), each
 /// with the field URI that names it in an update; the dates and categories it hasn't are
 /// taken off an item being updated (`absent`).
-fn task_fields(t: &Task) -> (Vec<(&'static str, String)>, Vec<&'static str>) {
+pub(super) fn task_fields(t: &Task) -> (Vec<(&'static str, String)>, Vec<&'static str>) {
     let mut f = vec![
         ("item:Subject", format!("<t:Subject>{}</t:Subject>", esc(&t.subject))),
-        ("item:Sensitivity", format!("<t:Sensitivity>{}</t:Sensitivity>", if t.private { "Private" } else { "Normal" })),
+        ("item:Sensitivity", format!("<t:Sensitivity>{}</t:Sensitivity>", sensitivity(t.private, t.private_kind))),
         ("item:Body", format!("<t:Body BodyType=\"Text\">{}</t:Body>", esc(&t.notes))),
     ];
     let mut absent = Vec::new();

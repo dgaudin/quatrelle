@@ -466,12 +466,22 @@ impl Session {
         Ok(serde_json::json!({"uid": real}))
     }
 
-    /// Save, and ask for a sync when the server has something to learn.
+    /// Save, and ask for a sync when the server has something to learn (once: a second one
+    /// asked for meanwhile would start before the first one's results are in, and send its new
+    /// items again).
     pub(crate) fn after_pim_change(&mut self, account: &str, remote: bool) {
         self.save_pim(account);
         if remote && self.account(account).is_some_and(|a| !a.is_local()) {
             log::info!("{account}: a change to send to the calendars, contacts or tasks");
-            self.jobs.push(Job::SyncDav { account: account.to_string() });
+            self.ask_pim_sync(account);
+        }
+    }
+
+    /// A calendars' and contacts' sync for this account, unless one is waiting to go.
+    pub(crate) fn ask_pim_sync(&mut self, account: &str) {
+        let job = Job::SyncDav { account: account.to_string() };
+        if !self.jobs.contains(&job) {
+            self.jobs.push(job);
         }
     }
 }
