@@ -13,6 +13,7 @@ use crate::look::people_field::{
 use crate::theme::Tokens;
 
 mod message;
+mod sending;
 
 /// What one frame of the field gave: its events, the rect it took, what was drawn, and what egui
 /// was told (the clipboard, the screen reader's tree).
