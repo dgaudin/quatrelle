@@ -368,9 +368,12 @@ domains, the domains the user allowed, and the homes found and saved before): a 
 address, redirect or href (principal, home, collection, item) is on any other site is not sent at
 all, with or without the password, and is `NetError::Untrusted`. Discovery skips such a start
 when another one finds the home (an address's website commonly redirects everything to a web
-host), and asks only when none does. During a sync, `Untrusted` stops it like a refused sign-in
-(it is never one of the items' errors); the worker sends `Event::TrustAsked` once, and the
-account's calendars and contacts wait for its next start.
+host), and asks only when none does. A look for a missing home that ends so doesn't stop the
+sync: what has a home syncs, the site comes back in `DavSync::untrusted` to ask about once
+(`Event::TrustAsked`), and the look runs again a day later, as after finding nothing, or at once
+when the site noted (`Pim::dav_untrusted`) has been allowed. An `Untrusted` anywhere else (an item's
+or a collection's address) stops the sync like a refused sign-in (it is never one of the items'
+errors), asks once, and the account's calendars and contacts wait for its next start.
 
 **Invitations** travel by mail (iTIP over iMIP, RFC 5546/6047): a `text/calendar` part with
 `METHOD:REQUEST` shows as an invitation card (Accept, Tentative, Decline), which updates the
