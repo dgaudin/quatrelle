@@ -4,7 +4,10 @@
 use std::borrow::Cow;
 
 use super::*;
-use crate::tnef::{TnefBody, is_tnef, read_tnef};
+use tnef::is_tnef;
+pub use tnef::{Tnef, TnefBody, TnefFile, decompress_rtf, read_tnef, rtf_body};
+
+mod tnef;
 
 /// One of a message's attachments, with its bytes.
 pub(super) struct Attached<'a> {
