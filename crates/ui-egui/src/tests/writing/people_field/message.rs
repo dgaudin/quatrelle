@@ -823,3 +823,23 @@ fn a_name_left_unsettled_by_something_else_stops_the_send_with_a_word() {
     assert!(a.ui.people.send_wait_left(0.0).is_none(), "the wait is off");
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// A first start over a big mailbox, the book being read a slice per frame: an address closed in
+/// To (checked at once) must not read the mail that is left in one go on the window's thread.
+#[test]
+fn closing_an_address_never_reads_a_big_mailbox_whole() {
+    let (mut a, dir) = app_big("resolve-big", 3, 12_000);
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    a.run("mail.new", json!({}));
+    frame(&ctx, &mut a, vec![]);
+    assert!(a.session.contacts_pending(), "the book is being read a slice per frame");
+    let before = a.session.cached_folders();
+    frame(&ctx, &mut a, vec![Event::Text("ann@x.example;".into())]);
+    let read = a.session.cached_folders().iter().filter(|k| !before.contains(k)).count();
+    assert!(a.session.contacts_pending(), "closing an address didn't read the book whole");
+    assert!(read < 2, "the frame read its slice, not the mailbox: {read} folders");
+    frame(&ctx, &mut a, vec![]);
+    assert_eq!(to(&a), "ann@x.example; ");
+    let _ = std::fs::remove_dir_all(dir);
+}

@@ -111,11 +111,13 @@ impl Session {
         self.suggest_contacts_now(query, limit)
     }
 
-    /// The book with all the mail read: in one go, when there's no book yet. One already there
-    /// answers as it is (the mail new since is read a slice at a time by the window): a command
-    /// run from it (Send, resolving names) doesn't read a big folder whole.
+    /// The book with all the mail read: in one go, when there's no book yet (a command run with no
+    /// window, the CLI's). One already there answers as it is, whatever is left to read: the window
+    /// reads the mail a slice a frame, and anything it runs between slices (an address closed in
+    /// To, Send, Check Names) must never read a big mailbox whole on its thread — not even on a
+    /// first start, before any folder is read through.
     pub(crate) fn contacts_whole(&mut self) {
-        if self.contacts.book.is_none() || self.contacts.marks.is_empty() {
+        if self.contacts.book.is_none() {
             self.contacts_step(usize::MAX);
         }
     }
