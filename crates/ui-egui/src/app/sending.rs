@@ -23,7 +23,7 @@ impl MailApp {
         }
         for (id, done) in self.ui.people.send_when_resolved(&mut self.session, now) {
             if is_meeting_window(id) {
-                self.meeting_resolved(id & !MEETING_WINDOWS, done);
+                self.meeting_resolved(id & !MEETING_WINDOWS, done, now);
             } else {
                 match done {
                     Ok(params) => {
@@ -43,12 +43,16 @@ impl MailApp {
 
     /// Meeting window `wid`'s held Send concluded: sent as its lines hold them now (created, or
     /// updated when it was sent before), or why not said in its window. A window closed meanwhile
-    /// has nothing left to send.
-    fn meeting_resolved(&mut self, wid: u64, done: Result<Value, String>) {
+    /// has nothing left to send. Its lines go through the check again first: a name typed in one
+    /// while the others were checked is closed and checked in turn (held again while it's asked),
+    /// never sent as typed.
+    fn meeting_resolved(&mut self, wid: u64, done: Result<Value, String>, now: f64) {
         let Some((_, f)) = self.ui.event_windows.iter_mut().find(|(w, _)| *w == wid) else { return };
         match done {
             Ok(_) => {
-                take_lines(f, &mut self.session, &mut self.ui.people);
+                if check_and_take(f, &mut self.session, &mut self.ui.people, now) {
+                    return;
+                }
                 let id = if f.uid.is_some() { "event.update" } else { "event.create" };
                 let p = f.params();
                 self.event_command(wid, id, p);
@@ -72,19 +76,8 @@ impl MailApp {
             return;
         }
         let now = self.ui.close_checked.unwrap_or(0.0);
-        let account = f.account_id();
-        let lines = [("required", &mut f.guests), ("optional", &mut f.optional), ("rooms", &mut f.rooms_line)];
-        if people.gate_meeting(&mut self.session, w, &account, lines, now) {
+        if check_and_take(f, &mut self.session, people, now) {
             return;
-        }
-        take_lines(f, &mut self.session, people);
-        // A room the check took out of the guests that Rooms couldn't book is back among them,
-        // saying why: checked again, the send stops on it.
-        if MEETING_FIELDS.iter().any(|&name| people.blocked(meeting_field(w, name))) {
-            let lines = [("required", &mut f.guests), ("optional", &mut f.optional), ("rooms", &mut f.rooms_line)];
-            if people.gate_meeting(&mut self.session, w, &account, lines, now) {
-                return;
-            }
         }
         let p = f.params();
         self.event_command(w, id, p);
@@ -106,6 +99,20 @@ impl MailApp {
             }
         }
     }
+}
+
+/// A meeting's Send checked ([`PeopleFields::gate_meeting`]) and, unless that holds it (`true`),
+/// its lines taken into its form. A room the check took out of the guests that Rooms couldn't
+/// book is back among them then, saying why: the send is held on it as it stands (not checked
+/// again, which would take it out once more), and stops on it.
+fn check_and_take(f: &mut EventForm, s: &mut Session, people: &mut PeopleFields, now: f64) -> bool {
+    let account = f.account_id();
+    let lines = [("required", &mut f.guests), ("optional", &mut f.optional), ("rooms", &mut f.rooms_line)];
+    if people.gate_meeting(s, f.window, &account, lines, now) {
+        return true;
+    }
+    take_lines(f, s, people);
+    MEETING_FIELDS.iter().any(|&name| people.blocked(meeting_field(f.window, name))) && people.hold_meeting(s, f.window, now)
 }
 
 /// A meeting's lines as its fields hold them now, into its form: what was settled since its

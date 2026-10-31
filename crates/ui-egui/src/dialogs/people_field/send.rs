@@ -112,7 +112,7 @@ impl PeopleFields {
             // Every name is asked again (an answer kept settles it at once): what the directory
             // said last time doesn't stop a name it is being asked for now.
             if let Some(f) = self.fields.get_mut(&field) {
-                f.clear_errors(&[PieceError::NotFound, PieceError::Unreached]);
+                f.clear_errors(|e| matches!(e, PieceError::NotFound | PieceError::Unreached));
             }
             let _ = s.people_resolve(field, Some(&account), accepts, None);
             self.sync_compose(s, field, &account);
@@ -274,8 +274,9 @@ impl PeopleFields {
                 self.prepare_with(s, field, Some(account), accepts, Some(line.as_str()));
             }
             let Some(f) = self.fields.get_mut(&field) else { continue };
-            // Asked again, as a message's names are: last time's answer doesn't stop them now.
-            f.clear_errors(&[PieceError::NotFound, PieceError::Unreached]);
+            // Asked again, as a message's names are: last time's answer doesn't stop them now, nor
+            // a room the meeting couldn't book then (one may have been freed).
+            f.clear_errors(|e| matches!(e, PieceError::NotFound | PieceError::Unreached | PieceError::RoomsFull(_)));
             let unresolved = f.unresolved_text();
             if !unresolved.is_empty() {
                 let _ = s.people_resolve(field, Some(account), accepts, Some(&unresolved));
@@ -286,5 +287,12 @@ impl PeopleFields {
             self.expand_groups(s, field, account);
         }
         self.hold(s, window, Value::Null, &MEETING_FIELDS, now)
+    }
+
+    /// Meeting window `wid`'s Send held on its fields as they stand, nothing closed or asked
+    /// again (its lines just written after [`PeopleFields::gate_meeting`] let it go: a room Rooms
+    /// couldn't book is back among the guests, and the send stops on it). `false`: it can go.
+    pub(crate) fn hold_meeting(&mut self, s: &Session, wid: u64, now: f64) -> bool {
+        self.hold(s, MEETING_WINDOWS | wid, Value::Null, &MEETING_FIELDS, now)
     }
 }
