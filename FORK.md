@@ -558,6 +558,43 @@ pour le propriétaire : le courrier des expéditeurs Outlook arrive souvent avec
 - **Hors du `winmail.dat`** : deux paires de tests du moteur partageaient leur dossier temporaire
   (`contact-fields`, `server-search`) ; le second de chaque paire a le sien.
 
+### Troisième partie : les codes Alt de Windows (2026-10-31)
+
+Sur la branche `zidan-v0.30-alt`, un commit de l'origine, demandé par le propriétaire pour les
+utilisateurs français : un clavier français n'a pas de touche pour É, È ou Ç, que Windows fait
+taper par Alt+0201, Alt+0200, Alt+0199 sur le pavé numérique, et rien n'était tapé (issue #23 de
+l'origine : Windows fait le caractère au relâchement d'Alt, et winit l'écarte).
+
+- **Repris** : `7f70b72a`. Les chiffres tapés avec Alt seul tenu sont retirés de l'entrée de la
+  fenêtre et le caractère est tapé au relâchement d'Alt, dans n'importe quel champ : avec un 0 en
+  tête, dans la page ANSI du système (Windows-1252 en français : `0201` → É, `0128` → €) ; sans,
+  dans sa page OEM (850 en français : `130` → é) ; au-delà de 255, en Unicode (`8364` → €). Une
+  autre touche, ou la fenêtre qui perd le focus, abandonne le code ; un code qui ne nomme rien
+  (0, caractère de contrôle, trop long) ne tape rien. La lecture des pages est dans
+  `mime/src/files/alt_code.rs`, le relevé des touches dans `ui-egui/src/app/alt_code.rs`.
+- **Adapté** : l'origine appelle ce relevé depuis la structure `ClipboardKeys` de son collage de
+  fichiers par Ctrl+V (`9b896ef3`, pas repris). Ce fork n'avait pas encore de crochet sur l'entrée
+  des fenêtres : `main.rs` installe sous Windows seulement une structure `WindowInput` par
+  `viewport_hooks` d'eframe (le correctif E1 de l'egui épinglé), qui passe sur la fenêtre
+  principale (et la fenêtre de compactage, qui y est dessinée) comme sur chaque fenêtre ouverte
+  par `show_viewport_immediate` : messages, rédaction détachée, réunions, rappels.
+  `App::raw_input_hook` aurait manqué ces dernières. Chaque fenêtre garde son propre code en
+  cours. Sous Linux, macOS et dans le navigateur, rien ne change. Le test de l'origine va dans
+  `tests/writing/typing.rs` (le dossier `tests/` a déjà 16 fichiers).
+- **Corrigé** (défaut venu de l'origine) : là où le système envoie aussi le texte d'un chiffre tapé
+  avec Alt, ce texte n'était retiré que pendant un code ; après une touche qui l'avait interrompu
+  (Alt+0, Alt+Tab, puis 2, 0, 1), « 201 » arrivait dans le texte. Le texte qui suit un chiffre
+  retiré est retiré avec lui. Les index dans les tables OEM sont des soustractions vérifiées.
+- **Vérifié par les tests** (sous Linux : seul l'appel est propre à Windows) : É, È, Ç et € en
+  1252, é et É en 850, € en Unicode, la répétition d'un chiffre tenu ; rien pour les codes qui ne
+  nomment rien ; Alt seul, Alt+F (les touches des menus) et AltGr (Ctrl+Alt sous Windows, ses
+  chiffres et leur texte) passent tels quels. Le contrôle de compilation pour Windows ne passe ici
+  que pour `quatrelle-mime` et `quatrelle-ui-egui` (le script de `ring` veut les outils MSVC) ;
+  l'application est vérifiée par la porte Windows de GitHub. Reste à l'essayer avec de vraies
+  touches dans une version de test Windows.
+- **Limite connue** : comme chez l'origine, les chiffres du pavé comptent quand le verrouillage
+  numérique est actif ; sans lui, egui reçoit des flèches et le code est interrompu.
+
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
 Quatre chantiers, chacun dans son commit, à la suite d'un audit de l'éditeur HTML.
