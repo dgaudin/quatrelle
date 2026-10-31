@@ -1,10 +1,26 @@
 //! The rule editor: what a rule looks at and does, where it runs, and the form behind it.
 
 use super::*;
+use crate::dialogs::people_field::{DIALOG_WINDOWS, PeopleFields, accepts_of, dialog_field};
+use quatrelle_engine::FieldId;
+use quatrelle_engine::model::addr::matched;
 use quatrelle_engine::model::organize::ForeignRule;
 
+/// How wide a condition's contacts field is; the row's × follows it.
+const RULE_FIELD_W: f32 = 260.0;
+
+/// The contacts field condition `i` of a rule shows for its `test`: one address for From and To,
+/// several for the lists. Any other test keeps its plain box (`None`).
+pub(crate) fn rule_field(i: usize, test: RuleTest) -> Option<FieldId> {
+    match test {
+        RuleTest::From | RuleTest::To => Some(dialog_field(i as u64, "rule-one")),
+        RuleTest::FromAny | RuleTest::ToAny => Some(dialog_field(i as u64, "rule-any")),
+        _ => None,
+    }
+}
+
 /// The New rule / Edit rule dialog; whether it stays open.
-pub(super) fn edit_rule(ui: &mut Ui, f: &mut RuleForm, s: &Session, t: &Tokens, acts: &mut Vec<Action>) -> bool {
+pub(super) fn edit_rule(ui: &mut Ui, f: &mut RuleForm, s: &Session, people: &mut PeopleFields, t: &Tokens, acts: &mut Vec<Action>) -> bool {
     ui.set_width(540.0);
     let on_server = f.remote.clone();
     title(
@@ -32,14 +48,40 @@ pub(super) fn edit_rule(ui: &mut Ui, f: &mut RuleForm, s: &Session, t: &Tokens, 
         });
     }
     let mut remove_cond = None;
+    // The directory the names are looked up in, when an account has one (Ctrl+K and Expand).
+    let directory = s.directory_account(f.account.as_deref());
     for (i, c) in f.conditions.iter_mut().enumerate() {
-        ui.horizontal(|ui| {
+        ui.horizontal_top(|ui| {
+            let before = c.test;
             egui::ComboBox::from_id_salt(("rule-test", i)).width(230.0).selected_text(c.test.label()).show_ui(ui, |ui| {
                 for x in RuleTest::ALL {
                     ui.selectable_value(&mut c.test, x, x.label());
                 }
             });
-            if c.test.needs_text() {
+            if c.test != before {
+                // Another test, another field (or none): made again from the text.
+                people.reset_window(DIALOG_WINDOWS | i as u64);
+            }
+            if let Some(field) = rule_field(i, c.test) {
+                ui.vertical(|ui| {
+                    ui.set_width(RULE_FIELD_W);
+                    let accepts = accepts_of(field.name);
+                    people.draw(
+                        ui,
+                        t,
+                        field,
+                        directory.as_deref(),
+                        accepts,
+                        "",
+                        tl!("Text or address"),
+                        &mut c.text,
+                        false,
+                        directory.is_some(),
+                        false,
+                        acts,
+                    );
+                });
+            } else if c.test.needs_text() {
                 ui.add(egui::TextEdit::singleline(&mut c.text).hint_text(tl!("Text or address")).desired_width(220.0));
             }
             if widgets::tiny_icon_button(ui, Icon::Delete, "Remove", t).clicked() {
@@ -48,7 +90,17 @@ pub(super) fn edit_rule(ui: &mut Ui, f: &mut RuleForm, s: &Session, t: &Tokens, 
         });
     }
     if let Some(i) = remove_cond {
+        // Each field after it is the next one's now: made again from its text.
+        for j in i..f.conditions.len() {
+            people.reset_window(DIALOG_WINDOWS | j as u64);
+        }
         f.conditions.remove(i);
+    }
+    // Which person a name means, when several fit (Ctrl+K in a field).
+    for (i, c) in f.conditions.iter().enumerate() {
+        if let Some(field) = rule_field(i, c.test) {
+            people.choice_dialog(ui.ctx(), t, s, field.window, &[field.name], acts);
+        }
     }
     if ui.button(tl!(if f.conditions.is_empty() { "+ Add a condition" } else { "+ Add another condition" })).clicked() {
         f.conditions.push(RuleCond { test: RuleTest::From, text: String::new() });
@@ -165,7 +217,9 @@ pub(super) fn edit_rule(ui: &mut Ui, f: &mut RuleForm, s: &Session, t: &Tokens, 
     if let Some(e) = &f.error {
         ui.label(RichText::new(e.as_str()).color(t.danger).small());
     }
-    let (ok, cancel) = buttons(ui, t, "Save", true);
+    // An entry its place refuses (a contact group has no address) stops the rule.
+    let stopped = f.conditions.iter().enumerate().any(|(i, c)| rule_field(i, c.test).is_some_and(|field| people.blocked(field)));
+    let (ok, cancel) = buttons(ui, t, "Save", !stopped);
     if ok {
         match f.save_actions(s) {
             Ok(a) => {
@@ -289,19 +343,23 @@ impl RuleForm {
         let mut conditions = Vec::new();
         for c in &self.conditions {
             let t = c.text.trim().to_string();
-            if c.test.needs_text() && t.is_empty() {
+            // The addresses alone, names as typed (`Doe, John <j@x.fr>` is `j@x.fr`): a text of
+            // separators only says nothing either.
+            let entries = matched(&c.text);
+            let address_test = rule_field(0, c.test).is_some();
+            if c.test.needs_text() && (t.is_empty() || (address_test && entries.is_empty())) {
                 return Err(tl!("Say what to look for").into());
             }
             let several = || t.split([',', ';']).map(|x| x.trim().to_string()).filter(|x| !x.is_empty()).collect::<Vec<_>>();
             conditions.push(match c.test {
-                RuleTest::From => Condition::From(t),
-                RuleTest::To => Condition::To(t),
+                RuleTest::From => Condition::From(entries.into_iter().next().unwrap_or_default()),
+                RuleTest::To => Condition::To(entries.into_iter().next().unwrap_or_default()),
                 RuleTest::Subject => Condition::Subject(t),
                 RuleTest::AnyText => Condition::AnyText(t),
                 RuleTest::HasAttachment => Condition::HasAttachment,
                 RuleTest::Bulk => Condition::Bulk,
-                RuleTest::FromAny => Condition::FromAny(several()),
-                RuleTest::ToAny => Condition::ToAny(several()),
+                RuleTest::FromAny => Condition::FromAny(entries),
+                RuleTest::ToAny => Condition::ToAny(entries),
                 RuleTest::SubjectAny => Condition::SubjectAny(several()),
             });
         }

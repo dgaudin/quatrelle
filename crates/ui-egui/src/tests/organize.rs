@@ -1,6 +1,12 @@
 //! UI tests: rules, junk lists, Search Folders and Quick Steps.
 
+use quatrelle_engine::FieldId;
+use quatrelle_engine::model::organize::{Condition, Rule, RuleAction};
+
 use super::*;
+use crate::dialogs::people_field::{dialog_field, egui_id};
+use crate::dialogs::{RuleCond, RuleTest, rule_field};
+use crate::look::people_field::{Piece, input_id};
 
 #[test]
 fn organising_renders_and_rules_save() {
@@ -188,7 +194,7 @@ fn search_folders_are_made_from_the_dialog_and_open() {
     assert!(matches!(&a.ui.dialog, Some(Dialog::SearchFolder(f)) if f.error.is_some()));
     // Edited: a preset's search shows as that kind, anything else as Custom.
     let edit = crate::dialogs::SearchFolderForm::edit(&a.session.prefs.search_folders[0]);
-    assert_eq!((edit.preset, edit.query.as_str()), (9, "from:zoe@studio.example,\"Ana Lima\",x"));
+    assert_eq!((edit.preset, edit.final_query().as_str()), (8, "from:zoe@studio.example,\"Ana Lima\",x"));
     a.ui.dialog = Some(Dialog::SearchFolder(Box::new(edit)));
     frame(&ctx, &mut a, vec![]);
     // Many, with long names, draw.
@@ -378,5 +384,214 @@ fn a_notice_shows_in_the_interfaces_language() {
     let said = "exportation : le serveur a fermé la connexion : bye";
     assert!(settled_text_at(&ctx, &mut a, said, egui::vec2(1280.0, 800.0)).is_some(), "{:?}", a.ui.toast);
     crate::i18n::set_current(crate::i18n::Lang::EN);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A window tall enough for the rule editor.
+const SIZE: egui::Vec2 = egui::vec2(1280.0, 900.0);
+
+fn frames(ctx: &egui::Context, a: &mut MailApp, n: usize) {
+    for _ in 0..n {
+        frame_sized(ctx, a, vec![], SIZE);
+    }
+}
+
+/// The dialog `d` open over the main window, a few frames on.
+fn open(ctx: &egui::Context, a: &mut MailApp, d: Dialog) {
+    frames(ctx, a, 1);
+    a.ui.dialog = Some(d);
+    frames(ctx, a, 3);
+}
+
+/// `text` typed in the field, its input given the keyboard first; a few frames after.
+fn type_in(ctx: &egui::Context, a: &mut MailApp, field: FieldId, text: &str) {
+    ctx.memory_mut(|m| m.request_focus(input_id(egui_id(field))));
+    frame_sized(ctx, a, vec![], SIZE);
+    frame_sized(ctx, a, vec![Event::Text(text.into())], SIZE);
+    frames(ctx, a, 3);
+}
+
+/// The kinds of a field's pieces, as the tests compare them: a chip's address and name, or a text.
+fn shown(a: &MailApp, field: FieldId) -> Vec<String> {
+    a.ui.people
+        .pieces(field)
+        .iter()
+        .map(|p| match p {
+            Piece::Chip { who, refused: None } => format!("chip {} <{}>", who.name, who.address),
+            Piece::Chip { who, refused: Some(why) } => format!("refused {} ({why})", who.name),
+            Piece::Text { text, error: None } => format!("text {text}"),
+            Piece::Text { text, error: Some(e) } => format!("error {text} ({e:?})"),
+        })
+        .collect()
+}
+
+fn rule_of(a: &MailApp) -> Result<Rule, String> {
+    match &a.ui.dialog {
+        Some(Dialog::EditRule(f)) => f.to_rule(),
+        other => panic!("not the rule editor: {other:?}"),
+    }
+}
+
+/// A rule editor with `conditions`, flagging what it finds.
+fn rule_with(conditions: Vec<RuleCond>) -> Dialog {
+    let Dialog::EditRule(mut f) = Dialog::rule_from("", Some("sample"), false, None) else { panic!("the rule editor") };
+    f.name = "People".into();
+    f.conditions = conditions;
+    f.actions = vec![crate::dialogs::RuleAct { action: crate::dialogs::RuleDo::Flag, target: String::new() }];
+    Dialog::EditRule(f)
+}
+
+fn cond(test: RuleTest, text: &str) -> RuleCond {
+    RuleCond { test, text: text.into() }
+}
+
+/// A rule's From conditions take addresses alone — `Doe, John <j@x.fr>` is `j@x.fr` — and any other
+/// entry as typed (`@proginov.com` looks for a domain), with no error and no word of a name not
+/// found.
+#[test]
+fn a_rule_matches_addresses_alone_and_text_as_typed() {
+    let (mut a, dir) = app("rule-people-typed");
+    let ctx = egui::Context::default();
+    open(&ctx, &mut a, rule_with(vec![cond(RuleTest::FromAny, "")]));
+    let f = rule_field(0, RuleTest::FromAny).unwrap();
+    assert_eq!(f, dialog_field(0, "rule-any"));
+    type_in(&ctx, &mut a, f, "Doe, John <j@x.fr>; @proginov.com; ");
+    let p = shown(&a, f);
+    assert!(p.len() == 2 && p[0].starts_with("chip ") && p[0].ends_with("<j@x.fr>") && p[1] == "text @proginov.com", "{p:?}");
+    assert!(!a.ui.people.blocked(f));
+    let rule = rule_of(&a).unwrap();
+    assert_eq!(rule.conditions, [Condition::FromAny(vec!["j@x.fr".into(), "@proginov.com".into()])]);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// The same in the "Mail from specific people" Search Folder.
+#[test]
+fn a_search_folder_matches_addresses_alone_and_text_as_typed() {
+    let (mut a, dir) = app("search-people-typed");
+    let ctx = egui::Context::default();
+    let mut f = crate::dialogs::SearchFolderForm::new();
+    f.preset = 8;
+    f.name = "People".into();
+    open(&ctx, &mut a, Dialog::SearchFolder(Box::new(f)));
+    let field = dialog_field(0, "search-people");
+    type_in(&ctx, &mut a, field, "Doe, John <j@x.fr>; @proginov.com; ");
+    let p = shown(&a, field);
+    assert!(p.len() == 2 && p[0].ends_with("<j@x.fr>") && p[1] == "text @proginov.com", "{p:?}");
+    let Some(Dialog::SearchFolder(f)) = &a.ui.dialog else { panic!("the dialog is open") };
+    assert_eq!(f.final_query(), "from:j@x.fr,@proginov.com");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+fn saved(conditions: Vec<Condition>) -> Rule {
+    Rule {
+        name: "Saved".into(),
+        enabled: true,
+        account: None,
+        conditions,
+        match_all: true,
+        actions: vec![RuleAction::Flag],
+        stop: false,
+        server: false,
+        remote_id: None,
+        priority: None,
+        refused: None,
+    }
+}
+
+/// A saved rule reopens with an address the book knows as a chip (named by the book) and what it
+/// doesn't as text, and saves the same.
+#[test]
+fn a_saved_rule_reopens_with_a_known_address_as_a_chip_and_text_as_text() {
+    let (mut a, dir) = app("rule-people-reopen");
+    a.session.contacts_step(usize::MAX);
+    let ctx = egui::Context::default();
+    let rule = saved(vec![Condition::FromAny(vec!["zoe@studio.example".into(), "Dupont".into()])]);
+    open(&ctx, &mut a, Dialog::EditRule(Box::new(crate::dialogs::RuleForm::from_rule(0, &rule))));
+    frames(&ctx, &mut a, 2);
+    let f = rule_field(0, RuleTest::FromAny).unwrap();
+    let p = shown(&a, f);
+    assert!(p.len() == 2 && p[0].ends_with("<zoe@studio.example>") && p[1] == "text Dupont", "{p:?}");
+    assert!(p[0].starts_with("chip Zoe Park "), "her name from the book: {p:?}");
+    assert_eq!(rule_of(&a).unwrap().conditions, rule.conditions);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A saved From with a comma in it is one piece, and saves unchanged.
+#[test]
+fn a_saved_rule_with_a_comma_saves_unchanged() {
+    let (mut a, dir) = app("rule-people-comma");
+    let ctx = egui::Context::default();
+    let rule = saved(vec![Condition::From("Doe, John".into())]);
+    open(&ctx, &mut a, Dialog::EditRule(Box::new(crate::dialogs::RuleForm::from_rule(0, &rule))));
+    frames(&ctx, &mut a, 2);
+    let f = rule_field(0, RuleTest::From).unwrap();
+    // One piece, written quoted as the field writes a text holding a comma.
+    assert_eq!(shown(&a, f), ["text \"Doe, John\""]);
+    frames(&ctx, &mut a, 2);
+    assert_eq!(rule_of(&a).unwrap().conditions, rule.conditions);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// The × buttons of the dialog, top to bottom.
+fn remove_buttons(ctx: &egui::Context, a: &mut MailApp) -> Vec<egui::Pos2> {
+    ctx.enable_accesskit();
+    let input = RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, SIZE)), ..Default::default() };
+    let mut out = ctx.run_ui(input, |ui| a.ui(ui));
+    out.textures_delta.clear();
+    let nodes = out.platform_output.accesskit_update.map(|u| u.nodes).unwrap_or_default();
+    let mut at: Vec<egui::Pos2> = nodes
+        .iter()
+        .filter(|(_, n)| n.label() == Some("Remove"))
+        .filter_map(|(_, n)| n.bounds())
+        .map(|r| egui::pos2(((r.x0 + r.x1) / 2.0) as f32, ((r.y0 + r.y1) / 2.0) as f32))
+        .collect();
+    at.sort_by(|p, q| p.y.total_cmp(&q.y));
+    at
+}
+
+/// Taking a condition out keeps each field its own: the ones after it are made again from their
+/// text, and the rule is what the fields show.
+#[test]
+fn removing_a_rule_condition_keeps_each_field_its_own() {
+    let (mut a, dir) = app("rule-people-remove");
+    let ctx = egui::Context::default();
+    let three = ["a@x.fr", "b@x.fr", "c@x.fr"].map(|m| cond(RuleTest::FromAny, m)).to_vec();
+    open(&ctx, &mut a, rule_with(three));
+    frames(&ctx, &mut a, 2);
+    let field = |i| rule_field(i, RuleTest::FromAny).unwrap();
+    assert_eq!(shown(&a, field(1)).len(), 1);
+    let buttons = remove_buttons(&ctx, &mut a);
+    assert!(buttons.len() >= 3, "{buttons:?}");
+    click_at(&ctx, &mut a, buttons[1], 1, SIZE);
+    frames(&ctx, &mut a, 2);
+    let (p0, p1) = (shown(&a, field(0)), shown(&a, field(1)));
+    assert!(p0.len() == 1 && p0[0].ends_with("<a@x.fr>") && p1.len() == 1 && p1[0].ends_with("<c@x.fr>"), "{p0:?} {p1:?}");
+    assert!(shown(&a, field(2)).is_empty(), "the third is gone");
+    assert_eq!(rule_of(&a).unwrap().conditions, [Condition::FromAny(vec!["a@x.fr".into()]), Condition::FromAny(vec!["c@x.fr".into()])]);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A saved "from these people" Search Folder reopens as people, as chips, and saves the same.
+#[test]
+fn a_people_search_folder_reopens_as_people_and_saves_the_same() {
+    let (mut a, dir) = app("search-people-reopen");
+    let ctx = egui::Context::default();
+    let query = "from:zoe@studio.example,\"Ana Lima\",x";
+    a.run("searchFolder.create", json!({"name": "People", "query": query}));
+    let edit = crate::dialogs::SearchFolderForm::edit(&a.session.prefs.search_folders[0]);
+    assert_eq!(edit.preset, 8);
+    assert!(edit.query.is_empty());
+    assert_eq!(edit.final_query(), query);
+    open(&ctx, &mut a, Dialog::SearchFolder(Box::new(edit)));
+    frames(&ctx, &mut a, 2);
+    let p = shown(&a, dialog_field(0, "search-people"));
+    assert_eq!(p.len(), 3, "{p:?}");
+    let Some(Dialog::SearchFolder(f)) = &a.ui.dialog else { panic!("the dialog is open") };
+    assert_eq!(f.final_query(), query);
+    // A person with a comma in the name is one entry, quoted in the search and back.
+    let with_comma = "from:\"Doe, John\",x@y.fr";
+    a.run("searchFolder.create", json!({"name": "Comma", "query": with_comma}));
+    let edit = crate::dialogs::SearchFolderForm::edit(&a.session.prefs.search_folders[1]);
+    assert_eq!((edit.preset, edit.final_query().as_str()), (8, with_comma));
     let _ = std::fs::remove_dir_all(dir);
 }
