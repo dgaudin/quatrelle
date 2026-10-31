@@ -491,6 +491,10 @@ codes Alt, Exchange, signatures…) vient dans les parties suivantes.
   concernés sont dans le `pictures.rs` de l'origine, que ce fork a remplacé par le sien (un seul
   dossier `picture-size`). La même faute était chez ce fork dans deux tests de réunion qui
   partageaient `meeting-send-waits` : le second a maintenant son dossier.
+- **Règle des petits fichiers** : ces reprises ont fait passer `model/src/lib.rs` (1007 lignes) et
+  `engine/src/tests/writing.rs` (1001) au-delà de la limite. Les dossiers et leurs rôles vont dans
+  `model/src/folder.rs` (avec `folder/utf7.rs`, ré-exporté sous les mêmes noms) et les deux tests
+  d'images citées dans `tests/writing/quoted.rs`, sans changement de comportement.
 
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
