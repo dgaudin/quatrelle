@@ -164,7 +164,25 @@ impl Field {
                 _ => None,
             })
             .collect();
+        // An entry whose action failed stays the red text it was made, though its text reads as
+        // an address: asked once, not asked again by a chip that came back at a reparse.
+        let failed_before: Vec<(&String, &Piece)> = self
+            .st
+            .pieces
+            .iter()
+            .filter_map(|p| match p {
+                Piece::Text { text, error: Some(PieceError::Failed(_)) } => Some((text, p)),
+                _ => None,
+            })
+            .collect();
         for p in &mut pieces {
+            if let Piece::Chip { who, .. } = p
+                && let Some((_, old)) =
+                    failed_before.iter().find(|(t, _)| **t == who.text() || parse_one(t).is_some_and(|a| a.email.eq_ignore_ascii_case(&who.address)))
+            {
+                *p = (*old).clone();
+                continue;
+            }
             match p {
                 Piece::Text { text, error: error @ None } => {
                     *error = self.st.pieces.iter().find_map(|old| match old {

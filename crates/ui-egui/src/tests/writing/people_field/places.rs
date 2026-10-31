@@ -347,10 +347,16 @@ fn add_calendar_opens_each_entry_once_and_keeps_the_one_refused() {
     assert_eq!(left.len(), 2, "{left:?}");
     assert_eq!(refusal(&a, f, "team@contoso.example"), Some(Some(NO_LIST_CALENDAR.into())), "{left:?}");
     assert_eq!(left[1], own);
-    // Pressed again: nothing opened twice, the red entries as they were.
-    press(&ctx, &mut a, "Open");
-    assert_eq!(shared(&a, &gal), ["ana@contoso.example", "bo@contoso.example"]);
+    // Only red entries are left: Open is off, and pressing it does nothing.
+    assert_eq!(enabled(&ctx, &mut a, "Open"), Some(false));
     assert_eq!(a.ui.people.pieces(f), left.as_slice());
+    // A new entry turns Open on; pressed, it opens that one only: ana and bo stay once each, the
+    // entries already refused aren't asked again.
+    type_in(&ctx, &mut a, f, "cy@contoso.example; ");
+    assert_eq!(enabled(&ctx, &mut a, "Open"), Some(true));
+    press(&ctx, &mut a, "Open");
+    assert_eq!(shared(&a, &gal), ["ana@contoso.example", "bo@contoso.example", "cy@contoso.example"]);
+    assert_eq!(a.ui.people.pieces(f), left.as_slice(), "the red entries as they were");
     // Both taken out (Backspace selects the last, a second removes it).
     focus_field(&ctx, f);
     frames(&ctx, &mut a, 1);
@@ -361,6 +367,28 @@ fn add_calendar_opens_each_entry_once_and_keeps_the_one_refused() {
     assert!(a.ui.people.pieces(f).is_empty(), "{:?}", a.ui.people.pieces(f));
     assert_eq!(enabled(&ctx, &mut a, "Open"), Some(false));
     assert!(calendar_open(&a));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// An entry whose opening failed stays red text when another entry is closed after it: the next
+/// parse doesn't turn its address back into a chip that would be asked again.
+#[test]
+fn a_failed_calendar_stays_red_when_another_entry_is_closed() {
+    let (mut a, dir) = app("add-calendar-failed-stays");
+    let gal = with_exchange(&mut a);
+    let ctx = egui::Context::default();
+    open_dialog(&ctx, &mut a, Dialog::open_calendars());
+    let f = dialog_field(0, "calendar");
+    type_in(&ctx, &mut a, f, "ana@contoso.example; riley@contoso.example; ");
+    press(&ctx, &mut a, "Open");
+    assert_eq!(shared(&a, &gal), ["ana@contoso.example"]);
+    let own = Piece::Text { text: "riley@contoso.example".into(), error: Some(PieceError::Failed("that's this account's own calendar".into())) };
+    assert_eq!(a.ui.people.pieces(f), [own.clone()].as_slice());
+    type_in(&ctx, &mut a, f, "bo@contoso.example; ");
+    let now = a.ui.people.pieces(f).to_vec();
+    assert_eq!(now.len(), 2, "{now:?}");
+    assert!(now.contains(&own), "the failed entry is still red text: {now:?}");
+    assert!(a.ui.people.blocked(f), "and still stops: {now:?}");
     let _ = std::fs::remove_dir_all(dir);
 }
 
