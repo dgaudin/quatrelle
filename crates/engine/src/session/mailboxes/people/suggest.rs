@@ -234,8 +234,11 @@ impl Session {
             for m in self.accounts.iter().flat_map(|a| &a.config.shared_mailboxes) {
                 let address = m.trim().to_ascii_lowercase();
                 if starts_with("", &address, q) && seen.insert(address.clone()) {
+                    // Ranked on the address in lower case, as typed text is: configured in any
+                    // case, the mailbox typed exactly is an exact match.
+                    let how_well = fit("", &address, q);
                     let who = Addressee::new("", address, AddresseeKind::SharedMailbox);
-                    hits.push(hit(who, Source::Recent, fit("", m, q), 0.0, kinds));
+                    hits.push(hit(who, Source::Recent, how_well, 0.0, kinds));
                 }
             }
         }

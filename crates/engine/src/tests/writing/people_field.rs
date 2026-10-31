@@ -186,6 +186,23 @@ fn suggestions_are_ordered_exact_then_prefix_then_most_used_and_only_accepted_ki
     done(s);
 }
 
+/// A shared mailbox typed exactly, whatever case it was configured in, is an exact match: first,
+/// before an address that merely starts with it.
+#[test]
+fn a_shared_mailbox_typed_exactly_comes_first_whatever_its_case() {
+    let (mut s, gal) = with_exchange("shared-exact");
+    s.contacts_step(usize::MAX);
+    for a in s.accounts.iter_mut().filter(|a| a.config.id == gal) {
+        a.config.shared_mailboxes.push("Shared@Contoso.example".into());
+    }
+    s.contacts_sent(&[EmailAddress::new("Shared Archive", "shared@contoso.example.org")]);
+    let f = FieldId { window: 1, name: "to" };
+    let got = s.people_suggest(f, Some(&gal), &Accepts::RECIPIENTS, "shared@contoso.example");
+    assert_eq!(got.first().map(|x| x.who.address.as_str()), Some("shared@contoso.example"), "{got:?}");
+    assert_eq!(got.get(1).map(|x| x.who.address.as_str()), Some("shared@contoso.example.org"), "{got:?}");
+    done(s);
+}
+
 /// The search bug of 2026-10-30 again would be a pass per frame: a text typed once costs one
 /// pass, however often the window asks, over at most the book, the index and the rooms.
 #[test]
