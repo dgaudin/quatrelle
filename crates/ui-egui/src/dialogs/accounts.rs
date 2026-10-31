@@ -486,6 +486,8 @@ pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, people: &mut People
             if ui.memory(|m| m.focused().is_none()) {
                 ui.memory_mut(|m| m.request_focus(input));
             }
+            // Which person a name means, when several fit (OK waits for the answer).
+            people.choice_dialog(ui.ctx(), t, s, DIALOG_WINDOWS, &["mailbox"], acts);
             ui.add_space(4.0);
             ui.checkbox(calendar, tl!("Open its calendar too"));
             if let Some(e) = error {
