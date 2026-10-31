@@ -17,7 +17,9 @@ use super::*;
 pub const MAX_SUGGESTIONS: usize = 8;
 
 /// The fields that ask for suggestions: the message's recipients and From, the address book's
-/// (`book-*`), a meeting's (`required`, `optional`, `rooms`, and their `att-*` twins), and the command line's.
+/// (`book-*`), a meeting's (`required`, `optional`, `rooms`, and their `att-*` twins), the command line's,
+/// and those of the dialogs that open a place (`calendar`, `mailbox`) or match people (`rule-one`,
+/// `rule-any`, `search-people`).
 pub const FIELD_NAMES: &[&str] = &[
     "to",
     "cc",
@@ -34,6 +36,11 @@ pub const FIELD_NAMES: &[&str] = &[
     "att-required",
     "att-optional",
     "att-rooms",
+    "calendar",
+    "mailbox",
+    "rule-one",
+    "rule-any",
+    "search-people",
 ];
 
 /// The fields whose last answer is kept; past them, all are forgotten (a window closed takes

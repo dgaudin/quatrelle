@@ -175,9 +175,9 @@ fn suggestions_are_ordered_exact_then_prefix_then_most_used_and_only_accepted_ki
     s.apply(Event::DirectoryPeople { account: gal.clone(), query: "sales".into(), people: sales, more: false, error: None });
     let got = s.people_suggest(f, Some(&gal), &Accepts::RECIPIENTS, "sales");
     assert_eq!(got.iter().map(|x| x.who.kind).collect::<Vec<_>>(), [AddresseeKind::Person, AddresseeKind::DistributionList]);
-    let lists_first = Accepts { kinds: &[AddresseeKind::DistributionList, AddresseeKind::Person], one: false, typed: &[] };
+    let lists_first = Accepts { kinds: &[AddresseeKind::DistributionList, AddresseeKind::Person], one: false, typed: &[], as_typed: false };
     assert_eq!(s.people_suggest(f, Some(&gal), &lists_first, "sales")[0].who.kind, AddresseeKind::DistributionList);
-    let only_rooms = Accepts { kinds: &[AddresseeKind::Room, AddresseeKind::Equipment], one: false, typed: &[] };
+    let only_rooms = Accepts { kinds: &[AddresseeKind::Room, AddresseeKind::Equipment], one: false, typed: &[], as_typed: false };
     let got = s.people_suggest(f, Some(&gal), &only_rooms, "s");
     assert!(!got.is_empty() && got.iter().all(|x| x.who.kind == AddresseeKind::Room) && got[0].source == Source::RoomList, "{got:?}");
     assert!(s.people_suggest(f, Some(&gal), &Accepts::RECIPIENTS, "zzzz-nobody").is_empty());
@@ -467,7 +467,7 @@ fn a_dialogs_field_resolves_its_own_text_and_chooses_by_field() {
 fn of_several_that_fit_a_field_keeps_the_kinds_it_takes() {
     let (mut s, gal) = with_exchange("resolve-kinds");
     s.apply(seine(&gal));
-    let rooms = Accepts { kinds: &[AddresseeKind::Room, AddresseeKind::Equipment], one: false, typed: &[] };
+    let rooms = Accepts { kinds: &[AddresseeKind::Room, AddresseeKind::Equipment], one: false, typed: &[], as_typed: false };
     let f = FieldId { window: 9, name: "cli" };
     let r = s.people_resolve(f, Some(&gal), &rooms, Some("seine")).unwrap();
     assert_eq!(r.searching, ["seine"]);
