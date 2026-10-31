@@ -9,6 +9,7 @@ mod keys;
 mod meetings;
 mod ribbon;
 mod search_box;
+mod sending;
 mod updates;
 mod windows;
 

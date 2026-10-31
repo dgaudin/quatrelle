@@ -189,11 +189,15 @@ impl EventForm {
     }
 
     /// Book a room: it joins the rooms (and the Rooms line, unless an entry there has its
-    /// address), and the place follows the rooms unless it was typed by hand.
-    pub fn add_room(&mut self, name: &str, email: &str) {
+    /// address), and the place follows the rooms unless it was typed by hand. Whether the meeting
+    /// books it now: one booked already stays so; not an address, or past [`MAX_ROOMS`], it can't.
+    pub fn add_room(&mut self, name: &str, email: &str) -> bool {
         let email = email.trim().to_ascii_lowercase();
-        if !email.contains('@') || self.rooms.iter().any(|(_, e)| *e == email) || self.rooms.len() >= MAX_ROOMS {
-            return;
+        if self.rooms.iter().any(|(_, e)| *e == email) {
+            return true;
+        }
+        if !email.contains('@') || self.rooms.len() >= MAX_ROOMS {
+            return false;
         }
         let before = self.rooms_text();
         if !line_entries(&self.rooms_line).any(|(_, e)| e.is_some_and(|e| e.eq_ignore_ascii_case(&email))) {
@@ -203,6 +207,7 @@ impl EventForm {
         let name = if name.trim().is_empty() { email.clone() } else { name.trim().to_string() };
         self.rooms.push((name, email));
         self.place_follows_rooms(&before);
+        true
     }
 
     /// Take a room off, and its entry off the Rooms line (the place follows, as above).
@@ -361,7 +366,7 @@ pub(super) fn reminder_choice(ui: &mut Ui, f: &mut EventForm, width: f32) {
 }
 
 /// The most rooms a meeting books.
-const MAX_ROOMS: usize = 50;
+pub(super) const MAX_ROOMS: usize = 50;
 
 /// A room as the Rooms line writes it: `Name <address>`, or its address alone when it's known by
 /// nothing else.

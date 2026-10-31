@@ -167,7 +167,7 @@ fn text_piece(ui: &mut Ui, t: &Tokens, text: &str, error: Option<&PieceError>, i
     let message = error.map(|e| error_text(text, e));
     // The reason is in what's read out when it names the text; otherwise the text is.
     let said = match (error, &message) {
-        (Some(PieceError::NotAnAddress | PieceError::NotFound), Some(m)) => m.as_str(),
+        (Some(PieceError::NotAnAddress | PieceError::NotFound | PieceError::RoomsFull(_)), Some(m)) => m.as_str(),
         _ => text,
     };
     widgets::named(ui, &resp, said, true, Some(selected));

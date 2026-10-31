@@ -1815,3 +1815,5 @@ month	May	مايو
 	Send from a person, a shared mailbox or a list	أرسل من شخص أو صندوق بريد مشترك أو قائمة
 	{room} was moved to Rooms	تم نقل {room} إلى الغرف
 	This list is no longer available	هذه القائمة لم تعد متاحة
+	Checking names…	جارٍ التحقق من الأسماء…
+	{room} can't be booked: a meeting books {max} rooms at most	لا يمكن حجز {room}: يحجز الاجتماع {max} غرفة على الأكثر

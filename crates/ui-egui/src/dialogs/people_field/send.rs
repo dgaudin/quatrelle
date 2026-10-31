@@ -236,11 +236,12 @@ impl PeopleFields {
 }
 
 /// A meeting's Send, held as a message's is: its lines are its form's text, handed in.
-#[cfg_attr(not(test), expect(dead_code, reason = "the meeting's Send is gated through it, next in this delivery"))]
 impl PeopleFields {
     /// A meeting's line written as its field's pieces spell it, when they changed without the
-    /// widget (what's typed closed, a name settled).
-    fn write_line(&mut self, field: FieldId, line: &mut String) {
+    /// widget (what's typed closed, a name settled, a room taken out or kept): the form's text
+    /// then, the line drawn or not (the Scheduling Assistant draws none). The field knows it
+    /// wrote it, so it isn't parsed again (a room kept as typed would be taken out again).
+    pub(crate) fn write_line(&mut self, field: FieldId, line: &mut String) {
         let Some(f) = self.fields.get_mut(&field) else { return };
         if f.dirty {
             *line = text_of(&f.st.pieces, &f.st.input);

@@ -10,11 +10,11 @@ use super::*;
 use crate::dialogs::people_field::{accepts_of, egui_id, meeting_field};
 use crate::pim_dialogs::{EventForm, Line, line_button_id};
 
-const SIZE: egui::Vec2 = egui::vec2(1280.0, 900.0);
+pub(super) const SIZE: egui::Vec2 = egui::vec2(1280.0, 900.0);
 
-const LAB: &str = "sound.lab@studio.example";
+pub(super) const LAB: &str = "sound.lab@studio.example";
 
-fn frames(ctx: &egui::Context, a: &mut MailApp, n: usize) {
+pub(super) fn frames(ctx: &egui::Context, a: &mut MailApp, n: usize) {
     for _ in 0..n {
         frame_sized(ctx, a, vec![], SIZE);
     }
@@ -22,7 +22,7 @@ fn frames(ctx: &egui::Context, a: &mut MailApp, n: usize) {
 
 /// A new meeting with `guests` in Required, open in its window (`finder`: its Room Finder open);
 /// the window's number.
-fn open_meeting(ctx: &egui::Context, a: &mut MailApp, guests: &str, finder: bool) -> u64 {
+pub(super) fn open_meeting(ctx: &egui::Context, a: &mut MailApp, guests: &str, finder: bool) -> u64 {
     frame_sized(ctx, a, vec![], SIZE);
     let mut d = Dialog::new_event(&a.session, Some(NOW + 2 * 3600));
     if let Dialog::Event(f) = &mut d {
@@ -38,17 +38,17 @@ fn open_meeting(ctx: &egui::Context, a: &mut MailApp, guests: &str, finder: bool
     a.ui.event_windows.first().map_or(0, |(w, _)| *w)
 }
 
-fn form(a: &MailApp) -> &EventForm {
+pub(super) fn form(a: &MailApp) -> &EventForm {
     &a.ui.event_windows[0].1
 }
 
 /// What the meeting books: its rooms' addresses.
-fn booked(a: &MailApp) -> Vec<String> {
+pub(super) fn booked(a: &MailApp) -> Vec<String> {
     form(a).rooms.iter().map(|(_, e)| e.clone()).collect()
 }
 
 /// Type `text` in the field, its input given the keyboard first; a few frames after.
-fn type_in(ctx: &egui::Context, a: &mut MailApp, field: FieldId, text: &str) {
+pub(super) fn type_in(ctx: &egui::Context, a: &mut MailApp, field: FieldId, text: &str) {
     focus_field(ctx, field);
     frame_sized(ctx, a, vec![], SIZE);
     frame_sized(ctx, a, vec![Event::Text(text.into())], SIZE);

@@ -1816,3 +1816,5 @@ month	May	5月
 	Send from a person, a shared mailbox or a list	個人、共有メールボックス、またはリストから送信してください
 	{room} was moved to Rooms	{room} を会議室に移動しました
 	This list is no longer available	このリストは利用できなくなりました
+	Checking names…	名前を確認しています…
+	{room} can't be booked: a meeting books {max} rooms at most	{room} は予約できません: 1 つの会議で予約できる会議室は {max} 室までです
