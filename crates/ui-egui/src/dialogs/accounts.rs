@@ -1,12 +1,14 @@
 //! Dialogs: accounts (adding one, its settings, its password, removing it), and closing Quatrelle.
 
+use super::people_field::{DIALOG_WINDOWS, PeopleFields, accepts_of, dialog_field, egui_id};
 use super::*;
+use crate::look::people_field::input_id;
 
 mod forms;
 
 pub use forms::*;
 
-pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Action>) -> bool {
+pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, people: &mut PeopleFields, t: &Tokens, acts: &mut Vec<Action>) -> bool {
     match d {
         Dialog::AddAccount(f) => {
             ui.set_width(440.0);
@@ -474,21 +476,32 @@ pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &
                 .wrap(),
             );
             ui.add_space(8.0);
-            let r = ui.add(egui::TextEdit::singleline(email).hint_text("support@example.com").desired_width(f32::INFINITY));
+            // A contacts field of one entry: a name typed is checked as OK goes (`dialog_ok`).
+            let field = dialog_field(0, "mailbox");
+            let input = input_id(egui_id(field));
+            // Before the focus request below, which would hide the Enter that ended input.
+            let had = ui.memory(|m| m.has_focus(input));
+            people.draw(ui, t, field, Some(account.as_str()), accepts_of(field.name), "", "support@example.com", email, false, false, false, acts);
+            let enter = had && ui.input(|i| i.key_pressed(egui::Key::Enter));
             if ui.memory(|m| m.focused().is_none()) {
-                r.request_focus();
+                ui.memory_mut(|m| m.request_focus(input));
             }
             ui.add_space(4.0);
             ui.checkbox(calendar, tl!("Open its calendar too"));
             if let Some(e) = error {
                 ui.add_space(4.0);
-                ui.label(RichText::new(e.as_str()).color(t.danger).small());
+                ui.add(egui::Label::new(RichText::new(e.as_str()).color(t.danger).small()).wrap());
             }
-            let enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-            let ready = email.contains('@');
+            let held = people.holding(DIALOG_WINDOWS);
+            if held {
+                ui.add_space(4.0);
+                ui.label(RichText::new(tl!("Checking names…")).color(t.faint).small());
+            }
+            // An entry its place refuses still lets OK go: it stops there, saying why.
+            let ready = !held && (!people.pieces(field).is_empty() || !people.typing(field).trim().is_empty());
             let (ok, cancel) = buttons(ui, t, "Open", ready);
             if (ok || enter) && ready {
-                acts.push(Action::Submit("account.openMailbox", json!({"account": account, "email": email.trim(), "calendar": *calendar})));
+                acts.push(Action::DialogOk);
             }
             !cancel
         }

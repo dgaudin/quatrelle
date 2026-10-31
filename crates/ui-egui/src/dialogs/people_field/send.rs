@@ -326,7 +326,6 @@ impl PeopleFields {
     /// does what it can with each. Strict, an entry nothing can be done with stops it, as a
     /// meeting's Send stops. A field no OK is held for (not one of [`DIALOG_FIELDS`]) has
     /// nothing to wait on: `false`.
-    #[cfg_attr(not(test), expect(dead_code, reason = "the dialogs draw their fields from the next commit"))]
     pub(crate) fn gate_dialog(
         &mut self,
         s: &mut Session,

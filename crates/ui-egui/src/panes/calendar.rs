@@ -142,7 +142,7 @@ pub fn nav(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
         if s.accounts.iter().any(|a| a.config.graph.is_some() || a.config.ews.is_some()) {
             ui.add_space(6.0);
             if ui.link(RichText::new(tl!("Open shared calendar…")).small()).clicked() {
-                acts.push(Action::Dialog(Dialog::OpenSharedCalendar { email: String::new(), error: None }));
+                acts.push(Action::Dialog(Dialog::open_calendars()));
             }
         }
         // Outlook's Add Calendar › From Internet (issue #7).

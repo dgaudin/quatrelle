@@ -324,6 +324,7 @@ impl MailApp {
                 }
             }
             Action::ForEvent(w, id, p) => self.for_event(w, id, p),
+            Action::DialogOk => self.dialog_ok(),
             Action::Submit(id, p) => match self.session.run(id, &p) {
                 Ok(v) => {
                     if id == "contact.create" {

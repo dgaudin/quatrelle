@@ -1,9 +1,12 @@
-//! Sending once the names are known: a message's Send or a meeting's, held while its fields'
-//! names are resolved and its contact groups expanded (`PeopleFields::gate_send`,
-//! `PeopleFields::gate_meeting`), then run, or stopped with why in the window it was asked from;
-//! and the commands of an appointment's or meeting's window.
+//! Sending once the names are known: a message's Send or a meeting's, or a dialog's OK, held
+//! while its fields' names are resolved and its contact groups expanded
+//! (`PeopleFields::gate_send`, `PeopleFields::gate_meeting`, `PeopleFields::gate_dialog`), then
+//! run, or stopped with why in the window or dialog it was asked from; and the commands of an
+//! appointment's or meeting's window.
 
-use crate::dialogs::people_field::{MEETING_FIELDS, MEETING_WINDOWS, PeopleFields, is_meeting_window, meeting_field};
+use crate::dialogs::people_field::{
+    DIALOG_WINDOWS, MEETING_FIELDS, MEETING_WINDOWS, PeopleFields, dialog_field, is_dialog_window, is_meeting_window, meeting_field, places,
+};
 use crate::pim_dialogs::{self, EventForm};
 use crate::*;
 
@@ -21,9 +24,17 @@ impl MailApp {
                 pim_dialogs::prepare(f, &mut self.session, &mut self.ui.people);
             }
         }
+        // A held dialog's field likewise.
+        if self.ui.people.holding(DIALOG_WINDOWS)
+            && let Some(d) = self.ui.dialog.as_mut()
+        {
+            places::prepare(&mut self.ui.people, &mut self.session, d);
+        }
         for (id, done) in self.ui.people.send_when_resolved(&mut self.session, now) {
             if is_meeting_window(id) {
                 self.meeting_resolved(id & !MEETING_WINDOWS, done, now);
+            } else if is_dialog_window(id) {
+                self.dialog_resolved(done);
             } else {
                 match done {
                     Ok(params) => {
@@ -81,6 +92,64 @@ impl MailApp {
         }
         let p = f.params();
         self.event_command(w, id, p);
+    }
+
+    /// The open dialog's OK (Add calendar, Open another mailbox): what's typed in its field closed
+    /// and its names checked first. Add calendar waits only on the names being asked and does
+    /// what it can with each entry; Open another mailbox stops on one it can't open. Held, it goes
+    /// on from [`Self::send_when_resolved`]; another press meanwhile does nothing.
+    pub(super) fn dialog_ok(&mut self) {
+        let people = &mut self.ui.people;
+        if people.holding(DIALOG_WINDOWS) {
+            return;
+        }
+        let now = self.ui.close_checked.unwrap_or(0.0);
+        let held = match self.ui.dialog.as_mut() {
+            Some(Dialog::OpenSharedCalendar(f)) => {
+                let account = self.session.directory_account(None);
+                people.gate_dialog(&mut self.session, "calendar", account.as_deref(), &mut f.text, true, now)
+            }
+            Some(Dialog::OpenSharedMailbox { account, email, .. }) => {
+                let account = account.clone();
+                people.gate_dialog(&mut self.session, "mailbox", Some(&account), email, false, now)
+            }
+            _ => return,
+        };
+        if !held {
+            self.dialog_resolved(Ok(Value::Null));
+        }
+    }
+
+    /// What the open dialog's OK came to once its names were settled. Add calendar opens each
+    /// person's calendar: one opened leaves the field, one that couldn't stays, red, with why; the
+    /// dialog closes once nothing is left (a wait that gave up says so, under the field). Open
+    /// another mailbox opens the one entry (closing on success, saying why otherwise), or says
+    /// why it can't.
+    fn dialog_resolved(&mut self, done: Result<Value, String>) {
+        match self.ui.dialog.as_mut() {
+            Some(Dialog::OpenSharedCalendar(f)) => {
+                let field = dialog_field(0, "calendar");
+                for who in self.ui.people.addressees(field) {
+                    match self.session.run("calendar.openShared", &json!({"email": who.address})) {
+                        Ok(_) => self.ui.people.opened(field, &who.address),
+                        Err(e) => self.ui.people.failed(field, &who.address, e.to_string().trim_start_matches("bad parameters: ").to_string()),
+                    }
+                }
+                f.error = done.err();
+                if self.ui.people.pieces(field).is_empty() && self.ui.people.typing(field).trim().is_empty() {
+                    self.ui.dialog = None;
+                }
+            }
+            Some(Dialog::OpenSharedMailbox { account, calendar, error, .. }) => match done {
+                Ok(_) => {
+                    let Some(who) = self.ui.people.addressees(dialog_field(0, "mailbox")).into_iter().next() else { return };
+                    let p = json!({"account": account, "email": who.address, "calendar": *calendar});
+                    self.act(Action::Submit("account.openMailbox", p));
+                }
+                Err(why) => *error = Some(why),
+            },
+            _ => {}
+        }
     }
 
     /// Run a command of window `w`'s: done, the window closes; refused, it says why.
