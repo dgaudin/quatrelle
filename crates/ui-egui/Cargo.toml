@@ -44,3 +44,8 @@ web-time = "1.1"
 resvg = { version = "0.45", default-features = false }
 # PDF attachment thumbnails: a pure-Rust rasterizer (no unsafe code).
 hayro = { version = "0.8", default-features = false }
+
+[target.'cfg(windows)'.dependencies]
+# The system's code pages for Alt codes (`app/alt_code.rs`), from the registry; the version the
+# app and ipconfig use, so it's built once.
+windows-registry = "0.6"

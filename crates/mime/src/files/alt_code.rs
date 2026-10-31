@@ -86,6 +86,17 @@ pub fn alt_code_pages(locale: Option<&str>) -> (u16, u16) {
     }
 }
 
+/// The code pages Windows itself reads Alt codes in: the system's ANSI and OEM pages
+/// (`ACP` and `OEMCP` under `HKLM\SYSTEM\CurrentControlSet\Control\Nls\CodePage`, as the
+/// registry writes their numbers), set by the system locale, not by the display language. A
+/// page [`alt_code_char`] can't read, or none, keeps `guess`'s (from [`alt_code_pages`]).
+pub fn alt_code_system_pages(acp: Option<&str>, oemcp: Option<&str>, guess: (u16, u16)) -> (u16, u16) {
+    let number = |v: Option<&str>| v.and_then(|v| v.trim().parse::<u16>().ok());
+    let ansi = number(acp).filter(|p| matches!(p, 874 | 1250..=1258)).unwrap_or(guess.0);
+    let oem = number(oemcp).filter(|p| matches!(p, 437 | 850 | 866)).unwrap_or(guess.1);
+    (ansi, oem)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -113,5 +124,30 @@ mod tests {
         }
         assert_eq!(alt_code_pages(None), (1252, 437));
         assert_eq!(alt_code_pages(Some("en-GB")), (1252, 850));
+    }
+
+    /// A Windows shown in US English with a French system locale (common in companies): its
+    /// display language guesses OEM 437, the system says 850, and Alt+183 is À, not ╖.
+    #[test]
+    fn the_system_pages_win_over_the_display_language() {
+        let guess = alt_code_pages(Some("en-US"));
+        assert_eq!(guess, (1252, 437));
+        let (ansi, oem) = alt_code_system_pages(Some("1252"), Some("850"), guess);
+        assert_eq!((ansi, oem), (1252, 850));
+        let typed: String = ["183", "212", "210", "182", "226"].iter().filter_map(|c| alt_code_char(c, ansi, oem)).collect();
+        assert_eq!(typed, "ÀÈÊÂÔ");
+        assert_eq!(alt_code_char("183", guess.0, guess.1), Some('╖'));
+        // Every page it keeps is one the codes are read in: its bytes decode.
+        for (acp, oemcp) in [("874", "437"), ("1250", "850"), ("1251", "866"), ("1253", "437"), ("1257", "437"), ("1258", "850")] {
+            let (a, o) = alt_code_system_pages(Some(acp), Some(oemcp), (0, 0));
+            assert_eq!((a.to_string(), o.to_string()), (acp.to_string(), oemcp.to_string()));
+            assert!(page_byte(&format!("windows-{a}"), 0xC0).is_some(), "{a}");
+            assert!(alt_code_char("200", a, o).is_some(), "{o}");
+        }
+        assert_eq!(alt_code_system_pages(Some(" 1251 "), Some("866"), guess), (1251, 866));
+        // Pages it can't read (Japanese 932, OEM 852), junk, nothing: the guess stays.
+        assert_eq!(alt_code_system_pages(Some("932"), Some("852"), (1250, 437)), (1250, 437));
+        assert_eq!(alt_code_system_pages(Some("x"), Some("99999"), guess), guess);
+        assert_eq!(alt_code_system_pages(None, None, guess), guess);
     }
 }

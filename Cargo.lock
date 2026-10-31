@@ -5052,6 +5052,7 @@ dependencies = [
  "unicode-bidi",
  "vello_cpu 0.2.0",
  "web-time",
+ "windows-registry",
 ]
 
 [[package]]
