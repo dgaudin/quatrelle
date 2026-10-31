@@ -1827,3 +1827,4 @@ month	May	5월
 	From one of these	보낸 사람이 다음 중 하나
 	To or Cc one of these	받는 사람 또는 참조가 다음 중 하나
 	Subject has one of these (comma-separated)	제목에 다음 단어 중 하나 포함 (쉼표로 구분)
+	Messages still being sent: {n}. They may not go if Quatrelle closes now: wait a moment, or close anyway.	아직 보내는 중인 메시지: {n}. 지금 Quatrelle를 닫으면 보내지지 않을 수 있습니다. 잠시 기다리거나 그래도 닫으세요.

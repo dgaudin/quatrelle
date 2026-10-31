@@ -1824,3 +1824,4 @@ month	May	מאי
 	From one of these	השולח הוא אחד מאלה
 	To or Cc one of these	אל או עותק הוא אחד מאלה
 	Subject has one of these (comma-separated)	הנושא מכיל אחת מהמילים האלה (מופרדות בפסיקים)
+	Messages still being sent: {n}. They may not go if Quatrelle closes now: wait a moment, or close anyway.	הודעות שעדיין נשלחות: {n}. ייתכן שלא יישלחו אם Quatrelle ייסגר עכשיו: המתן רגע, או סגור בכל זאת.

@@ -1824,3 +1824,4 @@ month	May	مايو
 	From one of these	المرسل هو أحد هؤلاء
 	To or Cc one of these	إلى أو نسخة هو أحد هؤلاء
 	Subject has one of these (comma-separated)	الموضوع يحتوي على إحدى هذه الكلمات (مفصولة بفواصل)
+	Messages still being sent: {n}. They may not go if Quatrelle closes now: wait a moment, or close anyway.	رسائل لا تزال قيد الإرسال: {n}. قد لا تُرسل إذا أُغلق Quatrelle الآن: انتظر قليلًا، أو أغلق على أي حال.
