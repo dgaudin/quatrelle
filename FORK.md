@@ -496,6 +496,41 @@ codes Alt, Exchange, signatures…) vient dans les parties suivantes.
   `model/src/folder.rs` (avec `folder/utf7.rs`, ré-exporté sous les mêmes noms) et les deux tests
   d'images citées dans `tests/writing/quoted.rs`, sans changement de comportement.
 
+### Deuxième partie : le `winmail.dat` d'Outlook (2026-10-31)
+
+Sur la branche `zidan-v0.30-tnef`, un seul commit de l'origine, le plus important de la tournée
+pour le propriétaire : le courrier des expéditeurs Outlook arrive souvent avec un `winmail.dat`
+(`application/ms-tnef`) que rien ne savait ouvrir.
+
+- **Repris** : `99cee57a` (issue #18). Le lecteur TNEF (`mime/src/attachments/tnef.rs`,
+  MS-OXTNEF) donne les fichiers du `winmail.dat` avec leur nom long, leur type et leur `Content-ID`, et un message
+  Outlook joint en `.eml` ; le lecteur RTF (`tnef/rtf.rs`, MS-OXRTFCP et MS-OXRTFEX) décompresse
+  le corps, en ressort l'HTML qu'Outlook y a enveloppé, ou fait d'un RTF propre un HTML simple
+  (gras, italique, souligné, barré, liens, sauts de ligne). Les fichiers prennent la place du
+  `winmail.dat` dans la liste des pièces jointes, par le même index que les autres : enregistrer,
+  prévisualiser, transférer et citer les images passent par `attachment_data` sans autre
+  changement ; la recherche trouve leurs noms et le texte. Rien n'est chargé du réseau : l'HTML
+  sorti du RTF suit le chemin de tout courrier HTML (images du Web retenues). La cible de fuzz
+  `tnef` vient avec son dictionnaire et ses graines.
+- **Résolu à la main** : l'origine a sorti le code des pièces jointes de `lib.rs` vers
+  `attachments.rs` ; le `lib.rs` de ce fork diffère (réponses dans `reply.rs`, liens, `fnv`…),
+  donc ce déplacement est refait à la main : `AttachmentInfo`, les genres, la règle des parties
+  incorporées et `has_real_attachments` passent tels quels, `attachment_data` prend l'index commun
+  au `winmail.dat`, et `quoted_pictures` (avec `data_url`) rejoint `attachments.rs` comme chez
+  l'origine, inchangé. `lib.rs` exporte aussi `decompress_rtf` et `rtf_body`, qu'appelle la cible
+  de fuzz (l'origine ne les exporte que plus tard).
+- **Corrigé après relecture** : la limite `MAX_PROPS` (4096) valait par liste de propriétés, mais
+  un flux peut répéter ses listes : elle vaut maintenant pour le message et pour chaque fichier.
+  Dans le lecteur RTF, `raw()` écrivait les balises d'un changement de lien avant de regarder la
+  limite de 16 Mo (40 Mo écrits pour 160 Ko de RTF dans le test) ; l'instruction d'un champ
+  n'était pas bornée quand ses caractères étaient écrits en `\uN` ; et chaque jeton recopiait les
+  liens de son groupe (désormais partagés, `Rc<str>`). Un test de régression pour chacun.
+- **Règle des petits fichiers** : `mime/src/` serait passé à 17 fichiers Rust ; le lecteur TNEF
+  (avec `tnef/rtf.rs` et ses tests) va sous `attachments/`, puisqu'un `winmail.dat` est une pièce
+  jointe (l'origine l'a à `mime/src/tnef.rs`) ; les noms exportés ne changent pas.
+- **Hors du `winmail.dat`** : deux paires de tests du moteur partageaient leur dossier temporaire
+  (`contact-fields`, `server-search`) ; le second de chaque paire a le sien.
+
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
 Quatre chantiers, chacun dans son commit, à la suite d'un audit de l'éditeur HTML.
