@@ -233,13 +233,17 @@ pub fn quoted_pictures(p: &mut Parsed, raw: &[u8]) -> (Vec<InlinePicture>, Vec<u
         })
         .collect();
     let trackers = p.trackers.pictures.clone();
+    // The message read once for all its pictures (a winmail.dat's files are made each time it's
+    // read), and only when one of them is among its attachments.
+    let message = found.iter().any(|(_, at)| at.is_some()).then(|| MessageParser::default().parse(raw)).flatten();
+    let files = message.as_ref().map(|m| attached(m).0).unwrap_or_default();
     let mut given: Vec<(String, String)> = Vec::new();
     for (src, at) in found {
         if given.iter().any(|(s, _)| *s == src) || out.len() >= QUOTED_PICTURES {
             continue;
         }
         let picture = match at.and_then(|i| p.attachments.get(i)) {
-            Some(a) if a.size <= QUOTED_PICTURE_MAX => attachment_data(raw, a.index).map(|data| {
+            Some(a) if a.size <= QUOTED_PICTURE_MAX => files.get(a.index).map(|f| f.data.to_vec()).map(|data| {
                 let cid = a
                     .content_id
                     .clone()
