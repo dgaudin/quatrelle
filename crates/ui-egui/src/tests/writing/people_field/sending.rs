@@ -1,11 +1,21 @@
-//! Send and the contacts field (`PeopleFields::gate_send`, `send_when_resolved`): the names still
-//! being resolved, the choice dialog, a contact group expanded first, the directory's timeout, and
-//! recipients left out.
+//! Send and the contacts field (`PeopleFields::gate_send`, `send_when_resolved`, `gate_meeting`):
+//! the names still being resolved, the choice dialog, a contact group expanded first, the
+//! directory's timeout, and recipients left out; and what the field's place takes (a meeting's
+//! windows apart from the messages', a kind refused, one entry, a room among the guests).
 
-use quatrelle_engine::model::{Addressee, AddresseeKind, Job};
+use std::collections::HashSet;
+
+use quatrelle_engine::FieldId;
+use quatrelle_engine::model::addr::Accepts;
+use quatrelle_engine::model::{AccountConfig, Addressee, AddresseeKind, Job};
+use serde_json::Value;
 
 use super::message::{SIZE, Taken, chip_named, directory_fails, field, focus_field, frame_at, handed, has_send, new_message_on, text_with, to};
 use super::*;
+use crate::dialogs::people_field::{MEETING_WINDOWS, accepts_of, meeting_field};
+
+/// The stop when a field lost recipients (past its cap, or a list expanded in part).
+const LEFT_OUT: &str = "Some recipients were left out. Empty the field, then add fewer at once or the list itself";
 
 /// Send waits for a name still being looked up, then goes once the directory has answered; a
 /// name the directory doesn't know stops the send with "Not found"; a message to addresses alone
@@ -336,7 +346,7 @@ fn a_contact_group_with_more_members_than_the_field_holds_stops_the_send() {
         error: None,
     });
     frame(&ctx, &mut a, vec![]);
-    assert_eq!(a.ui.compose_alert.as_deref(), Some("Some recipients were left out: send to fewer at once, or to the list itself"));
+    assert_eq!(a.ui.compose_alert.as_deref(), Some(LEFT_OUT));
     assert!(!has_send(&handed(&jobs)), "not sent to part of the list");
     assert!(!a.session.compose.as_ref().unwrap().sending);
     assert!(a.ui.people.send_wait_left(0.0).is_none(), "the wait is off");
@@ -367,7 +377,7 @@ fn a_field_fed_more_entries_than_it_holds_stops_the_send() {
     handed(&jobs);
     a.run("compose.send", json!({}));
     frame(&ctx, &mut a, vec![]);
-    assert_eq!(a.ui.compose_alert.as_deref(), Some("Some recipients were left out: send to fewer at once, or to the list itself"));
+    assert_eq!(a.ui.compose_alert.as_deref(), Some(LEFT_OUT));
     assert!(!has_send(&handed(&jobs)), "not sent to the first 500 alone");
     assert!(!a.session.compose.as_ref().unwrap().sending);
     let _ = std::fs::remove_dir_all(dir);
@@ -401,7 +411,7 @@ fn a_group_expanded_in_part_keeps_stopping_the_send_after_another_entry() {
         error: None,
     });
     frame(&ctx, &mut a, vec![]);
-    let alert = "Some recipients were left out: send to fewer at once, or to the list itself";
+    let alert = LEFT_OUT;
     assert_eq!(a.ui.compose_alert.as_deref(), Some(alert));
     a.ui.compose_alert = None;
     let f = field(&a, "to");
@@ -454,7 +464,226 @@ fn a_paste_past_the_cap_keeps_stopping_the_send_after_a_chip_is_removed() {
     handed(&jobs);
     a.run("compose.send", json!({}));
     frame(&ctx, &mut a, vec![]);
-    assert_eq!(a.ui.compose_alert.as_deref(), Some("Some recipients were left out: send to fewer at once, or to the list itself"));
+    assert_eq!(a.ui.compose_alert.as_deref(), Some(LEFT_OUT));
     assert!(!has_send(&handed(&jobs)), "not sent to 499 of 503");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A meeting window and a message window can have the same number (each counts on its own): the
+/// message closed, its names go, and the meeting's stay — its Required line still waits on its
+/// name.
+#[test]
+fn a_meeting_and_a_message_numbered_alike_keep_their_own_names() {
+    let (mut a, dir) = app("meeting-numbered-alike");
+    let gal = with_exchange(&mut a);
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    new_message_on(&mut a, &gal, "dupont");
+    let n = a.session.compose.as_ref().unwrap().id;
+    frame(&ctx, &mut a, vec![]);
+    let to = FieldId { window: n, name: "to" };
+    let _ = a.session.people_resolve(to, Some(&gal), &Accepts::RECIPIENTS, None);
+    assert_eq!(a.session.people_pending(to), 1, "the message's name waits");
+    let required = meeting_field(n, "required");
+    assert_ne!(required.window, n, "numbered apart");
+    a.ui.people.prepare(&mut a.session, required, Some(&gal), accepts_of("required"), "smith");
+    let _ = a.session.people_resolve(required, Some(&gal), accepts_of("required"), Some("smith"));
+    assert_eq!(a.session.people_pending(required), 1, "the meeting's name waits too");
+    // Both open, then the message closed.
+    let both: HashSet<u64> = [n, MEETING_WINDOWS | n].into();
+    a.ui.people.settle(&mut a.session, &both, &HashSet::new());
+    let meeting: HashSet<u64> = [MEETING_WINDOWS | n].into();
+    a.ui.people.settle(&mut a.session, &meeting, &HashSet::new());
+    assert_eq!(a.session.people_pending(required), 1, "the meeting's name still waits");
+    assert_eq!(a.ui.people.pieces(required).len(), 1, "and its line keeps it");
+    assert_eq!(a.session.people_pending(to), 0, "the message's name went with it");
+    assert!(a.ui.people.pieces(to).is_empty(), "so did its fields");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Whether a chip of `address` is in the pieces, and why it's refused if it is.
+fn refusal(pieces: &[Piece], address: &str) -> Option<Option<String>> {
+    pieces.iter().find_map(|p| match p {
+        Piece::Chip { who, refused } if who.address == address => Some(refused.clone()),
+        _ => None,
+    })
+}
+
+/// A person picked by name in Rooms is a red chip that says why, and it stays red when the line
+/// is read again with another entry; the same person typed as a full address is taken.
+#[test]
+fn a_refused_kind_is_a_red_chip_that_stays_red() {
+    let (mut a, dir) = app("refused-kind");
+    let rooms = meeting_field(1, "rooms");
+    a.ui.people.prepare(&mut a.session, rooms, Some("sample"), accepts_of("rooms"), "");
+    a.ui.people.add(rooms, Addressee::new("Zoe Park", "zoe@studio.example", AddresseeKind::Person));
+    let not_a_room = Some(Some("This isn't a room".to_string()));
+    assert_eq!(refusal(a.ui.people.pieces(rooms), "zoe@studio.example"), not_a_room, "{:?}", a.ui.people.pieces(rooms));
+    assert!(a.ui.people.blocked(rooms), "a refused chip blocks");
+    assert!(a.ui.people.addressees(rooms).is_empty(), "and isn't handed on");
+    // The line read again, another entry added: still refused.
+    let text = a.ui.people.text(rooms).unwrap_or_default();
+    let more = format!("{text}Sound Lab <sound.lab@studio.example>; ");
+    a.ui.people.prepare(&mut a.session, rooms, Some("sample"), accepts_of("rooms"), &more);
+    assert_eq!(a.ui.people.pieces(rooms).len(), 2, "{:?}", a.ui.people.pieces(rooms));
+    assert_eq!(refusal(a.ui.people.pieces(rooms), "zoe@studio.example"), not_a_room, "still red");
+    // Typed in full in a fresh Rooms line, the same person is taken.
+    let fresh = meeting_field(2, "rooms");
+    a.ui.people.prepare(&mut a.session, fresh, Some("sample"), accepts_of("rooms"), "zoe@studio.example");
+    assert_eq!(refusal(a.ui.people.pieces(fresh), "zoe@studio.example"), Some(None), "{:?}", a.ui.people.pieces(fresh));
+    assert!(!a.ui.people.blocked(fresh));
+    assert_eq!(a.ui.people.addressees(fresh).len(), 1);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// One frame of a field alone, as a window draws it: made ready, then drawn, with the keyboard.
+fn draw_alone(ctx: &egui::Context, a: &mut MailApp, field: FieldId, text: &mut String, events: Vec<Event>) {
+    let raw = RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, SIZE)), events, ..Default::default() };
+    let t = crate::theme::Tokens::light();
+    let accepts = accepts_of(field.name);
+    let mut acts = Vec::new();
+    let mut out = ctx.run_ui(raw, |ui| {
+        a.ui.people.prepare(&mut a.session, field, Some("sample"), accepts, text);
+        a.ui.people.draw(ui, &t, field, Some("sample"), accepts, "From", "", text, true, false, false, &mut acts);
+    });
+    out.textures_delta.clear();
+}
+
+/// From holds one entry: a second one closed takes the first one's place.
+#[test]
+fn a_one_entry_field_keeps_the_last_entry() {
+    let (mut a, dir) = app("one-entry");
+    let ctx = egui::Context::default();
+    let from = FieldId { window: 7, name: "from" };
+    let mut text = String::new();
+    draw_alone(&ctx, &mut a, from, &mut text, vec![]);
+    draw_alone(&ctx, &mut a, from, &mut text, vec![Event::Text("zoe@studio.example;".into())]);
+    draw_alone(&ctx, &mut a, from, &mut text, vec![]);
+    assert_eq!(a.ui.people.pieces(from).len(), 1, "{:?}", a.ui.people.pieces(from));
+    draw_alone(&ctx, &mut a, from, &mut text, vec![Event::Text("ana@soundlab.example;".into())]);
+    draw_alone(&ctx, &mut a, from, &mut text, vec![]);
+    let p = a.ui.people.pieces(from);
+    assert!(p.len() == 1 && matches!(&p[0], Piece::Chip { who, refused: None } if who.address == "ana@soundlab.example"), "{p:?}");
+    assert!(text.contains("ana@soundlab.example") && !text.contains("zoe"), "{text}");
+    assert_eq!(a.ui.people.left_out(from), None, "the one replaced isn't left out");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A room typed among the guests is no guest: it is taken out of Required, for Rooms to book.
+#[test]
+fn a_room_in_the_guests_is_moved_out() {
+    let (mut a, dir) = app("room-moved");
+    // The sample's room set, from its calendar: an answer about its rooms with none of the
+    // server's makes it (`calendar.rooms` alone fills the Room Finder, not the set).
+    a.session.apply(MailEvent::Rooms { account: "sample".into(), lists: Vec::new(), rooms: Vec::new(), error: None });
+    assert_eq!(a.session.addressee_kind(Some("sample"), "sound.lab@studio.example"), AddresseeKind::Room, "the sample's rooms, from its calendar");
+    let required = meeting_field(1, "required");
+    a.ui.people.prepare(&mut a.session, required, Some("sample"), accepts_of("required"), "Sound Lab <sound.lab@studio.example>, zoe@studio.example");
+    let moved = a.ui.people.take_moved(required);
+    assert!(moved.len() == 1 && moved[0].address == "sound.lab@studio.example" && moved[0].name == "Sound Lab", "{moved:?}");
+    let text = a.ui.people.text(required).unwrap_or_default();
+    assert!(text.contains("zoe@studio.example") && !text.contains("sound.lab"), "{text}");
+    assert!(a.ui.people.take_moved(required).is_empty(), "taken once");
+    // The window says so under the line.
+    a.ui.people.say(required, "Sound Lab was moved to Rooms".into());
+    assert_eq!(a.ui.people.note(required), Some("Sound Lab was moved to Rooms"));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Put everyone in Bcc would set To and Cc anew and so forget that To lost recipients: it waits,
+/// with the stop's word, while they're left out.
+#[test]
+fn hide_recipients_waits_while_recipients_were_left_out() {
+    let (mut a, dir) = app("hide-left-out");
+    let gal = with_exchange(&mut a);
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    new_message_on(&mut a, &gal, "");
+    frame(&ctx, &mut a, vec![]);
+    frame(&ctx, &mut a, vec![]);
+    let many: Vec<String> = (0..501).map(|i| format!("p{i}@x.example")).collect();
+    frame(&ctx, &mut a, vec![Event::Paste(many.join("; "))]);
+    frame(&ctx, &mut a, vec![]);
+    frame(&ctx, &mut a, vec![]);
+    let f = field(&a, "to");
+    assert_eq!(a.ui.people.left_out(f), Some(1));
+    a.run("compose.hideRecipients", json!({}));
+    assert_eq!(a.ui.compose_alert.as_deref(), Some(LEFT_OUT));
+    let c = a.session.compose.as_ref().unwrap();
+    assert_eq!(c.bcc, "", "nobody put in Bcc");
+    assert!(c.to.contains("p0@x.example"), "To as it was");
+    assert_eq!(a.ui.people.left_out(f), Some(1), "still left out");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A list whose question the engine no longer has (its account removed before the answer came)
+/// isn't dropped in silence: the field says it couldn't be expanded, and the send stops with that.
+#[test]
+fn a_list_gone_from_the_engine_says_it_couldnt_be_expanded() {
+    let (mut a, dir) = app("list-gone");
+    let taken = Taken::default();
+    let jobs = taken.0.clone();
+    a.backend = Box::new(taken);
+    let first = with_exchange(&mut a);
+    let config = AccountConfig {
+        name: "Sam".into(),
+        email: "sam@fabrikam.example".into(),
+        username: "sam".into(),
+        ews: Some("https://mail.fabrikam.example/EWS/Exchange.asmx".into()),
+        ..Default::default()
+    };
+    a.session.add_account(config, Some("pw".into())).unwrap();
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    // Written from the sample account: the first Exchange account's directory expands its lists.
+    new_message_on(&mut a, "sample", "Dupont family <group:AAMk=>");
+    frame(&ctx, &mut a, vec![]);
+    handed(&jobs);
+    a.run("compose.send", json!({}));
+    frame(&ctx, &mut a, vec![]);
+    let out = handed(&jobs);
+    assert!(out.iter().any(|j| matches!(j, Job::ExpandList { account, .. } if *account == first)), "{out:?}");
+    a.session.remove_account(&first).unwrap();
+    frame(&ctx, &mut a, vec![]);
+    let f = field(&a, "to");
+    let note = a.ui.people.note(f).map(str::to_string);
+    assert!(note.as_deref().is_some_and(|n| n.starts_with("This list couldn't be expanded")), "{note:?}");
+    assert_eq!(a.ui.compose_alert, note, "the send stops with it");
+    assert!(!has_send(&handed(&jobs)));
+    assert!(!a.ui.people.holding(f.window), "the wait is off");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A meeting's Send waits for its lines' names as a message's does: held while a name is asked of
+/// the directory, it goes once the answer is in (the caller builds the command from the form); a
+/// person picked by name in Rooms stops it with why.
+#[test]
+fn a_meetings_send_waits_for_its_names_then_goes() {
+    let (mut a, dir) = app("meeting-send-waits");
+    let gal = with_exchange(&mut a);
+    let wid = 3;
+    let window = MEETING_WINDOWS | wid;
+    let required = meeting_field(wid, "required");
+    let (mut guests, mut optional, mut rooms) = ("zoe@studio.example; dupont".to_string(), String::new(), String::new());
+    let lines = [("required", &mut guests), ("optional", &mut optional), ("rooms", &mut rooms)];
+    assert!(a.ui.people.gate_meeting(&mut a.session, wid, &gal, lines, 1.0), "held for the name");
+    assert!(a.ui.people.holding(window));
+    assert!(a.session.directory_searching(&gal, "dupont"), "asked of the directory");
+    assert!(a.ui.people.send_when_resolved(&mut a.session, 2.0).is_empty(), "still waiting");
+    directory_answers(&mut a, &gal, "dupont", &[("Marc Dupont", "marc@contoso.example")]);
+    // The window's frame takes what its lines came to.
+    a.ui.people.prepare(&mut a.session, required, Some(&gal), accepts_of("required"), &guests);
+    assert_eq!(a.ui.people.send_when_resolved(&mut a.session, 3.0), vec![(window, Ok(Value::Null))]);
+    assert!(!a.ui.people.holding(window));
+    // (No message is being written, so the book isn't read: Zoe's address stands alone.)
+    assert_eq!(a.ui.people.text(required).as_deref(), Some("zoe@studio.example; Marc Dupont <marc@contoso.example>; "));
+    // A person picked by name into Rooms: the send stops on it.
+    let room_line = meeting_field(wid, "rooms");
+    a.ui.people.add(room_line, Addressee::new("Zoe Park", "zoe@studio.example", AddresseeKind::Person));
+    rooms = a.ui.people.text(room_line).unwrap_or_default();
+    guests = a.ui.people.text(required).unwrap_or_default();
+    let lines = [("required", &mut guests), ("optional", &mut optional), ("rooms", &mut rooms)];
+    assert!(a.ui.people.gate_meeting(&mut a.session, wid, &gal, lines, 4.0));
+    assert_eq!(a.ui.people.send_when_resolved(&mut a.session, 5.0), vec![(window, Err("This isn't a room".to_string()))]);
     let _ = std::fs::remove_dir_all(dir);
 }
