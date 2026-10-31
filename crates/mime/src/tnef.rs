@@ -25,7 +25,7 @@ pub use rtf::{decompress_rtf, rtf_body};
 const SIGNATURE: [u8; 4] = [0x78, 0x9F, 0x3E, 0x22];
 /// Most attachments read from one stream.
 const MAX_FILES: usize = 500;
-/// Most properties read from one list.
+/// Most properties read for the message, or for one attachment (from any number of lists).
 const MAX_PROPS: usize = 4096;
 /// How deep attached messages are read (each one a stream of its own).
 const MAX_DEPTH: u8 = 3;
@@ -200,7 +200,7 @@ fn read_at(data: &[u8], depth: u8) -> Option<Tnef> {
             (1, ATT_OEM_CODEPAGE) => oem = Reader { data: value, at: 0 }.u32().unwrap_or(1252),
             (1, ATT_SUBJECT) => subject = Some(value.to_vec()),
             (1, ATT_BODY) => body_attr = Some(value.to_vec()),
-            (1, ATT_MSG_PROPS) => msg.extend(props(value)),
+            (1, ATT_MSG_PROPS) => add_props(&mut msg, value),
             (2, ATT_REND_DATA) => {
                 if files.len() >= MAX_FILES {
                     break;
@@ -216,7 +216,7 @@ fn read_at(data: &[u8], depth: u8) -> Option<Tnef> {
                     ATT_TITLE => f.title = Some(value.to_vec()),
                     ATT_DATA => f.data = Some(value.to_vec()),
                     ATT_TRANSPORT_NAME => f.transport = Some(value.to_vec()),
-                    _ => f.props.extend(props(value)),
+                    _ => add_props(&mut f.props, value),
                 }
             }
             _ => {}
@@ -383,18 +383,17 @@ fn utf16(b: &[u8]) -> String {
     char::decode_utf16(units).map(|c| c.unwrap_or('\u{FFFD}')).filter(|c| *c != '\0').collect()
 }
 
-/// A MAPI property list (`attMsgProps`, `attAttachment`). A damaged list gives what came before.
-fn props(data: &[u8]) -> Props {
+/// A MAPI property list (`attMsgProps`, `attAttachment`) added to `into`, up to [`MAX_PROPS`] in
+/// all: a stream can repeat its lists. A damaged list gives what came before.
+fn add_props(into: &mut Props, data: &[u8]) {
     let mut r = Reader { data, at: 0 };
-    let mut out = Props::new();
-    let Some(count) = r.u32() else { return out };
-    for _ in 0..(count as usize).min(MAX_PROPS) {
+    let Some(count) = r.u32() else { return };
+    for _ in 0..(count as usize).min(MAX_PROPS.saturating_sub(into.len())) {
         match one_prop(&mut r) {
-            Some(p) => out.push(p),
+            Some(p) => into.push(p),
             None => break,
         }
     }
-    out
 }
 
 fn one_prop(r: &mut Reader<'_>) -> Option<(u16, Value)> {
