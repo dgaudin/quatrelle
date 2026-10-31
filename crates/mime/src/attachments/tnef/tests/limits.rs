@@ -190,3 +190,41 @@ fn winmail_dat_parts_share_the_files_and_one_body() {
     let dat = p.attachments.iter().filter(|a| a.name == "winmail.dat").count();
     assert_eq!((p.attachments.len() - dat, dat), (MAX_FILES, 2));
 }
+
+/// The last file left goes to an attached message whose own file is counted meanwhile: the count
+/// never goes below zero (a panic in a debug build, and in a release build the cap gone: two
+/// parts gave 1000 files), and two streams of 500 give 500 in all.
+#[test]
+fn an_attached_message_never_takes_the_count_below_zero() {
+    let mut inner = Vec::new();
+    attr(&mut inner, 2, ATT_REND_DATA, &[]);
+    attr(&mut inner, 2, ATT_DATA, b"in");
+    let mut object = vec![0u8; 16];
+    object.extend(stream(&inner));
+    let files = |n: usize, attached: bool| {
+        let mut a = Vec::new();
+        for _ in 0..n {
+            attr(&mut a, 2, ATT_REND_DATA, &[]);
+            attr(&mut a, 2, ATT_DATA, b"x");
+        }
+        if attached {
+            attr(&mut a, 2, ATT_REND_DATA, &[]);
+            attr(
+                &mut a,
+                2,
+                ATT_ATTACHMENT,
+                &props(&[(0x0003, PR_ATTACH_METHOD, 5i32.to_le_bytes().to_vec()), (0x000D, PR_ATTACH_DATA, binary(&object))]),
+            );
+            for _ in 0..10 {
+                attr(&mut a, 2, ATT_REND_DATA, &[]);
+                attr(&mut a, 2, ATT_DATA, b"y");
+            }
+        }
+        stream(&a)
+    };
+    let mut budget = Budget::new();
+    let first = read_with(&files(MAX_FILES - 1, true), &mut budget, true).unwrap_or_default();
+    let second = read_with(&files(MAX_FILES, false), &mut budget, false).unwrap_or_default();
+    assert_eq!(first.attachments.len() + second.attachments.len(), MAX_FILES);
+    assert!(!budget.files_left());
+}
