@@ -30,13 +30,17 @@ use quatrelle_model::thread::norm_id;
 use quatrelle_model::{EmailAddress, Flags, MessageKey, Summary};
 use serde::{Deserialize, Serialize};
 
+mod attachments;
 mod files;
 mod hidden;
 mod html;
 mod photos;
 mod reply;
 pub mod smime;
+mod tnef;
 mod trackers;
+pub use attachments::{AttachmentInfo, AttachmentKind, attachment_data, craft_app_for, kind_of, quoted_pictures, text_preview_kind};
+use attachments::{attached, has_real_attachments};
 use files::attachment_name;
 pub use files::{mime_from_name, runs_code, sanitize_filename};
 pub use hidden::{HIDDEN_WORDS_MIN, hidden_text};
@@ -44,6 +48,7 @@ use html::*;
 pub use html::*;
 pub use photos::without_location;
 pub use reply::{QuoteWords, ReplyMode, reply, reply_doc};
+pub use tnef::{Tnef, TnefBody, TnefFile, decompress_rtf, read_tnef, rtf_body};
 pub use trackers::{Trackers, clean_link, trackers, tracks_click};
 
 /// Longest preview kept in a summary, in characters.
@@ -93,26 +98,6 @@ pub fn preview(text: &str) -> String {
         }
     }
     out
-}
-
-fn has_real_attachments(m: &Message<'_>) -> bool {
-    // S/MIME's signature and encrypted content are the message itself, not files in it.
-    let smime = |p: &mail_parser::MessagePart<'_>| {
-        let mime = p.content_type().map(|c| format!("{}/{}", c.ctype(), c.subtype().unwrap_or_default())).unwrap_or_default();
-        smime::is_smime_part(&mime, p.attachment_name().unwrap_or_default())
-    };
-    m.attachments().any(|p| (p.attachment_name().is_some() || !p.is_inline_part()) && !smime(p))
-}
-
-trait InlinePart {
-    fn is_inline_part(&self) -> bool;
-}
-
-impl InlinePart for mail_parser::MessagePart<'_> {
-    /// Inline images referenced from the HTML (`Content-ID`) don't count as attachments.
-    fn is_inline_part(&self) -> bool {
-        self.content_id().is_some() && self.content_disposition().is_none_or(|d| d.ctype().eq_ignore_ascii_case("inline"))
-    }
 }
 
 /// Build a summary from a message's header (or its whole source). `fallback_date` is the
@@ -204,101 +189,6 @@ fn is_bulk(m: &Message<'_>) -> bool {
         || from.starts_with("noreply@")
         || from.starts_with("no-reply@")
         || from.starts_with("donotreply@")
-}
-
-/// An attachment as the reading pane lists it.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AttachmentInfo {
-    /// Position among the message's attachments (for [`attachment_data`]).
-    pub index: usize,
-    pub name: String,
-    pub mime: String,
-    pub size: usize,
-    pub inline: bool,
-    /// `Content-ID` without angle brackets, for pictures the HTML shows (`cid:`).
-    #[serde(default)]
-    pub content_id: Option<String>,
-    /// `Content-Location` (RFC 2557): the address the HTML may show it by instead
-    /// (`<img src="logo.png">`).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub content_location: Option<String>,
-}
-
-impl AttachmentInfo {
-    /// What kind of preview the UI can offer.
-    pub fn kind(&self) -> AttachmentKind {
-        kind_of(&self.mime, &self.name)
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum AttachmentKind {
-    Image,
-    Video,
-    Audio,
-    Pdf,
-    Text,
-    Archive,
-    Document,
-    Other,
-}
-
-pub fn kind_of(mime: &str, name: &str) -> AttachmentKind {
-    let mime = mime.to_ascii_lowercase();
-    let ext = name.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase()).unwrap_or_default();
-    // Sent as `application/octet-stream`, a picture this can show is still one (by its name).
-    if mime.starts_with("image/") || ["png", "jpg", "jpeg", "gif", "webp", "bmp"].contains(&ext.as_str()) {
-        AttachmentKind::Image
-    } else if mime.starts_with("video/") {
-        AttachmentKind::Video
-    } else if mime.starts_with("audio/") {
-        AttachmentKind::Audio
-    } else if mime == "application/pdf" || ext == "pdf" {
-        AttachmentKind::Pdf
-    } else if mime.starts_with("text/") {
-        AttachmentKind::Text
-    } else if ["zip", "7z", "rar", "gz", "tar"].contains(&ext.as_str()) {
-        AttachmentKind::Archive
-    } else if ["docx", "doc", "odt", "xlsx", "xls", "ods", "pptx", "ppt", "odp", "rtf", "craft"].contains(&ext.as_str()) {
-        AttachmentKind::Document
-    } else {
-        AttachmentKind::Other
-    }
-}
-
-/// The Craft app that edits files of this kind (by its command name), when there is one.
-pub fn craft_app_for(mime: &str, name: &str) -> Option<(&'static str, &'static str)> {
-    let ext = name.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase()).unwrap_or_default();
-    let app = match kind_of(mime, name) {
-        AttachmentKind::Pdf => ("pdfcraft", "PdfCraft"),
-        AttachmentKind::Image => ("photocraft", "PhotoCraft"),
-        AttachmentKind::Video => ("filmcraft", "FilmCraft"),
-        AttachmentKind::Audio => ("soundcraft", "SoundCraft"),
-        _ => match ext.as_str() {
-            "docx" | "doc" | "odt" | "rtf" | "dotx" => ("wordcraft", "WordCraft"),
-            "xlsx" | "xls" | "ods" | "csv" | "xlsm" => ("gridcraft", "GridCraft"),
-            "pptx" | "ppt" | "odp" | "ppsx" => ("deckcraft", "DeckCraft"),
-            _ => return None,
-        },
-    };
-    Some(app)
-}
-
-/// Whether an attachment can be shown as text (and how: `message` for an attached email).
-pub fn text_preview_kind(mime: &str, name: &str) -> Option<&'static str> {
-    let m = mime.to_ascii_lowercase();
-    let ext = name.rsplit_once('.').map(|(_, e)| e.to_ascii_lowercase()).unwrap_or_default();
-    if m == "message/rfc822" || ext == "eml" {
-        return Some("message");
-    }
-    let texty = m.starts_with("text/")
-        || ["application/json", "application/xml", "application/x-yaml", "application/javascript"].contains(&m.as_str())
-        || [
-            "txt", "md", "csv", "tsv", "json", "xml", "yaml", "yml", "log", "ics", "vcf", "ini", "toml", "rs", "py", "js", "ts", "html", "css", "sh",
-            "srt", "vtt",
-        ]
-        .contains(&ext.as_str());
-    texty.then_some("text")
 }
 
 /// A message ready for the reading pane.
@@ -401,12 +291,19 @@ pub fn parse(raw: &[u8]) -> Option<Parsed> {
     let m = MessageParser::default().parse(raw)?;
     // mail-parser lists text parts among the HTML bodies too (converted); only real HTML counts.
     let real_html = m.html_bodies().any(|p| p.is_text_html());
-    let tracking = m.body_html(0).filter(|_| real_html).map(|h| trackers(&h)).unwrap_or_default();
+    // A `winmail.dat` gives its files, and its rich body when the message has no HTML (issue #18).
+    let (attached, tnef_body) = attached(&m);
+    let tnef_html = match &tnef_body {
+        TnefBody::Html(h) if !real_html => Some(h.as_str()),
+        _ => None,
+    };
+    let html = m.body_html(0).filter(|_| real_html).or(tnef_html.map(std::borrow::Cow::Borrowed));
+    let tracking = html.as_ref().map(|h| trackers(h)).unwrap_or_default();
     let mut hidden = None;
-    let (rich, images, layout) = match m.body_html(0).filter(|_| real_html) {
+    let (rich, images, layout) = match &html {
         Some(h) => {
             // Style sheet rules as inline styles, so cells keep their colours and titles their size.
-            let h = layout::inline_css(&h);
+            let h = layout::inline_css(h);
             hidden = hidden_text(&h);
             let layout = layout::html_layout(&h);
             // Pictures behind boxes are shown, or held back, like the others.
@@ -421,6 +318,7 @@ pub fn parse(raw: &[u8]) -> Option<Parsed> {
         None => (Vec::new(), Vec::new(), Vec::new()),
     };
     let (text, had_html) = match (m.text_body_count() > 0, m.body_text(0), m.body_html(0)) {
+        _ if let Some(h) = tnef_html => (html_to_text(h), true),
         // Prefer the HTML version when the text part is an auto-generated stub.
         (_, Some(t), Some(h)) if t.trim().is_empty() => (html_to_text(&h), true),
         (true, Some(t), _) if !m.text_part(0).is_some_and(|p| p.is_text_html()) => (tidy_text(&t), real_html),
@@ -428,26 +326,12 @@ pub fn parse(raw: &[u8]) -> Option<Parsed> {
         (_, Some(t), None) => (tidy_text(&t), false),
         _ => (String::new(), false),
     };
-    let attachments = m
-        .attachments()
-        .enumerate()
-        .map(|(index, p)| {
-            let mime = p
-                .content_type()
-                .map(|c| format!("{}/{}", c.ctype(), c.subtype().unwrap_or("octet-stream")).to_ascii_lowercase())
-                .unwrap_or_else(|| "application/octet-stream".into());
-            let name = attachment_name(p.attachment_name(), &mime, p.contents(), index);
-            AttachmentInfo {
-                index,
-                name,
-                mime,
-                size: p.len(),
-                inline: p.is_inline_part(),
-                content_id: p.content_id().map(|c| c.trim().trim_matches(['<', '>']).to_string()),
-                content_location: p.content_location().map(|c| c.trim().trim_matches(['<', '>', '"']).to_string()).filter(|c| !c.is_empty()),
-            }
-        })
-        .collect();
+    // Plain text Outlook wrapped, when the message has none of its own.
+    let text = match &tnef_body {
+        TnefBody::Text(t) if text.trim().is_empty() => tidy_text(t),
+        _ => text,
+    };
+    let attachments = attached.into_iter().map(|a| a.info).collect();
     let unsubscribe = match m.list_unsubscribe() {
         HeaderValue::Address(a) => a.first().and_then(|x| x.address()).map(str::to_string),
         HeaderValue::Text(t) => Some(t.trim_matches(['<', '>']).to_string()),
@@ -482,11 +366,18 @@ pub fn parse(raw: &[u8]) -> Option<Parsed> {
 pub fn search_text(raw: &[u8]) -> String {
     let Some(m) = MessageParser::default().parse(raw) else { return String::new() };
     let mut out: String = m.body_text(0).map(|t| t.chars().take(50_000).collect()).unwrap_or_default();
-    for a in m.attachments() {
-        if let Some(n) = a.attachment_name() {
-            out.push('\n');
-            out.push_str(n);
+    let (attached, tnef_body) = attached(&m);
+    // What Outlook wrapped in a `winmail.dat`, when the message has no text of its own.
+    if out.trim().is_empty() {
+        match tnef_body {
+            TnefBody::Html(h) => out = html_to_text(&h).chars().take(50_000).collect(),
+            TnefBody::Text(t) => out = t.chars().take(50_000).collect(),
+            TnefBody::None => {}
         }
+    }
+    for a in attached {
+        out.push('\n');
+        out.push_str(&a.info.name);
     }
     out
 }
@@ -502,103 +393,17 @@ pub fn summary_from_full(raw: &[u8], key: MessageKey, flags: Flags, size: u32, f
     s
 }
 
-/// The HTML body as written, for a message that has one.
+/// The HTML body as written, for a message that has one: its own, or the one Outlook wrapped in
+/// a `winmail.dat` (issue #18).
 pub fn html_body(raw: &[u8]) -> Option<String> {
     let m = MessageParser::default().parse(raw)?;
     if !m.html_bodies().any(|p| p.is_text_html()) {
-        return None;
+        return match attached(&m).1 {
+            TnefBody::Html(h) => Some(h),
+            _ => None,
+        };
     }
     m.body_html(0).map(|h| h.into_owned())
-}
-
-/// Most pictures a reply or forward takes from the message it quotes, and bytes each.
-const QUOTED_PICTURES: usize = 100;
-const QUOTED_PICTURE_MAX: usize = 25 << 20;
-
-/// The pictures of a message as a reply or forward quotes it (issue #10: they came out as
-/// "[picture]"): each one in the message (by `cid:`, by its `Content-Location` or name, or written
-/// into the HTML as `data:`) given by `cid:`, with its bytes for the reply to send; one on the web
-/// kept by its address, as Outlook keeps it (never loaded here); tracking pictures left out.
-/// Also the indexes of the attachments the quote shows.
-pub fn quoted_pictures(p: &mut Parsed, raw: &[u8]) -> (Vec<InlinePicture>, Vec<usize>) {
-    let mut out: Vec<InlinePicture> = Vec::new();
-    let mut used: Vec<usize> = Vec::new();
-    let found: Vec<(String, Option<usize>)> = p
-        .rich
-        .iter()
-        .flatten()
-        .filter_map(|s| s.image.clone())
-        .map(|src| {
-            let at = picture_attachment(p, &src);
-            (src, at)
-        })
-        .collect();
-    let trackers = p.trackers.pictures.clone();
-    let mut given: Vec<(String, String)> = Vec::new();
-    for (src, at) in found {
-        if given.iter().any(|(s, _)| *s == src) || out.len() >= QUOTED_PICTURES {
-            continue;
-        }
-        let picture = match at.and_then(|i| p.attachments.get(i)) {
-            Some(a) if a.size <= QUOTED_PICTURE_MAX => attachment_data(raw, a.index).map(|data| {
-                let cid = a
-                    .content_id
-                    .clone()
-                    .filter(|c| !c.is_empty())
-                    .unwrap_or_else(|| format!("quoted-{}-{:012x}@quatrelle", a.index, fnv(&src) & 0xFFFF_FFFF_FFFF));
-                InlinePicture { cid, name: a.name.clone(), mime: a.mime.clone(), data }
-            }),
-            Some(_) => None,
-            None => data_url(&src).map(|(mime, data)| {
-                let n = out.len() + 1;
-                let ext = Some(files::ext_for_mime(&mime)).filter(|e| !e.is_empty()).unwrap_or(".png");
-                InlinePicture {
-                    cid: format!("quoted{n}-{:012x}@quatrelle", fnv(&src) & 0xFFFF_FFFF_FFFF),
-                    name: format!("image{n:03}{ext}"),
-                    mime,
-                    data,
-                }
-            }),
-        };
-        if let Some(pic) = picture {
-            used.extend(at);
-            given.push((src, pic.cid.clone()));
-            if !out.iter().any(|q| q.cid == pic.cid) {
-                out.push(pic);
-            }
-        }
-    }
-    for span in p.rich.iter_mut().flatten() {
-        let Some(src) = span.image.clone() else { continue };
-        if let Some((_, cid)) = given.iter().find(|(s, _)| *s == src) {
-            span.image = Some(format!("cid:{cid}"));
-        } else if trackers.contains(&src) {
-            span.image = None;
-            span.text.clear();
-        }
-    }
-    (out, used)
-}
-
-/// A picture written into HTML as `data:image/…;base64,…`: its type and bytes.
-fn data_url(src: &str) -> Option<(String, Vec<u8>)> {
-    let rest = src.trim().get(..11).filter(|p| p.eq_ignore_ascii_case("data:image/")).and_then(|_| src.trim().get(5..))?;
-    let (kind, b64) = rest.split_once(',')?;
-    let mime = kind.strip_suffix(";base64").or_else(|| kind.strip_suffix(";BASE64"))?.to_ascii_lowercase();
-    if !["image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp", "image/bmp"].contains(&mime.as_str())
-        || b64.len() > QUOTED_PICTURE_MAX / 3 * 4 + 8
-    {
-        return None;
-    }
-    let clean: Vec<u8> = b64.bytes().filter(|b| !b.is_ascii_whitespace()).collect();
-    let data = mail_parser::decoders::base64::base64_decode(&clean).filter(|d| !d.is_empty())?;
-    Some((if mime == "image/jpg" { "image/jpeg".into() } else { mime }, data))
-}
-
-/// The bytes of attachment `index`.
-pub fn attachment_data(raw: &[u8], index: usize) -> Option<Vec<u8>> {
-    let m = MessageParser::default().parse(raw)?;
-    m.attachments().nth(index).map(|p| p.contents().to_vec())
 }
 
 /// A file attached to an outgoing message.
