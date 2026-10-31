@@ -1825,3 +1825,6 @@ month	May	mayo
 	Checking names…	Comprobando los nombres…
 	{room} can't be booked: a meeting books {max} rooms at most	No se puede reservar {room}: una reunión reserva {max} salas como máximo
 	Calendar ->	Calendario ->
+	From one of these	El remitente es uno de estos
+	To or Cc one of these	Para o CC es uno de estos
+	Subject has one of these (comma-separated)	El asunto contiene una de estas palabras (separadas por comas)

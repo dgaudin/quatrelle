@@ -1824,3 +1824,6 @@ month	May	Май
 	Checking names…	Проверка имён…
 	{room} can't be booked: a meeting books {max} rooms at most	Не удалось забронировать {room}: для собрания можно забронировать не более {max} переговорных
 	Calendar ->	Календарь ->
+	From one of these	Отправитель — один из этих
+	To or Cc one of these	Кому или копия — один из этих
+	Subject has one of these (comma-separated)	Тема содержит одно из этих слов (через запятую)

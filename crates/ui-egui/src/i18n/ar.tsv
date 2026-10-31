@@ -1821,3 +1821,6 @@ month	May	مايو
 	Checking names…	جارٍ التحقق من الأسماء…
 	{room} can't be booked: a meeting books {max} rooms at most	لا يمكن حجز {room}: يحجز الاجتماع {max} غرفة على الأكثر
 	Calendar ->	التقويم ->
+	From one of these	المرسل هو أحد هؤلاء
+	To or Cc one of these	إلى أو نسخة هو أحد هؤلاء
+	Subject has one of these (comma-separated)	الموضوع يحتوي على إحدى هذه الكلمات (مفصولة بفواصل)

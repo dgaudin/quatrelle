@@ -1824,3 +1824,6 @@ month	May	5월
 	Checking names…	이름 확인 중…
 	{room} can't be booked: a meeting books {max} rooms at most	{room}을(를) 예약할 수 없습니다: 회의 하나에 회의실은 최대 {max}개까지 예약할 수 있습니다
 	Calendar ->	일정 ->
+	From one of these	보낸 사람이 다음 중 하나
+	To or Cc one of these	받는 사람 또는 참조가 다음 중 하나
+	Subject has one of these (comma-separated)	제목에 다음 단어 중 하나 포함 (쉼표로 구분)
