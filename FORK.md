@@ -457,6 +457,41 @@ L'origine a publié la v0.28 : onze commits après `d826960`. Même méthode, un
   propriétaire nomme déjà les gens correctement ; la documentation et la version de l'origine
   (`70b6257`, `3345a18`).
 
+### État de la récupération : v0.29 (fin) et v0.30, première partie : la fiabilité (2026-10-31)
+
+L'origine a ajouté 33 commits à décider après `d826960` (jusqu'à `706ca2f2`, la v0.30). Même
+méthode, un par un depuis les copies renommées, sur la branche `zidan-v0.30`. Cette première
+partie prend ce qui touche à la fiabilité et aux données ; la suite (analyseur de `winmail.dat`,
+codes Alt, Exchange, signatures…) vient dans les parties suivantes.
+
+- **Repris** : la fermeture demandée tant qu'un message est encore en cours d'envoi, car il n'est
+  pas encore dans la Boîte d'envoi et se perdait sans un mot (`b0db8e8f`, issue #19) ; le courrier
+  envoyé garde sa copie là où le serveur IMAP n'a pas de dossier Éléments envoyés : il est créé
+  (`Sent`, ou `INBOX.Sent` sur un serveur qui range tout dans la boîte de réception), abonné, les
+  noms de dossier sont lus décodés (UTF-7 modifié), les Éléments envoyés des autres langues sont
+  connus, et quand aucune copie ne peut être gardée, on le dit (`f5e12476`) ; le dossier que le
+  serveur marque `\Sent` l'emporte, où qu'il soit (`fe8beb07`) ; la ligne de commande attend son
+  propre message puis sa copie (`8330c072`) et dit quand l'application tient les données ouvertes
+  (`9439007f`, issue #20) ; les réponses et transferts emportent toutes les images du message cité,
+  par `cid:`, par `Content-Location` ou nom, ou écrites en `data:` ; une image du Web reste par son
+  adresse sans être chargée, les images espionnes sont écartées, et un courrier sans en-tête
+  `Date` n'est plus cité comme envoyé le 1er janvier 1970 (`411d1a89`, `d2b25e3f`, issues #10 et
+  #18) ; le courrier en Shift_JIS, GBK, Big5 et EUC-KR se lit (`98d8ebd2` : `full_encoding` de
+  mail-parser, donc `encoding_rs` et `multiversion_no_op` au `Cargo.lock` ; `cargo deny check`
+  passe).
+- **Résolu à la main, sans toucher à l'apparence, au calendrier ni aux contacts** : les
+  catalogues et `tests/writing.rs` gardent les ajouts des deux côtés (`b0db8e8f`) ; le dialogue
+  `LostOnClose` du parcours de dialogues de `tests.rs`, propre à ce fork, prend son nouveau champ
+  `sending` ; le faux serveur IMAP de ce fork est découpé (`fake/commands.rs`), la règle « créer
+  seulement sous `INBOX/` » y est portée (`f5e12476`) ; `quoted_pictures` vit dans `mime/src/lib.rs`
+  près de `attachment_data` (l'origine l'a dans `attachments.rs`, que ramènera le découpage de
+  `winmail.dat`) et son appel dans `reply_compose` se place à côté des lignes propres à ce fork
+  (signature, boîte partagée, mots de citation) (`d2b25e3f`).
+- **Pas repris tel quel** : `135f7be1` (chaque test d'images dans son dossier) : les deux tests
+  concernés sont dans le `pictures.rs` de l'origine, que ce fork a remplacé par le sien (un seul
+  dossier `picture-size`). La même faute était chez ce fork dans deux tests de réunion qui
+  partageaient `meeting-send-waits` : le second a maintenant son dossier.
+
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
 Quatre chantiers, chacun dans son commit, à la suite d'un audit de l'éditeur HTML.
