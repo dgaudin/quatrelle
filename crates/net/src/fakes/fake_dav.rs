@@ -24,6 +24,8 @@ pub struct Data {
     /// naming another site in its answers).
     pub principal_at: String,
     pub homes_at: String,
+    /// Put before the collections' hrefs in their home's listing.
+    pub collections_at: String,
 }
 
 impl Data {
@@ -145,7 +147,10 @@ pub fn serve() -> Server {
                         &mut s,
                         "207 Multi-Status",
                         &[],
-                        &multistatus(&[response(&path, "<d:resourcetype><d:collection/></d:resourcetype>"), response(child, &col)]),
+                        &multistatus(&[
+                            response(&path, "<d:resourcetype><d:collection/></d:resourcetype>"),
+                            response(&format!("{}{child}", d.collections_at), &col),
+                        ]),
                     );
                 }
                 ("PROPFIND", p) if p == CAL || p == BOOK => {

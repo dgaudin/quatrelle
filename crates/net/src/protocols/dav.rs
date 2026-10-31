@@ -188,12 +188,9 @@ impl Dav {
     /// Whether the password, or anything at all, may go to this address: its host's site is
     /// one the account trusts. `Untrusted` names the site otherwise.
     fn reachable(&self, url: &Url) -> Result<()> {
-        // `Url` keeps an IPv6 address without its brackets; the trust (and `site`) write it
-        // with them, as a URL does.
-        let host = if url.host.contains(':') { format!("[{}]", url.host) } else { url.host.clone() };
         // A host two parsers could read differently (`evil.example\.good.example`, whose site
         // reads `good.example`) goes nowhere, and is no domain to ask about either.
-        let Some(host) = url_host(&host) else {
+        let Some(host) = safe_host(url) else {
             return Err(NetError::Protocol("the server named an address that can't be read safely".into()));
         };
         if self.trust.allows(&host) { Ok(()) } else { Err(NetError::Untrusted { site: site(&host) }) }
@@ -211,6 +208,17 @@ impl Dav {
         self.reachable(&u)?;
         Ok(format!("{}{}", u.origin(), u.path))
     }
+}
+
+/// The host of an address as the trust writes it, when it reads one way only. (`Url` keeps an
+/// IPv6 address without its brackets; the trust, and `site`, write it with them, as a URL does.)
+fn safe_host(url: &Url) -> Option<String> {
+    url_host(&if url.host.contains(':') { format!("[{}]", url.host) } else { url.host.clone() })
+}
+
+/// Whether an address saved here can be sent at all: a web address whose host reads one way only.
+fn readable(url: &str) -> bool {
+    Url::parse(url).is_ok_and(|u| safe_host(&u).is_some())
 }
 
 /// The path of an absolute address (multiget names items by path).
