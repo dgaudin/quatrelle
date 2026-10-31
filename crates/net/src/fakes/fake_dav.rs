@@ -18,6 +18,12 @@ pub struct Data {
     pub items: BTreeMap<String, (String, String)>,
     pub ctag: u32,
     pub log: Vec<String>,
+    /// Where the well-known addresses redirect (`/dav/` when not set).
+    pub well_known: Option<String>,
+    /// Put before the principal's href, and before the homes' (another site's base: a server
+    /// naming another site in its answers).
+    pub principal_at: String,
+    pub homes_at: String,
 }
 
 impl Data {
@@ -108,16 +114,25 @@ pub fn serve() -> Server {
                 continue;
             }
             match (method.as_str(), path.as_str()) {
-                ("PROPFIND", "/.well-known/caldav" | "/.well-known/carddav") => respond(&mut s, "301 Moved", &[("Location", "/dav/".into())], ""),
+                ("PROPFIND", "/.well-known/caldav" | "/.well-known/carddav") => {
+                    let to = d.well_known.clone().unwrap_or_else(|| "/dav/".into());
+                    respond(&mut s, "301 Moved", &[("Location", to)], "");
+                }
                 ("PROPFIND", "/dav/") => respond(
                     &mut s,
                     "207 Multi-Status",
                     &[],
-                    &multistatus(&[response("/dav/", "<d:current-user-principal><d:href>/dav/principals/me/</d:href></d:current-user-principal>")]),
+                    &multistatus(&[response(
+                        "/dav/",
+                        &format!("<d:current-user-principal><d:href>{}/dav/principals/me/</d:href></d:current-user-principal>", d.principal_at),
+                    )]),
                 ),
                 ("PROPFIND", "/dav/principals/me/") => {
-                    let props = "<c:calendar-home-set><d:href>/dav/cal/</d:href></c:calendar-home-set><card:addressbook-home-set><d:href>/dav/card/</d:href></card:addressbook-home-set>";
-                    respond(&mut s, "207 Multi-Status", &[], &multistatus(&[response("/dav/principals/me/", props)]));
+                    let at = &d.homes_at;
+                    let props = format!(
+                        "<c:calendar-home-set><d:href>{at}/dav/cal/</d:href></c:calendar-home-set><card:addressbook-home-set><d:href>{at}/dav/card/</d:href></card:addressbook-home-set>"
+                    );
+                    respond(&mut s, "207 Multi-Status", &[], &multistatus(&[response("/dav/principals/me/", &props)]));
                 }
                 ("PROPFIND", "/dav/cal/" | "/dav/card/") => {
                     let (kind, child, name) =
@@ -190,6 +205,12 @@ mod tests {
     use super::*;
     use crate::dav::{Dav, Kind, sync};
 
+    /// A session for the fake server's account, trusting the server.
+    fn session(server: &Server, password: &str) -> Dav {
+        let acc = quatrelle_model::AccountConfig { email: USER.into(), ..Default::default() };
+        Dav::new(USER, password, quatrelle_model::addr::trust::Trust::of(&acc, &[&server.base]))
+    }
+
     fn event(uid: &str, summary: &str, start: i64) -> CalEvent {
         CalEvent { uid: uid.into(), summary: summary.into(), start, end: start + 3600, ..Default::default() }
     }
@@ -211,9 +232,9 @@ mod tests {
                 }),
             );
         }
-        let dav = Dav::new(USER, PASSWORD);
+        let dav = session(&server, PASSWORD);
         assert!(matches!(
-            Dav::new(USER, "nope").home_from(Kind::Calendars, &format!("{}/.well-known/caldav", server.base)),
+            session(&server, "nope").home_from(Kind::Calendars, &format!("{}/.well-known/caldav", server.base)),
             Err(crate::NetError::Auth(_))
         ));
         // Discovery: the well-known address redirects to the principal, which names the homes.
@@ -307,10 +328,11 @@ mod tests {
     fn long_uids_get_items_of_their_own() {
         let server = serve();
         let data = server.data.clone();
-        let dav = Dav::new(USER, PASSWORD);
+        let dav = session(&server, PASSWORD);
         let home = dav.home_from(Kind::Calendars, &format!("{}/.well-known/caldav", server.base)).unwrap().unwrap();
         let cal_id = format!("{}{CAL}", server.base);
-        let mut pim = Pim { caldav_home: Some(home), carddav_home: Some(String::new()), ..Default::default() };
+        // The address books were looked for just now (none): not again.
+        let mut pim = Pim { caldav_home: Some(home), carddav_home: Some(String::new()), dav_checked: Some(100), ..Default::default() };
         pim.ensure_defaults();
         let long = "x".repeat(125);
         let old_href = format!("{cal_id}{}.ics", "y".repeat(120));

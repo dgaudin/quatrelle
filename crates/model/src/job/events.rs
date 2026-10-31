@@ -146,6 +146,13 @@ pub enum Event {
         account: String,
         sync: Box<crate::pim::DavSync>,
     },
+    /// The account's calendar or address book server leads to a site (a registrable domain) the
+    /// account doesn't trust: nothing was sent there, and the account's calendars and contacts
+    /// wait until the user answers (the account starts again if the site is allowed).
+    TrustAsked {
+        account: String,
+        site: String,
+    },
     /// How a data file import is going (`done`: finished, or failed with `error`). The folders
     /// come as [`Event::Folders`] first.
     Imported {

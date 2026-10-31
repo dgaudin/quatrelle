@@ -141,6 +141,8 @@ impl Session {
                 }
             }
             Event::DavSynced { account, sync } => self.apply_dav(&account, &sync),
+            // Asked by credentials-trust Task 6 (`ask_trust_once`).
+            Event::TrustAsked { .. } => {}
             Event::CalendarFetched { account, calendar, ics, etag, modified, unchanged, error } => {
                 let read = match (ics, error) {
                     (_, Some(e)) => pim::web::WebRead::Failed(e),

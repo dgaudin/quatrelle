@@ -370,6 +370,10 @@ struct Worker {
     auth_failed: bool,
     /// An OAuth refusal was answered with a fresh token once; another means signing in again.
     token_retried: bool,
+    /// The calendars' and contacts' server led to a site the account doesn't trust: asked once
+    /// ([`Event::TrustAsked`]), their sync waits for the account's next start (allowing the
+    /// site starts it again).
+    dav_waits: bool,
     closed: bool,
     /// Where a rotated OAuth refresh token is saved.
     creds: Option<Arc<dyn Credentials>>,
@@ -470,6 +474,7 @@ impl Worker {
             last_full: None,
             auth_failed: false,
             token_retried: false,
+            dav_waits: false,
             closed: false,
             creds: None,
             sieve_port: crate::sieve::PORT,

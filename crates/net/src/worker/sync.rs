@@ -656,17 +656,23 @@ impl Worker {
             }
             return;
         }
-        // OAuth tokens are for mail only.
-        if self.acc.oauth.is_some() || self.acc.ews.is_some() {
+        // OAuth tokens are for mail only. A site to allow first: nothing until the next start.
+        if self.acc.oauth.is_some() || self.acc.ews.is_some() || self.dav_waits {
             return;
         }
+        // The homes saved in the account's PIM doc are trusted: the password has gone there.
         let pim = self.load_pim();
         let user = if self.acc.username.is_empty() { self.acc.email.clone() } else { self.acc.username.clone() };
         let password = self.auth.lock().unwrap_or_else(std::sync::PoisonError::into_inner).secret.clone();
-        let dav = crate::dav::Dav::new(&user, &password);
+        let dav = crate::dav::Dav::new(&user, &password, crate::dav::trust_of(&self.acc, &pim));
         let host = self.acc.pop.as_ref().map_or(self.acc.imap.host.as_str(), |p| p.host.as_str());
         match crate::dav::sync(&dav, &self.acc.email, host, &pim, now(), system_zone()) {
             Ok(sync) => self.sink.emit(Event::DavSynced { account: self.id(), sync: Box::new(sync) }),
+            Err(NetError::Untrusted { site }) => {
+                log::info!("{}: calendars and contacts wait for {site} to be allowed", self.acc.id);
+                self.dav_waits = true;
+                self.sink.emit(Event::TrustAsked { account: self.id(), site });
+            }
             Err(e) => {
                 log::info!("{}: calendars and contacts: {e}", self.acc.id);
                 if matches!(e, NetError::Auth(_)) {
