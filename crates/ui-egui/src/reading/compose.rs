@@ -140,6 +140,7 @@ fn people_row(
 ) -> bool {
     let t = st.tokens;
     let field = FieldId { window: c.id, name };
+    let untouched = c.untouched();
     let value = match name {
         "to" => &mut c.to,
         "cc" => &mut c.cc,
@@ -148,7 +149,13 @@ fn people_row(
     };
     // Select Names has rows for To, Cc and Bcc: Replies to keeps its label alone.
     let book = name != "replyTo";
-    st.people.draw(ui, &t, field, Some(&c.account), &Accepts::RECIPIENTS, label, hint, value, focus, can_expand, book, acts)
+    let drawn = st.people.draw(ui, &t, field, Some(&c.account), &Accepts::RECIPIENTS, label, hint, value, focus, can_expand, book, acts);
+    // The field spelling a name it knows isn't the owner writing: a reply left as it came still
+    // simply goes when another message is read, instead of being filed as a draft.
+    if drawn.normalised && untouched {
+        c.started = Some(c.fingerprint());
+    }
+    drawn.book
 }
 
 /// The message being written, in a window of its own.

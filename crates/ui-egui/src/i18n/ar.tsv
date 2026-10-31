@@ -1806,6 +1806,7 @@ month	May	مايو
 	and others	وآخرون
 	This list couldn't be expanded: {error}	تعذّر توسيع هذه القائمة: {error}
 	Some names need checking before sending	بعض الأسماء تحتاج إلى التحقق قبل الإرسال
+	Some recipients were left out: send to fewer at once, or to the list itself	تم استبعاد بعض المستلمين: أرسل إلى عدد أقل في المرة الواحدة، أو إلى القائمة نفسها
 	Matched as typed	مطابقة كما كُتب
 	{name}, {kind}, remove with Delete	{name}، {kind}، للإزالة اضغط Delete
 	{name}, {kind}, {why}, remove with Delete	{name}، {kind}، {why}، للإزالة اضغط Delete

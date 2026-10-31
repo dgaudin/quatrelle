@@ -1807,6 +1807,7 @@ month	May	5月
 	and others	ほか
 	This list couldn't be expanded: {error}	このリストを展開できませんでした: {error}
 	Some names need checking before sending	送信前に確認が必要な名前があります
+	Some recipients were left out: send to fewer at once, or to the list itself	一部の宛先が除外されました: 一度に送る人数を減らすか、リスト自体に送ってください
 	Matched as typed	入力どおりに照合
 	{name}, {kind}, remove with Delete	{name}、{kind}、Delete キーで削除
 	{name}, {kind}, {why}, remove with Delete	{name}、{kind}、{why}、Delete キーで削除
