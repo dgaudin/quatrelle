@@ -481,7 +481,8 @@ fn files_dropped_on_a_message_are_attached() {
 }
 
 /// From offers the account's own address and the mailboxes it opens (a shared one); another
-/// address is typed under the menu's list, checked as it's typed, and taken with Enter.
+/// address is typed under the menu's list, marked by the field when it isn't one, and taken with
+/// Enter.
 #[test]
 fn from_offers_shared_mailboxes_and_another_address() {
     let (mut a, dir) = app("send-from");
@@ -517,11 +518,18 @@ fn from_offers_shared_mailboxes_and_another_address() {
     click_at(&ctx, &mut a, from, 1, size);
     let other = settled_text_at(&ctx, &mut a, "Other email address…", size).expect("another address offered");
     click_at(&ctx, &mut a, other, 1, size);
-    frame_sized(&ctx, &mut a, vec![Event::Text("nope".into())], size);
-    assert!(settled_text_at(&ctx, &mut a, "Not an address: nope", size).is_some(), "said as it's typed");
-    for _ in 0..4 {
+    // A plain name is no error: it's checked on Ctrl+K or as the field is left.
+    frame_sized(&ctx, &mut a, vec![Event::Text("Dupont".into())], size);
+    assert!(settled_text_at(&ctx, &mut a, "Not an address: Dupont", size).is_none(), "a name typed isn't said to be no address");
+    for _ in 0.."Dupont".len() {
         frame_sized(&ctx, &mut a, vec![key(Key::Backspace, Modifiers::NONE)], size);
     }
+    // A piece with `@` that isn't an address is marked by the field itself as it closes.
+    frame_sized(&ctx, &mut a, vec![Event::Text("nope@;".into())], size);
+    frame_sized(&ctx, &mut a, vec![], size);
+    let field = quatrelle_engine::FieldId { window: a.session.compose.as_ref().map_or(0, |c| c.id), name: "from" };
+    let bad = |p: &crate::look::people_field::Piece| matches!(p, crate::look::people_field::Piece::Text { text, error: Some(crate::look::people_field::PieceError::NotAnAddress) } if text == "nope@");
+    assert!(a.ui.people.pieces(field).iter().any(bad), "{:?}", a.ui.people.pieces(field));
     frame_sized(&ctx, &mut a, vec![Event::Text("Bookings <bookings@studio.example>".into())], size);
     frame_sized(&ctx, &mut a, vec![key(Key::Enter, Modifiers::NONE)], size);
     frame_sized(&ctx, &mut a, vec![], size);
