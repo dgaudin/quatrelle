@@ -5,6 +5,11 @@ use super::*;
 
 mod limits;
 
+thread_local! {
+    /// Compressed RTF bodies read on this thread, for tests that count the work done.
+    pub(crate) static RTF_READ: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
 /// One attribute: level, id, length, data, checksum.
 pub(crate) fn attr(out: &mut Vec<u8>, level: u8, id: u32, data: &[u8]) {
     out.push(level);

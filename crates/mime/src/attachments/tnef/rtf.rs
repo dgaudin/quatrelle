@@ -22,6 +22,12 @@ const UNCOMPRESSED: u32 = 0x414C_454D;
 /// `PidTagRtfCompressed` as RTF; `None` for bytes that aren't compressed RTF. Cut-short input
 /// gives what was there.
 pub fn decompress_rtf(data: &[u8]) -> Option<Vec<u8>> {
+    decompress_rtf_max(data, RTF_MAX)
+}
+
+/// [`decompress_rtf`], up to `max` bytes (and never past [`RTF_MAX`]).
+pub(super) fn decompress_rtf_max(data: &[u8], max: usize) -> Option<Vec<u8>> {
+    let max = max.min(RTF_MAX);
     let word = |i: usize| data.get(i..i + 4).and_then(|b| b.try_into().ok()).map(u32::from_le_bytes);
     let size = word(0)? as usize;
     let raw = word(4)? as usize;
@@ -30,8 +36,8 @@ pub fn decompress_rtf(data: &[u8]) -> Option<Vec<u8>> {
     // The size counts the 12 header bytes after it.
     let contents = rest.get(..size.saturating_sub(12).min(rest.len())).unwrap_or(rest);
     match kind {
-        UNCOMPRESSED => Some(contents.get(..contents.len().min(RTF_MAX)).unwrap_or_default().to_vec()),
-        COMPRESSED => Some(lzfu(contents, raw.min(RTF_MAX))),
+        UNCOMPRESSED => Some(contents.get(..contents.len().min(max)).unwrap_or_default().to_vec()),
+        COMPRESSED => Some(lzfu(contents, raw.min(max))),
         _ => None,
     }
 }
@@ -91,6 +97,12 @@ enum Mode {
 
 /// A body's RTF as the reading pane takes it.
 pub fn rtf_body(rtf: &[u8]) -> TnefBody {
+    rtf_body_max(rtf, RTF_MAX)
+}
+
+/// [`rtf_body`], writing up to about `max` bytes (and never past [`RTF_MAX`]).
+pub(super) fn rtf_body_max(rtf: &[u8], max: usize) -> TnefBody {
+    let max = max.min(RTF_MAX);
     if !rtf.starts_with(b"{\\rtf") {
         return TnefBody::None;
     }
@@ -111,7 +123,7 @@ pub fn rtf_body(rtf: &[u8]) -> TnefBody {
             _ => break,
         }
     }
-    let out = read(rtf, mode);
+    let out = read(rtf, mode, max);
     match mode {
         Mode::Text => TnefBody::Text(out),
         _ if out.trim().is_empty() => TnefBody::None,
@@ -296,6 +308,8 @@ fn charset_cp(n: i32) -> u32 {
 struct Out {
     mode: Mode,
     s: String,
+    /// Most bytes written (the cap, or what's left of the reading's budget).
+    max: usize,
     /// Bytes waiting to be read together (a lead byte and its trail byte), in this code page.
     pending: Vec<u8>,
     pending_cp: u32,
@@ -326,7 +340,7 @@ impl Out {
 
     /// One character of text (escaped, and formatted, in [`Mode::Rich`]).
     fn char(&mut self, c: char, g: &Group) {
-        if self.s.len() >= RTF_MAX {
+        if self.s.len() >= self.max {
             return;
         }
         if self.mode != Mode::Rich {
@@ -345,7 +359,7 @@ impl Out {
     fn raw(&mut self, s: &str, g: &Group) {
         self.flush(g);
         // Past the cap, no tags either: a link opened again and again would grow without end.
-        if self.s.len() >= RTF_MAX {
+        if self.s.len() >= self.max {
             return;
         }
         if self.mode == Mode::Rich {
@@ -395,12 +409,12 @@ fn hyperlink(inst: &str) -> Option<String> {
     (lower.starts_with("https://") || lower.starts_with("http://") || lower.starts_with("mailto:")).then(|| url.to_string())
 }
 
-fn read(rtf: &[u8], mode: Mode) -> String {
+fn read(rtf: &[u8], mode: Mode, max: usize) -> String {
     let mut stack = vec![Group { uc: 1, ..Default::default() }];
     let mut deeper = 0usize;
     let mut fonts: HashMap<i32, u32> = HashMap::new();
     let mut default_cp = 1252u32;
-    let mut out = Out { mode, s: String::new(), pending: Vec::new(), pending_cp: 1252, open: Fmt::default(), open_link: None };
+    let mut out = Out { mode, s: String::new(), max, pending: Vec::new(), pending_cp: 1252, open: Fmt::default(), open_link: None };
     // The first token of a group, and whether it was `\*`: what says the group's destination.
     let mut fresh = false;
     let mut starred = false;

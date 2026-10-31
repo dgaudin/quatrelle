@@ -4,8 +4,8 @@
 use std::borrow::Cow;
 
 use super::*;
+use tnef::{Budget, is_tnef, read_with, shown_cids};
 pub use tnef::{Tnef, TnefBody, TnefFile, decompress_rtf, read_tnef, rtf_body};
-use tnef::{is_tnef, shown_cids};
 
 mod tnef;
 
@@ -15,18 +15,33 @@ pub(super) struct Attached<'a> {
     pub(super) data: Cow<'a, [u8]>,
 }
 
+/// A `winmail.dat` part as what it gives in its place: `None` when it stays one (it can't be read,
+/// or holds nothing). Only the first body is read (`body`): a later one is noted, not read.
+fn read_part(contents: &[u8], budget: &mut Budget, body: bool) -> Option<tnef::Tnef> {
+    if !budget.files_left() {
+        return None;
+    }
+    read_with(contents, budget, body).filter(|t| !t.attachments.is_empty() || !t.body.is_empty() || t.body_left)
+}
+
+fn part_mime(p: &mail_parser::MessagePart<'_>) -> String {
+    p.content_type()
+        .map(|c| format!("{}/{}", c.ctype(), c.subtype().unwrap_or("octet-stream")).to_ascii_lowercase())
+        .unwrap_or_else(|| "application/octet-stream".into())
+}
+
 /// A message's attachments in order, a `winmail.dat` given as the files in it (it stays one
-/// when it can't be read, or holds nothing), and the body the first such file carries.
+/// when it can't be read, or holds nothing, and is listed too when the reading's budget left
+/// some of it out), and the body the first such file carries. One budget for all of them.
 pub(super) fn attached<'a>(m: &'a Message<'a>) -> (Vec<Attached<'a>>, TnefBody) {
     let mut out = Vec::new();
     let mut body = TnefBody::None;
+    let mut budget = Budget::new();
     for p in m.attachments() {
-        let mime = p
-            .content_type()
-            .map(|c| format!("{}/{}", c.ctype(), c.subtype().unwrap_or("octet-stream")).to_ascii_lowercase())
-            .unwrap_or_else(|| "application/octet-stream".into());
+        let mime = part_mime(p);
+        budget.cut = false;
         if is_tnef(&mime, p.attachment_name())
-            && let Some(t) = read_tnef(p.contents()).filter(|t| !t.attachments.is_empty() || !t.body.is_empty())
+            && let Some(t) = read_part(p.contents(), &mut budget, body.is_empty())
         {
             if body.is_empty() {
                 body = t.body;
@@ -40,7 +55,10 @@ pub(super) fn attached<'a>(m: &'a Message<'a>) -> (Vec<Attached<'a>>, TnefBody) 
                 let info = AttachmentInfo { index, name, mime: f.mime, size: f.data.len(), inline, content_id: f.content_id, content_location: None };
                 out.push(Attached { info, data: Cow::Owned(f.data) });
             }
-            continue;
+            // Files left out: the winmail.dat itself stays too, so none is lost.
+            if !budget.cut {
+                continue;
+            }
         }
         let index = out.len();
         let name = attachment_name(p.attachment_name(), &mime, p.contents(), index);
