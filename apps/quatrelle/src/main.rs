@@ -63,6 +63,24 @@ impl Backend for PoolBackend {
     }
 }
 
+/// Quatrelle's own handling of each window's input, before egui reads it, for every window: the
+/// main one and each message's, meeting's and reminders' (eframe's `viewport_hooks` runs for all
+/// of them, where `App::raw_input_hook` misses the windows drawn with `show_viewport_immediate`).
+/// For now Windows' Alt+numpad character codes ([`quatrelle_ui_egui::alt_codes`], in the code
+/// pages of the user's language); other keys taken from the window's input belong here too.
+#[cfg(windows)]
+struct WindowInput {
+    /// The (ANSI, OEM) code pages Alt codes are read in ([`quatrelle_ui_egui::alt_code_pages`]).
+    alt_pages: (u16, u16),
+}
+
+#[cfg(windows)]
+impl eframe::ViewportHooks for WindowInput {
+    fn raw_input(&self, ctx: &egui::Context, raw_input: &mut egui::RawInput) {
+        quatrelle_ui_egui::alt_codes(ctx, raw_input, self.alt_pages);
+    }
+}
+
 /// The window icon: the committed app icon (`cargo xtask icons`), or egui's default if it can't be decoded.
 fn app_icon() -> egui::IconData {
     const PNG: &[u8] = include_bytes!("../../../assets/app-icon/hicolor/64x64/apps/ai.storyteller.quatrelle.png");
@@ -424,6 +442,12 @@ fn main() -> eframe::Result {
         None => options,
     };
     graphics::configure(&mut options);
+    // Windows: Alt+numpad codes type their characters in every window (Alt+0201 is É; issue #23
+    // upstream). Elsewhere the window's input is egui's, unchanged.
+    #[cfg(windows)]
+    {
+        options.viewport_hooks = Some(Arc::new(WindowInput { alt_pages: quatrelle_ui_egui::alt_code_pages() }));
+    }
     // Linux and the BSDs: through XWayland on a Wayland desktop, so attachments drag in and out.
     #[cfg(all(unix, not(target_os = "macos")))]
     if display::choose_from_env() == display::Choice::X11 {
