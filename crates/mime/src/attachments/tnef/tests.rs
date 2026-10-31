@@ -8,6 +8,8 @@ mod limits;
 thread_local! {
     /// Compressed RTF bodies read on this thread, for tests that count the work done.
     pub(crate) static RTF_READ: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    /// winmail.dat parts read on this thread.
+    pub(crate) static TNEF_READ: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
 /// One attribute: level, id, length, data, checksum.
@@ -566,4 +568,19 @@ fn properties_are_capped_across_lists() {
         add_props(&mut kept, &list);
     }
     assert_eq!(kept.len(), MAX_PROPS);
+}
+
+/// The paperclip counts what a winmail.dat gives: its files, or itself when it can't be read; one
+/// holding only the body gives nothing to list.
+#[test]
+fn a_winmail_dat_with_only_a_body_has_no_paperclip() {
+    let real = |dat: Vec<u8>| {
+        let raw = outlook_message(dat);
+        mail_parser::MessageParser::default().parse(&raw).is_some_and(|m| crate::attachments::has_real_attachments(&m))
+    };
+    let mut body_only = Vec::new();
+    attr(&mut body_only, 1, ATT_MSG_PROPS, &props(&[(0x001E, PR_BODY, str8("Only the text"))]));
+    assert!(!real(stream(&body_only)));
+    assert!(real(outlook_stream()));
+    assert!(real(b"not a winmail.dat".to_vec()));
 }
