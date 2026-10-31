@@ -88,7 +88,8 @@ impl Session {
     }
 
     /// Ask for an account's rooms (`refresh`: again): the server's, with the calendar's after
-    /// them once they come; an account with no server for it has the calendar's at once.
+    /// them once they come; an account with no server for it has the calendar's at once, and
+    /// they are its room set too (what tells a room from a person in every field).
     pub fn request_rooms(&mut self, account: &str, refresh: bool) -> CmdResult {
         if self.account(account).is_none() {
             return Err(CmdError::Params(format!("no account `{account}`")));
@@ -99,6 +100,7 @@ impl Session {
                 self.ask_rooms(account);
             } else {
                 let rooms = self.calendar_rooms(account);
+                self.set_room_set(account, &rooms, false);
                 self.rooms.insert(account.to_string(), Fetched::Ready(RoomFinder { lists: Vec::new(), rooms, from_calendar: true }));
             }
         }

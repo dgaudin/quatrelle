@@ -1,17 +1,63 @@
 //! An appointment or a meeting in a window of its own, as Outlook opens one: a ribbon (the
 //! Appointment or Meeting tab, and the Scheduling Assistant), then its title, guests, times and
 //! place, and its notes taking the rest of the window. The form is the dialog's ([`EventForm`]);
-//! only where it's shown differs.
+//! only where it's shown differs. Its Required, Optional and Rooms lines are the contacts field
+//! (`required`, `optional`, `rooms` of the window, made ready by [`prepare`] before it's drawn).
 
 use quatrelle_engine::model::ical::ShowAs;
 
 use super::event::{reminder_choice, repeat_options};
 use super::*;
+use crate::dialogs::people_field::{MEETING_FIELDS, MEETING_WINDOWS, PeopleFields, accepts_of, meeting_field};
 use crate::widgets::Groups;
 
+/// The window's contacts fields made ready before it's drawn (where the session can be changed:
+/// the window only reads it). Its account's rooms are asked once, so that a room is known as one
+/// in every line. Required, Optional and Rooms are read from the form's texts; a room entered
+/// among the guests is booked, with a word under its line. While Select Attendees and Resources
+/// is open, its rows too, a room among their guests going to its Resources.
+pub(crate) fn prepare(f: &mut EventForm, s: &mut Session, people: &mut PeopleFields) {
+    if !f.can_invite {
+        return;
+    }
+    let account = f.account_id();
+    if s.rooms_now(&account).is_none() {
+        let _ = s.request_rooms(&account, false);
+    }
+    let a = Some(account.as_str());
+    let (required, optional) = (meeting_field(f.window, "required"), meeting_field(f.window, "optional"));
+    people.prepare(s, required, a, accepts_of("required"), &f.guests);
+    people.prepare(s, optional, a, accepts_of("optional"), &f.optional);
+    for field in [required, optional] {
+        for who in people.take_moved(field) {
+            f.add_room(&who.name, &who.address);
+            people.say(field, moved_note(&who));
+        }
+    }
+    people.prepare(s, meeting_field(f.window, "rooms"), a, accepts_of("rooms"), &f.rooms_line);
+    let Some(st) = f.attendees_book.as_deref() else { return };
+    let rows = [("att-required", &st.required), ("att-optional", &st.optional), ("att-rooms", &st.resources)];
+    for (name, text) in rows {
+        people.prepare(s, meeting_field(f.window, name), a, accepts_of(name), text);
+    }
+    let resources = meeting_field(f.window, "att-rooms");
+    for field in [meeting_field(f.window, "att-required"), meeting_field(f.window, "att-optional")] {
+        for who in people.take_moved(field) {
+            people.say(field, moved_note(&who));
+            people.add(resources, who);
+        }
+    }
+}
+
+/// What a line says of a room taken out of it.
+fn moved_note(who: &quatrelle_engine::model::Addressee) -> String {
+    tf!("{room} was moved to Rooms", room = who.display())
+}
+
 /// The window's content. `false` once it's done with from its ribbon (Close, for one that can't
-/// be changed); saving, sending and deleting close it once the engine has done them.
-pub fn meeting(ui: &mut Ui, f: &mut EventForm, s: &Session, t: &Tokens, acts: &mut Vec<Action>) -> bool {
+/// be changed); saving, sending and deleting close it once the engine has done them. `people`
+/// draws its contacts fields, made ready by [`prepare`].
+pub fn meeting(ui: &mut Ui, f: &mut EventForm, s: &Session, people: &mut PeopleFields, t: &Tokens, acts: &mut Vec<Action>) -> bool {
     tabs(ui, t, f);
     ui.add_space(2.0);
     let mut keep = true;
@@ -51,9 +97,10 @@ pub fn meeting(ui: &mut Ui, f: &mut EventForm, s: &Session, t: &Tokens, acts: &m
     }
     // Outlook's Select Attendees and Resources, over the window while it's open.
     if let Some(mut st) = f.attendees_book.take() {
-        match super::attendees::dialog(ui.ctx(), &mut st, t, f.window, acts) {
+        let account = f.account_id();
+        match super::attendees::dialog(ui.ctx(), &mut st, s, people, t, f.window, &account, acts) {
             // People added make it a meeting (from the Scheduling Assistant, an appointment).
-            Some(true) if st.apply(f) => f.inviting |= !f.guests.is_empty() || !f.optional.is_empty(),
+            Some(true) if st.apply(f, people) => f.inviting |= !f.guests.is_empty() || !f.optional.is_empty(),
             Some(false) => {}
             _ => f.attendees_book = Some(st),
         }
@@ -64,8 +111,12 @@ pub fn meeting(ui: &mut Ui, f: &mut EventForm, s: &Session, t: &Tokens, acts: &m
         // Outlook's assistant keeps the times under it.
         ui.add_enabled_ui(!f.read_only, |ui| times(ui, t, f, s));
     } else {
-        header(ui, t, f, s, acts);
+        header(ui, t, f, s, people, acts);
         body(ui, t, f, acts);
+    }
+    // A name several people fit in one of its lines: which one, over the window.
+    if f.attendees_book.is_none() {
+        people.choice_dialog(ui.ctx(), t, s, MEETING_WINDOWS | f.window, &MEETING_FIELDS, acts);
     }
     keep
 }
@@ -319,43 +370,77 @@ fn categories(ui: &mut Ui, t: Tokens, f: &mut EventForm) {
     }
 }
 
+/// A meeting's line: the contacts field in the rest of its form row, its name the row's button,
+/// a word under it when it has one.
+#[allow(clippy::too_many_arguments)]
+fn people_line(
+    ui: &mut Ui,
+    t: &Tokens,
+    people: &mut PeopleFields,
+    field: quatrelle_engine::FieldId,
+    account: &str,
+    hint: &str,
+    text: &mut String,
+    can_expand: bool,
+    acts: &mut Vec<Action>,
+) {
+    field_column(ui, |ui| {
+        people.draw(ui, t, field, Some(account), accepts_of(field.name), "", hint, text, false, can_expand, false, acts);
+    });
+}
+
 /// The title, the guests' lines, the times, the place and the rooms, and the calendar a new one
 /// goes in; then what's said of it (organizer, answers).
-fn header(ui: &mut Ui, t: &Tokens, f: &mut EventForm, s: &Session, acts: &mut Vec<Action>) {
+fn header(ui: &mut Ui, t: &Tokens, f: &mut EventForm, s: &Session, people: &mut PeopleFields, acts: &mut Vec<Action>) {
+    let account = f.account_id();
+    let can_expand = s.directory_account(Some(&account)).is_some();
+    let tip = tl!("Choose from the address book");
+    let id = |line| super::line_button_id(f.window, line);
+    let (required, optional, rooms) = (id(super::Line::Required), id(super::Line::Optional), id(super::Line::Resources));
     ui.add_enabled_ui(!f.read_only, |ui| {
         form_row(ui, t, false, None, "Title", |ui| {
             field(ui, &mut f.summary, tl!("Add a title"), f32::INFINITY);
         });
-        // Required and Optional open the address book, as in Outlook.
+        // Required and Optional open the address book, as in Outlook; each is the contacts field.
+        let mut open = None;
         if f.inviting && f.can_invite {
-            let tip = tl!("Choose from the address book");
-            let hint = tl!("Names <addresses>, separated by ; or ,");
-            let mut open = None;
-            let id = |line| super::line_button_id(f.window, line);
-            if button_row(ui, t, id(super::Line::Required), "Required", tip, |ui| {
-                field(ui, &mut f.guests, hint, f32::INFINITY);
-            }) {
-                open = Some(super::Line::Required);
-            }
-            if button_row(ui, t, id(super::Line::Optional), "Optional", tip, |ui| {
-                field(ui, &mut f.optional, hint, f32::INFINITY);
-            }) {
-                open = Some(super::Line::Optional);
-            }
-            if let Some(line) = open {
-                f.attendees_book = Some(Box::new(super::AttendeesUi::open(f, line)));
+            let hint = "Names <addresses>, separated by ; or ,";
+            for (line, button, name, label) in
+                [(super::Line::Required, required, "required", "Required"), (super::Line::Optional, optional, "optional", "Optional")]
+            {
+                let text = if line == super::Line::Required { &mut f.guests } else { &mut f.optional };
+                let field = meeting_field(f.window, name);
+                if button_row(ui, t, button, label, tip, |ui| people_line(ui, t, people, field, &account, hint, text, can_expand, acts)) {
+                    open = Some(line);
+                }
             }
         }
         times(ui, t, f, s);
         form_row(ui, t, false, None, "Location", |ui| {
             field(ui, &mut f.location, tl!("Add a place"), f32::INFINITY);
         });
+        // The rooms booked are its Rooms line (the address book opens on its Resources), the
+        // Room Finder's toggle after it.
         if f.can_invite {
-            form_row(ui, t, false, None, "Rooms", |ui| super::rooms::row(ui, f, t));
+            let field = meeting_field(f.window, "rooms");
+            let mut line = f.rooms_line.clone();
+            if button_row(ui, t, rooms, "Rooms", tip, |ui| {
+                super::rooms::with_finder_toggle(ui, f, |ui| people_line(ui, t, people, field, &account, "", &mut line, can_expand, acts));
+            }) {
+                open = Some(super::Line::Resources);
+            }
+            // What the line books, as it changed (an entry typed, removed, or settled).
+            let booked = people.addressees(field);
+            if line != f.rooms_line || !f.books(&booked) {
+                f.rooms_from_field(&booked, line);
+            }
             if f.finder.is_some() {
                 super::rooms::finder(ui, f, s, t, acts);
                 ui.add_space(8.0);
             }
+        }
+        if let Some(line) = open {
+            f.attendees_book = Some(Box::new(super::AttendeesUi::open(f, line)));
         }
         if f.uid.is_none() && f.calendars.len() > 1 {
             let name = f.calendars.get(f.calendar).map(|c| c.2.clone()).unwrap_or_default();

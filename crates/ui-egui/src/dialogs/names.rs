@@ -224,20 +224,6 @@ pub(crate) fn search(ui: &mut Ui, id: egui::Id, f: &mut AddressSearch, t: &Token
     chosen
 }
 
-/// The buttons beside the fields, as wide as the longest label (Required -> in some languages).
-const FIELD_BUTTON_W: f32 = 112.0;
-
-/// A button and the field it adds the person picked to (`To ->` and To), as Outlook lines them
-/// up under the list. `true`: pressed.
-pub(crate) fn field_row(ui: &mut Ui, label: &str, field: &mut String) -> bool {
-    ui.horizontal(|ui| {
-        let pressed = ui.add_sized(vec2(FIELD_BUTTON_W, 24.0), egui::Button::new(tl!(label))).clicked();
-        ui.add(egui::TextEdit::singleline(field).desired_width(f32::INFINITY));
-        pressed
-    })
-    .inner
-}
-
 pub(super) fn select_names(ui: &mut Ui, f: &mut NamesForm, s: &Session, people: &mut PeopleFields, t: &Tokens, acts: &mut Vec<Action>) -> bool {
     ui.set_width(620.0);
     title(ui, t, "Select Names");

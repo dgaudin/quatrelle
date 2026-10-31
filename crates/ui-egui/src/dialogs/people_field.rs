@@ -53,7 +53,6 @@ pub(crate) const MEETING_FIELDS: [&str; 3] = ["required", "optional", "rooms"];
 pub(crate) const ATTENDEE_FIELDS: [&str; 3] = ["att-required", "att-optional", "att-rooms"];
 
 /// The field `name` of meeting window `wid`.
-#[cfg_attr(not(test), expect(dead_code, reason = "the meeting window draws its lines through these, next in this delivery"))]
 pub(crate) fn meeting_field(wid: u64, name: &'static str) -> FieldId {
     FieldId { window: MEETING_WINDOWS | wid, name }
 }
@@ -290,7 +289,7 @@ impl PeopleFields {
         }
         if let Some(note) = &f.note {
             ui.horizontal(|ui| {
-                ui.add_space(crate::widgets::FIELD_LABEL_W);
+                ui.add_space(people_field::label_w(label));
                 ui.label(RichText::new(note).color(t.dim).small());
             });
         }
@@ -390,9 +389,9 @@ impl PeopleFields {
 /// What a meeting's window and its Select Attendees ask of their fields: the text to keep in the
 /// form, who to invite or book, whether anything stops them, an entry picked in the book, a word
 /// under a line, the rooms typed among the guests, and whether Send waits.
-#[cfg_attr(not(test), expect(dead_code, reason = "the meeting window draws its lines through these, next in this delivery"))]
 impl PeopleFields {
     /// The field's text as its pieces write it, with what's being typed.
+    #[cfg_attr(not(test), expect(dead_code, reason = "the meeting's Send reads its lines through it, next in this delivery"))]
     pub(crate) fn text(&self, field: FieldId) -> Option<String> {
         self.fields.get(&field).map(|f| text_of(&f.st.pieces, &f.st.input))
     }
@@ -438,6 +437,7 @@ impl PeopleFields {
     }
 
     /// Whether the window's send is held for its names.
+    #[cfg_attr(not(test), expect(dead_code, reason = "the meeting's window says it's checking names through it, next in this delivery"))]
     pub(crate) fn holding(&self, window: u64) -> bool {
         self.send_wait.contains_key(&window)
     }

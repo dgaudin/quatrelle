@@ -88,7 +88,9 @@ pub struct FieldState {
 pub struct FieldInput<'a> {
     /// The field's id: its input, list, card and scroll are kept under it.
     pub id: egui::Id,
-    /// The book button's label and the input's hint (English, translated here).
+    /// The book button's label and the input's hint (English, translated here). An empty label:
+    /// the field sits in a form's row whose own label names it (a meeting's Required), drawn
+    /// under [`label_id`]; the field draws no button of its own.
     pub label: &'a str,
     pub hint: &'a str,
     /// The button opens the address book (a field with no book to open keeps the label alone).
@@ -130,6 +132,12 @@ pub enum PeopleEvent {
 /// The id of a field's input (`TextEdit`), from the field's id.
 pub fn input_id(field: Id) -> Id {
     field.with("people-input")
+}
+
+/// The id of the label a form draws for a field with none of its own (an empty
+/// [`FieldInput::label`]): it names the input to a screen reader.
+pub fn label_id(field: Id) -> Id {
+    field.with("people-label")
 }
 
 /// The icon for a kind of entry.
@@ -257,11 +265,16 @@ pub fn people_field(ui: &mut Ui, t: &Tokens, st: &mut FieldState, input: &FieldI
     let typed_from = st.input.clone();
     let mut laid = None;
     ui.horizontal_top(|ui| {
-        let book = crate::widgets::field_button(ui, t, input.label, input.book, false);
-        if input.book && book.clicked() {
-            ev.push(PeopleEvent::OpenBook);
-        }
-        laid = Some(ui.vertical(|ui| chips::body(ui, t, st, input, edit, book.id)).inner);
+        let named_by = if input.label.is_empty() {
+            label_id(input.id)
+        } else {
+            let book = crate::widgets::field_button(ui, t, input.label, input.book, false);
+            if input.book && book.clicked() {
+                ev.push(PeopleEvent::OpenBook);
+            }
+            book.id
+        };
+        laid = Some(ui.vertical(|ui| chips::body(ui, t, st, input, edit, named_by)).inner);
     });
     let Some(laid) = laid else { return ev };
     refocus |= laid.refocus;
@@ -312,12 +325,18 @@ pub fn people_field(ui: &mut Ui, t: &Tokens, st: &mut FieldState, input: &FieldI
 
     if let Some(n) = st.left_out {
         ui.horizontal(|ui| {
-            ui.add_space(crate::widgets::FIELD_LABEL_W);
+            ui.add_space(label_w(input.label));
             let n = crate::widgets::count_text(n as u64);
             ui.label(egui::RichText::new(tf!("and {n} more were left out", n = n)).color(t.warn).font(crate::theme::regular(12.0)));
         });
     }
     ev
+}
+
+/// How far a word under the field is set in, to line up with its chips: past its label, when it
+/// has one of its own.
+pub fn label_w(label: &str) -> f32 {
+    if label.is_empty() { 0.0 } else { crate::widgets::FIELD_LABEL_W }
 }
 
 /// The keys the field takes before its input sees them; whether the input is to get the focus

@@ -24,6 +24,7 @@ pub use attendees::{AttendeesUi, Line, line_button_id};
 pub use contact::{ContactForm, contact};
 pub use event::{EventForm, event};
 pub use meeting::meeting;
+pub(crate) use meeting::prepare;
 pub use rooms::RoomFinderUi;
 pub use scheduling::SchedDrag;
 
@@ -159,16 +160,33 @@ pub(super) fn button_row(ui: &mut Ui, t: &Tokens, id: egui::Id, label: &str, tip
     ui.horizontal_top(|ui| {
         let (r, _) = ui.allocate_exact_size(vec2(LABEL_W, FIELD_H), Sense::hover());
         let button = egui::Rect::from_min_size(r.min, vec2(LABEL_W - 12.0, FIELD_H));
-        let resp = ui.interact(button, id, Sense::click()).on_hover_text(tip);
-        let enabled = ui.is_enabled();
-        let fill = if enabled && resp.hovered() { t.hover } else { t.surface };
-        ui.painter().rect(button, 4.0, fill, egui::Stroke::new(1.0, t.border), egui::StrokeKind::Inside);
-        ui.painter().text(button.center(), egui::Align2::CENTER_CENTER, tl!(label), theme::regular(13.0), if enabled { t.text } else { t.dim });
-        pressed = enabled && resp.clicked();
+        pressed = label_button(ui, t, button, id, label, tip).clicked();
         add(ui);
     });
     ui.add_space(8.0);
     pressed
+}
+
+/// A column for a contacts field in a form's row: room for every line the field grows to before
+/// it scrolls (a row gives one line's height); only what it takes is kept.
+pub(super) fn field_column(ui: &mut Ui, add: impl FnOnce(&mut Ui)) {
+    let tall = crate::look::people_field::MAX_LINES as f32 * crate::look::people_field::CHIP_ROW_H;
+    ui.allocate_ui_with_layout(vec2(ui.available_width(), tall), egui::Layout::top_down(egui::Align::Min), add);
+}
+
+/// A framed button naming a field, drawn in `rect` under `id` (the label that names a contacts
+/// field with none of its own, to a screen reader too); `tip` on hover, when there's one.
+pub(super) fn label_button(ui: &mut Ui, t: &Tokens, rect: egui::Rect, id: egui::Id, label: &str, tip: &str) -> egui::Response {
+    let enabled = ui.is_enabled();
+    let mut resp = ui.interact(rect, id, if enabled { Sense::click() } else { Sense::hover() });
+    widgets::named(ui, &resp, tl!(label), enabled, None);
+    if !tip.is_empty() {
+        resp = resp.on_hover_text(tip);
+    }
+    let fill = if enabled && resp.hovered() { t.hover } else { t.surface };
+    ui.painter().rect(rect, 4.0, fill, egui::Stroke::new(1.0, t.border), egui::StrokeKind::Inside);
+    ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, tl!(label), theme::regular(13.0), if enabled { t.text } else { t.dim });
+    resp
 }
 
 /// A one-line field of a form, `width` wide (the rest of the row when infinite).

@@ -19,25 +19,19 @@ pub struct RoomFinderUi {
     pub shown: Option<(String, String)>,
 }
 
-/// The rooms row: each room booked with its ×, and the Room Finder's button.
-pub(super) fn row(ui: &mut Ui, f: &mut EventForm, t: &Tokens) {
-    ui.horizontal_wrapped(|ui| {
-        let mut remove = None;
-        for (name, email) in &f.rooms {
-            egui::Frame::new().fill(t.accent_soft).corner_radius(10.0).inner_margin(Margin::symmetric(8, 2)).show(ui, |ui| {
-                ui.label(RichText::new(name).color(t.text)).on_hover_text(email);
-                if widgets::tiny_icon_button(ui, Icon::Close, "Remove", t).clicked() {
-                    remove = Some(email.clone());
-                }
-            });
-        }
-        if let Some(e) = remove {
-            f.remove_room(&e);
-        }
-        let open = f.finder.is_some();
-        if ui.selectable_label(open, tl!("Room Finder")).clicked() {
-            f.finder = if open { None } else { Some(RoomFinderUi::default()) };
-        }
+/// A Rooms row's content: `line` (the rooms) in the room the Room Finder's toggle leaves it, the
+/// toggle at the row's end, on the line's first line. The toggle is laid out first, as wide as
+/// its label reads in the language shown, so the line never runs under it.
+pub(super) fn with_finder_toggle(ui: &mut Ui, f: &mut EventForm, line: impl FnOnce(&mut Ui)) {
+    ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
+        ui.with_layout(egui::Layout::top_down(egui::Align::Max), |ui| {
+            ui.add_space(((FIELD_H - ui.spacing().interact_size.y) / 2.0).max(0.0));
+            let open = f.finder.is_some();
+            if ui.selectable_label(open, tl!("Room Finder")).clicked() {
+                f.finder = if open { None } else { Some(RoomFinderUi::default()) };
+            }
+        });
+        ui.with_layout(egui::Layout::left_to_right(egui::Align::Min), line);
     });
 }
 
