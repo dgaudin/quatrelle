@@ -120,12 +120,22 @@ impl Field {
     /// while a key was typed). The text is written back when the pieces spell it otherwise. A
     /// chip the place refuses is red; one refused stays so while a chip of its address stays (a
     /// person picked by name in Rooms reads back from the text as if typed), with what it was
-    /// known to be while nothing here knows it (unknown is no reason to take it).
+    /// known to be while nothing here knows it (unknown is no reason to take it). A one-entry
+    /// field keeps the last entry.
     pub(super) fn parse(&mut self, s: &mut Session, account: Option<&str>, accepts: &Accepts, text: &str) {
         s.contacts_step(0);
         let was_reparse = std::mem::take(&mut self.reparse);
-        let entries = split_entries(text).len();
-        let mut pieces = pieces_of(s, account, text);
+        let entries = split_entries(text);
+        // A one-entry field fed several (a paste that reached it whole, a text set from outside)
+        // keeps the last, in place of the others: they aren't left out. What's being typed is
+        // no entry yet: the one before it stays until it's closed.
+        let (mut pieces, cut) = if accepts.one {
+            let typed = self.st.input.trim();
+            let keep = if !typed.is_empty() && entries.last().is_some_and(|e| *e == typed) { 2 } else { 1 };
+            (entries.iter().skip(entries.len().saturating_sub(keep)).map(|e| piece_of(s, account, e)).collect(), 0)
+        } else {
+            (pieces_of(s, account, text), entries.len().saturating_sub(MAX_ENTRIES))
+        };
         let refused_before: Vec<&Addressee> = self
             .st
             .pieces
@@ -162,7 +172,6 @@ impl Field {
             self.st.input.clear();
             self.st.open = false;
         }
-        let cut = entries.saturating_sub(MAX_ENTRIES);
         // A text set from outside whole (a script, Select Names' OK) starts afresh, its losses
         // with it; the engine writing a name found keeps every entry, and the losses stay.
         let replaced = !was_reparse && pieces.len() != self.st.pieces.len();

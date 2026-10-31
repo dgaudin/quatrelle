@@ -137,6 +137,26 @@ pub fn input_id(field: Id) -> Id {
     field.with("people-input")
 }
 
+/// The id of a field's suggestion list (an area of its own), from the field's id.
+pub fn list_id(field: Id) -> Id {
+    field.with("people-list")
+}
+
+/// The id of a field's chip card (an area of its own), from the field's id.
+pub fn card_id(field: Id) -> Id {
+    field.with("people-card")
+}
+
+/// Whether `pos` is on the field's suggestion list or chip card, as drawn last frame: a menu
+/// holding the field doesn't take a click there for one outside it.
+pub fn over_popups(ctx: &egui::Context, field: Id, pos: egui::Pos2) -> bool {
+    ctx.memory(|m| {
+        [list_id(field), card_id(field)].into_iter().any(|id| {
+            m.areas().visible_last_frame(&egui::LayerId::new(egui::Order::Foreground, id)) && m.area_rect(id).is_some_and(|r| r.contains(pos))
+        })
+    })
+}
+
 /// The id of the label a form draws for a field with none of its own (an empty
 /// [`FieldInput::label`]): it names the input to a screen reader.
 pub fn label_id(field: Id) -> Id {

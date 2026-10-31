@@ -606,19 +606,12 @@ fn check_names_asks_which_person_a_name_means() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
-/// From's other address: a name typed offers the people the directory has for it; Enter takes
-/// the only one.
-#[test]
-fn from_finds_another_address_by_its_name() {
-    let (mut a, dir) = app("send-from-name");
-    let gal = with_exchange(&mut a);
-    let ctx = egui::Context::default();
-    let size = egui::vec2(1280.0, 800.0);
-    frame(&ctx, &mut a, vec![]);
-    a.run("mail.new", json!({}));
-    let own = a.session.senders().first().unwrap().label.clone();
-    let row = settled_text_at(&ctx, &mut a, &own, size).expect("who it's from");
-    let from = frame_shapes(&ctx, &mut a, vec![], size)
+/// The From button of the message being written, from the own address beside it (the message
+/// sends from it, and the menu is closed).
+fn from_button(ctx: &egui::Context, a: &mut MailApp, size: egui::Vec2) -> egui::Pos2 {
+    let own = a.session.senders().first().map(|s| s.label.clone()).expect("the account's own address");
+    let row = settled_text_at(ctx, a, &own, size).expect("who it's from");
+    frame_shapes(ctx, a, vec![], size)
         .iter()
         .find_map(|s| match s {
             egui::Shape::Text(t) if t.galley.text() == "From" => {
@@ -627,18 +620,49 @@ fn from_finds_another_address_by_its_name() {
             }
             _ => None,
         })
-        .expect("the From button");
-    click_at(&ctx, &mut a, from, 1, size);
-    let other = settled_text_at(&ctx, &mut a, "Other email address…", size).expect("another address offered");
-    click_at(&ctx, &mut a, other, 1, size);
+        .expect("the From button")
+}
+
+/// The From menu of the message being written opened, and its Other email address (the field
+/// has the keyboard); where the From button is.
+pub(super) fn open_other_address(ctx: &egui::Context, a: &mut MailApp, size: egui::Vec2) -> egui::Pos2 {
+    let from = from_button(ctx, a, size);
+    click_at(ctx, a, from, 1, size);
+    let other = settled_text_at(ctx, a, "Other email address…", size).expect("another address offered");
+    click_at(ctx, a, other, 1, size);
+    from
+}
+
+/// From's other address finds a name when asked, as any contacts field does. This test once
+/// checked that the directory was searched as the name was typed; the contacts field's rule
+/// (typing never asks the server) took that away: typing asks nothing, Ctrl+K asks the
+/// directory, the one person it has becomes the field's chip, and Send from it takes them.
+#[test]
+fn from_finds_another_address_by_its_name() {
+    let (mut a, dir) = app("send-from-name");
+    let gal = with_exchange(&mut a);
+    let ctx = egui::Context::default();
+    let size = egui::vec2(1280.0, 800.0);
+    frame(&ctx, &mut a, vec![]);
+    a.run("mail.new", json!({}));
+    open_other_address(&ctx, &mut a, size);
     frame_sized(&ctx, &mut a, vec![Event::Text("proginov".into())], size);
     frame_sized(&ctx, &mut a, vec![], size);
-    assert!(a.session.directory_searching(&gal, "proginov"), "asked as it's typed");
-    assert!(settled_text_at(&ctx, &mut a, "Searching the directory…", size).is_some());
-    directory_answers(&mut a, &gal, "proginov", &[("Proginov Reseau", "reseaux@proginov.example")]);
-    assert!(settled_text_at(&ctx, &mut a, "Proginov Reseau <reseaux@proginov.example>", size).is_some(), "offered");
-    frame_sized(&ctx, &mut a, vec![key(Key::Enter, Modifiers::NONE)], size);
+    assert!(!a.session.directory_searching(&gal, "proginov"), "typing asks nothing");
+    frame_sized(&ctx, &mut a, vec![key(Key::K, Modifiers::COMMAND)], size);
     frame_sized(&ctx, &mut a, vec![], size);
+    assert!(a.session.directory_searching(&gal, "proginov"), "Ctrl+K asks the directory");
+    directory_answers(&mut a, &gal, "proginov", &[("Proginov Reseau", "reseaux@proginov.example")]);
+    frame_sized(&ctx, &mut a, vec![], size);
+    frame_sized(&ctx, &mut a, vec![], size);
+    let from = quatrelle_engine::FieldId { window: a.session.compose.as_ref().map_or(0, |c| c.id), name: "from" };
+    let pieces = a.ui.people.pieces(from).to_vec();
+    assert!(
+        matches!(pieces.as_slice(), [crate::look::people_field::Piece::Chip { who, refused: None }] if who.address == "reseaux@proginov.example"),
+        "one chip: {pieces:?}"
+    );
+    let send = settled_text_at(&ctx, &mut a, "Send from it", size).expect("Send from it");
+    click_at(&ctx, &mut a, send, 1, size);
     assert_eq!(a.session.compose.as_ref().unwrap().from, "Proginov Reseau <reseaux@proginov.example>");
     let _ = std::fs::remove_dir_all(dir);
 }

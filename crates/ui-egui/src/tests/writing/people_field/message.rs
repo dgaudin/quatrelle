@@ -1,5 +1,6 @@
 //! The contacts field wired to the session (`dialogs/people_field.rs`): the message's To, Cc,
-//! Bcc and Replies to, and the Select Names dialog's rows (Send is `sending.rs`).
+//! Bcc and Replies to, and the Select Names dialog's rows (Send is `sending.rs`, From's other
+//! address `message/from.rs`).
 
 use quatrelle_engine::FieldId;
 use quatrelle_engine::model::scheduling::Room;
@@ -7,6 +8,8 @@ use quatrelle_engine::model::{Addressee, AddresseeKind, EmailAddress, Job};
 
 use super::*;
 use crate::dialogs::people_field::egui_id;
+
+mod from;
 
 pub(super) const SIZE: egui::Vec2 = egui::vec2(1280.0, 800.0);
 

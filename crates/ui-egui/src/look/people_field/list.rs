@@ -41,7 +41,7 @@ pub(super) fn show(
 ) -> (bool, bool) {
     let w = edit_w.clamp(300.0, 480.0);
     let mut picked = None;
-    let area = egui::Area::new(input.id.with("people-list")).order(egui::Order::Foreground).fixed_pos(at).show(ui.ctx(), |ui| {
+    let area = egui::Area::new(super::list_id(input.id)).order(egui::Order::Foreground).fixed_pos(at).show(ui.ctx(), |ui| {
         egui::Frame::popup(ui.style()).inner_margin(egui::Margin::same(4)).show(ui, |ui| {
             ui.spacing_mut().item_spacing.y = 0.0;
             for (n, &k) in rows.iter().enumerate() {

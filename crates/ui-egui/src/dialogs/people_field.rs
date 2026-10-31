@@ -1,8 +1,9 @@
 //! The contacts field's glue with the session. [`PeopleFields`] keeps every field's state by
-//! [`FieldId`] (the message's To, Cc, Bcc and Replies to; the Select Names dialog's rows), turns a
-//! field's text into pieces and the widget's events back into text and actions, asks the engine for
+//! [`FieldId`] (the message's To, Cc, Bcc and Replies to, and From's other address; the Select
+//! Names dialog's rows; a meeting's lines and its Select Attendees' rows), turns a field's text
+//! into pieces and the widget's events back into text and actions, asks the engine for
 //! suggestions, and holds the waits Send makes for the names still being resolved (one per
-//! message).
+//! window).
 //!
 //! The work is bounded as the engine's is (the search bug of 2026-10-30): a field's text is parsed
 //! when it changes (fed in, or the engine writing a name found), never on a frame where nothing
@@ -328,13 +329,25 @@ impl PeopleFields {
         self.open
     }
 
+    /// A field not drawn this frame (its menu closed) has let go of the keyboard: it no longer
+    /// holds the window's keys (Ctrl+K is Check Names' again).
+    pub(crate) fn let_go(&mut self, field: FieldId) {
+        if self.open == Some(field) {
+            self.open = None;
+        }
+    }
+
     pub(crate) fn pieces(&self, field: FieldId) -> &[Piece] {
         self.fields.get(&field).map_or(&[], |f| f.st.pieces.as_slice())
     }
 
-    #[cfg(test)]
     pub(crate) fn suggestions(&self, field: FieldId) -> &[quatrelle_engine::Suggestion] {
         self.fields.get(&field).map_or(&[], |f| f.suggestions.as_slice())
+    }
+
+    /// What's being typed in the field's input, not yet an entry.
+    pub(crate) fn typing(&self, field: FieldId) -> &str {
+        self.fields.get(&field).map_or("", |f| f.st.input.as_str())
     }
 
     /// How many times the field's text was parsed.
