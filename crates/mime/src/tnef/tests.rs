@@ -510,3 +510,16 @@ fn outlooks_rich_text_reads_as_outlook_shows_it() {
     assert_eq!((eml.subject.as_str(), eml.images.as_slice()), ("Inner", &["cid:logo@x".to_string()][..]));
     assert!(eml.attachments.iter().all(|a| a.inline), "{:?}", eml.attachments);
 }
+
+/// Property lists keep coming: no more than `MAX_PROPS` are kept for a message or a file, however
+/// many lists it has.
+#[test]
+fn properties_are_capped_across_lists() {
+    let list: Vec<(u16, u16, Vec<u8>)> = (0..MAX_PROPS).map(|i| (0x0003, 0x6000 + (i % 0x1000) as u16, long(1))).collect();
+    let list = props(&list);
+    let mut kept = Props::new();
+    for _ in 0..3 {
+        add_props(&mut kept, &list);
+    }
+    assert_eq!(kept.len(), MAX_PROPS);
+}
