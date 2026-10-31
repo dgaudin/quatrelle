@@ -26,6 +26,7 @@ use crate::reading::check_names::Answer;
 use crate::theme::Tokens;
 
 mod field;
+pub(crate) mod places;
 mod send;
 
 use field::{Field, same_list};
@@ -115,7 +116,8 @@ pub(crate) struct PeopleFields {
     /// The fields drawn since the last [`PeopleFields::settle`]: one not drawn (its menu closed,
     /// its message set aside) has let go of the keyboard.
     drawn: HashSet<FieldId>,
-    /// The sends held, by window (a message's id, or a meeting's [`MEETING_WINDOWS`] one).
+    /// The sends held, by window (a message's id, a meeting's [`MEETING_WINDOWS`] one, or the
+    /// dialog's [`DIALOG_WINDOWS`] for its OK).
     send_wait: HashMap<u64, SendWait>,
     /// The names whose choice the user cancelled (the field and the name as typed): a send that
     /// finds them unsettled stops quietly.
@@ -392,7 +394,8 @@ impl PeopleFields {
     }
 
     /// Housekeeping each frame: the fields of windows gone go, here and in the engine (`live`:
-    /// the messages' ids and the meetings' [`MEETING_WINDOWS`] ones), and so do a book's rows once
+    /// the messages' ids, the meetings' [`MEETING_WINDOWS`] ones and the open dialog's
+    /// [`places::dialog_windows`]), and so do a book's rows once
     /// it's closed (`open_books`: the window of an open Select Names, and of each meeting whose
     /// Select Attendees is open); a send held for a window gone is off. A field not drawn last
     /// frame (its menu closed, its message set aside or hidden) has let go of the keyboard: it no
@@ -492,7 +495,6 @@ impl PeopleFields {
 impl PeopleFields {
     /// The chip of `address` taken out of the field (its calendar opened), written into the text
     /// at the next draw. An address the field holds no chip of: nothing to do.
-    #[cfg_attr(not(test), expect(dead_code, reason = "the dialogs draw their fields from the next commit"))]
     pub(crate) fn opened(&mut self, field: FieldId, address: &str) {
         let Some(f) = self.fields.get_mut(&field) else { return };
         let before = f.st.pieces.len();
@@ -511,7 +513,6 @@ impl PeopleFields {
     /// The chip of `address` turned back into its text, red with why it couldn't be done
     /// ([`PieceError::Failed`]: it isn't asked again), written into the text at the next draw.
     /// An address the field holds no chip of: nothing to do.
-    #[cfg_attr(not(test), expect(dead_code, reason = "the dialogs draw their fields from the next commit"))]
     pub(crate) fn failed(&mut self, field: FieldId, address: &str, why: String) {
         let Some(f) = self.fields.get_mut(&field) else { return };
         for p in &mut f.st.pieces {

@@ -11,6 +11,7 @@ use crate::theme::{self, Tokens};
 use crate::{Action, Icon, widgets};
 
 mod accounts;
+mod calendars;
 mod closing;
 mod folder_sizes;
 mod folders;
@@ -24,6 +25,7 @@ pub(crate) mod pim_dialogs;
 mod writing;
 
 pub use accounts::*;
+pub use calendars::CalendarsForm;
 pub use folder_sizes::SizeSort;
 pub use mailbox::*;
 pub use moving::MoveForm;
@@ -109,11 +111,8 @@ pub enum Dialog {
         calendar: bool,
         error: Option<String>,
     },
-    /// Open someone else's calendar by their address (Outlook's Open Calendar).
-    OpenSharedCalendar {
-        email: String,
-        error: Option<String>,
-    },
+    /// Open other people's calendars, from the address book or typed (Outlook's Open Calendar).
+    OpenSharedCalendar(Box<CalendarsForm>),
     /// Subscribe to a calendar by its link (Outlook's Add Calendar › From Internet, issue #7).
     SubscribeCalendar {
         url: String,
@@ -244,6 +243,11 @@ impl Dialog {
             cc: c.cc.clone(),
             bcc: c.bcc.clone(),
         }))
+    }
+
+    /// Add calendar › From Address Book: the address book, and the people whose calendars to open.
+    pub fn open_calendars() -> Dialog {
+        Dialog::OpenSharedCalendar(Box::new(CalendarsForm { search: AddressSearch::new(), ..Default::default() }))
     }
 
     /// Attach Item, open on a kind of item; messages from the Inbox of the account writing.
@@ -455,9 +459,8 @@ impl Dialog {
             Dialog::Contact(f) => f.error = Some(e),
             Dialog::MoveEvent(f) => f.error = Some(e),
             Dialog::Vacation(f) => f.error = Some(e),
-            Dialog::OpenSharedCalendar { error, .. } | Dialog::SubscribeCalendar { error, .. } | Dialog::OpenSharedMailbox { error, .. } => {
-                *error = Some(e)
-            }
+            Dialog::OpenSharedCalendar(f) => f.error = Some(e),
+            Dialog::SubscribeCalendar { error, .. } | Dialog::OpenSharedMailbox { error, .. } => *error = Some(e),
             _ => {}
         }
     }
@@ -570,7 +573,7 @@ pub(crate) fn buttons(ui: &mut Ui, t: &Tokens, ok: &str, ok_enabled: bool) -> (b
 }
 
 /// Show the dialog; returns whether it stays open. `people` draws the contacts fields a dialog
-/// has (Select Names' rows).
+/// has (Select Names' rows, Add calendar's and Open another mailbox's).
 pub fn show(ctx: &egui::Context, d: &mut Dialog, s: &Session, people: &mut people_field::PeopleFields, t: &Tokens, acts: &mut Vec<Action>) -> bool {
     let frame = dialog_frame(t);
     // Each kind of dialog keeps its own size: one id for all let a small one open at the size
@@ -616,7 +619,7 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, people: &mut people_field::Peo
         | Dialog::RemoveAccount { .. }
         | Dialog::MailboxClosed { .. }
         | Dialog::EditAccount(..)
-        | Dialog::OpenSharedMailbox { .. } => accounts::draw(ui, d, s, t, acts),
+        | Dialog::OpenSharedMailbox { .. } => accounts::draw(ui, d, s, people, t, acts),
         Dialog::Signature(..) | Dialog::Vacation(..) => mailbox::draw(ui, d, s, t, acts),
         Dialog::FolderSize { .. } => folder_sizes::draw(ui, d, s, t, acts),
         Dialog::ConfirmDelete { .. }
@@ -643,12 +646,12 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, people: &mut people_field::Peo
         | Dialog::OpenShare { .. }
         | Dialog::PicturePreview { .. }
         | Dialog::Preview { .. }
-        | Dialog::OpenSharedCalendar { .. }
         | Dialog::SubscribeCalendar { .. }
         | Dialog::Certificate { .. }
         | Dialog::SmartCard { .. }
         | Dialog::Event(..)
         | Dialog::Contact(..) => other::draw(ui, d, s, t, acts),
+        Dialog::OpenSharedCalendar(f) => calendars::draw(ui, f, s, people, t, acts),
         Dialog::MoveEvent(f) => moving::draw(ui, f, t, acts),
     }
 }

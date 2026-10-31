@@ -138,33 +138,6 @@ pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &
             !cancel
         }
         Dialog::SmartCard { account, module, pin } => smart_card(ui, s, t, acts, account, module, pin),
-        Dialog::OpenSharedCalendar { email, error } => {
-            ui.set_width(420.0);
-            title(ui, t, "Open a shared calendar");
-            ui.add(
-                egui::Label::new(
-                    RichText::new(tl!("Whose calendar? It opens read-only beside yours, when they've shared it with you in Exchange.")).color(t.dim),
-                )
-                .wrap(),
-            );
-            ui.add_space(8.0);
-            let r = ui.add(egui::TextEdit::singleline(email).hint_text("name@example.com").desired_width(f32::INFINITY));
-            // Before the focus request below, which would hide the Enter that ended input.
-            let enter = r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-            if ui.memory(|m| m.focused().is_none()) {
-                r.request_focus();
-            }
-            if let Some(e) = error {
-                ui.add_space(4.0);
-                ui.label(RichText::new(e.as_str()).color(t.danger).small());
-            }
-            let ready = email.contains('@');
-            let (ok, cancel) = buttons(ui, t, "Open", ready);
-            if (ok || enter) && ready {
-                acts.push(Action::Submit("calendar.openShared", json!({"email": email.trim()})));
-            }
-            !cancel
-        }
         Dialog::SubscribeCalendar { url, name, error } => {
             ui.set_width(440.0);
             title(ui, t, "Subscribe to a calendar");

@@ -412,15 +412,27 @@ fn leaving_an_attachment_preview_lets_go_of_its_chip() {
 /// looking for the Enter that had just ended input, so only the button worked.
 #[test]
 fn enter_submits_a_one_field_dialog() {
+    use crate::look::people_field::{Piece, PieceError, input_id};
     let (mut a, dir) = app("enter-submits");
     let ctx = egui::Context::default();
-    // The sample account isn't an Exchange one, so the submit comes back as the dialog's error.
-    a.ui.dialog = Some(Dialog::OpenSharedCalendar { email: "ana@contoso.example".into(), error: None });
-    frame(&ctx, &mut a, vec![]);
+    // The sample account isn't an Exchange one, so the calendar can't be opened: the entry stays,
+    // red with why, and the dialog with it.
+    let mut d = Dialog::open_calendars();
+    if let Dialog::OpenSharedCalendar(f) = &mut d {
+        f.text = "ana@contoso.example".into();
+    }
+    a.ui.dialog = Some(d);
+    let field = crate::dialogs::people_field::dialog_field(0, "calendar");
+    for _ in 0..3 {
+        frame(&ctx, &mut a, vec![]);
+    }
+    ctx.memory_mut(|m| m.request_focus(input_id(crate::dialogs::people_field::egui_id(field))));
     frame(&ctx, &mut a, vec![]);
     frame(&ctx, &mut a, vec![key(Key::Enter, Modifiers::NONE)]);
     frame(&ctx, &mut a, vec![]);
-    assert!(matches!(&a.ui.dialog, Some(Dialog::OpenSharedCalendar { error: Some(_), .. })), "submitted: {:?}", a.ui.dialog.is_some());
+    assert!(matches!(&a.ui.dialog, Some(Dialog::OpenSharedCalendar(_))), "still open");
+    let p = a.ui.people.pieces(field);
+    assert!(matches!(p, [Piece::Text { error: Some(PieceError::Failed(_)), .. }]), "submitted: {p:?}");
     let _ = std::fs::remove_dir_all(dir);
 }
 

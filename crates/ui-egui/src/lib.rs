@@ -233,6 +233,8 @@ pub enum Action {
     OpenShare(String),
     /// Run a command for the open dialog: it closes on success and shows the error otherwise.
     Submit(&'static str, Value),
+    /// The open dialog's OK once its field's names are settled (Add calendar, Open another mailbox).
+    DialogOk,
     /// Bring the main window to the front (after acting from a message window).
     FocusMain,
     /// Open the File page at a page.

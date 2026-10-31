@@ -250,7 +250,11 @@ pub(crate) fn tour() {
                 unread: 3,
                 size: 20_480,
             },
-            Dialog::OpenSharedCalendar { email: "ana@contoso.example".into(), error: Some("no access".into()) },
+            {
+                let mut d = Dialog::open_calendars();
+                d.set_error("no access".into());
+                d
+            },
             Dialog::SubscribeCalendar { url: "webcal://holidays.example/de.ics".into(), name: String::new(), error: Some("HTTP 404".into()) },
             Dialog::OpenSharedMailbox {
                 account: "a1".into(),

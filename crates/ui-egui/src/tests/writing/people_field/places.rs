@@ -276,3 +276,187 @@ fn a_dialog_field_is_numbered_apart_and_goes_with_its_dialog() {
     assert!(!is_dialog_window(MEETING_WINDOWS | 1) && !is_dialog_window(1 << 41) && !is_dialog_window(n));
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// A window tall enough for the dialogs with an address book.
+const SIZE: egui::Vec2 = egui::vec2(1280.0, 900.0);
+
+fn frames(ctx: &egui::Context, a: &mut MailApp, n: usize) {
+    for _ in 0..n {
+        frame_sized(ctx, a, vec![], SIZE);
+    }
+}
+
+/// The dialog `d` open over the main window, a few frames on.
+fn open_dialog(ctx: &egui::Context, a: &mut MailApp, d: Dialog) {
+    frames(ctx, a, 1);
+    a.ui.dialog = Some(d);
+    frames(ctx, a, 3);
+}
+
+/// Type `text` in the dialog's field, its input given the keyboard first; a few frames after.
+fn type_in(ctx: &egui::Context, a: &mut MailApp, field: FieldId, text: &str) {
+    focus_field(ctx, field);
+    frame_sized(ctx, a, vec![], SIZE);
+    frame_sized(ctx, a, vec![Event::Text(text.into())], SIZE);
+    frames(ctx, a, 3);
+}
+
+/// The dialog's button (or anything drawn on top) reading `label`, clicked.
+fn press(ctx: &egui::Context, a: &mut MailApp, label: &str) {
+    let at = settled_text_at(ctx, a, label, SIZE).unwrap_or_else(|| panic!("{label} is drawn"));
+    click_at(ctx, a, at, 1, SIZE);
+}
+
+/// Whether the button `label` can be pressed, as a screen reader is told.
+fn enabled(ctx: &egui::Context, a: &mut MailApp, label: &str) -> Option<bool> {
+    ctx.enable_accesskit();
+    let input = RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, SIZE)), ..Default::default() };
+    let mut out = ctx.run_ui(input, |ui| a.ui(ui));
+    out.textures_delta.clear();
+    let nodes = out.platform_output.accesskit_update.map(|u| u.nodes).unwrap_or_default();
+    nodes.iter().find(|(_, n)| n.role() == egui::accesskit::Role::Button && n.label() == Some(label)).map(|(_, n)| !n.is_disabled())
+}
+
+/// The other people's calendars `account` has open.
+fn shared(a: &MailApp, account: &str) -> Vec<String> {
+    a.session.pim.get(account).map(|p| p.shared.clone()).unwrap_or_default()
+}
+
+fn calendar_open(a: &MailApp) -> bool {
+    matches!(a.ui.dialog, Some(Dialog::OpenSharedCalendar(_)))
+}
+
+/// Add calendar takes several people: each is opened once; a list it refuses and the account's
+/// own address stay, red, and the dialog with them. Pressed again, nothing is opened twice.
+/// Taken out, they leave the field empty, with Open off.
+#[test]
+fn add_calendar_opens_each_entry_once_and_keeps_the_one_refused() {
+    let (mut a, dir) = app("add-calendar-several");
+    let gal = with_exchange(&mut a);
+    team_is_a_list(&mut a, &gal);
+    let ctx = egui::Context::default();
+    open_dialog(&ctx, &mut a, Dialog::open_calendars());
+    let f = dialog_field(0, "calendar");
+    type_in(&ctx, &mut a, f, "ana@contoso.example; bo@contoso.example; team@contoso.example; riley@contoso.example; ");
+    assert_eq!(enabled(&ctx, &mut a, "Open"), Some(true));
+    press(&ctx, &mut a, "Open");
+    assert_eq!(shared(&a, &gal), ["ana@contoso.example", "bo@contoso.example"]);
+    assert!(calendar_open(&a), "the dialog stays for the entries left");
+    let own = Piece::Text { text: "riley@contoso.example".into(), error: Some(PieceError::Failed("that's this account's own calendar".into())) };
+    let left = a.ui.people.pieces(f).to_vec();
+    assert_eq!(left.len(), 2, "{left:?}");
+    assert_eq!(refusal(&a, f, "team@contoso.example"), Some(Some(NO_LIST_CALENDAR.into())), "{left:?}");
+    assert_eq!(left[1], own);
+    // Pressed again: nothing opened twice, the red entries as they were.
+    press(&ctx, &mut a, "Open");
+    assert_eq!(shared(&a, &gal), ["ana@contoso.example", "bo@contoso.example"]);
+    assert_eq!(a.ui.people.pieces(f), left.as_slice());
+    // Both taken out (Backspace selects the last, a second removes it).
+    focus_field(&ctx, f);
+    frames(&ctx, &mut a, 1);
+    for _ in 0..4 {
+        frame_sized(&ctx, &mut a, vec![key(Key::Backspace, Modifiers::NONE)], SIZE);
+    }
+    frames(&ctx, &mut a, 2);
+    assert!(a.ui.people.pieces(f).is_empty(), "{:?}", a.ui.people.pieces(f));
+    assert_eq!(enabled(&ctx, &mut a, "Open"), Some(false));
+    assert!(calendar_open(&a));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A name typed in Add calendar: Open waits for the directory ("Checking names…", nothing
+/// opened), then opens the person found and closes.
+#[test]
+fn add_calendar_waits_for_a_name_then_opens_it() {
+    let (mut a, dir) = app("add-calendar-waits");
+    let gal = with_exchange(&mut a);
+    let ctx = egui::Context::default();
+    open_dialog(&ctx, &mut a, Dialog::open_calendars());
+    // A name the sample's people don't know (its Ana Lima would settle "Ana" at once).
+    type_in(&ctx, &mut a, dialog_field(0, "calendar"), "Dupont");
+    press(&ctx, &mut a, "Open");
+    assert!(a.ui.people.holding(DIALOG_WINDOWS), "held for the name");
+    assert!(settled_text_at(&ctx, &mut a, "Checking names…", SIZE).is_some(), "said in the dialog");
+    assert!(shared(&a, &gal).is_empty(), "nothing opened yet");
+    directory_answers(&mut a, &gal, "Dupont", &[("Ana Dupont", "ana@contoso.example")]);
+    frames(&ctx, &mut a, 2);
+    assert_eq!(shared(&a, &gal), ["ana@contoso.example"], "the name answered is opened: {:?}", a.ui.dialog.is_some());
+    assert!(a.ui.dialog.is_none(), "and the dialog closed");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Add calendar's address book: the person picked goes into the field with "Calendar ->", or with
+/// a double-click on their row.
+#[test]
+fn add_calendar_takes_a_person_from_its_book() {
+    let (mut a, dir) = app("add-calendar-book");
+    for (name, email) in [("Jean Dupont", "jean.dupont@proginov.com"), ("Jeanne Martin", "jeanne.martin@proginov.com")] {
+        a.session.run("contact.create", &json!({"name": name, "emails": [email]})).unwrap();
+    }
+    a.session.contacts_step(usize::MAX);
+    let ctx = egui::Context::default();
+    open_dialog(&ctx, &mut a, Dialog::open_calendars());
+    // The search box has the keyboard as the dialog opens.
+    frame_sized(&ctx, &mut a, vec![Event::Text("Jean".into())], SIZE);
+    frames(&ctx, &mut a, 3);
+    let f = dialog_field(0, "calendar");
+    press(&ctx, &mut a, "Jean Dupont");
+    press(&ctx, &mut a, "Calendar ->");
+    frames(&ctx, &mut a, 2);
+    let p = a.ui.people.pieces(f).to_vec();
+    assert!(p.len() == 1 && chip_named(&p[0], "Jean Dupont"), "{p:?}");
+    let row = settled_text_at(&ctx, &mut a, "Jeanne Martin", SIZE).expect("the second row");
+    click_at(&ctx, &mut a, row, 2, SIZE);
+    frames(&ctx, &mut a, 2);
+    let p = a.ui.people.pieces(f).to_vec();
+    assert!(p.len() == 2 && chip_named(&p[1], "Jeanne Martin"), "{p:?}");
+    let Some(Dialog::OpenSharedCalendar(form)) = &a.ui.dialog else { panic!("the dialog is open") };
+    assert!(form.text.contains("jean.dupont@proginov.com") && form.text.contains("jeanne.martin@proginov.com"), "{}", form.text);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+fn open_mailbox(account: &str) -> Dialog {
+    Dialog::OpenSharedMailbox { account: account.into(), email: String::new(), calendar: false, error: None }
+}
+
+fn mailboxes(a: &MailApp, account: &str) -> Vec<String> {
+    a.session.account(account).map(|x| x.config.shared_mailboxes.clone()).unwrap_or_default()
+}
+
+/// Open another mailbox's field: a name typed, Enter waits for the directory, then the mailbox
+/// found opens and the dialog closes.
+#[test]
+fn open_mailbox_waits_for_a_typed_name() {
+    let (mut a, dir) = app("open-mailbox-waits");
+    let gal = with_exchange(&mut a);
+    let ctx = egui::Context::default();
+    open_dialog(&ctx, &mut a, open_mailbox(&gal));
+    type_in(&ctx, &mut a, dialog_field(0, "mailbox"), "Support");
+    frame_sized(&ctx, &mut a, vec![key(Key::Enter, Modifiers::NONE)], SIZE);
+    frames(&ctx, &mut a, 1);
+    assert!(matches!(a.ui.dialog, Some(Dialog::OpenSharedMailbox { .. })), "still open");
+    assert!(a.ui.people.holding(DIALOG_WINDOWS), "held for the name");
+    assert!(mailboxes(&a, &gal).is_empty());
+    directory_answers(&mut a, &gal, "Support", &[("Support", "support@contoso.example")]);
+    frames(&ctx, &mut a, 2);
+    assert_eq!(mailboxes(&a, &gal), ["support@contoso.example"]);
+    assert!(a.ui.dialog.is_none(), "opened, and the dialog closed");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A list is no mailbox: Open another mailbox stops on it, says why, and opens nothing.
+#[test]
+fn open_mailbox_stops_on_a_list_and_says_why() {
+    let (mut a, dir) = app("open-mailbox-list");
+    let gal = with_exchange(&mut a);
+    team_is_a_list(&mut a, &gal);
+    let ctx = egui::Context::default();
+    open_dialog(&ctx, &mut a, open_mailbox(&gal));
+    type_in(&ctx, &mut a, dialog_field(0, "mailbox"), "team@contoso.example");
+    press(&ctx, &mut a, "Open");
+    frames(&ctx, &mut a, 2);
+    let Some(Dialog::OpenSharedMailbox { error, .. }) = &a.ui.dialog else { panic!("the dialog stays open") };
+    assert_eq!(error.as_deref(), Some(NOT_A_MAILBOX));
+    assert!(mailboxes(&a, &gal).is_empty(), "nothing opened");
+    let _ = std::fs::remove_dir_all(dir);
+}

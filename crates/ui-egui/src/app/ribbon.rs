@@ -102,7 +102,7 @@ impl MailApp {
                                         .on_hover_text(tl!("Open someone's calendar shared with you in Exchange"))
                                         .clicked()
                                 {
-                                    acts.push(Action::Dialog(Dialog::OpenSharedCalendar { email: String::new(), error: None }));
+                                    acts.push(Action::Dialog(Dialog::open_calendars()));
                                     ui.close();
                                 }
                                 if ui.button(tl!("From the Internet…")).clicked() {
