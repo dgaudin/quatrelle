@@ -269,8 +269,8 @@ impl RuleTest {
             RuleTest::AnyText => "Sender, recipients or subject contain",
             RuleTest::HasAttachment => "Has attachments",
             RuleTest::Bulk => "Is a newsletter or list mail",
-            RuleTest::FromAny => "From one of these (comma-separated)",
-            RuleTest::ToAny => "To or Cc one of these (comma-separated)",
+            RuleTest::FromAny => "From one of these",
+            RuleTest::ToAny => "To or Cc one of these",
             RuleTest::SubjectAny => "Subject has one of these (comma-separated)",
         })
     }

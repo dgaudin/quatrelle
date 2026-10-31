@@ -1821,3 +1821,6 @@ month	May	מאי
 	Checking names…	בודק שמות…
 	{room} can't be booked: a meeting books {max} rooms at most	לא ניתן להזמין את {room}: פגישה מזמינה {max} חדרים לכל היותר
 	Calendar ->	לוח שנה ->
+	From one of these	השולח הוא אחד מאלה
+	To or Cc one of these	אל או עותק הוא אחד מאלה
+	Subject has one of these (comma-separated)	הנושא מכיל אחת מהמילים האלה (מופרדות בפסיקים)

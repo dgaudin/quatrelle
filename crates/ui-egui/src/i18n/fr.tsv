@@ -1825,3 +1825,6 @@ month	May	mai
 	Checking names…	Vérification des noms…
 	{room} can't be booked: a meeting books {max} rooms at most	Impossible de réserver {room} : une réunion réserve {max} salles au plus
 	Calendar ->	Calendrier ->
+	From one of these	L’expéditeur est l’un de ceux-ci
+	To or Cc one of these	À ou Cc est l’un de ceux-ci
+	Subject has one of these (comma-separated)	L’objet contient l’un de ces mots (séparés par des virgules)

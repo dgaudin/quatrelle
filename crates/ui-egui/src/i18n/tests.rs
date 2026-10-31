@@ -222,6 +222,10 @@ pub(crate) fn interface_strings() -> BTreeSet<String> {
     for a in quatrelle_engine::Arrange::ALL {
         out.insert(a.label().to_string());
     }
+    // A rule's conditions: `tl!(match …)` isn't seen by the literal scan.
+    for t in crate::dialogs::RuleTest::ALL {
+        out.insert(t.label().to_string());
+    }
     out.extend(quatrelle_engine::ARRANGE_HEADINGS.map(str::to_string));
     // The message editor's ribbon and dialogs; labels chosen at run time.
     for s in [
@@ -256,6 +260,7 @@ pub(crate) fn interface_strings() -> BTreeSet<String> {
         "Cc ->",
         "Bcc ->",
         // Select Attendees and Resources, and the Room Finder's button.
+        "Calendar ->",
         "Required ->",
         "Optional ->",
         "Resources ->",
