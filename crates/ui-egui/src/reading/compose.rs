@@ -1,10 +1,9 @@
 //! The message being written: its form (from, to, cc, bcc, subject), its ribbon and its body.
 
 use quatrelle_engine::FieldId;
-use quatrelle_engine::model::addr::Accepts;
 
 use super::*;
-use crate::dialogs::people_field::COMPOSE_FIELDS;
+use crate::dialogs::people_field::{COMPOSE_FIELDS, accepts_of};
 
 /// Height of an attachment chip.
 pub(super) const CHIP_H: f32 = 42.0;
@@ -149,7 +148,7 @@ fn people_row(
     };
     // Select Names has rows for To, Cc and Bcc: Replies to keeps its label alone.
     let book = name != "replyTo";
-    let drawn = st.people.draw(ui, &t, field, Some(&c.account), &Accepts::RECIPIENTS, label, hint, value, focus, can_expand, book, acts);
+    let drawn = st.people.draw(ui, &t, field, Some(&c.account), accepts_of(field.name), label, hint, value, focus, can_expand, book, acts);
     // The field spelling a name it knows isn't the owner writing: a reply left as it came still
     // simply goes when another message is read, instead of being filed as a draft.
     if drawn.normalised && untouched {

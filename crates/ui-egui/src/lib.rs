@@ -661,6 +661,11 @@ impl MailApp {
                 return;
             }
         }
+        // Everyone put in Bcc sets To and Cc anew, which would forget what a field left out.
+        if id == "compose.hideRecipients" && self.session.compose.as_ref().is_some_and(|c| self.ui.people.has_losses(c.id)) {
+            self.ui.compose_alert = Some(dialogs::people_field::left_out_stop());
+            return;
+        }
         self.run_now(id, params);
     }
 

@@ -1,5 +1,6 @@
 //! The windows of their own: messages being written, and messages popped out.
 
+use crate::dialogs::people_field::MEETING_WINDOWS;
 use crate::*;
 
 impl MailApp {
@@ -21,12 +22,16 @@ impl MailApp {
         if self.ui.dialog_for.is_some_and(|id| !live.contains(&id)) {
             self.ui.dialog_for = None;
         }
-        // Their contacts fields go with them, and Select Names' rows with the dialog.
-        let book = match &self.ui.dialog {
-            Some(Dialog::SelectNames(f)) => Some(f.compose),
-            _ => None,
-        };
-        self.ui.people.settle(&mut self.session, &live, book);
+        // Their contacts fields go with them, as do a meeting window's (numbered apart), and a
+        // book's rows with its dialog: Select Names', or a meeting's Select Attendees.
+        let meetings = &self.ui.event_windows;
+        let windows: std::collections::HashSet<u64> = live.iter().copied().chain(meetings.iter().map(|(wid, _)| MEETING_WINDOWS | wid)).collect();
+        let mut books: std::collections::HashSet<u64> =
+            meetings.iter().filter(|(_, f)| f.attendees_book.is_some()).map(|(wid, _)| MEETING_WINDOWS | wid).collect();
+        if let Some(Dialog::SelectNames(f)) = &self.ui.dialog {
+            books.insert(f.compose);
+        }
+        self.ui.people.settle(&mut self.session, &windows, &books);
         let inline = self.session.all_composes().find(|c| compose_inline(c, ctx)).map(|c| c.id);
         if let Some(id) = inline {
             self.use_compose(id);

@@ -1809,9 +1809,12 @@ month	May	5月
 	and others	及其他
 	This list couldn't be expanded: {error}	無法展開此清單: {error}
 	Some names need checking before sending	傳送前需要核對一些姓名
-	Some recipients were left out: send to fewer at once, or to the list itself	部分收件者未加入：請減少每次傳送的人數，或直接傳送給該清單
+	Some recipients were left out. Empty the field, then add fewer at once or the list itself	部分收件者未加入。請清空該欄位，然後每次少加入一些，或直接加入該清單
 	Matched as typed	依輸入內容比對
 	{name}, {kind}, remove with Delete	{name}，{kind}，按 Delete 鍵移除
 	{name}, {kind}, {why}, remove with Delete	{name}，{kind}，{why}，按 Delete 鍵移除
 # A kind of entry in a contacts field: an e-mail address (the plain entry is a web address).
 kind	Address	地址
+	This isn't a room	這不是會議室
+	Only people, lists and groups can be invited	只能邀請個人、清單和群組
+	Send from a person, a shared mailbox or a list	請從個人、共用信箱或清單傳送

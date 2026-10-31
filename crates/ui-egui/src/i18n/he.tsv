@@ -1806,7 +1806,10 @@ month	May	מאי
 	and others	ואחרים
 	This list couldn't be expanded: {error}	לא ניתן להרחיב רשימה זו: {error}
 	Some names need checking before sending	יש לבדוק כמה שמות לפני השליחה
-	Some recipients were left out: send to fewer at once, or to the list itself	חלק מהנמענים הושמטו: שלחו לפחות נמענים בבת אחת, או לרשימה עצמה
+	Some recipients were left out. Empty the field, then add fewer at once or the list itself	חלק מהנמענים הושמטו. רוקנו את השדה, ואז הוסיפו פחות בבת אחת או את הרשימה עצמה
 	Matched as typed	הותאם כפי שהוקלד
 	{name}, {kind}, remove with Delete	{name}, {kind}, להסרה הקש Delete
 	{name}, {kind}, {why}, remove with Delete	{name}, {kind}, {why}, להסרה הקש Delete
+	This isn't a room	זה אינו חדר
+	Only people, lists and groups can be invited	אפשר להזמין רק אנשים, רשימות וקבוצות
+	Send from a person, a shared mailbox or a list	שלחו מאדם, מתיבת דואר משותפת או מרשימה
