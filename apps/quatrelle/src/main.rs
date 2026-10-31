@@ -67,7 +67,7 @@ impl Backend for PoolBackend {
 /// main one and each message's, meeting's and reminders' (eframe's `viewport_hooks` runs for all
 /// of them, where `App::raw_input_hook` misses the windows drawn with `show_viewport_immediate`).
 /// For now Windows' Alt+numpad character codes ([`quatrelle_ui_egui::alt_codes`], in the code
-/// pages of the user's language); other keys taken from the window's input belong here too.
+/// pages of the system); other keys taken from the window's input belong here too.
 #[cfg(windows)]
 struct WindowInput {
     /// The (ANSI, OEM) code pages Alt codes are read in ([`quatrelle_ui_egui::alt_code_pages`]).

@@ -20,9 +20,31 @@ fn typed(viewport: egui::ViewportId) -> egui::Id {
     egui::Id::unique("alt-code").with(viewport)
 }
 
-/// The Windows code pages for the user's language (ANSI, OEM), which Alt codes are read in.
+/// The code pages (ANSI, OEM) Alt codes are read in: on Windows the system's, which its system
+/// locale sets (an English Windows with French regional settings has OEM 850, though it shows
+/// in English); else, or when they can't be read, a guess from the user's language.
 pub fn alt_code_pages() -> (u16, u16) {
-    quatrelle_engine::mime::alt_code_pages(sys_locale::get_locale().as_deref())
+    let guess = quatrelle_engine::mime::alt_code_pages(sys_locale::get_locale().as_deref());
+    let (acp, oemcp) = system_code_pages();
+    quatrelle_engine::mime::alt_code_system_pages(acp.as_deref(), oemcp.as_deref(), guess)
+}
+
+/// Windows' own ANSI and OEM code pages, as the registry has their numbers.
+#[cfg(windows)]
+fn system_code_pages() -> (Option<String>, Option<String>) {
+    match windows_registry::LOCAL_MACHINE.open(r"SYSTEM\CurrentControlSet\Control\Nls\CodePage") {
+        Ok(key) => (key.get_string("ACP").ok(), key.get_string("OEMCP").ok()),
+        Err(e) => {
+            log::warn!("Alt codes: the system's code pages can't be read ({e}); guessed from the language");
+            (None, None)
+        }
+    }
+}
+
+/// Elsewhere, no system code pages: the guess.
+#[cfg(not(windows))]
+fn system_code_pages() -> (Option<String>, Option<String>) {
+    (None, None)
 }
 
 /// Run on a window's input before egui reads it: digits typed with Alt alone held are taken out
