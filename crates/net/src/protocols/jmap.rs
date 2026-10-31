@@ -23,6 +23,7 @@ impl From<quatrelle_jmap::Error> for NetError {
             E::Closed(m) => NetError::Closed(m),
             E::Send(m) => NetError::Smtp(m),
             E::Store(e) => NetError::Store(e),
+            E::Untrusted { site } => NetError::Untrusted { site },
         }
     }
 }
@@ -40,7 +41,7 @@ impl From<NetError> for quatrelle_jmap::Error {
             NetError::Closed(m) => E::Closed(m),
             NetError::Smtp(m) | NetError::Later(m) => E::Send(m),
             NetError::Store(e) => E::Store(e),
-            e @ NetError::Untrusted { .. } => E::No(e.to_string()),
+            NetError::Untrusted { site } => E::Untrusted { site },
         }
     }
 }
@@ -50,9 +51,9 @@ pub struct Blocking;
 
 impl quatrelle_jmap::Http for Blocking {
     async fn send(&self, req: quatrelle_jmap::Request) -> quatrelle_jmap::Result<quatrelle_jmap::Response> {
-        let r = http::Request { method: req.method, url: req.url, headers: req.headers, body: req.body, max: req.max, ..Default::default() };
+        let r = http::Request { method: req.method, url: req.url, headers: req.headers, body: req.body, max: req.max, trusted: req.trusted };
         let resp = http::send(&r)?;
-        Ok(quatrelle_jmap::Response { status: resp.status, body: resp.body })
+        Ok(quatrelle_jmap::Response { status: resp.status, body: resp.body, url: resp.url })
     }
 }
 
@@ -61,8 +62,8 @@ pub struct Client(quatrelle_jmap::Client<Blocking>);
 
 impl Client {
     /// Fetch the session and check it offers mail. `bearer` signs in with an OAuth access token.
-    pub fn connect(url: &str, user: &str, secret: &str, bearer: bool) -> Result<Client> {
-        Ok(Client(block_on(quatrelle_jmap::Client::connect(Blocking, url, user, secret, bearer))?))
+    pub fn connect(url: &str, user: &str, secret: &str, bearer: bool, trusted: &[String]) -> Result<Client> {
+        Ok(Client(block_on(quatrelle_jmap::Client::connect(Blocking, url, user, secret, bearer, trusted))?))
     }
 
     /// Carry a new OAuth access token from now on.

@@ -181,7 +181,7 @@ impl Worker {
             return Ok(());
         }
         if let Some(url) = &self.acc.jmap {
-            self.conn = Some(Conn::Jmap(jmap::Client::connect(url, &user, &secret, self.acc.oauth.is_some())?));
+            self.conn = Some(Conn::Jmap(jmap::Client::connect(url, &user, &secret, self.acc.oauth.is_some(), &Trust::of(&self.acc, &[]).sites())?));
             self.backoff = Duration::from_secs(5);
             return Ok(());
         }

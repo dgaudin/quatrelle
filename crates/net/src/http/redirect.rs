@@ -19,7 +19,7 @@ pub(super) struct Chain<'a> {
 
 impl<'a> Chain<'a> {
     pub(super) fn new(req: &'a Request, first: &Url) -> Chain<'a> {
-        Chain { req, site: site(&first.host), bare: None }
+        Chain { req, site: site_of(first), bare: None }
     }
 
     /// The request to send next.
@@ -36,9 +36,15 @@ impl<'a> Chain<'a> {
 
     /// Whether the credentials may go to `next`: its site is the first one's or a trusted one.
     fn keeps(&self, next: &Url) -> bool {
-        let to = site(&next.host);
+        let to = site_of(next);
         to == self.site || self.req.trusted.iter().any(|t| t.eq_ignore_ascii_case(&to))
     }
+}
+
+/// A URL's site, an IPv6 address in brackets as the account's trusted sites spell it (`Url`
+/// keeps its host without them): unbracketed, a trusted `[::1]` would never match.
+fn site_of(u: &Url) -> String {
+    if u.host.contains(':') { site(&format!("[{}]", u.host)) } else { site(&u.host) }
 }
 
 /// Headers that carry a credential.
@@ -203,6 +209,24 @@ mod tests {
         let e = crate::NetError::Untrusted { site: "evil.test".into() };
         assert_eq!(e.to_string(), "evil.test isn't allowed for this account");
         assert!(e.is_retryable() && !e.is_fatal());
+    }
+
+    /// An IPv6 host is compared as the trusted list spells it, in brackets (as DAV does).
+    #[test]
+    fn an_ipv6_site_is_trusted_as_written() {
+        let u = |s: &str| Url::parse(s).unwrap();
+        let credentials = |c: &Chain| c.current().headers.iter().any(|(k, _)| is_credential(k));
+        let req = with_credentials("https://mail.example.com/a").trusting(vec!["[2001:db8::1]".into()]);
+        let mut c = Chain::new(&req, &u("https://mail.example.com/a"));
+        c.follow(&u("https://[2001:db8::1]:8443/b"));
+        assert!(credentials(&c));
+        c.follow(&u("https://[2001:db8::2]/c"));
+        assert!(!credentials(&c));
+        // From an IPv6 address to the same one on another port: its own site.
+        let req = with_credentials("https://[::1]/a");
+        let mut c = Chain::new(&req, &u("https://[::1]/a"));
+        c.follow(&u("https://[::1]:8443/b"));
+        assert!(credentials(&c));
     }
 
     /// Two URLs are one site whatever the scheme and port: the registrable domain counts.

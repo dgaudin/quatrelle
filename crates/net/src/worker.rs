@@ -25,6 +25,7 @@ use crate::stream::Stream;
 use crate::sync::SyncReport;
 use crate::sync::{SyncOptions, fetch_body, sync_folder};
 use crate::{NetError, Result, smtp};
+use quatrelle_model::addr::trust::Trust;
 
 /// Where passwords live. The desktop app backs this with the system keychain.
 pub trait Credentials: Send + Sync {
@@ -760,7 +761,7 @@ fn connect_for_sync(acc: &AccountConfig, store: &Store, secret: &str) -> Result<
         return Ok(Conn::Ews(Box::new(c)));
     }
     if let Some(url) = &acc.jmap {
-        return Ok(Conn::Jmap(jmap::Client::connect(url, &user, secret, acc.oauth.is_some())?));
+        return Ok(Conn::Jmap(jmap::Client::connect(url, &user, secret, acc.oauth.is_some(), &Trust::of(acc, &[]).sites())?));
     }
     let mut c = Client::connect(&acc.imap)?;
     if acc.oauth.is_some() {
