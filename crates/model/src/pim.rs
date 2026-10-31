@@ -274,6 +274,10 @@ pub struct Pim {
     /// When the server was last asked where they are.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub dav_checked: Option<i64>,
+    /// The site the last look for a missing home stopped at, which the account didn't trust:
+    /// once it's allowed, the home is looked for again at once rather than a day later.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dav_untrusted: Option<String>,
     /// Read this account's own calendar and contacts only, not other people's or public
     /// folders' (the calendar isn't shown: they're read once it is).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -290,6 +294,14 @@ pub struct DavSync {
     pub caldav_home: Option<String>,
     pub carddav_home: Option<String>,
     pub checked: i64,
+    /// A missing home was looked for this time ([`Pim::dav_untrusted`] then follows
+    /// `untrusted`).
+    #[serde(default)]
+    pub looked: bool,
+    /// Looking stopped at a site the account doesn't trust (nothing sent there): the one to ask
+    /// about. What has a home synced all the same.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub untrusted: Option<String>,
     /// The server's calendars (`None`: no CalDAV).
     pub calendars: Option<Vec<CalendarInfo>>,
     /// The events of the calendars read in full (`synced_calendars`), except those unchanged

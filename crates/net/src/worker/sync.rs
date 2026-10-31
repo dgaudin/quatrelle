@@ -666,12 +666,25 @@ impl Worker {
         let password = self.auth.lock().unwrap_or_else(std::sync::PoisonError::into_inner).secret.clone();
         let dav = crate::dav::Dav::new(&user, &password, crate::dav::trust_of(&self.acc, &pim));
         let host = self.acc.pop.as_ref().map_or(self.acc.imap.host.as_str(), |p| p.host.as_str());
-        match crate::dav::sync(&dav, &self.acc.email, host, &pim, now(), system_zone()) {
-            Ok(sync) => self.sink.emit(Event::DavSynced { account: self.id(), sync: Box::new(sync) }),
+        let done = crate::dav::sync(&dav, &self.acc.email, host, &pim, now(), system_zone());
+        self.dav_done(done);
+    }
+
+    /// A CalDAV / CardDAV sync's result: merged, and a site it stopped at asked about (once).
+    pub(super) fn dav_done(&mut self, done: Result<quatrelle_model::pim::DavSync>) {
+        match done {
+            Ok(sync) => {
+                let untrusted = sync.untrusted.clone();
+                self.sink.emit(Event::DavSynced { account: self.id(), sync: Box::new(sync) });
+                if let Some(site) = untrusted {
+                    log::info!("{}: a calendar or address book waits for {site} to be allowed", self.acc.id);
+                    self.ask_trust(site);
+                }
+            }
             Err(NetError::Untrusted { site }) => {
                 log::info!("{}: calendars and contacts wait for {site} to be allowed", self.acc.id);
                 self.dav_waits = true;
-                self.sink.emit(Event::TrustAsked { account: self.id(), site });
+                self.ask_trust(site);
             }
             Err(e) => {
                 log::info!("{}: calendars and contacts: {e}", self.acc.id);
@@ -679,6 +692,12 @@ impl Worker {
                     self.notice(format!("calendars and contacts: {e}"));
                 }
             }
+        }
+    }
+
+    fn ask_trust(&mut self, site: String) {
+        if self.dav_asked.insert(site.clone()) {
+            self.sink.emit(Event::TrustAsked { account: self.id(), site });
         }
     }
 

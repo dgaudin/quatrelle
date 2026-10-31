@@ -741,3 +741,31 @@ fn the_work_week_is_monday_to_friday() {
     assert!(s.run("calendar.view", &json!({"mode": "fortnight"})).is_err());
     done(s);
 }
+
+/// A look for a missing home that stopped at a site to allow is kept with its time (on disk:
+/// the worker reads it, and would otherwise look and ask again at each sync), and stays noted
+/// while later syncs don't look.
+#[test]
+fn a_look_stopped_at_a_site_to_allow_is_noted_and_saved() {
+    use quatrelle_model::pim::DavSync;
+    let mut s = Session::open(Some(temp("dav-untrusted")), quatrelle_model::dates::Clock::new(NOW, 0));
+    let id = s.run("account.add", &json!({"email": "ann@example.org", "password": "pw"})).unwrap()["account"].as_str().unwrap().to_string();
+    let saved = |s: &Session| s.store.clone().unwrap().load_account_doc::<quatrelle_model::pim::Pim>(&id, quatrelle_model::pim::PIM_DOC).unwrap();
+    s.apply(Event::DavSynced { account: id.clone(), sync: Box::new(DavSync { checked: NOW, ..Default::default() }) });
+    let looked = DavSync { checked: NOW + 60, looked: true, untrusted: Some("example.net".into()), ..Default::default() };
+    s.apply(Event::DavSynced { account: id.clone(), sync: Box::new(looked) });
+    let p = saved(&s);
+    assert_eq!((p.dav_checked, p.dav_untrusted.as_deref()), (Some(NOW + 60), Some("example.net")));
+    // A sync that didn't look leaves it noted.
+    s.apply(Event::DavSynced { account: id.clone(), sync: Box::new(DavSync { checked: NOW + 120, ..Default::default() }) });
+    assert_eq!(s.pim.get(&id).unwrap().dav_untrusted.as_deref(), Some("example.net"));
+    // Looked again a day later and stopped at the same site, nothing else changed: the time is
+    // saved all the same, so the next look is a day later still.
+    let again = DavSync { checked: NOW + 86_500, looked: true, untrusted: Some("example.net".into()), ..Default::default() };
+    s.apply(Event::DavSynced { account: id.clone(), sync: Box::new(again) });
+    assert_eq!(saved(&s).dav_checked, Some(NOW + 86_500));
+    // A look that stopped nowhere clears it.
+    s.apply(Event::DavSynced { account: id.clone(), sync: Box::new(DavSync { checked: NOW + 180, looked: true, ..Default::default() }) });
+    assert_eq!(saved(&s).dav_untrusted, None);
+    done(s);
+}

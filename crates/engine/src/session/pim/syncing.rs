@@ -29,6 +29,9 @@ impl Session {
         p.caldav_home = sync.caldav_home.clone().or_else(|| Some(String::new()));
         p.carddav_home = sync.carddav_home.clone().or_else(|| Some(String::new()));
         p.dav_checked = Some(sync.checked);
+        if sync.looked {
+            p.dav_untrusted.clone_from(&sync.untrusted);
+        }
         p.deleted.retain(|t| !sync.deleted.contains(&t.href));
         // What was stored: its address and version, and no longer to send (unless it changed
         // again meanwhile).
@@ -131,14 +134,16 @@ impl Session {
             log::info!("{account}: invitations' answers to send");
             self.jobs.push(Job::SyncDav { account: account.to_string() });
         }
-        // Saved only when something changed (when the server was last asked isn't a change), and
-        // the address book worked out again only when the contacts did.
+        // Saved only when something changed (when the server was last asked isn't a change, unless
+        // the look stopped at a site to allow: the worker reads the saved time, and would look,
+        // and ask, again at each sync rather than a day later), and the address book worked out
+        // again only when the contacts did.
         let p = self.pim_mut(account);
         let events_changed = events_digest(&p.events) != events_were;
         let events = std::mem::take(&mut p.events);
         let checked = p.dav_checked;
         let contacts_changed = p.cards != was.cards || p.books != was.books;
-        let rest_changed = *p != Pim { dav_checked: checked, ..was };
+        let rest_changed = *p != Pim { dav_checked: checked, ..was } || sync.untrusted.is_some();
         p.events = events;
         if contacts_changed {
             self.save_pim(account);

@@ -273,3 +273,67 @@ fn a_saved_home_on_another_site_still_syncs_unasked() {
     let bare = Dav::new(USER, PASSWORD, trust_of(&acc, &Pim::default()));
     assert_eq!(untrusted(sync(&bare, USER, "127.0.0.1", &pim, 100, Zone::UTC)), "localhost");
 }
+
+/// A collection a home's listing names on another site is never requested.
+#[test]
+fn a_collection_on_another_site_is_never_requested() {
+    let s = fake_dav::serve();
+    s.data.lock().unwrap().collections_at = by_name(&s.base);
+    let dav = Dav::new(USER, PASSWORD, trusting(&[&s.base]));
+    assert_eq!(untrusted(dav.collections(Kind::Calendars, &format!("{}/dav/cal/", s.base))), "localhost");
+    assert_eq!(s.data.lock().unwrap().log, ["PROPFIND /dav/cal/"], "nothing else, under either name");
+}
+
+/// A deletion saved with an address that can't be read safely can never be sent: it is
+/// dropped, not kept with the errors (where it would come back at each sync).
+#[test]
+fn a_deletion_saved_with_an_unreadable_address_is_dropped() {
+    let dav = Dav::new(USER, PASSWORD, trusting(&[]));
+    let bad = "https://evil.example\\.studio.example/x.ics".to_string();
+    let pim = Pim {
+        caldav_home: Some(String::new()),
+        carddav_home: Some(String::new()),
+        dav_checked: Some(100),
+        deleted: vec![Tombstone { href: bad.clone(), etag: "\"1\"".into(), ..Default::default() }],
+        ..Default::default()
+    };
+    let out = sync(&dav, USER, "imap.studio.example", &pim, 100, Zone::UTC).unwrap();
+    assert_eq!(out.deleted, [bad]);
+    assert!(out.errors.is_empty(), "{:?}", out.errors);
+}
+
+/// The fix round's Important case: the calendars' home is saved, and the address books' look
+/// stops at another site. The calendars sync all the same, and the site comes back with the
+/// result, to ask about once; the same day nothing is looked for or asked again, a day later
+/// it is, and once the site is allowed it's looked for at once.
+#[test]
+fn a_contacts_look_stopped_elsewhere_leaves_the_calendars_syncing() {
+    let (s, web) = (fake_dav::serve(), fake_dav::serve());
+    let review = CalEvent { uid: "a".into(), summary: "Review".into(), start: 1_800_000_000, end: 1_800_003_600, ..Default::default() };
+    s.data.lock().unwrap().put(&format!("{CAL}a.ics"), &quatrelle_model::ical::write(&[review], None, 0));
+    web.data.lock().unwrap().well_known = Some(format!("{}/dav/", by_name(&web.base)));
+    let starts = |_: Kind| vec![format!("{}/.well-known/carddav", web.base)];
+    let dav = Dav::new(USER, PASSWORD, trusting(&["127.0.0.1"]));
+    let pim = Pim { caldav_home: Some(format!("{}/dav/cal/", s.base)), carddav_home: Some(String::new()), ..Default::default() };
+
+    let first = syncing::sync_from(&dav, &starts, &pim, 100, Zone::UTC).unwrap();
+    assert_eq!((first.looked, first.untrusted.as_deref(), first.carddav_home.as_deref()), (true, Some("localhost"), None));
+    assert_eq!(first.events.iter().map(|e| e.event.summary.as_str()).collect::<Vec<_>>(), ["Review"], "the calendars synced");
+    assert!(first.errors.is_empty(), "{:?}", first.errors);
+
+    // As the engine merges it.
+    let merged = Pim { dav_checked: Some(first.checked), dav_untrusted: first.untrusted.clone(), ..pim.clone() };
+    let looks = web.data.lock().unwrap().log.len();
+    let same_day = syncing::sync_from(&dav, &starts, &merged, 160, Zone::UTC).unwrap();
+    assert_eq!((same_day.looked, same_day.untrusted.as_deref()), (false, None), "nothing looked for, nothing to ask");
+    assert_eq!(web.data.lock().unwrap().log.len(), looks);
+    assert_eq!(same_day.calendars.map(|c| c.len()), Some(1));
+
+    let next_day = syncing::sync_from(&dav, &starts, &merged, 100 + 86_401, Zone::UTC).unwrap();
+    assert_eq!((next_day.looked, next_day.untrusted.as_deref()), (true, Some("localhost")));
+
+    let allowed = Dav::new(USER, PASSWORD, trusting(&["127.0.0.1", "localhost"]));
+    let found = syncing::sync_from(&allowed, &starts, &merged, 160, Zone::UTC).unwrap();
+    assert_eq!((found.looked, found.untrusted.as_deref()), (true, None));
+    assert_eq!(found.carddav_home, Some(format!("{}/dav/card/", by_name(&web.base))));
+}

@@ -7,7 +7,8 @@ use quatrelle_model::ical::{self, CalEvent};
 use quatrelle_model::pim::{BookInfo, CalendarInfo, DavSync, LOCAL, Pim, StoredCard, StoredEvent};
 use quatrelle_model::vcard;
 
-use super::{BATCH, CALDAV, CARDDAV, DAV, Dav, Item, Kind, multistatus, path_of, xml_escape};
+use super::discovery::starts;
+use super::{BATCH, CALDAV, CARDDAV, DAV, Dav, Item, Kind, multistatus, path_of, readable, xml_escape};
 use crate::{NetError, Result};
 
 impl Dav {
@@ -88,23 +89,50 @@ fn resource_name(uid: &str, ext: &str) -> String {
 /// Sync an account's calendars and address books with its server. `pim` is what the engine
 /// last saved; nothing is written here: the result is for the engine to merge.
 pub fn sync(dav: &Dav, email: &str, imap_host: &str, pim: &Pim, now: i64, local: quatrelle_model::zone::Zone) -> Result<DavSync> {
+    sync_from(dav, &|kind| starts(kind, email, imap_host), pim, now, local)
+}
+
+/// [`sync`], a missing home looked for from `starts`' addresses.
+pub(super) fn sync_from(dav: &Dav, starts: &dyn Fn(Kind) -> Vec<String>, pim: &Pim, now: i64, local: quatrelle_model::zone::Zone) -> Result<DavSync> {
     let mut out = DavSync::default();
-    // Where the collections live (looked up once; again a day after finding none).
-    let retry = pim.dav_checked.is_none_or(|t| now - t > 86_400);
+    // Where the collections live (looked up once; again a day after finding none, or at once
+    // when the site the last look stopped at has been allowed since).
+    let allowed = pim.dav_untrusted.as_deref().is_some_and(|s| dav.trust.allows(s));
+    let retry = allowed || pim.dav_checked.is_none_or(|t| now - t > 86_400);
+    // A look that stops at a site the account doesn't trust finds nothing, as one that finds no
+    // server does, and is noted (to ask about); the other kind, and what has a home, sync all the
+    // same.
+    let find = |kind: Kind, out: &mut DavSync| -> Result<Option<String>> {
+        out.looked = true;
+        match dav.discover_from(kind, &starts(kind)) {
+            Err(NetError::Untrusted { site }) => {
+                out.untrusted.get_or_insert(site);
+                Ok(None)
+            }
+            r => r,
+        }
+    };
     out.caldav_home = match &pim.caldav_home {
         Some(h) if !h.is_empty() => Some(h.clone()),
-        _ if retry => dav.discover(Kind::Calendars, email, imap_host)?,
+        _ if retry => find(Kind::Calendars, &mut out)?,
         _ => None,
     };
     out.carddav_home = match &pim.carddav_home {
         Some(h) if !h.is_empty() => Some(h.clone()),
-        _ if retry => dav.discover(Kind::Contacts, email, imap_host)?,
+        _ if retry => find(Kind::Contacts, &mut out)?,
         _ => None,
     };
     out.checked = now;
 
     // 1. Deletions made here.
     for t in &pim.deleted {
+        // Saved with an address that can't be read safely: it can never be sent, and would
+        // stay for good.
+        if !readable(&t.href) {
+            log::info!("calendars and contacts: a deletion whose address can't be read is dropped");
+            out.deleted.push(t.href.clone());
+            continue;
+        }
         match dav.delete(&t.href, &t.etag) {
             Ok(()) => out.deleted.push(t.href.clone()),
             // The account's own problems, not the item's: kept with the item's errors, they'd

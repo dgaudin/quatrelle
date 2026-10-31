@@ -308,3 +308,23 @@ fn dav_trusts_the_saved_homes_and_asks_once_about_another_site() {
     worker().sync_dav();
     assert_eq!(events(&pool), [Event::TrustAsked { account: "a1".into(), site: "localhost".into() }]);
 }
+
+/// A sync whose look for a missing home stopped at another site is merged all the same, and
+/// that site asked about once, however many syncs bring it back.
+#[test]
+fn a_look_stopped_elsewhere_is_merged_and_asked_once() {
+    use quatrelle_model::pim::DavSync;
+    let store = crate::fake::tests_store("dav-looked");
+    let pool = Pool::new(store.clone(), Arc::new(MemoryCredentials::default()));
+    let acc = AccountConfig { id: "a1".into(), email: "me@studio.example".into(), ..Default::default() };
+    let mut w = Worker::new(acc, Auth::shared("pw"), store, pool.sink.clone(), SyncOptions::default());
+    let stopped = || Ok(DavSync { looked: true, untrusted: Some("localhost".into()), ..Default::default() });
+    w.dav_done(stopped());
+    w.dav_done(stopped());
+    let seen: Vec<Event> = std::iter::from_fn(|| pool.wait(Duration::from_millis(100))).collect();
+    let synced = seen.iter().filter(|e| matches!(e, Event::DavSynced { .. })).count();
+    let asked: Vec<&Event> = seen.iter().filter(|e| matches!(e, Event::TrustAsked { .. })).collect();
+    assert_eq!(synced, 2, "{seen:?}");
+    assert_eq!(asked, [&Event::TrustAsked { account: "a1".into(), site: "localhost".into() }]);
+    assert!(!w.dav_waits, "the rest of the sync goes on");
+}

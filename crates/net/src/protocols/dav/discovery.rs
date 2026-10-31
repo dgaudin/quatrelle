@@ -49,7 +49,7 @@ impl Dav {
 
 /// Where to look, in order: the SRV record's target, then the domain's, `caldav.`'s (or
 /// `carddav.`'s), the IMAP host's sibling's and the IMAP host's `/.well-known/` address.
-fn starts(kind: Kind, email: &str, imap_host: &str) -> Vec<String> {
+pub(super) fn starts(kind: Kind, email: &str, imap_host: &str) -> Vec<String> {
     let domain = email.rsplit_once('@').map(|(_, d)| d.trim().to_ascii_lowercase()).unwrap_or_default();
     let mut starts: Vec<String> = Vec::new();
     if !domain.is_empty()
