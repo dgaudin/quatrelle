@@ -280,7 +280,7 @@ impl PeopleFields {
         // it (typing never asks the server). Ctrl+K checks whatever is there.
         let ask = resolve || (closed_any && f.st.input.trim().is_empty() && f.needs_resolve());
         if ask {
-            f.clear_errors(&[PieceError::Unreached]);
+            f.clear_errors(|e| *e == PieceError::Unreached);
         }
         if changed {
             // What this frame's events changed without the widget (a room taken out) is written

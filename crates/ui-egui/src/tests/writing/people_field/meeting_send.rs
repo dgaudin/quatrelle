@@ -67,6 +67,37 @@ fn a_meeting_waits_for_a_name_then_is_sent() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// A name typed into a line while "Checking names…" is up, not closed: once the names waited on
+/// are found, it's checked in turn, never sent as typed.
+#[test]
+fn a_name_typed_while_the_names_are_checked_is_checked_too() {
+    let (mut a, dir) = app("meeting-typed-while-held");
+    let gal = with_exchange(&mut a);
+    let ctx = egui::Context::default();
+    let w = open_meeting(&ctx, &mut a, "Dupont", false);
+    press(&ctx, &mut a, "Send");
+    assert!(a.ui.people.holding(MEETING_WINDOWS | w));
+    let required = meeting_field(w, "required");
+    type_in(&ctx, &mut a, required, "Zoe Park");
+    assert_eq!(a.ui.people.typing(required), "Zoe Park", "typed, not closed");
+    assert!(a.ui.people.holding(MEETING_WINDOWS | w), "still held");
+    directory_answers(&mut a, &gal, "dupont", &[("Anne Dupont", "anne.dupont@contoso.example")]);
+    frames(&ctx, &mut a, 3);
+    if a.session.directory_searching(&gal, "zoe park") {
+        directory_answers(&mut a, &gal, "zoe park", &[("Zoe Park", "zoe@studio.example")]);
+        frames(&ctx, &mut a, 3);
+    }
+    assert_eq!(form_error(&a), None, "nothing refused");
+    let made = made(&a, "Foley review").expect("sent once both are known");
+    assert_eq!(guests_of(&made), ["anne.dupont@contoso.example", "zoe@studio.example"]);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// The window's error, while it's open.
+fn form_error(a: &MailApp) -> Option<String> {
+    a.ui.event_windows.first().and_then(|(_, f)| f.error.clone())
+}
+
 /// A name the directory doesn't know stops the meeting's Send, said in its own window.
 #[test]
 fn a_meeting_stops_on_a_name_not_found_and_says_why_in_its_window() {
@@ -230,6 +261,37 @@ fn a_room_that_cant_be_booked_stays_among_the_guests() {
     press(&ctx, &mut a, "Send");
     assert!(made(&a, "Foley review").is_none(), "not sent");
     assert_eq!(form(&a).error.as_deref(), Some(why));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// The room kept among the guests while the meeting booked 50 is checked again at Send once one
+/// of them is freed: it's moved into Rooms, booked, and the meeting goes.
+#[test]
+fn a_room_kept_among_the_guests_is_booked_once_a_room_is_freed() {
+    let (mut a, dir) = app("meeting-room-freed");
+    let ctx = egui::Context::default();
+    let w = open_meeting(&ctx, &mut a, "zoe@studio.example", false);
+    if let Some((_, f)) = a.ui.event_windows.first_mut() {
+        for i in 0..50 {
+            f.add_room("", &format!("room{i}@studio.example"));
+        }
+    }
+    frames(&ctx, &mut a, 3);
+    let required = meeting_field(w, "required");
+    type_in(&ctx, &mut a, required, "Sound Lab <sound.lab@studio.example>;");
+    frames(&ctx, &mut a, 3);
+    let entry = "Sound Lab <sound.lab@studio.example>";
+    assert!(a.ui.people.pieces(required).iter().any(|p| text_with(p, entry, Some(PieceError::RoomsFull(50)))), "{:?}", a.ui.people.pieces(required));
+    if let Some((_, f)) = a.ui.event_windows.first_mut() {
+        f.remove_room("room0@studio.example");
+    }
+    frames(&ctx, &mut a, 3);
+    assert_eq!(booked(&a).len(), 49, "a room freed");
+    press(&ctx, &mut a, "Send");
+    frames(&ctx, &mut a, 3);
+    let made = made(&a, "Foley review").expect("sent, the room booked");
+    assert!(made.contains(&(LAB.to_string(), true)), "booked: {made:?}");
+    assert_eq!(guests_of(&made), ["zoe@studio.example"], "not invited as a guest");
     let _ = std::fs::remove_dir_all(dir);
 }
 

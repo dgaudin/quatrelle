@@ -75,6 +75,11 @@ fn refused_by(accepts: &Accepts, who: &Addressee, by_name: bool) -> Option<Strin
 /// The pieces of a field's text, cut to [`MAX_ENTRIES`]: a chip for an address (its kind and, when
 /// the entry gives no name, the name known here) and for a contact group's reference, text for a
 /// name (red at once when it has an `@` and isn't an address).
+/// Whether a text piece with this error is one to check (see [`Field::needs_resolve`]).
+fn to_check(error: Option<&PieceError>) -> bool {
+    matches!(error, None | Some(PieceError::Unreached | PieceError::RoomsFull(_)))
+}
+
 pub(crate) fn pieces_of(s: &Session, account: Option<&str>, text: &str) -> Vec<Piece> {
     split_entries(text).into_iter().take(MAX_ENTRIES).map(|entry| piece_of(s, account, entry)).collect()
 }
@@ -411,10 +416,11 @@ impl Field {
         true
     }
 
-    /// Whether a piece is left to check: text with no error, or one the directory couldn't be
-    /// asked for (asked again, as the directory may be back).
+    /// Whether a piece is left to check: text with no error, one the directory couldn't be asked
+    /// for (asked again, as the directory may be back), or a room the meeting couldn't book (one
+    /// of its rooms may have been freed since: checked, it's moved into Rooms again).
     pub(super) fn needs_resolve(&self) -> bool {
-        self.st.pieces.iter().any(|p| matches!(p, Piece::Text { error: None | Some(PieceError::Unreached), .. }))
+        self.st.pieces.iter().any(|p| matches!(p, Piece::Text { error, .. } if to_check(error.as_ref())))
     }
 
     /// The pieces left to check, as a dialog's row hands them in (what's settled isn't asked again).
@@ -424,19 +430,20 @@ impl Field {
             .pieces
             .iter()
             .filter_map(|p| match p {
-                Piece::Text { text, error: None | Some(PieceError::Unreached) } => Some(text.as_str()),
+                Piece::Text { text, error } if to_check(error.as_ref()) => Some(text.as_str()),
                 _ => None,
             })
             .collect();
         parts.join("; ")
     }
 
-    /// The errors of the pieces about to be asked again go: a name pending again isn't stopped on
-    /// what the directory said last time (the answer puts them back if nothing changed).
-    pub(super) fn clear_errors(&mut self, kinds: &[PieceError]) {
+    /// The errors of the pieces about to be asked again go (those `asked_again` says): a name
+    /// pending again isn't stopped on what the directory said last time (the answer puts them
+    /// back if nothing changed).
+    pub(super) fn clear_errors(&mut self, asked_again: impl Fn(&PieceError) -> bool) {
         for p in &mut self.st.pieces {
             if let Piece::Text { error: error @ Some(_), .. } = p
-                && error.as_ref().is_some_and(|e| kinds.contains(e))
+                && error.as_ref().is_some_and(&asked_again)
             {
                 *error = None;
             }
