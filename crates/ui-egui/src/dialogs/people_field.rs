@@ -20,6 +20,7 @@ use serde_json::{Value, json};
 
 use crate::Action;
 use crate::look::people_field::{self, FieldInput, FieldState, PeopleEvent, Piece, PieceError, error_text, text_of};
+use crate::reading::check_names::Answer;
 use crate::theme::Tokens;
 
 /// How long Send waits for the directory: a request's own timeout (`IO_TIMEOUT`, `net/src/stream.rs`).
@@ -78,8 +79,11 @@ struct Field {
     /// The book's revision the chips' kinds were read at, and whether it was still being read.
     kinds_at: Option<(u64, bool)>,
     /// A list expanded here had more members than the field shows: what's shown isn't everyone,
-    /// and Send stops until the pieces change.
+    /// and Send stops until the field is emptied or its text set anew.
     partial: bool,
+    /// The owner asked for what the next write brings (Expand, a choice): that write is theirs,
+    /// not the field spelling what it knows.
+    user_changed: bool,
 }
 
 /// What drawing a field came to.
@@ -240,13 +244,14 @@ impl Field {
             self.st.open = false;
         }
         let cut = entries.saturating_sub(MAX_ENTRIES);
-        if cut > 0 {
+        // A text set from outside whole (a script, Select Names' OK) starts afresh, its losses
+        // with it; the engine writing a name found keeps every entry, and the losses stay.
+        let replaced = !was_reparse && pieces.len() != self.st.pieces.len();
+        if replaced {
+            self.forget_losses();
+            self.st.left_out = (cut > 0).then_some(cut);
+        } else if cut > 0 {
             self.st.left_out = Some(cut);
-        } else if !was_reparse {
-            self.st.left_out = None;
-        }
-        if !was_reparse {
-            self.partial = false;
         }
         self.st.selected = None;
         self.st.card = None;
@@ -368,10 +373,21 @@ impl Field {
         let entries = split_entries(closed);
         let cut = entries.len().saturating_sub(room);
         self.st.pieces.extend(entries.iter().take(room).map(|e| Piece::Text { text: (*e).to_string(), error: None }));
-        self.st.left_out = (cut > 0).then_some(cut);
-        self.note = None;
-        self.partial = false;
+        if cut > 0 {
+            self.st.left_out = Some(self.st.left_out.unwrap_or(0).saturating_add(cut));
+        }
+        if !self.partial {
+            self.note = None;
+        }
         self.reparse = true;
+    }
+
+    /// The field lost recipients (entries past its cap, a list expanded in part): it stays
+    /// stopped until the loss is undone — the field emptied, or its text set anew.
+    fn forget_losses(&mut self) {
+        self.st.left_out = None;
+        self.partial = false;
+        self.note = None;
     }
 
     /// What's being typed, closed as an entry (Ctrl+K, Send).
@@ -421,12 +437,12 @@ impl Field {
     fn add_chip(&mut self, who: Addressee) {
         if self.st.pieces.len() < MAX_ENTRIES {
             self.st.pieces.push(Piece::chip(who));
-            self.st.left_out = None;
         } else {
-            self.st.left_out = Some(1);
+            self.st.left_out = Some(self.st.left_out.unwrap_or(0).saturating_add(1));
         }
-        self.note = None;
-        self.partial = false;
+        if !self.partial {
+            self.note = None;
+        }
     }
 
     /// A contact group's members asked for (once).
@@ -503,10 +519,16 @@ impl PeopleFields {
         } else if self.open == Some(field) {
             self.open = None;
         }
-        let normalised = std::mem::take(&mut f.dirty);
-        let mut changed = normalised;
+        let dirty = std::mem::take(&mut f.dirty);
+        // A write from `dirty` with no event this frame is the field spelling what it knows (a
+        // name filled in, the kinds read again) — unless the owner asked for what came (Expand,
+        // a choice): that write is theirs.
+        let normalised = dirty && events.is_empty() && !f.user_changed;
+        if dirty {
+            f.user_changed = false;
+        }
+        let mut changed = dirty;
         let (mut opened, mut resolve, mut closed_any) = (false, false, false);
-        let quiet = events.is_empty();
         for e in events {
             match e {
                 PeopleEvent::Changed => changed = true,
@@ -525,9 +547,11 @@ impl PeopleFields {
                 PeopleEvent::RemoveChip(i) => {
                     if i < f.st.pieces.len() {
                         f.st.pieces.remove(i);
-                        f.note = None;
-                        f.partial = false;
-                        f.st.left_out = None;
+                        if f.st.pieces.is_empty() {
+                            f.forget_losses();
+                        } else if !f.partial {
+                            f.note = None;
+                        }
                         changed = true;
                     }
                 }
@@ -537,6 +561,7 @@ impl PeopleFields {
                     {
                         acts.push(Action::Run("people.expand", expand_params(account, who)));
                         f.expanding.push(who.clone());
+                        f.user_changed = true;
                     }
                 }
                 PeopleEvent::Resolve => resolve = true,
@@ -567,12 +592,12 @@ impl PeopleFields {
                 ui.label(RichText::new(note).color(t.dim).small());
             });
         }
-        Drawn { book: opened, normalised: normalised && quiet }
+        Drawn { book: opened, normalised }
     }
 
     /// The choice dialog for a name several people fit in one of `names` of a window
     /// (`check_names::choice_dialog`), when one waits. A cancel there is the user's: a send held
-    /// for that name stops quietly.
+    /// for that name stops quietly. A pick is the user's change to the field.
     pub(crate) fn choice_dialog(
         &mut self,
         ctx: &egui::Context,
@@ -582,10 +607,18 @@ impl PeopleFields {
         names: &[&'static str],
         acts: &mut Vec<Action>,
     ) {
-        if let Some(choice) = names.iter().find_map(|name| s.name_choice_for(FieldId { window, name }))
-            && crate::reading::check_names::choice_dialog(ctx, t, choice, acts)
-        {
-            self.cancelled.insert((choice.field, choice.token.clone()));
+        if let Some(choice) = names.iter().find_map(|name| s.name_choice_for(FieldId { window, name })) {
+            match crate::reading::check_names::choice_dialog(ctx, t, choice, acts) {
+                Answer::Picked => {
+                    if let Some(f) = self.fields.get_mut(&choice.field) {
+                        f.user_changed = true;
+                    }
+                }
+                Answer::Cancelled => {
+                    self.cancelled.insert((choice.field, choice.token.clone()));
+                }
+                Answer::Pending => {}
+            }
         }
     }
 
