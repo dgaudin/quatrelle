@@ -541,6 +541,17 @@ pour le propriétaire : le courrier des expéditeurs Outlook arrive souvent avec
     message est lu, les suivants ne donnent que leurs fichiers ;
   - le trombone compte ce que donne un `winmail.dat` (un `winmail.dat` qui ne tient que le corps
     n'en met plus), et `quoted_pictures` lit le message une seule fois pour toutes ses images.
+- **Troisième relecture** :
+  - la recherche des images du corps relisait encore tout le corps pour chaque `winmail.dat` du
+    message (13 s pour 100 parties) ; chaque référence `cid:` était lue jusqu'à la longueur du plus
+    long Content-ID (53 s pour un Content-ID de 700 Ko). Désormais, une passe par message, et des
+    références d'au plus 1 Ko ;
+  - le compte des fichiers pouvait passer sous zéro quand un message joint prenait le dernier
+    (panique en debug, et plus de limite en release) : le fichier est compté avant d'être lu ;
+  - un lien RTF montré puis retiré à répétition récrivait son adresse chaque fois : au plus 1 Mo
+    d'adresses par corps, puis le texte seul ;
+  - le trombone ne décode plus de corps, et ne compte plus les images qu'Outlook marque comme
+    celles du corps.
 - **Règle des petits fichiers** : `mime/src/` serait passé à 17 fichiers Rust ; le lecteur TNEF
   (avec `tnef/rtf.rs` et ses tests) va sous `attachments/`, puisqu'un `winmail.dat` est une pièce
   jointe (l'origine l'a à `mime/src/tnef.rs`) ; les noms exportés ne changent pas.
