@@ -185,6 +185,8 @@ pub fn read_tnef(data: &[u8]) -> Option<Tnef> {
 
 /// [`read_tnef`] within `budget`; with `body` false, the body is only noted (`body_left`).
 pub(crate) fn read_with(data: &[u8], budget: &mut Budget, body: bool) -> Option<Tnef> {
+    #[cfg(test)]
+    tests::TNEF_READ.with(|n| n.set(n.get() + 1));
     budget.grant(data);
     read_at(data, 0, budget, body)
 }

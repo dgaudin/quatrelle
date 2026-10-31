@@ -82,7 +82,26 @@ pub(super) fn has_real_attachments(m: &Message<'_>) -> bool {
         let mime = p.content_type().map(|c| format!("{}/{}", c.ctype(), c.subtype().unwrap_or_default())).unwrap_or_default();
         smime::is_smime_part(&mime, p.attachment_name().unwrap_or_default())
     };
-    m.attachments().any(|p| (p.attachment_name().is_some() || !p.is_inline_part()) && !smime(p))
+    // A winmail.dat counts by what it gives in its place, as `attached` lists it: its files, or
+    // itself when it stays one; one holding only the body gives none (no paperclip over an
+    // empty list).
+    let mut budget = Budget::new();
+    let mut body = false;
+    for p in m.attachments() {
+        if smime(p) {
+            continue;
+        }
+        if is_tnef(&part_mime(p), p.attachment_name()) {
+            budget.cut = false;
+            match read_part(p.contents(), &mut budget, !body) {
+                Some(t) if t.attachments.is_empty() && !budget.cut => body |= !t.body.is_empty(),
+                _ => return true,
+            }
+        } else if p.attachment_name().is_some() || !p.is_inline_part() {
+            return true;
+        }
+    }
+    false
 }
 
 pub(super) trait InlinePart {
