@@ -272,3 +272,16 @@ fn long_content_ids_keep_the_search_linear() {
     let body = TnefBody::Html(format!("<img src=\"cid:{long}\">"));
     assert!(shown_cids(&body, [long.as_str()]).is_empty());
 }
+
+/// A link shown then dropped again and again (`{\\fldrslt a}b`): its address is written up to
+/// `LINKS_MAX` bytes in all, then the text alone (before: 7 KB of RTF gave 16 MB of HTML).
+#[test]
+fn a_link_shown_again_and_again_writes_its_address_a_bounded_number_of_times() {
+    let rtf = format!("{{\\rtf1{{\\field{{\\*\\fldinst HYPERLINK \"http://x.example/{}\"}}{}}}}}", "a".repeat(4000), "{\\fldrslt a}b".repeat(4000));
+    let TnefBody::Html(h) = rtf_body(rtf.as_bytes()) else { panic!("no HTML") };
+    let links = h.matches("<a href=").count();
+    assert!(links > 0 && links * 4000 <= 1 << 20, "{links} links");
+    assert!(h.len() < (1 << 20) + 64_000, "{} bytes", h.len());
+    // The text is all there, links or not.
+    assert_eq!(h.matches('b').count(), 4000);
+}

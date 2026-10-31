@@ -13,6 +13,9 @@ const RTF_MAX: usize = 16 << 20;
 const MAX_GROUPS: usize = 512;
 /// Most characters of a field's instruction read (it names a link).
 const INST_MAX: usize = 4096;
+/// Most bytes of link addresses one body writes: a link shown then dropped again and again wrote
+/// its address each time (7 KB of RTF gave 16 MB of HTML). Past it, links are their text only.
+const LINKS_MAX: usize = 1 << 20;
 
 /// What the compression's dictionary starts with (MS-OXRTFCP 2.1.2.1).
 const DICTIONARY: &[u8; 207] = b"{\\rtf1\\ansi\\mac\\deff0\\deftab720{\\fonttbl;}{\\f0\\fnil \\froman \\fswiss \\fmodern \\fscript \\fdecor MS Sans SerifSymbolArialTimes New RomanCourier{\\colortbl\\red0\\green0\\blue0\r\n\\par \\pard\\plain\\f0\\fs20\\b\\i\\u\\tab\\tx";
@@ -316,6 +319,8 @@ struct Out {
     /// What's open in the HTML ([`Mode::Rich`]).
     open: Fmt,
     open_link: Option<Rc<str>>,
+    /// Bytes of link addresses written so far ([`LINKS_MAX`]).
+    links: usize,
 }
 
 impl Out {
@@ -369,6 +374,12 @@ impl Out {
     }
 
     fn format(&mut self, fmt: Fmt, link: &Option<Rc<str>>) {
+        // A link that no longer fits is written as its text.
+        let fits = |l: &Rc<str>| self.links.saturating_add(l.len()) <= LINKS_MAX;
+        let link = match link {
+            Some(l) if *link != self.open_link && !fits(l) => &None,
+            _ => link,
+        };
         let same_link = *link == self.open_link;
         if fmt == self.open && same_link {
             return;
@@ -386,6 +397,7 @@ impl Out {
                 self.s.push_str("</a>");
             }
             if let Some(l) = link {
+                self.links = self.links.saturating_add(l.len());
                 self.s.push_str(&format!("<a href=\"{}\">", l.replace('"', "%22")));
             }
         }
@@ -414,7 +426,7 @@ fn read(rtf: &[u8], mode: Mode, max: usize) -> String {
     let mut deeper = 0usize;
     let mut fonts: HashMap<i32, u32> = HashMap::new();
     let mut default_cp = 1252u32;
-    let mut out = Out { mode, s: String::new(), max, pending: Vec::new(), pending_cp: 1252, open: Fmt::default(), open_link: None };
+    let mut out = Out { mode, s: String::new(), max, pending: Vec::new(), pending_cp: 1252, open: Fmt::default(), open_link: None, links: 0 };
     // The first token of a group, and whether it was `\*`: what says the group's destination.
     let mut fresh = false;
     let mut starred = false;
