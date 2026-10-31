@@ -258,3 +258,53 @@ fn how_long_after_a_new_mail_came_it_was_told_of() {
     // Hostile times give a number, never a panic.
     assert!(listening::told_after(i64::MIN, i64::MAX, u128::MAX).is_finite());
 }
+
+/// The calendars' and contacts' homes saved in the account's PIM doc are trusted: on another
+/// site, they still sync, with no question. A site the server leads to that the account doesn't
+/// trust is asked about once, and the PIM sync then waits for the account's next start.
+#[test]
+fn dav_trusts_the_saved_homes_and_asks_once_about_another_site() {
+    use quatrelle_model::pim::{PIM_DOC, Pim, Tombstone};
+
+    use crate::fakes::fake_dav;
+    let s = fake_dav::serve();
+    let there = s.base.replace("127.0.0.1", "localhost");
+    let store = crate::fake::tests_store("dav-trust");
+    let pool = Pool::new(store.clone(), Arc::new(MemoryCredentials::default()));
+    let acc = AccountConfig {
+        id: "a1".into(),
+        email: fake_dav::USER.into(),
+        imap: quatrelle_model::ServerConfig { host: "127.0.0.1".into(), port: 1, security: quatrelle_model::Security::None },
+        ..Default::default()
+    };
+    let events = |pool: &Pool| std::iter::from_fn(|| pool.wait(Duration::from_millis(100))).collect::<Vec<_>>();
+    let worker = || Worker::new(acc.clone(), Auth::shared(fake_dav::PASSWORD), store.clone(), pool.sink.clone(), SyncOptions::default());
+
+    // Homes found and saved before on `localhost`, a site the account's settings don't name.
+    let saved = Pim { caldav_home: Some(format!("{there}/dav/cal/")), carddav_home: Some(format!("{there}/dav/card/")), ..Default::default() };
+    store.save_account_doc("a1", PIM_DOC, &saved).unwrap();
+    worker().sync_dav();
+    let seen = events(&pool);
+    assert!(seen.iter().any(|e| matches!(e, Event::DavSynced { .. })), "{seen:?}");
+    assert!(!seen.iter().any(|e| matches!(e, Event::TrustAsked { .. })), "{seen:?}");
+
+    // Homes on the account's own server, and a deletion on `localhost`, which nothing trusts.
+    let pim = Pim {
+        caldav_home: Some(format!("{}/dav/cal/", s.base)),
+        carddav_home: Some(format!("{}/dav/card/", s.base)),
+        deleted: vec![Tombstone { href: format!("{there}{}x.ics", fake_dav::CAL), ..Default::default() }],
+        ..Default::default()
+    };
+    store.save_account_doc("a1", PIM_DOC, &pim).unwrap();
+    let before = s.data.lock().unwrap().log.len();
+    let mut w = worker();
+    w.sync_dav();
+    assert_eq!(events(&pool), [Event::TrustAsked { account: "a1".into(), site: "localhost".into() }]);
+    // Until the next start: nothing more, neither asked nor sent.
+    w.sync_dav();
+    assert_eq!(events(&pool), []);
+    assert_eq!(s.data.lock().unwrap().log.len(), before, "{:?}", s.data.lock().unwrap().log);
+    // The next start (a new worker) asks again; the engine keeps one question per run.
+    worker().sync_dav();
+    assert_eq!(events(&pool), [Event::TrustAsked { account: "a1".into(), site: "localhost".into() }]);
+}

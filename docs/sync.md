@@ -340,7 +340,7 @@ servers that don't offer IMAP. Every call is SOAP over HTTPS.
   guests as the schema orders them, and reads back as a resource attendee; a room taken off a
   meeting is taken off the item (`DeleteItemField calendar:Resources`).
 
-## Calendars and address books (`crates/net/src/protocols/dav.rs`)
+## Calendars and address books (`crates/net/src/protocols/dav.rs`, `dav/`)
 
 Password accounts sync calendars over CalDAV (RFC 4791) and address books over CardDAV
 (RFC 6352). The homes are found as RFC 6764 describes: an SRV record, then the `/.well-known/`
@@ -350,6 +350,15 @@ here (deletions with `If-Match`, edits guarded by the item's etag so a newer cop
 never overwritten, new items with `If-None-Match: *`), then reads each collection whose `getctag`
 moved: the etags by `PROPFIND`, and the new or changed items by `calendar-multiget` /
 `addressbook-multiget`. The engine merges the result: what changed here meanwhile stays to be sent.
+
+The password goes only to the sites the account trusts (its servers' and address's registrable
+domains, the domains the user allowed, and the homes found and saved before): a request whose
+address, redirect or href (principal, home, collection, item) is on any other site is not sent at
+all, with or without the password, and is `NetError::Untrusted`. Discovery skips such a start
+when another one finds the home (an address's website commonly redirects everything to a web
+host), and asks only when none does. During a sync, `Untrusted` stops it like a refused sign-in
+(it is never one of the items' errors); the worker sends `Event::TrustAsked` once, and the
+account's calendars and contacts wait for its next start.
 
 **Invitations** travel by mail (iTIP over iMIP, RFC 5546/6047): a `text/calendar` part with
 `METHOD:REQUEST` shows as an invitation card (Accept, Tentative, Decline), which updates the

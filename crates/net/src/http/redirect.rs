@@ -41,13 +41,8 @@ impl<'a> Chain<'a> {
     }
 }
 
-/// Whether two URLs are one site: scheme and port don't matter, the registrable domain does.
-pub(crate) fn same_site(a: &Url, b: &Url) -> bool {
-    site(&a.host) == site(&b.host)
-}
-
 /// Headers that carry a credential.
-pub(crate) fn is_credential(name: &str) -> bool {
+fn is_credential(name: &str) -> bool {
     ["Authorization", "Proxy-Authorization", "Cookie"].iter().any(|c| name.trim().eq_ignore_ascii_case(c))
 }
 
@@ -63,7 +58,7 @@ impl Request {
 mod tests {
     use super::super::tests::{bind, credentials_seen, serve, serve_on};
     use super::super::*;
-    use super::same_site;
+    use super::{is_credential, site};
 
     fn with_credentials(url: &str) -> Request {
         Request::get(url, 1000).header("Authorization", "Bearer x").header("cookie", "s=1")
@@ -210,9 +205,11 @@ mod tests {
         assert!(e.is_retryable() && !e.is_fatal());
     }
 
+    /// Two URLs are one site whatever the scheme and port: the registrable domain counts.
     #[test]
     fn sites() {
         let u = |s: &str| Url::parse(s).unwrap();
+        let same_site = |a: &Url, b: &Url| site(&a.host) == site(&b.host);
         assert!(same_site(&u("https://Mail.example.com/a"), &u("https://imap.example.com:8443/b")));
         assert!(same_site(&u("http://mail.example.com/"), &u("https://mail.example.com/")));
         assert!(!same_site(&u("https://mail.example.com/"), &u("https://mail.example.org/")));

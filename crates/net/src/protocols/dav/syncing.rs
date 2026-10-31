@@ -7,7 +7,7 @@ use quatrelle_model::ical::{self, CalEvent};
 use quatrelle_model::pim::{BookInfo, CalendarInfo, DavSync, LOCAL, Pim, StoredCard, StoredEvent};
 use quatrelle_model::vcard;
 
-use super::{BATCH, CALDAV, CARDDAV, DAV, Dav, Item, Kind, absolute, multistatus, path_of, xml_escape};
+use super::{BATCH, CALDAV, CARDDAV, DAV, Dav, Item, Kind, multistatus, path_of, xml_escape};
 use crate::{NetError, Result};
 
 impl Dav {
@@ -21,7 +21,7 @@ impl Dav {
             if kind == Kind::Calendars && !i.comps.is_empty() && !i.comps.iter().any(|c| c == "VEVENT") {
                 continue;
             }
-            i.href = absolute(&at, &i.href)?;
+            i.href = self.absolute(&at, &i.href)?;
             out.push(i);
         }
         Ok(out)
@@ -36,7 +36,7 @@ impl Dav {
                 continue;
             }
             let Some(etag) = i.props.get("getetag") else { continue };
-            out.push((absolute(&at, &i.href)?, etag.clone()));
+            out.push((self.absolute(&at, &i.href)?, etag.clone()));
         }
         Ok(out)
     }
@@ -61,7 +61,7 @@ impl Dav {
             let field = if kind == Kind::Calendars { "calendar-data" } else { "address-data" };
             for i in multistatus(&String::from_utf8_lossy(&resp.body)) {
                 if let Some(data) = i.props.get(field) {
-                    out.push((absolute(&at, &i.href)?, i.props.get("getetag").cloned().unwrap_or_default(), data.clone()));
+                    out.push((self.absolute(&at, &i.href)?, i.props.get("getetag").cloned().unwrap_or_default(), data.clone()));
                 }
             }
         }
@@ -107,7 +107,9 @@ pub fn sync(dav: &Dav, email: &str, imap_host: &str, pim: &Pim, now: i64, local:
     for t in &pim.deleted {
         match dav.delete(&t.href, &t.etag) {
             Ok(()) => out.deleted.push(t.href.clone()),
-            Err(e @ NetError::Auth(_)) => return Err(e),
+            // The account's own problems, not the item's: kept with the item's errors, they'd
+            // come back at each sync (a tombstone would stay for good).
+            Err(e @ (NetError::Auth(_) | NetError::Untrusted { .. })) => return Err(e),
             Err(e) => out.errors.push(e.to_string()),
         }
     }
@@ -133,7 +135,7 @@ pub fn sync(dav: &Dav, email: &str, imap_host: &str, pim: &Pim, now: i64, local:
                     out.pushed_events.push(StoredEvent { href: url.clone(), etag: new.clone(), dirty: false, ..(*p).clone() });
                 }
             }
-            Err(e @ NetError::Auth(_)) => return Err(e),
+            Err(e @ (NetError::Auth(_) | NetError::Untrusted { .. })) => return Err(e),
             Err(e) => out.errors.push(format!("{}: {e}", master.event.summary)),
         }
     }
@@ -142,7 +144,7 @@ pub fn sync(dav: &Dav, email: &str, imap_host: &str, pim: &Pim, now: i64, local:
         let etag = (!c.href.is_empty()).then_some(c.etag.as_str());
         match dav.put(&url, "text/vcard; charset=utf-8", &vcard::write(&c.card), etag) {
             Ok(new) => out.pushed_cards.push(StoredCard { href: url, etag: new, dirty: false, ..c.clone() }),
-            Err(e @ NetError::Auth(_)) => return Err(e),
+            Err(e @ (NetError::Auth(_) | NetError::Untrusted { .. })) => return Err(e),
             Err(e) => out.errors.push(format!("{}: {e}", c.card.display())),
         }
     }
