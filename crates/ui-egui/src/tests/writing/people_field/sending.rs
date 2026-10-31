@@ -573,9 +573,8 @@ fn a_one_entry_field_keeps_the_last_entry() {
 #[test]
 fn a_room_in_the_guests_is_moved_out() {
     let (mut a, dir) = app("room-moved");
-    // The sample's room set, from its calendar: an answer about its rooms with none of the
-    // server's makes it (`calendar.rooms` alone fills the Room Finder, not the set).
-    a.session.apply(MailEvent::Rooms { account: "sample".into(), lists: Vec::new(), rooms: Vec::new(), error: None });
+    // The sample's room set, from its calendar: asking its rooms makes it.
+    a.session.run("calendar.rooms", &json!({"account": "sample"})).unwrap();
     assert_eq!(a.session.addressee_kind(Some("sample"), "sound.lab@studio.example"), AddresseeKind::Room, "the sample's rooms, from its calendar");
     let required = meeting_field(1, "required");
     a.ui.people.prepare(&mut a.session, required, Some("sample"), accepts_of("required"), "Sound Lab <sound.lab@studio.example>, zoe@studio.example");
@@ -617,7 +616,7 @@ fn hide_recipients_waits_while_recipients_were_left_out() {
 }
 
 /// A list whose question the engine no longer has (its account removed before the answer came)
-/// isn't dropped in silence: the field says it couldn't be expanded, and the send stops with that.
+/// isn't dropped in silence: the field says it is no longer available, and the send stops with that.
 #[test]
 fn a_list_gone_from_the_engine_says_it_couldnt_be_expanded() {
     let (mut a, dir) = app("list-gone");
@@ -647,7 +646,7 @@ fn a_list_gone_from_the_engine_says_it_couldnt_be_expanded() {
     frame(&ctx, &mut a, vec![]);
     let f = field(&a, "to");
     let note = a.ui.people.note(f).map(str::to_string);
-    assert!(note.as_deref().is_some_and(|n| n.starts_with("This list couldn't be expanded")), "{note:?}");
+    assert_eq!(note.as_deref(), Some("This list is no longer available"), "said in words of its own");
     assert_eq!(a.ui.compose_alert, note, "the send stops with it");
     assert!(!has_send(&handed(&jobs)));
     assert!(!a.ui.people.holding(f.window), "the wait is off");

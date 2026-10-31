@@ -1818,3 +1818,5 @@ kind	Address	地址
 	This isn't a room	這不是會議室
 	Only people, lists and groups can be invited	只能邀請個人、清單和群組
 	Send from a person, a shared mailbox or a list	請從個人、共用信箱或清單傳送
+	{room} was moved to Rooms	{room} 已移至「會議室」
+	This list is no longer available	此清單已無法使用

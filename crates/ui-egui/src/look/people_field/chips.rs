@@ -28,8 +28,8 @@ pub(super) struct Laid {
     pub(super) refocus: bool,
 }
 
-/// The body; `label_id` is the book button, which names the input to a screen reader.
-pub(super) fn body(ui: &mut Ui, t: &Tokens, st: &mut FieldState, input: &FieldInput<'_>, edit_id: Id, label_id: Id) -> Laid {
+/// The body; `named_by` names the input to a screen reader: the book button, or the form's label.
+pub(super) fn body(ui: &mut Ui, t: &Tokens, st: &mut FieldState, input: &FieldInput<'_>, edit_id: Id, named_by: Id) -> Laid {
     let FieldState { pieces, input: typed, selected, card, .. } = st;
     let card_open = card.is_some();
     let mut rects = Vec::with_capacity(pieces.len());
@@ -65,8 +65,8 @@ pub(super) fn body(ui: &mut Ui, t: &Tokens, st: &mut FieldState, input: &FieldIn
                     .hint_text(hint)
                     .desired_width(w)
                     .align(egui::Align2::LEFT_CENTER);
-                // Named by the field's button ("To"): its hint goes once there are chips.
-                let r = ui.add_sized(vec2(w, CHIP_H), edit).labelled_by(label_id);
+                // Named by the field's label ("To"): its hint goes once there are chips.
+                let r = ui.add_sized(vec2(w, CHIP_H), edit).labelled_by(named_by);
                 if input.pending > 0 {
                     ui.add(egui::Spinner::new().size(ICON).color(t.dim)).on_hover_text(tl!("Checking…"));
                 }
@@ -74,7 +74,9 @@ pub(super) fn body(ui: &mut Ui, t: &Tokens, st: &mut FieldState, input: &FieldIn
             })
             .inner
         });
-    let view = out.inner_rect;
+    // The lines in view: as wide as the room given, as tall as the lines shown (the output's
+    // rect is the room the area was given before it shrank to its lines).
+    let view = egui::Rect::from_min_size(out.inner_rect.min, vec2(out.inner_rect.width(), out.inner_rect.height().min(out.content_size.y)));
     let edit = out.inner;
     let line = if edit.has_focus() { t.accent } else { t.border };
     ui.painter().line_segment([pos2(view.left(), view.bottom() + 1.0), pos2(view.right(), view.bottom() + 1.0)], Stroke::new(1.0, line));

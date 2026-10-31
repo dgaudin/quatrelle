@@ -1,5 +1,5 @@
-//! Engine tests: the contacts field of a meeting: what a rooms field refuses, and the names of the
-//! meeting's fields.
+//! Engine tests: the contacts field of a meeting: what a rooms field refuses, the rooms known for
+//! it, and the names of the meeting's fields.
 
 use super::*;
 use crate::FieldId;
@@ -23,6 +23,20 @@ fn a_known_list_is_refused_as_a_room_and_an_unknown_address_goes_through() {
     // An update refuses it the same way, and keeps the room it had.
     let refused = s.run("event.update", &json!({"uid": uid, "rooms": "team@contoso.example"}));
     assert!(matches!(&refused, Err(CmdError::Params(m)) if m == "not a room: team@contoso.example"), "{refused:?}");
+    done(s);
+}
+
+/// An account the Room Finder answers from its calendar (no server for it): asking its rooms
+/// makes them rooms for every field too, so a room typed among a meeting's guests is known
+/// without the Room Finder opened.
+#[test]
+fn the_calendars_rooms_join_the_room_set() {
+    let mut s = sample_session("rooms-set-local");
+    let lab = "sound.lab@studio.example";
+    assert_ne!(s.addressee_kind(Some("sample"), lab), AddresseeKind::Room, "not known before the rooms are asked");
+    s.run("calendar.rooms", &json!({"account": "sample"})).unwrap();
+    assert_eq!(s.addressee_kind(Some("sample"), lab), AddresseeKind::Room);
+    assert_eq!(s.room_name("sample", lab), Some("Sound Lab"));
     done(s);
 }
 

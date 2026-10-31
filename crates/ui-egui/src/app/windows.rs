@@ -163,10 +163,12 @@ impl MailApp {
         let open = windows.len().saturating_sub(1);
         let mut closed: Vec<u64> = Vec::new();
         for (n, (wid, f)) in windows.iter_mut().enumerate() {
-            // Its address book, listed from the session's (which the window only reads).
+            // Its address book, listed from the session's (which the window only reads), and its
+            // contacts fields made ready: its lines, and the address book's rows while it's open.
             if let Some(book) = f.attendees_book.as_mut() {
                 book.search.refresh(&mut self.session);
             }
+            pim_dialogs::prepare(f, &mut self.session, &mut self.ui.people);
             let title = if f.summary.trim().is_empty() { tl!("Untitled").to_string() } else { f.summary.trim().to_string() };
             let title = if f.inviting { tf!("{subject} – Meeting", subject = title) } else { tf!("{subject} – Appointment", subject = title) };
             let id = egui::ViewportId::from_hash_of(("event-window", *wid));
@@ -178,7 +180,7 @@ impl MailApp {
                     None => builder.with_inner_size([920.0, 700.0]),
                 };
             }
-            let (session, places) = (&self.session, &mut self.ui.places);
+            let (session, places, people) = (&self.session, &mut self.ui.places, &mut self.ui.people);
             let wid = *wid;
             let mut mine: Vec<Action> = Vec::new();
             let (keep, close) = ctx.show_viewport_immediate(id, builder, |ui, _| {
@@ -193,7 +195,7 @@ impl MailApp {
                 egui::CentralPanel::default().frame(egui::Frame::new().fill(t.surface).inner_margin(egui::Margin::symmetric(14, 10))).show(
                     ui,
                     |ui| {
-                        keep = pim_dialogs::meeting(ui, f, session, &t, &mut mine);
+                        keep = pim_dialogs::meeting(ui, f, session, people, &t, &mut mine);
                     },
                 );
                 (keep, ui.input(|i| i.viewport().close_requested()))
