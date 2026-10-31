@@ -9,7 +9,7 @@ use crate::{FieldId, Suggestion};
 pub(super) fn commands() -> Vec<CommandSpec> {
     vec![
         CommandSpec::new("people.suggest", "Suggest people", "Message › To", suggest).params(
-            r#"{"window": number, "field": string (to, cc, bcc, replyTo, book-to, book-cc, book-bcc, cli), "text": string, "account"?: string, "accepts"?: [kind codes] (none: every kind)} → [{"name", "email", "kind", "itemId"?, "source"}]"#,
+            r#"{"window": number, "field": string (to, cc, bcc, replyTo, book-to, book-cc, book-bcc, cli, from, required, optional, rooms, att-required, att-optional, att-rooms), "text": string, "account"?: string, "accepts"?: [kind codes] (none: every kind)} → [{"name", "email", "kind", "itemId"?, "source"}]"#,
         ),
         CommandSpec::new("people.resolve", "Check Names", "Message › Names", resolve).params(
             r#"{"window": number, "field": string (as people.suggest), "text"?: string (a field that isn't a message's: its text; a message's To, Cc, Bcc or Reply-To is checked in the message), "account"?: string (whose directory), "accepts"?: [kind codes] (of several that fit, these first)} → {"text", "resolved", "unresolved", "searching"}"#,

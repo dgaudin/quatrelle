@@ -2,6 +2,7 @@
 
 use super::*;
 
+mod attendees;
 mod drafts;
 mod emoji;
 mod names;
