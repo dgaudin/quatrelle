@@ -635,7 +635,7 @@ fn a_big_folder_changes_all_at_once_quickly() {
 #[test]
 fn more_on_the_server_and_searching_it() {
     use quatrelle_model::{Folder, FolderRole, MessageKey, Summary};
-    let mut s = sample_session("server-search");
+    let mut s = sample_session("server-search-more");
     let a = s
         .run("account.add", &json!({"email": "zoe@example.org", "password": "pw", "imapHost": "mail.example.org", "smtpHost": "mail.example.org"}))
         .unwrap()["account"]
