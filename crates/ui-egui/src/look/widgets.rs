@@ -175,10 +175,23 @@ pub(crate) const FIELD_LABEL_W: f32 = 76.0;
 /// Height of a form's row: a field and the label button naming it.
 pub(crate) const FIELD_ROW_H: f32 = 30.0;
 
+/// Margin left and right of a field button's label.
+const FIELD_BUTTON_MARGIN: f32 = 8.0;
+
+/// Width of the button [`field_button`] draws for `label` (translated here): [`FIELD_LABEL_W`]
+/// less its gap, or wider when the label as it reads in the language shown needs it
+/// ("Calendrier ->").
+pub(crate) fn field_button_w(ui: &Ui, label: &str, menu: bool) -> f32 {
+    let text = ui.painter().layout_no_wrap(tl!(label).to_string(), theme::regular(13.0), egui::Color32::PLACEHOLDER).size().x;
+    let chevron = if menu { 14.0 } else { 0.0 };
+    (text + chevron + 2.0 * FIELD_BUTTON_MARGIN).max(FIELD_LABEL_W - 8.0)
+}
+
 /// A small framed button naming a field (To, Cc…), as in Outlook's message window; with `menu`, a
 /// small drawn chevron after its label, the two centred together. `label` is translated here.
 pub(crate) fn field_button(ui: &mut Ui, t: &Tokens, label: &str, enabled: bool, menu: bool) -> Response {
-    let (rect, resp) = ui.allocate_exact_size(vec2(FIELD_LABEL_W - 8.0, FIELD_ROW_H - 4.0), if enabled { Sense::click() } else { Sense::hover() });
+    let (rect, resp) =
+        ui.allocate_exact_size(vec2(field_button_w(ui, label, menu), FIELD_ROW_H - 4.0), if enabled { Sense::click() } else { Sense::hover() });
     named(ui, &resp, tl!(label), enabled, None);
     let fill = if resp.hovered() && enabled { t.hover } else { t.surface };
     ui.painter().rect(rect, 3.0, fill, Stroke::new(1.0, t.border), egui::StrokeKind::Inside);

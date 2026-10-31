@@ -353,7 +353,7 @@ pub fn people_field(ui: &mut Ui, t: &Tokens, st: &mut FieldState, input: &FieldI
 
     if let Some(n) = st.left_out {
         ui.horizontal(|ui| {
-            ui.add_space(label_w(input.label));
+            ui.add_space(label_w(ui, input.label));
             let n = crate::widgets::count_text(n as u64);
             ui.label(egui::RichText::new(tf!("and {n} more were left out", n = n)).color(t.warn).font(crate::theme::regular(12.0)));
         });
@@ -363,8 +363,8 @@ pub fn people_field(ui: &mut Ui, t: &Tokens, st: &mut FieldState, input: &FieldI
 
 /// How far a word under the field is set in, to line up with its chips: past its label, when it
 /// has one of its own.
-pub fn label_w(label: &str) -> f32 {
-    if label.is_empty() { 0.0 } else { crate::widgets::FIELD_LABEL_W }
+pub fn label_w(ui: &Ui, label: &str) -> f32 {
+    if label.is_empty() { 0.0 } else { crate::widgets::field_button_w(ui, label, false) + 8.0 }
 }
 
 /// The keys the field takes before its input sees them; whether the input is to get the focus
