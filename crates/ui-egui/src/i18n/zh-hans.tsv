@@ -1736,6 +1736,7 @@ month	May	5月
 	{done} messages downloaded	已下载 {done} 封邮件
 	{done} messages downloaded, {failed} failed	已下载 {done} 封邮件，{failed} 封失败
 	{email} opens under {account}	{email} 在 {account} 下打开
+	{domain} wasn't allowed: {account} won't use it	未允许 {domain}：{account} 不会使用它
 	{email} removed. Its data file stays at {path}	已删除 {email}。其数据文件仍在 {path}
 	{event}: a change to one occurrence couldn't be sent: its series is no longer on the server	{event}: 无法发送对其中一次的更改: 其系列已不在服务器上
 	{name} could not be exported: {error}	无法导出 {name}: {error}

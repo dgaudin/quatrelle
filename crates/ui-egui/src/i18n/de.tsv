@@ -1739,6 +1739,7 @@ month	May	Mai
 	{done} messages downloaded	{done} Nachrichten heruntergeladen
 	{done} messages downloaded, {failed} failed	{done} Nachrichten heruntergeladen, {failed} fehlgeschlagen
 	{email} opens under {account}	{email} wird unter {account} geöffnet
+	{domain} wasn't allowed: {account} won't use it	{domain} wurde nicht zugelassen: {account} verwendet es nicht
 	{email} removed. Its data file stays at {path}	{email} entfernt. Die Datendatei bleibt unter {path}
 	{event}: a change to one occurrence couldn't be sent: its series is no longer on the server	{event}: Eine Änderung an einem Vorkommen konnte nicht gesendet werden: Die Serie ist nicht mehr auf dem Server
 	{name} could not be exported: {error}	{name} konnte nicht exportiert werden: {error}

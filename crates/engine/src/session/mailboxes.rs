@@ -17,6 +17,7 @@ pub(crate) use people::People;
 pub use people::{Expansion, FIELD_NAMES, FieldId, INDEX_MAX, MAX_SHOWN_MEMBERS, MAX_SUGGESTIONS, MAX_TOTAL, Source, Suggestion};
 mod envelope;
 mod shared_mailboxes;
+mod trust;
 pub(crate) use envelope::Envelope;
 
 impl Session {

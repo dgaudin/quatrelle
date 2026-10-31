@@ -317,6 +317,14 @@ pub struct Session {
     /// already asked while this runs.
     pub ask_password: Vec<String>,
     asked_password: HashSet<String>,
+    /// Other sites a server proposed for an account, one question each (account, site), waiting
+    /// for the user's answer (`account.trustDomain`, `account.refuseDomain`).
+    pub ask_trust: Vec<(String, String)>,
+    /// The (account, site) pairs asked while this runs; one is forgotten when it is allowed or
+    /// withdrawn, so a site withdrawn can be asked again.
+    pub(crate) asked_trust: HashSet<(String, String)>,
+    /// The pairs the user refused while this runs: not asked again until Quatrelle starts again.
+    pub(crate) refused_trust: HashSet<(String, String)>,
     /// Pictures the directory keeps for addresses, by lowercased address (`None`: there is
     /// none, or the server keeps none).
     person_photos: BTreeMap<String, Option<Photo>>,
@@ -517,6 +525,9 @@ impl Session {
             showing_more: None,
             ask_password: Vec::new(),
             asked_password: HashSet::new(),
+            ask_trust: Vec::new(),
+            asked_trust: HashSet::new(),
+            refused_trust: HashSet::new(),
             person_photos: BTreeMap::new(),
             photo_asked: HashSet::new(),
             list: Vec::new(),
