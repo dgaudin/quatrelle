@@ -1821,3 +1821,6 @@ month	May	mei
 	Checking names…	Namen controleren…
 	{room} can't be booked: a meeting books {max} rooms at most	{room} kan niet worden geboekt: een vergadering boekt maximaal {max} ruimtes
 	Calendar ->	Agenda ->
+	From one of these	Van is een van deze
+	To or Cc one of these	Aan of CC is een van deze
+	Subject has one of these (comma-separated)	Onderwerp bevat een van deze woorden (gescheiden door komma’s)

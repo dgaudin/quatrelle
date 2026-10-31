@@ -1825,3 +1825,6 @@ month	May	Mai
 	Checking names…	Namen werden überprüft…
 	{room} can't be booked: a meeting books {max} rooms at most	{room} kann nicht gebucht werden: Eine Besprechung bucht höchstens {max} Räume
 	Calendar ->	Kalender ->
+	From one of these	Absender ist einer dieser
+	To or Cc one of these	An oder Cc ist einer dieser
+	Subject has one of these (comma-separated)	Betreff enthält eines dieser Wörter (durch Kommas getrennt)

@@ -1826,3 +1826,6 @@ kind	Address	地址
 	Checking names…	正在檢查名稱…
 	{room} can't be booked: a meeting books {max} rooms at most	無法預訂 {room}: 一個會議最多預訂 {max} 間會議室
 	Calendar ->	行事曆 ->
+	From one of these	寄件者是以下之一
+	To or Cc one of these	收件者或副本是以下之一
+	Subject has one of these (comma-separated)	主旨包含以下任一詞語（以逗號分隔）

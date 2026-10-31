@@ -1822,3 +1822,6 @@ month	May	5月
 	Checking names…	名前を確認しています…
 	{room} can't be booked: a meeting books {max} rooms at most	{room} は予約できません: 1 つの会議で予約できる会議室は {max} 室までです
 	Calendar ->	予定表 ->
+	From one of these	差出人が次のいずれか
+	To or Cc one of these	宛先または CC が次のいずれか
+	Subject has one of these (comma-separated)	件名に次のいずれかの語を含む（コンマ区切り）
