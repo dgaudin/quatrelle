@@ -525,6 +525,22 @@ pour le propriétaire : le courrier des expéditeurs Outlook arrive souvent avec
   limite de 16 Mo (40 Mo écrits pour 160 Ko de RTF dans le test) ; l'instruction d'un champ
   n'était pas bornée quand ses caractères étaient écrits en `\uN` ; et chaque jeton recopiait les
   liens de son groupe (désormais partagés, `Rc<str>`). Un test de régression pour chacun.
+- **Corrigé après une seconde relecture, mesurée** (défauts venus de l'origine) :
+  - chaque fichier à `Content-ID` cherchait `cid:` dans tout le corps HTML : 500 fichiers et un
+    corps de 16 Mo tirés de 49 Ko de `winmail.dat` coûtaient 13 s par lecture, à la
+    synchronisation (sur le fil de l'interface), à l'ouverture et pour chaque image. Le corps est
+    maintenant lu une fois (`shown_cids`) ;
+  - chaque corps avait ses 16 Mo, chaque message joint, à chaque niveau, son corps et son `.eml` :
+    30 messages joints de 3 Ko gardaient 503 Mo. Un seul budget (`Budget`) vaut désormais pour
+    toute une lecture, pour tous les `winmail.dat` d'un message et tous les niveaux : 64 Mo, plus
+    deux fois les octets du flux (ses vrais fichiers ne sont jamais coupés), et 500 fichiers au
+    total. Ce qui ne tient pas est laissé, et le `winmail.dat` reste alors listé à côté de ses
+    fichiers ;
+  - un lien RTF était récrit à chaque changement de gras ou d'italique (2,8 Ko de RTF donnaient
+    16 Mo d'HTML) : il reste ouvert maintenant. Seul le premier corps des `winmail.dat` d'un
+    message est lu, les suivants ne donnent que leurs fichiers ;
+  - le trombone compte ce que donne un `winmail.dat` (un `winmail.dat` qui ne tient que le corps
+    n'en met plus), et `quoted_pictures` lit le message une seule fois pour toutes ses images.
 - **Règle des petits fichiers** : `mime/src/` serait passé à 17 fichiers Rust ; le lecteur TNEF
   (avec `tnef/rtf.rs` et ses tests) va sous `attachments/`, puisqu'un `winmail.dat` est une pièce
   jointe (l'origine l'a à `mime/src/tnef.rs`) ; les noms exportés ne changent pas.
