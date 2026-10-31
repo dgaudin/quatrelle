@@ -355,7 +355,8 @@ impl Out {
     }
 
     fn format(&mut self, fmt: Fmt, link: &Option<Rc<str>>) {
-        if fmt == self.open && *link == self.open_link {
+        let same_link = *link == self.open_link;
+        if fmt == self.open && same_link {
             return;
         }
         let close = [(self.open.strike, "</s>"), (self.open.underline, "</u>"), (self.open.italic, "</i>"), (self.open.bold, "</b>")];
@@ -364,11 +365,15 @@ impl Out {
                 self.s.push_str(tag);
             }
         }
-        if self.open_link.is_some() {
-            self.s.push_str("</a>");
-        }
-        if let Some(l) = link {
-            self.s.push_str(&format!("<a href=\"{}\">", l.replace('"', "%22")));
+        // The link stays open while only the formatting changes: written again for each change,
+        // a long one made a few bytes of RTF into kilobytes of HTML.
+        if !same_link {
+            if self.open_link.is_some() {
+                self.s.push_str("</a>");
+            }
+            if let Some(l) = link {
+                self.s.push_str(&format!("<a href=\"{}\">", l.replace('"', "%22")));
+            }
         }
         let open = [(fmt.bold, "<b>"), (fmt.italic, "<i>"), (fmt.underline, "<u>"), (fmt.strike, "<s>")];
         for (on, tag) in open {
