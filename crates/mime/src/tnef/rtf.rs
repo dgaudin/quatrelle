@@ -3,6 +3,7 @@
 //! italic, underline, struck-through text, links and line breaks).
 
 use std::collections::HashMap;
+use std::rc::Rc;
 
 use super::{TnefBody, decode};
 
@@ -10,6 +11,8 @@ use super::{TnefBody, decode};
 const RTF_MAX: usize = 16 << 20;
 /// Deepest group nesting followed; deeper groups count as the one they're in.
 const MAX_GROUPS: usize = 512;
+/// Most characters of a field's instruction read (it names a link).
+const INST_MAX: usize = 4096;
 
 /// What the compression's dictionary starts with (MS-OXRTFCP 2.1.2.1).
 const DICTIONARY: &[u8; 207] = b"{\\rtf1\\ansi\\mac\\deff0\\deftab720{\\fonttbl;}{\\f0\\fnil \\froman \\fswiss \\fmodern \\fscript \\fdecor MS Sans SerifSymbolArialTimes New RomanCourier{\\colortbl\\red0\\green0\\blue0\r\n\\par \\pard\\plain\\f0\\fs20\\b\\i\\u\\tab\\tx";
@@ -228,9 +231,10 @@ struct Group {
     /// Characters after `\uN` that stand in for it.
     uc: usize,
     fmt: Fmt,
-    /// The link a field's instruction named, and the one its result shows.
-    field_link: Option<String>,
-    link: Option<String>,
+    /// The link a field's instruction named, and the one its result shows (shared: every
+    /// token copies its group).
+    field_link: Option<Rc<str>>,
+    link: Option<Rc<str>>,
 }
 
 /// Destinations never shown.
@@ -297,7 +301,7 @@ struct Out {
     pending_cp: u32,
     /// What's open in the HTML ([`Mode::Rich`]).
     open: Fmt,
-    open_link: Option<String>,
+    open_link: Option<Rc<str>>,
 }
 
 impl Out {
@@ -340,15 +344,17 @@ impl Out {
 
     fn raw(&mut self, s: &str, g: &Group) {
         self.flush(g);
+        // Past the cap, no tags either: a link opened again and again would grow without end.
+        if self.s.len() >= RTF_MAX {
+            return;
+        }
         if self.mode == Mode::Rich {
             self.format(g.fmt, &g.link);
         }
-        if self.s.len() < RTF_MAX {
-            self.s.push_str(s);
-        }
+        self.s.push_str(s);
     }
 
-    fn format(&mut self, fmt: Fmt, link: &Option<String>) {
+    fn format(&mut self, fmt: Fmt, link: &Option<Rc<str>>) {
         if fmt == self.open && *link == self.open_link {
             return;
         }
@@ -430,7 +436,7 @@ fn read(rtf: &[u8], mode: Mode) -> String {
                         && c.dest == Dest::FieldInst
                         && parent.dest != Dest::FieldInst
                     {
-                        parent.field_link = hyperlink(&inst);
+                        parent.field_link = hyperlink(&inst).map(Rc::from);
                         inst.clear();
                     }
                     // The document ends with its group: Outlook leaves bytes of an older body after it.
@@ -492,6 +498,7 @@ fn read(rtf: &[u8], mode: Mode) -> String {
                         if let Some(c) = c.filter(|_| shows) {
                             out.char(c, &g);
                         } else if g.dest == Dest::FieldInst
+                            && inst.len() < INST_MAX
                             && let Some(c) = c
                         {
                             inst.push(c);
@@ -527,7 +534,7 @@ fn read(rtf: &[u8], mode: Mode) -> String {
                 high_surrogate = None;
                 if shows {
                     out.byte(b, cp, &g);
-                } else if g.dest == Dest::FieldInst && inst.len() < 4096 {
+                } else if g.dest == Dest::FieldInst && inst.len() < INST_MAX {
                     inst.push(char::from(b));
                 }
             }
@@ -535,7 +542,7 @@ fn read(rtf: &[u8], mode: Mode) -> String {
                 fallback = fallback.saturating_sub(1);
                 if shows {
                     out.char(c, &g);
-                } else if g.dest == Dest::FieldInst && inst.len() < 4096 {
+                } else if g.dest == Dest::FieldInst && inst.len() < INST_MAX {
                     inst.push(c);
                 }
             }
