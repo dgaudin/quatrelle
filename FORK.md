@@ -569,8 +569,9 @@ l'origine : Windows fait le caractère au relâchement d'Alt, et winit l'écarte
   fenêtre et le caractère est tapé au relâchement d'Alt, dans n'importe quel champ : avec un 0 en
   tête, dans la page ANSI du système (Windows-1252 en français : `0201` → É, `0128` → €) ; sans,
   dans sa page OEM (850 en français : `130` → é) ; au-delà de 255, en Unicode (`8364` → €). Une
-  autre touche, ou la fenêtre qui perd le focus, abandonne le code ; un code qui ne nomme rien
-  (0, caractère de contrôle, trop long) ne tape rien. La lecture des pages est dans
+  autre touche abandonne le code, et quitter la fenêtre en cours de code (Alt+Tab) ne tape rien
+  dans celle qu'on quitte ; un code qui ne nomme rien (0, caractère de contrôle, trop long) ne
+  tape rien. La lecture des pages est dans
   `mime/src/files/alt_code.rs`, le relevé des touches dans `ui-egui/src/app/alt_code.rs`.
 - **Adapté** : l'origine appelle ce relevé depuis la structure `ClipboardKeys` de son collage de
   fichiers par Ctrl+V (`9b896ef3`, pas repris). Ce fork n'avait pas encore de crochet sur l'entrée
@@ -585,15 +586,40 @@ l'origine : Windows fait le caractère au relâchement d'Alt, et winit l'écarte
   avec Alt, ce texte n'était retiré que pendant un code ; après une touche qui l'avait interrompu
   (Alt+0, Alt+Tab, puis 2, 0, 1), « 201 » arrivait dans le texte. Le texte qui suit un chiffre
   retiré est retiré avec lui. Les index dans les tables OEM sont des soustractions vérifiées.
+- **Corrigé après relecture** (sur le vrai trajet des événements de winit et d'egui-winit ; les
+  trois premiers défauts venaient de l'origine) :
+  - Alt+Tab au milieu d'un code tapait le code entamé dans la fenêtre qu'on quitte (Alt+1, 3 :
+    ♪ ; Alt+6, 5 : A) : winit envoie les modificateurs relâchés *avant* la perte du focus, à la
+    suite. Un relâchement d'Alt suivi de la perte du focus ne tape plus rien ;
+  - la répétition d'un chiffre tenu arrive d'egui-winit comme d'autres pressions, marquées non
+    répétées (egui calcule la répétition après le crochet) : un chiffre tenu plus d'une
+    demi-seconde comptait plusieurs fois. Chaque fenêtre retient les chiffres enfoncés, et une
+    pression ne compte qu'après le relâchement de sa touche ;
+  - les pages venaient de la langue d'affichage (`sys_locale`), alors que Windows lit les codes
+    dans les pages du système, que fixent les paramètres régionaux : un Windows affiché en anglais
+    avec des paramètres français (courant en entreprise) prenait l'OEM 437 au lieu du 850, et
+    Alt+183 donnait ╖ au lieu de À (de même È, Ê, Â, Ô). Sous Windows, les pages sont lues dans le
+    registre (`ACP` et `OEMCP` de `HKLM\SYSTEM\CurrentControlSet\Control\Nls\CodePage`, par
+    `windows-registry`, que l'app utilisait déjà : API sûre, MIT OR Apache-2.0, rien de neuf au
+    `Cargo.lock` hormis la ligne de ui-egui ; `cargo deny check` passe) ; une page illisible pour
+    les codes (OEM 852, japonais 932…) garde la supposition d'après la langue ;
+  - AltGr sur un clavier AZERTY arrive sans aucun modificateur (winit efface Ctrl et Alt tant que
+    l'Alt de droite est tenu) : le comportement était juste, un test le dit maintenant.
 - **Vérifié par les tests** (sous Linux : seul l'appel est propre à Windows) : É, È, Ç et € en
   1252, é et É en 850, € en Unicode, la répétition d'un chiffre tenu ; rien pour les codes qui ne
-  nomment rien ; Alt seul, Alt+F (les touches des menus) et AltGr (Ctrl+Alt sous Windows, ses
-  chiffres et leur texte) passent tels quels. Le contrôle de compilation pour Windows ne passe ici
+  nomment rien ; Alt seul, Alt+F (les touches des menus), Ctrl+Alt et AltGr (sans modificateur
+  sur AZERTY) passent tels quels ; Alt+Tab en cours de code ne tape rien ; un chiffre tenu compte
+  une fois ; chaque fenêtre garde son code ; pages du registre préférées à la langue
+  d'affichage. Les tests suivent l'ordre et la forme réels des événements. Le contrôle de compilation pour Windows ne passe ici
   que pour `quatrelle-mime` et `quatrelle-ui-egui` (le script de `ring` veut les outils MSVC) ;
   l'application est vérifiée par la porte Windows de GitHub. Reste à l'essayer avec de vraies
   touches dans une version de test Windows.
-- **Limite connue** : comme chez l'origine, les chiffres du pavé comptent quand le verrouillage
-  numérique est actif ; sans lui, egui reçoit des flèches et le code est interrompu.
+- **Limites connues, laissées telles quelles** : comme chez l'origine, les chiffres du pavé
+  comptent quand le verrouillage numérique est actif ; sans lui, egui reçoit des flèches et le
+  code est interrompu (comme sans le crochet). Sur AZERTY, les chiffres de la rangée du haut
+  tapés avec Alt retombent sur la touche physique et composent un code eux aussi (hérité). La
+  lecture des pages reste dans `mime/src/files/` : elle a besoin des décodeurs de mail-parser,
+  et `mime/src/` a déjà ses 16 fichiers.
 
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
