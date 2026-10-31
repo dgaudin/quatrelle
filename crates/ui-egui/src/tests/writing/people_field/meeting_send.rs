@@ -308,7 +308,8 @@ fn a_meeting_sent_from_the_scheduling_assistant_sends_the_lines_as_they_are() {
 }
 
 /// An appointment books no rooms through the Room Finder until it's asked for, nor invites: its
-/// window asks for no room list (on Exchange, a request to the server); a meeting's does.
+/// window asks for no room list (on Exchange, a request to the server); a meeting's does, and so
+/// does an appointment's Select Attendees and Resources (its Resources row takes rooms).
 #[test]
 fn an_appointment_asks_for_no_rooms() {
     let (mut a, dir) = app("appointment-no-rooms");
@@ -321,5 +322,17 @@ fn an_appointment_asks_for_no_rooms() {
     a.ui.event_windows[0].1.inviting = true;
     frames(&ctx, &mut a, 2);
     assert!(a.session.rooms_now("sample").is_some(), "a meeting does");
+    let _ = std::fs::remove_dir_all(dir);
+    // Another appointment, its Select Attendees opened.
+    let (mut a, dir) = app("appointment-attendees-rooms");
+    let ctx = egui::Context::default();
+    frame_sized(&ctx, &mut a, vec![], SIZE);
+    a.ui.dialog = Some(Dialog::new_event(&a.session, Some(NOW + 2 * 3600)));
+    frames(&ctx, &mut a, 3);
+    assert!(a.session.rooms_now("sample").is_none(), "an appointment asks for no rooms");
+    a.ui.event_windows[0].1.select_attendees();
+    frames(&ctx, &mut a, 2);
+    assert!(!form(&a).inviting && form(&a).attendees_book.is_some(), "still an appointment, the book open");
+    assert!(a.session.rooms_now("sample").is_some(), "its Select Attendees does");
     let _ = std::fs::remove_dir_all(dir);
 }
