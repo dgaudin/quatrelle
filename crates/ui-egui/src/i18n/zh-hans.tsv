@@ -1807,6 +1807,7 @@ month	May	5月
 	and others	及其他
 	This list couldn't be expanded: {error}	无法展开此列表: {error}
 	Some names need checking before sending	发送前需要核对一些姓名
+	Some recipients were left out: send to fewer at once, or to the list itself	部分收件人未添加：请减少每次发送的人数，或直接发送给该列表
 	Matched as typed	按输入内容匹配
 	{name}, {kind}, remove with Delete	{name}，{kind}，按 Delete 键移除
 	{name}, {kind}, {why}, remove with Delete	{name}，{kind}，{why}，按 Delete 键移除

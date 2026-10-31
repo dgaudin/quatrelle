@@ -1806,6 +1806,7 @@ month	May	mei
 	and others	en anderen
 	This list couldn't be expanded: {error}	Deze lijst kon niet worden uitgevouwen: {error}
 	Some names need checking before sending	Enkele namen moeten vóór het verzenden worden gecontroleerd
+	Some recipients were left out: send to fewer at once, or to the list itself	Enkele ontvangers zijn weggelaten: verstuur naar minder tegelijk, of naar de lijst zelf
 	Matched as typed	Vergeleken zoals getypt
 	{name}, {kind}, remove with Delete	{name}, {kind}, verwijderen met Delete
 	{name}, {kind}, {why}, remove with Delete	{name}, {kind}, {why}, verwijderen met Delete

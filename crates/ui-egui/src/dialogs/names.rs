@@ -254,7 +254,7 @@ pub(super) fn select_names(ui: &mut Ui, f: &mut NamesForm, s: &Session, people: 
             _ => &mut f.bcc,
         };
         let id = FieldId { window: f.compose, name };
-        if people.draw(ui, t, id, Some(&f.account), &Accepts::RECIPIENTS, label, "", field, false, can_expand, true, acts) {
+        if people.draw(ui, t, id, Some(&f.account), &Accepts::RECIPIENTS, label, "", field, false, can_expand, true, acts).book {
             add = Some(target);
         }
     }

@@ -1810,6 +1810,7 @@ month	May	Mai
 	and others	und weitere
 	This list couldn't be expanded: {error}	Diese Liste konnte nicht erweitert werden: {error}
 	Some names need checking before sending	Einige Namen müssen vor dem Senden geprüft werden
+	Some recipients were left out: send to fewer at once, or to the list itself	Einige Empfänger wurden ausgelassen: senden Sie an weniger auf einmal oder an die Liste selbst
 	Matched as typed	Wie eingegeben verglichen
 	{name}, {kind}, remove with Delete	{name}, {kind}, mit Entf entfernen
 	{name}, {kind}, {why}, remove with Delete	{name}, {kind}, {why}, mit Entf entfernen
