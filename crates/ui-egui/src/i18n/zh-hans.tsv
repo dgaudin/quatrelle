@@ -1816,3 +1816,5 @@ month	May	5月
 	Send from a person, a shared mailbox or a list	请从个人、共享邮箱或列表发送
 	{room} was moved to Rooms	{room} 已移至“会议室”
 	This list is no longer available	此列表已不可用
+	Checking names…	正在检查名称…
+	{room} can't be booked: a meeting books {max} rooms at most	无法预订 {room}: 一个会议最多预订 {max} 间会议室

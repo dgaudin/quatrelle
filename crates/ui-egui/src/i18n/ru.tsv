@@ -1818,3 +1818,5 @@ month	May	Май
 	Send from a person, a shared mailbox or a list	Отправляйте от имени человека, общего почтового ящика или списка
 	{room} was moved to Rooms	{room}: перенесено в «Переговорные»
 	This list is no longer available	Этот список больше недоступен
+	Checking names…	Проверка имён…
+	{room} can't be booked: a meeting books {max} rooms at most	Не удалось забронировать {room}: для собрания можно забронировать не более {max} переговорных

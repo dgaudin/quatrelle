@@ -1815,3 +1815,5 @@ month	May	מאי
 	Send from a person, a shared mailbox or a list	שלחו מאדם, מתיבת דואר משותפת או מרשימה
 	{room} was moved to Rooms	{room} הועבר אל חדרים
 	This list is no longer available	רשימה זו כבר אינה זמינה
+	Checking names…	בודק שמות…
+	{room} can't be booked: a meeting books {max} rooms at most	לא ניתן להזמין את {room}: פגישה מזמינה {max} חדרים לכל היותר

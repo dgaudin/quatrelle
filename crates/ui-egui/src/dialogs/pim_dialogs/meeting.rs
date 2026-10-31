@@ -12,16 +12,19 @@ use crate::dialogs::people_field::{MEETING_FIELDS, MEETING_WINDOWS, PeopleFields
 use crate::widgets::Groups;
 
 /// The window's contacts fields made ready before it's drawn (where the session can be changed:
-/// the window only reads it). Its account's rooms are asked once, so that a room is known as one
-/// in every line. Required, Optional and Rooms are read from the form's texts; a room entered
-/// among the guests is booked, with a word under its line. While Select Attendees and Resources
-/// is open, its rows too, a room among their guests going to its Resources.
+/// the window only reads it). Its account's rooms are asked once it invites or finds rooms, so
+/// that a room is known as one in every line. Required, Optional and Rooms are read from the
+/// form's texts; a room entered among the guests is booked, with a word under its line (or kept
+/// there, with why, when Rooms can't take it). While Select Attendees and Resources is open, its
+/// rows too, a room among their guests going to its Resources.
 pub(crate) fn prepare(f: &mut EventForm, s: &mut Session, people: &mut PeopleFields) {
     if !f.can_invite {
         return;
     }
     let account = f.account_id();
-    if s.rooms_now(&account).is_none() {
+    // The rooms are asked for where they're used, a meeting or the Room Finder (on Exchange, a
+    // request to the server): an appointment opened asks nothing.
+    if (f.inviting || f.finder.is_some()) && s.rooms_now(&account).is_none() {
         let _ = s.request_rooms(&account, false);
     }
     let a = Some(account.as_str());
@@ -30,8 +33,13 @@ pub(crate) fn prepare(f: &mut EventForm, s: &mut Session, people: &mut PeopleFie
     people.prepare(s, optional, a, accepts_of("optional"), &f.optional);
     for field in [required, optional] {
         for who in people.take_moved(field) {
-            f.add_room(&who.name, &who.address);
-            people.say(field, moved_note(&who));
+            if f.add_room(&who.name, &who.address) {
+                people.say(field, moved_note(&who));
+            } else {
+                // Rooms can't take it (the meeting books as many as it can): it stays a guest,
+                // as typed, saying why, rather than being lost.
+                people.keep_unbooked(field, &who, super::event::MAX_ROOMS);
+            }
         }
     }
     people.prepare(s, meeting_field(f.window, "rooms"), a, accepts_of("rooms"), &f.rooms_line);
@@ -61,15 +69,24 @@ pub fn meeting(ui: &mut Ui, f: &mut EventForm, s: &Session, people: &mut PeopleF
     tabs(ui, t, f);
     ui.add_space(2.0);
     let mut keep = true;
+    // Its Send held while its lines' names are checked: Send is off, and the window says so.
+    let checking = people.holding(MEETING_WINDOWS | f.window);
     egui::ScrollArea::horizontal().id_salt("meeting-ribbon").show(ui, |ui| {
         ui.with_layout(egui::Layout::left_to_right(egui::Align::Min), |ui| {
             ui.spacing_mut().item_spacing.x = 2.0;
-            keep = ribbon(ui, t, f, &s.prefs.webex_room, acts);
+            keep = ribbon(ui, t, f, &s.prefs.webex_room, checking, acts);
         });
     });
     let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 1.0), Sense::hover());
     ui.painter().rect_filled(r, 0.0, t.border);
     ui.add_space(8.0);
+    if checking {
+        ui.horizontal(|ui| {
+            ui.add(egui::Spinner::new().size(12.0).color(t.accent));
+            ui.label(RichText::new(tl!("Checking names…")).color(t.dim).small());
+        });
+        ui.add_space(4.0);
+    }
     // Outlook's Appointment Recurrence, over the window while it's open.
     if let Some(st) = f.recurrence.as_mut() {
         match super::recurrence::dialog(ui.ctx(), st, t, f.window, dates::today(&s.clock)) {
@@ -106,6 +123,10 @@ pub fn meeting(ui: &mut Ui, f: &mut EventForm, s: &Session, people: &mut PeopleF
         }
     }
     if f.scheduling && !f.all_day {
+        // Why its Send stopped, here too: the header with the lines isn't drawn.
+        if let Some(e) = &f.error {
+            ui.label(RichText::new(e).color(t.danger));
+        }
         super::scheduling::view(ui, f, s, t, acts);
         ui.add_space(8.0);
         // Outlook's assistant keeps the times under it.
@@ -206,8 +227,9 @@ fn webex_room(ui: &mut Ui, t: &Tokens, window: u64) -> Option<String> {
     taken
 }
 
-/// The Appointment (or Meeting) tab's groups. `false`: closed from it.
-fn ribbon(ui: &mut Ui, t: &Tokens, f: &mut EventForm, webex: &str, acts: &mut Vec<Action>) -> bool {
+/// The Appointment (or Meeting) tab's groups (`checking`: its Send is held for its names, and
+/// off meanwhile). `false`: closed from it.
+fn ribbon(ui: &mut Ui, t: &Tokens, f: &mut EventForm, webex: &str, checking: bool, acts: &mut Vec<Action>) -> bool {
     let t = *t;
     let mut keep = true;
     let mut groups = Groups::new(ui);
@@ -219,7 +241,7 @@ fn ribbon(ui: &mut Ui, t: &Tokens, f: &mut EventForm, webex: &str, acts: &mut Ve
             (true, true) => (Icon::Send, "Send Update"),
             _ => (Icon::Calendar, "Save & Close"),
         };
-        if widgets::big_button(ui, icon, label, &t, !f.summary.trim().is_empty()).clicked() {
+        if widgets::big_button(ui, icon, label, &t, !f.summary.trim().is_empty() && !checking).clicked() {
             submit(f, acts);
         }
     }

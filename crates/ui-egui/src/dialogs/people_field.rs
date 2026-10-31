@@ -388,10 +388,11 @@ impl PeopleFields {
 
 /// What a meeting's window and its Select Attendees ask of their fields: the text to keep in the
 /// form, who to invite or book, whether anything stops them, an entry picked in the book, a word
-/// under a line, the rooms typed among the guests, and whether Send waits.
+/// under a line, the rooms typed among the guests (and one Rooms can't take, kept), and whether
+/// Send waits.
 impl PeopleFields {
     /// The field's text as its pieces write it, with what's being typed.
-    #[cfg_attr(not(test), expect(dead_code, reason = "the meeting's Send reads its lines through it, next in this delivery"))]
+    #[cfg(test)]
     pub(crate) fn text(&self, field: FieldId) -> Option<String> {
         self.fields.get(&field).map(|f| text_of(&f.st.pieces, &f.st.input))
     }
@@ -436,8 +437,18 @@ impl PeopleFields {
         self.fields.get_mut(&field).map(|f| std::mem::take(&mut f.moved)).unwrap_or_default()
     }
 
+    /// A room taken out of a meeting's guests that its Rooms couldn't book (the meeting books
+    /// `max` already): put back among them as typed, with why ([`PieceError::RoomsFull`]), so
+    /// that nothing is lost and Send stops on it. Written into the line at the next draw.
+    pub(crate) fn keep_unbooked(&mut self, field: FieldId, who: &Addressee, max: usize) {
+        let f = self.fields.entry(field).or_default();
+        if f.st.pieces.len() < quatrelle_engine::model::addr::MAX_ENTRIES {
+            f.st.pieces.push(Piece::Text { text: who.text(), error: Some(PieceError::RoomsFull(max)) });
+            f.dirty = true;
+        }
+    }
+
     /// Whether the window's send is held for its names.
-    #[cfg_attr(not(test), expect(dead_code, reason = "the meeting's window says it's checking names through it, next in this delivery"))]
     pub(crate) fn holding(&self, window: u64) -> bool {
         self.send_wait.contains_key(&window)
     }
