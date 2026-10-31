@@ -1813,6 +1813,9 @@ month	May	mei
 	This isn't a room	Dit is geen ruimte
 	Only people, lists and groups can be invited	Alleen personen, lijsten en groepen kunnen worden uitgenodigd
 	Send from a person, a shared mailbox or a list	Verstuur vanaf een persoon, een gedeeld postvak of een lijst
+	A distribution list's calendar can't be opened	De agenda van een distributielijst kan niet worden geopend
+	Only a person's, a room's or a shared mailbox can be opened	Alleen het postvak van een persoon of ruimte, of een gedeeld postvak, kan worden geopend
+	A contact group has no address: expand it	Een contactgroep heeft geen adres: vouw deze uit
 	{room} was moved to Rooms	{room} is verplaatst naar Ruimtes
 	This list is no longer available	Deze lijst is niet meer beschikbaar
 	Checking names…	Namen controleren…

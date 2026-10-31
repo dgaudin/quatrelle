@@ -1816,6 +1816,9 @@ month	May	5월
 	This isn't a room	회의실이 아닙니다
 	Only people, lists and groups can be invited	사람, 목록, 그룹만 초대할 수 있습니다
 	Send from a person, a shared mailbox or a list	사람, 공유 사서함 또는 목록에서 보내세요
+	A distribution list's calendar can't be opened	배포 목록의 일정은 열 수 없습니다
+	Only a person's, a room's or a shared mailbox can be opened	사람, 회의실 또는 공유 사서함만 열 수 있습니다
+	A contact group has no address: expand it	연락처 그룹에는 주소가 없습니다. 펼치세요
 	{room} was moved to Rooms	{room}을(를) 회의실로 옮겼습니다
 	This list is no longer available	이 목록은 더 이상 사용할 수 없습니다
 	Checking names…	이름 확인 중…

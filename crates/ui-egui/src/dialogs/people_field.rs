@@ -1,9 +1,10 @@
 //! The contacts field's glue with the session. [`PeopleFields`] keeps every field's state by
 //! [`FieldId`] (the message's To, Cc, Bcc and Replies to, and From's other address; the Select
-//! Names dialog's rows; a meeting's lines and its Select Attendees' rows), turns a field's text
+//! Names dialog's rows; a meeting's lines and its Select Attendees' rows; a dialog's: Add
+//! calendar's, Open another mailbox's, a rule's and a Search Folder's), turns a field's text
 //! into pieces and the widget's events back into text and actions, asks the engine for
-//! suggestions, and holds the waits Send makes for the names still being resolved (one per
-//! window).
+//! suggestions, and holds the waits Send (or a dialog's OK) makes for the names still being
+//! resolved (one per window).
 //!
 //! The work is bounded as the engine's is (the search bug of 2026-10-30): a field's text is parsed
 //! when it changes (fed in, or the engine writing a name found), never on a frame where nothing
@@ -63,12 +64,36 @@ pub(crate) fn is_meeting_window(window: u64) -> bool {
     (window & MEETING_WINDOWS) != 0
 }
 
+/// A dialog's fields are numbered apart from the windows': dialog `n` (Add calendar, Open
+/// another mailbox, a rule, a Search Folder — one open at a time, numbered 0) is window
+/// `DIALOG_WINDOWS | n` here and in the engine. Bit 51 is never a message's (their ids are about
+/// 2^41) and a meeting's [`MEETING_WINDOWS`] bit is clear, so none of them share names, waits or
+/// choices.
+pub(crate) const DIALOG_WINDOWS: u64 = 1 << 51;
+
+/// The dialogs' fields whose OK can be held for their names ([`PeopleFields::gate_dialog`]).
+pub(crate) const DIALOG_FIELDS: [&str; 2] = ["calendar", "mailbox"];
+
+/// The field `name` of dialog `n`.
+pub(crate) fn dialog_field(n: u64, name: &'static str) -> FieldId {
+    FieldId { window: DIALOG_WINDOWS | n, name }
+}
+
+/// Whether a field's window is a dialog's ([`DIALOG_WINDOWS`]), not a message's or a meeting's.
+pub(crate) fn is_dialog_window(window: u64) -> bool {
+    (window & DIALOG_WINDOWS) != 0 && !is_meeting_window(window)
+}
+
 /// What the field named `name` takes: the one place that says it.
 pub(crate) fn accepts_of(name: &str) -> &'static Accepts {
     match name {
         "required" | "optional" | "att-required" | "att-optional" => &Accepts::ATTENDEES,
         "rooms" | "att-rooms" => &Accepts::ROOMS,
         "from" => &Accepts::ONE_SENDER,
+        "calendar" => &Accepts::CALENDARS,
+        "mailbox" => &Accepts::MAILBOX,
+        "rule-one" => &Accepts::MATCHED_ONE,
+        "rule-any" | "search-people" => &Accepts::MATCHED,
         _ => &Accepts::RECIPIENTS,
     }
 }
@@ -277,8 +302,10 @@ impl PeopleFields {
         }
         // Text closed with the input left empty (the field left, a name closed by `;`, a paste)
         // is checked as Ctrl+K checks it; with something still being typed, the check waits for
-        // it (typing never asks the server). Ctrl+K checks whatever is there.
-        let ask = resolve || (closed_any && f.st.input.trim().is_empty() && f.needs_resolve());
+        // it (typing never asks the server). Ctrl+K checks whatever is there. A place that takes
+        // text as typed (a rule's) checks its names on Ctrl+K alone: a domain or a word is what
+        // it looks for, not a name to settle.
+        let ask = resolve || (!accepts.as_typed && closed_any && f.st.input.trim().is_empty() && f.needs_resolve());
         if ask {
             f.clear_errors(|e| *e == PieceError::Unreached);
         }
@@ -465,4 +492,58 @@ impl PeopleFields {
     pub(crate) fn holding(&self, window: u64) -> bool {
         self.send_wait.contains_key(&window)
     }
+}
+
+/// What a dialog makes of its fields once its OK went (Add calendar, Open another mailbox): an
+/// entry done with leaves, one that couldn't be done stays with why; and its fields made afresh
+/// (a rule's row given another condition).
+impl PeopleFields {
+    /// The chip of `address` taken out of the field (its calendar opened), written into the text
+    /// at the next draw. An address the field holds no chip of: nothing to do.
+    #[cfg_attr(not(test), expect(dead_code, reason = "the dialogs draw their fields from the next commit"))]
+    pub(crate) fn opened(&mut self, field: FieldId, address: &str) {
+        let Some(f) = self.fields.get_mut(&field) else { return };
+        let before = f.st.pieces.len();
+        f.st.pieces.retain(|p| !matches!(p, Piece::Chip { who, .. } if same_address(who, address)));
+        if f.st.pieces.len() == before {
+            return;
+        }
+        f.st.selected = None;
+        f.st.card = None;
+        if f.st.pieces.is_empty() {
+            f.forget_losses();
+        }
+        f.dirty = true;
+    }
+
+    /// The chip of `address` turned back into its text, red with why it couldn't be done
+    /// ([`PieceError::Failed`]: it isn't asked again), written into the text at the next draw.
+    /// An address the field holds no chip of: nothing to do.
+    #[cfg_attr(not(test), expect(dead_code, reason = "the dialogs draw their fields from the next commit"))]
+    pub(crate) fn failed(&mut self, field: FieldId, address: &str, why: String) {
+        let Some(f) = self.fields.get_mut(&field) else { return };
+        for p in &mut f.st.pieces {
+            if let Piece::Chip { who, .. } = p
+                && same_address(who, address)
+            {
+                *p = Piece::Text { text: who.text(), error: Some(PieceError::Failed(why.clone())) };
+                f.dirty = true;
+            }
+        }
+    }
+
+    /// This side's fields of the window forgotten, each made again from its text at the next
+    /// prepare (the engine's names for them stay: an answer for a name no longer typed is
+    /// ignored); an OK held for them is off.
+    #[cfg_attr(not(test), expect(dead_code, reason = "the dialogs draw their fields from the next commit"))]
+    pub(crate) fn reset_window(&mut self, window: u64) {
+        self.fields.retain(|f, _| f.window != window);
+        self.send_wait.remove(&window);
+        self.cancelled.retain(|(f, _)| f.window != window);
+    }
+}
+
+/// Whether a chip is `address`'s (a contact group, with no address, is no one's).
+fn same_address(who: &Addressee, address: &str) -> bool {
+    !who.address.is_empty() && who.address.eq_ignore_ascii_case(address.trim())
 }
