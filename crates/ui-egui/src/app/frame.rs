@@ -495,6 +495,10 @@ impl MailApp {
                 self.ui.people.prepare(&mut self.session, field, Some(&f.account), crate::dialogs::people_field::accepts_of(name), text);
             }
         }
+        // Add calendar's and Open another mailbox's field (and the former's address book), alike.
+        if let Some(d) = self.ui.dialog.as_mut() {
+            crate::dialogs::people_field::places::prepare(&mut self.ui.people, &mut self.session, d);
+        }
         // Attach Item's list: the items of the kind and folder chosen, matching the words typed.
         if let Some(Dialog::AttachItem(f)) = self.ui.dialog.as_mut()
             && f.stale
