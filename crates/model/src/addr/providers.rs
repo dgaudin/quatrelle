@@ -146,6 +146,7 @@ impl AccountConfig {
             public_favorites_kept: false,
             oauth_client_id: None,
             oauth_tenant: None,
+            trusted_domains: Vec::new(),
         }
     }
 

@@ -203,6 +203,12 @@ pub struct AccountConfig {
     /// account).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub oauth_tenant: Option<String>,
+    /// Other domains whose servers get this account's password or sign-in, besides its own
+    /// servers' and the address's: the user allowed them (a server proposed one, or File ›
+    /// Account settings added it). Each is a site ([`addr::trust::site`]); the commands keep at
+    /// most 20.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub trusted_domains: Vec<String>,
 }
 
 /// Longest User-Agent an account can name.

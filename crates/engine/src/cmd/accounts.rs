@@ -100,6 +100,20 @@ pub(super) fn commands() -> Vec<CommandSpec> {
         })
         .params(r#"{"account": string} (a Microsoft account over IMAP starts again through Microsoft Graph, for a mailbox Microsoft won't open over IMAP)"#),
         CommandSpec::new("account.setPassword", "Sign in again", "File › Accounts", set_password).params(r#"{"account": string, "password": string}"#),
+        // The servers an account's password or sign-in may go to, besides its own: a server that
+        // proposes another domain is asked about first (`Session.ask_trust`).
+        CommandSpec::new("account.trustDomain", "Allow another server", "Dialog › Allow another server", |s, v| {
+            s.trust_domain(p::req_str(v, "account")?, p::req_str(v, "domain")?)
+        })
+        .params(r#"{"account": string, "domain": string (a host name, or a URL: its host is taken; the account's password or sign-in may go to that site's servers, and it starts again)}"#),
+        CommandSpec::new("account.distrustDomain", "Remove an allowed server", "File › Info › Account settings", |s, v| {
+            s.distrust_domain(p::req_str(v, "account")?, p::req_str(v, "domain")?)
+        })
+        .params(r#"{"account": string, "domain": string (a domain allowed before; it starts again without it)}"#),
+        CommandSpec::new("account.refuseDomain", "Don't allow another server", "Dialog › Allow another server", |s, v| {
+            s.refuse_domain(p::req_str(v, "account")?, p::req_str(v, "domain")?)
+        })
+        .params(r#"{"account": string, "domain": string (the domain a server proposed: says so, and isn't asked again until Quatrelle starts again)}"#),
         CommandSpec::new("account.setSignature", "Signature", "File › Options › Mail", set_signature)
             .params(r#"{"account": string, "signature": string, "styles"?: object (its look as the editor keeps it: a style per character and paragraph), "html"?: string (its look as HTML: bold, colours, sizes, links; the text then comes from it), "newMessages"?: bool (added to new messages; default: as it was), "replies"?: bool (added to replies and forwards), "rawHtml"?: string (the signature written in HTML, sent as it is, cleaned)}"#),
         CommandSpec::new("account.list", "Accounts", "File › Accounts", list_accounts),
@@ -248,6 +262,7 @@ pub(super) fn add_account(s: &mut Session, v: &Value) -> CmdResult {
         public_favorites_kept: p::bool(v, "publicFavoritesKept").unwrap_or(false),
         oauth_client_id,
         oauth_tenant,
+        trusted_domains: Vec::new(),
     };
     // A registration built in, or the account's own (Microsoft).
     // A line break or tab pasted in with the user name: no server would ever take it (in an

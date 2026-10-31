@@ -1735,6 +1735,7 @@ month	May	مايو
 	{done} messages downloaded	عدد الرسائل التي نُزّلت: {done}
 	{done} messages downloaded, {failed} failed	عدد الرسائل التي نُزّلت: {done}، وفشل منها: {failed}
 	{email} opens under {account}	يُفتح {email} ضمن {account}
+	{domain} wasn't allowed: {account} won't use it	{domain} لم يُسمح به: لن يستخدمه {account}
 	{email} removed. Its data file stays at {path}	أُزيل {email}. يبقى ملف بياناته في {path}
 	{event}: a change to one occurrence couldn't be sent: its series is no longer on the server	{event}: تعذّر إرسال تغيير على تكرار واحد: سلسلته لم تعد على الخادم
 	{name} could not be exported: {error}	تعذّر تصدير {name}: {error}

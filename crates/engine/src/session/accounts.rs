@@ -339,6 +339,8 @@ impl Session {
             // Its own registration goes with it.
             oauth_client_id: c.oauth_client_id,
             oauth_tenant: c.oauth_tenant,
+            // The servers it was allowed to use go with it.
+            trusted_domains: c.trusted_domains,
             ..Default::default()
         };
         let new = self.add_account(config, None)?;
@@ -565,6 +567,7 @@ impl Session {
             || a.config.user_agent != config.user_agent
             || a.config.online_only != config.online_only
             || a.config.shared_online != config.shared_online
+            || a.config.trusted_domains != config.trusted_domains
             || password.is_some();
         if config.online_only && !config.can_be_online_only() {
             return Err(CmdError::Params("a POP account keeps its mail on this computer: it can't be online only".into()));

@@ -2,6 +2,8 @@
 
 use super::*;
 
+mod trust;
+
 #[test]
 fn jmap_accounts_need_no_imap_servers() {
     let store = temp("jmap-account");

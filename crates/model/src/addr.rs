@@ -4,6 +4,7 @@ use std::fmt;
 
 pub mod entries;
 pub(crate) mod providers;
+pub mod trust;
 
 use serde::{Deserialize, Serialize};
 
