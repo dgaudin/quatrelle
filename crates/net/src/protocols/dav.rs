@@ -251,6 +251,7 @@ impl Dav {
                     headers: vec![("Content-Type".into(), "application/xml; charset=utf-8".into())],
                     body: body.as_bytes().to_vec(),
                     max: MAX_BODY,
+                    ..Default::default()
                 }
             };
             if !left_origin {
@@ -271,7 +272,7 @@ impl Dav {
                 if from.https && !next.https {
                     return Err(NetError::Tls("redirected from https to http".into()));
                 }
-                left_origin |= !http::same_origin(&first, &next);
+                left_origin |= !http::same_site(&first, &next);
                 url = format!("{}{}", next.origin(), next.path);
                 continue;
             }
@@ -404,6 +405,7 @@ impl Dav {
             headers: vec![("Content-Type".into(), content_type.into())],
             body: data.as_bytes().to_vec(),
             max: 1 << 20,
+            ..Default::default()
         };
         req = req.header("Authorization", &self.auth).header(cond.0, &cond.1);
         let resp = http::send(&req)?;
@@ -680,8 +682,8 @@ END:VCALENDAR]]></c:calendar-data></d:prop>
         request.to_ascii_lowercase().contains("authorization: basic dtpw")
     }
 
-    /// A redirect within the server keeps the password; one to another site (another port
-    /// here) carries none, and a chain that comes back to the first site doesn't bring it back.
+    /// A redirect within the server keeps the password; one to another site (`localhost` here,
+    /// the same server under another site's name) carries none, and a chain that comes back to the first site doesn't bring it back.
     #[test]
     fn a_redirect_to_another_site_never_carries_the_password() {
         use crate::http::tests::{bind, serve, serve_on};
@@ -695,8 +697,9 @@ END:VCALENDAR]]></c:calendar-data></d:prop>
             let seen = ha.join().unwrap();
             assert!(seen.len() == 2 && seen.iter().all(|r| password_seen(r)), "{method}: {seen:?}");
             assert!(seen[1].starts_with(&format!("{method} /dav/ ")), "{}", seen[1]);
-            // Another port: the first leg carries it, the second doesn't.
+            // Another site: the first leg carries it, the second doesn't.
             let (b, hb) = serve(vec![multi()]);
+            let b = b.replace("127.0.0.1", "localhost");
             let (a, ha) = serve(vec![format!("HTTP/1.1 307 Temporary Redirect\r\nLocation: {b}/dav/\r\n\r\n").into_bytes()]);
             assert_eq!(go(&format!("{a}/")), 207);
             assert!(password_seen(&ha.join().unwrap()[0]));
@@ -704,6 +707,7 @@ END:VCALENDAR]]></c:calendar-data></d:prop>
             assert!(seen[0].starts_with(&format!("{method} /dav/ ")) && !password_seen(&seen[0]), "{method}: {}", seen[0]);
             // A -> B -> A: the first leg only.
             let ((la, a), (lb, b)) = (bind(), bind());
+            let b = b.replace("127.0.0.1", "localhost");
             let ha = serve_on(la, vec![format!("HTTP/1.1 302 Found\r\nLocation: {b}/two\r\n\r\n").into_bytes(), multi()]);
             let hb = serve_on(lb, vec![format!("HTTP/1.1 302 Found\r\nLocation: {a}/three\r\n\r\n").into_bytes()]);
             assert_eq!(go(&format!("{a}/one")), 207);

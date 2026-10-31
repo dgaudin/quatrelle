@@ -696,7 +696,7 @@ pub(super) fn stray(m: &Value, me: &str, since: i64) -> bool {
 /// before acting (a 4xx, a 429 after its waits, a refused sign-in, a refusal before sending).
 fn uncertain(e: &NetError) -> bool {
     match e {
-        NetError::Auth(_) | NetError::Refused(_) => false,
+        NetError::Auth(_) | NetError::Refused(_) | NetError::Untrusted { .. } => false,
         NetError::Protocol(m) => !m.starts_with("HTTP 4"),
         NetError::Closed(m) => !m.starts_with("HTTP 429"),
         _ => true,

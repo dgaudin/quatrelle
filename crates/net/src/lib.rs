@@ -94,6 +94,10 @@ pub enum NetError {
     /// Can't go on, for a reason said in full (what to do included): not a server's words.
     #[error("{0}")]
     Refused(String),
+    /// A redirect or a server's own answer named a site the account doesn't trust: nothing was
+    /// sent there.
+    #[error("{site} isn't allowed for this account")]
+    Untrusted { site: String },
 }
 
 impl NetError {
@@ -105,7 +109,7 @@ impl NetError {
     /// Whether sending may work later (keep the message in the Outbox rather than give up): a
     /// refused sign-in is the account's problem, not the message's, and clears once signed in.
     pub fn is_retryable(&self) -> bool {
-        self.is_fatal() || matches!(self, NetError::Later(_) | NetError::Auth(_))
+        self.is_fatal() || matches!(self, NetError::Later(_) | NetError::Auth(_) | NetError::Untrusted { .. })
     }
 }
 

@@ -17,7 +17,7 @@ mod redirect;
 mod streamed;
 pub use events::{BodyStream, EventStream, Sse, Streamed, open_events};
 use redirect::Chain;
-pub(crate) use redirect::{is_credential, same_origin};
+pub(crate) use redirect::{is_credential, same_site};
 pub use streamed::{exchange_into, get_into};
 
 /// Longest header block accepted.
@@ -124,6 +124,9 @@ pub struct Response {
     /// When its status line and headers were in: the server had answered, and the body came
     /// after (what a slow request spent waiting for the server, told from what it spent receiving).
     pub head_at: Option<Instant>,
+    /// Where it ended: the URL the answer came from once the redirects were followed (`None` on
+    /// an answer read from a connection kept open, which follows none).
+    pub url: Option<String>,
 }
 
 impl Response {
@@ -163,15 +166,32 @@ pub struct Request {
     pub body: Vec<u8>,
     /// Largest body accepted.
     pub max: usize,
+    /// The sites (registrable domains, as `quatrelle_model::addr::trust::site` gives them) a
+    /// redirect may carry this request's credentials to, besides the site of its own URL.
+    pub trusted: Vec<String>,
 }
 
 impl Request {
     pub fn get(url: &str, max: usize) -> Request {
-        Request { method: "GET".into(), url: url.into(), headers: Vec::new(), body: Vec::new(), max }
+        Request { method: "GET".into(), url: url.into(), headers: Vec::new(), body: Vec::new(), max, trusted: Vec::new() }
     }
 
     pub fn post(url: &str, content_type: &str, body: Vec<u8>, max: usize) -> Request {
-        Request { method: "POST".into(), url: url.into(), headers: vec![("Content-Type".into(), content_type.into())], body, max }
+        Request {
+            method: "POST".into(),
+            url: url.into(),
+            headers: vec![("Content-Type".into(), content_type.into())],
+            body,
+            max,
+            trusted: Vec::new(),
+        }
+    }
+
+    /// This request, whose credentials may follow a redirect to these sites as well (see
+    /// [`Request::trusted`]).
+    pub fn trusting(mut self, sites: Vec<String>) -> Request {
+        self.trusted = sites;
+        self
     }
 
     pub fn header(mut self, name: &str, value: &str) -> Request {
@@ -180,8 +200,9 @@ impl Request {
     }
 }
 
-/// Send a request; GET and HEAD follow redirects, and one that leaves the request's origin
-/// takes no `Authorization`, `Proxy-Authorization` or `Cookie` header along.
+/// Send a request; GET and HEAD follow redirects, and one that leaves the request's site (and the
+/// sites it [trusts](Request::trusting)) takes no `Authorization`, `Proxy-Authorization` or
+/// `Cookie` header along.
 pub fn send(req: &Request) -> Result<Response> {
     send_to(req, false)
 }
@@ -214,7 +235,7 @@ fn send_to(req: &Request, public_only: bool) -> Result<Response> {
                 chain.follow(&next);
                 url = next;
             }
-            None => return Ok(resp),
+            None => return Ok(Response { url: Some(format!("{}{}", url.origin(), url.path)), ..resp }),
         }
     }
     Err(NetError::Protocol("too many redirects".into()))
@@ -448,7 +469,7 @@ fn read_response<S: Read>(s: &mut S, max: usize, head_only: bool) -> Result<Resp
     let mut tmp = [0u8; 16 << 10];
     let (status, headers, mut rest) = read_head(s)?;
     let head_at = Some(Instant::now());
-    let resp = |body| Response { status, headers: headers.clone(), body, head_at };
+    let resp = |body| Response { status, headers: headers.clone(), body, head_at, url: None };
     let get = |n: &str| headers.iter().find(|(k, _)| k.eq_ignore_ascii_case(n)).map(|(_, v)| v.to_ascii_lowercase());
     if head_only || status == 204 || status == 304 || (100..200).contains(&status) {
         return Ok(resp(Vec::new()));
@@ -632,7 +653,7 @@ pub(crate) mod tests {
     /// The server's clock, from its answer: hostile values are none, never a panic.
     #[test]
     fn the_servers_date() {
-        let with = |d: &str| Response { status: 200, headers: vec![("date".into(), d.into())], body: Vec::new(), head_at: None }.date();
+        let with = |d: &str| Response { status: 200, headers: vec![("date".into(), d.into())], body: Vec::new(), head_at: None, url: None }.date();
         assert_eq!(with("Thu, 29 Oct 2026 11:30:24 GMT"), Some(1_793_273_424));
         assert_eq!(with("Thu, 01 Jan 1970 00:00:00 GMT"), Some(0));
         for junk in [
