@@ -72,14 +72,14 @@ fn refused_by(accepts: &Accepts, who: &Addressee, by_name: bool) -> Option<Strin
     Some(why.to_string())
 }
 
-/// The pieces of a field's text, cut to [`MAX_ENTRIES`]: a chip for an address (its kind and, when
-/// the entry gives no name, the name known here) and for a contact group's reference, text for a
-/// name (red at once when it has an `@` and isn't an address).
 /// Whether a text piece with this error is one to check (see [`Field::needs_resolve`]).
 fn to_check(error: Option<&PieceError>) -> bool {
     matches!(error, None | Some(PieceError::Unreached | PieceError::RoomsFull(_)))
 }
 
+/// The pieces of a field's text, cut to [`MAX_ENTRIES`]: a chip for an address (its kind and, when
+/// the entry gives no name, the name known here) and for a contact group's reference, text for a
+/// name (red at once when it has an `@` and isn't an address).
 pub(crate) fn pieces_of(s: &Session, account: Option<&str>, text: &str) -> Vec<Piece> {
     split_entries(text).into_iter().take(MAX_ENTRIES).map(|entry| piece_of(s, account, entry)).collect()
 }
