@@ -520,6 +520,8 @@ fn from_offers_shared_mailboxes_and_another_address() {
     click_at(&ctx, &mut a, other, 1, size);
     // A plain name is no error: it's checked on Ctrl+K or as the field is left.
     frame_sized(&ctx, &mut a, vec![Event::Text("Dupont".into())], size);
+    let field = quatrelle_engine::FieldId { window: a.session.compose.as_ref().map_or(0, |c| c.id), name: "from" };
+    assert_eq!(a.ui.people.typing(field), "Dupont", "typed in the field");
     assert!(settled_text_at(&ctx, &mut a, "Not an address: Dupont", size).is_none(), "a name typed isn't said to be no address");
     for _ in 0.."Dupont".len() {
         frame_sized(&ctx, &mut a, vec![key(Key::Backspace, Modifiers::NONE)], size);
@@ -527,7 +529,6 @@ fn from_offers_shared_mailboxes_and_another_address() {
     // A piece with `@` that isn't an address is marked by the field itself as it closes.
     frame_sized(&ctx, &mut a, vec![Event::Text("nope@;".into())], size);
     frame_sized(&ctx, &mut a, vec![], size);
-    let field = quatrelle_engine::FieldId { window: a.session.compose.as_ref().map_or(0, |c| c.id), name: "from" };
     let bad = |p: &crate::look::people_field::Piece| matches!(p, crate::look::people_field::Piece::Text { text, error: Some(crate::look::people_field::PieceError::NotAnAddress) } if text == "nope@");
     assert!(a.ui.people.pieces(field).iter().any(bad), "{:?}", a.ui.people.pieces(field));
     frame_sized(&ctx, &mut a, vec![Event::Text("Bookings <bookings@studio.example>".into())], size);
