@@ -71,12 +71,35 @@ fn session_urls_dates_and_keywords() {
     assert!(f.seen && f.flagged && !f.draft && f.has("$label1"));
     assert_eq!(flag_keyword(Flag::Deleted), None);
     let base = Url::parse("https://h.example/.well-known/jmap").unwrap();
+    let here = ["h.example".to_string()];
     assert_eq!(
-        template_url(&base, "/download/{accountId}/{blobId}/{name}?type={type}").unwrap(),
+        template_url(&base, "/download/{accountId}/{blobId}/{name}?type={type}", &here).unwrap(),
         "https://h.example/download/{accountId}/{blobId}/{name}?type={type}"
     );
     assert_eq!(expand("/d/{blobId}/{name}", &[("blobId", "b 1"), ("name", "m.eml")]), "/d/b%201/m.eml");
-    assert!(template_url(&base, "http://h.example/upload/{accountId}/").is_err(), "no downgrade");
+    assert!(template_url(&base, "http://h.example/upload/{accountId}/", &here).is_err(), "no downgrade");
+}
+
+/// The session's URLs are checked by site: another host of a trusted site goes, another site is
+/// `Untrusted` with its name, an IPv6 address matches as the trusted list spells it (in
+/// brackets), and a host two parsers read differently is no site at all.
+#[test]
+fn session_urls_must_be_on_a_trusted_site() {
+    let base = Url::parse("https://www.fastmail.com/jmap/session").unwrap();
+    let trusted = ["fastmail.com".to_string()];
+    assert_eq!(template_url(&base, "https://api.fastmail.com/download/{blobId}", &trusted).unwrap(), "https://api.fastmail.com/download/{blobId}");
+    match template_url(&base, "https://www.fastmailusercontent.com/jmap/download/{accountId}/{blobId}", &trusted) {
+        Err(Error::Untrusted { site }) => assert_eq!(site, "fastmailusercontent.com"),
+        other => panic!("{other:?}"),
+    }
+    assert!(template_url(&base, "https://api.fastmail.com/d/", &["FastMail.com".into()]).is_ok(), "however the list spells it");
+    let v6 = Url::parse("https://[::1]:8443/jmap").unwrap();
+    assert_eq!(site_of(&v6).unwrap(), "[::1]");
+    assert!(template_url(&v6, "/download/{blobId}", &["[::1]".into()]).is_ok());
+    assert!(matches!(template_url(&v6, "/download/{blobId}", &["::1".into()]), Err(Error::Untrusted { .. })));
+    let odd = Url::parse("https://evil.example\\.fastmail.com/api/").unwrap();
+    assert!(matches!(site_of(&odd), Err(Error::Protocol(_))));
+    assert_eq!(Error::Untrusted { site: "evil.test".into() }.to_string(), "evil.test isn't allowed for this account");
 }
 
 /// Two connections numbering messages at once never give the same number to two of them,
@@ -172,15 +195,55 @@ fn connect_checks_the_session() {
         "primaryAccounts": {"urn:ietf:params:jmap:mail": "A1"},
         "apiUrl": "/api/", "downloadUrl": "/d/{accountId}/{blobId}", "uploadUrl": "/u/{accountId}/",
     });
-    let ok = |v: &Value| Response { status: 200, body: v.to_string().into_bytes() };
-    let c = block_on(Client::connect(Canned(vec![ok(&session)].into()), "jmap.example.com", "me", "pw", false)).unwrap();
+    let ok = |v: &Value| Response { status: 200, body: v.to_string().into_bytes(), url: None };
+    let c = block_on(Client::connect(Canned(vec![ok(&session)].into()), "jmap.example.com", "me", "pw", false, &[])).unwrap();
     assert_eq!(c.api, "https://jmap.example.com/api/");
     assert_eq!(c.authorization(), "Basic bWU6cHc=");
     assert_eq!(c.events_url(), None);
-    let refused = block_on(Client::connect(Canned(vec![Response { status: 401, body: Vec::new() }].into()), "h", "me", "x", false));
+    let refused = block_on(Client::connect(Canned(vec![Response { status: 401, ..Default::default() }].into()), "h", "me", "x", false, &[]));
     assert!(matches!(refused, Err(Error::Auth(_))));
     let no_mail = json!({"capabilities": {}, "apiUrl": "/a"});
-    assert!(matches!(block_on(Client::connect(Canned(vec![ok(&no_mail)].into()), "h", "me", "x", true)), Err(Error::Protocol(_))));
+    assert!(matches!(block_on(Client::connect(Canned(vec![ok(&no_mail)].into()), "h", "me", "x", true, &[])), Err(Error::Protocol(_))));
     let downgrade = json!({"capabilities": {"urn:ietf:params:jmap:mail": {}}, "primaryAccounts": {"urn:ietf:params:jmap:mail": "A"}, "apiUrl": "http://h/api", "downloadUrl": "/d", "uploadUrl": "/u"});
-    assert!(matches!(block_on(Client::connect(Canned(vec![ok(&downgrade)].into()), "h", "me", "x", true)), Err(Error::Tls(_))));
+    assert!(matches!(block_on(Client::connect(Canned(vec![ok(&downgrade)].into()), "h", "me", "x", true, &[])), Err(Error::Tls(_))));
+}
+
+/// A canned server that keeps what it was asked.
+struct Recorded(std::cell::RefCell<Vec<Response>>, std::cell::RefCell<Vec<Request>>);
+
+impl Http for &Recorded {
+    async fn send(&self, req: Request) -> Result<Response> {
+        self.1.borrow_mut().push(req);
+        let mut q = self.0.borrow_mut();
+        if q.is_empty() { Err(Error::Io("no more answers".into())) } else { Ok(q.remove(0)) }
+    }
+}
+
+/// The session GET goes with the trusted sites, and the session address's own; a 401 from
+/// another site a redirect led to is `Untrusted` (the credentials stayed behind), not a refused
+/// password; the session's relative URLs resolve against where it ended.
+#[test]
+fn the_session_is_fetched_within_the_trusted_sites() {
+    let session = json!({
+        "capabilities": {"urn:ietf:params:jmap:mail": {}},
+        "primaryAccounts": {"urn:ietf:params:jmap:mail": "A1"},
+        "apiUrl": "/api/", "downloadUrl": "/d/{accountId}/{blobId}", "uploadUrl": "/u/{accountId}/",
+    });
+    let at = |status: u16, url: &str, body: Vec<u8>| Response { status, body, url: Some(url.into()) };
+    let http = Recorded(vec![at(401, "https://jmap.provider.test/session", Vec::new())].into(), Default::default());
+    match block_on(Client::connect(&http, "example.com", "me", "pw", false, &["example.com".into()])) {
+        Err(Error::Untrusted { site }) => assert_eq!(site, "provider.test"),
+        other => panic!("{:?}", other.err()),
+    }
+    let asked = http.1.borrow();
+    assert_eq!(asked.len(), 1);
+    assert_eq!(asked[0].url, "https://example.com/.well-known/jmap");
+    assert!(asked[0].trusted.contains(&"example.com".to_string()));
+    // Trusted, it ends there signed in, and the session's URLs are on its host.
+    let body = session.to_string().into_bytes();
+    let http = Recorded(vec![at(200, "https://jmap.provider.test/session", body)].into(), Default::default());
+    let c = block_on(Client::connect(&http, "example.com", "me", "pw", false, &["provider.test".into()])).unwrap();
+    assert_eq!(c.api, "https://jmap.provider.test/api/");
+    assert_eq!(c.trusted, vec!["provider.test".to_string(), "example.com".to_string()]);
+    assert!(http.1.borrow()[0].trusted.contains(&"provider.test".to_string()));
 }

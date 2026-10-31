@@ -85,6 +85,9 @@ pub enum Error {
     Send(String),
     #[error("{0}")]
     Store(#[from] StoreError),
+    /// The server named a site the account doesn't trust: nothing was sent there.
+    #[error("{site} isn't allowed for this account")]
+    Untrusted { site: String },
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -100,7 +103,8 @@ impl<H: Http> Client<H> {
             .send(
                 Request::post(&self.api, "application/json", bytes, MAX_JSON)
                     .header("Authorization", &self.auth)
-                    .header("Accept", "application/json"),
+                    .header("Accept", "application/json")
+                    .trusting(self.trusted.clone()),
             )
             .await?;
         check(&resp)?;
@@ -137,14 +141,17 @@ impl<H: Http> Client<H> {
 
     pub async fn download(&self, blob: &str) -> Result<Vec<u8>> {
         let url = expand(&self.download, &[("accountId", &self.account), ("blobId", blob), ("type", "message/rfc822"), ("name", "message.eml")]);
-        let resp = self.http.send(Request::get(&url, MAX_BLOB).header("Authorization", &self.auth)).await?;
+        let resp = self.http.send(Request::get(&url, MAX_BLOB).header("Authorization", &self.auth).trusting(self.trusted.clone())).await?;
         check(&resp)?;
         Ok(resp.body)
     }
 
     pub async fn upload(&self, raw: &[u8]) -> Result<String> {
         let url = expand(&self.upload, &[("accountId", &self.account)]);
-        let resp = self.http.send(Request::post(&url, "message/rfc822", raw.to_vec(), 1 << 20).header("Authorization", &self.auth)).await?;
+        let resp = self
+            .http
+            .send(Request::post(&url, "message/rfc822", raw.to_vec(), 1 << 20).header("Authorization", &self.auth).trusting(self.trusted.clone()))
+            .await?;
         check(&resp)?;
         let v = json_body(&resp)?;
         Ok(str_at(&v, "blobId")?.to_string())

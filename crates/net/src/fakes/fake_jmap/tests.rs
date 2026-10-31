@@ -8,6 +8,7 @@ use quatrelle_store::Store;
 
 use super::*;
 
+mod trust;
 mod window;
 
 fn until(pool: &crate::worker::Pool, what: &str, mut f: impl FnMut(&Event) -> bool) -> Vec<Event> {
@@ -51,7 +52,7 @@ fn a_jmap_folder_keeps_more_than_one_get() {
     let dir = std::env::temp_dir().join(format!("quatrelle-jmap-pages-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let store = Store::open(&dir).unwrap();
-    let c = crate::jmap::Client::connect(&server.base, USER, PASSWORD, false).unwrap();
+    let c = crate::jmap::Client::connect(&server.base, USER, PASSWORD, false, &[]).unwrap();
     let mut st = crate::jmap::State::default();
     crate::jmap::list_folders(&c, &mut st, "a1").unwrap();
     let opts = |window| crate::sync::SyncOptions { window, prefetch: 0, ..Default::default() };

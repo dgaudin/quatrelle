@@ -54,6 +54,13 @@ pub struct Data {
     /// with `Identity/set` are listed (their addresses).
     pub no_identity: bool,
     pub made_identities: Vec<String>,
+    /// The well-known address redirects to `/session` on this host (`127.0.0.1`, or
+    /// `localhost`: the same server on another site), as providers redirect to their own.
+    pub redirect_session: Option<String>,
+    /// The session's URLs (`apiUrl`, `downloadUrl`…) named on `localhost`, another site.
+    pub elsewhere: Vec<&'static str>,
+    /// Every request, as `host path` (its `Host` header without the port).
+    pub requests: Vec<String>,
     next: u32,
 }
 
@@ -382,7 +389,7 @@ fn handle(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>, auth: &str) {
             if reader.read_line(&mut first).unwrap_or(0) == 0 {
                 return;
             }
-            let (mut len, mut authorized) = (0usize, false);
+            let (mut len, mut authorized, mut host) = (0usize, false, String::new());
             loop {
                 let mut line = String::new();
                 if reader.read_line(&mut line).unwrap_or(0) == 0 || line == "\r\n" {
@@ -391,6 +398,9 @@ fn handle(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>, auth: &str) {
                 let lower = line.to_ascii_lowercase();
                 if let Some(v) = lower.strip_prefix("content-length:") {
                     len = v.trim().parse().unwrap_or(0);
+                }
+                if let Some(v) = lower.strip_prefix("host:") {
+                    host = v.trim().rsplit_once(':').map_or(v.trim(), |(h, _)| h).to_string();
                 }
                 if line.split_once(':').is_some_and(|(k, v)| k.eq_ignore_ascii_case("authorization") && v.trim() == auth) {
                     authorized = true;
@@ -403,11 +413,25 @@ fn handle(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>, auth: &str) {
                 respond(&mut s, 204, b"", "text/plain");
                 return;
             }
+            let path = first.split(' ').nth(1).unwrap_or("/").to_string();
+            let port = s.local_addr().map(|a| a.port()).unwrap_or(0);
+            let (redirect, elsewhere) = {
+                let mut d = shared.lock().unwrap();
+                d.requests.push(format!("{host} {path}"));
+                (d.redirect_session.clone(), d.elsewhere.clone())
+            };
+            // Before signing in, as a provider's well-known address answers anyone.
+            if let Some(to) = redirect.filter(|_| path == "/.well-known/jmap") {
+                let head = format!(
+                    "HTTP/1.1 307 Temporary Redirect\r\nLocation: http://{to}:{port}/session\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                );
+                let _ = s.write_all(head.as_bytes());
+                return;
+            }
             if !authorized {
                 respond(&mut s, 401, b"{}", "application/json");
                 return;
             }
-            let path = first.split(' ').nth(1).unwrap_or("/").to_string();
             let mut d = shared.lock().unwrap();
             if path.starts_with("/events/") {
                 assert!(path.contains("types=%2A") || path.contains("types=*"), "{path}");
@@ -428,8 +452,8 @@ fn handle(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>, auth: &str) {
                 }
                 return;
             }
-            if path == "/.well-known/jmap" {
-                let session = json!({
+            if path == "/.well-known/jmap" || path == "/session" {
+                let mut session = json!({
                     "capabilities": {"urn:ietf:params:jmap:core": {"maxObjectsInGet": MAX_GET}, "urn:ietf:params:jmap:mail": {}, "urn:ietf:params:jmap:submission": {}, "urn:ietf:params:jmap:quota": {}, "urn:ietf:params:jmap:vacationresponse": {}},
                     "accounts": {ACCOUNT: {"name": USER}},
                     "primaryAccounts": {"urn:ietf:params:jmap:mail": ACCOUNT, "urn:ietf:params:jmap:submission": ACCOUNT},
@@ -440,6 +464,11 @@ fn handle(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>, auth: &str) {
                     "eventSourceUrl": "/events/?types={types}&closeafter={closeafter}&ping={ping}",
                     "state": "1",
                 });
+                for key in elsewhere {
+                    if let Some(u) = session.get(key).and_then(Value::as_str).map(|u| format!("http://localhost:{port}{u}")) {
+                        session[key] = Value::String(u);
+                    }
+                }
                 respond(&mut s, 200, session.to_string().as_bytes(), "application/json");
             } else if path == "/api/" {
                 let req: Value = serde_json::from_slice(&body).unwrap_or(Value::Null);

@@ -180,7 +180,9 @@ fn failed(sh: &Rcs, id: &str, e: Error) {
             }
             status(sh, id, SyncStatus::NeedsPassword { error: m });
         }
-        e @ (Error::Io(_) | Error::Closed(_) | Error::Protocol(_) | Error::Tls(_)) => {
+        // A site the account doesn't trust (its text names it) stops the account as a broken
+        // connection does: Server settings' "Add" is how the browser allows it.
+        e @ (Error::Io(_) | Error::Closed(_) | Error::Protocol(_) | Error::Tls(_) | Error::Untrusted { .. }) => {
             if let Some(a) = sh.borrow_mut().accounts.get_mut(id) {
                 a.client = None;
             }
@@ -200,7 +202,8 @@ async fn connect(sh: &Rcs, id: &str) {
     };
     status(sh, id, SyncStatus::Connecting);
     let user = if config.username.is_empty() { config.email.clone() } else { config.username.clone() };
-    match Client::connect(Fetch, &url, &user, &password, false).await {
+    let trusted = quatrelle_engine::model::addr::trust::Trust::of(&config, &[]).sites();
+    match Client::connect(Fetch, &url, &user, &password, false, &trusted).await {
         Ok(c) => {
             let ops = {
                 let mut s = sh.borrow_mut();

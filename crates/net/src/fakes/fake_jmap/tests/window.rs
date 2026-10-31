@@ -27,7 +27,7 @@ fn open(server: &Server, name: &str) -> (std::path::PathBuf, Store, crate::jmap:
     let dir = std::env::temp_dir().join(format!("quatrelle-jmap-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let store = Store::open(&dir).unwrap();
-    let c = crate::jmap::Client::connect(&server.base, USER, PASSWORD, false).unwrap();
+    let c = crate::jmap::Client::connect(&server.base, USER, PASSWORD, false, &[]).unwrap();
     let mut st = crate::jmap::State::default();
     crate::jmap::list_folders(&c, &mut st, "a1").unwrap();
     (dir, store, c, st)

@@ -12,6 +12,11 @@ fn js(e: &wasm_bindgen::JsValue) -> String {
     e.as_string().or_else(|| e.dyn_ref::<js_sys::Error>().map(|e| String::from(e.message()))).unwrap_or_else(|| format!("{e:?}"))
 }
 
+/// `Request::trusting` can't be honoured here: the browser follows redirects itself and, by the
+/// Fetch standard, drops `Authorization` whenever a redirect changes origin, whatever the account
+/// trusts. A well-known address that redirects to the provider's host therefore arrives there
+/// without the credentials; the connection fails naming that site, and the fix is to type the
+/// provider's session URL (see the web app's README).
 impl quatrelle_jmap::Http for Fetch {
     async fn send(&self, req: Request) -> Result<Response> {
         let init = web_sys::RequestInit::new();
@@ -35,12 +40,14 @@ impl quatrelle_jmap::Http for Fetch {
         })?;
         let resp: web_sys::Response = answer.dyn_into().map_err(|e| Error::Protocol(js(&e)))?;
         let status = resp.status();
+        // Where it ended, once the browser followed the redirects (empty when it can't say).
+        let url = Some(resp.url()).filter(|u| !u.is_empty());
         let buf = JsFuture::from(resp.array_buffer().map_err(|e| Error::Io(js(&e)))?).await.map_err(|e| Error::Io(js(&e)))?;
         let body = js_sys::Uint8Array::new(&buf);
         if usize::try_from(body.length()).unwrap_or(usize::MAX) > req.max {
             return Err(Error::Protocol(format!("the answer is larger than {} bytes", req.max)));
         }
-        Ok(Response { status, body: body.to_vec() })
+        Ok(Response { status, body: body.to_vec(), url })
     }
 }
 

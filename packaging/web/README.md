@@ -25,6 +25,17 @@ kept with the account, and every language.
   `Authorization` in `Access-Control-Allow-Headers`). Without them, connecting fails with
   "the server may not allow web pages to reach it". Serving Quatrelle from the mail server's own
   domain avoids the question.
+- **Type the provider's session URL.** An account's password goes only to the sites it trusts:
+  its address's domain, its server, and the domains allowed in Server settings. The desktop app
+  follows a well-known address (`https://example.com/.well-known/jmap`) that redirects to the
+  provider's host and asks before trusting another domain; a browser follows the redirect
+  itself and drops the password as soon as it changes origin (the Fetch standard), so the
+  provider's host answers without it and connecting fails with "<domain> isn't allowed for
+  this account". The same message comes when the session names a download or upload address on
+  another domain (Fastmail's downloads are on `fastmailusercontent.com`). Type the provider's
+  own session URL as the JMAP server (`https://api.fastmail.com/jmap/session`), and add the
+  domain the message names in File › Account settings › Server settings › "Other servers
+  allowed".
 - **Passwords are never kept.** They stay in the tab's memory; after a reload Quatrelle asks
   again. The account list, folder lists and settings are kept in the page's `localStorage`
   (no mail, no passwords). Mail is cached in memory and synced again on each visit.

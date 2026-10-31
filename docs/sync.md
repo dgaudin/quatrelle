@@ -161,6 +161,18 @@ method calls, signed in with Basic authentication or an OAuth bearer token.
 The transport is written once (`quatrelle-jmap`, async over an `Http` trait) and shared: the
 desktop worker runs it over its own HTTP client, the browser app over `fetch`.
 
+**Trusted sites.** The session is the server's to describe, so its URLs don't get the credentials
+on its word: `Client::connect` takes the account's trusted sites (`Trust::of(&acc, &[]).sites()`,
+plus the session address's own). The session GET follows redirects with them, and where it ended
+must be one of them (a redirect elsewhere arrives without the credentials, and its 401 is
+`Untrusted { site }`, not a refused password); its relative URLs resolve against that final URL.
+Each of `apiUrl`, `downloadUrl`, `uploadUrl` and `eventSourceUrl` must be on a trusted site too,
+or the connection fails with `Untrusted` before anything is sent there (Fastmail's downloads are
+on `fastmailusercontent.com`). Every later request carries the same list. In the browser, `fetch`
+drops `Authorization` at any change of origin whatever the list, so a well-known redirect to the
+provider's host fails there naming the site: the user types the provider's session URL instead
+(`packaging/web/README.md`).
+
 ## Exchange Online through Microsoft Graph (`crates/net/src/exchange/graph.rs`)
 
 An account with a Graph address (`AccountConfig::graph`) syncs with Exchange Online through the
