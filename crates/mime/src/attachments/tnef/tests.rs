@@ -3,6 +3,8 @@
 
 use super::*;
 
+mod limits;
+
 /// One attribute: level, id, length, data, checksum.
 pub(crate) fn attr(out: &mut Vec<u8>, level: u8, id: u32, data: &[u8]) {
     out.push(level);
