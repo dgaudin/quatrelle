@@ -137,10 +137,6 @@ fn other_address(ui: &mut Ui, t: &Tokens, c: &Compose, people: &mut PeopleFields
     // Enter the suggestions didn't take (the list closed): Send from it.
     let enter = had_focus && ui.input(|i| i.key_pressed(egui::Key::Enter));
     let clicked = ui.add_enabled(can_take, egui::Button::new(tl!("Send from it"))).clicked();
-    let typed = people.typing(field).trim();
-    if !typed.is_empty() && one_address(typed).is_none() && people.suggestions(field).is_empty() {
-        ui.label(RichText::new(tf!("Not an address: {what}", what = typed)).color(t.danger).small());
-    }
     let asked = clicked || enter;
     // What was typed is parsed at the next frame: asked as it closed, it's taken then.
     let taken = if asked || o.take { takeable(people, field) } else { None };

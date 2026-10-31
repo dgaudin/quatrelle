@@ -341,6 +341,7 @@ impl PeopleFields {
         self.fields.get(&field).map_or(&[], |f| f.st.pieces.as_slice())
     }
 
+    #[cfg(test)]
     pub(crate) fn suggestions(&self, field: FieldId) -> &[quatrelle_engine::Suggestion] {
         self.fields.get(&field).map_or(&[], |f| f.suggestions.as_slice())
     }
