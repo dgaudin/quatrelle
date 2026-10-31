@@ -498,6 +498,11 @@ impl Session {
         if !ok {
             return Err(CmdError::Params(format!("not an email address: {email}")));
         }
+        // Best effort, by the field's own rule: a kind the session knows that Add calendar doesn't
+        // take (a list has no calendar) is refused. An address it doesn't know goes through.
+        if !quatrelle_model::addr::Accepts::CALENDARS.takes(self.addressee_kind(Some(&account), &email)) {
+            return Err(CmdError::Params(format!("a distribution list's calendar can't be opened: {email}")));
+        }
         let mine = self.account(&account).is_some_and(|a| a.config.email.eq_ignore_ascii_case(&email));
         if mine {
             return Err(CmdError::Params("that's this account's own calendar".into()));
