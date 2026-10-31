@@ -508,7 +508,7 @@ fn a_formatted_signature_keeps_its_look() {
 /// addresses and birthday are fields of their own, as in Outlook.
 #[test]
 fn contacts_keep_typed_numbers_addresses_and_birthdays() {
-    let mut s = sample_session("contact-fields");
+    let mut s = sample_session("contact-typed-fields");
     let uid = s
         .run(
             "contact.create",
