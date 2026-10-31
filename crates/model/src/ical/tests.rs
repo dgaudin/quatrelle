@@ -574,3 +574,23 @@ fn occurrences_at_the_ends_of_time() {
     let whole = occurrences(&[at(-10, i64::MAX, None)], 0, 10);
     assert_eq!(whole.len(), 1, "one that runs to the end of time is there now");
 }
+
+/// A classification comes back as it went: an edit here doesn't turn Confidential into Private,
+/// nor Exchange's Personal (`X-PERSONAL`, which iCalendar has no word for) into anything else.
+#[test]
+fn every_kind_of_private_comes_back_as_it_went() {
+    use PrivateKind::{Confidential, Personal, Private};
+    for (class, private, kind, written) in [
+        ("PUBLIC", false, Private, None),
+        ("PRIVATE", true, Private, Some("CLASS:PRIVATE")),
+        ("confidential", true, Confidential, Some("CLASS:CONFIDENTIAL")),
+        ("X-PERSONAL", true, Personal, Some("CLASS:X-PERSONAL")),
+    ] {
+        let ics = format!("BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:c\r\nDTSTART:20261016T140000Z\r\nCLASS:{class}\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
+        let e = parse(&ics, 0).events.first().cloned().expect("one event");
+        assert_eq!((e.private, e.private_kind), (private, kind), "{class}");
+        let mut out = String::new();
+        write_event(&e, 0, &mut out);
+        assert_eq!(out.lines().find(|l| l.starts_with("CLASS")), written, "{class}");
+    }
+}

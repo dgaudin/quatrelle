@@ -437,6 +437,9 @@ pub(super) fn event_from(s: &Session, v: &Value, mut e: quatrelle_model::ical::C
     }
     if let Some(b) = p::bool(v, "private") {
         e.private = b;
+        if !b {
+            e.private_kind = Default::default();
+        }
     }
     if let Some(b) = p::bool(v, "responses") {
         e.no_responses = !b;

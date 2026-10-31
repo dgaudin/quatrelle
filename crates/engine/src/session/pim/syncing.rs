@@ -142,7 +142,7 @@ impl Session {
         // Invitations the server answered, and copies of invitations to answer instead.
         if self.settle_answers(account, sync) {
             log::info!("{account}: invitations' answers to send");
-            self.jobs.push(Job::SyncDav { account: account.to_string() });
+            self.ask_pim_sync(account);
         }
         // Saved only when something changed (when the server was last asked isn't a change, unless
         // the look stopped at a site to allow: the worker reads the saved time, and would look,

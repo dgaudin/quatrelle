@@ -700,3 +700,37 @@ fn leaving_the_calendar_writes_only_what_to_read() {
     assert!(again.pim.get(&id).is_some_and(|p| p.own_only));
     done(again);
 }
+
+/// A change while a calendar sync is still waiting asks for no second one: it would start before
+/// the first one's results are in, and send the same new events again.
+#[test]
+fn a_calendar_sync_waiting_is_asked_for_once() {
+    let mut s = Session::open(Some(temp("one-sync")), quatrelle_model::dates::Clock::new(NOW, 0));
+    let id = s.run("account.add", &json!({"email": "zoe@contoso.example", "password": "pw"})).unwrap()["account"].as_str().unwrap().to_string();
+    s.take_jobs();
+    s.after_pim_change(&id, true);
+    s.after_pim_change(&id, true);
+    let syncs = s.take_jobs().iter().filter(|j| matches!(j, Job::SyncDav { .. })).count();
+    assert_eq!(syncs, 1);
+    s.after_pim_change(&id, true);
+    assert_eq!(s.take_jobs().iter().filter(|j| matches!(j, Job::SyncDav { .. })).count(), 1, "the next change asks again");
+}
+
+/// The lock on an event stays as Exchange said it (Confidential, Personal) through any other
+/// change, and taking it off makes it plain Private the next time it's put on.
+#[test]
+fn the_lock_keeps_its_kind_until_it_comes_off() {
+    use quatrelle_model::ical::PrivateKind;
+    let mut s = sample_session("private-kind");
+    let uid = s.run("event.create", &json!({"summary": "Lawyer", "start": "2026-10-21T15:00", "private": true})).unwrap()["uid"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let kind = |s: &Session| s.pim["sample"].events.iter().find(|e| e.event.uid == uid).map(|e| (e.event.private, e.event.private_kind)).unwrap();
+    s.pim.get_mut("sample").unwrap().events.iter_mut().find(|e| e.event.uid == uid).unwrap().event.private_kind = PrivateKind::Confidential;
+    s.run("event.update", &json!({"uid": uid, "summary": "Avocat", "private": true})).unwrap();
+    assert_eq!(kind(&s), (true, PrivateKind::Confidential));
+    s.run("event.update", &json!({"uid": uid, "private": false})).unwrap();
+    s.run("event.update", &json!({"uid": uid, "private": true})).unwrap();
+    assert_eq!(kind(&s), (true, PrivateKind::Private));
+}

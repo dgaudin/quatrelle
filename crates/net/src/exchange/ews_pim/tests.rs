@@ -321,3 +321,26 @@ fn an_appointments_webex_id_round_trips() {
     assert_eq!(bad(" ok-1 ").as_deref(), Some("ok-1"));
     let _ = cal;
 }
+
+/// A change here (a title, say) sends the item's whole sensitivity back: Personal went as Normal
+/// and Confidential as Private. Each stays what it is until the lock is taken off.
+#[test]
+fn an_edit_leaves_an_items_sensitivity_as_it_is() {
+    let sent = |fields: Vec<(&'static str, String)>| fields.into_iter().find(|f| f.0 == "item:Sensitivity").map(|f| f.1).unwrap_or_default();
+    for (word, private) in [("Normal", false), ("Personal", true), ("Private", true), ("Confidential", true)] {
+        let tag = format!("<t:Sensitivity>{word}</t:Sensitivity>");
+        let xml = format!(
+            "<t:CalendarItem><t:ItemId Id=\"E1\"/><t:Subject>Pitch</t:Subject>{tag}<t:Start>2026-10-16T10:00:00Z</t:Start><t:End>2026-10-16T11:00:00Z</t:End></t:CalendarItem>"
+        );
+        let mut e = event_of(parse(&xml).find("CalendarItem").unwrap()).unwrap();
+        assert_eq!(e.private, private, "{word}");
+        assert_eq!(sent(event_fields(&e, "me@studio.example")), tag);
+        e.private = false;
+        e.private_kind = Default::default();
+        assert_eq!(sent(event_fields(&e, "me@studio.example")), "<t:Sensitivity>Normal</t:Sensitivity>", "{word} unlocked");
+        let xml = format!("<t:Task><t:ItemId Id=\"T1\"/><t:Subject>Budget</t:Subject>{tag}</t:Task>");
+        let t = tasks::task_of(parse(&xml).find("Task").unwrap()).unwrap().task;
+        assert_eq!(t.private, private, "task {word}");
+        assert_eq!(sent(tasks::task_fields(&t).0), tag);
+    }
+}

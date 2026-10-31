@@ -170,6 +170,9 @@ fn apply(t: &mut Task, c: TaskChange, today: i64) {
     }
     if let Some(p) = c.private {
         t.private = p;
+        if !p {
+            t.private_kind = Default::default();
+        }
     }
     if let Some(s) = c.status {
         t.status = s;

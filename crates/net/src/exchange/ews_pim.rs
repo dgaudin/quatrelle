@@ -13,7 +13,7 @@
 use std::collections::{BTreeMap, HashMap};
 use std::time::{Duration, Instant};
 
-use quatrelle_model::ical::{Attendee, CalEvent, ShowAs};
+use quatrelle_model::ical::{Attendee, CalEvent, PrivateKind, ShowAs};
 use quatrelle_model::pim::{BookInfo, CalendarInfo, DavSync, Note, Pim, StoredCard, StoredEvent, StoredNote};
 use quatrelle_model::vcard::{Card, PostalAddress, Typed};
 use quatrelle_model::zone::Zone;
@@ -38,6 +38,16 @@ pub(crate) fn utc(t: i64) -> String {
     let (y, m, d) = quatrelle_model::dates::civil_from_days(t.div_euclid(86_400));
     let s = t.rem_euclid(86_400);
     format!("{y:04}-{m:02}-{d:02}T{:02}:{:02}:{:02}Z", s / 3600, s / 60 % 60, s % 60)
+}
+
+/// The kind of private an item's `Sensitivity` says it is; `None` for one that isn't.
+fn private_kind(it: &El) -> Option<PrivateKind> {
+    it.text_of("Sensitivity").and_then(PrivateKind::from_sensitivity)
+}
+
+/// The `Sensitivity` an item goes to the server with.
+fn sensitivity(private: bool, kind: PrivateKind) -> &'static str {
+    if private { kind.sensitivity() } else { "Normal" }
 }
 
 fn text(e: &El, name: &str) -> String {

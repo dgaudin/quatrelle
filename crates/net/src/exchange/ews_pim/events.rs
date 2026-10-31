@@ -298,7 +298,8 @@ fn appointment(it: &El) -> Option<CalEvent> {
             .unwrap_or_default(),
         // Outlook's Show As, Private and response options (EWS gives Busy, and the rest, unsaid).
         show_as: it.text_of("LegacyFreeBusyStatus").and_then(ShowAs::from_cdo).unwrap_or_default(),
-        private: matches!(it.text_of("Sensitivity").map(str::trim), Some("Private" | "Confidential")),
+        private: private_kind(it).is_some(),
+        private_kind: private_kind(it).unwrap_or_default(),
         webex_id: crate::ews::extended_named(it, WEBEX_SET, "WebexId")
             .map(str::trim)
             .filter(|id| quatrelle_model::ical::valid_webex_id(id))
@@ -336,7 +337,7 @@ pub(crate) fn event_fields(e: &CalEvent, me: &str) -> Vec<(&'static str, String)
     let (start, end) = if e.all_day { (e.start, e.end.max(e.start + 86_400)) } else { (e.start, e.end.max(e.start)) };
     let mut f = vec![
         ("item:Subject", format!("<t:Subject>{}</t:Subject>", esc(&e.summary))),
-        ("item:Sensitivity", format!("<t:Sensitivity>{}</t:Sensitivity>", if e.private { "Private" } else { "Normal" })),
+        ("item:Sensitivity", format!("<t:Sensitivity>{}</t:Sensitivity>", sensitivity(e.private, e.private_kind))),
         ("item:Body", format!("<t:Body BodyType=\"Text\">{}</t:Body>", esc(&e.description))),
     ];
     // Categories come between the item's fields and the appointment's (EWS keeps the schema's

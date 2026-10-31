@@ -24,7 +24,7 @@ mod notes;
 mod recurrence;
 mod zones;
 pub use alarms::*;
-pub use meeting::{OPTIONAL, ShowAs, valid_webex_id};
+pub use meeting::{OPTIONAL, PrivateKind, ShowAs, valid_webex_id};
 use notes::*;
 pub use notes::*;
 use recurrence::*;
@@ -133,6 +133,9 @@ pub struct CalEvent {
     /// Private: others who can see the calendar see only that the time is taken.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub private: bool,
+    /// Which kind of private it is, while it's private.
+    #[serde(default, skip_serializing_if = "PrivateKind::is_plain")]
+    pub private_kind: PrivateKind,
     /// A meeting whose guests aren't asked to answer (Outlook's Request Responses off), and one
     /// for which they can't propose another time (Allow New Time Proposals off).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]

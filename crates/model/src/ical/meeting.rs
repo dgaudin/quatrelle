@@ -58,6 +58,59 @@ impl ShowAs {
     }
 }
 
+/// Which kind of private something is. The lock shows one way, but each has its own word, kept
+/// through a change so that editing a title doesn't change what it is.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PrivateKind {
+    #[default]
+    Private,
+    Confidential,
+    /// Exchange's Personal, which iCalendar has no word for: `CLASS:X-PERSONAL`.
+    Personal,
+}
+
+impl PrivateKind {
+    /// Plain Private, the default.
+    pub fn is_plain(&self) -> bool {
+        *self == PrivateKind::Private
+    }
+
+    /// The kind a `CLASS` names; `None` for one that isn't private.
+    pub fn from_class(value: &str) -> Option<PrivateKind> {
+        match value.trim().to_ascii_uppercase().as_str() {
+            "PRIVATE" => Some(PrivateKind::Private),
+            "CONFIDENTIAL" => Some(PrivateKind::Confidential),
+            "X-PERSONAL" => Some(PrivateKind::Personal),
+            _ => None,
+        }
+    }
+
+    /// Its `CLASS`.
+    pub fn class(self) -> &'static str {
+        match self {
+            PrivateKind::Private => "PRIVATE",
+            PrivateKind::Confidential => "CONFIDENTIAL",
+            PrivateKind::Personal => "X-PERSONAL",
+        }
+    }
+
+    /// The kind an Exchange `Sensitivity` names; `None` for `Normal`.
+    pub fn from_sensitivity(value: &str) -> Option<PrivateKind> {
+        [PrivateKind::Private, PrivateKind::Confidential, PrivateKind::Personal]
+            .into_iter()
+            .find(|k| k.sensitivity().eq_ignore_ascii_case(value.trim()))
+    }
+
+    /// Its Exchange `Sensitivity`.
+    pub fn sensitivity(self) -> &'static str {
+        match self {
+            PrivateKind::Private => "Private",
+            PrivateKind::Confidential => "Confidential",
+            PrivateKind::Personal => "Personal",
+        }
+    }
+}
+
 /// An optional guest (`ROLE=OPT-PARTICIPANT`), Outlook's Optional line.
 pub const OPTIONAL: &str = "OPT-PARTICIPANT";
 
@@ -91,7 +144,11 @@ pub(super) fn read(e: &mut CalEvent, name: &str, value: &str, said: &mut bool) -
                 e.show_as = ShowAs::Free;
             }
         }
-        "CLASS" => e.private = matches!(value.trim().to_ascii_uppercase().as_str(), "PRIVATE" | "CONFIDENTIAL"),
+        "CLASS" => {
+            let kind = PrivateKind::from_class(value);
+            e.private = kind.is_some();
+            e.private_kind = kind.unwrap_or_default();
+        }
         "X-MICROSOFT-DISALLOW-COUNTER" => e.no_new_times = value.trim().eq_ignore_ascii_case("TRUE"),
         "X-QUATRELLE-WEBEX-ID" => e.webex_id = Some(value.trim()).filter(|v| valid_webex_id(v)).map(str::to_string),
         _ => return false,
@@ -116,7 +173,7 @@ pub(super) fn lines(e: &CalEvent) -> Vec<String> {
         out.push(format!("X-MICROSOFT-CDO-BUSYSTATUS:{}", e.show_as.cdo()));
     }
     if e.private {
-        out.push("CLASS:PRIVATE".to_string());
+        out.push(format!("CLASS:{}", e.private_kind.class()));
     }
     if e.no_new_times {
         out.push("X-MICROSOFT-DISALLOW-COUNTER:TRUE".to_string());
