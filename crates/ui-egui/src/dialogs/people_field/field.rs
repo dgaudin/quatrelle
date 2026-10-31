@@ -210,7 +210,7 @@ impl Field {
         if !self.expanding.is_empty()
             && let Some(dir) = s.directory_account(account)
         {
-            self.settle_expansions(s, &dir);
+            self.settle_expansions(s, &dir, accepts);
         }
         let (revision, reading) = (s.contacts_revision(), s.contacts_pending());
         if !reading && self.kinds_at != Some((revision, reading)) {
@@ -222,8 +222,9 @@ impl Field {
 
     /// The lists whose members came: each chip replaced by them (the field's cap kept), with how
     /// many more the list has; an empty list, or one that couldn't be expanded, is said and its
-    /// chip stays.
-    fn settle_expansions(&mut self, s: &Session, dir: &str) {
+    /// chip stays. A member is an entry like any other: refused when the place doesn't take its
+    /// kind, a room among a meeting's guests moved.
+    fn settle_expansions(&mut self, s: &Session, dir: &str, accepts: &Accepts) {
         let mut i = 0;
         while let Some(who) = self.expanding.get(i) {
             let ready = match s.expansion_now(dir, who) {
@@ -239,7 +240,7 @@ impl Field {
                 // The question is gone (its account removed, the answers kept trimmed): said, not
                 // taken for a list with no members.
                 None => {
-                    self.note = Some(tf!("This list couldn't be expanded: {error}", error = "gone"));
+                    self.note = Some(tl!("This list is no longer available").to_string());
                     None
                 }
             };
@@ -250,7 +251,11 @@ impl Field {
                 continue;
             }
             if let Some(at) = self.st.pieces.iter().position(|p| matches!(p, Piece::Chip { who: w, .. } if same_list(w, &who))) {
-                self.st.pieces.splice(at..=at, x.members.iter().cloned().map(Piece::chip));
+                let members = x.members.iter().cloned().map(|who| {
+                    let refused = refused_by(accepts, &who, false);
+                    Piece::Chip { who, refused }
+                });
+                self.st.pieces.splice(at..=at, members);
                 let over = self.st.pieces.len().saturating_sub(MAX_ENTRIES);
                 if over > 0 {
                     self.st.pieces.truncate(MAX_ENTRIES);
@@ -259,6 +264,7 @@ impl Field {
                 self.st.selected = None;
                 self.st.card = None;
                 self.dirty = true;
+                self.move_rooms(accepts);
             }
             let more = x.total.saturating_sub(x.members.len());
             self.partial |= x.more || more > 0;

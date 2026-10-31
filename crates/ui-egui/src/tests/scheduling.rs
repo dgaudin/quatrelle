@@ -248,7 +248,10 @@ fn required_and_optional_open_the_address_book() {
     click_at(&ctx, &mut a, at, 1, size);
     let b = book(&a).expect("the address book opened");
     assert_eq!(b.target, Line::Optional);
-    assert_eq!((b.required.as_str(), b.resources.as_str()), ("sam@studio.example", "Sound Lab <sound.lab@studio.example>"));
+    // Required as the meeting's line holds it (the contacts field names Sam, whom the book knows).
+    assert_eq!(b.required, a.ui.event_windows[0].1.guests);
+    assert!(b.required.contains("sam@studio.example"), "{}", b.required);
+    assert_eq!(b.resources, "Sound Lab <sound.lab@studio.example>");
     // Listed as the address book is read, a slice a frame.
     for _ in 0..10 {
         frame_sized(&ctx, &mut a, vec![], size);
@@ -280,18 +283,19 @@ fn required_and_optional_open_the_address_book() {
         let f = &a.ui.event_windows[0].1;
         assert!(f.attendees_book.is_none(), "closed");
         assert!(f.optional.contains("zoe@studio.example") && !f.optional.ends_with(';'), "{}", f.optional);
-        assert_eq!(f.guests, "sam@studio.example");
+        assert!(f.guests.contains("sam@studio.example") && !f.guests.contains("zoe"), "{}", f.guests);
         assert_eq!(f.rooms, [("projector@studio.example".to_string(), "projector@studio.example".to_string())]);
         assert_eq!(f.location, "projector@studio.example", "the place follows the rooms");
     }
     // Required, then Escape: the meeting as it was.
+    let guests = a.ui.event_windows[0].1.guests.clone();
     let at = ctx.read_response(line_button_id(w, Line::Required)).map(|r| r.rect.center()).expect("the Required button");
     click_at(&ctx, &mut a, at, 1, size);
     assert_eq!(book(&a).map(|b| b.target), Some(Line::Required));
     a.ui.event_windows[0].1.attendees_book.as_mut().unwrap().required.clear();
     frame_sized(&ctx, &mut a, vec![key(Key::Escape, Modifiers::NONE)], size);
     frame_sized(&ctx, &mut a, vec![], size);
-    assert!(book(&a).is_none() && a.ui.event_windows[0].1.guests == "sam@studio.example");
+    assert!(book(&a).is_none() && a.ui.event_windows[0].1.guests == guests);
     // The Scheduling Assistant: a row for the optional guest too.
     a.ui.event_windows[0].1.scheduling = true;
     for _ in 0..3 {

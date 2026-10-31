@@ -12,6 +12,7 @@ use crate::look::people_field::{
 };
 use crate::theme::Tokens;
 
+mod meeting;
 mod message;
 mod sending;
 
@@ -241,6 +242,13 @@ fn chips_wrap_and_scroll_past_four_lines() {
     st.pieces = vec![Piece::chip(person("Pat Pierce", "pat@studio.example"))];
     let d = draw_in(&ctx, &mut st, &input, vec![], 400.0);
     assert!(d.rect.height() <= CHIP_ROW_H + 8.0, "one line: {}", d.rect.height());
+    // The line under the field is under the line it has, not under the four it could grow to.
+    let under = d.shapes.iter().filter_map(|s| match s {
+        egui::Shape::LineSegment { points, .. } if (points[0].y - points[1].y).abs() < 0.5 => Some(points[0].y),
+        _ => None,
+    });
+    let under = under.fold(f32::NEG_INFINITY, f32::max);
+    assert!(under <= d.rect.bottom() + 1.0, "the underline at {under}, the field {:?}", d.rect);
 
     // Sixty chips, or a few fewer so that the input shares the last line with chips.
     let chips = |n: usize| (0..n).map(|i| Piece::chip(person(&format!("Person {i}"), &format!("p{i}@studio.example")))).collect::<Vec<_>>();

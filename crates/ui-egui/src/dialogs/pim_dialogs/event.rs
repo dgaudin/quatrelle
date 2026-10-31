@@ -2,8 +2,8 @@
 //! it ([`super::rooms`]) and when everyone is free ([`super::scheduling`]).
 
 use egui::Color32;
-use quatrelle_engine::model::addr;
 use quatrelle_engine::model::ical::ShowAs;
+use quatrelle_engine::model::{Addressee, EmailAddress, addr};
 
 use super::*;
 
@@ -37,8 +37,11 @@ pub struct EventForm {
     /// The guests, as typed (`Name <address>, …`): editable on the user's own events.
     pub guests: String,
     /// The rooms booked for it (name, address): resource attendees, which book themselves
-    /// on Exchange; picked in the Room Finder.
+    /// on Exchange; picked in the Room Finder or entered in the Rooms line.
     pub rooms: Vec<(String, String)>,
+    /// The Rooms line's text: the rooms booked, then any entry that isn't one (text not checked
+    /// yet, a chip the line refuses). Never sent: the rooms are.
+    pub rooms_line: String,
     /// The Room Finder, while it's open.
     pub finder: Option<RoomFinderUi>,
     /// The Scheduling Assistant is shown; the local day it shows (`None`: the meeting's); a
@@ -159,6 +162,7 @@ impl EventForm {
             responses: !e.no_responses,
             new_times: !e.no_new_times,
             rooms: e.attendees.iter().filter(|a| a.is_resource()).map(|a| (shown(a), a.email.clone())).collect(),
+            rooms_line: line_of(e.attendees.iter().filter(|a| a.is_resource()).map(|a| room_entry(&a.name, &a.email))),
             can_invite: e.organizer.as_ref().is_none_or(|o| mine.contains(&o.email.to_ascii_lowercase())),
             links: e.links(),
             join: e.join_link(),
@@ -184,24 +188,62 @@ impl EventForm {
         self.rooms.iter().map(|(name, _)| name.as_str()).collect::<Vec<_>>().join("; ")
     }
 
-    /// Book a room: it joins the rooms, and the place follows the rooms unless it was typed
-    /// by hand.
+    /// Book a room: it joins the rooms (and the Rooms line, unless an entry there has its
+    /// address), and the place follows the rooms unless it was typed by hand.
     pub fn add_room(&mut self, name: &str, email: &str) {
         let email = email.trim().to_ascii_lowercase();
-        if !email.contains('@') || self.rooms.iter().any(|(_, e)| *e == email) || self.rooms.len() >= 50 {
+        if !email.contains('@') || self.rooms.iter().any(|(_, e)| *e == email) || self.rooms.len() >= MAX_ROOMS {
             return;
         }
         let before = self.rooms_text();
+        if !line_entries(&self.rooms_line).any(|(_, e)| e.is_some_and(|e| e.eq_ignore_ascii_case(&email))) {
+            let entry = room_entry(name, &email);
+            self.rooms_line = line_of(line_entries(&self.rooms_line).map(|(entry, _)| entry.to_string()).chain(std::iter::once(entry)));
+        }
         let name = if name.trim().is_empty() { email.clone() } else { name.trim().to_string() };
         self.rooms.push((name, email));
         self.place_follows_rooms(&before);
     }
 
-    /// Take a room off (the place follows, as above).
+    /// Take a room off, and its entry off the Rooms line (the place follows, as above).
     pub fn remove_room(&mut self, email: &str) {
         let before = self.rooms_text();
         self.rooms.retain(|(_, e)| !e.eq_ignore_ascii_case(email));
+        if line_entries(&self.rooms_line).any(|(_, e)| e.is_some_and(|e| e.eq_ignore_ascii_case(email))) {
+            let kept = line_entries(&self.rooms_line)
+                .filter(|(_, e)| !e.as_deref().is_some_and(|e| e.eq_ignore_ascii_case(email)))
+                .map(|(entry, _)| entry.to_string());
+            self.rooms_line = line_of(kept);
+        }
         self.place_follows_rooms(&before);
+    }
+
+    /// The Rooms line drawn (`line`, its text) and what it books (`booked`): the rooms become
+    /// those, through [`EventForm::remove_room`] and [`EventForm::add_room`] so that the place
+    /// follows; the line keeps what it holds that isn't booked (a refused chip, text not checked).
+    pub fn rooms_from_field(&mut self, booked: &[Addressee], line: String) {
+        self.book_only(booked);
+        self.rooms_line = line;
+    }
+
+    /// The rooms made those `booked` (a name, or the address when there is none), the place
+    /// following them.
+    pub(super) fn book_only(&mut self, booked: &[Addressee]) {
+        for (_, email) in self.rooms.clone() {
+            if !booked.iter().any(|b| b.address.eq_ignore_ascii_case(&email)) {
+                self.remove_room(&email);
+            }
+        }
+        for who in booked {
+            self.add_room(&who.name, &who.address);
+        }
+    }
+
+    /// Whether the rooms are those `booked` (as many as a meeting holds).
+    pub fn books(&self, booked: &[Addressee]) -> bool {
+        let has = |email: &str| self.rooms.iter().any(|(_, e)| e.eq_ignore_ascii_case(email));
+        self.rooms.iter().all(|(_, e)| booked.iter().any(|b| b.address.eq_ignore_ascii_case(e)))
+            && (self.rooms.len() >= MAX_ROOMS || booked.iter().all(|b| has(&b.address)))
     }
 
     fn place_follows_rooms(&mut self, before: &str) {
@@ -318,6 +360,28 @@ pub(super) fn reminder_choice(ui: &mut Ui, f: &mut EventForm, width: f32) {
     });
 }
 
+/// The most rooms a meeting books.
+const MAX_ROOMS: usize = 50;
+
+/// A room as the Rooms line writes it: `Name <address>`, or its address alone when it's known by
+/// nothing else.
+fn room_entry(name: &str, email: &str) -> String {
+    let name = name.trim();
+    let name = if name.eq_ignore_ascii_case(email.trim()) { "" } else { name };
+    EmailAddress::new(name, email.trim()).to_string()
+}
+
+/// A line's entries, each with its address when it has one.
+fn line_entries(line: &str) -> impl Iterator<Item = (&str, Option<String>)> {
+    addr::split_entries(line).into_iter().map(|entry| (entry, addr::parse_one(entry).map(|a| a.email)))
+}
+
+/// A line of entries, as the contacts field writes one: `a; b; `, or nothing.
+fn line_of(entries: impl Iterator<Item = String>) -> String {
+    let entries: Vec<String> = entries.collect();
+    if entries.is_empty() { String::new() } else { format!("{}; ", entries.join("; ")) }
+}
+
 /// The required (or optional) guests, as the lines show them: `Name <address>, …`.
 fn guest_list(attendees: &[quatrelle_engine::model::ical::Attendee], optional: bool) -> String {
     attendees
@@ -406,8 +470,15 @@ pub fn event(ui: &mut Ui, f: &mut EventForm, s: &Session, t: &Tokens, acts: &mut
             form_row(ui, t, true, Some(Icon::People), "Invite", |ui| {
                 field(ui, &mut f.guests, tl!("Names <addresses>, separated by ; or ,"), f32::INFINITY);
             });
-            // The rooms booked for it, and the Room Finder to pick one (Outlook's).
-            form_row(ui, t, true, Some(Icon::Location), "Rooms", |ui| super::rooms::row(ui, f, t));
+            // The rooms booked for it, read, and the Room Finder to book or free one (Outlook's).
+            form_row(ui, t, true, Some(Icon::Location), "Rooms", |ui| {
+                let names = f.rooms_text();
+                super::rooms::with_finder_toggle(ui, f, |ui| {
+                    ui.allocate_ui_with_layout(vec2(ui.available_width(), FIELD_H), egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                        ui.label(RichText::new(names).color(t.text));
+                    });
+                });
+            });
             if f.finder.is_some() {
                 super::rooms::finder(ui, f, s, t, acts);
                 ui.add_space(8.0);
