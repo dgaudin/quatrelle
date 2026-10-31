@@ -554,3 +554,23 @@ fn a_strangers_invitation_brings_no_webex_id() {
     let file = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:j\r\nDTSTART:20261016T140000Z\r\nX-QUATRELLE-WEBEX-ID:abc\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
     assert_eq!(parse(file, 0).events.first().and_then(|e| e.webex_id.as_deref()), Some("abc"), "a file without a method is the user's own");
 }
+
+/// Times at the very ends of the range (a damaged cache, a hostile server) make no overflow:
+/// their occurrences are worked out, or none, and nothing panics.
+#[test]
+fn occurrences_at_the_ends_of_time() {
+    let at =
+        |start: i64, end: i64, rrule: Option<&str>| CalEvent { uid: "x".into(), start, end, rrule: rrule.map(str::to_string), ..Default::default() };
+    let events = [
+        at(i64::MAX, i64::MAX, None),
+        at(i64::MAX - 5, i64::MAX, Some("FREQ=DAILY")),
+        at(i64::MIN, i64::MAX, None),
+        at(i64::MIN, i64::MIN, Some("FREQ=WEEKLY")),
+        CalEvent { recurrence_id: Some(i64::MAX), ..at(i64::MAX, i64::MAX, None) },
+    ];
+    for (from, to) in [(i64::MIN, i64::MAX), (0, 1_800_000_000), (i64::MAX - 10, i64::MAX)] {
+        let _ = occurrences(&events, from, to);
+    }
+    let whole = occurrences(&[at(-10, i64::MAX, None)], 0, 10);
+    assert_eq!(whole.len(), 1, "one that runs to the end of time is there now");
+}
