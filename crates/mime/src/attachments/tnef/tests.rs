@@ -584,6 +584,15 @@ fn a_winmail_dat_with_only_a_body_has_no_paperclip() {
     let mut body_only = Vec::new();
     attr(&mut body_only, 1, ATT_MSG_PROPS, &props(&[(0x001E, PR_BODY, str8("Only the text"))]));
     assert!(!real(stream(&body_only)));
+    // Only the body's pictures, as Outlook marks them: no paperclip, and the RTF body not read.
+    let mut pictures = Vec::new();
+    attr(&mut pictures, 1, ATT_MSG_PROPS, &props(&[(0x0102, PR_RTF_COMPRESSED, binary(&compress(b"{\\rtf1 Hello}")))]));
+    attr(&mut pictures, 2, ATT_REND_DATA, &[]);
+    attr(&mut pictures, 2, ATT_ATTACHMENT, &props(&[(0x001E, PR_ATTACH_CONTENT_ID, str8("p@x")), (0x000B, PR_ATTACHMENT_HIDDEN, boolean(true))]));
+    attr(&mut pictures, 2, ATT_DATA, b"png");
+    RTF_READ.with(|n| n.set(0));
+    assert!(!real(stream(&pictures)));
+    assert_eq!(RTF_READ.with(|n| n.get()), 0);
     assert!(real(outlook_stream()));
     assert!(real(b"not a winmail.dat".to_vec()));
 }

@@ -94,17 +94,17 @@ pub(super) fn has_real_attachments(m: &Message<'_>) -> bool {
     };
     // A winmail.dat counts by what it gives in its place, as `attached` lists it: its files, or
     // itself when it stays one; one holding only the body gives none (no paperclip over an
-    // empty list).
+    // empty list), and neither do the pictures Outlook marks as the body's (hidden, by
+    // Content-ID), as a MIME part shown inline doesn't. No body is read to count them.
     let mut budget = Budget::new();
-    let mut body = false;
     for p in m.attachments() {
         if smime(p) {
             continue;
         }
         if is_tnef(&part_mime(p), p.attachment_name()) {
             budget.cut = false;
-            match read_part(p.contents(), &mut budget, !body) {
-                Some(t) if t.attachments.is_empty() && !budget.cut => body |= !t.body.is_empty(),
+            match read_part(p.contents(), &mut budget, false) {
+                Some(t) if !budget.cut && t.attachments.iter().all(|f| f.hidden && f.content_id.is_some()) => {}
                 _ => return true,
             }
         } else if p.attachment_name().is_some() || !p.is_inline_part() {
