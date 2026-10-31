@@ -22,6 +22,7 @@ use crate::files::mime_from_name;
 mod rtf;
 
 pub use rtf::{decompress_rtf, rtf_body};
+use rtf::{decompress_rtf_max, rtf_body_max};
 
 /// The signature a TNEF stream starts with (little-endian `0x223E9F78`).
 const SIGNATURE: [u8; 4] = [0x78, 0x9F, 0x3E, 0x22];
@@ -31,6 +32,11 @@ const MAX_FILES: usize = 500;
 const MAX_PROPS: usize = 4096;
 /// How deep attached messages are read (each one a stream of its own).
 const MAX_DEPTH: u8 = 3;
+/// What one reading may hold beyond the copies of its own bytes: bodies, files and the `.eml` of
+/// attached messages, of every level and every `winmail.dat` of a message, together. Four bodies
+/// at the RTF cap; a real `winmail.dat` holds one body, and its files are its own bytes, which
+/// [`Budget::grant`] adds (twice: an attached message's files go into its `.eml` too).
+const BUDGET_BYTES: usize = 64 << 20;
 
 // Attribute ids (level 1: the message; level 2: an attachment).
 const ATT_OEM_CODEPAGE: u32 = 0x0006_9007;
@@ -75,6 +81,49 @@ pub struct Tnef {
     pub date: i64,
     pub body: TnefBody,
     pub attachments: Vec<TnefFile>,
+    /// A body this reading was asked to leave unread (a message's later `winmail.dat`s).
+    pub(crate) body_left: bool,
+}
+
+/// What one reading may still hold ([`BUDGET_BYTES`], [`MAX_FILES`]): shared by every level of
+/// attached messages and every `winmail.dat` of a message. Each of those had its own caps, so 30
+/// attached messages of 3 KB held 500 MB of `.eml` (review, 2026-10-31).
+#[derive(Debug)]
+pub(crate) struct Budget {
+    bytes: usize,
+    files: usize,
+    /// Something was left out for want of budget.
+    pub(crate) cut: bool,
+}
+
+impl Budget {
+    pub(crate) fn new() -> Self {
+        Budget { bytes: BUDGET_BYTES, files: MAX_FILES, cut: false }
+    }
+
+    /// A stream's own bytes, twice: its files are copies of them, and an attached message's
+    /// again in its `.eml`, so a big `winmail.dat` of real files is never cut short.
+    fn grant(&mut self, stream: &[u8]) {
+        self.bytes = self.bytes.saturating_add(stream.len().saturating_mul(2));
+    }
+
+    fn take(&mut self, n: usize) -> bool {
+        if n <= self.bytes {
+            self.bytes -= n;
+            true
+        } else {
+            self.cut = true;
+            false
+        }
+    }
+
+    fn give_back(&mut self, n: usize) {
+        self.bytes = self.bytes.saturating_add(n);
+    }
+
+    pub(crate) fn files_left(&self) -> bool {
+        self.files > 0
+    }
 }
 
 /// A TNEF body, as the reading pane takes it.
@@ -131,7 +180,13 @@ fn prop(props: &Props, id: u16) -> Option<&Value> {
 
 /// The files and body in a `winmail.dat`; `None` for bytes that aren't one.
 pub fn read_tnef(data: &[u8]) -> Option<Tnef> {
-    read_at(data, 0)
+    read_with(data, &mut Budget::new(), true)
+}
+
+/// [`read_tnef`] within `budget`; with `body` false, the body is only noted (`body_left`).
+pub(crate) fn read_with(data: &[u8], budget: &mut Budget, body: bool) -> Option<Tnef> {
+    budget.grant(data);
+    read_at(data, 0, budget, body)
 }
 
 /// Whether an attachment is a `winmail.dat` (by its type, or its name when sent as plain bytes).
@@ -179,7 +234,7 @@ struct Building {
     props: Props,
 }
 
-fn read_at(data: &[u8], depth: u8) -> Option<Tnef> {
+fn read_at(data: &[u8], depth: u8, budget: &mut Budget, want_body: bool) -> Option<Tnef> {
     let mut r = Reader { data, at: 0 };
     if r.take(4)? != SIGNATURE {
         return None;
@@ -230,8 +285,22 @@ fn read_at(data: &[u8], depth: u8) -> Option<Tnef> {
         _ => oem,
     };
     let subject = text(prop(&msg, PR_SUBJECT), cp).or_else(|| subject.map(|s| decode(trim_nul(&s), oem))).unwrap_or_default();
-    let body = body_of(&msg, cp, body_attr.as_deref().map(|b| decode(trim_nul(b), oem)));
-    let attachments = files.into_iter().enumerate().filter_map(|(i, f)| file(f, i, oem, cp, depth)).collect();
+    let body_left = !want_body && (body_attr.is_some() || [PR_HTML, PR_RTF_COMPRESSED, PR_BODY].iter().any(|id| prop(&msg, *id).is_some()));
+    let body = match want_body {
+        true => body_of(&msg, cp, body_attr.as_deref().map(|b| decode(trim_nul(b), oem)), budget),
+        false => TnefBody::None,
+    };
+    let mut attachments = Vec::new();
+    for (i, f) in files.into_iter().enumerate() {
+        if !budget.files_left() {
+            budget.cut = true;
+            break;
+        }
+        if let Some(f) = file(f, i, oem, cp, depth, budget) {
+            budget.files -= 1;
+            attachments.push(f);
+        }
+    }
     let (from_name, from_email, date) = sender_and_date(&msg, cp);
     Some(Tnef {
         subject: subject.trim().to_string(),
@@ -240,12 +309,26 @@ fn read_at(data: &[u8], depth: u8) -> Option<Tnef> {
         date: date.unwrap_or(0),
         body,
         attachments,
+        body_left,
     })
 }
 
 /// The body: the HTML when there is one, else the compressed RTF (the HTML or text it carries,
 /// or itself as simple HTML), else the plain text.
-fn body_of(msg: &Props, cp: u32, attr: Option<String>) -> TnefBody {
+/// Held only when the budget has room for it.
+fn body_of(msg: &Props, cp: u32, attr: Option<String>, budget: &mut Budget) -> TnefBody {
+    // Once something was left out, no more bodies are read: each would take what's left again.
+    let room = if budget.cut { 0 } else { budget.bytes };
+    let body = body_unbudgeted(msg, cp, attr, room);
+    let len = match &body {
+        TnefBody::Html(s) | TnefBody::Text(s) => s.len(),
+        TnefBody::None => 0,
+    };
+    if budget.take(len) { body } else { TnefBody::None }
+}
+
+/// `room`: what the RTF may decompress to and write.
+fn body_unbudgeted(msg: &Props, cp: u32, attr: Option<String>, room: usize) -> TnefBody {
     match prop(msg, PR_HTML) {
         Some(Value::Binary(b)) => return TnefBody::Html(decode(b, cp)),
         Some(Value::Str8(b)) => return TnefBody::Html(decode(trim_nul(b), cp)),
@@ -253,9 +336,12 @@ fn body_of(msg: &Props, cp: u32, attr: Option<String>) -> TnefBody {
         _ => {}
     }
     if let Some(Value::Binary(b)) = prop(msg, PR_RTF_COMPRESSED)
-        && let Some(rtf) = decompress_rtf(b)
+        && room > 0
+        && let Some(rtf) = decompress_rtf_max(b, room)
     {
-        let body = rtf_body(&rtf);
+        #[cfg(test)]
+        tests::RTF_READ.with(|n| n.set(n.get() + 1));
+        let body = rtf_body_max(&rtf, room);
         if !body.is_empty() {
             return body;
         }
@@ -266,7 +352,7 @@ fn body_of(msg: &Props, cp: u32, attr: Option<String>) -> TnefBody {
     }
 }
 
-fn file(f: Building, index: usize, oem: u32, cp: u32, depth: u8) -> Option<TnefFile> {
+fn file(f: Building, index: usize, oem: u32, cp: u32, depth: u8, budget: &mut Budget) -> Option<TnefFile> {
     let p = &f.props;
     let name = text(prop(p, PR_ATTACH_LONG_FILENAME), cp)
         .or_else(|| text(prop(p, PR_DISPLAY_NAME), cp))
@@ -279,7 +365,9 @@ fn file(f: Building, index: usize, oem: u32, cp: u32, depth: u8) -> Option<TnefF
     let (name, mime, data) = match (prop(p, PR_ATTACH_DATA), embedded) {
         // An attached Outlook message: a stream of its own, after the object's interface id.
         (Some(Value::Object(o)), true) => {
-            let inner = o.get(16..).filter(|_| depth < MAX_DEPTH).and_then(|t| read_at(t, depth + 1))?;
+            let inner = o.get(16..).filter(|_| depth < MAX_DEPTH && !budget.cut).and_then(|t| read_at(t, depth + 1, budget, true))?;
+            // What the attached message held goes into its `.eml`, which is held instead.
+            budget.give_back(held(&inner));
             let eml = to_eml(&inner)?;
             let title = name.unwrap_or_else(|| if inner.subject.is_empty() { format!("message {}", index + 1) } else { inner.subject.clone() });
             (Some(format!("{}.eml", title.trim_end_matches(".msg"))), "message/rfc822".to_string(), eml)
@@ -297,7 +385,16 @@ fn file(f: Building, index: usize, oem: u32, cp: u32, depth: u8) -> Option<TnefF
     };
     let content_id = text(prop(p, PR_ATTACH_CONTENT_ID), cp).map(|c| c.trim().trim_matches(['<', '>']).to_string()).filter(|c| !c.is_empty());
     let hidden = matches!(prop(p, PR_ATTACHMENT_HIDDEN), Some(Value::Bool(true)));
-    Some(TnefFile { name, mime, data, content_id, hidden })
+    budget.take(data.len()).then_some(TnefFile { name, mime, data, content_id, hidden })
+}
+
+/// The bytes a reading holds: its body and its files.
+fn held(t: &Tnef) -> usize {
+    let body = match &t.body {
+        TnefBody::Html(s) | TnefBody::Text(s) => s.len(),
+        TnefBody::None => 0,
+    };
+    t.attachments.iter().fold(body, |n, f| n.saturating_add(f.data.len()))
 }
 
 /// An attached Outlook message as an RFC 5322 message, so the reading pane opens it as one.
