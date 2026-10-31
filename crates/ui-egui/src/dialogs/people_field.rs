@@ -528,7 +528,6 @@ impl PeopleFields {
     /// This side's fields of the window forgotten, each made again from its text at the next
     /// prepare (the engine's names for them stay: an answer for a name no longer typed is
     /// ignored); an OK held for them is off.
-    #[cfg_attr(not(test), expect(dead_code, reason = "the dialogs draw their fields from the next commit"))]
     pub(crate) fn reset_window(&mut self, window: u64) {
         self.fields.retain(|f, _| f.window != window);
         self.send_wait.remove(&window);

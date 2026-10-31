@@ -1,12 +1,15 @@
 //! Dialogs: categories, rules, Search Folders and Quick Steps.
 
 use super::*;
+use crate::dialogs::people_field::{DIALOG_WINDOWS, PeopleFields, accepts_of, dialog_field};
+use quatrelle_engine::model::addr::{matched, matched_text};
+use quatrelle_engine::model::search::from_people;
 
 mod rule_form;
 
 pub use rule_form::*;
 
-pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &mut Vec<Action>) -> bool {
+pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, people: &mut PeopleFields, t: &Tokens, acts: &mut Vec<Action>) -> bool {
     match d {
         Dialog::NewCategory { name, color, error } => {
             ui.set_width(340.0);
@@ -259,7 +262,7 @@ pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &
             ui.add_space(6.0);
             close_row(ui)
         }
-        Dialog::EditRule(f) => rule_form::edit_rule(ui, f, s, t, acts),
+        Dialog::EditRule(f) => rule_form::edit_rule(ui, f, s, people, t, acts),
         Dialog::SearchFolder(f) => {
             ui.set_width(460.0);
             title(ui, t, if f.original.is_some() { "Edit Search Folder" } else { "New Search Folder" });
@@ -285,7 +288,25 @@ pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &
             if needs_people {
                 ui.add_space(6.0);
                 ui.label(RichText::new(tl!("From these people (addresses or names, separated by commas)")).color(t.dim).small());
-                ui.add(egui::TextEdit::singleline(&mut f.people).hint_text("ana@example.com, Jun").desired_width(f32::INFINITY));
+                // A contacts field: the addresses are what's looked for, a name or a domain as typed.
+                let field = dialog_field(0, "search-people");
+                let directory = s.directory_account(None);
+                let accepts = accepts_of(field.name);
+                people.draw(
+                    ui,
+                    t,
+                    field,
+                    directory.as_deref(),
+                    accepts,
+                    "",
+                    "ana@example.com, Jun",
+                    &mut f.people,
+                    false,
+                    directory.is_some(),
+                    false,
+                    acts,
+                );
+                people.choice_dialog(ui.ctx(), t, s, DIALOG_WINDOWS, &[field.name], acts);
             }
             if custom {
                 ui.add_space(6.0);
@@ -301,7 +322,9 @@ pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &
                 ui.label(RichText::new(e.as_str()).color(t.danger).small());
             }
             let query = f.final_query();
-            let ready = !f.name.trim().is_empty() && !query.trim().is_empty();
+            // An entry its place refuses (a contact group has no address) stops it.
+            let stopped = needs_people && people.blocked(dialog_field(0, "search-people"));
+            let ready = !f.name.trim().is_empty() && !query.trim().is_empty() && !stopped;
             let (ok, cancel) = buttons(ui, t, if f.original.is_some() { "Save" } else { "Create" }, ready);
             if (ok || enter) && ready {
                 let p = match &f.original {
@@ -409,7 +432,8 @@ pub struct SearchFolderForm {
     /// Which of [`SEARCH_PRESETS`].
     pub preset: usize,
     pub name: String,
-    /// For "Mail from specific people": addresses or names, separated by commas.
+    /// For "Mail from specific people": the contacts field's text (addresses, names or domains,
+    /// separated by `;` or `,`).
     pub people: String,
     /// For "Custom": the search, as typed in the search box.
     pub query: String,
@@ -423,6 +447,16 @@ impl SearchFolderForm {
 
     /// An existing one, to change: its search shown as written.
     pub fn edit(f: &quatrelle_engine::SearchFolder) -> SearchFolderForm {
+        // People (`from:a,"b c"`) reopen as the people they are, as chips.
+        if let Some(list) = from_people(&f.query) {
+            return SearchFolderForm {
+                original: Some(f.name.clone()),
+                preset: PRESET_PEOPLE,
+                name: f.name.clone(),
+                people: matched_text(&list),
+                ..Default::default()
+            };
+        }
         let preset = SEARCH_PRESETS.iter().position(|p| !p.1.is_empty() && p.1 != "from:" && p.1 == f.query).unwrap_or(PRESET_CUSTOM);
         SearchFolderForm { original: Some(f.name.clone()), preset, name: f.name.clone(), query: f.query.clone(), ..Default::default() }
     }
@@ -447,12 +481,11 @@ impl SearchFolderForm {
     pub fn final_query(&self) -> String {
         match self.preset {
             PRESET_PEOPLE => {
-                let people: Vec<String> = self
-                    .people
-                    .split([',', ';'])
-                    .map(|p| p.trim().replace('"', ""))
+                let people: Vec<String> = matched(&self.people)
+                    .into_iter()
+                    .map(|p| p.replace('"', "").trim().to_string())
                     .filter(|p| !p.is_empty())
-                    .map(|p| if p.contains(char::is_whitespace) { format!("\"{p}\"") } else { p })
+                    .map(|p| if p.contains(|c: char| c.is_whitespace() || c == ',') { format!("\"{p}\"") } else { p })
                     .collect();
                 if people.is_empty() { String::new() } else { format!("from:{}", people.join(",")) }
             }

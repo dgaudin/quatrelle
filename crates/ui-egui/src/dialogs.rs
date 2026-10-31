@@ -3,6 +3,7 @@
 use egui::{Margin, Rect, RichText, Sense, Ui, vec2};
 use quatrelle_engine::Compose;
 use quatrelle_engine::Session;
+use quatrelle_engine::model::addr::matched_text;
 use quatrelle_engine::model::organize::{Condition, Rule, RuleAction};
 use quatrelle_engine::model::{AccountConfig, Folder, FolderRole, Security};
 use serde_json::json;
@@ -634,7 +635,7 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, people: &mut people_field::Peo
         | Dialog::ReplaceOutlookRules { .. }
         | Dialog::EditRule(..)
         | Dialog::SearchFolder(..)
-        | Dialog::QuickStep(..) => organize::draw(ui, d, s, t, acts),
+        | Dialog::QuickStep(..) => organize::draw(ui, d, s, people, t, acts),
         Dialog::SelectNames(..)
         | Dialog::AttachItem(..)
         | Dialog::SaveChanges
@@ -679,15 +680,16 @@ pub struct RuleAct {
 impl RuleCond {
     fn of(c: &Condition) -> RuleCond {
         let (test, text) = match c {
-            Condition::From(t) => (RuleTest::From, t.clone()),
-            Condition::To(t) => (RuleTest::To, t.clone()),
+            // As the field writes them: a text with a comma in quotes, so it reads back whole.
+            Condition::From(t) => (RuleTest::From, matched_text(std::slice::from_ref(t))),
+            Condition::To(t) => (RuleTest::To, matched_text(std::slice::from_ref(t))),
             Condition::Subject(t) => (RuleTest::Subject, t.clone()),
             Condition::AnyText(t) => (RuleTest::AnyText, t.clone()),
             Condition::HasAttachment => (RuleTest::HasAttachment, String::new()),
             Condition::Bulk => (RuleTest::Bulk, String::new()),
+            Condition::FromAny(v) => (RuleTest::FromAny, matched_text(v)),
+            Condition::ToAny(v) => (RuleTest::ToAny, matched_text(v)),
             // "; " between them, so a subject that has a comma keeps it.
-            Condition::FromAny(v) => (RuleTest::FromAny, v.join("; ")),
-            Condition::ToAny(v) => (RuleTest::ToAny, v.join("; ")),
             Condition::SubjectAny(v) => (RuleTest::SubjectAny, v.join("; ")),
         };
         RuleCond { test, text }
