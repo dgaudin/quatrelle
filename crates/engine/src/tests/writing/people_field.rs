@@ -203,6 +203,26 @@ fn a_shared_mailbox_typed_exactly_comes_first_whatever_its_case() {
     done(s);
 }
 
+/// A book started but empty (as `Session::open` leaves it with the Focused Inbox on): a command
+/// with no window (the CLI's) reads the mail into it whole before answering; the window's never
+/// does, whatever is left to read — its slices go on between frames.
+#[test]
+fn a_book_started_but_empty_is_read_whole_for_a_command_and_never_for_the_window() {
+    let (mut s, _gal) = with_exchange("whole-cli");
+    s.contacts_step(0);
+    assert!(s.contacts_pending());
+    let found = s.suggest_contacts("zoe", 8);
+    assert!(found.iter().any(|c| c.address.email == "zoe@studio.example"), "a command reads the mail first: {found:?}");
+    assert!(!s.contacts_pending(), "read whole");
+    done(s);
+    let (mut s, _gal) = with_exchange("whole-window");
+    s.interactive = true;
+    s.contacts_step(0);
+    assert!(s.suggest_contacts("zoe", 8).is_empty(), "the window's book answers as it stands");
+    assert!(s.contacts_pending(), "left to the window's slices");
+    done(s);
+}
+
 /// The search bug of 2026-10-30 again would be a pass per frame: a text typed once costs one
 /// pass, however often the window asks, over at most the book, the index and the rooms.
 #[test]
