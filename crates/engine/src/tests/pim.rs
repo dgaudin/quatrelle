@@ -769,3 +769,22 @@ fn a_look_stopped_at_a_site_to_allow_is_noted_and_saved() {
     assert_eq!(saved(&s).dav_untrusted, None);
     done(s);
 }
+
+/// An event at the very end of time in the cache (a damaged file) doesn't stop the calendar.
+#[test]
+fn an_event_at_the_end_of_time_is_drawn_without_overflow() {
+    let mut s = sample_session("calendar-end-of-time");
+    let e = quatrelle_model::ical::CalEvent { uid: "end".into(), summary: "End".into(), start: i64::MAX, end: i64::MAX, ..Default::default() };
+    s.pim_mut("sample").events.push(quatrelle_model::pim::StoredEvent {
+        calendar: quatrelle_model::pim::LOCAL.into(),
+        event: e,
+        ..Default::default()
+    });
+    for mode in ["day", "week", "month"] {
+        s.run("calendar.view", &json!({"mode": mode})).unwrap();
+        assert!(s.run("calendar.events", &json!({})).is_ok());
+    }
+    let _ = s.agenda(i64::MAX - 100, i64::MAX);
+    let _ = s.agenda(i64::MIN, i64::MIN + 100);
+    done(s);
+}
