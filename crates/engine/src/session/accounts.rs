@@ -552,6 +552,7 @@ impl Session {
     pub fn update_account(&mut self, config: AccountConfig, password: Option<String>) -> CmdResult {
         let id = config.id.clone();
         let Some(a) = self.account_mut(&id) else { return Err(CmdError::Params(format!("no account `{id}`"))) };
+        // `trusted_domains` is normalised and capped only by the trust commands: the settings UI goes through them.
         let reconnect = a.config.imap != config.imap
             || a.config.smtp != config.smtp
             || a.config.jmap != config.jmap

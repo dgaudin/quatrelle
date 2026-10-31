@@ -169,3 +169,12 @@ fn a_hostile_server_cannot_queue_endless_questions() {
     assert!(s.ask_trust.len() <= 200, "{}", s.ask_trust.len());
     assert!(!s.ask_trust.is_empty());
 }
+
+#[test]
+fn a_site_with_junk_in_it_is_not_asked() {
+    let (mut s, id) = with_account("trust-junk");
+    for junk in ["", "a\nb.example", "a b.example", "\u{7}"] {
+        s.ask_trust_once(&id, junk);
+    }
+    assert!(s.ask_trust.is_empty(), "neither queued nor logged");
+}

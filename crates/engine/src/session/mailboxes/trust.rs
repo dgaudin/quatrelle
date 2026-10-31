@@ -102,7 +102,11 @@ impl Session {
         /// queue endless dialogs. The domains past it stay untrusted, so nothing goes to them.
         const MAX_ASKED: usize = 200;
         let pair = (account.to_string(), site.to_string());
-        if site.is_empty() || self.refused_trust.contains(&pair) || self.asked_trust.contains(&pair) {
+        if site.is_empty()
+            || site.chars().any(|c| c.is_control() || c.is_whitespace())
+            || self.refused_trust.contains(&pair)
+            || self.asked_trust.contains(&pair)
+        {
             return;
         }
         if self.asked_trust.len() >= MAX_ASKED {
