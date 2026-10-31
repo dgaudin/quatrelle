@@ -16,9 +16,25 @@ use super::*;
 /// Most suggestions offered.
 pub const MAX_SUGGESTIONS: usize = 8;
 
-/// The fields that ask for suggestions: the message's recipients, the address book's
-/// (`book-*`), and the command line's.
-pub const FIELD_NAMES: &[&str] = &["to", "cc", "bcc", "replyTo", "book-to", "book-cc", "book-bcc", "cli"];
+/// The fields that ask for suggestions: the message's recipients and From, the address book's
+/// (`book-*`), a meeting's (`required`, `optional`, `rooms`, and their `att-*` twins), and the command line's.
+pub const FIELD_NAMES: &[&str] = &[
+    "to",
+    "cc",
+    "bcc",
+    "replyTo",
+    "book-to",
+    "book-cc",
+    "book-bcc",
+    "cli",
+    "from",
+    "required",
+    "optional",
+    "rooms",
+    "att-required",
+    "att-optional",
+    "att-rooms",
+];
 
 /// The fields whose last answer is kept; past them, all are forgotten (a window closed takes
 /// its fields with it, and nothing says so).
