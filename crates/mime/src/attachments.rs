@@ -34,31 +34,41 @@ fn part_mime(p: &mail_parser::MessagePart<'_>) -> String {
 /// when it can't be read, or holds nothing, and is listed too when the reading's budget left
 /// some of it out), and the body the first such file carries. One budget for all of them.
 pub(super) fn attached<'a>(m: &'a Message<'a>) -> (Vec<Attached<'a>>, TnefBody) {
-    let mut out = Vec::new();
+    // Each part, with the files a winmail.dat gives in its place (and whether it stays listed
+    // too: files left out for want of budget), read before any is listed: the body's pictures
+    // are then looked for once, among the files of every part.
+    let mut parts = Vec::new();
     let mut body = TnefBody::None;
     let mut budget = Budget::new();
     for p in m.attachments() {
         let mime = part_mime(p);
         budget.cut = false;
-        if is_tnef(&mime, p.attachment_name())
-            && let Some(t) = read_part(p.contents(), &mut budget, body.is_empty())
-        {
+        let files = match is_tnef(&mime, p.attachment_name()) {
+            true => read_part(p.contents(), &mut budget, body.is_empty()),
+            false => None,
+        }
+        .map(|mut t| {
             if body.is_empty() {
-                body = t.body;
+                body = std::mem::take(&mut t.body);
             }
-            // A picture the body shows is in it, whether or not Outlook marked it hidden.
-            let shown = shown_cids(&body, t.attachments.iter().filter_map(|f| f.content_id.as_deref()));
-            for f in t.attachments {
-                let index = out.len();
-                let inline = f.content_id.as_deref().is_some_and(|c| f.hidden || shown.contains(c));
-                let name = attachment_name(Some(&f.name), &f.mime, &f.data, index);
-                let info = AttachmentInfo { index, name, mime: f.mime, size: f.data.len(), inline, content_id: f.content_id, content_location: None };
-                out.push(Attached { info, data: Cow::Owned(f.data) });
-            }
-            // Files left out: the winmail.dat itself stays too, so none is lost.
-            if !budget.cut {
-                continue;
-            }
+            t.attachments
+        });
+        let listed = files.is_none() || budget.cut;
+        parts.push((p, mime, files, listed));
+    }
+    // A picture the body shows is in it, whether or not Outlook marked it hidden.
+    let shown = shown_cids(&body, parts.iter().flat_map(|(_, _, files, _)| files.iter().flatten().filter_map(|f| f.content_id.as_deref())));
+    let mut out = Vec::new();
+    for (p, mime, files, listed) in parts {
+        for f in files.into_iter().flatten() {
+            let index = out.len();
+            let inline = f.content_id.as_deref().is_some_and(|c| f.hidden || shown.contains(c));
+            let name = attachment_name(Some(&f.name), &f.mime, &f.data, index);
+            let info = AttachmentInfo { index, name, mime: f.mime, size: f.data.len(), inline, content_id: f.content_id, content_location: None };
+            out.push(Attached { info, data: Cow::Owned(f.data) });
+        }
+        if !listed {
+            continue;
         }
         let index = out.len();
         let name = attachment_name(p.attachment_name(), &mime, p.contents(), index);
