@@ -84,18 +84,10 @@ pub(crate) fn is_dialog_window(window: u64) -> bool {
     (window & DIALOG_WINDOWS) != 0 && !is_meeting_window(window)
 }
 
-/// What the field named `name` takes: the one place that says it.
+/// What the field named `name` takes: the engine's word ([`FieldId::accepts_of`]), so that it
+/// and the field agree (a rule's field keeps a name as typed, and nothing says it wasn't found).
 pub(crate) fn accepts_of(name: &str) -> &'static Accepts {
-    match name {
-        "required" | "optional" | "att-required" | "att-optional" => &Accepts::ATTENDEES,
-        "rooms" | "att-rooms" => &Accepts::ROOMS,
-        "from" => &Accepts::ONE_SENDER,
-        "calendar" => &Accepts::CALENDARS,
-        "mailbox" => &Accepts::MAILBOX,
-        "rule-one" => &Accepts::MATCHED_ONE,
-        "rule-any" | "search-people" => &Accepts::MATCHED,
-        _ => &Accepts::RECIPIENTS,
-    }
+    FieldId::accepts_of(name)
 }
 
 /// The egui id a field is drawn under (its input, list, card, scroll and held click are keyed by

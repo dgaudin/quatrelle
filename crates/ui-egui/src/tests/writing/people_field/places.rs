@@ -96,8 +96,8 @@ fn a_name_in_a_rule_field_stays_as_typed_until_ctrl_k() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
-/// A name nothing matches, checked with Ctrl+K in a rule's field, stays as typed with no error:
-/// it is looked for as text.
+/// A name nothing matches, checked with Ctrl+K in a rule's field, stays as typed with no error,
+/// and nothing says it wasn't found: it is looked for as text.
 #[test]
 fn a_rule_field_keeps_a_name_nothing_matches_without_error() {
     let (mut a, dir) = app("rule-nothing-matches");
@@ -109,6 +109,7 @@ fn a_rule_field_keeps_a_name_nothing_matches_without_error() {
     focus_field(&ctx, f);
     draw_field(&ctx, &mut a, f, Some(&gal), &mut text, vec![]);
     draw_field(&ctx, &mut a, f, Some(&gal), &mut text, vec![Event::Text("Zz".into())]);
+    let notices = a.session.notices.len();
     let acts = draw_field(&ctx, &mut a, f, Some(&gal), &mut text, vec![key(Key::K, Modifiers::COMMAND)]);
     assert!(asks(&acts));
     for x in acts {
@@ -123,6 +124,8 @@ fn a_rule_field_keeps_a_name_nothing_matches_without_error() {
     let p = a.ui.people.pieces(f).to_vec();
     assert!(p.len() == 1 && text_with(&p[0], "Zz", None), "{p:?}");
     assert!(!a.ui.people.blocked(f), "nothing stops the rule");
+    let said: Vec<&str> = a.session.notices[notices..].iter().map(|n| n.text.as_str()).collect();
+    assert!(!said.contains(&quatrelle_engine::NAMES_NOT_FOUND), "no word of names not found: {said:?}");
     let _ = std::fs::remove_dir_all(dir);
 }
 
