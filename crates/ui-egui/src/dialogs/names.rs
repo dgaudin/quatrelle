@@ -5,9 +5,8 @@
 
 use quatrelle_engine::FieldId;
 use quatrelle_engine::model::EmailAddress;
-use quatrelle_engine::model::addr::Accepts;
 
-use super::people_field::{BOOK_FIELDS, PeopleFields};
+use super::people_field::{BOOK_FIELDS, PeopleFields, accepts_of};
 use super::*;
 
 /// The address book being looked at.
@@ -254,7 +253,7 @@ pub(super) fn select_names(ui: &mut Ui, f: &mut NamesForm, s: &Session, people: 
             _ => &mut f.bcc,
         };
         let id = FieldId { window: f.compose, name };
-        if people.draw(ui, t, id, Some(&f.account), &Accepts::RECIPIENTS, label, "", field, false, can_expand, true, acts).book {
+        if people.draw(ui, t, id, Some(&f.account), accepts_of(id.name), label, "", field, false, can_expand, true, acts).book {
             add = Some(target);
         }
     }

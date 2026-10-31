@@ -1810,7 +1810,10 @@ month	May	maio
 	and others	e outros
 	This list couldn't be expanded: {error}	Esta lista não pôde ser expandida: {error}
 	Some names need checking before sending	Alguns nomes precisam ser verificados antes do envio
-	Some recipients were left out: send to fewer at once, or to the list itself	Alguns destinatários ficaram de fora: envie para menos pessoas de cada vez, ou para a própria lista
+	Some recipients were left out. Empty the field, then add fewer at once or the list itself	Alguns destinatários ficaram de fora. Esvazie o campo e depois adicione menos de cada vez ou a própria lista
 	Matched as typed	Comparado como digitado
 	{name}, {kind}, remove with Delete	{name}, {kind}, remover com Delete
 	{name}, {kind}, {why}, remove with Delete	{name}, {kind}, {why}, remover com Delete
+	This isn't a room	Isto não é uma sala
+	Only people, lists and groups can be invited	Só é possível convidar pessoas, listas e grupos
+	Send from a person, a shared mailbox or a list	Envie de uma pessoa, uma caixa de correio compartilhada ou uma lista

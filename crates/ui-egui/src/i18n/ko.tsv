@@ -1809,7 +1809,10 @@ month	May	5월
 	and others	외 다수
 	This list couldn't be expanded: {error}	이 목록을 확장할 수 없습니다: {error}
 	Some names need checking before sending	보내기 전에 확인해야 할 이름이 있습니다
-	Some recipients were left out: send to fewer at once, or to the list itself	일부 받는 사람이 제외되었습니다: 한 번에 더 적은 사람에게 보내거나 목록 자체로 보내세요
+	Some recipients were left out. Empty the field, then add fewer at once or the list itself	일부 받는 사람이 제외되었습니다. 필드를 비운 다음 한 번에 더 적게 추가하거나 목록 자체를 추가하세요
 	Matched as typed	입력한 대로 비교
 	{name}, {kind}, remove with Delete	{name}, {kind}, Delete 키로 제거
 	{name}, {kind}, {why}, remove with Delete	{name}, {kind}, {why}, Delete 키로 제거
+	This isn't a room	회의실이 아닙니다
+	Only people, lists and groups can be invited	사람, 목록, 그룹만 초대할 수 있습니다
+	Send from a person, a shared mailbox or a list	사람, 공유 사서함 또는 목록에서 보내세요

@@ -1809,7 +1809,10 @@ month	May	Май
 	and others	и другие
 	This list couldn't be expanded: {error}	Этот список не удалось развернуть: {error}
 	Some names need checking before sending	Некоторые имена нужно проверить перед отправкой
-	Some recipients were left out: send to fewer at once, or to the list itself	Часть получателей не добавлена: отправьте меньшему числу за раз или самому списку
+	Some recipients were left out. Empty the field, then add fewer at once or the list itself	Часть получателей не добавлена. Очистите поле, затем добавьте меньше за раз или сам список
 	Matched as typed	Сравнивается как введено
 	{name}, {kind}, remove with Delete	{name}, {kind}, удалить клавишей Delete
 	{name}, {kind}, {why}, remove with Delete	{name}, {kind}, {why}, удалить клавишей Delete
+	This isn't a room	Это не переговорная
+	Only people, lists and groups can be invited	Пригласить можно только людей, списки и группы
+	Send from a person, a shared mailbox or a list	Отправляйте от имени человека, общего почтового ящика или списка

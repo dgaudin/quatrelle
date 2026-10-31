@@ -1807,7 +1807,10 @@ month	May	5月
 	and others	及其他
 	This list couldn't be expanded: {error}	无法展开此列表: {error}
 	Some names need checking before sending	发送前需要核对一些姓名
-	Some recipients were left out: send to fewer at once, or to the list itself	部分收件人未添加：请减少每次发送的人数，或直接发送给该列表
+	Some recipients were left out. Empty the field, then add fewer at once or the list itself	部分收件人未添加。请清空该字段，然后每次少添加一些，或直接添加该列表
 	Matched as typed	按输入内容匹配
 	{name}, {kind}, remove with Delete	{name}，{kind}，按 Delete 键移除
 	{name}, {kind}, {why}, remove with Delete	{name}，{kind}，{why}，按 Delete 键移除
+	This isn't a room	这不是会议室
+	Only people, lists and groups can be invited	只能邀请个人、列表和组
+	Send from a person, a shared mailbox or a list	请从个人、共享邮箱或列表发送

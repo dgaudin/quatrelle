@@ -1,7 +1,5 @@
 //! The window, frame by frame: what comes in, the panes, the windows, what was asked.
 
-use quatrelle_engine::model::addr::Accepts;
-
 use crate::*;
 
 use super::ribbon::RIBBON_H;
@@ -515,7 +513,7 @@ impl MailApp {
             f.search.refresh(&mut self.session);
             for (name, text) in [("book-to", &f.to), ("book-cc", &f.cc), ("book-bcc", &f.bcc)] {
                 let field = quatrelle_engine::FieldId { window: f.compose, name };
-                self.ui.people.prepare(&mut self.session, field, Some(&f.account), &Accepts::RECIPIENTS, text);
+                self.ui.people.prepare(&mut self.session, field, Some(&f.account), crate::dialogs::people_field::accepts_of(name), text);
             }
         }
         // Attach Item's list: the items of the kind and folder chosen, matching the words typed.

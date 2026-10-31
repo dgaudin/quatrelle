@@ -1806,7 +1806,10 @@ month	May	mei
 	and others	en anderen
 	This list couldn't be expanded: {error}	Deze lijst kon niet worden uitgevouwen: {error}
 	Some names need checking before sending	Enkele namen moeten vóór het verzenden worden gecontroleerd
-	Some recipients were left out: send to fewer at once, or to the list itself	Enkele ontvangers zijn weggelaten: verstuur naar minder tegelijk, of naar de lijst zelf
+	Some recipients were left out. Empty the field, then add fewer at once or the list itself	Enkele ontvangers zijn weggelaten. Maak het veld leeg en voeg dan minder tegelijk toe, of de lijst zelf
 	Matched as typed	Vergeleken zoals getypt
 	{name}, {kind}, remove with Delete	{name}, {kind}, verwijderen met Delete
 	{name}, {kind}, {why}, remove with Delete	{name}, {kind}, {why}, verwijderen met Delete
+	This isn't a room	Dit is geen ruimte
+	Only people, lists and groups can be invited	Alleen personen, lijsten en groepen kunnen worden uitgenodigd
+	Send from a person, a shared mailbox or a list	Verstuur vanaf een persoon, een gedeeld postvak of een lijst
