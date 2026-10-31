@@ -37,9 +37,11 @@ mod html;
 mod photos;
 mod reply;
 pub mod smime;
-mod tnef;
 mod trackers;
-pub use attachments::{AttachmentInfo, AttachmentKind, attachment_data, craft_app_for, kind_of, quoted_pictures, text_preview_kind};
+pub use attachments::{
+    AttachmentInfo, AttachmentKind, Tnef, TnefBody, TnefFile, attachment_data, craft_app_for, decompress_rtf, kind_of, quoted_pictures, read_tnef,
+    rtf_body, text_preview_kind,
+};
 use attachments::{attached, has_real_attachments};
 use files::attachment_name;
 pub use files::{mime_from_name, runs_code, sanitize_filename};
@@ -48,7 +50,6 @@ use html::*;
 pub use html::*;
 pub use photos::without_location;
 pub use reply::{QuoteWords, ReplyMode, reply, reply_doc};
-pub use tnef::{Tnef, TnefBody, TnefFile, decompress_rtf, read_tnef, rtf_body};
 pub use trackers::{Trackers, clean_link, trackers, tracks_click};
 
 /// Longest preview kept in a summary, in characters.
