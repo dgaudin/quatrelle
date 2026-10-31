@@ -1819,3 +1819,5 @@ month	May	mayo
 	Send from a person, a shared mailbox or a list	Envíe desde una persona, un buzón compartido o una lista
 	{room} was moved to Rooms	{room} se movió a Salas
 	This list is no longer available	Esta lista ya no está disponible
+	Checking names…	Comprobando los nombres…
+	{room} can't be booked: a meeting books {max} rooms at most	No se puede reservar {room}: una reunión reserva {max} salas como máximo

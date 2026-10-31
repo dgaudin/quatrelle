@@ -72,27 +72,6 @@ impl MailApp {
         ctx.request_repaint_after(std::time::Duration::from_secs(15));
     }
 
-    /// A send held for the names its fields are still resolving: run once they're settled, or
-    /// said over the message when one can't be sent to (a name not found, the directory not
-    /// answering within its timeout).
-    fn send_when_resolved(&mut self, ctx: &egui::Context) {
-        let now = ctx.input(|i| i.time);
-        for (id, done) in self.ui.people.send_when_resolved(&mut self.session, now) {
-            match done {
-                Ok(params) => {
-                    if self.use_compose(id) {
-                        self.run_now("compose.send", params);
-                    }
-                }
-                Err(why) => self.ui.compose_alert = Some(why),
-            }
-            ctx.request_repaint();
-        }
-        if let Some(left) = self.ui.people.send_wait_left(now) {
-            ctx.request_repaint_after(std::time::Duration::from_secs_f64(left.clamp(0.05, 1.0)));
-        }
-    }
-
     /// Where the platform has a quit of its own (macOS: `terminate:`, `quit` returning true), a
     /// close of the main window that nothing held open goes that way instead: call it last in
     /// `logic`. Leaving a Mac by closing the eframe window can crash in AppKit's Touch Bar code

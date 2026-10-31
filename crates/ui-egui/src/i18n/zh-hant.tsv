@@ -1820,3 +1820,5 @@ kind	Address	地址
 	Send from a person, a shared mailbox or a list	請從個人、共用信箱或清單傳送
 	{room} was moved to Rooms	{room} 已移至「會議室」
 	This list is no longer available	此清單已無法使用
+	Checking names…	正在檢查名稱…
+	{room} can't be booked: a meeting books {max} rooms at most	無法預訂 {room}: 一個會議最多預訂 {max} 間會議室

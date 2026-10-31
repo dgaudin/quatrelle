@@ -323,19 +323,7 @@ impl MailApp {
                     self.ui.drag_out = self.attachment_to_temp(i, false);
                 }
             }
-            Action::ForEvent(w, id, p) => match self.session.run(id, &p) {
-                Ok(v) => {
-                    if id == "event.move" {
-                        self.moved_event(&v);
-                    }
-                    self.ui.event_windows.retain(|(x, _)| *x != w);
-                }
-                Err(e) => {
-                    if let Some((_, f)) = self.ui.event_windows.iter_mut().find(|(x, _)| *x == w) {
-                        f.error = Some(e.to_string().trim_start_matches("bad parameters: ").to_string());
-                    }
-                }
-            },
+            Action::ForEvent(w, id, p) => self.for_event(w, id, p),
             Action::Submit(id, p) => match self.session.run(id, &p) {
                 Ok(v) => {
                     if id == "contact.create" {
@@ -530,7 +518,7 @@ impl MailApp {
     }
 
     /// An appointment was moved (`event.move`'s answer): where to, and that Undo puts it back.
-    fn moved_event(&mut self, v: &Value) {
+    pub(super) fn moved_event(&mut self, v: &Value) {
         let Some(start) = v.get("start").and_then(Value::as_i64) else { return };
         let all_day = v.get("allDay").and_then(Value::as_bool).unwrap_or(false);
         // An all-day event's start is a UTC midnight; a timed one's a moment, said locally.

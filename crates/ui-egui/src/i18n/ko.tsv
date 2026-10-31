@@ -1818,3 +1818,5 @@ month	May	5월
 	Send from a person, a shared mailbox or a list	사람, 공유 사서함 또는 목록에서 보내세요
 	{room} was moved to Rooms	{room}을(를) 회의실로 옮겼습니다
 	This list is no longer available	이 목록은 더 이상 사용할 수 없습니다
+	Checking names…	이름 확인 중…
+	{room} can't be booked: a meeting books {max} rooms at most	{room}을(를) 예약할 수 없습니다: 회의 하나에 회의실은 최대 {max}개까지 예약할 수 있습니다

@@ -36,6 +36,9 @@ pub enum PieceError {
     NotFound,
     /// The directory couldn't be asked (offline, unreachable).
     Unreached,
+    /// A room among a meeting's guests that its Rooms can't take, the meeting booking the most
+    /// rooms it can (this many): kept among them as typed rather than lost.
+    RoomsFull(usize),
 }
 
 /// One entry of the field: a chip, or text not (yet) recognised.
@@ -187,6 +190,7 @@ pub fn error_text(text: &str, error: &PieceError) -> String {
         PieceError::NotAnAddress => tf!("Not an address: {what}", what = text),
         PieceError::NotFound => tf!("Not found: {name}", name = text),
         PieceError::Unreached => tl!("The directory can't be reached").to_string(),
+        PieceError::RoomsFull(max) => tf!("{room} can't be booked: a meeting books {max} rooms at most", room = text, max = max),
     }
 }
 
