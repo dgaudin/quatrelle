@@ -221,7 +221,10 @@ impl Worker {
                 Ok(Some(folder))
             })();
             match r {
-                Ok(Some(f)) => Some(f),
+                Ok(Some(f)) => {
+                    log::info!("{}: sent copy saved in {f}", self.acc.id);
+                    Some(f)
+                }
                 Ok(None) => {
                     self.notice(NO_SENT.to_string());
                     None
@@ -420,7 +423,10 @@ impl Worker {
             Ok(Some(folder))
         })();
         match r {
-            Ok(Some(folder)) => self.sync_one(&folder),
+            Ok(Some(folder)) => {
+                log::info!("{}: message {id}'s sent copy saved in {folder}", self.acc.id);
+                self.sync_one(&folder);
+            }
             Ok(None) => self.notice(NO_SENT.to_string()),
             Err(e) => self.notice(format!("sent, but no copy was saved in Sent Items: {e}")),
         }
