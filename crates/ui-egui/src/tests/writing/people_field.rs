@@ -15,6 +15,7 @@ use crate::theme::Tokens;
 mod meeting;
 mod meeting_send;
 mod message;
+mod places;
 mod sending;
 
 /// What one frame of the field gave: its events, the rect it took, what was drawn, and what egui
@@ -367,6 +368,30 @@ fn a_chip_is_a_named_widget_with_its_kind_and_a_refused_one_is_red() {
     assert!(ctx.memory(|m| m.has_focus(input_id(input.id))), "the field keeps the keyboard");
     assert_eq!(kind_name(AddresseeKind::Unknown), "Address");
     assert_eq!(source_name(Source::Directory), "Directory (cached)");
+}
+
+/// Where a rule matches text as typed, text that isn't a chip says so on hover, with no red line
+/// under it; in To, the same text says nothing.
+#[test]
+fn matched_as_typed_text_says_so_on_hover() {
+    let ctx = egui::Context::default();
+    let hovered = |accepts: &Accepts| {
+        let input = FieldInput { accepts, focus: false, ..field("rule", &[]) };
+        let mut st = FieldState { pieces: vec![Piece::Text { text: "@proginov.com".into(), error: None }], ..Default::default() };
+        let d = draw_in(&ctx, &mut st, &input, vec![], 600.0);
+        let at = drawn_at(&d.shapes, "@proginov.com").expect("the text is drawn").center();
+        draw(&ctx, &mut st, &input, vec![Event::PointerMoved(at)]);
+        let mut d = draw_in(&ctx, &mut st, &input, vec![], 600.0);
+        for _ in 0..60 {
+            d = draw_in(&ctx, &mut st, &input, vec![], 600.0);
+        }
+        d
+    };
+    let d = hovered(&Accepts::MATCHED);
+    assert!(drawn_at(&d.shapes, "Matched as typed").is_some(), "said on hover");
+    let danger = Tokens::light().danger;
+    assert!(!d.shapes.iter().any(|s| matches!(s, egui::Shape::LineSegment { stroke, .. } if stroke.color == danger)), "no red line");
+    assert!(drawn_at(&hovered(&Accepts::RECIPIENTS).shapes, "Matched as typed").is_none(), "nothing said in To");
 }
 
 /// A click on a suggestion or on its × keeps the keyboard in the field: no text closed, and what's

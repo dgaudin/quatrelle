@@ -39,6 +39,9 @@ pub enum PieceError {
     /// A room among a meeting's guests that its Rooms can't take, the meeting booking the most
     /// rooms it can (this many): kept among them as typed rather than lost.
     RoomsFull(usize),
+    /// What was asked of it couldn't be done (a calendar that didn't open), and why (as said,
+    /// already translated or the server's own words). It isn't asked again.
+    Failed(String),
 }
 
 /// One entry of the field: a chip, or text not (yet) recognised.
@@ -210,6 +213,7 @@ pub fn error_text(text: &str, error: &PieceError) -> String {
         PieceError::NotAnAddress => tf!("Not an address: {what}", what = text),
         PieceError::NotFound => tf!("Not found: {name}", name = text),
         PieceError::Unreached => tl!("The directory can't be reached").to_string(),
+        PieceError::Failed(why) => why.clone(),
         PieceError::RoomsFull(max) => tf!("{room} can't be booked: a meeting books {max} rooms at most", room = text, max = max),
     }
 }

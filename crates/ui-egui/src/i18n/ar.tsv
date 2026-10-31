@@ -1813,6 +1813,9 @@ month	May	مايو
 	This isn't a room	هذه ليست غرفة
 	Only people, lists and groups can be invited	يمكن دعوة الأشخاص والقوائم والمجموعات فقط
 	Send from a person, a shared mailbox or a list	أرسل من شخص أو صندوق بريد مشترك أو قائمة
+	A distribution list's calendar can't be opened	لا يمكن فتح تقويم قائمة توزيع
+	Only a person's, a room's or a shared mailbox can be opened	يمكن فتح صندوق بريد شخص أو غرفة أو صندوق بريد مشترك فقط
+	A contact group has no address: expand it	ليس لمجموعة جهات الاتصال عنوان: قم بتوسيعها
 	{room} was moved to Rooms	تم نقل {room} إلى الغرف
 	This list is no longer available	هذه القائمة لم تعد متاحة
 	Checking names…	جارٍ التحقق من الأسماء…

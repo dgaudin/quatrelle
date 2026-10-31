@@ -1813,6 +1813,9 @@ month	May	מאי
 	This isn't a room	זה אינו חדר
 	Only people, lists and groups can be invited	אפשר להזמין רק אנשים, רשימות וקבוצות
 	Send from a person, a shared mailbox or a list	שלחו מאדם, מתיבת דואר משותפת או מרשימה
+	A distribution list's calendar can't be opened	לא ניתן לפתוח לוח שנה של רשימת תפוצה
+	Only a person's, a room's or a shared mailbox can be opened	אפשר לפתוח רק תיבת דואר של אדם או של חדר, או תיבת דואר משותפת
+	A contact group has no address: expand it	לקבוצת אנשי קשר אין כתובת: יש להרחיב אותה
 	{room} was moved to Rooms	{room} הועבר אל חדרים
 	This list is no longer available	רשימה זו כבר אינה זמינה
 	Checking names…	בודק שמות…

@@ -46,7 +46,9 @@ pub(super) fn body(ui: &mut Ui, t: &Tokens, st: &mut FieldState, input: &FieldIn
                     let on = *selected == Some(i);
                     let resp = match piece {
                         Piece::Chip { who, refused } => chip(ui, t, who, refused.as_deref(), input.id.with(("people-chip", i)), on, card_open),
-                        Piece::Text { text, error } => text_piece(ui, t, text, error.as_ref(), input.id.with(("people-text", i)), on),
+                        Piece::Text { text, error } => {
+                            text_piece(ui, t, text, error.as_ref(), input.accepts.as_typed, input.id.with(("people-text", i)), on)
+                        }
                     };
                     if resp.clicked() {
                         clicked = Some(i);
@@ -160,8 +162,9 @@ fn chip(ui: &mut Ui, t: &Tokens, a: &Addressee, refused: Option<&str>, id: Id, s
     if card_open { resp } else { resp.on_hover_text(tip) }
 }
 
-/// Text not recognised: as typed, red-underlined with its reason on hover when it has an error.
-fn text_piece(ui: &mut Ui, t: &Tokens, text: &str, error: Option<&PieceError>, id: Id, selected: bool) -> Response {
+/// Text not recognised: as typed, red-underlined with its reason on hover when it has an error;
+/// where the place takes text as typed (`as_typed`: a rule's), one with no error says so on hover.
+fn text_piece(ui: &mut Ui, t: &Tokens, text: &str, error: Option<&PieceError>, as_typed: bool, id: Id, selected: bool) -> Response {
     let text_w = text_width(ui, text).min(MAX_CHIP_W - 2.0 * PAD_LEFT);
     let (rect, resp) = slot(ui, id, PAD_LEFT + text_w + PAD_LEFT);
     let message = error.map(|e| error_text(text, e));
@@ -183,6 +186,7 @@ fn text_piece(ui: &mut Ui, t: &Tokens, text: &str, error: Option<&PieceError>, i
             ui.painter().line_segment([pos2(label.rect.left(), y), pos2(label.rect.right(), y)], Stroke::new(1.5, t.danger));
             resp.on_hover_text(m)
         }
+        None if as_typed => resp.on_hover_text(tl!("Matched as typed")),
         None => resp,
     }
 }

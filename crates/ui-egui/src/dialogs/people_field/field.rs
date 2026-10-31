@@ -66,6 +66,12 @@ fn refused_by(accepts: &Accepts, who: &Addressee, by_name: bool) -> Option<Strin
         tl!("This isn't a room")
     } else if *accepts == Accepts::ONE_SENDER {
         tl!("Send from a person, a shared mailbox or a list")
+    } else if *accepts == Accepts::CALENDARS {
+        tl!("A distribution list's calendar can't be opened")
+    } else if *accepts == Accepts::MAILBOX {
+        tl!("Only a person's, a room's or a shared mailbox can be opened")
+    } else if *accepts == Accepts::MATCHED || *accepts == Accepts::MATCHED_ONE {
+        tl!("A contact group has no address: expand it")
     } else {
         tl!("Only people, lists and groups can be invited")
     };
@@ -126,7 +132,8 @@ impl Field {
     /// chip the place refuses is red; one refused stays so while a chip of its address stays (a
     /// person picked by name in Rooms reads back from the text as if typed), with what it was
     /// known to be while nothing here knows it (unknown is no reason to take it). A one-entry
-    /// field keeps the last entry.
+    /// field keeps the last entry. A place that takes text as typed (a rule's) keeps an `@` that
+    /// isn't an address (`@proginov.com`) with no error.
     pub(super) fn parse(&mut self, s: &mut Session, account: Option<&str>, accepts: &Accepts, text: &str) {
         s.contacts_step(0);
         let was_reparse = std::mem::take(&mut self.reparse);
@@ -141,6 +148,13 @@ impl Field {
         } else {
             (pieces_of(s, account, text), entries.len().saturating_sub(MAX_ENTRIES))
         };
+        if accepts.as_typed {
+            for p in &mut pieces {
+                if let Piece::Text { error: error @ Some(PieceError::NotAnAddress), .. } = p {
+                    *error = None;
+                }
+            }
+        }
         let refused_before: Vec<&Addressee> = self
             .st
             .pieces
@@ -200,6 +214,8 @@ impl Field {
 
     /// What the engine has for the field since the last frame: the names settled (a chip, or why
     /// not), the lists expanded, the chips' kinds from the book once it's read, the names waiting.
+    /// A place that takes text as typed (a rule's) keeps a name nothing settled as it is, with no
+    /// error: it's looked for as text.
     pub(super) fn refresh(&mut self, s: &mut Session, field: FieldId, account: Option<&str>, accepts: &Accepts) {
         for (token, outcome) in s.take_people_outcomes(field) {
             let error = match outcome {
@@ -213,11 +229,12 @@ impl Field {
                 Outcome::NotAnAddress => PieceError::NotAnAddress,
                 Outcome::Unreached(_) => PieceError::Unreached,
             };
+            let error = (!accepts.as_typed).then_some(error);
             for p in &mut self.st.pieces {
                 if let Piece::Text { text, error: e } = p
                     && *text == token
                 {
-                    *e = Some(error.clone());
+                    e.clone_from(&error);
                 }
             }
         }

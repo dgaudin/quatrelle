@@ -1816,6 +1816,9 @@ month	May	Май
 	This isn't a room	Это не переговорная
 	Only people, lists and groups can be invited	Пригласить можно только людей, списки и группы
 	Send from a person, a shared mailbox or a list	Отправляйте от имени человека, общего почтового ящика или списка
+	A distribution list's calendar can't be opened	Календарь списка рассылки нельзя открыть
+	Only a person's, a room's or a shared mailbox can be opened	Открыть можно только почтовый ящик человека или переговорной либо общий почтовый ящик
+	A contact group has no address: expand it	У группы контактов нет адреса: разверните её
 	{room} was moved to Rooms	{room}: перенесено в «Переговорные»
 	This list is no longer available	Этот список больше недоступен
 	Checking names…	Проверка имён…

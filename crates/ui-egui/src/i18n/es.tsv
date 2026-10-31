@@ -1817,6 +1817,9 @@ month	May	mayo
 	This isn't a room	Esto no es una sala
 	Only people, lists and groups can be invited	Solo se puede invitar a personas, listas y grupos
 	Send from a person, a shared mailbox or a list	Envíe desde una persona, un buzón compartido o una lista
+	A distribution list's calendar can't be opened	No se puede abrir el calendario de una lista de distribución
+	Only a person's, a room's or a shared mailbox can be opened	Solo se puede abrir el buzón de una persona, de una sala o un buzón compartido
+	A contact group has no address: expand it	Un grupo de contactos no tiene dirección: expándalo
 	{room} was moved to Rooms	{room} se movió a Salas
 	This list is no longer available	Esta lista ya no está disponible
 	Checking names…	Comprobando los nombres…
