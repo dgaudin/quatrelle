@@ -174,3 +174,35 @@ fn a_one_entry_field_fed_several_keeps_the_last() {
     assert_eq!(a.ui.people.left_out(f), None);
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// From's field left holding the keyboard in a message set aside (another started over it, the
+/// menu still open): the message set aside isn't drawn, so its field has let go, and Ctrl+K in
+/// the message on screen checks its names.
+#[test]
+fn ctrl_k_works_in_a_message_after_another_ones_from_was_left_open() {
+    let (mut a, dir) = app("from-left-open");
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    a.run("mail.new", json!({}));
+    // Something written: the message is set aside, not dropped, when another starts.
+    a.run("compose.update", json!({"subject": "Draft"}));
+    open_other_address(&ctx, &mut a, SIZE);
+    let f = field(&a, "from");
+    frame(&ctx, &mut a, vec![Event::Text("x".into())]);
+    frame(&ctx, &mut a, vec![]);
+    assert_eq!(a.ui.people.open_field(), Some(f), "the first message's From has the keyboard");
+    a.run("mail.new", json!({}));
+    assert_ne!(field(&a, "from"), f, "another message on screen");
+    assert!(a.session.composes.iter().any(|c| c.id == f.window), "the first one set aside");
+    a.run("compose.update", json!({"to": "Zoe Park"}));
+    frame(&ctx, &mut a, vec![]);
+    // Out of the text (where Ctrl+K makes a link).
+    let body = crate::rich_edit::body_id(a.session.compose.as_ref().unwrap());
+    ctx.memory_mut(|m| m.surrender_focus(body));
+    frame(&ctx, &mut a, vec![]);
+    assert_ne!(a.ui.people.open_field(), Some(f), "the message set aside let go");
+    frame(&ctx, &mut a, vec![key(Key::K, Modifiers::COMMAND)]);
+    frame(&ctx, &mut a, vec![]);
+    assert_eq!(to(&a), "Zoe Park <zoe@studio.example>; ", "Check Names ran");
+    let _ = std::fs::remove_dir_all(dir);
+}
