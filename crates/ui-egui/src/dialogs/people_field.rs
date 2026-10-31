@@ -77,6 +77,19 @@ struct Field {
     dirty: bool,
     /// The book's revision the chips' kinds were read at, and whether it was still being read.
     kinds_at: Option<(u64, bool)>,
+    /// A list expanded here had more members than the field shows: what's shown isn't everyone,
+    /// and Send stops until the pieces change.
+    partial: bool,
+}
+
+/// What drawing a field came to.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct Drawn {
+    /// The book button was pressed.
+    pub book: bool,
+    /// The text was written back with no event from the user: the field spelling what it knows
+    /// (a name filled in, a comma name quoted), not a change of the owner's.
+    pub normalised: bool,
 }
 
 /// Every contacts field on screen, by [`FieldId`].
@@ -232,6 +245,9 @@ impl Field {
         } else if !was_reparse {
             self.st.left_out = None;
         }
+        if !was_reparse {
+            self.partial = false;
+        }
         self.st.selected = None;
         self.st.card = None;
         self.st.pieces = pieces;
@@ -320,6 +336,7 @@ impl Field {
                 self.dirty = true;
             }
             let more = x.total.saturating_sub(x.members.len());
+            self.partial |= x.more || more > 0;
             self.note = if more > 0 {
                 Some(tf!("and {n} more", n = crate::widgets::count_text(more as u64)))
             } else if x.more {
@@ -353,6 +370,7 @@ impl Field {
         self.st.pieces.extend(entries.iter().take(room).map(|e| Piece::Text { text: (*e).to_string(), error: None }));
         self.st.left_out = (cut > 0).then_some(cut);
         self.note = None;
+        self.partial = false;
         self.reparse = true;
     }
 
@@ -408,6 +426,7 @@ impl Field {
             self.st.left_out = Some(1);
         }
         self.note = None;
+        self.partial = false;
     }
 
     /// A contact group's members asked for (once).
@@ -456,8 +475,8 @@ impl PeopleFields {
         }
     }
 
-    /// Draw a field and apply what happened in it; `text` is written when the entries changed.
-    /// Whether its book button was pressed.
+    /// Draw a field and apply what happened in it; `text` is written when the entries changed:
+    /// by the owner, or by the field spelling what it knows ([`Drawn::normalised`]).
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn draw(
         &mut self,
@@ -473,7 +492,7 @@ impl PeopleFields {
         can_expand: bool,
         book: bool,
         acts: &mut Vec<Action>,
-    ) -> bool {
+    ) -> Drawn {
         let f = self.fields.entry(field).or_default();
         let id = egui_id(field);
         let input = FieldInput { id, label, hint, book, accepts, suggestions: &f.suggestions, can_expand, focus, pending: f.pending };
@@ -484,8 +503,10 @@ impl PeopleFields {
         } else if self.open == Some(field) {
             self.open = None;
         }
-        let mut changed = std::mem::take(&mut f.dirty);
+        let normalised = std::mem::take(&mut f.dirty);
+        let mut changed = normalised;
         let (mut opened, mut resolve, mut closed_any) = (false, false, false);
+        let quiet = events.is_empty();
         for e in events {
             match e {
                 PeopleEvent::Changed => changed = true,
@@ -505,6 +526,8 @@ impl PeopleFields {
                     if i < f.st.pieces.len() {
                         f.st.pieces.remove(i);
                         f.note = None;
+                        f.partial = false;
+                        f.st.left_out = None;
                         changed = true;
                     }
                 }
@@ -544,7 +567,7 @@ impl PeopleFields {
                 ui.label(RichText::new(note).color(t.dim).small());
             });
         }
-        opened
+        Drawn { book: opened, normalised: normalised && quiet }
     }
 
     /// The choice dialog for a name several people fit in one of `names` of a window
@@ -749,6 +772,10 @@ impl PeopleFields {
             let Some(f) = self.fields.get(&field) else { continue };
             let pending = s.people_pending(field) > 0 || s.name_choice_for(field).is_some();
             waiting |= pending || !f.expanding.is_empty();
+            // The field shows at most 500 entries; a message never goes to part of what was meant.
+            if f.st.left_out.is_some() || f.partial {
+                return SendState::Stopped(tl!("Some recipients were left out: send to fewer at once, or to the list itself").to_string());
+            }
             for p in &f.st.pieces {
                 match p {
                     Piece::Chip { refused: Some(why), .. } => return SendState::Stopped(why.clone()),

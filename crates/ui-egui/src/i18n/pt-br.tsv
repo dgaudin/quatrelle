@@ -1810,6 +1810,7 @@ month	May	maio
 	and others	e outros
 	This list couldn't be expanded: {error}	Esta lista não pôde ser expandida: {error}
 	Some names need checking before sending	Alguns nomes precisam ser verificados antes do envio
+	Some recipients were left out: send to fewer at once, or to the list itself	Alguns destinatários ficaram de fora: envie para menos pessoas de cada vez, ou para a própria lista
 	Matched as typed	Comparado como digitado
 	{name}, {kind}, remove with Delete	{name}, {kind}, remover com Delete
 	{name}, {kind}, {why}, remove with Delete	{name}, {kind}, {why}, remover com Delete

@@ -824,6 +824,132 @@ fn a_name_left_unsettled_by_something_else_stops_the_send_with_a_word() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// The sample with one more message in its Inbox: from Zoe's address with no name on it (an
+/// automated sender's way), as a reply finds it.
+fn app_with_bare_sender(name: &str) -> (MailApp, std::path::PathBuf) {
+    let dir = std::env::temp_dir().join(format!("quatrelle-ui-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let store = Store::open(&dir).unwrap();
+    sample::seed_if_empty(&store, NOW).unwrap();
+    let raw = "From: zoe@studio.example\r\nTo: Riley Moreno <riley@studio.example>\r\nSubject: Bare from Zoe\r\n\
+         Date: Wed, 22 Oct 2026 10:00:00 +0200\r\nMessage-ID: <bare-zoe@studio.example>\r\nMIME-Version: 1.0\r\n\
+         Content-Type: text/plain; charset=utf-8\r\n\r\nNo name on this one.";
+    let account = sample::SAMPLE_ACCOUNT;
+    let mut fs = store.load_folder(account, "INBOX").unwrap();
+    let uid = fs.uid_next.max(1);
+    let key = MessageKey { account: account.into(), folder: "INBOX".into(), validity: fs.validity.max(1), uid };
+    store.write_body(&key, raw.as_bytes()).unwrap();
+    let flags = quatrelle_engine::model::Flags { seen: true, ..Default::default() };
+    fs.messages.push(quatrelle_engine::mime::summary_from_full(raw.as_bytes(), key, flags, raw.len() as u32, NOW));
+    fs.uid_next = uid + 1;
+    store.save_folder(account, "INBOX", &fs).unwrap();
+    let s = Session::open(Some(store), Clock::new(NOW, 0));
+    (MailApp::new(s, Box::new(NullBackend), Box::new(NullServices(NOW))), dir)
+}
+
+/// A reply to a sender the book knows by name but whose From had none: the field spells the name
+/// it knows, with no word from the owner, and the reply left as it came still simply goes when
+/// another message is read — it isn't filed as a draft (the old box never wrote the text itself).
+#[test]
+fn an_untouched_reply_to_a_bare_sender_is_not_filed_as_a_draft() {
+    let (mut a, dir) = app_with_bare_sender("untouched-reply");
+    let ctx = egui::Context::default();
+    a.session.prefs.reply_window = false;
+    frame(&ctx, &mut a, vec![]);
+    let bare = a.session.list.iter().find(|m| m.subject == "Bare from Zoe").map(|m| m.key.clone()).expect("the bare message");
+    let other = a.session.list.iter().find(|m| m.subject != "Bare from Zoe").map(|m| m.key.clone()).expect("another message");
+    a.run("list.open", json!({"key": bare.to_id()}));
+    frame(&ctx, &mut a, vec![]);
+    a.run("mail.reply", json!({}));
+    assert_eq!(to(&a), "zoe@studio.example; ", "the original's From had no name");
+    for _ in 0..6 {
+        frame(&ctx, &mut a, vec![]);
+    }
+    assert_eq!(to(&a), "Zoe Park <zoe@studio.example>; ", "the field spells the name the book knows");
+    assert!(a.session.compose.as_ref().is_some_and(|c| c.untouched()), "nothing the owner did");
+    let drafts = a
+        .session
+        .account(sample::SAMPLE_ACCOUNT)
+        .and_then(|x| x.folder(quatrelle_engine::model::FolderRole::Drafts))
+        .map(|f| f.path.clone())
+        .unwrap();
+    let before = a.session.folder_state(sample::SAMPLE_ACCOUNT, &drafts).messages.len();
+    a.run("list.open", json!({"key": other.to_id()}));
+    frame(&ctx, &mut a, vec![]);
+    assert!(a.session.compose.is_none(), "the reply left as it came simply goes");
+    assert!(!a.session.notices.iter().any(|n| n.text == "Draft saved"), "{:?}", a.session.notices.last());
+    assert_eq!(a.session.folder_state(sample::SAMPLE_ACCOUNT, &drafts).messages.len(), before, "no draft filed");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A contact group with more members than the field holds, expanded at Send: the message doesn't
+/// go to part of the list; it stops and says so.
+#[test]
+fn a_contact_group_with_more_members_than_the_field_holds_stops_the_send() {
+    let (mut a, dir) = app("send-group-partial");
+    let taken = Taken::default();
+    let jobs = taken.0.clone();
+    a.backend = Box::new(taken);
+    let gal = with_exchange(&mut a);
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    new_message_on(&mut a, &gal, "Dupont family <group:AAMk=>");
+    frame(&ctx, &mut a, vec![]);
+    handed(&jobs);
+    a.run("compose.send", json!({}));
+    frame(&ctx, &mut a, vec![]);
+    assert!(handed(&jobs).iter().any(|j| matches!(j, Job::ExpandList { .. })));
+    let members = vec![
+        Addressee::new("Anne Dupont", "anne@contoso.example", AddresseeKind::Person),
+        Addressee::new("Marc Dupont", "marc@contoso.example", AddresseeKind::Person),
+    ];
+    a.session.apply(MailEvent::ListExpanded {
+        account: gal.clone(),
+        address: String::new(),
+        item_id: Some("AAMk=".into()),
+        members,
+        more: true,
+        total: 700,
+        error: None,
+    });
+    frame(&ctx, &mut a, vec![]);
+    assert_eq!(a.ui.compose_alert.as_deref(), Some("Some recipients were left out: send to fewer at once, or to the list itself"));
+    assert!(!has_send(&handed(&jobs)), "not sent to part of the list");
+    assert!(!a.session.compose.as_ref().unwrap().sending);
+    assert!(a.ui.people.send_wait_left(0.0).is_none(), "the wait is off");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A field fed more entries than it holds (a long list pasted) keeps the first 500 and says so;
+/// Send doesn't go to those 500 alone.
+#[test]
+fn a_field_fed_more_entries_than_it_holds_stops_the_send() {
+    let (mut a, dir) = app("send-over-cap");
+    let taken = Taken::default();
+    let jobs = taken.0.clone();
+    a.backend = Box::new(taken);
+    let gal = with_exchange(&mut a);
+    let ctx = egui::Context::default();
+    frame(&ctx, &mut a, vec![]);
+    new_message_on(&mut a, &gal, "");
+    frame(&ctx, &mut a, vec![]);
+    frame(&ctx, &mut a, vec![]);
+    let many: Vec<String> = (0..503).map(|i| format!("p{i}@x.example")).collect();
+    frame(&ctx, &mut a, vec![Event::Paste(many.join("; "))]);
+    frame(&ctx, &mut a, vec![]);
+    frame(&ctx, &mut a, vec![]);
+    let f = field(&a, "to");
+    assert_eq!(a.ui.people.pieces(f).len(), 500);
+    assert_eq!(a.ui.people.left_out(f), Some(3));
+    handed(&jobs);
+    a.run("compose.send", json!({}));
+    frame(&ctx, &mut a, vec![]);
+    assert_eq!(a.ui.compose_alert.as_deref(), Some("Some recipients were left out: send to fewer at once, or to the list itself"));
+    assert!(!has_send(&handed(&jobs)), "not sent to the first 500 alone");
+    assert!(!a.session.compose.as_ref().unwrap().sending);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 /// A first start over a big mailbox, the book being read a slice per frame: an address closed in
 /// To (checked at once) must not read the mail that is left in one go on the window's thread.
 #[test]

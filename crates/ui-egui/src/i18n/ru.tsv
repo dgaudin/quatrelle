@@ -1809,6 +1809,7 @@ month	May	Май
 	and others	и другие
 	This list couldn't be expanded: {error}	Этот список не удалось развернуть: {error}
 	Some names need checking before sending	Некоторые имена нужно проверить перед отправкой
+	Some recipients were left out: send to fewer at once, or to the list itself	Часть получателей не добавлена: отправьте меньшему числу за раз или самому списку
 	Matched as typed	Сравнивается как введено
 	{name}, {kind}, remove with Delete	{name}, {kind}, удалить клавишей Delete
 	{name}, {kind}, {why}, remove with Delete	{name}, {kind}, {why}, удалить клавишей Delete
