@@ -42,7 +42,8 @@ pub fn alt_codes(ctx: &egui::Context, raw: &mut egui::RawInput, pages: (u16, u16
     let mut out = Vec::with_capacity(raw.events.len());
     // A digit taken out just before: the text egui-winit sends right after its key is its own.
     let mut took_digit = false;
-    for e in raw.events.drain(..) {
+    let mut events = std::mem::take(&mut raw.events).into_iter().peekable();
+    while let Some(e) = events.next() {
         let after_digit = std::mem::take(&mut took_digit);
         match &e {
             egui::Event::Key { key, pressed, repeat, modifiers, .. } if alt_only(modifiers) && digit(*key).is_some() => {
@@ -57,9 +58,11 @@ pub fn alt_codes(ctx: &egui::Context, raw: &mut egui::RawInput, pages: (u16, u16
             // also after another key ended the code.
             egui::Event::Text(t)
                 if (after_digit || (!code.is_empty() && code != INTERRUPTED)) && !t.is_empty() && t.chars().all(|c| c.is_ascii_digit()) => {}
-            // Alt let go: the code's character, where it was typed.
+            // Alt let go: the code's character, where it was typed. Not when the window is being
+            // left (Alt+Tab): winit sends its modifiers let go and then its focus lost, together.
             egui::Event::ModifiersChanged(m) if !m.alt && !code.is_empty() => {
-                if let Some(c) = quatrelle_engine::mime::alt_code_char(&code, pages.0, pages.1) {
+                let leaving = matches!(events.peek(), Some(egui::Event::WindowFocused(false)));
+                if let Some(c) = quatrelle_engine::mime::alt_code_char(&code, pages.0, pages.1).filter(|_| !leaving) {
                     out.push(egui::Event::Text(c.to_string()));
                 }
                 code.clear();
@@ -187,12 +190,29 @@ mod tests {
         assert!(out.iter().any(|e| matches!(e, Event::Key { key: Key::Tab, .. })));
         // The next code, Alt held again, is read afresh.
         assert_eq!(texts(&through(&ctx, code("0199", true))), "Ç");
-        // A window losing focus drops a half-typed code.
-        let mut first = code("02", false);
-        first.pop();
-        through(&ctx, first);
-        through(&ctx, vec![Event::WindowFocused(false)]);
-        assert_eq!(texts(&through(&ctx, vec![Event::ModifiersChanged(Modifiers::NONE)])), "");
+    }
+
+    /// Alt+Tab in the middle of a code: Windows gives the Tab to the window switcher, and winit
+    /// sends the window's modifiers let go and then its focus lost, together (`lose_active_focus`).
+    /// The window being left gets nothing typed, not ♪ for Alt+13 nor A for Alt+65.
+    #[test]
+    fn leaving_the_window_mid_code_types_nothing() {
+        let ctx = egui::Context::default();
+        for digits in ["13", "65", "0201"] {
+            let mut left = code(digits, true);
+            left.push(Event::WindowFocused(false));
+            let out = through(&ctx, left);
+            assert_eq!(texts(&out), "", "Alt+{digits} then Alt+Tab: {out:?}");
+            assert!(matches!(out.as_slice(), [.., Event::ModifiersChanged(m), Event::WindowFocused(false)] if !m.alt), "{out:?}");
+            // Back in the window, the next code is read afresh.
+            let back = [vec![Event::WindowFocused(true)], code("0199", true)].concat();
+            assert_eq!(texts(&through(&ctx, back)), "Ç");
+        }
+        // The code begun in one frame and the window left in the next.
+        let mut begun = code("02", false);
+        begun.pop();
+        through(&ctx, begun);
+        assert_eq!(texts(&through(&ctx, vec![Event::ModifiersChanged(Modifiers::NONE), Event::WindowFocused(false)])), "");
     }
 
     /// Each window has its own code: one typed half in the main window and one whole in a
