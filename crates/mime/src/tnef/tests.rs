@@ -511,6 +511,43 @@ fn outlooks_rich_text_reads_as_outlook_shows_it() {
     assert!(eml.attachments.iter().all(|a| a.inline), "{:?}", eml.attachments);
 }
 
+/// What RTF may write, as `rtf.rs` caps it (`RTF_MAX`).
+const RTF_OUT_MAX: usize = 16 << 20;
+
+/// A link named once and shown again and again: the tags it opens stay within what RTF may write,
+/// as the text does.
+#[test]
+fn rtf_links_shown_again_and_again_stay_within_the_cap() {
+    let mut rtf = format!("{{\\rtf1 {{\\field{{\\*\\fldinst HYPERLINK \"https://x.example/{}\"}}", "a".repeat(4000));
+    for _ in 0..10_000 {
+        rtf.push_str("{\\fldrslt\\par}\\par ");
+    }
+    rtf.push_str("}}");
+    let TnefBody::Html(h) = rtf_body(rtf.as_bytes()) else { panic!("no HTML") };
+    assert!(h.len() <= RTF_OUT_MAX + 16_384, "{} bytes", h.len());
+}
+
+/// A link spelled in `\uN` characters is held to the same length as one in plain text.
+#[test]
+fn an_rtf_link_in_unicode_characters_stays_short() {
+    let rtf = format!("{{\\rtf1 {{\\field{{\\*\\fldinst HYPERLINK \"https://x.example/{}\"}}{{\\fldrslt see}}}}}}", "\\u97?".repeat(10_000));
+    let TnefBody::Html(h) = rtf_body(rtf.as_bytes()) else { panic!("no HTML") };
+    let href = h.split("href=\"").nth(1).and_then(|r| r.split('"').next()).unwrap_or_default();
+    assert!(href.starts_with("https://x.example/aaa") && href.len() <= 4096, "{} bytes", href.len());
+}
+
+/// A long link and a long text after it read in one pass: the link isn't copied for each character.
+#[test]
+fn a_long_text_after_a_long_rtf_link_reads_quickly() {
+    let rtf =
+        format!("{{\\rtf1 {{\\field{{\\*\\fldinst HYPERLINK \"https://x.example/{}\"}}{{\\fldrslt {}}}}}}}", "a".repeat(4000), "x".repeat(500_000));
+    let started = std::time::Instant::now();
+    let TnefBody::Html(h) = rtf_body(rtf.as_bytes()) else { panic!("no HTML") };
+    assert_eq!(h.matches("<a href=").count(), 1);
+    assert!(h.contains(&"x".repeat(500_000)));
+    assert!(started.elapsed() < std::time::Duration::from_secs(10), "{:?}", started.elapsed());
+}
+
 /// Property lists keep coming: no more than `MAX_PROPS` are kept for a message or a file, however
 /// many lists it has.
 #[test]
