@@ -16,7 +16,7 @@ pub(super) fn show(ui: &Ui, t: &Tokens, st: &mut FieldState, input: &FieldInput<
         return false;
     };
     let mut asked = None;
-    let area = egui::Area::new(input.id.with("people-card")).order(egui::Order::Foreground).fixed_pos(chip.left_bottom() + vec2(0.0, 4.0)).show(
+    let area = egui::Area::new(super::card_id(input.id)).order(egui::Order::Foreground).fixed_pos(chip.left_bottom() + vec2(0.0, 4.0)).show(
         ui.ctx(),
         |ui| {
             egui::Frame::popup(ui.style()).inner_margin(Margin::same(12)).show(ui, |ui| {

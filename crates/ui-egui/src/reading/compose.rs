@@ -5,6 +5,10 @@ use quatrelle_engine::FieldId;
 use super::*;
 use crate::dialogs::people_field::{COMPOSE_FIELDS, accepts_of};
 
+/// The fields a choice dialog may ask about: the message's own, and From's other address (whose
+/// name Send never waits on: it isn't one of [`COMPOSE_FIELDS`]).
+const CHOICE_FIELDS: [&str; 5] = [COMPOSE_FIELDS[0], COMPOSE_FIELDS[1], COMPOSE_FIELDS[2], COMPOSE_FIELDS[3], "from"];
+
 /// Height of an attachment chip.
 pub(super) const CHIP_H: f32 = 42.0;
 
@@ -179,17 +183,16 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
         });
     }
     let senders = s.senders();
-    // Who the other address typed in From may be; the message's fields made ready (chips from
-    // their text, the names the directory settled, suggestions for what's typed), and the
-    // choice a name several people fit waits for.
-    let others = match s.compose.as_ref().map(|c| (c.id, c.account.clone())) {
-        Some((id, account)) => {
-            st.people.prepare_compose(s, id, &account);
-            st.people.choice_dialog(ui.ctx(), &t, s, id, &COMPOSE_FIELDS, acts);
-            candidates(s, ui.ctx(), id, &account)
-        }
-        None => Candidates::default(),
-    };
+    // The message's fields and From's other address made ready (chips from their text, the
+    // names the directory settled, suggestions for what's typed), and the choice a name several
+    // people fit waits for (From's menu stays open under it).
+    let mut choosing = false;
+    if let Some((id, account)) = s.compose.as_ref().map(|c| (c.id, c.account.clone())) {
+        st.people.prepare_compose(s, id, &account);
+        prepare_other(&mut st.people, s, ui.ctx(), id, &account);
+        st.people.choice_dialog(ui.ctx(), &t, s, id, &CHOICE_FIELDS, acts);
+        choosing = s.name_choice_for(other_field(id)).is_some();
+    }
     // A list's card offers Expand only where there's a directory to ask (an Exchange account).
     let can_expand = s.compose.as_ref().is_some_and(|c| s.directory_account(Some(&c.account)).is_some());
     let clock = s.clock;
@@ -326,10 +329,10 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
             });
         }
         // Ctrl+K: Outlook's Check Names on every field, anywhere but in the text (where it makes
-        // a link), the other sender's box, and a contacts field (which checks itself).
+        // a link) and a contacts field, From's other address among them (which checks itself).
         if !c.sending
             && st.people.open_field().is_none()
-            && !ui.memory(|m| m.has_focus(rich_edit::body_id(c)) || m.has_focus(box_id(c.id)))
+            && !ui.memory(|m| m.has_focus(rich_edit::body_id(c)))
             && ui.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::K))
         {
             acts.push(Action::Run("compose.checkNames", json!({})));
@@ -346,7 +349,7 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
                 }
                 ui.add_space(10.0);
                 ui.vertical(|ui| {
-                    ui.horizontal(|ui| from_row(ui, &t, c, &senders, &others));
+                    ui.horizontal(|ui| from_row(ui, &t, c, &senders, &mut st.people, choosing, acts));
                     // To, Cc and Bcc are the contacts field; their buttons open the address book,
                     // as in Outlook.
                     let mut book = None;

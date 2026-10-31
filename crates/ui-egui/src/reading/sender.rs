@@ -1,31 +1,37 @@
 //! The From row of a message being written, as Outlook's: the button offers each account's own
 //! address, the mailboxes it opens (a shared one) and the other addresses it sent from, and
-//! another address typed in, or found by a name typed (among the people known here and in the
-//! organisation's directory).
+//! another address: a one-entry contacts field (a person, a shared mailbox or a list), whose name
+//! is checked on Ctrl+K or as the field is left, never as it's typed.
 
-use quatrelle_engine::{Compose, Sender};
+use quatrelle_engine::model::Addressee;
+use quatrelle_engine::{Compose, FieldId, Sender};
 
 use super::*;
+use crate::dialogs::people_field::{PeopleFields, accepts_of, egui_id};
+use crate::look::people_field as widget;
 
-/// The most people offered under the other address.
-const MAX_CANDIDATES: usize = 10;
-
-/// Who the other address typed may be: the people known here it begins the name or address of,
-/// and those the directory has for it.
-#[derive(Default)]
-pub(super) struct Candidates {
-    pub people: Vec<EmailAddress>,
-    /// The directory is still being asked.
-    pub searching: bool,
+/// The Other email address section's state between frames, by message.
+#[derive(Clone, Default)]
+struct Other {
+    /// The section is open.
+    open: bool,
+    /// The field's text.
+    text: String,
+    /// The field is to take the keyboard (the section's just been opened).
+    focus: bool,
+    /// Send from it was asked as the field closed what was typed: the entry is taken at the next
+    /// frame, once it's parsed.
+    take: bool,
 }
 
 fn state_id(compose: u64) -> egui::Id {
     egui::Id::unique(("compose-other-sender", compose))
 }
 
-/// The box the other address is typed in (Ctrl+K there checks its name, not the message's).
-pub(super) fn box_id(compose: u64) -> egui::Id {
-    egui::Id::unique(("compose-other-sender-box", compose))
+/// The other address's field in the message `compose` (the engine checks its names as it does
+/// any field's).
+pub(super) fn other_field(compose: u64) -> FieldId {
+    FieldId { window: compose, name: "from" }
 }
 
 /// The one address `text` holds, if it holds just one.
@@ -33,38 +39,35 @@ fn one_address(text: &str) -> Option<EmailAddress> {
     addr::parse_list(text.trim()).ok().filter(|l| l.len() == 1).and_then(|l| l.into_iter().next())
 }
 
-/// [`Candidates`] for the other address being typed in the message `compose`; the directory of
-/// its account (or the first Exchange one) is asked as it's typed, from three characters.
-pub(super) fn candidates(s: &mut Session, ctx: &egui::Context, compose: u64, account: &str) -> Candidates {
-    let (open, typed, _): (bool, String, bool) = ctx.data_mut(|d| d.get_temp(state_id(compose))).unwrap_or_default();
-    let typed = typed.trim();
-    if !open || typed.chars().count() < 2 || one_address(typed).is_some() {
-        return Candidates::default();
+/// Make the other address's field ready to draw while its section is open (its text parsed when
+/// it changed, the names the engine settled taken, the suggestions for what's typed).
+pub(super) fn prepare_other(people: &mut PeopleFields, s: &mut Session, ctx: &egui::Context, compose: u64, account: &str) {
+    let o: Other = ctx.data_mut(|d| d.get_temp(state_id(compose))).unwrap_or_default();
+    if o.open {
+        let field = other_field(compose);
+        people.prepare(s, field, Some(account), accepts_of(field.name), &o.text);
     }
-    let mut people: Vec<EmailAddress> = s.suggest_contacts_now(typed, 6).into_iter().map(|c| c.address).collect();
-    let mut searching = false;
-    if typed.chars().count() >= 3
-        && let Some(gal) = s.directory_account(Some(account))
-    {
-        s.search_directory(&gal, typed, true);
-        searching = s.directory_searching(&gal, typed);
-        for p in s.directory_found(&gal, typed).map(|f| quatrelle_engine::directory_people(&f.people)).unwrap_or_default() {
-            // Known here by its address alone: the directory's full name for it.
-            match people.iter_mut().find(|x| x.email.eq_ignore_ascii_case(&p.email)) {
-                Some(known) => quatrelle_engine::fill_name(known, &p),
-                None => people.push(p),
-            }
-        }
-    }
-    people.truncate(MAX_CANDIDATES);
-    Candidates { people, searching }
 }
 
-/// The From button and who the message is from beside it.
-pub(super) fn from_row(ui: &mut Ui, t: &Tokens, c: &mut Compose, senders: &[Sender], cands: &Candidates) {
+/// The From button and who the message is from beside it. `choosing`: the choice dialog asks
+/// which person a name in the other address means (the menu stays open under it).
+pub(super) fn from_row(
+    ui: &mut Ui,
+    t: &Tokens,
+    c: &mut Compose,
+    senders: &[Sender],
+    people: &mut PeopleFields,
+    choosing: bool,
+    acts: &mut Vec<Action>,
+) {
     let own = senders.iter().find(|x| x.account == c.account && x.from.is_empty()).map(|x| x.label.clone()).unwrap_or_default();
     let b = label_button_menu(ui, t, "From", true, true).on_hover_text(tl!("Send from another account, a shared mailbox or another address"));
-    egui::Popup::menu(&b).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
+    // The field's suggestion list and card are drawn outside the menu: a click there, or in the
+    // choice dialog, isn't one outside it.
+    let field = egui_id(other_field(c.id));
+    let on_field = ui.ctx().input(|i| i.pointer.interact_pos()).is_some_and(|p| widget::over_popups(ui.ctx(), field, p));
+    let close = if choosing || on_field { egui::PopupCloseBehavior::IgnoreClicks } else { egui::PopupCloseBehavior::CloseOnClickOutside };
+    let shown = egui::Popup::menu(&b).close_behavior(close).show(|ui| {
         for x in senders {
             let on = x.account == c.account && x.from.eq_ignore_ascii_case(&c.from);
             if ui.selectable_label(on, &x.label).clicked() {
@@ -74,12 +77,15 @@ pub(super) fn from_row(ui: &mut Ui, t: &Tokens, c: &mut Compose, senders: &[Send
             }
         }
         ui.separator();
-        if let Some(from) = other_address(ui, t, c.id, cands) {
-            let mine = senders.iter().any(|x| x.account == c.account && x.from.is_empty() && x.email.eq_ignore_ascii_case(&from.email));
-            c.from = if mine { String::new() } else { from.to_string() };
+        if let Some(who) = other_address(ui, t, c, people, acts) {
+            let mine = senders.iter().any(|x| x.account == c.account && x.from.is_empty() && x.email.eq_ignore_ascii_case(&who.address));
+            c.from = if mine { String::new() } else { who.text() };
             ui.close();
         }
     });
+    if shown.is_none() {
+        people.let_go(other_field(c.id));
+    }
     ui.allocate_ui_with_layout(vec2(ui.available_width(), ROW_H), egui::Layout::left_to_right(egui::Align::Center), |ui| {
         if c.from.is_empty() {
             ui.add(egui::Label::new(RichText::new(&own).color(t.dim)).truncate());
@@ -90,59 +96,58 @@ pub(super) fn from_row(ui: &mut Ui, t: &Tokens, c: &mut Compose, senders: &[Send
     });
 }
 
-/// Outlook's Other E-mail Address: an address typed under the menu's list, taken with Enter or
-/// its button once it's one address; a name typed offers the people it may be (Enter takes the
-/// only one, Ctrl+K writes them out in the box).
-fn other_address(ui: &mut Ui, t: &Tokens, compose: u64, cands: &Candidates) -> Option<EmailAddress> {
-    let id = state_id(compose);
-    // Open, what's typed, and the box to take the keyboard (it's just been opened).
-    let (mut open, mut typed, mut focus): (bool, String, bool) = ui.data_mut(|d| d.get_temp(id)).unwrap_or_default();
-    if !open {
+/// The one entry Send from it would take: one chip the field holds, with nothing typed after it
+/// and nothing against it.
+fn takeable(people: &PeopleFields, field: FieldId) -> Option<Addressee> {
+    let mut who = people.addressees(field);
+    let one = who.len() == 1 && !people.blocked(field) && people.typing(field).trim().is_empty();
+    if one { who.pop() } else { None }
+}
+
+/// Outlook's Other E-mail Address: a one-entry contacts field under the menu's list, taken with
+/// Send from it, or Enter with its suggestions closed. A name typed is checked on Ctrl+K or as
+/// the field is left; several people fitting it are asked about in the choice dialog.
+fn other_address(ui: &mut Ui, t: &Tokens, c: &Compose, people: &mut PeopleFields, acts: &mut Vec<Action>) -> Option<Addressee> {
+    let id = state_id(c.id);
+    let mut o: Other = ui.data_mut(|d| d.get_temp(id)).unwrap_or_default();
+    if !o.open {
         if ui.selectable_label(false, tl!("Other email address…")).clicked() {
-            (open, focus) = (true, true);
+            (o.open, o.focus) = (true, true);
         }
-        ui.data_mut(|d| d.insert_temp(id, (open, typed, focus)));
+        ui.data_mut(|d| d.insert_temp(id, o));
+        people.let_go(other_field(c.id));
         return None;
     }
-    ui.label(RichText::new(tl!("Other email address")).font(theme::bold(13.0)).color(t.text));
+    let field = other_field(c.id);
+    let fid = egui_id(field);
+    // The heading names the field's input to a screen reader.
+    let heading = ui.label(RichText::new(tl!("Other email address")).font(theme::bold(13.0)).color(t.text));
+    ui.interact(heading.rect, widget::label_id(fid), Sense::hover())
+        .widget_info(|| egui::WidgetInfo::labeled(egui::Role::Label, true, tl!("Other email address")));
     ui.label(RichText::new(tl!("Exchange sends from it when your account may send as it or on its behalf.")).color(t.dim).small());
-    let found = one_address(&typed);
-    let only = match cands.people.as_slice() {
-        [one] => Some(one.clone()),
-        _ => None,
-    };
-    let mut taken = None;
-    ui.horizontal(|ui| {
-        let r = ui.add(egui::TextEdit::singleline(&mut typed).id(box_id(compose)).hint_text(tl!("Name or address")).desired_width(260.0));
-        if std::mem::take(&mut focus) {
-            r.request_focus();
-        }
-        // In a menu the box keeps the focus on Enter: Enter while typing in it.
-        let enter = (r.has_focus() || r.lost_focus()) && ui.input(|i| i.key_pressed(egui::Key::Enter));
-        if ui.add_enabled(found.is_some(), egui::Button::new(tl!("Send from it"))).clicked() || enter {
-            taken = found.clone().or_else(|| only.clone().filter(|_| enter));
-        }
-        // Ctrl+K: the one person the name fits, written out.
-        if r.has_focus()
-            && ui.input_mut(|i| i.consume_key(egui::Modifiers::COMMAND, egui::Key::K))
-            && let Some(one) = &only
-        {
-            typed = one.to_string();
-        }
+    // As the field stood before this frame's keys and clicks: the click on Send from it may be
+    // the one that closes what was typed.
+    let can_take = takeable(people, field).is_some() || one_address(people.typing(field)).is_some();
+    let had_focus = ui.memory(|m| m.has_focus(widget::input_id(fid)));
+    ui.scope(|ui| {
+        ui.set_width(300.0);
+        let focus = std::mem::take(&mut o.focus);
+        people.draw(ui, t, field, Some(&c.account), accepts_of(field.name), "", "Name or address", &mut o.text, focus, false, false, acts);
     });
-    for p in &cands.people {
-        if ui.selectable_label(false, p.to_string()).clicked() {
-            taken = Some(p.clone());
-        }
+    // Enter the suggestions didn't take (the list closed): Send from it.
+    let enter = had_focus && ui.input(|i| i.key_pressed(egui::Key::Enter));
+    let clicked = ui.add_enabled(can_take, egui::Button::new(tl!("Send from it"))).clicked();
+    let typed = people.typing(field).trim();
+    if !typed.is_empty() && one_address(typed).is_none() && people.suggestions(field).is_empty() {
+        ui.label(RichText::new(tf!("Not an address: {what}", what = typed)).color(t.danger).small());
     }
-    if cands.searching {
-        ui.label(RichText::new(tl!("Searching the directory…")).color(t.dim).small());
-    } else if !typed.trim().is_empty() && found.is_none() && cands.people.is_empty() {
-        ui.label(RichText::new(tf!("Not an address: {what}", what = typed.trim())).color(t.danger).small());
-    }
+    let asked = clicked || enter;
+    // What was typed is parsed at the next frame: asked as it closed, it's taken then.
+    let taken = if asked || o.take { takeable(people, field) } else { None };
+    o.take = asked && taken.is_none();
     if taken.is_some() {
-        (open, typed) = (false, String::new());
+        o = Other::default();
     }
-    ui.data_mut(|d| d.insert_temp(id, (open, typed, focus)));
+    ui.data_mut(|d| d.insert_temp(id, o));
     taken
 }
