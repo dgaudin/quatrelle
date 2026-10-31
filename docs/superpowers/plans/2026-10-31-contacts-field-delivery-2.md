@@ -19,7 +19,7 @@ The meeting window (`pim_dialogs/meeting.rs`) draws its lines through that glue.
 ## Decisions this plan makes (the spec doesn't settle them)
 
 1. **Shared mailboxes are accepted in Required and Optional.** The spec's table lists people, lists, contact groups and Microsoft 365 groups. A shared mailbox receives mail and has a calendar, and refusing it would block "Send Update" on meetings that invite one today. *Cost if wrong:* one constant.
-2. **Meeting windows' FieldIds are numbered apart:** `MEETING_WINDOWS | wid`, with `MEETING_WINDOWS = 1 << 32`. Event windows count from 1 on a counter of their own (`UiState.event_window_ids`); compose ids are the engine's.
+2. **Meeting windows' FieldIds are numbered apart:** `MEETING_WINDOWS | wid`, with `MEETING_WINDOWS = 1 << 52`. Event windows count from 1 on a counter of their own (`UiState.event_window_ids`); compose ids are the engine's, from the clock in milliseconds (≈ 2^41), so a lower bit would tag them too (found in Task 2).
 3. **The attendees dialog's list is not filtered by row.** It feeds three rows, and each row refuses what it doesn't take: a person picked into Resources is a red chip "This isn't a room".
 4. **The old appointment dialog (`pim_dialogs::event`) keeps its plain Invite line.** A `Dialog::Event` is moved into a window of its own (`app/windows.rs:147`) before dialogs are drawn, so only tests reach that form.
 5. **Hide Recipients is held, with the stop's alert, while a field of the message has lost recipients.** This is the first residual parked after delivery 1 (Ruling 15). The stop's alert now says to empty the field, which closes the second residual.
@@ -142,7 +142,7 @@ This refactors a send path that was reviewed once, so the existing tests are its
 
 **Interfaces:**
 - Produces in `dialogs/people_field.rs`:
-  - `pub(crate) const MEETING_WINDOWS: u64 = 1 << 32;`
+  - `pub(crate) const MEETING_WINDOWS: u64 = 1 << 52;`
   - `pub(crate) fn meeting_field(wid: u64, name: &'static str) -> FieldId`, with `window: MEETING_WINDOWS | wid`;
   - `pub(crate) fn is_meeting_window(window: u64) -> bool`;
   - `pub(crate) const MEETING_FIELDS: [&str; 3] = ["required", "optional", "rooms"]` and `ATTENDEE_FIELDS: [&str; 3] = ["att-required", "att-optional", "att-rooms"]`;
