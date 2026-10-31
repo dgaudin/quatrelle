@@ -333,6 +333,9 @@ pub struct Session {
     /// Messages opened in their own windows (double-click), oldest first.
     pub windows: Vec<Reading>,
     /// The message being written that commands act on (`compose.*`).
+    /// Run by a window, which reads the mail into the address book a slice a frame: nothing run
+    /// between its frames reads a mailbox whole. A command run with no window (the CLI's) does.
+    pub interactive: bool,
     pub compose: Option<Compose>,
     /// Other messages being written, each in a window of its own (Outlook keeps every one
     /// open): starting another sets the current one aside here rather than losing it.
@@ -525,6 +528,7 @@ impl Session {
             compose: None,
             composes: Vec::new(),
             set_aside: Vec::new(),
+            interactive: false,
             drafted: HashSet::new(),
             quote_words: mime::QuoteWords::default(),
             prefs: Prefs::default(),

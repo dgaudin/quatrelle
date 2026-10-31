@@ -111,13 +111,16 @@ impl Session {
         self.suggest_contacts_now(query, limit)
     }
 
-    /// The book with all the mail read: in one go, when there's no book yet (a command run with no
-    /// window, the CLI's). One already there answers as it is, whatever is left to read: the window
-    /// reads the mail a slice a frame, and anything it runs between slices (an address closed in
-    /// To, Send, Check Names) must never read a big mailbox whole on its thread — not even on a
-    /// first start, before any folder is read through.
+    /// The book with all the mail read: in one go, for a command run with no window (the CLI's:
+    /// no book yet, or one started and still empty). The window's session says so
+    /// (`interactive`) and reads the mail a slice a frame: its book answers as it stands,
+    /// whatever is left to read, so that nothing run between its frames (an address closed in
+    /// To, Send, Check Names) reads a big mailbox whole on its thread — not even on a first
+    /// start, before any folder is read through.
     pub(crate) fn contacts_whole(&mut self) {
-        if self.contacts.book.is_none() {
+        if self.interactive {
+            self.contacts_step(0);
+        } else if self.contacts.book.is_none() || self.contacts.marks.is_empty() {
             self.contacts_step(usize::MAX);
         }
     }

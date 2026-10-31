@@ -463,6 +463,8 @@ impl MailApp {
         let has_files = !services.downloads();
         let (data_folder, pending_move) = (services.data_folder(), services.pending_data_move());
         let mut session = session;
+        // The window reads the address book a slice a frame: the session never reads it whole.
+        session.interactive = true;
         session.set_zone(services.zone().as_deref());
         match services.take_data_moved() {
             Some(Ok(to)) => session.notice(tf!("Your mail is now kept in {folder}", folder = to.display().to_string()), false),
