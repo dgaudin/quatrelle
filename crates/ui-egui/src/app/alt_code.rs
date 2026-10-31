@@ -213,8 +213,23 @@ mod tests {
         }
     }
 
-    /// Alt alone, and Alt with a letter (a menu's key), go on as they came; AltGr (Ctrl+Alt on
-    /// Windows) is never a code, its digits and their text go through.
+    /// AltGr on a layout that has it (French AZERTY): winit clears both Ctrl and Alt while the
+    /// right Alt is held (`get_agnostic_mods`), so AltGr+0 (@) and AltGr+2 (~) arrive with no
+    /// modifier at all, and go through as they came, around a code typed with the left Alt.
+    #[test]
+    fn altgr_on_azerty_is_left_alone() {
+        let ctx = egui::Context::default();
+        let none = Modifiers::NONE;
+        let at = vec![key(Key::Num0, true, none), Event::Text("@".into()), key(Key::Num0, false, none)];
+        let tilde = vec![key(Key::Num2, true, none), Event::Text("~".into()), key(Key::Num2, false, none)];
+        assert_eq!(through(&ctx, at.clone()), at);
+        assert_eq!(texts(&through(&ctx, [at.clone(), code("0201", true), tilde.clone()].concat())), "@É~");
+        assert_eq!(through(&ctx, tilde.clone()), tilde);
+    }
+
+    /// Alt alone, and Alt with a letter (a menu's key), go on as they came; Ctrl+Alt (AltGr's
+    /// stand-in with the left keys, or on a layout without AltGr) is never a code, its digits
+    /// and their text go through.
     #[test]
     fn alt_with_letters_and_altgr_are_left_alone() {
         let ctx = egui::Context::default();
