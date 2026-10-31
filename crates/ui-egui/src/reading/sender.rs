@@ -67,7 +67,7 @@ pub(super) fn from_row(
     let field = egui_id(other_field(c.id));
     let on_field = ui.ctx().input(|i| i.pointer.interact_pos()).is_some_and(|p| widget::over_popups(ui.ctx(), field, p));
     let close = if choosing || on_field { egui::PopupCloseBehavior::IgnoreClicks } else { egui::PopupCloseBehavior::CloseOnClickOutside };
-    let shown = egui::Popup::menu(&b).close_behavior(close).show(|ui| {
+    egui::Popup::menu(&b).close_behavior(close).show(|ui| {
         for x in senders {
             let on = x.account == c.account && x.from.eq_ignore_ascii_case(&c.from);
             if ui.selectable_label(on, &x.label).clicked() {
@@ -83,9 +83,6 @@ pub(super) fn from_row(
             ui.close();
         }
     });
-    if shown.is_none() {
-        people.let_go(other_field(c.id));
-    }
     ui.allocate_ui_with_layout(vec2(ui.available_width(), ROW_H), egui::Layout::left_to_right(egui::Align::Center), |ui| {
         if c.from.is_empty() {
             ui.add(egui::Label::new(RichText::new(&own).color(t.dim)).truncate());
@@ -115,7 +112,6 @@ fn other_address(ui: &mut Ui, t: &Tokens, c: &Compose, people: &mut PeopleFields
             (o.open, o.focus) = (true, true);
         }
         ui.data_mut(|d| d.insert_temp(id, o));
-        people.let_go(other_field(c.id));
         return None;
     }
     let field = other_field(c.id);
