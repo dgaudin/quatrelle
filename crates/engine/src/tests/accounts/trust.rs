@@ -59,6 +59,18 @@ fn changing_the_allowed_domains_in_the_settings_restarts_the_account() {
     assert_eq!(restarts(&mut s), 1);
 }
 
+/// A change made offline reaches the pool, which keeps the new settings for when the account
+/// starts again: kept back here, a domain removed offline stayed trusted until the app restarted.
+#[test]
+fn a_domain_changed_offline_reaches_the_pool() {
+    let (mut s, id) = with_account("trust-offline");
+    s.prefs.work_offline = true;
+    s.run("account.trustDomain", &json!({"account": id, "domain": "icloud.com"})).unwrap();
+    assert!(matches!(s.take_jobs().as_slice(), [Job::Start { account, .. }] if account.trusted_domains == ["icloud.com"]));
+    s.run("account.distrustDomain", &json!({"account": id, "domain": "icloud.com"})).unwrap();
+    assert!(matches!(s.take_jobs().as_slice(), [Job::Start { account, .. }] if account.trusted_domains.is_empty()));
+}
+
 #[test]
 fn twenty_other_servers_at_most() {
     let (mut s, id) = with_account("trust-twenty");

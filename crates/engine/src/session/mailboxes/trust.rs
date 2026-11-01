@@ -26,10 +26,11 @@ impl Session {
         Ok((a.config.id.clone(), domain_site(domain)?))
     }
 
-    /// Start the account again, so what waited for the answer goes on.
+    /// Start the account again, so what waited for the answer goes on. Working offline, the pool
+    /// only keeps the new settings, for when that is turned off (`Job::Start`).
     fn restart_account(&mut self, account: &str) {
         let Some(a) = self.account(account) else { return };
-        if a.is_local() || self.prefs.work_offline {
+        if a.is_local() {
             return;
         }
         let config = a.config.clone();
