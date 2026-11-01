@@ -1,7 +1,8 @@
 # Webex: a scheduled meeting, not the personal room
 
-Status: the owner decided the goal and three choices on 2026-10-31 ("2 ok on fait dans cet ordre"). This
-is the written spec. Facts about Webex were read in its public developer documentation on 2026-11-01.
+Status: the owner decided the goal and three choices on 2026-10-31 ("2 ok on fait dans cet ordre"), and
+approved this written spec on 2026-11-01 ("webex ok"). Facts about Webex were read in its public developer
+documentation on 2026-11-01.
 
 ## Why
 
@@ -41,7 +42,10 @@ the public REST API.
   `http://127.0.0.1:53683/`. Options shows it, with a copy button, for the owner to paste when registering.
 - **Tokens:** use the expiry the server returns. Typically 14 days for the access token and 90 for the
   refresh token. A refresh may return a new refresh token, which replaces the old one.
+- **Permissions (scopes):** `meeting:schedules_read` and `meeting:schedules_write` for the meetings, and
+  `spark:people_read` for `GET /v1/people/me`, which names the account shown in Options.
 - **Meetings:** `POST /v1/meetings`; `PATCH` and `PUT /v1/meetings/{id}`; `DELETE /v1/meetings/{id}`.
+  `PUT` is to be retired. `PATCH` requires nothing but the id. `sendEmail` is optional and defaults to true.
 
 ## What the owner sees
 
@@ -61,8 +65,9 @@ the public REST API.
   - Join works, as for any meeting link.
 
   A meeting needs a title and a start: without them, the button says so and sends nothing.
-- **Saving a changed appointment** (title, start, end, time zone) updates the Webex meeting, and the notes
-  if the answer changed something.
+- **Saving a changed appointment** (title, start, end, time zone, repeat) updates the Webex meeting. If the
+  answer gives another `webLink`, the old one is replaced in the notes and the place. The meeting number,
+  password and video address can't change this way: Quatrelle never sends them.
 - **Deleting or cancelling the appointment** deletes the Webex meeting.
 - **Closing the window without saving** deletes the meeting just created: nothing is left on the site.
 - **Errors** show in the window and change nothing in the appointment:
@@ -87,8 +92,13 @@ the public REST API.
 4. **A recurring appointment** passes its `RRULE` as `recurrence`. Webex doesn't take several days or
    dates in a monthly or yearly rule: it answers with an error, shown as such. There's no attempt to
    convert one.
-5. **`sendEmail` is false on create and delete** when the appointment invites guests: Exchange's invitation
-   is the one they get, and Webex shouldn't mail them a second.
+5. **`sendEmail` is false on create, update and delete** when the appointment invites guests: Exchange's
+   invitation is the one they get, and Webex shouldn't mail them a second.
+6. **One occurrence of a series isn't the series.** Deleting or moving one occurrence sends nothing to
+   Webex: the id is the whole series'. A change made there stays in the calendar alone.
+7. **The Webex id is the organizer's.** It isn't written into an invitation, and an event organized by
+   someone else never sends anything to Webex, whatever id it carries: a stranger's invitation mustn't be
+   able to make the user's own token delete a meeting.
 
 ## Where the code goes
 
