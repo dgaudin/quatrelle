@@ -138,7 +138,8 @@ impl Session {
                         p.events
                             .iter()
                             .filter(|e| e.event.uid == master.event.uid && e.calendar == master.calendar)
-                            .map(|e| e.event.clone())
+                            // A Webex meeting is the user's, not the guests'.
+                            .map(|e| ical::CalEvent { webex_id: None, ..e.event.clone() })
                             .collect()
                     })
                     .unwrap_or_default();

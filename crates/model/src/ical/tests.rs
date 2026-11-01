@@ -542,3 +542,15 @@ fn a_junk_webex_id_is_not_read() {
         assert_eq!(e.webex_id, None, "{junk}");
     }
 }
+
+#[test]
+fn a_strangers_invitation_brings_no_webex_id() {
+    for organizer in ["ORGANIZER:mailto:boss@elsewhere.example\r\n", "ORGANIZER:\r\n", ""] {
+        let ics = format!(
+            "BEGIN:VCALENDAR\r\nMETHOD:REQUEST\r\nBEGIN:VEVENT\r\nUID:j\r\nDTSTART:20261016T140000Z\r\n{organizer}X-QUATRELLE-WEBEX-ID:abc\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+        );
+        assert_eq!(parse(&ics, 0).events.first().expect("one event").webex_id, None, "{organizer:?}");
+    }
+    let file = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:j\r\nDTSTART:20261016T140000Z\r\nX-QUATRELLE-WEBEX-ID:abc\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+    assert_eq!(parse(file, 0).events.first().and_then(|e| e.webex_id.as_deref()), Some("abc"), "a file without a method is the user's own");
+}

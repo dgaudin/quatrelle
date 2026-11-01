@@ -554,3 +554,66 @@ fn a_foreign_id_is_refused() {
     }
     done(s);
 }
+
+#[test]
+fn no_organizer_is_the_users_only_for_a_lone_appointment() {
+    let guest = quatrelle_model::ical::Attendee { email: "zoe@studio.example".into(), ..Default::default() };
+    // (organizer, guests, the user's answer, whose it is): what the sync leaves of the user's own
+    // appointment, and of a colleague's meeting from a server that names no organizer.
+    let cases = [
+        (None, vec![], "", true),
+        (None, vec![guest.clone()], "ACCEPTED", false),
+        (None, vec![guest.clone()], "", false),
+        (None, vec![], "NEEDS-ACTION", false),
+        (Some(stranger()), vec![], "", false),
+        (Some(quatrelle_model::ical::Attendee::default()), vec![], "", false),
+    ];
+    for (n, (organizer, attendees, answer, mine)) in cases.into_iter().enumerate() {
+        let mut s = signed_in("webex-no-organizer");
+        let uid = alone(&mut s);
+        webex_jobs(&mut s);
+        let e = s.pim_mut("sample").events.iter_mut().find(|e| e.event.uid == uid).unwrap();
+        (e.event.organizer, e.event.attendees, e.event.my_answer) = (organizer, attendees, answer.into());
+        s.run("event.move", &json!({"uid": uid, "start": "2026-10-22T09:00", "send": false})).unwrap();
+        assert_eq!(webex_jobs(&mut s).len(), usize::from(mine), "case {n}");
+        done(s);
+    }
+    // The user's own meeting, read back with its organizer filled in.
+    let mut s = signed_in("webex-own-organizer");
+    let uid = appointment(&mut s, "", "");
+    let me = s.find_event(&uid).unwrap().1.event.organizer.clone();
+    assert!(me.is_some());
+    webex_jobs(&mut s);
+    s.run("event.update", &json!({"uid": uid, "summary": "Again"})).unwrap();
+    assert_eq!(webex_jobs(&mut s).len(), 1);
+    done(s);
+}
+
+#[test]
+fn a_strangers_invitation_and_files_bring_no_webex_id() {
+    let ics = |method: &str| {
+        format!(
+            "BEGIN:VCALENDAR\r\n{method}BEGIN:VEVENT\r\nUID:inv1\r\nSUMMARY:Planted\r\nDTSTART:20261016T140000Z\r\nDTEND:20261016T150000Z\r\nX-QUATRELLE-WEBEX-ID:evil\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+        )
+    };
+    // An imported file, with or without a method.
+    for (n, method) in ["", "METHOD:PUBLISH\r\n"].into_iter().enumerate() {
+        let mut s = signed_in("webex-import");
+        let path = std::env::temp_dir().join(format!("quatrelle-webex-import-{n}-{}.ics", std::process::id()));
+        std::fs::write(&path, ics(method)).unwrap();
+        s.run("file.open", &json!({"path": path.to_string_lossy()})).unwrap();
+        let _ = std::fs::remove_file(&path);
+        let planted = s.pim_mut("sample").events.iter().find(|e| e.event.summary == "Planted").map(|e| e.event.clone()).expect("imported");
+        assert_eq!(planted.webex_id, None, "{method:?}");
+        done(s);
+    }
+    // An appointment attached to a message leaves its meeting out.
+    let mut s = signed_in("webex-attach");
+    let uid = alone(&mut s);
+    s.run("mail.new", &json!({})).unwrap();
+    s.run("compose.attachItem", &json!({"kind": "event", "id": uid})).unwrap();
+    let data = s.compose.as_ref().unwrap().attachments[0].data.clone();
+    let text = String::from_utf8_lossy(&data);
+    assert!(!text.contains("WEBEX"), "{text}");
+    done(s);
+}
