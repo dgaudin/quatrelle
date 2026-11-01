@@ -74,6 +74,17 @@ pub fn url_host(url: &str) -> Option<String> {
     ok.then(|| host.to_string())
 }
 
+/// Whether a URL found and saved earlier (the Exchange address in `ews.json`, a DAV home) is on a
+/// site the user withdrew and that nothing else makes trusted. Such a URL counts for nothing, when
+/// ever it was saved: what was on its way when the site was removed can save it afterwards. An
+/// unreadable URL isn't on any site. This one rule is what the worker and the engine read.
+pub fn withdrawn(acc: &AccountConfig, url: &str) -> bool {
+    url_host(url).is_some_and(|h| {
+        let on_list = acc.withdrawn_domains.contains(&site(&h));
+        on_list && !Trust::of(acc, &[]).allows(&h)
+    })
+}
+
 /// The sites an account sends its credentials to.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Trust {
@@ -83,9 +94,8 @@ pub struct Trust {
 impl Trust {
     /// The sites of the address's domain, every configured server (IMAP, SMTP, POP, and the
     /// JMAP, Graph and EWS URLs), each domain the user allowed (`trusted_domains`), and each of
-    /// `extra` (URLs, or hosts, known only to the worker and the engine: the Exchange address
-    /// Autodiscover found, the saved CalDAV and CardDAV homes). An empty or unreadable one is
-    /// ignored.
+    /// `extra` (URLs, or hosts, known only to the worker and the engine: the saved CalDAV and
+    /// CardDAV homes) unless its site was withdrawn. An empty or unreadable one is ignored.
     pub fn of(acc: &AccountConfig, extra: &[&str]) -> Trust {
         let mut t = Trust::default();
         t.add(acc.email.rsplit_once('@').map(|(_, d)| d));
@@ -99,7 +109,10 @@ impl Trust {
             t.add(Some(d));
         }
         for e in extra {
-            t.add(Some(e));
+            let site_of = url_host(e).map(|h| site(&h));
+            if !site_of.is_some_and(|s| acc.withdrawn_domains.contains(&s)) {
+                t.add(Some(e));
+            }
         }
         t
     }
@@ -222,6 +235,30 @@ mod tests {
         // Nothing configured: nothing trusted, not even the empty host.
         let none = Trust::of(&AccountConfig::default(), &[]);
         assert!(none.sites().is_empty() && !none.allows("") && !none.allows("example.org"));
+    }
+
+    /// A URL saved earlier stops counting once the user withdrew its site, whenever it was saved;
+    /// nothing else does, so an account that withdrew nothing trusts all it saved.
+    #[test]
+    fn a_withdrawn_site_is_no_longer_trusted_through_a_saved_url() {
+        let home = "https://caldav.icloud.com/123/";
+        let mut acc = AccountConfig { email: "zoe@example.org".into(), ..Default::default() };
+        assert!(Trust::of(&acc, &[home]).allows("caldav.icloud.com"));
+        assert!(!withdrawn(&acc, home));
+
+        acc.withdrawn_domains = vec!["icloud.com".into()];
+        assert!(withdrawn(&acc, home) && withdrawn(&acc, "https://P01.iCloud.com./x"));
+        assert!(!Trust::of(&acc, &[home]).allows("caldav.icloud.com"));
+        // Elsewhere, and unreadable or empty: it isn't this rule's business.
+        assert!(!withdrawn(&acc, "https://exch01.corp.local/EWS/") && !withdrawn(&acc, "") && !withdrawn(&acc, "https://"));
+        assert!(Trust::of(&acc, &["https://exch01.corp.local/EWS/"]).allows("exch01.corp.local"));
+
+        // The account's own servers and what the user allows stay trusted, withdrawn or not.
+        acc.trusted_domains = vec!["icloud.com".into()];
+        assert!(!withdrawn(&acc, home) && Trust::of(&acc, &[home]).allows("caldav.icloud.com"));
+        acc.trusted_domains.clear();
+        acc.imap.host = "imap.mail.icloud.com".into();
+        assert!(!withdrawn(&acc, home));
     }
 
     #[test]

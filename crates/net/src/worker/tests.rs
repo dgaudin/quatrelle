@@ -329,6 +329,37 @@ fn dav_trusts_the_saved_homes_and_asks_once_about_another_site() {
     assert_eq!(events(&pool), [Event::TrustAsked { account: "a1".into(), site: "localhost".into() }]);
 }
 
+/// A site removed while its home was saved: the home that came back (a sync already on its way
+/// saved it after the removal) goes for nothing. The worker sends nothing there and asks again.
+#[test]
+fn a_removed_sites_home_gets_nothing_and_is_asked_about_again() {
+    use quatrelle_model::pim::{PIM_DOC, Pim};
+
+    use crate::fakes::fake_dav;
+    let s = fake_dav::serve();
+    let there = s.base.replace("127.0.0.1", "localhost");
+    let store = crate::fake::tests_store("dav-removed");
+    let pool = Pool::new(store.clone(), Arc::new(MemoryCredentials::default()));
+    let acc = AccountConfig { id: "a1".into(), email: fake_dav::USER.into(), ..Default::default() };
+    let events = |pool: &Pool| std::iter::from_fn(|| pool.wait(Duration::from_millis(100))).collect::<Vec<_>>();
+    let worker =
+        |a: &AccountConfig| Worker::new(a.clone(), Auth::shared(fake_dav::PASSWORD), store.clone(), pool.sink.clone(), SyncOptions::default());
+    let saved =
+        Pim { caldav_home: Some(format!("{there}/dav/cal/")), carddav_home: Some(String::new()), dav_checked: Some(now()), ..Default::default() };
+    store.save_account_doc("a1", PIM_DOC, &saved).unwrap();
+
+    // Allowed: it syncs.
+    worker(&AccountConfig { trusted_domains: vec!["localhost".into()], ..acc.clone() }).sync_dav();
+    assert!(events(&pool).iter().any(|e| matches!(e, Event::DavSynced { .. })));
+    assert!(!s.data.lock().unwrap().log.is_empty(), "the home was read");
+
+    // Removed.
+    s.data.lock().unwrap().log.clear();
+    worker(&AccountConfig { withdrawn_domains: vec!["localhost".into()], ..acc }).sync_dav();
+    assert_eq!(events(&pool), [Event::TrustAsked { account: "a1".into(), site: "localhost".into() }]);
+    assert_eq!(s.data.lock().unwrap().log, Vec::<String>::new(), "nothing went there");
+}
+
 /// A sync whose look for a missing home stopped at another site is merged all the same, and
 /// that site asked about once, however many syncs bring it back.
 #[test]

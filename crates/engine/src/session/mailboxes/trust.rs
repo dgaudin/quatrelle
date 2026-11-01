@@ -5,7 +5,8 @@
 //! `account.refuseDomain`.
 
 use super::*;
-use quatrelle_model::addr::trust::{site as site_of, url_host};
+use quatrelle_model::EWS_FOUND_DOC;
+use quatrelle_model::addr::trust::{Trust, site as site_of, url_host, withdrawn};
 
 /// Other domains one account trusts at most.
 const MAX_TRUSTED: usize = 20;
@@ -55,6 +56,7 @@ impl Session {
             a.config.trusted_domains.push(site.clone());
         }
         let pair = (id.clone(), site.clone());
+        a.config.withdrawn_domains.retain(|d| *d != site);
         self.asked_trust.remove(&pair);
         self.refused_trust.remove(&pair);
         self.ask_trust.retain(|p| *p != pair);
@@ -63,22 +65,77 @@ impl Session {
         Ok(serde_json::json!({ "account": id, "trusted": site }))
     }
 
-    /// Withdraw a domain the account trusted; it starts again without it. If a server proposes
-    /// the domain again in the same run, it is asked about again.
+    /// Withdraw a domain the account trusted, and what was found on it: a URL saved there would
+    /// put the site back among those it trusts, and the password would go there unasked. The
+    /// account starts again without it. If a server proposes the domain again, it is asked about
+    /// again, in the same run too.
+    ///
+    /// The site stays listed as withdrawn: a sync on its way can still save a URL there after
+    /// this, and [`withdrawn`] is what makes such a URL count for nothing. It's written first, so
+    /// that stopping half way through leaves the rule, not the URL, in charge.
+    ///
+    /// A site the account trusts anyway (its own server is on it) has nothing to withdraw; and any
+    /// other saved URL stays as it is: an Exchange address in `ews.json` is touched only when its
+    /// very site is removed.
     pub fn distrust_domain(&mut self, account: &str, domain: &str) -> CmdResult {
         let (id, site) = self.trust_target(account, domain)?;
+        let on_site = |url: &str| url_host(url).is_some_and(|h| site_of(&h) == site);
+        let ews: String = self.store.as_ref().and_then(|s| s.load_account_doc(&id, EWS_FOUND_DOC).ok()).unwrap_or_default();
+        let ews_there = on_site(&ews);
+        let home_there = self.pim.get(&id).is_some_and(|p| [&p.caldav_home, &p.carddav_home].into_iter().flatten().any(|h| on_site(h)));
         let Some(a) = self.account_mut(&id) else { return Err(CmdError::Params(format!("no account `{id}`"))) };
         let before = a.config.trusted_domains.len();
         a.config.trusted_domains.retain(|d| url_host(d).map(|h| site_of(&h)).as_deref() != Some(site.as_str()));
         let removed = a.config.trusted_domains.len() != before;
+        let still_trusted = Trust::of(&a.config, &[]).allows(&site);
+        let forget = (ews_there || home_there) && !still_trusted;
+        if (removed || forget) && !still_trusted && !a.config.withdrawn_domains.contains(&site) {
+            a.config.withdrawn_domains.push(site.clone());
+        }
         let pair = (id.clone(), site.clone());
         self.asked_trust.remove(&pair);
         self.ask_trust.retain(|p| *p != pair);
-        if removed {
+        if removed || forget {
             self.save_accounts();
+        }
+        if forget {
+            self.forget_found_on(&id, &site, ews_there);
+        }
+        if removed || forget {
             self.restart_account(&id);
         }
-        Ok(serde_json::json!({ "account": id, "removed": site, "wasTrusted": removed }))
+        Ok(serde_json::json!({ "account": id, "removed": site, "wasTrusted": removed || forget }))
+    }
+
+    /// Forget what was found on a site: the Exchange address kept (`ews`: it is on the site), and
+    /// the calendars' and contacts' homes there, which are then looked for again at the next sync.
+    fn forget_found_on(&mut self, account: &str, site: &str, ews: bool) {
+        if ews
+            && let Some(store) = &self.store
+            && let Err(e) = store.save_account_doc(account, EWS_FOUND_DOC, "")
+        {
+            // `withdrawn` keeps it from being used all the same.
+            log::warn!("{account}: the Exchange address kept couldn't be forgotten: {e}");
+        }
+        let on_site = |h: &Option<String>| h.as_deref().and_then(url_host).is_some_and(|h| site_of(&h) == site);
+        let Some(p) = self.pim.get_mut(account) else { return };
+        let (caldav, carddav) = (on_site(&p.caldav_home), on_site(&p.carddav_home));
+        if caldav {
+            p.caldav_home = Some(String::new());
+        }
+        if carddav {
+            p.carddav_home = Some(String::new());
+        }
+        if caldav || carddav {
+            p.dav_checked = None;
+            self.write_pim(account);
+        }
+    }
+
+    /// Whether a home a sync brings is on a site the user withdrew: the sync was on its way when
+    /// the site was removed, and nothing of it is kept.
+    pub(crate) fn home_withdrawn(&self, account: &str, home: Option<&str>) -> bool {
+        self.account(account).is_some_and(|a| home.is_some_and(|h| withdrawn(&a.config, h)))
     }
 
     /// The user didn't allow a domain: the account leaves it as it is, and it isn't asked about

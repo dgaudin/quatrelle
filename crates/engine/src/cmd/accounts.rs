@@ -263,6 +263,7 @@ pub(super) fn add_account(s: &mut Session, v: &Value) -> CmdResult {
         oauth_client_id,
         oauth_tenant,
         trusted_domains: Vec::new(),
+        withdrawn_domains: Vec::new(),
     };
     // A registration built in, or the account's own (Microsoft).
     // A line break or tab pasted in with the user name: no server would ever take it (in an

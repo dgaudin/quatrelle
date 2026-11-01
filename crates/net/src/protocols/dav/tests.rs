@@ -274,6 +274,51 @@ fn a_saved_home_on_another_site_still_syncs_unasked() {
     assert_eq!(untrusted(sync(&bare, USER, "127.0.0.1", &pim, 100, Zone::UTC)), "localhost");
 }
 
+/// A home that came back on a site the user withdrew (saved by a sync already on its way) doesn't
+/// put the site back: nothing goes there, and the question comes back.
+#[test]
+fn a_home_saved_on_a_withdrawn_site_is_no_trust() {
+    let s = fake_dav::serve();
+    let there = by_name(&s.base);
+    let acc = AccountConfig { email: USER.into(), withdrawn_domains: vec!["localhost".into()], ..Default::default() };
+    let pim = Pim { caldav_home: Some(format!("{there}/dav/cal/")), carddav_home: Some(String::new()), ..Default::default() };
+    let dav = Dav::new(USER, PASSWORD, trust_of(&acc, &pim));
+    assert_eq!(untrusted(sync(&dav, USER, "127.0.0.1", &pim, 100, Zone::UTC)), "localhost");
+    assert_eq!(s.data.lock().unwrap().log, Vec::<String>::new(), "nothing went there");
+}
+
+/// Allowed, found, removed: with what `account.distrustDomain` leaves (no home, the look to do
+/// again, the site withdrawn) the look stops at that site, nothing is sent there, and it is asked
+/// about again. The saved home is what kept it trusted: gone, so is the password's way there.
+#[test]
+fn a_site_removed_is_looked_at_again_and_asked_about() {
+    let s = fake_dav::serve();
+    let there = by_name(&s.base);
+    s.data.lock().unwrap().well_known = Some(format!("{there}/dav/"));
+    let start = format!("{}/.well-known/caldav", s.base);
+    let starts = |kind: Kind| if kind == Kind::Calendars { vec![start.clone()] } else { Vec::new() };
+    let acc = AccountConfig {
+        email: USER.into(),
+        imap: quatrelle_model::ServerConfig { host: "127.0.0.1".into(), ..Default::default() },
+        ..Default::default()
+    };
+
+    // Allowed: the home is found on the other site.
+    let allowed = AccountConfig { trusted_domains: vec!["localhost".into()], ..acc.clone() };
+    let found = syncing::sync_from(&Dav::new(USER, PASSWORD, trust_of(&allowed, &Pim::default())), &starts, &Pim::default(), 100, Zone::UTC).unwrap();
+    assert_eq!(found.caldav_home, Some(format!("{there}/dav/cal/")));
+
+    // Removed.
+    s.data.lock().unwrap().log.clear();
+    let removed = AccountConfig { withdrawn_domains: vec!["localhost".into()], ..acc };
+    let forgotten = Pim { caldav_home: Some(String::new()), carddav_home: Some(String::new()), ..Default::default() };
+    let dav = Dav::new(USER, PASSWORD, trust_of(&removed, &forgotten));
+    let again = syncing::sync_from(&dav, &starts, &forgotten, 200, Zone::UTC).unwrap();
+    assert_eq!(again.untrusted.as_deref(), Some("localhost"), "the question comes back");
+    assert_eq!(again.caldav_home, None);
+    assert_eq!(s.data.lock().unwrap().log, ["PROPFIND /.well-known/caldav"], "only the start, on the account's own server");
+}
+
 /// A collection a home's listing names on another site is never requested.
 #[test]
 fn a_collection_on_another_site_is_never_requested() {

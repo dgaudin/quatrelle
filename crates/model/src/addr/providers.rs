@@ -7,6 +7,9 @@ use crate::{AccountConfig, Security, ServerConfig};
 /// The EWS address of an account whose Exchange server Autodiscover finds when it connects.
 pub const EWS_AUTODISCOVER: &str = "autodiscover";
 
+/// The account document that keeps the EWS address Autodiscover found.
+pub const EWS_FOUND_DOC: &str = "ews.json";
+
 /// Microsoft Graph's address, for Exchange Online accounts.
 pub const GRAPH_URL: &str = "https://graph.microsoft.com/v1.0";
 
@@ -147,6 +150,7 @@ impl AccountConfig {
             oauth_client_id: None,
             oauth_tenant: None,
             trusted_domains: Vec::new(),
+            withdrawn_domains: Vec::new(),
         }
     }
 

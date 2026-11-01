@@ -70,7 +70,8 @@ pub struct Dav {
 }
 
 /// What an account's DAV session trusts: its own servers and allowed domains, and the homes
-/// found and saved before (`pim`'s), where the password has already gone.
+/// found and saved before (`pim`'s), where the password has already gone, unless the user
+/// withdrew their site since.
 pub fn trust_of(acc: &AccountConfig, pim: &Pim) -> Trust {
     let home = |h: &Option<String>| h.clone().unwrap_or_default();
     Trust::of(acc, &[&home(&pim.caldav_home), &home(&pim.carddav_home)])

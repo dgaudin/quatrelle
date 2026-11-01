@@ -125,6 +125,40 @@ fn an_exchange_account_found_by_autodiscover_before_keeps_working_unasked() {
     assert_eq!(store.load_folder("a1", "INBOX").unwrap().messages.len(), 1);
 }
 
+/// A server the user removed: its address is forgotten (the engine empties `ews.json`), and even
+/// if a connection already on its way saved it again afterwards it isn't used. Autodiscover runs,
+/// its answer asks the question again, and nothing but Autodiscover reaches the server.
+#[test]
+fn a_removed_server_is_not_used_and_is_asked_about_again() {
+    let mut d = Data::default();
+    let inbox = d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    d.deliver(&inbox, &mail("Storyboard", "m1"), false, "2024-05-06T09:00:00Z");
+    let server = serve(d);
+    let email = "removed@contoso.example";
+    crate::ews::TEST_BASES.lock().unwrap().push((email.into(), vec![server.url.clone()]));
+    let store = crate::fake::tests_store("ews-removed");
+    // The save that came after the removal.
+    store.save_account_doc("a1", quatrelle_model::EWS_FOUND_DOC, &server.url).unwrap();
+    let mut pool = crate::worker::Pool::new(store.clone(), Arc::new(crate::worker::MemoryCredentials::default()));
+    let account = AccountConfig {
+        id: "a1".into(),
+        email: email.into(),
+        username: format!("{DOMAIN}\\{USER}"),
+        ews: Some(crate::ews::AUTODISCOVER.into()),
+        withdrawn_domains: vec!["127.0.0.1".into()],
+        ..Default::default()
+    };
+    pool.submit(Job::Start { account: account.clone(), password: Some(Secret(PASSWORD.into())) });
+    let seen = until(&pool, "the question", |e| matches!(e, Event::Status { status: SyncStatus::NeedsTrust { site }, .. } if site == "127.0.0.1"));
+    assert!(!seen.iter().any(|e| matches!(e, Event::Status { status: SyncStatus::Online { .. }, .. })), "{seen:?}");
+    assert!(store.load_folder("a1", "INBOX").map_or(true, |f| f.messages.is_empty()), "no mail read from the server removed");
+
+    // Allowed again (the command takes it off the list): the same address works.
+    let again = AccountConfig { trusted_domains: vec!["127.0.0.1".into()], withdrawn_domains: Vec::new(), ..account };
+    pool.submit(Job::Start { account: again, password: Some(Secret(PASSWORD.into())) });
+    until(&pool, "online", |e| matches!(e, Event::Status { status: SyncStatus::Online { .. }, .. }));
+}
+
 /// A message sent while the account waits for the answer stays in the Outbox: it is neither
 /// failed nor dropped, and nothing is sent. Allowed, the account starts again and it goes.
 #[test]

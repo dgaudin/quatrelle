@@ -569,6 +569,7 @@ impl Session {
             || a.config.online_only != config.online_only
             || a.config.shared_online != config.shared_online
             || a.config.trusted_domains != config.trusted_domains
+            || a.config.withdrawn_domains != config.withdrawn_domains
             || password.is_some();
         if config.online_only && !config.can_be_online_only() {
             return Err(CmdError::Params("a POP account keeps its mail on this computer: it can't be online only".into()));
