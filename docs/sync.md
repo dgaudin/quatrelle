@@ -398,7 +398,7 @@ the removal. So the site also goes in `AccountConfig::withdrawn_domains`, saved 
 until it is allowed again, and `trust::withdrawn` makes any saved URL on it count for nothing,
 whenever it was saved: `Trust::of` skips it, `ews_url` doesn't use it, `apply_dav` doesn't keep it.
 A request already sent can't be taken back, and a worker told to stop finishes the DAV sync it is
-in, under the trust it started with; its restart is what the removal waits for.
+in, under the trust it started with, but begins no other (`pim_pass`).
 
 **Invitations** travel by mail (iTIP over iMIP, RFC 5546/6047): a `text/calendar` part with
 `METHOD:REQUEST` shows as an invitation card (Accept, Tentative, Decline), which updates the

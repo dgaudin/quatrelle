@@ -54,6 +54,15 @@ impl Worker {
         self.dav_done(done);
     }
 
+    /// The calendars' and contacts' pass after a full sync, unless the worker was told to stop
+    /// meanwhile: it would run under the settings it started with, a site just removed among them.
+    pub(super) fn pim_pass(&mut self, rx: &Receiver<Job>) {
+        self.drain(rx);
+        if !self.closed {
+            self.sync_dav();
+        }
+    }
+
     /// A CalDAV / CardDAV sync's result: merged, and a site it stopped at asked about (once).
     pub(super) fn dav_done(&mut self, done: Result<quatrelle_model::pim::DavSync>) {
         match done {
