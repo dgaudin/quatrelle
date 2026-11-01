@@ -31,6 +31,9 @@ pub struct Data {
     pub refreshes: usize,
     /// Each token comes with a new refresh token, not the one it was asked with.
     pub rotate: bool,
+    /// The only refresh token the form still takes: under `rotate`, the last it gave, or what a
+    /// test sets (a sign-in of its own). `None`: any.
+    pub latest: Option<String>,
 }
 
 impl Data {
@@ -63,11 +66,15 @@ impl Data {
         let text = String::from_utf8_lossy(form);
         let get = |k: &str| text.split('&').filter_map(|kv| kv.split_once('=')).find(|(n, _)| *n == k).map(|(_, v)| unpct(v));
         let asked = get("refresh_token").unwrap_or_default();
-        if get("client_secret").as_deref() != Some(SECRET) || asked == REVOKED {
+        let replaced = self.latest.as_ref().is_some_and(|latest| *latest != asked);
+        if get("client_secret").as_deref() != Some(SECRET) || asked == REVOKED || replaced {
             return (400, json!({"message": "The refresh token provided is expired, revoked, malformed, or invalid."}));
         }
         self.refreshes += 1;
         let refresh = if self.rotate { format!("rotated-{}", self.refreshes) } else { asked };
+        if self.rotate {
+            self.latest = Some(refresh.clone());
+        }
         (200, json!({"access_token": TOKEN, "expires_in": 1_209_600, "refresh_token": refresh, "token_type": "Bearer"}))
     }
 
