@@ -11,6 +11,9 @@ use crate::WebexAsk;
 const ASK: u64 = 7;
 const OLD_LINK: &str = "https://acme.webex.com/acme/j.php?MTID=old";
 const NEW_LINK: &str = "https://acme.webex.com/acme/j.php?MTID=new";
+const ZOOM: &str = "https://us02web.zoom.us/j/1234567890";
+const MEET: &str = "https://meet.google.com/abc-defg-hij";
+const TEAMS: &str = "https://teams.microsoft.com/l/meetup-join/19%3ameeting_abc/0";
 
 fn fields() -> WebexFields {
     WebexFields { title: "Budget".into(), start: NOW, end: NOW + 3600, timezone: "Europe/Paris".into(), recurrence: None }
@@ -171,20 +174,62 @@ fn changing_the_link_reaches_the_notes() {
     done(s);
 }
 
-/// The server's own join address isn't in the notes: there is nothing there to replace, so the
-/// guests aren't sent an update that changes nothing.
+/// A join address the notes and the place don't hold, the server's own or Webex's: there is
+/// nothing there to replace, so the guests aren't sent an update that changes nothing.
 #[test]
 fn a_link_the_notes_dont_hold_changes_nothing() {
-    let mut s = sample_session("webex-no-link");
-    let uid = appointment(&mut s, "Room 2", "");
-    let e = s.pim_mut("sample").events.iter_mut().find(|e| e.event.uid == uid).unwrap();
-    e.event.join_url = "https://teams.microsoft.com/l/meetup-join/19%3ameeting_abc/0".into();
-    let before = s.find_event(&uid).unwrap().1.clone();
+    for join_url in [TEAMS, OLD_LINK] {
+        let mut s = sample_session("webex-no-link");
+        let uid = appointment(&mut s, "Room 2", "");
+        let e = s.pim_mut("sample").events.iter_mut().find(|e| e.event.uid == uid).unwrap();
+        e.event.join_url = join_url.into();
+        let before = s.find_event(&uid).unwrap().1.clone();
+        let told = invitations(&s);
+        s.apply(Event::WebexUpdated { id: "m1".into(), meeting: Some(meeting(NEW_LINK)), error: None });
+        s.apply(Event::WebexUpdated { id: "elsewhere".into(), meeting: Some(meeting(NEW_LINK)), error: None });
+        assert_eq!(s.find_event(&uid).unwrap().1, &before, "{join_url}");
+        assert_eq!(invitations(&s), told, "{join_url}");
+        assert!(s.notices.iter().all(|n| !n.error));
+        done(s);
+    }
+}
+
+/// Webex answers every change with the meeting's link, most often the one it had: a title
+/// changed mustn't touch a meeting link of another kind that comes first, nor raise the
+/// appointment's sequence, nor mail its guests.
+#[test]
+fn the_same_link_answered_changes_nothing() {
+    let block = format!("Join the Webex meeting: {OLD_LINK}");
+    for (place, notes, join_url) in [
+        (ZOOM, block.clone(), ""),
+        ("https://acme.webex.com/meet/ana", block.clone(), ""),
+        ("Room 2", format!("{MEET}\n{block}"), ""),
+        ("Room 2", format!("{TEAMS}\n{block}"), TEAMS),
+        ("Room 2", format!("Last time: https://acme.webex.com/acme/j.php?MTID=last\n{block}"), ""),
+    ] {
+        let mut s = sample_session("webex-same-link");
+        let uid = appointment(&mut s, place, &notes);
+        let e = s.pim_mut("sample").events.iter_mut().find(|e| e.event.uid == uid).unwrap();
+        e.event.join_url = join_url.into();
+        let before = s.find_event(&uid).unwrap().1.clone();
+        let told = invitations(&s);
+        s.apply(Event::WebexUpdated { id: "m1".into(), meeting: Some(meeting(OLD_LINK)), error: None });
+        assert_eq!(s.find_event(&uid).unwrap().1, &before, "{place}: {notes}");
+        assert_eq!(invitations(&s), told, "{place}: {notes}");
+        done(s);
+    }
+}
+
+/// Webex's link did change: its own is replaced, and the links around it stay.
+#[test]
+fn a_new_link_replaces_webexs_own_alone() {
+    let mut s = sample_session("webex-own-link");
+    let uid = appointment(&mut s, ZOOM, &format!("{MEET}\nJoin the Webex meeting: {OLD_LINK}"));
     let told = invitations(&s);
     s.apply(Event::WebexUpdated { id: "m1".into(), meeting: Some(meeting(NEW_LINK)), error: None });
-    s.apply(Event::WebexUpdated { id: "elsewhere".into(), meeting: Some(meeting(NEW_LINK)), error: None });
-    assert_eq!(s.find_event(&uid).unwrap().1, &before);
-    assert_eq!(invitations(&s), told);
-    assert!(s.notices.iter().all(|n| !n.error));
+    let e = &s.find_event(&uid).unwrap().1.event;
+    assert_eq!(e.location, ZOOM);
+    assert_eq!(e.description, format!("{MEET}\nJoin the Webex meeting: {NEW_LINK}"));
+    assert_eq!(invitations(&s), told + 1);
     done(s);
 }

@@ -202,6 +202,14 @@ fn web_host_and_path(url: &str) -> Option<(String, &str)> {
     Some((host.to_ascii_lowercase(), path))
 }
 
+/// The host of a scheduled Webex meeting's join page (`https://<site>.webex.com/<site>/j.php?MTID=…`);
+/// none for any other link, a personal room's among them.
+pub fn webex_join_host(url: &str) -> Option<String> {
+    let (host, path) = web_host_and_path(url)?;
+    let page = path.split(['?', '#']).next()?.rsplit('/').next()?;
+    page.eq_ignore_ascii_case("j.php").then_some(host)
+}
+
 /// Whether a web address is a Microsoft Teams meeting (`…teams.microsoft.com/l/meetup-join…` or
 /// `…/meet/…`, `teams.live.com/meet…`), by the host the browser would really go to.
 pub fn is_teams_link(url: &str) -> bool {
