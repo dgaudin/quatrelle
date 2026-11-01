@@ -77,7 +77,9 @@ server set.
     - Exchange hybrid: a `RedirectAddr` to `onmicrosoft.com`, then an `EwsUrl` on `office365.com`.
       That is two questions, one after the other, each followed by a restart;
     - a new on-premises Exchange account whose `EwsUrl` is on an internal domain (`exch01.corp.local`)
-      other than the address's.
+      other than the address's;
+    - an online-only Exchange account on another domain than its address: its documents live in
+      memory, `ews.json` too, so it asks once after the update.
 
     The owner's own Exchange account is covered by `ews.json`.
 
@@ -153,7 +155,7 @@ The model computes this as `Trust::of(&AccountConfig, extra: &[&str]) -> Trust`,
      `jmap::Error` gains `Untrusted { site }`, mapped both ways in `net/src/protocols/jmap.rs`.
      - Natively, `Response.url` comes from `http::Response.url`.
      - In the browser it comes from `web_sys::Response::url()`.
-   - The session GET goes with the trusted sites (`Request::trusting`). A 401 whose final URL is on an
+   - The session GET goes with the trusted sites (`Request::trusting`). An answer whose final URL is on an
      untrusted site gives `Untrusted { site }`.
    - The session's `apiUrl`, `downloadUrl`, `uploadUrl` and `eventSourceUrl` must each be on a trusted
      site. Otherwise `connect` fails with `Untrusted { site }` before sending anything there.
