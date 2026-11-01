@@ -16,14 +16,33 @@ const MAX_HOST: usize = 253;
 /// the ASCII form given (no U-label/A-label conversion: two spellings are two sites, which errs
 /// on the safe side). When the list gives none (a single label like `exchange01` or `localhost`,
 /// an IP address, a bare suffix) the site is the normalised host itself. An unknown suffix
-/// (`.local`) follows the list's `*` rule: `exch01.corp.local` → `corp.local`.
+/// (`.local`) follows the list's `*` rule: `exch01.corp.local` → `corp.local`. The suffixes of
+/// [`SHARED_SUFFIXES`] count as public too.
 pub fn site(host: &str) -> String {
     let h = host.trim().trim_end_matches('.').to_ascii_lowercase();
     if h.is_empty() || h.starts_with('[') || h.parse::<Ipv4Addr>().is_ok() || h.parse::<Ipv6Addr>().is_ok() {
         return h;
     }
+    for suffix in SHARED_SUFFIXES {
+        if h == suffix {
+            return h;
+        }
+        if let Some(rest) = h.strip_suffix(suffix).and_then(|r| r.strip_suffix('.')) {
+            // An empty label (`a..onmicrosoft.com`) names no tenant: the host is its own site.
+            return match rest.rsplit('.').next().filter(|l| !l.is_empty()) {
+                Some(label) => format!("{label}.{suffix}"),
+                None => h,
+            };
+        }
+    }
     psl::domain_str(&h).map(str::to_string).unwrap_or(h)
 }
+
+/// Suffixes the Public Suffix List doesn't name whose names each belong to someone else:
+/// Microsoft 365's tenant domains (`contoso.onmicrosoft.com`, and the hybrid routing domain
+/// `contoso.mail.onmicrosoft.com`). Longest first. Each tenant is a site of its own: allowing one
+/// never allows them all.
+const SHARED_SUFFIXES: [&str; 2] = ["mail.onmicrosoft.com", "onmicrosoft.com"];
 
 /// The host of a URL (`https://user@Mail.Example.com:8443/path?q` → `Mail.Example.com`; an IPv6
 /// address keeps its brackets). The scheme is optional, so a bare host or `host/path` reads too.
@@ -128,6 +147,15 @@ mod tests {
             ("alice.github.io", "alice.github.io"),
             ("github.io", "github.io"),
             ("co.uk", "co.uk"),
+            // Microsoft 365's tenants, which the list doesn't name: each a site of its own.
+            ("contoso.onmicrosoft.com", "contoso.onmicrosoft.com"),
+            ("autodiscover.Contoso.OnMicrosoft.com.", "contoso.onmicrosoft.com"),
+            ("contoso.mail.onmicrosoft.com", "contoso.mail.onmicrosoft.com"),
+            ("autodiscover.contoso.mail.onmicrosoft.com", "contoso.mail.onmicrosoft.com"),
+            ("onmicrosoft.com", "onmicrosoft.com"),
+            ("mail.onmicrosoft.com", "mail.onmicrosoft.com"),
+            ("notonmicrosoft.com", "notonmicrosoft.com"),
+            ("a..onmicrosoft.com", "a..onmicrosoft.com"),
             ("", ""),
         ] {
             assert_eq!(site(host), want, "{host}");
