@@ -40,6 +40,32 @@ fn an_ews_url_on_another_site_is_untrusted() {
     assert_eq!(untrusted(ask(&server, &trusting(&[]))), "127.0.0.1");
 }
 
+/// An Exchange's answer naming another site stands, as Outlook takes it: the domain's other
+/// address isn't asked. (Its web server's 401 read as a wrong password: the password was asked
+/// again and again, and the question never came.)
+#[test]
+fn an_untrusted_answer_isnt_overruled_by_the_domains_web_server() {
+    let server = serve(Data::default());
+    // The domain's second address: a web server that refuses everyone, counting who came.
+    let web = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let web_url = format!("http://127.0.0.1:{}/autodiscover/autodiscover.xml", web.local_addr().unwrap().port());
+    let came = Arc::new(Mutex::new(0usize));
+    let counted = came.clone();
+    std::thread::spawn(move || {
+        for mut s in web.incoming().flatten() {
+            *counted.lock().unwrap() += 1;
+            let mut buf = [0u8; 4096];
+            let _ = std::io::Read::read(&mut s, &mut buf);
+            let _ = std::io::Write::write_all(&mut s, b"HTTP/1.1 401 X\r\nWWW-Authenticate: Basic realm=\"x\"\r\nContent-Length: 0\r\n\r\n");
+        }
+    });
+    let email = "web@contoso.example";
+    crate::ews::TEST_BASES.lock().unwrap().push((email.into(), vec![server.url.clone(), web_url]));
+    let r = crate::ews::autodiscover(email, &format!("{DOMAIN}\\{USER}"), PASSWORD, None, &trusting(&[]));
+    assert_eq!(untrusted(r), "127.0.0.1");
+    assert_eq!(*came.lock().unwrap(), 0, "the web server wasn't asked");
+}
+
 /// Allowed, each is followed or used.
 #[test]
 fn both_work_once_trusted() {
@@ -108,7 +134,7 @@ fn a_message_waits_in_the_outbox_for_the_answer() {
     d.folder("Sent Items", None, Some("sentitems"), "IPF.Note");
     let server = serve(d);
     let email = "waits@contoso.example";
-    crate::ews::TEST_BASES.lock().unwrap().push((email.into(), server.url.clone()));
+    crate::ews::TEST_BASES.lock().unwrap().push((email.into(), vec![server.url.clone()]));
     let store = crate::fake::tests_store("ews-outbox-trust");
     let mut pool = crate::worker::Pool::new(store.clone(), Arc::new(crate::worker::MemoryCredentials::default()));
     let account = AccountConfig {

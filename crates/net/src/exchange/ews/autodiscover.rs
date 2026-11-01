@@ -78,9 +78,10 @@ pub(super) fn allowed(host: &str, trust: &Trust) -> Result<()> {
 }
 
 /// Tests: where a worker's Autodiscover asks about an address instead of its domain's servers
-/// (the fakes listen on 127.0.0.1 only), as (address, base).
+/// (the fakes listen on 127.0.0.1 only), as (address, the addresses asked in turn); after a
+/// redirect, the first with the new domain for its host.
 #[cfg(test)]
-pub(crate) static TEST_BASES: std::sync::Mutex<Vec<(String, String)>> = std::sync::Mutex::new(Vec::new());
+pub(crate) static TEST_BASES: std::sync::Mutex<Vec<(String, Vec<String>)>> = std::sync::Mutex::new(Vec::new());
 
 /// The EWS address in an Autodiscover answer (the outside one first), or the address to ask
 /// about instead (a redirect).
@@ -109,13 +110,14 @@ pub fn autodiscover(email: &str, user: &str, password: &str, base: Option<&str>,
 
 /// [`autodiscover`], naming itself `agent` to the servers asked.
 pub fn autodiscover_as(email: &str, user: &str, password: &str, base: Option<&str>, agent: Option<&str>, trust: &Trust) -> Result<String> {
+    // Where the first round asks instead of the address's domain (tests): `base`, or for a
+    // worker's own Autodiscover the addresses a test set for this address.
+    let first: Option<Vec<String>> = base.map(|b| vec![b.to_string()]);
     #[cfg(test)]
-    let tested = base
-        .is_none()
-        .then(|| TEST_BASES.lock().unwrap_or_else(std::sync::PoisonError::into_inner).iter().find(|(a, _)| a == email).map(|(_, b)| b.clone()))
-        .flatten();
-    #[cfg(test)]
-    let base = base.or(tested.as_deref());
+    let first = first.or_else(|| {
+        let bases = TEST_BASES.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        bases.iter().find(|(a, _)| a == email).map(|(_, b)| b.clone())
+    });
     let mut address = email.to_string();
     for round in 0..3 {
         let body = format!(
@@ -123,17 +125,33 @@ pub fn autodiscover_as(email: &str, user: &str, password: &str, base: Option<&st
              <Request><EMailAddress>{}</EMailAddress><AcceptableResponseSchema>http://schemas.microsoft.com/exchange/autodiscover/outlook/responseschema/2006a</AcceptableResponseSchema></Request></Autodiscover>",
             esc(&address)
         );
-        let urls = match base {
-            Some(b) if round == 0 => vec![b.to_string()],
-            Some(b) => address_domain(&address).map(|d| vec![on_host(b, &d)]).unwrap_or_default(),
+        let urls = match &first {
+            Some(f) if round == 0 => f.clone(),
+            Some(f) => f.first().zip(address_domain(&address)).map(|(b, d)| vec![on_host(b, &d)]).unwrap_or_default(),
             None => autodiscover_urls(&address),
         };
         let mut redirect = None;
         let mut last = NetError::No("Autodiscover found no Exchange server for this address".into());
-        // An answer naming a site the account doesn't trust: the first is said if nothing else
-        // answers (as the calendars' discovery does, another address of the domain may).
+        // An Exchange's answer naming a site the account doesn't trust. It stands, as Outlook
+        // takes it: the domain's other address isn't asked (its web server's 401 would read as a
+        // wrong password, and the question would never come).
         let mut untrusted = None;
         for url in urls {
+            // After a redirect, each address asked must itself be on a trusted site: a domain
+            // allowed that is a public suffix itself mustn't widen what is asked.
+            if round > 0 {
+                match url_host(&url).map(|h| allowed(&h, trust)) {
+                    Some(Ok(())) => {}
+                    Some(Err(e)) => {
+                        untrusted.get_or_insert(e);
+                        continue;
+                    }
+                    None => {
+                        last = NetError::Protocol("Autodiscover was sent to an address that can't be read safely".into());
+                        continue;
+                    }
+                }
+            }
             let c = match Client::new(&url, user, password, email) {
                 Ok(c) => c.with_agent(agent),
                 Err(e) => {
@@ -147,22 +165,22 @@ pub fn autodiscover_as(email: &str, user: &str, password: &str, base: Option<&st
                     (Some(found), _) => match url_host(&found).map(|h| allowed(&h, trust)) {
                         Some(Ok(())) => return Ok(found),
                         Some(Err(e)) => {
-                            untrusted.get_or_insert(e);
+                            untrusted = Some(e);
+                            break;
                         }
                         None => last = NetError::Protocol("Autodiscover named an address that can't be read safely".into()),
                     },
                     // Another address to ask about: only on a domain the account trusts, or
                     // the password would go there with the next question.
-                    (None, Some(r)) if r != address && r.contains('@') => match address_domain(&r).map(|d| allowed(&d, trust)) {
-                        Some(Err(e)) => {
-                            untrusted.get_or_insert(e);
-                        }
-                        // Trusted, or no domain to ask (then there's nowhere to ask either).
-                        _ => {
-                            redirect = Some(r);
+                    (None, Some(r)) if r != address && r.contains('@') => {
+                        if let Some(Err(e)) = address_domain(&r).map(|d| allowed(&d, trust)) {
+                            untrusted = Some(e);
                             break;
                         }
-                    },
+                        // Trusted, or no domain to ask (then there's nowhere to ask either).
+                        redirect = Some(r);
+                        break;
+                    }
                     _ => {}
                 },
                 Ok(resp) => last = NetError::Protocol(format!("Autodiscover answered HTTP {}", resp.status)),

@@ -713,11 +713,10 @@ fn autodiscover_asks_before_another_domain() {
     assert!(allowed("autodiscover.contoso.com", &trust).is_ok());
     assert!(allowed("mail.contoso.com", &trust).is_ok());
     // Exchange hybrid: the cloud mailbox's address, then the cloud's server, one after the other.
-    // (The Public Suffix List doesn't list `onmicrosoft.com`: its tenants are one site. Their
-    // names are Microsoft's, in Microsoft's DNS, so the password goes to Microsoft either way.)
-    assert_eq!(site_of(allowed("contoso.onmicrosoft.com", &trust)), "onmicrosoft.com");
+    assert_eq!(site_of(allowed("contoso.onmicrosoft.com", &trust)), "contoso.onmicrosoft.com", "each tenant a site of its own");
     let trust = Trust::of(&quatrelle_model::AccountConfig { trusted_domains: vec!["contoso.onmicrosoft.com".into()], ..acc.clone() }, &[]);
-    assert!(allowed("contoso.onmicrosoft.com", &trust).is_ok());
+    assert!(allowed("autodiscover.contoso.onmicrosoft.com", &trust).is_ok());
+    assert!(allowed("fabrikam.onmicrosoft.com", &trust).is_err(), "not another tenant");
     assert_eq!(site_of(allowed("outlook.office365.com", &trust)), "office365.com");
     // An on-premises server on an internal domain: asked about, unless found and kept before.
     assert_eq!(site_of(allowed("exch01.corp.local", &Trust::of(&acc, &[]))), "corp.local");

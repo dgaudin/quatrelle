@@ -332,7 +332,11 @@ servers that don't offer IMAP. Every call is SOAP over HTTPS.
   redirects to another address (`RedirectAddr`); the EWS address found is kept with the account
   (`ews.json`). Each answer must stay on a site the account trusts (`Trust`): a `RedirectAddr` to
   another domain is not followed and an `EwsUrl` on another site is not used, both
-  `NetError::Untrusted { site }`, unless another address of the domain answers within it. At
+  `NetError::Untrusted { site }`. Such an answer comes from an Exchange and stands, as for
+  Outlook: the domain's other address isn't asked (its web server's 401 would read as a wrong
+  password). After a redirect, each address asked must itself be on a trusted site. Microsoft
+  365's tenant domains (`contoso.onmicrosoft.com`, `contoso.mail.onmicrosoft.com`) are a site
+  each, though the Public Suffix List doesn't name them (`trust::site`). At
   connect the worker then waits for the user (`SyncStatus::NeedsTrust { site }`, no back-off, as
   for a password); mail sent meanwhile waits in the Outbox and goes once the account is started
   again with the site allowed. Exchange hybrid asks twice (the cloud's address, then its
