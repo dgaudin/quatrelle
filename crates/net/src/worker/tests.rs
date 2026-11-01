@@ -360,6 +360,36 @@ fn a_removed_sites_home_gets_nothing_and_is_asked_about_again() {
     assert_eq!(s.data.lock().unwrap().log, Vec::<String>::new(), "nothing went there");
 }
 
+/// A worker told to stop (the account starts again: a site removed, its settings changed) doesn't
+/// begin the calendars' pass under the settings it was started with.
+#[test]
+fn a_worker_told_to_stop_begins_no_calendar_pass() {
+    use quatrelle_model::pim::{PIM_DOC, Pim};
+
+    use crate::fakes::fake_dav;
+    let s = fake_dav::serve();
+    let store = crate::fake::tests_store("dav-stopping");
+    let pool = Pool::new(store.clone(), Arc::new(MemoryCredentials::default()));
+    let acc = AccountConfig {
+        id: "a1".into(),
+        email: fake_dav::USER.into(),
+        imap: quatrelle_model::ServerConfig { host: "127.0.0.1".into(), port: 1, security: quatrelle_model::Security::None },
+        ..Default::default()
+    };
+    let saved =
+        Pim { caldav_home: Some(format!("{}/dav/cal/", s.base)), carddav_home: Some(String::new()), dav_checked: Some(now()), ..Default::default() };
+    store.save_account_doc("a1", PIM_DOC, &saved).unwrap();
+    let mut w = Worker::new(acc, Auth::shared(fake_dav::PASSWORD), store, pool.sink.clone(), SyncOptions::default());
+
+    let (tx, rx) = mpsc::channel();
+    w.pim_pass(&rx);
+    assert!(!s.data.lock().unwrap().log.is_empty(), "running: the pass is made");
+    s.data.lock().unwrap().log.clear();
+    drop(tx);
+    w.pim_pass(&rx);
+    assert_eq!(s.data.lock().unwrap().log, Vec::<String>::new(), "stopping: nothing sent");
+}
+
 /// A sync whose look for a missing home stopped at another site is merged all the same, and
 /// that site asked about once, however many syncs bring it back.
 #[test]

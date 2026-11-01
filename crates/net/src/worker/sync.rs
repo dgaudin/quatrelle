@@ -270,7 +270,7 @@ impl Worker {
         }
         if self.conn.is_some() {
             let began = Instant::now();
-            self.sync_dav();
+            self.pim_pass(rx);
             log::info!("{}: PIM pass took {:.1} s", self.acc.id, began.elapsed().as_secs_f32());
         }
     }
