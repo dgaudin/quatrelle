@@ -16,9 +16,12 @@ impl MailApp {
         // A server proposed another domain: asked one at a time, when nothing else is open. Unlike
         // the password, whatever the account's status says: a question from the calendars' or
         // contacts' discovery comes while its mail is online.
-        if self.ui.dialog.is_none() && self.ui.backstage.is_none() && !self.session.ask_trust.is_empty() {
+        // One whose account went or whose site was allowed meanwhile has nothing to ask.
+        while self.ui.dialog.is_none() && self.ui.backstage.is_none() && !self.session.ask_trust.is_empty() {
             let (account, site) = self.session.ask_trust.remove(0);
-            self.ui.dialog = Some(Dialog::trust_domain(&account, &site));
+            if self.session.account(&account).is_some_and(|a| !a.config.trusted_domains.contains(&site)) {
+                self.ui.dialog = Some(Dialog::trust_domain(&account, &site));
+            }
         }
         let news = self.session.take_new_mail();
         if !news.is_empty() {
@@ -332,6 +335,19 @@ impl MailApp {
             }
             Action::ForEvent(w, id, p) => self.for_event(w, id, p),
             Action::DialogOk => self.dialog_ok(),
+            Action::SaveWithDomain(domain, settings) => match self.session.run("account.trustDomain", &domain) {
+                Ok(_) => {
+                    if let Some(Dialog::EditAccount(f)) = self.ui.dialog.as_mut() {
+                        f.trust_add.clear();
+                    }
+                    self.act(Action::Submit("account.update", settings));
+                }
+                Err(e) => {
+                    if let Some(d) = self.ui.dialog.as_mut() {
+                        d.set_error(e.to_string().trim_start_matches("bad parameters: ").to_string());
+                    }
+                }
+            },
             Action::Submit(id, p) => match self.session.run(id, &p) {
                 Ok(v) => {
                     if id == "contact.create" {

@@ -144,8 +144,14 @@ impl Session {
         Ok(serde_json::json!({ "account": id, "refused": site }))
     }
 
+    /// Whether the user said no to this site for this account while Quatrelle runs.
+    pub fn trust_refused(&self, account: &str, site: &str) -> bool {
+        self.refused_trust.contains(&(account.to_string(), site.to_string()))
+    }
+
     /// Ask whether the account may use another site, unless it was asked (and not withdrawn since)
-    /// or refused in this run. The interface drains `ask_trust` as it does `ask_password`.
+    /// or refused in this run, or has been allowed since what raised this was on its way. The
+    /// interface drains `ask_trust` as it does `ask_password`.
     pub(crate) fn ask_trust_once(&mut self, account: &str, site: &str) {
         /// Questions asked in one run at most: a hostile server naming endless domains must not
         /// queue endless dialogs. The domains past it stay untrusted, so nothing goes to them.
@@ -155,6 +161,7 @@ impl Session {
             || site.chars().any(|c| c.is_control() || c.is_whitespace())
             || self.refused_trust.contains(&pair)
             || self.asked_trust.contains(&pair)
+            || self.account(account).is_some_and(|a| a.config.trusted_domains.iter().any(|d| d == site))
         {
             return;
         }

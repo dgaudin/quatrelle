@@ -304,7 +304,10 @@ pub(crate) fn account_status(s: &Session, t: &Tokens, a: &quatrelle_engine::Acco
         // An account that signs in in the browser has no password to ask for.
         SyncStatus::NeedsPassword { .. } if a.config.oauth.is_some() => (t.danger, tl!("Sign in again").to_string()),
         SyncStatus::NeedsPassword { .. } => (t.danger, tl!("Password needed").to_string()),
-        // A link to the question (`sign_in_again`).
+        // Refused: what it can't do, and why. The link (`sign_in_again`) brings the question back.
+        SyncStatus::NeedsTrust { site } if s.trust_refused(&a.config.id, site) => {
+            (t.warn, tf!("{domain} wasn't allowed: {account} won't use it", domain = site, account = a.config.email))
+        }
         SyncStatus::NeedsTrust { site } => (t.warn, tf!("{domain} is waiting for your answer", domain = site)),
         SyncStatus::Error { error } => (t.warn, tf!("Disconnected: {error}", error = widgets::shorten(error, 60))),
     }

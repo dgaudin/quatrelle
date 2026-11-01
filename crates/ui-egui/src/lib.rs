@@ -233,6 +233,9 @@ pub enum Action {
     OpenShare(String),
     /// Run a command for the open dialog: it closes on success and shows the error otherwise.
     Submit(&'static str, Value),
+    /// Server settings' Save with a domain typed and not added: `account.trustDomain`'s params,
+    /// then `account.update`'s. A domain refused leaves the dialog open, saying why, nothing saved.
+    SaveWithDomain(Value, Value),
     /// The open dialog's OK once its field's names are settled (Add calendar, Open another mailbox).
     DialogOk,
     /// Bring the main window to the front (after acting from a message window).

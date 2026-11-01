@@ -190,6 +190,79 @@ fn the_status_bar_waits_for_the_answer_and_brings_the_question_back() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// After a refusal the account has nothing left to wait for: its status says why it is stopped,
+/// not that it waits for an answer. The link still brings the question back.
+#[test]
+fn a_refused_domain_says_why_in_the_status_bar() {
+    let (mut a, dir, id, _) = with_account("trust-refused-status");
+    let ctx = egui::Context::default();
+    a.session.apply(MailEvent::Status { account: id.clone(), status: SyncStatus::NeedsTrust { site: "office365.com".into() } });
+    step(&ctx, &mut a);
+    assert!(is_question(&a, "office365.com"));
+    let no = settled_text_at(&ctx, &mut a, "Don't allow", SIZE).expect("its buttons");
+    click_at(&ctx, &mut a, no, 1, SIZE);
+    step(&ctx, &mut a);
+    a.session.notices.clear();
+    let shapes = frame_shapes(&ctx, &mut a, vec![], SIZE);
+    let said: Vec<String> = shapes
+        .iter()
+        .filter_map(|s| match s {
+            egui::Shape::Text(t) => Some(t.galley.text().to_string()),
+            _ => None,
+        })
+        .collect();
+    assert!(said.iter().any(|t| t.contains("office365.com wasn't allowed")), "{said:?}");
+    assert!(!said.iter().any(|t| t.contains("is waiting for your answer")), "{said:?}");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A question that has nothing left to ask opens no dialog, not even for a frame: the next one
+/// comes at once.
+#[test]
+fn a_stale_question_opens_nothing() {
+    let (mut a, dir, id, _) = with_account("trust-stale");
+    let ctx = egui::Context::default();
+    a.session.run("account.trustDomain", &json!({"account": id, "domain": "icloud.com"})).unwrap();
+    a.session.take_jobs();
+    a.session.ask_trust =
+        vec![("gone".to_string(), "fastmail.com".to_string()), (id.clone(), "icloud.com".to_string()), (id.clone(), "office365.com".to_string())];
+    a.logic(&ctx);
+    assert!(is_question(&a, "office365.com"), "{:?}", a.ui.dialog);
+    assert!(a.session.ask_trust.is_empty());
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A domain typed and not added isn't lost on Save: it is added with the rest, and if it can't
+/// be, the dialog stays and says why, the field as it was typed.
+#[test]
+fn save_adds_the_domain_typed() {
+    let (mut a, dir, id, handed) = with_account("trust-save-typed");
+    let ctx = egui::Context::default();
+    let config = a.session.account(&id).unwrap().config.clone();
+    let size = egui::vec2(1280.0, 1400.0);
+    a.ui.dialog = Some(Dialog::edit_account(&config));
+    let Some(Dialog::EditAccount(f)) = a.ui.dialog.as_mut() else { panic!("the server settings") };
+    f.trust_add = "no dot".into();
+    let save = settled_text_at(&ctx, &mut a, "Save", size).expect("its Save button");
+    click_at(&ctx, &mut a, save, 1, size);
+    frame_sized(&ctx, &mut a, vec![], size);
+    let Some(Dialog::EditAccount(f)) = a.ui.dialog.as_ref() else { panic!("refused: the dialog stays, {:?}", a.ui.dialog) };
+    assert!(f.error.as_deref().is_some_and(|e| e.contains("not a domain: no dot")), "{:?}", f.error);
+    assert_eq!(f.trust_add, "no dot", "as typed");
+    assert!(trusted(&a, &id).is_empty());
+
+    let Some(Dialog::EditAccount(f)) = a.ui.dialog.as_mut() else { panic!() };
+    f.trust_add = " Fastmail.com ".into();
+    restarts(&handed);
+    let save = settled_text_at(&ctx, &mut a, "Save", size).expect("its Save button");
+    click_at(&ctx, &mut a, save, 1, size);
+    frame_sized(&ctx, &mut a, vec![], size);
+    assert!(a.ui.dialog.is_none(), "saved: {:?}", a.ui.dialog);
+    assert_eq!(trusted(&a, &id), ["fastmail.com"]);
+    assert_eq!(restarts(&handed), 1, "the account starts again");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 /// Server settings list the other domains allowed, each with Remove, and a field with Add; both
 /// start the account again.
 #[test]
