@@ -40,8 +40,8 @@ impl Worker {
             }
             return;
         }
-        // OAuth tokens are for mail only. A site to allow first: nothing until the next start.
-        if self.acc.oauth.is_some() || self.acc.ews.is_some() || self.dav_waits {
+        // A site to allow first: nothing until the next start.
+        if !looks_for_calendars(&self.acc) || self.dav_waits {
             return;
         }
         // The homes saved in the account's PIM doc are trusted: the password has gone there.
@@ -95,7 +95,31 @@ impl Worker {
     }
 }
 
+/// Whether an account's calendars are looked for over CalDAV and CardDAV: OAuth tokens are for
+/// mail only, Exchange has its own way, and Google's take no password.
+fn looks_for_calendars(acc: &AccountConfig) -> bool {
+    acc.oauth.is_none() && acc.ews.is_none() && !quatrelle_model::google_mailbox(&acc.imap.host, &acc.smtp.host)
+}
+
 /// The system's time zone, for calendar times written without one (`UTC` when it can't say).
 fn system_zone() -> quatrelle_model::zone::Zone {
     iana_time_zone::get_timezone().ok().and_then(|z| quatrelle_model::zone::Zone::named(&z)).unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn calendars_are_looked_for_only_where_a_password_can_find_them() {
+        let at = |host: &str| {
+            let mut a = AccountConfig::default();
+            a.imap.host = host.into();
+            a
+        };
+        assert!(looks_for_calendars(&at("imap.fastmail.com")));
+        assert!(!looks_for_calendars(&at("imap.gmail.com")));
+        assert!(!looks_for_calendars(&AccountConfig { oauth: Some("microsoft".into()), ..at("imap.fastmail.com") }));
+        assert!(!looks_for_calendars(&AccountConfig { ews: Some("https://mail.example/EWS/Exchange.asmx".into()), ..at("mail.example") }));
+    }
 }

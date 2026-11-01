@@ -25,6 +25,14 @@ pub fn oauth_provider_for(imap_host: &str) -> Option<&'static str> {
     }
 }
 
+/// Whether this is a Google mailbox, read by its servers. Its calendars and address books answer
+/// only OAuth with their own permissions, which Quatrelle doesn't ask for: signed in by password,
+/// looking for them finds nothing and only asks the user about `google.com`.
+pub fn google_mailbox(imap_host: &str, smtp_host: &str) -> bool {
+    let at = |host: &str, names: [&str; 2]| names.contains(&host.trim().trim_end_matches('.').to_ascii_lowercase().as_str());
+    at(imap_host, ["imap.gmail.com", "imap.googlemail.com"]) || at(smtp_host, ["smtp.gmail.com", "smtp.googlemail.com"])
+}
+
 /// Whether the mail service at this IMAP server is known to keep no ManageSieve (RFC 5804):
 /// Gmail's, Microsoft's, Yahoo's, iCloud's and AOL's. Its port isn't tried: Gmail's drops what
 /// it's sent, and reading the rules waited the whole connect timeout (29 s) while the first
@@ -186,6 +194,16 @@ impl AccountConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn google_mailboxes_are_told_apart() {
+        for (imap, smtp) in [("imap.gmail.com", ""), ("IMAP.GMAIL.COM.", ""), ("imap.googlemail.com", ""), ("pop.gmail.com", "smtp.gmail.com")] {
+            assert!(google_mailbox(imap, smtp), "{imap}");
+        }
+        for (imap, smtp) in [("imap.gmail.com.example", "smtp.example"), ("mail.studio.example", "smtp.studio.example")] {
+            assert!(!google_mailbox(imap, smtp), "{imap}");
+        }
+    }
 
     #[test]
     fn microsofts_own_addresses_need_its_sign_in() {
