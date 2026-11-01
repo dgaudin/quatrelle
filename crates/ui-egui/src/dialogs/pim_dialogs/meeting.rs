@@ -235,10 +235,10 @@ fn webex_room(ui: &mut Ui, t: &Tokens, window: u64) -> Option<String> {
 /// Webex Meeting: a click schedules a meeting, and the menu beside it offers that or the personal
 /// room, asked for there the first time (`busy`: names are being checked or a meeting made, and
 /// both wait). Only a meeting the appointment can keep is scheduled: one at a time, and on the
-/// user's own, as someone else's event never sends anything to Webex.
+/// user's own, as the engine never follows one on someone else's event.
 #[cfg(not(target_arch = "wasm32"))]
 fn webex_button(ui: &mut Ui, t: &Tokens, f: &mut EventForm, s: &Session, busy: bool, acts: &mut Vec<Action>) {
-    let schedules = !busy && f.webex_id.is_none() && f.can_invite;
+    let schedules = !busy && f.webex_id.is_none() && f.can_invite && f.webex_allowed;
     if widgets::big_button(ui, Icon::Video, "Webex Meeting", t, schedules).clicked() {
         super::webex::new_meeting(f, &s.prefs, acts);
     }

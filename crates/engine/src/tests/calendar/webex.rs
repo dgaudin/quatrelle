@@ -640,6 +640,10 @@ fn no_organizer_is_the_users_only_for_a_lone_appointment() {
         webex_jobs(&mut s);
         let e = s.pim_mut("sample").events.iter_mut().find(|e| e.event.uid == uid).unwrap();
         (e.event.organizer, e.event.attendees, e.event.my_answer) = (organizer, attendees, answer.into());
+        let without_id = quatrelle_model::ical::CalEvent { webex_id: None, ..e.event.clone() };
+        assert_eq!(s.webex_can_hold(&without_id), mine, "case {n}");
+        let occurrence = quatrelle_model::ical::CalEvent { recurrence_id: Some(NOW), ..without_id };
+        assert!(!s.webex_can_hold(&occurrence), "case {n}");
         s.run("event.move", &json!({"uid": uid, "start": "2026-10-22T09:00", "send": false})).unwrap();
         assert_eq!(webex_jobs(&mut s).len(), usize::from(mine), "case {n}");
         done(s);
