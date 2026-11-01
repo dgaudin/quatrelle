@@ -35,37 +35,7 @@
 
 ### Task 1: No calendar search at Google for a password account
 
-The test.116 question about `google.com` is useless: `_caldavs._tcp.gmail.com` points to `calendar.google.com`, which refuses `PROPFIND` on `/.well-known/caldav` (405), and Quatrelle's Google sign-in covers mail only. The owner was told it goes in the next test build. This is outside the Webex spec and stands alone as one commit.
-
-**Files:**
-- Modify: `crates/model/src/addr/providers.rs`
-- Modify: `crates/net/src/worker/dav.rs:43-46`
-
-**Interfaces:**
-- Produces: `pub fn google_mailbox(imap_host: &str, smtp_host: &str) -> bool`, exported as `oauth_provider_for` is.
-
-- [ ] **Step 1: Write the failing tests**
-
-In `providers.rs`, `google_mailboxes_are_told_apart`: true for (`imap.gmail.com`, ``), (`IMAP.GMAIL.COM.`, ``), (`imap.googlemail.com`, ``), (`pop.gmail.com`, `smtp.gmail.com`); false for (`imap.gmail.com.example`, `smtp.example`), (`mail.studio.example`, `smtp.studio.example`).
-
-In `worker/dav.rs`, `calendars_are_looked_for_only_where_a_password_can_find_them`: `looks_for_calendars` is false for an account with `oauth` set, with `ews` set, and with `imap.host = "imap.gmail.com"`; true for `imap.fastmail.com`.
-
-- [ ] **Step 2: Run them and see them fail**
-
-Run: `cargo test -p quatrelle-model google_mailboxes && cargo test -p quatrelle-net calendars_are_looked_for`
-Expected: FAIL, the functions don't exist.
-
-- [ ] **Step 3: Implement**
-
-Add `google_mailbox`, whose doc says why: Google's calendars want OAuth with their own permissions, which Quatrelle doesn't ask for. Add `fn looks_for_calendars(acc: &AccountConfig) -> bool` in `worker/dav.rs`, and use it in `sync_dav`'s early return in place of the `oauth` and `ews` tests, keeping `self.dav_waits`.
-
-- [ ] **Step 4: Run the tests and `cargo xtask ci`**
-
-Expected: PASS.
-
-- [ ] **Step 5: Commit**
-
-`git commit -m "Calendars: no search at Google for an account signed in by password"`
+Done before this plan ran, on `main` as 02fdf7e6, for the owner's test build. Nothing to do here.
 
 ---
 
