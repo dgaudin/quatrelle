@@ -213,6 +213,10 @@ impl MailApp {
             }
             Action::FocusMain => self.ui.focus_main = true,
             Action::Backstage(p) => self.ui.backstage = Some(backstage::Backstage::new(p)),
+            Action::WebexOptions => {
+                self.ui.backstage = Some(backstage::Backstage::new(backstage::Page::Options));
+                self.ui.webex_scroll.set(true);
+            }
             Action::InWindow(key, inner) => {
                 // The window's message stands in as the open one while the action runs.
                 if self.session.reading.as_ref().is_some_and(|r| r.key == key) {

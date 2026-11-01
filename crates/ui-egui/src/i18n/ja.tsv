@@ -1467,7 +1467,22 @@ month	May	5月
 	Remove this room	この会議室を削除
 	Join the Webex meeting:	Webex 会議に参加:
 	Webex personal room	Webex パーソナル会議室
-	Webex Meeting, in a new appointment's window, puts it in for the guests to join	新しい予定のウィンドウの [Webex 会議] で挿入され、出席者が参加できます
+	Use my personal room, under Webex Meeting in an appointment's window, puts it in.	個人ルームを使う: 予定のウィンドウの「Webex ミーティング」が個人ルームを挿入します。
+	Webex	Webex
+	Schedule Webex meetings from an appointment's window. Register an integration at developer.webex.com, then sign in with it here.	予定のウィンドウから Webex ミーティングを設定します。developer.webex.com で統合を登録し、ここでそれを使ってサインインしてください。
+	Site	サイト
+	Client ID	クライアント ID
+	Client secret	クライアントシークレット
+	Kept in the system keychain, and never shown again	システムのキーチェーンに保存され、再表示されません
+	Redirect URI	リダイレクト URI
+	Paste it where the integration asks for its redirect URI	統合がリダイレクト URI を求める場所に貼り付けてください
+	Signed in	サインイン済み
+	Signed in as {user}	{user} としてサインイン済み
+	Sign out	サインアウト
+	Waiting for the browser…	ブラウザーを待っています…
+	Sign in to Webex	Webex にサインイン
+	Sign in to Webex again	Webex に再度サインインしてください
+	Your Webex account can't schedule meetings on this site	お使いの Webex アカウントでは、このサイトでミーティングを設定できません
 	Tasks	タスク
 	New task	新しいタスク
 	{n} tasks to do	未完了のタスク {n} 件

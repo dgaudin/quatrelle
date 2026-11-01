@@ -1469,7 +1469,22 @@ month	May	5月
 	Remove this room	移除此會議室
 	Join the Webex meeting:	加入 Webex 會議:
 	Webex personal room	Webex 個人會議室
-	Webex Meeting, in a new appointment's window, puts it in for the guests to join	新約會視窗中的「Webex 會議」會將其插入，供與會者加入
+	Use my personal room, under Webex Meeting in an appointment's window, puts it in.	使用我的個人會議室：約會視窗中的「Webex 會議」會將其插入。
+	Webex	Webex
+	Schedule Webex meetings from an appointment's window. Register an integration at developer.webex.com, then sign in with it here.	在約會視窗中安排 Webex 會議。請先在 developer.webex.com 註冊整合，然後在此使用它登入。
+	Site	網站
+	Client ID	用戶端 ID
+	Client secret	用戶端密碼
+	Kept in the system keychain, and never shown again	儲存在系統鑰匙圈中，不會再次顯示
+	Redirect URI	重新導向 URI
+	Paste it where the integration asks for its redirect URI	請貼到整合要求填寫重新導向 URI 的位置
+	Signed in	已登入
+	Signed in as {user}	已登入為 {user}
+	Sign out	登出
+	Waiting for the browser…	正在等候瀏覽器…
+	Sign in to Webex	登入 Webex
+	Sign in to Webex again	請重新登入 Webex
+	Your Webex account can't schedule meetings on this site	您的 Webex 帳號無法在此網站上安排會議
 	Tasks	工作
 	New task	新增工作
 	{n} tasks to do	{n} 項待辦工作
