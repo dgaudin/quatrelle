@@ -14,10 +14,12 @@ use super::*;
 impl Session {
     /// Whether the user organizes this event and it has guests to tell.
     pub fn organizes(&self, e: &CalEvent) -> bool {
-        !e.attendees.is_empty()
-            && e.organizer.as_ref().is_some_and(|o| {
-                self.accounts.iter().any(|a| a.config.email.eq_ignore_ascii_case(&o.email) || a.config.username.eq_ignore_ascii_case(&o.email))
-            })
+        !e.attendees.is_empty() && e.organizer.as_ref().is_some_and(|o| self.is_my_address(&o.email))
+    }
+
+    /// Whether this address is one of the accounts'.
+    pub(super) fn is_my_address(&self, email: &str) -> bool {
+        self.accounts.iter().any(|a| a.config.email.eq_ignore_ascii_case(email) || a.config.username.eq_ignore_ascii_case(email))
     }
 
     /// Whether an account's server tells the guests of a change itself (Exchange, on-premises
@@ -86,6 +88,10 @@ impl Session {
                         remote |= e.calendar != LOCAL;
                     }
                     self.after_pim_change(&account, remote);
+                }
+                // Undo comes through here as well, and Webex's meeting follows it back.
+                if let Some(after) = self.find_event(&real).map(|(_, e)| e.event.clone()) {
+                    self.webex_follow(Some(&before), &after);
                 }
                 (None, before.start, before.end)
             }

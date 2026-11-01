@@ -65,6 +65,7 @@ mod scheduling;
 mod security;
 mod tasks;
 mod view;
+mod webex;
 
 /// Every command, in the order the CLI lists them: the Home tab's first, accounts' last.
 /// The UI puts a pasted picture where the caret is.
@@ -83,6 +84,7 @@ pub fn registry() -> Registry {
     all.extend(security::commands());
     all.extend(tasks::commands());
     all.extend(accounts::commands());
+    all.extend(webex::commands());
     Registry::new(all)
 }
 
