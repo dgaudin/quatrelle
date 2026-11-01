@@ -468,6 +468,8 @@ pub struct Session {
     pub vote_sending: Option<(MessageKey, String)>,
     /// Each account's calendars and address books.
     pub pim: HashMap<String, quatrelle_model::pim::Pim>,
+    /// Webex's sign-in and the meetings on their way.
+    pub webex: pim::WebexState,
     /// The rooms each account offers for meetings, once asked for (Outlook's Room Finder).
     pub rooms: HashMap<String, scheduling::Fetched<scheduling::RoomFinder>>,
     /// When people and rooms are busy, by (account, address, from, to), once asked for (the
@@ -599,6 +601,7 @@ impl Session {
             pim: HashMap::new(),
             rooms: HashMap::new(),
             free_busy: HashMap::new(),
+            webex: pim::WebexState::default(),
             module: pim::Module::Mail,
             cal_mode: pim::CalMode::Week,
             cal_day: None,

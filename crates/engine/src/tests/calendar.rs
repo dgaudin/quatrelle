@@ -3,6 +3,7 @@
 use super::*;
 
 mod web;
+mod webex;
 
 /// An appointment read from Exchange carries its start in its name (`…#<start>`), and a dialog
 /// opened before it moved still holds the old one: it finds the appointment all the same, when

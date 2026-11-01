@@ -1719,6 +1719,9 @@ month	May	5월
 	the file has no private key with its certificate	파일에 인증서와 짝을 이루는 개인 키가 없습니다
 	the keychain: {error}	키체인: {error}
 	the language model's key couldn't be kept: {error}	언어 모델 키를 보관하지 못했습니다: {error}
+	The Webex meeting couldn't be updated: {error}	Webex 회의를 업데이트할 수 없습니다: {error}
+	The Webex meeting couldn't be deleted: {error}	Webex 회의를 삭제할 수 없습니다: {error}
+	the Webex client secret couldn't be kept: {error}	Webex 클라이언트 비밀을 보관할 수 없습니다: {error}
 	the new sign-in couldn't be saved in the keychain: {error}	새 로그인 정보를 키체인에 저장하지 못했습니다: {error}
 	the outgoing server's password could not be saved in the keychain: {error}	보내는 메일 서버의 암호를 키체인에 저장하지 못했습니다: {error}
 	the password could not be saved in the keychain: {error}	암호를 키체인에 저장하지 못했습니다: {error}

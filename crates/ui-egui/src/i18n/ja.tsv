@@ -1717,6 +1717,9 @@ month	May	5月
 	the file has no private key with its certificate	このファイルには証明書と対になる秘密キーがありません
 	the keychain: {error}	キーチェーン: {error}
 	the language model's key couldn't be kept: {error}	言語モデルのキーを保持できませんでした: {error}
+	The Webex meeting couldn't be updated: {error}	Webex 会議を更新できませんでした: {error}
+	The Webex meeting couldn't be deleted: {error}	Webex 会議を削除できませんでした: {error}
+	the Webex client secret couldn't be kept: {error}	Webex のクライアント シークレットを保存できませんでした: {error}
 	the new sign-in couldn't be saved in the keychain: {error}	新しいサインインをキーチェーンに保存できませんでした: {error}
 	the outgoing server's password could not be saved in the keychain: {error}	送信サーバーのパスワードをキーチェーンに保存できませんでした: {error}
 	the password could not be saved in the keychain: {error}	パスワードをキーチェーンに保存できませんでした: {error}

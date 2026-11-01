@@ -1720,6 +1720,9 @@ month	May	Mai
 	the file has no private key with its certificate	die Datei enthält keinen privaten Schlüssel zu ihrem Zertifikat
 	the keychain: {error}	der Schlüsselbund: {error}
 	the language model's key couldn't be kept: {error}	der Schlüssel des Sprachmodells konnte nicht behalten werden: {error}
+	The Webex meeting couldn't be updated: {error}	Die Webex-Besprechung konnte nicht aktualisiert werden: {error}
+	The Webex meeting couldn't be deleted: {error}	Die Webex-Besprechung konnte nicht gelöscht werden: {error}
+	the Webex client secret couldn't be kept: {error}	Der Webex-Clientschlüssel konnte nicht gespeichert werden: {error}
 	the new sign-in couldn't be saved in the keychain: {error}	die neue Anmeldung konnte nicht im Schlüsselbund gespeichert werden: {error}
 	the outgoing server's password could not be saved in the keychain: {error}	das Kennwort des Postausgangsservers konnte nicht im Schlüsselbund gespeichert werden: {error}
 	the password could not be saved in the keychain: {error}	das Kennwort konnte nicht im Schlüsselbund gespeichert werden: {error}

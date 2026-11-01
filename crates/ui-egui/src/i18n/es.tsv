@@ -1720,6 +1720,9 @@ month	May	mayo
 	the file has no private key with its certificate	el archivo no tiene clave privada con su certificado
 	the keychain: {error}	el llavero: {error}
 	the language model's key couldn't be kept: {error}	no se pudo conservar la clave del modelo de lenguaje: {error}
+	The Webex meeting couldn't be updated: {error}	No se pudo actualizar la reunión de Webex: {error}
+	The Webex meeting couldn't be deleted: {error}	No se pudo eliminar la reunión de Webex: {error}
+	the Webex client secret couldn't be kept: {error}	no se pudo guardar el secreto de cliente de Webex: {error}
 	the new sign-in couldn't be saved in the keychain: {error}	no se pudo guardar el nuevo inicio de sesión en el llavero: {error}
 	the outgoing server's password could not be saved in the keychain: {error}	no se pudo guardar en el llavero la contraseña del servidor de salida: {error}
 	the password could not be saved in the keychain: {error}	no se pudo guardar la contraseña en el llavero: {error}

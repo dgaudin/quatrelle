@@ -1716,6 +1716,9 @@ month	May	מאי
 	the file has no private key with its certificate	בקובץ אין מפתח פרטי עם האישור שלו
 	the keychain: {error}	מחזיק המפתחות: {error}
 	the language model's key couldn't be kept: {error}	לא ניתן היה להחזיק את המפתח של מודל השפה: {error}
+	The Webex meeting couldn't be updated: {error}	לא ניתן היה לעדכן את פגישת Webex: {error}
+	The Webex meeting couldn't be deleted: {error}	לא ניתן היה למחוק את פגישת Webex: {error}
+	the Webex client secret couldn't be kept: {error}	לא ניתן היה לשמור את סוד הלקוח של Webex: {error}
 	the new sign-in couldn't be saved in the keychain: {error}	לא ניתן היה לשמור את הכניסה החדשה במחזיק המפתחות: {error}
 	the outgoing server's password could not be saved in the keychain: {error}	לא ניתן היה לשמור את הסיסמה של שרת הדואר היוצא במחזיק המפתחות: {error}
 	the password could not be saved in the keychain: {error}	לא ניתן היה לשמור את הסיסמה במחזיק המפתחות: {error}

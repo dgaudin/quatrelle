@@ -221,6 +221,12 @@ impl Worker {
             | Job::AskLlm { .. }
             | Job::ListLlmModels { .. }
             | Job::SetLlmKey { .. }
+            | Job::WebexSignIn { .. }
+            | Job::WebexSignOut
+            | Job::SetWebexSecret { .. }
+            | Job::WebexCreate { .. }
+            | Job::WebexUpdate { .. }
+            | Job::WebexDelete { .. }
             | Job::LocalFolderSizes { .. }
             | Job::ExportPst { .. }
             | Job::ImportIdentity { .. }
