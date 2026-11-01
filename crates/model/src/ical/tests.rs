@@ -155,6 +155,18 @@ fn an_events_links_and_the_one_that_joins_it() {
     ] {
         assert!(!is_meeting_link(not), "{not}");
     }
+    // A scheduled Webex meeting's join page names its site; a personal room isn't one.
+    for (link, site) in [
+        ("https://acme.webex.com/acme/j.php?MTID=m1", Some("acme.webex.com")),
+        ("https://ACME.webex.com/acme/J.PHP?MTID=m1", Some("acme.webex.com")),
+        ("https://acme.webex.com/meet/ana", None),
+        ("https://acme.webex.com/acme/xj.php", None),
+        ("https://acme.webex.com/acme?next=/j.php", None),
+        ("https://us02web.zoom.us/j/123", None),
+        ("javascript:alert(1)", None),
+    ] {
+        assert_eq!(webex_join_host(link).as_deref(), site, "{link}");
+    }
     // The first meeting link, from its place before its notes; the server's own first.
     let e = CalEvent { location: "Microsoft Teams Meeting".into(), description: notes.into(), ..Default::default() };
     assert_eq!(e.join_link().as_deref(), Some("https://zoom.us/j/9876543210?pwd=abc"));

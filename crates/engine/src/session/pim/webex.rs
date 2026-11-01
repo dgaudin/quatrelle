@@ -27,6 +27,18 @@ pub struct WebexState {
     pub sent: HashMap<String, WebexFields>,
 }
 
+/// The link in an appointment's notes or place that Webex's `link` replaces: a join page on the
+/// same site. Every answer gives the link, most often the one the appointment has already, and
+/// any other meeting link in it (a Zoom room typed in, a personal room) is the user's.
+fn replaced_link(e: &CalEvent, link: &str) -> Option<String> {
+    let site = ical::webex_join_host(link)?;
+    let links = e.links();
+    if links.iter().any(|l| l == link) {
+        return None;
+    }
+    links.into_iter().find(|l| ical::webex_join_host(l).as_ref() == Some(&site) && (e.description.contains(l) || e.location.contains(l)))
+}
+
 impl Session {
     pub(in crate::session) fn webex_signed_in(&mut self, user: Option<String>, error: Option<WebexError>) {
         self.webex.signing_in = false;
@@ -64,16 +76,11 @@ impl Session {
     }
 
     /// Webex gave a meeting another link: the appointment says the new one, and its guests hear
-    /// of it. Where its notes and location don't hold the old one (a server's own join address),
-    /// there's nothing to tell them.
+    /// of it.
     fn webex_link_changed(&mut self, id: &str, link: &str) -> Result<(), CmdError> {
         let found = self.pim.iter().find_map(|(account, p)| {
             let e = p.events.iter().map(|e| &e.event).find(|e| e.webex_id.as_deref() == Some(id) && e.recurrence_id.is_none())?;
-            Some((
-                account.clone(),
-                e.uid.clone(),
-                e.join_link().filter(|old| old != link && (e.description.contains(old) || e.location.contains(old)))?,
-            ))
+            Some((account.clone(), e.uid.clone(), replaced_link(e, link)?))
         });
         let Some((account, uid, old)) = found else { return Ok(()) };
         self.update_event(&uid, |e| {
