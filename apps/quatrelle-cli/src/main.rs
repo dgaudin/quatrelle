@@ -128,19 +128,8 @@ fn drive(s: &mut Session, pool: &mut Pool, timeout: Duration, mut done: impl FnM
     let end = Instant::now() + timeout;
     while Instant::now() < end {
         let Some(e) = pool.wait(Duration::from_millis(250)) else { continue };
-        match &e {
-            Event::Status { status, .. } => match status {
-                SyncStatus::Connecting => errln!("connecting…"),
-                SyncStatus::Syncing { folder } => errln!("updating {}…", quatrelle_engine::model::utf7::decode(folder)),
-                SyncStatus::Online { .. } => errln!("up to date"),
-                SyncStatus::NeedsPassword { error } => errln!("sign-in failed: {error}"),
-                SyncStatus::NeedsTrust { site } => errln!("{site} isn't allowed for this account"),
-                SyncStatus::Error { error } => errln!("error: {error}"),
-                SyncStatus::Offline => {}
-            },
-            Event::Notice { message, .. } => errln!("note: {message}"),
-            Event::OpFailed { error, .. } => errln!("change refused: {error}"),
-            _ => {}
+        if let Some(line) = progress(&e) {
+            errln!("{line}");
         }
         let verdict = done(&e);
         s.apply(e);
@@ -498,11 +487,40 @@ fn main() -> ExitCode {
     }
 }
 
+/// What a command that waits on the network says about an event, on stderr.
+fn progress(e: &Event) -> Option<String> {
+    Some(match e {
+        Event::Status { status, .. } => match status {
+            SyncStatus::Connecting => "connecting…".to_string(),
+            SyncStatus::Syncing { folder } => format!("updating {}…", quatrelle_engine::model::utf7::decode(folder)),
+            SyncStatus::Online { .. } => "up to date".to_string(),
+            SyncStatus::NeedsPassword { error } => format!("sign-in failed: {error}"),
+            SyncStatus::NeedsTrust { site } => format!("{site} isn't allowed for this account"),
+            SyncStatus::Error { error } => format!("error: {error}"),
+            SyncStatus::Offline => return None,
+        },
+        // A calendar's discovery stopped at another site: the mail goes on, and nothing else says it.
+        Event::TrustAsked { site, .. } => format!("{site} isn't allowed for this account"),
+        Event::Notice { message, .. } => format!("note: {message}"),
+        Event::OpFailed { error, .. } => format!("change refused: {error}"),
+        _ => return None,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use quatrelle_engine::model::job::Op;
     use quatrelle_engine::model::{Flag, MessageKey};
+
+    /// A calendar's discovery stopped at another site says so, as a connection stopped there does.
+    #[test]
+    fn a_site_to_allow_is_said_however_it_comes() {
+        let status = Event::Status { account: "a1".into(), status: SyncStatus::NeedsTrust { site: "icloud.com".into() } };
+        let asked = Event::TrustAsked { account: "a1".into(), site: "icloud.com".into() };
+        assert_eq!(progress(&status).as_deref(), Some("icloud.com isn't allowed for this account"));
+        assert_eq!(progress(&asked), progress(&status));
+    }
 
     /// A change made with `run` waits for `sync` instead of being dropped.
     #[test]
