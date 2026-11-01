@@ -78,8 +78,7 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             };
             // With guests, the user organizes it.
             if !e.attendees.is_empty() && e.organizer.is_none() {
-                let me = s.account(&account).map(|a| (a.config.name.clone(), a.config.email.clone())).unwrap_or_default();
-                e.organizer = Some(quatrelle_model::ical::Attendee { email: me.1, name: me.0, partstat: "ACCEPTED".into(), rsvp: false, cutype: String::new(), role: String::new() });
+                e.organizer = Some(organizer_of(s, &account));
             }
             let r = s.create_event(Some(&account), p::str(v, "calendar"), e.clone())?;
             s.webex_follow(None, &e);
@@ -134,8 +133,14 @@ pub(super) fn commands() -> Vec<CommandSpec> {
         .params(r#"{"key": string, "minutes"?: 1…40320 | "beforeStart"?: minutes before the event starts}"#),
         CommandSpec::new("event.update", "Edit event", "Calendar › Event", |s, v| {
             let uid = p::req_str(v, "uid")?.to_string();
-            let current = s.find_event(&uid).map(|(_, e)| e.event.clone()).ok_or_else(|| CmdError::Params(format!("no event `{uid}`")))?;
-            let e = event_from(s, v, current.clone())?;
+            let (account, current) =
+                s.find_event(&uid).map(|(a, e)| (a.to_string(), e.event.clone())).ok_or_else(|| CmdError::Params(format!("no event `{uid}`")))?;
+            let mut e = event_from(s, v, current.clone())?;
+            // A lone appointment given guests is the user's to organize, as a new one is. One read
+            // with guests or an answer of the user's is a colleague's, whatever the server left out.
+            if !e.attendees.is_empty() && current.organizer.is_none() && current.attendees.is_empty() && current.my_answer.is_empty() {
+                e.organizer = Some(organizer_of(s, &account));
+            }
             let r = s.update_event(&uid, |x| *x = e.clone())?;
             s.webex_follow(Some(&current), &e);
             // The user's own meeting: the guests hear of the change.
@@ -316,6 +321,12 @@ pub(super) fn commands() -> Vec<CommandSpec> {
 }
 
 /// An event from command params, starting from `e` (what's not given stays).
+/// The user, as the organizer of a meeting in `account`.
+fn organizer_of(s: &Session, account: &str) -> quatrelle_model::ical::Attendee {
+    let (name, email) = s.account(account).map(|a| (a.config.name.clone(), a.config.email.clone())).unwrap_or_default();
+    quatrelle_model::ical::Attendee { email, name, partstat: "ACCEPTED".into(), rsvp: false, cutype: String::new(), role: String::new() }
+}
+
 pub(super) fn event_from(s: &Session, v: &Value, mut e: quatrelle_model::ical::CalEvent) -> Result<quatrelle_model::ical::CalEvent, CmdError> {
     let when = |k: &str| -> Result<Option<(i64, bool)>, CmdError> {
         match p::str(v, k) {
