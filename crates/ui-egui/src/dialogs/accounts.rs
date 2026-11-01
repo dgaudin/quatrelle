@@ -632,15 +632,21 @@ pub(super) fn edit_account(ui: &mut Ui, f: &mut EditForm, s: &Session, t: &Token
     let (ok, cancel) = buttons(ui, t, "Save", true);
     if ok {
         f.error = None;
-        acts.push(Action::Submit("account.update", f.params()));
+        let typed = f.trust_add.trim();
+        acts.push(if typed.is_empty() {
+            Action::Submit("account.update", f.params())
+        } else {
+            Action::SaveWithDomain(json!({"account": f.account, "domain": typed}), f.params())
+        });
     }
     !cancel
 }
 
 /// The other domains the account may send its password or sign-in to (`trusted_domains`): each
 /// with Remove, and a field with Add. They go through the account's trust commands, which
-/// normalise, cap and save them and start the account again at once (not on Save): the form
-/// never edits the field itself. The list is the account's, read each frame.
+/// normalise, cap and save them and start the account again at once (not on Save, which only
+/// adds what is still typed): the form never edits the field itself. The list is the account's,
+/// read each frame.
 fn other_servers(ui: &mut Ui, t: &Tokens, f: &mut EditForm, s: &Session, acts: &mut Vec<Action>) {
     ui.add_space(8.0);
     ui.label(RichText::new(tl!("Other servers allowed")).strong().small());

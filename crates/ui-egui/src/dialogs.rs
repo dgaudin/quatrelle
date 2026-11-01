@@ -624,12 +624,11 @@ pub fn show(ctx: &egui::Context, d: &mut Dialog, s: &Session, people: &mut peopl
         }
     });
     // Escape, or a click outside, is a no: the safe answer to a question about a password.
-    if modal.should_close()
-        && let Dialog::TrustDomain { account, site } = d
-    {
+    let closing = modal.should_close();
+    if closing && let Dialog::TrustDomain { account, site } = d {
         acts.push(Action::Run("account.refuseDomain", json!({"account": account, "domain": site})));
     }
-    keep && !modal.should_close()
+    keep && !closing
 }
 
 fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, people: &mut people_field::PeopleFields, t: &Tokens, acts: &mut Vec<Action>) -> bool {

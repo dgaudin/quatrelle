@@ -172,11 +172,11 @@ fn a_domain_removed_is_asked_again_in_the_same_run() {
     assert_eq!(s.ask_trust.len(), 1);
     s.ask_trust.clear();
     s.run("account.trustDomain", &json!({"account": id, "domain": "icloud.com"})).unwrap();
-    // A request already on its way when the answer came is asked about once more...
+    // A request already on its way when the answer came: allowed, there is nothing to ask.
     s.ask_trust_once(&id, "icloud.com");
-    s.ask_trust.clear();
+    assert!(s.ask_trust.is_empty(), "already allowed");
     s.run("account.distrustDomain", &json!({"account": id, "domain": "icloud.com"})).unwrap();
-    // ...and the pair is free again once the domain is removed.
+    // The pair is free again once the domain is removed.
     s.ask_trust_once(&id, "icloud.com");
     assert_eq!(s.ask_trust, [(id.clone(), "icloud.com".to_string())], "removed: asked again, or the account would stay silent");
 }
