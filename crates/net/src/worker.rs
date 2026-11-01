@@ -201,6 +201,8 @@ pub struct Pool {
     pub sieve_port: u16,
     /// Picture downloads, on their own thread so they never wait behind a sync.
     fetcher: Option<Sender<String>>,
+    /// Webex's jobs, on their own thread, one after the other.
+    webex_jobs: Option<Sender<Job>>,
     /// Working offline: no account connects until it's turned off.
     offline: bool,
     /// The server search still wanted ([`Job::SearchServer`]'s `search`; 0: none), shared with
@@ -302,6 +304,7 @@ mod send;
 mod sizes;
 mod smime;
 mod sync;
+mod webex;
 
 /// Largest picture downloaded for a message.
 const MAX_PICTURE: usize = 8 << 20;

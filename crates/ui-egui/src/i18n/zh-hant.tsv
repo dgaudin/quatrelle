@@ -1719,6 +1719,9 @@ month	May	5月
 	the file has no private key with its certificate	檔案中沒有與憑證配對的私密金鑰
 	the keychain: {error}	鑰匙圈: {error}
 	the language model's key couldn't be kept: {error}	無法保留語言模型的金鑰: {error}
+	The Webex meeting couldn't be updated: {error}	無法更新 Webex 會議: {error}
+	The Webex meeting couldn't be deleted: {error}	無法刪除 Webex 會議: {error}
+	the Webex client secret couldn't be kept: {error}	無法保存 Webex 用戶端密鑰: {error}
 	the new sign-in couldn't be saved in the keychain: {error}	無法將新的登入資訊儲存到鑰匙圈: {error}
 	the outgoing server's password could not be saved in the keychain: {error}	無法將外寄伺服器的密碼儲存到鑰匙圈: {error}
 	the password could not be saved in the keychain: {error}	無法將密碼儲存到鑰匙圈: {error}

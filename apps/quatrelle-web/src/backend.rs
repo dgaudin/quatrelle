@@ -7,7 +7,7 @@ use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
 
-use quatrelle_engine::model::{AccountConfig, Event, Folder, FolderRole, Job, Op, SyncStatus, sort_folders};
+use quatrelle_engine::model::{AccountConfig, Event, Folder, FolderRole, Job, Op, SyncStatus, WebexError, sort_folders};
 use quatrelle_engine::store::Store;
 use quatrelle_jmap::{Client, Error, State, SyncOptions};
 use quatrelle_ui_egui::Backend;
@@ -576,6 +576,12 @@ async fn job(sh: &Rcs, id: &str, j: Job) {
         | Job::AskLlm { .. }
         | Job::ListLlmModels { .. }
         | Job::SetLlmKey { .. }
+        | Job::WebexSignIn { .. }
+        | Job::WebexSignOut
+        | Job::SetWebexSecret { .. }
+        | Job::WebexCreate { .. }
+        | Job::WebexUpdate { .. }
+        | Job::WebexDelete { .. }
         | Job::ExportPst { .. }
         | Job::WorkOffline { .. }
         | Job::SetSync { .. }
@@ -694,6 +700,11 @@ async fn fetch_calendar(sh: Rcs, account: String, calendar: String, url: String)
 /// Largest calendar read in the browser.
 const MAX_CALENDAR: usize = 20 << 20;
 
+/// What Webex's jobs answer in the browser.
+fn webex_refused() -> WebexError {
+    WebexError::Failed("Webex needs the desktop app".into())
+}
+
 impl Backend for WebBackend {
     fn submit(&mut self, job: Job) {
         let sh = &self.shared;
@@ -736,6 +747,11 @@ impl Backend for WebBackend {
                 emit(sh, Event::LlmModels { url, models: Vec::new(), error: Some("the language model needs the desktop app".into()) })
             }
             Job::SetLlmKey { .. } => {}
+            Job::WebexSignIn { .. } => emit(sh, Event::WebexSignedIn { user: None, error: Some(webex_refused()) }),
+            Job::WebexCreate { ask, .. } => emit(sh, Event::WebexCreated { ask, meeting: None, error: Some(webex_refused()) }),
+            Job::WebexUpdate { id, .. } => emit(sh, Event::WebexUpdated { id, meeting: None, error: Some(webex_refused()) }),
+            Job::WebexDelete { id, .. } => emit(sh, Event::WebexDeleted { id, error: Some(webex_refused()) }),
+            Job::WebexSignOut | Job::SetWebexSecret { .. } => {}
             Job::FindCertificates { account, .. } => {
                 let error = Some("only an Exchange account's address book keeps certificates".to_string());
                 emit(sh, Event::DirectoryCertificates { account, found: Vec::new(), error })

@@ -244,6 +244,29 @@ pub enum Event {
         models: Vec<String>,
         error: Option<String>,
     },
+    /// Webex's sign-in is done ([`Job::WebexSignIn`]): who signed in, when Webex said, or why
+    /// it failed.
+    WebexSignedIn {
+        user: Option<String>,
+        error: Option<WebexError>,
+    },
+    /// The meeting [`Job::WebexCreate`] made, or why there's none.
+    WebexCreated {
+        ask: u64,
+        meeting: Option<WebexMeeting>,
+        error: Option<WebexError>,
+    },
+    /// The meeting [`Job::WebexUpdate`] changed, as Webex now has it, or why it couldn't.
+    WebexUpdated {
+        id: String,
+        meeting: Option<WebexMeeting>,
+        error: Option<WebexError>,
+    },
+    /// Whether [`Job::WebexDelete`] deleted its meeting.
+    WebexDeleted {
+        id: String,
+        error: Option<WebexError>,
+    },
     /// What the address book keeps for each address asked about ([`Job::FindCertificates`]):
     /// its certificates (DER, none when it has none), or why it couldn't be asked.
     DirectoryCertificates {

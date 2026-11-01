@@ -21,6 +21,7 @@ impl Pool {
             opts: SyncOptions::default(),
             sieve_port: crate::sieve::PORT,
             fetcher: None,
+            webex_jobs: None,
             offline: false,
             search: Arc::new(AtomicU64::new(0)),
         }
@@ -310,6 +311,12 @@ impl Pool {
             | Job::CheckRevocation { .. }
             | Job::FindHeldKeys { .. }
             | Job::UseHeldKey { .. }) => self.smime(j),
+            j @ (Job::WebexSignIn { .. }
+            | Job::WebexSignOut
+            | Job::SetWebexSecret { .. }
+            | Job::WebexCreate { .. }
+            | Job::WebexUpdate { .. }
+            | Job::WebexDelete { .. }) => self.webex(j),
             Job::SealDraft { account, raw, folder, replaces, keep } => {
                 let raw = self.seal(&account, raw.0);
                 let account = account.id;

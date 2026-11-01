@@ -1719,6 +1719,9 @@ month	May	Май
 	the file has no private key with its certificate	в файле нет закрытого ключа к его сертификату
 	the keychain: {error}	связка ключей: {error}
 	the language model's key couldn't be kept: {error}	не удалось сберечь ключ языковой модели: {error}
+	The Webex meeting couldn't be updated: {error}	Не удалось обновить собрание Webex: {error}
+	The Webex meeting couldn't be deleted: {error}	Не удалось удалить собрание Webex: {error}
+	the Webex client secret couldn't be kept: {error}	Не удалось сохранить секрет клиента Webex: {error}
 	the new sign-in couldn't be saved in the keychain: {error}	не удалось сохранить новый вход в связке ключей: {error}
 	the outgoing server's password could not be saved in the keychain: {error}	не удалось сохранить пароль сервера исходящей почты в связке ключей: {error}
 	the password could not be saved in the keychain: {error}	не удалось сохранить пароль в связке ключей: {error}

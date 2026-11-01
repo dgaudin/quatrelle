@@ -1716,6 +1716,9 @@ month	May	mei
 	the file has no private key with its certificate	het bestand bevat geen privésleutel bij het certificaat
 	the keychain: {error}	de sleutelhanger: {error}
 	the language model's key couldn't be kept: {error}	de sleutel van het taalmodel kon niet worden bewaard: {error}
+	The Webex meeting couldn't be updated: {error}	De Webex-vergadering kon niet worden bijgewerkt: {error}
+	The Webex meeting couldn't be deleted: {error}	De Webex-vergadering kon niet worden verwijderd: {error}
+	the Webex client secret couldn't be kept: {error}	Het Webex-clientgeheim kon niet worden bewaard: {error}
 	the new sign-in couldn't be saved in the keychain: {error}	de nieuwe aanmelding kon niet in de sleutelhanger worden opgeslagen: {error}
 	the outgoing server's password could not be saved in the keychain: {error}	het wachtwoord van de server voor uitgaande mail kon niet in de sleutelhanger worden opgeslagen: {error}
 	the password could not be saved in the keychain: {error}	het wachtwoord kon niet in de sleutelhanger worden opgeslagen: {error}

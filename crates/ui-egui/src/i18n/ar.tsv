@@ -1716,6 +1716,9 @@ month	May	مايو
 	the file has no private key with its certificate	لا يحتوي الملف على مفتاح خاص مع شهادته
 	the keychain: {error}	سلسلة المفاتيح: {error}
 	the language model's key couldn't be kept: {error}	تعذّر الاحتفاظ بمفتاح النموذج اللغوي: {error}
+	The Webex meeting couldn't be updated: {error}	تعذّر تحديث اجتماع Webex: {error}
+	The Webex meeting couldn't be deleted: {error}	تعذّر حذف اجتماع Webex: {error}
+	the Webex client secret couldn't be kept: {error}	تعذّر الاحتفاظ بسرّ عميل Webex: {error}
 	the new sign-in couldn't be saved in the keychain: {error}	تعذّر حفظ تسجيل الدخول الجديد في سلسلة المفاتيح: {error}
 	the outgoing server's password could not be saved in the keychain: {error}	تعذّر حفظ كلمة مرور خادم البريد الصادر في سلسلة المفاتيح: {error}
 	the password could not be saved in the keychain: {error}	تعذّر حفظ كلمة المرور في سلسلة المفاتيح: {error}

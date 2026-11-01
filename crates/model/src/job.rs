@@ -361,6 +361,21 @@ pub enum Job {
     ListLlmModels { url: String },
     /// Keep the language model's key in the keychain (empty: forget it).
     SetLlmKey { key: Secret },
+    /// Sign in to Webex through the browser, with the integration `client_id`; answered by
+    /// [`Event::WebexSignedIn`].
+    WebexSignIn { client_id: String },
+    /// Forget the Webex sign-in, once the Webex jobs before it are done.
+    WebexSignOut,
+    /// Keep the Webex integration's client secret in the keychain (empty: forget it).
+    SetWebexSecret { secret: Secret },
+    /// Make a Webex meeting on `site` from an appointment's `fields`; `quiet`: Webex mails no
+    /// one. Answered by [`Event::WebexCreated`] with the same `ask`.
+    WebexCreate { ask: u64, client_id: String, site: String, fields: WebexFields, quiet: bool },
+    /// Send a Webex meeting what changed between `before` and `after`; answered by
+    /// [`Event::WebexUpdated`].
+    WebexUpdate { client_id: String, id: String, before: WebexFields, after: WebexFields, quiet: bool },
+    /// Delete a Webex meeting; answered by [`Event::WebexDeleted`].
+    WebexDelete { client_id: String, id: String, quiet: bool },
     /// Forget the account's certificate and key (the keychain's copy goes). Older ones kept for
     /// reading stay.
     ForgetIdentity { account: AccountConfig },
@@ -445,6 +460,12 @@ impl Job {
             | Job::AskLlm { .. }
             | Job::ListLlmModels { .. }
             | Job::SetLlmKey { .. }
+            | Job::WebexSignIn { .. }
+            | Job::WebexSignOut
+            | Job::SetWebexSecret { .. }
+            | Job::WebexCreate { .. }
+            | Job::WebexUpdate { .. }
+            | Job::WebexDelete { .. }
             | Job::StopSearch
             | Job::CheckRevocation { .. }
             | Job::FindHeldKeys { .. } => "",

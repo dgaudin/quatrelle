@@ -189,6 +189,17 @@ pub struct Prefs {
     /// (`https://<site>.webex.com/meet/<name>`); empty until it's set in Options.
     #[serde(skip_serializing_if = "String::is_empty")]
     pub webex_room: String,
+    /// The Webex site meetings are made on (`<org>.webex.com`), and the integration's client id
+    /// (its client secret and the sign-in are in the keychain).
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub webex_site: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub webex_client_id: String,
+    /// Who signed in to Webex, when Webex said.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub webex_user: String,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub webex_signed_in: bool,
     /// The language model asked about mail (File › Options › Assistant): an OpenAI-compatible
     /// server's address (`…/v1`; empty: none) and the model; its key is in the keychain.
     #[serde(skip_serializing_if = "String::is_empty")]
@@ -252,6 +263,10 @@ impl Default for Prefs {
             meeting_profile: None,
             check_revocation: false,
             webex_room: String::new(),
+            webex_site: String::new(),
+            webex_client_id: String::new(),
+            webex_user: String::new(),
+            webex_signed_in: false,
             llm_url: String::new(),
             llm_model: String::new(),
             quick_steps: Vec::new(),
