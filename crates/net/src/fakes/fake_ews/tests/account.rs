@@ -595,7 +595,10 @@ fn a_server_that_lets_in_only_known_clients() {
     assert!(server.data.lock().unwrap().agents.iter().all(|a| a.starts_with("Quatrelle/")));
     let c = crate::ews::Client::connect_as(&server.url, &user, PASSWORD, "riley@contoso.example", Some(EVOLUTION)).unwrap();
     assert_eq!(c.mailboxes().unwrap().len(), 1);
-    assert_eq!(crate::ews::autodiscover_as("riley@contoso.example", &user, PASSWORD, Some(&server.url), Some(EVOLUTION)).unwrap(), server.url);
+    assert_eq!(
+        crate::ews::autodiscover_as("riley@contoso.example", &user, PASSWORD, Some(&server.url), Some(EVOLUTION), &trusting(&["127.0.0.1"])).unwrap(),
+        server.url
+    );
     {
         let d = server.data.lock().unwrap();
         let after: Vec<&String> = d.agents.iter().skip_while(|a| a.starts_with("Quatrelle/")).collect();

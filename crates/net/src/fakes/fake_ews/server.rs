@@ -94,6 +94,12 @@ fn serve_connection(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>) {
                 if k.eq_ignore_ascii_case("user-agent") {
                     agent = v.trim().to_string();
                 }
+                if k.eq_ignore_ascii_case("host") {
+                    let mut d = shared.lock().unwrap();
+                    if d.hosts.len() < 10_000 {
+                        d.hosts.push(v.trim().to_string());
+                    }
+                }
             }
         }
         let mut body = vec![0u8; len];
@@ -163,6 +169,17 @@ fn serve_connection(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>) {
             };
             // The public folder mailbox, asked for by its GUID: its address.
             let asked = doc.find("EMailAddress").map(|e| e.text.clone()).unwrap_or_default();
+            // An address to ask about instead (Exchange hybrid: the cloud mailbox's).
+            let elsewhere = shared.lock().unwrap().redirect_addr.iter().find(|(from, _)| *from == asked).map(|(_, to)| to.clone());
+            if let Some(to) = elsewhere {
+                let answer = format!(
+                    "<?xml version=\"1.0\"?><Autodiscover><Response><Account><Action>redirectAddr</Action>\
+                     <RedirectAddr>{}</RedirectAddr></Account></Response></Autodiscover>",
+                    esc(&to)
+                );
+                respond(&mut s, 200, &[], answer.as_bytes());
+                continue;
+            }
             if let Some(pf) = pf.filter(|_| asked.starts_with(PF_GUID)) {
                 let answer = format!(
                     "<?xml version=\"1.0\"?><Autodiscover><Response><User><DisplayName>Public folders</DisplayName>\

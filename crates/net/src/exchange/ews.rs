@@ -614,6 +614,8 @@ mod sizes;
 mod sync;
 mod xml;
 
+#[cfg(test)]
+pub(crate) use autodiscover::TEST_BASES;
 use autodiscover::{alternative_mailboxes, autodiscover_public, autodiscover_smtp, autodiscover_urls};
 pub use autodiscover::{autodiscover, autodiscover_as};
 pub use changes::{append, apply_remote, send, vote};

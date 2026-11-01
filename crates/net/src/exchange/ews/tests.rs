@@ -1,6 +1,6 @@
 //! Tests of the EWS transport: rules, headers, searching, syncing and Autodiscover, over the fake server.
 
-use super::autodiscover::autodiscover_answer;
+use super::autodiscover::{allowed, autodiscover_answer};
 use super::rules::{inbox_rule_xml, server_rule};
 use super::sync::aqs_of;
 use super::*;
@@ -699,6 +699,31 @@ fn a_contacts_picture_comes_with_the_contact() {
     assert!(matches!(c.contact_photo("ghost"), Err(NetError::No(_) | NetError::Protocol(_))), "an unknown contact is no picture either");
 }
 
+/// Which servers Autodiscover's answers may lead to, by their real names: the address's own
+/// site, and the configured or kept server's, go; another domain is asked about first.
+#[test]
+fn autodiscover_asks_before_another_domain() {
+    use quatrelle_model::addr::trust::Trust;
+    let site_of = |r: Result<()>| match r {
+        Err(NetError::Untrusted { site }) => site,
+        other => format!("{other:?}"),
+    };
+    let acc = quatrelle_model::AccountConfig { email: "riley@contoso.com".into(), ews: Some(AUTODISCOVER.into()), ..Default::default() };
+    let trust = Trust::of(&acc, &[]);
+    assert!(allowed("autodiscover.contoso.com", &trust).is_ok());
+    assert!(allowed("mail.contoso.com", &trust).is_ok());
+    // Exchange hybrid: the cloud mailbox's address, then the cloud's server, one after the other.
+    // (The Public Suffix List doesn't list `onmicrosoft.com`: its tenants are one site. Their
+    // names are Microsoft's, in Microsoft's DNS, so the password goes to Microsoft either way.)
+    assert_eq!(site_of(allowed("contoso.onmicrosoft.com", &trust)), "onmicrosoft.com");
+    let trust = Trust::of(&quatrelle_model::AccountConfig { trusted_domains: vec!["contoso.onmicrosoft.com".into()], ..acc.clone() }, &[]);
+    assert!(allowed("contoso.onmicrosoft.com", &trust).is_ok());
+    assert_eq!(site_of(allowed("outlook.office365.com", &trust)), "office365.com");
+    // An on-premises server on an internal domain: asked about, unless found and kept before.
+    assert_eq!(site_of(allowed("exch01.corp.local", &Trust::of(&acc, &[]))), "corp.local");
+    assert!(allowed("exch01.corp.local", &Trust::of(&acc, &["https://exch01.corp.local/EWS/Exchange.asmx"])).is_ok());
+}
+
 #[test]
 fn autodiscover_answers() {
     let ok = "<Autodiscover><Response><Account><AccountType>email</AccountType><Action>settings</Action>\
@@ -710,6 +735,9 @@ fn autodiscover_answers() {
     assert_eq!(autodiscover_answer("<x/>"), (None, None));
     let plain = "<Autodiscover><Response><Account><Protocol><Type>EXPR</Type><EwsUrl>http://mail.contoso.example/EWS</EwsUrl></Protocol></Account></Response></Autodiscover>";
     assert_eq!(autodiscover_answer(plain).0, None, "never plain http");
+    // Tests name a second site, `localhost`, for the fakes on 127.0.0.1.
+    let local = "<Autodiscover><Response><Account><Protocol><Type>EXPR</Type><EwsUrl>http://localhost:8080/EWS</EwsUrl></Protocol></Account></Response></Autodiscover>";
+    assert_eq!(autodiscover_answer(local).0.as_deref(), Some("http://localhost:8080/EWS"));
     assert_eq!(autodiscover_urls("riley@Contoso.example")[0], "https://autodiscover.contoso.example/autodiscover/autodiscover.xml");
     assert!(autodiscover_urls("riley@bad/host").is_empty());
     // A public folder's content mailbox: PR_REPLICA_LIST as Exchange sends it.

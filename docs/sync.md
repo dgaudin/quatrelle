@@ -328,8 +328,16 @@ servers that don't offer IMAP. Every call is SOAP over HTTPS.
   sending's, else the warning). Exchange spells tags its own way (`0xe08`): they're compared as
   numbers.
 - **Finding the server:** an account added without one asks Autodiscover (POX, MS-OXDSCLI) at the
-  domain's `autodiscover.` host and the domain itself, signed in as the user, following one
-  redirect; the EWS address found is kept with the account.
+  domain's `autodiscover.` host and the domain itself, signed in as the user, following
+  redirects to another address (`RedirectAddr`); the EWS address found is kept with the account
+  (`ews.json`). Each answer must stay on a site the account trusts (`Trust`): a `RedirectAddr` to
+  another domain is not followed and an `EwsUrl` on another site is not used, both
+  `NetError::Untrusted { site }`, unless another address of the domain answers within it. At
+  connect the worker then waits for the user (`SyncStatus::NeedsTrust { site }`, no back-off, as
+  for a password); mail sent meanwhile waits in the Outbox and goes once the account is started
+  again with the site allowed. Exchange hybrid asks twice (the cloud's address, then its
+  server). The address kept in `ews.json` is in service, so it counts as trusted (the worker's
+  `account_trust`): an account found before never asks.
 - **Calendars and contacts** (`crates/net/src/exchange/ews_pim.rs`) are the mailbox's Calendar and
   Contacts folders, synced like CalDAV / CardDAV: changes here first (appointments updated field
   by field, contacts made again, never any meeting mail), then both folders read in full.

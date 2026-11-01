@@ -192,6 +192,11 @@ pub struct Data {
     pub stream_cookies: Vec<String>,
     /// Outlook's master category list (the `CategoryList` configuration's XML), when it made one.
     pub category_list: Option<String>,
+    /// The `Host` each request named (`127.0.0.1:port`, `localhost:port`), as it came: two sites
+    /// reaching this one server.
+    pub hosts: Vec<String>,
+    /// Autodiscover sends an address elsewhere (`RedirectAddr`): (asked, where to ask instead).
+    pub redirect_addr: Vec<(String, String)>,
     /// What each subscription last told of: what changed since is told when it's next asked,
     /// as a subscription keeps its notifications between two answers.
     told: std::collections::HashMap<String, streaming::Seen>,
@@ -309,6 +314,8 @@ impl Default for Data {
             stream_for: std::time::Duration::from_secs(2),
             stream_cookies: Vec::new(),
             category_list: None,
+            hosts: Vec::new(),
+            redirect_addr: Vec::new(),
             told: std::collections::HashMap::new(),
             next: 0,
         };

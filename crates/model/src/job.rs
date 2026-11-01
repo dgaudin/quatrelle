@@ -493,6 +493,12 @@ pub enum SyncStatus {
     NeedsPassword {
         error: String,
     },
+    /// An answer named a server on a site the account doesn't trust (`site`): nothing went
+    /// there, and the user is asked whether to allow it. Like `NeedsPassword`, the account waits
+    /// to be started again.
+    NeedsTrust {
+        site: String,
+    },
     /// The last attempt failed; the worker retries with back-off.
     Error {
         error: String,
@@ -528,6 +534,16 @@ mod tests {
         for bad in ["2026-02-29", "1900-02-29", "2026-13-01", "2026-1-01", "26-10-15", "2026-10-15T00", "", "2026-10-00", "abcd-ef-gh"] {
             assert!(!is_day(bad), "{bad}");
         }
+    }
+
+    /// Waiting for the user's answer about another server is no more online than waiting for a
+    /// password.
+    #[test]
+    fn waiting_for_trust_is_not_online() {
+        let s = SyncStatus::NeedsTrust { site: "office365.com".into() };
+        assert_eq!(s.is_online(), SyncStatus::NeedsPassword { error: String::new() }.is_online());
+        assert!(!s.is_online());
+        assert_eq!(serde_json::to_value(&s).unwrap()["state"], "needsTrust");
     }
 
     #[test]

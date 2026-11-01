@@ -210,6 +210,26 @@ fn a_quatrelle_data_file_is_imported() {
     let _ = std::fs::remove_dir_all(&t);
 }
 
+/// A server on a site the account doesn't trust, met while connecting: the account waits for
+/// the user's answer (`NeedsTrust`), as for a password. No back-off, and no try again by
+/// itself: it starts again once answered.
+#[test]
+fn untrusted_at_connect_needs_trust_with_no_backoff() {
+    let store = crate::fake::tests_store("untrusted-connect");
+    let p = Pool::new(store.clone(), Arc::new(MemoryCredentials::default()));
+    let acc =
+        AccountConfig { id: "a1".into(), email: "riley@contoso.example".into(), ews: Some(crate::ews::AUTODISCOVER.into()), ..Default::default() };
+    let mut w = Worker::new(acc, Auth::shared("pw"), store, p.sink.clone(), SyncOptions::default());
+    let (backoff, next) = (w.backoff, w.next_attempt);
+    w.connect_failed(NetError::Untrusted { site: "office365.com".into() });
+    assert!(w.conn.is_none() && w.auth_failed, "waits to be started again");
+    assert_eq!((w.backoff, w.next_attempt), (backoff, next), "no back-off");
+    assert!(
+        matches!(p.poll().as_slice(), [Event::Status { status: SyncStatus::NeedsTrust { site }, .. }] if site == "office365.com"),
+        "the question is the account's status"
+    );
+}
+
 #[test]
 fn pool_without_password_asks_for_one() {
     let dir = std::env::temp_dir().join(format!("quatrelle-pool-{}", std::process::id()));

@@ -17,6 +17,7 @@ mod listening;
 mod mailbox;
 mod scheduling;
 mod tasks;
+mod trust;
 
 fn until(pool: &crate::worker::Pool, what: &str, mut f: impl FnMut(&Event) -> bool) -> Vec<Event> {
     let end = Instant::now() + Duration::from_secs(20);
@@ -42,6 +43,18 @@ fn eventually(what: &str, mut f: impl FnMut() -> bool) {
         std::thread::sleep(Duration::from_millis(50));
     }
     panic!("timed out waiting for {what}");
+}
+
+/// What riley@contoso.example's account trusts, with these other servers allowed. (The fake
+/// answers on 127.0.0.1, which is another site than the address's.)
+fn trusting(allowed: &[&str]) -> quatrelle_model::addr::trust::Trust {
+    let acc = AccountConfig {
+        email: "riley@contoso.example".into(),
+        ews: Some(crate::ews::AUTODISCOVER.into()),
+        trusted_domains: allowed.iter().map(|d| d.to_string()).collect(),
+        ..Default::default()
+    };
+    quatrelle_model::addr::trust::Trust::of(&acc, &[])
 }
 
 fn mail(subject: &str, id: &str) -> Vec<u8> {
