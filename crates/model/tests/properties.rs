@@ -2,6 +2,7 @@
 //! what Quatrelle writes it reads back the same.
 
 use proptest::prelude::*;
+use quatrelle_model::addr::trust::{site, url_host};
 use quatrelle_model::search::{Advanced, Query};
 use quatrelle_model::vcard::{self, Card, PostalAddress, Typed};
 use quatrelle_model::{ical, utf7};
@@ -111,5 +112,19 @@ proptest! {
     #[test]
     fn ical_text_round_trips(text in "[^\r]{0,60}") {
         prop_assert_eq!(ical::unescape(&ical::escape(&text)), text);
+    }
+
+    /// What the fuzz target `trust` holds as well: a host read from a URL is clean, its site is
+    /// stable, and the site reads back as itself (a question about it can be answered).
+    #[test]
+    fn a_hosts_site_is_stable_and_reads_back(url in r"(https?://)?[a-zA-Z0-9.:_@%/\\\[\]ü-]{0,40}") {
+        if let Some(host) = url_host(&url) {
+            prop_assert!(!host.contains(['\\', '%', '@']), "{}", host);
+            let s = site(&host);
+            prop_assert_eq!(site(&s), s.clone());
+            if !s.is_empty() {
+                prop_assert_eq!(url_host(&s).map(|h| site(&h)), Some(s));
+            }
+        }
     }
 }
