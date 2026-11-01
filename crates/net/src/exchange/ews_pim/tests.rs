@@ -213,6 +213,7 @@ fn ones_own_meeting_is_known_by_the_answer_organizer() {
     let it = doc.find("CalendarItem").unwrap();
     let mut e = event_of(it).unwrap();
     assert!(e.organizer.is_none(), "an EX address isn't read as one");
+    assert!(e.my_answer.is_empty(), "the owner's own meeting has no answer of theirs");
     own_organizer(&mut e, it, "Riley@Contoso.example");
     let o = e.organizer.unwrap();
     assert_eq!((o.email.as_str(), o.name.as_str()), ("riley@contoso.example", "Riley Moreno"));
@@ -221,6 +222,7 @@ fn ones_own_meeting_is_known_by_the_answer_organizer() {
     let mut e = event_of(it).unwrap();
     own_organizer(&mut e, it, "riley@contoso.example");
     assert!(e.organizer.is_none(), "someone else's: not made the owner's");
+    assert_eq!(e.my_answer, "ACCEPTED", "and it carries the owner's answer");
 }
 
 /// Many items are asked in batches alike, as many as give each connection the same share; the

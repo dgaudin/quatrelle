@@ -67,7 +67,9 @@ fn open_mail_file(s: &mut Session, v: &Value) -> CmdResult {
             };
             let cal = quatrelle_model::ical::parse(&String::from_utf8_lossy(&bytes), i64::from(s.clock.offset));
             let (mut added, mut skipped, mut first) = (0usize, 0usize, None);
-            for e in cal.events {
+            for mut e in cal.events {
+                // A file's Webex meeting is not the user's.
+                e.webex_id = None;
                 let start = e.start;
                 match s.create_event(None, None, e) {
                     Ok(_) => {

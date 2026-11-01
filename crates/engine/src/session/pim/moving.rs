@@ -19,7 +19,8 @@ impl Session {
 
     /// Whether this address is one of the accounts'.
     pub(super) fn is_my_address(&self, email: &str) -> bool {
-        self.accounts.iter().any(|a| a.config.email.eq_ignore_ascii_case(email) || a.config.username.eq_ignore_ascii_case(email))
+        !email.trim().is_empty()
+            && self.accounts.iter().any(|a| a.config.email.eq_ignore_ascii_case(email) || a.config.username.eq_ignore_ascii_case(email))
     }
 
     /// Whether an account's server tells the guests of a change itself (Exchange, on-premises
