@@ -24,7 +24,7 @@ mod notes;
 mod recurrence;
 mod zones;
 pub use alarms::*;
-pub use meeting::{OPTIONAL, ShowAs};
+pub use meeting::{OPTIONAL, ShowAs, valid_webex_id};
 use notes::*;
 pub use notes::*;
 use recurrence::*;
@@ -145,6 +145,10 @@ pub struct CalEvent {
     /// guests, not them.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub my_answer: String,
+    /// The id of the Webex meeting made for it (`X-QUATRELLE-WEBEX-ID`), kept in the event's own
+    /// file and never sent in an invitation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub webex_id: Option<String>,
 }
 
 fn is_zero(n: &i64) -> bool {
@@ -787,6 +791,14 @@ pub fn write(events: &[CalEvent], method: Option<&str>, now: i64) -> String {
         }
     }
     for e in events {
+        // An invitation doesn't carry the id of a meeting kept for the organizer's own use.
+        let bare;
+        let e = if method.is_some() && e.webex_id.is_some() {
+            bare = CalEvent { webex_id: None, ..e.clone() };
+            &bare
+        } else {
+            e
+        };
         let stamp = if method.is_none() && e.dtstamp > 0 { e.dtstamp } else { now };
         write_event(e, stamp, &mut out);
     }

@@ -93,9 +93,16 @@ pub(super) fn read(e: &mut CalEvent, name: &str, value: &str, said: &mut bool) -
         }
         "CLASS" => e.private = matches!(value.trim().to_ascii_uppercase().as_str(), "PRIVATE" | "CONFIDENTIAL"),
         "X-MICROSOFT-DISALLOW-COUNTER" => e.no_new_times = value.trim().eq_ignore_ascii_case("TRUE"),
+        "X-QUATRELLE-WEBEX-ID" => e.webex_id = Some(value.trim()).filter(|v| valid_webex_id(v)).map(str::to_string),
         _ => return false,
     }
     true
+}
+
+/// A Webex meeting id that is safe to keep and to put in an address: 1 to 200 ASCII letters,
+/// digits, `_` and `-`.
+pub fn valid_webex_id(id: &str) -> bool {
+    (1..=200).contains(&id.len()) && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
 }
 
 /// Its lines for what this module knows (none for a busy, public event that takes answers and
@@ -113,6 +120,9 @@ pub(super) fn lines(e: &CalEvent) -> Vec<String> {
     }
     if e.no_new_times {
         out.push("X-MICROSOFT-DISALLOW-COUNTER:TRUE".to_string());
+    }
+    if let Some(id) = e.webex_id.as_deref().filter(|id| valid_webex_id(id)) {
+        out.push(format!("X-QUATRELLE-WEBEX-ID:{id}"));
     }
     out
 }

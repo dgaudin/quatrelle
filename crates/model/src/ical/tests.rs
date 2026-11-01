@@ -498,3 +498,35 @@ fn a_teams_meeting_link_is_told_from_look_alikes() {
         assert!(!launchable_link(bad), "{bad:?}");
     }
 }
+
+fn webex_event(id: &str) -> CalEvent {
+    CalEvent { uid: "w1".into(), start: 1_792_000_000, end: 1_792_003_600, webex_id: Some(id.into()), ..Default::default() }
+}
+
+#[test]
+fn webex_id_round_trips() {
+    let out = write(&[webex_event("abc_20261102T090000Z")], None, 1_791_979_200);
+    assert!(out.contains("X-QUATRELLE-WEBEX-ID:abc_20261102T090000Z"), "{out}");
+    let back = parse(&out, 0);
+    let e = back.events.first().expect("one event");
+    assert_eq!(e.webex_id.as_deref(), Some("abc_20261102T090000Z"));
+    assert!(e.extra.is_empty(), "{:?}", e.extra);
+}
+
+#[test]
+fn an_invitation_leaves_the_webex_id_out() {
+    for m in ["REQUEST", "CANCEL"] {
+        let out = write(&[webex_event("abc")], Some(m), 1_791_979_200);
+        assert!(!out.contains("X-QUATRELLE-WEBEX-ID"), "{m}: {out}");
+    }
+}
+
+#[test]
+fn a_junk_webex_id_is_not_read() {
+    for junk in ["a/../b".to_string(), "x".repeat(201), String::new()] {
+        let ics = format!("BEGIN:VEVENT\r\nUID:j\r\nDTSTART:20261016T140000Z\r\nX-QUATRELLE-WEBEX-ID:{junk}\r\nEND:VEVENT\r\n");
+        let cal = parse(&ics, 0);
+        let e = cal.events.first().expect("one event");
+        assert_eq!(e.webex_id, None, "{junk}");
+    }
+}
