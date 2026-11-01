@@ -555,6 +555,72 @@ fn a_foreign_id_is_refused() {
     done(s);
 }
 
+/// A lone appointment given guests is still the user's: its meeting follows the change, and goes
+/// with it.
+#[test]
+fn a_lone_appointment_given_guests_keeps_its_meeting() {
+    let mut s = signed_in("webex-gains-guests");
+    let uid = alone(&mut s);
+    webex_jobs(&mut s);
+    s.run("event.update", &json!({"uid": uid, "attendees": "Zoe Park <zoe@studio.example>", "start": "2026-10-22T09:00"})).unwrap();
+    let jobs = webex_jobs(&mut s);
+    let [Job::WebexUpdate { id, quiet, .. }] = &jobs[..] else { panic!("{jobs:?}") };
+    assert_eq!((id.as_str(), *quiet), ("m1", true), "its guests hear from the invitation");
+    s.run("event.delete", &json!({"uid": uid})).unwrap();
+    assert_eq!(webex_jobs(&mut s), [Job::WebexDelete { client_id: "C1".into(), id: "m1".into(), quiet: true }]);
+    done(s);
+}
+
+/// Send Update on a lone appointment given guests does what Send does on a new meeting: the user
+/// organizes it, and the guests are invited, here by mail. Only its sequence tells them apart.
+#[test]
+fn a_lone_appointment_given_guests_invites_them_as_a_new_meeting_does() {
+    let mut s = signed_in("webex-gains-guests-invited");
+    let new = appointment(&mut s, "", "");
+    assert_eq!(invitations(&s), 1);
+    let new = s.find_event(&new).unwrap().1.event.clone();
+    let made = s.run("event.create", &json!({"summary": "Trailer review", "start": "2026-10-21T15:00"})).unwrap();
+    let uid = made["uid"].as_str().unwrap().to_string();
+    assert_eq!(invitations(&s), 1, "nobody to invite yet");
+    s.run("event.update", &json!({"uid": uid, "attendees": "Zoe Park <zoe@studio.example>"})).unwrap();
+    assert_eq!(invitations(&s), 2);
+    let given = s.find_event(&uid).unwrap().1.event.clone();
+    assert_eq!(given.organizer, new.organizer);
+    assert_eq!((new.sequence, given.sequence), (0, 1));
+    done(s);
+}
+
+/// A room is a guest for this: booked on a lone appointment, it makes the user the organizer too.
+#[test]
+fn a_lone_appointment_given_a_room_keeps_its_meeting() {
+    let mut s = signed_in("webex-gains-a-room");
+    let uid = alone(&mut s);
+    webex_jobs(&mut s);
+    s.run("event.update", &json!({"uid": uid, "rooms": "Sound Lab <sound.lab@studio.example>", "summary": "Budget 2"})).unwrap();
+    assert_eq!(webex_jobs(&mut s).len(), 1);
+    let me = s.find_event(&uid).unwrap().1.event.organizer.clone().expect("the user organizes it");
+    assert_eq!(me.email, "riley@studio.example");
+    done(s);
+}
+
+/// An event read with no organizer and with guests, or an answer of the user's, is a colleague's:
+/// a change made here doesn't claim it.
+#[test]
+fn an_event_read_with_no_organizer_is_not_claimed() {
+    let guest = quatrelle_model::ical::Attendee { email: "zoe@studio.example".into(), ..Default::default() };
+    for (attendees, answer) in [(vec![guest.clone()], ""), (vec![guest.clone()], "ACCEPTED"), (vec![], "NEEDS-ACTION")] {
+        let mut s = signed_in("webex-not-claimed");
+        let uid = alone(&mut s);
+        webex_jobs(&mut s);
+        let e = s.pim_mut("sample").events.iter_mut().find(|e| e.event.uid == uid).unwrap();
+        (e.event.attendees, e.event.my_answer) = (attendees, answer.into());
+        s.run("event.update", &json!({"uid": uid, "summary": "Again", "attendees": "Sam Lee <sam@studio.example>"})).unwrap();
+        assert!(s.find_event(&uid).unwrap().1.event.organizer.is_none(), "answer {answer:?}");
+        assert_eq!(webex_jobs(&mut s), [], "answer {answer:?}");
+        done(s);
+    }
+}
+
 #[test]
 fn no_organizer_is_the_users_only_for_a_lone_appointment() {
     let guest = quatrelle_model::ical::Attendee { email: "zoe@studio.example".into(), ..Default::default() };
