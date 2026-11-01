@@ -10,6 +10,7 @@
 //! * [`pst`]: importing Outlook data files (`.pst`) into an account on this computer.
 //! * [`sieve`]: automatic replies on IMAP servers, through ManageSieve (RFC 5804).
 //! * [`teams`]: Microsoft Teams chats through Graph (the Teams worker's client).
+//! * [`webex`]: Webex's scheduled meetings through its public REST API.
 //! * [`smtp`]: message submission through `lettre` (RFC 6409, implicit TLS per RFC 8314).
 //! * [`worker`]: one thread per account that runs the engine's [`Job`](quatrelle_model::Job)s
 //!   and reports [`Event`](quatrelle_model::Event)s, keeping a connection open, idling on the
@@ -34,6 +35,7 @@ pub mod stream;
 pub mod sync;
 pub mod teams;
 pub mod updates;
+pub mod webex;
 pub mod worker;
 
 /// Largest directory picture kept (bytes): a contact photo, not a photograph album.
@@ -58,7 +60,7 @@ pub use exchange::{ews, graph, graph_pim, ntlm};
 #[cfg(feature = "fakes")]
 pub use fakes::{TeamsSample, teams_sample};
 #[cfg(test)]
-use fakes::{fake, fake_graph};
+use fakes::{fake, fake_graph, fake_webex};
 pub use protocols::{dav, imap, jmap, pop, sieve, smtp, web_calendar};
 
 use std::io;
