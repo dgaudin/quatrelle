@@ -159,12 +159,17 @@ mod tests {
         WebexFields { title: "Budget".into(), start: 1_793_610_000, end: 1_793_613_600, timezone: "Europe/Paris".into(), recurrence: None }
     }
 
-    /// A pool whose Webex thread calls the fake, with a keychain holding the client secret and a
-    /// sign-in.
-    fn pool_on(server: &Server, name: &str) -> (Pool, Arc<MemoryCredentials>) {
+    /// A keychain holding the client secret and a sign-in.
+    fn signed_in() -> Arc<MemoryCredentials> {
         let creds = Arc::new(MemoryCredentials::default());
         creds.set_secret(&keyring(), SECRET_KEY, SECRET).unwrap();
         creds.set_secret(&keyring(), REFRESH_KEY, "r1").unwrap();
+        creds
+    }
+
+    /// A pool whose Webex thread calls the fake, and its keychain, [`signed_in`].
+    fn pool_on(server: &Server, name: &str) -> (Pool, Arc<MemoryCredentials>) {
+        let creds = signed_in();
         let mut pool = Pool::new(crate::fake::tests_store(name), creds.clone());
         let (api, token_url) = (server.base.clone(), format!("{}/access_token", server.base));
         let client = move |client_id: &str, creds: Arc<dyn Credentials>| {
@@ -229,6 +234,26 @@ mod tests {
         }
         assert_eq!(creds.get_secret(&keyring(), REFRESH_KEY), None);
         assert_eq!(creds.get_secret(&keyring(), SECRET_KEY).as_deref(), Some(SECRET), "the integration's secret stays");
+    }
+
+    /// A pool left on the production client, with all a sign-in needs, as a test that forgot the
+    /// fake would have it: every call stops at the refusal for tests, which is what `send_to`
+    /// alone answers (not a network failure, which would prove nothing).
+    #[test]
+    fn a_keychain_that_could_sign_in_still_never_reaches_webex() {
+        let mut pool = Pool::new(crate::fake::tests_store("webex-real"), signed_in());
+        pool.submit(Job::WebexCreate { ask: 7, client_id: "C1".into(), site: "acme.webex.com".into(), fields: fields(), quiet: false });
+        pool.submit(Job::WebexUpdate { client_id: "C1".into(), id: "m1".into(), before: fields(), after: fields(), quiet: false });
+        pool.submit(Job::WebexDelete { client_id: "C1".into(), id: "m1".into(), quiet: false });
+        let refused = |e: &Option<WebexError>| matches!(e, Some(WebexError::Failed(why)) if why.contains(crate::http::REAL_WEBEX));
+        match &answers(&pool, 3)[..] {
+            [
+                Event::WebexCreated { meeting: None, error: created, .. },
+                Event::WebexUpdated { meeting: None, error: updated, .. },
+                Event::WebexDeleted { error: deleted, .. },
+            ] => assert!(refused(created) && refused(updated) && refused(deleted), "{created:?} {updated:?} {deleted:?}"),
+            other => panic!("{other:?}"),
+        }
     }
 
     #[test]

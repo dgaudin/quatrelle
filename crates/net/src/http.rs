@@ -218,10 +218,26 @@ pub fn send_public(req: &Request) -> Result<Response> {
     send_to(req, true)
 }
 
+/// What a test gets for calling the real Webex.
+#[cfg(test)]
+pub(crate) const REAL_WEBEX: &str = "a test may not call the real Webex";
+
+/// Whether a host is Webex's API. Tests call the fake (`fake_webex`), and a client left on the
+/// production address, with a keychain that lets it sign in, is stopped by this alone.
+#[cfg(test)]
+fn is_real_webex(host: &str) -> bool {
+    let host = host.trim_end_matches('.').to_ascii_lowercase();
+    host == "webexapis.com" || host.ends_with(".webexapis.com")
+}
+
 fn send_to(req: &Request, public_only: bool) -> Result<Response> {
     let mut url = Url::parse(&req.url)?;
     let mut chain = Chain::new(req, &url);
     for _ in 0..=MAX_REDIRECTS {
+        #[cfg(test)]
+        if is_real_webex(&url.host) {
+            return Err(NetError::Protocol(REAL_WEBEX.into()));
+        }
         let resp = once(chain.current(), &url, public_only)?;
         let follow = matches!(resp.status, 301 | 302 | 303 | 307 | 308) && (req.method == "GET" || req.method == "HEAD");
         match resp.header("Location").filter(|_| follow) {
@@ -587,6 +603,28 @@ pub(crate) mod tests {
     use std::net::TcpListener;
 
     use super::*;
+
+    /// The address alone stops a test, however it's written and whichever way it's reached, a
+    /// redirect included; only that refusal counts, not a failed connection.
+    #[test]
+    fn a_test_never_reaches_the_real_webex() {
+        let refused = |r: Result<Response>| matches!(r, Err(NetError::Protocol(m)) if m == REAL_WEBEX);
+        for url in [
+            "https://webexapis.com/v1/people/me",
+            "https://WEBEXAPIS.com/v1/access_token",
+            "https://webexapis.com./v1/meetings",
+            "https://api.webexapis.com/v1/meetings",
+            "https://webexapis.com:8443/v1/meetings",
+        ] {
+            assert!(refused(send(&Request::get(url, 100))), "{url}");
+            assert!(refused(send_public(&Request::post(url, "application/json", b"{}".to_vec(), 100))), "{url}");
+            assert!(refused(get_public(url, 100)), "{url}");
+        }
+        let moved = b"HTTP/1.1 302 Found\r\nLocation: https://webexapis.com/v1/people/me\r\nContent-Length: 0\r\n\r\n".to_vec();
+        let (base, served) = serve(vec![moved]);
+        assert!(refused(get(&base, 100)), "a redirect is refused too");
+        assert_eq!(served.join().unwrap().len(), 1);
+    }
 
     /// How long [`serve`] waits for a request, or for the rest of one, before it gives up.
     const WAIT: Duration = Duration::from_secs(20);
