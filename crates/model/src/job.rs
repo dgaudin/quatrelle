@@ -9,9 +9,16 @@ use serde::{Deserialize, Serialize};
 
 use crate::{AccountConfig, Flag, Folder, MessageKey, organize::Rule};
 
-/// A password in transit. Its `Debug` form is redacted so it never reaches a log.
-#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+/// A password in transit. Its `Debug` form and what it serializes to are redacted, so it never
+/// reaches a log or a file: nothing writes a [`Job`] or an [`Event`] to read it back.
+#[derive(Clone, Default, PartialEq, Eq, Deserialize)]
 pub struct Secret(pub String);
+
+impl Serialize for Secret {
+    fn serialize<S: serde::Serializer>(&self, to: S) -> Result<S::Ok, S::Error> {
+        to.serialize_str(if self.0.is_empty() { "" } else { "<redacted>" })
+    }
+}
 
 impl fmt::Debug for Secret {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -548,6 +555,26 @@ mod tests {
         assert!(!format!("{j:?}").contains("hunter2"));
         let e = Event::Decrypted { key: MessageKey::default(), content: Some(Private(b"the plan".to_vec())), authenticated: true, error: None };
         assert!(!format!("{e:?}").contains("the plan"), "what decrypted mail says never prints");
+    }
+
+    /// What is written of a job or an event holds no secret either: a log or a file made of one
+    /// says that there was one, and no more.
+    #[test]
+    fn secrets_never_serialize() {
+        let meeting = WebexMeeting {
+            id: "m1".into(),
+            web_link: "https://acme.webex.com/acme/j.php?MTID=m1".into(),
+            meeting_number: "2623456701".into(),
+            password: Secret("Xy7qT2".into()),
+            sip_address: String::new(),
+        };
+        let j = serde_json::to_string(&Job::SetWebexSecret { secret: Secret("hunter2".into()) }).unwrap();
+        let e = serde_json::to_string(&Event::WebexCreated { ask: 1, meeting: Some(meeting), error: None }).unwrap();
+        for (written, secret) in [(j, "hunter2"), (e, "Xy7qT2")] {
+            assert!(!written.contains(secret), "{written}");
+            assert!(written.contains("<redacted>"), "the field is there, masked: {written}");
+        }
+        assert_eq!(serde_json::to_string(&Secret::default()).unwrap(), "\"\"", "none to hide");
     }
 
     #[test]
