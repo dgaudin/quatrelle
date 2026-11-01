@@ -26,7 +26,7 @@ use crate::http::{Request, form, pct};
 use crate::{NetError, Result};
 
 /// An OAuth provider's endpoints and the app's registration with it.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Provider {
     /// `google`, `microsoft`, `webex`.
     pub id: String,
@@ -35,7 +35,22 @@ pub struct Provider {
     pub token_url: String,
     pub scope: String,
     pub client_id: String,
+    /// Google's isn't secret, for an installed app; Webex's is, and stays out of `Debug`.
     pub client_secret: Option<String>,
+}
+
+impl std::fmt::Debug for Provider {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Provider")
+            .field("id", &self.id)
+            .field("name", &self.name)
+            .field("auth_url", &self.auth_url)
+            .field("token_url", &self.token_url)
+            .field("scope", &self.scope)
+            .field("client_id", &self.client_id)
+            .field("client_secret", &self.client_secret.as_ref().map(|_| "<redacted>"))
+            .finish()
+    }
 }
 
 fn setting(name: &str, built_in: Option<&'static str>) -> Option<String> {
@@ -614,6 +629,17 @@ pub(crate) mod tests {
         let seen = seen.join().unwrap();
         assert!(seen[0].contains("client_secret=s3") && seen[0].contains("client_id=C1"), "{}", seen[0]);
         assert!(!seen[0].contains("scope"), "{}", seen[0]);
+    }
+
+    /// Webex's client secret is a real one: a provider in a log or a panic doesn't show it.
+    #[test]
+    fn a_providers_debug_hides_its_secret() {
+        let mut p = crate::webex::provider("C1", "s3").unwrap();
+        let shown = format!("{p:?}");
+        assert!(!shown.contains("s3"), "{shown}");
+        assert!(shown.contains("webex") && shown.contains("C1") && shown.contains("client_secret: Some(\"<redacted>\")"), "{shown}");
+        p.client_secret = None;
+        assert!(format!("{p:?}").contains("client_secret: None"));
     }
 
     #[test]
