@@ -15,7 +15,7 @@
 //! (an organisation's single-tenant one: `AccountConfig::oauth_client_id` and `oauth_tenant`),
 //! which then stands in for the built-in one, and for `common`, for that account.
 
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, ErrorKind, Write};
 use std::net::TcpListener;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -28,7 +28,7 @@ use crate::{NetError, Result};
 /// An OAuth provider's endpoints and the app's registration with it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Provider {
-    /// `google`, `microsoft`.
+    /// `google`, `microsoft`, `webex`.
     pub id: String,
     pub name: String,
     pub auth_url: String,
@@ -220,8 +220,9 @@ impl std::fmt::Debug for Tokens {
 fn token_request(p: &Provider, mut fields: Vec<(&str, String)>, extra_scope: &str) -> Result<Tokens> {
     fields.push(("client_id", p.client_id.clone()));
     // The permissions wanted, each time: without them a personal Microsoft account's token
-    // covered reading (IMAP) but not sending (SMTP refused it, 535 5.7.3). Google takes none here.
-    if p.id != "google" {
+    // covered reading (IMAP) but not sending (SMTP refused it, 535 5.7.3). Google and Webex take
+    // none here.
+    if !matches!(p.id.as_str(), "google" | "webex") {
         fields.push(("scope", format!("{}{extra_scope}", p.scope)));
     }
     if let Some(s) = &p.client_secret {
@@ -301,7 +302,22 @@ pub(crate) fn unpct(s: &str) -> String {
 /// Run the browser sign-in: `open` shows the provider's page (the system browser), the
 /// redirect comes back to a listener on 127.0.0.1, and the code becomes tokens.
 pub fn authorize(p: &Provider, login_hint: &str, open: &mut dyn FnMut(&str) -> std::result::Result<(), String>, timeout: Duration) -> Result<Tokens> {
-    let listener = TcpListener::bind("127.0.0.1:0")?;
+    authorize_on(p, 0, login_hint, open, timeout)
+}
+
+/// [`authorize`] with the listener on `port` (0: any free one), for a provider that takes only
+/// the redirect address registered with it, to the letter.
+pub fn authorize_on(
+    p: &Provider,
+    port: u16,
+    login_hint: &str,
+    open: &mut dyn FnMut(&str) -> std::result::Result<(), String>,
+    timeout: Duration,
+) -> Result<Tokens> {
+    let listener = TcpListener::bind(("127.0.0.1", port)).map_err(|e| match e.kind() {
+        ErrorKind::AddrInUse if port != 0 => NetError::Auth(format!("port {port} is in use: a sign-in may still be waiting in the browser")),
+        _ => e.into(),
+    })?;
     let redirect = format!("http://127.0.0.1:{}/", listener.local_addr()?.port());
     let state = b64url(&random(16)?);
     let (verifier, challenge) = pkce()?;
@@ -328,7 +344,7 @@ pub fn authorize(p: &Provider, login_hint: &str, open: &mut dyn FnMut(&str) -> s
         }
         let (sock, _) = match listener.accept() {
             Ok(s) => s,
-            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+            Err(e) if e.kind() == ErrorKind::WouldBlock => {
                 std::thread::sleep(Duration::from_millis(100));
                 continue;
             }
@@ -583,6 +599,45 @@ pub(crate) mod tests {
         };
         match authorize(&p, "", &mut deny, Duration::from_secs(10)) {
             Err(NetError::Auth(m)) => assert_eq!(m, format!("{} sign-in was cancelled (access_denied, AADSTS65004)", p.name)),
+            other => panic!("{:?}", other.map(|t| t.access)),
+        }
+    }
+
+    #[test]
+    fn webexs_token_request_carries_the_secret_and_no_scope() {
+        let body = r#"{"access_token":"fresh","expires_in":3600}"#;
+        let answer = format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{body}", body.len());
+        let (base, seen) = crate::http::tests::serve(vec![answer.into_bytes()]);
+        let mut p = crate::webex::provider("C1", "s3").unwrap();
+        p.token_url = format!("{base}/token");
+        assert_eq!(refresh(&p, "r1").unwrap().access, "fresh");
+        let seen = seen.join().unwrap();
+        assert!(seen[0].contains("client_secret=s3") && seen[0].contains("client_id=C1"), "{}", seen[0]);
+        assert!(!seen[0].contains("scope"), "{}", seen[0]);
+    }
+
+    #[test]
+    fn sign_in_listens_on_the_port_asked_for() {
+        let port = TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
+        let mut opened = String::new();
+        // The address it hands the browser, and something there to answer: then no further.
+        let mut browser = |url: &str| -> std::result::Result<(), String> {
+            opened = url.to_string();
+            std::net::TcpStream::connect(("127.0.0.1", port)).map_err(|e| e.to_string())?;
+            Err("no browser here".into())
+        };
+        let r = authorize_on(&local("http://127.0.0.1:9/token"), port, "", &mut browser, Duration::from_secs(1));
+        assert!(matches!(r, Err(NetError::Protocol(m)) if m.contains("no browser here")), "the listener was there");
+        assert!(opened.contains(&format!("redirect_uri=http%3A%2F%2F127.0.0.1%3A{port}%2F")), "{opened}");
+    }
+
+    #[test]
+    fn a_port_in_use_says_so() {
+        let held = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = held.local_addr().unwrap().port();
+        let mut browser = |_: &str| -> std::result::Result<(), String> { panic!("nothing to open a browser for") };
+        match authorize_on(&local("http://127.0.0.1:9/token"), port, "", &mut browser, Duration::from_secs(1)) {
+            Err(NetError::Auth(m)) => assert_eq!(m, format!("port {port} is in use: a sign-in may still be waiting in the browser")),
             other => panic!("{:?}", other.map(|t| t.access)),
         }
     }

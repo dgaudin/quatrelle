@@ -1,4 +1,4 @@
-//! Servers of the tests' own, in memory: IMAP, CalDAV/CardDAV, EWS, Graph and JMAP.
+//! Servers of the tests' own, in memory: IMAP, CalDAV/CardDAV, EWS, Graph, JMAP and Webex.
 //!
 //! The fake Graph server is also built for other crates' tests with the `fakes` feature (a
 //! dev-dependency only, never in a build that ships): [`teams_sample`] starts it with a Teams
@@ -13,6 +13,8 @@ pub(crate) mod fake_ews;
 pub(crate) mod fake_graph;
 #[cfg(test)]
 pub(crate) mod fake_jmap;
+#[cfg(test)]
+pub(crate) mod fake_webex;
 #[cfg(test)]
 mod real_servers;
 
