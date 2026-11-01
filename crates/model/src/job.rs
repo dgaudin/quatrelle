@@ -514,6 +514,9 @@ impl SyncStatus {
 mod events;
 pub use events::{Event, HeldKey, Revocation};
 
+mod webex;
+pub use webex::{WEBEX_REDIRECT_PORT, WEBEX_REDIRECT_URI, WebexError, WebexFields, WebexMeeting};
+
 #[cfg(test)]
 mod tests {
     use super::*;
