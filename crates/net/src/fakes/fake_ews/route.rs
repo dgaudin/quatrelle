@@ -513,6 +513,16 @@ impl Data {
                             continue;
                         }
                         for u in updates {
+                            // A property of Quatrelle's own, set on an appointment: replaces its namesake.
+                            if u.name == "SetItemField"
+                                && el.name == "CalendarItem"
+                                && let Some(name) = u.child("ExtendedFieldURI").and_then(|f| f.attr("PropertyName")).map(str::to_string)
+                            {
+                                let named = |k: &El| k.child("ExtendedFieldURI").and_then(|f| f.attr("PropertyName")) == Some(name.as_str());
+                                el.kids.retain(|k| k.name != "ExtendedProperty" || !named(k));
+                                el.kids.extend(u.find("CalendarItem").into_iter().flat_map(|c| c.kids.iter().filter(|k| named(k)).cloned()));
+                                continue;
+                            }
                             let field =
                                 u.find("FieldURI").and_then(|f| f.attr("FieldURI")).and_then(|f| f.split(':').nth(1)).unwrap_or("").to_string();
                             el.kids.retain(|k| k.name != field);
@@ -810,6 +820,7 @@ const CALENDAR_ITEM_ORDER: &[&str] = &[
     "Importance",
     "ReminderIsSet",
     "ReminderMinutesBeforeStart",
+    "ExtendedProperty",
     "UID",
     "Start",
     "End",

@@ -731,3 +731,41 @@ fn a_refused_token_is_renewed_once_before_asking_to_sign_in() {
     pool.submit(Job::Remove { account: "a1".into() });
     let _ = std::fs::remove_dir_all(store.root());
 }
+
+/// The Webex id of an event travels as an extended property of Quatrelle's own: written with the
+/// event, asked for with the events (`$expand`), and read back.
+#[test]
+fn an_events_webex_id_round_trips_through_graph() {
+    use quatrelle_model::ical::CalEvent;
+    use quatrelle_model::pim::{LOCAL, Pim, StoredEvent};
+    let mut d = Data::default();
+    d.folder("Inbox", None, Some("inbox"));
+    d.calendars.push(("CAL1".into(), "Calendar".into()));
+    let server = serve(d);
+    let c = crate::graph::Client::connect(&server.base, TOKEN).unwrap();
+    let mut pim = Pim::default();
+    pim.events.push(StoredEvent {
+        calendar: LOCAL.into(),
+        event: CalEvent {
+            uid: "w-1".into(),
+            summary: "Review".into(),
+            start: 1_792_000_000,
+            end: 1_792_003_600,
+            webex_id: Some("abc_123".into()),
+            ..Default::default()
+        },
+        dirty: true,
+        ..Default::default()
+    });
+    let sync = crate::graph_pim::sync(&c, &pim, 1_792_000_000).unwrap();
+    assert!(sync.errors.is_empty(), "{:?}", sync.errors);
+    let d = server.data.lock().unwrap();
+    assert!(
+        d.calls.iter().any(|c| c.starts_with("GET /me/calendars/CAL1/events") && c.contains("$expand=singleValueExtendedProperties")),
+        "{:?}",
+        d.calls
+    );
+    assert!(d.events.iter().any(|e| e["subject"] == "Review" && e["singleValueExtendedProperties"][0]["value"] == "abc_123"));
+    let back = sync.events.iter().find(|e| e.event.summary == "Review").unwrap();
+    assert_eq!(back.event.webex_id.as_deref(), Some("abc_123"));
+}

@@ -322,11 +322,11 @@ impl Data {
                     return not_found();
                 }
                 let list: Vec<Value> = self.events.iter().filter(|e| e["calendar"] == *cal).cloned().collect();
-                ok(json!({ "value": list }))
+                ok(json!({ "value": with_extended(list, query) }))
             }
             ("GET", ["me", "calendars", cal, "events"]) => {
                 let list: Vec<Value> = self.events.iter().filter(|e| e["calendar"] == *cal).cloned().collect();
-                ok(json!({ "value": list }))
+                ok(json!({ "value": with_extended(list, query) }))
             }
             ("POST", ["me", "calendars", cal, "events"]) => {
                 let id = self.id("EV");
@@ -355,7 +355,7 @@ impl Data {
                 match (method, parts.get(2..).unwrap_or_default()) {
                     ("GET", ["calendar"]) => ok(json!({"id": cal, "canEdit": edit})),
                     ("GET", ["calendar", "events"]) => {
-                        ok(json!({"value": self.events.iter().filter(|e| e["calendar"] == cal.as_str()).cloned().collect::<Vec<_>>()}))
+                        ok(json!({"value": with_extended(self.events.iter().filter(|e| e["calendar"] == cal.as_str()).cloned().collect(), query)}))
                     }
                     (_, _) if !edit => denied(),
                     ("POST", ["calendar", "events"]) => {
@@ -517,4 +517,16 @@ impl Data {
         }
         (200, v.to_string().into_bytes(), "application/json")
     }
+}
+
+/// Events as Graph lists them: their extended properties only when asked for (`$expand`).
+fn with_extended(mut events: Vec<Value>, query: &str) -> Vec<Value> {
+    if !query.contains("$expand=singleValueExtendedProperties") {
+        for e in &mut events {
+            if let Some(o) = e.as_object_mut() {
+                o.remove("singleValueExtendedProperties");
+            }
+        }
+    }
+    events
 }

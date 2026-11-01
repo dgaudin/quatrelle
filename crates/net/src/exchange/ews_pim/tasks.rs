@@ -19,7 +19,7 @@ const TASK_COMPLETE: &str = "<t:ExtendedFieldURI DistinguishedPropertySetId=\"Ta
 const DATE_COMPLETED: &str = "<t:ExtendedFieldURI DistinguishedPropertySetId=\"Task\" PropertyId=\"33039\" PropertyType=\"SystemTime\"/>";
 
 /// The element that names a field in an update: EWS's own (`task:Status`), or a MAPI property.
-fn path(uri: &str) -> String {
+pub(super) fn path(uri: &str) -> String {
     if uri.starts_with('<') { uri.to_string() } else { format!("<t:FieldURI FieldURI=\"{uri}\"/>") }
 }
 

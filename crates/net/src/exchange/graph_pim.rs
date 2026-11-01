@@ -19,6 +19,17 @@ const MAX_ITEMS: usize = 5000;
 /// The address book Graph's contacts go into.
 pub const CONTACTS: &str = "graph:contacts";
 const EVENT_FIELDS: &str = "id,iCalUId,subject,body,start,end,isAllDay,location,attendees,organizer,recurrence,changeKey,isCancelled,type,categories,onlineMeeting,isReminderOn,reminderMinutesBeforeStart";
+/// Asks each event for Quatrelle's own property too, the Webex id (percent-encoded, as
+/// `graph.rs` writes its own).
+fn events_query() -> String {
+    format!("$select={EVENT_FIELDS}&$expand=singleValueExtendedProperties($filter=id%20eq%20'{}')", quatrelle_jmap::pct(&webex_property_id()))
+}
+
+/// How Graph names the Webex id property: its type, property set and name.
+fn webex_property_id() -> String {
+    format!("String {{{}}} Name WebexId", crate::ews_pim::events::WEBEX_SET)
+}
+
 const CONTACT_FIELDS: &str = "id,changeKey,displayName,givenName,surname,emailAddresses,businessPhones,homePhones,mobilePhone,companyName,department,jobTitle,profession,officeLocation,manager,assistantName,businessHomePage,imAddresses,nickName,spouseName,personalNotes,businessAddress,homeAddress,otherAddress,birthday";
 
 fn seg(id: &str) -> String {
@@ -220,6 +231,13 @@ pub fn event_of(v: &Value) -> Option<CalEvent> {
         organizer: v.get("organizer").and_then(person),
         attendees,
         status: if v.get("isCancelled").and_then(Value::as_bool).unwrap_or(false) { "CANCELLED".into() } else { String::new() },
+        webex_id: v
+            .get("singleValueExtendedProperties")
+            .and_then(Value::as_array)
+            .and_then(|props| props.iter().find(|p| s(p, "id").eq_ignore_ascii_case(&webex_property_id())))
+            .map(|p| s(p, "value"))
+            .map(|id| id.trim().to_string())
+            .filter(|id| quatrelle_model::ical::valid_webex_id(id)),
         categories: v
             .get("categories")
             .and_then(Value::as_array)
@@ -245,6 +263,10 @@ pub fn event_json(e: &CalEvent) -> Value {
         "reminderMinutesBeforeStart": e.reminder.unwrap_or(0),
     });
     v["recurrence"] = e.rrule.as_deref().and_then(|r| recurrence_of(r, e.start)).unwrap_or(Value::Null);
+    // Only a meeting that has a Webex id carries the property (an event without one is left as it was).
+    if let Some(id) = e.webex_id.as_deref().filter(|id| quatrelle_model::ical::valid_webex_id(id)) {
+        v["singleValueExtendedProperties"] = json!([{"id": webex_property_id(), "value": id}]);
+    }
     v
 }
 
@@ -504,7 +526,7 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
     // Then everything, read again.
     for (id, at) in &events_at {
         // The account's own fail the sync; one in a group that won't open says why.
-        let list = match c.all(&format!("{at}?$top=100&$select={EVENT_FIELDS}"), MAX_ITEMS) {
+        let list = match c.all(&format!("{at}?$top=100&{}", events_query()), MAX_ITEMS) {
             Ok(list) => list,
             Err(e) if at.starts_with("/me/calendarGroups/") => {
                 out.errors.push(format!("{}: {e}", calendars.iter().find(|x| x.id == *id).map_or("a calendar", |x| x.name.as_str())));
@@ -533,7 +555,7 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
         let id = quatrelle_model::pim::shared_calendar_id(email);
         let n = calendars.len();
         let can_edit = c.get(&format!("/users/{}/calendar?$select=canEdit", seg(email))).ok().and_then(|v| v.get("canEdit").and_then(Value::as_bool));
-        match c.all(&format!("/users/{}/calendar/events?$top=100&$select={EVENT_FIELDS}", seg(email)), MAX_ITEMS) {
+        match c.all(&format!("/users/{}/calendar/events?$top=100&{}", seg(email), events_query()), MAX_ITEMS) {
             Ok(list) => {
                 for v in &list {
                     if let Some(event) = event_of(v) {
@@ -602,6 +624,10 @@ mod tests {
         assert!(recurrence_of("FREQ=SECONDLY", start).is_none() && recurrence_of("junk", start).is_none());
     }
 
+    fn v_start() -> Value {
+        json!({"dateTime": "2026-10-16T14:00:00.0000000", "timeZone": "UTC"})
+    }
+
     #[test]
     fn events_and_contacts_both_ways() {
         let v = json!({
@@ -624,6 +650,21 @@ mod tests {
         assert_eq!(back["start"]["dateTime"], "2026-10-16T14:00:00");
         assert_eq!(back["categories"], json!(["Clients", "Mix"]));
         assert_eq!(back["subject"], "Mix review");
+        assert!(back.get("singleValueExtendedProperties").is_none(), "no id, nothing written");
+        let with_id = CalEvent { webex_id: Some("abc_123".into()), ..e.clone() };
+        let mut sent = event_json(&with_id);
+        assert_eq!(
+            sent["singleValueExtendedProperties"],
+            json!([{"id": "String {5b7a1c3e-8f44-4f0e-9c1d-3e2a7d6b4c11} Name WebexId", "value": "abc_123"}])
+        );
+        sent["id"] = json!("E1");
+        assert_eq!(event_of(&sent).and_then(|x| x.webex_id).as_deref(), Some("abc_123"), "read back");
+        // The name's case is Graph's to change; an id that isn't one is none.
+        let theirs = |id: &str, v: &str| json!({"id": "E2", "start": v_start(), "singleValueExtendedProperties": [{"id": id, "value": v}]});
+        let upper = "string {5B7A1C3E-8F44-4F0E-9C1D-3E2A7D6B4C11} name webexid";
+        assert_eq!(event_of(&theirs(upper, "z9")).and_then(|x| x.webex_id).as_deref(), Some("z9"));
+        assert_eq!(event_of(&theirs(upper, "a b")).and_then(|x| x.webex_id), None);
+        assert_eq!(event_of(&theirs("String {other} Name WebexId", "z9")).and_then(|x| x.webex_id), None);
         let all_day = CalEvent { all_day: true, start: e.start - 14 * 3600, end: e.start - 14 * 3600 + 86_400, ..e.clone() };
         assert_eq!(event_json(&all_day)["end"]["dateTime"], "2026-10-17T00:00:00");
         assert!(event_of(&json!({"id": "x"})).is_none(), "no start, no event");
