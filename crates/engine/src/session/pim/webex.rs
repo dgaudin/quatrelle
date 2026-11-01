@@ -40,12 +40,11 @@ fn replaced_link(e: &CalEvent, link: &str) -> Option<String> {
 }
 
 impl Session {
-    /// Whether this event's Webex meeting is the user's to change: it has one, it is the event
+    /// Whether a Webex meeting of this event's would be the user's to change: it is the event
     /// itself and not an occurrence of it, and the user organizes it (or no one does, as for a
-    /// lone appointment made here). A stranger's event may carry any id.
-    fn webex_is_mine(&self, e: &CalEvent) -> bool {
-        e.webex_id.is_some()
-            && e.recurrence_id.is_none()
+    /// lone appointment made here).
+    pub fn webex_can_hold(&self, e: &CalEvent) -> bool {
+        e.recurrence_id.is_none()
             && match &e.organizer {
                 Some(o) => self.is_my_address(&o.email),
                 // No organizer is the user's own appointment only while it has no guests and no
@@ -53,6 +52,12 @@ impl Session {
                 // organizer has both.
                 None => e.attendees.is_empty() && e.my_answer.is_empty(),
             }
+    }
+
+    /// Whether this event has a Webex meeting that is the user's to change. A stranger's event may
+    /// carry any id.
+    fn webex_is_mine(&self, e: &CalEvent) -> bool {
+        e.webex_id.is_some() && self.webex_can_hold(e)
     }
 
     /// An appointment of the user's changed from `before` to `after`: its Webex meeting is sent

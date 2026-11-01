@@ -83,6 +83,9 @@ pub struct EventForm {
     pub recurrence: Option<super::recurrence::RecurrenceUi>,
     /// Outlook's Select Attendees and Resources, while it's open over the window.
     pub attendees_book: Option<Box<super::AttendeesUi>>,
+    /// A Webex meeting made for it would be the user's to keep: a new one, or what
+    /// [`Session::webex_can_hold`] says of the event.
+    pub webex_allowed: bool,
     /// The Webex meeting it holds, from the event or made here.
     pub webex_id: Option<String>,
     /// That meeting was made from this window and isn't saved: leaving deletes it.
@@ -117,6 +120,7 @@ impl EventForm {
             reminder: Some(DEFAULT_REMINDER),
             responses: true,
             new_times: true,
+            webex_allowed: true,
             ..Default::default()
         }
     }
@@ -177,6 +181,7 @@ impl EventForm {
             categories: e.categories.clone(),
             all_categories: all_categories(s, &e.categories),
             error: None,
+            webex_allowed: s.webex_can_hold(e),
             webex_id: e.webex_id.clone(),
             ..Default::default()
         })

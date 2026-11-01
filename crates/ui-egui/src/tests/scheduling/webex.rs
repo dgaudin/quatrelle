@@ -353,6 +353,26 @@ fn a_meeting_goes_only_where_it_can_be_kept() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// A colleague's meeting from a server that names no organizer reads as the user's to invite to,
+/// but no meeting made for it could be kept: Webex Meeting is off, as the engine would never
+/// follow it. A lone appointment opened again can have one.
+#[test]
+fn a_colleagues_meeting_with_no_organizer_schedules_nothing() {
+    let (mut a, dir, ctx, _) = appointment("webex-colleague", "Budget");
+    let uid = saved_and_opened(&ctx, &mut a);
+    assert_eq!(button(&ctx, &mut a, "Webex Meeting").map(|b| b.1), Some(true));
+    a.ui.event_windows.clear();
+    let guest = quatrelle_engine::model::ical::Attendee { email: "zoe@studio.example".into(), ..Default::default() };
+    let e = a.session.pim_mut("sample").events.iter_mut().find(|e| e.event.uid == uid).expect("saved");
+    e.event.attendees = vec![guest];
+    let start = e.event.start;
+    a.ui.dialog = Dialog::open_event(&a.session, &uid, start);
+    frame_sized(&ctx, &mut a, vec![], SIZE);
+    assert!(form(&mut a).can_invite && form(&mut a).join.is_none());
+    assert_eq!(button(&ctx, &mut a, "Webex Meeting").map(|b| b.1), Some(false));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 /// Save waits for the meeting on its way, and goes with it once it's in.
 #[test]
 fn save_waits_for_the_webex_answer() {
