@@ -1,5 +1,7 @@
 //! Tests of the Webex client, over the fake server.
 
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use serde_json::json;
 
 use super::*;
@@ -71,6 +73,13 @@ fn bodies(server: &Server) -> Vec<Value> {
 
 fn refuse(server: &Server, status: u16, body: Value) {
     server.data.lock().unwrap().refuse.push_back((status, body));
+}
+
+/// The access token held runs out.
+fn run_out(w: &mut Webex) {
+    if let Some((t, _)) = &mut w.access {
+        t.expires_at = 0;
+    }
 }
 
 /// The names of a body's fields, sorted.
@@ -199,8 +208,17 @@ fn an_expired_token_is_refreshed_once_and_the_request_tried_again() {
     assert_eq!(creds.get_secret(&keyring(), REFRESH_KEY).as_deref(), Some("rotated-2"), "the keychain holds the new refresh token");
 }
 
-/// A keychain that reads, and refuses to keep anything new (the trait's `set_secret`).
-struct Locked(MemoryCredentials);
+/// A keychain that reads, and refuses to keep anything new while `locked`.
+struct Locked {
+    held: MemoryCredentials,
+    locked: AtomicBool,
+}
+
+impl Locked {
+    fn holding(held: MemoryCredentials) -> Locked {
+        Locked { held, locked: AtomicBool::new(true) }
+    }
+}
 
 impl Credentials for Locked {
     fn get(&self, _: &AccountConfig) -> Option<String> {
@@ -218,21 +236,79 @@ impl Credentials for Locked {
     }
     fn delete_smtp(&self, _: &AccountConfig) {}
     fn get_secret(&self, account: &AccountConfig, what: &str) -> Option<String> {
-        self.0.get_secret(account, what)
+        self.held.get_secret(account, what)
+    }
+    fn set_secret(&self, account: &AccountConfig, what: &str, secret: &str) -> Result<(), String> {
+        if self.locked.load(Ordering::Relaxed) { Err("locked".into()) } else { self.held.set_secret(account, what, secret) }
     }
 }
 
-/// The keychain still holds the old refresh token: the access token in hand is the one it
-/// stays good for, and the meeting is made all the same.
+/// The new refresh token has replaced the old one at Webex, whatever the keychain says: it stays
+/// in memory, takes over at the next refresh, by expiry or by a 401, and is offered to the
+/// keychain again then.
 #[test]
-fn a_new_refresh_token_the_keychain_refuses_loses_nothing_now() {
+fn a_new_refresh_token_the_keychain_refuses_loses_nothing() {
     let server = fake_webex::serve(Data { rotate: true, ..Default::default() });
-    let creds = Arc::new(Locked(keychain(Some("r1"))));
+    let creds = Arc::new(Locked::holding(keychain(Some("r1"))));
+    let mut w = pointed_at(&server, creds.clone());
+    let refreshes = || server.data.lock().unwrap().refreshes;
+    let held = || creds.get_secret(&keyring(), REFRESH_KEY);
+
+    w.create(SITE, &fields(), true).unwrap();
+    w.create(SITE, &fields(), true).unwrap();
+    assert_eq!(refreshes(), 1, "the token in hand goes on working");
+    assert_eq!(held().as_deref(), Some("r1"));
+
+    run_out(&mut w);
+    w.create(SITE, &fields(), true).unwrap();
+    assert_eq!(refreshes(), 2, "expired: the fake took the token the keychain refused");
+
+    refuse(&server, 401, json!({}));
+    w.create(SITE, &fields(), true).unwrap();
+    assert_eq!(refreshes(), 3, "a 401: the same");
+    assert_eq!(held().as_deref(), Some("r1"), "still refused");
+
+    creds.locked.store(false, Ordering::Relaxed);
+    run_out(&mut w);
+    w.create(SITE, &fields(), true).unwrap();
+    assert_eq!(held().as_deref(), Some("rotated-4"), "the write is tried again at the next refresh");
+    assert_eq!(w.unsaved, None);
+}
+
+/// The refresh that offers it again needn't bring a newer one: Webex answering with the token it
+/// was asked with, that one still goes to the keychain, which holds a replaced one.
+#[test]
+fn a_refused_token_is_saved_though_no_newer_one_comes() {
+    let server = fake_webex::serve(Data { rotate: true, ..Default::default() });
+    let creds = Arc::new(Locked::holding(keychain(Some("r1"))));
     let mut w = pointed_at(&server, creds.clone());
     w.create(SITE, &fields(), true).unwrap();
+
+    server.data.lock().unwrap().rotate = false;
+    creds.locked.store(false, Ordering::Relaxed);
+    run_out(&mut w);
     w.create(SITE, &fields(), true).unwrap();
-    assert_eq!(server.data.lock().unwrap().refreshes, 1);
-    assert_eq!(creds.get_secret(&keyring(), REFRESH_KEY).as_deref(), Some("r1"));
+    assert_eq!(creds.get_secret(&keyring(), REFRESH_KEY).as_deref(), Some("rotated-1"));
+    assert_eq!(w.unsaved, None);
+}
+
+/// A refused token stands in for the keychain's value it replaces and no other: another sign-in
+/// wins over it.
+#[test]
+fn a_sign_out_or_another_sign_in_beats_a_token_the_keychain_refused() {
+    let server = fake_webex::serve(Data { rotate: true, ..Default::default() });
+    let creds = Arc::new(Locked::holding(keychain(Some("r1"))));
+    let mut w = pointed_at(&server, creds.clone());
+    w.create(SITE, &fields(), true).unwrap();
+
+    server.data.lock().unwrap().latest = Some("r2".into());
+    creds.held.set_secret(&keyring(), REFRESH_KEY, "r2").unwrap();
+    w.create(SITE, &fields(), true).unwrap();
+    assert_eq!(server.data.lock().unwrap().refreshes, 2, "the fake takes r2 alone");
+
+    creds.held.delete_secret(&keyring(), REFRESH_KEY);
+    assert_eq!(w.create(SITE, &fields(), true), Err(WebexError::SignIn));
+    assert_eq!(w.unsaved, None, "nothing of it stays in memory");
 }
 
 #[test]
@@ -300,9 +376,7 @@ fn a_token_lasts_until_it_runs_out_or_the_sign_in_changes() {
     w.create(SITE, &fields(), true).unwrap();
     assert_eq!(refreshes(), 2, "another sign-in");
 
-    if let Some((t, _)) = &mut w.access {
-        t.expires_at = 0;
-    }
+    run_out(&mut w);
     w.create(SITE, &fields(), true).unwrap();
     assert_eq!(refreshes(), 3, "run out");
 

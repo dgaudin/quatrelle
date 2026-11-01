@@ -3,8 +3,9 @@
 //!
 //! Webex is a service of Quatrelle, not of an account. Its integration is the user's own: the
 //! client id comes from the settings, and the client secret and the refresh token stay in the
-//! keychain, under [`keyring`]. The access token lives in memory alone, and the password an
-//! answer carries goes into a [`Secret`]. None of them is ever logged.
+//! keychain, under [`keyring`] (a new refresh token it refuses waits in memory, as the old one
+//! no longer works). The access token lives in memory alone, and the password an answer carries
+//! goes into a [`Secret`]. None of them is ever logged.
 //!
 //! Answers are hostile input: they are capped, what is kept of them is cleaned, and a meeting
 //! with no usable id or link is refused, not half kept.
@@ -68,13 +69,15 @@ pub struct Webex {
     pub(crate) token_url: String,
     client_id: String,
     creds: Arc<dyn Credentials>,
-    /// The access token, and the refresh token it came from.
+    /// The access token, and the keychain's refresh token it goes with.
     access: Option<(Tokens, String)>,
+    /// A new refresh token the keychain refused, and the value there that it replaces.
+    unsaved: Option<(String, String)>,
 }
 
 impl Webex {
     pub fn new(client_id: &str, creds: Arc<dyn Credentials>) -> Webex {
-        Webex { api: API.into(), token_url: TOKEN_URL.into(), client_id: client_id.into(), creds, access: None }
+        Webex { api: API.into(), token_url: TOKEN_URL.into(), client_id: client_id.into(), creds, access: None, unsaved: None }
     }
 
     /// Make a meeting on `site` for an appointment. `quiet`: Webex mails no one.
@@ -161,28 +164,38 @@ impl Webex {
     }
 
     /// The access token: the one held, while it hasn't run out and the keychain's refresh token
-    /// is still the one it came from (else the person signed out, or in as someone else), or a
+    /// is still the one it goes with (else the person signed out, or in as someone else), or a
     /// fresh one.
     fn token(&mut self) -> Result<String, WebexError> {
         let keyring = keyring();
-        let refresh = self.creds.get_secret(&keyring, REFRESH_KEY).ok_or(WebexError::SignIn)?;
+        let kept = self.creds.get_secret(&keyring, REFRESH_KEY);
+        // A token the keychain refused stands in for the value it replaces and no other: if
+        // that has gone, the person signed out or in again, and that wins.
+        self.unsaved.take_if(|(_, replaces)| kept.as_ref() != Some(&*replaces));
+        let kept = kept.ok_or(WebexError::SignIn)?;
         let secret = self.creds.get_secret(&keyring, SECRET_KEY).ok_or(WebexError::SignIn)?;
         if let Some((t, from)) = &self.access
-            && *from == refresh
+            && *from == kept
             && !t.expired()
         {
             return Ok(t.access.clone());
         }
+        let refresh = self.unsaved.as_ref().map_or(&kept, |(new, _)| new).clone();
         let mut p = provider(&self.client_id, &secret).ok_or(WebexError::SignIn)?;
         p.token_url.clone_from(&self.token_url);
         let t = oauth::refresh(&p, &refresh).map_err(|e| if matches!(e, NetError::Auth(_)) { WebexError::SignIn } else { failed(e) })?;
-        // A refresh may hand out a new refresh token, which replaces the old one. Unsaved, the
-        // old one is still the keychain's: the token in hand keeps working until it runs out.
-        let mut from = refresh;
-        if let Some(new) = t.refresh.clone().filter(|r| !r.is_empty() && *r != from) {
-            match self.creds.set_secret(&keyring, REFRESH_KEY, &new) {
-                Ok(()) => from = new,
-                Err(e) => log::warn!("the new Webex sign-in couldn't be saved in the keychain: {e}"),
+        // A refresh may hand out a new refresh token, which replaces the old one for good. If
+        // the keychain refuses it, it waits here for the next refresh, which offers it again.
+        let newest = t.refresh.clone().filter(|r| !r.is_empty()).unwrap_or(refresh);
+        self.unsaved = None;
+        let mut from = kept;
+        if newest != from {
+            match self.creds.set_secret(&keyring, REFRESH_KEY, &newest) {
+                Ok(()) => from = newest,
+                Err(e) => {
+                    log::warn!("the new Webex sign-in couldn't be saved in the keychain: {e}");
+                    self.unsaved = Some((newest, from.clone()));
+                }
             }
         }
         let access = t.access.clone();
