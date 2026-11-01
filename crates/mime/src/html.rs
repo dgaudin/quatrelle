@@ -34,6 +34,15 @@ fn css_px(v: &str) -> Option<u32> {
     (n.is_finite() && n >= 0.0).then(|| n.min(4000.0) as u32)
 }
 
+/// A picture's width as written (`300`, `300px`, `50%`).
+fn picture_width(v: &str) -> Option<layout::Width> {
+    let v = v.trim();
+    match v.strip_suffix('%') {
+        Some(p) => p.trim().parse::<f32>().ok().filter(|p| p.is_finite() && *p > 0.0).map(|p| layout::Width::Percent(p.min(100.0) as u8)),
+        None => css_px(v).map(layout::Width::Px),
+    }
+}
+
 /// The size each `<img>` of `html` sets, in order, with its address (`src`).
 pub(super) fn picture_sizes(html: &str) -> Vec<(String, ImageSize)> {
     let lower = html.to_ascii_lowercase();
@@ -47,23 +56,18 @@ pub(super) fn picture_sizes(html: &str) -> Vec<(String, ImageSize)> {
         let Some(src) = tag_attr(tag, "src").map(str::trim).filter(|s| !s.is_empty()) else { continue };
         let style = tag_attr(tag, "style").map(css::declarations).unwrap_or_default();
         let css = |prop: &str| style.iter().rev().find(|d| d.prop == prop).map(|d| d.value.as_str());
-        // The style's size wins over the attributes', as in a browser.
-        let width = css("width").and_then(|w| {
-            let w = w.trim();
-            match w.strip_suffix('%') {
-                Some(p) => p.trim().parse::<f32>().ok().filter(|p| p.is_finite() && *p > 0.0).map(|p| layout::Width::Percent(p.min(100.0) as u8)),
-                None => css_px(w).map(layout::Width::Px),
-            }
-        });
-        let width = width.or_else(|| {
-            let w = tag_attr(tag, "width")?.trim();
-            match w.strip_suffix('%') {
-                Some(p) => p.trim().parse::<f32>().ok().filter(|p| p.is_finite() && *p > 0.0).map(|p| layout::Width::Percent(p.min(100.0) as u8)),
-                None => css_px(w).map(layout::Width::Px),
-            }
-        });
-        let height = css("height").and_then(css_px).or_else(|| tag_attr(tag, "height").and_then(css_px));
-        let max_width = css("max-width").and_then(css_px);
+        // The style's size wins over the attributes', as in a browser: `auto` too, which leaves
+        // the side to the picture's shape. A length not read here (Word's inches) leaves the tag's.
+        let auto = |prop: &str| css(prop).is_some_and(|v| v.trim().eq_ignore_ascii_case("auto"));
+        let width = css("width").and_then(picture_width).or_else(|| tag_attr(tag, "width").and_then(picture_width)).filter(|_| !auto("width"));
+        let height = css("height").and_then(css_px).or_else(|| tag_attr(tag, "height").and_then(css_px)).filter(|_| !auto("height"));
+        // A share of a box as wide as the tag says, when the style's is a percentage: the width
+        // the message was made for, and the most Outlook, which reads only the tag, would show.
+        let made_for = match width {
+            Some(layout::Width::Percent(_)) => tag_attr(tag, "width").and_then(css_px),
+            _ => None,
+        };
+        let max_width = css("max-width").and_then(css_px).or(made_for);
         out.push((src.to_string(), ImageSize { width, height, max_width }));
         if out.len() >= MAX_SIZED {
             break;
