@@ -13,6 +13,13 @@ impl MailApp {
                 self.ui.dialog = Some(Dialog::password(&a.config));
             }
         }
+        // A server proposed another domain: asked one at a time, when nothing else is open. Unlike
+        // the password, whatever the account's status says: a question from the calendars' or
+        // contacts' discovery comes while its mail is online.
+        if self.ui.dialog.is_none() && self.ui.backstage.is_none() && !self.session.ask_trust.is_empty() {
+            let (account, site) = self.session.ask_trust.remove(0);
+            self.ui.dialog = Some(Dialog::trust_domain(&account, &site));
+        }
         let news = self.session.take_new_mail();
         if !news.is_empty() {
             // Issue #4: the system keeps its notifications (Windows, in its history): one for an
@@ -534,6 +541,11 @@ impl MailApp {
 
     pub(crate) fn sign_in_again(&mut self, id: &str) {
         let Some((config, status)) = self.session.account(id).map(|a| (a.config.clone(), a.status.clone())) else { return };
+        // Waiting for a yes to another domain: the question again (it was closed, or answered late).
+        if let SyncStatus::NeedsTrust { site } = &status {
+            self.ui.dialog = Some(Dialog::trust_domain(id, site));
+            return;
+        }
         // Microsoft took the sign-in but won't open the mailbox: say why, and what helps.
         if let SyncStatus::Error { error } = &status
             && error.starts_with(quatrelle_engine::model::MICROSOFT_IMAP_CLOSED)

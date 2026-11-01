@@ -1830,3 +1830,9 @@ month	May	mayo
 	To or Cc one of these	Para o CC es uno de estos
 	Subject has one of these (comma-separated)	El asunto contiene una de estas palabras (separadas por comas)
 	Messages still being sent: {n}. They may not go if Quatrelle closes now: wait a moment, or close anyway.	Mensajes que aún se están enviando: {n}. Puede que no salgan si Quatrelle se cierra ahora: espera un momento o ciérralo de todos modos.
+	Allow another server?	¿Permitir otro servidor?
+	The server proposes to set up {account} with {domain}. Your password or sign-in will be sent there. Allow it?	El servidor propone configurar {account} con {domain}. Tu contraseña o tu inicio de sesión se enviarán allí. ¿Permitirlo?
+	Allow	Permitir
+	Don't allow	No permitir
+	{domain} is waiting for your answer	{domain} está esperando tu respuesta
+	Other servers allowed	Otros servidores permitidos

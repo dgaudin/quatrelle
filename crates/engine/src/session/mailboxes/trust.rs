@@ -95,8 +95,6 @@ impl Session {
 
     /// Ask whether the account may use another site, unless it was asked (and not withdrawn since)
     /// or refused in this run. The interface drains `ask_trust` as it does `ask_password`.
-    // The network's events call it from the next tasks; the compiler is told until then (tests use it).
-    #[cfg_attr(not(test), expect(dead_code, reason = "called by the NeedsTrust and TrustAsked events (credentials-trust tasks 5 and 6)"))]
     pub(crate) fn ask_trust_once(&mut self, account: &str, site: &str) {
         /// Questions asked in one run at most: a hostile server naming endless domains must not
         /// queue endless dialogs. The domains past it stay untrusted, so nothing goes to them.

@@ -261,10 +261,11 @@ impl MailApp {
 }
 
 /// An account that waits for you to do something: sign in (again, or with Microsoft rather than
-/// a password), or choose what to do about a mailbox Microsoft won't open over IMAP.
+/// a password), answer whether another domain may get its sign-in, or choose what to do about a
+/// mailbox Microsoft won't open over IMAP.
 pub(crate) fn needs_you(a: &quatrelle_engine::AccountState) -> bool {
     match &a.status {
-        SyncStatus::NeedsPassword { .. } => true,
+        SyncStatus::NeedsPassword { .. } | SyncStatus::NeedsTrust { .. } => true,
         SyncStatus::Error { error } => {
             error.starts_with(quatrelle_engine::model::MICROSOFT_IMAP_CLOSED) || error.starts_with(quatrelle_engine::model::MICROSOFT_NO_PASSWORDS)
         }
@@ -303,9 +304,8 @@ pub(crate) fn account_status(s: &Session, t: &Tokens, a: &quatrelle_engine::Acco
         // An account that signs in in the browser has no password to ask for.
         SyncStatus::NeedsPassword { .. } if a.config.oauth.is_some() => (t.danger, tl!("Sign in again").to_string()),
         SyncStatus::NeedsPassword { .. } => (t.danger, tl!("Password needed").to_string()),
-        // Task 6 says "{domain} is waiting for your answer" and opens the question; until then,
-        // the site named as a disconnection says.
-        SyncStatus::NeedsTrust { site } => (t.warn, tf!("Disconnected: {error}", error = site)),
+        // A link to the question (`sign_in_again`).
+        SyncStatus::NeedsTrust { site } => (t.warn, tf!("{domain} is waiting for your answer", domain = site)),
         SyncStatus::Error { error } => (t.warn, tf!("Disconnected: {error}", error = widgets::shorten(error, 60))),
     }
 }

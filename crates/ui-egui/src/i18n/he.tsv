@@ -1826,3 +1826,9 @@ month	May	מאי
 	To or Cc one of these	אל או עותק הוא אחד מאלה
 	Subject has one of these (comma-separated)	הנושא מכיל אחת מהמילים האלה (מופרדות בפסיקים)
 	Messages still being sent: {n}. They may not go if Quatrelle closes now: wait a moment, or close anyway.	הודעות שעדיין נשלחות: {n}. ייתכן שלא יישלחו אם Quatrelle ייסגר עכשיו: המתן רגע, או סגור בכל זאת.
+	Allow another server?	לאשר שרת אחר?
+	The server proposes to set up {account} with {domain}. Your password or sign-in will be sent there. Allow it?	השרת מציע להגדיר את {account} באמצעות {domain}. הסיסמה או פרטי הכניסה שלך יישלחו לשם. לאשר?
+	Allow	אשר
+	Don't allow	אל תאשר
+	{domain} is waiting for your answer	{domain} ממתין לתשובתך
+	Other servers allowed	שרתים אחרים מותרים

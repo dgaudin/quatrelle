@@ -1826,3 +1826,9 @@ month	May	mei
 	To or Cc one of these	Aan of CC is een van deze
 	Subject has one of these (comma-separated)	Onderwerp bevat een van deze woorden (gescheiden door komma’s)
 	Messages still being sent: {n}. They may not go if Quatrelle closes now: wait a moment, or close anyway.	Berichten die nog worden verzonden: {n}. Ze gaan misschien niet weg als Quatrelle nu sluit: wacht even, of sluit toch.
+	Allow another server?	Een andere server toestaan?
+	The server proposes to set up {account} with {domain}. Your password or sign-in will be sent there. Allow it?	De server stelt voor {account} in te stellen met {domain}. Uw wachtwoord of aanmelding wordt daarheen gestuurd. Toestaan?
+	Allow	Toestaan
+	Don't allow	Niet toestaan
+	{domain} is waiting for your answer	{domain} wacht op uw antwoord
+	Other servers allowed	Andere toegestane servers

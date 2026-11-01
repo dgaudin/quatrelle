@@ -69,6 +69,7 @@ fn a_question_is_read_as_an_alert_by_its_title() {
     for (d, role, title) in [
         (Dialog::ConfirmDelete { count: 2 }, Role::AlertDialog, "Delete permanently?"),
         (Dialog::SaveOnClose(1), Role::AlertDialog, "Save the message you're writing?"),
+        (Dialog::trust_domain("sample", "fastmailusercontent.com"), Role::AlertDialog, "Allow another server?"),
         (Dialog::MoveTo { filter: String::new() }, Role::Dialog, "Move to folder"),
     ] {
         a.ui.dialog = Some(d);
@@ -79,10 +80,11 @@ fn a_question_is_read_as_an_alert_by_its_title() {
         let mut out = ctx.run_ui(input, |ui| a.ui(ui));
         out.textures_delta.clear();
         let nodes = out.platform_output.accesskit_update.expect("AccessKit is on").nodes;
-        let dialog = nodes.iter().find(|(_, n)| n.role() == role).map(|(_, n)| n.clone()).unwrap_or_else(|| {
-            panic!("no {role:?} for {title}: {:?}", nodes.iter().map(|(_, n)| n.role()).collect::<std::collections::BTreeSet<_>>())
+        // (The modal's own area has the dialog role too, without being modal: which of the two
+        // comes first depends on their ids, so the one asked for is the modal.)
+        let dialog = nodes.iter().find(|(_, n)| n.role() == role && n.is_modal()).map(|(_, n)| n.clone()).unwrap_or_else(|| {
+            panic!("no modal {role:?} for {title}: {:?}", nodes.iter().map(|(_, n)| (n.role(), n.is_modal())).collect::<Vec<_>>())
         });
-        assert!(dialog.is_modal(), "{title}");
         let named: Vec<String> = dialog
             .labelled_by()
             .iter()

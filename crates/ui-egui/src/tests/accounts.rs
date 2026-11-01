@@ -2,6 +2,8 @@
 
 use super::*;
 
+mod trust;
+
 #[test]
 fn the_account_form_adds_exchange_accounts() {
     let (mut a, dir) = app("graph-form");
