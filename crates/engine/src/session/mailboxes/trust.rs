@@ -11,19 +11,12 @@ use quatrelle_model::addr::trust::{Trust, site as site_of, url_host, withdrawn};
 /// Other domains one account trusts at most.
 const MAX_TRUSTED: usize = 20;
 
-/// The site of a domain the user typed (or a URL they pasted: its host is taken), when it is a
-/// host name: letters, digits, `-` and `.`, at most 253 characters, labels of 1 to 63 that don't
-/// start or end with `-`, and a dot (or `localhost`).
+/// The site of a domain the user typed, a URL they pasted, or a site a server was asked about:
+/// whatever [`url_host`] reads, so that a question always has an answer. A single label
+/// (`exchange01`) and an IP address are sites like any other.
 fn domain_site(domain: &str) -> Result<String, CmdError> {
-    let bad = || CmdError::Params(format!("not a domain: {}", domain.chars().take(80).collect::<String>()));
-    let host = url_host(domain).ok_or_else(bad)?;
-    let host = host.trim_end_matches('.');
-    let label_ok = |l: &str| !l.is_empty() && l.len() <= 63 && !l.starts_with('-') && !l.ends_with('-');
-    let ok = host.len() <= 253
-        && host.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.')
-        && host.split('.').all(label_ok)
-        && (host.contains('.') || host.eq_ignore_ascii_case("localhost"));
-    if ok { Ok(site_of(host)) } else { Err(bad()) }
+    let site = url_host(domain).map(|h| site_of(&h)).unwrap_or_default();
+    if site.is_empty() { Err(CmdError::Params(format!("not a domain: {}", domain.chars().take(80).collect::<String>()))) } else { Ok(site) }
 }
 
 impl Session {

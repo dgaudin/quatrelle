@@ -15,12 +15,16 @@ const MAX_HOST: usize = 253;
 /// The site a host belongs to: its registrable domain, in lower case, without a trailing dot, in
 /// the ASCII form given (no U-label/A-label conversion: two spellings are two sites, which errs
 /// on the safe side). When the list gives none (a single label like `exchange01` or `localhost`,
-/// an IP address, a bare suffix) the site is the normalised host itself. An unknown suffix
+/// an IP address, a bare suffix) the site is the normalised host itself, an IPv6 address in
+/// brackets as a URL writes it. An unknown suffix
 /// (`.local`) follows the list's `*` rule: `exch01.corp.local` → `corp.local`. The suffixes of
 /// [`SHARED_SUFFIXES`] count as public too.
 pub fn site(host: &str) -> String {
     let h = host.trim().trim_end_matches('.').to_ascii_lowercase();
-    if h.is_empty() || h.starts_with('[') || h.parse::<Ipv4Addr>().is_ok() || h.parse::<Ipv6Addr>().is_ok() {
+    if h.parse::<Ipv6Addr>().is_ok() {
+        return format!("[{h}]");
+    }
+    if h.is_empty() || h.starts_with('[') || h.parse::<Ipv4Addr>().is_ok() {
         return h;
     }
     for suffix in SHARED_SUFFIXES {
@@ -45,7 +49,8 @@ pub fn site(host: &str) -> String {
 const SHARED_SUFFIXES: [&str; 2] = ["mail.onmicrosoft.com", "onmicrosoft.com"];
 
 /// The host of a URL (`https://user@Mail.Example.com:8443/path?q` → `Mail.Example.com`; an IPv6
-/// address keeps its brackets). The scheme is optional, so a bare host or `host/path` reads too.
+/// address keeps its brackets, and a bare one gets them). The scheme is optional, so a bare host
+/// or `host/path` reads too.
 /// `None` for an empty, over-long or unreadable one (spaces, control characters).
 pub fn url_host(url: &str) -> Option<String> {
     let url = url.trim();
@@ -54,6 +59,9 @@ pub fn url_host(url: &str) -> Option<String> {
     // differently is unreadable.
     if url.contains('\\') || url.chars().any(char::is_control) {
         return None;
+    }
+    if url.parse::<Ipv6Addr>().is_ok() {
+        return Some(format!("[{url}]"));
     }
     let rest = match url.split_once("://") {
         Some((scheme, rest)) if !scheme.is_empty() && scheme.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.')) => rest,
@@ -102,7 +110,7 @@ impl Trust {
         t.add(Some(&acc.imap.host));
         t.add(Some(&acc.smtp.host));
         t.add(acc.pop.as_ref().map(|p| p.host.as_str()));
-        for url in [&acc.jmap, &acc.graph, &acc.ews].into_iter().flatten() {
+        for url in [&acc.jmap, &acc.graph, &acc.ews].into_iter().flatten().filter(|u| *u != crate::EWS_AUTODISCOVER) {
             t.add(Some(url));
         }
         for d in &acc.trusted_domains {
@@ -154,6 +162,8 @@ mod tests {
             ("localhost", "localhost"),
             ("127.0.0.1", "127.0.0.1"),
             ("[::1]", "[::1]"),
+            ("::1", "[::1]"),
+            ("2001:DB8::1", "[2001:db8::1]"),
             ("xn--bcher-kva.example", "xn--bcher-kva.example"),
             ("XN--Bcher-KVA.Example", "xn--bcher-kva.example"),
             // Shared hosting: each customer is a site of its own.
@@ -181,6 +191,10 @@ mod tests {
             ("https://caldav.icloud.com/123/", Some("caldav.icloud.com")),
             ("https://user:pw@Mail.Example.com:8443/EWS/Exchange.asmx?x=1#y", Some("Mail.Example.com")),
             ("http://[::1]:8080/a", Some("[::1]")),
+            // A bare IPv6 address, as an IMAP host is typed: written as URLs write it.
+            ("::1", Some("[::1]")),
+            (" 2001:db8::1 ", Some("[2001:db8::1]")),
+            ("https://::1/", None),
             ("example.org", Some("example.org")),
             ("example.org/path", Some("example.org")),
             ("https://", None),
@@ -232,6 +246,13 @@ mod tests {
         };
         let t = Trust::of(&acc, &[]);
         assert_eq!(t.sites(), ["corp.example", "corp.local", "jmap-host.example", "microsoft.com", "pop-host.example"]);
+        // `autodiscover` says how to find the server: it isn't one.
+        let found = AccountConfig { ews: Some(crate::EWS_AUTODISCOVER.into()), ..Default::default() };
+        assert!(!Trust::of(&found, &[]).allows("autodiscover") && Trust::of(&found, &[]).sites().is_empty());
+        // A bare IPv6 address counts, however the server is written elsewhere.
+        let v6 = AccountConfig { imap: ServerConfig { host: "::1".into(), port: 993, security: Security::Tls }, ..Default::default() };
+        assert_eq!(Trust::of(&v6, &[]).sites(), ["[::1]"]);
+        assert!(Trust::of(&v6, &[]).allows("[::1]") && Trust::of(&v6, &[]).allows("::1"));
         // Nothing configured: nothing trusted, not even the empty host.
         let none = Trust::of(&AccountConfig::default(), &[]);
         assert!(none.sites().is_empty() && !none.allows("") && !none.allows("example.org"));

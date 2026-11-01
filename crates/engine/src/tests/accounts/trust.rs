@@ -82,22 +82,7 @@ fn twenty_other_servers_at_most() {
 #[test]
 fn not_a_domain_is_refused() {
     let (mut s, id) = with_account("trust-not-a-domain");
-    for bad in [
-        "",
-        "  ",
-        "nodot",
-        "a b.example",
-        "-a.example",
-        "a-.example",
-        "a..example",
-        ".example",
-        "ex_ample.com",
-        "bücher.example",
-        "[::1]",
-        "https://",
-        "a@",
-        "http://x y.example/",
-    ] {
+    for bad in ["", "  ", ".", "..", "a b.example", "https://", "a@", "http://x y.example/", "http://[nope]/", "a\\b.example"] {
         for cmd in ["account.trustDomain", "account.distrustDomain", "account.refuseDomain"] {
             let e = s.run(cmd, &json!({"account": id, "domain": bad})).unwrap_err();
             assert!(e.to_string().contains(&format!("not a domain: {}", bad)), "{cmd} {bad:?}: {e}");
@@ -105,14 +90,38 @@ fn not_a_domain_is_refused() {
     }
     let long = format!("{}.example", "a".repeat(250));
     assert!(s.run("account.trustDomain", &json!({"account": id, "domain": long})).is_err(), "over 253 characters");
-    let label = format!("{}.example", "a".repeat(64));
-    assert!(s.run("account.trustDomain", &json!({"account": id, "domain": label})).is_err(), "a label over 63");
-    // What is allowed: localhost, an address, a URL's host.
-    for ok in ["localhost", "127.0.0.1", "https://exch01.corp.local:444/EWS/", "xn--bcher-kva.example"] {
-        s.run("account.trustDomain", &json!({"account": id, "domain": ok})).unwrap();
-    }
-    assert_eq!(trusted(&s, &id), ["localhost", "127.0.0.1", "corp.local", "xn--bcher-kva.example"]);
     assert!(s.run("account.trustDomain", &json!({"account": id})).is_err(), "`domain` is required");
+}
+
+/// Every site a server can lead to can be answered: what `url_host` reads, the commands take. A
+/// new Exchange at `https://exchange01/EWS/…`, or a home on an IPv6 address, asks about a host
+/// with no dot, and both buttons once said "not a domain" and left the account waiting for good.
+#[test]
+fn every_site_that_can_be_asked_about_can_be_answered() {
+    let (mut s, id) = with_account("trust-answerable");
+    for (domain, site) in [
+        ("exchange01", "exchange01"),
+        ("https://Exchange01:444/EWS/Exchange.asmx", "exchange01"),
+        ("localhost", "localhost"),
+        ("127.0.0.1", "127.0.0.1"),
+        ("[::1]", "[::1]"),
+        ("::1", "[::1]"),
+        ("http://[2001:DB8::1]:8080/dav/", "[2001:db8::1]"),
+        ("ex_ample.com", "ex_ample.com"),
+        ("b\u{fc}cher.example", "b\u{fc}cher.example"),
+        ("https://exch01.corp.local:444/EWS/", "corp.local"),
+        ("xn--bcher-kva.example", "xn--bcher-kva.example"),
+    ] {
+        s.ask_trust_once(&id, site);
+        let r = s.run("account.refuseDomain", &json!({"account": id, "domain": site})).unwrap();
+        assert_eq!(r["refused"], site, "{domain}");
+        let r = s.run("account.trustDomain", &json!({"account": id, "domain": domain})).unwrap();
+        assert_eq!(r["trusted"], site, "{domain}");
+        assert!(trusted(&s, &id).iter().any(|d| d == site), "{domain}");
+        let r = s.run("account.distrustDomain", &json!({"account": id, "domain": domain})).unwrap();
+        assert_eq!(r["wasTrusted"], true, "{domain}");
+        assert!(!trusted(&s, &id).iter().any(|d| d == site), "{domain}");
+    }
 }
 
 #[test]
