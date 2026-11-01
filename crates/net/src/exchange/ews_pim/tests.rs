@@ -241,3 +241,81 @@ fn batches_share_the_connections_alike() {
     let said = lanes_said(&[vec![s(1.0), s(2.0)], vec![s(10.5)], vec![]], 1);
     assert_eq!(said, "each done in 3.0 s (2), 10.5 s (1), 0.0 s (0) (batches in brackets), the slowest batch in 10.5 s; 1 asked again on the first");
 }
+
+/// The Webex id goes in an extended property of Quatrelle's own, right before the appointment's
+/// own fields (EWS keeps the schema's order); an event with none writes nothing of it.
+#[test]
+fn the_webex_id_comes_before_the_appointments_own_fields() {
+    let e = CalEvent {
+        uid: "w".into(),
+        summary: "Review".into(),
+        start: 1_792_000_000,
+        end: 1_792_003_600,
+        reminder: Some(15),
+        webex_id: Some("abc123".into()),
+        ..Default::default()
+    };
+    let fields = event_fields(&e, "riley@contoso.example");
+    let names: Vec<&str> = fields.iter().map(|(uri, _)| *uri).collect();
+    let at = names.iter().position(|u| *u == events::WEBEX_ID).unwrap();
+    assert_eq!(names.get(at.wrapping_sub(1)), Some(&"item:ReminderMinutesBeforeStart"));
+    assert_eq!(names.get(at + 1), Some(&"calendar:Start"));
+    assert_eq!(fields[at].1, format!("<t:ExtendedProperty>{}<t:Value>abc123</t:Value></t:ExtendedProperty>", events::WEBEX_ID));
+    let none = CalEvent { webex_id: None, ..e };
+    assert!(event_fields(&none, "riley@contoso.example").iter().all(|(uri, _)| *uri != events::WEBEX_ID));
+}
+
+/// The id of a Webex meeting made for an appointment is kept by the server with it: created,
+/// read back by a first sync and by a later one, and still there once another field changes.
+/// One the server holds that isn't an id reads as none.
+#[test]
+fn an_appointments_webex_id_round_trips() {
+    use crate::fakes::fake_ews::{DOMAIN, Data, PASSWORD, USER, serve};
+    use quatrelle_model::pim::StoredEvent;
+    let mut d = Data::default();
+    d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    let cal = d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
+    d.folder("Contacts", None, Some("contacts"), "IPF.Contact");
+    let server = serve(d);
+    let c = Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, "riley@contoso.example").unwrap();
+    let new = StoredEvent {
+        calendar: CALENDAR.into(),
+        event: CalEvent {
+            uid: "w-1".into(),
+            summary: "Review".into(),
+            start: 1_792_000_000,
+            end: 1_792_003_600,
+            webex_id: Some("abc_123-X".into()),
+            ..Default::default()
+        },
+        dirty: true,
+        ..Default::default()
+    };
+    let first = sync(&c, &Pim { events: vec![new], ..Default::default() }, 1_791_000_000).unwrap();
+    assert!(first.errors.is_empty(), "{:?}", first.errors);
+    let made = first.events.iter().find(|e| e.event.summary == "Review").unwrap();
+    assert_eq!(made.event.webex_id.as_deref(), Some("abc_123-X"), "read back by the first sync");
+    // Another field changed: the id stays, and a later sync (the lighter read) still gives it.
+    let mut changed = made.clone();
+    changed.event.summary = "Review (moved)".into();
+    changed.dirty = true;
+    let second = sync(&c, &Pim { events: vec![changed], ..Default::default() }, 1_791_000_100).unwrap();
+    assert!(second.errors.is_empty(), "{:?}", second.errors);
+    let again = second.events.iter().find(|e| e.event.summary == "Review (moved)").unwrap();
+    assert_eq!(again.event.webex_id.as_deref(), Some("abc_123-X"), "kept when another field changes");
+    let third = sync(&c, &Pim { events: second.events.clone(), ..Default::default() }, 1_791_000_200).unwrap();
+    assert_eq!(third.events.iter().find(|e| e.event.summary == "Review (moved)").unwrap().event.webex_id.as_deref(), Some("abc_123-X"));
+    // An id that isn't one reads as none.
+    let bad = |v: &str| {
+        let xml = format!(
+            "<t:CalendarItem><t:ItemId Id=\"B\"/><t:Subject>S</t:Subject><t:Start>2026-10-16T10:00:00Z</t:Start>\
+             <t:ExtendedProperty>{}<t:Value>{v}</t:Value></t:ExtendedProperty></t:CalendarItem>",
+            events::WEBEX_ID
+        );
+        event_of(parse(&xml).find("CalendarItem").unwrap()).unwrap().webex_id
+    };
+    assert_eq!(bad("a b/c"), None);
+    assert_eq!(bad(""), None);
+    assert_eq!(bad(" ok-1 ").as_deref(), Some("ok-1"));
+    let _ = cal;
+}

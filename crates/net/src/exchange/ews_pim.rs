@@ -334,14 +334,16 @@ fn ask_batch(c: &Client, chunk: &[String], shape: Shape) -> Result<Vec<El>> {
     let field = |uri: &str| format!("<t:FieldURI FieldURI=\"{uri}\"/>");
     let asked = match shape {
         Shape::All(extra) => format!(
-            "<t:BaseShape>AllProperties</t:BaseShape><t:BodyType>Text</t:BodyType><t:AdditionalProperties>{}{}{}{extra}</t:AdditionalProperties>",
+            "<t:BaseShape>AllProperties</t:BaseShape><t:BodyType>Text</t:BodyType><t:AdditionalProperties>{}{}{}{}{extra}</t:AdditionalProperties>",
             field("calendar:Recurrence"),
             field("calendar:StartTimeZone"),
-            field("item:EffectiveRights")
+            field("item:EffectiveRights"),
+            events::WEBEX_ID
         ),
         Shape::Appointment => format!(
-            "<t:BaseShape>IdOnly</t:BaseShape><t:BodyType>Text</t:BodyType><t:AdditionalProperties>{}</t:AdditionalProperties>",
-            APPOINTMENT_FIELDS.iter().map(|u| field(u)).collect::<String>()
+            "<t:BaseShape>IdOnly</t:BaseShape><t:BodyType>Text</t:BodyType><t:AdditionalProperties>{}{}</t:AdditionalProperties>",
+            APPOINTMENT_FIELDS.iter().map(|u| field(u)).collect::<String>(),
+            events::WEBEX_ID
         ),
     };
     let doc = c.call(&format!("<m:GetItem><m:ItemShape>{asked}</m:ItemShape><m:ItemIds>{list}</m:ItemIds></m:GetItem>"))?;

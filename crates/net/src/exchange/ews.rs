@@ -515,6 +515,17 @@ fn extended_text<'a>(it: &'a El, tag: &str) -> Option<&'a str> {
         .and_then(|p| p.text_of("Value"))
 }
 
+/// An extended property's text, named as Quatrelle's own are: by its property set (a GUID, in
+/// either case) and its `PropertyName`.
+pub(crate) fn extended_named<'a>(it: &'a El, set: &str, name: &str) -> Option<&'a str> {
+    it.children("ExtendedProperty")
+        .find(|p| {
+            p.child("ExtendedFieldURI")
+                .is_some_and(|u| u.attr("PropertySetId").is_some_and(|s| s.trim().eq_ignore_ascii_case(set)) && u.attr("PropertyName") == Some(name))
+        })
+        .and_then(|p| p.text_of("Value"))
+}
+
 fn flags(it: &El) -> Flags {
     let mut keywords: Vec<String> = it
         .child("Categories")

@@ -2,6 +2,19 @@
 
 use super::*;
 
+/// Quatrelle's own property set: where the Webex id of an appointment is kept (Exchange and
+/// Graph both name it by this GUID). The literal is written once, here.
+macro_rules! webex_set {
+    () => {
+        "5b7a1c3e-8f44-4f0e-9c1d-3e2a7d6b4c11"
+    };
+}
+pub(crate) const WEBEX_SET: &str = webex_set!();
+/// The id of the Webex meeting made for an appointment (a string named `WebexId`), what
+/// `ExtendedFieldURI` calls it in a read, a create and an update.
+pub(crate) const WEBEX_ID: &str =
+    concat!("<t:ExtendedFieldURI PropertySetId=\"", webex_set!(), "\" PropertyName=\"WebexId\" PropertyType=\"String\"/>");
+
 /// An EWS `Recurrence` element as Graph's pattern and range.
 pub fn recurrence_json(r: &El) -> Option<Value> {
     let p = r.kids.iter().find(|k| k.name.ends_with("Recurrence") && !k.name.contains("End") && !k.name.contains("Numbered"))?;
@@ -286,6 +299,10 @@ fn appointment(it: &El) -> Option<CalEvent> {
         // Outlook's Show As, Private and response options (EWS gives Busy, and the rest, unsaid).
         show_as: it.text_of("LegacyFreeBusyStatus").and_then(ShowAs::from_cdo).unwrap_or_default(),
         private: matches!(it.text_of("Sensitivity").map(str::trim), Some("Private" | "Confidential")),
+        webex_id: crate::ews::extended_named(it, WEBEX_SET, "WebexId")
+            .map(str::trim)
+            .filter(|id| quatrelle_model::ical::valid_webex_id(id))
+            .map(str::to_string),
         no_responses: it.text_of("IsResponseRequested").map(str::trim) == Some("false"),
         no_new_times: it.text_of("AllowNewTimeProposal").map(str::trim) == Some("false"),
         my_answer: match it.text_of("MyResponseType").map(str::trim) {
@@ -331,6 +348,11 @@ pub(crate) fn event_fields(e: &CalEvent, me: &str) -> Vec<(&'static str, String)
     f.push(("item:ReminderIsSet", format!("<t:ReminderIsSet>{}</t:ReminderIsSet>", e.reminder.is_some())));
     if let Some(m) = e.reminder {
         f.push(("item:ReminderMinutesBeforeStart", format!("<t:ReminderMinutesBeforeStart>{m}</t:ReminderMinutesBeforeStart>")));
+    }
+    // Quatrelle's own property, after the item's fields and before the appointment's, and only for
+    // a meeting that has a Webex id (an event without one is written, and left, as it was).
+    if let Some(id) = e.webex_id.as_deref().filter(|id| quatrelle_model::ical::valid_webex_id(id)) {
+        f.push((WEBEX_ID, format!("<t:ExtendedProperty>{WEBEX_ID}<t:Value>{}</t:Value></t:ExtendedProperty>", esc(id))));
     }
     f.extend([
         ("calendar:Start", format!("<t:Start>{}</t:Start>", utc(start))),

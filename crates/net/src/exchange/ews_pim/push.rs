@@ -117,7 +117,7 @@ fn create_item(c: &Client, owner: Option<&str>, e: &CalEvent, notify: bool) -> R
 fn update_item(c: &Client, id: &str, change_key: &str, e: &CalEvent, notify: bool) -> Result<(String, String)> {
     let mut updates: String = event_fields(e, c.email())
         .iter()
-        .map(|(uri, x)| format!("<t:SetItemField><t:FieldURI FieldURI=\"{uri}\"/><t:CalendarItem>{x}</t:CalendarItem></t:SetItemField>"))
+        .map(|(uri, x)| format!("<t:SetItemField>{}<t:CalendarItem>{x}</t:CalendarItem></t:SetItemField>", tasks::path(uri)))
         .collect();
     // An appointment that no longer repeats loses its pattern (an occurrence never had one).
     if e.rrule.is_none() && e.recurrence_id.is_none() {
