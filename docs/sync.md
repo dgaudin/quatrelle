@@ -340,8 +340,9 @@ servers that don't offer IMAP. Every call is SOAP over HTTPS.
   connect the worker then waits for the user (`SyncStatus::NeedsTrust { site }`, no back-off, as
   for a password); mail sent meanwhile waits in the Outbox and goes once the account is started
   again with the site allowed. Exchange hybrid asks twice (the cloud's address, then its
-  server). The address kept in `ews.json` is in service, so it counts as trusted (the worker's
-  `account_trust`): an account found before never asks.
+  server). The address kept in `ews.json` is in service, so the worker uses it as it is, before
+  any Autodiscover and with no look at `Trust` (`worker/connect.rs`, `ews_url`): an account found
+  before never asks. The one exception is a site the user removed: see below.
 - **Calendars and contacts** (`crates/net/src/exchange/ews_pim.rs`) are the mailbox's Calendar and
   Contacts folders, synced like CalDAV / CardDAV: changes here first (appointments updated field
   by field, contacts made again, never any meeting mail), then both folders read in full.
@@ -376,9 +377,10 @@ moved: the etags by `PROPFIND`, and the new or changed items by `calendar-multig
 `addressbook-multiget`. The engine merges the result: what changed here meanwhile stays to be sent.
 
 The password goes only to the sites the account trusts (its servers' and address's registrable
-domains, the domains the user allowed, and the homes found and saved before): a request whose
-address, redirect or href (principal, home, collection, item) is on any other site is not sent at
-all, with or without the password, and is `NetError::Untrusted`. Discovery skips such a start
+domains, the domains the user allowed, and the homes found and saved before, unless the user
+removed their site): a request whose address, redirect or href (principal, home, collection,
+item) is on any other site is not sent at all, with or without the password, and is
+`NetError::Untrusted`. Discovery skips such a start
 when another one finds the home (an address's website commonly redirects everything to a web
 host), and asks only when none does. A look for a missing home that ends so doesn't stop the
 sync: what has a home syncs, the site comes back in `DavSync::untrusted` to ask about once
@@ -386,6 +388,17 @@ sync: what has a home syncs, the site comes back in `DavSync::untrusted` to ask 
 when the site noted (`Pim::dav_untrusted`) has been allowed. An `Untrusted` anywhere else (an item's
 or a collection's address) stops the sync like a refused sign-in (it is never one of the items'
 errors), asks once, and the account's calendars and contacts wait for its next start.
+
+**Removing a site** (`account.distrustDomain`, Server settings' Remove) forgets what was found
+there, so nothing is sent there again and the question comes back: `ews.json` if it is on that
+site (and only then: an on-premises Exchange's address is never touched otherwise), the homes on
+it, and `Pim::dav_checked`, so the next sync looks again. The window can't reach what is already on
+its way: a sync can still answer with a home there, and a connection save an address there, after
+the removal. So the site also goes in `AccountConfig::withdrawn_domains`, saved first and kept
+until it is allowed again, and `trust::withdrawn` makes any saved URL on it count for nothing,
+whenever it was saved: `Trust::of` skips it, `ews_url` doesn't use it, `apply_dav` doesn't keep it.
+A request already sent can't be taken back, and a worker told to stop finishes the DAV sync it is
+in, under the trust it started with; its restart is what the removal waits for.
 
 **Invitations** travel by mail (iTIP over iMIP, RFC 5546/6047): a `text/calendar` part with
 `METHOD:REQUEST` shows as an invitation card (Accept, Tentative, Decline), which updates the

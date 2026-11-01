@@ -160,6 +160,130 @@ fn a_domain_removed_is_asked_again_in_the_same_run() {
     assert_eq!(s.ask_trust, [(id.clone(), "icloud.com".to_string())], "removed: asked again, or the account would stay silent");
 }
 
+/// The two homes saved in the account's calendars document, as a sync would have left them.
+fn with_homes(s: &mut Session, id: &str, caldav: &str, carddav: &str) {
+    let p = s.pim_mut(id);
+    p.caldav_home = Some(caldav.into());
+    p.carddav_home = Some(carddav.into());
+    p.dav_checked = Some(NOW);
+    s.write_pim(id);
+}
+
+/// The calendars document as the worker reads it: from the disk, not from the window's memory.
+fn saved_pim(s: &Session, id: &str) -> quatrelle_model::pim::Pim {
+    s.store.as_ref().unwrap().load_account_doc(id, quatrelle_model::pim::PIM_DOC).unwrap()
+}
+
+fn saved_ews(s: &Session, id: &str) -> String {
+    s.store.as_ref().unwrap().load_account_doc(id, quatrelle_model::EWS_FOUND_DOC).unwrap()
+}
+
+fn save_ews(s: &Session, id: &str, url: &str) {
+    s.store.as_ref().unwrap().save_account_doc(id, quatrelle_model::EWS_FOUND_DOC, url).unwrap();
+}
+
+/// Removed means removed: what was found on that site goes with it, or the saved URL would put
+/// the site back among those the account trusts, and the password would go there unasked.
+#[test]
+fn removing_a_domain_forgets_what_was_found_there() {
+    let (mut s, id) = with_account("trust-forgets");
+    s.run("account.trustDomain", &json!({"account": id, "domain": "icloud.com"})).unwrap();
+    with_homes(&mut s, &id, "https://p01-caldav.icloud.com/123/calendars/", "https://contacts.example.org/card/");
+    save_ews(&s, &id, "https://ex.icloud.com/EWS/Exchange.asmx");
+    s.take_jobs();
+
+    s.run("account.distrustDomain", &json!({"account": id, "domain": "icloud.com"})).unwrap();
+    assert_eq!(saved_ews(&s, &id), "", "ews.json on that site");
+    let pim = saved_pim(&s, &id);
+    assert_eq!(pim.caldav_home.as_deref(), Some(""), "the home on that site");
+    assert_eq!(pim.carddav_home.as_deref(), Some("https://contacts.example.org/card/"), "another site's home stays");
+    assert_eq!(pim.dav_checked, None, "looked for again at the next sync, so the question comes back");
+    assert_eq!(s.account(&id).unwrap().config.withdrawn_domains, ["icloud.com"]);
+    assert!(matches!(s.take_jobs().as_slice(), [Job::Start { account, .. }] if account.withdrawn_domains == ["icloud.com"]));
+    // Withdrawn, the site is asked about again.
+    s.ask_trust_once(&id, "icloud.com");
+    assert_eq!(s.ask_trust, [(id.clone(), "icloud.com".to_string())]);
+    // And the file says so across a restart.
+    let root = s.store.as_ref().unwrap().root().to_path_buf();
+    let s2 = Session::open(Some(Store::open(&root).unwrap()), quatrelle_model::dates::Clock::new(NOW, 0));
+    assert_eq!(s2.account(&id).unwrap().config.withdrawn_domains, ["icloud.com"]);
+}
+
+/// A sync already on its way when the domain was removed answers afterwards, with the home it
+/// took from the document or found there: it isn't kept, and the look starts over.
+#[test]
+fn a_sync_on_its_way_brings_no_removed_home_back() {
+    let (mut s, id) = with_account("trust-race");
+    s.run("account.trustDomain", &json!({"account": id, "domain": "icloud.com"})).unwrap();
+    with_homes(&mut s, &id, "https://p01-caldav.icloud.com/123/calendars/", "");
+    s.run("account.distrustDomain", &json!({"account": id, "domain": "icloud.com"})).unwrap();
+
+    let late = quatrelle_model::pim::DavSync {
+        caldav_home: Some("https://p01-caldav.icloud.com/123/calendars/".into()),
+        carddav_home: Some("https://contacts.example.org/card/".into()),
+        checked: NOW + 5,
+        ..Default::default()
+    };
+    s.apply(Event::DavSynced { account: id.clone(), sync: Box::new(late.clone()) });
+    let pim = saved_pim(&s, &id);
+    assert_eq!(pim.caldav_home.as_deref(), Some(""), "the removed site's home isn't kept");
+    assert_eq!(s.pim_mut(&id).caldav_home.as_deref(), Some(""), "in memory neither");
+    assert_eq!(s.pim_mut(&id).carddav_home.as_deref(), Some("https://contacts.example.org/card/"), "the other one is");
+    assert_eq!(s.pim_mut(&id).dav_checked, None, "still to look for");
+
+    // Allowed again, the same answer is kept: the user said yes.
+    s.run("account.trustDomain", &json!({"account": id, "domain": "icloud.com"})).unwrap();
+    assert!(s.account(&id).unwrap().config.withdrawn_domains.is_empty());
+    s.apply(Event::DavSynced { account: id.clone(), sync: Box::new(late) });
+    assert_eq!(saved_pim(&s, &id).caldav_home.as_deref(), Some("https://p01-caldav.icloud.com/123/calendars/"));
+}
+
+/// The owner's on-premises Exchange: its address, on another domain than his mail's, is in
+/// `ews.json` and nowhere else. Whatever else is removed, it isn't touched, and nothing is asked.
+#[test]
+fn removing_another_domain_leaves_the_exchange_address_alone() {
+    let (mut s, id) = with_account("trust-owner");
+    s.accounts.iter_mut().find(|a| a.config.id == id).unwrap().config.ews = Some(quatrelle_model::EWS_AUTODISCOVER.into());
+    let url = "https://exch01.corp.local/EWS/Exchange.asmx";
+    save_ews(&s, &id, url);
+    s.run("account.trustDomain", &json!({"account": id, "domain": "icloud.com"})).unwrap();
+    s.run("account.distrustDomain", &json!({"account": id, "domain": "icloud.com"})).unwrap();
+    assert_eq!(saved_ews(&s, &id), url);
+    assert_eq!(s.account(&id).unwrap().config.withdrawn_domains, ["icloud.com"]);
+    let r = s.run("account.distrustDomain", &json!({"account": id, "domain": "other.example"})).unwrap();
+    assert_eq!(r["wasTrusted"], false);
+    assert_eq!(saved_ews(&s, &id), url);
+    assert_eq!(s.account(&id).unwrap().config.withdrawn_domains, ["icloud.com"], "nothing to withdraw");
+    assert!(s.ask_trust.is_empty());
+}
+
+/// A site that stays trusted (the account's own server is on it): nothing to forget or withdraw.
+#[test]
+fn a_site_the_account_still_trusts_keeps_what_was_found() {
+    let (mut s, id) = with_account("trust-own-site");
+    let own = "https://dav.example.org/cal/";
+    s.run("account.trustDomain", &json!({"account": id, "domain": "example.org"})).unwrap();
+    with_homes(&mut s, &id, own, "");
+    let r = s.run("account.distrustDomain", &json!({"account": id, "domain": "example.org"})).unwrap();
+    assert_eq!(r["wasTrusted"], true);
+    assert_eq!(saved_pim(&s, &id).caldav_home.as_deref(), Some(own));
+    assert_eq!(saved_pim(&s, &id).dav_checked, Some(NOW));
+    assert!(s.account(&id).unwrap().config.withdrawn_domains.is_empty());
+}
+
+/// A saved URL is all that makes this site trusted: named, it goes too, and the settings list
+/// nothing for it to be removed from.
+#[test]
+fn a_site_trusted_only_through_a_saved_url_can_be_removed() {
+    let (mut s, id) = with_account("trust-saved-only");
+    with_homes(&mut s, &id, "https://caldav.other.example/cal/", "");
+    let r = s.run("account.distrustDomain", &json!({"account": id, "domain": "other.example"})).unwrap();
+    assert_eq!(r["wasTrusted"], true);
+    assert_eq!(saved_pim(&s, &id).caldav_home.as_deref(), Some(""));
+    assert_eq!(s.account(&id).unwrap().config.withdrawn_domains, ["other.example"]);
+    assert_eq!(restarts(&mut s), 1);
+}
+
 #[test]
 fn a_hostile_server_cannot_queue_endless_questions() {
     let (mut s, id) = with_account("trust-flood");

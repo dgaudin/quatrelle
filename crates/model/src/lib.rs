@@ -209,6 +209,11 @@ pub struct AccountConfig {
     /// most 20.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub trusted_domains: Vec<String>,
+    /// Sites the user withdrew: what was found there and saved no longer counts
+    /// ([`addr::trust::withdrawn`]), even if a sync already on its way when the site was removed
+    /// saves it again afterwards. Allowing the site again takes it off.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub withdrawn_domains: Vec<String>,
 }
 
 /// Longest User-Agent an account can name.

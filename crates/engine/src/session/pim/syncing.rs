@@ -19,6 +19,10 @@ impl Session {
     /// server next time); everything else follows the server.
     pub fn apply_dav(&mut self, account: &str, sync: &quatrelle_model::pim::DavSync) {
         self.read_while_parked(account, sync);
+        // Found by a sync already on its way when the user removed the site: not kept, or it would
+        // bring the site back. What wasn't found stays to look for.
+        let caldav_kept = !self.home_withdrawn(account, sync.caldav_home.as_deref());
+        let carddav_kept = !self.home_withdrawn(account, sync.carddav_home.as_deref());
         let p = self.pim_mut(account);
         // As it was, to tell whether the sync changed anything: the appointments by their digest,
         // the rest as it is.
@@ -26,9 +30,15 @@ impl Session {
         let events = std::mem::take(&mut p.events);
         let was = p.clone();
         p.events = events;
-        p.caldav_home = sync.caldav_home.clone().or_else(|| Some(String::new()));
-        p.carddav_home = sync.carddav_home.clone().or_else(|| Some(String::new()));
-        p.dav_checked = Some(sync.checked);
+        if caldav_kept {
+            p.caldav_home = sync.caldav_home.clone().or_else(|| Some(String::new()));
+        }
+        if carddav_kept {
+            p.carddav_home = sync.carddav_home.clone().or_else(|| Some(String::new()));
+        }
+        if caldav_kept && carddav_kept {
+            p.dav_checked = Some(sync.checked);
+        }
         if sync.looked {
             p.dav_untrusted.clone_from(&sync.untrusted);
         }

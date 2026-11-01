@@ -108,8 +108,9 @@ server set.
   with `#[serde(default, skip_serializing_if = "Vec::is_empty")]`, so old files load.
   - The commands keep it at most 20 entries: a 21st is refused with "at most 20 other servers".
   - A hand-edited file with more is read as it is.
-- the URLs in service and saved (`ews.json`, the DAV homes), given as `extra`. An unreadable or empty
-  value is ignored.
+- the URLs in service and saved (the DAV homes), given as `extra`, unless their site was withdrawn.
+  An unreadable or empty value is ignored. `ews.json` is used as it is, before any look at the trust,
+  unless its site was withdrawn.
 
 The model computes this as `Trust::of(&AccountConfig, extra: &[&str]) -> Trust`, with
 `Trust::allows(host) -> bool`, `Trust::sites() -> Vec<String>` and a free function
@@ -203,7 +204,12 @@ The model computes this as `Trust::of(&AccountConfig, extra: &[&str]) -> Trust`,
 - Commands (CLI and scripts too):
   - `account.trustDomain {account, domain}` adds `site(domain)` to `trusted_domains`, saves, and restarts
     the account (`Job::Start`);
-  - `account.distrustDomain {account, domain}` removes it, saves, and restarts;
+  - `account.distrustDomain {account, domain}` removes it, forgets what was found there (`ews.json`
+    if it is on that site, the DAV homes on it, and the time of the last look), saves, and restarts.
+    The site stays in `AccountConfig.withdrawn_domains` until it is allowed again: a saved URL on a
+    withdrawn site counts for nothing (`trust::withdrawn`), however late a sync on its way saves it.
+    Without this the saved URL would put the site back through `extra`, unasked. A site the account
+    trusts anyway is left as it is;
   - "Don't allow" runs `account.refuseDomain {account, domain}`, which only gives the notice and records
     the refusal for this run.
   - **`account.trustDomain` and `account.distrustDomain` take the pair out of `asked_trust`.** Otherwise

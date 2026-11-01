@@ -1,33 +1,27 @@
 //! An account's worker: signing in and connecting (IMAP, JMAP, Graph, EWS, POP), and what a failure means.
 
 use super::*;
-
-/// Where an Exchange account's EWS saved by Autodiscover is kept.
-const EWS_FOUND: &str = "ews.json";
-
-/// The sites an account's credentials may go to, the Exchange address Autodiscover found before
-/// (`ews.json`) among them: it is in service, and the credentials have gone there all along, so
-/// it never needs asking about (the owner's on-premises server is on another domain than his
-/// address).
-pub(super) fn account_trust(acc: &AccountConfig, store: &Store) -> Trust {
-    let kept: String = store.load_account_doc(&acc.id, EWS_FOUND).unwrap_or_default();
-    Trust::of(acc, &[&kept])
-}
+use quatrelle_model::EWS_FOUND_DOC;
+use quatrelle_model::addr::trust::withdrawn;
 
 /// An Exchange account's EWS address: the one set, or for `autodiscover` the one found the first
-/// time, then kept. Autodiscover asks before it follows an answer to a site the account doesn't
+/// time, then kept ([`EWS_FOUND_DOC`]). A kept address is used as it is, asking nothing: it is in
+/// service, and the credentials have gone there all along (the owner's on-premises server is on
+/// another domain than his address). The one exception is a site the user withdrew: its address
+/// counts for nothing, even saved after the removal by a connection already on its way, so
+/// Autodiscover runs again, and it asks before it follows an answer to a site the account doesn't
 /// trust (`Untrusted`).
 pub(super) fn ews_url(acc: &AccountConfig, store: &Store, user: &str, secret: &str) -> Result<String> {
     let Some(url) = &acc.ews else { return Err(NetError::No("not an Exchange account".into())) };
     if url != crate::ews::AUTODISCOVER {
         return Ok(url.clone());
     }
-    let kept: String = store.load_account_doc(&acc.id, EWS_FOUND).unwrap_or_default();
-    if !kept.is_empty() {
+    let kept: String = store.load_account_doc(&acc.id, EWS_FOUND_DOC).unwrap_or_default();
+    if !kept.is_empty() && !withdrawn(acc, &kept) {
         return Ok(kept);
     }
-    let found = crate::ews::autodiscover_as(&acc.email, user, secret, None, acc.user_agent.as_deref(), &account_trust(acc, store))?;
-    let _ = store.save_account_doc(&acc.id, EWS_FOUND, &found);
+    let found = crate::ews::autodiscover_as(&acc.email, user, secret, None, acc.user_agent.as_deref(), &Trust::of(acc, &[]))?;
+    let _ = store.save_account_doc(&acc.id, EWS_FOUND_DOC, &found);
     Ok(found)
 }
 
