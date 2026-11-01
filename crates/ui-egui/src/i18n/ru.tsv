@@ -1469,7 +1469,22 @@ month	May	Май
 	Remove this room	Убрать эту переговорную
 	Join the Webex meeting:	Присоединиться к собранию Webex:
 	Webex personal room	Личная комната Webex
-	Webex Meeting, in a new appointment's window, puts it in for the guests to join	Кнопка «Собрание Webex» в окне новой встречи вставляет её, чтобы гости могли присоединиться
+	Use my personal room, under Webex Meeting in an appointment's window, puts it in.	Использовать мою личную комнату: «Встреча Webex» в окне события вставляет её.
+	Webex	Webex
+	Schedule Webex meetings from an appointment's window. Register an integration at developer.webex.com, then sign in with it here.	Планируйте встречи Webex из окна события. Зарегистрируйте интеграцию на developer.webex.com и войдите здесь с её помощью.
+	Site	Сайт
+	Client ID	ID клиента
+	Client secret	Секрет клиента
+	Kept in the system keychain, and never shown again	Хранится в связке ключей системы и больше не показывается
+	Redirect URI	URI перенаправления
+	Paste it where the integration asks for its redirect URI	Вставьте его туда, где интеграция запрашивает URI перенаправления
+	Signed in	Вход выполнен
+	Signed in as {user}	Вход выполнен как {user}
+	Sign out	Выйти
+	Waiting for the browser…	Ожидание браузера…
+	Sign in to Webex	Войти в Webex
+	Sign in to Webex again	Войдите в Webex снова
+	Your Webex account can't schedule meetings on this site	Ваша учётная запись Webex не может планировать встречи на этом сайте
 	Tasks	Задачи
 	New task	Новая задача
 	{n} tasks to do	Задач к выполнению: {n}

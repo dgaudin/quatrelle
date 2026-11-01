@@ -1470,7 +1470,22 @@ month	May	Mai
 	Remove this room	Diesen Raum entfernen
 	Join the Webex meeting:	An der Webex-Besprechung teilnehmen:
 	Webex personal room	Persönlicher Webex-Raum
-	Webex Meeting, in a new appointment's window, puts it in for the guests to join	Webex-Besprechung im Fenster eines neuen Termins fügt ihn ein, damit die Gäste teilnehmen können
+	Use my personal room, under Webex Meeting in an appointment's window, puts it in.	Meinen persönlichen Raum verwenden: „Webex-Besprechung“ im Fenster eines Termins fügt ihn ein.
+	Webex	Webex
+	Schedule Webex meetings from an appointment's window. Register an integration at developer.webex.com, then sign in with it here.	Planen Sie Webex-Besprechungen im Fenster eines Termins. Registrieren Sie eine Integration auf developer.webex.com und melden Sie sich hier damit an.
+	Site	Site
+	Client ID	Client-ID
+	Client secret	Client-Geheimnis
+	Kept in the system keychain, and never shown again	Im Schlüsselbund des Systems gespeichert und nie wieder angezeigt
+	Redirect URI	Weiterleitungs-URI
+	Paste it where the integration asks for its redirect URI	Fügen Sie ihn dort ein, wo die Integration ihren Weiterleitungs-URI verlangt
+	Signed in	Angemeldet
+	Signed in as {user}	Angemeldet als {user}
+	Sign out	Abmelden
+	Waiting for the browser…	Warten auf den Browser…
+	Sign in to Webex	Bei Webex anmelden
+	Sign in to Webex again	Erneut bei Webex anmelden
+	Your Webex account can't schedule meetings on this site	Ihr Webex-Konto kann auf dieser Site keine Besprechungen planen
 	Tasks	Aufgaben
 	New task	Neue Aufgabe
 	{n} tasks to do	{n} Aufgaben offen

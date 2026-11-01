@@ -1466,7 +1466,22 @@ month	May	מאי
 	Remove this room	הסר את החדר הזה
 	Join the Webex meeting:	הצטרף לפגישת Webex:
 	Webex personal room	חדר אישי ב-Webex
-	Webex Meeting, in a new appointment's window, puts it in for the guests to join	פגישת Webex, בחלון של פגישה חדשה, מוסיפה אותו כדי שהמוזמנים יצטרפו
+	Use my personal room, under Webex Meeting in an appointment's window, puts it in.	שימוש בחדר האישי שלי: ‏״פגישת Webex״ בחלון של פגישה ביומן מוסיפה אותו.
+	Webex	Webex
+	Schedule Webex meetings from an appointment's window. Register an integration at developer.webex.com, then sign in with it here.	תזמון פגישות Webex מחלון של פגישה ביומן. רשמו אינטגרציה ב-developer.webex.com ואז היכנסו כאן באמצעותה.
+	Site	אתר
+	Client ID	מזהה לקוח
+	Client secret	סוד לקוח
+	Kept in the system keychain, and never shown again	נשמר בצרור המפתחות של המערכת ולא יוצג שוב
+	Redirect URI	כתובת הפניה (URI)
+	Paste it where the integration asks for its redirect URI	הדביקו אותה במקום שבו האינטגרציה מבקשת את כתובת ההפניה
+	Signed in	מחובר
+	Signed in as {user}	מחובר בתור {user}
+	Sign out	התנתקות
+	Waiting for the browser…	ממתין לדפדפן…
+	Sign in to Webex	התחברות ל-Webex
+	Sign in to Webex again	התחברו שוב ל-Webex
+	Your Webex account can't schedule meetings on this site	חשבון ה-Webex שלכם אינו יכול לתזמן פגישות באתר זה
 	Tasks	משימות
 	New task	משימה חדשה
 	{n} tasks to do	{n} משימות לביצוע

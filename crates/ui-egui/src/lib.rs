@@ -242,6 +242,8 @@ pub enum Action {
     FocusMain,
     /// Open the File page at a page.
     Backstage(backstage::Page),
+    /// Open File › Options, scrolled to the Webex card.
+    WebexOptions,
     /// Read a typeface the message being written uses (Arial, Calibri…) from the system, so
     /// the editor draws it as it will be read.
     LoadTypeface(String),
@@ -401,6 +403,8 @@ pub struct UiState {
     tray_shown: TrayIcon,
     /// Raise the main window on the next frame.
     focus_main: bool,
+    /// The Webex card is to be scrolled to as File › Options draws it (read once by the card).
+    pub(crate) webex_scroll: std::cell::Cell<bool>,
     /// Video attachments written out for the platform to take a frame from, and the frames.
     pub(crate) video_files: HashMap<(MessageKey, usize), PathBuf>,
     pub(crate) video_frames: HashMap<PathBuf, VideoFrame>,
@@ -553,6 +557,7 @@ impl MailApp {
                 title_shown: String::new(),
                 tray_shown: TrayIcon::default(),
                 focus_main: false,
+                webex_scroll: std::cell::Cell::new(false),
                 video_files: HashMap::new(),
                 video_frames: HashMap::new(),
                 backstage: None,

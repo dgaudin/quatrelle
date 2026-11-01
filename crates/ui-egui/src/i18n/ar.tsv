@@ -1466,7 +1466,22 @@ month	May	مايو
 	Remove this room	إزالة هذه الغرفة
 	Join the Webex meeting:	الانضمام إلى اجتماع Webex:
 	Webex personal room	غرفة Webex الشخصية
-	Webex Meeting, in a new appointment's window, puts it in for the guests to join	يدرجها زر اجتماع Webex في نافذة موعد جديد لينضم إليها الضيوف
+	Use my personal room, under Webex Meeting in an appointment's window, puts it in.	استخدام غرفتي الشخصية: يضيفها «اجتماع Webex» في نافذة الموعد.
+	Webex	Webex
+	Schedule Webex meetings from an appointment's window. Register an integration at developer.webex.com, then sign in with it here.	جدولة اجتماعات Webex من نافذة الموعد. سجّل تكاملاً على developer.webex.com ثم سجّل الدخول به هنا.
+	Site	الموقع
+	Client ID	معرّف العميل
+	Client secret	سر العميل
+	Kept in the system keychain, and never shown again	يُحفظ في سلسلة مفاتيح النظام ولا يُعرض مرة أخرى
+	Redirect URI	عنوان إعادة التوجيه (URI)
+	Paste it where the integration asks for its redirect URI	الصقه حيث يطلب التكامل عنوان إعادة التوجيه
+	Signed in	تم تسجيل الدخول
+	Signed in as {user}	تم تسجيل الدخول باسم {user}
+	Sign out	تسجيل الخروج
+	Waiting for the browser…	في انتظار المتصفح…
+	Sign in to Webex	تسجيل الدخول إلى Webex
+	Sign in to Webex again	سجّل الدخول إلى Webex مرة أخرى
+	Your Webex account can't schedule meetings on this site	لا يستطيع حساب Webex الخاص بك جدولة اجتماعات على هذا الموقع
 	Tasks	المهام
 	New task	مهمة جديدة
 	{n} tasks to do	{n} مهام للقيام بها

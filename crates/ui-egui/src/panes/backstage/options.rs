@@ -6,6 +6,7 @@ use super::*;
 use crate::BrowserProfile;
 
 mod assistant;
+mod webex;
 
 pub(super) fn options(s: &Session, st: &UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
     let t = st.tokens;
@@ -302,7 +303,7 @@ pub(super) fn options(s: &Session, st: &UiState, ui: &mut Ui, acts: &mut Vec<Act
             ui,
             true,
             tl!("Webex personal room"),
-            Some(tl!("Webex Meeting, in a new appointment's window, puts it in for the guests to join")),
+            Some(tl!("Use my personal room, under Webex Meeting in an appointment's window, puts it in.")),
             &mut |ui| {
                 let id = egui::Id::unique("options-webex-room");
                 let mut text: String = ui.data_mut(|d| d.get_temp::<String>(id)).unwrap_or_else(|| s.prefs.webex_room.clone());
@@ -315,6 +316,7 @@ pub(super) fn options(s: &Session, st: &UiState, ui: &mut Ui, acts: &mut Vec<Act
         );
     });
 
+    webex::webex(s, st, ui, acts);
     assistant::assistant(s, &t, ui, acts);
 
     // Junk Email: the blocked and safe senders, each list with a box to add to it.

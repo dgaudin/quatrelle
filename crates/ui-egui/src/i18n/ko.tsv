@@ -1469,7 +1469,22 @@ month	May	5월
 	Remove this room	이 회의실 제거
 	Join the Webex meeting:	Webex 회의 참가:
 	Webex personal room	Webex 개인 회의실
-	Webex Meeting, in a new appointment's window, puts it in for the guests to join	새 약속 창의 Webex 회의 단추가 참석자가 참가할 수 있도록 이를 넣습니다
+	Use my personal room, under Webex Meeting in an appointment's window, puts it in.	내 개인 룸 사용: 일정 창의 'Webex 회의'가 개인 룸을 넣습니다.
+	Webex	Webex
+	Schedule Webex meetings from an appointment's window. Register an integration at developer.webex.com, then sign in with it here.	일정 창에서 Webex 회의를 예약합니다. developer.webex.com에서 통합을 등록한 다음 여기에서 그것으로 로그인하세요.
+	Site	사이트
+	Client ID	클라이언트 ID
+	Client secret	클라이언트 비밀
+	Kept in the system keychain, and never shown again	시스템 키체인에 보관되며 다시 표시되지 않습니다
+	Redirect URI	리디렉션 URI
+	Paste it where the integration asks for its redirect URI	통합이 리디렉션 URI를 요구하는 곳에 붙여 넣으세요
+	Signed in	로그인됨
+	Signed in as {user}	{user}(으)로 로그인됨
+	Sign out	로그아웃
+	Waiting for the browser…	브라우저를 기다리는 중…
+	Sign in to Webex	Webex에 로그인
+	Sign in to Webex again	Webex에 다시 로그인하세요
+	Your Webex account can't schedule meetings on this site	Webex 계정으로는 이 사이트에서 회의를 예약할 수 없습니다
 	Tasks	작업
 	New task	새 작업
 	{n} tasks to do	할 일 {n}개

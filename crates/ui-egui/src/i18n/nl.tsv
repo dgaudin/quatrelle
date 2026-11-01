@@ -1466,7 +1466,22 @@ month	May	mei
 	Remove this room	Deze ruimte verwijderen
 	Join the Webex meeting:	Deelnemen aan de Webex-vergadering:
 	Webex personal room	Persoonlijke Webex-ruimte
-	Webex Meeting, in a new appointment's window, puts it in for the guests to join	Webex-vergadering, in het venster van een nieuwe afspraak, voegt deze in zodat de gasten kunnen deelnemen
+	Use my personal room, under Webex Meeting in an appointment's window, puts it in.	Mijn persoonlijke ruimte gebruiken: Webex-vergadering voegt die in, in het venster van een afspraak.
+	Webex	Webex
+	Schedule Webex meetings from an appointment's window. Register an integration at developer.webex.com, then sign in with it here.	Plan Webex-vergaderingen vanuit het venster van een afspraak. Registreer een integratie op developer.webex.com en meld u hier ermee aan.
+	Site	Site
+	Client ID	Client-ID
+	Client secret	Clientgeheim
+	Kept in the system keychain, and never shown again	Bewaard in de sleutelhanger van het systeem en nooit meer getoond
+	Redirect URI	Omleidings-URI
+	Paste it where the integration asks for its redirect URI	Plak deze waar de integratie om de omleidings-URI vraagt
+	Signed in	Aangemeld
+	Signed in as {user}	Aangemeld als {user}
+	Sign out	Afmelden
+	Waiting for the browser…	Wachten op de browser…
+	Sign in to Webex	Aanmelden bij Webex
+	Sign in to Webex again	Meld u opnieuw aan bij Webex
+	Your Webex account can't schedule meetings on this site	Uw Webex-account kan op deze site geen vergaderingen plannen
 	Tasks	Taken
 	New task	Nieuwe taak
 	{n} tasks to do	{n} taken te doen
