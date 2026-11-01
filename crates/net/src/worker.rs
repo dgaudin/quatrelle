@@ -294,6 +294,7 @@ pub(crate) fn now() -> i64 {
 mod ahead;
 mod changes;
 mod connect;
+mod dav;
 mod listening;
 mod pool;
 mod scheduling;
