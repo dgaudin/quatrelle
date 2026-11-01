@@ -82,13 +82,14 @@ pub(super) fn commands() -> Vec<CommandSpec> {
                 e.organizer = Some(quatrelle_model::ical::Attendee { email: me.1, name: me.0, partstat: "ACCEPTED".into(), rsvp: false, cutype: String::new(), role: String::new() });
             }
             let r = s.create_event(Some(&account), p::str(v, "calendar"), e.clone())?;
+            s.webex_follow(None, &e);
             // The guests are invited: by the server where it does that, else by mail.
             if let Some(uid) = r.get("uid").and_then(Value::as_str).map(str::to_string) {
                 s.tell_guests(&account, &uid, None, true)?;
             }
             Ok(r)
         })
-        .params(r#"{"summary": string, "start": "YYYY-MM-DD[THH:MM]", "end"?: …, "allDay"?: bool, "location"?: string, "description"?: string, "repeat"?: "daily"|"weekly"|"monthly"|"yearly"|RRULE, "attendees"?: "a@x, Name <b@y>" (invited by mail), "optional"?: … (invited as optional), "rooms"?: "Room <room@x>, …" (rooms booked, from calendar.rooms; the location unless given), "categories"?: [string] | "Work, Clients" (colour it as those categories), "reminder"?: number (minutes before the start; 0 when it starts, up to four weeks) | "none" | null (none), "showAs"?: "free"|"workingElsewhere"|"tentative"|"busy"|"outOfOffice", "private"?: bool, "responses"?: bool (the guests are asked to answer; default true), "newTimes"?: bool (they may propose another time; default true), "account"?: string, "calendar"?: string}"#),
+        .params(r#"{"summary": string, "start": "YYYY-MM-DD[THH:MM]", "end"?: …, "allDay"?: bool, "location"?: string, "description"?: string, "repeat"?: "daily"|"weekly"|"monthly"|"yearly"|RRULE, "attendees"?: "a@x, Name <b@y>" (invited by mail), "optional"?: … (invited as optional), "rooms"?: "Room <room@x>, …" (rooms booked, from calendar.rooms; the location unless given), "categories"?: [string] | "Work, Clients" (colour it as those categories), "reminder"?: number (minutes before the start; 0 when it starts, up to four weeks) | "none" | null (none), "showAs"?: "free"|"workingElsewhere"|"tentative"|"busy"|"outOfOffice", "private"?: bool, "responses"?: bool (the guests are asked to answer; default true), "newTimes"?: bool (they may propose another time; default true), "account"?: string, "calendar"?: string, "webexId"?: string (the Webex meeting the appointment is for, from webex.createMeeting's answer)}"#),
         CommandSpec::new("reminders.list", "Reminders", "File › Reminders", |s, _| {
             let now = s.clock.now;
             Ok(json!(s
@@ -134,8 +135,9 @@ pub(super) fn commands() -> Vec<CommandSpec> {
         CommandSpec::new("event.update", "Edit event", "Calendar › Event", |s, v| {
             let uid = p::req_str(v, "uid")?.to_string();
             let current = s.find_event(&uid).map(|(_, e)| e.event.clone()).ok_or_else(|| CmdError::Params(format!("no event `{uid}`")))?;
-            let e = event_from(s, v, current)?;
-            let r = s.update_event(&uid, |x| *x = e)?;
+            let e = event_from(s, v, current.clone())?;
+            let r = s.update_event(&uid, |x| *x = e.clone())?;
+            s.webex_follow(Some(&current), &e);
             // The user's own meeting: the guests hear of the change.
             if let Some((account, real)) = s.find_event(&uid).map(|(a, e)| (a.to_string(), e.event.uid.clone())) {
                 s.tell_guests(&account, &real, None, true)?;
@@ -174,6 +176,9 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             let before = s.find_event(&uid).map(|(a, e)| (a.to_string(), e.event.clone()));
             let occurrence = p::i64(v, "occurrence");
             let r = s.delete_event(&uid, occurrence)?;
+            if let Some((_, e)) = &before {
+                s.webex_gone(e, occurrence);
+            }
             if let Some((account, mut e)) = before
                 && organized_by_me(s, &e)
             {
@@ -412,6 +417,12 @@ pub(super) fn event_from(s: &Session, v: &Value, mut e: quatrelle_model::ical::C
     if let Some(x) = p::str(v, "showAs") {
         e.show_as = quatrelle_model::ical::ShowAs::from_param(x)
             .ok_or_else(|| CmdError::Params(format!("`{x}`: show as free, workingElsewhere, tentative, busy or outOfOffice")))?;
+    }
+    if let Some(id) = p::str(v, "webexId") {
+        if !id.is_empty() && !quatrelle_model::ical::valid_webex_id(id) {
+            return Err(CmdError::Params("`webexId` is not a Webex meeting id".into()));
+        }
+        e.webex_id = Some(id).filter(|id| !id.is_empty()).map(str::to_string);
     }
     if let Some(b) = p::bool(v, "private") {
         e.private = b;

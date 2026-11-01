@@ -233,3 +233,324 @@ fn a_new_link_replaces_webexs_own_alone() {
     assert_eq!(invitations(&s), told + 1);
     done(s);
 }
+
+/// Only the jobs that go to Webex: event commands push others (syncs, mail).
+fn webex_jobs(s: &mut Session) -> Vec<Job> {
+    s.take_jobs()
+        .into_iter()
+        .filter(|j| {
+            matches!(
+                j,
+                Job::WebexSignIn { .. }
+                    | Job::WebexSignOut
+                    | Job::SetWebexSecret { .. }
+                    | Job::WebexCreate { .. }
+                    | Job::WebexUpdate { .. }
+                    | Job::WebexDelete { .. }
+            )
+        })
+        .collect()
+}
+
+/// A session signed in to Webex on `acme.webex.com`.
+fn signed_in(name: &str) -> Session {
+    let mut s = sample_session(name);
+    s.prefs.webex_site = "acme.webex.com".into();
+    s.prefs.webex_client_id = "C1".into();
+    s.prefs.webex_signed_in = true;
+    s
+}
+
+fn is_params<T: std::fmt::Debug>(r: Result<T, CmdError>) -> bool {
+    matches!(r, Err(CmdError::Params(_)))
+}
+
+/// An appointment without guests, its Webex meeting `m1`; its uid.
+fn alone(s: &mut Session) -> String {
+    let made = s.run("event.create", &json!({"summary": "Budget", "start": "2026-10-21T15:00", "end": "2026-10-21T16:00", "webexId": "m1"}));
+    made.unwrap()["uid"].as_str().unwrap().to_string()
+}
+
+fn stranger() -> quatrelle_model::ical::Attendee {
+    quatrelle_model::ical::Attendee { email: "boss@elsewhere.example".into(), name: "Boss".into(), ..Default::default() }
+}
+
+fn set_organizer(s: &mut Session, uid: &str, organizer: Option<quatrelle_model::ical::Attendee>) {
+    let e = s.pim_mut("sample").events.iter_mut().find(|e| e.event.uid == uid).unwrap();
+    e.event.organizer = organizer;
+}
+
+#[test]
+fn settings_keep_the_site_as_a_host() {
+    let mut s = sample_session("webex-settings");
+    s.run("webex.settings", &json!({"site": "https://acme.webex.com/", "clientId": "C1.x-y_z"})).unwrap();
+    assert_eq!((s.prefs.webex_site.as_str(), s.prefs.webex_client_id.as_str()), ("acme.webex.com", "C1.x-y_z"));
+    for bad in ["not a site", "localhost"] {
+        assert!(is_params(s.run("webex.settings", &json!({"site": bad}))), "{bad}");
+    }
+    for bad in ["has space", &"x".repeat(201), "é"] {
+        assert!(is_params(s.run("webex.settings", &json!({"clientId": bad}))), "{bad}");
+    }
+    assert_eq!(s.prefs.webex_site, "acme.webex.com", "a refused one changes nothing");
+    assert!(webex_jobs(&mut s).is_empty());
+    s.run("webex.settings", &json!({"secret": "hunter2"})).unwrap();
+    assert_eq!(webex_jobs(&mut s), [Job::SetWebexSecret { secret: Secret("hunter2".into()) }]);
+    s.run("webex.settings", &json!({"secret": ""})).unwrap();
+    assert_eq!(webex_jobs(&mut s), [Job::SetWebexSecret { secret: Secret(String::new()) }]);
+    done(s);
+}
+
+#[test]
+fn signing_in_needs_a_client_id_and_waits() {
+    let mut s = sample_session("webex-sign-in-cmd");
+    assert!(s.run("webex.signIn", &json!({})).is_err());
+    assert!(webex_jobs(&mut s).is_empty());
+    s.prefs.webex_client_id = "C1".into();
+    s.webex.sign_in_error = Some(WebexError::SignIn);
+    s.run("webex.signIn", &json!({})).unwrap();
+    assert_eq!(webex_jobs(&mut s), [Job::WebexSignIn { client_id: "C1".into() }]);
+    assert!(s.webex.signing_in);
+    assert_eq!(s.webex.sign_in_error, None);
+    assert!(s.run("webex.signIn", &json!({})).is_err(), "one at a time");
+    assert!(webex_jobs(&mut s).is_empty());
+    done(s);
+}
+
+#[test]
+fn signing_out_forgets_who() {
+    let mut s = signed_in("webex-sign-out");
+    s.prefs.webex_user = "zoe@acme.example".into();
+    s.run("webex.signOut", &json!({})).unwrap();
+    assert_eq!(webex_jobs(&mut s), [Job::WebexSignOut]);
+    assert!(!s.prefs.webex_signed_in && s.prefs.webex_user.is_empty());
+    done(s);
+}
+
+#[test]
+fn creating_needs_a_title_a_start_a_site_and_a_sign_in() {
+    let ok = json!({"summary": "Budget", "start": "2026-10-21T15:00"});
+    let mut s = signed_in("webex-create-needs");
+    assert!(is_params(s.run("webex.createMeeting", &json!({"summary": " ", "start": "2026-10-21T15:00"}))));
+    assert!(is_params(s.run("webex.createMeeting", &json!({"summary": "Budget"}))));
+    s.prefs.webex_site.clear();
+    assert!(matches!(s.run("webex.createMeeting", &ok), Err(CmdError::Disabled(_))));
+    s.prefs.webex_site = "acme.webex.com".into();
+    s.prefs.webex_signed_in = false;
+    assert!(matches!(s.run("webex.createMeeting", &ok), Err(CmdError::Disabled(_))));
+    assert!(webex_jobs(&mut s).is_empty());
+    assert!(s.webex.asks.is_empty());
+    done(s);
+}
+
+#[test]
+fn creating_asks_webex_with_the_appointments_fields() {
+    let mut s = signed_in("webex-create");
+    s.clock.zone = quatrelle_model::zone::Zone::named("Europe/Paris");
+    let made = s
+        .run(
+            "webex.createMeeting",
+            &json!({"summary": "Budget", "start": "2026-10-21T15:00", "end": "2026-10-21T16:30", "repeat": "weekly", "quiet": true}),
+        )
+        .unwrap();
+    let ask = made["ask"].as_u64().unwrap();
+    let jobs = webex_jobs(&mut s);
+    let [Job::WebexCreate { ask: a, client_id, site, fields, quiet }] = &jobs[..] else { panic!("{jobs:?}") };
+    assert_eq!((*a, client_id.as_str(), site.as_str(), *quiet), (ask, "C1", "acme.webex.com", true));
+    assert_eq!(fields.title, "Budget");
+    assert_eq!(fields.end - fields.start, 5400);
+    assert_eq!(fields.timezone, "Europe/Paris");
+    assert_eq!(fields.recurrence.as_deref(), Some("FREQ=WEEKLY"));
+    assert_eq!(s.webex.asks.get(&ask).map(|x| (x.fields.clone(), x.quiet, x.abandoned)), Some((fields.clone(), true, false)));
+    // The answer is the window's to take, once.
+    s.apply(Event::WebexCreated { ask, meeting: Some(meeting(OLD_LINK)), error: None });
+    assert_eq!(s.webex_take_answer(ask), Some(Ok(meeting(OLD_LINK))));
+    assert_eq!(s.webex_take_answer(ask), None);
+    let again = s.run("webex.createMeeting", &json!({"summary": "Budget", "start": "2026-10-21T15:00"})).unwrap();
+    assert_ne!(again["ask"].as_u64().unwrap(), ask);
+    assert!(matches!(&webex_jobs(&mut s)[..], [Job::WebexCreate { quiet: false, .. }]));
+    done(s);
+}
+
+#[test]
+fn the_first_save_sends_what_changed_since_the_click() {
+    let mut s = signed_in("webex-first-save");
+    let made = s.run("webex.createMeeting", &json!({"summary": "Budget", "start": "2026-10-21T15:00", "end": "2026-10-21T16:00"})).unwrap();
+    let ask = made["ask"].as_u64().unwrap();
+    let Some(Job::WebexCreate { fields: clicked, .. }) = webex_jobs(&mut s).pop() else { panic!("no creation") };
+    s.apply(Event::WebexCreated { ask, meeting: Some(meeting(OLD_LINK)), error: None });
+    assert_eq!(s.webex.sent.get("m1"), Some(&clicked), "sent holds the click's fields");
+    // The window's times moved before the save.
+    s.run("event.create", &json!({"summary": "Budget", "start": "2026-10-21T17:00", "end": "2026-10-21T18:00", "webexId": "m1"})).unwrap();
+    let jobs = webex_jobs(&mut s);
+    let [Job::WebexUpdate { client_id, id, before, after, quiet }] = &jobs[..] else { panic!("{jobs:?}") };
+    assert_eq!((client_id.as_str(), id.as_str(), *quiet), ("C1", "m1", false));
+    assert_eq!(before, &clicked);
+    assert_eq!(after.start, clicked.start + 7200);
+    assert_eq!(s.webex.sent.get("m1"), Some(after));
+    done(s);
+}
+
+#[test]
+fn a_save_that_changes_nothing_sends_nothing() {
+    let mut s = signed_in("webex-same-save");
+    let uid = alone(&mut s);
+    // No creation of ours behind it and no earlier state: nothing to compare with.
+    assert!(webex_jobs(&mut s).is_empty());
+    s.webex.sent.insert("m1".into(), WebexFields::of(&s.find_event(&uid).unwrap().1.event));
+    s.run("event.create", &json!({"summary": "Budget", "start": "2026-10-21T15:00", "end": "2026-10-21T16:00", "webexId": "m1"})).unwrap();
+    s.run("event.update", &json!({"uid": uid, "location": "Room 2"})).unwrap();
+    s.run("event.update", &json!({"uid": uid, "summary": "Budget"})).unwrap();
+    assert!(webex_jobs(&mut s).is_empty());
+    done(s);
+}
+
+#[test]
+fn changing_an_appointment_updates_its_meeting() {
+    let mut s = signed_in("webex-follow");
+    let uid = appointment(&mut s, "", "");
+    s.take_jobs();
+    let before = WebexFields::of(&s.find_event(&uid).unwrap().1.event);
+    s.run("event.update", &json!({"uid": uid, "summary": "Trailer review 2"})).unwrap();
+    let jobs = webex_jobs(&mut s);
+    let [Job::WebexUpdate { id, before: b, after, quiet, .. }] = &jobs[..] else { panic!("{jobs:?}") };
+    assert_eq!((id.as_str(), *quiet), ("m1", true), "with guests");
+    assert_eq!((b, after.title.as_str()), (&before, "Trailer review 2"));
+    s.run("event.move", &json!({"uid": uid, "start": "2026-10-22T09:00"})).unwrap();
+    let jobs = webex_jobs(&mut s);
+    let [Job::WebexUpdate { before: b, after, .. }] = &jobs[..] else { panic!("{jobs:?}") };
+    assert_eq!(b.title, "Trailer review 2");
+    assert_eq!(after.start - b.start, 18 * 3600);
+    assert_eq!(after.end - after.start, b.end - b.start);
+    done(s);
+}
+
+#[test]
+fn undoing_a_move_updates_its_meeting() {
+    let mut s = signed_in("webex-undo");
+    let uid = alone(&mut s);
+    let start = s.find_event(&uid).unwrap().1.event.start;
+    s.run("event.move", &json!({"uid": uid, "start": "2026-10-22T09:00"})).unwrap();
+    assert_eq!(webex_jobs(&mut s).len(), 1);
+    s.run("edit.undo", &json!({})).unwrap();
+    let jobs = webex_jobs(&mut s);
+    let [Job::WebexUpdate { after, .. }] = &jobs[..] else { panic!("{jobs:?}") };
+    assert_eq!(after.start, start);
+    done(s);
+}
+
+#[test]
+fn deleting_an_appointment_deletes_its_meeting() {
+    for (guests, quiet) in [(true, true), (false, false)] {
+        let mut s = signed_in("webex-delete");
+        let uid = if guests { appointment(&mut s, "", "") } else { alone(&mut s) };
+        webex_jobs(&mut s);
+        s.run("event.delete", &json!({"uid": uid})).unwrap();
+        assert_eq!(webex_jobs(&mut s), [Job::WebexDelete { client_id: "C1".into(), id: "m1".into(), quiet }]);
+        done(s);
+    }
+}
+
+#[test]
+fn a_strangers_webex_id_is_never_acted_on() {
+    let mut s = signed_in("webex-stranger");
+    let uid = alone(&mut s);
+    set_organizer(&mut s, &uid, Some(stranger()));
+    webex_jobs(&mut s);
+    s.run("event.update", &json!({"uid": uid, "summary": "Mine now"})).unwrap();
+    s.run("event.move", &json!({"uid": uid, "start": "2026-10-22T09:00"})).unwrap();
+    s.run("event.delete", &json!({"uid": uid})).unwrap();
+    assert!(webex_jobs(&mut s).is_empty());
+    done(s);
+}
+
+#[test]
+fn a_strangers_event_takes_no_new_link() {
+    let mut s = signed_in("webex-stranger-link");
+    let uid = appointment(&mut s, OLD_LINK, &format!("Join the Webex meeting: {OLD_LINK}"));
+    set_organizer(&mut s, &uid, Some(stranger()));
+    let before = s.find_event(&uid).unwrap().1.clone();
+    let told = invitations(&s);
+    s.apply(Event::WebexUpdated { id: "m1".into(), meeting: Some(meeting(NEW_LINK)), error: None });
+    assert_eq!(s.find_event(&uid).unwrap().1, &before);
+    assert_eq!(invitations(&s), told);
+    done(s);
+}
+
+#[test]
+fn one_occurrence_leaves_the_series_meeting_alone() {
+    let mut s = signed_in("webex-occurrence");
+    let made = s
+        .run(
+            "event.create",
+            &json!({"summary": "Weekly", "start": "2026-10-21T15:00", "end": "2026-10-21T16:00", "repeat": "weekly", "webexId": "m1"}),
+        )
+        .unwrap();
+    let uid = made["uid"].as_str().unwrap().to_string();
+    let start = s.find_event(&uid).unwrap().1.event.start;
+    let second = start + 7 * 86_400;
+    webex_jobs(&mut s);
+    s.run("event.move", &json!({"uid": uid, "occurrence": second, "start": second + 3600})).unwrap();
+    s.run("event.delete", &json!({"uid": uid, "occurrence": second + 7 * 86_400})).unwrap();
+    assert!(webex_jobs(&mut s).is_empty());
+    s.run("event.move", &json!({"uid": uid, "start": "2026-10-22T09:00"})).unwrap();
+    assert!(matches!(&webex_jobs(&mut s)[..], [Job::WebexUpdate { .. }]), "the series' own move follows");
+    done(s);
+}
+
+#[test]
+fn no_meeting_no_webex() {
+    let mut s = signed_in("webex-none");
+    let made = s.run("event.create", &json!({"summary": "Lunch", "start": "2026-10-21T12:00"})).unwrap();
+    let uid = made["uid"].as_str().unwrap().to_string();
+    s.run("event.update", &json!({"uid": uid, "summary": "Late lunch"})).unwrap();
+    s.run("event.move", &json!({"uid": uid, "start": "2026-10-22T09:00"})).unwrap();
+    s.run("event.delete", &json!({"uid": uid})).unwrap();
+    assert!(webex_jobs(&mut s).is_empty());
+    done(s);
+}
+
+#[test]
+fn closing_during_a_creation_marks_it_abandoned() {
+    let mut s = signed_in("webex-close");
+    asked(&mut s, false, false);
+    s.run("webex.deleteMeeting", &json!({"ask": ASK})).unwrap();
+    assert!(s.webex.asks.get(&ASK).is_some_and(|a| a.abandoned));
+    assert!(webex_jobs(&mut s).is_empty());
+    // Its answer was there already, and nobody took it: the meeting goes.
+    s.webex.answers.insert(9, Ok(meeting(OLD_LINK)));
+    s.run("webex.deleteMeeting", &json!({"ask": 9})).unwrap();
+    assert_eq!(webex_jobs(&mut s), [Job::WebexDelete { client_id: "C1".into(), id: "m1".into(), quiet: true }]);
+    assert!(s.webex.answers.is_empty());
+    // An ask nobody knows is not an error to the window closing.
+    s.run("webex.deleteMeeting", &json!({"ask": 12345})).unwrap();
+    assert!(webex_jobs(&mut s).is_empty());
+    done(s);
+}
+
+#[test]
+fn updating_and_deleting_a_meeting_by_id() {
+    let mut s = signed_in("webex-by-id");
+    s.webex.sent.insert("m1".into(), fields());
+    s.run("webex.updateMeeting", &json!({"id": "m1", "summary": "Budget", "start": "2026-10-21T15:00", "quiet": true})).unwrap();
+    let jobs = webex_jobs(&mut s);
+    let [Job::WebexUpdate { id, before, after, quiet, .. }] = &jobs[..] else { panic!("{jobs:?}") };
+    assert_eq!((id.as_str(), before, *quiet), ("m1", &fields(), true));
+    assert_eq!(s.webex.sent.get("m1"), Some(after));
+    assert!(is_params(s.run("webex.updateMeeting", &json!({"id": "a b", "summary": "x", "start": "2026-10-21T15:00"}))));
+    assert!(is_params(s.run("webex.deleteMeeting", &json!({"id": "a b"}))));
+    s.run("webex.deleteMeeting", &json!({"id": "m1"})).unwrap();
+    assert_eq!(webex_jobs(&mut s), [Job::WebexDelete { client_id: "C1".into(), id: "m1".into(), quiet: false }]);
+    assert!(s.webex.sent.is_empty());
+    assert!(is_params(s.run("webex.deleteMeeting", &json!({}))));
+    done(s);
+}
+
+#[test]
+fn a_foreign_id_is_refused() {
+    let mut s = signed_in("webex-foreign-id");
+    for bad in ["a b", "x/y", &"x".repeat(201)] {
+        let made = s.run("event.create", &json!({"summary": "x", "start": "2026-10-21T15:00", "webexId": bad}));
+        assert!(is_params(made), "{bad:?}");
+    }
+    done(s);
+}

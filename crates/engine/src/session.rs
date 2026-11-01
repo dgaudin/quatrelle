@@ -736,7 +736,7 @@ impl Session {
         self.clock.zone = name.and_then(quatrelle_model::zone::Zone::named).filter(|z| z.offset_at(now) == offset);
     }
 
-    fn fresh_id(&mut self) -> u64 {
+    pub(crate) fn fresh_id(&mut self) -> u64 {
         self.next_id += 1;
         self.next_id
     }
