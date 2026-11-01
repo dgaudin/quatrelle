@@ -743,19 +743,8 @@ fn connect_for_sync(acc: &AccountConfig, store: &Store, secret: &str) -> Result<
     if acc.pop.is_some() {
         return Err(NetError::No("POP accounts read mail on one connection".into()));
     }
-    if let Some(url) = &acc.ews {
-        let url = if url == crate::ews::AUTODISCOVER {
-            let kept: String = store.load_account_doc(&acc.id, "ews.json").unwrap_or_default();
-            if kept.is_empty() {
-                let found = crate::ews::autodiscover(&acc.email, &user, secret, None)?;
-                let _ = store.save_account_doc(&acc.id, "ews.json", &found);
-                found
-            } else {
-                kept
-            }
-        } else {
-            url.clone()
-        };
+    if acc.ews.is_some() {
+        let url = connect::ews_url(acc, store, &user, secret)?;
         let c = crate::ews::Client::connect(&url, &user, secret, &acc.email)?;
         c.set_shared(&acc.shared_mailboxes);
         return Ok(Conn::Ews(Box::new(c)));

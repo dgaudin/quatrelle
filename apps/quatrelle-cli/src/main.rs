@@ -134,6 +134,7 @@ fn drive(s: &mut Session, pool: &mut Pool, timeout: Duration, mut done: impl FnM
                 SyncStatus::Syncing { folder } => errln!("updating {}…", quatrelle_engine::model::utf7::decode(folder)),
                 SyncStatus::Online { .. } => errln!("up to date"),
                 SyncStatus::NeedsPassword { error } => errln!("sign-in failed: {error}"),
+                SyncStatus::NeedsTrust { site } => errln!("{site} isn't allowed for this account"),
                 SyncStatus::Error { error } => errln!("error: {error}"),
                 SyncStatus::Offline => {}
             },
@@ -287,6 +288,8 @@ fn run() -> Result<(), String> {
                 }
                 Event::Status { status: SyncStatus::Online { .. }, .. } => Some(Ok(())),
                 Event::Status { status: SyncStatus::NeedsPassword { error }, .. } => Some(Err(format!("sign-in failed: {error}"))),
+                // Waits for an answer, as for a password: nothing more comes until then.
+                Event::Status { status: SyncStatus::NeedsTrust { site }, .. } => Some(Err(format!("{site} isn't allowed for this account"))),
                 _ => None,
             })?;
             if !test {

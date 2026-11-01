@@ -2,6 +2,35 @@
 
 use super::*;
 
+/// Where an Exchange account's EWS saved by Autodiscover is kept.
+const EWS_FOUND: &str = "ews.json";
+
+/// The sites an account's credentials may go to, the Exchange address Autodiscover found before
+/// (`ews.json`) among them: it is in service, and the credentials have gone there all along, so
+/// it never needs asking about (an on-premises server is often on another domain than the
+/// user's address).
+pub(super) fn account_trust(acc: &AccountConfig, store: &Store) -> Trust {
+    let kept: String = store.load_account_doc(&acc.id, EWS_FOUND).unwrap_or_default();
+    Trust::of(acc, &[&kept])
+}
+
+/// An Exchange account's EWS address: the one set, or for `autodiscover` the one found the first
+/// time, then kept. Autodiscover asks before it follows an answer to a site the account doesn't
+/// trust (`Untrusted`).
+pub(super) fn ews_url(acc: &AccountConfig, store: &Store, user: &str, secret: &str) -> Result<String> {
+    let Some(url) = &acc.ews else { return Err(NetError::No("not an Exchange account".into())) };
+    if url != crate::ews::AUTODISCOVER {
+        return Ok(url.clone());
+    }
+    let kept: String = store.load_account_doc(&acc.id, EWS_FOUND).unwrap_or_default();
+    if !kept.is_empty() {
+        return Ok(kept);
+    }
+    let found = crate::ews::autodiscover_as(&acc.email, user, secret, None, acc.user_agent.as_deref(), &account_trust(acc, store))?;
+    let _ = store.save_account_doc(&acc.id, EWS_FOUND, &found);
+    Ok(found)
+}
+
 impl Worker {
     /// What to sign in with: the password, or for OAuth accounts a current access token
     /// (refreshed from the stored refresh token when needed).
@@ -141,6 +170,8 @@ impl Worker {
             }
             // Said here too: not every caller hands the failure on (a picture, a search), and
             // the caller that does says it again, more precisely (a password to ask for).
+            // Another server to allow is said as such whoever asked (a message to send).
+            Err(NetError::Untrusted { site }) => self.status(SyncStatus::NeedsTrust { site: site.clone() }),
             Err(e) => self.status(SyncStatus::Error { error: e.to_string() }),
         }
         r
@@ -160,20 +191,8 @@ impl Worker {
             self.backoff = Duration::from_secs(5);
             return Ok(());
         }
-        if let Some(url) = &self.acc.ews {
-            // `autodiscover`: found the first time, then kept.
-            let url = if url == crate::ews::AUTODISCOVER {
-                let kept: String = self.store.load_account_doc(&self.acc.id, "ews.json").unwrap_or_default();
-                if kept.is_empty() {
-                    let found = crate::ews::autodiscover_as(&self.acc.email, &user, &secret, None, self.acc.user_agent.as_deref())?;
-                    let _ = self.store.save_account_doc(&self.acc.id, "ews.json", &found);
-                    found
-                } else {
-                    kept
-                }
-            } else {
-                url.clone()
-            };
+        if self.acc.ews.is_some() {
+            let url = ews_url(&self.acc, &self.store, &user, &secret)?;
             let c = crate::ews::Client::connect_as(&url, &user, &secret, &self.acc.email, self.acc.user_agent.as_deref())?;
             c.set_shared(&self.acc.shared_mailboxes);
             self.conn = Some(Conn::Ews(Box::new(c)));
@@ -237,6 +256,15 @@ impl Worker {
     pub(super) fn connect_failed(&mut self, e: NetError) {
         match e {
             e @ NetError::Auth(_) => self.failed(e),
+            // A server on a site the account doesn't trust: nothing went there. The user is
+            // asked; the account waits for the answer (it starts again once allowed), with no
+            // back-off: it isn't a failure to sign in, nor the network's.
+            NetError::Untrusted { site } => {
+                log::warn!("{}: {site} isn't allowed for this account: waiting for the answer", self.acc.id);
+                self.conn = None;
+                self.auth_failed = true;
+                self.status(SyncStatus::NeedsTrust { site });
+            }
             e if e.is_fatal() => self.failed(e),
             // Busy: tried again after the backoff, as when the network fails.
             e @ NetError::Later(_) => {

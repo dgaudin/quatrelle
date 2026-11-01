@@ -303,6 +303,9 @@ pub(crate) fn account_status(s: &Session, t: &Tokens, a: &quatrelle_engine::Acco
         // An account that signs in in the browser has no password to ask for.
         SyncStatus::NeedsPassword { .. } if a.config.oauth.is_some() => (t.danger, tl!("Sign in again").to_string()),
         SyncStatus::NeedsPassword { .. } => (t.danger, tl!("Password needed").to_string()),
+        // Task 6 says "{domain} is waiting for your answer" and opens the question; until then,
+        // the site named as a disconnection says.
+        SyncStatus::NeedsTrust { site } => (t.warn, tf!("Disconnected: {error}", error = site)),
         SyncStatus::Error { error } => (t.warn, tf!("Disconnected: {error}", error = widgets::shorten(error, 60))),
     }
 }

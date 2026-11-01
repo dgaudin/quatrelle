@@ -50,7 +50,7 @@ fn calendars_and_contacts_sync_and_autodiscover_finds_the_server() {
     d.pim.push(("E1".into(), cal.clone(), standup.kids[0].clone()));
     let server = serve(d);
     let user = format!("{DOMAIN}\\{USER}");
-    assert_eq!(crate::ews::autodiscover("riley@contoso.example", &user, PASSWORD, Some(&server.url)).unwrap(), server.url);
+    assert_eq!(crate::ews::autodiscover("riley@contoso.example", &user, PASSWORD, Some(&server.url), &trusting(&["127.0.0.1"])).unwrap(), server.url);
     let c = crate::ews::Client::connect(&server.url, &user, PASSWORD, "riley@contoso.example").unwrap();
     let mut pim = Pim::default();
     pim.events.push(StoredEvent {
