@@ -1482,6 +1482,15 @@ month	May	mei
 	Sign in to Webex	Aanmelden bij Webex
 	Sign in to Webex again	Meld u opnieuw aan bij Webex
 	Your Webex account can't schedule meetings on this site	Uw Webex-account kan op deze site geen vergaderingen plannen
+	Webex Meeting options	Opties voor Webex-vergadering
+	New Webex meeting	Nieuwe Webex-vergadering
+	Use my personal room	Mijn persoonlijke ruimte gebruiken
+	A meeting needs a title and a start	Een vergadering heeft een titel en een begin nodig
+	Creating the Webex meeting…	Webex-vergadering maken…
+	Meeting number: {number}	Vergadernummer: {number}
+	Password: {password}	Wachtwoord: {password}
+	Video: {address}	Video: {address}
+	Webex answered {status}: {message}	Webex antwoordde {status}: {message}
 	Tasks	Taken
 	New task	Nieuwe taak
 	{n} tasks to do	{n} taken te doen

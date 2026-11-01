@@ -1483,6 +1483,15 @@ month	May	5月
 	Sign in to Webex	Webex にサインイン
 	Sign in to Webex again	Webex に再度サインインしてください
 	Your Webex account can't schedule meetings on this site	お使いの Webex アカウントでは、このサイトでミーティングを設定できません
+	Webex Meeting options	Webex 会議のオプション
+	New Webex meeting	新しい Webex 会議
+	Use my personal room	個人ルームを使う
+	A meeting needs a title and a start	会議にはタイトルと開始日時が必要です
+	Creating the Webex meeting…	Webex 会議を作成しています…
+	Meeting number: {number}	会議番号: {number}
+	Password: {password}	パスワード: {password}
+	Video: {address}	ビデオ: {address}
+	Webex answered {status}: {message}	Webex の応答 {status}: {message}
 	Tasks	タスク
 	New task	新しいタスク
 	{n} tasks to do	未完了のタスク {n} 件

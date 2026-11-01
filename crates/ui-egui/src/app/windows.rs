@@ -152,6 +152,7 @@ impl MailApp {
     }
 
     pub(crate) fn event_windows(&mut self, ctx: &egui::Context, acts: &mut Vec<Action>) {
+        self.webex_answers();
         if matches!(self.ui.dialog, Some(Dialog::Event(_)))
             && let Some(Dialog::Event(mut f)) = self.ui.dialog.take()
         {
@@ -213,6 +214,9 @@ impl MailApp {
             if !keep || close {
                 forget_open(ctx, id);
                 closed.push(wid);
+                if let Some(p) = pim_dialogs::webex::leaving(f) {
+                    acts.push(Action::Run("webex.deleteMeeting", p));
+                }
             }
         }
         windows.retain(|(w, _)| !closed.contains(w));

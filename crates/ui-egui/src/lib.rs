@@ -163,6 +163,9 @@ pub enum Action {
     /// A command from an appointment's window (its number): the window closes once it's done,
     /// or says why it couldn't be.
     ForEvent(u64, &'static str, Value),
+    /// A Webex meeting asked for from an appointment's window (its number), with
+    /// `webex.createMeeting`'s params: the window waits for the answer, or says why not.
+    ForWebex(u64, Value),
     OpenAttachment(usize),
     SaveAttachment(usize),
     AttachFiles,

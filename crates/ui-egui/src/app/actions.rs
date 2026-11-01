@@ -216,6 +216,8 @@ impl MailApp {
             Action::WebexOptions => {
                 self.ui.backstage = Some(backstage::Backstage::new(backstage::Page::Options));
                 self.ui.webex_scroll.set(true);
+                // Asked from an appointment's window: Options is behind it.
+                self.ui.focus_main = true;
             }
             Action::InWindow(key, inner) => {
                 // The window's message stands in as the open one while the action runs.
@@ -338,6 +340,7 @@ impl MailApp {
                 }
             }
             Action::ForEvent(w, id, p) => self.for_event(w, id, p),
+            Action::ForWebex(w, p) => self.for_webex(w, p),
             Action::DialogOk => self.dialog_ok(),
             Action::SaveWithDomain(domain, settings) => match self.session.run("account.trustDomain", &domain) {
                 Ok(_) => {

@@ -83,6 +83,12 @@ pub struct EventForm {
     pub recurrence: Option<super::recurrence::RecurrenceUi>,
     /// Outlook's Select Attendees and Resources, while it's open over the window.
     pub attendees_book: Option<Box<super::AttendeesUi>>,
+    /// The Webex meeting it holds, from the event or made here.
+    pub webex_id: Option<String>,
+    /// That meeting was made from this window and isn't saved: leaving deletes it.
+    pub webex_fresh: bool,
+    /// The creation being waited for: Save is off until its answer is in.
+    pub webex_wait: Option<u64>,
 }
 
 impl EventForm {
@@ -171,6 +177,7 @@ impl EventForm {
             categories: e.categories.clone(),
             all_categories: all_categories(s, &e.categories),
             error: None,
+            webex_id: e.webex_id.clone(),
             ..Default::default()
         })
     }
@@ -304,6 +311,9 @@ impl EventForm {
             let rooms: Vec<quatrelle_engine::model::EmailAddress> =
                 self.rooms.iter().map(|(name, email)| quatrelle_engine::model::EmailAddress::new(name.clone(), email.clone())).collect();
             p["rooms"] = json!(addr::format_list(&rooms));
+        }
+        if let Some(id) = &self.webex_id {
+            p["webexId"] = json!(id);
         }
         match &self.uid {
             Some(u) => p["uid"] = json!(u),

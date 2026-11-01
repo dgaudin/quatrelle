@@ -1485,6 +1485,15 @@ month	May	Май
 	Sign in to Webex	Войти в Webex
 	Sign in to Webex again	Войдите в Webex снова
 	Your Webex account can't schedule meetings on this site	Ваша учётная запись Webex не может планировать встречи на этом сайте
+	Webex Meeting options	Параметры собрания Webex
+	New Webex meeting	Новое собрание Webex
+	Use my personal room	Использовать мою личную комнату
+	A meeting needs a title and a start	Для собрания нужны название и время начала
+	Creating the Webex meeting…	Создание собрания Webex…
+	Meeting number: {number}	Номер собрания: {number}
+	Password: {password}	Пароль: {password}
+	Video: {address}	Видео: {address}
+	Webex answered {status}: {message}	Webex ответил {status}: {message}
 	Tasks	Задачи
 	New task	Новая задача
 	{n} tasks to do	Задач к выполнению: {n}

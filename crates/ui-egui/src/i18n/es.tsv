@@ -1486,6 +1486,15 @@ month	May	mayo
 	Sign in to Webex	Iniciar sesión en Webex
 	Sign in to Webex again	Vuelva a iniciar sesión en Webex
 	Your Webex account can't schedule meetings on this site	Su cuenta de Webex no puede programar reuniones en este sitio
+	Webex Meeting options	Opciones de reunión de Webex
+	New Webex meeting	Nueva reunión de Webex
+	Use my personal room	Usar mi sala personal
+	A meeting needs a title and a start	Una reunión necesita un título y un inicio
+	Creating the Webex meeting…	Creando la reunión de Webex…
+	Meeting number: {number}	Número de reunión: {number}
+	Password: {password}	Contraseña: {password}
+	Video: {address}	Vídeo: {address}
+	Webex answered {status}: {message}	Webex respondió {status}: {message}
 	Tasks	Tareas
 	New task	Nueva tarea
 	{n} tasks to do	{n} tareas pendientes
