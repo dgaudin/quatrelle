@@ -1827,3 +1827,9 @@ month	May	5月
 	To or Cc one of these	收件人或抄送是以下之一
 	Subject has one of these (comma-separated)	主题包含以下任一词语（用逗号分隔）
 	Messages still being sent: {n}. They may not go if Quatrelle closes now: wait a moment, or close anyway.	仍在发送的邮件：{n}。如果现在关闭 Quatrelle，它们可能无法发出：请稍候，或仍然关闭。
+	Allow another server?	允许其他服务器吗？
+	The server proposes to set up {account} with {domain}. Your password or sign-in will be sent there. Allow it?	服务器建议使用 {domain} 设置 {account}。您的密码或登录信息将发送到那里。是否允许？
+	Allow	允许
+	Don't allow	不允许
+	{domain} is waiting for your answer	{domain} 正在等待您的回复
+	Other servers allowed	已允许的其他服务器

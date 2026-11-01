@@ -299,6 +299,9 @@ pub struct EditForm {
     /// (client) ID and tenant (empty: the one built into this copy, at `common`).
     pub client_id: String,
     pub tenant: String,
+    /// The domain typed to allow for this account (Other servers allowed); the list itself is the
+    /// account's, read from the session.
+    pub trust_add: String,
     pub error: Option<String>,
 }
 

@@ -6,6 +6,11 @@ impl MailApp {
     pub(crate) fn shortcuts(&mut self, ctx: &egui::Context) {
         if self.ui.dialog.is_some() {
             if ctx.input(|i| i.key_pressed(Key::Escape)) {
+                // Escape on the question about another domain is a no: the safe answer.
+                if let Some(Dialog::TrustDomain { account, site }) = &self.ui.dialog {
+                    let refusal = json!({"account": account, "domain": site});
+                    self.run("account.refuseDomain", refusal);
+                }
                 self.ui.dialog = None;
             }
             return;

@@ -214,6 +214,11 @@ pub(crate) fn tour() {
                 quatrelle_engine::SendCheck::Exposed { count: 12 },
             ]),
             Dialog::edit_account(&a.session.accounts[0].config),
+            {
+                // Server settings with other servers allowed (the list is the account's).
+                a.session.accounts[0].config.trusted_domains = vec!["icloud.com".into(), "fastmailusercontent.com".into()];
+                Dialog::edit_account(&a.session.accounts[0].config)
+            },
             Dialog::vacation(
                 "sample",
                 &quatrelle_engine::model::job::Vacation {
@@ -272,6 +277,7 @@ pub(crate) fn tour() {
             Dialog::Signature(Box::new(crate::dialogs::SignatureForm::new(&a.session, "sample", false))),
             Dialog::Signature(Box::new(crate::dialogs::SignatureForm::new(&a.session, "sample", true))),
             Dialog::Password { account: "sample".into(), email: "x".into(), password: String::new() },
+            Dialog::trust_domain("sample", "fastmailusercontent.com"),
             Dialog::Certificate { account: "sample".into(), path: "riley.p12".into(), data: None, password: String::new() },
             Dialog::Certificate { account: "sample".into(), path: String::new(), data: None, password: String::new() },
             Dialog::SmartCard { account: "sample".into(), module: "/usr/lib/opensc-pkcs11.so".into(), pin: "1234".into() },
@@ -364,6 +370,7 @@ line two"
     for st in [
         SyncStatus::Connecting,
         SyncStatus::NeedsPassword { error: "refused".into() },
+        SyncStatus::NeedsTrust { site: "office365.com".into() },
         SyncStatus::Error { error: "x".repeat(300) },
         SyncStatus::Online { at: NOW },
     ] {

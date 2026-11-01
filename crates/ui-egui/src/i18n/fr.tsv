@@ -1830,3 +1830,9 @@ month	May	mai
 	To or Cc one of these	À ou Cc est l’un de ceux-ci
 	Subject has one of these (comma-separated)	L’objet contient l’un de ces mots (séparés par des virgules)
 	Messages still being sent: {n}. They may not go if Quatrelle closes now: wait a moment, or close anyway.	Messages encore en cours d'envoi : {n}. Ils risquent de ne pas partir si Quatrelle se ferme maintenant : patientez un instant, ou fermez quand même.
+	Allow another server?	Autoriser un autre serveur ?
+	The server proposes to set up {account} with {domain}. Your password or sign-in will be sent there. Allow it?	Le serveur propose de configurer {account} avec {domain}. Votre mot de passe ou votre connexion y seront envoyés. Autoriser ?
+	Allow	Autoriser
+	Don't allow	Ne pas autoriser
+	{domain} is waiting for your answer	{domain} attend votre accord
+	Other servers allowed	Autres serveurs autorisés

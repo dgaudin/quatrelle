@@ -178,3 +178,53 @@ fn a_site_with_junk_in_it_is_not_asked() {
     }
     assert!(s.ask_trust.is_empty(), "neither queued nor logged");
 }
+
+#[test]
+fn a_status_needing_trust_asks_once() {
+    let (mut s, id) = with_account("trust-status");
+    let needs = |s: &mut Session, site: &str| s.apply(Event::Status { account: id.clone(), status: SyncStatus::NeedsTrust { site: site.into() } });
+    needs(&mut s, "office365.com");
+    assert_eq!(s.ask_trust, [(id.clone(), "office365.com".to_string())]);
+    assert!(matches!(&s.account(&id).unwrap().status, SyncStatus::NeedsTrust { site } if site == "office365.com"), "shown in the account's status");
+    // The worker says it once per connection try; the question is asked once while Quatrelle runs.
+    s.ask_trust.clear();
+    needs(&mut s, "office365.com");
+    assert!(s.ask_trust.is_empty(), "once per account and site");
+    // The next site of an Exchange hybrid is another question.
+    needs(&mut s, "onmicrosoft.com");
+    assert_eq!(s.ask_trust, [(id.clone(), "onmicrosoft.com".to_string())]);
+    // An account that isn't there asks nothing.
+    s.apply(Event::Status { account: "nope".into(), status: SyncStatus::NeedsTrust { site: "x.example".into() } });
+    assert_eq!(s.ask_trust.len(), 1);
+}
+
+#[test]
+fn a_status_needing_trust_resets_the_rules_state_as_a_password_does() {
+    let (mut s, id) = with_account("trust-rules-state");
+    let reads = |s: &mut Session| s.take_jobs().iter().filter(|j| matches!(j, Job::GetServerRules { .. })).count();
+    let status = |s: &mut Session, status: SyncStatus| s.apply(Event::Status { account: id.clone(), status });
+    status(&mut s, SyncStatus::Online { at: NOW });
+    assert_eq!(reads(&mut s), 1, "read on coming online");
+    status(&mut s, SyncStatus::Online { at: NOW + 1 });
+    assert_eq!(reads(&mut s), 0, "not at each look for new mail");
+    status(&mut s, SyncStatus::NeedsTrust { site: "office365.com".into() });
+    status(&mut s, SyncStatus::Online { at: NOW + 2 });
+    assert_eq!(reads(&mut s), 1, "the server was lost: its rules are read again once it is back");
+}
+
+#[test]
+fn trust_asked_during_a_sync_asks_once() {
+    let (mut s, id) = with_account("trust-dav");
+    s.apply(Event::Status { account: id.clone(), status: SyncStatus::Online { at: NOW } });
+    let asked = |s: &mut Session| s.apply(Event::TrustAsked { account: id.clone(), site: "icloud.com".into() });
+    asked(&mut s);
+    assert_eq!(s.ask_trust, [(id.clone(), "icloud.com".to_string())]);
+    assert!(matches!(s.account(&id).unwrap().status, SyncStatus::Online { .. }), "the account stays online: the mail goes on");
+    s.ask_trust.clear();
+    asked(&mut s);
+    assert!(s.ask_trust.is_empty(), "once per account and site");
+    // After the user said no, the network may say it again: no more questions.
+    s.run("account.refuseDomain", &json!({"account": id, "domain": "icloud.com"})).unwrap();
+    asked(&mut s);
+    assert!(s.ask_trust.is_empty());
+}

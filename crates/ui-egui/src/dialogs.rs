@@ -48,6 +48,12 @@ pub enum Dialog {
         email: String,
         password: String,
     },
+    /// A server proposed another domain (Autodiscover, a calendar's discovery, JMAP's session):
+    /// the account's password or sign-in goes there only if the user allows it.
+    TrustDomain {
+        account: String,
+        site: String,
+    },
     ConfirmDelete {
         count: usize,
     },
@@ -284,6 +290,7 @@ impl Dialog {
                     | Dialog::DeleteFolder { .. }
                     | Dialog::RemoveAccount { .. }
                     | Dialog::MailboxClosed { .. }
+                    | Dialog::TrustDomain { .. }
                     | Dialog::EmptySubject
                     | Dialog::SaveChanges
                     | Dialog::SendCheck(_)
@@ -420,6 +427,7 @@ impl Dialog {
             oauth: a.oauth.clone(),
             client_id: a.oauth_client_id.clone().unwrap_or_default(),
             tenant: a.oauth_tenant.clone().unwrap_or_default(),
+            trust_add: String::new(),
             error: None,
         }))
     }
@@ -440,6 +448,11 @@ impl Dialog {
             outside: if v.outside.is_empty() { "all".into() } else { v.outside.clone() },
             error: None,
         }))
+    }
+
+    /// The question a server's proposal of another domain raises (`Session::ask_trust`).
+    pub fn trust_domain(account: &str, site: &str) -> Dialog {
+        Dialog::TrustDomain { account: account.to_string(), site: site.to_string() }
     }
 
     pub fn password(a: &AccountConfig) -> Dialog {
@@ -610,6 +623,12 @@ pub fn show(ctx: &egui::Context, d: &mut Dialog, s: &Session, people: &mut peopl
             node.push_labelled_by(title.accesskit_id());
         }
     });
+    // Escape, or a click outside, is a no: the safe answer to a question about a password.
+    if modal.should_close()
+        && let Dialog::TrustDomain { account, site } = d
+    {
+        acts.push(Action::Run("account.refuseDomain", json!({"account": account, "domain": site})));
+    }
     keep && !modal.should_close()
 }
 
@@ -619,6 +638,7 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, people: &mut people_field::Peo
         Dialog::LostOnClose { .. } | Dialog::SaveOnClose(..) | Dialog::UpdateOnClose(..) => closing::draw(ui, d, s, t, acts),
         Dialog::AddAccount(..)
         | Dialog::Password { .. }
+        | Dialog::TrustDomain { .. }
         | Dialog::RemoveAccount { .. }
         | Dialog::MailboxClosed { .. }
         | Dialog::EditAccount(..)

@@ -404,6 +404,36 @@ pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, people: &mut People
             }
             !cancel
         }
+        Dialog::TrustDomain { account, site } => {
+            ui.set_width(400.0);
+            title(ui, t, "Allow another server?");
+            // The account was removed (or the domain allowed some other way) while the question
+            // waited: nothing to ask.
+            let Some(a) = s.account(account).filter(|a| !a.config.trusted_domains.contains(site)) else { return false };
+            ui.add(
+                egui::Label::new(
+                    RichText::new(tf!(
+                        "The server proposes to set up {account} with {domain}. Your password or sign-in will be sent there. Allow it?",
+                        account = a.config.email,
+                        domain = site
+                    ))
+                    .color(t.dim),
+                )
+                .wrap(),
+            );
+            ui.add_space(10.0);
+            let (mut allow, mut refuse) = (false, false);
+            button_row(ui, |ui| {
+                allow = widgets::primary_button(ui, tl!("Allow"), t, true).clicked();
+                refuse = ui.button(tl!("Don't allow")).clicked();
+            });
+            if allow {
+                acts.push(Action::Run("account.trustDomain", json!({"account": account, "domain": site})));
+            } else if refuse {
+                acts.push(Action::Run("account.refuseDomain", json!({"account": account, "domain": site})));
+            }
+            !(allow || refuse)
+        }
         Dialog::RemoveAccount { account, email } => {
             ui.set_width(380.0);
             title(ui, t, "Remove account?");
@@ -594,6 +624,7 @@ pub(super) fn edit_account(ui: &mut Ui, f: &mut EditForm, s: &Session, t: &Token
         ui.checkbox(&mut f.public_favorites_kept, tl!("Keep the public folders in Favorites on this computer"));
         ui.add(egui::Label::new(RichText::new(tl!("Those not kept are read on the server when you open them.")).color(t.faint).small()).wrap());
     }
+    other_servers(ui, t, f, s, acts);
     if let Some(e) = &f.error {
         ui.add_space(6.0);
         ui.label(RichText::new(e).color(t.danger));
@@ -604,6 +635,41 @@ pub(super) fn edit_account(ui: &mut Ui, f: &mut EditForm, s: &Session, t: &Token
         acts.push(Action::Submit("account.update", f.params()));
     }
     !cancel
+}
+
+/// The other domains the account may send its password or sign-in to (`trusted_domains`): each
+/// with Remove, and a field with Add. They go through the account's trust commands, which
+/// normalise, cap and save them and start the account again at once (not on Save): the form
+/// never edits the field itself. The list is the account's, read each frame.
+fn other_servers(ui: &mut Ui, t: &Tokens, f: &mut EditForm, s: &Session, acts: &mut Vec<Action>) {
+    ui.add_space(8.0);
+    ui.label(RichText::new(tl!("Other servers allowed")).strong().small());
+    let allowed: Vec<String> = s.account(&f.account).map(|a| a.config.trusted_domains.clone()).unwrap_or_default();
+    for domain in &allowed {
+        ui.horizontal(|ui| {
+            ui.label(RichText::new(domain).color(t.text));
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui.button(tl!("Remove")).clicked() {
+                    acts.push(Action::Run("account.distrustDomain", json!({"account": f.account, "domain": domain})));
+                }
+            });
+        });
+    }
+    let typed = !f.trust_add.trim().is_empty();
+    let mut add = false;
+    ui.horizontal(|ui| {
+        // Add at the right edge, as each Remove is; the field takes the rest.
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            add = ui.add_enabled(typed, egui::Button::new(tl!("Add"))).clicked();
+            let width = ui.available_width().max(140.0);
+            let r = ui.add_sized([width, 26.0], egui::TextEdit::singleline(&mut f.trust_add).hint_text("example.com").char_limit(300));
+            add |= r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+        });
+    });
+    if add && typed {
+        acts.push(Action::Run("account.trustDomain", json!({"account": f.account, "domain": f.trust_add.trim()})));
+        f.trust_add.clear();
+    }
 }
 
 /// Microsoft sign-in through an organisation's own app registration (a single-tenant one its

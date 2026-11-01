@@ -1826,3 +1826,9 @@ month	May	مايو
 	To or Cc one of these	إلى أو نسخة هو أحد هؤلاء
 	Subject has one of these (comma-separated)	الموضوع يحتوي على إحدى هذه الكلمات (مفصولة بفواصل)
 	Messages still being sent: {n}. They may not go if Quatrelle closes now: wait a moment, or close anyway.	رسائل لا تزال قيد الإرسال: {n}. قد لا تُرسل إذا أُغلق Quatrelle الآن: انتظر قليلًا، أو أغلق على أي حال.
+	Allow another server?	السماح بخادم آخر؟
+	The server proposes to set up {account} with {domain}. Your password or sign-in will be sent there. Allow it?	يقترح الخادم إعداد {account} باستخدام {domain}. سيتم إرسال كلمة المرور أو بيانات تسجيل الدخول إلى هناك. هل تسمح بذلك؟
+	Allow	السماح
+	Don't allow	عدم السماح
+	{domain} is waiting for your answer	{domain} ينتظر ردك
+	Other servers allowed	الخوادم الأخرى المسموح بها

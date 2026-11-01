@@ -1827,3 +1827,9 @@ month	May	5月
 	To or Cc one of these	宛先または CC が次のいずれか
 	Subject has one of these (comma-separated)	件名に次のいずれかの語を含む（コンマ区切り）
 	Messages still being sent: {n}. They may not go if Quatrelle closes now: wait a moment, or close anyway.	送信中のメッセージ: {n}。今 Quatrelle を閉じると送信されない場合があります。少し待つか、そのまま閉じてください。
+	Allow another server?	別のサーバーを許可しますか?
+	The server proposes to set up {account} with {domain}. Your password or sign-in will be sent there. Allow it?	サーバーが {account} を {domain} で設定するよう提案しています。パスワードまたはサインイン情報がそこに送信されます。許可しますか?
+	Allow	許可
+	Don't allow	許可しない
+	{domain} is waiting for your answer	{domain} はあなたの回答を待っています
+	Other servers allowed	許可した他のサーバー

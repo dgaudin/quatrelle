@@ -49,9 +49,23 @@ impl Session {
                 // and each check for new mail (Syncing, then Online, every half minute), and the
                 // rules were read (and a refused one sent again) that often — over a hundred
                 // times a pass on a big mailbox. Losing the server starts it over.
-                if matches!(status, SyncStatus::Offline | SyncStatus::Connecting | SyncStatus::Error { .. } | SyncStatus::NeedsPassword { .. }) {
+                if matches!(
+                    status,
+                    SyncStatus::Offline
+                        | SyncStatus::Connecting
+                        | SyncStatus::Error { .. }
+                        | SyncStatus::NeedsPassword { .. }
+                        | SyncStatus::NeedsTrust { .. }
+                ) {
                     self.rules_asked.remove(&account);
                     self.rules_online.remove(&account);
+                }
+                // A server proposed another domain: the account waits for the user's answer, and the
+                // question is asked once while Quatrelle runs (`ask_trust_once`).
+                if let SyncStatus::NeedsTrust { site } = &status
+                    && self.account(&account).is_some()
+                {
+                    self.ask_trust_once(&account, site);
                 }
                 let online = matches!(status, SyncStatus::Online { .. }) && self.rules_online.insert(account.clone());
                 // A server that has started syncing is readable: its rules are asked for then,
@@ -141,8 +155,12 @@ impl Session {
                 }
             }
             Event::DavSynced { account, sync } => self.apply_dav(&account, &sync),
-            // Asked by credentials-trust Task 6 (`ask_trust_once`).
-            Event::TrustAsked { .. } => {}
+            // A discovery during a sync named another domain: the mail goes on, the user is asked.
+            Event::TrustAsked { account, site } => {
+                if self.account(&account).is_some() {
+                    self.ask_trust_once(&account, &site);
+                }
+            }
             Event::CalendarFetched { account, calendar, ics, etag, modified, unchanged, error } => {
                 let read = match (ics, error) {
                     (_, Some(e)) => pim::web::WebRead::Failed(e),
