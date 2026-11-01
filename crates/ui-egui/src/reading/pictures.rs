@@ -86,18 +86,23 @@ pub(crate) fn shown_size(own: Vec2, size: Option<mime::ImageSize>, width: f32) -
         return None;
     }
     let shape = own.y.max(1.0) / own.x.max(1.0);
+    // A percentage is of a box the message laid out, often narrower than this pane: a height set
+    // beside it was meant for that width, so the shape is kept, no wider than a picture on its
+    // own (a logo came out across the window, flat). A spacer has no shape to keep.
+    let share = own.x > 3.0 && own.y > 3.0 && matches!(set.and_then(|z| z.width), Some(Width::Percent(_)));
     let w = set.and_then(|z| z.width).map(|w| match w {
         Width::Px(px) => px as f32,
         Width::Percent(pc) => width * f32::from(pc) / 100.0,
     });
     let h = set.and_then(|z| z.height).map(|h| h as f32);
     let (mut w, mut h) = match (w, h) {
+        (Some(w), Some(_)) if share => (w, w * shape),
         (Some(w), Some(h)) => (w, h),
         (Some(w), None) => (w, w * shape),
         (None, Some(h)) => (h / shape, h),
         (None, None) => (own.x, own.y),
     };
-    let room = if set.is_some() { width } else { width.min(WIDEST) };
+    let room = if set.is_some() && !share { width } else { width.min(WIDEST) };
     let most = size.and_then(|z| z.max_width).map_or(f32::INFINITY, |m| m as f32).min(room);
     if w > most {
         h *= most / w;

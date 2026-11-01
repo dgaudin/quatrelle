@@ -862,4 +862,8 @@ fn html_pictures_show_at_the_size_the_message_sets() {
     assert_eq!(shown_size(v(1.0, 1.0), set(Some(Width::Px(20)), Some(20), None), 800.0), Some(v(20.0, 20.0)));
     assert_eq!(shown_size(v(1.0, 1.0), None, 800.0), None);
     assert_eq!(shown_size(v(10.0, 10.0), set(Some(Width::Px(0)), Some(0), None), 800.0), None);
+    // A percentage keeps the shape whatever height is set, as wide as a picture on its own; a
+    // rule made of a dot stays a rule.
+    assert_eq!(shown_size(v(1024.0, 64.0), set(Some(Width::Percent(100)), Some(32), None), 1800.0), Some(v(900.0, 56.25)));
+    assert_eq!(shown_size(v(1.0, 1.0), set(Some(Width::Percent(100)), Some(1), None), 1900.0), Some(v(1900.0, 1.0)));
 }

@@ -631,6 +631,23 @@ fn pictures_carry_the_size_the_message_sets() {
     assert!(odd.width.is_none() && odd.height == Some(4000), "nonsense is left out or held to 4000: {odd:?}");
 }
 
+/// `auto` in the style overrules the tag's size, as in a browser: a logo written `width="600"
+/// height="40"` and `width:100%; height:auto` came out across the whole window at the tag's
+/// height, stretched. A percentage keeps the tag's width as its limit, and a length not read here
+/// leaves the tag's (Word's inches).
+#[test]
+fn auto_in_the_style_overrules_the_tags_size() {
+    use layout::Width;
+    let html = r#"<p><img src="cid:logo" width="600" height="40" style="width:100%; height:auto !important" alt="L">
+        <img src="cid:wide" width="600" height="40" style="width:auto" alt="W">
+        <img src="cid:word" width="600" height="96" style="width:6.25in;height:1in" alt="S"></p>"#;
+    let rich = html_to_rich(html);
+    let of = |src: &str| rich.iter().flatten().find(|sp| sp.image.as_deref() == Some(src)).and_then(|sp| sp.image_size);
+    assert_eq!(of("cid:logo"), Some(ImageSize { width: Some(Width::Percent(100)), height: None, max_width: Some(600) }));
+    assert_eq!(of("cid:wide"), Some(ImageSize { width: None, height: Some(40), max_width: None }));
+    assert_eq!(of("cid:word"), Some(ImageSize { width: Some(Width::Px(600)), height: Some(96), max_width: None }));
+}
+
 /// Issue #10 (Larsene): a reply or forward quotes every picture of the message, not "[picture]":
 /// one by `cid:`, one by its `Content-Location`, one written into the HTML (`data:`), each sent
 /// with it; one on the web by its address (never loaded); a tracking picture left out.
