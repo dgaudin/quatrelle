@@ -216,12 +216,12 @@ fn server_settings_list_add_and_remove_domains() {
     assert!(settled_text_at(&ctx, &mut a, "fastmail.com", size).is_some(), "listed at once");
     // Not a domain: refused by the command, said in a notice; nothing changes.
     let Some(Dialog::EditAccount(f)) = a.ui.dialog.as_mut() else { panic!() };
-    f.trust_add = "nodot".into();
+    f.trust_add = "no dot".into();
     let add = settled_text_at(&ctx, &mut a, "Add", size).expect("its Add button");
     click_at(&ctx, &mut a, add, 1, size);
     frame_sized(&ctx, &mut a, vec![], size);
     assert_eq!(trusted(&a, &id).len(), 2);
-    assert!(a.session.notices.iter().any(|n| n.error && n.text.contains("not a domain: nodot")), "{:?}", a.session.notices);
+    assert!(a.session.notices.iter().any(|n| n.error && n.text.contains("not a domain: no dot")), "{:?}", a.session.notices);
     restarts(&handed);
     // Remove the first one (the first Remove button drawn is the first domain's).
     let removes: Vec<egui::Pos2> = frame_shapes(&ctx, &mut a, vec![], size)

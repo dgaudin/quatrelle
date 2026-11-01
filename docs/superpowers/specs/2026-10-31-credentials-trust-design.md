@@ -221,7 +221,8 @@ The model computes this as `Trust::of(&AccountConfig, extra: &[&str]) -> Trust`,
 
 ## Errors and limits
 
-- An empty or invalid domain (not a host name) is refused by the commands with "not a domain: {d}".
+- A domain `url_host` can't read is refused by the commands with "not a domain: {d}". Whatever it reads is
+  taken, a single label and an IP address too: a question always has an answer.
 - `Untrusted` is not an authentication failure: it never opens the password prompt and never counts
   towards back-off. Once it is answered, the account starts again.
 - The log carries the site, never an address or a credential.
