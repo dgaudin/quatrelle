@@ -17,6 +17,7 @@ bin = [
     { name = "pst", bench = false, test = false, doc = false, path = "fuzz_targets/pst.rs" }, # Outlook data file import
     { name = "search", bench = false, test = false, doc = false, path = "fuzz_targets/search.rs" }, # the search box and its filters
     { name = "tnef", bench = false, test = false, doc = false, path = "fuzz_targets/tnef.rs" }, # Outlook's winmail.dat and compressed RTF
+    { name = "trust", bench = false, test = false, doc = false, path = "fuzz_targets/trust.rs" }, # the URLs and hosts servers hand out
     { name = "vcard", bench = false, test = false, doc = false, path = "fuzz_targets/vcard.rs" }, # contact cards
 ]
 
