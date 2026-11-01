@@ -1482,6 +1482,15 @@ month	May	מאי
 	Sign in to Webex	התחברות ל-Webex
 	Sign in to Webex again	התחברו שוב ל-Webex
 	Your Webex account can't schedule meetings on this site	חשבון ה-Webex שלכם אינו יכול לתזמן פגישות באתר זה
+	Webex Meeting options	אפשרויות פגישת Webex
+	New Webex meeting	פגישת Webex חדשה
+	Use my personal room	שימוש בחדר האישי שלי
+	A meeting needs a title and a start	לפגישה נדרשים כותרת ושעת התחלה
+	Creating the Webex meeting…	יוצר פגישת Webex…
+	Meeting number: {number}	מספר פגישה: {number}
+	Password: {password}	סיסמה: {password}
+	Video: {address}	וידאו: {address}
+	Webex answered {status}: {message}	Webex השיב {status}: {message}
 	Tasks	משימות
 	New task	משימה חדשה
 	{n} tasks to do	{n} משימות לביצוע

@@ -1485,6 +1485,15 @@ month	May	maggio
 	Sign in to Webex	Accedi a Webex
 	Sign in to Webex again	Accedi di nuovo a Webex
 	Your Webex account can't schedule meetings on this site	Il tuo account Webex non può pianificare riunioni su questo sito
+	Webex Meeting options	Opzioni riunione Webex
+	New Webex meeting	Nuova riunione Webex
+	Use my personal room	Usa la mia stanza personale
+	A meeting needs a title and a start	Una riunione deve avere un titolo e un inizio
+	Creating the Webex meeting…	Creazione della riunione Webex…
+	Meeting number: {number}	Numero riunione: {number}
+	Password: {password}	Password: {password}
+	Video: {address}	Video: {address}
+	Webex answered {status}: {message}	Webex ha risposto {status}: {message}
 	Tasks	Attività
 	New task	Nuova attività
 	{n} tasks to do	{n} attività da fare

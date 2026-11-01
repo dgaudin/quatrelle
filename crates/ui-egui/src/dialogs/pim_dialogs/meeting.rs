@@ -70,23 +70,27 @@ pub fn meeting(ui: &mut Ui, f: &mut EventForm, s: &Session, people: &mut PeopleF
     tabs(ui, t, f);
     ui.add_space(2.0);
     let mut keep = true;
-    // Its Send held while its lines' names are checked: Send is off, and the window says so.
+    // Its Send held while its lines' names are checked, or a Webex meeting on its way: Send is
+    // off, and the window says so.
     let checking = people.holding(MEETING_WINDOWS | f.window);
+    let creating = f.webex_wait.is_some();
     egui::ScrollArea::horizontal().id_salt("meeting-ribbon").show(ui, |ui| {
         ui.with_layout(egui::Layout::left_to_right(egui::Align::Min), |ui| {
             ui.spacing_mut().item_spacing.x = 2.0;
-            keep = ribbon(ui, t, f, &s.prefs.webex_room, checking, acts);
+            keep = ribbon(ui, t, f, s, checking || creating, acts);
         });
     });
     let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 1.0), Sense::hover());
     ui.painter().rect_filled(r, 0.0, t.border);
     ui.add_space(8.0);
-    if checking {
-        ui.horizontal(|ui| {
-            ui.add(egui::Spinner::new().size(12.0).color(t.accent));
-            ui.label(RichText::new(tl!("Checking names…")).color(t.dim).small());
-        });
-        ui.add_space(4.0);
+    for (busy, said) in [(checking, tl!("Checking names…")), (creating, tl!("Creating the Webex meeting…"))] {
+        if busy {
+            ui.horizontal(|ui| {
+                ui.add(egui::Spinner::new().size(12.0).color(t.accent));
+                ui.label(RichText::new(said).color(t.dim).small());
+            });
+            ui.add_space(4.0);
+        }
     }
     // Outlook's Appointment Recurrence, over the window while it's open.
     if let Some(st) = f.recurrence.as_mut() {
@@ -228,9 +232,68 @@ fn webex_room(ui: &mut Ui, t: &Tokens, window: u64) -> Option<String> {
     taken
 }
 
-/// The Appointment (or Meeting) tab's groups (`checking`: its Send is held for its names, and
-/// off meanwhile). `false`: closed from it.
-fn ribbon(ui: &mut Ui, t: &Tokens, f: &mut EventForm, webex: &str, checking: bool, acts: &mut Vec<Action>) -> bool {
+/// Webex Meeting: a click schedules a meeting, and the menu beside it offers that or the personal
+/// room, asked for there the first time (`busy`: names are being checked or a meeting made, and
+/// both wait). Only a meeting the appointment can keep is scheduled: one at a time, and on the
+/// user's own, as someone else's event never sends anything to Webex.
+#[cfg(not(target_arch = "wasm32"))]
+fn webex_button(ui: &mut Ui, t: &Tokens, f: &mut EventForm, s: &Session, busy: bool, acts: &mut Vec<Action>) {
+    let schedules = !busy && f.webex_id.is_none() && f.can_invite;
+    if widgets::big_button(ui, Icon::Video, "Webex Meeting", t, schedules).clicked() {
+        super::webex::new_meeting(f, &s.prefs, acts);
+    }
+    let asking = egui::Id::unique(("webex-room-asking", f.window));
+    let r = ui.add_enabled_ui(!busy, |ui| widgets::big_more(ui, "Webex Meeting options", t)).inner;
+    let menu = egui::Popup::menu(&r).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
+        if ui.data(|d| d.get_temp(asking)).unwrap_or(false) {
+            if let Some(url) = webex_room(ui, t, f.window) {
+                acts.push(Action::Run("calendar.webexRoom", json!({"url": url})));
+                add_webex(f, &url);
+                ui.close();
+            }
+            return;
+        }
+        if ui.add_enabled(schedules, egui::Button::new(tl!("New Webex meeting"))).clicked() {
+            super::webex::new_meeting(f, &s.prefs, acts);
+            ui.close();
+        }
+        if ui.button(tl!("Use my personal room")).clicked() {
+            if s.prefs.webex_room.is_empty() {
+                ui.data_mut(|d| d.insert_temp(asking, true));
+            } else {
+                add_webex(f, &s.prefs.webex_room);
+                ui.close();
+            }
+        }
+    });
+    if menu.is_none() {
+        ui.data_mut(|d| d.remove::<bool>(asking));
+    }
+}
+
+/// Webex Meeting in the browser, where no meeting is scheduled: it puts the personal room in,
+/// asked for under the button the first time.
+#[cfg(target_arch = "wasm32")]
+fn webex_button(ui: &mut Ui, t: &Tokens, f: &mut EventForm, s: &Session, _busy: bool, acts: &mut Vec<Action>) {
+    let webex = s.prefs.webex_room.as_str();
+    let r = widgets::big_button(ui, Icon::Video, "Webex Meeting", t, true);
+    if webex.is_empty() {
+        let r = r.on_hover_text(tl!("Puts your Webex personal room in the meeting"));
+        egui::Popup::menu(&r).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
+            if let Some(url) = webex_room(ui, t, f.window) {
+                acts.push(Action::Run("calendar.webexRoom", json!({"url": url})));
+                add_webex(f, &url);
+                ui.close();
+            }
+        });
+    } else if r.on_hover_text(webex).clicked() {
+        add_webex(f, webex);
+    }
+}
+
+/// The Appointment (or Meeting) tab's groups (`checking`: its Send is held for its names or a
+/// Webex meeting, and off meanwhile). `false`: closed from it.
+fn ribbon(ui: &mut Ui, t: &Tokens, f: &mut EventForm, s: &Session, checking: bool, acts: &mut Vec<Action>) -> bool {
     let t = *t;
     let mut keep = true;
     let mut groups = Groups::new(ui);
@@ -268,28 +331,15 @@ fn ribbon(ui: &mut Ui, t: &Tokens, f: &mut EventForm, webex: &str, checking: boo
         keep = false;
     }
     groups.end(ui, &t, "Actions");
-    // An online meeting (Teams, Webex, Zoom…): Join, as Outlook has it; none yet, Webex
-    // Meeting puts the personal room in, asked for under the button the first time (kept in
-    // Options from then on).
+    // An online meeting (Teams, Webex, Zoom…): Join, as Outlook has it; none yet, Webex Meeting
+    // makes one.
     if let Some(url) = f.join.clone() {
         if widgets::big_button(ui, Icon::Video, "Join meeting", &t, true).on_hover_text(&url).clicked() {
             acts.push(Action::OpenMeeting(url));
         }
         groups.end(ui, &t, "Online meeting");
     } else if writable {
-        let r = widgets::big_button(ui, Icon::Video, "Webex Meeting", &t, true);
-        if webex.is_empty() {
-            let r = r.on_hover_text(tl!("Puts your Webex personal room in the meeting"));
-            egui::Popup::menu(&r).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
-                if let Some(url) = webex_room(ui, &t, f.window) {
-                    acts.push(Action::Run("calendar.webexRoom", json!({"url": url})));
-                    add_webex(f, &url);
-                    ui.close();
-                }
-            });
-        } else if r.on_hover_text(webex).clicked() {
-            add_webex(f, webex);
-        }
+        webex_button(ui, &t, f, s, checking, acts);
         groups.end(ui, &t, "Online meeting");
     }
     // Someone else's invitation, not answered yet.

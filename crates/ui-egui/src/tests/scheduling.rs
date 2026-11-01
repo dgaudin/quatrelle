@@ -359,11 +359,11 @@ fn a_click_shows_a_rooms_day_and_a_double_click_books_it() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
-/// Webex Meeting with no personal room set asks for it under the button (in the meeting's
-/// window, not in Options behind it): a link that isn't a personal room's is refused, one that
-/// is goes in the meeting and is kept for the next ones.
+/// Use my personal room with none set asks for it under the button (in the meeting's window, not
+/// in Options behind it): a link that isn't a personal room's is refused, one that is goes in the
+/// meeting and is kept for the next ones.
 #[test]
-fn webex_meeting_asks_for_the_personal_room_under_its_button() {
+fn use_my_personal_room_asks_for_it_under_the_button() {
     let (mut a, dir) = app("webex-ask");
     let ctx = egui::Context::default();
     let size = egui::vec2(1280.0, 900.0);
@@ -371,7 +371,8 @@ fn webex_meeting_asks_for_the_personal_room_under_its_button() {
     assert!(a.session.prefs.webex_room.is_empty());
     a.ui.dialog = Some(Dialog::new_event(&a.session, Some(NOW + 2 * 3600)));
     frame_sized(&ctx, &mut a, vec![], size);
-    let at = settled_text_at(&ctx, &mut a, "Webex Meeting", size).expect("the button");
+    webex::open_webex_menu(&ctx, &mut a, size);
+    let at = settled_text_at(&ctx, &mut a, "Use my personal room", size).expect("the menu's entry");
     click_at(&ctx, &mut a, at, 1, size);
     let shapes = frame_shapes(&ctx, &mut a, vec![], size);
     assert!(text_at(&shapes, "Your Webex personal room").is_some(), "asked for under the button");
@@ -384,9 +385,7 @@ fn webex_meeting_asks_for_the_personal_room_under_its_button() {
     assert!(a.ui.event_windows[0].1.join.is_none() && a.session.prefs.webex_room.is_empty(), "refused");
     // Typed again, right this time.
     let shapes = frame_shapes(&ctx, &mut a, vec![], size);
-    if text_at(&shapes, "Your Webex personal room").is_none() {
-        click_at(&ctx, &mut a, text_at(&shapes, "Webex Meeting").expect("the button"), 1, size);
-    }
+    assert!(text_at(&shapes, "Your Webex personal room").is_some(), "still asked");
     let room = "https://acme.webex.com/meet/ana";
     let typed = egui::Id::unique(("webex-room-typed", a.ui.event_windows[0].0));
     ctx.data_mut(|d| d.insert_temp(typed, String::new()));

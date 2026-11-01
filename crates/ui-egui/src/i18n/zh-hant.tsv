@@ -1485,6 +1485,15 @@ month	May	5月
 	Sign in to Webex	登入 Webex
 	Sign in to Webex again	請重新登入 Webex
 	Your Webex account can't schedule meetings on this site	您的 Webex 帳號無法在此網站上安排會議
+	Webex Meeting options	Webex 會議選項
+	New Webex meeting	新增 Webex 會議
+	Use my personal room	使用我的個人會議室
+	A meeting needs a title and a start	會議需要標題和開始時間
+	Creating the Webex meeting…	正在建立 Webex 會議…
+	Meeting number: {number}	會議號碼: {number}
+	Password: {password}	密碼: {password}
+	Video: {address}	視訊: {address}
+	Webex answered {status}: {message}	Webex 回應 {status}: {message}
 	Tasks	工作
 	New task	新增工作
 	{n} tasks to do	{n} 項待辦工作

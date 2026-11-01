@@ -1482,6 +1482,15 @@ month	May	مايو
 	Sign in to Webex	تسجيل الدخول إلى Webex
 	Sign in to Webex again	سجّل الدخول إلى Webex مرة أخرى
 	Your Webex account can't schedule meetings on this site	لا يستطيع حساب Webex الخاص بك جدولة اجتماعات على هذا الموقع
+	Webex Meeting options	خيارات اجتماع Webex
+	New Webex meeting	اجتماع Webex جديد
+	Use my personal room	استخدام غرفتي الشخصية
+	A meeting needs a title and a start	يحتاج الاجتماع إلى عنوان ووقت بدء
+	Creating the Webex meeting…	جارٍ إنشاء اجتماع Webex…
+	Meeting number: {number}	رقم الاجتماع: {number}
+	Password: {password}	كلمة المرور: {password}
+	Video: {address}	الفيديو: {address}
+	Webex answered {status}: {message}	ردّ Webex بالرمز {status}: {message}
 	Tasks	المهام
 	New task	مهمة جديدة
 	{n} tasks to do	{n} مهام للقيام بها

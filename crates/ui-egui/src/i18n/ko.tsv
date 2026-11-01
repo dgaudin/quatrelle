@@ -1485,6 +1485,15 @@ month	May	5월
 	Sign in to Webex	Webex에 로그인
 	Sign in to Webex again	Webex에 다시 로그인하세요
 	Your Webex account can't schedule meetings on this site	Webex 계정으로는 이 사이트에서 회의를 예약할 수 없습니다
+	Webex Meeting options	Webex 회의 옵션
+	New Webex meeting	새 Webex 회의
+	Use my personal room	내 개인 룸 사용
+	A meeting needs a title and a start	회의에는 제목과 시작 시간이 필요합니다
+	Creating the Webex meeting…	Webex 회의를 만드는 중…
+	Meeting number: {number}	회의 번호: {number}
+	Password: {password}	암호: {password}
+	Video: {address}	비디오: {address}
+	Webex answered {status}: {message}	Webex 응답 {status}: {message}
 	Tasks	작업
 	New task	새 작업
 	{n} tasks to do	할 일 {n}개
