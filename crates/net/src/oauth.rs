@@ -366,9 +366,15 @@ pub fn authorize_on(
             Err(e) => return Err(e.into()),
         };
         sock.set_nonblocking(false)?;
-        sock.set_read_timeout(Some(Duration::from_secs(10)))?;
+        // Never past the sign-in's own timeout, whatever is connected.
+        let left = deadline.saturating_duration_since(Instant::now()).max(Duration::from_millis(1));
+        sock.set_read_timeout(Some(left.min(Duration::from_secs(10))))?;
         let mut line = String::new();
-        BufReader::new(sock.try_clone()?).take(8192).read_line(&mut line)?;
+        // A connection that says nothing readable (a browser's early one) is skipped: the real
+        // redirect may be waiting behind it.
+        if BufReader::new(sock.try_clone()?).take(8192).read_line(&mut line).is_err() {
+            continue;
+        }
         let target = line.split_whitespace().nth(1).unwrap_or("");
         let params = query_params(target);
         let get = |k: &str| params.iter().find(|(n, _)| n == k).map(|(_, v)| v.clone());
@@ -595,6 +601,60 @@ pub(crate) mod tests {
             Ok(())
         };
         assert!(matches!(authorize(&p, "", &mut deny, Duration::from_secs(10)), Err(NetError::Auth(m)) if m.contains("access_denied")));
+    }
+
+    /// The address a sign-in's redirect listens on, from the URL the browser is sent to.
+    fn listening_on(url: &str) -> String {
+        let params = query_params(url);
+        let redirect = params.iter().find(|(n, _)| n == "redirect_uri").map(|(_, v)| v.clone()).unwrap_or_default();
+        redirect.trim_start_matches("http://").split('/').next().unwrap_or("").to_string()
+    }
+
+    /// A connection that sends nothing readable (a browser's early one) doesn't end the sign-in:
+    /// the redirect behind it still counts.
+    #[test]
+    fn a_connection_that_says_nothing_readable_is_skipped() {
+        let (base, _seen) = crate::http::tests::serve(vec![
+            b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 45\r\n\r\n{\"access_token\":\"good\",\"expires_in\":3600}      "
+                .to_vec(),
+        ]);
+        let p = local(&format!("{base}/token"));
+        let mut browser = |url: &str| -> std::result::Result<(), String> {
+            let params = query_params(url);
+            let get = |k: &str| params.iter().find(|(n, _)| n == k).map(|(_, v)| v.clone()).unwrap_or_default();
+            let (redirect, state, at) = (get("redirect_uri"), get("state"), listening_on(url));
+            std::thread::spawn(move || {
+                if let Ok(mut junk) = std::net::TcpStream::connect(&at) {
+                    let _ = junk.write_all(b"\xff\xfe\n");
+                }
+                let _ = crate::http::get(&format!("{redirect}?code=the-code&state={state}"), 10_000);
+            });
+            Ok(())
+        };
+        assert!(authorize(&p, "", &mut browser, Duration::from_secs(10)).is_ok());
+    }
+
+    /// Connections that stay silent can't hold the wait past its timeout.
+    #[test]
+    fn silent_connections_cannot_outlast_the_timeout() {
+        let p = local("http://127.0.0.1:9/token");
+        let held = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let keep = held.clone();
+        let mut browser = move |url: &str| -> std::result::Result<(), String> {
+            let at = listening_on(url);
+            for _ in 0..3 {
+                if let Ok(c) = std::net::TcpStream::connect(&at)
+                    && let Ok(mut h) = keep.lock()
+                {
+                    h.push(c);
+                }
+            }
+            Ok(())
+        };
+        let started = Instant::now();
+        assert!(matches!(authorize(&p, "", &mut browser, Duration::from_secs(1)), Err(NetError::Auth(m)) if m.contains("in time")));
+        assert!(started.elapsed() < Duration::from_secs(5), "{:?}", started.elapsed());
+        drop(held);
     }
 
     #[test]
