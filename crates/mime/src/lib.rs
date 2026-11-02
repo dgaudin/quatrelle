@@ -40,7 +40,7 @@ pub mod smime;
 mod trackers;
 pub use attachments::{
     AttachmentInfo, AttachmentKind, MOST_PENDING_FILES, PendingFile, Tnef, TnefBody, TnefFile, attachment_data, craft_app_for, decompress_rtf,
-    is_protected_file, kind_of, quoted_pictures, read_tnef, rtf_body, text_first, text_preview_kind,
+    is_protected_file, kind_of, parse_text_first, quoted_pictures, read_tnef, rtf_body, text_first, text_preview_kind,
 };
 use attachments::{attached, has_real_attachments};
 use files::attachment_name;
@@ -57,8 +57,13 @@ pub const PREVIEW_CHARS: usize = 200;
 /// HTML larger than this is cut before conversion (the rest is rarely more than markup).
 pub(crate) const HTML_MAX: usize = 4 << 20;
 
-/// A header's addresses. A name alone stays (an empty `email`: not known yet); one with neither is dropped.
 fn addrs(a: Option<&Address<'_>>) -> Vec<EmailAddress> {
+    a.map(|a| a.iter().filter_map(|x| x.address().map(|e| EmailAddress::new(x.name().unwrap_or_default().trim(), e.trim()))).collect())
+        .unwrap_or_default()
+}
+
+/// Like [`addrs`], a name alone stays too (an empty `email`: not known yet); one with neither is dropped.
+fn addrs_with_names(a: Option<&Address<'_>>) -> Vec<EmailAddress> {
     a.map(|a| {
         a.iter()
             .map(|x| EmailAddress::new(x.name().unwrap_or_default().trim(), x.address().unwrap_or_default().trim()))
@@ -295,6 +300,11 @@ pub type RichText = Vec<Vec<Span>>;
 
 /// Parse a full message for display. `None` only for input that isn't a message at all.
 pub fn parse(raw: &[u8]) -> Option<Parsed> {
+    parse_as(raw, addrs)
+}
+
+/// [`parse`], reading the recipients' addresses with `read` (see [`parse_text_first`]).
+fn parse_as(raw: &[u8], read: fn(Option<&Address<'_>>) -> Vec<EmailAddress>) -> Option<Parsed> {
     let m = MessageParser::default().parse(raw)?;
     // mail-parser lists text parts among the HTML bodies too (converted); only real HTML counts.
     let real_html = m.html_bodies().any(|p| p.is_text_html());
@@ -348,9 +358,9 @@ pub fn parse(raw: &[u8]) -> Option<Parsed> {
     Some(Parsed {
         subject: m.subject().unwrap_or_default().trim().to_string(),
         from: addrs(m.from()).into_iter().next().unwrap_or_default(),
-        reply_to: addrs(m.reply_to()),
-        to: addrs(m.to()),
-        cc: addrs(m.cc()),
+        reply_to: read(m.reply_to()),
+        to: read(m.to()),
+        cc: read(m.cc()),
         date: m.date().map(|d| d.to_timestamp()).unwrap_or(0),
         message_id: m.message_id().map(norm_id).unwrap_or_default(),
         in_reply_to: ids(m.in_reply_to()).into_iter().next().unwrap_or_default(),
