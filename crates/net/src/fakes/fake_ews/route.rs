@@ -377,7 +377,7 @@ impl Data {
                         continue;
                     }
                     match self.items.iter().find(|i| i.id == id) {
-                        Some(i) if self.unrouted(&i.folder) => out.push(err("ErrorItemNotFound")),
+                        Some(i) if self.unrouted(&i.folder) || self.unanchored(&i.folder) => out.push(err("ErrorItemNotFound")),
                         Some(i) if mime && self.unreadable.contains(&i.id) => out.push(err("ErrorInternalServerError")),
                         Some(i) => out.push(ok(format!("<m:Items>{}</m:Items>", self.item_xml(i, mime, text)))),
                         None => out.push(err("ErrorItemNotFound")),

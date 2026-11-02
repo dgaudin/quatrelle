@@ -125,7 +125,7 @@ const APPOINTMENT_FIELDS: [&str; 27] = [
 ];
 
 /// The codes of a server refusing a field asked by name, rather than the item.
-const FIELD_REFUSED: [&str; 3] = ["ErrorInvalidPropertyRequest", "ErrorInvalidPropertyForOperation", "ErrorSchemaValidation"];
+pub(crate) const FIELD_REFUSED: [&str; 3] = ["ErrorInvalidPropertyRequest", "ErrorInvalidPropertyForOperation", "ErrorSchemaValidation"];
 
 /// Every item of a distinguished folder, with all its properties (bodies as text); a
 /// calendar's from `since` on, with the fields read of an appointment.
