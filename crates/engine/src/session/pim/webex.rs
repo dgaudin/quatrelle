@@ -25,6 +25,9 @@ pub struct WebexState {
     pub answers: HashMap<u64, Result<WebexMeeting, WebexError>>,
     /// What each meeting made in this run was last sent with.
     pub sent: HashMap<String, WebexFields>,
+    /// What each update on its way started from, oldest first: what Webex had before it, put back
+    /// in `sent` when the update fails.
+    pub unacknowledged: HashMap<String, std::collections::VecDeque<WebexFields>>,
     /// Meetings being deleted: asked of Webex, not answered yet.
     pub deleting: usize,
     /// Quatrelle is closing with a meeting of an open window to delete.
@@ -80,6 +83,7 @@ impl Session {
             return;
         }
         self.webex.sent.insert(id.to_string(), now.clone());
+        self.webex.unacknowledged.entry(id.to_string()).or_default().push_back(last.clone());
         self.jobs.push(Job::WebexUpdate {
             client_id: self.prefs.webex_client_id.clone(),
             id: id.to_string(),
@@ -97,6 +101,7 @@ impl Session {
             return;
         }
         self.webex.sent.remove(id);
+        self.webex.unacknowledged.remove(id);
         self.webex_delete(id.to_string(), !e.attendees.is_empty());
     }
 
@@ -125,7 +130,16 @@ impl Session {
         }
     }
 
+    /// Webex says the sign-in is over: signed out, who it was kept, and Options offers the sign-in.
+    fn webex_lapsed(&mut self, error: Option<&WebexError>) {
+        if matches!(error, Some(WebexError::SignIn)) {
+            self.prefs.webex_signed_in = false;
+            self.webex.sign_in_error = Some(WebexError::SignIn);
+        }
+    }
+
     pub(in crate::session) fn webex_created(&mut self, ask: u64, meeting: Option<WebexMeeting>, error: Option<WebexError>) {
+        self.webex_lapsed(error.as_ref());
         let Some(asked) = self.webex.asks.remove(&ask) else { return };
         let answer = meeting.ok_or_else(|| error.unwrap_or_else(|| WebexError::Failed("Webex gave no answer".into())));
         if asked.abandoned {
@@ -141,6 +155,15 @@ impl Session {
     }
 
     pub(in crate::session) fn webex_updated(&mut self, id: &str, meeting: Option<WebexMeeting>, error: Option<WebexError>) {
+        self.webex_lapsed(error.as_ref());
+        let started_from = self.webex.unacknowledged.get_mut(id).and_then(|q| q.pop_front());
+        if self.webex.unacknowledged.get(id).is_some_and(|q| q.is_empty()) {
+            self.webex.unacknowledged.remove(id);
+        }
+        if let (Some(_), Some(from)) = (&error, started_from) {
+            // Webex still has what it had: the next save sends the difference again.
+            self.webex.sent.insert(id.to_string(), from);
+        }
         let done = match (meeting, error) {
             (_, Some(e)) => Err(e.to_string()),
             (Some(m), None) => self.webex_link_changed(id, &m.web_link).map_err(|e| e.to_string()),
@@ -169,6 +192,7 @@ impl Session {
 
     pub(in crate::session) fn webex_deleted(&mut self, error: Option<WebexError>) {
         self.webex.deleting = self.webex.deleting.saturating_sub(1);
+        self.webex_lapsed(error.as_ref());
         if let Some(e) = error {
             self.notice_with("The Webex meeting couldn't be deleted: {error}", &[("error", &e.to_string())], true);
         }
