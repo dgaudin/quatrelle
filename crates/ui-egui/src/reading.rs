@@ -218,6 +218,12 @@ pub fn window(s: &mut Session, st: &mut UiState, ui: &mut Ui, w: quatrelle_engin
     }
 }
 
+/// What asking for something that needs the whole message says while only its text is here:
+/// that it's coming, or, once that failed, why it isn't (as the engine's refusals say).
+fn still_coming(r: &quatrelle_engine::Reading) -> String {
+    r.error.clone().unwrap_or_else(|| quatrelle_engine::STILL_COMING.to_string())
+}
+
 /// The sender's voting buttons, above the message: a button per choice, which sends that answer
 /// at once; once answered, which one (and the buttons stay, to vote again).
 fn vote_bar(ui: &mut Ui, t: &Tokens, key: &MessageKey, choices: &[String], voted: &str, sending: Option<&str>, acts: &mut Vec<Action>) {
@@ -261,7 +267,9 @@ fn message(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action
         .as_ref()
         .filter(|(k, _)| *k == r.key)
         .map(|(_, i)| *i)
-        .filter(|i| r.parsed.as_ref().is_some_and(|p| p.attachments.iter().any(|a| a.index == *i)));
+        .filter(|i| r.parsed.as_ref().is_some_and(|p| p.attachments.iter().any(|a| a.index == *i)))
+        // Its text alone here: no attachment to show yet.
+        .filter(|_| !r.text_first);
     if viewing.is_some() && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
         close_attachment_view(st);
     }
@@ -354,23 +362,44 @@ fn message(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action
                 .filter(|a| (!a.inline || a.kind() == AttachmentKind::Image) && !in_place(a) && !is_invite_file(a))
                 .cloned()
                 .collect();
-            if !files.is_empty() {
+            // Its text came first: the files are on their way (said even when none is listed, the
+            // pictures shown in place being among them), or couldn't be had.
+            let coming = r.text_first && r.error.is_none();
+            if let Some(e) = r.error.as_ref().filter(|_| r.text_first) {
                 ui.horizontal(|ui| {
-                    ui.label(
-                        RichText::new(if files.len() == 1 { tl!("1 attachment").to_string() } else { tf!("{n} attachments", n = files.len()) })
-                            .color(t.dim)
-                            .small(),
-                    );
-                    if files.len() > 1 && ui.link(RichText::new(tl!("Save all…")).small()).clicked() {
+                    let (ir, _) = ui.allocate_exact_size(vec2(16.0, 16.0), Sense::hover());
+                    icons::paint(ui.painter(), ir, Icon::Warning, t.warn);
+                    ui.label(RichText::new(tf!("The attachments couldn't be downloaded: {error}", error = e)).color(t.dim).small());
+                    if ui.button(tl!("Try again")).clicked() {
+                        acts.push(Action::Open(r.key.clone()));
+                    }
+                });
+                ui.add_space(6.0);
+            }
+            if !files.is_empty() || coming {
+                ui.horizontal(|ui| {
+                    if !files.is_empty() {
+                        ui.label(
+                            RichText::new(if files.len() == 1 { tl!("1 attachment").to_string() } else { tf!("{n} attachments", n = files.len()) })
+                                .color(t.dim)
+                                .small(),
+                        );
+                    }
+                    if coming {
+                        ui.add(egui::Spinner::new().size(11.0));
+                        ui.label(RichText::new(tl!("Downloading the attachments…")).color(t.dim).small());
+                    } else if !r.text_first && files.len() > 1 && ui.link(RichText::new(tl!("Save all…")).small()).clicked() {
                         acts.push(Action::SaveAll);
                     }
                 });
                 // Wrapped into rows, scrolling past three, as Outlook's are.
-                widgets::chip_grid(ui, egui::Id::unique(("attachments", r.key.to_id())), files.len(), 240.0, 400.0, CHIP_H, 3, |ui, i, w| {
-                    if let Some(a) = files.get(i) {
-                        attachment_card(s, st, ui, &r.key, a, w, acts);
-                    }
-                });
+                if !files.is_empty() {
+                    widgets::chip_grid(ui, egui::Id::unique(("attachments", r.key.to_id())), files.len(), 240.0, 400.0, CHIP_H, 3, |ui, i, w| {
+                        if let Some(a) = files.get(i) {
+                            attachment_card(s, st, ui, &r.key, a, w, acts);
+                        }
+                    });
+                }
                 ui.add_space(10.0);
             }
             if let Some(index) = viewing

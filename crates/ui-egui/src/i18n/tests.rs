@@ -145,6 +145,7 @@ fn notice_wordings() -> BTreeSet<String> {
     }
     out.extend(KNOWN_ERRORS.map(str::to_string));
     out.insert(quatrelle_engine::NAMES_NOT_FOUND.to_string());
+    out.insert(quatrelle_engine::STILL_COMING.to_string());
     out
 }
 

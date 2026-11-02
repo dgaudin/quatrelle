@@ -63,6 +63,7 @@
 	Disconnected: {error}	연결 끊김: {error}
 	Document	문서
 	Don't run later rules on mail this one matches	이 규칙에 해당하는 메일에는 다음 규칙을 적용하지 않음
+	Downloading the attachments…	첨부 파일을 다운로드하는 중…
 	Downloading the message…	메시지를 다운로드하는 중…
 	Draft saved	임시 보관함에 저장했습니다
 	Drafts	임시 보관함
@@ -279,6 +280,7 @@
 	Text	텍스트
 	Text or address	텍스트 또는 주소
 	The PDF couldn't be opened: {error}	PDF를 열 수 없습니다: {error}
+	The attachments couldn't be downloaded: {error}	첨부 파일을 다운로드할 수 없습니다: {error}
 	The folder and everything in it will be moved to Deleted Items.	폴더와 그 안의 모든 항목이 지운 편지함으로 이동합니다.
 	The folder, its subfolders and all the mail in them will be deleted for good. This can't be undone.	폴더, 하위 폴더 및 그 안의 모든 메일이 영구적으로 삭제됩니다. 되돌릴 수 없습니다.
 	The link couldn't be opened: {error}	링크를 열 수 없습니다: {error}
@@ -1311,6 +1313,7 @@ month	May	5월
 	this account has no certificate to decrypt it with (File › Info › Security)	이 계정에는 해독할 인증서가 없습니다 (파일 › 정보 › 보안)
 	it can't be decrypted with your certificate	내 인증서로는 해독할 수 없습니다
 	its account is gone	해당 계정이 더 이상 없습니다
+	its attachments are still downloading: a moment	첨부 파일을 아직 다운로드하는 중입니다: 잠시만 기다려 주세요
 	Hide the subject of encrypted mail	암호화된 메일의 제목 숨기기
 	On the way it reads [...]; the real one is inside, for its recipients (header protection).	전송 중에는 [...]로 보이고, 실제 제목은 받는 사람을 위해 안에 들어 있습니다 (헤더 보호).
 	Its subject and addresses were protected inside it too.	제목과 주소도 안에서 보호되었습니다.

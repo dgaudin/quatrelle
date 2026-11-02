@@ -63,6 +63,7 @@
 	Disconnected: {error}	Verbinding verbroken: {error}
 	Document	Document
 	Don't run later rules on mail this one matches	Geen latere regels uitvoeren op mail waarop deze van toepassing is
+	Downloading the attachments…	De bijlagen worden gedownload…
 	Downloading the message…	Het bericht wordt gedownload…
 	Draft saved	Concept opgeslagen
 	Drafts	Concepten
@@ -279,6 +280,7 @@
 	Text	Tekst
 	Text or address	Tekst of adres
 	The PDF couldn't be opened: {error}	De pdf kon niet worden geopend: {error}
+	The attachments couldn't be downloaded: {error}	De bijlagen konden niet worden gedownload: {error}
 	The folder and everything in it will be moved to Deleted Items.	De map en alles erin worden naar Verwijderde items verplaatst.
 	The folder, its subfolders and all the mail in them will be deleted for good. This can't be undone.	De map, de submappen en alle mail erin worden definitief verwijderd. Dit kan niet ongedaan worden gemaakt.
 	The link couldn't be opened: {error}	De koppeling kon niet worden geopend: {error}
@@ -1308,6 +1310,7 @@ month	May	mei
 	this account has no certificate to decrypt it with (File › Info › Security)	dit account heeft geen certificaat om het te ontsleutelen (Bestand › Info › Beveiliging)
 	it can't be decrypted with your certificate	het kan niet met uw certificaat worden ontsleuteld
 	its account is gone	het account bestaat niet meer
+	its attachments are still downloading: a moment	de bijlagen worden nog gedownload: een ogenblik
 	Hide the subject of encrypted mail	Het onderwerp van versleutelde mail verbergen
 	On the way it reads [...]; the real one is inside, for its recipients (header protection).	Onderweg staat er [...]; het echte staat binnenin, voor de ontvangers (headerbescherming).
 	Its subject and addresses were protected inside it too.	Het onderwerp en de adressen waren er ook binnenin beschermd.

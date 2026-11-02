@@ -63,6 +63,7 @@
 	Disconnected: {error}	Disconnesso: {error}
 	Document	Documento
 	Don't run later rules on mail this one matches	Non applicare le regole successive alla posta che corrisponde a questa
+	Downloading the attachments…	Download degli allegati…
 	Downloading the message…	Download del messaggio…
 	Draft saved	Bozza salvata
 	Drafts	Bozze
@@ -279,6 +280,7 @@
 	Text	Testo
 	Text or address	Testo o indirizzo
 	The PDF couldn't be opened: {error}	Impossibile aprire il PDF: {error}
+	The attachments couldn't be downloaded: {error}	Impossibile scaricare gli allegati: {error}
 	The folder and everything in it will be moved to Deleted Items.	La cartella e tutto il suo contenuto verranno spostati in Posta eliminata.
 	The folder, its subfolders and all the mail in them will be deleted for good. This can't be undone.	La cartella, le sue sottocartelle e tutta la posta che contengono verranno eliminate definitivamente. Non si può annullare.
 	The link couldn't be opened: {error}	Impossibile aprire il collegamento: {error}
@@ -1311,6 +1313,7 @@ month	May	maggio
 	this account has no certificate to decrypt it with (File › Info › Security)	questo account non ha un certificato per decrittografarlo (File › Informazioni › Sicurezza)
 	it can't be decrypted with your certificate	non può essere decrittografato con il tuo certificato
 	its account is gone	il suo account non esiste più
+	its attachments are still downloading: a moment	i suoi allegati sono ancora in download: un momento
 	Hide the subject of encrypted mail	Nascondi l'oggetto della posta crittografata
 	On the way it reads [...]; the real one is inside, for its recipients (header protection).	Durante il percorso si legge [...]; quello vero è all'interno, per i destinatari (protezione delle intestazioni).
 	Its subject and addresses were protected inside it too.	Anche l'oggetto e gli indirizzi erano protetti all'interno.
