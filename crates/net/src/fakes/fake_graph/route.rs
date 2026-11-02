@@ -186,6 +186,9 @@ impl Data {
             }
             // With its body and the list of its files, names and sizes but no bytes (a message's
             // text first); another mailbox's message comes the same way, through `/users/…`.
+            ("GET", ["me", "messages", _]) if query.contains("$expand=attachments") && self.text_status.is_some() => {
+                (self.text_status.unwrap_or(500), json!({"error": {"code": "ErrorServerBusy"}}).to_string().into_bytes(), "application/json")
+            }
             ("GET", ["me", "messages", id]) if query.contains("$expand=attachments") => self.message(id).map_or_else(not_found, |m| {
                 let mut v = self.message_json(m);
                 let p = quatrelle_mime::parse(&m.raw);
