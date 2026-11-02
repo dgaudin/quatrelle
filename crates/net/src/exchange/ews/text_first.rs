@@ -284,8 +284,7 @@ mod tests {
         ))
         .unwrap();
         let p = mime::parse_text_first(&raw).unwrap();
-        assert_eq!(p.from.email, "", "an SMTP address that isn't one isn't used");
-        assert!(String::from_utf8_lossy(&raw).contains("From: \"Sam\" <>"), "the name is");
+        assert_eq!((p.from.name.as_str(), p.from.email.as_str()), ("Sam", ""), "an SMTP address that isn't one isn't used; the name stays");
         assert_eq!(p.to.len(), 1, "{:?}", p.to);
         assert!(!String::from_utf8_lossy(&raw).contains("\nBcc:"));
     }
