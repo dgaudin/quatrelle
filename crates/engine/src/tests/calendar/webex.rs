@@ -732,3 +732,54 @@ fn a_strangers_invitation_and_files_bring_no_webex_id() {
     assert!(!text.contains("WEBEX"), "{text}");
     done(s);
 }
+
+/// Webex says the sign-in is over, to a create, an update or a delete alike: the session is signed
+/// out, who it was stays, and Options offers the sign-in.
+#[test]
+fn an_answer_that_says_sign_in_signs_out() {
+    for which in 0..3 {
+        let mut s = signed_in("webex-lapsed");
+        s.prefs.webex_user = "Zoe".into();
+        asked(&mut s, false, false);
+        let signed_in_error = Some(WebexError::SignIn);
+        match which {
+            0 => s.apply(Event::WebexCreated { ask: ASK, meeting: None, error: signed_in_error }),
+            1 => s.apply(Event::WebexUpdated { id: "m1".into(), meeting: None, error: signed_in_error }),
+            _ => s.apply(Event::WebexDeleted { id: "m1".into(), error: signed_in_error }),
+        }
+        assert!(!s.prefs.webex_signed_in, "{which}");
+        assert_eq!(s.prefs.webex_user, "Zoe", "{which}");
+        assert_eq!(s.webex.sign_in_error, Some(WebexError::SignIn), "{which}");
+        done(s);
+    }
+    // Any other refusal leaves the sign-in alone.
+    let mut s = signed_in("webex-refused");
+    s.apply(Event::WebexUpdated { id: "m1".into(), meeting: None, error: Some(WebexError::Forbidden) });
+    assert!(s.prefs.webex_signed_in && s.webex.sign_in_error.is_none());
+    done(s);
+}
+
+/// An update Webex didn't take is sent again by the next save, with what Webex last had as its
+/// starting point.
+#[test]
+fn a_failed_update_is_sent_again_by_the_next_save() {
+    let mut s = signed_in("webex-resend");
+    let uid = alone(&mut s);
+    let original = WebexFields::of(&s.find_event(&uid).unwrap().1.event);
+    s.webex.sent.insert("m1".into(), original.clone());
+    s.run("event.update", &json!({"uid": uid, "summary": "Budget 2"})).unwrap();
+    let jobs = webex_jobs(&mut s);
+    let [Job::WebexUpdate { after, .. }] = &jobs[..] else { panic!("{jobs:?}") };
+    let after = after.clone();
+    s.apply(Event::WebexUpdated { id: "m1".into(), meeting: None, error: Some(WebexError::Failed("no network".into())) });
+    assert_eq!(s.webex.sent.get("m1"), Some(&original));
+    s.run("event.update", &json!({"uid": uid, "location": "Room 2"})).unwrap();
+    let jobs = webex_jobs(&mut s);
+    let [Job::WebexUpdate { before, after: again, .. }] = &jobs[..] else { panic!("{jobs:?}") };
+    assert_eq!((before, again), (&original, &after));
+    // One Webex took stays sent.
+    s.apply(Event::WebexUpdated { id: "m1".into(), meeting: Some(meeting(OLD_LINK)), error: None });
+    s.run("event.update", &json!({"uid": uid, "location": "Room 3"})).unwrap();
+    assert!(webex_jobs(&mut s).is_empty());
+    done(s);
+}
