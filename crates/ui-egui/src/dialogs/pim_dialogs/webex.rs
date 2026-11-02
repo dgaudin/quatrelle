@@ -10,12 +10,16 @@ use super::*;
 /// until Webex is set up (the engine asks for a site too), and otherwise the window asks.
 #[cfg(not(target_arch = "wasm32"))]
 pub(super) fn new_meeting(f: &mut EventForm, prefs: &quatrelle_engine::Prefs, acts: &mut Vec<Action>) {
-    f.error = None;
+    // Webex asking for a new sign-in stays said while Options opens for it.
+    if f.error.as_deref() != Some(error_text(&WebexError::SignIn).as_str()) {
+        f.error = None;
+    }
     if f.summary.trim().is_empty() || f.date.trim().is_empty() {
         f.error = Some(tl!("A meeting needs a title and a start").to_string());
     } else if !prefs.webex_signed_in || prefs.webex_site.is_empty() {
         acts.push(Action::WebexOptions);
     } else {
+        f.error = None;
         acts.push(Action::ForWebex(f.window, webex_params(f)));
     }
 }

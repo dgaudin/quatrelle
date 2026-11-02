@@ -250,6 +250,21 @@ fn signed_out_opens_options() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// Webex asked for a new sign-in: the window says so, and the next click goes to Options, the
+/// refusal staying in the window.
+#[test]
+fn signing_in_again_goes_to_options_and_keeps_the_refusal() {
+    let (mut a, dir, ctx, jobs) = appointment("webex-lapsed", "Budget");
+    a.session.apply(quatrelle_engine::model::Event::WebexCreated { ask: 99, meeting: None, error: Some(WebexError::SignIn) });
+    form(&mut a).error = Some(error_text(&WebexError::SignIn));
+    a.session.prefs.webex_signed_in = false;
+    click_webex(&ctx, &mut a);
+    assert!(a.ui.backstage.as_ref().is_some_and(|b| b.page == crate::backstage::Page::Options));
+    assert_eq!(form(&mut a).error.as_deref(), Some("Sign in to Webex again"));
+    assert_eq!(webex_jobs(&jobs), 0);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 /// The answer's place, notes, Join and id, as the Scheduler writes them; a place typed stays.
 #[test]
 fn the_answer_goes_into_the_appointment() {
