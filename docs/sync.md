@@ -405,6 +405,14 @@ never overwritten, new items with `If-None-Match: *`), then reads each collectio
 moved: the etags by `PROPFIND`, and the new or changed items by `calendar-multiget` /
 `addressbook-multiget`. The engine merges the result: what changed here meanwhile stays to be sent.
 
+Every calendar sync (CalDAV, Exchange, Graph) starts from the calendars as the window last saved
+them, and the window takes a sync's result in a moment after it's sent: the next sync can start
+before. The worker therefore remembers the appointments its syncs put on the server, with their
+item there (`worker/dav.rs`, `Stored`, kept with the `Sink` every result leaves by), until the
+saved calendars show them; one still new there is given its item back before anything is sent.
+Without it, an appointment made then moved during the first sync was made a second time (02/11:
+Outlook showed it on Monday and on Tuesday).
+
 The password goes only to the sites the account trusts (its servers' and address's registrable
 domains, the domains the user allowed, and the homes found and saved before, unless the user
 removed their site): a request whose address, redirect or href (principal, home, collection,

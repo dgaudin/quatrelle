@@ -5,7 +5,7 @@ use super::*;
 impl Pool {
     pub fn new(store: Store, creds: Arc<dyn Credentials>) -> Pool {
         let (tx, rx) = mpsc::channel();
-        let sink = Sink { tx, wake: Arc::new(Mutex::new(None)) };
+        let sink = Sink { tx, wake: Arc::new(Mutex::new(None)), stored: Arc::default() };
         let (etx, erx) = mpsc::channel();
         let (st, sk) = (store.clone(), sink.clone());
         let edits_thread = std::thread::Builder::new().name("mail-edits".into()).spawn(move || edit_writer(st, sk, erx)).ok();
