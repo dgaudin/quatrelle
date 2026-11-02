@@ -66,6 +66,9 @@ pub struct State {
     /// Folders can only be made inside this one (`INBOX/`), as cPanel's and Courier's servers
     /// keep every folder in the Inbox.
     pub create_under: Option<String>,
+    /// The next connection to wait in IDLE is cut this long after IDLE began, saying nothing: a
+    /// connection lost on the way (the office's gateway changed over, 02/11).
+    pub hang_up_idle: Option<std::time::Duration>,
 }
 
 impl State {
@@ -89,6 +92,7 @@ impl State {
             trickle: std::time::Duration::ZERO,
             deliver_on: None,
             create_under: None,
+            hang_up_idle: None,
         }))
     }
 
@@ -323,6 +327,11 @@ pub fn serve_tcp(st: &Arc<Mutex<State>>) -> u16 {
                 loop {
                     let out: Vec<u8> = fake.out.drain(..).collect();
                     if !out.is_empty() && sock.write_all(&out).is_err() {
+                        return;
+                    }
+                    let hang_up = if fake.idling.is_some() { st.lock().ok().and_then(|mut s| s.hang_up_idle.take()) } else { None };
+                    if let Some(after) = hang_up {
+                        std::thread::sleep(after);
                         return;
                     }
                     match sock.read(&mut buf) {

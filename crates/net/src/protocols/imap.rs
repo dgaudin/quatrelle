@@ -6,7 +6,7 @@
 //! literal sizes are capped and nothing indexes unchecked.
 
 use std::collections::HashSet;
-use std::io::{self, Read, Write};
+use std::io::{Read, Write};
 use std::time::{Duration, Instant};
 
 use imap_proto::{AttributeValue, Capability, MailboxDatum, NameAttribute, Response, ResponseCode, Status, StatusAttribute};
@@ -779,7 +779,7 @@ impl<S: Read + Write + Timeouts> Client<S> {
                     changed |= is_change(&r);
                 }
                 Ok(Err(_)) => {}
-                Err(NetError::Io(e)) if matches!(e.kind(), io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut) => {}
+                Err(NetError::Io(e)) if stream::nothing_yet(&e) => {}
                 Err(e) => {
                     err = Some(e);
                     break;

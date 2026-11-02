@@ -49,6 +49,7 @@ impl Worker {
             return;
         }
         let Some(inbox) = inbox else { return };
+        let waiting_since = Instant::now();
         let result = (|| -> Result<bool> {
             let Some(Conn::Imap(c)) = self.conn.as_mut() else { return Err(NetError::Closed("not connected".into())) };
             // Mail that came after the Inbox was synced and before IDLE starts is never pushed
@@ -101,7 +102,7 @@ impl Worker {
                 );
             }
             Ok(false) => {}
-            Err(e) => self.failed(e),
+            Err(e) => self.failed_waiting(e, waiting_since.elapsed()),
         }
     }
 

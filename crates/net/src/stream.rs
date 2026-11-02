@@ -13,6 +13,14 @@ use crate::{NetError, Result};
 
 pub const CONNECT_TIMEOUT: Duration = Duration::from_secs(20);
 pub const IO_TIMEOUT: Duration = Duration::from_secs(60);
+/// TCP keepalive on every connection: a first probe after this long with nothing either way…
+const KEEPALIVE_AFTER: Duration = Duration::from_secs(60);
+/// …then one this often…
+const KEEPALIVE_EVERY: Duration = Duration::from_secs(15);
+/// …and the connection is given up after this many go unanswered: two minutes in all, where a
+/// connection a gateway forgot waited out IDLE's ten minutes, then a minute more. The probes
+/// also keep the connection fresh in a gateway's memory.
+const KEEPALIVE_TRIES: u32 = 4;
 /// A connection that takes longer than this is detailed in the log: where the time went.
 pub const SLOW_CONNECT: Duration = Duration::from_secs(2);
 /// Per-address budget while more candidates remain. With a black-holed IPv6 route each AAAA
@@ -188,6 +196,7 @@ fn connect(host: &str, port: u16, public_only: bool) -> Result<TcpStream> {
                 s.set_read_timeout(Some(IO_TIMEOUT))?;
                 s.set_write_timeout(Some(IO_TIMEOUT))?;
                 let _ = s.set_nodelay(true);
+                keep_alive(&s);
                 return Ok(s);
             }
             Err(e) => {
@@ -203,6 +212,24 @@ fn connect(host: &str, port: u16, public_only: bool) -> Result<TcpStream> {
         }
     }
     Err(NetError::Io(io::Error::new(last.kind(), format!("{host}:{port}: {last}"))))
+}
+
+/// Probe a connection gone quiet ([`KEEPALIVE_AFTER`]), so a dead one is found while IDLE waits.
+/// Best effort: a system that won't take a setting keeps its own.
+fn keep_alive(s: &TcpStream) {
+    let probes = socket2::TcpKeepalive::new().with_time(KEEPALIVE_AFTER);
+    #[cfg(any(target_os = "linux", target_os = "android", target_os = "macos", target_os = "freebsd", target_os = "netbsd", windows))]
+    let probes = probes.with_interval(KEEPALIVE_EVERY).with_retries(KEEPALIVE_TRIES);
+    if let Err(e) = socket2::SockRef::from(s).set_tcp_keepalive(&probes) {
+        log::debug!("TCP keepalive: {e}");
+    }
+}
+
+/// Whether a read stopped for the read timeout set on the connection (nothing came yet) rather
+/// than for the connection: Windows says that as `TimedOut`, the others as `WouldBlock`, and
+/// there `TimedOut` (`ETIMEDOUT`) is the keepalive finding the connection dead.
+pub fn nothing_yet(e: &io::Error) -> bool {
+    e.kind() == io::ErrorKind::WouldBlock || (cfg!(windows) && e.kind() == io::ErrorKind::TimedOut)
 }
 
 /// Wrap a TCP connection in TLS, verifying the certificate against `host`.
@@ -263,6 +290,23 @@ mod tests {
         let by_name = why("localhost");
         assert!(by_name.contains("only addresses on the internet"), "a name resolving to it too: {by_name}");
         assert!(super::tcp("127.0.0.1", port).is_ok(), "the account's own servers may be anywhere");
+    }
+
+    /// A connection a gateway forgot (the office's changed over, 02/11) is found dead within two
+    /// minutes: Gmail's IDLE only found out when it ended, eleven minutes on.
+    #[test]
+    fn connections_are_kept_alive() {
+        let server = std::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0)).unwrap();
+        let s = super::tcp("127.0.0.1", server.local_addr().unwrap().port()).unwrap();
+        let sock = socket2::SockRef::from(&s);
+        assert!(sock.keepalive().unwrap());
+        #[cfg(not(windows))]
+        assert_eq!(sock.tcp_keepalive_time().unwrap(), super::KEEPALIVE_AFTER);
+        #[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd"))]
+        {
+            assert_eq!(sock.tcp_keepalive_interval().unwrap(), super::KEEPALIVE_EVERY);
+            assert_eq!(sock.tcp_keepalive_retries().unwrap(), super::KEEPALIVE_TRIES);
+        }
     }
 
     #[test]

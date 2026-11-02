@@ -43,6 +43,9 @@ hmac = "0.13"
 # Room left on the disk, so downloading mail ahead never fills it (MIT / Apache-2.0; over
 # rustix and windows-sys, already here).
 fs4 = { version = "1.1", default-features = false }
+# TCP keepalive on every connection, so one a gateway forgot is found dead in two minutes, not
+# when IDLE ends ten minutes later (MIT / Apache-2.0; already here through lettre and tokio).
+socket2 = { version = "0.6", features = ["all"] }
 log = { workspace = true }
 thiserror = { workspace = true }
 
