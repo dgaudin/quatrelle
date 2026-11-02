@@ -360,9 +360,9 @@ mod tests {
         assert!(!s.check("zzzzzzzz"));
         // A word the writer added, whatever its language.
         let mut s = s;
-        assert!(s.add_personal("Contoso"));
-        assert!(s.check("contoso"), "added words are case-insensitive");
-        assert!(!s.add_personal("contoso"), "added once");
+        assert!(s.add_personal("Northwind"));
+        assert!(s.check("northwind"), "added words are case-insensitive");
+        assert!(!s.add_personal("northwind"), "added once");
         assert_eq!(s.languages(), ["fr", "en"]);
     }
 

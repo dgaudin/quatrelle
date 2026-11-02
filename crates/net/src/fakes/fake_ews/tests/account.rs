@@ -545,7 +545,7 @@ fn the_directory_is_searched_by_name() {
     let mut d = Data::default();
     d.folder("Inbox", None, Some("inbox"), "IPF.Note");
     d.people = vec![
-        ("Contoso Reseau".into(), "reseaux@contoso.example".into()),
+        ("Projets Reseau".into(), "reseaux@contoso.example".into()),
         ("Rémi Restout".into(), "remi.restout@contoso.example".into()),
         ("Zoe Park".into(), "zoe@contoso.example".into()),
     ];
