@@ -313,6 +313,7 @@ fn the_last_opened_comes_first_and_each_once() {
 #[test]
 fn sending_waits_for_nothing() {
     let (mut d, _) = inbox_of(1);
+    let inbox = d.by_name("Inbox").unwrap().id.clone();
     d.folder("Sent Items", None, Some("sentitems"), "IPF.Note");
     d.slow_sources = Some(Duration::from_secs(3));
     let server = serve(d);
@@ -329,7 +330,12 @@ fn sending_waits_for_nothing() {
         recipients: vec!["zoe@contoso.example".into()],
         sent_folder: Some("Sent Items".into()),
     });
-    let seen = until(&pool, "sent", |e| matches!(e, Event::Sent { id: 7, .. }));
+    let mut seen = until(&pool, "sent", |e| matches!(e, Event::Sent { id: 7, .. }));
+    // Sending has a connection of its own: what shows the main one is free is a job on it.
+    server.data.lock().unwrap().deliver(&inbox, &mail("New", "n1"), false, "2026-10-30T08:00:00Z");
+    pool.submit(Job::SyncFolder { account: "a1".into(), folder: "INBOX".into() });
+    let read = |store: &Store| store.load_folder("a1", "INBOX").is_ok_and(|f| f.messages.iter().any(|m| m.subject == "New"));
+    seen.extend(until(&pool, "the folder read", |e| matches!(e, Event::FolderChanged { folder, .. } if folder == "INBOX") && read(&store)));
     assert!(!seen.iter().any(|e| is_body(e, &key)), "{seen:?}");
     until(&pool, "the whole message", |e| is_body(e, &key));
     drop(pool);
@@ -374,12 +380,10 @@ fn a_public_folder_and_a_shared_mailbox_work() {
     let _ = std::fs::remove_dir_all(store.root());
 }
 
-#[test]
-fn a_refused_text_falls_back_and_is_not_asked_again() {
-    let (mut d, _) = inbox_of(2);
-    d.refuse_text = true;
+/// Two messages opened on a server refusing the text: both come whole, and it's asked once.
+fn refused_once(d: Data, name: &str) {
     let server = serve(d);
-    let store = crate::fake::tests_store("ews-text-first-refused");
+    let store = crate::fake::tests_store(name);
     let mut pool = start(&server, &store);
     let texts_asked = || server.data.lock().unwrap().item_shapes.iter().filter(|s| *s == "IdOnly").count();
     let before = texts_asked();
@@ -393,6 +397,39 @@ fn a_refused_text_falls_back_and_is_not_asked_again() {
     assert_eq!(texts_asked(), before + 1, "asked once, not at every message");
     drop(pool);
     let _ = std::fs::remove_dir_all(store.root());
+}
+
+#[test]
+fn a_refused_text_falls_back_and_is_not_asked_again() {
+    let (mut d, _) = inbox_of(2);
+    d.refuse_text = true;
+    refused_once(d, "ews-text-first-refused");
+}
+
+/// The same refusal item by item: the message's words hide its code from the error it would give.
+#[test]
+fn a_text_refused_item_by_item_is_not_asked_again() {
+    let (mut d, _) = inbox_of(2);
+    d.refuse_text_each = true;
+    refused_once(d, "ews-text-first-refused-each");
+}
+
+#[test]
+fn a_refusal_says_its_code() {
+    let (mut d, id) = one_message(&with_a_file("m1"));
+    d.refuse_text_each = true;
+    let server = serve(d);
+    let refused = connect(&server).download_text(&id).unwrap_err();
+    assert!(matches!(&refused, crate::NetError::No(code) if code == "ErrorInvalidPropertyRequest"), "{refused:?}");
+}
+
+/// Any other refusal is the message's own: its words stay, for the person reading them.
+#[test]
+fn another_refusal_is_said_as_before() {
+    let (d, _) = one_message(&with_a_file("m1"));
+    let server = serve(d);
+    let gone = connect(&server).download_text("I999").unwrap_err();
+    assert!(matches!(&gone, crate::NetError::No(m) if m.starts_with("not on the server any more")), "{gone:?}");
 }
 
 #[test]
@@ -470,6 +507,56 @@ fn nothing_is_written_after_the_stop() {
     assert!(!seen.iter().any(|e| matches!(e, Event::Body { .. })), "{seen:?}");
     std::thread::sleep(Duration::from_secs(3).saturating_sub(stopped.elapsed()));
     assert!(keys.iter().all(|k| !store.has_body(k)));
+    drop(pool);
+    let _ = std::fs::remove_dir_all(store.root());
+}
+
+/// The account stops while the main connection is in a slow call, so the worker can't end yet:
+/// the copy of the connection hears of it all the same, as an account removed must not get a
+/// file written back meanwhile.
+#[test]
+fn the_stop_is_heard_during_a_slow_call() {
+    let (mut d, _) = inbox_of(1);
+    d.slow_sources = Some(Duration::from_secs(1));
+    let server = serve(d);
+    let store = crate::fake::tests_store("ews-text-first-slow-stop");
+    let mut pool = start(&server, &store);
+    let key = key_of(&store, "M0");
+    open(&mut pool, &key);
+    until(&pool, "the text", |e| is_text(e, &key));
+    server.data.lock().unwrap().slow_counts = Some(Duration::from_secs(3));
+    pool.submit(Job::SyncFolder { account: "a1".into(), folder: "INBOX".into() });
+    until(&pool, "the slow call", |e| matches!(e, Event::Status { status: SyncStatus::Syncing { folder }, .. } if folder == "INBOX"));
+    pool.submit(Job::WorkOffline { on: true });
+    let seen = until(&pool, "told", |e| is_failed(e, &key) || is_body(e, &key));
+    assert!(matches!(seen.last(), Some(Event::BodyFailed { error, .. }) if error == "the account stopped"), "{:?}", seen.last());
+    assert!(!store.has_body(&key));
+    drop(pool);
+    let _ = std::fs::remove_dir_all(store.root());
+}
+
+/// A wrong password counts against the account at each try: a message opened tries once.
+#[test]
+fn a_refused_sign_in_is_tried_once_for_a_message() {
+    let (d, _) = inbox_of(1);
+    let server = serve(d);
+    let store = crate::fake::tests_store("ews-text-first-sign-in");
+    let mut pool = Pool::new(store.clone(), Arc::new(MemoryCredentials::default()));
+    let account = AccountConfig {
+        id: "a1".into(),
+        email: "riley@contoso.example".into(),
+        username: format!("{DOMAIN}\\{USER}"),
+        ews: Some(server.url.clone()),
+        ..Default::default()
+    };
+    pool.submit(Job::Start { account, password: Some(Secret("wrong".into())) });
+    until(&pool, "sign in again", |e| matches!(e, Event::Status { status: SyncStatus::NeedsPassword { .. }, .. }));
+    let key = MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: VALIDITY, uid: 1 };
+    open(&mut pool, &key);
+    let seen = until(&pool, "the failure", |e| is_failed(e, &key));
+    let tries = seen.iter().filter(|e| matches!(e, Event::Status { status: SyncStatus::Connecting, .. })).count();
+    assert_eq!(tries, 1, "{seen:?}");
+    until(&pool, "asked for the password", |e| matches!(e, Event::Status { status: SyncStatus::NeedsPassword { .. }, .. }));
     drop(pool);
     let _ = std::fs::remove_dir_all(store.root());
 }

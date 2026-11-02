@@ -85,12 +85,21 @@ impl Client {
     /// Message `id` from the fields above, without its source: `None` when [`text_first()`] leaves
     /// it whole.
     pub fn download_text(&self, id: &str) -> Result<Option<Vec<u8>>> {
-        let m = self.call_one(&format!(
+        let doc = self.call(&format!(
             "<m:GetItem><m:ItemShape><t:BaseShape>IdOnly</t:BaseShape><t:AdditionalProperties>{HEADER_FIELDS}{TEXT_FIELDS}</t:AdditionalProperties></m:ItemShape>\
              <m:ItemIds><t:ItemId Id=\"{}\"/></m:ItemIds></m:GetItem>",
             esc(id)
         ))?;
-        Ok(text_first(&m))
+        let m = messages(&doc).first().copied().ok_or_else(|| NetError::Protocol("an empty answer".into()))?;
+        // The code, which `check_message` gives up for the server's words: it's what tells a
+        // refused shape, whatever the server writes beside it.
+        if m.attr("ResponseClass") == Some("Error")
+            && let Some(code) = m.text_of("ResponseCode").map(str::trim).filter(|c| crate::ews_pim::FIELD_REFUSED.contains(c))
+        {
+            return Err(NetError::No(code.to_string()));
+        }
+        check_message(m)?;
+        Ok(text_first(m))
     }
 }
 

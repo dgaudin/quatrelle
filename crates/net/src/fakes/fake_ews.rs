@@ -119,6 +119,9 @@ pub struct Data {
     pub refuse_fields_each: bool,
     /// Refuse a `GetItem` naming `item:Body` as a whole, the way `refuse_fields` does.
     pub refuse_text: bool,
+    /// Refuse each item of a `GetItem` naming `item:Body`, the way `refuse_fields_each` does, with
+    /// a `MessageText` saying so in words, as Exchange writes one.
+    pub refuse_text_each: bool,
     /// The public folder mailbox holding the public folders' content (Exchange 2013 and
     /// later): reading inside them is only answered when routed there.
     pub pf_mailbox: Option<String>,
@@ -292,6 +295,7 @@ impl Default for Data {
             refuse_fields: false,
             refuse_fields_each: false,
             refuse_text: false,
+            refuse_text_each: false,
             pf_mailbox: None,
             pf_hierarchy: None,
             rules: Vec::new(),

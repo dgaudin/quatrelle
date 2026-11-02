@@ -546,7 +546,8 @@ impl Pool {
         let (qtx, qrx) = mpsc::channel();
         let (creds, store, sink, opts, sieve_port, search) =
             (self.creds.clone(), self.store.clone(), self.sink.clone(), self.opts, self.sieve_port, self.search.clone());
-        let (acc, main_tx) = (account.clone(), tx.clone());
+        let (acc, main_tx, stop) = (account.clone(), tx.clone(), Arc::<AtomicBool>::default());
+        let stopped = Arc::clone(&stop);
         let spawned = std::thread::Builder::new().name(format!("mail-{}", account.id)).spawn(move || {
             for t in before {
                 let _ = t.join();
@@ -556,6 +557,7 @@ impl Pool {
             w.creds = Some(creds.clone());
             w.sieve_port = sieve_port;
             w.search = search;
+            w.rest.stop_on(stopped);
             // The second connection: quiet (the account's status is the main one's), connecting
             // only when there's something to do. Should it not start, its jobs go to the main one.
             let mut q = Worker::with_numbering(acc.clone(), auth, store, sink, opts, acc.ews.is_none());
@@ -570,7 +572,7 @@ impl Pool {
         });
         match spawned {
             Ok(thread) => {
-                self.workers.insert(account.id.clone(), Handle { tx, thread: Some(thread), quick: Some(qtx), quick_thread: None });
+                self.workers.insert(account.id.clone(), Handle { tx, thread: Some(thread), quick: Some(qtx), quick_thread: None, stop });
             }
             Err(e) => self.sink.emit(Event::Status { account: account.id.clone(), status: SyncStatus::Error { error: e.to_string() } }),
         }
@@ -590,6 +592,7 @@ impl Pool {
     /// waited for on the window's thread.
     fn stopping(&mut self, account: &str) -> Vec<JoinHandle<()>> {
         let Some(mut h) = self.workers.remove(account) else { return Vec::new() };
+        h.stop.store(true, Ordering::SeqCst);
         drop(h.tx);
         drop(h.quick.take());
         [h.thread.take(), h.quick_thread.take()].into_iter().flatten().collect()
