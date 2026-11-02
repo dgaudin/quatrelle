@@ -108,6 +108,37 @@ fn a_message_text_first_says_its_files_are_coming() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// An invitation whose text came first (a Graph one without its type, or any message with an
+/// `.ics` file) has no card yet, and none is kept as missing: the card shows once the whole
+/// message comes, with no calendar change needed.
+#[test]
+fn an_invitation_shows_its_card_once_the_whole_message_comes() {
+    let (mut a, dir) = app("text-first-invite");
+    let ctx = egui::Context::default();
+    ctx.enable_accesskit();
+    frame(&ctx, &mut a, vec![]);
+    let (d, _) = rushes();
+    let ics = PendingFile { name: "invite.ics".into(), mime: "text/calendar".into(), size: 600, ..Default::default() };
+    let (key, _) = in_its_text_phase(&mut a, &d, &[ics]);
+    frame(&ctx, &mut a, vec![]);
+    let s = shown(&ctx, &mut a, vec![]);
+    assert!(s.says("Here's the reel") && !s.says("Grading session"), "no card yet");
+    let calendar = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nMETHOD:REQUEST\r\nBEGIN:VEVENT\r\nUID:grading-1@studio.example\r\n\
+                    DTSTAMP:20261101T090000Z\r\nDTSTART:20261105T100000Z\r\nDTEND:20261105T110000Z\r\nSUMMARY:Grading session\r\n\
+                    ORGANIZER:mailto:sam@studio.example\r\nATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:me@studio.example\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+    let whole = format!(
+        "From: Sam <sam@studio.example>\r\nTo: me@studio.example\r\nSubject: Rushes\r\nMessage-ID: <r@x>\r\nMIME-Version: 1.0\r\n\
+         Content-Type: multipart/mixed; boundary=b\r\n\r\n--b\r\nContent-Type: text/plain\r\n\r\nHere's the reel.\r\n\
+         --b\r\nContent-Type: text/calendar; method=REQUEST; name=invite.ics\r\nContent-Disposition: attachment; filename=invite.ics\r\n\r\n\
+         {calendar}--b--\r\n"
+    );
+    whole_arrives(&mut a, &key, whole.as_bytes());
+    frame(&ctx, &mut a, vec![]);
+    let s = shown(&ctx, &mut a, vec![]);
+    assert!(s.says("Grading session"), "the card: {:?}", s.0.iter().map(|(_, l, _)| l).filter(|l| !l.is_empty()).collect::<Vec<_>>());
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 /// A picture shown in the text waits for the whole message: a spinner, not the placeholder, and
 /// nothing kept of it, so it shows once the whole message comes.
 #[test]
