@@ -195,3 +195,50 @@ fn no_text_for_what_is_here_or_out_of_reach() {
     assert_eq!(asked(), 0, "nothing asked of the server");
     let _ = std::fs::remove_dir_all(store.root());
 }
+
+/// One message with a file, listed, on a pool whose server is `d`.
+fn opened_with(d: Data, name: &str) -> (Server, Store, Pool, MessageKey) {
+    let server = serve(d);
+    let store = crate::fake::tests_store(name);
+    let pool = start(&server, &store, &[]);
+    let key = store.load_folder("a1", "INBOX").unwrap().messages[0].key.clone();
+    (server, store, pool, key)
+}
+
+fn one_message() -> Data {
+    let mut d = Data::default();
+    let inbox = d.folder("Inbox", None, Some("inbox"));
+    d.deliver(&inbox, &rushes("r1"), false, "2024-05-06T10:00:00Z");
+    d
+}
+
+/// A sign-in the server no longer takes is told as the connection's failure; asking for the whole
+/// message would only be refused again.
+#[test]
+fn a_refused_token_on_the_text_is_told_and_the_whole_message_is_not_asked_for() {
+    let (server, store, mut pool, key) = opened_with(one_message(), "graph-text-first-401");
+    server.data.lock().unwrap().token = Some("renewed-elsewhere".into());
+    pool.submit(Job::FetchTextFirst { key: key.clone() });
+    let seen = until(&pool, "the failure", |e| matches!(e, Event::BodyFailed { key: k, .. } if *k == key));
+    assert_eq!(seen.iter().filter(|e| matches!(e, Event::BodyFailed { .. })).count(), 1, "{seen:?}");
+    assert!(!seen.iter().any(|e| matches!(e, Event::TextFirst { .. } | Event::Body { .. })), "{seen:?}");
+    assert!(!calls(&server).iter().any(|c| c.ends_with("$value")), "{:?}", calls(&server));
+    drop(pool);
+    let _ = std::fs::remove_dir_all(store.root());
+}
+
+/// Any other error on the text is the text's alone (a gateway timing out on `$expand`): the whole
+/// message comes as it would have.
+#[test]
+fn a_gateway_error_on_the_text_leaves_the_whole_message_to_come() {
+    let (server, store, mut pool, key) = opened_with(one_message(), "graph-text-first-503");
+    server.data.lock().unwrap().text_status = Some(503);
+    pool.submit(Job::FetchTextFirst { key: key.clone() });
+    let seen = until(&pool, "the whole message", |e| is_body(e, &key));
+    assert!(!seen.iter().any(|e| matches!(e, Event::TextFirst { .. } | Event::BodyFailed { .. })), "{seen:?}");
+    assert!(store.has_body(&key));
+    let calls = calls(&server);
+    assert!(calls.iter().any(|c| c.contains("$expand=attachments")) && calls.iter().any(|c| c.ends_with("$value")), "{calls:?}");
+    drop(pool);
+    let _ = std::fs::remove_dir_all(store.root());
+}

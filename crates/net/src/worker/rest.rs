@@ -242,10 +242,10 @@ impl Worker {
                 log::warn!("{}: the server refuses a message's text alone ({e}): messages come whole from now on", self.acc.id);
                 return self.fetch(key);
             }
-            // The same trouble as a failed connection, told the same way: `fetch` would ask the
-            // server again, and a password changed meanwhile would cost two refused sign-ins for
-            // each message.
-            Err(e) if e.is_fatal() || matches!(e, NetError::Auth(_)) => return self.body_failed(key, e),
+            // A refused sign-in is told as a failed connection is: `fetch` would ask the server
+            // again, and a password changed meanwhile would cost two refused sign-ins for each
+            // message. Any other error is the text's alone: the whole message may still come.
+            Err(e @ NetError::Auth(_)) => return self.body_failed(key, e),
             Err(e) => {
                 log::info!("{}: a message's text didn't come ({e}): it comes whole", self.acc.id);
                 return self.fetch(key);

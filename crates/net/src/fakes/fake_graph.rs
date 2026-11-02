@@ -70,6 +70,8 @@ pub struct Data {
     pub group_calendars: Vec<(String, String, String, bool)>,
     /// Messages whose source can't be had (the server fails on it).
     pub unreadable: Vec<String>,
+    /// A message's text first (`$expand=attachments`) is refused with this status.
+    pub text_status: Option<u16>,
     /// Messages that are meeting invitations: Graph types them `eventMessage`, unasked.
     pub invitations: Vec<String>,
     /// Per-batch concurrency cap: entries past this index get a 429 with Retry-After.
