@@ -52,7 +52,11 @@ impl Body<'_> {
                     let share = (target - least) / (most - least).max(1.0);
                     f.iter().map(|(lo, hi)| lo + (hi - lo) * share).collect()
                 };
-                columns = widths.iter().map(|w| Some(Width::Px(w.ceil() as u32))).collect();
+                // Rounded down, so they never add up to more than the table: rows would then be
+                // narrowed in proportion, and one with fewer cells not, its lines off the others'.
+                // (`Width::Px` is as written: `row` applies the zoom.)
+                let zoom = self.zoom.max(0.01);
+                columns = widths.iter().map(|w| Some(Width::Px((w / zoom).floor() as u32))).collect();
                 widths.iter().sum()
             }
             None => match table.width {
@@ -64,7 +68,7 @@ impl Body<'_> {
         .max(1.0);
         if tw > width + 0.5 {
             egui::ScrollArea::horizontal().id_salt(("message-table", self.key.to_id(), self.cells)).auto_shrink([false, true]).show(ui, |ui| {
-                self.table_box(st, ui, table, &columns, tw, 0.0, page, depth);
+                self.table_box(st, ui, table, &columns, figures.is_some(), tw, 0.0, page, depth);
             });
             return;
         }
@@ -76,7 +80,7 @@ impl Body<'_> {
             A::Left => 0.0,
         }
         .max(0.0);
-        self.table_box(st, ui, table, &columns, tw, indent, page, depth);
+        self.table_box(st, ui, table, &columns, figures.is_some(), tw, indent, page, depth);
     }
 
     /// A table `tw` wide, `indent` from the left, in its frame: its rows one under the other.
@@ -87,6 +91,7 @@ impl Body<'_> {
         ui: &mut Ui,
         table: &mime::layout::Table,
         columns: &[Option<mime::layout::Width>],
+        figures: bool,
         tw: f32,
         indent: f32,
         page: [u8; 3],
@@ -109,7 +114,7 @@ impl Body<'_> {
                     let slot = ui.painter().add(egui::Shape::Noop);
                     ui.spacing_mut().item_spacing = vec2(0.0, if bordered { 0.0 } else { 4.0 });
                     for row in &table.rows {
-                        self.row(st, ui, row, columns, tw, page, depth);
+                        self.row(st, ui, row, columns, figures, tw, page, depth);
                     }
                     slot
                 });
@@ -130,7 +135,8 @@ impl Body<'_> {
     /// column's, as HTML sizes columns). Each cell's content sits at the top, the middle or the
     /// bottom of the row as the cell asks ([`mime::layout::VAlign`]): the row is as tall as its
     /// tallest cell as measured the frame before ([`CellHeights`]), and the others are moved
-    /// down in it (their backgrounds and borders span the row).
+    /// down in it (their backgrounds and borders span the row). `figures`: `columns` are a table of
+    /// figures' own, and a width one cell sets doesn't move its row off them.
     #[allow(clippy::too_many_arguments)]
     pub(super) fn row(
         &mut self,
@@ -138,6 +144,7 @@ impl Body<'_> {
         ui: &mut Ui,
         row: &[mime::layout::Cell],
         columns: &[Option<mime::layout::Width>],
+        figures: bool,
         width: f32,
         page: [u8; 3],
         depth: usize,
@@ -160,7 +167,8 @@ impl Body<'_> {
                     (parts.len() == span && parts.iter().all(Option::is_some)).then(|| parts.iter().flatten().map(|w| px(*w)).sum::<f32>())
                 };
                 // A floated picture's box (a signature's logo): as wide as the picture, padding added.
-                let w = c.width.map(px).or_else(from_columns).or_else(|| c.fit.map(|f| f as f32 * self.zoom + pad.sum().x));
+                let set = if figures { from_columns().or(c.width.map(px)) } else { c.width.map(px).or_else(from_columns) };
+                let w = set.or_else(|| c.fit.map(|f| f as f32 * self.zoom + pad.sum().x));
                 col += span;
                 w
             })

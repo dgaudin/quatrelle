@@ -137,6 +137,38 @@ fn group_beside(kids: &[Kid]) -> Option<Vec<Kid>> {
     grouped.then_some(out)
 }
 
+/// A table without what's only there to space it: the rows of nothing, and the columns of nothing
+/// (a layout's gutters). An empty cell in a column that shows something elsewhere holds its place,
+/// or the cells after it slide under the wrong headings and its row stops lining up. A cell across
+/// several columns says nothing about any one of them.
+fn without_spacers(rows: Vec<Vec<Cell>>) -> Vec<Vec<Cell>> {
+    let blank = |c: &Cell| c.blocks.is_empty() && c.background.is_none() && c.background_image.is_none();
+    let span = |c: &Cell| usize::from(c.span.max(1));
+    let mut shown = std::collections::BTreeSet::new();
+    for row in &rows {
+        let mut col = 0usize;
+        for c in row {
+            if span(c) == 1 && !blank(c) {
+                shown.insert(col);
+            }
+            col = col.saturating_add(span(c));
+        }
+    }
+    rows.into_iter()
+        .filter(|row| !row.iter().all(blank))
+        .map(|row| {
+            let mut col = 0usize;
+            row.into_iter()
+                .filter(|c| {
+                    let start = col;
+                    col = col.saturating_add(span(c));
+                    !blank(c) || shown.range(start..col).next().is_some()
+                })
+                .collect()
+        })
+        .collect()
+}
+
 fn blocks_of(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
     let mut out = Vec::new();
     let mut pending = String::new();
@@ -189,12 +221,11 @@ fn blocks_of(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
                                         valign: c.valign(Some(tr)),
                                     }
                                 })
-                                .filter(|c| !c.blocks.is_empty() || c.background.is_some() || c.background_image.is_some())
                                 .collect::<Vec<Cell>>()
                         })
-                        .filter(|r| !r.is_empty())
                         .collect()
                 });
+                let rows = without_spacers(rows);
                 if rows.is_empty() {
                     continue;
                 }
