@@ -212,15 +212,16 @@ pub fn window(s: &mut Session, st: &mut UiState, ui: &mut Ui, w: quatrelle_engin
     let mut mine = Vec::new();
     message(s, st, ui, &mut mine, true);
     s.reading = saved;
-    if !mine.is_empty() {
+    // Only refusals said (its text alone here): the message isn't opened again, nor fetched.
+    if mine.iter().any(|a| !matches!(a, Action::Refuse(_))) {
         acts.push(Action::Open(key));
-        acts.extend(mine);
     }
+    acts.extend(mine);
 }
 
 /// What asking for something that needs the whole message says while only its text is here:
 /// that it's coming, or, once that failed, why it isn't (as the engine's refusals say).
-fn still_coming(r: &quatrelle_engine::Reading) -> String {
+pub(crate) fn still_coming(r: &quatrelle_engine::Reading) -> String {
     r.error.clone().unwrap_or_else(|| quatrelle_engine::STILL_COMING.to_string())
 }
 
@@ -366,14 +367,18 @@ fn message(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action
             // pictures shown in place being among them), or couldn't be had.
             let coming = r.text_first && r.error.is_none();
             if let Some(e) = r.error.as_ref().filter(|_| r.text_first) {
-                ui.horizontal(|ui| {
+                // The error wraps and the button has its own line: a long error can't push it away.
+                ui.horizontal_top(|ui| {
                     let (ir, _) = ui.allocate_exact_size(vec2(16.0, 16.0), Sense::hover());
                     icons::paint(ui.painter(), ir, Icon::Warning, t.warn);
-                    ui.label(RichText::new(tf!("The attachments couldn't be downloaded: {error}", error = e)).color(t.dim).small());
-                    if ui.button(tl!("Try again")).clicked() {
-                        acts.push(Action::Open(r.key.clone()));
-                    }
+                    ui.add(
+                        egui::Label::new(RichText::new(tf!("The attachments couldn't be downloaded: {error}", error = e)).color(t.dim).small())
+                            .wrap(),
+                    );
                 });
+                if ui.button(tl!("Try again")).clicked() {
+                    acts.push(Action::Open(r.key.clone()));
+                }
                 ui.add_space(6.0);
             }
             if !files.is_empty() || coming {
