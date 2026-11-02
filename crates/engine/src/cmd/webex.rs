@@ -119,7 +119,7 @@ fn delete(s: &mut Session, v: &Value) -> CmdResult {
         if let Some(a) = s.webex.asks.get_mut(&ask) {
             a.abandoned = true;
         } else if let Some(Ok(m)) = s.webex_take_answer(ask) {
-            s.push_job(Job::WebexDelete { client_id: s.prefs.webex_client_id.clone(), id: m.id, quiet: true });
+            s.webex_delete(m.id, true);
         }
         return Ok(json!({}));
     }
@@ -128,6 +128,6 @@ fn delete(s: &mut Session, v: &Value) -> CmdResult {
         return Err(CmdError::Disabled(SETUP.into()));
     }
     s.webex.sent.remove(&id);
-    s.push_job(Job::WebexDelete { client_id: s.prefs.webex_client_id.clone(), id, quiet: p::bool(v, "quiet").unwrap_or(false) });
+    s.webex_delete(id, p::bool(v, "quiet").unwrap_or(false));
     Ok(json!({}))
 }

@@ -25,6 +25,10 @@ pub struct WebexState {
     pub answers: HashMap<u64, Result<WebexMeeting, WebexError>>,
     /// What each meeting made in this run was last sent with.
     pub sent: HashMap<String, WebexFields>,
+    /// Meetings being deleted: asked of Webex, not answered yet.
+    pub deleting: usize,
+    /// Quatrelle is closing with a meeting of an open window to delete.
+    pub closing: bool,
 }
 
 /// The link in an appointment's notes or place that Webex's `link` replaces: a join page on the
@@ -93,7 +97,18 @@ impl Session {
             return;
         }
         self.webex.sent.remove(id);
-        self.jobs.push(Job::WebexDelete { client_id: self.prefs.webex_client_id.clone(), id: id.to_string(), quiet: !e.attendees.is_empty() });
+        self.webex_delete(id.to_string(), !e.attendees.is_empty());
+    }
+
+    /// Ask Webex to delete a meeting: it counts as being deleted until the answer is in.
+    pub(crate) fn webex_delete(&mut self, id: String, quiet: bool) {
+        self.webex.deleting = self.webex.deleting.saturating_add(1);
+        self.jobs.push(Job::WebexDelete { client_id: self.prefs.webex_client_id.clone(), id, quiet });
+    }
+
+    /// Whether a meeting is still being deleted, or a creation given up may still bring one.
+    pub fn webex_deleting(&self) -> bool {
+        self.webex.deleting > 0 || self.webex.asks.values().any(|a| a.abandoned)
     }
 
     /// The answer to a creation, once, for the window that asked.
@@ -115,7 +130,7 @@ impl Session {
         let answer = meeting.ok_or_else(|| error.unwrap_or_else(|| WebexError::Failed("Webex gave no answer".into())));
         if asked.abandoned {
             if let Ok(m) = answer {
-                self.jobs.push(Job::WebexDelete { client_id: self.prefs.webex_client_id.clone(), id: m.id, quiet: asked.quiet });
+                self.webex_delete(m.id, asked.quiet);
             }
             return;
         }
@@ -153,6 +168,7 @@ impl Session {
     }
 
     pub(in crate::session) fn webex_deleted(&mut self, error: Option<WebexError>) {
+        self.webex.deleting = self.webex.deleting.saturating_sub(1);
         if let Some(e) = error {
             self.notice_with("The Webex meeting couldn't be deleted: {error}", &[("error", &e.to_string())], true);
         }

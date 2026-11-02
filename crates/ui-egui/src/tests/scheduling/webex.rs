@@ -1,6 +1,6 @@
 //! UI tests: File › Options › Calendar › Webex, and the appointment window's Webex Meeting.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use egui::accesskit::Role;
@@ -507,5 +507,145 @@ fn deleting_the_event_with_a_fresh_meeting_leaves_nothing() {
     a.for_event(w, "event.delete", json!({"uid": uid}));
     assert!(a.ui.event_windows.is_empty());
     assert!(a.session.webex.asks.get(&ask).is_some_and(|x| x.abandoned));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A backend that keeps the jobs it is given, counts its polls, and answers each Webex delete as
+/// the worker does, with `error`.
+struct Answering {
+    jobs: Jobs,
+    polls: Rc<Cell<usize>>,
+    error: Option<WebexError>,
+    answers: Vec<MailEvent>,
+}
+
+impl crate::Backend for Answering {
+    fn submit(&mut self, job: Job) {
+        if let Job::WebexDelete { id, .. } = &job {
+            self.answers.push(MailEvent::WebexDeleted { id: id.clone(), error: self.error.clone() });
+        }
+        self.jobs.borrow_mut().push(job);
+    }
+    fn poll(&mut self) -> Vec<MailEvent> {
+        self.polls.set(self.polls.get() + 1);
+        std::mem::take(&mut self.answers)
+    }
+}
+
+/// The deletes queued.
+fn deletes(jobs: &Jobs) -> usize {
+    jobs.borrow().iter().filter(|j| matches!(j, Job::WebexDelete { .. })).count()
+}
+
+/// The app answering Webex's deletes with `error`, the jobs kept and the polls counted.
+fn answering(a: &mut MailApp, error: Option<WebexError>) -> (Jobs, Rc<Cell<usize>>) {
+    let (jobs, polls) = (Rc::new(RefCell::new(Vec::new())), Rc::new(Cell::new(0)));
+    a.backend = Box::new(Answering { jobs: jobs.clone(), polls: polls.clone(), error, answers: Vec::new() });
+    (jobs, polls)
+}
+
+/// Quitting deletes the fresh meeting of an open window, once however often it's asked, and stops
+/// waiting as soon as Webex answers, deleted or refused.
+#[test]
+fn quitting_deletes_a_fresh_meeting_once() {
+    for (n, error) in [None, Some(WebexError::Forbidden)].into_iter().enumerate() {
+        let (mut a, dir, _ctx, _) = appointment(&format!("webex-quit-{n}"), "Budget");
+        let (jobs, _) = answering(&mut a, error);
+        take_meeting(form(&mut a), &meeting());
+        assert!(a.webex_closing(), "the delete is on its way");
+        assert_eq!(deletes(&jobs), 1);
+        assert!(a.ui.event_windows.is_empty());
+        assert!(!a.webex_closing(), "answered");
+        assert!(!a.webex_closing());
+        assert_eq!(deletes(&jobs), 1, "once");
+        assert_eq!(a.session.webex.deleting, 0);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+}
+
+/// Quitting during a creation gives it up, and waits for what it brings: a meeting is deleted.
+#[test]
+fn quitting_during_a_creation_deletes_what_it_brings() {
+    let (mut a, dir, ctx, _) = appointment("webex-quit-waiting", "Budget");
+    click_webex(&ctx, &mut a);
+    let ask = form(&mut a).webex_wait.expect("waiting");
+    let (jobs, _) = answering(&mut a, None);
+    assert!(a.webex_closing(), "its answer is awaited");
+    assert_eq!(deletes(&jobs), 0);
+    a.session.apply(MailEvent::WebexCreated { ask, meeting: Some(meeting()), error: None });
+    assert!(a.webex_closing(), "what it brought is being deleted");
+    assert_eq!(deletes(&jobs), 1);
+    assert!(!a.webex_closing());
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A creation that fails while Quatrelle closes leaves nothing to wait for.
+#[test]
+fn quitting_stops_at_a_failed_creation() {
+    let (mut a, dir, ctx, _) = appointment("webex-quit-failed", "Budget");
+    click_webex(&ctx, &mut a);
+    let ask = form(&mut a).webex_wait.expect("waiting");
+    let (jobs, _) = answering(&mut a, None);
+    assert!(a.webex_closing());
+    a.session.apply(MailEvent::WebexCreated { ask, meeting: None, error: Some(WebexError::Forbidden) });
+    assert!(!a.webex_closing());
+    assert_eq!(deletes(&jobs), 0);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Signed out, the delete is refused and nothing goes: quitting waits for nothing.
+#[test]
+fn quitting_signed_out_waits_for_nothing() {
+    let (mut a, dir, _ctx, _) = appointment("webex-quit-signed-out", "Budget");
+    let (jobs, polls) = answering(&mut a, None);
+    take_meeting(form(&mut a), &meeting());
+    a.session.prefs.webex_signed_in = false;
+    assert!(!a.webex_closing());
+    assert_eq!((deletes(&jobs), polls.get()), (0, 0));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// No window with a meeting to leave: quitting adds nothing, not a look at the workers, even with
+/// an older delete still out.
+#[test]
+fn quitting_with_no_meeting_in_a_window_adds_no_wait() {
+    let (mut a, dir, _ctx, _) = appointment("webex-quit-nothing", "Budget");
+    let (jobs, polls) = answering(&mut a, None);
+    a.session.run("webex.deleteMeeting", &json!({"id": "m0"})).expect("asked");
+    assert_eq!(a.session.webex.deleting, 1);
+    assert!(!a.webex_closing());
+    assert_eq!((jobs.borrow().len(), polls.get()), (0, 0));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A bad date is the engine's to refuse: the window says so, and waits for nothing.
+#[test]
+fn a_refused_creation_says_why_in_the_window() {
+    let (mut a, dir, ctx, jobs) = appointment("webex-engine-refuses", "Budget");
+    form(&mut a).date = "someday".into();
+    click_webex(&ctx, &mut a);
+    let f = form(&mut a);
+    assert!(f.error.as_deref().is_some_and(|e| e.contains("someday") && !e.starts_with("bad parameters")), "{:?}", f.error);
+    assert!(f.webex_wait.is_none());
+    assert_eq!(webex_jobs(&jobs), 0);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A save refused keeps the window and its meeting; closing it then takes the meeting along.
+#[test]
+fn closing_after_a_refused_save_deletes_the_meeting() {
+    let (mut a, dir, ctx, jobs) = appointment("webex-save-refused", "Budget");
+    let w = a.ui.event_windows[0].0;
+    take_meeting(form(&mut a), &meeting());
+    form(&mut a).date = "someday".into();
+    let p = form(&mut a).params();
+    a.for_event(w, "event.create", p);
+    assert_eq!(a.ui.event_windows.len(), 1, "the window stays");
+    let f = form(&mut a);
+    assert!(f.error.is_some() && f.webex_fresh && f.webex_id.is_some());
+    frame_sized(&ctx, &mut a, vec![], SIZE);
+    assert_eq!(webex_jobs(&jobs), 0, "the meeting waits for what the window does next");
+    close_window(&ctx, &mut a);
+    assert_eq!(deletes(&jobs), 1);
     let _ = std::fs::remove_dir_all(dir);
 }

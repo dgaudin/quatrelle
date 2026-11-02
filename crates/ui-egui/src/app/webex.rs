@@ -28,6 +28,25 @@ impl MailApp {
         }
     }
 
+    /// Quatrelle is closing: what the open windows leave unsaved goes from Webex's site, each
+    /// window once. `true` while that's on its way, for the caller to ask again shortly. With
+    /// nothing of theirs to delete, `false` at once: closing waits for nothing, and a delete
+    /// refused (signed out) has nothing to wait for.
+    pub fn webex_closing(&mut self) -> bool {
+        for (_, f) in std::mem::take(&mut self.ui.event_windows) {
+            if let Some(p) = leaving(&f) {
+                self.session.webex.closing |= self.session.run("webex.deleteMeeting", &p).is_ok();
+            }
+        }
+        if !self.session.webex.closing {
+            return false;
+        }
+        // In this order: an answer may bring one more meeting to delete.
+        self.pump();
+        self.flush_jobs();
+        self.session.webex_deleting()
+    }
+
     /// Window `w` is going without saving: nothing stays on Webex's site for it.
     pub(super) fn webex_left(&mut self, w: u64) {
         let left = self.ui.event_windows.iter().find(|(x, _)| *x == w).and_then(|(_, f)| leaving(f));

@@ -119,6 +119,10 @@ struct App {
 /// How often changed settings are written while Quatrelle runs.
 const KEEP_STATE_EVERY: std::time::Duration = std::time::Duration::from_secs(5);
 
+/// Closing: how long a Webex meeting's delete is waited for, and how often it's looked at.
+const WEBEX_CLOSING_LIMIT: std::time::Duration = std::time::Duration::from_secs(3);
+const WEBEX_CLOSING_STEP: std::time::Duration = std::time::Duration::from_millis(50);
+
 impl App {
     /// Write the settings when they've changed: a reminder dismissed or a sender blocked isn't
     /// lost if Quatrelle is ended without closing (a crash, a power cut, a forced quit).
@@ -192,6 +196,12 @@ impl eframe::App for App {
         }
     }
     fn on_exit(&mut self) {
+        // A Webex meeting an open appointment window leaves unsaved goes from the site first; with
+        // none, this adds no wait. Past the limit it stays there, as after a crash: harmless.
+        let closing = std::time::Instant::now();
+        while self.app.webex_closing() && closing.elapsed() < WEBEX_CLOSING_LIMIT {
+            std::thread::sleep(WEBEX_CLOSING_STEP);
+        }
         if let Some(server) = &self.instance {
             server.close();
         }
