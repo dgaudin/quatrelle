@@ -281,6 +281,26 @@ fn empty_values_write_no_line() {
     assert_eq!(f.description, format!("Join the Webex meeting:\n{LINK}\n"));
 }
 
+/// In Arabic and Hebrew a value filled in with `tf!` is wrapped in invisible marks: in the notes
+/// they'd go out in the invitation, and along with a password a guest copies.
+#[test]
+fn the_notes_hold_the_values_as_webex_gave_them() {
+    let notes = ["he", "ar"].map(|code| {
+        crate::i18n::set_current(crate::i18n::Lang::from_code(code).unwrap_or(crate::i18n::Lang::EN));
+        let mut f = EventForm::default();
+        take_meeting(&mut f, &meeting());
+        f.description
+    });
+    crate::i18n::set_current(crate::i18n::Lang::EN);
+    for n in notes {
+        assert!(!n.contains(['\u{2068}', '\u{2069}']), "{n:?}");
+        for value in ["2623456701", "abc123", "2623456701@acme.webex.com"] {
+            assert!(n.contains(value), "{n:?}");
+        }
+        assert!(!n.contains("Password"), "said in the language: {n:?}");
+    }
+}
+
 /// Whatever Webex refuses is said in the window, and the appointment stays as it was.
 #[test]
 fn a_refused_creation_shows_and_changes_nothing() {
