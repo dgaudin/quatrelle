@@ -19,11 +19,13 @@ use serde::{Deserialize, Serialize};
 use crate::dates::{civil_from_days, days_from_civil};
 
 mod alarms;
+mod find;
 mod meeting;
 mod notes;
 mod recurrence;
 mod zones;
 pub use alarms::*;
+pub use find::*;
 pub use meeting::{OPTIONAL, PrivateKind, ShowAs, valid_webex_id};
 use notes::*;
 pub use notes::*;
