@@ -1,6 +1,7 @@
 //! An appointment's Webex meeting, in its form: what's asked of Webex, what its answer writes,
 //! and what's left to delete when the window goes without saving.
 
+use quatrelle_engine::fill;
 use quatrelle_engine::model::{WebexError, WebexMeeting};
 
 use super::*;
@@ -33,15 +34,17 @@ pub(crate) fn take_meeting(f: &mut EventForm, m: &WebexMeeting) {
     if f.location.trim().is_empty() {
         f.location = m.web_link.clone();
     }
+    // Filled in as they are, not with `tf!`: its marks around a value would go out in the
+    // invitation, and along with a password a guest copies.
     let mut lines = vec![tl!("Join the Webex meeting:").to_string(), m.web_link.clone()];
     if !m.meeting_number.is_empty() {
-        lines.push(tf!("Meeting number: {number}", number = m.meeting_number));
+        lines.push(fill(tl!("Meeting number: {number}"), &[("number", &m.meeting_number)]));
     }
     if !m.password.0.is_empty() {
-        lines.push(tf!("Password: {password}", password = m.password.0));
+        lines.push(fill(tl!("Password: {password}"), &[("password", &m.password.0)]));
     }
     if !m.sip_address.is_empty() {
-        lines.push(tf!("Video: {address}", address = m.sip_address));
+        lines.push(fill(tl!("Video: {address}"), &[("address", &m.sip_address)]));
     }
     let notes = f.description.trim_end();
     let gap = if notes.is_empty() { "" } else { "\n\n" };
