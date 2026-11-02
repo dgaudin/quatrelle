@@ -620,16 +620,29 @@ fn quitting_signed_out_waits_for_nothing() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
-/// No window with a meeting to leave: quitting adds nothing, not a look at the workers, even with
-/// an older delete still out.
+/// No window with a meeting to leave and nothing on its way: quitting adds no wait, not a look at
+/// the workers.
 #[test]
-fn quitting_with_no_meeting_in_a_window_adds_no_wait() {
+fn quitting_with_nothing_on_its_way_adds_no_wait() {
     let (mut a, dir, _ctx, _) = appointment("webex-quit-nothing", "Budget");
     let (jobs, polls) = answering(&mut a, None);
-    a.session.run("webex.deleteMeeting", &json!({"id": "m0"})).expect("asked");
-    assert_eq!(a.session.webex.deleting, 1);
     assert!(!a.webex_closing());
     assert_eq!((jobs.borrow().len(), polls.get()), (0, 0));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A delete already on its way (an appointment deleted just before quitting) is waited for like
+/// a window's, until Webex answers.
+#[test]
+fn quitting_waits_for_a_delete_already_on_its_way() {
+    let (mut a, dir, _ctx, _) = appointment("webex-quit-delete", "Budget");
+    let (jobs, _) = answering(&mut a, None);
+    a.session.run("webex.deleteMeeting", &json!({"id": "m0"})).expect("asked");
+    assert_eq!(a.session.webex.deleting, 1);
+    assert!(a.webex_closing(), "its answer is awaited");
+    assert_eq!(deletes(&jobs), 1);
+    assert!(!a.webex_closing(), "answered");
+    assert_eq!(a.session.webex.deleting, 0);
     let _ = std::fs::remove_dir_all(dir);
 }
 
