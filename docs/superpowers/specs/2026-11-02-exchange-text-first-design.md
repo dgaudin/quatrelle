@@ -182,8 +182,13 @@ downloaded, and whether the thread is up.
   worker as it ends, the one running from the thread when its call returns. Otherwise a message would keep
   its spinner after the account went offline.
 
-An authentication failure here isn't the main connection's failure: it reports `Event::BodyFailed` only, and
-the main connection meets the same problem on its own.
+An authentication failure here isn't the main connection's failure: it reports `Event::BodyFailed` only. The
+main connection doesn't necessarily meet it: NTLM signs in a TCP connection, so after a password change in
+Active Directory the main connection stays signed in until the server recycles it, while each copy, on a new
+connection, is refused. So the first refused sign-in closes the queue for the rest of the worker's life: the
+keys waiting get `Event::BodyFailed` with that error without being tried, and every big message after it,
+"Try again" included, comes whole on the main connection (`fetch`). A restarted account, with the password
+typed again, starts clean.
 
 ### The engine
 
@@ -222,8 +227,12 @@ end of that sync today.
   a long call, a big message of its own for instance, the text waits for that call. Upstream has the same
   limit.
 - **One download at a time:** a very big message holds up the next one's attachments, not its text.
-- **The list line:** a message that came this way doesn't get its list preview from its source, like any
-  message downloaded ahead.
+- **The list line:** a message that came this way keeps its list entry as the listing gave it: its source
+  doesn't fill it (`fill_from_source`), as it does when a message is opened whole, prefetched during a sync
+  (EWS) or downloaded ahead on Graph. So its list preview isn't taken from its source, as with EWS's
+  downloading ahead (`download_ahead`, which doesn't fill either). On Graph it also misses the `In-Reply-To`
+  and `References` that filling gives a list entry, since a Graph listing carries neither: it isn't threaded
+  with its conversation by them.
 - **Where Exchange says a message has no attachments,** which it may for embedded pictures alone, the message
   comes whole, as today.
 - **Mail older than what's kept** stays out of this lot. By the code's reading, its attachments can't be
@@ -277,3 +286,6 @@ What changed from the text above:
 - The stop flag is set by the pool as the account stops.
 - Reply's guard checks the draft it built, not the message's `from` and `reply_to`.
 - After a failure, commands say the failure instead of "still downloading".
+- A copy of the connection refused its sign-in costs one refused sign-in for the whole session, not one per
+  big message: the keys waiting are told without being tried, and later messages come whole on the main
+  connection, which a password changed in Active Directory leaves signed in.

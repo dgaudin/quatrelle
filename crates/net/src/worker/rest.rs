@@ -35,13 +35,18 @@ struct Waiting {
 }
 
 /// The whole messages asked for: those waiting, the last asked for first; the one downloading;
-/// and whether the thread is up. `up` goes down only with `waiting` empty, in [`next`], or
-/// emptied, in [`let_go`].
+/// whether the thread is up; and the refused sign-in that closed it. `up` goes down only with
+/// `waiting` empty, in [`next`], or emptied, in [`let_go`] and [`refused`].
 #[derive(Default)]
 struct Queue {
     waiting: VecDeque<Waiting>,
     running: Option<MessageKey>,
     up: bool,
+    /// A copy of the connection was refused its sign-in, as a password changed in Active
+    /// Directory does: the main connection, signed in before, goes on working, but each copy
+    /// would cost a refused sign-in, and a few of them lock the account. Nothing is taken from
+    /// then on; the next worker, with the password typed again, starts clean.
+    refused: Option<String>,
 }
 
 impl Queue {
@@ -87,10 +92,20 @@ impl Rest {
         self.stopped = stopped;
     }
 
+    /// A copy of the connection was refused its sign-in: messages come whole on the main one.
+    /// A poisoned lock says no, as [`Rest::add`] then refuses every key anyway.
+    pub(super) fn refused(&self) -> bool {
+        self.queue.lock().is_ok_and(|q| q.refused.is_some())
+    }
+
     /// Bring this message after the others asked for since, starting the thread if it's down.
-    /// `false`: the thread can't start. The caller brings the message itself.
+    /// `false`: the thread can't take it (it can't start, or a copy was refused its sign-in).
+    /// The caller brings the message itself.
     pub(super) fn add(&self, key: MessageKey, id: String, how: Whole) -> bool {
         let Ok(mut q) = self.queue.lock() else { return false };
+        if q.refused.is_some() {
+            return false;
+        }
         q.put(Waiting { key: key.clone(), id, how });
         if q.up {
             return true;
@@ -148,36 +163,62 @@ impl Drop for Unwinding<'_> {
     }
 }
 
-/// The thread: bring messages until the queue is empty.
+/// The thread: bring messages until the queue is empty, or a copy is refused its sign-in.
 fn work(queue: &Mutex<Queue>, stopped: &AtomicBool, store: &Store, sink: &Sink) {
     let _unwinding = Unwinding { queue, sink };
     while let Some(entry) = next(queue) {
-        let told = bring(entry, stopped, store);
+        let (told, left) = match bring(entry, stopped, store) {
+            Ok(told) => (told, Vec::new()),
+            Err((key, e)) => {
+                let error = e.to_string();
+                let left = if matches!(e, NetError::Auth(_)) { refused(queue, &key, &error) } else { Vec::new() };
+                (Event::BodyFailed { key, error }, left)
+            }
+        };
         // Before it's told of: a key reopened from now on is taken as any other, where one that
         // met `running` here would be dropped, and keep its spinner.
         if let Ok(mut q) = queue.lock() {
             q.running = None;
         }
         sink.emit(told);
+        for e in left {
+            sink.emit(e);
+        }
     }
 }
 
-/// Bring one message; what to tell of it. Its failures are told of the message only: the main
-/// connection meets the same trouble on its own.
-fn bring(entry: Waiting, stopped: &AtomicBool, store: &Store) -> Event {
+/// A copy refused its sign-in: no other is tried, and the keys waiting are told why, each of
+/// them a refused sign-in saved. Under the queue's lock, so no key gets in after.
+fn refused(queue: &Mutex<Queue>, key: &MessageKey, error: &str) -> Vec<Event> {
+    log::warn!("{}: a second connection was refused its sign-in ({error}): big messages come whole on the main connection from now on", key.account);
+    let mut q = queue.lock().unwrap_or_else(PoisonError::into_inner);
+    q.refused = Some(error.to_string());
+    std::mem::take(&mut q.waiting).into_iter().map(|w| Event::BodyFailed { key: w.key, error: error.to_string() }).collect()
+}
+
+/// A message as the log names it: account, folder and uid, so that with several big messages on
+/// their way, each one's text and rest can be paired.
+fn named(key: &MessageKey) -> String {
+    format!("{}: {} #{}", key.account, quatrelle_model::utf7::decode(&key.folder), key.uid)
+}
+
+/// Bring one message: what to tell of it, or why it didn't come. Its failures are told of the
+/// message only; a refused sign-in also closes the queue ([`refused`]), as the main connection,
+/// signed in before, may well go on working.
+fn bring(entry: Waiting, stopped: &AtomicBool, store: &Store) -> std::result::Result<Event, (MessageKey, NetError)> {
     let Waiting { key, id, how } = entry;
     if stopped.load(Ordering::SeqCst) {
-        return Event::BodyFailed { key, error: STOPPED.into() };
+        return Ok(Event::BodyFailed { key, error: STOPPED.into() });
     }
     // Written meanwhile (downloading ahead, a sync), which tells no one: told here, or the message
     // would wait for ever. A body that can't be read is downloaded.
     if let Some(raw) = store.read_body(&key) {
-        return Event::Body { key, raw };
+        return Ok(Event::Body { key, raw });
     }
     let asked = Instant::now();
     let raw = how.download(&id);
     if stopped.load(Ordering::SeqCst) {
-        return Event::BodyFailed { key, error: STOPPED.into() };
+        return Ok(Event::BodyFailed { key, error: STOPPED.into() });
     }
     let written = raw.and_then(|raw| {
         store.write_body(&key, &raw)?;
@@ -185,10 +226,10 @@ fn bring(entry: Waiting, stopped: &AtomicBool, store: &Store) -> Event {
     });
     match written {
         Ok(raw) => {
-            log::info!("{}: the rest of it came in {:.1} s ({} bytes)", key.account, asked.elapsed().as_secs_f32(), raw.len());
-            Event::Body { key, raw }
+            log::info!("{}: the rest of it came in {:.1} s ({} bytes)", named(&key), asked.elapsed().as_secs_f32(), raw.len());
+            Ok(Event::Body { key, raw })
         }
-        Err(e) => Event::BodyFailed { key, error: e.to_string() },
+        Err(e) => Err((key, e)),
     }
 }
 
@@ -208,7 +249,9 @@ impl Worker {
         if let Some(raw) = self.store.read_body(&key) {
             return self.sink.emit(Event::Body { key, raw });
         }
-        if self.text_refused {
+        // A copy refused its sign-in: this connection, signed in before, brings the message whole,
+        // where another copy would cost one more refused sign-in.
+        if self.text_refused || self.rest.refused() {
             return self.fetch(key);
         }
         // Told here, not left to `fetch`, which would connect again: on Active Directory two
@@ -234,7 +277,7 @@ impl Worker {
         let (raw, id, how) = match text {
             Ok(Some(found)) => found,
             Ok(None) => {
-                log::info!("{}: a message comes whole, without its text first", self.acc.id);
+                log::info!("{}: the message comes whole, without its text first", named(&key));
                 return self.fetch(key);
             }
             Err(NetError::No(e)) if crate::ews_pim::FIELD_REFUSED.iter().any(|r| e.contains(r)) => {
@@ -247,11 +290,11 @@ impl Worker {
             // message. Any other error is the text's alone: the whole message may still come.
             Err(e @ NetError::Auth(_)) => return self.body_failed(key, e),
             Err(e) => {
-                log::info!("{}: a message's text didn't come ({e}): it comes whole", self.acc.id);
+                log::info!("{}: the message's text didn't come ({e}): it comes whole", named(&key));
                 return self.fetch(key);
             }
         };
-        log::info!("{}: a message's text came first: {} bytes in {} ms", self.acc.id, raw.len(), asked.elapsed().as_millis());
+        log::info!("{}: the message's text came first: {} bytes in {} ms", named(&key), raw.len(), asked.elapsed().as_millis());
         // In this order, a message's first text can't arrive after the whole of it. Reopened as
         // it downloads, its text can come after `Event::Body`, which it can't overwrite; or, the
         // key no longer running, `add` brings it again and `Event::Body` follows.
@@ -417,6 +460,42 @@ mod text_first_tests {
         .join();
         drop(rest);
         assert_eq!(failed(&rx), [1]);
+        let _ = std::fs::remove_dir_all(store.root());
+    }
+
+    /// A copy of the connection refused its sign-in (a password changed in Active Directory):
+    /// each key waiting would cost another refused sign-in. They are told so without asking, and
+    /// no key is taken from then on: the main connection, still signed in, brings it.
+    #[test]
+    fn a_refused_sign_in_tells_the_keys_waiting_without_trying_them() {
+        use crate::fakes::fake_ews::{self, DOMAIN, USER};
+        let mut d = fake_ews::Data::default();
+        let inbox = d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+        let ids: Vec<String> = (0..3)
+            .map(|i| d.deliver(&inbox, format!("Subject: M{i}\r\nMessage-ID: <m{i}@x>\r\n\r\nhi\r\n").as_bytes(), false, "2026-10-30T08:00:00Z"))
+            .collect();
+        let server = fake_ews::serve(d);
+        let store = crate::fake::tests_store("rest-text-first-refused");
+        let (sink, rx) = sink();
+        let rest = Rest::new(store.clone(), sink.clone());
+        let copy = || {
+            let c = crate::ews::Client::new(&server.url, &format!("{DOMAIN}\\{USER}"), "changed", "riley@contoso.example").unwrap();
+            Whole::Ews(Box::new(c))
+        };
+        let key = |uid: u32| MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 1, uid };
+        for (uid, id) in (1..).zip(&ids) {
+            rest.queue.lock().unwrap().put(Waiting { key: key(uid), id: id.clone(), how: copy() });
+        }
+        rest.queue.lock().unwrap().up = true;
+        work(&rest.queue, &rest.stopped, &store, &sink);
+        let told: Vec<(u32, String)> =
+            rx.try_iter().filter_map(|e| if let Event::BodyFailed { key, error } = e { Some((key.uid, error)) } else { None }).collect();
+        assert_eq!(told.iter().map(|(uid, _)| *uid).collect::<Vec<_>>(), [3, 2, 1], "{told:?}");
+        assert!(told.iter().all(|(_, error)| *error == told[0].1), "the same refusal for each: {told:?}");
+        assert_eq!(server.data.lock().unwrap().refused_sign_ins.len(), 1);
+        assert!(!rest.add(key(4), ids[0].clone(), copy()), "brought by the main connection");
+        assert_eq!(server.data.lock().unwrap().refused_sign_ins.len(), 1);
+        drop(rest);
         let _ = std::fs::remove_dir_all(store.root());
     }
 

@@ -263,6 +263,53 @@ fn the_text_comes_before_the_whole_message() {
     let _ = std::fs::remove_dir_all(store.root());
 }
 
+/// The log lines a test build is read by, as this test binary logs them (the rest is dropped).
+static LINES: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+
+struct Lines;
+
+impl log::Log for Lines {
+    fn enabled(&self, _: &log::Metadata) -> bool {
+        true
+    }
+    fn log(&self, record: &log::Record) {
+        let line = record.args().to_string();
+        if line.contains("text came first") || line.contains("the rest of it came") {
+            LINES.lock().unwrap().push(line);
+        }
+    }
+    fn flush(&self) {}
+}
+
+/// With two big messages on their way, a line of each kind says which message it's about, so
+/// the text's and the rest's can be paired.
+#[test]
+fn the_log_lines_name_their_message() {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| {
+        let _ = log::set_logger(&Lines);
+        log::set_max_level(log::LevelFilter::Info);
+    });
+    let (d, _) = inbox_of(2);
+    let server = serve(d);
+    let store = crate::fake::tests_store("ews-text-first-log");
+    let mut pool = start(&server, &store);
+    let keys = [key_of(&store, "M0"), key_of(&store, "M1")];
+    for key in &keys {
+        open(&mut pool, key);
+    }
+    until_each(&pool, "both messages", &keys, is_body);
+    let lines = LINES.lock().unwrap().clone();
+    for key in &keys {
+        let named = format!("a1: INBOX #{}: ", key.uid);
+        for kind in ["text came first", "the rest of it came"] {
+            assert!(lines.iter().any(|l| l.starts_with(&named) && l.contains(kind)), "{named}{kind}: {lines:?}");
+        }
+    }
+    drop(pool);
+    let _ = std::fs::remove_dir_all(store.root());
+}
+
 #[test]
 fn another_message_opened_meanwhile_shows_at_once() {
     let (mut d, _) = inbox_of(2);
@@ -582,6 +629,46 @@ fn a_password_changed_meanwhile_costs_one_refused_sign_in_for_a_message() {
     let seen = until(&pool, "the failure", |e| is_failed(e, &key));
     assert!(!seen.iter().any(|e| matches!(e, Event::TextFirst { .. } | Event::Body { .. })), "{seen:?}");
     assert_eq!(refused(), 1, "one request for the text, none for the whole message");
+    drop(pool);
+    let _ = std::fs::remove_dir_all(store.root());
+}
+
+/// A password changed in Active Directory while the account is open: NTLM signs in a connection,
+/// so the main one stays signed in, and only a copy of it, on a connection of its own, is refused.
+/// That refusal is paid once: the messages after it, and "Try again", come whole on the main
+/// connection. Paid at every big message, it would lock the account.
+#[test]
+fn a_copy_refused_after_a_password_change_costs_one_refused_sign_in() {
+    let (d, _) = inbox_of(3);
+    let server = serve(d);
+    let store = crate::fake::tests_store("ews-text-first-copy-refused");
+    let mut pool = start(&server, &store);
+    let keys: Vec<MessageKey> = (0..3).map(|i| key_of(&store, &format!("M{i}"))).collect();
+    {
+        let mut d = server.data.lock().unwrap();
+        d.password_changed = true;
+        d.forget_sign_in = false;
+    }
+    // The sync's own requests could meet the refusal on a new connection: only the messages'.
+    let refused = || server.data.lock().unwrap().refused_sign_ins.iter().filter(|op| *op == "GetItem").count();
+    let told = |e: &Event, k: &MessageKey| is_body(e, k) || is_failed(e, k);
+    open(&mut pool, &keys[0]);
+    let seen = until(&pool, "the first told", |e| told(e, &keys[0]));
+    assert!(seen.iter().any(|e| is_text(e, &keys[0])), "its text on the main connection: {seen:?}");
+    assert!(matches!(seen.last(), Some(Event::BodyFailed { .. })), "{:?}", seen.last());
+    for key in &keys[1..] {
+        open(&mut pool, key);
+    }
+    let seen = until_each(&pool, "the later ones told", &keys[1..], told);
+    for key in &keys[1..] {
+        let failure = seen.iter().find_map(|e| if let Event::BodyFailed { key: k, error } = e { (k == key).then_some(error) } else { None });
+        assert!(seen.iter().any(|e| is_body(e, key)) && failure.is_none(), "uid {}: {failure:?}", key.uid);
+    }
+    assert!(refused() <= 1, "{:?}", server.data.lock().unwrap().refused_sign_ins);
+    open(&mut pool, &keys[0]);
+    let seen = until(&pool, "the first again", |e| told(e, &keys[0]));
+    assert!(is_body(seen.last().unwrap(), &keys[0]), "Try again brings it: {seen:?}");
+    assert!(refused() <= 1, "{:?}", server.data.lock().unwrap().refused_sign_ins);
     drop(pool);
     let _ = std::fs::remove_dir_all(store.root());
 }

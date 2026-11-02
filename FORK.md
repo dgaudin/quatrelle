@@ -667,7 +667,11 @@ Rien n'a encore été essayé sur un vrai Exchange : l'origine ne l'a essayé qu
   ordinaire ne change pas) ; le fil qui trouve déjà le corps en cache envoie `Event::Body` ; seul un
   `NetError::Auth` sur le texte évite le retour au message entier, et une connexion qui échoue répond
   comme `fetch` ; le pool arrête le fil avec le compte ; « Répondre » vérifie le brouillon construit ;
-  après un échec, les commandes disent l'échec et non « encore en cours ».
+  après un échec, les commandes disent l'échec et non « encore en cours » ; une copie de la connexion
+  refusée à la connexion (mot de passe changé dans l'Active Directory, la connexion principale restant
+  connectée) ne coûte qu'un refus pour toute la session : les messages en attente sont signalés sans être
+  essayés, les suivants viennent entiers par la connexion principale ; la carte d'une invitation attend le
+  message entier ; les lignes du journal nomment le dossier et l'uid du message.
 - **Vérifié** : les serveurs factices EWS et Graph (dont un qui refuse un champ inconnu comme Exchange),
   le moteur, l'interface. La cible de fuzz `text_first` (les deux constructeurs) est écrite et compile,
   mais n'a pas été lancée : `cargo-fuzz` n'est pas installé ici.

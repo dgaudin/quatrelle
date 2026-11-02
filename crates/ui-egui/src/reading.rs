@@ -524,6 +524,11 @@ pub(crate) fn sender_warning(t: &Tokens, ui: &mut Ui, w: &quatrelle_engine::mode
 
 /// A meeting invitation (or an answer to one, or a cancellation) carried by the message.
 fn invite_card(s: &Session, st: &mut UiState, ui: &mut Ui, key: &MessageKey, acts: &mut Vec<Action>) {
+    // Only its text is here: the invitation, in the whole message to come, can't be read yet, and
+    // a "none" kept now would outlast its coming, until the calendar next changed.
+    if s.text_first(key) {
+        return;
+    }
     // Worked out once per message (the reading pane's and each window's) and calendar change.
     let kept = st.invite.iter().find(|(k, rev, _)| k == key && *rev == s.pim_revision).map(|(_, _, i)| i.clone());
     let invite = match kept {
