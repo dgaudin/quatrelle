@@ -64,3 +64,88 @@ fn an_appointment_moved_while_it_went_up_is_made_once() {
     drop(pool);
     let _ = std::fs::remove_dir_all(store.root());
 }
+
+/// The same race for contacts and notes, which go to Exchange as new items at each change (the
+/// old one deleted, the new one made), and for a new task: a new contact, a contact changed, a
+/// new note and a new task, sent by one sync, then by the next before the window took the first
+/// one's result in. Each is on the server once.
+#[test]
+fn contacts_notes_and_tasks_changed_while_they_went_up_are_made_once() {
+    use quatrelle_model::pim::{Note, PIM_DOC, Pim, StoredCard, StoredNote, StoredTask, Task};
+    use quatrelle_model::vcard::Card;
+    let mut d = Data::default();
+    d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    d.folder("Calendar", None, Some("calendar"), "IPF.Appointment");
+    let contacts = d.folder("Contacts", None, Some("contacts"), "IPF.Contact");
+    let notes = d.folder("Notes", None, Some("notes"), "IPF.StickyNote");
+    let tasks = d.folder("Tasks", None, Some("tasks"), "IPF.Task");
+    let ana = parse("<t:Contact><t:DisplayName>Ana Lima</t:DisplayName><t:Surname>Lima</t:Surname></t:Contact>");
+    d.pim.push(("C1".into(), contacts.clone(), ana.kids[0].clone()));
+    let server = serve(d);
+    let store = crate::fake::tests_store("ews-cards-made-once");
+    let pim = |n: u8| Pim {
+        cards: vec![
+            StoredCard {
+                book: crate::ews_pim::CONTACTS.into(),
+                href: "contact:C1".into(),
+                card: Card { uid: "C1".into(), name: format!("Ana Lima {n}"), family: "Lima".into(), ..Default::default() },
+                dirty: true,
+                ..Default::default()
+            },
+            StoredCard {
+                book: crate::ews_pim::CONTACTS.into(),
+                card: Card { uid: "bo-1@quatrelle".into(), name: format!("Bo Chen {n}"), family: "Chen".into(), ..Default::default() },
+                dirty: true,
+                ..Default::default()
+            },
+        ],
+        notes: vec![StoredNote {
+            note: Note { uid: "n-local".into(), text: format!("Buy paper {n}"), color: 1, modified: 5 },
+            dirty: true,
+            ..Default::default()
+        }],
+        tasks: vec![StoredTask {
+            task: Task { uid: "t-local".into(), subject: format!("Order paper {n}"), ..Default::default() },
+            dirty: true,
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    store.save_account_doc("a1", PIM_DOC, &pim(1)).unwrap();
+    let mut pool = crate::worker::Pool::new(store.clone(), Arc::new(crate::worker::MemoryCredentials::default()));
+    let account = AccountConfig {
+        id: "a1".into(),
+        email: "riley@contoso.example".into(),
+        username: format!("{DOMAIN}\\{USER}"),
+        ews: Some(server.url.clone()),
+        ..Default::default()
+    };
+    pool.submit(Job::Start { account, password: Some(Secret(PASSWORD.into())) });
+    let sent = |e: &Event| matches!(e, Event::DavSynced { sync, .. } if !sync.pushed_cards.is_empty());
+    // The first sync sends them. No window here takes the result in.
+    until(&pool, "sent", sent);
+    // Changed again meanwhile: as saved, still the old contact, the new ones still new.
+    store.save_account_doc("a1", PIM_DOC, &pim(2)).unwrap();
+    pool.submit(Job::SyncDav { account: "a1".into() });
+    until(&pool, "sent again", sent);
+    let in_folder = |folder: &str, field: &str| -> Vec<String> {
+        let mut v: Vec<String> = server
+            .data
+            .lock()
+            .unwrap()
+            .pim
+            .iter()
+            .filter(|(_, f, _)| f == folder)
+            .map(|(_, _, el)| el.text_of(field).unwrap_or_default().to_string())
+            .collect();
+        v.sort();
+        v
+    };
+    assert_eq!(
+        (in_folder(&contacts, "DisplayName"), in_folder(&notes, "Subject"), in_folder(&tasks, "Subject")),
+        (vec!["Ana Lima 2".to_string(), "Bo Chen 2".into()], vec!["Buy paper 2".to_string()], vec!["Order paper 2".to_string()]),
+        "each once, as changed last"
+    );
+    drop(pool);
+    let _ = std::fs::remove_dir_all(store.root());
+}

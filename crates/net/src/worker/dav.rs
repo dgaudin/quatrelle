@@ -1,51 +1,179 @@
 //! An account's worker: calendars and address books over CalDAV and CardDAV, and the sites they ask about.
 
-use quatrelle_model::pim::{DavSync, Pim, StoredEvent};
+use quatrelle_model::pim::{DavSync, Pim, StoredCard, StoredEvent, StoredNote, StoredTask};
 
 use super::*;
 
-/// The most appointments an account's syncs made that are remembered (the oldest go first).
+/// The most appointments (and as many contacts, notes, tasks) an account's syncs made that are
+/// remembered (the oldest go first).
 const STORED_MAX: usize = 500;
 
-/// The appointments an account's syncs put on the server, each with its item there, until the
-/// calendars as saved show it. The window takes a sync's result in a moment after it's sent,
-/// and the next sync may start before, from the calendars as they were saved: an appointment
+/// What an account's syncs put on the server, each with its item there, until the calendars,
+/// contacts, notes and tasks as saved show it. The window takes a sync's result in a moment
+/// after it's sent, and the next sync may start before, from what was saved: an appointment
 /// made by the sync before, then moved, was still new there, and was made a second time
-/// (02/11: Outlook showed it on Monday and on Tuesday). Its item is put back on it instead, so
-/// the change goes to the item made.
+/// (02/11: Outlook showed it on Monday and on Tuesday). So with a new contact, note or task, and
+/// with a changed contact or note, which Exchange takes as a new item each time (the old one
+/// deleted): the next sync deleted nothing and made it again. Its item is put back on it
+/// instead, so the change goes to the item made.
 #[derive(Default)]
 pub(super) struct Stored {
     events: VecDeque<StoredEvent>,
+    cards: VecDeque<StoredCard>,
+    notes: VecDeque<StoredNote>,
+    tasks: VecDeque<StoredTask>,
+}
+
+/// Something a sync puts on the server and [`Stored`] remembers.
+trait Pushed: Clone {
+    /// The same appointment, contact, note or task.
+    fn same(&self, other: &Self) -> bool;
+    fn href(&self) -> &str;
+    /// As saved, still to send through another item than the one `made`: none yet, or (contacts
+    /// and notes, made again at each change) the one the sync before replaced.
+    fn behind(&self, made: &Self) -> bool {
+        self.href().is_empty() || (self.dirty() && self.made_again() && self.href() != made.href())
+    }
+    fn dirty(&self) -> bool;
+    /// Sent as a new item at each change.
+    fn made_again(&self) -> bool {
+        false
+    }
+    /// Given the item made, and where it went.
+    fn take_item(&mut self, made: &Self);
+    /// How the log names it (no one's name or text).
+    fn id(&self) -> &str;
+}
+
+impl Pushed for StoredEvent {
+    fn same(&self, other: &Self) -> bool {
+        self.event.uid == other.event.uid && self.event.recurrence_id == other.event.recurrence_id
+    }
+    fn href(&self) -> &str {
+        &self.href
+    }
+    fn dirty(&self) -> bool {
+        self.dirty
+    }
+    fn take_item(&mut self, made: &Self) {
+        self.href.clone_from(&made.href);
+        self.etag.clone_from(&made.etag);
+        self.calendar.clone_from(&made.calendar);
+    }
+    fn id(&self) -> &str {
+        &self.event.uid
+    }
+}
+
+impl Pushed for StoredCard {
+    fn same(&self, other: &Self) -> bool {
+        self.card.uid == other.card.uid
+    }
+    fn href(&self) -> &str {
+        &self.href
+    }
+    fn dirty(&self) -> bool {
+        self.dirty
+    }
+    fn made_again(&self) -> bool {
+        self.href.starts_with("contact:")
+    }
+    fn take_item(&mut self, made: &Self) {
+        self.href.clone_from(&made.href);
+        self.etag.clone_from(&made.etag);
+        self.book.clone_from(&made.book);
+    }
+    fn id(&self) -> &str {
+        &self.card.uid
+    }
+}
+
+impl Pushed for StoredNote {
+    fn same(&self, other: &Self) -> bool {
+        self.note.uid == other.note.uid
+    }
+    fn href(&self) -> &str {
+        &self.href
+    }
+    fn dirty(&self) -> bool {
+        self.dirty
+    }
+    fn made_again(&self) -> bool {
+        self.href.starts_with("note:")
+    }
+    fn take_item(&mut self, made: &Self) {
+        self.href.clone_from(&made.href);
+        self.etag.clone_from(&made.etag);
+    }
+    fn id(&self) -> &str {
+        &self.note.uid
+    }
+}
+
+impl Pushed for StoredTask {
+    fn same(&self, other: &Self) -> bool {
+        self.task.uid == other.task.uid
+    }
+    fn href(&self) -> &str {
+        &self.href
+    }
+    fn dirty(&self) -> bool {
+        self.dirty
+    }
+    /// An Exchange task deleted in Outlook meanwhile is made again by the change.
+    fn made_again(&self) -> bool {
+        self.href.starts_with("task:")
+    }
+    fn take_item(&mut self, made: &Self) {
+        self.href.clone_from(&made.href);
+        self.etag.clone_from(&made.etag);
+    }
+    fn id(&self) -> &str {
+        &self.task.uid
+    }
+}
+
+/// What a sync put on the server, each in place of what an earlier sync put there.
+fn record<T: Pushed>(list: &mut VecDeque<T>, pushed: &[T]) {
+    for x in pushed.iter().filter(|x| !x.href().is_empty()) {
+        list.retain(|e| !e.same(x));
+        list.push_back(x.clone());
+    }
+    while list.len() > STORED_MAX {
+        list.pop_front();
+    }
+}
+
+/// What was saved, each thing made since and still behind there given its item; one saved with
+/// its item is no longer remembered.
+fn carry<T: Pushed>(list: &mut VecDeque<T>, saved: &mut [T]) {
+    list.retain(|x| {
+        if saved.iter().any(|e| e.same(x) && e.href() == x.href()) {
+            return false;
+        }
+        for e in saved.iter_mut().filter(|e| e.same(x) && e.behind(x)) {
+            log::info!("{}: made on the server by the sync before, not taken in yet: changed there, not made again", e.id());
+            e.take_item(x);
+        }
+        true
+    });
 }
 
 impl Stored {
     /// What a sync put on the server, each in place of what an earlier sync put there.
     fn record(&mut self, sync: &DavSync) {
-        for x in sync.pushed_events.iter().filter(|x| !x.href.is_empty()) {
-            self.events.retain(|e| !(e.event.uid == x.event.uid && e.event.recurrence_id == x.event.recurrence_id));
-            self.events.push_back(x.clone());
-        }
-        while self.events.len() > STORED_MAX {
-            self.events.pop_front();
-        }
+        record(&mut self.events, &sync.pushed_events);
+        record(&mut self.cards, &sync.pushed_cards);
+        record(&mut self.notes, &sync.pushed_notes);
+        record(&mut self.tasks, &sync.pushed_tasks);
     }
 
-    /// The calendars as saved, each appointment made since and still new there given its item;
-    /// one the calendars show with its item is no longer remembered.
+    /// What was saved, with what the syncs made since and the window hasn't taken in yet.
     fn carry(&mut self, pim: &mut Pim) {
-        self.events.retain(|x| {
-            let same = |e: &StoredEvent| e.event.uid == x.event.uid && e.event.recurrence_id == x.event.recurrence_id;
-            if pim.events.iter().any(|e| same(e) && e.href == x.href) {
-                return false;
-            }
-            for e in pim.events.iter_mut().filter(|e| same(e) && e.href.is_empty()) {
-                log::info!("{}: made on the server by the sync before, not taken in yet: changed there, not made again", e.event.uid);
-                e.href.clone_from(&x.href);
-                e.etag.clone_from(&x.etag);
-                e.calendar.clone_from(&x.calendar);
-            }
-            true
-        });
+        carry(&mut self.events, &mut pim.events);
+        carry(&mut self.cards, &mut pim.cards);
+        carry(&mut self.notes, &mut pim.notes);
+        carry(&mut self.tasks, &mut pim.tasks);
     }
 }
 
@@ -53,7 +181,7 @@ impl Sink {
     /// A sync's result on its way to the window: what it put on the server is remembered.
     pub(super) fn note_stored(&self, e: &Event) {
         if let Event::DavSynced { account, sync } = e
-            && !sync.pushed_events.is_empty()
+            && !(sync.pushed_events.is_empty() && sync.pushed_cards.is_empty() && sync.pushed_notes.is_empty() && sync.pushed_tasks.is_empty())
             && let Ok(mut stored) = self.stored.lock()
         {
             stored.entry(account.clone()).or_default().record(sync);
