@@ -47,6 +47,13 @@ fn plain_type(m: &str) -> String {
     if ok { m.to_ascii_lowercase() } else { "application/octet-stream".into() }
 }
 
+/// [`parse`] for a message built by [`text_first`], and only one: a recipient with a name alone
+/// stays (an empty `email`: not known yet), as `text_first` writes it. Ordinary mail goes
+/// through [`parse`], which keeps addresses only.
+pub fn parse_text_first(raw: &[u8]) -> Option<Parsed> {
+    crate::parse_as(raw, crate::addrs_with_names)
+}
+
 /// The message as MIME, its text and `files` (named and sized, no bytes): `d`'s headers and
 /// body (HTML in `d.html` when there is some), from `from` at `date`, under `message_id`
 /// (empty: none).
@@ -131,15 +138,24 @@ mod tests {
     fn a_name_alone_stays_a_name() {
         let d = Draft { to: vec![EmailAddress::new("Alex Martin", "")], subject: "s".into(), body: "b".into(), ..Default::default() };
         let raw = text_first(&d, &EmailAddress::new("Sam", "sam@x.example"), 1, "", &[]).unwrap();
-        let p = parse(&raw).unwrap();
+        let p = parse_text_first(&raw).unwrap();
         assert_eq!((p.to[0].name.as_str(), p.to[0].email.as_str()), ("Alex Martin", ""));
+    }
+
+    #[test]
+    fn ordinary_mail_keeps_only_addresses() {
+        let raw = b"To: Alex Martin, b@x.example\r\nFrom: Nobody\r\nSender: s@x.example\r\nSubject: s\r\n\r\nb";
+        assert_eq!(parse(raw).unwrap().to, vec![EmailAddress::new("", "b@x.example")]);
+        // The list falls back to the sender when From has no address.
+        let sum = summary_from_header(raw, MessageKey::default(), Flags::default(), 0, 0);
+        assert_eq!(sum.from.email, "s@x.example");
     }
 
     #[test]
     fn an_address_with_nothing_is_dropped() {
         let d = Draft { to: vec![EmailAddress::new(" ", ""), EmailAddress::new("", "a@b.example")], body: "b".into(), ..Default::default() };
         let raw = text_first(&d, &EmailAddress::default(), 1, "", &[]).unwrap();
-        assert_eq!(parse(&raw).unwrap().to.len(), 1);
+        assert_eq!(parse_text_first(&raw).unwrap().to.len(), 1);
     }
 
     #[test]

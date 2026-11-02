@@ -9,7 +9,7 @@ pub use tnef::{Tnef, TnefBody, TnefFile, decompress_rtf, read_tnef, rtf_body};
 
 mod text_first;
 mod tnef;
-pub use text_first::{MOST_PENDING_FILES, PendingFile, is_protected_file, text_first};
+pub use text_first::{MOST_PENDING_FILES, PendingFile, is_protected_file, parse_text_first, text_first};
 
 /// A part's size: its bytes, or, with none yet (a message's text that came first), the size its
 /// `Content-Disposition` gives (RFC 2183's `size`).
