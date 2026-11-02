@@ -7,7 +7,7 @@
 //! password stops retrying until the user enters a new one.
 
 use std::collections::{BTreeSet, HashMap, VecDeque};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender, TryRecvError};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
@@ -116,6 +116,9 @@ struct Handle {
     /// replies): it never waits behind a sync. `None` where it can't be used (POP, JMAP sends).
     quick: Option<Sender<Job>>,
     quick_thread: Option<JoinHandle<()>>,
+    /// Set as the account stops, when its worker may yet be in a slow call: what's being brought
+    /// on the side ([`rest::Rest`]) writes nothing from then on.
+    stop: Arc<AtomicBool>,
 }
 
 /// What an account signs in with, shared by its connections: the password or refresh token, and

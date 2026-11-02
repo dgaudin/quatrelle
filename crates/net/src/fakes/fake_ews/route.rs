@@ -379,6 +379,11 @@ impl Data {
                     match self.items.iter().find(|i| i.id == id) {
                         Some(i) if self.unrouted(&i.folder) || self.unanchored(&i.folder) => out.push(err("ErrorItemNotFound")),
                         Some(i) if mime && self.unreadable.contains(&i.id) => out.push(err("ErrorInternalServerError")),
+                        Some(_) if text && self.refuse_text_each => out.push(
+                            "<m:R ResponseClass=\"Error\"><m:MessageText>The property can't be used with this type of item.</m:MessageText>\
+                             <m:ResponseCode>ErrorInvalidPropertyRequest</m:ResponseCode></m:R>"
+                                .to_string(),
+                        ),
                         Some(i) => out.push(ok(format!("<m:Items>{}</m:Items>", self.item_xml(i, mime, text)))),
                         None => out.push(err("ErrorItemNotFound")),
                     }
