@@ -423,7 +423,7 @@ fn message(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action
                 html_bar(s, &t, ui, p, acts);
             }
             if let Some(u) = &p.unsubscribe {
-                ui.label(RichText::new(tf!("Mailing list: unsubscribe at {address}", address = widgets::shorten(u, 80))).color(t.faint).small());
+                unsubscribe_line(&t, ui, u, acts);
                 ui.add_space(6.0);
             }
             let sep = ui.available_rect_before_wrap();
@@ -760,5 +760,19 @@ mod tests {
         // A square picture is left as it is.
         let square = image::RgbaImage::from_pixel(16, 16, image::Rgba([1, 2, 3, 255]));
         assert_eq!(round_pixels(square).0, [16, 16]);
+    }
+
+    /// A list's unsubscribe address opens when it's a web page or a mail address (bare, it's
+    /// written to); anything else stays words, never handed to the system.
+    #[test]
+    fn an_unsubscribe_address_opens_only_as_a_page_or_a_message() {
+        assert_eq!(unsubscribe_link(" https://lists.example/u?id=7 ").as_deref(), Some("https://lists.example/u?id=7"));
+        assert_eq!(unsubscribe_link("MAILTO:leave@lists.example").as_deref(), Some("MAILTO:leave@lists.example"));
+        assert_eq!(unsubscribe_link("leave@lists.example").as_deref(), Some("mailto:leave@lists.example"));
+        for words in
+            ["javascript:alert(1)", "file:///etc/passwd", "ftp://lists.example/x", "leave", "@lists.example", "a b@lists.example", "x@localhost", ""]
+        {
+            assert_eq!(unsubscribe_link(words), None, "{words}");
+        }
     }
 }

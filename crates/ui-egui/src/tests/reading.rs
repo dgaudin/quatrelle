@@ -2,6 +2,7 @@
 
 use super::*;
 
+mod bars;
 mod tables;
 mod text_first;
 

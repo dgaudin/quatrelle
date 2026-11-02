@@ -96,7 +96,10 @@ fn row(
     let x = rect.min.x + 10.0 + depth as f32 * 14.0;
     let font = if unread > 0 || selected { theme::bold(13.5) } else { theme::regular(13.5) };
     let text_right = rect.max.x - if unread > 0 { 40.0 } else { 8.0 };
-    let galley = ui.painter().layout(label.to_string(), font, t.text, (text_right - x - 6.0).max(10.0));
+    // One line, as Outlook's: a name too long for the pane ends in "…" and is told whole under
+    // the pointer ("All Inboxes" in French went on two lines and spilled out of its row).
+    let galley = crate::widgets::one_line(ui, label, font, t.text, (text_right - x - 6.0).max(10.0));
+    let cut = galley.elided;
     let gy = rect.center().y - galley.size().y / 2.0;
     ui.painter().with_clip_rect(egui::Rect::from_x_y_ranges(x..=text_right, rect.y_range())).galley(egui::pos2(x + 6.0, gy), galley, t.text);
     if unread > 0 {
@@ -108,7 +111,7 @@ fn row(
             t.accent,
         );
     }
-    resp
+    if cut { resp.on_hover_text(label) } else { resp }
 }
 
 pub fn show(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>) {

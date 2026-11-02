@@ -643,10 +643,10 @@ impl MailApp {
         let cleaned = if self.session.prefs.clean_links { quatrelle_engine::mime::clean_link(url) } else { url.to_string() };
         let u = cleaned.trim();
         let lower = u.to_ascii_lowercase();
-        if let Some(rest) = u.get(7..).filter(|_| lower.starts_with("mailto:")) {
-            let to = rest.split('?').next().unwrap_or("").replace("%40", "@");
-            self.run("mail.new", json!({}));
-            self.run("compose.update", json!({"to": to}));
+        if quatrelle_engine::model::mailto::is_mailto(u) {
+            // A new message as the link writes it (RFC 6068): its subject too, which a list's
+            // unsubscribe address often needs ("?subject=unsubscribe").
+            self.run("mail.mailto", json!({"url": u}));
         } else if let Some(share) = quatrelle_engine::mime::share_link(u) {
             // A network share: opened once the user says so, unless its server is trusted (one on
             // a stranger's server can ask for their sign-in).

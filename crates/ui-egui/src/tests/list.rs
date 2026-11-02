@@ -1,6 +1,35 @@
-//! UI tests: the message list, and the reading pane beside it.
+//! UI tests: the folder pane, the message list, and the reading pane beside it.
 
 use super::*;
+
+/// A folder's name too long for the folder pane stays on one line, ending in "…" (its whole name
+/// under the pointer): "All Inboxes" in French went on two lines, out of its row.
+#[test]
+fn a_long_folder_name_stays_on_one_line() {
+    let (mut a, dir) = app("long-folder-name");
+    let long = "Correspondence with the suppliers of the new building, every quote and every invoice";
+    a.run("folder.create", json!({"account": "sample", "name": long}));
+    assert!(a.session.folder("sample", long).is_some());
+    let ctx = egui::Context::default();
+    let size = egui::vec2(1280.0, 800.0);
+    for _ in 0..3 {
+        frame_sized(&ctx, &mut a, vec![], size);
+    }
+    let shapes = frame_shapes(&ctx, &mut a, vec![], size);
+    let drawn = |name: &str| {
+        shapes.iter().find_map(|s| match s {
+            egui::Shape::Text(t) if t.galley.text() == name => Some(t.galley.clone()),
+            _ => None,
+        })
+    };
+    let g = drawn(long).expect("the folder is in the pane");
+    assert_eq!(g.rows.len(), 1, "one line");
+    assert!(g.elided, "cut, with its \"…\"");
+    assert!(g.rect.height() < 26.0, "inside its row: {:?}", g.rect);
+    let inbox = drawn("Inbox").expect("the Inbox is in the pane");
+    assert!(!inbox.elided, "a name that fits is whole");
+    let _ = std::fs::remove_dir_all(dir);
+}
 
 /// The lines drawn along the bottom of what they're clipped to (a row, the column headings),
 /// whose part outside it doesn't show: (where, the clip, its y).
