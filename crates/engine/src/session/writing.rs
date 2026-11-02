@@ -199,7 +199,7 @@ impl Session {
         let encrypted = r.security.as_ref().is_some_and(|s| matches!(s.lock, Some(Lock::Open { .. }))) && self.identity(&r.key.account).is_some();
         let mut parsed = r.parsed.ok_or_else(|| CmdError::Disabled("the message is still downloading".into()))?;
         if r.text_first && !answerable_from_text(&parsed, mode) {
-            return Err(CmdError::Failed(STILL_COMING.into()));
+            self.whole_here()?;
         }
         let account = r.key.account.clone();
         let sig = self.signature_in_message(&self.signature_when(&account, true));
@@ -211,6 +211,11 @@ impl Session {
         // The pictures in the quoted message go with it (they showed as "[picture]", issue #10).
         let (inline, quoted) = raw.as_deref().map(|raw| mime::quoted_pictures(&mut parsed, raw)).unwrap_or_default();
         let (d, styles) = mime::reply_doc(&parsed, mode, &me, &self.clock, &sig, &self.quote_words);
+        // Whoever it goes to, as worked out above (one's own message goes to its recipients):
+        // a name alone can't be written to.
+        if r.text_first && d.to.iter().chain(&d.cc).any(|a| a.email.trim().is_empty()) {
+            self.whole_here()?;
+        }
         let id = self.fresh_id();
         let mut attachments = Vec::new();
         if mode == ReplyMode::Forward
@@ -580,12 +585,10 @@ impl Session {
     }
 }
 
-/// Whether an answer can be written from a message's text alone. It can't quote pictures not here
-/// yet (a `cid:` the text names counts: Microsoft Graph's inline files read as plain ones until
-/// the whole message comes), write to someone known by name only, or forward what's still coming.
+/// Whether an answer can be written from a message's text alone, as far as its content goes. It
+/// can't quote pictures not here yet (a `cid:` the text names counts: Microsoft Graph's inline
+/// files read as plain ones until the whole message comes), nor forward what's still coming.
 fn answerable_from_text(p: &Parsed, mode: ReplyMode) -> bool {
-    let known = |list: &[EmailAddress]| list.iter().all(|a| !a.email.trim().is_empty());
     let pictures = p.attachments.iter().any(|a| a.inline) || p.images.iter().any(|i| i.get(..4).is_some_and(|s| s.eq_ignore_ascii_case("cid:")));
-    let written_to = if p.reply_to.is_empty() { known(std::slice::from_ref(&p.from)) } else { known(&p.reply_to) };
-    mode != ReplyMode::Forward && !pictures && written_to && (mode != ReplyMode::ReplyAll || (known(&p.to) && known(&p.cc)))
+    mode != ReplyMode::Forward && !pictures
 }

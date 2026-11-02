@@ -148,7 +148,7 @@ fn the_whole_message_can_come_twice() {
     assert_eq!(results(&mut s, "kilimanjaro"), 0);
     whole_arrives(&mut s, &key, &whole);
     s.apply(Event::Body { key: key.clone(), raw: whole.clone() });
-    assert_eq!(results(&mut s, "kilimanjaro"), 1, "indexed once");
+    assert_eq!(results(&mut s, "kilimanjaro"), 1, "found, and as one message");
     assert!(!s.windows[0].text_first);
     assert!(s.windows[0].parsed.as_ref().unwrap().text.contains("kilimanjaro"));
     done(s);
@@ -202,7 +202,86 @@ fn the_reading_pane_keeps_the_text_when_the_rest_fails() {
     assert_eq!(r.error.as_deref(), Some("no way through"));
     assert!(r.text_first);
     assert!(r.parsed.is_some());
-    assert!(matches!(s.run("mail.forward", &json!({})), Err(CmdError::Failed(m)) if m == STILL_COMING));
+    done(s);
+}
+
+/// "Try again" is showing: what needs the whole message says why it isn't here, not that it's
+/// on its way.
+#[test]
+fn once_the_rest_failed_the_commands_say_why() {
+    let mut s = sample_session("text-first-why");
+    let (key, _) = in_its_text_phase(&mut s, |_, _, f| {
+        f.inline = true;
+        f.content_id = Some("still@x".into());
+    });
+    s.apply(Event::BodyFailed { key: key.clone(), error: "no way through".into() });
+    for id in ["mail.forward", "mail.forwardAsAttachment", "mail.reply", "message.headers"] {
+        match s.run(id, &json!({})) {
+            Err(CmdError::Failed(m)) => assert_eq!(m, "no way through", "{id}"),
+            other => panic!("{id}: {other:?}"),
+        }
+    }
+    done(s);
+}
+
+/// The reply's text is the user's from the moment it's opened.
+#[test]
+fn the_whole_message_arriving_leaves_a_reply_alone() {
+    let mut s = sample_session("text-first-reply-kept");
+    let (key, whole) = in_its_text_phase(&mut s, |_, _, _| {});
+    s.run("mail.reply", &json!({})).unwrap();
+    s.compose.as_mut().unwrap().set_text("My own words".into());
+    let before = s.compose.clone().unwrap();
+    whole_arrives(&mut s, &key, &whole);
+    let after = s.compose.clone().unwrap();
+    assert_eq!(after.body, "My own words");
+    assert_eq!((after.to, after.subject), (before.to, before.subject));
+    assert_eq!(after.source, Some(key));
+    done(s);
+}
+
+#[test]
+fn a_reply_to_ones_own_message_needs_its_recipients() {
+    let me = {
+        let s = sample_session("text-first-own-address");
+        let email = s.account(sample::SAMPLE_ACCOUNT).unwrap().config.email.clone();
+        done(s);
+        email
+    };
+    let mine = me.clone();
+    let to_a_name = move |d: &mut Draft, from: &mut EmailAddress, _: &mut PendingFile| {
+        *from = EmailAddress::new("Me", &mine);
+        d.reply_to.clear();
+        d.to = vec![EmailAddress::new("Sam Park", "")];
+    };
+    assert_eq!(answer_in_text_phase("text-first-own", "mail.reply", to_a_name), Err(STILL_COMING.to_string()));
+    let to_an_address = move |d: &mut Draft, from: &mut EmailAddress, _: &mut PendingFile| {
+        *from = EmailAddress::new("Me", &me);
+        d.reply_to.clear();
+        d.to = vec![EmailAddress::new("Sam Park", "sam@studio.example")];
+    };
+    assert_eq!(answer_in_text_phase("text-first-own-known", "mail.reply", to_an_address), Ok(()));
+}
+
+#[test]
+fn a_sender_known_by_name_alone_cant_be_kept() {
+    let mut s = sample_session("text-first-sender-kept");
+    in_its_text_phase(&mut s, |_, from, _| *from = EmailAddress::new("Riley Chen", ""));
+    let trusted = s.prefs.trusted_senders.clone();
+    let refused = |out: Result<Value, CmdError>| matches!(out, Err(CmdError::Failed(m)) if m == STILL_COMING);
+    assert!(refused(s.run("message.showPictures", &json!({"always": true}))));
+    assert_eq!(s.prefs.trusted_senders, trusted);
+    s.run("message.showPictures", &json!({})).unwrap();
+    let cards = s.people("").len();
+    assert!(refused(s.run("contact.fromMessage", &json!({}))));
+    assert_eq!(s.people("").len(), cards);
+    done(s);
+
+    // An address known: nothing to wait for.
+    let mut s = sample_session("text-first-sender-known");
+    in_its_text_phase(&mut s, |_, _, _| {});
+    s.run("message.showPictures", &json!({"always": true})).unwrap();
+    s.run("contact.fromMessage", &json!({})).unwrap();
     done(s);
 }
 
@@ -404,18 +483,18 @@ fn which_messages_come_text_first() {
     assert_eq!(asked_for(&mut s, &key), "online");
     s.older = None;
 
+    // "Download all" stays whole, for a message that would come text first if opened.
+    s.take_jobs();
+    s.run("account.downloadAll", &json!({})).unwrap();
+    let jobs = s.take_jobs();
+    assert!(jobs.iter().any(|j| matches!(j, Job::FetchBody { key: k } if *k == key)));
+    assert!(!jobs.iter().any(|j| matches!(j, Job::FetchTextFirst { .. })));
+
     // The Outbox, and a message the list doesn't have.
     let waiting = MessageKey { folder: OUTBOX.into(), ..key.clone() };
     s.list.push(Arc::new(Summary { key: waiting.clone(), ..summary }));
     assert_eq!(asked_for(&mut s, &waiting), "whole");
     s.list.retain(|m| m.key != key);
     assert_eq!(asked_for(&mut s, &key), "whole");
-
-    // "Download all" stays whole.
-    s.take_jobs();
-    s.run("account.downloadAll", &json!({})).unwrap();
-    let jobs = s.take_jobs();
-    assert!(jobs.iter().any(|j| matches!(j, Job::FetchBody { .. })));
-    assert!(!jobs.iter().any(|j| matches!(j, Job::FetchTextFirst { .. })));
     done(s);
 }

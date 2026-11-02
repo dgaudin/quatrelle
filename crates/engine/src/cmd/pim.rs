@@ -258,6 +258,9 @@ pub(super) fn commands() -> Vec<CommandSpec> {
         .params(r#"{"email": string, "account"?: string} (the picture Exchange's directory keeps for that address)"#),
         CommandSpec::new("contact.fromMessage", "Add sender to contacts", "Reading pane", |s, _| {
             let from = s.reading.as_ref().and_then(|r| r.parsed.as_ref()).map(|p| p.from.clone()).ok_or_else(|| CmdError::Disabled("open a message first".into()))?;
+            if from.email.trim().is_empty() {
+                s.whole_here()?;
+            }
             if let Some(existing) = s.people(&from.email).into_iter().find(|x| x.card.emails.iter().any(|e| e.value.eq_ignore_ascii_case(&from.email))) {
                 return Ok(json!({"uid": existing.card.uid, "existing": true}));
             }
