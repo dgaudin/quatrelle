@@ -386,7 +386,7 @@ mod text_first_tests {
 
     fn sink() -> (Sink, Receiver<Event>) {
         let (tx, rx) = mpsc::channel();
-        (Sink { tx, wake: Arc::new(Mutex::new(None)) }, rx)
+        (Sink { tx, wake: Arc::new(Mutex::new(None)), stored: Arc::default() }, rx)
     }
 
     fn failed(rx: &Receiver<Event>) -> Vec<u32> {
@@ -504,7 +504,7 @@ mod text_first_tests {
     fn the_stop_tells_each_key_waiting() {
         let (tx, rx) = mpsc::channel();
         let store = crate::fake::tests_store("rest-text-first-stop");
-        let rest = Rest::new(store.clone(), Sink { tx, wake: Arc::new(Mutex::new(None)) });
+        let rest = Rest::new(store.clone(), Sink { tx, wake: Arc::new(Mutex::new(None)), stored: Arc::default() });
         rest.queue.lock().unwrap().put(entry(1, "id"));
         rest.queue.lock().unwrap().put(entry(2, "id"));
         let stopped = Arc::clone(&rest.stopped);

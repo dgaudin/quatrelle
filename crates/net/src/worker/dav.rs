@@ -1,14 +1,84 @@
 //! An account's worker: calendars and address books over CalDAV and CardDAV, and the sites they ask about.
 
+use quatrelle_model::pim::{DavSync, Pim, StoredEvent};
+
 use super::*;
+
+/// The most appointments an account's syncs made that are remembered (the oldest go first).
+const STORED_MAX: usize = 500;
+
+/// The appointments an account's syncs put on the server, each with its item there, until the
+/// calendars as saved show it. The window takes a sync's result in a moment after it's sent,
+/// and the next sync may start before, from the calendars as they were saved: an appointment
+/// made by the sync before, then moved, was still new there, and was made a second time
+/// (02/11: Outlook showed it on Monday and on Tuesday). Its item is put back on it instead, so
+/// the change goes to the item made.
+#[derive(Default)]
+pub(super) struct Stored {
+    events: VecDeque<StoredEvent>,
+}
+
+impl Stored {
+    /// What a sync put on the server, each in place of what an earlier sync put there.
+    fn record(&mut self, sync: &DavSync) {
+        for x in sync.pushed_events.iter().filter(|x| !x.href.is_empty()) {
+            self.events.retain(|e| !(e.event.uid == x.event.uid && e.event.recurrence_id == x.event.recurrence_id));
+            self.events.push_back(x.clone());
+        }
+        while self.events.len() > STORED_MAX {
+            self.events.pop_front();
+        }
+    }
+
+    /// The calendars as saved, each appointment made since and still new there given its item;
+    /// one the calendars show with its item is no longer remembered.
+    fn carry(&mut self, pim: &mut Pim) {
+        self.events.retain(|x| {
+            let same = |e: &StoredEvent| e.event.uid == x.event.uid && e.event.recurrence_id == x.event.recurrence_id;
+            if pim.events.iter().any(|e| same(e) && e.href == x.href) {
+                return false;
+            }
+            for e in pim.events.iter_mut().filter(|e| same(e) && e.href.is_empty()) {
+                log::info!("{}: made on the server by the sync before, not taken in yet: changed there, not made again", e.event.uid);
+                e.href.clone_from(&x.href);
+                e.etag.clone_from(&x.etag);
+                e.calendar.clone_from(&x.calendar);
+            }
+            true
+        });
+    }
+}
+
+impl Sink {
+    /// A sync's result on its way to the window: what it put on the server is remembered.
+    pub(super) fn note_stored(&self, e: &Event) {
+        if let Event::DavSynced { account, sync } = e
+            && !sync.pushed_events.is_empty()
+            && let Ok(mut stored) = self.stored.lock()
+        {
+            stored.entry(account.clone()).or_default().record(sync);
+        }
+    }
+
+    /// An account's calendars as saved, with what its syncs put on the server since.
+    fn carry_stored(&self, account: &str, pim: &mut Pim) {
+        if let Ok(mut stored) = self.stored.lock()
+            && let Some(s) = stored.get_mut(account)
+        {
+            s.carry(pim);
+        }
+    }
+}
 
 impl Worker {
     /// The account's calendars and address books as the window last kept them, reading what it
-    /// last asked for ([`quatrelle_model::pim::PIM_READING_DOC`]).
+    /// last asked for ([`quatrelle_model::pim::PIM_READING_DOC`]), with the appointments made on
+    /// the server since that it hasn't taken in yet ([`Stored`]).
     pub(super) fn load_pim(&self) -> quatrelle_model::pim::Pim {
-        use quatrelle_model::pim::{PIM_DOC, PIM_READING_DOC, Pim, PimReading};
+        use quatrelle_model::pim::{PIM_DOC, PIM_READING_DOC, PimReading};
         let mut pim: Pim = self.store.load_account_doc(&self.acc.id, PIM_DOC).unwrap_or_default();
         pim.read_as(self.store.load_account_doc::<Option<PimReading>>(&self.acc.id, PIM_READING_DOC).unwrap_or_default());
+        self.sink.carry_stored(&self.acc.id, &mut pim);
         pim
     }
 

@@ -95,11 +95,14 @@ impl Credentials for MemoryCredentials {
 struct Sink {
     tx: Sender<Event>,
     wake: Arc<Mutex<Option<Arc<dyn Fn() + Send + Sync>>>>,
+    /// What each account's syncs made on the server, until the calendars as saved show it.
+    stored: Arc<Mutex<HashMap<String, dav::Stored>>>,
 }
 
 impl Sink {
     fn emit(&self, e: Event) {
         log_event(&e);
+        self.note_stored(&e);
         let _ = self.tx.send(e);
         if let Ok(w) = self.wake.lock()
             && let Some(f) = w.as_ref()
