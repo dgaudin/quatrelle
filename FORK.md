@@ -87,6 +87,9 @@ Seules la disposition et les noms des fonctions sont repris.
 | Volet des dossiers | Noms seuls, sans icône devant, lignes plus serrées | `a55c4e9` | — |
 | Barre To-Do | À droite du courrier : le mois en cours et les rendez-vous de la semaine | `0237901` | Affichage › Barre des tâches |
 | Calendrier | Vue Semaine de travail, en-têtes de jours, deux mois dans le volet, groupes de calendriers | `2c30e94` | — |
+| Noms de dossiers longs | Sur une ligne, coupés par « … », le nom entier en infobulle (« Toutes les boîtes de réception » passait sur deux lignes) | `0a9222ba` | — |
+| Texte caché d'un message | Une ligne discrète, « Texte caché : n mots · Afficher », l'explication en infobulle, au lieu d'un cadre coloré de trois lignes | `0a9222ba` | — |
+| Liste de diffusion | L'adresse de désabonnement est un lien : page web dans le navigateur, ou nouveau message avec l'objet que la liste demande | `0a9222ba` | — |
 
 **Pourquoi « Automatique » pour la liste.** Outlook montre des cartes quand le volet de lecture est
 à droite (la liste est étroite), et un tableau quand il est en bas ou masqué. Le mode Automatique
