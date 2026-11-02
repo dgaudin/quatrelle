@@ -341,10 +341,10 @@ This refactors a send path that was reviewed once, so the existing tests are its
 
 - [ ] **Step 1: Write the failing tests:**
   - `from_finds_another_address_by_its_name` (rewritten):
-    1. typing `contoso` asks nothing (`!directory_searching`);
+    1. typing `projets` asks nothing (`!directory_searching`);
     2. Ctrl+K asks the directory;
     3. one answer → a chip;
-    4. "Send from it" → `c.from == "Contoso Reseau <reseaux@contoso.example>"`.
+    4. "Send from it" → `c.from == "Projets Reseau <reseaux@contoso.example>"`.
   - `a_suggestion_clicked_in_from_is_taken`: a local contact typed in part, its suggestion clicked → the chip is there and the menu is still open; "Send from it" takes it.
   - `from_holds_one_entry_and_refuses_a_room`:
     - a second address typed replaces the first;

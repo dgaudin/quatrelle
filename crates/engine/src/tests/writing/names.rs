@@ -47,9 +47,9 @@ fn check_names_asks_the_directory_for_names_not_known_here() {
     assert_eq!(out["resolved"], 1);
     assert_eq!(out["searching"], json!(["reseau", "nobody here", "dupont"]));
     assert_eq!(asked(&mut s), ["reseau"], "one name at a time");
-    answer(&mut s, &gal, "reseau", &[("Contoso Reseau", "reseaux@contoso.example")]);
+    answer(&mut s, &gal, "reseau", &[("Projets Reseau", "reseaux@contoso.example")]);
     let c = s.compose.clone().unwrap();
-    assert_eq!(c.to, "Zoe Park <zoe@studio.example>; Contoso Reseau <reseaux@contoso.example>; nobody here; ");
+    assert_eq!(c.to, "Zoe Park <zoe@studio.example>; Projets Reseau <reseaux@contoso.example>; nobody here; ");
     assert_eq!(asked(&mut s), ["nobody here"]);
     let notices = s.notices.len();
     answer(&mut s, &gal, "nobody here", &[]);
@@ -67,7 +67,7 @@ fn check_names_asks_the_directory_for_names_not_known_here() {
     s.run("compose.update", &json!({"bcc": "Reseau"})).unwrap();
     s.run("compose.checkNames", &json!({})).unwrap();
     assert!(asked(&mut s).is_empty());
-    assert_eq!(s.compose.as_ref().unwrap().bcc, "Contoso Reseau <reseaux@contoso.example>; ");
+    assert_eq!(s.compose.as_ref().unwrap().bcc, "Projets Reseau <reseaux@contoso.example>; ");
     done(s);
 }
 
@@ -86,11 +86,11 @@ fn the_global_address_list_is_searched_as_a_name_is_typed() {
     assert_eq!(asked(&mut s), ["p"], "the first, while the others wait");
     assert!(s.directory_searching(&gal, "pro") && !s.directory_searching(&gal, "pr"), "the last typed waits in place of the one before");
     let revision = s.contacts_revision();
-    answer(&mut s, &gal, "p", &[("Contoso Reseau", "reseaux@contoso.example"), ("Paul Petit", "paul@contoso.example")]);
+    answer(&mut s, &gal, "p", &[("Projets Reseau", "reseaux@contoso.example"), ("Paul Petit", "paul@contoso.example")]);
     assert!(s.contacts_revision() > revision, "the window lists it again");
     assert_eq!(asked(&mut s), ["pro"]);
-    answer(&mut s, &gal, "pro", &[("Contoso Reseau", "reseaux@contoso.example")]);
-    assert_eq!(s.address_book_now(&source, "Pro"), [EmailAddress::new("Contoso Reseau", "reseaux@contoso.example")]);
+    answer(&mut s, &gal, "pro", &[("Projets Reseau", "reseaux@contoso.example")]);
+    assert_eq!(s.address_book_now(&source, "Pro"), [EmailAddress::new("Projets Reseau", "reseaux@contoso.example")]);
     // An answer that failed is asked again a while later, not every time it's wanted.
     s.apply(Event::DirectoryPeople { account: gal.clone(), query: "zed".into(), people: Vec::new(), more: false, error: Some("offline".into()) });
     s.search_directory(&gal, "zed", false);

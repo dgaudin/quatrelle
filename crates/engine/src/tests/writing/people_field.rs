@@ -145,7 +145,7 @@ fn suggestions_are_ordered_exact_then_prefix_then_most_used_and_only_accepted_ki
     // The window reads the mail into the book a slice per frame (a pass only starts it): here,
     // in one go.
     s.contacts_step(usize::MAX);
-    answer(&mut s, &gal, "res", &[("Contoso Reseau", "reseaux@contoso.example")]);
+    answer(&mut s, &gal, "res", &[("Projets Reseau", "reseaux@contoso.example")]);
     let team = Addressee::new("Team", "team@contoso.example", AddresseeKind::DistributionList);
     s.apply(Event::DirectoryPeople { account: gal.clone(), query: "team".into(), people: vec![team], more: false, error: None });
     s.apply(seine(&gal));
@@ -161,7 +161,7 @@ fn suggestions_are_ordered_exact_then_prefix_then_most_used_and_only_accepted_ki
     // a first or last name.
     s.contacts_sent(&[EmailAddress::new("Old Reseaux", "reseaux@contoso.example.org"), EmailAddress::new("Anna Teresa Lopez", "alopez@x.example")]);
     let got = s.people_suggest(f, Some(&gal), &Accepts::RECIPIENTS, "reseaux@contoso.example");
-    assert_eq!((got[0].who.name.as_str(), got[0].source), ("Contoso Reseau", Source::Directory), "an exact match first");
+    assert_eq!((got[0].who.name.as_str(), got[0].source), ("Projets Reseau", Source::Directory), "an exact match first");
     assert_eq!(got.get(1).map(|x| x.who.address.as_str()), Some("reseaux@contoso.example.org"));
     let got = s.people_suggest(f, Some(&gal), &Accepts::RECIPIENTS, "te");
     let at = |a: &str| got.iter().position(|x| x.who.address == a);
@@ -260,7 +260,7 @@ fn suggestions_run_one_pass_per_change_of_text_over_a_book_at_its_cap() {
 fn the_directory_index_feeds_suggestions_and_is_never_filled_by_them() {
     let (mut s, gal) = with_exchange("suggest-index");
     s.contacts_step(usize::MAX);
-    answer(&mut s, &gal, "res", &[("Contoso Reseau", "reseaux@contoso.example")]);
+    answer(&mut s, &gal, "res", &[("Projets Reseau", "reseaux@contoso.example")]);
     assert!(s.directory_known("RESEAUX@contoso.example").is_some());
     let f = FieldId { window: 1, name: "to" };
     assert!(!s.people_suggest(f, Some(&gal), &Accepts::RECIPIENTS, "zo").is_empty());
@@ -350,12 +350,12 @@ fn a_book_being_read_redoes_the_same_text_at_most_once_a_second() {
 }
 
 /// The book's best by score aren't cut before the match is ranked: thousands of colleagues
-/// whose address has "pro" in it (`@contoso.example`) don't push out the one whose name starts with it.
+/// whose address has "pro" in it (`@probuild.example`) don't push out the one whose name starts with it.
 #[test]
 fn a_name_that_starts_with_the_text_beats_many_addresses_that_merely_contain_it() {
     let mut s = sample_session("suggest-prefix");
     s.contacts_step(usize::MAX);
-    let colleagues: Vec<EmailAddress> = (0..2_000).map(|i| EmailAddress::new(format!("Colleague {i}"), format!("c{i}@contoso.example"))).collect();
+    let colleagues: Vec<EmailAddress> = (0..2_000).map(|i| EmailAddress::new(format!("Colleague {i}"), format!("c{i}@probuild.example"))).collect();
     for _ in 0..3 {
         s.contacts_sent(&colleagues);
     }

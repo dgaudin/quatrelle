@@ -683,13 +683,13 @@ fn from_finds_another_address_by_its_name() {
     frame(&ctx, &mut a, vec![]);
     a.run("mail.new", json!({}));
     open_other_address(&ctx, &mut a, size);
-    frame_sized(&ctx, &mut a, vec![Event::Text("contoso".into())], size);
+    frame_sized(&ctx, &mut a, vec![Event::Text("projets".into())], size);
     frame_sized(&ctx, &mut a, vec![], size);
-    assert!(!a.session.directory_searching(&gal, "contoso"), "typing asks nothing");
+    assert!(!a.session.directory_searching(&gal, "projets"), "typing asks nothing");
     frame_sized(&ctx, &mut a, vec![key(Key::K, Modifiers::COMMAND)], size);
     frame_sized(&ctx, &mut a, vec![], size);
-    assert!(a.session.directory_searching(&gal, "contoso"), "Ctrl+K asks the directory");
-    directory_answers(&mut a, &gal, "contoso", &[("Contoso Reseau", "reseaux@contoso.example")]);
+    assert!(a.session.directory_searching(&gal, "projets"), "Ctrl+K asks the directory");
+    directory_answers(&mut a, &gal, "projets", &[("Projets Reseau", "reseaux@contoso.example")]);
     frame_sized(&ctx, &mut a, vec![], size);
     frame_sized(&ctx, &mut a, vec![], size);
     let from = quatrelle_engine::FieldId { window: a.session.compose.as_ref().map_or(0, |c| c.id), name: "from" };
@@ -700,7 +700,7 @@ fn from_finds_another_address_by_its_name() {
     );
     let send = settled_text_at(&ctx, &mut a, "Send from it", size).expect("Send from it");
     click_at(&ctx, &mut a, send, 1, size);
-    assert_eq!(a.session.compose.as_ref().unwrap().from, "Contoso Reseau <reseaux@contoso.example>");
+    assert_eq!(a.session.compose.as_ref().unwrap().from, "Projets Reseau <reseaux@contoso.example>");
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -715,7 +715,7 @@ fn an_html_signature_shows_in_the_message_as_its_sent() {
     let id = a.session.accounts.first().map(|x| x.config.id.clone()).unwrap();
     let logo = "https://logo.example/logo.png";
     let html = format!(
-        r#"<table align="left" border="0" cellpadding="0" cellspacing="0" style="float:left"><tr><td valign="middle" style="vertical-align:middle"><img src="{logo}" width="120px" border="0" style="width:120px;height:48px"></td></tr></table><table border="0" cellpadding="0" cellspacing="0" style="float:left;padding:0px;padding-left:10px;border-left:1px solid #ccc;height:63px"><tr><td style="height:63px;vertical-align:middle"><p>Didier GAUDIN<br>01 02 03 04 05<br>didier@example.org</p></td></tr></table>"#
+        r#"<table align="left" border="0" cellpadding="0" cellspacing="0" style="float:left"><tr><td valign="middle" style="vertical-align:middle"><img src="{logo}" width="120px" border="0" style="width:120px;height:48px"></td></tr></table><table border="0" cellpadding="0" cellspacing="0" style="float:left;padding:0px;padding-left:10px;border-left:1px solid #ccc;height:63px"><tr><td style="height:63px;vertical-align:middle"><p>Riley MORENO<br>01 02 03 04 05<br>didier@example.org</p></td></tr></table>"#
     );
     a.run("account.setSignature", json!({"account": id, "signature": "", "rawHtml": html}));
     let mut png = Vec::new();
@@ -744,7 +744,7 @@ fn an_html_signature_shows_in_the_message_as_its_sent() {
     let logo_at = pictures.iter().find(|r| (r.width() - 120.0).abs() < 1.0 && (r.height() - 48.0).abs() < 1.0).copied();
     let logo_at = logo_at.unwrap_or_else(|| panic!("the logo is drawn at its size: {pictures:?}"));
     let name = shapes.iter().find_map(|s| match s {
-        Shape::Text(t) if t.galley.text().contains("Didier GAUDIN") => Some(t.pos),
+        Shape::Text(t) if t.galley.text().contains("Riley MORENO") => Some(t.pos),
         _ => None,
     });
     let name = name.unwrap_or_else(|| panic!("the name is drawn"));

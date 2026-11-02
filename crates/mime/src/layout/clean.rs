@@ -161,12 +161,12 @@ mod tests {
     #[test]
     fn signatures_are_cleaned_but_keep_their_look() {
         let sig = r#"<table align="left" style="float:left;"><tr><td valign="middle"><a href="https://www.contoso.example?sign" target="_top"><img src="https://www.contoso.example/images/logo.gif" width="194px" style="width:194px;height:75px" onerror="alert(1)"></a></td></tr></table>
-<p><span style="font-weight:bold;color:#4B5763">Didier GAUDIN</span><br>T&eacute;l.&nbsp;+33<br><a href="mailto:riley@contoso.example" onmouseover="this.style.color='#0C4790'">riley@contoso.example</a></p>
+<p><span style="font-weight:bold;color:#4B5763">Riley MORENO</span><br>T&eacute;l.&nbsp;+33<br><a href="mailto:riley@contoso.example" onmouseover="this.style.color='#0C4790'">riley@contoso.example</a></p>
 <script>alert(2)</script><form><input value="x"></form><a href="javascript:alert(3)">bad</a><div style="background:url(https://track.example/p.gif)">t</div>"#;
         let c = clean_html(sig);
         assert!(c.contains(r#"<table align="left" style="float:left;">"#), "{c}");
         assert!(c.contains(r#"src="https://www.contoso.example/images/logo.gif""#));
-        assert!(c.contains("Didier GAUDIN") && c.contains("Tél.\u{a0}+33"), "{c}");
+        assert!(c.contains("Riley MORENO") && c.contains("Tél.\u{a0}+33"), "{c}");
         assert!(c.contains(r#"href="mailto:riley@contoso.example""#));
         for gone in ["onerror", "onmouseover", "<script", "alert(2)", "<form", "<input", "javascript:", "url(", "target=\"_top\""] {
             assert!(!c.contains(gone), "{gone} in {c}");

@@ -226,7 +226,7 @@ mod tests {
     fn the_directory_gives_people_with_an_internet_address() {
         let answer = "<m:ResolveNamesResponseMessage ResponseClass=\"Warning\"><m:ResponseCode>ErrorNameResolutionMultipleResults</m:ResponseCode>\
              <m:ResolutionSet TotalItemsInView=\"100\" IncludesLastItemInRange=\"false\">\
-             <t:Resolution><t:Mailbox><t:Name>Contoso R\u{e9}seau</t:Name><t:EmailAddress>reseaux@contoso.example</t:EmailAddress>\
+             <t:Resolution><t:Mailbox><t:Name>Projets R\u{e9}seau</t:Name><t:EmailAddress>reseaux@contoso.example</t:EmailAddress>\
              <t:RoutingType>SMTP</t:RoutingType><t:MailboxType>Mailbox</t:MailboxType></t:Mailbox></t:Resolution>\
              <t:Resolution><t:Mailbox><t:Name>Old entry</t:Name><t:EmailAddress>/o=Org/cn=old</t:EmailAddress><t:RoutingType>EX</t:RoutingType></t:Mailbox></t:Resolution>\
              <t:Resolution><t:Mailbox><t:Name>Again</t:Name><t:EmailAddress>Reseaux@contoso.example</t:EmailAddress></t:Mailbox></t:Resolution>\
@@ -234,7 +234,7 @@ mod tests {
         let (people, more) = people_of(&parse(answer));
         assert_eq!(
             people.iter().map(Addressee::email).collect::<Vec<_>>(),
-            [EmailAddress::new("Contoso R\u{e9}seau", "reseaux@contoso.example")],
+            [EmailAddress::new("Projets R\u{e9}seau", "reseaux@contoso.example")],
             "an X.500 name and a second copy left out"
         );
         assert_eq!(people[0].kind, AddresseeKind::Person);

@@ -198,14 +198,14 @@ assert_eq!(s.addressee_kind(Some(&gal), "nobody@elsewhere.example"), AddresseeKi
 ```rust
 #[test] fn suggestions_are_ordered_exact_then_prefix_then_most_used_and_only_accepted_kinds() {
     let (mut s, gal) = with_exchange("suggest-order");
-    answer(&mut s, &gal, "res", &[("Contoso Reseau", "reseaux@contoso.example")]);      // the helper gives kind Unknown; Source::Directory
+    answer(&mut s, &gal, "res", &[("Projets Reseau", "reseaux@contoso.example")]);      // the helper gives kind Unknown; Source::Directory
     s.apply(Event::DirectoryPeople { account: gal.clone(), query: "team".into(), people: vec![Addressee::new("Team", "team@contoso.example", AddresseeKind::DistributionList)], more: false, error: None });
     s.apply(Event::Rooms { /* Salle Seine, room.seine@contoso.example */ });
     let f = FieldId { window: 1, name: "to" };
     let got = s.people_suggest(f, Some(&gal), &Accepts::RECIPIENTS, "zoe");
     assert_eq!(got[0].who.address, "zoe@studio.example"); assert_eq!(got[0].source, Source::Recent);
     let got = s.people_suggest(f, Some(&gal), &Accepts::RECIPIENTS, "reseaux@contoso.example");
-    assert_eq!((got[0].who.name.as_str(), got[0].source), ("Contoso Reseau", Source::Directory), "an exact match first");
+    assert_eq!((got[0].who.name.as_str(), got[0].source), ("Projets Reseau", Source::Directory), "an exact match first");
     assert!(s.people_suggest(f, Some(&gal), &Accepts::RECIPIENTS, "te").iter().any(|x| x.who.kind == AddresseeKind::DistributionList));
     let only_rooms = Accepts { kinds: &[AddresseeKind::Room, AddresseeKind::Equipment], one: false };
     let got = s.people_suggest(f, Some(&gal), &only_rooms, "s");

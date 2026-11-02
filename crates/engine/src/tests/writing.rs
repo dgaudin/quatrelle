@@ -580,14 +580,14 @@ fn a_signature_goes_where_the_account_says() {
 fn a_signature_keeps_its_logo() {
     let mut s = sample_session("signature-logo");
     let logo = json!({"cid": "logo@mc", "name": "logo.gif", "mime": "image/gif", "data": [71, 73, 70, 56, 57, 97]});
-    let html = "<p><img src=\"cid:logo@mc\"></p><p><b>Didier GAUDIN</b><br>Tél. 02 51 70 93 93</p>";
+    let html = "<p><img src=\"cid:logo@mc\"></p><p><b>Riley MORENO</b><br>Tél. 02 51 70 93 93</p>";
     s.run("account.setSignature", &json!({"account": "sample", "signature": "x", "html": html, "pictures": [logo]})).unwrap();
     let config = s.account("sample").unwrap().config.clone();
     assert_eq!(config.signature_pictures.len(), 1);
     assert!(config.signature_html.contains("cid:logo@mc"), "{}", config.signature_html);
     s.run("mail.new", &json!({})).unwrap();
     let (text, html, pictures) = s.compose.as_ref().unwrap().bodies();
-    assert!(text.contains("Didier GAUDIN"));
+    assert!(text.contains("Riley MORENO"));
     assert!(html.unwrap_or_default().contains("cid:logo@mc"));
     assert_eq!(pictures.len(), 1);
     // Changed without its picture: it goes.
@@ -606,10 +606,10 @@ fn an_html_signature_goes_as_written() {
     let mut s = Session::open(Some(temp("signature-html")), quatrelle_model::dates::Clock::new(NOW, 0));
     let id = s.run("account.add", &json!({"email": "dgaudin@example.org", "password": "pw"})).unwrap()["account"].as_str().unwrap().to_string();
     let html = r#"<table align="left" style="float:left;"><tr><td><a href="https://www.contoso.example"><img src="https://www.contoso.example/images/logo.gif" width="194"></a></td></tr></table>
-<table style="float:left;border-left:1px solid #ccc;"><tr><td><p><span style="font-weight:bold">Didier GAUDIN</span><br>T&eacute;l. 02 51 70 93 93</p></td></tr></table><script>x()</script>"#;
+<table style="float:left;border-left:1px solid #ccc;"><tr><td><p><span style="font-weight:bold">Riley MORENO</span><br>T&eacute;l. 02 51 70 93 93</p></td></tr></table><script>x()</script>"#;
     s.run("account.setSignature", &json!({"account": id, "signature": "", "rawHtml": html})).unwrap();
     let config = s.account(&id).unwrap().config.clone();
-    assert!(config.signature.contains("Didier GAUDIN"), "{}", config.signature);
+    assert!(config.signature.contains("Riley MORENO"), "{}", config.signature);
     assert!(!config.signature_raw_html.contains("<script"));
     s.run("mail.new", &json!({})).unwrap();
     s.run("compose.update", &json!({"to": "zoe@example.org", "subject": "Hello", "body": "Hi Zoe"})).unwrap();
@@ -631,7 +631,7 @@ fn an_html_signature_goes_as_written() {
     let side_by_side = p.layout.iter().any(|b| matches!(b, quatrelle_mime::layout::Block::Table(t) if t.rows.iter().any(|r| r.len() == 2)));
     assert!(side_by_side, "{:?}", p.layout);
     assert!(p.images.iter().any(|u| u.contains("www.contoso.example/images/logo.gif")), "{:?}", p.images);
-    assert!(p.text.contains("Hi Zoe") && p.text.contains("Didier GAUDIN") && !p.text.contains("x()"), "{}", p.text);
+    assert!(p.text.contains("Hi Zoe") && p.text.contains("Riley MORENO") && !p.text.contains("x()"), "{}", p.text);
 }
 
 /// The web picture of a signature written in HTML (a company logo by its address) is fetched
@@ -644,7 +644,7 @@ fn an_html_signatures_web_logo_is_fetched_and_kept() {
     s.take_jobs();
     let logo = "https://www.contoso.example/images/logo.gif";
     let html = format!(
-        r#"<table><tr><td><a href="https://www.contoso.example"><img src="{logo}" width="194"></a></td><td><b>Didier GAUDIN</b></td></tr></table>"#
+        r#"<table><tr><td><a href="https://www.contoso.example"><img src="{logo}" width="194"></a></td><td><b>Riley MORENO</b></td></tr></table>"#
     );
     s.run("account.setSignature", &json!({"account": id, "signature": "", "rawHtml": html})).unwrap();
     let asked: Vec<String> = s
@@ -664,7 +664,7 @@ fn an_html_signatures_web_logo_is_fetched_and_kept() {
         config.signature_raw_html.contains("src=\"cid:signature-1@quatrelle\"")
             && config.signature_raw_html.contains("href=\"https://www.contoso.example\"")
     );
-    assert!(config.signature.contains("Didier GAUDIN"));
+    assert!(config.signature.contains("Riley MORENO"));
     // A new message shows it, and carries it.
     s.run("mail.new", &json!({})).unwrap();
     let c = s.compose.clone().unwrap();
@@ -684,7 +684,7 @@ fn an_html_signatures_web_logo_is_fetched_and_kept() {
     assert!(!p.images.iter().any(|u| u.starts_with("https://")), "nothing on the web: {:?}", p.images);
     assert!(String::from_utf8_lossy(&raw).contains("Content-ID: <signature-1@quatrelle>"), "the logo goes in the message");
     assert!(!p.layout.is_empty() && p.images.iter().any(|u| u == "cid:signature-1@quatrelle"), "as it was written, laid out");
-    assert!(p.text.contains("Didier GAUDIN"), "and as text in the text part: {}", p.text);
+    assert!(p.text.contains("Riley MORENO"), "and as text in the text part: {}", p.text);
     assert!(!String::from_utf8_lossy(&raw).contains(quatrelle_mime::rich::SIGNATURE), "nothing of where it stood");
     // Started again: nothing fetched again.
     let store = s.store.clone().unwrap();
@@ -727,7 +727,7 @@ fn a_signature_keeps_every_bit_of_its_look() {
     use quatrelle_mime::rich::{Align, Style, Styles};
     let mut s = Session::open(Some(temp("signature-look")), quatrelle_model::dates::Clock::new(NOW, 0));
     let id = s.run("account.add", &json!({"email": "dgaudin@example.org", "password": "pw"})).unwrap()["account"].as_str().unwrap().to_string();
-    let text = "Didier GAUDIN\nContoso";
+    let text = "Riley MORENO\nNorthwind";
     let mut styles = Styles::plain(text);
     styles.restyle(text, 0..13, |st| Style { size: Some(16), font: Some("Arial".into()), underline: true, ..st.clone() });
     styles.relayout(text, 0..1, |p| p.align = Align::Center);
@@ -742,8 +742,8 @@ fn a_signature_keeps_every_bit_of_its_look() {
     // Into a new message, with no `-- ` line before it.
     s.run("mail.new", &json!({})).unwrap();
     let c = s.compose.clone().unwrap();
-    assert_eq!(c.body, "\n\nDidier GAUDIN\nContoso");
-    assert_eq!(c.signature, "Didier GAUDIN\nContoso");
+    assert_eq!(c.body, "\n\nRiley MORENO\nNorthwind");
+    assert_eq!(c.signature, "Riley MORENO\nNorthwind");
     let st = c.styles.style(2);
     assert_eq!((st.size, st.font.as_deref(), st.underline), (Some(16), Some("Arial"), true), "{st:?}");
     assert_eq!(c.styles.para(2).align, Align::Center);
@@ -753,7 +753,7 @@ fn a_signature_keeps_every_bit_of_its_look() {
     s.run("compose.insertSignature", &json!({})).unwrap();
     let (plain, html, _) = s.compose.as_ref().unwrap().bodies();
     let html = html.unwrap_or_default();
-    assert!(html.contains("<span style=\"font-family:'Arial',sans-serif; font-size:16pt\"><u>Didier GAUDIN</u></span>"), "{html}");
+    assert!(html.contains("<span style=\"font-family:'Arial',sans-serif; font-size:16pt\"><u>Riley MORENO</u></span>"), "{html}");
     assert!(html.contains("<div style=\"text-align:center\">"), "{html}");
     assert!(!plain.contains("-- "), "{plain}");
     s.take_jobs();
@@ -767,12 +767,12 @@ fn a_signature_keeps_every_bit_of_its_look() {
         })
         .unwrap();
     let p = quatrelle_mime::parse(&raw).unwrap();
-    assert!(p.had_html && p.text.contains("Hi Zoe") && p.text.contains("Didier GAUDIN") && !p.text.contains("-- "), "{}", p.text);
+    assert!(p.had_html && p.text.contains("Hi Zoe") && p.text.contains("Riley MORENO") && !p.text.contains("-- "), "{}", p.text);
     // The `-- ` line asked for: it goes in before the signature, which keeps its look.
     s.run("view.signatureDashes", &json!({"on": true})).unwrap();
     s.run("mail.new", &json!({})).unwrap();
     let c = s.compose.clone().unwrap();
-    assert_eq!((c.body.as_str(), c.signature.as_str()), ("\n\n-- \nDidier GAUDIN\nContoso", "-- \nDidier GAUDIN\nContoso"));
+    assert_eq!((c.body.as_str(), c.signature.as_str()), ("\n\n-- \nRiley MORENO\nNorthwind", "-- \nRiley MORENO\nNorthwind"));
     assert!(c.styles.style(6).underline && c.styles.para(3).align == Align::Center, "{:?}", c.styles);
     // Junk styles are refused, not trusted.
     assert!(s.run("account.setSignature", &json!({"account": id, "signature": "x", "styles": "junk"})).is_err());

@@ -23,7 +23,7 @@ fn the_directory_is_searched_with_contacts_and_a_list_expands() {
     d.people = vec![
         person("Anne Dupont", "anne.dupont@contoso.example"),
         person("Marc Dupont", "marc.dupont@contoso.example"),
-        person("Contoso Reseaux", "reseaux@contoso.example"),
+        person("Projets Reseaux", "reseaux@contoso.example"),
     ];
     d.mailbox_types = vec![("reseaux@contoso.example".into(), "PublicDL".into())];
     d.contact_groups = vec![("Dupont family".into(), "AAMk=".into())];
