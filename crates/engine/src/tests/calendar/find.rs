@@ -111,6 +111,8 @@ fn an_occurrence_moved_on_its_own_is_found_at_its_place() {
     let named = day + 9 * 3600 + 7 * 86_400;
     let new_start = named + 5 * 3600;
     s.run("event.move", &json!({"uid": uid, "occurrence": named, "start": new_start})).unwrap();
+    // The rename in the store stands in for what a server sync would deliver: `event.update` has no
+    // `occurrence` param to rename one occurrence of a series.
     for e in s.pim_mut("sample").events.iter_mut().filter(|e| e.event.uid == uid && e.event.recurrence_id == Some(named)) {
         e.event.summary = "Moved stand-up".into();
     }
@@ -151,8 +153,158 @@ fn searching_25000_appointments_stays_quick() {
         let hits = s.find_events(query, crate::EventWhen::All, None, None, 500);
         let took = started.elapsed();
         assert_eq!(hits.len(), wanted, "{query}");
+        // One second is the spec's number for a search of this size (debug build).
         assert!(took < std::time::Duration::from_secs(1), "{query}: {took:?}");
         eprintln!("calendar search `{query}` over 25,000 appointments: {took:?}");
     }
+    done(s);
+}
+
+/// A changed occurrence of a series that matches when the series doesn't is found on its own,
+/// and a cancelled one isn't; an all-day event is on its day; a series long over shows its last.
+#[test]
+fn changed_occurrences_all_day_and_finished_series() {
+    use quatrelle_model::ical::CalEvent;
+    let mut s = sample_session("calendar-search-odd");
+    let day = crate::parse_local("2026-10-05", &s.clock).unwrap().0;
+    let master = CalEvent {
+        uid: "s1".into(),
+        summary: "Weekly sync".into(),
+        start: day + 9 * 3600,
+        end: day + 10 * 3600,
+        rrule: Some("FREQ=WEEKLY".into()),
+        ..Default::default()
+    };
+    let moved = CalEvent {
+        summary: "Sync with the board".into(),
+        recurrence_id: Some(day + 9 * 3600 + 14 * 86_400),
+        start: day + 14 * 86_400 + 15 * 3600,
+        end: day + 14 * 86_400 + 16 * 3600,
+        ..master.clone()
+    };
+    let gone = CalEvent { summary: "Board call (cancelled)".into(), status: "CANCELLED".into(), uid: "c1".into(), rrule: None, ..master.clone() };
+    let over = CalEvent {
+        uid: "o1".into(),
+        summary: "Old course".into(),
+        start: day - 400 * 86_400,
+        end: day - 400 * 86_400 + 3600,
+        rrule: Some("FREQ=DAILY;COUNT=5".into()),
+        ..Default::default()
+    };
+    let all_day = CalEvent {
+        uid: "a1".into(),
+        summary: "Festival".into(),
+        all_day: true,
+        start: 1_792_800_000 / 86_400 * 86_400,
+        end: 1_792_800_000 / 86_400 * 86_400 + 86_400,
+        ..Default::default()
+    };
+    for e in [master, moved.clone(), gone, over, all_day.clone()] {
+        let p = s.pim_mut("sample");
+        p.events.push(quatrelle_model::pim::StoredEvent { calendar: quatrelle_model::pim::LOCAL.into(), event: e, ..Default::default() });
+    }
+    let board = search(&mut s, json!({"query": "board"}));
+    assert_eq!(titles(&board), ["Sync with the board"], "the changed one on its own, not the cancelled one");
+    assert_eq!(board[0]["start"].as_i64(), Some(moved.start));
+    assert_eq!(board[0]["occurrence"].as_i64(), moved.recurrence_id);
+    let sync = search(&mut s, json!({"query": "weekly"}));
+    assert_eq!(sync.len(), 1, "the series once");
+    let old = search(&mut s, json!({"query": "course"}));
+    assert_eq!(old[0]["start"].as_i64(), Some(day - 396 * 86_400), "its last");
+    assert!(search(&mut s, json!({"query": "course", "when": "upcoming"})).is_empty());
+    let fest = search(&mut s, json!({"query": "festival"}));
+    assert_eq!(fest[0]["start"].as_i64(), Some(s.clock.utc(all_day.start)), "from local midnight");
+    assert_eq!(fest[0]["occurrence"].as_i64(), Some(all_day.start), "named as its rule names it");
+    done(s);
+}
+
+/// A series with days taken out is found at the next day that is left.
+#[test]
+fn a_series_with_days_taken_out_is_found_at_the_next_one_left() {
+    use quatrelle_model::ical::CalEvent;
+    let mut s = sample_session("calendar-search-exdates");
+    let day = crate::parse_local("2026-10-14", &s.clock).unwrap().0;
+    let at = |n: i64| day + n * 86_400 + 15 * 3600;
+    let daily = CalEvent {
+        uid: "ex1".into(),
+        summary: "Daily huddle".into(),
+        start: at(-3),
+        end: at(-3) + 900,
+        rrule: Some("FREQ=DAILY".into()),
+        exdates: vec![at(0), at(1)],
+        ..Default::default()
+    };
+    let p = s.pim_mut("sample");
+    p.events.push(quatrelle_model::pim::StoredEvent { calendar: quatrelle_model::pim::LOCAL.into(), event: daily, ..Default::default() });
+    let hit = search(&mut s, json!({"query": "huddle"}));
+    assert_eq!(hit.len(), 1);
+    assert_eq!(hit[0]["start"].as_i64(), Some(at(2)), "the days taken out are skipped");
+    done(s);
+}
+
+/// A damaged cache (times at the ends of the range, a rule that never repeats, a calendar
+/// with thousands of events) doesn't stop the search, nor make it slow; a hit never ends before
+/// it starts.
+#[test]
+fn the_search_survives_a_hostile_cache() {
+    use quatrelle_model::ical::CalEvent;
+    use quatrelle_model::pim::{LOCAL, StoredEvent};
+    let mut s = sample_session("calendar-search-hostile");
+    let odd = [
+        CalEvent { uid: "max".into(), summary: "edge max".into(), start: i64::MAX - 5, end: i64::MAX, ..Default::default() },
+        CalEvent { uid: "min".into(), summary: "edge min".into(), start: i64::MIN, end: i64::MIN + 5, ..Default::default() },
+        CalEvent {
+            uid: "never".into(),
+            summary: "edge never".into(),
+            start: NOW,
+            end: NOW + 60,
+            rrule: Some("FREQ=YEARLY;BYMONTH=2;BYMONTHDAY=31".into()),
+            ..Default::default()
+        },
+        CalEvent {
+            uid: "daily".into(),
+            summary: "edge daily".into(),
+            start: NOW - 30 * 365 * 86_400,
+            end: NOW - 30 * 365 * 86_400 + 60,
+            rrule: Some("FREQ=DAILY".into()),
+            ..Default::default()
+        },
+        CalEvent { uid: "back".into(), summary: "edge backwards".into(), start: NOW, end: NOW - 3600, ..Default::default() },
+        CalEvent { uid: "whole".into(), summary: "edge whole".into(), start: i64::MIN, end: i64::MAX, all_day: true, ..Default::default() },
+        CalEvent {
+            uid: "top".into(),
+            summary: "edge top".into(),
+            start: i64::MAX,
+            end: i64::MAX,
+            rrule: Some("FREQ=DAILY".into()),
+            ..Default::default()
+        },
+    ];
+    let p = s.pim_mut("sample");
+    for e in odd {
+        p.events.push(StoredEvent { calendar: LOCAL.into(), event: e, ..Default::default() });
+    }
+    for i in 0..20_000 {
+        let e =
+            CalEvent { uid: format!("bulk-{i}"), summary: format!("Bulk {i}"), start: NOW + i * 600, end: NOW + i * 600 + 300, ..Default::default() };
+        p.events.push(StoredEvent { calendar: LOCAL.into(), event: e, ..Default::default() });
+    }
+    let backwards = search(&mut s, json!({"query": "backwards"}));
+    assert_eq!(backwards.len(), 1, "an event ending before it starts is still found");
+    assert_eq!((backwards[0]["start"].as_i64(), backwards[0]["end"].as_i64()), (Some(NOW), Some(NOW + 1)), "lasting a second");
+    let started = std::time::Instant::now();
+    for when in ["all", "upcoming", "past"] {
+        for hit in search(&mut s, json!({"query": "edge", "when": when})) {
+            assert!(hit["end"].as_i64() >= hit["start"].as_i64(), "{when}: a hit ends before it starts: {hit}");
+        }
+        let _ = search(&mut s, json!({"query": "after:9999-12-31", "when": when}));
+        let _ = search(&mut s, json!({"query": "before:0001-01-01", "when": when}));
+    }
+    let bulk = search(&mut s, json!({"query": "bulk", "limit": 1000}));
+    assert_eq!(bulk.len(), 1000);
+    assert!(started.elapsed() < std::time::Duration::from_secs(10), "{:?}", started.elapsed());
+    // What the calendar draws, around now and at the ends.
+    let _ = s.agenda(NOW - 86_400 * 7, NOW + 86_400 * 7);
+    let _ = s.agenda(i64::MIN, i64::MAX);
     done(s);
 }
