@@ -162,6 +162,11 @@ impl Session {
         }
         if let (Some(_), Some(from)) = (&error, started_from) {
             // Webex still has what it had: the next save sends the difference again.
+            // The updates still out started from something Webex now lacks too: a later failure
+            // can't move `sent` forward again.
+            if let Some(q) = self.webex.unacknowledged.get_mut(id) {
+                q.iter_mut().for_each(|f| *f = from.clone());
+            }
             self.webex.sent.insert(id.to_string(), from);
         }
         let done = match (meeting, error) {
