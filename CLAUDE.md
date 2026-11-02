@@ -69,7 +69,7 @@ A mail client that crashes loses drafts and trust. **This outranks feature work.
 | L0 | `model` | data model, jobs/events, threading, search, dates (pure, wasm) |
 | L1 | `mime`, `store`, `print` | MIME parse/build; the cache (on disk, or in memory for the browser); PDF export |
 | L2 | `jmap` | the JMAP transport, async over any HTTP client (portable, wasm) |
-| L3 | `net` | IMAP client + sync, SMTP, JMAP push, Microsoft Graph, CalDAV/CardDAV, ManageSieve, `.pst` import, HTTP/DNS/OAuth, worker pool (native only) |
+| L3 | `net` | IMAP client + sync, SMTP, JMAP push, Microsoft Graph, Webex, CalDAV/CardDAV, ManageSieve, `.pst` import, HTTP/DNS/OAuth, worker pool (native only) |
 | L4 | `engine` | sans-I/O `Session` + command registry |
 | L6 | `ui-egui` | egui front end |
 | apps | `quatrelle`, `quatrelle-cli`, `quatrelle-web` | binaries (the web app: `trunk build --release` in `apps/quatrelle-web`) |

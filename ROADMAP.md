@@ -611,3 +611,14 @@ local-first, media-aware v1); the fuller request is
   cell rather than a second layout pass. Still approximate: `border-collapse: separate`'s double
   lines draw as one, `dotted`/`dashed`/`double` styles draw solid, `currentColor` borders are
   grey, and a cell's `vertical-align` within boxes laid out with CSS stays at the top.
+- **2026-11-02** — **Webex scheduled meetings** (`docs/webex.md`): the Webex Meeting button makes a
+  real meeting on the user's site through Webex's REST API (title, times and time zone from the
+  appointment; link, number, password and video address from the answer), signed in with an
+  integration the user registers (client id and secret in Options, the secret and refresh token in
+  the keychain, redirect port fixed at 53683). The meeting's id rides on the event
+  (`X-QUATRELLE-WEBEX-ID`, an EWS extended property, a Graph `singleValueExtendedProperties`), so
+  saving the appointment updates the meeting and deleting it deletes the meeting; only events the
+  user organizes are followed, and guests get no second invitation. A window closed unsaved, or
+  open when Quatrelle quits, deletes its meeting. The personal room stays, as a choice in the
+  button's menu. Not yet confirmed on a real account: the sign-in, a create, an update, a delete,
+  `"recurrence": null`, and the extended property on on-premises Exchange.
