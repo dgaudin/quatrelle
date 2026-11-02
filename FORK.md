@@ -645,6 +645,33 @@ branche `zidan-v0.31`. Cette partie ne prend que les défauts vérifiés dans le
 - **Reste à faire** : `~/mailcraft/merge-tools/survey-v0.31.md` donne les lots suivants et les commits
   laissés.
 
+### État de la récupération : v0.31, deuxième partie : le texte d'abord pour Exchange (2026-11-02)
+
+Le lot 2 de `merge-tools/survey-v0.31.md`, sur la branche `zidan-v0.31` : ouvrir un gros message
+d'Exchange (EWS ou Graph) montre son texte tout de suite, le message entier suit. Pris et adaptés :
+`59515345` (le message construit à partir de son texte et de la liste de ses fichiers, vides) et
+`42c45848` (la même chose pour Graph). Le spec est `docs/superpowers/specs/2026-11-02-exchange-text-first-design.md`.
+Rien n'a encore été essayé sur un vrai Exchange : l'origine ne l'a essayé que sur grommunio.
+
+- **Différences avec l'origine** :
+  - la liste des champs demandés : `item:InReplyTo` (le nom de Microsoft) au lieu de `message:InReplyTo`,
+    que Exchange refuserait, et la requête entière avec ;
+  - l'expéditeur lu comme la liste le lit (`0x5D01`), pas par un `mailbox()` qui jette toute adresse sans `@` ;
+  - le message entier arrive par un fil à lui, sur une copie de la connexion principale, pas sur la
+    seconde connexion du compte (sans numérotation ici, et occupée par l'envoi et les salles) ;
+  - pas d'en-tête `X-MailCraft-Text-First` : un message reçu aurait pu le porter et rester « en cours »
+    pour toujours ; un événement à part, `Event::TextFirst`.
+- **Réglé en route** : un nom sans adresse n'est gardé que par `mime::parse_text_first` (le courrier
+  ordinaire ne change pas) ; le fil qui trouve déjà le corps en cache envoie `Event::Body` ; seul un
+  `NetError::Auth` sur le texte évite le retour au message entier, et une connexion qui échoue répond
+  comme `fetch` ; le pool arrête le fil avec le compte ; « Répondre » vérifie le brouillon construit ;
+  après un échec, les commandes disent l'échec et non « encore en cours ».
+- **Vérifié** : les serveurs factices EWS et Graph (dont un qui refuse un champ inconnu comme Exchange),
+  le moteur, l'interface, et la cible de fuzz `text_first`, qui lit les deux constructeurs.
+- **Reste à faire** : l'essai sur le vrai serveur du propriétaire (un gros message, un message de dossier
+  public ; la ligne du journal en fait foi) ; le courrier plus ancien que ce qui est gardé, lu en ligne,
+  ne passe pas par là.
+
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
 Quatre chantiers, chacun dans son commit, à la suite d'un audit de l'éditeur HTML.

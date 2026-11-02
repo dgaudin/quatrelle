@@ -266,3 +266,14 @@ line. That is the only real proof of this lot.
 - Mail older than what's kept (see Known limits).
 - A size or attachment count on Graph, which it doesn't give.
 - Downloading a single attachment on demand. The whole message still comes, as Cached Exchange Mode keeps it.
+
+## Settled during the work
+
+What changed from the text above:
+
+- A name alone is read only through `parse_text_first`; `parse` keeps addresses only, as before.
+- The thread finding a body already stored emits `Event::Body`, it doesn't skip silently.
+- Only `NetError::Auth` on the text skips the whole-message fallback, and a failed connect reports as `fetch` does.
+- The stop flag is set by the pool as the account stops.
+- Reply's guard checks the draft it built, not the message's `from` and `reply_to`.
+- After a failure, commands say the failure instead of "still downloading".
