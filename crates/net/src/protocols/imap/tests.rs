@@ -1,3 +1,5 @@
+use std::io;
+
 use super::*;
 
 /// A canned server: reads are served from `input`; writes are recorded.
@@ -115,4 +117,45 @@ fn a_code_right_before_non_ascii_text_never_panics() {
     assert!(c.append("Drafts", "", b"x").is_ok(), "a continuation without its space");
     // Inside a quoted string the bracket isn't a code: left as it was.
     assert_eq!(super::conn::space_after_code(b"* 1 FETCH (X \"[a]\xc3\xa9\")\r\n".to_vec()), b"* 1 FETCH (X \"[a]\xc3\xa9\")\r\n");
+}
+
+/// A connection the keepalive finds dead while IDLE waits ends the wait at once: Linux and macOS
+/// say so as `ETIMEDOUT` (`TimedOut`), which isn't IDLE's own read timeout there (`WouldBlock`).
+#[cfg(unix)]
+#[test]
+fn idle_ends_when_the_connection_is_found_dead() {
+    /// The script, then the keepalive's verdict, then nothing more.
+    struct Dying(Script, bool);
+    impl Read for Dying {
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            match self.0.read(buf)? {
+                0 if !self.1 => {
+                    self.1 = true;
+                    Err(io::Error::from(io::ErrorKind::TimedOut))
+                }
+                0 => Err(io::Error::from(io::ErrorKind::WouldBlock)),
+                n => Ok(n),
+            }
+        }
+    }
+    impl Write for Dying {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            self.0.write(buf)
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+    impl Timeouts for Dying {
+        fn set_read_timeout(&mut self, _: Option<Duration>) -> io::Result<()> {
+            Ok(())
+        }
+    }
+    let server = b"* OK hi\r\nM1 OK [CAPABILITY IMAP4rev1 IDLE] logged in\r\n+ idling\r\n";
+    let mut c = Client::from_stream(Dying(Script::new(server), false)).unwrap();
+    c.login("zoe@x", "pw").unwrap();
+    let start = Instant::now();
+    let r = c.idle(Duration::from_secs(2), || false);
+    assert!(matches!(&r, Err(NetError::Io(e)) if e.kind() == io::ErrorKind::TimedOut), "{r:?}");
+    assert!(start.elapsed() < Duration::from_millis(1500), "waited {:?}", start.elapsed());
 }

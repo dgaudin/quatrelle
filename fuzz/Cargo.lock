@@ -1703,6 +1703,7 @@ dependencies = [
  "rustls-native-certs",
  "serde",
  "serde_json",
+ "socket2",
  "thiserror",
  "webpki-roots",
 ]

@@ -101,6 +101,12 @@ and a message with a protected file. The fuzz target
 - **Failures:** a broken connection is retried with exponential back-off (5 s → 5 min). A refused
   password stops retrying and asks the user (`NeedsPassword`). A refused command is reported and
   the cache is resynced.
+- **A connection lost while waiting:** every connection has TCP keepalive (a probe after 60 s of
+  silence, then every 15 s, given up after 4 unanswered), so a connection a gateway dropped in
+  silence is found dead within two minutes rather than when IDLE ends (eleven minutes with the
+  wait for `DONE`'s answer); the probes also keep it in a NAT's memory. A wait for mail that
+  loses its connection after a minute or more connects again at once without an error status
+  (`failed_waiting`); one lost sooner, or a new connection that fails, is an error as above.
 
 ### Reading folders on connections of their own
 

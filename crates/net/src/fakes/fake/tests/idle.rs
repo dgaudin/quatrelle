@@ -56,3 +56,56 @@ fn mail_arriving_after_the_inbox_sync_shows_before_idle() {
     pool.submit(Job::Remove { account: "a1".into() });
     let _ = std::fs::remove_dir_all(store.root());
 }
+
+/// A connection lost while waiting in IDLE (the office's gateway changed over on 02/11, and
+/// Gmail's connection died in silence) is made again at once, saying nothing: the account showed
+/// an error each time, with nothing for the user to do. The mail that came meanwhile is read.
+#[test]
+fn a_connection_lost_while_waiting_comes_back_without_an_error() {
+    let st = State::new();
+    {
+        let mut s = st.lock().unwrap();
+        s.caps = "IMAP4rev1 UIDPLUS MOVE CONDSTORE ENABLE QUOTA IDLE";
+        s.add("INBOX", "First", &[]);
+        s.hang_up_idle = Some(Duration::from_millis(500));
+    }
+    let port = serve_tcp(&st);
+    let store = store("lost-idle");
+    let mut pool = crate::worker::Pool::new(store.clone(), std::sync::Arc::new(crate::worker::MemoryCredentials::default()));
+    let account = AccountConfig {
+        id: "a1".into(),
+        email: "me@studio.example".into(),
+        username: "me@studio.example".into(),
+        imap: ServerConfig { port, security: Security::None, host: "127.0.0.1".into() },
+        smtp: ServerConfig { host: "127.0.0.1".into(), port: 1, security: Security::None },
+        ..Default::default()
+    };
+    pool.submit(Job::Start { account, password: Some(Secret("pw".into())) });
+    let mut seen = until(&pool, "online", |e| matches!(e, Event::Status { status: SyncStatus::Online { .. }, .. }));
+    // Waiting in IDLE: mail comes, which the fake never tells of; only a new connection reads it.
+    let end = Instant::now() + Duration::from_secs(10);
+    while !st.lock().unwrap().log.iter().any(|c| c == "IDLE") {
+        assert!(Instant::now() < end, "never waited in IDLE");
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    st.lock().unwrap().add("INBOX", "While cut off", &[]);
+    let has = || store.load_folder("a1", "INBOX").unwrap().messages.iter().any(|m| m.subject == "While cut off");
+    let end = Instant::now() + Duration::from_secs(15);
+    while !has() {
+        assert!(Instant::now() < end, "the mail never came; saw {seen:?}");
+        if let Some(e) = pool.wait(Duration::from_millis(100)) {
+            seen.push(e);
+        }
+    }
+    // What was said before the mail came, to the last.
+    let end = Instant::now() + Duration::from_secs(2);
+    while let Some(e) = pool.wait(Duration::from_millis(200)).filter(|_| Instant::now() < end) {
+        seen.push(e);
+    }
+    assert!(st.lock().unwrap().hang_up_idle.is_none(), "the connection was cut");
+    let errors: Vec<&Event> =
+        seen.iter().filter(|e| matches!(e, Event::Status { status: SyncStatus::Error { .. } | SyncStatus::NeedsPassword { .. }, .. })).collect();
+    assert!(errors.is_empty(), "{errors:?}");
+    pool.submit(Job::Remove { account: "a1".into() });
+    let _ = std::fs::remove_dir_all(store.root());
+}

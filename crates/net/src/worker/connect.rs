@@ -25,7 +25,29 @@ pub(super) fn ews_url(acc: &AccountConfig, store: &Store, user: &str, secret: &s
     Ok(found)
 }
 
+/// A wait for new mail that loses its connection after this long lost it on the way (a gateway
+/// that changed over or forgot it), not to a server that won't wait.
+#[cfg(not(test))]
+const LOST_AFTER: Duration = Duration::from_secs(60);
+#[cfg(test)]
+const LOST_AFTER: Duration = Duration::from_millis(200);
+
 impl Worker {
+    /// The wait for new mail failed. A connection lost after a while of waiting (the keepalive, or
+    /// IDLE's end, found it dead: the office's gateway changed over, 02/11) is made again at once,
+    /// saying nothing: the account showed an error each time, with nothing for the user to do.
+    /// Connecting again that fails is said as ever, and so is a connection lost straight away (a
+    /// server that won't wait would be connected to over and over).
+    pub(super) fn failed_waiting(&mut self, e: NetError, after: Duration) {
+        if after < LOST_AFTER || !matches!(e, NetError::Io(_) | NetError::Closed(_)) {
+            self.failed(e);
+            return;
+        }
+        log::info!("{}: the connection waiting for new mail was lost after {} s ({e}); connecting again", self.acc.id, after.as_secs());
+        self.conn = None;
+        self.next_attempt = Instant::now();
+    }
+
     /// What to sign in with: the password, or for OAuth accounts a current access token
     /// (refreshed from the stored refresh token when needed).
     pub(super) fn secret(&mut self) -> Result<String> {
