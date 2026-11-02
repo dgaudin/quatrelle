@@ -198,6 +198,9 @@ impl Session {
         let r = self.reading.clone().ok_or_else(|| CmdError::Disabled("open a message first".into()))?;
         let encrypted = r.security.as_ref().is_some_and(|s| matches!(s.lock, Some(Lock::Open { .. }))) && self.identity(&r.key.account).is_some();
         let mut parsed = r.parsed.ok_or_else(|| CmdError::Disabled("the message is still downloading".into()))?;
+        if r.text_first && !answerable_from_text(&parsed, mode) {
+            return Err(CmdError::Failed(STILL_COMING.into()));
+        }
         let account = r.key.account.clone();
         let sig = self.signature_in_message(&self.signature_when(&account, true));
         // In another mailbox's folder (a shared one): from that mailbox, which isn't written to.
@@ -253,6 +256,7 @@ impl Session {
     /// Forward the open message as an attachment, as Outlook's More › Forward as Attachment: the
     /// original goes along whole (an `.eml`), the new message holds only the signature.
     pub fn forward_as_attachment(&mut self) -> CmdResult {
+        self.whole_here()?;
         let r = self.reading.clone().ok_or_else(|| CmdError::Disabled("open a message first".into()))?;
         let raw =
             self.store.as_ref().and_then(|s| s.read_body(&r.key)).ok_or_else(|| CmdError::Disabled("the message is still downloading".into()))?;
@@ -574,4 +578,14 @@ impl Session {
         self.refresh_list();
         Some(key)
     }
+}
+
+/// Whether an answer can be written from a message's text alone. It can't quote pictures not here
+/// yet (a `cid:` the text names counts: Microsoft Graph's inline files read as plain ones until
+/// the whole message comes), write to someone known by name only, or forward what's still coming.
+fn answerable_from_text(p: &Parsed, mode: ReplyMode) -> bool {
+    let known = |list: &[EmailAddress]| list.iter().all(|a| !a.email.trim().is_empty());
+    let pictures = p.attachments.iter().any(|a| a.inline) || p.images.iter().any(|i| i.get(..4).is_some_and(|s| s.eq_ignore_ascii_case("cid:")));
+    let written_to = if p.reply_to.is_empty() { known(std::slice::from_ref(&p.from)) } else { known(&p.reply_to) };
+    mode != ReplyMode::Forward && !pictures && written_to && (mode != ReplyMode::ReplyAll || (known(&p.to) && known(&p.cc)))
 }

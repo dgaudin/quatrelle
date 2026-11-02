@@ -2,6 +2,8 @@
 
 use super::*;
 
+mod text_first;
+
 #[test]
 fn sample_inbox_lists_newest_first_with_groups() {
     let s = sample_session("inbox");

@@ -489,6 +489,7 @@ pub(super) fn discard(s: &mut Session, _: &Value) -> CmdResult {
 impl Session {
     /// The open message's attachment `index`, as bytes.
     pub fn attachment_bytes(&self, index: usize) -> Result<Vec<u8>, CmdError> {
+        self.whole_here()?;
         let r = self.reading.as_ref().ok_or_else(|| CmdError::Disabled("open a message first".into()))?;
         // A signed or encrypted message's attachments are the ones inside it.
         let raw = self.readable_raw(&r.key).ok_or_else(|| CmdError::Failed("the message isn't downloaded".into()))?;
@@ -497,6 +498,7 @@ impl Session {
 
     /// The open message's source (`.eml`).
     pub fn message_source(&self) -> Result<Vec<u8>, CmdError> {
+        self.whole_here()?;
         let r = self.reading.as_ref().ok_or_else(|| CmdError::Disabled("open a message first".into()))?;
         self.source_of(&r.key).ok_or_else(|| CmdError::Failed("the message isn't downloaded".into()))
     }
@@ -519,6 +521,7 @@ impl Session {
 
     /// The open message as a PDF: subject, header, text and the names of its attachments.
     pub fn message_pdf(&self) -> Result<Vec<u8>, CmdError> {
+        self.whole_here()?;
         let r = self.reading.as_ref().ok_or_else(|| CmdError::Disabled("open a message first".into()))?;
         let m = r.parsed.as_ref().ok_or_else(|| CmdError::Disabled("the message is still downloading".into()))?;
         let mut header = vec![("From".to_string(), m.from.to_string())];
@@ -581,6 +584,7 @@ pub(super) fn save_all_attachments(s: &mut Session, v: &Value) -> CmdResult {
     if !dir.is_dir() {
         return Err(CmdError::Params(format!("{} is not a folder", dir.display())));
     }
+    s.whole_here()?;
     let r = s.reading.as_ref().ok_or_else(|| CmdError::Disabled("open a message first".into()))?;
     let parsed = r.parsed.as_ref().ok_or_else(|| CmdError::Disabled("the message is still downloading".into()))?;
     let raw = s.readable_raw(&r.key).ok_or_else(|| CmdError::Failed("the message isn't downloaded".into()))?;
@@ -607,6 +611,7 @@ pub(super) fn save_all_attachments(s: &mut Session, v: &Value) -> CmdResult {
 /// An attachment as text, for previewing (`message` kind: an attached email, parsed).
 pub(super) fn preview_attachment(s: &mut Session, v: &Value) -> CmdResult {
     let index = p::u64(v, "index").and_then(|i| usize::try_from(i).ok()).ok_or_else(|| CmdError::Params("`index` is required".into()))?;
+    s.whole_here()?;
     let r = s.reading.as_ref().ok_or_else(|| CmdError::Disabled("open a message first".into()))?;
     let parsed = r.parsed.as_ref().ok_or_else(|| CmdError::Disabled("the message is still downloading".into()))?;
     let a = parsed.attachments.iter().find(|a| a.index == index).ok_or_else(|| CmdError::Params(format!("no attachment {index}")))?;

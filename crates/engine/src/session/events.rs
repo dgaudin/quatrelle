@@ -271,10 +271,9 @@ impl Session {
                 self.index_body(&key, &raw);
                 self.downloaded(&key, true);
             }
-            // The text ahead of the whole message: shown once the session handles it (later).
-            Event::TextFirst { .. } => {}
+            Event::TextFirst { key, raw } => self.show_text_first(&key, &raw),
             Event::BodyFailed { key, error } => {
-                for w in self.windows.iter_mut().filter(|w| w.key == key && w.parsed.is_none()) {
+                for w in self.windows.iter_mut().filter(|w| w.key == key && (w.parsed.is_none() || w.text_first)) {
                     w.error = Some(error.clone());
                 }
                 if let Some(r) = self.reading.as_mut()
