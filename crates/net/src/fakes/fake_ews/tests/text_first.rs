@@ -428,6 +428,29 @@ fn a_message_deleted_meanwhile_is_told() {
     let _ = std::fs::remove_dir_all(store.root());
 }
 
+/// Downloading ahead and the sync write sources without a word: a message waiting that one of
+/// them brought meanwhile is still told of, or it would keep its spinner, and isn't asked for.
+#[test]
+fn a_message_written_while_it_waits_is_told_of_and_not_asked_for() {
+    let (mut d, _) = inbox_of(2);
+    d.slow_sources = Some(Duration::from_secs(1));
+    let server = serve(d);
+    let store = crate::fake::tests_store("ews-text-first-written");
+    let mut pool = start(&server, &store);
+    let (running, waiting) = (key_of(&store, "M0"), key_of(&store, "M1"));
+    open(&mut pool, &running);
+    until(&pool, "the first text", |e| is_text(e, &running));
+    open(&mut pool, &waiting);
+    until(&pool, "the second text", |e| is_text(e, &waiting));
+    let source = titled("M1", "m1");
+    store.write_body(&waiting, &source).unwrap();
+    let seen = until(&pool, "the message written", |e| is_body(e, &waiting));
+    assert!(matches!(seen.last(), Some(Event::Body { raw, .. }) if *raw == source));
+    assert_eq!(sources_asked(&server), 1, "only the one downloading");
+    drop(pool);
+    let _ = std::fs::remove_dir_all(store.root());
+}
+
 /// Working offline with a message downloading and another waiting: neither keeps its spinner, and
 /// neither is written once the account has stopped. The pool stays, to listen.
 #[test]

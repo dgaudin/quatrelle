@@ -681,7 +681,8 @@ fn log_event(e: &Event) {
         Event::SendFailed { account, id, error } => log::warn!("{account}: message {id} not sent: {error}"),
         Event::Queued { account, id, error } => log::warn!("{account}: message {id} waits in the Outbox: {error}"),
         Event::OpFailed { account, error, .. } => log::warn!("{account}: a change failed: {error}"),
-        Event::TextFirst { key, raw } => log::info!("{}: the text of a message arrived ({} bytes) in {}", key.account, raw.len(), key.folder),
+        // Logged where it's asked for, with the time it took: one line per message.
+        Event::TextFirst { .. } => {}
         Event::BodyFailed { key, error } => log::warn!("{}: a message didn't download: {error}", key.account),
         Event::Vacation { account, error: Some(error), .. } => log::warn!("{account}: automatic replies: {error}"),
         Event::Voted { key, error: Some(error), .. } => log::warn!("{}: vote not sent: {error}", key.account),

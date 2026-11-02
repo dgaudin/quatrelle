@@ -120,8 +120,10 @@ fn bring(entry: Waiting, stopped: &AtomicBool, store: &Store, sink: &Sink) {
     if stopped.load(Ordering::SeqCst) {
         return sink.emit(Event::BodyFailed { key, error: STOPPED.into() });
     }
-    if store.has_body(&key) {
-        return;
+    // Written meanwhile (downloading ahead, a sync), which tells no one: told here, or the message
+    // would wait for ever. A body that can't be read is downloaded.
+    if let Some(raw) = store.read_body(&key) {
+        return sink.emit(Event::Body { key, raw });
     }
     let asked = Instant::now();
     let raw = how.download(&id);
