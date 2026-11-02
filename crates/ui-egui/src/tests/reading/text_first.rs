@@ -26,7 +26,11 @@ impl Shown {
 }
 
 fn shown(ctx: &egui::Context, a: &mut MailApp, events: Vec<Event>) -> Shown {
-    let input = RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1280.0, 800.0))), events, ..Default::default() };
+    shown_sized(ctx, a, events, egui::vec2(1280.0, 800.0))
+}
+
+fn shown_sized(ctx: &egui::Context, a: &mut MailApp, events: Vec<Event>, size: egui::Vec2) -> Shown {
+    let input = RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, size)), events, ..Default::default() };
     let mut out = ctx.run_ui(input, |ui| a.ui(ui));
     out.textures_delta.clear();
     let tree = out.platform_output.accesskit_update.expect("AccessKit is on");
@@ -43,7 +47,11 @@ fn shown(ctx: &egui::Context, a: &mut MailApp, events: Vec<Event>) -> Shown {
 }
 
 fn click(ctx: &egui::Context, a: &mut MailApp, at: egui::Pos2) {
-    let button = |pressed| Event::PointerButton { pos: at, button: egui::PointerButton::Primary, pressed, modifiers: Modifiers::NONE };
+    press(ctx, a, at, egui::PointerButton::Primary);
+}
+
+fn press(ctx: &egui::Context, a: &mut MailApp, at: egui::Pos2, which: egui::PointerButton) {
+    let button = |pressed| Event::PointerButton { pos: at, button: which, pressed, modifiers: Modifiers::NONE };
     frame(ctx, a, vec![Event::PointerMoved(at)]);
     frame(ctx, a, vec![button(true)]);
     frame(ctx, a, vec![button(false)]);
@@ -117,7 +125,7 @@ fn a_picture_waits_for_the_whole_message() {
     assert!(s.says("The still we chose"));
     assert!(!s.says("[picture]"), "no placeholder");
     assert!(s.says("Downloading the attachments"), "said though no file is listed");
-    assert!(s.spinners() >= 2, "the files' and the picture's");
+    assert_eq!(s.spinners(), 2, "the files' and the picture's");
     // The whole message: the picture in it.
     let mut png = Vec::new();
     image::DynamicImage::ImageRgba8(image::RgbaImage::from_pixel(40, 30, image::Rgba([200, 90, 30, 255])))
@@ -197,5 +205,104 @@ fn reply_with_meeting_waits_for_the_whole_message() {
     click(&ctx, &mut a, item);
     assert!(a.ui.dialog.is_none(), "no meeting");
     assert_eq!(a.session.notices.last().map(|n| n.text.as_str()), Some(quatrelle_engine::STILL_COMING));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// In a message's own window too, a chip says its file is coming, and the reading pane is left
+/// as it was: the window's message isn't opened there again (nor fetched again).
+#[test]
+fn a_chip_in_a_window_says_it_is_coming() {
+    let (mut a, dir) = app("text-first-window");
+    let ctx = egui::Context::default();
+    ctx.enable_accesskit();
+    frame(&ctx, &mut a, vec![]);
+    let key = a.session.list.first().map(|m| m.key.clone()).unwrap();
+    let plain = a.session.list.iter().find(|m| m.key != key && !m.has_attachments).map(|m| m.key.clone()).unwrap();
+    a.session.store.as_ref().unwrap().remove_body(&key);
+    a.run("message.popOut", json!({"key": key.to_id()}));
+    a.run("list.open", json!({"key": plain.to_id()}));
+    let (d, file) = rushes();
+    let raw = mime::text_first(&d, &EmailAddress::new("Sam", "sam@studio.example"), NOW, "<r@x>", &[file]).unwrap();
+    a.session.apply(Mail::TextFirst { key: key.clone(), raw });
+    assert!(a.session.windows.iter().any(|w| w.key == key && w.text_first));
+    frame(&ctx, &mut a, vec![]);
+    let more = shown(&ctx, &mut a, vec![]).at("More options");
+    a.session.notices.clear();
+    click(&ctx, &mut a, more - egui::vec2(120.0, 0.0));
+    assert_eq!(a.session.notices.last().map(|n| n.text.as_str()), Some(quatrelle_engine::STILL_COMING));
+    let r = a.session.reading.as_ref().unwrap();
+    assert!(r.key == plain && r.parsed.is_some(), "the reading pane is as it was");
+    assert!(!a.session.take_jobs().iter().any(|j| matches!(j, quatrelle_engine::model::Job::FetchTextFirst { .. })), "nothing fetched again");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A long error in a narrow window still leaves Try again in reach.
+#[test]
+fn try_again_stays_in_a_narrow_pane() {
+    let (mut a, dir) = app("text-first-narrow");
+    let ctx = egui::Context::default();
+    ctx.enable_accesskit();
+    let size = egui::vec2(900.0, 700.0);
+    frame_sized(&ctx, &mut a, vec![], size);
+    let (d, file) = rushes();
+    let (key, _) = in_its_text_phase(&mut a, &d, &[file]);
+    let error = "the server answered with something long: ".to_string() + &"a gateway between here and there gave up ".repeat(8);
+    a.session.apply(Mail::BodyFailed { key, error });
+    frame_sized(&ctx, &mut a, vec![], size);
+    let s = shown_sized(&ctx, &mut a, vec![], size);
+    let button = s.0.iter().find(|(_, l, _)| l == "Try again").and_then(|(_, _, b)| *b).expect("Try again");
+    assert!(button.right() <= size.x && button.left() >= 0.0, "{button:?}");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Services that count the times a place to save is asked for.
+struct Asking(std::rc::Rc<std::cell::Cell<usize>>);
+
+impl crate::Services for Asking {
+    fn clock(&self) -> (i64, i32) {
+        (NOW, 0)
+    }
+    fn pick_files(&mut self) -> Vec<std::path::PathBuf> {
+        Vec::new()
+    }
+    fn save_path(&mut self, _: &str) -> Option<std::path::PathBuf> {
+        self.0.set(self.0.get() + 1);
+        None
+    }
+    fn pick_folder(&mut self) -> Option<std::path::PathBuf> {
+        self.0.set(self.0.get() + 1);
+        None
+    }
+    fn open_path(&mut self, _: &std::path::Path) -> Result<(), String> {
+        Err("refused".into())
+    }
+}
+
+/// Save As on a file still coming says so before asking where: there'd be nothing to save.
+#[test]
+fn save_as_says_it_is_coming_before_asking_where() {
+    let (mut a, dir) = app("text-first-save");
+    let ctx = egui::Context::default();
+    ctx.enable_accesskit();
+    frame(&ctx, &mut a, vec![]);
+    let asked = std::rc::Rc::new(std::cell::Cell::new(0));
+    a.services = Box::new(Asking(asked.clone()));
+    let (d, file) = rushes();
+    in_its_text_phase(&mut a, &d, &[file]);
+    frame(&ctx, &mut a, vec![]);
+    let more = shown(&ctx, &mut a, vec![]).at("More options");
+    press(&ctx, &mut a, more - egui::vec2(120.0, 0.0), egui::PointerButton::Secondary);
+    let item = shown(&ctx, &mut a, vec![]).at("Save As…");
+    a.session.notices.clear();
+    click(&ctx, &mut a, item);
+    assert_eq!(asked.get(), 0, "nowhere asked");
+    assert_eq!(a.session.notices.last().map(|n| n.text.as_str()), Some(quatrelle_engine::STILL_COMING));
+    // The rest that asks where: the same.
+    for act in
+        [crate::Action::SaveAll, crate::Action::SaveAttachments(vec![0]), crate::Action::SaveMessage, crate::Action::ExportPdf, crate::Action::Print]
+    {
+        a.act(act);
+    }
+    assert_eq!(asked.get(), 0, "nowhere asked");
     let _ = std::fs::remove_dir_all(dir);
 }

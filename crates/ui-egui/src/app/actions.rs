@@ -128,6 +128,16 @@ impl MailApp {
     }
 
     pub(crate) fn act(&mut self, a: Action) {
+        // What saves the open message or its files, its text alone here, is refused before
+        // asking where: there'd be nothing to save there.
+        if matches!(
+            a,
+            Action::SaveAttachment(_) | Action::SaveAttachments(_) | Action::SaveAll | Action::SaveMessage | Action::ExportPdf | Action::Print
+        ) && let Some(why) = self.session.reading.as_ref().filter(|r| r.text_first).map(crate::reading::still_coming)
+        {
+            self.session.notice(why, true);
+            return;
+        }
         match a {
             // Done to the message whose window asked; a dialog it opens shows there.
             Action::ForCompose(id, inner) => {
