@@ -63,6 +63,7 @@
 	Disconnected: {error}	Getrennt: {error}
 	Document	Dokument
 	Don't run later rules on mail this one matches	Spätere Regeln nicht auf E-Mails anwenden, auf die diese zutrifft
+	Downloading the attachments…	Anhänge werden heruntergeladen…
 	Downloading the message…	Nachricht wird heruntergeladen…
 	Draft saved	Entwurf gespeichert
 	Drafts	Entwürfe
@@ -279,6 +280,7 @@
 	Text	Text
 	Text or address	Text oder Adresse
 	The PDF couldn't be opened: {error}	Das PDF konnte nicht geöffnet werden: {error}
+	The attachments couldn't be downloaded: {error}	Die Anhänge konnten nicht heruntergeladen werden: {error}
 	The folder and everything in it will be moved to Deleted Items.	Der Ordner und sein gesamter Inhalt werden nach „Gelöschte Elemente“ verschoben.
 	The folder, its subfolders and all the mail in them will be deleted for good. This can't be undone.	Der Ordner, seine Unterordner und alle E-Mails darin werden endgültig gelöscht. Dies kann nicht rückgängig gemacht werden.
 	The link couldn't be opened: {error}	Der Link konnte nicht geöffnet werden: {error}
@@ -1312,6 +1314,7 @@ month	May	Mai
 	this account has no certificate to decrypt it with (File › Info › Security)	dieses Konto hat kein Zertifikat zum Entschlüsseln (Datei › Informationen › Sicherheit)
 	it can't be decrypted with your certificate	sie lässt sich mit Ihrem Zertifikat nicht entschlüsseln
 	its account is gone	sein Konto gibt es nicht mehr
+	its attachments are still downloading: a moment	die Anhänge werden noch heruntergeladen: einen Moment
 	Hide the subject of encrypted mail	Betreff verschlüsselter Mails verbergen
 	On the way it reads [...]; the real one is inside, for its recipients (header protection).	Unterwegs steht dort [...]; der echte steht innen, für die Empfänger (Header-Schutz).
 	Its subject and addresses were protected inside it too.	Betreff und Adressen waren darin ebenfalls geschützt.

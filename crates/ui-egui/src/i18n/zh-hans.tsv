@@ -63,6 +63,7 @@
 	Disconnected: {error}	已断开连接: {error}
 	Document	文档
 	Don't run later rules on mail this one matches	此规则匹配的邮件不再运行后续规则
+	Downloading the attachments…	正在下载附件…
 	Downloading the message…	正在下载邮件…
 	Draft saved	草稿已保存
 	Drafts	草稿
@@ -279,6 +280,7 @@
 	Text	文本
 	Text or address	文本或地址
 	The PDF couldn't be opened: {error}	无法打开 PDF: {error}
+	The attachments couldn't be downloaded: {error}	无法下载附件: {error}
 	The folder and everything in it will be moved to Deleted Items.	文件夹及其所有内容将移动到“已删除邮件”。
 	The folder, its subfolders and all the mail in them will be deleted for good. This can't be undone.	文件夹、其子文件夹及其中的所有邮件将被永久删除。此操作无法撤消。
 	The link couldn't be opened: {error}	无法打开链接: {error}
@@ -1309,6 +1311,7 @@ month	May	5月
 	this account has no certificate to decrypt it with (File › Info › Security)	此帐户没有可用于解密的证书（文件 › 信息 › 安全）
 	it can't be decrypted with your certificate	无法用你的证书解密
 	its account is gone	其帐户已不存在
+	its attachments are still downloading: a moment	附件仍在下载: 请稍候
 	Hide the subject of encrypted mail	隐藏加密邮件的主题
 	On the way it reads [...]; the real one is inside, for its recipients (header protection).	途中显示为 [...]；真正的主题在里面，只给收件人看（标头保护）。
 	Its subject and addresses were protected inside it too.	它的主题和地址也在里面受到了保护。

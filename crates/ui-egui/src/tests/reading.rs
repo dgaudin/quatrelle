@@ -3,6 +3,7 @@
 use super::*;
 
 mod tables;
+mod text_first;
 
 #[test]
 fn renders_every_state_without_panicking() {

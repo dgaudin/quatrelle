@@ -63,6 +63,7 @@
 	Disconnected: {error}	החיבור נותק: {error}
 	Document	מסמך
 	Don't run later rules on mail this one matches	אל תפעיל כללים נוספים על דואר שהכלל הזה תואם
+	Downloading the attachments…	מוריד את הקבצים המצורפים…
 	Downloading the message…	מוריד את ההודעה…
 	Draft saved	הטיוטה נשמרה
 	Drafts	טיוטות
@@ -279,6 +280,7 @@
 	Text	טקסט
 	Text or address	טקסט או כתובת
 	The PDF couldn't be opened: {error}	לא ניתן היה לפתוח את ה-PDF: {error}
+	The attachments couldn't be downloaded: {error}	לא ניתן היה להוריד את הקבצים המצורפים: {error}
 	The folder and everything in it will be moved to Deleted Items.	התיקייה וכל מה שבה יועברו לפריטים שנמחקו.
 	The folder, its subfolders and all the mail in them will be deleted for good. This can't be undone.	התיקייה, תיקיות המשנה שלה וכל הדואר שבהן יימחקו לצמיתות. אי אפשר לבטל את זה.
 	The link couldn't be opened: {error}	לא ניתן היה לפתוח את הקישור: {error}
@@ -1308,6 +1310,7 @@ month	May	מאי
 	this account has no certificate to decrypt it with (File › Info › Security)	לחשבון הזה אין תעודה לפענוח (קובץ › מידע › אבטחה)
 	it can't be decrypted with your certificate	לא ניתן לפענח אותה בתעודה שלכם
 	its account is gone	החשבון שלה כבר לא קיים
+	its attachments are still downloading: a moment	הקבצים המצורפים שלה עדיין בהורדה: רגע אחד
 	Hide the subject of encrypted mail	להסתיר את הנושא של דואר מוצפן
 	On the way it reads [...]; the real one is inside, for its recipients (header protection).	בדרך כתוב [...]; הנושא האמיתי נמצא בפנים, לנמענים (הגנת כותרות).
 	Its subject and addresses were protected inside it too.	גם הנושא והכתובות שלה היו מוגנים בתוכה.

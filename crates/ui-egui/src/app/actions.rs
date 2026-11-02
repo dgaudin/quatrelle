@@ -189,6 +189,7 @@ impl MailApp {
                 self.run("list.open", json!({"key": k.to_id()}));
             }
             Action::Dialog(d) => self.ui.dialog = Some(d),
+            Action::Refuse(why) => self.session.notice(why, true),
             Action::FocusSearch => self.ui.focus_search = true,
             Action::NewNote => match self.session.run("note.create", &json!({})) {
                 Ok(v) => {

@@ -146,6 +146,12 @@ pub(super) fn picture_texture(
     // points wide).
     let lower = src.to_ascii_lowercase();
     if !(lower.starts_with("http://") || lower.starts_with("https://")) {
+        // Its message's text alone is here: the picture comes with the whole of it, or not at
+        // all once that failed; nothing is kept meanwhile (its index can differ there).
+        if s.text_first(key) {
+            let failed = s.reading.iter().chain(&s.windows).any(|r| &r.key == key && r.error.is_some());
+            return if failed { Pic::Missing } else { Pic::Loading };
+        }
         let Some(index) = sent_with(p, src) else { return Pic::Missing };
         let name = format!("att-{}-{index}-{most}", key.to_id());
         return shown_picture(st, &name, || {

@@ -63,6 +63,7 @@
 	Disconnected: {error}	已中斷連線: {error}
 	Document	文件
 	Don't run later rules on mail this one matches	符合此規則的郵件不再套用後續規則
+	Downloading the attachments…	正在下載附件…
 	Downloading the message…	正在下載郵件…
 	Draft saved	已儲存草稿
 	Drafts	草稿
@@ -279,6 +280,7 @@
 	Text	文字
 	Text or address	文字或地址
 	The PDF couldn't be opened: {error}	無法開啟 PDF: {error}
+	The attachments couldn't be downloaded: {error}	無法下載附件: {error}
 	The folder and everything in it will be moved to Deleted Items.	資料夾和其中所有內容將移到「刪除的郵件」。
 	The folder, its subfolders and all the mail in them will be deleted for good. This can't be undone.	資料夾、其子資料夾和其中所有郵件將永久刪除。此動作無法復原。
 	The link couldn't be opened: {error}	無法開啟連結: {error}
@@ -1311,6 +1313,7 @@ month	May	5月
 	this account has no certificate to decrypt it with (File › Info › Security)	此帳戶沒有可用於解密的憑證（檔案 › 資訊 › 安全性）
 	it can't be decrypted with your certificate	無法用你的憑證解密
 	its account is gone	其帳戶已不存在
+	its attachments are still downloading: a moment	附件仍在下載: 請稍候
 	Hide the subject of encrypted mail	隱藏加密郵件的主旨
 	On the way it reads [...]; the real one is inside, for its recipients (header protection).	途中顯示為 [...]；真正的主旨在裡面，只給收件人看（標頭保護）。
 	Its subject and addresses were protected inside it too.	它的主旨和地址也在裡面受到了保護。

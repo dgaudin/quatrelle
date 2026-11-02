@@ -266,6 +266,9 @@ pub enum Action {
     MoveDataFolder,
     /// Forget a move asked for.
     CancelDataMove,
+    /// Say why something can't be done now, as a command's refusal is said (a message whose
+    /// text came first: its attachments are still coming).
+    Refuse(String),
 }
 
 /// UI-only state.

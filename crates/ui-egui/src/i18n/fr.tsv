@@ -63,6 +63,7 @@
 	Disconnected: {error}	Déconnecté : {error}
 	Document	Document
 	Don't run later rules on mail this one matches	Ne pas appliquer les règles suivantes au courrier qui correspond à celle-ci
+	Downloading the attachments…	Téléchargement des pièces jointes…
 	Downloading the message…	Téléchargement du message…
 	Draft saved	Brouillon enregistré
 	Drafts	Brouillons
@@ -279,6 +280,7 @@
 	Text	Texte
 	Text or address	Texte ou adresse
 	The PDF couldn't be opened: {error}	Impossible d’ouvrir le PDF : {error}
+	The attachments couldn't be downloaded: {error}	Impossible de télécharger les pièces jointes : {error}
 	The folder and everything in it will be moved to Deleted Items.	Le dossier et tout son contenu seront déplacés dans Éléments supprimés.
 	The folder, its subfolders and all the mail in them will be deleted for good. This can't be undone.	Le dossier, ses sous-dossiers et tout le courrier qu’ils contiennent seront supprimés définitivement. Cette action est irréversible.
 	The link couldn't be opened: {error}	Impossible d’ouvrir le lien : {error}
@@ -1312,6 +1314,7 @@ month	May	mai
 	this account has no certificate to decrypt it with (File › Info › Security)	ce compte n'a pas de certificat pour le déchiffrer (Fichier › Informations › Sécurité)
 	it can't be decrypted with your certificate	il ne peut pas être déchiffré avec votre certificat
 	its account is gone	son compte n'existe plus
+	its attachments are still downloading: a moment	ses pièces jointes sont encore en cours de téléchargement : un instant
 	Hide the subject of encrypted mail	Masquer l'objet du courrier chiffré
 	On the way it reads [...]; the real one is inside, for its recipients (header protection).	En route, on lit [...] ; le vrai est à l'intérieur, pour ses destinataires (protection des en-têtes).
 	Its subject and addresses were protected inside it too.	Son objet et ses adresses étaient aussi protégés à l'intérieur.

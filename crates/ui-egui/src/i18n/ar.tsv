@@ -63,6 +63,7 @@
 	Disconnected: {error}	انقطع الاتصال: {error}
 	Document	مستند
 	Don't run later rules on mail this one matches	لا تشغّل القواعد التالية على البريد الذي تطابقه هذه القاعدة
+	Downloading the attachments…	جارٍ تنزيل المرفقات…
 	Downloading the message…	جارٍ تنزيل الرسالة…
 	Draft saved	حُفظت المسودة
 	Drafts	المسودات
@@ -279,6 +280,7 @@
 	Text	نص
 	Text or address	نص أو عنوان
 	The PDF couldn't be opened: {error}	تعذّر فتح ملف PDF: {error}
+	The attachments couldn't be downloaded: {error}	تعذّر تنزيل المرفقات: {error}
 	The folder and everything in it will be moved to Deleted Items.	سيُنقل المجلد وكل ما فيه إلى العناصر المحذوفة.
 	The folder, its subfolders and all the mail in them will be deleted for good. This can't be undone.	سيُحذف المجلد ومجلداته الفرعية وكل البريد فيها نهائيًا. لا يمكن التراجع عن ذلك.
 	The link couldn't be opened: {error}	تعذّر فتح الرابط: {error}
@@ -1308,6 +1310,7 @@ month	May	مايو
 	this account has no certificate to decrypt it with (File › Info › Security)	ليس لهذا الحساب شهادة لفك تشفيرها (ملف › معلومات › الأمان)
 	it can't be decrypted with your certificate	تعذّر فك تشفيرها بشهادتك
 	its account is gone	حسابها لم يعد موجودًا
+	its attachments are still downloading: a moment	مرفقاتها لا تزال قيد التنزيل: لحظة من فضلك
 	Hide the subject of encrypted mail	إخفاء موضوع البريد المشفّر
 	On the way it reads [...]; the real one is inside, for its recipients (header protection).	في الطريق يظهر [...]؛ والموضوع الحقيقي في الداخل لمستلميه (حماية الترويسة).
 	Its subject and addresses were protected inside it too.	كان موضوعها وعناوينها محميّة في داخلها أيضًا.

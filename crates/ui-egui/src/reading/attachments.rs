@@ -12,6 +12,10 @@ pub(super) fn kind_icon(k: AttachmentKind) -> Icon {
 /// Decode an image attachment into a thumbnail texture (cached; `None` if it isn't a picture
 /// we can read). Pictures come from mail, so size is capped before decoding.
 pub(super) fn preview(s: &Session, st: &mut UiState, ctx: &egui::Context, key: &MessageKey, index: usize) -> Option<egui::TextureHandle> {
+    // Its text alone here: nothing of it is read, so no absence is kept for the whole message.
+    if s.text_first(key) {
+        return None;
+    }
     if let Some(t) = st.previews.get(&(key.clone(), index)) {
         return t.clone();
     }
@@ -29,6 +33,10 @@ pub(super) fn preview(s: &Session, st: &mut UiState, ctx: &egui::Context, key: &
 
 /// A picture attachment at a size to look at (decoded once and kept by egui while it's shown).
 pub(crate) fn big_picture(s: &Session, ctx: &egui::Context, key: &MessageKey, index: usize) -> Option<egui::TextureHandle> {
+    // Its text alone here: nothing of it is read, so no absence is kept for the whole message.
+    if s.text_first(key) {
+        return None;
+    }
     let id = egui::Id::unique(("big-picture", key.to_id(), index));
     if let Some(t) = ctx.data(|d| d.get_temp::<Option<egui::TextureHandle>>(id)) {
         return t;
@@ -44,6 +52,10 @@ pub(crate) fn big_picture(s: &Session, ctx: &egui::Context, key: &MessageKey, in
 
 /// The first page of a PDF attachment (cached like pictures).
 pub(super) fn pdf_preview(s: &Session, st: &mut UiState, ctx: &egui::Context, key: &MessageKey, index: usize) -> Option<egui::TextureHandle> {
+    // Its text alone here: nothing of it is read, so no absence is kept for the whole message.
+    if s.text_first(key) {
+        return None;
+    }
     if let Some(t) = st.previews.get(&(key.clone(), index)) {
         return t.clone();
     }
@@ -69,6 +81,10 @@ pub(super) fn video_preview(
     key: &MessageKey,
     a: &mime::AttachmentInfo,
 ) -> Option<egui::TextureHandle> {
+    // Its text alone here: nothing of it is read, so no absence is kept for the whole message.
+    if s.text_first(key) {
+        return None;
+    }
     let id = (key.clone(), a.index);
     if let Some(t) = st.previews.get(&id) {
         return t.clone();
@@ -149,9 +165,14 @@ pub(super) fn attachment_card(
     // Several selected, this one among them: its menu can save them together.
     let several: Option<Vec<usize>> =
         st.attachment_selected.as_ref().filter(|(k, v)| k == key && v.len() > 1 && v.contains(&a.index)).map(|(_, v)| v.clone());
+    // Its message's text alone is here: the file isn't yet, and asking for it says so.
+    let coming = s.reading.as_ref().filter(|r| &r.key == key && r.text_first).map(still_coming);
     let menu = |ui: &mut Ui, acts: &mut Vec<Action>| {
         if kind == AttachmentKind::Image && ui.button(tl!("Preview")).clicked() {
-            acts.push(Action::Dialog(crate::Dialog::PicturePreview { key: key.clone(), index: a.index, name: a.name.clone() }));
+            acts.push(match &coming {
+                Some(why) => Action::Refuse(why.clone()),
+                None => Action::Dialog(crate::Dialog::PicturePreview { key: key.clone(), index: a.index, name: a.name.clone() }),
+            });
             ui.close();
         }
         if text_preview && ui.button(tl!("Preview")).clicked() {
@@ -215,7 +236,10 @@ pub(super) fn attachment_card(
     }
     // A plain click shows it in place of the message's text, as Outlook previews attachments.
     if resp.clicked() && !on_more && !ctrl {
-        st.attachment_view = Some((key.clone(), a.index));
+        match &coming {
+            Some(why) => acts.push(Action::Refuse(why.clone())),
+            None => st.attachment_view = Some((key.clone(), a.index)),
+        }
     }
     let previewed = st.attachment_view.as_ref().is_some_and(|(k, i)| k == key && *i == a.index);
     let selected = previewed || picked.contains(&a.index);

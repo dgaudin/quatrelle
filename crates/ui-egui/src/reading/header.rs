@@ -220,7 +220,8 @@ pub(super) fn actions(
             let more = widgets::more_pill(ui, "More actions", &t);
             egui::Popup::menu(&more).show(|ui| {
                 if ui.button(tl!("Reply with meeting")).clicked() {
-                    acts.push(Action::Dialog(crate::Dialog::meeting_from(s, p)));
+                    // Its text alone: someone it went to can have no address yet, and would be left out.
+                    acts.push(if r.text_first { Action::Refuse(still_coming(r)) } else { Action::Dialog(crate::Dialog::meeting_from(s, p)) });
                     ui.close();
                 }
                 if ui.button(tl!("Forward as attachment")).clicked() {
