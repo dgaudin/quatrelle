@@ -36,7 +36,10 @@ pub use session::{
     is_profile_dir,
     junk::{JunkList, junk_entry},
     newer_release, parse_key,
-    pim::{ACCOUNT_COLOR, AgendaItem, CalMode, DueReminder, Module, NoteRef, Person, TaskChange, TaskRef, WebexAsk, WebexState, parse_local},
+    pim::{
+        ACCOUNT_COLOR, AgendaItem, CalMode, DueReminder, EVENT_HITS_MAX, EventHit, EventWhen, Module, NoteRef, Person, TaskChange, TaskRef, WebexAsk,
+        WebexState, parse_local,
+    },
     quick_steps::QuickStep,
     scheduling::{Fetched, RoomFinder},
     search_folders::SearchFolder,
