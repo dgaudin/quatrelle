@@ -41,8 +41,8 @@ impl Worker {
                 }
             }
             Job::SearchServer { folders, query, search, .. } => self.search_server(&folders, query, search),
-            // The text alone is for the Exchange worker (later); until then, the whole message.
-            Job::FetchBody { key } | Job::FetchTextFirst { key } => self.fetch(key),
+            Job::FetchBody { key } => self.fetch(key),
+            Job::FetchTextFirst { key } => self.fetch_text_first(key),
             Job::Older { folder, offset, .. } => self.older(&folder, offset),
             Job::ReadOnline { key } => self.read_online_body(key),
             Job::Search { query, folder, .. } => self.search(query, folder),

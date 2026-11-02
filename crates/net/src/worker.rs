@@ -299,6 +299,7 @@ mod connect;
 mod dav;
 mod listening;
 mod pool;
+mod rest;
 mod scheduling;
 mod send;
 mod sizes;
@@ -418,6 +419,10 @@ struct Worker {
     /// no push). A deadline, not a wait restarted by every job: while someone works (messages
     /// opened, pictures, read marks), the look kept being put off, and new mail with it.
     next_poll: Instant,
+    /// Big messages whose text came first, on their way whole. Ends with the worker.
+    rest: rest::Rest,
+    /// The server refused a message's text for how it was asked: not asked again this session.
+    text_refused: bool,
 }
 
 /// Where an account keeps its folders' own windows.
@@ -457,6 +462,7 @@ impl Worker {
         let opts = if acc.keeps_online() { SyncOptions { prefetch: 0, full: false, ..opts } } else { opts };
         let windows = store.load_account_doc(&acc.id, WINDOWS).unwrap_or_default();
         let followed = store.load_account_doc(&acc.id, FOLLOWED_PUBLIC_DOC).unwrap_or_default();
+        let rest = rest::Rest::new(store.clone(), sink.clone());
         Worker {
             acc,
             auth,
@@ -492,6 +498,8 @@ impl Worker {
             search: Arc::new(AtomicU64::new(0)),
             next_poll: Instant::now() + POLL_EVERY,
             listen: listening::Listening::default(),
+            rest,
+            text_refused: false,
         }
     }
 

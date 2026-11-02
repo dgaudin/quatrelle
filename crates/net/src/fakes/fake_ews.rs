@@ -133,6 +133,14 @@ pub struct Data {
     pub shared: Vec<SharedBox>,
     /// The `X-AnchorMailbox` header of each request about a shared mailbox's folders.
     pub anchors: Vec<String>,
+    /// The request's `X-AnchorMailbox` header.
+    anchored: String,
+    /// A shared mailbox's items are answered only when anchored to it, as a server in another
+    /// database than the account's does.
+    pub anchored_items: bool,
+    /// Where each request for a whole source was sent: its `X-PublicFolderMailbox` header, else
+    /// its `X-AnchorMailbox` one (empty: the account's own mailbox).
+    pub source_routes: Vec<String>,
     /// Outlook's navigation shortcuts, as items of the Common Views folder (hidden ones).
     pub wlinks: Vec<String>,
     /// The directory: (X.500 name, address).
@@ -290,6 +298,9 @@ impl Default for Data {
             routed: String::new(),
             shared: Vec::new(),
             anchors: Vec::new(),
+            anchored: String::new(),
+            anchored_items: false,
+            source_routes: Vec::new(),
             wlinks: Vec::new(),
             directory: Vec::new(),
             people: Vec::new(),
@@ -521,6 +532,12 @@ impl Data {
     /// without being routed to the mailbox holding it.
     fn unrouted(&self, folder: &str) -> bool {
         self.pf_mailbox.as_ref().is_some_and(|m| *m != self.routed) && self.public_ids().iter().any(|p| p == folder)
+    }
+
+    /// Whether a request for this folder's content goes unanswered: a shared mailbox's, asked
+    /// without being anchored to it.
+    fn unanchored(&self, folder: &str) -> bool {
+        self.anchored_items && self.folders.iter().any(|f| f.id == folder && !f.owner.is_empty() && !f.owner.eq_ignore_ascii_case(&self.anchored))
     }
 
     /// An item as an answer has it: with its whole source when `mime_content`, with its text and

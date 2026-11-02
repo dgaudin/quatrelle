@@ -296,6 +296,9 @@ fn serve_connection(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>) {
             } else {
                 base
             });
+            if source {
+                d.source_routes.push(if routed.is_empty() { anchor.clone() } else { routed.clone() });
+            }
             let unknown = named.iter().any(|u| (u.starts_with("item:") || u.starts_with("message:")) && !super::MICROSOFT_FIELDS.contains(u));
             if unknown || (fields && d.refuse_fields) || (d.refuse_text && named.contains(&"item:Body")) {
                 drop(d);
@@ -308,6 +311,7 @@ fn serve_connection(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>) {
             }
         }
         d.routed = routed;
+        d.anchored = anchor.clone();
         if !anchor.is_empty() && d.anchors.len() < 1000 {
             d.anchors.push(anchor);
         }
