@@ -12,6 +12,7 @@ use super::*;
 pub use quatrelle_model::pim::PIM_DOC;
 
 mod deleting;
+mod find;
 mod moving;
 mod notes;
 mod parking;
@@ -28,6 +29,7 @@ mod webex;
 pub(super) fn own_calendar(id: &str) -> bool {
     quatrelle_model::pim::shared_calendar_owner(id).is_none() && !id.starts_with("public:") && !quatrelle_model::pim::is_web_calendar(id)
 }
+pub use find::{EVENT_HITS_MAX, EventHit, EventWhen};
 pub use notes::NoteRef;
 pub use people::Person;
 pub use reminders::DueReminder;
