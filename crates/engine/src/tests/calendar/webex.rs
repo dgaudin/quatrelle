@@ -545,6 +545,51 @@ fn updating_and_deleting_a_meeting_by_id() {
     done(s);
 }
 
+/// Every delete asked of Webex is counted until it answers, however it went, and however it was
+/// asked for: this is what closing Quatrelle waits on.
+#[test]
+fn a_delete_is_counted_until_webex_answers() {
+    for error in [None, Some(WebexError::Forbidden), Some(WebexError::SignIn)] {
+        let mut s = signed_in("webex-deleting");
+        let uid = alone(&mut s);
+        s.run("event.delete", &json!({"uid": uid})).unwrap();
+        assert_eq!(s.webex.deleting, 1, "the appointment's meeting");
+        s.run("webex.deleteMeeting", &json!({"id": "m2"})).unwrap();
+        assert_eq!(s.webex.deleting, 2, "a meeting its window left");
+        asked(&mut s, true, true);
+        s.apply(Event::WebexCreated { ask: ASK, meeting: Some(meeting(NEW_LINK)), error: None });
+        assert_eq!(s.webex.deleting, 3, "one nobody waits for any more");
+        s.webex.answers.insert(9, Ok(meeting(NEW_LINK)));
+        s.run("webex.deleteMeeting", &json!({"ask": 9})).unwrap();
+        assert_eq!(s.webex.deleting, 4, "an answer nobody took");
+        assert!(s.webex_deleting());
+        for left in [3, 2, 1, 0] {
+            s.apply(Event::WebexDeleted { id: "m1".into(), error: error.clone() });
+            assert_eq!(s.webex.deleting, left);
+        }
+        assert!(!s.webex_deleting());
+        s.apply(Event::WebexDeleted { id: "m1".into(), error: None });
+        assert_eq!(s.webex.deleting, 0, "an answer nobody counted");
+        done(s);
+    }
+}
+
+/// A creation given up may still bring a meeting to delete; refused or signed out, nothing is out.
+#[test]
+fn only_what_is_on_its_way_counts_as_deleting() {
+    let mut s = signed_in("webex-deleting-asks");
+    asked(&mut s, true, false);
+    assert!(!s.webex_deleting(), "its window still waits for it");
+    s.run("webex.deleteMeeting", &json!({"ask": ASK})).unwrap();
+    assert!(s.webex_deleting(), "given up");
+    s.apply(Event::WebexCreated { ask: ASK, meeting: None, error: Some(WebexError::Forbidden) });
+    assert!(!s.webex_deleting(), "it brought nothing");
+    s.run("webex.signOut", &json!({})).unwrap();
+    assert!(s.run("webex.deleteMeeting", &json!({"id": "m1"})).is_err());
+    assert!(!s.webex_deleting() && s.webex.deleting == 0, "signed out, nothing went");
+    done(s);
+}
+
 #[test]
 fn a_foreign_id_is_refused() {
     let mut s = signed_in("webex-foreign-id");
