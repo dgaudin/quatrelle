@@ -169,12 +169,13 @@ impl Session {
         self.reading.iter().chain(&self.windows).any(|r| &r.key == key && r.text_first)
     }
 
-    /// Refuses what needs the whole message while the open one has only its text here.
+    /// Refuses what needs the whole message while the open one has only its text here: it's
+    /// coming, or, once that failed, why it isn't.
     pub(crate) fn whole_here(&self) -> Result<(), CmdError> {
-        if self.reading.as_ref().is_some_and(|r| r.text_first) {
-            return Err(CmdError::Failed(STILL_COMING.into()));
+        match self.reading.as_ref().filter(|r| r.text_first) {
+            Some(r) => Err(CmdError::Failed(r.error.clone().unwrap_or_else(|| STILL_COMING.into()))),
+            None => Ok(()),
         }
-        Ok(())
     }
 
     pub fn close_window(&mut self, key: &MessageKey) {

@@ -73,8 +73,11 @@ impl Session {
     /// Show the open message's pictures (`always`: and everything from its sender from now on).
     pub fn show_pictures(&mut self, always: bool) -> CmdResult {
         let r = self.reading.clone().ok_or_else(|| CmdError::Disabled("open a message first".into()))?;
-        self.pictures_for.insert(r.key.clone());
         let sender = r.parsed.as_ref().map(|p| p.from.email.trim().to_ascii_lowercase()).unwrap_or_default();
+        if always && sender.is_empty() {
+            self.whole_here()?;
+        }
+        self.pictures_for.insert(r.key.clone());
         if always && !sender.is_empty() && self.prefs.trusted_senders.len() < 10_000 {
             self.prefs.trusted_senders.insert(sender.clone());
         }
