@@ -23,7 +23,7 @@ schedule the meetings.
    - *Scopes*: `meeting:schedules_read`, `meeting:schedules_write` and `spark:people_read`
      (the last one only names the signed-in account in Options). Quatrelle asks for exactly these.
 2. **Add Integration**. Copy the **Client ID** and the **Client Secret**. The secret is shown once.
-3. In Quatrelle, **File › Options › Webex** (Calendar):
+3. In Quatrelle, **File › Options › Webex** (a section of its own, after Calendar):
    - *Site*: the Webex site, for example `example.webex.com`. Never built in.
    - *Client ID* and *Client secret*. The secret goes to the system keychain when the box is left
      and is never shown again; it is not written to any file or log.
@@ -31,9 +31,12 @@ schedule the meetings.
      account, with Sign out. The refresh token is kept in the keychain too, and the access token
      in memory only.
 
-Quatrelle uses the expiries Webex returns (typically 14 days for the access token and 90 for
-the refresh token). A refresh may return a new refresh token, which replaces the old one. If the
-sign-in can't be renewed, the window says "Sign in to Webex again".
+Quatrelle uses the expiries Webex returns for the access token, but never trusts one beyond a
+day: it is renewed at least daily. The refresh token (Webex lets it lapse after about 90 days
+unused) is kept until Webex refuses it. A refresh may return a new refresh token, which replaces
+the old one. If the sign-in can't be renewed, the window says "Sign in to Webex again", Options
+shows the account as signed out, still naming who it was, and **Sign in to Webex** there signs in
+again; the Webex Meeting button goes to Options too, and the window keeps its message.
 
 The Options page is not drawn in the browser build: there is no loopback sign-in there.
 
@@ -53,6 +56,9 @@ The **Webex Meeting** button is a menu:
 - **Use my personal room**: what the button used to do. It writes the room typed in Options
   (*Webex personal room*) into the appointment and sends nothing to Webex.
 
+In the browser build the button offers only the personal room: there is no loopback sign-in
+there, so no scheduled meeting.
+
 No error ever falls back to the personal room silently. Errors show in the window and change
 nothing in the appointment: 401 is retried once with a refreshed token, then "Sign in to Webex
 again"; 403 is "Your Webex account can't schedule meetings on this site"; other 4xx and 5xx show
@@ -70,14 +76,18 @@ calendar program or on a phone doesn't reach Webex.
 - **Deleting or cancelling the appointment** sends a `DELETE`. A meeting already gone counts as
   deleted.
 - **A repeat** is sent as the rule's `RRULE` in `recurrence`; when the repeat is removed,
-  `"recurrence": null`. Webex refuses several days or dates in a monthly or yearly rule; its
-  error is shown, and nothing is converted.
+  `"recurrence": null`. Webex is expected to refuse several days or dates in a monthly or yearly
+  rule (this hasn't been tried against a real account); whatever it answers is shown, and nothing
+  is converted.
 - **One occurrence of a series** is not the series: deleting or moving one sends nothing to
   Webex, because the id is the whole series'.
 - **Whose events are followed.** Only an event the user organizes, or a lone appointment with no
   organizer, no guests and no answer of the user's. An event someone else organizes never
   sends anything to Webex, whatever id it carries, so a stranger's invitation can't make the
-  user's token delete a meeting. The id is the organizer's and isn't written into an invitation.
+  user's token delete a meeting. The id is the organizer's. Quatrelle writes it into no invitation it sends or answers (a
+  mail invitation carries no `X-QUATRELLE-WEBEX-ID`, and one received is never read for it);
+  whether Exchange copies its named property into the meeting request it sends is unverified
+  (section 6). Even if it does, a guest is not the organizer, so nothing is followed.
 - **Guests.** `sendEmail` is false on create, update and delete when the appointment has guests:
   the calendar server's invitation is the one they get, and Webex mails no second one.
 
@@ -114,3 +124,7 @@ registered, confirm once:
 6. An appointment with guests sends no second invitation from Webex.
 7. On a real on-premises Exchange, the extended property `WebexId` is stored with the
    appointment and read back after a sync.
+8. Whether Exchange copies the `WebexId` named property into the meeting request it sends to
+   guests. Quatrelle's own invitations never carry the id, but Exchange may add the property to
+   the guest's copy. It is harmless (a guest is not the organizer, so the id is never acted on),
+   and only the sentence that the id is not written into an invitation depends on it.

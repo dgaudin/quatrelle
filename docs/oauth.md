@@ -111,7 +111,6 @@ Hotmail and Live addresses aren't affected: those are known by their domain.
   Graph**, which reaches the mailbox without IMAP (and brings its calendar and contacts): the
   account starts again through Graph.
 
-
 ## Webex: a fixed port, and a client secret
 
 Webex is not a mail sign-in; it schedules meetings (see [webex.md](webex.md)). Its sign-in uses
