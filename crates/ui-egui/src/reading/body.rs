@@ -70,41 +70,98 @@ pub(super) fn html_bar(s: &Session, t: &Tokens, ui: &mut Ui, p: &mime::Parsed, a
     ui.add_space(6.0);
 }
 
-/// A message that hides a lot of text from its reader: said, with the text to look at.
+/// A message that hides a lot of text from its reader: one quiet line saying how much (why it
+/// matters under the pointer), and the text to look at on a click. Kept rather than dropped: it
+/// is what shows instructions slipped to the assistants that read mail.
 pub(super) fn hidden_bar(t: &Tokens, ui: &mut Ui, key: &MessageKey, p: &mime::Parsed) {
     let id = egui::Id::unique(("hidden-text", key.to_id()));
     let mut open = ui.data(|d| d.get_temp::<bool>(id)).unwrap_or(false);
-    egui::Frame::new().fill(t.warn.gamma_multiply(0.12)).corner_radius(6).inner_margin(Margin::symmetric(10, 8)).show(ui, |ui| {
-        ui.set_width(ui.available_width());
-        ui.horizontal(|ui| {
-            let (r, _) = ui.allocate_exact_size(vec2(16.0, 16.0), Sense::hover());
-            icons::paint(ui.painter(), r, Icon::Warning, t.warn);
-            ui.vertical(|ui| {
-                ui.label(RichText::new(tf!("This message hides text from you ({n} words).", n = p.hidden_words)).color(t.text));
-                ui.label(
-                    RichText::new(tl!(
-                        "Hidden text is a way to slip past spam filters, or to give instructions to tools and assistants that read mail for you."
-                    ))
-                    .color(t.dim)
-                    .small(),
-                );
-                if ui.link(RichText::new(if open { tl!("Hide it again") } else { tl!("Show the hidden text") }).small()).clicked() {
-                    open = !open;
-                }
-            });
-        });
-        if open {
-            ui.add_space(6.0);
-            egui::ScrollArea::vertical().id_salt(id).max_height(180.0).show(ui, |ui| {
-                let mut text = p.hidden_text.as_str();
-                ui.add(
-                    egui::TextEdit::multiline(&mut text).font(egui::FontId::monospace(12.0)).desired_width(f32::INFINITY).frame(egui::Frame::NONE),
-                );
-            });
+    let why = tl!("Hidden text is a way to slip past spam filters, or to give instructions to tools and assistants that read mail for you.");
+    // Never fewer than `mime::HIDDEN_WORDS_MIN` words: no singular to say.
+    let words = tf!("Hidden text: {n} words", n = widgets::count_text(u64::try_from(p.hidden_words).unwrap_or(u64::MAX)));
+    ui.horizontal_wrapped(|ui| {
+        let (ir, _) = ui.allocate_exact_size(vec2(14.0, 14.0), Sense::hover());
+        icons::paint(ui.painter(), ir, Icon::Warning, t.faint);
+        ui.label(RichText::new(words).color(t.faint).small()).on_hover_text(why);
+        ui.label(RichText::new("·").color(t.faint).small());
+        if ui.link(RichText::new(if open { tl!("Hide") } else { tl!("Show") }).small()).on_hover_text(why).clicked() {
+            open = !open;
         }
     });
+    if open {
+        egui::Frame::new().fill(t.chrome).stroke(egui::Stroke::new(1.0, t.border)).corner_radius(6).inner_margin(Margin::symmetric(10, 6)).show(
+            ui,
+            |ui| {
+                ui.set_width(ui.available_width());
+                egui::ScrollArea::vertical().id_salt(id).max_height(180.0).show(ui, |ui| {
+                    let mut text = p.hidden_text.as_str();
+                    ui.add(
+                        egui::TextEdit::multiline(&mut text)
+                            .font(egui::FontId::monospace(12.0))
+                            .desired_width(f32::INFINITY)
+                            .frame(egui::Frame::NONE),
+                    );
+                });
+            },
+        );
+    }
     ui.data_mut(|d| d.insert_temp(id, open));
-    ui.add_space(8.0);
+    ui.add_space(4.0);
+}
+
+/// Under a mailing list's message: where to unsubscribe, the address a link that opens as the
+/// message's own links do (a web page in the browser, a mail address as a new message to it).
+pub(super) fn unsubscribe_line(t: &Tokens, ui: &mut Ui, address: &str, acts: &mut Vec<Action>) {
+    let Some(link) = unsubscribe_link(address) else {
+        ui.label(RichText::new(tf!("Mailing list: unsubscribe at {address}", address = widgets::shorten(address, 80))).color(t.faint).small());
+        return;
+    };
+    // Cut by "…" to its line further down; this cap only keeps an absurd header from being laid
+    // out whole.
+    let shown = widgets::shorten(address, 400);
+    // The sentence as the language puts it, the address where its place is.
+    let sentence = tl!("Mailing list: unsubscribe at {address}");
+    let (before, after) = sentence.split_once("{address}").map_or((sentence, ""), |(b, a)| (b.trim(), a.trim()));
+    ui.horizontal_wrapped(|ui| {
+        ui.spacing_mut().item_spacing.x = 4.0;
+        if !before.is_empty() {
+            ui.label(RichText::new(before).color(t.faint).small());
+        }
+        // On the sentence's line, cut by "…" when longer than the room left there (whole under
+        // the pointer): it went down to a line of its own. Where little room is left, on the
+        // next line, cut to that one. (egui cuts a link to the whole width, not to what's left.)
+        let font = egui::TextStyle::Small.resolve(ui.style());
+        let after_width = if after.is_empty() {
+            0.0
+        } else {
+            ui.painter().layout_no_wrap(after.to_string(), font.clone(), t.faint).size().x + ui.spacing().item_spacing.x
+        };
+        let room = ui.available_size_before_wrap().x - after_width;
+        let width = if room >= 160.0 { room } else { ui.available_width() - after_width };
+        // Drawn in the links' colour (a placeholder colour takes the link's).
+        let galley = widgets::one_line(ui, &shown, font, Color32::PLACEHOLDER, width);
+        if ui.link(galley).on_hover_text(address).clicked() {
+            acts.push(Action::OpenUrl(link));
+        }
+        if !after.is_empty() {
+            ui.label(RichText::new(after).color(t.faint).small());
+        }
+    });
+}
+
+/// What a list's unsubscribe address opens: a web page, or a message to write (a bare mail
+/// address is one too). `None` for anything else, which stays words.
+pub(super) fn unsubscribe_link(address: &str) -> Option<String> {
+    let a = address.trim();
+    let lower = a.to_ascii_lowercase();
+    if ["https://", "http://", "mailto:"].iter().any(|s| lower.starts_with(s)) {
+        Some(a.to_string())
+    } else if !a.contains([':', '/']) && !a.contains(char::is_whitespace) && a.split_once('@').is_some_and(|(n, d)| !n.is_empty() && d.contains('.'))
+    {
+        Some(format!("mailto:{a}"))
+    } else {
+        None
+    }
 }
 
 /// An HTML message, formatted: emphasis, code, links (opened in the browser on click) and
