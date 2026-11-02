@@ -168,7 +168,9 @@ impl Session {
                 .filter_map(|o| {
                     let all_day = events.get(o.event).is_some_and(|e| e.all_day);
                     let (s, e) = if all_day { (self.clock.utc(o.start), self.clock.utc(o.end)) } else { (o.start, o.end) };
-                    (s < to && e.max(s.saturating_add(1)) > from && fits(s)).then_some(Shown { event: o.event, named: o.start, start: s, end: e })
+                    // One that ends before it starts (a damaged cache) lasts a second.
+                    let e = e.max(s.saturating_add(1));
+                    (s < to && e > from && fits(s)).then_some(Shown { event: o.event, named: o.start, start: s, end: e })
                 })
                 .collect()
         };
