@@ -538,3 +538,103 @@ fn a_narrow_appointment_never_breaks_a_word() {
     }
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// Issue #33: in the Calendar the search box searches the calendar (not mail); what it finds is
+/// listed, and one clicked goes to its day and opens.
+#[test]
+fn the_calendar_search_box_lists_and_opens_events() {
+    let (mut a, dir) = app("calendar-search");
+    // The rooms' calendars unticked, as the app leaves them when it starts.
+    a.session.note_new_calendars();
+    let ctx = egui::Context::default();
+    a.run("view.module", json!({"name": "calendar"}));
+    frame(&ctx, &mut a, vec![]);
+    a.ui.focus_search = true;
+    frame(&ctx, &mut a, vec![]);
+    frame(&ctx, &mut a, vec![Event::Text("storyboard".into())]);
+    assert_eq!(a.ui.cal_search.query, "storyboard");
+    assert!(a.session.search.is_none(), "mail isn't searched");
+    frame(&ctx, &mut a, vec![]);
+    let hits = a.ui.cal_search.results(&a.session).to_vec();
+    assert_eq!(hits.iter().map(|h| h.summary.as_str()).collect::<Vec<_>>(), ["Storyboard review"]);
+    let mut acts = Vec::new();
+    crate::panes::calendar::open_hit(&a.session, &mut a.ui, &hits[0], &mut acts);
+    for act in acts {
+        a.act(act);
+    }
+    assert!(a.ui.cal_search.query.is_empty(), "back to the days");
+    assert!(matches!(&a.ui.dialog, Some(Dialog::Event(f)) if f.summary == "Storyboard review"));
+    let day = a.session.clock.local(hits[0].start).div_euclid(86_400);
+    assert_eq!(a.session.cal_day(), day, "on its day");
+    frame(&ctx, &mut a, vec![]);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Escape in the calendar's search box empties it, as the × does: the days come back.
+#[test]
+fn the_calendar_search_box_empties_on_escape() {
+    use crate::calendar::chip_id;
+    let (mut a, dir) = app("calendar-search-escape");
+    let ctx = egui::Context::default();
+    a.run("view.module", json!({"name": "calendar"}));
+    a.run("calendar.view", json!({"mode": "day"}));
+    frame(&ctx, &mut a, vec![]);
+    let lunch = a.session.agenda(NOW - 86_400, NOW + 2 * 86_400).into_iter().find(|i| i.summary == "Lunch with Jun").unwrap();
+    a.ui.focus_search = true;
+    frame(&ctx, &mut a, vec![]);
+    frame(&ctx, &mut a, vec![Event::Text("storyboard".into())]);
+    frame(&ctx, &mut a, vec![]);
+    frame(&ctx, &mut a, vec![]);
+    assert_eq!(a.ui.cal_search.query, "storyboard");
+    assert!(ctx.read_response(chip_id(&lunch)).is_none(), "the results in place of the days");
+    frame(&ctx, &mut a, vec![key(Key::Escape, Modifiers::NONE)]);
+    assert!(a.ui.cal_search.query.is_empty(), "Escape empties it");
+    frame(&ctx, &mut a, vec![]);
+    frame(&ctx, &mut a, vec![]);
+    assert!(ctx.read_response(chip_id(&lunch)).is_some(), "the days drawn again");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A search kept on a calendar that has since gone (closed, unsubscribed) looks in every one.
+#[test]
+fn a_scope_whose_calendar_is_gone_searches_every_calendar() {
+    let (mut a, dir) = app("calendar-search-scope");
+    // The rooms' calendars unticked, as the app leaves them when it starts.
+    a.session.note_new_calendars();
+    let ctx = egui::Context::default();
+    a.run("view.module", json!({"name": "calendar"}));
+    a.ui.cal_search.scope = Some(("sample".into(), "no-such".into()));
+    a.ui.cal_search.query = "storyboard".into();
+    let hits = a.ui.cal_search.results(&a.session).to_vec();
+    assert_eq!(hits.iter().map(|h| h.summary.as_str()).collect::<Vec<_>>(), ["Storyboard review"]);
+    frame(&ctx, &mut a, vec![]);
+    assert!(a.ui.cal_search.scope.is_none(), "back to every calendar");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// The calendar's query is its own: it waits while Mail is shown (whose box is the mail search
+/// box), and the calendar's search never searches mail.
+#[test]
+fn the_calendar_query_waits_while_mail_is_shown() {
+    let (mut a, dir) = app("calendar-search-mail");
+    let ctx = egui::Context::default();
+    a.run("view.module", json!({"name": "calendar"}));
+    frame(&ctx, &mut a, vec![]);
+    a.ui.focus_search = true;
+    frame(&ctx, &mut a, vec![]);
+    frame(&ctx, &mut a, vec![Event::Text("storyboard".into())]);
+    frame(&ctx, &mut a, vec![]);
+    assert_eq!(a.ui.cal_search.query, "storyboard");
+    assert!(a.session.search.is_none(), "mail isn't searched from the Calendar");
+    a.run("view.module", json!({"name": "mail"}));
+    frame(&ctx, &mut a, vec![]);
+    a.ui.focus_search = true;
+    frame(&ctx, &mut a, vec![]);
+    frame(&ctx, &mut a, vec![Event::Text("x".into())]);
+    frame(&ctx, &mut a, vec![]);
+    assert_eq!(a.ui.cal_search.query, "storyboard", "typing in Mail leaves it");
+    a.run("view.module", json!({"name": "calendar"}));
+    frame(&ctx, &mut a, vec![]);
+    assert_eq!(a.ui.cal_search.query, "storyboard", "still there back in the Calendar");
+    let _ = std::fs::remove_dir_all(dir);
+}

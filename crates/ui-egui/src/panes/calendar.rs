@@ -13,9 +13,13 @@ use crate::{Action, Dialog, UiState, widgets};
 
 mod days;
 mod drag;
+mod found;
 mod side;
 use days::days;
 pub use drag::Drag;
+#[cfg(test)]
+pub(crate) use found::open_hit;
+pub(crate) use found::{CalSearch, found};
 pub use side::{nav, todo_bar};
 
 /// Height of an hour in the day and week views.
@@ -76,6 +80,11 @@ pub fn long_date(day: i64) -> String {
 
 /// The main pane.
 pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
+    // Searching: the events found, in place of the days.
+    if st.cal_search.active() {
+        found(s, st, ui, acts);
+        return;
+    }
     let t = st.tokens;
     egui::Frame::new().inner_margin(Margin::symmetric(14, 10)).show(ui, |ui| {
         ui.horizontal(|ui| {

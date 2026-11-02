@@ -37,12 +37,13 @@ impl MailApp {
                 ui.horizontal(|ui| {
                     let (r, _) = ui.allocate_exact_size(vec2(16.0, 16.0), Sense::hover());
                     icons::paint(ui.painter(), r, Icon::Search, t.dim);
-                    // In People, Tasks and Notes it searches those (as Outlook's box searches where
-                    // you are).
+                    // In the Calendar, People, Tasks and Notes it searches those (as Outlook's box
+                    // searches where you are).
                     let module = self.session.module;
-                    if matches!(module, Module::People | Module::Tasks | Module::Notes) {
+                    if matches!(module, Module::Calendar | Module::People | Module::Tasks | Module::Notes) {
                         let focus = std::mem::take(&mut self.ui.focus_search);
                         let (query, hint) = match module {
+                            Module::Calendar => (&mut self.ui.cal_search.query, tl!("Search calendar (location:, organizer:, after:…)")),
                             Module::People => (&mut self.ui.people_query, tl!("Search people")),
                             Module::Tasks => (&mut self.ui.tasks.query, tl!("Search tasks")),
                             _ => (&mut self.ui.notes_query, tl!("Search notes")),
@@ -57,6 +58,10 @@ impl MailApp {
                         );
                         if focus {
                             resp.request_focus();
+                        }
+                        // Escape in the calendar's box empties it: the days come back.
+                        if module == Module::Calendar && resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                            query.clear();
                         }
                         if !query.is_empty() && widgets::tiny_icon_button(ui, Icon::Close, "Clear search", &t).clicked() {
                             query.clear();

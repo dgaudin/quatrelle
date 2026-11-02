@@ -438,6 +438,8 @@ pub struct UiState {
     /// Notes: the search, the note being written on (and its text), a new note to write on,
     /// and the keyboard to give its text box.
     pub(crate) notes_query: String,
+    /// The calendar's search (issue #33): what's typed, the switches, what it found.
+    pub(crate) cal_search: calendar::CalSearch,
     /// How far the calendar's month grip has been dragged since it last added or took a month.
     pub(crate) months_drag: f32,
     /// An appointment being dragged to another time ([`calendar::Drag`]).
@@ -577,6 +579,7 @@ impl MailApp {
                 people_list: people::ListSettings::default(),
                 list_columns: list::ColumnWidths::default(),
                 notes_query: String::new(),
+                cal_search: calendar::CalSearch::default(),
                 months_drag: 0.0,
                 cal_drag: None,
                 note_edit: None,

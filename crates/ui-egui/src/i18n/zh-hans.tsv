@@ -1862,3 +1862,7 @@ month	May	5月
 	Don't allow	不允许
 	{domain} is waiting for your answer	{domain} 正在等待您的回复
 	Other servers allowed	已允许的其他服务器
+	All calendars	所有日历
+	No events match.	没有匹配的事件。
+	Past	过去
+	Search calendar (location:, organizer:, after:…)	搜索日历 (location:, organizer:, after:…)

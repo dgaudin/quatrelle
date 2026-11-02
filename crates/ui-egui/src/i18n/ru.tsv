@@ -1864,3 +1864,7 @@ month	May	Май
 	Don't allow	Не разрешать
 	{domain} is waiting for your answer	{domain} ждёт вашего ответа
 	Other servers allowed	Другие разрешённые серверы
+	All calendars	Все календари
+	No events match.	Подходящих событий нет.
+	Past	Прошедшие
+	Search calendar (location:, organizer:, after:…)	Поиск в календаре (location:, organizer:, after:…)
