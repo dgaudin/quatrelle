@@ -43,6 +43,12 @@ pub enum Event {
         key: MessageKey,
         raw: Vec<u8>,
     },
+    /// A big message's text arrived ahead of the whole message: `raw` is a source holding the
+    /// text and the list of files to come, not kept on disk. [`Event::Body`] follows.
+    TextFirst {
+        key: MessageKey,
+        raw: Vec<u8>,
+    },
     BodyFailed {
         key: MessageKey,
         error: String,

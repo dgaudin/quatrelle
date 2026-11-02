@@ -135,7 +135,7 @@ impl Auth {
 /// row each ask for Sent Items: once is enough), or the calendars' and contacts' sync (each
 /// calendar ticked and each task changed asks for it, and the one waiting reads them all).
 fn push_job(queue: &mut VecDeque<Job>, j: Job) {
-    if matches!(j, Job::SyncFolder { .. } | Job::SyncDav { .. }) && queue.contains(&j) {
+    if matches!(j, Job::SyncFolder { .. } | Job::SyncDav { .. } | Job::FetchTextFirst { .. }) && queue.contains(&j) {
         return;
     }
     // Calendars just ticked: the sync waiting reads them too, else those waiting take them in
@@ -185,7 +185,7 @@ fn quick_job(j: &Job, acc: &AccountConfig) -> bool {
 /// Jobs a full sync serves between two folders rather than at its end: what someone is waiting
 /// on (an opened message) and the edits they just made.
 fn between_folders(j: &Job) -> bool {
-    matches!(j, Job::FetchBody { .. } | Job::Apply { .. })
+    matches!(j, Job::FetchBody { .. } | Job::FetchTextFirst { .. } | Job::ReadOnline { .. } | Job::Apply { .. })
 }
 
 /// Runs jobs for every account.
@@ -673,6 +673,7 @@ fn log_event(e: &Event) {
         Event::SendFailed { account, id, error } => log::warn!("{account}: message {id} not sent: {error}"),
         Event::Queued { account, id, error } => log::warn!("{account}: message {id} waits in the Outbox: {error}"),
         Event::OpFailed { account, error, .. } => log::warn!("{account}: a change failed: {error}"),
+        Event::TextFirst { key, raw } => log::info!("{}: the text of a message arrived ({} bytes) in {}", key.account, raw.len(), key.folder),
         Event::BodyFailed { key, error } => log::warn!("{}: a message didn't download: {error}", key.account),
         Event::Vacation { account, error: Some(error), .. } => log::warn!("{account}: automatic replies: {error}"),
         Event::Voted { key, error: Some(error), .. } => log::warn!("{}: vote not sent: {error}", key.account),
@@ -815,6 +816,8 @@ fn jumps_queue(j: &Job) -> bool {
     matches!(
         j,
         Job::FetchBody { .. }
+            | Job::FetchTextFirst { .. }
+            | Job::ReadOnline { .. }
             | Job::FetchPhoto { .. }
             | Job::GetServerRules { .. }
             | Job::GetVacation { .. }
