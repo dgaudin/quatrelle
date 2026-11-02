@@ -654,8 +654,10 @@ d'Exchange (EWS ou Graph) montre son texte tout de suite, le message entier suit
 Rien n'a encore été essayé sur un vrai Exchange : l'origine ne l'a essayé que sur grommunio.
 
 - **Différences avec l'origine** :
-  - la liste des champs demandés : `item:InReplyTo` (le nom de Microsoft) au lieu de `message:InReplyTo`,
-    que Exchange refuserait, et la requête entière avec ;
+  - la liste des champs demandés : `HEADER_FIELDS`, déjà éprouvée par chaque synchro, plus `item:Body`,
+    `item:Attachments`, `item:ItemClass` et `item:Importance`, tous de la liste de Microsoft ;
+    le `message:InReplyTo` de l'origine n'existe pas chez Microsoft et n'est pas demandé (ni
+    In-Reply-To ni References), sans quoi Exchange refuserait la requête entière ;
   - l'expéditeur lu comme la liste le lit (`0x5D01`), pas par un `mailbox()` qui jette toute adresse sans `@` ;
   - le message entier arrive par un fil à lui, sur une copie de la connexion principale, pas sur la
     seconde connexion du compte (sans numérotation ici, et occupée par l'envoi et les salles) ;
@@ -667,7 +669,8 @@ Rien n'a encore été essayé sur un vrai Exchange : l'origine ne l'a essayé qu
   comme `fetch` ; le pool arrête le fil avec le compte ; « Répondre » vérifie le brouillon construit ;
   après un échec, les commandes disent l'échec et non « encore en cours ».
 - **Vérifié** : les serveurs factices EWS et Graph (dont un qui refuse un champ inconnu comme Exchange),
-  le moteur, l'interface, et la cible de fuzz `text_first`, qui lit les deux constructeurs.
+  le moteur, l'interface. La cible de fuzz `text_first` (les deux constructeurs) est écrite et compile,
+  mais n'a pas été lancée : `cargo-fuzz` n'est pas installé ici.
 - **Reste à faire** : l'essai sur le vrai serveur du propriétaire (un gros message, un message de dossier
   public ; la ligne du journal en fait foi) ; le courrier plus ancien que ce qui est gardé, lu en ligne,
   ne passe pas par là.
