@@ -81,7 +81,7 @@ impl Session {
         self.selection = vec![key.clone()];
         self.focus = Some(key.clone());
         let thread = self.thread_of(key);
-        self.reading = Some(Reading { key: key.clone(), parsed: None, error: None, thread, warning: None, security: None });
+        self.reading = Some(Reading { key: key.clone(), parsed: None, error: None, thread, warning: None, security: None, text_first: false });
         let cached = if key.folder == OUTBOX {
             self.outbox_entry(key).and_then(|(a, i)| self.store.as_ref().and_then(|s| s.outbox_raw(&a, i.id)))
         } else {
@@ -120,7 +120,7 @@ impl Session {
             } else {
                 self.store.as_ref().and_then(|s| s.read_body(key))
             };
-            let mut w = Reading { key: key.clone(), parsed: None, error: None, thread: Vec::new(), warning: None, security: None };
+            let mut w = Reading { key: key.clone(), parsed: None, error: None, thread: Vec::new(), warning: None, security: None, text_first: false };
             match cached {
                 Some(raw) => {
                     let (shown, security) = self.unwrap(key, &raw);
@@ -138,15 +138,43 @@ impl Session {
         Ok(serde_json::json!({"key": key.to_id(), "windows": self.windows.len()}))
     }
 
-    /// How a message not on this computer is brought: kept as it comes, or, older than what's
-    /// kept, read on the server for showing only.
+    /// How a message not on this computer is brought: kept as it comes, its text ahead when it's
+    /// a big one, or, older than what's kept, read on the server for showing only.
     pub(super) fn fetch_job(&self, key: &MessageKey) -> Job {
-        if self.is_older(key) { Job::ReadOnline { key: key.clone() } } else { Job::FetchBody { key: key.clone() } }
+        if self.is_older(key) {
+            Job::ReadOnline { key: key.clone() }
+        } else if self.text_first_wanted(key) {
+            Job::FetchTextFirst { key: key.clone() }
+        } else {
+            Job::FetchBody { key: key.clone() }
+        }
+    }
+
+    /// Whether a message is worth showing as its text before the whole of it: one with files, on
+    /// Exchange from [`TEXT_FIRST_OVER`] on, on Microsoft Graph whatever it weighs (it gives no
+    /// size).
+    fn text_first_wanted(&self, key: &MessageKey) -> bool {
+        let Some(config) = self.account(&key.account).map(|a| &a.config) else { return false };
+        key.folder != OUTBOX
+            && self.summary(key).is_some_and(|m| m.has_attachments && (config.graph.is_some() || (config.ews.is_some() && m.size >= TEXT_FIRST_OVER)))
     }
 
     /// Whether a message is one of the older mail read on the server, not kept.
     pub(super) fn is_older(&self, key: &MessageKey) -> bool {
         self.older.as_ref().is_some_and(|(_, _, items, _)| items.iter().any(|m| &m.key == key))
+    }
+
+    /// Whether the reading pane or a window shows `key`'s text alone, the whole message to come.
+    pub fn text_first(&self, key: &MessageKey) -> bool {
+        self.reading.iter().chain(&self.windows).any(|r| &r.key == key && r.text_first)
+    }
+
+    /// Refuses what needs the whole message while the open one has only its text here.
+    pub(crate) fn whole_here(&self) -> Result<(), CmdError> {
+        if self.reading.as_ref().is_some_and(|r| r.text_first) {
+            return Err(CmdError::Failed(STILL_COMING.into()));
+        }
+        Ok(())
     }
 
     pub fn close_window(&mut self, key: &MessageKey) {
@@ -156,22 +184,46 @@ impl Session {
     /// A message as it's read: one without a `Date` gets the time the server took it in, as the
     /// list shows it (replies and forwards quoted it as sent on 1 January 1970).
     fn parse_for_reading(&self, key: &MessageKey, raw: &[u8]) -> Option<mime::Parsed> {
-        let mut p = mime::parse(raw)?;
+        mime::parse(raw).map(|p| self.dated(key, p))
+    }
+
+    fn dated(&self, key: &MessageKey, mut p: mime::Parsed) -> mime::Parsed {
         if p.date == 0
             && let Some(m) = self.list.iter().find(|m| &m.key == key)
         {
             p.date = m.date;
         }
-        Some(p)
+        p
+    }
+
+    /// A message's text ahead of the whole of it: shown where nothing is yet, so it can never
+    /// replace a whole message. It isn't kept, nor indexed.
+    pub(super) fn show_text_first(&mut self, key: &MessageKey, raw: &[u8]) {
+        let waits = |r: &Reading| &r.key == key && r.parsed.is_none();
+        if !self.reading.iter().chain(&self.windows).any(waits) {
+            return;
+        }
+        // Read as it was built: a name alone stays, where the address isn't known yet.
+        let Some(parsed) = mime::parse_text_first(raw).map(|p| self.dated(key, p)) else { return };
+        let warning = self.sender_warning(&parsed.from);
+        for r in self.reading.iter_mut().chain(&mut self.windows).filter(|r| waits(r)) {
+            r.parsed = Some(parsed.clone());
+            r.error = None;
+            r.warning = warning.clone();
+            r.text_first = true;
+        }
+        self.request_pictures();
     }
 
     pub(super) fn show_body(&mut self, key: &MessageKey, raw: &[u8]) {
         // Signed or encrypted: what's inside is what's shown, the protection said beside it.
-        let shown = self.reading.as_ref().is_some_and(|r| &r.key == key) || self.windows.iter().any(|w| &w.key == key && w.parsed.is_none());
+        let shown = self.reading.as_ref().is_some_and(|r| &r.key == key)
+            || self.windows.iter().any(|w| &w.key == key && (w.parsed.is_none() || w.text_first));
         let (raw, security) = if shown { self.unwrap(key, raw) } else { (raw.to_vec(), None) };
         let raw = raw.as_slice();
         let mut windows = std::mem::take(&mut self.windows);
-        for w in windows.iter_mut().filter(|w| &w.key == key && w.parsed.is_none()) {
+        for w in windows.iter_mut().filter(|w| &w.key == key && (w.parsed.is_none() || w.text_first)) {
+            w.text_first = false;
             w.parsed = self.parse_for_reading(key, raw);
             w.error = w.parsed.is_none().then(|| "this message could not be read".to_string());
             w.warning = w.parsed.as_ref().and_then(|p| self.sender_warning(&p.from));
@@ -186,6 +238,7 @@ impl Session {
             r.error = if parsed.is_none() { Some("this message could not be read".into()) } else { None };
             r.parsed = parsed;
             r.security = security;
+            r.text_first = false;
         }
         let from = self.reading.as_ref().filter(|r| &r.key == key).and_then(|r| r.parsed.as_ref()).map(|p| p.from.clone());
         if let Some(from) = from {

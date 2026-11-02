@@ -7,7 +7,7 @@ use std::sync::Arc;
 use quatrelle_mime::{self as mime, OutAttachment, Parsed, ReplyMode};
 use quatrelle_model::contacts::{Contact, ContactBook};
 use quatrelle_model::dates::{Clock, DateGroup};
-use quatrelle_model::job::{Secret, Vacation};
+use quatrelle_model::job::{Secret, TEXT_FIRST_OVER, Vacation};
 use quatrelle_model::search::{Doc, Index, Query, summary_text};
 use quatrelle_model::thread::{Thread, threads};
 use quatrelle_model::{
@@ -216,6 +216,9 @@ const UNDO_DEPTH: usize = 20;
 /// The most messages open in their own windows at once.
 pub const MAX_WINDOWS: usize = 8;
 
+/// The answer of what needs the whole message while only its text is here.
+pub const STILL_COMING: &str = "its attachments are still downloading: a moment";
+
 /// The message open in the reading pane (or in a window of its own).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Reading {
@@ -229,6 +232,8 @@ pub struct Reading {
     pub warning: Option<quatrelle_model::lookalike::SenderWarning>,
     /// Signed or encrypted (S/MIME), and how that went.
     pub security: Option<Security>,
+    /// Only its text is here so far: `parsed` holds that, and the whole message is on its way.
+    pub text_first: bool,
 }
 
 /// Outlook's "Download all": the messages still to bring onto this computer, the ones asked for
