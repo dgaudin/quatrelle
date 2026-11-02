@@ -62,6 +62,27 @@ Graph blobs, EWS `GetItem` with the MIME content, POP's copy. A source that arri
 search as it is read (`Session::index_body`). `Session::download_progress` feeds the status bar,
 messages already kept are never asked for again, and it stops by itself once the last one is here.
 
+## A message's text first (Exchange and Graph, `worker/rest.rs`)
+
+A message can arrive in two ways. The usual one is `Job::FetchBody`: the whole source, then
+`Event::Body`. The second is `Job::FetchTextFirst`, chosen by `Session::fetch_job` for an EWS or
+Graph message that is not older mail read online, has files, and (EWS) is over 1 MiB. The
+worker asks the server for its body, headers and file list alone (EWS `GetItem` with named
+fields, Graph `$expand=attachments`), builds a message from them with `mime::text_first` (its
+files listed empty) and sends `Event::TextFirst`, so the pane shows the text at once. The whole
+message is then downloaded by a thread of its own on a copy of the connection (`Rest`), one at a
+time and the last asked first, and arrives as `Event::Body`, which replaces the text in place; only
+that one is stored and indexed. The text phase reads the built message with
+`mime::parse_text_first`, which keeps a name without an address.
+
+Any failure of the text request sends the message the usual way; only a refused sign-in
+(`NetError::Auth`) does not retry, to spare a locked account a second attempt. A server that
+refuses the request (a field it doesn't know) turns the feature off for the session. If the
+whole message is already stored, the thread answers with `Event::Body` straight away, so the
+interface never waits for ever. A failed whole message gives `Event::BodyFailed` and the pane's
+"Try again". "Download all", the CLI and the sync's own prefetch stay whole. The fuzz target
+`text_first` covers the two builders.
+
 ## The worker loop
 
 - On start: connect (TLS, or STARTTLS with a fresh capability list), authenticate (`AUTHENTICATE PLAIN`

@@ -16,6 +16,7 @@ libFuzzer. `.github/workflows/fuzz.yml` runs every target weekly on Linux.
 | `search` | the search box: the query language, the Advanced form, JMAP filters, modified UTF-7 |
 | `pst` | an Outlook data file: a good exported file with the input as byte patches, or a whole file |
 | `trust` | the URLs and hosts servers hand out (DAV hrefs, `EwsUrl`, `Location`): `url_host` and `site`, a site staying itself and reading back |
+| `text_first` | Exchange's `GetItem` answer (XML) or Graph's message (JSON), picked by the first byte, built into a message's text and read back with `parse_text_first` and `parse` |
 | `tnef` | Outlook's `winmail.dat`: its files, body and attached messages, compressed RTF and the HTML or text in it, and as a message's attachment |
 
 ## Running
