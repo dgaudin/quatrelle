@@ -21,6 +21,7 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             s.prefs.webex_user.clear();
             s.webex.signing_in = false;
             s.webex.sign_in_error = None;
+            s.webex.unacknowledged.clear();
             s.push_job(Job::WebexSignOut);
             Ok(json!({}))
         })
@@ -108,6 +109,7 @@ fn update(s: &mut Session, v: &Value) -> CmdResult {
         return Err(CmdError::Disabled(SETUP.into()));
     }
     let before = s.webex.sent.insert(id.clone(), after.clone()).unwrap_or_default();
+    s.webex.unacknowledged.entry(id.clone()).or_default().push_back(before.clone());
     s.push_job(Job::WebexUpdate { client_id: s.prefs.webex_client_id.clone(), id: id.clone(), before, after, quiet });
     Ok(json!({"id": id}))
 }
@@ -128,6 +130,7 @@ fn delete(s: &mut Session, v: &Value) -> CmdResult {
         return Err(CmdError::Disabled(SETUP.into()));
     }
     s.webex.sent.remove(&id);
+    s.webex.unacknowledged.remove(&id);
     s.webex_delete(id, p::bool(v, "quiet").unwrap_or(false));
     Ok(json!({}))
 }

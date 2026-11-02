@@ -783,3 +783,40 @@ fn a_failed_update_is_sent_again_by_the_next_save() {
     assert!(webex_jobs(&mut s).is_empty());
     done(s);
 }
+
+/// Two updates on their way and both refused: Webex still has the first start, and the next save
+/// sends both changes.
+#[test]
+fn two_failed_updates_are_both_sent_again() {
+    let mut s = signed_in("webex-resend-two");
+    let uid = alone(&mut s);
+    let original = WebexFields::of(&s.find_event(&uid).unwrap().1.event);
+    s.webex.sent.insert("m1".into(), original.clone());
+    s.run("event.update", &json!({"uid": uid, "summary": "Budget 2"})).unwrap();
+    s.run("event.update", &json!({"uid": uid, "summary": "Budget 3"})).unwrap();
+    assert_eq!(webex_jobs(&mut s).len(), 2);
+    for _ in 0..2 {
+        s.apply(Event::WebexUpdated { id: "m1".into(), meeting: None, error: Some(WebexError::Failed("no network".into())) });
+    }
+    assert_eq!(s.webex.sent.get("m1"), Some(&original));
+    s.run("event.update", &json!({"uid": uid, "location": "Room 2"})).unwrap();
+    let jobs = webex_jobs(&mut s);
+    let [Job::WebexUpdate { before, after, .. }] = &jobs[..] else { panic!("{jobs:?}") };
+    assert_eq!((before, after.title.as_str()), (&original, "Budget 3"));
+    done(s);
+}
+
+/// The command's updates leave a start too, and a delete or a sign-out forgets them.
+#[test]
+fn updates_by_command_leave_a_start_until_deleted_or_signed_out() {
+    let mut s = signed_in("webex-unacknowledged");
+    let p = json!({"id": "m1", "summary": "Budget", "start": "2026-10-21T15:00"});
+    s.run("webex.updateMeeting", &p).unwrap();
+    assert_eq!(s.webex.unacknowledged.get("m1").map(|q| q.len()), Some(1));
+    s.run("webex.deleteMeeting", &json!({"id": "m1"})).unwrap();
+    assert!(s.webex.unacknowledged.is_empty());
+    s.run("webex.updateMeeting", &p).unwrap();
+    s.run("webex.signOut", &json!({})).unwrap();
+    assert!(s.webex.unacknowledged.is_empty());
+    done(s);
+}
