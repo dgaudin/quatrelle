@@ -111,3 +111,15 @@ Hotmail and Live addresses aren't affected: those are known by their domain.
   Graph**, which reaches the mailbox without IMAP (and brings its calendar and contacts): the
   account starts again through Graph.
 
+
+## Webex: a fixed port, and a client secret
+
+Webex is not a mail sign-in; it schedules meetings (see [webex.md](webex.md)). Its sign-in uses
+the same browser flow with two differences:
+
+- **A fixed redirect port, 53683.** An integration on developer.webex.com registers each Redirect
+  URI exactly, port included (`http://127.0.0.1:53683/`). The ephemeral port the other sign-ins
+  use can't match it, so Webex's listens on this one port. If it is in use, the sign-in says so.
+- **A client secret, even with PKCE.** Webex's token request requires `client_secret`. Nothing is
+  built into Quatrelle: the integration is the user's own, its client id is a setting, and its
+  secret is typed into Options and kept in the system keychain, never in a file.

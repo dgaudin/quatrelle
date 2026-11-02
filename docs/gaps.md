@@ -18,6 +18,7 @@ _Status: v0.22, 2026-10-22._
 | 4 | **Drag attachments out on a Wayland-only desktop** | Works on Windows, macOS, and Linux and the BSDs under X11 (XDND), and on Wayland desktops through XWayland, which the window opens on by default. With `QUATRELLE_WAYLAND=1`, or on a desktop without XWayland, the window is native Wayland, where it would need the compositor's data-device drag from the window's own Wayland connection, which egui's window layer doesn't share (reaching it would take unsafe code). |
 | 5 | **On-premises Exchange: Kerberos-only servers** | EWS signs in with NTLMv2 or Basic and is found with Autodiscover; a server that only takes Kerberos can't be signed in to. ActiveSync is licensed and out of scope. |
 | 6 | **Public folders on Exchange Online** | Public folders list and sync on on-premises Exchange through EWS. Exchange Online reaches them only through EWS, which Microsoft blocks there from October 2026 and removes in April 2027, and Microsoft Graph has no public folders; its suggested replacement, Microsoft 365 Groups, needs permissions only a tenant's administrator can grant. |
+| 7 | **Webex meetings: not yet confirmed on a real account** | Built and tested against a fake Webex only. A real account must still confirm the browser sign-in, a create, an update and a delete, `"recurrence": null` when a repeat is removed, that no second invitation goes out, and the extended property on real on-premises Exchange (`docs/webex.md`, section 6). Webex refuses several days or dates in a monthly or yearly rule; the error is shown, nothing is converted. |
 
 ## Done
 
@@ -802,3 +803,11 @@ tester's does, a contact as Exchange keeps it, Outlook's clipboard), then fixed 
   sideways when it's wider than the pane, as Outlook shows it. Their cells went one under the
   other (no column of twelve could be 140 wide). Only a layout's two or three columns squeezed
   narrower than that stack now; one the message asks narrow (a signature's logo) no longer does.
+- **Webex Meeting makes a real meeting** (`docs/webex.md`): the button's click schedules a meeting
+  on the user's Webex site through its REST API (title, times, time zone and repeat from the
+  appointment; link, number, password and video address from the answer) in place of writing the
+  personal room's link, which stays as "Use my personal room" in the button's menu. The user's own
+  integration (client id and secret in Options, the secret and refresh token in the keychain,
+  redirect port 53683). Saving the appointment updates the meeting, deleting it deletes the meeting,
+  a window closed unsaved deletes the one it made; only events the user organizes are followed, and
+  guests get no second invitation. The id rides on the event in iCalendar, EWS and Graph.
