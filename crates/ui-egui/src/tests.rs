@@ -490,6 +490,18 @@ pub(crate) fn pim_tour(a: &mut MailApp, ctx: &egui::Context) {
     a.session.rooms.insert("sample".into(), quatrelle_engine::Fetched::Failed("no directory".into()));
     frame(ctx, a, vec![]);
     a.ui.dialog = None;
+    // The calendar's search: what it finds, each switch, and nothing found.
+    for (q, when) in [
+        ("a", quatrelle_engine::EventWhen::All),
+        ("stand-up", quatrelle_engine::EventWhen::Past),
+        ("review", quatrelle_engine::EventWhen::Upcoming),
+        ("nothing-like-it", quatrelle_engine::EventWhen::Upcoming),
+    ] {
+        a.ui.cal_search.query = q.into();
+        a.ui.cal_search.when = when;
+        frame(ctx, a, vec![]);
+    }
+    a.ui.cal_search = Default::default();
     a.run("view.module", json!({"name": "people"}));
     frame(ctx, a, vec![]);
     a.ui.person = a.session.people("").first().map(|p| p.card.uid.clone());

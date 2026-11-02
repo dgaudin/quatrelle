@@ -1862,3 +1862,7 @@ month	May	5月
 	Don't allow	許可しない
 	{domain} is waiting for your answer	{domain} はあなたの回答を待っています
 	Other servers allowed	許可した他のサーバー
+	All calendars	すべての予定表
+	No events match.	一致する予定はありません。
+	Past	過去
+	Search calendar (location:, organizer:, after:…)	予定表を検索 (location:, organizer:, after:…)

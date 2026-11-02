@@ -1866,3 +1866,7 @@ kind	Address	地址
 	Don't allow	不允許
 	{domain} is waiting for your answer	{domain} 正在等待您的回覆
 	Other servers allowed	已允許的其他伺服器
+	All calendars	所有行事曆
+	No events match.	沒有符合的活動。
+	Past	過去
+	Search calendar (location:, organizer:, after:…)	搜尋行事曆 (location:, organizer:, after:…)

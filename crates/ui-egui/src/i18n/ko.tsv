@@ -1864,3 +1864,7 @@ month	May	5월
 	Don't allow	허용 안 함
 	{domain} is waiting for your answer	{domain}이(가) 답변을 기다리고 있습니다
 	Other servers allowed	허용된 다른 서버
+	All calendars	모든 일정
+	No events match.	일치하는 일정이 없습니다.
+	Past	지난 일정
+	Search calendar (location:, organizer:, after:…)	일정 검색 (location:, organizer:, after:…)
