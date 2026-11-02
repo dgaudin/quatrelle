@@ -320,13 +320,13 @@ pub(super) fn commands() -> Vec<CommandSpec> {
     ]
 }
 
-/// An event from command params, starting from `e` (what's not given stays).
 /// The user, as the organizer of a meeting in `account`.
 fn organizer_of(s: &Session, account: &str) -> quatrelle_model::ical::Attendee {
     let (name, email) = s.account(account).map(|a| (a.config.name.clone(), a.config.email.clone())).unwrap_or_default();
     quatrelle_model::ical::Attendee { email, name, partstat: "ACCEPTED".into(), rsvp: false, cutype: String::new(), role: String::new() }
 }
 
+/// An event from command params, starting from `e` (what's not given stays).
 pub(super) fn event_from(s: &Session, v: &Value, mut e: quatrelle_model::ical::CalEvent) -> Result<quatrelle_model::ical::CalEvent, CmdError> {
     let when = |k: &str| -> Result<Option<(i64, bool)>, CmdError> {
         match p::str(v, k) {
