@@ -23,7 +23,7 @@ impl Http for Server<'_> {
             [b'!', s, rest @ ..] => (u16::from(*s) * 3, rest.to_vec()),
             _ => (200, a.to_vec()),
         };
-        Ok(Response { status, body })
+        Ok(Response { status, body, url: None })
     }
 }
 
@@ -40,7 +40,7 @@ fuzz_target!(|data: &[u8]| {
     }
     let server = Server { answers: data.split(|b| *b == 0x0c).collect(), next: Cell::new(0) };
     jmap::block_on(async {
-        let Ok(c) = Client::connect(server, "https://jmap.example/", "me", "pw", false).await else { return };
+        let Ok(c) = Client::connect(server, "https://jmap.example/", "me", "pw", false, &[]).await else { return };
         let _ = c.events_url();
         let store = Store::memory();
         let mut st = State::default();

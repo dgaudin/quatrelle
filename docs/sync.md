@@ -66,7 +66,7 @@ messages already kept are never asked for again, and it stops by itself once the
 
 A message can arrive in two ways. The usual one is `Job::FetchBody`: the whole source, then
 `Event::Body`. The second is `Job::FetchTextFirst`, chosen by `Session::fetch_job` for an EWS or
-Graph message that is not older mail read online, has files, and (EWS) is over 1 MiB. The
+Graph message that is not older mail read online, has files, and (EWS) is 1 MiB or more. The
 worker asks the server for its body, headers and file list alone (EWS `GetItem` with named
 fields, Graph `$expand=attachments`), builds a message from them with `mime::text_first` (its
 files listed empty) and sends `Event::TextFirst`, so the pane shows the text at once. The whole
@@ -80,7 +80,9 @@ Any failure of the text request sends the message the usual way; only a refused 
 refuses the request (a field it doesn't know) turns the feature off for the session. If the
 whole message is already stored, the thread answers with `Event::Body` straight away, so the
 interface never waits for ever. A failed whole message gives `Event::BodyFailed` and the pane's
-"Try again". "Download all", the CLI and the sync's own prefetch stay whole. The fuzz target
+"Try again". "Download all", the CLI and the sync's own prefetch stay whole.
+Left whole as well: the Outbox, older mail read online, signed or encrypted mail, invitations
+and a message with a protected file. The fuzz target
 `text_first` covers the two builders.
 
 ## The worker loop
