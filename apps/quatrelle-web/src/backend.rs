@@ -395,7 +395,7 @@ async fn job(sh: &Rcs, id: &str, j: Job) {
             }
         }
         Job::SyncFolder { folder, .. } => sync_one(sh, id, &folder).await,
-        Job::FetchBody { key } => {
+        Job::FetchBody { key } | Job::FetchTextFirst { key } => {
             let r = match client(sh, id) {
                 Some(c) => quatrelle_jmap::fetch_body(&c, &state(sh, id), &store, &key).await,
                 None => store.read_body(&key).ok_or_else(|| Error::No("not downloaded yet, and the account is offline".into())),
@@ -819,7 +819,7 @@ impl Backend for WebBackend {
                 let id = other.account().to_string();
                 if sh.borrow().accounts.contains_key(&id) {
                     enqueue(sh, &id, Task::Job(other));
-                } else if let Job::FetchBody { key } = other {
+                } else if let Job::FetchBody { key } | Job::FetchTextFirst { key } = other {
                     // The sample mailbox and other accounts with no server: the cache has it or nobody does.
                     let raw = store(sh).read_body(&key);
                     match raw {

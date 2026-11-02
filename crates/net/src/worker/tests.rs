@@ -409,3 +409,20 @@ fn a_look_stopped_elsewhere_is_merged_and_asked_once() {
     assert_eq!(asked, [&Event::TrustAsked { account: "a1".into(), site: "localhost".into() }]);
     assert!(!w.dav_waits, "the rest of the sync goes on");
 }
+
+#[test]
+fn what_someone_waits_on_jumps_the_queue() {
+    let key = MessageKey::default();
+    for j in [Job::FetchBody { key: key.clone() }, Job::FetchTextFirst { key: key.clone() }, Job::ReadOnline { key: key.clone() }] {
+        assert!(jumps_queue(&j) && between_folders(&j), "{j:?}");
+    }
+}
+
+#[test]
+fn a_text_asked_for_twice_is_asked_once() {
+    let mut q = VecDeque::new();
+    let j = Job::FetchTextFirst { key: MessageKey::default() };
+    push_job(&mut q, j.clone());
+    push_job(&mut q, j);
+    assert_eq!(q.len(), 1);
+}

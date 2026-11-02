@@ -271,6 +271,8 @@ impl Session {
                 self.index_body(&key, &raw);
                 self.downloaded(&key, true);
             }
+            // The text ahead of the whole message: shown once the session handles it (later).
+            Event::TextFirst { .. } => {}
             Event::BodyFailed { key, error } => {
                 for w in self.windows.iter_mut().filter(|w| w.key == key && w.parsed.is_none()) {
                     w.error = Some(error.clone());

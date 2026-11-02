@@ -250,6 +250,10 @@ pub enum Job {
     StopSearch,
     /// Download a message's full source.
     FetchBody { key: MessageKey },
+    /// A message's text first, for one over [`TEXT_FIRST_OVER`] bytes: answered by
+    /// [`Event::TextFirst`] with a source holding the text, then by [`Event::Body`] with the
+    /// whole message as any.
+    FetchTextFirst { key: MessageKey },
     /// Apply a mailbox change on the server.
     Apply { account: String, op: Op },
     /// Submit a message over SMTP, then file a copy in the Sent folder (when the server doesn't
@@ -424,7 +428,7 @@ impl Job {
     pub fn account(&self) -> &str {
         match self {
             Job::Start { account, .. } | Job::SmtpPassword { account, .. } => &account.id,
-            Job::FetchBody { key } | Job::ReadOnline { key } | Job::Vote { key, .. } => &key.account,
+            Job::FetchBody { key } | Job::FetchTextFirst { key } | Job::ReadOnline { key } | Job::Vote { key, .. } => &key.account,
             Job::Remove { account }
             | Job::SyncAll { account }
             | Job::SyncFolder { account, .. }
@@ -488,6 +492,10 @@ impl Job {
         }
     }
 }
+
+/// A message of more bytes than this is shown by its text first, the whole message following
+/// ([`Job::FetchTextFirst`]).
+pub const TEXT_FIRST_OVER: u32 = 1 << 20;
 
 /// The folder Exchange's public folders are listed under. They are the organisation's, often
 /// huge (years of automatic reports): as in Outlook, only the ones made Favorites are kept in

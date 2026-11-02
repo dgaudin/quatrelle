@@ -385,7 +385,7 @@ impl Pool {
                 // No connection: the local index's answer stands.
                 self.sink.emit(Event::Found { account, query, items: Vec::new(), error: Some("the account is offline".into()) });
             }
-            Job::FetchBody { key } if !self.workers.contains_key(&key.account) => {
+            Job::FetchBody { key } | Job::FetchTextFirst { key } if !self.workers.contains_key(&key.account) => {
                 // Offline or not started: the cache may still have it.
                 match self.store.read_body(&key) {
                     Some(raw) => self.sink.emit(Event::Body { key, raw }),
