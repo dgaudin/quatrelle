@@ -47,9 +47,9 @@ fn plain_type(m: &str) -> String {
     if ok { m.to_ascii_lowercase() } else { "application/octet-stream".into() }
 }
 
-/// [`parse`] for a message built by [`text_first`], and only one: a recipient with a name alone
-/// stays (an empty `email`: not known yet), as `text_first` writes it. Ordinary mail goes
-/// through [`parse`], which keeps addresses only.
+/// [`parse`] for a message built by [`text_first`], and only one: a sender or a recipient with a
+/// name alone stays (an empty `email`: not known yet), as `text_first` writes it. Ordinary mail
+/// goes through [`parse`], which keeps addresses only.
 pub fn parse_text_first(raw: &[u8]) -> Option<Parsed> {
     crate::parse_as(raw, crate::addrs_with_names)
 }
@@ -146,6 +146,7 @@ mod tests {
     fn ordinary_mail_keeps_only_addresses() {
         let raw = b"To: Alex Martin, b@x.example\r\nFrom: Nobody\r\nSender: s@x.example\r\nSubject: s\r\n\r\nb";
         assert_eq!(parse(raw).unwrap().to, vec![EmailAddress::new("", "b@x.example")]);
+        assert_eq!(parse(raw).unwrap().from, EmailAddress::default(), "a name-only From stays out too");
         // The list falls back to the sender when From has no address.
         let sum = summary_from_header(raw, MessageKey::default(), Flags::default(), 0, 0);
         assert_eq!(sum.from.email, "s@x.example");

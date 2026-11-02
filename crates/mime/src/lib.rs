@@ -303,7 +303,7 @@ pub fn parse(raw: &[u8]) -> Option<Parsed> {
     parse_as(raw, addrs)
 }
 
-/// [`parse`], reading the recipients' addresses with `read` (see [`parse_text_first`]).
+/// [`parse`], reading the sender's and the recipients' addresses with `read` (see [`parse_text_first`]).
 fn parse_as(raw: &[u8], read: fn(Option<&Address<'_>>) -> Vec<EmailAddress>) -> Option<Parsed> {
     let m = MessageParser::default().parse(raw)?;
     // mail-parser lists text parts among the HTML bodies too (converted); only real HTML counts.
@@ -357,7 +357,7 @@ fn parse_as(raw: &[u8], read: fn(Option<&Address<'_>>) -> Vec<EmailAddress>) -> 
     };
     Some(Parsed {
         subject: m.subject().unwrap_or_default().trim().to_string(),
-        from: addrs(m.from()).into_iter().next().unwrap_or_default(),
+        from: read(m.from()).into_iter().next().unwrap_or_default(),
         reply_to: read(m.reply_to()),
         to: read(m.to()),
         cc: read(m.cc()),
