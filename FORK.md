@@ -621,6 +621,30 @@ l'origine : Windows fait le caractère au relâchement d'Alt, et winit l'écarte
   lecture des pages reste dans `mime/src/files/` : elle a besoin des décodeurs de mail-parser,
   et `mime/src/` a déjà ses 16 fichiers.
 
+### État de la récupération : v0.31, première partie : les défauts présents ici (2026-11-02)
+
+L'origine a ajouté 73 commits après `706ca2f2` (jusqu'à `9413d410`, la v0.31). Même méthode, sur la
+branche `zidan-v0.31`. Cette partie ne prend que les défauts vérifiés dans le code de ce fork.
+
+- **Repris** : `d03d4805` (le lieu d'une photo retiré en une passe, quels que soient ses décalages,
+  trouvé par le fuzz de l'origine) ; `1cda3112` (heures aux extrémités de la plage sans
+  dépassement) ; `1852371d` (le premier message d'une Boîte de réception vide compte comme nouveau).
+  Ce dernier suppose que `Online` veut dire « courrier entièrement lu » : c'est vrai ici aussi, le
+  premier `Online` d'une session n'est dit qu'à la fin de la passe complète (`last_full`).
+- **Adapté** : `6ecf53b2` (une synchro de calendrier en attente n'est demandée qu'une fois) : le côté
+  réseau était déjà là, seul le moteur manquait, et `settle_answers` passe par le même chemin ;
+  `5c4a9d33` (une classification n'est jamais perdue) : ce fork a son propre modèle, sans
+  `ical/showing.rs`. Le défaut y était plus large : toute modification renvoyait `Personal` en
+  `Normal` et `Confidential` en `Private`, sur les rendez-vous comme sur les tâches.
+  `CalEvent::private_kind` et `Task::private_kind` gardent le mot tant que le verrou reste. L'autre
+  moitié du commit (un `CLASS` au-delà de 200 lignes) ne s'applique pas : `CLASS` est lu avant le
+  plafond. Graph n'envoie toujours pas la sensibilité. Les éléments déjà dans le cache gardent
+  l'ancienne lecture tant qu'ils ne changent pas sur le serveur.
+- **Corrigé hors de l'origine** : un tableau de rapport dont une cellule vide disparaissait dans les
+  rangées sans couleur (les cellules suivantes glissaient sous le mauvais titre) ; voir `0f9113c0`.
+- **Reste à faire** : `~/mailcraft/merge-tools/survey-v0.31.md` donne les lots suivants et les commits
+  laissés.
+
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
 Quatre chantiers, chacun dans son commit, à la suite d'un audit de l'éditeur HTML.
