@@ -268,6 +268,47 @@ fn plain_mail_and_one_column_tables_have_no_layout() {
     assert!(!html_layout("<table><tr><th>Item</th><th>Price</th></tr><tr><td>Poster</td><td>40</td></tr></table>").is_empty());
 }
 
+/// An empty cell in a report holds its place: left out, the cells after it slid under the wrong
+/// headings, in the white rows only (a striped row's colour kept its empty cells).
+#[test]
+fn an_empty_cell_holds_its_place_in_its_column() {
+    let b = html_layout(
+        "<table><tr><th>Who</th><th>Ticket</th><th>Server</th></tr>\
+         <tr><td>Ann</td><td></td><td>S1</td></tr>\
+         <tr bgcolor=\"#dddddd\"><td>Bob</td><td></td><td>S2</td></tr>\
+         <tr><td>Cid</td><td>&nbsp;</td><td>S3</td></tr>\
+         <tr><td>Dee</td><td>T4</td></tr></table>",
+    );
+    let Some(Block::Table(t)) = b.first() else { panic!("a table: {b:?}") };
+    let shape: Vec<usize> = t.rows.iter().map(Vec::len).collect();
+    assert_eq!(shape, [3, 3, 3, 3, 2], "a short row stays short");
+    for (row, server) in [(1, "S1"), (2, "S2"), (3, "S3")] {
+        let cell = t.rows.get(row).and_then(|r| r.get(2)).expect("a third cell");
+        assert_eq!(cell.blocks.first().map(text).as_deref(), Some(server));
+    }
+}
+
+/// What's empty all the way down is a layout's spacer, and is left out as it always was: a
+/// gutter between two columns (under a banner across them too), a row of nothing.
+#[test]
+fn a_column_or_a_row_of_nothing_is_left_out() {
+    let shape = |html: &str| {
+        let b = html_layout(html);
+        let Some(Block::Table(t)) = b.first() else { panic!("a table: {b:?}") };
+        t.rows.iter().map(Vec::len).collect::<Vec<usize>>()
+    };
+    assert_eq!(shape("<table><tr><td>Left</td><td></td><td>Right</td></tr></table>"), [2]);
+    assert_eq!(
+        shape(
+            "<table><tr><td colspan=\"3\">Banner</td></tr><tr><td>A</td><td width=\"20\">&nbsp;</td><td>B</td></tr><tr><td>C</td><td></td><td>D</td></tr></table>"
+        ),
+        [1, 2, 2]
+    );
+    assert_eq!(shape("<table><tr><td>A</td><td>B</td></tr><tr><td></td><td></td></tr><tr><td>C</td><td>D</td></tr></table>"), [2, 2]);
+    // An empty cell across columns that show something holds their place.
+    assert_eq!(shape("<table><tr><td>A</td><td>B</td><td>C</td><td>D</td></tr><tr><td>E</td><td colspan=\"2\"></td><td>F</td></tr></table>"), [4, 3]);
+}
+
 #[test]
 fn hostile_markup_is_survived() {
     // Unclosed, misnested, deep, huge.
