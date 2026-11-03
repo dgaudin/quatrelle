@@ -1,0 +1,111 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
+//! Engine tests: what the agenda says of each appointment (private, how it shows, the user's
+//! answer), and changing those without telling the guests.
+
+use quatrelle_model::ical::{Attendee, CalEvent, ShowAs};
+use quatrelle_model::pim::{CalendarInfo, DavSync, StoredEvent};
+
+use super::*;
+
+const DAY: i64 = 86_400;
+
+fn around(s: &Session) -> Vec<crate::AgendaItem> {
+    s.agenda(NOW - 30 * DAY, NOW + 30 * DAY)
+}
+
+fn item(s: &Session, summary: &str) -> crate::AgendaItem {
+    around(s).into_iter().find(|i| i.summary == summary).unwrap_or_else(|| panic!("`{summary}` is not in the agenda"))
+}
+
+fn sent(s: &Session) -> usize {
+    s.store.as_ref().unwrap().load_folder("sample", "Sent").unwrap().messages.len()
+}
+
+fn guest(email: &str, partstat: &str) -> Attendee {
+    Attendee { email: email.into(), name: email.into(), partstat: partstat.into(), rsvp: true, ..Default::default() }
+}
+
+/// Put an event in the agenda: in the sample's own calendar, or in a server calendar.
+fn put_event(s: &mut Session, read_only: bool, event: CalEvent) {
+    let cal = "https://dav.example.org/cal/work/".to_string();
+    let sync = DavSync {
+        caldav_home: Some("https://dav.example.org/cal/".into()),
+        calendars: Some(vec![CalendarInfo { id: cal.clone(), name: "Work".into(), color: 1, read_only, ctag: "a".into(), group: String::new() }]),
+        events: vec![StoredEvent { calendar: cal.clone(), href: format!("{cal}x.ics"), etag: "\"1\"".into(), event, ..Default::default() }],
+        synced_calendars: vec![cal],
+        checked: NOW,
+        ..Default::default()
+    };
+    s.apply(Event::DavSynced { account: "sample".into(), sync: Box::new(sync) });
+}
+
+fn meeting(uid: &str, organizer: Option<&str>, my_answer: &str, guests: Vec<Attendee>) -> CalEvent {
+    CalEvent {
+        uid: uid.into(),
+        summary: "Planning".into(),
+        start: NOW + DAY,
+        end: NOW + DAY + 3600,
+        organizer: organizer.map(|o| guest(o, "ACCEPTED")),
+        attendees: guests,
+        my_answer: my_answer.into(),
+        ..Default::default()
+    }
+}
+
+#[test]
+fn the_agenda_says_private_show_as_and_answer() {
+    let mut s = sample_session("showing-agenda");
+    let lunch = item(&s, "Lunch with Jun");
+    assert!(lunch.private && lunch.answer.is_none(), "{lunch:?}");
+    assert_eq!(item(&s, "Winter group show opening").show_as, ShowAs::OutOfOffice);
+    let mix = item(&s, "Sound mix playback");
+    assert_eq!(mix.answer.as_deref(), Some("NEEDS-ACTION"));
+    s.run("event.respond", &json!({"uid": mix.uid, "answer": "accepted"})).unwrap();
+    assert_eq!(item(&s, "Sound mix playback").answer.as_deref(), Some("ACCEPTED"));
+
+    let listed = s.run("calendar.events", &json!({"from": "2026-09-15", "to": "2026-11-30"})).unwrap();
+    let find = |name: &str| listed.as_array().unwrap().iter().find(|e| e["summary"] == name).unwrap().clone();
+    assert_eq!(find("Lunch with Jun")["private"], json!(true));
+    assert_eq!(find("Winter group show opening")["showAs"], json!("outOfOffice"));
+    assert_eq!(find("Sound mix playback")["answer"], json!("ACCEPTED"));
+    assert_eq!(find("Lunch with Jun")["answer"], json!(null));
+}
+
+#[test]
+fn an_organizer_without_a_known_address_is_answered_by_my_answer() {
+    let mut s = sample_session("showing-no-organizer");
+    put_event(&mut s, false, meeting("a@x", None, "TENTATIVE", vec![guest("zoe@studio.example", "ACCEPTED")]));
+    assert_eq!(item(&s, "Planning").answer.as_deref(), Some("TENTATIVE"));
+    put_event(&mut s, false, meeting("a@x", None, "", vec![guest("zoe@studio.example", "ACCEPTED")]));
+    assert_eq!(item(&s, "Planning").answer, None);
+}
+
+#[test]
+fn a_read_only_calendars_meeting_has_no_answer() {
+    let mut s = sample_session("showing-read-only");
+    let invitation = meeting("b@x", Some("ana@soundlab.example"), "", vec![guest("riley@studio.example", "NEEDS-ACTION")]);
+    put_event(&mut s, false, invitation.clone());
+    assert_eq!(item(&s, "Planning").answer.as_deref(), Some("NEEDS-ACTION"), "writable: the answer is awaited");
+    put_event(&mut s, true, invitation);
+    assert_eq!(item(&s, "Planning").answer, None);
+}
+
+#[test]
+fn private_and_show_as_change_without_telling_the_guests() {
+    let mut s = sample_session("showing-silent");
+    let start = "2026-10-20T10:00";
+    let uid = s
+        .run("event.create", &json!({"summary": "Kick-off", "start": start, "end": "2026-10-20T11:00", "attendees": "zoe@studio.example"}))
+        .unwrap()["uid"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let before = sent(&s);
+    s.run("event.update", &json!({"uid": uid, "private": true, "showAs": "free", "send": false})).unwrap();
+    let e = s.find_event(&uid).unwrap().1.event.clone();
+    assert!(e.private && e.show_as == ShowAs::Free, "{e:?}");
+    assert_eq!(sent(&s), before, "the guests heard nothing");
+    s.run("event.update", &json!({"uid": uid, "summary": "Renamed"})).unwrap();
+    assert_eq!(sent(&s), before + 1);
+}

@@ -95,6 +95,13 @@ pub struct AgendaItem {
     pub movable: bool,
     /// A meeting the user organizes, with guests to tell of a change.
     pub organized: bool,
+    /// Private: the people a calendar is shared with see it as a busy time only.
+    pub private: bool,
+    /// How it shows the user's time.
+    pub show_as: quatrelle_model::ical::ShowAs,
+    /// The user's answer (`ACCEPTED`, `TENTATIVE`, `DECLINED` or `NEEDS-ACTION`) when it's a
+    /// meeting someone else organizes in a calendar the user can write; `None` otherwise.
+    pub answer: Option<String>,
 }
 
 /// A calendar colour of this or above is an account's colour ([`Session::calendar_color`]).
@@ -318,7 +325,11 @@ impl Session {
                     }
                     let needs_reply = e.attendees.iter().any(|a| mine.contains(&a.email.to_ascii_lowercase()) && a.partstat == "NEEDS-ACTION");
                     let organizer_is_me = e.organizer.as_ref().is_some_and(|o| mine.contains(&o.email.to_ascii_lowercase()));
+                    let answer = if cal.read_only { None } else { self.answer_to(e, &mine) };
                     out.push(AgendaItem {
+                        private: e.private,
+                        show_as: e.show_as,
+                        answer,
                         movable: !cal.read_only && (e.attendees.is_empty() || e.organizer.is_none() || organizer_is_me),
                         organized: !e.attendees.is_empty() && organizer_is_me,
                         account: account.clone(),
@@ -342,6 +353,24 @@ impl Session {
         }
         out.sort_by(|a, b| (b.all_day, a.start, &a.summary).cmp(&(a.all_day, b.start, &b.summary)));
         out
+    }
+
+    /// The user's answer to a meeting someone else organizes: the organizer is known and isn't
+    /// the user, or isn't known and the user has answered. Their own answer when set, else their
+    /// guest line's, else awaited.
+    fn answer_to(&self, e: &CalEvent, mine: &[String]) -> Option<String> {
+        let theirs = match &e.organizer {
+            Some(o) => !mine.contains(&super::invite::without_mailto(&o.email).to_ascii_lowercase()),
+            None => !e.my_answer.is_empty(),
+        };
+        if !theirs || (e.attendees.is_empty() && e.my_answer.is_empty()) {
+            return None;
+        }
+        if !e.my_answer.is_empty() {
+            return Some(e.my_answer.clone());
+        }
+        let line = e.attendees.iter().find(|a| mine.contains(&super::invite::without_mailto(&a.email).to_ascii_lowercase()));
+        Some(line.map(|a| a.partstat.clone()).filter(|p| !p.is_empty()).unwrap_or_else(|| "NEEDS-ACTION".into()))
     }
 
     /// A category's colour by its name: the one made with that name (mail and events share

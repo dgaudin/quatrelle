@@ -47,7 +47,7 @@ pub fn sample_pim(now: i64, offset: i64) -> quatrelle_model::pim::Pim {
             ],
             ..ev("review", "Storyboard review", at(monday + 3, 14, 0), at(monday + 3, 15, 30))
         },
-        CalEvent { location: "Café on the corner".into(), ..ev("lunch", "Lunch with Jun", at(today, 12, 30), at(today, 13, 30)) },
+        CalEvent { location: "Café on the corner".into(), private: true, ..ev("lunch", "Lunch with Jun", at(today, 12, 30), at(today, 13, 30)) },
         CalEvent {
             location: "Sound Lab".into(),
             organizer: Some(who("Ana Lima", "ana@soundlab.example", "ACCEPTED")),
@@ -55,7 +55,11 @@ pub fn sample_pim(now: i64, offset: i64) -> quatrelle_model::pim::Pim {
             ..ev("mix", "Sound mix playback", at(today + 1, 11, 0), at(today + 1, 12, 0))
         },
         CalEvent { all_day: true, ..ev("poster", "Poster to the print shop", (today + 2) * 86_400, (today + 3) * 86_400) },
-        CalEvent { location: "Community Gallery".into(), ..ev("opening", "Winter group show opening", at(today + 9, 18, 0), at(today + 9, 21, 0)) },
+        CalEvent {
+            location: "Community Gallery".into(),
+            show_as: quatrelle_model::ical::ShowAs::OutOfOffice,
+            ..ev("opening", "Winter group show opening", at(today + 9, 18, 0), at(today + 9, 21, 0))
+        },
     ];
     let person = |uid: &str, name: &str, email: &str, org: &str, title: &str, phone: &str| Card {
         uid: format!("{uid}@sample.quatrelle"),

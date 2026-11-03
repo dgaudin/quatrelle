@@ -70,6 +70,7 @@ pub(super) fn commands() -> Vec<CommandSpec> {
                 "uid": i.uid, "summary": i.summary, "location": i.location, "start": i.start, "end": i.end, "allDay": i.all_day,
                 "occurrence": i.occurrence, "recurring": i.recurring, "account": i.account, "calendar": i.calendar,
                 "needsReply": i.needs_reply, "status": i.status, "movable": i.movable, "organized": i.organized,
+                "private": i.private, "showAs": i.show_as.param(), "answer": i.answer,
             })).collect::<Vec<_>>()))
         })
         .params(r#"{"from"?: date or date-time, "to"?: …} (default: what the calendar shows)"#),
@@ -164,11 +165,11 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             s.webex_follow(Some(&current), &e);
             // The user's own meeting: the guests hear of the change.
             if let Some((account, real)) = s.find_event(&uid).map(|(a, e)| (a.to_string(), e.event.uid.clone())) {
-                s.tell_guests(&account, &real, None, true)?;
+                s.tell_guests(&account, &real, None, p::bool(v, "send").unwrap_or(true))?;
             }
             Ok(r)
         })
-        .params(r#"{"uid": string, … the fields of event.create to change}"#),
+        .params(r#"{"uid": string, "send"?: bool (the guests of a meeting you organize hear of the change; default true), … the fields of event.create to change}"#),
         CommandSpec::new("event.move", "Move event", "Calendar › Event", |s, v| {
             let uid = p::req_str(v, "uid")?.to_string();
             let occurrence = p::i64(v, "occurrence");
