@@ -2,6 +2,8 @@
 //! every calendar shown or the one asked for. A recurring series is found once, at its next
 //! occurrence (or, when it's over, its last).
 
+use std::borrow::Cow;
+
 use quatrelle_model::ical::{EventQuery, ShowAs};
 
 use super::*;
@@ -114,10 +116,16 @@ impl Session {
                 for list in series {
                     // The series when it matches (its changed occurrences with it); else each
                     // changed occurrence that does, on its own.
-                    let master = list.iter().find(|e| e.recurrence_id.is_none()).copied();
-                    let groups: Vec<Vec<CalEvent>> = match master {
-                        Some(m) if q.matches(m) => vec![list.iter().map(|e| (*e).clone()).collect()],
-                        _ => list.iter().filter(|e| e.recurrence_id.is_some() && q.matches(e)).map(|e| vec![(*e).clone()]).collect(),
+                    // Only a series with changed occurrences is copied (to lie side by side).
+                    let master = list.iter().find(|e| e.recurrence_id.is_none()).is_some_and(|m| q.matches(m));
+                    let groups: Vec<Cow<[CalEvent]>> = match (master, list.as_slice()) {
+                        (true, [one]) => vec![Cow::Borrowed(std::slice::from_ref(*one))],
+                        (true, _) => vec![Cow::Owned(list.iter().map(|e| (*e).clone()).collect())],
+                        _ => list
+                            .iter()
+                            .filter(|e| e.recurrence_id.is_some() && q.matches(e))
+                            .map(|e| Cow::Borrowed(std::slice::from_ref(*e)))
+                            .collect(),
                     };
                     for events in groups {
                         let Some(Shown { event: o, named, start, end }) = self.shown_occurrence(&events, when, now, lo, hi) else { continue };

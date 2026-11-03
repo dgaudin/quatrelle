@@ -109,3 +109,181 @@ fn the_join_link_is_found_in_the_place() {
     assert!(m("teams.microsoft.com") && m("location:teams") && m("where:meetup"));
     assert!(!m("notes:teams"), "not in its notes");
 }
+
+/// A bare word looks through the fields one by one: a needle's words may each be in a different
+/// field, the notes are read last, and what the field's words are doesn't change.
+#[test]
+fn a_bare_word_looks_through_each_field() {
+    assert!(hit("board-budget"), "the subject's and the notes' words");
+    assert!(hit("2027 lima") && hit("studio clients"));
+    assert!(!hit("board-dinner"));
+    assert!(hit("notes:2027") && !hit("subject:2027"));
+    // A phrase written across fields (the separator in it) still finds them joined.
+    assert!(hit("\"meeting \u{1f} room\""));
+    // A word ending in a sigma is lowercased on its own (`ς`), the text as a whole may not be.
+    let road = CalEvent { summary: "ΟΔΟΣ^Α".into(), ..Default::default() };
+    for q in ["οδος", "ΟΔΟΣ", "οδο", "α"] {
+        assert!(EventQuery::parse(q).matches(&road), "{q}");
+    }
+    // An address or a room's number inside a word, an accented word, a word in a long note.
+    let mut notes = board();
+    notes.description = format!("{}Réunion du comité, salle B.12, écrire à info@post.example", "x ".repeat(5_000));
+    for q in ["réunion", "RÉUN", "comité", "b.12", "post.example", "info@post", "notes:salle"] {
+        assert!(EventQuery::parse(q).matches(&notes), "{q}");
+    }
+    for q in ["eunion", "notes:board", "ecrire"] {
+        assert!(!EventQuery::parse(q).matches(&notes), "{q}");
+    }
+    // Over several lines: each word on its line, a word cut by a line break isn't one.
+    notes.description = "Bonjour,\r\nCode secret : x123q\n\nRejoindre\u{2028}maintenant\nΟΔΟΣ\nfin-\nale ΣΑΣ".into();
+    for q in ["secret", "x123", "rejoindre", "maint", "οδος", "ale", "σας", "ΣΑΣ", "fin", "bonjour code"] {
+        assert!(EventQuery::parse(q).matches(&notes), "{q}");
+    }
+    for q in ["finale", "ecret", "jour", "notes:x123q,secretx"] {
+        assert_eq!(EventQuery::parse(q).matches(&notes), q.starts_with("notes:"), "{q}");
+    }
+    // A field starting with a mark that joins the space before it (a combining one that is part
+    // of a letter): its words are those it had among the fields joined.
+    let mark = CalEvent { location: "\u{345}".into(), description: "A".into(), ..Default::default() };
+    for q in ["\u{345}a", "\u{345}", "a", "location:\u{345}"] {
+        let parsed = EventQuery::parse(q);
+        assert_eq!(parsed.matches(&mark), matched_before(&parsed, &mark), "{q:?}");
+    }
+    assert!(!EventQuery::parse("\u{345}a").matches(&mark));
+}
+
+/// The search as it read events before it looked through them field by field: every field joined,
+/// lowercased and cut into words whole.
+fn matched_before(q: &EventQuery, e: &CalEvent) -> bool {
+    fn people(list: &[&Attendee]) -> String {
+        list.iter().map(|a| format!("{} {} ", a.name, a.email)).collect()
+    }
+    fn text(f: EventField, e: &CalEvent) -> String {
+        match f {
+            EventField::Subject => e.summary.clone(),
+            EventField::Location if e.join_url.is_empty() || e.location.contains(&e.join_url) => e.location.clone(),
+            EventField::Location => format!("{} \u{1f} {}", e.location, e.join_url),
+            EventField::Notes => e.description.chars().take(64 * 1024).collect(),
+            EventField::Organizer => people(&e.organizer.iter().collect::<Vec<_>>()),
+            EventField::Attendees => people(&e.attendees.iter().collect::<Vec<_>>()),
+            EventField::Categories => e.categories.join(" \u{1f} "),
+            EventField::Any => {
+                [EventField::Subject, EventField::Location, EventField::Organizer, EventField::Attendees, EventField::Categories, EventField::Notes]
+                    .into_iter()
+                    .map(|f| text(f, e))
+                    .collect::<Vec<_>>()
+                    .join(" \u{1f} ")
+            }
+        }
+    }
+    q.terms.iter().all(|(t, negated)| {
+        let hit = match t {
+            EventTerm::Private => e.private,
+            EventTerm::Recurring => e.rrule.is_some() || e.recurrence_id.is_some(),
+            EventTerm::Text(f, list) => {
+                let text = text(*f, e);
+                let lower = text.to_lowercase();
+                let have: Vec<String> = crate::search::words(&text).collect();
+                list.iter().any(|n| match n {
+                    Needle::Phrase(p) => lower.contains(p.as_str()),
+                    Needle::Words(ws) => {
+                        ws.iter().all(|w| have.iter().any(|h| h.starts_with(w.as_str())) || (w.contains(['@', '.']) && lower.contains(w.as_str())))
+                    }
+                })
+            }
+        };
+        hit != *negated
+    })
+}
+
+mod same_as_before {
+    use proptest::prelude::*;
+
+    use super::*;
+
+    /// Letters whose small form is odd (a sigma, a dotted capital I, the Kelvin sign), marks
+    /// written apart (accents, one that is a letter's part, a joiner, a soft hyphen), line breaks, an address's and a room's punctuation, the fields' separator.
+    const CHARS: &[char] = &[
+        'a', 'b', 'A', 'B', 'Σ', 'σ', 'ς', 'İ', 'i', 'K', '\u{212a}', 'k', 'é', 'e', '\u{301}', '\u{345}', '\u{200d}', '\u{ad}', ' ', '\n', '\r',
+        '@', '.', '-', ':', '^', '\u{1f}',
+    ];
+    const PIECES: &[&str] = &[
+        "a",
+        "ab",
+        "b",
+        "Σ",
+        "σας",
+        "ΑΣ",
+        "i",
+        "İ",
+        "k",
+        "é",
+        "e\u{301}",
+        "\u{345}a",
+        "@",
+        "a@b",
+        "b.a",
+        ".",
+        "\"a b\"",
+        "\"b \u{1f} a\"",
+        "\"\u{1f}\"",
+        "subject:",
+        "notes:",
+        "location:",
+        "organizer:",
+        "attendee:",
+        "category:",
+        "is:private",
+        "-",
+        " ",
+        " ",
+        ",",
+        "\"",
+    ];
+
+    fn text(max: usize) -> impl Strategy<Value = String> {
+        prop::collection::vec(prop::sample::select(CHARS), 0..max).prop_map(|v| v.into_iter().collect())
+    }
+
+    fn person() -> impl Strategy<Value = Attendee> {
+        (text(6), text(6)).prop_map(|(name, email)| Attendee { name, email, ..Default::default() })
+    }
+
+    fn event() -> impl Strategy<Value = CalEvent> {
+        (
+            text(10),
+            text(10),
+            text(8),
+            text(40),
+            prop::option::of(person()),
+            prop::collection::vec(person(), 0..3),
+            prop::collection::vec(text(5), 0..3),
+            any::<bool>(),
+        )
+            .prop_map(|(summary, location, join_url, description, organizer, attendees, categories, private)| CalEvent {
+                summary,
+                location,
+                join_url,
+                description,
+                organizer,
+                attendees,
+                categories,
+                private,
+                ..Default::default()
+            })
+    }
+
+    fn query() -> impl Strategy<Value = String> {
+        prop::collection::vec(prop::sample::select(PIECES), 1..6).prop_map(|v| v.concat())
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(3000))]
+        /// What a query finds is what it found before.
+        #[test]
+        fn a_query_finds_what_it_found_before(q in query(), e in event()) {
+            let parsed = EventQuery::parse(&q);
+            prop_assert_eq!(parsed.matches(&e), matched_before(&parsed, &e), "{:?} in {:?}", q, e);
+        }
+    }
+}

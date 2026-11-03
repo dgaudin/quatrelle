@@ -126,14 +126,61 @@ fn an_occurrence_moved_on_its_own_is_found_at_its_place() {
     done(s);
 }
 
-/// A big calendar (a second account's, 25,000 appointments, some of them daily series) is searched
-/// in well under a second, by words and by a field.
+/// Notes as an online meeting's invitation writes them (about a kilobyte): a few lines, a link
+/// to join, a number to dial in.
+fn invitation_notes(i: i64) -> String {
+    let mut notes = format!(
+        "Bonjour à tous,\n\nOrdre du jour : point d'étape n° {i}, budget prévisionnel, calendrier des livraisons et questions diverses.\n\
+         Merci de préparer vos éléments avant la séance.\n\n\
+         ________________________________________________________________________________\n\
+         Réunion en ligne\n\
+         Rejoindre la réunion maintenant\n\
+         https://meet.studio.example/l/meetup-join/19%3ameeting_{i:08}%40thread.v2/0?context=%7b%22Tid%22%3a%22{i:x}%22%7d\n\
+         ID de réunion : {} {} {} {}\n\
+         Code secret : x{i:05}q\n\
+         ________________________________________________________________________________\n\
+         Besoin d'aide ? | Paramètres de la réunion | Options du système\n\
+         Participer par téléphone\n\
+         +33 1 70 00 {:02} {:02},,{}# France, Paris\n\
+         Numéro de conférence : {} {} {}#\n\
+         Trouver un numéro local | Réinitialiser le code confidentiel\n",
+        300 + i % 700,
+        100 + i % 900,
+        200 + i % 800,
+        400 + i % 600,
+        i % 100,
+        (i / 100) % 100,
+        700_000 + i,
+        700 + i % 300,
+        100 + i % 900,
+        i % 1000,
+    );
+    notes.push_str("Pour en savoir plus sur cette réunion et les règles qui s'y appliquent, consultez l'aide en ligne de votre organisation.\n");
+    notes.push_str("________________________________________________________________________________\n");
+    notes
+}
+
+/// A big calendar (a second account's, 25,000 appointments with invitation notes and a few
+/// guests each, some of them daily series) is searched in well under a second, by a bare word,
+/// by a word only the notes have, and by a field.
 #[test]
 fn searching_25000_appointments_stays_quick() {
-    use quatrelle_model::ical::CalEvent;
+    use quatrelle_model::ical::{Attendee, CalEvent};
     use quatrelle_model::pim::{LOCAL, StoredEvent};
     let mut s = sample_session("calendar-search-big");
     let id = s.run("account.add", &json!({"email": "zoe@example.org", "password": "pw"})).unwrap()["account"].as_str().unwrap().to_string();
+    let people = [
+        ("Ana Lima", "ana@studio.example"),
+        ("Jun Park", "jun@studio.example"),
+        ("Sam Reyes", "sam@example.org"),
+        ("Zoe Martin", "zoe@example.org"),
+        ("Theo Brandt", "theo@post.example"),
+        ("Mila Novak", "mila@post.example"),
+    ];
+    let person = |n: i64| {
+        let (name, email) = people[(n % people.len() as i64) as usize];
+        Attendee { name: name.into(), email: email.into(), partstat: "ACCEPTED".into(), ..Default::default() }
+    };
     let p = s.pim_mut(&id);
     p.events.extend((0..25_000_i64).map(|i| {
         let start = NOW - 200 * 86_400 + i * 1_500;
@@ -141,6 +188,9 @@ fn searching_25000_appointments_stays_quick() {
             uid: format!("big-{i}"),
             summary: format!("Appointment {i}"),
             location: format!("Room {}", i % 50),
+            description: invitation_notes(i),
+            organizer: Some(person(i)),
+            attendees: (1..3 + i % 3).map(|k| person(i + k)).collect(),
             start,
             end: start + 900,
             rrule: (i % 125 == 0).then(|| "FREQ=DAILY".to_string()),
@@ -148,14 +198,15 @@ fn searching_25000_appointments_stays_quick() {
         };
         StoredEvent { calendar: LOCAL.into(), event, ..Default::default() }
     }));
-    for (query, wanted) in [("a", 500), ("location:room", 500)] {
+    assert!(p.events.iter().filter(|e| e.event.uid.starts_with("big-")).all(|e| (900..1300).contains(&e.event.description.len())));
+    for (query, wanted) in [("a", 500), ("secret", 500), ("location:room", 500)] {
         let started = std::time::Instant::now();
         let hits = s.find_events(query, crate::EventWhen::All, None, None, 500);
         let took = started.elapsed();
+        eprintln!("calendar search `{query}` over 25,000 appointments: {took:?}");
         assert_eq!(hits.len(), wanted, "{query}");
         // One second is the spec's number for a search of this size (debug build).
         assert!(took < std::time::Duration::from_secs(1), "{query}: {took:?}");
-        eprintln!("calendar search `{query}` over 25,000 appointments: {took:?}");
     }
     done(s);
 }
