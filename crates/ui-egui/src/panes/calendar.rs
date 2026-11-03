@@ -169,11 +169,20 @@ pub(crate) fn chip_id(item: &AgendaItem) -> egui::Id {
     egui::Id::unique(("calendar-chip", &item.account, &item.calendar, &item.uid, item.start))
 }
 
-/// An appointment in the grid: its box, its card under the pointer, its menu on a right click.
-fn chip(ui: &mut Ui, s: &Session, t: &Tokens, rect: Rect, item: &AgendaItem, text: &str, acts: &mut Vec<Action>) -> egui::Response {
+/// The id of an appointment's box on `day`: [`chip_id`] on the day it starts, another on each
+/// other day it's drawn on (over two days, or past midnight), so each box is clicked, and opens
+/// its menu, by itself (sharing one, a right click opened none, or one per day).
+fn drawn_id(item: &AgendaItem, day: i64, s: &Session) -> egui::Id {
+    if day_of(item.start, s) == day { chip_id(item) } else { chip_id(item).with(day) }
+}
+
+/// An appointment in the grid, as drawn on `day`: its box, its card under the pointer, its menu
+/// on a right click.
+#[allow(clippy::too_many_arguments)]
+fn chip(ui: &mut Ui, s: &Session, t: &Tokens, rect: Rect, item: &AgendaItem, text: &str, day: i64, acts: &mut Vec<Action>) -> egui::Response {
     // One that can move is taken hold of as well as clicked.
     let sense = if item.movable { Sense::click_and_drag() } else { Sense::click() };
-    let resp = ui.interact(rect, chip_id(item), sense);
+    let resp = ui.interact(rect, drawn_id(item, day, s), sense);
     let c = item_color(item, t);
     let tentative = item.needs_reply || item.status == "TENTATIVE";
     // Stronger under the pointer, with its colour round it.
@@ -475,7 +484,7 @@ fn month(s: &Session, st: &mut UiState, ui: &mut Ui, items: &[AgendaItem], d0: i
             for (k, it) in todays.iter().take(shown).enumerate() {
                 let cr = Rect::from_min_size(r.min + vec2(3.0, 24.0 + 19.0 * k as f32), vec2(cw - 6.0, 17.0));
                 let text = if it.all_day { title(it) } else { format!("{} {}", hm(it.start, s), title(it)) };
-                let resp = chip(ui, s, t, cr, it, &text, acts);
+                let resp = chip(ui, s, t, cr, it, &text, d, acts);
                 // Only on the day it starts: a chip drawn on each day it spans would start a
                 // drag each.
                 if day_of(it.start, s) == d {

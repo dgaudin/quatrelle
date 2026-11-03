@@ -114,7 +114,7 @@ pub(super) fn days(s: &Session, st: &mut UiState, ui: &mut Ui, items: &[AgendaIt
                 pos2(strip.min.x + day_x(a - d0, col_of(it)) + 2.0, strip.min.y + 3.0 + 20.0 * lane as f32),
                 vec2(cw * (b - a + 1) as f32 - 4.0, 18.0),
             );
-            let resp = chip(ui, s, &t, r, it, &title(it), acts);
+            let resp = chip(ui, s, &t, r, it, &title(it), day_of(it.start, s), acts);
             // Dragged along the strip: another day, as long as it was.
             let area = Area::Strip { rect: strip, x0: strip.min.x + pane_x(col_of(it)), cw, day0: d0, days: n };
             drag::chip(ui, st, s, &resp, r, it, &area, acts);
@@ -220,7 +220,7 @@ pub(super) fn days(s: &Session, st: &mut UiState, ui: &mut Ui, items: &[AgendaIt
                     text.push_str(if w <= r.width() - 8.0 { " · " } else { "\n" });
                     text.push_str(&it.location);
                 }
-                let resp = chip(ui, s, &t, r, it, &text, acts);
+                let resp = chip(ui, s, &t, r, it, &text, d, acts);
                 // Dragged by its body to another hour or day; by its bottom edge, made to end
                 // at another time.
                 let area = Area::Hours { grid, pane_x: pane_x(j), cw, day0: d0, days: n };
