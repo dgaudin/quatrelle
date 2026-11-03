@@ -173,6 +173,8 @@ pub fn listed_exception(master: &CalEvent, o: &El) -> Option<CalEvent> {
     e.recurrence_id = Some(if e.all_day { day(original) } else { original });
     e.rrule = None;
     e.exdates.clear();
+    // Its own version isn't known (the series' is often higher): 0, never newer than an invitation.
+    e.sequence = 0;
     Some(e)
 }
 

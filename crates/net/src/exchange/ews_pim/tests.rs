@@ -248,6 +248,26 @@ fn an_appointment_carries_its_version() {
     assert!(APPOINTMENT_FIELDS.contains(&"calendar:AppointmentSequenceNumber"));
 }
 
+/// An occurrence listed by its series (one the server didn't give) doesn't take the series'
+/// version: an invitation to that occurrence alone, lower than the series, isn't out of date.
+#[test]
+fn an_occurrence_listed_by_its_series_has_no_version() {
+    let doc = parse(
+        "<t:CalendarItem><t:ItemId Id=\"m1\" ChangeKey=\"c\"/><t:Subject>Weekly</t:Subject><t:UID>u-1</t:UID>\
+         <t:Start>2026-10-21T08:00:00Z</t:Start><t:End>2026-10-21T09:00:00Z</t:End><t:CalendarItemType>RecurringMaster</t:CalendarItemType>\
+         <t:AppointmentSequenceNumber>5</t:AppointmentSequenceNumber></t:CalendarItem>",
+    );
+    let master = event_of(doc.find("CalendarItem").unwrap()).unwrap();
+    assert_eq!(master.sequence, 5);
+    let o = parse(
+        "<t:Occurrence><t:ItemId Id=\"o1\" ChangeKey=\"c\"/><t:Start>2026-10-29T10:00:00Z</t:Start>\
+         <t:End>2026-10-29T11:00:00Z</t:End><t:OriginalStart>2026-10-28T08:00:00Z</t:OriginalStart></t:Occurrence>",
+    );
+    let e = listed_exception(&master, o.find("Occurrence").unwrap()).unwrap();
+    assert!(e.recurrence_id.is_some());
+    assert_eq!(e.sequence, 0, "the series' version isn't the occurrence's");
+}
+
 /// Many items are asked in batches alike, as many as give each connection the same share; the
 /// log says what each did.
 #[test]
