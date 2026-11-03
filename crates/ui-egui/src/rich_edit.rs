@@ -187,6 +187,24 @@ fn set_selection(ctx: &egui::Context, id: egui::Id, r: Range<usize>) {
 
 /// The look typing at `at` takes: the character before (or after, at a paragraph's start),
 /// without a link the text doesn't continue.
+/// The styles of `text`, which the text box just made from `before` (a key, a paste, a
+/// deletion) with `sel` selected. The text box lays the new text out at once, before [`body`]
+/// makes the message's styles follow it: laid out with `before`'s, each run started a character
+/// off and a picture was drawn a character early, for a frame at every key (the quoted message
+/// under a reply flashed as the owner typed, 2026-11-03).
+fn following<'a>(before: &str, text: &str, styles: &'a Styles, typing: &Style, sel: &Range<usize>) -> std::borrow::Cow<'a, Styles> {
+    if text == before {
+        return std::borrow::Cow::Borrowed(styles);
+    }
+    // Where the cursor ends when what was typed replaced the selection (`edit_at` checks it,
+    // and finds the change on its own when it's something else).
+    let kept = before.chars().count().saturating_sub(sel.end.saturating_sub(sel.start));
+    let cursor = text.chars().count().checked_sub(kept).map(|typed| sel.start.saturating_add(typed));
+    let mut st = styles.clone();
+    st.edit_at(before, text, typing, cursor);
+    std::borrow::Cow::Owned(st)
+}
+
 fn typing_style(text: &str, styles: &Styles, at: usize) -> Style {
     let chars: Vec<char> = text.chars().collect();
     let before = at.checked_sub(1).filter(|i| chars.get(*i).is_some_and(|c| *c != '\n'));
@@ -513,11 +531,17 @@ pub(crate) fn body(ui: &mut Ui, t: &Tokens, ed: &mut Editor, c: &mut Compose, st
     }
     let before = c.body.clone();
     let styles = c.styles.clone();
+    // The look of what's typed now: the ribbon's choice, else the text's at the cursor.
+    let typing = ed.typing.clone().unwrap_or_else(|| typing_style(&before, &styles, ed.sel.start));
+    let sel = ed.sel.clone();
     let plain = c.plain;
     let tokens = *t;
     let check = check_for(c);
     let sizes = signature::with_room(pictures::sizes_as_set(picture_sizes(ed, c), c), &ed.signature);
-    let mut layouter = |ui: &Ui, buf: &dyn egui::TextBuffer, wrap: f32| layout(ui, buf.as_str(), &styles, plain, &tokens, wrap, &check, &sizes);
+    let mut layouter = |ui: &Ui, buf: &dyn egui::TextBuffer, wrap: f32| {
+        let text = buf.as_str();
+        layout(ui, text, &following(&before, text, &styles, &typing, &sel), plain, &tokens, wrap, &check, &sizes)
+    };
     let height = ui.available_height().max(220.0);
     // A right-click inside the selection keeps it (egui's text box moves the cursor on any
     // press); one outside it moves the cursor there, as Outlook does.
@@ -560,8 +584,7 @@ pub(crate) fn body(ui: &mut Ui, t: &Tokens, ed: &mut Editor, c: &mut Compose, st
         }
     }
     if c.body != before {
-        // The look of what was typed: the ribbon's choice, else the text's at the cursor.
-        let typing = ed.typing.take().unwrap_or_else(|| typing_style(&before, &styles, ed.sel.start));
+        ed.typing = None;
         let now = ui.input(|i| i.time);
         let breaks = c.body.matches('\n').count() != before.matches('\n').count();
         if now - ed.last_change > 1.0 || breaks || ed.undo.is_empty() {
