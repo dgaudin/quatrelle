@@ -1873,3 +1873,9 @@ month	May	maio
 	No events match.	Nenhum evento encontrado.
 	Past	Passados
 	Search calendar (location:, organizer:, after:…)	Pesquisar no calendário (location:, organizer:, after:…)
+	Sync Issues	Problemas de sincronização
+folder	Conflicts	Conflitos
+	On this computer only	Somente neste computador
+	{item} — deleted on the server ({account})	{item} — excluído no servidor ({account})
+	{item} was deleted on the server while it was being changed here.\n\nAccount: {account}\nIn: {place}\nWhen: {when}\n\nThe server's version was kept, so the change made here was dropped. The attachment holds the version that was here: open it to put it back.	{item} foi excluído no servidor enquanto era alterado aqui.\n\nConta: {account}\nEm: {place}\nQuando: {when}\n\nA versão do servidor foi mantida, então a alteração feita aqui foi descartada. O anexo contém a versão que estava aqui: abra-o para restaurá-la.
+	{event}: deleted on the server meanwhile; the change made here was dropped (a copy is in Sync Issues › Conflicts)	{event}: excluído no servidor nesse meio-tempo; a alteração feita aqui foi descartada (há uma cópia em Problemas de sincronização › Conflitos)

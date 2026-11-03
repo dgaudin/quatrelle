@@ -1873,3 +1873,9 @@ month	May	mai
 	No events match.	Aucun événement ne correspond.
 	Past	Passés
 	Search calendar (location:, organizer:, after:…)	Rechercher dans le calendrier (location:, organizer:, after:…)
+	Sync Issues	Problèmes de synchronisation
+folder	Conflicts	Conflits
+	On this computer only	Sur cet ordinateur uniquement
+	{item} — deleted on the server ({account})	{item} — supprimé sur le serveur ({account})
+	{item} was deleted on the server while it was being changed here.\n\nAccount: {account}\nIn: {place}\nWhen: {when}\n\nThe server's version was kept, so the change made here was dropped. The attachment holds the version that was here: open it to put it back.	{item} a été supprimé sur le serveur pendant qu’il était modifié ici.\n\nCompte : {account}\nDans : {place}\nQuand : {when}\n\nLa version du serveur a été conservée : la modification faite ici a été abandonnée. La pièce jointe contient la version qui était ici : ouvrez-la pour la remettre.
+	{event}: deleted on the server meanwhile; the change made here was dropped (a copy is in Sync Issues › Conflicts)	{event} : supprimé sur le serveur entre-temps ; la modification faite ici a été abandonnée (une copie est dans Problèmes de synchronisation › Conflits)

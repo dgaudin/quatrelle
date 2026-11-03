@@ -303,6 +303,7 @@ pub(crate) fn account_status(s: &Session, t: &Tokens, a: &quatrelle_engine::Acco
             (t.accent, tf!("Updating {folder}…", folder = s.folder(&a.config.id, folder).map(i18n::folder).unwrap_or_default()))
         }
         SyncStatus::Connecting => (t.accent, tl!("Connecting…").to_string()),
+        SyncStatus::Offline if a.config.id == quatrelle_engine::SYNC_ISSUES => (t.faint, tl!("On this computer only").to_string()),
         SyncStatus::Offline if a.is_data_file() => (t.faint, tl!("Outlook data file").to_string()),
         SyncStatus::Offline if a.is_local() => (t.faint, tl!("Sample mailbox (offline)").to_string()),
         SyncStatus::Offline => (t.faint, tl!("Offline").to_string()),

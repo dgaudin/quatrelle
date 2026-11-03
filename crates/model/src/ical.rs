@@ -26,6 +26,7 @@ mod find;
 mod meeting;
 mod notes;
 mod recurrence;
+mod todo;
 mod zones;
 pub use alarms::*;
 pub use find::*;
@@ -34,6 +35,7 @@ use notes::*;
 pub use notes::*;
 use recurrence::*;
 pub use recurrence::*;
+pub use todo::write_task;
 use zones::*;
 
 /// The most occurrences produced for one event in one expansion.
