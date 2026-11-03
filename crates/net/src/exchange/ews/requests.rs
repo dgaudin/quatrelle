@@ -310,14 +310,34 @@ impl Client {
             check_message(m)?;
         }
         if gone > 0 {
-            let what = body.trim_start_matches('<').split(|c: char| !c.is_alphanumeric()).next().unwrap_or("");
+            // The operation's element, its namespace prefix aside: `<m:MoveItem …>` is "MoveItem".
+            let what = op_name(body);
             log::info!("ews: {gone} item(s) already gone from the server, skipped ({what})");
         }
         Ok(gone)
     }
 }
 
+/// The name of a request's first element, its namespace prefix aside (`<m:MoveItem>`: "MoveItem").
+pub(super) fn op_name(body: &str) -> &str {
+    let element = body.trim_start().trim_start_matches('<').split(|c: char| c == '>' || c == '/' || c.is_whitespace()).next().unwrap_or("");
+    element.rsplit(':').next().unwrap_or("")
+}
+
 /// What an HTTP refusal without a SOAP answer says.
 pub(super) fn answered_http(status: u16) -> String {
     format!("Exchange answered HTTP {status}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::op_name;
+
+    #[test]
+    fn the_operation_is_named_without_its_prefix() {
+        assert_eq!(op_name("<m:MoveItem><m:ToFolderId/></m:MoveItem>"), "MoveItem");
+        assert_eq!(op_name(" <m:DeleteItem DeleteType=\"MoveToDeletedItems\">"), "DeleteItem");
+        assert_eq!(op_name("<GetItem/>"), "GetItem");
+        assert_eq!(op_name(""), "");
+    }
 }
