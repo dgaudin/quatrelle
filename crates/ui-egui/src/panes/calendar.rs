@@ -7,6 +7,7 @@
 
 use egui::{Align2, Color32, Key, Margin, Rect, RichText, Sense, Ui, pos2, vec2};
 use quatrelle_engine::model::dates::{self, civil_from_days, days_from_civil};
+use quatrelle_engine::model::ical::ShowAs;
 use quatrelle_engine::{AgendaItem, CalMode, Session};
 use serde_json::json;
 
@@ -52,7 +53,7 @@ fn day_of(t: i64, s: &Session) -> i64 {
 }
 
 /// `October 2026`, `12 – 18 October 2026`, `Monday, 12 October 2026`.
-pub fn title(s: &Session) -> String {
+pub fn heading(s: &Session) -> String {
     let (d0, d1) = s.cal_days();
     let month = |m: u32| crate::i18n::tc("month", MONTHS.get(m as usize - 1).copied().unwrap_or("")).to_string();
     match s.cal_mode {
@@ -101,7 +102,7 @@ pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) 
                 acts.push(Action::Run("calendar.goto", json!({"step": 1})));
             }
             ui.add_space(6.0);
-            ui.label(RichText::new(title(s)).font(theme::bold(18.0)).color(t.text));
+            ui.label(RichText::new(heading(s)).font(theme::bold(18.0)).color(t.text));
             // The view, as a drop-down at the right, as Outlook's.
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let views = [
@@ -186,12 +187,20 @@ fn chip(ui: &mut Ui, s: &Session, t: &Tokens, rect: Rect, item: &AgendaItem, tex
         }),
     };
     ui.painter().rect(rect, 4.0, fill, egui::Stroke::new(if tentative || hovered { 1.0 } else { 0.0 }, c), egui::StrokeKind::Inside);
-    ui.painter().rect_filled(Rect::from_min_size(rect.min, vec2(3.0, rect.height())), 2.0, c);
+    // How it shows the user's time, in the strip at its left, as Outlook draws it.
+    strip(ui.painter(), t, Rect::from_min_size(rect.min, vec2(STRIP, rect.height())), c, strip_look(item.show_as));
+    // A private one: a lock in its top right corner, the text stopping short of it.
+    let locked = item.private && rect.width() >= 30.0;
+    if locked {
+        let lock = Rect::from_min_size(pos2(rect.max.x - 3.0 - 11.0, rect.min.y + 3.0), vec2(11.0, 11.0));
+        icons::paint(ui.painter(), lock, Icon::Lock, t.dim);
+    }
     // As many whole lines as the box holds, the last one ending in "…" when more is left (a line
     // cut in half by the box's edge read badly).
     let font = theme::regular(12.0);
     let row = ui.fonts_mut(|f| f.row_height(&font)).max(1.0);
-    let (width, rows) = ((rect.width() - 8.0).max(4.0), ((rect.height() - 4.0) / row).floor().max(1.0) as usize);
+    let width = (rect.width() - TEXT_X - 2.0 - if locked { 14.0 } else { 0.0 }).max(4.0);
+    let rows = ((rect.height() - 4.0) / row).floor().max(1.0) as usize;
     let lay = |ui: &mut Ui, text: String, rows: usize| {
         let mut job = egui::text::LayoutJob::simple(text, font.clone(), t.text, width);
         job.wrap.max_rows = rows;
@@ -207,10 +216,10 @@ fn chip(ui: &mut Ui, s: &Session, t: &Tokens, rect: Rect, item: &AgendaItem, tex
         for (i, w) in words.iter().take(rows).enumerate() {
             let more = i + 1 == rows && words.len() > rows;
             let galley = lay(ui, if more { format!("{w}…") } else { (*w).to_string() }, 1);
-            painter.galley(rect.min + vec2(6.0, 2.0 + row * i as f32), galley, t.text);
+            painter.galley(rect.min + vec2(TEXT_X, 2.0 + row * i as f32), galley, t.text);
         }
     } else {
-        painter.galley(rect.min + vec2(6.0, 2.0), lay(ui, text.to_string(), rows), t.text);
+        painter.galley(rect.min + vec2(TEXT_X, 2.0), lay(ui, text.to_string(), rows), t.text);
     }
     // Outlook's card when the pointer rests on it: what it is, when, where, and its calendar
     // (not while something is dragged: the card would hide where it's going).
@@ -218,6 +227,76 @@ fn chip(ui: &mut Ui, s: &Session, t: &Tokens, rect: Rect, item: &AgendaItem, tex
         hover_card(&resp, s, t, item);
     }
     resp
+}
+
+/// The width of the strip at a chip's left, and where its text starts.
+const STRIP: f32 = 5.0;
+const TEXT_X: f32 = 8.0;
+
+/// What an appointment is called in the grid: its subject, or "Private appointment" for a
+/// private one given without it (a colleague's), rather than a blank box.
+pub(crate) fn title(item: &AgendaItem) -> String {
+    if item.private && item.summary.trim().is_empty() { tl!("Private appointment").to_string() } else { item.summary.clone() }
+}
+
+/// How the strip at a chip's left is drawn, by how the appointment shows the user's time.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum StripLook {
+    /// Busy: filled in its colour.
+    Solid,
+    /// Tentative: hatched in its colour.
+    Hatched,
+    /// Free: white, outlined in its colour.
+    Hollow,
+    /// Out of office: purple.
+    Purple,
+    /// Working elsewhere: dotted in its colour.
+    Dotted,
+}
+
+pub(crate) fn strip_look(s: ShowAs) -> StripLook {
+    match s {
+        ShowAs::Busy => StripLook::Solid,
+        ShowAs::Tentative => StripLook::Hatched,
+        ShowAs::Free => StripLook::Hollow,
+        ShowAs::OutOfOffice => StripLook::Purple,
+        ShowAs::WorkingElsewhere => StripLook::Dotted,
+    }
+}
+
+/// The strip `r`, drawn its `look` in colour `c` (hatches and dots kept inside it).
+fn strip(painter: &egui::Painter, t: &Tokens, r: Rect, c: Color32, look: StripLook) {
+    const STEP: f32 = 4.0;
+    let inside = painter.with_clip_rect(r);
+    let line = egui::Stroke::new(1.0, c);
+    match look {
+        StripLook::Solid => {
+            painter.rect_filled(r, 2.0, c);
+        }
+        StripLook::Purple => {
+            painter.rect_filled(r, 2.0, theme::category_color(4, t.dark));
+        }
+        StripLook::Hollow => {
+            painter.rect(r, 2.0, t.surface, line, egui::StrokeKind::Inside);
+        }
+        StripLook::Hatched => {
+            painter.rect_filled(r, 2.0, t.surface);
+            // Rising lines, one every STEP down the strip, starting above it so its top is hatched too.
+            let mut y = r.min.y;
+            while y < r.max.y + r.width() {
+                inside.line_segment([pos2(r.min.x, y), pos2(r.max.x, y - r.width())], line);
+                y += STEP;
+            }
+        }
+        StripLook::Dotted => {
+            painter.rect_filled(r, 2.0, t.surface);
+            let mut y = r.min.y + STEP / 2.0;
+            while y < r.max.y {
+                inside.circle_filled(pos2(r.center().x, y), 1.0, c);
+                y += STEP;
+            }
+        }
+    }
 }
 
 /// The colour of an appointment: its first category's, as Outlook draws a categorized one; else
@@ -311,7 +390,7 @@ fn calendar_name(s: &Session, item: &AgendaItem) -> String {
 /// The card itself: the title on the appointment's colour, then its lines, as Outlook's.
 fn hover_card(resp: &egui::Response, s: &Session, t: &Tokens, item: &AgendaItem) {
     let c = item_color(item, t);
-    let title = if item.summary.trim().is_empty() { tl!("(no title)").to_string() } else { item.summary.clone() };
+    let name = Some(title(item)).filter(|x| !x.trim().is_empty()).unwrap_or_else(|| tl!("(no title)").to_string());
     let rows = card_rows(s, item);
     // The tooltip's own frame is replaced by the card's: the header's band on top, square
     // corners where the body meets it.
@@ -326,7 +405,7 @@ fn hover_card(resp: &egui::Response, s: &Session, t: &Tokens, item: &AgendaItem)
             .inner_margin(egui::Margin::symmetric(10, 7))
             .show(ui, |ui| {
                 ui.set_width(300.0);
-                ui.label(RichText::new(title).font(theme::bold(13.5)).color(t.text));
+                ui.label(RichText::new(name).font(theme::bold(13.5)).color(t.text));
             });
         egui::Frame::new().corner_radius(egui::CornerRadius { nw: 0, ne: 0, sw: 4, se: 4 }).inner_margin(egui::Margin::symmetric(10, 8)).show(
             ui,
@@ -392,7 +471,7 @@ fn month(s: &Session, st: &mut UiState, ui: &mut Ui, items: &[AgendaItem], d0: i
             let shown = if todays.len() > fit { fit.saturating_sub(1) } else { todays.len() };
             for (k, it) in todays.iter().take(shown).enumerate() {
                 let cr = Rect::from_min_size(r.min + vec2(3.0, 24.0 + 19.0 * k as f32), vec2(cw - 6.0, 17.0));
-                let text = if it.all_day { it.summary.clone() } else { format!("{} {}", hm(it.start, s), it.summary) };
+                let text = if it.all_day { title(it) } else { format!("{} {}", hm(it.start, s), title(it)) };
                 let resp = chip(ui, s, t, cr, it, &text);
                 // Only on the day it starts: a chip drawn on each day it spans would start a
                 // drag each.

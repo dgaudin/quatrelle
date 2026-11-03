@@ -114,7 +114,7 @@ pub(super) fn days(s: &Session, st: &mut UiState, ui: &mut Ui, items: &[AgendaIt
                 pos2(strip.min.x + day_x(a - d0, col_of(it)) + 2.0, strip.min.y + 3.0 + 20.0 * lane as f32),
                 vec2(cw * (b - a + 1) as f32 - 4.0, 18.0),
             );
-            let resp = chip(ui, s, &t, r, it, &it.summary);
+            let resp = chip(ui, s, &t, r, it, &title(it));
             // Dragged along the strip: another day, as long as it was.
             let area = Area::Strip { rect: strip, x0: strip.min.x + pane_x(col_of(it)), cw, day0: d0, days: n };
             drag::chip(ui, st, s, &resp, r, it, &area, acts);
@@ -213,7 +213,7 @@ pub(super) fn days(s: &Session, st: &mut UiState, ui: &mut Ui, items: &[AgendaIt
                 );
                 // The place beside the time when both fit on one line (a short event still shows it),
                 // else on a line of its own.
-                let mut text = format!("{}\n{} – {}", it.summary, hm(it.start, s), hm(it.end, s));
+                let mut text = format!("{}\n{} – {}", title(it), hm(it.start, s), hm(it.end, s));
                 if !it.location.is_empty() {
                     let both = format!("{} – {} · {}", hm(it.start, s), hm(it.end, s), it.location);
                     let w = ui.fonts_mut(|f| f.layout_no_wrap(both, theme::regular(12.0), t.text).size().x);

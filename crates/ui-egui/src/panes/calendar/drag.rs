@@ -120,7 +120,7 @@ impl Area {
                 }
                 let r = Rect::from_min_size(pos2(x0 + cw * (a - day0) as f32 + 2.0, rect.min.y + 3.0), vec2(cw * (b - a + 1) as f32 - 4.0, 18.0));
                 painter.rect(r, 4.0, fill, stroke, egui::StrokeKind::Inside);
-                painter.with_clip_rect(r).text(r.min + vec2(6.0, 2.0), Align2::LEFT_TOP, d.item.summary.clone(), theme::regular(12.0), t.text);
+                painter.with_clip_rect(r).text(r.min + vec2(6.0, 2.0), Align2::LEFT_TOP, title(&d.item), theme::regular(12.0), t.text);
             }
             Area::Month { area, head, cw, rh, day0 } => {
                 let day = day_of(start, s);
@@ -132,7 +132,7 @@ impl Area {
                 painter.rect_stroke(cell.shrink(1.0), 0.0, egui::Stroke::new(2.0, t.accent), egui::StrokeKind::Inside);
                 let r = Rect::from_min_size(cell.min + vec2(3.0, 24.0), vec2(cw - 6.0, 17.0));
                 painter.rect(r, 4.0, fill, stroke, egui::StrokeKind::Inside);
-                let text = if d.item.all_day { d.item.summary.clone() } else { format!("{} {}", hm(start, s), d.item.summary) };
+                let text = if d.item.all_day { title(&d.item) } else { format!("{} {}", hm(start, s), title(&d.item)) };
                 painter.with_clip_rect(r).text(r.min + vec2(6.0, 2.0), Align2::LEFT_TOP, text, theme::regular(12.0), t.text);
             }
         }
