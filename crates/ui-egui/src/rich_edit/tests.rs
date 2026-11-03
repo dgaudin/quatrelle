@@ -228,3 +228,46 @@ fn a_picture_shows_at_its_own_size_up_to_the_width() {
         out.textures_delta.clear();
     }
 }
+
+/// What's typed is drawn with the styles it'll have on the frame it's typed. The text box lays
+/// the new text out before [`body`] sees the change, and it laid it out with the styles of the
+/// text before: each run a character off, a picture a character early, and the next frame put
+/// right (seen on 2026-11-03: the quoted message under a reply flashed at every
+/// key, its pictures over its tables).
+#[test]
+fn what_is_typed_is_drawn_with_its_styles_at_once() {
+    let text = "Salut\n\nMorgan DEPARIS\nfin";
+    let mut c = Compose { body: text.into(), ..Default::default() };
+    c.styles = Styles::plain(text);
+    c.styles.restyle(text, 7..21, |s| Style { color: Some([0x00, 0x55, 0xAA]), ..s.clone() });
+    let mut ed = Editor::new(c.id);
+    let t = Tokens::light();
+    let ctx = egui::Context::default();
+    let frame = |ed: &mut Editor, c: &mut Compose, events: Vec<egui::Event>, start: Option<usize>| {
+        let input = egui::RawInput { events, screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(800.0, 600.0))), ..Default::default() };
+        let mut acts = Vec::new();
+        let mut out = ctx.run_ui(input, |ui| body(ui, &t, ed, c, start, &mut acts));
+        out.textures_delta.clear();
+        out.shapes
+    };
+    frame(&mut ed, &mut c, vec![], Some(6));
+    let shapes = frame(&mut ed, &mut c, vec![egui::Event::Text("S".into())], None);
+    assert_eq!(c.body, "Salut\nS\nMorgan DEPARIS\nfin");
+    fn galleys(s: &egui::Shape, out: &mut Vec<Arc<Galley>>) {
+        match s {
+            egui::Shape::Text(t) => out.push(t.galley.clone()),
+            egui::Shape::Vec(v) => v.iter().for_each(|s| galleys(s, out)),
+            _ => {}
+        }
+    }
+    let mut drawn = Vec::new();
+    shapes.iter().for_each(|s| galleys(&s.shape, &mut drawn));
+    let drawn = drawn.into_iter().find(|g| g.job.text == c.body).expect("the text drawn");
+    // Each run's colour where the styles, now that they've followed the text, put it.
+    let colours = |g: &Galley| g.job.sections.iter().map(|s| (s.byte_range.clone(), s.format.color)).collect::<Vec<_>>();
+    let mut out = ctx.run_ui(Default::default(), |ui| {
+        let fresh = layout::layout(ui, &c.body, &c.styles, false, &t, drawn.job.wrap.max_width, &Check::default(), &HashMap::new());
+        assert_eq!(colours(&drawn), colours(&fresh), "drawn with the styles of the text before it");
+    });
+    out.textures_delta.clear();
+}
