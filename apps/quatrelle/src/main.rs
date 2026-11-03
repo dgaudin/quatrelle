@@ -9,7 +9,8 @@
 //! `ui.addAccount` (optionally `={"email":…,"advanced":true,"graph":true}` or `"pop":true`), `ui.newEvent`
 //! (optionally `={"at":"YYYY-MM-DDTHH:MM","summary":…,"guests":…,"rooms":…,"scheduling":true,"finder":true}`)
 //! and `ui.newContact` open those dialogs, `ui.rules` the Rules dialog; `ui.folderSize`
-//! (optionally `={"account":…}`) opens Folder Size over the File page.
+//! (optionally `={"account":…}`) opens Folder Size over the File page; `ui.calendarSearch`
+//! (optionally `={"query":…,"when":"all"|"upcoming"|"past"}`) shows the Calendar searched.
 #![cfg_attr(all(target_os = "windows", not(debug_assertions)), windows_subsystem = "windows")]
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
@@ -671,6 +672,11 @@ fn run(
                         app.ui.dialog = Some(d);
                     }
                     "ui.newContact" => app.ui.dialog = Some(quatrelle_ui_egui::Dialog::new_contact()),
+                    "ui.calendarSearch" => {
+                        let p: serde_json::Value = serde_json::from_str(params).unwrap_or_default();
+                        let when = p.get("when").and_then(|v| v.as_str()).and_then(quatrelle_engine::EventWhen::from_code).unwrap_or_default();
+                        app.search_calendar(p.get("query").and_then(|v| v.as_str()).unwrap_or_default(), when);
+                    }
                     "ui.folderSize" => {
                         let p: serde_json::Value = serde_json::from_str(params).unwrap_or_default();
                         let first = app.session.accounts.first().map(|a| a.config.id.clone());
