@@ -1462,6 +1462,8 @@ month	May	Май
 	Puts your Webex personal room in the meeting	Вставляет вашу личную комнату Webex в собрание
 	Select Attendees and Resources	Выбор участников и ресурсов
 	Your Webex personal room	Ваша личная комната Webex
+	Move meeting invitations to Deleted Items once answered	Перемещать приглашения на собрания в «Удалённые» после ответа
+	Also a cancellation once its meeting is removed from the calendar, and the meeting's earlier invitations.	Также отмену, когда её собрание удалено из календаря, и более ранние приглашения на это собрание.
 	Required ->	Обязательные ->
 	Optional ->	Необязательные ->
 	Resources ->	Ресурсы ->

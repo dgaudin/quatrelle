@@ -1459,6 +1459,8 @@ month	May	mei
 	Puts your Webex personal room in the meeting	Voegt uw persoonlijke Webex-ruimte toe aan de vergadering
 	Select Attendees and Resources	Deelnemers en middelen selecteren
 	Your Webex personal room	Uw persoonlijke Webex-ruimte
+	Move meeting invitations to Deleted Items once answered	Vergaderuitnodigingen na beantwoording naar Verwijderde items verplaatsen
+	Also a cancellation once its meeting is removed from the calendar, and the meeting's earlier invitations.	Ook een annulering zodra de vergadering uit de agenda is verwijderd, en de eerdere uitnodigingen van de vergadering.
 	Required ->	Vereist ->
 	Optional ->	Optioneel ->
 	Resources ->	Middelen ->
