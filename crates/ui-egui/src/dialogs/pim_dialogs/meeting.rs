@@ -413,20 +413,22 @@ fn ribbon(ui: &mut Ui, t: &Tokens, f: &mut EventForm, s: &Session, checking: boo
     keep
 }
 
+/// What a Show As is called (in English: the catalogs translate it).
+pub(crate) fn show_as_label(x: ShowAs) -> &'static str {
+    match x {
+        ShowAs::Free => "Free",
+        ShowAs::WorkingElsewhere => "Working Elsewhere",
+        ShowAs::Tentative => "Tentative",
+        ShowAs::Busy => "Busy",
+        ShowAs::OutOfOffice => "Out of Office",
+    }
+}
+
 /// Outlook's Show As: how its time shows to others.
 fn show_as_choice(ui: &mut Ui, f: &mut EventForm) {
-    let label = |x: ShowAs| -> &'static str {
-        match x {
-            ShowAs::Free => "Free",
-            ShowAs::WorkingElsewhere => "Working Elsewhere",
-            ShowAs::Tentative => "Tentative",
-            ShowAs::Busy => "Busy",
-            ShowAs::OutOfOffice => "Out of Office",
-        }
-    };
-    egui::ComboBox::from_id_salt("event-show-as").width(130.0).selected_text(tl!(label(f.show_as))).show_ui(ui, |ui| {
+    egui::ComboBox::from_id_salt("event-show-as").width(130.0).selected_text(tl!(show_as_label(f.show_as))).show_ui(ui, |ui| {
         for x in ShowAs::ALL {
-            ui.selectable_value(&mut f.show_as, x, tl!(label(x)));
+            ui.selectable_value(&mut f.show_as, x, tl!(show_as_label(x)));
         }
     });
 }

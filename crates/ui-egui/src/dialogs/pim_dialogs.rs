@@ -29,7 +29,7 @@ pub use attendees::{AttendeesUi, Line, line_button_id};
 pub use contact::{ContactForm, contact};
 pub use event::{EventForm, event};
 pub use meeting::meeting;
-pub(crate) use meeting::prepare;
+pub(crate) use meeting::{prepare, show_as_label};
 pub use rooms::RoomFinderUi;
 pub use scheduling::SchedDrag;
 
@@ -98,7 +98,7 @@ pub(super) fn writable_calendars(s: &Session) -> Vec<(String, String, String)> {
 
 /// The categories to pick from (name, colour): the ones made in Quatrelle, and any an event
 /// already has from elsewhere.
-pub(super) fn all_categories(s: &Session, has: &[String]) -> Vec<(String, u8)> {
+pub(crate) fn all_categories(s: &Session, has: &[String]) -> Vec<(String, u8)> {
     let mut out: Vec<(String, u8)> = s.prefs.categories.iter().map(|c| (c.name.clone(), c.color)).collect();
     for c in has {
         if !out.iter().any(|(n, _)| n.eq_ignore_ascii_case(c)) {

@@ -185,9 +185,11 @@ pub(super) fn chip(
             ui.painter().rect_filled(bar(rect.min.y + 3.0), 1.5, grip);
         }
     }
-    let top = top_handle.as_ref().is_some_and(|h| h.drag_started());
-    let resize = top || handle.as_ref().is_some_and(|h| h.drag_started());
-    if (resp.drag_started() || resize) && st.cal_drag.is_none() {
+    // Taken hold of with the left button only: the right one opens its menu.
+    let left = egui::PointerButton::Primary;
+    let top = top_handle.as_ref().is_some_and(|h| h.drag_started_by(left));
+    let resize = top || handle.as_ref().is_some_and(|h| h.drag_started_by(left));
+    if (resp.drag_started_by(left) || resize) && st.cal_drag.is_none() {
         // Where it was taken hold of: the press, not where the pointer is once the drag is
         // decided (it has moved by then).
         let at = ui.input(|i| i.pointer.press_origin()).or_else(|| resp.interact_pointer_pos());
