@@ -682,6 +682,37 @@ Rien n'a encore été essayé sur un vrai Exchange : l'origine ne l'a essayé qu
   public ; la ligne du journal en fait foi) ; le courrier plus ancien que ce qui est gardé, lu en ligne,
   ne passe pas par là.
 
+### État de la récupération : v0.31, troisième partie : la recherche dans tous les calendriers (2026-11-03)
+
+La première des quatre fonctions de calendrier de la v0.31 (`merge-tools/survey-v0.31.md`, « Décidé le
+02/11 »), sur la branche `calendar-search` : dans le Calendrier, la zone de recherche cherche les
+rendez-vous de tous les calendriers cochés (ou d'un seul) et les liste à la place des jours ; un clic va
+au jour et ouvre le rendez-vous. Pris et adaptés : `9539f80e` (issue #33 de l'origine) et, pour le lien de
+réunion, l'esprit de `54f09098` (les lignes `CONFERENCE` viendront avec la quatrième fonction). Laissé :
+`d9135bea` (affichage de droite à gauche), avec le reste de ce travail de l'origine. Spec et plan :
+`docs/superpowers/specs/2026-11-02-calendar-search-design.md`, `docs/superpowers/plans/2026-11-02-calendar-search.md`.
+
+- **Différences avec l'origine** :
+  - le privé est le `private` du fork et « Afficher comme » son `show_as` (pas le type `Privacy` de
+    l'origine, que `5fa58c50` apportait) ; le lien de réunion (`join_url`) est cherché comme un lieu ;
+  - la vitesse à l'échelle du propriétaire (25 000 rendez-vous en mémoire quand le calendrier est
+    affiché, presque tous avec des notes d'invitation) : chaque champ n'est lu que si le mot y figure, les
+    notes en dernier, sans copie des rendez-vous ; « a » sur 25 000 rendez-vous avec notes passe de 2,8 s
+    à 0,15 s (compilation de débogage), à résultat identique (un test aléatoire compare l'ancienne et la
+    nouvelle façon) ; la liste n'est pas recopiée à chaque image et seules les lignes visibles sont dessinées ;
+  - le menu « Tous les calendriers » ne propose que les calendriers dont les rendez-vous sont gardés ici
+    (l'origine proposait aussi un calendrier de collègue jamais lu, qui ne trouvait rien) ;
+  - Échap vide la recherche où que soit le focus, comme pour le courrier ;
+  - le volet latéral du calendrier est passé dans son propre fichier (`panes/calendar/side.rs`) avant
+    l'ajout, `calendar.rs` ayant dépassé 800 lignes ;
+  - une commande de démarrage, `ui.calendarSearch`, pour voir la recherche dans la vraie fenêtre.
+- **Vérifié** : modèle (requête, champs, dates, privé, données absurdes), moteur (une série trouvée une
+  fois, à sa prochaine occurrence ou à sa dernière, une occurrence modifiée seule, les annulées et les
+  dates retirées écartées, la journée entière à l'est et à l'ouest de UTC, des dates aux limites, 25 000
+  rendez-vous réalistes en moins d'une seconde), interface (ouverture au bon jour, Échap, portée devenue
+  invalide, données absurdes dessinées), captures de la fenêtre en clair et en sombre.
+- **Reste à faire** : l'essai sur le calendrier du propriétaire, avec ceux de ses collègues cochés.
+
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
 Quatre chantiers, chacun dans son commit, à la suite d'un audit de l'éditeur HTML.
