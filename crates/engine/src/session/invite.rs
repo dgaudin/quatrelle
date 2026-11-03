@@ -199,9 +199,8 @@ impl Session {
         // Inbox go to Deleted Items. One answered again from Deleted Items stays there. Some
         // occurrences answered take only the invitations to those.
         self.close_window(&key);
-        let occurrences: Vec<i64> = answered.iter().filter_map(|e| e.recurrence_id).collect();
-        let only = (!answered.iter().any(|e| e.recurrence_id.is_none())).then_some(occurrences.as_slice());
-        let moved = self.tidy_meeting_mail(&key.account, &uid, &["REQUEST"], only, &answered, Some(&key));
+        let only = tidy::occurrences_only(&answered);
+        let moved = self.tidy_meeting_mail(&key.account, &uid, &["REQUEST"], only.as_deref(), &answered, Some(&key));
         if let Some(o) = out.as_object_mut() {
             o.insert("moved".into(), moved.into());
         }
@@ -350,17 +349,44 @@ impl Session {
         !copies.is_empty()
     }
 
-    /// Answer an invitation already in the calendar (from the event form).
+    /// Answer an invitation already in the calendar (from the event form). Someone else's meeting
+    /// answered, its invitations in the Inbox go to Deleted Items, as when answered in the
+    /// message; the user's own meetings are left alone.
     pub fn respond_to_event(&mut self, uid: &str, answer: &str) -> CmdResult {
         let stat = partstat(answer).ok_or_else(|| CmdError::Params(format!("`{answer}`: answer accepted, tentative or declined")))?;
-        let account = self.find_event(uid).map(|(a, _)| a.to_string()).ok_or_else(|| CmdError::Params(format!("no event `{uid}`")))?;
-        if self.server_answers(&account) {
-            return self.answer_by_server(&account, uid, None, stat);
+        let (account, organizer) = self
+            .find_event(uid)
+            .map(|(a, e)| (a.to_string(), e.event.organizer.as_ref().map(|o| without_mailto(&o.email).to_ascii_lowercase())))
+            .ok_or_else(|| CmdError::Params(format!("no event `{uid}`")))?;
+        let mut out =
+            if self.server_answers(&account) { self.answer_by_server(&account, uid, None, stat)? } else { self.answer_event(&account, uid, stat)? };
+        // No organizer known (an Exchange colleague's meeting names them by an internal
+        // address) counts as someone else's.
+        let theirs = organizer.is_none_or(|o| !self.my_addresses().contains(&o));
+        let moved = if theirs {
+            // The version answered: the calendar's copy (on Exchange the answer may only be on
+            // its way; what's stored is the version known).
+            let upto: Vec<CalEvent> = self
+                .pim
+                .get(&account)
+                .map(|p| p.events.iter().filter(|e| same_meeting(&e.event.uid, uid)).map(|e| e.event.clone()).collect())
+                .unwrap_or_default();
+            self.tidy_meeting_mail(&account, uid, &["REQUEST"], None, &upto, None)
+        } else {
+            0
+        };
+        if let Some(o) = out.as_object_mut() {
+            o.insert("moved".into(), moved.into());
         }
-        let me = self.account(&account).map(|a| a.config.email.clone()).unwrap_or_default();
+        Ok(out)
+    }
+
+    /// [`Session::respond_to_event`]'s answer, by mail: in the calendar, and to the organizer.
+    fn answer_event(&mut self, account: &str, uid: &str, stat: &str) -> CmdResult {
+        let me = self.account(account).map(|a| a.config.email.clone()).unwrap_or_default();
         let mine = self.my_addresses();
         let mut master = None;
-        let p = self.pim_mut(&account);
+        let p = self.pim_mut(account);
         let mut remote = false;
         for e in p.events.iter_mut().filter(|e| e.event.uid == uid) {
             set_answer(&mut e.event, &mine, &me, stat);
@@ -370,9 +396,9 @@ impl Session {
                 master = Some(e.event.clone());
             }
         }
-        self.after_pim_change(&account, remote);
+        self.after_pim_change(account, remote);
         if let Some(m) = master {
-            self.send_reply(&account, &m, stat)?;
+            self.send_reply(account, &m, stat)?;
         }
         Ok(serde_json::json!({"answer": stat, "uid": uid}))
     }
@@ -397,7 +423,8 @@ impl Session {
             "CANCEL" => {
                 // Cancelled by the organizer: no answer is sent. The whole series, or the
                 // occurrences it names.
-                let cancelled: Vec<Option<i64>> = cal.events.iter().filter(|e| e.uid == uid).map(|e| e.recurrence_id).collect();
+                let cancelled_parts: Vec<CalEvent> = cal.events.iter().filter(|e| e.uid == uid).cloned().collect();
+                let cancelled: Vec<Option<i64>> = cancelled_parts.iter().map(|e| e.recurrence_id).collect();
                 let p = self.pim_mut(&account);
                 let mut remote = false;
                 if cancelled.iter().any(Option::is_none) {
@@ -410,7 +437,11 @@ impl Session {
                     }
                 }
                 self.after_pim_change(&account, remote);
-                Ok(serde_json::json!({"removed": true}))
+                // Out of the calendar: the cancellation, and the meeting's invitations in the
+                // Inbox (one sent again since, newer, stays), go to Deleted Items.
+                let only = tidy::occurrences_only(&cancelled_parts);
+                let moved = self.tidy_meeting_mail(&key.account, &uid, &["REQUEST", "CANCEL"], only.as_deref(), &cancelled_parts, Some(&key));
+                Ok(serde_json::json!({"removed": true, "moved": moved}))
             }
             "REPLY" => {
                 let who = inv.replier.ok_or_else(|| CmdError::Disabled("the answer names no one".into()))?;
