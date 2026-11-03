@@ -2,8 +2,8 @@
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 // Copyright (c) 2026 Didier Gaudin
 //! The Calendar: a month to pick days from and the calendars in the side pane; a day, a week
-//! or a month in the main one. Click an empty hour to add an event there, an event to open it,
-//! drag one to move it ([`drag`]).
+//! or a month in the main one. A click selects an event or an empty half hour, a double click
+//! opens it or adds an event there ([`pick`]); drag one to move it ([`drag`]).
 
 use egui::{Align2, Color32, Key, Margin, Rect, RichText, Sense, Ui, pos2, vec2};
 use quatrelle_engine::model::dates::{self, civil_from_days, days_from_civil};
@@ -19,12 +19,14 @@ mod days;
 mod drag;
 mod found;
 mod menu;
+mod pick;
 mod side;
 use days::days;
 pub use drag::Drag;
 #[cfg(test)]
 pub(crate) use found::open_hit;
 pub(crate) use found::{CalSearch, found};
+pub use pick::Pick;
 pub use side::{nav, todo_bar};
 
 /// Height of an hour in the day and week views.
@@ -131,6 +133,7 @@ pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) 
         CalMode::Month => month(s, st, ui, &items, d0, acts),
         CalMode::Day | CalMode::WorkWeek | CalMode::Week => days(s, st, ui, &items, d0, d1, acts),
     }
+    pick::enter(s, st, ui, &items, acts);
     slow_drawing(ui, began.elapsed(), found, items.len());
     // A drag whose chip is no longer drawn (the view changed under it) is let go of.
     if st.cal_drag.is_some() && !ui.input(|i| i.pointer.primary_down()) {
@@ -176,13 +179,23 @@ fn drawn_id(item: &AgendaItem, day: i64, s: &Session) -> egui::Id {
     if day_of(item.start, s) == day { chip_id(item) } else { chip_id(item).with(day) }
 }
 
-/// An appointment in the grid, as drawn on `day`: its box, its card under the pointer, its menu
-/// on a right click.
+/// An appointment in the grid, as drawn on `day`: its box (outlined when it's selected), its card
+/// under the pointer, its menu on a right click. A click selects it, a right click too (then its
+/// menu opens), a double click opens it, as Outlook's.
 #[allow(clippy::too_many_arguments)]
-fn chip(ui: &mut Ui, s: &Session, t: &Tokens, rect: Rect, item: &AgendaItem, text: &str, day: i64, acts: &mut Vec<Action>) -> egui::Response {
+fn chip(ui: &mut Ui, s: &Session, st: &mut UiState, rect: Rect, item: &AgendaItem, text: &str, day: i64, acts: &mut Vec<Action>) -> egui::Response {
+    let t = st.tokens;
+    let t = &t;
     // One that can move is taken hold of as well as clicked.
     let sense = if item.movable { Sense::click_and_drag() } else { Sense::click() };
     let resp = ui.interact(rect, drawn_id(item, day, s), sense);
+    if resp.clicked() || resp.secondary_clicked() || resp.double_clicked() {
+        st.cal_pick = Some(Pick::of(item));
+    }
+    if resp.double_clicked() {
+        acts.extend(open(s, item));
+    }
+    let picked = st.cal_pick.as_ref().is_some_and(|p| p.is(item));
     let c = item_color(item, t);
     let tentative = item.needs_reply || item.status == "TENTATIVE";
     // Stronger under the pointer, with its colour round it.
@@ -197,7 +210,10 @@ fn chip(ui: &mut Ui, s: &Session, t: &Tokens, rect: Rect, item: &AgendaItem, tex
             (false, true) => 0.3,
         }),
     };
-    ui.painter().rect(rect, 4.0, fill, egui::Stroke::new(if tentative || hovered { 1.0 } else { 0.0 }, c), egui::StrokeKind::Inside);
+    // Selected: a thicker, darker border round it (Outlook's).
+    let stroke =
+        if picked { egui::Stroke::new(2.0, pick::outline(c, t)) } else { egui::Stroke::new(if tentative || hovered { 1.0 } else { 0.0 }, c) };
+    ui.painter().rect(rect, 4.0, fill, stroke, egui::StrokeKind::Inside);
     // How it shows the user's time, in the strip at its left, as Outlook draws it.
     strip(ui.painter(), t, Rect::from_min_size(rect.min, vec2(STRIP, rect.height())), c, strip_look(item.show_as));
     // A private one: a lock in its top right corner, the text stopping short of it.
@@ -493,16 +509,11 @@ fn month(s: &Session, st: &mut UiState, ui: &mut Ui, items: &[AgendaItem], d0: i
             for (k, it) in todays.iter().take(shown).enumerate() {
                 let cr = Rect::from_min_size(r.min + vec2(3.0, 24.0 + 19.0 * k as f32), vec2(cw - 6.0, 17.0));
                 let text = if it.all_day { title(it) } else { format!("{} {}", hm(it.start, s), title(it)) };
-                let resp = chip(ui, s, t, cr, it, &text, d, acts);
+                let resp = chip(ui, s, st, cr, it, &text, d, acts);
                 // Only on the day it starts: a chip drawn on each day it spans would start a
                 // drag each.
                 if day_of(it.start, s) == d {
                     drag::chip(ui, st, s, &resp, cr, it, &drag_area, acts);
-                }
-                if resp.clicked()
-                    && let Some(a) = open(s, it)
-                {
-                    acts.push(a);
                 }
             }
             if todays.len() > shown {

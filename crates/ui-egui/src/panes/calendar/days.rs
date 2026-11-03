@@ -3,7 +3,8 @@
 // Copyright (c) 2026 Didier Gaudin
 //! The Day, Work week and Week views: the days in columns over the hours (each calendar in a
 //! pane of its own when side by side), the all-day events in a strip above, a click on an empty
-//! half hour adding an event there, and appointments dragged to another time ([`super::drag`]).
+//! half hour selecting it and a double click adding an event there ([`super::pick`]), and
+//! appointments dragged to another time ([`super::drag`]).
 
 use super::*;
 use drag::Area;
@@ -114,15 +115,10 @@ pub(super) fn days(s: &Session, st: &mut UiState, ui: &mut Ui, items: &[AgendaIt
                 pos2(strip.min.x + day_x(a - d0, col_of(it)) + 2.0, strip.min.y + 3.0 + 20.0 * lane as f32),
                 vec2(cw * (b - a + 1) as f32 - 4.0, 18.0),
             );
-            let resp = chip(ui, s, &t, r, it, &title(it), day_of(it.start, s), acts);
+            let resp = chip(ui, s, st, r, it, &title(it), day_of(it.start, s), acts);
             // Dragged along the strip: another day, as long as it was.
             let area = Area::Strip { rect: strip, x0: strip.min.x + pane_x(col_of(it)), cw, day0: d0, days: n };
             drag::chip(ui, st, s, &resp, r, it, &area, acts);
-            if resp.clicked()
-                && let Some(act) = open(s, it)
-            {
-                acts.push(act);
-            }
         }
         for j in 0..k {
             drag::paint(ui, st, s, &t, &Area::Strip { rect: strip, x0: strip.min.x + pane_x(j), cw, day0: d0, days: n }, j, &col_of);
@@ -163,23 +159,33 @@ pub(super) fn days(s: &Session, st: &mut UiState, ui: &mut Ui, items: &[AgendaIt
                 ui.painter().line_segment([pos2(x, grid.min.y), pos2(x, grid.max.y)], egui::Stroke::new(1.0, t.border));
             }
         }
-        // Click an empty half hour to add an event there (in that pane's calendar).
+        // A click on an empty half hour selects it, a double click adds an event there (in that
+        // pane's calendar), as Outlook's.
+        let half_at = |y: f32| ((y - grid.min.y) / (HOUR / 2.0)).floor().clamp(0.0, 47.0) as i64;
         for j in 0..k {
             for i in 0..n {
                 let col = Rect::from_min_size(pos2(grid.min.x + day_x(i, j), grid.min.y), vec2(cw, grid.height()));
+                let slot = |half: i64| Rect::from_min_size(pos2(col.min.x, grid.min.y + half as f32 * HOUR / 2.0), vec2(cw, HOUR / 2.0)).shrink(1.0);
                 let r = ui.interact(col, ui.scope_id().with(("hours", d0 + i, j)), Sense::click());
-                // The half hour under the pointer lights up: a click adds an event there (not
-                // while something is being dragged over it).
+                // The half hour under the pointer lights up (not while something is being dragged
+                // over it); the one selected stays lit, in the selection's colour.
                 if let Some(p) = r.hover_pos().filter(|_| st.cal_drag.is_none()) {
-                    let half = ((p.y - grid.min.y) / (HOUR / 2.0)).floor().clamp(0.0, 47.0);
-                    let slot = Rect::from_min_size(pos2(col.min.x, grid.min.y + half * HOUR / 2.0), vec2(cw, HOUR / 2.0)).shrink(1.0);
-                    ui.painter().rect_filled(slot, 2.0, t.hover_row);
+                    ui.painter().rect_filled(slot(half_at(p.y)), 2.0, t.hover_row);
                 }
-                if r.clicked()
+                if let Some(Pick::Slot { day, half, pane }) = &st.cal_pick
+                    && *day == d0 + i
+                    && *pane == j
+                {
+                    ui.painter().rect_filled(slot(*half), 2.0, t.accent_soft);
+                }
+                if (r.clicked() || r.double_clicked())
                     && let Some(p) = r.interact_pointer_pos()
                 {
-                    let half = ((p.y - grid.min.y) / (HOUR / 2.0)).floor().clamp(0.0, 47.0) as i64;
-                    acts.push(new_event_in(s, s.local_midnight(d0 + i) + half * 1800, cals.get(j).filter(|_| k > 1)));
+                    let half = half_at(p.y);
+                    st.cal_pick = Some(Pick::Slot { day: d0 + i, half, pane: j });
+                    if r.double_clicked() {
+                        acts.push(new_event_in(s, s.local_midnight(d0 + i) + half * 1800, cals.get(j).filter(|_| k > 1)));
+                    }
                 }
             }
         }
@@ -220,16 +226,11 @@ pub(super) fn days(s: &Session, st: &mut UiState, ui: &mut Ui, items: &[AgendaIt
                     text.push_str(if w <= r.width() - 8.0 { " · " } else { "\n" });
                     text.push_str(&it.location);
                 }
-                let resp = chip(ui, s, &t, r, it, &text, d, acts);
+                let resp = chip(ui, s, st, r, it, &text, d, acts);
                 // Dragged by its body to another hour or day; by its bottom edge, made to end
                 // at another time.
                 let area = Area::Hours { grid, pane_x: pane_x(j), cw, day0: d0, days: n };
                 drag::chip(ui, st, s, &resp, r, it, &area, acts);
-                if resp.clicked()
-                    && let Some(a) = open(s, it)
-                {
-                    acts.push(a);
-                }
             }
         }
         // Where what's dragged would land, over everything else.

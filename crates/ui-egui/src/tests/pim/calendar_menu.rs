@@ -9,11 +9,11 @@ use quatrelle_engine::model::ical::ShowAs;
 use super::*;
 use crate::calendar::chip_id;
 
-const SIZE: egui::Vec2 = egui::vec2(1280.0, 800.0);
+pub(super) const SIZE: egui::Vec2 = egui::vec2(1280.0, 800.0);
 
 /// The sample in the Day view, `step` days on from today, its chips settled (the day scrolled to
 /// the working hours).
-fn day_view(name: &str, step: i64) -> (MailApp, std::path::PathBuf, egui::Context) {
+pub(super) fn day_view(name: &str, step: i64) -> (MailApp, std::path::PathBuf, egui::Context) {
     let (mut a, dir) = app(name);
     let ctx = egui::Context::default();
     frame(&ctx, &mut a, vec![]);
@@ -29,13 +29,13 @@ fn day_view(name: &str, step: i64) -> (MailApp, std::path::PathBuf, egui::Contex
 }
 
 /// The appointment called `summary` in the days shown.
-fn shown(a: &MailApp, summary: &str) -> AgendaItem {
+pub(super) fn shown(a: &MailApp, summary: &str) -> AgendaItem {
     let (d0, d1) = a.session.cal_days();
     let items = a.session.agenda(a.session.local_midnight(d0), a.session.local_midnight(d1));
     items.into_iter().find(|i| i.summary == summary).unwrap_or_else(|| panic!("{summary} isn't in the view"))
 }
 
-fn texts(shapes: &[egui::Shape]) -> Vec<String> {
+pub(super) fn texts(shapes: &[egui::Shape]) -> Vec<String> {
     shapes
         .iter()
         .filter_map(|s| match s {
@@ -47,7 +47,7 @@ fn texts(shapes: &[egui::Shape]) -> Vec<String> {
 
 /// A right click (pressed and let go where it was) on the appointment's chip: the texts the
 /// frame draws then that it didn't before (the menu's entries).
-fn right_click(ctx: &egui::Context, a: &mut MailApp, item: &AgendaItem) -> Vec<String> {
+pub(super) fn right_click(ctx: &egui::Context, a: &mut MailApp, item: &AgendaItem) -> Vec<String> {
     let at = ctx.read_response(chip_id(item)).map(|r| r.rect.center()).expect("the chip is drawn");
     frame(ctx, a, vec![Event::PointerMoved(at)]);
     for _ in 0..60 {
