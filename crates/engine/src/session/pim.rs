@@ -325,7 +325,9 @@ impl Session {
                     }
                     let needs_reply = e.attendees.iter().any(|a| mine.contains(&a.email.to_ascii_lowercase()) && a.partstat == "NEEDS-ACTION");
                     let organizer_is_me = e.organizer.as_ref().is_some_and(|o| mine.contains(&o.email.to_ascii_lowercase()));
-                    let answer = if cal.read_only { None } else { self.answer_to(e, &mine) };
+                    // Only in the user's own calendars: in a colleague's, even one the user may
+                    // change, the meeting isn't the user's to answer.
+                    let answer = if cal.read_only || !own_calendar(&cal.id) { None } else { self.answer_to(e, &mine) };
                     out.push(AgendaItem {
                         private: e.private,
                         show_as: e.show_as,
