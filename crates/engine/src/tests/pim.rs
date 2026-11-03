@@ -698,6 +698,8 @@ fn reminders_come_snooze_and_go() {
     assert_eq!(due(&s), ["Review", "Stand-up"], "the next day's stand-up, and yesterday's review still unanswered (overdue)");
     assert!(s.run("reminders.dismiss", &json!({})).unwrap()["dismissed"].as_u64().unwrap() >= 2, "all of them, the sample's too");
     assert!(due(&s).is_empty());
+    // The review's reminder was dismissed with the rest: off the appointment, as Outlook does.
+    s.run("event.update", &json!({"uid": review, "reminder": 60})).unwrap();
     // The 14:00 review's an hour before; hiding its calendar doesn't silence it.
     s.prefs.reminders.clear();
     s.clock.now = review_at - 3600;
