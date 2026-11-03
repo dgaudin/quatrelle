@@ -7,7 +7,9 @@ use egui::{Align2, Margin, Rect, RichText, Sense, Ui, pos2, vec2};
 use quatrelle_engine::{EventHit, EventWhen, Session};
 use serde_json::json;
 
-use super::{color, hm, long_date};
+use std::collections::HashSet;
+
+use super::{color, day_of, hm, long_date};
 use crate::icons::{self, Icon};
 use crate::theme::{self, Tokens};
 use crate::{Action, Dialog, UiState};
@@ -20,6 +22,9 @@ pub struct CalSearch {
     /// One calendar (account, calendar id) to look in; `None`: every one shown.
     pub scope: Option<(String, String)>,
     found: Option<(Key, Vec<EventHit>)>,
+    /// The calendars that can be searched (account, id, name), and what they were worked out
+    /// from (the calendars' state, how many are unticked).
+    searchable: Option<((u64, usize), Vec<(String, String, String)>)>,
     /// When a slow search was last said in the log.
     slow_said: Option<web_time::Instant>,
 }
@@ -31,6 +36,8 @@ type Key = (String, EventWhen, Option<(String, String)>, u64, i64);
 const SHOWN: usize = 500;
 /// A result's height.
 const ROW: f32 = 46.0;
+/// A heading's (Upcoming, Past).
+const HEADING: f32 = 30.0;
 /// A search this long or longer is said in the log (once every ten seconds at most).
 const SLOW: web_time::Duration = web_time::Duration::from_millis(50);
 
@@ -43,9 +50,10 @@ impl CalSearch {
     /// What the search finds, searched again only when the query, the switches, the calendars
     /// or the minute have changed.
     pub(crate) fn results(&mut self, s: &Session) -> &[EventHit] {
-        // A calendar since closed or unsubscribed from: every calendar, rather than nothing.
-        if let Some((a, c)) = &self.scope
-            && !s.pim.get(a).is_some_and(|p| p.calendars.iter().any(|x| x.id == *c))
+        // A calendar since closed or unsubscribed from, or one not kept here (unticked, never
+        // read): every calendar, rather than nothing.
+        if let Some((a, c)) = self.scope.clone()
+            && !self.calendars(s).iter().any(|(x, y, _)| *x == a && *y == c)
         {
             self.scope = None;
         }
@@ -66,16 +74,44 @@ impl CalSearch {
         }
         self.found.as_ref().map_or(&[], |(_, h)| h.as_slice())
     }
+
+    /// The calendars that can be searched ([`searchable`]), worked out again only when the
+    /// calendars or which are ticked have changed.
+    pub(crate) fn calendars(&mut self, s: &Session) -> &[(String, String, String)] {
+        let key = (s.pim_revision, s.prefs.hidden_calendars.len());
+        if self.searchable.as_ref().is_none_or(|(k, _)| *k != key) {
+            self.searchable = Some((key, searchable(s)));
+        }
+        self.searchable.as_ref().map_or(&[], |(_, l)| l.as_slice())
+    }
 }
 
-/// Every calendar there is (account, id, name), for the scope menu.
-fn calendars(s: &Session) -> Vec<(String, String, String)> {
+impl crate::MailApp {
+    /// Searches the calendar for `query` (the box's text), upcoming, past or both, and shows the
+    /// Calendar (the start-up `--cmd ui.calendarSearch`).
+    pub fn search_calendar(&mut self, query: &str, when: EventWhen) {
+        self.run("view.module", json!({"name": "calendar"}));
+        self.ui.cal_search.query = query.to_string();
+        self.ui.cal_search.when = when;
+    }
+}
+
+/// The calendars that can be searched (account, id, name), for the scope menu: those whose
+/// appointments are read and kept here, every one ticked and those unticked that still have
+/// what was read of them; not a colleague's never read (the engine's `not_read`, unticked).
+fn searchable(s: &Session) -> Vec<(String, String, String)> {
     let mut out = Vec::new();
     for a in &s.accounts {
-        if let Some(p) = s.pim.get(&a.config.id) {
-            for c in &p.calendars {
-                out.push((a.config.id.clone(), c.id.clone(), format!("{} · {}", calendar_name(c), a.config.email)));
-            }
+        let id = &a.config.id;
+        let Some(p) = s.pim.get(id) else { continue };
+        // Which calendars have appointments kept here: only asked when some are unticked.
+        let kept: HashSet<&str> = if p.calendars.iter().all(|c| s.calendar_shown(id, &c.id)) {
+            HashSet::new()
+        } else {
+            p.events.iter().map(|e| e.calendar.as_str()).collect()
+        };
+        for c in p.calendars.iter().filter(|c| s.calendar_shown(id, &c.id) || kept.contains(c.id.as_str())) {
+            out.push((id.clone(), c.id.clone(), format!("{} · {}", calendar_name(c), a.config.email)));
         }
     }
     out
@@ -88,7 +124,6 @@ fn calendar_name(c: &quatrelle_engine::model::pim::CalendarInfo) -> String {
 
 /// The results, in place of the days.
 pub(crate) fn found(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
-    let t = st.tokens;
     egui::Frame::new().inner_margin(Margin::symmetric(14, 10)).show(ui, |ui| {
         ui.horizontal(|ui| {
             for (when, label) in [(EventWhen::All, tl!("All")), (EventWhen::Upcoming, tl!("Upcoming")), (EventWhen::Past, tl!("Past"))] {
@@ -97,26 +132,53 @@ pub(crate) fn found(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<A
                 }
             }
             ui.add_space(12.0);
-            // Where to look, as the mail search box's menu: every calendar shown, or one.
-            let all = calendars(s);
-            let shown = match &st.cal_search.scope {
-                Some((a, c)) => all.iter().find(|(x, y, _)| x == a && y == c).map_or_else(|| tl!("All calendars").to_string(), |x| x.2.clone()),
-                None => tl!("All calendars").to_string(),
-            };
-            egui::ComboBox::from_id_salt("calendar-search-scope").selected_text(shown).show_ui(ui, |ui| {
-                if ui.selectable_label(st.cal_search.scope.is_none(), tl!("All calendars")).clicked() {
-                    st.cal_search.scope = None;
-                }
-                for (a, c, name) in &all {
-                    let on = st.cal_search.scope.as_ref().is_some_and(|(x, y)| x == a && y == c);
-                    if ui.selectable_label(on, name).clicked() {
-                        st.cal_search.scope = Some((a.clone(), c.clone()));
-                    }
-                }
-            });
+            scope_menu(s, st, ui);
         });
     });
-    let hits = st.cal_search.results(s).to_vec();
+    // The results taken out to draw (not copied each frame), then put back.
+    st.cal_search.results(s);
+    let found = st.cal_search.found.take();
+    let hits = found.as_ref().map_or(&[][..], |(_, h)| h.as_slice());
+    list(s, st, ui, hits, acts);
+    if st.cal_search.found.is_none() {
+        st.cal_search.found = found;
+    }
+}
+
+/// Where to look, as the mail search box's menu: every calendar shown, or one that can be searched.
+fn scope_menu(s: &Session, st: &mut UiState, ui: &mut Ui) {
+    st.cal_search.calendars(s);
+    let kept = st.cal_search.searchable.take();
+    let all = kept.as_ref().map_or(&[][..], |(_, l)| l.as_slice());
+    let shown = match &st.cal_search.scope {
+        Some((a, c)) => all.iter().find(|(x, y, _)| x == a && y == c).map_or_else(|| tl!("All calendars").to_string(), |x| x.2.clone()),
+        None => tl!("All calendars").to_string(),
+    };
+    egui::ComboBox::from_id_salt("calendar-search-scope").selected_text(shown).show_ui(ui, |ui| {
+        if ui.selectable_label(st.cal_search.scope.is_none(), tl!("All calendars")).clicked() {
+            st.cal_search.scope = None;
+        }
+        for (a, c, name) in all {
+            let on = st.cal_search.scope.as_ref().is_some_and(|(x, y)| x == a && y == c);
+            if ui.selectable_label(on, name).clicked() {
+                st.cal_search.scope = Some((a.clone(), c.clone()));
+            }
+        }
+    });
+    if st.cal_search.searchable.is_none() {
+        st.cal_search.searchable = kept;
+    }
+}
+
+/// A line of the results: a heading (upcoming ones, or past ones), or a result.
+enum Line {
+    Heading(bool),
+    Hit(usize),
+}
+
+/// The results under their headings, only those in view drawn.
+fn list(s: &Session, st: &mut UiState, ui: &mut Ui, hits: &[EventHit], acts: &mut Vec<Action>) {
+    let t = st.tokens;
     if hits.is_empty() {
         ui.add_space(40.0);
         ui.vertical_centered(|ui| {
@@ -127,31 +189,53 @@ pub(crate) fn found(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<A
         });
         return;
     }
-    egui::ScrollArea::vertical().auto_shrink(false).id_salt("calendar-found").show(ui, |ui| {
-        egui::Frame::new().inner_margin(Margin::symmetric(14, 0)).show(ui, |ui| {
-            let mut heading: Option<bool> = None;
-            for h in &hits {
-                // Upcoming ones, then past ones, each under its heading.
-                if st.cal_search.when == EventWhen::All && heading != Some(h.upcoming) {
-                    heading = Some(h.upcoming);
-                    ui.add_space(6.0);
-                    ui.label(RichText::new(if h.upcoming { tl!("Upcoming") } else { tl!("Past") }).font(theme::bold(13.0)).color(t.dim));
-                    ui.add_space(2.0);
+    // Upcoming ones, then past ones, each under its heading: each line with its top.
+    let mut lines: Vec<(f32, Line)> = Vec::with_capacity(hits.len() + 2);
+    let mut y = 0.0;
+    let mut heading: Option<bool> = None;
+    for (i, h) in hits.iter().enumerate() {
+        if st.cal_search.when == EventWhen::All && heading != Some(h.upcoming) {
+            heading = Some(h.upcoming);
+            lines.push((y, Line::Heading(h.upcoming)));
+            y += HEADING;
+        }
+        lines.push((y, Line::Hit(i)));
+        y += ROW;
+    }
+    let total = y + 10.0;
+    egui::ScrollArea::vertical().auto_shrink(false).id_salt("calendar-found").show_viewport(ui, |ui, view| {
+        ui.set_height(total);
+        let origin = ui.min_rect().min + vec2(14.0, 0.0);
+        let width = (ui.available_width() - 28.0).max(0.0);
+        let first = lines.partition_point(|(top, line)| top + if matches!(line, Line::Heading(_)) { HEADING } else { ROW } < view.min.y);
+        for (top, line) in lines.iter().skip(first) {
+            if *top > view.max.y {
+                break;
+            }
+            match line {
+                Line::Heading(upcoming) => {
+                    let r = Rect::from_min_size(origin + vec2(0.0, *top), vec2(width, HEADING));
+                    let label = if *upcoming { tl!("Upcoming") } else { tl!("Past") };
+                    ui.painter().text(pos2(r.min.x, r.max.y - 12.0), Align2::LEFT_CENTER, label, theme::bold(13.0), t.dim);
                 }
-                if row(s, &t, ui, h).clicked() {
-                    open_hit(s, st, h, acts);
+                Line::Hit(i) => {
+                    let Some(h) = hits.get(*i) else { continue };
+                    let r = Rect::from_min_size(origin + vec2(0.0, *top), vec2(width, ROW));
+                    let clicked =
+                        ui.scope_builder(egui::UiBuilder::new().id_salt(("calendar-found", *i)).max_rect(r), |ui| row(s, &t, ui, h).clicked()).inner;
+                    if clicked {
+                        open_hit(s, st, h, acts);
+                    }
                 }
             }
-            ui.add_space(10.0);
-        });
+        }
     });
 }
 
 /// A result clicked: its day in the view the calendar was in (the search box emptied), and the
 /// event open at that occurrence.
 pub(crate) fn open_hit(s: &Session, st: &mut UiState, h: &EventHit, acts: &mut Vec<Action>) {
-    let day = s.clock.local(h.start).div_euclid(86_400);
-    let (y, m, d) = quatrelle_engine::model::dates::civil_from_days(day);
+    let (y, m, d) = quatrelle_engine::model::dates::civil_from_days(day_of(h.start, s));
     acts.push(Action::Run("calendar.goto", json!({"date": format!("{y:04}-{m:02}-{d:02}")})));
     if let Some(dialog) = Dialog::open_event(s, &h.uid, h.occurrence) {
         acts.push(Action::Dialog(dialog));
@@ -171,7 +255,7 @@ fn row(s: &Session, t: &Tokens, ui: &mut Ui, h: &EventHit) -> egui::Response {
     ui.painter().rect_filled(Rect::from_min_size(rect.min + vec2(2.0, 6.0), vec2(3.0, ROW - 12.0)), 2.0, c);
     let p = ui.painter().with_clip_rect(rect);
     let date_x = rect.min.x + 16.0;
-    let day = s.clock.local(h.start).div_euclid(86_400);
+    let day = day_of(h.start, s);
     p.text(pos2(date_x, rect.min.y + 14.0), Align2::LEFT_CENTER, long_date(day), theme::regular(12.5), t.text);
     let time = if h.all_day { tl!("All day").to_string() } else { format!("{} – {}", hm(h.start, s), hm(h.end, s)) };
     p.text(pos2(date_x, rect.min.y + 32.0), Align2::LEFT_CENTER, time, theme::regular(12.0), t.dim);

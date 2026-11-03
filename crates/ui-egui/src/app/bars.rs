@@ -59,10 +59,7 @@ impl MailApp {
                         if focus {
                             resp.request_focus();
                         }
-                        // Escape in the calendar's box empties it: the days come back.
-                        if module == Module::Calendar && resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Escape)) {
-                            query.clear();
-                        }
+                        // Escape empties the calendar's (the shortcuts' Escape, wherever the focus is).
                         if !query.is_empty() && widgets::tiny_icon_button(ui, Icon::Close, "Clear search", &t).clicked() {
                             query.clear();
                         }
