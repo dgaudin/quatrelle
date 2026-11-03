@@ -750,6 +750,48 @@ plan : `docs/superpowers/specs/2026-11-03-answered-invitations-design.md`,
   le calendrier, vérifier qu'aucune erreur « Le serveur a refusé un changement » n'apparaît) ; les
   rendez-vous déjà en cache ne recevront leur `SEQUENCE` qu'à leur prochain changement.
 
+### État de la récupération : v0.31, cinquième partie : privé et « Afficher comme » dans la grille (2026-11-03)
+
+La troisième des quatre fonctions de calendrier de la v0.31 (`merge-tools/survey-v0.31.md`, « Décidé le
+02/11 », issue #32 de l'origine), sur la branche `private-show-as`, en comblant les manques plutôt qu'en
+portant : le fork avait déjà le privé (`PrivateKind`) et les cinq états d'« Afficher comme », dans la
+fenêtre du rendez-vous, sur EWS et sur CalDAV. Avec les deux demandes du propriétaire du 02/11 au soir :
+le cadenas dans la grille et un menu au clic droit sur un rendez-vous. Spec et plan :
+`docs/superpowers/specs/2026-11-03-private-and-show-as-design.md`,
+`docs/superpowers/plans/2026-11-03-private-and-show-as.md`.
+
+- **Ce qui change** :
+  - la grille (Jour, Semaine de travail, Semaine, Mois, la bande « toute la journée ») dessine l'état à
+    gauche du rendez-vous comme Outlook : occupé plein, provisoire hachuré, libre en contour, absent en
+    violet (la couleur de catégorie n° 4), ailleurs en pointillés ; un rendez-vous privé porte le cadenas
+    Fluent, et se lit « Rendez-vous privé » quand il arrive sans objet ;
+  - le clic droit sur un rendez-vous : Ouvrir, Rejoindre ; Accepter / Provisoire / Refuser pour une
+    réunion qu'un autre organise, dans un calendrier à soi ; Afficher comme, Catégoriser et Privé, sans
+    prévenir les invités (`event.update` avec `"send": false`) ; Supprimer (cette occurrence ou la série).
+    Dans un calendrier en lecture seule, ou sur la copie d'un collègue, seulement Ouvrir et Rejoindre ;
+  - une invitation acceptée s'affiche comme l'organisateur l'a voulu (`X-MICROSOFT-CDO-INTENDEDSTATUS`),
+    sinon occupée si elle était provisoire (repris de `1ae7e345`) ; la réponse à l'organisateur part sans
+    alarme (`6d1ccb3c`, ici sous une autre forme : le rappel partait, et une alarme gardée telle quelle
+    n'en perdait que la première ligne) ;
+  - Exchange Online (Graph) lit et écrit la sensibilité et l'état (Personnel et Confidentiel gardés).
+- **Défauts trouvés en chemin et corrigés** : une modification qui ne touchait pas l'heure donnait le
+  fuseau de l'utilisateur à une série qui n'en avait pas, et ses occurrences changeaient d'heure après le
+  passage à l'heure d'hiver ; un glisser au bouton droit déplaçait le rendez-vous de 15 minutes ; un
+  rendez-vous sur plusieurs jours n'ouvrait aucun menu en vue Mois ; une modification « sans prévenir »
+  annulait, sur Exchange, une invitation encore à envoyer (elle serait partie sans destinataire).
+- **Laissés** : `5fa58c50` (il remplacerait le modèle du fork) ; `418faa02` (le calendrier par défaut
+  choisi de l'origine, #30, non repris : le formulaire du fork part déjà du premier calendrier
+  modifiable du compte).
+- **Vérifié** : modèle, moteur (invitations sur IMAP, réponse sans alarme, agenda, envoi en attente,
+  série au passage à l'heure d'hiver), faux serveur Graph, grille et menu (tests d'interface, clics
+  simulés), la vraie fenêtre en clair et en sombre (captures lues), `cargo xtask ci`.
+- **Reste à faire** : l'essai sur l'Exchange du propriétaire (EWS) et sur Microsoft 365 (Graph : un état
+  choisi depuis le menu, sur une réunion reçue et sur une réunion organisée). Connus, laissés pour
+  plus tard : sur EWS, un état ou un privé choisi entre une réponse et la synchronisation suivante est
+  perdu (seule la réponse part), et une invitation acceptée s'affiche occupée jusqu'à la lecture suivante
+  (`IntendedFreeBusyStatus` n'est pas lu) ; sur Graph, un rendez-vous modifié avant cette version et pas
+  encore envoyé part public et occupé.
+
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
 Quatre chantiers, chacun dans son commit, à la suite d'un audit de l'éditeur HTML.
