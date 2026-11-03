@@ -21,7 +21,7 @@ use crate::{NetError, Result};
 const MAX_ITEMS: usize = 5000;
 /// The address book Graph's contacts go into.
 pub const CONTACTS: &str = "graph:contacts";
-const EVENT_FIELDS: &str = "id,iCalUId,subject,body,start,end,isAllDay,location,attendees,organizer,recurrence,changeKey,isCancelled,type,categories,onlineMeeting,isReminderOn,reminderMinutesBeforeStart";
+const EVENT_FIELDS: &str = "id,iCalUId,subject,body,start,end,isAllDay,location,attendees,organizer,recurrence,changeKey,isCancelled,type,categories,onlineMeeting,isReminderOn,reminderMinutesBeforeStart,sensitivity,showAs";
 /// Asks each event for Quatrelle's own property too, the Webex id (percent-encoded, as
 /// `graph.rs` writes its own).
 fn events_query() -> String {
@@ -221,8 +221,13 @@ pub fn event_of(v: &Value) -> Option<CalEvent> {
     let reminder =
         (v.get("isReminderOn").and_then(Value::as_bool) == Some(true)).then(|| v.get("reminderMinutesBeforeStart").and_then(Value::as_i64)).flatten();
     let uid = [s(v, "iCalUId"), s(v, "id")].into_iter().find(|u| !u.is_empty())?;
+    // `normal`, a missing or an unreadable sensitivity is a public appointment.
+    let kind = quatrelle_model::ical::PrivateKind::from_sensitivity(&s(v, "sensitivity"));
     let event = CalEvent {
         uid,
+        private: kind.is_some(),
+        private_kind: kind.unwrap_or_default(),
+        show_as: quatrelle_model::ical::ShowAs::from_cdo(&s(v, "showAs")).unwrap_or_default(),
         summary: s(v, "subject"),
         description: description.trim().to_string(),
         reminder,
@@ -264,6 +269,8 @@ pub fn event_json(e: &CalEvent) -> Value {
         "categories": e.categories,
         "isReminderOn": e.reminder.is_some(),
         "reminderMinutesBeforeStart": e.reminder.unwrap_or(0),
+        "sensitivity": if e.private { e.private_kind.sensitivity().to_ascii_lowercase() } else { "normal".into() },
+        "showAs": e.show_as.graph(),
     });
     v["recurrence"] = e.rrule.as_deref().and_then(|r| recurrence_of(r, e.start)).unwrap_or(Value::Null);
     // Only a meeting that has a Webex id carries the property (an event without one is left as it was).
