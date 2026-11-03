@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! The session: the address book built from the mail kept here (everyone written to or heard
 //! from, and the people saved in Contacts), for the recipient boxes' suggestions, Select Names
 //! and the Focused Inbox.

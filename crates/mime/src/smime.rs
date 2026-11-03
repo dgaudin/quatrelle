@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! S/MIME's MIME (RFC 8551 §3): finding what protects a message, taking out exactly what was
 //! signed or the encrypted content, putting a message back together around what was inside, and
 //! writing `multipart/signed` and `application/pkcs7-mime` for sending. The cryptography is

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! EWS calendars: appointments read as events (their recurrence in Graph's terms) and written back as fields.
 
 use super::*;

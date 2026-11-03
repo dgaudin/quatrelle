@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! One's own certificates where there's no keychain to hold their keys (the browser): each kept
 //! as the `.p12` file it came in, still encrypted with its password, beside its certificate (in
 //! the clear: it's public). As every mail program that handles renewals does (Thunderbird's and

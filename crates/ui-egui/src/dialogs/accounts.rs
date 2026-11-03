@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Dialogs: accounts (adding one, its settings, its password, removing it), and closing Quatrelle.
 
 use super::people_field::{DIALOG_WINDOWS, PeopleFields, accepts_of, dialog_field, egui_id};

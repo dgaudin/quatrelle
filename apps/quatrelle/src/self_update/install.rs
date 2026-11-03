@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! Putting a downloaded version in place: a small detached helper waits for Quatrelle to end,
 //! installs it the way this copy was installed, and (when restarting) opens it.
 

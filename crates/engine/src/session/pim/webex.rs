@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! Webex's answers. The engine asks and the worker's thread calls Webex; what comes back waits
 //! here for the window that asked, and a meeting whose window has closed is deleted, as nothing
 //! else will ever hold its id.

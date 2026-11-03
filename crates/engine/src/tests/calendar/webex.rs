@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! Webex's answers: what the session keeps for the window that asked, what it does with a
 //! meeting nobody waits for any more, and what a failure says.
 

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! Recurring events: RRULE read, and a series' occurrences worked out over a window.
 
 use super::*;

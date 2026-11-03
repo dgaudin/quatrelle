@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Headless UI tests: real egui frames over the sample mailbox, in every pane layout and dialog,
 //! with keyboard shortcuts sent as input events.
 

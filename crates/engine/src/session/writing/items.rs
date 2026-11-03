@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! Items attached to a message being written, as Outlook's Attach Item: a message as an `.eml`,
 //! a contact as a `.vcf`, an appointment as an `.ics`, chosen from what's on this computer.
 

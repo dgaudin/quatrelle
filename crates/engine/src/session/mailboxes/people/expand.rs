@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! The session: a distribution list or a contact group expanded into its members, as Outlook's
 //! "+" before a list does. A round trip like the rooms': the question goes out as
 //! [`Job::ExpandList`] once, `Loading` while it's out, and [`Event::ListExpanded`] settles it.

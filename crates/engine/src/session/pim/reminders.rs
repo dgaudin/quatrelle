@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Reminders: those whose time has come, from the user's own calendars and tasks, as
 //! Outlook's Reminders window lists them; dismissed and snoozed.
 

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! Against a real PKCS #11 module: SoftHSM 2 with a token holding an RSA and an EC certificate
 //! and their keys (`crates/keys/softhsm.sh` sets it up, in Docker). Run with
 //! `QUATRELLE_PKCS11_MODULE=/usr/lib/softhsm/libsofthsm2.so cargo test -p quatrelle-keys -- --ignored`.

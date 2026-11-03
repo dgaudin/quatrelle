@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! The contacts field in the dialogs (`dialogs/people_field.rs`): Add calendar's and Open another
 //! mailbox's, whose OK waits for their names (`PeopleFields::gate_dialog`), and a rule's and a
 //! Search Folder's, which keep a name as typed until Ctrl+K asks; all numbered apart from the

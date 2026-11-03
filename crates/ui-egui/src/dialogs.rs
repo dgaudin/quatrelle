@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Modal dialogs: add an account, sign in again, move to a folder, confirmations, settings.
 
 use egui::{Margin, Rect, RichText, Sense, Ui, vec2};

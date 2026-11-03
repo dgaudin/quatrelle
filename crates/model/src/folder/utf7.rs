@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! IMAP's modified UTF-7 for mailbox names (RFC 3501 §5.1.3).
 //!
 //! Printable ASCII stands for itself except `&`, written `&-`. Other characters are UTF-16BE,

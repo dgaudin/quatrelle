@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! Underlining misspelt words in the message being written.
 //!
 //! The dictionaries (French and English built in, and the system's: `/usr/share/hunspell`) are

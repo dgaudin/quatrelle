@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! The browser's network side: the engine's jobs run over JMAP and `fetch`, one account's at a
 //! time in order (as the desktop's worker threads do), and their events wait for the next frame.
 //! New mail comes by push: the session's event stream, read through `fetch` (an `EventSource`

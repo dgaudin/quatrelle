@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! Insert › Emoji (in the Message tab's Include group too): the emoji put in last, a search by
 //! name or GitHub shortcode, and Unicode's groups, each emoji drawn in colour from the system's
 //! emoji font as the rest of the text is (`look/emoji.rs`). Only the rows in view are laid out:

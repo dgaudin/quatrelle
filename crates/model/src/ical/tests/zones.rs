@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! Events in named time zones: read, expanded at their wall-clock time (summer or winter),
 //! written back with their zone; and rules that limit or pick among the days they make.
 

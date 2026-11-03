@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! The File page: Options.
 
 use quatrelle_engine::{MEETINGS_PROFILE, is_profile_dir};

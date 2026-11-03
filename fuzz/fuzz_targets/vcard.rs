@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! A contact card (an attachment, a CardDAV contact) read, written back and read again.
 #![no_main]
 

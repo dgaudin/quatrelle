@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! The contacts field (To, Cc, Bcc, and later a meeting's attendees, a rule's senders…), drawn the
 //! way Outlook draws it: the book button naming the field, each recognised entry a chip with its
 //! kind's icon and any text not yet recognised beside them, the input after them, the suggestions

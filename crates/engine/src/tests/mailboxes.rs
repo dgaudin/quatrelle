@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Engine tests: downloading a whole mailbox, other mailboxes opened in an account, and the
 //! envelope that stands for new mail.
 

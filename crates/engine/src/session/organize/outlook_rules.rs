@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! The session: the copy of the rules Outlook keeps in an Exchange mailbox, which makes Exchange
 //! refuse every change of them while it's there, replaced when the user says so.
 

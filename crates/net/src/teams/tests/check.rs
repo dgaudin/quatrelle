@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! The step 0 check against the fake Graph server: what it counts, that it says nothing
 //! private, and that it leaves no test message behind.
 

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Style sheets written into each element's `style`, and text sized as a title made a heading,
 //! before the layout and the text converter read the HTML; font sizes as pixels.
 

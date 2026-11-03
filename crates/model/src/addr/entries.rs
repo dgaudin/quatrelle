@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! The typed entry of a contacts field: an address with its kind, what a field accepts, and the one
 //! splitter that cuts typed text into entries.
 

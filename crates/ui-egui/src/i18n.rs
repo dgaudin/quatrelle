@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Interface languages. Strings in the code stay English and are the lookup keys; a catalog per
 //! language (`*.tsv`) maps them to what the interface shows. Command ids, mail, file names, the
 //! CLI and agents never see translated text. A string without a translation shows in English, so

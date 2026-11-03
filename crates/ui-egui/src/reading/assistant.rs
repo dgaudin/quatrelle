@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! The reading pane: Summarize, with the language model set in Options, and its answer above
 //! the message.
 

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! Commands: Outlook's Tasks.
 
 use crate::{TaskChange, parse_local};

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! Engine tests: what the system hands Quatrelle as its mail app, `mailto:` links and the
 //! `.eml`, `.ics` and `.vcf` files a user opens with it.
 

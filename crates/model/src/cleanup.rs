@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! Clean Up: the messages of a conversation that say nothing a later one doesn't, because a
 //! reply quotes them in full. Only what can be shown redundant goes: a message whose text is
 //! missing (not downloaded), one the user marked (unread, flagged, categorized, pinned), or one

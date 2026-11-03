@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Scheduling a meeting: the rooms to pick from (Outlook's Room Finder) and when people and
 //! rooms are busy (its Scheduling Assistant). An Exchange or Microsoft 365 account asks its
 //! server ([`Job::GetRooms`], [`Job::GetAvailability`], answered by events while the form stays

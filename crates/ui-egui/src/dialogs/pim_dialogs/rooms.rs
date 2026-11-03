@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! The Room Finder: the rooms the account's server offers (its room lists, as Outlook's Room
 //! Finder lists them), or those its calendar knows where the server has no lists set up, to
 //! book one for the meeting; and any room by its address.

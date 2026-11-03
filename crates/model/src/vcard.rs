@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! vCard (RFC 6350; 3.0 files read too): the people in an address book.
 //!
 //! The fields Quatrelle shows and edits are read into a [`Card`]; every other property is kept

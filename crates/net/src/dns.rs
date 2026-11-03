@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! Just enough DNS (RFC 1035) for account setup: MX records (who handles a domain's mail) and
 //! SRV records (RFC 6186: `_imaps._tcp`, `_submission._tcp`…), asked over UDP of the system's
 //! own resolvers. Answers are hostile input: every length and pointer is checked, compression

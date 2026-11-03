@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! The session: what an address is. Exchange's directory cannot tell a room from a person in
 //! its answers, so the room lists (already loaded for the Room Finder) are the source of truth
 //! for "this address is a room": they are asked as soon as an account is online, and again

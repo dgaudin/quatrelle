@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! Check Names (Ctrl+K), as Outlook's, for any contacts field. Each entry typed is looked at:
 //! an address is checked here alone (one the book, the directory's answers or the room lists
 //! know takes its name), a contact group's reference is kept, and a name is looked up among the

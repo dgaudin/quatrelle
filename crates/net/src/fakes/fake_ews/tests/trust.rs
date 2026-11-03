@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Autodiscover asks before another domain: a `RedirectAddr` or an `EwsUrl` on a site the account
 //! doesn't trust is `Untrusted`, and the account waits for the answer (`NeedsTrust`), its Outbox
 //! with it. `127.0.0.1` and `localhost` reach the same fake server as two sites; the address's

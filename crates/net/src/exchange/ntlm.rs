@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! NTLMv2 sign-in (MS-NLMP), as on-premises Exchange asks for it over HTTPS: a negotiate
 //! message, the server's challenge, and the answer proving the password without sending it.
 //! Only NTLMv2 responses are made (never the older LM or NTLMv1 ones), with no signing or

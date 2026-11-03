@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! The log file, for working out what happened when something misbehaves on an account (its
 //! servers' errors, its statuses, how long syncing took). `quatrelle.log` in the data folder:
 //! a new one each time Quatrelle starts (the last run's renamed `quatrelle.old.log`), up to

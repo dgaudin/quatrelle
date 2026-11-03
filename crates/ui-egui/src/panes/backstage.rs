@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! The File page: everything about accounts and the app that isn't about one message. It
 //! replaces the ribbon and panes until the user goes back: Info (the account's settings, its
 //! automatic replies, the space it uses and its rules), Open & Export (Outlook data files),

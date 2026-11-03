@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! The pool: S/MIME's work with an account's private key (issue #6), each job on a thread of
 //! its own so it never waits behind a sync. The key and its chain live in the system's keychain
 //! only (`Credentials::set_secret`, under `smime`); the engine sees the certificate, never the key.

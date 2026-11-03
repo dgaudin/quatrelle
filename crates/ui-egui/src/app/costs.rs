@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! What a calendars' read costs on the window's thread, said in the log: merged into the
 //! calendar, then saved. With what the read cost on the server (said by the network side), it
 //! tells where a calendar just ticked spends its seconds (29/10: a quarter of a minute).

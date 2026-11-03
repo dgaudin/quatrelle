@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! The session: accounts' folder lists and what's kept of each folder; with them, making and
 //! changing folders, a mailbox's settings on the server, other mailboxes opened in an account,
 //! and the address book built from the mail kept.

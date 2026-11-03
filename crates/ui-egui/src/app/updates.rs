@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! A newer Quatrelle on its way, in a build that updates itself (`apps/quatrelle/src/self_update.rs`):
 //! the status bar says how far its download is; once it's downloaded and checked, a bar above the
 //! panes (and the system's notification, if Quatrelle isn't in front) offers to restart into it;

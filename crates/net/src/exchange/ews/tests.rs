@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Tests of the EWS transport: rules, headers, searching, syncing and Autodiscover, over the fake server.
 
 use super::autodiscover::{allowed, autodiscover_answer};

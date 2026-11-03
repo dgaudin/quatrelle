@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Meeting invitations by mail (iTIP, RFC 5546, over iMIP, RFC 6047): answering one, taking
 //! in the answers and cancellations organizers and guests send, and inviting people to the
 //! user's own events. Invitations travel as `text/calendar` parts with a `METHOD`.

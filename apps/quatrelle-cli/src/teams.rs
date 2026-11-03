@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! `quatrelle-cli teams check`: the owner's step 0. It signs in to Microsoft in the browser
 //! with the organisation's own app registration (`docs/teams.md`), runs the check of
 //! [`quatrelle_net::teams::run_check`] on the account, and prints what it finds: counts, yes or

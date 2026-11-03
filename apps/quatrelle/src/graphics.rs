@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! The graphics adapter Quatrelle's window is drawn with.
 //!
 //! On Windows only DirectX 12 starts, and the adapter is picked here: a real GPU first, WARP

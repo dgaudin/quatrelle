@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 /// A `VALARM` becomes the reminder (and goes back out as one); an alarm Quatrelle can't
 /// read is kept whole rather than lost.
 #[test]

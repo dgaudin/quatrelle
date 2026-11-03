@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! HTTP through the browser's `fetch`, for the JMAP transport and pictures.
 
 use quatrelle_jmap::{Error, Request, Response, Result};

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! One contacts field's state beside the widget's ([`Field`]): its text parsed into pieces, what
 //! the engine settled taken, the lists expanded, the losses kept (entries past the cap, a list
 //! expanded in part).

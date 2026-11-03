@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! An in-memory Exchange Web Services server on localhost, for tests: folders (distinguished
 //! ids, a deep tree), messages (find, get with their MIME source, update, move with a new id,
 //! delete), creating from MIME (drafts and sending), folder changes and automatic replies, signed

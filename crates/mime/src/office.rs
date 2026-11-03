@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! What an Office attachment says, for the reading pane's preview, as Outlook previews Word,
 //! Excel and PowerPoint files: a document's paragraphs (bold, italic, headings) and tables, a
 //! workbook's sheets as grids, a presentation's slides as their text.

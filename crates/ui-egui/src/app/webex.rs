@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! An appointment window's Webex meeting: asked for, taken in when Webex answers, and deleted
 //! when the window leaves it unsaved. What each of these does to the form is in
 //! `pim_dialogs/webex.rs`.

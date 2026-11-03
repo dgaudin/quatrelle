@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! Outlook's `winmail.dat`: read for its files and body (the attached messages in it too), its
 //! compressed RTF taken out and read as HTML or text, and the same bytes as a message's
 //! `winmail.dat` attachment.

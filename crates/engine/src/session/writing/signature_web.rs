@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! A signature written in HTML whose pictures are on the web (a company logo by its address):
 //! fetched once and kept with the signature, as Outlook keeps a signature's pictures, so a message
 //! shows them while it's written and carries them (whoever reads it isn't sent to the web for

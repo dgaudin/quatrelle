@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! The types the Webex scheduling tasks share: the fields of an event that a Webex meeting is
 //! made from, the meeting Webex answers with, and what can go wrong.
 

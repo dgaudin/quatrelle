@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! The contacts field wired to the session (`dialogs/people_field.rs`): the message's To, Cc,
 //! Bcc and Replies to, and the Select Names dialog's rows (Send is `sending.rs`, From's other
 //! address `message/from.rs`).

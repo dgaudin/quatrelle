@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! Calendars subscribed to by their links (issue #7), as Outlook's Add Calendar › From
 //! Internet: an iCal or `webcal://` address, read-only beside the account's own calendars, read
 //! again from the link every few hours (as often as the calendar asks, within limits), and at

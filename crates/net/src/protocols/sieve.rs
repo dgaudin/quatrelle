@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Automatic replies and inbox rules on IMAP servers: a small ManageSieve client (RFC 5804)
 //! that keeps a Sieve script (RFC 5228) named `quatrelle` with a `vacation` action (RFC 5230),
 //! limited to a date range with `currentdate` (RFC 5260) when one is set, and the rules marked

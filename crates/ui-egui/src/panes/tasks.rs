@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Tasks, as Outlook's Tasks module: the To-Do List grouped by due date (Overdue, Today,
 //! Tomorrow, This Week…), a box at its top to type a new one in, a tick to mark one complete.
 //! The one picked shows beside the list, written on in place ([`form`]). Exchange accounts keep

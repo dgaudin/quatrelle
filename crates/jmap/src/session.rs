@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! The session: the HTTP interface the transport runs over, and signing in (fetching the JMAP
 //! session, RFC 8620 §2, and resolving its URLs).
 

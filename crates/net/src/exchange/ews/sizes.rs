@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! EWS: how much space each folder of the mailbox takes on the server, and the mailbox's limits,
 //! as Outlook's Folder Size (its Server Data) and the bar on its File › Info show them.
 

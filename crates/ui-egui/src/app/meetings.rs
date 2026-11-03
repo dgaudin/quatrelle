@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! Joining an online meeting: a Teams one in a browser's app window (File › Options ›
 //! Applications says which browser).
 

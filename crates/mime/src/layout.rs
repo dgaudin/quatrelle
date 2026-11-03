@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! The layout of HTML mail built from tables: newsletters and receipts put their content in
 //! columns with layout tables (a centred 600-pixel table, rows of two or three cells, coloured
 //! bands). [`html_layout`] keeps that structure as [`Block`]s: tables with rows and cells (their

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! Server-sent events (`text/event-stream`, the format of JMAP push, RFC 8620 §7.3), parsed from
 //! the bytes of a response as they arrive: the browser reads its push stream through `fetch`,
 //! which hands over the body in pieces of any size.

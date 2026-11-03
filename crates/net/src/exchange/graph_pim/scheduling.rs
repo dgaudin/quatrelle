@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! Microsoft 365 scheduling through Graph: the organisation's rooms (`/places`, or the older
 //! `findRoomLists`/`findRooms` where the sign-in hasn't `Place.Read.All`) and when people and
 //! rooms are busy (`getSchedule`, the Scheduling Assistant's free/busy).

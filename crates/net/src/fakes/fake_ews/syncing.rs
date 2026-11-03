@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! The fake EWS server's `SyncFolderItems`: what changed in a folder since a sync state. Here the
 //! state is the folder as it was (its messages' ids and marks), and the changes are what differs
 //! now — as Exchange answers them.

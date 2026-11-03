@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! Attachment names from a message, before anything is written to disk or handed to another app:
 //! [`sanitize_filename`] turns whatever the sender wrote into a plain name we can save under,
 //! [`attachment_name`] gives it the extension its type has when it has none, [`runs_code`] says

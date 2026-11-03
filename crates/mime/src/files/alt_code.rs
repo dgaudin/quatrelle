@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Alt+numpad character codes, as Windows types them (issue #23: É is Alt+0201 on a French
 //! keyboard that has no key for it): which character a code names, in the system's code pages.
 

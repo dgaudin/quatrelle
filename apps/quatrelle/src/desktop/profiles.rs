@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! The profiles of a Chromium-family browser, so Teams meetings open in the one signed in to
 //! Microsoft 365 rather than whichever the browser used last.
 //!

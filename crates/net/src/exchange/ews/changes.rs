@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! EWS: changes made here applied on the server (flags, moves, deletions, folders), drafts stored and mail sent.
 
 use super::*;

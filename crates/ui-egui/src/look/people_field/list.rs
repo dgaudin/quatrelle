@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! The suggestions under the input: at most [`quatrelle_engine::MAX_SUGGESTIONS`] rows, each the
 //! kind's icon, the name and the address, and the kind and where it comes from; a Recent one has
 //! a × that forgets it.

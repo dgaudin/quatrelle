@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! An in-memory CalDAV / CardDAV server for tests: the well-known redirect, a principal with
 //! its homes, one calendar and one address book, PROPFIND, multiget REPORTs, conditional PUT
 //! and DELETE, Basic authentication.

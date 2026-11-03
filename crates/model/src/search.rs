@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Search: the query language of the search box and an inverted index for fast offline search.
 //!
 //! The syntax follows the familiar mail-client form: bare words match anywhere (as word

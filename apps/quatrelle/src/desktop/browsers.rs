@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! The Chromium-family browsers installed (Google Chrome, Chromium, Microsoft Edge), and opening
 //! a link in one as an app window (`--app=<url>`): a window of its own, without tabs or address
 //! bar, where Teams meetings run as they do in Teams' own app.

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Font sizes and typefaces of HTML (a message read, a signature copied from Outlook or Word):
 //! the HTML converter keeps bold, colours and links but not sizes, fonts or underlines, so
 //! where each element with a `font-size` or `font-family` (or `<font size face>`, or bold,

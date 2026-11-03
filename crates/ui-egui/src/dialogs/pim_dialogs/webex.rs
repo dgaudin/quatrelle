@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! An appointment's Webex meeting, in its form: what's asked of Webex, what its answer writes,
 //! and what's left to delete when the window goes without saving.
 

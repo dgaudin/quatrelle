@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! What a JMAP account keeps, as Outlook's Cached Exchange Mode does: the mail received in the
 //! time kept, and every message kept downloaded whole in the end.
 

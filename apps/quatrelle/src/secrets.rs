@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! Passwords and sign-ins in the system keychain, whatever their length.
 //!
 //! Windows' Credential Manager keeps at most 2560 bytes in an entry (CRED_MAX_CREDENTIAL_BLOB_SIZE),

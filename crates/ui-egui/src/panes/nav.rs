@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! The folder pane: Favorites, then each account's folders as a tree with unread counts, and
 //! after it the shared mailboxes it opens, each a mailbox of its own as Outlook shows them.
 //! Messages dragged from the list drop onto a folder to move them; a folder dragged onto another

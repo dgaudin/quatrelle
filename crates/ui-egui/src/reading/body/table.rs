@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Tables in a message: their width and place, their columns' widths, and their rows' cells side
 //! by side (or one under the other when a layout's few columns can't fit). A table of figures is
 //! laid out as a browser lays it out, its columns as wide as their content, and scrolls sideways

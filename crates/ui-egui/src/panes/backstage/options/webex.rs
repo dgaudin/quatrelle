@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! The File page: Options › Webex, the site and integration meetings are scheduled with.
 
 use quatrelle_engine::model::{WEBEX_REDIRECT_URI, WebexError};

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! Engine tests: what Add calendar and Open another mailbox take: a kind the session knows that
 //! the place can't open is refused, an address nobody knows goes through.
 

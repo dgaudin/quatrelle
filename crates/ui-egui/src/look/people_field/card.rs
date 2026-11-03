@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! A chip's card, open on a click: the name, the address and the kind (and why a refused one is
 //! refused), "Remove", and "Expand" for a distribution list or a contact group when the account can
 //! expand one.

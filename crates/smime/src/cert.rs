@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! Certificates: what one says (whose it is, who issued it, until when), whether a signature
 //! made with its key holds, and whether it can be trusted for a sender's mail (RFC 8550 §3,
 //! RFC 5280 §6): a chain to a trusted root, each certificate signed by the next and in date, for

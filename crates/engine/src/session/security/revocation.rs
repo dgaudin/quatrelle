@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! Whether a signer's certificate was withdrawn by its authority (OCSP, else its CRL), when File ›
 //! Options › Safety says to ask: off at first, since asking tells the authority whose mail is
 //! being read. The answers are kept a while by certificate, so a message shown again doesn't ask

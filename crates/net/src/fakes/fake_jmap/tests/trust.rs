@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! The session's URLs are the server's to give: the account's credentials go only to the sites it
 //! trusts. `127.0.0.1` and `localhost` reach the same fake server as two sites.
 

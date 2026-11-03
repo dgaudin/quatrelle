@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 /// An HTML body's links read whole from its `href`s: a 900-character Teams link that the
 /// text's footnote wraps (it came out cut at 395), quoted either way or not, with entities,
 /// once each; nothing that isn't a web address, and nothing runaway.

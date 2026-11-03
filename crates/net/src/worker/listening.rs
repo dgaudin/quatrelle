@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Exchange telling of changes as they happen, as Outlook's Cached Exchange Mode is told: the
 //! folder that changed is read at once — new mail in the Inbox, mail a server rule filed in
 //! another folder, a message read on the phone, a shared mailbox's new mail — rather than the

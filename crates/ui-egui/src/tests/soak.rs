@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! The whole window played by a random hand, as deckcraft's soak test does: seeded clicks,
 //! right-clicks, double-clicks, drags, keys (plain, Ctrl, Shift, Alt), typing and scrolling over
 //! the sample mailbox, in a wide window and a narrow one. Nothing may panic, in egui or behind a

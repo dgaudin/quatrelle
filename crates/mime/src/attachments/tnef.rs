@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Outlook's `winmail.dat` (`application/ms-tnef`, MS-OXTNEF): the files and the rich body
 //! Outlook wraps in it when it sends in Rich Text Format (issue #18). Without reading it, the
 //! files and the formatting were one `winmail.dat` attachment nothing could open.

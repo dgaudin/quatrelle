@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! An HTML body: converted to text, to formatted lines and to columns, and searched for its
 //! pictures and links; plus the plain-text markup Quatrelle writes itself.
 #![no_main]

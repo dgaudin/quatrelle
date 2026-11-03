@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! The fake Graph server's Teams: the signed-in user, chats, their members and messages (listed
 //! in a `lastModifiedDateTime` range, posted, edited, reacted to, soft-deleted), marking a chat
 //! read and shared files, as Graph v1.0 answers them.

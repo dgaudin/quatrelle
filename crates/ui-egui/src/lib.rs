@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Quatrelle's egui front end: the familiar three-pane mail layout (folders, message list,
 //! reading pane) with a simplified ribbon, search box, inline compose and account dialogs.
 //!

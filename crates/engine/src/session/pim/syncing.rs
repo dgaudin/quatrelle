@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! What a CalDAV / CardDAV (or Exchange) sync found, merged into an account's calendars and
 //! address books: changes made here since stay (and go to the server next time); everything else
 //! follows the server.

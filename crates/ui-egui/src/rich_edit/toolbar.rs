@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! The message editor's small buttons (formats, colours), the date and time choices, and the
 //! word count; the ribbon itself is `ribbon.rs`.
 

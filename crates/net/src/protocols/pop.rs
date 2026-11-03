@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! POP3 (RFC 1939): mail is downloaded from the server's single maildrop into the account's
 //! Inbox on this computer; every other folder lives here only, as in Outlook's POP accounts.
 //!

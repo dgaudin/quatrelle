@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Status-bar messages. The engine writes them in English; one with values in it keeps its
 //! wording and its values apart, so the interface can say it in its own language.
 

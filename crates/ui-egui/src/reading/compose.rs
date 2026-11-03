@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! The message being written: its form (from, to, cc, bcc, subject), its ribbon and its body.
 
 use quatrelle_engine::FieldId;

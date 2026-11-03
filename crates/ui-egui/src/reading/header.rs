@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! A message's header in the reading pane (or its window), which stays put while the message
 //! scrolls under it, as Outlook's does: the subject and categories, who it's from and to and
 //! when, what's to know about it (follow-up, importance, a doubtful sender, its signature or

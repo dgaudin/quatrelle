@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! EWS tasks: the mailbox's Tasks folder ([MS-OXOTASK]), read as tasks and written back field
 //! by field — a task changed here is updated in place (its item, its reminder and its history
 //! in Outlook stay), a new one created, one deleted in Outlook meanwhile made again.

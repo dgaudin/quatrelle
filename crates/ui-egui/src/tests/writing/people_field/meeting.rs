@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! The contacts field in a meeting's window (`pim_dialogs/meeting.rs`): its Required, Optional and
 //! Rooms lines, a room typed among the guests moved to Rooms, the Room Finder and the Rooms line
 //! kept in step, and the Select Attendees and Resources dialog's rows.

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Small shared widgets: toolbar buttons, avatars, the welcome screen.
 
 use egui::{Color32, CornerRadius, Response, RichText, Sense, Stroke, Ui, vec2};

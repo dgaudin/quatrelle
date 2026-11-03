@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Answers that stay open and are read a slice at a time, so the caller can do other work in
 //! between: server-sent events (`text/event-stream`, as JMAP push uses), and any body the server
 //! sends in pieces as it has something to say (Exchange's streaming notifications).

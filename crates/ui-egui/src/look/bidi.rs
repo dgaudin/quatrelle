@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! Right-to-left text (Arabic, Hebrew, Persian…) for egui.
 //!
 //! The Craft apps' egui (storytold/egui, `Cargo.toml`'s `[patch.crates-io]`) draws it itself:

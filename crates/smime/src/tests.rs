@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! Against OpenSSL 3's output (`testdata/`, made with `openssl cms`: a test CA, Ana and Riley
 //! with RSA 2048 keys, Zoe with EC P-256), and round trips of Quatrelle's own.
 

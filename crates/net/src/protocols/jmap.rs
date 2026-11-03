@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! JMAP on the desktop: the portable transport in `quatrelle-jmap`, run over this crate's HTTP
 //! client (each request waits for its answer, so the transport's futures are ready at once),
 //! plus push over the session's EventSource (RFC 8620 §7.3).

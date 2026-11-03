@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! The interface icons: Microsoft's Fluent UI System Icons (MIT, `assets/icons/fluent`, the
 //! owner's choice so the window looks like Outlook's), rendered from their SVG once per size and
 //! tinted when drawn. Each also has a line drawing in code on a 16-unit grid, used should its

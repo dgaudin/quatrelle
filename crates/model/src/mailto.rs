@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! `mailto:` links (RFC 6068): who a new message is to, its subject and its first words.
 //!
 //! A link clicked in a browser or another app starts Quatrelle with it (Quatrelle as the system's

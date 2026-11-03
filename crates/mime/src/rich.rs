@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! A message being written, formatted the way the person sees it: text with a style for every
 //! character (bold, italic, underline, strikethrough, size, colour, highlight, link, picture)
 //! and one for every paragraph (bullets or numbers, indent, alignment, or a rule).

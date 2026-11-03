@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! The organisation's directory (Exchange's Global Address List), looked up on the server by
 //! name or address: by Check Names (Ctrl+K), the address book's Global Address List and the From
 //! button's other address. An account is asked one name at a time; a name being typed waits its

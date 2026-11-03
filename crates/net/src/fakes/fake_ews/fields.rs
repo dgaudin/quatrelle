@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! The fake EWS server: which fields Exchange knows, and what the fields of a message's text give.
 
 use super::*;

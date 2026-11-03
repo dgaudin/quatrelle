@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Alt+numpad character codes on Windows (issue #23): hold Alt, type a code on the numeric
 //! keypad, let go of Alt, and its character is typed (`0201` → É), in any text. Windows makes
 //! the character itself, but the window library drops it (it comes after the keys, with none of

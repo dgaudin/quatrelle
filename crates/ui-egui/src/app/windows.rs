@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! The windows of their own: messages being written, and messages popped out.
 
 use crate::dialogs::people_field::{MEETING_WINDOWS, places};

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! Fonts from storytold/craft-fonts, a fully optional build input: with `CRAFT_FONTS_DIR` set to
 //! a checkout, the fonts in its `fonts/manifest.txt` (and their licences) are compiled in as
 //! fallbacks; without it, `CRAFT_FONTS` is empty and nothing changes. See craft-fonts'

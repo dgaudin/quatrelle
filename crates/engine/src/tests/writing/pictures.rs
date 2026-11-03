@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! Pictures in the message being written: put in at the width asked (a page's, for a wide one),
 //! on a line of their own, and resized (from upstream 865a712).
 

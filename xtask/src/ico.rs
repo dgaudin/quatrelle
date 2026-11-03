@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! `cargo xtask ico <out.ico> <in.png>…`: pack PNG images into a Windows `.ico`.
 //!
 //! Vista and later read PNG-compressed icon entries, so each PNG is stored as is. The size comes

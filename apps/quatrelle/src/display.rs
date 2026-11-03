@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! Which windowing system the window opens on, on Linux and the BSDs.
 //!
 //! Quatrelle's attachments drag out to other apps through X11's drag and drop (`xdnd.rs`; the

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! EWS scheduling: the rooms a server offers (`GetRoomLists`, then `GetRooms` for each list,
 //! as Outlook's Room Finder fills its lists) and when people and rooms are busy
 //! (`GetUserAvailability`, which the Scheduling Assistant draws).

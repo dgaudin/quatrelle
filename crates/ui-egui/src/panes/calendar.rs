@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! The Calendar: a month to pick days from and the calendars in the side pane; a day, a week
 //! or a month in the main one. Click an empty hour to add an event there, an event to open it,
 //! drag one to move it ([`drag`]).

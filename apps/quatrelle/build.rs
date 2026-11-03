@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Windows only: embed the app icon, version info (VERSIONINFO) and the application manifest
 //! (per-monitor DPI awareness: `src/windows_manifest.rs`) into `quatrelle.exe`, so it
 //! shows in Explorer, the taskbar, the Start menu and Alt-Tab.

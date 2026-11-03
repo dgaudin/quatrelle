@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Engine tests: the contacts field of a meeting: what a rooms field refuses, the rooms known for
 //! it, and the names of the meeting's fields.
 

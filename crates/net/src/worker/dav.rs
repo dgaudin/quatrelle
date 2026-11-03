@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! An account's worker: calendars and address books over CalDAV and CardDAV, and the sites they ask about.
 
 use quatrelle_model::pim::{DavSync, Pim, StoredCard, StoredEvent, StoredNote, StoredTask};

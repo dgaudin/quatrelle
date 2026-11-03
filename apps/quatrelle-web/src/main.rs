@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Quatrelle in the browser.
 //!
 //! Runs the same [`quatrelle_ui_egui::MailApp`] as the desktop app through eframe's web runner

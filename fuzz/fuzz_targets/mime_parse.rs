@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! A message source as it comes from a server or a file: parsed for reading, for the message
 //! list and for search, and its attachments taken out.
 #![no_main]

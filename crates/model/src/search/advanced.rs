@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! Advanced search: the search box's query as a form (words, From, To, Subject, the body, and
 //! what a message is), and back. What the form has no field for stays as it was written.
 

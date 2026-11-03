@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Read a packed data file (redb) outside the app: `cargo run -p quatrelle-store --example dump -- <file> [path]`.
 //!
 //! With no path, every file's path and size is listed; with one, that file is written to stdout

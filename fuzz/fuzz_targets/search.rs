@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! What the user types in the search box (and saved searches read back): the query language,
 //! the Advanced search form, the server-side forms of a search, and IMAP's modified UTF-7.
 #![no_main]

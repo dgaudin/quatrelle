@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Servers of the tests' own, in memory: IMAP, CalDAV/CardDAV, EWS, Graph, JMAP and Webex.
 //!
 //! The fake Graph server is also built for other crates' tests with the `fakes` feature (a

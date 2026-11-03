@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! Keys held where Quatrelle can't read them: a smart card's (through its PKCS #11 module), or
 //! the macOS Keychain's. The network layer looks for them ([`Job::FindHeldKeys`]); one chosen
 //! becomes the account's certificate ([`Job::UseHeldKey`]), its key staying where it is.

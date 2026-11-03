@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! Thumbnails for attachments that aren't pictures: the first page of a PDF (rendered here, in
 //! pure Rust) and a frame of a video (from the platform, when it has a way: see
 //! [`Services::video_frame`](crate::Services::video_frame)).

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! The CLI's arguments as the system hands them over.
 
 /// An argument that isn't Unicode (a file name in another encoding) panicked `std::env::args()`

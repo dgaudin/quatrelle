@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! One Quatrelle per data folder: a second launch brings the running one forward and exits.
 //!
 //! Started again (a second click on the taskbar or Start, a `mailto:` handler, a desktop

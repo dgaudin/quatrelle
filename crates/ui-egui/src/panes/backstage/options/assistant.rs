@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! The File page: Options › Assistant, the language model asked about mail.
 
 use super::*;

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! An account's worker: sending (on a second connection when it's free), the copy in Sent Items, and the Outbox;
 //! and the second connection's other work (other people's calendars just ticked, read at once).
 

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! The dialogs' contacts fields, made ready before they draw: Add calendar's (with its address
 //! book), Open another mailbox's, a rule's conditions' and the Search Folder's, numbered apart as
 //! dialog window 0 ([`DIALOG_WINDOWS`]).

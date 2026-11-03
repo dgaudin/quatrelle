@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! Outlook's Select Attendees and Resources: the address book over a meeting's window, opened
 //! from its Required, Optional and Rooms buttons, to add people to those lines and rooms to its
 //! resources. Its rows are the contacts field (`att-required`, `att-optional`, `att-rooms`), each

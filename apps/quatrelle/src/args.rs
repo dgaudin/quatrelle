@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! What Quatrelle is started with besides its options: `mailto:` links and mail files.
 //!
 //! Chosen as the system's mail app, Quatrelle is started with the link clicked

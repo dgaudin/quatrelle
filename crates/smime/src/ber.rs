@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! BER to DER. The `der` crate reads DER only, but S/MIME is mostly written in BER: mail
 //! programs stream it, with lengths left open (ended by two zero bytes) and the encrypted or
 //! signed content cut into OCTET STRING pieces. [`to_der`] rewrites such input as DER: every

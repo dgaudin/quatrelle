@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! Time zones in calendar files: the `VTIMEZONE`s a file defines, which zone an event's times
 //! are in (the IANA database's when it knows the name, else the file's definition), and the
 //! definition written with an event in a zone.

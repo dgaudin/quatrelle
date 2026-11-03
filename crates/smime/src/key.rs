@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! A private key as signing and decrypting use it: three operations, so a key Quatrelle can't
 //! read (on a smart card, in the system's keychain) does them where it is. [`Software`] is a key
 //! held here, as a `.p12` file brings it (PKCS #8).

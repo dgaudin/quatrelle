@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Engine tests: commands against the sample mailbox and scripted network events.
 
 use quatrelle_model::{Event, Flag, FolderRole, Job, Op, SyncStatus};

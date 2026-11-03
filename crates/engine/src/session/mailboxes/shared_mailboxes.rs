@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Other mailboxes opened in an Exchange account: a shared mailbox (support@…), or someone's who
 //! made this account a delegate. Each lists under a folder named after its address, and its
 //! calendar opens beside this account's, as Outlook adds them.

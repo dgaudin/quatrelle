@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! The mail search box (issue #4, as Outlook's): where to look on its left, the recent searches
 //! dropping down from it, and advanced search under the chevron on its right.
 

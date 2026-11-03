@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! The fake EWS server's directory: names resolved (`ResolveNames`) from the other mailboxes, the
 //! Global Address List and, when the account's contacts are searched too, its contact groups,
 //! each with its `MailboxType`; and a list's members (`ExpandDL`).

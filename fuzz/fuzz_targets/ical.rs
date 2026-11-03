@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! A calendar file (an invitation, a CalDAV event) read, written back and read again; and the
 //! WebDAV answers CalDAV and CardDAV servers send.
 #![no_main]

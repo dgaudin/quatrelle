@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Commands: Send / Receive, moving around, folders, search, Quick Steps and Search Folders.
 
 use super::compose::{export_pdf, message_headers, save_message, save_messages};

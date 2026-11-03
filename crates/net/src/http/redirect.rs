@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! Redirects and credentials: a redirect is the server's to give, so a request followed to a
 //! site it wasn't meant for leaves its token, password and cookies behind (see [`Chain`]).
 

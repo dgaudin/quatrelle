@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Engine tests: S/MIME on the sample mailbox, with OpenSSL's messages (`crates/smime/testdata`:
 //! a test CA, Ana and Riley; the sample account is Riley's address). The network layer's part
 //! (the key, decrypting, signing) is played here with the smime crate itself.

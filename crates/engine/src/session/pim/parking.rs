@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! Other people's calendars set aside while the calendar isn't shown, as Outlook reads a shared
 //! calendar from its offline file only to show it: their appointments (25,000 of them in the
 //! owner's organisation, two thirds of the app's data) were held in memory all day, and written

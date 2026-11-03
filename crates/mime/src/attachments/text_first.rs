@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! A message's text first: from a server that gives its body and the list of its files apart from
 //! its source (Exchange), the message as MIME with its files named and sized but empty, to read
 //! while the whole source (a 20 MB attachment) comes.

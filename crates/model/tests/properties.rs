@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Round trips that must hold for any input, not only the examples the unit tests pick:
 //! what Quatrelle writes it reads back the same.
 

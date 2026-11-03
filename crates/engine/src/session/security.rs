@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! The session: S/MIME (issue #6). An account's certificate, imported from a `.p12` file (its
 //! private key kept by the network layer in the system's keychain, only the certificate here);
 //! signed mail checked as it's shown, encrypted mail decrypted for showing and kept in memory

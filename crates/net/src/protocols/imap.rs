@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! A small IMAP4rev1 client (RFC 3501).
 //!
 //! Framing is done here: a response is one line plus any `{n}` literals it announces, and it is

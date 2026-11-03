@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Rich Text Format as Outlook keeps a body: compressed (MS-OXRTFCP), then read as the HTML or
 //! the text it wraps (MS-OXRTFEX), or, when it wraps neither, as simple HTML of its own (bold,
 //! italic, underline, struck-through text, links and line breaks).

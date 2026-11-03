@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! OAuth 2.0 sign-in for providers that no longer take passwords over IMAP and SMTP (Gmail,
 //! Microsoft 365).
 //!

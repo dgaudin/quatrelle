@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! The message editor, as in Outlook's message window: the text shows as it will be sent (bold,
 //! italic, underline, sizes, colours, highlights, lists, indents, rules, pictures) with no marks,
 //! formatted from the Message ribbon or with Outlook's shortcuts.

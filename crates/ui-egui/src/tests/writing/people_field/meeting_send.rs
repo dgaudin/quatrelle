@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! A meeting's Send and its lines (`app/sending.rs`): Send waits for the names they're still
 //! checking ("Checking names…", Send off meanwhile), stops in the meeting's window on an entry it
 //! can't invite or book, asks there which person a name means, expands a contact group first, and

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! EWS: the organisation's address book (the Global Address List) and the account's contacts:
 //! people, lists and contact groups found by name or address, as Outlook's Check Names finds them,
 //! each with its kind; a list's members (`ExpandDL`); and the certificates the directory keeps for

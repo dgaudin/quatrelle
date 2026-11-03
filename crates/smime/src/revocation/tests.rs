@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! Against OpenSSL 3's answers (`testdata/rev-*`, made with `openssl ca` and `openssl ocsp`): the
 //! test CA issued Kim and Lee certificates naming a CRL and a responder, then revoked Lee's.
 

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! Encryption: `EnvelopedData` (RFC 5652 §6) and `AuthEnvelopedData` (RFC 5083, AES-GCM by
 //! RFC 5084), each recipient's copy of the content key encrypted to their RSA key
 //! (`KeyTransRecipientInfo`).

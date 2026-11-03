@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! Exchange's and Graph's answers, read as a message's text: the first byte picks the server, the
 //! rest is a `GetItem` answer (EWS) or a message's JSON (Graph). Whatever message is built is read
 //! the way the engine reads it, with `parse_text_first`.

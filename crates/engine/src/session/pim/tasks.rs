@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Outlook's Tasks: each account's, kept with its calendar and address book (Exchange's Tasks
 //! folder), or on this computer.
 

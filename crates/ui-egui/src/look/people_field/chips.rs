@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! The field's body: its pieces (chips with their kind's icon, text not yet recognised) laid line
 //! after line with the input after them, growing to [`MAX_LINES`] lines, then scrolling.
 

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! The edges of boxes and cells: borders, rounded corners, padding and where a cell's content
 //! sits in its row, read from CSS (`border`, its sides and their parts, `border-radius`,
 //! `padding`, `vertical-align`) and the table attributes (`border`, `cellpadding`, `valign`).

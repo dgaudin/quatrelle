@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! Motion: how things move, kept short and calm, as a mail client's should be. Things coming in
 //! decelerate into place, things leaving accelerate away, and a change of state (a hover, a
 //! selection) eases both ways; nothing takes longer than a quarter of a second. With Play

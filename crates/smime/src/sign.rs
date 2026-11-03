@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Signatures: `SignedData` (RFC 5652 §5) as S/MIME uses it (RFC 8551 §2.5, §3.5).
 //!
 //! What's signed is the DER of the signed attributes, never the content directly: the content's

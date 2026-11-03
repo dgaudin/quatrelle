@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! Tests over the fake EWS server: the directory searched with the account's contacts, each entry
 //! with its kind, and a list (or a contact group) expanded into its members.
 

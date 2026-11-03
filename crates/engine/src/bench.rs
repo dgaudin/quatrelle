@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! A big mailbox, on demand: what opening it, its biggest folder, a search and the address book
 //! cost. An ignored test, run by hand on a cache a data file was imported into (see
 //! `quatrelle-net`'s `pst_bench`):

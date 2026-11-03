@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! What a message carries to learn about its reader. A newsletter's 1-by-1 picture tells its
 //! sender when (and from where) it was opened; its links go through a click counter, or carry
 //! tags (`utm_source`, `fbclid`…) that say which mailing and which reader clicked.

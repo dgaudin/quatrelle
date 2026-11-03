@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! S/MIME in the browser. The page has no keychain, so each certificate's `.p12` file itself is
 //! what's kept (in the browser's storage, beside the account's mail): it's already encrypted with
 //! its password (PBES2), which is never kept. As on the desktop, a renewal keeps the old

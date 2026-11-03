@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Outlook's Tasks: things to do, with the day they start and the day they're due, where they
 //! stand and how far along, a priority and a reminder — kept with an account's calendar
 //! (Exchange's Tasks folder, [MS-OXOTASK]) or on this computer.

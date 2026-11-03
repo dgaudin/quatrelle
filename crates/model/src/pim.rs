@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! What an account keeps of its calendars and address books: the server's (CalDAV, CardDAV)
 //! with what's needed to sync them, or ones kept on this computer only.
 

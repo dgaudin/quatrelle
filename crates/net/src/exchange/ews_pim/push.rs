@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! EWS calendars: the appointments changed here, sent to the server — new ones created, changed
 //! ones updated field by field, an occurrence changed on its own through the occurrence's own
 //! item — and the guests told when the change asks for it; invitations answered as Outlook

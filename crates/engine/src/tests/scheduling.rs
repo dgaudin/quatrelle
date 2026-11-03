@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Engine tests: the rooms offered for a meeting (the Room Finder) and when everyone is free
 //! (the Scheduling Assistant), from the calendars kept here and from an Exchange server.
 

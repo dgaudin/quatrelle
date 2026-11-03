@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! The session: mailbox settings on the server (automatic replies), emptying folders, the data
 //! file kept here (its size, Compact Now), and each folder's size here and on the server.
 

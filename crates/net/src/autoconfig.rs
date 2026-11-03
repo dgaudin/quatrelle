@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Finding an account's server settings from its address, the way mail clients have agreed to:
 //!
 //! 1. the domain's own configuration: `https://autoconfig.<domain>/mail/config-v1.1.xml` and

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! A small HTTP/1.1 client (RFC 9112) for the few things mail needs from the web: pictures in a
 //! message once the user asks for them, account autoconfiguration, OAuth token requests and JMAP.
 //!

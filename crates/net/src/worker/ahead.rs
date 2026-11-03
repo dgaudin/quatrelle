@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! Messages downloaded whole ahead of reading, as Cached Exchange Mode keeps its offline file:
 //! a few at a time while nothing else is asked, the Inbox looked at meanwhile, and never so
 //! much that the disk fills.

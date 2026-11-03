@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! The pool: Webex's jobs. Its calls run one after the other on a thread of their own, started
 //! with the first of them: a change never overtakes the one before it, and two refreshes of the
 //! token never race. Signing in waits on the browser, so it has a thread to itself.

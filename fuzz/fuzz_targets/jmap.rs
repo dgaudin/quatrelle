@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! A JMAP server's answers: the input is split at form feeds into the bodies of the HTTP
 //! responses to a session fetch, a folder list and a folder sync (the first two bytes of each
 //! piece pick its status); plus the push stream and the URLs a session hands out.

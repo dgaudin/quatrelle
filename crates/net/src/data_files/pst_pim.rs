@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Contacts and calendar items in an Outlook data file (MS-OXOCNTC, MS-OXOCAL).
 //!
 //! Most of what makes a contact or an appointment lives in *named* properties: their ids differ

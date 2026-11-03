@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! The desktop's own style, for the window to follow: light or dark, the accent colour, and the
 //! interface font.
 //!

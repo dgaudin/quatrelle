@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! Quick Steps, as Outlook's: several things done to the selected mail in one click (or with
 //! Ctrl+Shift+1…9): mark it read, flag, pin or categorize it, then move, archive or delete it.
 

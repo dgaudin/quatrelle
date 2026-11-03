@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! What a web server sends: an HTTP answer read whole and read as it streams (lengths, chunks, to
 //! the end of the connection), a download's `Content-Range`; and what the updater reads from
 //! GitHub: the release list, a `SHA256SUMS.txt`, the quota header and release tags.

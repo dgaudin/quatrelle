@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! An appointment or a meeting in a window of its own, as Outlook opens one: a ribbon (the
 //! Appointment or Meeting tab, and the Scheduling Assistant), then its title, guests, times and
 //! place, and its notes taking the rest of the window. The form is the dialog's ([`EventForm`]);

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! The servers an account trusts: the three commands that record the user's answer, and the
 //! questions a server's proposal raises (one per account and site while Quatrelle runs).
 
