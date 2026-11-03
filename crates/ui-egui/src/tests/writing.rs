@@ -5,6 +5,7 @@
 
 use super::*;
 
+mod file_dialogs;
 mod people_field;
 mod typing;
 

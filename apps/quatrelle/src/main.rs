@@ -584,6 +584,8 @@ fn run(
                     #[cfg(windows)]
                     portable: app_portable,
                     updater: updater.clone(),
+                    // File dialogs above the window, and modal to it where the system allows.
+                    files: desktop::file_dialogs::FileDialogs::over(cc),
                     // A reminder answered from its notification wakes the window to act on it.
                     #[cfg(all(unix, not(target_os = "macos")))]
                     waker: Some(Arc::new({

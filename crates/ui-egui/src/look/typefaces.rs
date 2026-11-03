@@ -121,12 +121,6 @@ mod tests {
         fn clock(&self) -> (i64, i32) {
             (0, 0)
         }
-        fn pick_files(&mut self) -> Vec<std::path::PathBuf> {
-            Vec::new()
-        }
-        fn save_path(&mut self, _: &str) -> Option<std::path::PathBuf> {
-            None
-        }
         fn open_path(&mut self, _: &std::path::Path) -> Result<(), String> {
             Ok(())
         }

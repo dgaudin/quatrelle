@@ -296,16 +296,9 @@ impl crate::Services for Asking {
     fn clock(&self) -> (i64, i32) {
         (NOW, 0)
     }
-    fn pick_files(&mut self) -> Vec<std::path::PathBuf> {
-        Vec::new()
-    }
-    fn save_path(&mut self, _: &str) -> Option<std::path::PathBuf> {
+    fn ask_file(&mut self, _: crate::FileAsk) -> bool {
         self.0.set(self.0.get() + 1);
-        None
-    }
-    fn pick_folder(&mut self) -> Option<std::path::PathBuf> {
-        self.0.set(self.0.get() + 1);
-        None
+        false
     }
     fn open_path(&mut self, _: &std::path::Path) -> Result<(), String> {
         Err("refused".into())

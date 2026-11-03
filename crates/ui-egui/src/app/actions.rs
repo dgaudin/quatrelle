@@ -248,14 +248,14 @@ impl MailApp {
                 }
             }
             Action::PickAccountDataFile => {
-                if let Some(path) = self.services.pick_data_file()
+                if let Some(path) = self.file_answer_one(FileAsk::DataFile, Action::PickAccountDataFile)
                     && let Some(dialogs::Dialog::AddAccount(f)) = self.ui.dialog.as_mut()
                 {
                     f.pst = path.to_string_lossy().into_owned();
                 }
             }
             Action::OpenDataFile => {
-                if let Some(path) = self.services.pick_data_file() {
+                if let Some(path) = self.file_answer_one(FileAsk::DataFile, Action::OpenDataFile) {
                     match self.session.run("account.importPst", &json!({"path": path.to_string_lossy()})) {
                         Ok(_) => {
                             self.ui.backstage = None;
@@ -273,7 +273,7 @@ impl MailApp {
                     .map(|a| if a.config.email.trim().is_empty() { a.config.name.clone() } else { a.config.email.clone() })
                     .unwrap_or_default();
                 let name = quatrelle_engine::mime::sanitize_filename(if name.trim().is_empty() { "Mail" } else { name.trim() });
-                if let Some(path) = self.services.save_path(&format!("{name}.pst")) {
+                if let Some(path) = self.file_answer_one(FileAsk::Save(format!("{name}.pst")), Action::ExportDataFile(account.clone())) {
                     match self.session.run("account.exportPst", &json!({"account": account, "path": path.to_string_lossy()})) {
                         Ok(_) => {
                             self.ui.backstage = None;
@@ -284,7 +284,7 @@ impl MailApp {
                 }
             }
             Action::ExportRules => {
-                if let Some(path) = self.services.save_path("Quatrelle rules.json") {
+                if let Some(path) = self.file_answer_one(FileAsk::Save("Quatrelle rules.json".into()), Action::ExportRules) {
                     match self.session.run("rules.export", &json!({"path": path.to_string_lossy()})) {
                         Ok(v) => {
                             let n = v.get("rules").and_then(Value::as_u64).unwrap_or(0);
@@ -298,7 +298,7 @@ impl MailApp {
             // The browser's picker answers later (with the file's bytes).
             Action::ImportCertificate(account) if self.services.pick_later(&format!("certificate:{account}")) => {}
             Action::ImportCertificate(account) => {
-                if let Some(path) = self.services.pick_certificate() {
+                if let Some(path) = self.file_answer_one(FileAsk::Certificate, Action::ImportCertificate(account.clone())) {
                     self.ui.dialog =
                         Some(Dialog::Certificate { account, path: path.to_string_lossy().into_owned(), data: None, password: String::new() });
                 }
@@ -311,7 +311,7 @@ impl MailApp {
                 self.ui.dialog = Some(Dialog::SmartCard { account, module, pin: String::new() });
             }
             Action::ImportRules => {
-                if let Some(path) = self.services.pick_rules_file() {
+                if let Some(path) = self.file_answer_one(FileAsk::Rules, Action::ImportRules) {
                     match self.session.run("rules.import", &json!({"path": path.to_string_lossy()})) {
                         Ok(v) => {
                             let n = v.get("added").and_then(Value::as_u64).unwrap_or(0);
@@ -333,7 +333,7 @@ impl MailApp {
                 }
             }
             Action::MoveDataFolder => {
-                if let Some(to) = self.services.pick_folder() {
+                if let Some(to) = self.file_answer_one(FileAsk::Folder, Action::MoveDataFolder) {
                     match self.services.move_data_folder(Some(&to)) {
                         Ok(Some(target)) if self.ui.data_folder.as_ref().is_some_and(|(d, _)| *d == target) => {
                             self.ui.pending_move = None;
@@ -448,7 +448,7 @@ impl MailApp {
             Action::AttachFiles if self.services.pick_later("attach") => {}
             Action::Print => {
                 // The message as a PDF, saved where asked, then opened to print from the viewer.
-                let Some(path) = self.services.save_path(&format!("{}.pdf", self.message_file_name())) else { return };
+                let Some(path) = self.file_answer_one(FileAsk::Save(format!("{}.pdf", self.message_file_name())), Action::Print) else { return };
                 match self.session.run("message.exportPdf", &json!({"path": path.to_string_lossy()})) {
                     Ok(_) => match self.services.open_path(&path) {
                         Ok(()) => self.session.notice(tl!("Opened as a PDF: print it from the viewer"), false),
@@ -458,18 +458,31 @@ impl MailApp {
                 }
             }
             Action::ExportPdf | Action::SaveMessage => {
-                let (ext, id) = if matches!(a, Action::ExportPdf) { ("pdf", "message.exportPdf") } else { ("eml", "message.saveAs") };
-                if let Some(path) = self.services.save_path(&format!("{}.{ext}", self.message_file_name())) {
+                let pdf = matches!(a, Action::ExportPdf);
+                let (ext, id) = if pdf { ("pdf", "message.exportPdf") } else { ("eml", "message.saveAs") };
+                let again = if pdf { Action::ExportPdf } else { Action::SaveMessage };
+                if let Some(path) = self.file_answer_one(FileAsk::Save(format!("{}.{ext}", self.message_file_name())), again) {
                     match self.session.run(id, &json!({"path": path.to_string_lossy()})) {
                         Ok(_) => self.session.notice(tf!("Saved {path}", path = path.display()), false),
                         Err(e) => self.session.notice(e.to_string(), true),
                     }
                 }
             }
-            Action::SaveSelected => self.save_selected(),
+            Action::SaveSelected => {
+                let keys = if self.session.selection.is_empty() {
+                    self.session.reading.iter().map(|r| r.key.clone()).collect()
+                } else {
+                    self.session.selection.clone()
+                };
+                self.save_messages(keys);
+            }
+            Action::SaveMessages(keys) => self.save_messages(keys),
             Action::SaveAll | Action::SaveAttachments(_) => {
-                let indices = if let Action::SaveAttachments(v) = &a { json!(v) } else { Value::Null };
-                if let Some(dir) = self.services.pick_folder() {
+                let (indices, again) = match &a {
+                    Action::SaveAttachments(v) => (json!(v), Action::SaveAttachments(v.clone())),
+                    _ => (Value::Null, Action::SaveAll),
+                };
+                if let Some(dir) = self.file_answer_one(FileAsk::Folder, again) {
                     match self.session.run("attachment.saveAll", &json!({"dir": dir.to_string_lossy(), "indices": indices})) {
                         Ok(v) => {
                             let n = v.get("saved").and_then(Value::as_array).map_or(0, Vec::len);
@@ -496,7 +509,7 @@ impl MailApp {
                 }
             }
             Action::SignaturePicture => {
-                for p in self.services.pick_pictures() {
+                for p in self.file_answer(FileAsk::Pictures, Action::SignaturePicture).unwrap_or_default() {
                     let name = p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "picture.png".into());
                     let mime = quatrelle_engine::mime::mime_from_name(&name);
                     let data = match std::fs::metadata(&p) {
@@ -519,7 +532,7 @@ impl MailApp {
                 }
             }
             Action::InsertPicture => {
-                for p in self.services.pick_pictures() {
+                for p in self.file_answer(FileAsk::Pictures, Action::InsertPicture).unwrap_or_default() {
                     let size = rich_edit::own_size_of(&p);
                     self.insert_picture(json!({"path": p.to_string_lossy()}), size);
                 }
@@ -545,13 +558,13 @@ impl MailApp {
                 }
             }
             Action::AttachFiles => {
-                for p in self.services.pick_files() {
+                for p in self.file_answer(FileAsk::Attach, Action::AttachFiles).unwrap_or_default() {
                     self.run("compose.attach", json!({"path": p.to_string_lossy()}));
                 }
             }
             Action::SaveAttachment(i) => {
                 let name = self.attachment_name(i);
-                if let Some(path) = self.services.save_path(&name) {
+                if let Some(path) = self.file_answer_one(FileAsk::Save(name), Action::SaveAttachment(i)) {
                     self.run("attachment.save", json!({"index": i, "path": path.to_string_lossy()}));
                 }
             }
@@ -680,14 +693,9 @@ impl MailApp {
     }
 
     /// A file name for the open message (its subject, made safe).
-    /// The messages selected (else the open one) as `.eml` files: one where the user says, several
-    /// in a folder chosen, each under its subject; in the browser, each downloaded.
-    fn save_selected(&mut self) {
-        let keys: Vec<MessageKey> = if self.session.selection.is_empty() {
-            self.session.reading.iter().map(|r| r.key.clone()).collect()
-        } else {
-            self.session.selection.clone()
-        };
+    /// Messages (those selected, else the open one) as `.eml` files: one where the user says,
+    /// several in a folder chosen, each under its subject; in the browser, each downloaded.
+    fn save_messages(&mut self, keys: Vec<MessageKey>) {
         let ids: Vec<String> = keys.iter().map(MessageKey::to_id).collect();
         let saved = if self.services.downloads() {
             let mut n = 0usize;
@@ -699,12 +707,16 @@ impl MailApp {
             }
             Ok(json!({"saved": vec![Value::Null; n], "missing": keys.len() - n}))
         } else if let [k] = keys.as_slice() {
-            let Some(path) = self.services.save_path(&self.session.message_file(k, "eml")) else { return };
+            let ask = FileAsk::Save(self.session.message_file(k, "eml"));
+            let Some(path) = self.file_answer_one(ask, Action::SaveMessages(keys.clone())) else { return };
             self.session.run("messages.saveAs", &json!({"keys": ids, "path": path.to_string_lossy()})).inspect(|_| {
                 self.session.notice(tf!("Saved {path}", path = path.display()), false);
             })
         } else {
-            let Some(dir) = (!keys.is_empty()).then(|| self.services.pick_folder()).flatten() else { return };
+            if keys.is_empty() {
+                return;
+            }
+            let Some(dir) = self.file_answer_one(FileAsk::Folder, Action::SaveMessages(keys.clone())) else { return };
             self.session.run("messages.saveAs", &json!({"keys": ids, "dir": dir.to_string_lossy()})).inspect(|v| {
                 let n = v.get("saved").and_then(Value::as_array).map_or(0, Vec::len);
                 self.session.notice(tf!("Saved {n} messages in {folder}", n = n, folder = dir.display()), false);

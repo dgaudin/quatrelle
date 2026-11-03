@@ -94,6 +94,25 @@ impl UpdateState {
     }
 }
 
+/// A system file dialog the window asks for ([`Services::ask_file`]).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum FileAsk {
+    /// Files to attach.
+    Attach,
+    /// Pictures to insert.
+    Pictures,
+    /// Where to save a file, under the name suggested.
+    Save(String),
+    /// A folder to save into (attachments, messages; where the data files move).
+    Folder,
+    /// A certificate file (`.p12`, `.pfx`) to import.
+    Certificate,
+    /// A rules file to import.
+    Rules,
+    /// An Outlook (or Quatrelle) data file to open.
+    DataFile,
+}
+
 /// Platform services the UI needs.
 pub trait Services {
     /// Unix seconds and the local UTC offset in seconds.
@@ -102,10 +121,19 @@ pub trait Services {
     fn zone(&self) -> Option<String> {
         None
     }
-    /// Files to attach (an empty list when cancelled).
-    fn pick_files(&mut self) -> Vec<PathBuf>;
-    /// Where to save a file (`None` when cancelled).
-    fn save_path(&mut self, suggested: &str) -> Option<PathBuf>;
+    /// Open the system's file dialog `ask` without waiting for it: the window keeps drawing (and
+    /// answering the desktop) while it's open, and its answer comes later, through
+    /// [`Services::take_file_answer`]. False when nothing opened: there are no such dialogs here,
+    /// or one is open already. The default has none.
+    fn ask_file(&mut self, _ask: FileAsk) -> bool {
+        false
+    }
+    /// The open dialog's answer once it's given (asked every frame while one is open): the files
+    /// or the folder picked, or where to save; an empty list when it was cancelled. `None` while
+    /// it's still open, or when none is.
+    fn take_file_answer(&mut self) -> Option<Vec<PathBuf>> {
+        None
+    }
     /// Open a file with the system's default app.
     fn open_path(&mut self, path: &std::path::Path) -> Result<(), String>;
     /// Where a build that updates itself is with the next version. The default: nowhere.
@@ -155,19 +183,6 @@ pub trait Services {
     fn open_with(&mut self, _app: &std::path::Path, _file: &std::path::Path) -> Result<(), String> {
         Err("not available".into())
     }
-    /// A rules file to import (`None` when cancelled, or where there's no file picker).
-    fn pick_rules_file(&mut self) -> Option<PathBuf> {
-        None
-    }
-    /// A certificate file (`.p12`, `.pfx`) to import (`None` when cancelled, or where there's no
-    /// file picker).
-    fn pick_certificate(&mut self) -> Option<PathBuf> {
-        None
-    }
-    /// A folder to save into (`None` when cancelled).
-    fn pick_folder(&mut self) -> Option<PathBuf> {
-        None
-    }
     /// An installed font for a Chinese, Japanese or Korean interface language (`ja`, `ko`,
     /// `zh-hans`, `zh-hant`): its bytes and the index in a collection.
     fn cjk_font(&mut self, _lang: &str) -> Option<(Vec<u8>, u32)> {
@@ -200,10 +215,6 @@ pub trait Services {
     fn clipboard_picture(&mut self) -> Option<Vec<u8>> {
         None
     }
-    /// Pictures to insert (an empty list when cancelled). The default offers the file picker.
-    fn pick_pictures(&mut self) -> Vec<PathBuf> {
-        self.pick_files()
-    }
     /// Open a web address in the browser. The default can't.
     fn open_url(&mut self, _url: &str) -> Result<(), String> {
         Err("not available".into())
@@ -229,10 +240,6 @@ pub trait Services {
     }
     /// Close this page (a message's own window, when it's done).
     fn close_page(&mut self) {}
-    /// An Outlook data file to open (`None` when cancelled).
-    fn pick_data_file(&mut self) -> Option<PathBuf> {
-        None
-    }
     /// The folder Quatrelle keeps its data in, and whether it can be moved from here (not when
     /// it was chosen at start, or in the browser).
     fn data_folder(&self) -> Option<(PathBuf, bool)> {
@@ -262,7 +269,7 @@ pub trait Services {
         false
     }
     /// Whether files are handed over as downloads (the browser, which has no files) instead of
-    /// saved through [`Services::save_path`].
+    /// saved where a [`FileAsk::Save`] dialog says.
     fn downloads(&self) -> bool {
         false
     }
@@ -270,7 +277,7 @@ pub trait Services {
     fn download(&mut self, _name: &str, _bytes: &[u8]) {}
     /// Start choosing files without waiting (the browser): `purpose` is `attach` or `picture`,
     /// and the files arrive through [`Services::take_picked`]. `false` (the default) means
-    /// [`Services::pick_files`] answers at once.
+    /// the system's dialog is asked for ([`Services::ask_file`]).
     fn pick_later(&mut self, _purpose: &str) -> bool {
         false
     }
@@ -291,12 +298,6 @@ pub struct NullServices(pub i64);
 impl Services for NullServices {
     fn clock(&self) -> (i64, i32) {
         (self.0, 0)
-    }
-    fn pick_files(&mut self) -> Vec<PathBuf> {
-        Vec::new()
-    }
-    fn save_path(&mut self, _: &str) -> Option<PathBuf> {
-        None
     }
     fn open_path(&mut self, _: &std::path::Path) -> Result<(), String> {
         Err("not available".into())

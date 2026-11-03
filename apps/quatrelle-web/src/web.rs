@@ -6,7 +6,7 @@
 //! local storage.
 
 use std::cell::RefCell;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::rc::Rc;
 
 use quatrelle_engine::Session;
@@ -232,12 +232,6 @@ impl Services for WebServices {
     }
     fn zone(&self) -> Option<String> {
         zone()
-    }
-    fn pick_files(&mut self) -> Vec<PathBuf> {
-        Vec::new()
-    }
-    fn save_path(&mut self, _suggested: &str) -> Option<PathBuf> {
-        None
     }
     fn open_path(&mut self, _path: &Path) -> Result<(), String> {
         Err("the browser has no files to open".into())

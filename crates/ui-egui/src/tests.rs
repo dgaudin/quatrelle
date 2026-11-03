@@ -424,12 +424,6 @@ impl crate::Services for PageServices {
     fn clock(&self) -> (i64, i32) {
         (NOW, 0)
     }
-    fn pick_files(&mut self) -> Vec<std::path::PathBuf> {
-        Vec::new()
-    }
-    fn save_path(&mut self, _: &str) -> Option<std::path::PathBuf> {
-        None
-    }
     fn open_path(&mut self, _: &std::path::Path) -> Result<(), String> {
         Err("refused".into())
     }
@@ -529,12 +523,6 @@ impl crate::Services for Recorder {
     fn clock(&self) -> (i64, i32) {
         (NOW, 0)
     }
-    fn pick_files(&mut self) -> Vec<std::path::PathBuf> {
-        Vec::new()
-    }
-    fn save_path(&mut self, _: &str) -> Option<std::path::PathBuf> {
-        None
-    }
     fn open_path(&mut self, _: &std::path::Path) -> Result<(), String> {
         Ok(())
     }
@@ -561,11 +549,12 @@ impl crate::Services for WebLike {
     fn clock(&self) -> (i64, i32) {
         (NOW, 0)
     }
-    fn pick_files(&mut self) -> Vec<std::path::PathBuf> {
-        panic!("the browser can't pick files at once")
-    }
-    fn save_path(&mut self, _: &str) -> Option<std::path::PathBuf> {
-        panic!("the browser has no paths")
+    fn ask_file(&mut self, ask: crate::FileAsk) -> bool {
+        match ask {
+            crate::FileAsk::Attach | crate::FileAsk::Pictures => panic!("the browser picks files its own way"),
+            crate::FileAsk::Save(_) => panic!("the browser has no paths"),
+            _ => false,
+        }
     }
     fn open_path(&mut self, _: &std::path::Path) -> Result<(), String> {
         panic!("the browser has no paths")
@@ -598,12 +587,6 @@ struct Ticking(
 impl crate::Services for Ticking {
     fn clock(&self) -> (i64, i32) {
         (*self.0.lock().unwrap(), 0)
-    }
-    fn pick_files(&mut self) -> Vec<std::path::PathBuf> {
-        Vec::new()
-    }
-    fn save_path(&mut self, _: &str) -> Option<std::path::PathBuf> {
-        None
     }
     fn open_path(&mut self, _: &std::path::Path) -> Result<(), String> {
         Ok(())
