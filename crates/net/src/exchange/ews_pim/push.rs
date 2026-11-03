@@ -47,7 +47,7 @@ pub(super) fn push_events(c: &Client, pim: &Pim, out: &mut DavSync) {
             Ok(Saved { href, etag, untold }) => {
                 // Saved, but the server wouldn't send to its guests: said once, not tried again.
                 if let Some(why) = untold {
-                    out.errors.push(format!("{}: saved, but the server wouldn't tell the guests ({}): {why}", e.event.summary, guests.join(", ")));
+                    out.errors.push(format!("{}: saved, but the server wouldn't tell the guests ({}): {why}", e.event.summary, some_names(&guests)));
                 }
                 out.pushed_events.push(StoredEvent {
                     calendar: if owner.is_some() { e.calendar.clone() } else { CALENDAR.into() },
@@ -123,14 +123,33 @@ struct Saved {
 /// take.
 const RECIPIENT_ERRORS: [&str; 2] = ["ErrorInvalidRecipients", "ErrorMissingRecipients"];
 
-/// One request that may ask the server to send a meeting: a refusal for its recipients comes
-/// back as `Ok(Err(the server's words))`, for the change to be saved telling no one.
-fn call_sending(c: &Client, body: &str) -> Result<std::result::Result<El, String>> {
+/// Most guests named in a message.
+const NAMES_SHOWN: usize = 3;
+
+/// A few of the names, then how many more.
+fn some_names(names: &[&str]) -> String {
+    let shown = names.iter().take(NAMES_SHOWN).copied().collect::<Vec<_>>().join(", ");
+    match names.len().saturating_sub(NAMES_SHOWN) {
+        0 => shown,
+        n => format!("{shown} and {n} others"),
+    }
+}
+
+/// Whether a refusal is for the recipients: by its code, or (the on-premises server's code was
+/// never seen, only its words) by its text speaking of recipients.
+fn refuses_recipients(code: &str, text: &str) -> bool {
+    RECIPIENT_ERRORS.contains(&code.trim()) || text.to_ascii_lowercase().contains("recipient")
+}
+
+/// One request that may ask the server to send a meeting (`sending`): a refusal for its
+/// recipients comes back as `Ok(Err(the server's words))`, for the change to be saved telling no
+/// one. Not asked to send, no refusal is one for recipients.
+fn call_sending(c: &Client, body: &str, sending: bool) -> Result<std::result::Result<El, String>> {
     let doc = c.call(body)?;
     let m = crate::ews::messages(&doc).first().map(|m| (*m).clone()).ok_or_else(|| NetError::Protocol("an empty answer".into()))?;
-    if m.attr("ResponseClass") == Some("Error") && m.text_of("ResponseCode").is_some_and(|code| RECIPIENT_ERRORS.contains(&code.trim())) {
-        let code = m.text_of("ResponseCode").unwrap_or_default();
-        return Ok(Err(m.text_of("MessageText").filter(|t| !t.trim().is_empty()).unwrap_or(code).trim().to_string()));
+    let (code, text) = (m.text_of("ResponseCode").unwrap_or_default(), m.text_of("MessageText").unwrap_or_default());
+    if sending && m.attr("ResponseClass") == Some("Error") && refuses_recipients(code, text) {
+        return Ok(Err(if text.trim().is_empty() { code } else { text }.trim().to_string()));
     }
     crate::ews::check_message(&m)?;
     Ok(Ok(m))
@@ -166,6 +185,7 @@ fn create_item(c: &Client, owner: Option<&str>, e: &CalEvent, notify: bool) -> R
                 "<m:CreateItem SendMeetingInvitations=\"{send}\"><m:SavedItemFolderId>{folder}</m:SavedItemFolderId>\
                  <m:Items><t:CalendarItem>{body}</t:CalendarItem></m:Items></m:CreateItem>"
             ),
+            send != "SendToNone",
         )
     };
     let first = call(if notify { "SendToAllAndSaveCopy" } else { "SendToNone" });
@@ -206,6 +226,7 @@ fn update_item(c: &Client, id: &str, change_key: &str, e: &CalEvent, notify: boo
                  <t:ItemChange><t:ItemId Id=\"{}\"{key}/><t:Updates>{updates}</t:Updates></t:ItemChange></m:ItemChanges></m:UpdateItem>",
                 esc(id)
             ),
+            send != "SendToNone",
         )
     };
     let send = if notify { "SendToAllAndSaveCopy" } else { "SendToNone" };

@@ -29,6 +29,7 @@ fn calendar() -> (super::server::Server, crate::ews::Client, String) {
     );
     d.pim.push(("E1".into(), cal.clone(), test.kids[0].clone()));
     d.refused_guests.push("gone@contoso.example".into());
+    d.refused_guests.push("odd-gone@contoso.example".into());
     let server = serve(d);
     let c = crate::ews::Client::connect(&server.url, &format!("{DOMAIN}\\{USER}"), PASSWORD, ME).unwrap();
     (server, c, cal)
@@ -101,4 +102,56 @@ fn a_guest_the_server_refuses_leaves_the_change_saved_and_says_so() {
     let again = crate::ews_pim::sync(&c, &next, 1_793_600_100).unwrap();
     assert!(again.errors.is_empty(), "{:?}", again.errors);
     assert_eq!(server.data.lock().unwrap().meeting_sends.len(), 2, "nothing sent again");
+}
+
+/// The on-premises server's code was never seen, only its words: a refusal of a send that
+/// speaks of recipients is one whatever its code, and is saved telling no one just the same.
+#[test]
+fn a_refusal_for_recipients_under_another_code_is_treated_the_same() {
+    let (server, c, _) = calendar();
+    let pim = Pim {
+        events: vec![changed("E1", "test-1", vec![person(ME, "ACCEPTED"), person("odd-gone@contoso.example", "NEEDS-ACTION")])],
+        ..Default::default()
+    };
+    let out = crate::ews_pim::sync(&c, &pim, 1_793_600_000).unwrap();
+    assert_eq!(out.errors.len(), 1, "{:?}", out.errors);
+    assert!(out.errors[0].contains("At least one recipient isn't valid."), "{}", out.errors[0]);
+    assert_eq!(out.pushed_events.len(), 1);
+    assert!(!out.pushed_events[0].dirty && !out.pushed_events[0].notify);
+    assert_eq!(subject_of(&server, "E1"), "test 2");
+    assert_eq!(server.data.lock().unwrap().meeting_sends, ["SendToAllAndSaveCopy", "SendToNone"]);
+}
+
+/// A new meeting with a guest the server refuses is created once, telling no one, with one error.
+#[test]
+fn a_new_meeting_with_a_refused_guest_is_created_telling_no_one() {
+    let (server, c, _) = calendar();
+    let pim = Pim {
+        events: vec![changed("", "new-1", vec![person(ME, "ACCEPTED"), person("gone@contoso.example", "NEEDS-ACTION")])],
+        ..Default::default()
+    };
+    let out = crate::ews_pim::sync(&c, &pim, 1_793_600_000).unwrap();
+    assert_eq!(out.errors.len(), 1, "{:?}", out.errors);
+    assert!(out.errors[0].contains("gone@contoso.example"), "{}", out.errors[0]);
+    assert_eq!(out.pushed_events.len(), 1);
+    let e = &out.pushed_events[0];
+    assert!(!e.href.is_empty() && !e.dirty && !e.notify, "{e:?}");
+    assert_eq!(subject_of(&server, &e.href), "test 2");
+    let d = server.data.lock().unwrap();
+    assert_eq!(d.meeting_sends, ["SendToAllAndSaveCopy", "SendToNone"]);
+    assert_eq!(d.pim.iter().filter(|(_, _, el)| el.text_of("Subject") == Some("test 2")).count(), 1, "created once");
+}
+
+/// The error names a few guests, then how many more, not all of up to 500.
+#[test]
+fn the_error_names_a_few_refused_guests_and_counts_the_others() {
+    let (_server, c, _) = calendar();
+    let mut guests = vec![person(ME, "ACCEPTED"), person("gone@contoso.example", "NEEDS-ACTION")];
+    guests.extend((0..40).map(|i| person(&format!("g{i}@contoso.example"), "NEEDS-ACTION")));
+    let pim = Pim { events: vec![changed("E1", "test-1", guests)], ..Default::default() };
+    let out = crate::ews_pim::sync(&c, &pim, 1_793_600_000).unwrap();
+    assert_eq!(out.errors.len(), 1, "{:?}", out.errors);
+    let error = &out.errors[0];
+    assert!(error.contains("and 39 others") || error.contains("others"), "{error}");
+    assert!(error.len() < 400, "{} bytes: {error}", error.len());
 }

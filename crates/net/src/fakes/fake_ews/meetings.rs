@@ -28,8 +28,13 @@ impl Data {
         } else {
             return None;
         };
-        Some(format!(
-            "<m:R ResponseClass=\"Error\"><m:MessageText>{text}</m:MessageText><m:ResponseCode>ErrorInvalidRecipients</m:ResponseCode></m:R>"
-        ))
+        // A refused guest whose address starts `odd-` is answered under another code, the words
+        // the same: the on-premises server's real code was never seen, only its message.
+        let code = if guests.iter().any(|g| g.starts_with("odd-") && self.refused_guests.contains(g)) {
+            "ErrorRecipientNotFound"
+        } else {
+            "ErrorInvalidRecipients"
+        };
+        Some(format!("<m:R ResponseClass=\"Error\"><m:MessageText>{text}</m:MessageText><m:ResponseCode>{code}</m:ResponseCode></m:R>"))
     }
 }
