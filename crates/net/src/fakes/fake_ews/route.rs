@@ -331,6 +331,8 @@ impl Data {
                         Some(id) => {
                             out.push(ok(format!("<m:Items><t:CalendarItem><t:ItemId Id=\"{id}\" ChangeKey=\"ck\"/></t:CalendarItem></m:Items>")))
                         }
+                        // As Exchange: a series deleted is an item not found.
+                        None if !self.pim.iter().any(|(i, _, _)| *i == master) => out.push(err("ErrorItemNotFound")),
                         None => out.push(err("ErrorCalendarOccurrenceIndexIsOutOfRecurrenceRange")),
                     }
                 }

@@ -99,6 +99,10 @@ pub enum NetError {
     /// Can't go on, for a reason said in full (what to do included): not a server's words.
     #[error("{0}")]
     Refused(String),
+    /// The item a change went to update isn't on the server any more (deleted there meanwhile),
+    /// as its answer's code says: the server wins, the change made here goes.
+    #[error("not on the server any more ({0})")]
+    Gone(String),
     /// A redirect or a server's own answer named a site the account doesn't trust: nothing was
     /// sent there.
     #[error("{site} isn't allowed for this account")]

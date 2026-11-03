@@ -16,6 +16,7 @@ mod account;
 mod calendar_speed;
 mod calendars;
 mod directory;
+mod gone;
 mod guests;
 mod listening;
 mod mailbox;

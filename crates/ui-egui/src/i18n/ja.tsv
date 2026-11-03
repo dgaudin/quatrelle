@@ -1771,6 +1771,7 @@ month	May	5月
 	{domain} wasn't allowed: {account} won't use it	{domain} は許可されませんでした: {account} では使用しません
 	{email} removed. Its data file stays at {path}	{email} を削除しました。データ ファイルは {path} に残っています
 	{event}: a change to one occurrence couldn't be sent: its series is no longer on the server	{event}: 1 回分の変更を送信できませんでした: その定期的な予定はサーバーにもうありません
+	{event}: deleted on the server meanwhile; the change made here was dropped	{event}: その間にサーバーで削除されました。ここで行った変更は破棄されました
 	{name} could not be exported: {error}	{name} をエクスポートできませんでした: {error}
 	{name} couldn't be read: {error}	{name} を読み込めませんでした: {error}
 	{name}: the data file could not be opened: {error}	{name}: データ ファイルを開けませんでした: {error}

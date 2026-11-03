@@ -205,12 +205,16 @@ pub fn occurrence_item_id(c: &Client, master_id: &str, master: &CalEvent, at: i6
         .iter()
         .position(|s| *s == at)
         .ok_or_else(|| NetError::No("the series has no such occurrence".into()))?;
-    let m = c.call_one(&format!(
-        "<m:GetItem><m:ItemShape><t:BaseShape>IdOnly</t:BaseShape></m:ItemShape><m:ItemIds>\
+    // The series deleted on the server: said as such (`NetError::Gone`).
+    let m = super::push::call_item(
+        c,
+        &format!(
+            "<m:GetItem><m:ItemShape><t:BaseShape>IdOnly</t:BaseShape></m:ItemShape><m:ItemIds>\
          <t:OccurrenceItemId RecurringMasterId=\"{}\" InstanceIndex=\"{}\"/></m:ItemIds></m:GetItem>",
-        esc(master_id),
-        index.saturating_add(1)
-    ))?;
+            esc(master_id),
+            index.saturating_add(1)
+        ),
+    )?;
     let (id, key) = new_id(&m);
     if id.is_empty() {
         return Err(NetError::Protocol("the occurrence came back without an id".into()));

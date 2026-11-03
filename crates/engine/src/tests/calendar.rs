@@ -6,6 +6,7 @@
 use super::*;
 
 mod find;
+mod gone;
 mod guests;
 mod reminders;
 mod showing;

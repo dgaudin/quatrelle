@@ -106,3 +106,27 @@ fn unknown_show_as_and_no_sensitivity_read_as_busy_and_public() {
     assert!(!odd.event.private);
     assert_eq!(odd.event.show_as, ShowAs::Busy);
 }
+
+/// An appointment changed here and deleted on the server meanwhile: its `PATCH` is answered 404
+/// `ErrorItemNotFound`, and it's reported gone (the server wins), not refused at every sync.
+#[test]
+fn an_appointment_deleted_on_the_server_is_reported_gone() {
+    let mut d = Data::default();
+    d.folder("Inbox", None, Some("inbox"));
+    d.calendars.push(("CAL1".into(), "Calendar".into()));
+    let server = serve(d);
+    let c = crate::graph::Client::connect(&server.base, TOKEN).unwrap();
+    let edited = StoredEvent {
+        calendar: "CAL1".into(),
+        href: "GONE1".into(),
+        etag: "ck".into(),
+        event: CalEvent { uid: "gone-1".into(), summary: "test".into(), start: 1_792_000_000, end: 1_792_001_800, ..Default::default() },
+        dirty: true,
+        ..Default::default()
+    };
+    let pim = Pim { events: vec![edited], ..Default::default() };
+    let sync = crate::graph_pim::sync(&c, &pim, 1_792_000_000).unwrap();
+    assert_eq!(sync.gone_events, ["GONE1"]);
+    assert!(sync.errors.is_empty(), "said by the engine, once: {:?}", sync.errors);
+    assert!(sync.pushed_events.is_empty());
+}

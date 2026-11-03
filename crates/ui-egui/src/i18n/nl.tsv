@@ -1770,6 +1770,7 @@ month	May	mei
 	{domain} wasn't allowed: {account} won't use it	{domain} is niet toegestaan: {account} gebruikt het niet
 	{email} removed. Its data file stays at {path}	{email} verwijderd. Het gegevensbestand blijft in {path}
 	{event}: a change to one occurrence couldn't be sent: its series is no longer on the server	{event}: een wijziging aan één exemplaar kon niet worden verzonden: de reeks staat niet meer op de server
+	{event}: deleted on the server meanwhile; the change made here was dropped	{event}: intussen op de server verwijderd; de wijziging die hier is gemaakt, is verworpen
 	{name} could not be exported: {error}	{name} kon niet worden geëxporteerd: {error}
 	{name} couldn't be read: {error}	{name} kon niet worden gelezen: {error}
 	{name}: the data file could not be opened: {error}	{name}: het gegevensbestand kon niet worden geopend: {error}
