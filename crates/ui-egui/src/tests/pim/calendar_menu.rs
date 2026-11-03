@@ -286,3 +286,74 @@ fn a_colleagues_private_appointment_offers_only_open() {
     }
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// The same appointment in the user's calendar and in a colleague's the user may change: the
+/// colleague's chip offers Open only (Delete there deleted the user's own copy), the user's own
+/// chip the whole menu.
+#[test]
+fn a_colleagues_copy_offers_only_open() {
+    let (mut a, dir, ctx) = day_view("menu-colleague-copy", 0);
+    let zoe = quatrelle_engine::model::pim::shared_calendar_id("zoe@studio.example");
+    a.run("calendar.show", json!({"account": "sample", "calendar": zoe, "shown": true}));
+    let p = a.session.pim_mut("sample");
+    p.calendars.iter_mut().filter(|c| c.id == zoe).for_each(|c| c.read_only = false);
+    let mut copy = p.events.iter().find(|e| e.event.summary == "Lunch with Jun").cloned().unwrap();
+    copy.calendar = zoe.clone();
+    p.events.push(copy);
+    a.session.pim_revision += 1;
+    for _ in 0..5 {
+        frame(&ctx, &mut a, vec![]);
+    }
+    let (d0, d1) = a.session.cal_days();
+    let items = a.session.agenda(a.session.local_midnight(d0), a.session.local_midnight(d1));
+    let lunches: Vec<AgendaItem> = items.into_iter().filter(|i| i.summary == "Lunch with Jun").collect();
+    let theirs = lunches.iter().find(|i| i.calendar == zoe).cloned().expect("the colleague's copy is shown");
+    let mine = lunches.iter().find(|i| i.calendar != zoe).cloned().expect("the user's copy is shown");
+    let menu = right_click(&ctx, &mut a, &theirs);
+    assert!(menu.iter().any(|t| t == "Open"), "{menu:?}");
+    for entry in ["Show As", "Categorize", "Private", "Delete", "Accept"] {
+        assert!(!menu.iter().any(|t| t == entry), "{entry} in the colleague's menu: {menu:?}");
+    }
+    frame(&ctx, &mut a, vec![Event::Key { key: egui::Key::Escape, physical_key: None, pressed: true, repeat: false, modifiers: Modifiers::NONE }]);
+    for _ in 0..5 {
+        frame(&ctx, &mut a, vec![]);
+    }
+    let menu = right_click(&ctx, &mut a, &mine);
+    for entry in ["Open", "Show As", "Categorize", "Private", "Delete"] {
+        assert!(menu.iter().any(|t| t == entry), "no {entry} in the user's menu: {menu:?}");
+    }
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// One occurrence of a series made private and free on its own: the menu, which changes the
+/// series, ticks the series' values. Private makes the series private; Show As › Busy, the
+/// series' already, changes nothing.
+#[test]
+fn a_changed_occurrence_ticks_the_series() {
+    let (mut a, dir, ctx) = day_view("menu-changed-occurrence", 0);
+    let standup = shown(&a, "Team stand-up");
+    let p = a.session.pim_mut("sample");
+    let mut changed = p.events.iter().find(|e| e.event.uid == standup.uid && e.event.recurrence_id.is_none()).cloned().unwrap();
+    assert!(!changed.event.private && changed.event.show_as == ShowAs::Busy, "{changed:?}");
+    changed.event.rrule = None;
+    changed.event.recurrence_id = Some(standup.occurrence);
+    (changed.event.start, changed.event.end) = (standup.start, standup.end);
+    (changed.event.private, changed.event.show_as) = (true, ShowAs::Free);
+    p.events.push(changed);
+    a.session.pim_revision += 1;
+    for _ in 0..5 {
+        frame(&ctx, &mut a, vec![]);
+    }
+    let one = shown(&a, "Team stand-up");
+    assert!(one.private && one.show_as == ShowAs::Free, "{one:?}");
+    let series = |a: &MailApp| a.session.find_event(&standup.uid).map(|(_, e)| e.event.clone()).unwrap();
+    let revision = a.session.pim_revision;
+    right_click(&ctx, &mut a, &one);
+    choose(&ctx, &mut a, &["Show As", "Busy"]);
+    assert_eq!(series(&a).show_as, ShowAs::Busy);
+    assert_eq!(a.session.pim_revision, revision, "nothing changed");
+    right_click(&ctx, &mut a, &one);
+    choose(&ctx, &mut a, &["Private"]);
+    assert!(series(&a).private, "the series is private now");
+    let _ = std::fs::remove_dir_all(dir);
+}

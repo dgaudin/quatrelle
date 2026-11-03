@@ -17,7 +17,8 @@ use crate::{Action, theme};
 
 /// The menu's entries for `item` (drawn only while it's open: the event is read from here).
 pub(super) fn menu(ui: &mut Ui, s: &Session, item: &AgendaItem, acts: &mut Vec<Action>) {
-    let event = s.find_event(&item.uid).map(|(_, e)| &e.event);
+    let found = s.find_event(&item.uid);
+    let event = found.map(|(_, e)| &e.event);
     if ui.button(tl!("Open")).clicked() {
         acts.extend(open(s, item));
         ui.close();
@@ -29,7 +30,10 @@ pub(super) fn menu(ui: &mut Ui, s: &Session, item: &AgendaItem, acts: &mut Vec<A
         ui.close();
     }
     let writable = s.pim.get(&item.account).and_then(|p| p.calendars.iter().find(|c| c.id == item.calendar)).is_some_and(|c| !c.read_only);
-    if !writable {
+    // What the entries below change is the event the uid finds (the user's own copy first): only
+    // when it's the one clicked. A colleague's copy of a meeting the user also has is opened only.
+    let this_one = found.is_some_and(|(account, e)| account == item.account && e.calendar == item.calendar);
+    if !writable || !this_one {
         return;
     }
     let uid = item.uid.as_str();
@@ -48,11 +52,13 @@ pub(super) fn menu(ui: &mut Ui, s: &Session, item: &AgendaItem, acts: &mut Vec<A
             }
         }
     }
+    // Ticked as the event changed is (a series, not an occurrence changed on its own).
+    let (show_as, is_private) = event.map_or((item.show_as, item.private), |e| (e.show_as, e.private));
     ui.separator();
     ui.menu_button(tl!("Show As"), |ui| {
         for x in ShowAs::ALL {
-            if ui.radio(item.show_as == x, tl!(show_as_label(x))).clicked() {
-                if x != item.show_as {
+            if ui.radio(show_as == x, tl!(show_as_label(x))).clicked() {
+                if x != show_as {
                     acts.push(Action::Run("event.update", json!({"uid": uid, "showAs": x.param(), "send": false})));
                 }
                 ui.close();
@@ -79,7 +85,7 @@ pub(super) fn menu(ui: &mut Ui, s: &Session, item: &AgendaItem, acts: &mut Vec<A
         });
     });
     ui.horizontal(|ui| {
-        let mut private = item.private;
+        let mut private = is_private;
         if ui.checkbox(&mut private, tl!("Private")).changed() {
             acts.push(Action::Run("event.update", json!({"uid": uid, "private": private, "send": false})));
             ui.close();
