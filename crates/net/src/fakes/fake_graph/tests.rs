@@ -12,6 +12,7 @@ use quatrelle_store::Store;
 use super::*;
 
 mod cached_mode;
+mod events;
 mod teams;
 mod text_first;
 
