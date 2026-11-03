@@ -1459,6 +1459,8 @@ month	May	מאי
 	Puts your Webex personal room in the meeting	מוסיף את החדר האישי שלך ב-Webex לפגישה
 	Select Attendees and Resources	בחירת משתתפים ומשאבים
 	Your Webex personal room	החדר האישי שלך ב-Webex
+	Move meeting invitations to Deleted Items once answered	העבר הזמנות לפגישות אל פריטים שנמחקו לאחר שנענו
+	Also a cancellation once its meeting is removed from the calendar, and the meeting's earlier invitations.	וכן ביטול, לאחר שהפגישה שלו הוסרה מהלוח, ואת ההזמנות הקודמות של הפגישה.
 	Required ->	נדרש ->
 	Optional ->	אופציונלי ->
 	Resources ->	משאבים ->

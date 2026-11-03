@@ -1460,6 +1460,8 @@ month	May	5月
 	Puts your Webex personal room in the meeting	Webex パーソナル会議室を会議に挿入します
 	Select Attendees and Resources	出席者とリソースの選択
 	Your Webex personal room	あなたの Webex パーソナル会議室
+	Move meeting invitations to Deleted Items once answered	会議の招待は、返信したら削除済みアイテムに移動する
+	Also a cancellation once its meeting is removed from the calendar, and the meeting's earlier invitations.	会議がカレンダーから削除された後の取り消しと、その会議の以前の招待も対象です。
 	Required ->	必須 ->
 	Optional ->	任意 ->
 	Resources ->	リソース ->

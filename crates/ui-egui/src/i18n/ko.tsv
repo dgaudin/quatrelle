@@ -1462,6 +1462,8 @@ month	May	5월
 	Puts your Webex personal room in the meeting	Webex 개인 회의실을 회의에 넣습니다
 	Select Attendees and Resources	참석자 및 리소스 선택
 	Your Webex personal room	내 Webex 개인 회의실
+	Move meeting invitations to Deleted Items once answered	회의 초대에 응답하면 지운 편지함으로 이동
+	Also a cancellation once its meeting is removed from the calendar, and the meeting's earlier invitations.	회의가 일정에서 제거된 뒤의 취소 메일과 그 회의의 이전 초대도 함께 옮깁니다.
 	Required ->	필수 ->
 	Optional ->	선택 ->
 	Resources ->	리소스 ->

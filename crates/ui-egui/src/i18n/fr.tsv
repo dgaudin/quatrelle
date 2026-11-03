@@ -1463,6 +1463,8 @@ month	May	mai
 	Puts your Webex personal room in the meeting	Ajoute votre salle personnelle Webex à la réunion
 	Select Attendees and Resources	Choisir les participants et les ressources
 	Your Webex personal room	Votre salle personnelle Webex
+	Move meeting invitations to Deleted Items once answered	Mettre les invitations aux Éléments supprimés une fois répondues
+	Also a cancellation once its meeting is removed from the calendar, and the meeting's earlier invitations.	Aussi une annulation, une fois sa réunion retirée du calendrier, et les invitations précédentes de la réunion.
 	Required ->	Obligatoire ->
 	Optional ->	Facultatif ->
 	Resources ->	Ressources ->

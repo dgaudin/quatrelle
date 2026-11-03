@@ -1459,6 +1459,8 @@ month	May	مايو
 	Puts your Webex personal room in the meeting	يضيف غرفتك الشخصية في Webex إلى الاجتماع
 	Select Attendees and Resources	تحديد الحضور والموارد
 	Your Webex personal room	غرفتك الشخصية في Webex
+	Move meeting invitations to Deleted Items once answered	نقل دعوات الاجتماعات إلى العناصر المحذوفة بعد الرد عليها
+	Also a cancellation once its meeting is removed from the calendar, and the meeting's earlier invitations.	وكذلك الإلغاء بعد إزالة اجتماعه من التقويم، والدعوات السابقة للاجتماع.
 	Required ->	مطلوب ->
 	Optional ->	اختياري ->
 	Resources ->	الموارد ->

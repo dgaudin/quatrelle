@@ -1463,6 +1463,8 @@ month	May	Mai
 	Puts your Webex personal room in the meeting	Fügt Ihren persönlichen Webex-Raum in die Besprechung ein
 	Select Attendees and Resources	Teilnehmer und Ressourcen auswählen
 	Your Webex personal room	Ihr persönlicher Webex-Raum
+	Move meeting invitations to Deleted Items once answered	Besprechungseinladungen nach der Antwort in „Gelöschte Elemente“ verschieben
+	Also a cancellation once its meeting is removed from the calendar, and the meeting's earlier invitations.	Auch eine Absage, sobald ihre Besprechung aus dem Kalender entfernt ist, und die früheren Einladungen der Besprechung.
 	Required ->	Erforderlich ->
 	Optional ->	Optional ->
 	Resources ->	Ressourcen ->

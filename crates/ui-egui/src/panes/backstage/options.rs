@@ -302,6 +302,16 @@ pub(super) fn options(s: &Session, st: &UiState, ui: &mut Ui, acts: &mut Vec<Act
     // Online meetings: the Webex personal room the appointment window's Webex Meeting puts in,
     // saved once it's typed (a link that isn't one says why and stays to be corrected).
     group(ui, tl!("Calendar"), None, &mut |ui| {
+        let about = tl!("Also a cancellation once its meeting is removed from the calendar, and the meeting's earlier invitations.");
+        setting(ui, false, tl!("Move meeting invitations to Deleted Items once answered"), Some(about), &mut |ui| {
+            switch(
+                ui,
+                s.prefs.tidy_answered_invites,
+                tl!("Move meeting invitations to Deleted Items once answered"),
+                "view.tidyAnsweredInvites",
+                acts,
+            );
+        });
         setting(
             ui,
             true,

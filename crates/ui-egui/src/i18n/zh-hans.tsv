@@ -1460,6 +1460,8 @@ month	May	5月
 	Puts your Webex personal room in the meeting	将你的 Webex 个人会议室插入会议
 	Select Attendees and Resources	选择与会者和资源
 	Your Webex personal room	你的 Webex 个人会议室
+	Move meeting invitations to Deleted Items once answered	答复会议邀请后将其移到“已删除邮件”
+	Also a cancellation once its meeting is removed from the calendar, and the meeting's earlier invitations.	会议从日历中移除后的取消通知，以及该会议之前的邀请，也一并移动。
 	Required ->	必需 ->
 	Optional ->	可选 ->
 	Resources ->	资源 ->
