@@ -447,6 +447,8 @@ pub struct UiState {
     pub(crate) months_drag: f32,
     /// An appointment being dragged to another time ([`calendar::Drag`]).
     pub(crate) cal_drag: Option<calendar::Drag>,
+    /// The appointment or empty half hour selected in the calendar's grid ([`calendar::Pick`]).
+    pub(crate) cal_pick: Option<calendar::Pick>,
     pub(crate) note_edit: Option<(String, String)>,
     /// Tasks: the search, the one picked and its form, the task being typed in.
     pub(crate) tasks: tasks::TasksUi,
@@ -585,6 +587,7 @@ impl MailApp {
                 cal_search: calendar::CalSearch::default(),
                 months_drag: 0.0,
                 cal_drag: None,
+                cal_pick: None,
                 note_edit: None,
                 tasks: Default::default(),
                 note_focus: false,
