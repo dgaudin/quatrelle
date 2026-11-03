@@ -9,7 +9,7 @@ pub(super) fn commands() -> Vec<CommandSpec> {
     vec![
         // Home › New
         CommandSpec::new("mail.new", "New mail", "Home › New", new_mail)
-            .key("Mod+N")
+            .key("Mod+N / Mod+Shift+M")
             .params(r#"{"account"?: string, "to"?: string (who it's to, "Name <address>")}"#)
             .when(has_account),
         // Home › Delete

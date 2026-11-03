@@ -27,6 +27,7 @@ pub use drag::Drag;
 pub(crate) use found::open_hit;
 pub(crate) use found::{CalSearch, found};
 pub use pick::Pick;
+pub(crate) use pick::new_event;
 pub use side::{nav, todo_bar};
 
 /// Height of an hour in the day and week views.

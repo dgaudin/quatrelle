@@ -10,7 +10,7 @@ use super::*;
 use drag::Area;
 
 /// A new event at `at`, in calendar `cal` (account, calendar id) when it can take one.
-fn new_event_in(s: &Session, at: i64, cal: Option<&(String, String, String, u8)>) -> Action {
+pub(super) fn new_event_in(s: &Session, at: i64, cal: Option<&(String, String, String, u8)>) -> Action {
     let mut d = Dialog::new_event(s, Some(at));
     if let (Dialog::Event(f), Some((account, id, _, _))) = (&mut d, cal)
         && let Some(i) = f.calendars.iter().position(|(a, c, _)| a == account && c == id)

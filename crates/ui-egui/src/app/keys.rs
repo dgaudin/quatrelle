@@ -95,6 +95,11 @@ impl MailApp {
                     continue;
                 }
             }
+            // Ctrl+N: the shown module's new item, as Outlook's.
+            if combo == "Mod+N" && self.session.module != Module::Mail {
+                self.new_item();
+                continue;
+            }
             if combo == "Mod+E" {
                 self.ui.focus_search = true;
                 continue;
@@ -156,6 +161,30 @@ impl MailApp {
         }
         if ctx.input(|i| i.modifiers.command && i.key_pressed(Key::Enter)) && self.session.compose.is_some() {
             self.run("compose.send", json!({}));
+        }
+    }
+
+    /// The shown module's new item (Ctrl+N), as its ribbon's New button makes it: a message, an
+    /// appointment (at the half hour or the day selected), a contact, a task, a note.
+    fn new_item(&mut self) {
+        if self.session.accounts.is_empty() {
+            return;
+        }
+        match self.session.module {
+            Module::Mail => self.run("mail.new", json!({})),
+            Module::Calendar => {
+                let new = calendar::new_event(&self.session, self.ui.cal_pick.as_ref());
+                self.act(new);
+            }
+            Module::People => self.ui.dialog = Some(Dialog::new_contact()),
+            Module::Tasks => self.ui.tasks.focus_new = true,
+            Module::Notes => {
+                let mut acts = Vec::new();
+                notes::new_note(&mut self.ui, &mut acts);
+                for a in acts {
+                    self.act(a);
+                }
+            }
         }
     }
 
