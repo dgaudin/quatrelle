@@ -55,7 +55,7 @@ pub(crate) use app::{SearchDrop, junk_menu, meeting_browser, meeting_profile, sc
 pub use app::{WindowPlace, after_open, alt_code_pages, alt_codes};
 pub use dialogs::Dialog;
 use icons::Icon;
-pub use services::{Backend, BrowserProfile, NullBackend, NullServices, ReminderAction, Services, TrayAction, TrayIcon, UpdateState};
+pub use services::{Backend, BrowserProfile, FileAsk, NullBackend, NullServices, ReminderAction, Services, TrayAction, TrayIcon, UpdateState};
 use theme::Tokens;
 
 /// Whether the message being written shows in the reading pane: when it isn't popped out, or
@@ -196,6 +196,8 @@ pub enum Action {
     SaveAttachments(Vec<usize>),
     /// The messages selected in the list, as `.eml` files (one where asked; several in a folder).
     SaveSelected,
+    /// These messages as `.eml` files (Save As on those selected, once the place is said).
+    SaveMessages(Vec<MessageKey>),
     /// The rules to a file, or rules from one (Outlook's Export and Import Rules).
     ExportRules,
     ImportRules,
@@ -378,6 +380,8 @@ pub struct UiState {
     pub(crate) editors: HashMap<u64, rich_edit::Editor>,
     /// The message whose window a dialog for messages belongs to (Save changes, Address Book).
     pub(crate) dialog_for: Option<u64>,
+    /// The system's file dialog open, and what asked for it (`app/file_dialogs.rs`).
+    pub(crate) files: app::FileDialogs,
     /// The appointments and meetings open in windows of their own, each with its number, and
     /// the last number given.
     pub(crate) event_windows: Vec<(u64, Box<pim_dialogs::EventForm>)>,
@@ -552,6 +556,7 @@ impl MailApp {
                 compose_shown: Default::default(),
                 editors: HashMap::new(),
                 dialog_for: None,
+                files: Default::default(),
                 event_windows: Vec::new(),
                 event_window_ids: 0,
                 editor: None,

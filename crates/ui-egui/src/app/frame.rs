@@ -27,6 +27,8 @@ impl MailApp {
         }
         // A send held for names being resolved goes once they are, or says why it can't.
         self.send_when_resolved(ctx);
+        // A file dialog answered: what asked (Attach, Save As…) completes.
+        self.file_dialog_answers(ctx);
         self.announce(ctx);
         // Reminders answered from their notification: as from the window's buttons; clicked:
         // the window comes forward, the Reminders window with it. (Before the due list is

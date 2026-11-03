@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use quatrelle_engine::store::location;
-use quatrelle_ui_egui::{BrowserProfile, ReminderAction, Services, VideoFrame};
+use quatrelle_ui_egui::{BrowserProfile, FileAsk, ReminderAction, Services, VideoFrame};
 
 #[cfg(windows)]
 use crate::toast;
@@ -19,6 +19,7 @@ use crate::{display, self_update, video};
 
 pub(crate) mod appearance;
 pub(crate) mod browsers;
+pub(crate) mod file_dialogs;
 pub(crate) mod keychain;
 pub(crate) mod profiles;
 pub(crate) mod tray;
@@ -55,18 +56,41 @@ pub(crate) struct Desktop {
     /// The folder of the last file picked or saved: the next file dialog opens there (attaching
     /// several files from one folder, saving attachments beside each other), as figcraft's do.
     pub(crate) last_dir: Option<PathBuf>,
+    /// The file dialog open, if one is, and the window they belong to.
+    pub(crate) files: file_dialogs::FileDialogs,
     /// Quatrelle's icon in the notification area, the envelope on it while new mail is unread.
     pub(crate) tray: tray::Tray,
 }
 
 impl Desktop {
     /// A file dialog titled `title`, open at the folder last used when it's still there.
-    fn dialog(&self, title: &str) -> rfd::FileDialog {
-        let d = rfd::FileDialog::new().set_title(title);
+    fn dialog(&self, title: &str) -> rfd::AsyncFileDialog {
+        let d = self.files.base.clone().set_title(title);
         match self.last_dir.as_ref().filter(|d| d.is_dir()) {
             Some(dir) => d.set_directory(dir),
             None => d,
         }
+    }
+
+    /// Where to save a file, the name `suggested` filled in.
+    fn save_dialog(&self, suggested: &str) -> rfd::AsyncFileDialog {
+        let mut d = self.dialog("Save as").set_file_name(suggested);
+        // Save as type: the suggested name's kind first, so the system keeps its extension.
+        if let Some((_, ext)) = suggested.rsplit_once('.').filter(|(_, e)| !e.is_empty() && e.len() <= 8) {
+            let kind = match ext.to_ascii_lowercase().as_str() {
+                "pst" => "Outlook data file".to_string(),
+                "eml" => "Email message".to_string(),
+                "pdf" => "PDF document".to_string(),
+                "ics" => "Calendar".to_string(),
+                "vcf" => "Contact card".to_string(),
+                "txt" => "Text".to_string(),
+                "json" => "Quatrelle rules".to_string(),
+                "html" | "htm" => "Web page".to_string(),
+                e => format!("{} file", e.to_ascii_uppercase()),
+            };
+            d = d.add_filter(kind, &[ext]).add_filter("All files", &["*"]);
+        }
+        d
     }
 
     /// Notes where a dialog's answer was (a file's folder, or the folder picked); passes it on.
@@ -117,30 +141,55 @@ impl Services for Desktop {
     fn zone(&self) -> Option<String> {
         iana_time_zone::get_timezone().ok()
     }
-    fn pick_files(&mut self) -> Vec<PathBuf> {
-        let files = self.dialog("Attach files").pick_files().unwrap_or_default();
-        self.used(files.first(), false);
-        files
-    }
-    fn save_path(&mut self, suggested: &str) -> Option<PathBuf> {
-        let mut d = self.dialog("Save as").set_file_name(suggested);
-        // Save as type: the suggested name's kind first, so the system keeps its extension.
-        if let Some((_, ext)) = suggested.rsplit_once('.').filter(|(_, e)| !e.is_empty() && e.len() <= 8) {
-            let kind = match ext.to_ascii_lowercase().as_str() {
-                "pst" => "Outlook data file".to_string(),
-                "eml" => "Email message".to_string(),
-                "pdf" => "PDF document".to_string(),
-                "ics" => "Calendar".to_string(),
-                "vcf" => "Contact card".to_string(),
-                "txt" => "Text".to_string(),
-                "json" => "Quatrelle rules".to_string(),
-                "html" | "htm" => "Web page".to_string(),
-                e => format!("{} file", e.to_ascii_uppercase()),
-            };
-            d = d.add_filter(kind, &[ext]).add_filter("All files", &["*"]);
+    /// The system's dialog, open without holding the window (`desktop/file_dialogs.rs`); one at
+    /// a time.
+    fn ask_file(&mut self, ask: FileAsk) -> bool {
+        use file_dialogs::{many, one};
+        if self.files.is_open() {
+            return false;
         }
-        let saved = d.save_file();
-        self.used(saved, false)
+        // The dialog is made here, on the window's thread: macOS begins its panel at once.
+        let (answer, remember) = match ask {
+            FileAsk::Attach => (many(self.dialog("Attach files").pick_files()), Some(false)),
+            FileAsk::Pictures => {
+                (many(self.dialog("Insert pictures").add_filter("Pictures", &["png", "jpg", "jpeg", "gif", "webp", "bmp"]).pick_files()), Some(false))
+            }
+            FileAsk::Save(suggested) => (one(self.save_dialog(&suggested).save_file()), Some(false)),
+            FileAsk::Folder => (one(self.dialog("Save attachments to").pick_folder()), Some(true)),
+            FileAsk::Certificate => (
+                one(self
+                    .dialog("Import certificate")
+                    .add_filter("Certificate with its key", &["p12", "pfx"])
+                    .add_filter("All files", &["*"])
+                    .pick_file()),
+                Some(false),
+            ),
+            FileAsk::Rules => {
+                (one(self.dialog("Import rules").add_filter("Quatrelle rules", &["json"]).add_filter("All files", &["*"]).pick_file()), Some(false))
+            }
+            FileAsk::DataFile => {
+                let mut d = self.files.base.clone();
+                // Where the data files are (a removed account's stays there), as Outlook opens its own.
+                if let Some(dir) = self.data.as_ref().filter(|d| d.is_dir()) {
+                    d = d.set_directory(dir);
+                }
+                let d = d
+                    .set_title("Open data file")
+                    .add_filter("Data files", &["pst", "quatrelle"])
+                    .add_filter("Outlook data files", &["pst"])
+                    .add_filter("Quatrelle data files", &["quatrelle"]);
+                (one(d.pick_file()), None)
+            }
+        };
+        self.files.start(answer, remember);
+        true
+    }
+    fn take_file_answer(&mut self) -> Option<Vec<PathBuf>> {
+        let (answer, remember) = self.files.poll()?;
+        if let Some(is_folder) = remember {
+            self.used(answer.first(), is_folder);
+        }
+        Some(answer)
     }
     fn open_path(&mut self, path: &Path) -> Result<(), String> {
         shell_open(path.as_os_str())
@@ -314,37 +363,6 @@ impl Services for Desktop {
             return VideoFrame::Unavailable;
         }
         VideoFrame::Pending
-    }
-    fn pick_folder(&mut self) -> Option<PathBuf> {
-        let folder = self.dialog("Save attachments to").pick_folder();
-        self.used(folder, true)
-    }
-    fn pick_certificate(&mut self) -> Option<PathBuf> {
-        let file =
-            self.dialog("Import certificate").add_filter("Certificate with its key", &["p12", "pfx"]).add_filter("All files", &["*"]).pick_file();
-        self.used(file, false)
-    }
-    fn pick_rules_file(&mut self) -> Option<PathBuf> {
-        let file = self.dialog("Import rules").add_filter("Quatrelle rules", &["json"]).add_filter("All files", &["*"]).pick_file();
-        self.used(file, false)
-    }
-    fn pick_data_file(&mut self) -> Option<PathBuf> {
-        let mut d = rfd::FileDialog::new();
-        // Where the data files are (a removed account's stays there), as Outlook opens its own.
-        if let Some(dir) = self.data.as_ref().filter(|d| d.is_dir()) {
-            d = d.set_directory(dir);
-        }
-        d.set_title("Open data file")
-            .add_filter("Data files", &["pst", "quatrelle"])
-            .add_filter("Outlook data files", &["pst"])
-            .add_filter("Quatrelle data files", &["quatrelle"])
-            .pick_file()
-    }
-    fn pick_pictures(&mut self) -> Vec<PathBuf> {
-        let files =
-            self.dialog("Insert pictures").add_filter("Pictures", &["png", "jpg", "jpeg", "gif", "webp", "bmp"]).pick_files().unwrap_or_default();
-        self.used(files.first(), false);
-        files
     }
     fn clipboard_picture(&mut self) -> Option<Vec<u8>> {
         let img = read_clipboard(|c| c.get_image().ok())?;
