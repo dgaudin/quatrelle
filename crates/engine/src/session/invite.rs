@@ -15,6 +15,8 @@ use quatrelle_model::pim::{LOCAL, Pim, StoredEvent, Tombstone, same_meeting};
 
 use super::*;
 
+mod tidy;
+
 /// The most occurrences one message can take out of a series.
 const MAX_EXDATES: usize = 1000;
 
@@ -106,13 +108,18 @@ impl Session {
 
     /// The calendar in a message, and the address it's from.
     fn message_invitation(&self, key: &MessageKey) -> Option<(ICalendar, String)> {
-        let raw = self.readable_raw(key)?;
-        let parsed = mime::parse(&raw)?;
+        self.calendar_in(&self.readable_raw(key)?)
+    }
+
+    /// The calendar in a message's source (its `text/calendar` part or `.ics` file), and the
+    /// address the message is from.
+    fn calendar_in(&self, raw: &[u8]) -> Option<(ICalendar, String)> {
+        let parsed = mime::parse(raw)?;
         let att = parsed
             .attachments
             .iter()
             .find(|a| a.mime.to_ascii_lowercase().starts_with("text/calendar") || a.name.to_ascii_lowercase().ends_with(".ics"))?;
-        let data = mime::attachment_data(&raw, att.index)?;
+        let data = mime::attachment_data(raw, att.index)?;
         let cal = ical::parse_in(&String::from_utf8_lossy(&data), self.clock.local_zone());
         (!cal.events.is_empty()).then_some((cal, parsed.from.email))
     }
@@ -182,17 +189,21 @@ impl Session {
     /// of a series changes those occurrences only.
     pub fn respond_to_invite(&mut self, answer: &str) -> CmdResult {
         let key = self.reading.as_ref().map(|r| r.key.clone()).ok_or_else(|| CmdError::Disabled("open the invitation first".into()))?;
-        let out = self.answer_invite(&key, answer)?;
-        // Answered: as Outlook does by default, the invitation goes to Deleted Items and its
-        // window closes (it stayed in the Inbox, and nothing said the answer had gone).
-        // One answered again from Deleted Items stays there.
+        // The version answered: the meeting's parts in the message.
+        let cal = self.message_calendar(&key);
+        let uid = cal.as_ref().and_then(|c| c.events.first()).map(|e| e.uid.clone()).unwrap_or_default();
+        let answered: Vec<CalEvent> = cal.map(|c| c.events.into_iter().filter(|e| e.uid == uid).collect()).unwrap_or_default();
+        let mut out = self.answer_invite(&key, answer)?;
+        // Answered: its window closes (it stayed open, and nothing said the answer had gone),
+        // and, as Outlook does by default, the invitation and the meeting's earlier ones in the
+        // Inbox go to Deleted Items. One answered again from Deleted Items stays there. Some
+        // occurrences answered take only the invitations to those.
         self.close_window(&key);
-        let in_trash = self.account(&key.account).and_then(|a| a.folder(FolderRole::Trash)).is_some_and(|t| t.path == key.folder);
-        if !in_trash {
-            self.selection = vec![key];
-            if let Err(e) = self.move_selection(MoveTarget::Role(FolderRole::Trash)) {
-                log::info!("the invitation answered stays where it is: {e}");
-            }
+        let occurrences: Vec<i64> = answered.iter().filter_map(|e| e.recurrence_id).collect();
+        let only = (!answered.iter().any(|e| e.recurrence_id.is_none())).then_some(occurrences.as_slice());
+        let moved = self.tidy_meeting_mail(&key.account, &uid, &["REQUEST"], only, &answered, Some(&key));
+        if let Some(o) = out.as_object_mut() {
+            o.insert("moved".into(), moved.into());
         }
         Ok(out)
     }

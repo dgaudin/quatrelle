@@ -270,6 +270,21 @@ impl Session {
             .map(|m| m.key.clone())
     }
 
+    /// The message to show after `gone` leave the list when `read` is the one being read: the
+    /// first after it that stays, else the nearest before it. Anchored at the message read, not
+    /// after the last one going: an earlier version of an invitation further down doesn't take
+    /// the list down there.
+    pub(crate) fn successor_of(&self, read: &MessageKey, gone: &[MessageKey]) -> Option<MessageKey> {
+        let gone: HashSet<&MessageKey> = gone.iter().collect();
+        let at = self.list.iter().position(|m| &m.key == read)?;
+        self.list
+            .iter()
+            .skip(at.saturating_add(1))
+            .find(|m| !gone.contains(&m.key))
+            .or_else(|| self.list.iter().take(at).rev().find(|m| !gone.contains(&m.key)))
+            .map(|m| m.key.clone())
+    }
+
     /// Move the selection to a folder of the same role in each message's account (Archive,
     /// Deleted Items, Junk), or to an explicit folder.
     pub fn move_selection(&mut self, target: MoveTarget) -> CmdResult {
@@ -278,19 +293,28 @@ impl Session {
             return Err(CmdError::Disabled("no message selected".into()));
         }
         let next = self.successor(&self.selection.clone());
+        let moved = self.move_messages(&sel, &target)?;
+        self.after_removal(next);
+        Ok(serde_json::json!({ "moved": moved }))
+    }
+
+    /// Move these messages to a folder of the same role beside each one (Archive, Deleted Items,
+    /// Junk), or to an explicit folder, each one undoable; those already there stay. How many
+    /// moved. What's shown next is the caller's ([`Session::after_removal`]).
+    pub(crate) fn move_messages(&mut self, msgs: &[Arc<Summary>], target: &MoveTarget) -> Result<usize, CmdError> {
         // By account, and by mailbox within it: mail in another mailbox opened here goes to
         // that mailbox's own Deleted Items, Archive… (Exchange moves mail within a mailbox).
-        let mut groups: BTreeMap<(String, Option<String>), Vec<MessageKey>> = BTreeMap::new();
-        for m in &sel {
+        let mut groups: BTreeMap<(String, Option<String>), Vec<&Summary>> = BTreeMap::new();
+        for m in msgs {
             let owner = self.account(&m.key.account).and_then(|a| a.folder_mailbox(&m.key.folder));
-            groups.entry((m.key.account.clone(), owner)).or_default().push(m.key.clone());
+            groups.entry((m.key.account.clone(), owner)).or_default().push(m);
         }
         let mut moved = 0usize;
-        for ((a, _), keys) in groups {
-            let dest = match &target {
+        for ((a, _), group) in groups {
+            let dest = match target {
                 MoveTarget::Folder(f) => Some(f.clone()),
                 MoveTarget::Role(r) => {
-                    let from = keys.first().map(|k| k.folder.clone()).unwrap_or_default();
+                    let from = group.first().map(|m| m.key.folder.clone()).unwrap_or_default();
                     self.account(&a).and_then(|acc| acc.folder_beside(&from, *r)).map(|f| f.path.clone())
                 }
             };
@@ -304,22 +328,20 @@ impl Session {
             if self.folder(&a, &dest).is_none() {
                 return Err(CmdError::Params(format!("no folder `{dest}`")));
             }
-            let keys: Vec<MessageKey> = keys.into_iter().filter(|k| k.folder != dest).collect();
-            moved += keys.len();
-            if !keys.is_empty() {
+            let group: Vec<&Summary> = group.into_iter().filter(|m| m.key.folder != dest).collect();
+            moved = moved.saturating_add(group.len());
+            if !group.is_empty() {
                 // Undo finds them again by Message-ID (those without one can't come back).
-                let back: Vec<(String, String)> = keys
-                    .iter()
-                    .filter_map(|k| self.summary(k).filter(|m| !m.message_id.is_empty()).map(|m| (m.message_id.clone(), k.folder.clone())))
-                    .collect();
+                let back: Vec<(String, String)> =
+                    group.iter().filter(|m| !m.message_id.is_empty()).map(|m| (m.message_id.clone(), m.key.folder.clone())).collect();
                 if !back.is_empty() {
                     self.remember(Undo::Move { account: a.clone(), to: dest.clone(), back });
                 }
+                let keys = group.iter().map(|m| m.key.clone()).collect();
                 self.apply_op(&a, Op::Move { keys, to: dest });
             }
         }
-        self.after_removal(next);
-        Ok(serde_json::json!({ "moved": moved }))
+        Ok(moved)
     }
 
     /// Delete permanently.

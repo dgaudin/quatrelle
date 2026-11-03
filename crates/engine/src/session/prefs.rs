@@ -144,6 +144,11 @@ pub struct Prefs {
     /// apps mark it. Off: the signature goes in as Outlook adds it, with nothing before it.
     #[serde(default)]
     pub signature_dashes: bool,
+    /// Move a meeting's invitations to Deleted Items once it's answered (Outlook's option is on
+    /// from the start): the one answered and the meeting's earlier ones in the Inbox. On for
+    /// settings saved before it came: it was always on.
+    #[serde(default = "yes")]
+    pub tidy_answered_invites: bool,
     /// Quick Steps: actions done to the selection in one go ([`quick_steps`]).
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub quick_steps: Vec<quick_steps::QuickStep>,
@@ -278,6 +283,7 @@ impl Default for Prefs {
             spelling: Vec::new(),
             spell_check: true,
             signature_dashes: false,
+            tidy_answered_invites: true,
             pane_order: Vec::new(),
         }
     }
