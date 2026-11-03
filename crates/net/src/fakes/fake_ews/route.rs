@@ -423,6 +423,10 @@ impl Data {
                         out.push(err("ErrorSchemaValidation"));
                         continue;
                     }
+                    if let Some(refused) = self.refuses_recipients(&m, op.attr("SendMeetingInvitations")) {
+                        out.push(refused);
+                        continue;
+                    }
                     if m.name == "CalendarItem" || m.name == "Contact" || m.name == "Task" || sticky {
                         if m.name == "Task" {
                             super::tasks::after_create(&mut m);
@@ -517,7 +521,10 @@ impl Data {
                     if let Some(how) = op.attr("SendMeetingInvitationsOrCancellations").filter(|_| self.pim.iter().any(|(i, _, _)| *i == id)) {
                         self.meeting_sends.push(how.to_string());
                     }
-                    if let Some((_, _, el)) = self.pim.iter_mut().find(|(i, _, _)| *i == id) {
+                    // Changed on a copy: a change the server refuses leaves the item as it was.
+                    if let Some(pos) = self.pim.iter().position(|(i, _, _)| *i == id) {
+                        let Some(mut item) = self.pim.get(pos).map(|(_, _, el)| el.clone()) else { continue };
+                        let el = &mut item;
                         let updates = ch.child("Updates").map(|u| u.kids.clone()).unwrap_or_default();
                         if updates.iter().filter_map(|u| u.find("FieldURI").and_then(|f| f.attr("FieldURI"))).any(|uri| !field_uri_is_known(uri)) {
                             out.push(err("ErrorInvalidRequest"));
@@ -545,6 +552,13 @@ impl Data {
                             if el.name == "Task" {
                                 super::tasks::after_update(el, &u);
                             }
+                        }
+                        if let Some(refused) = self.refuses_recipients(&item, op.attr("SendMeetingInvitationsOrCancellations")) {
+                            out.push(refused);
+                            continue;
+                        }
+                        if let Some(slot) = self.pim.get_mut(pos) {
+                            slot.2 = item;
                         }
                         out.push(ok(format!("<m:Items><t:CalendarItem><t:ItemId Id=\"{id}\" ChangeKey=\"ck2\"/></t:CalendarItem></m:Items>")));
                         continue;

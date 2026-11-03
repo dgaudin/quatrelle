@@ -563,6 +563,8 @@ fn an_occurrence_moves_on_its_own_and_the_server_tells_the_guests() {
     let standup = parse(
         "<t:CalendarItem><t:Subject>Stand-up</t:Subject><t:Start>2026-10-05T09:00:00Z</t:Start><t:End>2026-10-05T09:15:00Z</t:End>\
          <t:IsAllDayEvent>false</t:IsAllDayEvent><t:UID>standup-1</t:UID><t:CalendarItemType>RecurringMaster</t:CalendarItemType>\
+         <t:Organizer><t:Mailbox><t:Name>Riley</t:Name><t:EmailAddress>riley@contoso.example</t:EmailAddress></t:Mailbox></t:Organizer>\
+         <t:RequiredAttendees><t:Attendee><t:Mailbox><t:Name>Ana Lima</t:Name><t:EmailAddress>ana@contoso.example</t:EmailAddress></t:Mailbox></t:Attendee></t:RequiredAttendees>\
          <t:Recurrence><t:WeeklyRecurrence><t:Interval>1</t:Interval><t:DaysOfWeek>Monday</t:DaysOfWeek></t:WeeklyRecurrence>\
          <t:NoEndRecurrence><t:StartDate>2026-10-05Z</t:StartDate></t:NoEndRecurrence></t:Recurrence>\
          <t:DeletedOccurrences><t:DeletedOccurrence><t:Start>2026-10-19T09:00:00Z</t:Start></t:DeletedOccurrence></t:DeletedOccurrences></t:CalendarItem>",
