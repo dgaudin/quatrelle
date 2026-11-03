@@ -279,6 +279,8 @@ pub(crate) fn strip_look(s: ShowAs) -> StripLook {
 /// The strip `r`, drawn its `look` in colour `c` (hatches and dots kept inside it).
 fn strip(painter: &egui::Painter, t: &Tokens, r: Rect, c: Color32, look: StripLook) {
     const STEP: f32 = 4.0;
+    // A strip down a whole day takes 24 * HOUR / STEP (under 300) steps: room for a zoomed one.
+    const MAX_STEPS: usize = 2048;
     let inside = painter.with_clip_rect(r);
     let line = egui::Stroke::new(1.0, c);
     match look {
@@ -294,8 +296,12 @@ fn strip(painter: &egui::Painter, t: &Tokens, r: Rect, c: Color32, look: StripLo
         StripLook::Hatched => {
             painter.rect_filled(r, 2.0, t.surface);
             // Rising lines, one every STEP down the strip, starting above it so its top is hatched too.
+            // (At most MAX_STEPS lines: a strip stretched out of all measure stops there.)
             let mut y = r.min.y;
-            while y < r.max.y + r.width() {
+            for _ in 0..MAX_STEPS {
+                if y >= r.max.y + r.width() {
+                    break;
+                }
                 inside.line_segment([pos2(r.min.x, y), pos2(r.max.x, y - r.width())], line);
                 y += STEP;
             }
@@ -303,7 +309,10 @@ fn strip(painter: &egui::Painter, t: &Tokens, r: Rect, c: Color32, look: StripLo
         StripLook::Dotted => {
             painter.rect_filled(r, 2.0, t.surface);
             let mut y = r.min.y + STEP / 2.0;
-            while y < r.max.y {
+            for _ in 0..MAX_STEPS {
+                if y >= r.max.y {
+                    break;
+                }
                 inside.circle_filled(pos2(r.center().x, y), 1.0, c);
                 y += STEP;
             }
