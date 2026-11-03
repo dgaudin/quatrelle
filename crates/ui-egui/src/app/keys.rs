@@ -103,6 +103,12 @@ impl MailApp {
                     self.ui.attachments_active = false;
                     continue;
                 }
+                // In the Calendar, wherever the focus is (the box, a switch, the list), it empties
+                // the calendar's search: the days come back.
+                if self.session.module == Module::Calendar && !self.ui.cal_search.query.is_empty() {
+                    self.ui.cal_search.query.clear();
+                    continue;
+                }
                 if self.session.search.is_some() {
                     self.ui.search_text.clear();
                     self.run("search.clear", json!({}));

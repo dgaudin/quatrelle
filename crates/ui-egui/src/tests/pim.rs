@@ -638,3 +638,123 @@ fn the_calendar_query_waits_while_mail_is_shown() {
     assert_eq!(a.ui.cal_search.query, "storyboard", "still there back in the Calendar");
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// Escape empties the calendar's search wherever the focus is: after a click on a switch has
+/// taken it from the box, too.
+#[test]
+fn escape_empties_the_calendar_search_away_from_its_box() {
+    let (mut a, dir) = app("calendar-search-escape-away");
+    let ctx = egui::Context::default();
+    a.run("view.module", json!({"name": "calendar"}));
+    frame(&ctx, &mut a, vec![]);
+    a.ui.focus_search = true;
+    frame(&ctx, &mut a, vec![]);
+    frame(&ctx, &mut a, vec![Event::Text("storyboard".into())]);
+    let size = egui::vec2(1280.0, 800.0);
+    let all = settled_text_at(&ctx, &mut a, "All", size).expect("the All switch");
+    click_at(&ctx, &mut a, all, 1, size);
+    assert!(!ctx.text_edit_focused(), "the box let go of the focus");
+    assert_eq!(a.ui.cal_search.query, "storyboard");
+    frame(&ctx, &mut a, vec![key(Key::Escape, Modifiers::NONE)]);
+    assert!(a.ui.cal_search.query.is_empty(), "Escape empties it");
+    // In Mail, Escape leaves the calendar's query alone.
+    a.ui.cal_search.query = "storyboard".into();
+    a.run("view.module", json!({"name": "mail"}));
+    frame(&ctx, &mut a, vec![key(Key::Escape, Modifiers::NONE)]);
+    assert_eq!(a.ui.cal_search.query, "storyboard");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// The scope menu offers the calendars whose appointments are kept here: every one ticked, and
+/// those unticked that still have what was read of them; not a colleague's never read. A scope
+/// set to one of those looks in every calendar.
+#[test]
+fn the_scope_menu_offers_the_calendars_kept_here() {
+    use quatrelle_engine::model::pim::{CalendarInfo, LOCAL, shared_calendar_id};
+    let (mut a, dir) = app("calendar-search-kept");
+    let theo = shared_calendar_id("theo@post.example");
+    let p = a.session.pim_mut("sample");
+    p.calendars.push(CalendarInfo {
+        id: theo.clone(),
+        name: "Theo Brandt".into(),
+        read_only: true,
+        group: "Studio team".into(),
+        ..Default::default()
+    });
+    // Others' calendars unticked, as the app leaves them when it starts.
+    a.session.note_new_calendars();
+    let room = shared_calendar_id(quatrelle_engine::sample::ROOMS[0].0);
+    assert!(!a.session.calendar_shown("sample", &theo) && !a.session.calendar_shown("sample", &room));
+    let ids = |a: &mut MailApp| a.ui.cal_search.calendars(&a.session).iter().map(|(_, c, _)| c.clone()).collect::<Vec<_>>();
+    let listed = ids(&mut a);
+    assert!(listed.contains(&LOCAL.to_string()), "the own calendar: {listed:?}");
+    assert!(listed.contains(&room), "unticked, its bookings kept here: {listed:?}");
+    assert!(!listed.contains(&theo), "never read: {listed:?}");
+    // A scope set to it looks in every calendar.
+    a.ui.cal_search.scope = Some(("sample".into(), theo.clone()));
+    a.ui.cal_search.query = "storyboard".into();
+    assert!(!a.ui.cal_search.results(&a.session).is_empty());
+    assert!(a.ui.cal_search.scope.is_none(), "back to every calendar");
+    // Ticked, it's read: offered.
+    a.run("calendar.show", json!({"account": "sample", "calendar": theo, "shown": true}));
+    assert!(ids(&mut a).contains(&theo));
+    let ctx = egui::Context::default();
+    a.run("view.module", json!({"name": "calendar"}));
+    frame(&ctx, &mut a, vec![]);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// The results drawn over appointments at the ends of time (an end before its start, one all-day
+/// across the whole range, a daily series thirty years long), and each opened: nothing breaks.
+#[test]
+fn the_calendar_search_draws_and_opens_hostile_appointments() {
+    use quatrelle_engine::model::ical::CalEvent;
+    use quatrelle_engine::model::pim::{LOCAL, StoredEvent};
+    let (mut a, dir) = app("calendar-search-hostile");
+    let odd = [
+        CalEvent { uid: "max".into(), summary: "edge max".into(), start: i64::MAX - 5, end: i64::MAX, ..Default::default() },
+        CalEvent { uid: "min".into(), summary: "edge min".into(), start: i64::MIN, end: i64::MIN + 5, ..Default::default() },
+        CalEvent {
+            uid: "daily".into(),
+            summary: "edge daily".into(),
+            start: NOW - 30 * 365 * 86_400,
+            end: NOW - 30 * 365 * 86_400 + 60,
+            rrule: Some("FREQ=DAILY".into()),
+            ..Default::default()
+        },
+        CalEvent { uid: "back".into(), summary: "edge backwards".into(), start: NOW, end: NOW - 3600, ..Default::default() },
+        CalEvent { uid: "whole".into(), summary: "edge whole".into(), start: i64::MIN, end: i64::MAX, all_day: true, ..Default::default() },
+        CalEvent {
+            uid: "top".into(),
+            summary: "edge top".into(),
+            start: i64::MAX,
+            end: i64::MAX,
+            rrule: Some("FREQ=DAILY".into()),
+            ..Default::default()
+        },
+    ];
+    let p = a.session.pim_mut("sample");
+    for e in odd {
+        p.events.push(StoredEvent { calendar: LOCAL.into(), event: e, ..Default::default() });
+    }
+    let ctx = egui::Context::default();
+    a.run("view.module", json!({"name": "calendar"}));
+    for when in quatrelle_engine::EventWhen::ALL {
+        a.ui.cal_search.query = "edge".into();
+        a.ui.cal_search.when = when;
+        frame(&ctx, &mut a, vec![]);
+        frame_sized(&ctx, &mut a, vec![], egui::vec2(420.0, 300.0));
+        let hits = a.ui.cal_search.results(&a.session).to_vec();
+        assert!(when != quatrelle_engine::EventWhen::All || hits.len() >= 3, "{hits:?}");
+        for h in &hits {
+            let mut acts = Vec::new();
+            crate::panes::calendar::open_hit(&a.session, &mut a.ui, h, &mut acts);
+            for act in acts {
+                a.act(act);
+            }
+            a.ui.dialog = None;
+            frame(&ctx, &mut a, vec![]);
+        }
+    }
+    let _ = std::fs::remove_dir_all(dir);
+}
