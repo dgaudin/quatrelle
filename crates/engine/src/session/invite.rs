@@ -364,13 +364,7 @@ impl Session {
         // address) counts as someone else's.
         let theirs = organizer.is_none_or(|o| !self.my_addresses().contains(&o));
         let moved = if theirs {
-            // The version answered: the calendar's copy (on Exchange the answer may only be on
-            // its way; what's stored is the version known).
-            let upto: Vec<CalEvent> = self
-                .pim
-                .get(&account)
-                .map(|p| p.events.iter().filter(|e| same_meeting(&e.event.uid, uid)).map(|e| e.event.clone()).collect())
-                .unwrap_or_default();
+            let upto = self.answered_copy(&account, uid);
             self.tidy_meeting_mail(&account, uid, &["REQUEST"], None, &upto, None)
         } else {
             0

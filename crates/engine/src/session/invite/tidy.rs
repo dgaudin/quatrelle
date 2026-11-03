@@ -90,6 +90,23 @@ impl Session {
         }
     }
 
+    /// The version of a meeting answered in the calendar (`uid`, as the event form names it):
+    /// the copy [`Session::find_event`] takes, read after the answer (on Exchange the answer
+    /// may only be on its way: what's stored is the version known, and a copy made here the
+    /// server answer dropped gives way to the server's), with its moved occurrences in the same
+    /// calendar under the same UID. Not the copies in colleagues' shared calendars, which can
+    /// be ahead or behind the user's, nor Exchange's other appointments of a series
+    /// (`UID#start`). None in `account`: nothing.
+    pub(super) fn answered_copy(&self, account: &str, uid: &str) -> Vec<CalEvent> {
+        let Some((found, copy)) = self.find_event(uid) else { return Vec::new() };
+        if found != account {
+            return Vec::new();
+        }
+        let (calendar, uid) = (&copy.calendar, &copy.event.uid);
+        let Some(p) = self.pim.get(account) else { return Vec::new() };
+        p.events.iter().filter(|e| &e.calendar == calendar && &e.event.uid == uid).map(|e| e.event.clone()).collect()
+    }
+
     /// Whether a message the user dealt with a meeting in may go: not from Deleted Items (it's
     /// there already), Sent Items, Drafts or the Outbox, nor from a folder not known here.
     fn tidied_from(&self, key: &MessageKey) -> bool {
