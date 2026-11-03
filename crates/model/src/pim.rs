@@ -341,6 +341,9 @@ pub struct DavSync {
     /// (a series' occurrences changed here go with it).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub gone_events: Vec<String>,
+    /// Tasks changed here whose item the server no longer has, by that item: gone here too.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub gone_tasks: Vec<String>,
     /// Invitations the server answered ([`StoredEvent::respond`]): their UID and the answer.
     #[serde(default)]
     pub responded: Vec<(String, String)>,

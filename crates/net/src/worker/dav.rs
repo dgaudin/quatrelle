@@ -123,10 +123,6 @@ impl Pushed for StoredTask {
     fn dirty(&self) -> bool {
         self.dirty
     }
-    /// An Exchange task deleted in Outlook meanwhile is made again by the change.
-    fn made_again(&self) -> bool {
-        self.href.starts_with("task:")
-    }
     fn take_item(&mut self, made: &Self) {
         self.href.clone_from(&made.href);
         self.etag.clone_from(&made.etag);

@@ -136,11 +136,15 @@ fn update_task(c: &Client, id: &str, t: &Task) -> Result<(String, String)> {
     for uri in absent {
         updates.push_str(&format!("<t:DeleteItemField>{}</t:DeleteItemField>", path(uri)));
     }
-    c.call_one(&format!(
-        "<m:UpdateItem ConflictResolution=\"AlwaysOverwrite\"><m:ItemChanges><t:ItemChange><t:ItemId Id=\"{}\"/>\
+    // Deleted on the server: said as such (`NetError::Gone`).
+    super::push::call_item(
+        c,
+        &format!(
+            "<m:UpdateItem ConflictResolution=\"AlwaysOverwrite\"><m:ItemChanges><t:ItemChange><t:ItemId Id=\"{}\"/>\
          <t:Updates>{updates}</t:Updates></t:ItemChange></m:ItemChanges></m:UpdateItem>",
-        esc(id)
-    ))
+            esc(id)
+        ),
+    )
     .map(|m| {
         let (new, key) = new_id(&m);
         (if new.is_empty() { id.to_string() } else { new }, key)
@@ -152,14 +156,16 @@ fn update_task(c: &Client, id: &str, t: &Task) -> Result<(String, String)> {
 pub(super) fn read_tasks(c: &Client, pim: &Pim, out: &mut DavSync) {
     for s in pim.tasks.iter().filter(|s| s.dirty) {
         let r = match s.href.strip_prefix("task:") {
-            Some(id) => match update_task(c, id, &s.task) {
-                // Deleted in Outlook meanwhile: the change made here keeps it, as a new task.
-                Err(NetError::No(why)) if why.starts_with("not on the server") => create_task(c, &s.task),
-                r => r,
-            },
+            Some(id) => update_task(c, id, &s.task),
             None => create_task(c, &s.task),
         };
         match r {
+            // Deleted in Outlook meanwhile: the server wins, as for appointments (the owner's
+            // decision, 03/11; it was made again); the engine lets it go here too, and says so.
+            Err(NetError::Gone(why)) if !s.href.is_empty() => {
+                log::info!("{}: deleted on the server ({why}); the change made here is dropped", s.task.subject);
+                out.gone_tasks.push(s.href.clone());
+            }
             Ok((id, etag)) => out.pushed_tasks.push(StoredTask { href: format!("task:{id}"), etag, task: s.task.clone(), dirty: false }),
             Err(x) => out.errors.push(format!("{}: {x}", s.task.subject)),
         }

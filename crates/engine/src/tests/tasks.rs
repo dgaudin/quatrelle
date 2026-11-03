@@ -130,6 +130,41 @@ fn an_exchange_accounts_tasks_go_to_its_tasks_folder() {
     done(s);
 }
 
+/// A task changed here and deleted in Outlook meanwhile: the server wins, as for appointments
+/// (03/11; it was made again): it goes here too, said once, and doesn't come back.
+#[test]
+fn a_task_deleted_on_the_server_goes_here_too_said_once() {
+    use quatrelle_model::pim::{DavSync, StoredTask, Task};
+    let mut s = Session::open(Some(temp("task-gone")), quatrelle_model::dates::Clock::new(NOW, 0));
+    let id = s
+        .run("account.add", &json!({"email": "zoe@contoso.example", "password": "pw", "ews": "https://mail.contoso.example/EWS/Exchange.asmx"}))
+        .unwrap()["account"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    s.take_jobs();
+    let task = |href: &str, subject: &str, dirty: bool| StoredTask {
+        href: href.into(),
+        task: Task { uid: href.into(), subject: subject.into(), ..Default::default() },
+        dirty,
+        ..Default::default()
+    };
+    s.pim_mut(&id).tasks = vec![task("task:T1", "Devis Martin", true), task("task:T2", "Kept", false)];
+    let read = |gone: &[&str]| DavSync {
+        tasks: Some(vec![task("task:T2", "Kept", false)]),
+        gone_tasks: gone.iter().map(|g| (*g).to_string()).collect(),
+        ..Default::default()
+    };
+    s.apply_dav(&id, &read(&["task:T1"]));
+    assert!(s.find_task("task:T1").is_none(), "gone here too");
+    let said = |s: &Session| s.notices.iter().filter(|n| n.text.starts_with("Devis Martin: deleted on the server meanwhile")).count();
+    assert_eq!(said(&s), 1);
+    s.apply_dav(&id, &read(&[]));
+    assert!(s.find_task("task:T1").is_none() && s.find_task("task:T2").is_some());
+    assert_eq!(said(&s), 1, "said once");
+    done(s);
+}
+
 /// A change Exchange tells of in the Tasks folder reads that folder alone (28/10): the calendar,
 /// the contacts and the notes it brings nothing of stay as they were.
 #[test]
