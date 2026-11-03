@@ -79,7 +79,7 @@ fn same_address(one: &str, other: &str) -> bool {
 
 /// An attendee or organizer value as a plain address: trimmed, any `mailto:` (in any case) taken
 /// off the front.
-fn without_mailto(value: &str) -> &str {
+pub(super) fn without_mailto(value: &str) -> &str {
     const SCHEME: &str = "mailto:";
     let value = value.trim();
     let has_scheme = value.get(..SCHEME.len()).is_some_and(|start| start.eq_ignore_ascii_case(SCHEME));
