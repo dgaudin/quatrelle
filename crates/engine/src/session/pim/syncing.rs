@@ -46,7 +46,8 @@ impl Session {
             p.dav_untrusted.clone_from(&sync.untrusted);
         }
         p.deleted.retain(|t| !sync.deleted.contains(&t.href));
-        let gone = drop_gone(p, &sync.gone_events);
+        let mut gone = drop_gone(p, &sync.gone_events);
+        gone.extend(tasks::drop_gone_tasks(p, &sync.gone_tasks));
         // What was stored: its address and version, and no longer to send (unless it changed
         // again meanwhile).
         for x in &sync.pushed_events {

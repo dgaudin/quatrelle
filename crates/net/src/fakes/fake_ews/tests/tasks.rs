@@ -65,14 +65,21 @@ fn tasks_sync_with_the_tasks_folder() {
     let t1 = on_server("T1");
     assert_eq!((t1.text_of("IsComplete"), t1.text_of("CompleteDate"), t1.text_of("Status")), (Some("false"), None, Some("NotStarted")));
 
-    // Deleted in Outlook meanwhile, then changed here: made again rather than lost.
+    // Deleted in Outlook meanwhile, then changed here: the server wins (the owner's decision,
+    // 03/11, as for appointments): reported gone, not made again, nothing said by the sync (the
+    // engine says it).
     server.data.lock().unwrap().pim.retain(|(id, _, _)| id != "T1");
     let mut again = now.clone();
     again.task.subject = "Devis Martin (relancé)".into();
     again.dirty = true;
     let sync = crate::ews_pim::sync(&c, &Pim { tasks: vec![again], ..Default::default() }, 1_792_000_000).unwrap();
     assert!(sync.errors.is_empty(), "{:?}", sync.errors);
-    let remade = sync.tasks.unwrap().into_iter().find(|s| s.task.subject == "Devis Martin (relancé)").unwrap().href;
+    assert_eq!(sync.gone_tasks, ["task:T1"], "reported gone");
+    assert!(sync.pushed_tasks.is_empty(), "not made again");
+    assert!(!sync.tasks.unwrap().iter().any(|s| s.task.subject == "Devis Martin (relancé)"));
+    // Another, on the server, for the deletion that follows.
+    server.data.lock().unwrap().pim.push(("T3".into(), tasks.clone(), quote.kids[0].clone()));
+    let remade = "task:T3".to_string();
 
     // Deleted here: deleted in Outlook too (Exchange deletes a task only when told which of its
     // occurrences go), and not read back.
