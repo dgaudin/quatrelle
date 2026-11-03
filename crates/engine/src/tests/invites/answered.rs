@@ -193,3 +193,124 @@ fn an_occurrence_answered_moves_only_its_invitations() {
     assert!(listed(&s, 4), "week 4's stays");
     done(s);
 }
+
+/// Put a meeting in a server calendar of the sample account (`calendar`), as a sync would.
+fn in_calendar(s: &mut Session, calendar: &str, href: &str, event: CalEvent) {
+    let sync = DavSync {
+        calendars: Some(vec![CalendarInfo { id: calendar.into(), name: "Work".into(), ..Default::default() }]),
+        events: vec![StoredEvent { calendar: calendar.into(), href: href.into(), etag: "\"1\"".into(), event, ..Default::default() }],
+        synced_calendars: vec![calendar.into()],
+        checked: NOW,
+        ..Default::default()
+    };
+    s.apply(Event::DavSynced { account: "sample".into(), sync: Box::new(sync) });
+}
+
+const WORK: &str = "https://dav.example.org/cal/work/";
+
+/// Ana's meeting at version 2 in the calendar, its invitations at versions 1 and 2 in the Inbox.
+fn answered_from_the_calendar(name: &str) -> (Session, CalEvent) {
+    let mut s = sample_session(name);
+    let m = meeting("Mix review", 2);
+    in_calendar(&mut s, WORK, &format!("{WORK}review.ics"), m.clone());
+    put(&mut s, "INBOX", 1, ANA, "Mix review", "REQUEST", &[meeting("Mix review", 1)], NOW);
+    put(&mut s, "INBOX", 2, ANA, "Updated: Mix review", "REQUEST", &[meeting("Mix review", 2)], NOW);
+    s.run("folder.open", &json!({"account": "sample", "folder": "INBOX"})).unwrap();
+    (s, m)
+}
+
+#[test]
+fn answered_in_the_calendar_takes_the_inbox_invitations() {
+    let (mut s, m) = answered_from_the_calendar("answered-calendar");
+    let other = s.list.iter().find(|m| m.key.uid < 9000).map(|m| m.key.clone()).unwrap();
+    s.run("list.open", &json!({"key": other.to_id()})).unwrap();
+    let r = s.run("event.respond", &json!({"uid": m.uid, "answer": "accepted"})).unwrap();
+    assert_eq!(r["moved"], 2, "{r}");
+    let t = trash(&s);
+    let gone = ids(&mut s, &t);
+    assert!(gone.contains(&"i1@x".to_string()) && gone.contains(&"i2@x".to_string()), "{gone:?}");
+    assert!(!listed(&s, 1) && !listed(&s, 2), "out of the Inbox");
+    assert_eq!(s.reading.as_ref().map(|r| r.key.clone()), Some(other), "the message read stays");
+    done(s);
+}
+
+#[test]
+fn answered_in_the_calendar_while_its_invitation_is_read_goes_on() {
+    let (mut s, m) = answered_from_the_calendar("answered-calendar-read");
+    let (k1, k2) = (key(&s, "INBOX", 1), key(&s, "INBOX", 2));
+    s.run("list.open", &json!({"key": k2.to_id()})).unwrap();
+    let next = s.successor_of(&k2, &[k1, k2.clone()]).unwrap();
+    let r = s.run("event.respond", &json!({"uid": m.uid, "answer": "tentative"})).unwrap();
+    assert_eq!(r["moved"], 2, "{r}");
+    assert!(!listed(&s, 1) && !listed(&s, 2), "out of the Inbox");
+    assert_eq!(s.reading.as_ref().map(|r| r.key.clone()), Some(next), "the list goes on");
+    done(s);
+}
+
+#[test]
+fn ones_own_meeting_answered_in_the_calendar_moves_nothing() {
+    let mut s = sample_session("answered-own");
+    let riley = Some(Attendee { email: "riley@studio.example".into(), name: "Riley".into(), ..Default::default() });
+    let own = |sequence: u32| CalEvent { organizer: riley.clone(), ..meeting("Mix review", sequence) };
+    in_calendar(&mut s, WORK, &format!("{WORK}review.ics"), own(2));
+    put(&mut s, "INBOX", 1, ("Riley", "riley@studio.example"), "Mix review", "REQUEST", &[own(1)], NOW);
+    put(&mut s, "INBOX", 2, ("Riley", "riley@studio.example"), "Mix review", "REQUEST", &[own(2)], NOW);
+    s.run("folder.open", &json!({"account": "sample", "folder": "INBOX"})).unwrap();
+    let r = s.run("event.respond", &json!({"uid": own(2).uid, "answer": "accepted"})).unwrap();
+    assert_eq!(r["moved"], 0, "{r}");
+    assert!(listed(&s, 1) && listed(&s, 2), "the user's own meeting is left alone");
+    done(s);
+}
+
+/// On Exchange a colleague's meeting comes with no organizer (an internal address), and its
+/// appointment is kept as `UID#start`: its invitations are found by the title.
+#[test]
+fn an_exchange_colleagues_meeting_is_tidied_by_its_title() {
+    let mut s = sample_session("answered-exchange");
+    if let Some(a) = s.accounts.iter_mut().find(|a| a.config.id == "sample") {
+        a.config.ews = Some("https://mail.studio.example/EWS/Exchange.asmx".into());
+    }
+    const PAT: (&str, &str) = ("Pat Kim", "pat@contoso.example");
+    let budget = |sequence: u32| CalEvent {
+        uid: "budget@contoso.example".into(),
+        summary: "Budget review".into(),
+        start: NOW + 86_400,
+        end: NOW + 86_400 + 3600,
+        organizer: Some(Attendee { email: PAT.1.into(), name: PAT.0.into(), ..Default::default() }),
+        attendees: vec![me("NEEDS-ACTION")],
+        sequence,
+        ..Default::default()
+    };
+    let appointment = CalEvent { uid: format!("budget@contoso.example#{}", NOW + 86_400), organizer: None, ..budget(2) };
+    in_calendar(&mut s, "calendar", "AAMk-budget", appointment.clone());
+    put(&mut s, "INBOX", 1, PAT, "Budget review", "REQUEST", &[budget(1)], NOW);
+    put(&mut s, "INBOX", 2, PAT, "Budget review", "REQUEST", &[budget(2)], NOW);
+    put(&mut s, "INBOX", 3, PAT, "Budget review", "REQUEST", &[budget(3)], NOW);
+    s.run("folder.open", &json!({"account": "sample", "folder": "INBOX"})).unwrap();
+    let r = s.run("event.respond", &json!({"uid": appointment.uid, "answer": "accepted"})).unwrap();
+    assert_eq!(r["byServer"], true, "{r}");
+    assert_eq!(r["moved"], 2, "{r}");
+    assert!(!listed(&s, 1) && !listed(&s, 2), "out of the Inbox");
+    assert!(listed(&s, 3), "the newer update stays");
+    done(s);
+}
+
+#[test]
+fn removing_a_cancelled_meeting_takes_the_cancellation_and_its_invitations() {
+    let mut s = sample_session("answered-cancelled");
+    in_calendar(&mut s, WORK, &format!("{WORK}review.ics"), meeting("Mix review", 1));
+    put(&mut s, "INBOX", 1, ANA, "Mix review", "REQUEST", &[meeting("Mix review", 1)], NOW);
+    // Sent again after the cancellation: stays, to be answered.
+    put(&mut s, "INBOX", 3, ANA, "Mix review", "REQUEST", &[meeting("Mix review", 3)], NOW);
+    let cancel = CalEvent { status: "CANCELLED".into(), ..meeting("Mix review", 2) };
+    deliver(&mut s, 2, ANA, "CANCEL", &[cancel], NOW);
+    let r = s.run("invite.apply", &json!({})).unwrap();
+    assert_eq!(r["removed"], true, "{r}");
+    assert_eq!(r["moved"], 2, "{r}");
+    let t = trash(&s);
+    let gone = ids(&mut s, &t);
+    assert!(gone.contains(&"i1@x".to_string()) && gone.contains(&"i2@x".to_string()), "{gone:?}");
+    assert!(!listed(&s, 1) && !listed(&s, 2), "the cancellation and the first invitation go");
+    assert!(listed(&s, 3), "the later invitation stays");
+    done(s);
+}

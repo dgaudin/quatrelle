@@ -148,6 +148,12 @@ impl Session {
     }
 }
 
+/// The occurrences a meeting's parts name when they don't name the series (an answer or
+/// cancellation of some occurrences only); `None` when the series is among them.
+pub(super) fn occurrences_only(parts: &[CalEvent]) -> Option<Vec<i64>> {
+    (!parts.iter().any(|e| e.recurrence_id.is_none())).then(|| parts.iter().filter_map(|e| e.recurrence_id).collect())
+}
+
 /// Whether a message's part is a newer version than the one dealt with: compared with the part
 /// of `upto` for the same occurrence, else with its series, by `SEQUENCE` only (a `DTSTAMP` is
 /// the time a copy was written, and with the organizer's clock ahead the calendar's copy looked
