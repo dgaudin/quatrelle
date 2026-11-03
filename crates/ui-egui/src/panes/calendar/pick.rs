@@ -71,3 +71,17 @@ fn pressed<'a>(st: &UiState, ui: &mut Ui, items: &'a [AgendaItem], key: Key) -> 
     let item = items.iter().find(|i| pick.is(i))?;
     ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, key)).then_some(item)
 }
+
+/// The new appointment Ctrl+N opens, as Outlook's: at the half hour selected (in its calendar,
+/// side by side, as a double click there), on the day selected at 9:00 (as a double click on
+/// it), else as the ribbon's New event.
+pub(crate) fn new_event(s: &Session, pick: Option<&Pick>) -> Action {
+    match pick {
+        Some(Pick::Slot { day, half, pane }) => {
+            let cals = if s.prefs.calendars_side_by_side { s.shown_calendars() } else { Vec::new() };
+            days::new_event_in(s, s.local_midnight(*day) + half * 1800, cals.get(*pane).filter(|_| cals.len() > 1))
+        }
+        Some(Pick::Day { day }) => Action::Dialog(Dialog::new_event(s, Some(s.local_midnight(*day) + 9 * 3600))),
+        _ => Action::Dialog(Dialog::new_event(s, None)),
+    }
+}
