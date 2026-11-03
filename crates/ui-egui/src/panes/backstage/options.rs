@@ -303,7 +303,7 @@ pub(super) fn options(s: &Session, st: &UiState, ui: &mut Ui, acts: &mut Vec<Act
     // saved once it's typed (a link that isn't one says why and stays to be corrected).
     group(ui, tl!("Calendar"), None, &mut |ui| {
         let about = tl!("Also a cancellation once its meeting is removed from the calendar, and the meeting's earlier invitations.");
-        setting(ui, false, tl!("Move meeting invitations to Deleted Items once answered"), Some(about), &mut |ui| {
+        setting(ui, true, tl!("Move meeting invitations to Deleted Items once answered"), Some(about), &mut |ui| {
             switch(
                 ui,
                 s.prefs.tidy_answered_invites,
@@ -314,7 +314,7 @@ pub(super) fn options(s: &Session, st: &UiState, ui: &mut Ui, acts: &mut Vec<Act
         });
         setting(
             ui,
-            true,
+            false,
             tl!("Webex personal room"),
             Some(tl!("Use my personal room, under Webex Meeting in an appointment's window, puts it in.")),
             &mut |ui| {
