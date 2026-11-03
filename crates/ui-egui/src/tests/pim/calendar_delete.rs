@@ -2,7 +2,7 @@
 // Copyright (c) 2026 Didier Gaudin
 //! UI tests: the Delete key in the calendar's grid, as Outlook's: it deletes the appointment
 //! selected (a series asks which first), only where the menu's Delete would, and never the
-//! messages selected in Mail.
+//! messages selected in Mail: no shortcut acting on them fires while another module is shown.
 
 use quatrelle_engine::AgendaItem;
 
@@ -41,19 +41,73 @@ fn today_has(a: &MailApp, summary: &str) -> bool {
     a.session.agenda(a.session.local_midnight(d0), a.session.local_midnight(d1)).iter().any(|i| i.summary == summary)
 }
 
-/// Delete with an appointment selected deletes it, and nothing else; the selection goes.
-#[test]
-fn delete_deletes_the_appointment_selected() {
-    let (mut a, dir, ctx) = day_view("delete-single", 0);
-    // A message selected in Mail, before going to the Calendar.
+/// The Day view of the sample's Calendar (or `module`, another one) with a message still selected
+/// in Mail (opened there before).
+fn mail_then(name: &str, module: &str) -> (MailApp, std::path::PathBuf, egui::Context) {
+    let (mut a, dir, ctx) = day_view(name, 0);
     a.run("view.module", json!({"name": "mail"}));
     let k = a.session.list.first().map(|m| m.key.clone()).expect("a message in the Inbox");
     a.run("list.open", json!({"key": k.to_id()}));
-    a.run("view.module", json!({"name": "calendar"}));
+    a.run("view.module", json!({"name": module}));
     for _ in 0..5 {
         frame(&ctx, &mut a, vec![]);
     }
     assert!(!a.session.selection.is_empty(), "a message still selected in Mail");
+    (a, dir, ctx)
+}
+
+fn press_key(ctx: &egui::Context, a: &mut MailApp, k: Key, m: Modifiers) {
+    frame(ctx, a, vec![key(k, m)]);
+    for _ in 0..3 {
+        frame(ctx, a, vec![]);
+    }
+}
+
+fn flagged(a: &MailApp) -> bool {
+    a.session.selected().first().is_some_and(|m| m.flags.flagged)
+}
+
+fn unread(a: &MailApp) -> bool {
+    a.session.selected().first().is_some_and(|m| !m.flags.seen)
+}
+
+/// In Calendar, People, Tasks and Notes, the keys that act on the message selected in Mail do
+/// nothing: Backspace archives nothing, Insert flags nothing, Ctrl+U marks nothing unread, Ctrl+R
+/// writes no reply, Ctrl+Shift+1 runs no Quick Step.
+#[test]
+fn mail_keys_leave_the_message_alone_in_other_modules() {
+    for module in ["calendar", "people", "tasks", "notes"] {
+        let (mut a, dir, ctx) = mail_then(&format!("mail-keys-{module}"), module);
+        let (mail, flag, was_unread) = (inbox(&a), flagged(&a), unread(&a));
+        press_key(&ctx, &mut a, Key::Backspace, Modifiers::NONE);
+        press_key(&ctx, &mut a, Key::Insert, Modifiers::NONE);
+        press_key(&ctx, &mut a, Key::U, Modifiers::COMMAND);
+        press_key(&ctx, &mut a, Key::Num1, Modifiers::COMMAND | Modifiers::SHIFT);
+        press_key(&ctx, &mut a, Key::R, Modifiers::COMMAND);
+        assert_eq!(inbox(&a), mail, "{module}: nothing archived");
+        assert_eq!(flagged(&a), flag, "{module}: the flag unchanged");
+        assert_eq!(unread(&a), was_unread, "{module}: still as read as it was");
+        assert!(a.session.compose.is_none(), "{module}: no reply");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+}
+
+/// In Mail, the same keys still act: Insert flags, Backspace archives.
+#[test]
+fn mail_keys_still_act_in_mail() {
+    let (mut a, dir, ctx) = mail_then("mail-keys-mail", "mail");
+    let (mail, flag) = (inbox(&a), flagged(&a));
+    press_key(&ctx, &mut a, Key::Insert, Modifiers::NONE);
+    assert_eq!(flagged(&a), !flag, "Insert toggles the flag");
+    press_key(&ctx, &mut a, Key::Backspace, Modifiers::NONE);
+    assert_eq!(inbox(&a), mail - 1, "Backspace archives");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Delete with an appointment selected deletes it, and nothing else; the selection goes.
+#[test]
+fn delete_deletes_the_appointment_selected() {
+    let (mut a, dir, ctx) = mail_then("delete-single", "calendar");
     let lunch = shown(&a, "Lunch with Jun");
     let mail = inbox(&a);
     select_and_delete(&ctx, &mut a, &lunch);
