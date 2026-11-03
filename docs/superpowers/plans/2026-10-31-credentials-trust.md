@@ -20,7 +20,7 @@ Nothing at all is sent to an untrusted host. The question « Le serveur propose 
 
 **Tech Stack:** Rust, egui; new dependency `psl` (Public Suffix List), if `cargo deny` and the build cost allow (Task 1 decides).
 
-**Spec:** `docs/superpowers/specs/2026-10-31-credentials-trust-design.md` (the owner's rule, 2026-10-31; reviewed). The branch `jeton-redirection` already holds 1a809b6e, f868d2d2 and 02e66fdf (credentials dropped at an origin change); this plan replaces their origin rule with the site rule and completes it.
+**Spec:** `docs/superpowers/specs/2026-10-31-credentials-trust-design.md` (the owner's rule, 2026-10-31; reviewed). The branch `jeton-redirection` already holds 724b15b2, b4fa63ea and e6fe0f41 (credentials dropped at an origin change); this plan replaces their origin rule with the site rule and completes it.
 
 ## Global Constraints
 

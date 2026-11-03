@@ -18,7 +18,7 @@
 
 **Tech Stack:** Rust, egui; no new dependency, no new icon.
 
-**Spec:** `docs/superpowers/specs/2026-10-30-contacts-field-design.md` (approved 2026-10-30), section "Delivery", item 3; the table "What each place accepts" and its paragraphs "Rules and Search Folders", "Add calendar" and "The commands". This plan builds on deliveries 1 (e9d9d96) and 2 (c0d86aa2).
+**Spec:** `docs/superpowers/specs/2026-10-30-contacts-field-design.md` (approved 2026-10-30), section "Delivery", item 3; the table "What each place accepts" and its paragraphs "Rules and Search Folders", "Add calendar" and "The commands". This plan builds on deliveries 1 (601f419) and 2 (7e6c13f7).
 
 ## Decisions this plan makes (the spec doesn't settle them)
 

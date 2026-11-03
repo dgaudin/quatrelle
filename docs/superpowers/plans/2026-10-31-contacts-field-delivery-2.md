@@ -14,7 +14,7 @@ The meeting window (`pim_dialogs/meeting.rs`) draws its lines through that glue.
 
 **Tech Stack:** Rust, egui; no new dependency, no new icon.
 
-**Spec:** `docs/superpowers/specs/2026-10-30-contacts-field-design.md` (approved 2026-10-30), section "Delivery", item 2. This plan builds on delivery 1 (merged as e9d9d96) and on its final review (`contacts-d1-final-review.md` in the session scratchpad: M2, M3, M4, M8 and the two parked residuals). Delivery 3 (Add calendar, Open another mailbox, rules, Search Folders) gets its own plan.
+**Spec:** `docs/superpowers/specs/2026-10-30-contacts-field-design.md` (approved 2026-10-30), section "Delivery", item 2. This plan builds on delivery 1 (merged as 601f419) and on its final review (`contacts-d1-final-review.md` in the session scratchpad: M2, M3, M4, M8 and the two parked residuals). Delivery 3 (Add calendar, Open another mailbox, rules, Search Folders) gets its own plan.
 
 ## Decisions this plan makes (the spec doesn't settle them)
 
@@ -359,7 +359,7 @@ This refactors a send path that was reviewed once, so the existing tests are its
 
 ## After the tasks
 
-- A final whole-branch review on `fable`, effort `xhigh`. The diff is from `main` at e9d9d96 to the branch head, with the spec and this plan.
+- A final whole-branch review on `fable`, effort `xhigh`. The diff is from `main` at 601f419 to the branch head, with the spec and this plan.
 - One fix wave, then the gates.
 - Merge into `main`, then publish a test build (Linux + Web).
 - Update the carnet item `champ-contacts` (build, status) and close its two residuals.

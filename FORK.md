@@ -6,7 +6,7 @@ volontairement sur l'apparence, pour ressembler davantage à Outlook et s'intég
 ajoute des fonctions Exchange. Ce fichier dit **quoi**, **pourquoi**, et **comment revenir en
 arrière** si besoin.
 
-Point de départ : le commit `8cbd116` (« Docs: v0.15 »). Les modifications sont sur la branche
+Point de départ : le commit `7d16bb1` (« Docs: v0.15 »). Les modifications sont sur la branche
 `claude/practical-gauss-g3t65c`.
 
 ## 1. Les icônes : Fluent UI System Icons de Microsoft
@@ -39,7 +39,7 @@ On peut donc l'utiliser, la modifier et la redistribuer, à condition de garder 
 - Une nouvelle icône doit être un autre fichier Fluent, ajouté de la même façon : fichier
   inchangé, plus une ligne dans `ATTRIBUTION.md`.
 
-**Revenir en arrière.** Annuler le commit `69bef61`, ainsi que les ajouts d'icônes des commits qui
+**Revenir en arrière.** Annuler le commit `d00314f`, ainsi que les ajouts d'icônes des commits qui
 le suivent. Les tracés en code reprennent alors automatiquement.
 
 ## 2. La fenêtre suit le bureau
@@ -50,7 +50,7 @@ GNOME Wayland, sa couleur sarcelle partout, sa police, et un mode clair forcé s
 **Pourquoi.** Une application de bureau doit avoir les mêmes boutons de fenêtre (réduire,
 agrandir, fermer), les mêmes couleurs et les mêmes polices que les autres applications.
 
-**Comment** (commit `3f5a21d`, code dans `apps/quatrelle/src/appearance.rs`).
+**Comment** (commit `5ea491a`, code dans `apps/quatrelle/src/appearance.rs`).
 - **Barre de titre.** Là où le gestionnaire de fenêtres la dessine (KDE, wlroots, X11, Windows,
   macOS), c'est lui qui le fait. Sous GNOME Wayland, la fonction `wayland-csd-adwaita` de `winit`
   en dessine une identique à celle de GNOME : titre, boutons placés selon le réglage
@@ -79,17 +79,17 @@ Seules la disposition et les noms des fonctions sont repris.
 
 | Élément | Ce qui change | Commit | Option pour revenir |
 |---|---|---|---|
-| Barre du haut | Neutre (couleur des volets) au lieu d'être remplie de couleur d'accent ; recherche centrée | `2d678e2` | — |
-| Ruban | Grands boutons avec leur nom dessous, rangés en groupes nommés | `3a89df5` | — |
-| Ruban repliable | Se replie sur ses onglets avec ⌃ ou Ctrl+F1 ; état gardé d'un lancement à l'autre | `a55c4e9` | le ⌃ / Ctrl+F1 |
-| Modules | Rail vertical à gauche (Courrier, Calendrier, Contacts…) | `7c06664` | — |
-| Liste des messages | Tableau à colonnes triables quand la liste est large | `0e537a4` | Affichage › Liste des messages : Automatique / Cartes / Tableau |
-| Volet des dossiers | Noms seuls, sans icône devant, lignes plus serrées | `a55c4e9` | — |
-| Barre To-Do | À droite du courrier : le mois en cours et les rendez-vous de la semaine | `0237901` | Affichage › Barre des tâches |
-| Calendrier | Vue Semaine de travail, en-têtes de jours, deux mois dans le volet, groupes de calendriers | `2c30e94` | — |
-| Noms de dossiers longs | Sur une ligne, coupés par « … », le nom entier en infobulle (« Toutes les boîtes de réception » passait sur deux lignes) | `0a9222ba` | — |
-| Texte caché d'un message | Une ligne discrète, « Texte caché : n mots · Afficher », l'explication en infobulle, au lieu d'un cadre coloré de trois lignes | `0a9222ba` | — |
-| Liste de diffusion | L'adresse de désabonnement est un lien : page web dans le navigateur, ou nouveau message avec l'objet que la liste demande | `0a9222ba` | — |
+| Barre du haut | Neutre (couleur des volets) au lieu d'être remplie de couleur d'accent ; recherche centrée | `ebff331` | — |
+| Ruban | Grands boutons avec leur nom dessous, rangés en groupes nommés | `40309b8` | — |
+| Ruban repliable | Se replie sur ses onglets avec ⌃ ou Ctrl+F1 ; état gardé d'un lancement à l'autre | `7b0e502` | le ⌃ / Ctrl+F1 |
+| Modules | Rail vertical à gauche (Courrier, Calendrier, Contacts…) | `803e497` | — |
+| Liste des messages | Tableau à colonnes triables quand la liste est large | `dee4c4b` | Affichage › Liste des messages : Automatique / Cartes / Tableau |
+| Volet des dossiers | Noms seuls, sans icône devant, lignes plus serrées | `7b0e502` | — |
+| Barre To-Do | À droite du courrier : le mois en cours et les rendez-vous de la semaine | `f360b7d` | Affichage › Barre des tâches |
+| Calendrier | Vue Semaine de travail, en-têtes de jours, deux mois dans le volet, groupes de calendriers | `87c35ae` | — |
+| Noms de dossiers longs | Sur une ligne, coupés par « … », le nom entier en infobulle (« Toutes les boîtes de réception » passait sur deux lignes) | `0686020c` | — |
+| Texte caché d'un message | Une ligne discrète, « Texte caché : n mots · Afficher », l'explication en infobulle, au lieu d'un cadre coloré de trois lignes | `0686020c` | — |
+| Liste de diffusion | L'adresse de désabonnement est un lien : page web dans le navigateur, ou nouveau message avec l'objet que la liste demande | `0686020c` | — |
 
 **Pourquoi « Automatique » pour la liste.** Outlook montre des cartes quand le volet de lecture est
 à droite (la liste est étroite), et un tableau quand il est en bas ou masqué. Le mode Automatique
@@ -100,20 +100,20 @@ fait la même chose ; les deux autres choix forcent l'un ou l'autre.
 Toutes s'appuient sur les spécifications publiques de Microsoft (EWS, Graph, [MS-OXOMSG],
 [MS-OXOCFG]), pas sur le code d'Outlook.
 
-- **Boutons de vote** (`1fb5aaf`)
+- **Boutons de vote** (`f90e091`)
   - Les messages avec des boutons de vote les affichent dans le volet de lecture.
   - La réponse est envoyée comme Outlook l'attend (`PidLidVerbResponse`), pour que l'expéditeur la
     voie comptée.
   - Fonctionne sur Exchange (EWS) et sur Microsoft 365 (Graph).
-- **Boîtes partagées et délégations** (`27e3dbe`)
+- **Boîtes partagées et délégations** (`39fba06`)
   - Fichier › Ouvrir une autre boîte aux lettres.
   - La boîte s'affiche sous un dossier portant son adresse, avec son calendrier.
   - Un message supprimé va dans ses propres Éléments supprimés.
 - **Groupes de calendriers**
   - Les groupes du volet Calendrier d'Outlook (« Équipe : … », « Calendriers partagés »,
     salles) sont repris avec les calendriers des collègues qu'ils contiennent.
-  - Sur Microsoft 365 (`54bba09`).
-  - Sur Exchange **on-premise** (`0817f83`), à partir des raccourcis de navigation qu'Outlook
+  - Sur Microsoft 365 (`911c85d`).
+  - Sur Exchange **on-premise** (`93468a2`), à partir des raccourcis de navigation qu'Outlook
     enregistre dans la boîte, décrits dans [MS-OXOCFG] §2.2.9.
 - **Glisser-déposer dans le calendrier**
   - Un rendez-vous se déplace à la souris dans les vues Jour, Semaine de travail, Semaine et
@@ -246,7 +246,7 @@ ce fork n'a été réécrit ; 23 fichiers ont demandé une résolution.
   d'une autre boîte des deux façons (`mailbox` de l'origine, préfixe d'adresse de ce fork), et
   `move_selection` groupe par boîte — un message supprimé dans une boîte partagée Exchange va bien
   dans *ses* Éléments supprimés. Un test le vérifie désormais sur les deux formes de nommage.
-- **Dialogues et boîtes partagées** : unifiés sur l'entrée de ce fork (commit `5343945`) —
+- **Dialogues et boîtes partagées** : unifiés sur l'entrée de ce fork (commit `51f110a`) —
   « Ouvrir une autre boîte aux lettres… », plus riche (Graph et calendrier), garde ses commandes
   `account.openMailbox`/`account.closeMailbox` ; le dialogue et les commandes de l'origine
   (`AddSharedMailbox`, `account.addSharedMailbox`/`removeSharedMailbox`) sont retirés. Le menu d'une
@@ -263,16 +263,16 @@ l'origine (`0.19.0`).
 
 ### État de la récupération : v0.21, v0.22 et le découpage en petits fichiers (2026-10-22)
 
-Les 51 commits de l'origine (`f0619af..1dc3ba7`) sont fusionnés en trois fusions, dans une
-branche à part puis dans `main` : jusqu'à `d0dffbd` (les fonctions de la v0.22), puis le découpage
-de l'origine en petits fichiers (`d0dffbd..f78afa9`), puis le reste (`..1dc3ba7`). L'historique de
-l'origine est un parent de chaque fusion : la prochaine repartira de `1dc3ba7`.
+Les 51 commits de l'origine (`600f97f..8ba8253`) sont fusionnés en trois fusions, dans une
+branche à part puis dans `main` : jusqu'à `215ce10` (les fonctions de la v0.22), puis le découpage
+de l'origine en petits fichiers (`215ce10..55c5853`), puis le reste (`..8ba8253`). L'historique de
+l'origine est un parent de chaque fusion : la prochaine repartira de `8ba8253`.
 
 **Méthode.**
 - **Renommer l'origine d'abord.** Chaque commit de l'origine utilisé comme point de fusion est
-  recopié avec MailCraft → Quatrelle appliqué aux chemins et au texte (comme `9bb5d25` l'avait
+  recopié avec MailCraft → Quatrelle appliqué aux chemins et au texte (comme `0f88a0e` l'avait
   fait ici), et la fusion se fait contre ces copies (`git merge-tree --merge-base`). Vérifié : le
-  renommage automatique de `477b835` redonne `9bb5d25` à l'identique, hors ajouts voulus
+  renommage automatique de `c744fa8` redonne `0f88a0e` à l'identique, hors ajouts voulus
   (`legacy.rs`, icônes). Il ne reste alors que les vrais conflits.
 - **Le découpage de l'origine, élément par élément.** Quand l'origine éclate un fichier que ce fork
   a modifié, chaque fonction, méthode ou test du fork est fusionné à trois voies dans le fichier
@@ -286,7 +286,7 @@ l'origine est un parent de chaque fusion : la prochaine repartira de `1dc3ba7`.
 - **Gardé de ce fork** : l'apparence (ruban, rail, icônes Fluent, fenêtre qui suit le bureau), le
   calendrier et les contacts, et tout ce que ce fork avait déjà porté à la main (instance unique,
   en-tête étroit, modifications gardées pendant une synchro, IPv6/IPv4, semaine de travail, boîtes
-  partagées, recherche sur le serveur EWS et IMAP), ainsi que la fiabilité Exchange (`5636c1c`).
+  partagées, recherche sur le serveur EWS et IMAP), ainsi que la fiabilité Exchange (`b023484`).
 - **Pris de l'origine** : Quick Steps (groupe « Actions rapides » du ruban, icône Fluent `flash`),
   expéditeurs bloqués et approuvés, Clean Up, dossiers de recherche, `larger:`/`smaller:`, rappels
   avec répétition et la fenêtre Rappels (à la place de la sonnerie simple de ce fork), plusieurs
@@ -299,18 +299,18 @@ l'origine est un parent de chaque fusion : la prochaine repartira de `1dc3ba7`.
   boutons radio empilés, pour les quatre portées.
 - **La règle des petits fichiers** de l'origine (`cargo xtask sizes` : 1000 lignes par fichier,
   16 fichiers par dossier) s'applique aussi à ce fork : les fichiers qu'il avait fait grossir sont
-  découpés (`fab2ab9`), sans changement de comportement.
+  découpés (`2b8f930`), sans changement de comportement.
 
 Preuves : `cargo xtask ci` vert à chaque étape (541 tests à la fin, fmt, `clippy -D warnings`,
 tailles, couches, ressources, wasm), et la fenêtre regardée sur la boîte d'exemple.
 
 ### État de la récupération : reprises choisies de la v0.23 et de la v0.24 (2026-10-24)
 
-L'origine a ajouté 60 commits après `1dc3ba7` (jusqu'à `49ad25c`). Ils ne sont pas fusionnés :
+L'origine a ajouté 60 commits après `8ba8253` (jusqu'à `49ad25c`). Ils ne sont pas fusionnés :
 ils sont **repris un par un**, comme des *cherry-picks* des copies renommées
 (`refs/merge/r-<commit>`, faites par `renamed.sh`), le diff entre la copie d'un commit et celle de
 son parent appliqué à trois voies (`git apply -3`). La prochaine fusion complète repartira de
-`1dc3ba7` : les changements repris à l'identique s'y retrouveront des deux côtés.
+`8ba8253` : les changements repris à l'identique s'y retrouveront des deux côtés.
 
 - **Repris** : les fuseaux horaires (`b9f0546`, `c4df00c`) et les invitations (`65d64b9`,
   `b34d158`, `4889315`) ; la revue de durcissement (`44dae91`, `014c2e6`, `9dffd7e`, `406fe3f`,
@@ -644,7 +644,7 @@ branche `zidan-v0.31`. Cette partie ne prend que les défauts vérifiés dans le
   plafond. Graph n'envoie toujours pas la sensibilité. Les éléments déjà dans le cache gardent
   l'ancienne lecture tant qu'ils ne changent pas sur le serveur.
 - **Corrigé hors de l'origine** : un tableau de rapport dont une cellule vide disparaissait dans les
-  rangées sans couleur (les cellules suivantes glissaient sous le mauvais titre) ; voir `0f9113c0`.
+  rangées sans couleur (les cellules suivantes glissaient sous le mauvais titre) ; voir `c38805d3`.
 - **Reste à faire** : `~/mailcraft/merge-tools/survey-v0.31.md` donne les lots suivants et les commits
   laissés.
 
