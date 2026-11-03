@@ -189,6 +189,8 @@ pub struct Data {
     /// How each appointment created or changed asked the guests to be told
     /// (`SendMeetingInvitations`, `SendMeetingInvitationsOrCancellations`), in order.
     pub meeting_sends: Vec<String>,
+    /// Guests Exchange won't send a meeting to (`ErrorInvalidRecipients`), by address.
+    pub refused_guests: Vec<String>,
     /// Meetings answered (Outlook's buttons): the item, how (`AcceptItem`…), and whether the
     /// organizer was sent the answer.
     pub answers: Vec<(String, String, bool)>,
@@ -333,6 +335,7 @@ impl Default for Data {
             most_items_in_flight: 0,
             hidden: Vec::new(),
             meeting_sends: Vec::new(),
+            refused_guests: Vec::new(),
             answers: Vec::new(),
             room_lists: Vec::new(),
             rooms: Vec::new(),
@@ -716,6 +719,7 @@ fn xml(e: &El) -> String {
 
 mod directory;
 mod fields;
+mod meetings;
 mod route;
 mod server;
 mod streaming;

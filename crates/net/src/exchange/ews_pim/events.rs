@@ -373,7 +373,7 @@ pub(crate) fn event_fields(e: &CalEvent, me: &str) -> Vec<(&'static str, String)
     // schema has it; then the rooms and equipment booked (`Resources`, which the server asks
     // to book themselves), right after them.
     let mine = e.organizer.as_ref().is_none_or(|o| o.email.eq_ignore_ascii_case(me));
-    let meeting = mine && e.attendees.iter().any(|a| !a.email.eq_ignore_ascii_case(me));
+    let meeting = !guests_written(e, me).is_empty();
     // Whether the guests are asked to answer, before them as the schema has it.
     if meeting {
         f.push(("calendar:IsResponseRequested", format!("<t:IsResponseRequested>{}</t:IsResponseRequested>", !e.no_responses)));
@@ -427,6 +427,17 @@ pub(crate) fn event_fields(e: &CalEvent, me: &str) -> Vec<(&'static str, String)
         f.push(("calendar:AllowNewTimeProposal", format!("<t:AllowNewTimeProposal>{}</t:AllowNewTimeProposal>", !e.no_new_times)));
     }
     f
+}
+
+/// The guests [`event_fields`] writes (required, optional and rooms): the attendees of a meeting
+/// the user organizes (or no one does) with an address, the user aside. None: there's no one for
+/// the server to tell, and asked to, it refuses ("no recipients").
+pub(crate) fn guests_written<'a>(e: &'a CalEvent, me: &str) -> Vec<&'a str> {
+    let mine = e.organizer.as_ref().is_none_or(|o| o.email.eq_ignore_ascii_case(me));
+    if !mine {
+        return Vec::new();
+    }
+    e.attendees.iter().filter(|a| !a.email.eq_ignore_ascii_case(me) && a.email.contains('@')).take(500).map(|a| a.email.as_str()).collect()
 }
 
 /// Show As as EWS names it. Working elsewhere came with Exchange 2013's schema, after the 2010 one

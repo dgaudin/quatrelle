@@ -333,7 +333,7 @@ impl Session {
                         show_as: e.show_as,
                         answer,
                         movable: !cal.read_only && (e.attendees.is_empty() || e.organizer.is_none() || organizer_is_me),
-                        organized: !e.attendees.is_empty() && organizer_is_me,
+                        organized: organizer_is_me && self.has_guests(e),
                         account: account.clone(),
                         calendar: cal.id.clone(),
                         uid: e.uid.clone(),

@@ -16,7 +16,18 @@ use super::*;
 impl Session {
     /// Whether the user organizes this event and it has guests to tell.
     pub fn organizes(&self, e: &CalEvent) -> bool {
-        !e.attendees.is_empty() && e.organizer.as_ref().is_some_and(|o| self.is_my_address(&o.email))
+        self.has_guests(e) && e.organizer.as_ref().is_some_and(|o| self.is_my_address(&o.email))
+    }
+
+    /// Whether an event has someone to tell: an attendee with an address that isn't one of
+    /// the user's. Exchange lists the organizer among the attendees, so an appointment the user
+    /// made alone can come back with the user as its one attendee: nobody's meeting to announce
+    /// (asked to send it, the server refuses for want of recipients).
+    pub fn has_guests(&self, e: &CalEvent) -> bool {
+        e.attendees.iter().any(|a| {
+            let email = super::super::invite::without_mailto(&a.email);
+            email.contains('@') && !self.is_my_address(email)
+        })
     }
 
     /// Whether this address is one of the accounts'.

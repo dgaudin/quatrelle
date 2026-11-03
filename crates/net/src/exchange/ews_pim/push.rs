@@ -6,6 +6,7 @@
 //! item — and the guests told when the change asks for it; invitations answered as Outlook
 //! answers them, by the server.
 
+use super::events::guests_written;
 use super::*;
 
 /// Send every appointment changed here, noting each one's item on the server in `out`.
@@ -25,29 +26,39 @@ pub(super) fn push_events(c: &Client, pim: &Pim, out: &mut DavSync) {
             continue;
         }
         let owner = quatrelle_model::pim::shared_calendar_owner(&e.calendar);
+        // The server is asked to tell the guests only when the appointment goes with some: asked
+        // to send to no one (the user alone, as Exchange lists the organizer), it refuses.
+        let guests = guests_written(&e.event, c.email());
+        let notify = e.notify && !guests.is_empty();
         let r = match e.event.recurrence_id.filter(|_| e.href.is_empty()) {
             // One occurrence of a series, changed on its own: the occurrence's item is asked for
             // by its place in the series, then changed as any appointment is.
             Some(at) => match series_of(pim, out, &e.event.uid) {
                 Some((master_id, master)) => {
-                    occurrence_item_id(c, &master_id, &master, at).and_then(|(id, key)| update_item(c, &id, &key, &e.event, e.notify))
+                    occurrence_item_id(c, &master_id, &master, at).and_then(|(id, key)| update_item(c, &id, &key, &e.event, notify))
                 }
                 None => Err(NetError::No("the series isn't on the server yet".into())),
             },
-            None if e.href.is_empty() => create_item(c, owner, &e.event, e.notify),
-            None => update_item(c, &e.href, &e.etag, &e.event, e.notify),
+            None if e.href.is_empty() => create_item(c, owner, &e.event, notify),
+            None => update_item(c, &e.href, &e.etag, &e.event, notify),
         };
         match r {
             // Someone else's event stays in their calendar.
-            Ok((href, etag)) => out.pushed_events.push(StoredEvent {
-                calendar: if owner.is_some() { e.calendar.clone() } else { CALENDAR.into() },
-                href,
-                etag,
-                event: e.event.clone(),
-                dirty: false,
-                notify: false,
-                respond: None,
-            }),
+            Ok(Saved { href, etag, untold }) => {
+                // Saved, but the server wouldn't send to its guests: said once, not tried again.
+                if let Some(why) = untold {
+                    out.errors.push(format!("{}: saved, but the server wouldn't tell the guests ({}): {why}", e.event.summary, guests.join(", ")));
+                }
+                out.pushed_events.push(StoredEvent {
+                    calendar: if owner.is_some() { e.calendar.clone() } else { CALENDAR.into() },
+                    href,
+                    etag,
+                    event: e.event.clone(),
+                    dirty: false,
+                    notify: false,
+                    respond: None,
+                });
+            }
             Err(x) => out.errors.push(format!("{}: {x}", e.event.summary)),
         }
     }
@@ -100,24 +111,75 @@ fn series_of(pim: &Pim, out: &DavSync, uid: &str) -> Option<(String, CalEvent)> 
         .next_back()
 }
 
+/// An appointment saved on the server: its item and change key, and the server's words when it
+/// wouldn't send to the guests (the change saved telling no one instead).
+struct Saved {
+    href: String,
+    etag: String,
+    untold: Option<String>,
+}
+
+/// What Exchange answers a meeting it won't send for its recipients: none left, or one it won't
+/// take.
+const RECIPIENT_ERRORS: [&str; 2] = ["ErrorInvalidRecipients", "ErrorMissingRecipients"];
+
+/// One request that may ask the server to send a meeting: a refusal for its recipients comes
+/// back as `Ok(Err(the server's words))`, for the change to be saved telling no one.
+fn call_sending(c: &Client, body: &str) -> Result<std::result::Result<El, String>> {
+    let doc = c.call(body)?;
+    let m = crate::ews::messages(&doc).first().map(|m| (*m).clone()).ok_or_else(|| NetError::Protocol("an empty answer".into()))?;
+    if m.attr("ResponseClass") == Some("Error") && m.text_of("ResponseCode").is_some_and(|code| RECIPIENT_ERRORS.contains(&code.trim())) {
+        let code = m.text_of("ResponseCode").unwrap_or_default();
+        return Ok(Err(m.text_of("MessageText").filter(|t| !t.trim().is_empty()).unwrap_or(code).trim().to_string()));
+    }
+    crate::ews::check_message(&m)?;
+    Ok(Ok(m))
+}
+
+/// A refusal for recipients when the guests were to be told: logged, and the change made
+/// again (`again`, telling no one); otherwise the answer as it came.
+fn or_untold(
+    summary: &str,
+    first: Result<std::result::Result<El, String>>,
+    again: impl FnOnce() -> Result<std::result::Result<El, String>>,
+) -> Result<(El, Option<String>)> {
+    match first? {
+        Ok(m) => Ok((m, None)),
+        Err(why) => {
+            log::info!("{summary}: {why}; saved without telling the guests");
+            let m = again()?.map_err(NetError::No)?;
+            Ok((m, Some(why)))
+        }
+    }
+}
+
 /// A new appointment, in this mailbox's calendar or someone else's; the guests invited by the
-/// server when asked (`notify`, as Outlook's Send), else told nothing.
-fn create_item(c: &Client, owner: Option<&str>, e: &CalEvent, notify: bool) -> Result<(String, String)> {
+/// server when asked (`notify`, as Outlook's Send), else told nothing. One the server won't
+/// send for its recipients is made all the same, telling no one.
+fn create_item(c: &Client, owner: Option<&str>, e: &CalEvent, notify: bool) -> Result<Saved> {
     let body: String = event_fields(e, c.email()).iter().map(|(_, x)| x.as_str()).collect();
-    let send = if notify { "SendToAllAndSaveCopy" } else { "SendToNone" };
-    c.call_one(&format!(
-        "<m:CreateItem SendMeetingInvitations=\"{send}\"><m:SavedItemFolderId>{}</m:SavedItemFolderId>\
-         <m:Items><t:CalendarItem>{body}</t:CalendarItem></m:Items></m:CreateItem>",
-        calendar_folder(owner.map(|o| c.address_of(o)).as_deref())
-    ))
-    .map(|m| new_id(&m))
+    let folder = calendar_folder(owner.map(|o| c.address_of(o)).as_deref());
+    let call = |send: &str| {
+        call_sending(
+            c,
+            &format!(
+                "<m:CreateItem SendMeetingInvitations=\"{send}\"><m:SavedItemFolderId>{folder}</m:SavedItemFolderId>\
+                 <m:Items><t:CalendarItem>{body}</t:CalendarItem></m:Items></m:CreateItem>"
+            ),
+        )
+    };
+    let first = call(if notify { "SendToAllAndSaveCopy" } else { "SendToNone" });
+    let (m, untold) = or_untold(&e.summary, first, || call("SendToNone"))?;
+    let (href, etag) = new_id(&m);
+    Ok(Saved { href, etag, untold })
 }
 
 /// An appointment changed, field by field. Asked to tell the guests (`notify`), the server
 /// sends the update to all of them and keeps a copy, as Outlook's "Send update" does — on the
 /// item as last seen (its change key), so a change made meanwhile isn't overwritten unseen;
-/// otherwise the change goes in over whatever is there, telling no one.
-fn update_item(c: &Client, id: &str, change_key: &str, e: &CalEvent, notify: bool) -> Result<(String, String)> {
+/// otherwise the change goes in over whatever is there, telling no one. One the server won't
+/// send for its recipients goes in all the same, telling no one.
+fn update_item(c: &Client, id: &str, change_key: &str, e: &CalEvent, notify: bool) -> Result<Saved> {
     let mut updates: String = event_fields(e, c.email())
         .iter()
         .map(|(uri, x)| format!("<t:SetItemField>{}<t:CalendarItem>{x}</t:CalendarItem></t:SetItemField>", tasks::path(uri)))
@@ -136,18 +198,21 @@ fn update_item(c: &Client, id: &str, change_key: &str, e: &CalEvent, notify: boo
     if mine && !e.attendees.is_empty() && !e.attendees.iter().any(|a| a.is_optional()) {
         updates.push_str("<t:DeleteItemField><t:FieldURI FieldURI=\"calendar:OptionalAttendees\"/></t:DeleteItemField>");
     }
-    let send = if notify { "SendToAllAndSaveCopy" } else { "SendToNone" };
-    let call = |resolution: &str, key: &str| {
-        c.call_one(&format!(
-            "<m:UpdateItem ConflictResolution=\"{resolution}\" SendMeetingInvitationsOrCancellations=\"{send}\"><m:ItemChanges>\
-             <t:ItemChange><t:ItemId Id=\"{}\"{key}/><t:Updates>{updates}</t:Updates></t:ItemChange></m:ItemChanges></m:UpdateItem>",
-            esc(id)
-        ))
+    let call = |resolution: &str, key: &str, send: &str| {
+        call_sending(
+            c,
+            &format!(
+                "<m:UpdateItem ConflictResolution=\"{resolution}\" SendMeetingInvitationsOrCancellations=\"{send}\"><m:ItemChanges>\
+                 <t:ItemChange><t:ItemId Id=\"{}\"{key}/><t:Updates>{updates}</t:Updates></t:ItemChange></m:ItemChanges></m:UpdateItem>",
+                esc(id)
+            ),
+        )
     };
+    let send = if notify { "SendToAllAndSaveCopy" } else { "SendToNone" };
     let mut r = if notify && !change_key.is_empty() {
-        call("AutoResolve", &format!(" ChangeKey=\"{}\"", esc(change_key)))
+        call("AutoResolve", &format!(" ChangeKey=\"{}\"", esc(change_key)), send)
     } else {
-        call("AlwaysOverwrite", "")
+        call("AlwaysOverwrite", "", send)
     };
     // The item changed on the server since it was last read and the two can't be reconciled:
     // this change goes in over it, as it always did (a change kept here forever helps no one).
@@ -155,10 +220,10 @@ fn update_item(c: &Client, id: &str, change_key: &str, e: &CalEvent, notify: boo
         && (why.contains("Conflict") || why.contains("ChangeKey"))
     {
         log::info!("{}: {why}; written over", e.summary);
-        r = call("AlwaysOverwrite", "");
+        r = call("AlwaysOverwrite", "", send);
     }
-    r.map(|m| {
-        let (new, key) = new_id(&m);
-        (if new.is_empty() { id.to_string() } else { new }, key)
-    })
+    // Refused for its recipients: saved telling no one, over whatever is there (as above).
+    let (m, untold) = or_untold(&e.summary, r, || call("AlwaysOverwrite", "", "SendToNone"))?;
+    let (new, key) = new_id(&m);
+    Ok(Saved { href: if new.is_empty() { id.to_string() } else { new }, etag: key, untold })
 }
