@@ -229,3 +229,60 @@ fn categorize_from_the_menu() {
     assert_eq!(sent(&a), before, "nothing sent");
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// An invitation over two days, in the Month view, is drawn on each: a right click opens one
+/// menu, and Accept answers once (one reply, not one a day).
+#[test]
+fn an_appointment_over_two_days_answers_once() {
+    let (mut a, dir, ctx) = day_view("menu-two-days", 0);
+    let mix = a.session.pim_mut("sample").events.iter_mut().find(|e| e.event.summary == "Sound mix playback").unwrap();
+    mix.event.end += 86_400;
+    a.session.pim_revision += 1;
+    a.run("calendar.view", json!({"mode": "month"}));
+    for _ in 0..10 {
+        frame(&ctx, &mut a, vec![]);
+    }
+    let mix = shown(&a, "Sound mix playback");
+    assert!(mix.end - mix.start > 86_400 && mix.answer.as_deref() == Some("NEEDS-ACTION"));
+    let before = sent(&a);
+    let menu = right_click(&ctx, &mut a, &mix);
+    assert_eq!(menu.iter().filter(|t| *t == "Accept").count(), 1, "one menu: {menu:?}");
+    choose(&ctx, &mut a, &["Accept"]);
+    assert_eq!(shown(&a, "Sound mix playback").answer.as_deref(), Some("ACCEPTED"));
+    assert_eq!(sent(&a), before + 1, "one reply");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A colleague's private appointment, given without its subject, in their calendar (which can't
+/// be changed): the grid calls it "Private appointment", and its menu has Open, and Join for its
+/// meeting's link, nothing else.
+#[test]
+fn a_colleagues_private_appointment_offers_only_open() {
+    const TEAMS: &str = "https://teams.microsoft.com/l/meetup-join/19%3ameeting_x%40thread.v2/0?context=%7b%7d";
+    let (mut a, dir, ctx) = day_view("menu-private-colleague", 0);
+    let zoe = quatrelle_engine::model::pim::shared_calendar_id("zoe@studio.example");
+    a.run("calendar.show", json!({"account": "sample", "calendar": zoe, "shown": true}));
+    let call = a.session.pim_mut("sample").events.iter_mut().find(|e| e.event.summary == "Producers' call").unwrap();
+    (call.event.summary, call.event.private, call.event.location) = (String::new(), true, TEAMS.into());
+    let uid = call.event.uid.clone();
+    a.session.pim_revision += 1;
+    for _ in 0..5 {
+        frame(&ctx, &mut a, vec![]);
+    }
+    let (d0, d1) = a.session.cal_days();
+    let items = a.session.agenda(a.session.local_midnight(d0), a.session.local_midnight(d1));
+    let call = items.into_iter().find(|i| i.uid == uid).expect("the private appointment is in the view");
+    assert!(call.private && call.summary.is_empty());
+    assert!(a.session.pim["sample"].calendars.iter().any(|c| c.id == call.calendar && c.read_only));
+    let drawn = texts(&frame_shapes(&ctx, &mut a, vec![], SIZE));
+    // (Beside two others, its box is narrow: a word a line.)
+    let drawn = drawn.join(" ");
+    assert!(drawn.contains("Private appointment"), "{drawn}");
+    let menu = right_click(&ctx, &mut a, &call);
+    assert!(menu.iter().any(|t| t == "Open"), "{menu:?}");
+    assert!(menu.iter().any(|t| t == "Join meeting"), "{menu:?}");
+    for entry in ["Show As", "Categorize", "Private", "Delete", "Accept", "Tentative", "Decline"] {
+        assert!(!menu.iter().any(|t| t == entry), "{entry} in {menu:?}");
+    }
+    let _ = std::fs::remove_dir_all(dir);
+}
