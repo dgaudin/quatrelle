@@ -379,7 +379,7 @@ pub fn todo_bar(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Actio
                     ui.painter().rect_filled(bar, 1.0, color(item.color, &t));
                     ui.vertical(|ui| {
                         ui.spacing_mut().item_spacing.y = 0.0;
-                        let title = if item.summary.trim().is_empty() { tl!("(no title)").to_string() } else { item.summary.clone() };
+                        let title = Some(super::title(item)).filter(|x| !x.trim().is_empty()).unwrap_or_else(|| tl!("(no title)").to_string());
                         ui.add(egui::Label::new(RichText::new(title).font(theme::bold(12.0)).color(t.text)).truncate());
                         if !under.is_empty() {
                             ui.add(egui::Label::new(RichText::new(&under).color(t.dim).small()).truncate());

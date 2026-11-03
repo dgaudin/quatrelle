@@ -5,6 +5,8 @@
 
 use super::*;
 
+mod calendar_look;
+
 /// People's list and A–Z index were a few pixels wider than the pane, so the pane (shared by
 /// every module) grew each frame to its widest and Mail, Calendar and Notes stayed that wide.
 #[test]
