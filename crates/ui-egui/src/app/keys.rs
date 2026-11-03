@@ -130,13 +130,13 @@ impl MailApp {
             if text_selected && matches!(combo.as_str(), "Mod+A" | "Mod+C") {
                 continue;
             }
-            // Delete in the Calendar is the grid's (the appointment selected), never the messages
-            // still selected in Mail.
-            if combo == "Delete" && self.session.module == Module::Calendar {
-                continue;
-            }
             if let Some(spec) = reg.by_shortcut(&combo) {
                 let id = spec.id;
+                // Another module shown (Calendar, People, Tasks, Notes): the keys that act on the
+                // messages still selected in Mail don't (Delete in the Calendar is the grid's).
+                if self.session.module != Module::Mail && acts_on_mail(id) {
+                    continue;
+                }
                 if id == "search.run" {
                     continue;
                 }
@@ -170,4 +170,11 @@ impl MailApp {
                     .is_some_and(|t| t.path == m.key.folder)
             })
     }
+}
+
+/// A command whose shortcut acts on the messages selected in Mail, or moves through its list:
+/// delete, archive, reply, forward, move, read/unread, flag, Quick Steps, select all, next and
+/// previous. New mail, Send / Receive, Undo, Search, the modules and the address book act anywhere.
+fn acts_on_mail(id: &str) -> bool {
+    (id.starts_with("mail.") && !matches!(id, "mail.new" | "mail.sync")) || id.starts_with("quickStep.") || id.starts_with("list.")
 }
