@@ -45,6 +45,17 @@ impl ShowAs {
         ShowAs::ALL.into_iter().find(|x| x.cdo().eq_ignore_ascii_case(s))
     }
 
+    /// Microsoft Graph's name for it (`showAs` on an event).
+    pub fn graph(&self) -> &'static str {
+        match self {
+            ShowAs::Free => "free",
+            ShowAs::WorkingElsewhere => "workingElsewhere",
+            ShowAs::Tentative => "tentative",
+            ShowAs::Busy => "busy",
+            ShowAs::OutOfOffice => "oof",
+        }
+    }
+
     /// The command parameter's name for it (`free`, `outOfOffice`…).
     pub fn param(&self) -> &'static str {
         match self {
@@ -58,6 +69,35 @@ impl ShowAs {
 
     pub fn from_param(s: &str) -> Option<ShowAs> {
         ShowAs::ALL.into_iter().find(|x| x.param().eq_ignore_ascii_case(s.trim()))
+    }
+}
+
+/// What the organizer meant the time to show as for a guest who accepts
+/// (`X-MICROSOFT-CDO-INTENDEDSTATUS`): the first such line among the extra lines that reads.
+pub fn intended_show_as(e: &CalEvent) -> Option<ShowAs> {
+    e.extra.iter().take(400).find_map(|l| {
+        let (head, value) = l.split_once(':')?;
+        let name = head.split(';').next().unwrap_or("").trim();
+        if !name.eq_ignore_ascii_case("X-MICROSOFT-CDO-INTENDEDSTATUS") {
+            return None;
+        }
+        ShowAs::from_cdo(value)
+    })
+}
+
+/// A guest answered (`partstat`, any case). Outlook sends the guest's copy tentative until it is
+/// answered, so accepting turns it into what the organizer meant (else Busy); accepting
+/// tentatively makes it Tentative unless it shows Free; anything else leaves it as it is.
+pub fn show_as_answered(e: &mut CalEvent, partstat: &str) {
+    let p = partstat.trim();
+    if p.eq_ignore_ascii_case("ACCEPTED") {
+        if let Some(intent) = intended_show_as(e) {
+            e.show_as = intent;
+        } else if e.show_as == ShowAs::Tentative {
+            e.show_as = ShowAs::Busy;
+        }
+    } else if p.eq_ignore_ascii_case("TENTATIVE") && e.show_as != ShowAs::Free {
+        e.show_as = ShowAs::Tentative;
     }
 }
 
