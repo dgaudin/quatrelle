@@ -103,7 +103,7 @@ Outlook set them (Personal and Confidential kept, as on EWS).
 - `calendar.rs` `chip`: the left strip by `item.show_as` (a small painter helper: solid, hatched with
   diagonal lines, white with an outline, purple, dots), the lock when `item.private`, and the
   "Private appointment" title for an empty private one (a helper the day, week and month views and
-  the card share). The purple is a fixed colour of the category palette, the same in light and dark.
+  the card share). The purple is the category palette's (`theme::category_color(4, t.dark)`).
 - New `panes/calendar/menu.rs`: `pub(super) fn menu(ui, s, item, acts)`, attached in `chip` with
   `resp.context_menu` so every view has it. It reads the event's categories and join link with
   `Session::find_event` only while the menu is open. Its entries push `Action::Dialog` (Open),
