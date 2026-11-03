@@ -14,8 +14,10 @@
 </p>
 
 <p align="center">
-  <a href="https://dgaudin.github.io/quatrelle/?sample"><b>▶ Try it in your browser</b></a>:
-  the sample mailbox, nothing to install, nothing sent anywhere.
+  <a href="https://dgaudin.github.io/quatrelle/demo/?sample"><b>▶ Try it in your browser</b></a>:
+  the sample mailbox, nothing to install, nothing sent anywhere.<br>
+  Website: <a href="https://dgaudin.github.io/quatrelle/">dgaudin.github.io/quatrelle</a>
+  (<a href="https://dgaudin.github.io/quatrelle/fr/">en français</a>)
 </p>
 
 <p align="center">
@@ -136,8 +138,9 @@ cd apps/quatrelle-web && trunk serve
 ```
 
 Then open http://127.0.0.1:8774/?sample for the sample mailbox. The latest stable release's
-browser version is also at https://dgaudin.github.io/quatrelle/?sample (`.github/workflows/pages.yml`
-puts it there when a release is published).
+browser version is also at https://dgaudin.github.io/quatrelle/demo/?sample, under the website
+whose pages are in `site/` (`.github/workflows/pages.yml` puts both there when a release is
+published or `site/` changes on `main`).
 
 The desktop app and the CLI share the cache (`%APPDATA%\Quatrelle`, `~/Library/Application Support/Quatrelle`
 or `~/.local/share/quatrelle`; override with `--data DIR` or `QUATRELLE_DATA`).

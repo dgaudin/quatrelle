@@ -1,0 +1,145 @@
+/* Quatrelle's landing page: one stylesheet, system fonts, nothing loaded from elsewhere. */
+
+:root {
+  --paper: #f7fafa;
+  --paper-2: #e8f2f3;
+  --ink: #15303a;
+  --ink-soft: #3f5b64;
+  --teal: #0e7c86;
+  --teal-2: #1f9aa6;
+  --on-teal: #ffffff;
+  --button: #0e7c86;
+  --button-hover: #0a6670;
+  --line: #c9dcdf;
+  --van: #f2c230;
+  --van-ink: #2b2410;
+  --shot-shadow: 0 1px 2px rgba(21, 48, 58, .18), 0 18px 48px -18px rgba(21, 48, 58, .35);
+  --font: "Segoe UI Variable Text", "Segoe UI", -apple-system, BlinkMacSystemFont, "SF Pro Text",
+    Cantarell, "Noto Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-display: "Segoe UI Variable Display", "Segoe UI", -apple-system, BlinkMacSystemFont,
+    "SF Pro Display", Cantarell, "Noto Sans", "Helvetica Neue", Arial, sans-serif;
+  --wide: 72rem;
+  --text: 40rem;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #10181b;
+    --paper-2: #172328;
+    --ink: #e3eef0;
+    --ink-soft: #a6bcc2;
+    --teal: #1f9aa6;
+    --teal-2: #4fc0cb;
+    --on-teal: #ffffff;
+    --line: #2a3d43;
+    --shot-shadow: 0 1px 2px rgba(0, 0, 0, .5), 0 18px 48px -18px rgba(0, 0, 0, .8);
+  }
+}
+
+* { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: 1.0625rem/1.6 var(--font);
+}
+
+img { max-width: 100%; height: auto; display: block; }
+
+a { color: var(--teal); text-underline-offset: .18em; }
+a:hover { color: var(--teal-2); }
+:focus-visible { outline: 3px solid var(--teal-2); outline-offset: 3px; border-radius: 2px; }
+
+h1, h2, h3 { font-family: var(--font-display); line-height: 1.15; margin: 0 0 .6em; }
+h1 { font-size: clamp(2.1rem, 1.3rem + 3.4vw, 3.6rem); font-weight: 700; letter-spacing: -.025em; }
+h2 { font-size: clamp(1.5rem, 1.2rem + 1.2vw, 2.1rem); font-weight: 650; letter-spacing: -.015em; }
+h3 { font-size: 1.15rem; font-weight: 650; margin-bottom: .35em; }
+p { margin: 0 0 1em; }
+
+.wrap { width: min(100% - 2.5rem, var(--wide)); margin-inline: auto; }
+
+.skip { position: absolute; left: -999px; }
+.skip:focus { left: 1rem; top: 1rem; background: var(--paper); padding: .5rem .8rem; z-index: 2; }
+
+/* The bar along the top */
+.top { border-bottom: 1px solid var(--line); }
+.top .wrap { display: flex; align-items: center; gap: 1.5rem; min-height: 4rem; }
+.brand { display: flex; align-items: center; gap: .6rem; color: var(--ink); text-decoration: none;
+  font: 650 1.2rem/1 var(--font-display); letter-spacing: -.01em; }
+.brand img { width: 32px; height: 32px; }
+.top nav { margin-left: auto; display: flex; gap: 1.25rem; align-items: center; font-size: .95rem; }
+.top nav a { color: var(--ink-soft); text-decoration: none; }
+.top nav a:hover { color: var(--teal); text-decoration: underline; }
+.top nav .lang { border: 1px solid var(--line); border-radius: 999px; padding: .2rem .7rem; color: var(--ink); }
+@media (max-width: 40rem) { .top nav .section-link { display: none; } }
+
+/* The opening: the words, then the window itself, larger than the column */
+.hero { padding: clamp(2.5rem, 6vw, 5rem) 0 0; }
+.hero .lead { font-size: clamp(1.1rem, 1rem + .4vw, 1.3rem); color: var(--ink-soft); max-width: var(--text); }
+.hero h1 { max-width: 18ch; }
+.actions { display: flex; flex-wrap: wrap; gap: .75rem; margin: 1.75rem 0 .75rem; }
+.button { display: inline-block; padding: .8rem 1.3rem; border-radius: 8px; font-weight: 600;
+  text-decoration: none; border: 2px solid var(--teal); }
+.button.primary { background: var(--button); border-color: var(--button); color: var(--on-teal); }
+.button.primary:hover { background: var(--button-hover); border-color: var(--button-hover); color: var(--on-teal); }
+.button.secondary { color: var(--teal); }
+.button.secondary:hover { background: var(--paper-2); }
+.fine { font-size: .92rem; color: var(--ink-soft); }
+
+.window { margin: clamp(2rem, 5vw, 3.5rem) auto 0; width: min(100% - 1.5rem, 82rem); }
+.window img { border-radius: 10px 10px 0 0; box-shadow: var(--shot-shadow); }
+
+/* A band in the teal under the window: what Quatrelle talks to */
+.connects { background: var(--teal); color: var(--on-teal); padding: clamp(2.5rem, 5vw, 4rem) 0; }
+@media (prefers-color-scheme: dark) { .connects { background: #0b5a62; } }
+.connects h2 { max-width: 26ch; }
+.connects dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 1.5rem 2.5rem; margin: 2rem 0 0; }
+.connects dt { font-weight: 700; font-size: 1.05rem; }
+.connects dd { margin: .25rem 0 0; opacity: .92; }
+.connects a { color: inherit; }
+
+/* What it does: one picture and its words per row, alternating sides */
+.features { padding: clamp(3rem, 7vw, 6rem) 0 1rem; }
+.features > .wrap > h2 { max-width: 24ch; }
+.feature { display: grid; gap: 1.25rem 3rem; align-items: center; margin: clamp(2.5rem, 6vw, 5rem) 0; }
+@media (min-width: 52rem) {
+  .feature { grid-template-columns: 7fr 5fr; }
+  .feature:nth-of-type(even) { grid-template-columns: 5fr 7fr; }
+  .feature:nth-of-type(even) figure { order: 2; }
+}
+.feature figure { margin: 0; }
+.feature img { border-radius: 8px; box-shadow: var(--shot-shadow); }
+.feature p { color: var(--ink-soft); max-width: 34rem; }
+.feature ul { padding-left: 1.1rem; margin: 0; color: var(--ink-soft); }
+.feature li { margin: .25rem 0; }
+
+/* Why: short points under a rule, no boxes */
+.why { padding: clamp(2rem, 5vw, 4rem) 0; border-top: 1px solid var(--line); }
+.points { display: grid; gap: 2rem 4rem; margin-top: 2rem; max-width: 60rem; }
+@media (min-width: 44rem) { .points { grid-template-columns: 1fr 1fr; } }
+.points p { color: var(--ink-soft); margin: 0; }
+
+/* The name: the one yellow thing on the page, the postman's van */
+.name { background: var(--van); color: var(--van-ink); padding: clamp(2.5rem, 5vw, 4rem) 0; }
+.name .wrap { display: grid; gap: 1rem 3rem; align-items: start; }
+@media (min-width: 52rem) { .name .wrap { grid-template-columns: 1fr 2fr; } }
+.name h2 { font-size: clamp(2rem, 1.4rem + 2.4vw, 3.2rem); font-style: italic; letter-spacing: -.03em; margin: 0; }
+.name p { font-size: 1.15rem; max-width: var(--text); margin: 0; }
+
+/* Download */
+.get { padding: clamp(3rem, 6vw, 5rem) 0; }
+.get .columns { display: grid; gap: 2rem 3rem; }
+@media (min-width: 52rem) { .get .columns { grid-template-columns: 3fr 2fr; } }
+.get table { border-collapse: collapse; width: 100%; font-size: .98rem; margin: 1rem 0 1.5rem; }
+.get th, .get td { text-align: left; padding: .55rem .75rem .55rem 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+.get th { font-weight: 650; white-space: nowrap; }
+.get td { color: var(--ink-soft); }
+.get aside { align-self: start; background: var(--paper-2); border-radius: 10px; padding: 1.5rem; }
+.get aside p:last-child { margin-bottom: 0; }
+
+footer { border-top: 1px solid var(--line); padding: 2rem 0 3rem; font-size: .95rem; color: var(--ink-soft); }
+footer p { margin: .3rem 0; }

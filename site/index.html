@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <!-- Old links to the browser version (https://dgaudin.github.io/quatrelle/?sample, ?webgl,
+       ?open=…) go on to demo/ with the same query and hash. -->
+  <script>(function(l){if(/sample|webgl|(^|[?&])open=/.test(l.search)){l.replace("demo/"+l.search+l.hash);}})(location);</script>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Quatrelle — open-source Outlook alternative for Linux, Windows and macOS</title>
+  <meta name="description" content="Quatrelle is a free, open-source email client and Outlook alternative written in Rust: mail, calendar, people and tasks over IMAP, JMAP, Exchange and Microsoft 365, on Linux, Windows and macOS. Your mail stays on your computer.">
+  <meta name="google-site-verification" content="29LgHyUKfVCPoNXVBmZ9b6ateOns75mymB4S5TNJdEk" />
+  <link rel="canonical" href="https://dgaudin.github.io/quatrelle/">
+  <link rel="alternate" hreflang="en" href="https://dgaudin.github.io/quatrelle/">
+  <link rel="alternate" hreflang="fr" href="https://dgaudin.github.io/quatrelle/fr/">
+  <link rel="alternate" hreflang="x-default" href="https://dgaudin.github.io/quatrelle/">
+  <link rel="icon" href="favicon.ico" sizes="any">
+  <link rel="icon" href="images/quatrelle.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="images/quatrelle-256.png">
+  <meta name="theme-color" content="#0e7c86">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Quatrelle">
+  <meta property="og:title" content="Quatrelle — open-source Outlook alternative for Linux, Windows and macOS">
+  <meta property="og:description" content="Mail, calendar, people and tasks over IMAP, JMAP, Exchange and Microsoft 365. Local-first, private, written in Rust. Try it in your browser.">
+  <meta property="og:url" content="https://dgaudin.github.io/quatrelle/">
+  <meta property="og:image" content="https://dgaudin.github.io/quatrelle/images/reading.png">
+  <meta property="og:image:width" content="1320">
+  <meta property="og:image:height" content="820">
+  <meta property="og:image:alt" content="Quatrelle's main window: folders, the Inbox grouped by date and a message in the reading pane">
+  <meta property="og:locale" content="en_GB">
+  <meta property="og:locale:alternate" content="fr_FR">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Quatrelle — open-source Outlook alternative for Linux, Windows and macOS">
+  <meta name="twitter:description" content="Mail, calendar, people and tasks over IMAP, JMAP, Exchange and Microsoft 365. Local-first, private, written in Rust.">
+  <meta name="twitter:image" content="https://dgaudin.github.io/quatrelle/images/reading.png">
+  <link rel="stylesheet" href="site.css">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Quatrelle",
+    "description": "An open-source, clean-room, local-first alternative to Microsoft Outlook in pure Rust: mail, calendar, people and tasks over IMAP and SMTP, JMAP, Exchange and Microsoft 365.",
+    "url": "https://dgaudin.github.io/quatrelle/",
+    "downloadUrl": "https://github.com/dgaudin/quatrelle/releases/latest",
+    "installUrl": "https://github.com/dgaudin/quatrelle/releases/latest",
+    "codeRepository": "https://github.com/dgaudin/quatrelle",
+    "screenshot": "https://dgaudin.github.io/quatrelle/images/reading.png",
+    "image": "https://dgaudin.github.io/quatrelle/images/quatrelle-256.png",
+    "applicationCategory": "CommunicationApplication",
+    "applicationSubCategory": "Email client",
+    "operatingSystem": "Linux, Windows, macOS",
+    "license": ["https://opensource.org/license/mit", "https://www.apache.org/licenses/LICENSE-2.0"],
+    "isAccessibleForFree": true,
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" },
+    "author": { "@type": "Person", "name": "Didier Gaudin", "url": "https://github.com/dgaudin" },
+    "inLanguage": ["en", "fr", "es", "de", "pt-BR", "it", "ru", "ja", "ko", "zh-Hans", "zh-Hant", "ar", "he"]
+  }
+  </script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to the content</a>
+  <noscript>
+    <p class="wrap fine">Came for the browser version? <a href="demo/?sample">Open the sample mailbox</a>.</p>
+  </noscript>
+
+  <header class="top">
+    <div class="wrap">
+      <a class="brand" href="./"><img src="images/quatrelle-64.png" alt="" width="32" height="32">Quatrelle</a>
+      <nav aria-label="Page">
+        <a class="section-link" href="#features">Features</a>
+        <a class="section-link" href="#download">Download</a>
+        <a class="section-link" href="https://github.com/dgaudin/quatrelle">Source code</a>
+        <a class="lang" href="fr/" hreflang="fr" lang="fr">Français</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero">
+      <div class="wrap">
+        <h1>The open-source Outlook alternative for Linux, Windows and macOS</h1>
+        <p class="lead">Quatrelle is a free email client with a calendar, people and tasks beside it, written
+          in Rust. Folders, a message list grouped by date, a reading pane, the ribbon and the shortcuts
+          you already know — over IMAP and SMTP, JMAP, your organisation's Exchange server or Microsoft 365.
+          Your mail is kept on your computer, so it opens instantly and stays readable offline.</p>
+        <div class="actions">
+          <a class="button primary" href="demo/?sample">Try it in your browser</a>
+          <a class="button secondary" href="https://github.com/dgaudin/quatrelle/releases/latest">Download</a>
+        </div>
+        <p class="fine">The browser version opens a sample mailbox: nothing to install, nothing sent anywhere.
+          Free and open source, MIT or Apache-2.0.</p>
+      </div>
+      <div class="window">
+        <img src="images/reading.png" width="1320" height="820"
+          alt="Quatrelle with the sample mailbox: the folder pane with Favorites and unread counts, the ribbon with Reply, Quick steps, Flag, Categorize, Pin and Snooze, the Inbox grouped under Today, Yesterday, Monday and Last week, and a flagged message open in the reading pane">
+      </div>
+    </section>
+
+    <section class="connects" aria-labelledby="connects-title">
+      <div class="wrap">
+        <h2 id="connects-title">One email client for IMAP, JMAP, Exchange and Microsoft 365</h2>
+        <dl>
+          <div>
+            <dt>Any IMAP or POP provider</dt>
+            <dd>With SMTP to send; settings found from your address, SSL/TLS or STARTTLS, Gmail and Outlook.com included.</dd>
+          </div>
+          <div>
+            <dt>Exchange on-premises</dt>
+            <dd>Your organisation's own Exchange server through EWS, found with Autodiscover: mail, calendars, contacts, shared mailboxes, public folders and the server's rules.</dd>
+          </div>
+          <div>
+            <dt>Exchange Online and Microsoft 365</dt>
+            <dd>Through Microsoft Graph, with sign-in in your browser (OAuth 2.0).</dd>
+          </div>
+          <div>
+            <dt>JMAP, CalDAV and CardDAV</dt>
+            <dd>Modern mail servers, plus calendars and address books kept in sync. Outlook data files (<code>.pst</code>) open too.</dd>
+          </div>
+        </dl>
+      </div>
+    </section>
+
+    <section class="features" id="features" aria-labelledby="features-title">
+      <div class="wrap">
+        <h2 id="features-title">A familiar email client, kept on your computer</h2>
+
+        <div class="feature">
+          <figure>
+            <img src="images/search-dark.png" width="1320" height="820" loading="lazy"
+              alt="Dark mode with a search for storyboard across all folders: both messages of the conversation found and the reply open">
+          </figure>
+          <div>
+            <h3>Search every folder, even offline</h3>
+            <p>Every folder is cached on disk, so search answers at once, with or without a connection.
+              Narrow it down with <code>from:</code>, <code>subject:</code>, <code>has:attachment</code> or
+              <code>is:unread</code>. Conversations, and a dark mode.</p>
+          </div>
+        </div>
+
+        <div class="feature">
+          <figure>
+            <img src="images/compose.png" width="1320" height="820" loading="lazy"
+              alt="Writing a reply in the reading pane: the Message, Insert, Options, Format Text and Review tabs, the From, To and Subject fields, the signature and the original message below">
+          </figure>
+          <div>
+            <h3>Write in place</h3>
+            <p>Reply, Reply all and Forward in the reading pane or in a window of their own. Formatting,
+              pictures, attachments, signatures, Cc and Bcc, drafts saved to the server and an Outbox for
+              mail written offline. S/MIME signing and encryption.</p>
+          </div>
+        </div>
+
+        <div class="feature">
+          <figure>
+            <img src="images/calendar.png" width="1320" height="820" loading="lazy"
+              alt="The calendar's week view: the date navigator on the left, the ribbon with Day, Work week, Week and Month, and a week of appointments in their calendars' colours">
+          </figure>
+          <div>
+            <h3>Calendar, people and tasks</h3>
+            <p>Day, week and month views, recurring events and time zones, meeting invitations you can
+              accept or decline, the Scheduling Assistant and the Room Finder — on Exchange, CalDAV or this
+              computer. An address book beside it.</p>
+          </div>
+        </div>
+
+        <div class="feature">
+          <figure>
+            <img src="images/table.png" width="1320" height="820" loading="lazy"
+              alt="The classic layout: the message list as a table with From, Subject, Received, Size and Categories columns, the reading pane at the bottom and the To-Do bar on the right">
+          </figure>
+          <div>
+            <h3>The layout you are used to</h3>
+            <p>Three panes or the classic table, the reading pane on the right, at the bottom or off, and the
+              To-Do bar. The everyday shortcuts work as you expect:</p>
+            <ul>
+              <li>Ctrl+N new, Ctrl+R reply, Ctrl+Shift+R reply all, Ctrl+F forward</li>
+              <li>Insert to flag, Delete, Backspace to archive, F9 to send and receive</li>
+              <li>Ctrl+E to search, Ctrl+Z to undo</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="why" aria-labelledby="why-title">
+      <div class="wrap">
+        <h2 id="why-title">Private by design</h2>
+        <div class="points">
+          <div>
+            <h3>Your mail stays with you</h3>
+            <p>No cloud relay: Quatrelle talks to your own mail servers directly over TLS, and keeps the mail on your computer.</p>
+          </div>
+          <div>
+            <h3>Passwords in the system keychain</h3>
+            <p>Windows Credential Manager, the macOS Keychain or the Secret Service, never Quatrelle's own files.</p>
+          </div>
+          <div>
+            <h3>No trackers in your mail</h3>
+            <p>HTML mail is shown as formatted text; pictures from the web load only when you ask.</p>
+          </div>
+          <div>
+            <h3>Open and clean-room</h3>
+            <p>Built in Rust from the public standards (the RFCs) and Outlook's visible behaviour. MIT or Apache-2.0.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="name" aria-labelledby="name-title">
+      <div class="wrap">
+        <h2 id="name-title">Why “Quatrelle”?</h2>
+        <p>A <i>quatrelle</i> is a Renault 4L — the yellow van the postman drove from one mailbox to the next,
+          never in a hurry and never leaving a letter behind. Ours is a little rusty in places, and that is
+          the point: Rust is the language underneath.</p>
+      </div>
+    </section>
+
+    <section class="get" id="download" aria-labelledby="download-title">
+      <div class="wrap">
+        <h2 id="download-title">Download Quatrelle for Linux, Windows or macOS</h2>
+        <div class="columns">
+          <div>
+            <table>
+              <tr><th scope="row">Linux</th><td>AppImage, <code>.deb</code>, <code>.rpm</code>, Flatpak and <code>.tar.gz</code> (x86_64, aarch64, riscv64)</td></tr>
+              <tr><th scope="row">Windows</th><td><code>.msi</code> installer and a portable zip (x64, x86, ARM64)</td></tr>
+              <tr><th scope="row">macOS</th><td><code>.dmg</code> (universal)</td></tr>
+              <tr><th scope="row">FreeBSD</th><td>tarball</td></tr>
+            </table>
+            <div class="actions">
+              <a class="button primary" href="https://github.com/dgaudin/quatrelle/releases/latest">Get the latest release</a>
+              <a class="button secondary" href="https://github.com/dgaudin/quatrelle">Source code on GitHub</a>
+            </div>
+            <p class="fine">The Windows and macOS installers aren't signed yet: Windows SmartScreen asks you to
+              confirm (More info, then Run anyway), and macOS to allow the app in System Settings, Privacy &amp; Security.</p>
+          </div>
+          <aside aria-labelledby="try-title">
+            <h3 id="try-title">Or try it first in your browser</h3>
+            <p>The same app, built for the web, with a sample mailbox to click through. Nothing is installed and
+              nothing leaves your browser. The browser version can also open JMAP accounts.</p>
+            <p><a class="button primary" href="demo/?sample">Open the sample mailbox</a></p>
+          </aside>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <p>By Didier Gaudin. Quatrelle started as a fork of <a href="https://github.com/ZIDAN44/mailcraft">ZIDAN44/mailcraft</a>.</p>
+      <p>Free software under the <a href="https://github.com/dgaudin/quatrelle/blob/main/LICENSE-MIT">MIT</a> or
+        <a href="https://github.com/dgaudin/quatrelle/blob/main/LICENSE-APACHE">Apache-2.0</a> licence.
+        The interface icons are Microsoft's Fluent UI System Icons (MIT); Quatrelle is not affiliated with Microsoft.</p>
+      <p><a href="https://github.com/dgaudin/quatrelle">github.com/dgaudin/quatrelle</a>. <a href="fr/" hreflang="fr" lang="fr">Version française</a></p>
+    </div>
+  </footer>
+</body>
+</html>
