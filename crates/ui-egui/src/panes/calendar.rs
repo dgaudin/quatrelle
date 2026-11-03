@@ -134,6 +134,7 @@ pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) 
         CalMode::Day | CalMode::WorkWeek | CalMode::Week => days(s, st, ui, &items, d0, d1, acts),
     }
     pick::enter(s, st, ui, &items, acts);
+    pick::delete(s, st, ui, &items, acts);
     slow_drawing(ui, began.elapsed(), found, items.len());
     // A drag whose chip is no longer drawn (the view changed under it) is let go of.
     if st.cal_drag.is_some() && !ui.input(|i| i.pointer.primary_down()) {
@@ -170,6 +171,11 @@ fn open(s: &Session, item: &AgendaItem) -> Option<Action> {
 /// the click goes to neither. (Fixed, not the pane's, so a test can find the chip.)
 pub(crate) fn chip_id(item: &AgendaItem) -> egui::Id {
     egui::Id::unique(("calendar-chip", &item.account, &item.calendar, &item.uid, item.start))
+}
+
+/// The id of a day's background in the Month view (fixed, so a test can find it).
+pub(crate) fn month_day_id(day: i64) -> egui::Id {
+    egui::Id::unique(("calendar-month-day", day))
 }
 
 /// The id of an appointment's box on `day`: [`chip_id`] on the day it starts, another on each
@@ -479,7 +485,13 @@ fn month(s: &Session, st: &mut UiState, ui: &mut Ui, items: &[AgendaItem], d0: i
         for i in 0..7 {
             let d = d0 + w * 7 + i;
             let r = Rect::from_min_size(pos2(area.min.x + cw * i as f32, area.min.y + head + rh * w as f32), vec2(cw, rh));
-            if ui.rect_contains_pointer(r) {
+            let bg = ui.interact(r, month_day_id(d), Sense::click());
+            if bg.clicked() || bg.double_clicked() {
+                st.cal_pick = Some(Pick::Day { day: d });
+            }
+            if st.cal_pick == Some(Pick::Day { day: d }) {
+                ui.painter().rect_filled(r, 0.0, t.accent_soft);
+            } else if ui.rect_contains_pointer(r) {
                 ui.painter().rect_filled(r, 0.0, t.hover_row);
             }
             ui.painter().rect_stroke(r, 0.0, egui::Stroke::new(1.0, t.border), egui::StrokeKind::Inside);
@@ -501,7 +513,6 @@ fn month(s: &Session, st: &mut UiState, ui: &mut Ui, items: &[AgendaItem], d0: i
                     t.faint
                 },
             );
-            let bg = ui.interact(r, ui.scope_id().with(("month-day", d)), Sense::click());
             let todays: Vec<&AgendaItem> =
                 items.iter().filter(|it| day_of(it.start, s) <= d && day_of(it.end.max(it.start + 1) - 1, s) >= d).collect();
             let fit = ((rh - 26.0) / 19.0).floor().max(0.0) as usize;

@@ -130,6 +130,11 @@ impl MailApp {
             if text_selected && matches!(combo.as_str(), "Mod+A" | "Mod+C") {
                 continue;
             }
+            // Delete in the Calendar is the grid's (the appointment selected), never the messages
+            // still selected in Mail.
+            if combo == "Delete" && self.session.module == Module::Calendar {
+                continue;
+            }
             if let Some(spec) = reg.by_shortcut(&combo) {
                 let id = spec.id;
                 if id == "search.run" {

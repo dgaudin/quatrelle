@@ -71,6 +71,13 @@ pub enum Dialog {
     },
     /// Closing with an update about to be installed, or still downloading: what becomes of it.
     UpdateOnClose(crate::UpdateState),
+    /// Delete pressed on an appointment of a series (its uid, the occurrence's start, its
+    /// subject): this occurrence, or the series?
+    DeleteOccurrence {
+        uid: String,
+        occurrence: i64,
+        name: String,
+    },
     /// Confirmation before `contact.delete`, which can't be undone.
     ConfirmDeleteContact {
         uid: String,
@@ -289,6 +296,7 @@ impl Dialog {
                 self,
                 Dialog::ConfirmDelete { .. }
                     | Dialog::ConfirmDeleteContact { .. }
+                    | Dialog::DeleteOccurrence { .. }
                     | Dialog::ConfirmEmpty { .. }
                     | Dialog::DeleteFolder { .. }
                     | Dialog::RemoveAccount { .. }
@@ -668,6 +676,7 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, people: &mut people_field::Peo
         | Dialog::WordCount(..)
         | Dialog::Spelling(..) => writing::draw(ui, d, s, people, t, acts),
         Dialog::ConfirmDeleteContact { .. }
+        | Dialog::DeleteOccurrence { .. }
         | Dialog::OpenShare { .. }
         | Dialog::PicturePreview { .. }
         | Dialog::Preview { .. }

@@ -193,6 +193,10 @@ impl MailApp {
                 if matches!(id, "search.clear" | "searchFolder.open") {
                     self.ui.search_text.clear();
                 }
+                // An appointment deleted: nothing selected in the calendar any more.
+                if id == "event.delete" {
+                    self.ui.cal_pick = None;
+                }
                 self.run(id, p);
                 if matches!(id, "list.next" | "list.prev") {
                     self.ui.scroll_to_focus = true;

@@ -2,11 +2,12 @@
 // Copyright (c) 2026 Didier Gaudin
 //! What's selected in the calendar's grid, as Outlook's: a click selects an appointment or an
 //! empty half hour, a double click opens it (or a new appointment there), Enter opens the
-//! appointment selected. One thing at a time; one that's no longer shown just isn't drawn.
+//! appointment selected, Delete deletes it (a series asks which first); in the Month view a click
+//! selects a day. One thing at a time; one that's no longer shown just isn't drawn.
 
 use super::*;
 
-/// The appointment or the half hour selected.
+/// The appointment, the half hour or the day selected.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Pick {
     /// An appointment, told apart as its chip is ([`chip_id`]): whose calendar, its uid, when
@@ -15,6 +16,8 @@ pub enum Pick {
     /// An empty half hour of the Day and Week views: the day, the half hour (0 to 47) and the
     /// calendar's pane (side by side; 0 otherwise).
     Slot { day: i64, half: i64, pane: usize },
+    /// A day of the Month view, clicked on its background.
+    Day { day: i64 },
 }
 
 impl Pick {
@@ -40,14 +43,31 @@ pub(super) fn outline(c: Color32, t: &Tokens) -> Color32 {
 /// Enter opens the appointment selected, when it's shown (not while a dialog is open or text is
 /// typed).
 pub(super) fn enter(s: &Session, st: &UiState, ui: &mut Ui, items: &[AgendaItem], acts: &mut Vec<Action>) {
-    let Some(pick) = st.cal_pick.as_ref().filter(|p| matches!(p, Pick::Item { .. })) else { return };
-    if st.dialog.is_some() || ui.ctx().text_edit_focused() {
-        return;
-    }
-    if !ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, Key::Enter)) {
-        return;
-    }
-    if let Some(item) = items.iter().find(|i| pick.is(i)) {
+    if let Some(item) = pressed(st, ui, items, Key::Enter) {
         acts.extend(open(s, item));
     }
+}
+
+/// Delete deletes the appointment selected, as the menu's Delete does, where the menu would
+/// offer it ([`menu::changeable`]): a series asks first which, this occurrence or all of it.
+/// (The selection goes once it's deleted: `event.delete` clears it.)
+pub(super) fn delete(s: &Session, st: &UiState, ui: &mut Ui, items: &[AgendaItem], acts: &mut Vec<Action>) {
+    let Some(item) = pressed(st, ui, items, Key::Delete).filter(|i| menu::changeable(s, i)) else { return };
+    if item.recurring {
+        let (uid, occurrence, name) = (item.uid.clone(), item.occurrence, title(item));
+        acts.push(Action::Dialog(Dialog::DeleteOccurrence { uid, occurrence, name }));
+    } else {
+        acts.push(Action::Run("event.delete", json!({"uid": item.uid})));
+    }
+}
+
+/// The appointment selected, shown, when `key` is pressed on it (not while a dialog is open or
+/// text is typed): the key is taken.
+fn pressed<'a>(st: &UiState, ui: &mut Ui, items: &'a [AgendaItem], key: Key) -> Option<&'a AgendaItem> {
+    let pick = st.cal_pick.as_ref().filter(|p| matches!(p, Pick::Item { .. }))?;
+    if st.dialog.is_some() || ui.ctx().text_edit_focused() {
+        return None;
+    }
+    let item = items.iter().find(|i| pick.is(i))?;
+    ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, key)).then_some(item)
 }
