@@ -6,6 +6,7 @@
 use super::*;
 
 mod bars;
+mod linked_pictures;
 mod tables;
 mod text_first;
 
