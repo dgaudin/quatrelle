@@ -8,6 +8,10 @@
 //! (`YYYY-MM-DD`), its occurrences starting on or after it, or before it. A leading `-` turns any
 //! of them round. The caller places the dates in its zone and finds the occurrences.
 
+use std::borrow::Cow;
+
+use unicode_segmentation::UnicodeSegmentation;
+
 use super::*;
 use crate::search::words;
 
@@ -74,7 +78,7 @@ const FIELDS: &[(&str, EventField)] = &[
     ("categories", EventField::Categories),
 ];
 
-/// The most of an event's notes looked through.
+/// The most of an event's notes looked through, in characters.
 const NOTES_SEARCHED: usize = 64 * 1024;
 
 fn is_field(k: &str) -> bool {
@@ -192,34 +196,95 @@ fn people(list: &[&Attendee]) -> String {
     s
 }
 
+/// What joins the parts of a field (the location and its link, categories) and, for a bare
+/// word's look anywhere, the fields themselves: no word goes across it.
+const SEP: &str = " \u{1f} ";
+
+/// Where a bare word looks, in this order: the notes, the longest, last.
+const ANY_FIELDS: [EventField; 6] =
+    [EventField::Subject, EventField::Location, EventField::Organizer, EventField::Attendees, EventField::Categories, EventField::Notes];
+
 /// Where it is: the location, then the link that joins it when that isn't already written there.
-fn place(e: &CalEvent) -> String {
+fn place(e: &CalEvent) -> Cow<'_, str> {
     if e.join_url.is_empty() || e.location.contains(&e.join_url) {
-        return e.location.clone();
+        return Cow::Borrowed(&e.location);
     }
-    format!("{} \u{1f} {}", e.location, e.join_url)
+    Cow::Owned(format!("{}{SEP}{}", e.location, e.join_url))
 }
 
-fn field_text(f: EventField, e: &CalEvent) -> String {
-    let notes = || {
-        let cut = e.description.char_indices().nth(NOTES_SEARCHED).map_or(e.description.len(), |(i, _)| i);
-        e.description.get(..cut).unwrap_or_default().to_string()
-    };
+/// A field's text, borrowed when it's kept as it is. `Any`'s is every field joined: only a
+/// phrase written across fields needs it.
+fn field_text(f: EventField, e: &CalEvent) -> Cow<'_, str> {
     match f {
-        EventField::Subject => e.summary.clone(),
+        EventField::Subject => Cow::Borrowed(&e.summary),
         EventField::Location => place(e),
-        EventField::Notes => notes(),
-        EventField::Organizer => people(&e.organizer.iter().collect::<Vec<_>>()),
-        EventField::Attendees => people(&e.attendees.iter().collect::<Vec<_>>()),
-        EventField::Categories => e.categories.join(" \u{1f} "),
-        EventField::Any => {
-            [EventField::Subject, EventField::Location, EventField::Organizer, EventField::Attendees, EventField::Categories, EventField::Notes]
-                .into_iter()
-                .map(|f| field_text(f, e))
-                .collect::<Vec<_>>()
-                .join(" \u{1f} ")
+        EventField::Notes => {
+            // Characters are never fewer than bytes: short notes are read whole.
+            let cut = if e.description.len() <= NOTES_SEARCHED {
+                e.description.len()
+            } else {
+                e.description.char_indices().nth(NOTES_SEARCHED).map_or(e.description.len(), |(i, _)| i)
+            };
+            Cow::Borrowed(e.description.get(..cut).unwrap_or_default())
         }
+        EventField::Organizer => Cow::Owned(people(&e.organizer.iter().collect::<Vec<_>>())),
+        EventField::Attendees => Cow::Owned(people(&e.attendees.iter().collect::<Vec<_>>())),
+        EventField::Categories => match e.categories.as_slice() {
+            [one] => Cow::Borrowed(one.as_str()),
+            list => Cow::Owned(list.join(SEP)),
+        },
+        EventField::Any => Cow::Owned(ANY_FIELDS.into_iter().map(|f| field_text(f, e)).collect::<Vec<_>>().join(SEP)),
     }
+}
+
+/// A field's text, and the same lowercased.
+struct Text<'a> {
+    raw: Cow<'a, str>,
+    lower: String,
+}
+
+impl<'a> Text<'a> {
+    fn new(raw: Cow<'a, str>) -> Text<'a> {
+        let lower = raw.to_lowercase();
+        Text { raw, lower }
+    }
+
+    /// One of its words starts with `w` (or, an address or a room's `2.14`, it's inside one).
+    fn has_word(&self, w: &str) -> bool {
+        // A word can only start with `w` where the lowercased text holds it, so most fields,
+        // and most lines of the others, are never cut into words. (A sigma aside: a word ending
+        // in one is lowercased on its own, `ς`, where the whole text may have `σ`.)
+        let sigma = w.contains(['σ', 'ς']);
+        if !sigma && !self.lower.contains(w) {
+            return false;
+        }
+        if w.contains(['@', '.']) && self.lower.contains(w) {
+            return true;
+        }
+        // A line break always ends a word (Unicode's word bounds, WB3a and WB3b), and lowercases
+        // to itself: each line is cut into words, and lowercased, on its own as within the text.
+        self.raw.split('\n').zip(self.lower.split('\n')).any(|(raw, lower)| (sigma || lower.contains(w)) && words(raw).any(|h| h.starts_with(w)))
+    }
+}
+
+/// The text of the `i`th of `fields`, made the first time it's asked for.
+fn nth_text<'s, 'e>(seen: &'s mut [Option<Text<'e>>], fields: &[EventField], i: usize, e: &'e CalEvent) -> Option<&'s Text<'e>> {
+    let f = *fields.get(i)?;
+    let slot = seen.get_mut(i)?;
+    Some(slot.get_or_insert_with(|| Text::new(after_sep(field_text(f, e), i > 0))))
+}
+
+/// A field as it's read after the separator, when it isn't the first of those looked through:
+/// one starting with a mark that joins the space before it (a combining one) keeps the separator
+/// in front, so that its words are those of the fields joined.
+fn after_sep(raw: Cow<'_, str>, after: bool) -> Cow<'_, str> {
+    let joins = after && raw.chars().next().filter(|c| !c.is_ascii()).is_some_and(|c| format!(" {c}").split_word_bounds().nth(1).is_none());
+    if joins { Cow::Owned(format!("{SEP}{raw}")) } else { raw }
+}
+
+/// Whether one of `fields` passes `test`, looked through in order up to the first that does.
+fn in_any<'e>(seen: &mut [Option<Text<'e>>], fields: &[EventField], e: &'e CalEvent, test: impl Fn(&Text) -> bool) -> bool {
+    (0..fields.len()).any(|i| nth_text(seen, fields, i, e).is_some_and(&test))
 }
 
 fn term_matches(t: &EventTerm, e: &CalEvent) -> bool {
@@ -227,15 +292,19 @@ fn term_matches(t: &EventTerm, e: &CalEvent) -> bool {
         EventTerm::Private => e.private,
         EventTerm::Recurring => e.rrule.is_some() || e.recurrence_id.is_some(),
         EventTerm::Text(f, list) => {
-            let text = field_text(*f, e);
-            let lower = text.to_lowercase();
-            let have: Vec<String> = words(&text).collect();
+            // A bare word's fields are looked through one by one, each read only if the ones
+            // before it don't have it; a phrase written across them (the separator in it)
+            // needs them joined.
+            let across = list.iter().any(|n| matches!(n, Needle::Phrase(p) if p.contains('\u{1f}')));
+            let fields: &[EventField] = match f {
+                EventField::Any if !across => &ANY_FIELDS,
+                f => std::slice::from_ref(f),
+            };
+            let mut seen: [Option<Text>; ANY_FIELDS.len()] = Default::default();
             list.iter().any(|n| match n {
-                Needle::Phrase(p) => lower.contains(p.as_str()),
-                // Each word starts one of the field's (an address, or a room's `2.14`, inside one).
-                Needle::Words(ws) => {
-                    ws.iter().all(|w| have.iter().any(|h| h.starts_with(w.as_str())) || (w.contains(['@', '.']) && lower.contains(w.as_str())))
-                }
+                Needle::Phrase(p) => in_any(&mut seen, fields, e, |t| t.lower.contains(p.as_str())),
+                // Each word in one of the fields (not all in the same one).
+                Needle::Words(ws) => ws.iter().all(|w| in_any(&mut seen, fields, e, |t| t.has_word(w))),
             })
         }
     }
