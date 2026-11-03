@@ -56,15 +56,19 @@ impl Session {
         {
             let mut read = 0usize;
             for m in self.meeting_candidates(account, &inbox, upto) {
-                if going.iter().any(|g| g.key == m.key) || usize::try_from(m.size).unwrap_or(usize::MAX) > MAX_MESSAGE {
+                let size = usize::try_from(m.size).unwrap_or(usize::MAX);
+                if going.iter().any(|g| g.key == m.key) || size > MAX_MESSAGE {
                     continue;
+                }
+                // The budget is checked before reading, by the size the summary gives (used up,
+                // a summary saying 0 isn't read either).
+                if read >= MAX_READ || read.saturating_add(size) > MAX_READ {
+                    break;
                 }
                 // Never fetched: one not downloaded stays where it is.
                 let Some(raw) = self.store.as_ref().and_then(|s| s.read_body(&m.key)) else { continue };
-                read = read.saturating_add(raw.len());
-                if read > MAX_READ {
-                    break;
-                }
+                // The summary's size may be 0 or wrong: the larger of the two counts.
+                read = read.saturating_add(size.max(raw.len()));
                 if raw.len() <= MAX_MESSAGE && mentions_calendar(&raw) && self.carries_meeting(&raw, uid, methods, only, upto) {
                     going.push(m);
                 }

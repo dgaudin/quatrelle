@@ -44,27 +44,32 @@ fn listed(s: &Session, n: u32) -> bool {
 #[test]
 fn answered_in_the_message_takes_its_earlier_versions_and_leaves_a_newer_one() {
     let mut s = sample_session("answered-versions");
+    // Read: n=5 (version 2). Below it, Zoe's lunch (n=4) stays, then the earlier version (n=3)
+    // goes, then another of Zoe's (n=2) stays: the list goes on at n=4, under the message read,
+    // not at n=2, under the lowest one going.
     let lunch = CalEvent { uid: "lunch@soundlab.example".into(), ..meeting("Lunch", 1) };
-    put(&mut s, "INBOX", 0, ZOE, "Lunch", "REQUEST", &[lunch], NOW);
-    put(&mut s, "INBOX", 1, ANA, "Mix review", "REQUEST", &[meeting("Mix review", 1)], NOW);
-    put(&mut s, "INBOX", 3, ANA, "Updated: Mix review", "REQUEST", &[meeting("Mix review", 3)], NOW);
-    deliver(&mut s, 2, ANA, "REQUEST", &[meeting("Mix review", 2)], NOW);
-    let (k0, k1, k2, k3) = (key(&s, "INBOX", 0), key(&s, "INBOX", 1), key(&s, "INBOX", 2), key(&s, "INBOX", 3));
+    let notes = CalEvent { uid: "notes@soundlab.example".into(), ..meeting("Notes", 1) };
+    put(&mut s, "INBOX", 2, ZOE, "Notes", "REQUEST", &[notes], NOW);
+    put(&mut s, "INBOX", 3, ANA, "Mix review", "REQUEST", &[meeting("Mix review", 1)], NOW);
+    put(&mut s, "INBOX", 4, ZOE, "Lunch", "REQUEST", &[lunch], NOW);
+    put(&mut s, "INBOX", 6, ANA, "Updated: Mix review", "REQUEST", &[meeting("Mix review", 3)], NOW);
+    deliver(&mut s, 5, ANA, "REQUEST", &[meeting("Mix review", 2)], NOW);
+    let (k2, k3, k4, k5) = (key(&s, "INBOX", 2), key(&s, "INBOX", 3), key(&s, "INBOX", 4), key(&s, "INBOX", 5));
     // The next message is anchored at the one read, not after the lowest one going.
-    assert_eq!(s.successor_of(&k3, &[k1.clone(), k3.clone()]), Some(k2.clone()));
-    let next = s.successor_of(&k2, &[k1.clone(), k2.clone()]).unwrap();
-    assert_eq!(next, k0);
-    assert!(!s.list.iter().find(|m| m.key == next).unwrap().flags.seen);
+    assert_eq!(s.successor_of(&k5, &[k3.clone(), k5.clone()]), Some(k4.clone()));
+    assert_eq!(s.successor(&[k3.clone(), k5.clone()]), Some(k2), "the two rules differ here");
+    assert!(!s.list.iter().find(|m| m.key == k4).unwrap().flags.seen);
 
     let r = s.run("invite.respond", &json!({"answer": "accepted"})).unwrap();
     assert_eq!(r["moved"], 2, "{r}");
     let t = trash(&s);
     let gone = ids(&mut s, &t);
-    assert!(gone.contains(&"i1@x".to_string()) && gone.contains(&"i2@x".to_string()), "{gone:?}");
-    assert!(!listed(&s, 1) && !listed(&s, 2), "out of the Inbox");
-    assert!(listed(&s, 3), "the newer update stays");
-    assert_eq!(s.reading.as_ref().map(|r| r.key.clone()), Some(next.clone()));
-    assert!(!s.list.iter().find(|m| m.key == next).unwrap().flags.seen, "not marked read");
+    assert!(gone.contains(&"i3@x".to_string()) && gone.contains(&"i5@x".to_string()), "{gone:?}");
+    assert!(!listed(&s, 3) && !listed(&s, 5), "out of the Inbox");
+    assert!(listed(&s, 2) && listed(&s, 4), "the other meetings stay");
+    assert!(listed(&s, 6), "the newer update stays");
+    assert_eq!(s.reading.as_ref().map(|r| r.key.clone()), Some(k4.clone()), "the one under the message read");
+    assert!(!s.list.iter().find(|m| m.key == k4).unwrap().flags.seen, "not marked read");
     done(s);
 }
 
@@ -132,6 +137,28 @@ fn a_message_not_downloaded_stays_and_isnt_fetched() {
     assert!(listed(&s, 3), "not downloaded: it stays");
     let jobs = s.take_jobs();
     assert!(!jobs.iter().any(|j| matches!(j, Job::FetchBody { key } if *key == k3)), "{jobs:?}");
+    done(s);
+}
+
+/// The 16 MB read is checked before each source is read, by the size its summary gives: two
+/// earlier versions claiming 8 MB each use it up, and a third (its summary's size 0) isn't read:
+/// it stays.
+#[test]
+fn the_read_budget_is_checked_before_reading() {
+    let mut s = sample_session("answered-budget");
+    let keys: Vec<_> = [4, 3, 2].iter().map(|&n| put(&mut s, "INBOX", n, ANA, "Mix review", "REQUEST", &[meeting("Mix review", 1)], NOW)).collect();
+    let store = s.store.clone().unwrap();
+    let mut state = store.load_folder("sample", "INBOX").unwrap();
+    for m in state.messages.iter_mut().filter(|m| keys[..2].contains(&m.key)) {
+        m.size = 8 << 20;
+    }
+    store.save_folder("sample", "INBOX", &state).unwrap();
+    s.apply(Event::FolderChanged { account: "sample".into(), folder: "INBOX".into() });
+    deliver(&mut s, 5, ANA, "REQUEST", &[meeting("Mix review", 2)], NOW);
+    let r = s.run("invite.respond", &json!({"answer": "accepted"})).unwrap();
+    assert_eq!(r["moved"], 3, "{r}");
+    assert!(!listed(&s, 4) && !listed(&s, 3) && !listed(&s, 5), "read within the budget: gone");
+    assert!(listed(&s, 2), "past the budget: not read, it stays");
     done(s);
 }
 
@@ -208,13 +235,16 @@ fn in_calendar(s: &mut Session, calendar: &str, href: &str, event: CalEvent) {
 
 const WORK: &str = "https://dav.example.org/cal/work/";
 
-/// Ana's meeting at version 2 in the calendar, its invitations at versions 1 and 2 in the Inbox.
+/// Ana's meeting at version 2 in the calendar, its invitations at versions 1 (n=1) and 2 (n=3)
+/// in the Inbox, and Zoe's lunch (n=2) between them.
 fn answered_from_the_calendar(name: &str) -> (Session, CalEvent) {
     let mut s = sample_session(name);
     let m = meeting("Mix review", 2);
     in_calendar(&mut s, WORK, &format!("{WORK}review.ics"), m.clone());
+    let lunch = CalEvent { uid: "lunch@soundlab.example".into(), ..meeting("Lunch", 1) };
     put(&mut s, "INBOX", 1, ANA, "Mix review", "REQUEST", &[meeting("Mix review", 1)], NOW);
-    put(&mut s, "INBOX", 2, ANA, "Updated: Mix review", "REQUEST", &[meeting("Mix review", 2)], NOW);
+    put(&mut s, "INBOX", 2, ZOE, "Lunch", "REQUEST", &[lunch], NOW);
+    put(&mut s, "INBOX", 3, ANA, "Updated: Mix review", "REQUEST", &[meeting("Mix review", 2)], NOW);
     s.run("folder.open", &json!({"account": "sample", "folder": "INBOX"})).unwrap();
     (s, m)
 }
@@ -228,8 +258,9 @@ fn answered_in_the_calendar_takes_the_inbox_invitations() {
     assert_eq!(r["moved"], 2, "{r}");
     let t = trash(&s);
     let gone = ids(&mut s, &t);
-    assert!(gone.contains(&"i1@x".to_string()) && gone.contains(&"i2@x".to_string()), "{gone:?}");
-    assert!(!listed(&s, 1) && !listed(&s, 2), "out of the Inbox");
+    assert!(gone.contains(&"i1@x".to_string()) && gone.contains(&"i3@x".to_string()), "{gone:?}");
+    assert!(!listed(&s, 1) && !listed(&s, 3), "out of the Inbox");
+    assert!(listed(&s, 2), "another meeting's stays");
     assert_eq!(s.reading.as_ref().map(|r| r.key.clone()), Some(other), "the message read stays");
     done(s);
 }
@@ -237,13 +268,14 @@ fn answered_in_the_calendar_takes_the_inbox_invitations() {
 #[test]
 fn answered_in_the_calendar_while_its_invitation_is_read_goes_on() {
     let (mut s, m) = answered_from_the_calendar("answered-calendar-read");
-    let (k1, k2) = (key(&s, "INBOX", 1), key(&s, "INBOX", 2));
-    s.run("list.open", &json!({"key": k2.to_id()})).unwrap();
-    let next = s.successor_of(&k2, &[k1, k2.clone()]).unwrap();
+    let (k1, k2, k3) = (key(&s, "INBOX", 1), key(&s, "INBOX", 2), key(&s, "INBOX", 3));
+    s.run("list.open", &json!({"key": k3.to_id()})).unwrap();
+    // Under the message read (n=3), not under the lowest one going (n=1).
+    assert_ne!(s.successor(&[k1.clone(), k3.clone()]), Some(k2.clone()), "the two rules differ here");
     let r = s.run("event.respond", &json!({"uid": m.uid, "answer": "tentative"})).unwrap();
     assert_eq!(r["moved"], 2, "{r}");
-    assert!(!listed(&s, 1) && !listed(&s, 2), "out of the Inbox");
-    assert_eq!(s.reading.as_ref().map(|r| r.key.clone()), Some(next), "the list goes on");
+    assert!(!listed(&s, 1) && !listed(&s, 3), "out of the Inbox");
+    assert_eq!(s.reading.as_ref().map(|r| r.key.clone()), Some(k2), "the list goes on");
     done(s);
 }
 
