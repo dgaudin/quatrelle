@@ -18,6 +18,7 @@ use crate::{Action, Dialog, UiState, widgets};
 mod days;
 mod drag;
 mod found;
+mod menu;
 mod side;
 use days::days;
 pub use drag::Drag;
@@ -168,7 +169,8 @@ pub(crate) fn chip_id(item: &AgendaItem) -> egui::Id {
     egui::Id::unique(("calendar-chip", &item.account, &item.calendar, &item.uid, item.start))
 }
 
-fn chip(ui: &mut Ui, s: &Session, t: &Tokens, rect: Rect, item: &AgendaItem, text: &str) -> egui::Response {
+/// An appointment in the grid: its box, its card under the pointer, its menu on a right click.
+fn chip(ui: &mut Ui, s: &Session, t: &Tokens, rect: Rect, item: &AgendaItem, text: &str, acts: &mut Vec<Action>) -> egui::Response {
     // One that can move is taken hold of as well as clicked.
     let sense = if item.movable { Sense::click_and_drag() } else { Sense::click() };
     let resp = ui.interact(rect, chip_id(item), sense);
@@ -223,9 +225,10 @@ fn chip(ui: &mut Ui, s: &Session, t: &Tokens, rect: Rect, item: &AgendaItem, tex
     }
     // Outlook's card when the pointer rests on it: what it is, when, where, and its calendar
     // (not while something is dragged: the card would hide where it's going).
-    if !resp.dragged() && !ui.input(|i| i.pointer.primary_down()) {
+    if !resp.dragged() && !ui.input(|i| i.pointer.primary_down()) && !resp.context_menu_opened() {
         hover_card(&resp, s, t, item);
     }
+    resp.context_menu(|ui| menu::menu(ui, s, item, acts));
     resp
 }
 
@@ -472,7 +475,7 @@ fn month(s: &Session, st: &mut UiState, ui: &mut Ui, items: &[AgendaItem], d0: i
             for (k, it) in todays.iter().take(shown).enumerate() {
                 let cr = Rect::from_min_size(r.min + vec2(3.0, 24.0 + 19.0 * k as f32), vec2(cw - 6.0, 17.0));
                 let text = if it.all_day { title(it) } else { format!("{} {}", hm(it.start, s), title(it)) };
-                let resp = chip(ui, s, t, cr, it, &text);
+                let resp = chip(ui, s, t, cr, it, &text, acts);
                 // Only on the day it starts: a chip drawn on each day it spans would start a
                 // drag each.
                 if day_of(it.start, s) == d {
