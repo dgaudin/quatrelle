@@ -7,6 +7,7 @@ use super::*;
 
 mod find;
 mod guests;
+mod reminders;
 mod showing;
 mod web;
 mod webex;

@@ -143,7 +143,9 @@ impl Session {
         for k in &keys {
             // A task's reminder is taken off the task, as Outlook does (and Exchange learns it).
             let uid = k.split('|').nth(1).unwrap_or_default();
-            if self.find_task(uid).is_some() && self.update_task(uid, TaskChange { reminder: Some(None), ..Default::default() }).is_ok() {
+            let off = (self.find_task(uid).is_some() && self.update_task(uid, TaskChange { reminder: Some(None), ..Default::default() }).is_ok())
+                || self.turn_off_reminder_of_single(k);
+            if off {
                 self.prefs.reminders.remove(k);
             } else {
                 self.prefs.reminders.insert(k.clone(), 0);
@@ -151,6 +153,26 @@ impl Session {
         }
         self.forget_old_reminders(now);
         keys.len()
+    }
+
+    /// An appointment that is no part of a series, in one of the user's own calendars, loses its
+    /// reminder when it's dismissed, as in Outlook (Exchange's `ReminderIsSet`): it's on the item,
+    /// so every device sees it and moving the appointment doesn't bring it back. A personal
+    /// matter: the guests are never told. False for anything else (a series or one of its
+    /// occurrences, an event not found, a calendar that can't be changed): that one is answered
+    /// here, per occurrence.
+    fn turn_off_reminder_of_single(&mut self, key: &str) -> bool {
+        let mut parts = key.split('|');
+        let (Some(account), Some(uid)) = (parts.next(), parts.next()) else { return false };
+        let Some(p) = self.pim.get(account) else { return false };
+        let Some(stored) = p.events.iter().find(|e| e.event.uid == uid) else { return false };
+        if p.events.iter().any(|e| e.event.uid == uid && (e.event.rrule.is_some() || e.event.recurrence_id.is_some())) {
+            return false;
+        }
+        if quatrelle_model::pim::shared_calendar_owner(&stored.calendar).is_some() || quatrelle_model::pim::is_web_calendar(&stored.calendar) {
+            return false;
+        }
+        self.update_event(uid, |e| ical::set_reminder(e, None)).is_ok()
     }
 
     /// Snooze a reminder until `until` (Unix seconds).

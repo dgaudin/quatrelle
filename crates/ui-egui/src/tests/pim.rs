@@ -345,7 +345,9 @@ fn reminders_pop_up_snooze_and_dismiss() {
     pressed.lock().unwrap().push((key.clone(), crate::ReminderAction::Snooze));
     frame(&ctx, &mut a, vec![]);
     assert_eq!(a.session.notices.len(), notices, "{:?}", a.session.notices.last());
-    assert_eq!(a.session.prefs.reminders.get(&key), Some(&0), "still dismissed, not snoozed");
+    // A single appointment's reminder went off the appointment itself; a series' stays dismissed.
+    assert!(matches!(a.session.prefs.reminders.get(&key), None | Some(0)), "still dismissed, not snoozed");
+    assert!(a.session.due_reminders(*now.lock().unwrap()).iter().all(|r| r.key != key));
     let _ = std::fs::remove_dir_all(dir);
 }
 
