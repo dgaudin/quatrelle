@@ -678,6 +678,7 @@ impl MailApp {
         let lang = i18n::Lang::from_pref(&self.ui.language);
         if self.ui.quoted_in.replace(lang.code()) != Some(lang.code()) {
             self.session.quote_words = i18n::quote_words(lang);
+            self.session.conflict_words = i18n::conflict_words(lang);
         }
     }
 

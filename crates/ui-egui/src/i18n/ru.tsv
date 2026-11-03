@@ -1872,3 +1872,9 @@ month	May	Май
 	No events match.	Подходящих событий нет.
 	Past	Прошедшие
 	Search calendar (location:, organizer:, after:…)	Поиск в календаре (location:, organizer:, after:…)
+	Sync Issues	Проблемы синхронизации
+folder	Conflicts	Конфликты
+	On this computer only	Только на этом компьютере
+	{item} — deleted on the server ({account})	{item} — удалено на сервере ({account})
+	{item} was deleted on the server while it was being changed here.\n\nAccount: {account}\nIn: {place}\nWhen: {when}\n\nThe server's version was kept, so the change made here was dropped. The attachment holds the version that was here: open it to put it back.	{item} было удалено на сервере, пока его изменяли здесь.\n\nУчётная запись: {account}\nГде: {place}\nКогда: {when}\n\nСохранена версия сервера, поэтому изменение, сделанное здесь, отброшено. Во вложении — версия, которая была здесь: откройте его, чтобы вернуть её.
+	{event}: deleted on the server meanwhile; the change made here was dropped (a copy is in Sync Issues › Conflicts)	{event}: тем временем удалено на сервере; изменение, сделанное здесь, отброшено (копия находится в Проблемы синхронизации › Конфликты)

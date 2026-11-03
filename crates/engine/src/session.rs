@@ -366,6 +366,9 @@ pub struct Session {
     /// The words the original's header is written with under a reply, in the interface's
     /// language (the app sets them; English without it).
     pub quote_words: mime::QuoteWords,
+    /// The words of the copies kept in Sync Issues › Conflicts, in the interface's language (the
+    /// app sets them; English without it).
+    pub conflict_words: pim::ConflictWords,
     pub prefs: Prefs,
     pub clock: Clock,
     pub notices: Vec<Notice>,
@@ -552,6 +555,7 @@ impl Session {
             interactive: false,
             drafted: HashSet::new(),
             quote_words: mime::QuoteWords::default(),
+            conflict_words: pim::ConflictWords::default(),
             prefs: Prefs::default(),
             clock,
             notices: Vec::new(),

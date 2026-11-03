@@ -5,6 +5,7 @@
 
 use super::*;
 
+mod conflicts;
 mod find;
 mod gone;
 mod guests;

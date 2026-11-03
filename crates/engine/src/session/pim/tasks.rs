@@ -190,17 +190,6 @@ fn apply(t: &mut Task, c: TaskChange, today: i64) {
 /// Merge the tasks a sync found: those stored on the server get their item there and are no
 /// longer to send; the server's list replaces the rest, those changed here (and those never
 /// sent) staying.
-/// The tasks the server no longer has, changed here (`gone`, by their item there): the server
-/// wins, so they go here too. Their names, one for each, to say so.
-pub(super) fn drop_gone_tasks(p: &mut Pim, gone: &[String]) -> Vec<String> {
-    if gone.is_empty() {
-        return Vec::new();
-    }
-    let names = p.tasks.iter().filter(|t| !t.href.is_empty() && gone.contains(&t.href)).map(|t| t.task.subject.clone()).collect();
-    p.tasks.retain(|t| t.href.is_empty() || !gone.contains(&t.href));
-    names
-}
-
 pub(super) fn merge_tasks(p: &mut Pim, sync: &DavSync) {
     for x in &sync.pushed_tasks {
         for t in p.tasks.iter_mut().filter(|t| t.task.uid == x.task.uid) {

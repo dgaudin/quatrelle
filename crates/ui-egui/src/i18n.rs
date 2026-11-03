@@ -328,6 +328,22 @@ pub fn folder(f: &quatrelle_engine::model::Folder) -> String {
     }
 }
 
+/// The words of the copies kept in Sync Issues › Conflicts, in `lang` (they go into the
+/// message).
+pub fn conflict_words(lang: Lang) -> quatrelle_engine::ConflictWords {
+    let before = CURRENT.replace(lang);
+    let words = quatrelle_engine::ConflictWords {
+        subject: tl!("{item} — deleted on the server ({account})").to_string(),
+        body: tl!(
+            "{item} was deleted on the server while it was being changed here.\n\nAccount: {account}\nIn: {place}\nWhen: {when}\n\nThe server's version was kept, so the change made here was dropped. The attachment holds the version that was here: open it to put it back."
+        )
+        .to_string(),
+        tasks: tl!("Tasks").to_string(),
+    };
+    CURRENT.set(before);
+    words
+}
+
 /// The words a reply quotes its original's header with in `lang`, as written (they go into
 /// the message): `From:`, `Sent:`… and the date written out as the calendar writes it.
 pub fn quote_words(lang: Lang) -> quatrelle_engine::mime::QuoteWords {

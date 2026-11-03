@@ -1870,3 +1870,9 @@ month	May	5月
 	No events match.	没有匹配的事件。
 	Past	过去
 	Search calendar (location:, organizer:, after:…)	搜索日历 (location:, organizer:, after:…)
+	Sync Issues	同步问题
+folder	Conflicts	冲突
+	On this computer only	仅在此计算机上
+	{item} — deleted on the server ({account})	{item} — 已在服务器上删除 ({account})
+	{item} was deleted on the server while it was being changed here.\n\nAccount: {account}\nIn: {place}\nWhen: {when}\n\nThe server's version was kept, so the change made here was dropped. The attachment holds the version that was here: open it to put it back.	{item} 在此处更改期间已在服务器上删除。\n\n帐户: {account}\n位置: {place}\n时间: {when}\n\n已保留服务器上的版本，因此在此所做的更改已放弃。附件中是此处原有的版本: 打开它即可恢复。
+	{event}: deleted on the server meanwhile; the change made here was dropped (a copy is in Sync Issues › Conflicts)	{event}: 期间已在服务器上删除；在此所做的更改已放弃 (副本在 同步问题 › 冲突 中)

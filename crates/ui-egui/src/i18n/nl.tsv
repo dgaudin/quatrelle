@@ -1869,3 +1869,9 @@ month	May	mei
 	No events match.	Geen afspraken gevonden.
 	Past	Voorbij
 	Search calendar (location:, organizer:, after:…)	Agenda doorzoeken (location:, organizer:, after:…)
+	Sync Issues	Synchronisatieproblemen
+folder	Conflicts	Conflicten
+	On this computer only	Alleen op deze computer
+	{item} — deleted on the server ({account})	{item} — verwijderd op de server ({account})
+	{item} was deleted on the server while it was being changed here.\n\nAccount: {account}\nIn: {place}\nWhen: {when}\n\nThe server's version was kept, so the change made here was dropped. The attachment holds the version that was here: open it to put it back.	{item} is op de server verwijderd terwijl het hier werd gewijzigd.\n\nAccount: {account}\nIn: {place}\nWanneer: {when}\n\nDe versie van de server is behouden, dus de wijziging die hier is gemaakt, is verworpen. De bijlage bevat de versie die hier was: open die om haar terug te zetten.
+	{event}: deleted on the server meanwhile; the change made here was dropped (a copy is in Sync Issues › Conflicts)	{event}: intussen op de server verwijderd; de wijziging die hier is gemaakt, is verworpen (een kopie staat in Synchronisatieproblemen › Conflicten)
