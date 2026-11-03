@@ -713,6 +713,43 @@ réunion, l'esprit de `54f09098` (les lignes `CONFERENCE` viendront avec la quat
   invalide, données absurdes dessinées), captures de la fenêtre en clair et en sombre.
 - **Reste à faire** : l'essai sur le calendrier du propriétaire, avec ceux de ses collègues cochés.
 
+### État de la récupération : v0.31, quatrième partie : l'invitation répondue quitte la Boîte de réception (2026-11-03)
+
+La deuxième des quatre fonctions de calendrier de la v0.31 (`merge-tools/survey-v0.31.md`, « Décidé le
+02/11 »), sur la branche `answered-invites`, en comblant les manques plutôt qu'en portant : une invitation
+répondue depuis le message partait déjà aux Éléments supprimés, toujours. Maintenant, une réponse donnée
+depuis le calendrier (`event.respond`), ou « Supprimer du calendrier » sur une annulation (`invite.apply`),
+range aussi le courrier de la réunion, et les versions plus anciennes de l'invitation partent avec, derrière
+une case de Fichier › Options › Calendrier (cochée par défaut, comme aujourd'hui). Pris pour référence et
+adaptés : `484e4c2f` (issue #31 de l'origine), `25c6997b` (la mise à jour plus récente reste), `3c4febce`
+(le message suivant). Choix du propriétaire (03/11) : une seule case, comme Outlook, plutôt que les trois
+choix de l'origine (laisser / Éléments supprimés / un dossier par compte) ; l'annulation rangée aussi. Spec et
+plan : `docs/superpowers/specs/2026-11-03-answered-invitations-design.md`,
+`docs/superpowers/plans/2026-11-03-answered-invitations.md`.
+
+- **Différences avec l'origine** :
+  - la recherche des invitations : l'origine lit les sources des 2 000 derniers messages de la Boîte de
+    réception (64 Mo) à chaque réponse ; ici, les résumés trient d'abord (objet contenant le titre de la
+    réunion, ou envoyé par son organisateur), puis au plus 200 candidats et 16 Mo de sources déjà
+    téléchargées sont lus ; rien n'est demandé au serveur ;
+  - depuis le calendrier, la version répondue est la copie du calendrier où le rendez-vous a été trouvé
+    (pas celle du calendrier partagé d'un collègue, qui peut être en avance), comparée par `SEQUENCE` seul ;
+  - Exchange : les rendez-vous lisent enfin leur `SEQUENCE` (`calendar:AppointmentSequenceNumber`, toujours
+    0 auparavant), une occurrence modifiée ne recopie pas celle de sa série, et un `MoveItem` dont un
+    élément est déjà parti (le serveur range lui-même l'invitation répondue) n'est plus une erreur ;
+  - le message suivant est celui qui suit le message lu, pas celui qui suit la plus basse des versions
+    rangées ; un message répondu dans les Éléments supprimés y reste ;
+  - laissés : les réponses des invités à ses propres réunions (`answered_replies` de l'origine), le
+    dossier au choix par compte.
+- **Vérifié** : moteur (versions anciennes rangées et plus récente gardée, occurrence seule, réponse
+  depuis le calendrier sur IMAP et sur Exchange sans organisateur connu, ses propres réunions laissées,
+  copie d'un collègue en avance, annulation, case décochée, Ctrl+Z, message non téléchargé ni lu ni
+  demandé, titre trop court, message suivant), faux serveur Exchange (déplacement d'un élément déjà parti,
+  version lue), page Options et ses 13 traductions, `cargo xtask ci`.
+- **Reste à faire** : l'essai sur le serveur Exchange du propriétaire (répondre depuis le message et depuis
+  le calendrier, vérifier qu'aucune erreur « Le serveur a refusé un changement » n'apparaît) ; les
+  rendez-vous déjà en cache ne recevront leur `SEQUENCE` qu'à leur prochain changement.
+
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
 Quatre chantiers, chacun dans son commit, à la suite d'un audit de l'éditeur HTML.
