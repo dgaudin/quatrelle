@@ -314,3 +314,27 @@ fn removing_a_cancelled_meeting_takes_the_cancellation_and_its_invitations() {
     assert!(listed(&s, 3), "the later invitation stays");
     done(s);
 }
+
+/// A colleague's shared calendar holding the meeting at a newer version than the user's own copy
+/// isn't the version answered: the update the user hasn't seen stays.
+#[test]
+fn a_colleagues_copy_ahead_doesnt_move_an_unseen_update() {
+    let mut s = sample_session("answered-colleague");
+    let m = meeting("Mix review", 2);
+    in_calendar(&mut s, WORK, &format!("{WORK}review.ics"), m.clone());
+    {
+        let theirs = "shared:zoe@soundlab.example";
+        let p = s.pim_mut("sample");
+        p.calendars.insert(0, CalendarInfo { id: theirs.into(), name: "Zoe".into(), ..Default::default() });
+        let copy = StoredEvent { calendar: theirs.into(), href: "zoe-item".into(), event: meeting("Mix review", 3), ..Default::default() };
+        p.events.insert(0, copy);
+    }
+    put(&mut s, "INBOX", 2, ANA, "Mix review", "REQUEST", &[meeting("Mix review", 2)], NOW);
+    put(&mut s, "INBOX", 3, ANA, "Updated: Mix review", "REQUEST", &[meeting("Mix review", 3)], NOW);
+    s.run("folder.open", &json!({"account": "sample", "folder": "INBOX"})).unwrap();
+    let r = s.run("event.respond", &json!({"uid": m.uid, "answer": "accepted"})).unwrap();
+    assert_eq!(r["moved"], 1, "{r}");
+    assert!(!listed(&s, 2), "the version answered goes");
+    assert!(listed(&s, 3), "the update not seen yet stays");
+    done(s);
+}
