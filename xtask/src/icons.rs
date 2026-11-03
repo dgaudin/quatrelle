@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! `cargo xtask icons`: render Quatrelle's app icon into `assets/app-icon/`.
 //!
 //! The icon is drawn here, from the geometry below, so it is Quatrelle's own and every size comes

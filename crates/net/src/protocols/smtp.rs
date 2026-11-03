@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! Message submission (RFC 6409) through `lettre`: implicit TLS on 465 (preferred, RFC 8314),
 //! STARTTLS on 587, or plain only for local test servers.
 

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! Appointments dragged to another time, as Outlook's calendar has it: a chip's body moves it
 //! (the day from where the pointer is, the time snapped to the quarter hour; in the month and
 //! the all-day strip, to another day as long as it was), its bottom edge changes when it ends

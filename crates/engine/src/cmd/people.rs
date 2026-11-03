@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! The contacts field's commands: suggestions as a name is typed, and Check Names for any field.
 
 use quatrelle_model::addr::{Accepts, valid_item_id};

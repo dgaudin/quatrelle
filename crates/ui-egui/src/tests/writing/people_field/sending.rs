@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Send and the contacts field (`PeopleFields::gate_send`, `send_when_resolved`, `gate_meeting`):
 //! the names still being resolved, the choice dialog, a contact group expanded first, the
 //! directory's timeout, and recipients left out; and what the field's place takes (a meeting's

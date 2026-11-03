@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! Outlook's Appointment Recurrence: how often it repeats (every few days or every working day,
 //! weekly on some days, monthly on a day or on the nth weekday, yearly the same ways) and until
 //! when (no end, after so many times, by a date), kept as the event's RRULE (RFC 5545 §3.3.10),

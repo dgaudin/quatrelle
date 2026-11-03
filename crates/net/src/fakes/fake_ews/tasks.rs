@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! Exchange's part in a task written: a Completed status sets Outlook's "complete" flag
 //! (`IsComplete`, PidLidTaskComplete), a status put back leaves it as it was (as a real Exchange
 //! did: a task un-ticked elsewhere stayed struck through in Outlook), and the flag and the

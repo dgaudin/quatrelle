@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! Tests of the Webex client, over the fake server.
 
 use std::sync::atomic::{AtomicBool, Ordering};

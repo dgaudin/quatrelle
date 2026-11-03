@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! Engine tests: a big message's text ahead of the whole of it.
 
 use std::sync::Arc;

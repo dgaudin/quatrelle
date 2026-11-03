@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! An account's worker: how much space each folder takes on the server and the mailbox's limits
 //! (Outlook's Folder Size, Server Data), on the second connection so it never waits behind a sync.
 

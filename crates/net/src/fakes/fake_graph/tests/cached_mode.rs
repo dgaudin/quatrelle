@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Mail kept as Outlook's Cached Exchange Mode keeps it, over the fake Graph server: what came in
 //! the time kept, older mail let go with its source, every message kept downloaded whole.
 

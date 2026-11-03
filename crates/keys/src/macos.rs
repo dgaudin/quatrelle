@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! Identities in the macOS Keychain (a certificate with its private key: one imported there, a
 //! company's, or a smart card macOS reads itself), used where they are through the Security
 //! framework: `SecKeyCreateSignature` (PKCS #1 v1.5 or X9.62 over the SHA-256 digest) and

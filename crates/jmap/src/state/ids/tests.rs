@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 use super::*;
 
 /// An id shaped like Exchange's: a mailbox's bytes, then a folder's and a message's numbers.

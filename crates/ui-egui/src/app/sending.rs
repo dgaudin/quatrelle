@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! Sending once the names are known: a message's Send or a meeting's, or a dialog's OK, held
 //! while its fields' names are resolved and its contact groups expanded
 //! (`PeopleFields::gate_send`, `PeopleFields::gate_meeting`, `PeopleFields::gate_dialog`), then

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! The servers an account trusts: its password or sign-in goes only to its own servers, the
 //! sites of their domains, and the other domains the user allowed. A server that proposes
 //! another one (Autodiscover, a calendar's discovery, JMAP's session) is asked about first; these

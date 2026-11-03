@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Big data files, on demand: making one, and importing it the way the app does, timed. Both are
 //! ignored tests (they take minutes and gigabytes), run by hand:
 //!

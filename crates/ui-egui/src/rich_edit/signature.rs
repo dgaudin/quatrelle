@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! A signature written in HTML in the message being written: the character it stands on
 //! ([`rich::SIGNATURE`]) gets its room in the text, and it's drawn there as it's sent (its layout:
 //! a logo beside the name), over the text but out of its way (clicks go to the text).

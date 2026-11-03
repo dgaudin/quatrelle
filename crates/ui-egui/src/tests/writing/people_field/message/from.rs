@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! From's other address (`reading/sender.rs`): a one-entry contacts field in the From menu, a
 //! person, a shared mailbox or a list, checked on Ctrl+K and never as it's typed.
 

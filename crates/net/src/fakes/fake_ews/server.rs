@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! The fake EWS server on localhost: connections kept open, NTLM or Basic sign-in, and each request routed to the data.
 
 use std::io::{BufRead, BufReader, Read, Write};

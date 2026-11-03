@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Finding events: the calendar's search, over what's kept here (offline, as mail search is), in
 //! every calendar shown or the one asked for. A recurring series is found once, at its next
 //! occurrence (or, when it's over, its last).

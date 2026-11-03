@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! A message's text first, from Microsoft Graph: its body, headers and the list of its files
 //! without their bytes, in one request, to read while its whole source comes. Graph gives no
 //! message sizes, so every message with files can come this way.

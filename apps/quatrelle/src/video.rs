@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Video thumbnails: a frame from ffmpeg when it's installed, otherwise from the system's own
 //! thumbnailer (the Windows Shell, macOS Quick Look, or a Linux video thumbnailer), which decodes
 //! with the codecs the system has. Every tool runs as a separate process, stopped after a while.

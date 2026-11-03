@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! The cache kept between visits, in the browser's IndexedDB: one object store of files by their
 //! path in the cache (`a1/folders.json`, `a1/f…/3/12.eml`), mirrored from the in-memory cache's
 //! changes. Passwords are never in the cache, so never here.

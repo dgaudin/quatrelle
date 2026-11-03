@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Notes, as Outlook's Notes module: coloured sticky notes, written straight onto. A click on a
 //! note writes on it (the text is saved when the note is left); right-click gives its colours
 //! and Delete. Exchange accounts keep them in the mailbox's Notes folder, others on this computer.

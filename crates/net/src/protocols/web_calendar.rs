@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! Calendars subscribed to by their links (issue #7): an iCal file read over HTTP(S), asked only
 //! when it changed since the version kept (`If-None-Match`, `If-Modified-Since`), size capped.
 

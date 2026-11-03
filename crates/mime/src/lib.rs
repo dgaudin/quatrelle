@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Quatrelle MIME handling.
 //!
 //! * [`summary_from_header`] turns a header block (what sync downloads for every message) into

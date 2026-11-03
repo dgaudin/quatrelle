@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! Colour emoji, drawn from the system's emoji font.
 //!
 //! egui draws text from outlines in the text's colour, so an emoji from its own fonts is a line

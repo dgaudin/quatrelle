@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! What the window asks of the desktop (`Services`): the clock and the system's style and fonts,
 //! files and web addresses opened with the system's apps, the clipboard, files dragged out of
 //! the window, notifications, and video frames.

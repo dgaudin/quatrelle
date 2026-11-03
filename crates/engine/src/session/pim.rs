@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Calendar and People: each account's events and contacts, kept in its cache (`pim.json`).
 //! Accounts whose server offers CalDAV / CardDAV sync them (see `net::dav`); the others, and the
 //! sample mailbox, keep a calendar and an address book on this computer.

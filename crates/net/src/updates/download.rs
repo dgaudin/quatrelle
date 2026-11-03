@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Downloading an update's installer so that nothing fetched is lost: the bytes go to a partial
 //! file as they come, and a download cut off (the connection gone, Quatrelle closed) carries on
 //! from there with an HTTP range request (RFC 9110 §14), in this run or the next.

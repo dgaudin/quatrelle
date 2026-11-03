@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! The envelope in the notification area: Outlook shows one while mail that arrived in an Inbox
 //! is unread, and clicking it opens the Inbox. The app draws it; the session says when.
 

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Portable mode (issue #4): a marker file beside the executable ([`MARKERS`]) keeps everything
 //! Quatrelle writes in `<exe dir>/QuatrelleData`: the account list, the window's state, the log
 //! and the accounts' data files, so a copy on a USB stick leaves nothing in `%APPDATA%`,

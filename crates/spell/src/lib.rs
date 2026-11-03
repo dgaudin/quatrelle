@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! Spelling for the composer: Hunspell dictionaries, read natively (no C library), French and
 //! English built in, and any the system has (German, Spanish…) added by the caller.
 //!

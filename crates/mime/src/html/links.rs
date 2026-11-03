@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! Web and mail addresses written out in a message's text (`https://…`, `www.…`, `name@host`),
 //! and network shares (`\\server\share\folder`, Windows' way of naming a file on another
 //! computer): found so they open as links do, the way Outlook makes them links though the

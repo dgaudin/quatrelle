@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! An event's notes as they read: links under their words, addresses as links (Exchange's and Google's invitations).
 
 /// Most web addresses taken from an event's notes.

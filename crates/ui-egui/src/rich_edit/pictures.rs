@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! Pictures in the message being written, at the size they're sent (from upstream b5f14ee and
 //! 865a712): a picture shows at its width (its own, else the one it was given), its shape kept,
 //! never wider than the text. Clicked, it's selected (Delete removes it); the handle at its

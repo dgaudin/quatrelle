@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! A plain-text message as it reads: selectable as a whole, the web and mail addresses written
 //! in it (`https://…`, `www.…`, `name@host`) shown as links and opened with a click, as
 //! Outlook makes them links.

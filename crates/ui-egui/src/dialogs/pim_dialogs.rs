@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! The event and contact forms: what they share (their rows, fields and headings), the event
 //! form in `event` (with its Room Finder in `rooms`, its Scheduling Assistant in `scheduling`,
 //! its address book in `attendees` and its Webex meeting in `webex`), the contact form in

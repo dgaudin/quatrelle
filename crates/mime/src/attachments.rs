@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! A message's attachments: the MIME parts that are files, and the files inside an Outlook
 //! `winmail.dat` (issue #18), listed and read by one index.
 

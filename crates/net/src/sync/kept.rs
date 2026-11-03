@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! What a folder keeps as Outlook's Cached Exchange Mode does: the mail the server received in
 //! the last [`SyncOptions::since_days`], and what a search of the server brought in.
 

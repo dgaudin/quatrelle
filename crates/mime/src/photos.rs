@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! Photos leave without saying where they were taken. A phone writes the place into every
 //! picture it takes (the GPS block of its EXIF data, often an XMP copy of it too), and a photo
 //! sent as it is tells every recipient where its sender lives or was standing.

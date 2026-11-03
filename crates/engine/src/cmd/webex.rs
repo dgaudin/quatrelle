@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! Commands: Webex scheduled meetings (File › Options › Calendar and the appointment window).
 //! The engine only asks: the worker's thread calls Webex, and its answers wait in
 //! [`Session::webex_take_answer`] for the window that asked.

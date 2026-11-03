@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! How fast a calendar ticked shows: a big one read over several connections, each of those
 //! ticked together shown as soon as it's read, and a shared mailbox without a calendar asked
 //! about once (29/10: a colleague's calendar ticked showed a quarter of a minute later).

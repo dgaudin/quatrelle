@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! The Scheduling Assistant: a day's hours, a row each for the organizer, the guests and the
 //! rooms, their busy hours as the server (or the calendars kept here) has them, and the
 //! meeting drawn over them — clicked or dragged to another time, the start and end follow.

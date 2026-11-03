@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Junk Email lists: blocked senders, whose mail goes to Junk as it arrives, and safe senders,
 //! whose mail is taken back out of Junk (and whose pictures load). An entry is an address or a
 //! whole domain (`@example.com`).

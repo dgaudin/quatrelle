@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Folder synchronisation (RFC 4549 §4.3, with CONDSTORE from RFC 7162).
 //!
 //! For each folder, the cache keeps UIDVALIDITY, UIDNEXT, HIGHESTMODSEQ and the summaries.

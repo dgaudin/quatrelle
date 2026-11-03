@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! An account's worker: the rooms its server offers and when people and rooms are busy, for a
 //! meeting being written, and its address book: the people it has for a name, and the
 //! certificates it keeps, for a message to be encrypted (on the second connection, so they never

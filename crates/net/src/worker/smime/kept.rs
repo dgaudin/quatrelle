@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! What the system's keychain keeps of an account's certificates: the one that signs and
 //! encrypts (`smime`), and the older ones kept to read mail encrypted to them (issue #6: a
 //! certificate renewed, mail sent to the last one still has to open). Each older one is an entry

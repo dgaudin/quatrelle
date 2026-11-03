@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! A newer Quatrelle on its way: the bar and the notification when it's ready, and what closing
 //! says about it.
 

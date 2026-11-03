@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! A client for Graph's chat API (v1.0): the signed-in user, chats, their members and
 //! messages, posting and editing text, reactions, soft deletes, marking a chat read, and
 //! counting the bytes of a file shared in a chat.

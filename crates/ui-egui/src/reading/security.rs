@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! The reading pane: how a message was protected (S/MIME), said above it in Quatrelle's own
 //! colours, outside anything the message itself draws, so a message can't pass for signed.
 

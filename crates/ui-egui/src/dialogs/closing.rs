@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! Dialogs: what closing Quatrelle would leave behind (messages being written, what online-only
 //! accounts hold in memory, an update about to be installed or still downloading).
 

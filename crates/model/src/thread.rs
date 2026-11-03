@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Conversation threading: Jamie Zawinski's algorithm (the one behind IMAP `THREAD=REFERENCES`,
 //! RFC 5256), followed by Outlook-style grouping of replies that lost their references but share
 //! a subject.

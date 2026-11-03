@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! Quatrelle S/MIME (RFC 8551): the cryptography under signed and encrypted mail, with the MIME
 //! around it left to `quatrelle-mime`.
 //!

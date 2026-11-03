@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! The step 0 check: what a user runs on their own Microsoft 365 account to learn whether
 //! Graph serves their Teams chats, before anything else is built on it.
 //!

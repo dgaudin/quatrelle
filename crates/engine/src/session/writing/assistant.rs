@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! The session: the language model set in Options (an OpenAI-compatible server), asked about the
 //! message being read; its answer is shown above it.
 

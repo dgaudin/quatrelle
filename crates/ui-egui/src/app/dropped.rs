@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! Files dropped on the main window where nothing is being written: a new message with them
 //! attached, as Outlook starts one (from upstream 865a712). Files dropped on a message being
 //! written are its own (`reading::compose`), and files copied in a file manager are attached as

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! A message's text first: its body, headers and the list of its files, without their bytes, from
 //! one `GetItem`, so it can be read while its whole source comes.
 

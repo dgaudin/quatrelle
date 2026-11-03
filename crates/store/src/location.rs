@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Where Quatrelle keeps its things, and moving its data files (as Outlook moves a `.pst`).
 //!
 //! As Outlook keeps each account in a `.pst` in Documents\Outlook Files and its settings

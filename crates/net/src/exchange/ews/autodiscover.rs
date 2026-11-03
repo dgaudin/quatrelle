@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! EWS: Autodiscover — a server's address found from an email address, and what its answer says about a mailbox.
 
 use quatrelle_model::addr::trust::{Trust, site, url_host};

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! Moving appointments (the calendar's drag and drop): the whole event, or one occurrence of a
 //! recurring one, which becomes an instance of its own (`RECURRENCE-ID`, RFC 5545 §3.8.4.4);
 //! and how the guests of a meeting the user organizes hear of a change.

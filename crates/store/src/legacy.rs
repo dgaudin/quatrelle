@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! The names Quatrelle had when it was forked from MailCraft, read so a mailbox, its settings
 //! and its passwords stay where they were. Everything else uses the new names: this is the only
 //! place the old ones are written.

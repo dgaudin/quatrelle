@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! `cargo xtask sizes`: files and folders stay small enough to read.
 //!
 //! Every Rust file is at most [`MAX_LINES`] lines, and every folder holds at most
@@ -5,11 +7,14 @@
 //! What was over a limit when the rule came in is listed in `xtask/sizes.txt` with its size
 //! then: it may shrink, never grow, and `--update` only ever lowers those figures (dropping
 //! what's back within the limits). Nothing can be added to the list: a new file or folder
-//! meets the limits outright. Vendored code (`vendor/`) is someone else's and isn't counted.
+//! meets the limits outright. Vendored code (`vendor/`) is someone else's and isn't counted, and
+//! neither is a file's licence-and-authors header ([`counted_lines`]).
 
 use std::collections::BTreeMap;
 use std::path::Path;
 use std::process::Command;
+
+use crate::authors;
 
 /// The most lines in one Rust file.
 pub const MAX_LINES: usize = 1000;
@@ -33,11 +38,17 @@ fn measure(root: &Path) -> Result<Sizes, String> {
     for f in String::from_utf8_lossy(&out.stdout).lines().filter(|f| !f.starts_with("vendor/")) {
         // Listed but deleted from the working tree: not there to count.
         let Ok(text) = std::fs::read_to_string(root.join(f)) else { continue };
-        files.insert(f.to_string(), text.lines().count());
+        files.insert(f.to_string(), counted_lines(&text));
         let dir = f.rsplit_once('/').map_or(".", |(d, _)| d);
         *dirs.entry(format!("{dir}/")).or_default() += 1;
     }
     Ok((files, dirs))
+}
+
+/// A file's line count without its licence-and-authors header (`xtask/src/authors.rs`): the
+/// header is the same everywhere and must not push a file over its limit or its budget.
+pub fn counted_lines(text: &str) -> usize {
+    text.lines().count().saturating_sub(authors::header_len(text))
 }
 
 /// `path count` lines (`#` comments and blank lines skipped).
@@ -160,5 +171,18 @@ mod tests {
         // Never raised, never added.
         let same = lowered(&map(&[("a.rs", 1600), ("z.rs", 5000)]), &map(&[]), &budget);
         assert_eq!(same, map(&[("a.rs", 1500)]));
+    }
+
+    /// The licence-and-authors header (SPDX line and copyright lines) isn't counted.
+    #[test]
+    fn the_header_is_not_counted() {
+        let body = "//! Doc.\nfn f() {}\n";
+        let with = |head: &[&str]| format!("{}\n{body}", head.join("\n"));
+        assert_eq!(counted_lines(body), 2);
+        assert_eq!(counted_lines(&with(&[authors::SPDX, authors::FORK])), 2);
+        assert_eq!(counted_lines(&with(&[authors::SPDX, authors::UPSTREAM, authors::FORK])), 2);
+        // A copyright-looking line without the SPDX line first is just a line.
+        assert_eq!(counted_lines(&with(&[authors::FORK])), 3);
+        assert_eq!(counted_lines(""), 0);
     }
 }

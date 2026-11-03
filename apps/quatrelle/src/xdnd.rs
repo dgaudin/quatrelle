@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Dragging a file out of the window on Linux and the BSDs under X11: Quatrelle is the source of
 //! an XDND drag (the freedesktop.org drag-and-drop protocol, version 5), offering the file as
 //! `text/uri-list`. The drag runs on a connection of its own (x11rb, safe Rust): it follows the

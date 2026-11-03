@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! Dialogs: Folder Size, as Outlook's: how much space each of an account's folders takes on this
 //! computer (Local Data) and on its server (Server Data), with the mailbox's limits.
 

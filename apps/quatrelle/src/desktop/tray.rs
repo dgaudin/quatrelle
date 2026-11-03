@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! Quatrelle's icon in the notification area (`Services::show_tray`): there while closing the
 //! window leaves Quatrelle running, and the envelope Outlook shows while new mail is unread: the
 //! icon, an envelope already, with a red dot, its tip saying how many messages. Clicked, it

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! Which servers an account's credentials may reach.
 //!
 //! A server belongs to a **site**: its registrable domain (`api.fastmail.com` → `fastmail.com`,

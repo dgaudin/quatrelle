@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! The session: accounts, the current view and its message list, the open message, the message
 //! being written, preferences, and the queue of jobs for the network layer.
 

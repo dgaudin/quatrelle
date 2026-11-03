@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! Voting buttons: the choices a sender offers ("Yes", "No"…), each recipient answering with one.
 //!
 //! Exchange keeps them in a binary property of the message, the verb stream (`PidLidVerbStream`,

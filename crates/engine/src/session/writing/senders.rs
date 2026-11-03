@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Who a message is from, as Outlook's From button offers it: the account's own address, a
 //! mailbox it opens (a shared one), or another address it may send from. Exchange sends as that
 //! address, or on its behalf, as the account is allowed to; other servers decide for themselves.

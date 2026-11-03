@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! An Outlook data file (`.pst`) as the user picks it to import: read into an empty cache.
 //!
 //! Random bytes rarely get past a `.pst`'s header, so most inputs damage a good file instead:

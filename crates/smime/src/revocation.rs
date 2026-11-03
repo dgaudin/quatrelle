@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! Revocation: whether a certificate's authority withdrew it before it ran out (a stolen key, a
 //! mistaken issue). The certificate says where to ask: a list of the ones withdrawn (CRL, RFC 5280
 //! §5, its `cRLDistributionPoints`) or a responder that answers for one certificate (OCSP, RFC 6960,

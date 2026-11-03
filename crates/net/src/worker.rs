@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Per-account workers.
 //!
 //! [`Pool`] owns one thread per account. Each thread keeps an IMAP connection, runs the

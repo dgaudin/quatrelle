@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Each icon's line drawing on a 16-unit grid, for when its picture can't be rendered.
 
 use egui::{Color32, Painter, Pos2, Rect, Stroke, pos2};

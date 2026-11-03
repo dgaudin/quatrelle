@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! The calendar's search (issue #33): what's typed in the search box in the Calendar lists the
 //! events it finds in place of the days, as Outlook's calendar search does: each with its date
 //! and time, subject, place and calendar's colour; upcoming ones first, then past ones, or only

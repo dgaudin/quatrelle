@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Finding events (issue #33): what's typed in the calendar's search box.
 //!
 //! As the mail search box reads it: bare words match anywhere (as word prefixes, so `budg` finds

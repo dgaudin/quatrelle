@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 use super::*;
 
 /// The fixtures' time: Riley's certificate was issued on 2026-10-24, last year's (riley-2025) on

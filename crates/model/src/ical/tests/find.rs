@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! Issue #33: the calendar's search box, read and matched against events.
 
 use super::*;

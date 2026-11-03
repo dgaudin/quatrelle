@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! An in-memory Microsoft Graph mail API on localhost, for tests: mail folders (well-known
 //! names, children, paging), messages (list, get, patch, move, delete, `$value`, made from
 //! MIME), `sendMail`, mailbox settings and JSON batches, with a bearer token.

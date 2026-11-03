@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! The engine is sans-I/O: it never touches the network. It queues [`Job`]s, the network layer
 //! runs them (one worker per account) and answers with [`Event`]s, which the engine applies.
 //! The same split lets tests drive the engine with scripted events, and lets a web build plug in

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! The mail providers Quatrelle knows by their servers — who signs in through the browser
 //! rather than with a password, Microsoft's own addresses and its rules — and what Exchange
 //! Online needs: Graph's address, Autodiscover, and an account's own app registration.

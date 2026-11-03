@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Bringing a folder's cache up to date: what's kept of it (the newest, of the mail received in
 //! the time kept), what falls out, and messages' sources downloaded ahead of reading.
 

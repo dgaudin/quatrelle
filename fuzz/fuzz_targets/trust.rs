@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! The URLs and hosts servers hand out (DAV hrefs, an Autodiscover's `EwsUrl`, a redirect's
 //! `Location`): the host an account's credentials would go to, and its site.
 #![no_main]

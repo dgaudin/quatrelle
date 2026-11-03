@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! The Reminders window: calendar reminders that have come due (Outlook's own window lists them
 //! the same way), each to dismiss, snooze or open; and a desktop notification when one comes.
 //! A window of its own, over every other, when the option says so (the main window minimized

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Exporting an account's mail to an Outlook data file (`.pst`).
 //!
 //! The file is written with the MIT-licensed `outlook-pst-rw` crate (MS-PST, Unicode format):

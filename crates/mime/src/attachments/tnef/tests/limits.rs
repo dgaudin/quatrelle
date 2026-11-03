@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! What a crafted `winmail.dat` can cost: the output, the memory and the passes over it stay
 //! bounded however it's built (measured on crafted inputs, review of 2026-10-31).
 

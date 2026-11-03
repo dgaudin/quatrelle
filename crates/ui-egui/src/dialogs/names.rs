@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Outlook's address book: what's typed to find someone, the book looked in and who's found,
 //! shared by Select Names (a message's To, Cc and Bcc, here) and Select Attendees and Resources
 //! (a meeting's, over its window). An Exchange account's directory (the Global Address List) is

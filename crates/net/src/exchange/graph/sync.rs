@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Graph: the sync — the folder list, one folder's messages brought up to date, the server searched, sources, and changes applied.
 
 use std::collections::HashSet;

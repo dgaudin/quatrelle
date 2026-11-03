@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Calendars, contacts and notes over EWS: the account's own, other people's, and Outlook's calendar groups.
 
 use super::*;

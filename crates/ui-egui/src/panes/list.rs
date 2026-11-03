@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! The message list: date headings, rows with avatar, sender, subject and preview, unread and
 //! flag markers, hover actions, multi-select (Ctrl/Shift), drag to a folder, right-click menu.
 //! Only visible rows are laid out, so long folders scroll smoothly.

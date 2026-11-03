@@ -63,6 +63,14 @@ A mail client that crashes loses drafts and trust. **This outranks feature work.
   `deny.toml` (cargo-deny, `.github/workflows/deny.yml`) checks licences, advisories and sources.
   Named exceptions there are the owner's decision (spellbook's MPL-2.0, 2026-10-26).
 
+## Authors
+- Every `.rs` file starts with `// SPDX-License-Identifier: MIT OR Apache-2.0`, then one or both of
+  `// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors` (the upstream code the
+  fork started from) and `// Copyright (c) 2026 Didier Gaudin`, in that order; the file follows.
+- A new file gets the SPDX line and "Didier Gaudin". Code taken from upstream into a file adds the
+  MailCraft line (picks are committed with their upstream author).
+- `cargo xtask authors` enforces it (part of `cargo xtask ci`); `NOTICE` says the same for the project.
+
 ## Architecture
 | Layer | Crate | Job |
 |---|---|---|

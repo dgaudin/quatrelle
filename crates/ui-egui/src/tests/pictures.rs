@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! UI tests: pictures in the message being written, at their size and resized (from upstream
 //! b5f14ee and 865a712).
 

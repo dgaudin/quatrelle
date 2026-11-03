@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! JMAP (RFC 8620 core, RFC 8621 mail): Quatrelle's second transport, behind the same
 //! [`Job`](quatrelle_model::Job)/[`Event`](quatrelle_model::Event) interface as IMAP. Portable:
 //! it runs over any [`Http`] client, the desktop's own (through `quatrelle-net`, which waits on

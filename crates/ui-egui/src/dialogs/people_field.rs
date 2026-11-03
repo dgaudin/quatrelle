@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! The contacts field's glue with the session. [`PeopleFields`] keeps every field's state by
 //! [`FieldId`] (the message's To, Cc, Bcc and Replies to, and From's other address; the Select
 //! Names dialog's rows; a meeting's lines and its Select Attendees' rows; a dialog's: Add

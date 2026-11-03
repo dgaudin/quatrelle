@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! The worker pool over the fake IMAP server: settings and rules, working offline, the Outbox, connections, end to end over TCP.
 
 use super::*;

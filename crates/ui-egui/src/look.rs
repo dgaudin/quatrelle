@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! How Quatrelle looks and moves: colours and type, icons drawn in code, widgets, motion, fonts,
 //! thumbnails, and right-to-left text.
 

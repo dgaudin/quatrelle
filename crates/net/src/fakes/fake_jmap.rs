@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! An in-memory JMAP server (RFC 8620/8621, the parts Quatrelle uses) on localhost, for tests:
 //! the session, `Mailbox/get|set`, `Email/query|get|set|import`, `Identity/get`,
 //! `EmailSubmission/set`, back-references, blob download and upload, Basic authentication, and

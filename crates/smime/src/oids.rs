@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! The object identifiers S/MIME is written with (RFC 5652, 8551, 5280, 3447/8017, 5480,
 //! 3565, 5084).
 

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! Quatrelle's private keys held where it can't read them, signing and decrypting S/MIME mail
 //! there through [`quatrelle_smime::PrivateKey`]:
 //!

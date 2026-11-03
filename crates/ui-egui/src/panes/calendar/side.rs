@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! The calendar's side pane: a month (or several) to jump around in, then the calendars in their
 //! groups; and beside the mail, Outlook's To-Do bar.
 

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! Issue #7: calendars subscribed to by their links (iCal, `webcal://`), read-only, read again
 //! now and then; not the account's own (set aside away from the calendar, no reminders).
 

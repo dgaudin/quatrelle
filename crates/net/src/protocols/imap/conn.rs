@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! Response framing and the command loop: a response is one line plus any `{n}` literals it
 //! announces, taken off the buffer only once complete, so a read that times out (IDLE waits in
 //! short slices) never loses half a response. Server input is hostile: a line, a literal and the

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! The Day, Work week and Week views: the days in columns over the hours (each calendar in a
 //! pane of its own when side by side), the all-day events in a strip above, a click on an empty
 //! half hour adding an event there, and appointments dragged to another time ([`super::drag`]).

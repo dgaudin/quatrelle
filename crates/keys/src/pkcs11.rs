@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! Smart cards and tokens through PKCS #11 (OASIS PKCS #11 v2.40 / 3.0): the card's own module
 //! is loaded, the certificates on it that have a private key beside them (the same `CKA_ID`) are
 //! offered, and signing and decrypting happen on the card:

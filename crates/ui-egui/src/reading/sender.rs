@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! The From row of a message being written, as Outlook's: the button offers each account's own
 //! address, the mailboxes it opens (a shared one) and the other addresses it sent from, and
 //! another address: a one-entry contacts field (a person, a shared mailbox or a list), whose name

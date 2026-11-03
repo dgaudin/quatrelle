@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Calendar arithmetic for the message list: date groups (Today, Yesterday, Last week…) and the
 //! short and long times shown for a message. Pure integer maths on Unix seconds plus the local
 //! time zone (its offset on the date shown), so it works the same everywhere, wasm included.

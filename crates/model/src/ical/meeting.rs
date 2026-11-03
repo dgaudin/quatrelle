@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! How a meeting shows in a calendar and what it asks of its guests, as Outlook sets them: Show As
 //! (`TRANSP`, and Microsoft's `X-MICROSOFT-CDO-BUSYSTATUS`, which says more), Private (`CLASS`),
 //! whether answers are asked for (each guest's `RSVP`) and whether new times may be proposed

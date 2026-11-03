@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! `QUATRELLE_SCREENSHOT=window.png`: the window saved as a picture once it has settled, then
 //! closed — to look at a change in the window itself (and only it), where the desktop offers no
 //! way to capture one window (GNOME on Wayland).

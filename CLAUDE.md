@@ -63,6 +63,14 @@ A mail client that crashes loses drafts and trust. **This outranks feature work.
   `deny.toml` (cargo-deny, `.github/workflows/deny.yml`) checks licences, advisories and sources.
   Named exceptions there are the owner's decision (spellbook's MPL-2.0, 2026-10-26).
 
+## Authors
+- Every `.rs` file starts with `// SPDX-License-Identifier: MIT OR Apache-2.0`, then one or both of
+  `// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors` (the upstream code the
+  fork started from) and `// Copyright (c) 2026 Didier Gaudin`, in that order; the file follows.
+- A new file gets the SPDX line and "Didier Gaudin". Code taken from upstream into a file adds the
+  MailCraft line (picks are committed with their upstream author).
+- `cargo xtask authors` enforces it (part of `cargo xtask ci`); `NOTICE` says the same for the project.
+
 ## Architecture
 | Layer | Crate | Job |
 |---|---|---|
@@ -86,7 +94,8 @@ A mail client that crashes loses drafts and trust. **This outranks feature work.
 ## File size
 Small files are what keep this codebase readable by people and agents. `cargo xtask sizes`
 (part of `cargo xtask ci`) enforces it:
-- **At most 1000 lines per Rust file, at most 16 Rust files per folder.** Split *before* a file
+- **At most 1000 lines per Rust file, at most 16 Rust files per folder** (a file's licence and
+  authors header isn't counted). Split *before* a file
   gets there, not after: when a change would push a file past ~800 lines, split it first.
 - **Split by topic, not by size:** `foo.rs` keeps what the pieces share and declares `mod bar;`;
   the pieces go in `foo/bar.rs` (modern layout, never `mod.rs`). A type's `impl` can be continued

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! EWS: the master category list, as Outlook keeps it in the mailbox — the categories it offers,
 //! by name and colour (MS-OXOCFG: the `CategoryList` configuration of the Calendar folder).
 

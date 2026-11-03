@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 use quatrelle_model::ical::CalEvent;
 use quatrelle_model::pim::{StoredCard, StoredEvent, Tombstone};
 use quatrelle_model::vcard::Card;

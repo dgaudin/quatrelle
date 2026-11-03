@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Add calendar › From Address Book (Outlook's Open Calendar): the address book above, and its
 //! "Calendar ->" row, a contacts field taking several people. Open waits for the names still being
 //! checked (`app/sending.rs`, `dialog_ok`), then opens each person's calendar: one that opened

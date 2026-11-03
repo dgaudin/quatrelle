@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! Encryption to and from EC keys: `KeyAgreeRecipientInfo` with ephemeral-static ECDH (RFC 5753,
 //! RFC 5652 §6.2.2). The sender makes a key pair for the message, agrees a secret with the
 //! recipient's P-256 or P-384 key, derives a key-encryption key from it (ANSI X9.63, over the

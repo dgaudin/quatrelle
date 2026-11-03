@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! Addresses made to pass for someone else's. A phishing message rarely comes from the bank's own
 //! domain: it comes from one a glance mistakes for it (`paypa1.com`, `rnicrosoft.com`, a Cyrillic
 //! `а` in `аpple.com`, `paypal.com.account-check.ru`), or it writes a trusted address into the

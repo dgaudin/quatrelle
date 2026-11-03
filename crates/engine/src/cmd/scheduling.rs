@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Commands: the rooms to book and when people and rooms are free, for a meeting being written
 //! (Outlook's Room Finder and Scheduling Assistant).
 

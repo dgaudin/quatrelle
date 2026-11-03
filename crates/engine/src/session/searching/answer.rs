@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! The session: a search's answer, carried on while its index grows.
 //!
 //! The window asks for a slice of the index a frame. Looking through the whole index after each

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Exchange Online calendars and contacts through Microsoft Graph, synced into the same calendars
 //! and address books as CalDAV and CardDAV ([`DavSync`], which the engine merges).
 //!

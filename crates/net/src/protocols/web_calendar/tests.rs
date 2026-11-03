@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! Reading a calendar's link from a server on this computer: the calendar with its version, not
 //! again while unchanged, a server's refusal, and an answer too large to keep.
 

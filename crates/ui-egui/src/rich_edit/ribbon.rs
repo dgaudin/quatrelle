@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! The message window's ribbon, as Outlook's: the tabs Message, Insert, Options, Format Text
 //! and Review, each a row of named groups of big buttons (the main window's widgets), with
 //! Save small at the right of the tabs (and in a window Pop in and Discard).

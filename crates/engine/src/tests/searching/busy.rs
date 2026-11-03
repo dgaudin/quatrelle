@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! Engine tests: a search over a big mailbox whose folders keep changing (a busy shared mailbox
 //! on Exchange, its folder list sent again every few seconds), driven a slice at a time as the
 //! window drives it.

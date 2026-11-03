@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Quatrelle's network layer (native builds only).
 //!
 //! * [`stream`]: TCP with timeouts, TLS through rustls (Mozilla's root store), STARTTLS.

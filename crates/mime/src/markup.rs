@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! The formatting marks of the message editor, and what they become when sent.
 //!
 //! The editor keeps plain text with light marks, styled as they are typed; sending turns them

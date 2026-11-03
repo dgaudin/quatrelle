@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Moving an appointment by drag and drop: what Outlook asks before it moves — one occurrence
 //! of a series or the whole series, and whether the guests of a meeting the user organizes are
 //! sent the update — then `event.move`.

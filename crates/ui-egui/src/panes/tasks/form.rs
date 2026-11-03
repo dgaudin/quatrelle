@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! The picked task, written on in place as Outlook's task form has it: its subject, the day it
 //! starts and the day it's due, its status, priority and % complete, its reminder, Private, and
 //! its notes. A choice is saved as it's made; text once it's left.

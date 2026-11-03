@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Calendars and address books on the account's server: CalDAV (RFC 4791) and CardDAV
 //! (RFC 6352) over WebDAV (RFC 4918), found as RFC 6764 describes (an SRV record, then the
 //! domain's `/.well-known/` addresses), signed in with the account's password. Nothing at all

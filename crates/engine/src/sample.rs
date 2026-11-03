@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! The sample mailbox (`quatrelle --sample`): a local-only account full of our own example mail,
 //! so the app can be explored, screenshotted and tested without a server. Every word here is
 //! original; addresses use the reserved `example` domains (RFC 2606).

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! An IMAP server's side of a session: the input is everything the server sends, read by the
 //! client through a run of commands (greeting, CAPABILITY, LOGIN, LIST, SELECT, a folder sync,
 //! STATUS, QUOTA, APPEND, MOVE). Each command reads on after the last one failed, as a

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Typefaces the message editor draws with (Arial, Calibri, Times New Roman…): each one the
 //! system has is read once, asked for by name, and becomes an egui family named after it (and
 //! `<name>-bold` for its bold), with the usual fonts after it for the characters it lacks. One

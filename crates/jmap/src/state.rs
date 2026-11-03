@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! What JMAP sync keeps between runs (states, ids), and messages' summaries from their properties.
 
 use std::sync::Arc;

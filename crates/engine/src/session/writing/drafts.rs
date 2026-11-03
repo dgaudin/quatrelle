@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Drafts: the copies of a message being written kept in Drafts, found again by their
 //! `Message-ID`; a reply written in the reading pane set aside when another message is read, as
 //! Outlook sets it aside, and taken up again; a draft from Drafts carried on; the messages a

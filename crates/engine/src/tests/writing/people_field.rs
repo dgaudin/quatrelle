@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! Engine tests: the contacts field: what an address stands for (rooms, from the room lists),
 //! suggestions, and names resolved for any field (Check Names generalised).
 

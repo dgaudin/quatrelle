@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! A GET whose body goes to a writer as it comes, for a download too big to hold in memory (an
 //! update's installer): the answer's head first, so the caller can choose where the body goes
 //! (a partial file continued, or started again), then its bytes. Hostile input as every answer

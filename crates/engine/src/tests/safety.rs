@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Engine tests: what keeps the user safe as mail comes and goes (photos' places, lookalike
 //! addresses, the checks before sending, trackers, hidden text, replies still owed).
 

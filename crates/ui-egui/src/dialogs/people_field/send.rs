@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! Send and the contacts fields: a send held while its fields' names are resolved and its
 //! contact groups expanded — a message's ([`PeopleFields::gate_send`]), a meeting's
 //! ([`PeopleFields::gate_meeting`]) or a dialog's OK ([`PeopleFields::gate_dialog`]) — and what

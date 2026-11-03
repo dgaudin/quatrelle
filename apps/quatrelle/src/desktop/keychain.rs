@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Passwords and sign-ins in the system keychain, under the app's own name.
 
 use quatrelle_engine::model::AccountConfig;

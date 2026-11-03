@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Engine tests: meeting invitations that change one occurrence, and invitations that mustn't
 //! be applied (from the wrong person, or older than what the calendar holds).
 

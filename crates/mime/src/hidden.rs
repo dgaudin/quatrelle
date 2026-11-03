@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! Text an HTML message carries but doesn't show. A line of it is ordinary (the preview a
 //! newsletter puts first, `display:none`), but paragraphs of it are a trick: words to get spam
 //! past a filter, a different story for the search index than for the reader, or instructions

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Folders: what a folder is for (RFC 6154 special-use roles, or the usual names in many languages
 //! when a server marks none), the mailbox a folder is on, paths below a parent, and the order the
 //! pane lists them in. Mailbox names on the wire are IMAP's modified UTF-7 ([`utf7`]).

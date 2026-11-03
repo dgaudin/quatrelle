@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! The fake EWS server telling of changes as they happen (streaming notifications): `Subscribe`,
 //! and `GetStreamingEvents` answered with a response kept open, a notification sent whenever a
 //! message the subscription covers comes, goes, moves or changes, or a folder is made or deleted.

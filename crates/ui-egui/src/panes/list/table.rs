@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! The message list as a table, as Outlook's: its columns (dragged wider or narrower, kept
 //! with the settings), their headings that sort it, and its rows.
 

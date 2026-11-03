@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! Message ids and their numbers, each id kept small. Exchange's ids are some 150 characters of
 //! base64, 195,000 of them in a large mailbox, and the two tables that looked them up held
 //! 50 MB; they differ from one another in a few bytes only (where the message and its folder

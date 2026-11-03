@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! File › About › Check for updates: Quatrelle's releases, as GitHub lists them; and, for the
 //! test builds' updater (`apps/quatrelle/src/self_update.rs`), fetching an installer (resumably,
 //! [`download`]) and proving it is the one the release lists.

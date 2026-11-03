@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Time zones: the IANA database (built in through `chrono-tz`, so it reads no system files and
 //! works the same everywhere, wasm included) and fixed offsets. A zone turns a local wall-clock
 //! time into Unix seconds and back, with the offset in force on that date (summer time included).

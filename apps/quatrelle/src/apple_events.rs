@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! macOS document opening: an `.eml`, `.ics` or `.vcf` sent to Quatrelle from the Finder
 //! (double-click, Open With, dropped on the Dock tile) or from `open -a Quatrelle invite.ics`.
 //!

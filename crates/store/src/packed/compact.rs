@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! Compacting a data file, as Outlook's Compact Now: the space freed inside it (mail deleted,
 //! folders no longer kept) goes back to the disk. The file is reused as it is written, but it
 //! never shrinks by itself.

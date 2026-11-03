@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! The session: suggestions for a contacts field, from what is already on this computer (the
 //! address book, the directory's answers kept, the room lists and the shared mailboxes opened).
 //! The server is never asked while a name is typed.

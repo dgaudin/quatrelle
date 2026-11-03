@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! How the cache puts files on disk: a file is replaced in one step, so a reader sees the old
 //! contents or the new ones and never half of either, and what Quatrelle writes stays its owner's.
 

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! The browser shell: the eframe web runner, the browser's `Services`, and what the page keeps
 //! between visits: the cache in IndexedDB (local storage when that's unavailable), settings in
 //! local storage.

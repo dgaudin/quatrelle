@@ -1,0 +1,11 @@
+Quatrelle
+Copyright (c) 2026 Didier Gaudin
+
+Quatrelle started as a fork of MailCraft (https://github.com/ZIDAN44/mailcraft),
+Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors.
+
+Quatrelle is dual-licensed under MIT OR Apache-2.0 (see LICENSE-MIT and LICENSE-APACHE).
+
+Each source file names its licence and its authors on its first lines: the ArtCraft Team and the
+MailCraft contributors where the code is MailCraft's, Didier Gaudin where the fork added code, both
+on files that hold both.

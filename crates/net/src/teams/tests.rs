@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! The Teams Graph client against the fake Graph server (and, where the exact request line
 //! matters, against a server that only records what it is sent).
 

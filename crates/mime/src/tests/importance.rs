@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 use super::*;
 
 /// High and low importance, and a read receipt, go out as headers other mail programs read,

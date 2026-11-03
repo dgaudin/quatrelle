@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! An account's worker: signing in and connecting (IMAP, JMAP, Graph, EWS, POP), and what a failure means.
 
 use super::*;

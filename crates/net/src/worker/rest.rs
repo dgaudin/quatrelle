@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! A big Exchange message: its text on the main connection, so it shows at once, and the whole
 //! message on a thread of its own, which nothing waits behind. The thread writes the source only,
 //! as downloading ahead does: it never touches the folder's list, so it can't race a sync saving

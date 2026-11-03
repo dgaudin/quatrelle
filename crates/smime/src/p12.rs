@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! `.p12` / `.pfx` files (PKCS #12, RFC 7292): the private key and the certificates with it.
 //! Read by `p12-keystore`, which checks the file's MAC with the password and opens PBES2 (PBKDF2
 //! with AES, what OpenSSL 3 and newer Firefox write) and the older SHA-1 3DES and RC2-40 bags

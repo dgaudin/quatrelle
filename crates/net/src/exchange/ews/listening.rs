@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Exchange telling of changes as they happen (streaming notifications, Exchange 2010 SP1 and
 //! later), as Outlook's Cached Exchange Mode is told: a subscription to a mailbox's folders, and
 //! an answer the server keeps open, sending a notification whenever something in them changes.

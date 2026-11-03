@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! Search Folders, as Outlook's: a saved search shown as a folder (Unread Mail, Large Mail, mail
 //! from certain people…), its messages found in every folder of every account, except Deleted
 //! Items and Junk, whenever it's opened.

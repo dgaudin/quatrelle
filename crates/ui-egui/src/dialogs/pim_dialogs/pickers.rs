@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Picking a date and a time, as Outlook's appointment window has them: the field can be typed
 //! in, and beside it a month to click a day in, or the hours by the half hour.
 

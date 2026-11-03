@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! File › Info › Security: the account's S/MIME certificate (from a `.p12` or `.pfx` file; its key
 //! stays in the system's keychain) and whether new messages are signed and encrypted.
 

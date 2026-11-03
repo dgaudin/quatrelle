@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Each account in one data file, as Outlook keeps each account in a `.pst`.
 //!
 //! The store's paths stay the same: `<root>/<account>/<path>`. Under this backend everything in

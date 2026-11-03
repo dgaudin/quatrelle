@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! The fake Graph server's Teams routes, asked over plain HTTP: what the Teams client and the
 //! check of the next tasks are tested against.
 

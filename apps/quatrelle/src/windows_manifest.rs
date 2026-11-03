@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! The Windows application manifest embedded in quatrelle.exe (`build.rs`): per-monitor DPI
 //! awareness (V2, with per-monitor V1 for older Windows 10), declared before any code runs, as
 //! PdfCraft does. winit sets it at run time too, but only once the window is being made; anything

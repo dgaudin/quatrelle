@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Organising mail: categories (colour-coded keywords), inbox rules, snoozing, and the
 //! Focused/Other split of the Inbox. Pure data and matching: the engine applies them.
 

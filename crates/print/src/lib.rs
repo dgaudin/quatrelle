@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! A message on paper: laid out on A4 pages and written as a PDF (ISO 32000).
 //!
 //! The installed system font is embedded when the app has one (a TrueType font, as a CID font

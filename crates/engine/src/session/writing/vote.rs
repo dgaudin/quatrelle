@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 Didier Gaudin
 //! Voting buttons: a message's sender offered choices ("Yes", "No"…), and the user answers with
 //! one. The vote goes as a reply that names the choice, for the sender's mail client to count
 //! (Exchange and Microsoft 365 accounts, which keep the choices with the message).
