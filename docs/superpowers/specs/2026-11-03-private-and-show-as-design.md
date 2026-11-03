@@ -40,7 +40,7 @@ account's first writable calendar, which is where invitations and `event.create`
 - The strip at the appointment's left says how its time shows, as Outlook draws it: **Busy** solid in
   its colour (today's look), **Tentative** hatched, **Free** white with its colour's outline, **Out of
   office** purple, **Working elsewhere** dotted. The body stays as today: in its colour, hollow for an
-  unanswered invitation or a cancelled-tentative meeting.
+  unanswered invitation or a meeting whose own status is tentative (`STATUS:TENTATIVE`).
 - A **private** appointment has the Fluent lock (`Icon::Lock`) in its top right corner, the title
   stopping short of it. One with no title (a colleague's private appointment, given without its
   subject) reads "Private appointment" in the grid and in its card, not a blank box.
