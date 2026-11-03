@@ -173,12 +173,14 @@ impl Session {
             return Ok("none");
         }
         if self.server_tells_guests(account) {
-            // The next sync asks the server to send the update (or not to).
+            // The next sync asks the server to send the update. Not sending this one never takes
+            // back what's still to go: a meeting made private before its invitation went out is
+            // still sent to its guests.
             let p = self.pim_mut(account);
             let mut changed = false;
             for e in p.events.iter_mut().filter(|e| e.event.uid == uid && e.event.recurrence_id == occurrence) {
-                changed |= e.notify != send;
-                e.notify = send;
+                changed |= send && !e.notify;
+                e.notify |= send;
             }
             if changed {
                 self.save_pim(account);

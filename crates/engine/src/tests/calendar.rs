@@ -341,15 +341,17 @@ fn exchange_tells_the_guests_itself_and_mail_tells_them_once() {
     assert_eq!(r["told"], "server");
     assert!(!s.take_jobs().iter().any(|j| matches!(j, Job::Send { .. })));
     assert!(stored(&s).notify);
-    // "Save without sending": the server is told to keep quiet.
+    // "Save without sending" before the invitation went: it still goes, with the new time.
     let r = s.run("event.move", &json!({"uid": uid, "start": at + 3600, "send": false})).unwrap();
     assert_eq!(r["told"], "none");
-    assert!(!stored(&s).notify);
+    assert!(stored(&s).notify);
     // Once on the server, the mark is spent.
-    s.run("event.move", &json!({"uid": uid, "start": at, "send": true})).unwrap();
     let pushed = quatrelle_model::pim::StoredEvent { href: "I1".into(), etag: "ck".into(), dirty: false, notify: false, ..stored(&s) };
     s.apply_dav(&id, &quatrelle_model::pim::DavSync { pushed_events: vec![pushed], ..Default::default() });
     assert!(!stored(&s).notify && !stored(&s).dirty);
+    // "Save without sending" then: the server is told to keep quiet.
+    s.run("event.move", &json!({"uid": uid, "start": at, "send": false})).unwrap();
+    assert!(!stored(&s).notify && stored(&s).dirty);
     assert!(s.server_tells_guests(&id) && !s.server_tells_guests("sample"));
     done(s);
 
