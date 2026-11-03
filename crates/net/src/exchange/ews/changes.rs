@@ -114,7 +114,7 @@ pub fn apply_remote(c: &Client, st: &State, op: &Op) -> Result<()> {
             let dest = st.mailbox(to)?.to_string();
             let moving: Vec<String> = ids(keys).into_iter().filter(|(_, from)| from != to).map(|(id, _)| id).collect();
             for chunk in moving.chunks(BATCH) {
-                c.call_all(&format!(
+                c.call_all_present(&format!(
                     "<m:MoveItem><m:ToFolderId>{}</m:ToFolderId><m:ItemIds>{}</m:ItemIds></m:MoveItem>",
                     folder_ref(Some(&dest)),
                     item_ids(chunk)

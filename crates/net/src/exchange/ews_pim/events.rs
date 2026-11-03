@@ -307,6 +307,8 @@ fn appointment(it: &El) -> Option<CalEvent> {
             .map(str::trim)
             .filter(|id| quatrelle_model::ical::valid_webex_id(id))
             .map(str::to_string),
+        // Its version: Outlook raises it at each change of the organizer's.
+        sequence: it.text_of("AppointmentSequenceNumber").and_then(|n| n.trim().parse::<u32>().ok()).unwrap_or(0),
         no_responses: it.text_of("IsResponseRequested").map(str::trim) == Some("false"),
         no_new_times: it.text_of("AllowNewTimeProposal").map(str::trim) == Some("false"),
         my_answer: match it.text_of("MyResponseType").map(str::trim) {

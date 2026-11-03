@@ -228,6 +228,26 @@ fn ones_own_meeting_is_known_by_the_answer_organizer() {
     assert_eq!(e.my_answer, "ACCEPTED", "and it carries the owner's answer");
 }
 
+/// An appointment's version (its sequence number) is read; absent or unreadable is 0.
+#[test]
+fn an_appointment_carries_its_version() {
+    let item = |seq: &str| {
+        format!(
+            "<t:CalendarItem><t:ItemId Id=\"m1\" ChangeKey=\"c\"/><t:Subject>Weekly</t:Subject><t:UID>u-1</t:UID>\
+             <t:Start>2026-10-21T08:00:00Z</t:Start><t:End>2026-10-21T09:00:00Z</t:End><t:CalendarItemType>Single</t:CalendarItemType>{seq}</t:CalendarItem>"
+        )
+    };
+    for (seq, want) in [
+        ("<t:AppointmentSequenceNumber> 3 </t:AppointmentSequenceNumber>", 3),
+        ("", 0),
+        ("<t:AppointmentSequenceNumber>x</t:AppointmentSequenceNumber>", 0),
+    ] {
+        let doc = parse(&item(seq));
+        assert_eq!(event_of(doc.find("CalendarItem").unwrap()).unwrap().sequence, want, "{seq}");
+    }
+    assert!(APPOINTMENT_FIELDS.contains(&"calendar:AppointmentSequenceNumber"));
+}
+
 /// Many items are asked in batches alike, as many as give each connection the same share; the
 /// log says what each did.
 #[test]
