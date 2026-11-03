@@ -413,13 +413,29 @@ impl Body<'_> {
         let t = st.tokens;
         if let Some(src) = &sp.image {
             self.shown.push(src.clone());
-            if let Some(pic) = src.strip_prefix("cid:").and_then(|cid| self.inline.iter().find(|p| p.cid == cid)) {
-                carried_picture(st, ui, pic, width, sp.image_size, self.zoom);
-                return;
-            }
-            if !picture(self.s, st, ui, self.key, self.p, src, self.allowed, width, sp.image_size, self.zoom, self.acts) {
-                let alt = if sp.text.trim().is_empty() { "picture" } else { sp.text.trim() };
-                ui.label(RichText::new(format!("[{alt}]")).color(t.faint));
+            let r = if let Some(pic) = src.strip_prefix("cid:").and_then(|cid| self.inline.iter().find(|p| p.cid == cid)) {
+                carried_picture(st, ui, pic, width, sp.image_size, self.zoom)
+            } else {
+                match picture(self.s, st, ui, self.key, self.p, src, self.allowed, width, sp.image_size, self.zoom, self.acts) {
+                    (true, r) => r,
+                    (false, _) => {
+                        let alt = if sp.text.trim().is_empty() { "picture" } else { sp.text.trim() };
+                        let text = format!("[{alt}]");
+                        // Inside a link, its place is the link's.
+                        Some(match &sp.link {
+                            Some(_) => ui.add(egui::Link::new(RichText::new(text).color(t.accent))),
+                            None => ui.label(RichText::new(text).color(t.faint)),
+                        })
+                    }
+                }
+            };
+            // A picture in a link follows it, as in Outlook and browsers.
+            if let (Some(link), Some(r)) = (&sp.link, r) {
+                let shown = if self.s.prefs.clean_links { mime::clean_link(link) } else { link.clone() };
+                let r = r.on_hover_cursor(egui::CursorIcon::PointingHand).on_hover_text(shown);
+                if r.clicked() {
+                    self.acts.push(Action::OpenUrl(link.clone()));
+                }
             }
             return;
         }

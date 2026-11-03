@@ -7,7 +7,8 @@
 use super::*;
 
 /// Draw one picture of an HTML message at the size the message sets (`size`), in `width`, `zoom`
-/// times (wider than that when zoomed in); `false` when it can't be shown (yet). Right-clicked, it
+/// times (wider than that when zoomed in); `false` when it can't be shown (yet), else with the
+/// picture's response when it is drawn (a link around it is followed from that). Right-clicked, it
 /// is copied — whole, not as shrunk to fit — or, one sent with the message, saved.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn picture(
@@ -22,17 +23,17 @@ pub(super) fn picture(
     size: Option<mime::ImageSize>,
     zoom: f32,
     acts: &mut Vec<Action>,
-) -> bool {
+) -> (bool, Option<egui::Response>) {
     let (tex, own) = match picture_texture(s, st, ui.ctx(), key, p, src, allowed, zoom) {
         Pic::Ready(tex, own) => (tex, own),
         Pic::Loading => {
             ui.spinner();
-            return true;
+            return (true, None);
         }
-        Pic::Missing => return false,
+        Pic::Missing => return (false, None),
     };
     // Tracking pixels and spacers that set no size: nothing to see.
-    let Some(at) = shown_size(own, size, width) else { return true };
+    let Some(at) = shown_size(own, size, width) else { return (true, None) };
     let r = ui.add(egui::Image::new(&tex).fit_to_exact_size(at * zoom).maintain_aspect_ratio(false).sense(Sense::click()));
     r.context_menu(|ui| {
         if ui.button(tl!("Copy picture")).clicked() {
@@ -48,7 +49,7 @@ pub(super) fn picture(
             ui.close();
         }
     });
-    true
+    (true, Some(r))
 }
 
 /// The attachment a picture sent with the message is (named by `cid:`, or by the name or
@@ -178,18 +179,25 @@ pub(super) fn picture_texture(
 
 /// A picture carried with what's drawn (a signature's, by `cid:`), as a message's: at the size
 /// its HTML sets (a signature's logo often does), else its own, up to `width`, `zoom` times.
-pub(super) fn carried_picture(st: &mut UiState, ui: &mut Ui, pic: &mime::InlinePicture, width: f32, size: Option<mime::ImageSize>, zoom: f32) {
+pub(super) fn carried_picture(
+    st: &mut UiState,
+    ui: &mut Ui,
+    pic: &mime::InlinePicture,
+    width: f32,
+    size: Option<mime::ImageSize>,
+    zoom: f32,
+) -> Option<egui::Response> {
     let ctx = ui.ctx().clone();
     let most = shown_pixels(&ctx, zoom);
     let name = format!("carried-{}-{}-{most}", pic.cid, pic.data.len());
     match shown_picture(st, &name, || decode_sized(&ctx, &name, &pic.data, most)) {
         Pic::Ready(tex, own) => {
-            if let Some(at) = shown_size(own, size, width) {
-                ui.add(egui::Image::new(&tex).fit_to_exact_size(at * zoom).maintain_aspect_ratio(false));
-            }
+            let at = shown_size(own, size, width)?;
+            Some(ui.add(egui::Image::new(&tex).fit_to_exact_size(at * zoom).maintain_aspect_ratio(false).sense(Sense::click())))
         }
         Pic::Loading | Pic::Missing => {
             ui.label(RichText::new(format!("[{}]", pic.name)).color(st.tokens.faint));
+            None
         }
     }
 }
