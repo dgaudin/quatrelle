@@ -477,7 +477,9 @@ impl Session {
             });
         }
         reply.description.clear();
-        reply.extra.retain(|x| !x.to_ascii_uppercase().starts_with("BEGIN:VALARM"));
+        // No alarm in a REPLY (RFC 5546). Cutting an alarm at its first line left an
+        // `END:VALARM` never begun; this takes it whole.
+        ical::set_reminder(&mut reply, None);
         let word = match stat {
             "ACCEPTED" => "Accepted",
             "TENTATIVE" => "Tentative",
@@ -576,6 +578,7 @@ pub(super) fn set_answer(e: &mut CalEvent, mine: &[String], me: &str, stat: &str
             role: String::new(),
         });
     }
+    ical::show_as_answered(e, stat);
 }
 
 /// Delete these parts of an event on the server: each item once. True when the server has
