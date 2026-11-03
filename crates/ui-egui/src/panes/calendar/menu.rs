@@ -15,6 +15,15 @@ use crate::dialogs::pim_dialogs::{all_categories, show_as_label};
 use crate::icons::{self, Icon};
 use crate::{Action, theme};
 
+/// Whether the user may change `item` here: its calendar isn't read-only, and it's the event the
+/// uid finds (the user's own copy first), what the commands change. A colleague's copy of a
+/// meeting the user also has is opened only.
+pub(super) fn changeable(s: &Session, item: &AgendaItem) -> bool {
+    let writable = s.pim.get(&item.account).and_then(|p| p.calendars.iter().find(|c| c.id == item.calendar)).is_some_and(|c| !c.read_only);
+    let this_one = s.find_event(&item.uid).is_some_and(|(account, e)| account == item.account && e.calendar == item.calendar);
+    writable && this_one
+}
+
 /// The menu's entries for `item` (drawn only while it's open: the event is read from here).
 pub(super) fn menu(ui: &mut Ui, s: &Session, item: &AgendaItem, acts: &mut Vec<Action>) {
     let found = s.find_event(&item.uid);
@@ -29,11 +38,7 @@ pub(super) fn menu(ui: &mut Ui, s: &Session, item: &AgendaItem, acts: &mut Vec<A
         acts.push(Action::OpenMeeting(url));
         ui.close();
     }
-    let writable = s.pim.get(&item.account).and_then(|p| p.calendars.iter().find(|c| c.id == item.calendar)).is_some_and(|c| !c.read_only);
-    // What the entries below change is the event the uid finds (the user's own copy first): only
-    // when it's the one clicked. A colleague's copy of a meeting the user also has is opened only.
-    let this_one = found.is_some_and(|(account, e)| account == item.account && e.calendar == item.calendar);
-    if !writable || !this_one {
+    if !changeable(s, item) {
         return;
     }
     let uid = item.uid.as_str();

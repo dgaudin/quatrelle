@@ -6,6 +6,7 @@
 use super::*;
 
 mod calendar_clicks;
+mod calendar_delete;
 mod calendar_look;
 mod calendar_menu;
 

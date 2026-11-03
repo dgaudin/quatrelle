@@ -2,20 +2,21 @@
 // Copyright (c) 2026 Didier Gaudin
 //! UI tests: clicks in the calendar's grid, as Outlook's: a click selects an appointment or an
 //! empty half hour, a double click opens it (or a new appointment there), Enter opens the
-//! appointment selected, a right click selects it too.
+//! appointment selected, a right click selects it too; in the Month view a click on a day's
+//! background selects the day.
 
 use quatrelle_engine::AgendaItem;
 
 use super::calendar_menu::{SIZE, day_view, right_click, shown};
 use super::*;
-use crate::calendar::{HOUR, Pick, chip_id};
+use crate::calendar::{HOUR, Pick, chip_id, month_day_id};
 
-fn chip_rect(ctx: &egui::Context, item: &AgendaItem) -> egui::Rect {
+pub(super) fn chip_rect(ctx: &egui::Context, item: &AgendaItem) -> egui::Rect {
     ctx.read_response(chip_id(item)).map(|r| r.rect).expect("the chip is drawn")
 }
 
 /// The appointment's form opened (as a dialog, or already in a window of its own).
-fn form(a: &MailApp) -> Option<&crate::dialogs::pim_dialogs::EventForm> {
+pub(super) fn form(a: &MailApp) -> Option<&crate::dialogs::pim_dialogs::EventForm> {
     match &a.ui.dialog {
         Some(Dialog::Event(f)) => Some(&**f),
         _ => a.ui.event_windows.last().map(|(_, f)| &**f),
@@ -28,12 +29,12 @@ fn opened(a: &MailApp) -> Option<String> {
 }
 
 /// Nothing opened: no dialog, no appointment's window.
-fn nothing_opened(a: &MailApp) -> bool {
+pub(super) fn nothing_opened(a: &MailApp) -> bool {
     a.ui.dialog.is_none() && a.ui.event_windows.is_empty()
 }
 
 /// The pointer away from the grid (on the window's title), a frame drawn: what it drew.
-fn drawn_away(ctx: &egui::Context, a: &mut MailApp, size: egui::Vec2) -> Vec<egui::Shape> {
+pub(super) fn drawn_away(ctx: &egui::Context, a: &mut MailApp, size: egui::Vec2) -> Vec<egui::Shape> {
     frame_sized(ctx, a, vec![Event::PointerMoved(egui::pos2(640.0, 2.0))], size);
     let mut shapes = Vec::new();
     for _ in 0..3 {
@@ -159,5 +160,45 @@ fn a_right_click_selects_the_appointment() {
     assert!(menu.iter().any(|t| t == "Open"), "{menu:?}");
     assert_eq!(a.ui.cal_pick, Some(Pick::of(&lunch)));
     assert!(nothing_opened(&a));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// In the Month view, a click on an empty day's background selects the day (lit, the pointer
+/// away; the appointment selected before isn't any more); a click on an appointment then
+/// unselects it; a double click on the day still opens a new appointment there, at 9:00.
+#[test]
+fn a_click_selects_a_month_day() {
+    let (mut a, dir, ctx) = day_view("clicks-month-day", 0);
+    a.run("calendar.view", json!({"mode": "month"}));
+    let tall = egui::vec2(1280.0, 1300.0);
+    for _ in 0..10 {
+        frame_sized(&ctx, &mut a, vec![], tall);
+    }
+    let lunch = shown(&a, "Lunch with Jun");
+    let (d0, d1) = a.session.cal_days();
+    let items = a.session.agenda(a.session.local_midnight(d0), a.session.local_midnight(d1));
+    let day = (d0..d1)
+        .find(|d| {
+            let (from, to) = (a.session.local_midnight(*d), a.session.local_midnight(d + 1));
+            !items.iter().any(|i| i.start < to && i.end.max(i.start + 1) > from)
+        })
+        .expect("an empty day in the month");
+    let cell = ctx.read_response(month_day_id(day)).map(|r| r.rect).expect("the day is drawn");
+    let at = cell.center();
+    click_at(&ctx, &mut a, chip_rect(&ctx, &lunch).center(), 1, tall);
+    assert_eq!(a.ui.cal_pick, Some(Pick::of(&lunch)));
+    click_at(&ctx, &mut a, at, 1, tall);
+    assert!(nothing_opened(&a), "a click opens nothing: {:?}", opened(&a));
+    assert_eq!(a.ui.cal_pick, Some(Pick::Day { day }), "the day selected, the appointment not");
+    let accent_soft = a.ui.tokens.accent_soft;
+    let lit = |shapes: &[egui::Shape]| shapes.iter().any(|s| matches!(s, egui::Shape::Rect(x) if x.fill == accent_soft && x.rect.contains(at)));
+    assert!(lit(&drawn_away(&ctx, &mut a, tall)), "the day stays lit, the pointer away");
+    click_at(&ctx, &mut a, chip_rect(&ctx, &lunch).center(), 1, tall);
+    assert_eq!(a.ui.cal_pick, Some(Pick::of(&lunch)), "the appointment selected, the day not");
+    assert!(!lit(&drawn_away(&ctx, &mut a, tall)), "the day no longer lit");
+    click_at(&ctx, &mut a, at, 2, tall);
+    let f = form(&a).expect("a new appointment opened");
+    assert!(f.summary.is_empty(), "a new appointment: {}", f.summary);
+    assert_eq!(f.start, "09:00");
     let _ = std::fs::remove_dir_all(dir);
 }

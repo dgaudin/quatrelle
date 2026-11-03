@@ -22,6 +22,27 @@ pub(super) fn draw(ui: &mut Ui, d: &mut Dialog, s: &Session, t: &Tokens, acts: &
             }
             !cancel
         }
+        // Delete on an appointment of a series, as Outlook asks: this one, or all of them?
+        Dialog::DeleteOccurrence { uid, occurrence, name } => {
+            ui.set_width(380.0);
+            title(ui, t, &tf!("Delete “{name}”?", name = name));
+            ui.add_space(10.0);
+            let mut keep = true;
+            button_row(ui, |ui| {
+                if ui.button(tl!("Cancel")).clicked() {
+                    keep = false;
+                }
+                if ui.button(tl!("Delete the series")).clicked() {
+                    acts.push(Action::Run("event.delete", json!({"uid": uid})));
+                    keep = false;
+                }
+                if widgets::primary_button(ui, "Delete this occurrence", t, true).clicked() {
+                    acts.push(Action::Run("event.delete", json!({"uid": uid, "occurrence": occurrence})));
+                    keep = false;
+                }
+            });
+            keep
+        }
         Dialog::OpenShare { link, server, path, always } => {
             ui.set_width(460.0);
             title(ui, t, "Open a network share?");
