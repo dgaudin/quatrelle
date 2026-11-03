@@ -29,7 +29,7 @@ mod recurrence;
 mod zones;
 pub use alarms::*;
 pub use find::*;
-pub use meeting::{OPTIONAL, PrivateKind, ShowAs, valid_webex_id};
+pub use meeting::{OPTIONAL, PrivateKind, ShowAs, intended_show_as, show_as_answered, valid_webex_id};
 use notes::*;
 pub use notes::*;
 use recurrence::*;
