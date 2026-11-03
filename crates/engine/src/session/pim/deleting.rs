@@ -21,6 +21,7 @@ impl Session {
         if self.pim.get(&account).is_some_and(|p| p.calendars.iter().any(|c| c.id == calendar && c.read_only)) {
             return Err(CmdError::Params("this calendar can't be changed".into()));
         }
+        let others = self.find_event(&real).is_some_and(|(_, e)| self.organized_by_other(&e.event));
         let p = self.pim_mut(&account);
         let here = |e: &StoredEvent| e.calendar == calendar && e.event.uid == real;
         let mut remote = false;
@@ -32,7 +33,9 @@ impl Session {
                     if !m.event.exdates.contains(&at) {
                         m.event.exdates.push(at);
                     }
-                    m.event.sequence = m.event.sequence.saturating_add(1);
+                    if !others {
+                        m.event.sequence = m.event.sequence.saturating_add(1);
+                    }
                     remote = m.calendar != LOCAL;
                     m.dirty |= remote;
                 }

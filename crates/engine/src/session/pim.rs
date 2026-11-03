@@ -483,6 +483,7 @@ impl Session {
             .find_event_index(uid)
             .and_then(|(a, at)| self.pim.get(a).and_then(|p| p.events.get(at)).map(|e| (a.to_string(), at, e.event.uid.clone())))
             .ok_or_else(|| CmdError::Params(format!("no event `{uid}`")))?;
+        let others = self.pim.get(&account).and_then(|p| p.events.get(at)).is_some_and(|s| self.organized_by_other(&s.event));
         let p = self.pim_mut(&account);
         let Some(stored) = p.events.get_mut(at) else {
             return Err(CmdError::Params(format!("no event `{uid}`")));
@@ -494,7 +495,9 @@ impl Session {
         let mut e = stored.event.clone();
         change(&mut e);
         check_event(&e)?;
-        e.sequence = e.sequence.saturating_add(1);
+        if !others {
+            e.sequence = e.sequence.saturating_add(1);
+        }
         stored.event = e;
         let remote = stored.calendar != LOCAL;
         stored.dirty |= remote;

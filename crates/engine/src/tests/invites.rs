@@ -11,6 +11,7 @@ use super::*;
 use crate::InviteProblem;
 
 mod answered;
+mod sequence;
 mod showing;
 
 const WEEK: i64 = 7 * 86_400;
