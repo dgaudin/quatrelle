@@ -263,8 +263,20 @@ fn what_is_typed_is_drawn_with_its_styles_at_once() {
     let mut drawn = Vec::new();
     shapes.iter().for_each(|s| galleys(&s.shape, &mut drawn));
     let drawn = drawn.into_iter().find(|g| g.job.text == c.body).expect("the text drawn");
-    // Each run's colour where the styles, now that they've followed the text, put it.
-    let colours = |g: &Galley| g.job.sections.iter().map(|s| (s.byte_range.clone(), s.format.color)).collect::<Vec<_>>();
+    // Each run's colour where the styles, now that they've followed the text, put it; runs of
+    // one colour side by side are one (a misspelt word is a run of its own once another test has
+    // read the dictionaries: "Salut" when the suite runs, in English).
+    let colours = |g: &Galley| {
+        let mut runs: Vec<(std::ops::Range<usize>, egui::Color32)> = Vec::new();
+        for s in &g.job.sections {
+            let (start, end, colour) = (s.byte_range.start.0, s.byte_range.end.0, s.format.color);
+            match runs.last_mut() {
+                Some((r, c)) if *c == colour && r.end == start => r.end = end,
+                _ => runs.push((start..end, colour)),
+            }
+        }
+        runs
+    };
     let mut out = ctx.run_ui(Default::default(), |ui| {
         let fresh = layout::layout(ui, &c.body, &c.styles, false, &t, drawn.job.wrap.max_width, &Check::default(), &HashMap::new());
         assert_eq!(colours(&drawn), colours(&fresh), "drawn with the styles of the text before it");
