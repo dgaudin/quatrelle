@@ -109,3 +109,46 @@ fn private_and_show_as_change_without_telling_the_guests() {
     s.run("event.update", &json!({"uid": uid, "summary": "Renamed"})).unwrap();
     assert_eq!(sent(&s), before + 1);
 }
+
+/// The stand-up's occurrences around now, as `(occurrence, start)`.
+fn stand_ups(s: &Session) -> Vec<(i64, i64)> {
+    around(s).into_iter().filter(|i| i.summary == "Team stand-up").map(|i| (i.occurrence, i.start)).collect()
+}
+
+/// An edit of something other than the time must not move a series: giving a zoneless series the
+/// user's zone makes it repeat at its first occurrence's local time, an hour off across a
+/// summer/winter change.
+#[test]
+fn an_edit_that_keeps_the_time_keeps_the_series_in_place() {
+    for (what, params) in [
+        ("showAs", json!({"uid": "standup@sample.quatrelle", "showAs": "tentative", "send": false})),
+        ("private", json!({"uid": "standup@sample.quatrelle", "private": true, "send": false})),
+        ("categories", json!({"uid": "standup@sample.quatrelle", "categories": "Team", "send": false})),
+    ] {
+        let mut s = sample_session("showing-in-place");
+        s.set_clock(NOW, 2 * 3600);
+        s.set_zone(Some("Europe/Paris"));
+        assert!(s.clock.zone.is_some());
+        let (before, tzid) = (stand_ups(&s), s.find_event("standup@sample.quatrelle").unwrap().1.event.tzid.clone());
+        assert!(before.len() > 8, "{before:?}");
+        s.run("event.update", &params).unwrap();
+        let e = &s.find_event("standup@sample.quatrelle").unwrap().1.event;
+        assert_eq!(e.tzid, tzid, "{what}: the zone is as it was");
+        match what {
+            "showAs" => assert_eq!(e.show_as, ShowAs::Tentative),
+            "private" => assert!(e.private),
+            _ => assert_eq!(e.categories, vec!["Team".to_string()]),
+        }
+        assert_eq!(stand_ups(&s), before, "{what}: every occurrence starts when it did");
+    }
+}
+
+#[test]
+fn a_new_time_gives_a_zoneless_event_the_users_zone() {
+    let mut s = sample_session("showing-new-time");
+    s.set_clock(NOW, 2 * 3600);
+    s.set_zone(Some("Europe/Paris"));
+    assert_eq!(s.find_event("standup@sample.quatrelle").unwrap().1.event.tzid, "");
+    s.run("event.update", &json!({"uid": "standup@sample.quatrelle", "start": "2026-10-12T09:30", "send": false})).unwrap();
+    assert_eq!(s.find_event("standup@sample.quatrelle").unwrap().1.event.tzid, "Europe/Paris");
+}

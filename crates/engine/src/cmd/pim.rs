@@ -360,6 +360,7 @@ pub(super) fn event_from(s: &Session, v: &Value, mut e: quatrelle_model::ical::C
         }
     };
     let length = e.end - e.start;
+    let was_all_day = e.all_day;
     if let Some((t, all_day)) = when("start")? {
         e.start = t;
         e.all_day = p::bool(v, "allDay").unwrap_or(all_day);
@@ -375,9 +376,13 @@ pub(super) fn event_from(s: &Session, v: &Value, mut e: quatrelle_model::ical::C
         e.start -= e.start.rem_euclid(86_400);
         e.end = (e.end - e.end.rem_euclid(86_400)).max(e.start + 86_400);
     } else if e.tzid.is_empty()
+        && (e.uid.is_empty() || v.get("start").is_some() || v.get("end").is_some() || e.all_day != was_all_day)
         && let Some(zone) = s.clock.zone.and_then(|z| z.name())
     {
-        // In the user's zone: it repeats at the same time of day there, summer or winter.
+        // In the user's zone: it repeats at the same time of day there, summer or winter. Only
+        // when the time is being set, or the event is new (no uid yet): a zoneless series repeats at the same UTC time, and an edit
+        // of anything else (Show As, Private, categories...) mustn't give it a zone, or its
+        // occurrences across a summer/winter change would move by an hour.
         e.tzid = zone.to_string();
     }
     for (k, field) in [("summary", &mut e.summary), ("location", &mut e.location), ("description", &mut e.description)] {
