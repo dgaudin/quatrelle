@@ -1770,6 +1770,7 @@ month	May	מאי
 	{domain} wasn't allowed: {account} won't use it	{domain} לא אושר: {account} לא ישתמש בו
 	{email} removed. Its data file stays at {path}	{email} הוסר. קובץ הנתונים שלו נשאר ב-{path}
 	{event}: a change to one occurrence couldn't be sent: its series is no longer on the server	{event}: לא ניתן היה לשלוח שינוי במופע אחד: הסדרה שלו כבר לא בשרת
+	{event}: deleted on the server meanwhile; the change made here was dropped	{event}: נמחק בשרת בינתיים; השינוי שנעשה כאן בוטל
 	{name} could not be exported: {error}	לא ניתן היה לייצא את {name}: {error}
 	{name} couldn't be read: {error}	לא ניתן היה לקרוא את {name}: {error}
 	{name}: the data file could not be opened: {error}	{name}: לא ניתן היה לפתוח את קובץ הנתונים: {error}

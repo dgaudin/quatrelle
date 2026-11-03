@@ -497,10 +497,16 @@ pub fn sync(c: &Client, pim: &Pim, now: i64) -> Result<DavSync> {
             c.post(&format!("/me/calendars/{}/events", seg(&cal)), &body).map(|v| (v, cal))
         } else {
             let b = serde_json::to_vec(&body).map_err(|x| NetError::Protocol(x.to_string()))?;
-            c.send_raw("PATCH", &format!("{}/events/{}", owner_path(&e.calendar), seg(&e.href)), "application/json", b)
-                .map(|v| (v, e.calendar.clone()))
+            c.patch_item(&format!("{}/events/{}", owner_path(&e.calendar), seg(&e.href)), b).map(|v| (v, e.calendar.clone()))
         };
         match r {
+            // Deleted on the server meanwhile: the server wins (the engine lets it go, and says so).
+            Err(NetError::Gone(why)) if !e.href.is_empty() => {
+                log::info!("{}: deleted on the server ({why}); the change made here is dropped", e.event.summary);
+                if !out.gone_events.contains(&e.href) {
+                    out.gone_events.push(e.href.clone());
+                }
+            }
             Ok((v, cal)) => out.pushed_events.push(StoredEvent {
                 calendar: cal,
                 href: s(&v, "id"),

@@ -336,6 +336,11 @@ pub struct DavSync {
     pub pushed_tasks: Vec<StoredTask>,
     /// Deletions done (by href).
     pub deleted: Vec<String>,
+    /// Appointments changed here whose item the server no longer has (deleted there meanwhile),
+    /// by that item: the server wins, so they go here too, and the change made here with them
+    /// (a series' occurrences changed here go with it).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub gone_events: Vec<String>,
     /// Invitations the server answered ([`StoredEvent::respond`]): their UID and the answer.
     #[serde(default)]
     pub responded: Vec<(String, String)>,

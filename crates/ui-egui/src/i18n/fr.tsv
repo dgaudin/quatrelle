@@ -1774,6 +1774,7 @@ month	May	mai
 	{domain} wasn't allowed: {account} won't use it	{domain} n'a pas été autorisé : {account} ne l'utilisera pas
 	{email} removed. Its data file stays at {path}	{email} supprimé. Son fichier de données reste dans {path}
 	{event}: a change to one occurrence couldn't be sent: its series is no longer on the server	{event} : la modification d’une occurrence n’a pas pu être envoyée : sa série n’est plus sur le serveur
+	{event}: deleted on the server meanwhile; the change made here was dropped	{event} : supprimé sur le serveur entre-temps ; la modification faite ici a été abandonnée
 	{name} could not be exported: {error}	{name} n’a pas pu être exporté : {error}
 	{name} couldn't be read: {error}	{name} n’a pas pu être lu : {error}
 	{name}: the data file could not be opened: {error}	{name} : le fichier de données n’a pas pu être ouvert : {error}

@@ -6,11 +6,24 @@
 use super::*;
 
 impl Client {
-    fn request(&self, mut r: Request) -> Result<Value> {
+    fn request(&self, r: Request) -> Result<Value> {
+        self.request_as(r, false)
+    }
+
+    /// A request; `item`: about one item, whose `ErrorItemNotFound` (HTTP 404) says it was deleted
+    /// on the server (`NetError::Gone`).
+    fn request_as(&self, mut r: Request, item: bool) -> Result<Value> {
         for (name, value) in [("Authorization", self.auth.as_str()), ("Accept", "application/json"), ("Prefer", PREFER)] {
             r = r.header(name, value);
         }
         let resp = send_through_limits(&r)?;
+        if item && resp.status == 404 {
+            let error = serde_json::from_slice::<Value>(&resp.body).ok().and_then(|v| v.get("error").cloned()).unwrap_or_default();
+            if error.get("code").and_then(Value::as_str) == Some("ErrorItemNotFound") {
+                let message = error.get("message").and_then(Value::as_str).unwrap_or("ErrorItemNotFound");
+                return Err(NetError::Gone(message.to_string()));
+            }
+        }
         check(&resp)?;
         if resp.body.iter().all(u8::is_ascii_whitespace) {
             return Ok(Value::Null);
@@ -31,6 +44,13 @@ impl Client {
         let mut r = Request::post(&format!("{}{path}", self.base), content_type, body, MAX_JSON);
         r.method = method.into();
         self.request(r)
+    }
+
+    /// An item changed (`PATCH`): one deleted on the server meanwhile is `NetError::Gone`.
+    pub(crate) fn patch_item(&self, path: &str, body: Vec<u8>) -> Result<Value> {
+        let mut r = Request::post(&format!("{}{path}", self.base), "application/json", body, MAX_JSON);
+        r.method = "PATCH".into();
+        self.request_as(r, true)
     }
 
     /// Every item of a listing, following `@odata.nextLink` (on the same server only).

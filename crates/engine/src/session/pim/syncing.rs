@@ -46,6 +46,7 @@ impl Session {
             p.dav_untrusted.clone_from(&sync.untrusted);
         }
         p.deleted.retain(|t| !sync.deleted.contains(&t.href));
+        let gone = drop_gone(p, &sync.gone_events);
         // What was stored: its address and version, and no longer to send (unless it changed
         // again meanwhile).
         for x in &sync.pushed_events {
@@ -142,6 +143,9 @@ impl Session {
         for e in sync.errors.iter().take(3) {
             self.notice_with("calendars and contacts: {error}", &[("error", e)], true);
         }
+        for what in &gone {
+            self.notice_with("{event}: deleted on the server meanwhile; the change made here was dropped", &[("event", what)], true);
+        }
         // Invitations the server answered, and copies of invitations to answer instead.
         if self.settle_answers(account, sync) {
             log::info!("{account}: invitations' answers to send");
@@ -164,6 +168,32 @@ impl Session {
             self.write_pim(account);
         }
     }
+}
+
+/// The appointments the server no longer has, changed here (`gone`, by their item there): the
+/// server wins, so they go here too, a series with the occurrences changed here that never had
+/// an item of their own. Their names, one for each, to say so.
+fn drop_gone(p: &mut Pim, gone: &[String]) -> Vec<String> {
+    if gone.is_empty() {
+        return Vec::new();
+    }
+    let mut names = Vec::new();
+    let mut series: HashSet<(String, String)> = HashSet::new();
+    for href in gone.iter().filter(|h| !h.is_empty()) {
+        let mut found = p.events.iter().filter(|e| e.href == *href);
+        let first = found.clone().find(|e| e.event.recurrence_id.is_none()).or_else(|| found.next());
+        if let Some(e) = first {
+            names.push(e.event.summary.clone());
+        }
+        series.extend(
+            p.events.iter().filter(|e| e.href == *href && e.event.recurrence_id.is_none()).map(|e| (e.calendar.clone(), e.event.uid.clone())),
+        );
+    }
+    p.events.retain(|e| {
+        let unsent_occurrence = e.href.is_empty() && e.event.recurrence_id.is_some() && series.contains(&(e.calendar.clone(), e.event.uid.clone()));
+        (e.href.is_empty() || !gone.contains(&e.href)) && !unsent_occurrence
+    });
+    names
 }
 
 /// A digest of an account's appointments as kept, whatever their order: what a sync changes in

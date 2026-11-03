@@ -12,6 +12,13 @@ use super::*;
 /// Send every appointment changed here, noting each one's item on the server in `out`.
 pub(super) fn push_events(c: &Client, pim: &Pim, out: &mut DavSync) {
     for e in pim.events.iter().filter(|e| e.dirty) {
+        // The series of an occurrence found gone already: it goes with it, said once.
+        if e.event.recurrence_id.is_some()
+            && e.href.is_empty()
+            && series_of(pim, out, &e.event.uid).is_some_and(|(h, _)| out.gone_events.contains(&h))
+        {
+            continue;
+        }
         // An answer to an invitation: given by the server on the meeting it placed in the
         // calendar; one not in the calendar here yet waits for it to be read
         // ([`answer_pending`]). Never created as an appointment of the user's own: that made a
@@ -30,11 +37,14 @@ pub(super) fn push_events(c: &Client, pim: &Pim, out: &mut DavSync) {
         // to send to no one (the user alone, as Exchange lists the organizer), it refuses.
         let guests = guests_written(&e.event, c.email());
         let notify = e.notify && !guests.is_empty();
+        // The item a change goes to, if there's one already: the appointment's, or its series'.
+        let mut item = e.href.clone();
         let r = match e.event.recurrence_id.filter(|_| e.href.is_empty()) {
             // One occurrence of a series, changed on its own: the occurrence's item is asked for
             // by its place in the series, then changed as any appointment is.
             Some(at) => match series_of(pim, out, &e.event.uid) {
                 Some((master_id, master)) => {
+                    item.clone_from(&master_id);
                     occurrence_item_id(c, &master_id, &master, at).and_then(|(id, key)| update_item(c, &id, &key, &e.event, notify))
                 }
                 None => Err(NetError::No("the series isn't on the server yet".into())),
@@ -43,6 +53,14 @@ pub(super) fn push_events(c: &Client, pim: &Pim, out: &mut DavSync) {
             None => update_item(c, &e.href, &e.etag, &e.event, notify),
         };
         match r {
+            // Deleted on the server meanwhile (the owner's "test", 03/11, refused at every sync):
+            // the server wins; the engine lets it go here too, and says so.
+            Err(NetError::Gone(why)) if !item.is_empty() => {
+                log::info!("{}: deleted on the server ({why}); the change made here is dropped", e.event.summary);
+                if !out.gone_events.contains(&item) {
+                    out.gone_events.push(item);
+                }
+            }
             // Someone else's event stays in their calendar.
             Ok(Saved { href, etag, untold }) => {
                 // Saved, but the server wouldn't send to its guests: said once, not tried again.
@@ -101,6 +119,33 @@ fn respond_item(c: &Client, id: &str, answer: &str) -> Result<()> {
     .map(drop)
 }
 
+/// Whether an answer's code says the item itself isn't on the server (deleted there): not a
+/// folder not found (`ErrorFolderNotFound`: a colleague's calendar no longer shared), which
+/// stays an error.
+pub(crate) fn item_gone_code(code: &str) -> bool {
+    code.trim() == "ErrorItemNotFound"
+}
+
+/// An answer about an item the server no longer has: `NetError::Gone`.
+fn gone(m: &El) -> Result<()> {
+    let code = m.text_of("ResponseCode").unwrap_or_default();
+    if m.attr("ResponseClass") == Some("Error") && item_gone_code(code) {
+        let text = m.text_of("MessageText").unwrap_or_default().trim();
+        return Err(NetError::Gone(if text.is_empty() { code.trim() } else { text }.to_string()));
+    }
+    Ok(())
+}
+
+/// One operation on one item ([`Client::call_one`]), the item not found said as
+/// `NetError::Gone`.
+pub(super) fn call_item(c: &Client, body: &str) -> Result<El> {
+    let doc = c.call(body)?;
+    let m = crate::ews::messages(&doc).first().map(|m| (*m).clone()).ok_or_else(|| NetError::Protocol("an empty answer".into()))?;
+    gone(&m)?;
+    crate::ews::check_message(&m)?;
+    Ok(m)
+}
+
 /// A series' item on the server and the series itself: as kept here, or as just created.
 fn series_of(pim: &Pim, out: &DavSync, uid: &str) -> Option<(String, CalEvent)> {
     pim.events
@@ -148,6 +193,7 @@ fn call_sending(c: &Client, body: &str, sending: bool) -> Result<std::result::Re
     let doc = c.call(body)?;
     let m = crate::ews::messages(&doc).first().map(|m| (*m).clone()).ok_or_else(|| NetError::Protocol("an empty answer".into()))?;
     let (code, text) = (m.text_of("ResponseCode").unwrap_or_default(), m.text_of("MessageText").unwrap_or_default());
+    gone(&m)?;
     if sending && m.attr("ResponseClass") == Some("Error") && refuses_recipients(code, text) {
         return Ok(Err(if text.trim().is_empty() { code } else { text }.trim().to_string()));
     }
