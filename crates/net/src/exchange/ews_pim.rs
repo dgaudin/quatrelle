@@ -97,7 +97,7 @@ enum Shape<'a> {
 /// name. `AllProperties` gives much besides, some of it worked out for each appointment as it's
 /// asked (how many meetings it conflicts with, and is next to), and a colleague's 870
 /// appointments cost the server 10 s that way, 12 ms each (29/10).
-const APPOINTMENT_FIELDS: [&str; 27] = [
+const APPOINTMENT_FIELDS: [&str; 28] = [
     "item:Subject",
     "item:Body",
     "item:Categories",
@@ -125,6 +125,7 @@ const APPOINTMENT_FIELDS: [&str; 27] = [
     "calendar:DeletedOccurrences",
     "calendar:StartTimeZone",
     "calendar:AllowNewTimeProposal",
+    "calendar:AppointmentSequenceNumber",
 ];
 
 /// The codes of a server refusing a field asked by name, rather than the item.

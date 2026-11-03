@@ -47,6 +47,46 @@ fn folder_edits_queued_together_each_find_their_folder() {
     drop(pool);
 }
 
+/// A move of two items, one of which the server already moved (a rule, or another client): the
+/// other still moves, and nothing is reported as failed.
+#[test]
+fn a_move_of_an_item_already_gone_moves_the_rest_quietly() {
+    let mut d = Data::default();
+    let inbox = d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    let trash = d.folder("Deleted Items", None, Some("deleteditems"), "IPF.Note");
+    d.deliver(&inbox, &mail("Storyboard", "m1"), false, "2024-05-06T09:00:00Z");
+    d.deliver(&inbox, &mail("Sound mix", "m2"), false, "2024-05-06T10:00:00Z");
+    let server = serve(d);
+    let data = server.data.clone();
+    let store = crate::fake::tests_store("ews-move-gone");
+    let mut pool = crate::worker::Pool::new(store.clone(), Arc::new(crate::worker::MemoryCredentials::default()));
+    let account = AccountConfig {
+        id: "a1".into(),
+        email: "riley@contoso.example".into(),
+        username: format!("{DOMAIN}\\{USER}"),
+        ews: Some(server.url.clone()),
+        ..Default::default()
+    };
+    pool.submit(Job::Start { account, password: Some(Secret(PASSWORD.into())) });
+    until(&pool, "online", |e| matches!(e, Event::Status { status: SyncStatus::Online { .. }, .. }));
+    let keys: Vec<_> = store.load_folder("a1", "INBOX").unwrap().messages.iter().map(|m| m.key.clone()).collect();
+    assert_eq!(keys.len(), 2);
+    let kept = data.lock().unwrap().items.pop().map(|i| i.id);
+    assert!(kept.is_some());
+    pool.submit(Job::Apply { account: "a1".into(), op: Op::Move { keys, to: "Deleted Items".into() } });
+    eventually("the other item moved", || {
+        let d = data.lock().unwrap();
+        d.items.len() == 1 && d.items.iter().all(|i| i.folder == trash)
+    });
+    let end = Instant::now() + Duration::from_secs(1);
+    while Instant::now() < end {
+        if let Some(e) = pool.wait(Duration::from_millis(100)) {
+            assert!(!matches!(e, Event::OpFailed { .. }), "a move of an item already gone isn't a failure: {e:?}");
+        }
+    }
+    drop(pool);
+}
+
 #[test]
 fn an_on_premises_exchange_account_works_through_ews() {
     let mut d = Data::default();

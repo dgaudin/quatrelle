@@ -296,6 +296,25 @@ impl Client {
         }
         Ok(())
     }
+
+    /// Like [`Self::call_all`], but a thing the server no longer has (`ErrorItemNotFound`: a rule,
+    /// or another client, moved it first) is skipped, not an error. How many were skipped.
+    pub(crate) fn call_all_present(&self, body: &str) -> Result<usize> {
+        let doc = self.call(body)?;
+        let mut gone = 0;
+        for m in messages(&doc) {
+            if m.attr("ResponseClass") == Some("Error") && m.text_of("ResponseCode").map(str::trim) == Some("ErrorItemNotFound") {
+                gone += 1;
+                continue;
+            }
+            check_message(m)?;
+        }
+        if gone > 0 {
+            let what = body.trim_start_matches('<').split(|c: char| !c.is_alphanumeric()).next().unwrap_or("");
+            log::info!("ews: {gone} item(s) already gone from the server, skipped ({what})");
+        }
+        Ok(gone)
+    }
 }
 
 /// What an HTTP refusal without a SOAP answer says.
