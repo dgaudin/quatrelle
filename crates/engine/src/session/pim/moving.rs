@@ -19,6 +19,13 @@ impl Session {
         self.has_guests(e) && e.organizer.as_ref().is_some_and(|o| self.is_my_address(&o.email))
     }
 
+    /// Whether this is a copy of a meeting someone else organizes. `SEQUENCE` is the organizer's
+    /// revision number (RFC 5545 §3.8.7.4): the user's changes to such a copy leave it as sent,
+    /// else the organizer's next update would be judged older and ignored.
+    pub(crate) fn organized_by_other(&self, e: &CalEvent) -> bool {
+        e.organizer.as_ref().is_some_and(|o| !o.email.trim().is_empty() && !self.is_my_address(super::super::invite::without_mailto(&o.email)))
+    }
+
     /// Whether an event has someone to tell: an attendee with an address that isn't one of
     /// the user's. Exchange lists the organizer among the attendees, so an appointment the user
     /// made alone can come back with the user as its one attendee: nobody's meeting to announce
@@ -135,6 +142,7 @@ impl Session {
             return Err(CmdError::Params(format!("the series has no occurrence at {at}")));
         }
         let real = master.event.uid.clone();
+        let others = self.organized_by_other(&master.event);
         let p = self.pim_mut(&account);
         let existing = p.events.iter().position(|e| e.event.uid == real && e.event.recurrence_id == Some(at));
         let mut e = match existing.and_then(|i| p.events.get(i)) {
@@ -150,7 +158,10 @@ impl Session {
         e.recurrence_id = Some(at);
         e.rrule = None;
         e.exdates.clear();
-        e.sequence = e.sequence.max(master.event.sequence).saturating_add(1);
+        e.sequence = e.sequence.max(master.event.sequence);
+        if !others {
+            e.sequence = e.sequence.saturating_add(1);
+        }
         let remote = master.calendar != LOCAL;
         match existing.and_then(|i| p.events.get_mut(i)) {
             Some(stored) => {
