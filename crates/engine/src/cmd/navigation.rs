@@ -139,6 +139,11 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             Ok(json!({"on": s.prefs.signature_dashes}))
         })
         .params(r#"{"on"?: bool}"#),
+        CommandSpec::new("view.tidyAnsweredInvites", "Move meeting invitations to Deleted Items once answered", "File › Options", |s, v| {
+            s.prefs.tidy_answered_invites = p::bool(v, "on").unwrap_or(!s.prefs.tidy_answered_invites);
+            Ok(json!({"on": s.prefs.tidy_answered_invites}))
+        })
+        .params(r#"{"on"?: bool}"#),
         CommandSpec::new("view.html", "Show HTML formatted", "View › Messages", |s, v| {
             s.prefs.show_html = p::bool(v, "on").unwrap_or(!s.prefs.show_html);
             Ok(json!({"on": s.prefs.show_html}))
