@@ -381,6 +381,52 @@ fn base64_attachments_are_kept_compressed() {
     assert_eq!(super::unpack(kept.into_owned()).unwrap(), text);
 }
 
+/// `pack` keeps exactly what compressing the whole file and then applying the tenth rule would
+/// have kept, right up to the line, from text that compresses well to noise that doesn't.
+#[test]
+fn packing_keeps_what_the_tenth_rule_would() {
+    let (mut raw, mut deflated) = (0, 0);
+    for noisy in (0..=100).step_by(2) {
+        let len = 40_000;
+        let noisy_len = len * noisy / 100;
+        let mut bytes = noise(noisy_len, noisy as u64 + 1);
+        bytes.extend("The figures for October are in the attached sheet. ".bytes().cycle().take(len - noisy_len));
+        let stream = miniz_oxide::deflate::compress_to_vec(&bytes, 1);
+        let expected = if super::DEFLATED.len() + stream.len() >= len - len / 10 {
+            raw += 1;
+            bytes.clone()
+        } else {
+            deflated += 1;
+            [super::DEFLATED, &stream].concat()
+        };
+        assert_eq!(super::pack(&bytes).as_ref(), expected.as_slice(), "{noisy}% noise");
+    }
+    assert!(raw > 0 && deflated > 0, "both sides of the line: {raw} raw, {deflated} compressed");
+}
+
+/// A packed attachment holds no more memory than eight tenths of its source, and a file that
+/// comes to between eight and nine tenths is still kept compressed, in no more than nine.
+#[test]
+fn packing_reserves_what_an_attachment_comes_to() {
+    let text = base64(&noise(1 << 20, 11));
+    let kept = super::pack(&text).into_owned();
+    assert!(kept.starts_with(super::DEFLATED), "stored raw");
+    assert!(kept.capacity() * 10 <= text.len() * 8, "{} held for {} bytes", kept.capacity(), text.len());
+    let mut grown = 0;
+    for noisy in (0..=100).step_by(2) {
+        let len = 40_000;
+        let mut bytes = noise(len * noisy / 100, noisy as u64 + 1);
+        bytes.extend("The figures for October are in the attached sheet. ".bytes().cycle().take(len - bytes.len()));
+        let kept = super::pack(&bytes).into_owned();
+        if kept.starts_with(super::DEFLATED) && kept.len() * 10 > len * 8 {
+            grown += 1;
+            assert!(kept.capacity() * 10 <= len * 9, "{} held for {len} bytes", kept.capacity());
+            assert_eq!(super::unpack(kept).unwrap(), bytes, "{noisy}% noise");
+        }
+    }
+    assert!(grown > 0, "no file came to between eight and nine tenths");
+}
+
 #[test]
 fn folders_from_before_come_into_the_data_file() {
     let t = temp("bring-in");
