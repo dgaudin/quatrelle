@@ -5,6 +5,7 @@
 
 use super::*;
 
+mod room_options;
 mod webex;
 mod webex_rooms;
 

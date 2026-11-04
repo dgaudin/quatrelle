@@ -1470,8 +1470,10 @@ month	May	Май
 	Book this room	Забронировать эту переговорную
 	Remove this room	Убрать эту переговорную
 	Join the Webex meeting:	Присоединиться к собранию Webex:
-	Webex personal room	Личная комната Webex
-	Use my personal room, under Webex Meeting in an appointment's window, puts it in.	Использовать мою личную комнату: «Встреча Webex» в окне события вставляет её.
+	Webex rooms	Комнаты Webex
+	Under Webex Meeting in an appointment's window, each room puts its link and its lines in the meeting.	В меню «Собрание Webex» в окне события каждая комната добавляет в собрание свою ссылку и свои строки.
+	Meeting number, video address, dial-in numbers… copied into the notes	Номер собрания, видеоадрес, номера для дозвона… копируются в заметки
+	Add a room	Добавить комнату
 	Webex	Webex
 	Schedule Webex meetings from an appointment's window. Register an integration at developer.webex.com, then sign in with it here.	Планируйте встречи Webex из окна события. Зарегистрируйте интеграцию на developer.webex.com и войдите здесь с её помощью.
 	Site	Сайт

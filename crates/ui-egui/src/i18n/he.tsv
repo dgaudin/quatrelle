@@ -1467,8 +1467,10 @@ month	May	מאי
 	Book this room	הזמן את החדר הזה
 	Remove this room	הסר את החדר הזה
 	Join the Webex meeting:	הצטרף לפגישת Webex:
-	Webex personal room	חדר אישי ב-Webex
-	Use my personal room, under Webex Meeting in an appointment's window, puts it in.	שימוש בחדר האישי שלי: ‏״פגישת Webex״ בחלון של פגישה ביומן מוסיפה אותו.
+	Webex rooms	חדרי Webex
+	Under Webex Meeting in an appointment's window, each room puts its link and its lines in the meeting.	תחת ‏״פגישת Webex״ בחלון של פגישה ביומן, כל חדר מכניס את הקישור והשורות שלו לפגישה.
+	Meeting number, video address, dial-in numbers… copied into the notes	מספר פגישה, כתובת וידאו, מספרי חיוג… מועתקים להערות
+	Add a room	הוסף חדר
 	Webex	Webex
 	Schedule Webex meetings from an appointment's window. Register an integration at developer.webex.com, then sign in with it here.	תזמון פגישות Webex מחלון של פגישה ביומן. רשמו אינטגרציה ב-developer.webex.com ואז היכנסו כאן באמצעותה.
 	Site	אתר

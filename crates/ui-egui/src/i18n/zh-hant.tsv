@@ -1470,8 +1470,10 @@ month	May	5月
 	Book this room	預約此會議室
 	Remove this room	移除此會議室
 	Join the Webex meeting:	加入 Webex 會議:
-	Webex personal room	Webex 個人會議室
-	Use my personal room, under Webex Meeting in an appointment's window, puts it in.	使用我的個人會議室：約會視窗中的「Webex 會議」會將其插入。
+	Webex rooms	Webex 會議室
+	Under Webex Meeting in an appointment's window, each room puts its link and its lines in the meeting.	在約會視窗的「Webex 會議」下，每個會議室會將其連結和各行放入會議。
+	Meeting number, video address, dial-in numbers… copied into the notes	會議號碼、視訊位址、撥入號碼… 複製到附註中
+	Add a room	新增會議室
 	Webex	Webex
 	Schedule Webex meetings from an appointment's window. Register an integration at developer.webex.com, then sign in with it here.	在約會視窗中安排 Webex 會議。請先在 developer.webex.com 註冊整合，然後在此使用它登入。
 	Site	網站

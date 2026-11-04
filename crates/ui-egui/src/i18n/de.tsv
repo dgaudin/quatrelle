@@ -1471,8 +1471,10 @@ month	May	Mai
 	Book this room	Diesen Raum buchen
 	Remove this room	Diesen Raum entfernen
 	Join the Webex meeting:	An der Webex-Besprechung teilnehmen:
-	Webex personal room	Persönlicher Webex-Raum
-	Use my personal room, under Webex Meeting in an appointment's window, puts it in.	Meinen persönlichen Raum verwenden: „Webex-Besprechung“ im Fenster eines Termins fügt ihn ein.
+	Webex rooms	Webex-Räume
+	Under Webex Meeting in an appointment's window, each room puts its link and its lines in the meeting.	Unter „Webex-Besprechung“ im Fenster eines Termins fügt jeder Raum seinen Link und seine Zeilen in die Besprechung ein.
+	Meeting number, video address, dial-in numbers… copied into the notes	Besprechungsnummer, Videoadresse, Einwahlnummern… in die Notizen kopiert
+	Add a room	Raum hinzufügen
 	Webex	Webex
 	Schedule Webex meetings from an appointment's window. Register an integration at developer.webex.com, then sign in with it here.	Planen Sie Webex-Besprechungen im Fenster eines Termins. Registrieren Sie eine Integration auf developer.webex.com und melden Sie sich hier damit an.
 	Site	Site
