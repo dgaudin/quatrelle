@@ -100,8 +100,9 @@ impl Session {
             w.retain(|(_, t)| *t != who);
         }
         match w.iter_mut().find(|(x, _)| *x == q) {
-            // A sender's name the user asks about too is theirs now: it can't be displaced.
-            Some((_, t)) if *t == Asked::Sender => *t = who,
+            // A sender's name the user asks about too is theirs now, and a name typed that Check
+            // Names asks about is Check Names' own: neither can be displaced.
+            Some((_, t)) if *t == Asked::Sender || who == Asked::Checked => *t = who,
             Some(_) => {}
             None => w.push_back((q, who)),
         }

@@ -20,6 +20,11 @@ pub(crate) struct Senders {
     pub(crate) check: SenderCheck,
     /// The organisation's domains, for the External tag (empty: there's no telling).
     pub(crate) org: BTreeSet<String>,
+    /// How many times the people were gathered this run (the tests count them).
+    pub(crate) gathered: u64,
+    /// The cards' print (`Session::cards_print`) when they were gathered: an appointment saved
+    /// or synced moves the PIM revision too, and needs nothing gathered.
+    cards: u64,
 }
 
 /// What the check is made of: when any of it changes, it's gathered again.
@@ -27,7 +32,8 @@ pub(crate) struct Senders {
 struct Stamp {
     /// Each account's address, user name and name.
     accounts: Vec<(String, String, String)>,
-    /// The calendars' and contacts' revision (a card saved, an address book synced).
+    /// The calendars' and contacts' revision (a card saved, an address book synced; an
+    /// appointment too, which `Senders::cards` tells apart).
     pim: u64,
     /// The address book's (people written to; the directory's answers bump it too).
     book: u64,
@@ -86,21 +92,53 @@ impl Session {
 
     fn keep_senders_if_changed(&mut self) {
         let stamp = self.senders_stamp();
-        let org = self.organisation_now();
-        match self.senders.as_mut() {
+        let (same_people, same_pim) = match &self.senders {
             Some(s) if s.stamp == stamp => return,
-            // Only the domains listed in Options changed (typed a key at a time): the people
-            // stay as they were gathered.
-            Some(s) if (&s.stamp.accounts, s.stamp.pim, s.stamp.book) == (&stamp.accounts, stamp.pim, stamp.book) => {
+            Some(s) => ((&s.stamp.accounts, s.stamp.book) == (&stamp.accounts, stamp.book), s.stamp.pim == stamp.pim),
+            None => (false, false),
+        };
+        let org = self.organisation_now();
+        // The PIM revision moved with nothing else: a card, or an appointment (a calendar's sync).
+        let cards = (same_people && !same_pim).then(|| self.cards_print());
+        match self.senders.as_mut() {
+            // Only the domains listed in Options changed (typed a key at a time), or an
+            // appointment: the people stay as they were gathered.
+            Some(s) if same_people && (same_pim || cards == Some(s.cards)) => {
                 s.stamp = stamp;
                 s.org = org;
             }
             _ => {
                 let check = self.gather_check();
-                self.senders = Some(Senders { stamp, check, org });
+                let cards = cards.unwrap_or_else(|| self.cards_print());
+                let gathered = self.senders.as_ref().map_or(0, |s| s.gathered).saturating_add(1);
+                self.senders = Some(Senders { stamp, check, org, gathered, cards });
             }
         }
         self.warn_open();
+    }
+
+    /// A print of every account's cards as the check reads them: their number and each one's
+    /// name and addresses, in any order (the accounts are kept in a map). Hundreds of cards take
+    /// microseconds, against tens of milliseconds to gather the people again.
+    fn cards_print(&self) -> u64 {
+        use std::hash::{Hash, Hasher};
+        let mut count = 0u64;
+        let mut sum = 0u64;
+        for (account, p) in &self.pim {
+            for c in &p.cards {
+                let mut h = std::hash::DefaultHasher::new();
+                account.hash(&mut h);
+                c.card.display().hash(&mut h);
+                for e in &c.card.emails {
+                    e.value.hash(&mut h);
+                }
+                sum = sum.wrapping_add(h.finish());
+                count = count.wrapping_add(1);
+            }
+        }
+        let mut h = std::hash::DefaultHasher::new();
+        (count, sum).hash(&mut h);
+        h.finish()
     }
 
     /// The organisation's domains: those listed in Options, else those of the user's accounts,
@@ -133,8 +171,10 @@ impl Session {
                 }
             }
         }
+        // Known from the directory alone, a name warns from a mail service or a look-alike
+        // domain only: its thousands of names make namesakes common.
         for e in self.people.index.values().filter(|e| !e.who.address.trim().is_empty()) {
-            people.add_named(&e.who.name, &e.who.address);
+            people.add_from_directory(&e.who.name, &e.who.address);
         }
         if let Some(book) = self.contacts_book() {
             domains.extend(book.written_domains());
@@ -161,15 +201,14 @@ impl Session {
         }
     }
 
-    /// What doesn't add up about an open message's sender, the check kept up to date first. With
-    /// nothing to say about a stranger, their name is asked of the directory: its answer gathers
-    /// the check again, and what's open says what it found.
+    /// What doesn't add up about an open message's sender, the check kept up to date first. A
+    /// stranger's name is asked of the directory, whether or not something was found: its answer
+    /// gathers the check again, and what's open says what it found (a colleague at a sister
+    /// domain, the organisation's site in her signature, is known by address then).
     pub(crate) fn message_warning(&mut self, key: &MessageKey, parsed: &mime::Parsed) -> Option<SenderWarning> {
         self.keep_senders();
         let warning = self.warning_now(key, parsed);
-        if warning.is_none() {
-            self.ask_about_sender(key, parsed);
-        }
+        self.ask_about_sender(key, parsed);
         warning
     }
 
