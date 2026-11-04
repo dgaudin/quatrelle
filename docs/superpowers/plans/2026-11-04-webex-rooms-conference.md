@@ -188,3 +188,41 @@ a room's block; a new `options/webex_rooms.rs` draws the Options rows.
 - [ ] **Step 1: Write the docs** above; the command docs come from the params strings, nothing else to regenerate.
 - [ ] **Step 2: Run** `TMPDIR=$HOME/.tq cargo xtask ci` — expect every gate green (sizes, authors, layers, wasm, assets, tests, clippy, fmt). Fix what fails in the task it belongs to.
 - [ ] **Step 3: Commit** — "Docs: several Webex rooms and CONFERENCE (ZIDAN44 v0.31 calendar feature 4, issue #25)".
+
+### Task 8: Exchange — a refused answer says why, and isn't sent again forever
+
+Added on 2026-11-04 at the owner's request, run **before Task 7** (so Task 7's docs and `cargo xtask ci`
+cover it). Reported by the owner: an invitation from an outside organizer (sfr.fr), a single meeting
+answered from its message, is refused by Exchange at every sync with "Set action is invalid for
+property." (`respond_item`'s `AcceptItem` on the calendar item); the organizer never gets the answer, and
+the error comes back at every sync. Exchange names the refused field in the answer's `MessageXml`, which
+`check_message` drops. This task makes the next occurrence name the field and stops the loop; the real
+fix waits for that name.
+
+**Files:**
+- Modify: `crates/net/src/exchange/ews.rs` (`check_message` ~l.248), `crates/net/src/exchange/ews_pim/push.rs` (`push_events` respond branch ~l.25, `answer_pending` ~l.88), `crates/model/src/pim.rs` (`DavSync` ~l.349), `crates/engine/src/session/invite.rs` (`settle_answers` ~l.312), `crates/net/src/fakes/fake_ews.rs` + `fake_ews/route.rs` (~l.410: a way to refuse answers), the 13 catalogs for the notice
+- Test: beside the existing tests of each (net: the ews_pim tests that drive the fake EWS; engine: `crates/engine/src/tests/invites/answered.rs`, set up as `an_exchange_invitation_is_answered_on_the_servers_meeting` in `tests/calendar.rs` ~l.409)
+
+**Interfaces:**
+- Produces: `DavSync::refused_answers: Vec<(String, String)>` (`#[serde(default, skip_serializing_if = "Vec::is_empty")]`): the invitation's UID and why, for an answer the server refused for good.
+
+- [ ] **Step 1: Write the failing tests:**
+  - `check_message` unit test `a_refusal_names_the_fields`:
+    - an Error message with `<m:MessageText>Set action is invalid for property.</m:MessageText><m:ResponseCode>ErrorInvalidPropertySet</m:ResponseCode><m:MessageXml><t:FieldURI FieldURI="calendar:Organizer"/></m:MessageXml>` gives the text `Set action is invalid for property. (ErrorInvalidPropertySet: calendar:Organizer)`;
+    - `ExtendedFieldURI` (its `PropertyTag` or `PropertyName`) and `IndexedFieldURI` (`FieldURI`) are named the same way;
+    - with 10 fields, the first 3 are named;
+    - a name over 80 bytes, or holding anything but ASCII letters, digits and `:_-.`, is left out;
+    - with no field named, the text is exactly as today (existing messages and tests unchanged).
+  - net test `a_refused_answer_is_reported_once_as_refused`: the fake EWS refuses `AcceptItem` with the message above. A sync with an answered event gives `refused_answers == [(uid, why)]` with `why` holding `Set action is invalid for property` and `calendar:Organizer`, and nothing about it in `errors`. A transient refusal (`ErrorServerBusy`) stays in `errors` with `refused_answers` empty (it's tried again). Cover the `answer_pending` path the same way.
+  - engine test `a_refused_answer_is_said_once_and_not_sent_again`: an Exchange invitation answered `accepted`, then `apply_dav` with `refused_answers: [(server_uid, why)]` gives:
+    - the event's `respond` `None` and `dirty` false;
+    - one notice holding the meeting's summary and `why`;
+    - the next `take_jobs` and sync ask for no answer again.
+- [ ] **Step 2: Run** `TMPDIR=$HOME/.tq cargo test -p quatrelle-net refus` and `TMPDIR=$HOME/.tq cargo test -p quatrelle-engine refused` — expect failures.
+- [ ] **Step 3: Implement.**
+  - `check_message`: when the error's `MessageXml` names fields, append ` ({code}: {names})`, names joined by `, `, with the caps above.
+  - `push_events` and `answer_pending`: a `respond_item` error that is `NetError::No` goes to `out.refused_answers` (the event's UID, the error's text). Any other error stays in `out.errors`, as today.
+  - `settle_answers`: for each refused answer, the meeting's events (`same_meeting`) lose `respond` and `dirty`, and one notice says it, through `notice_with`: `"Exchange refused your answer to {summary}: {error}. Answer it in Outlook on the web."`, French « Exchange a refusé votre réponse à {summary} : {error}. Répondez-y dans Outlook sur le web. ».
+  - Add a row for the notice in all 13 catalogs. The server's text stays as it came.
+- [ ] **Step 4: Run** `cargo test -p quatrelle-net`, `cargo test -p quatrelle-engine`, `cargo test -p quatrelle-ui-egui i18n`, clippy -D warnings on net and engine, fmt --check — expect PASS. A clippy failure on code this task didn't touch (dead `TeamsSample` in `crates/net/src/fakes.rs` was reported) is said in the report, not fixed here.
+- [ ] **Step 5: Commit** — "Exchange: a refused answer to an invitation names the field Exchange refused, is said once and isn't sent again".
