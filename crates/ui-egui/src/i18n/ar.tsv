@@ -1875,3 +1875,4 @@ folder	Conflicts	التعارضات
 	{item} — deleted on the server ({account})	{item} — حُذف على الخادم ({account})
 	{item} was deleted on the server while it was being changed here.\n\nAccount: {account}\nIn: {place}\nWhen: {when}\n\nThe server's version was kept, so the change made here was dropped. The attachment holds the version that was here: open it to put it back.	حُذف {item} على الخادم بينما كان يُغيَّر هنا.\n\nالحساب: {account}\nفي: {place}\nمتى: {when}\n\nأُبقي على نسخة الخادم، لذا تم التخلي عن التغيير الذي أُجري هنا. يحتوي المرفق على النسخة التي كانت هنا: افتحه لاستعادتها.
 	{event}: deleted on the server meanwhile; the change made here was dropped (a copy is in Sync Issues › Conflicts)	{event}: حُذف على الخادم في هذه الأثناء؛ وتم التخلي عن التغيير الذي أُجري هنا (توجد نسخة في مشكلات المزامنة › التعارضات)
+	Careful: you know {name} as {known}, but this comes from {real}.	انتبه: تعرف {name} بالعنوان {known}، لكن هذه الرسالة من {real}.

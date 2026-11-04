@@ -1876,3 +1876,4 @@ folder	Conflicts	競合
 	{item} — deleted on the server ({account})	{item} — サーバーで削除されました ({account})
 	{item} was deleted on the server while it was being changed here.\n\nAccount: {account}\nIn: {place}\nWhen: {when}\n\nThe server's version was kept, so the change made here was dropped. The attachment holds the version that was here: open it to put it back.	{item} は、ここで変更している間にサーバーで削除されました。\n\nアカウント: {account}\n場所: {place}\n日時: {when}\n\nサーバーの版が残されたため、ここで行った変更は破棄されました。添付ファイルにはここにあった版が入っています。開くと元に戻せます。
 	{event}: deleted on the server meanwhile; the change made here was dropped (a copy is in Sync Issues › Conflicts)	{event}: その間にサーバーで削除されました。ここで行った変更は破棄されました (コピーは 同期の問題 › 競合 にあります)
+	Careful: you know {name} as {known}, but this comes from {real}.	注意: {name} は {known} として知られていますが、実際は {real} から届いています。

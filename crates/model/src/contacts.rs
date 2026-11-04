@@ -208,6 +208,11 @@ impl ContactBook {
         self.by_email.values().filter(move |c| !q.is_empty() && c.matches(q))
     }
 
+    /// The people the user writes to (or saved in an address book).
+    pub fn written(&self) -> impl Iterator<Item = &Contact> + '_ {
+        self.by_email.values().filter(|c| c.sent > 0)
+    }
+
     /// Up to `limit` contacts matching `query` (the start of the address, of the name, or of any
     /// word of the name; case-insensitive), best first.
     pub fn suggest(&self, query: &str, limit: usize, now: i64) -> Vec<Contact> {

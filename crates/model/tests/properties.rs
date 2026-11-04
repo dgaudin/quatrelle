@@ -8,7 +8,7 @@ use proptest::prelude::*;
 use quatrelle_model::addr::trust::{site, url_host};
 use quatrelle_model::search::{Advanced, Query};
 use quatrelle_model::vcard::{self, Card, PostalAddress, Typed};
-use quatrelle_model::{ical, utf7};
+use quatrelle_model::{EmailAddress, ical, lookalike, utf7};
 
 /// Words the search box reads as plain words (no `field:`, no leading `-` or quote).
 fn words() -> impl Strategy<Value = String> {
@@ -129,5 +129,20 @@ proptest! {
                 prop_assert_eq!(url_host(&s).map(|h| site(&h)), Some(s));
             }
         }
+    }
+
+    /// A person's name compares the same whichever order its words come in, "Last, First"
+    /// included (issue #29), and any name and address is checked without fault.
+    #[test]
+    fn known_names_compare_in_any_order(first in "[a-zA-Zà-ÿ]{2,12}", last in "[a-zA-Zà-ÿ]{2,12}", junk in r"\PC{0,80}") {
+        let key = lookalike::name_key(&format!("{first} {last}"));
+        prop_assert_eq!(&key, &lookalike::name_key(&format!("{last}, {first}")));
+        prop_assert_eq!(&key, &lookalike::name_key(&format!("  {} {}  ", last.to_uppercase(), first)));
+        let mut people = lookalike::KnownPeople::new();
+        people.add(&EmailAddress::new(format!("{first} {last}"), "them@work.example"));
+        let from = EmailAddress::new(format!("{last}, {first}"), "them.too@gmail.com");
+        prop_assert_eq!(people.check(&from, false).is_some(), key.is_some());
+        let _ = people.check(&EmailAddress::new(junk.clone(), junk.clone()), false);
+        let _ = lookalike::name_key(&junk);
     }
 }
