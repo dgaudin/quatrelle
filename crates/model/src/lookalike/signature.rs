@@ -87,11 +87,13 @@ fn wrote(line: &str) -> bool {
 /// forwarded message, at most [`READ_MOST`] bytes.
 pub fn own_text(text: &str) -> &str {
     let text = head(text);
-    // Each line's start and its lower-case, trimmed form, for the header block's look ahead.
+    // Each line's start and its lower-case, trimmed form, for the header block's look ahead. An
+    // HTML message's converted text writes bold and italics with stars around them (Outlook's
+    // `**De :**`): they're left aside.
     let mut lines: Vec<(usize, String)> = Vec::new();
     let mut at = 0;
     for line in text.split_inclusive('\n') {
-        lines.push((at, line.trim().to_lowercase()));
+        lines.push((at, line.trim().trim_matches('*').trim().to_lowercase()));
         at += line.len();
     }
     for (i, (start, line)) in lines.iter().enumerate() {
@@ -111,8 +113,24 @@ pub fn own_text(text: &str) -> &str {
     text
 }
 
+/// The number of a link's note (`[1]: https://…`), the line of an HTML message's converted text
+/// that says where a link goes: the notes are put at the end of the text, whichever part the
+/// links are in.
+fn link_note(line: &str) -> Option<&str> {
+    let (n, after) = line.trim().strip_prefix('[')?.split_once(']')?;
+    (!n.is_empty() && n.len() <= 6 && n.bytes().all(|b| b.is_ascii_digit()) && after.starts_with(':')).then_some(n)
+}
+
+/// The numbers of the links' notes a line refers to (`[Dana][1]`).
+fn link_refs(line: &str) -> impl Iterator<Item = &str> {
+    line.match_indices("][").filter_map(move |(at, _)| {
+        let (n, _) = line.get(at + 2..)?.split_once(']')?;
+        (!n.is_empty() && n.len() <= 6 && n.bytes().all(|b| b.is_ascii_digit())).then_some(n)
+    })
+}
+
 /// The signature of the author's own text: what follows its last `-- ` line, or else its last
-/// [`SIGNATURE_LINES`] lines that aren't empty.
+/// [`SIGNATURE_LINES`] lines that aren't empty (links' notes left aside).
 fn signature(own: &str) -> &str {
     let mut after_dashes = None;
     let mut last: VecDeque<usize> = VecDeque::with_capacity(SIGNATURE_LINES + 1);
@@ -122,7 +140,7 @@ fn signature(own: &str) -> &str {
         let bare = line.trim_end_matches(['\n', '\r']);
         if bare.trim_end() == "--" {
             after_dashes = Some(next);
-        } else if !bare.trim().is_empty() {
+        } else if !bare.trim().is_empty() && link_note(bare).is_none() {
             last.push_back(at);
             if last.len() > SIGNATURE_LINES {
                 last.pop_front();
@@ -137,13 +155,20 @@ fn signature(own: &str) -> &str {
 /// The addresses and websites the signature of `text` gives, in order, once each, at most
 /// [`MOST_SHOWN`]. Only a signature's kind of line counts: one where they come with at most
 /// [`MOST_OTHER_WORDS`] other words (a name, a title, a label such as `Tél.` or `Web`), so a
-/// sentence naming a website or an address ("I can't log in to www.…") isn't read.
+/// sentence naming a website or an address ("I can't log in to www.…") isn't read. A link's
+/// note (where an HTML link goes, at the end of the text) is read only for a link on such a line:
+/// not for one in a sentence of the message.
 pub fn signature_shows(text: &str) -> Vec<Shown> {
     let mut out: Vec<Shown> = Vec::new();
     let separator = |c: char| c.is_whitespace() || matches!(c, '<' | '>' | '(' | ')' | '[' | ']' | '{' | '}' | '"' | ',' | ';' | '|' | '«' | '»');
+    // The notes of the links on the signature's lines (they come after those lines).
+    let mut linked: BTreeSet<&str> = BTreeSet::new();
     for line in signature(own_text(text)).split('\n') {
         if out.len() >= MOST_SHOWN {
             break;
+        }
+        if link_note(line).is_some_and(|n| !linked.contains(n)) {
+            continue;
         }
         let mut found: Vec<Shown> = Vec::new();
         let mut others = 0usize;
@@ -167,6 +192,9 @@ pub fn signature_shows(text: &str) -> Vec<Shown> {
         }
         if others > MOST_OTHER_WORDS {
             continue;
+        }
+        if linked.len() < MOST_SHOWN {
+            linked.extend(link_refs(line).take(MOST_SHOWN));
         }
         for shown in found {
             if out.len() < MOST_SHOWN && !out.contains(&shown) {
@@ -336,6 +364,37 @@ mod tests {
         let text = "Thanks\n\nDana\nOn Mon, 3 Nov 2026 at 10:00, Ana <a@b.example>\nwrote:\nquoted";
         assert!(!own_text(text).contains("a@b.example"));
         assert!(own_text(text).contains("Dana"));
+    }
+
+    /// An HTML message's converted text writes Outlook's bold labels with stars (`**De :**`), and
+    /// a "wrote:" line in italics with one.
+    #[test]
+    fn own_text_reads_marks_through_bold_and_italics() {
+        for mark in [
+            "**De :** Zoe Park <zoe@studio.example>\n**Envoyé :** lundi 3 novembre 2026 10:00",
+            "**From:** Zoe Park\n**Sent:** Monday",
+            "*On Mon, 3 Nov 2026, Zoe Park <zoe@studio.example> wrote:*",
+        ] {
+            let text = format!("Hello\n\nDana\n{mark}\nquoted dana@x.example");
+            let own = own_text(&text);
+            assert!(!own.contains("quoted"), "{mark:?}: {own:?}");
+            assert!(own.contains("Dana"), "{mark:?}: {own:?}");
+        }
+    }
+
+    /// An HTML message's links are noted at the end of its converted text (`[1]: https://…`):
+    /// a link in a sentence of the message isn't the signature's, a link on its lines is.
+    #[test]
+    fn links_notes_count_for_the_signatures_links_only() {
+        let text = "Hello Zoe, the new prices are on [your portal][1].\n\nBo Chen\nSupplier Ltd\n\n[1]: https://portal.studio.example/prices";
+        assert_eq!(signature_shows(text), Vec::<Shown>::new());
+        let text =
+            "Please wire it today, see [the details][1].\n\n[Dana Whitfield][2]\nCEO\n\n[1]: https://pay.example/x\n[2]: mailto:dana@studio.example";
+        assert_eq!(signature_shows(text), vec![Shown::Address("dana@studio.example".into())]);
+        // Many links in the message don't push the signature out of its last lines.
+        let notes: String = (1..=40).map(|i| format!("\n[{i}]: https://n{i}.example")).collect();
+        let text = format!("Hi\n\nDana\nwww.studio.example\n{notes}");
+        assert_eq!(signature_shows(&text), vec![Shown::Site("studio.example".into())]);
     }
 
     #[test]
