@@ -1877,3 +1877,16 @@ folder	Conflicts	التعارضات
 	{event}: deleted on the server meanwhile; the change made here was dropped (a copy is in Sync Issues › Conflicts)	{event}: حُذف على الخادم في هذه الأثناء؛ وتم التخلي عن التغيير الذي أُجري هنا (توجد نسخة في مشكلات المزامنة › التعارضات)
 	Careful: you know {name} as {known}, but this comes from {real}.	انتبه: تعرف {name} بالعنوان {known}، لكن هذه الرسالة من {real}.
 	Careful: the signature gives {shown}, but this comes from {real}.	انتبه: يذكر التوقيع {shown}، لكن هذه الرسالة من {real}.
+	Show sender addresses in the message list	إظهار عناوين المرسلين في قائمة الرسائل
+	Tag mail from outside the organisation	وسم البريد الوارد من خارج المؤسسة
+	Sender addresses in the message list	عناوين المرسلين في قائمة الرسائل
+	The address a message comes from, after the sender's name: a familiar name can come from anyone's address	العنوان الذي جاءت منه الرسالة، بعد اسم المرسل: قد يأتي اسم مألوف من عنوان أي شخص
+	People you don't know	أشخاص لا تعرفهم
+	Tag mail from outside your organisation	وسم البريد الوارد من خارج مؤسستك
+	Messages from other domains are tagged External, in the list and above the message	تُوسم الرسائل الواردة من نطاقات أخرى بـ«خارجي» في القائمة وفوق الرسالة
+	Your organisation's domains	نطاقات مؤسستك
+	Separated by commas. Left empty, the domains of your accounts, mail services such as Gmail left out	مفصولة بفواصل. إذا تُركت فارغة: نطاقات حساباتك، باستثناء خدمات البريد مثل Gmail
+	None: nothing is tagged	لا شيء: لا يُوسم أي شيء
+	External	خارجي
+	This sender is outside your organisation.	هذا المرسل من خارج مؤسستك.
+	Check who sent it	تحقّق ممّن أرسلها

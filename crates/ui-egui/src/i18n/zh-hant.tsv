@@ -1882,3 +1882,16 @@ folder	Conflicts	衝突
 	{event}: deleted on the server meanwhile; the change made here was dropped (a copy is in Sync Issues › Conflicts)	{event}: 期間已在伺服器上刪除；在此所做的變更已捨棄 (副本在 同步問題 › 衝突 中)
 	Careful: you know {name} as {known}, but this comes from {real}.	小心：你認識的 {name} 地址是 {known}，但這封郵件來自 {real}。
 	Careful: the signature gives {shown}, but this comes from {real}.	小心：簽名顯示的是 {shown}，但這封郵件來自 {real}。
+	Show sender addresses in the message list	在郵件清單中顯示寄件者地址
+	Tag mail from outside the organisation	標記來自組織外部的郵件
+	Sender addresses in the message list	郵件清單中的寄件者地址
+	The address a message comes from, after the sender's name: a familiar name can come from anyone's address	在寄件者名稱後顯示郵件的來源地址：熟悉的名稱可能來自任何人的地址
+	People you don't know	你不認識的人
+	Tag mail from outside your organisation	標記來自你的組織外部的郵件
+	Messages from other domains are tagged External, in the list and above the message	來自其他網域的郵件會在清單中和郵件上方標示為「外部」
+	Your organisation's domains	你的組織的網域
+	Separated by commas. Left empty, the domains of your accounts, mail services such as Gmail left out	以逗號分隔。留空則為你的帳戶的網域，不含 Gmail 等郵件服務
+	None: nothing is tagged	無：不標記任何郵件
+	External	外部
+	This sender is outside your organisation.	此寄件者不屬於你的組織。
+	Check who sent it	請核實寄件者

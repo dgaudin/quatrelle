@@ -404,6 +404,63 @@ pub(super) fn options(s: &Session, st: &UiState, ui: &mut Ui, acts: &mut Vec<Act
                 switch(ui, s.prefs.check_revocation, tl!("Check whether certificates were withdrawn"), "view.checkRevocation", acts);
             },
         );
+        // Who mail is really from: both off at first, so the list keeps its usual look.
+        setting(
+            ui,
+            false,
+            tl!("Sender addresses in the message list"),
+            Some(tl!("The address a message comes from, after the sender's name: a familiar name can come from anyone's address")),
+            &mut |ui| {
+                use quatrelle_engine::SenderAddresses as A;
+                let options = [tl!("Never"), tl!("People you don't know"), tl!("Always")];
+                let values = [A::Never, A::Strangers, A::Always];
+                let now = values.iter().position(|v| *v == s.prefs.sender_addresses).unwrap_or(0);
+                if let Some(i) = widgets::segmented(ui, &t, "sender-addresses", &options, now)
+                    && let Some(v) = values.get(i)
+                {
+                    acts.push(Action::Run("view.senderAddresses", json!({"show": v.code()})));
+                }
+            },
+        );
+        setting(
+            ui,
+            false,
+            tl!("Tag mail from outside your organisation"),
+            Some(tl!("Messages from other domains are tagged External, in the list and above the message")),
+            &mut |ui| {
+                switch(ui, s.prefs.external_tag, tl!("Tag mail from outside your organisation"), "view.externalTag", acts);
+            },
+        );
+        if s.prefs.external_tag {
+            setting(
+                ui,
+                false,
+                tl!("Your organisation's domains"),
+                Some(tl!("Separated by commas. Left empty, the domains of your accounts, mail services such as Gmail left out")),
+                &mut |ui| {
+                    let id = egui::Id::unique("org-domains");
+                    let saved = s.prefs.org_domains.join(", ");
+                    let mut text: String = ui.data_mut(|d| d.get_temp::<String>(id)).unwrap_or_else(|| saved.clone());
+                    // Left empty, the field says which domains count (none before the check is
+                    // first gathered: it can't tell yet).
+                    let hint = match s.organisation() {
+                        Some(own) if own.is_empty() => tl!("None: nothing is tagged").to_string(),
+                        Some(own) => own.iter().map(String::as_str).collect::<Vec<_>>().join(", "),
+                        None => String::new(),
+                    };
+                    let r = ui.add(egui::TextEdit::singleline(&mut text).hint_text(hint).desired_width(260.0));
+                    if r.lost_focus() && text.trim() != saved {
+                        acts.push(Action::Run("view.externalTag", json!({"domains": text.trim()})));
+                    }
+                    // Kept while it's typed in; the saved list shows again after.
+                    if r.has_focus() {
+                        ui.data_mut(|d| d.insert_temp(id, text));
+                    } else {
+                        ui.data_mut(|d| d.remove::<String>(id));
+                    }
+                },
+            );
+        }
     });
 
     group(
