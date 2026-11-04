@@ -38,7 +38,7 @@ use links::*;
 pub(crate) use pictures::FIT_WIDTH;
 pub(crate) use pictures::{own_size, own_size_of, placement};
 use ribbon::*;
-pub(crate) use ribbon::{ComposeTab, RibbonInput, compose_ribbon};
+pub(crate) use ribbon::{ComposeTab, RibbonInput, compose_ribbon, rewrite_choices, rewrite_on};
 pub(crate) use signature::draw as draw_signature;
 pub use toolbar::Counts;
 use toolbar::*;

@@ -68,11 +68,14 @@ pub struct Rewrite {
 }
 
 /// Where the text the user wrote ends in a message being written: before its signature, or for
-/// a reply or a forward without one, before the message quoted (its `From:` line).
-pub fn own_text_end(c: &Compose) -> usize {
+/// a reply or a forward without one, before the message quoted: its `From:` line, in `from`,
+/// the interface's word for it (« De : » in French), or in English.
+pub fn own_text_end(c: &Compose, from: &str) -> usize {
     let body = c.body.as_str();
     let sig = Some(c.signature.trim()).filter(|s| !s.is_empty()).and_then(|s| body.find(s));
-    let quote = c.mode.and_then(|_| body.find("\nFrom: ").map(|i| i + 1));
+    let quote = c.mode.and_then(|_| {
+        [from.trim(), "From:"].into_iter().filter(|w| !w.is_empty()).filter_map(|w| body.find(&format!("\n{w} ")).map(|i| i + 1)).min()
+    });
     let end = match (sig, quote) {
         (Some(a), Some(b)) => a.min(b),
         (a, b) => a.or(b).unwrap_or(body.len()),
@@ -330,7 +333,7 @@ impl Session {
         }
         let prompt = rewrite_prompt(how).ok_or_else(|| CmdError::Params(format!("no rewrite `{how}`")))?;
         let c = self.compose.as_ref().ok_or_else(|| CmdError::Disabled("write a message first".into()))?;
-        let text: String = c.body.chars().take(own_text_end(c)).collect();
+        let text: String = c.body.chars().take(own_text_end(c, &self.quote_words.from)).collect();
         if text.trim().is_empty() {
             return Err(CmdError::Params("write something first".into()));
         }
@@ -349,6 +352,12 @@ impl Session {
         Ok(serde_json::json!({ "asked": id }))
     }
 
+    /// Whether something is written in the message being written, above its signature or the
+    /// message quoted: what Rewrite works on (its button stays grey until then).
+    pub fn has_written_text(&self) -> bool {
+        self.compose.as_ref().is_some_and(|c| c.body.chars().take(own_text_end(c, &self.quote_words.from)).any(|ch| !ch.is_whitespace()))
+    }
+
     /// Put the rewritten text in place of the text written (`use`), or let it go.
     pub fn end_rewrite(&mut self, use_it: bool) -> CmdResult {
         let c = self.compose.as_mut().ok_or_else(|| CmdError::Disabled("write a message first".into()))?;
@@ -360,7 +369,7 @@ impl Session {
         if !use_it {
             return Ok(serde_json::json!({ "dropped": true }));
         }
-        let end = own_text_end(c);
+        let end = own_text_end(c, &self.quote_words.from);
         let add = text.trim().to_string();
         let add_styles = quatrelle_mime::rich::Styles::plain(&add);
         quatrelle_mime::rich::splice(&mut c.body, &mut c.styles, 0..end, &add, &add_styles);

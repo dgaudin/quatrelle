@@ -293,6 +293,24 @@ pub fn menu_icon(icon: Option<Icon>) -> egui::Atom<'static> {
     })
 }
 
+/// A [`pill_button`] that opens a menu (a ▾ after its label), grey and still when not `enabled`.
+pub fn menu_pill(ui: &mut Ui, icon: Icon, label: &str, t: &Tokens, enabled: bool) -> Response {
+    let label = tl!(label);
+    let ink = if enabled { t.text } else { t.dim };
+    let galley = ui.painter().layout_no_wrap(label.to_string(), theme::regular(13.0), ink);
+    let size = vec2(galley.size().x + 50.0, 28.0);
+    let (rect, resp) = ui.allocate_exact_size(size, if enabled { Sense::click() } else { Sense::hover() });
+    named(ui, &resp, label, enabled, None);
+    let fill = if enabled && resp.hovered() { t.hover } else { t.surface };
+    ui.painter().rect(rect, 6.0, fill, Stroke::new(1.0, t.border), egui::StrokeKind::Inside);
+    let tint = if enabled { t.accent } else { t.dim };
+    icons::paint(ui.painter(), egui::Rect::from_min_size(rect.min + vec2(9.0, 6.0), vec2(16.0, 16.0)), icon, tint);
+    ui.painter().galley_with_override_text_color(rect.min + vec2(29.0, (28.0 - galley.size().y) / 2.0), galley, ink);
+    let arrow = egui::Rect::from_min_size(rect.right_top() + vec2(-19.0, 9.0), vec2(10.0, 10.0));
+    icons::paint(ui.painter(), arrow, Icon::ChevronDown, t.dim);
+    resp
+}
+
 /// A labelled icon button for the reading pane's action row.
 pub fn pill_button(ui: &mut Ui, icon: Icon, label: &str, t: &Tokens) -> Response {
     let label = tl!(label);
