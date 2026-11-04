@@ -167,7 +167,13 @@ impl Session {
                 return false;
             }
         };
-        self.file_locally(SYNC_ISSUES, CONFLICTS, &raw, true).is_some()
+        match self.file_locally(SYNC_ISSUES, CONFLICTS, &raw, true) {
+            Ok(_) => true,
+            Err(e) => {
+                log::warn!("{account}: the copy of an item dropped couldn't be kept: {e}");
+                false
+            }
+        }
     }
 
     /// Sync Issues and its Conflicts folder, made the first time (an account on this computer,

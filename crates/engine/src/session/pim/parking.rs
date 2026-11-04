@@ -52,6 +52,10 @@ impl Session {
     /// aside of calendars not among them), then the calendar saved without them: stopped
     /// between the two, both have them, and nothing is lost.
     fn park(&mut self, store: &Store, account: &str) {
+        // A calendar that couldn't be read isn't saved, so nothing goes out of memory.
+        if self.pim_unread.contains(account) {
+            return;
+        }
         let Some(p) = self.pim.get_mut(account) else { return };
         if !p.events.iter().any(parks) {
             self.parked.insert(account.to_string());

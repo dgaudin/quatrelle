@@ -484,6 +484,8 @@ pub struct Session {
     pub vote_sending: Option<(MessageKey, String)>,
     /// Each account's calendars and address books.
     pub pim: HashMap<String, quatrelle_model::pim::Pim>,
+    /// The accounts whose calendars and contacts couldn't be read: never saved over.
+    pub(crate) pim_unread: HashSet<String>,
     /// Webex's sign-in and the meetings on their way.
     pub webex: pim::WebexState,
     /// The rooms each account offers for meetings, once asked for (Outlook's Room Finder).
@@ -617,6 +619,7 @@ impl Session {
             open_urls: Vec::new(),
             vote_sending: None,
             pim: HashMap::new(),
+            pim_unread: HashSet::new(),
             rooms: HashMap::new(),
             free_busy: HashMap::new(),
             webex: pim::WebexState::default(),

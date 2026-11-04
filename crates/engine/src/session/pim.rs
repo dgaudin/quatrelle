@@ -112,8 +112,16 @@ pub const ACCOUNT_COLOR: u8 = 16;
 impl Session {
     pub(crate) fn load_pim(&mut self) {
         let Some(store) = self.store.clone() else { return };
+        let mut unread = Vec::new();
         for a in &self.accounts {
-            let mut p: Pim = store.load_account_doc(&a.config.id, PIM_DOC).unwrap_or_default();
+            let mut p: Pim = match store.load_account_doc(&a.config.id, PIM_DOC) {
+                Ok(p) => p,
+                Err(e) => {
+                    log::warn!("{}: calendar and contacts couldn't be read: {e}", a.config.id);
+                    unread.push(a.config.id.clone());
+                    Pim::default()
+                }
+            };
             p.read_as(store.load_account_doc(&a.config.id, quatrelle_model::pim::PIM_READING_DOC).unwrap_or_default());
             p.ensure_defaults();
             // Cached before Quatrelle read `CONFERENCE`: the line kept becomes the conference.
@@ -125,6 +133,10 @@ impl Session {
             }
             self.pim.insert(a.config.id.clone(), p);
         }
+        if !unread.is_empty() {
+            self.notice("Calendar and contacts couldn't be read: changes to them won't be saved", true);
+        }
+        self.pim_unread.extend(unread);
         // Away from the calendar from the start: set aside at once.
         self.away_from_calendar = Some(self.clock.now.saturating_sub(parking::PARK_AFTER));
     }
@@ -138,6 +150,10 @@ impl Session {
     /// again.
     pub(crate) fn write_pim(&mut self, account: &str) {
         self.pim_revision = self.pim_revision.wrapping_add(1);
+        // What couldn't be read isn't written over with what's shown in its place.
+        if self.pim_unread.contains(account) {
+            return;
+        }
         let (Some(store), Some(p)) = (&self.store, self.pim.get(account)) else { return };
         if let Err(e) = store.save_account_doc(account, PIM_DOC, p) {
             self.notice_with("calendar and contacts could not be saved: {error}", &[("error", &e.to_string())], true);

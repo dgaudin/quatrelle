@@ -5,6 +5,7 @@
 
 use super::*;
 
+mod store_errors;
 mod text_first;
 
 #[test]

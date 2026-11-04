@@ -83,21 +83,33 @@ impl Session {
         }
     }
 
-    /// The cached state of a folder, loaded from disk on first use.
+    /// The cached state of a folder, loaded from disk on first use; empty while it can't be read.
     pub fn folder_state(&mut self, account: &str, folder: &str) -> &FolderState<Arc<Summary>> {
+        if let Err(e) = self.load_cached(account, folder) {
+            log::warn!("a folder's list couldn't be read: {e}");
+        }
+        static EMPTY: std::sync::OnceLock<FolderState<Arc<Summary>>> = std::sync::OnceLock::new();
+        self.cache.get(&(account.to_string(), folder.to_string())).unwrap_or_else(|| EMPTY.get_or_init(FolderState::default))
+    }
+
+    /// Have a folder's list in the cache. One that can't be read is left out, not kept as empty:
+    /// a flag changed in it then saved the empty list over the folder's mail.
+    pub(super) fn load_cached(&mut self, account: &str, folder: &str) -> Result<(), quatrelle_store::StoreError> {
         let k = (account.to_string(), folder.to_string());
         if !self.cache.contains_key(&k) {
-            let st = self.store.as_ref().and_then(|s| s.load_folder(account, folder).ok()).unwrap_or_default().shared();
+            let st = match &self.store {
+                Some(s) => s.load_folder(account, folder)?.shared(),
+                None => FolderState::default(),
+            };
             self.cache.insert(k.clone(), st);
             self.cache_order.retain(|o| *o != k);
             self.cache_order.push(k.clone());
             self.trim_cache(&k);
         } else if self.cache_order.last() != Some(&k) {
             self.cache_order.retain(|o| *o != k);
-            self.cache_order.push(k.clone());
+            self.cache_order.push(k);
         }
-        static EMPTY: std::sync::OnceLock<FolderState<Arc<Summary>>> = std::sync::OnceLock::new();
-        self.cache.get(&k).unwrap_or_else(|| EMPTY.get_or_init(FolderState::default))
+        Ok(())
     }
 
     /// The folders whose lists are in memory, the least recently used first (what a look
