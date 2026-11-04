@@ -1738,6 +1738,7 @@ month	May	mai
 	bad parameters: {error}	paramètres incorrects : {error}
 	calendar and contacts could not be saved: {error}	Le calendrier et les contacts n’ont pas pu être enregistrés : {error}
 	calendars and contacts: {error}	calendriers et contacts : {error}
+	Exchange refused your answer to {summary}: {error}. Answer it in Outlook on the web.	Exchange a refusé votre réponse à {summary} : {error}. Répondez-y dans Outlook sur le web.
 	export: {error}	exportation : {error}
 	import: {error}	importation : {error}
 	network: {error}	réseau : {error}

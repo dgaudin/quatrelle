@@ -8,6 +8,8 @@ use super::rules::{inbox_rule_xml, server_rule};
 use super::sync::aqs_of;
 use super::*;
 
+mod refusals;
+
 #[test]
 fn the_inbox_rules_go_to_exchange_and_come_back() {
     use quatrelle_model::organize::{Condition, Rule, RuleAction};

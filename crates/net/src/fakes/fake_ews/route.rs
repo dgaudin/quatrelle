@@ -413,6 +413,10 @@ impl Data {
                             out.push(err("ErrorItemNotFound"));
                             continue;
                         }
+                        if let Some(refused) = self.refuses_answer() {
+                            out.push(refused);
+                            continue;
+                        }
                         if m.name == "DeclineItem" {
                             self.pim.retain(|(id, _, _)| *id != reference);
                         }

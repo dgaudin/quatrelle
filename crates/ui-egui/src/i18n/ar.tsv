@@ -1734,6 +1734,7 @@ month	May	مايو
 	bad parameters: {error}	معلمات غير صحيحة: {error}
 	calendar and contacts could not be saved: {error}	تعذّر حفظ التقويم وجهات الاتصال: {error}
 	calendars and contacts: {error}	التقويمات وجهات الاتصال: {error}
+	Exchange refused your answer to {summary}: {error}. Answer it in Outlook on the web.	رفض Exchange ردّك على {summary}: {error}. أجب عنه في Outlook على الويب.
 	export: {error}	التصدير: {error}
 	import: {error}	الاستيراد: {error}
 	network: {error}	الشبكة: {error}

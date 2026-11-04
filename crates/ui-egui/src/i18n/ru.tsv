@@ -1737,6 +1737,7 @@ month	May	Май
 	bad parameters: {error}	неверные параметры: {error}
 	calendar and contacts could not be saved: {error}	Не удалось сохранить календарь и контакты: {error}
 	calendars and contacts: {error}	календари и контакты: {error}
+	Exchange refused your answer to {summary}: {error}. Answer it in Outlook on the web.	Exchange отклонил ваш ответ на приглашение {summary}: {error}. Ответьте в Outlook в Интернете.
 	export: {error}	экспорт: {error}
 	import: {error}	импорт: {error}
 	network: {error}	сеть: {error}

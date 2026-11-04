@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 Didier Gaudin
 //! Engine tests: an answered invitation, and the meeting's earlier invitations in the Inbox, go
-//! to Deleted Items (behind `Prefs::tidy_answered_invites`); a newer update stays.
+//! to Deleted Items (behind `Prefs::tidy_answered_invites`); a newer update stays. An answer
+//! Exchange refused is said once and not sent again.
 
 use super::*;
 
@@ -368,5 +369,94 @@ fn a_colleagues_copy_ahead_doesnt_move_an_unseen_update() {
     assert_eq!(r["moved"], 1, "{r}");
     assert!(!listed(&s, 2), "the version answered goes");
     assert!(listed(&s, 3), "the update not seen yet stays");
+    done(s);
+}
+
+/// The sample session on Exchange, the sample's invitation open: answered by the server.
+fn on_exchange(name: &str) -> Session {
+    let mut s = sample_session(name);
+    if let Some(a) = s.accounts.iter_mut().find(|a| a.config.id == "sample") {
+        a.config.ews = Some("https://mail.studio.example/EWS/Exchange.asmx".into());
+    }
+    let k = s.list.iter().find(|m| m.subject == "Sound mix, version 3").map(|m| m.key.clone()).unwrap();
+    s.run("list.open", &json!({"key": k.to_id()})).unwrap();
+    s
+}
+
+/// Exchange's refusal of 04/11, as the server's words come with the field it named.
+const REFUSED: &str = "Set action is invalid for property. (ErrorInvalidPropertySet: calendar:Organizer)";
+
+/// The notices saying why the answer was refused.
+fn refusals(s: &Session) -> Vec<&crate::Notice> {
+    s.notices.iter().filter(|n| n.text.contains(REFUSED)).collect()
+}
+
+/// Whether anything is left to answer about the sample's meeting, or a sync was asked for since
+/// the jobs were last taken (they're taken here).
+fn anything_to_answer(s: &mut Session) -> bool {
+    let asked = s.take_jobs().iter().any(|j| matches!(j, Job::SyncDav { .. }));
+    let waiting = s.pim["sample"]
+        .events
+        .iter()
+        .any(|e| quatrelle_model::pim::same_meeting(&e.event.uid, "mix@sample.quatrelle") && (e.respond.is_some() || e.dirty));
+    waiting || asked
+}
+
+/// On 04/11 Exchange refused the owner's answer to an outside organizer's meeting at every sync,
+/// and it was sent again at each one. Refused for good, it's said once, with why, and the meeting
+/// is left as the server has it: nothing is sent again, at this sync or the next.
+#[test]
+fn a_refused_answer_is_said_once_and_not_sent_again() {
+    let mut s = on_exchange("answered-refused");
+    // The server's meeting, as Exchange's is kept: `UID#start`, with its item's address.
+    let (server_uid, summary) = {
+        let p = s.pim_mut("sample");
+        let e = p.events.iter_mut().find(|e| e.event.uid == "mix@sample.quatrelle").expect("the sample's meeting");
+        e.event.uid = format!("{}#{}", e.event.uid, e.event.start);
+        e.href = "E1".into();
+        (e.event.uid.clone(), e.event.summary.clone())
+    };
+    s.run("invite.respond", &json!({"answer": "accepted"})).unwrap();
+    assert!(anything_to_answer(&mut s), "the server is to answer");
+    s.apply_dav("sample", &DavSync { refused_answers: vec![(server_uid.clone(), REFUSED.into())], ..Default::default() });
+    let e = s.pim["sample"].events.iter().find(|e| e.event.uid == server_uid).unwrap();
+    assert_eq!((e.respond.as_deref(), e.dirty), (None, false));
+    let said = refusals(&s);
+    assert_eq!(said.len(), 1, "{:?}", s.notices);
+    assert!(!summary.is_empty() && said[0].text.contains(&summary) && said[0].error, "{:?}", said[0]);
+    assert!(!anything_to_answer(&mut s), "not sent again");
+    s.apply_dav("sample", &DavSync::default());
+    assert!(!anything_to_answer(&mut s), "nor at the next sync");
+    assert_eq!(refusals(&s).len(), 1, "said once");
+    done(s);
+}
+
+/// Answered before the calendar here had the meeting, the answer waited for it and was refused
+/// once it was read: what waited goes too, or it would be made the answer on the server's meeting
+/// again, and refused again, at every sync.
+#[test]
+fn an_answer_refused_before_the_meeting_was_here_isnt_made_again() {
+    let mut s = on_exchange("answered-refused-waiting");
+    s.pim_mut("sample").events.retain(|e| e.event.uid != "mix@sample.quatrelle");
+    s.run("invite.respond", &json!({"answer": "accepted"})).unwrap();
+    let waiting = s.pim["sample"].events.iter().find(|e| e.href.is_empty() && e.respond.is_some()).cloned().expect("waiting for the meeting");
+    s.take_jobs();
+    // The sync read the server's meeting, and Exchange refused the answer there.
+    let theirs =
+        CalEvent { uid: format!("{}#{}", waiting.event.uid, waiting.event.start), attendees: vec![me("NEEDS-ACTION")], ..waiting.event.clone() };
+    let sync = DavSync {
+        calendars: Some(vec![CalendarInfo { id: "calendar".into(), name: "Calendar".into(), ..Default::default() }]),
+        events: vec![StoredEvent { calendar: "calendar".into(), href: "E1".into(), etag: "ck".into(), event: theirs, ..Default::default() }],
+        synced_calendars: vec!["calendar".into()],
+        refused_answers: vec![(waiting.event.uid.clone(), REFUSED.into())],
+        checked: NOW,
+        ..Default::default()
+    };
+    s.apply_dav("sample", &sync);
+    let p = &s.pim["sample"];
+    assert!(!p.events.iter().any(|e| e.href.is_empty() && e.event.uid == waiting.event.uid), "what waited goes");
+    assert!(p.events.iter().any(|e| e.href == "E1"), "the server's meeting stays");
+    assert!(!anything_to_answer(&mut s), "not made the answer on the server's meeting");
+    assert_eq!(refusals(&s).len(), 1, "{:?}", s.notices);
     done(s);
 }

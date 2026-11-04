@@ -1734,6 +1734,7 @@ month	May	mei
 	bad parameters: {error}	onjuiste parameters: {error}
 	calendar and contacts could not be saved: {error}	Agenda en contactpersonen konden niet worden opgeslagen: {error}
 	calendars and contacts: {error}	agenda's en contactpersonen: {error}
+	Exchange refused your answer to {summary}: {error}. Answer it in Outlook on the web.	Exchange heeft je antwoord op {summary} geweigerd: {error}. Beantwoord het in Outlook op het web.
 	export: {error}	export: {error}
 	import: {error}	import: {error}
 	network: {error}	netwerk: {error}

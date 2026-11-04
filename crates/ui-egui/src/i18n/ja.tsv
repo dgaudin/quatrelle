@@ -1735,6 +1735,7 @@ month	May	5月
 	bad parameters: {error}	パラメーターが正しくありません: {error}
 	calendar and contacts could not be saved: {error}	予定表と連絡先を保存できませんでした: {error}
 	calendars and contacts: {error}	予定表と連絡先: {error}
+	Exchange refused your answer to {summary}: {error}. Answer it in Outlook on the web.	Exchange は {summary} への返信を拒否しました: {error}。Outlook on the web で返信してください。
 	export: {error}	エクスポート: {error}
 	import: {error}	インポート: {error}
 	network: {error}	ネットワーク: {error}

@@ -1737,6 +1737,7 @@ month	May	5月
 	bad parameters: {error}	參數錯誤: {error}
 	calendar and contacts could not be saved: {error}	無法儲存行事曆和連絡人: {error}
 	calendars and contacts: {error}	行事曆和連絡人: {error}
+	Exchange refused your answer to {summary}: {error}. Answer it in Outlook on the web.	Exchange 拒絕了你對 {summary} 的回覆: {error}。請在 Outlook 網頁版中回覆。
 	export: {error}	匯出: {error}
 	import: {error}	匯入: {error}
 	network: {error}	網路: {error}

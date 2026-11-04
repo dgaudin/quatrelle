@@ -1735,6 +1735,7 @@ month	May	5月
 	bad parameters: {error}	参数错误: {error}
 	calendar and contacts could not be saved: {error}	无法保存日历和联系人: {error}
 	calendars and contacts: {error}	日历和联系人: {error}
+	Exchange refused your answer to {summary}: {error}. Answer it in Outlook on the web.	Exchange 拒绝了你对 {summary} 的答复: {error}。请在 Outlook 网页版中答复。
 	export: {error}	导出: {error}
 	import: {error}	导入: {error}
 	network: {error}	网络: {error}
