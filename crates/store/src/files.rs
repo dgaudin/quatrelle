@@ -15,6 +15,29 @@ pub(super) enum Files {
     Packed(Arc<packed::Packs>),
     /// The files, and the paths changed since they were last taken (when that's tracked).
     Memory(Arc<Mutex<BTreeMap<PathBuf, Vec<u8>>>>, Arc<Mutex<Option<std::collections::BTreeSet<PathBuf>>>>),
+    /// Memory whose reads or writes of some files fail, as a disk or a data file can
+    /// ([`Store::failing`]): what a store error loses is tested with it.
+    Failing(Arc<Faults>),
+}
+
+/// The files of [`Files::Failing`], and the file-name endings whose reads and writes fail now.
+#[derive(Debug)]
+pub(super) struct Faults {
+    pub(super) files: Files,
+    pub(super) reads: Mutex<Option<String>>,
+    pub(super) writes: Mutex<Option<String>>,
+}
+
+impl Faults {
+    /// An error when `rule` names how `p` ends: never "not found", which the store reads as an
+    /// empty file.
+    fn check(rule: &Mutex<Option<String>>, p: &Path) -> io::Result<()> {
+        let rule = rule.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        match rule.as_deref() {
+            Some(end) if p.to_string_lossy().replace('\\', "/").ends_with(end) => Err(io::Error::other("failed on purpose")),
+            _ => Ok(()),
+        }
+    }
 }
 
 fn not_found() -> io::Error {
@@ -43,6 +66,10 @@ impl Files {
             #[cfg(not(target_arch = "wasm32"))]
             Files::Packed(x) => x.read(p),
             Files::Memory(m, _) => Files::with(m, |m| m.get(p).cloned().ok_or_else(not_found)),
+            Files::Failing(f) => {
+                Faults::check(&f.reads, p)?;
+                f.files.read(p)
+            }
         }
     }
 
@@ -55,6 +82,10 @@ impl Files {
                 Files::with(m, |m| m.insert(p.to_path_buf(), bytes.to_vec()));
                 self.mark([p]);
                 Ok(())
+            }
+            Files::Failing(f) => {
+                Faults::check(&f.writes, p).map_err(io_err(p))?;
+                f.files.write(p, bytes)
             }
         }
     }
@@ -97,6 +128,11 @@ impl Files {
                 self.mark(moved.iter().map(PathBuf::as_path));
                 Ok(())
             }
+            Files::Failing(f) => {
+                Faults::check(&f.writes, from)?;
+                Faults::check(&f.writes, to)?;
+                f.files.rename(from, to)
+            }
         }
     }
 
@@ -109,6 +145,10 @@ impl Files {
                 Files::with(m, |m| m.remove(p).map(|_| ()).ok_or_else(not_found))?;
                 self.mark([p]);
                 Ok(())
+            }
+            Files::Failing(f) => {
+                Faults::check(&f.writes, p)?;
+                f.files.remove_file(p)
             }
         }
     }
@@ -132,6 +172,10 @@ impl Files {
                 self.mark(gone.iter().map(PathBuf::as_path));
                 Ok(())
             }
+            Files::Failing(f) => {
+                Faults::check(&f.writes, p)?;
+                f.files.remove_dir_all(p)
+            }
         }
     }
 
@@ -141,6 +185,7 @@ impl Files {
             #[cfg(not(target_arch = "wasm32"))]
             Files::Packed(x) => x.is_file(p),
             Files::Memory(m, _) => Files::with(m, |m| m.contains_key(p)),
+            Files::Failing(f) => f.files.is_file(p),
         }
     }
 
@@ -150,6 +195,7 @@ impl Files {
             #[cfg(not(target_arch = "wasm32"))]
             Files::Packed(x) => x.exists(p),
             Files::Memory(m, _) => Files::with(m, |m| m.keys().any(|k| k.starts_with(p))),
+            Files::Failing(f) => f.files.exists(p),
         }
     }
 
@@ -168,6 +214,7 @@ impl Files {
             Files::Memory(m, _) => Files::with(m, |m| {
                 m.keys().filter(|k| k.parent() == Some(dir)).filter_map(|k| Some((k.file_name()?.to_str()?.to_string(), k.clone()))).collect()
             }),
+            Files::Failing(f) => f.files.list(dir),
         }
     }
 
@@ -192,6 +239,7 @@ impl Files {
             #[cfg(not(target_arch = "wasm32"))]
             Files::Packed(x) => x.walk(dir),
             Files::Memory(m, _) => Files::with(m, |m| m.keys().filter(|k| k.starts_with(dir)).cloned().collect()),
+            Files::Failing(f) => f.files.walk(dir),
         }
     }
 
@@ -214,6 +262,7 @@ impl Files {
             Files::Memory(m, _) => {
                 Files::with(m, |m| m.iter().filter(|(k, _)| k.starts_with(dir)).map(|(_, v)| v.len() as u64).fold(0u64, u64::saturating_add))
             }
+            Files::Failing(f) => f.files.size(dir),
         }
     }
 }
