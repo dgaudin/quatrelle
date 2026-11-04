@@ -273,8 +273,9 @@ fn external_stays_on_one_line_in_a_narrow_pane() {
 }
 
 /// File › Options › Safety, in French as the spec words it: the sender addresses' choice and the
-/// External switch; the organisation's domains only while the switch is on, the field saying
-/// which they are when it's left empty. Choosing « Personnes que vous ne connaissez pas » runs
+/// External switch; the organisation's domains always (Ruling 16: the signature check reads them
+/// too, the switch off), its note saying what they serve and the field which they are when it's
+/// left empty. Choosing « Personnes que vous ne connaissez pas » runs
 /// `view.senderAddresses` with `strangers`.
 #[test]
 fn the_safety_rows() {
@@ -297,14 +298,16 @@ fn the_safety_rows() {
     for want in ["Jamais", "Personnes que vous ne connaissez pas", "Toujours", "Signaler le courrier venant de l'extérieur de votre organisation"] {
         assert!(texts.iter().any(|t| t == want), "{want}: {texts:?}");
     }
-    assert!(!texts.iter().any(|t| t == "Domaines de votre organisation"), "the domains only with the tag on");
+    assert!(texts.iter().any(|t| t == "Domaines de votre organisation"), "the domains with the tag off too: {texts:?}");
+    let serves = "Sert à l'étiquette Externe et à la vérification de la signature";
+    assert!(texts.iter().any(|t| t.starts_with(serves)), "what they serve: {texts:?}");
     assert_eq!(a.session.prefs.sender_addresses, quatrelle_engine::SenderAddresses::Never, "never at first");
     let strangers = settled_text_at(&ctx, &mut a, "Personnes que vous ne connaissez pas", size).expect("its choice");
     click_at(&ctx, &mut a, strangers, 1, size);
     frame_sized(&ctx, &mut a, vec![], size);
     assert_eq!(a.session.prefs.sender_addresses, quatrelle_engine::SenderAddresses::Strangers);
     a.run("view.externalTag", json!({"on": true}));
-    settled_text_at(&ctx, &mut a, "Domaines de votre organisation", size).expect("the domains' row, with the tag on");
+    settled_text_at(&ctx, &mut a, "Domaines de votre organisation", size).expect("the domains' row, with the tag on too");
     let texts = drawn(&ctx, &mut a);
     assert!(texts.iter().any(|t| t == "studio.example"), "left empty, the field says the account's domain: {texts:?}");
     crate::i18n::set_current(crate::i18n::Lang::EN);

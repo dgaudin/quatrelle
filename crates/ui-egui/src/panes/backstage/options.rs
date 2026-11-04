@@ -431,36 +431,34 @@ pub(super) fn options(s: &Session, st: &UiState, ui: &mut Ui, acts: &mut Vec<Act
                 switch(ui, s.prefs.external_tag, tl!("Tag mail from outside your organisation"), "view.externalTag", acts);
             },
         );
-        if s.prefs.external_tag {
-            setting(
-                ui,
-                false,
-                tl!("Your organisation's domains"),
-                Some(tl!("Separated by commas. Left empty, the domains of your accounts, mail services such as Gmail left out")),
-                &mut |ui| {
-                    let id = egui::Id::unique("org-domains");
-                    let saved = s.prefs.org_domains.join(", ");
-                    let mut text: String = ui.data_mut(|d| d.get_temp::<String>(id)).unwrap_or_else(|| saved.clone());
-                    // Left empty, the field says which domains count (none before the check is
-                    // first gathered: it can't tell yet).
-                    let hint = match s.organisation() {
-                        Some(own) if own.is_empty() => tl!("None: nothing is tagged").to_string(),
-                        Some(own) => own.iter().map(String::as_str).collect::<Vec<_>>().join(", "),
-                        None => String::new(),
-                    };
-                    let r = ui.add(egui::TextEdit::singleline(&mut text).hint_text(hint).desired_width(260.0));
-                    if r.lost_focus() && text.trim() != saved {
-                        acts.push(Action::Run("view.externalTag", json!({"domains": text.trim()})));
-                    }
-                    // Kept while it's typed in; the saved list shows again after.
-                    if r.has_focus() {
-                        ui.data_mut(|d| d.insert_temp(id, text));
-                    } else {
-                        ui.data_mut(|d| d.remove::<String>(id));
-                    }
-                },
-            );
-        }
+        // Always shown: the signature check reads them too, with the tag off.
+        let about = format!(
+            "{} {}",
+            tl!("Used for the External tag and the signature check."),
+            tl!("Separated by commas. Left empty, the domains of your accounts, mail services such as Gmail left out")
+        );
+        setting(ui, false, tl!("Your organisation's domains"), Some(&about), &mut |ui| {
+            let id = egui::Id::unique("org-domains");
+            let saved = s.prefs.org_domains.join(", ");
+            let mut text: String = ui.data_mut(|d| d.get_temp::<String>(id)).unwrap_or_else(|| saved.clone());
+            // Left empty, the field says which domains count (none before the check is
+            // first gathered: it can't tell yet).
+            let hint = match s.organisation() {
+                Some(own) if own.is_empty() => tl!("None: nothing is tagged").to_string(),
+                Some(own) => own.iter().map(String::as_str).collect::<Vec<_>>().join(", "),
+                None => String::new(),
+            };
+            let r = ui.add(egui::TextEdit::singleline(&mut text).hint_text(hint).desired_width(260.0));
+            if r.lost_focus() && text.trim() != saved {
+                acts.push(Action::Run("view.externalTag", json!({"domains": text.trim()})));
+            }
+            // Kept while it's typed in; the saved list shows again after.
+            if r.has_focus() {
+                ui.data_mut(|d| d.insert_temp(id, text));
+            } else {
+                ui.data_mut(|d| d.remove::<String>(id));
+            }
+        });
     });
 
     group(

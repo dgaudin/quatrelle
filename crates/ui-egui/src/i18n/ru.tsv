@@ -1889,6 +1889,7 @@ folder	Conflicts	Конфликты
 	Messages from other domains are tagged External, in the list and above the message	Письма из других доменов отмечаются как «Внешнее» в списке и над письмом
 	Your organisation's domains	Домены вашей организации
 	Separated by commas. Left empty, the domains of your accounts, mail services such as Gmail left out	Через запятую. Если пусто — домены ваших учётных записей, кроме почтовых сервисов вроде Gmail
+	Used for the External tag and the signature check.	Для метки «Внешнее» и проверки подписи.
 	None: nothing is tagged	Нет: ничего не отмечается
 	External	Внешнее
 	This sender is outside your organisation.	Этот отправитель не из вашей организации.

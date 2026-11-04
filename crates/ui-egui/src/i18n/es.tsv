@@ -1890,6 +1890,7 @@ folder	Conflicts	Conflictos
 	Messages from other domains are tagged External, in the list and above the message	Los mensajes de otros dominios se marcan como Externo, en la lista y encima del mensaje
 	Your organisation's domains	Dominios de tu organización
 	Separated by commas. Left empty, the domains of your accounts, mail services such as Gmail left out	Separados por comas. Si se deja vacío, los dominios de tus cuentas, sin los servicios de correo como Gmail
+	Used for the External tag and the signature check.	Sirve para la etiqueta Externo y la comprobación de la firma.
 	None: nothing is tagged	Ninguno: no se marca nada
 	External	Externo
 	This sender is outside your organisation.	Este remitente es externo a tu organización.

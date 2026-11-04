@@ -1886,6 +1886,7 @@ folder	Conflicts	התנגשויות
 	Messages from other domains are tagged External, in the list and above the message	הודעות מדומיינים אחרים מסומנות כחיצוניות, ברשימה ומעל ההודעה
 	Your organisation's domains	הדומיינים של הארגון שלכם
 	Separated by commas. Left empty, the domains of your accounts, mail services such as Gmail left out	מופרדים בפסיקים. אם ריק: הדומיינים של החשבונות שלכם, ללא שירותי דואר כמו Gmail
+	Used for the External tag and the signature check.	משמש לתווית „חיצוני” ולבדיקת החתימה.
 	None: nothing is tagged	אין: שום דבר לא מסומן
 	External	חיצוני
 	This sender is outside your organisation.	השולח הזה נמצא מחוץ לארגון שלכם.
