@@ -1903,3 +1903,5 @@ folder	Conflicts	競合
 	Check who sent it	差出人を確認してください
 	Type your text first	先に本文を入力してください
 	Calendar and contacts couldn't be read: changes to them won't be saved	カレンダーと連絡先を読み込めませんでした。変更は保存されません
+	Your rules couldn't be read: changes to them won't be saved	ルールを読み込めませんでした。変更は保存されません
+	Snoozed mail couldn't be read: changes to it won't be saved	再通知に設定したメールを読み込めませんでした。変更は保存されません

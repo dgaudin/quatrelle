@@ -17,6 +17,9 @@ pub mod search_folders;
 
 /// The folder snoozed mail waits in.
 const SNOOZED: &str = "Snoozed";
+/// The mail rules, and the snoozed mail to bring back.
+const RULES_DOC: &str = "rules.json";
+const SNOOZES_DOC: &str = "snoozes.json";
 
 /// Where "run the rules now" looks: the list on screen, the Inbox of each account the rules
 /// apply to, or one folder (`account`: the rule's, or the current one, when not given).
@@ -103,6 +106,28 @@ impl Session {
         Ok(serde_json::json!({ "removed": name }))
     }
 
+    /// The rules and the snoozed mail, as the session opens. One that can't be read is never
+    /// written over with what's shown in its place (nothing): a notice says so.
+    pub(super) fn load_rules_and_snoozes(&mut self) {
+        let Some(store) = self.store.clone() else { return };
+        match store.load_doc(RULES_DOC) {
+            Ok(r) => self.rules = r,
+            Err(e) => {
+                log::warn!("the rules couldn't be read: {e}");
+                self.docs_unread.insert(RULES_DOC);
+                self.notice("Your rules couldn't be read: changes to them won't be saved", true);
+            }
+        }
+        match store.load_doc(SNOOZES_DOC) {
+            Ok(z) => self.snoozes = z,
+            Err(e) => {
+                log::warn!("snoozed mail couldn't be read: {e}");
+                self.docs_unread.insert(SNOOZES_DOC);
+                self.notice("Snoozed mail couldn't be read: changes to it won't be saved", true);
+            }
+        }
+    }
+
     // ----- snooze -----
 
     /// The Snoozed folder of an account, created when missing.
@@ -129,6 +154,10 @@ impl Session {
         }
         if sel.iter().any(|m| m.message_id.is_empty()) {
             return Err(CmdError::Failed("a message without a Message-ID can't be snoozed".into()));
+        }
+        // Its record wouldn't be kept: the mail would stay in Snoozed after a restart.
+        if self.docs_unread.contains(SNOOZES_DOC) {
+            return Err(CmdError::Failed("Snoozed mail couldn't be read, so no more can be snoozed".into()));
         }
         let next = self.successor(&self.selection.clone());
         let mut accounts: Vec<String> = sel.iter().map(|m| m.key.account.clone()).collect();
@@ -228,6 +257,10 @@ impl Session {
     }
 
     pub(super) fn save_snoozes(&mut self) {
+        // What couldn't be read isn't written over (the mail snoozed before wouldn't come back).
+        if self.docs_unread.contains(SNOOZES_DOC) {
+            return;
+        }
         // An online-only account's snoozed mail is kept without its subject (issue #4).
         let kept: Vec<_> = self
             .snoozes
@@ -238,7 +271,7 @@ impl Session {
             })
             .collect();
         if let Some(store) = &self.store
-            && let Err(e) = store.save_doc("snoozes.json", &kept)
+            && let Err(e) = store.save_doc(SNOOZES_DOC, &kept)
         {
             self.notice_with("snoozed mail couldn't be saved: {error}", &[("error", &e.to_string())], true);
         }
