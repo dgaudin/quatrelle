@@ -695,10 +695,27 @@ fn a_notice_is_said_in_the_interfaces_language() {
 #[test]
 fn a_string_is_found_in_every_language() {
     let all = in_every_language("Join the Webex meeting:");
-    assert_eq!(all.first(), Some(&"Join the Webex meeting:"));
+    assert_eq!(all.first().map(String::as_str), Some("Join the Webex meeting:"));
     for said in ["Rejoindre la réunion Webex :", "Webex 会議に参加:", "加入 Webex 会议:", "加入 Webex 會議:"] {
-        assert_eq!(all.iter().filter(|s| **s == said).count(), 1, "{said}: {all:?}");
+        assert!(all.iter().any(|s| s == said), "{said}: {all:?}");
     }
-    assert_eq!(all.len(), LANGUAGES.len(), "{all:?}");
+    assert_eq!(all.iter().collect::<BTreeSet<_>>().len(), all.len(), "each once: {all:?}");
     assert_eq!(in_every_language("No catalog has this"), vec!["No catalog has this"]);
+}
+
+/// A translation read from a catalog's source, its catalog left unbuilt, is the one the built
+/// catalog holds: escapes read, a row in a context or skipped not taken, the first of two rows.
+#[test]
+fn a_translation_read_from_the_source_is_the_catalogs() {
+    let source = "# a comment\nfolder\tArchive\tArchives\n\tArchive\tArchiver\n\tLine\\none\tLigne\\nun\n\
+                  \tSaved {path}\tEnregistré\n\tSaved {path}\tEnregistré {path}\n\tTwice\tUne\n\tTwice\tDeux\n\tBroken\n";
+    let built: HashMap<String, String> = parse(source).0.into_iter().collect();
+    for key in ["Archive", "Line\none", "Saved {path}", "Twice", "Broken", "Missing", "folder"] {
+        assert_eq!(find_in(source, key), built.get(key).cloned(), "{key:?}");
+    }
+    for lang in Lang::all() {
+        for key in ["Join the Webex meeting:", "Archive", "Meeting number: {number}"] {
+            assert_eq!(find_in(lang.0.source, key).as_ref(), lang.0.catalog().get(key), "{}: {key:?}", lang.code());
+        }
+    }
 }
