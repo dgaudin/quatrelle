@@ -7,6 +7,8 @@ use super::*;
 use std::collections::{HashMap, VecDeque};
 
 pub(crate) mod links;
+mod rules;
+use rules::{RULE_MARK, mark_rules};
 
 /// Most lines kept of a rich rendering (the rest is shown as text).
 pub(super) const RICH_MAX_LINES: usize = 20_000;
@@ -266,7 +268,9 @@ pub fn html_to_rich(html: &str) -> RichText {
     };
     // Wide enough that paragraphs stay one line each (the UI wraps them to the pane). Sizes,
     // typefaces and CSS bold are marked first: the converter keeps none of them.
-    let (fonts_marked, fonts) = crate::fonts::mark(html);
+    // Lines across it (an `<hr>`, Outlook's border over a quoted message) are marked first.
+    let ruled = mark_rules(html);
+    let (fonts_marked, fonts) = crate::fonts::mark(&ruled);
     let marked = close_css_rules(&mark_pictures(&mark_headings(&fonts_marked)));
     // The message's own CSS is read for colours and hidden parts (`display: none`), nothing else.
     let result = std::panic::catch_unwind(|| html2text::config::rich().use_doc_css().lines_from_read(marked.as_bytes(), 2000));
@@ -339,8 +343,14 @@ pub fn html_to_rich(html: &str) -> RichText {
                 sp.heading = level;
             }
         }
+        // A line across the message: alone on its line, drawn by the reader.
+        if spans.iter().map(|s| s.text.as_str()).collect::<String>().trim() == RULE_MARK.to_string() {
+            out.push(vec![Span { rule: true, ..Default::default() }]);
+            blank = 0;
+            continue;
+        }
         for sp in &mut spans {
-            sp.text = sp.text.replace([HEADING_MARK, PICTURE_MARK], "");
+            sp.text = sp.text.replace([HEADING_MARK, PICTURE_MARK, RULE_MARK], "");
         }
         // List bullets (`* item`, indented when nested) as real bullets.
         if let Some(first) = spans.first_mut() {

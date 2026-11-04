@@ -712,3 +712,23 @@ fn east_asian_mail_reads() {
         assert_eq!(parse(&raw).map(|p| p.text.trim().to_string()).as_deref(), Some(text), "{charset}");
     }
 }
+
+/// Outlook draws a thin line above each message a reply quotes (a block with a top border over
+/// its « De : » lines), and an `<hr>` is one too (Quatrelle's own replies write one): each comes
+/// out as a rule line, where the exchanges ran together. A box framed all round isn't one.
+#[test]
+fn a_quotes_top_border_and_an_hr_are_rule_lines() {
+    let rule_at = |rich: &RichText| rich.iter().position(|l| l.iter().any(|s| s.rule));
+    let line_of = |rich: &RichText, text: &str| rich.iter().position(|l| l.iter().any(|s| s.text.contains(text)));
+    let outlook = r#"<p class=MsoNormal>Cordialement,</p><div style='border:none;border-top:solid #E1E1E1 1.0pt;padding:3.0pt 0cm 0cm 0cm'>
+        <p class=MsoNormal><b>De&nbsp;:</b> Fred &lt;f@x.example&gt;<br><b>Envoyé&nbsp;:</b> mercredi</p></div><p>Texte cité</p>"#;
+    let rich = html_to_rich(outlook);
+    let (rule, above, below) = (rule_at(&rich), line_of(&rich, "Cordialement"), line_of(&rich, "Fred"));
+    assert!(rule.is_some() && above < rule && rule < below, "{rich:?}");
+    assert!(rich.iter().flatten().filter(|s| s.rule).all(|s| s.text.is_empty()));
+    let rich = html_to_rich("<p>Merci</p><HR size=2 width=\"100%\"><p><b>From:</b> Fred</p>");
+    assert!(rule_at(&rich).is_some_and(|r| line_of(&rich, "Merci") < Some(r) && Some(r) < line_of(&rich, "Fred")), "{rich:?}");
+    // Framed all round, or no border at all: no line.
+    assert_eq!(rule_at(&html_to_rich(r#"<div style="border:1px solid #ccc">Encadré</div><p>Suite</p>"#)), None);
+    assert_eq!(rule_at(&html_to_rich(r#"<div style="border-top:none">Rien</div><p style="margin-top:4px">Suite</p>"#)), None);
+}

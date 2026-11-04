@@ -8,6 +8,7 @@ use super::*;
 mod bars;
 mod header_actions;
 mod linked_pictures;
+mod rules;
 mod senders;
 mod tables;
 mod text_first;
