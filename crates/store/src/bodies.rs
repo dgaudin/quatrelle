@@ -10,13 +10,18 @@ impl Store {
         self.files.read(&self.body_path(key)).ok()
     }
 
-    /// A message's source, `None` when it isn't kept here (never downloaded); an error when it is
-    /// but couldn't be read, so that what goes on to rewrite it stops rather than lose it.
+    /// A message's source, `None` when it isn't kept here (never downloaded, or damaged past
+    /// reading: like a damaged cache file, never worth stopping over); an error when it is but
+    /// couldn't be read now, so that what goes on to rewrite it stops rather than lose it.
     pub fn load_body(&self, key: &MessageKey) -> Result<Option<Vec<u8>>> {
         let path = self.body_path(key);
         match self.files.read(&path) {
             Ok(raw) => Ok(Some(raw)),
             Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
+            Err(e) if e.kind() == io::ErrorKind::InvalidData => {
+                log::warn!("{}: damaged, taken as missing: {e}", path.display());
+                Ok(None)
+            }
             Err(e) => Err(io_err(&path)(e)),
         }
     }
