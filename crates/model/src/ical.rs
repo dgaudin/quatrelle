@@ -710,7 +710,9 @@ pub fn write_event(e: &CalEvent, now: i64, out: &mut String) {
         lines.push(format!("TRIGGER:{}", trigger(m)));
         lines.push("END:VALARM".into());
     }
-    lines.extend(e.extra.iter().map(|x| x.replace(['\r', '\n'], "")));
+    // A kept line with the conference's link isn't written again.
+    let repeated = conference::repeats(e);
+    lines.extend(e.extra.iter().enumerate().filter(|(i, _)| !repeated.contains(i)).map(|(_, x)| x.replace(['\r', '\n'], "")));
     lines.push("END:VEVENT".into());
     for l in lines {
         fold(&l, out);

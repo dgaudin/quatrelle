@@ -61,6 +61,9 @@ fn a_conference_is_read_in_any_order() {
     let many: Vec<String> = (0..12).map(|i| format!("F{i}")).collect();
     let e = event(&[&format!("CONFERENCE;FEATURE={},{},VIDEO:https://x.example/", "X".repeat(41), many.join(","))]);
     assert_eq!(e.conference.map(|c| c.features), Some(many.into_iter().take(10).collect::<Vec<_>>()));
+    // Judged on those kept: ten phones and a video would be written as ten phones, no conference.
+    let phones = format!("CONFERENCE;FEATURE={}VIDEO:https://x.example/", "PHONE,".repeat(10));
+    assert_eq!((event(&[&phones]).conference, event(&[&phones]).extra), (None, vec![phones.clone()]));
 }
 
 /// Those of the issue's Review Focus 1: a phone, a chat, a phone given as a web link, the
@@ -150,6 +153,46 @@ fn kept_lines_are_written_once() {
     }
 }
 
+/// An event cached before Quatrelle read `CONFERENCE` has the line among its kept ones: it's
+/// taken as the file's reading would take it, and taken out of them.
+#[test]
+fn a_kept_conference_is_adopted() {
+    let tel = "CONFERENCE;VALUE=URI;FEATURE=PHONE;LABEL=Appel:tel:+33-1-23-45-67-89";
+    let second = "CONFERENCE;VALUE=URI:https://second.example.org/";
+    let kept = |lines: &[&str]| lines.iter().map(|l| l.to_string()).collect::<Vec<_>>();
+    let mut e = CalEvent { extra: kept(&[tel, "CONFERENCE;VALUE=URI;LABEL=Old:https://old.example/", second]), ..with(None) };
+    e.adopt_kept_conference();
+    assert_eq!(e.conference, Some(conference("https://old.example/", "Old", &[])));
+    assert_eq!(e.extra, [tel, second]);
+    let once = e.clone();
+    e.adopt_kept_conference();
+    assert_eq!(e, once, "a second call changes nothing");
+    // An event that has its conference keeps its lines; one inside a component kept whole
+    // stays there.
+    let mut set = CalEvent { extra: kept(&[second]), ..with(Conference::new("https://x.example/", "")) };
+    let before = set.clone();
+    set.adopt_kept_conference();
+    assert_eq!(set, before);
+    let nested = kept(&["BEGIN:X-PART", "CONFERENCE:https://inner.example/", "END:X-PART"]);
+    let mut e = CalEvent { extra: nested.clone(), ..with(None) };
+    e.adopt_kept_conference();
+    assert_eq!((e.conference, e.extra), (None, nested));
+}
+
+/// A conference whose link is also among the kept lines is written once.
+#[test]
+fn a_kept_line_never_repeats_the_conference() {
+    let other = "CONFERENCE;VALUE=URI;FEATURE=CHAT:https://chat.example.org/r";
+    let e = CalEvent {
+        extra: vec!["CONFERENCE;VALUE=URI;FEATURE=VIDEO:HTTPS://OLD.EXAMPLE/ ".into(), other.into()],
+        ..with(Conference::new("https://old.example/", "Old"))
+    };
+    let out = written(&e, None);
+    let lines = conference_lines(&out);
+    assert_eq!(lines.iter().filter(|l| l.to_ascii_lowercase().contains("old.example")).count(), 1, "{out}");
+    assert_eq!(lines, ["CONFERENCE;VALUE=URI;FEATURE=AUDIO,VIDEO;LABEL=Old:https://old.example/", other]);
+}
+
 #[test]
 fn a_new_conference_is_cleaned() {
     assert_eq!(Conference::new("https://x.example/", "Webex"), Some(conference("https://x.example/", "Webex", &["AUDIO", "VIDEO"])));
@@ -162,6 +205,13 @@ fn a_new_conference_is_cleaned() {
     assert_eq!(Conference::new(" https://x.example/ ", "").map(|c| c.url).as_deref(), Some("https://x.example/"));
     assert_eq!(Conference::new("ftp://x.example", "x"), None);
     assert_eq!(Conference::new("", "x"), None);
+    // A stranger's label loses the characters that turn text round or hide in it.
+    let hidden = "Sal\u{202e}le\u{200b} A\u{2028}";
+    let read = event(&[&format!("CONFERENCE;LABEL={hidden}:https://x.example/")]).conference.map(|c| c.label);
+    assert_eq!(read.as_deref(), Some("Salle A"));
+    assert_eq!(Conference::new("https://x.example/", hidden).map(|c| c.label).as_deref(), Some("Salle A"));
+    let every = "a\u{202a}\u{202b}\u{202c}\u{202d}\u{202e}\u{2066}\u{2067}\u{2068}\u{2069}\u{200b}\u{200c}\u{200d}\u{200e}\u{200f}\u{2028}\u{2029}\u{feff}\u{61c}b";
+    assert_eq!(Conference::new("https://x.example/", every).map(|c| c.label).as_deref(), Some("ab"));
 }
 
 #[test]
@@ -205,5 +255,23 @@ proptest! {
         let e = with(made.clone());
         let back = parse(&write(std::slice::from_ref(&e), None, 0), 0);
         prop_assert_eq!(back.events.first().and_then(|e| e.conference.clone()), made);
+    }
+
+    /// The features a line names are read upper-cased, the first ten kept; none named is a
+    /// conference that says nothing of them, and one whose first ten are only a phone, a chat or
+    /// a feed is none. Written again, they read back the same.
+    #[test]
+    fn the_features_named_are_read(
+        url in "https://[a-z]{1,12}\\.example(/[a-zA-Z0-9._~-]{0,20}){0,3}",
+        named in prop::collection::vec(prop_oneof![Just("PHONE".to_string()), Just("chat".to_string()), Just("Feed".to_string()), "[A-Za-z0-9-]{1,40}"], 0..=12),
+    ) {
+        let e = event(&[&format!("CONFERENCE;VALUE=URI;FEATURE={}:{url}", named.join(","))]);
+        let upper: Vec<String> = named.iter().map(|f| f.to_ascii_uppercase()).collect();
+        let first: Vec<&str> = upper.iter().take(10).map(String::as_str).collect();
+        let phone_only = !first.is_empty() && first.iter().all(|f| matches!(*f, "PHONE" | "CHAT" | "FEED"));
+        let expected = (!phone_only).then(|| conference(&url, "", &first));
+        prop_assert_eq!(&e.conference, &expected);
+        let back = parse(&write(std::slice::from_ref(&e), None, 0), 0);
+        prop_assert_eq!(back.events.first().and_then(|e| e.conference.clone()), expected);
     }
 }
