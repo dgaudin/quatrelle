@@ -111,7 +111,7 @@ fn open_mail_file(s: &mut Session, v: &Value) -> CmdResult {
             };
             let m = quatrelle_mime::parse(&bytes).ok_or_else(|| CmdError::Failed(format!("{name} can't be read as a message")))?;
             let attachments: Vec<&str> = m.attachments.iter().map(|a| a.name.as_str()).collect();
-            let warning = s.sender_warning(&m.from);
+            let warning = s.sender_warning(&m.from, m.bulk);
             Ok(json!({
                 "kind": "message", "name": name, "subject": m.subject, "from": m.from.to_string(),
                 "to": quatrelle_model::addr::format_list(&m.to), "cc": quatrelle_model::addr::format_list(&m.cc),

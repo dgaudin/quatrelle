@@ -362,11 +362,22 @@ pub(super) fn summary_json(m: &quatrelle_model::Summary) -> Value {
 
 pub(super) fn list_messages(s: &mut Session, v: &Value) -> CmdResult {
     let limit = p::u64(v, "limit").map_or(50, |n| usize::try_from(n).unwrap_or(usize::MAX).min(10_000));
-    Ok(json!({
-        "view": s.view_title(),
-        "total": s.list.len(),
-        "messages": s.list.iter().take(limit).map(|m| summary_json(m)).collect::<Vec<_>>(),
-    }))
+    // What the list shows about each sender (issue #29), as the check stands now.
+    s.keep_senders();
+    let messages: Vec<Value> = s
+        .list
+        .iter()
+        .take(limit)
+        .map(|m| {
+            let mut j = summary_json(m);
+            let marks = s.sender_marks(m);
+            j["fromAddress"] = json!(marks.address);
+            j["senderWarning"] = json!(marks.warning);
+            j["external"] = json!(marks.external);
+            j
+        })
+        .collect();
+    Ok(json!({"view": s.view_title(), "total": s.list.len(), "messages": messages}))
 }
 
 pub(super) fn read_message(s: &mut Session, v: &Value) -> CmdResult {
@@ -377,8 +388,11 @@ pub(super) fn read_message(s: &mut Session, v: &Value) -> CmdResult {
         }
     }
     let r = s.reading.as_ref().ok_or_else(|| CmdError::Disabled("open a message first".into()))?;
+    let external = r.parsed.as_ref().is_some_and(|m| s.is_external(&m.from.email));
     match &r.parsed {
         Some(m) => Ok(json!({
+            "warning": r.warning,
+            "external": external,
             "key": r.key.to_id(),
             "subject": m.subject,
             "from": m.from.to_string(),
