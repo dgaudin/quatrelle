@@ -147,6 +147,72 @@ fn a_warned_row_has_its_sign() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// The table (the wide list, its columns) says the same in its From column: the warning sign,
+/// heard with the row; with the options on, the address after the name and the External tag.
+#[test]
+fn a_warned_row_in_the_table_has_its_sign() {
+    let (mut a, dir) = app("warned-table");
+    let ctx = egui::Context::default();
+    ctx.enable_accesskit();
+    a.run("view.listLayout", json!({"value": "table"}));
+    frame(&ctx, &mut a, vec![]);
+    let key = deliver(&mut a, 9803, ("Zoe Park", "zoe.park.director@gmail.com"), "Quick favour", "Are you at your desk?");
+    a.run("folder.open", json!({"account": "sample", "folder": "INBOX"}));
+    a.run("list.open", json!({"key": key.to_id()}));
+    settle(&ctx, &mut a);
+    assert!(a.session.list_as_table());
+    let row = |shown: &[String]| shown.iter().find(|l| l.contains(", Quick favour, ")).cloned().unwrap_or_default();
+    let warned = row(&spoken(&ctx, &mut a, SIZE));
+    assert!(warned.contains("Check who sent it") && !warned.contains('<') && !warned.contains("External"), "{warned}");
+    a.run("view.externalTag", json!({"on": true}));
+    a.run("view.senderAddresses", json!({"show": "always"}));
+    frame(&ctx, &mut a, vec![]);
+    let warned = row(&spoken(&ctx, &mut a, SIZE));
+    assert!(warned.contains("Zoe Park <zoe.park.director@gmail.com>") && warned.contains("External"), "{warned}");
+    let drawn = |ctx: &egui::Context, a: &mut MailApp| -> Vec<String> {
+        frame_shapes(ctx, a, vec![], SIZE)
+            .into_iter()
+            .filter_map(|s| match s {
+                egui::Shape::Text(t) => Some(t.galley.text().to_string()),
+                _ => None,
+            })
+            .collect()
+    };
+    // Beside the reading pane the From column is narrow: the name keeps its share (it starts
+    // "Zo"), the address is cut, and the tag, with no room left for it, isn't drawn in the row.
+    let narrow = drawn(&ctx, &mut a);
+    assert!(narrow.iter().any(|t| t.starts_with("Zo") && !t.contains('<')), "the name drawn: {narrow:?}");
+    assert!(narrow.iter().any(|t| t.starts_with('<')), "the address drawn: {narrow:?}");
+    assert_eq!(narrow.iter().filter(|t| *t == "External").count(), 1, "the tag above the message only: {narrow:?}");
+    // The reading pane below and the From column dragged wider: room for the name, the address
+    // and the tag.
+    a.run("view.readingPane", json!({"value": "bottom"}));
+    a.ui.list_columns.who = Some(420.0);
+    frame(&ctx, &mut a, vec![]);
+    let wide = drawn(&ctx, &mut a);
+    assert!(wide.iter().any(|t| t == "<zoe.park.director@gmail.com>" || t == "<…@gmail.com>"), "the address drawn: {wide:?}");
+    assert!(wide.iter().filter(|t| *t == "External").count() >= 2, "the tag in the row and above the message: {wide:?}");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// The warning sign is in the list from the start, nothing opened: the window starts reading the
+/// address book (a slice a frame) and the check is gathered once it's read.
+#[test]
+fn the_sign_shows_before_any_message_is_opened() {
+    let (mut a, dir) = app("warned-unopened");
+    let ctx = egui::Context::default();
+    ctx.enable_accesskit();
+    frame(&ctx, &mut a, vec![]);
+    deliver(&mut a, 9804, ("Zoe Park", "zoe.park.director@gmail.com"), "Quick favour", "Are you at your desk?");
+    a.run("folder.open", json!({"account": "sample", "folder": "INBOX"}));
+    settle(&ctx, &mut a);
+    assert!(a.session.reading.as_ref().is_none_or(|r| r.parsed.is_none()), "nothing opened");
+    let shown = spoken(&ctx, &mut a, SIZE);
+    let warned = shown.iter().find(|l| l.contains(", Quick favour, ")).cloned().unwrap_or_default();
+    assert!(warned.contains("Check who sent it"), "{warned}");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 /// With the sender's address shown in a short line (All Inboxes names each message's folder,
 /// the External tag on), the address is cut to its domain and the name keeps its share: at least
 /// nine twentieths of the line (the address, laid out first, took up to seven tenths of it and cut

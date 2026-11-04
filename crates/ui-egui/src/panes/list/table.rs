@@ -220,6 +220,9 @@ pub(super) fn table_row(
     let hovered = ui.rect_contains_pointer(r) && !ui.ctx().is_being_dragged(id) || resp.hovered();
     let selected = s.selection.contains(&m.key);
     let unread = if count > 1 { unread_in_thread > 0 } else { !m.flags.seen };
+    // What the sender check says about the sender, as the list's rows say it.
+    let marks = if sent_view { quatrelle_engine::SenderMarks::default() } else { s.sender_marks(m) };
+    resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::ListItem, true, selected, row_spoken(s, m, &marks, unread, sent_view)));
     let p = ui.painter_at(r);
     let fill = if selected {
         t.accent_soft
@@ -253,6 +256,38 @@ pub(super) fn table_row(
             }
             Col::Attach if m.has_attachments => {
                 icons::paint(&p, Rect::from_center_size(egui::pos2(cell.center().x, line1), vec2(13.0, 13.0)), Icon::Attach, t.dim);
+            }
+            Col::Who if marks.warning || marks.address || marks.external => {
+                // The warning sign before the name, the External tag at the column's end, the
+                // address between them after the name.
+                let inner = cell.shrink2(vec2(6.0, 0.0));
+                let mut left = inner.min.x;
+                if marks.warning {
+                    left += warning_mark(ui, &p, t, &resp, left, line1 - 7.5);
+                }
+                let mut right = inner.max.x;
+                let who = m.from.display().to_string();
+                // The tag only where what tells more keeps its room: the name its nine twentieths
+                // of the column, the address its domain at least. In a narrow column the tag took
+                // it all and the name went (the row is still heard as External).
+                let tag = external_galley(&p, t).size().x + 16.0;
+                let name_w = p.layout_no_wrap(who.clone(), font(13.0), t.text).size().x.min(inner.width() * 0.45);
+                let domain_w = match m.from.email.trim().rsplit_once('@') {
+                    Some((_, domain)) if marks.address => p.layout_no_wrap(format!("<…@{domain}>"), theme::regular(12.5), t.dim).size().x + 6.0,
+                    _ => 0.0,
+                };
+                if marks.external && right - left - tag >= name_w + domain_w {
+                    right -= external_mark(ui, &p, t, &resp, right, line1 - 8.5) + 6.0;
+                }
+                let clip = p.with_clip_rect(Rect::from_x_y_ranges(left..=right.max(left), r.y_range()));
+                if marks.address {
+                    let top = line1 - p.layout_no_wrap(who.clone(), font(13.0), t.text).size().y / 2.0;
+                    sender_with_address(ui, &clip, t, (left, right, top), &who, font(13.0), m.from.email.trim(), count);
+                } else {
+                    let who = if count > 1 { format!("{who}  ({count})") } else { who };
+                    let g = widgets::one_line(ui, &crate::bidi::shown(&who).0, font(13.0), t.text, (right - left).max(1.0));
+                    clip.galley(egui::pos2(left, line1 - g.size().y / 2.0), g, t.text);
+                }
             }
             Col::Who => {
                 let who = if sent_view { addr::display_list(&m.to) } else { m.from.display().to_string() };
