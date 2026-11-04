@@ -45,10 +45,16 @@ options, both off at first so the list keeps Outlook's look:
 
 - the address after the name, dimmer: "Jane Director <jane.director1984@gmail.com>"; where the line is
   short, cut to its domain ("<…@gmail.com>"), the name keeping at least nine twentieths of the line
-  (`06a623db`); never for the user's own mail; the conversation count stays after the name;
+  (`06a623db`); never for the user's own mail; the conversation count comes after the address, as
+  upstream has it;
 - the External tag: a small framed « Externe » before the time in the list, and beside the sender's
   name above the message, never wrapped (`80fb57d9`), never on the user's own mail; hover: « Cet
   expéditeur est extérieur à votre organisation. »
+
+The table layout's From column shows the same marks (External left out where the column can't hold
+the name and the cut address; the row is still read as External). The marks don't wait for a message
+to be opened: when nothing has been gathered, the address book starts being read in slices, one per
+frame, and the check is gathered once it's settled.
 
 **File › Options › Safety**, after the three settings there:
 
@@ -75,6 +81,10 @@ The people the check knows, by name and by address:
 - everyone the directory has answered for this run (the people index, `mailboxes/people.rs`, at most
   `INDEX_MAX` = 30 000, in memory only).
 
+They are added in that order but with the directory before the people written to, as upstream: a
+warning calls a person by their card's name, then the directory's, then the name seen in mail. A
+change of the listed organisation domains alone doesn't gather the people again.
+
 The known domains (the look-alike check's) are the accounts' and the written-to people's, as today.
 The organisation, for the External tag and the signature rule's case a: the domains listed in
 Options, or else `own_domains` of the accounts (mail services left out: someone at gmail.com doesn't
@@ -100,7 +110,7 @@ made the letter it stands for; accents and case kept, at most `MAX_QUERY` (100) 
 through the queue Check Names uses (`search_directory(account, name, typed = false)`: one question at
 a time per account, answers kept, a failed one asked again after 60 s at the earliest). A sender's
 question still waiting gives its place to the next message's (arrowing through the list asks for the
-last one), and never takes the place of a Check Names question. Nothing is
+last one), never takes the place of a Check Names question, and waits behind them. Nothing is
 asked for the list, nor as mail arrives. The answer fills the people index; the check is gathered
 again, and the open message's warning follows. An error is logged and shows nothing.
 
@@ -116,12 +126,20 @@ included) up to the first of:
   lines by one starting `Sent:`, `Envoyé :`, `Date:`, `To:`, `À :`, `Gesendet:`, `An:`, `Enviado:`,
   `Inviato:` or `Verzonden:` (case left aside; the French ones with a space, a no-break space or
   none before the colon);
-- a line ending `wrote:`, `a écrit :`, `schrieb:`, `escribió:`, `ha scritto:` or `schreef:`;
+- a line ending `wrote:`, `a écrit :`, `schrieb:`, `escribió:`, `ha scritto:` or `schreef:`, or
+  ending `:` with ` schrieb ` or ` schreef ` in it (Gmail's German and Dutch lines);
 - Apple Mail's `Begin forwarded message:` or `Début du message réexpédié :`;
 - a line starting `>`.
 
+The marks are read through emphasis: the converted HTML writes Outlook's labels bold (`**De :**`), so
+a leading `**`, a leading `*` stuck to a word and trailing `*` are left aside, a list's `* ` bullet
+isn't.
+
 **The signature** is what follows its last `-- ` line, or else its last 15 lines that aren't empty.
-Read in it: addresses (`addr::is_valid_email`), `mailto:` links and websites (`www.…`, `http(s)://…`),
+Only its short lines are read: an address or site with at most four other words on the line (a
+token without a letter, such as a separator or a phone number's digits, isn't a word), so a sentence
+naming a site isn't a signature. The converted HTML's link notes at the end of the text (`[1]: …`)
+count only when their link is on a signature line. Read in it: addresses (`addr::is_valid_email`), `mailto:` links and websites (`www.…`, `http(s)://…`),
 ten at most, each reduced to its domain where it's a site. A mail service's domain doesn't count, nor
 a domain related to the sender's (`related`: the same, or one under the other), nor the user's own
 addresses (their own message quoted where no quotation mark was found).
