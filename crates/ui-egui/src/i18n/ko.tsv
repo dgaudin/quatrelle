@@ -1879,3 +1879,4 @@ folder	Conflicts	충돌
 	{item} was deleted on the server while it was being changed here.\n\nAccount: {account}\nIn: {place}\nWhen: {when}\n\nThe server's version was kept, so the change made here was dropped. The attachment holds the version that was here: open it to put it back.	{item}이(가) 여기서 변경되는 동안 서버에서 삭제되었습니다.\n\n계정: {account}\n위치: {place}\n시간: {when}\n\n서버의 버전을 유지했으므로 여기서 한 변경 내용은 버려졌습니다. 첨부 파일에 여기 있던 버전이 들어 있습니다. 열어서 되돌릴 수 있습니다.
 	{event}: deleted on the server meanwhile; the change made here was dropped (a copy is in Sync Issues › Conflicts)	{event}: 그 사이 서버에서 삭제되었습니다. 여기서 한 변경 내용은 버려졌습니다 (사본은 동기화 문제 › 충돌에 있습니다)
 	Careful: you know {name} as {known}, but this comes from {real}.	주의: {name}님은 {known}(으)로 알고 있는 사람이지만, 이 메일은 {real}에서 왔습니다.
+	Careful: the signature gives {shown}, but this comes from {real}.	주의: 서명에는 {shown}(이)라고 되어 있지만, 이 메일은 {real}에서 왔습니다.

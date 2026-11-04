@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Addresses made to pass for someone else's. A phishing message rarely comes from the bank's own
 //! domain: it comes from one a glance mistakes for it (`paypa1.com`, `rnicrosoft.com`, a Cyrillic
 //! `а` in `аpple.com`, `paypal.com.account-check.ru`), or it writes a trusted address into the
@@ -9,16 +10,19 @@
 //! people they write to) and names the one it imitates; [`check_sender`] does that for a message's
 //! sender and also catches an address hidden in the name. [`SenderCheck`] adds a known person's
 //! name worn on someone else's address ([`people`]); [`external`] tells senders from outside the
-//! organisation. All of it only compares text: nothing is looked up.
+//! organisation; [`signature`] reads the message's own signature against where it came from. All
+//! of it only compares text: nothing is looked up.
 
 mod external;
 mod people;
+mod signature;
 
 use std::borrow::Cow;
 use std::collections::BTreeSet;
 
 pub use external::{clean_domain, is_external, is_free_mail, own_domains};
-pub use people::{KnownPeople, name_key};
+pub use people::{KnownPeople, lookup_name, name_key};
+pub use signature::{Shown, own_text, signature_shows};
 
 use serde::{Deserialize, Serialize};
 
@@ -35,6 +39,9 @@ pub enum SenderWarning {
     /// The sender's name is that of someone the user knows (`name`, as they know them) by
     /// another address (`known`), not the one it came from (`real`): issue #29.
     NameOfKnownPerson { name: String, known: String, real: String },
+    /// The message's own signature gives an address or a website (`shown`: the address, or the
+    /// site's domain) that belongs elsewhere than where it came from (`real`): [`signature`].
+    SignatureShowsOther { shown: String, real: String },
 }
 
 /// Big mail services whose names are close to each other (`mail.com`, `gmail.com`): neither is
