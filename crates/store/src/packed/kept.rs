@@ -30,6 +30,9 @@ const DEFLATED_OLD: &[u8] = crate::legacy::OLD_DEFLATED;
 const DEFLATE_MIN: usize = 1024;
 /// The most a compressed file may come to (a crafted data file can't fill the memory).
 pub(super) const INFLATE_MAX: u64 = 1 << 30;
+/// The most set aside at once for a file, before it's read: a file in pieces has a note that says
+/// how long it is, and a crafted one can say 1 GiB with no pieces at all.
+const RESERVE_MAX: usize = 64 << 20;
 
 /// A file as kept: compressed (fast deflate) when that saves a tenth or more.
 ///
@@ -56,7 +59,7 @@ pub(super) fn pack(bytes: &[u8]) -> std::borrow::Cow<'_, [u8]> {
 pub(super) fn unpack(kept: Vec<u8>) -> io::Result<Vec<u8>> {
     use std::io::Read;
     let Some(stream) = kept.strip_prefix(DEFLATED).or_else(|| kept.strip_prefix(DEFLATED_OLD)) else { return Ok(kept) };
-    let mut out = Vec::with_capacity(stream.len().saturating_mul(3).min(64 << 20));
+    let mut out = Vec::with_capacity(stream.len().saturating_mul(3).min(RESERVE_MAX));
     flate2::read::DeflateDecoder::new(stream).take(INFLATE_MAX + 1).read_to_end(&mut out)?;
     if out.len() as u64 > INFLATE_MAX {
         return Err(io::Error::new(io::ErrorKind::InvalidData, "a compressed file is too big"));
@@ -126,7 +129,7 @@ impl Tables<'_> {
     pub(super) fn take_kept(&mut self, key: &str) -> io::Result<Option<Vec<u8>>> {
         let Some(v) = self.files.remove(key).map_err(other)?.map(|g| g.value().to_vec()) else { return Ok(None) };
         let Some(len) = pieced_len(&v) else { return Ok(Some(v)) };
-        let mut out = Vec::with_capacity(usize::try_from(len).unwrap_or(0).min(1 << 30));
+        let mut out = Vec::with_capacity(usize::try_from(len).unwrap_or(0).min(RESERVE_MAX));
         for (_, piece) in self.pieces.extract_from_if((key, 0)..=(key, u32::MAX), |_, _| true).map_err(other)?.flatten() {
             out.extend_from_slice(piece.value());
         }
@@ -159,7 +162,7 @@ pub(super) fn read_file(
     let mut head = Vec::with_capacity(DEFLATED.len());
     (&mut reader).take(DEFLATED.len() as u64).read_to_end(&mut head)?;
     let out = if head == DEFLATED || head == DEFLATED_OLD {
-        let mut out = Vec::with_capacity(usize::try_from(len).unwrap_or(0).saturating_mul(3).min(64 << 20));
+        let mut out = Vec::with_capacity(usize::try_from(len).unwrap_or(0).saturating_mul(3).min(RESERVE_MAX));
         let inflated = flate2::read::DeflateDecoder::new(&mut reader).take(INFLATE_MAX + 1).read_to_end(&mut out);
         if reader.failed {
             return Err(inflated.err().unwrap_or_else(|| io::Error::other("a piece couldn't be read")));
@@ -176,7 +179,7 @@ pub(super) fn read_file(
         }
         out
     } else {
-        let mut out = Vec::with_capacity(usize::try_from(len).unwrap_or(0).min(1 << 30));
+        let mut out = Vec::with_capacity(usize::try_from(len).unwrap_or(0).min(RESERVE_MAX));
         out.extend_from_slice(&head);
         reader.read_to_end(&mut out)?;
         if reader.read != len {
