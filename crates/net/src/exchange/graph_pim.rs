@@ -696,4 +696,20 @@ mod tests {
         let back = card_json(&card);
         assert_eq!((back["mobilePhone"].as_str(), back["businessPhones"][0].as_str()), (Some("+1 555 0101"), Some("+1 555 0100")));
     }
+
+    #[test]
+    fn exchange_gets_no_conference() {
+        let plain = CalEvent {
+            uid: "u".into(),
+            summary: "Call".into(),
+            location: "Lab".into(),
+            description: "Notes".into(),
+            start: 1_792_000_000,
+            end: 1_792_003_600,
+            ..Default::default()
+        };
+        let with = CalEvent { conference: quatrelle_model::ical::Conference::new("https://acme.webex.com/meet/ana", "Webex"), ..plain.clone() };
+        assert!(with.conference.is_some());
+        assert_eq!(event_json(&plain), event_json(&with));
+    }
 }
