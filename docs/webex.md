@@ -4,7 +4,7 @@ Quatrelle's Webex Meeting button makes a real scheduled meeting on the user's We
 Webex's public REST API (`https://webexapis.com/v1/meetings`), signed in as the person using it.
 The invitation carries the title, the times and the time zone of the appointment, and the link,
 meeting number, password and video address Webex answers with; Quatrelle never builds a link
-itself. The personal room stays, as an explicit choice in the button's menu.
+itself. Webex personal rooms stay, as explicit choices in the button's menu (section 2).
 
 Nothing in Quatrelle ships with a Webex registration: Webex's token request needs a client secret
 even with PKCE, and a secret must not be built into an application. Each person or organisation
@@ -53,13 +53,43 @@ The **Webex Meeting** button is a menu:
   - the notes gain, in the interface's language, the join link, the meeting number, the password
     and the video address, each as Webex gave it;
   - Join works, as for any meeting link.
-- **Use my personal room**: what the button used to do. It writes the room typed in Options
-  (*Webex personal room*) into the appointment and sends nothing to Webex.
+- **A room** (the menu lists the rooms by name, then **Add a room…**, which asks for a name and a
+  link): what the button used to do for the one personal room. It puts the room's link as the place
+  (when the place is empty or holds another room's link), and at the end of the notes a block: the
+  line "Join the Webex meeting:", the link and the room's free lines. It sends nothing to Webex.
+  Choosing another room replaces that block, found again whatever language the interface was in
+  when it was written; lines the user typed stay. Rooms are greyed while the appointment has a
+  scheduled Webex meeting, and a scheduled meeting replaces a room's block in turn.
+- **Join** and **Webex Meeting** sit side by side in a writable appointment's ribbon.
 
-In the browser build the button offers only the personal room: there is no loopback sign-in
-there, so no scheduled meeting.
+In the browser build a click adds the room when there is exactly one; there is no scheduled meeting
+there (no loopback sign-in), so the menu offers only the rooms.
 
-No error ever falls back to the personal room silently. Errors show in the window and change
+### The rooms
+
+File › Options › Calendar, under "Webex rooms": one row per room with its name (up to 80
+characters), its Webex personal room link, its free lines (up to 20, 200 characters each: a PIN, a
+dial-in number, whatever guests need) and a × to remove it; the add row sits below. At most 20
+rooms; a link can be used by one room only. The single room of earlier versions is carried over as
+the first room, with no name, shown as "My personal room". The command is
+`calendar.webexRoom {"url", "was"?, "name"?, "details"?, "remove"?}`.
+
+### CONFERENCE (RFC 7986)
+
+A room, or a scheduled meeting, is also written as the event's conference:
+`CONFERENCE;VALUE=URI;FEATURE=AUDIO,VIDEO;LABEL=Webex:<link>`.
+
+- **Read** from every iCalendar: the first web link whose `FEATURE` isn't only phone, chat or feed.
+  Its other `CONFERENCE` lines are kept and written back as they came.
+- **Written** by CalDAV, local calendars, invitations sent from an IMAP account and `.ics` export.
+  Nothing goes to Exchange (EWS) or Microsoft Graph, which have no such field.
+- **Join** takes the server's own link, then the conference, then a known meeting link found in the
+  place or the notes. The calendar search finds a conference's label and link.
+- **Taken out** when the user erases its link from both the place and the notes; a conference
+  another application wrote stays.
+- `event.create` and `event.update` take `"conference"?: {"url", "label"?} | null`.
+
+No error ever falls back to a room silently. Errors show in the window and change
 nothing in the appointment: 401 is retried once with a refreshed token, then "Sign in to Webex
 again"; 403 is "Your Webex account can't schedule meetings on this site"; other 4xx and 5xx show
 Webex's own message with the status.

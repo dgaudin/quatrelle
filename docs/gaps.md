@@ -19,6 +19,7 @@ _Status: v0.22, 2026-10-22._
 | 5 | **On-premises Exchange: Kerberos-only servers** | EWS signs in with NTLMv2 or Basic and is found with Autodiscover; a server that only takes Kerberos can't be signed in to. ActiveSync is licensed and out of scope. |
 | 6 | **Public folders on Exchange Online** | Public folders list and sync on on-premises Exchange through EWS. Exchange Online reaches them only through EWS, which Microsoft blocks there from October 2026 and removes in April 2027, and Microsoft Graph has no public folders; its suggested replacement, Microsoft 365 Groups, needs permissions only a tenant's administrator can grant. |
 | 7 | **Webex meetings: not yet confirmed on a real account** | Built and tested against a fake Webex only. A real account must still confirm the browser sign-in, a create, an update and a delete, `"recurrence": null` when a repeat is removed, that no second invitation goes out, and the extended property on real on-premises Exchange (`docs/webex.md`, section 6). Webex is expected to refuse several days or dates in a monthly or yearly rule (not tried); the error is shown, nothing is converted. |
+| 8 | **On-premises Exchange: an answer to an invitation refused with "Set action is invalid for property"** | Exchange refuses `AcceptItem` and its siblings on some meetings with `ErrorInvalidPropertySet`. Quatrelle says it once in a notice (answer in Outlook on the web), shows the meeting as the server has it and doesn't send the answer again; the refusal now names the refused field. The cause isn't known yet: the real fix waits for that field's name from a real server. |
 
 ## Done
 
@@ -805,8 +806,9 @@ tester's does, a contact as Exchange keeps it, Outlook's clipboard), then fixed 
   narrower than that stack now; one the message asks narrow (a signature's logo) no longer does.
 - **Webex Meeting makes a real meeting** (`docs/webex.md`): the button's click schedules a meeting
   on the user's Webex site through its REST API (title, times, time zone and repeat from the
-  appointment; link, number, password and video address from the answer) in place of writing the
-  personal room's link, which stays as "Use my personal room" in the button's menu. The user's own
+  appointment; link, number, password and video address from the answer); the
+  Webex rooms (several, kept in Options › Calendar; a room's link and lines go into the appointment,
+  and its `CONFERENCE` line into the calendar) stay as choices in the button's menu. The user's own
   integration (client id and secret in Options, the secret and refresh token in the keychain,
   redirect port 53683). Saving the appointment updates the meeting, deleting it deletes the meeting,
   a window closed unsaved deletes the one it made; only events the user organizes are followed, and
