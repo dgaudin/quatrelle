@@ -130,6 +130,9 @@ still being read; it also takes a folder of its own when only one is left.
 Flag changes, moves and deletes are applied to the cache immediately (the UI updates before the
 server answers) and appended to `<account>/ops.json` by the pool on the UI side, not by the account
 thread, which may be busy for minutes; a store-wide mutex guards the file's read-modify-write.
+The pool writes them on a thread of its own (`edit_writer` in `worker.rs`), in order. An account
+removed meanwhile (its files go at once, on the UI's thread) has its queued changes dropped, not
+written back (`Store::while_kept`).
 When connected, the worker replays them oldest first, deleting each entry once the server accepts
 or rejects it, also between folders of a full sync. After a folder is re-read from the server,
 queued ops that touch it are applied to the new cache again:

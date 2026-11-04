@@ -224,18 +224,33 @@ pub struct Pool {
     edits_thread: Option<JoinHandle<()>>,
 }
 
-/// An edit for the writer: the account, the change, and the account's thread to tell after.
-type Edit = (String, Op, Option<Sender<Job>>);
+/// An edit for the writer: the account, the change, the account's thread to tell after, and how
+/// many times the account had been removed when it was made ([`Store::while_kept`]).
+type Edit = (String, Op, Option<Sender<Job>>, u64);
 
 /// Write an edit to the cache and journal it (ops.json), report what changed, then hand it to
 /// the account's thread, which takes it to the server. Journaled first: a sync saving the folder
 /// meanwhile makes the edit again on what it saves (`Store::save_folder`) rather than putting the
-/// old flags back over it.
-fn write_edit(store: &Store, sink: &Sink, account: String, op: Op, worker: Option<Sender<Job>>) {
+/// old flags back over it. Nothing, for an account removed since: its files go at once on the
+/// window's thread, and a change queued before wrote its folder and its queue back.
+fn write_edit(store: &Store, sink: &Sink, account: String, op: Op, worker: Option<Sender<Job>>, seen: u64) {
+    if store.while_kept(&account, seen, || make_edit(store, sink, &account, &op)).is_none() {
+        log::info!("{account}: a change to mail dropped, the account removed");
+        return;
+    }
+    // Wake the account's thread: it uploads the queue at its next opportunity.
+    if let Some(w) = worker {
+        let _ = w.send(Job::Apply { account, op });
+    }
+}
+
+/// [`write_edit`]'s change journaled and made in the cache.
+fn make_edit(store: &Store, sink: &Sink, account: &str, op: &Op) {
+    let account = account.to_string();
     if let Err(e) = store.add_op(&account, op.clone()) {
         sink.emit(Event::Notice { account: account.clone(), message: e.to_string() });
     }
-    match store.apply_op(&account, &op) {
+    match store.apply_op(&account, op) {
         Ok(changed) => {
             if op.is_folder_op() {
                 let folders = store.load_folders(&account).unwrap_or_default();
@@ -245,18 +260,14 @@ fn write_edit(store: &Store, sink: &Sink, account: String, op: Op, worker: Optio
                 sink.emit(Event::FolderChanged { account: account.clone(), folder });
             }
         }
-        Err(e) => sink.emit(Event::Notice { account: account.clone(), message: e.to_string() }),
-    }
-    // Wake the account's thread: it uploads the queue at its next opportunity.
-    if let Some(w) = worker {
-        let _ = w.send(Job::Apply { account, op });
+        Err(e) => sink.emit(Event::Notice { account, message: e.to_string() }),
     }
 }
 
 /// The thread writing edits, in the order they were made, until the pool shuts down.
 fn edit_writer(store: Store, sink: Sink, rx: Receiver<Edit>) {
-    for (account, op, worker) in rx {
-        write_edit(&store, &sink, account, op, worker);
+    for (account, op, worker, seen) in rx {
+        write_edit(&store, &sink, account, op, worker, seen);
     }
 }
 

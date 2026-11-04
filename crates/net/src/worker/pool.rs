@@ -472,12 +472,15 @@ impl Pool {
                 // Into the cache and ops.json on the edit writer's thread (in order, before the
                 // account's thread hears of it): not on the window's.
                 let worker = self.workers.get(&account).map(|h| h.tx.clone());
+                // The account's files go at once on the window's thread when it's removed, before
+                // the pool hears of it: a change queued before that isn't made after.
+                let seen = self.store.removals(&account);
                 let unsent = match &self.edits {
-                    Some(tx) => tx.send((account, op, worker)).err().map(|mpsc::SendError(e)| e),
-                    None => Some((account, op, worker)),
+                    Some(tx) => tx.send((account, op, worker, seen)).err().map(|mpsc::SendError(e)| e),
+                    None => Some((account, op, worker, seen)),
                 };
-                if let Some((account, op, worker)) = unsent {
-                    write_edit(&self.store, &self.sink, account, op, worker);
+                if let Some((account, op, worker, seen)) = unsent {
+                    write_edit(&self.store, &self.sink, account, op, worker, seen);
                 }
             }
             other => {

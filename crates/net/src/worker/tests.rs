@@ -442,3 +442,57 @@ fn a_draft_kept_offline_doesnt_write_over_a_list_that_cant_be_read() {
     let kept: Vec<PendingDraft> = store.load_account_doc("a1", PENDING_DRAFTS).unwrap();
     assert_eq!(kept.iter().map(|d| d.raw.clone()).collect::<Vec<_>>(), [b"Subject: first\r\n\r\nOne\r\n".to_vec()]);
 }
+
+/// `n` messages, with their sources, in the Inbox of account `a1` of a memory cache.
+fn indexed_mail(n: u32) -> Store {
+    let s = Store::memory();
+    fill(&s, n);
+    s
+}
+
+/// `n` messages in `s`'s account `a1`, as [`indexed_mail`] has them.
+fn fill(s: &Store, n: u32) {
+    let messages = (1..=n)
+        .map(|uid| quatrelle_model::Summary {
+            key: MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 7, uid },
+            message_id: format!("m{uid}@x"),
+            size: 40,
+            date: i64::from(uid),
+            ..Default::default()
+        })
+        .collect();
+    let inbox = Folder { account: "a1".into(), path: "INBOX".into(), role: FolderRole::Inbox, selectable: true, ..Default::default() };
+    s.save_folders("a1", &[inbox]).unwrap();
+    s.save_folder("a1", "INBOX", &quatrelle_store::FolderState { validity: 7, uid_next: n + 1, messages, ..Default::default() }).unwrap();
+    for uid in 1..=n {
+        let key = MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 7, uid };
+        s.write_body(&key, format!("Subject: m\r\nMessage-ID: <m{uid}@x>\r\n\r\nword{uid} common\r\n").as_bytes()).unwrap();
+    }
+}
+
+/// An account removed while changes to its mail wait on the pool's thread: its files go at
+/// once, on the window's thread, and the changes queued before aren't made after, which wrote
+/// its folder and its queue for the server back.
+#[test]
+fn changes_waiting_for_a_removed_account_are_dropped() {
+    // Fewer than upstream's 2,000: each change here is read back over the whole list, and the
+    // removal still comes with nearly all of them waiting.
+    let s = indexed_mail(300);
+    let mut pool = Pool::new(s.clone(), Arc::new(MemoryCredentials::default()));
+    for uid in 1..=300 {
+        let key = MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 7, uid };
+        pool.submit(Job::Apply { account: "a1".into(), op: Op::SetFlag { keys: vec![key], flag: Flag::Seen, on: true } });
+    }
+    s.delete_account("a1").unwrap();
+    pool.submit(Job::Remove { account: "a1".into() });
+    pool.shutdown();
+    assert_eq!(s.account_size("a1"), 0, "nothing of it written back");
+    assert!(s.load_ops("a1").unwrap_or_default().is_empty());
+    // Added again under the same id: its changes are made.
+    fill(&s, 3);
+    let mut pool = Pool::new(s.clone(), Arc::new(MemoryCredentials::default()));
+    let key = MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 7, uid: 2 };
+    pool.submit(Job::Apply { account: "a1".into(), op: Op::SetFlag { keys: vec![key], flag: Flag::Seen, on: true } });
+    pool.shutdown();
+    assert!(s.load_folder("a1", "INBOX").unwrap().messages.iter().any(|m| m.key.uid == 2 && m.flags.seen));
+}

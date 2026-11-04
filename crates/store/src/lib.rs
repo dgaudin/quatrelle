@@ -28,11 +28,11 @@ mod packed;
 #[cfg(not(target_arch = "wasm32"))]
 pub use packed::EXTENSION as DATA_FILE_EXTENSION;
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 
 use quatrelle_model::{AccountConfig, Folder, MessageKey, Op, Summary, sort_newest_first};
 use serde::de::DeserializeOwned;
@@ -321,6 +321,8 @@ pub struct Store {
     /// Serializes read-modify-write of ops.json between the pool (the window's thread) and the
     /// account threads.
     changes: Arc<Mutex<()>>,
+    /// How many times each account was removed ([`Store::while_kept`]).
+    removals: Arc<RwLock<HashMap<String, u64>>>,
 }
 
 impl Store {
@@ -328,7 +330,7 @@ impl Store {
     pub fn open(root: impl Into<PathBuf>) -> Result<Store> {
         let root = root.into();
         private_dir(&root)?;
-        Ok(Store { files: Routed::new(&root, Files::Disk), root, changes: Arc::default() })
+        Ok(Store { files: Routed::new(&root, Files::Disk), root, changes: Arc::default(), removals: Arc::default() })
     }
 
     /// A cache whose accounts are each one data file in `files` (as Outlook keeps a `.pst` per
@@ -339,13 +341,13 @@ impl Store {
         let root = root.into();
         private_dir(&root)?;
         let packs = packed::Packs::open(&root, files.as_ref())?;
-        Ok(Store { files: Routed::new(&root, Files::Packed(Arc::new(packs))), root, changes: Arc::default() })
+        Ok(Store { files: Routed::new(&root, Files::Packed(Arc::new(packs))), root, changes: Arc::default(), removals: Arc::default() })
     }
 
     /// A cache kept in memory only (clones share it).
     pub fn memory() -> Store {
         let root = PathBuf::from("memory");
-        Store { files: Routed::new(&root, Files::Memory(Arc::default(), Arc::default())), root, changes: Arc::default() }
+        Store { files: Routed::new(&root, Files::Memory(Arc::default(), Arc::default())), root, changes: Arc::default(), removals: Arc::default() }
     }
 
     /// A memory cache whose files can be made to fail ([`Store::fail`]), for tests of what a
@@ -354,7 +356,7 @@ impl Store {
     pub fn failing() -> Store {
         let root = PathBuf::from("memory");
         let faults = files::Faults { files: Files::Memory(Arc::default(), Arc::default()), reads: Mutex::default(), writes: Mutex::default() };
-        Store { files: Routed::new(&root, Files::Failing(Arc::new(faults))), root, changes: Arc::default() }
+        Store { files: Routed::new(&root, Files::Failing(Arc::new(faults))), root, changes: Arc::default(), removals: Arc::default() }
     }
 
     /// From now on, a [`Store::failing`] cache fails to read the files whose path ends with
