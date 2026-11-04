@@ -13,7 +13,7 @@
 
 use std::path::Path;
 
-use pst_rw::{UnicodePstAttachment, UnicodePstBatchMessage, UnicodePstFile, UnicodePstMessage, UnicodePstRecipient, UnicodePstRecipientType};
+use outlook_pst::{UnicodePstAttachment, UnicodePstBatchMessage, UnicodePstFile, UnicodePstMessage, UnicodePstRecipient, UnicodePstRecipientType};
 use quatrelle_mime as mime;
 use quatrelle_model::{FolderRole, MessageKey, utf7};
 use quatrelle_store::Store;
@@ -174,14 +174,22 @@ fn pim_beside(store: &Store, account: &str, path: &Path) -> quatrelle_store::Res
 fn write(path: &Path, folder: &[&str], batch: &[Owned], created: &mut bool) -> Result<(), String> {
     let recipients: Vec<Vec<UnicodePstRecipient<'_>>> = batch
         .iter()
-        .map(|m| m.recipients.iter().map(|(name, email, kind)| UnicodePstRecipient { name, email, recipient_type: *kind }).collect())
+        .map(|m| {
+            m.recipients.iter().map(|(name, email, kind)| UnicodePstRecipient { name, email, recipient_type: *kind, ..Default::default() }).collect()
+        })
         .collect();
     let files: Vec<Vec<UnicodePstAttachment<'_>>> = batch
         .iter()
         .map(|m| {
             m.files
                 .iter()
-                .map(|(filename, mime_type, cid, data)| UnicodePstAttachment { filename, mime_type, content_id: cid.as_deref(), data })
+                .map(|(filename, mime_type, cid, data)| UnicodePstAttachment {
+                    filename,
+                    mime_type,
+                    content_id: cid.as_deref(),
+                    data,
+                    ..Default::default()
+                })
                 .collect()
         })
         .collect();
@@ -199,6 +207,8 @@ fn write(path: &Path, folder: &[&str], batch: &[Owned], created: &mut bool) -> R
                 html_body: m.html.as_deref(),
                 message_id: &m.message_id,
                 delivery_time: m.time,
+                message_class: "IPM.Note",
+                properties: &[],
             },
             attachments: f,
         })

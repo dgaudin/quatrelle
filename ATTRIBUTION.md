@@ -17,6 +17,13 @@ does it fall back to the Cantarell Regular that crate embeds (SIL Open Font Lice
 are rendered by `cargo xtask icons` from Quatrelle's own drawing in `xtask/src/icons.rs`, or from the
 owner's own picture `assets/icon.png` when it is there (every size is sampled down from it).
 
+Third-party code built from a fixed copy rather than taken from crates.io as it is published:
+Dong Shin's [outlook-pst-rw](https://github.com/dongs0104/outlook-pst-rs) 1.2.14 (MIT, its
+`LICENSE`), a fork of Microsoft's [outlook-pst](https://github.com/microsoft/outlook-pst-rs) reader
+with a writer added, from [dgaudin/outlook-pst-rs](https://github.com/dgaudin/outlook-pst-rs), the
+owner's copy of MailCraft's `craft/rw-1.2.14` branch, with the fixes listed in its `PATCHES.md`.
+It adds no asset files.
+
 | Path | Author | Source | Licence |
 |---|---|---|---|
 | `assets/icon.png` | Quatrelle's owner | The picture the app icon is rendered from, when present | Quatrelle's own |

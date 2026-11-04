@@ -3,7 +3,8 @@
 // Copyright (c) 2026 Didier Gaudin
 //! Importing an Outlook data file (`.pst`) into an account kept on this computer.
 //!
-//! The file is read with Microsoft's MIT-licensed `outlook-pst` crate (MS-PST): the folder tree
+//! The file is read with Microsoft's MIT-licensed reader (MS-PST), from the fixed copy of
+//! `outlook-pst-rw` the export writes with too (library `outlook_pst`): the folder tree
 //! under the top of the mailbox becomes folders, and each mail item is written out again as a
 //! standard message (RFC 5322 / MIME) from its properties (MS-OXCMSG / MS-OXPROPS), keeping the
 //! original headers when the item has them. Contacts and calendar items go to the account's address
@@ -34,6 +35,10 @@ use quatrelle_store::{FolderState, Store};
 const MAX_DEPTH: usize = 32;
 /// Attachments larger than this are left out of the imported message.
 const MAX_ATTACHMENT: usize = 100 * 1024 * 1024;
+/// A value (a body, an attachment's bytes, a table's rows, a store's, folder's or the name map's
+/// properties) the file says is larger than this is an error before any of it is read: a damaged
+/// size can't make the import run out of memory.
+const MAX_VALUE: u64 = 256 * 1024 * 1024;
 /// Original headers longer than this are not kept.
 const MAX_HEADERS: usize = 256 * 1024;
 /// Embedded messages inside embedded messages… stop here.
@@ -105,6 +110,7 @@ pub fn import(path: &Path, store: &Store, account: &str, progress: &mut dyn FnMu
 macro_rules! reader {
     ($name:ident, $file:ty, $store:ty, $message:ty, $attachment:ty) => {
         fn $name(pst: $file, out: &mut Out<'_>) -> io::Result<()> {
+            pst.set_max_value_size(MAX_VALUE);
             let store = <$store>::read(Rc::new(pst))?;
             let any: Rc<dyn PstStore> = store.clone();
             let named = crate::pst_pim::Named::of(&*any);

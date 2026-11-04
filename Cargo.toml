@@ -88,3 +88,11 @@ egui-wgpu = { git = "https://github.com/storytold/egui.git", rev = "6d518fc79968
 egui_glow = { git = "https://github.com/storytold/egui.git", rev = "6d518fc799681571963842f95b55a6b68431b15a" }
 eframe = { git = "https://github.com/storytold/egui.git", rev = "6d518fc799681571963842f95b55a6b68431b15a" }
 winit = { git = "https://github.com/storytold/winit.git", rev = "a517b3846ee8457d84ee4975110bfda6797c44dc" }
+# outlook-pst-rw 1.2.14, the .pst reader and writer in one crate (library `outlook_pst`), with
+# the fixes Quatrelle needs (capped reads of a damaged file, trees that can't point back at
+# themselves, attached messages, zero-byte files): the owner's copy (dgaudin/outlook-pst-rs) of
+# MailCraft's branch craft/rw-1.2.14, at the revision MailCraft pins, whose PATCHES.md lists the
+# fixes. To move to a newer release, follow that file (a craft/rw-<version> branch from the
+# release's tag, its commits cherry-picked onto it), then pin the new revision here and in
+# fuzz/Cargo.toml (`cargo xtask ci` checks both alike). Dropped once a release has the fixes.
+outlook-pst-rw = { git = "https://github.com/dgaudin/outlook-pst-rs.git", rev = "60cefd986b159d5f934d8291e4317dc96e0cd35b" }
