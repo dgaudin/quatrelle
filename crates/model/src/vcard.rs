@@ -319,6 +319,23 @@ fn quoted_printable_line(line: &str) -> bool {
     })
 }
 
+/// The longest property head read: past it a line's head is taken as settled.
+const MAX_HEAD: usize = 4096;
+
+/// A line's (quoted-printable, head still open) after it grew: its head is read again only
+/// while it has no colon and is short, so each line costs at most [`MAX_HEAD`] bytes.
+fn reread_head(line: &str, qp: bool, open: bool) -> (bool, bool) {
+    if !open {
+        return (qp, false);
+    }
+    let mut end = line.len().min(MAX_HEAD);
+    while !line.is_char_boundary(end) {
+        end = end.saturating_sub(1);
+    }
+    let head = line.get(..end).unwrap_or_default();
+    (quoted_printable_line(head), !head.contains(':') && line.len() < MAX_HEAD)
+}
+
 /// Upper-cased value of `CHARSET=` in a property head; empty means UTF-8.
 fn charset_of(head: &str) -> String {
     head.split(';')
@@ -374,18 +391,34 @@ fn western(b: u8) -> char {
 
 /// Read every card in a text (one `.vcf` can hold many).
 pub fn parse(text: &str) -> Vec<Card> {
-    let text = text.get(..MAX_INPUT).unwrap_or(text);
+    // At a character's start (a cut inside one would read the whole text).
+    let mut end = MAX_INPUT.min(text.len());
+    while !text.is_char_boundary(end) {
+        end = end.saturating_sub(1);
+    }
+    let text = text.get(..end).unwrap_or_default();
     let mut unfolded: Vec<String> = Vec::new();
+    // Whether the last line's head says quoted-printable, and whether that head is still open
+    // (no colon yet, and short enough to be one): kept beside the line, so a line growing by
+    // continuations isn't rescanned at each one (1 MiB of `=` lines took seconds).
+    let (mut qp, mut head_open) = (false, false);
     for l in text.split('\n') {
         let l = l.strip_suffix('\r').unwrap_or(l);
         match (l.strip_prefix(' ').or_else(|| l.strip_prefix('\t')), unfolded.last_mut()) {
             // 2.1's quoted-printable values break lines with a trailing `=`, the next line as it is.
-            (_, Some(prev)) if prev.ends_with('=') && quoted_printable_line(prev) => {
+            (_, Some(prev)) if prev.ends_with('=') && qp => {
                 prev.pop();
                 prev.push_str(l);
+                (qp, head_open) = reread_head(prev, qp, head_open);
             }
-            (Some(rest), Some(prev)) => prev.push_str(rest),
-            _ => unfolded.push(l.to_string()),
+            (Some(rest), Some(prev)) => {
+                prev.push_str(rest);
+                (qp, head_open) = reread_head(prev, qp, head_open);
+            }
+            _ => {
+                (qp, head_open) = reread_head(l, false, true);
+                unfolded.push(l.to_string());
+            }
         }
     }
     let mut cards = Vec::new();
@@ -720,6 +753,29 @@ TITLE:Price=5 not encoded\r\nEND:VCARD\r\n";
         // Broken escapes stay as written.
         assert_eq!(quoted_printable("a=Zb=4", String::new()), "a=Zb=4");
         assert_eq!(quoted_printable("=FF=FE", String::new()), "ÿþ");
+    }
+
+    /// A quoted-printable line with no colon that goes on for the whole 1 MiB of `=` breaks is
+    /// read in one pass (its head was read again at each break: seconds), and a head folded
+    /// before its encoding still reads.
+    #[test]
+    fn endless_quoted_printable_breaks_read_quickly() {
+        let mut text = "BEGIN:VCARD\nX;ENCODING=QUOTED-PRINTABLE;Y=".to_string();
+        text.push_str(&"\nz=".repeat((MAX_INPUT - text.len()) / 3));
+        let started = std::time::Instant::now();
+        assert!(parse(&text).is_empty());
+        assert!(started.elapsed() < std::time::Duration::from_secs(1), "took {:?}", started.elapsed());
+        let folded = parse("BEGIN:VCARD\nNOTE;ENCODING=QUOTED-\n PRINTABLE:caf=\n=C3=A9\nEND:VCARD");
+        assert_eq!(folded[0].note, "café");
+    }
+
+    /// A text cut by the size cap inside a character is still cut (it was read whole).
+    #[test]
+    fn the_size_cap_holds_inside_a_character() {
+        let mut text = "x".repeat(MAX_INPUT - 1);
+        text.push('é');
+        text.push_str("\nBEGIN:VCARD\nFN:Late\nEND:VCARD\n");
+        assert!(parse(&text).is_empty());
     }
 
     #[test]
