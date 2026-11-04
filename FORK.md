@@ -878,6 +878,40 @@ lignes libres, et la lecture et l'écriture de `CONFERENCE` (RFC 7986). Spec et 
   sans fenêtre (menu, remplacement du bloc, retrait, lignes d'Options), cible de fuzz `ical` étendue,
   `cargo xtask ci`.
 
+### État de la récupération : huitième partie : la mise en page HTML (2026-11-04)
+
+Le lot 3 de `merge-tools/survey-v0.31.md` (`223e1962`, `7ae3b393`, v0.31) et ses deux suites de
+l'issue #41 de l'origine, arrivées après la v0.31 (`b06767f4`, `d153a457`, 04/11), sur la branche
+`lot3-mise-en-page` ; un commit par commit de l'origine, à son nom. Avant : un courrier en une
+colonne centrée de largeur fixe (lettre d'information de 600 px, message écrit par Outlook en
+`width:450pt`, `max-width:37.5em` des outils d'e-mailing, largeur posée sur `<body>`) n'avait aucune
+mise en page ici et s'étalait sur toute la largeur du volet de lecture ; 10 des 13 cas de test de
+l'origine échouaient.
+
+- **Repris** : une boîte ou un tableau d'une largeur fixe garde sa largeur, centré là où le message le
+  centre ; `max-width` borne un `width: 100%` ; les unités pt, pc, in, cm, mm, em et rem pour les
+  colonnes et les tailles d'images ; `auto` ne fixe rien, une unité illisible laisse l'attribut
+  `width` ; un `<body>` de largeur fixe est une colonne ; dans un courrier mis en page, un paragraphe
+  centré est une cellule centrée, et une taille posée dans `<b><span style="font-size:20pt">` en fait
+  un titre, comme Outlook l'affiche.
+- **Adapté** :
+  - la photo d'une carte de visite : la cellule d'une seule image prend le `fit` qu'un logo flottant
+    avait déjà (largeur de l'image, marge ajoutée au dessin) ; la règle d'empilement du volet de
+    lecture de ce fork garde déjà une colonne étroite demandée par le message, le changement de
+    l'origine sur l'empilement n'est pas pris ;
+  - le centrage d'un tableau dans une cellule centrée existait déjà ici, et plus largement
+    (`reading/body/table.rs`) : la partie de `223e1962` sur le volet de lecture n'est pas prise ;
+  - les unités passent par le `length_px` des bordures et marges de ce fork, qui reconnaît désormais
+    l'unité par la fin du texte : un nombre écrit avec exposant (`1e9`) reste un nombre, comme les
+    tailles d'images le lisaient avant ;
+  - les largeurs vont dans `layout/lengths.rs`, les titres dans `layout/styling.rs`.
+- **Vérifié** : les tests de l'origine adaptés, ceux du fork (signatures d'Outlook côte à côte,
+  cellules vides, images cliquables, bordures), le moteur, l'interface sans fenêtre ; dans la vraie
+  fenêtre, quatre courriers d'essai avant et après, et la lettre d'information de la boîte d'exemple,
+  identique au pixel près.
+- **Reste à faire** : l'essai du propriétaire sur ses vraies lettres d'information ; les boutons
+  dessinés par la marge interne d'un lien (carnet `lecture-html-boutons`) ne sont pas dans ce lot.
+
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
 Quatre chantiers, chacun dans son commit, à la suite d'un audit de l'éditeur HTML.
