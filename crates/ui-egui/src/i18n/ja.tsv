@@ -1472,6 +1472,7 @@ month	May	5月
 	Under Webex Meeting in an appointment's window, each room puts its link and its lines in the meeting.	予定のウィンドウの「Webex 会議」で、各ルームがそのリンクと行を会議に挿入します。
 	Meeting number, video address, dial-in numbers… copied into the notes	会議番号、ビデオ アドレス、ダイヤルイン番号… メモにコピーされます
 	Add a room	ルームを追加
+	Remove this Webex room	この Webex ルームを削除
 	Webex	Webex
 	Schedule Webex meetings from an appointment's window. Register an integration at developer.webex.com, then sign in with it here.	予定のウィンドウから Webex ミーティングを設定します。developer.webex.com で統合を登録し、ここでそれを使ってサインインしてください。
 	Site	サイト

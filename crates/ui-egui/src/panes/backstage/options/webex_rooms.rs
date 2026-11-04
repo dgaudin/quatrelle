@@ -83,10 +83,14 @@ fn kept_lines(text: &str) -> Vec<String> {
 }
 
 /// Room `at`'s row: its name, its link and ×, its lines under them, then why the link typed can't
-/// be its link. The room is found by its link as kept.
+/// be its link. The room is found by its link as kept, or as it's changed in this frame: a box is
+/// left on the click that lands on × or on another box, and what it saves goes first, the room
+/// taken out last.
 fn room_row(ui: &mut Ui, t: &Tokens, at: usize, room: &WebexRoom, rooms: &[WebexRoom], acts: &mut Vec<Action>) {
     let url = room.url.as_str();
+    let mut link = url.to_string();
     let mut refused = None;
+    let mut remove = false;
     ui.horizontal(|ui| {
         // The room carried over from 1.0 has no name until it's given one; a name can't be taken
         // off again (the box shows it back).
@@ -101,7 +105,9 @@ fn room_row(ui: &mut Ui, t: &Tokens, at: usize, room: &WebexRoom, rooms: &[Webex
         }
         hold(ui, id, text, r.has_focus());
 
-        // Its link, checked first: one that can't be the room's stays in the box.
+        // Its link, checked first: one that can't be the room's stays in the box, and so does one
+        // that became right since (the room that had it gone, or given another), to be saved
+        // when the box is left again.
         let id = typed_id(at, "link");
         let mut text = shown(ui, id, url);
         let r = ui.add(egui::TextEdit::singleline(&mut text).hint_text("https://site.webex.com/meet/name").desired_width(LINK_WIDTH));
@@ -110,14 +116,14 @@ fn room_row(ui: &mut Ui, t: &Tokens, at: usize, room: &WebexRoom, rooms: &[Webex
         if changed {
             refused = link_refused(typed, rooms.iter().enumerate().filter(|(i, _)| *i != at).map(|(_, r)| r));
         }
-        if r.lost_focus() && changed && refused.is_none() {
+        let save = r.lost_focus() && changed && refused.is_none();
+        if save {
             acts.push(Action::Run("calendar.webexRoom", json!({"url": typed, "was": url})));
+            link = typed.to_string();
         }
-        hold(ui, id, text, r.has_focus() || refused.is_some());
+        hold(ui, id, text, r.has_focus() || (changed && !save));
 
-        if widgets::tiny_icon_button(ui, Icon::Close, "Remove this room", t).clicked() {
-            acts.push(Action::Run("calendar.webexRoom", json!({"url": url, "remove": true})));
-        }
+        remove = widgets::tiny_icon_button(ui, Icon::Close, "Remove this Webex room", t).clicked();
     });
     // Its lines, as many as it keeps.
     let id = typed_id(at, "lines");
@@ -128,10 +134,13 @@ fn room_row(ui: &mut Ui, t: &Tokens, at: usize, room: &WebexRoom, rooms: &[Webex
     if r.lost_focus() {
         let lines = kept_lines(&text);
         if lines != room.details {
-            acts.push(Action::Run("calendar.webexRoom", json!({"url": url, "details": lines.join("\n")})));
+            acts.push(Action::Run("calendar.webexRoom", json!({"url": link, "details": lines.join("\n")})));
         }
     }
     hold(ui, id, text, r.has_focus());
+    if remove {
+        acts.push(Action::Run("calendar.webexRoom", json!({"url": link, "remove": true})));
+    }
     if let Some(why) = refused {
         ui.label(RichText::new(why).color(t.danger).small());
     }
