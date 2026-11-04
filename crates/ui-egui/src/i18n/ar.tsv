@@ -1886,6 +1886,7 @@ folder	Conflicts	التعارضات
 	Messages from other domains are tagged External, in the list and above the message	تُوسم الرسائل الواردة من نطاقات أخرى بـ«خارجي» في القائمة وفوق الرسالة
 	Your organisation's domains	نطاقات مؤسستك
 	Separated by commas. Left empty, the domains of your accounts, mail services such as Gmail left out	مفصولة بفواصل. إذا تُركت فارغة: نطاقات حساباتك، باستثناء خدمات البريد مثل Gmail
+	Used for the External tag and the signature check.	يُستخدم لوسم «خارجي» وللتحقق من التوقيع.
 	None: nothing is tagged	لا شيء: لا يُوسم أي شيء
 	External	خارجي
 	This sender is outside your organisation.	هذا المرسل من خارج مؤسستك.
