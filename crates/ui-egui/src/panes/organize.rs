@@ -99,21 +99,23 @@ pub fn follow_up_menu(ui: &mut Ui, s: &Session, t: &Tokens, acts: &mut Vec<Actio
 
 /// Every organising item of the message context menu.
 pub fn context_items(ui: &mut Ui, s: &Session, t: &Tokens, acts: &mut Vec<Action>, pinned: bool) {
-    ui.menu_button(tl!("Categorize"), |ui| categorize_menu(ui, s, t, acts));
-    if ui.button(tl!(if pinned { "Unpin" } else { "Pin" })).clicked() {
+    use crate::icons::Icon;
+    use crate::widgets::menu_icon;
+    ui.menu_button((menu_icon(Some(Icon::Tag)), tl!("Categorize")), |ui| categorize_menu(ui, s, t, acts));
+    if ui.button((menu_icon(Some(Icon::Pin)), tl!(if pinned { "Unpin" } else { "Pin" }))).clicked() {
         acts.push(Action::Run("mail.pin", json!({"on": !pinned})));
         ui.close();
     }
-    ui.menu_button(tl!("Snooze"), |ui| snooze_menu(ui, s, t, acts));
+    ui.menu_button((menu_icon(Some(Icon::Clock)), tl!("Snooze")), |ui| snooze_menu(ui, s, t, acts));
     if s.focus_split() {
         let (id, label) = if s.focus_other { ("mail.moveToFocused", "Always move to Focused") } else { ("mail.moveToOther", "Always move to Other") };
-        if ui.button(tl!(label)).clicked() {
+        if ui.button((menu_icon(Some(Icon::Inbox)), tl!(label))).clicked() {
             acts.push(Action::Run(id, json!({})));
             ui.close();
         }
     }
     if let Some(m) = s.selected().into_iter().next()
-        && ui.button(tl!("Create rule…")).clicked()
+        && ui.button((menu_icon(Some(Icon::MailRules)), tl!("Create rule…"))).clicked()
     {
         // A colleague's address may be Exchange's internal one, kept as a name alone: the rule
         // goes by the name then.

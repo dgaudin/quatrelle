@@ -598,3 +598,32 @@ fn a_people_search_folder_reopens_as_people_and_saves_the_same() {
     assert_eq!((edit.preset, edit.final_query().as_str()), (8, with_comma));
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// A message's right-click menu draws an icon before each of its commands, as Outlook's does: it
+/// was text alone.
+#[test]
+fn the_message_menu_has_an_icon_before_each_command() {
+    let (mut a, dir) = app("menu-icons");
+    let ctx = egui::Context::default();
+    let name = a.session.list.first().map(|m| m.from.name.clone()).unwrap_or_default();
+    let row = settled_text_at(&ctx, &mut a, &name, SIZE).expect("the first message's row");
+    let press = |pressed| Event::PointerButton { pos: row, button: egui::PointerButton::Secondary, pressed, modifiers: Modifiers::NONE };
+    frame_sized(&ctx, &mut a, vec![Event::PointerMoved(row)], SIZE);
+    frame_sized(&ctx, &mut a, vec![press(true)], SIZE);
+    frame_sized(&ctx, &mut a, vec![press(false)], SIZE);
+    assert!(settled_text_at(&ctx, &mut a, "Reply all", SIZE).is_some(), "the menu open");
+    let shapes = frame_shapes(&ctx, &mut a, vec![], SIZE);
+    for label in ["Open in new window", "Reply", "Forward", "Follow up", "Move to…", "Ignore", "Delete", "Find related", "Categorize", "Create rule…"]
+    {
+        let at = text_at(&shapes, label).unwrap_or_else(|| panic!("{label} in the menu"));
+        let icon = shapes.iter().any(|s| match s {
+            egui::Shape::Mesh(m) => {
+                let r = m.calc_bounds();
+                r.max.x <= at.x && r.max.x > at.x - 90.0 && (r.center().y - at.y).abs() < 6.0
+            }
+            _ => false,
+        });
+        assert!(icon, "an icon before {label}");
+    }
+    let _ = std::fs::remove_dir_all(dir);
+}

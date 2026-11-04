@@ -576,5 +576,19 @@ pub(super) fn drawn(p: &Painter, rect: Rect, icon: Icon, color: Color32) {
             pen.line(&[(1.0, 13.0), (1.5, 11.0), (3.5, 10.0), (5.0, 10.5)]);
             pen.line(&[(15.0, 13.0), (14.5, 11.0), (12.5, 10.0), (11.0, 10.5)]);
         }
+        Icon::Ignore => {
+            // An envelope with a cross over its corner.
+            pen.line(&[(8.0, 4.0), (1.5, 4.0), (1.5, 13.5), (14.5, 13.5), (14.5, 9.0)]);
+            pen.line(&[(1.5, 4.5), (7.0, 8.5), (8.5, 7.5)]);
+            pen.line(&[(10.5, 1.5), (14.5, 5.5)]);
+            pen.line(&[(14.5, 1.5), (10.5, 5.5)]);
+        }
+        Icon::MailRules => {
+            // An envelope with a cog over its corner.
+            pen.line(&[(8.0, 4.0), (1.5, 4.0), (1.5, 13.5), (14.5, 13.5), (14.5, 9.0)]);
+            pen.line(&[(1.5, 4.5), (7.0, 8.5), (8.5, 7.5)]);
+            pen.circle(12.5, 3.5, 2.5);
+            pen.circle(12.5, 3.5, 0.8);
+        }
     }
 }
