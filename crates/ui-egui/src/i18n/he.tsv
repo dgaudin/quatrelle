@@ -1877,3 +1877,16 @@ folder	Conflicts	התנגשויות
 	{event}: deleted on the server meanwhile; the change made here was dropped (a copy is in Sync Issues › Conflicts)	{event}: נמחק בשרת בינתיים; השינוי שנעשה כאן בוטל (עותק נמצא בבעיות סנכרון › התנגשויות)
 	Careful: you know {name} as {known}, but this comes from {real}.	זהירות: אתם מכירים את {name} בכתובת {known}, אבל ההודעה הגיעה מ־{real}.
 	Careful: the signature gives {shown}, but this comes from {real}.	זהירות: בחתימה מופיע {shown}, אבל ההודעה הגיעה מ־{real}.
+	Show sender addresses in the message list	הצגת כתובות השולחים ברשימת ההודעות
+	Tag mail from outside the organisation	סימון דואר מחוץ לארגון
+	Sender addresses in the message list	כתובות השולחים ברשימת ההודעות
+	The address a message comes from, after the sender's name: a familiar name can come from anyone's address	הכתובת שממנה הגיעה ההודעה, אחרי שם השולח: שם מוכר יכול להגיע מכתובת של כל אחד
+	People you don't know	אנשים שאינכם מכירים
+	Tag mail from outside your organisation	סימון דואר מחוץ לארגון שלכם
+	Messages from other domains are tagged External, in the list and above the message	הודעות מדומיינים אחרים מסומנות כחיצוניות, ברשימה ומעל ההודעה
+	Your organisation's domains	הדומיינים של הארגון שלכם
+	Separated by commas. Left empty, the domains of your accounts, mail services such as Gmail left out	מופרדים בפסיקים. אם ריק: הדומיינים של החשבונות שלכם, ללא שירותי דואר כמו Gmail
+	None: nothing is tagged	אין: שום דבר לא מסומן
+	External	חיצוני
+	This sender is outside your organisation.	השולח הזה נמצא מחוץ לארגון שלכם.
+	Check who sent it	בדקו מי שלח אותה

@@ -1881,3 +1881,16 @@ folder	Conflicts	Conflitos
 	{event}: deleted on the server meanwhile; the change made here was dropped (a copy is in Sync Issues › Conflicts)	{event}: excluído no servidor nesse meio-tempo; a alteração feita aqui foi descartada (há uma cópia em Problemas de sincronização › Conflitos)
 	Careful: you know {name} as {known}, but this comes from {real}.	Cuidado: você conhece {name} como {known}, mas isto vem de {real}.
 	Careful: the signature gives {shown}, but this comes from {real}.	Cuidado: a assinatura indica {shown}, mas isto vem de {real}.
+	Show sender addresses in the message list	Mostrar os endereços dos remetentes na lista de mensagens
+	Tag mail from outside the organisation	Marcar emails de fora da organização
+	Sender addresses in the message list	Endereços dos remetentes na lista de mensagens
+	The address a message comes from, after the sender's name: a familiar name can come from anyone's address	O endereço de onde vem uma mensagem, após o nome do remetente: um nome conhecido pode vir do endereço de qualquer pessoa
+	People you don't know	Pessoas que você não conhece
+	Tag mail from outside your organisation	Marcar emails de fora da sua organização
+	Messages from other domains are tagged External, in the list and above the message	Mensagens de outros domínios são marcadas como Externo, na lista e acima da mensagem
+	Your organisation's domains	Domínios da sua organização
+	Separated by commas. Left empty, the domains of your accounts, mail services such as Gmail left out	Separados por vírgulas. Se vazio, os domínios das suas contas, exceto serviços de email como o Gmail
+	None: nothing is tagged	Nenhum: nada é marcado
+	External	Externo
+	This sender is outside your organisation.	Este remetente é de fora da sua organização.
+	Check who sent it	Verifique quem enviou

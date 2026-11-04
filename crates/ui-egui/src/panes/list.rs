@@ -337,6 +337,43 @@ pub(crate) fn arrange_menu(ui: &mut Ui, s: &Session, acts: &mut Vec<Action>) {
     }
 }
 
+/// The sender's name, then the address their mail really came from, dimmer, on the row's first
+/// line between `left` and `right` (`at`: left, right, top). The address is what tells, so it's
+/// laid out first, cut to its domain when it doesn't fit (`<…@example.com>`); the name keeps up
+/// to nine twentieths of the room, so a short line still says who. A conversation's count
+/// follows the address.
+#[allow(clippy::too_many_arguments)]
+fn sender_with_address(
+    ui: &Ui,
+    p: &egui::Painter,
+    t: &theme::Tokens,
+    at: (f32, f32, f32),
+    who: &str,
+    who_font: egui::FontId,
+    email: &str,
+    count: usize,
+) {
+    let (left, right, top) = at;
+    let room = (right - left).max(1.0);
+    let more = if count > 1 { format!("  ({count})") } else { String::new() };
+    let font = theme::regular(12.5);
+    let name_w = p.layout_no_wrap(who.to_string(), who_font.clone(), t.text).size().x;
+    // `max` last: `clamp` would panic on a room under a point and a half.
+    let cap = (room - name_w.min(room * 0.45) - 6.0).min(room * 0.7).max(1.0);
+    let full = format!("<{email}>{more}");
+    let fits = p.layout_no_wrap(full.clone(), font.clone(), t.dim).size().x <= cap;
+    let address = match email.rsplit_once('@') {
+        Some((_, domain)) if !fits => format!("<…@{domain}>{more}"),
+        _ => full,
+    };
+    let ag = widgets::one_line(ui, &address, font, t.dim, cap);
+    let aw = ag.size().x;
+    let who_g = widgets::one_line(ui, who, who_font, t.text, (room - aw - 6.0).max(1.0));
+    let nw = who_g.size().x;
+    p.galley(egui::pos2(left, top), who_g, t.text);
+    p.galley(egui::pos2(left + nw + 6.0, top + 1.5), ag, t.dim);
+}
+
 #[allow(clippy::too_many_arguments)]
 fn message_row(
     s: &Session,
@@ -356,13 +393,25 @@ fn message_row(
     let hovered = ui.rect_contains_pointer(r) && !ui.ctx().is_being_dragged(id) || resp.hovered();
     let selected = s.selection.contains(&m.key);
     let unread = if count > 1 { unread_in_thread > 0 } else { !m.flags.seen };
+    // What the sender check says about the sender: a warning, their address, External (never
+    // for the user's own mail, nor in Sent, which lists whom it went to).
+    let marks = if sent_view { quatrelle_engine::SenderMarks::default() } else { s.sender_marks(m) };
     // To a screen reader a row is one item of the list: who, the subject, when, and what its
-    // markers show (unread, flagged, attachments).
+    // markers show (a sender to check, external, unread, flagged, attachments).
     resp.widget_info(|| {
-        let who = if sent_view { m.to.first().map(|a| a.display().to_string()).unwrap_or_default() } else { m.from.display().to_string() };
+        let mut who = if sent_view { m.to.first().map(|a| a.display().to_string()).unwrap_or_default() } else { m.from.display().to_string() };
+        if marks.address {
+            who = format!("{who} <{}>", m.from.email.trim());
+        }
         let subject = if m.subject.is_empty() { tl!("(no subject)") } else { m.subject.as_str() };
         let mut spoken = vec![who, subject.to_string(), crate::i18n::date(&dates::list_time(m.date, &s.clock))];
-        for (on, word) in [(unread, "Unread"), (m.flags.flagged, "Flagged"), (m.has_attachments, "Has attachments")] {
+        for (on, word) in [
+            (marks.warning, "Check who sent it"),
+            (marks.external, "External"),
+            (unread, "Unread"),
+            (m.flags.flagged, "Flagged"),
+            (m.has_attachments, "Has attachments"),
+        ] {
             if on {
                 spoken.push(tl!(word).to_string());
             }
@@ -411,13 +460,41 @@ fn message_row(
         p.galley(egui::pos2(right - tw - 10.0 - fw, line1 + 2.0), fg, t.faint);
         tw += fw + 10.0;
     }
+    // From outside the organisation: a small framed tag before the time.
+    if marks.external {
+        let eg = p.layout_no_wrap(tl!("External").to_string(), theme::regular(11.0), t.dim);
+        let ew = eg.size().x + 10.0;
+        let er = Rect::from_min_size(egui::pos2(right - tw - 10.0 - ew, line1), vec2(ew, 17.0));
+        p.rect_stroke(er, 4.0, egui::Stroke::new(1.0, t.border), egui::StrokeKind::Inside);
+        p.galley(er.center() - eg.size() / 2.0, eg, t.dim);
+        if ui.rect_contains_pointer(er) {
+            resp.clone().on_hover_text(tl!("This sender is outside your organisation."));
+        }
+        tw += ew + 10.0;
+    }
+    let mut name_x = x;
+    // The sender doesn't add up: a warning sign before the name (the reading pane says what).
+    if marks.warning {
+        let ir = Rect::from_min_size(egui::pos2(name_x, line1 + 1.0), vec2(15.0, 15.0));
+        icons::paint(&p, ir, Icon::Warning, t.danger);
+        if ui.rect_contains_pointer(ir) {
+            resp.clone().on_hover_text(tl!("Check who sent it"));
+        }
+        name_x += 19.0;
+    }
     let who = if sent_view { tf!("To: {names}", names = addr::display_list(&m.to)) } else { m.from.display().to_string() };
-    let who = if count > 1 { format!("{who}  ({count})") } else { who };
+    let who = if count > 1 && !marks.address { format!("{who}  ({count})") } else { who };
     let (who, who_rtl) = crate::bidi::shown(&who);
-    let who_g = p.layout_no_wrap(who.into_owned(), if unread { theme::bold(14.0) } else { theme::regular(14.0) }, t.text);
-    // Right-to-left text starts at the right, so that's where it goes when it doesn't fit.
-    let who_x = if who_rtl { (right - tw - 10.0 - who_g.size().x).max(x) } else { x };
-    p.with_clip_rect(Rect::from_x_y_ranges(x..=right - tw - 8.0, r.y_range())).galley(egui::pos2(who_x, line1), who_g, t.text);
+    let who_font = if unread { theme::bold(14.0) } else { theme::regular(14.0) };
+    let who_right = right - tw - 8.0;
+    if marks.address {
+        sender_with_address(ui, &p, t, (name_x, who_right, line1), &who, who_font, m.from.email.trim(), count);
+    } else {
+        let who_g = p.layout_no_wrap(who.into_owned(), who_font, t.text);
+        // Right-to-left text starts at the right, so that's where it goes when it doesn't fit.
+        let who_x = if who_rtl { (who_right - 2.0 - who_g.size().x).max(name_x) } else { name_x };
+        p.with_clip_rect(Rect::from_x_y_ranges(name_x..=who_right, r.y_range())).galley(egui::pos2(who_x, line1), who_g, t.text);
+    }
 
     // Subject with markers.
     let line2 = line1 + 19.0;

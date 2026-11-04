@@ -188,8 +188,17 @@ impl MailApp {
     /// while a message is being written, ahead of the first name typed; kept going once started.
     /// Built whole at that first name, it read every folder of a big mailbox from disk at once
     /// and froze the window for seconds.
+    /// Then the sender check, gathered again when what it's made of changed (the book just read,
+    /// a contact saved, an account added): the list's marks and the open message's warning follow.
     fn build_contacts(&mut self, ctx: &egui::Context) {
-        if (self.session.all_composes().next().is_some() || self.session.contacts_pending()) && !self.session.contacts_step(CONTACTS_BUDGET) {
+        let reading = self.session.contacts_pending();
+        if (self.session.all_composes().next().is_some() || reading) && !self.session.contacts_step(CONTACTS_BUDGET) {
+            ctx.request_repaint();
+        }
+        // Cheap when nothing changed; never while the book is being read, and never loads it.
+        self.session.keep_senders_quietly();
+        // The book done in this frame, after it drew: the next one shows what the check found.
+        if reading && !self.session.contacts_pending() {
             ctx.request_repaint();
         }
     }

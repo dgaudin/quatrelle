@@ -26,6 +26,7 @@ pub(crate) mod pictures;
 mod plain;
 mod security;
 mod sender;
+mod sender_check;
 use attachments::*;
 pub(crate) use attachments::{big_picture, decode};
 pub(crate) use body::CellHeights;
@@ -34,6 +35,7 @@ pub use compose::compose_window;
 #[cfg(test)]
 pub(crate) use compose::picture_alone;
 use pictures::*;
+pub(crate) use sender_check::{external_tag, sender_warning};
 /// A picture cut to a circle: its middle square is kept (a picture that isn't square would
 /// otherwise fill a square box stretched, its circle an oval), then everything outside the
 /// circle goes, with a pixel of smoothing at its edge.
@@ -496,39 +498,6 @@ fn zoom_step(ctx: &egui::Context, percent: u16) -> Option<u16> {
     let next = if pending > 0.0 { tens.saturating_add(1) } else { tens.saturating_sub(1) }.saturating_mul(10);
     let (low, high) = (*quatrelle_engine::READING_ZOOM.start(), *quatrelle_engine::READING_ZOOM.end());
     Some(next.clamp(low, high)).filter(|n| *n != percent)
-}
-
-/// Who the message says it's from doesn't add up: said plainly, above everything it asks for.
-pub(crate) fn sender_warning(t: &Tokens, ui: &mut Ui, w: &quatrelle_engine::model::lookalike::SenderWarning) {
-    use quatrelle_engine::model::lookalike::SenderWarning;
-    let what = match w {
-        SenderWarning::Lookalike { domain, like } => {
-            tf!("Careful: this comes from {domain}, which looks like {like} but isn't it.", domain = domain, like = like)
-        }
-        SenderWarning::NameShowsOther { shown, real } => {
-            tf!("Careful: the sender's name shows {shown}, but this comes from {real}.", shown = shown, real = real)
-        }
-        SenderWarning::NameOfKnownPerson { name, known, real } => {
-            tf!("Careful: you know {name} as {known}, but this comes from {real}.", name = name, known = known, real = real)
-        }
-        SenderWarning::SignatureShowsOther { shown, real } => {
-            tf!("Careful: the signature gives {shown}, but this comes from {real}.", shown = shown, real = real)
-        }
-    };
-    egui::Frame::new().fill(t.danger.gamma_multiply(0.12)).corner_radius(6).inner_margin(Margin::symmetric(10, 8)).show(ui, |ui| {
-        ui.set_width(ui.available_width());
-        ui.horizontal(|ui| {
-            let (r, _) = ui.allocate_exact_size(vec2(16.0, 16.0), Sense::hover());
-            icons::paint(ui.painter(), r, Icon::Warning, t.danger);
-            ui.vertical(|ui| {
-                ui.label(RichText::new(what).color(t.text));
-                ui.label(
-                    RichText::new(tl!("Don't open its links or attachments, or answer it, unless you're sure who sent it.")).color(t.dim).small(),
-                );
-            });
-        });
-    });
-    ui.add_space(8.0);
 }
 
 /// A meeting invitation (or an answer to one, or a cancellation) carried by the message.
