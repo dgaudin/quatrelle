@@ -1491,6 +1491,15 @@ month	May	5月
 	Webex Meeting options	Webex 会议选项
 	New Webex meeting	新建 Webex 会议
 	Use my personal room	使用我的个人会议室
+	My personal room	我的个人会议室
+	Add a room…	添加会议室…
+	This appointment already has its Webex meeting	此约会已有 Webex 会议
+	At most {n} Webex rooms	最多 {n} 个 Webex 会议室
+	New Webex room	新的 Webex 会议室
+	Its link is on your Webex profile, under Personal Room. Its other lines are added in File › Options › Calendar.	链接位于你的 Webex 个人资料的“个人会议室”中。其他行在“文件 › 选项 › 日历”中添加。
+	Room name	会议室名称
+	Another room has this link	另一个会议室已使用此链接
+	Puts your Webex room in the meeting	将你的 Webex 会议室插入会议
 	A meeting needs a title and a start	会议需要标题和开始时间
 	Creating the Webex meeting…	正在创建 Webex 会议…
 	Meeting number: {number}	会议号: {number}

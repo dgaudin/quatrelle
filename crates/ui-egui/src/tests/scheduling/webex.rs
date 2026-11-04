@@ -6,6 +6,7 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use egui::accesskit::Role;
+use quatrelle_engine::WebexRoom;
 use quatrelle_engine::model::job::Secret;
 use quatrelle_engine::model::{Job, WEBEX_REDIRECT_URI, WebexError, WebexMeeting};
 
@@ -110,6 +111,11 @@ const ROOM: &str = "https://acme.webex.com/meet/ana";
 
 type Jobs = Rc<RefCell<Vec<Job>>>;
 
+/// The personal room of 1.0, carried over as a room with no name.
+fn personal_room() -> WebexRoom {
+    WebexRoom { name: String::new(), url: ROOM.into(), details: Vec::new() }
+}
+
 /// An appointment called `title` in its window, in a session signed in to Webex, the jobs kept.
 fn appointment(name: &str, title: &str) -> (MailApp, std::path::PathBuf, egui::Context, Jobs) {
     let (mut a, dir) = app(name);
@@ -146,7 +152,7 @@ fn webex_jobs(jobs: &Jobs) -> usize {
 
 /// The button named `label`, as a screen reader is told of it: where it is and whether it can be
 /// pressed.
-fn button(ctx: &egui::Context, a: &mut MailApp, label: &str) -> Option<(egui::Pos2, bool)> {
+pub(super) fn button(ctx: &egui::Context, a: &mut MailApp, label: &str) -> Option<(egui::Pos2, bool)> {
     ctx.enable_accesskit();
     let input = RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, SIZE)), ..Default::default() };
     let mut out = ctx.run_ui(input, |ui| a.ui(ui));
@@ -346,13 +352,14 @@ fn a_refused_creation_shows_and_changes_nothing() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
-/// Use my personal room puts the room in as ever: nothing goes to Webex.
+/// The personal room carried over from 1.0 (a room with no name) puts itself in as ever: nothing
+/// goes to Webex.
 #[test]
 fn the_personal_room_stays_a_choice() {
     let (mut a, dir, ctx, jobs) = appointment("webex-room-choice", "Budget");
-    a.session.prefs.webex_room = ROOM.into();
+    a.session.prefs.webex_rooms = vec![personal_room()];
     open_webex_menu(&ctx, &mut a, SIZE);
-    let at = settled_text_at(&ctx, &mut a, "Use my personal room", SIZE).expect("the entry");
+    let at = settled_text_at(&ctx, &mut a, "My personal room", SIZE).expect("the entry");
     click_at(&ctx, &mut a, at, 1, SIZE);
     let f = form(&mut a);
     assert_eq!((f.join.as_deref(), f.location.as_str()), (Some(ROOM), ROOM));
@@ -363,7 +370,7 @@ fn the_personal_room_stays_a_choice() {
 
 /// One meeting at a time, and only for the user's own appointment: Webex Meeting is off while one
 /// is on its way, while the appointment holds one, and on someone else's event, whose menu keeps
-/// the personal room.
+/// the rooms.
 #[test]
 fn a_meeting_goes_only_where_it_can_be_kept() {
     let (mut a, dir, ctx, jobs) = appointment("webex-one-only", "Budget");
@@ -382,8 +389,8 @@ fn a_meeting_goes_only_where_it_can_be_kept() {
     open_webex_menu(&ctx, &mut a, SIZE);
     let at = text_at(&frame_shapes(&ctx, &mut a, vec![], SIZE), "New Webex meeting").expect("the entry");
     click_at(&ctx, &mut a, at, 1, SIZE);
-    a.session.prefs.webex_room = ROOM.into();
-    let at = text_at(&frame_shapes(&ctx, &mut a, vec![], SIZE), "Use my personal room").expect("the room stays");
+    a.session.prefs.webex_rooms = vec![personal_room()];
+    let at = text_at(&frame_shapes(&ctx, &mut a, vec![], SIZE), "My personal room").expect("the room stays");
     click_at(&ctx, &mut a, at, 1, SIZE);
     assert_eq!(form(&mut a).join.as_deref(), Some(ROOM));
     assert_eq!(webex_jobs(&jobs), 0, "none of these asked Webex");

@@ -184,113 +184,58 @@ fn submit(f: &mut EventForm, acts: &mut Vec<Action>) {
     acts.push(Action::Submit(if f.uid.is_some() { "event.update" } else { "event.create" }, f.params()));
 }
 
-/// The Webex personal room in the appointment, as Webex's own add-in puts it: as the place (one
-/// typed is kept) and at the end of the notes, for the guests to join by.
-fn add_webex(f: &mut EventForm, url: &str) {
-    if f.location.trim().is_empty() {
-        f.location = url.to_string();
-    }
-    if !f.description.contains(url) {
-        let notes = f.description.trim_end();
-        let gap = if notes.is_empty() { "" } else { "\n\n" };
-        f.description = format!("{notes}{gap}{}\n{url}\n", tl!("Join the Webex meeting:"));
-    }
-    f.join = Some(url.to_string());
-}
-
-/// The Webex personal room asked for under Webex Meeting, the first time (the window is
-/// `window`): its link, once one is given that is a personal room's.
-fn webex_room(ui: &mut Ui, t: &Tokens, window: u64) -> Option<String> {
-    let id = egui::Id::unique(("webex-room-typed", window));
-    let mut typed: String = ui.data_mut(|d| d.get_temp(id)).unwrap_or_default();
-    ui.set_width(400.0);
-    ui.label(RichText::new(tl!("Your Webex personal room")).font(theme::bold(13.0)).color(t.text));
-    ui.label(
-        RichText::new(tl!("Its link is on your Webex profile, under Personal Room. It's kept in File › Options › Calendar for the next meetings."))
-            .color(t.dim)
-            .small(),
-    );
-    ui.add_space(4.0);
-    let link = typed.trim().to_string();
-    let good = quatrelle_engine::model::ical::is_webex_link(&link);
-    let mut taken = None;
-    ui.horizontal(|ui| {
-        let r = ui.add(egui::TextEdit::singleline(&mut typed).hint_text("https://site.webex.com/meet/name").desired_width(270.0));
-        if ui.memory(|m| m.focused().is_none()) {
-            r.request_focus();
-        }
-        // In a menu the box keeps the focus on Enter: Enter while typing in it.
-        let enter = (r.has_focus() || r.lost_focus()) && ui.input(|i| i.key_pressed(egui::Key::Enter));
-        if (ui.add_enabled(good, egui::Button::new(tl!("Add to the meeting"))).clicked() || enter) && good {
-            taken = Some(link.clone());
-        }
-    });
-    if !link.is_empty() && !good {
-        ui.label(RichText::new(tl!("Not a Webex personal room: https://<site>.webex.com/meet/<name>")).color(t.danger).small());
-    }
-    if taken.is_some() {
-        typed.clear();
-    }
-    ui.data_mut(|d| d.insert_temp(id, typed));
-    taken
-}
-
-/// Webex Meeting: a click schedules a meeting, and the menu beside it offers that or the personal
-/// room, asked for there the first time (`busy`: names are being checked or a meeting made, and
-/// both wait). Only a meeting the appointment can keep is scheduled: one at a time, and on the
-/// user's own, as the engine never follows one on someone else's event.
+/// Webex Meeting: a click schedules a meeting, and the menu beside it offers that or a Webex room,
+/// a new one asked for there (`busy`: names are being checked or a meeting made, and both wait).
+/// Only a meeting the appointment can keep is scheduled: one at a time, and on the user's own, as
+/// the engine never follows one on someone else's event.
 #[cfg(not(target_arch = "wasm32"))]
 fn webex_button(ui: &mut Ui, t: &Tokens, f: &mut EventForm, s: &Session, busy: bool, acts: &mut Vec<Action>) {
+    use super::webex_rooms::{asking_now, rooms_menu, stop_asking};
     let schedules = !busy && f.webex_id.is_none() && f.can_invite && f.webex_allowed;
     if widgets::big_button(ui, Icon::Video, "Webex Meeting", t, schedules).clicked() {
         super::webex::new_meeting(f, &s.prefs, acts);
     }
-    let asking = egui::Id::unique(("webex-room-asking", f.window));
     let r = ui.add_enabled_ui(!busy, |ui| widgets::big_more(ui, "Webex Meeting options", t)).inner;
     let menu = egui::Popup::menu(&r).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
-        if ui.data(|d| d.get_temp(asking)).unwrap_or(false) {
-            if let Some(url) = webex_room(ui, t, f.window) {
-                acts.push(Action::Run("calendar.webexRoom", json!({"url": url})));
-                add_webex(f, &url);
+        if !asking_now(ui, f.window) {
+            if ui.add_enabled(schedules, egui::Button::new(tl!("New Webex meeting"))).clicked() {
+                super::webex::new_meeting(f, &s.prefs, acts);
                 ui.close();
+                return;
             }
-            return;
+            ui.separator();
         }
-        if ui.add_enabled(schedules, egui::Button::new(tl!("New Webex meeting"))).clicked() {
-            super::webex::new_meeting(f, &s.prefs, acts);
+        if rooms_menu(ui, t, f, s, acts) {
             ui.close();
-        }
-        if ui.button(tl!("Use my personal room")).clicked() {
-            if s.prefs.webex_room.is_empty() {
-                ui.data_mut(|d| d.insert_temp(asking, true));
-            } else {
-                add_webex(f, &s.prefs.webex_room);
-                ui.close();
-            }
         }
     });
     if menu.is_none() {
-        ui.data_mut(|d| d.remove::<bool>(asking));
+        stop_asking(ui, f.window);
     }
 }
 
-/// Webex Meeting in the browser, where no meeting is scheduled: it puts the personal room in,
-/// asked for under the button the first time.
+/// Webex Meeting in the browser, where no meeting is scheduled: with one room, a click puts it in;
+/// otherwise it opens the rooms' menu, a new one asked for there.
 #[cfg(target_arch = "wasm32")]
 fn webex_button(ui: &mut Ui, t: &Tokens, f: &mut EventForm, s: &Session, _busy: bool, acts: &mut Vec<Action>) {
-    let webex = s.prefs.webex_room.as_str();
+    let rooms = &s.prefs.webex_rooms;
     let r = widgets::big_button(ui, Icon::Video, "Webex Meeting", t, true);
-    if webex.is_empty() {
-        let r = r.on_hover_text(tl!("Puts your Webex personal room in the meeting"));
-        egui::Popup::menu(&r).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
-            if let Some(url) = webex_room(ui, t, f.window) {
-                acts.push(Action::Run("calendar.webexRoom", json!({"url": url})));
-                add_webex(f, &url);
-                ui.close();
-            }
-        });
-    } else if r.on_hover_text(webex).clicked() {
-        add_webex(f, webex);
+    if let [room] = rooms.as_slice()
+        && f.webex_id.is_none()
+    {
+        if r.on_hover_text(&room.url).clicked() {
+            super::webex_rooms::add_room(f, room, rooms);
+        }
+        return;
+    }
+    let r = if rooms.is_empty() { r.on_hover_text(tl!("Puts your Webex room in the meeting")) } else { r };
+    let menu = egui::Popup::menu(&r).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
+        if super::webex_rooms::rooms_menu(ui, t, f, s, acts) {
+            ui.close();
+        }
+    });
+    if menu.is_none() {
+        super::webex_rooms::stop_asking(ui, f.window);
     }
 }
 
@@ -619,29 +564,5 @@ fn body(ui: &mut Ui, t: &Tokens, f: &mut EventForm, acts: &mut Vec<Action>) {
                 }
             }
         });
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Webex Meeting puts the room as the place (one typed is kept) and at the end of the notes,
-    /// once however often it's pressed, and Join then shows.
-    #[test]
-    fn webex_meeting_puts_the_room_in_once() {
-        let room = "https://acme.webex.com/meet/ana";
-        let mut f = EventForm::default();
-        add_webex(&mut f, room);
-        assert_eq!((f.location.as_str(), f.join.as_deref()), (room, Some(room)));
-        assert!(f.description.starts_with(tl!("Join the Webex meeting:")) && f.description.ends_with(&format!("{room}\n")), "{:?}", f.description);
-        let mut f = EventForm { location: "Salle B".into(), description: "Ordre du jour\n".into(), ..Default::default() };
-        add_webex(&mut f, room);
-        add_webex(&mut f, room);
-        assert_eq!(f.location, "Salle B");
-        assert!(f.description.starts_with("Ordre du jour\n\n"), "{:?}", f.description);
-        assert_eq!(f.description.matches(room).count(), 1);
-        let e = quatrelle_engine::model::ical::CalEvent { location: f.location.clone(), description: f.description.clone(), ..Default::default() };
-        assert_eq!(e.join_link().as_deref(), Some(room), "what Join finds once it's saved");
     }
 }

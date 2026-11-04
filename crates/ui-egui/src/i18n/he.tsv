@@ -1490,6 +1490,15 @@ month	May	מאי
 	Webex Meeting options	אפשרויות פגישת Webex
 	New Webex meeting	פגישת Webex חדשה
 	Use my personal room	שימוש בחדר האישי שלי
+	My personal room	החדר האישי שלי
+	Add a room…	הוסף חדר…
+	This appointment already has its Webex meeting	לפגישה זו כבר יש פגישת Webex משלה
+	At most {n} Webex rooms	לכל היותר {n} חדרי Webex
+	New Webex room	חדר Webex חדש
+	Its link is on your Webex profile, under Personal Room. Its other lines are added in File › Options › Calendar.	הקישור נמצא בפרופיל ה-Webex שלך, תחת חדר אישי. שאר השורות שלו מתווספות בקובץ › אפשרויות › לוח שנה.
+	Room name	שם החדר
+	Another room has this link	לחדר אחר כבר יש את הקישור הזה
+	Puts your Webex room in the meeting	מוסיף את החדר שלך ב-Webex לפגישה
 	A meeting needs a title and a start	לפגישה נדרשים כותרת ושעת התחלה
 	Creating the Webex meeting…	יוצר פגישת Webex…
 	Meeting number: {number}	מספר פגישה: {number}

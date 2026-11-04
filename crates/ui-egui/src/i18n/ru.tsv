@@ -1493,6 +1493,15 @@ month	May	Май
 	Webex Meeting options	Параметры собрания Webex
 	New Webex meeting	Новое собрание Webex
 	Use my personal room	Использовать мою личную комнату
+	My personal room	Моя личная комната
+	Add a room…	Добавить комнату…
+	This appointment already has its Webex meeting	У этой встречи уже есть собрание Webex
+	At most {n} Webex rooms	Не более {n} комнат Webex
+	New Webex room	Новая комната Webex
+	Its link is on your Webex profile, under Personal Room. Its other lines are added in File › Options › Calendar.	Ссылка есть в вашем профиле Webex, в разделе «Персональная комната». Остальные строки добавляются в Файл › Параметры › Календарь.
+	Room name	Название комнаты
+	Another room has this link	Эта ссылка уже есть у другой комнаты
+	Puts your Webex room in the meeting	Вставляет вашу комнату Webex в собрание
 	A meeting needs a title and a start	Для собрания нужны название и время начала
 	Creating the Webex meeting…	Создание собрания Webex…
 	Meeting number: {number}	Номер собрания: {number}
