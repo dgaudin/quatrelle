@@ -83,17 +83,30 @@ fn wrote(line: &str) -> bool {
     WROTE.iter().any(|w| rest.strip_suffix(w).is_some_and(|before| before.is_empty() || before.ends_with(char::is_whitespace)))
 }
 
+/// A line (trimmed) without the stars an HTML message's converted text writes around bold and
+/// italics (`**De :**`, `*… wrote:*`). A list's bullet (`* item`, a star then a space) stays: an
+/// item isn't emphasis.
+fn unemphasised(line: &str) -> &str {
+    let start = if line.starts_with("**") {
+        line.get(2..)
+    } else if line.starts_with('*') && !line.get(1..).is_some_and(|r| r.starts_with(char::is_whitespace)) {
+        line.get(1..)
+    } else {
+        Some(line)
+    };
+    start.unwrap_or(line).trim_end_matches('*').trim()
+}
+
 /// The author's own part of a message's text: up to the first line that starts a quoted or
 /// forwarded message, at most [`READ_MOST`] bytes.
 pub fn own_text(text: &str) -> &str {
     let text = head(text);
-    // Each line's start and its lower-case, trimmed form, for the header block's look ahead. An
-    // HTML message's converted text writes bold and italics with stars around them (Outlook's
-    // `**De :**`): they're left aside.
+    // Each line's start and its lower-case, trimmed form, for the header block's look ahead,
+    // bold and italics' stars left aside (Outlook's `**De :**`).
     let mut lines: Vec<(usize, String)> = Vec::new();
     let mut at = 0;
     for line in text.split_inclusive('\n') {
-        lines.push((at, line.trim().trim_matches('*').trim().to_lowercase()));
+        lines.push((at, unemphasised(line.trim()).to_lowercase()));
         at += line.len();
     }
     for (i, (start, line)) in lines.iter().enumerate() {
@@ -379,6 +392,11 @@ mod tests {
             let own = own_text(&text);
             assert!(!own.contains("quoted"), "{mark:?}: {own:?}");
             assert!(own.contains("Dana"), "{mark:?}: {own:?}");
+        }
+        // A list's bullet (`* ` before each `<li>`, or typed) isn't emphasis: its items start no
+        // header block.
+        for text in ["Hi\n\n* From: Paris\n* To: Lyon\n\nDana\nwww.x.example", "Bonjour\n\n* De : 9 h\n* À : 17 h\n\nDana\nwww.x.example"] {
+            assert_eq!(own_text(text), text);
         }
     }
 
