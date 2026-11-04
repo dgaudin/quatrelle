@@ -53,6 +53,8 @@ thiserror = { workspace = true }
 [target.'cfg(windows)'.dependencies]
 # The system's DNS resolvers (account autoconfiguration).
 ipconfig = "0.3"
+# The certificates Windows distrusts (`Disallowed`), refused even when among the roots.
+schannel = "0.1"
 
 [features]
 # The fake Graph server, for other crates' tests (`teams_sample`): a dev-dependency only.
