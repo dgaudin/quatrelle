@@ -25,8 +25,9 @@ use crate::files::mime_from_name;
 mod codepage;
 mod rtf;
 
-pub use codepage::{decode_code_page, known_code_page, unsupported_code_page, utf16_code_page};
-use codepage::{decode_code_page as decode, utf16};
+pub use codepage::{byte_code_page, decode_code_page, known_code_page, unsupported_code_page, utf16_code_page};
+// 8-bit strings and RTF are never UTF-16 or UTF-7, whatever page they're labelled with.
+use codepage::{decode_bytes as decode, utf16};
 pub use rtf::{decompress_rtf, rtf_body};
 use rtf::{decompress_rtf_max, rtf_body_max};
 
@@ -341,7 +342,7 @@ fn body_of(msg: &Props, cp: u32, attr: Option<String>, budget: &mut Budget) -> T
 /// `room`: what the RTF may decompress to and write.
 fn body_unbudgeted(msg: &Props, cp: u32, attr: Option<String>, room: usize) -> TnefBody {
     match prop(msg, PR_HTML) {
-        Some(Value::Binary(b)) => return TnefBody::Html(decode(b, cp)),
+        Some(Value::Binary(b)) => return TnefBody::Html(decode_code_page(b, cp)),
         Some(Value::Str8(b)) => return TnefBody::Html(decode(trim_nul(b), cp)),
         Some(Value::Unicode(s)) => return TnefBody::Html(s.clone()),
         _ => {}
