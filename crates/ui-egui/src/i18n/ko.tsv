@@ -1737,6 +1737,7 @@ month	May	5월
 	bad parameters: {error}	잘못된 매개변수: {error}
 	calendar and contacts could not be saved: {error}	일정과 연락처를 저장하지 못했습니다: {error}
 	calendars and contacts: {error}	일정과 연락처: {error}
+	Exchange refused your answer to {summary}: {error}. Answer it in Outlook on the web.	Exchange가 {summary}에 대한 회신을 거부했습니다: {error}. 웹용 Outlook에서 회신하세요.
 	export: {error}	내보내기: {error}
 	import: {error}	가져오기: {error}
 	network: {error}	네트워크: {error}

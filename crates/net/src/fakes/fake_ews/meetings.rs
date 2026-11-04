@@ -2,7 +2,8 @@
 // Copyright (c) 2026 Didier Gaudin
 //! The fake EWS server: a meeting's invitations or update go to someone. Asked to send them
 //! (anything but `SendToNone`), Exchange refuses the change of an appointment with no guest to
-//! send to, or with a guest it won't take, and leaves the item as it was.
+//! send to, or with a guest it won't take, and leaves the item as it was. An answer to a
+//! meeting can be refused too.
 
 use super::*;
 
@@ -36,5 +37,15 @@ impl Data {
             "ErrorInvalidRecipients"
         };
         Some(format!("<m:R ResponseClass=\"Error\"><m:MessageText>{text}</m:MessageText><m:ResponseCode>{code}</m:ResponseCode></m:R>"))
+    }
+
+    /// The refusal of an answer to a meeting, when answers are refused ([`Data::refuse_answers`]):
+    /// the field Exchange names in its `MessageXml`, after the code, as Exchange writes it.
+    pub(super) fn refuses_answer(&self) -> Option<String> {
+        let (code, text, named) = self.refuse_answers.as_ref()?;
+        Some(format!(
+            "<m:R ResponseClass=\"Error\"><m:MessageText>{text}</m:MessageText><m:ResponseCode>{code}</m:ResponseCode>\
+             <m:DescriptiveLinkKey>0</m:DescriptiveLinkKey><m:MessageXml>{named}</m:MessageXml><m:Items/></m:R>"
+        ))
     }
 }

@@ -1734,6 +1734,7 @@ month	May	מאי
 	bad parameters: {error}	פרמטרים שגויים: {error}
 	calendar and contacts could not be saved: {error}	לא ניתן היה לשמור את לוח השנה ואנשי הקשר: {error}
 	calendars and contacts: {error}	לוחות שנה ואנשי קשר: {error}
+	Exchange refused your answer to {summary}: {error}. Answer it in Outlook on the web.	Exchange דחה את התשובה שלך לפגישה {summary}: {error}. השב עליה ב-Outlook באינטרנט.
 	export: {error}	ייצוא: {error}
 	import: {error}	ייבוא: {error}
 	network: {error}	רשת: {error}

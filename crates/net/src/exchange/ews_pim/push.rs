@@ -25,10 +25,7 @@ pub(super) fn push_events(c: &Client, pim: &Pim, out: &mut DavSync) {
         // second copy of the meeting, with the user as its organizer.
         if let Some(answer) = &e.respond {
             if !e.href.is_empty() && e.event.recurrence_id.is_none() {
-                match respond_item(c, &e.href, answer) {
-                    Ok(()) => out.responded.push((e.event.uid.clone(), answer.clone())),
-                    Err(x) => out.errors.push(format!("{}: {x}", e.event.summary)),
-                }
+                note_answer(out, e, answer, respond_item(c, &e.href, answer));
             }
             continue;
         }
@@ -94,11 +91,22 @@ pub(super) fn answer_pending(c: &Client, pim: &Pim, out: &mut DavSync) {
             .find(|x| x.calendar == CALENDAR && x.event.recurrence_id.is_none() && quatrelle_model::pim::same_meeting(&x.event.uid, &e.event.uid))
             .map(|x| x.href.clone());
         if let Some(href) = found {
-            match respond_item(c, &href, answer) {
-                Ok(()) => out.responded.push((e.event.uid.clone(), answer.clone())),
-                Err(x) => out.errors.push(format!("{}: {x}", e.event.summary)),
-            }
+            note_answer(out, e, answer, respond_item(c, &href, answer));
         }
+    }
+}
+
+/// What came of answering an invitation, in `out`: given; refused for good (said once, and not
+/// sent again: Exchange refused an answer of 04/11 at every sync); or not now, tried
+/// again at the next sync.
+fn note_answer(out: &mut DavSync, e: &StoredEvent, answer: &str, r: Result<()>) {
+    match r {
+        Ok(()) => out.responded.push((e.event.uid.clone(), answer.to_string())),
+        Err(NetError::No(why)) => {
+            log::warn!("{}: the server refused the answer: {why}", e.event.summary);
+            out.refused_answers.push((e.event.uid.clone(), why));
+        }
+        Err(x) => out.errors.push(format!("{}: {x}", e.event.summary)),
     }
 }
 

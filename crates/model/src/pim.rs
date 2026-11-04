@@ -347,6 +347,10 @@ pub struct DavSync {
     /// Invitations the server answered ([`StoredEvent::respond`]): their UID and the answer.
     #[serde(default)]
     pub responded: Vec<(String, String)>,
+    /// Invitations whose answer the server refused for good (not tried again): their UID and
+    /// why, in the server's words.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub refused_answers: Vec<(String, String)>,
     /// What couldn't be stored or deleted (tried again next time).
     pub errors: Vec<String>,
     /// Only some calendars and address books were looked at ([`Pim::own_only`]): those not

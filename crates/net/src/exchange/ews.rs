@@ -244,15 +244,53 @@ fn busy(doc: &El) -> Option<std::time::Duration> {
     Some(std::time::Duration::from_millis(ms.max(500)))
 }
 
-/// What a `…ResponseMessage` said.
+/// The most fields a refusal is said to name, and the longest name said.
+const FIELDS_NAMED: usize = 3;
+const FIELD_NAME_MAX: usize = 80;
+
+/// The fields a refusal's `MessageXml` names (`FieldURI`, `IndexedFieldURI`, `ExtendedFieldURI`
+/// by its tag or its name), the first few, in its order. The server's words: only what looks
+/// like a field's name ([`a_field_name`]).
+fn fields_named(m: &El) -> Vec<&str> {
+    let mut names = Vec::new();
+    // Depth first, without recursion (an answer's elements are capped in number and depth
+    // already: see `parse`).
+    let mut next: Vec<&El> = m.child("MessageXml").map(|x| x.kids.iter().rev().collect()).unwrap_or_default();
+    while let Some(el) = next.pop()
+        && names.len() < FIELDS_NAMED
+    {
+        let name = match el.name.as_str() {
+            "FieldURI" | "IndexedFieldURI" => el.attr("FieldURI"),
+            "ExtendedFieldURI" => el.attr("PropertyTag").or_else(|| el.attr("PropertyName")),
+            _ => None,
+        };
+        names.extend(name.filter(|n| a_field_name(n)));
+        next.extend(el.kids.iter().rev());
+    }
+    names
+}
+
+/// Not too long, and nothing but ASCII letters, digits and `:_-.` (`calendar:Organizer`,
+/// `0x1090`).
+fn a_field_name(n: &str) -> bool {
+    !n.is_empty() && n.len() <= FIELD_NAME_MAX && n.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b':' | b'_' | b'-' | b'.'))
+}
+
+/// What a `…ResponseMessage` said: a refusal in the server's words, with the fields it named
+/// (Exchange names the field it refused in its `MessageXml`, which its text doesn't say).
 pub(crate) fn check_message(m: &El) -> Result<()> {
     match m.attr("ResponseClass") {
         Some("Error") => {
             let code = m.text_of("ResponseCode").unwrap_or("");
-            let text = m.text_of("MessageText").unwrap_or(code);
+            let said = m.text_of("MessageText").unwrap_or(code);
+            let text = match (fields_named(m).join(", "), code.trim()) {
+                (names, _) if names.is_empty() => said.to_string(),
+                (names, "") => format!("{said} ({names})"),
+                (names, c) => format!("{said} ({c}: {names})"),
+            };
             Err(match code {
                 "ErrorItemNotFound" | "ErrorFolderNotFound" => NetError::No(format!("not on the server any more ({text})")),
-                c if TRANSIENT.contains(&c) => NetError::Later(text.to_string()),
+                c if TRANSIENT.contains(&c) => NetError::Later(text),
                 // Outlook keeps a copy of the rules of its own in the mailbox, and Exchange won't
                 // change them while it's there (`RemoveOutlookRuleBlob` would remove it, and the
                 // rules Outlook runs only on its computer with it): said plainly.
@@ -261,12 +299,12 @@ pub(crate) fn check_message(m: &El) -> Result<()> {
                      Change this rule in Outlook, or let Quatrelle replace Outlook's copy (Outlook's rules that run only on its computer would be lost)"
                         .into(),
                 ),
-                "ErrorAccessDenied" => NetError::No(text.to_string()),
+                "ErrorAccessDenied" => NetError::No(text),
                 // From an address the account may not send from.
                 "ErrorSendAsDenied" => NetError::No(
                     "this account isn't allowed to send from that address: Exchange's administrator gives Send As or Send on Behalf on it".into(),
                 ),
-                _ => NetError::No(text.to_string()),
+                _ => NetError::No(text),
             })
         }
         _ => Ok(()),

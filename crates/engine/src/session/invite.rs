@@ -305,7 +305,8 @@ impl Session {
     }
 
     /// After a sync: the invitations the server answered take their answer (a declined one leaves
-    /// the calendar, as the server took it out), and what waited for it goes. Then copies of
+    /// the calendar, as the server took it out), and what waited for it goes. One whose answer the
+    /// server refused for good isn't answered from here any more, said once. Then copies of
     /// invitations made here before the server answered them (accepted from the invitation,
     /// never sent: they showed beside the server's meeting, twice) become the user's answer on
     /// the server's meeting. Whether there's something new to send.
@@ -313,6 +314,7 @@ impl Session {
         if !self.server_answers(account) {
             return false;
         }
+        self.drop_refused_answers(account, &sync.refused_answers);
         let (mine, me) = (self.my_addresses(), self.account(account).map(|a| a.config.email.clone()).unwrap_or_default());
         let p = self.pim_mut(account);
         for (uid, stat) in &sync.responded {
@@ -347,6 +349,28 @@ impl Session {
             }
         }
         !copies.is_empty()
+    }
+
+    /// Answers the server refused for good (Exchange refused one on 04/11 at every sync,
+    /// the organizer never told): the meeting is left unanswered from here, and what waited for
+    /// it goes (or it would be made the answer on the server's meeting again). Said once, with
+    /// the server's words, so the user can answer it in Outlook on the web.
+    fn drop_refused_answers(&mut self, account: &str, refused: &[(String, String)]) {
+        for (uid, why) in refused {
+            let p = self.pim_mut(account);
+            let summary = p.events.iter().find(|e| same_meeting(&e.event.uid, uid)).map(|e| e.event.summary.clone()).unwrap_or_default();
+            p.events.retain(|e| !(e.href.is_empty() && same_meeting(&e.event.uid, uid)));
+            for e in p.events.iter_mut().filter(|e| same_meeting(&e.event.uid, uid)) {
+                e.respond = None;
+                e.dirty = false;
+            }
+            let summary = if summary.trim().is_empty() { uid.as_str() } else { summary.as_str() };
+            self.notice_with(
+                "Exchange refused your answer to {summary}: {error}. Answer it in Outlook on the web.",
+                &[("summary", summary), ("error", why)],
+                true,
+            );
+        }
     }
 
     /// Answer an invitation already in the calendar (from the event form). Someone else's meeting
