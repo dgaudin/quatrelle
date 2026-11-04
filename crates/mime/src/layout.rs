@@ -30,6 +30,7 @@ mod styling;
 pub(crate) use blocks::background_pictures;
 use blocks::*;
 pub use clean::clean_html;
+pub(crate) use edges::length_px;
 use edges::*;
 pub use edges::{Border, Edges, MAX_BORDER, MAX_PADDING, MAX_RADIUS, Padding, VAlign};
 pub use styling::inline_css;
@@ -674,7 +675,13 @@ pub fn html_layout(html: &str) -> Vec<Block> {
         collect_css(&root, &mut css, 0);
         let mut ctx = Ctx { css, cells: 0, color: None };
         let body = find(&root, "body", 0).unwrap_or(&root);
-        let out = blocks(&body.kids, &mut ctx, 0);
+        // A body of a set width is a column of that width, as a box would be.
+        let out = if body.tag == "body" && matches!(body.width(), Some(Width::Px(_))) {
+            let column = Node { tag: "div".into(), attrs: body.attrs.clone(), kids: body.kids.iter().map(copy).collect() };
+            blocks(&[Kid::El(column)], &mut ctx, 0)
+        } else {
+            blocks(&body.kids, &mut ctx, 0)
+        };
         if ctx.cells > MAX_CELLS { Vec::new() } else { out }
     });
     match built {

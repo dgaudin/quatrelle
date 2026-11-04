@@ -651,6 +651,19 @@ fn auto_in_the_style_overrules_the_tags_size() {
     assert_eq!(of("cid:word"), Some(ImageSize { width: Some(Width::Px(600)), height: Some(96), max_width: None }));
 }
 
+/// A picture sized in points or inches alone (as Outlook and Word write it, upstream issue #41)
+/// takes that size, in pixels: it was left at the picture's own.
+#[test]
+fn a_picture_sized_in_points_takes_that_size() {
+    use layout::Width;
+    let rich = html_to_rich(
+        r#"<p><img src="cid:pt" style="width:150pt;height:75pt" alt="P"><img src="cid:in" style="width:2in;max-width:3in" alt="I"></p>"#,
+    );
+    let of = |src: &str| rich.iter().flatten().find(|sp| sp.image.as_deref() == Some(src)).and_then(|sp| sp.image_size);
+    assert_eq!(of("cid:pt"), Some(ImageSize { width: Some(Width::Px(200)), height: Some(100), max_width: None }));
+    assert_eq!(of("cid:in"), Some(ImageSize { width: Some(Width::Px(192)), height: None, max_width: Some(288) }));
+}
+
 /// Issue #10 (Larsene): a reply or forward quotes every picture of the message, not "[picture]":
 /// one by `cid:`, one by its `Content-Location`, one written into the HTML (`data:`), each sent
 /// with it; one on the web by its address (never loaded); a tracking picture left out.
