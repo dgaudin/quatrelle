@@ -59,6 +59,20 @@ fn webex_rooms_are_added_changed_and_removed() {
     done(s);
 }
 
+/// A tab in a name or a line is a space (a meeting number copied from a table: `N°<tab>123`); the
+/// other control characters go, `\r` with them. A hand-edited file's rooms are read the same way.
+#[test]
+fn a_tab_in_a_room_is_a_space() {
+    let mut s = sample_session("webex-rooms-tabs");
+    let details = "N°\t123\r\nVidéo\u{7}\t: ana@acme.webex.com\t\r\n\t";
+    let r = s.run("calendar.webexRoom", &json!({"url": ANA, "name": "Ana\tB", "details": details})).unwrap();
+    assert_eq!(answered(&r), [room("Ana B", ANA, &["N° 123", "Vidéo : ana@acme.webex.com"])]);
+    let mut p: Prefs = serde_json::from_value(json!({"webexRooms": [{"name": "Ana\tB", "url": ANA, "details": ["N°\t123\r"]}]})).unwrap();
+    p.carry_over_webex_rooms();
+    assert_eq!(p.webex_rooms, [room("Ana B", ANA, &["N° 123"])]);
+    done(s);
+}
+
 /// What a room can't keep is refused whole: the rooms stay as they were.
 #[test]
 fn webex_rooms_refuse_what_they_cannot_keep() {

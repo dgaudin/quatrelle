@@ -227,6 +227,35 @@ fn a_refused_link_is_saved_once_it_can_be() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+/// A link box emptied to type the link again says nothing while it's empty (or holds only
+/// spaces), nor once it's left, and nothing is sent; a link typed in it is then weighed again.
+#[test]
+fn an_emptied_link_box_says_nothing() {
+    let (mut a, dir, ctx) = options_with("room-options-empty-link", rooms());
+    let at = settled_text_at(&ctx, &mut a, TEAM, SIZE).expect("Équipe's link");
+    click_at(&ctx, &mut a, at, 1, SIZE);
+    frame_sized(&ctx, &mut a, vec![key(Key::A, Modifiers::COMMAND)], SIZE);
+    frame_sized(&ctx, &mut a, vec![key(Key::Delete, Modifiers::NONE)], SIZE);
+    let shapes = frame_shapes(&ctx, &mut a, vec![], SIZE);
+    assert!(text_at(&shapes, TEAM).is_none(), "emptied");
+    assert!(text_at(&shapes, NOT_WEBEX).is_none(), "nothing said while it's empty");
+    leave(&ctx, &mut a);
+    assert!(text_at(&frame_shapes(&ctx, &mut a, vec![], SIZE), NOT_WEBEX).is_none(), "nor once it's left");
+    assert_eq!(a.session.prefs.webex_rooms, rooms(), "nothing sent");
+    // The emptied box shows its hint, above the add row's.
+    let at = every_text_at(&frame_shapes(&ctx, &mut a, vec![], SIZE), "https://site.webex.com/meet/name");
+    assert_eq!(at.len(), 2, "the emptied box's hint and the add row's");
+    type_over(&ctx, &mut a, at[0], "   ");
+    assert!(text_at(&frame_shapes(&ctx, &mut a, vec![], SIZE), NOT_WEBEX).is_none(), "nor with spaces only");
+    // A link typed in it: weighed again.
+    type_over(&ctx, &mut a, at[0], "https://evil.example/x");
+    assert!(text_at(&frame_shapes(&ctx, &mut a, vec![], SIZE), NOT_WEBEX).is_some(), "why, once there's a link");
+    leave(&ctx, &mut a);
+    assert_eq!(a.session.prefs.webex_rooms, rooms(), "nothing sent");
+    nothing_refused(&a);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
 /// The room carried over from 1.0 is named in its row.
 #[test]
 fn the_unnamed_room_takes_a_name() {
@@ -242,8 +271,8 @@ fn the_unnamed_room_takes_a_name() {
 
 /// What's typed is cut to what a room keeps before it's sent, so it's never refused for its size:
 /// a name of 80 characters, 20 lines of 200 (the blank ones left out), lines ended by `\r\n` kept
-/// without the `\r`; a named room's name taken off isn't sent (nothing refused), and the box shows
-/// it again.
+/// without the `\r`, a tab kept as a space; a named room's name taken off isn't sent (nothing
+/// refused), and the box shows it again.
 #[test]
 fn what_is_typed_is_cut_to_what_a_room_keeps() {
     let (mut a, dir, ctx) = options_with("room-options-caps", rooms());
@@ -257,7 +286,7 @@ fn what_is_typed_is_cut_to_what_a_room_keeps() {
     let kept = vec!["x".repeat(WEBEX_ROOM_LINE_MAX); WEBEX_ROOM_LINES_MAX];
     assert_eq!(a.session.prefs.webex_rooms[1].details, kept);
     let at = settled_text_at(&ctx, &mut a, "N° 123", SIZE).expect("ana's lines");
-    type_in(&ctx, &mut a, at, "N° 1\r\nVidéo : ana@acme.webex.com\r\n");
+    type_in(&ctx, &mut a, at, "N°\t1\r\nVidéo : ana@acme.webex.com\r\n");
     assert_eq!(a.session.prefs.webex_rooms[0].details, ["N° 1", "Vidéo : ana@acme.webex.com"]);
     let at = settled_text_at(&ctx, &mut a, "Équipe", SIZE).expect("its name's box");
     click_at(&ctx, &mut a, at, 1, SIZE);

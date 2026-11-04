@@ -77,7 +77,9 @@ the first room, with no name, shown as "My personal room". The command is
 ### CONFERENCE (RFC 7986)
 
 A room, or a scheduled meeting, is also written as the event's conference:
-`CONFERENCE;VALUE=URI;FEATURE=AUDIO,VIDEO;LABEL=Webex:<link>`.
+`CONFERENCE;VALUE=URI;FEATURE=AUDIO,VIDEO;LABEL=Webex:<link>`. A label that holds `,`, `;` or `:`
+is written in double quotes (`LABEL="Webex: Ana"`), as a parameter can't be escaped with a
+backslash (RFC 5545 §3.2); its own double quotes and control characters are left out.
 
 - **Read** from every iCalendar: the first web link whose `FEATURE` isn't only phone, chat or feed.
   Its other `CONFERENCE` lines are kept and written back as they came.

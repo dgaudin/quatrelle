@@ -3,7 +3,8 @@
 //! File › Options › Calendar › Webex rooms: the rooms the Webex Meeting button's menu offers, a row
 //! each (its name, its link, its lines and ×), then a row to add one. Each box is saved once it's
 //! left, through `calendar.webexRoom`, what's typed cut to what a room keeps; a link that can't be
-//! the room's says why under its row and stays in its box to be corrected, nothing sent.
+//! the room's says why under its row and stays in its box to be corrected, nothing sent (an emptied
+//! box says nothing).
 
 use quatrelle_engine::{WEBEX_ROOM_LINE_MAX, WEBEX_ROOM_LINES_MAX, WEBEX_ROOM_NAME_MAX, WebexRoom};
 
@@ -68,13 +69,15 @@ fn hold(ui: &Ui, id: egui::Id, text: String, held: bool) {
     }
 }
 
-/// The lines typed as a room keeps them: no control character, no space at either end, no blank
-/// line, at most [`WEBEX_ROOM_LINES_MAX`] of at most [`WEBEX_ROOM_LINE_MAX`] characters (the rest
-/// cut, so the engine never refuses them for their size).
+/// The lines typed as a room keeps them, by the engine's rule: a tab turned into a space, no other
+/// control character, no space at either end, no blank line, at most [`WEBEX_ROOM_LINES_MAX`] of
+/// at most [`WEBEX_ROOM_LINE_MAX`] characters (the rest cut, so the engine never refuses them for
+/// their size). Kept otherwise, a line would differ from the room's, and be sent again whenever
+/// the box is left.
 fn kept_lines(text: &str) -> Vec<String> {
     text.split('\n')
         .map(|l| {
-            let l: String = l.chars().filter(|c| !c.is_control()).collect();
+            let l: String = l.chars().map(|c| if c == '\t' { ' ' } else { c }).filter(|c| !c.is_control()).collect();
             l.trim().chars().take(WEBEX_ROOM_LINE_MAX).collect::<String>().trim_end().to_string()
         })
         .filter(|l| !l.is_empty())
@@ -107,16 +110,17 @@ fn room_row(ui: &mut Ui, t: &Tokens, at: usize, room: &WebexRoom, rooms: &[Webex
 
         // Its link, checked first: one that can't be the room's stays in the box, and so does one
         // that became right since (the room that had it gone, or given another), to be saved
-        // when the box is left again.
+        // when the box is left again. An emptied box (to type the link again) says nothing, and
+        // is never sent.
         let id = typed_id(at, "link");
         let mut text = shown(ui, id, url);
         let r = ui.add(egui::TextEdit::singleline(&mut text).hint_text("https://site.webex.com/meet/name").desired_width(LINK_WIDTH));
         let typed = text.trim();
         let changed = typed != url;
-        if changed {
+        if changed && !typed.is_empty() {
             refused = link_refused(typed, rooms.iter().enumerate().filter(|(i, _)| *i != at).map(|(_, r)| r));
         }
-        let save = r.lost_focus() && changed && refused.is_none();
+        let save = r.lost_focus() && changed && !typed.is_empty() && refused.is_none();
         if save {
             acts.push(Action::Run("calendar.webexRoom", json!({"url": typed, "was": url})));
             link = typed.to_string();
@@ -177,4 +181,24 @@ fn add_row(ui: &mut Ui, t: &Tokens, rooms: &[WebexRoom], acts: &mut Vec<Action>)
         _ => {}
     }
     ui.data_mut(|d| d.insert_temp(id, (new_name, link)));
+}
+
+#[cfg(test)]
+mod tests {
+    use quatrelle_engine::Prefs;
+
+    use super::*;
+
+    /// The lines typed are cut as the engine keeps them (a tab a space, `\r` and the other control
+    /// characters left out): once saved, what the box holds is what's kept, so leaving it again
+    /// sends nothing.
+    #[test]
+    fn lines_are_kept_as_the_engine_keeps_them() {
+        let typed = "N°\t123\r\nVidéo\u{7} : ana@acme.webex.com\t\r\n\t\n";
+        let mut p = Prefs::default();
+        let lines = typed.split('\n').map(str::to_string).collect();
+        p.set_webex_room("https://acme.webex.com/meet/ana", None, Some("Ana"), Some(lines), false).unwrap();
+        assert_eq!(kept_lines(typed), ["N° 123", "Vidéo : ana@acme.webex.com"]);
+        assert_eq!(kept_lines(typed), p.webex_rooms[0].details, "as the engine keeps them");
+    }
 }
