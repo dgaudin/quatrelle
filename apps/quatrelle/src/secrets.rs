@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Passwords and sign-ins in the system keychain, whatever their length.
 //!
 //! Windows' Credential Manager keeps at most 2560 bytes in an entry (CRED_MAX_CREDENTIAL_BLOB_SIZE),
@@ -84,18 +85,43 @@ fn part_name(user: &str, n: usize) -> String {
     format!("{user}|part{n}")
 }
 
+/// Keychain calls from this process, one at a time: two threads writing and deleting entries of
+/// their own in Windows' Credential Manager at once lost some of them (an entry deleted came
+/// back, another's parts stayed), seen in 2 of 15 runs of the keychain tests.
+static ONE_AT_A_TIME: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+pub(crate) fn one_at_a_time() -> std::sync::MutexGuard<'static, ()> {
+    ONE_AT_A_TIME.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 /// Keep `secret` under `user`.
 pub fn store(service: &str, user: &str, secret: &str) -> Result<(), String> {
+    let _turn = one_at_a_time();
     #[cfg(windows)]
     {
         let parts = split(secret)?;
         let had = parts_kept(service, user);
+        // A write that fails leaves no parts past what the secret kept before had: nothing would
+        // ever name them again, and Credential Manager fills up until it refuses any entry.
+        let undo = |written: usize| {
+            for n in had.max(1) + 1..=written {
+                if let Ok(e) = keyring::Entry::new(service, &part_name(user, n)) {
+                    let _ = e.delete_credential();
+                }
+            }
+        };
         // The other parts first, the first last: a set half-written never reads as whole.
         for (i, p) in parts.iter().enumerate().skip(1) {
-            keyring::Entry::new(service, &part_name(user, i + 1)).and_then(|e| e.set_secret(p)).map_err(|e| e.to_string())?;
+            if let Err(e) = keyring::Entry::new(service, &part_name(user, i + 1)).and_then(|e| e.set_secret(p)) {
+                undo(i);
+                return Err(e.to_string());
+            }
         }
         let first = parts.first().ok_or("nothing to keep")?;
-        keyring::Entry::new(service, user).and_then(|e| e.set_secret(first)).map_err(|e| e.to_string())?;
+        if let Err(e) = keyring::Entry::new(service, user).and_then(|e| e.set_secret(first)) {
+            undo(parts.len());
+            return Err(e.to_string());
+        }
         // A longer secret before this one left parts this one hasn't.
         for n in parts.len() + 1..=had {
             if let Ok(e) = keyring::Entry::new(service, &part_name(user, n)) {
@@ -112,6 +138,7 @@ pub fn store(service: &str, user: &str, secret: &str) -> Result<(), String> {
 
 /// The secret kept under `user`.
 pub fn load(service: &str, user: &str) -> Option<String> {
+    let _turn = one_at_a_time();
     #[cfg(windows)]
     {
         let first = keyring::Entry::new(service, user).ok()?.get_secret().ok()?;
@@ -125,10 +152,12 @@ pub fn load(service: &str, user: &str) -> Option<String> {
     }
 }
 
-/// Forget the secret kept under `user`, every part of it.
+/// Forget the secret kept under `user`, every part of it, and any part a write that failed in
+/// an earlier version left behind (no first part names those).
 pub fn remove(service: &str, user: &str) {
+    let _turn = one_at_a_time();
     #[cfg(windows)]
-    for n in 2..=parts_kept(service, user) {
+    for n in 2..=MAX_PARTS {
         if let Ok(e) = keyring::Entry::new(service, &part_name(user, n)) {
             let _ = e.delete_credential();
         }
