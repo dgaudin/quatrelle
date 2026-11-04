@@ -372,6 +372,21 @@ pub fn tr(lang: Lang, s: &str) -> &str {
     lang.0.catalog().get(s).map_or(s, String::as_str)
 }
 
+/// `s` and its translation in each catalog, each once, `s` first: to find text Quatrelle wrote in
+/// whichever language the interface had then (a Webex room's block in an appointment's notes).
+/// Read from the catalogs themselves, never marked by the tests' pseudo-language.
+pub fn in_every_language(s: &'static str) -> Vec<&'static str> {
+    let mut all = vec![s];
+    for lang in &LANGUAGES {
+        if let Some(t) = lang.catalog().get(s)
+            && !all.contains(&t.as_str())
+        {
+            all.push(t.as_str());
+        }
+    }
+    all
+}
+
 /// Fill `{name}` placeholders in one pass (values are never read as templates).
 ///
 /// Where right-to-left and left-to-right text meet (a Hebrew or Arabic template, or such a

@@ -6,6 +6,7 @@
 use super::*;
 
 mod webex;
+mod webex_rooms;
 
 /// A new meeting's Scheduling Assistant: a row for the organizer, each guest and each room,
 /// their hours read from the calendars here (the sample's rooms and a colleague's), and a click

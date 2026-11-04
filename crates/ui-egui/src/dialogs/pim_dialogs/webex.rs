@@ -3,8 +3,8 @@
 //! An appointment's Webex meeting, in its form: what's asked of Webex, what its answer writes,
 //! and what's left to delete when the window goes without saving.
 
-use quatrelle_engine::fill;
 use quatrelle_engine::model::{WebexError, WebexMeeting};
+use quatrelle_engine::{WebexRoom, fill};
 
 use super::*;
 
@@ -34,12 +34,10 @@ pub(crate) fn webex_params(f: &EventForm) -> Value {
     json!({"summary": p["summary"], "start": p["start"], "end": p["end"], "allDay": p["allDay"], "repeat": p["repeat"], "quiet": f.inviting})
 }
 
-/// Webex's answer in the appointment: the link as the place (one typed is kept), what the guests
-/// need at the end of the notes, a line for each value it gave, and Join.
-pub(crate) fn take_meeting(f: &mut EventForm, m: &WebexMeeting) {
-    if f.location.trim().is_empty() {
-        f.location = m.web_link.clone();
-    }
+/// Webex's answer in the appointment: what the guests need at the end of the notes, a line for
+/// each value it gave, in place of a Webex room's block (one of `rooms`); the link as the place
+/// when that's empty or a room's (one typed is kept); Join and the conference.
+pub(crate) fn take_meeting(f: &mut EventForm, m: &WebexMeeting, rooms: &[WebexRoom]) {
     // Filled in as they are, not with `tf!`: its marks around a value would go out in the
     // invitation, and along with a password a guest copies.
     let mut lines = vec![tl!("Join the Webex meeting:").to_string(), m.web_link.clone()];
@@ -52,10 +50,7 @@ pub(crate) fn take_meeting(f: &mut EventForm, m: &WebexMeeting) {
     if !m.sip_address.is_empty() {
         lines.push(fill(tl!("Video: {address}"), &[("address", &m.sip_address)]));
     }
-    let notes = f.description.trim_end();
-    let gap = if notes.is_empty() { "" } else { "\n\n" };
-    f.description = format!("{notes}{gap}{}\n", lines.join("\n"));
-    f.join = Some(m.web_link.clone());
+    super::webex_rooms::put_block(f, &lines, &m.web_link, rooms);
     f.webex_id = Some(m.id.clone());
     f.webex_fresh = true;
 }

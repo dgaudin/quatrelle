@@ -24,7 +24,7 @@ impl MailApp {
             let Some(answer) = f.webex_wait.and_then(|ask| self.session.webex_take_answer(ask)) else { continue };
             f.webex_wait = None;
             match answer {
-                Ok(m) => take_meeting(f, &m),
+                Ok(m) => take_meeting(f, &m, &self.session.prefs.webex_rooms),
                 Err(e) => f.error = Some(error_text(&e)),
             }
         }

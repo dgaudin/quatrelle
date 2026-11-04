@@ -689,3 +689,16 @@ fn a_notice_is_said_in_the_interfaces_language() {
     set_current(Lang::EN);
     assert_eq!(s.notices.last().map(notice).as_deref(), Some("Didier: 12 messages imported"), "English as the engine wrote it");
 }
+
+/// A string in every catalog's language, for text written in whichever the interface had then:
+/// the English first, then each translation once.
+#[test]
+fn a_string_is_found_in_every_language() {
+    let all = in_every_language("Join the Webex meeting:");
+    assert_eq!(all.first(), Some(&"Join the Webex meeting:"));
+    for said in ["Rejoindre la réunion Webex :", "Webex 会議に参加:", "加入 Webex 会议:", "加入 Webex 會議:"] {
+        assert_eq!(all.iter().filter(|s| **s == said).count(), 1, "{said}: {all:?}");
+    }
+    assert_eq!(all.len(), LANGUAGES.len(), "{all:?}");
+    assert_eq!(in_every_language("No catalog has this"), vec!["No catalog has this"]);
+}

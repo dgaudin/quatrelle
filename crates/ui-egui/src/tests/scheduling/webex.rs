@@ -271,14 +271,14 @@ fn signing_in_again_goes_to_options_and_keeps_the_refusal() {
 #[test]
 fn the_answer_goes_into_the_appointment() {
     let mut f = EventForm { description: "Agenda\n".into(), ..Default::default() };
-    take_meeting(&mut f, &meeting());
+    take_meeting(&mut f, &meeting(), &[]);
     assert_eq!(f.location, LINK);
     let notes =
         format!("Agenda\n\nJoin the Webex meeting:\n{LINK}\nMeeting number: 2623456701\nPassword: abc123\nVideo: 2623456701@acme.webex.com\n");
     assert_eq!(f.description, notes);
     assert_eq!((f.join.as_deref(), f.webex_id.as_deref(), f.webex_fresh), (Some(LINK), Some("m1"), true));
     let mut f = EventForm { location: "Salle B".into(), ..Default::default() };
-    take_meeting(&mut f, &meeting());
+    take_meeting(&mut f, &meeting(), &[]);
     assert_eq!(f.location, "Salle B");
     assert!(f.description.starts_with("Join the Webex meeting:\n"), "{:?}", f.description);
     let e = quatrelle_engine::model::ical::CalEvent { location: f.location.clone(), description: f.description.clone(), ..Default::default() };
@@ -290,11 +290,11 @@ fn the_answer_goes_into_the_appointment() {
 fn empty_values_write_no_line() {
     let m = WebexMeeting { password: Secret(String::new()), ..meeting() };
     let mut f = EventForm::default();
-    take_meeting(&mut f, &m);
+    take_meeting(&mut f, &m, &[]);
     assert!(!f.description.contains("Password") && f.description.contains("Meeting number: 2623456701"), "{:?}", f.description);
     let m = WebexMeeting { meeting_number: String::new(), password: Secret(String::new()), sip_address: String::new(), ..meeting() };
     let mut f = EventForm::default();
-    take_meeting(&mut f, &m);
+    take_meeting(&mut f, &m, &[]);
     assert_eq!(f.description, format!("Join the Webex meeting:\n{LINK}\n"));
 }
 
@@ -305,7 +305,7 @@ fn the_notes_hold_the_values_as_webex_gave_them() {
     let notes = ["he", "ar"].map(|code| {
         crate::i18n::set_current(crate::i18n::Lang::from_code(code).unwrap_or(crate::i18n::Lang::EN));
         let mut f = EventForm::default();
-        take_meeting(&mut f, &meeting());
+        take_meeting(&mut f, &meeting(), &[]);
         f.description
     });
     crate::i18n::set_current(crate::i18n::Lang::EN);
@@ -437,7 +437,7 @@ fn save_waits_for_the_webex_answer() {
 fn saving_sends_the_id_and_keeps_the_meeting() {
     let (mut a, dir, ctx, jobs) = appointment("webex-saved", "Budget");
     let w = a.ui.event_windows[0].0;
-    take_meeting(form(&mut a), &meeting());
+    take_meeting(form(&mut a), &meeting(), &[]);
     let p = form(&mut a).params();
     assert_eq!(p["webexId"], "m1");
     a.for_event(w, "event.create", p);
@@ -464,7 +464,7 @@ fn saved_and_opened(ctx: &egui::Context, a: &mut MailApp) -> String {
 #[test]
 fn a_saved_meeting_outlives_its_window() {
     let (mut a, dir, ctx, jobs) = appointment("webex-reopened", "Budget");
-    take_meeting(form(&mut a), &meeting());
+    take_meeting(form(&mut a), &meeting(), &[]);
     saved_and_opened(&ctx, &mut a);
     let f = form(&mut a);
     assert_eq!((f.webex_id.as_deref(), f.webex_fresh), (Some("m1"), false));
@@ -478,7 +478,7 @@ fn a_saved_meeting_outlives_its_window() {
 #[test]
 fn closing_unsaved_deletes_the_meeting() {
     let (mut a, dir, ctx, jobs) = appointment("webex-close", "Budget");
-    take_meeting(form(&mut a), &meeting());
+    take_meeting(form(&mut a), &meeting(), &[]);
     form(&mut a).inviting = true;
     close_window(&ctx, &mut a);
     let deleted = jobs.borrow().iter().find_map(|j| match j {
@@ -509,7 +509,7 @@ fn deleting_the_event_with_a_fresh_meeting_leaves_nothing() {
     let (mut a, dir, ctx, jobs) = appointment("webex-delete", "Budget");
     let uid = saved_and_opened(&ctx, &mut a);
     let w = a.ui.event_windows[0].0;
-    take_meeting(form(&mut a), &meeting());
+    take_meeting(form(&mut a), &meeting(), &[]);
     a.for_event(w, "event.delete", json!({"uid": uid}));
     assert!(a.ui.event_windows.is_empty());
     frame_sized(&ctx, &mut a, vec![], SIZE);
@@ -568,7 +568,7 @@ fn quitting_deletes_a_fresh_meeting_once() {
     for (n, error) in [None, Some(WebexError::Forbidden)].into_iter().enumerate() {
         let (mut a, dir, _ctx, _) = appointment(&format!("webex-quit-{n}"), "Budget");
         let (jobs, _) = answering(&mut a, error);
-        take_meeting(form(&mut a), &meeting());
+        take_meeting(form(&mut a), &meeting(), &[]);
         assert!(a.webex_closing(), "the delete is on its way");
         assert_eq!(deletes(&jobs), 1);
         assert!(a.ui.event_windows.is_empty());
@@ -615,7 +615,7 @@ fn quitting_stops_at_a_failed_creation() {
 fn quitting_signed_out_waits_for_nothing() {
     let (mut a, dir, _ctx, _) = appointment("webex-quit-signed-out", "Budget");
     let (jobs, polls) = answering(&mut a, None);
-    take_meeting(form(&mut a), &meeting());
+    take_meeting(form(&mut a), &meeting(), &[]);
     a.session.prefs.webex_signed_in = false;
     assert!(!a.webex_closing());
     assert_eq!((deletes(&jobs), polls.get()), (0, 0));
@@ -666,7 +666,7 @@ fn a_refused_creation_says_why_in_the_window() {
 fn closing_after_a_refused_save_deletes_the_meeting() {
     let (mut a, dir, ctx, jobs) = appointment("webex-save-refused", "Budget");
     let w = a.ui.event_windows[0].0;
-    take_meeting(form(&mut a), &meeting());
+    take_meeting(form(&mut a), &meeting(), &[]);
     form(&mut a).date = "someday".into();
     let p = form(&mut a).params();
     a.for_event(w, "event.create", p);
