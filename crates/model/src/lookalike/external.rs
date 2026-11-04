@@ -84,6 +84,10 @@ mod tests {
         for d in ["gmail.com", "GMAIL.COM.", "yahoo.co.uk", "hotmail.fr", "outlook.com.br", "gmx.ch", "yahoo.co.jp", "proton.me"] {
             assert!(is_free_mail(d), "{d}");
         }
+        // French providers' own domains.
+        for d in ["wanadoo.fr", "laposte.net", "sfr.fr", "bbox.fr", "neuf.fr", "numericable.fr", "Orange.fr", "free.fr"] {
+            assert!(is_free_mail(d) && is_mail_service(d), "{d}");
+        }
         for d in ["corp.example", "outlook.corp.example", "mail.yahoo.example.com", "gmail", "", "yahoo.", "mail.example"] {
             assert!(!is_free_mail(d), "{d}");
         }
