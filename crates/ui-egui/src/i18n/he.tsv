@@ -1876,3 +1876,4 @@ folder	Conflicts	התנגשויות
 	{item} was deleted on the server while it was being changed here.\n\nAccount: {account}\nIn: {place}\nWhen: {when}\n\nThe server's version was kept, so the change made here was dropped. The attachment holds the version that was here: open it to put it back.	{item} נמחק בשרת בזמן ששונה כאן.\n\nחשבון: {account}\nב: {place}\nמתי: {when}\n\nהגרסה של השרת נשמרה, ולכן השינוי שנעשה כאן בוטל. הקובץ המצורף מכיל את הגרסה שהייתה כאן: פתחו אותו כדי להחזיר אותה.
 	{event}: deleted on the server meanwhile; the change made here was dropped (a copy is in Sync Issues › Conflicts)	{event}: נמחק בשרת בינתיים; השינוי שנעשה כאן בוטל (עותק נמצא בבעיות סנכרון › התנגשויות)
 	Careful: you know {name} as {known}, but this comes from {real}.	זהירות: אתם מכירים את {name} בכתובת {known}, אבל ההודעה הגיעה מ־{real}.
+	Careful: the signature gives {shown}, but this comes from {real}.	זהירות: בחתימה מופיע {shown}, אבל ההודעה הגיעה מ־{real}.

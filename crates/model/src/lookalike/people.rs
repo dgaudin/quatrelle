@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! A known person's name on someone else's address (issue #29). The cheapest impersonation
 //! needs no look-alike domain: `"Jane Director" <jane.director1984@gmail.com>` is a real address
 //! at a real mail service, and a message list showing only names shows "Jane Director".
@@ -145,8 +146,101 @@ pub fn name_key(name: &str) -> Option<String> {
 /// Combining accents (`e` + `◌́`), zero-width spaces and joiners, the soft hyphen, the byte-order
 /// mark: nothing a reader sees between two letters.
 fn invisible(c: char) -> bool {
+    combining(c) || unseen(c)
+}
+
+/// An accent written as a mark of its own, after its letter.
+fn combining(c: char) -> bool {
     matches!(c, '\u{0300}'..='\u{036F}' | '\u{1AB0}'..='\u{1AFF}' | '\u{1DC0}'..='\u{1DFF}' | '\u{20D0}'..='\u{20FF}' | '\u{FE20}'..='\u{FE2F}')
-        || matches!(c, '\u{00AD}' | '\u{200B}'..='\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2060}'..='\u{2069}' | '\u{FEFF}' | '\u{034F}')
+}
+
+/// Zero-width spaces and joiners, direction marks, the soft hyphen, the byte-order mark.
+fn unseen(c: char) -> bool {
+    matches!(c, '\u{00AD}' | '\u{200B}'..='\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2060}'..='\u{2069}' | '\u{FEFF}' | '\u{034F}')
+}
+
+/// The longest name asked of the directory, in characters.
+const LOOKUP_MOST: usize = 100;
+
+/// The name as a person would type it into a directory search (`"Dr. D\u{430}na J. Whitfield,
+/// CEO"` → `"Dana Whitfield"`): titles, suffixes and initials left out, invisible characters
+/// dropped, full-width and mathematical letters made plain, letters of other scripts drawn like
+/// Latin ones made Latin inside a Latin word, a digit inside a word of letters made the letter it
+/// stands for; the words in their order, accents and case kept, at most [`LOOKUP_MOST`]
+/// characters. `None` for a name that doesn't say who someone is ([`name_key`]).
+pub fn lookup_name(name: &str) -> Option<String> {
+    name_key(name)?;
+    let mut words: Vec<String> = Vec::new();
+    let mut word = String::new();
+    for c in name.trim().chars().map(wide_or_styled) {
+        if unseen(c) {
+            continue;
+        }
+        // Apostrophes and hyphens stay inside a name (O'Brien, Anne-Marie), and so do accents
+        // written as marks of their own.
+        if c.is_alphanumeric() || (!word.is_empty() && (combining(c) || matches!(c, '\'' | '\u{2019}' | '-'))) {
+            word.push(c);
+        } else if !word.is_empty() {
+            words.push(std::mem::take(&mut word));
+        }
+    }
+    if !word.is_empty() {
+        words.push(word);
+    }
+    let mut out = String::new();
+    for w in &words {
+        let w = as_typed(w.trim_end_matches(['\'', '\u{2019}', '-']));
+        let mut folded = String::new();
+        w.chars().for_each(|c| fold_into(c, &mut folded));
+        if w.chars().filter(|c| c.is_alphanumeric()).count() <= 1 || TITLES.contains(&folded.as_str()) {
+            continue;
+        }
+        if !out.is_empty() {
+            out.push(' ');
+        }
+        out.push_str(&w);
+    }
+    let out: String = out.chars().take(LOOKUP_MOST).collect();
+    let out = out.trim_end();
+    (!out.is_empty()).then(|| out.to_string())
+}
+
+/// One word of a name as it would be typed: in a word with Latin letters, a Cyrillic or Greek
+/// letter drawn like a Latin one is that one (`Dаna`), and a digit among letters is the letter it
+/// stands for (`Z0e`, `Wh1tfield`). A word wholly in another script is left as it is.
+fn as_typed(word: &str) -> String {
+    let latin = |c: char| c.is_ascii_alphabetic() || (c.is_alphabetic() && matches!(c, '\u{C0}'..='\u{24F}' | '\u{1E00}'..='\u{1EFF}'));
+    if !word.chars().any(latin) {
+        return word.to_string();
+    }
+    let shouting = !word.chars().any(char::is_lowercase);
+    let chars: Vec<char> = word.chars().collect();
+    let consonant = |c: Option<&char>| c.is_some_and(|c| c.is_ascii_alphabetic() && !"aeiouyAEIOUY".contains(*c));
+    let mut out = String::with_capacity(word.len());
+    for (i, &c) in chars.iter().enumerate() {
+        let typed = match c {
+            // `1` between two consonants is an `i` (Wh1tfield), elsewhere an `l` (A1ice).
+            '1' if consonant(i.checked_sub(1).and_then(|p| chars.get(p))) && consonant(chars.get(i + 1)) => 'i',
+            '0' | '1' | '5' => plain(c),
+            // Look-alikes from the IPA, Greek and Cyrillic blocks.
+            '\u{250}'..='\u{2AF}' | '\u{370}'..='\u{52F}' => {
+                let upper = c.is_uppercase();
+                let p = c.to_lowercase().next().map_or(c, plain);
+                match (p.is_ascii_alphabetic(), upper) {
+                    (true, true) => p.to_ascii_uppercase(),
+                    (true, false) => p,
+                    (false, _) => c,
+                }
+            }
+            _ => c,
+        };
+        if typed.is_ascii_alphabetic() && c.is_ascii_digit() && shouting {
+            out.push(typed.to_ascii_uppercase());
+        } else {
+            out.push(typed);
+        }
+    }
+    out
 }
 
 /// `c` lower case, without its accent, and as the Latin letter it's drawn like (full-width and

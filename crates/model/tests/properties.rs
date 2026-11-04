@@ -145,4 +145,19 @@ proptest! {
         let _ = people.check(&EmailAddress::new(junk.clone(), junk.clone()), false);
         let _ = lookalike::name_key(&junk);
     }
+
+    /// Nothing after the first quotation mark changes the signature found: a quoted or forwarded
+    /// message's own signature is never read as the sender's.
+    #[test]
+    fn signature_ignores_what_follows_a_quote(a in ".{0,400}", b in ".{0,400}") {
+        let with = lookalike::signature_shows(&format!("{a}\n-----Original Message-----\n{b}"));
+        prop_assert_eq!(with, lookalike::signature_shows(&format!("{a}\n-----Original Message-----\n")));
+    }
+
+    /// The name asked of the directory is never longer than 100 characters, whatever the
+    /// sender's name.
+    #[test]
+    fn lookup_name_is_short(s in ".{0,600}") {
+        prop_assert!(lookalike::lookup_name(&s).map_or(0, |n| n.chars().count()) <= 100);
+    }
 }

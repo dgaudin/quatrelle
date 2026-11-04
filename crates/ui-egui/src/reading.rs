@@ -511,6 +511,9 @@ pub(crate) fn sender_warning(t: &Tokens, ui: &mut Ui, w: &quatrelle_engine::mode
         SenderWarning::NameOfKnownPerson { name, known, real } => {
             tf!("Careful: you know {name} as {known}, but this comes from {real}.", name = name, known = known, real = real)
         }
+        SenderWarning::SignatureShowsOther { shown, real } => {
+            tf!("Careful: the signature gives {shown}, but this comes from {real}.", shown = shown, real = real)
+        }
     };
     egui::Frame::new().fill(t.danger.gamma_multiply(0.12)).corner_radius(6).inner_margin(Margin::symmetric(10, 8)).show(ui, |ui| {
         ui.set_width(ui.available_width());

@@ -1881,3 +1881,4 @@ folder	Conflicts	衝突
 	{item} was deleted on the server while it was being changed here.\n\nAccount: {account}\nIn: {place}\nWhen: {when}\n\nThe server's version was kept, so the change made here was dropped. The attachment holds the version that was here: open it to put it back.	{item} 在此處變更期間已在伺服器上刪除。\n\n帳戶: {account}\n位置: {place}\n時間: {when}\n\n已保留伺服器上的版本，因此在此所做的變更已捨棄。附件中是此處原有的版本: 開啟它即可還原。
 	{event}: deleted on the server meanwhile; the change made here was dropped (a copy is in Sync Issues › Conflicts)	{event}: 期間已在伺服器上刪除；在此所做的變更已捨棄 (副本在 同步問題 › 衝突 中)
 	Careful: you know {name} as {known}, but this comes from {real}.	小心：你認識的 {name} 地址是 {known}，但這封郵件來自 {real}。
+	Careful: the signature gives {shown}, but this comes from {real}.	小心：簽名顯示的是 {shown}，但這封郵件來自 {real}。
