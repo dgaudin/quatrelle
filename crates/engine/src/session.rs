@@ -396,6 +396,9 @@ pub struct Session {
     /// The last reason each account's server gave for refusing its rules that was told this
     /// session: the same one isn't told again on every try.
     rules_refused_told: HashMap<String, String>,
+    /// Invitations whose answer the server refused once (account, UID), in memory only: sent
+    /// again at the next sync before the refusal counts ([`Session::drop_refused_answers`]).
+    refused_once: HashSet<(String, String)>,
     jobs: Vec<Job>,
     pub(crate) cache: HashMap<(String, String), FolderState<Arc<Summary>>>,
     /// The cached folders, the least recently used first.
@@ -570,6 +573,7 @@ impl Session {
             rules_online: std::collections::BTreeSet::new(),
             followed_public: HashMap::new(),
             rules_refused_told: HashMap::new(),
+            refused_once: HashSet::new(),
             jobs: Vec::new(),
             cache: HashMap::new(),
             cache_order: Vec::new(),
