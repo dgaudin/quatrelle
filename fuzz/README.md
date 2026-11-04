@@ -39,4 +39,7 @@ Every panic counts as a crash, even one Quatrelle's own `catch_unwind` fences wo
 HTML converter's, for instance): there the message would lose its formatting, so it is worth a
 fix. The exception is `pst`, where `pst::import` fences the outlook-pst reader and reports the
 file as damaged, the right answer for a damaged file: that target aborts only on a panic in
-Quatrelle's own code.
+Quatrelle's own code, and a panic in the reader (built from the fixed copy pinned in
+`[patch.crates-io]`) is not one. Its seeds are the patches' starting point and a whole file whose
+first attachment holds a message and whose second is a zero-byte file (as `pst/tests/reader.rs`
+makes it), so the reader's paths for those are fuzzed too.
