@@ -7,6 +7,7 @@ use super::*;
 
 mod file_dialogs;
 mod people_field;
+mod rewrite;
 mod typing;
 
 /// A name typed into To over a big mailbox (16 folders of 4,000 messages, too many to count

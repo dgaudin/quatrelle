@@ -46,6 +46,8 @@ pub(crate) struct RibbonInput<'a> {
     pub can_pop: bool,
     /// A language model is set in Options: Rewrite is offered.
     pub assistant: bool,
+    /// Something is typed above the signature and the message quoted: Rewrite has it to work on.
+    pub written: bool,
     /// The emoji put in last, newest first (Insert › Emoji's Recent row).
     pub recent_emoji: &'a [String],
 }
@@ -78,7 +80,15 @@ pub(crate) fn compose_ribbon(ui: &mut Ui, tokens: &Tokens, ed: &mut Editor, c: &
                     include(ui, t, ed, c, &sel, input, acts);
                     groups.end(ui, &t, "Include");
                     tags(ui, t, c);
-                    groups.last(ui, &t, "Tags");
+                    // In a window, Rewrite on the tab it opens on (in the reading pane it's on
+                    // the bar above, beside Discard).
+                    if input.assistant && input.in_window {
+                        groups.end(ui, &t, "Tags");
+                        rewrite_button(ui, &t, c, input, acts);
+                        groups.last(ui, &t, "Assistant");
+                    } else {
+                        groups.last(ui, &t, "Tags");
+                    }
                 }
                 ComposeTab::Insert => {
                     include(ui, t, ed, c, &sel, input, acts);
@@ -137,24 +147,7 @@ pub(crate) fn compose_ribbon(ui: &mut Ui, tokens: &Tokens, ed: &mut Editor, c: &
                     }
                     if input.assistant {
                         groups.end(ui, &t, "Proofing");
-                        // The text written, rewritten by the language model set in Options.
-                        let busy = c.rewrite.as_ref().is_some_and(|r| r.answer.is_none());
-                        let r = widgets::big_button(ui, Icon::Drafts, "Rewrite", &t, !c.sending && !busy)
-                            .on_hover_text(tl!("Have the language model set in Options rewrite what you wrote"));
-                        egui::Popup::menu(&r).show(|ui| {
-                            for (how, label) in [
-                                ("fix", "Correct spelling and grammar"),
-                                ("shorter", "Shorter"),
-                                ("formal", "More formal"),
-                                ("friendly", "Friendlier"),
-                                ("english", "In English"),
-                            ] {
-                                if ui.button(tl!(label)).clicked() {
-                                    acts.push(Action::Run("assistant.rewrite", json!({"how": how})));
-                                    ui.close();
-                                }
-                            }
-                        });
+                        rewrite_button(ui, &t, c, input, acts);
                         groups.last(ui, &t, "Assistant");
                     } else {
                         groups.last(ui, &t, "Proofing");
@@ -401,6 +394,36 @@ fn include(ui: &mut Ui, t: Tokens, ed: &mut Editor, c: &mut Compose, sel: &Range
 }
 
 /// Tags: high and low importance.
+/// Rewrite and its ways: the text written, rewritten by the language model set in Options.
+fn rewrite_button(ui: &mut Ui, t: &Tokens, c: &Compose, input: &RibbonInput<'_>, acts: &mut Vec<Action>) {
+    let r = widgets::big_button(ui, Icon::Drafts, "Rewrite", t, rewrite_on(c, input.written))
+        .on_hover_text(tl!("Have the language model set in Options rewrite what you wrote"));
+    let r = if input.written { r } else { r.on_disabled_hover_text(tl!("Type your text first")) };
+    egui::Popup::menu(&r).show(|ui| rewrite_choices(ui, acts));
+}
+
+/// Whether Rewrite can be asked: something `written`, the message not being sent, and no rewrite
+/// still out.
+pub(crate) fn rewrite_on(c: &Compose, written: bool) -> bool {
+    written && !c.sending && c.rewrite.as_ref().is_none_or(|r| r.answer.is_some())
+}
+
+/// Rewrite's ways, each asking the language model.
+pub(crate) fn rewrite_choices(ui: &mut Ui, acts: &mut Vec<Action>) {
+    for (how, label) in [
+        ("fix", "Correct spelling and grammar"),
+        ("shorter", "Shorter"),
+        ("formal", "More formal"),
+        ("friendly", "Friendlier"),
+        ("english", "In English"),
+    ] {
+        if ui.button(tl!(label)).clicked() {
+            acts.push(Action::Run("assistant.rewrite", json!({"how": how})));
+            ui.close();
+        }
+    }
+}
+
 fn tags(ui: &mut Ui, t: Tokens, c: &mut Compose) {
     if widgets::big_toggle(ui, Icon::Important, "High importance", &t, c.importance > 0).clicked() {
         c.importance = if c.importance > 0 { 0 } else { 1 };

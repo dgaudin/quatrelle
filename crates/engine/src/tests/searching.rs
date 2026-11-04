@@ -371,6 +371,39 @@ fn the_assistant_rewrites_the_text_written_only() {
     assert_eq!(s.compose.as_ref().unwrap().body, before);
 }
 
+/// A reply quotes its original under the interface's words (« De : » in French): the text
+/// written stops there too, with no signature to stop at first. The quoted message went to the
+/// model with it, and Rewrite was on before anything was typed.
+#[test]
+fn the_text_written_stops_at_a_quote_in_the_interfaces_language() {
+    let mut s = sample_session("assistant-rewrite-fr");
+    s.run("assistant.settings", &json!({"url": "http://localhost:11434/v1", "model": "llama3"})).unwrap();
+    s.quote_words.from = "De :".into();
+    let key = s.list.first().map(|m| m.key.clone()).unwrap();
+    s.run("list.open", &json!({"key": key.to_id()})).unwrap();
+    s.run("mail.reply", &json!({})).unwrap();
+    let quoted = "\n\nDe : Zoe Park <zoe@studio.example>\nEnvoyé : mardi 3 novembre 2026\n\nLe texte cité";
+    let write = |s: &mut Session, text: &str| {
+        if let Some(c) = s.compose.as_mut() {
+            c.signature = String::new();
+            c.body = format!("{text}{quoted}");
+            c.styles = quatrelle_mime::rich::Styles::plain(&c.body);
+        }
+    };
+    write(&mut s, "");
+    assert!(!s.has_written_text(), "nothing typed above the quote");
+    assert!(s.run("assistant.rewrite", &json!({"how": "fix"})).is_err());
+    write(&mut s, "merci, c'est note");
+    assert!(s.has_written_text());
+    s.take_jobs();
+    s.run("assistant.rewrite", &json!({"how": "fix"})).unwrap();
+    let sent = s.take_jobs().into_iter().find_map(|j| match j {
+        Job::AskLlm { messages, .. } => messages.get(1).map(|m| m.1.clone()),
+        _ => None,
+    });
+    assert_eq!(sent.as_deref(), Some("merci, c'est note"), "the text written alone");
+}
+
 /// A message in a conversation: its summary is the conversation's, each message's own part
 /// oldest first.
 #[test]
