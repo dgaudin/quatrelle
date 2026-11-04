@@ -85,21 +85,25 @@ fn a_refused_answer_is_reported_once_as_refused() {
     assert!(server.data.lock().unwrap().answers.is_empty(), "never given");
 }
 
-/// A server too busy to answer now hasn't refused: the answer stays an error, tried again.
+/// A server that can't answer now hasn't refused: too busy, or failing inside for a moment, the
+/// answer stays an error, tried again.
 #[test]
-fn an_answer_refused_while_the_server_is_busy_is_tried_again() {
+fn an_answer_refused_for_now_is_tried_again() {
     let busy = (
         "ErrorServerBusy".to_string(),
         "The server cannot service this request right now. Try again later.".to_string(),
         "<t:Value Name=\"BackOffMilliseconds\">10</t:Value>".to_string(),
     );
-    let (_server, c) = refusing(busy);
-    let (pim, _) = accepted_on_its_item(&c);
-    for (pim, at) in [(pim, 1_792_000_100), (answered_before_it_was_here(), 1_792_000_200)] {
-        let out = crate::ews_pim::sync(&c, &pim, at).unwrap();
-        assert!(out.refused_answers.is_empty(), "{:?}", out.refused_answers);
-        assert!(out.responded.is_empty(), "{:?}", out.responded);
-        assert_eq!(out.errors.len(), 1, "{:?}", out.errors);
-        assert!(out.errors[0].starts_with("Review: "), "{:?}", out.errors);
+    let failing = ("ErrorInternalServerError".to_string(), "An internal server error occurred. The operation failed.".to_string(), String::new());
+    for how in [busy, failing] {
+        let (_server, c) = refusing(how);
+        let (pim, _) = accepted_on_its_item(&c);
+        for (pim, at) in [(pim, 1_792_000_100), (answered_before_it_was_here(), 1_792_000_200)] {
+            let out = crate::ews_pim::sync(&c, &pim, at).unwrap();
+            assert!(out.refused_answers.is_empty(), "{:?}", out.refused_answers);
+            assert!(out.responded.is_empty(), "{:?}", out.responded);
+            assert_eq!(out.errors.len(), 1, "{:?}", out.errors);
+            assert!(out.errors[0].starts_with("Review: "), "{:?}", out.errors);
+        }
     }
 }

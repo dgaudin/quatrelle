@@ -402,25 +402,49 @@ fn anything_to_answer(s: &mut Session) -> bool {
     waiting || asked
 }
 
+/// The user's answer among a meeting's guests.
+fn my_partstat(e: &CalEvent) -> Option<&str> {
+    e.attendees.iter().find(|a| a.email == "riley@studio.example").map(|a| a.partstat.as_str())
+}
+
 /// On 04/11 Exchange refused an answer to an outside organizer's meeting at every sync,
 /// and it was sent again at each one. Refused for good, it's said once, with why, and the meeting
-/// is left as the server has it: nothing is sent again, at this sync or the next.
+/// is shown as the server has it, unanswered, from the sync that brought the refusal: nothing
+/// is sent again, at this sync or the next.
 #[test]
 fn a_refused_answer_is_said_once_and_not_sent_again() {
     let mut s = on_exchange("answered-refused");
-    // The server's meeting, as Exchange's is kept: `UID#start`, with its item's address.
-    let (server_uid, summary) = {
+    // The server's meeting, as Exchange's is kept: `UID#start`, with its item's address, the user
+    // among its guests, unanswered.
+    let theirs = {
         let p = s.pim_mut("sample");
         let e = p.events.iter_mut().find(|e| e.event.uid == "mix@sample.quatrelle").expect("the sample's meeting");
         e.event.uid = format!("{}#{}", e.event.uid, e.event.start);
+        e.calendar = "calendar".into();
         e.href = "E1".into();
-        (e.event.uid.clone(), e.event.summary.clone())
+        e.etag = "ck1".into();
+        e.event.my_answer = "NEEDS-ACTION".into();
+        e.clone()
     };
+    assert_eq!(my_partstat(&theirs.event), Some("NEEDS-ACTION"));
+    let (server_uid, summary) = (theirs.event.uid.clone(), theirs.event.summary.clone());
     s.run("invite.respond", &json!({"answer": "accepted"})).unwrap();
     assert!(anything_to_answer(&mut s), "the server is to answer");
-    s.apply_dav("sample", &DavSync { refused_answers: vec![(server_uid.clone(), REFUSED.into())], ..Default::default() });
+    let e = s.pim["sample"].events.iter().find(|e| e.event.uid == server_uid).unwrap();
+    assert_eq!((my_partstat(&e.event), e.event.my_answer.as_str()), (Some("ACCEPTED"), "ACCEPTED"), "shown answered meanwhile");
+    // The sync that tried brings the refusal and the meeting read again, as the server keeps it.
+    let sync = DavSync {
+        calendars: Some(vec![CalendarInfo { id: theirs.calendar.clone(), name: "Calendar".into(), ..Default::default() }]),
+        events: vec![theirs.clone()],
+        synced_calendars: vec![theirs.calendar.clone()],
+        refused_answers: vec![(server_uid.clone(), REFUSED.into())],
+        checked: NOW,
+        ..Default::default()
+    };
+    s.apply_dav("sample", &sync);
     let e = s.pim["sample"].events.iter().find(|e| e.event.uid == server_uid).unwrap();
     assert_eq!((e.respond.as_deref(), e.dirty), (None, false));
+    assert_eq!((my_partstat(&e.event), e.event.my_answer.as_str()), (Some("NEEDS-ACTION"), "NEEDS-ACTION"), "as the server has it");
     let said = refusals(&s);
     assert_eq!(said.len(), 1, "{:?}", s.notices);
     assert!(!summary.is_empty() && said[0].text.contains(&summary) && said[0].error, "{:?}", said[0]);

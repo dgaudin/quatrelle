@@ -1714,6 +1714,7 @@ month	May	maggio
 	Clean Up moved {n} messages to Deleted Items	Pulizia ha spostato {n} messaggi in Posta eliminata
 	Downloading {total} messages…	Download di {total} messaggi in corso…
 	Every message is already on this computer	Tutti i messaggi sono già su questo computer
+	Exchange refused your answer to {summary}: {error}. Answer it in Outlook on the web.	Exchange ha rifiutato la tua risposta a {summary}: {error}. Rispondi in Outlook sul web.
 	It will be sent {when}	Verrà inviato il {when}
 	Mail from {n} senders is never treated as junk	La posta di {n} mittenti non viene mai considerata indesiderata
 	Mail from {n} senders now goes to Junk Email	La posta di {n} mittenti ora va in Posta indesiderata
@@ -1737,7 +1738,6 @@ month	May	maggio
 	bad parameters: {error}	parametri non validi: {error}
 	calendar and contacts could not be saved: {error}	Non è stato possibile salvare calendario e contatti: {error}
 	calendars and contacts: {error}	calendari e contatti: {error}
-	Exchange refused your answer to {summary}: {error}. Answer it in Outlook on the web.	Exchange ha rifiutato la tua risposta a {summary}: {error}. Rispondi in Outlook sul web.
 	export: {error}	esportazione: {error}
 	import: {error}	importazione: {error}
 	network: {error}	rete: {error}

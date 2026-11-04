@@ -305,8 +305,8 @@ impl Session {
     }
 
     /// After a sync: the invitations the server answered take their answer (a declined one leaves
-    /// the calendar, as the server took it out), and what waited for it goes. One whose answer the
-    /// server refused for good isn't answered from here any more, said once. Then copies of
+    /// the calendar, as the server took it out), and what waited for it goes. (Those whose answer
+    /// the server refused went before: [`Session::drop_refused_answers`].) Then copies of
     /// invitations made here before the server answered them (accepted from the invitation,
     /// never sent: they showed beside the server's meeting, twice) become the user's answer on
     /// the server's meeting. Whether there's something new to send.
@@ -314,7 +314,6 @@ impl Session {
         if !self.server_answers(account) {
             return false;
         }
-        self.drop_refused_answers(account, &sync.refused_answers);
         let (mine, me) = (self.my_addresses(), self.account(account).map(|a| a.config.email.clone()).unwrap_or_default());
         let p = self.pim_mut(account);
         for (uid, stat) in &sync.responded {
@@ -354,8 +353,10 @@ impl Session {
     /// Answers the server refused for good (Exchange refused one on 04/11 at every sync,
     /// the organizer never told): the meeting is left unanswered from here, and what waited for
     /// it goes (or it would be made the answer on the server's meeting again). Said once, with
-    /// the server's words, so the user can answer it in Outlook on the web.
-    fn drop_refused_answers(&mut self, account: &str, refused: &[(String, String)]) {
+    /// the server's words, so the user can answer it in Outlook on the web. Done when a sync's
+    /// result comes, before the server's copies are weighed, so the meeting comes back as the
+    /// server keeps it.
+    pub(super) fn drop_refused_answers(&mut self, account: &str, refused: &[(String, String)]) {
         for (uid, why) in refused {
             let p = self.pim_mut(account);
             let summary = p.events.iter().find(|e| same_meeting(&e.event.uid, uid)).map(|e| e.event.summary.clone()).unwrap_or_default();

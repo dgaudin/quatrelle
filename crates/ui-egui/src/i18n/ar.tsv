@@ -1711,6 +1711,7 @@ month	May	مايو
 	Clean Up moved {n} messages to Deleted Items	عدد الرسائل التي نقلها التنظيف إلى العناصر المحذوفة: {n}
 	Downloading {total} messages…	جارٍ تنزيل الرسائل: {total}…
 	Every message is already on this computer	كل الرسائل موجودة بالفعل على هذا الكمبيوتر
+	Exchange refused your answer to {summary}: {error}. Answer it in Outlook on the web.	رفض Exchange ردّك على {summary}: {error}. أجب عنه في Outlook على الويب.
 	It will be sent {when}	ستُرسل في {when}
 	Mail from {n} senders is never treated as junk	البريد من هؤلاء المرسلين ({n}) لا يُعامل أبدًا كبريد عشوائي
 	Mail from {n} senders now goes to Junk Email	البريد من هؤلاء المرسلين ({n}) يذهب الآن إلى البريد العشوائي
@@ -1734,7 +1735,6 @@ month	May	مايو
 	bad parameters: {error}	معلمات غير صحيحة: {error}
 	calendar and contacts could not be saved: {error}	تعذّر حفظ التقويم وجهات الاتصال: {error}
 	calendars and contacts: {error}	التقويمات وجهات الاتصال: {error}
-	Exchange refused your answer to {summary}: {error}. Answer it in Outlook on the web.	رفض Exchange ردّك على {summary}: {error}. أجب عنه في Outlook على الويب.
 	export: {error}	التصدير: {error}
 	import: {error}	الاستيراد: {error}
 	network: {error}	الشبكة: {error}

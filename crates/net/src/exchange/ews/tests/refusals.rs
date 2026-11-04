@@ -8,18 +8,27 @@ use super::*;
 
 const TEXT: &str = "Set action is invalid for property.";
 
-/// What `check_message` says of an `ErrorInvalidPropertySet` refusal carrying this
+/// What `check_message` makes of a refusal with this code (written as XML text) carrying this
 /// `MessageXml` (none when empty).
-fn said(xml: &str) -> String {
+fn refused(code: &str, xml: &str) -> NetError {
     let more = if xml.is_empty() { String::new() } else { format!("<m:MessageXml>{xml}</m:MessageXml>") };
     let doc = parse(&format!(
         "<s:Envelope xmlns:s=\"x\"><s:Body><m:CreateItemResponse><m:ResponseMessages>\
          <m:CreateItemResponseMessage ResponseClass=\"Error\"><m:MessageText>{TEXT}</m:MessageText>\
-         <m:ResponseCode>ErrorInvalidPropertySet</m:ResponseCode>{more}<m:DescriptiveLinkKey>0</m:DescriptiveLinkKey><m:Items/>\
+         <m:ResponseCode>{code}</m:ResponseCode>{more}<m:DescriptiveLinkKey>0</m:DescriptiveLinkKey><m:Items/>\
          </m:CreateItemResponseMessage></m:ResponseMessages></m:CreateItemResponse></s:Body></s:Envelope>"
     ));
     match messages(&doc).first().map(|m| check_message(m)) {
-        Some(Err(NetError::No(text))) => text,
+        Some(Err(e)) => e,
+        other => panic!("{other:?}"),
+    }
+}
+
+/// What `check_message` says of an `ErrorInvalidPropertySet` refusal carrying this
+/// `MessageXml` (none when empty).
+fn said(xml: &str) -> String {
+    match refused("ErrorInvalidPropertySet", xml) {
+        NetError::No(text) => text,
         other => panic!("{other:?}"),
     }
 }
@@ -57,4 +66,43 @@ fn a_refusal_names_the_fields() {
     assert!(said(&deep).starts_with(TEXT));
     let many = "<t:FieldURI FieldURI=\"bad name\"/>".repeat(20_000);
     assert_eq!(said(&many), TEXT);
+}
+
+/// Calendar properties are often named by their id in a property set: said as `{set}:{id}`, or
+/// the id alone without a set, under the same rules.
+#[test]
+fn an_extended_field_is_named_by_its_id_in_its_set() {
+    let distinguished = "<t:ExtendedFieldURI DistinguishedPropertySetId=\"Appointment\" PropertyId=\"33315\" PropertyType=\"Integer\"/>";
+    assert_eq!(said(distinguished), naming("Appointment:33315"));
+    let guid = "<t:ExtendedFieldURI PropertySetId=\"00062002-0000-0000-C000-000000000046\" PropertyId=\"33315\" PropertyType=\"Integer\"/>";
+    assert_eq!(said(guid), naming("00062002-0000-0000-C000-000000000046:33315"));
+    assert_eq!(said("<t:ExtendedFieldURI PropertyId=\"33315\" PropertyType=\"Integer\"/>"), naming("33315"));
+    // A set or an id that isn't a name, or the two too long together: not said.
+    let odd = format!(
+        "<t:ExtendedFieldURI PropertySetId=\"a b\" PropertyId=\"1\"/><t:ExtendedFieldURI DistinguishedPropertySetId=\"Common\" PropertyId=\"x&lt;\"/>\
+         <t:ExtendedFieldURI PropertySetId=\"{}\" PropertyId=\"{}\"/><t:ExtendedFieldURI PropertyType=\"String\"/>",
+        "s".repeat(40),
+        "9".repeat(40)
+    );
+    assert_eq!(said(&odd), TEXT);
+}
+
+/// The code goes in as a name does: one that doesn't look like a code is left out, the fields
+/// still said.
+#[test]
+fn a_code_is_said_only_when_it_looks_like_one() {
+    let field = "<t:FieldURI FieldURI=\"calendar:Organizer\"/>";
+    for code in ["Error &lt;Bad&gt; code", &"E".repeat(81), "Errør"] {
+        assert!(matches!(refused(code, field), NetError::No(t) if t == format!("{TEXT} (calendar:Organizer)")), "{code}");
+    }
+    assert!(matches!(refused("", field), NetError::No(t) if t == format!("{TEXT} (calendar:Organizer)")));
+}
+
+/// Exchange failing inside, or over its limits on objects open and connections, is for now:
+/// tried again, not dropped.
+#[test]
+fn a_refusal_for_now_is_tried_again() {
+    for code in ["ErrorInternalServerError", "ErrorTooManyObjectsOpened", "ErrorExceededConnectionCount"] {
+        assert!(matches!(refused(code, ""), NetError::Later(t) if t == TEXT), "{code}");
+    }
 }

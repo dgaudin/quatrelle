@@ -1711,6 +1711,7 @@ month	May	mei
 	Clean Up moved {n} messages to Deleted Items	Opruimen heeft {n} berichten naar Verwijderde items verplaatst
 	Downloading {total} messages…	{total} berichten downloaden…
 	Every message is already on this computer	Alle berichten staan al op deze computer
+	Exchange refused your answer to {summary}: {error}. Answer it in Outlook on the web.	Exchange heeft je antwoord op {summary} geweigerd: {error}. Beantwoord het in Outlook op het web.
 	It will be sent {when}	Het wordt verzonden op {when}
 	Mail from {n} senders is never treated as junk	Mail van {n} afzenders wordt nooit als ongewenst behandeld
 	Mail from {n} senders now goes to Junk Email	Mail van {n} afzenders gaat nu naar Ongewenste e-mail
@@ -1734,7 +1735,6 @@ month	May	mei
 	bad parameters: {error}	onjuiste parameters: {error}
 	calendar and contacts could not be saved: {error}	Agenda en contactpersonen konden niet worden opgeslagen: {error}
 	calendars and contacts: {error}	agenda's en contactpersonen: {error}
-	Exchange refused your answer to {summary}: {error}. Answer it in Outlook on the web.	Exchange heeft je antwoord op {summary} geweigerd: {error}. Beantwoord het in Outlook op het web.
 	export: {error}	export: {error}
 	import: {error}	import: {error}
 	network: {error}	netwerk: {error}

@@ -1715,6 +1715,7 @@ month	May	Mai
 	Clean Up moved {n} messages to Deleted Items	Aufräumen hat {n} Nachrichten nach „Gelöschte Elemente“ verschoben
 	Downloading {total} messages…	{total} Nachrichten werden heruntergeladen…
 	Every message is already on this computer	Alle Nachrichten sind bereits auf diesem Computer
+	Exchange refused your answer to {summary}: {error}. Answer it in Outlook on the web.	Exchange hat Ihre Antwort auf {summary} abgelehnt: {error}. Antworten Sie in Outlook im Web.
 	It will be sent {when}	Wird am {when} gesendet
 	Mail from {n} senders is never treated as junk	E-Mails von {n} Absendern werden nie als Junk behandelt
 	Mail from {n} senders now goes to Junk Email	E-Mails von {n} Absendern gehen jetzt in „Junk-E-Mail“
@@ -1738,7 +1739,6 @@ month	May	Mai
 	bad parameters: {error}	falsche Parameter: {error}
 	calendar and contacts could not be saved: {error}	Kalender und Kontakte konnten nicht gespeichert werden: {error}
 	calendars and contacts: {error}	Kalender und Kontakte: {error}
-	Exchange refused your answer to {summary}: {error}. Answer it in Outlook on the web.	Exchange hat Ihre Antwort auf {summary} abgelehnt: {error}. Antworten Sie in Outlook im Web.
 	export: {error}	Export: {error}
 	import: {error}	Import: {error}
 	network: {error}	Netzwerk: {error}
