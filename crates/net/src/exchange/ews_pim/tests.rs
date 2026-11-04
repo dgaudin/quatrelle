@@ -403,3 +403,39 @@ fn exchange_gets_no_conference() {
     assert!(with.conference.is_some());
     assert_eq!(event_fields(&plain, "riley@contoso.example"), event_fields(&with, "riley@contoso.example"));
 }
+
+/// A change to the user's copy of someone else's meeting (the server keeps the user's answer to
+/// it) neither sets nor takes off the organizer's zone and pattern: Exchange refuses the zone
+/// written on a guest's copy, and the whole change with it (04/11). The user's own appointments
+/// keep both, and every other field goes as before.
+#[test]
+fn a_change_to_someone_elses_meeting_leaves_its_zone_and_pattern() {
+    let start = quatrelle_jmap::utc_date("2026-10-19T08:00:00Z").unwrap_or(0);
+    let own = CalEvent {
+        uid: "s".into(),
+        summary: "Weekly".into(),
+        start,
+        end: start + 3600,
+        tzid: "Europe/Paris".into(),
+        rrule: Some("FREQ=WEEKLY;BYDAY=MO;COUNT=3".into()),
+        reminder: Some(15),
+        ..Default::default()
+    };
+    let organizers = ["calendar:Recurrence", "calendar:StartTimeZone", "calendar:EndTimeZone"];
+    let sent = push::updates(&own, "riley@contoso.example");
+    for uri in organizers {
+        assert!(sent.contains(uri), "{uri}: {sent}");
+    }
+    let single = CalEvent { rrule: None, ..own.clone() };
+    assert!(push::updates(&single, "riley@contoso.example").contains("<t:DeleteItemField><t:FieldURI FieldURI=\"calendar:Recurrence\"/>"));
+    for answer in ["ACCEPTED", "TENTATIVE", "DECLINED", "NEEDS-ACTION"] {
+        for e in [&own, &single] {
+            let theirs = CalEvent { my_answer: answer.into(), ..e.clone() };
+            let sent = push::updates(&theirs, "riley@contoso.example");
+            assert!(organizers.iter().all(|uri| !sent.contains(uri)), "{answer}: {sent}");
+            for kept in ["calendar:Start\"", "calendar:End\"", "item:ReminderIsSet", "calendar:LegacyFreeBusyStatus", "item:Sensitivity"] {
+                assert!(sent.contains(kept), "{answer}, {kept}: {sent}");
+            }
+        }
+    }
+}

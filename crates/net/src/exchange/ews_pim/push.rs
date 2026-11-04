@@ -97,8 +97,8 @@ pub(super) fn answer_pending(c: &Client, pim: &Pim, out: &mut DavSync) {
 }
 
 /// What came of answering an invitation, in `out`: given; refused (the engine sends it again at
-/// the next sync, and refused again, says so once and lets it go: Exchange refused an
-/// answer of 04/11 at every sync); or not now, tried again at the next sync.
+/// the next sync, and refused again, says so once and lets it go, rather than send it at every
+/// sync); or not now, tried again at the next sync.
 fn note_answer(out: &mut DavSync, e: &StoredEvent, answer: &str, r: Result<()>) {
     match r {
         Ok(()) => out.responded.push((e.event.uid.clone(), answer.to_string())),
@@ -254,24 +254,7 @@ fn create_item(c: &Client, owner: Option<&str>, e: &CalEvent, notify: bool) -> R
 /// otherwise the change goes in over whatever is there, telling no one. One the server won't
 /// send for its recipients goes in all the same, telling no one.
 fn update_item(c: &Client, id: &str, change_key: &str, e: &CalEvent, notify: bool) -> Result<Saved> {
-    let mut updates: String = event_fields(e, c.email())
-        .iter()
-        .map(|(uri, x)| format!("<t:SetItemField>{}<t:CalendarItem>{x}</t:CalendarItem></t:SetItemField>", tasks::path(uri)))
-        .collect();
-    // An appointment that no longer repeats loses its pattern (an occurrence never had one).
-    if e.rrule.is_none() && e.recurrence_id.is_none() {
-        updates.push_str("<t:DeleteItemField><t:FieldURI FieldURI=\"calendar:Recurrence\"/></t:DeleteItemField>");
-    }
-    // A meeting of the user's whose room was taken off loses its resources too (a plain
-    // appointment, with no one invited, is left alone: nothing to take off).
-    let mine = e.organizer.as_ref().is_none_or(|o| o.email.eq_ignore_ascii_case(c.email()));
-    if mine && !e.attendees.is_empty() && !e.attendees.iter().any(|a| a.is_resource()) {
-        updates.push_str("<t:DeleteItemField><t:FieldURI FieldURI=\"calendar:Resources\"/></t:DeleteItemField>");
-    }
-    // So with its optional guests, all taken off (or all made required).
-    if mine && !e.attendees.is_empty() && !e.attendees.iter().any(|a| a.is_optional()) {
-        updates.push_str("<t:DeleteItemField><t:FieldURI FieldURI=\"calendar:OptionalAttendees\"/></t:DeleteItemField>");
-    }
+    let updates = updates(e, c.email());
     let call = |resolution: &str, key: &str, send: &str| {
         call_sending(
             c,
@@ -301,4 +284,40 @@ fn update_item(c: &Client, id: &str, change_key: &str, e: &CalEvent, notify: boo
     let (m, untold) = or_untold(&e.summary, r, || call("AlwaysOverwrite", "", "SendToNone"))?;
     let (new, key) = new_id(&m);
     Ok(Saved { href: if new.is_empty() { id.to_string() } else { new }, etag: key, untold })
+}
+
+/// What only a meeting's organizer sets: its pattern and the zone it's set in.
+const ORGANIZERS_OWN: [&str; 3] = ["calendar:Recurrence", "calendar:StartTimeZone", "calendar:EndTimeZone"];
+
+/// The changes [`update_item`] makes, field by field: each field of the appointment set, and
+/// those it no longer has taken off. `me`: this account's address.
+///
+/// The user's copy of someone else's meeting (the server keeps the user's answer to it, where
+/// it says "Organizer" of the user's own) keeps the organizer's pattern and zone, neither set nor
+/// taken off: Exchange refuses the zone written on a guest's copy, and the whole change with it
+/// ("Set action is invalid for property.", naming `calendar:StartTimeZone`). Two outside
+/// meetings changed here were refused so at every sync on 04/11, which was taken at
+/// first for a refused answer.
+pub(super) fn updates(e: &CalEvent, me: &str) -> String {
+    let guests_copy = !e.my_answer.is_empty();
+    let mut updates: String = event_fields(e, me)
+        .iter()
+        .filter(|(uri, _)| !(guests_copy && ORGANIZERS_OWN.contains(uri)))
+        .map(|(uri, x)| format!("<t:SetItemField>{}<t:CalendarItem>{x}</t:CalendarItem></t:SetItemField>", tasks::path(uri)))
+        .collect();
+    // An appointment that no longer repeats loses its pattern (an occurrence never had one).
+    if e.rrule.is_none() && e.recurrence_id.is_none() && !guests_copy {
+        updates.push_str("<t:DeleteItemField><t:FieldURI FieldURI=\"calendar:Recurrence\"/></t:DeleteItemField>");
+    }
+    // A meeting of the user's whose room was taken off loses its resources too (a plain
+    // appointment, with no one invited, is left alone: nothing to take off).
+    let mine = e.organizer.as_ref().is_none_or(|o| o.email.eq_ignore_ascii_case(me));
+    if mine && !e.attendees.is_empty() && !e.attendees.iter().any(|a| a.is_resource()) {
+        updates.push_str("<t:DeleteItemField><t:FieldURI FieldURI=\"calendar:Resources\"/></t:DeleteItemField>");
+    }
+    // So with its optional guests, all taken off (or all made required).
+    if mine && !e.attendees.is_empty() && !e.attendees.iter().any(|a| a.is_optional()) {
+        updates.push_str("<t:DeleteItemField><t:FieldURI FieldURI=\"calendar:OptionalAttendees\"/></t:DeleteItemField>");
+    }
+    updates
 }

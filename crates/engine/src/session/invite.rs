@@ -350,9 +350,9 @@ impl Session {
         !copies.is_empty()
     }
 
-    /// Answers the server refused at two syncs running (Exchange refused one on 04/11 at
-    /// every sync, the organizer never told): the meeting is left unanswered from here, and what
-    /// waited for it goes (or it would be made the answer on the server's meeting again). Said
+    /// Answers the server refused at two syncs running (one refused for good was otherwise
+    /// sent again at every sync, the organizer never told): the meeting is left unanswered
+    /// from here, and what waited for it goes (or it would be made the answer on the server's meeting again). Said
     /// once, with the server's words, so the user can answer it in Outlook on the web. Refused
     /// the first time, the answer stays as it is, nothing said, and is sent again at the next
     /// sync: a busy server refuses for a while (too many connections, an internal error) as it

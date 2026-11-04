@@ -39,6 +39,26 @@ impl Data {
         Some(format!("<m:R ResponseClass=\"Error\"><m:MessageText>{text}</m:MessageText><m:ResponseCode>{code}</m:ResponseCode></m:R>"))
     }
 
+    /// The refusal of a change that writes a zone (`calendar:StartTimeZone`, `EndTimeZone`) on a
+    /// guest's copy of a meeting — one whose `MyResponseType` is the guest's answer, not
+    /// "Organizer": the zone is the organizer's, and Exchange refuses the whole change, naming it
+    /// (two outside meetings, 04/11). Nothing of the change is kept.
+    pub(super) fn refuses_zone(item: &El, updates: &[El]) -> Option<String> {
+        let guests_copy = item.name == "CalendarItem" && item.text_of("MyResponseType").is_some_and(|r| r.trim() != "Organizer");
+        let zone = updates
+            .iter()
+            .filter(|u| u.name == "SetItemField")
+            .filter_map(|u| u.find("FieldURI").and_then(|f| f.attr("FieldURI")))
+            .find(|uri| matches!(*uri, "calendar:StartTimeZone" | "calendar:EndTimeZone"))?;
+        guests_copy.then(|| {
+            format!(
+                "<m:R ResponseClass=\"Error\"><m:MessageText>Set action is invalid for property.</m:MessageText>\
+                 <m:ResponseCode>ErrorInvalidPropertySet</m:ResponseCode><m:DescriptiveLinkKey>0</m:DescriptiveLinkKey>\
+                 <m:MessageXml><t:FieldURI FieldURI=\"{zone}\"/></m:MessageXml><m:Items/></m:R>"
+            )
+        })
+    }
+
     /// The refusal of an answer to a meeting, when answers are refused ([`Data::refuse_answers`]):
     /// the field Exchange names in its `MessageXml`, after the code, as Exchange writes it.
     pub(super) fn refuses_answer(&self) -> Option<String> {

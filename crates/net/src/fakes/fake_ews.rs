@@ -195,7 +195,7 @@ pub struct Data {
     /// organizer was sent the answer.
     pub answers: Vec<(String, String, bool)>,
     /// Answers to meetings are refused with this code, text and `MessageXml` content, and not
-    /// given (as Exchange refused one on 04/11).
+    /// given.
     pub refuse_answers: Option<(String, String, String)>,
     /// The room lists the organisation set up (name, address) — none on most on-premises
     /// servers — and the rooms (name, address, the list's address).

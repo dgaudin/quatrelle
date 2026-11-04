@@ -536,6 +536,10 @@ impl Data {
                             out.push(err("ErrorInvalidRequest"));
                             continue;
                         }
+                        if let Some(refused) = Data::refuses_zone(el, &updates) {
+                            out.push(refused);
+                            continue;
+                        }
                         for u in updates {
                             // A property of Quatrelle's own, set on an appointment: replaces its namesake.
                             if u.name == "SetItemField"
