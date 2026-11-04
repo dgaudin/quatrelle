@@ -68,10 +68,13 @@ impl Session {
                 r.refused = None;
             }
         }
+        if self.docs_unread.contains(RULES_DOC) {
+            return Err(CmdError::Failed("Your rules couldn't be read, so they aren't saved over".into()));
+        }
         let before = server_shape(&self.rules, &|a| self.server_kind(a));
         self.rules = rules;
         if let Some(store) = &self.store
-            && let Err(e) = store.save_doc("rules.json", &self.rules)
+            && let Err(e) = store.save_doc(RULES_DOC, &self.rules)
         {
             return Err(CmdError::Failed(format!("the rules couldn't be saved: {e}")));
         }
@@ -119,8 +122,12 @@ impl Session {
     /// Keep the rules on disk, without telling any server (the server's answer brings the ids
     /// back through `Event::ServerRules`, which lands here).
     pub(crate) fn save_rules(&mut self) {
+        // What couldn't be read isn't written over with what's shown in its place.
+        if self.docs_unread.contains(RULES_DOC) {
+            return;
+        }
         if let Some(store) = &self.store
-            && let Err(e) = store.save_doc("rules.json", &self.rules)
+            && let Err(e) = store.save_doc(RULES_DOC, &self.rules)
         {
             self.notice_with("the rules couldn't be saved: {error}", &[("error", &e.to_string())], true);
         }

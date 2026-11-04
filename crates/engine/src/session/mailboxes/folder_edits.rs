@@ -339,11 +339,14 @@ impl Session {
                 // Undo finds them again by Message-ID (those without one can't come back).
                 let back: Vec<(String, String)> =
                     group.iter().filter(|m| !m.message_id.is_empty()).map(|m| (m.message_id.clone(), m.key.folder.clone())).collect();
-                if !back.is_empty() {
-                    self.remember(Undo::Move { account: a.clone(), to: dest.clone(), back });
-                }
                 let keys = group.iter().map(|m| m.key.clone()).collect();
-                self.apply_op(&a, Op::Move { keys, to: dest });
+                // One that didn't happen (a local store error) has nothing to undo, and the
+                // selection stays on it.
+                self.apply_op_checked(&a, Op::Move { keys, to: dest.clone() })
+                    .map_err(|e| CmdError::Failed(format!("Your mail couldn't be moved, so it stays where it was: {e}")))?;
+                if !back.is_empty() {
+                    self.remember(Undo::Move { account: a.clone(), to: dest, back });
+                }
             }
         }
         Ok(moved)

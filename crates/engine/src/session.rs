@@ -486,6 +486,9 @@ pub struct Session {
     pub pim: HashMap<String, quatrelle_model::pim::Pim>,
     /// The accounts whose calendars and contacts couldn't be read: never saved over.
     pub(crate) pim_unread: HashSet<String>,
+    /// The documents (`rules.json`, `snoozes.json`) that couldn't be read at start: never saved
+    /// over with what's shown in their place.
+    pub(crate) docs_unread: HashSet<&'static str>,
     /// Webex's sign-in and the meetings on their way.
     pub webex: pim::WebexState,
     /// The rooms each account offers for meetings, once asked for (Outlook's Room Finder).
@@ -620,6 +623,7 @@ impl Session {
             vote_sending: None,
             pim: HashMap::new(),
             pim_unread: HashSet::new(),
+            docs_unread: HashSet::new(),
             rooms: HashMap::new(),
             free_busy: HashMap::new(),
             webex: pim::WebexState::default(),
@@ -638,9 +642,8 @@ impl Session {
             build_sha: None,
             update: UpdateCheck::NotAsked,
         };
+        s.load_rules_and_snoozes();
         if let Some(store) = &s.store {
-            s.rules = store.load_doc("rules.json").unwrap_or_default();
-            s.snoozes = store.load_doc("snoozes.json").unwrap_or_default();
             s.contacts = Contacts::load(store);
             s.pending_marks = store
                 .load_doc::<Vec<(u64, MessageKey, Flag)>>(PENDING_MARKS)

@@ -176,6 +176,7 @@ impl Session {
                     p.ensure_defaults();
                     p.events.iter_mut().for_each(|e| e.event.adopt_kept_conference());
                     self.pim.insert(account.to_string(), p);
+                    self.pim_unread.remove(account);
                     self.forget_contacts();
                     self.pim_revision = self.pim_revision.wrapping_add(1);
                 }
@@ -269,6 +270,8 @@ impl Session {
         self.accounts.retain(|a| a.config.id != id);
         self.cache.retain(|(a, _), _| a != id);
         self.pim.remove(id);
+        // An account added later under the same id has its own calendar and contacts to save.
+        self.pim_unread.remove(id);
         self.forget_rooms(id);
         self.clear_directory_index();
         self.forget_expansions(id);
