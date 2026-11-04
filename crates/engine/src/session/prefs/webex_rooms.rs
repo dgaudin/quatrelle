@@ -63,9 +63,11 @@ pub(super) fn read_rooms<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<W
     })
 }
 
-/// A name or a line as kept: no control character, no space at either end.
+/// A name or a line as kept: a tab turned into a space (`N°<tab>123` copied from a table), no
+/// other control character, no space at either end. The Options rows cut what's typed the same
+/// way (`kept_lines` in `ui-egui`).
 fn clean(text: &str) -> String {
-    text.chars().filter(|c| !c.is_control()).collect::<String>().trim().to_string()
+    text.chars().map(|c| if c == '\t' { ' ' } else { c }).filter(|c| !c.is_control()).collect::<String>().trim().to_string()
 }
 
 /// `text` cleaned and cut to `max` characters (then trimmed again: a cut leaves no space at the
@@ -114,10 +116,10 @@ impl Prefs {
     /// Add a room, change one, or take one out (`remove`), by its link as kept (`url`, trimmed):
     /// the room whose link was `was` gets `url` as its link, in its place; else the room with the
     /// link `url` changes; with neither, a new room goes at the end, its name required. A `name` or
-    /// `details` not given stays as it was. Lines lose their control characters and spaces at
-    /// either end, and the blank ones go. Whatever can't be kept (not a Webex personal room's
-    /// link, one another room has whatever its case, a name or a line too long, too many lines or
-    /// rooms, a named room's name taken off) is refused, and nothing changes.
+    /// `details` not given stays as it was. Lines lose their control characters (a tab becomes a
+    /// space) and spaces at either end, and the blank ones go. Whatever can't be kept (not a Webex
+    /// personal room's link, one another room has whatever its case, a name or a line too long,
+    /// too many lines or rooms, a named room's name taken off) is refused, and nothing changes.
     pub fn set_webex_room(
         &mut self,
         url: &str,
