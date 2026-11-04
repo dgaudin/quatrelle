@@ -429,3 +429,16 @@ fn a_text_asked_for_twice_is_asked_once() {
     push_job(&mut q, j);
     assert_eq!(q.len(), 1);
 }
+
+/// A pending-drafts list that can't be read isn't saved over with just the newest draft: the
+/// drafts waiting in it stay.
+#[test]
+fn a_draft_kept_offline_doesnt_write_over_a_list_that_cant_be_read() {
+    let store = Store::failing();
+    keep_draft(&store, "a1", "Drafts", None, b"Subject: first\r\n\r\nOne\r\n".to_vec()).unwrap();
+    store.fail(Some(PENDING_DRAFTS), None);
+    assert!(keep_draft(&store, "a1", "Drafts", None, b"Subject: second\r\n\r\nTwo\r\n".to_vec()).is_err());
+    store.fail(None, None);
+    let kept: Vec<PendingDraft> = store.load_account_doc("a1", PENDING_DRAFTS).unwrap();
+    assert_eq!(kept.iter().map(|d| d.raw.clone()).collect::<Vec<_>>(), [b"Subject: first\r\n\r\nOne\r\n".to_vec()]);
+}
