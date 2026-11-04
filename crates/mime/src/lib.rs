@@ -292,6 +292,10 @@ pub struct Span {
     /// A picture's size as the message sets it (issue #10).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub image_size: Option<ImageSize>,
+    /// A line across the message, alone on its line, its text empty: an `<hr>`, or the top
+    /// border Outlook draws over each message a reply quotes.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub rule: bool,
 }
 
 fn is_none(v: &usize) -> bool {

@@ -342,6 +342,15 @@ impl Body<'_> {
                 ui.add_space(9.0 * self.zoom);
                 continue;
             }
+            // A line across the message (an `<hr>`, the border Outlook draws over each message a
+            // reply quotes), in the colour of the window's own dividers.
+            if line.iter().any(|sp| sp.rule) {
+                ui.add_space(4.0 * self.zoom);
+                let (r, _) = ui.allocate_exact_size(vec2(width, 1.0), egui::Sense::hover());
+                ui.painter().hline(r.x_range(), r.center().y, egui::Stroke::new(1.0, t.border));
+                ui.add_space(4.0 * self.zoom);
+                continue;
+            }
             // A line with right-to-left text is laid out whole, egui putting it in order (its links
             // show, but as text).
             if line.iter().any(|sp| crate::bidi::has_rtl(&sp.text)) && line.iter().all(|sp| sp.image.is_none()) {
