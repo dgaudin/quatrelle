@@ -112,6 +112,22 @@ fn the_join_link_is_found_in_the_place() {
     assert!(!m("notes:teams"), "not in its notes");
 }
 
+/// The conference's label and link are looked for with the place.
+#[test]
+fn the_search_finds_the_conference() {
+    let jitsi = CalEvent {
+        summary: "Point".into(),
+        location: "Salle 3".into(),
+        conference: Conference::new("https://jitsi.example.org/team", "Jitsi équipe"),
+        ..Default::default()
+    };
+    let bare = CalEvent { conference: None, ..jitsi.clone() };
+    for q in ["location:équipe", "jitsi.example.org"] {
+        assert!(EventQuery::parse(q).matches(&jitsi), "{q}");
+        assert!(!EventQuery::parse(q).matches(&bare), "{q}");
+    }
+}
+
 /// A bare word looks through the fields one by one: a needle's words may each be in a different
 /// field, the notes are read last, and what the field's words are doesn't change.
 #[test]
