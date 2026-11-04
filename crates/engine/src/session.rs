@@ -49,9 +49,11 @@ pub use mailboxes::{
     DirectoryAnswer, Expansion, FIELD_NAMES, FieldId, FolderSizes, INDEX_MAX, MAX_SHOWN_MEMBERS, MAX_SUGGESTIONS, MAX_TOTAL, Sizes, Source,
     Suggestion, directory_people, fill_name,
 };
+pub use opening::SenderMarks;
 pub use organize::{RulesScope, junk, quick_steps, search_folders};
 pub use prefs::{
-    ListLayout, MEETINGS_PROFILE, NotesOrder, PictureLoading, Prefs, READING_ZOOM, RECENT_EMOJI, ReadInPane, ReadingPane, is_profile_dir,
+    ListLayout, MEETINGS_PROFILE, NotesOrder, PictureLoading, Prefs, READING_ZOOM, RECENT_EMOJI, ReadInPane, ReadingPane, SenderAddresses,
+    is_profile_dir,
 };
 use searching::SearchIndex;
 pub use security::{CardSearch, KnownCert, Lock, RevocationCheck, SMIME_DOC, Seal, Security, SignedBy, SmimeSettings};
@@ -230,8 +232,9 @@ pub struct Reading {
     pub error: Option<String>,
     /// The other messages of its conversation in this list, oldest first.
     pub thread: Vec<MessageKey>,
-    /// Who it says it's from doesn't add up: a lookalike of a domain the user deals with, or
-    /// another address shown in the sender's name.
+    /// Who it says it's from doesn't add up: a lookalike of a domain the user deals with,
+    /// another address shown in the sender's name, or a known person's name on an address that
+    /// isn't theirs (said again each time the sender check is gathered).
     pub warning: Option<quatrelle_model::lookalike::SenderWarning>,
     /// Signed or encrypted (S/MIME), and how that went.
     pub security: Option<Security>,
@@ -417,9 +420,8 @@ pub struct Session {
     contacts: Contacts,
     /// What addresses stand for: each account's rooms, from its room lists (`mailboxes/people.rs`).
     pub(crate) people: mailboxes::People,
-    /// The domains the user deals with ([`Session::known_domains`]), and the address book's
-    /// revision they were counted from.
-    known_domains: Option<(u64, BTreeSet<String>)>,
+    /// The sender check ([`Session::keep_senders`]), gathered again when what it's made of changes.
+    pub(crate) senders: Option<opening::Senders>,
     /// S/MIME: each account's settings, the roots trusted for email, decrypted messages (in
     /// memory only: the MIME entity inside, and whether it was authenticated), the ones being
     /// decrypted and why others couldn't be, and messages waiting to be signed or encrypted.
@@ -579,7 +581,7 @@ impl Session {
             cache_limit: CACHE_MESSAGES,
             contacts: Contacts::default(),
             people: mailboxes::People::default(),
-            known_domains: None,
+            senders: None,
             smime: HashMap::new(),
             trust_roots: Vec::new(),
             opened: HashMap::new(),

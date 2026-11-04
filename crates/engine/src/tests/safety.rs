@@ -6,6 +6,8 @@
 
 use super::*;
 
+mod senders;
+
 /// A JPEG whose EXIF block has a GPS block with a latitude (51° 30' 41.23").
 fn geotagged_jpeg() -> Vec<u8> {
     let mut tiff = b"MM\0\x2a\0\0\0\x08".to_vec();

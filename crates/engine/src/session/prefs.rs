@@ -193,6 +193,17 @@ pub struct Prefs {
     /// signed mail is shown. Off at first: the authority learns whose mail is being read.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub check_revocation: bool,
+    /// When the message list shows a sender's address after their name (issue #29): never at
+    /// first, as Outlook shows names only.
+    pub sender_addresses: SenderAddresses,
+    /// Tag mail from outside the organisation « Externe » (issue #29). Off at first: outside a
+    /// company nearly every message is, and a tag on everything is a tag nobody reads.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub external_tag: bool,
+    /// The organisation's domains, for the External tag (empty: those of the user's accounts,
+    /// mail services left out).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub org_domains: Vec<String>,
     /// The Webex personal room the appointment window's Webex Meeting button puts in
     /// (`https://<site>.webex.com/meet/<name>`); empty until it's set in Options.
     #[serde(skip_serializing_if = "String::is_empty")]
@@ -270,6 +281,9 @@ impl Default for Prefs {
             meeting_browser: None,
             meeting_profile: None,
             check_revocation: false,
+            sender_addresses: SenderAddresses::Never,
+            external_tag: false,
+            org_domains: Vec::new(),
             webex_room: String::new(),
             webex_site: String::new(),
             webex_client_id: String::new(),
@@ -353,6 +367,36 @@ impl PictureLoading {
 
     pub fn from_code(s: &str) -> Option<PictureLoading> {
         PictureLoading::ALL.into_iter().find(|p| p.code() == s)
+    }
+}
+
+/// When the message list shows a sender's address after their name (issue #29).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SenderAddresses {
+    /// Names only, as Outlook.
+    #[default]
+    Never,
+    /// For senders the user doesn't know (not a contact, never written to, not in the
+    /// directory's answers): where an unknown address hides behind a familiar name.
+    Strangers,
+    Always,
+}
+
+impl SenderAddresses {
+    pub const ALL: [SenderAddresses; 3] = [SenderAddresses::Never, SenderAddresses::Strangers, SenderAddresses::Always];
+
+    pub fn code(self) -> &'static str {
+        match self {
+            SenderAddresses::Never => "never",
+            SenderAddresses::Strangers => "strangers",
+            SenderAddresses::Always => "always",
+        }
+    }
+
+    pub fn from_code(code: &str) -> Option<SenderAddresses> {
+        let code = code.trim();
+        SenderAddresses::ALL.into_iter().find(|a| a.code().eq_ignore_ascii_case(code))
     }
 }
 

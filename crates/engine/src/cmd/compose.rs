@@ -624,7 +624,7 @@ pub(super) fn preview_attachment(s: &mut Session, v: &Value) -> CmdResult {
     if kind == "message" {
         let m = quatrelle_mime::parse(&data).ok_or_else(|| CmdError::Failed("the attached message can't be read".into()))?;
         let name = a.name.clone();
-        let warning = s.sender_warning(&m.from);
+        let warning = s.sender_warning(&m.from, m.bulk);
         return Ok(json!({
             "kind": "message", "name": name, "subject": m.subject, "from": m.from.to_string(), "to": quatrelle_model::addr::format_list(&m.to),
             "date": m.date, "text": m.text, "warning": warning,

@@ -5,6 +5,10 @@
 
 use super::*;
 
+mod senders;
+pub use senders::SenderMarks;
+pub(crate) use senders::Senders;
+
 impl Session {
     pub fn open_view(&mut self, view: View) {
         // A reply written in the reading pane is set aside (in Drafts) for the folder.
@@ -129,7 +133,7 @@ impl Session {
                     let (shown, security) = self.unwrap(key, &raw);
                     w.parsed = self.parse_for_reading(key, &shown);
                     w.error = w.parsed.is_none().then(|| "this message could not be read".to_string());
-                    w.warning = w.parsed.as_ref().and_then(|p| self.sender_warning(&p.from));
+                    w.warning = w.parsed.as_ref().and_then(|p| self.message_warning(key, p));
                     w.security = security;
                 }
                 None => self.jobs.push(self.fetch_job(key)),
@@ -209,7 +213,7 @@ impl Session {
         }
         // Read as it was built: a name alone stays, where the address isn't known yet.
         let Some(parsed) = mime::parse_text_first(raw).map(|p| self.dated(key, p)) else { return };
-        let warning = self.sender_warning(&parsed.from);
+        let warning = self.message_warning(key, &parsed);
         for r in self.reading.iter_mut().chain(&mut self.windows).filter(|r| waits(r)) {
             r.parsed = Some(parsed.clone());
             r.error = None;
@@ -225,12 +229,16 @@ impl Session {
             || self.windows.iter().any(|w| &w.key == key && (w.parsed.is_none() || w.text_first));
         let (raw, security) = if shown { self.unwrap(key, raw) } else { (raw.to_vec(), None) };
         let raw = raw.as_slice();
+        // Gathered before the windows are set aside: a gathering says again what every one shows.
+        if shown {
+            self.keep_senders();
+        }
         let mut windows = std::mem::take(&mut self.windows);
         for w in windows.iter_mut().filter(|w| &w.key == key && (w.parsed.is_none() || w.text_first)) {
             w.text_first = false;
             w.parsed = self.parse_for_reading(key, raw);
             w.error = w.parsed.is_none().then(|| "this message could not be read".to_string());
-            w.warning = w.parsed.as_ref().and_then(|p| self.sender_warning(&p.from));
+            w.warning = w.parsed.as_ref().and_then(|p| self.message_warning(key, p));
             w.security = security.clone();
         }
         self.windows = windows;
@@ -244,39 +252,15 @@ impl Session {
             r.security = security;
             r.text_first = false;
         }
-        let from = self.reading.as_ref().filter(|r| &r.key == key).and_then(|r| r.parsed.as_ref()).map(|p| p.from.clone());
-        if let Some(from) = from {
-            let warning = self.sender_warning(&from);
+        // Taken out while it's checked (not copied: it can be big), and put back.
+        let parsed = self.reading.as_mut().filter(|r| &r.key == key).and_then(|r| r.parsed.take());
+        if let Some(parsed) = parsed {
+            let warning = self.message_warning(key, &parsed);
             if let Some(r) = self.reading.as_mut() {
                 r.warning = warning;
+                r.parsed = Some(parsed);
             }
         }
         self.request_pictures();
-    }
-
-    /// The domains the user deals with: their own accounts', and those of the people they write
-    /// to or keep in an address book.
-    pub fn known_domains(&mut self) -> BTreeSet<String> {
-        let revision = self.contacts_revision();
-        if let Some((at, known)) = &self.known_domains
-            && *at == revision
-        {
-            return known.clone();
-        }
-        let mut known: BTreeSet<String> = self.accounts.iter().map(|a| quatrelle_model::lookalike::domain_of(&a.config.email)).collect();
-        known.extend(self.written_domains());
-        known.remove("");
-        // As the book is now (reading it may have changed it).
-        self.known_domains = Some((self.contacts_revision(), known.clone()));
-        known
-    }
-
-    /// What doesn't add up about a sender (nothing for the user's own messages).
-    pub fn sender_warning(&mut self, from: &EmailAddress) -> Option<quatrelle_model::lookalike::SenderWarning> {
-        if self.accounts.iter().any(|a| a.config.email.eq_ignore_ascii_case(from.email.trim())) {
-            return None;
-        }
-        let known = self.known_domains();
-        quatrelle_model::lookalike::check_sender(from, &known)
     }
 }
