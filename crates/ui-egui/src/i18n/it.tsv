@@ -1470,8 +1470,10 @@ month	May	maggio
 	Book this room	Prenota questa sala
 	Remove this room	Rimuovi questa sala
 	Join the Webex meeting:	Partecipa alla riunione Webex:
-	Webex personal room	Stanza personale Webex
-	Use my personal room, under Webex Meeting in an appointment's window, puts it in.	Usa la mia stanza personale: «Riunione Webex», nella finestra di un appuntamento, la inserisce.
+	Webex rooms	Stanze Webex
+	Under Webex Meeting in an appointment's window, each room puts its link and its lines in the meeting.	In «Riunione Webex», nella finestra di un appuntamento, ogni stanza inserisce il suo link e le sue righe nella riunione.
+	Meeting number, video address, dial-in numbers… copied into the notes	Numero riunione, indirizzo video, numeri di accesso… copiati nelle note
+	Add a room	Aggiungi una stanza
 	Webex	Webex
 	Schedule Webex meetings from an appointment's window. Register an integration at developer.webex.com, then sign in with it here.	Pianifica riunioni Webex dalla finestra di un appuntamento. Registra un’integrazione su developer.webex.com, poi accedi qui con essa.
 	Site	Sito

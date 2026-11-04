@@ -1467,8 +1467,10 @@ month	May	mei
 	Book this room	Deze ruimte boeken
 	Remove this room	Deze ruimte verwijderen
 	Join the Webex meeting:	Deelnemen aan de Webex-vergadering:
-	Webex personal room	Persoonlijke Webex-ruimte
-	Use my personal room, under Webex Meeting in an appointment's window, puts it in.	Mijn persoonlijke ruimte gebruiken: Webex-vergadering voegt die in, in het venster van een afspraak.
+	Webex rooms	Webex-ruimtes
+	Under Webex Meeting in an appointment's window, each room puts its link and its lines in the meeting.	Onder Webex-vergadering, in het venster van een afspraak, zet elke ruimte haar link en haar regels in de vergadering.
+	Meeting number, video address, dial-in numbers… copied into the notes	Vergadernummer, video-adres, inbelnummers… gekopieerd naar de notities
+	Add a room	Ruimte toevoegen
 	Webex	Webex
 	Schedule Webex meetings from an appointment's window. Register an integration at developer.webex.com, then sign in with it here.	Plan Webex-vergaderingen vanuit het venster van een afspraak. Registreer een integratie op developer.webex.com en meld u hier ermee aan.
 	Site	Site

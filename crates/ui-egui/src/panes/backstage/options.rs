@@ -10,6 +10,7 @@ use crate::BrowserProfile;
 
 mod assistant;
 mod webex;
+mod webex_rooms;
 
 pub(super) fn options(s: &Session, st: &UiState, ui: &mut Ui, acts: &mut Vec<Action>) {
     let t = st.tokens;
@@ -299,8 +300,8 @@ pub(super) fn options(s: &Session, st: &UiState, ui: &mut Ui, acts: &mut Vec<Act
         );
     });
 
-    // Online meetings: the Webex personal room the appointment window's Webex Meeting puts in,
-    // saved once it's typed (a link that isn't one says why and stays to be corrected).
+    // Online meetings: the Webex rooms the appointment window's Webex Meeting offers, each box
+    // saved once it's left (a link that isn't one says why and stays to be corrected).
     group(ui, tl!("Calendar"), None, &mut |ui| {
         let about = tl!("Also a cancellation once its meeting is removed from the calendar, and the meeting's earlier invitations.");
         setting(ui, true, tl!("Move meeting invitations to Deleted Items once answered"), Some(about), &mut |ui| {
@@ -312,21 +313,7 @@ pub(super) fn options(s: &Session, st: &UiState, ui: &mut Ui, acts: &mut Vec<Act
                 acts,
             );
         });
-        setting(
-            ui,
-            false,
-            tl!("Webex personal room"),
-            Some(tl!("Use my personal room, under Webex Meeting in an appointment's window, puts it in.")),
-            &mut |ui| {
-                let id = egui::Id::unique("options-webex-room");
-                let mut text: String = ui.data_mut(|d| d.get_temp::<String>(id)).unwrap_or_else(|| s.prefs.webex_room.clone());
-                let r = ui.add(egui::TextEdit::singleline(&mut text).hint_text("https://site.webex.com/meet/name").desired_width(320.0));
-                if r.lost_focus() && text.trim() != s.prefs.webex_room {
-                    acts.push(Action::Run("calendar.webexRoom", json!({"url": text.trim()})));
-                }
-                ui.data_mut(|d| d.insert_temp(id, text));
-            },
-        );
+        webex_rooms::webex_rooms(ui, s, &t, acts);
     });
 
     webex::webex(s, st, ui, acts);

@@ -1467,8 +1467,10 @@ month	May	مايو
 	Book this room	حجز هذه الغرفة
 	Remove this room	إزالة هذه الغرفة
 	Join the Webex meeting:	الانضمام إلى اجتماع Webex:
-	Webex personal room	غرفة Webex الشخصية
-	Use my personal room, under Webex Meeting in an appointment's window, puts it in.	استخدام غرفتي الشخصية: يضيفها «اجتماع Webex» في نافذة الموعد.
+	Webex rooms	غرف Webex
+	Under Webex Meeting in an appointment's window, each room puts its link and its lines in the meeting.	ضمن «اجتماع Webex» في نافذة الموعد، تضع كل غرفة رابطها وأسطرها في الاجتماع.
+	Meeting number, video address, dial-in numbers… copied into the notes	رقم الاجتماع، عنوان الفيديو، أرقام الاتصال… تُنسخ إلى الملاحظات
+	Add a room	إضافة غرفة
 	Webex	Webex
 	Schedule Webex meetings from an appointment's window. Register an integration at developer.webex.com, then sign in with it here.	جدولة اجتماعات Webex من نافذة الموعد. سجّل تكاملاً على developer.webex.com ثم سجّل الدخول به هنا.
 	Site	الموقع

@@ -1470,8 +1470,10 @@ month	May	5월
 	Book this room	이 회의실 예약
 	Remove this room	이 회의실 제거
 	Join the Webex meeting:	Webex 회의 참가:
-	Webex personal room	Webex 개인 회의실
-	Use my personal room, under Webex Meeting in an appointment's window, puts it in.	내 개인 룸 사용: 일정 창의 'Webex 회의'가 개인 룸을 넣습니다.
+	Webex rooms	Webex 룸
+	Under Webex Meeting in an appointment's window, each room puts its link and its lines in the meeting.	일정 창의 'Webex 회의'에서 각 룸이 링크와 줄을 회의에 넣습니다.
+	Meeting number, video address, dial-in numbers… copied into the notes	회의 번호, 비디오 주소, 전화 접속 번호… 메모에 복사됩니다
+	Add a room	룸 추가
 	Webex	Webex
 	Schedule Webex meetings from an appointment's window. Register an integration at developer.webex.com, then sign in with it here.	일정 창에서 Webex 회의를 예약합니다. developer.webex.com에서 통합을 등록한 다음 여기에서 그것으로 로그인하세요.
 	Site	사이트

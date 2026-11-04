@@ -105,25 +105,38 @@ fn asking(ui: &mut Ui, t: &Tokens, window: u64, rooms: &[WebexRoom]) -> Option<W
     taken
 }
 
-/// The room typed, once its name (trimmed, at most [`WEBEX_ROOM_NAME_MAX`] characters) and its link
-/// are right: a Webex personal room's that none of `rooms` has, ASCII case aside, with fewer rooms
-/// than are kept (the last one may have been added in Options meanwhile). Otherwise why not, or
-/// nothing to say while the link is empty or the name alone is missing.
-fn typed_room(name: &str, link: &str, rooms: &[WebexRoom]) -> Result<WebexRoom, Option<String>> {
+/// The room typed (in the menu, or in Options' add row), once its name (trimmed, at most
+/// [`WEBEX_ROOM_NAME_MAX`] characters) and its link are right: one none of `rooms` has
+/// ([`link_refused`]), with fewer rooms than are kept (the last one may have been added elsewhere
+/// meanwhile). Otherwise why not, or nothing to say while the link is empty or the name alone is
+/// missing.
+pub(crate) fn typed_room(name: &str, link: &str, rooms: &[WebexRoom]) -> Result<WebexRoom, Option<String>> {
     let (name, link) = (name.trim(), link.trim());
     if rooms.len() >= WEBEX_ROOMS_MAX {
         return Err(Some(tf!("At most {n} Webex rooms", n = WEBEX_ROOMS_MAX)));
     }
-    if !link.is_empty() && !is_webex_link(link) {
-        return Err(Some(tl!("Not a Webex personal room: https://<site>.webex.com/meet/<name>").to_string()));
-    }
-    if room_of(rooms, link).is_some() {
-        return Err(Some(tl!("Another room has this link").to_string()));
+    if !link.is_empty()
+        && let Some(why) = link_refused(link, rooms)
+    {
+        return Err(Some(why));
     }
     if link.is_empty() || name.is_empty() || name.chars().count() > WEBEX_ROOM_NAME_MAX {
         return Err(None);
     }
     Ok(WebexRoom { name: name.to_string(), url: link.to_string(), details: Vec::new() })
+}
+
+/// Why `link` (trimmed) can't be a room's: it isn't a Webex personal room's, or one of `others`
+/// has it, ASCII case aside.
+pub(crate) fn link_refused<'a>(link: &str, others: impl IntoIterator<Item = &'a WebexRoom>) -> Option<String> {
+    let link = link.trim();
+    if !is_webex_link(link) {
+        return Some(tl!("Not a Webex personal room: https://<site>.webex.com/meet/<name>").to_string());
+    }
+    if others.into_iter().any(|r| r.url.trim().eq_ignore_ascii_case(link)) {
+        return Some(tl!("Another room has this link").to_string());
+    }
+    None
 }
 
 /// A Webex room in the appointment, as Webex's own add-in puts one: at the end of the notes the
