@@ -6,8 +6,7 @@ volontairement sur l'apparence, pour ressembler davantage à Outlook et s'intég
 ajoute des fonctions Exchange. Ce fichier dit **quoi**, **pourquoi**, et **comment revenir en
 arrière** si besoin.
 
-Point de départ : le commit `7d16bb1` (« Docs: v0.15 »). Les modifications sont sur la branche
-`claude/practical-gauss-g3t65c`.
+Point de départ : le commit `7d16bb1` (« Docs: v0.15 »). Les modifications sont sur `main`.
 
 ## 1. Les icônes : Fluent UI System Icons de Microsoft
 
