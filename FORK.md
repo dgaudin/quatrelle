@@ -957,6 +957,73 @@ telles quelles sont au nom de leur auteur, les adaptations au nom du propriétai
   autorité interne, comme l'Exchange du propriétaire) ; la suite du relevé, à commencer par P1 (le
   lecteur .pst corrigé) puis R2.
 
+### État de la récupération : v0.32, dixième partie : le lecteur .pst corrigé (2026-11-05)
+
+Le lot P1 de `merge-tools/survey-v0.32.md` (décision n° 1 du propriétaire, 04/11), sur `main`.
+Les tests de l'origine portés d'abord et lancés un par un contre le lecteur d'alors, puis le
+changement de crate.
+
+- **D'où vient le crate** : `outlook-pst-rw` 1.2.14 (Dong Shin, MIT : le lecteur de Microsoft,
+  `outlook-pst`, avec un rédacteur ; sa bibliothèque garde le nom `outlook_pst`), construit depuis
+  [dgaudin/outlook-pst-rs](https://github.com/dgaudin/outlook-pst-rs), dépôt indépendant du
+  propriétaire (pas une fourche GitHub), copie de la branche `craft/rw-1.2.14` de la fourche de
+  MailCraft (ZIDAN44/outlook-pst-rs), à la révision `60cefd986b159d5f934d8291e4317dc96e0cd35b`,
+  celle qu'épingle l'origine. Son `PATCHES.md` liste les correctifs et dit comment monter de
+  version. Épinglé par révision dans `[patch.crates-io]` de `Cargo.toml` et de `fuzz/Cargo.toml`,
+  admis dans `allow-git` de `deny.toml` ; le dépôt de ZIDAN44 n'est nommé nulle part. Un seul
+  crate lit et écrit : `outlook-pst` 1.2.0 de crates.io et le renommage `pst_rw` disparaissent.
+- **Sondes**, contre `outlook-pst` 1.2.0 (le rédacteur `outlook-pst-rw` 1.2.14 de crates.io
+  fabrique les fichiers, abîmés ensuite octet par octet ; deux méthodes absentes de la 1.2.0,
+  `set_max_value_size` et `embedded_message`, remplacées le temps de la sonde par des méthodes
+  vides) :
+  - `a_data_tree_that_points_at_itself_is_an_error` (`2db969b0`) et
+    `a_btree_page_that_points_at_itself_is_an_error` (`e3b7c919`) : débordement de pile, « fatal
+    runtime error: stack overflow », SIGABRT en 0,3 s : tout le binaire de test meurt. Par
+    `pst::import` (test ajouté, `the_import_of_a_tree_that_points_at_itself_ends`) : pareil, le
+    `catch_unwind` de l'import n'y peut rien ; un tel fichier fermait Quatrelle.
+  - `a_data_tree_that_names_one_block_over_and_over_reads_no_more_than_it_declares`
+    (`e3b7c919`) : 24 528 octets rendus pour 20 000 déclarés. Poussé plus loin (test ajouté,
+    `a_data_tree_that_fans_out_over_one_block_is_held_to_its_size_and_the_limit` : un XXBLOCK de
+    1 021 entrées vers un XBLOCK de 1 021 entrées vers un bloc de 3 648 octets) : un fichier de
+    525 Ko fait monter le lecteur à 2,1 Go résidents, arrêté seulement par un `ulimit -v` de 3 Go
+    (« out of memory ») ; sans plafond il visait 3,8 Go (pas lancé : 5 Go libres sur le poste).
+  - `a_data_tree_reads_no_more_than_it_declares_or_is_allowed` (`2db969b0`) : la lecture entière
+    passe, la 1.2.0 n'a pas de plafond, et un XBLOCK qui déclare 100 octets en rend 20 000.
+    `a_store_or_name_map_value_is_held_to_the_file_limit` (`23d38bbb`) : lu sans plafond.
+  - Surprise : la 1.2.0 ne réserve rien d'après la taille déclarée (un XBLOCK qui déclare 4 Gio
+    rend ses 20 000 octets avec 21 Mo résidents). L'allocation de 4 Gio que décrit `23d38bbb`
+    venait de la première version corrigée de l'origine, qui lit jusqu'à la taille déclarée ; le
+    plafond reste nécessaire avec le lecteur corrigé, dont la limite par défaut est `u64::MAX`.
+  - `an_attached_message_and_an_empty_file_read` (`cd52356e`) : erreur `AttachmentMethodNotFound`
+    (l'enregistrement `PtypObject` arrêtait la lecture des propriétés de la pièce) ;
+    `an_attached_message_in_the_message_tree_reads_when_its_own_tree_is_damaged` (`e3b7c919`) :
+    « Missing PidTagAttachMethod » ; `the_import_keeps_an_attached_message_and_an_empty_file`
+    (`cd52356e`) : le message entre, sans son message joint ni son fichier vide, perdus en silence.
+  - Aucun test ne passait avant ; tous passent après, sous 25 Mo résidents chacun.
+- **Adapté** (au nom du propriétaire, en un commit pour le crate et un pour le fuzz) :
+  - `3bcf229e`, `44b511b6`, `0cb9196d` : le crate épinglé directement à la révision finale ;
+    `cargo xtask ci` vérifie que les deux manifestes l'épinglent pareil (`FORKED`, `patched`).
+    Les `use` de `pst.rs`, `pst_export.rs`, `pst_bench.rs` et des tests passent à `outlook_pst` ;
+    le rédacteur prend désormais `message_class` et `properties` (l'export écrit `IPM.Note` sans
+    propriété de plus, comme avant ; l'export fidèle est P4).
+  - `2db969b0`, `cd52356e`, `e3b7c919`, `23d38bbb` : `pst/tests/reader.rs` (état de `23d38bbb`,
+    plus les deux tests des sondes) ; la macro `reader!` de l'import pose un plafond de 256 Mo par
+    valeur (`MAX_VALUE`), pour les fichiers Unicode et ANSI. La part de `23d38bbb` dans
+    `pst_export.rs` n'a pas d'objet ici : l'export du fork écrit toujours un fichier neuf et ne
+    lit aucun fichier existant (le rédacteur relit le sien sous son propre plafond de 256 Mo).
+  - `bd464a49` : la cible de fuzz `pst` compte le crate construit depuis git
+    (`.cargo/git/checkouts/outlook-pst-rs-…`) comme code tiers, et prend la graine
+    `seeds/pst/attached-message` de l'origine.
+- **Écarté** : les épingles intermédiaires de l'origine (branche `craft/1.2.0`), la découpe de
+  `pst.rs` et le reste de l'import de l'origine (lots P2 et P4).
+- **Vérifié** : les dix tests du lecteur un par un, la suite de `quatrelle-net` (import et export
+  compris), `cargo xtask ci`, `cargo deny check` (index rafraîchi), et la cible de fuzz `pst`
+  vérifiée par `cargo check` dans `fuzz/` (`cargo-fuzz` n'est pas installé sur ce poste : pas de
+  `cargo +nightly fuzz build pst`).
+- **Reste à faire** : les fichiers d'un message joint (le lecteur les ouvre maintenant, l'import
+  ne les prend pas encore : P2), une passe de fuzz sur la cible `pst` avec la nouvelle graine,
+  puis R2.
+
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
 Quatre chantiers, chacun dans son commit, à la suite d'un audit de l'éditeur HTML.
