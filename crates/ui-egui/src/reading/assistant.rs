@@ -7,27 +7,38 @@ use quatrelle_engine::AssistKind;
 
 use super::*;
 
-/// Summarize, beside Forward, once a language model is set.
-pub(super) fn button(s: &Session, t: &Tokens, ui: &mut Ui, acts: &mut Vec<Action>) {
+/// Assistant, beside the reply group once a language model is set: Summarize, Suggest a reply
+/// and File it in its menu (greyed while a question is out); its icon alone when `compact`.
+pub(super) fn button(s: &Session, t: &Tokens, ui: &mut Ui, compact: bool, acts: &mut Vec<Action>) {
     if s.prefs.llm_url.trim().is_empty() {
         return;
     }
     let busy = s.assistant.as_ref().is_some_and(|a| a.answer.is_none());
-    let summary = widgets::pill_button(ui, Icon::ListBullet, "Summarize", t)
-        .on_hover_text(tl!("Ask the language model set in Options for the gist of this message"));
-    if summary.clicked() && !busy {
-        acts.push(Action::Run("assistant.summarize", json!({})));
-    }
-    let reply = widgets::pill_button(ui, Icon::Drafts, "Suggest a reply", t)
-        .on_hover_text(tl!("Ask the language model set in Options to write a reply to this message"));
-    if reply.clicked() && !busy {
-        acts.push(Action::Run("assistant.suggestReply", json!({})));
-    }
-    let filing = widgets::pill_button(ui, Icon::Move, "File it", t)
-        .on_hover_text(tl!("Ask the language model set in Options which of your folders and categories this message belongs in"));
-    if filing.clicked() && !busy {
-        acts.push(Action::Run("assistant.suggestFiling", json!({})));
-    }
+    let r = widgets::menu_pill(ui, Icon::Sparkle, "Assistant", t, true, compact);
+    egui::Popup::menu(&r).show(|ui| {
+        let asks = [
+            ("assistant.summarize", Icon::ListBullet, "Summarize", "Ask the language model set in Options for the gist of this message"),
+            ("assistant.suggestReply", Icon::Drafts, "Suggest a reply", "Ask the language model set in Options to write a reply to this message"),
+            (
+                "assistant.suggestFiling",
+                Icon::Move,
+                "File it",
+                "Ask the language model set in Options which of your folders and categories this message belongs in",
+            ),
+        ];
+        for (id, icon, label, tip) in asks {
+            if ui.add_enabled(!busy, egui::Button::new((widgets::menu_icon(Some(icon)), tl!(label)))).on_hover_text(tl!(tip)).clicked() {
+                acts.push(Action::Run(id, json!({})));
+                ui.close();
+            }
+        }
+    });
+}
+
+/// The room [`button`] takes beside the reply group, its gap with it: none without a language
+/// model.
+pub(super) fn width(ui: &Ui, s: &Session, compact: bool) -> f32 {
+    if s.prefs.llm_url.trim().is_empty() { 0.0 } else { widgets::menu_pill_width(ui, tl!("Assistant"), compact) + 6.0 }
 }
 
 /// The language model's answer about this message, or that it's working on it.

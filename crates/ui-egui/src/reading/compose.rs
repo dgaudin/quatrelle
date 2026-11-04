@@ -321,7 +321,7 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
                     acts.push(Action::Run("compose.discard", json!({})));
                 }
                 if input.assistant {
-                    let r = widgets::menu_pill(ui, Icon::Drafts, "Rewrite", &t, rich_edit::rewrite_on(c, written))
+                    let r = widgets::menu_pill(ui, Icon::Drafts, "Rewrite", &t, rich_edit::rewrite_on(c, written), false)
                         .on_hover_text(tl!("Have the language model set in Options rewrite what you wrote"));
                     let r = if written { r } else { r.on_disabled_hover_text(tl!("Type your text first")) };
                     egui::Popup::menu(&r).show(|ui| rich_edit::rewrite_choices(ui, acts));

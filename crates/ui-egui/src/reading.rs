@@ -285,13 +285,14 @@ fn message(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action
     let headed = viewing.is_none() && r.parsed.is_some();
     if let Some(p) = r.parsed.as_ref().filter(|_| headed) {
         let most = (ui.available_height() * 0.45).max(140.0);
+        let mut placed = false;
         egui::ScrollArea::vertical().auto_shrink([false, true]).max_height(most).id_salt(("reading-head", in_window, r.key.to_id())).show(ui, |ui| {
             egui::Frame::new().inner_margin(Margin { left: 24, right: 24, top: 18, bottom: 4 }).show(ui, |ui| {
-                header::header(s, t, ui, &r, p, &summary, acts);
+                placed = header::header(s, t, ui, &r, p, &summary, in_window, acts);
             });
         });
         egui::Frame::new().inner_margin(Margin { left: 24, right: 24, top: 0, bottom: 4 }).show(ui, |ui| {
-            header::actions(s, t, ui, &r, p, in_window, acts);
+            header::actions(s, t, ui, &r, p, in_window, placed, acts);
         });
     }
     let top = ui.cursor().top();

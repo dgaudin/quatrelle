@@ -137,6 +137,8 @@ pub enum Icon {
     /// A conversation ignored (its mail goes to Deleted Items), and the rules mail is sorted by.
     Ignore,
     MailRules,
+    /// The assistant (the language model set in Options).
+    Sparkle,
 }
 
 /// The Fluent UI icon drawn for each icon (its 20-pixel regular outline).
@@ -249,6 +251,7 @@ fn svg(icon: Icon) -> &'static str {
         Icon::Address => f!("mail"),
         Icon::Ignore => f!("mail_dismiss"),
         Icon::MailRules => f!("mail_settings"),
+        Icon::Sparkle => f!("sparkle"),
     }
 }
 
@@ -407,6 +410,7 @@ mod tests {
             Address,
             Ignore,
             MailRules,
+            Sparkle,
         ];
         for icon in all {
             let img = render(icon, 32).unwrap_or_else(|| panic!("{icon:?} didn't render"));

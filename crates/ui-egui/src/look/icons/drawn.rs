@@ -590,5 +590,11 @@ pub(super) fn drawn(p: &Painter, rect: Rect, icon: Icon, color: Color32) {
             pen.circle(12.5, 3.5, 2.5);
             pen.circle(12.5, 3.5, 0.8);
         }
+        Icon::Sparkle => {
+            // A four-pointed star, a small one beside it.
+            pen.closed(&[(7.0, 2.0), (8.5, 6.5), (13.0, 8.0), (8.5, 9.5), (7.0, 14.0), (5.5, 9.5), (1.0, 8.0), (5.5, 6.5)]);
+            pen.line(&[(12.5, 1.5), (12.5, 4.5)]);
+            pen.line(&[(11.0, 3.0), (14.0, 3.0)]);
+        }
     }
 }

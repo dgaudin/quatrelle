@@ -9,6 +9,9 @@ use crate::icons::{self, Icon};
 use crate::theme::{self, Tokens};
 use crate::{Action, Dialog};
 
+mod pills;
+pub use pills::*;
+
 /// A ribbon button: icon over nothing, label to the right.
 /// The ribbon's buttons as it's drawn: those from `icons_from` on are icons alone, their labels
 /// tooltips (it didn't fit the window); how wide each label is, and how far right they reached.
@@ -118,18 +121,6 @@ pub fn tool_button(ui: &mut Ui, icon: Icon, label: &str, t: &Tokens, enabled: bo
     icons::paint(ui.painter(), ir, icon, if enabled { t.accent } else { t.faint });
     ui.painter().galley_with_override_text_color(rect.min + vec2(30.0, (30.0 - galley.size().y) / 2.0), galley, color);
     resp
-}
-
-/// A "⋯" button in the style of [`pill_button`], for a menu of more actions.
-pub fn more_pill(ui: &mut Ui, tip: &str, t: &Tokens) -> Response {
-    let (rect, resp) = ui.allocate_exact_size(vec2(34.0, 28.0), Sense::click());
-    named(ui, &resp, tl!(tip), true, None);
-    let fill = if resp.hovered() { t.hover } else { t.surface };
-    ui.painter().rect(rect, 6.0, fill, Stroke::new(1.0, t.border), egui::StrokeKind::Inside);
-    for dx in [-6.0, 0.0, 6.0] {
-        ui.painter().circle_filled(rect.center() + vec2(dx, 0.0), 1.6, t.dim);
-    }
-    resp.on_hover_text(tl!(tip))
 }
 
 /// The filled "New mail" button.
@@ -279,50 +270,6 @@ pub fn one_line(ui: &Ui, text: &str, font: egui::FontId, color: Color32, width: 
     let mut job = egui::text::LayoutJob::simple_singleline(text.to_owned(), font, color);
     job.wrap = egui::text::TextWrapping { max_width: width.max(1.0), max_rows: 1, break_anywhere: true, overflow_character: Some('…') };
     ui.painter().layout_job(job)
-}
-
-/// An icon before a menu command's label, as Outlook's menus show theirs:
-/// `ui.button((widgets::menu_icon(Some(Icon::Reply)), tl!("Reply")))`, a submenu's
-/// `ui.menu_button((…, label), …)` too. Drawn in the label's colour (greyed with it); `None`
-/// keeps its room, so the labels line up.
-pub fn menu_icon(icon: Option<Icon>) -> egui::Atom<'static> {
-    egui::Atom::paint(vec2(16.0, 16.0), move |ui, args| {
-        if let Some(icon) = icon {
-            icons::paint(ui.painter(), args.rect, icon, args.fallback_text_color);
-        }
-    })
-}
-
-/// A [`pill_button`] that opens a menu (a ▾ after its label), grey and still when not `enabled`.
-pub fn menu_pill(ui: &mut Ui, icon: Icon, label: &str, t: &Tokens, enabled: bool) -> Response {
-    let label = tl!(label);
-    let ink = if enabled { t.text } else { t.dim };
-    let galley = ui.painter().layout_no_wrap(label.to_string(), theme::regular(13.0), ink);
-    let size = vec2(galley.size().x + 50.0, 28.0);
-    let (rect, resp) = ui.allocate_exact_size(size, if enabled { Sense::click() } else { Sense::hover() });
-    named(ui, &resp, label, enabled, None);
-    let fill = if enabled && resp.hovered() { t.hover } else { t.surface };
-    ui.painter().rect(rect, 6.0, fill, Stroke::new(1.0, t.border), egui::StrokeKind::Inside);
-    let tint = if enabled { t.accent } else { t.dim };
-    icons::paint(ui.painter(), egui::Rect::from_min_size(rect.min + vec2(9.0, 6.0), vec2(16.0, 16.0)), icon, tint);
-    ui.painter().galley_with_override_text_color(rect.min + vec2(29.0, (28.0 - galley.size().y) / 2.0), galley, ink);
-    let arrow = egui::Rect::from_min_size(rect.right_top() + vec2(-19.0, 9.0), vec2(10.0, 10.0));
-    icons::paint(ui.painter(), arrow, Icon::ChevronDown, t.dim);
-    resp
-}
-
-/// A labelled icon button for the reading pane's action row.
-pub fn pill_button(ui: &mut Ui, icon: Icon, label: &str, t: &Tokens) -> Response {
-    let label = tl!(label);
-    let galley = ui.painter().layout_no_wrap(label.to_string(), theme::regular(13.0), t.text);
-    let size = vec2(galley.size().x + 34.0, 28.0);
-    let (rect, resp) = ui.allocate_exact_size(size, Sense::click());
-    named(ui, &resp, label, true, None);
-    let fill = if resp.hovered() { t.hover } else { t.surface };
-    ui.painter().rect(rect, 6.0, fill, Stroke::new(1.0, t.border), egui::StrokeKind::Inside);
-    icons::paint(ui.painter(), egui::Rect::from_min_size(rect.min + vec2(9.0, 6.0), vec2(16.0, 16.0)), icon, t.accent);
-    ui.painter().galley_with_override_text_color(rect.min + vec2(29.0, (28.0 - galley.size().y) / 2.0), galley, t.text);
-    resp
 }
 
 /// How tall the ribbon's buttons are (a group's name goes under them).
