@@ -1490,6 +1490,15 @@ month	May	مايو
 	Webex Meeting options	خيارات اجتماع Webex
 	New Webex meeting	اجتماع Webex جديد
 	Use my personal room	استخدام غرفتي الشخصية
+	My personal room	غرفتي الشخصية
+	Add a room…	إضافة غرفة…
+	This appointment already has its Webex meeting	لهذا الموعد اجتماع Webex بالفعل
+	At most {n} Webex rooms	{n} غرفة Webex على الأكثر
+	New Webex room	غرفة Webex جديدة
+	Its link is on your Webex profile, under Personal Room. Its other lines are added in File › Options › Calendar.	رابطها موجود في ملفك الشخصي على Webex، ضمن الغرفة الشخصية. وتُضاف أسطرها الأخرى في ملف › خيارات › التقويم.
+	Room name	اسم الغرفة
+	Another room has this link	غرفة أخرى لها هذا الرابط بالفعل
+	Puts your Webex room in the meeting	يضيف غرفتك في Webex إلى الاجتماع
 	A meeting needs a title and a start	يحتاج الاجتماع إلى عنوان ووقت بدء
 	Creating the Webex meeting…	جارٍ إنشاء اجتماع Webex…
 	Meeting number: {number}	رقم الاجتماع: {number}

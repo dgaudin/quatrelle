@@ -1493,6 +1493,15 @@ month	May	5月
 	Webex Meeting options	Webex 會議選項
 	New Webex meeting	新增 Webex 會議
 	Use my personal room	使用我的個人會議室
+	My personal room	我的個人會議室
+	Add a room…	新增會議室…
+	This appointment already has its Webex meeting	此約會已有 Webex 會議
+	At most {n} Webex rooms	最多 {n} 個 Webex 會議室
+	New Webex room	新的 Webex 會議室
+	Its link is on your Webex profile, under Personal Room. Its other lines are added in File › Options › Calendar.	連結位於您的 Webex 個人資料的「個人會議室」中。其他行在「檔案 › 選項 › 行事曆」中新增。
+	Room name	會議室名稱
+	Another room has this link	另一個會議室已使用此連結
+	Puts your Webex room in the meeting	將您的 Webex 會議室插入會議
 	A meeting needs a title and a start	會議需要標題和開始時間
 	Creating the Webex meeting…	正在建立 Webex 會議…
 	Meeting number: {number}	會議號碼: {number}

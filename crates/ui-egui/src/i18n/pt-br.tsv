@@ -1494,6 +1494,15 @@ month	May	maio
 	Webex Meeting options	Opções de reunião do Webex
 	New Webex meeting	Nova reunião do Webex
 	Use my personal room	Usar minha sala pessoal
+	My personal room	Minha sala pessoal
+	Add a room…	Adicionar uma sala…
+	This appointment already has its Webex meeting	Este compromisso já tem sua reunião do Webex
+	At most {n} Webex rooms	No máximo {n} salas do Webex
+	New Webex room	Nova sala do Webex
+	Its link is on your Webex profile, under Personal Room. Its other lines are added in File › Options › Calendar.	O link está no seu perfil do Webex, em Sala pessoal. As outras linhas são adicionadas em Arquivo › Opções › Calendário.
+	Room name	Nome da sala
+	Another room has this link	Outra sala já tem este link
+	Puts your Webex room in the meeting	Insere sua sala do Webex na reunião
 	A meeting needs a title and a start	Uma reunião precisa de um título e de um início
 	Creating the Webex meeting…	Criando a reunião do Webex…
 	Meeting number: {number}	Número da reunião: {number}

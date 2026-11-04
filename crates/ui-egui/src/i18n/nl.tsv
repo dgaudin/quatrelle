@@ -1490,6 +1490,15 @@ month	May	mei
 	Webex Meeting options	Opties voor Webex-vergadering
 	New Webex meeting	Nieuwe Webex-vergadering
 	Use my personal room	Mijn persoonlijke ruimte gebruiken
+	My personal room	Mijn persoonlijke ruimte
+	Add a room…	Ruimte toevoegen…
+	This appointment already has its Webex meeting	Deze afspraak heeft al een eigen Webex-vergadering
+	At most {n} Webex rooms	Hoogstens {n} Webex-ruimtes
+	New Webex room	Nieuwe Webex-ruimte
+	Its link is on your Webex profile, under Personal Room. Its other lines are added in File › Options › Calendar.	De link staat in uw Webex-profiel, onder Persoonlijke ruimte. De andere regels voegt u toe in Bestand › Opties › Agenda.
+	Room name	Naam van de ruimte
+	Another room has this link	Een andere ruimte heeft deze link al
+	Puts your Webex room in the meeting	Voegt uw Webex-ruimte toe aan de vergadering
 	A meeting needs a title and a start	Een vergadering heeft een titel en een begin nodig
 	Creating the Webex meeting…	Webex-vergadering maken…
 	Meeting number: {number}	Vergadernummer: {number}

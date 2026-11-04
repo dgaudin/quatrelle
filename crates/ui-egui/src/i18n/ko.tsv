@@ -1493,6 +1493,15 @@ month	May	5월
 	Webex Meeting options	Webex 회의 옵션
 	New Webex meeting	새 Webex 회의
 	Use my personal room	내 개인 룸 사용
+	My personal room	내 개인 룸
+	Add a room…	룸 추가…
+	This appointment already has its Webex meeting	이 약속에는 이미 Webex 회의가 있습니다
+	At most {n} Webex rooms	Webex 룸은 최대 {n}개입니다
+	New Webex room	새 Webex 룸
+	Its link is on your Webex profile, under Personal Room. Its other lines are added in File › Options › Calendar.	링크는 Webex 프로필의 개인 회의실에 있습니다. 다른 줄은 파일 › 옵션 › 일정에서 추가합니다.
+	Room name	룸 이름
+	Another room has this link	다른 룸에 이미 이 링크가 있습니다
+	Puts your Webex room in the meeting	Webex 룸을 회의에 넣습니다
 	A meeting needs a title and a start	회의에는 제목과 시작 시간이 필요합니다
 	Creating the Webex meeting…	Webex 회의를 만드는 중…
 	Meeting number: {number}	회의 번호: {number}

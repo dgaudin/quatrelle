@@ -1,19 +1,129 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 Didier Gaudin
-//! A Webex room in an appointment (File › Options › Calendar keeps them): its block at the end of
-//! the notes, found again as Quatrelle wrote it, in whichever language the interface had then, to
-//! give way to another room's or a scheduled meeting's; and the conference it's saved with.
+//! A Webex room in an appointment (File › Options › Calendar keeps them): the rooms in the Webex
+//! Meeting button's menu, a new one asked for there; its block at the end of the notes, found
+//! again as Quatrelle wrote it, in whichever language the interface had then, to give way to
+//! another room's or a scheduled meeting's; and the conference it's saved with.
 
-use quatrelle_engine::WebexRoom;
-use quatrelle_engine::model::ical::Conference;
+use quatrelle_engine::model::ical::{Conference, is_webex_link};
+use quatrelle_engine::{WEBEX_ROOM_NAME_MAX, WEBEX_ROOMS_MAX, WebexRoom};
 
 use super::*;
+
+/// The rooms in the Webex Meeting button's open menu, each by its name (its link on hover), then
+/// Add a room…, which asks for a new one in the menu. Greyed while the appointment has its
+/// scheduled Webex meeting, Add a room… also once there are as many rooms as are kept. `true` once
+/// a room is in the appointment: the menu closes.
+pub(super) fn rooms_menu(ui: &mut Ui, t: &Tokens, f: &mut EventForm, s: &Session, acts: &mut Vec<Action>) -> bool {
+    let rooms = &s.prefs.webex_rooms;
+    if asking_now(ui, f.window) {
+        let Some(room) = asking(ui, t, f.window, rooms) else { return false };
+        acts.push(Action::Run("calendar.webexRoom", json!({"url": room.url, "name": room.name})));
+        // With the new one, for a block another room left in the notes to be found.
+        let mut all = rooms.clone();
+        all.push(room.clone());
+        add_room(f, &room, &all);
+        return true;
+    }
+    let free = f.webex_id.is_none();
+    let scheduled = tl!("This appointment already has its Webex meeting");
+    for room in rooms {
+        let name = room.name.trim();
+        let label = if name.is_empty() { tl!("My personal room") } else { name };
+        let r = ui.add_enabled(free, egui::Button::new(label)).on_hover_text(&room.url).on_disabled_hover_text(scheduled);
+        if r.clicked() {
+            add_room(f, room, rooms);
+            return true;
+        }
+    }
+    let full = rooms.len() >= WEBEX_ROOMS_MAX;
+    let r = ui.add_enabled(free && !full, egui::Button::new(tl!("Add a room…")));
+    let r = if free { r.on_disabled_hover_text(tf!("At most {n} Webex rooms", n = WEBEX_ROOMS_MAX)) } else { r.on_disabled_hover_text(scheduled) };
+    if r.clicked() {
+        ui.data_mut(|d| d.insert_temp(asking_id(f.window), true));
+    }
+    false
+}
+
+/// Where window `window`'s menu keeps that it's asking for a new room.
+fn asking_id(window: u64) -> egui::Id {
+    egui::Id::unique(("webex-room-asking", window))
+}
+
+/// Whether window `window`'s menu is asking for a new room (in place of the rooms).
+pub(super) fn asking_now(ui: &Ui, window: u64) -> bool {
+    ui.data(|d| d.get_temp(asking_id(window))).unwrap_or(false)
+}
+
+/// Window `window`'s menu closed: opened again, it lists the rooms (what was typed stays).
+pub(super) fn stop_asking(ui: &Ui, window: u64) {
+    ui.data_mut(|d| d.remove::<bool>(asking_id(window)));
+}
+
+/// A new room asked for in the menu of window `window`: its name and its link, given back once
+/// both are right ([`typed_room`]), a wrong link saying why under them.
+fn asking(ui: &mut Ui, t: &Tokens, window: u64, rooms: &[WebexRoom]) -> Option<WebexRoom> {
+    let id = egui::Id::unique(("webex-room-typed", window));
+    let (mut name, mut link): (String, String) = ui.data_mut(|d| d.get_temp(id)).unwrap_or_default();
+    ui.set_width(400.0);
+    ui.label(RichText::new(tl!("New Webex room")).font(theme::bold(13.0)).color(t.text));
+    ui.label(
+        RichText::new(tl!("Its link is on your Webex profile, under Personal Room. Its other lines are added in File › Options › Calendar."))
+            .color(t.dim)
+            .small(),
+    );
+    ui.add_space(4.0);
+    // In a menu a box keeps the focus on Enter: Enter while typing in either.
+    let enter_key = ui.input(|i| i.key_pressed(egui::Key::Enter));
+    let r = ui.add(egui::TextEdit::singleline(&mut name).hint_text(tl!("Room name")).char_limit(WEBEX_ROOM_NAME_MAX).desired_width(270.0));
+    if ui.memory(|m| m.focused().is_none()) {
+        r.request_focus();
+    }
+    let mut enter = enter_key && (r.has_focus() || r.lost_focus());
+    let mut taken = None;
+    let room = ui
+        .horizontal(|ui| {
+            let r = ui.add(egui::TextEdit::singleline(&mut link).hint_text("https://site.webex.com/meet/name").desired_width(270.0));
+            enter |= enter_key && (r.has_focus() || r.lost_focus());
+            let room = typed_room(&name, &link, rooms);
+            if ui.add_enabled(room.is_ok(), egui::Button::new(tl!("Add to the meeting"))).clicked() || enter {
+                taken = room.as_ref().ok().cloned();
+            }
+            room
+        })
+        .inner;
+    if let Err(Some(why)) = room {
+        ui.label(RichText::new(why).color(t.danger).small());
+    }
+    if taken.is_some() {
+        name.clear();
+        link.clear();
+    }
+    ui.data_mut(|d| d.insert_temp(id, (name, link)));
+    taken
+}
+
+/// The room typed, once its name (trimmed, at most [`WEBEX_ROOM_NAME_MAX`] characters) and its link
+/// are right: a Webex personal room's that none of `rooms` has, ASCII case aside. Otherwise why the
+/// link is wrong, or nothing to say while it's empty or the name alone is missing.
+fn typed_room(name: &str, link: &str, rooms: &[WebexRoom]) -> Result<WebexRoom, Option<&'static str>> {
+    let (name, link) = (name.trim(), link.trim());
+    if !link.is_empty() && !is_webex_link(link) {
+        return Err(Some(tl!("Not a Webex personal room: https://<site>.webex.com/meet/<name>")));
+    }
+    if room_of(rooms, link).is_some() {
+        return Err(Some(tl!("Another room has this link")));
+    }
+    if link.is_empty() || name.is_empty() || name.chars().count() > WEBEX_ROOM_NAME_MAX {
+        return Err(None);
+    }
+    Ok(WebexRoom { name: name.to_string(), url: link.to_string(), details: Vec::new() })
+}
 
 /// A Webex room in the appointment, as Webex's own add-in puts one: at the end of the notes the
 /// line before the link, the link and the room's lines, in place of any room's block there; its
 /// link as the place when that's empty or another room's (one typed is kept); Join; its
 /// conference. Nothing while the appointment has its scheduled Webex meeting.
-#[cfg_attr(not(test), expect(dead_code, reason = "the Webex Meeting button's menu, next, adds its rooms with it"))]
 pub(crate) fn add_room(f: &mut EventForm, room: &WebexRoom, rooms: &[WebexRoom]) {
     if f.webex_id.is_some() {
         return;
@@ -130,6 +240,43 @@ mod tests {
 
     fn strings(features: &[&str]) -> Vec<String> {
         features.iter().map(|f| f.to_string()).collect()
+    }
+
+    /// A room goes in as the place (one typed is kept) and at the end of the notes, once however
+    /// often it's chosen, and Join then shows.
+    #[test]
+    fn webex_meeting_puts_the_room_in_once() {
+        let room = WebexRoom { name: String::new(), url: ANA.into(), details: Vec::new() };
+        let rooms = std::slice::from_ref(&room);
+        let mut f = EventForm::default();
+        add_room(&mut f, &room, rooms);
+        assert_eq!((f.location.as_str(), f.join.as_deref()), (ANA, Some(ANA)));
+        assert!(f.description.starts_with(tl!("Join the Webex meeting:")) && f.description.ends_with(&format!("{ANA}\n")), "{:?}", f.description);
+        let mut f = EventForm { location: "Salle B".into(), description: "Ordre du jour\n".into(), ..Default::default() };
+        add_room(&mut f, &room, rooms);
+        add_room(&mut f, &room, rooms);
+        assert_eq!(f.location, "Salle B");
+        assert!(f.description.starts_with("Ordre du jour\n\n"), "{:?}", f.description);
+        assert_eq!(f.description.matches(ANA).count(), 1);
+        let e = quatrelle_engine::model::ical::CalEvent { location: f.location.clone(), description: f.description.clone(), ..Default::default() };
+        assert_eq!(e.join_link().as_deref(), Some(ANA), "what Join finds once it's saved");
+    }
+
+    /// A room typed in the menu needs a name, at most as long as a room's, and a personal room's
+    /// link no room has, ASCII case aside; both are taken trimmed.
+    #[test]
+    fn a_room_typed_needs_a_name_and_a_link_of_its_own() {
+        let rooms = [team()];
+        let taken = typed_room("  Ana ", &format!(" {ANA} "), &rooms);
+        assert_eq!(taken, Ok(WebexRoom { name: "Ana".into(), url: ANA.into(), details: Vec::new() }));
+        let long = "é".repeat(WEBEX_ROOM_NAME_MAX);
+        assert!(typed_room(&long, ANA, &rooms).is_ok());
+        for (name, link) in [("", ANA), ("  ", ANA), ("Ana", ""), (&format!("{long}x"), ANA)] {
+            assert_eq!(typed_room(name, link, &rooms), Err(None), "{name:?} {link:?}");
+        }
+        let wrong = Err(Some("Not a Webex personal room: https://<site>.webex.com/meet/<name>"));
+        assert_eq!(typed_room("", "https://evil.example/meet/ana", &rooms), wrong);
+        assert_eq!(typed_room("Ana", "HTTPS://Acme.webex.com/meet/TEAM", &rooms), Err(Some("Another room has this link")));
     }
 
     /// The block goes whichever catalog's language its label was written in, with the blank line

@@ -1,15 +1,141 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 Didier Gaudin
-//! UI tests: the conference an appointment is saved with, kept by its window.
+//! UI tests: the Webex rooms in the Webex Meeting button's menu, and the conference an appointment
+//! is saved with, kept by its window.
 
 use quatrelle_engine::WebexRoom;
 use quatrelle_engine::model::ical::Conference;
 
+use super::webex::{button, open_webex_menu};
 use super::*;
 use crate::pim_dialogs::EventForm;
 use crate::pim_dialogs::webex_rooms::add_room;
 
 const JITSI: &str = "https://jitsi.example.org/team";
+const ANA: &str = "https://acme.webex.com/meet/ana";
+const TEAM: &str = "https://acme.webex.com/meet/team";
+const SIZE: egui::Vec2 = egui::vec2(1280.0, 900.0);
+
+/// The room carried over from 1.0, unnamed.
+fn ana() -> WebexRoom {
+    WebexRoom { name: String::new(), url: ANA.into(), details: Vec::new() }
+}
+
+fn team() -> WebexRoom {
+    WebexRoom { name: "Équipe".into(), url: TEAM.into(), details: vec!["N° 456".into()] }
+}
+
+/// A titled appointment in its window, with `rooms` in the settings.
+fn with_rooms(name: &str, rooms: Vec<WebexRoom>) -> (MailApp, std::path::PathBuf, egui::Context) {
+    let (mut a, dir) = app(name);
+    let ctx = egui::Context::default();
+    a.session.prefs.webex_rooms = rooms;
+    frame_sized(&ctx, &mut a, vec![], SIZE);
+    a.ui.dialog = Some(Dialog::new_event(&a.session, Some(NOW + 2 * 3600)));
+    frame_sized(&ctx, &mut a, vec![], SIZE);
+    a.ui.event_windows[0].1.summary = "Point".into();
+    (a, dir, ctx)
+}
+
+/// The menu lists the scheduled meeting, then each room by its name (the unnamed one as the
+/// personal room), then Add a room…; a room clicked is the appointment's place, Join and
+/// conference, with its lines in the notes, and the menu closes.
+#[test]
+fn the_menu_lists_the_rooms_by_name() {
+    let (mut a, dir, ctx) = with_rooms("webex-rooms-menu", vec![ana(), team()]);
+    open_webex_menu(&ctx, &mut a, SIZE);
+    let shapes = frame_shapes(&ctx, &mut a, vec![], SIZE);
+    for label in ["New Webex meeting", "My personal room", "Équipe", "Add a room…"] {
+        assert!(text_at(&shapes, label).is_some(), "{label}");
+    }
+    let at = settled_text_at(&ctx, &mut a, "Équipe", SIZE).expect("its line");
+    click_at(&ctx, &mut a, at, 1, SIZE);
+    let f = &a.ui.event_windows[0].1;
+    assert_eq!((f.location.as_str(), f.join.as_deref()), (TEAM, Some(TEAM)));
+    assert_eq!(f.conference.as_ref().map(|c| c.url.as_str()), Some(TEAM));
+    assert!(f.description.ends_with(&format!("{TEAM}\nN° 456\n")), "{:?}", f.description);
+    assert!(text_at(&frame_shapes(&ctx, &mut a, vec![], SIZE), "Add a room…").is_none(), "the menu closed");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// While the appointment has its scheduled Webex meeting, the rooms and Add a room… are greyed: a
+/// click changes nothing. With as many rooms as are kept, Add a room… alone is.
+#[test]
+fn rooms_are_greyed_with_a_scheduled_meeting() {
+    let (mut a, dir, ctx) = with_rooms("webex-rooms-greyed", vec![ana(), team()]);
+    a.ui.event_windows[0].1.webex_id = Some("m1".into());
+    a.ui.event_windows[0].1.description = "Ordre du jour".into();
+    open_webex_menu(&ctx, &mut a, SIZE);
+    for label in ["My personal room", "Équipe", "Add a room…"] {
+        assert_eq!(button(&ctx, &mut a, label).map(|b| b.1), Some(false), "{label}");
+    }
+    for label in ["Équipe", "Add a room…"] {
+        let at = settled_text_at(&ctx, &mut a, label, SIZE).expect(label);
+        click_at(&ctx, &mut a, at, 1, SIZE);
+        let f = &a.ui.event_windows[0].1;
+        assert_eq!((f.description.as_str(), f.conference.as_ref(), f.join.as_deref()), ("Ordre du jour", None, None), "{label}");
+        assert!(text_at(&frame_shapes(&ctx, &mut a, vec![], SIZE), "New Webex room").is_none(), "no room asked for");
+    }
+    // As many rooms as are kept: they can be chosen, but none added.
+    a.ui.event_windows[0].1.webex_id = None;
+    a.session.prefs.webex_rooms = (0..quatrelle_engine::WEBEX_ROOMS_MAX)
+        .map(|i| WebexRoom { name: format!("Salle {i}"), url: format!("https://acme.webex.com/meet/s{i}"), details: Vec::new() })
+        .collect();
+    frame_sized(&ctx, &mut a, vec![], SIZE);
+    assert_eq!(button(&ctx, &mut a, "Salle 0").map(|b| b.1), Some(true));
+    assert_eq!(button(&ctx, &mut a, "Add a room…").map(|b| b.1), Some(false));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Add a room… asks for its name and its link under the button (in the appointment's window, not
+/// in Options behind it): nothing goes in until both are right, a link that isn't a personal
+/// room's or that another room has saying so; then the room is kept and in the appointment.
+#[test]
+fn add_a_room_asks_its_name_and_link() {
+    let (mut a, dir, ctx) = with_rooms("webex-rooms-add", Vec::new());
+    open_webex_menu(&ctx, &mut a, SIZE);
+    let at = settled_text_at(&ctx, &mut a, "Add a room…", SIZE).expect("the menu's entry");
+    click_at(&ctx, &mut a, at, 1, SIZE);
+    let shapes = frame_shapes(&ctx, &mut a, vec![], SIZE);
+    assert!(text_at(&shapes, "New Webex room").is_some(), "asked for under the button");
+    assert!(a.ui.backstage.is_none(), "not in Options");
+    let typed = egui::Id::unique(("webex-room-typed", a.ui.event_windows[0].0));
+    let enter = |ctx: &egui::Context, a: &mut MailApp| {
+        frame_sized(ctx, a, vec![key(Key::Enter, Modifiers::NONE)], SIZE);
+        frame_sized(ctx, a, vec![], SIZE);
+    };
+    // A link with no name.
+    ctx.data_mut(|d| d.insert_temp(typed, (String::new(), ANA.to_string())));
+    enter(&ctx, &mut a);
+    assert!(a.session.prefs.webex_rooms.is_empty() && a.ui.event_windows[0].1.join.is_none(), "a room needs a name");
+    // The name typed (the name's box has the focus), with a link that isn't a personal room's.
+    ctx.data_mut(|d| d.insert_temp(typed, (String::new(), "https://evil.example/meet/ana".to_string())));
+    frame_sized(&ctx, &mut a, vec![Event::Text("Ana".into())], SIZE);
+    assert_eq!(ctx.data_mut(|d| d.get_temp::<(String, String)>(typed)).map(|t| t.0).as_deref(), Some("Ana"));
+    let shapes = frame_shapes(&ctx, &mut a, vec![], SIZE);
+    assert!(text_at(&shapes, "Not a Webex personal room: https://<site>.webex.com/meet/<name>").is_some());
+    enter(&ctx, &mut a);
+    assert!(a.session.prefs.webex_rooms.is_empty() && a.ui.event_windows[0].1.join.is_none(), "refused");
+    // A link another room has, whatever its case.
+    a.session.prefs.webex_rooms = vec![team()];
+    ctx.data_mut(|d| d.insert_temp(typed, ("Ana".to_string(), "HTTPS://acme.webex.com/meet/TEAM".to_string())));
+    let shapes = frame_shapes(&ctx, &mut a, vec![], SIZE);
+    assert!(text_at(&shapes, "Another room has this link").is_some());
+    enter(&ctx, &mut a);
+    assert!(a.session.prefs.webex_rooms == [team()] && a.ui.event_windows[0].1.join.is_none(), "refused");
+    // Right this time.
+    a.session.prefs.webex_rooms.clear();
+    let shapes = frame_shapes(&ctx, &mut a, vec![], SIZE);
+    assert!(text_at(&shapes, "New Webex room").is_some(), "still asked");
+    ctx.data_mut(|d| d.insert_temp(typed, (" Ana ".to_string(), ANA.to_string())));
+    enter(&ctx, &mut a);
+    assert_eq!(a.session.prefs.webex_rooms, [WebexRoom { name: "Ana".into(), url: ANA.into(), details: Vec::new() }], "kept");
+    let f = &a.ui.event_windows[0].1;
+    assert_eq!((f.join.as_deref(), f.location.as_str()), (Some(ANA), ANA));
+    assert_eq!(f.description, format!("Join the Webex meeting:\n{ANA}\n"));
+    assert_eq!(f.conference.as_ref().map(|c| c.url.as_str()), Some(ANA));
+    let _ = std::fs::remove_dir_all(dir);
+}
 
 /// The event `uid`'s conference, as stored.
 fn stored(a: &MailApp, uid: &str) -> Option<Conference> {

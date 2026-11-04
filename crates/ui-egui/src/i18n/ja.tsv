@@ -1491,6 +1491,15 @@ month	May	5月
 	Webex Meeting options	Webex 会議のオプション
 	New Webex meeting	新しい Webex 会議
 	Use my personal room	個人ルームを使う
+	My personal room	個人ルーム
+	Add a room…	ルームを追加…
+	This appointment already has its Webex meeting	この予定には既に Webex 会議があります
+	At most {n} Webex rooms	Webex ルームは最大 {n} 個です
+	New Webex room	新しい Webex ルーム
+	Its link is on your Webex profile, under Personal Room. Its other lines are added in File › Options › Calendar.	リンクは Webex のプロフィールの [パーソナル会議室] にあります。その他の行は [ファイル] › [オプション] › [予定表] で追加します。
+	Room name	ルーム名
+	Another room has this link	このリンクは別のルームで使われています
+	Puts your Webex room in the meeting	Webex ルームを会議に挿入します
 	A meeting needs a title and a start	会議にはタイトルと開始日時が必要です
 	Creating the Webex meeting…	Webex 会議を作成しています…
 	Meeting number: {number}	会議番号: {number}
