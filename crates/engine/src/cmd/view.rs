@@ -130,16 +130,22 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             Ok(json!({"on": s.prefs.reminders_on_top}))
         })
         .params(r#"{"on"?: bool} (the Reminders window in a window of its own, over every other)"#),
-        CommandSpec::new("calendar.webexRoom", "Webex personal room", "File › Options › Calendar", |s, v| {
-            let url = p::str(v, "url").unwrap_or_default().trim();
-            if !url.is_empty() && !quatrelle_model::ical::is_webex_link(url) {
-                let shown: String = url.chars().take(80).collect();
-                return Err(CmdError::Params(format!("`{shown}` is not a Webex personal room (https://<site>.webex.com/meet/<name>)")));
-            }
-            s.prefs.webex_room = url.to_string();
-            Ok(json!({"url": s.prefs.webex_room}))
+        CommandSpec::new("calendar.webexRoom", "Webex rooms", "File › Options › Calendar", |s, v| {
+            let url = p::req_str(v, "url")?;
+            let text = |k: &str| match v.get(k) {
+                None | Some(Value::Null) => Ok(None),
+                Some(Value::String(x)) => Ok(Some(x.as_str())),
+                Some(_) => Err(CmdError::Params(format!("`{k}` is a string"))),
+            };
+            let remove = match v.get("remove") {
+                None | Some(Value::Null) => false,
+                Some(Value::Bool(b)) => *b,
+                Some(_) => return Err(CmdError::Params("`remove` is true or false".into())),
+            };
+            s.prefs.set_webex_room(url, text("was")?, text("name")?, room_lines(v)?, remove)?;
+            Ok(json!({"rooms": s.prefs.webex_rooms}))
         })
-        .params(r#"{"url": "https://<site>.webex.com/meet/<name>" | "" (none)} (what the appointment window's Webex Meeting button puts in)"#),
+        .params(r#"{"url": "https://<site>.webex.com/meet/<name>", "was"?: string (the link it had: that room's link changes, in its place), "name"?: string (required for a new room; at most 80 characters), "details"?: string ("\n" between its lines) | [string] (at most 20 lines of 200 characters, copied into the notes after the link), "remove"?: bool (takes the room with that link out)} → {"rooms": [{"name", "url", "details"}]} (adds a room at the end, changes the one with that link, or removes it; the rooms the appointment window's Webex Meeting button offers)"#),
         CommandSpec::new("assistant.settings", "Assistant", "File › Options › Assistant", |s, v| {
             s.set_assistant(p::str(v, "url").unwrap_or_default(), p::str(v, "model").unwrap_or_default(), p::str(v, "key"))
         })
@@ -338,6 +344,22 @@ pub(super) fn commands() -> Vec<CommandSpec> {
         })
         .params(r#"{"address": string, "on"?: bool}"#),
     ]
+}
+
+/// A Webex room's lines given (`details`): a string, `\n` between them, or a list of strings; the
+/// blank ones left out and no more taken than one past the most (enough to refuse), whatever
+/// their number.
+fn room_lines(v: &Value) -> Result<Option<Vec<String>>, CmdError> {
+    fn keep<'a>(lines: impl Iterator<Item = &'a str>) -> Vec<String> {
+        let blank = |l: &str| l.chars().all(|c| c.is_control() || c.is_whitespace());
+        lines.filter(|l| !blank(l)).take(crate::WEBEX_ROOM_LINES_MAX + 1).map(str::to_string).collect()
+    }
+    match v.get("details") {
+        None => Ok(None),
+        Some(Value::String(x)) => Ok(Some(keep(x.split('\n')))),
+        Some(Value::Array(a)) if a.iter().all(Value::is_string) => Ok(Some(keep(a.iter().filter_map(Value::as_str)))),
+        Some(_) => Err(CmdError::Params("`details` is the room's lines: a string (\"\\n\" between them) or a list of strings".into())),
+    }
 }
 
 /// The External tag (issue #29): on or off, and the organisation's domains.

@@ -5,6 +5,9 @@
 
 use super::*;
 
+mod webex_rooms;
+pub use webex_rooms::*;
+
 /// Mail kept on this computer by default: what came in the last two years (the owner's choice;
 /// Outlook offers the same range).
 pub const KEEP_DAYS: u32 = 730;
@@ -204,9 +207,13 @@ pub struct Prefs {
     /// mail services left out).
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub org_domains: Vec<String>,
-    /// The Webex personal room the appointment window's Webex Meeting button puts in
-    /// (`https://<site>.webex.com/meet/<name>`); empty until it's set in Options.
-    #[serde(skip_serializing_if = "String::is_empty")]
+    /// The Webex rooms the appointment window's Webex Meeting button offers, in order
+    /// ([`WebexRoom`], at most [`WEBEX_ROOMS_MAX`]); none until one is added.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub webex_rooms: Vec<WebexRoom>,
+    /// The single room of 1.0, carried over ([`Prefs::carry_over_webex_rooms`]): read, never
+    /// written again.
+    #[serde(skip_serializing)]
     pub webex_room: String,
     /// The Webex site meetings are made on (`<org>.webex.com`), and the integration's client id
     /// (its client secret and the sign-in are in the keychain).
@@ -284,6 +291,7 @@ impl Default for Prefs {
             sender_addresses: SenderAddresses::Never,
             external_tag: false,
             org_domains: Vec::new(),
+            webex_rooms: Vec::new(),
             webex_room: String::new(),
             webex_site: String::new(),
             webex_client_id: String::new(),

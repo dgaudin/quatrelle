@@ -11,8 +11,8 @@ use crate::WebexAsk;
 
 /// The creation the tests answer.
 const ASK: u64 = 7;
-const OLD_LINK: &str = "https://acme.webex.com/acme/j.php?MTID=old";
-const NEW_LINK: &str = "https://acme.webex.com/acme/j.php?MTID=new";
+pub(super) const OLD_LINK: &str = "https://acme.webex.com/acme/j.php?MTID=old";
+pub(super) const NEW_LINK: &str = "https://acme.webex.com/acme/j.php?MTID=new";
 const ZOOM: &str = "https://us02web.zoom.us/j/1234567890";
 const MEET: &str = "https://meet.google.com/abc-defg-hij";
 const TEAMS: &str = "https://teams.microsoft.com/l/meetup-join/19%3ameeting_abc/0";
@@ -22,7 +22,7 @@ fn fields() -> WebexFields {
 }
 
 /// The meeting `m1`, as Webex answers it.
-fn meeting(link: &str) -> WebexMeeting {
+pub(super) fn meeting(link: &str) -> WebexMeeting {
     WebexMeeting {
         id: "m1".into(),
         web_link: link.into(),
@@ -37,7 +37,7 @@ fn asked(s: &mut Session, quiet: bool, abandoned: bool) {
 }
 
 /// A meeting with a guest, its Webex meeting `m1`; its uid.
-fn appointment(s: &mut Session, location: &str, notes: &str) -> String {
+pub(super) fn appointment(s: &mut Session, location: &str, notes: &str) -> String {
     let made = s.run(
         "event.create",
         &json!({"summary": "Trailer review", "start": "2026-10-21T15:00", "location": location, "description": notes,

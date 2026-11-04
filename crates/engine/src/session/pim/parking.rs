@@ -104,10 +104,11 @@ impl Session {
     fn unpark(&mut self, store: &Store, account: &str) {
         self.parked.remove(account);
         let read = self.read_aside.remove(account).unwrap_or_default();
-        let doc: Vec<StoredEvent> = store.load_account_doc(account, PARKED_DOC).unwrap_or_default();
+        let mut doc: Vec<StoredEvent> = store.load_account_doc(account, PARKED_DOC).unwrap_or_default();
         if doc.is_empty() {
             return;
         }
+        doc.iter_mut().for_each(|e| e.event.adopt_kept_conference());
         let p = self.pim_mut(account);
         let kept: HashSet<(String, String, Option<i64>)> =
             p.events.iter().map(|e| (e.calendar.clone(), e.event.uid.clone(), e.event.recurrence_id)).collect();

@@ -174,6 +174,7 @@ impl Session {
                     && let Ok(mut p) = store.load_account_doc::<quatrelle_model::pim::Pim>(account, quatrelle_model::pim::PIM_DOC)
                 {
                     p.ensure_defaults();
+                    p.events.iter_mut().for_each(|e| e.event.adopt_kept_conference());
                     self.pim.insert(account.to_string(), p);
                     self.forget_contacts();
                     self.pim_revision = self.pim_revision.wrapping_add(1);
