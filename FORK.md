@@ -959,3 +959,26 @@ centrés ou alignés à droite le sont sur toutes leurs lignes ; ⌘⇧Z refait 
 d'effacer la mise en forme ; Couper et Copier mettent aussi l'HTML dans le presse-papiers
 (`set_clipboard_html_writer`, arboard) ; le HTML collé garde ses images incorporées (`data:`)
 et celles que le message possède déjà (`cid:`), en laissant les autres.
+
+## 8. Le volet de lecture rapproché d'Outlook (2026-11-04, pour la 1.2)
+
+Demandé par le propriétaire en regardant Outlook à côté de Quatrelle ; propre à ce fork.
+
+- **L'en-tête** (`reading/header.rs`) : Répondre | Répondre à tous | Transférer forment un seul
+  groupe (`widgets::button_group`), suivi d'Assistant (Résumer, Proposer une réponse, Classer dans
+  son menu ; icône Fluent `sparkle`) et de ⋯ (Imprimer, Enregistrer en PDF, Enregistrer comme
+  e-mail, Répondre par une réunion, Transférer en pièce jointe, En-têtes du message). Dans un volet
+  assez large, ils sont à droite de l'expéditeur, la date dessous ; sinon sur une ligne sous
+  l'en-tête, hors de son défilement, en icônes seules si même cette ligne est trop étroite. Les
+  boutons du volet de lecture sont dans `look/widgets/pills.rs`.
+- **Le menu clic droit d'un courrier** (`panes/list.rs`, `panes/organize.rs`) : une icône devant
+  chaque commande (`widgets::menu_icon`, un atom de dessin d'egui), deux icônes Fluent ajoutées
+  (`mail_dismiss` pour Ignorer, `mail_settings` pour Créer une règle).
+- **Reformuler** : à côté d'Abandonner sur une réponse écrite dans le volet, dans l'onglet Message
+  d'une fenêtre, et toujours dans Révision ; grisé tant que rien n'est tapé au-dessus de la
+  signature et du message cité (`Session::has_written_text`). Corrigé en route : la fin du texte
+  tapé cherchait la ligne `From:` en anglais seulement ; en français (« De : »), une réponse sans
+  signature envoyait aussi le message cité au modèle.
+- **La ligne entre les échanges** : la bordure du haut qu'Outlook met au-dessus de chaque message
+  cité, et les `<hr>`, sont repérées avant la conversion du HTML (`html/rules.rs`) et dessinées en
+  travers du message (`Span::rule`).
