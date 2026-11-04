@@ -134,6 +134,9 @@ pub enum Icon {
     PublicFolder,
     Group365,
     Address,
+    /// A conversation ignored (its mail goes to Deleted Items), and the rules mail is sorted by.
+    Ignore,
+    MailRules,
 }
 
 /// The Fluent UI icon drawn for each icon (its 20-pixel regular outline).
@@ -244,6 +247,8 @@ fn svg(icon: Icon) -> &'static str {
         Icon::PublicFolder => f!("folder_mail"),
         Icon::Group365 => f!("people_community"),
         Icon::Address => f!("mail"),
+        Icon::Ignore => f!("mail_dismiss"),
+        Icon::MailRules => f!("mail_settings"),
     }
 }
 
@@ -400,6 +405,8 @@ mod tests {
             PublicFolder,
             Group365,
             Address,
+            Ignore,
+            MailRules,
         ];
         for icon in all {
             let img = render(icon, 32).unwrap_or_else(|| panic!("{icon:?} didn't render"));

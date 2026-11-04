@@ -281,6 +281,18 @@ pub fn one_line(ui: &Ui, text: &str, font: egui::FontId, color: Color32, width: 
     ui.painter().layout_job(job)
 }
 
+/// An icon before a menu command's label, as Outlook's menus show theirs:
+/// `ui.button((widgets::menu_icon(Some(Icon::Reply)), tl!("Reply")))`, a submenu's
+/// `ui.menu_button((…, label), …)` too. Drawn in the label's colour (greyed with it); `None`
+/// keeps its room, so the labels line up.
+pub fn menu_icon(icon: Option<Icon>) -> egui::Atom<'static> {
+    egui::Atom::paint(vec2(16.0, 16.0), move |ui, args| {
+        if let Some(icon) = icon {
+            icons::paint(ui.painter(), args.rect, icon, args.fallback_text_color);
+        }
+    })
+}
+
 /// A labelled icon button for the reading pane's action row.
 pub fn pill_button(ui: &mut Ui, icon: Icon, label: &str, t: &Tokens) -> Response {
     let label = tl!(label);

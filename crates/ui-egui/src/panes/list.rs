@@ -680,37 +680,39 @@ fn row_input(
         if !s.selection.contains(&key) {
             acts.push(Action::Run("list.select", json!({"key": key.to_id()})));
         }
-        let item = |ui: &mut Ui, acts: &mut Vec<Action>, label: &str, act: Action| {
-            if ui.button(label).clicked() {
+        // Each command with its icon before it, as Outlook's menu shows them.
+        let item = |ui: &mut Ui, acts: &mut Vec<Action>, icon: Icon, label: &str, act: Action| {
+            if ui.button((widgets::menu_icon(Some(icon)), label)).clicked() {
                 acts.push(act);
                 ui.close();
             }
         };
-        item(ui, acts, tl!("Open in new window"), Action::Run("message.popOut", json!({"key": key.to_id()})));
+        item(ui, acts, Icon::PopOut, tl!("Open in new window"), Action::Run("message.popOut", json!({"key": key.to_id()})));
         ui.separator();
-        item(ui, acts, tl!("Reply"), Action::Run("mail.reply", json!({})));
-        item(ui, acts, tl!("Reply all"), Action::Run("mail.replyAll", json!({})));
-        item(ui, acts, tl!("Forward"), Action::Run("mail.forward", json!({})));
-        item(ui, acts, tl!("Quick print"), Action::Print);
-        item(ui, acts, tl!("Save as…"), Action::SaveSelected);
+        item(ui, acts, Icon::Reply, tl!("Reply"), Action::Run("mail.reply", json!({})));
+        item(ui, acts, Icon::ReplyAll, tl!("Reply all"), Action::Run("mail.replyAll", json!({})));
+        item(ui, acts, Icon::Forward, tl!("Forward"), Action::Run("mail.forward", json!({})));
+        item(ui, acts, Icon::Print, tl!("Quick print"), Action::Print);
+        item(ui, acts, Icon::File, tl!("Save as…"), Action::SaveSelected);
         ui.separator();
         item(
             ui,
             acts,
+            if flags.seen { Icon::Unread } else { Icon::Read },
             tl!(if flags.seen { "Mark as unread" } else { "Mark as read" }),
             Action::Run(if flags.seen { "mail.markUnread" } else { "mail.markRead" }, json!({})),
         );
-        ui.menu_button(tl!("Follow up"), |ui| crate::organize::follow_up_menu(ui, s, t, acts));
+        ui.menu_button((widgets::menu_icon(Some(Icon::Flag)), tl!("Follow up")), |ui| crate::organize::follow_up_menu(ui, s, t, acts));
         ui.separator();
-        item(ui, acts, tl!("Move to…"), Action::Dialog(Dialog::move_to()));
-        item(ui, acts, tl!("Archive"), Action::Run("mail.archive", json!({})));
-        item(ui, acts, tl!("Report junk"), Action::Run("mail.junk", json!({})));
-        ui.menu_button(tl!("Junk"), |ui| crate::junk_menu(ui, s, acts));
-        item(ui, acts, tl!("Ignore"), Action::Run("mail.ignore", json!({})));
-        item(ui, acts, tl!("Delete"), Action::Run("mail.delete", json!({})));
+        item(ui, acts, Icon::Move, tl!("Move to…"), Action::Dialog(Dialog::move_to()));
+        item(ui, acts, Icon::Archive, tl!("Archive"), Action::Run("mail.archive", json!({})));
+        item(ui, acts, Icon::Junk, tl!("Report junk"), Action::Run("mail.junk", json!({})));
+        ui.menu_button((widgets::menu_icon(Some(Icon::Junk)), tl!("Junk")), |ui| crate::junk_menu(ui, s, acts));
+        item(ui, acts, Icon::Ignore, tl!("Ignore"), Action::Run("mail.ignore", json!({})));
+        item(ui, acts, Icon::Delete, tl!("Delete"), Action::Run("mail.delete", json!({})));
         ui.separator();
         // Find related, as Outlook's: the conversation, or everything from the sender.
-        ui.menu_button(tl!("Find related"), |ui| {
+        ui.menu_button((widgets::menu_icon(Some(Icon::Search)), tl!("Find related")), |ui| {
             let topic = quatrelle_engine::model::thread::base_subject(&subject);
             let searches = [
                 ("Messages in this conversation", format!("subject:\"{}\"", topic.replace('"', ""))),
