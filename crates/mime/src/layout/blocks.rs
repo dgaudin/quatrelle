@@ -42,12 +42,14 @@ pub(super) fn blocks(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
 }
 
 /// Whether any table puts content side by side, or a picture behind it, or boxes over it, or
-/// draws a border: a layout worth keeping (otherwise the text flows).
+/// draws a border, or is a set number of pixels wide (a centred 600-pixel column): a layout worth
+/// keeping (otherwise the text flows, the width of the window).
 pub(super) fn has_columns(b: &[Block]) -> bool {
     b.iter().any(|b| match b {
         Block::Text(_) => false,
         Block::Table(t) => {
-            t.background_image.is_some()
+            matches!(t.width, Some(Width::Px(_)))
+                || t.background_image.is_some()
                 || !t.borders.is_none()
                 || t.rows.iter().any(|r| r.iter().filter(|c| !c.blocks.is_empty()).count() > 1)
                 || t.rows
@@ -363,6 +365,22 @@ fn blocks_of(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
                     out.push(Block::Table(Table {
                         rows: vec![vec![Cell { blocks: inner, align: Align::Center, background: n.background(), span: 1, ..Default::default() }]],
                         align: Align::Center,
+                        ..Default::default()
+                    }));
+                }
+            }
+            // A column of a set width (`max-width: 600px; margin: 0 auto`): a one-cell table that
+            // wide, so it isn't stretched across the window (upstream issue #10).
+            Kid::El(n) if depth < MAX_DEPTH && n.fixed_width() && (n.has_text(0) || n.has_picture(0)) => {
+                flush(&mut pending, &mut out, ctx);
+                ctx.cells += 1;
+                let inner = colored(ctx, n, |ctx| blocks(&n.kids, ctx, depth + 1));
+                if !inner.is_empty() {
+                    let align = if n.tag == "center" { Align::Center } else { n.table_align() };
+                    out.push(Block::Table(Table {
+                        rows: vec![vec![Cell { blocks: inner, align: n.align(), background: n.background(), span: 1, ..Default::default() }]],
+                        width: n.width(),
+                        align,
                         ..Default::default()
                     }));
                 }
