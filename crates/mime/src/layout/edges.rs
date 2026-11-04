@@ -63,23 +63,16 @@ pub enum VAlign {
 pub type Padding = [u8; 4];
 
 /// A CSS length in pixels: `px`, `pt`, `em`/`rem` (16 pixels), `cm`, `mm`, `in`, `pc`, or a
-/// bare number (pixels); `None` for anything else (`auto`, `50%`).
-pub(super) fn length_px(v: &str) -> Option<f32> {
+/// bare number (pixels), an exponent too (`1e3px`); `None` for anything else (`auto`, `50%`,
+/// `10vw`).
+pub(crate) fn length_px(v: &str) -> Option<f32> {
     let v = v.trim().to_ascii_lowercase();
-    let at = v.find(|c: char| c.is_ascii_alphabetic() || c == '%').unwrap_or(v.len());
-    let (n, unit) = (v.get(..at)?, v.get(at..)?);
+    // The unit by the end it's written at (`rem` before `em`), so `1e3` stays a number.
+    let units: [(&str, f32); 8] =
+        [("px", 1.0), ("pt", 4.0 / 3.0), ("pc", 16.0), ("in", 96.0), ("cm", 96.0 / 2.54), ("mm", 96.0 / 25.4), ("rem", 16.0), ("em", 16.0)];
+    let (n, scale) = units.iter().find_map(|(u, k)| v.strip_suffix(u).map(|n| (n, *k))).unwrap_or((v.as_str(), 1.0));
     let n = n.trim().parse::<f32>().ok().filter(|n| n.is_finite())?;
-    let px = match unit {
-        "" | "px" => n,
-        "pt" => n * 4.0 / 3.0,
-        "em" | "rem" => n * 16.0,
-        "cm" => n * 96.0 / 2.54,
-        "mm" => n * 96.0 / 25.4,
-        "in" => n * 96.0,
-        "pc" => n * 16.0,
-        _ => return None,
-    };
-    Some(px.clamp(-4000.0, 4000.0))
+    Some((n * scale).clamp(-4000.0, 4000.0))
 }
 
 /// Colours by name, the common ones (`red`, `gray`, `silver`…).
@@ -413,6 +406,10 @@ mod tests {
         assert_eq!(length_px("1.0pt"), Some(4.0 / 3.0));
         assert_eq!(length_px("50%"), None);
         assert_eq!(length_px("auto"), None);
+        assert_eq!(
+            (length_px("2REM"), length_px("1e3px"), length_px("1e9"), length_px("10vw"), length_px("NaNpx")),
+            (Some(32.0), Some(1000.0), Some(4000.0), None, None)
+        );
         assert_eq!(words("1px solid rgb(1, 2, 3)"), ["1px", "solid", "rgb(1,2,3)"]);
     }
 }
