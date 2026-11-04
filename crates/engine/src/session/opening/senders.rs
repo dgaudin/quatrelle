@@ -108,7 +108,7 @@ impl Session {
         for a in &self.accounts {
             for email in [&a.config.email, &a.config.username] {
                 if addr::is_valid_email(email.trim()) {
-                    people.add(&EmailAddress::new(a.config.name.clone(), email.clone()));
+                    people.add_named(&a.config.name, email);
                     own.push(email.clone());
                 }
             }
@@ -117,12 +117,12 @@ impl Session {
             for c in &p.cards {
                 let name = c.card.display();
                 for e in &c.card.emails {
-                    people.add(&EmailAddress::new(name.clone(), e.value.clone()));
+                    people.add_named(&name, &e.value);
                 }
             }
         }
         for e in self.people.index.values().filter(|e| !e.who.address.trim().is_empty()) {
-            people.add(&e.who.email());
+            people.add_named(&e.who.name, &e.who.address);
         }
         if let Some(book) = self.contacts_book() {
             domains.extend(book.written_domains());
