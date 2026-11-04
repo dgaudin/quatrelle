@@ -42,9 +42,9 @@ mod reply;
 pub mod smime;
 mod trackers;
 pub use attachments::{
-    AttachmentInfo, AttachmentKind, MOST_PENDING_FILES, PendingFile, Tnef, TnefBody, TnefFile, attachment_data, craft_app_for, decode_code_page,
-    decompress_rtf, is_protected_file, known_code_page, kind_of, parse_text_first, quoted_pictures, read_tnef, rtf_body, text_first,
-    text_preview_kind, unsupported_code_page, utf16_code_page,
+    AttachmentInfo, AttachmentKind, MOST_PENDING_FILES, PendingFile, Tnef, TnefBody, TnefFile, attachment_data, byte_code_page, craft_app_for,
+    decode_code_page, decompress_rtf, is_protected_file, kind_of, known_code_page, parse_text_first, quoted_pictures, read_tnef, rtf_body,
+    text_first, text_preview_kind, unsupported_code_page, utf16_code_page,
 };
 use attachments::{attached, has_real_attachments};
 use files::attachment_name;
