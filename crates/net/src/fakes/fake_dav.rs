@@ -330,6 +330,50 @@ mod tests {
         assert!(back.iter().any(|e| e.event.recurrence_id.is_none() && e.event.rrule.is_some()));
     }
 
+    /// A CONFERENCE the server holds is read; one changed here goes back with each of its two
+    /// lines once, the telephone one as it came.
+    #[test]
+    fn a_conference_goes_to_the_server_and_back() {
+        let server = serve();
+        let data = server.data.clone();
+        let jitsi = "CONFERENCE;VALUE=URI;FEATURE=VIDEO;LABEL=Jitsi:https://jitsi.example.org/team";
+        let phone = "CONFERENCE;VALUE=URI;FEATURE=PHONE:tel:+33-1-23-45-67-89";
+        {
+            let ics = ical::write(&[event("c", "Call", 1_800_000_000)], None, 0);
+            let ics = ics.replacen("END:VEVENT", &format!("{jitsi}\r\n{phone}\r\nEND:VEVENT"), 1);
+            data.lock().unwrap().put(&format!("{CAL}c.ics"), &ics);
+        }
+        let dav = session(&server, PASSWORD);
+        let home = dav.home_from(Kind::Calendars, &format!("{}/.well-known/caldav", server.base)).unwrap().unwrap();
+        let mut pim = Pim { caldav_home: Some(home), carddav_home: Some(String::new()), dav_checked: Some(100), ..Default::default() };
+        pim.ensure_defaults();
+        let first = sync(&dav, USER, "imap.example", &pim, 100, Zone::UTC).unwrap();
+        let want =
+            quatrelle_model::ical::Conference { url: "https://jitsi.example.org/team".into(), label: "Jitsi".into(), features: vec!["VIDEO".into()] };
+        let read = &first.events.iter().find(|e| e.event.uid == "c").unwrap().event;
+        assert_eq!(read.conference.as_ref(), Some(&want));
+        assert!(format!("{:?}", read.extra).contains("tel:+33-1-23-45-67-89"), "{:?}", read.extra);
+
+        pim.calendars = first.calendars.clone().unwrap();
+        pim.events = first.events.clone();
+        pim.events[0].event.summary = "Call (moved)".into();
+        pim.events[0].dirty = true;
+        let second = sync(&dav, USER, "imap.example", &pim, 200, Zone::UTC).unwrap();
+        assert!(second.errors.is_empty(), "{:?}", second.errors);
+        {
+            let d = data.lock().unwrap();
+            let ics = d.items.get(&format!("{CAL}c.ics")).unwrap().1.replace("\r\n ", "").replace("\n ", "");
+            assert!(ics.contains("Call (moved)"), "{ics}");
+            assert_eq!(ics.matches(jitsi).count(), 1, "{ics}");
+            assert_eq!(ics.matches(phone).count(), 1, "{ics}");
+            assert_eq!(ics.matches("CONFERENCE").count(), 2, "{ics}");
+        }
+        let after = pim.clone();
+        let third = sync(&dav, USER, "imap.example", &Pim { events: vec![], ..after }, 300, Zone::UTC).unwrap();
+        let back = third.events.iter().find(|e| e.event.uid == "c").map(|e| e.event.conference.clone());
+        assert_eq!(back, Some(Some(want)), "{:?}", third.events);
+    }
+
     /// Two new events whose long uids differ only after the part a file name keeps each get an
     /// item of their own; an event already on the server keeps its address.
     #[test]

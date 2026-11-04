@@ -387,3 +387,19 @@ fn an_edit_leaves_an_items_sensitivity_as_it_is() {
         assert_eq!(sent(tasks::task_fields(&t).0), tag);
     }
 }
+
+#[test]
+fn exchange_gets_no_conference() {
+    let plain = CalEvent {
+        uid: "u".into(),
+        summary: "Call".into(),
+        location: "Lab".into(),
+        description: "Notes".into(),
+        start: 1_792_000_000,
+        end: 1_792_003_600,
+        ..Default::default()
+    };
+    let with = CalEvent { conference: quatrelle_model::ical::Conference::new("https://acme.webex.com/meet/ana", "Webex"), ..plain.clone() };
+    assert!(with.conference.is_some());
+    assert_eq!(event_fields(&plain, "riley@contoso.example"), event_fields(&with, "riley@contoso.example"));
+}
