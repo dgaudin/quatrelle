@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 Didier Gaudin
 //! EWS: a refusal says which fields Exchange named in its `MessageXml`, as far as they look
-//! like names (the owner's answer refused at every sync on 04/11, "Set action is invalid for
-//! property.", the field it was about dropped).
+//! like names. The owner's two meetings refused at every sync on 04/11 ("Set action is invalid
+//! for property.") said nothing of the field, which was dropped; named, it was found:
+//! `calendar:StartTimeZone`.
 
 use super::*;
 

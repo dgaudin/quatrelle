@@ -383,7 +383,7 @@ fn on_exchange(name: &str) -> Session {
     s
 }
 
-/// Exchange's refusal of 04/11, as the server's words come with the field it named.
+/// A refusal of Exchange's, as the server's words come with the field it named.
 const REFUSED: &str = "Set action is invalid for property. (ErrorInvalidPropertySet: calendar:Organizer)";
 
 /// The notices saying why the answer was refused.
@@ -433,8 +433,7 @@ fn refusing(theirs: &StoredEvent, uid: &str) -> DavSync {
     }
 }
 
-/// On 04/11 Exchange refused the owner's answer to an outside organizer's meeting at every sync,
-/// and it was sent again at each one. Refused once, it's kept and sent again at the next sync,
+/// An answer Exchange refuses for good was sent again at every sync. Refused once, it's kept and sent again at the next sync,
 /// nothing said (a busy server refuses for a while: too many connections, an internal error).
 /// Refused again, it's said once, with why, and the meeting is shown as the server has it,
 /// unanswered, from the sync that brought that refusal: nothing is sent again, at this sync or
