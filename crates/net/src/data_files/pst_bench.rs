@@ -15,7 +15,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use pst_rw::{UnicodePstAttachment, UnicodePstBatchMessage, UnicodePstFile, UnicodePstMessage, UnicodePstRecipient, UnicodePstRecipientType};
+use outlook_pst::{UnicodePstAttachment, UnicodePstBatchMessage, UnicodePstFile, UnicodePstMessage, UnicodePstRecipient, UnicodePstRecipientType};
 
 fn env(name: &str) -> Option<String> {
     std::env::var(name).ok().filter(|v| !v.trim().is_empty())
@@ -113,12 +113,23 @@ fn make() {
                 let unix = 1_700_000_000 + k as i64 * 60;
                 owned.push((subject, body, html, format!("<m{k}@bench.example>"), file, (unix + 11_644_473_600) * 10_000_000));
             }
-            let recipients = [UnicodePstRecipient { name: "Zoe Park", email: "zoe@studio.example", recipient_type: UnicodePstRecipientType::To }];
+            let recipients = [UnicodePstRecipient {
+                name: "Zoe Park",
+                email: "zoe@studio.example",
+                recipient_type: UnicodePstRecipientType::To,
+                ..Default::default()
+            }];
             let files: Vec<Vec<UnicodePstAttachment<'_>>> = owned
                 .iter()
                 .map(|o| {
                     o.4.iter()
-                        .map(|(name, data)| UnicodePstAttachment { filename: name, mime_type: "application/octet-stream", content_id: None, data })
+                        .map(|(name, data)| UnicodePstAttachment {
+                            filename: name,
+                            mime_type: "application/octet-stream",
+                            content_id: None,
+                            data,
+                            ..Default::default()
+                        })
                         .collect()
                 })
                 .collect();
@@ -135,6 +146,8 @@ fn make() {
                         html_body: Some(&o.2),
                         message_id: &o.3,
                         delivery_time: o.5,
+                        message_class: "IPM.Note",
+                        properties: &[],
                     },
                     attachments: f,
                 })
@@ -210,7 +223,8 @@ fn a_big_folder_comes_in_a_page_at_a_time() {
     let n = quatrelle_store::PAGE_MESSAGES * 2 + 808;
     let owned: Vec<(String, String, i64)> =
         (0..n).map(|k| (format!("Report #{k}"), format!("<p{k}@bench.example>"), 1_700_000_000 + k as i64 * 60)).collect();
-    let recipients = [UnicodePstRecipient { name: "Zoe", email: "zoe@studio.example", recipient_type: UnicodePstRecipientType::To }];
+    let recipients =
+        [UnicodePstRecipient { name: "Zoe", email: "zoe@studio.example", recipient_type: UnicodePstRecipientType::To, ..Default::default() }];
     let batch: Vec<UnicodePstBatchMessage<'_>> = owned
         .iter()
         .map(|o| UnicodePstBatchMessage {
@@ -223,6 +237,8 @@ fn a_big_folder_comes_in_a_page_at_a_time() {
                 html_body: None,
                 message_id: &o.1,
                 delivery_time: o.2,
+                message_class: "IPM.Note",
+                properties: &[],
             },
             attachments: &[],
         })
