@@ -629,5 +629,5 @@ local-first, media-aware v1); the fuller request is
   replaces that block). `CONFERENCE` (RFC 7986) is read from every iCalendar and written by CalDAV,
   local calendars, invitations sent from an IMAP account and `.ics` export; Join and the calendar
   search take it; nothing goes to Exchange. Join and Webex Meeting sit side by side. Also: an answer to
-  an invitation that Exchange refuses for good is said once and not sent again at every sync, and the
-  refusal names the refused field; the real fix waits for that field's name from a real server.
+  an invitation that Exchange refuses at two syncs running is said once and not sent again at every
+  sync (refused once, it's sent again), and the refusal names the refused field; the real fix waits for that field's name from a real server.

@@ -34,10 +34,10 @@ impl Session {
         let events = std::mem::take(&mut p.events);
         let was = p.clone();
         p.events = events;
-        // Answers the server refused for good are let go before its copies are weighed: the
-        // meeting is then read back as the server keeps it (unanswered) at once, not shown
-        // answered until the next sync.
-        self.drop_refused_answers(account, &sync.refused_answers);
+        // Answers the server refused again (one refused once is sent again) are let go before its
+        // copies are weighed: the meeting is then read back as the server keeps it (unanswered)
+        // at once, not shown answered until the next sync.
+        self.drop_refused_answers(account, sync);
         let p = self.pim_mut(account);
         if caldav_kept {
             p.caldav_home = sync.caldav_home.clone().or_else(|| Some(String::new()));

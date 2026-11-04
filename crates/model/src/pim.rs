@@ -347,8 +347,9 @@ pub struct DavSync {
     /// Invitations the server answered ([`StoredEvent::respond`]): their UID and the answer.
     #[serde(default)]
     pub responded: Vec<(String, String)>,
-    /// Invitations whose answer the server refused for good (not tried again): their UID and
-    /// why, in the server's words.
+    /// Invitations whose answer the server refused (not a failure to reach it): their UID and
+    /// why, in the server's words. The engine sends the answer again at the next sync, and lets
+    /// it go when it's refused again.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub refused_answers: Vec<(String, String)>,
     /// What couldn't be stored or deleted (tried again next time).

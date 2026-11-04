@@ -306,7 +306,7 @@ impl Session {
 
     /// After a sync: the invitations the server answered take their answer (a declined one leaves
     /// the calendar, as the server took it out), and what waited for it goes. (Those whose answer
-    /// the server refused went before: [`Session::drop_refused_answers`].) Then copies of
+    /// the server refused again went before: [`Session::drop_refused_answers`].) Then copies of
     /// invitations made here before the server answered them (accepted from the invitation,
     /// never sent: they showed beside the server's meeting, twice) become the user's answer on
     /// the server's meeting. Whether there's something new to send.
@@ -350,14 +350,33 @@ impl Session {
         !copies.is_empty()
     }
 
-    /// Answers the server refused for good (Exchange refused one on 04/11 at every sync,
-    /// the organizer never told): the meeting is left unanswered from here, and what waited for
-    /// it goes (or it would be made the answer on the server's meeting again). Said once, with
-    /// the server's words, so the user can answer it in Outlook on the web. Done when a sync's
+    /// Answers the server refused at two syncs running (Exchange refused one on 04/11 at
+    /// every sync, the organizer never told): the meeting is left unanswered from here, and what
+    /// waited for it goes (or it would be made the answer on the server's meeting again). Said
+    /// once, with the server's words, so the user can answer it in Outlook on the web. Refused
+    /// the first time, the answer stays as it is, nothing said, and is sent again at the next
+    /// sync: a busy server refuses for a while (too many connections, an internal error) as it
+    /// refuses for good. That first refusal is forgotten once the server takes the answer, or
+    /// nothing waits to be answered there any more; it's held in memory only. Done when a sync's
     /// result comes, before the server's copies are weighed, so the meeting comes back as the
     /// server keeps it.
-    pub(super) fn drop_refused_answers(&mut self, account: &str, refused: &[(String, String)]) {
-        for (uid, why) in refused {
+    pub(super) fn drop_refused_answers(&mut self, account: &str, sync: &quatrelle_model::pim::DavSync) {
+        if self.refused_once.iter().any(|(a, _)| a == account) {
+            let events = self.pim.get(account).map(|p| p.events.as_slice()).unwrap_or_default();
+            let waits = |uid: &str| events.iter().any(|e| e.event.uid == uid && e.respond.is_some());
+            let given = |uid: &str| sync.responded.iter().any(|(u, _)| same_meeting(u, uid));
+            self.refused_once.retain(|(a, uid)| a != account || (waits(uid) && !given(uid)));
+        }
+        // Refused before this sync: the same answer refused twice in one sync counts once.
+        let before: HashSet<String> = self.refused_once.iter().filter(|(a, _)| a == account).map(|(_, u)| u.clone()).collect();
+        for (uid, why) in &sync.refused_answers {
+            let key = (account.to_string(), uid.clone());
+            if !before.contains(uid) {
+                log::info!("{account}: the server refused the answer to {uid} ({why}); sent again at the next sync before it counts");
+                self.refused_once.insert(key);
+                continue;
+            }
+            self.refused_once.remove(&key);
             let p = self.pim_mut(account);
             let summary = p.events.iter().find(|e| same_meeting(&e.event.uid, uid)).map(|e| e.event.summary.clone()).unwrap_or_default();
             p.events.retain(|e| !(e.href.is_empty() && same_meeting(&e.event.uid, uid)));

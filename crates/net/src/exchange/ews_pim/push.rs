@@ -96,9 +96,9 @@ pub(super) fn answer_pending(c: &Client, pim: &Pim, out: &mut DavSync) {
     }
 }
 
-/// What came of answering an invitation, in `out`: given; refused for good (said once, and not
-/// sent again: Exchange refused an answer of 04/11 at every sync); or not now, tried
-/// again at the next sync.
+/// What came of answering an invitation, in `out`: given; refused (the engine sends it again at
+/// the next sync, and refused again, says so once and lets it go: Exchange refused an
+/// answer of 04/11 at every sync); or not now, tried again at the next sync.
 fn note_answer(out: &mut DavSync, e: &StoredEvent, answer: &str, r: Result<()>) {
     match r {
         Ok(()) => out.responded.push((e.event.uid.clone(), answer.to_string())),
