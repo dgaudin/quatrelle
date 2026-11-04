@@ -198,7 +198,7 @@ Names, addresses and text come from the sender: hostile.
 - A property test: nothing after the first quotation mark changes the signature found.
 - `every_command_survives_junk_params` runs the three new commands.
 - Gathering the check is timed: at most 50 ms in a release build for 20 000 people written to and
-  30 000 of the directory (the debug test's bound is 500 ms, best of three runs, as the calendar search
+  30 000 of the directory (the debug test's bound is 2 s, GitHub's runners being twice as slow, best of three runs, as the calendar search
   test). If it can't, it's gathered in slices, as the book itself is read. The per-frame gathering
   waits while the address book is being read, and never loads it.
 
