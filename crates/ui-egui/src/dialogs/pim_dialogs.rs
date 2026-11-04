@@ -24,7 +24,7 @@ pub(crate) mod recurrence;
 pub(crate) mod rooms;
 pub(crate) mod scheduling;
 pub(crate) mod webex;
-mod webex_rooms;
+pub(crate) mod webex_rooms;
 
 pub use attendees::{AttendeesUi, Line, line_button_id};
 pub use contact::{ContactForm, contact};

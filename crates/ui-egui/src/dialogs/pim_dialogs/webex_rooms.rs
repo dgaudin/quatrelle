@@ -26,7 +26,8 @@ pub(crate) fn add_room(f: &mut EventForm, room: &WebexRoom, rooms: &[WebexRoom])
 
 /// `block` (a room's or a scheduled meeting's) at the end of the notes, any room's block there
 /// taken out first; `link` as the place when that's empty or a room's link (one typed is kept);
-/// Join; and the conference it's saved with, which the window now shows.
+/// Join; and the conference it's saved with, which the window now shows. A link that can't be a
+/// conference leaves the one before: a room's, its link gone, is then taken out on save.
 pub(super) fn put_block(f: &mut EventForm, block: &[String], link: &str, rooms: &[WebexRoom]) {
     let notes = without_room_block(&f.description, rooms);
     let notes = notes.trim_end();
@@ -37,8 +38,10 @@ pub(super) fn put_block(f: &mut EventForm, block: &[String], link: &str, rooms: 
         f.location = link.to_string();
     }
     f.join = Some(link.to_string());
-    f.conference = Conference::new(link, "Webex");
-    f.conference_shown = true;
+    if let Some(c) = Conference::new(link, "Webex") {
+        f.conference = Some(c);
+        f.conference_shown = true;
+    }
 }
 
 /// The notes without any room's block, as Quatrelle wrote it: the line before the link in any of
@@ -48,6 +51,9 @@ pub(super) fn put_block(f: &mut EventForm, block: &[String], link: &str, rooms: 
 /// the notes. What the room didn't write stays: a line typed, one of its lines changed in Options
 /// since, a scheduled meeting's block. Notes with no block come back as they were.
 pub(crate) fn without_room_block(notes: &str, rooms: &[WebexRoom]) -> String {
+    if rooms.is_empty() {
+        return notes.to_string();
+    }
     let labels = crate::i18n::in_every_language("Join the Webex meeting:");
     let lines: Vec<&str> = notes.split('\n').collect();
     let mut kept: Vec<&str> = Vec::with_capacity(lines.len());
@@ -78,7 +84,7 @@ pub(crate) fn without_room_block(notes: &str, rooms: &[WebexRoom]) -> String {
 }
 
 /// How many lines a room's block takes at the start of `lines`, when one starts there.
-fn block_at(lines: &[&str], labels: &[&str], rooms: &[WebexRoom]) -> Option<usize> {
+fn block_at(lines: &[&str], labels: &[String], rooms: &[WebexRoom]) -> Option<usize> {
     let first = lines.first()?.trim();
     if !labels.iter().any(|l| l.trim() == first) {
         return None;
@@ -95,12 +101,6 @@ fn block_at(lines: &[&str], labels: &[&str], rooms: &[WebexRoom]) -> Option<usiz
 fn room_of<'a>(rooms: &'a [WebexRoom], link: &str) -> Option<&'a WebexRoom> {
     let link = link.trim();
     rooms.iter().find(|r| !link.is_empty() && r.url.trim().eq_ignore_ascii_case(link))
-}
-
-/// Whether the conference's link `url` is in the place or the notes (ASCII case aside).
-pub(super) fn link_shown(url: &str, place: &str, notes: &str) -> bool {
-    let url = url.trim().to_ascii_lowercase();
-    [place, notes].iter().any(|text| text.to_ascii_lowercase().contains(&url))
 }
 
 #[cfg(test)]
@@ -166,12 +166,15 @@ mod tests {
         for notes in [
             format!("Ordre du jour\n\nJoin the Webex meeting:\n{LINK}\nMeeting number: 2623456701\n"),
             "Ordre du jour\n\nJoin the Webex meeting:\n".to_string(),
+            "Ordre du jour\n\nJoin the Webex meeting:".to_string(),
             format!("Join the Webex meeting:\n\n{ANA}\n"),
             format!("Rejoindre :\n{ANA}\nN° 123\n"),
             "Join the Webex meeting:\nhttps://acme.webex.com/meet/zoe\n".to_string(),
         ] {
             assert_eq!(without_room_block(&notes, &rooms), notes);
         }
+        let notes = ana_block("Join the Webex meeting:");
+        assert_eq!(without_room_block(&notes, &[]), notes, "no room, no block");
     }
 
     /// A room's block takes the place of the one before, its link the place of the other room's;
@@ -223,22 +226,50 @@ mod tests {
         assert_eq!((f.description, f.location, f.join, f.conference), before);
     }
 
-    /// Saved, the conference goes along while its link is in the place or the notes, and is taken
-    /// out once it was there and is in neither; one never shown there (another app's) stays.
+    /// A meeting whose link can't be a conference (Webex never gives one with a space, but who
+    /// knows) leaves the room's conference in the form: its link gone, it's taken out on save
+    /// rather than kept for good by the engine.
+    #[test]
+    fn a_meeting_with_a_link_refused_takes_the_rooms_conference_out() {
+        let rooms = [ana()];
+        let m = WebexMeeting {
+            id: "m1".into(),
+            web_link: "https://acme.webex.com/acme/j.php?MTID=m 1".into(),
+            meeting_number: String::new(),
+            password: Secret(String::new()),
+            sip_address: String::new(),
+        };
+        let mut f = EventForm::default();
+        add_room(&mut f, &rooms[0], &rooms);
+        take_meeting(&mut f, &m, &rooms);
+        assert_eq!(f.conference.as_ref().map(|c| c.url.as_str()), Some(ANA), "the room's, kept");
+        assert_eq!(f.params().get("conference"), Some(&Value::Null), "and taken out");
+    }
+
+    /// Saved, the conference the window opened with is left to the engine while it's unchanged and
+    /// its link is in the place or the notes; once it was there and is in neither, it's taken out.
+    /// One never shown there (another app's) stays. A room's goes along.
     #[test]
     fn the_conference_goes_when_its_link_is_erased() {
         const JITSI: &str = "https://jitsi.example.org/team";
         let jitsi = Conference { url: JITSI.into(), label: "Jitsi".into(), features: strings(&["VIDEO"]) };
-        let mut f =
-            EventForm { conference: Some(jitsi), conference_shown: true, description: format!("Rejoindre : {JITSI}\n"), ..Default::default() };
-        assert_eq!(f.params()["conference"], json!({"url": JITSI, "label": "Jitsi"}));
+        let mut f = EventForm {
+            conference: Some(jitsi.clone()),
+            conference_opened: Some(jitsi),
+            conference_shown: true,
+            description: format!("Rejoindre : {JITSI}\n"),
+            ..Default::default()
+        };
+        assert!(f.params().get("conference").is_none(), "unchanged: the engine keeps it");
         f.description = "Rejoindre : plus tard".into();
         assert_eq!(f.params().get("conference"), Some(&Value::Null), "taken out");
         f.location = JITSI.into();
-        assert_eq!(f.params()["conference"], json!({"url": JITSI, "label": "Jitsi"}), "still in the place");
+        assert!(f.params().get("conference").is_none(), "still in the place");
         f.location.clear();
         f.conference_shown = false;
-        assert_eq!(f.params()["conference"], json!({"url": JITSI, "label": "Jitsi"}), "never shown here");
+        assert!(f.params().get("conference").is_none(), "never shown here");
+        add_room(&mut f, &ana(), &[ana()]);
+        assert_eq!(f.params()["conference"], json!({"url": ANA, "label": "Webex"}), "a room's");
         assert!(EventForm::default().params().get("conference").is_none());
     }
 }

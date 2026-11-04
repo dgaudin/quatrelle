@@ -102,6 +102,9 @@ pub struct EventForm {
     /// a meeting put it there: erased from both, the conference goes when it's saved. One never
     /// shown there (another app's) stays.
     pub conference_shown: bool,
+    /// The conference the window opened with. Saved unchanged, it isn't sent and the engine keeps
+    /// it as it is, even one it would refuse now (the user couldn't see it to fix it).
+    pub(crate) conference_opened: Option<Conference>,
 }
 
 impl EventForm {
@@ -194,7 +197,8 @@ impl EventForm {
             webex_allowed: s.webex_can_hold(e),
             webex_id: e.webex_id.clone(),
             conference: e.conference.clone(),
-            conference_shown: e.conference.as_ref().is_some_and(|c| super::webex_rooms::link_shown(&c.url, &e.location, &e.description)),
+            conference_shown: e.conference.as_ref().is_some_and(|c| link_shown(&c.url, &e.location, &e.description)),
+            conference_opened: e.conference.clone(),
             ..Default::default()
         })
     }
@@ -332,10 +336,14 @@ impl EventForm {
         if let Some(id) = &self.webex_id {
             p["webexId"] = json!(id);
         }
-        // Its conference, while it has one; `null` takes out the one whose link was erased.
+        // Its conference when a room or a meeting set it; `null` takes out the one whose link was
+        // erased. One left as it opened isn't sent: the engine keeps it.
         if let Some(c) = &self.conference {
-            let erased = self.conference_shown && !super::webex_rooms::link_shown(&c.url, &self.location, &self.description);
-            p["conference"] = if erased { Value::Null } else { json!({"url": c.url, "label": c.label}) };
+            if self.conference_shown && !link_shown(&c.url, &self.location, &self.description) {
+                p["conference"] = Value::Null;
+            } else if self.conference != self.conference_opened {
+                p["conference"] = json!({"url": c.url, "label": c.label});
+            }
         }
         match &self.uid {
             Some(u) => p["uid"] = json!(u),
@@ -348,6 +356,12 @@ impl EventForm {
         }
         p
     }
+}
+
+/// Whether a conference's link `url` is in the place or the notes (ASCII case aside).
+fn link_shown(url: &str, place: &str, notes: &str) -> bool {
+    let url = url.trim().to_ascii_lowercase();
+    [place, notes].iter().any(|text| text.to_ascii_lowercase().contains(&url))
 }
 
 /// How a repeat reads: Outlook's simple choices, a rule set elsewhere as Custom.

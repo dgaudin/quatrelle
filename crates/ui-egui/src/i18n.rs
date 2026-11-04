@@ -92,34 +92,55 @@ pub fn parse(text: &str) -> (Vec<(String, String)>, Vec<String>) {
     let mut entries: Vec<(String, String)> = Vec::new();
     let mut errors = Vec::new();
     for (i, line) in text.lines().enumerate() {
-        if line.trim().is_empty() || line.starts_with('#') {
-            continue;
-        }
-        let mut cols = line.split('\t');
-        let (Some(ctx), Some(src), Some(tr), None) = (cols.next(), cols.next(), cols.next(), cols.next()) else {
-            errors.push(format!("line {}: expected context<TAB>source<TAB>translation", i + 1));
-            continue;
-        };
-        match (unescape(src), unescape(tr)) {
-            (Ok(s), Ok(t)) if !s.is_empty() && !t.is_empty() => {
-                if placeholders(&s) != placeholders(&t) {
-                    errors.push(format!("line {}: placeholders differ: {s:?}", i + 1));
-                } else if s.ends_with('…') != t.ends_with('…') {
-                    errors.push(format!("line {}: trailing ellipsis differs: {s:?}", i + 1));
+        match row(line) {
+            None => {}
+            Some(Err(e)) => errors.push(format!("line {}: {e}", i + 1)),
+            Some(Ok((key, t))) => {
+                if entries.iter().any(|(e, _)| *e == key) {
+                    errors.push(format!("line {}: duplicate {key:?}", i + 1));
                 } else {
-                    let key = if ctx.is_empty() { s } else { format!("{ctx}{CTX}{s}") };
-                    if entries.iter().any(|(e, _)| *e == key) {
-                        errors.push(format!("line {}: duplicate {key:?}", i + 1));
-                    } else {
-                        entries.push((key, t));
-                    }
+                    entries.push((key, t));
                 }
             }
-            (Err(e), _) | (_, Err(e)) => errors.push(format!("line {}: {e}", i + 1)),
-            _ => errors.push(format!("line {}: empty column", i + 1)),
         }
     }
     (entries, errors)
+}
+
+/// A catalog's line: `None` for a blank line or a comment; else its key (the English, after its
+/// context when it has one) and its translation, or why it's skipped.
+fn row(line: &str) -> Option<Result<(String, String), String>> {
+    if line.trim().is_empty() || line.starts_with('#') {
+        return None;
+    }
+    let mut cols = line.split('\t');
+    let (Some(ctx), Some(src), Some(tr), None) = (cols.next(), cols.next(), cols.next(), cols.next()) else {
+        return Some(Err("expected context<TAB>source<TAB>translation".into()));
+    };
+    Some(match (unescape(src), unescape(tr)) {
+        (Ok(s), Ok(t)) if !s.is_empty() && !t.is_empty() => {
+            if placeholders(&s) != placeholders(&t) {
+                Err(format!("placeholders differ: {s:?}"))
+            } else if s.ends_with('…') != t.ends_with('…') {
+                Err(format!("trailing ellipsis differs: {s:?}"))
+            } else {
+                Ok((if ctx.is_empty() { s } else { format!("{ctx}{CTX}{s}") }, t))
+            }
+        }
+        (Err(e), _) | (_, Err(e)) => Err(e),
+        _ => Err("empty column".into()),
+    })
+}
+
+/// The translation of `key` in a catalog's `source`, as [`parse`] reads it (its first row that
+/// reads), without building the catalog. Only the rows that can hold it are read.
+fn find_in(source: &str, key: &str) -> Option<String> {
+    // Without a character a row escapes, its English column is `key` itself.
+    let plain = !key.contains(['\n', '\t', '\\']);
+    source.lines().filter(|l| !plain || l.contains(key)).find_map(|l| match row(l) {
+        Some(Ok((k, t))) if k == key => Some(t),
+        _ => None,
+    })
 }
 
 impl LangInfo {
@@ -374,14 +395,19 @@ pub fn tr(lang: Lang, s: &str) -> &str {
 
 /// `s` and its translation in each catalog, each once, `s` first: to find text Quatrelle wrote in
 /// whichever language the interface had then (a Webex room's block in an appointment's notes).
-/// Read from the catalogs themselves, never marked by the tests' pseudo-language.
-pub fn in_every_language(s: &'static str) -> Vec<&'static str> {
-    let mut all = vec![s];
+/// Read from a catalog already built, or from its source, which isn't built for it: a session
+/// keeps only the catalogs it shows. Never marked by the tests' pseudo-language.
+pub fn in_every_language(s: &str) -> Vec<String> {
+    let mut all = vec![s.to_string()];
     for lang in &LANGUAGES {
-        if let Some(t) = lang.catalog().get(s)
-            && !all.contains(&t.as_str())
+        let found = match lang.catalog.get() {
+            Some(built) => built.get(s).cloned(),
+            None => find_in(lang.source, s),
+        };
+        if let Some(t) = found
+            && !all.contains(&t)
         {
-            all.push(t.as_str());
+            all.push(t);
         }
     }
     all
