@@ -4,16 +4,20 @@
 //! is saved with, kept by its window.
 
 use quatrelle_engine::WebexRoom;
+use quatrelle_engine::model::WebexMeeting;
 use quatrelle_engine::model::ical::Conference;
+use quatrelle_engine::model::job::Secret;
 
 use super::webex::{button, open_webex_menu};
 use super::*;
 use crate::pim_dialogs::EventForm;
+use crate::pim_dialogs::webex::take_meeting;
 use crate::pim_dialogs::webex_rooms::add_room;
 
 const JITSI: &str = "https://jitsi.example.org/team";
 const ANA: &str = "https://acme.webex.com/meet/ana";
 const TEAM: &str = "https://acme.webex.com/meet/team";
+const LINK: &str = "https://acme.webex.com/acme/j.php?MTID=m1";
 const SIZE: egui::Vec2 = egui::vec2(1280.0, 900.0);
 
 /// The room carried over from 1.0, unnamed.
@@ -58,13 +62,46 @@ fn the_menu_lists_the_rooms_by_name() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
-/// While the appointment has its scheduled Webex meeting, the rooms and Add a room… are greyed: a
-/// click changes nothing. With as many rooms as are kept, Add a room… alone is.
+/// Once a room is in, Webex Meeting stays beside Join: another room chosen there takes the first
+/// one's place in the notes, the place, Join and the conference.
+#[test]
+fn another_room_takes_the_first_ones_place() {
+    let (mut a, dir, ctx) = with_rooms("webex-rooms-another", vec![ana(), team()]);
+    open_webex_menu(&ctx, &mut a, SIZE);
+    let at = settled_text_at(&ctx, &mut a, "My personal room", SIZE).expect("its line");
+    click_at(&ctx, &mut a, at, 1, SIZE);
+    assert_eq!(a.ui.event_windows[0].1.join.as_deref(), Some(ANA));
+    assert!(settled_text_at(&ctx, &mut a, "Join meeting", SIZE).is_some(), "Join shows");
+    open_webex_menu(&ctx, &mut a, SIZE);
+    let at = settled_text_at(&ctx, &mut a, "Équipe", SIZE).expect("its line, the menu open again");
+    click_at(&ctx, &mut a, at, 1, SIZE);
+    let f = &a.ui.event_windows[0].1;
+    assert_eq!(f.description, format!("Join the Webex meeting:\n{TEAM}\nN° 456\n"), "the first room's block gone");
+    assert_eq!((f.location.as_str(), f.join.as_deref()), (TEAM, Some(TEAM)));
+    assert_eq!(f.conference.as_ref().map(|c| c.url.as_str()), Some(TEAM));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// While the appointment has its scheduled Webex meeting (Join beside the button), its menu still
+/// opens, the rooms and Add a room… greyed: a click changes nothing. With as many rooms as are
+/// kept, Add a room… alone is.
 #[test]
 fn rooms_are_greyed_with_a_scheduled_meeting() {
     let (mut a, dir, ctx) = with_rooms("webex-rooms-greyed", vec![ana(), team()]);
-    a.ui.event_windows[0].1.webex_id = Some("m1".into());
-    a.ui.event_windows[0].1.description = "Ordre du jour".into();
+    let m = WebexMeeting {
+        id: "m1".into(),
+        web_link: LINK.into(),
+        meeting_number: "2623456701".into(),
+        password: Secret(String::new()),
+        sip_address: String::new(),
+    };
+    let rooms = a.session.prefs.webex_rooms.clone();
+    let f = &mut a.ui.event_windows[0].1;
+    f.description = "Ordre du jour".into();
+    take_meeting(f, &m, &rooms);
+    let before = |f: &EventForm| (f.description.clone(), f.location.clone(), f.join.clone(), f.conference.clone());
+    let scheduled = before(f);
+    assert!(settled_text_at(&ctx, &mut a, "Join meeting", SIZE).is_some(), "Join shows");
     open_webex_menu(&ctx, &mut a, SIZE);
     for label in ["My personal room", "Équipe", "Add a room…"] {
         assert_eq!(button(&ctx, &mut a, label).map(|b| b.1), Some(false), "{label}");
@@ -72,8 +109,7 @@ fn rooms_are_greyed_with_a_scheduled_meeting() {
     for label in ["Équipe", "Add a room…"] {
         let at = settled_text_at(&ctx, &mut a, label, SIZE).expect(label);
         click_at(&ctx, &mut a, at, 1, SIZE);
-        let f = &a.ui.event_windows[0].1;
-        assert_eq!((f.description.as_str(), f.conference.as_ref(), f.join.as_deref()), ("Ordre du jour", None, None), "{label}");
+        assert_eq!(before(&a.ui.event_windows[0].1), scheduled, "{label}");
         assert!(text_at(&frame_shapes(&ctx, &mut a, vec![], SIZE), "New Webex room").is_none(), "no room asked for");
     }
     // As many rooms as are kept: they can be chosen, but none added.
@@ -84,6 +120,19 @@ fn rooms_are_greyed_with_a_scheduled_meeting() {
     frame_sized(&ctx, &mut a, vec![], SIZE);
     assert_eq!(button(&ctx, &mut a, "Salle 0").map(|b| b.1), Some(true));
     assert_eq!(button(&ctx, &mut a, "Add a room…").map(|b| b.1), Some(false));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A window that can't be changed shows Join alone: no Webex Meeting to put a room in.
+#[test]
+fn a_read_only_window_shows_join_alone() {
+    let (mut a, dir, ctx) = with_rooms("webex-rooms-read-only", vec![ana()]);
+    let f = &mut a.ui.event_windows[0].1;
+    f.read_only = true;
+    f.join = Some(LINK.into());
+    assert!(settled_text_at(&ctx, &mut a, "Join meeting", SIZE).is_some());
+    assert_eq!(button(&ctx, &mut a, "Webex Meeting"), None);
+    assert_eq!(button(&ctx, &mut a, "Webex Meeting options"), None);
     let _ = std::fs::remove_dir_all(dir);
 }
 

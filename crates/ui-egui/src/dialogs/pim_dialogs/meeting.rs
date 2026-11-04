@@ -279,15 +279,19 @@ fn ribbon(ui: &mut Ui, t: &Tokens, f: &mut EventForm, s: &Session, checking: boo
         keep = false;
     }
     groups.end(ui, &t, "Actions");
-    // An online meeting (Teams, Webex, Zoom…): Join, as Outlook has it; none yet, Webex Meeting
-    // makes one.
-    if let Some(url) = f.join.clone() {
-        if widgets::big_button(ui, Icon::Video, "Join meeting", &t, true).on_hover_text(&url).clicked() {
-            acts.push(Action::OpenMeeting(url));
-        }
-        groups.end(ui, &t, "Online meeting");
-    } else if writable {
+    // An online meeting (Teams, Webex, Zoom…): Join, as Outlook has it; and while it can be
+    // changed, Webex Meeting beside it, to make one or put a Webex room in (another in place of
+    // the first).
+    let join = f.join.clone();
+    if let Some(url) = &join
+        && widgets::big_button(ui, Icon::Video, "Join meeting", &t, true).on_hover_text(url).clicked()
+    {
+        acts.push(Action::OpenMeeting(url.clone()));
+    }
+    if writable {
         webex_button(ui, &t, f, s, checking, acts);
+    }
+    if join.is_some() || writable {
         groups.end(ui, &t, "Online meeting");
     }
     // Someone else's invitation, not answered yet.
