@@ -50,6 +50,7 @@ const MAIL_SERVICES: &[&str] = &[
     "126.com",
     "163.com",
     "aol.com",
+    "bbox.fr",
     "daum.net",
     "fastmail.com",
     "free.fr",
@@ -61,6 +62,7 @@ const MAIL_SERVICES: &[&str] = &[
     "googlemail.com",
     "hotmail.com",
     "icloud.com",
+    "laposte.net",
     "libero.it",
     "live.com",
     "mac.com",
@@ -69,13 +71,17 @@ const MAIL_SERVICES: &[&str] = &[
     "me.com",
     "msn.com",
     "naver.com",
+    "neuf.fr",
+    "numericable.fr",
     "orange.fr",
     "outlook.com",
     "pm.me",
     "proton.me",
     "protonmail.com",
     "qq.com",
+    "sfr.fr",
     "t-online.de",
+    "wanadoo.fr",
     "web.de",
     "ya.ru",
     "yahoo.com",
@@ -228,6 +234,12 @@ fn worn_inside(d: &str, known: &str) -> bool {
 
 /// Whether one letter added, dropped, changed or two swapped turns `a` into `b`.
 fn one_edit_apart(a: &str, b: &str) -> bool {
+    // A letter is at most four bytes: one edit never changes the length by more. Most known
+    // domains are told apart here, before anything is collected (the list checks every row's
+    // sender against each of them, each frame).
+    if a.len().abs_diff(b.len()) > 4 {
+        return false;
+    }
     let (a, b): (Vec<char>, Vec<char>) = (a.chars().collect(), b.chars().collect());
     if a == b || a.len().abs_diff(b.len()) > 1 {
         return false;
@@ -400,6 +412,56 @@ mod tests {
         // Two short domains one letter apart are just two domains.
         let short: BTreeSet<String> = ["ab.io".to_string()].into();
         assert_eq!(imitates("ac.io", &short), None);
+    }
+
+    /// `one_edit_apart` as it was, comparing characters only: the length test on bytes first
+    /// (a character is at most four bytes, so one edit changes the length by four at most) gives
+    /// the same answers without collecting anything for domains of very different lengths.
+    #[test]
+    fn one_edit_apart_answers_as_before() {
+        fn by_chars(a: &str, b: &str) -> bool {
+            let (a, b): (Vec<char>, Vec<char>) = (a.chars().collect(), b.chars().collect());
+            if a == b || a.len().abs_diff(b.len()) > 1 {
+                return false;
+            }
+            let start = a.iter().zip(&b).take_while(|(x, y)| x == y).count();
+            let (ra, rb) = (&a[start..], &b[start..]);
+            match ra.len().cmp(&rb.len()) {
+                std::cmp::Ordering::Equal => ra[1..] == rb[1..] || (ra.len() >= 2 && ra[0] == rb[1] && ra[1] == rb[0] && ra[2..] == rb[2..]),
+                std::cmp::Ordering::Greater => ra[1..] == *rb,
+                std::cmp::Ordering::Less => rb[1..] == *ra,
+            }
+        }
+        let words = [
+            "",
+            "a",
+            "ab",
+            "ba",
+            "abc",
+            "paypal.com",
+            "paypa1.com",
+            "paypall.com",
+            "payapl.com",
+            "bücher.example",
+            "bucher.example",
+            "bcher.example",
+            "b\u{1D41A}cher.example",
+            "b\u{1D41A}\u{1D41A}cher.example",
+            "€",
+            "€€",
+            "a€",
+            "\u{1F600}",
+            "\u{1F600}a",
+            "aaaa",
+            "\u{1D41A}\u{1D41A}\u{1D41A}\u{1D41A}",
+            "studio-lantern.example",
+            "studio-lanterns.example",
+        ];
+        for a in words {
+            for b in words {
+                assert_eq!(one_edit_apart(a, b), by_chars(a, b), "{a:?} {b:?}");
+            }
+        }
     }
 
     #[test]

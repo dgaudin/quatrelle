@@ -14,7 +14,7 @@
 //! or a name with a word any team uses ("IT Support", "Billing Team"), never warns by itself.
 
 use std::collections::hash_map::Entry;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use crate::EmailAddress;
 
@@ -380,12 +380,23 @@ fn drawn(key: String) -> Option<String> {
 /// The people the user deals with, by name and by address.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct KnownPeople {
-    /// [`drawn_key`] → the name that person was first known by, and the addresses they're
-    /// known by (lower case, in order, each once: most people have one, which a list holds in
-    /// far less than a tree).
-    by_name: HashMap<String, (String, Vec<String>)>,
+    /// [`drawn_key`] → the name that person was first known by, the addresses they're known by
+    /// (lower case, in order, each once: most people have one, which a list holds in far less
+    /// than a tree), and whether they're known otherwise than from the directory.
+    by_name: HashMap<String, Known>,
     /// Every address known (lower case), named or not.
     addresses: HashSet<String>,
+}
+
+/// One person known by name.
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct Known {
+    /// The name they were first known by (what warnings call them).
+    name: String,
+    /// Their addresses, lower case, in order, each once.
+    addresses: Vec<String>,
+    /// Known otherwise than from the directory: a card, mail written to them, the user.
+    vouched: bool,
 }
 
 impl KnownPeople {
@@ -402,6 +413,18 @@ impl KnownPeople {
     /// [`KnownPeople::add`] from a name and an address as they are (no [`EmailAddress`] made
     /// for each of tens of thousands).
     pub fn add_named(&mut self, name: &str, email: &str) {
+        self.add_known(name, email, true);
+    }
+
+    /// Someone the organisation's directory answered for, and nothing else says the user deals
+    /// with (yet): their name is worn on another address only from a mail service or a look-alike
+    /// of their domain ([`KnownPeople::check`]). A card or mail written for the same name makes
+    /// them known as [`KnownPeople::add_named`] does, whichever comes first.
+    pub fn add_from_directory(&mut self, name: &str, email: &str) {
+        self.add_known(name, email, false);
+    }
+
+    fn add_known(&mut self, name: &str, email: &str, vouched: bool) {
         let email = email.trim().to_lowercase();
         if !crate::addr::is_valid_email(&email) || self.addresses.len() >= MOST_PEOPLE {
             return;
@@ -409,12 +432,13 @@ impl KnownPeople {
         if let Some(key) = drawn_key(name) {
             match self.by_name.entry(key) {
                 Entry::Vacant(v) => {
-                    v.insert((name.trim().to_string(), vec![email.clone()]));
+                    v.insert(Known { name: name.trim().to_string(), addresses: vec![email.clone()], vouched });
                 }
                 Entry::Occupied(mut o) => {
-                    let theirs = &mut o.get_mut().1;
-                    if let Err(at) = theirs.binary_search(&email) {
-                        theirs.insert(at, email.clone());
+                    let known = o.get_mut();
+                    known.vouched |= vouched;
+                    if let Err(at) = known.addresses.binary_search(&email) {
+                        known.addresses.insert(at, email.clone());
                     }
                 }
             }
@@ -438,7 +462,7 @@ impl KnownPeople {
     /// The addresses the person named `name` is known by, in order (none for a name that doesn't
     /// say who someone is).
     pub fn addresses_of(&self, name: &str) -> Option<&[String]> {
-        self.by_name.get(&drawn_key(name)?).map(|(_, a)| a.as_slice())
+        self.by_name.get(&drawn_key(name)?).map(|k| k.addresses.as_slice())
     }
 
     /// `from` wears the name of someone known on an address that person isn't known by. Not
@@ -448,14 +472,16 @@ impl KnownPeople {
     /// sign up there), or when `listed` (a mailing list or someone sending for the author, as
     /// `List-Id` or `Sender` say) and the address isn't at a mail service: lists send their
     /// members' mail under the members' names. An impersonator adding those headers to free
-    /// mail is still caught.
+    /// mail is still caught. Someone known only from the directory
+    /// ([`KnownPeople::add_from_directory`]) only from a mail service or a domain imitating one of
+    /// theirs: among its thousands of names, a namesake at a customer is the likelier.
     pub fn check(&self, from: &EmailAddress, listed: bool) -> Option<SenderWarning> {
         let real = from.email.trim().to_lowercase();
         let domain = domain_of(&real);
         if domain.is_empty() || self.knows_address(&real) {
             return None;
         }
-        let (known_as, theirs) = self.by_name.get(&drawn_key(&from.name)?)?;
+        let Known { name: known_as, addresses: theirs, vouched } = self.by_name.get(&drawn_key(&from.name)?)?;
         let free = super::is_free_mail(&domain);
         if listed && !free {
             return None;
@@ -463,7 +489,11 @@ impl KnownPeople {
         if !free && theirs.iter().any(|a| related(&domain_of(a), &domain)) {
             return None;
         }
-        let known = theirs.iter().next()?.clone();
+        if !vouched && !free {
+            let domains: BTreeSet<String> = theirs.iter().map(|a| domain_of(a)).collect();
+            super::imitates(&domain, &domains)?;
+        }
+        let known = theirs.first()?.clone();
         Some(SenderWarning::NameOfKnownPerson { name: known_as.clone(), known, real })
     }
 }
@@ -619,6 +649,41 @@ mod tests {
         assert!(!warned(&k, "John Smith", "john@gmail.com"));
         assert!(!warned(&k, "Jane Director", ""));
         assert!(!warned(&k, "Jane Director", "not an address"));
+    }
+
+    /// Ruling 15: thousands of names in the directory make namesakes common (a customer and a
+    /// colleague both called Jean Martin). Someone known only from it is worn on another address
+    /// only from a mail service or a look-alike of their domain; a card or mail written keeps the
+    /// whole rule, whichever came first.
+    #[test]
+    fn a_name_known_only_from_the_directory_warns_from_mail_services_and_look_alikes() {
+        let mut k = KnownPeople::new();
+        k.add_from_directory("Jean Martin", "jean.martin@corp.example");
+        assert!(k.knows_address("jean.martin@corp.example"));
+        assert!(!warned(&k, "Jean Martin", "jean.martin@client.example"), "a namesake at a customer");
+        assert_eq!(
+            k.check(&EmailAddress::new("Jean Martin", "jean.martin.1984@gmail.com"), false),
+            Some(SenderWarning::NameOfKnownPerson {
+                name: "Jean Martin".into(),
+                known: "jean.martin@corp.example".into(),
+                real: "jean.martin.1984@gmail.com".into()
+            })
+        );
+        assert!(warned(&k, "Martin, Jean", "jmartin@yahoo.co.uk"));
+        assert!(warned(&k, "Jean Martin", "jean.martin@c0rp.example"), "a look-alike of their domain");
+        assert!(warned(&k, "Jean Martin", "jean.martin@corp.example.billing.example"), "their domain worn inside another");
+        // Known by a card or written to as well, after or before: the whole rule.
+        for card_first in [false, true] {
+            let mut k = KnownPeople::new();
+            if card_first {
+                k.add_named("Jean Martin", "jean.martin@corp.example");
+            }
+            k.add_from_directory("Jean Martin", "jean.martin@corp.example");
+            if !card_first {
+                k.add(&EmailAddress::new("Jean Martin", "jean.martin@corp.example"));
+            }
+            assert!(warned(&k, "Jean Martin", "jean.martin@client.example"), "card first: {card_first}");
+        }
     }
 
     #[test]

@@ -55,12 +55,40 @@ fn labelled(line: &str, labels: &[&str]) -> bool {
 
 /// The first line of a header block.
 const FROM: &[&str] = &["from", "de", "von", "da", "van"];
-/// Its other lines.
-const HEADERS: &[&str] = &["sent", "envoyé", "date", "to", "à", "gesendet", "an", "enviado", "inviato", "verzonden"];
+/// The most words of a header block's other labels (`Enviado el`, `Enviada em`, `Sent`).
+const LABEL_WORDS: usize = 3;
 /// The end of a line that introduces what someone else wrote.
 const WROTE: &[&str] = &["wrote", "a écrit", "schrieb", "escribió", "ha scritto", "schreef"];
 /// How such a line starts when a mail program cut it in two.
 const ON: &[&str] = &["on ", "le ", "am ", "el ", "il ", "op "];
+
+/// A line (lower case, trimmed) that starts with a short label: one to [`LABEL_WORDS`] words of
+/// letters, then a colon after a space, a no-break space or nothing (`sent:`, `enviado el:`,
+/// `à :`, `para\u{a0}:`); not a link's `https://`. What a header block's lines after its first
+/// start with, in every language Outlook writes.
+fn short_label(line: &str) -> bool {
+    let Some((label, after)) = line.split_once(':') else { return false };
+    let label = label.trim_end_matches([' ', '\u{a0}', '\u{202f}', '\t']);
+    let mut words = 0usize;
+    for word in label.split([' ', '\u{a0}', '\u{202f}', '\t']) {
+        if word.is_empty() || !word.chars().all(char::is_alphabetic) {
+            return false;
+        }
+        words += 1;
+        if words > LABEL_WORDS {
+            return false;
+        }
+    }
+    words > 0 && !after.starts_with("//")
+}
+
+/// Gmail's German or Dutch attribution line (`Am … schrieb Ana <`, `Op … schreef`), cut in two
+/// before the end that closes it with a colon.
+fn wrapped_attribution(line: &str, next: Option<&str>) -> bool {
+    ["am ", "op "].iter().any(|o| line.starts_with(o))
+        && [(" schrieb", " schrieb "), (" schreef", " schreef ")].iter().any(|(end, inside)| line.ends_with(end) || line.contains(inside))
+        && next.is_some_and(|n| n.ends_with(':'))
+}
 
 /// A line (lower case, trimmed) that by itself starts what isn't the author's: a row of dashes
 /// around words, Outlook's row of underscores, a "wrote:" line, Apple Mail's forwarding line, a
@@ -116,8 +144,14 @@ pub fn own_text(text: &str) -> &str {
             let before = i.checked_sub(1).and_then(|p| lines.get(p)).filter(|(_, l)| cut_before && ON.iter().any(|o| l.starts_with(o)));
             return text.get(..before.map_or(*start, |(s, _)| *s)).unwrap_or_default();
         }
+        // Gmail's German or Dutch line, cut in two before its address's end.
+        if wrapped_attribution(line, lines.get(i + 1).map(|(_, l)| l.as_str())) {
+            return text.get(..*start).unwrap_or_default();
+        }
+        // A header block: a From line, then within a few lines one with a short label (`Sent:`,
+        // `Enviado el:`, `Para:`), whatever the language.
         if labelled(line, FROM) {
-            let block = lines.iter().skip(i + 1).take(HEADER_REACH).take_while(|(_, l)| !mark(l)).any(|(_, l)| labelled(l, HEADERS));
+            let block = lines.iter().skip(i + 1).take(HEADER_REACH).take_while(|(_, l)| !mark(l)).any(|(_, l)| short_label(l));
             if block {
                 return text.get(..*start).unwrap_or_default();
             }
@@ -165,53 +199,78 @@ fn signature(own: &str) -> &str {
     own.get(start..).unwrap_or_default()
 }
 
+/// The parts of a signature's line between spaced separators (`Dana – CEO – www.…`, `a | b`):
+/// a signature written on one line, as phones send it.
+fn parts(line: &str) -> impl Iterator<Item = &str> {
+    let mut rest = Some(line);
+    std::iter::from_fn(move || {
+        let r = rest?;
+        let mut spaced = false;
+        for (at, c) in r.char_indices() {
+            if spaced && matches!(c, '|' | '–' | '—' | '•' | '·') {
+                let after = r.get(at + c.len_utf8()..);
+                if after.is_some_and(|a| a.starts_with(char::is_whitespace)) {
+                    rest = after;
+                    return r.get(..at);
+                }
+            }
+            spaced = c.is_whitespace();
+        }
+        rest = None;
+        Some(r)
+    })
+}
+
 /// The addresses and websites the signature of `text` gives, in order, once each, at most
 /// [`MOST_SHOWN`]. Only a signature's kind of line counts: one where they come with at most
 /// [`MOST_OTHER_WORDS`] other words (a name, a title, a label such as `Tél.` or `Web`), so a
-/// sentence naming a website or an address ("I can't log in to www.…") isn't read. A link's
-/// note (where an HTML link goes, at the end of the text) is read only for a link on such a line:
-/// not for one in a sentence of the message.
+/// sentence naming a website or an address ("I can't log in to www.…") isn't read; a line in
+/// parts between spaced separators (`Dana Whitfield – CEO – www.…`) counts the words of each part
+/// apart. A link's note (where an HTML link goes, at the end of the text) is read only for a link
+/// on such a line: not for one in a sentence of the message.
 pub fn signature_shows(text: &str) -> Vec<Shown> {
     let mut out: Vec<Shown> = Vec::new();
     let separator = |c: char| c.is_whitespace() || matches!(c, '<' | '>' | '(' | ')' | '[' | ']' | '{' | '}' | '"' | ',' | ';' | '|' | '«' | '»');
     // The notes of the links on the signature's lines (they come after those lines).
     let mut linked: BTreeSet<&str> = BTreeSet::new();
     for line in signature(own_text(text)).split('\n') {
-        if out.len() >= MOST_SHOWN {
-            break;
-        }
         if link_note(line).is_some_and(|n| !linked.contains(n)) {
             continue;
         }
-        let mut found: Vec<Shown> = Vec::new();
-        let mut others = 0usize;
-        for word in line.split(separator) {
-            let word = word.trim_matches(|c: char| matches!(c, '.' | ':' | '!' | '?' | '\'' | '\u{2019}' | '*' | '`'));
-            if word.is_empty() || word.len() > LONGEST_WORD {
+        for part in parts(line) {
+            if out.len() >= MOST_SHOWN {
+                return out;
+            }
+            let mut found: Vec<Shown> = Vec::new();
+            let mut others = 0usize;
+            for word in part.split(separator) {
+                let word = word.trim_matches(|c: char| matches!(c, '.' | ':' | '!' | '?' | '\'' | '\u{2019}' | '*' | '`'));
+                if word.is_empty() || word.len() > LONGEST_WORD {
+                    continue;
+                }
+                match read_word(word) {
+                    Some(shown) if found.len() < MOST_SHOWN => found.push(shown),
+                    Some(_) => {}
+                    // Separators (`–`, `•`, `/`) and a phone number's digits aren't words.
+                    None if word.chars().any(char::is_alphabetic) => {
+                        others += 1;
+                        if others > MOST_OTHER_WORDS {
+                            break;
+                        }
+                    }
+                    None => {}
+                }
+            }
+            if others > MOST_OTHER_WORDS {
                 continue;
             }
-            match read_word(word) {
-                Some(shown) if found.len() < MOST_SHOWN => found.push(shown),
-                Some(_) => {}
-                // Separators (`–`, `•`, `/`) and a phone number's digits aren't words.
-                None if word.chars().any(char::is_alphabetic) => {
-                    others += 1;
-                    if others > MOST_OTHER_WORDS {
-                        break;
-                    }
-                }
-                None => {}
+            if linked.len() < MOST_SHOWN {
+                linked.extend(link_refs(part).take(MOST_SHOWN));
             }
-        }
-        if others > MOST_OTHER_WORDS {
-            continue;
-        }
-        if linked.len() < MOST_SHOWN {
-            linked.extend(link_refs(line).take(MOST_SHOWN));
-        }
-        for shown in found {
-            if out.len() < MOST_SHOWN && !out.contains(&shown) {
-                out.push(shown);
+            for shown in found {
+                if out.len() < MOST_SHOWN && !out.contains(&shown) {
+                    out.push(shown);
+                }
             }
         }
     }
@@ -415,6 +474,47 @@ mod tests {
         assert_eq!(signature_shows(&text), vec![Shown::Site("studio.example".into())]);
     }
 
+    /// Outlook's header block in Spanish, Portuguese, Italian, Dutch and German: whatever its
+    /// labels (`Enviado el:`, `Para:`, `Assunto:`…), a short label after the From line makes it a
+    /// block (Ruling 18). An outsider's reply quoting the user's own signature says nothing.
+    #[test]
+    fn header_blocks_in_other_languages() {
+        let mut k = KnownPeople::new();
+        k.add(&EmailAddress::new("Zoe Park", "zoe@studio.example"));
+        let zoe = SenderCheck::new(org(), k, ["zoe@studio.example".to_string()]);
+        let mine = "Hola Bo\n\nZoe Park\nwww.studio.example\nzoe@studio.example";
+        for header in [
+            "De: Zoe Park <zoe@studio.example>\nEnviado el: lunes, 3 de noviembre de 2026 10:00\nPara: Bo Chen\nAsunto: Precios",
+            "De: Zoe Park <zoe@studio.example>\nEnviada em: segunda-feira, 3 de novembro de 2026 10:00\nPara: Bo Chen\nAssunto: Preços",
+            "Da: Zoe Park <zoe@studio.example>\nInviato: lunedì 3 novembre 2026 10:00\nA: Bo Chen\nOggetto: Prezzi",
+            "Van: Zoe Park <zoe@studio.example>\nVerzonden: maandag 3 november 2026 10:00\nAan: Bo Chen\nOnderwerp: Prijzen",
+            "Von: Zoe Park <zoe@studio.example>\nGesendet: Montag, 3. November 2026 10:00\nAn: Bo Chen\nBetreff: Preise",
+            "**De:** Zoe Park <zoe@studio.example>\n**Enviado el:** lunes\n**Para:** Bo Chen",
+            "De: Zoe Park\n\u{a0}\nPara\u{a0}: Bo Chen",
+        ] {
+            let text = format!("Gracias.\n\nBo\n{header}\n\n{mine}");
+            assert!(!own_text(&text).contains("Hola"), "{header:?}");
+            assert_eq!(zoe.check_signature(&EmailAddress::new("Bo Chen", "bo@supplier.example"), &text, false, &org()), None, "{header:?}");
+        }
+        // Gmail's German and Dutch lines, wrapped over two.
+        for attribution in [
+            "Am Mo., 3. Nov. 2026 um 10:00 Uhr schrieb Zoe Park <\nzoe@studio.example>:",
+            "Am Mo., 3. Nov. 2026 um 10:00 Uhr schrieb\nZoe Park <zoe@studio.example>:",
+            "Op ma 3 nov. 2026 om 10:00 schreef Zoe Park <\nzoe@studio.example>:",
+        ] {
+            let text = format!("Danke.\n\nBo\n{attribution}\n\n{mine}");
+            assert_eq!(own_text(&text), "Danke.\n\nBo\n", "{attribution:?}");
+            assert_eq!(zoe.check_signature(&EmailAddress::new("Bo Chen", "bo@supplier.example"), &text, false, &org()), None, "{attribution:?}");
+        }
+        // A link on the line after a From line isn't a label.
+        let text = "From: our team\nhttps://www.studio.example\n\nDana";
+        assert_eq!(own_text(text), text);
+        // A label too long, or not of letters, isn't one either.
+        for text in ["From: Paris\nthe four of us: fine", "From: Paris\n10h30: train", "From: Paris\n* To: Lyon"] {
+            assert_eq!(own_text(text), text);
+        }
+    }
+
     #[test]
     fn a_from_line_alone_is_no_quote() {
         let text = "From: our team, with love\n\nDana\nwww.studio.example";
@@ -471,7 +571,23 @@ mod tests {
         assert_eq!(warns(&c, "Marie Client", "marie.client@gmail.com", text, false), shown("dana@corp.example", "marie.client@gmail.com"));
         let text = "Merci.\n\nTél. : +33 1 23 45 67 89 – Web : www.studio.example";
         assert_eq!(signature_shows(text), vec![Shown::Site("studio.example".into())]);
-        assert_eq!(signature_shows("Dana Whitfield, CEO, Studio, Paris, France • www.studio.example"), vec![]);
+        // A sentence of more words, even with a separator, isn't (Ruling 17: only the part
+        // holding the site counts its words).
+        assert_eq!(signature_shows("I can't log in to www.studio.example | since Monday"), vec![]);
+    }
+
+    /// A signature on one line, its parts between spaced separators (Ruling 17): only the part
+    /// holding the address or site counts its words.
+    #[test]
+    fn a_one_line_signature_is_read_by_its_parts() {
+        let c = knowing(&[]);
+        let text = "Merci.\n\nDana Whitfield – Directrice Générale – Studio SAS – www.studio.example";
+        assert_eq!(warns(&c, "Dana Whitfield", "dg.studio@gmail.com", text, false), shown("studio.example", "dg.studio@gmail.com"));
+        assert_eq!(signature_shows("Dana Whitfield, CEO, Studio, Paris, France • www.studio.example"), vec![Shown::Site("studio.example".into())]);
+        assert_eq!(signature_shows("Dana Whitfield — Head of Finance · dana@corp.example"), vec![Shown::Address("dana@corp.example".into())]);
+        // A separator stuck to a word doesn't part the line.
+        assert_eq!(signature_shows("Dana Whitfield, CEO, Studio, Paris, France •www.studio.example"), vec![]);
+        assert_eq!(warns(&c, "Marie Client", "marie.client@gmail.com", "I can't log in to www.studio.example", false), None);
     }
 
     #[test]
