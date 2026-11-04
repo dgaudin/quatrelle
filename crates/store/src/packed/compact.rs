@@ -83,6 +83,15 @@ impl Packs {
                 Err(e) => break Err(other(e)),
             }
         };
+        // The compaction's own commits don't keep the file's free space (redb skips it there), so
+        // a crash after them had the whole file gone through as it reopened, on the window's
+        // thread: a sealed commit (as `Packs::change` makes) ends it, whether it went to the end
+        // or not.
+        let sealed = db.begin_write().map_err(other).and_then(|mut tx| {
+            tx.set_quick_repair(true);
+            tx.commit().map_err(other)
+        });
+        let done = done.and(sealed);
         let after = size();
         log::info!("{}: compacted from {before} to {after} bytes in {:.1} s", path.display(), began.elapsed().as_secs_f32());
         Packs::lock(&self.open).insert(account.to_string(), Arc::new(db));
