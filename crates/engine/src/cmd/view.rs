@@ -355,7 +355,7 @@ fn room_lines(v: &Value) -> Result<Option<Vec<String>>, CmdError> {
         lines.filter(|l| !blank(l)).take(crate::WEBEX_ROOM_LINES_MAX + 1).map(str::to_string).collect()
     }
     match v.get("details") {
-        None => Ok(None),
+        None | Some(Value::Null) => Ok(None),
         Some(Value::String(x)) => Ok(Some(keep(x.split('\n')))),
         Some(Value::Array(a)) if a.iter().all(Value::is_string) => Ok(Some(keep(a.iter().filter_map(Value::as_str)))),
         Some(_) => Err(CmdError::Params("`details` is the room's lines: a string (\"\\n\" between them) or a list of strings".into())),

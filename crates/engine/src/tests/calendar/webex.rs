@@ -50,7 +50,7 @@ pub(super) fn appointment(s: &mut Session, location: &str, notes: &str) -> Strin
 }
 
 /// The invitations gone to the guests so far.
-fn invitations(s: &Session) -> usize {
+pub(super) fn invitations(s: &Session) -> usize {
     let folder = s.store.as_ref().unwrap().load_folder("sample", "Sent").unwrap();
     folder.messages.iter().filter(|m| m.subject == "Invitation: Trailer review").count()
 }

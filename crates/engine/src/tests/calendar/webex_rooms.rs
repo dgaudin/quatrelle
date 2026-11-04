@@ -40,6 +40,9 @@ fn webex_rooms_are_added_changed_and_removed() {
     let r = s.run("calendar.webexRoom", &json!({"url": TEAM, "name": "Équipe", "details": ["  ", "N° 9 "]})).unwrap();
     assert_eq!(answered(&r), [ana.clone(), room("Équipe", TEAM, &["N° 9"])]);
     assert_eq!(s.prefs.webex_rooms, answered(&r));
+    // `null`: as if not given.
+    let r = s.run("calendar.webexRoom", &json!({"url": ANA, "name": null, "was": null, "details": null, "remove": null})).unwrap();
+    assert_eq!(answered(&r)[0], ana, "left as it was");
     // Its lines taken off: its name stays.
     s.run("calendar.webexRoom", &json!({"url": ANA, "details": []})).unwrap();
     assert_eq!(s.prefs.webex_rooms[0], room("Ana", ANA, &[]));
@@ -74,6 +77,9 @@ fn webex_rooms_refuse_what_they_cannot_keep() {
     refused(&mut s, json!({"url": new, "name": "  "}));
     refused(&mut s, json!({"url": new, "name": "n".repeat(81)}));
     s.run("calendar.webexRoom", &json!({"url": new, "name": "n".repeat(80)})).unwrap();
+    let e = "https://acme.webex.com/meet/e";
+    refused(&mut s, json!({"url": e, "name": "é".repeat(81)}));
+    s.run("calendar.webexRoom", &json!({"url": e, "name": "é".repeat(80)})).unwrap();
     // At most 20 lines of 200 characters.
     refused(&mut s, json!({"url": ANA, "details": vec!["ligne"; 21]}));
     s.run("calendar.webexRoom", &json!({"url": ANA, "details": vec!["ligne"; 20]})).unwrap();
@@ -154,6 +160,28 @@ fn a_hand_edited_rooms_list_is_cut_when_read() {
     assert!(p.external_tag, "the other settings still read");
 }
 
+/// A settings file whose rooms are damaged (not a list, an entry that isn't a room, a value of
+/// the wrong kind) keeps everything else: what reads as a room is kept, a name that isn't text
+/// reads as none (the room stays, unnamed, with its link), lines read as the command takes them.
+#[test]
+fn a_damaged_rooms_list_loses_nothing_else() {
+    let read = |v: Value| {
+        let mut p: Prefs = serde_json::from_value(v.clone()).unwrap_or_else(|e| panic!("{v}: {e}"));
+        p.carry_over_webex_rooms();
+        assert!(p.external_tag, "the other settings still read: {v}");
+        p.webex_rooms
+    };
+    let rooms = read(json!({"webexRooms": [{"name": 5, "url": ANA}, {"name": "Équipe", "url": TEAM, "details": "x"}], "externalTag": true}));
+    assert_eq!(rooms, [room("", ANA, &[]), room("Équipe", TEAM, &["x"])]);
+    for list in [json!("x"), json!(null), json!(5), json!({"name": "Ana", "url": ANA})] {
+        assert!(read(json!({"webexRooms": list, "externalTag": true})).is_empty(), "{list}");
+    }
+    assert!(read(json!({"webexRoom": 7, "externalTag": true})).is_empty());
+    let rooms = read(json!({"webexRooms": [5, "x", null, {"url": 3}, {"name": "Équipe", "url": TEAM, "details": [1, "N° 1", null]},
+                                           {"name": "Ana", "url": ANA, "details": "N° 2\nN° 3"}], "externalTag": true}));
+    assert_eq!(rooms, [room("Équipe", TEAM, &["N° 1"]), room("Ana", ANA, &["N° 2", "N° 3"])]);
+}
+
 #[test]
 fn an_event_takes_a_conference_and_lets_it_go() {
     let mut s = sample_session("event-conference");
@@ -171,6 +199,7 @@ fn an_event_takes_a_conference_and_lets_it_go() {
     })
     .unwrap();
     let read = conference(&s);
+    assert_eq!(read.as_ref().map(|c| c.features.as_slice()), Some(["VIDEO".to_string(), "SCREEN".to_string()].as_slice()));
     s.run("event.update", &json!({"uid": uid, "summary": "Point d'équipe"})).unwrap();
     assert_eq!(conference(&s), read, "not given: left as it was");
     s.run("event.update", &json!({"uid": uid, "conference": {"url": JITSI}})).unwrap();
@@ -214,18 +243,34 @@ fn an_invitation_by_mail_carries_the_conference() {
 }
 
 /// Webex gives a scheduled meeting another link: the appointment's conference follows, its label
-/// kept.
+/// kept, whether the notes held the old link too or not; another service's conference stays.
 #[test]
 fn a_webex_link_changed_moves_the_conference() {
-    use super::webex::{NEW_LINK, OLD_LINK, appointment, meeting};
-    let mut s = sample_session("webex-link-conference");
-    let uid = appointment(&mut s, OLD_LINK, &format!("Join the Webex meeting: {OLD_LINK}"));
-    let e = s.pim_mut("sample").events.iter_mut().find(|e| e.event.uid == uid).unwrap();
-    e.event.conference = Conference::new(OLD_LINK, "Webex");
-    s.apply(Event::WebexUpdated { id: "m1".into(), meeting: Some(meeting(NEW_LINK)), error: None });
-    let c = s.find_event(&uid).unwrap().1.event.conference.clone().unwrap();
-    assert_eq!((c.url.as_str(), c.label.as_str()), (NEW_LINK, "Webex"));
-    done(s);
+    use super::webex::{NEW_LINK, OLD_LINK, appointment, invitations, meeting};
+    for (place, notes, conference, moved) in [
+        (OLD_LINK, format!("Join the Webex meeting: {OLD_LINK}"), OLD_LINK, true),
+        ("Room 2", String::new(), OLD_LINK, true),
+        ("Room 2", String::new(), JITSI, false),
+    ] {
+        let mut s = sample_session("webex-link-conference");
+        let uid = appointment(&mut s, place, &notes);
+        let e = s.pim_mut("sample").events.iter_mut().find(|e| e.event.uid == uid).unwrap();
+        e.event.conference = Conference::new(conference, "Webex");
+        let before = s.find_event(&uid).unwrap().1.clone();
+        let told = invitations(&s);
+        s.apply(Event::WebexUpdated { id: "m1".into(), meeting: Some(meeting(NEW_LINK)), error: None });
+        let e = &s.find_event(&uid).unwrap().1.event;
+        if moved {
+            let c = e.conference.clone().unwrap();
+            assert_eq!((c.url.as_str(), c.label.as_str()), (NEW_LINK, "Webex"), "{place}");
+            assert_eq!((e.location.clone(), e.description.clone()), (place.replace(OLD_LINK, NEW_LINK), notes.replace(OLD_LINK, NEW_LINK)));
+            assert_eq!(invitations(&s), told + 1, "the guests hear of it: {place}");
+        } else {
+            assert_eq!(s.find_event(&uid).unwrap().1, &before, "another service's conference stays");
+            assert_eq!(invitations(&s), told);
+        }
+        done(s);
+    }
 }
 
 /// An event cached before Quatrelle read `CONFERENCE` holds the line among its kept ones: read

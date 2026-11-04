@@ -48,6 +48,12 @@ fn replaced_link(e: &CalEvent, link: &str) -> Option<String> {
     links.into_iter().find(|l| ical::webex_join_host(l).as_ref() == Some(&site) && (e.description.contains(l) || e.location.contains(l)))
 }
 
+/// Whether a conference's link gives way to Webex's `link`: another join page on the same site
+/// (the meeting's link before), and `link` one that may be opened.
+fn moved_conference(url: &str, link: &str) -> bool {
+    url != link && ical::launchable_link(link) && ical::webex_join_host(url).is_some_and(|site| ical::webex_join_host(link) == Some(site))
+}
+
 impl Session {
     /// Whether a Webex meeting of this event's would be the user's to change: it is the event
     /// itself and not an occurrence of it, and the user organizes it (or no one does, as for a
@@ -181,18 +187,23 @@ impl Session {
         }
     }
 
-    /// Webex gave a meeting another link: the appointment says the new one (its conference too,
-    /// when it was the old link), and its guests hear of it.
+    /// Webex gave a meeting another link: the appointment says the new one in its notes and place,
+    /// and as its conference when that was a join page on the same site (alone or not), and its
+    /// guests hear of it.
     fn webex_link_changed(&mut self, id: &str, link: &str) -> Result<(), CmdError> {
         let found = self.pim.iter().find_map(|(account, p)| {
             let e = p.events.iter().map(|e| &e.event).find(|e| e.webex_id.as_deref() == Some(id) && self.webex_is_mine(e))?;
-            Some((account.clone(), e.uid.clone(), replaced_link(e, link)?))
+            let old = replaced_link(e, link);
+            let conference = e.conference.as_ref().is_some_and(|c| moved_conference(&c.url, link));
+            (old.is_some() || conference).then(|| (account.clone(), e.uid.clone(), old))
         });
         let Some((account, uid, old)) = found else { return Ok(()) };
         self.update_event(&uid, |e| {
-            e.description = e.description.replace(&old, link);
-            e.location = e.location.replace(&old, link);
-            if let Some(c) = e.conference.as_mut().filter(|c| c.url == old && ical::launchable_link(link)) {
+            if let Some(old) = &old {
+                e.description = e.description.replace(old, link);
+                e.location = e.location.replace(old, link);
+            }
+            if let Some(c) = e.conference.as_mut().filter(|c| moved_conference(&c.url, link)) {
                 c.url = link.to_string();
             }
         })?;

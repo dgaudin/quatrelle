@@ -209,11 +209,11 @@ pub struct Prefs {
     pub org_domains: Vec<String>,
     /// The Webex rooms the appointment window's Webex Meeting button offers, in order
     /// ([`WebexRoom`], at most [`WEBEX_ROOMS_MAX`]); none until one is added.
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(skip_serializing_if = "Vec::is_empty", deserialize_with = "webex_rooms::read_rooms")]
     pub webex_rooms: Vec<WebexRoom>,
     /// The single room of 1.0, carried over ([`Prefs::carry_over_webex_rooms`]): read, never
     /// written again.
-    #[serde(skip_serializing)]
+    #[serde(skip_serializing, deserialize_with = "webex_rooms::read_text")]
     pub webex_room: String,
     /// The Webex site meetings are made on (`<org>.webex.com`), and the integration's client id
     /// (its client secret and the sign-in are in the keychain).
