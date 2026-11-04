@@ -104,6 +104,25 @@ fn the_global_address_list_is_searched_as_a_name_is_typed() {
     done(s);
 }
 
+/// A name typed that Check Names then asks about too is Check Names' own question: the next
+/// name typed doesn't take its place, and Check Names gets its answer.
+#[test]
+fn a_typed_name_checked_waits_as_check_names_question() {
+    let (mut s, gal) = with_exchange("gal-typed-checked");
+    let source = format!("directory:{gal}");
+    for typed in ["p", "pro"] {
+        s.address_book_now(&source, typed);
+    }
+    assert_eq!(asked(&mut s), ["p"]);
+    s.search_directory(&gal, "pro", false);
+    s.address_book_now(&source, "prov");
+    assert!(s.directory_searching(&gal, "pro"), "Check Names' question still waits");
+    assert!(s.directory_searching(&gal, "prov"));
+    answer(&mut s, &gal, "p", &[]);
+    assert_eq!(asked(&mut s), ["pro"], "Check Names first");
+    done(s);
+}
+
 /// Issue #9 (follow-up): someone known here by an address alone (a contact saved with no name)
 /// is checked against the directory and written out with its full name; a name of one's own is
 /// kept, even when the directory names that person otherwise.

@@ -238,7 +238,6 @@ fn the_quiet_gathering_waits_for_the_book() {
     done(s);
 }
 
-/// A name made of letters only, one per `i` (names with digits aren't people's).
 /// The list's marks come without any message opened: with no book, the window's wish starts its
 /// reading (nothing read then, nothing gathered), its slices read it, and the quiet gathering then
 /// marks the warned row. A second wish, once gathered, starts nothing.
@@ -275,6 +274,7 @@ fn the_marks_come_without_opening_a_message() {
     done(s);
 }
 
+/// A name made of letters only, one per `i` (names with digits aren't people's).
 fn letters(mut i: usize) -> String {
     let mut w = String::new();
     for _ in 0..4 {
@@ -316,6 +316,59 @@ fn gathering_is_quick() {
     let took = started.elapsed();
     assert_eq!(s.organisation(), Some(&["corp.example", "studio.example"].map(String::from).into()));
     assert!(took < std::time::Duration::from_millis(100), "the domains alone: {took:?}");
+    done(s);
+}
+
+/// Final review n° 4: a calendar saved or synced moves the PIM revision too; the people are
+/// gathered again only when the cards changed (one added, renamed), not for an appointment.
+#[test]
+fn a_calendar_change_doesnt_gather_the_people_again() {
+    let mut s = zoe_session("senders-calendar");
+    let uid = s.run("contact.create", &json!({"name": "Ana Lima", "emails": ["ana@corp.example"]})).unwrap()["uid"].as_str().unwrap().to_string();
+    s.keep_senders();
+    let gathered = |s: &Session| s.senders.as_ref().unwrap().gathered;
+    let first = gathered(&s);
+    let pim = s.pim_revision;
+    s.run("event.create", &json!({"summary": "Review", "start": "2026-11-05T11:00", "end": "2026-11-05T12:00"})).unwrap();
+    assert_ne!(s.pim_revision, pim, "the appointment moved the revision");
+    s.keep_senders();
+    assert_eq!(gathered(&s), first, "an appointment: not gathered again");
+    // A card added: gathered.
+    card(&mut s, "Bo Chen", "bo@corp.example");
+    s.keep_senders();
+    assert_eq!(gathered(&s), first + 1);
+    assert!(s.senders.as_ref().unwrap().check.knows("bo@corp.example"));
+    // A card renamed: gathered, the warning calling her by her new name.
+    s.run("contact.update", &json!({"uid": uid, "name": "Ana Costa"})).unwrap();
+    s.keep_senders();
+    assert_eq!(gathered(&s), first + 2);
+    assert!(s.senders.as_ref().unwrap().check.people().addresses_of("Ana Costa").is_some());
+    // And another appointment after it: not again.
+    s.run("event.create", &json!({"summary": "Lunch", "start": "2026-11-06T12:00", "end": "2026-11-06T13:00"})).unwrap();
+    s.keep_senders();
+    assert_eq!(gathered(&s), first + 2);
+    done(s);
+}
+
+/// Ruling 15: someone known only from the directory is worn on another address only from a mail
+/// service (or a look-alike of their domain): a namesake at a customer says nothing. Known by a
+/// card, the whole rule.
+#[test]
+fn a_directory_namesake_at_a_customer_isnt_warned() {
+    let mut s = zoe_session("senders-namesake");
+    directory_answers(&mut s, "jean", &[("Jean Martin", "jean.martin@corp.example")]);
+    deliver(&mut s, 1, ("Jean Martin", "jean.martin@client.example"), "Order");
+    assert_eq!(warning(&s), None, "a customer called Jean Martin");
+    deliver(&mut s, 2, ("Jean Martin", "jean.martin.1984@gmail.com"), "Urgent");
+    let warned = |real: &str| {
+        Some(SenderWarning::NameOfKnownPerson { name: "Jean Martin".into(), known: "jean.martin@corp.example".into(), real: real.into() })
+    };
+    assert_eq!(warning(&s), warned("jean.martin.1984@gmail.com"));
+    done(s);
+    let mut s = zoe_session("senders-namesake-card");
+    card(&mut s, "Jean Martin", "jean.martin@corp.example");
+    deliver(&mut s, 1, ("Jean Martin", "jean.martin@client.example"), "Order");
+    assert_eq!(warning(&s), warned("jean.martin@client.example"), "known by a card: as before");
     done(s);
 }
 
@@ -407,6 +460,35 @@ fn the_answer_brings_the_warning() {
     });
     assert_eq!(warning(&s), None);
     assert!(asked(&mut s).is_empty());
+    done(s);
+}
+
+/// Final review n° 1: the directory is asked whether or not something was found. A colleague at
+/// a sister domain, the organisation's site in her signature, is warned until the directory
+/// says it knows her address; a Gmail fake of a known name is asked about too, and stays warned.
+#[test]
+fn the_directory_is_asked_with_a_warning_shown_too() {
+    let mut s = zoe_session("question-warned");
+    let body = "Here's the plan for Monday.\r\n\r\nDana Whitfield\r\nwww.studio.example";
+    deliver_raw(&mut s, 1, &source(1, "Dana Whitfield <dana@studio-group.example>", "", "text/plain", body));
+    assert_eq!(warning(&s), Some(SenderWarning::SignatureShowsOther { shown: "studio.example".into(), real: "dana@studio-group.example".into() }));
+    assert_eq!(asked(&mut s), ["dana whitfield"]);
+    directory_answers(&mut s, "dana whitfield", &[("Dana Whitfield", "dana@studio-group.example")]);
+    assert_eq!(warning(&s), None, "a colleague after all");
+    done(s);
+    let mut s = zoe_session("question-fake");
+    card(&mut s, "Dana Whitfield", "dana@studio.example");
+    asked(&mut s);
+    deliver(&mut s, 1, ("Dana Whitfield", "dana.whitfield1984@gmail.com"), "Wire");
+    let warned = Some(SenderWarning::NameOfKnownPerson {
+        name: "Dana Whitfield".into(),
+        known: "dana@studio.example".into(),
+        real: "dana.whitfield1984@gmail.com".into(),
+    });
+    assert_eq!(warning(&s), warned);
+    assert_eq!(asked(&mut s), ["dana whitfield"]);
+    directory_answers(&mut s, "dana whitfield", &[("Dana Whitfield", "dana@studio.example")]);
+    assert_eq!(warning(&s), warned, "the directory knows her real address, not this one");
     done(s);
 }
 
