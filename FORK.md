@@ -840,6 +840,45 @@ d'un message, et, son ajout, la signature comparée à l'expéditeur. Spec et pl
   Plus tard (1.2) : un bouton « Est-ce une arnaque ? » de l'assistant, à la demande, qui ne pourra
   qu'ajouter une mise en garde.
 
+### État de la récupération : v0.31, septième partie : plusieurs salles Webex et CONFERENCE (2026-11-04)
+
+Fonction n° 4 du calendrier de ZIDAN44 (v0.31, issue #25 de l'origine), sur la branche `webex-rooms`,
+conçue avec le propriétaire le 04/11 : plusieurs salles Webex, chacune avec son nom, son lien et des
+lignes libres, et la lecture et l'écriture de `CONFERENCE` (RFC 7986). Spec et plan :
+`docs/superpowers/specs/2026-11-04-webex-rooms-conference-design.md`,
+`docs/superpowers/plans/2026-11-04-webex-rooms-conference.md`. Mode d'emploi : `docs/webex.md`.
+
+- **Repris de l'origine** : la lecture de `CONFERENCE` de `e838af15`, réécrite ici (premier lien web
+  dont `FEATURE` n'est pas seulement téléphone, discussion ou flux ; les autres lignes gardées et
+  réécrites telles quelles ; liens et étiquettes bornés ; fonctions de texte iCalendar rangées dans
+  `ical/text.rs`).
+- **Ajouté ici** :
+  - plusieurs salles (Fichier › Options › Calendrier, « Salles Webex » : nom de 80 caractères, lien
+    de salle personnelle, jusqu'à 20 lignes libres de 200 caractères ; 20 salles au plus, liens
+    uniques), la salle unique de la 1.0 reprise comme première salle, sans nom, affichée « Ma salle
+    personnelle » ; commande `calendar.webexRoom` ;
+  - le menu du bouton Réunion Webex : « Nouvelle réunion Webex », les salles par nom, « Ajouter une
+    salle… » ; les salles grisées tant qu'une réunion Webex est planifiée ; dans le navigateur, un
+    clic avec une seule salle l'ajoute ;
+  - le remplacement du bloc d'une salle : « Rejoindre la réunion Webex : », le lien et les lignes en
+    fin de notes ; une autre salle (ou une réunion planifiée) remplace ce bloc, retrouvé dans toutes
+    les langues de l'interface, les lignes tapées par l'utilisateur restant ;
+  - la règle de retrait : une conférence dont le lien est effacé du lieu et des notes est retirée ;
+    celle d'une autre application reste ;
+  - l'écriture partout où c'est possible : CalDAV, calendriers locaux, invitations envoyées depuis un
+    compte IMAP, export `.ics` (`CONFERENCE;VALUE=URI;FEATURE=AUDIO,VIDEO;LABEL=Webex:<lien>`), rien
+    vers Exchange (EWS, Graph) ; Rejoindre prend le lien du serveur, puis la conférence, puis un lien de
+    réunion connu du lieu ou des notes ; la recherche trouve l'étiquette et le lien ;
+  - Rejoindre et Réunion Webex côte à côte dans le ruban d'un rendez-vous modifiable ;
+  - `event.create` et `event.update` acceptent `conference`.
+- **Laissés** : les salles d'autres services (BigBlueButton, Jitsi, OpenTalk), son bloc
+  `---- Online meeting ----` à marqueurs, la liste des organisateurs de réunions, « ajouter une réunion
+  en ligne à toutes les réunions avec invités », sa carte Réunions en ligne, ses commandes `meetings.*`,
+  Teams par Graph.
+- **Vérifié** : modèle, moteur (aller-retour CalDAV, invitation IMAP, rien vers Exchange), interface
+  sans fenêtre (menu, remplacement du bloc, retrait, lignes d'Options), cible de fuzz `ical` étendue,
+  `cargo xtask ci`.
+
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
 Quatre chantiers, chacun dans son commit, à la suite d'un audit de l'éditeur HTML.

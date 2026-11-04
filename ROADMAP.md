@@ -622,3 +622,12 @@ local-first, media-aware v1); the fuller request is
   open when Quatrelle quits, deletes its meeting. The personal room stays, as a choice in the
   button's menu. Not yet confirmed on a real account: the sign-in, a create, an update, a delete,
   `"recurrence": null`, and the extended property on on-premises Exchange.
+- **2026-11-04** — **Several Webex rooms, and CONFERENCE read and written** (`docs/webex.md`): File ›
+  Options › Calendar keeps any number of Webex rooms (a name, a personal room link, free lines; up to
+  20), the 1.0 single room carried over as the first; the Webex Meeting button's menu lists them and
+  adds one, and a room puts its link as the place and its block at the end of the notes (another room
+  replaces that block). `CONFERENCE` (RFC 7986) is read from every iCalendar and written by CalDAV,
+  local calendars, invitations sent from an IMAP account and `.ics` export; Join and the calendar
+  search take it; nothing goes to Exchange. Join and Webex Meeting sit side by side. Also: an answer to
+  an invitation that Exchange refuses for good is said once and not sent again at every sync, and the
+  refusal names the refused field; the real fix waits for that field's name from the owner's server.
