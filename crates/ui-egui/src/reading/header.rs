@@ -9,6 +9,13 @@
 use super::*;
 use quatrelle_engine::model::Summary;
 
+/// The narrowest the sender's column gets with the reply group beside it (narrower, the group
+/// goes under the header).
+const MIN_SENDER: f32 = 220.0;
+
+/// The message's header; whether Reply | Reply all | Forward went in it, at the sender's right
+/// ([`actions`] leaves them out then).
+#[allow(clippy::too_many_arguments)]
 pub(super) fn header(
     s: &mut Session,
     t: Tokens,
@@ -16,8 +23,10 @@ pub(super) fn header(
     r: &quatrelle_engine::Reading,
     p: &mime::Parsed,
     summary: &Option<Summary>,
+    in_window: bool,
     acts: &mut Vec<Action>,
-) {
+) -> bool {
+    let mut placed = false;
     // Subject.
     ui.horizontal_wrapped(|ui| {
         let subject = if p.subject.is_empty() { tl!("(no subject)") } else { p.subject.as_str() };
@@ -69,7 +78,12 @@ pub(super) fn header(
             f32::INFINITY,
             egui::TextStyle::Small,
         );
-        let rest = ui.available_width() - date.size().x - 16.0;
+        // In a pane wide enough, the reply group goes above the date, as Outlook's header has it.
+        let full = offers_actions(s, r, in_window).then(|| action_width(ui, s, false));
+        let with_actions = full.filter(|w| ui.available_width() - w - 16.0 >= MIN_SENDER);
+        placed = with_actions.is_some();
+        let right = with_actions.map_or(date.size().x, |w| w.max(date.size().x));
+        let rest = ui.available_width() - right - 16.0;
         let beside = rest >= 200.0;
         let room = if beside { rest } else { ui.available_width() };
         ui.allocate_ui_with_layout(vec2(room, 0.0), egui::Layout::top_down(egui::Align::Min), |ui| {
@@ -116,7 +130,15 @@ pub(super) fn header(
         });
         if beside {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
-                ui.label(date);
+                ui.allocate_ui_with_layout(vec2(right, 0.0), egui::Layout::top_down(egui::Align::Max), |ui| {
+                    if let Some(w) = with_actions {
+                        ui.allocate_ui_with_layout(vec2(w, 28.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                            action_row(s, &t, ui, r, p, false, acts);
+                        });
+                        ui.add_space(6.0);
+                    }
+                    ui.label(date);
+                });
             });
         }
     });
@@ -156,11 +178,73 @@ pub(super) fn header(
     if let Some(sec) = &r.security {
         security::security_bar(s, &t, ui, sec);
     }
+    placed
+}
+
+/// Whether the message has Reply | Reply all | Forward beside it: not in a window (its ribbon
+/// has them) nor in the Outbox (Send now… instead).
+fn offers_actions(s: &Session, r: &quatrelle_engine::Reading, in_window: bool) -> bool {
+    !in_window && s.outbox_entry(&r.key).is_none()
+}
+
+/// The reply group's labels.
+const REPLY_GROUP: [(Icon, &str); 3] = [(Icon::Reply, "Reply"), (Icon::ReplyAll, "Reply all"), (Icon::Forward, "Forward")];
+
+/// How wide [`action_row`] is, its icons alone when `compact`.
+fn action_width(ui: &Ui, s: &Session, compact: bool) -> f32 {
+    widgets::button_group_width(ui, &REPLY_GROUP.map(|(_, l)| l), compact) + assistant::width(ui, s, compact) + 6.0 + 34.0
+}
+
+/// Reply | Reply all | Forward as one group, as Outlook's, then Assistant (with a language model
+/// set) and ⋯ with the rest; their icons alone when `compact`.
+fn action_row(s: &Session, t: &Tokens, ui: &mut Ui, r: &quatrelle_engine::Reading, p: &mime::Parsed, compact: bool, acts: &mut Vec<Action>) {
+    ui.spacing_mut().item_spacing.x = 6.0;
+    match widgets::button_group(ui, &REPLY_GROUP, t, compact) {
+        Some(0) => acts.push(Action::Run("mail.reply", json!({}))),
+        Some(1) => acts.push(Action::Run("mail.replyAll", json!({}))),
+        Some(_) => acts.push(Action::Run("mail.forward", json!({}))),
+        None => {}
+    }
+    assistant::button(s, t, ui, compact, acts);
+    // More, as Outlook's ⋯ beside Forward: printing and saving too.
+    let more = widgets::more_pill(ui, "More actions", t);
+    egui::Popup::menu(&more).show(|ui| {
+        let item = |ui: &mut Ui, icon: Icon, label: &str| ui.button((widgets::menu_icon(Some(icon)), tl!(label))).clicked();
+        if item(ui, Icon::Print, "Print") {
+            acts.push(Action::Print);
+            ui.close();
+        }
+        if item(ui, Icon::File, "Save as PDF…") {
+            acts.push(Action::ExportPdf);
+            ui.close();
+        }
+        if item(ui, Icon::Inbox, "Save as email (.eml)…") {
+            acts.push(Action::SaveMessage);
+            ui.close();
+        }
+        ui.separator();
+        if item(ui, Icon::Calendar, "Reply with meeting") {
+            // Its text alone: someone it went to can have no address yet, and would be left out.
+            acts.push(if r.text_first { Action::Refuse(still_coming(r)) } else { Action::Dialog(crate::Dialog::meeting_from(s, p)) });
+            ui.close();
+        }
+        if item(ui, Icon::Forward, "Forward as attachment") {
+            acts.push(Action::Run("mail.forwardAsAttachment", json!({})));
+            ui.close();
+        }
+        if item(ui, Icon::Info, "Message headers") {
+            acts.push(Action::Run("message.headers", json!({})));
+            ui.close();
+        }
+    });
 }
 
 /// What can be done with the message (Reply… or, in the Outbox, Send now…): under the header
 /// and outside its scrolling, so a long header never hides it (a reading pane at the bottom, too
-/// short for the whole header, cut the buttons in half).
+/// short for the whole header, cut the buttons in half). Reply | Reply all | Forward come here
+/// when the header had no room for them (`placed`: it had), their icons alone when even this
+/// line is too narrow for their words.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn actions(
     s: &mut Session,
     t: Tokens,
@@ -168,6 +252,7 @@ pub(super) fn actions(
     r: &quatrelle_engine::Reading,
     p: &mime::Parsed,
     in_window: bool,
+    placed: bool,
     acts: &mut Vec<Action>,
 ) {
     if let Some((_, item)) = s.outbox_entry(&r.key) {
@@ -194,52 +279,9 @@ pub(super) fn actions(
                 acts.push(Action::Run("mail.delete", json!({})));
             }
         });
-    } else if !in_window {
-        // Wrapped: a narrow pane cut off Save and More.
-        ui.horizontal_wrapped(|ui| {
-            ui.spacing_mut().item_spacing = vec2(6.0, 6.0);
-            if widgets::pill_button(ui, Icon::Reply, "Reply", &t).clicked() {
-                acts.push(Action::Run("mail.reply", json!({})));
-            }
-            if widgets::pill_button(ui, Icon::ReplyAll, "Reply all", &t).clicked() {
-                acts.push(Action::Run("mail.replyAll", json!({})));
-            }
-            if widgets::pill_button(ui, Icon::Forward, "Forward", &t).clicked() {
-                acts.push(Action::Run("mail.forward", json!({})));
-            }
-            assistant::button(s, &t, ui, acts);
-            ui.add_space(6.0);
-            if widgets::pill_button(ui, Icon::Print, "Print", &t).on_hover_text(tl!("Open as a PDF to print")).clicked() {
-                acts.push(Action::Print);
-            }
-            let more = widgets::pill_button(ui, Icon::File, "Save", &t);
-            egui::Popup::menu(&more).show(|ui| {
-                if ui.button(tl!("Save as PDF…")).clicked() {
-                    acts.push(Action::ExportPdf);
-                    ui.close();
-                }
-                if ui.button(tl!("Save as email (.eml)…")).clicked() {
-                    acts.push(Action::SaveMessage);
-                    ui.close();
-                }
-            });
-            // More, as Outlook's ⋯ beside Forward.
-            let more = widgets::more_pill(ui, "More actions", &t);
-            egui::Popup::menu(&more).show(|ui| {
-                if ui.button(tl!("Reply with meeting")).clicked() {
-                    // Its text alone: someone it went to can have no address yet, and would be left out.
-                    acts.push(if r.text_first { Action::Refuse(still_coming(r)) } else { Action::Dialog(crate::Dialog::meeting_from(s, p)) });
-                    ui.close();
-                }
-                if ui.button(tl!("Forward as attachment")).clicked() {
-                    acts.push(Action::Run("mail.forwardAsAttachment", json!({})));
-                    ui.close();
-                }
-                if ui.button(tl!("Message headers")).clicked() {
-                    acts.push(Action::Run("message.headers", json!({})));
-                    ui.close();
-                }
-            });
-        });
+    } else if !in_window && !placed {
+        // On one line: their icons alone when it has no room for their words.
+        let compact = ui.available_width() < action_width(ui, s, false);
+        ui.horizontal(|ui| action_row(s, &t, ui, r, p, compact, acts));
     }
 }
