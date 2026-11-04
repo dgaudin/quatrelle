@@ -1472,6 +1472,7 @@ month	May	5月
 	Under Webex Meeting in an appointment's window, each room puts its link and its lines in the meeting.	在约会窗口的“Webex 会议”下，每个会议室会将其链接和各行放入会议。
 	Meeting number, video address, dial-in numbers… copied into the notes	会议号、视频地址、拨入号码… 复制到备注中
 	Add a room	添加会议室
+	Remove this Webex room	移除此 Webex 会议室
 	Webex	Webex
 	Schedule Webex meetings from an appointment's window. Register an integration at developer.webex.com, then sign in with it here.	在约会窗口中安排 Webex 会议。请先在 developer.webex.com 注册集成，然后在此用它登录。
 	Site	站点
