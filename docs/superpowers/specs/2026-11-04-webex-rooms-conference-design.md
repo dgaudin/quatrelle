@@ -46,8 +46,12 @@ opens the menu (the rooms and « Ajouter une salle… »).
 
 **What a room adds:** its link as the place when the place is empty (a place typed is kept); at the end
 of the notes « Rejoindre la réunion Webex : », the link, then its free lines; Join shows. Choosing
-another room replaces the previous room's lines, found as Quatrelle wrote them, rather than adding a
-second block. The appointment gets the room as its `CONFERENCE` (below).
+another room replaces the previous room's lines rather than adding a second block. The previous block
+is found as Quatrelle wrote it: the « Rejoindre la réunion Webex : » line (in any of the catalogs'
+languages, the interface's may have changed since), the room's link on the next line, then the lines
+after it that are still among that room's free lines; a line that matches none of these (the room's
+lines edited in Options since, text the user typed) stays. The appointment gets the room as its
+`CONFERENCE` (below).
 
 **Join** takes, in order: the server's own link (Exchange's, a known meeting service); the
 `CONFERENCE` link, any web link, a self-hosted one included, since the calendar says it joins; the
@@ -93,7 +97,8 @@ there (another app's) stays whatever else is changed. `event.create` and `event.
   that link, or removes it, and returns the rooms; an empty link is refused now (the Options rows
   remove rooms one by one). `event.create` / `event.update` carry `conference`.
 - **Interface.** The menu's rooms, the inline add and the replacing of a room's lines in a new
-  `dialogs/pim_dialogs/rooms.rs` (`meeting.rs` is at 647 lines); the scheduled meeting's
+  `dialogs/pim_dialogs/webex_rooms.rs` (`meeting.rs` is at 647 lines; `rooms.rs` is already the
+  Room Finder, the server's meeting rooms); the scheduled meeting's
   `pim_dialogs/webex.rs` sets the conference too; the Options rows in a new
   `panes/backstage/options/webex_rooms.rs`. The window remembers the conference link it opened with,
   for the taking-out rule.
@@ -123,6 +128,7 @@ A `CONFERENCE` line comes from strangers; rooms are typed by hand.
   `conference`, `null`; a CalDAV round trip through `fakes/fake_dav.rs` keeps the conference; an
   invitation from an IMAP account carries the line; an Exchange event pushes no such thing.
 - **Interface, headless:** the menu lists the rooms by name, greyed with a scheduled meeting; a room
-  fills the place and the notes, another replaces its lines; the link removed from the notes takes the
+  fills the place and the notes, another replaces its lines (also when the label was written in
+  another language, and leaving a line the user typed or a free line edited since); the link removed from the notes takes the
   conference out on save, a foreign conference stays; the Options rows (add, edit, ×, the unnamed
   room's name).
