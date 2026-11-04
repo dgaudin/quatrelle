@@ -792,6 +792,54 @@ le cadenas dans la grille et un menu au clic droit sur un rendez-vous. Spec et p
   (`IntendedFreeBusyStatus` n'est pas lu) ; sur Graph, un rendez-vous modifié avant cette version et pas
   encore envoyé part public et occupé.
 
+### État de la récupération : v0.31, sixième partie : la vérification de l'expéditeur (2026-11-04)
+
+Le lot 5 de la tournée v0.31 (`merge-tools/survey-v0.31.md`, issue #29 de l'origine), sur la branche
+`sender-check`, adapté au carnet d'adresses du fork plutôt que porté : la partie moteur de l'origine est
+bâtie sur un autre carnet. Conçu avec le propriétaire le 04/11 : l'alerte entière, l'adresse après le
+nom et l'étiquette Externe en options éteintes au départ, l'annuaire Exchange interrogé à l'ouverture
+d'un message, et, son ajout, la signature comparée à l'expéditeur. Spec et plan :
+`docs/superpowers/specs/2026-11-04-sender-check-design.md`,
+`docs/superpowers/plans/2026-11-04-sender-check.md`.
+
+- **Repris de l'origine** (`pick.sh`, auteur gardé) : `14c0bee4` (le nom d'une personne connue sur
+  une autre adresse : `KnownPeople`, `SenderCheck`, les messageries gratuites de chaque pays,
+  l'organisation), `22796fda` (lettres stylisées, chiffre pour une lettre, titres), la partie `mime` de
+  `f421f17e` (`Parsed::bulk`). La comparaison des noms est accélérée ici sans changer ses résultats.
+- **Réécrit** : la partie moteur (`session/opening/senders.rs`). L'origine recompte son carnet à
+  chaque synchro de calendrier et garde dix minutes ce qu'elle a compté ; ici les gens connus (comptes,
+  fiches de Contacts, correspondants, personnes déjà données par l'annuaire) sont rassemblés quand un
+  tampon change (comptes, fiches, révision du carnet, domaines de l'organisation), 45 ms en release
+  pour 50 000 personnes. Les marques de la liste viennent sans ouvrir de message (le carnet lu par
+  tranches au démarrage), dans la vue en tableau aussi. L'interface reprend `3a87dfa4`, `80fb57d9` et
+  `06a623db` dans l'apparence du fork ; les deux réglages de Fichier › Options › Sécurité sont éteints
+  au départ (l'origine montre d'emblée l'adresse des inconnus).
+- **Ajouté ici** :
+  - la question à l'annuaire Exchange quand on ouvre le message d'un inconnu au nom de personne : une
+    fois par nom, la dernière en attente remplace la précédente, jamais devant Vérifier les noms ; une
+    personne connue seulement par l'annuaire n'alerte que depuis une messagerie gratuite ou un domaine
+    sosie (les homonymes d'une grande liste d'adresses) ;
+  - la règle de signature (`lookalike/signature.rs`, cible de fuzz `signature`) : le texte propre à
+    l'auteur jusqu'à la première marque de citation (blocs d'en-tête d'Outlook dans chaque langue,
+    intitulés en gras de la conversion HTML, lignes de Gmail, transferts d'Apple), les seules lignes
+    courtes de sa fin, et trois cas : la signature de l'organisation venue d'ailleurs, une adresse connue
+    venue d'une autre, le nom de l'expéditeur sur une adresse de messagerie gratuite ;
+  - les fournisseurs d'accès français parmi les messageries (wanadoo.fr, laposte.net, sfr.fr…).
+- **Corrigé en chemin** (préexistant) : une question de Vérifier les noms posée sur un nom déjà en
+  attente pouvait être évincée par le nom tapé suivant, et la fenêtre attendait une réponse qui ne
+  venait pas.
+- **Laissés** : les parties arabes de l'origine ; son cache de dix minutes.
+- **Vérifié** : modèle, moteur et interface (tests sans fenêtre : bandeaux, liste, tableau, Options),
+  la vraie fenêtre (liste avec adresses et Externe, vue en tableau ; captures lues), le temps du
+  recalcul en release, `cargo xtask ci`.
+- **Reste à faire** : l'essai sur la boîte du propriétaire (un faux collègue sur Gmail, la question à
+  l'annuaire, le temps du premier démarrage). Laissés pour plus tard : retenir les marques de la liste
+  par message plutôt que de les recalculer à chaque image ; le lecteur de signature ne voit pas les
+  notes de liens d'une réponse citée ; un domaine d'organisation refusé dans Options l'est sans
+  message ; les noms écrits de droite à gauche ne sont pas alignés à droite dans les lignes marquées.
+  Plus tard (1.2) : un bouton « Est-ce une arnaque ? » de l'assistant, à la demande, qui ne pourra
+  qu'ajouter une mise en garde.
+
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
 Quatre chantiers, chacun dans son commit, à la suite d'un audit de l'éditeur HTML.
