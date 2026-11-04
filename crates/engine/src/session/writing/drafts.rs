@@ -21,10 +21,12 @@ impl Session {
         let (raw, folder, mid) = self.draft_bytes(c)?;
         let mut earlier = self.saved_copies(c);
         if self.account(&c.account).is_none_or(AccountState::is_local) {
+            // The new copy first: the earlier ones go only once this one is kept.
+            let key = self.file_locally(&c.account, &folder, &raw, false)?;
             if !earlier.is_empty() {
                 self.apply_op(&c.account.clone(), Op::Expunge { keys: earlier });
             }
-            return Ok((self.file_locally(&c.account, &folder, &raw, false), mid));
+            return Ok((Some(key), mid));
         }
         // The server numbers the new copy: the worker puts it in place of the earlier one, and
         // any other (saved again before the first was listed) goes.
