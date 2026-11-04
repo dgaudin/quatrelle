@@ -59,8 +59,8 @@ options, both off at first so the list keeps Outlook's look:
   domains of the user's accounts with mail services left out, and the field says which those are
   (« Aucun : rien n'est signalé » when there are none).
 
-**Commands** (upstream's names): `view.senderAddresses` (`never` | `strangers` | `always`),
-`view.externalTag` (bool), `view.orgDomains` (list). `list.messages` gives each row's marks
+**Commands** (upstream's): `view.senderAddresses` (`show`: `never` | `strangers` | `always`),
+`view.externalTag` (`on`: bool; `domains`: a list or a text, at most 100). `list.messages` gives each row's marks
 (`address`, `warning`, `external`); `message.read` gives the warning and `external`. The CLI prints
 them.
 
@@ -98,7 +98,9 @@ suffixes and initials left out, invisible characters dropped, full-width and mat
 plain, letters of other scripts drawn like Latin ones made Latin, a digit inside a word of letters
 made the letter it stands for; accents and case kept, at most `MAX_QUERY` (100) characters. It goes
 through the queue Check Names uses (`search_directory(account, name, typed = false)`: one question at
-a time per account, answers kept, a failed one asked again after 60 s at the earliest). Nothing is
+a time per account, answers kept, a failed one asked again after 60 s at the earliest). A sender's
+question still waiting gives its place to the next message's (arrowing through the list asks for the
+last one), and never takes the place of a Check Names question. Nothing is
 asked for the list, nor as mail arrives. The answer fills the people index; the check is gathered
 again, and the open message's warning follows. An error is logged and shows nothing.
 
@@ -115,12 +117,14 @@ included) up to the first of:
   `Inviato:` or `Verzonden:` (case left aside; the French ones with a space, a no-break space or
   none before the colon);
 - a line ending `wrote:`, `a écrit :`, `schrieb:`, `escribió:`, `ha scritto:` or `schreef:`;
+- Apple Mail's `Begin forwarded message:` or `Début du message réexpédié :`;
 - a line starting `>`.
 
 **The signature** is what follows its last `-- ` line, or else its last 15 lines that aren't empty.
 Read in it: addresses (`addr::is_valid_email`), `mailto:` links and websites (`www.…`, `http(s)://…`),
 ten at most, each reduced to its domain where it's a site. A mail service's domain doesn't count, nor
-a domain related to the sender's (`related`: the same, or one under the other).
+a domain related to the sender's (`related`: the same, or one under the other), nor the user's own
+addresses (their own message quoted where no quotation mark was found).
 
 **It warns** (`SenderWarning::SignatureShowsOther { shown, real }`) for the first of:
 
@@ -164,9 +168,10 @@ Names, addresses and text come from the sender: hostile.
   rule), beside upstream's part of `search`; `fuzz/README.md` lists it.
 - A property test: nothing after the first quotation mark changes the signature found.
 - `every_command_survives_junk_params` runs the three new commands.
-- Gathering the check is timed: at most 50 ms for 20 000 people written to and 30 000 of the directory
-  (best of three runs, as the calendar search test). If it can't, it's gathered in slices, as the book
-  itself is read.
+- Gathering the check is timed: at most 50 ms in a release build for 20 000 people written to and
+  30 000 of the directory (the debug test's bound is 500 ms, best of three runs, as the calendar search
+  test). If it can't, it's gathered in slices, as the book itself is read. The per-frame gathering
+  waits while the address book is being read, and never loads it.
 
 ## Tests
 
