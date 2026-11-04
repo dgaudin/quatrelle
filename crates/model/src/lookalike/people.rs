@@ -13,17 +13,19 @@
 //! middle initial. Only names that say who someone is count: a single word ("Jane", "Support"),
 //! or a name with a word any team uses ("IT Support", "Billing Team"), never warns by itself.
 
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::hash_map::Entry;
+use std::collections::{HashMap, HashSet};
 
 use crate::EmailAddress;
 
 use super::{SenderWarning, domain_of, plain, related};
 
-/// Words that make a name a role or a service rather than a person ("Help Desk", "Sales Team").
+/// Words that make a name a role or a service rather than a person ("Help Desk", "Sales Team"),
+/// in order ([`listed`]).
 const GENERIC: &[&str] = &[
     "account",
-    "accounts",
     "accounting",
+    "accounts",
     "admin",
     "administrator",
     "alert",
@@ -86,9 +88,10 @@ const GENERIC: &[&str] = &[
 ];
 
 /// Titles and suffixes worn around a name ("Dr. Jane Director", "Jane Director, CEO"): left out
-/// like initials, so a title added to a known name doesn't make it another name.
+/// like initials, so a title added to a known name doesn't make it another name. In order
+/// ([`listed`]).
 const TITLES: &[&str] = &[
-    "cfo", "ceo", "cio", "coo", "cto", "dr", "esq", "evp", "ii", "iii", "jr", "md", "miss", "mr", "mrs", "ms", "mx", "phd", "prof", "sir", "sr",
+    "ceo", "cfo", "cio", "coo", "cto", "dr", "esq", "evp", "ii", "iii", "jr", "md", "miss", "mr", "mrs", "ms", "mx", "phd", "prof", "sir", "sr",
     "svp", "vp",
 ];
 
@@ -107,40 +110,83 @@ pub fn name_key(name: &str) -> Option<String> {
     if name.is_empty() || name.len() > LONGEST_NAME || name.contains('@') {
         return None;
     }
-    let mut words: Vec<String> = Vec::new();
-    let mut word = String::new();
-    for c in name.chars() {
+    // Each word is folded into `text` and looked at as soon as it ends; the ones kept are
+    // where they are in it. Two strings in all, whatever the name: this runs for every person
+    // known, tens of thousands at a time.
+    let mut text = String::with_capacity(name.len() + 8);
+    let mut kept = [(0usize, 0usize); MOST_WORDS];
+    let mut n = 0;
+    let mut start = 0;
+    let mut chars = name.chars();
+    loop {
+        let c = chars.next();
         // An apostrophe joins (O'Brien), and so do an accent written as a mark of its own and
         // the invisible characters that would part a name unseen; anything else that isn't a
         // letter or digit parts.
-        if matches!(c, '\'' | '\u{2019}' | '`') || invisible(c) {
-            continue;
+        if let Some(c) = c {
+            if matches!(c, '\'' | '\u{2019}' | '`') || invisible(c) {
+                continue;
+            }
+            if c.is_alphanumeric() {
+                fold_into(c, &mut text);
+                continue;
+            }
         }
-        if c.is_alphanumeric() {
-            fold_into(c, &mut word);
-        } else if !word.is_empty() {
-            words.push(std::mem::take(&mut word));
+        if text.len() > start {
+            let word = text.get(start..).unwrap_or("");
+            // Digits drawn like letters inside a word read as those letters (`Z0e`); any other
+            // digit makes it an account or a ticket, not a person.
+            if word.chars().any(char::is_alphabetic) && word.chars().any(|c| c.is_ascii_digit()) {
+                let plain_word: String = word.chars().map(plain).collect();
+                text.truncate(start);
+                text.push_str(&plain_word);
+            }
+            let word = text.get(start..).unwrap_or("");
+            if word.chars().any(char::is_numeric) {
+                return None;
+            }
+            // One letter is an initial.
+            if word.chars().nth(1).is_some() && !listed(TITLES, word) {
+                if listed(GENERIC, word) {
+                    return None;
+                }
+                *kept.get_mut(n)? = (start, text.len());
+                n += 1;
+            }
+            start = text.len();
+        }
+        if c.is_none() {
+            break;
         }
     }
-    if !word.is_empty() {
-        words.push(word);
-    }
-    // Digits drawn like letters inside a word read as those letters (`Z0e`); any other digit
-    // makes it an account or a ticket, not a person. One letter is an initial.
-    for w in words.iter_mut() {
-        if w.chars().any(char::is_alphabetic) && w.chars().any(|c| c.is_ascii_digit()) {
-            *w = w.chars().map(plain).collect();
-        }
-    }
-    if words.iter().any(|w| w.chars().any(char::is_numeric)) {
+    if n < 2 {
         return None;
     }
-    words.retain(|w| w.chars().count() > 1 && !TITLES.contains(&w.as_str()));
-    if words.len() < 2 || words.len() > MOST_WORDS || words.iter().any(|w| GENERIC.contains(&w.as_str())) {
-        return None;
+    let mut words: [&str; MOST_WORDS] = [""; MOST_WORDS];
+    for (w, &(a, b)) in words.iter_mut().zip(&kept).take(n) {
+        *w = text.get(a..b)?;
     }
-    words.sort();
-    Some(words.join(" "))
+    let words = words.get_mut(..n)?;
+    words.sort_unstable();
+    let mut out = String::with_capacity(text.len() + n);
+    for w in words.iter() {
+        if !out.is_empty() {
+            out.push(' ');
+        }
+        out.push_str(w);
+    }
+    Some(out)
+}
+
+/// Whether `word` is in `list`, a list kept in order: by halves, each word compared in line (a
+/// call to compare memory for each costs more than the words are long).
+fn listed(list: &[&str], word: &str) -> bool {
+    let word = word.as_bytes();
+    list.binary_search_by(|w| {
+        let w = w.as_bytes();
+        w.iter().zip(word).map(|(a, b)| a.cmp(b)).find(|o| o.is_ne()).unwrap_or_else(|| w.len().cmp(&word.len()))
+    })
+    .is_ok()
 }
 
 /// Combining accents (`e` + `◌́`), zero-width spaces and joiners, the soft hyphen, the byte-order
@@ -192,7 +238,7 @@ pub fn lookup_name(name: &str) -> Option<String> {
         let w = as_typed(w.trim_end_matches(['\'', '\u{2019}', '-']));
         let mut folded = String::new();
         w.chars().for_each(|c| fold_into(c, &mut folded));
-        if w.chars().filter(|c| c.is_alphanumeric()).count() <= 1 || TITLES.contains(&folded.as_str()) {
+        if w.chars().filter(|c| c.is_alphanumeric()).count() <= 1 || listed(TITLES, &folded) {
             continue;
         }
         if !out.is_empty() {
@@ -246,6 +292,11 @@ fn as_typed(word: &str) -> String {
 /// `c` lower case, without its accent, and as the Latin letter it's drawn like (full-width and
 /// mathematical letters too: `Ｊａｎｅ`, `𝐉𝐚𝐧𝐞`).
 fn fold_into(c: char, out: &mut String) {
+    // Most names are plain ASCII: neither full-width nor styled, nor invisible once lowered.
+    if c.is_ascii() {
+        out.push(c.to_ascii_lowercase());
+        return;
+    }
     for c in wide_or_styled(c).to_lowercase() {
         // `İ` lowers to `i` and a combining dot: the dot isn't seen apart.
         if invisible(c) {
@@ -299,15 +350,40 @@ fn wide_or_styled(c: char) -> char {
 /// A name's key as it's looked up: [`name_key`] with letters drawn alike made one (`l`, `i` and
 /// `1`; `rn` and `m`), as domains are compared, so `Wh1tfield` is `Whitfield`.
 fn drawn_key(name: &str) -> Option<String> {
-    name_key(name).map(|k| k.replace("rn", "m").replace("vv", "w").replace('i', "l"))
+    name_key(name).and_then(drawn)
+}
+
+/// `key.replace("rn", "m").replace("vv", "w").replace('i', "l")` in one pass, in place: the
+/// three never make or part each other's letters, and only ASCII letters change, so the bytes
+/// of other characters go through as they are.
+fn drawn(key: String) -> Option<String> {
+    let mut b = key.into_bytes();
+    let (mut read, mut write) = (0, 0);
+    while let Some(&c) = b.get(read) {
+        let next = b.get(read + 1).copied();
+        let (out, step) = match (c, next) {
+            (b'r', Some(b'n')) => (b'm', 2),
+            (b'v', Some(b'v')) => (b'w', 2),
+            (b'i', _) => (b'l', 1),
+            _ => (c, 1),
+        };
+        if let Some(slot) = b.get_mut(write) {
+            *slot = out;
+        }
+        write += 1;
+        read += step;
+    }
+    b.truncate(write);
+    String::from_utf8(b).ok()
 }
 
 /// The people the user deals with, by name and by address.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct KnownPeople {
     /// [`drawn_key`] → the name that person was first known by, and the addresses they're
-    /// known by (lower case).
-    by_name: HashMap<String, (String, BTreeSet<String>)>,
+    /// known by (lower case, in order, each once: most people have one, which a list holds in
+    /// far less than a tree).
+    by_name: HashMap<String, (String, Vec<String>)>,
     /// Every address known (lower case), named or not.
     addresses: HashSet<String>,
 }
@@ -320,12 +396,28 @@ impl KnownPeople {
     /// Someone the user knows (a contact, someone written to, the directory, themselves). The
     /// first name given for a person is the one warnings call them by.
     pub fn add(&mut self, a: &EmailAddress) {
-        let email = a.email.trim().to_lowercase();
+        self.add_named(&a.name, &a.email);
+    }
+
+    /// [`KnownPeople::add`] from a name and an address as they are (no [`EmailAddress`] made
+    /// for each of tens of thousands).
+    pub fn add_named(&mut self, name: &str, email: &str) {
+        let email = email.trim().to_lowercase();
         if !crate::addr::is_valid_email(&email) || self.addresses.len() >= MOST_PEOPLE {
             return;
         }
-        if let Some(key) = drawn_key(&a.name) {
-            self.by_name.entry(key).or_insert_with(|| (a.name.trim().to_string(), BTreeSet::new())).1.insert(email.clone());
+        if let Some(key) = drawn_key(name) {
+            match self.by_name.entry(key) {
+                Entry::Vacant(v) => {
+                    v.insert((name.trim().to_string(), vec![email.clone()]));
+                }
+                Entry::Occupied(mut o) => {
+                    let theirs = &mut o.get_mut().1;
+                    if let Err(at) = theirs.binary_search(&email) {
+                        theirs.insert(at, email.clone());
+                    }
+                }
+            }
         }
         self.addresses.insert(email);
     }
@@ -343,10 +435,10 @@ impl KnownPeople {
         self.addresses.contains(&email.trim().to_lowercase())
     }
 
-    /// The addresses the person named `name` is known by (none for a name that doesn't say who
-    /// someone is).
-    pub fn addresses_of(&self, name: &str) -> Option<&BTreeSet<String>> {
-        self.by_name.get(&drawn_key(name)?).map(|(_, a)| a)
+    /// The addresses the person named `name` is known by, in order (none for a name that doesn't
+    /// say who someone is).
+    pub fn addresses_of(&self, name: &str) -> Option<&[String]> {
+        self.by_name.get(&drawn_key(name)?).map(|(_, a)| a.as_slice())
     }
 
     /// `from` wears the name of someone known on an address that person isn't known by. Not
@@ -379,6 +471,23 @@ impl KnownPeople {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The word lists are searched by halves: they must stay in order, each word once.
+    #[test]
+    fn the_word_lists_are_in_order() {
+        for list in [GENERIC, TITLES] {
+            assert!(list.windows(2).all(|w| w[0] < w[1]), "{list:?}");
+        }
+    }
+
+    /// The one pass gives what the three replacements gave.
+    #[test]
+    fn drawn_alike_in_one_pass() {
+        for key in ["", "i", "rn", "rrn", "rnn", "vvv", "vvvv", "rnvv", "mirn ivv", "zoë rnvvi", "дана rn", "iiii", "r", "v", "nr"] {
+            let three = key.replace("rn", "m").replace("vv", "w").replace('i', "l");
+            assert_eq!(drawn(key.to_string()).as_deref(), Some(three.as_str()), "{key}");
+        }
+    }
 
     fn people() -> KnownPeople {
         let mut k = KnownPeople::new();
