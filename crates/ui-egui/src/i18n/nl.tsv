@@ -1454,12 +1454,9 @@ month	May	mei
 	Choose from the address book	Kiezen uit het adresboek
 	Click a room to see when it's free; double-click it to book it.	Klik op een ruimte om te zien wanneer die vrij is; dubbelklik om hem te boeken.
 	Hide its day	Dag verbergen
-	Its link is on your Webex profile, under Personal Room. It's kept in File › Options › Calendar for the next meetings.	De link staat in uw Webex-profiel, onder Persoonlijke ruimte. Hij wordt voor volgende vergaderingen bewaard in Bestand › Opties › Agenda.
 	Not a Webex personal room: https://<site>.webex.com/meet/<name>	Geen persoonlijke Webex-ruimte: https://<site>.webex.com/meet/<naam>
 	Not an address: {what}	Geen adres: {what}
-	Puts your Webex personal room in the meeting	Voegt uw persoonlijke Webex-ruimte toe aan de vergadering
 	Select Attendees and Resources	Deelnemers en middelen selecteren
-	Your Webex personal room	Uw persoonlijke Webex-ruimte
 	Move meeting invitations to Deleted Items once answered	Vergaderuitnodigingen na beantwoording naar Verwijderde items verplaatsen
 	Also a cancellation once its meeting is removed from the calendar, and the meeting's earlier invitations.	Ook een annulering zodra de vergadering uit de agenda is verwijderd, en de eerdere uitnodigingen van de vergadering.
 	Required ->	Vereist ->
@@ -1489,7 +1486,6 @@ month	May	mei
 	Your Webex account can't schedule meetings on this site	Uw Webex-account kan op deze site geen vergaderingen plannen
 	Webex Meeting options	Opties voor Webex-vergadering
 	New Webex meeting	Nieuwe Webex-vergadering
-	Use my personal room	Mijn persoonlijke ruimte gebruiken
 	My personal room	Mijn persoonlijke ruimte
 	Add a room…	Ruimte toevoegen…
 	This appointment already has its Webex meeting	Deze afspraak heeft al een eigen Webex-vergadering

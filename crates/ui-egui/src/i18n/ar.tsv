@@ -1454,12 +1454,9 @@ month	May	مايو
 	Choose from the address book	الاختيار من دفتر العناوين
 	Click a room to see when it's free; double-click it to book it.	انقر غرفة لترى متى تكون متاحة، وانقر نقرًا مزدوجًا لحجزها.
 	Hide its day	إخفاء يومها
-	Its link is on your Webex profile, under Personal Room. It's kept in File › Options › Calendar for the next meetings.	رابطها موجود في ملفك الشخصي على Webex، ضمن الغرفة الشخصية. ويُحفظ في ملف › خيارات › التقويم للاجتماعات التالية.
 	Not a Webex personal room: https://<site>.webex.com/meet/<name>	ليست غرفة Webex شخصية: https://<site>.webex.com/meet/<name>
 	Not an address: {what}	ليس عنوانًا: {what}
-	Puts your Webex personal room in the meeting	يضيف غرفتك الشخصية في Webex إلى الاجتماع
 	Select Attendees and Resources	تحديد الحضور والموارد
-	Your Webex personal room	غرفتك الشخصية في Webex
 	Move meeting invitations to Deleted Items once answered	نقل دعوات الاجتماعات إلى العناصر المحذوفة بعد الرد عليها
 	Also a cancellation once its meeting is removed from the calendar, and the meeting's earlier invitations.	وكذلك الإلغاء بعد إزالة اجتماعه من التقويم، والدعوات السابقة للاجتماع.
 	Required ->	مطلوب ->
@@ -1489,7 +1486,6 @@ month	May	مايو
 	Your Webex account can't schedule meetings on this site	لا يستطيع حساب Webex الخاص بك جدولة اجتماعات على هذا الموقع
 	Webex Meeting options	خيارات اجتماع Webex
 	New Webex meeting	اجتماع Webex جديد
-	Use my personal room	استخدام غرفتي الشخصية
 	My personal room	غرفتي الشخصية
 	Add a room…	إضافة غرفة…
 	This appointment already has its Webex meeting	لهذا الموعد اجتماع Webex بالفعل

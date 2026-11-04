@@ -1457,12 +1457,9 @@ month	May	Май
 	Choose from the address book	Выбрать в адресной книге
 	Click a room to see when it's free; double-click it to book it.	Щёлкните переговорную, чтобы увидеть, когда она свободна; двойной щелчок бронирует её.
 	Hide its day	Скрыть день
-	Its link is on your Webex profile, under Personal Room. It's kept in File › Options › Calendar for the next meetings.	Ссылка есть в вашем профиле Webex, в разделе «Персональная комната». Она сохраняется в Файл › Параметры › Календарь для следующих собраний.
 	Not a Webex personal room: https://<site>.webex.com/meet/<name>	Это не личная комната Webex: https://<site>.webex.com/meet/<имя>
 	Not an address: {what}	Не адрес: {what}
-	Puts your Webex personal room in the meeting	Вставляет вашу личную комнату Webex в собрание
 	Select Attendees and Resources	Выбор участников и ресурсов
-	Your Webex personal room	Ваша личная комната Webex
 	Move meeting invitations to Deleted Items once answered	Перемещать приглашения на собрания в «Удалённые» после ответа
 	Also a cancellation once its meeting is removed from the calendar, and the meeting's earlier invitations.	Также отмену, когда её собрание удалено из календаря, и более ранние приглашения на это собрание.
 	Required ->	Обязательные ->
@@ -1492,7 +1489,6 @@ month	May	Май
 	Your Webex account can't schedule meetings on this site	Ваша учётная запись Webex не может планировать встречи на этом сайте
 	Webex Meeting options	Параметры собрания Webex
 	New Webex meeting	Новое собрание Webex
-	Use my personal room	Использовать мою личную комнату
 	My personal room	Моя личная комната
 	Add a room…	Добавить комнату…
 	This appointment already has its Webex meeting	У этой встречи уже есть собрание Webex

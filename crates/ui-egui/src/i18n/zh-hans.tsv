@@ -1455,12 +1455,9 @@ month	May	5月
 	Choose from the address book	从通讯簿中选择
 	Click a room to see when it's free; double-click it to book it.	单击会议室可查看其空闲时间；双击即可预订。
 	Hide its day	隐藏当天
-	Its link is on your Webex profile, under Personal Room. It's kept in File › Options › Calendar for the next meetings.	链接位于你的 Webex 个人资料的“个人会议室”中。它会保存在“文件 › 选项 › 日历”中，供以后的会议使用。
 	Not a Webex personal room: https://<site>.webex.com/meet/<name>	不是 Webex 个人会议室: https://<site>.webex.com/meet/<name>
 	Not an address: {what}	不是地址: {what}
-	Puts your Webex personal room in the meeting	将你的 Webex 个人会议室插入会议
 	Select Attendees and Resources	选择与会者和资源
-	Your Webex personal room	你的 Webex 个人会议室
 	Move meeting invitations to Deleted Items once answered	答复会议邀请后将其移到“已删除邮件”
 	Also a cancellation once its meeting is removed from the calendar, and the meeting's earlier invitations.	会议从日历中移除后的取消通知，以及该会议之前的邀请，也一并移动。
 	Required ->	必需 ->
@@ -1490,7 +1487,6 @@ month	May	5月
 	Your Webex account can't schedule meetings on this site	您的 Webex 帐户无法在此站点上安排会议
 	Webex Meeting options	Webex 会议选项
 	New Webex meeting	新建 Webex 会议
-	Use my personal room	使用我的个人会议室
 	My personal room	我的个人会议室
 	Add a room…	添加会议室…
 	This appointment already has its Webex meeting	此约会已有 Webex 会议
