@@ -23,7 +23,8 @@ impl Node {
             && matches!(self.width(), Some(Width::Px(_)))
     }
 
-    /// A floated box's content width when it's one picture of a known width (see [`Cell::fit`]).
+    /// The content width of a floated box or a table cell when it's one picture of a known width
+    /// (see [`Cell::fit`]).
     pub(super) fn picture_width(&self, depth: usize) -> Option<u32> {
         let mut found: Option<u32> = None;
         let mut pictures = 0usize;
