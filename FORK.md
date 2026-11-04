@@ -1024,6 +1024,81 @@ changement de crate.
   ne les prend pas encore : P2), une passe de fuzz sur la cible `pst` avec la nouvelle graine,
   puis R2.
 
+### État de la récupération : v0.32, onzième partie : ne rien perdre sur une erreur du cache (2026-11-05)
+
+Le lot R2 de `merge-tools/survey-v0.32.md` (constats n° 4 et 7), sur `main`. Pour chaque commit,
+son test porté seul d'abord et lancé contre le code d'alors : la correction n'est prise que si le
+test échouait. Le stockage garde le scellement à chaque commit du fork (`38594552`) et son
+compactage en place : rien de la machinerie de commits non durables de l'origine (`652ac8f6`,
+`packed/commit.rs`, `Seals`, `open.rs`).
+
+- **Refait à la main** : `85f5c255` (`1e317bfc`), pur déplacement : `Files` et `Routed` de
+  `lib.rs` vers `files.rs` (identiques à l'origine, vérifié par `diff`), tables, compression,
+  pièces et `read_file` de `packed.rs` vers `packed/kept.rs`, avec nos préfixes hérités
+  `DEFLATED_OLD`/`PIECED_OLD` ; `PIECED` est `pub(super)` pour notre test des noms hérités. Les
+  30 tests de `quatrelle-store` passent avant et après.
+- **Repris tels quels** (au nom de leur auteur) :
+  - `4d3359dd` (`6c61ccd8`) : un brouillon gardé hors ligne ne réécrit plus une liste
+    `drafts-pending.json` illisible. Sonde : la liste réécrite avec le seul dernier brouillon.
+  - `43f36a6a` (`81f4fb78`) : POP, un relevé des messages téléchargés illisible arrête le
+    relevé ; un dossier illisible n'a plus de comptes à 0. Sonde (sans ses deux lignes sur
+    `local_counts`, qui ne compilent pas avec l'ancienne signature) : le relevé continuait.
+  - `756374e8` (`ca8ba64f`) : POP, un déplacement classe d'abord dans la destination, puis
+    enregistre les sources, puis ôte les anciennes sources ; numéros contrôlés. Sonde : sources
+    illisibles, le déplacement se disait fait et les messages arrivaient sans leur source.
+- **Adapté** (au nom du propriétaire) :
+  - `2cebf2c6` (`d83b5b16`) : `Store::failing` et `Store::fail` (un cache en mémoire dont les
+    lectures ou écritures échouent sur demande), `load_body` (source absente ≠ erreur). Sans le
+    compteur `reads` de l'origine ; `data_dir` du fork prend la nouvelle variante. Sonde : le
+    test échouait d'abord sur `add_op` qui réécrivait un `ops.json` illisible, puis, cela
+    corrigé, sur la source qu'un Expunge ôtait alors que la liste n'avait pu être enregistrée
+    (EmptyFolder corrigé de même).
+  - `2f92bc45` (`907a3e4e`) : source abîmée lue comme absente, `free_uid`/`take_uid`. Ici
+    `free_uid` sert tout `FolderState` (la session garde ses listes partagées). Pas de test
+    propre : ses sondes sont celles de `f8e6dbfd`.
+  - `01f49293` (`bf19ef67`) : le déplacement local lit toutes les listes avant d'écrire et
+    s'arrête sur une erreur du cache (`file_moved`) ; `file_locally` rend une erreur ; la
+    nouvelle copie d'un brouillon est classée avant que les anciennes partent (ici dans
+    `file_draft`, que partagent l'enregistrement et les brouillons gardés à la fermeture) ;
+    un agenda illisible n'est ni réécrit ni rangé (le rangement des rendez-vous des autres du
+    fork, `parking.rs`, réécrit aussi `pim.json`) ; une liste illisible reste hors du cache de
+    la session et garde ses comptes. Sondes (trois tests de l'origine) : la destination vidée
+    (ses deux messages perdus), le brouillon dit enregistré et le message dit envoyé avec
+    Brouillons illisible, aucun avis pour un agenda illisible.
+  - `f8e6dbfd` (`74a19d45`) : un déplacement raté échoue sans pas d'annulation
+    (`apply_op_checked`) ; numéros pris par `free_uid`/`take_uid` ; `rules.json` et
+    `snoozes.json` illisibles jamais réécrits (lus dans `organize.rs`, et le second écrivain
+    de `rules.json` du fork, `save_rules`, retenu aussi) ; `pim_unread` oublié au retrait du
+    compte. Avant, `organize.rs` (839 lignes) est découpé : les règles vont dans
+    `organize/rules.rs` (`6184ff91`, pur déplacement). Sondes : le déplacement raté répondait
+    `{"moved": 1}`, une destination à `u32::MAX` prenait le message (l'ancien `+ 1` débordait :
+    panique en debug, 0 en release), aucun avis pour `rules.json` illisible, le compte retiré
+    restait marqué. `a_damaged_source_moves_without_it` passait déjà : `2f92bc45` fait ce
+    travail, et l'ancien code du fork (`read_body().ok()`) aussi.
+  - `690c6214` (`ac4f921f`) : les modifications en attente d'un compte retiré sont abandonnées
+    (`Store::removals`, `Store::while_kept`), dans l'écrivain du fork (`write_edit` de
+    `worker.rs` ; l'origine a `worker/edits.rs`). Sonde, à 300 marques plutôt que 2 000 (au-delà
+    de sept minutes ici, voir plus bas) : 140 836 octets du compte supprimé réécrits.
+  - Avis nouveaux dans les treize catalogues (traductions de l'origine, le français et
+    l'allemand au registre du fork) ; « Your mail couldn't be moved… » y était déjà, sans
+    code qui s'en serve.
+- **Propre au fork** : `3152956f`, un commit vide scellé (`set_quick_repair(true)`) après
+  `Packs::compact` : les commits du compactage de redb n'enregistrent pas l'état de
+  l'allocateur. Sonde (`a_data_file_killed_after_compacting_needs_no_repair`, sur le modèle de
+  `a_data_file_left_by_a_crash_needs_no_repair`) : un enfant qui compacte puis s'arrête net
+  laissait un fichier à vérifier en entier ; il rouvre sans réparation après.
+- **Écarté** : la machinerie de commits non durables de l'origine ; rien d'autre, aucune
+  correction prise sans que son test échoue d'abord.
+- **Vérifié** : chaque sonde avant et après, les suites de `quatrelle-store`, `quatrelle-engine`,
+  `quatrelle-net` et les tests i18n, `cargo xtask ci`.
+- **Reste à faire** : un arrêt brutal *pendant* le compactage demande toujours une vérification
+  complète (redb ne peut pas sceller en cours de compactage) ; chaque enregistrement d'une liste
+  rejoue toutes les modifications en attente (`pending_edits`), si bien qu'une rafale de
+  marques hors ligne coûte au carré (2 000 marques sur un dossier de 2 000 messages dépassaient
+  sept minutes en debug) ; les rendez-vous rangés (`pim-parked.json`) et l'agenda relu après un
+  import se lisent encore « vide si illisible » (copies du serveur, relues à l'affichage) ; la
+  suite du relevé, R3.
+
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
 Quatre chantiers, chacun dans son commit, à la suite d'un audit de l'éditeur HTML.
