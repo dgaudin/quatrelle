@@ -5,7 +5,7 @@
 //! it ([`super::rooms`]) and when everyone is free ([`super::scheduling`]).
 
 use egui::Color32;
-use quatrelle_engine::model::ical::ShowAs;
+use quatrelle_engine::model::ical::{Conference, ShowAs};
 use quatrelle_engine::model::{Addressee, EmailAddress, addr};
 
 use super::*;
@@ -95,6 +95,13 @@ pub struct EventForm {
     pub webex_fresh: bool,
     /// The creation being waited for: Save is off until its answer is in.
     pub webex_wait: Option<u64>,
+    /// Where it's joined online, as it's saved (its calendar's `CONFERENCE`): the event's, or the
+    /// Webex room or meeting put in here.
+    pub conference: Option<Conference>,
+    /// That conference's link was in the place or the notes when the window opened, or a room or
+    /// a meeting put it there: erased from both, the conference goes when it's saved. One never
+    /// shown there (another app's) stays.
+    pub conference_shown: bool,
 }
 
 impl EventForm {
@@ -186,6 +193,8 @@ impl EventForm {
             error: None,
             webex_allowed: s.webex_can_hold(e),
             webex_id: e.webex_id.clone(),
+            conference: e.conference.clone(),
+            conference_shown: e.conference.as_ref().is_some_and(|c| super::webex_rooms::link_shown(&c.url, &e.location, &e.description)),
             ..Default::default()
         })
     }
@@ -322,6 +331,11 @@ impl EventForm {
         }
         if let Some(id) = &self.webex_id {
             p["webexId"] = json!(id);
+        }
+        // Its conference, while it has one; `null` takes out the one whose link was erased.
+        if let Some(c) = &self.conference {
+            let erased = self.conference_shown && !super::webex_rooms::link_shown(&c.url, &self.location, &self.description);
+            p["conference"] = if erased { Value::Null } else { json!({"url": c.url, "label": c.label}) };
         }
         match &self.uid {
             Some(u) => p["uid"] = json!(u),

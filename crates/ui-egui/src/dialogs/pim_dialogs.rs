@@ -3,8 +3,8 @@
 // Copyright (c) 2026 Didier Gaudin
 //! The event and contact forms: what they share (their rows, fields and headings), the event
 //! form in `event` (with its Room Finder in `rooms`, its Scheduling Assistant in `scheduling`,
-//! its address book in `attendees` and its Webex meeting in `webex`), the contact form in
-//! `contact`.
+//! its address book in `attendees`, its Webex meeting in `webex` and its Webex rooms in
+//! `webex_rooms`), the contact form in `contact`.
 
 use egui::{Margin, RichText, Sense, Ui, vec2};
 use quatrelle_engine::Session;
@@ -24,6 +24,7 @@ pub(crate) mod recurrence;
 pub(crate) mod rooms;
 pub(crate) mod scheduling;
 pub(crate) mod webex;
+mod webex_rooms;
 
 pub use attendees::{AttendeesUi, Line, line_button_id};
 pub use contact::{ContactForm, contact};
