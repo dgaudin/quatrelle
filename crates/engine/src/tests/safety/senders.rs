@@ -16,13 +16,18 @@ const ME: &str = "zoe";
 /// A session with one Exchange account, Zoe Park's (`zoe@studio.example`), and an empty Inbox and
 /// Sent: nobody else is known yet.
 fn zoe_session(name: &str) -> Session {
+    zoe_session_on(name, true)
+}
+
+/// [`zoe_session`], the account on Exchange or (`exchange` false) on IMAP.
+fn zoe_session_on(name: &str, exchange: bool) -> Session {
     let store = temp(name);
     let config = AccountConfig {
         id: ME.into(),
         name: "Zoe Park".into(),
         email: "zoe@studio.example".into(),
         username: "zoe".into(),
-        ews: Some("https://mail.studio.example/EWS/Exchange.asmx".into()),
+        ews: exchange.then(|| "https://mail.studio.example/EWS/Exchange.asmx".into()),
         ..Default::default()
     };
     store.save_accounts(&[config]).unwrap();
@@ -48,12 +53,17 @@ fn deliver(s: &mut Session, n: u32, from: (&str, &str), subject: &str) -> Messag
         ..Default::default()
     };
     let raw = quatrelle_mime::build(&d, &EmailAddress::new(from.0, from.1), NOW, &format!("<senders{n}@x>")).unwrap();
+    deliver_raw(s, n, &raw)
+}
+
+/// Put a message's source in Zoe's Inbox and open it in the reading pane.
+fn deliver_raw(s: &mut Session, n: u32, raw: &[u8]) -> MessageKey {
     let store = s.store.clone().unwrap();
     let mut inbox = store.load_folder(ME, "INBOX").unwrap();
     let key = MessageKey { account: ME.into(), folder: "INBOX".into(), validity: inbox.validity, uid: 9400 + n };
-    inbox.messages.insert(0, quatrelle_mime::summary_from_full(&raw, key.clone(), quatrelle_model::Flags::default(), 0, NOW));
+    inbox.messages.insert(0, quatrelle_mime::summary_from_full(raw, key.clone(), quatrelle_model::Flags::default(), 0, NOW));
     store.save_folder(ME, "INBOX", &inbox).unwrap();
-    store.write_body(&key, &raw).unwrap();
+    store.write_body(&key, raw).unwrap();
     s.apply(Event::FolderChanged { account: ME.into(), folder: "INBOX".into() });
     s.run("folder.open", &json!({"account": ME, "folder": "INBOX"})).unwrap();
     s.run("list.open", &json!({"key": key.to_id()})).unwrap();
@@ -270,5 +280,180 @@ fn gathering_is_quick() {
     let took = started.elapsed();
     assert_eq!(s.organisation(), Some(&["corp.example", "studio.example"].map(String::from).into()));
     assert!(took < std::time::Duration::from_millis(100), "the domains alone: {took:?}");
+    done(s);
+}
+
+/// The names the directory is being asked about, in order (the session's other jobs dropped).
+fn asked(s: &mut Session) -> Vec<String> {
+    s.take_jobs()
+        .into_iter()
+        .filter_map(|j| match j {
+            Job::SearchDirectory { query, .. } => Some(query),
+            _ => None,
+        })
+        .collect()
+}
+
+/// A message's source as a server gives it: `headers` added, the body of type `kind`.
+fn source(n: u32, from: &str, headers: &str, kind: &str, body: &str) -> Vec<u8> {
+    format!(
+        "From: {from}\r\nTo: Zoe Park <zoe@studio.example>\r\nSubject: Message {n}\r\nDate: Mon, 03 Nov 2026 11:00:00 +0000\r\n\
+         Message-ID: <question{n}@x.example>\r\n{headers}MIME-Version: 1.0\r\nContent-Type: {kind}; charset=utf-8\r\n\
+         Content-Transfer-Encoding: 8bit\r\n\r\n{body}\r\n"
+    )
+    .into_bytes()
+}
+
+const DANA: (&str, &str) = ("Dr. Dana Whitfield, CEO", "dw.ceo@gmail.com");
+
+#[test]
+fn an_unknown_persons_name_is_asked_once() {
+    let mut s = zoe_session("question-once");
+    let key = deliver(&mut s, 1, DANA, "Wire");
+    assert_eq!(asked(&mut s), ["dana whitfield"], "the name as a person would type it");
+    // Opened again, in the pane or a window: not asked again.
+    deliver(&mut s, 2, ("Zoe Park", "zoe@studio.example"), "Mine");
+    s.run("list.open", &json!({"key": key.to_id()})).unwrap();
+    s.run("message.popOut", &json!({"key": key.to_id()})).unwrap();
+    assert!(asked(&mut s).is_empty());
+    // Answered, nor then.
+    directory_answers(&mut s, "dana whitfield", &[]);
+    s.run("list.open", &json!({"key": key.to_id()})).unwrap();
+    assert!(asked(&mut s).is_empty());
+    done(s);
+}
+
+#[test]
+fn no_question_when_known_or_no_person_or_bulk_or_no_exchange() {
+    let mut s = zoe_session("question-none");
+    card(&mut s, "Dana Whitfield", "dana@corp.example");
+    asked(&mut s);
+    deliver(&mut s, 1, ("Dana Whitfield", "dana@corp.example"), "Known");
+    deliver(&mut s, 2, ("IT Support", "helpdesk@gmail.com"), "A team");
+    deliver(&mut s, 3, ("Dana", "dana.w@gmail.com"), "One word");
+    let list = source(4, "Ravi Menon <news@corp-news.example>", "List-Id: <weekly.corp-news.example>\r\n", "text/plain", "This week.");
+    deliver_raw(&mut s, 4, &list);
+    assert!(asked(&mut s).is_empty());
+    for name in ["dana whitfield", "it support", "dana", "ravi menon"] {
+        assert!(!s.directory_searching(ME, name), "{name}");
+    }
+    done(s);
+    // No Exchange account: no directory to ask.
+    let mut s = zoe_session_on("question-imap", false);
+    deliver(&mut s, 1, DANA, "Wire");
+    assert!(asked(&mut s).is_empty());
+    done(s);
+}
+
+#[test]
+fn the_answer_brings_the_warning() {
+    let mut s = zoe_session("question-answer");
+    deliver(&mut s, 1, DANA, "Wire");
+    assert_eq!(warning(&s), None, "nobody knows Dana yet");
+    assert_eq!(asked(&mut s), ["dana whitfield"]);
+    directory_answers(&mut s, "dana whitfield", &[("Dana Whitfield", "dana@corp.example")]);
+    assert_eq!(
+        warning(&s),
+        Some(SenderWarning::NameOfKnownPerson { name: "Dana Whitfield".into(), known: "dana@corp.example".into(), real: "dw.ceo@gmail.com".into() })
+    );
+    assert!(asked(&mut s).is_empty(), "the answer asks nothing more");
+    done(s);
+    // The directory couldn't be asked: logged, and nothing shown.
+    let mut s = zoe_session("question-offline");
+    deliver(&mut s, 1, DANA, "Wire");
+    assert_eq!(asked(&mut s), ["dana whitfield"]);
+    s.apply(Event::DirectoryPeople {
+        account: ME.into(),
+        query: "dana whitfield".into(),
+        people: Vec::new(),
+        more: false,
+        error: Some("offline".into()),
+    });
+    assert_eq!(warning(&s), None);
+    assert!(asked(&mut s).is_empty());
+    done(s);
+}
+
+/// Review Focus 2: arrowing down through 20 messages from strangers, at most one sender's
+/// question waits (the last one's), and Check Names' questions aren't held behind it.
+#[test]
+fn strangers_in_a_row_ask_for_the_last() {
+    const SURNAMES: [&str; 20] = [
+        "Abbott", "Barlow", "Carver", "Dalton", "Ellery", "Fenwick", "Garrow", "Hollis", "Ingram", "Jessop", "Kenning", "Lowther", "Marlow",
+        "Norris", "Oakley", "Pruitt", "Quigley", "Rowan", "Sutton", "Thorne",
+    ];
+    let mut s = zoe_session("question-strangers");
+    // Check Names asks about one name while another waits.
+    s.run("mail.new", &json!({})).unwrap();
+    s.run("compose.update", &json!({"to": "reseau; dupont"})).unwrap();
+    s.run("compose.checkNames", &json!({})).unwrap();
+    assert_eq!(asked(&mut s), ["reseau"]);
+    let names: Vec<String> = SURNAMES.iter().map(|n| format!("Pat {n}")).collect();
+    for (n, name) in (1..).zip(&names) {
+        deliver(&mut s, n, (name, &format!("pat.{}@gmail.com", name.to_lowercase().replace(' ', "."))), &format!("From {name}"));
+        assert!(asked(&mut s).is_empty(), "{name}: the account is being asked about another name");
+    }
+    for name in names.iter().take(19) {
+        assert!(!s.directory_searching(ME, name), "{name}: gave its place to the next");
+    }
+    assert!(s.directory_searching(ME, "Pat Thorne"), "the last one opened waits");
+    assert!(s.directory_searching(ME, "dupont"), "Check Names' question still waits");
+    // Check Names' questions go first, even one asked after the sender's.
+    directory_answers(&mut s, "reseau", &[]);
+    assert_eq!(asked(&mut s), ["dupont"]);
+    s.run("compose.update", &json!({"to": "garcia"})).unwrap();
+    s.run("compose.checkNames", &json!({})).unwrap();
+    directory_answers(&mut s, "dupont", &[]);
+    assert_eq!(asked(&mut s), ["garcia"]);
+    directory_answers(&mut s, "garcia", &[]);
+    assert_eq!(asked(&mut s), ["pat thorne"]);
+    done(s);
+}
+
+#[test]
+fn the_signature_warns_in_the_pane_and_a_window() {
+    let mut s = zoe_session("signature-warns");
+    let body = "Please wire the deposit today, I'm boarding.\r\n\r\nDirection\r\nwww.studio.example";
+    let key = deliver_raw(&mut s, 1, &source(1, "Direction <dg.studio@gmail.com>", "", "text/plain", body));
+    let warned = Some(SenderWarning::SignatureShowsOther { shown: "studio.example".into(), real: "dg.studio@gmail.com".into() });
+    assert_eq!(warning(&s), warned);
+    s.run("message.popOut", &json!({"key": key.to_id()})).unwrap();
+    assert!(s.windows.iter().any(|w| w.key == key && w.warning == warned));
+    done(s);
+}
+
+/// Review Focus 1: an outsider's reply quoting the user's own message, her signature in the
+/// quote, says nothing, as Outlook (a bordered block or a rule) and Gmail lay it out.
+#[test]
+fn an_outlook_reply_quoting_the_user_doesnt_warn() {
+    let mine = "<p>Hello Bo</p><p>Zoe Park<br>www.studio.example<br>zoe@studio.example</p>";
+    let headers = "<p><b>De :</b> Zoe Park &lt;zoe@studio.example&gt;<br><b>Envoyé :</b> lundi 3 novembre 2026 10:00<br><b>À :</b> Bo Chen</p>";
+    let replies = [
+        format!("<p>Thanks, done.</p><p>Bo</p><div style=\"border:none;border-top:solid #E1E1E1 1.0pt\">{headers}</div>{mine}"),
+        format!("<p>Thanks, done.</p><p>Bo</p><hr>{headers}{mine}"),
+        format!(
+            "<div dir=\"ltr\"><p>Thanks, done.</p><p>Bo</p></div><div class=\"gmail_quote\"><div dir=\"ltr\" class=\"gmail_attr\">Le lun. 3 nov. 2026 \
+             à 10:00, Zoe Park &lt;<a href=\"mailto:zoe@studio.example\">zoe@studio.example</a>&gt; a écrit :<br></div>\
+             <blockquote class=\"gmail_quote\" style=\"margin:0px 0px 0px 0.8ex;border-left:1px solid rgb(204,204,204);padding-left:1ex\">{mine}</blockquote></div>"
+        ),
+    ];
+    let mut s = zoe_session("signature-reply");
+    for (n, html) in (1..).zip(&replies) {
+        deliver_raw(&mut s, n, &source(n, "Bo Chen <bo@supplier.example>", "", "text/html", &format!("<html><body>{html}</body></html>")));
+        let text = s.reading.as_ref().and_then(|r| r.parsed.as_ref()).map(|p| p.text.clone()).unwrap_or_default();
+        assert_eq!(warning(&s), None, "{n}: {text:?}");
+    }
+    done(s);
+}
+
+/// An HTML message's links are noted at the end of its text: a supplier's link to the user's
+/// portal, in a sentence, isn't their signature showing her organisation.
+#[test]
+fn a_link_in_the_message_isnt_the_signature() {
+    let mut s = zoe_session("signature-link");
+    let html = "<html><body><p>Hello Zoe, the new prices are on <a href=\"https://portal.studio.example/prices\">your portal</a>.</p>\
+                <p>Bo Chen<br>Supplier Ltd</p></body></html>";
+    deliver_raw(&mut s, 1, &source(1, "Bo Chen <bo@supplier.example>", "", "text/html", html));
+    assert_eq!(warning(&s), None);
     done(s);
 }

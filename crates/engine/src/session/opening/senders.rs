@@ -6,7 +6,8 @@
 //! written to and the directory's people, and gathered again only when what it's made of changes
 //! (its [`Stamp`]): never each frame, never by age. The address book is kept on disk and step by
 //! step (`mailboxes/contacts.rs`), with a revision the directory's answers bump too, so there's
-//! nothing to count again after a sync.
+//! nothing to count again after a sync. A stranger's name is asked of the directory as their
+//! message opens (`message_warning`); the gathering itself never asks anything.
 
 use quatrelle_model::lookalike::{self, KnownPeople, SenderCheck, SenderWarning};
 
@@ -149,19 +150,49 @@ impl Session {
         }
     }
 
-    /// What doesn't add up about an open message's sender, the check kept up to date first.
+    /// What doesn't add up about an open message's sender, the check kept up to date first. With
+    /// nothing to say about a stranger, their name is asked of the directory: its answer gathers
+    /// the check again, and what's open says what it found.
     pub(crate) fn message_warning(&mut self, key: &MessageKey, parsed: &mime::Parsed) -> Option<SenderWarning> {
         self.keep_senders();
-        self.warning_now(key, parsed)
+        let warning = self.warning_now(key, parsed);
+        if warning.is_none() {
+            self.ask_about_sender(key, parsed);
+        }
+        warning
     }
 
-    /// [`Session::message_warning`] as the check stands. It came through a list or in bulk as
-    /// its own header says (a message opened in a window, or from another folder, needn't be in
-    /// the list; an Exchange listing carries no `List-Id`), or as its row does: a list sends its
-    /// members' mail under their names.
+    /// [`Session::message_warning`] as the check stands, asking nothing: what the sender's header
+    /// says, else what the message's own signature does.
     fn warning_now(&self, key: &MessageKey, parsed: &mime::Parsed) -> Option<SenderWarning> {
-        let listed = parsed.bulk || self.summary(key).is_some_and(|m| m.bulk);
-        self.senders.as_ref().and_then(|s| s.check.check(&parsed.from, listed))
+        let listed = self.listed(key, parsed);
+        let s = self.senders.as_ref()?;
+        s.check.check(&parsed.from, listed).or_else(|| s.check.check_signature(&parsed.from, &parsed.text, listed, &s.org))
+    }
+
+    /// The message came through a list or in bulk as its own header says (a message opened in a
+    /// window, or from another folder, needn't be in the list; an Exchange listing carries no
+    /// `List-Id`), or as its row does: a list sends its members' mail under their names.
+    fn listed(&self, key: &MessageKey, parsed: &mime::Parsed) -> bool {
+        parsed.bulk || self.summary(key).is_some_and(|m| m.bulk)
+    }
+
+    /// The directory question: an opened message's sender, neither the user nor known by address,
+    /// whose name is a person's, has that name asked of the user's Exchange directory, as a
+    /// person would type it. Not for a list's or bulk mail (excused from the warning anyway)
+    /// unless it comes from a mail service; nothing without an Exchange account.
+    fn ask_about_sender(&mut self, key: &MessageKey, parsed: &mime::Parsed) {
+        let Some(s) = self.senders.as_ref() else { return };
+        let email = parsed.from.email.trim();
+        if email.is_empty() || s.check.knows(email) {
+            return;
+        }
+        if self.listed(key, parsed) && !lookalike::is_free_mail(&lookalike::domain_of(email)) {
+            return;
+        }
+        let Some(account) = self.directory_account(Some(&key.account)) else { return };
+        let Some(name) = lookalike::lookup_name(&parsed.from.name) else { return };
+        self.ask_directory_for_sender(&account, &name);
     }
 
     /// What doesn't add up about a sender outside the mailbox (a message file, an attached
