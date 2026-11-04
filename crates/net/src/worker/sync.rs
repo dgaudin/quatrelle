@@ -481,7 +481,7 @@ impl Worker {
                     Ok(r)
                 })()
             }
-            Some(Conn::Pop) => Ok(crate::pop::local_counts(&store, &id, path)),
+            Some(Conn::Pop) => crate::pop::local_counts(&store, &id, path),
             None => Err(NetError::Closed("not connected".into())),
         };
         let newest = result.as_ref().ok().and_then(|r| r.newest);
