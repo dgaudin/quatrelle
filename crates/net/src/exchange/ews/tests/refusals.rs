@@ -97,12 +97,3 @@ fn a_code_is_said_only_when_it_looks_like_one() {
     }
     assert!(matches!(refused("", field), NetError::No(t) if t == format!("{TEXT} (calendar:Organizer)")));
 }
-
-/// Exchange failing inside, or over its limits on objects open and connections, is for now:
-/// tried again, not dropped.
-#[test]
-fn a_refusal_for_now_is_tried_again() {
-    for code in ["ErrorInternalServerError", "ErrorTooManyObjectsOpened", "ErrorExceededConnectionCount"] {
-        assert!(matches!(refused(code, ""), NetError::Later(t) if t == TEXT), "{code}");
-    }
-}

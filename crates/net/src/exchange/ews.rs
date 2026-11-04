@@ -220,9 +220,8 @@ enum Busy {
 }
 
 /// Refusals that say the server can't now, not that it won't: tried again later rather than
-/// dropped. (A failure inside Exchange, and its limits on objects open and on connections, clear
-/// by themselves: an answer to an invitation refused so is sent again, not given up.)
-const TRANSIENT: [&str; 10] = [
+/// dropped.
+const TRANSIENT: [&str; 7] = [
     "ErrorServerBusy",
     "ErrorInternalServerTransientError",
     "ErrorMailboxStoreUnavailable",
@@ -230,9 +229,6 @@ const TRANSIENT: [&str; 10] = [
     "ErrorConnectionFailed",
     "ErrorTimeoutExpired",
     "ErrorBatchProcessingStopped",
-    "ErrorInternalServerError",
-    "ErrorTooManyObjectsOpened",
-    "ErrorExceededConnectionCount",
 ];
 
 /// Whether Exchange said it's busy (`ErrorServerBusy`, as a fault or in a response message),
@@ -296,7 +292,8 @@ fn plain_name(n: &str) -> bool {
 }
 
 /// What a `…ResponseMessage` said: a refusal in the server's words, with the fields it named
-/// (Exchange names the field it refused in its `MessageXml`, which its text doesn't say).
+/// (Exchange names the field it refused in its `MessageXml`, which its text doesn't say). It
+/// reads the server's answer, hostile like any: public for the fuzz target.
 pub fn check_message(m: &El) -> Result<()> {
     match m.attr("ResponseClass") {
         Some("Error") => {
@@ -355,7 +352,8 @@ fn photo_of(doc: &El) -> Result<(String, Vec<u8>)> {
     Ok((crate::picture_media(&bytes).to_string(), bytes))
 }
 
-/// The `…ResponseMessage` elements of an answer.
+/// The `…ResponseMessage` elements of an answer, as the server sent it (hostile like any): public
+/// for the fuzz target.
 pub fn messages(doc: &El) -> Vec<&El> {
     let mut out = Vec::new();
     if let Some(body) = doc.find("Body") {
