@@ -14,6 +14,7 @@ fuzz_target!(|data: &[u8]| {
     for e in cal.events.iter().take(16) {
         let _ = ical::reminder_minutes(e);
         let _ = e.links();
+        let _ = e.join_link();
     }
     let written = ical::write(&cal.events, cal.method.as_deref(), 0);
     let _ = ical::parse(&written, 3600);

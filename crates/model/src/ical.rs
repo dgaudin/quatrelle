@@ -22,6 +22,7 @@ use serde::{Deserialize, Serialize};
 use crate::dates::{civil_from_days, days_from_civil};
 
 mod alarms;
+mod conference;
 mod find;
 mod meeting;
 mod notes;
@@ -30,6 +31,7 @@ mod text;
 mod todo;
 mod zones;
 pub use alarms::*;
+pub use conference::{CONFERENCE_LABEL_MAX, Conference};
 pub use find::*;
 pub use meeting::{OPTIONAL, PrivateKind, ShowAs, intended_show_as, show_as_answered, valid_webex_id};
 use notes::*;
@@ -161,6 +163,9 @@ pub struct CalEvent {
     /// file and never sent in an invitation.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub webex_id: Option<String>,
+    /// Where to join it online, as its calendar says (RFC 7986 `CONFERENCE`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub conference: Option<Conference>,
 }
 
 fn is_zero(n: &i64) -> bool {
@@ -168,16 +173,21 @@ fn is_zero(n: &i64) -> bool {
 }
 
 impl CalEvent {
-    /// The address that joins it online: the server's own, else the first meeting link in its
-    /// location or notes (as Outlook's Join finds a Teams or Zoom meeting).
+    /// The address that joins it online: the server's own, else its conference's (any web link:
+    /// the calendar says it joins), else the first meeting link in its location or notes (as
+    /// Outlook's Join finds a Teams or Zoom meeting).
     pub fn join_link(&self) -> Option<String> {
         if is_meeting_link(&self.join_url) {
             return Some(self.join_url.clone());
         }
+        if let Some(c) = self.conference.as_ref().filter(|c| launchable_link(&c.url)) {
+            return Some(c.url.clone());
+        }
         links_in(&self.location).into_iter().chain(links_in(&self.description)).find(|l| is_meeting_link(l))
     }
 
-    /// Every web address in its location and notes (and its join address), once each.
+    /// Every web address in its location and notes (and its join address, then its
+    /// conference's), once each.
     pub fn links(&self) -> Vec<String> {
         let mut out = links_in(&self.location);
         for l in links_in(&self.description) {
@@ -187,6 +197,10 @@ impl CalEvent {
         }
         if !self.join_url.is_empty() && !out.contains(&self.join_url) && self.join_url.starts_with("http") {
             out.insert(0, self.join_url.clone());
+        }
+        if let Some(c) = self.conference.as_ref().filter(|c| launchable_link(&c.url) && !out.contains(&c.url)) {
+            let at = out.iter().position(|l| *l == self.join_url).map_or(0, |i| i + 1);
+            out.insert(at, c.url.clone());
         }
         out.truncate(MAX_LINKS);
         out
@@ -490,6 +504,8 @@ pub fn parse_in(text: &str, local: crate::zone::Zone) -> ICalendar {
             }
             "DTSTAMP" => e.dtstamp = zones.time(l, "").map_or(0, |(t, _, _)| t),
             "CREATED" | "LAST-MODIFIED" => {}
+            // A line that isn't the conference is kept as it came.
+            "CONFERENCE" if conference::take(e, l) => {}
             _ if meeting::read(e, n, &l.value, &mut busy_said) => {}
             _ => {
                 if e.extra.len() < 200 {
@@ -677,6 +693,7 @@ pub fn write_event(e: &CalEvent, now: i64, out: &mut String) {
         lines.push(format!("SEQUENCE:{}", e.sequence));
     }
     lines.extend(meeting::lines(e));
+    lines.extend(e.conference.as_ref().and_then(conference::line));
     if let Some(o) = &e.organizer {
         lines.push(mailbox("ORGANIZER", o));
     }

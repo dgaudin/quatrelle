@@ -207,12 +207,20 @@ const SEP: &str = " \u{1f} ";
 const ANY_FIELDS: [EventField; 6] =
     [EventField::Subject, EventField::Location, EventField::Organizer, EventField::Attendees, EventField::Categories, EventField::Notes];
 
-/// Where it is: the location, then the link that joins it when that isn't already written there.
+/// Where it is: the location, then the link that joins it, then its conference's label and
+/// link, each when the location doesn't already hold it.
 fn place(e: &CalEvent) -> Cow<'_, str> {
-    if e.join_url.is_empty() || e.location.contains(&e.join_url) {
+    let conference = e.conference.iter().flat_map(|c| [c.label.as_str(), c.url.as_str()]);
+    let more: Vec<&str> = std::iter::once(e.join_url.as_str()).chain(conference).filter(|p| !p.is_empty() && !e.location.contains(*p)).collect();
+    if more.is_empty() {
         return Cow::Borrowed(&e.location);
     }
-    Cow::Owned(format!("{}{SEP}{}", e.location, e.join_url))
+    let mut s = e.location.clone();
+    for p in more {
+        s.push_str(SEP);
+        s.push_str(p);
+    }
+    Cow::Owned(s)
 }
 
 /// A field's text, borrowed when it's kept as it is. `Any`'s is every field joined: only a
