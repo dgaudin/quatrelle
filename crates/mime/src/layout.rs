@@ -106,7 +106,8 @@ pub struct Cell {
     pub span: u16,
     /// A floated box that sets no width is as wide as its content (CSS's shrink-to-fit): this,
     /// in pixels, when that's a picture of a known width (a signature's logo), its padding not
-    /// counted. The others beside it share the rest.
+    /// counted; a table cell of one such picture too (a business card's photo, as a browser fits
+    /// its column). The others beside it share the rest.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fit: Option<u32>,
     /// A picture behind its content, covering the cell.

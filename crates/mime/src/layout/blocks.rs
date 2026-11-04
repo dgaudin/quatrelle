@@ -207,19 +207,23 @@ fn blocks_of(kids: &[Kid], ctx: &mut Ctx, depth: usize) -> Vec<Block> {
                             row.into_iter()
                                 .map(|c| {
                                     ctx.cells += 1;
+                                    let width = c.width();
                                     Cell {
                                         blocks: if ctx.cells > MAX_CELLS {
                                             Vec::new()
                                         } else {
                                             colored(ctx, c, |ctx| blocks(&c.kids, ctx, depth + 1))
                                         },
-                                        width: c.width(),
+                                        width,
                                         background: c.background().or(row_bg),
                                         align: c.align(),
                                         span: c.attr("colspan").and_then(|s| s.trim().parse::<u16>().ok()).unwrap_or(1).clamp(1, 50),
                                         background_image: c.background_image(),
                                         overlays: Vec::new(),
-                                        fit: None,
+                                        // A cell of one picture of a set width (a business card's
+                                        // photo, upstream issue #11): as wide as the picture, as a
+                                        // browser fits the column to it, rather than half the table.
+                                        fit: width.is_none().then(|| c.picture_width(depth)).flatten(),
                                         borders: c.borders(cell_border),
                                         radius: c.radius(),
                                         padding: c.padding(cellpadding),
