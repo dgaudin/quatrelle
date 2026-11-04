@@ -386,12 +386,12 @@ impl Node {
             })
     }
 
-    /// Whether a table or side-by-side boxes are somewhere inside.
+    /// Whether a table, side-by-side boxes or a box of a set width are somewhere inside.
     fn has_table(&self, depth: usize) -> bool {
         depth < MAX_DEPTH * 4
             && !self.hidden()
             && self.kids.iter().any(|k| match k {
-                Kid::El(n) => n.tag == "table" || n.columns().is_some() || n.has_table(depth + 1),
+                Kid::El(n) => n.tag == "table" || n.columns().is_some() || n.fixed_width() || n.has_table(depth + 1),
                 Kid::Text(_) => false,
             })
     }
@@ -658,7 +658,8 @@ pub fn html_layout(html: &str) -> Vec<Block> {
         || lower.contains("inline-block")
         || lower.contains("float")
         || lower.contains("background")
-        || lower.contains("absolute"))
+        || lower.contains("absolute")
+        || lower.contains("width"))
     {
         return Vec::new();
     }
