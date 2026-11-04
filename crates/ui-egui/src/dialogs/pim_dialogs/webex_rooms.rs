@@ -18,6 +18,8 @@ pub(super) fn rooms_menu(ui: &mut Ui, t: &Tokens, f: &mut EventForm, s: &Session
     let rooms = &s.prefs.webex_rooms;
     if asking_now(ui, f.window) {
         let Some(room) = asking(ui, t, f.window, rooms) else { return false };
+        // Opened again, the menu lists the rooms (a browser's one-room click never closes it).
+        stop_asking(ui, f.window);
         acts.push(Action::Run("calendar.webexRoom", json!({"url": room.url, "name": room.name})));
         // With the new one, for a block another room left in the notes to be found.
         let mut all = rooms.clone();
@@ -92,8 +94,8 @@ fn asking(ui: &mut Ui, t: &Tokens, window: u64, rooms: &[WebexRoom]) -> Option<W
             room
         })
         .inner;
-    if let Err(Some(why)) = room {
-        ui.label(RichText::new(why).color(t.danger).small());
+    if let Err(Some(why)) = &room {
+        ui.label(RichText::new(why.as_str()).color(t.danger).small());
     }
     if taken.is_some() {
         name.clear();
@@ -104,15 +106,19 @@ fn asking(ui: &mut Ui, t: &Tokens, window: u64, rooms: &[WebexRoom]) -> Option<W
 }
 
 /// The room typed, once its name (trimmed, at most [`WEBEX_ROOM_NAME_MAX`] characters) and its link
-/// are right: a Webex personal room's that none of `rooms` has, ASCII case aside. Otherwise why the
-/// link is wrong, or nothing to say while it's empty or the name alone is missing.
-fn typed_room(name: &str, link: &str, rooms: &[WebexRoom]) -> Result<WebexRoom, Option<&'static str>> {
+/// are right: a Webex personal room's that none of `rooms` has, ASCII case aside, with fewer rooms
+/// than are kept (the last one may have been added in Options meanwhile). Otherwise why not, or
+/// nothing to say while the link is empty or the name alone is missing.
+fn typed_room(name: &str, link: &str, rooms: &[WebexRoom]) -> Result<WebexRoom, Option<String>> {
     let (name, link) = (name.trim(), link.trim());
+    if rooms.len() >= WEBEX_ROOMS_MAX {
+        return Err(Some(tf!("At most {n} Webex rooms", n = WEBEX_ROOMS_MAX)));
+    }
     if !link.is_empty() && !is_webex_link(link) {
-        return Err(Some(tl!("Not a Webex personal room: https://<site>.webex.com/meet/<name>")));
+        return Err(Some(tl!("Not a Webex personal room: https://<site>.webex.com/meet/<name>").to_string()));
     }
     if room_of(rooms, link).is_some() {
-        return Err(Some(tl!("Another room has this link")));
+        return Err(Some(tl!("Another room has this link").to_string()));
     }
     if link.is_empty() || name.is_empty() || name.chars().count() > WEBEX_ROOM_NAME_MAX {
         return Err(None);
@@ -262,8 +268,8 @@ mod tests {
         assert_eq!(e.join_link().as_deref(), Some(ANA), "what Join finds once it's saved");
     }
 
-    /// A room typed in the menu needs a name, at most as long as a room's, and a personal room's
-    /// link no room has, ASCII case aside; both are taken trimmed.
+    /// A room typed in the menu needs a name, at most as long as a room's, a personal room's link
+    /// no room has, ASCII case aside, and room to be kept; name and link are taken trimmed.
     #[test]
     fn a_room_typed_needs_a_name_and_a_link_of_its_own() {
         let rooms = [team()];
@@ -274,9 +280,49 @@ mod tests {
         for (name, link) in [("", ANA), ("  ", ANA), ("Ana", ""), (&format!("{long}x"), ANA)] {
             assert_eq!(typed_room(name, link, &rooms), Err(None), "{name:?} {link:?}");
         }
-        let wrong = Err(Some("Not a Webex personal room: https://<site>.webex.com/meet/<name>"));
+        let wrong = Err(Some("Not a Webex personal room: https://<site>.webex.com/meet/<name>".to_string()));
         assert_eq!(typed_room("", "https://evil.example/meet/ana", &rooms), wrong);
-        assert_eq!(typed_room("Ana", "HTTPS://Acme.webex.com/meet/TEAM", &rooms), Err(Some("Another room has this link")));
+        assert_eq!(typed_room("Ana", "HTTPS://Acme.webex.com/meet/TEAM", &rooms), Err(Some("Another room has this link".to_string())));
+        // The last room kept added elsewhere (in Options) while this one was typed.
+        let full: Vec<WebexRoom> = (0..WEBEX_ROOMS_MAX)
+            .map(|i| WebexRoom { name: format!("Salle {i}"), url: format!("https://acme.webex.com/meet/s{i}"), details: Vec::new() })
+            .collect();
+        assert_eq!(typed_room("Ana", ANA, &full), Err(Some(format!("At most {WEBEX_ROOMS_MAX} Webex rooms"))));
+        assert!(typed_room("Ana", ANA, full.get(1..).unwrap_or_default()).is_ok(), "one fewer");
+    }
+
+    /// A frame of window `f.window`'s menu of rooms, with `events`: whether a room went in, and the
+    /// actions.
+    fn menu_frame(ctx: &egui::Context, f: &mut EventForm, s: &Session, events: Vec<egui::Event>) -> (bool, Vec<Action>) {
+        let (mut taken, mut acts) = (false, Vec::new());
+        let input = egui::RawInput { events, ..Default::default() };
+        let mut out = ctx.run_ui(input, |ui| taken = rooms_menu(ui, &theme::Tokens::light(), f, s, &mut acts));
+        out.textures_delta.clear();
+        (taken, acts)
+    }
+
+    /// A room added from the menu's form puts the menu back to its rooms (a browser's, whose
+    /// one-room click leaves the menu alone, would open on the form again otherwise); what's
+    /// typed is cleared with it.
+    #[test]
+    fn a_room_added_in_the_menu_ends_the_asking() {
+        let ctx = egui::Context::default();
+        let s = Session::open(None, quatrelle_engine::model::dates::Clock::default());
+        let mut f = EventForm::default();
+        let typed_id = egui::Id::unique(("webex-room-typed", f.window));
+        ctx.data_mut(|d| {
+            d.insert_temp(asking_id(f.window), true);
+            d.insert_temp(typed_id, ("Ana".to_string(), ANA.to_string()));
+        });
+        // The first frame gives the name's box the focus; Enter in the next adds the room.
+        assert!(!menu_frame(&ctx, &mut f, &s, Vec::new()).0);
+        let enter = egui::Event::Key { key: egui::Key::Enter, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::NONE };
+        let (taken, acts) = menu_frame(&ctx, &mut f, &s, vec![enter]);
+        assert!(taken, "the room went in");
+        assert!(acts.iter().any(|a| matches!(a, Action::Run("calendar.webexRoom", p) if p["url"] == ANA && p["name"] == "Ana")));
+        assert_eq!(f.join.as_deref(), Some(ANA));
+        assert_eq!(ctx.data(|d| d.get_temp::<bool>(asking_id(f.window))), None, "the rooms listed when the menu opens again");
+        assert_eq!(ctx.data(|d| d.get_temp::<(String, String)>(typed_id)), Some((String::new(), String::new())));
     }
 
     /// The block goes whichever catalog's language its label was written in, with the blank line

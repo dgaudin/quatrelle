@@ -130,7 +130,9 @@ fn a_read_only_window_shows_join_alone() {
     let f = &mut a.ui.event_windows[0].1;
     f.read_only = true;
     f.join = Some(LINK.into());
-    assert!(settled_text_at(&ctx, &mut a, "Join meeting", SIZE).is_some());
+    settled_text_at(&ctx, &mut a, "Join meeting", SIZE).expect("Join drawn");
+    // Told of the ribbon's buttons as a screen reader is: Join is there, and nothing else.
+    assert_eq!(button(&ctx, &mut a, "Join meeting").map(|b| b.1), Some(true));
     assert_eq!(button(&ctx, &mut a, "Webex Meeting"), None);
     assert_eq!(button(&ctx, &mut a, "Webex Meeting options"), None);
     let _ = std::fs::remove_dir_all(dir);

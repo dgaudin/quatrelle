@@ -1454,12 +1454,9 @@ month	May	מאי
 	Choose from the address book	בחר מפנקס הכתובות
 	Click a room to see when it's free; double-click it to book it.	לחץ על חדר כדי לראות מתי הוא פנוי; לחיצה כפולה מזמינה אותו.
 	Hide its day	הסתר את היום
-	Its link is on your Webex profile, under Personal Room. It's kept in File › Options › Calendar for the next meetings.	הקישור נמצא בפרופיל ה-Webex שלך, תחת חדר אישי. הוא נשמר בקובץ › אפשרויות › לוח שנה לפגישות הבאות.
 	Not a Webex personal room: https://<site>.webex.com/meet/<name>	זה אינו חדר אישי ב-Webex: https://<site>.webex.com/meet/<name>
 	Not an address: {what}	אינה כתובת: {what}
-	Puts your Webex personal room in the meeting	מוסיף את החדר האישי שלך ב-Webex לפגישה
 	Select Attendees and Resources	בחירת משתתפים ומשאבים
-	Your Webex personal room	החדר האישי שלך ב-Webex
 	Move meeting invitations to Deleted Items once answered	העבר הזמנות לפגישות אל פריטים שנמחקו לאחר שנענו
 	Also a cancellation once its meeting is removed from the calendar, and the meeting's earlier invitations.	וכן ביטול, לאחר שהפגישה שלו הוסרה מהלוח, ואת ההזמנות הקודמות של הפגישה.
 	Required ->	נדרש ->
@@ -1489,7 +1486,6 @@ month	May	מאי
 	Your Webex account can't schedule meetings on this site	חשבון ה-Webex שלכם אינו יכול לתזמן פגישות באתר זה
 	Webex Meeting options	אפשרויות פגישת Webex
 	New Webex meeting	פגישת Webex חדשה
-	Use my personal room	שימוש בחדר האישי שלי
 	My personal room	החדר האישי שלי
 	Add a room…	הוסף חדר…
 	This appointment already has its Webex meeting	לפגישה זו כבר יש פגישת Webex משלה

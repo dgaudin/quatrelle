@@ -1455,12 +1455,9 @@ month	May	5月
 	Choose from the address book	アドレス帳から選択
 	Click a room to see when it's free; double-click it to book it.	会議室をクリックすると空き時間が表示され、ダブルクリックすると予約されます。
 	Hide its day	この日を非表示
-	Its link is on your Webex profile, under Personal Room. It's kept in File › Options › Calendar for the next meetings.	リンクは Webex のプロフィールの [パーソナル会議室] にあります。次回以降の会議のために [ファイル] › [オプション] › [予定表] に保存されます。
 	Not a Webex personal room: https://<site>.webex.com/meet/<name>	Webex パーソナル会議室ではありません: https://<site>.webex.com/meet/<name>
 	Not an address: {what}	アドレスではありません: {what}
-	Puts your Webex personal room in the meeting	Webex パーソナル会議室を会議に挿入します
 	Select Attendees and Resources	出席者とリソースの選択
-	Your Webex personal room	あなたの Webex パーソナル会議室
 	Move meeting invitations to Deleted Items once answered	会議の招待は、返信したら削除済みアイテムに移動する
 	Also a cancellation once its meeting is removed from the calendar, and the meeting's earlier invitations.	会議がカレンダーから削除された後の取り消しと、その会議の以前の招待も対象です。
 	Required ->	必須 ->
@@ -1490,7 +1487,6 @@ month	May	5月
 	Your Webex account can't schedule meetings on this site	お使いの Webex アカウントでは、このサイトでミーティングを設定できません
 	Webex Meeting options	Webex 会議のオプション
 	New Webex meeting	新しい Webex 会議
-	Use my personal room	個人ルームを使う
 	My personal room	個人ルーム
 	Add a room…	ルームを追加…
 	This appointment already has its Webex meeting	この予定には既に Webex 会議があります

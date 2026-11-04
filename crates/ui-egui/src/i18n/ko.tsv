@@ -1457,12 +1457,9 @@ month	May	5월
 	Choose from the address book	주소록에서 선택
 	Click a room to see when it's free; double-click it to book it.	회의실을 클릭하면 비어 있는 시간이 표시되고, 두 번 클릭하면 예약됩니다.
 	Hide its day	이 날 숨기기
-	Its link is on your Webex profile, under Personal Room. It's kept in File › Options › Calendar for the next meetings.	링크는 Webex 프로필의 개인 회의실에 있습니다. 다음 회의를 위해 파일 › 옵션 › 일정에 저장됩니다.
 	Not a Webex personal room: https://<site>.webex.com/meet/<name>	Webex 개인 회의실이 아닙니다: https://<site>.webex.com/meet/<name>
 	Not an address: {what}	주소가 아닙니다: {what}
-	Puts your Webex personal room in the meeting	Webex 개인 회의실을 회의에 넣습니다
 	Select Attendees and Resources	참석자 및 리소스 선택
-	Your Webex personal room	내 Webex 개인 회의실
 	Move meeting invitations to Deleted Items once answered	회의 초대에 응답하면 지운 편지함으로 이동
 	Also a cancellation once its meeting is removed from the calendar, and the meeting's earlier invitations.	회의가 일정에서 제거된 뒤의 취소 메일과 그 회의의 이전 초대도 함께 옮깁니다.
 	Required ->	필수 ->
@@ -1492,7 +1489,6 @@ month	May	5월
 	Your Webex account can't schedule meetings on this site	Webex 계정으로는 이 사이트에서 회의를 예약할 수 없습니다
 	Webex Meeting options	Webex 회의 옵션
 	New Webex meeting	새 Webex 회의
-	Use my personal room	내 개인 룸 사용
 	My personal room	내 개인 룸
 	Add a room…	룸 추가…
 	This appointment already has its Webex meeting	이 약속에는 이미 Webex 회의가 있습니다

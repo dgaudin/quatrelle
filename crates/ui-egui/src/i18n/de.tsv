@@ -1458,12 +1458,9 @@ month	May	Mai
 	Choose from the address book	Aus dem Adressbuch auswählen
 	Click a room to see when it's free; double-click it to book it.	Klicken Sie auf einen Raum, um zu sehen, wann er frei ist; ein Doppelklick bucht ihn.
 	Hide its day	Tag ausblenden
-	Its link is on your Webex profile, under Personal Room. It's kept in File › Options › Calendar for the next meetings.	Der Link steht in Ihrem Webex-Profil unter „Persönlicher Raum“. Er wird für die nächsten Besprechungen unter Datei › Optionen › Kalender gespeichert.
 	Not a Webex personal room: https://<site>.webex.com/meet/<name>	Kein persönlicher Webex-Raum: https://<site>.webex.com/meet/<name>
 	Not an address: {what}	Keine Adresse: {what}
-	Puts your Webex personal room in the meeting	Fügt Ihren persönlichen Webex-Raum in die Besprechung ein
 	Select Attendees and Resources	Teilnehmer und Ressourcen auswählen
-	Your Webex personal room	Ihr persönlicher Webex-Raum
 	Move meeting invitations to Deleted Items once answered	Besprechungseinladungen nach der Antwort in „Gelöschte Elemente“ verschieben
 	Also a cancellation once its meeting is removed from the calendar, and the meeting's earlier invitations.	Auch eine Absage, sobald ihre Besprechung aus dem Kalender entfernt ist, und die früheren Einladungen der Besprechung.
 	Required ->	Erforderlich ->
@@ -1493,7 +1490,6 @@ month	May	Mai
 	Your Webex account can't schedule meetings on this site	Ihr Webex-Konto kann auf dieser Site keine Besprechungen planen
 	Webex Meeting options	Optionen für Webex-Besprechungen
 	New Webex meeting	Neue Webex-Besprechung
-	Use my personal room	Meinen persönlichen Raum verwenden
 	My personal room	Mein persönlicher Raum
 	Add a room…	Raum hinzufügen…
 	This appointment already has its Webex meeting	Dieser Termin hat bereits seine Webex-Besprechung

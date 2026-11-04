@@ -1458,12 +1458,9 @@ month	May	mai
 	Choose from the address book	Choisir dans le carnet d’adresses
 	Click a room to see when it's free; double-click it to book it.	Un clic sur une salle montre quand elle est libre ; un double-clic la réserve.
 	Hide its day	Masquer sa journée
-	Its link is on your Webex profile, under Personal Room. It's kept in File › Options › Calendar for the next meetings.	Son lien figure dans votre profil Webex, sous Salle personnelle. Il est gardé dans Fichier › Options › Calendrier pour les réunions suivantes.
 	Not a Webex personal room: https://<site>.webex.com/meet/<name>	Ce n’est pas une salle personnelle Webex : https://<site>.webex.com/meet/<nom>
 	Not an address: {what}	Adresse non valide : {what}
-	Puts your Webex personal room in the meeting	Ajoute votre salle personnelle Webex à la réunion
 	Select Attendees and Resources	Choisir les participants et les ressources
-	Your Webex personal room	Votre salle personnelle Webex
 	Move meeting invitations to Deleted Items once answered	Mettre les invitations aux Éléments supprimés une fois répondues
 	Also a cancellation once its meeting is removed from the calendar, and the meeting's earlier invitations.	Aussi une annulation, une fois sa réunion retirée du calendrier, et les invitations précédentes de la réunion.
 	Required ->	Obligatoire ->
@@ -1493,7 +1490,6 @@ month	May	mai
 	Your Webex account can't schedule meetings on this site	Votre compte Webex ne peut pas planifier de réunions sur ce site
 	Webex Meeting options	Options de réunion Webex
 	New Webex meeting	Nouvelle réunion Webex
-	Use my personal room	Utiliser ma salle personnelle
 	My personal room	Ma salle personnelle
 	Add a room…	Ajouter une salle…
 	This appointment already has its Webex meeting	Ce rendez-vous a déjà sa réunion Webex
