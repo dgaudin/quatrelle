@@ -24,6 +24,8 @@ const READ_MOST: usize = 64 * 1024;
 const SIGNATURE_LINES: usize = 15;
 /// The most addresses and sites read in a signature.
 const MOST_SHOWN: usize = 10;
+/// A signature's line has at most this many words besides its addresses and sites.
+const MOST_OTHER_WORDS: usize = 4;
 /// A word longer than this (in bytes) is no address or website anyone would read.
 const LONGEST_WORD: usize = 2048;
 /// A header block's second line comes within this many lines of its first.
@@ -69,9 +71,14 @@ fn mark(line: &str) -> bool {
     dashes || underscores || wrote(line) || labelled(line, &["begin forwarded message", "début du message réexpédié"]) || line.starts_with('>')
 }
 
-/// A line (lower case, trimmed) ending `wrote:` or the like.
+/// A line (lower case, trimmed) ending `wrote:` or the like, or one ending `:` with `schrieb` or
+/// `schreef` inside.
 fn wrote(line: &str) -> bool {
     let Some(rest) = line.strip_suffix(':') else { return false };
+    // Gmail in German and Dutch: "Am …, um … Uhr schrieb Ana <ana@…>:", "Op … schreef Ana <…>:".
+    if [" schrieb ", " schreef "].iter().any(|w| rest.contains(w)) {
+        return true;
+    }
     let rest = rest.trim_end_matches([' ', '\u{a0}', '\u{202f}', '\t']);
     WROTE.iter().any(|w| rest.strip_suffix(w).is_some_and(|before| before.is_empty() || before.ends_with(char::is_whitespace)))
 }
@@ -128,20 +135,43 @@ fn signature(own: &str) -> &str {
 }
 
 /// The addresses and websites the signature of `text` gives, in order, once each, at most
-/// [`MOST_SHOWN`].
+/// [`MOST_SHOWN`]. Only a signature's kind of line counts: one where they come with at most
+/// [`MOST_OTHER_WORDS`] other words (a name, a title, a label such as `Tél.` or `Web`), so a
+/// sentence naming a website or an address ("I can't log in to www.…") isn't read.
 pub fn signature_shows(text: &str) -> Vec<Shown> {
     let mut out: Vec<Shown> = Vec::new();
     let separator = |c: char| c.is_whitespace() || matches!(c, '<' | '>' | '(' | ')' | '[' | ']' | '{' | '}' | '"' | ',' | ';' | '|' | '«' | '»');
-    for word in signature(own_text(text)).split(separator) {
+    for line in signature(own_text(text)).split('\n') {
         if out.len() >= MOST_SHOWN {
             break;
         }
-        let word = word.trim_matches(|c: char| matches!(c, '.' | ':' | '!' | '?' | '\'' | '\u{2019}' | '*' | '`'));
-        if word.is_empty() || word.len() > LONGEST_WORD {
+        let mut found: Vec<Shown> = Vec::new();
+        let mut others = 0usize;
+        for word in line.split(separator) {
+            let word = word.trim_matches(|c: char| matches!(c, '.' | ':' | '!' | '?' | '\'' | '\u{2019}' | '*' | '`'));
+            if word.is_empty() || word.len() > LONGEST_WORD {
+                continue;
+            }
+            match read_word(word) {
+                Some(shown) if found.len() < MOST_SHOWN => found.push(shown),
+                Some(_) => {}
+                // Separators (`–`, `•`, `/`) and a phone number's digits aren't words.
+                None if word.chars().any(char::is_alphabetic) => {
+                    others += 1;
+                    if others > MOST_OTHER_WORDS {
+                        break;
+                    }
+                }
+                None => {}
+            }
+        }
+        if others > MOST_OTHER_WORDS {
             continue;
         }
-        if let Some(shown) = read_word(word).filter(|s| !out.contains(s)) {
-            out.push(shown);
+        for shown in found {
+            if out.len() < MOST_SHOWN && !out.contains(&shown) {
+                out.push(shown);
+            }
         }
     }
     out
@@ -291,6 +321,8 @@ mod tests {
             "On Mon, 3 Nov 2026, Ana <a@b.example> wrote:",
             "Le lun. 3 nov. 2026 à 10:00, Ana <a@b.example> a écrit :",
             "Ana <a@b.example> schrieb:",
+            "Am Mo., 3. Nov. 2026 um 10:00 Uhr schrieb Ana <a@b.example>:",
+            "Op ma 3 nov. 2026 om 10:00 schreef Ana <a@b.example>:",
             "> quoted",
             "Begin forwarded message:",
             "Début du message réexpédié :",
@@ -342,6 +374,27 @@ mod tests {
         assert_eq!(signature_shows("dana@localhost\nwww.\nhttps://\nstudio.example\n@\nx@y@z.example\nwww.a_b!.example"), vec![]);
         let many: Vec<String> = (0..25).map(|i| format!("p{i}@corp{i}.example")).collect();
         assert_eq!(signature_shows(&many.join(" ")).len(), 10);
+    }
+
+    #[test]
+    fn a_sentence_naming_the_organisation_is_no_signature() {
+        let c = knowing(&[("Dana Whitfield", "dana@corp.example")]);
+        for text in [
+            "Bonjour,\n\nJe n'arrive pas à me connecter sur www.studio.example depuis hier.",
+            "Bonjour,\n\nj'ai écrit à support@studio.example sans réponse",
+            "I can't log in to www.studio.example",
+        ] {
+            assert_eq!(warns(&c, "Marie Client", "marie.client@gmail.com", text, false), None, "{text:?}");
+        }
+        // A signature's line: a name, a title, separators, the site.
+        let text = "Cordialement,\n\nDana Whitfield | CEO | Studio | www.studio.example";
+        assert_eq!(warns(&c, "Marie Client", "marie.client@gmail.com", text, false), shown("studio.example", "marie.client@gmail.com"));
+        // A label is a word, separators and a phone number's digits aren't.
+        let text = "Merci.\n\nEmail : dana@corp.example";
+        assert_eq!(warns(&c, "Marie Client", "marie.client@gmail.com", text, false), shown("dana@corp.example", "marie.client@gmail.com"));
+        let text = "Merci.\n\nTél. : +33 1 23 45 67 89 – Web : www.studio.example";
+        assert_eq!(signature_shows(text), vec![Shown::Site("studio.example".into())]);
+        assert_eq!(signature_shows("Dana Whitfield, CEO, Studio, Paris, France • www.studio.example"), vec![]);
     }
 
     #[test]
