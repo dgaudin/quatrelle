@@ -1712,6 +1712,7 @@ month	May	5月
 	Clean Up moved {n} messages to Deleted Items	クリーンアップで {n} 件のメッセージを削除済みアイテムに移動しました
 	Downloading {total} messages…	{total} 件のメッセージをダウンロードしています…
 	Every message is already on this computer	すべてのメッセージがすでにこのコンピューターにあります
+	Exchange refused your answer to {summary}: {error}. Answer it in Outlook on the web.	Exchange は {summary} への返信を拒否しました: {error}。Outlook on the web で返信してください。
 	It will be sent {when}	{when} に送信されます
 	Mail from {n} senders is never treated as junk	{n} 人の差出人からのメールは迷惑メールとして扱われません
 	Mail from {n} senders now goes to Junk Email	{n} 人の差出人からのメールは今後、迷惑メールに移動されます
@@ -1735,7 +1736,6 @@ month	May	5月
 	bad parameters: {error}	パラメーターが正しくありません: {error}
 	calendar and contacts could not be saved: {error}	予定表と連絡先を保存できませんでした: {error}
 	calendars and contacts: {error}	予定表と連絡先: {error}
-	Exchange refused your answer to {summary}: {error}. Answer it in Outlook on the web.	Exchange は {summary} への返信を拒否しました: {error}。Outlook on the web で返信してください。
 	export: {error}	エクスポート: {error}
 	import: {error}	インポート: {error}
 	network: {error}	ネットワーク: {error}

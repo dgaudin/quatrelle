@@ -220,8 +220,9 @@ enum Busy {
 }
 
 /// Refusals that say the server can't now, not that it won't: tried again later rather than
-/// dropped.
-const TRANSIENT: [&str; 7] = [
+/// dropped. (A failure inside Exchange, and its limits on objects open and on connections, clear
+/// by themselves: an answer to an invitation refused so is sent again, not given up.)
+const TRANSIENT: [&str; 10] = [
     "ErrorServerBusy",
     "ErrorInternalServerTransientError",
     "ErrorMailboxStoreUnavailable",
@@ -229,6 +230,9 @@ const TRANSIENT: [&str; 7] = [
     "ErrorConnectionFailed",
     "ErrorTimeoutExpired",
     "ErrorBatchProcessingStopped",
+    "ErrorInternalServerError",
+    "ErrorTooManyObjectsOpened",
+    "ErrorExceededConnectionCount",
 ];
 
 /// Whether Exchange said it's busy (`ErrorServerBusy`, as a fault or in a response message),
@@ -249,9 +253,9 @@ const FIELDS_NAMED: usize = 3;
 const FIELD_NAME_MAX: usize = 80;
 
 /// The fields a refusal's `MessageXml` names (`FieldURI`, `IndexedFieldURI`, `ExtendedFieldURI`
-/// by its tag or its name), the first few, in its order. The server's words: only what looks
-/// like a field's name ([`a_field_name`]).
-fn fields_named(m: &El) -> Vec<&str> {
+/// as [`extended_name`] says it), the first few, in its order. The server's words: only what
+/// looks like a name ([`plain_name`]).
+fn fields_named(m: &El) -> Vec<String> {
     let mut names = Vec::new();
     // Depth first, without recursion (an answer's elements are capped in number and depth
     // already: see `parse`).
@@ -260,33 +264,49 @@ fn fields_named(m: &El) -> Vec<&str> {
         && names.len() < FIELDS_NAMED
     {
         let name = match el.name.as_str() {
-            "FieldURI" | "IndexedFieldURI" => el.attr("FieldURI"),
-            "ExtendedFieldURI" => el.attr("PropertyTag").or_else(|| el.attr("PropertyName")),
+            "FieldURI" | "IndexedFieldURI" => el.attr("FieldURI").filter(|n| plain_name(n)).map(str::to_string),
+            "ExtendedFieldURI" => extended_name(el),
             _ => None,
         };
-        names.extend(name.filter(|n| a_field_name(n)));
+        names.extend(name.filter(|n| plain_name(n)));
         next.extend(el.kids.iter().rev());
     }
     names
 }
 
-/// Not too long, and nothing but ASCII letters, digits and `:_-.` (`calendar:Organizer`,
-/// `0x1090`).
-fn a_field_name(n: &str) -> bool {
+/// An extended field's name: its tag, or its name, or its id — after its property set when one
+/// is given (`Appointment:33315`), as calendar properties are named. Its parts are each a
+/// [`plain_name`], or it has none.
+fn extended_name(el: &El) -> Option<String> {
+    if let Some(n) = el.attr("PropertyTag").or_else(|| el.attr("PropertyName")) {
+        return plain_name(n).then(|| n.to_string());
+    }
+    let id = el.attr("PropertyId").filter(|i| plain_name(i))?;
+    match el.attr("DistinguishedPropertySetId").or_else(|| el.attr("PropertySetId")) {
+        Some(set) => plain_name(set).then(|| format!("{set}:{id}")),
+        None => Some(id.to_string()),
+    }
+}
+
+/// Not too long, and nothing but ASCII letters, digits and `:_-.`: what a refusal's text says of
+/// the server's names, a field's (`calendar:Organizer`, `0x1090`) or the code's
+/// (`ErrorInvalidPropertySet`).
+fn plain_name(n: &str) -> bool {
     !n.is_empty() && n.len() <= FIELD_NAME_MAX && n.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b':' | b'_' | b'-' | b'.'))
 }
 
 /// What a `…ResponseMessage` said: a refusal in the server's words, with the fields it named
 /// (Exchange names the field it refused in its `MessageXml`, which its text doesn't say).
-pub(crate) fn check_message(m: &El) -> Result<()> {
+pub fn check_message(m: &El) -> Result<()> {
     match m.attr("ResponseClass") {
         Some("Error") => {
             let code = m.text_of("ResponseCode").unwrap_or("");
             let said = m.text_of("MessageText").unwrap_or(code);
-            let text = match (fields_named(m).join(", "), code.trim()) {
-                (names, _) if names.is_empty() => said.to_string(),
-                (names, "") => format!("{said} ({names})"),
-                (names, c) => format!("{said} ({c}: {names})"),
+            let names = fields_named(m).join(", ");
+            let text = match code.trim() {
+                _ if names.is_empty() => said.to_string(),
+                c if plain_name(c) => format!("{said} ({c}: {names})"),
+                _ => format!("{said} ({names})"),
             };
             Err(match code {
                 "ErrorItemNotFound" | "ErrorFolderNotFound" => NetError::No(format!("not on the server any more ({text})")),
@@ -336,7 +356,7 @@ fn photo_of(doc: &El) -> Result<(String, Vec<u8>)> {
 }
 
 /// The `…ResponseMessage` elements of an answer.
-pub(crate) fn messages(doc: &El) -> Vec<&El> {
+pub fn messages(doc: &El) -> Vec<&El> {
     let mut out = Vec::new();
     if let Some(body) = doc.find("Body") {
         let mut all = Vec::new();

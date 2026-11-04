@@ -1712,6 +1712,7 @@ month	May	5月
 	Clean Up moved {n} messages to Deleted Items	清理已将 {n} 封邮件移至已删除邮件
 	Downloading {total} messages…	正在下载 {total} 封邮件…
 	Every message is already on this computer	所有邮件都已在这台电脑上
+	Exchange refused your answer to {summary}: {error}. Answer it in Outlook on the web.	Exchange 拒绝了你对 {summary} 的答复: {error}。请在 Outlook 网页版中答复。
 	It will be sent {when}	将于 {when} 发送
 	Mail from {n} senders is never treated as junk	来自 {n} 个发件人的邮件永远不会被视为垃圾邮件
 	Mail from {n} senders now goes to Junk Email	来自 {n} 个发件人的邮件现在会进入垃圾邮件
@@ -1735,7 +1736,6 @@ month	May	5月
 	bad parameters: {error}	参数错误: {error}
 	calendar and contacts could not be saved: {error}	无法保存日历和联系人: {error}
 	calendars and contacts: {error}	日历和联系人: {error}
-	Exchange refused your answer to {summary}: {error}. Answer it in Outlook on the web.	Exchange 拒绝了你对 {summary} 的答复: {error}。请在 Outlook 网页版中答复。
 	export: {error}	导出: {error}
 	import: {error}	导入: {error}
 	network: {error}	网络: {error}

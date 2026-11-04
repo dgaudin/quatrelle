@@ -1714,6 +1714,7 @@ month	May	5월
 	Clean Up moved {n} messages to Deleted Items	정리에서 메시지 {n}개를 지운 편지함으로 옮겼습니다
 	Downloading {total} messages…	메시지 {total}개를 다운로드하는 중…
 	Every message is already on this computer	모든 메시지가 이미 이 컴퓨터에 있습니다
+	Exchange refused your answer to {summary}: {error}. Answer it in Outlook on the web.	Exchange가 {summary}에 대한 회신을 거부했습니다: {error}. 웹용 Outlook에서 회신하세요.
 	It will be sent {when}	{when}에 보내집니다
 	Mail from {n} senders is never treated as junk	보낸 사람 {n}명의 메일은 정크로 처리되지 않습니다
 	Mail from {n} senders now goes to Junk Email	보낸 사람 {n}명의 메일은 이제 정크 메일로 갑니다
@@ -1737,7 +1738,6 @@ month	May	5월
 	bad parameters: {error}	잘못된 매개변수: {error}
 	calendar and contacts could not be saved: {error}	일정과 연락처를 저장하지 못했습니다: {error}
 	calendars and contacts: {error}	일정과 연락처: {error}
-	Exchange refused your answer to {summary}: {error}. Answer it in Outlook on the web.	Exchange가 {summary}에 대한 회신을 거부했습니다: {error}. 웹용 Outlook에서 회신하세요.
 	export: {error}	내보내기: {error}
 	import: {error}	가져오기: {error}
 	network: {error}	네트워크: {error}

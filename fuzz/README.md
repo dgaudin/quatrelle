@@ -17,7 +17,7 @@ libFuzzer. `.github/workflows/fuzz.yml` runs every target weekly on Linux.
 | `signature` | a sender's name, address and message text (split at the first two line breaks): the author's own part, the signature's addresses and sites, the name asked of the directory, the signature checked against the sender |
 | `pst` | an Outlook data file: a good exported file with the input as byte patches, or a whole file |
 | `trust` | the URLs and hosts servers hand out (DAV hrefs, `EwsUrl`, `Location`): `url_host` and `site`, a site staying itself and reading back |
-| `text_first` | Exchange's `GetItem` answer (XML) or Graph's message (JSON), picked by the first byte, built into a message's text and read back with `parse_text_first` and `parse` |
+| `text_first` | Exchange's `GetItem` answer (XML) or Graph's message (JSON), picked by the first byte, built into a message's text and read back with `parse_text_first` and `parse`; each of Exchange's response messages read as a refusal (`check_message`, the fields its `MessageXml` names) |
 | `tnef` | Outlook's `winmail.dat`: its files, body and attached messages, compressed RTF and the HTML or text in it, and as a message's attachment |
 
 ## Running
