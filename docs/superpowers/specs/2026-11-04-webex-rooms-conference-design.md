@@ -63,14 +63,16 @@ first known meeting link in the place or the notes, as today.
 the first `CONFERENCE` line whose value is a web link Quatrelle may open (`launchable_link`: http or
 https, a plain host, no user name, at most 2 048 bytes) and whose `FEATURE`, when given, isn't only
 `PHONE`, `CHAT` or `FEED` becomes the event's conference, with its `LABEL` (at most 80 characters,
-unescaped) and its features. Parameters in any order (Stalwart reorders them), `VALUE=URI` or none.
+its quotes taken off, control characters left out) and its features. Parameters in any order (Stalwart reorders them), `VALUE=URI` or none.
 Every other `CONFERENCE` line (a `tel:` one, chat, a second one) stays in the event's kept lines and is
 written back as it came.
 
 **Written** wherever Quatrelle writes iCalendar (CalDAV, local calendars, invitations from an IMAP
 account, `.ics` export): `CONFERENCE;VALUE=URI;FEATURE=AUDIO,VIDEO;LABEL=<label>:<link>`, the label
-escaped (`\,` `\;`) and the line folded as every other. A room or a scheduled Webex meeting sets it,
-label `Webex`. A conference read keeps its own label and features.
+in double quotes when it holds a `,`, `;` or `:` (a parameter's value can't be escaped with a
+backslash, RFC 5545 §3.2: `\;` would cut the line for every reader), its own double quotes and
+control characters left out, and the line folded as every other. A room or a scheduled Webex meeting
+sets it, label `Webex`. A conference read keeps its own label and features.
 
 **Exchange** (EWS and Graph) has no place for it: nothing changes there; the link lives in the place
 and the notes, where Join already finds it.
@@ -112,7 +114,7 @@ A `CONFERENCE` line comes from strangers; rooms are typed by hand.
 
 - Caps: link 2 048 bytes, name and label 80 characters, 20 free lines of 200 characters, 20 rooms; a
   hand-edited settings file is cut the same way when read.
-- No panics; char-boundary cuts; the label's escaping and folding as the rest of the writer.
+- No panics; char-boundary cuts; the label's quoting, and folding as the rest of the writer.
 - The `ical` fuzz target gets `CONFERENCE` lines (hostile values, odd parameters, `tel:`, `javascript:`,
   a user name in the host); a property test: a conference written then read is the same.
 - `every_command_survives_junk_params` runs `calendar.webexRoom` and `event.*` with `conference`.
@@ -121,7 +123,7 @@ A `CONFERENCE` line comes from strangers; rooms are typed by hand.
 
 - **Model:** reading (parameters in any order, `VALUE` missing, a label with a comma, `tel:`, chat and
   phone-only lines left in the kept lines, `javascript:` and `https://user@host` refused); writing
-  (escaping, folding, kept lines written once); Join's order; the search finds the label; the text
+  (the label quoted, folding, kept lines written once); Join's order; the search finds the label; the text
   helpers' move changes nothing (the existing `ical` tests).
 - **Engine:** `calendar.webexRoom` add, change, remove, 21st room, 81-character name, 21 lines, an empty
   or non-Webex link, junk; an old `webex_room` setting carried over; `event.update` with and without
