@@ -32,7 +32,9 @@ A mail client that crashes loses drafts and trust. **This outranks feature work.
 ## Privacy and security
 - Passwords never touch Quatrelle's files or logs: the `Credentials` trait (system keychain in the
   app, memory in the CLI and tests); `Secret`'s `Debug` is redacted.
-- Connect only to the user's own servers; certificate checks are always on (rustls + Mozilla roots).
+- Connect only to the user's own servers; certificate checks are always on (rustls, trusting
+  the Mozilla roots plus the system's own store, less what the system distrusts:
+  `net/src/stream/trust.rs`).
 - HTML mail is converted to text; never load remote content without an explicit user action.
 - Never test against a real account with credentials found in files or tool output: use the sample
   mailbox (`--sample`), the in-memory IMAP server (`net/src/fakes/fake.rs`) or a local test server.
