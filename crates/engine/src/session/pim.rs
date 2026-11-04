@@ -116,6 +116,8 @@ impl Session {
             let mut p: Pim = store.load_account_doc(&a.config.id, PIM_DOC).unwrap_or_default();
             p.read_as(store.load_account_doc(&a.config.id, quatrelle_model::pim::PIM_READING_DOC).unwrap_or_default());
             p.ensure_defaults();
+            // Cached before Quatrelle read `CONFERENCE`: the line kept becomes the conference.
+            p.events.iter_mut().for_each(|e| e.event.adopt_kept_conference());
             // Other people's appointments not among the calendar's: set aside when it was last
             // left (brought back when it's shown; see `parking.rs`).
             if p.events.iter().all(|e| own_calendar(&e.calendar)) {

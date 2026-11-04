@@ -181,8 +181,8 @@ impl Session {
         }
     }
 
-    /// Webex gave a meeting another link: the appointment says the new one, and its guests hear
-    /// of it.
+    /// Webex gave a meeting another link: the appointment says the new one (its conference too,
+    /// when it was the old link), and its guests hear of it.
     fn webex_link_changed(&mut self, id: &str, link: &str) -> Result<(), CmdError> {
         let found = self.pim.iter().find_map(|(account, p)| {
             let e = p.events.iter().map(|e| &e.event).find(|e| e.webex_id.as_deref() == Some(id) && self.webex_is_mine(e))?;
@@ -192,6 +192,9 @@ impl Session {
         self.update_event(&uid, |e| {
             e.description = e.description.replace(&old, link);
             e.location = e.location.replace(&old, link);
+            if let Some(c) = e.conference.as_mut().filter(|c| c.url == old && ical::launchable_link(link)) {
+                c.url = link.to_string();
+            }
         })?;
         self.tell_guests(&account, &uid, None, true)?;
         Ok(())

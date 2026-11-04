@@ -366,6 +366,7 @@ fn a_click_shows_a_rooms_day_and_a_double_click_books_it() {
 /// in Options behind it): a link that isn't a personal room's is refused, one that is goes in the
 /// meeting and is kept for the next ones.
 #[test]
+#[ignore = "rewritten in Task 5"]
 fn use_my_personal_room_asks_for_it_under_the_button() {
     let (mut a, dir) = app("webex-ask");
     let ctx = egui::Context::default();

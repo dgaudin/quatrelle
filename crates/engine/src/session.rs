@@ -53,7 +53,7 @@ pub use opening::SenderMarks;
 pub use organize::{RulesScope, junk, quick_steps, search_folders};
 pub use prefs::{
     ListLayout, MEETINGS_PROFILE, NotesOrder, PictureLoading, Prefs, READING_ZOOM, RECENT_EMOJI, ReadInPane, ReadingPane, SenderAddresses,
-    is_profile_dir,
+    WEBEX_ROOM_LINE_MAX, WEBEX_ROOM_LINES_MAX, WEBEX_ROOM_NAME_MAX, WEBEX_ROOMS_MAX, WebexRoom, is_profile_dir,
 };
 use searching::SearchIndex;
 pub use security::{CardSearch, KnownCert, Lock, RevocationCheck, SMIME_DOC, Seal, Security, SignedBy, SmimeSettings};

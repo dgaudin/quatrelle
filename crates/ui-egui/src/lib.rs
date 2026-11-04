@@ -845,6 +845,7 @@ impl MailApp {
         if let Some(p) = v.get("prefs").and_then(|p| serde_json::from_value::<quatrelle_engine::Prefs>(p.clone()).ok()) {
             let offline = p.work_offline;
             self.session.prefs = p;
+            self.session.prefs.carry_over_webex_rooms();
             self.session.follow_public_favorites();
             spellcheck::set_personal(self.session.prefs.spelling.clone());
             self.session.note_new_calendars();

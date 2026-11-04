@@ -108,7 +108,7 @@ pub(super) fn commands() -> Vec<CommandSpec> {
             }
             Ok(r)
         })
-        .params(r#"{"summary": string, "start": "YYYY-MM-DD[THH:MM]", "end"?: …, "allDay"?: bool, "location"?: string, "description"?: string, "repeat"?: "daily"|"weekly"|"monthly"|"yearly"|RRULE, "attendees"?: "a@x, Name <b@y>" (invited by mail), "optional"?: … (invited as optional), "rooms"?: "Room <room@x>, …" (rooms booked, from calendar.rooms; the location unless given), "categories"?: [string] | "Work, Clients" (colour it as those categories), "reminder"?: number (minutes before the start; 0 when it starts, up to four weeks) | "none" | null (none), "showAs"?: "free"|"workingElsewhere"|"tentative"|"busy"|"outOfOffice", "private"?: bool, "responses"?: bool (the guests are asked to answer; default true), "newTimes"?: bool (they may propose another time; default true), "account"?: string, "calendar"?: string, "webexId"?: string (the Webex meeting the appointment is for, from webex.createMeeting's answer)}"#),
+        .params(r#"{"summary": string, "start": "YYYY-MM-DD[THH:MM]", "end"?: …, "allDay"?: bool, "location"?: string, "description"?: string, "repeat"?: "daily"|"weekly"|"monthly"|"yearly"|RRULE, "attendees"?: "a@x, Name <b@y>" (invited by mail), "optional"?: … (invited as optional), "rooms"?: "Room <room@x>, …" (rooms booked, from calendar.rooms; the location unless given), "categories"?: [string] | "Work, Clients" (colour it as those categories), "reminder"?: number (minutes before the start; 0 when it starts, up to four weeks) | "none" | null (none), "showAs"?: "free"|"workingElsewhere"|"tentative"|"busy"|"outOfOffice", "private"?: bool, "responses"?: bool (the guests are asked to answer; default true), "newTimes"?: bool (they may propose another time; default true), "account"?: string, "calendar"?: string, "webexId"?: string (the Webex meeting the appointment is for, from webex.createMeeting's answer), "conference"?: {"url": string, "label"?: string} | null (where to join it online, its calendar's CONFERENCE: a web link; the same link keeps its label unless one is given; null takes it out)}"#),
         CommandSpec::new("reminders.list", "Reminders", "File › Reminders", |s, _| {
             let now = s.clock.now;
             Ok(json!(s
@@ -462,6 +462,30 @@ pub(super) fn event_from(s: &Session, v: &Value, mut e: quatrelle_model::ical::C
             return Err(CmdError::Params("`webexId` is not a Webex meeting id".into()));
         }
         e.webex_id = Some(id).filter(|id| !id.is_empty()).map(str::to_string);
+    }
+    // Where to join it online (RFC 7986 `CONFERENCE`): `null` takes it out. The link it has
+    // already keeps the features its calendar named, and its label unless one is given.
+    let refused = || CmdError::Params("`conference` is {\"url\": a web link, \"label\"?: string} or null".into());
+    match v.get("conference") {
+        None => {}
+        Some(Value::Null) => e.conference = None,
+        Some(Value::Object(c)) => {
+            let url = c.get("url").and_then(Value::as_str).ok_or_else(refused)?;
+            let label = match c.get("label") {
+                None | Some(Value::Null) => None,
+                Some(Value::String(l)) => Some(l.as_str()),
+                Some(_) => return Err(refused()),
+            };
+            let mut new = quatrelle_model::ical::Conference::new(url, label.unwrap_or("")).ok_or_else(refused)?;
+            if let Some(had) = e.conference.as_ref().filter(|had| had.url == new.url) {
+                new.features = had.features.clone();
+                if label.is_none() {
+                    new.label = had.label.clone();
+                }
+            }
+            e.conference = Some(new);
+        }
+        Some(_) => return Err(refused()),
     }
     if let Some(b) = p::bool(v, "private") {
         e.private = b;
