@@ -305,8 +305,10 @@ fn gathering_is_quick() {
         assert!(s.senders.as_ref().unwrap().check.knows(&format!("card{n}@cards.example")), "gathered again");
     }
     eprintln!("the sender check over 20,000 people written to and 30,000 of the directory: {took:?} (the best of three)");
-    // The spec's 50 ms is for a release build; a debug one gets 500.
-    assert!(took < std::time::Duration::from_millis(500), "{took:?}");
+    // The spec's 50 ms is for a release build (44.7 ms on 04/11, measured by hand with
+    // `cargo test --release`). A debug build gets 2 s: 330 ms here, 703 ms on GitHub's Linux
+    // runner (04/11); a gathering gone quadratic would take minutes.
+    assert!(took < std::time::Duration::from_secs(2), "{took:?}");
     // The organisation's domains typed in Options, a key at a time: the people aren't gathered
     // again for them.
     let started = std::time::Instant::now();
