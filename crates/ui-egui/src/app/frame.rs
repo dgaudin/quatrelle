@@ -191,6 +191,9 @@ impl MailApp {
     /// Then the sender check, gathered again when what it's made of changed (the book just read,
     /// a contact saved, an account added): the list's marks and the open message's warning follow.
     fn build_contacts(&mut self, ctx: &egui::Context) {
+        // The list's marks without any message opened: a first start's book begins its reading
+        // (nothing read now; the slices below read it).
+        self.session.want_senders();
         let reading = self.session.contacts_pending();
         if (self.session.all_composes().next().is_some() || reading) && !self.session.contacts_step(CONTACTS_BUDGET) {
             ctx.request_repaint();

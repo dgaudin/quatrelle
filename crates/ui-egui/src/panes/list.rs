@@ -337,6 +337,59 @@ pub(crate) fn arrange_menu(ui: &mut Ui, s: &Session, acts: &mut Vec<Action>) {
     }
 }
 
+/// To a screen reader a row is one item of the list: who, the subject, when, and what its
+/// markers show (a sender to check, external, unread, flagged, attachments).
+fn row_spoken(s: &Session, m: &Summary, marks: &quatrelle_engine::SenderMarks, unread: bool, sent_view: bool) -> String {
+    let mut who = if sent_view { m.to.first().map(|a| a.display().to_string()).unwrap_or_default() } else { m.from.display().to_string() };
+    if marks.address {
+        who = format!("{who} <{}>", m.from.email.trim());
+    }
+    let subject = if m.subject.is_empty() { tl!("(no subject)") } else { m.subject.as_str() };
+    let mut spoken = vec![who, subject.to_string(), crate::i18n::date(&dates::list_time(m.date, &s.clock))];
+    for (on, word) in [
+        (marks.warning, "Check who sent it"),
+        (marks.external, "External"),
+        (unread, "Unread"),
+        (m.flags.flagged, "Flagged"),
+        (m.has_attachments, "Has attachments"),
+    ] {
+        if on {
+            spoken.push(tl!(word).to_string());
+        }
+    }
+    spoken.join(", ")
+}
+
+/// The External tag in a row, its right edge at `right` on the line from `top`: framed, small
+/// and dim, its explanation under the pointer. Its width.
+fn external_mark(ui: &Ui, p: &egui::Painter, t: &theme::Tokens, resp: &egui::Response, right: f32, top: f32) -> f32 {
+    let eg = external_galley(p, t);
+    let ew = eg.size().x + 10.0;
+    let er = Rect::from_min_size(egui::pos2(right - ew, top), vec2(ew, 17.0));
+    p.rect_stroke(er, 4.0, egui::Stroke::new(1.0, t.border), egui::StrokeKind::Inside);
+    p.galley(er.center() - eg.size() / 2.0, eg, t.dim);
+    if ui.rect_contains_pointer(er) {
+        resp.clone().on_hover_text(tl!("This sender is outside your organisation."));
+    }
+    ew
+}
+
+/// The External tag's word, as a row draws it.
+fn external_galley(p: &egui::Painter, t: &theme::Tokens) -> std::sync::Arc<egui::Galley> {
+    p.layout_no_wrap(tl!("External").to_string(), theme::regular(11.0), t.dim)
+}
+
+/// The warning sign before a sender's name, from `left` on the line from `top`, its explanation
+/// under the pointer. How far the name moves for it.
+fn warning_mark(ui: &Ui, p: &egui::Painter, t: &theme::Tokens, resp: &egui::Response, left: f32, top: f32) -> f32 {
+    let ir = Rect::from_min_size(egui::pos2(left, top), vec2(15.0, 15.0));
+    icons::paint(p, ir, Icon::Warning, t.danger);
+    if ui.rect_contains_pointer(ir) {
+        resp.clone().on_hover_text(tl!("Check who sent it"));
+    }
+    19.0
+}
+
 /// The sender's name, then the address their mail really came from, dimmer, on the row's first
 /// line between `left` and `right` (`at`: left, right, top). The address is what tells, so it's
 /// laid out first, cut to its domain when it doesn't fit (`<…@example.com>`); the name keeps up
@@ -370,8 +423,10 @@ fn sender_with_address(
     let aw = ag.size().x;
     let who_g = widgets::one_line(ui, who, who_font, t.text, (room - aw - 6.0).max(1.0));
     let nw = who_g.size().x;
+    // The address in the middle of the name's line (it's a little smaller).
+    let lift = (who_g.size().y - ag.size().y) / 2.0;
     p.galley(egui::pos2(left, top), who_g, t.text);
-    p.galley(egui::pos2(left + nw + 6.0, top + 1.5), ag, t.dim);
+    p.galley(egui::pos2(left + nw + 6.0, top + lift.max(0.0)), ag, t.dim);
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -396,28 +451,7 @@ fn message_row(
     // What the sender check says about the sender: a warning, their address, External (never
     // for the user's own mail, nor in Sent, which lists whom it went to).
     let marks = if sent_view { quatrelle_engine::SenderMarks::default() } else { s.sender_marks(m) };
-    // To a screen reader a row is one item of the list: who, the subject, when, and what its
-    // markers show (a sender to check, external, unread, flagged, attachments).
-    resp.widget_info(|| {
-        let mut who = if sent_view { m.to.first().map(|a| a.display().to_string()).unwrap_or_default() } else { m.from.display().to_string() };
-        if marks.address {
-            who = format!("{who} <{}>", m.from.email.trim());
-        }
-        let subject = if m.subject.is_empty() { tl!("(no subject)") } else { m.subject.as_str() };
-        let mut spoken = vec![who, subject.to_string(), crate::i18n::date(&dates::list_time(m.date, &s.clock))];
-        for (on, word) in [
-            (marks.warning, "Check who sent it"),
-            (marks.external, "External"),
-            (unread, "Unread"),
-            (m.flags.flagged, "Flagged"),
-            (m.has_attachments, "Has attachments"),
-        ] {
-            if on {
-                spoken.push(tl!(word).to_string());
-            }
-        }
-        egui::WidgetInfo::selected(egui::Role::ListItem, true, selected, spoken.join(", "))
-    });
+    resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::ListItem, true, selected, row_spoken(s, m, &marks, unread, sent_view)));
     let p = ui.painter_at(r);
     let sel = crate::motion::toward(ui.ctx(), id.with("selected"), selected, crate::motion::NORMAL);
     let hover = crate::motion::toward(ui.ctx(), id.with("hover"), hovered, crate::motion::FAST);
@@ -462,25 +496,12 @@ fn message_row(
     }
     // From outside the organisation: a small framed tag before the time.
     if marks.external {
-        let eg = p.layout_no_wrap(tl!("External").to_string(), theme::regular(11.0), t.dim);
-        let ew = eg.size().x + 10.0;
-        let er = Rect::from_min_size(egui::pos2(right - tw - 10.0 - ew, line1), vec2(ew, 17.0));
-        p.rect_stroke(er, 4.0, egui::Stroke::new(1.0, t.border), egui::StrokeKind::Inside);
-        p.galley(er.center() - eg.size() / 2.0, eg, t.dim);
-        if ui.rect_contains_pointer(er) {
-            resp.clone().on_hover_text(tl!("This sender is outside your organisation."));
-        }
-        tw += ew + 10.0;
+        tw += external_mark(ui, &p, t, &resp, right - tw - 10.0, line1) + 10.0;
     }
     let mut name_x = x;
     // The sender doesn't add up: a warning sign before the name (the reading pane says what).
     if marks.warning {
-        let ir = Rect::from_min_size(egui::pos2(name_x, line1 + 1.0), vec2(15.0, 15.0));
-        icons::paint(&p, ir, Icon::Warning, t.danger);
-        if ui.rect_contains_pointer(ir) {
-            resp.clone().on_hover_text(tl!("Check who sent it"));
-        }
-        name_x += 19.0;
+        name_x += warning_mark(ui, &p, t, &resp, name_x, line1 + 1.0);
     }
     let who = if sent_view { tf!("To: {names}", names = addr::display_list(&m.to)) } else { m.from.display().to_string() };
     let who = if count > 1 && !marks.address { format!("{who}  ({count})") } else { who };

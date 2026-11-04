@@ -239,6 +239,42 @@ fn the_quiet_gathering_waits_for_the_book() {
 }
 
 /// A name made of letters only, one per `i` (names with digits aren't people's).
+/// The list's marks come without any message opened: with no book, the window's wish starts its
+/// reading (nothing read then, nothing gathered), its slices read it, and the quiet gathering then
+/// marks the warned row. A second wish, once gathered, starts nothing.
+#[test]
+fn the_marks_come_without_opening_a_message() {
+    let mut s = zoe_session("senders-unopened");
+    let d = quatrelle_mime::Draft { subject: "Quick favour".into(), body: "Are you at your desk?".into(), ..Default::default() };
+    let raw = quatrelle_mime::build(&d, &EmailAddress::new("Zoe Park", "zoe.park.director@gmail.com"), NOW, "<unopened@x>").unwrap();
+    let store = s.store.clone().unwrap();
+    let mut inbox = store.load_folder(ME, "INBOX").unwrap();
+    let key = MessageKey { account: ME.into(), folder: "INBOX".into(), validity: inbox.validity, uid: 9500 };
+    inbox.messages.insert(0, quatrelle_mime::summary_from_full(&raw, key, quatrelle_model::Flags::default(), 0, NOW));
+    store.save_folder(ME, "INBOX", &inbox).unwrap();
+    s.apply(Event::FolderChanged { account: ME.into(), folder: "INBOX".into() });
+    s.run("folder.open", &json!({"account": ME, "folder": "INBOX"})).unwrap();
+    assert!(s.contacts_book().is_none() && s.senders.is_none() && s.reading.is_none());
+    s.want_senders();
+    assert!(s.contacts_book().is_some() && s.contacts_pending(), "started, not read");
+    assert!(s.senders.is_none());
+    for _ in 0..100 {
+        if s.contacts_step(1) {
+            break;
+        }
+        s.keep_senders_quietly();
+        assert!(s.senders.is_none(), "not while the book is read");
+    }
+    s.keep_senders_quietly();
+    let m = s.list.iter().find(|m| m.subject == "Quick favour").cloned().unwrap();
+    assert!(s.sender_marks(&m).warning, "the user's own name from another address");
+    assert!(s.reading.is_none(), "nothing opened");
+    let revision = s.contacts_revision();
+    s.want_senders();
+    assert!(!s.contacts_pending() && s.contacts_revision() == revision, "nothing started again");
+    done(s);
+}
+
 fn letters(mut i: usize) -> String {
     let mut w = String::new();
     for _ in 0..4 {

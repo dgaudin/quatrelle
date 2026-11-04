@@ -73,6 +73,17 @@ impl Session {
         }
     }
 
+    /// The window wants the check's marks in the list before any message is opened: with nothing
+    /// gathered and no address book, the book's reading is started, nothing read now (a first
+    /// start, no book kept on disk). The window reads it a slice a frame
+    /// ([`Session::contacts_step`]) and [`Session::keep_senders_quietly`] gathers once it's done.
+    /// Nothing to do otherwise: a book kept on disk is read so already.
+    pub fn want_senders(&mut self) {
+        if self.senders.is_none() && self.contacts_book().is_none() {
+            self.contacts_step(0);
+        }
+    }
+
     fn keep_senders_if_changed(&mut self) {
         let stamp = self.senders_stamp();
         let org = self.organisation_now();
