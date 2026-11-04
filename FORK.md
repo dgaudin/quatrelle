@@ -912,6 +912,51 @@ l'origine échouaient.
 - **Reste à faire** : l'essai du propriétaire sur ses vraies lettres d'information ; les boutons
   dessinés par la marge interne d'un lien (carnet `lecture-html-boutons`) ne sont pas dans ce lot.
 
+### État de la récupération : v0.32, neuvième partie : plantages, entrées hostiles et certificats du système (2026-11-04)
+
+Les lots R1 et R1b de `merge-tools/survey-v0.32.md`, sur `main`. Pour chaque commit, son test porté
+seul d'abord et lancé chez nous : la correction n'est prise que si le test échouait. Les reprises
+telles quelles sont au nom de leur auteur, les adaptations au nom du propriétaire.
+
+- **Repris** :
+  - `37170bcd` : une réponse IMAP imbriquée à plus de 64 niveaux est refusée avant d'être analysée.
+    Sonde : sur une pile de 1 Mio, débordement de pile et arrêt du processus (SIGABRT) dès
+    1 000 niveaux : un serveur hostile fermait Quatrelle.
+  - `215cca05` : async-executor 1.14.1, la 1.14.0 étant retirée de crates.io. Sonde : `cargo deny`
+    disait d'abord tout bon, faute d'index à jour ; index rafraîchi, il refusait la 1.14.0.
+  - `900162b8` : les tests d'instance unique cessent d'attendre une réponse sans fin. Pas de sonde
+    possible (le blocage vient d'une fermeture que Windows perd sous charge) ; ne touche que les tests.
+  - `28ad403a` : les serveurs dont le certificat vient d'une autorité installée sur le système se
+    connectent (IMAP, POP, Sieve, HTTPS, SMTP), en plus des racines Mozilla ; les certificats que
+    Windows désavoue (`Disallowed`) restent refusés ; une racine illisible du magasin n'empêche plus
+    d'envoyer. Décision du propriétaire du 04/11. Sonde : l'autorité de test posée comme celle du
+    système (`SSL_CERT_FILE`), la configuration TLS du fork refusait le serveur (`UnknownIssuer`) ;
+    elle l'accepte après. `schannel` (MIT, Windows) devient une dépendance directe ; il était déjà
+    dans l'arbre. La règle de `CLAUDE.md` le dit ; `docs/gaps.md` (n° 8) note ce que SMTP ne peut
+    pas refuser (lettre ne prend pas de vérificateur).
+- **Adapté** :
+  - `dee9fff3` (vCard) : sous le plafond de 1 Mio du fork, la lecture quadratique prenait 4,6 s, sous
+    la borne de 30 s du test de l'origine ; la borne est ici d'une seconde. Corrigé en même temps :
+    une coupe du plafond au milieu d'un caractère lisait tout le texte (`get()` échouait) ; l'origine
+    l'avait déjà corrigé.
+  - `b38b8e2a` puis `9157dc1e` (pages de code de winmail.dat) : le lecteur TNEF du fork est dans
+    `attachments/tnef`, `codepage.rs` y remplace son `decode` ; la table est publique pour l'import
+    .pst à venir. Sondes : 24 des 46 pages du test de l'origine étaient mal lues (ISO-2022-JP,
+    UTF-7, UTF-16BE, EUC-JP, plusieurs ISO-8859, les cinq octets non définis de Windows-1252) ; un
+    RTF en `\ansicpg1200` perdait tout son texte, un texte 8 bits étiqueté 1200 devenait des
+    idéogrammes.
+  - `e023a6e9` (trousseau) : le fork garde `Keychain` et ses tests Windows dans
+    `desktop/keychain.rs` ; ils y reçoivent leur nettoyage et le contrôle des morceaux orphelins.
+    Non sondé : ces tests ne tournent que sous Windows, et la vérification de types pour Windows
+    n'est pas possible sur ce poste (`ring` demande l'outillage MSVC). Sous Linux et macOS, seul
+    changement : les appels au trousseau passent un par un.
+- **Écarté** : rien ; aucune sonde n'est passée avant la correction.
+- **Vérifié** : chaque test porté, les tests des crates touchés, la sonde des certificats refaite
+  après la reprise, `cargo deny check`, `cargo xtask ci`.
+- **Reste à faire** : les tests du trousseau et des certificats sur un vrai Windows (avec une
+  autorité interne, comme l'Exchange du propriétaire) ; la suite du relevé, à commencer par P1 (le
+  lecteur .pst corrigé) puis R2.
+
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
 Quatre chantiers, chacun dans son commit, à la suite d'un audit de l'éditeur HTML.
