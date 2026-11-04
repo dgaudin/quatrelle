@@ -61,9 +61,10 @@ frame, and the check is gathered once it's settled.
 - « Adresses des expéditeurs dans la liste des messages »: Jamais (default), Personnes que vous ne
   connaissez pas, Toujours;
 - « Signaler le courrier venant de l'extérieur de votre organisation »: a switch, off;
-- « Domaines de votre organisation », shown while the switch is on: comma-separated; empty means the
-  domains of the user's accounts with mail services left out, and the field says which those are
-  (« Aucun : rien n'est signalé » when there are none).
+- « Domaines de votre organisation », always shown (the signature rule's case a reads it with the
+  switch off too), its note « Sert à l'étiquette Externe et à la vérification de la signature » :
+  comma-separated; empty means the domains of the user's accounts with mail services left out, and
+  the field says which those are (« Aucun : rien n'est signalé » when there are none).
 
 **Commands** (upstream's): `view.senderAddresses` (`show`: `never` | `strangers` | `always`),
 `view.externalTag` (`on`: bool; `domains`: a list or a text, at most 100). `list.messages` gives each row's marks
@@ -85,6 +86,12 @@ They are added in that order but with the directory before the people written to
 warning calls a person by their card's name, then the directory's, then the name seen in mail. A
 change of the listed organisation domains alone doesn't gather the people again.
 
+Someone known **only** through the directory warns by name only when the sender writes from a mail
+service (`is_free_mail`) or a look-alike of a known domain (theirs, or the look-alike check's): its
+thousands of names make namesakes common (a customer « Jean Martin » beside a colleague). Known by a
+card, written to, or the user's own account, the whole rule applies, a person known both ways
+included.
+
 The known domains (the look-alike check's) are the accounts' and the written-to people's, as today.
 The organisation, for the External tag and the signature rule's case a: the domains listed in
 Options, or else `own_domains` of the accounts (mail services left out: someone at gmail.com doesn't
@@ -93,7 +100,8 @@ work with everyone there).
 ## The directory question
 
 When a message is opened (reading pane or window) and all of these hold, its sender's name is asked
-of the directory, once:
+of the directory, once, whether or not a warning was found (a colleague at a sister domain warned
+for the organisation's site in her signature is known by address once it answers):
 
 - the sender is neither the user nor known by address;
 - the message isn't from a list or sent in bulk, unless it comes from a mail service (bulk mail is
@@ -123,11 +131,12 @@ included) up to the first of:
   dashes around words;
 - Outlook's line of underscores (at least ten);
 - a header block: a line starting `From:`, `De :`, `Von:`, `De:`, `Da:` or `Van:` followed within four
-  lines by one starting `Sent:`, `Envoyé :`, `Date:`, `To:`, `À :`, `Gesendet:`, `An:`, `Enviado:`,
-  `Inviato:` or `Verzonden:` (case left aside; the French ones with a space, a no-break space or
-  none before the colon);
+  lines by one starting with a short label: one to three words of letters, then a colon after a
+  space, a no-break space or nothing (`Sent:`, `Envoyé :`, `Enviado el:`, `Para:`, `Enviada em:`,
+  `A:`, `Aan:`, `Betreff:`…; case left aside; not a link's `https://`);
 - a line ending `wrote:`, `a écrit :`, `schrieb:`, `escribió:`, `ha scritto:` or `schreef:`, or
-  ending `:` with ` schrieb ` or ` schreef ` in it (Gmail's German and Dutch lines);
+  ending `:` with ` schrieb ` or ` schreef ` in it (Gmail's German and Dutch lines), or such a line
+  starting `Am `/`Op ` cut in two, its next line ending `:`;
 - Apple Mail's `Begin forwarded message:` or `Début du message réexpédié :`;
 - a line starting `>`.
 
@@ -138,7 +147,8 @@ isn't.
 **The signature** is what follows its last `-- ` line, or else its last 15 lines that aren't empty.
 Only its short lines are read: an address or site with at most four other words on the line (a
 token without a letter, such as a separator or a phone number's digits, isn't a word), so a sentence
-naming a site isn't a signature. The converted HTML's link notes at the end of the text (`[1]: …`)
+naming a site isn't a signature. A line in parts between spaced `|`, `–`, `—`, `•` or `·` (a
+signature on one line) counts the words of the part holding the address or site only. The converted HTML's link notes at the end of the text (`[1]: …`)
 count only when their link is on a signature line. Read in it: addresses (`addr::is_valid_email`), `mailto:` links and websites (`www.…`, `http(s)://…`),
 ten at most, each reduced to its domain where it's a site. A mail service's domain doesn't count, nor
 a domain related to the sender's (`related`: the same, or one under the other), nor the user's own
@@ -167,7 +177,8 @@ addresses (their own message quoted where no quotation mark was found).
   step by step and on disk, with a revision: the check is gathered again only when its stamp changes —
   the accounts (address, user name, name), `pim_revision`, `contacts_revision` (which the people index
   bumps too, `apply_directory` → `contacts.changed()`) and the listed organisation domains — never
-  each frame, never by age. Each gathering sets the open message's and every window's warning again.
+  each frame, never by age. `pim_revision` moves for an appointment too: when only it moved, a print
+  of the cards (their number, each one's name and addresses) decides whether to gather. Each gathering sets the open message's and every window's warning again.
   `known_domains` and `sender_warning` become views of it.
 - **Adapted** (the interface): upstream's list row (⚠, address, External, the name's share), the
   reading pane's tag and the Options rows, in the fork's look; the 13 catalogues.
