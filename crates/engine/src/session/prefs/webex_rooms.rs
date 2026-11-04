@@ -18,18 +18,49 @@ pub const WEBEX_ROOM_LINES_MAX: usize = 20;
 /// The longest free line, in characters.
 pub const WEBEX_ROOM_LINE_MAX: usize = 200;
 
-/// A Webex room the Webex Meeting button puts in an appointment.
+/// A Webex room the Webex Meeting button puts in an appointment. Read leniently (a settings file
+/// edited by hand): a name or a link that isn't text reads as none, its lines as the command takes
+/// them; [`Prefs::carry_over_webex_rooms`] then cuts what can't be kept.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct WebexRoom {
     /// Its name in the menu; empty for the room carried over from 1.0's single one (shown « Ma
     /// salle personnelle » until it's named).
+    #[serde(deserialize_with = "read_text")]
     pub name: String,
     /// A Webex personal room's link (`https://<site>.webex.com/meet/<name>`).
+    #[serde(deserialize_with = "read_text")]
     pub url: String,
     /// Its free lines, copied into the notes after the link.
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(skip_serializing_if = "Vec::is_empty", deserialize_with = "read_lines")]
     pub details: Vec<String>,
+}
+
+/// A text setting as read: anything but text reads as none.
+pub(super) fn read_text<'de, D: serde::Deserializer<'de>>(d: D) -> Result<String, D::Error> {
+    Ok(match Value::deserialize(d)? {
+        Value::String(s) => s,
+        _ => String::new(),
+    })
+}
+
+/// A room's lines as read: a text (`\n` between them) or a list, what isn't text in it left out;
+/// anything else, none.
+fn read_lines<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<String>, D::Error> {
+    Ok(match Value::deserialize(d)? {
+        Value::String(s) => s.split('\n').map(str::to_string).collect(),
+        Value::Array(a) => a.into_iter().filter_map(|l| if let Value::String(l) = l { Some(l) } else { None }).collect(),
+        _ => Vec::new(),
+    })
+}
+
+/// The rooms as read: those of a list that read as rooms (an object each); anything else, none.
+/// A damaged list never loses the other settings.
+pub(super) fn read_rooms<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<WebexRoom>, D::Error> {
+    Ok(match Value::deserialize(d)? {
+        Value::Array(a) => a.into_iter().filter_map(|r| serde_json::from_value(r).ok()).collect(),
+        _ => Vec::new(),
+    })
 }
 
 /// A name or a line as kept: no control character, no space at either end.
