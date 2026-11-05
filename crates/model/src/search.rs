@@ -13,18 +13,25 @@
 //!
 //! [`Index`] maps every word of every message to the messages containing it (a `BTreeMap`, so a
 //! prefix is one range scan). A query asks the index for candidates and then checks each
-//! candidate with [`Query::matches`], so the index may over-approximate but never misses.
+//! candidate with [`Query::matches`], so the index may over-approximate but never misses. Words
+//! are read [folded](fold_word) on both sides: `resume` finds "Résumé", `résumé` "resume"; a
+//! server is asked for what was typed.
+
+use std::borrow::Cow;
 
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::{EmailAddress, Summary};
 
 mod advanced;
+mod fold;
+mod fold_table;
 mod index;
 mod matching;
 mod parse;
 
 pub use advanced::Advanced;
+pub use fold::{MAX_TOKEN_CHARS, fold_word, tokens};
 #[cfg(test)]
 use index::put_varint;
 pub use index::{FolderIndex, Index};
@@ -32,7 +39,8 @@ pub use parse::from_people;
 use parse::split_tokens;
 pub(crate) use parse::split_tokens_with;
 
-/// Lower-cased words of a text (UAX #29 word boundaries).
+/// Lower-cased words of a text (UAX #29 word boundaries), as typed: what a server is asked for.
+/// Search itself reads them [folded](fold_word).
 pub fn words(text: &str) -> impl Iterator<Item = String> + '_ {
     text.unicode_words().map(str::to_lowercase)
 }
@@ -129,7 +137,9 @@ const INDEX_MAGIC: &[u8] = b"MCIX";
 const INDEX_VERSION: u8 = 1;
 /// What [`FolderIndex::to_bytes`] writes first, and the format's version.
 const FOLDER_MAGIC: &[u8] = b"MCFI";
-const FOLDER_VERSION: u8 = 1;
+/// Raised whenever what the index holds of a text changes, so a folder kept by an older run is
+/// read again (2: words folded).
+const FOLDER_VERSION: u8 = 2;
 /// Bounds read back from a file: past them the file isn't ours any more (or is damaged), and it
 /// is rebuilt.
 const MAX_INDEX_DOCS: usize = 8_000_000;

@@ -6,7 +6,7 @@
 
 use proptest::prelude::*;
 use quatrelle_model::addr::trust::{site, url_host};
-use quatrelle_model::search::{Advanced, Query};
+use quatrelle_model::search::{Advanced, Doc, Index, MAX_TOKEN_CHARS, Query, fold_word, tokens};
 use quatrelle_model::vcard::{self, Card, PostalAddress, Typed};
 use quatrelle_model::{EmailAddress, ical, lookalike, utf7};
 
@@ -92,6 +92,46 @@ proptest! {
         let twice = Advanced::from_query(&once.to_query());
         prop_assert_eq!(&Advanced::from_query(&twice.to_query()), &twice);
         let _ = Query::parse(&once.to_query());
+    }
+
+    /// Folding a word twice changes nothing more than once, whatever its letters (upstream's,
+    /// 41464ec1).
+    #[test]
+    fn folding_is_idempotent(w in r"\PC{0,30}|[a-zA-Zà-ɏͰ-ϿḀ-ỿἀ-῿！-～Ѐ-ӿ\u{300}-\u{36f}]{0,20}") {
+        let once = fold_word(&w).into_owned();
+        prop_assert_eq!(fold_word(&once).into_owned(), once.clone());
+        for t in tokens(&w) {
+            prop_assert!(!t.is_empty() && t.chars().count() <= MAX_TOKEN_CHARS);
+            prop_assert_eq!(fold_word(&t).into_owned(), t.to_string());
+        }
+    }
+
+    /// Whatever is typed, reading it and checking it against any message never panics; and a
+    /// message holding the words typed, accents or not, is found by them through the index.
+    #[test]
+    fn any_query_reads_and_checks(q in r#"[a-z:"<>=./ 0-9-]{0,40}|\PC{0,60}"#, subject in r"\PC{0,30}") {
+        let query = Query::parse(&q);
+        let m = quatrelle_model::Summary { subject, ..Default::default() };
+        for body in [None, Some(q.as_str())] {
+            let _ = query.matches(&Doc { summary: &m, body, indexed: body.is_none(), awaiting: false });
+        }
+        let _ = (query.index_words(), query.needs_body());
+        let mut ix = Index::new();
+        ix.add(0, &q);
+        let _ = ix.candidates(&query);
+    }
+
+    /// Plain words, typed with or without their accents, find the text that has them.
+    #[test]
+    fn words_are_found_with_or_without_accents(w in "[a-zà-ÿ]{2,12}", plain in any::<bool>()) {
+        let typed = if plain { fold_word(&w).into_owned() } else { w.to_uppercase() };
+        let mut ix = Index::new();
+        ix.add(7, &format!("Before {w} after"));
+        let query = Query::parse(&typed);
+        prop_assert!(ix.candidates(&query).contains(&7), "{} in {}", typed, w);
+        let m = quatrelle_model::Summary { subject: format!("Before {w} after"), ..Default::default() };
+        let found = query.matches(&Doc { summary: &m, body: None, indexed: false, awaiting: false });
+        prop_assert!(found, "{} in {}", typed, w);
     }
 
     /// A contact written as a vCard reads back as the same contact.

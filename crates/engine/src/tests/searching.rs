@@ -6,6 +6,7 @@
 use super::*;
 
 mod busy;
+mod folding;
 mod paced;
 mod summaries;
 

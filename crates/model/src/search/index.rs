@@ -32,28 +32,27 @@ impl Index {
         self.docs.is_empty()
     }
 
-    /// Add a document's text (call again with more text, e.g. the body once fetched).
+    /// Add a document's text (call again with more text, e.g. the body once fetched). Its words
+    /// are [folded](super::fold_word).
     pub fn add(&mut self, doc: u32, text: &str) {
         self.docs.insert(doc);
-        for w in words(text) {
-            // Very long "words" (base64 debris) only bloat the index.
-            if w.chars().count() <= 40 {
-                let list = self.postings.entry(w).or_default();
-                // Documents mostly come in order: appended; one added later goes in its place.
-                match list.last() {
-                    Some(&last) if last == doc => {}
-                    Some(&last) if last > doc => {
-                        if let Err(at) = list.binary_search(&doc) {
-                            list.insert(at, doc);
-                        }
+        // Folded, and long "words" (base64 debris) left out: they only bloat it.
+        for w in tokens(text) {
+            let list = self.postings.entry(w.into_owned()).or_default();
+            // Documents mostly come in order: appended; one added later goes in its place.
+            match list.last() {
+                Some(&last) if last == doc => {}
+                Some(&last) if last > doc => {
+                    if let Err(at) = list.binary_search(&doc) {
+                        list.insert(at, doc);
                     }
-                    _ => list.push(doc),
                 }
+                _ => list.push(doc),
             }
         }
     }
 
-    /// Documents containing a word starting with `prefix`.
+    /// Documents containing a word starting with `prefix` (folded, as the index holds it).
     pub fn prefix(&self, prefix: &str) -> BTreeSet<u32> {
         self.prefix_in(prefix, ..)
     }
