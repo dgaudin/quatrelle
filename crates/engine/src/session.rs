@@ -50,7 +50,9 @@ pub use mailboxes::{
     Suggestion, directory_people, fill_name,
 };
 pub use opening::SenderMarks;
-pub use opening::Toward;
+#[cfg(test)]
+pub(crate) use opening::source_lines;
+pub use opening::{SOURCE_SHOWN, SourceView, Toward};
 pub use organize::{RulesScope, junk, quick_steps, search_folders};
 pub use prefs::{
     ListLayout, MEETINGS_PROFILE, NotesOrder, PictureLoading, Prefs, READING_ZOOM, RECENT_EMOJI, ReadInPane, ReadingPane, SenderAddresses,
@@ -357,6 +359,8 @@ pub struct Session {
     pub reading: Option<Reading>,
     /// Messages opened in their own windows (double-click), oldest first.
     pub windows: Vec<Reading>,
+    /// Messages' sources, each shown in a window of its own (issue #27), oldest first.
+    pub sources: Vec<SourceView>,
     /// The message being written that commands act on (`compose.*`).
     /// Run by a window, which reads the mail into the address book a slice a frame: nothing run
     /// between its frames reads a mailbox whole. A command run with no window (the CLI's) does.
@@ -568,6 +572,7 @@ impl Session {
             anchor: None,
             reading: None,
             windows: Vec::new(),
+            sources: Vec::new(),
             compose: None,
             composes: Vec::new(),
             set_aside: Vec::new(),

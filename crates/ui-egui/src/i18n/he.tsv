@@ -1912,4 +1912,11 @@ folder	Conflicts	התנגשויות
 	This account has no outgoing (SMTP) server.	לחשבון זה אין שרת דואר יוצא (SMTP).
 	Add one in its account settings to send mail.	הוסף שרת בהגדרות החשבון כדי לשלוח דואר.
 	{subject}: not sent, this account can't send mail	{subject}: לא נשלח, חשבון זה אינו יכול לשלוח דואר
+	View message source	הצג את מקור ההודעה
 	{n} messages selected	הודעות שנבחרו: {n}
+	{subject} – Message source	{subject} – מקור ההודעה
+	Whole message	ההודעה כולה
+	Header only	כותרות בלבד
+	Copy all	העתק הכול
+	Only the first {shown} of {size} are shown. Save as email (.eml) keeps all of it.	מוצגים רק {shown} הראשונים מתוך {size}. שמירה כדואר אלקטרוני (.eml) שומרת את כולה.
+	The source couldn't be downloaded: {error}	לא ניתן היה להוריד את המקור: {error}

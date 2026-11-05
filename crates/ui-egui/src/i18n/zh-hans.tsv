@@ -1913,4 +1913,12 @@ folder	Conflicts	冲突
 	This account has no outgoing (SMTP) server.	此帐户没有发送 (SMTP) 服务器。
 	Add one in its account settings to send mail.	请在帐户设置中添加一个以发送邮件。
 	{subject}: not sent, this account can't send mail	{subject}: 未发送，此帐户无法发送邮件
+	View message source	查看邮件源文件
+menu	View	查看
 	{n} messages selected	已选择 {n} 封邮件
+	{subject} – Message source	{subject} – 邮件源文件
+	Whole message	整封邮件
+	Header only	仅邮件头
+	Copy all	全部复制
+	Only the first {shown} of {size} are shown. Save as email (.eml) keeps all of it.	只显示了 {size} 中的前 {shown}。另存为电子邮件 (.eml) 可保留全部内容。
+	The source couldn't be downloaded: {error}	无法下载源文件：{error}

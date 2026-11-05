@@ -1917,4 +1917,11 @@ folder	Conflicts	衝突
 	This account has no outgoing (SMTP) server.	此帳戶沒有外寄 (SMTP) 伺服器。
 	Add one in its account settings to send mail.	請在帳戶設定中新增一個以傳送郵件。
 	{subject}: not sent, this account can't send mail	{subject}: 未傳送，此帳戶無法傳送郵件
+	View message source	檢視郵件原始檔
 	{n} messages selected	已選取 {n} 封郵件
+	{subject} – Message source	{subject} – 郵件原始檔
+	Whole message	整封郵件
+	Header only	僅郵件標頭
+	Copy all	全部複製
+	Only the first {shown} of {size} are shown. Save as email (.eml) keeps all of it.	只顯示了 {size} 中的前 {shown}。另存為電子郵件 (.eml) 可保留全部內容。
+	The source couldn't be downloaded: {error}	無法下載原始檔：{error}

@@ -1912,4 +1912,12 @@ folder	Conflicts	Conflicten
 	This account has no outgoing (SMTP) server.	Dit account heeft geen server voor uitgaande e-mail (SMTP).
 	Add one in its account settings to send mail.	Voeg er een toe in de accountinstellingen om e-mail te verzenden.
 	{subject}: not sent, this account can't send mail	{subject}: niet verzonden, dit account kan geen e-mail verzenden
+	View message source	Berichtbron weergeven
+menu	View	Weergeven
 	{n} messages selected	{n} berichten geselecteerd
+	{subject} – Message source	{subject} – Berichtbron
+	Whole message	Heel bericht
+	Header only	Alleen kopregels
+	Copy all	Alles kopiëren
+	Only the first {shown} of {size} are shown. Save as email (.eml) keeps all of it.	Alleen de eerste {shown} van {size} worden getoond. Opslaan als e-mail (.eml) bewaart alles.
+	The source couldn't be downloaded: {error}	De bron kon niet worden gedownload: {error}

@@ -236,6 +236,15 @@ fn action_row(s: &Session, t: &Tokens, ui: &mut Ui, r: &quatrelle_engine::Readin
             acts.push(Action::Run("message.headers", json!({})));
             ui.close();
         }
+        // View › View message source, where Outlook has it (issue #27); the eye is Bcc's icon.
+        // "View" as a menu says it (in French « Afficher », not the ribbon tab's « Affichage »).
+        let view = crate::i18n::tc("menu", "View");
+        ui.menu_button((widgets::menu_icon(Some(Icon::Bcc)), view), |ui| {
+            if ui.button((widgets::menu_icon(Some(Icon::File)), tl!("View message source"))).clicked() {
+                acts.push(Action::Run("message.source", json!({"key": r.key.to_id()})));
+                ui.close();
+            }
+        });
     });
 }
 

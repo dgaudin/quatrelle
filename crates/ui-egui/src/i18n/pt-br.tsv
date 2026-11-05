@@ -1916,4 +1916,11 @@ folder	Conflicts	Conflitos
 	This account has no outgoing (SMTP) server.	Esta conta não tem servidor de saída (SMTP).
 	Add one in its account settings to send mail.	Adicione um nas configurações da conta para enviar emails.
 	{subject}: not sent, this account can't send mail	{subject}: não enviado, esta conta não pode enviar emails
+	View message source	Exibir código-fonte da mensagem
 	{n} messages selected	{n} mensagens selecionadas
+	{subject} – Message source	{subject} – Código-fonte da mensagem
+	Whole message	Mensagem inteira
+	Header only	Só o cabeçalho
+	Copy all	Copiar tudo
+	Only the first {shown} of {size} are shown. Save as email (.eml) keeps all of it.	Só os primeiros {shown} de {size} são mostrados. Salvar como e-mail (.eml) guarda tudo.
+	The source couldn't be downloaded: {error}	Não foi possível baixar o código-fonte: {error}

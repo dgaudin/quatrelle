@@ -7,6 +7,7 @@ use super::*;
 
 mod selecting;
 mod shown;
+mod source;
 mod store_errors;
 mod text_first;
 

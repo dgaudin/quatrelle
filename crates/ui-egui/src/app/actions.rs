@@ -183,6 +183,11 @@ impl MailApp {
                 Ok(v) => self.ui.dialog = Some(Dialog::preview(&v, &self.session.clock)),
                 Err(e) => self.session.notice(e.to_string(), true),
             },
+            // A message's source in its window, brought to the front (asked for again while open).
+            Action::Run("message.source", p) => match self.session.run("message.source", &p) {
+                Ok(v) => self.ui.raise_source = v.get("key").and_then(Value::as_str).and_then(MessageKey::from_id),
+                Err(e) => self.session.notice(e.to_string(), true),
+            },
             // An appointment dragged somewhere: said where, with the way back.
             Action::Run("event.move", p) => match self.session.run("event.move", &p) {
                 Ok(v) => self.moved_event(&v),

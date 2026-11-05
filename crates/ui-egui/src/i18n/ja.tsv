@@ -1913,4 +1913,11 @@ folder	Conflicts	競合
 	This account has no outgoing (SMTP) server.	このアカウントには送信 (SMTP) サーバーがありません。
 	Add one in its account settings to send mail.	メールを送信するには、アカウント設定で追加してください。
 	{subject}: not sent, this account can't send mail	{subject}: 送信されていません。このアカウントからはメールを送信できません
+	View message source	メッセージのソースを表示
 	{n} messages selected	{n} 件のメッセージを選択中
+	{subject} – Message source	{subject} – メッセージのソース
+	Whole message	メッセージ全体
+	Header only	ヘッダーのみ
+	Copy all	すべてコピー
+	Only the first {shown} of {size} are shown. Save as email (.eml) keeps all of it.	{size} のうち最初の {shown} だけを表示しています。メール (.eml) として保存すると全体が残ります。
+	The source couldn't be downloaded: {error}	ソースをダウンロードできませんでした: {error}

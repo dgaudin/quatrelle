@@ -1915,4 +1915,11 @@ folder	Conflicts	충돌
 	This account has no outgoing (SMTP) server.	이 계정에는 보내는 메일(SMTP) 서버가 없습니다.
 	Add one in its account settings to send mail.	메일을 보내려면 계정 설정에서 추가하세요.
 	{subject}: not sent, this account can't send mail	{subject}: 보내지 않음, 이 계정에서는 메일을 보낼 수 없습니다
+	View message source	메시지 원본 보기
 	{n} messages selected	메시지 {n}개 선택됨
+	{subject} – Message source	{subject} – 메시지 원본
+	Whole message	전체 메시지
+	Header only	헤더만
+	Copy all	모두 복사
+	Only the first {shown} of {size} are shown. Save as email (.eml) keeps all of it.	{size} 중 처음 {shown}만 표시됩니다. 이메일(.eml)로 저장하면 전체가 보관됩니다.
+	The source couldn't be downloaded: {error}	원본을 다운로드하지 못했습니다: {error}

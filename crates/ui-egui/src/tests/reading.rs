@@ -13,6 +13,7 @@ mod linked_pictures;
 mod previews;
 mod rules;
 mod senders;
+mod source;
 mod tables;
 mod text_first;
 
