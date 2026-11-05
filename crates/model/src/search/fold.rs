@@ -56,18 +56,24 @@ pub fn tokens(text: &str) -> impl Iterator<Item = Cow<'_, str>> {
 }
 
 /// A text's words, folded, long ones too (what a message's own fields are checked against).
-pub(super) fn all_words(text: &str) -> impl Iterator<Item = Cow<'_, str>> {
+fn all_words(text: &str) -> impl Iterator<Item = Cow<'_, str>> {
     text.unicode_words().map(fold_word).filter(|w| !w.is_empty())
 }
 
 /// A text's [`tokens`], each followed by its [`parts`]: the words search indexes, so `word` finds
 /// "site.word".
 pub fn index_tokens(text: &str) -> impl Iterator<Item = Cow<'_, str>> {
-    with_parts(all_words(text)).filter(|w| w.len() <= MAX_TOKEN_CHARS || w.chars().count() <= MAX_TOKEN_CHARS)
+    words_and_parts(text).filter(|w| w.len() <= MAX_TOKEN_CHARS || w.chars().count() <= MAX_TOKEN_CHARS)
+}
+
+/// A text's words, folded, long ones too, each followed by its [`parts`]: what a text is checked
+/// against, here and in the calendar's search.
+pub(crate) fn words_and_parts(text: &str) -> impl Iterator<Item = Cow<'_, str>> {
+    with_parts(all_words(text))
 }
 
 /// Words, each followed by its [`parts`].
-pub(super) fn with_parts<'a>(words: impl Iterator<Item = Cow<'a, str>>) -> impl Iterator<Item = Cow<'a, str>> {
+fn with_parts<'a>(words: impl Iterator<Item = Cow<'a, str>>) -> impl Iterator<Item = Cow<'a, str>> {
     words.flat_map(|w| {
         let parts: Vec<Cow<'a, str>> = parts(&w).map(|p| Cow::Owned(p.to_string())).collect();
         std::iter::once(w).chain(parts)
