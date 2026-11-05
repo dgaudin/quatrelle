@@ -337,3 +337,87 @@ impl Worker {
         }
     }
 }
+
+/// What a connection of its own sends back while it reads folders.
+pub(super) enum SyncDone {
+    /// A folder read, and what changed there (or why not, as it was: a connection that timed
+    /// out must stop the sync, not pass for "no such folder"); with the numbers given meanwhile.
+    Folder(String, std::result::Result<SyncReport, NetError>, Vec<(String, u32)>),
+    /// The numbers it gave while reading, when it's done.
+    State(Box<jmap::State>),
+    /// It couldn't connect: this account syncs on one connection.
+    Refused,
+}
+
+/// Open a connection like the account's main one, for a folder reader of its own.
+pub(super) fn connect_for_sync(acc: &AccountConfig, store: &Store, secret: &str) -> Result<Conn> {
+    let user = if acc.username.is_empty() { acc.email.clone() } else { acc.username.clone() };
+    if let Some(url) = &acc.graph {
+        return Ok(Conn::Graph(crate::graph::Client::connect(url, secret)?));
+    }
+    if acc.pop.is_some() {
+        return Err(NetError::No("POP accounts read mail on one connection".into()));
+    }
+    if acc.ews.is_some() {
+        let url = connect::ews_url(acc, store, &user, secret)?;
+        let c = crate::ews::Client::connect(&url, &user, secret, &acc.email)?;
+        c.set_shared(&acc.shared_mailboxes);
+        return Ok(Conn::Ews(Box::new(c)));
+    }
+    if let Some(url) = &acc.jmap {
+        return Ok(Conn::Jmap(jmap::Client::connect(url, &user, secret, acc.oauth.is_some(), &Trust::of(acc, &[]).sites())?));
+    }
+    let mut c = Client::connect(&acc.imap)?;
+    if acc.oauth.is_some() {
+        c.login_xoauth2(&user, secret)?;
+    } else {
+        c.login(&user, secret)?;
+    }
+    Ok(Conn::Imap(c))
+}
+
+/// Read folders from a shared list on a connection of its own, reporting each as it's read.
+pub(super) fn sync_folders(
+    acc: AccountConfig,
+    store: Store,
+    secret: String,
+    mut state: jmap::State,
+    queue: Arc<Mutex<VecDeque<(String, SyncOptions)>>>,
+    tx: Sender<SyncDone>,
+) {
+    let mut conn = match connect_for_sync(&acc, &store, &secret) {
+        Ok(c) => c,
+        Err(e) => {
+            log::info!("{}: a second connection wasn't taken ({e}): the rest syncs on the first", acc.id);
+            let _ = tx.send(SyncDone::Refused);
+            let _ = tx.send(SyncDone::State(Box::new(state)));
+            return;
+        }
+    };
+    while let Some((path, opts)) = queue.lock().ok().and_then(|mut q| q.pop_front()) {
+        let r = match &mut conn {
+            Conn::Imap(c) => sync_folder(c, &store, &acc.id, &path, &opts),
+            Conn::Jmap(c) => jmap::sync_folder(c, &mut state, &store, &acc.id, &path, &opts),
+            Conn::Graph(c) => crate::graph::sync_folder(c, &mut state, &store, &acc.id, &path, &opts),
+            Conn::Ews(c) => crate::ews::sync_folder(c, &mut state, &store, &acc.id, &path, &opts),
+            Conn::Pop => Err(NetError::No("POP accounts read mail on one connection".into())),
+        };
+        let stop = r.as_ref().is_err_and(reader_stops);
+        if tx.send(SyncDone::Folder(path, r, state.take_given())).is_err() {
+            break;
+        }
+        if stop {
+            break;
+        }
+    }
+    if let Conn::Imap(mut c) = conn {
+        c.logout();
+    }
+    let _ = tx.send(SyncDone::State(Box::new(state)));
+}
+
+/// A reader connection's error that ends it (the main connection reads its folder instead): its
+/// connection is gone or its sign-in refused.
+pub(super) fn reader_stops(e: &NetError) -> bool {
+    e.is_fatal() || matches!(e, NetError::Auth(_))
+}
