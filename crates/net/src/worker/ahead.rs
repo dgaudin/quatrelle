@@ -46,12 +46,13 @@ impl Worker {
                 true
             }
         };
+        // The folder told of once it has its mail, Exchange's too (its list isn't written, but the
+        // sources came): the search reads what came then, not only at its next reading of the
+        // folder. Not at each step: the window reads the folder's list again when told.
         if done {
             self.ahead.pop_front();
             self.ahead_left = None;
-            if lists {
-                self.sink.emit(Event::FolderChanged { account: id, folder: path });
-            }
+            self.sink.emit(Event::FolderChanged { account: id, folder: path });
         }
     }
 
