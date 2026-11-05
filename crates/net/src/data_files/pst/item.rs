@@ -152,6 +152,16 @@ pub(super) fn item_of<'a>(
     let forwarded = verb == 0x0068 || (verb == 0 && matches!(p(0x1080), Some(Val::Int(0x0106))));
     // MSGFLAG_READ, MSGFLAG_UNSENT.
     it.flags = Flags { seen: flags & 0x1 != 0, draft: flags & 0x8 != 0, flagged: follow_up, answered: replied, forwarded, ..Default::default() };
+    // Its categories, as the keywords Quatrelle keeps them as, the way Exchange's come in (a
+    // name like `$Junk` is `cat_$junk`, never the system's own keyword).
+    if let Some(Val::Texts(names)) = named.keywords().and_then(p) {
+        let keywords = names.iter().filter(|n| !n.trim().is_empty()).map(|n| quatrelle_model::keyword_for(n));
+        for k in keywords.filter(|k| quatrelle_model::is_keyword(k)) {
+            if it.flags.keywords.len() < MAX_KEYWORDS && !it.flags.keywords.contains(&k) {
+                it.flags.keywords.push(k);
+            }
+        }
+    }
     for row in recipients {
         let get = |id: u16| row(id).and_then(Val::into_text).unwrap_or_default();
         // The SMTP address, the address, or the one in the recipient's one-off entry id.
