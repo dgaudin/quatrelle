@@ -27,6 +27,7 @@ mod plain;
 mod security;
 mod sender;
 mod sender_check;
+mod videos;
 pub(crate) use attachments::decode;
 #[cfg(test)]
 pub(crate) use attachments::previewed_text;
@@ -42,6 +43,7 @@ pub(crate) use compose::send_block_text;
 use pictures::*;
 pub(crate) use pictures::{Got, Pictures, Want};
 pub(crate) use sender_check::{external_tag, sender_warning};
+pub(crate) use videos::Videos;
 /// A picture cut to a circle: its middle square is kept (a picture that isn't square would
 /// otherwise fill a square box stretched, its circle an oval), then everything outside the
 /// circle goes, with a pixel of smoothing at its edge.

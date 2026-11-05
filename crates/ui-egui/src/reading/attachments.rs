@@ -47,41 +47,35 @@ pub(super) fn video_preview(
     }
     let path = match st.video_files.get(&id) {
         Some(p) => p.clone(),
-        None => {
-            // The platform's decoder reads files: put the attachment in one.
-            let written = (|| {
-                let raw = s.store.as_ref()?.read_body(key)?;
-                let data = mime::attachment_data(&raw, a.index)?;
-                let dir = quatrelle_engine::store::scratch_dir("thumbs")?;
-                let name = format!("{:016x}-{}", quatrelle_engine::store::fnv64(&key.to_id()), mime::sanitize_filename(&a.name));
-                let path = dir.join(name);
-                std::fs::write(&path, &data).ok()?;
-                Some(path)
-            })();
-            let Some(p) = written else {
+        // The platform's decoder reads files: the attachment is put in one, on the pictures
+        // lane, its kind's icon meanwhile (the message was read, the video taken out and written
+        // in the frame that first showed it: upstream 51d1cd0).
+        None => match st.videos.file(key, a.index, &a.name, s.store.as_ref()) {
+            None => return None,
+            Some(None) => {
                 keep_preview(st, ctx, id, None);
                 return None;
-            };
-            st.video_files.insert(id.clone(), p.clone());
-            p
-        }
+            }
+            Some(Some(p)) => {
+                st.video_files.insert(id.clone(), p.clone());
+                p
+            }
+        },
     };
-    let frame = st.video_frames.entry(path).or_insert(crate::VideoFrame::Pending).clone();
-    match frame {
-        crate::VideoFrame::Pending => {
-            ctx.request_repaint_after(std::time::Duration::from_millis(250));
-            None
-        }
-        crate::VideoFrame::Ready(png) => {
-            let tex = decode(ctx, &format!("video-{}-{}", key.to_id(), a.index), &png, 480);
-            keep_preview(st, ctx, id, tex.clone());
-            tex
-        }
-        crate::VideoFrame::Unavailable => {
-            keep_preview(st, ctx, id, None);
-            None
-        }
-    }
+    // The platform's frame, its pixels decoded on the pictures lane too.
+    let limit = ctx.input(|i| i.max_texture_side).try_into().unwrap_or(u32::MAX);
+    let pixels = match st.video_frames.entry(path).or_insert(crate::VideoFrame::Pending) {
+        crate::VideoFrame::Pending => None,
+        crate::VideoFrame::Ready(png) => st.videos.frame(key, a.index, png, limit),
+        crate::VideoFrame::Unavailable => Some(None),
+    };
+    let Some(pixels) = pixels else {
+        ctx.request_repaint_after(std::time::Duration::from_millis(250));
+        return None;
+    };
+    let tex = pixels.map(|(image, options)| ctx.load_texture(format!("video-{}-{}", key.to_id(), a.index), image, options));
+    keep_preview(st, ctx, id, tex.clone());
+    tex
 }
 
 /// Most video thumbnails kept: those shown least recently go first, never one shown in this

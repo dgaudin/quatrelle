@@ -10,6 +10,7 @@ use egui::{Pos2, Rect, Shape, vec2};
 mod bench;
 mod reading;
 mod threads;
+mod videos;
 
 /// A picture of one colour, as a PNG.
 fn png(w: u32, h: u32) -> Vec<u8> {

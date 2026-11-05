@@ -206,11 +206,13 @@ impl MailApp {
         }
     }
 
-    /// The pictures this frame drew ask for their work (on the pictures lane where there is
-    /// one), and what's done of it becomes textures (from upstream 321bef2 and fe86139).
+    /// The pictures (and the video thumbnails) this frame drew ask for their work (on the
+    /// pictures lane where there is one), and what's done of it becomes textures (from upstream
+    /// 321bef2, fe86139 and 51d1cd0).
     fn pictures_drawn(&mut self, ctx: &egui::Context) {
         let open = self.session.reading.as_ref().map(|r| (&r.key, r.parsed.as_ref().map_or(&[][..], |p| &p.attachments[..])));
         self.ui.pictures.end_frame(ctx, self.session.store.as_ref(), open, &self.ui.fonts, &mut *self.services);
+        self.ui.videos.end_frame(ctx, &mut *self.services);
     }
 
     /// The whole window.
