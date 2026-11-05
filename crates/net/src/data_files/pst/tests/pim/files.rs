@@ -141,3 +141,18 @@ fn kept_files_read_back_from_calendar_and_address_book_files() {
     assert_eq!((kept, lost), (8, 4), "eight fit in what's kept");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// A contact's picture past what a card keeps of one is counted as too big: hidden, it would
+/// otherwise go unsaid.
+#[test]
+fn a_picture_past_the_cap_is_counted() {
+    let mut big = b"\x89PNG\r\n\x1a\n".to_vec();
+    big.resize(quatrelle_model::vcard::MAX_PHOTO + 1, 0);
+    let flags = [UnicodePstProperty::tagged(0x7FFF, V::Boolean(true)), UnicodePstProperty::tagged(0x7FFE, V::Boolean(true))];
+    let mut contact = Put::new(&["Contacts"], "IPF.Contact", item("IPM.Contact", "Ana Lima", "", &[]));
+    contact.files = vec![file("ContactPicture.png", "image/png", &big, &flags)];
+    let b = Brought::of("big-picture", &[contact]);
+    assert_eq!(b.done.contacts, 1);
+    assert!(b.pim().cards[0].card.photo.is_none());
+    assert_eq!(b.done.files_left_out.get(&FileLeftOut::TooBig), Some(&1), "{:?}", b.done);
+}
