@@ -201,7 +201,7 @@ impl MailApp {
     pub fn needs_delete_confirm(&self) -> bool {
         self.session.prefs.confirm_permanent_delete
             && !self.session.selection.is_empty()
-            && self.session.selected().iter().all(|m| {
+            && self.session.selected_iter().all(|m| {
                 self.session
                     .account(&m.key.account)
                     .and_then(|a| a.folder(quatrelle_engine::model::FolderRole::Trash))
