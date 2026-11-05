@@ -50,16 +50,49 @@ pub fn fold_word(w: &str) -> Cow<'_, str> {
         let mut chars = tail.chars();
         let Some(c) = chars.next() else { break };
         rest = chars.as_str();
-        // "l’équipe" is "l'équipe", as typed on a keyboard.
-        let c = if matches!(c, '\u{2018}' | '\u{2019}') { '\'' } else { c };
-        for l in c.to_lowercase().filter(|l| !is_mark(*l)) {
-            match FOLD.binary_search_by(|(k, _)| k.cmp(&l)).ok().and_then(|i| FOLD.get(i)) {
-                Some((_, s)) => out.push_str(s),
-                None => out.push(l),
-            }
-        }
+        push_folded(c, &mut out);
     }
     Cow::Owned(out)
+}
+
+/// One letter that isn't ASCII, folded onto `out` (nothing for an accent written apart).
+fn push_folded(c: char, out: &mut String) {
+    // "l’équipe" is "l'équipe", as typed on a keyboard.
+    let c = if matches!(c, '\u{2018}' | '\u{2019}') { '\'' } else { c };
+    for l in c.to_lowercase().filter(|l| !is_mark(*l)) {
+        match FOLD.binary_search_by(|(k, _)| k.cmp(&l)).ok().and_then(|i| FOLD.get(i)) {
+            Some((_, s)) => out.push_str(s),
+            None => out.push(l),
+        }
+    }
+}
+
+/// A text [folded](fold_word), and where each byte of the fold comes from: the start, in `text`,
+/// of the letter it was folded from (what was found in the fold is shown in the text as written:
+/// "equipe" found in "l'équipe" lights up "équipe"). The fold is [`fold_word`]'s, byte for byte.
+pub fn fold_mapped(text: &str) -> (String, Vec<u32>) {
+    let mut out = String::with_capacity(text.len());
+    let mut from: Vec<u32> = Vec::with_capacity(text.len());
+    let mut rest = text;
+    while !rest.is_empty() {
+        let at = u32::try_from(text.len() - rest.len()).unwrap_or(u32::MAX);
+        // A run of ASCII in one go, a byte for a byte (as `fold_word` copies it).
+        let ascii = rest.bytes().position(|b| !b.is_ascii()).unwrap_or(rest.len());
+        let Some((run, tail)) = rest.split_at_checked(ascii) else { break };
+        let start = out.len();
+        out.push_str(run);
+        if let Some(added) = out.get_mut(start..) {
+            added.make_ascii_lowercase();
+        }
+        from.extend((0..run.len()).map(|i| at.saturating_add(u32::try_from(i).unwrap_or(u32::MAX))));
+        let mut chars = tail.chars();
+        let Some(c) = chars.next() else { break };
+        rest = chars.as_str();
+        let at = u32::try_from(text.len() - tail.len()).unwrap_or(u32::MAX);
+        push_folded(c, &mut out);
+        from.resize(out.len(), at);
+    }
+    (out, from)
 }
 
 /// A text [folded](fold_word), each run of white space one space: what a phrase is looked for

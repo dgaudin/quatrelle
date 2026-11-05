@@ -342,6 +342,27 @@ fn folding_reads_accents_and_letters() {
     assert_eq!(tokens(&"x".repeat(41)).count(), 0, "base64 debris isn't a word");
 }
 
+/// The fold with its map back to the text: the same fold as `fold_word`, each of its bytes
+/// pointing at the start of the letter it came from, so what is found in it can be shown where
+/// it is written (R20, find in the message).
+#[test]
+fn a_fold_maps_back_to_the_text_as_written() {
+    let text = "L\u{2019}\u{c9}quipe, Stra\u{df}e et Re\u{301}sume\u{301}";
+    let (folded, from) = fold_mapped(text);
+    assert_eq!(folded, fold_word(text));
+    assert_eq!(from.len(), folded.len());
+    let at = folded.find("equipe").unwrap();
+    assert_eq!(&text[from[at] as usize..], "\u{c9}quipe, Stra\u{df}e et Re\u{301}sume\u{301}", "back to the É");
+    // "ss" from ß: both bytes point at it.
+    let ss = folded.find("strasse").unwrap() + 4;
+    assert_eq!((from[ss], from[ss + 1]), (from[ss], from[ss]));
+    assert!(text[from[ss] as usize..].starts_with('\u{df}'));
+    // An accent written apart folds to nothing: the letters around it keep their places.
+    let r = folded.find("resume").unwrap();
+    assert!(text[from[r + 1] as usize..].starts_with("e\u{301}s"));
+    assert_eq!(fold_mapped(""), (String::new(), Vec::new()));
+}
+
 /// A word that folds to nothing (a mark alone) is no word: it neither narrows the index to
 /// nothing nor crashes.
 #[test]
@@ -512,5 +533,16 @@ proptest::proptest! {
         }
         all.renumber(&map);
         proptest::prop_assert_eq!(all.to_bytes(), rest.to_bytes());
+    }
+
+    /// Any text: the mapped fold is `fold_word`'s, and each byte points at a letter's start, in
+    /// order.
+    #[test]
+    fn a_mapped_fold_is_the_fold(text in "\\PC{0,40}") {
+        let (folded, from) = fold_mapped(&text);
+        proptest::prop_assert_eq!(&folded, &fold_word(&text).into_owned());
+        proptest::prop_assert_eq!(from.len(), folded.len());
+        proptest::prop_assert!(from.windows(2).all(|w| w[0] <= w[1]));
+        proptest::prop_assert!(from.iter().all(|f| text.is_char_boundary(*f as usize) && (*f as usize) < text.len()));
     }
 }
