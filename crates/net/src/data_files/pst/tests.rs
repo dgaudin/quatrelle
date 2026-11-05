@@ -807,6 +807,7 @@ mod fidelity;
 mod files;
 mod losses;
 mod open;
+mod protected;
 mod reader;
 mod real_files;
 mod rebuilt;
