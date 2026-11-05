@@ -31,7 +31,7 @@ mod matching;
 mod parse;
 
 pub use advanced::Advanced;
-pub use fold::{MAX_TOKEN_CHARS, fold_word, tokens};
+pub use fold::{MAX_TOKEN_CHARS, fold_word, index_tokens, parts, tokens};
 #[cfg(test)]
 use index::put_varint;
 pub use index::{FolderIndex, Index};
@@ -138,8 +138,8 @@ const INDEX_VERSION: u8 = 1;
 /// What [`FolderIndex::to_bytes`] writes first, and the format's version.
 const FOLDER_MAGIC: &[u8] = b"MCFI";
 /// Raised whenever what the index holds of a text changes, so a folder kept by an older run is
-/// read again (2: words folded).
-const FOLDER_VERSION: u8 = 2;
+/// read again (2: words folded; 3: the parts of joined words).
+const FOLDER_VERSION: u8 = 3;
 /// Bounds read back from a file: past them the file isn't ours any more (or is damaged), and it
 /// is rebuilt.
 const MAX_INDEX_DOCS: usize = 8_000_000;

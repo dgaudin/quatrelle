@@ -7,7 +7,7 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use quatrelle_model::search::{Advanced, Doc, Index, Query, fold_word, tokens};
+use quatrelle_model::search::{Advanced, Doc, Index, Query, fold_word, index_tokens, parts, tokens};
 use quatrelle_model::{lookalike, utf7};
 
 fuzz_target!(|data: &[u8]| {
@@ -21,6 +21,7 @@ fuzz_target!(|data: &[u8]| {
     let _ = q.matches(&Doc { summary: &m, body: Some(&text), indexed: false, awaiting: data.len() % 2 == 0 });
     let _ = q.matches(&Doc { summary: &m, body: None, indexed: true, awaiting: false });
     let _ = tokens(&fold_word(&text)).count();
+    let _ = index_tokens(&text).map(|w| parts(&w).count()).sum::<usize>();
     let mut ix = Index::new();
     ix.add(0, &text);
     let _ = ix.candidates(&q);

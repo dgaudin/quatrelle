@@ -343,3 +343,59 @@ fn a_word_folding_to_nothing_is_no_word() {
     assert!(Query::parse("\u{301}").index_words().iter().all(|w| !w.is_empty()));
     assert_eq!(ix.candidates(&Query::parse("beta \u{301}")), BTreeSet::from([0]));
 }
+
+/// Cases met in real use (04/11): words joined by an apostrophe, straight or typographic, a dot, a
+/// colon or an underscore are found by their parts too; "10,000" isn't cut; what's typed with
+/// one apostrophe finds the text written with the other.
+#[test]
+fn joined_words_are_found_by_their_parts() {
+    let at = |text: &str, query: &str| {
+        let mut m = sample();
+        m.subject = text.into();
+        m.preview = String::new();
+        let mut ix = Index::new();
+        ix.add(0, &summary_text(&m));
+        (!ix.candidates(&Query::parse(query)).is_empty(), q(query, &m))
+    };
+    for (text, query) in [
+        ("Réunion de l'équipe", "equipe"),
+        ("Réunion de l\u{2019}équipe", "equipe"),
+        ("Réunion de l\u{2019}équipe", "l'equipe"),
+        ("Réunion de l'équipe", "l\u{2019}équipe"),
+        ("Rendez-vous aujourd'hui", "hui"),
+        ("Rendez-vous aujourd\u{2019}hui", "aujourd"),
+        ("See site.word", "word"),
+        ("ratio:word", "word"),
+        ("shot_list_v2.pdf", "list"),
+    ] {
+        assert_eq!(at(text, query), (true, true), "{query} in {text}");
+    }
+    assert!(!at("Réunion de l'équipe", "-equipe").1, "left out by its part too");
+    assert_eq!(at("We raised 10,000 today", "000"), (false, false), "a number isn't cut");
+    assert_eq!(at("Don't", "t"), (false, false), "one letter isn't a part");
+}
+
+/// UAX #29 keeps "site.word" one word: its parts are indexed and found too (`word` and `site`),
+/// in the index, in a body and in a summary, and the whole as typed still finds it; one letter
+/// isn't a part (upstream's test, 282b08c6, on this fork's two-valued matching).
+#[test]
+fn the_parts_of_a_dotted_word_are_words() {
+    let words: Vec<String> = index_tokens("See xx.word and l'avion, snake_case. Don't").map(std::borrow::Cow::into_owned).collect();
+    for w in ["xx", "word", "xx.word", "avion", "l'avion", "snake", "case", "snake_case", "don't"] {
+        assert!(words.iter().any(|x| x == w), "{w} in {words:?}");
+    }
+    assert!(!words.iter().any(|x| x == "l" || x == "t"), "{words:?}");
+    assert_eq!(parts("plain").count(), 0);
+    let mut ix = Index::new();
+    ix.add(1, "the site.word kept");
+    ix.add(2, "the site kept");
+    assert_eq!(ix.prefix("word").into_iter().collect::<Vec<_>>(), [1]);
+    assert_eq!(ix.prefix("site").into_iter().collect::<Vec<_>>(), [1, 2]);
+    assert_eq!(ix.prefix("site.word").into_iter().collect::<Vec<_>>(), [1]);
+    let m = sample();
+    let t = |q: &str| Query::parse(q).matches(&Doc { summary: &m, body: Some("Report at site.word today"), indexed: false, awaiting: false });
+    assert_eq!((t("word"), t("site"), t("site.word"), t("-word")), (true, true, true, false));
+    let mut subject = sample();
+    subject.subject = "Notes on xx.word today".into();
+    assert!(q("subject:word", &subject) && q("subject:xx.word", &subject) && q("\"xx.word today\"", &subject));
+}

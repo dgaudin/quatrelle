@@ -4,7 +4,7 @@
 //! Checking a message against a [`Query`]: the words the index narrows by, and each clause.
 //! Both sides are read [folded](fold_word): `resume` finds "Résumé", `résumé` "resume".
 
-use super::fold::all_words;
+use super::fold::{all_words, with_parts};
 use super::*;
 
 impl Query {
@@ -82,7 +82,8 @@ fn clause_matches(term: &Term, doc: &Doc<'_>) -> bool {
         Term::Words(Field::Any, ws) if doc.indexed && doc.body.is_none() && ws.iter().all(|w| !w.contains(['@', '.'])) => true,
         Term::Words(f, ws) => {
             let text = field_text(f, doc);
-            let have: Vec<Cow<'_, str>> = all_words(&text).collect();
+            // A word, as one of the parts of one too (`word` in "site.word"), as the index has it.
+            let have: Vec<Cow<'_, str>> = with_parts(all_words(&text)).collect();
             // An address is also found inside a word (`ana@studio.example` in `<ana@…>`).
             let inside = ws.iter().any(|w| w.contains(['@', '.'])).then(|| fold_word(&text));
             ws.iter().all(|w| {
