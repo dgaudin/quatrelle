@@ -33,6 +33,12 @@ pub struct Msg {
     /// Its follow-up marked complete (`flagStatus` "complete"), and when (`completedDateTime`'s
     /// `dateTime`, in UTC; empty: not said).
     pub complete: Option<String>,
+    /// The last thing done with it, as Exchange keeps it: `PidTagLastVerbExecuted` (`Integer
+    /// 0x1081`), `PidTagLastVerbExecutionTime` (`SystemTime 0x1082`), `PidTagIconIndex`
+    /// (`Integer 0x1080`); given only when asked for (`$expand`).
+    pub verb: Option<String>,
+    pub verb_time: Option<String>,
+    pub icon: Option<String>,
     pub draft: bool,
     pub received: String,
     /// The voting buttons (`PidLidVerbStream`), when it has some.
@@ -104,6 +110,8 @@ pub struct Data {
     /// Set per request from its `Prefer` header; without `IdType="ImmutableId"` message ids
     /// are returned in the other (prefixed) form.
     asked_immutable: bool,
+    /// Set per request: its `$expand` names the last verb (`0x1081`).
+    pub(super) asked_verbs: bool,
     /// A folder's messages listed at most this many a page (`None`: all of `$top` at once), the
     /// rest through `@odata.nextLink`.
     pub page_messages: Option<usize>,
@@ -163,6 +171,9 @@ impl Data {
             read,
             flagged: false,
             complete: None,
+            verb: None,
+            verb_time: None,
+            icon: None,
             draft: false,
             received: received.into(),
             voting: Vec::new(),
@@ -217,9 +228,19 @@ impl Data {
         if self.invitations.contains(&m.id) {
             v["@odata.type"] = json!("#microsoft.graph.eventMessage");
         }
+        let mut props = Vec::new();
         if !m.voting.is_empty() {
-            v["singleValueExtendedProperties"] =
-                json!([{"id": "Binary {00062008-0000-0000-c000-000000000046} Id 0x8520", "value": crate::imap::base64(&m.voting)}]);
+            props.push(json!({"id": "Binary {00062008-0000-0000-c000-000000000046} Id 0x8520", "value": crate::imap::base64(&m.voting)}));
+        }
+        if self.asked_verbs {
+            for (id, value) in [("Integer 0x1081", &m.verb), ("SystemTime 0x1082", &m.verb_time)] {
+                if let Some(value) = value {
+                    props.push(json!({"id": id, "value": value}));
+                }
+            }
+        }
+        if !props.is_empty() {
+            v["singleValueExtendedProperties"] = json!(props);
         }
         v
     }

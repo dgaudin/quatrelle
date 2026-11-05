@@ -617,10 +617,7 @@ fn flags(it: &El) -> Flags {
     let verb = extended(it, "0x1081");
     let answered = matches!(verb, Some(VERB_REPLY | VERB_REPLY_ALL));
     let forwarded = verb == Some(VERB_FORWARD);
-    // And when (`PidTagLastVerbExecutionTime`): a time before 1970, or MAPI's "none" (4501), is
-    // none.
-    let none = quatrelle_model::dates::days_from_civil(4501, 1, 1).saturating_mul(86_400);
-    let acted = extended_text(it, "0x1082").and_then(jmap::utc_date).filter(|t| (answered || forwarded) && *t > 0 && *t < none).unwrap_or(0);
+    let acted = extended_text(it, "0x1082").filter(|_| answered || forwarded).map_or(0, verb_time);
     Flags {
         seen: it.text_of("IsRead").is_some_and(|v| v == "true"),
         flagged: status == Some(2),
@@ -632,6 +629,21 @@ fn flags(it: &El) -> Flags {
         acted,
         ..Default::default()
     }
+}
+
+/// When it was done (`PidTagLastVerbExecutionTime`), in Unix seconds: a time that isn't one,
+/// before 1970, or MAPI's "none" (4501) is none (0).
+pub(crate) fn verb_time(text: &str) -> i64 {
+    let none = quatrelle_model::dates::days_from_civil(4501, 1, 1).saturating_mul(86_400);
+    jmap::utc_date(text).filter(|t| *t > 0 && *t < none).unwrap_or(0)
+}
+
+/// The verb and the icon Outlook writes on the original of a reply (`forward`: a forward):
+/// `PidTagLastVerbExecuted` 102 or 104 and `PidTagIconIndex` 0x105 or 0x106 ([MS-OXOMSG]). The
+/// engine doesn't say a reply was to all (103): it's written as a reply to the sender, which
+/// Outlook shows alike.
+pub(crate) fn replied_verb(forward: bool) -> (i64, i64) {
+    if forward { (VERB_FORWARD, 0x106) } else { (VERB_REPLY, 0x105) }
 }
 
 /// `PidTagLastVerbExecuted` for a reply to the sender ([MS-OXOMSG]; `NOTEIVERB_REPLYTOSENDER`).

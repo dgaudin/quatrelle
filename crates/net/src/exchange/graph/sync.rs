@@ -81,7 +81,8 @@ pub fn sync_folder(c: &Client, st: &mut State, store: &Store, account: &str, fol
     report.removed = gone.len();
     fs.messages = kept;
     for m in &mut fs.messages {
-        // Graph has no answered flag or categories here: keep those as they are.
+        // Categories stay as they are here; replied to or forwarded, the last of them, once the
+        // server says one (as over EWS).
         if let Some(f) = wanted.get(&m.key.uid) {
             let mut next = m.flags.clone();
             next.seen = f.seen;
@@ -90,6 +91,9 @@ pub fn sync_folder(c: &Client, st: &mut State, store: &Store, account: &str, fol
             // Graph's one flag status: complete, and when.
             next.set_keyword(quatrelle_model::FOLLOW_UP_COMPLETE, f.follow_up_complete());
             next.completed = f.completed;
+            if f.answered || f.forwarded {
+                (next.answered, next.forwarded, next.acted) = (f.answered, f.forwarded, f.acted);
+            }
             if next != m.flags {
                 m.flags = next;
                 report.changed += 1;

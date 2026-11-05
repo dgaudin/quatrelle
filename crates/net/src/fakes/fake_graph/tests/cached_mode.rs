@@ -130,7 +130,8 @@ fn graph_keeps_all_its_mail_when_the_time_is_not_limited() {
     crate::graph::sync_folder(&c, &mut st, &store, "a1", "INBOX", &SyncOptions::default()).unwrap();
     assert_eq!(kept(&store), ["Ancient", "Recent"]);
     let asked = listings(&server);
-    assert!(!asked.is_empty() && asked.iter().all(|c| !c.contains("$filter") && c.contains("$orderby=receivedDateTime%20desc")), "{asked:?}");
+    // (The `$filter` of the properties expanded isn't the listing's.)
+    assert!(!asked.is_empty() && asked.iter().all(|c| !c.contains("?$filter") && c.contains("$orderby=receivedDateTime%20desc")), "{asked:?}");
     let _ = std::fs::remove_dir_all(store.root());
 }
 

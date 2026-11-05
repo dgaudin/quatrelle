@@ -48,9 +48,14 @@ const MAX_PAGES: usize = 200;
 const MAX_FOLDERS: usize = 5000;
 const FOLDER_FIELDS: &str = "id,displayName,parentFolderId,childFolderCount,totalItemCount,unreadItemCount";
 const HEADER_FIELDS: &str = "id,isRead,isDraft,flag,subject,from,sender,toRecipients,ccRecipients,replyTo,receivedDateTime,sentDateTime,bodyPreview,hasAttachments,internetMessageId,internetMessageHeaders";
-/// The voting buttons (`PidLidVerbStream`), asked for with a message's details.
-const VOTING_EXPAND: &str =
-    "$expand=singleValueExtendedProperties($filter=id%20eq%20'Binary%20%7B00062008-0000-0000-C000-000000000046%7D%20Id%200x8520')";
+/// The voting buttons (`PidLidVerbStream`), asked for with a message's details, with the last
+/// thing done with it ([`VERB_EXPAND`]).
+const VOTING_EXPAND: &str = "$expand=singleValueExtendedProperties($filter=id%20eq%20'Binary%20%7B00062008-0000-0000-C000-000000000046%7D%20Id%200x8520'\
+     %20or%20id%20eq%20'Integer%200x1081'%20or%20id%20eq%20'SystemTime%200x1082')";
+/// The last thing done with a message, as Outlook keeps it and Graph has no field for: replied
+/// to or forwarded (`PidTagLastVerbExecuted`), and when (`PidTagLastVerbExecutionTime`), asked
+/// for wherever its marks are.
+const VERB_EXPAND: &str = "$expand=singleValueExtendedProperties($filter=id%20eq%20'Integer%200x1081'%20or%20id%20eq%20'SystemTime%200x1082')";
 /// The choice a vote carries (`PidLidVerbResponse`), as Graph names the property.
 const VERB_RESPONSE_ID: &str = "String {00062008-0000-0000-C000-000000000046} Id 0x8524";
 /// `$select` for folder listings. `internetMessageHeaders` is left out on purpose: it is
@@ -236,7 +241,10 @@ impl Client {
         let since = since.filter(|t| *t > 0);
         let filter = since.map(|t| format!("$filter={}&", http::pct(&format!("receivedDateTime ge {}", utc(t))))).unwrap_or_default();
         let mut entries = self.all(
-            &format!("{me}/mailFolders/{}/messages?{filter}$top={page}&$orderby=receivedDateTime%20desc&$select={LIST_FIELDS}", seg(folder)),
+            &format!(
+                "{me}/mailFolders/{}/messages?{filter}$top={page}&$orderby=receivedDateTime%20desc&$select={LIST_FIELDS}&{VERB_EXPAND}",
+                seg(folder)
+            ),
             window.min(100_000),
         )?;
         // Measured here as the server measures it, should it list older mail all the same: one
@@ -250,8 +258,10 @@ impl Client {
 
     /// Of these messages, those still in a folder, with their flags (through `$batch`).
     fn still_in(&self, folder: &str, ids: &[String]) -> Result<Vec<(String, Flags)>> {
-        let reqs: Vec<(&str, String, Option<Value>)> =
-            ids.iter().map(|id| ("GET", format!("/me/messages/{}?$select=id,isRead,isDraft,flag,parentFolderId", seg(id)), None)).collect();
+        let reqs: Vec<(&str, String, Option<Value>)> = ids
+            .iter()
+            .map(|id| ("GET", format!("/me/messages/{}?$select=id,isRead,isDraft,flag,parentFolderId&{VERB_EXPAND}", seg(id)), None))
+            .collect();
         Ok(self
             .batch(&reqs)?
             .into_iter()
@@ -411,6 +421,22 @@ fn flags(m: &Value) -> Flags {
     {
         f.completed = done.get("dateTime").and_then(Value::as_str).and_then(jmap::utc_date).filter(|t| *t > 0).unwrap_or(0);
     }
+    // Replied to (102, 103 to all) or forwarded (104), the last of them, and when, read as EWS
+    // reads them.
+    let prop = |tag: &str| {
+        m.get("singleValueExtendedProperties")
+            .and_then(Value::as_array)?
+            .iter()
+            .find(|p| p.get("id").and_then(Value::as_str).and_then(|id| id.trim().rsplit_once(' ')).is_some_and(|(_, t)| crate::ews::is_tag(t, tag)))?
+            .get("value")?
+            .as_str()
+    };
+    let verb = prop("0x1081").and_then(|v| v.trim().parse::<i64>().ok());
+    f.answered = matches!(verb, Some(crate::ews::VERB_REPLY | crate::ews::VERB_REPLY_ALL));
+    f.forwarded = verb == Some(crate::ews::VERB_FORWARD);
+    if f.answered || f.forwarded {
+        f.acted = prop("0x1082").map_or(0, crate::ews::verb_time);
+    }
     f
 }
 
@@ -424,6 +450,18 @@ fn flag_patch(op: &Op) -> Option<Value> {
         Op::SetFlag { flag: Flag::Flagged, on, .. } => Some(json!({"flag": {"flagStatus": if *on { "flagged" } else { "notFlagged" }}})),
         Op::SetKeyword { keyword, on, .. } if keyword.eq_ignore_ascii_case(quatrelle_model::FOLLOW_UP_COMPLETE) => {
             Some(json!({"flag": {"flagStatus": if *on { "complete" } else { "notFlagged" }}}))
+        }
+        // Replied to or forwarded here: the original marked as Outlook marks it (as over EWS:
+        // `crate::ews` says where the values come from). Taken off, nothing: the next one
+        // replaces the last.
+        Op::SetFlag { flag: flag @ (Flag::Answered | Flag::Forwarded), on: true, .. } => {
+            let (verb, icon) = crate::ews::replied_verb(*flag == Flag::Forwarded);
+            let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(0));
+            Some(json!({"singleValueExtendedProperties": [
+                {"id": "Integer 0x1081", "value": verb.to_string()},
+                {"id": "SystemTime 0x1082", "value": quatrelle_jmap::utc_date_string(now)},
+                {"id": "Integer 0x1080", "value": icon.to_string()},
+            ]}))
         }
         _ => None,
     }
@@ -547,7 +585,15 @@ mod tests {
         // Its Undo, or flagged again: the keyword off, then the flag on.
         assert_eq!([status(complete(false)), status(flag(true))], [Some("notFlagged".into()), Some("flagged".into())]);
         assert_eq!(flag_patch(&Op::SetKeyword { keys: keys.clone(), keyword: "work".into(), on: true, name: None }), None);
-        assert_eq!(flag_patch(&Op::SetFlag { keys, flag: Flag::Seen, on: true }), Some(json!({"isRead": true})));
+        assert_eq!(flag_patch(&Op::SetFlag { keys: keys.clone(), flag: Flag::Seen, on: true }), Some(json!({"isRead": true})));
+        // Replied to: the verb, its time and the icon, as Outlook writes them; an arrow taken
+        // off (before the other is put on) writes nothing.
+        let p = flag_patch(&Op::SetFlag { keys: keys.clone(), flag: Flag::Answered, on: true }).unwrap();
+        let props = p["singleValueExtendedProperties"].as_array().unwrap();
+        assert_eq!((props[0]["id"].as_str(), props[0]["value"].as_str()), (Some("Integer 0x1081"), Some("102")));
+        assert!(props[1]["value"].as_str().and_then(jmap::utc_date).is_some_and(|t| t > 1_790_000_000), "{p}");
+        assert_eq!((props[2]["id"].as_str(), props[2]["value"].as_str()), (Some("Integer 0x1080"), Some("261")));
+        assert_eq!(flag_patch(&Op::SetFlag { keys, flag: Flag::Forwarded, on: false }), None);
     }
 
     #[test]
