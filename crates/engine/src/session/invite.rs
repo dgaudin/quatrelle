@@ -119,8 +119,9 @@ impl Session {
             .attachments
             .iter()
             .find(|a| a.mime.to_ascii_lowercase().starts_with("text/calendar") || a.name.to_ascii_lowercase().ends_with(".ics"))?;
-        let data = mime::attachment_data(raw, att.index)?;
-        let cal = ical::parse_in(&String::from_utf8_lossy(&data), self.clock.local_zone());
+        // Read in the charset the part names: its bytes are as they came.
+        let text = mime::attachment_text(raw, att.index)?;
+        let cal = ical::parse_in(&text, self.clock.local_zone());
         (!cal.events.is_empty()).then_some((cal, parsed.from.email))
     }
 
