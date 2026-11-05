@@ -931,11 +931,40 @@ fn a_data_file_is_compacted_on_demand() {
     assert!(s.take_jobs().iter().any(|j| matches!(j, Job::CompactDataFile { account } if *account == id)));
     assert_eq!(s.compacting.as_deref(), Some(id.as_str()));
     assert!(s.run("account.compact", &json!({})).is_err(), "one at a time");
-    s.apply(Event::Compacted { account: id.clone(), before: 9_000, after: 3_000, error: None });
-    assert!(s.compacting.is_none());
-    assert_eq!(s.compacted, Some((id.clone(), 9_000, 3_000)));
+    assert_eq!(s.compact_phase, crate::CompactPhase::Starting);
+    // Attachments made smaller first: the window goes on, its previews worked out.
+    s.apply(Event::CompactProgress { account: id.clone(), in_place: false, done: 40, total: 100 });
+    assert_eq!(s.compact_phase, crate::CompactPhase::Recompressing { done: 40, total: 100 });
+    assert_eq!(s.compacting_in_place(), None);
+    // A message whose source isn't here: looked at from the window (and found missing)...
+    let ghost = |uid: u32| quatrelle_model::Summary {
+        key: quatrelle_model::MessageKey { account: id.clone(), folder: "INBOX".into(), validity: 1, uid },
+        ..Default::default()
+    };
+    s.fill_previews(&[ghost(999_998).key]);
+    assert!(!s.preview_wanted(&ghost(999_998)), "looked at");
+    // ...but not while the file is had to itself; a search waits too.
+    s.apply(Event::CompactProgress { account: id.clone(), in_place: true, done: 0, total: 0 });
+    assert_eq!(s.compacting_in_place(), Some(id.as_str()));
+    s.fill_previews(&[ghost(999_999).key]);
+    assert!(s.preview_wanted(&ghost(999_999)), "nothing read while it's compacted");
+    s.run("search.run", &json!({"query": "the", "scope": "all", "index": 1})).unwrap();
+    assert!(s.search_pending, "a slice at a time");
+    s.run("search.more", &json!({"index": 0})).unwrap();
+    assert!(s.search_pending, "the search waits");
+    s.apply(Event::Compacted { account: id.clone(), before: 9_000, after: 3_000, recompressed: 2_000, no_room: false, error: None });
+    assert!(s.compacting.is_none() && s.compacting_in_place().is_none());
+    s.run("search.more", &json!({"index": 0})).unwrap();
+    assert!(!s.search_pending, "and goes on once it's done");
+    s.fill_previews(&[ghost(999_999).key]);
+    assert!(!s.preview_wanted(&ghost(999_999)), "looked at once it's done");
+    assert_eq!(s.compacted, Some(crate::Compacted { account: id.clone(), before: 9_000, after: 3_000, recompressed: 2_000 }));
+    // Without room on the drive, only compacted: said.
     s.run("account.compact", &json!({})).unwrap();
-    s.apply(Event::Compacted { account: id, before: 0, after: 0, error: Some("disk full".into()) });
+    s.apply(Event::Compacted { account: id.clone(), before: 9_000, after: 8_000, recompressed: 0, no_room: true, error: None });
+    assert!(s.notices.last().is_some_and(|n| n.text.contains("room on the drive") && !n.error));
+    s.run("account.compact", &json!({})).unwrap();
+    s.apply(Event::Compacted { account: id, before: 0, after: 0, recompressed: 0, no_room: false, error: Some("disk full".into()) });
     assert!(s.compacting.is_none() && s.notices.last().is_some_and(|n| n.error));
     drop(s);
     let _ = std::fs::remove_dir_all(&dir);

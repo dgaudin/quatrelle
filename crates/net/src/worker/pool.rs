@@ -3,6 +3,8 @@
 // Copyright (c) 2026 Didier Gaudin
 //! The pool: a worker started for each account, the jobs handed to them, and the events they report back.
 
+use quatrelle_store::CompactStep;
+
 use super::*;
 
 impl Pool {
@@ -146,18 +148,42 @@ impl Pool {
         }
     }
 
-    /// Import a data file on a thread of its own: an Outlook one (`.pst`), or Quatrelle's own
-    /// (`.quatrelle`, copied in as it is).
-    /// Compact a data file, on a thread of its own (a minute for 40 GB): whatever else wants
-    /// the account's file waits for it.
+    /// Compact Now, on a thread of its own: attachments an earlier version kept uncompressed made
+    /// smaller first, in short batches the account goes on being read and written between (it
+    /// can be stopped anywhere, by a sleep or a kill, and the next one goes on from there); then
+    /// the file compacted in place (a minute for 40 GB), whatever else wants it waiting for it
+    /// but the window's reads. Each step is told as it goes.
     fn compact(&mut self, account: String) {
         let sink = self.sink.clone();
         let store = self.store.clone();
         let spawned = std::thread::Builder::new().name("compact".into()).spawn(move || {
-            let done = match store.compact_data_file(&account) {
-                Ok(Some((before, after))) => Event::Compacted { account, before, after, error: None },
-                Ok(None) => Event::Compacted { account, before: 0, after: 0, error: Some("this account has no data file".into()) },
-                Err(e) => Event::Compacted { account, before: 0, after: 0, error: Some(e.to_string()) },
+            // While attachments are made smaller the file may grow by its size (redb doubles a
+            // file under 4 GiB as it grows) before the compaction gives it back: without that
+            // room on its drive, it's only compacted.
+            let room = store.data_file(&account).is_none_or(|f| room_to_grow(&f));
+            let mut told = std::time::Instant::now();
+            let mut progress = |step: CompactStep| {
+                let (in_place, done, total) = match step {
+                    CompactStep::Recompressing(w) => (false, w.done, w.total),
+                    CompactStep::Compacting => (true, 0, 0),
+                };
+                // At most a few times a second, but the first and the last of each step.
+                if in_place || done == 0 || done >= total || told.elapsed() >= std::time::Duration::from_millis(200) {
+                    told = std::time::Instant::now();
+                    sink.emit(Event::CompactProgress { account: account.clone(), in_place, done, total });
+                }
+            };
+            let done = store.compact_now(&account, room, &std::sync::atomic::AtomicBool::new(false), &mut progress);
+            let no_room = !room;
+            let done = match done {
+                Ok(Some(c)) => {
+                    let recompressed = c.recompressed.before.saturating_sub(c.recompressed.after);
+                    Event::Compacted { account, before: c.before, after: c.after, recompressed, no_room, error: None }
+                }
+                Ok(None) => {
+                    Event::Compacted { account, before: 0, after: 0, recompressed: 0, no_room, error: Some("this account has no data file".into()) }
+                }
+                Err(e) => Event::Compacted { account, before: 0, after: 0, recompressed: 0, no_room, error: Some(e.to_string()) },
             };
             sink.emit(done);
         });
@@ -183,6 +209,8 @@ impl Pool {
         }
     }
 
+    /// Import a data file on a thread of its own: an Outlook one (`.pst`), or Quatrelle's own
+    /// (`.quatrelle`, copied in as it is).
     fn import_pst(&mut self, account: String, path: String) {
         let sink = self.sink.clone();
         let store = self.store.clone();
@@ -632,5 +660,17 @@ impl Pool {
 impl Drop for Pool {
     fn drop(&mut self) {
         self.shutdown();
+    }
+}
+
+/// Whether the drive a data file is on has room for it to grow by its size, and a gigabyte to
+/// spare (Compact Now makes attachments smaller only then). A drive that can't be read is taken
+/// to have it: writes that fail stop that step, and the file is compacted all the same.
+fn room_to_grow(file: &std::path::Path) -> bool {
+    let size = std::fs::metadata(file).map_or(0, |m| m.len());
+    let Some(dir) = file.parent() else { return true };
+    match fs4::statvfs(dir) {
+        Ok(stats) => stats.available_space() >= size.saturating_add(1 << 30),
+        Err(_) => true,
     }
 }

@@ -177,11 +177,26 @@ pub enum Event {
         done: bool,
         error: Option<String>,
     },
-    /// A data file compacted: its size before and after, or why it couldn't be.
+    /// How far Compact Now has come ([`Job::CompactDataFile`]): making smaller what an earlier
+    /// version kept uncompressed (`done` of `total` files looked at; the window goes on as ever),
+    /// then, `in_place`, compacting with the data file had to itself.
+    CompactProgress {
+        account: String,
+        in_place: bool,
+        done: u64,
+        total: u64,
+    },
+    /// A data file compacted: its size before and after, what making attachments smaller saved
+    /// first (`recompressed`, bytes as kept), whether the drive hadn't the room for that
+    /// (`no_room`: only compacted), or why it couldn't be.
     Compacted {
         account: String,
         before: u64,
         after: u64,
+        #[serde(default)]
+        recompressed: u64,
+        #[serde(default)]
+        no_room: bool,
         error: Option<String>,
     },
     /// The size of each of an account's folders ([`Job::LocalFolderSizes`], or with `server`

@@ -8,6 +8,29 @@ use quatrelle_model::{FolderSize, MailboxQuota};
 
 use super::*;
 
+/// How far Compact Now has come ([`Session::compacting`]).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum CompactPhase {
+    /// Asked for, nothing heard yet.
+    #[default]
+    Starting,
+    /// Making smaller the attachments an earlier version kept uncompressed: `done` of `total` files
+    /// looked at. The window goes on as ever.
+    Recompressing { done: u64, total: u64 },
+    /// Compacting in place: the data file is had to itself, and the window waits under a veil.
+    InPlace,
+}
+
+/// The last data file compacted here ([`Session::compacted`]): its size before and after, and
+/// what making its attachments smaller saved of that (bytes as kept).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Compacted {
+    pub account: String,
+    pub before: u64,
+    pub after: u64,
+    pub recompressed: u64,
+}
+
 /// Outlook's Folder Size for one account: each folder's size on this computer (Local Data) and
 /// on its server (Server Data), as each answer comes in ([`Session::folder_sizes`]).
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -122,7 +145,9 @@ impl Session {
     }
 
     /// Compact an account's data file, as Outlook's Compact Now (the current account's when none
-    /// is named): the space freed inside it goes back to the disk. The rest waits for it meanwhile.
+    /// is named): attachments an earlier version kept uncompressed are made smaller first, the
+    /// window going on as ever ([`CompactPhase::Recompressing`]), then the space freed inside it
+    /// goes back to the disk, the rest waiting for it ([`CompactPhase::InPlace`]).
     pub fn compact_data_file(&mut self, account: Option<&str>) -> CmdResult {
         let id = match account {
             Some(a) => a.to_string(),
@@ -138,6 +163,7 @@ impl Session {
             return Err(CmdError::Disabled("this account keeps no data file on this computer".into()));
         }
         self.compacting = Some(id.clone());
+        self.compact_phase = CompactPhase::Starting;
         self.jobs.push(Job::CompactDataFile { account: id.clone() });
         Ok(serde_json::json!({"compacting": id}))
     }
@@ -192,12 +218,30 @@ impl Session {
         }
     }
 
-    pub(in crate::session) fn compacted(&mut self, account: &str, before: u64, after: u64, error: Option<String>) {
+    /// The account whose data file Compact Now has to itself now, when it does: the window
+    /// doesn't read it meanwhile (its reads would be refused), and carries on once it's done.
+    pub fn compacting_in_place(&self) -> Option<&str> {
+        self.compacting.as_deref().filter(|_| self.compact_phase == CompactPhase::InPlace)
+    }
+
+    /// How far Compact Now has come, for the account it was asked for.
+    pub(in crate::session) fn compact_progress(&mut self, account: &str, in_place: bool, done: u64, total: u64) {
+        if self.compacting.as_deref() != Some(account) {
+            return;
+        }
+        self.compact_phase = if in_place { CompactPhase::InPlace } else { CompactPhase::Recompressing { done: done.min(total), total } };
+    }
+
+    pub(in crate::session) fn compacted(&mut self, account: &str, done: Compacted, no_room: bool, error: Option<String>) {
         self.compacting = None;
+        self.compact_phase = CompactPhase::Starting;
         match error {
             None => {
-                self.compacted = Some((account.to_string(), before, after));
+                self.compacted = Some(Compacted { account: account.to_string(), ..done });
                 self.notice("The data file was compacted.", false);
+                if no_room {
+                    self.notice("There wasn't room on the drive to make attachments smaller first: the data file was only compacted.", false);
+                }
             }
             Some(e) => self.notice_with("The data file could not be compacted: {error}", &[("error", &e)], true),
         }

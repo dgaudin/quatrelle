@@ -167,9 +167,27 @@ pub(super) fn info(s: &Session, t: &Tokens, has_files: bool, ui: &mut Ui, b: &mu
             Some(f) => format!("{}\n{}", tf!("Kept on this computer: {size}", size = size(cached)), f.display()),
             None => tf!("Kept on this computer: {size}", size = size(cached)),
         };
-        if let Some((_, before, after)) = s.compacted.as_ref().filter(|(a, _, _)| *a == id) {
+        if let Some(c) = s.compacted.as_ref().filter(|c| c.account == id) {
             here.push('\n');
-            here.push_str(&tf!("Compacted from {before} to {after}", before = size(*before), after = size(*after)));
+            here.push_str(&tf!("Compacted from {before} to {after}", before = size(c.before), after = size(c.after)));
+            if c.recompressed > 0 {
+                here.push_str(", ");
+                here.push_str(&tf!("{saved} of it from attachments made smaller", saved = size(c.recompressed)));
+            }
+        }
+        // Compact Now's first step, which leaves the window free: how far it has come.
+        let recompressing = match s.compact_phase {
+            quatrelle_engine::CompactPhase::Recompressing { done, total } if s.compacting.as_deref() == Some(id.as_str()) => {
+                Some(if total == 0 { 1.0 } else { done as f32 / total as f32 })
+            }
+            _ => None,
+        };
+        if let Some(frac) = recompressing {
+            here.push('\n');
+            here.push_str(&tf!(
+                "Making attachments kept here smaller: {percent}% (you can keep working meanwhile)",
+                percent = (frac * 100.0).floor() as u32
+            ));
         }
         setting_row(ui, t, first, name(t, tl!("On this computer")), Some(note(t, &here)), |ui| {
             // An account without a server has the button here.
@@ -177,6 +195,11 @@ pub(super) fn info(s: &Session, t: &Tokens, has_files: bool, ui: &mut Ui, b: &mu
             {
                 acts.push(Action::Run("account.folderSizes", json!({"account": id})));
                 acts.push(Action::Dialog(Dialog::folder_size(s, &id)));
+            }
+            if let Some(frac) = recompressing {
+                widgets::meter(ui, t, frac, 200.0);
+                // The next frame shows how far it has come.
+                ui.ctx().request_repaint_after(std::time::Duration::from_millis(250));
             }
             if let Some(file) = &file {
                 let busy = s.compacting.is_some();

@@ -496,3 +496,38 @@ fn changes_waiting_for_a_removed_account_are_dropped() {
     pool.shutdown();
     assert!(s.load_folder("a1", "INBOX").unwrap().messages.iter().any(|m| m.key.uid == 2 && m.flags.seen));
 }
+
+/// Compact Now through the pool, on its own thread: the step that has the file to itself is told
+/// before it starts (the window puts its veil up then, not before), then what it gave back. A
+/// data file this version made has no attachments to make smaller: nothing saved there, and room
+/// enough on the drive.
+#[test]
+fn compact_now_tells_its_steps_and_what_it_gave_back() {
+    let dir = std::env::temp_dir().join(format!("quatrelle-compact-now-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let store = Store::open_packed(dir.join("app"), dir.join("Files")).unwrap();
+    store.save_accounts(&[AccountConfig { id: "a1".into(), ..Default::default() }]).unwrap();
+    let key = |uid: u32| MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 1, uid };
+    for uid in 1..=40 {
+        store.write_body(&key(uid), format!("Subject: {uid}\r\n\r\n{}", "x".repeat(200_000 + uid as usize)).as_bytes()).unwrap();
+    }
+    for uid in 1..=30 {
+        store.remove_body(&key(uid));
+    }
+    let mut p = Pool::new(store, Arc::new(MemoryCredentials::default()));
+    p.submit(Job::CompactDataFile { account: "a1".into() });
+    let (mut heard, began) = (Vec::new(), std::time::Instant::now());
+    while !heard.iter().any(|e| matches!(e, Event::Compacted { .. })) && began.elapsed() < std::time::Duration::from_secs(60) {
+        heard.extend(p.poll());
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    let steps: Vec<bool> =
+        heard.iter().filter_map(|e| if let Event::CompactProgress { in_place, .. } = e { Some(*in_place) } else { None }).collect();
+    assert_eq!(steps.last(), Some(&true), "the step in place told: {heard:?}");
+    let Some(Event::Compacted { before, after, recompressed, no_room, error, .. }) = heard.last() else { panic!("{heard:?}") };
+    assert_eq!((error, *recompressed, *no_room), (&None, 0, false));
+    assert!(after < before, "{before} → {after}");
+    assert_eq!(p.store.read_body(&key(35)).map(|b| b.len()), Some(200_000 + 35 + "Subject: 35\r\n\r\n".len()));
+    drop(p);
+    let _ = std::fs::remove_dir_all(dir);
+}

@@ -127,10 +127,11 @@ impl MailApp {
     /// Each appointment or meeting in a window of its own, as Outlook opens them (several at once,
     /// the main window free meanwhile). One opened as a dialog (from the calendar, a reminder,
     /// Reply with Meeting) moves into a window of its own at once.
-    /// While a data file is compacted (Compact Now), a window over the rest says so: what
-    /// reads or writes the account waits for it, so nothing is to be done meanwhile.
+    /// While a data file is compacted in place (Compact Now's second step), a window over the rest
+    /// says so: what reads or writes the account waits for it, so nothing is to be done meanwhile.
+    /// Its first step, attachments made smaller, leaves the window free (File › Info shows it).
     pub(crate) fn compacting_window(&mut self, ctx: &egui::Context) {
-        let Some(account) = self.session.compacting.clone() else { return };
+        let Some(account) = self.session.compacting_in_place().map(str::to_string) else { return };
         let t = self.ui.tokens;
         let email = self.session.account(&account).map_or(account, |a| a.config.email.clone());
         egui::Modal::new(egui::Id::unique("compacting")).frame(crate::dialogs::dialog_frame(&t)).show(ctx, |ui| {
