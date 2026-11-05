@@ -98,3 +98,43 @@ fn a_data_file_killed_after_compacting_needs_no_repair() {
     drop(store);
     let _ = std::fs::remove_dir_all(&t);
 }
+
+/// Compact Now ends with the file as small as what it keeps, even with nothing to give back:
+/// what seals it (so a crash after it needs no repair) doesn't grow it again. A commit on a file
+/// compacted tight grew it, and redb doubles a file under 4 GiB as it grows: here 306 MB kept in
+/// a file of 539 MB ended in one of 623 MB.
+#[test]
+fn a_compacted_data_file_stays_as_small_as_what_it_keeps() {
+    // Noise, eight bytes at a time (quick enough for 300 MB in a debug build).
+    let body = |uid: u32| -> Vec<u8> {
+        let n = [5_000usize, 40_000, 300_000, 1_200_000, 70_000][uid as usize % 5] + uid as usize * 37;
+        let mut x = u64::from(uid).wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1;
+        let mut out = Vec::with_capacity(n + 8);
+        while out.len() < n {
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            out.extend_from_slice(&x.to_le_bytes());
+        }
+        out.truncate(n);
+        out
+    };
+    let root = temp("compact-tight");
+    let store = Store::open_packed(root.join("app"), root.join("Quatrelle Files")).unwrap();
+    store.save_accounts(&[account("a1", "ana@example.com")]).unwrap();
+    let key = |uid: u32| MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 1, uid };
+    let mut kept = 0u64;
+    for uid in 1..=900 {
+        let b = body(uid);
+        kept += b.len() as u64;
+        store.write_body(&key(uid), &b).unwrap();
+    }
+    let (before, after) = store.compact_data_file("a1").unwrap().unwrap();
+    eprintln!("{before} → {after} bytes for {kept} kept ({:.2} of it)", after as f64 / kept as f64);
+    assert!(after < kept + kept / 5, "{before} → {after} bytes for {kept} kept");
+    for uid in (1..=900).step_by(97) {
+        assert_eq!(store.read_body(&key(uid)), Some(body(uid)), "{uid}");
+    }
+    drop(store);
+    let _ = std::fs::remove_dir_all(&root);
+}
