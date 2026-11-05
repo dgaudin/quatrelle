@@ -130,8 +130,8 @@ pub fn find_on_server(
     Ok(block_on(quatrelle_jmap::find_on_server(&c.0, st, store, account, folder, filter, cap))?)
 }
 
-/// Download one message's source (and cache it).
-pub fn fetch_body(c: &Client, st: &State, store: &Store, key: &MessageKey) -> Result<Vec<u8>> {
+/// Download one message's source (and cache it), with its summary filled from it.
+pub fn fetch_body(c: &Client, st: &State, store: &Store, key: &MessageKey) -> Result<(Vec<u8>, Option<quatrelle_model::Summary>)> {
     Ok(block_on(quatrelle_jmap::fetch_body(&c.0, st, store, key))?)
 }
 

@@ -208,6 +208,27 @@ fn down_twenty() {
             ms(writer) / 20.0
         );
     }
+    // A change the window didn't make (a sync's): the folder read from disk again and the list
+    // built, what a body downloaded on the way cost before it came back as its summary filled.
+    let mut reread = Duration::ZERO;
+    for _ in 0..20 {
+        let t = Instant::now();
+        s.apply(Event::FolderChanged { account: account.clone(), folder: "INBOX".into() });
+        reread += t.elapsed();
+    }
+    println!("a change from the server (FolderChanged): {:.1} ms, the folder read again", ms(reread) / 20.0);
+    // A body downloaded now: its summary filled from it, taken into its row.
+    let filled: Vec<crate::model::Summary> = s
+        .list
+        .iter()
+        .take(20)
+        .map(|m| crate::model::Summary { preview: format!("First take of the mix, number {}", m.key.uid), ..crate::model::Summary::clone(m) })
+        .collect();
+    let t = Instant::now();
+    for m in filled {
+        s.apply(Event::Filled { summary: Box::new(m) });
+    }
+    println!("a body downloaded (Filled): {:.2} ms, its row filled", ms(t.elapsed()) / 20.0);
     // Offline: the marks wait in the journal, and each one kept makes them all again.
     let _ = s.run("view.conversations", &json!({"on": false}));
     let _ = s.run("view.arrange", &json!({"by": "date"}));
