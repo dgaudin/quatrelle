@@ -64,6 +64,9 @@ fn deliver_raw(s: &mut Session, n: u32, raw: &[u8]) -> MessageKey {
     inbox.messages.insert(0, quatrelle_mime::summary_from_full(raw, key.clone(), quatrelle_model::Flags::default(), 0, NOW));
     store.save_folder(ME, "INBOX", &inbox).unwrap();
     store.write_body(&key, raw).unwrap();
+    // No pool runs here to say the read marks back first (their echo, which would read the
+    // folder again): taken as come, so this change is read from disk.
+    s.forget_echoes(ME);
     s.apply(Event::FolderChanged { account: ME.into(), folder: "INBOX".into() });
     s.run("folder.open", &json!({"account": ME, "folder": "INBOX"})).unwrap();
     s.run("list.open", &json!({"key": key.to_id()})).unwrap();
@@ -251,6 +254,7 @@ fn the_marks_come_without_opening_a_message() {
     let key = MessageKey { account: ME.into(), folder: "INBOX".into(), validity: inbox.validity, uid: 9500 };
     inbox.messages.insert(0, quatrelle_mime::summary_from_full(&raw, key, quatrelle_model::Flags::default(), 0, NOW));
     store.save_folder(ME, "INBOX", &inbox).unwrap();
+    s.forget_echoes(ME);
     s.apply(Event::FolderChanged { account: ME.into(), folder: "INBOX".into() });
     s.run("folder.open", &json!({"account": ME, "folder": "INBOX"})).unwrap();
     assert!(s.contacts_book().is_none() && s.senders.is_none() && s.reading.is_none());
