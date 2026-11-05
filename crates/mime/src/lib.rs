@@ -578,7 +578,7 @@ pub fn with_date(raw: &[u8], date: i64) -> Vec<u8> {
     out
 }
 
-pub fn build(d: &Draft, from: &EmailAddress, date: i64, message_id: &str) -> Result<Vec<u8>, String> {
+pub fn build<'d>(d: &'d Draft, from: &EmailAddress, date: i64, message_id: &str) -> Result<Vec<u8>, String> {
     let mut b = MessageBuilder::new().from(b_addr(from)).subject(d.subject.clone()).date(date.max(0)).message_id(message_id.to_string());
     if !d.to.is_empty() {
         b = b.to(b_list(&d.to));
@@ -620,10 +620,12 @@ pub fn build(d: &Draft, from: &EmailAddress, date: i64, message_id: &str) -> Res
     // Boundaries come from the message itself: unique per message and part, the same every time
     // (mail-builder would read the clock, which the browser doesn't have).
     let seed = format!("{:016x}", fnv(&format!("{message_id}\u{0}{date}")));
-    let multipart = |kind: &str, n: u32, parts: Vec<MimePart<'static>>| {
+    let multipart = |kind: &str, n: u32, parts: Vec<MimePart<'d>>| {
         MimePart::new(ContentType::new(kind.to_string()).attribute("boundary", format!("=_mc{seed}_{n}")), parts)
     };
-    let files: Vec<MimePart<'static>> = d
+    // The parts borrow the draft's files and texts: each is read where it is, not copied first
+    // (an imported message's attachments can be tens of megabytes).
+    let files: Vec<MimePart<'d>> = d
         .attachments
         .iter()
         .map(|a| {
@@ -632,24 +634,26 @@ pub fn build(d: &Draft, from: &EmailAddress, date: i64, message_id: &str) -> Res
             if mime.eq_ignore_ascii_case("message/rfc822") {
                 // In a signed message: encoded (base64) by mail-builder, as binary.
                 if d.seven_bit && !a.data.is_ascii() {
-                    return MimePart::new(mime, a.data.clone()).attachment(sanitize_filename(&a.name));
+                    return MimePart::new(mime, a.data.as_slice()).attachment(sanitize_filename(&a.name));
                 }
                 let cte = if a.data.is_ascii() { "7bit" } else { "8bit" };
-                return MimePart::new(mime, a.data.clone())
+                return MimePart::new(mime, a.data.as_slice())
                     .attachment(sanitize_filename(&a.name))
                     .header("Content-Transfer-Encoding", mail_builder::headers::raw::Raw::new(cte));
             }
-            MimePart::new(mime, a.data.clone()).attachment(sanitize_filename(&a.name))
+            MimePart::new(mime, a.data.as_slice()).attachment(sanitize_filename(&a.name))
         })
         .collect();
-    let text = MimePart::new("text/plain", d.body.replace("\r\n", "\n"));
+    // The text with bare line ends (mail-builder writes CR LF): copied only when it has others.
+    let body: std::borrow::Cow<'d, str> = if d.body.contains("\r\n") { d.body.replace("\r\n", "\n").into() } else { d.body.as_str().into() };
+    let text = MimePart::new("text/plain", body);
     let root = match &d.html {
         None if files.is_empty() => text,
         None => multipart("multipart/mixed", 1, std::iter::once(text).chain(files).collect()),
         Some(html) => {
             // mixed( related( alternative(text, html), pictures… ), attachments… ): the pictures
             // belong with the HTML that shows them (RFC 2387), the files with the message.
-            let alt = multipart("multipart/alternative", 3, vec![text, MimePart::new("text/html", html.clone())]);
+            let alt = multipart("multipart/alternative", 3, vec![text, MimePart::new("text/html", html.as_str())]);
             let mut related = vec![alt];
             for p in &d.inline {
                 let mime = if p.mime.is_empty() { mime_from_name(&p.name).to_string() } else { p.mime.clone() };
@@ -657,9 +661,9 @@ pub fn build(d: &Draft, from: &EmailAddress, date: i64, message_id: &str) -> Res
                 // so a saved copy or another client's list shows it: still inline, and not a file
                 // while the HTML shows it.
                 let part = match files::picture_name(&p.name, &mime) {
-                    Some(name) => MimePart::new(ContentType::new(mime).attribute("name", name.clone()), p.data.clone())
+                    Some(name) => MimePart::new(ContentType::new(mime).attribute("name", name.clone()), p.data.as_slice())
                         .header("Content-Disposition", ContentType::new("inline").attribute("filename", name)),
-                    None => MimePart::new(mime, p.data.clone()).inline(),
+                    None => MimePart::new(mime, p.data.as_slice()).inline(),
                 };
                 related.push(part.cid(p.cid.clone()));
             }
