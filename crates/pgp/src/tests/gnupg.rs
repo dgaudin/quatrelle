@@ -60,3 +60,113 @@ fn gnupg_mail_decrypts_and_verifies() {
     assert!(matches!(check, Check::Good { .. }));
     assert!(text.contains("\r\n- this line starts with a dash\r\n"), "{text:?}");
 }
+
+/// GnuPG, where it's installed, reads what Quatrelle makes, and Quatrelle what GnuPG makes with
+/// that key: the backup imported with its passphrase, mail decrypted, signatures verified both
+/// ways, the end of the key and of its extension as GnuPG lists them. Run by hand:
+/// `cargo test -p quatrelle-pgp gnupg_reads -- --ignored --nocapture`. Its keyring is a directory
+/// of its own under the temporary directory, given to each `gpg` run (`GNUPGHOME`) and removed
+/// at the end: the user's own keyring is never touched.
+#[test]
+#[ignore = "needs GnuPG (gpg on PATH); run by hand"]
+fn gnupg_reads_a_key_and_mail_quatrelle_made() {
+    use std::process::Command;
+    if Command::new("gpg").arg("--version").output().is_err() {
+        eprintln!("gpg isn't on PATH: skipped");
+        return;
+    }
+    // GnuPG refuses a key made in the future: this one is made now.
+    let now = i64::try_from(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs()).unwrap();
+    let mut rng = rand_core::OsRng;
+    let k = generate("Riley Moreno", "riley@studio.example", now, &mut rng).unwrap();
+    let fp = k.info.fingerprint.clone();
+    let home = std::env::temp_dir().join(format!("quatrelle-gnupg-{}-{now}", std::process::id()));
+    std::fs::create_dir_all(&home).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        std::fs::set_permissions(&home, std::fs::Permissions::from_mode(0o700)).unwrap();
+    }
+    let file = |name: &str, data: &[u8]| {
+        let p = home.join(name);
+        std::fs::write(&p, data).unwrap();
+        p.to_string_lossy().into_owned()
+    };
+    let gpg = |args: &[&str]| {
+        let o = Command::new("gpg")
+            .env("GNUPGHOME", &home)
+            // Status lines (`[GNUPG:] GOODSIG`) say what happened whatever the language.
+            .args([
+                "--batch",
+                "--no-tty",
+                "--status-fd",
+                "2",
+                "--pinentry-mode",
+                "loopback",
+                "--passphrase",
+                "correct horse",
+                "--trust-model",
+                "always",
+            ])
+            .args(args)
+            .output()
+            .unwrap();
+        let err = String::from_utf8_lossy(&o.stderr).into_owned();
+        eprintln!("gpg {}: {}\n{err}", args.join(" "), o.status);
+        (o.status.success(), o.stdout, err)
+    };
+    let expiry = |listing: &[u8], kind: &str| -> Option<i64> {
+        String::from_utf8_lossy(listing).lines().find(|l| l.starts_with(kind)).and_then(|l| l.split(':').nth(6)).and_then(|e| e.parse().ok())
+    };
+    let check = || {
+        // The backup, imported with its passphrase.
+        let (ok, _, _) = gpg(&["--import", &file("backup.asc", backup(&k, "correct horse", &mut rng).unwrap().as_bytes())]);
+        assert!(ok, "the backup imports");
+        let (ok, listing, _) = gpg(&["--with-colons", "--list-secret-keys", &fp]);
+        assert!(ok && String::from_utf8_lossy(&listing).contains(&fp));
+        let end = now + i64::try_from(VALID_FOR_SECS).unwrap();
+        assert_eq!(expiry(&listing, "sec:"), Some(end));
+        assert_eq!(expiry(&listing, "ssb:"), Some(end));
+        // Mail Quatrelle encrypted and signed, read by GnuPG.
+        let part = b"Content-Type: text/plain; charset=utf-8\r\n\r\nFrom Quatrelle.\r\n";
+        let sealed = encrypt(part, &[&k.public], Some(&k.secret), now, &mut rng).unwrap();
+        let (ok, out, err) = gpg(&["--decrypt", &file("sealed.asc", sealed.as_bytes())]);
+        assert!(ok && out == part, "GnuPG decrypts");
+        assert!(err.contains("[GNUPG:] GOODSIG "), "and checks the signature inside");
+        let sig = sign(part, &k.secret, now, &mut rng).unwrap();
+        let (ok, _, err) = gpg(&["--verify", &file("part.sig", sig.as_bytes()), &file("part.txt", part)]);
+        assert!(ok && err.contains("[GNUPG:] GOODSIG "), "GnuPG verifies a detached signature");
+        // What GnuPG makes with the key, read by Quatrelle.
+        let from = home.join("gpg.sig").to_string_lossy().into_owned();
+        let (ok, _, _) = gpg(&["--local-user", &fp, "--armor", "--output", &from, "--detach-sign", &file("theirs.txt", part)]);
+        assert!(ok);
+        let theirs = std::fs::read(&from).unwrap();
+        assert!(matches!(verify(part, &theirs, &[&k.public]).unwrap(), Check::Good { key: 0, .. }), "Quatrelle verifies GnuPG's signature");
+        let to = home.join("gpg.asc").to_string_lossy().into_owned();
+        let (ok, _, _) = gpg(&["--armor", "--recipient", &fp, "--output", &to, "--sign", "--local-user", &fp, "--encrypt", &file("plain.txt", part)]);
+        assert!(ok);
+        let d = decrypt(&std::fs::read(&to).unwrap(), &[&k.secret], &[&k.public]).unwrap();
+        assert_eq!(d.data, part, "Quatrelle decrypts GnuPG's");
+        assert!(matches!(d.check, Some(Check::Good { key: 0, .. })));
+        // The public key GnuPG exports is the same key, and an extension moves its end there.
+        let (ok, exported, _) = gpg(&["--armor", "--export", &fp]);
+        assert!(ok);
+        assert!(same_key(&public_keys(&exported).unwrap()[0], &k.public));
+        let x = extend(&k, now + 1000, &mut rng).unwrap();
+        let armored = {
+            let p: pgp::composed::SignedPublicKey = pgp::composed::Deserializable::from_bytes(&x.public[..]).unwrap();
+            p.to_armored_string(Default::default()).unwrap()
+        };
+        let (ok, _, _) = gpg(&["--import", &file("extended.asc", armored.as_bytes())]);
+        assert!(ok);
+        let (_, listing, _) = gpg(&["--with-colons", "--list-keys", &fp]);
+        assert_eq!(expiry(&listing, "pub:"), Some(end + 1000), "GnuPG takes the extension");
+        assert_eq!(expiry(&listing, "sub:"), Some(end + 1000));
+    };
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(check));
+    let _ = Command::new("gpgconf").env("GNUPGHOME", &home).args(["--kill", "all"]).output();
+    let _ = std::fs::remove_dir_all(&home);
+    if let Err(e) = result {
+        std::panic::resume_unwind(e);
+    }
+}
