@@ -11,6 +11,7 @@ use super::*;
 use crate::InviteProblem;
 
 mod answered;
+mod charset;
 mod sequence;
 mod showing;
 
