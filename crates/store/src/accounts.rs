@@ -239,7 +239,8 @@ impl Store {
         progress: &mut dyn FnMut(CompactStep),
     ) -> Result<Option<Compacted>> {
         let Some(file) = self.data_file(account) else { return Ok(None) };
-        let size = || fs::metadata(&file).map_or(0, |m| m.len());
+        // The room it takes on the disk, as File › Info says it.
+        let size = || fs::metadata(&file).map_or(0, |m| crate::on_disk(&m));
         let before = size();
         let recompressed = match recompress {
             true => self.recompress_data_file(account, cancel, &mut |w| progress(CompactStep::Recompressing(w))),

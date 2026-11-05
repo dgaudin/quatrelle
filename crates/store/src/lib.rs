@@ -55,6 +55,22 @@ fn io_err(path: &Path) -> impl FnOnce(io::Error) -> StoreError + '_ {
     move |source| StoreError::Io { path: path.display().to_string(), source }
 }
 
+/// The room a file takes on the disk: its length, less the holes in it on Unix. redb grows a
+/// file under 4 GiB by doubling it, and on Linux the new half is a hole until it's written: by
+/// its length, the cache looked twice as big as it was right after Compact Now. Windows (NTFS)
+/// reserves the room it grows by: its length is what it takes.
+pub(crate) fn on_disk(m: &fs::Metadata) -> u64 {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        m.len().min(m.blocks().saturating_mul(512))
+    }
+    #[cfg(not(unix))]
+    {
+        m.len()
+    }
+}
+
 /// What the cache knows about one folder (RFC 4549 §4.3 and RFC 7162 state). The session keeps
 /// its messages shared ([`FolderState::shared`]) with the list on screen and search results,
 /// rather than copied into them.

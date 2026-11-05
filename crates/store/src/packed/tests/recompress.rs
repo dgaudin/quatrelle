@@ -136,7 +136,8 @@ fn compact_now_gives_back_raw_attachments(total: usize) {
     let s = old_store_from(&t, raw_attachments(total));
     let before_files = digests(&s);
     let file = s.data_file("a1").unwrap();
-    let size = std::fs::metadata(&file).unwrap().len();
+    // What File › Info says it takes: the room on the disk.
+    let size = crate::packed::on_disk(&std::fs::metadata(&file).unwrap());
     let began = std::time::Instant::now();
     // The file's size, and what it takes on the disk (a file grown by redb is sparse until written).
     let on_disk = |f: &std::path::Path| {

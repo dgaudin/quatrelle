@@ -74,7 +74,7 @@ impl Packs {
     /// Compact an account's data file: its size before and after; `None` when it has none.
     pub(crate) fn compact(&self, account: &str) -> io::Result<Option<(u64, u64)>> {
         let Some(path) = self.file(account).filter(|f| f.is_file()) else { return Ok(None) };
-        let size = || fs::metadata(&path).map_or(0, |m| m.len());
+        let size = || fs::metadata(&path).map_or(0, |m| on_disk(&m));
         let before = size();
         if !Packs::lock(&self.compacting).insert(account.to_string()) {
             return Err(other("the data file is being compacted already"));

@@ -557,7 +557,7 @@ impl Packs {
     /// Bytes under a folder: an account's is its data file's size.
     pub(crate) fn size(&self, dir: &Path) -> Option<u64> {
         match self.place(dir) {
-            Place::Account(a) => Some(self.file(&a).and_then(|f| fs::metadata(f).ok()).map_or(0, |m| m.len())),
+            Place::Account(a) => Some(self.file(&a).and_then(|f| fs::metadata(f).ok()).map_or(0, |m| on_disk(&m))),
             Place::In(a, k) => Some(self.keys(&a, &k).unwrap_or_default().iter().map(|(_, n)| n).fold(0u64, |s, n| s.saturating_add(*n))),
             Place::Disk => None,
         }
@@ -671,6 +671,8 @@ pub(crate) fn read_data_file(path: &Path, tmp: &Path, each: &mut dyn FnMut(Vec<(
     let _ = fs::remove_file(tmp);
     read
 }
+
+pub(crate) use crate::on_disk;
 
 mod compact;
 pub(crate) use compact::no_waiting;
