@@ -49,6 +49,7 @@ impl Session {
         let done = if local { self.apply_op_local(account, &op) } else { Ok(()) };
         let patched = !folder_op && self.patch_list(&op);
         if !local {
+            self.expect_echo(account, &op);
             self.jobs.push(Job::Apply { account: account.to_string(), op });
         }
         if folder_op {

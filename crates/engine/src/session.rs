@@ -317,6 +317,9 @@ pub struct Session {
     pub(crate) cache: HashMap<(String, String), FolderState<Arc<Summary>>>,
     /// The cached folders, the least recently used first.
     pub(crate) cache_order: Vec<(String, String)>,
+    /// Flag and category changes sent for a server account's mail, their echo still to come
+    /// (`mailboxes/echo.rs`).
+    pub(crate) echoes: mailboxes::Echoes,
     /// Accounts whose other people's appointments are set aside (`pim/parking.rs`), and since
     /// when the calendar isn't shown.
     parked: HashSet<String>,
@@ -503,6 +506,7 @@ impl Session {
             jobs: Vec::new(),
             cache: HashMap::new(),
             cache_order: Vec::new(),
+            echoes: mailboxes::Echoes::default(),
             previews: HashMap::new(),
             parked: HashSet::new(),
             away_from_calendar: None,

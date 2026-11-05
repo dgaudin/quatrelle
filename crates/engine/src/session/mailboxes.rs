@@ -9,6 +9,8 @@ use super::*;
 
 mod contacts;
 pub(crate) use contacts::Contacts;
+mod echo;
+pub(crate) use echo::Echoes;
 mod directory;
 pub(crate) use directory::{Directory, bare_name, directory_key};
 pub use directory::{DirectoryAnswer, directory_people, fill_name};
