@@ -416,6 +416,8 @@ pub struct Session {
     index: Option<SearchIndex>,
     /// The index of the summaries alone (no word of a message read), for the queries they answer.
     summary_index: Option<SearchIndex>,
+    /// How many times a message was shown in the reading pane ([`Session::messages_shown`]).
+    shown: u64,
     /// The message in the reading pane to mark read, and when (`ReadInPane::Shown` with a wait).
     read_due: Option<(MessageKey, i64)>,
     /// The message to mark read once another is chosen (`ReadInPane::Left`).
@@ -548,6 +550,7 @@ impl Session {
             cal_day: None,
             index: None,
             summary_index: None,
+            shown: 0,
             read_due: None,
             read_on_leave: None,
             body_words: HashMap::new(),

@@ -79,6 +79,12 @@ impl Session {
         }
     }
 
+    /// How many times a message was shown in the reading pane (each one read from the cache and
+    /// parsed): a held arrow key is one per frame, whatever the key repeat rate.
+    pub fn messages_shown(&self) -> u64 {
+        self.shown
+    }
+
     /// Select one message and show it in the reading pane (marked read as the options say).
     pub fn open_message(&mut self, key: &MessageKey) {
         self.show_message(key, true);
@@ -86,6 +92,7 @@ impl Session {
 
     /// Select one message and show it; `mark`: as the reading options say (else left as it is).
     pub(super) fn show_message(&mut self, key: &MessageKey, mark: bool) {
+        self.shown = self.shown.wrapping_add(1);
         // A reply written in the reading pane is set aside (in Drafts) for another message, and
         // one set aside for this message comes back.
         self.set_compose_aside(Some(key));
