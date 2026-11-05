@@ -267,7 +267,7 @@ macro_rules! reader {
         }
 
         impl Holder for Held<'_, $message> {
-            fn attachments(&self, each: &mut dyn FnMut(&dyn Fn() -> Part<Self>) -> bool) {
+            fn attachments(&self, top: bool, each: &mut dyn FnMut(&dyn Fn() -> Part<Self>) -> bool) {
                 let cp = message_code_page(&*self.m);
                 // Which hidden files are left out depends on what the item is.
                 let class = message_class(&*self.m, cp);
@@ -284,7 +284,7 @@ macro_rules! reader {
                                 {
                                     *photo = picture_of(&*a);
                                 }
-                                match attachment(&*a, cp, &class) {
+                                match attachment(&*a, cp, &class, top) {
                                     Some(got) => Part::Got(got),
                                     None => match a.embedded_message() {
                                         Some(m) => Part::Message(Held { m, named: self.named, photo: RefCell::new(None) }),
@@ -292,7 +292,7 @@ macro_rules! reader {
                                     },
                                 }
                             }
-                            Err(e) => Part::Got(unread_attachment(&e, &**table, row, cp, &class)),
+                            Err(e) => Part::Got(unread_attachment(&e, &**table, row, cp, &class, top)),
                         }
                     };
                     if !each(&read) {

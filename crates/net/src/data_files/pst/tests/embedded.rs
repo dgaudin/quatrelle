@@ -37,7 +37,7 @@ struct At<'a> {
 }
 
 impl Holder for At<'_> {
-    fn attachments(&self, each: &mut dyn FnMut(&dyn Fn() -> Part<Self>) -> bool) {
+    fn attachments(&self, _top: bool, each: &mut dyn FnMut(&dyn Fn() -> Part<Self>) -> bool) {
         for part in &self.layout[self.at].parts {
             let read = || {
                 self.reads.set(self.reads.get() + 1);

@@ -57,7 +57,7 @@ fn data(name: &str, mime: &str, n: usize) -> File {
 
 /// A changed occurrence's files go on its own event, the series' on the series; a file past what
 /// the contacts and calendar keep is counted as too big, and the files left out as an item was read
-/// are counted too.
+/// are counted too; an exception item that is no occurrence (it says no time) is counted.
 #[test]
 fn an_occurrence_s_files_go_on_its_event_and_big_ones_are_counted() {
     use quatrelle_model::dates::days_from_civil;
@@ -76,21 +76,68 @@ fn an_occurrence_s_files_go_on_its_event_and_big_ones_are_counted() {
         extra: Some(crate::pst_pim::Extra { start: Some(at(19, 8)), end: Some(at(19, 9)), replaces: Some(at(19, 8)), ..Default::default() }),
         ..Default::default()
     }));
+    let timeless = File::Message(Box::new(Item {
+        class: "IPM.OLE.CLASS.{00061055-0000-0000-C000-000000000046}".into(),
+        files: vec![data("lost.pdf", "application/pdf", 1)],
+        extra: Some(crate::pst_pim::Extra { replaces: Some(at(26, 7)), ..Default::default() }),
+        ..Default::default()
+    }));
     out.add_pim(Item {
         class: "IPM.Appointment".into(),
         subject: "Review".into(),
-        files: vec![data("agenda.pdf", "application/pdf", 3), own, data("huge.bin", "application/octet-stream", 5 << 20)],
+        files: vec![data("agenda.pdf", "application/pdf", 3), own, data("huge.bin", "application/octet-stream", 5 << 20), timeless],
         left_out: BTreeMap::from([(FileLeftOut::Link, 1)]),
         extra: Some(crate::pst_pim::Extra { start: Some(start), end: Some(start + 3600), recurrence: pattern, ..Default::default() }),
         ..Default::default()
     });
     let done = out.finish();
-    assert_eq!(done.events, 1);
+    assert_eq!((done.events, done.skipped), (1, 1));
     assert_eq!(done.files_left_out.into_iter().collect::<Vec<_>>(), [(FileLeftOut::Link, 1), (FileLeftOut::TooBig, 1)]);
     let pim: Pim = store.load_account_doc("d1", PIM_DOC).unwrap();
     let events: Vec<_> = pim.events.iter().map(|e| &e.event).collect();
     assert_eq!(file_lines(&events[0].extra), ["ATTACH;FMTTYPE=application/pdf;ENCODING=BASE64;VALUE=BINARY;X-FILENAME=\"agenda.pdf\""]);
     assert!(file_lines(&events[1].extra).is_empty());
     assert_eq!(file_lines(&events[2].extra), ["ATTACH;FMTTYPE=application/pdf;ENCODING=BASE64;VALUE=BINARY;X-FILENAME=\"proofs.pdf\""]);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The files kept on cards and events stay within what Quatrelle reads back: the contacts and
+/// calendar written as one `.vcf` and one `.ics` read back whole, every card and event with every
+/// file that was kept; those past the cap are counted.
+#[test]
+fn kept_files_read_back_from_calendar_and_address_book_files() {
+    let dir = std::env::temp_dir().join(format!("quatrelle-pst-pim-files-back-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let store = Store::open(&dir).unwrap();
+    let mut progress = |_| {};
+    let mut out = Out::new(&store, "d1", &mut progress);
+    // Files of 700,000 bytes: about 0.93 MB each in base64.
+    for i in 0..6 {
+        out.add_pim(Item {
+            class: "IPM.Contact".into(),
+            files: vec![data("cv.pdf", "application/pdf", 700_000)],
+            extra: Some(crate::pst_pim::Extra { given: format!("Person {i}"), ..Default::default() }),
+            ..Default::default()
+        });
+        let start = 1_790_000_000 + i * 86_400;
+        out.add_pim(Item {
+            class: "IPM.Appointment".into(),
+            subject: format!("Review {i}"),
+            files: vec![data("proofs.pdf", "application/pdf", 700_000)],
+            extra: Some(crate::pst_pim::Extra { start: Some(start), end: Some(start + 3600), ..Default::default() }),
+            ..Default::default()
+        });
+    }
+    let done = out.finish();
+    assert_eq!((done.contacts, done.events), (6, 6));
+    let lost = done.files_left_out.get(&FileLeftOut::TooBig).copied().unwrap_or(0);
+    let pim: Pim = store.load_account_doc("d1", PIM_DOC).unwrap();
+    let vcf: String = pim.cards.iter().map(|c| quatrelle_model::vcard::write(&c.card)).collect();
+    let ics = quatrelle_model::ical::write(&pim.events.iter().map(|e| e.event.clone()).collect::<Vec<_>>(), None, 0);
+    let cards = quatrelle_model::vcard::parse(&vcf);
+    let events = quatrelle_model::ical::parse(&ics, 0).events;
+    assert_eq!((cards.len(), events.len()), (6, 6), "read back whole: {} and {} bytes", vcf.len(), ics.len());
+    let kept = cards.iter().map(|c| file_lines(&c.extra).len()).sum::<usize>() + events.iter().map(|e| file_lines(&e.extra).len()).sum::<usize>();
+    assert_eq!((kept, lost), (8, 4), "eight fit in what's kept");
     let _ = std::fs::remove_dir_all(&dir);
 }

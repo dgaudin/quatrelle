@@ -3,19 +3,22 @@
 // Copyright (c) 2026 Didier Gaudin
 //! Contacts, contact groups, calendar items, tasks, notes and journal entries as they come in.
 //! A repeating appointment's changed occurrences come in as events of their own, each replacing
-//! its occurrence (`RECURRENCE-ID`). The files of a contact or calendar item come in on its card
-//! or event (`pst_pim::files`); a task, a note and a journal entry have nowhere to keep one, and
-//! theirs are counted. The account's contacts and calendar are one document, written whole at
-//! each change, so the files kept there are held to [`MAX_FILE`] each and [`MAX_FILES`] in all,
-//! and those past either are counted as too big.
+//! its occurrence (`RECURRENCE-ID`); an exception item that is none of them is counted. The files
+//! of a contact or calendar item come in on its card or event (`pst_pim::files`); a task, a note
+//! and a journal entry have nowhere to keep one, and theirs are counted. The account's contacts
+//! and calendar are one document, written whole at each change, and written as one `.ics` and one
+//! `.vcf` that Quatrelle must read back (in full up to 16 MiB each), so the files kept there are
+//! held to [`MAX_FILE`] each and [`MAX_FILES`] in all, and those past either are counted as too
+//! big.
 
 use super::super::item::{EXCEPTION, File};
 use super::*;
 
 /// A file of a contact or calendar item kept at most, as its line holds it (base64)…
-const MAX_FILE: usize = 4 << 20;
-/// …and all of them in the account's contacts and calendar.
-const MAX_FILES: usize = 24 << 20;
+const MAX_FILE: usize = 1 << 20;
+/// …and all of them in the account's contacts and calendar: half what a calendar or address book
+/// file is read to, leaving the rest to their text and the folding of their lines.
+const MAX_FILES: usize = 8 << 20;
 
 impl Out<'_> {
     /// A contact, contact group, calendar item, task, note or journal entry (anything else in
@@ -108,6 +111,13 @@ impl Out<'_> {
                     with_files(&mut e, lines);
                 }
                 self.pim.events.push(StoredEvent { calendar: LOCAL.into(), event: e, ..Default::default() });
+            }
+            // One that isn't any occurrence (no time of its own, or one taken already) is
+            // counted, its files with it.
+            let unused = own.iter().flatten().count();
+            if unused > 0 {
+                log::info!("{unused} changed occurrences of a repeating appointment could not be placed");
+                self.skipped += unused;
             }
         }
     }

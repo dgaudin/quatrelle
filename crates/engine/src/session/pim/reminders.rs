@@ -60,8 +60,8 @@ impl Session {
                 if with.is_empty() {
                     continue;
                 }
-                let events: Vec<CalEvent> =
-                    p.events.iter().filter(|e| e.calendar == cal.id && with.contains(e.event.uid.as_str())).map(|e| e.event.clone()).collect();
+                let events: Vec<&CalEvent> =
+                    p.events.iter().filter(|e| e.calendar == cal.id && with.contains(e.event.uid.as_str())).map(|e| &e.event).collect();
                 for o in ical::occurrences(&events, now - REMINDER_KEPT_AFTER_END - 86_400, now + ahead + 86_400) {
                     let Some(e) = events.get(o.event) else { continue };
                     let Some(minutes) = reminder_of(e) else { continue };

@@ -335,7 +335,9 @@ impl Session {
             let Some(acc) = self.account(account) else { continue };
             for cal in p.calendars.iter().filter(|c| self.calendar_shown(account, &c.id)) {
                 let stored: Vec<&StoredEvent> = p.events.iter().filter(|e| e.calendar == cal.id).collect();
-                let events: Vec<CalEvent> = stored.iter().map(|e| e.event.clone()).collect();
+                // Borrowed, not copied: this runs each frame the calendar is drawn, and an
+                // imported event can carry files.
+                let events: Vec<&CalEvent> = stored.iter().map(|e| &e.event).collect();
                 // All-day events are dates, not times: widen the window by a day each way.
                 for o in ical::occurrences(&events, from.saturating_sub(86_400), to.saturating_add(86_400)) {
                     let Some(e) = events.get(o.event) else { continue };
