@@ -601,3 +601,39 @@ fn every_kind_of_private_comes_back_as_it_went() {
         assert_eq!(out.lines().find(|l| l.starts_with("CLASS")), written, "{class}");
     }
 }
+
+/// How many times each of `BEGIN:<what>` and `END:<what>` is in a written calendar.
+fn begins_and_ends(text: &str, what: &str) -> (usize, usize) {
+    let count = |line: String| text.split("\r\n").filter(|l| l.eq_ignore_ascii_case(&line)).count();
+    (count(format!("BEGIN:{what}")), count(format!("END:{what}")))
+}
+
+/// What an event or a zone keeps as written goes back to the server whole: a stray `END` in an
+/// event is left out and what it begins is ended, a zone cut off at the end of the file is ended,
+/// and an event inside a zone's definition isn't written twice.
+#[test]
+fn a_stray_end_is_not_sent_back() {
+    let stray = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:e\r\nBEGIN:X\r\nEND:VCALENDAR\r\nEND:VEVENT\r\nBEGIN:VEVENT\r\nUID:f\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+    let out = write(&parse(stray, 0).events, None, 0);
+    assert_eq!(begins_and_ends(&out, "VCALENDAR"), (1, 1), "{out}");
+    assert!(out.contains("BEGIN:X\r\nEND:X\r\n"), "{out}");
+    assert_eq!(parse(&out, 0).events.len(), 2);
+
+    let cut = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:e\r\nDTSTART;TZID=Nowhere:20261103T100000\r\nEND:VEVENT\r\n\
+BEGIN:VTIMEZONE\r\nTZID:Nowhere\r\nBEGIN:STANDARD\r\nDTSTART:19700101T000000\r\nTZOFFSETFROM:+0100\r\nTZOFFSETTO:+0100\r\nEND:STANDARD\r\n";
+    let out = write(&parse(cut, 0).events, None, 0);
+    assert_eq!(begins_and_ends(&out, "VTIMEZONE"), (1, 1), "{out}");
+    assert_eq!(begins_and_ends(&out, "STANDARD"), (1, 1), "{out}");
+
+    let holding = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:e\r\nDTSTART;TZID=Nowhere:20261103T100000\r\nEND:VEVENT\r\n\
+BEGIN:VTIMEZONE\r\nTZID:Nowhere\r\nBEGIN:STANDARD\r\nDTSTART:19700101T000000\r\nTZOFFSETFROM:+0100\r\nTZOFFSETTO:+0100\r\nEND:STANDARD\r\n\
+BEGIN:VEVENT\r\nUID:inside\r\nEND:VEVENT\r\nEND:VTIMEZONE\r\nEND:VCALENDAR\r\n";
+    let read = parse(holding, 0).events;
+    let out = write(&read, None, 0);
+    assert_eq!(parse(&out, 0).events.len(), read.len(), "{out}");
+
+    // A CR inside a line is read as writing has it: taken out.
+    let cr = "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID:c\r\nSUMMARY:one\rtwo\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+    let e = parse(cr, 0).events;
+    assert_eq!(parse(&write(&e, None, 0), 0).events[0].summary, e[0].summary);
+}
