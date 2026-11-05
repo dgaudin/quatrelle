@@ -212,13 +212,15 @@ impl Session {
         self.apply_op(&s.account, Op::Move { keys: vec![key], to: back });
     }
 
-    /// Bring back snoozed mail that is due. Called often (each frame, each CLI run): cheap when
-    /// nothing is due.
+    /// Bring back snoozed mail that is due (and what else waits for its time: the list's date
+    /// headings on a new day). Called often (each frame, each CLI run): cheap when nothing is due.
     pub fn tick(&mut self) {
         self.flush_due_outbox();
         self.read_when_due();
         self.web_calendars_due();
         self.refresh_rooms_due();
+        // A new day moves the list's date headings (before the snoozes' early return).
+        self.follow_the_day();
         let now = self.clock.now;
         if !self.snoozes.iter().any(|s| s.until <= now) {
             return;
