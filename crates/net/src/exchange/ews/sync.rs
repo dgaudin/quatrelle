@@ -279,11 +279,11 @@ pub fn sync_folder_then(
     sort_newest_first(&mut fs.messages);
     fs.uid_next = fs.messages.iter().map(|m| m.key.uid).max().unwrap_or(0).saturating_add(1);
     store.save_folder(account, folder, &fs)?;
-    if report.touched() {
-        prefetch(c, st, store, account, folder, &mut fs, opts, listed)?;
+    report.fetched = if report.touched() {
+        prefetch(c, st, store, account, folder, &mut fs, opts, listed)?
     } else {
-        prefetch(c, st, store, account, folder, &mut fs, opts, &mut || {})?;
-    }
+        prefetch(c, st, store, account, folder, &mut fs, opts, &mut || {})?
+    };
     // Read in full: noted as it was, for the next pass to leave alone if nothing changes.
     st.marks.insert(folder.to_string(), mark);
     report.total = total;
@@ -449,9 +449,9 @@ fn changes(
         sort_newest_first(&mut fs.messages);
         fs.uid_next = fs.messages.iter().map(|m| m.key.uid).max().unwrap_or(0).saturating_add(1);
         store.save_folder(account, folder, &fs)?;
-        prefetch(c, st, store, account, folder, &mut fs, opts, listed)?;
+        report.fetched = prefetch(c, st, store, account, folder, &mut fs, opts, listed)?;
     } else {
-        prefetch(c, st, store, account, folder, &mut fs, opts, &mut || {})?;
+        report.fetched = prefetch(c, st, store, account, folder, &mut fs, opts, &mut || {})?;
     }
     Ok((report, state))
 }
@@ -534,7 +534,7 @@ const AHEAD_BATCH: usize = 10;
 const AHEAD_BATCH_BYTES: u64 = 8 << 20;
 
 /// The newest messages downloaded whole (those not too big), `listed` told first when there are
-/// any (the list just saved shows meanwhile).
+/// any (the list just saved shows meanwhile); how many came.
 #[allow(clippy::too_many_arguments)]
 fn prefetch(
     c: &Client,
@@ -545,7 +545,7 @@ fn prefetch(
     fs: &mut FolderState,
     opts: &SyncOptions,
     listed: &mut dyn FnMut(),
-) -> Result<()> {
+) -> Result<usize> {
     let wanted: Vec<(u32, String, u64)> = fs
         .messages
         .iter()
@@ -554,12 +554,12 @@ fn prefetch(
         .filter_map(|m| Some((m.key.uid, st.id(m.key.uid)?, u64::from(m.size))))
         .collect();
     if wanted.is_empty() {
-        return Ok(());
+        return Ok(0);
     }
     listed();
-    download(c, store, account, folder, Some(fs), wanted, true)?;
+    let written = download(c, store, account, folder, Some(fs), wanted, true)?;
     store.save_folder(account, folder, fs)?;
-    Ok(())
+    Ok(written)
 }
 
 /// What of a folder is still to be downloaded ahead, worked out once — the whole list read and

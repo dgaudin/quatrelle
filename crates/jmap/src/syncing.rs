@@ -147,7 +147,7 @@ pub async fn sync_folder<H: Http>(
     sort_newest_first(&mut fs.messages);
     fs.uid_next = fs.messages.iter().map(|m| m.key.uid).max().unwrap_or(0).saturating_add(1);
     store.save_folder(account, folder, &fs)?;
-    prefetch(c, st, store, account, folder, &mut fs, opts).await?;
+    report.fetched = prefetch(c, st, store, account, folder, &mut fs, opts).await?;
     let (total, unread) = counts.unwrap_or((u32::try_from(fs.messages.len()).unwrap_or(u32::MAX), fs.unread()));
     report.total = total;
     report.unread = unread;
@@ -224,7 +224,7 @@ pub async fn find_on_server<H: Http>(
     Ok((numbers.iter().filter_map(|n| fs.find(*n).map(|m| m.key.clone())).collect(), new))
 }
 
-/// The newest [`SyncOptions::prefetch`] sources, with the folder's list.
+/// The newest [`SyncOptions::prefetch`] sources, with the folder's list; how many came.
 async fn prefetch<H: Http>(
     c: &Client<H>,
     st: &State,
@@ -233,7 +233,7 @@ async fn prefetch<H: Http>(
     folder: &str,
     fs: &mut FolderState,
     opts: &SyncOptions,
-) -> Result<()> {
+) -> Result<usize> {
     let wanted: Vec<(u32, String)> = fs
         .messages
         .iter()
@@ -241,7 +241,7 @@ async fn prefetch<H: Http>(
         .filter(|m| m.size <= opts.prefetch_max_bytes && !store.has_body(&m.key))
         .filter_map(|m| Some((m.key.uid, st.id(m.key.uid)?)))
         .collect();
-    download_sources(c, store, account, folder, fs, &wanted, wanted.len()).await.map(drop)
+    download_sources(c, store, account, folder, fs, &wanted, wanted.len()).await.map(|a| a.got.len())
 }
 
 /// Download, newest first, the sources of up to `budget` of a folder's kept messages that have

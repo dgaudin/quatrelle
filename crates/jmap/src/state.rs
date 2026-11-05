@@ -339,11 +339,13 @@ pub struct SyncReport {
     /// When the server received the newest of the messages that came in (Unix seconds, IMAP's
     /// INTERNALDATE), for the log to say how soon it was told of; the others leave it out.
     pub newest: Option<i64>,
+    /// Message sources downloaded ahead (their summaries filled in, their words searchable).
+    pub fetched: usize,
 }
 
 impl SyncReport {
     pub fn touched(&self) -> bool {
-        self.new + self.changed + self.removed > 0 || self.reset
+        self.new + self.changed + self.removed + self.fetched > 0 || self.reset
     }
 }
 
