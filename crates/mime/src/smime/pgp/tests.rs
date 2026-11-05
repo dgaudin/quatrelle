@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 use super::*;
 
 const SIGNED: &str = "From: Bo <bo@studio.example>\r\nSubject: Hi\r\nMIME-Version: 1.0\r\n\
@@ -40,6 +41,19 @@ fn pgp_mime_is_told_from_the_rest() {
     assert_eq!(protection(wrapped.as_bytes()), Protection::None);
     // No signature part, no encrypted part: nothing.
     assert_eq!(protection(SIGNED.replace("application/pgp-signature; name", "text/plain; name").as_bytes()), Protection::None);
+}
+
+#[test]
+fn pgp_mime_mail_is_marked_as_smime_is() {
+    use quatrelle_model::Smime;
+    for summary in [crate::summary_from_header, crate::summary_from_full] {
+        let marker = |raw: &str| summary(raw.as_bytes(), Default::default(), Default::default(), 0, 0).smime;
+        assert_eq!(marker(SIGNED), Smime::Signed);
+        assert_eq!(marker(ENCRYPTED), Smime::Encrypted);
+        // Another protocol, or OpenPGP inside a text, isn't marked: only a whole message is.
+        assert_eq!(marker(&ENCRYPTED.replace("pgp-encrypted\";", "x-unknown\";")), Smime::None);
+        assert_eq!(marker("From: a@b.example\r\nContent-Type: text/plain\r\n\r\n-----BEGIN PGP MESSAGE-----\r\n"), Smime::None);
+    }
 }
 
 #[test]
