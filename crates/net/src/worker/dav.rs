@@ -212,6 +212,7 @@ impl Worker {
     /// Sync calendars and address books with the account's CalDAV / CardDAV server (password
     /// accounts: OAuth tokens are for mail only).
     pub(super) fn sync_dav(&mut self) {
+        let _at_work = self.at_work();
         self.pim_synced();
         // Exchange Online: its calendars and contacts through Graph.
         if let Some(Conn::Graph(c)) = &self.conn {

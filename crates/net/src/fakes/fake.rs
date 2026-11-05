@@ -72,6 +72,9 @@ pub struct State {
     /// The next connection to wait in IDLE is cut this long after IDLE began, saying nothing: a
     /// connection lost on the way (the office's gateway changed over, 02/11).
     pub hang_up_idle: Option<std::time::Duration>,
+    /// Commands containing this text take this long (a big folder on a slow server): the
+    /// connection that sent it waits, others don't.
+    pub stall_on: Option<(String, std::time::Duration)>,
 }
 
 impl State {
@@ -96,6 +99,7 @@ impl State {
             deliver_on: None,
             create_under: None,
             hang_up_idle: None,
+            stall_on: None,
         }))
     }
 

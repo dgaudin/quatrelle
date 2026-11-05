@@ -697,6 +697,23 @@ fn id_by_message_id(c: &Client, folder_id: &str, mid: &str) -> Result<Option<Str
     Ok(None)
 }
 
+/// A message's server id found by its Message-ID in its folder (`mailboxes`: each folder path's
+/// id on the server), without the numbering: how a copy of the connection opens a message while
+/// the main one is at work, the numbering in its hands. `None`: no Message-ID here, or not found.
+pub fn find_by_message_id(
+    c: &Client,
+    mailboxes: &std::collections::BTreeMap<String, String>,
+    store: &Store,
+    key: &MessageKey,
+) -> Result<Option<String>> {
+    let Some(folder_id) = mailboxes.get(&key.folder).filter(|_| key.validity == VALIDITY) else { return Ok(None) };
+    let mid = store.load_folder(&key.account, &key.folder).ok().and_then(|f| f.find(key.uid).map(|m| m.message_id.clone())).unwrap_or_default();
+    if mid.trim().is_empty() {
+        return Ok(None);
+    }
+    id_by_message_id(c, folder_id, &mid)
+}
+
 /// Download one message's source (and cache it), with its summary as its folder now has it, filled
 /// from it ([`crate::sync::keep_source`]); one cached already comes as it is, with no summary.
 pub fn fetch_body(c: &Client, st: &mut State, store: &Store, key: &MessageKey) -> Result<(Vec<u8>, Option<Summary>)> {

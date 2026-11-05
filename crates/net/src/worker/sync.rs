@@ -169,6 +169,7 @@ impl Worker {
     /// The folder list, then every folder (Inbox first), staying responsive to opened messages.
     /// Refresh the folder list from the server; `false` when that failed.
     pub(super) fn relist(&mut self) -> bool {
+        let _at_work = self.at_work();
         let id = self.id();
         let listed = match self.conn.as_mut() {
             Some(Conn::Imap(c)) => c.list(&id),
@@ -442,6 +443,7 @@ impl Worker {
     /// [`Self::sync_one`], and when the server received the newest message that came in, if one
     /// did (for the log).
     pub(super) fn sync_one_newest(&mut self, path: &str) -> Option<i64> {
+        let _at_work = self.at_work();
         self.status(SyncStatus::Syncing { folder: path.to_string() });
         let (store, opts, id) = (self.store.clone(), self.options_for(path), self.id());
         // An edit still waiting is put back on the list once it's read (`apply_report`): the
@@ -629,6 +631,7 @@ impl Worker {
     /// calendar ticked is shown as soon as it's read, not with the last of those ticked
     /// together (two ticked in a row showed after 15 s, 29/10).
     pub(super) fn sync_calendars(&mut self, calendars: &[String]) {
+        let _at_work = self.at_work();
         // On the second connection (`main` names the first), connected as it's needed.
         if self.conn.is_none()
             && self.main.is_some()

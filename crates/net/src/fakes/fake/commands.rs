@@ -28,6 +28,10 @@ impl Fake {
             let delay = self.st.lock().map(|s| s.search_delay).unwrap_or_default();
             std::thread::sleep(delay);
         }
+        let stall = self.st.lock().ok().and_then(|s| s.stall_on.clone()).filter(|(text, _)| line.contains(text.as_str()));
+        if let Some((_, how_long)) = stall {
+            std::thread::sleep(how_long);
+        }
         let st = self.st.clone();
         let mut st = st.lock().unwrap();
         st.log.push(rest.to_string());

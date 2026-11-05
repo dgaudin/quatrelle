@@ -125,6 +125,8 @@ struct Handle {
     /// Set as the account stops, when its worker may yet be in a slow call: what's being brought
     /// on the side ([`rest::Rest`]) writes nothing from then on.
     stop: Arc<AtomicBool>,
+    /// Messages opened while the main connection is at work, brought on a copy of it.
+    opened: Arc<opening::Opened>,
 }
 
 /// What an account signs in with, shared by its connections: the password or refresh token, and
@@ -329,7 +331,7 @@ mod smime;
 mod sync;
 mod webex;
 
-use connect::{SyncDone, reader_stops, sync_folders};
+use connect::{SyncDone, connect_for_sync, reader_stops, sync_folders};
 
 /// Largest picture downloaded for a message.
 const MAX_PICTURE: usize = 8 << 20;
@@ -443,10 +445,10 @@ struct Worker {
     /// no push). A deadline, not a wait restarted by every job: while someone works (messages
     /// opened, pictures, read marks), the look kept being put off, and new mail with it.
     next_poll: Instant,
-    /// Big messages whose text came first, on their way whole. Ends with the worker.
-    rest: rest::Rest,
-    /// The server refused a message's text for how it was asked: not asked again this session.
-    text_refused: bool,
+    /// Big messages whose text came first, on their way whole. Shared with [`Worker::opened`].
+    rest: Arc<rest::Rest>,
+    /// The main connection's: messages opened while it's at work go to a copy of it.
+    opened: Option<Arc<opening::Opened>>,
 }
 
 /// Where an account keeps its folders' own windows.
@@ -486,7 +488,7 @@ impl Worker {
         let opts = if acc.keeps_online() { SyncOptions { prefetch: 0, full: false, ..opts } } else { opts };
         let windows = store.load_account_doc(&acc.id, WINDOWS).unwrap_or_default();
         let followed = store.load_account_doc(&acc.id, FOLLOWED_PUBLIC_DOC).unwrap_or_default();
-        let rest = rest::Rest::new(store.clone(), sink.clone());
+        let rest = Arc::new(rest::Rest::new(store.clone(), sink.clone()));
         Worker {
             acc,
             auth,
@@ -523,7 +525,7 @@ impl Worker {
             next_poll: Instant::now() + POLL_EVERY,
             listen: listening::Listening::default(),
             rest,
-            text_refused: false,
+            opened: None,
         }
     }
 

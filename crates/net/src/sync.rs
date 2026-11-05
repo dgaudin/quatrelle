@@ -534,20 +534,31 @@ pub fn fetch_body<S: Read + Write>(c: &mut Client<S>, store: &Store, key: &Messa
     if let Some(raw) = store.read_body(key) {
         return Ok((raw, None));
     }
+    let raw = fetch_source(c, key)?;
+    let filled = keep_source(store, key, &raw)?;
+    Ok((raw, filled))
+}
+
+/// The message's folder selected, if it isn't, and still the one the key was made in.
+fn select_for<S: Read + Write>(c: &mut Client<S>, key: &MessageKey) -> Result<()> {
     let info = if c.selected() == Some(key.folder.as_str()) { None } else { Some(c.select(&key.folder, false)?) };
     if let Some(i) = &info
         && i.validity != key.validity
     {
         return Err(crate::NetError::No("the folder changed on the server; refresh and try again".into()));
     }
+    Ok(())
+}
+
+/// One message's source from the server, nothing kept: its folder's list is left to the sync.
+pub fn fetch_source<S: Read + Write>(c: &mut Client<S>, key: &MessageKey) -> Result<Vec<u8>> {
+    select_for(c, key)?;
     let fetched = c.uid_fetch(&key.uid.to_string(), "UID BODY.PEEK[]", "")?;
-    let raw = fetched
+    fetched
         .into_iter()
         .find(|f| f.uid == key.uid)
         .and_then(|f| f.body)
-        .ok_or_else(|| crate::NetError::No("the message is no longer on the server".into()))?;
-    let filled = keep_source(store, key, &raw)?;
-    Ok((raw, filled))
+        .ok_or_else(|| crate::NetError::No("the message is no longer on the server".into()))
 }
 
 /// The messages of `folder` the server finds for `criteria`, the newest `cap` of them: their

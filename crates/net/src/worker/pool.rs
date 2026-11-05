@@ -491,6 +491,9 @@ impl Pool {
                 let quick = self.configs.get(&id).is_some_and(|c| quick_job(&other, c));
                 match self.workers.get(&id) {
                     Some(h) => {
+                        // A message opened while the main connection syncs a folder, or the
+                        // calendars, doesn't wait for that to end (issue #24).
+                        h.opened.offer(&other);
                         // Sending and automatic replies go on the second connection; if it has
                         // stopped, the main one does it (after its sync).
                         let other = match h.quick.as_ref().filter(|_| quick) {
@@ -556,7 +559,11 @@ impl Pool {
         let (creds, store, sink, opts, sieve_port, search) =
             (self.creds.clone(), self.store.clone(), self.sink.clone(), self.opts, self.sieve_port, self.search.clone());
         let (acc, main_tx, stop) = (account.clone(), tx.clone(), Arc::<AtomicBool>::default());
-        let stopped = Arc::clone(&stop);
+        // Whole messages and messages opened while the main connection works, shared with it.
+        let mut rest = rest::Rest::new(store.clone(), sink.clone());
+        rest.stop_on(Arc::clone(&stop));
+        let opened = Arc::new(opening::Opened::new(Arc::new(rest), tx.clone(), store.clone(), sink.clone()));
+        let for_worker = Arc::clone(&opened);
         let spawned = std::thread::Builder::new().name(format!("mail-{}", account.id)).spawn(move || {
             for t in before {
                 let _ = t.join();
@@ -566,7 +573,8 @@ impl Pool {
             w.creds = Some(creds.clone());
             w.sieve_port = sieve_port;
             w.search = search;
-            w.rest.stop_on(stopped);
+            w.rest = for_worker.rest();
+            w.opened = Some(for_worker);
             // The second connection: quiet (the account's status is the main one's), connecting
             // only when there's something to do. Should it not start, its jobs go to the main one.
             let mut q = Worker::with_numbering(acc.clone(), auth, store, sink, opts, acc.ews.is_none());
@@ -581,7 +589,7 @@ impl Pool {
         });
         match spawned {
             Ok(thread) => {
-                self.workers.insert(account.id.clone(), Handle { tx, thread: Some(thread), quick: Some(qtx), quick_thread: None, stop });
+                self.workers.insert(account.id.clone(), Handle { tx, thread: Some(thread), quick: Some(qtx), quick_thread: None, stop, opened });
             }
             Err(e) => self.sink.emit(Event::Status { account: account.id.clone(), status: SyncStatus::Error { error: e.to_string() } }),
         }
@@ -602,6 +610,7 @@ impl Pool {
     fn stopping(&mut self, account: &str) -> Vec<JoinHandle<()>> {
         let Some(mut h) = self.workers.remove(account) else { return Vec::new() };
         h.stop.store(true, Ordering::SeqCst);
+        h.opened.close();
         drop(h.tx);
         drop(h.quick.take());
         [h.thread.take(), h.quick_thread.take()].into_iter().flatten().collect()

@@ -21,6 +21,7 @@ mod gone;
 mod guests;
 mod listening;
 mod mailbox;
+mod opening;
 mod pushing;
 mod scheduling;
 mod tasks;
