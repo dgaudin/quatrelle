@@ -97,11 +97,12 @@ impl Store {
         state: &FolderState<M>,
         changed: Option<&std::collections::HashSet<u32>>,
     ) -> Result<usize> {
-        self.save_list(account, folder, state, changed, true)
+        self.save_list(account, folder, state, changed, true, &mut Vec::new())
     }
 
     /// [`Store::save_folder_counted`]; `waiting`: the edits waiting in ops.json made again on
-    /// the list first (not for a list just read from here, which has them).
+    /// the list first (not for a list just read from here, which has them); `extra`: other files
+    /// written in the same transaction (taken from it).
     fn save_list<M: Borrow<Summary>>(
         &self,
         account: &str,
@@ -109,6 +110,7 @@ impl Store {
         state: &FolderState<M>,
         changed: Option<&std::collections::HashSet<u32>>,
         waiting: bool,
+        extra: &mut Vec<(PathBuf, Vec<u8>)>,
     ) -> Result<usize> {
         // The marks beside the pages read and written with nothing in between (a sync's save
         // puts them into the pages while the edit writer keeps one more).
@@ -167,8 +169,10 @@ impl Store {
                 if marks.len() <= MARKS_MAX {
                     let list: Vec<(u32, &Flags)> = marks.into_iter().collect();
                     let bytes = serde_json::to_vec(&list).map_err(json_err(&marks_path))?;
-                    self.write_files(&[(marks_path, bytes)])?;
-                    return Ok(1);
+                    let mut writes = vec![(marks_path, bytes)];
+                    writes.append(extra);
+                    self.write_files(&writes)?;
+                    return Ok(writes.len());
                 }
                 // Too many: their pages are written again (as the list has them now), and the
                 // marks emptied.
@@ -201,6 +205,7 @@ impl Store {
             writes.push((marks_path, b"[]".to_vec()));
         }
         writes.push((head.clone(), serde_json::to_vec(&file).map_err(json_err(&head))?));
+        writes.append(extra);
         // The list and its pages together (one transaction in a data file).
         self.write_files(&writes)?;
         // Pages the list no longer has.
@@ -277,6 +282,12 @@ impl Store {
     /// changed. Moves only remove from the source: the destination learns the new UID at its
     /// next sync.
     pub fn apply_op(&self, account: &str, op: &Op) -> Result<Vec<String>> {
+        self.apply_op_with(account, op, &mut Vec::new())
+    }
+
+    /// [`Store::apply_op`], `extra` written in the same transaction as the first folder's list
+    /// or marks (taken from it; left there when no folder was written).
+    pub(super) fn apply_op_with(&self, account: &str, op: &Op, extra: &mut Vec<(PathBuf, Vec<u8>)>) -> Result<Vec<String>> {
         if op.is_folder_op() {
             return self.apply_folder_op(account, op);
         }
@@ -302,7 +313,7 @@ impl Store {
         for folder in &folders {
             // A flag or category in a big folder: the pages the messages are in alone read, and
             // their marks written beside them.
-            if matches!(op, Op::SetFlag { .. } | Op::SetKeyword { .. }) && self.mark_in_pages(account, folder, op)? {
+            if matches!(op, Op::SetFlag { .. } | Op::SetKeyword { .. }) && self.mark_in_pages(account, folder, op, extra)? {
                 continue;
             }
             let mut st = self.load_folder(account, folder)?;
@@ -344,7 +355,7 @@ impl Store {
                 Op::CreateFolder { .. } | Op::RenameFolder { .. } | Op::DeleteFolder { .. } | Op::EmptyFolder { .. } => {}
             }
             match &marked {
-                Some(uids) => self.save_list(account, folder, &st, Some(uids), false).map(drop)?,
+                Some(uids) => self.save_list(account, folder, &st, Some(uids), false, extra).map(drop)?,
                 None => self.save_folder(account, folder, &st)?,
             }
             // Once the list no longer has them: one that can't be saved keeps their sources.

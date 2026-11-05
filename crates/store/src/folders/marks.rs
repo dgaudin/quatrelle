@@ -33,7 +33,8 @@ impl Store {
     /// It read every page of the folder and wrote again the one each message is in: 100 to 170
     /// ms a mark on a folder of 50,000. False: not a list in pages so numbered (a small one, a
     /// head from before), or more marked than the marks hold: the whole list is read then.
-    pub(super) fn mark_in_pages(&self, account: &str, folder: &str, op: &Op) -> Result<bool> {
+    /// `extra`: other files written in the same transaction (taken from it when written).
+    pub(super) fn mark_in_pages(&self, account: &str, folder: &str, op: &Op, extra: &mut Vec<(PathBuf, Vec<u8>)>) -> Result<bool> {
         let _held = self.changes.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         let dir = self.folder_dir(account, folder);
         let head: StateFile = self.read_json(&dir.join("state.json"))?;
@@ -64,7 +65,38 @@ impl Store {
         }
         let list: Vec<(u32, Flags)> = marks.into_iter().collect();
         let bytes = serde_json::to_vec(&list).map_err(|source| StoreError::Json { path: marks_path.display().to_string(), source })?;
-        self.write_files(&[(marks_path, bytes)])?;
+        let mut writes = vec![(marks_path, bytes)];
+        writes.append(extra);
+        self.write_files(&writes)?;
         Ok(true)
+    }
+
+    /// A flag or category changed on a local account's messages (no server to send it to, no
+    /// journal), and the counts of the folders it touched as they are now (path, unread, total):
+    /// the marks and the account's `folders.json`, when its counts differ, written in one
+    /// transaction (the idea of upstream 7ab836b's `save_marks`). Two commits a message, on the
+    /// window's thread, made holding Down cost 25 ms a step. Returns the folders changed.
+    pub fn apply_marks(&self, account: &str, op: &Op, counts: &[(String, u32, u32)]) -> Result<Vec<String>> {
+        let mut extra = Vec::new();
+        let mut folders = self.load_folders(account)?;
+        let mut differ = false;
+        for (path, unread, total) in counts {
+            for f in folders.iter_mut().filter(|f| &f.path == path && (f.unread != *unread || f.total != *total)) {
+                f.unread = *unread;
+                f.total = *total;
+                differ = true;
+            }
+        }
+        if differ {
+            let path = self.account_dir(account).join("folders.json");
+            let bytes = serde_json::to_vec(&folders).map_err(|source| StoreError::Json { path: path.display().to_string(), source })?;
+            extra.push((path, bytes));
+        }
+        let changed = self.apply_op_with(account, op, &mut extra)?;
+        // No folder written (none of its messages kept here): the counts alone.
+        if !extra.is_empty() {
+            self.write_files(&extra)?;
+        }
+        Ok(changed)
     }
 }
