@@ -13,6 +13,7 @@
 //! A data file is hostile input like any other: the reader runs behind `catch_unwind`, items that
 //! can't be read are skipped and counted, and sizes are capped.
 
+use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, HashMap};
 use std::io;
 use std::path::Path;
@@ -31,14 +32,18 @@ use quatrelle_model::pim::{LOCAL, NOTE_YELLOW, Note, PIM_DOC, Pim, StoredCard, S
 use quatrelle_model::{EmailAddress, Flags, Folder, FolderRole, MessageKey, utf7};
 use quatrelle_store::{FolderState, Store};
 
+mod chunked;
 mod item;
+mod open;
 mod out;
 mod props;
 mod rebuild;
 #[cfg(test)]
 mod tests;
 
+use chunked::Shared;
 use item::{Files, Item, attachment, item, message_code_page, picture_of, unread_attachment};
+use open::Recycle;
 use out::Out;
 #[doc(hidden)]
 pub use props::Val;
@@ -95,6 +100,30 @@ pub struct Imported {
     /// The attachments left out of the messages that came in, by reason (`skipped` doesn't count
     /// them: their messages came in).
     pub files_left_out: BTreeMap<FileLeftOut, usize>,
+    /// How the data file was read (logged; for tests and measuring).
+    #[doc(hidden)]
+    pub reading: Reading,
+}
+
+/// How a data file was read: bytes read from it, in so many reads, and how many times the handle
+/// that reads items was opened again to let go of its caches.
+#[doc(hidden)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Reading {
+    pub bytes: u64,
+    pub reads: u64,
+    pub reopens: u64,
+}
+
+impl Reading {
+    /// What was read of the data file through `source`, with the item handle reopened `reopens` times.
+    fn add(&mut self, source: &Shared, reopens: u64) {
+        if let Ok(s) = source.try_borrow() {
+            self.bytes = self.bytes.saturating_add(s.bytes_read);
+            self.reads = self.reads.saturating_add(s.reads);
+        }
+        self.reopens = self.reopens.saturating_add(reopens);
+    }
 }
 
 /// Why one of a message's attachments didn't come in with it.
@@ -115,6 +144,11 @@ pub enum FileLeftOut {
 /// Import the data file at `path` into `account`'s cache (an account with no server). Calls
 /// `progress` with the number of messages imported so far, every so often.
 pub fn import(path: &Path, store: &Store, account: &str, progress: &mut dyn FnMut(usize)) -> Result<Imported, String> {
+    import_recycled(path, store, account, Recycle::default(), progress)
+}
+
+/// [`import`], the handle that reads items opened again as `recycle` says.
+fn import_recycled(path: &Path, store: &Store, account: &str, recycle: Recycle, progress: &mut dyn FnMut(usize)) -> Result<Imported, String> {
     let mut out = Out::new(store, account, progress);
     // `!BDN` then the client magic: `SM` a data file, `SO` Outlook's offline copy of a server
     // account (MS-PST 2.2.2.6).
@@ -126,11 +160,20 @@ pub fn import(path: &Path, store: &Store, account: &str, progress: &mut dyn FnMu
         return Err("this is Outlook's offline copy of a server account (.ost), not a data file: add the account itself to see its mail".into());
     }
     let read = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| -> io::Result<()> {
-        match UnicodePstFile::open(path) {
-            Ok(pst) => read_unicode(pst, &mut out),
-            // Locked by Outlook: say so, rather than trying it as the older format.
-            Err(e) if matches!(e.raw_os_error(), Some(32 | 33)) => Err(e),
-            Err(_) => read_ansi(AnsiPstFile::open(path)?, &mut out),
+        // Read only, and kept from writers while it's read. Locked by Outlook, this is what fails:
+        // said so below, rather than tried as the older format.
+        let source = open::source(path)?;
+        let (walk, _) = open::handle(&source);
+        match UnicodePstFile::read_from(walk) {
+            Ok(pst) => read_unicode(pst, &source, recycle, &mut out),
+            Err(_) => {
+                out.reading.add(&source, 0);
+                drop(source);
+                // The older format, read from the start through a handle of its own.
+                let source = open::source(path)?;
+                let (walk, _) = open::handle(&source);
+                read_ansi(AnsiPstFile::read_from(walk)?, &source, recycle, &mut out)
+            }
         }
     }));
     match read {
@@ -168,13 +211,34 @@ pub fn rebuilt<'a>(props: &[(u16, Val<'a>)], recipients: &[Vec<(u16, Val<'a>)>])
 
 macro_rules! reader {
     ($name:ident, $file:ty, $store:ty, $message:ty, $attachment:ty) => {
-        fn $name(pst: $file, out: &mut Out<'_>) -> io::Result<()> {
-            pst.set_max_value_size(MAX_VALUE);
-            let store = <$store>::read(Rc::new(pst))?;
+        fn $name(pst: $file, source: &Shared, recycle: Recycle, out: &mut Out<'_>) -> io::Result<()> {
+            let store_of = |pst: $file| {
+                pst.set_max_value_size(MAX_VALUE);
+                <$store>::read(Rc::new(pst))
+            };
+            // The handle that reads folders and their tables; items are read through another,
+            // opened again (with what was read of the file still cached) as its caches grow.
+            let store = store_of(pst)?;
             let any: Rc<dyn PstStore> = store.clone();
             let named = crate::pst_pim::Named::of(&*any);
+            let items: RefCell<Option<(Rc<$store>, chunked::Pages, usize)>> = RefCell::new(None);
+            let reopens = Cell::new(0u64);
             let read = |entry: &EntryId| -> io::Result<Item> {
-                let m = <$message>::read(store.clone(), entry, None)?;
+                let store = {
+                    let mut held = items.try_borrow_mut().map_err(io::Error::other)?;
+                    if held.as_ref().is_none_or(|(_, pages, n)| recycle.due(*n, pages)) {
+                        // The old handle, and its caches, go before the new one is made.
+                        if held.take().is_some() {
+                            reopens.set(reopens.get().saturating_add(1));
+                        }
+                        let (reader, pages) = open::handle(source);
+                        *held = Some((store_of(<$file>::read_from(reader)?)?, pages, 0));
+                    }
+                    let Some((store, _, n)) = held.as_mut() else { return Err(io::Error::other("no handle to read with")) };
+                    *n = n.saturating_add(1);
+                    store.clone()
+                };
+                let m = <$message>::read(store, entry, None)?;
                 let cp = message_code_page(&*m);
                 let mut files = Files::default();
                 let mut photo = None;
@@ -194,7 +258,9 @@ macro_rules! reader {
                 }
                 Ok(Item { left_out: files.left_out, ..item(&*m, files.files, &named, photo) })
             };
-            walk(&*any, &read, out)
+            let done = walk(&*any, &read, out);
+            out.reading.add(source, reopens.get());
+            done
         }
     };
 }
