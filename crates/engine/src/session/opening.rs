@@ -8,6 +8,8 @@ use super::*;
 mod senders;
 pub use senders::SenderMarks;
 pub(crate) use senders::Senders;
+mod selecting;
+pub use selecting::Toward;
 
 impl Session {
     pub fn open_view(&mut self, view: View) {
@@ -34,6 +36,7 @@ impl Session {
         self.summary_index = None;
         self.selection.clear();
         self.focus = None;
+        self.anchor = None;
         self.reading = None;
         self.leave_reading(None);
         self.refresh_list();
@@ -88,6 +91,7 @@ impl Session {
         self.filter_keep = Some(key.clone());
         self.selection = vec![key.clone()];
         self.focus = Some(key.clone());
+        self.anchor = Some(key.clone());
         let thread = self.thread_of(key);
         self.reading = Some(Reading { key: key.clone(), parsed: None, error: None, thread, warning: None, security: None, text_first: false });
         let cached = if key.folder == OUTBOX {

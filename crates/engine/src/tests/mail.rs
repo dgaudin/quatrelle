@@ -5,6 +5,7 @@
 
 use super::*;
 
+mod selecting;
 mod shown;
 mod store_errors;
 mod text_first;

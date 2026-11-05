@@ -210,6 +210,10 @@ pub(crate) fn tour() {
         a.run("compose.discard", json!({}));
         a.session.accounts.retain(|x| x.config.id != file);
         a.session.take_jobs();
+        // Several selected (issue #26).
+        a.run("list.extendNext", json!({}));
+        frame(&ctx, &mut a, vec![]);
+        a.run("list.open", json!({"key": k.to_id()}));
         backstage_tour(&mut a, &ctx);
         pim_tour(&mut a, &ctx);
         updates::tour(&mut a, &ctx);

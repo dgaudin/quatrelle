@@ -5,6 +5,8 @@
 
 use super::*;
 
+mod selecting;
+
 /// A folder's name too long for the folder pane stays on one line, ending in "…" (its whole name
 /// under the pointer): "All Inboxes" in French went on two lines, out of its row.
 #[test]

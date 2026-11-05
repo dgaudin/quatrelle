@@ -50,6 +50,7 @@ pub use mailboxes::{
     Suggestion, directory_people, fill_name,
 };
 pub use opening::SenderMarks;
+pub use opening::Toward;
 pub use organize::{RulesScope, junk, quick_steps, search_folders};
 pub use prefs::{
     ListLayout, MEETINGS_PROFILE, NotesOrder, PictureLoading, Prefs, READING_ZOOM, RECENT_EMOJI, ReadInPane, ReadingPane, SenderAddresses,
@@ -350,6 +351,9 @@ pub struct Session {
     pub threads: Vec<Thread>,
     pub selection: Vec<MessageKey>,
     pub focus: Option<MessageKey>,
+    /// Where a range of selected messages starts (Shift+click, Shift+Down): it stays put while
+    /// `focus`, the other end, moves (issue #26).
+    pub anchor: Option<MessageKey>,
     pub reading: Option<Reading>,
     /// Messages opened in their own windows (double-click), oldest first.
     pub windows: Vec<Reading>,
@@ -561,6 +565,7 @@ impl Session {
             threads: Vec::new(),
             selection: Vec::new(),
             focus: None,
+            anchor: None,
             reading: None,
             windows: Vec::new(),
             compose: None,

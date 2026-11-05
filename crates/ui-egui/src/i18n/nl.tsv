@@ -1912,3 +1912,4 @@ folder	Conflicts	Conflicten
 	This account has no outgoing (SMTP) server.	Dit account heeft geen server voor uitgaande e-mail (SMTP).
 	Add one in its account settings to send mail.	Voeg er een toe in de accountinstellingen om e-mail te verzenden.
 	{subject}: not sent, this account can't send mail	{subject}: niet verzonden, dit account kan geen e-mail verzenden
+	{n} messages selected	{n} berichten geselecteerd

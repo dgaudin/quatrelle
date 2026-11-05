@@ -1913,3 +1913,4 @@ folder	Conflicts	冲突
 	This account has no outgoing (SMTP) server.	此帐户没有发送 (SMTP) 服务器。
 	Add one in its account settings to send mail.	请在帐户设置中添加一个以发送邮件。
 	{subject}: not sent, this account can't send mail	{subject}: 未发送，此帐户无法发送邮件
+	{n} messages selected	已选择 {n} 封邮件

@@ -1915,3 +1915,4 @@ folder	Conflicts	Конфликты
 	This account has no outgoing (SMTP) server.	У этой учётной записи нет сервера исходящей почты (SMTP).
 	Add one in its account settings to send mail.	Добавьте его в параметрах учётной записи, чтобы отправлять почту.
 	{subject}: not sent, this account can't send mail	{subject}: не отправлено, с этой учётной записи нельзя отправлять почту
+	{n} messages selected	Выбрано писем: {n}
