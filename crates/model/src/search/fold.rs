@@ -49,6 +49,27 @@ pub fn fold_word(w: &str) -> Cow<'_, str> {
     Cow::Owned(out)
 }
 
+/// A text [folded](fold_word), each run of white space one space: what a phrase is looked for
+/// in (and the phrase itself), so it's found where the text breaks its line (HTML mail made text
+/// wraps its lines).
+pub(super) fn fold_spaced(text: &str) -> String {
+    let folded = fold_word(text);
+    let mut out = String::with_capacity(folded.len());
+    let mut space = false;
+    for c in folded.chars() {
+        if c.is_whitespace() {
+            if !space {
+                out.push(' ');
+            }
+            space = true;
+        } else {
+            out.push(c);
+            space = false;
+        }
+    }
+    out
+}
+
 /// A text's words, folded, as search indexes them: none empty, none longer than
 /// [`MAX_TOKEN_CHARS`].
 pub fn tokens(text: &str) -> impl Iterator<Item = Cow<'_, str>> {

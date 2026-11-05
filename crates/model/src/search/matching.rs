@@ -4,6 +4,7 @@
 //! Checking a message against a [`Query`]: the words the index narrows by, and each clause.
 //! Both sides are read [folded](fold_word): `resume` finds "Résumé", `résumé` "resume".
 
+use super::fold::fold_spaced;
 use super::*;
 
 impl Query {
@@ -75,8 +76,9 @@ fn clause_matches(term: &Term, doc: &Doc<'_>) -> bool {
         Term::Size(true, b) => u64::from(m.size) > *b,
         Term::Size(false, b) => u64::from(m.size) < *b,
         Term::AnyOf(ts) => ts.iter().any(|t| clause_matches(t, doc)),
-        // Folded a letter at a time on both sides: the phrase's spaces and signs stay as typed.
-        Term::Phrase(f, p) => fold_word(&field_text(f, doc)).contains(fold_word(p).as_ref()),
+        // Folded a letter at a time on both sides, white space as one space: the phrase's signs
+        // stay as typed, and a line break in the text is a space.
+        Term::Phrase(f, p) => fold_spaced(&field_text(f, doc)).contains(fold_spaced(p).as_str()),
         // Found through the index for these words: they're there (summary or body).
         Term::Words(Field::Any, ws) if doc.indexed && doc.body.is_none() && ws.iter().all(|w| !w.contains(['@', '.'])) => true,
         Term::Words(f, ws) => {
