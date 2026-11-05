@@ -247,7 +247,7 @@ pub fn open(data: &[u8], keys: &[&[u8]]) -> Result<Decrypted, Error> {
     })
 }
 
-fn secret(data: &[u8]) -> Result<SignedSecretKey, Error> {
+pub(crate) fn secret(data: &[u8]) -> Result<SignedSecretKey, Error> {
     if data.len() > MAX {
         return Err(Error::TooBig);
     }

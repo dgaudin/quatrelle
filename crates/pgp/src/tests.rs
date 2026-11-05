@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 use pgp::composed::{EncryptionCaps, KeyType, SecretKeyParamsBuilder, SubkeyParamsBuilder};
 use pgp::crypto::ecc_curve::ECCCurve;
 use pgp::ser::Serialize as _;
@@ -8,6 +9,7 @@ use super::*;
 
 mod gnupg;
 mod hostile;
+mod make;
 
 const NOW: i64 = 1_800_000_000;
 

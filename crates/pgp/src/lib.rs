@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Quatrelle OpenPGP (RFC 9580): the cryptography under PGP/MIME (RFC 3156) and inline PGP mail,
 //! with the MIME around it left to `quatrelle-mime`, on rPGP.
 //!
@@ -27,10 +28,12 @@
 mod armor;
 pub mod autocrypt;
 mod keys;
+mod make;
 mod message;
 
 pub use armor::{Inline, inline};
 pub use keys::{KeyInfo, Problem, Unlocked, info, minimal, public_keys, read_secret_key, same_key};
+pub use make::{EXPIRY_WARNING_SECS, VALID_FOR_SECS, extend, generate};
 pub use message::{Check, Decrypted, decrypt, encrypt, is_encrypted, open, recipients, sign, verify, verify_cleartext};
 
 /// Larger OpenPGP input than this isn't read, and nothing decrypts or decompresses to more.
