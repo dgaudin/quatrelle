@@ -5,6 +5,7 @@
 
 use super::*;
 
+mod deferred;
 mod echo;
 mod marks;
 mod nav;
