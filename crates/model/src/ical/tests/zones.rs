@@ -189,3 +189,24 @@ fn set_positions_pick_among_the_days() {
         assert!(starts(&mk(r, at(2026, 1, 5, 9, 0)), at(2027, 1, 1, 0, 0)).len() <= 366, "{r}");
     }
 }
+
+/// Hourly, minutely and secondly rules step from the start, on the days the rule allows; their
+/// count and end hold, and a step of nothing (or a hostile one) ends.
+#[test]
+fn rules_within_a_day() {
+    let start = days_from_civil(2026, 11, 6) * 86_400 + 22 * 3600; // a Friday, 22:00
+    let e = |rule: &str| CalEvent { start, end: start + 600, rrule: Some(rule.into()), ..Default::default() };
+    let hours = |rule: &str| starts(&e(rule), i64::MAX).iter().map(|t| (t - start) / 3600).collect::<Vec<_>>();
+    assert_eq!(hours("FREQ=HOURLY;INTERVAL=2;COUNT=4"), [0, 2, 4, 6]);
+    // Friday's and Monday's only: the weekend's hours are passed over, and not counted.
+    assert_eq!(hours("FREQ=HOURLY;INTERVAL=12;BYDAY=MO,FR;COUNT=3"), [0, 60, 72]);
+    assert_eq!(starts(&e("FREQ=MINUTELY;INTERVAL=15;UNTIL=20261106T224500Z"), i64::MAX).len(), 4);
+    assert_eq!(starts(&e("FREQ=SECONDLY;COUNT=3"), i64::MAX), [start, start + 1, start + 2]);
+    // No end: capped, and only up to `before`.
+    assert_eq!(starts(&e("FREQ=HOURLY"), start + 5 * 3600).len(), 5);
+    assert!(starts(&e("FREQ=SECONDLY"), i64::MAX).len() <= 50_000);
+    // At its wall-clock days where it is: in New York, 22:00 Friday is Saturday in UTC.
+    let ny = CalEvent { tzid: "America/New_York".into(), start: start + 5 * 3600, ..e("FREQ=HOURLY;BYDAY=FR;COUNT=2") };
+    assert_eq!(starts(&ny, i64::MAX), [start + 5 * 3600, start + 6 * 3600]);
+    let _ = starts(&CalEvent { start: i64::MAX - 10, ..e("FREQ=HOURLY") }, i64::MAX);
+}
