@@ -22,6 +22,7 @@ pub(crate) mod browsers;
 pub(crate) mod file_dialogs;
 pub(crate) mod keychain;
 pub(crate) mod profiles;
+pub(crate) mod state_writer;
 pub(crate) mod tray;
 
 #[derive(Default)]
