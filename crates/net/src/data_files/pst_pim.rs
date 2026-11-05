@@ -7,7 +7,7 @@
 //! Most of what makes a contact or an appointment lives in *named* properties: their ids differ
 //! from file to file and are found through the file's name-to-id map (MS-PST 2.4.7). The
 //! recurrence of a repeating appointment is a binary pattern (MS-OXOCAL 2.2.1.44), read into an
-//! RFC 5545 rule (`recur`).
+//! RFC 5545 rule, its deleted occurrences and its changed ones (`recur`).
 
 use std::collections::HashMap;
 
@@ -27,6 +27,7 @@ mod recur;
 pub(crate) use groups::group_of;
 pub(crate) use meetings::invitation;
 use recur::recurrence;
+pub(crate) use recur::{Own, changed_events};
 
 type GuidKey = (u32, u16, u16, [u8; 8]);
 const OLE: [u8; 8] = [0xC0, 0, 0, 0, 0, 0, 0, 0x46];
@@ -39,7 +40,7 @@ const PSETID_LOG: GuidKey = (0x0006_200A, 0, 0, OLE);
 const PSETID_MEETING: GuidKey = (0x6ED8_DA90, 0x450B, 0x101B, [0x98, 0xDA, 0x00, 0xAA, 0x00, 0x3F, 0x13, 0x05]);
 /// Name-to-id entries read at most.
 const MAX_NAMES: usize = 200_000;
-/// Deleted occurrences read at most.
+/// Deleted (and changed) occurrences read at most.
 const MAX_EXCEPTIONS: usize = 5_000;
 /// An event's categories kept at most.
 const MAX_CATEGORIES: usize = 64;
@@ -167,6 +168,9 @@ pub(crate) struct Extra {
     /// A journal entry's start and end.
     pub log_start: Option<i64>,
     pub log_end: Option<i64>,
+    /// A changed occurrence's item (attached to its series): the start of the occurrence it
+    /// replaces (PidLidExceptionReplaceTime).
+    pub replaces: Option<i64>,
 }
 
 /// Read the contact and appointment properties of an item.
@@ -254,6 +258,7 @@ pub(crate) fn extract<'a>(p: &dyn Fn(u16) -> Option<Val<'a>>, named: &Named) -> 
             _ => Some(15),
         };
     }
+    x.replaces = n(PSETID_APPOINTMENT, 0x8228).and_then(|v| v.time());
     x.members = groups::members(n(PSETID_ADDRESS, 0x8054), n(PSETID_ADDRESS, 0x8055));
     x.log_start = n(PSETID_LOG, 0x8706).and_then(|v| v.time());
     x.log_end = n(PSETID_LOG, 0x8708).and_then(|v| v.time()).or_else(|| match (x.log_start, n(PSETID_LOG, 0x8707)) {
@@ -391,4 +396,4 @@ pub(crate) fn event_of(x: &Extra, subject: &str, body: &str, from: &EmailAddress
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

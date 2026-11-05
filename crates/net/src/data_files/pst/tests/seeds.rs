@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 Didier Gaudin
-//! The fuzz targets' seeds for data files (`fuzz/seeds/pst`, `pst_item`, `pst_props`) read as
+//! The fuzz targets' seeds for data files (`fuzz/seeds/pst`, `pst_item`, `pst_props`,
+//! `pst_recurrence`) read as
 //! their targets read them, without cargo-fuzz: none may panic, and what `pst_item` checks of
 //! the rebuilt header holds.
 
@@ -125,5 +126,22 @@ fn the_pst_props_seeds_read_in_every_page() {
         for page in [0, 932, 936, 949, 1200, 1201, 1251, 1252, 20127, 50220, 50225, 51932, 54936, 65000, 65001, 10007, 28606, 99_999] {
             let _ = text_from_bytes(bytes, page, html & 1 == 1);
         }
+    }
+}
+
+/// `pst_recurrence`: the first occurrence's start (eight bytes), then an appointment's pattern;
+/// the series and its changed occurrences, each replacing one occurrence, written and read again.
+#[test]
+fn the_pst_recurrence_seeds_read_without_a_panic() {
+    for (name, data) in seeds("pst_recurrence") {
+        let Some((start, pattern)) = data.split_first_chunk::<8>() else { continue };
+        let events = super::super::repeating(pattern, i64::from_le_bytes(*start));
+        let (series, changed) = events.split_first().unwrap();
+        assert!(series.recurrence_id.is_none() && !changed.is_empty(), "{name}");
+        for e in changed {
+            assert!(e.recurrence_id.is_some() && e.rrule.is_none() && e.exdates.is_empty() && e.end >= e.start, "{name}");
+            assert_eq!(e.uid, series.uid);
+        }
+        let _ = quatrelle_model::ical::parse(&quatrelle_model::ical::write(&events, None, 0), 0);
     }
 }

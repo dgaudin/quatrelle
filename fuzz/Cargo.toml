@@ -19,6 +19,7 @@ bin = [
     { name = "pst", bench = false, test = false, doc = false, path = "fuzz_targets/pst/import.rs" }, # Outlook data file import
     { name = "pst_item", bench = false, test = false, doc = false, path = "fuzz_targets/pst/item.rs" }, # a .pst item rebuilt from its properties
     { name = "pst_props", bench = false, test = false, doc = false, path = "fuzz_targets/pst/props.rs" }, # text in a data file's properties, by code page
+    { name = "pst_recurrence", bench = false, test = false, doc = false, path = "fuzz_targets/pst/recurrence.rs" }, # a .pst appointment's recurrence and its changed occurrences
     { name = "search", bench = false, test = false, doc = false, path = "fuzz_targets/search.rs" }, # the search box and its filters
     { name = "signature", bench = false, test = false, doc = false, path = "fuzz_targets/signature.rs" }, # the signature read against the sender
     { name = "text_first", bench = false, test = false, doc = false, path = "fuzz_targets/text_first.rs" }, # Exchange's and Graph's answers, read as a message's text
