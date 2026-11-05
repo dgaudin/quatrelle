@@ -97,20 +97,7 @@ pub struct Imported {
 /// Import the data file at `path` into `account`'s cache (an account with no server). Calls
 /// `progress` with the number of messages imported so far, every so often.
 pub fn import(path: &Path, store: &Store, account: &str, progress: &mut dyn FnMut(usize)) -> Result<Imported, String> {
-    let mut out = Out {
-        store,
-        account,
-        folders: Vec::new(),
-        states: HashMap::new(),
-        imported: 0,
-        skipped: 0,
-        charset_unsupported: 0,
-        body_not_converted: 0,
-        progress,
-        pim: Pim::default(),
-        pending: Vec::new(),
-        pending_bytes: 0,
-    };
+    let mut out = Out::new(store, account, progress);
     // `!BDN` then the client magic: `SM` a data file, `SO` Outlook's offline copy of a server
     // account (MS-PST 2.2.2.6).
     let mut head = [0u8; 10];

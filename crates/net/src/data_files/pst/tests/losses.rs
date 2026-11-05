@@ -7,20 +7,7 @@ use super::*;
 
 /// An empty import's state, writing into `store` for `account`.
 fn out<'a>(store: &'a Store, account: &'a str, progress: &'a mut dyn FnMut(usize)) -> Out<'a> {
-    Out {
-        store,
-        account,
-        folders: Vec::new(),
-        states: HashMap::new(),
-        imported: 0,
-        skipped: 0,
-        charset_unsupported: 0,
-        body_not_converted: 0,
-        progress,
-        pim: Pim::default(),
-        pending: Vec::new(),
-        pending_bytes: 0,
-    }
+    Out::new(store, account, progress)
 }
 
 /// A mail item as read from a data file.
