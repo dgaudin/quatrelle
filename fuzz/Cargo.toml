@@ -16,6 +16,7 @@ bin = [
     { name = "index_text", bench = false, test = false, doc = false, path = "fuzz_targets/index_text.rs" }, # raw message sources read for search
     { name = "jmap", bench = false, test = false, doc = false, path = "fuzz_targets/jmap.rs" }, # JMAP replies, push events and URLs
     { name = "mime_parse", bench = false, test = false, doc = false, path = "fuzz_targets/mime_parse.rs" }, # raw message sources
+    { name = "pgp", bench = false, test = false, doc = false, path = "fuzz_targets/crypto/pgp.rs" }, # OpenPGP keys, messages, signatures, Autocrypt
     { name = "pst", bench = false, test = false, doc = false, path = "fuzz_targets/pst/import.rs" }, # Outlook data file import
     { name = "pst_item", bench = false, test = false, doc = false, path = "fuzz_targets/pst/item.rs" }, # a .pst item rebuilt from its properties
     { name = "pst_props", bench = false, test = false, doc = false, path = "fuzz_targets/pst/props.rs" }, # text in a data file's properties, by code page
@@ -35,6 +36,8 @@ quatrelle-jmap.path = "../crates/jmap" # the JMAP client
 quatrelle-mime.path = "../crates/mime" # MIME, HTML and markup
 quatrelle-model.path = "../crates/model" # iCalendar, vCard, search
 quatrelle-net.path = "../crates/net" # IMAP, WebDAV, .pst
+quatrelle-pgp.path = "../crates/pgp" # OpenPGP
+rand_core = "0.6" # the numbers a key's new signatures take
 quatrelle-store.path = "../crates/store" # the in-memory cache syncs write to; data files
 serde_json = "1" # Graph's answers
 
