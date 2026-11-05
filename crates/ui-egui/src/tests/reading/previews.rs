@@ -38,7 +38,8 @@ fn pictures_past_those_kept_are_not_decoded_each_frame() {
     frame(&ctx, &mut a, vec![]);
     a.run("list.open", json!({"key": key.to_id()}));
     let input = || RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1280.0, 800.0))), ..Default::default() };
-    for _ in 0..10 {
+    // A picture a frame (no threads here), all from one read.
+    for _ in 0..100 {
         ctx.run_ui(input(), |ui| a.ui(ui)).textures_delta.clear();
     }
     let reads = store.reads();

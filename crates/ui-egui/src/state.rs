@@ -92,11 +92,15 @@ pub struct UiState {
     /// are drawn compact, and their columns ([`widgets::GroupFit`]).
     pub(super) ribbon_groups: HashMap<String, RibbonGroups>,
     pub dialog: Option<Dialog>,
-    /// Attachments' thumbnails (pictures, PDF pages, video frames), and the frame each was last
-    /// shown in (`reading/attachments.rs`).
-    pub(super) previews: HashMap<(MessageKey, usize), (Option<egui::TextureHandle>, u64)>,
-    /// Messages' pictures as shown (texture, own size): by address, or by message and attachment.
-    pub(super) shown_pictures: HashMap<String, Option<(egui::TextureHandle, egui::Vec2)>>,
+    /// The pictures of the messages shown: attachment thumbnails, pictures in HTML, a picture or
+    /// a PDF's pages at the pane's size ([`reading::Pictures`]).
+    pub(crate) pictures: reading::Pictures,
+    /// Video attachments' thumbnails, and the frame each was last shown in
+    /// (`reading/attachments.rs`).
+    pub(super) video_thumbs: HashMap<(MessageKey, usize), (Option<egui::TextureHandle>, u64)>,
+    /// Web and carried pictures as shown (texture, own size), by address, and the frame each was
+    /// last shown in (the oldest go when there are too many).
+    pub(super) shown_pictures: HashMap<String, (Option<(egui::TextureHandle, egui::Vec2)>, u64)>,
     /// The heights of HTML messages' table cells as last drawn, for their rows' alignment.
     pub(super) cell_heights: reading::CellHeights,
     pub toast: Option<(String, bool, f64)>,
@@ -138,7 +142,7 @@ pub struct UiState {
     /// The interface language setting (`auto` or a language code).
     pub language: String,
     /// The fonts installed, kept to add a CJK fallback later (and for PDF thumbnails).
-    pub(crate) fonts: (Option<Vec<u8>>, Option<Vec<u8>>),
+    pub(crate) fonts: thumbs::Fonts,
     /// A fallback font for Arabic and Hebrew (when the main font hasn't them).
     pub(super) rtl_font: Option<Vec<u8>>,
     /// The system was asked for its colour emoji font (`look/emoji.rs`), once.

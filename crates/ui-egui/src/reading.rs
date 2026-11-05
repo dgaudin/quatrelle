@@ -27,10 +27,10 @@ mod plain;
 mod security;
 mod sender;
 mod sender_check;
+pub(crate) use attachments::decode;
 #[cfg(test)]
 pub(crate) use attachments::previewed_text;
 use attachments::*;
-pub(crate) use attachments::{big_picture, decode};
 pub(crate) use body::CellHeights;
 use body::*;
 pub use compose::compose_window;
@@ -40,6 +40,7 @@ pub(crate) use compose::picture_alone;
 pub(crate) use compose::send_block_lines;
 pub(crate) use compose::send_block_text;
 use pictures::*;
+pub(crate) use pictures::{Got, Pictures, Want};
 pub(crate) use sender_check::{external_tag, sender_warning};
 /// A picture cut to a circle: its middle square is kept (a picture that isn't square would
 /// otherwise fill a square box stretched, its circle an oval), then everything outside the
@@ -117,17 +118,30 @@ pub(crate) fn decode_sized(ctx: &egui::Context, name: &str, data: &[u8], max: u3
 }
 
 fn decode_sized_with(ctx: &egui::Context, name: &str, data: &[u8], max: u32, round: bool) -> Option<(egui::TextureHandle, Vec2)> {
+    let limit = ctx.input(|i| i.max_texture_side).try_into().unwrap_or(u32::MAX);
+    let (ci, filter, own) = pixels_of(data, max, limit, round)?;
+    Some((ctx.load_texture(name, ci, filter), own))
+}
+
+/// A picture's pixels, at most `max` pixels on a side and never more than `limit` (the graphics
+/// card's largest), how to draw them, and the picture's own size; pure, so it can run off the
+/// window's thread (from upstream 321bef2). Pictures are hostile input: see [`decoded`].
+pub(crate) fn decode_pixels(data: &[u8], max: u32, limit: u32) -> Option<(egui::ColorImage, egui::TextureOptions, Vec2)> {
+    pixels_of(data, max, limit, false)
+}
+
+fn pixels_of(data: &[u8], max: u32, limit: u32, round: bool) -> Option<(egui::ColorImage, egui::TextureOptions, Vec2)> {
     let decoded = decoded(data)?;
     let own = vec2(decoded.width() as f32, decoded.height() as f32);
     // Never bigger than the graphics card takes (a software or browser one may take 2048 only).
-    let max = max.min(ctx.input(|i| i.max_texture_side).try_into().unwrap_or(u32::MAX)).max(1);
+    let max = max.min(limit).max(1);
     // Shrink large pictures; never enlarge small ones (the painter scales them crisply).
     let img = if decoded.width() > max || decoded.height() > max { decoded.thumbnail(max, max) } else { decoded }.to_rgba8();
     let (size, pixels) = if round { round_pixels(img) } else { ([img.width() as usize, img.height() as usize], img.into_raw()) };
     let ci = egui::ColorImage::from_rgba_unmultiplied(size, &pixels);
     // Pixel art and tiny swatches stay crisp when scaled up.
     let filter = if size[0].max(size[1]) < 96 { egui::TextureOptions::NEAREST } else { egui::TextureOptions::LINEAR };
-    Some((ctx.load_texture(name, ci, filter), own))
+    Some((ci, filter, own))
 }
 
 /// HTML written by hand (a signature) as a message shows it: its layout, text and links, its

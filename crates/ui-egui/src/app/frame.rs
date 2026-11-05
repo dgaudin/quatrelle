@@ -206,6 +206,13 @@ impl MailApp {
         }
     }
 
+    /// The pictures this frame drew ask for their work, and what's done of it becomes textures
+    /// (from upstream 321bef2).
+    fn pictures_drawn(&mut self, ctx: &egui::Context) {
+        let open = self.session.reading.as_ref().map(|r| (&r.key, r.parsed.as_ref().map_or(&[][..], |p| &p.attachments[..])));
+        self.ui.pictures.end_frame(ctx, self.session.store.as_ref(), open, &self.ui.fonts);
+    }
+
     /// The whole window.
     pub fn ui(&mut self, ui: &mut Ui) {
         // The switch in Options, wherever it was changed from (a command, another window).
@@ -278,12 +285,13 @@ impl MailApp {
         if let Some(key) = self.ui.page_message.clone() {
             self.message_page(ui, &key, &mut acts);
             if let Some(mut d) = self.ui.dialog.take() {
-                let keep = dialogs::show(&ctx, &mut d, &self.session, &mut self.ui.people, &t, &mut acts);
+                let keep = dialogs::show(&ctx, &mut d, &self.session, &mut self.ui.people, &mut self.ui.pictures, &t, &mut acts);
                 if keep && self.ui.dialog.is_none() {
                     self.ui.dialog = Some(d);
                 }
             }
             self.toasts(&ctx);
+            self.pictures_drawn(&ctx);
             for a in acts {
                 self.act(a);
             }
@@ -534,7 +542,7 @@ impl MailApp {
             if in_window && d.for_compose() {
                 self.ui.dialog = Some(d);
             } else {
-                let keep = dialogs::show(&ctx, &mut d, &self.session, &mut self.ui.people, &t, &mut acts);
+                let keep = dialogs::show(&ctx, &mut d, &self.session, &mut self.ui.people, &mut self.ui.pictures, &t, &mut acts);
                 // A signature written in HTML: how it looks, under the dialog.
                 if let Dialog::Signature(f) = &d
                     && f.code
@@ -576,6 +584,7 @@ impl MailApp {
         for (path, frame) in self.ui.video_frames.iter_mut().filter(|(_, f)| **f == VideoFrame::Pending) {
             *frame = self.services.video_frame(path);
         }
+        self.pictures_drawn(&ctx);
 
         for a in acts {
             self.act(a);

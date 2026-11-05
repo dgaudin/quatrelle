@@ -601,7 +601,15 @@ pub(crate) fn buttons(ui: &mut Ui, t: &Tokens, ok: &str, ok_enabled: bool) -> (b
 
 /// Show the dialog; returns whether it stays open. `people` draws the contacts fields a dialog
 /// has (Select Names' rows, Add calendar's and Open another mailbox's).
-pub fn show(ctx: &egui::Context, d: &mut Dialog, s: &Session, people: &mut people_field::PeopleFields, t: &Tokens, acts: &mut Vec<Action>) -> bool {
+pub(crate) fn show(
+    ctx: &egui::Context,
+    d: &mut Dialog,
+    s: &Session,
+    people: &mut people_field::PeopleFields,
+    pics: &mut crate::reading::Pictures,
+    t: &Tokens,
+    acts: &mut Vec<Action>,
+) -> bool {
     let frame = dialog_frame(t);
     // Each kind of dialog keeps its own size: one id for all let a small one open at the size
     // of the last big one.
@@ -619,7 +627,7 @@ pub fn show(ctx: &egui::Context, d: &mut Dialog, s: &Session, people: &mut peopl
                 .id_salt("dialog-body")
                 .max_height(max)
                 .min_scrolled_height(max)
-                .show(ui, |ui| body(ui, d, s, people, t, acts))
+                .show(ui, |ui| body(ui, d, s, people, pics, t, acts))
                 .inner;
             (keep, ui.unique_id())
         })
@@ -642,7 +650,15 @@ pub fn show(ctx: &egui::Context, d: &mut Dialog, s: &Session, people: &mut peopl
     keep && !closing
 }
 
-fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, people: &mut people_field::PeopleFields, t: &Tokens, acts: &mut Vec<Action>) -> bool {
+fn body(
+    ui: &mut Ui,
+    d: &mut Dialog,
+    s: &Session,
+    people: &mut people_field::PeopleFields,
+    pics: &mut crate::reading::Pictures,
+    t: &Tokens,
+    acts: &mut Vec<Action>,
+) -> bool {
     // Each kind is drawn by its group; listing them all here keeps the match exhaustive.
     match d {
         Dialog::LostOnClose { .. } | Dialog::SaveOnClose(..) | Dialog::UpdateOnClose(..) => closing::draw(ui, d, s, t, acts),
@@ -684,7 +700,7 @@ fn body(ui: &mut Ui, d: &mut Dialog, s: &Session, people: &mut people_field::Peo
         | Dialog::Certificate { .. }
         | Dialog::SmartCard { .. }
         | Dialog::Event(..)
-        | Dialog::Contact(..) => other::draw(ui, d, s, t, acts),
+        | Dialog::Contact(..) => other::draw(ui, d, s, pics, t, acts),
         Dialog::OpenSharedCalendar(f) => calendars::draw(ui, f, s, people, t, acts),
         Dialog::MoveEvent(f) => moving::draw(ui, f, t, acts),
     }

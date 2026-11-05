@@ -358,7 +358,8 @@ impl MailApp {
                 ribbon_icons_from: usize::MAX,
                 ribbon_groups: HashMap::new(),
                 dialog: None,
-                previews: HashMap::new(),
+                pictures: reading::Pictures::default(),
+                video_thumbs: HashMap::new(),
                 shown_pictures: HashMap::new(),
                 cell_heights: reading::CellHeights::default(),
                 toast: None,
@@ -433,7 +434,7 @@ impl MailApp {
 
     /// Register the UI fonts, preferring an installed system font (call before the first frame).
     pub fn install_fonts(&mut self, ctx: &egui::Context, regular: Option<Vec<u8>>, bold: Option<Vec<u8>>) {
-        self.ui.fonts = (regular.clone(), bold.clone());
+        self.ui.fonts = (regular.clone().map(std::sync::Arc::new), bold.clone().map(std::sync::Arc::new));
         bidi::set_coverage(regular.as_deref());
         if !bidi::covers_rtl() {
             self.ui.rtl_font = self.services.rtl_font();
@@ -476,7 +477,7 @@ impl MailApp {
                 }
             }
             if !cjk.is_empty() {
-                let (r, b) = self.ui.fonts.clone();
+                let (r, b) = (self.ui.fonts.0.as_ref().map(|f| f.to_vec()), self.ui.fonts.1.as_ref().map(|f| f.to_vec()));
                 theme::install_fonts_with(ctx, r, b, cjk, self.ui.rtl_font.clone());
                 ctx.request_repaint();
             } else if self.services.font_pending() {
