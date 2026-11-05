@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 // Copyright (c) 2026 Didier Gaudin
-//! Contacts and calendar items in an Outlook data file (MS-OXOCNTC, MS-OXOCAL).
+//! Contacts, contact groups, calendar items, meeting requests and journal entries in an Outlook
+//! data file (MS-OXOCNTC, MS-OXOCAL, MS-OXOJRNL).
 //!
 //! Most of what makes a contact or an appointment lives in *named* properties: their ids differ
 //! from file to file and are found through the file's name-to-id map (MS-PST 2.4.7). The
@@ -15,12 +16,16 @@ use outlook_pst::messaging::named_prop::{NamedPropertyGuid, NamedPropertyId, PS_
 use outlook_pst::messaging::store::Store as PstStore;
 use quatrelle_model::EmailAddress;
 use quatrelle_model::dates::civil_from_days;
-use quatrelle_model::ical::{Attendee, CalEvent};
+use quatrelle_model::ical::{Attendee, CalEvent, PrivateKind, ShowAs};
 use quatrelle_model::vcard::{Card, Photo, PostalAddress, Typed, base64_encode};
 
 use crate::pst::Val;
 
+mod groups;
+mod meetings;
 mod recur;
+pub(crate) use groups::group_of;
+pub(crate) use meetings::invitation;
 use recur::recurrence;
 
 type GuidKey = (u32, u16, u16, [u8; 8]);
@@ -29,11 +34,17 @@ const PSETID_ADDRESS: GuidKey = (0x0006_2004, 0, 0, OLE);
 const PSETID_APPOINTMENT: GuidKey = (0x0006_2002, 0, 0, OLE);
 const PSETID_TASK: GuidKey = (0x0006_2003, 0, 0, OLE);
 const PSETID_NOTE: GuidKey = (0x0006_200E, 0, 0, OLE);
+const PSETID_COMMON: GuidKey = (0x0006_2008, 0, 0, OLE);
+const PSETID_LOG: GuidKey = (0x0006_200A, 0, 0, OLE);
 const PSETID_MEETING: GuidKey = (0x6ED8_DA90, 0x450B, 0x101B, [0x98, 0xDA, 0x00, 0xAA, 0x00, 0x3F, 0x13, 0x05]);
 /// Name-to-id entries read at most.
 const MAX_NAMES: usize = 200_000;
 /// Deleted occurrences read at most.
 const MAX_EXCEPTIONS: usize = 5_000;
+/// An event's categories kept at most.
+const MAX_CATEGORIES: usize = 64;
+/// A reminder further ahead than a year (in minutes) isn't one; nor a journal entry longer.
+const MAX_MINUTES: i64 = 366 * 24 * 60;
 /// Minutes from 1601-01-01 to 1970-01-01.
 const EPOCH_MINUTES: i64 = 11_644_473_600 / 60;
 
@@ -142,6 +153,20 @@ pub(crate) struct Extra {
     pub modified: Option<i64>,
     /// The contact's picture (its media type, and its bytes), when the item holds one.
     pub photo: Option<(String, Vec<u8>)>,
+    /// A meeting's version (PidLidAppointmentSequence).
+    pub sequence: u32,
+    /// An event's categories, how it shows its time (PidLidBusyStatus: 0 free, 1 tentative, 2
+    /// busy, 3 away, 4 working elsewhere), its sensitivity (1 personal, 2 private, 3
+    /// confidential) and its reminder, in minutes before it starts.
+    pub categories: Vec<String>,
+    pub busy: Option<i64>,
+    pub sensitivity: u8,
+    pub reminder: Option<i64>,
+    /// A contact group's members that carry their address: (name, address).
+    pub members: Vec<(String, String)>,
+    /// A journal entry's start and end.
+    pub log_start: Option<i64>,
+    pub log_end: Option<i64>,
 }
 
 /// Read the contact and appointment properties of an item.
@@ -203,7 +228,63 @@ pub(crate) fn extract<'a>(p: &dyn Fn(u16) -> Option<Val<'a>>, named: &Named) -> 
         x.note_color = u8::try_from(c).ok().filter(|c| *c < quatrelle_model::pim::NOTE_COLORS);
     }
     x.modified = p(0x3008).and_then(|v| v.time());
+    x.sequence = match n(PSETID_APPOINTMENT, 0x8201) {
+        Some(Val::Int(s)) => u32::try_from(s).unwrap_or(0),
+        _ => 0,
+    };
+    if let Some(Val::Texts(names)) = named.keywords().and_then(p) {
+        for name in names.iter().map(|c| c.trim()).filter(|c| !c.is_empty()) {
+            if x.categories.len() < MAX_CATEGORIES && !x.categories.iter().any(|c| c == name) {
+                x.categories.push(name.to_string());
+            }
+        }
+    }
+    x.busy = match n(PSETID_APPOINTMENT, 0x8205) {
+        Some(Val::Int(b)) => Some(b),
+        _ => None,
+    };
+    x.sensitivity = match p(0x0036) {
+        Some(Val::Int(s @ 1..=3)) => u8::try_from(s).unwrap_or(0),
+        _ => 0,
+    };
+    // A reminder that's set: so many minutes ahead, or Outlook's 15 when it doesn't say.
+    if matches!(n(PSETID_COMMON, 0x8503), Some(Val::Bool(true))) {
+        x.reminder = match n(PSETID_COMMON, 0x8501) {
+            Some(Val::Int(m)) if (0..=MAX_MINUTES).contains(&m) => Some(m),
+            _ => Some(15),
+        };
+    }
+    x.members = groups::members(n(PSETID_ADDRESS, 0x8054), n(PSETID_ADDRESS, 0x8055));
+    x.log_start = n(PSETID_LOG, 0x8706).and_then(|v| v.time());
+    x.log_end = n(PSETID_LOG, 0x8708).and_then(|v| v.time()).or_else(|| match (x.log_start, n(PSETID_LOG, 0x8707)) {
+        (Some(start), Some(Val::Int(minutes))) if (0..=MAX_MINUTES).contains(&minutes) => Some(start.saturating_add(minutes * 60)),
+        _ => None,
+    });
     x
+}
+
+/// A journal entry as a note's text: its subject, when it was (in UTC), then its own text.
+/// (Quatrelle has no journal.)
+pub(crate) fn journal_text(x: &Extra, subject: &str, body: &str) -> String {
+    let at = |t: i64| {
+        let (y, m, d) = civil_from_days(t.div_euclid(86_400));
+        let s = t.rem_euclid(86_400);
+        (format!("{y:04}-{m:02}-{d:02}"), format!("{:02}:{:02}", s / 3600, s % 3600 / 60))
+    };
+    let when = x.log_start.map(|start| {
+        let (day, time) = at(start);
+        match x.log_end.filter(|e| *e > start).map(at) {
+            Some((end_day, end)) if end_day == day => format!("{day} {time}–{end} UTC"),
+            Some((end_day, end)) => format!("{day} {time} – {end_day} {end} UTC"),
+            None => format!("{day} {time} UTC"),
+        }
+    });
+    let body = body.replace("\r\n", "\n");
+    [subject.trim().to_string(), when.unwrap_or_default(), body.trim().to_string()]
+        .into_iter()
+        .filter(|t| !t.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// The contact as a card.
@@ -287,6 +368,24 @@ pub(crate) fn event_of(x: &Extra, subject: &str, body: &str, from: &EmailAddress
         exdates,
         organizer: (!from.email.is_empty() && !attendees.is_empty()).then(|| person(from)),
         attendees: attendees.iter().map(person).collect(),
+        sequence: x.sequence,
+        categories: x.categories.clone(),
+        // PidLidBusyStatus: 2 (busy) is the default.
+        show_as: match x.busy {
+            Some(0) => ShowAs::Free,
+            Some(1) => ShowAs::Tentative,
+            Some(3) => ShowAs::OutOfOffice,
+            Some(4) => ShowAs::WorkingElsewhere,
+            _ => ShowAs::Busy,
+        },
+        // Sensitivity, as Exchange's comes in: personal, private, confidential.
+        private: x.sensitivity != 0,
+        private_kind: match x.sensitivity {
+            1 => PrivateKind::Personal,
+            3 => PrivateKind::Confidential,
+            _ => PrivateKind::Private,
+        },
+        reminder: x.reminder.map(|m| m.clamp(0, quatrelle_model::ical::REMINDER_MAX_MINUTES)),
         ..Default::default()
     })
 }

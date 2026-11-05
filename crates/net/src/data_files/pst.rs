@@ -7,8 +7,9 @@
 //! `outlook-pst-rw` the export writes with too (library `outlook_pst`): the folder tree
 //! under the top of the mailbox becomes folders, and each mail item is written out again as a
 //! standard message (RFC 5322 / MIME) from its properties (MS-OXCMSG / MS-OXPROPS), keeping the
-//! original headers when the item has them. Contacts and calendar items go to the account's address
-//! book and calendar (see `pst_pim`), notes to its notes, tasks to its tasks.
+//! original headers when the item has them. Contacts, contact groups and calendar items go to the
+//! account's address book and calendar (see `pst_pim`), notes and journal entries to its notes,
+//! tasks to its tasks.
 //!
 //! A data file is hostile input like any other: the reader runs behind `catch_unwind`, items that
 //! can't be read are skipped and counted, and sizes are capped.
@@ -51,7 +52,7 @@ use open::Recycle;
 use out::Out;
 #[doc(hidden)]
 pub use props::Val;
-pub(crate) use props::text_of;
+pub(crate) use props::{one_off_address, text_of};
 
 /// Folders nested deeper than this are left out.
 const MAX_DEPTH: usize = 32;
@@ -416,6 +417,8 @@ fn visit_one(store: &dyn PstStore, node: u32, parent: Option<&str>, read: &ReadI
             || class.starts_with("IPF.Appointment")
             || class.starts_with("IPF.Task")
             || class.starts_with("IPF.StickyNote")
+            // Quatrelle has no journal: its entries come in as notes.
+            || class.starts_with("IPF.Journal")
         {
             at.sub = Some(sub.clone());
             read_items(store, &*sub, read, out);

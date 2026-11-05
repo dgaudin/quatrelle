@@ -118,3 +118,50 @@ fn contacts_and_appointments_map() {
     assert_eq!(e.organizer.unwrap().email, "me@x.example");
     assert!(event_of(&Extra::default(), "", "", &EmailAddress::default(), &[], "u".into()).is_none());
 }
+
+/// A one-off entry id of `address`, in UTF-16.
+fn one_off(name: &str, address: &str) -> Vec<u8> {
+    let mut b = vec![0, 0, 0, 0, 0x81, 0x2B, 0x1F, 0xA4, 0xBE, 0xA3, 0x10, 0x19, 0x9D, 0x6E, 0x00, 0xDD, 0x01, 0x0F, 0x54, 0x02, 0, 0, 0, 0x80];
+    for s in [name, "SMTP", address] {
+        b.extend(s.encode_utf16().chain([0]).flat_map(u16::to_le_bytes));
+    }
+    b
+}
+
+/// A contact group's members come from its one-off members and from the members whose wrapped
+/// entry id holds one, once each; a member that is a contact of the file, or junk, is left out.
+#[test]
+fn a_contact_group_s_members() {
+    use super::groups::{WRAPPED, members};
+    let ana = one_off("Ana", "ana@posteo.example");
+    let ben = one_off("", "ben@studio.example");
+    let wrap = |kind: u8, inner: &[u8]| [&[0, 0, 0, 0][..], &WRAPPED, &[kind], inner].concat();
+    let wrapped_ben = wrap(0xC0, &ben);
+    let wrapped_ana = wrap(0x00, &ana);
+    let contact = wrap(0xC3, &[1, 2, 3, 4]);
+    let ids = HashMap::from([((PSETID_ADDRESS, 0x8054), 0x8001), ((PSETID_ADDRESS, 0x8055), 0x8002)]);
+    let named = Named { ids, keywords: None };
+    let props = HashMap::from([
+        (0x8001, Val::Bins(vec![&ana[..], &[0xFF; 3][..]])),
+        (0x8002, Val::Bins(vec![&wrapped_ana[..], &wrapped_ben[..], &contact[..], &[][..]])),
+    ]);
+    let x = extract(&|id| props.get(&id).cloned(), &named);
+    assert_eq!(x.members, [("Ana".to_string(), "ana@posteo.example".to_string()), (String::new(), "ben@studio.example".to_string())]);
+    // Cut anywhere, no crash: before its one-off's address, no member.
+    for n in 0..wrapped_ben.len() {
+        let got = members(None, Some(Val::Bins(vec![&wrapped_ben[..n]])));
+        assert!(n >= 21 + 24 || got.is_empty());
+    }
+    assert!(members(Some(Val::Bin(&ana)), Some(Val::Other)).is_empty(), "single values aren't lists");
+}
+
+/// A journal entry's text: its subject, its time in UTC (across midnight too), its own text.
+#[test]
+fn a_journal_entry_s_text() {
+    let day = days_from_civil(2026, 10, 20) * 86_400;
+    let x = Extra { log_start: Some(day + 23 * 3600), log_end: Some(day + 25 * 3600), ..Default::default() };
+    assert_eq!(journal_text(&x, "Night run", "Done.\r\n"), "Night run\n2026-10-20 23:00 – 2026-10-21 01:00 UTC\nDone.");
+    let x = Extra { log_start: Some(day), ..Default::default() };
+    assert_eq!(journal_text(&x, "", ""), "2026-10-20 00:00 UTC");
+    assert_eq!(journal_text(&Extra::default(), "", " "), "");
+}

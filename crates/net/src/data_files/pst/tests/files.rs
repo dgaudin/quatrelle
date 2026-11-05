@@ -96,7 +96,8 @@ fn an_unreadable_attachment_comes_from_its_row() {
 }
 
 /// The files left out of the messages that came in are counted by reason, without counting
-/// those messages as skipped; a message that didn't come in counts none.
+/// those messages as skipped; a message that didn't come in (a contact in a mail folder, counted
+/// as itself) counts none.
 #[test]
 fn files_left_out_are_counted_by_reason() {
     let dir = std::env::temp_dir().join(format!("quatrelle-pst-left-out-{}", std::process::id()));
@@ -124,7 +125,7 @@ fn files_left_out_are_counted_by_reason() {
     out.add_message(&path, mail(vec![link(), Got::Left(FileLeftOut::Unreadable), Got::File(data_file("plan.pdf", "application/pdf", ""))]));
     out.add_message(&path, Item { class: "IPM.Contact".into(), ..mail(vec![link()]) });
     let done = out.finish();
-    assert_eq!((done.messages, done.skipped), (2, 0));
+    assert_eq!((done.messages, done.skipped), (2, 1));
     assert_eq!(done.files_left_out.into_iter().collect::<Vec<_>>(), [(FileLeftOut::Link, 3), (FileLeftOut::Unreadable, 1)]);
     let _ = std::fs::remove_dir_all(&dir);
 }
