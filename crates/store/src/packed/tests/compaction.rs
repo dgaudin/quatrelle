@@ -25,7 +25,8 @@ fn a_data_file_compacts_and_others_wait_for_it() {
         }
     }
     let file = store.data_file("a1").unwrap();
-    let full = std::fs::metadata(&file).unwrap().len();
+    // What File › Info says it takes: the room on the disk.
+    let full = crate::packed::on_disk(&std::fs::metadata(&file).unwrap());
     // Another thread reading while it's compacted waits, then reads.
     let reader = {
         let store = store.clone();
@@ -37,7 +38,7 @@ fn a_data_file_compacts_and_others_wait_for_it() {
     let (before, after) = store.compact_data_file("a1").unwrap().unwrap();
     assert_eq!(before, full);
     assert!(after < full / 2, "{full} → {after}");
-    assert_eq!(std::fs::metadata(&file).unwrap().len(), after);
+    assert_eq!(crate::packed::on_disk(&std::fs::metadata(&file).unwrap()), after);
     assert!(reader.join().unwrap(), "read while it was compacted");
     for uid in (4..=300).step_by(4) {
         assert_eq!(store.read_body(&key(uid)).as_deref(), Some(body(uid).as_slice()), "{uid}");
@@ -198,6 +199,49 @@ fn a_compacted_data_file_stays_as_small_as_what_it_keeps() {
     for uid in (1..=900).step_by(97) {
         assert_eq!(store.read_body(&key(uid)), Some(body(uid)), "{uid}");
     }
+    drop(store);
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// What an account's data file takes on this computer (File › Info, the folder sizes, Compact
+/// Now's before and after) is the room it takes on the disk, not its length: redb doubles a file
+/// under 4 GiB as it grows, and on Linux the new half is a hole until it's written. The first
+/// message written after Compact Now showed the cache twice as big as it was.
+#[cfg(unix)]
+#[test]
+fn an_accounts_size_is_the_room_its_file_takes() {
+    // Noise, eight bytes at a time: kept as it is, never compressed smaller.
+    let body = |uid: u32| -> Vec<u8> {
+        let mut x = u64::from(uid).wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1;
+        let mut out = Vec::with_capacity(200_008);
+        while out.len() < 200_000 {
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            out.extend_from_slice(&x.to_le_bytes());
+        }
+        out
+    };
+    let root = temp("size-on-disk");
+    let store = Store::open_packed(root.join("app"), root.join("Quatrelle Files")).unwrap();
+    store.save_accounts(&[account("a1", "ana@example.com")]).unwrap();
+    let key = |uid: u32| MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 1, uid };
+    let mut kept = 0u64;
+    for uid in 1..=200 {
+        let b = body(uid);
+        kept += b.len() as u64;
+        store.write_body(&key(uid), &b).unwrap();
+    }
+    store.compact_data_file("a1").unwrap();
+    // The first message after it grows the file.
+    store.write_body(&key(201), &body(201)).unwrap();
+    kept += 200_000;
+    let file = store.data_file("a1").unwrap();
+    let length = std::fs::metadata(&file).unwrap().len();
+    let shown = store.account_size("a1");
+    eprintln!("{kept} kept, the file {length} long, shown {shown}");
+    assert!(shown <= length);
+    assert!(shown < kept + kept / 4, "{kept} kept, the file {length} long, shown {shown}");
     drop(store);
     let _ = std::fs::remove_dir_all(&root);
 }

@@ -2080,9 +2080,12 @@ pur : `packed/tests.rs` (821 lignes) découpé par sujet en `packed/tests/` (`na
   données, le bouton y répond comme avant).
 - **Reste, remarqué** :
   - après un compactage serré, la première écriture fait doubler la taille *apparente* du fichier
-    (croissance de redb, fichier creux sur Linux) : « Conservé sur cet ordinateur », qui lit cette
-    taille, peut montrer le double de la place réellement prise ; sur Windows (NTFS), la place est
-    réservée pour de bon ;
+    (croissance de redb, fichier creux sur Linux) ; sur Windows (NTFS), la place est réservée pour
+    de bon. **Réglé aussitôt pour l'affichage** : « Conservé sur cet ordinateur » et le bilan
+    avant → après du bouton lisent la place prise sur le disque (`store/src/lib.rs::on_disk` : la longueur,
+    moins les trous sous Unix), plus la longueur. Sonde
+    `an_accounts_size_is_the_room_its_file_takes` : 40,2 Mo gardés, fichier long de 82,3 Mo après
+    le premier message écrit, 82,3 Mo affichés ; 41,4 Mo maintenant ;
   - la vérification de place est prudente (taille apparente + 1 Go) ;
   - aucun bouton pour arrêter la phase 1 (la décision n'en demande pas) : fermer Quatrelle l'arrête,
     le clic suivant reprend ;
