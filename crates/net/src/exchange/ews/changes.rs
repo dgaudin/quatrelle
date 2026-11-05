@@ -75,9 +75,6 @@ const LAST_VERB: &str = "<t:ExtendedFieldURI PropertyTag=\"0x1081\" PropertyType
 const LAST_VERB_TIME: &str = "<t:ExtendedFieldURI PropertyTag=\"0x1082\" PropertyType=\"SystemTime\"/>";
 /// `PidTagIconIndex`: the icon Outlook's list draws for it.
 const ICON_INDEX: &str = "<t:ExtendedFieldURI PropertyTag=\"0x1080\" PropertyType=\"Integer\"/>";
-/// `PidTagIconIndex` of mail replied to, and forwarded ([MS-OXOMSG]: 0x00000105, 0x00000106).
-const ICON_REPLIED: i64 = 0x105;
-const ICON_FORWARDED: i64 = 0x106;
 
 /// An update setting a property to a value.
 fn set(field: &str, value: &str) -> String {
@@ -88,12 +85,11 @@ fn set(field: &str, value: &str) -> String {
 
 /// Replied to or forwarded, as Outlook marks the original when it sends its reply or forward
 /// ([MS-OXOMSG]: `PidTagLastVerbExecuted` the verb, `PidTagLastVerbExecutionTime` now,
-/// `PidTagIconIndex` the icon): Quatrelle sends its own message (`CreateItem` with its source),
-/// so Exchange marks nothing by itself. The engine doesn't say a reply was to all: it's written
-/// as a reply to the sender, which Outlook shows alike.
+/// `PidTagIconIndex` the icon, [`super::replied_verb`]): Quatrelle sends its own message
+/// (`CreateItem` with its source), so Exchange marks nothing by itself.
 fn replied(forward: bool) -> String {
     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(0));
-    let (verb, icon) = if forward { (super::VERB_FORWARD, ICON_FORWARDED) } else { (super::VERB_REPLY, ICON_REPLIED) };
+    let (verb, icon) = super::replied_verb(forward);
     format!(
         "{}{}{}",
         set(LAST_VERB, &verb.to_string()),

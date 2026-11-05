@@ -15,6 +15,7 @@ impl Data {
             self.deliver(&sent, &raw, true, "2030-01-01T00:00:00Z");
         }
         let (path, query) = target.split_once('?').unwrap_or((target, ""));
+        self.asked_verbs = query.contains("$expand=singleValueExtendedProperties") && query.contains("0x1081");
         let q = |k: &str| query.split('&').find_map(|kv| kv.strip_prefix(&format!("{k}=")).map(str::to_string));
         let parts: Vec<&str> = path.trim_start_matches('/').split('/').collect();
         let ok = |v: Value| (200, v.to_string().into_bytes(), "application/json");
@@ -227,8 +228,14 @@ impl Data {
                         m.raw = format!("Subject: {subject}\r\n{kept}").into_bytes();
                     }
                     for p in input["singleValueExtendedProperties"].as_array().cloned().unwrap_or_default() {
-                        if p["id"].as_str().is_some_and(|id| id.to_ascii_lowercase().ends_with("id 0x8524")) {
-                            m.vote = p["value"].as_str().unwrap_or_default().to_string();
+                        let value = p["value"].as_str().map(str::to_string);
+                        match p["id"].as_str().map(str::to_ascii_lowercase).as_deref() {
+                            Some(id) if id.ends_with("id 0x8524") => m.vote = value.unwrap_or_default(),
+                            // The last thing done with it, when, and its icon.
+                            Some("integer 0x1081") => m.verb = value,
+                            Some("systemtime 0x1082") => m.verb_time = value,
+                            Some("integer 0x1080") => m.icon = value,
+                            _ => {}
                         }
                     }
                     ok(json!({ "id": id }))
