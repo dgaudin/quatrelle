@@ -75,6 +75,8 @@ const MAX_IDS: usize = 256;
 const MAX_THREAD_BLOCKS: usize = 50;
 /// Categories kept on an item.
 const MAX_KEYWORDS: usize = 64;
+/// A meeting's guests' answers kept (one per recipient row).
+const MAX_ANSWERS: usize = 10_000;
 /// Longest Thread-Topic written, in characters.
 const MAX_TOPIC: usize = 512;
 /// Longest message id kept, in bytes: `Message-ID: <…>` stays within a header line's 998.
@@ -380,8 +382,7 @@ fn visit(store: &dyn PstStore, folder: &dyn PstFolder, (parent, trash): (Option<
         }
     };
     for node in nodes {
-        let mut at = Visited::default();
-        at.trash = trash || special_folder(store, 0x35E3) == Some(node);
+        let mut at = Visited { trash: trash || special_folder(store, 0x35E3) == Some(node), ..Default::default() };
         let done = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| visit_one(store, node, parent, read, out, &mut at)));
         if done.is_err() {
             // What came in of it stays, in its folder's list; the folders under it are read.
