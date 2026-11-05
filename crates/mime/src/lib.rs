@@ -40,6 +40,7 @@ mod html;
 mod photos;
 mod reply;
 pub mod smime;
+pub use smime::pgp;
 mod trackers;
 pub use attachments::{
     AttachmentInfo, AttachmentKind, HtmlRefs, IndexDoc, MAX_INDEX_CHARS, MAX_WANTED, MOST_PENDING_FILES, PendingFile, Tnef, TnefBody, TnefFile,
