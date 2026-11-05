@@ -8,8 +8,11 @@ use super::*;
 mod senders;
 pub use senders::SenderMarks;
 pub(crate) use senders::Senders;
+mod prepare;
 mod selecting;
 mod source;
+pub(crate) use prepare::BodyLane;
+pub use prepare::{BodyWork, PreparedBody};
 pub use selecting::Toward;
 #[cfg(test)]
 pub(crate) use source::source_lines;
@@ -105,14 +108,19 @@ impl Session {
         self.anchor = Some(key.clone());
         let thread = self.thread_of(key);
         self.reading = Some(Reading { key: key.clone(), parsed: None, error: None, thread, warning: None, security: None, text_first: false });
-        let cached = if key.folder == OUTBOX {
-            self.outbox_entry(key).and_then(|(a, i)| self.store.as_ref().and_then(|s| s.outbox_raw(&a, i.id)))
+        if self.body.defer {
+            // Read and parsed on another thread: the pane waits for it.
+            self.defer_read(key);
         } else {
-            self.store.as_ref().and_then(|s| s.read_body(key))
-        };
-        match cached {
-            Some(raw) => self.show_body(key, &raw),
-            None => self.jobs.push(self.fetch_job(key)),
+            let cached = if key.folder == OUTBOX {
+                self.outbox_entry(key).and_then(|(a, i)| self.store.as_ref().and_then(|s| s.outbox_raw(&a, i.id)))
+            } else {
+                self.store.as_ref().and_then(|s| s.read_body(key))
+            };
+            match cached {
+                Some(raw) => self.show_body(key, &raw),
+                None => self.jobs.push(self.fetch_job(key)),
+            }
         }
         let unread = key.folder != OUTBOX && self.summary(key).is_some_and(|m| !m.flags.seen);
         if mark && unread && self.prefs.mark_read_on_open {
@@ -205,7 +213,8 @@ impl Session {
 
     /// A message as it's read: one without a `Date` gets the time the server took it in, as the
     /// list shows it (replies and forwards quoted it as sent on 1 January 1970).
-    fn parse_for_reading(&self, key: &MessageKey, raw: &[u8]) -> Option<Arc<mime::Parsed>> {
+    fn parse_for_reading(&mut self, key: &MessageKey, raw: &[u8]) -> Option<Arc<mime::Parsed>> {
+        self.body.parsed_here = self.body.parsed_here.wrapping_add(1);
         mime::parse(raw).map(|p| Arc::new(self.dated(key, p)))
     }
 
@@ -226,6 +235,7 @@ impl Session {
             return;
         }
         // Read as it was built: a name alone stays, where the address isn't known yet.
+        self.body.parsed_here = self.body.parsed_here.wrapping_add(1);
         let Some(parsed) = mime::parse_text_first(raw).map(|p| Arc::new(self.dated(key, p))) else { return };
         let warning = self.message_warning(key, &parsed);
         for r in self.reading.iter_mut().chain(&mut self.windows).filter(|r| waits(r)) {
@@ -242,17 +252,30 @@ impl Session {
         let shown = self.reading.as_ref().is_some_and(|r| &r.key == key)
             || self.windows.iter().any(|w| &w.key == key && (w.parsed.is_none() || w.text_first));
         let (raw, security) = if shown { self.unwrap(key, raw) } else { (std::borrow::Cow::Borrowed(raw), None) };
-        let raw = &*raw;
+        self.show_ready(key, &raw, None, security);
+    }
+
+    /// Show a body (its protection taken off already): `parsed`, when it was parsed already
+    /// (on another thread), else it's parsed here.
+    fn show_ready(&mut self, key: &MessageKey, raw: &[u8], parsed: Option<Option<Arc<mime::Parsed>>>, security: Option<Security>) {
+        // Shown now: the pane waits for it no longer.
+        if self.reading.as_ref().is_some_and(|r| &r.key == key) {
+            self.stop_waiting(key);
+        }
         // Gathered before the windows are set aside: a gathering says again what every one shows.
-        if shown {
+        if self.reading.as_ref().is_some_and(|r| &r.key == key) || self.windows.iter().any(|w| &w.key == key && (w.parsed.is_none() || w.text_first))
+        {
             self.keep_senders();
         }
         let mut windows = std::mem::take(&mut self.windows);
         // Parsed once, however many places show it.
-        let mut parsed = None;
+        let mut parsed = parsed;
         for w in windows.iter_mut().filter(|w| &w.key == key && (w.parsed.is_none() || w.text_first)) {
             w.text_first = false;
-            w.parsed = parsed.get_or_insert_with(|| self.parse_for_reading(key, raw)).clone();
+            if parsed.is_none() {
+                parsed = Some(self.parse_for_reading(key, raw));
+            }
+            w.parsed = parsed.clone().flatten();
             w.error = w.parsed.is_none().then(|| "this message could not be read".to_string());
             w.warning = w.parsed.as_ref().and_then(|p| self.message_warning(key, p));
             w.security = security.clone();
