@@ -55,7 +55,7 @@ fn offenders(root: &Path) -> Result<Vec<(String, String)>, String> {
         .output()
         .map_err(|e| format!("git ls-files: {e}"))?;
     let mut bad = Vec::new();
-    for f in String::from_utf8_lossy(&out.stdout).lines().filter(|f| !f.starts_with("vendor/")) {
+    for f in String::from_utf8_lossy(&out.stdout).lines() {
         // Listed but deleted from the working tree: not there to check.
         let Ok(bytes) = std::fs::read(root.join(f)) else { continue };
         if let Some(why) = problem(&String::from_utf8_lossy(&bytes)) {
