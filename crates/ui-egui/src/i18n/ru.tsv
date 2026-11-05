@@ -1907,3 +1907,5 @@ folder	Conflicts	Конфликты
 	Calendar and contacts couldn't be read: changes to them won't be saved	Не удалось прочитать календарь и контакты: изменения в них не будут сохранены
 	Your rules couldn't be read: changes to them won't be saved	Не удалось прочитать ваши правила: изменения в них не будут сохранены
 	Snoozed mail couldn't be read: changes to it won't be saved	Не удалось прочитать отложенную почту: изменения в ней не будут сохранены
+	{name}: {messages} messages imported, but the last of it could not be saved: {error}	{name}: импортировано писем: {messages}, но последнюю часть сохранить не удалось: {error}
+	{name}: {messages} messages imported, but the last of it could not be saved: {error}. Import the file again to keep it.	{name}: импортировано писем: {messages}, но последнюю часть сохранить не удалось: {error}. Импортируйте файл ещё раз, чтобы сохранить её.

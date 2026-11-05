@@ -1905,3 +1905,5 @@ folder	Conflicts	冲突
 	Calendar and contacts couldn't be read: changes to them won't be saved	无法读取日历和联系人：对它们的更改不会保存
 	Your rules couldn't be read: changes to them won't be saved	无法读取你的规则：对它们的更改不会保存
 	Snoozed mail couldn't be read: changes to it won't be saved	无法读取已暂停提醒的邮件：对它们的更改不会保存
+	{name}: {messages} messages imported, but the last of it could not be saved: {error}	{name}: 已导入 {messages} 封邮件，但最后一部分无法保存：{error}
+	{name}: {messages} messages imported, but the last of it could not be saved: {error}. Import the file again to keep it.	{name}: 已导入 {messages} 封邮件，但最后一部分无法保存：{error}。要保留它，请重新导入该文件。

@@ -56,6 +56,9 @@ pub struct Imported {
     pub tasks: usize,
     /// Items that couldn't be read or written.
     pub skipped: usize,
+    /// Why the folder list or the contacts, calendar and notes couldn't be saved at the end, when
+    /// they couldn't: the messages above came in all the same.
+    pub last_save: Option<String>,
 }
 
 /// Import the data file at `path` into `account`'s cache (an account with no server). Calls
@@ -104,7 +107,7 @@ pub fn import(path: &Path, store: &Store, account: &str, progress: &mut dyn FnMu
         Err(_) if out.folders.is_empty() => return Err("the data file is damaged".into()),
         Err(_) => log::warn!("{}: the data file is damaged; stopped reading", path.display()),
     }
-    out.finish()
+    Ok(out.finish())
 }
 
 macro_rules! reader {
@@ -707,7 +710,9 @@ impl Out<'_> {
         }
     }
 
-    fn finish(mut self) -> Result<Imported, String> {
+    /// The rest written out. A last save that fails doesn't take back what came in before it:
+    /// it's said, with the counts, and the account is kept.
+    fn finish(mut self) -> Imported {
         self.flush();
         // An Inbox to open, even when the file had none.
         if !self.folders.iter().any(|f| f.role == FolderRole::Inbox) {
@@ -719,13 +724,18 @@ impl Out<'_> {
         for p in unsaved {
             self.save_folder(&p);
         }
-        self.store.save_folders(self.account, &self.folders).map_err(|e| e.to_string())?;
+        let mut last_save = self.store.save_folders(self.account, &self.folders).err().map(|e| format!("the folder list could not be saved ({e})"));
         let (contacts, events, notes, tasks) = (self.pim.cards.len(), self.pim.events.len(), self.pim.notes.len(), self.pim.tasks.len());
         if contacts + events + notes + tasks > 0 {
             self.pim.ensure_defaults();
-            self.store.save_account_doc(self.account, PIM_DOC, &self.pim).map_err(|e| e.to_string())?;
+            if let Err(e) = self.store.save_account_doc(self.account, PIM_DOC, &self.pim) {
+                last_save.get_or_insert(format!("the contacts, calendar, notes and tasks could not be saved ({e})"));
+            }
         }
-        Ok(Imported { folders: self.folders, messages: self.imported, contacts, events, notes, tasks, skipped: self.skipped })
+        if let Some(e) = &last_save {
+            log::warn!("import: {e}");
+        }
+        Imported { folders: self.folders, messages: self.imported, contacts, events, notes, tasks, skipped: self.skipped, last_save }
     }
 }
 

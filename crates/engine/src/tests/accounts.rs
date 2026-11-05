@@ -5,6 +5,7 @@
 
 use super::*;
 
+mod data_files;
 mod trust;
 
 #[test]
