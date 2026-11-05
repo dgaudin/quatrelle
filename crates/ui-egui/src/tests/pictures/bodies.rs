@@ -156,3 +156,55 @@ fn the_pane_shows_the_subject_while_the_lane_reads() {
     assert!(a.session.reading.as_ref().unwrap().parsed.is_some());
     let _ = std::fs::remove_dir_all(dir);
 }
+
+/// The arc's target: holding Down over 200 big messages on threads of their own, every step
+/// (the command and its frame) takes under 16 ms, marked read as they're shown (the fork marks
+/// them, and since R10 that's cheap on a server account). On the sample's local account the mark
+/// is written by the window: told, not held to the target. A timing test: run in release (`cargo
+/// test --release -p quatrelle-ui-egui holding_down_frames -- --ignored --nocapture`).
+#[test]
+#[ignore = "a bench: run it with --release, --ignored and --nocapture"]
+fn holding_down_frames_stay_under_16_ms() {
+    let local = hold_down(false);
+    let server = hold_down(true);
+    assert!(server < std::time::Duration::from_millis(16), "worst step {server:?} (local account: {local:?})");
+}
+
+/// Down held over 200 messages of about 1 MB, each marked read as it's shown: the slowest step.
+fn hold_down(server: bool) -> std::time::Duration {
+    let (mut a, dir) = app(if server { "body-frames-server" } else { "body-frames" });
+    if server {
+        on_a_server(&mut a);
+    }
+    let ctx = egui::Context::default();
+    a.services = Box::new(Threads);
+    a.defer_bodies();
+    frame(&ctx, &mut a, vec![]);
+    let big = "A long line of text that goes on. ".repeat(30_000);
+    for i in 0..200u32 {
+        with_files(&mut a, 9700 + i, vec![(format!("notes {i}.txt"), "text/plain", big.clone().into_bytes())]);
+    }
+    assert!(a.session.prefs.mark_read_on_open);
+    a.run("list.open", json!({"key": a.session.list[0].key.to_id()}));
+    frame(&ctx, &mut a, vec![]);
+    frame(&ctx, &mut a, vec![]);
+    let (mut worst, mut total) = (std::time::Duration::ZERO, std::time::Duration::ZERO);
+    for _ in 1..200 {
+        let t = std::time::Instant::now();
+        a.run("list.next", json!({}));
+        frame(&ctx, &mut a, vec![]);
+        worst = worst.max(t.elapsed());
+        total += t.elapsed();
+        // A key held down repeats about every 30 ms.
+        std::thread::sleep(std::time::Duration::from_millis(30));
+    }
+    let unread = a.session.list.iter().filter(|m| m.key.uid >= 9700 && !m.flags.seen).count();
+    println!(
+        "{}: worst step {:.1} ms, mean {:.1} ms, {unread} of 200 left unread",
+        if server { "server account" } else { "local account" },
+        worst.as_secs_f64() * 1e3,
+        total.as_secs_f64() * 1e3 / 199.0
+    );
+    let _ = std::fs::remove_dir_all(dir);
+    worst
+}
