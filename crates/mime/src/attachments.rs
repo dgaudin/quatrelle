@@ -13,8 +13,12 @@ pub use tnef::{
     utf16_code_page,
 };
 
+mod index_text;
 mod text_first;
 mod tnef;
+pub use index_text::{IndexDoc, MAX_INDEX_CHARS, index_doc};
+#[doc(hidden)]
+pub use index_text::{IndexStats, index_doc_stats};
 pub use text_first::{MOST_PENDING_FILES, PendingFile, is_protected_file, parse_text_first, text_first};
 
 /// A part's size: its bytes, or, with none yet (a message's text that came first), the size its
@@ -105,59 +109,212 @@ pub(super) fn attached<'a>(m: &'a Message<'a>) -> (Vec<Attached<'a>>, TnefBody) 
     (out, body)
 }
 
+/// Whether a message carries a file: the paperclip, "Has files" and `has:attachment`, which agree
+/// with search's count ([`index_doc`]) by the same rule: a part is a file unless it is S/MIME's
+/// own, or a part the HTML shows in its place ([`may_be_shown`], [`HtmlRefs::shows`]), whatever
+/// its name says (Outlook names its pictures `image001.png`; Apple Mail's inline PDF has no
+/// `Content-ID` and is a file). A winmail.dat counts by what it gives in its place, as
+/// `attached` lists it ([`tnef_files`]): its files, or itself when it stays one; one holding only
+/// the body gives none (no paperclip over an empty list). No body of it is read to count them.
 pub(super) fn has_real_attachments(m: &Message<'_>) -> bool {
-    // S/MIME's signature and encrypted content are the message itself, not files in it.
-    let smime = |p: &mail_parser::MessagePart<'_>| {
-        let mime = p.content_type().map(|c| format!("{}/{}", c.ctype(), c.subtype().unwrap_or_default())).unwrap_or_default();
-        smime::is_smime_part(&mime, p.attachment_name().unwrap_or_default())
-    };
-    // A winmail.dat counts by what it gives in its place, as `attached` lists it: its files, or
-    // itself when it stays one; one holding only the body gives none (no paperclip over an
-    // empty list), and neither do the pictures Outlook marks as the body's (hidden, by
-    // Content-ID), as a MIME part shown inline doesn't. No body is read to count them; the HTML
-    // is read only for a named picture (see `shown_picture`).
+    let refs = HtmlRefs::new(|| message_html(m));
     let mut budget = Budget::new();
-    let html = std::cell::OnceCell::new();
     for p in m.attachments() {
-        if smime(p) {
+        if is_smime(p) {
             continue;
         }
         if is_tnef(&part_mime(p), p.attachment_name()) {
             budget.cut = false;
             match read_part(p.contents(), &mut budget, false) {
-                Some(t) if !budget.cut && t.attachments.iter().all(|f| f.hidden && f.content_id.is_some()) => {}
+                Some(t) if !budget.cut && tnef_files(&t).next().is_none() => {}
                 _ => return true,
             }
-        } else if (p.attachment_name().is_some() || !p.is_inline_part()) && !shown_picture(m, p, &html) {
+        } else if may_be_shown(p).is_none_or(|(cid, location)| !refs.shows(cid, location)) {
             return true;
         }
     }
     false
 }
 
+/// The files of a `winmail.dat` that count as files: not the pictures Outlook marks as its
+/// body's (hidden, with a Content-ID), as a MIME part the HTML shows isn't one.
+pub(super) fn tnef_files(t: &Tnef) -> impl Iterator<Item = &TnefFile> {
+    t.attachments.iter().filter(|f| !(f.hidden && f.content_id.is_some()))
+}
+
 /// Most of a message's HTML looked through for the pictures it shows.
 const SHOWN_HTML_MAX: usize = 4 << 20;
 
-/// A named picture sent inline with a Content-ID that the message's HTML shows (`cid:`): the
-/// text's, not a file, as Outlook names its pictures (`image001.png`) and Quatrelle its own. A
-/// file sent inline (Apple Mail's PDFs) stays one. `html`: the HTML, lower case, read once.
-fn shown_picture(m: &Message<'_>, p: &mail_parser::MessagePart<'_>, html: &std::cell::OnceCell<String>) -> bool {
-    let Some(cid) = p.content_id().map(|c| c.trim().trim_matches(['<', '>']).to_ascii_lowercase()).filter(|c| !c.is_empty()) else {
-        return false;
-    };
-    if !p.is_inline_part() || !part_mime(p).starts_with("image/") {
-        return false;
+/// A message's real `text/html` bodies, the first [`SHOWN_HTML_MAX`] bytes of them.
+fn message_html(m: &Message<'_>) -> String {
+    let mut out = String::new();
+    for t in m.html_bodies().filter(|b| b.is_text_html()).filter_map(|b| b.text_contents()) {
+        push_capped(&mut out, t);
     }
-    let html = html.get_or_init(|| {
-        let mut out = String::new();
-        for t in m.html_bodies().filter_map(|b| b.text_contents()) {
-            let room = SHOWN_HTML_MAX.saturating_sub(out.len());
-            let end = (0..=room.min(t.len())).rev().find(|i| t.is_char_boundary(*i)).unwrap_or(0);
-            out.push_str(t.get(..end).unwrap_or_default());
+    out
+}
+
+/// `t` joins `out` on a line of its own, `out` kept to [`SHOWN_HTML_MAX`] bytes.
+pub(super) fn push_capped(out: &mut String, t: &str) {
+    if !out.is_empty() {
+        out.push('\n');
+    }
+    let room = SHOWN_HTML_MAX.saturating_sub(out.len());
+    let end = (0..=room.min(t.len())).rev().find(|i| t.is_char_boundary(*i)).unwrap_or(0);
+    out.push_str(t.get(..end).unwrap_or_default());
+}
+
+/// Most references kept from one message's HTML.
+const MAX_REFS: usize = 10_000;
+/// Longest reference read (a `cid:` or an address; the reading pane matches none longer).
+const REF_MAX: usize = 4096;
+
+/// The pictures a message's HTML shows, by `cid:` or by the address a part's `Content-Location`
+/// gives it (RFC 2557): read from the HTML only when a part asks, once.
+pub(super) struct HtmlRefs<F: Fn() -> String> {
+    refs: std::cell::OnceCell<Refs>,
+    make: F,
+}
+
+/// What an HTML body refers to, lower case: every `cid:` (up to its closing quote, bracket or
+/// space), and every `src`, `href` and `background` address, whole and by its last segment.
+#[derive(Default)]
+struct Refs {
+    cids: std::collections::HashSet<String>,
+    paths: std::collections::HashSet<String>,
+    files: std::collections::HashSet<String>,
+}
+
+impl Refs {
+    /// One pass over the HTML: each reference is read at most [`REF_MAX`] bytes and the search
+    /// goes on after it, so the time stays linear however the HTML is made.
+    fn read(html: &str) -> Refs {
+        let lower = html.as_bytes().to_ascii_lowercase();
+        let mut r = Refs::default();
+        let stop = |b: &u8| b.is_ascii_whitespace() || b"\"'()<>&;,".contains(b);
+        let window = |from: usize| {
+            let rest = lower.get(from..).unwrap_or_default();
+            rest.get(..rest.len().min(REF_MAX + 1)).unwrap_or_default()
+        };
+        let mut at = 0;
+        while let Some(i) = memchr::memmem::find(lower.get(at..).unwrap_or_default(), b"cid:") {
+            let mut start = at + i + 4;
+            while lower.get(start) == Some(&b'<') && start < at + i + 4 + REF_MAX {
+                start += 1;
+            }
+            let w = window(start);
+            let end = w.iter().position(stop).unwrap_or(w.len());
+            if (1..=REF_MAX).contains(&end) && r.cids.len() < MAX_REFS {
+                let cid = String::from_utf8_lossy(w.get(..end).unwrap_or_default()).into_owned();
+                r.cids.insert(percent_decoded(&cid));
+                r.cids.insert(cid);
+            }
+            at = start + end;
         }
-        out.to_ascii_lowercase()
-    });
-    html.contains(&format!("cid:{cid}"))
+        let space = |from: usize| from + lower.get(from..).unwrap_or_default().iter().take_while(|b| b.is_ascii_whitespace()).count();
+        for attr in [&b"src"[..], b"href", b"background"] {
+            let mut from = 0;
+            while let Some(i) = memchr::memmem::find(lower.get(from..).unwrap_or_default(), attr) {
+                let at = from + i;
+                from = at + attr.len();
+                if at == 0 || !lower.get(at - 1).is_some_and(|b| b.is_ascii_whitespace()) {
+                    continue;
+                }
+                let eq = space(from);
+                if lower.get(eq) != Some(&b'=') {
+                    from = eq;
+                    continue;
+                }
+                let start = space(eq + 1);
+                let (value, next) = match lower.get(start) {
+                    Some(&q @ (b'"' | b'\'')) => {
+                        let w = window(start + 1);
+                        let end = w.iter().position(|b| *b == q).unwrap_or(w.len());
+                        (w.get(..end).unwrap_or_default(), start + 1 + end)
+                    }
+                    _ => {
+                        let w = window(start);
+                        let end = w.iter().position(|b| b.is_ascii_whitespace() || *b == b'>').unwrap_or(w.len());
+                        (w.get(..end).unwrap_or_default(), start + end)
+                    }
+                };
+                from = next.max(from);
+                if value.len() > REF_MAX || r.paths.len() >= MAX_REFS {
+                    continue;
+                }
+                let value = String::from_utf8_lossy(value);
+                let path = percent_decoded(value.split(['?', '#']).next().unwrap_or(&value).trim());
+                if !path.is_empty() {
+                    if !last_segment(&path).is_empty() {
+                        r.files.insert(last_segment(&path).to_string());
+                    }
+                    r.paths.insert(path);
+                }
+            }
+        }
+        r
+    }
+}
+
+/// A path's last segment (`chart.png` of `http://studio.example/a/chart.png`).
+fn last_segment(path: &str) -> &str {
+    path.rsplit(['/', '\\']).next().unwrap_or(path)
+}
+
+/// `%xx` escapes decoded.
+fn percent_decoded(s: &str) -> String {
+    let b = s.as_bytes();
+    let mut out = Vec::with_capacity(b.len());
+    let mut i = 0;
+    while let Some(&c) = b.get(i) {
+        match (c, b.get(i + 1..i + 3).and_then(|h| std::str::from_utf8(h).ok()).and_then(|h| u8::from_str_radix(h, 16).ok())) {
+            (b'%', Some(v)) => {
+                out.push(v);
+                i += 3;
+            }
+            _ => {
+                out.push(c);
+                i += 1;
+            }
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+impl<F: Fn() -> String> HtmlRefs<F> {
+    /// The references of the HTML `make` gives, read the first time a part asks.
+    pub(super) fn new(make: F) -> HtmlRefs<F> {
+        HtmlRefs { refs: std::cell::OnceCell::new(), make }
+    }
+
+    /// Whether the HTML shows the part with this `Content-ID` or `Content-Location`, matched as
+    /// the reading pane finds a picture ([`picture_attachment`]): the whole `cid:` (whatever its
+    /// case; `cid:image10` doesn't show `image1`), the address exactly or by its last segment.
+    pub(super) fn shows(&self, cid: Option<&str>, location: Option<&str>) -> bool {
+        let r = self.refs.get_or_init(|| Refs::read(&(self.make)()));
+        let cid = cid.map(|c| c.trim().trim_matches(['<', '>']).to_ascii_lowercase()).filter(|c| !c.is_empty());
+        let location = location.map(|l| l.trim().trim_matches(['<', '>', '"']).to_ascii_lowercase()).filter(|l| !l.is_empty());
+        cid.is_some_and(|c| r.cids.contains(&c) || r.files.contains(&c))
+            || location.is_some_and(|l| r.paths.contains(&l) || r.files.contains(last_segment(&l)) || r.cids.contains(&l))
+    }
+}
+
+/// A part's type as `type/subtype`, lower case.
+pub(super) fn mime_of(p: &mail_parser::MessagePart<'_>) -> Option<String> {
+    p.content_type().map(|c| format!("{}/{}", c.ctype(), c.subtype().unwrap_or_default()).to_ascii_lowercase())
+}
+
+/// S/MIME's signature and encrypted content are the message itself, not files in it.
+pub(super) fn is_smime(p: &mail_parser::MessagePart<'_>) -> bool {
+    smime::is_smime_part(&mime_of(p).unwrap_or_default(), p.attachment_name().unwrap_or_default())
+}
+
+/// The `Content-ID` and `Content-Location` of a part the HTML may show in its place: one inline
+/// or without a disposition, that has either.
+pub(super) fn may_be_shown<'p>(p: &'p mail_parser::MessagePart<'_>) -> Option<(Option<&'p str>, Option<&'p str>)> {
+    let inline = p.content_disposition().is_none_or(|d| d.ctype().eq_ignore_ascii_case("inline"));
+    let (cid, location) = (p.content_id(), p.content_location());
+    (inline && (cid.is_some() || location.is_some())).then_some((cid, location))
 }
 
 pub(super) trait InlinePart {

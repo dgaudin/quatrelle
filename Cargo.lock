@@ -4927,6 +4927,7 @@ dependencies = [
  "html5ever",
  "mail-builder",
  "mail-parser",
+ "memchr",
  "proptest",
  "quatrelle-model",
  "serde",

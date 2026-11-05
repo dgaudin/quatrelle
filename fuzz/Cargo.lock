@@ -1647,6 +1647,7 @@ dependencies = [
  "html5ever",
  "mail-builder",
  "mail-parser",
+ "memchr",
  "quatrelle-model",
  "serde",
 ]
@@ -1732,6 +1733,7 @@ dependencies = [
  "dirs",
  "flate2",
  "log",
+ "miniz_oxide",
  "quatrelle-model",
  "redb",
  "serde",

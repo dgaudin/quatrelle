@@ -38,6 +38,7 @@ use super::*;
 
 mod build_bytes;
 mod importance;
+mod index_text;
 mod inline_names;
 mod one_parse;
 mod report;
