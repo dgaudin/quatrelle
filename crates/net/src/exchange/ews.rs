@@ -519,10 +519,12 @@ pub(crate) enum Change {
 /// Changes asked for at a time (Exchange answers 512 at most).
 const CHANGES_PAGE: usize = 512;
 
-/// An item's marks: read, flagged, a draft, its categories. Every answer whose marks are taken
-/// asks for all of them (a category missing from one would be taken off).
+/// An item's marks: read, flagged or its follow-up complete (`PidTagFlagStatus`, and
+/// `PidTagFlagCompleteTime` the time it was done), a draft, its categories. Every answer whose
+/// marks are taken asks for all of them (a category missing from one would be taken off).
 const FLAG_FIELDS: &str = "<t:FieldURI FieldURI=\"message:IsRead\"/>\
 <t:ExtendedFieldURI PropertyTag=\"0x1090\" PropertyType=\"Integer\"/>\
+<t:ExtendedFieldURI PropertyTag=\"0x1091\" PropertyType=\"SystemTime\"/>\
 <t:ExtendedFieldURI PropertyTag=\"0x0E07\" PropertyType=\"Integer\"/>\
 <t:FieldURI FieldURI=\"item:Categories\"/>";
 /// Most categories taken from one item.
@@ -598,27 +600,45 @@ fn flags(it: &El) -> Flags {
     keywords.sort_by_key(|k| k.to_ascii_lowercase());
     keywords.dedup_by(|a, b| a.eq_ignore_ascii_case(b));
     keywords.truncate(ITEM_CATEGORIES);
+    // Outlook's Mark Complete: status 1 (2 is flagged), and when it was done.
+    let status = extended(it, "0x1090");
+    if status == Some(1) {
+        keywords.push(quatrelle_model::FOLLOW_UP_COMPLETE.to_string());
+        keywords.sort_by_key(|k| k.to_ascii_lowercase());
+    }
+    let completed = extended_text(it, "0x1091").and_then(jmap::utc_date).filter(|t| *t > 0 && status == Some(1)).unwrap_or(0);
     Flags {
         seen: it.text_of("IsRead").is_some_and(|v| v == "true"),
-        flagged: extended(it, "0x1090") == Some(2),
+        flagged: status == Some(2),
         draft: extended(it, "0x0E07").is_some_and(|f| f & 8 != 0),
         keywords,
+        completed,
         ..Default::default()
     }
 }
 
-/// A message's marks as the server has them now: read, flagged, a draft and its categories
-/// (Exchange keeps them by name, as [`flags`] reads them); the keywords that are Quatrelle's own
-/// (`$Pinned`, `$Junk`…) stay. Whether anything changed.
+/// The marks of every message in an answer, as [`flags`] reads them (the fuzz target reads
+/// them so).
+pub fn marks_listed(doc: &El) -> Vec<Flags> {
+    let mut items = Vec::new();
+    doc.all("Message", &mut items);
+    items.into_iter().map(flags).collect()
+}
+
+/// A message's marks as the server has them now: read, flagged or complete (and when), a draft
+/// and its categories (Exchange keeps them by name, as [`flags`] reads them); the keywords that
+/// are Quatrelle's own (`$Pinned`, `$Junk`…) stay. Whether anything changed.
 fn take_marks(m: &mut Flags, server: &Flags) -> bool {
+    use quatrelle_model::FOLLOW_UP_COMPLETE;
     let mut next = m.clone();
     next.seen = server.seen;
     next.flagged = server.flagged;
     next.draft = server.draft;
-    next.keywords.retain(|k| k.starts_with('$'));
+    next.keywords.retain(|k| k.starts_with('$') && !k.eq_ignore_ascii_case(FOLLOW_UP_COMPLETE));
     for k in &server.keywords {
         next.set_keyword(k, true);
     }
+    next.completed = server.completed;
     let changed = next != *m;
     *m = next;
     changed

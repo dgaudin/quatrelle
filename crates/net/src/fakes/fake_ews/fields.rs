@@ -110,3 +110,38 @@ pub(super) fn text_fields(it: &It, p: &quatrelle_mime::Parsed) -> String {
         esc(&body)
     )
 }
+
+/// A message's follow-up flag as Exchange gives it: `PidTagFlagStatus` (2 flagged, 1 complete)
+/// and `PidTagFlagCompleteTime` when it has one.
+pub(super) fn flag_xml(flagged: bool, complete: bool, time: Option<&str>) -> String {
+    let status = if flagged { Some(2) } else { complete.then_some(1) };
+    let mut x = status
+        .map(|v| {
+            format!(
+                "<t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"0x1090\" PropertyType=\"Integer\"/><t:Value>{v}</t:Value></t:ExtendedProperty>"
+            )
+        })
+        .unwrap_or_default();
+    if let Some(t) = time {
+        x.push_str(&format!(
+            "<t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"0x1091\" PropertyType=\"SystemTime\"/><t:Value>{}</t:Value></t:ExtendedProperty>",
+            esc(t)
+        ));
+    }
+    x
+}
+
+/// An `UpdateItem` change to the follow-up flag taken (`SetItemField` or `DeleteItemField` of
+/// `0x1090` or `0x1091`).
+pub(super) fn take_flag_update(it: &mut It, u: &El) {
+    let set = u.name == "SetItemField";
+    match u.find("ExtendedFieldURI").and_then(|e| e.attr("PropertyTag")) {
+        Some("0x1090") => {
+            let v = u.find("Value").map(|v| v.text.trim().to_string());
+            it.flagged = set && v.as_deref() == Some("2");
+            it.complete = set && v.as_deref() == Some("1");
+        }
+        Some("0x1091") => it.complete_time = u.find("Value").map(|v| v.text.trim().to_string()).filter(|_| set),
+        _ => {}
+    }
+}

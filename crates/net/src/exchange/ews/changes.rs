@@ -62,13 +62,32 @@ fn set_category(c: &Client, ids: &[(String, String)], name: &str, on: bool) -> R
     Ok(())
 }
 
-/// Apply one change on the server.
+/// `PidTagFlagStatus`: 2 flagged, 1 its follow-up complete.
+const FLAG_STATUS: &str = "<t:ExtendedFieldURI PropertyTag=\"0x1090\" PropertyType=\"Integer\"/>";
+/// `PidTagFlagCompleteTime`: when the follow-up was marked complete.
+const COMPLETE_TIME: &str = "<t:ExtendedFieldURI PropertyTag=\"0x1091\" PropertyType=\"SystemTime\"/>";
+/// `PidTagFollowupIcon`: the colour of a flag Outlook set.
+const FOLLOW_UP_ICON: &str = "<t:ExtendedFieldURI PropertyTag=\"0x1095\" PropertyType=\"Integer\"/>";
+
+/// An update setting the flag status.
+fn flag_status(v: u8) -> String {
+    format!(
+        "<t:SetItemField>{FLAG_STATUS}<t:Message><t:ExtendedProperty>{FLAG_STATUS}<t:Value>{v}</t:Value></t:ExtendedProperty></t:Message></t:SetItemField>"
+    )
+}
+
+/// An update deleting a property.
+fn delete(field: &str) -> String {
+    format!("<t:DeleteItemField>{field}</t:DeleteItemField>")
+}
+
 /// Vote on a message (see [`Client::vote`]).
 pub fn vote(c: &Client, st: &State, key: &MessageKey, choice: &str, subject: &str) -> Result<()> {
     let id = st.id(key.uid).filter(|_| key.validity == VALIDITY).ok_or_else(|| NetError::No("the message is no longer on the server".into()))?;
     c.vote(&id, choice, subject)
 }
 
+/// Apply one change on the server.
 pub fn apply_remote(c: &Client, st: &State, op: &Op) -> Result<()> {
     let ids = |keys: &[MessageKey]| -> Vec<(String, String)> {
         let found: Vec<(String, String)> =
@@ -98,13 +117,23 @@ pub fn apply_remote(c: &Client, st: &State, op: &Op) -> Result<()> {
             keys,
             &format!("<t:SetItemField><t:FieldURI FieldURI=\"message:IsRead\"/><t:Message><t:IsRead>{on}</t:IsRead></t:Message></t:SetItemField>"),
         ),
-        Op::SetFlag { keys, flag: Flag::Flagged, on: true } => update(
-            keys,
-            "<t:SetItemField><t:ExtendedFieldURI PropertyTag=\"0x1090\" PropertyType=\"Integer\"/><t:Message><t:ExtendedProperty>\
-             <t:ExtendedFieldURI PropertyTag=\"0x1090\" PropertyType=\"Integer\"/><t:Value>2</t:Value></t:ExtendedProperty></t:Message></t:SetItemField>",
-        ),
-        Op::SetFlag { keys, flag: Flag::Flagged, on: false } => {
-            update(keys, "<t:DeleteItemField><t:ExtendedFieldURI PropertyTag=\"0x1090\" PropertyType=\"Integer\"/></t:DeleteItemField>")
+        // Flagged: status 2, and no time done (a follow-up completed and flagged again).
+        Op::SetFlag { keys, flag: Flag::Flagged, on: true } => update(keys, &format!("{}{}", flag_status(2), delete(COMPLETE_TIME))),
+        // Cleared, or marked complete (the engine takes the flag off first): neither.
+        Op::SetFlag { keys, flag: Flag::Flagged, on: false } => update(keys, &format!("{}{}", delete(FLAG_STATUS), delete(COMPLETE_TIME))),
+        // Outlook's Mark Complete: status 1 and the time it was done, the flag's icon gone
+        // ([MS-OXOFLAG] 3.1.4.2); taken off (Undo, or flagged again): none of it.
+        Op::SetKeyword { keys, keyword, on, .. } if keyword.eq_ignore_ascii_case(quatrelle_model::FOLLOW_UP_COMPLETE) => {
+            if *on {
+                let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(0));
+                let time = format!(
+                    "<t:SetItemField>{COMPLETE_TIME}<t:Message><t:ExtendedProperty>{COMPLETE_TIME}<t:Value>{}</t:Value></t:ExtendedProperty></t:Message></t:SetItemField>",
+                    quatrelle_jmap::utc_date_string(now)
+                );
+                update(keys, &format!("{}{time}{}", flag_status(1), delete(FOLLOW_UP_ICON)))
+            } else {
+                update(keys, &format!("{}{}", delete(FLAG_STATUS), delete(COMPLETE_TIME)))
+            }
         }
         Op::SetKeyword { keys, on, name: Some(name), .. } => set_category(c, &ids(keys), name, *on),
         // Answered and forwarded are Exchange's to set; other keywords (`$Pinned`) are this
