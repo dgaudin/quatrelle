@@ -36,6 +36,8 @@ pub(super) struct Item {
     /// Text of the item's, or of a message attached to it, is in a code page Quatrelle can't read
     /// and lost all but its ASCII.
     pub(super) charset_unsupported: bool,
+    /// The item's only body is Rich Text that couldn't be read: it came in with none.
+    pub(super) body_not_converted: bool,
 }
 
 pub(super) enum File {
@@ -116,7 +118,9 @@ pub(super) fn item_of<'a>(
     if it.html.as_deref().is_none_or(|h| h.trim().is_empty())
         && let Some(Val::Bin(rtf)) = p(0x1009)
     {
-        rtf_into(&mut it, rtf);
+        // PidTagRtfInSync: false when the plain text was changed after the RTF.
+        let in_sync = !matches!(p(0x0E1F), Some(Val::Bool(false)));
+        rtf_into(&mut it, rtf, in_sync);
     }
     it.message_id = message_ids(&s(0x1035)).into_iter().next().unwrap_or_default();
     it.in_reply_to = message_ids(&s(0x1042)).into_iter().next().unwrap_or_default();
@@ -191,9 +195,13 @@ pub(super) fn item_of<'a>(
 /// A body kept as compressed RTF (`PidTagRtfCompressed`) and no HTML: the HTML it wraps, or,
 /// when the item has no text, its own formatting or its text. Its pictures are then inline, as
 /// the HTML names their `cid:`. A plain body is kept over RTF of its own, whose simple HTML
-/// leaves out tables, pictures and objects the text still has.
-fn rtf_into(it: &mut Item, compressed: &[u8]) {
+/// leaves out tables, pictures and objects the text still has, and over RTF that isn't `in_sync`
+/// with it (the text is newer).
+fn rtf_into(it: &mut Item, compressed: &[u8], in_sync: bool) {
     let plain = !it.body.trim().is_empty();
+    if plain && !in_sync {
+        return;
+    }
     let rtf = mime::decompress_rtf(compressed);
     if plain && !rtf.as_deref().is_some_and(mime::rtf_wraps_html) {
         return;
@@ -202,7 +210,10 @@ fn rtf_into(it: &mut Item, compressed: &[u8]) {
         Some(mime::TnefBody::Html(h)) => it.html = Some(h),
         Some(mime::TnefBody::Text(t)) if !plain && !t.trim().is_empty() => it.body = t,
         _ if plain => {}
-        _ => log::info!("a Rich Text body could not be read"),
+        _ => {
+            log::info!("a Rich Text body could not be read");
+            it.body_not_converted = true;
+        }
     }
 }
 
