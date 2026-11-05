@@ -243,6 +243,15 @@ impl Fake {
                             item.extend(format!(" BODY[HEADER] {{{end}}}\r\n").as_bytes());
                             item.extend(&m.raw[..end]);
                         }
+                        if upper.contains("BODYSTRUCTURE") {
+                            item.extend(format!(" BODYSTRUCTURE {}", structure::Part::of(&m.raw).structure()).as_bytes());
+                        }
+                        for (spec, path, mime) in structure::asked_sections(&upper) {
+                            if let Some(data) = structure::Part::of(&m.raw).section(&path, mime) {
+                                item.extend(format!(" BODY[{spec}] {{{}}}\r\n", data.len()).as_bytes());
+                                item.extend(&data);
+                            }
+                        }
                         if upper.contains("BODY.PEEK[]") {
                             item.extend(format!(" BODY[] {{{}}}\r\n", m.raw.len()).as_bytes());
                             item.extend(&m.raw);

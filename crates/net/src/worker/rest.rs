@@ -20,13 +20,17 @@ pub(super) enum Whole {
     Ews(Box<crate::ews::Client>),
     /// With the mailbox it is in, when another than the account's own.
     Graph(crate::graph::Client, Option<String>),
+    /// One more IMAP connection, signed in as the main one is (the key is the message's UID).
+    Imap(Box<opening::ImapCopy>),
 }
 
 impl Whole {
-    fn download(&self, id: &str) -> Result<Vec<u8>> {
+    /// The message's source; an IMAP connection made for it is `held` for the next one.
+    fn download(&self, key: &MessageKey, id: &str, held: &mut Option<Client<Stream>>) -> Result<Vec<u8>> {
         match self {
             Whole::Ews(c) => c.download(id),
             Whole::Graph(c, owner) => c.download(id, owner.as_deref()),
+            Whole::Imap(copy) => copy.source(held, key),
         }
     }
 }
@@ -194,8 +198,10 @@ impl Drop for Unwinding<'_> {
 /// The thread: bring messages until the queue is empty, or a copy is refused its sign-in.
 fn work(queue: &Mutex<Queue>, stopped: &AtomicBool, store: &Store, sink: &Sink) {
     let _unwinding = Unwinding { queue, sink };
+    // An IMAP connection, kept from one message to the next.
+    let mut held = None;
     while let Some(entry) = next(queue) {
-        let (told, left) = match bring(entry, stopped, store) {
+        let (told, left) = match bring(entry, stopped, store, &mut held) {
             Ok(told) => (told, Vec::new()),
             Err((key, e)) => {
                 let error = e.to_string();
@@ -233,7 +239,12 @@ pub(super) fn named(key: &MessageKey) -> String {
 /// Bring one message: what to tell of it, or why it didn't come. Its failures are told of the
 /// message only; a refused sign-in also closes the queue ([`refused`]), as the main connection,
 /// signed in before, may well go on working.
-fn bring(entry: Waiting, stopped: &AtomicBool, store: &Store) -> std::result::Result<Event, (MessageKey, NetError)> {
+fn bring(
+    entry: Waiting,
+    stopped: &AtomicBool,
+    store: &Store,
+    held: &mut Option<Client<Stream>>,
+) -> std::result::Result<Event, (MessageKey, NetError)> {
     let Waiting { key, id, how } = entry;
     if stopped.load(Ordering::SeqCst) {
         return Ok(Event::BodyFailed { key, error: STOPPED.into() });
@@ -244,7 +255,7 @@ fn bring(entry: Waiting, stopped: &AtomicBool, store: &Store) -> std::result::Re
         return Ok(Event::Body { key, raw });
     }
     let asked = Instant::now();
-    let raw = how.download(&id);
+    let raw = how.download(&key, &id, held);
     if stopped.load(Ordering::SeqCst) {
         return Ok(Event::BodyFailed { key, error: STOPPED.into() });
     }
@@ -294,12 +305,18 @@ impl Worker {
             return self.body_failed(key, e);
         }
         let (asked, numbered) = (Instant::now(), self.jstate.len());
+        // IMAP: the whole message on one more connection, signed in as this one is.
+        let imap_copy = if matches!(self.conn, Some(Conn::Imap(_))) { self.imap_copy() } else { None };
         // The copy of the connection is taken once the text is had: it carries what that learnt.
-        let text = match self.conn.as_ref() {
+        let text = match self.conn.as_mut() {
             Some(Conn::Ews(c)) => crate::ews::fetch_text(c, &mut self.jstate, &self.store, &key)
                 .map(|found| found.map(|(raw, id)| (raw, id, Whole::Ews(Box::new(c.sibling()))))),
             Some(Conn::Graph(c)) => crate::graph::fetch_text(c, &self.jstate, &self.store, &key)
                 .map(|found| found.map(|(raw, id)| (raw, id, Whole::Graph(c.sibling(), self.jstate.owner(&key.folder).map(str::to_string))))),
+            Some(Conn::Imap(c)) => match imap_copy {
+                Some(copy) => crate::sync::fetch_text(c, &key).map(|found| found.map(|raw| (raw, String::new(), Whole::Imap(Box::new(copy))))),
+                None => return self.fetch(key),
+            },
             _ => return self.fetch(key),
         };
         if self.jstate.len() != numbered {

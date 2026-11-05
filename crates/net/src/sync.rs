@@ -550,6 +550,14 @@ fn select_for<S: Read + Write>(c: &mut Client<S>, key: &MessageKey) -> Result<()
     Ok(())
 }
 
+/// A big message's text first (issue #24): its header and text parts only, its files listed but
+/// not downloaded; `None` when it has no files to leave for later, is signed or encrypted, or is
+/// gone (then [`fetch_body`] brings it whole). Nothing is kept: the text isn't the message.
+pub fn fetch_text<S: Read + Write>(c: &mut Client<S>, key: &MessageKey) -> Result<Option<Vec<u8>>> {
+    select_for(c, key)?;
+    c.text_first(key.uid)
+}
+
 /// One message's source from the server, nothing kept: its folder's list is left to the sync.
 pub fn fetch_source<S: Read + Write>(c: &mut Client<S>, key: &MessageKey) -> Result<Vec<u8>> {
     select_for(c, key)?;

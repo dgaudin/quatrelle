@@ -20,6 +20,7 @@ use crate::{NetError, Result};
 
 mod conn;
 mod folders;
+mod text_first;
 use conn::check_unknown;
 #[cfg(test)]
 use conn::literal_len;

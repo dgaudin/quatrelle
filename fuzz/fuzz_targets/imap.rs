@@ -2,7 +2,7 @@
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! An IMAP server's side of a session: the input is everything the server sends, read by the
 //! client through a run of commands (greeting, CAPABILITY, LOGIN, LIST, SELECT, a folder sync,
-//! STATUS, QUOTA, APPEND, MOVE). Each command reads on after the last one failed, as a
+//! STATUS, QUOTA, APPEND, MOVE, a message's text first). Each command reads on after the last one failed, as a
 //! reconnect would see a fresh server.
 #![no_main]
 
@@ -58,6 +58,7 @@ fuzz_target!(|data: &[u8]| {
     let _ = c.quota();
     let _ = c.append("Drafts", r"(\Draft)", b"Subject: x\r\n\r\nbody\r\n");
     let _ = c.uid_move_to("1:3", "Trash");
+    let _ = c.text_first(1);
     let _ = c.noop();
     let _ = c.take_news();
 });

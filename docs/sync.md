@@ -62,11 +62,13 @@ Graph blobs, EWS `GetItem` with the MIME content, POP's copy. A source that arri
 search as it is read (`Session::index_body`). `Session::download_progress` feeds the status bar,
 messages already kept are never asked for again, and it stops by itself once the last one is here.
 
-## A message's text first (Exchange and Graph, `worker/rest.rs`)
+## A message's text first (Exchange, Graph and IMAP, `worker/rest.rs`)
 
 A message can arrive in two ways. The usual one is `Job::FetchBody`: the whole source, then
 `Event::Body`. The second is `Job::FetchTextFirst`, chosen by `Session::fetch_job` for an EWS or
-Graph message that is not older mail read online, has files, and (EWS) is 1 MiB or more. The
+Graph message that is not older mail read online, has files, and (EWS) is 1 MiB or more; and for
+an IMAP message of 256 KiB or more not signed or encrypted (its header can't say whether it has
+files: its structure will). The
 worker asks the server for its body, headers and file list alone (EWS `GetItem` with named
 fields, Graph `$expand=attachments`), builds a message from them with `mime::text_first` (its
 files listed empty) and sends `Event::TextFirst`, so the pane shows the text at once. The whole
@@ -74,6 +76,17 @@ message is then downloaded by a thread of its own on a copy of the connection (`
 time and the last asked first, and arrives as `Event::Body`, which replaces the text in place; only
 that one is stored and indexed. The text phase reads the built message with
 `mime::parse_text_first`, which keeps a name without an address.
+
+Over IMAP (`protocols/imap/text_first.rs`) the server is asked for the message's `BODYSTRUCTURE`
+first: a message of one part, signed or encrypted (`multipart/signed`, `multipart/encrypted`, a
+PKCS #7 or PGP part), with no file, with more than 32 text parts or 8 MiB of text, or past 500
+parts or 16 levels comes whole. Otherwise its header and its text parts alone are fetched
+(`BODY.PEEK[HEADER]`, `BODY.PEEK[1.1]`…), each text part's header written from its structure
+(servers differ on `BODY[1.1.MIME]`: GreenMail answers with the part above), the files listed
+with their names (RFC 2231 and RFC 2047 decoded, `mime::part_name`) and sizes (a base64 part's
+three quarters). The whole message comes on one more connection signed in as the main one is,
+kept for the next message while there is one. The fuzz targets `imap` and `text_first` read
+these answers.
 
 Any failure of the text request sends the message the usual way; only a refused sign-in
 (`NetError::Auth`) does not retry, to spare a locked account a second attempt. A server that
@@ -83,7 +96,7 @@ interface never waits for ever. A failed whole message gives `Event::BodyFailed`
 "Try again". "Download all", the CLI and the sync's own prefetch stay whole.
 Left whole as well: the Outbox, older mail read online, signed or encrypted mail, invitations
 and a message with a protected file. The fuzz target
-`text_first` covers the two builders.
+`text_first` covers the builders.
 
 ## A message opened while the main connection works (`worker/opening.rs`, issue #24)
 

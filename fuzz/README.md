@@ -12,13 +12,13 @@ libFuzzer. `.github/workflows/fuzz.yml` runs every target weekly on Linux.
 | `ical` | an iCalendar file, written back and read again; a WebDAV `multistatus` answer |
 | `vcard` | a vCard file, each card written back and read again |
 | `http` | an HTTP answer read whole and streamed to a file (lengths, chunks, to the end), a download's `Content-Range`; GitHub's release list, `SHA256SUMS.txt`, its quota header and tags |
-| `imap` | everything an IMAP server sends through a session (greeting to MOVE, with a folder sync) |
+| `imap` | everything an IMAP server sends through a session (greeting to MOVE, with a folder sync and a message's text first) |
 | `jmap` | a JMAP server's answers (split at form feeds) through sign-in, folder list and folder sync; push events; URLs |
 | `search` | the search box: the query language, the Advanced form, JMAP filters, modified UTF-7; lookalike senders, known names on other addresses, External |
 | `signature` | a sender's name, address and message text (split at the first two line breaks): the author's own part, the signature's addresses and sites, the name asked of the directory, the signature checked against the sender |
 | `pst` | an Outlook data file: a good exported file with the input as byte patches, or a whole file |
 | `trust` | the URLs and hosts servers hand out (DAV hrefs, `EwsUrl`, `Location`): `url_host` and `site`, a site staying itself and reading back |
-| `text_first` | Exchange's `GetItem` answer (XML) or Graph's message (JSON), picked by the first byte, built into a message's text and read back with `parse_text_first` and `parse`; each of Exchange's response messages read as a refusal (`check_message`, the fields its `MessageXml` names) |
+| `text_first` | Exchange's `GetItem` answer (XML), Graph's message (JSON) or an IMAP server's answers to a text first (`BODYSTRUCTURE`, then the header and text parts), picked by the first byte, built into a message's text and read back with `parse_text_first` and `parse`; each of Exchange's response messages read as a refusal (`check_message`, the fields its `MessageXml` names) |
 | `tnef` | Outlook's `winmail.dat`: its files, body and attached messages, compressed RTF and the HTML or text in it, and as a message's attachment |
 
 ## Running

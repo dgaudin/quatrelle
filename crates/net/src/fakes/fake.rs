@@ -75,6 +75,8 @@ pub struct State {
     /// Commands containing this text take this long (a big folder on a slow server): the
     /// connection that sent it waits, others don't.
     pub stall_on: Option<(String, std::time::Duration)>,
+    /// Bytes a second the server sends over TCP (0: as fast as it can), a line to the internet.
+    pub rate: usize,
 }
 
 impl State {
@@ -100,6 +102,7 @@ impl State {
             create_under: None,
             hang_up_idle: None,
             stall_on: None,
+            rate: 0,
         }))
     }
 
@@ -333,8 +336,14 @@ pub fn serve_tcp(st: &Arc<Mutex<State>>) -> u16 {
                 let _open = Open(st.clone());
                 loop {
                     let out: Vec<u8> = fake.out.drain(..).collect();
-                    if !out.is_empty() && sock.write_all(&out).is_err() {
-                        return;
+                    let rate = st.lock().map(|s| s.rate).unwrap_or(0);
+                    for piece in out.chunks(if rate == 0 { usize::MAX } else { (rate / 20).max(1) }) {
+                        if sock.write_all(piece).is_err() {
+                            return;
+                        }
+                        if rate > 0 {
+                            std::thread::sleep(std::time::Duration::from_millis(50));
+                        }
                     }
                     let hang_up = if fake.idling.is_some() { st.lock().ok().and_then(|mut s| s.hang_up_idle.take()) } else { None };
                     if let Some(after) = hang_up {
@@ -467,6 +476,7 @@ fn login(st: &Arc<Mutex<State>>) -> Client<Fake> {
 
 mod commands;
 mod search;
+mod structure;
 
 use search::{in_set, search_matches, search_tokens};
 

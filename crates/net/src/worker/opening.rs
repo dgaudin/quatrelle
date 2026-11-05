@@ -443,7 +443,22 @@ impl Opened {
                 }
                 c.download(&id).map_err(|e| (false, e))?
             }
-            Copy::Imap(i) => i.source(imap, key).map_err(|e| (false, e))?,
+            Copy::Imap(i) => {
+                if text {
+                    match i.with(imap, |c| crate::sync::fetch_text(c, key)) {
+                        Ok(Some(raw)) => {
+                            shown(raw);
+                            if self.rest.add(key.clone(), String::new(), Whole::Imap(i.clone())) {
+                                return Ok(Brought::Told);
+                            }
+                        }
+                        Ok(None) => {}
+                        Err(e) if e.is_fatal() || matches!(e, NetError::Auth(_)) => return Err((text, e)),
+                        Err(e) => log::info!("{}: the message's text didn't come ({e}): it comes whole", named(key)),
+                    }
+                }
+                i.source(imap, key).map_err(|e| (false, e))?
+            }
         };
         // Stopped meanwhile (quitting, working offline, the account removed): nothing written.
         if self.rest.stopped() {
@@ -504,6 +519,14 @@ impl Worker {
                 };
                 Some(Copy::Imap(Box::new(ImapCopy { acc: self.acc.clone(), secret, store: self.store.clone() })))
             }
+            _ => None,
+        }
+    }
+
+    /// A copy of this IMAP connection, for the thread bringing whole messages.
+    pub(super) fn imap_copy(&self) -> Option<ImapCopy> {
+        match self.copy() {
+            Some(Copy::Imap(i)) => Some(*i),
             _ => None,
         }
     }
