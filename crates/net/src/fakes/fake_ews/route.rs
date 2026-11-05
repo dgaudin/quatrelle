@@ -244,11 +244,16 @@ impl Data {
                     }
                     // Mail received since then (Cached Exchange Mode's mail kept offline); the
                     // times are all written alike, so they compare as text.
-                    if let Some(cond) = restriction.find("IsGreaterThanOrEqualTo")
-                        && cond.find("FieldURI").and_then(|f| f.attr("FieldURI")) == Some("item:DateTimeReceived")
-                    {
+                    let mut from = Vec::new();
+                    restriction.all("IsGreaterThanOrEqualTo", &mut from);
+                    if let Some(cond) = from.iter().find(|c| c.find("FieldURI").and_then(|f| f.attr("FieldURI")) == Some("item:DateTimeReceived")) {
                         let since = cond.find("Constant").and_then(|c| c.attr("Value")).unwrap_or_default().to_string();
                         list.retain(|i| i.received.as_str() >= since.as_str());
+                    }
+                    // Replied to or forwarded (`PidTagLastVerbExecuted` within a range).
+                    if let Some((lo, hi)) = super::fields::verb_range(restriction) {
+                        list.retain(|i| i.verb.last.as_deref().and_then(|v| v.parse::<i64>().ok()).is_some_and(|v| (lo..=hi).contains(&v)));
+                        self.calls.push("FindItem replied".into());
                     }
                     // Those carrying categories.
                     if restriction.find("Exists").and_then(|e| e.find("FieldURI")).and_then(|f| f.attr("FieldURI")) == Some("item:Categories") {
@@ -306,7 +311,7 @@ impl Data {
                             "<t:Message><t:ItemId Id=\"{}\" ChangeKey=\"ck\"/><t:IsRead>{}</t:IsRead>{}{}</t:Message>",
                             i.id,
                             i.read,
-                            super::flag_xml(i.flagged, i.complete, i.complete_time.as_deref()),
+                            super::flag_xml(i.flagged, i.complete, i.complete_time.as_deref(), &i.verb),
                             super::categories_xml(&i.categories)
                         )
                     })
@@ -465,6 +470,7 @@ impl Data {
                             flagged: false,
                             complete: false,
                             complete_time: None,
+                            verb: super::Verb::default(),
                             draft: true,
                             received: "2026-10-15T12:00:00Z".into(),
                             voting: Vec::new(),
@@ -507,6 +513,7 @@ impl Data {
                         flagged: false,
                         complete: false,
                         complete_time: None,
+                        verb: super::Verb::default(),
                         draft,
                         received: "2026-10-15T12:00:00Z".into(),
                         voting: verbs,

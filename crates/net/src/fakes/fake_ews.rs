@@ -50,6 +50,8 @@ pub struct It {
     pub complete: bool,
     /// When it was (`PidTagFlagCompleteTime`), as Exchange writes it.
     pub complete_time: Option<String>,
+    /// The last thing done with it: replied, forwarded (`PidTagLastVerbExecuted`…).
+    pub verb: Verb,
     pub draft: bool,
     pub received: String,
     /// The voting buttons (`PidLidVerbStream`), when it has some.
@@ -453,6 +455,7 @@ impl Data {
             flagged: false,
             complete: false,
             complete_time: None,
+            verb: Verb::default(),
             draft: false,
             received: received.into(),
             voting: Vec::new(),
@@ -517,7 +520,7 @@ impl Data {
             use std::hash::{Hash, Hasher};
             let mut h = std::collections::hash_map::DefaultHasher::new();
             for i in self.items.iter().filter(|i| i.folder == f.id) {
-                (&i.id, i.read, i.flagged, i.complete, &i.complete_time, i.draft, &i.categories).hash(&mut h);
+                (&i.id, i.read, i.flagged, i.complete, &i.complete_time, &i.verb, i.draft, &i.categories).hash(&mut h);
             }
             format!(
                 "{replica}<t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"0x670a\" PropertyType=\"SystemTime\"/><t:Value>2026-01-01T00:00:00.{:x}Z</t:Value></t:ExtendedProperty>",
@@ -605,7 +608,7 @@ impl Data {
         if text {
             x.push_str(&text_fields(it, &p));
         }
-        x.push_str(&flag_xml(it.flagged, it.complete, it.complete_time.as_deref()));
+        x.push_str(&flag_xml(it.flagged, it.complete, it.complete_time.as_deref(), &it.verb));
         x.push_str(&ext("0x0E07", if it.draft { 8 } else { 1 }));
         if !it.voting.is_empty() {
             x.push_str(&format!(
@@ -742,6 +745,7 @@ mod streaming;
 mod syncing;
 mod tasks;
 
+pub use fields::Verb;
 use fields::{MICROSOFT_FIELDS, fields_named, flag_xml, take_flag_update, text_fields};
 pub use server::serve;
 

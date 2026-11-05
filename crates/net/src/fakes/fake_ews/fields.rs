@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! The fake EWS server: which fields Exchange knows, and what the fields of a message's text give.
 
 use super::*;
@@ -111,9 +112,19 @@ pub(super) fn text_fields(it: &It, p: &quatrelle_mime::Parsed) -> String {
     )
 }
 
+/// The last thing done with a message, as Exchange keeps it: `PidTagLastVerbExecuted` (102
+/// replied to the sender, 103 to all, 104 forwarded…), `PidTagLastVerbExecutionTime` when, and
+/// `PidTagIconIndex` the icon Outlook's list draws.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub struct Verb {
+    pub last: Option<String>,
+    pub time: Option<String>,
+    pub icon: Option<String>,
+}
+
 /// A message's follow-up flag as Exchange gives it: `PidTagFlagStatus` (2 flagged, 1 complete)
-/// and `PidTagFlagCompleteTime` when it has one.
-pub(super) fn flag_xml(flagged: bool, complete: bool, time: Option<&str>) -> String {
+/// and `PidTagFlagCompleteTime` when it has one; with the last thing done with it ([`Verb`]).
+pub(super) fn flag_xml(flagged: bool, complete: bool, time: Option<&str>, verb: &Verb) -> String {
     let status = if flagged { Some(2) } else { complete.then_some(1) };
     let mut x = status
         .map(|v| {
@@ -128,11 +139,19 @@ pub(super) fn flag_xml(flagged: bool, complete: bool, time: Option<&str>) -> Str
             esc(t)
         ));
     }
+    for (tag, kind, v) in [("0x1081", "Integer", &verb.last), ("0x1082", "SystemTime", &verb.time), ("0x1080", "Integer", &verb.icon)] {
+        if let Some(v) = v {
+            x.push_str(&format!(
+                "<t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"{tag}\" PropertyType=\"{kind}\"/><t:Value>{}</t:Value></t:ExtendedProperty>",
+                esc(v)
+            ));
+        }
+    }
     x
 }
 
 /// An `UpdateItem` change to the follow-up flag taken (`SetItemField` or `DeleteItemField` of
-/// `0x1090` or `0x1091`).
+/// `0x1090` or `0x1091`), or to the last thing done with it (`0x1081`, `0x1082`, `0x1080`).
 pub(super) fn take_flag_update(it: &mut It, u: &El) {
     let set = u.name == "SetItemField";
     match u.find("ExtendedFieldURI").and_then(|e| e.attr("PropertyTag")) {
@@ -142,6 +161,27 @@ pub(super) fn take_flag_update(it: &mut It, u: &El) {
             it.complete = set && v.as_deref() == Some("1");
         }
         Some("0x1091") => it.complete_time = u.find("Value").map(|v| v.text.trim().to_string()).filter(|_| set),
+        // The last thing done with it, when, and its icon (as written).
+        Some(tag @ ("0x1081" | "0x1082" | "0x1080")) => {
+            let v = u.find("Value").map(|v| v.text.trim().to_string()).filter(|_| set);
+            match tag {
+                "0x1081" => it.verb.last = v,
+                "0x1082" => it.verb.time = v,
+                _ => it.verb.icon = v,
+            }
+        }
         _ => {}
     }
+}
+
+/// A restriction's range on `PidTagLastVerbExecuted` (`0x1081` at least and at most so much).
+pub(super) fn verb_range(restriction: &El) -> Option<(i64, i64)> {
+    let bound = |name: &str| {
+        let mut all = Vec::new();
+        restriction.all(name, &mut all);
+        all.into_iter()
+            .find(|c| c.find("ExtendedFieldURI").and_then(|e| e.attr("PropertyTag")) == Some("0x1081"))
+            .and_then(|c| c.find("Constant").and_then(|k| k.attr("Value")).and_then(|v| v.parse().ok()))
+    };
+    Some((bound("IsGreaterThanOrEqualTo")?, bound("IsLessThanOrEqualTo")?))
 }

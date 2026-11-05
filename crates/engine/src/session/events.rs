@@ -311,7 +311,7 @@ impl Session {
                 // Delivered from the Outbox: set the flag it owed.
                 if let Some((key, flag)) = self.pending_marks.remove(&id) {
                     self.save_pending_marks();
-                    self.apply_op(&key.account.clone(), Op::SetFlag { keys: vec![key], flag, on: true });
+                    self.mark_original(key, flag);
                 }
                 self.after_outbox_change();
             }

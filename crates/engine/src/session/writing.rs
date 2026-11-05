@@ -480,7 +480,7 @@ impl Session {
         if let (Some(src), Some(mode)) = (&c.source, c.mode) {
             let flag = if mode == ReplyMode::Forward { Flag::Forwarded } else { Flag::Answered };
             if delivered {
-                self.apply_op(&src.account.clone(), Op::SetFlag { keys: vec![src.clone()], flag, on: true });
+                self.mark_original(src.clone(), flag);
             } else if self.pending_marks.len() < 1000 {
                 self.pending_marks.insert(c.id, (src.clone(), flag));
                 self.save_pending_marks();
@@ -493,6 +493,19 @@ impl Session {
         self.composes.retain(|x| x.id != c.id);
         self.set_aside.retain(|x| x.id != c.id);
         self.notice("Message sent", false);
+    }
+
+    /// A reply or forward delivered: its original marked replied to or forwarded. Exchange keeps
+    /// the last thing done with a message, and Outlook shows that one: there the other arrow
+    /// goes first (the server, told the new one, has no use for that change). IMAP and JMAP keep
+    /// both marks, each a fact of its own.
+    pub(super) fn mark_original(&mut self, key: MessageKey, flag: Flag) {
+        let exchange = self.account(&key.account).is_some_and(|a| a.config.ews.is_some() || a.config.graph.is_some());
+        let other = if flag == Flag::Forwarded { Flag::Answered } else { Flag::Forwarded };
+        if exchange && self.summary(&key).is_some_and(|m| other.get(&m.flags)) {
+            self.apply_op(&key.account.clone(), Op::SetFlag { keys: vec![key.clone()], flag: other, on: false });
+        }
+        self.apply_op(&key.account.clone(), Op::SetFlag { keys: vec![key], flag, on: true });
     }
 
     /// Save the message being written to Drafts.
