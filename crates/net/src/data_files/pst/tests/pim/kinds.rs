@@ -5,6 +5,7 @@
 //! and documents, contact groups and journal entries; and the categories, Show As, privacy and
 //! reminder of a calendar item.
 
+use outlook_pst::ltp::prop_context::GuidValue;
 use outlook_pst::messaging::named_prop::PS_PUBLIC_STRINGS;
 use outlook_pst::{UnicodePstRecipient, UnicodePstRecipientType, UnicodePstValue as V};
 use quatrelle_model::ical::{PrivateKind, ShowAs};
@@ -56,14 +57,58 @@ fn meeting_items_come_in_with_their_calendar() {
     assert!(calendar_of(&by_subject(classes[3])).is_none(), "a forward's notice has none");
 }
 
-/// A post and a document in a mail folder come in as mail; a recall there is counted as left out,
-/// not dropped unsaid.
+/// A post (an RSS feed's too), a document, a recall and its report, a sharing invitation and a
+/// task request in a mail folder come in as mail, with their subject, text and sender; a contact
+/// there goes to the address book as one in a contacts folder does; another kind is counted as
+/// left out, not dropped unsaid.
 #[test]
 fn posts_and_documents_are_mail_and_other_kinds_are_counted() {
-    let classes = ["IPM.Post", "IPM.Document.Word.Document.12", "IPM.Note", "IPM.Outlook.Recall"];
-    let puts: Vec<Put<'_>> = classes.iter().map(|c| Put::new(&["Inbox"], "IPF.Note", item(c, c, "Text", &[]))).collect();
+    let mail = [
+        "IPM.Post",
+        "IPM.Post.Rss",
+        "IPM.Document.Word.Document.12",
+        "IPM.Note",
+        "IPM.Outlook.Recall",
+        "IPM.Recall.Report.Success",
+        "IPM.Sharing",
+        "IPM.TaskRequest",
+    ];
+    let texts: Vec<String> = mail.iter().map(|c| format!("Text of {c}")).collect();
+    let mut puts: Vec<Put<'_>> = mail.iter().zip(&texts).map(|(c, t)| Put::new(&["Inbox"], "IPF.Note", item(c, c, t, &[]))).collect();
+    let ana = [named(ADDRESS, 0x8083, V::Unicode("ana@posteo.example"))];
+    puts.push(Put::new(&["Inbox"], "IPF.Note", item("IPM.Contact", "Ana Lima", "", &ana)));
+    puts.push(Put::new(&["Inbox"], "IPF.Note", item("IPM.Configuration.Junk", "x", "", &[])));
     let b = Brought::of("kinds", &puts);
-    assert_eq!((b.done.messages, b.done.skipped), (3, 1), "{:?}", b.done);
+    assert_eq!((b.done.messages, b.done.contacts, b.done.skipped), (mail.len(), 1, 1), "{:?}", b.done);
+    let list = b.messages("INBOX");
+    for class in mail {
+        let (m, raw) = list.iter().find(|(m, _)| m.subject == class).expect(class);
+        assert_eq!(m.from.email, "riley@studio.example");
+        assert!(mime::parse(raw).unwrap().text.contains(&format!("Text of {class}")), "{class}");
+    }
+    assert!(b.pim().cards.iter().any(|c| c.card.emails.iter().any(|e| e.value == "ana@posteo.example")));
+}
+
+/// A sharing invitation says what it shares, who shares it and an internet calendar's address,
+/// from its sharing properties, before its own text.
+#[test]
+fn a_sharing_invitation_says_what_it_shares() {
+    let sharing = GuidValue::new(0x0006_2040, 0, 0, OLE);
+    let props = [
+        named(sharing, 0x8A05, V::Unicode("Studio bookings")),
+        named(sharing, 0x8A1D, V::Unicode("IPF.Appointment")),
+        named(sharing, 0x8A07, V::Unicode("Ana")),
+        named(sharing, 0x8A08, V::Unicode("ana@posteo.example")),
+        named(sharing, 0x8A04, V::Unicode("https://cal.example/ana.ics")),
+    ];
+    let b = Brought::of("sharing", &[Put::new(&["Inbox"], "IPF.Note", item("IPM.Sharing", "Ana shared a calendar", "Take a look.", &props))]);
+    assert_eq!(b.done.messages, 1, "{:?}", b.done);
+    let (_, raw) = b.messages("INBOX").remove(0);
+    let text = mime::parse(&raw).unwrap().text;
+    assert!(
+        text.contains("Shared calendar: Studio bookings\nShared by Ana <ana@posteo.example>\nAddress: https://cal.example/ana.ics\n\nTake a look."),
+        "{text}"
+    );
 }
 
 /// The wrapped entry id of a contact group's member that is a one-off address (MS-OXCDATA 2.2.5.3.3).

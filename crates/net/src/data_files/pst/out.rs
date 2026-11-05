@@ -104,6 +104,12 @@ impl<'a> Out<'a> {
     }
 
     pub(super) fn add_message(&mut self, path: &str, mut it: Item) {
+        // A contact, calendar item, task, note or journal entry in a mail folder goes where one in
+        // a folder of its own does.
+        if is_pim(&it.class) {
+            self.add_pim(it);
+            return;
+        }
         // Mail only: meeting requests and receipts are mail too, and so are a post and a
         // document; anything else in a mail folder is counted, not dropped unsaid.
         if !is_mail(&it.class) {
@@ -264,8 +270,21 @@ impl<'a> Out<'a> {
 }
 
 /// Whether an item of `class` comes in as mail: meeting requests and receipts are mail too, and so
-/// are a post and a document; appointments, contacts and tasks in a mail folder aren't.
+/// are a post (an RSS feed's among them), a document, a recall (and its report), a sharing
+/// invitation and a task request; appointments, contacts and tasks in a mail folder aren't
+/// ([`is_pim`]).
 pub(super) fn is_mail(class: &str) -> bool {
     let class = class.to_ascii_lowercase();
-    class.is_empty() || ["ipm.note", "ipm.schedule", "report.", "ipm.post", "ipm.document"].iter().any(|c| class.starts_with(c))
+    class.is_empty()
+        || ["ipm.note", "ipm.schedule", "report.", "ipm.post", "ipm.document", "ipm.outlook.recall", "ipm.recall", "ipm.sharing", "ipm.taskrequest"]
+            .iter()
+            .any(|c| class.starts_with(c))
+}
+
+/// Whether an item of `class` is a contact, contact group, calendar item, task, note or journal
+/// entry, which goes to the address book, calendar, tasks or notes wherever it's found.
+pub(super) fn is_pim(class: &str) -> bool {
+    let class = class.to_ascii_lowercase();
+    !class.starts_with("ipm.taskrequest")
+        && ["ipm.contact", "ipm.distlist", "ipm.appointment", "ipm.task", "ipm.stickynote", "ipm.activity"].iter().any(|c| class.starts_with(c))
 }

@@ -24,12 +24,14 @@ use crate::pst::Val;
 mod files;
 mod groups;
 mod meetings;
-pub(crate) use files::{card_file, event_file};
 mod recur;
+mod sharing;
+pub(crate) use files::{card_file, event_file};
 pub(crate) use groups::group_of;
 pub(crate) use meetings::invitation;
 use recur::recurrence;
 pub(crate) use recur::{Own, changed_events};
+pub(crate) use sharing::{put_before, sharing_lines};
 
 type GuidKey = (u32, u16, u16, [u8; 8]);
 const OLE: [u8; 8] = [0xC0, 0, 0, 0, 0, 0, 0, 0x46];
