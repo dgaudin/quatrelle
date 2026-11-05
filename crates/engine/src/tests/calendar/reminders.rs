@@ -244,13 +244,13 @@ fn a_dismissed_occurrence_and_a_snooze_go_to_exchange() {
     let series = key_for(&s, "m-1");
     s.run("reminders.snooze", &json!({"key": series, "minutes": 10})).unwrap();
     let later = ReminderAnswer { snooze_until: Some(s.clock.now + 600), ..waiting[0].clone() };
-    assert_eq!(s.pim[&id].reminder_answers, [later.clone()]);
+    assert_eq!(s.pim[&id].reminder_answers, std::slice::from_ref(&later));
     let took = |s: &mut Session, answered: Vec<ReminderAnswer>| {
         let sync = DavSync { answered, checked: s.clock.now, ..Default::default() };
         s.apply(Event::DavSynced { account: id.clone(), sync: Box::new(sync) });
     };
     took(&mut s, waiting.to_vec());
-    assert_eq!(s.pim[&id].reminder_answers, [later.clone()]);
+    assert_eq!(s.pim[&id].reminder_answers, std::slice::from_ref(&later));
     took(&mut s, vec![later]);
     assert!(s.pim[&id].reminder_answers.is_empty());
     assert!(due(&s, s.clock.now).is_empty(), "still answered here");
