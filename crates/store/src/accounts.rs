@@ -224,7 +224,8 @@ impl Store {
 
     /// Compact Now, whole: what an earlier build kept raw compressed again first
     /// ([`Store::recompress_data_file`]: the account is read and written as ever meanwhile), then
-    /// the file compacted in place ([`Store::compact_data_file`]: what wants it waits). Without
+    /// the file compacted in place ([`Store::compact_data_file`]: what wants it waits, but a read
+    /// from the window's thread is refused at once, [`crate::no_waiting`]). Without
     /// `recompress` (the drive hasn't the room for the file to grow while it's compressed again),
     /// only compacted. `progress` hears each step. Stopped by `cancel` while compressing, it isn't
     /// compacted (the next one goes on from there). Compressing again that fails (a damaged
