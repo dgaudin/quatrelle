@@ -1909,3 +1909,9 @@ folder	Conflicts	충돌
 	Snoozed mail couldn't be read: changes to it won't be saved	다시 알림으로 미룬 메일을 읽을 수 없습니다. 변경 내용은 저장되지 않습니다
 	{name}: {messages} messages imported, but the last of it could not be saved: {error}	{name}: 메시지 {messages}개를 가져왔지만 마지막 부분을 저장할 수 없습니다: {error}
 	{name}: {messages} messages imported, but the last of it could not be saved: {error}. Import the file again to keep it.	{name}: 메시지 {messages}개를 가져왔지만 마지막 부분을 저장할 수 없습니다: {error}. 유지하려면 파일을 다시 가져오세요.
+	Add an account to send mail.	메일을 보내려면 계정을 추가하세요.
+	Mail can't be sent from an Outlook data file.	Outlook 데이터 파일에서는 메일을 보낼 수 없습니다.
+	Mail can't be sent from a mailbox kept only on this computer.	이 컴퓨터에만 보관된 사서함에서는 메일을 보낼 수 없습니다.
+	This account has no outgoing (SMTP) server.	이 계정에는 보내는 메일(SMTP) 서버가 없습니다.
+	Add one in its account settings to send mail.	메일을 보내려면 계정 설정에서 추가하세요.
+	{subject}: not sent, this account can't send mail	{subject}: 보내지 않음, 이 계정에서는 메일을 보낼 수 없습니다

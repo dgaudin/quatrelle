@@ -97,7 +97,13 @@ written (`Compose`), preferences and status-bar notices.
   it to the cache and server and reports `FolderChanged`, which reloads from the cache (the single
   source of truth).
 - Local-only accounts (the sample mailbox) apply changes to the cache directly, including moves
-  (new UIDs in the destination) and sending (filed in Sent).
+  (new UIDs in the destination) and, for the sample mailbox alone, sending (filed in Sent).
+- Mail is sent only from an account that can send it (`session/writing/sending.rs`):
+  `Session::send_block` says why not (no account, a data file, a mailbox kept only here, no
+  outgoing server), `compose.send` is off with that reason, and `Session::deliver`, which every
+  way of sending reaches, refuses it, as Send now in the Outbox and meeting answers do. New
+  messages, replies and forwards in a data file are written from the first account that can
+  send, and an account added takes the messages being written from one that can't.
 
 ### Scheduling a meeting (`session/scheduling.rs`, `cmd/scheduling.rs`)
 

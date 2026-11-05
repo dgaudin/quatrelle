@@ -1910,3 +1910,9 @@ folder	Conflicts	Conflitos
 	Snoozed mail couldn't be read: changes to it won't be saved	Não foi possível ler os emails adiados: as alterações neles não serão salvas
 	{name}: {messages} messages imported, but the last of it could not be saved: {error}	{name}: {messages} mensagens importadas, mas não foi possível salvar a última parte: {error}
 	{name}: {messages} messages imported, but the last of it could not be saved: {error}. Import the file again to keep it.	{name}: {messages} mensagens importadas, mas não foi possível salvar a última parte: {error}. Importe o arquivo novamente para mantê-la.
+	Add an account to send mail.	Adicione uma conta para enviar emails.
+	Mail can't be sent from an Outlook data file.	Não é possível enviar emails de um arquivo de dados do Outlook.
+	Mail can't be sent from a mailbox kept only on this computer.	Não é possível enviar emails de uma caixa de correio mantida só neste computador.
+	This account has no outgoing (SMTP) server.	Esta conta não tem servidor de saída (SMTP).
+	Add one in its account settings to send mail.	Adicione um nas configurações da conta para enviar emails.
+	{subject}: not sent, this account can't send mail	{subject}: não enviado, esta conta não pode enviar emails

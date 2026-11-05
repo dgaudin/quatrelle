@@ -1906,3 +1906,9 @@ folder	Conflicts	Conflicten
 	Snoozed mail couldn't be read: changes to it won't be saved	Uitgestelde mail kon niet worden gelezen: wijzigingen daarin worden niet opgeslagen
 	{name}: {messages} messages imported, but the last of it could not be saved: {error}	{name}: {messages} berichten geïmporteerd, maar het laatste deel kon niet worden opgeslagen: {error}
 	{name}: {messages} messages imported, but the last of it could not be saved: {error}. Import the file again to keep it.	{name}: {messages} berichten geïmporteerd, maar het laatste deel kon niet worden opgeslagen: {error}. Importeer het bestand opnieuw om het te bewaren.
+	Add an account to send mail.	Voeg een account toe om e-mail te verzenden.
+	Mail can't be sent from an Outlook data file.	Vanuit een Outlook-gegevensbestand kan geen e-mail worden verzonden.
+	Mail can't be sent from a mailbox kept only on this computer.	Vanuit een postvak dat alleen op deze computer wordt bewaard, kan geen e-mail worden verzonden.
+	This account has no outgoing (SMTP) server.	Dit account heeft geen server voor uitgaande e-mail (SMTP).
+	Add one in its account settings to send mail.	Voeg er een toe in de accountinstellingen om e-mail te verzenden.
+	{subject}: not sent, this account can't send mail	{subject}: niet verzonden, dit account kan geen e-mail verzenden

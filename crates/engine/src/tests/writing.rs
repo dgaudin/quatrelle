@@ -14,6 +14,7 @@ mod pictures;
 mod places;
 mod quoted;
 mod senders;
+mod sending;
 
 #[test]
 fn compose_reply_and_send_locally() {

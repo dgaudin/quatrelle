@@ -1909,3 +1909,9 @@ folder	Conflicts	Конфликты
 	Snoozed mail couldn't be read: changes to it won't be saved	Не удалось прочитать отложенную почту: изменения в ней не будут сохранены
 	{name}: {messages} messages imported, but the last of it could not be saved: {error}	{name}: импортировано писем: {messages}, но последнюю часть сохранить не удалось: {error}
 	{name}: {messages} messages imported, but the last of it could not be saved: {error}. Import the file again to keep it.	{name}: импортировано писем: {messages}, но последнюю часть сохранить не удалось: {error}. Импортируйте файл ещё раз, чтобы сохранить её.
+	Add an account to send mail.	Добавьте учётную запись, чтобы отправлять почту.
+	Mail can't be sent from an Outlook data file.	Из файла данных Outlook нельзя отправлять почту.
+	Mail can't be sent from a mailbox kept only on this computer.	Из почтового ящика, хранящегося только на этом компьютере, нельзя отправлять почту.
+	This account has no outgoing (SMTP) server.	У этой учётной записи нет сервера исходящей почты (SMTP).
+	Add one in its account settings to send mail.	Добавьте его в параметрах учётной записи, чтобы отправлять почту.
+	{subject}: not sent, this account can't send mail	{subject}: не отправлено, с этой учётной записи нельзя отправлять почту

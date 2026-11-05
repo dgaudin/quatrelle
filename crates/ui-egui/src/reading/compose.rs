@@ -3,7 +3,7 @@
 // Copyright (c) 2026 Didier Gaudin
 //! The message being written: its form (from, to, cc, bcc, subject), its ribbon and its body.
 
-use quatrelle_engine::FieldId;
+use quatrelle_engine::{FieldId, SendBlock};
 
 use super::*;
 use crate::dialogs::people_field::{COMPOSE_FIELDS, accepts_of};
@@ -102,17 +102,66 @@ pub(super) fn label_button_menu(ui: &mut Ui, t: &Tokens, label: &str, enabled: b
     crate::widgets::field_button(ui, t, label, enabled, menu)
 }
 
-/// Outlook's tall Send button beside the address rows.
-pub(super) fn send_button(ui: &mut Ui, t: &Tokens, height: f32, sending: bool) -> egui::Response {
+/// Outlook's tall Send button beside the address rows. `blocked`: why the message can't go from
+/// its account; it's drawn off, and a click says why.
+pub(super) fn send_button(ui: &mut Ui, t: &Tokens, height: f32, sending: bool, blocked: Option<&str>) -> egui::Response {
     let (rect, resp) = ui.allocate_exact_size(vec2(66.0, height), if sending { Sense::hover() } else { Sense::click() });
-    crate::widgets::named(ui, &resp, if sending { tl!("Sending…") } else { tl!("Send") }, !sending, None);
-    let fill = if resp.hovered() && !sending { t.hover } else { t.surface };
+    let on = !sending && blocked.is_none();
+    crate::widgets::named(ui, &resp, if sending { tl!("Sending…") } else { tl!("Send") }, on, None);
+    let fill = if resp.hovered() && on { t.hover } else { t.surface };
     ui.painter().rect(rect, 4.0, fill, egui::Stroke::new(1.0, t.border), egui::StrokeKind::Inside);
     let icon = egui::Rect::from_center_size(rect.center() - vec2(0.0, 10.0), vec2(24.0, 24.0));
-    icons::paint(ui.painter(), icon, Icon::Send, if sending { t.dim } else { t.accent });
+    icons::paint(ui.painter(), icon, Icon::Send, if on { t.accent } else { t.dim });
     let label = if sending { tl!("Sending…") } else { tl!("Send") };
-    ui.painter().text(rect.center() + vec2(0.0, 16.0), egui::Align2::CENTER_CENTER, label, theme::regular(12.5), t.text);
-    resp.on_hover_text(tl!("Send (Ctrl+Enter)"))
+    ui.painter().text(rect.center() + vec2(0.0, 16.0), egui::Align2::CENTER_CENTER, label, theme::regular(12.5), if on { t.text } else { t.dim });
+    resp.on_hover_text(blocked.unwrap_or(tl!("Send (Ctrl+Enter)")))
+}
+
+/// Why a message can't be sent from its account, as the window says it: what's wrong, then
+/// what to do about it (none when the first says it).
+pub(crate) fn send_block_lines(b: SendBlock) -> (&'static str, Option<&'static str>) {
+    let add = Some(tl!("Add an account to send mail."));
+    match b {
+        SendBlock::NoAccount => (tl!("Add an account to send mail."), None),
+        SendBlock::DataFile => (tl!("Mail can't be sent from an Outlook data file."), add),
+        SendBlock::NoServer => (tl!("Mail can't be sent from a mailbox kept only on this computer."), add),
+        SendBlock::NoOutgoingServer => {
+            (tl!("This account has no outgoing (SMTP) server."), Some(tl!("Add one in its account settings to send mail.")))
+        }
+    }
+}
+
+/// [`send_block_lines`] as one text (the alert Send brings up, Send's hover).
+pub(crate) fn send_block_text(b: SendBlock) -> String {
+    match send_block_lines(b) {
+        (what, Some(todo)) => format!("{what}\n{todo}"),
+        (what, None) => what.to_string(),
+    }
+}
+
+/// Over the form, why the message can't be sent, as the reading pane's bars say what's wrong
+/// with a message: a warning, what's wrong, what to do in small under it, and Add an account
+/// when one would send it.
+fn send_block_bar(ui: &mut Ui, t: &Tokens, b: SendBlock, acts: &mut Vec<Action>) {
+    let (what, todo) = send_block_lines(b);
+    egui::Frame::new().fill(t.warn.gamma_multiply(0.12)).corner_radius(6).inner_margin(Margin::symmetric(10, 7)).show(ui, |ui| {
+        ui.set_width(ui.available_width());
+        ui.horizontal(|ui| {
+            let (r, _) = ui.allocate_exact_size(vec2(16.0, 16.0), Sense::hover());
+            icons::paint(ui.painter(), r, Icon::Warning, t.warn);
+            ui.vertical(|ui| {
+                ui.add(egui::Label::new(RichText::new(what).color(t.text)).wrap());
+                ui.horizontal_wrapped(|ui| {
+                    if let Some(todo) = todo {
+                        ui.label(RichText::new(todo).color(t.dim).small());
+                    }
+                    if b != SendBlock::NoOutgoingServer && ui.link(RichText::new(tl!("Add an account")).small()).clicked() {
+                        acts.push(Action::Dialog(crate::Dialog::add_account()));
+                    }
+                });
+            });
+        });
+    });
 }
 
 /// A labelled field; its spelling is checked when `spell` says how.
@@ -185,7 +234,13 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
             }
         });
     }
-    let senders = s.senders();
+    // From offers the accounts that can send (and the one it's from, whatever it is).
+    let from = s.compose.as_ref().map(|c| c.account.clone()).unwrap_or_default();
+    let senders: Vec<quatrelle_engine::Sender> =
+        s.senders().into_iter().filter(|x| x.account == from || s.send_block(&x.account).is_none()).collect();
+    // Mail goes only from an account that can send it (none set up, or a data file, can't).
+    let blocked = s.compose_send_block();
+    let blocked_text = blocked.map(send_block_text);
     // The message's fields and From's other address made ready (chips from their text, the
     // names the directory settled, suggestions for what's typed), and the choice a name several
     // people fit waits for (From's menu stays open under it).
@@ -242,7 +297,15 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
             });
             ui.add_space(10.0);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.button(tl!("OK")).clicked() || ui.input(|i| i.key_pressed(egui::Key::Enter))
+                // Enter is OK; not the Ctrl+Enter that tried to send and brought it up.
+                let ok = ui.button(tl!("OK")).clicked() || ui.input(|i| i.key_pressed(egui::Key::Enter) && !i.modifiers.command);
+                // Not sent for want of an account: one can be added from here.
+                let add = blocked.is_some_and(|b| b != SendBlock::NoOutgoingServer && blocked_text.as_deref() == Some(msg.as_str()))
+                    && ui.button(tl!("Add an account")).clicked();
+                if add {
+                    acts.push(Action::Dialog(crate::Dialog::add_account()));
+                }
+                ok || add
             })
             .inner
         });
@@ -255,7 +318,8 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
     let focus_to = fresh && c.to.trim().is_empty();
     let focus_body = fresh && !focus_to;
     let send = |c: &quatrelle_engine::Compose, acts: &mut Vec<Action>| {
-        if c.subject.trim().is_empty() {
+        // From an account that can't send: Send says why (not first ask about the subject).
+        if c.subject.trim().is_empty() && blocked.is_none() {
             acts.push(Action::Dialog(crate::Dialog::EmptySubject));
         } else {
             acts.push(Action::Run("compose.send", json!({})));
@@ -334,6 +398,10 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
             rich_edit::compose_ribbon(ui, &t, &mut ed, c, &input, acts);
         });
         super::assistant::rewrite_panel(&t, ui, c, acts);
+        if let Some(b) = blocked {
+            ui.add_space(4.0);
+            send_block_bar(ui, &t, b, acts);
+        }
         if let Some(e) = &c.error {
             ui.add_space(4.0);
             egui::Frame::new().fill(t.danger.gamma_multiply(0.12)).corner_radius(6).inner_margin(Margin::symmetric(10, 6)).show(ui, |ui| {
@@ -356,7 +424,7 @@ pub(super) fn compose(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut
             let rows = if c.show_cc { 4.0 } else { 3.0 };
             let height = rows * ROW_H + (rows - 1.0) * 6.0;
             ui.horizontal_top(|ui| {
-                if send_button(ui, &t, height, c.sending).clicked() {
+                if send_button(ui, &t, height, c.sending, blocked_text.as_deref()).clicked() {
                     send(c, acts);
                 }
                 ui.add_space(10.0);

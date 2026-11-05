@@ -200,6 +200,16 @@ pub(crate) fn tour() {
         a.run("message.popOut", json!({"key": k.to_id()}));
         frame(&ctx, &mut a, vec![]);
         a.run("message.closeWindow", json!({"key": k.to_id()}));
+        // Written from a data file, which can't send: the bar over the form, and Send's alert.
+        let file = a.session.run("account.importPst", &json!({"path": "Archive.pst"})).unwrap()["account"].as_str().unwrap().to_string();
+        a.run("mail.new", json!({"account": file}));
+        frame(&ctx, &mut a, vec![]);
+        a.run("compose.send", json!({}));
+        frame(&ctx, &mut a, vec![]);
+        a.ui.compose_alert = None;
+        a.run("compose.discard", json!({}));
+        a.session.accounts.retain(|x| x.config.id != file);
+        a.session.take_jobs();
         backstage_tour(&mut a, &ctx);
         pim_tour(&mut a, &ctx);
         updates::tour(&mut a, &ctx);

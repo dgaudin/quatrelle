@@ -1907,3 +1907,9 @@ folder	Conflicts	競合
 	Snoozed mail couldn't be read: changes to it won't be saved	再通知に設定したメールを読み込めませんでした。変更は保存されません
 	{name}: {messages} messages imported, but the last of it could not be saved: {error}	{name}: {messages} 件のメッセージをインポートしましたが、最後の部分を保存できませんでした: {error}
 	{name}: {messages} messages imported, but the last of it could not be saved: {error}. Import the file again to keep it.	{name}: {messages} 件のメッセージをインポートしましたが、最後の部分を保存できませんでした: {error}。残すにはファイルをもう一度インポートしてください。
+	Add an account to send mail.	メールを送信するには、アカウントを追加してください。
+	Mail can't be sent from an Outlook data file.	Outlook データ ファイルからはメールを送信できません。
+	Mail can't be sent from a mailbox kept only on this computer.	このコンピューターだけに保存されているメールボックスからはメールを送信できません。
+	This account has no outgoing (SMTP) server.	このアカウントには送信 (SMTP) サーバーがありません。
+	Add one in its account settings to send mail.	メールを送信するには、アカウント設定で追加してください。
+	{subject}: not sent, this account can't send mail	{subject}: 送信されていません。このアカウントからはメールを送信できません

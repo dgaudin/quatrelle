@@ -33,7 +33,7 @@ pub use session::{
     FolderRef, FolderSizes, INDEX_MAX, ItemChoice, ItemKind, KnownCert, ListFilter, ListLayout, Lock, MAX_SHOWN_MEMBERS, MAX_SUGGESTIONS, MAX_TOTAL,
     MEETINGS_PROFILE, MoveTarget, NAMES_NOT_FOUND, NameChoice, NotesOrder, Outcome, PANICS_CAUGHT, PaneSection, Picture, PictureLoading, Prefs,
     READING_ZOOM, RECENT_EMOJI, ReadInPane, Reading, ReadingPane, Resolved, RevocationCheck, Rewrite, Row, RulesScope, SMIME_DOC, STILL_COMING, Seal,
-    SearchScope, Security, SendCheck, Sender, SenderAddresses, SenderMarks, ServerSearch, Session, SignedBy, Sizes, SmimeSettings, Source,
+    SearchScope, Security, SendBlock, SendCheck, Sender, SenderAddresses, SenderMarks, ServerSearch, Session, SignedBy, Sizes, SmimeSettings, Source,
     Suggestion, UpdateCheck, VacationState, View, WEBEX_ROOM_LINE_MAX, WEBEX_ROOM_LINES_MAX, WEBEX_ROOM_NAME_MAX, WEBEX_ROOMS_MAX, WebexRoom,
     directory_people, fill_name, group_entry,
     invite::{Invite, InviteProblem},

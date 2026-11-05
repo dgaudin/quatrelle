@@ -1910,3 +1910,9 @@ folder	Conflicts	Conflits
 	Snoozed mail couldn't be read: changes to it won't be saved	Le courrier reporté n’a pas pu être lu : ses modifications ne seront pas enregistrées
 	{name}: {messages} messages imported, but the last of it could not be saved: {error}	{name} : {messages} messages importés, mais la fin de l’import n’a pas pu être enregistrée : {error}
 	{name}: {messages} messages imported, but the last of it could not be saved: {error}. Import the file again to keep it.	{name} : {messages} messages importés, mais la fin de l’import n’a pas pu être enregistrée : {error}. Importez de nouveau le fichier pour la garder.
+	Add an account to send mail.	Ajoutez un compte pour envoyer du courrier.
+	Mail can't be sent from an Outlook data file.	Impossible d’envoyer du courrier depuis un fichier de données Outlook.
+	Mail can't be sent from a mailbox kept only on this computer.	Impossible d’envoyer du courrier depuis une boîte aux lettres conservée uniquement sur cet ordinateur.
+	This account has no outgoing (SMTP) server.	Ce compte n’a pas de serveur de courrier sortant (SMTP).
+	Add one in its account settings to send mail.	Ajoutez-en un dans les paramètres du compte pour envoyer du courrier.
+	{subject}: not sent, this account can't send mail	{subject} : non envoyé, ce compte ne peut pas envoyer de courrier

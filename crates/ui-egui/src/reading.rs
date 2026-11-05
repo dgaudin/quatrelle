@@ -34,6 +34,7 @@ use body::*;
 pub use compose::compose_window;
 #[cfg(test)]
 pub(crate) use compose::picture_alone;
+pub(crate) use compose::{send_block_lines, send_block_text};
 use pictures::*;
 pub(crate) use sender_check::{external_tag, sender_warning};
 /// A picture cut to a circle: its middle square is kept (a picture that isn't square would
