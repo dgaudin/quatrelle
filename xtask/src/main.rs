@@ -44,6 +44,7 @@ const LAYERS: &[(&str, u8)] = &[
     ("quatrelle-store", 1),
     ("quatrelle-print", 1),
     ("quatrelle-smime", 1),
+    ("quatrelle-pgp", 1),
     ("quatrelle-spell", 1),
     ("quatrelle-jmap", 2),
     ("quatrelle-keys", 2),
