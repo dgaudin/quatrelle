@@ -194,6 +194,9 @@ pub(crate) struct Pictures {
     touched: HashSet<MessageKey>,
     /// A PDF's page count, by (message, attachment).
     pages: HashMap<(MessageKey, usize), usize>,
+    /// The open message's source, read already to show it ([`Pictures::give_source`]): its
+    /// work's first read takes it rather than reading the cache again. Kept a frame.
+    given: Option<(MessageKey, Arc<[u8]>)>,
     #[cfg(test)]
     pub(crate) panic_at: Option<usize>,
 }
@@ -212,6 +215,7 @@ impl Default for Pictures {
             shared: Arc::default(),
             touched: HashSet::new(),
             pages: HashMap::new(),
+            given: None,
             #[cfg(test)]
             panic_at: None,
         }
@@ -377,6 +381,14 @@ impl Pictures {
         self.frame = self.frame.wrapping_add(1);
         self.frame_bytes = 0;
         self.touched.clear();
+        self.given = None;
+    }
+
+    /// The source of the message just shown, read to show it (on the reading lane): the work
+    /// that takes its pictures out starts from it (this frame) instead of reading it again
+    /// (from upstream a75755e).
+    pub(crate) fn give_source(&mut self, key: &MessageKey, raw: Arc<[u8]>) {
+        self.given = Some((key.clone(), raw));
     }
 
     /// The pictures asked for this frame go to their message's batch (a new one for a message
@@ -421,9 +433,11 @@ impl Pictures {
                     .collect(),
                 _ => Vec::new(),
             };
+            let given = self.given.take_if(|(k, _)| *k == key).map(|(_, raw)| raw);
             let batch = Arc::new(Batch {
                 key,
                 store: store.clone(),
+                given: Mutex::new(given),
                 queue: Mutex::new(VecDeque::from([(index, want)])),
                 also,
                 tried: Mutex::new(HashMap::new()),
@@ -534,6 +548,11 @@ impl Pictures {
     /// Messages read for their files, and pictures decoded, so far.
     pub(crate) fn counts(&self) -> (usize, usize) {
         (self.shared.stats.extractions.load(Ordering::Relaxed), self.shared.stats.decodes.load(Ordering::Relaxed))
+    }
+
+    /// Messages read from the cache for their files.
+    pub(crate) fn reads(&self) -> usize {
+        self.shared.stats.reads.load(Ordering::Relaxed)
     }
 
     /// Steps done on the window's thread, and frames asked for by work on a thread.

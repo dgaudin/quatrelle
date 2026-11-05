@@ -25,6 +25,8 @@ impl MailApp {
         if self.pump() {
             ctx.request_repaint();
         }
+        // The open message's body, back from the reading lane.
+        self.take_body();
         // A send held for names being resolved goes once they are, or says why it can't.
         self.send_when_resolved(ctx);
         // A file dialog answered: what asked (Attach, Save As…) completes.
@@ -71,6 +73,7 @@ impl MailApp {
         if self.session.prefs.reminders_on_top && reminders::showing(&self.ui.reminders) && ctx.input(|i| i.viewport().visible() == Some(false)) {
             ctx.send_viewport_cmd_to(egui::ViewportId::ROOT, egui::ViewportCommand::RequestPaintWhileHidden);
         }
+        self.send_body_work(ctx);
         self.flush_jobs();
         // Woken by the workers when they have news; this is for the clock (reminders, snoozed
         // mail coming back) when nothing else happens.
@@ -298,6 +301,7 @@ impl MailApp {
                 self.act(a);
             }
             self.build_contacts(&ctx);
+            self.send_body_work(&ctx);
             self.flush_jobs();
             return;
         }
@@ -607,6 +611,7 @@ impl MailApp {
             self.session.fill_previews(&previews);
             ctx.request_repaint();
         }
+        self.send_body_work(&ctx);
         self.flush_jobs();
         if std::mem::take(&mut self.ui.focus_main) {
             ctx.send_viewport_cmd_to(egui::ViewportId::ROOT, egui::ViewportCommand::Focus);

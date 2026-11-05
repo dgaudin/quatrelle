@@ -7,7 +7,7 @@
 use super::*;
 
 /// Services with threads for slow work: each piece on a thread of its own.
-struct Threads;
+pub(super) struct Threads;
 
 impl crate::Services for Threads {
     fn clock(&self) -> (i64, i32) {
@@ -26,7 +26,7 @@ impl crate::Services for Threads {
 }
 
 /// Services that keep the work handed to them, for the test to run when it says.
-struct Held(std::sync::Arc<std::sync::Mutex<Vec<crate::Work>>>);
+pub(super) struct Held(pub(super) std::sync::Arc<std::sync::Mutex<Vec<crate::Work>>>);
 
 impl crate::Services for Held {
     fn clock(&self) -> (i64, i32) {
@@ -45,7 +45,7 @@ impl crate::Services for Held {
 }
 
 /// Services that say there are threads, but give the work back (one couldn't be started).
-struct Refused;
+pub(super) struct Refused;
 
 impl crate::Services for Refused {
     fn clock(&self) -> (i64, i32) {

@@ -8,6 +8,7 @@ use super::*;
 use egui::{Pos2, Rect, Shape, vec2};
 
 mod bench;
+mod bodies;
 mod reading;
 mod threads;
 mod videos;
