@@ -119,6 +119,24 @@ impl Index {
         }
     }
 
+    /// Keep the documents `map` gives a new number (`map[d]`), numbered so, and drop the others:
+    /// one pass over the words, however few documents go. The new numbers must keep the old
+    /// ones' order (each word's list stays sorted, never sorted again).
+    pub fn renumber(&mut self, map: &[Option<u32>]) {
+        let new = |d: u32| map.get(d as usize).copied().flatten();
+        self.postings.retain(|_, list| {
+            list.retain_mut(|d| match new(*d) {
+                Some(n) => {
+                    *d = n;
+                    true
+                }
+                None => false,
+            });
+            !list.is_empty()
+        });
+        self.docs = self.docs.iter().filter_map(|&d| new(d)).collect();
+    }
+
     /// The index as bytes, for keeping it between runs: the documents, then each word and the
     /// documents holding it as differences (a big folder's list stays a couple of bytes a
     /// message). [`Index::from_bytes`] reads it back.
@@ -248,6 +266,11 @@ impl Index {
     }
 }
 
+/// Keep the items of `v` whose place `kept` says.
+fn keep_at<T>(v: &mut Vec<T>, kept: impl Fn(usize) -> bool) {
+    *v = std::mem::take(v).into_iter().enumerate().filter(|(i, _)| kept(*i)).map(|(_, x)| x).collect();
+}
+
 /// A range of document numbers as `start..end` (`end` past the last number when unbounded): an
 /// empty or reversed range is simply empty, never a panic.
 fn span(docs: &impl RangeBounds<u32>) -> (u64, u64) {
@@ -313,16 +336,20 @@ impl<'a> Bytes<'a> {
 }
 
 /// A folder's index as kept between runs: the state it was read from (its `stamp`), the messages
-/// in the order of their number (and whether each had a body), and the words.
+/// in the order of their number (whether each had a body, and a sum of what its summary gave the
+/// index, [`summary_sum`]), and the words.
 ///
-/// Kept per folder: a folder that changed is read again on its own, the others are taken as they
-/// are. The stamp covers the messages' text, not their flags: marking mail read doesn't throw the
-/// index away. Bodies read since are added when the index is read back (see the session).
+/// Kept per folder. The stamp covers the messages' text, not their flags: marking mail read
+/// doesn't throw the index away. A folder that changed keeps what didn't: the messages gone, or
+/// whose summary changed (their sum), are taken out ([`FolderIndex::retain`]), and those come in
+/// are read alone (see the session); bodies read since are added when the index is read back.
 #[derive(Clone, Debug, Default)]
 pub struct FolderIndex {
     pub stamp: u64,
     pub keys: Vec<MessageKey>,
     pub has_body: Vec<bool>,
+    /// Each message's [`summary_sum`]; empty when read from a file of version 3, which had none.
+    pub sums: Vec<u64>,
     pub index: Index,
 }
 
@@ -331,8 +358,33 @@ impl FolderIndex {
         FolderIndex { stamp, ..Default::default() }
     }
 
+    /// Keep the messages `keep` says (by their number), numbered again from zero in their order:
+    /// how many went.
+    pub fn retain(&mut self, keep: &[bool]) -> usize {
+        let mut map = Vec::with_capacity(self.keys.len());
+        let mut next = 0u32;
+        for i in 0..self.keys.len() {
+            if keep.get(i) == Some(&true) {
+                map.push(Some(next));
+                next = next.saturating_add(1);
+            } else {
+                map.push(None);
+            }
+        }
+        let gone = self.keys.len() - next as usize;
+        if gone == 0 {
+            return 0;
+        }
+        self.index.renumber(&map);
+        let kept = |i: usize| map.get(i).is_some_and(Option::is_some);
+        keep_at(&mut self.keys, kept);
+        keep_at(&mut self.has_body, kept);
+        keep_at(&mut self.sums, kept);
+        gone
+    }
+
     pub fn to_bytes(&self) -> Vec<u8> {
-        let mut out = Vec::with_capacity(32 + self.keys.len() * 10);
+        let mut out = Vec::with_capacity(32 + self.keys.len() * 18);
         out.extend_from_slice(FOLDER_MAGIC);
         out.push(FOLDER_VERSION);
         out.extend_from_slice(&self.stamp.to_le_bytes());
@@ -342,6 +394,8 @@ impl FolderIndex {
             out.extend_from_slice(&k.validity.to_le_bytes());
             out.extend_from_slice(&k.uid.to_le_bytes());
             out.push(u8::from(self.has_body.get(i) == Some(&true)));
+            // A sum not known is one no summary has: the message is read again.
+            out.extend_from_slice(&self.sums.get(i).copied().unwrap_or(0).to_le_bytes());
         }
         let words = self.index.to_bytes();
         put_varint(&mut out, u32::try_from(words.len()).unwrap_or(u32::MAX));
@@ -350,12 +404,19 @@ impl FolderIndex {
     }
 
     /// Read back a folder index; `None` for a damaged file or one of another format. `account`
-    /// and `folder` aren't kept in it: the file's place says which folder it is.
+    /// and `folder` aren't kept in it: the file's place says which folder it is. A file of
+    /// version 3 (the same words, no sums) is read too, its sums left empty: the session takes it
+    /// only for a folder that didn't change.
     pub fn from_bytes(account: &str, folder: &str, bytes: &[u8]) -> Option<FolderIndex> {
         let mut r = Bytes { b: bytes, at: 0 };
-        if r.take(FOLDER_MAGIC.len())? != FOLDER_MAGIC || r.u8()? != FOLDER_VERSION {
+        if r.take(FOLDER_MAGIC.len())? != FOLDER_MAGIC {
             return None;
         }
+        let version = r.u8()?;
+        if version != FOLDER_VERSION && version != FOLDER_VERSION_UNSUMMED {
+            return None;
+        }
+        let summed = version == FOLDER_VERSION;
         let stamp = r.u64()?;
         let n = r.varint()? as usize;
         if n > MAX_INDEX_DOCS {
@@ -364,10 +425,16 @@ impl FolderIndex {
         let mut fi = FolderIndex::new(stamp);
         fi.keys.reserve(n.min(1024));
         fi.has_body.reserve(n.min(1024));
+        if summed {
+            fi.sums.reserve(n.min(1024));
+        }
         for _ in 0..n {
             let (validity, uid, body) = (r.u32()?, r.u32()?, r.u8()? != 0);
             fi.keys.push(MessageKey { account: account.to_string(), folder: folder.to_string(), validity, uid });
             fi.has_body.push(body);
+            if summed {
+                fi.sums.push(r.u64()?);
+            }
         }
         let len = r.varint()? as usize;
         fi.index = Index::from_bytes(r.take(len)?)?;

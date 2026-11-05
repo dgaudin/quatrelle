@@ -49,7 +49,8 @@ fn window(store: &Store) -> Session {
 
 /// A search over every folder, as the window carries it: a call, then a call a frame while more
 /// is left. The calls, their time in all and the worst; what it found.
-fn search(s: &mut Session, q: &str) -> (usize, Duration, Duration, usize) {
+fn search(s: &mut Session, q: &str) -> (usize, Duration, Duration, usize, u64) {
+    let reads = s.store.as_ref().map_or(0, |st| st.reads());
     let mut times = Vec::new();
     let t = Instant::now();
     s.run_search_budgeted(q, SearchScope::All, SLICE);
@@ -61,12 +62,13 @@ fn search(s: &mut Session, q: &str) -> (usize, Duration, Duration, usize) {
     }
     let total = times.iter().sum();
     let worst = times.iter().max().copied().unwrap_or_default();
-    (times.len(), total, worst, s.list.len())
+    let read = s.store.as_ref().map_or(0, |st| st.reads()).saturating_sub(reads);
+    (times.len(), total, worst, s.list.len(), read)
 }
 
-fn report(what: &str, (calls, total, worst, found): (usize, Duration, Duration, usize)) {
+fn report(what: &str, (calls, total, worst, found, read): (usize, Duration, Duration, usize, u64)) {
     println!(
-        "{what}: {calls} calls (about {:.1} s of frames at 60 Hz), {:.2} s in them, worst {:.1} ms; found {found}",
+        "{what}: {calls} calls (about {:.1} s of frames at 60 Hz), {:.2} s in them, worst {:.1} ms; found {found}; {read} sources read",
         calls as f64 * FRAME_MS / 1000.0,
         total.as_secs_f64(),
         worst.as_secs_f64() * 1000.0
@@ -133,7 +135,7 @@ fn fifty_thousand() {
     let accented = big::ACCENTED.to_lowercase().replace('ü', "u");
     for (q, want) in [
         (big::RARE.to_string(), Some(truth.rare)),
-        (accented, Some(truth.accented)),
+        (accented.clone(), Some(truth.accented)),
         (big::FAR.to_string(), Some(truth.far)),
         (format!("\"{}\"", big::PHRASE), Some(truth.phrase)),
         ("is:read".to_string(), Some(truth.read)),
@@ -154,20 +156,56 @@ fn fifty_thousand() {
     report("after a restart", search(&mut s, big::RARE));
     sizes(&s, n);
     println!("  process grew {:.0} MB", rss_mb() - before);
+    // In the same run: a message comes into the Inbox, and the next search.
+    let came = arrive(&store, 1, "Came while open");
+    s.apply(crate::model::Event::FolderChanged { account: big::ACCOUNT.into(), folder: "INBOX".into() });
+    let r = search(&mut s, big::RARE);
+    report("in the run, a message come into the Inbox", r);
+    assert_eq!(r.3, truth.rare + came);
+    // Every message after it a place down in its list: searches that look at many of them.
+    for q in [accented.as_str(), "is:read"] {
+        report(&format!("  then {q}"), search(&mut s, q));
+    }
     drop(s);
 
-    // A message comes into the Inbox: a restart reads the Inbox again, whole.
-    let mut inbox = store.load_folder(big::ACCOUNT, "INBOX").unwrap();
-    let uid = inbox.messages.iter().map(|m| m.key.uid).max().unwrap_or(0) + 1;
-    let key = MessageKey { account: big::ACCOUNT.into(), folder: "INBOX".into(), validity: 1, uid };
-    store.write_body(&key, format!("Subject: New one\r\n\r\nA {} arrived.\r\n", big::RARE).as_bytes()).unwrap();
-    inbox.messages.insert(0, Summary { key, subject: "New one".into(), date: NOW, ..Default::default() });
-    store.save_folder(big::ACCOUNT, "INBOX", &inbox).unwrap();
+    // A message comes into the Inbox: what a restart reads again.
+    let came = came + arrive(&store, 2, "New one");
     let mut s = window(&store);
-    report("after a restart, a message come into the Inbox", search(&mut s, big::RARE));
+    let r = search(&mut s, big::RARE);
+    report("after a restart, a message come into the Inbox", r);
+    assert_eq!(r.3, truth.rare + came);
+    drop(s);
+    // Then one deleted from the Inbox and one moved from it to another folder.
+    let mut inbox = store.load_folder(big::ACCOUNT, "INBOX").unwrap();
+    let gone = inbox.messages.remove(inbox.messages.len() / 2);
+    let mut moved = inbox.messages.remove(inbox.messages.len() / 3);
+    store.save_folder(big::ACCOUNT, "INBOX", &inbox).unwrap();
+    store.remove_body(&gone.key);
+    let other = s_folders(&store).into_iter().find(|f| f != "INBOX").unwrap_or_default();
+    let raw = store.read_body(&moved.key).unwrap_or_default();
+    store.remove_body(&moved.key);
+    let mut there = store.load_folder(big::ACCOUNT, &other).unwrap();
+    moved.key = MessageKey { folder: other.clone(), uid: there.messages.iter().map(|m| m.key.uid).max().unwrap_or(0) + 1, ..moved.key };
+    store.write_body(&moved.key, &raw).unwrap();
+    there.messages.insert(0, moved);
+    store.save_folder(big::ACCOUNT, &other, &there).unwrap();
+    let mut s = window(&store);
+    report("after a restart, one deleted from the Inbox and one moved out of it", search(&mut s, big::RARE));
     drop(s);
     drop(store);
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A message with the rare word comes into the Inbox, numbered after the others: how many came
+/// (one).
+fn arrive(store: &Store, n: u32, subject: &str) -> usize {
+    let mut inbox = store.load_folder(big::ACCOUNT, "INBOX").unwrap();
+    let uid = inbox.messages.iter().map(|m| m.key.uid).max().unwrap_or(0) + n;
+    let key = MessageKey { account: big::ACCOUNT.into(), folder: "INBOX".into(), validity: 1, uid };
+    store.write_body(&key, format!("Subject: {subject}\r\n\r\nA {} arrived.\r\n", big::RARE).as_bytes()).unwrap();
+    inbox.messages.insert(0, Summary { key, subject: subject.into(), date: NOW, ..Default::default() });
+    store.save_folder(big::ACCOUNT, "INBOX", &inbox).unwrap();
+    1
 }
 
 /// The made-up mailbox's folders.

@@ -69,8 +69,8 @@ fn drive(s: &mut Session, index: u64) -> (Vec<Duration>, usize) {
 /// is begun only while one as long as the longest so far still fits), and the search finds what
 /// a whole one does (every hundredth message).
 ///
-/// Not paced yet: the call that ends the folder keeps its index on disk and joins it to the
-/// mailbox's (45 ms here, one unit, growing with the folder).
+/// Not paced yet: the call that ends the folder keeps its index on disk (one unit, growing with
+/// the folder); the next joins it to the mailbox's (the two were one call of 45 ms here).
 #[test]
 fn a_search_keeps_to_its_share_of_a_frame() {
     let store = heavy_store("paced", 1200, 2, 16);
@@ -78,9 +78,9 @@ fn a_search_keeps_to_its_share_of_a_frame() {
     let start = Instant::now();
     s.set_search_clock(Some(SearchClock { budget: BUDGET, now: Box::new(move || start.elapsed()) }));
     let (times, found) = drive(&mut s, 4096);
-    let (last, indexing) = times.split_last().unwrap();
+    let (indexing, last) = times.split_at(times.len().saturating_sub(2));
     let slowest = indexing.iter().max().copied().unwrap_or_default();
-    println!("{} calls, slowest indexing {slowest:?}, the last (folder kept) {last:?}; {found} found", times.len());
+    println!("{} calls, slowest indexing {slowest:?}, the last two (the folder kept, then joined) {last:?}; {found} found", times.len());
     assert_eq!(found, 12);
     assert!(times.len() > 20, "spread over many frames: {} calls", times.len());
     // Generous for a loaded machine: one message is a couple of milliseconds here.

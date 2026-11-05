@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! What the user types in the search box (and saved searches read back): the query language,
 //! the query checked against a message and its text, folding, the index, the Advanced search form, the server-side forms of a search, and IMAP's modified UTF-7. The
 //! same text taken as a sender's name and address, checked for passing as someone else (a
@@ -7,7 +8,7 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use quatrelle_model::search::{Advanced, Doc, Index, Query, fold_word, index_tokens, parts, tokens};
+use quatrelle_model::search::{Advanced, Doc, FolderIndex, Index, Query, fold_word, index_tokens, parts, tokens};
 use quatrelle_model::{lookalike, utf7};
 
 fuzz_target!(|data: &[u8]| {
@@ -25,6 +26,15 @@ fuzz_target!(|data: &[u8]| {
     let mut ix = Index::new();
     ix.add(0, &text);
     let _ = ix.candidates(&q);
+    // The same bytes as a folder's kept index (`search.idx`, a cache file: hostile), and what a
+    // later run does with one: messages taken out, the rest numbered again, written back.
+    let _ = Index::from_bytes(data);
+    if let Some(mut fi) = FolderIndex::from_bytes("a1", "INBOX", data) {
+        let keep: Vec<bool> = (0..fi.keys.len()).map(|i| data.get(i).is_some_and(|b| b % 2 == 0)).collect();
+        fi.retain(&keep);
+        let _ = fi.index.candidates(&q);
+        let _ = FolderIndex::from_bytes("a1", "INBOX", &fi.to_bytes());
+    }
     let a = Advanced::from_query(&text);
     let _ = Advanced::from_query(&a.to_query());
     let _ = quatrelle_jmap::search_filter(&text);
