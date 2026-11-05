@@ -224,12 +224,14 @@ impl eframe::App for App {
         if s.portable || s.accounts.iter().any(|a| a.config.keeps_online()) {
             quatrelle_engine::store::clear_scratch();
         }
+        // The lines logged are written on the log's thread: written before Quatrelle ends.
+        log::logger().flush();
         // macOS: end here, before eframe tears the window down. AccessKit's macOS adapter
         // subclasses the window's content view and puts its class back on teardown; AppKit's
         // Touch Bar support observes that view, so in the next display cycle it throws ("not
         // registered") and quitting ends in a crash report (DeckCraft and GridCraft found). Every
         // way of quitting comes here, and nothing after it is needed: the window's state is
-        // saved, the log is unbuffered and the data files keep what they committed.
+        // saved, the log written and the data files keep what they committed.
         #[cfg(target_os = "macos")]
         std::process::exit(0);
     }
@@ -476,7 +478,11 @@ fn main() -> eframe::Result {
         run(options, sample, store, session, desktop_data, base, moved, state_path, (cmd_args, handed), instance, updater)
     }));
     let failed = match ran {
-        Ok(Ok(())) => return Ok(()),
+        Ok(Ok(())) => {
+            // What was logged as the window closed, after `on_exit`.
+            log::logger().flush();
+            return Ok(());
+        }
         Ok(Err(e)) => e.to_string(),
         Err(p) => p
             .downcast_ref::<&str>()
@@ -485,6 +491,7 @@ fn main() -> eframe::Result {
             .unwrap_or_else(|| "it stopped unexpectedly".into()),
     };
     log::error!("the window couldn't open: {failed}");
+    log::logger().flush();
     say(&format!("the window couldn't open: {failed}"));
     rfd::MessageDialog::new()
         .set_level(rfd::MessageLevel::Error)
