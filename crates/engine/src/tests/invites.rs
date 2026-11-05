@@ -57,6 +57,9 @@ fn put(
     state.messages.insert(0, quatrelle_mime::summary_from_full(&raw, key.clone(), quatrelle_model::Flags::default(), 0, NOW));
     store.save_folder("sample", folder, &state).unwrap();
     store.write_body(&key, &raw).unwrap();
+    // No pool runs here to say the read marks back first (their echo, which would read the
+    // folder again): taken as come, so this change is read from disk.
+    s.forget_echoes("sample");
     s.apply(Event::FolderChanged { account: "sample".into(), folder: folder.into() });
     key
 }
