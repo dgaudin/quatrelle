@@ -536,6 +536,15 @@ impl Session {
         h
     }
 
+    /// What the word index holds, for the benchmarks: its messages, words, documents counted once
+    /// per word, the words' bytes; and the bytes of message text kept for the next search.
+    #[cfg(test)]
+    pub(crate) fn search_index_sizes(&self) -> Option<(usize, usize, usize, usize, usize)> {
+        let ix = self.index.as_ref()?;
+        let (words, postings, bytes) = ix.index.sizes();
+        Some((ix.keys.len(), words, postings, bytes, self.body_words_bytes))
+    }
+
     /// A downloaded message's words for search, read once (`None`: not downloaded).
     pub(crate) fn words_of(&mut self, key: &MessageKey) -> Option<Arc<str>> {
         if let Some(w) = self.body_words.get(key) {
