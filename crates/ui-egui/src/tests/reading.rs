@@ -5,6 +5,7 @@
 
 use super::*;
 
+mod attachment_text;
 mod bars;
 mod header_actions;
 mod linked_pictures;

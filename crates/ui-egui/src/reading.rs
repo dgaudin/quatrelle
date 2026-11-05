@@ -27,6 +27,8 @@ mod plain;
 mod security;
 mod sender;
 mod sender_check;
+#[cfg(test)]
+pub(crate) use attachments::previewed_text;
 use attachments::*;
 pub(crate) use attachments::{big_picture, decode};
 pub(crate) use body::CellHeights;
