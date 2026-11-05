@@ -3,7 +3,7 @@
 // Copyright (c) 2026 Didier Gaudin
 //! An item as read from the file: its properties, recipients and attachments.
 
-use super::props::{Val, decode, val};
+use super::props::{Val, code_page, read, val};
 use super::*;
 
 /// A mail item, as read.
@@ -26,6 +26,9 @@ pub(super) struct Item {
     pub(super) files: Vec<File>,
     /// A contact's or appointment's own properties.
     pub(super) extra: Option<crate::pst_pim::Extra>,
+    /// Text of the item's, or of a message attached to it, is in a code page Quatrelle can't read
+    /// and lost all but its ASCII.
+    pub(super) charset_unsupported: bool,
 }
 
 pub(super) enum File {
@@ -35,16 +38,27 @@ pub(super) enum File {
 
 pub(super) fn item(m: &dyn Message, files: Vec<File>, named: &crate::pst_pim::Named, photo: Option<(String, Vec<u8>)>) -> Item {
     let props = m.properties();
-    let p = |id: u16| props.get(id).map(|v| val(v, 0));
+    // 8-bit strings are in the message's code page.
+    let cp = message_code_page(m);
+    let p = |id: u16| props.get(id).map(|v| val(v, cp));
     let table = m.recipient_table().map(|t| rows(&**t)).unwrap_or_default();
-    let recipients: Vec<_> = table.iter().map(|row| move |id: u16| row.get(&id).map(|v| val(v, 0))).collect();
+    let recipients: Vec<_> = table.iter().map(|row| move |id: u16| row.get(&id).map(|v| val(v, cp))).collect();
     let mut it = item_of(&p, &recipients, files, named);
+    if mime::unsupported_code_page(cp) {
+        let lost = |v: &PropertyValue| matches!(v, PropertyValue::String8(s) if read(s.buffer(), cp, false).1);
+        it.charset_unsupported |= props.iter().any(|(_, v)| lost(v)) || table.iter().any(|row| row.values().any(lost));
+    }
     if it.class.to_ascii_lowercase().starts_with("ipm.contact")
         && let Some(extra) = &mut it.extra
     {
         extra.photo = photo;
     }
     it
+}
+
+/// The code page a message's 8-bit strings are in (PidTagMessageCodepage; 0 when not said).
+pub(super) fn message_code_page(m: &dyn Message) -> u32 {
+    code_page(m.properties().get(0x3FFD))
 }
 
 /// An item from its properties (`p`) and its recipients' (one getter per recipient).
@@ -55,7 +69,8 @@ pub(super) fn item_of<'a>(
     named: &crate::pst_pim::Named,
 ) -> Item {
     let s = |id: u16| p(id).and_then(Val::into_text).unwrap_or_default();
-    let mut it = Item { class: s(0x001A), files, ..Default::default() };
+    let charset_unsupported = files.iter().any(|f| matches!(f, File::Message(m) if m.charset_unsupported));
+    let mut it = Item { class: s(0x001A), files, charset_unsupported, ..Default::default() };
     let class = it.class.to_ascii_lowercase();
     if class.starts_with("ipm.contact")
         || class.starts_with("ipm.appointment")
@@ -76,11 +91,14 @@ pub(super) fn item_of<'a>(
     it.body = s(0x1000);
     it.html = p(0x1013).and_then(|v| match v {
         Val::Bin(b) => {
+            // PidTagInternetCodepage.
             let page = match p(0x3FDE) {
                 Some(Val::Int(n)) => u32::try_from(n).unwrap_or(0),
                 _ => 0,
             };
-            Some(decode(b, page))
+            let (html, lost) = read(b, page, true);
+            it.charset_unsupported |= lost;
+            Some(html)
         }
         other => other.into_text(),
     });
@@ -147,10 +165,11 @@ pub(super) fn picture_of(a: &dyn Attachment) -> Option<(String, Vec<u8>)> {
     crate::pst_pim::contact_photo(true, &mime, Some(b.buffer()))
 }
 
-/// An attachment's file, or the message it holds.
-pub(super) fn attachment(a: &dyn Attachment, nesting: usize, named: &crate::pst_pim::Named) -> Option<File> {
+/// An attachment's file, or the message it holds; its 8-bit strings are in `code_page` (the
+/// message's).
+pub(super) fn attachment(a: &dyn Attachment, nesting: usize, code_page: u32, named: &crate::pst_pim::Named) -> Option<File> {
     let props = a.properties();
-    let p = |id: u16| props.get(id).map(|v| val(v, 0));
+    let p = |id: u16| props.get(id).map(|v| val(v, code_page));
     let s = |id: u16| p(id).and_then(Val::into_text).unwrap_or_default();
     // Hidden attachments (e.g. a contact picture) aren't part of the message.
     if matches!(p(0x7FFE), Some(Val::Bool(true))) && s(0x3712).is_empty() {
