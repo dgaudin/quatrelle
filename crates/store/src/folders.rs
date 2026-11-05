@@ -4,8 +4,15 @@
 //! The store: folders' lists of messages, and changes applied to them.
 
 use std::borrow::Borrow;
+use std::collections::BTreeMap;
+
+use quatrelle_model::Flags;
 
 use crate::*;
+
+mod marks;
+pub(crate) use marks::MARKS;
+pub use marks::MARKS_MAX;
 
 impl Store {
     pub fn load_folder(&self, account: &str, folder: &str) -> Result<FolderState> {
@@ -18,13 +25,23 @@ impl Store {
             messages: file.messages,
             window: file.window,
         };
-        // A big folder's list in pages (by number): put together, newest first again.
+        // A big folder's list in pages (by number): put together, newest first again, with the
+        // flags marked since its pages were written.
         if !file.pages.is_empty() {
             for i in 0..file.pages.len() {
                 let page: Vec<Summary> = self.read_json(&dir.join(format!("state-{i}.json")))?;
                 st.messages.extend(page);
             }
             sort_newest_first(&mut st.messages);
+            let marks: Vec<(u32, Flags)> = self.read_json(&dir.join(MARKS))?;
+            if !marks.is_empty() {
+                let marks: HashMap<u32, Flags> = marks.into_iter().collect();
+                for m in &mut st.messages {
+                    if let Some(f) = marks.get(&m.key.uid) {
+                        m.flags.clone_from(f);
+                    }
+                }
+            }
         }
         // Keys are rebuilt rather than trusted: a renamed or copied cache stays consistent.
         for m in &mut st.messages {
@@ -37,7 +54,10 @@ impl Store {
 
     /// A number that changes whenever a folder's list does (read from its head alone: a big
     /// folder's pages are named there by their hash), 0 when it has none: what was worked out
-    /// from a list can be trusted while its version stays the same.
+    /// from a list can be trusted while its version stays the same. Not its flags: a big
+    /// folder's marks are kept beside its pages ([`MARKS`]) and leave the head as it was, so
+    /// what's worked out from the version mustn't depend on a message's flags (what's still to
+    /// download doesn't).
     pub fn folder_version(&self, account: &str, folder: &str) -> u64 {
         self.files.read(&self.folder_dir(account, folder).join("state.json")).map(|b| page_hash(&b)).unwrap_or(0)
     }
@@ -77,10 +97,26 @@ impl Store {
         state: &FolderState<M>,
         changed: Option<&std::collections::HashSet<u32>>,
     ) -> Result<usize> {
+        self.save_list(account, folder, state, changed, true)
+    }
+
+    /// [`Store::save_folder_counted`]; `waiting`: the edits waiting in ops.json made again on
+    /// the list first (not for a list just read from here, which has them).
+    fn save_list<M: Borrow<Summary>>(
+        &self,
+        account: &str,
+        folder: &str,
+        state: &FolderState<M>,
+        changed: Option<&std::collections::HashSet<u32>>,
+        waiting: bool,
+    ) -> Result<usize> {
+        // The marks beside the pages read and written with nothing in between (a sync's save
+        // puts them into the pages while the edit writer keeps one more).
+        let _held = self.changes.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         // Edits still on their way to the server win over what this list was made from: a sync
         // that read the folder before a message was marked read (moved, deleted) and saves after
         // put the server's old state back — bold, normal, bold again until the edit got there.
-        let pending = self.pending_edits(account, folder);
+        let pending = if waiting { self.pending_edits(account, folder) } else { Vec::new() };
         let mutated;
         let widened;
         let (messages, changed): (Vec<&Summary>, _) = if pending.is_empty() {
@@ -106,18 +142,44 @@ impl Store {
             messages: Vec::new(),
             window: state.window,
             pages: Vec::new(),
+            firsts: Vec::new(),
             count: 0,
         };
         let mut writes: Vec<(PathBuf, Vec<u8>)> = Vec::new();
+        let marks_path = dir.join(MARKS);
         if messages.len() <= PAGE_MESSAGES {
             file.messages = messages.into_iter().cloned().collect();
         } else {
+            let n = messages.len();
+            // The same messages as last time, some flags changed: the other pages stand.
+            let same = changed.filter(|_| old.count == n && old.pages.len() == n.div_ceil(PAGE_MESSAGES));
+            // Few marked since the pages were written: those kept beside them, nothing else.
+            let mut folded: Option<std::collections::HashSet<u32>> = None;
+            if let Some(changed) = same {
+                let kept: Vec<(u32, Flags)> = self.read_json(&marks_path)?;
+                let mut marks: BTreeMap<u32, &Flags> = kept.iter().map(|(uid, f)| (*uid, f)).collect();
+                // Each one marked as the list has it now (one pass over it).
+                for m in &messages {
+                    if changed.contains(&m.key.uid) || marks.contains_key(&m.key.uid) {
+                        marks.insert(m.key.uid, &m.flags);
+                    }
+                }
+                if marks.len() <= MARKS_MAX {
+                    let list: Vec<(u32, &Flags)> = marks.into_iter().collect();
+                    let bytes = serde_json::to_vec(&list).map_err(json_err(&marks_path))?;
+                    self.write_files(&[(marks_path, bytes)])?;
+                    return Ok(1);
+                }
+                // Too many: their pages are written again (as the list has them now), and the
+                // marks emptied.
+                folded = Some(marks.into_keys().collect());
+            }
+            let same = folded.as_ref().or(same);
             let mut by_number = messages;
             by_number.sort_by_key(|m| m.key.uid);
-            file.count = by_number.len();
-            // The same messages as last time, some flags changed: the other pages stand.
-            let same = changed.filter(|_| old.count == by_number.len() && old.pages.len() == by_number.len().div_ceil(PAGE_MESSAGES));
+            file.count = n;
             for (i, page) in by_number.chunks(PAGE_MESSAGES).enumerate() {
+                file.firsts.push(page.first().map_or(0, |m| m.key.uid));
                 if let Some(changed) = same
                     && let Some(&hash) = old.pages.get(i)
                     && !page.iter().any(|m| changed.contains(&m.key.uid))
@@ -133,6 +195,10 @@ impl Store {
                 }
                 file.pages.push(hash);
             }
+        }
+        // The pages have every flag now: the marks beside them emptied, with them.
+        if self.has_marks(&marks_path) {
+            writes.push((marks_path, b"[]".to_vec()));
         }
         writes.push((head.clone(), serde_json::to_vec(&file).map_err(json_err(&head))?));
         // The list and its pages together (one transaction in a data file).
@@ -162,7 +228,15 @@ impl Store {
     /// held): messages are handed over in rising number order, then [`ListWriter::finish`]. The
     /// pages come out as [`Store::save_folder`] makes them.
     pub fn list_writer(&self, account: &str, folder: &str) -> ListWriter {
-        ListWriter { account: account.to_string(), folder: folder.to_string(), pages: Vec::new(), page: Vec::new(), total: 0, unread: 0 }
+        ListWriter {
+            account: account.to_string(),
+            folder: folder.to_string(),
+            pages: Vec::new(),
+            firsts: Vec::new(),
+            page: Vec::new(),
+            total: 0,
+            unread: 0,
+        }
     }
 
     /// Several files at once (one transaction in a data file).
@@ -226,8 +300,16 @@ impl Store {
         folders.sort();
         folders.dedup();
         for folder in &folders {
+            // A flag or category in a big folder: the pages the messages are in alone read, and
+            // their marks written beside them.
+            if matches!(op, Op::SetFlag { .. } | Op::SetKeyword { .. }) && self.mark_in_pages(account, folder, op)? {
+                continue;
+            }
             let mut st = self.load_folder(account, folder)?;
             let mut sources_gone: Vec<&MessageKey> = Vec::new();
+            // A flag or category: those messages' marks alone are kept (beside a big folder's
+            // pages), the list just read having every edit waiting already.
+            let mut marked: Option<HashSet<u32>> = None;
             let in_folder = |k: &MessageKey| k.account == account && &k.folder == folder && k.validity == st.validity;
             match op {
                 Op::SetFlag { keys, flag, on } => {
@@ -236,6 +318,7 @@ impl Store {
                     for m in st.messages.iter_mut().filter(|m| uids.contains(&m.key.uid)) {
                         flag.set(&mut m.flags, *on);
                     }
+                    marked = Some(uids);
                 }
                 Op::SetKeyword { keys, keyword, on, name } => {
                     // A set: every message of a folder may change at once (looked up in a list, that was quadratic).
@@ -243,6 +326,7 @@ impl Store {
                     for m in st.messages.iter_mut().filter(|m| uids.contains(&m.key.uid)) {
                         m.flags.set_category(keyword, name.as_deref(), *on);
                     }
+                    marked = Some(uids);
                 }
                 Op::Move { keys, to } => {
                     if to == folder {
@@ -259,7 +343,10 @@ impl Store {
                 }
                 Op::CreateFolder { .. } | Op::RenameFolder { .. } | Op::DeleteFolder { .. } | Op::EmptyFolder { .. } => {}
             }
-            self.save_folder(account, folder, &st)?;
+            match &marked {
+                Some(uids) => self.save_list(account, folder, &st, Some(uids), false).map(drop)?,
+                None => self.save_folder(account, folder, &st)?,
+            }
             // Once the list no longer has them: one that can't be saved keeps their sources.
             for k in sources_gone {
                 self.remove_body(k);
