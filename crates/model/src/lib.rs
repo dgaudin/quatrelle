@@ -282,6 +282,13 @@ pub struct Flags {
     /// [`FOLLOW_UP_COMPLETE`] here forgets it until the server says again.
     #[serde(default, skip_serializing_if = "is_zero_time")]
     pub completed: i64,
+    /// When the server says it was last replied to or forwarded (Unix seconds; 0: not said):
+    /// Exchange keeps the time of the last thing done with a message
+    /// (`PidTagLastVerbExecutionTime`), and that thing only, so one of [`Flags::answered`] and
+    /// [`Flags::forwarded`] comes from it; IMAP and JMAP have nowhere for it. Either set or
+    /// taken off here forgets it until the server says again.
+    #[serde(default, skip_serializing_if = "is_zero_time")]
+    pub acted: i64,
 }
 
 /// The keyword that pins a message to the top of its folder.
@@ -424,8 +431,14 @@ impl Flag {
         match self {
             Flag::Seen => flags.seen = on,
             Flag::Flagged => flags.flagged = on,
-            Flag::Answered => flags.answered = on,
-            Flag::Forwarded => flags.forwarded = on,
+            Flag::Answered => {
+                flags.answered = on;
+                flags.acted = 0;
+            }
+            Flag::Forwarded => {
+                flags.forwarded = on;
+                flags.acted = 0;
+            }
             Flag::Deleted => flags.deleted = on,
         }
     }
@@ -735,6 +748,12 @@ mod tests {
         f.completed = 1_791_979_200;
         f.set_keyword("$followupcomplete", false);
         assert_eq!(f.completed, 0);
+        // So does the time of the last reply or forward (Exchange's), unwritten when none.
+        assert!(serde_json::to_value(&f).unwrap().get("acted").is_none());
+        f.acted = 1_791_979_200;
+        assert_eq!(serde_json::to_value(&f).unwrap()["acted"], 1_791_979_200);
+        Flag::Forwarded.set(&mut f, true);
+        assert!(f.forwarded && f.acted == 0);
     }
 
     #[test]

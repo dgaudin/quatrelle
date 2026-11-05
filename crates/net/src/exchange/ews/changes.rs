@@ -69,6 +69,39 @@ const COMPLETE_TIME: &str = "<t:ExtendedFieldURI PropertyTag=\"0x1091\" Property
 /// `PidTagFollowupIcon`: the colour of a flag Outlook set.
 const FOLLOW_UP_ICON: &str = "<t:ExtendedFieldURI PropertyTag=\"0x1095\" PropertyType=\"Integer\"/>";
 
+/// `PidTagLastVerbExecuted`: the last thing done with a message (replied, forwarded).
+const LAST_VERB: &str = "<t:ExtendedFieldURI PropertyTag=\"0x1081\" PropertyType=\"Integer\"/>";
+/// `PidTagLastVerbExecutionTime`: when.
+const LAST_VERB_TIME: &str = "<t:ExtendedFieldURI PropertyTag=\"0x1082\" PropertyType=\"SystemTime\"/>";
+/// `PidTagIconIndex`: the icon Outlook's list draws for it.
+const ICON_INDEX: &str = "<t:ExtendedFieldURI PropertyTag=\"0x1080\" PropertyType=\"Integer\"/>";
+/// `PidTagIconIndex` of mail replied to, and forwarded ([MS-OXOMSG]: 0x00000105, 0x00000106).
+const ICON_REPLIED: i64 = 0x105;
+const ICON_FORWARDED: i64 = 0x106;
+
+/// An update setting a property to a value.
+fn set(field: &str, value: &str) -> String {
+    format!(
+        "<t:SetItemField>{field}<t:Message><t:ExtendedProperty>{field}<t:Value>{value}</t:Value></t:ExtendedProperty></t:Message></t:SetItemField>"
+    )
+}
+
+/// Replied to or forwarded, as Outlook marks the original when it sends its reply or forward
+/// ([MS-OXOMSG]: `PidTagLastVerbExecuted` the verb, `PidTagLastVerbExecutionTime` now,
+/// `PidTagIconIndex` the icon): Quatrelle sends its own message (`CreateItem` with its source),
+/// so Exchange marks nothing by itself. The engine doesn't say a reply was to all: it's written
+/// as a reply to the sender, which Outlook shows alike.
+fn replied(forward: bool) -> String {
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(0));
+    let (verb, icon) = if forward { (super::VERB_FORWARD, ICON_FORWARDED) } else { (super::VERB_REPLY, ICON_REPLIED) };
+    format!(
+        "{}{}{}",
+        set(LAST_VERB, &verb.to_string()),
+        set(LAST_VERB_TIME, &quatrelle_jmap::utc_date_string(now)),
+        set(ICON_INDEX, &icon.to_string())
+    )
+}
+
 /// An update setting the flag status.
 fn flag_status(v: u8) -> String {
     format!(
@@ -136,8 +169,10 @@ pub fn apply_remote(c: &Client, st: &State, op: &Op) -> Result<()> {
             }
         }
         Op::SetKeyword { keys, on, name: Some(name), .. } => set_category(c, &ids(keys), name, *on),
-        // Answered and forwarded are Exchange's to set; other keywords (`$Pinned`) are this
-        // computer's.
+        // Replied to or forwarded here: the original marked as Outlook marks it.
+        Op::SetFlag { keys, flag: flag @ (Flag::Answered | Flag::Forwarded), on: true } => update(keys, &replied(*flag == Flag::Forwarded)),
+        // Exchange keeps the last thing done, which the next one replaces (the engine takes one
+        // arrow off before it puts the other on); other keywords (`$Pinned`) are this computer's.
         Op::SetFlag { .. } | Op::SetKeyword { .. } => Ok(()),
         Op::Move { keys, to } => {
             let dest = st.mailbox(to)?.to_string();

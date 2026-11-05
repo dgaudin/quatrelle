@@ -10,6 +10,7 @@ use super::*;
 
 mod follow_up;
 mod refusals;
+mod replied;
 
 #[test]
 fn the_inbox_rules_go_to_exchange_and_come_back() {
