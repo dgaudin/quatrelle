@@ -1327,6 +1327,103 @@ R14). Pour chaque point, sa sonde d'abord, lancée contre le code d'alors.
   - un dossier signalé pendant une recherche liste ses sources en cache (une fois par signal) ;
   - les mesures de R14 sur une boîte de 50 000 messages, avant de choisir l'index sur disque.
 
+### État de la récupération : v0.32, quinzième partie : les périodicités du calendrier, et de petits gels en moins (2026-11-05)
+
+Les lots R7 et R8 de `merge-tools/survey-v0.32.md`, sur `main`. Le calendrier reste celui du
+fork : seules les corrections du modèle (`crates/model/src/ical*`) dont le défaut est ici sont
+prises. Pour chaque point, sa sonde d'abord, lancée contre le code d'alors.
+
+**R7 — périodicités du calendrier** (invitations .ics et CalDAV ; les séries d'Exchange viennent
+de son XML, `ews_pim/events.rs`, et n'ont ni RDATE ni règle horaire : rien n'y change).
+
+- **Les règles d'heure en heure, de minute en minute, de seconde en seconde** (`696dee64`, la
+  partie règle de `a5bbc00a`, sans `zone_rule`/`ZoneChange`, qui sert l'export .pst de
+  l'origine) : `FREQ=HOURLY`, `MINUTELY` et `SECONDLY` ne donnaient aucune occurrence. Elles
+  avancent depuis le début, sous les plafonds habituels, les jours que `BYDAY`, `BYMONTHDAY` et
+  `BYMONTH` permettent, à l'heure murale de leur fuseau. Sonde : `rules_within_a_day`, `[]` au
+  lieu de `[0, 2, 4, 6]` pour `FREQ=HOURLY;INTERVAL=2;COUNT=4`.
+- **`BYHOUR`, `BYMINUTE`, `BYSECOND` et les `RDATE`** (`aabcb994`, adapté de `bb554931`) : ces
+  trois parties étaient ignorées, et un `RDATE` finissait dans les lignes inconnues de
+  l'événement sans jamais donner d'occurrence. Ils sont lus, servent, repartent au serveur et
+  tombent avec la règle (`event_from`, « ne se répète pas »). En plus de l'origine : une série
+  déplacée entière emmène ses dates ajoutées, et une occurrence qu'on en détache n'en porte
+  aucune. Sondes : `rules_at_hours_minutes_and_seconds`, `BYHOUR=9,10,11` donnait une
+  occurrence par heure de 9 h à 14 h ; trois `RDATE` donnaient une seule occurrence, leurs deux
+  lignes restant inconnues (le test de l'origine, `added_dates`, a remplacé la sonde).
+- **Les lignes gardées repartent entières** (`7a9e5eab`, `whole()` et le CR de `48f8a4a9` ; la
+  partie VTODO ne concerne pas le fork, qui ne lit pas les tâches d'un fichier) : un `END`
+  égaré dans un événement (`END:VCALENDAR` fermant un composant inconnu) repartait au serveur au
+  milieu de l'événement ; une définition de fuseau coupée à la fin du fichier repartait sans
+  `END:VTIMEZONE` ; un événement logé dans une définition de fuseau était écrit une seconde fois.
+  `whole()` (`ical/whole.rs`) ferme ce qui est ouvert sous son propre nom, laisse un `END` qui ne
+  ferme rien et ôte événements, tâches et calendriers d'une définition de fuseau. Un CR au milieu
+  d'une ligne est lu comme l'écriture l'écrit, ôté (le CR d'un objet revenait en saut de ligne).
+  Sonde : `a_stray_end_is_not_sent_back`, chacun de ses quatre cas échouait (la zone coupée
+  avant sa partie `STANDARD` n'était pas écrite du tout ; coupée après, elle sortait
+  `(1, 0)`).
+
+**R8 — petits gels et gains sûrs.**
+
+- **`ui.json` sur un fil à lui** (`c0bfe080`, adapté de `2ea4a0be`) : les réglages s'écrivaient,
+  avec `sync_all`, sur le fil de la fenêtre, toutes les 5 s où ils changeaient. Un fil
+  `settings` écrit les derniers remis, la fermeture attend le dernier ; sans fil, comme avant.
+  Sonde : `a_held_writer_thread_returns_hand_overs_at_once`, lancée avec l'écrivain gardé sur le
+  fil appelant (la manière d'avant), 100 remises attendaient le disque tenu (2,3 s).
+- **Le journal sur un fil à lui** (`d189d040`, de `05e0f2cc`) : chaque ligne s'écrivait sur le
+  fil qui journalisait, fenêtre comprise. Un fil `log` les écrit dans l'ordre ; au-delà de 1 Mio
+  en attente, elles sont comptées et laissées. Rien n'est perdu à la fermeture : le journal est
+  vidé (2 s au plus) avant la sortie macOS d'`on_exit`, quand la fenêtre s'est fermée, et avant
+  la sortie « la fenêtre n'a pas pu s'ouvrir ». `8941e8e2` (la sortie de l'écran de démarrage de
+  l'origine sur macOS) est sans objet ici. Sonde : `a_line_logged_while_writes_are_held_returns_at_once`
+  (par `log::Log::log`), plus de 500 ms d'attente derrière le fichier tenu.
+- **S/MIME d'après l'en-tête seul** (`03fda572`, de `1c1ba9ea`) : savoir si un message est
+  signé ou chiffré l'analysait entier, à chaque ouverture. `is_protected` ne lit que l'en-tête ;
+  `protection()` n'analyse le reste que pour `multipart/signed` ou `pkcs7-mime` (et un `.p7m`
+  envoyé en `octet-stream`). Le fork n'a pas de cible de fuzz smime : la vérification
+  « jamais dit non protégé à tort » va dans `mime_parse`, avec la graine de l'origine. Sonde :
+  `protection()` sur un message non protégé de 30 Mo, **63 ms** (compilation de test) ; le test
+  de l'origine, 50 Mo, tient sous 50 ms après.
+- **Le message lu, analysé une fois et partagé** (`0ca1a559`, de `13cf8304`) : le volet
+  (`s.reading.clone()`) et les fenêtres (`session.windows.clone()`) recopiaient le message entier
+  à chaque image, chacun l'ayant analysé ; `unwrap` copiait la source même non protégée. La
+  source non protégée est empruntée, l'analyse partagée derrière un `Arc`, une réponse prend sa
+  copie. Sonde : `tests/mail/shown.rs::a_message_shown_twice_is_parsed_once` (le test de
+  l'origine, plus une mesure) : un message de 5 Mo dans le volet et une fenêtre, **55 ms** de
+  copies par seconde d'images.
+- **La carte d'invitation sans relire le message** (`dfebab9a`, adapté de `40b3259b`) : elle
+  relisait et réanalysait chaque message ouvert pour y chercher un calendrier. Elle regarde
+  l'analyse affichée et ne relit la source que s'il y en a un ; si le numéro de la partie ne
+  donne rien (un message aux en-têtes protégés se défait autrement pour l'affichage), la source
+  est analysée comme avant. Sonde : `a_message_without_an_invitation_is_not_read_again_for_one`
+  (`Store::reads()` à la place du compte d'analyses de l'origine), le message ordinaire relu.
+- **Les vignettes, les plus anciennes d'abord** (`a5d651de`, version courte de `b580c87a`) : le
+  cache des aperçus (images, pages PDF, vidéos) était vidé en entier à la 65ᵉ ; un message de plus
+  de 64 fichiers relisait sa source et redécodait chaque vignette à chaque image. Le moins
+  récemment montré part le premier, jamais un montré dans l'image en cours, et une puce au-delà
+  montre l'icône de son type. Le reste de `321bef22` attend le lot R11. Sonde :
+  `tests/reading/previews.rs`, 70 images : **70 textures** refaites (et 70 sources relues) par
+  image.
+- **Une pièce jointe ne s'ouvre qu'au double-clic** (`c58e2721`, adapté de `a06231b6`) : le
+  premier clic d'un double-clic laissait le fichier en aperçu dans le volet, derrière
+  l'application qui l'ouvrait. Un clic demande l'aperçu une fois le délai du double-clic passé ;
+  un double-clic l'annule. L'allure des puces ne change pas. Les tests des pièces jointes vont
+  dans `tests/reading/attachments.rs`, comme chez l'origine. Sondes :
+  `a_double_clicked_attachment_only_opens` et son pendant en fenêtre échouaient au premier clic.
+- **Ce qui change pour le propriétaire** : les réunions en `RDATE` ou d'heure en heure
+  apparaissent ; un clic sur une pièce jointe montre son aperçu après un court délai (le temps
+  d'un double-clic) ; un double-clic l'ouvre sans laisser d'aperçu ; plus d'arrêt de la fenêtre
+  sur l'écriture de `ui.json` ou du journal, ni sur les gros messages affichés.
+- **Vérifié** : chaque sonde avant et après, les suites de `quatrelle-model`, `quatrelle-mime`,
+  `quatrelle-engine`, `quatrelle-ui-egui` et de l'application, la cible de fuzz `mime_parse`
+  compilée, `cargo xtask ci` (wasm compris).
+- **Reste, remarqué** :
+  - un événement fait seulement de `RDATE` (sans règle) n'est pas vu comme une série par le
+    moteur (déplacer, supprimer, « cette occurrence ») : il se déplace d'un bloc ;
+  - le plafond d'entrée de `ical::lines()` saute quand `MAX_INPUT` tombe au milieu d'un
+    caractère (`get(..MAX_INPUT)` rend `None`, et tout le texte est lu) ; l'origine l'a corrigé
+    dans `bbc8f852` (lot de l'import .pst) ;
+  - `apps/quatrelle/src/main.rs` passe 817 lignes (811 avant) : à découper avant d'y ajouter.
+
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
 Quatre chantiers, chacun dans son commit, à la suite d'un audit de l'éditeur HTML.
