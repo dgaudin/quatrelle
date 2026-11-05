@@ -106,23 +106,37 @@ impl Session {
         self.message_invitation(key).map(|(cal, _)| cal)
     }
 
-    /// The calendar in a message, and the address it's from.
+    /// The calendar in a message, and the address it's from. The open message is looked at as it
+    /// was parsed to be shown: one with no calendar part is neither read nor parsed again. Asked
+    /// on the window's first frame of every message, that read and parsed each of them a second
+    /// time on the window's thread (149 ms for a 33 MB message upstream).
     fn message_invitation(&self, key: &MessageKey) -> Option<(ICalendar, String)> {
-        self.calendar_in(&self.readable_raw(key)?)
+        let shown = self.reading.as_ref().filter(|r| &r.key == key && !r.text_first).and_then(|r| r.parsed.as_deref());
+        match shown {
+            Some(p) => {
+                let (index, from) = calendar_part(p)?;
+                let raw = self.readable_raw(key)?;
+                // Shown with its protected header fields, a message's parts can be numbered
+                // otherwise than in what's read here: then read as it is.
+                self.calendar_at(&raw, index, from).or_else(|| self.calendar_in(&raw))
+            }
+            None => self.calendar_in(&self.readable_raw(key)?),
+        }
     }
 
     /// The calendar in a message's source (its `text/calendar` part or `.ics` file), and the
     /// address the message is from.
     fn calendar_in(&self, raw: &[u8]) -> Option<(ICalendar, String)> {
-        let parsed = mime::parse(raw)?;
-        let att = parsed
-            .attachments
-            .iter()
-            .find(|a| a.mime.to_ascii_lowercase().starts_with("text/calendar") || a.name.to_ascii_lowercase().ends_with(".ics"))?;
+        let (index, from) = calendar_part(&mime::parse(raw)?)?;
+        self.calendar_at(raw, index, from)
+    }
+
+    /// The calendar in part `index` of a message's source, from `from`.
+    fn calendar_at(&self, raw: &[u8], index: usize, from: String) -> Option<(ICalendar, String)> {
         // Read in the charset the part names: its bytes are as they came.
-        let text = mime::attachment_text(raw, att.index)?;
+        let text = mime::attachment_text(raw, index)?;
         let cal = ical::parse_in(&text, self.clock.local_zone());
-        (!cal.events.is_empty()).then_some((cal, parsed.from.email))
+        (!cal.events.is_empty()).then_some((cal, from))
     }
 
     /// The account holding an event (the series or any occurrence of it), and its parts there.
@@ -156,7 +170,8 @@ impl Session {
 
     /// The invitation in the open message.
     pub fn invite(&self) -> Option<Invite> {
-        let r = self.reading.as_ref()?;
+        // Its files still coming: asked again once they're here.
+        let r = self.reading.as_ref().filter(|r| !r.text_first)?;
         let (cal, sender) = self.message_invitation(&r.key)?;
         let method = cal.method.clone().unwrap_or_else(|| "PUBLISH".into());
         if !matches!(method.as_str(), "REQUEST" | "REPLY" | "CANCEL") {
@@ -699,4 +714,12 @@ fn put_occurrence(p: &mut Pim, calendar: &str, e: CalEvent) -> bool {
         respond: None,
     });
     remote
+}
+
+/// A message's calendar part (its `text/calendar` part or `.ics` file), and who it's from.
+fn calendar_part(p: &mime::Parsed) -> Option<(usize, String)> {
+    p.attachments
+        .iter()
+        .find(|a| a.mime.to_ascii_lowercase().starts_with("text/calendar") || a.name.to_ascii_lowercase().ends_with(".ics"))
+        .map(|a| (a.index, p.from.email.clone()))
 }
