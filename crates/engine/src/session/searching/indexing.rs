@@ -247,7 +247,11 @@ impl Session {
         if self.index.as_ref().is_some_and(|ix| ix.words == words && ix.scope == scope && (scope == SearchScope::All || ix.view == self.view)) {
             return;
         }
-        let scan: Vec<(String, String)> = self.scope_folders(scope);
+        // The folders on view are read first (what's on screen is found first), the others in
+        // the account's order after them.
+        let mut scan: Vec<(String, String)> = self.scope_folders(scope);
+        let shown = self.view_folders();
+        scan.sort_by_key(|k| !shown.contains(k));
         self.index = Some(SearchIndex {
             words,
             index: Index::new(),
