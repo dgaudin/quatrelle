@@ -19,18 +19,18 @@ pub(super) fn preview(s: &Session, st: &mut UiState, ctx: &egui::Context, key: &
     if s.text_first(key) {
         return None;
     }
-    if let Some(t) = st.previews.get(&(key.clone(), index)) {
-        return t.clone();
+    if let Some(t) = kept_preview(st, ctx, &(key.clone(), index)) {
+        return t;
     }
-    if st.previews.len() > 64 {
-        st.previews.clear();
+    if !room_for_preview(st, ctx) {
+        return None;
     }
     let tex = (|| {
         let raw = s.store.as_ref()?.read_body(key)?;
         let data = mime::attachment_data(&raw, index)?;
         decode(ctx, &format!("att-{}-{index}", key.to_id()), &data, 480)
     })();
-    st.previews.insert((key.clone(), index), tex.clone());
+    keep_preview(st, ctx, (key.clone(), index), tex.clone());
     tex
 }
 
@@ -59,11 +59,11 @@ pub(super) fn pdf_preview(s: &Session, st: &mut UiState, ctx: &egui::Context, ke
     if s.text_first(key) {
         return None;
     }
-    if let Some(t) = st.previews.get(&(key.clone(), index)) {
-        return t.clone();
+    if let Some(t) = kept_preview(st, ctx, &(key.clone(), index)) {
+        return t;
     }
-    if st.previews.len() > 64 {
-        st.previews.clear();
+    if !room_for_preview(st, ctx) {
+        return None;
     }
     let tex = (|| {
         let raw = s.store.as_ref()?.read_body(key)?;
@@ -72,7 +72,7 @@ pub(super) fn pdf_preview(s: &Session, st: &mut UiState, ctx: &egui::Context, ke
         let img = crate::thumbs::pdf_page(&data, 0, crate::thumbs::Fit::Longer(260), limit, st.fonts.clone()).map(|(img, _)| img)?;
         Some(ctx.load_texture(format!("pdf-{}-{index}", key.to_id()), img, egui::TextureOptions::LINEAR))
     })();
-    st.previews.insert((key.clone(), index), tex.clone());
+    keep_preview(st, ctx, (key.clone(), index), tex.clone());
     tex
 }
 
@@ -89,8 +89,11 @@ pub(super) fn video_preview(
         return None;
     }
     let id = (key.clone(), a.index);
-    if let Some(t) = st.previews.get(&id) {
-        return t.clone();
+    if let Some(t) = kept_preview(st, ctx, &id) {
+        return t;
+    }
+    if !room_for_preview(st, ctx) {
+        return None;
     }
     // The platform's decoder reads files, and the browser has none.
     if !st.has_files {
@@ -110,7 +113,7 @@ pub(super) fn video_preview(
                 Some(path)
             })();
             let Some(p) = written else {
-                st.previews.insert(id, None);
+                keep_preview(st, ctx, id, None);
                 return None;
             };
             st.video_files.insert(id.clone(), p.clone());
@@ -125,13 +128,47 @@ pub(super) fn video_preview(
         }
         crate::VideoFrame::Ready(png) => {
             let tex = decode(ctx, &format!("video-{}-{}", key.to_id(), a.index), &png, 480);
-            st.previews.insert(id, tex.clone());
+            keep_preview(st, ctx, id, tex.clone());
             tex
         }
         crate::VideoFrame::Unavailable => {
-            st.previews.insert(id, None);
+            keep_preview(st, ctx, id, None);
             None
         }
+    }
+}
+
+/// Most attachment thumbnails kept: those shown least recently go first, never one shown in
+/// this frame.
+const PREVIEWS: usize = 64;
+
+/// A thumbnail kept (`Some(None)`: the attachment has none), marked as shown in this frame.
+fn kept_preview(st: &mut UiState, ctx: &egui::Context, id: &(MessageKey, usize)) -> Option<Option<egui::TextureHandle>> {
+    let now = ctx.cumulative_frame_nr();
+    st.previews.get_mut(id).map(|(t, used)| {
+        *used = now;
+        t.clone()
+    })
+}
+
+/// Whether a thumbnail not kept may be made: with as many kept as were all shown in this frame,
+/// the chip shows its kind's icon (the thumbnails were all let go at the 65th, then each of a
+/// message's read and decoded again every frame).
+fn room_for_preview(st: &UiState, ctx: &egui::Context) -> bool {
+    let now = ctx.cumulative_frame_nr();
+    st.previews.len() < PREVIEWS || st.previews.values().any(|(_, used)| *used < now)
+}
+
+/// Keep a thumbnail made in this frame, letting go of the one shown least recently if need be.
+fn keep_preview(st: &mut UiState, ctx: &egui::Context, id: (MessageKey, usize), tex: Option<egui::TextureHandle>) {
+    let now = ctx.cumulative_frame_nr();
+    while st.previews.len() >= PREVIEWS {
+        let oldest = st.previews.iter().filter(|(_, (_, used))| *used < now).min_by_key(|(_, (_, used))| *used).map(|(k, _)| k.clone());
+        let Some(oldest) = oldest else { break };
+        st.previews.remove(&oldest);
+    }
+    if st.previews.len() < PREVIEWS {
+        st.previews.insert(id, (tex, now));
     }
 }
 

@@ -9,6 +9,7 @@ mod attachment_text;
 mod bars;
 mod header_actions;
 mod linked_pictures;
+mod previews;
 mod rules;
 mod senders;
 mod tables;
