@@ -388,11 +388,18 @@ impl Session {
     }
 
     /// Set or clear a flag on the selection (`on: None` toggles, following the first message).
+    /// Flagged again or cleared, a follow-up marked complete no longer is (`follow_up.rs`).
     pub fn flag_selection(&mut self, flag: Flag, on: Option<bool>) -> CmdResult {
         let sel = self.selected();
         let first = sel.first().ok_or_else(|| CmdError::Disabled("no message selected".into()))?;
         let current = flag.get(&first.flags);
         let on = on.unwrap_or(!current);
+        if flag == Flag::Flagged {
+            let was = self.follow_up_days_of(&sel);
+            let undo = self.set_flagged(&sel, on);
+            self.remember_follow_up(undo, was);
+            return Ok(serde_json::json!({ "on": on, "count": sel.len() }));
+        }
         let mut by_account: HashMap<String, Vec<MessageKey>> = HashMap::new();
         // Undo puts back only the ones that changed.
         let mut changed: HashMap<String, Vec<MessageKey>> = HashMap::new();
@@ -408,43 +415,7 @@ impl Session {
         for (a, keys) in by_account {
             self.apply_op(&a, Op::SetFlag { keys, flag, on });
         }
-        // Unflagged: no longer due.
-        if flag == Flag::Flagged && !on {
-            for m in &sel {
-                self.prefs.follow_up.remove(&follow_up_id(m));
-            }
-        }
         Ok(serde_json::json!({ "on": on, "count": sel.len() }))
-    }
-
-    /// Flag the selection for follow-up by a day (`None`: no date), or (`complete`) mark it
-    /// done: unflagged, its date forgotten.
-    pub fn follow_up_selection(&mut self, due: Option<i64>, complete: bool) -> CmdResult {
-        let sel = self.selected();
-        if sel.is_empty() {
-            return Err(CmdError::Disabled("no message selected".into()));
-        }
-        self.flag_selection(Flag::Flagged, Some(!complete))?;
-        for m in &sel {
-            let id = follow_up_id(m);
-            match due.filter(|_| !complete) {
-                Some(d) if self.prefs.follow_up.len() < 10_000 || self.prefs.follow_up.contains_key(&id) => {
-                    self.prefs.follow_up.insert(id, d);
-                }
-                _ => {
-                    self.prefs.follow_up.remove(&id);
-                }
-            }
-        }
-        Ok(serde_json::json!({ "flagged": !complete, "due": due.filter(|_| !complete).map(quatrelle_model::dates::day_string), "count": sel.len() }))
-    }
-
-    /// When a flagged message is due, if a day was given.
-    pub fn follow_up_due(&self, m: &Summary) -> Option<i64> {
-        if !m.flags.flagged {
-            return None;
-        }
-        self.prefs.follow_up.get(&follow_up_id(m)).copied()
     }
 
     pub(crate) fn remember(&mut self, u: Undo) {
@@ -462,6 +433,10 @@ impl Session {
                 for op in ops {
                     self.apply_op(&account, op);
                 }
+                Ok(serde_json::json!({ "undone": "changes" }))
+            }
+            Undo::FollowUp { ops, days } => {
+                self.undo_follow_up(ops, days);
                 Ok(serde_json::json!({ "undone": "changes" }))
             }
             Undo::Move { account, to, back } => {

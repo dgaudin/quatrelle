@@ -54,6 +54,10 @@ pub fn search_filter(query: &str) -> Option<Value> {
             {
                 conds.push(keyword(k, !c.negated));
             }
+            // Complete and not flagged again (asked negated, it's checked here).
+            Term::Complete if !c.negated => {
+                conds.extend([keyword(quatrelle_model::FOLLOW_UP_COMPLETE, true), keyword("$flagged", false)]);
+            }
             _ => {}
         }
     }

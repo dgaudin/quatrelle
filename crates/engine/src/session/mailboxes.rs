@@ -15,6 +15,8 @@ mod directory;
 pub(crate) use directory::{Directory, bare_name, directory_key};
 pub use directory::{DirectoryAnswer, directory_people, fill_name};
 mod folder_edits;
+mod follow_up;
+pub(crate) use follow_up::MAX_FOLLOW_UP;
 mod mailbox_settings;
 mod nav;
 pub(crate) use nav::ListNav;

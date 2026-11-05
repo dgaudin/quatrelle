@@ -32,7 +32,11 @@ impl Session {
                 Arrange::To => Row::Group(m.map(|m| person(m.to.first())).unwrap_or_default()),
                 Arrange::Subject => Row::Group(m.map(|m| m.base_subject()).unwrap_or_default()),
                 Arrange::Size => Row::Header(size_group(m.map_or(0, |m| m.size))),
-                Arrange::Flag => Row::Header(if m.is_some_and(|m| m.flags.flagged) { "Flagged" } else { "Not flagged" }),
+                Arrange::Flag => Row::Header(match m.map(|m| flag_rank(m)) {
+                    Some(2) => "Flagged",
+                    Some(1) => "Completed",
+                    _ => "Not flagged",
+                }),
                 Arrange::Attachments => Row::Header(if m.is_some_and(|m| m.has_attachments) { "With attachments" } else { "Without attachments" }),
             };
             let heading = match heading {

@@ -548,6 +548,23 @@ fn keywords_round_trip_with_the_server() {
     sync_folder(&mut c, &store, "a1", "INBOX", &SyncOptions::default()).unwrap();
     let m = store.load_folder("a1", "INBOX").unwrap().messages[0].clone();
     assert!(m.flags.has("$label2") && m.flags.pinned(), "{:?}", m.flags);
+    // A follow-up marked complete (the flag off, then the keyword on) comes back so, and a flag
+    // set again (the keyword off, then the flag on) comes back flagged.
+    let key = m.key.clone();
+    let complete = |on| Op::SetKeyword { keys: vec![key.clone()], keyword: quatrelle_model::FOLLOW_UP_COMPLETE.into(), on, name: None };
+    let flag = |on| Op::SetFlag { keys: vec![key.clone()], flag: quatrelle_model::Flag::Flagged, on };
+    for op in [flag(true), flag(false), complete(true)] {
+        apply_remote(&mut c, &op).unwrap();
+    }
+    sync_folder(&mut c, &store, "a1", "INBOX", &SyncOptions::default()).unwrap();
+    let m = store.load_folder("a1", "INBOX").unwrap().messages[0].clone();
+    assert!(m.flags.follow_up_complete() && m.flags.completed == 0, "{:?}", m.flags);
+    for op in [complete(false), flag(true)] {
+        apply_remote(&mut c, &op).unwrap();
+    }
+    sync_folder(&mut c, &store, "a1", "INBOX", &SyncOptions::default()).unwrap();
+    let m = store.load_folder("a1", "INBOX").unwrap().messages[0].clone();
+    assert!(m.flags.flagged && !m.flags.has(quatrelle_model::FOLLOW_UP_COMPLETE), "{:?}", m.flags);
     let _ = std::fs::remove_dir_all(store.root());
 }
 

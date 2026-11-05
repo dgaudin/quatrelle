@@ -44,7 +44,7 @@ mod writing;
 // named here as before.
 pub use accounts::{AccountState, UpdateCheck, VacationState, newer_release};
 pub use listing::{ARRANGE_HEADINGS, Arrange, FolderRef, ListFilter, OUTBOX, Row, View, arrange_list};
-use listing::{Preview, person, size_group};
+use listing::{Preview, flag_rank, person, size_group};
 pub use mailboxes::{
     CompactPhase, Compacted, DirectoryAnswer, Expansion, FIELD_NAMES, FieldId, FolderSizes, INDEX_MAX, MAX_SHOWN_MEMBERS, MAX_SUGGESTIONS, MAX_TOTAL,
     Sizes, Source, Suggestion, directory_people, fill_name,
@@ -116,6 +116,10 @@ pub enum Undo {
     Move { account: String, to: String, back: Vec<(String, String)> },
     /// Flags or keywords changed: the changes that put them back.
     Ops { account: String, ops: Vec<Op> },
+    /// Follow-ups changed (flagged, cleared, marked complete): the flag and keyword changes that
+    /// put them back, by account, and each message's due and done days as they were, by its
+    /// follow-up id.
+    FollowUp { ops: Vec<(String, Vec<Op>)>, days: Vec<(String, Option<i64>, Option<i64>)> },
     /// An appointment moved (or one occurrence of it, `occurrence`): where it was, and whether
     /// its guests were told (they're told of its return the same way).
     EventMove { uid: String, occurrence: Option<i64>, start: i64, end: i64, send: bool },
