@@ -827,9 +827,11 @@ fn a_shown_picture_keeps_its_name() {
     assert!(!mime::summary_from_full(&raw, key, Flags::default(), 0, 0).has_attachments);
 }
 
+mod chunked;
 mod fidelity;
 mod files;
 mod losses;
+mod open;
 mod reader;
 mod real_files;
 mod rebuilt;

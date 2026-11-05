@@ -34,6 +34,8 @@ pub(super) struct Out<'a> {
     pub(super) body_not_converted: usize,
     /// The files left out of the messages that came in, by reason.
     pub(super) files_left_out: BTreeMap<FileLeftOut, usize>,
+    /// How the data file was read.
+    pub(super) reading: Reading,
     pub(super) progress: &'a mut dyn FnMut(usize),
     /// Contacts and calendar items read so far.
     pub(super) pim: Pim,
@@ -55,6 +57,7 @@ impl<'a> Out<'a> {
             charset_unsupported: 0,
             body_not_converted: 0,
             files_left_out: BTreeMap::new(),
+            reading: Reading::default(),
             progress,
             pim: Pim::default(),
             pending: Vec::new(),
@@ -268,6 +271,12 @@ impl<'a> Out<'a> {
         if self.body_not_converted > 0 {
             log::info!("{} messages kept their body only as Rich Text that couldn't be read: they came in without one", self.body_not_converted);
         }
+        log::info!(
+            "import: {} bytes read from the data file in {} reads, its item reader opened again {} times",
+            self.reading.bytes,
+            self.reading.reads,
+            self.reading.reopens
+        );
         if !self.files_left_out.is_empty() {
             log::info!("attachments left out of the messages that came in: {:?}", self.files_left_out);
         }
@@ -283,6 +292,7 @@ impl<'a> Out<'a> {
             charset_unsupported: self.charset_unsupported,
             body_not_converted: self.body_not_converted,
             files_left_out: self.files_left_out,
+            reading: self.reading,
         }
     }
 }
