@@ -1739,6 +1739,123 @@ R11b.
   - dans le navigateur, la photo de 2400 × 1800 se décode dans une image (30 ms) ;
   - « Copier l'image » relit la source quand le fichier n'est plus gardé (au clic seulement).
 
+### État de la récupération : v0.32, dix-neuvième partie : le message ouvert lu sur la voie de lecture, et la seule partie visible d'un long message mise en page (2026-11-05)
+
+La seconde moitié du lot R11 de `merge-tools/survey-v0.32.md` (R11b), sur `main` : le lot R11 est
+fini. Pour chaque point, sa sonde d'abord, lancée contre le code d'alors ; quand le test de
+l'origine ne pouvait pas compiler avant la correction, la sonde est une mesure, ou la correction
+coupée le temps d'un essai. Aucune copie des données du propriétaire : des messages fabriqués
+dans des tests et trois bancs ignorés en `--release` : celui des images de R11a
+(`ui-egui/src/tests/pictures/bench.rs`, message de 10,4 Mo), Bas tenu sur 200 messages d'environ
+1 Mo marqués lus au passage (`tests/pictures/bodies.rs::holding_down_frames_stay_under_16_ms`),
+et les images d'un long message (`tests/reading/long_text.rs::bench_frames_of_a_long_message`).
+`apps/quatrelle/src/main.rs` (817 lignes) a d'abord perdu les commandes `--cmd` du démarrage,
+pur déplacement dans `desktop/start.rs` (`16e487ab`). Les deux commits du moteur qui suivent
+`0995a69f` (`01e633a1`, `4895be7d`) sont faits avant la fenêtre (`a75755e5`), le moteur d'un
+tenant.
+
+| Banc (`--release`) | avant le lot | après |
+|---|---|---|
+| message de 10,4 Mo, sur une voie : `list.open` | 45,7 ms | 0,0 ms (compte serveur) ; 26,4 ms (compte local : la marque de lu) |
+| la première image après l'ouverture, puis la plus lente | 47 ms (celle de la liste comprise), 7,6 ms | 0,6 à 0,9 ms, 1,8 ms |
+| Bas tenu, 200 messages d'1 Mo, compte serveur : pire pas (moyenne) | 4,2 ms (3,4) | 0,9 ms (0,6) |
+| le même, compte local | 34,5 ms (30,0) | 32,9 ms (27,6) : la marque |
+| texte brut de 127 000 caractères : première image, puis chacune | 39,8 ms, 12,1 ms | 4,1 ms, 3,2 ms |
+| HTML de 138 000 caractères (2 268 lignes) | 22,7 ms, 7,1 ms | 3,4 ms, 1,1 ms |
+| texte brut de 300 000 caractères | 73,7 ms, 30,0 ms | 4,0 ms, 2,8 ms |
+
+Les « 48 ms » de la première image, relevés par R11a, étaient en fait la première image de la
+liste qui venait d'être ouverte (46 ms, celle d'avant l'ouverture) : le banc dessine maintenant
+deux images avant d'ouvrir le message, et passe aussi sur un compte serveur.
+
+- **Le corps du message ouvert préparé ailleurs** (`43db93d5`, adapté de `0995a69f`) :
+  `session/opening/prepare.rs`, `BodyWork`, `finish_body`, `defer_bodies` (coupé par défaut : la
+  ligne de commande, `--cmd` et les tests lisent à l'instant) ; un résultat périmé est jeté ; une
+  commande autre que se déplacer dans la liste finit d'abord le corps en attente
+  (`Session::run`, sous `catch_unwind`). Gardé du fork : un message absent est demandé par
+  `fetch_job` (son texte d'abord sur Exchange, ou lu sur le serveur quand il est plus ancien que
+  ce qui est gardé) ; le S/MIME est déballé sur le fil de la session ; le texte d'abord arrive
+  seul (`Event::TextFirst`) et se montre comme avant, le message entier le remplaçant une fois
+  analysé ailleurs ; `show_ready` garde la vérification de l'expéditeur, `keep_senders` et les
+  images du web. Sonde (le mode différé coupé le temps d'un essai) : 35 messages montrés, 34
+  analysés sur le fil de la session ; maintenant 0. Tests de l'origine portés, avec les sortes
+  de messages du fork : invitation, `winmail.dat`, signé, chiffré, signé puis chiffré, et un
+  texte d'abord puis le message entier : chacun se lit pareil, différé ou non (même lecture,
+  mêmes travaux, même marque, même invitation).
+- **Un corps arrivé pendant la lecture du cache** (`77387e6e`, adapté de `01e633a1`) : chaque
+  attente porte un numéro, seul le dernier résultat est pris. Sonde : la première moitié du test
+  de l'origine demandait un second téléchargement. La seconde moitié (une copie texte d'abord
+  dans le cache) n'existe pas chez nous, le texte d'abord n'étant jamais gardé : à sa place, la
+  course du fork, le texte d'abord arrivé pendant la lecture du cache ; la lecture, ne trouvant
+  rien, redemandait le message. Le texte montré lâche maintenant la lecture attendue
+  (`text_shown_first`), le message entier étant en route.
+- **Chercher, filtrer, trier sans attendre le corps** (`a0a51894`, adapté de `4895be7d`) : la
+  liste des commandes qui laissent le corps à la voie s'allonge (recherche, filtre, Prioritaire,
+  tri, volet des dossiers, frappe dans un brouillon). Le test de l'origine passait avant sa
+  correction : le compteur des analyses sur le fil de la session ne voyait pas un corps fini là
+  par une commande ; il le compte maintenant. Sonde ensuite : un tri inversé lisait et analysait
+  le message ouvert sur le fil de la session (1 au lieu de 0).
+- **La voie de lecture** (`86739470`, adapté de `a75755e5`) : `reading/bodies.rs` (`app/` a 16
+  fichiers), une case à un seul travail : un message passé n'est jamais lu ; la source lue sert
+  aux images (`Pictures::give_source`, plus de seconde lecture du cache) ; sans voie (le
+  navigateur), le travail se fait dans l'image. Le travail est pris et confié dans `logic()`, qui
+  tourne que la fenêtre dessine ou non. Gardé du fork : pendant l'attente, l'objet du message à
+  la place de l'en-tête et un petit indicateur discret, pas « Téléchargement du message… ».
+  L'application l'active après les `--cmd` et les fichiers passés au démarrage. Sonde (la
+  fenêtre n'activant pas le mode différé) : Bas tenu sur 20 messages d'1 Mo, les 20 analysés dans
+  une image ; maintenant aucun. `docs/architecture.md` dit ce que fait la voie de lecture.
+- **Le banc de Bas tenu** (`31c7f272`, adapté de `0f0a4021`) : 200 messages d'environ 1 Mo,
+  **marqués lus au passage** (l'origine coupait la marque, écrite à l'instant chez elle), la
+  pire image tenue sous 16 ms sur un compte serveur, celui du propriétaire, où la marque part chez
+  l'écrivain ; sur le compte local de l'exemple, la fenêtre écrit la marque (dit, non tenu). La
+  sonde passait déjà sur le compte serveur (4,2 ms) : un message d'1 Mo de texte se lit et
+  s'analyse en 3 ms environ. C'est le message de 10 Mo du banc des images qui coûtait 20 ms à
+  lire et analyser, et 25 ms de plus pour la marque sur un compte local.
+- **La seule partie visible d'un long message mise en page** (`7ec8ec4e`, adapté de
+  `7020f7bb`) : `reading/long_text.rs` ; le texte brut de plus de 20 000 octets en morceaux de
+  4 Ko, le HTML de plus de 2 000 lignes en blocs de 64 lignes, les tableaux de sa mise en page un
+  à un ; hauteurs estimées puis mesurées, deux de plus par image. Gardé du fork : les adresses
+  d'un long texte brut restent des liens (une main, l'adresse, ouvertes d'un clic, comme
+  `plain.rs`) ; un tableau non dessiné garde les numéros de ses cellules (le premier de chaque
+  tableau calculé d'après ceux d'avant), si bien que les hauteurs qui alignent ses lignes ne sont
+  pas prises par les cellules d'un autre (`CellHeights`) ; le texte suit le zoom du message.
+  Sondes : le banc ci-dessus, les seuils coupés le temps d'un essai. Tests de l'origine portés ;
+  celui du Maj+clic vise plus bas, l'en-tête du fork restant en place au-dessus du message.
+  Tests du fork : les liens d'un long texte brut ; les tableaux d'une longue lettre
+  d'information (sans les numéros gardés, sept tableaux se partageaient quatre numéros).
+  **`0eeb5d6a`** (la sélection d'un seul tenant, phase 4) n'est pas nécessaire pour que la copie
+  soit juste : Ctrl+A puis Copier donne tout le texte, et une sélection au Maj+clic d'un bout à
+  l'autre copie exactement le texte entre les deux (testés). Il manque pour le clavier :
+  Maj+flèches, Début et Fin s'arrêtent au bord d'un morceau, et un glisser hors du volet ne fait
+  pas défiler. Un long texte brut n'est plus une zone de texte : Ctrl+A y demande une sélection
+  commencée dans le texte.
+- **Deux préparations finies dans le désordre** (`4ee41366`, adapté de `eb563510`) : le travail
+  est numéroté, seul un corps plus récent est gardé. Sonde (test du fork : un long HTML ouvert,
+  puis le suivant, l'ancien fil analysant encore quand le nouveau a fini) : 3 passes sur 3
+  laissaient le volet vide à attendre ; maintenant le message s'affiche.
+- **Ce qui change pour le propriétaire** : tenir Bas ne lit et n'analyse plus aucun message sur
+  le fil de la fenêtre : la voie de lecture le fait, et seul le message d'arrivée est lu ;
+  ouvrir un gros message ne coûte plus rien à la fenêtre (45 ms avant pour 10 Mo), il s'affiche
+  une image ou deux plus tard, son objet montré entre-temps ; chercher, filtrer ou trier
+  n'attendent plus le message ouvert. Un long message (une longue conversation en texte, une
+  longue lettre d'information) ne fige plus la fenêtre à l'ouverture (40 à 74 ms) ni à chaque
+  image ensuite (12 à 30 ms) : 3 à 4 ms. Répondre, transférer, enregistrer agissent toujours sur
+  le message tel qu'il s'affiche.
+- **Vérifié** : chaque sonde avant et après ; les suites de `quatrelle-engine` et de
+  `quatrelle-ui-egui` ; `cargo xtask ci` (wasm compris).
+- **Reste, remarqué** :
+  - sur un compte local ou un fichier de données, la marque de lu s'écrit encore sur le fil de la
+    fenêtre (25 ms par message dans les bancs) : le `save_marks` de `7ab836b6`, pas pris en R10 ;
+  - restent sur le fil de la session : le message signé ou chiffré (déballé puis analysé), la
+    copie texte d'abord d'Exchange (petite), un message ouvert dans sa propre fenêtre, et
+    l'indexation pour la recherche d'un corps téléchargé (`index_body`) ;
+  - dans le navigateur, sans voie, le travail se fait dans l'image (60 ms pour un HTML de 138 000
+    caractères) ;
+  - la première image après l'ouverture d'un dossier coûtait 46 ms dans le banc des images : non
+    regardé ;
+  - `reading.rs` est à 799 lignes : à découper avant d'y ajouter quoi que ce soit ;
+  - le commit `43db93d5` laissait un avertissement de clippy, corrigé dans `77387e6e`.
+
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
 Quatre chantiers, chacun dans son commit, à la suite d'un audit de l'éditeur HTML.
