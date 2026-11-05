@@ -2596,6 +2596,111 @@ lancée contre le code d'alors, sur les seuls faux serveurs du dépôt.
     l'envoi, par les tournures propres à Quatrelle ci-dessus, dans les 13 langues ;
   - l'import `.pst` ne lit pas `0x1081` (à faire avec P2, comme l'état 1 du drapeau).
 
+### État de la récupération : v0.32, vingt-cinquième partie : l'import fidèle des fichiers .pst, le courrier (2026-11-05)
+
+La première moitié du lot P2 de `merge-tools/survey-v0.32.md` (P2a, décision n° 7 du propriétaire :
+« en entier »), sur `main`, plus les restes de R16 et R18. L'import du fork reste le sien (un fil,
+un passage, pas de plan, pas de reprise) : rien de l'import suivi et reprenable de l'origine (C1-4),
+ni de ses copies à côté des `.pst`, ni de son index sur disque. Pour chaque commit, son test porté
+seul d'abord (ou une sonde écrite ici quand le test ne compilait pas contre le code d'alors), lancé
+contre le code d'alors, sur des fichiers fabriqués par l'écrivain du crate (`outlook-pst-rw`) et
+abîmés octet par octet, ou sur des éléments faits de valeurs (`Val`) : aucune donnée du propriétaire.
+
+**D'abord la découpe** (`057a0dba`, adaptée de `6119188b`) : `pst.rs` (786 lignes) garde le parcours
+des dossiers ; la lecture d'un élément va dans `pst/item.rs`, sa reconstruction dans
+`pst/rebuild.rs`, l'écriture dans `pst/out.rs`, les valeurs dans `pst/props.rs` (`Val`, que lit
+aussi `pst_pim.rs`). Pur déplacement, les parties du fork comprises (tâches, photo des contacts,
+`catch_unwind` par dossier, plafond `MAX_VALUE`). Puis `Out::new` (`8ee66721`, propre au fork) : les
+champs d'`Out` n'étaient plus à répéter dans chaque test.
+
+| Commit de l'origine | Sonde | avant | après |
+|---|---|---|---|
+| `7f879730` (`9ddc2712`, adapté) | ses deux tests | corps seulement en RTF : **aucun HTML** ; texte brut sans le HTML que son RTF enveloppait | HTML repris, images `cid:` dans le corps |
+| `8c21ad43` (`168ae198`, adapté) | sonde : HTML en Windows-1251 | « Ïðèâåò » | « Привет » ; pages de l'élément, BOM, UTF-8 mal étiqueté ; ISO-2022-KR compté |
+| `d4902c12` (`82b25e6d`, repris) | son test sans l'importance | verbe 104 et icône 262 **non transférés** ; `<a><b>`, `<a>,<b>`, `a,b` lus en un seul identifiant | transféré, importance, identifiants séparés |
+| `c92e285f` (`c5caf860`, repris) | sonde | aucun en-tête de fil ; **un `Message-ID` piégé ajoutait une ligne `Bcc:`** | `Thread-Index`, `Thread-Topic`, `Sensitivity` ; identifiant nettoyé ; cible de fuzz `pst_item` |
+| `f186abb0` (`343a0026`, repris) | sonde | destinataire connu par son seul identifiant ponctuel **perdu** | adresse et nom pris de l'identifiant |
+| `47aff562` (`c592989c`, adapté) | sonde sur un vrai fichier (`tests/fidelity.rs`) | catégories « Work », « To do » : **aucun mot-clé** | `work`, `to_do` |
+| `1cbc081f` (`e08159b1`, repris) | son test | adresse Cci avec saut de ligne gardée ; caractère de contrôle dans `Subject:` | noms, adresses, identifiants tenus dans leur ligne |
+| `ea6c516d` (`cfa83ece`, adapté) | ses lignes `0x0E1F` | RTF plus ancien que le texte : **son HTML par-dessus** | laissé ; RTF illisible compté |
+| `99470285` (`a4f99e11`, adapté) | ses nouveaux cas | « Hello » d'un message étiqueté UTF-16 lu « 效汬 » ; `<meta charset=utf-8>` à cheval sur 4 Ko : charabia | `charset` lu seulement dans une balise `<meta>` |
+| `d4433d85` (`d22573cc`, adapté) | son test de fichier abîmé, sans les comptes | **passait déjà** (le message entrait sans les deux pièces) | pièces illisibles et liens comptés (`FileLeftOut`) ; fichier vide repris de sa ligne |
+| `fefd506a` (`733249f1`, adapté) | ses six cas | image montrée par `cid:LOGO@…` (casse) sortie en fichier : **trombone** à l'import comme à la relecture | règle commune `carries_file`, `draft_carries_files`, `HtmlRefs::cites` |
+| `bc0308e4` (`948d2209`, adapté) | sonde mémoire (`rebuilt::memory_…`, ignorée) | fichier de 32 Mio : pic **3,85** fois le fichier | **1,46** (la source et un peu) |
+| `a905da13` (`6ba2884a`, repris) | ses deux tests | 80 lignes `Received` : 5 742 160 octets tenus pour 2 876 948 ; aperçu perdu après 64 K de citation | tampon exact, aperçu entier |
+| `ca3cb9e4`, `5d47a4b3`, `3b56c9f7` (`29393ebd`, adaptés) | sonde (`open::measure_…`, ignorée) | lecture seule : **passait déjà** ; 2 000 messages : **16 785 lectures** | 214 lectures ; pic 17,5 → 31 Mo sur ce petit fichier (cache partagé et second lecteur) |
+| `478f363c` (`ee1864f1`, repris) | celle de `dfbaa156` | — | `OutAttachment::content_id` (pas pris en R11 faute d'usage) |
+| `dfbaa156` (`c6f4a875`, adapté) | sonde | Content-ID d'un fichier non montré **perdu** ; fichier caché d'un message **écarté** | gardé ; fichiers cachés repris sauf photo de contact et occurrences modifiées |
+| `26bffa88` + `1d1f8b28` (`c0450bdf`, adaptés) | ses tests du lecteur | `Outer[Middle[], empty.txt]` : **fichiers des messages joints perdus** ; message joint à lui-même recopié | `Outer[Middle[Deep[deep.txt], middle.txt], empty.txt]` ; boucle écartée |
+| `fb05cf0a` (`fcf55d18`, adapté) | son test | onze messages joints de 111 octets dans 300 : **tous entrés** | le texte compte dans les 128 Mio de l'élément |
+| `20792f19` (`4db4e00e`, repris) | son premier test | non-remise reconstruite en `multipart/mixed` | `multipart/report`, état d'abord, en 7bit |
+| `73c19c52` (`76e9a8ed`, repris) | ses tests | signé ou chiffré : courrier simple avec un `smime.p7m` | signé tel qu'envoyé, CMS en `application/pkcs7-mime` |
+| Restes de R16 et R18 (`2ad431e3`, propre au fork) | sondes sur vrais fichiers (`tests/fidelity.rs`) | terminé dans Outlook : **aucune marque** ; répondu : **sans heure** | `$FollowUpComplete` et `Flags::completed` ; `Flags::acted` à côté de 102, 103, 104 |
+
+- **Repris tels quels** (au nom de leur auteur) : `d4902c12`, `c92e285f`, `f186abb0`, `1cbc081f`,
+  `a905da13`, `478f363c`, `20792f19` (avec son `usable_headers`, venu de `b320eae8`), `73c19c52`.
+- **Adaptés** (au nom du propriétaire), toujours pour la même raison : l'origine a un rapport de
+  pertes par raison (`SkipReason`, `skips`), des options d'import et des statistiques de durée, que
+  l'import du fork n'a pas. Ici : `Imported::charset_unsupported`, `body_not_converted`,
+  `files_left_out` (`FileLeftOut` : lien, trop gros, illisible, message joint illisible, trop
+  profond, au-delà de la limite) et `reading` (octets lus, lectures, réouvertures), tous écrits au
+  journal ; le moteur ne lit toujours que `messages` et `skipped`. Les catégories passent par
+  `keyword_for` et `is_keyword` comme celles d'Exchange (« $Junk » devient `cat_$junk`) ; la photo
+  d'un contact est toujours prise parmi ses pièces (`Held::photo`) ; la règle du trombone est
+  celle du fork (vérification S/MIME d'origine, `winmail.dat` dans son budget) ; le lecteur à
+  cache se règle par `import_recycled` dans les tests, pas par des options.
+- **Propre au fork** : `Out::new` ; les restes de R16 et R18 (`0x1090` = 1 et `0x1091`, `0x1082`
+  lus comme EWS les lit : avant 1970 ou « aucune » de MAPI en 4501, pas d'heure ; pas d'heure à
+  côté d'un autre verbe) ; `tests/fidelity.rs` et `tests/seeds.rs` (les graines de `pst`,
+  `pst_item` et `pst_props` relues comme leurs cibles les lisent, puisque `cargo-fuzz` manque ici).
+- **Découpes** : les tests passés au-delà de 800 lignes vont dans `tests/code_pages.rs`,
+  `tests/headers.rs` et `tests/reader/attached.rs` (`fa4494e1`, pur déplacement) ; les trois
+  cibles de fuzz des fichiers de données dans `fuzz/fuzz_targets/pst/` (`91bfc59c` : le dossier
+  dépassait 16 fichiers ; les binaires gardent leurs noms). `pst.rs` : 466 lignes.
+- **Ce qui dépendait de l'import suivi de l'origine** : les commits pris vivent chez l'origine dans
+  son pipeline (minuterie par phase, compression avant l'écrivain, plan, reprise). Seule leur
+  correction de fidélité est prise, branchée sur `Out::add_message` du fork : `bc0308e4` sans
+  `tally.time` ni `Store::prepare` ; `ca3cb9e4`… sans `ImportOptions` (`chunk_kb`, `recycle`,
+  `handle_cache_bytes`) ni `ImportStats`, remplacés par `Reading` et `import_recycled`.
+- **Ce que verra le propriétaire** en important un `.pst` : le courrier venu d'Outlook arrive avec
+  ce qu'Outlook gardait et que l'import perdait : les corps seulement en RTF et leurs images, le
+  cyrillique, le grec, le chinois ou le japonais lisibles, les catégories, le drapeau terminé avec
+  son jour (« Terminé le … ») et la flèche répondu ou transféré avec son heure (« Répondu le … »),
+  l'importance, la sensibilité, le fil (`Thread-Index`), les fichiers des messages joints (jusqu'à
+  trois niveaux), les fichiers cachés d'un message, les non-remises en rapports, le courrier signé
+  ou chiffré tel qu'envoyé (signature vérifiable, déchiffrable avec sa clé). Le trombone suit ce
+  que montre le message. Sur un gros fichier, beaucoup moins de lectures du disque, le fichier
+  ouvert en lecture seule, et la mémoire du lecteur bornée par la réouverture. Rien ne change pour
+  un fichier déjà importé : il faut le réimporter.
+- **Pour P2b** (rendez-vous, contacts, demandes de réunion, groupes, journal) :
+  - le lecteur d'un élément est `item_with_files(&Held { … })` (`pst.rs`) : les pièces passent
+    par `Holder` (`pst/embedded.rs`) ; la photo d'un contact est prise là (`Held::photo`) ;
+  - `item_of(p, recipients, files, named)` lit tout par `Val` ; `pst_pim::extract` prend la même
+    fermeture ; `Named` connaît maintenant un nom par chaîne (`keywords`) ;
+  - les raisons d'écartement sont `FileLeftOut` (pas de `SkipReason`) ; ajouter une raison là ;
+  - `hidden(p, class)` laisse déjà de côté les occurrences modifiées d'une série
+    (`afException`, ou message joint caché d'une réunion ou d'un rendez-vous) ;
+  - les tests créent `Out::new(&store, "d1", &mut progress)` ; `tests/` a 14 fichiers et le
+    sous-dossier `reader/` : prévoir des sous-dossiers par rôle au-delà de 16 ;
+  - `docs/gaps.md` n'a pas été suivi (le fork tient ce journal-ci).
+- **Vérifié** : chaque sonde avant (échec, ou déjà juste pour les deux notées) et après ; les
+  suites de `quatrelle-net` (import, export, EWS), `quatrelle-mime` et `quatrelle-engine` ; les
+  cibles de fuzz par `cargo check --bins` dans `fuzz/` et leurs graines par `tests/seeds.rs` ;
+  `cargo xtask ci` (wasm compris).
+- **Reste, remarqué** :
+  - la réouverture du lecteur ne s'est jamais déclenchée sur les fichiers fabriqués (20 000
+    messages, 91 Mo : 1 967 lectures, 18 Mo de pic, avec ou sans) : leurs arbres sont trop
+    simples ; son effet se voit sur un vrai fichier (le test ignoré `real_files`, avec
+    `QUATRELLE_PST`, dit maintenant les lectures et les réouvertures) ;
+  - le lecteur des dossiers (celui qui parcourt les tables) n'est jamais rouvert : ses pages
+    croissent avec le nombre de dossiers et de lignes, comme chez l'origine ;
+  - sur un petit fichier, le pic de mémoire monte (17,5 → 31 Mo pour 2 000 messages) : le cache
+    partagé (4 Mio au plus) et le second lecteur ;
+  - les comptes nouveaux (`files_left_out`, `charset_unsupported`, `body_not_converted`) ne vont
+    qu'au journal : la fenêtre ne montre toujours que les éléments écartés (`skipped`) ;
+  - le partage en lecture seule sous Windows (`FILE_SHARE_READ`) n'a été essayé que par son test
+    `#[cfg(windows)]`, pas lancé ici.
+
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
 Quatre chantiers, chacun dans son commit, à la suite d'un audit de l'éditeur HTML.
