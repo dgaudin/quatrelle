@@ -19,6 +19,7 @@ libFuzzer. `.github/workflows/fuzz.yml` runs every target weekly on Linux.
 | `pst` | an Outlook data file: a good exported file with the input as byte patches, or a whole file |
 | `trust` | the URLs and hosts servers hand out (DAV hrefs, `EwsUrl`, `Location`): `url_host` and `site`, a site staying itself and reading back |
 | `text_first` | Exchange's `GetItem` answer (XML), Graph's message (JSON) or an IMAP server's answers to a text first (`BODYSTRUCTURE`, then the header and text parts), picked by the first byte, built into a message's text and read back with `parse_text_first` and `parse`; each of Exchange's response messages read as a refusal (`check_message`, the fields its `MessageXml` names) |
+| `data_file` | an account's data file as a version before R3 may have left it, damaged any way (files whole and in pieces, raw or compressed, `META` and its cursor): `META` read, compressed again as Compact Now does (stopped after a batch, gone on with, then once more), and every file that read back before reads back the same |
 | `tnef` | Outlook's `winmail.dat`: its files, body and attached messages, compressed RTF and the HTML or text in it, and as a message's attachment |
 
 ## Running
