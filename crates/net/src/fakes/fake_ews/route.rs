@@ -270,8 +270,14 @@ impl Data {
                             let want = value == "true";
                             list.retain(|i| i.read == want);
                         } else if cond.find("ExtendedFieldURI").is_some() {
+                            // `PidTagFlagStatus`: 1 complete, 2 flagged.
                             let negated = restriction.find("Not").is_some();
-                            list.retain(|i| i.flagged != negated);
+                            if value == "1" {
+                                list.retain(|i| i.complete != negated);
+                                self.calls.push("FindItem completed".into());
+                            } else {
+                                list.retain(|i| i.flagged != negated);
+                            }
                         }
                     }
                 }

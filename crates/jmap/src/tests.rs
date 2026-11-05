@@ -250,3 +250,42 @@ fn the_session_is_fetched_within_the_trusted_sites() {
     assert_eq!(c.trusted, vec!["provider.test".to_string(), "example.com".to_string()]);
     assert!(http.1.borrow()[0].trusted.contains(&"provider.test".to_string()));
 }
+
+/// The pass reading Exchange's completed follow-ups once: the folders a reader of its own did
+/// come back with it, the account's pass is done once every folder followed had it, and a state
+/// written before it (or a damaged one) starts it rather than failing.
+#[test]
+fn the_completed_follow_ups_pass_is_kept_per_account() {
+    let mut main = State::default();
+    assert!(main.ticks_wanted("INBOX"));
+    main.ticks_read("INBOX");
+    let mut reader = main.reserve(10, &main.numbering());
+    assert!(!reader.ticks_wanted("INBOX"), "a reader knows what was done");
+    reader.ticks_read("Projects");
+    main.absorb(reader);
+    assert!(!main.ticks_wanted("Projects"), "and gives back what it did");
+    let followed = ["INBOX".to_string(), "Projects".to_string(), "Sent Items".to_string()];
+    assert!(!main.finish_ticks(&followed), "one folder still to do");
+    main.ticks_read("Sent Items");
+    assert!(main.finish_ticks(&followed));
+    assert!(main.ticks.done && main.ticks.folders.is_empty());
+    assert!(!main.ticks_wanted("A folder made later"), "done: nothing more is asked");
+
+    // Written and read back; a state from before has none (the pass to do), and a damaged one
+    // is a state to start again, not a failure.
+    let v = serde_json::to_value(&main).unwrap();
+    assert_eq!(v["ticks"]["done"], true);
+    let fresh = serde_json::to_value(State::default()).unwrap();
+    assert!(fresh.get("ticks").is_none(), "nothing written before it's begun");
+    let old: State = serde_json::from_value(json!({ "next": 3, "mailboxes": {} })).unwrap();
+    assert!(old.ticks_wanted("INBOX"));
+    let odd: State = serde_json::from_value(json!({ "ticks": { "folders": ["INBOX", ""] } })).unwrap();
+    assert!(!odd.ticks_wanted("INBOX") && odd.ticks_wanted("Projects"));
+    let damaged: State = serde_json::from_value(json!({ "next": 7, "ticks": { "done": "yes" }, "mailboxes": { "INBOX": "mb1" } })).unwrap();
+    assert!(damaged.ticks_wanted("INBOX") && damaged.mailbox("INBOX").is_ok(), "the pass done again, the rest kept");
+    let mut many = State::default();
+    for n in 0..10_001 {
+        many.ticks_read(&format!("F{n}"));
+    }
+    assert!(many.ticks.done && many.ticks.folders.is_empty(), "never grown without end");
+}
