@@ -279,3 +279,67 @@ fn a_people_search_gives_its_people_back() {
     assert_eq!(from_people("is:unread"), None);
     assert_eq!(from_people("from:"), None);
 }
+
+/// Cases met in real use (04/11): accents are read away both ways round, in a field, in the body,
+/// in a phrase and in the index, so `equipe` finds "Équipe" and `resume` "Résumé".
+#[test]
+fn accents_are_read_away_both_ways() {
+    let mut m = sample();
+    m.subject = "Réunion Équipe".into();
+    m.preview = "Le Résumé de la semaine".into();
+    let body = |q: &str, text: &str| Query::parse(q).matches(&Doc { summary: &m, body: Some(text), indexed: false, awaiting: false });
+    assert!(q("equipe", &m), "equipe finds Équipe");
+    assert!(q("subject:reunion", &m) && q("EQUI", &m));
+    assert!(q("resume", &m), "resume finds Résumé");
+    assert!(q("\"le resume\"", &m), "a phrase too");
+    assert!(!q("-resume", &m), "a word left out, read the same way");
+    assert!(body("body:resume", "Le R\u{e9}sum\u{e9}") && body("body:resume", "Le Re\u{301}sume\u{301}"), "accents written apart (NFD)");
+    let mut plain = sample();
+    plain.subject = "Notes equipe".into();
+    assert!(q("équipe", &plain) && q("ÉQUIPE", &plain), "an accent typed finds the word written without");
+    let mut ix = Index::new();
+    ix.add(0, &summary_text(&m));
+    ix.add(1, &summary_text(&plain));
+    ix.add(2, "Straße");
+    assert_eq!(ix.candidates(&Query::parse("resume")), BTreeSet::from([0]));
+    assert_eq!(ix.candidates(&Query::parse("reunion")), BTreeSet::from([0]));
+    assert_eq!(ix.candidates(&Query::parse("strasse")), BTreeSet::from([2]));
+    assert_eq!(ix.candidates(&Query::parse("\"résumé de\"")), BTreeSet::from([0]));
+}
+
+/// Folding: accents go both ways, letters are spelled out, other scripts stay as they are
+/// (upstream's test, 41464ec1, on this fork's two-valued matching).
+#[test]
+fn folding_reads_accents_and_letters() {
+    let f = |w: &str| fold_word(w).into_owned();
+    assert_eq!((f("é"), f("É"), f("e")), ("e".into(), "e".into(), "e".into()));
+    assert_eq!((f("Straße"), f("STRASSE")), ("strasse".into(), "strasse".into()));
+    assert_eq!((f("Æsir"), f("Øresund"), f("łódź"), f("Œuvre")), ("aesir".into(), "oresund".into(), "lodz".into(), "oeuvre".into()));
+    assert_eq!((f("ıstanbul"), f("İstanbul"), f("ISTANBUL")), ("istanbul".into(), "istanbul".into(), "istanbul".into()));
+    assert_eq!((f("Άθήνα"), f("ΑΘΗΝΑ"), f("λόγος"), f("ΛΟΓΟΣ")), ("αθηνα".into(), "αθηνα".into(), "λογοσ".into(), "λογοσ".into()));
+    assert_eq!((f("ёлка"), f("йод")), ("елка".into(), "йод".into()), "ё folds, й stays");
+    assert_eq!(f("Ｒｅｐｏｒｔ２０２４"), "report2024", "fullwidth letters and digits");
+    assert_eq!(f("Re\u{301}sume\u{301}"), "resume", "accents written apart (NFD)");
+    // Bengali and CJK pass through unchanged.
+    assert_eq!((f("বাংলা"), f("東京")), ("বাংলা".into(), "東京".into()));
+    assert!(matches!(fold_word("plain"), std::borrow::Cow::Borrowed(_)), "lower-case ASCII isn't copied");
+    // Through the query: both ways round.
+    let mut m = sample();
+    m.subject = "Résumé für Zoë".into();
+    assert!(q("resume", &m) && q("RÉSUMÉ", &m) && q("fur zoe", &m) && q("subject:\"resume fur\"", &m));
+    m.subject = "resume".into();
+    assert!(q("résumé", &m), "an accent typed finds the word written without");
+    assert_eq!(tokens("a\u{301}bc ").collect::<Vec<_>>(), ["abc"]);
+    assert_eq!(tokens("Grüße, Ana! 東京").collect::<Vec<_>>(), ["grusse", "ana", "東", "京"]);
+    assert_eq!(tokens(&"x".repeat(41)).count(), 0, "base64 debris isn't a word");
+}
+
+/// A word that folds to nothing (a mark alone) is no word: it neither narrows the index to
+/// nothing nor crashes.
+#[test]
+fn a_word_folding_to_nothing_is_no_word() {
+    let mut ix = Index::new();
+    ix.add(0, "Beta notes");
+    assert!(Query::parse("\u{301}").index_words().iter().all(|w| !w.is_empty()));
+    assert_eq!(ix.candidates(&Query::parse("beta \u{301}")), BTreeSet::from([0]));
+}

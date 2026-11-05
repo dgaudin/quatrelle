@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! What the user types in the search box (and saved searches read back): the query language,
-//! the Advanced search form, the server-side forms of a search, and IMAP's modified UTF-7. The
+//! the query checked against a message and its text, folding, the index, the Advanced search form, the server-side forms of a search, and IMAP's modified UTF-7. The
 //! same text taken as a sender's name and address, checked for passing as someone else (a
 //! look-alike domain, a known person's name on another address) and for coming from outside.
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use quatrelle_model::search::{Advanced, Query};
+use quatrelle_model::search::{Advanced, Doc, Index, Query, fold_word, tokens};
 use quatrelle_model::{lookalike, utf7};
 
 fuzz_target!(|data: &[u8]| {
@@ -15,6 +15,15 @@ fuzz_target!(|data: &[u8]| {
     let q = Query::parse(&text);
     let _ = q.index_words();
     let _ = q.needs_body();
+    // The query checked against a message whose fields and body are the same text, then the
+    // text folded and indexed.
+    let m = quatrelle_model::Summary { subject: text.to_string(), preview: text.to_string(), ..Default::default() };
+    let _ = q.matches(&Doc { summary: &m, body: Some(&text), indexed: false, awaiting: data.len() % 2 == 0 });
+    let _ = q.matches(&Doc { summary: &m, body: None, indexed: true, awaiting: false });
+    let _ = tokens(&fold_word(&text)).count();
+    let mut ix = Index::new();
+    ix.add(0, &text);
+    let _ = ix.candidates(&q);
     let a = Advanced::from_query(&text);
     let _ = Advanced::from_query(&a.to_query());
     let _ = quatrelle_jmap::search_filter(&text);

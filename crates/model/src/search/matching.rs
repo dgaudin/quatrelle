@@ -2,17 +2,20 @@
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 // Copyright (c) 2026 Didier Gaudin
 //! Checking a message against a [`Query`]: the words the index narrows by, and each clause.
+//! Both sides are read [folded](fold_word): `resume` finds "Résumé", `résumé` "resume".
 
+use super::fold::all_words;
 use super::*;
 
 impl Query {
-    /// The words the index can narrow by: words of positive text clauses.
+    /// The words the index can narrow by: words of positive text clauses, [folded](fold_word)
+    /// as the index holds them.
     pub fn index_words(&self) -> Vec<String> {
         let mut v = Vec::new();
         for c in self.clauses.iter().filter(|c| !c.negated) {
             match &c.term {
-                Term::Words(_, w) => v.extend(w.iter().cloned()),
-                Term::Phrase(_, p) => v.extend(words(p)),
+                Term::Words(_, w) => v.extend(w.iter().map(|w| fold_word(w).into_owned()).filter(|w| !w.is_empty())),
+                Term::Phrase(_, p) => v.extend(tokens(p).map(Cow::into_owned)),
                 _ => {}
             }
         }
@@ -73,14 +76,19 @@ fn clause_matches(term: &Term, doc: &Doc<'_>) -> bool {
         Term::Size(true, b) => u64::from(m.size) > *b,
         Term::Size(false, b) => u64::from(m.size) < *b,
         Term::AnyOf(ts) => ts.iter().any(|t| clause_matches(t, doc)),
-        Term::Phrase(f, p) => field_text(f, doc).to_lowercase().contains(p.as_str()),
+        // Folded a letter at a time on both sides: the phrase's spaces and signs stay as typed.
+        Term::Phrase(f, p) => fold_word(&field_text(f, doc)).contains(fold_word(p).as_ref()),
         // Found through the index for these words: they're there (summary or body).
         Term::Words(Field::Any, ws) if doc.indexed && doc.body.is_none() && ws.iter().all(|w| !w.contains(['@', '.'])) => true,
         Term::Words(f, ws) => {
             let text = field_text(f, doc);
-            let have: Vec<String> = words(&text).collect();
-            let lower = text.to_lowercase();
-            ws.iter().all(|w| have.iter().any(|h| h.starts_with(w.as_str())) || (w.contains(['@', '.']) && lower.contains(w.as_str())))
+            let have: Vec<Cow<'_, str>> = all_words(&text).collect();
+            // An address is also found inside a word (`ana@studio.example` in `<ana@…>`).
+            let inside = ws.iter().any(|w| w.contains(['@', '.'])).then(|| fold_word(&text));
+            ws.iter().all(|w| {
+                let w = fold_word(w);
+                have.iter().any(|h| h.starts_with(w.as_ref())) || (w.contains(['@', '.']) && inside.as_ref().is_some_and(|t| t.contains(w.as_ref())))
+            })
         }
     }
 }
