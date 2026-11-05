@@ -28,3 +28,7 @@ flate2 = { version = "1", default-features = false, features = ["rust_backend"] 
 miniz_oxide = "0.9"
 # The Documents folder (where "Quatrelle Files" goes), wherever the system has put it.
 dirs = "7"
+
+[dev-dependencies]
+# Changes made again on a list in one pass, held to one at a time over random lists.
+proptest = "1"

@@ -9,7 +9,9 @@
 //! ```text
 //! accounts.json                       account settings (never passwords)
 //! <account>/folders.json              the folder list with counts
-//! <account>/ops.json                  changes made offline, replayed when online (RFC 4549)
+//! <account>/ops/<n>.json              changes made offline, replayed when online (RFC 4549),
+//!                                     one a file in the order made (an `ops.json` from
+//!                                     before is read first)
 //! <account>/<folder-hash>/state.json  UIDVALIDITY, UIDNEXT, HIGHESTMODSEQ and the summaries
 //! <account>/<folder-hash>/<validity>/<uid>.eml   downloaded message sources
 //! ```
@@ -351,8 +353,8 @@ fn safe_doc(name: &str) -> String {
 pub struct Store {
     root: PathBuf,
     files: Routed,
-    /// Serializes read-modify-write of ops.json between the pool (the window's thread) and the
-    /// account threads.
+    /// Serializes changes to the journal of changes waiting (`ops/`, and an `ops.json` from
+    /// before) between the pool (the window's thread) and the account threads.
     changes: Arc<Mutex<()>>,
     /// How many times each account was removed ([`Store::while_kept`]).
     removals: Arc<RwLock<HashMap<String, u64>>>,
@@ -654,6 +656,7 @@ mod atomic;
 mod bodies;
 mod files;
 mod folders;
+mod journal;
 
 pub mod legacy;
 

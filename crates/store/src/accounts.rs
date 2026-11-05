@@ -106,7 +106,7 @@ impl Store {
             // account's changes still to make on its server, and its unsent mail, stay behind.
             let items: Vec<(PathBuf, Vec<u8>)> = batch
                 .into_iter()
-                .filter(|(k, _)| k != "ops.json" && !k.starts_with("outbox/"))
+                .filter(|(k, _)| k != "ops.json" && !k.starts_with("ops/") && !k.starts_with("outbox/"))
                 .filter_map(|(k, v)| inner_path(&k).map(|rel| (dir.join(rel), v)))
                 .collect();
             self.files.write_many(&items)
