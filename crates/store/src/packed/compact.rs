@@ -85,16 +85,23 @@ impl Packs {
         };
         // The compaction's own commits don't keep the file's free space (redb skips it there), so
         // a crash after them had the whole file gone through as it reopened, on the window's
-        // thread: a sealed commit (as `Packs::change` makes) ends it, whether it went to the end
-        // or not.
-        let sealed = db.begin_write().map_err(other).and_then(|mut tx| {
-            tx.set_quick_repair(true);
-            tx.commit().map_err(other)
-        });
-        let done = done.and(sealed);
+        // thread. A sealed commit after them (as `Packs::change` makes) grew a file compacted
+        // tight, which redb doubles under 4 GiB: 306 MB kept ended in 623 MB. Closed instead,
+        // the file records its free space as redb closes one, from its lowest pages and trimmed
+        // after (redb's issue 1165), whether the compaction went to the end or not; it's opened
+        // again at once, with nothing to check.
+        drop(db);
+        let reopened = builder(&path).create(&path).map_err(other);
         let after = size();
         log::info!("{}: compacted from {before} to {after} bytes in {:.1} s", path.display(), began.elapsed().as_secs_f32());
-        Packs::lock(&self.open).insert(account.to_string(), Arc::new(db));
+        // One that can't be opened again is opened (or set aside) by whatever wants it next.
+        let done = match reopened {
+            Ok(db) => {
+                Packs::lock(&self.open).insert(account.to_string(), Arc::new(db));
+                done
+            }
+            Err(e) => done.and(Err(e)),
+        };
         done.map(|()| Some((before, after)))
     }
 }
