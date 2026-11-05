@@ -3,7 +3,9 @@
 //! A bench, ignored (`cargo test --release -p quatrelle-ui-egui pictures::bench -- --ignored
 //! --nocapture`): the slowest frame of a message of about 10 MB, 36 photos in its HTML and
 //! photos, a PDF and a video attached, from opening it until its pictures are all shown; then
-//! the same with the PDF previewed in the reading pane.
+//! the same with the PDF previewed in the reading pane. Once in the window (no threads, as in
+//! the browser), once with a lane: a thread doing the work handed to it in order, as the
+//! desktop's (`apps/quatrelle/src/desktop/lanes.rs`).
 
 use super::*;
 use quatrelle_engine::mime::InlinePicture;
@@ -24,15 +26,29 @@ fn photo(w: u32, h: u32, seed: u32) -> Vec<u8> {
     out
 }
 
-/// Frames until no picture has been made for a second: the slowest frame, how long until the
-/// last picture came, the frames drawn and the pictures made.
-fn settle(ctx: &egui::Context, a: &mut MailApp) -> (Duration, Duration, usize, usize) {
+/// What [`settle`] saw.
+struct Settled {
+    /// The first frame, and the slowest after it.
+    first: Duration,
+    slowest: Duration,
+    /// When the last picture came.
+    last: Duration,
+    frames: usize,
+    made: usize,
+}
+
+/// Frames until no picture has been made for a second.
+fn settle(ctx: &egui::Context, a: &mut MailApp) -> Settled {
     let started = Instant::now();
-    let (mut slowest, mut last, mut frames, mut made) = (Duration::ZERO, Duration::ZERO, 0, 0);
+    let (mut first, mut slowest, mut last, mut frames, mut made) = (Duration::ZERO, Duration::ZERO, Duration::ZERO, 0, 0);
     while started.elapsed() < Duration::from_secs(180) && started.elapsed().saturating_sub(last) < Duration::from_secs(1) {
         let t = Instant::now();
         let n = textures_made(ctx, a, WINDOW);
-        slowest = slowest.max(t.elapsed());
+        if frames == 0 {
+            first = t.elapsed();
+        } else {
+            slowest = slowest.max(t.elapsed());
+        }
         frames += 1;
         made += n;
         if n > 0 {
@@ -40,7 +56,22 @@ fn settle(ctx: &egui::Context, a: &mut MailApp) -> (Duration, Duration, usize, u
         }
         std::thread::sleep(Duration::from_millis(2));
     }
-    (slowest, last, frames, made)
+    Settled { first, slowest, last, frames, made }
+}
+
+impl std::fmt::Display for Settled {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let ms = |d: Duration| d.as_secs_f64() * 1e3;
+        write!(
+            f,
+            "first frame {:.1} ms, slowest after it {:.1} ms, last picture at {:.0} ms, {} frames, {} pictures",
+            ms(self.first),
+            ms(self.slowest),
+            ms(self.last),
+            self.frames,
+            self.made
+        )
+    }
 }
 
 /// The message: 36 photos in its HTML, three photos, a PDF and a video attached.
@@ -80,24 +111,53 @@ fn big_message(a: &mut MailApp, uid: u32) -> (MessageKey, usize) {
     (k, size)
 }
 
+/// Services with one thread for the work handed to them, in order.
+struct OneLane(std::sync::mpsc::Sender<crate::Work>);
+
+impl crate::Services for OneLane {
+    fn clock(&self) -> (i64, i32) {
+        (NOW, 0)
+    }
+    fn open_path(&mut self, _: &std::path::Path) -> Result<(), String> {
+        Ok(())
+    }
+    fn background(&mut self, _: crate::Lane, work: crate::Work) -> Result<(), crate::Work> {
+        self.0.send(work).map_err(|e| e.0)
+    }
+    fn has_background(&self) -> bool {
+        true
+    }
+}
+
 #[test]
 #[ignore = "a bench: run it with --release, --ignored and --nocapture"]
 fn slowest_frame_of_a_message_with_many_pictures() {
-    let (mut a, dir) = app("bench-pictures");
+    bench(false);
+    bench(true);
+}
+
+fn bench(lane: bool) {
+    let (mut a, dir) = app(if lane { "bench-pictures-lane" } else { "bench-pictures" });
     let ctx = egui::Context::default();
+    if lane {
+        let (tx, rx) = std::sync::mpsc::channel::<crate::Work>();
+        std::thread::spawn(move || {
+            for w in rx {
+                if !w.cancelled.load(std::sync::atomic::Ordering::Relaxed) {
+                    (w.run)();
+                }
+            }
+        });
+        a.services = Box::new(OneLane(tx));
+    }
+    eprintln!("{}", if lane { "On a lane:" } else { "In the window:" });
     frame(&ctx, &mut a, vec![]);
     let (k, size) = big_message(&mut a, 9900);
     let store = a.session.store.clone().unwrap();
     let reads = store.reads();
     a.run("list.open", json!({"key": k.to_id()}));
-    let (slowest, last, frames, made) = settle(&ctx, &mut a);
-    eprintln!(
-        "message {:.1} MB: slowest frame {:.1} ms, last picture at {:.0} ms, {frames} frames, {made} pictures, {} reads of the source",
-        size as f64 / 1e6,
-        slowest.as_secs_f64() * 1e3,
-        last.as_secs_f64() * 1e3,
-        store.reads() - reads
-    );
+    let shown = settle(&ctx, &mut a);
+    eprintln!("message {:.1} MB: {shown}, {} reads of the source", size as f64 / 1e6, store.reads() - reads);
     let pdf = a
         .session
         .reading
@@ -107,12 +167,7 @@ fn slowest_frame_of_a_message_with_many_pictures() {
         .map(|f| f.index);
     a.ui.attachment_view = pdf.map(|i| (k.clone(), i));
     let reads = store.reads();
-    let (slowest, last, frames, made) = settle(&ctx, &mut a);
-    eprintln!(
-        "its PDF previewed: slowest frame {:.1} ms, last page at {:.0} ms, {frames} frames, {made} pictures, {} reads of the source",
-        slowest.as_secs_f64() * 1e3,
-        last.as_secs_f64() * 1e3,
-        store.reads() - reads
-    );
+    let shown = settle(&ctx, &mut a);
+    eprintln!("its PDF previewed: {shown}, {} reads of the source", store.reads() - reads);
     let _ = std::fs::remove_dir_all(dir);
 }

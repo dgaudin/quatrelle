@@ -67,6 +67,7 @@ fn seventy_pictures_decode_once_each() {
     pump(&ctx, &mut a, WINDOW, 10, |_| false);
     assert_eq!(a.ui.pictures.counts(), (1, 70), "and not again");
     assert_eq!(a.ui.pictures.working(), 0);
+    assert_eq!(a.ui.pictures.steps().1, 0, "no threads here: done in the window");
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -283,7 +284,7 @@ fn more_pictures_than_one_read_takes_show() {
         for i in 0..300 {
             let _ = a.ui.pictures.get(&k, i, Want::Body(900));
         }
-        a.ui.pictures.end_frame(&ctx, store.as_ref(), None, &a.ui.fonts);
+        a.ui.pictures.end_frame(&ctx, store.as_ref(), None, &a.ui.fonts, &mut crate::NullServices(NOW));
     }
     assert_eq!(a.ui.pictures.ready(), 300, "all of them");
     assert_eq!(a.ui.pictures.counts(), (2, 300), "two reads, each picture decoded once");
