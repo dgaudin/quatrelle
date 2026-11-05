@@ -42,6 +42,8 @@ fn sync_as(c: &Client, pim: &Pim, now: i64, calendars_only: bool) -> Result<DavS
     // Then both folders, read again.
     read_calendar(c, items(c, "calendar", Some(now - CALENDAR_BACK))?, CALENDAR, c.email(), now - CALENDAR_BACK, &mut out);
     answer_pending(c, pim, &mut out);
+    // Reminders dismissed or snoozed here (issue #40), once the server said its version.
+    reminders::answer_all(c, pim, &mut out);
     // Named as the server names it, in the mailbox's language ("Agenda"), as Outlook shows it.
     let own = folder_name(c, "calendar").unwrap_or_else(|| "Calendar".into());
     let mut calendars = vec![CalendarInfo { id: CALENDAR.into(), name: own, color: 0, read_only: false, ctag: String::new(), group: String::new() }];

@@ -301,6 +301,18 @@ fn serve_connection(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>) {
         }
         let mut d = shared.lock().unwrap();
         d.calls.push(op.name.clone());
+        // Reminders (Exchange 2013 and later), under the version the request asked for.
+        if super::reminders::is_reminders(&op.name) {
+            let version = doc.find("RequestServerVersion").and_then(|v| v.attr("Version")).unwrap_or_default().to_string();
+            let answer = d.reminders_answer(&op, &version);
+            drop(d);
+            let Some((status, body)) = answer else {
+                let _ = s.shutdown(std::net::Shutdown::Both);
+                return;
+            };
+            respond(&mut s, status, &[], body.as_bytes());
+            continue;
+        }
         // How the items were asked for; a field the schema doesn't know refuses the whole request.
         if op.name == "GetItem" {
             let base = op.find("BaseShape").map(|b| b.text.trim().to_string()).unwrap_or_default();
@@ -334,6 +346,7 @@ fn serve_connection(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>) {
             d.anchors.push(anchor);
         }
         let (name, parts) = d.route(&op);
+        let header = d.version_header();
         drop(d);
         // Operations Exchange answers in the response element itself, not in a list of
         // response messages: automatic replies, room lists and rooms, free/busy.
@@ -350,7 +363,7 @@ fn serve_connection(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>) {
             )
         };
         let xml = format!(
-            "<?xml version=\"1.0\"?><s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\"><s:Body><m:{name} xmlns:m=\"m\" xmlns:t=\"t\">{inner}</m:{name}></s:Body></s:Envelope>"
+            "<?xml version=\"1.0\"?><s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\">{header}<s:Body><m:{name} xmlns:m=\"m\" xmlns:t=\"t\">{inner}</m:{name}></s:Body></s:Envelope>"
         );
         respond(&mut s, 200, &[], xml.as_bytes());
     }

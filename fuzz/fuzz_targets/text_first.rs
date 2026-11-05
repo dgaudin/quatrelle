@@ -6,7 +6,8 @@
 //! says after its greeting to `UID FETCH 1 (UID BODYSTRUCTURE)` and to the header and text
 //! parts it names. Whatever message is built is read the way the engine reads it, with
 //! `parse_text_first`. Each of an EWS answer's response messages is read as a refusal too
-//! (`check_message`, with the fields its `MessageXml` names).
+//! (`check_message`, with the fields its `MessageXml` names), as a `GetReminders` answer
+//! (`reminders_listed`) and for the server's version (`server_major`).
 #![no_main]
 
 use std::io::{self, Read, Write};
@@ -53,6 +54,9 @@ fuzz_target!(|data: &[u8]| {
         for m in quatrelle_net::ews::messages(&root) {
             let _ = quatrelle_net::ews::check_message(m);
         }
+        // Read as a `GetReminders` answer too, and for the server's version.
+        let _ = quatrelle_net::ews::reminders_listed(&root);
+        let _ = quatrelle_net::ews::server_major(&root);
         quatrelle_net::ews::text_first(&root)
     } else {
         match serde_json::from_slice(rest) {

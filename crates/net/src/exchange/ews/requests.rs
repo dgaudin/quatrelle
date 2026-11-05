@@ -222,8 +222,13 @@ impl Client {
     }
 
     pub(super) fn call_once(&self, body: &str) -> std::result::Result<El, Busy> {
+        self.call_once_in(envelope(body))
+    }
+
+    /// One request, its envelope made: the answer's elements, and the server's version noted.
+    pub(super) fn call_once_in(&self, envelope: String) -> std::result::Result<El, Busy> {
         let asked = std::time::Instant::now();
-        let resp = self.post(envelope(body).into_bytes()).map_err(Busy::Failed)?;
+        let resp = self.post(envelope.into_bytes()).map_err(Busy::Failed)?;
         let received = std::time::Instant::now();
         if self.clock.get().is_none()
             && let (Some(there), Ok(here)) = (resp.date(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH))
@@ -231,6 +236,9 @@ impl Client {
             self.clock.set(Some(there.saturating_sub(i64::try_from(here.as_secs()).unwrap_or(i64::MAX))));
         }
         let answer = Client::answer(&resp);
+        if let Ok(doc) = &answer {
+            self.note_version(doc);
+        }
         let head = resp.head_at.unwrap_or(received);
         self.count_spent(Timing {
             requests: 1,

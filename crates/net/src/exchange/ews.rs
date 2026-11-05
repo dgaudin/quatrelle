@@ -159,6 +159,9 @@ pub struct Client {
     /// How far the server's clock is ahead of this computer's, in seconds (from its first
     /// answer's `Date`): the times it gives (a new mail's) set beside this computer's.
     clock: Cell<Option<i64>>,
+    /// The server's major version, once an answer said it (`ServerVersionInfo`: 15 for Exchange
+    /// 2013 and later, 14 for 2010).
+    server_major: Cell<Option<u32>>,
     /// What this session's requests cost, added up.
     spent: Cell<Timing>,
 }
@@ -396,6 +399,7 @@ impl Client {
             no_calendar: RefCell::new(Vec::new()),
             fields_refused: Cell::new(false),
             clock: Cell::new(None),
+            server_major: Cell::new(None),
             spent: Cell::new(Timing::default()),
         })
     }
@@ -427,6 +431,7 @@ impl Client {
             no_calendar: self.no_calendar.clone(),
             fields_refused: self.fields_refused.clone(),
             clock: self.clock.clone(),
+            server_major: self.server_major.clone(),
             spent: Cell::new(Timing::default()),
         }
     }
@@ -682,6 +687,7 @@ mod changes;
 mod directory;
 mod listening;
 mod mailbox;
+mod reminders;
 mod requests;
 mod rules;
 mod shared;
@@ -696,6 +702,7 @@ use autodiscover::{alternative_mailboxes, autodiscover_public, autodiscover_smtp
 pub use autodiscover::{autodiscover, autodiscover_as};
 pub use changes::{append, apply_remote, send, vote};
 pub use listening::{Heard, Listener};
+pub use reminders::{Listed, MAX_REMINDERS, reminders_listed, server_major};
 use sync::restriction;
 pub use sync::{
     AheadTodo, download_ahead, fetch_body, find_by_message_id, find_lost, find_on_server, list_folders, older, read_online, search, sync_folder,
@@ -703,7 +710,7 @@ pub use sync::{
 };
 pub use text_first::{fetch_text, text_first};
 pub use xml::{El, esc, parse, unb64};
-use xml::{b64, envelope};
+use xml::{b64, envelope, envelope_as};
 
 #[cfg(test)]
 mod tests;

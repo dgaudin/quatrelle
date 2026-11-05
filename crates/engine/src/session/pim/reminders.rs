@@ -2,7 +2,7 @@
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 // Copyright (c) 2026 Didier Gaudin
 //! Reminders: those whose time has come, from the user's own calendars and tasks, as
-//! Outlook's Reminders window lists them; dismissed and snoozed.
+//! Outlook's Reminders window lists them; dismissed and snoozed, and the server told (issue #40).
 
 use super::*;
 
@@ -147,8 +147,11 @@ impl Session {
                 || self.turn_off_reminder_of_single(k);
             if off {
                 self.prefs.reminders.remove(k);
+                // A snooze still waiting for the server is overtaken.
+                self.forget_reminder_answer(k);
             } else {
                 self.prefs.reminders.insert(k.clone(), 0);
+                self.tell_server_reminder(k, None, now);
             }
         }
         self.forget_old_reminders(now);
@@ -178,7 +181,85 @@ impl Session {
     /// Snooze a reminder until `until` (Unix seconds).
     pub fn snooze_reminder(&mut self, key: &str, until: i64) {
         self.prefs.reminders.insert(key.to_string(), until.max(1));
+        self.tell_server_reminder(key, Some(until.max(1)), self.clock.now);
         self.forget_old_reminders(now_or(until));
+    }
+
+    /// Tell the event's server a reminder answered here that it can't learn from the event
+    /// itself, so the user's other programs (Outlook, Outlook on the web, the phone) don't show
+    /// it again (issue #40). Exchange learns it through its own reminder action at the next
+    /// sync, as Outlook in Cached Exchange Mode tells it: the answer waits with the account's
+    /// calendar ([`quatrelle_model::pim::ReminderAnswer`]), so one given offline isn't lost. A CalDAV server learns a
+    /// dismissal from the event, its alarm acknowledged at `now` (RFC 9074), which every client
+    /// reads; its `SEQUENCE` isn't raised (no guest has anything to learn); a snooze stays here.
+    /// A single appointment's dismissal isn't for this: its reminder is turned off on the item
+    /// ([`Self::turn_off_reminder_of_single`]). Nor is a calendar this account can't change.
+    fn tell_server_reminder(&mut self, key: &str, snooze_until: Option<i64>, now: i64) {
+        use quatrelle_model::pim::{LOCAL, MAX_REMINDER_ANSWERS, ReminderAnswer, is_web_calendar, shared_calendar_owner};
+        let mut parts = key.rsplitn(3, '|');
+        let (Some(occurrence), Some(uid), Some(account)) = (parts.next().and_then(|o| o.parse::<i64>().ok()), parts.next(), parts.next()) else {
+            return;
+        };
+        let Some(config) = self.account(account).map(|a| a.config.clone()) else { return };
+        if config.is_local() {
+            return;
+        }
+        let exchange = config.graph.is_some() || config.ews.is_some();
+        let p = self.pim_mut(account);
+        let writable = |e: &StoredEvent| {
+            e.calendar != LOCAL
+                && shared_calendar_owner(&e.calendar).is_none()
+                && !is_web_calendar(&e.calendar)
+                && !p.calendars.iter().any(|c| c.id == e.calendar && c.read_only)
+                && (!exchange || !e.href.is_empty())
+        };
+        // The occurrence's own copy (one changed on its own), and its series.
+        let own = p.events.iter().position(|e| e.event.uid == uid && e.event.recurrence_id == Some(occurrence));
+        let series = p.events.iter().position(|e| e.event.uid == uid && e.event.recurrence_id.is_none());
+        if exchange {
+            // Exchange finds an occurrence's reminder by its series and start; a single
+            // appointment's (or an occurrence whose series isn't here) by its own item.
+            let (at, of_series) = match series.filter(|&i| p.events.get(i).is_some_and(|e| e.event.rrule.is_some() && writable(e))) {
+                Some(i) => (i, true),
+                None => match own.or(series).filter(|&i| p.events.get(i).is_some_and(writable)) {
+                    Some(i) => (i, false),
+                    None => return,
+                },
+            };
+            let Some(stored) = p.events.get(at) else { return };
+            let answer = ReminderAnswer {
+                calendar: stored.calendar.clone(),
+                href: stored.href.clone(),
+                uid: uid.to_string(),
+                occurrence,
+                series: of_series,
+                snooze_until,
+            };
+            // Answered again (snoozed, then dismissed): the later answer stands. Those for
+            // occurrences long past go, and the list is kept small.
+            p.reminder_answers.retain(|a| !(a.uid == uid && a.occurrence == occurrence) && a.occurrence >= now.saturating_sub(30 * 86_400));
+            if p.reminder_answers.len() >= MAX_REMINDER_ANSWERS {
+                p.reminder_answers.remove(0);
+            }
+            p.reminder_answers.push(answer);
+        } else {
+            return;
+        }
+        self.after_pim_change(account, true);
+    }
+
+    /// The answer waiting for the server for this reminder, if any, goes.
+    fn forget_reminder_answer(&mut self, key: &str) {
+        let mut parts = key.rsplitn(3, '|');
+        let (Some(occurrence), Some(uid), Some(account)) = (parts.next().and_then(|o| o.parse::<i64>().ok()), parts.next(), parts.next()) else {
+            return;
+        };
+        if let Some(p) = self.pim.get_mut(account)
+            && p.reminder_answers.iter().any(|a| a.uid == uid && a.occurrence == occurrence)
+        {
+            p.reminder_answers.retain(|a| !(a.uid == uid && a.occurrence == occurrence));
+            self.write_pim(account);
+        }
     }
 
     /// Answers for occurrences long past go, except a snooze still running (a task's reminder

@@ -571,6 +571,7 @@ mod categories;
 mod contacts;
 pub(crate) mod events;
 mod push;
+mod reminders;
 pub mod scheduling;
 mod sync;
 mod tasks;

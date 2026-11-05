@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 // Copyright (c) 2026 Didier Gaudin
 //! Engine tests: dismissing the reminder of an appointment takes it off the appointment, as Outlook
 //! does (Exchange's `ReminderIsSet`), so moving it doesn't bring it back; a series keeps its
 //! reminder and is answered per occurrence; a reminder is personal, so no guest is told (03/11).
 
 use quatrelle_model::ical::{Attendee, CalEvent};
-use quatrelle_model::pim::{CalendarInfo, StoredEvent};
+use quatrelle_model::pim::{CalendarInfo, DavSync, ReminderAnswer, StoredEvent};
 
 use super::*;
 
@@ -171,5 +172,102 @@ fn dismissing_every_reminder_mixes_both_kinds() {
     assert_eq!(single.event.reminder, None);
     assert!(single.dirty);
     assert_eq!(s.prefs.reminders.len(), 1, "only the series' occurrence is kept here");
+    done(s);
+}
+
+/// A single appointment beside the series of [`exchange`], with its own item on the server.
+fn add_single(s: &mut Session, id: &str) {
+    s.pim_mut(id).events.push(StoredEvent {
+        calendar: "ews:calendar".into(),
+        href: "I2".into(),
+        etag: "ck".into(),
+        event: CalEvent {
+            uid: "single".into(),
+            summary: "Once".into(),
+            start: NOW + 3600,
+            end: NOW + 7200,
+            reminder: Some(15),
+            ..Default::default()
+        },
+        ..Default::default()
+    });
+}
+
+fn key_for(s: &Session, uid: &str) -> String {
+    s.due_reminders(s.clock.now).into_iter().find(|r| r.uid == uid).map(|r| r.key).expect("due")
+}
+
+/// Exchange (issue #40): one occurrence of a series dismissed, and a single appointment snoozed,
+/// are for the server to learn too, so Outlook doesn't show them again: a sync is asked at once,
+/// and each answer waits with the calendar (a restart keeps it) until a sync takes it. The
+/// series itself doesn't change; answered again, the later answer stands.
+#[test]
+fn a_dismissed_occurrence_and_a_snooze_go_to_exchange() {
+    let (mut s, id) = exchange("rem-tell-ews", Vec::new(), Some("FREQ=WEEKLY"));
+    add_single(&mut s, &id);
+    s.clock.now = NOW + 3600 - 600;
+    let (series, single) = (key_for(&s, "m-1"), key_for(&s, "single"));
+    s.run("reminders.dismiss", &json!({"key": series})).unwrap();
+    assert!(s.take_jobs().iter().any(|j| matches!(j, Job::SyncDav { account } if *account == id)), "the occurrence: the server is told");
+    s.run("reminders.snooze", &json!({"key": single, "minutes": 5})).unwrap();
+    assert!(s.take_jobs().iter().any(|j| matches!(j, Job::SyncDav { account } if *account == id)), "the snooze: the server is told");
+    let occurrence = NOW + 3600;
+    let waiting = [
+        ReminderAnswer { calendar: "ews:calendar".into(), href: "I1".into(), uid: "m-1".into(), occurrence, series: true, snooze_until: None },
+        ReminderAnswer {
+            calendar: "ews:calendar".into(),
+            href: "I2".into(),
+            uid: "single".into(),
+            occurrence,
+            series: false,
+            snooze_until: Some(s.clock.now + 300),
+        },
+    ];
+    assert_eq!(s.pim[&id].reminder_answers, waiting);
+    assert!(!stored(&s, &id).dirty && stored(&s, &id).event.reminder == Some(15), "the series doesn't change");
+
+    // Offline: nothing taken; a restart keeps them.
+    let root = s.store.as_ref().unwrap().root().to_path_buf();
+    let mut s = Session::open(Some(quatrelle_store::Store::open(&root).unwrap()), quatrelle_model::dates::Clock::new(s.clock.now, 0));
+    assert_eq!(s.pim[&id].reminder_answers, waiting, "kept for the next sync");
+
+    // The single one dismissed after its snooze: its reminder is turned off on the item, as
+    // before, and its snooze no longer waits.
+    s.clock.now += 300;
+    let single = key_for(&s, "single");
+    s.run("reminders.dismiss", &json!({"key": single})).unwrap();
+    assert!(s.pim[&id].events.iter().any(|e| e.event.uid == "single" && e.dirty && e.event.reminder.is_none()));
+    assert_eq!(s.pim[&id].reminder_answers, waiting[..1]);
+
+    // The occurrence answered again (snoozed): the later answer stands, and a sync that took
+    // the earlier one leaves it waiting; the sync that takes it ends its wait.
+    let series = key_for(&s, "m-1");
+    s.run("reminders.snooze", &json!({"key": series, "minutes": 10})).unwrap();
+    let later = ReminderAnswer { snooze_until: Some(s.clock.now + 600), ..waiting[0].clone() };
+    assert_eq!(s.pim[&id].reminder_answers, [later.clone()]);
+    let took = |s: &mut Session, answered: Vec<ReminderAnswer>| {
+        let sync = DavSync { answered, checked: s.clock.now, ..Default::default() };
+        s.apply(Event::DavSynced { account: id.clone(), sync: Box::new(sync) });
+    };
+    took(&mut s, waiting.to_vec());
+    assert_eq!(s.pim[&id].reminder_answers, [later.clone()]);
+    took(&mut s, vec![later]);
+    assert!(s.pim[&id].reminder_answers.is_empty());
+    assert!(due(&s, s.clock.now).is_empty(), "still answered here");
+    done(s);
+}
+
+/// A shared calendar, or one this account may only read, has nothing told to its server.
+#[test]
+fn a_calendar_that_cant_be_changed_is_told_nothing() {
+    let (mut s, id) = exchange("rem-read-only", Vec::new(), Some("FREQ=WEEKLY"));
+    if let Some(c) = s.pim_mut(&id).calendars.first_mut() {
+        c.read_only = true;
+    }
+    s.clock.now = NOW + 3600 - 600;
+    let key = key_for(&s, "m-1");
+    s.run("reminders.dismiss", &json!({"key": key})).unwrap();
+    assert!(s.pim[&id].reminder_answers.is_empty());
+    assert!(due(&s, s.clock.now).is_empty(), "answered here all the same");
     done(s);
 }
