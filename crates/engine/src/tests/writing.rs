@@ -6,6 +6,7 @@
 use super::*;
 
 mod attendees;
+mod charsets;
 mod drafts;
 mod emoji;
 mod names;

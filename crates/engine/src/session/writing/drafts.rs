@@ -160,11 +160,12 @@ impl Session {
         }
         let raw = self.readable_raw(key).ok_or_else(|| CmdError::Disabled("the draft is still downloading".into()))?;
         let p = mime::parse(&raw).ok_or_else(|| CmdError::Failed("the draft can't be read".into()))?;
-        // Every part comes along, the pictures in the text too (as attachments): nothing is lost.
+        // Every part comes along, the pictures in the text too (as attachments): nothing is lost,
+        // a text file's charset neither.
         let attachments = p
             .attachments
             .iter()
-            .filter_map(|a| mime::attachment_data(&raw, a.index).map(|data| OutAttachment { name: a.name.clone(), mime: a.mime.clone(), data }))
+            .filter_map(|a| mime::attachment_out(&raw, a.index).map(|out| OutAttachment { name: a.name.clone(), ..out }))
             .collect();
         let (body, styles) =
             if p.had_html && !p.rich.is_empty() { mime::rich::from_rich(&p.rich) } else { (p.text.clone(), mime::rich::Styles::plain(&p.text)) };
