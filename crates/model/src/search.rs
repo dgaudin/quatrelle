@@ -137,14 +137,37 @@ pub fn summary_text(m: &Summary) -> String {
     s
 }
 
+/// A sum of what a summary gives the index ([`summary_text`]) and its number, the same from one
+/// run to the next (FNV-1a): a folder's kept index tells by it which messages changed.
+pub fn summary_sum(m: &Summary) -> u64 {
+    let mut h = 0xcbf2_9ce4_8422_2325u64;
+    let mut put = |bytes: &[u8]| {
+        for &b in bytes.iter().chain(&[0xff]) {
+            h ^= u64::from(b);
+            h = h.wrapping_mul(0x0100_0000_01b3);
+        }
+    };
+    put(&m.key.uid.to_le_bytes());
+    put(m.subject.as_bytes());
+    for a in std::iter::once(&m.from).chain(&m.to).chain(&m.cc) {
+        put(a.name.as_bytes());
+        put(a.email.as_bytes());
+    }
+    put(m.preview.as_bytes());
+    h
+}
+
 /// What [`Index::to_bytes`] writes first, and the format's version.
 const INDEX_MAGIC: &[u8] = b"MCIX";
 const INDEX_VERSION: u8 = 1;
 /// What [`FolderIndex::to_bytes`] writes first, and the format's version.
 const FOLDER_MAGIC: &[u8] = b"MCFI";
 /// Raised whenever what the index holds of a text changes, so a folder kept by an older run is
-/// read again (2: words folded; 3: the parts of joined words).
-const FOLDER_VERSION: u8 = 3;
+/// read again (2: words folded; 3: the parts of joined words), or its format does (4: each
+/// message's [`summary_sum`]).
+const FOLDER_VERSION: u8 = 4;
+/// The version before, the same words without the sums: still read ([`FolderIndex::from_bytes`]).
+const FOLDER_VERSION_UNSUMMED: u8 = 3;
 /// Bounds read back from a file: past them the file isn't ours any more (or is damaged), and it
 /// is rebuilt.
 const MAX_INDEX_DOCS: usize = 8_000_000;

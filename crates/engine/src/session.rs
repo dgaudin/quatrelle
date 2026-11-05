@@ -11,7 +11,7 @@ use quatrelle_mime::{self as mime, OutAttachment, Parsed, ReplyMode};
 use quatrelle_model::contacts::{Contact, ContactBook};
 use quatrelle_model::dates::{Clock, DateGroup};
 use quatrelle_model::job::{IMAP_TEXT_FIRST_OVER, Secret, TEXT_FIRST_OVER, Vacation};
-use quatrelle_model::search::{Doc, Index, Query, summary_text};
+use quatrelle_model::search::{Doc, Index, Query, summary_sum, summary_text};
 use quatrelle_model::thread::{Thread, threads};
 use quatrelle_model::{
     AccountConfig, EmailAddress, Event, Flag, Folder, FolderRole, Job, MessageKey, Op, Summary, SyncStatus, addr, sort_folders, sort_newest_first,

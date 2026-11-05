@@ -7,6 +7,9 @@ use std::ops::Range;
 
 use super::*;
 
+mod kept;
+use kept::Kept;
+
 pub(crate) struct SearchIndex {
     /// Whether it reads the messages' words (summary and body); without, only the messages are
     /// listed in it, for the queries their summaries answer (nothing is read, nor kept on disk).
@@ -27,6 +30,13 @@ pub(crate) struct SearchIndex {
     /// The folder being read, numbered from zero: it is kept on disk once read, so a later run
     /// takes it as it is, and it answers searches while it is being read too.
     pub(super) building: Option<FolderIndex>,
+    /// The messages the folder being read has already (by validity and number): a kept index
+    /// taken back less what changed ([`Kept::Partly`]); passed over as the folder is read.
+    pub(super) have: HashSet<(u32, u32)>,
+    /// The folder being read is whole and kept on disk: it joins the index at the next step, not
+    /// in the same one (a big folder's file written then joined in one go was a call of a tenth
+    /// of a second and more).
+    pub(super) joining: bool,
     /// Folders read (or being read) whose list changed since: what came in is added to the index
     /// ([`Session::top_up`]) before the scan goes on. A busy mailbox's sync tells of changes every
     /// few seconds; when each threw the whole index away, the scan started over and never ended.
@@ -181,6 +191,8 @@ impl SearchIndex {
             && let Some(k) = self.scan.get(self.folder).filter(|k| !set.contains(k)).cloned()
             && let Some(b) = self.building.take()
         {
+            self.have.clear();
+            self.joining = false;
             join_folder(self, k, b);
             self.folder += 1;
             self.pos = 0;
@@ -235,15 +247,6 @@ fn join_folder(ix: &mut SearchIndex, k: (String, String), folder: FolderIndex) {
     ix.ranges.entry(k).or_default().push(offset..offset.saturating_add(n));
 }
 
-/// A folder's index stamp is a hash kept on disk, so it is the same from one run to the next (the
-/// standard library's hasher makes no such promise).
-fn fnv(h: &mut u64, bytes: &[u8]) {
-    for &b in bytes {
-        *h ^= u64::from(b);
-        *h = h.wrapping_mul(0x100000001b3);
-    }
-}
-
 impl Session {
     /// Make sure an index covers this scope, starting one when there's none for it. An index
     /// already under way for the same scope (or a finished one) is kept as it is: the build goes
@@ -269,6 +272,8 @@ impl Session {
             pos: 0,
             done: false,
             building: None,
+            have: HashSet::new(),
+            joining: false,
             stale: Vec::new(),
             came: BTreeSet::new(),
             gone: HashSet::new(),
@@ -290,6 +295,18 @@ impl Session {
                 self.search_pace.spend(1);
                 continue;
             }
+            // A folder read whole joins the index.
+            if ix.joining {
+                ix.joining = false;
+                if let (Some(b), Some(k)) = (ix.building.take(), ix.scan.get(ix.folder).cloned()) {
+                    ix.have.clear();
+                    join_folder(&mut ix, k, b);
+                }
+                ix.folder += 1;
+                ix.pos = 0;
+                self.search_pace.spend(1);
+                continue;
+            }
             if ix.building.is_none()
                 && ix.pos == 0
                 && let Some(k) = ix.stale.first().cloned()
@@ -300,15 +317,25 @@ impl Session {
             }
             let Some((a, f)) = ix.scan.get(ix.folder).cloned() else { break };
             if ix.building.is_none() && ix.pos == 0 {
-                // A folder read by an earlier run is taken as it is (a folder that changed
-                // since is read again on its own; the others stay).
-                let before = ix.keys.len();
-                if ix.words && self.kept_folder(&mut ix, &a, &f) {
-                    ix.folder += 1;
-                    // A folder kept on disk is read in one go: a big one takes the whole
-                    // slice, so a first search after a restart doesn't load them all at once.
-                    self.search_pace.spend(ix.keys.len().saturating_sub(before).max(1));
-                    continue;
+                // A folder read by an earlier run is taken as it is; one that changed since,
+                // less what went or changed, what came in read as the folder is.
+                match if ix.words { self.kept_folder(&a, &f) } else { Kept::No } {
+                    Kept::Whole(b) => {
+                        // A folder kept on disk is read in one go: a big one takes the whole
+                        // slice, so a first search after a restart doesn't load them all at once.
+                        // Joined at once (read back, it's half the cost of one written).
+                        self.search_pace.spend(b.keys.len().max(1));
+                        join_folder(&mut ix, (a, f), b);
+                        ix.folder += 1;
+                        continue;
+                    }
+                    Kept::Partly(b, have) => {
+                        self.search_pace.spend(b.keys.len().max(1));
+                        ix.building = Some(b);
+                        ix.have = have;
+                        continue;
+                    }
+                    Kept::No => {}
                 }
                 // (The summaries' index is never kept: it costs no more than its list.)
                 let stamp = if ix.words { self.folder_stamp(&a, &f) } else { 0 };
@@ -319,30 +346,35 @@ impl Session {
             let take = self.search_pace.left().min(SLICE_MAX);
             let slice: Vec<Arc<Summary>> = self.folder_state(&a, &f).messages.iter().skip(ix.pos).take(take).cloned().collect();
             let Some(mut b) = ix.building.take() else { break };
-            let mut n = 0;
+            let (mut n, mut indexed) = (0, 0);
             for m in &slice {
-                if n > 0 && !self.search_pace.index_more() {
+                if indexed > 0 && !self.search_pace.index_more() {
                     break;
                 }
-                self.index_message(&mut b, m, ix.words);
                 n += 1;
+                // Already in (a kept index taken back): passed over.
+                if !ix.have.is_empty() && ix.have.remove(&(m.key.validity, m.key.uid)) {
+                    continue;
+                }
+                self.index_message(&mut b, m, ix.words);
+                indexed += 1;
             }
             ix.pos += n;
-            self.search_pace.spend(n);
+            // Passing a message over costs a little of what reading one does.
+            self.search_pace.spend(indexed + (n - indexed) / 64);
             if ix.pos < self.folder_state(&a, &f).messages.len() {
                 ix.building = Some(b);
                 continue;
             }
-            // The folder is read: what it holds joins the mailbox's index, and is kept for the
-            // next run (unless it changed while it was read: a mix of before and after is read
-            // again by the next run, and topped up now).
+            // The folder is read: it's kept for the next run (unless it changed while it was
+            // read: a mix of before and after is read again by the next run, and topped up now),
+            // and joins the mailbox's index at the next step.
             let k = (a, f);
             if ix.words && !ix.stale.contains(&k) {
                 self.keep_folder(&k.0, &k.1, &b);
             }
-            join_folder(&mut ix, k, b);
-            ix.folder += 1;
-            ix.pos = 0;
+            ix.building = Some(b);
+            ix.joining = true;
             self.search_pace.spend(1);
         }
         ix.done = ix.folder >= ix.scan.len();
@@ -361,6 +393,7 @@ impl Session {
             b.keys.push(m.key.clone());
             return;
         }
+        b.sums.push(summary_sum(m));
         b.index.add(doc, &summary_text(m));
         let words = self.words_of(&m.key);
         if let Some(words) = &words {
@@ -468,72 +501,6 @@ impl Session {
             changed |= ix.as_mut().is_some_and(|ix| ix.rescope(wanted));
         }
         changed
-    }
-
-    /// A folder's index kept by an earlier run, when it still fits it: its messages are joined to
-    /// the index, and the bodies that came in since are read (the folder itself isn't).
-    pub(crate) fn kept_folder(&mut self, ix: &mut SearchIndex, account: &str, folder: &str) -> bool {
-        let Some(bytes) = self.store.as_ref().and_then(|s| s.load_search_index(account, folder)) else { return false };
-        let Some(mut kept) = FolderIndex::from_bytes(account, folder, &bytes) else {
-            // A damaged file is no use: the folder is read again, and the file written over.
-            log::warn!("search index of {account}/{folder}: unreadable, reading the folder again");
-            return false;
-        };
-        if kept.stamp != self.folder_stamp(account, folder) {
-            return false;
-        }
-        let mut changed = false;
-        for i in 0..kept.keys.len() {
-            if kept.has_body.get(i) == Some(&true) || !self.store.as_ref().is_some_and(|s| s.has_body(&kept.keys[i])) {
-                continue;
-            }
-            let Some(words) = self.words_of(&kept.keys[i]) else { continue };
-            kept.index.add(u32::try_from(i).unwrap_or(u32::MAX), &words);
-            if let Some(b) = kept.has_body.get_mut(i) {
-                *b = true;
-            }
-            changed = true;
-        }
-        if changed {
-            self.keep_folder(account, folder, &kept);
-        }
-        join_folder(ix, (account.to_string(), folder.to_string()), kept);
-        true
-    }
-
-    /// Keep a folder's index for the next run (a cache that can't be written is no reason to
-    /// fail a search: the folder is read again next time).
-    pub(crate) fn keep_folder(&self, account: &str, folder: &str, b: &FolderIndex) {
-        if b.keys.is_empty() {
-            return;
-        }
-        if let Some(store) = &self.store
-            && let Err(e) = store.save_search_index(account, folder, &b.to_bytes())
-        {
-            log::warn!("search index of {account}/{folder} not kept: {e}");
-        }
-    }
-
-    /// A fingerprint of a folder's messages as search sees them — their text, not their flags
-    /// (marking mail read keeps the index): the one kept for the folder is used again only when it
-    /// matches. It costs a pass over the summaries, far less than reading their bodies again.
-    pub(crate) fn folder_stamp(&mut self, account: &str, folder: &str) -> u64 {
-        let st = self.folder_state(account, folder);
-        let mut h = 0xcbf29ce484222325u64;
-        fnv(&mut h, &st.validity.to_le_bytes());
-        fnv(&mut h, &(st.messages.len() as u64).to_le_bytes());
-        for m in &st.messages {
-            fnv(&mut h, &m.key.uid.to_le_bytes());
-            for s in [&m.subject, &m.from.name, &m.from.email, &m.preview] {
-                fnv(&mut h, s.as_bytes());
-                fnv(&mut h, &[0]);
-            }
-            for a in m.to.iter().chain(m.cc.iter()) {
-                fnv(&mut h, a.email.as_bytes());
-                fnv(&mut h, &[0]);
-            }
-        }
-        h
     }
 
     /// What the word index holds, for the benchmarks: its messages, words, documents counted once

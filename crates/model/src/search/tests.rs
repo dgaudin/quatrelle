@@ -419,3 +419,98 @@ fn a_phrase_is_found_across_a_line_break() {
     assert!(body("\"thank  you\"", "Thank you"), "spaces typed twice");
     assert!(!body("\"thank you for the update\"", "Thank you for theupdate."));
 }
+
+/// A folder index keeps each message's sum (format 4); one of the version before, without sums,
+/// is read too, its sums left for the session to fill.
+#[test]
+fn a_folder_index_keeps_its_sums_and_reads_the_version_before() {
+    let mut fi = FolderIndex::new(9);
+    for uid in 1..=2u32 {
+        let m = Summary {
+            key: MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 7, uid },
+            subject: format!("Report {uid}"),
+            ..Default::default()
+        };
+        fi.index.add(uid - 1, &summary_text(&m));
+        fi.sums.push(summary_sum(&m));
+        fi.keys.push(m.key);
+        fi.has_body.push(false);
+    }
+    assert_ne!(fi.sums[0], fi.sums[1]);
+    let bytes = fi.to_bytes();
+    let back = FolderIndex::from_bytes("a1", "INBOX", &bytes).expect("it reads back");
+    assert_eq!(back.sums, fi.sums);
+    // The same written as version 3: the sums taken out, the version byte lowered.
+    let mut old = bytes[..4].to_vec();
+    old.push(3);
+    old.extend_from_slice(&bytes[5..14]);
+    let mut at = 14;
+    for _ in 0..2 {
+        old.extend_from_slice(&bytes[at..at + 9]);
+        at += 17;
+    }
+    old.extend_from_slice(&bytes[at..]);
+    let v3 = FolderIndex::from_bytes("a1", "INBOX", &old).expect("version 3 reads");
+    assert!(v3.sums.is_empty() && v3.keys == fi.keys);
+    assert_eq!(v3.index.candidates(&Query::parse("report")).len(), 2);
+    for version in [2, 5] {
+        old[4] = version;
+        assert!(FolderIndex::from_bytes("a1", "INBOX", &old).is_none(), "version {version}");
+    }
+    // A sum changes with what the index takes of a summary, not with its flags.
+    let mut m = Summary { subject: "a".into(), ..Default::default() };
+    let sum = summary_sum(&m);
+    m.flags.seen = true;
+    assert_eq!(summary_sum(&m), sum);
+    m.preview = "filled".into();
+    assert_ne!(summary_sum(&m), sum);
+}
+
+/// Messages taken out of a folder index: the others numbered again from zero in their order,
+/// their words with them; a map that says nothing of a document drops it.
+#[test]
+fn a_folder_index_lets_messages_go() {
+    let mut fi = FolderIndex::new(1);
+    for (i, text) in ["alpha one", "bravo two", "alpha three", "bravo four"].iter().enumerate() {
+        let i = u32::try_from(i).unwrap();
+        fi.keys.push(MessageKey { uid: i + 1, ..Default::default() });
+        fi.has_body.push(i % 2 == 0);
+        fi.sums.push(u64::from(i));
+        fi.index.add(i, text);
+    }
+    assert_eq!(fi.retain(&[true, false, true]), 2, "the last not said: dropped too");
+    assert_eq!(fi.keys.iter().map(|k| k.uid).collect::<Vec<_>>(), [1, 3]);
+    assert_eq!((fi.has_body.clone(), fi.sums.clone()), (vec![true, true], vec![0, 2]));
+    assert_eq!(fi.index.candidates(&Query::parse("alpha")).into_iter().collect::<Vec<_>>(), [0, 1]);
+    assert!(fi.index.candidates(&Query::parse("bravo")).is_empty() && fi.index.len() == 2);
+    assert_eq!(fi.retain(&[true, true]), 0);
+    let mut ix = Index::new();
+    ix.add(5, "x");
+    ix.renumber(&[]);
+    assert!(ix.is_empty() && ix.candidates(&Query::parse("x")).is_empty());
+}
+
+proptest::proptest! {
+    /// Documents taken out of an index leave what an index of the others alone holds.
+    #[test]
+    fn an_index_less_some_documents_is_the_index_of_the_others(
+        docs in proptest::collection::vec(("[a-d]{1,3}( [a-d]{1,3}){0,3}", proptest::bool::ANY), 0..30),
+    ) {
+        let mut all = Index::new();
+        let mut map = Vec::new();
+        let mut rest = Index::new();
+        let mut next = 0u32;
+        for (d, (text, keep)) in docs.iter().enumerate() {
+            all.add(u32::try_from(d).unwrap(), text);
+            if *keep {
+                rest.add(next, text);
+                map.push(Some(next));
+                next += 1;
+            } else {
+                map.push(None);
+            }
+        }
+        all.renumber(&map);
+        proptest::prop_assert_eq!(all.to_bytes(), rest.to_bytes());
+    }
+}
