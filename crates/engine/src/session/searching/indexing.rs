@@ -8,6 +8,9 @@ use std::ops::Range;
 use super::*;
 
 pub(crate) struct SearchIndex {
+    /// Whether it reads the messages' words (summary and body); without, only the messages are
+    /// listed in it, for the queries their summaries answer (nothing is read, nor kept on disk).
+    pub(super) words: bool,
     pub(super) index: Index,
     pub(super) keys: Vec<MessageKey>,
     /// Whether each message's body words are in the index (the words themselves aren't kept: a
@@ -58,8 +61,10 @@ impl SearchIndex {
     }
 
     /// The candidates for a query numbered within `docs`: the index's, then the folder being
-    /// read's after them.
+    /// read's after them. The summaries' index has no words: every message is one.
     pub(super) fn candidates_in(&self, query: &Query, docs: Range<u32>) -> Vec<u32> {
+        let every = Query::default();
+        let query = if self.words { query } else { &every };
         let offset = u32::try_from(self.keys.len()).unwrap_or(u32::MAX);
         let mut out: Vec<u32> = self.index.candidates_in(query, docs.start..docs.end.min(offset)).into_iter().collect();
         if let Some(b) = &self.building
@@ -238,12 +243,13 @@ impl Session {
     /// Make sure an index covers this scope, starting one when there's none for it. An index
     /// already under way for the same scope (or a finished one) is kept as it is: the build goes
     /// on a slice at a time through [`Session::index_step`].
-    pub(crate) fn ensure_index(&mut self, scope: SearchScope) {
-        if self.index.as_ref().is_some_and(|ix| ix.scope == scope && (scope == SearchScope::All || ix.view == self.view)) {
+    pub(crate) fn ensure_index(&mut self, scope: SearchScope, words: bool) {
+        if self.index.as_ref().is_some_and(|ix| ix.words == words && ix.scope == scope && (scope == SearchScope::All || ix.view == self.view)) {
             return;
         }
         let scan: Vec<(String, String)> = self.scope_folders(scope);
         self.index = Some(SearchIndex {
+            words,
             index: Index::new(),
             keys: Vec::new(),
             has_body: Vec::new(),
@@ -282,14 +288,16 @@ impl Session {
                 // A folder read by an earlier run is taken as it is (a folder that changed
                 // since is read again on its own; the others stay).
                 let before = ix.keys.len();
-                if self.kept_folder(&mut ix, &a, &f) {
+                if ix.words && self.kept_folder(&mut ix, &a, &f) {
                     ix.folder += 1;
                     // A folder kept on disk is read in one go: a big one takes the whole
                     // slice, so a first search after a restart doesn't load them all at once.
                     self.search_pace.spend(ix.keys.len().saturating_sub(before).max(1));
                     continue;
                 }
-                ix.building = Some(FolderIndex::new(self.folder_stamp(&a, &f)));
+                // (The summaries' index is never kept: it costs no more than its list.)
+                let stamp = if ix.words { self.folder_stamp(&a, &f) } else { 0 };
+                ix.building = Some(FolderIndex::new(stamp));
             }
             // A slice of the folder at once (not the folder looked up again for each message);
             // a message is begun only while the call's time allows one more.
@@ -301,7 +309,7 @@ impl Session {
                 if n > 0 && !self.search_pace.index_more() {
                     break;
                 }
-                self.index_message(&mut b, m);
+                self.index_message(&mut b, m, ix.words);
                 n += 1;
             }
             ix.pos += n;
@@ -314,7 +322,7 @@ impl Session {
             // next run (unless it changed while it was read: a mix of before and after is read
             // again by the next run, and topped up now).
             let k = (a, f);
-            if !ix.stale.contains(&k) {
+            if ix.words && !ix.stale.contains(&k) {
                 self.keep_folder(&k.0, &k.1, &b);
             }
             join_folder(&mut ix, k, b);
@@ -328,9 +336,16 @@ impl Session {
         done
     }
 
-    /// One message into a folder's index: its summary's words and its body's, when downloaded.
-    fn index_message(&mut self, b: &mut FolderIndex, m: &Summary) {
+    /// One message into a folder's index: its summary's words and its body's, when downloaded
+    /// (`words`; without, the message alone).
+    fn index_message(&mut self, b: &mut FolderIndex, m: &Summary, words: bool) {
         let doc = u32::try_from(b.keys.len()).unwrap_or(u32::MAX);
+        if !words {
+            b.index.add(doc, "");
+            b.has_body.push(false);
+            b.keys.push(m.key.clone());
+            return;
+        }
         b.index.add(doc, &summary_text(m));
         let words = self.words_of(&m.key);
         if let Some(words) = &words {
@@ -371,7 +386,7 @@ impl Session {
             if !b.keys.is_empty() && !self.search_pace.index_more() {
                 break;
             }
-            self.index_message(&mut b, m);
+            self.index_message(&mut b, m, ix.words);
         }
         let n = b.keys.len();
         let all = n == came.len();
@@ -390,9 +405,15 @@ impl Session {
     /// renamed or deleted, an account removed): the index follows them rather than starting
     /// over (see [`SearchIndex::rescope`]). Whether anything changed.
     pub(crate) fn rescope_index(&mut self) -> bool {
-        let Some(scope) = self.index.as_ref().map(|ix| ix.scope) else { return false };
-        let wanted = self.scope_folders(scope);
-        self.index.as_mut().is_some_and(|ix| ix.rescope(wanted))
+        let mut changed = false;
+        for summaries in [false, true] {
+            let ix = if summaries { &self.summary_index } else { &self.index };
+            let Some(scope) = ix.as_ref().map(|ix| ix.scope) else { continue };
+            let wanted = self.scope_folders(scope);
+            let ix = if summaries { &mut self.summary_index } else { &mut self.index };
+            changed |= ix.as_mut().is_some_and(|ix| ix.rescope(wanted));
+        }
+        changed
     }
 
     /// A folder's index kept by an earlier run, when it still fits it: its messages are joined to

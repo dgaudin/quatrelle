@@ -54,9 +54,11 @@ impl Session {
         };
         if folder_op {
             self.rescope_index();
-        } else if let Some(ix) = self.index.as_mut() {
-            for f in &touched {
-                ix.changed(account, f, words_change, Some(&keys));
+        } else {
+            for ix in self.index.iter_mut().chain(self.summary_index.iter_mut()) {
+                for f in &touched {
+                    ix.changed(account, f, words_change, Some(&keys));
+                }
             }
         }
         self.refresh_list();

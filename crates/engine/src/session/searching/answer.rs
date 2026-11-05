@@ -79,6 +79,26 @@ impl Keys {
 /// are found (showing it sorts all of them: each slice's would grow with what's found).
 const SHOW_EACH_UP_TO: usize = 500;
 
+/// Whether a query needs the messages' words: one the summaries answer alone (flags, sizes,
+/// categories, waiting for a reply, words of the sender, recipients or subject) reads no message
+/// and builds no index of words: the summaries are looked through a slice at a time (a big data
+/// file's every message was read for `is:unread`).
+pub(super) fn query_words(q: &Query) -> bool {
+    !summaries_answer(q)
+}
+
+fn summaries_answer(q: &Query) -> bool {
+    fn on_summary(t: &quatrelle_model::search::Term) -> bool {
+        use quatrelle_model::search::{Field, Term};
+        match t {
+            Term::Words(f, _) | Term::Phrase(f, _) => matches!(f, Field::From | Field::To | Field::Subject),
+            Term::AnyOf(ts) => ts.iter().all(on_summary),
+            _ => true,
+        }
+    }
+    q.clauses.iter().all(|c| on_summary(&c.term))
+}
+
 /// Messages looked at for one indexed, in a slice: looking at one (found where it was in its
 /// list, checked against the query) costs a small part of indexing one.
 const LOOKS_PER_MESSAGE_INDEXED: usize = 8;
@@ -124,7 +144,18 @@ impl Session {
             self.search_pending = false;
             return true;
         }
-        self.ensure_index(scope);
+        let words = query_words(&query);
+        // The other index's answer goes: nothing would look at what it piles up meanwhile.
+        if let Some(ix) = if words { self.summary_index.as_mut() } else { self.index.as_mut() } {
+            ix.answer = None;
+        }
+        self.with_index(words, |s| s.step_in(&query, scope))
+    }
+
+    /// [`Session::search_step`] in the index the query is answered from.
+    fn step_in(&mut self, query: &Query, scope: SearchScope) -> bool {
+        let query = query.clone();
+        self.ensure_index(scope, query_words(&query));
         self.index_step();
         self.update_answer(&query);
         let done = !self.index.as_ref().is_some_and(SearchIndex::pending);
@@ -143,7 +174,14 @@ impl Session {
             self.search_pending = false;
             return Vec::new();
         }
-        self.ensure_index(scope);
+        let words = query_words(&query);
+        self.with_index(words, |s| s.results_in(&query, scope))
+    }
+
+    /// [`Session::search_results`] from the index the query is answered from.
+    fn results_in(&mut self, query: &Query, scope: SearchScope) -> Vec<Arc<Summary>> {
+        let query = query.clone();
+        self.ensure_index(scope, query_words(&query));
         if self.index.as_ref().is_some_and(|ix| ix.done && !ix.stale.is_empty()) {
             self.search_pace.again();
             self.index_step();
@@ -348,6 +386,18 @@ impl Session {
         let Some(a) = self.index.as_ref().and_then(|ix| ix.answer.as_ref()) else { return 0 };
         let ix = self.index.as_ref().map_or(0, |ix| a.dirty.iter().flat_map(|k| ix.docs_of(k)).map(|r| r.len()).sum::<usize>());
         ix + a.again.len() + a.todo.len()
+    }
+
+    /// `f` run with the index a query is answered from as `self.index`: the words' (`words`), or
+    /// the summaries' (swapped in for the call, and back).
+    fn with_index<R>(&mut self, words: bool, f: impl FnOnce(&mut Session) -> R) -> R {
+        if words {
+            return f(self);
+        }
+        std::mem::swap(&mut self.index, &mut self.summary_index);
+        let out = f(self);
+        std::mem::swap(&mut self.index, &mut self.summary_index);
+        out
     }
 
     /// The messages waiting for a reply, when the query asks about them.
