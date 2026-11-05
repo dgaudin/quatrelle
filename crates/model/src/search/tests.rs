@@ -399,3 +399,15 @@ fn the_parts_of_a_dotted_word_are_words() {
     subject.subject = "Notes on xx.word today".into();
     assert!(q("subject:word", &subject) && q("subject:xx.word", &subject) && q("\"xx.word today\"", &subject));
 }
+
+/// A phrase is found where the text breaks its line (HTML mail made text wraps its lines):
+/// "thank you for the update" in a 50,000-message mailbox missed 24 messages so wrapped.
+#[test]
+fn a_phrase_is_found_across_a_line_break() {
+    let m = sample();
+    let body = |q: &str, text: &str| Query::parse(q).matches(&Doc { summary: &m, body: Some(text), indexed: true, awaiting: false });
+    assert!(body("\"thank you for the update\"", "Thank you for the\nupdate."));
+    assert!(body("\"thank you for the update\"", "Thank you  for\r\n\tthe update."));
+    assert!(body("\"thank  you\"", "Thank you"), "spaces typed twice");
+    assert!(!body("\"thank you for the update\"", "Thank you for theupdate."));
+}
