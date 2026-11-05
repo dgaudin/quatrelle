@@ -339,7 +339,7 @@ pub(crate) fn arrange_menu(ui: &mut Ui, s: &Session, acts: &mut Vec<Action>) {
 }
 
 /// To a screen reader a row is one item of the list: who, the subject, when, and what its
-/// markers show (a sender to check, external, unread, flagged, attachments).
+/// markers show (a sender to check, external, unread, flagged or completed, attachments).
 fn row_spoken(s: &Session, m: &Summary, marks: &quatrelle_engine::SenderMarks, unread: bool, sent_view: bool) -> String {
     let mut who = if sent_view { m.to.first().map(|a| a.display().to_string()).unwrap_or_default() } else { m.from.display().to_string() };
     if marks.address {
@@ -352,6 +352,7 @@ fn row_spoken(s: &Session, m: &Summary, marks: &quatrelle_engine::SenderMarks, u
         (marks.external, "External"),
         (unread, "Unread"),
         (m.flags.flagged, "Flagged"),
+        (m.flags.follow_up_complete(), "Completed"),
         (m.has_attachments, "Has attachments"),
     ] {
         if on {
@@ -532,6 +533,9 @@ fn message_row(
         }
         if m.flags.flagged {
             marker(Icon::Flag, t.flag, &mut icons_w);
+        } else if m.flags.follow_up_complete() {
+            // Marked complete: a tick where the flag was, as Outlook shows it.
+            marker(Icon::Done, t.dim, &mut icons_w);
         }
         if m.has_attachments {
             marker(Icon::Attach, t.dim, &mut icons_w);
