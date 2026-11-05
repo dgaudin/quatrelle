@@ -572,6 +572,13 @@ impl Session {
         subject: &str,
         body: &str,
     ) -> Result<(), CmdError> {
+        // From an account that can't send, the answer stays unsent, and the user is told (it was
+        // filed in a data file's Sent Items as if it had gone).
+        if let Some(b) = self.send_block(account) {
+            log::info!("{subject}: {}", b.reason());
+            self.notice_with("{subject}: not sent, this account can't send mail", &[("subject", subject)], true);
+            return Ok(());
+        }
         let acc = self.account(account).ok_or_else(|| CmdError::Failed("the account is gone".into()))?;
         let from = EmailAddress::new(acc.config.name.clone(), acc.config.email.clone());
         let local = acc.is_local();

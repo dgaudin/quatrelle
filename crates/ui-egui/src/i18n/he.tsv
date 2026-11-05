@@ -1906,3 +1906,9 @@ folder	Conflicts	התנגשויות
 	Snoozed mail couldn't be read: changes to it won't be saved	לא ניתן היה לקרוא את הדואר שנדחה: שינויים בו לא יישמרו
 	{name}: {messages} messages imported, but the last of it could not be saved: {error}	{name}: {messages} הודעות יובאו, אך לא ניתן היה לשמור את החלק האחרון: {error}
 	{name}: {messages} messages imported, but the last of it could not be saved: {error}. Import the file again to keep it.	{name}: {messages} הודעות יובאו, אך לא ניתן היה לשמור את החלק האחרון: {error}. ייבא את הקובץ שוב כדי לשמור אותו.
+	Add an account to send mail.	הוסף חשבון כדי לשלוח דואר.
+	Mail can't be sent from an Outlook data file.	לא ניתן לשלוח דואר מקובץ נתונים של Outlook.
+	Mail can't be sent from a mailbox kept only on this computer.	לא ניתן לשלוח דואר מתיבת דואר שנשמרת רק במחשב זה.
+	This account has no outgoing (SMTP) server.	לחשבון זה אין שרת דואר יוצא (SMTP).
+	Add one in its account settings to send mail.	הוסף שרת בהגדרות החשבון כדי לשלוח דואר.
+	{subject}: not sent, this account can't send mail	{subject}: לא נשלח, חשבון זה אינו יכול לשלוח דואר

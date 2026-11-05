@@ -1907,3 +1907,9 @@ folder	Conflicts	冲突
 	Snoozed mail couldn't be read: changes to it won't be saved	无法读取已暂停提醒的邮件：对它们的更改不会保存
 	{name}: {messages} messages imported, but the last of it could not be saved: {error}	{name}: 已导入 {messages} 封邮件，但最后一部分无法保存：{error}
 	{name}: {messages} messages imported, but the last of it could not be saved: {error}. Import the file again to keep it.	{name}: 已导入 {messages} 封邮件，但最后一部分无法保存：{error}。要保留它，请重新导入该文件。
+	Add an account to send mail.	添加帐户以发送邮件。
+	Mail can't be sent from an Outlook data file.	无法从 Outlook 数据文件发送邮件。
+	Mail can't be sent from a mailbox kept only on this computer.	无法从仅保存在这台计算机上的邮箱发送邮件。
+	This account has no outgoing (SMTP) server.	此帐户没有发送 (SMTP) 服务器。
+	Add one in its account settings to send mail.	请在帐户设置中添加一个以发送邮件。
+	{subject}: not sent, this account can't send mail	{subject}: 未发送，此帐户无法发送邮件

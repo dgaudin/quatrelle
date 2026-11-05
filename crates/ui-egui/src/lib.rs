@@ -712,6 +712,13 @@ impl MailApp {
                 self.ui.dialog = Some(Dialog::SendCheck(found));
             }
             Ok(_) => {}
+            // Not from an account that can send: said over the message, as why it didn't go.
+            Err(CmdError::Disabled(_))
+                if id == "compose.send"
+                    && let Some(b) = self.session.compose_send_block() =>
+            {
+                self.ui.compose_alert = Some(reading::send_block_text(b));
+            }
             // Not possible now (a button that does nothing to do): logged, never shown.
             Err(CmdError::Disabled(m)) => log::info!("{id}: {m}"),
             // What went wrong with the message being written is said over it, in its own

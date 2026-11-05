@@ -13,6 +13,7 @@ mod drafts;
 mod items;
 mod names;
 mod senders;
+mod sending;
 mod signature_web;
 mod vote;
 pub use assistant::{AssistKind, Assistant, Filing, LlmModels, Rewrite};
@@ -22,6 +23,7 @@ pub use items::{ItemChoice, ItemKind};
 pub(crate) use names::NameCheck;
 pub use names::{NAMES_NOT_FOUND, NameChoice, Outcome, Resolved, group_entry};
 pub use senders::Sender;
+pub use sending::SendBlock;
 
 /// From this many people (counted as [`SendCheck::Exposed`] says), sending to all of them in To
 /// and Cc asks first.
@@ -184,7 +186,7 @@ impl Session {
     pub fn new_compose(&mut self, account: Option<&str>) -> Result<&mut Compose, CmdError> {
         let account = match account {
             Some(a) => self.account(a).map(|a| a.config.id.clone()),
-            None => self.current_account().map(|a| a.config.id.clone()),
+            None => self.current_account().map(|a| self.sending_account(a.config.id.clone())),
         }
         .ok_or_else(|| CmdError::Disabled("add an account first".into()))?;
         let signature = self.signature_in_message(&self.signature_when(&account, false));
@@ -204,7 +206,8 @@ impl Session {
         if r.text_first && !answerable_from_text(&parsed, mode) {
             self.whole_here()?;
         }
-        let account = r.key.account.clone();
+        // Answered from an account that can send (not the data file it's in).
+        let account = self.sending_account(r.key.account.clone());
         let sig = self.signature_in_message(&self.signature_when(&account, true));
         // In another mailbox's folder (a shared one): from that mailbox, which isn't written to.
         let from = self.reply_from(&r.key, &parsed);
@@ -269,7 +272,9 @@ impl Session {
         let raw =
             self.store.as_ref().and_then(|s| s.read_body(&r.key)).ok_or_else(|| CmdError::Disabled("the message is still downloading".into()))?;
         let out = self.reply_compose(ReplyMode::Forward)?;
-        let sig = self.signature_in_message(&self.signature_when(&r.key.account, true));
+        // The signature of the account it goes from (not the data file it's in).
+        let from = self.compose.as_ref().map_or(r.key.account.clone(), |c| c.account.clone());
+        let sig = self.signature_in_message(&self.signature_when(&from, true));
         let subject = r.parsed.as_ref().map(|p| p.subject.trim().to_string()).unwrap_or_default();
         let name = format!("{}.eml", if subject.is_empty() { "message" } else { subject.as_str() });
         if let Some(c) = self.compose.as_mut() {
@@ -379,6 +384,7 @@ impl Session {
         if c.sending {
             return Err(CmdError::Disabled("already sending".into()));
         }
+        self.can_send(&c.account)?;
         let mut d = self.compose_draft(&c)?;
         if d.recipients().is_empty() {
             return Err(CmdError::Params("add at least one recipient".into()));
@@ -426,9 +432,11 @@ impl Session {
     }
 
     /// `c` as `raw` (signed or encrypted already, if it's to be), on its way: into the Outbox for
-    /// later, filed in Sent on an account with no server, or handed to the network layer.
+    /// later, filed in Sent in the sample mailbox, or handed to the network layer. From an
+    /// account that can't send ([`SendBlock`]), refused: nothing goes, nothing says it went.
     pub(super) fn deliver(&mut self, c: &Compose, raw: Vec<u8>, from: String, recipients: Vec<String>) -> CmdResult {
-        let local = self.account(&c.account).is_none_or(AccountState::is_local);
+        self.can_send(&c.account)?;
+        let local = self.account(&c.account).is_some_and(AccountState::is_local);
         let sent_folder = self.account(&c.account).and_then(|a| a.folder(FolderRole::Sent)).map(|f| f.path.clone());
         // Delay Delivery: into the Outbox, sent once it's time (the app has to be running then).
         if let Some(at) = c.send_after.filter(|at| *at > self.clock.now && !local) {

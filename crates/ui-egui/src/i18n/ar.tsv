@@ -1906,3 +1906,9 @@ folder	Conflicts	التعارضات
 	Snoozed mail couldn't be read: changes to it won't be saved	تعذّرت قراءة البريد المؤجَّل: لن تُحفظ التغييرات عليه
 	{name}: {messages} messages imported, but the last of it could not be saved: {error}	{name}: عدد الرسائل المستوردة: {messages}، لكن تعذّر حفظ آخر جزء منها: {error}
 	{name}: {messages} messages imported, but the last of it could not be saved: {error}. Import the file again to keep it.	{name}: عدد الرسائل المستوردة: {messages}، لكن تعذّر حفظ آخر جزء منها: {error}. استورد الملف مرة أخرى للاحتفاظ به.
+	Add an account to send mail.	أضف حساباً لإرسال البريد.
+	Mail can't be sent from an Outlook data file.	لا يمكن إرسال البريد من ملف بيانات Outlook.
+	Mail can't be sent from a mailbox kept only on this computer.	لا يمكن إرسال البريد من صندوق بريد محفوظ على هذا الكمبيوتر فقط.
+	This account has no outgoing (SMTP) server.	لا يوجد لهذا الحساب خادم صادر (SMTP).
+	Add one in its account settings to send mail.	أضف خادماً في إعدادات الحساب لإرسال البريد.
+	{subject}: not sent, this account can't send mail	{subject}: لم يُرسل، لا يمكن لهذا الحساب إرسال البريد
