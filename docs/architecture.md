@@ -39,6 +39,13 @@ goes through `Services::background` to a lane: the desktop app runs one thread p
 lane caught on cancelled work for 30 seconds a new thread. Where the work is given back (the
 browser, the tests) the UI does it a step a frame.
 
+Two lanes: `Lane::Pictures` takes a message's files out of it in one read and decodes its
+pictures, PDF pages and video frames (`ui-egui/src/reading/pictures/cache.rs` and its
+`work.rs`, `reading/videos.rs`), each handed back as pixels for the window to make textures
+of, so many bytes a frame; `Lane::Reading` is for getting the open message ready to read. Work
+for a message no longer shown is cancelled, and what is kept is bounded (textures, decoded
+pictures waiting, files taken out).
+
 ## Source layout
 
 Modules use the 2018+ layout (`foo.rs` beside `foo/`, no `mod.rs`), split by topic, with every
