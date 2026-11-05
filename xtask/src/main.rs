@@ -3,10 +3,11 @@
 // Copyright (c) 2026 Didier Gaudin
 //! Workspace tooling: `cargo xtask <command>`.
 //!
-//! Pure Rust (std, serde_json, png). External tools (`cargo`, `git`) run through
+//! Pure Rust (std, serde_json, png, icu_normalizer). External tools (`cargo`, `git`) run through
 //! `std::process::Command`.
 
 mod authors;
+mod fold;
 mod ico;
 mod icons;
 mod sizes;
@@ -21,13 +22,15 @@ const USAGE: &str = "\
 usage: cargo xtask <command>
 
 commands:
-  ci       fmt --check, sizes, authors, clippy -D warnings, tests, forks pinned alike, layers, assets,
-           wasm (stops at the first failure)
+  ci       fmt --check, sizes, authors, fold --check, clippy -D warnings, tests, forks pinned alike,
+           layers, assets, wasm (stops at the first failure)
   layers   enforce the crate layering (docs/architecture.md)
   assets   check that every asset file is attributed in ATTRIBUTION.md
   sizes    files stay under 1000 lines and folders under 16 Rust files (xtask/sizes.txt holds
            what was over then, which may shrink but never grow); `sizes --update` lowers it
   authors  every Rust file starts with the SPDX licence line and its copyright line(s)
+  fold     write search's fold table (crates/model/src/search/fold_table.rs); `fold --check`
+           fails when the one committed differs
   wasm     cargo check --target wasm32-unknown-unknown for the portable crates and the web app
   icons    render the app icon into assets/app-icon/ (PNGs, SVG, .ico, .icns)
   ico      pack PNGs into a Windows .ico: ico <out.ico> <in.png>…
@@ -228,6 +231,7 @@ fn cmd_ci() -> Result<(), String> {
     run(fmt, "cargo fmt --check")?;
     sizes::run(&root(), &[])?;
     authors::run(&root())?;
+    fold::run(&root(), &["--check"])?;
     let mut clippy = cargo();
     clippy.args(["clippy", "--workspace", "--all-targets", "--", "-D", "warnings"]);
     run(clippy, "cargo clippy -D warnings")?;
@@ -248,6 +252,7 @@ fn main() -> ExitCode {
         Some("assets") => cmd_assets(),
         Some("sizes") => sizes::run(&root(), &args.iter().skip(1).map(String::as_str).collect::<Vec<_>>()),
         Some("authors") => authors::run(&root()),
+        Some("fold") => fold::run(&root(), &args.iter().skip(1).map(String::as_str).collect::<Vec<_>>()),
         Some("wasm") => cmd_wasm(),
         Some("icons") => icons::run(&root()),
         Some("ico") => ico::run(&args.iter().skip(1).map(String::as_str).collect::<Vec<_>>()),
