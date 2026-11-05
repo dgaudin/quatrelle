@@ -27,6 +27,9 @@ pub mod location;
 mod packed;
 #[cfg(not(target_arch = "wasm32"))]
 pub use packed::EXTENSION as DATA_FILE_EXTENSION;
+#[cfg(not(target_arch = "wasm32"))]
+#[doc(hidden)]
+pub use packed::fuzz_data_file;
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs;
@@ -617,6 +620,7 @@ pub fn clear_scratch() {
     }
 }
 
+pub use accounts::{CompactStep, Compacted, Recompressed, Recompressing};
 use atomic::private_dir;
 pub use atomic::write_atomic;
 use files::{Files, Routed};

@@ -10,6 +10,7 @@ mod folders;
 mod kept;
 mod names;
 mod opening;
+mod recompress;
 
 fn temp(name: &str) -> std::path::PathBuf {
     let d = std::env::temp_dir().join(format!("quatrelle-packed-{name}-{}", std::process::id()));

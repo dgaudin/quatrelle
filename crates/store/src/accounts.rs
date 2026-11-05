@@ -3,6 +3,8 @@
 // Copyright (c) 2026 Didier Gaudin
 //! The store: accounts' data, data files (kept or online only), and removing them.
 
+use std::sync::atomic::AtomicBool;
+
 use crate::*;
 
 impl Store {
@@ -189,6 +191,75 @@ impl Store {
         }
     }
 
+    /// What an account's data file keeps raw that compresses (a build before R3 kept base64
+    /// attachments so) compressed again, a few files at a time: each batch is compressed away from
+    /// the file, then written in a short sealed transaction of its own, so a write from the window
+    /// waits at most for one. `cancel` stops it between batches; the next call goes on from where
+    /// it got to, as after a sleep or a kill. `progress` hears how far it has come as it starts
+    /// and after each batch. The file gets smaller only once compacted (the space freed is used
+    /// again meanwhile). `None` when the account has no data file, or is removed while it runs
+    /// (its file isn't made again).
+    pub fn recompress_data_file(&self, account: &str, cancel: &AtomicBool, progress: &mut dyn FnMut(Recompressing)) -> Result<Option<Recompressed>> {
+        if self.is_online_only(account) {
+            return Ok(None);
+        }
+        match &self.files.main {
+            #[cfg(not(target_arch = "wasm32"))]
+            Files::Packed(x) => {
+                let a = safe_segment(account);
+                // A removal waits for the batch being written, and the run stops after it.
+                let seen = self.removals(account);
+                let kept = |write: &mut dyn FnMut() -> io::Result<()>| self.while_kept(account, seen, write);
+                match x.recompress(&a, cancel, progress, &kept) {
+                    Err(_) if self.removals(account) != seen => Ok(None),
+                    done => done.map_err(|source| StoreError::Io { path: a, source }),
+                }
+            }
+            _ => {
+                let _ = (cancel, progress);
+                Ok(None)
+            }
+        }
+    }
+
+    /// Compact Now, whole: what an earlier build kept raw compressed again first
+    /// ([`Store::recompress_data_file`]: the account is read and written as ever meanwhile), then
+    /// the file compacted in place ([`Store::compact_data_file`]: what wants it waits). Without
+    /// `recompress` (the drive hasn't the room for the file to grow while it's compressed again),
+    /// only compacted. `progress` hears each step. Stopped by `cancel` while compressing, it isn't
+    /// compacted (the next one goes on from there). Compressing again that fails (a damaged
+    /// `META`, the disk) doesn't keep the file from being compacted. `None` when the account has
+    /// no data file, or is removed meanwhile.
+    pub fn compact_now(
+        &self,
+        account: &str,
+        recompress: bool,
+        cancel: &AtomicBool,
+        progress: &mut dyn FnMut(CompactStep),
+    ) -> Result<Option<Compacted>> {
+        let Some(file) = self.data_file(account) else { return Ok(None) };
+        let size = || fs::metadata(&file).map_or(0, |m| m.len());
+        let before = size();
+        let recompressed = match recompress {
+            true => self.recompress_data_file(account, cancel, &mut |w| progress(CompactStep::Recompressing(w))),
+            false => Ok(Some(Recompressed::default())),
+        };
+        let recompressed = match recompressed {
+            Ok(None) => return Ok(None),
+            Ok(Some(r)) => r,
+            Err(e) => {
+                log::warn!("{}: couldn't compress it again, compacted all the same: {e}", file.display());
+                Recompressed::default()
+            }
+        };
+        if cancel.load(std::sync::atomic::Ordering::Relaxed) {
+            return Ok(Some(Compacted { before, after: size(), recompressed }));
+        }
+        progress(CompactStep::Compacting);
+        let Some((_, after)) = self.compact_data_file(account)? else { return Ok(None) };
+        Ok(Some(Compacted { before, after, recompressed }))
+    }
+
     /// Forget everything about an account, its data file too (one that never held anyone's mail:
     /// a file that failed to open, an account starting again).
     pub fn delete_account(&self, account: &str) -> Result<()> {
@@ -232,4 +303,56 @@ impl Store {
         *n = n.saturating_add(1);
         removals
     }
+}
+
+/// How far compressing a data file again has come ([`Store::recompress_data_file`]): files
+/// looked at, of all those it has.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Recompressing {
+    pub done: u64,
+    pub total: u64,
+}
+
+/// What compressing a data file again did ([`Store::recompress_data_file`]), in this run.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Recompressed {
+    /// Files compressed again: how many, and their bytes as they were kept and as they are now.
+    pub files: u64,
+    pub before: u64,
+    pub after: u64,
+    /// Files tried that stayed as they were (they don't compress: pictures, archives), and their
+    /// bytes.
+    pub stayed_raw: u64,
+    pub stayed_raw_bytes: u64,
+    /// Files written again while they were being compressed: left as written.
+    pub changed: u64,
+    /// Files kept raw passed over, and their bytes as kept: damaged ones, and those bigger than a
+    /// run takes (64 MiB). The data file says what every run passed over (`recompress.passed`).
+    pub passed_over: u64,
+    pub passed_over_bytes: u64,
+    /// What every run of it has saved, as the data file records it.
+    pub saved_in_all: u64,
+    /// Everything was looked at: the data file says it's kept as this build keeps it (what's left
+    /// raw doesn't compress, or was passed over). Otherwise it was stopped, and the next run goes
+    /// on from where it got to.
+    pub finished: bool,
+}
+
+/// A step of Compact Now ([`Store::compact_now`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CompactStep {
+    /// Compressing again what an earlier build kept raw: the window goes on as ever.
+    Recompressing(Recompressing),
+    /// Compacting in place: the file is had to itself.
+    Compacting,
+}
+
+/// What Compact Now did ([`Store::compact_now`]).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Compacted {
+    /// The data file's size before and after.
+    pub before: u64,
+    pub after: u64,
+    /// What compressing again did first (nothing when the file had nothing kept raw).
+    pub recompressed: Recompressed,
 }
