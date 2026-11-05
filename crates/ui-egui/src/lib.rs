@@ -359,7 +359,9 @@ pub struct UiState {
     /// are drawn compact, and their columns ([`widgets::GroupFit`]).
     ribbon_groups: HashMap<String, RibbonGroups>,
     pub dialog: Option<Dialog>,
-    previews: HashMap<(MessageKey, usize), Option<egui::TextureHandle>>,
+    /// Attachments' thumbnails (pictures, PDF pages, video frames), and the frame each was last
+    /// shown in (`reading/attachments.rs`).
+    previews: HashMap<(MessageKey, usize), (Option<egui::TextureHandle>, u64)>,
     /// Messages' pictures as shown (texture, own size): by address, or by message and attachment.
     shown_pictures: HashMap<String, Option<(egui::TextureHandle, egui::Vec2)>>,
     /// The heights of HTML messages' table cells as last drawn, for their rows' alignment.
