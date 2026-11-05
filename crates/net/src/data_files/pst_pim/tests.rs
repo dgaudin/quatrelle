@@ -1,0 +1,120 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
+//! Contacts' and appointments' properties, and recurrence patterns, as the import reads them.
+
+use super::*;
+use quatrelle_model::dates::days_from_civil;
+
+/// Names in the string stream are found by their offset; a damaged offset or length is no name.
+#[test]
+fn names_in_the_string_stream() {
+    let mut stream = vec![0xAA, 0xBB];
+    for name in ["Keywords", "x-custom"] {
+        let bytes: Vec<u8> = name.encode_utf16().flat_map(u16::to_le_bytes).collect();
+        stream.extend((bytes.len() as u32).to_le_bytes());
+        stream.extend(bytes);
+    }
+    assert_eq!(name_at(&stream, 2).as_deref(), Some("Keywords"));
+    assert_eq!(name_at(&stream, 22).as_deref(), Some("x-custom"));
+    for at in [0, 1, 3, 21, 23, 1000, u32::MAX] {
+        let _ = name_at(&stream, at);
+    }
+    assert_eq!(name_at(&stream, 39), None, "past the end");
+    let huge = [0xFF, 0xFF, 0xFF, 0xFF, b'a', 0];
+    assert_eq!(name_at(&huge, 0), None);
+}
+
+fn minutes(y: i64, m: u32, d: u32) -> u32 {
+    u32::try_from((days_from_civil(y, m, d) * 1440) + EPOCH_MINUTES).unwrap()
+}
+
+fn blob(frequency: u16, pattern: u16, period: u32, specific: &[u32], end: (u32, u32), deleted: &[u32], modified: &[u32], first: u32) -> Vec<u8> {
+    let mut v = Vec::new();
+    for x in [0x3004u16, 0x3004, frequency, pattern, 0] {
+        v.extend(x.to_le_bytes());
+    }
+    let mut words = vec![first, period, 0];
+    words.extend(specific);
+    words.extend([end.0, end.1, 0, u32::try_from(deleted.len()).unwrap()]);
+    words.extend(deleted);
+    words.push(u32::try_from(modified.len()).unwrap());
+    words.extend(modified);
+    words.extend([first, minutes(4500, 1, 1), 0x3006, 0x3008, 9 * 60]);
+    for w in words {
+        v.extend(w.to_le_bytes());
+    }
+    v
+}
+
+#[test]
+fn recurrence_patterns_become_rules() {
+    // Mondays and Wednesdays at 09:00 in UTC+2 (07:00Z), ten times, one deleted, one moved.
+    let first = minutes(2026, 10, 5);
+    let start = days_from_civil(2026, 10, 5) * 86_400 + 7 * 3600;
+    let b = blob(0x200B, 0x0001, 1, &[0b000_1010], (0x2022, 10), &[minutes(2026, 10, 7), minutes(2026, 10, 12)], &[minutes(2026, 10, 12)], first);
+    let (rule, ex) = recurrence(&b, start).unwrap();
+    assert_eq!(rule, "FREQ=WEEKLY;INTERVAL=1;BYDAY=MO,WE;COUNT=10");
+    assert_eq!(ex, [days_from_civil(2026, 10, 7) * 86_400 + 7 * 3600]);
+    // Every second day, until a date.
+    let b = blob(0x200A, 0x0000, 2880, &[], (0x2021, 0), &[], &[], first);
+    let b = {
+        let mut b = b;
+        let at = b.len() - 4 * 4;
+        b.splice(at..at + 4, minutes(2026, 12, 31).to_le_bytes());
+        b
+    };
+    assert_eq!(recurrence(&b, start).unwrap().0, "FREQ=DAILY;INTERVAL=2;UNTIL=20261231T235959Z");
+    // Every weekday; the last Friday of each month; every year.
+    assert_eq!(recurrence(&blob(0x200A, 0x0001, 1, &[0x3E], (0x2023, 0), &[], &[], first), start).unwrap().0, "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR");
+    assert_eq!(
+        recurrence(&blob(0x200C, 0x0003, 1, &[0b010_0000, 5], (0x2023, 0), &[], &[], first), start).unwrap().0,
+        "FREQ=MONTHLY;INTERVAL=1;BYDAY=-1FR"
+    );
+    assert_eq!(recurrence(&blob(0x200D, 0x0002, 12, &[5], (0x2023, 0), &[], &[], first), start).unwrap().0, "FREQ=YEARLY;INTERVAL=1");
+    // Junk is no rule, and never a crash.
+    assert!(recurrence(&[], start).is_none());
+    assert!(recurrence(&b[..20], start).is_none());
+    assert!(recurrence(&blob(0x7777, 0x0001, 1, &[1], (0x2023, 0), &[], &[], first), start).is_none());
+    let mut huge = blob(0x200B, 0x0001, 1, &[1], (0x2023, 0), &[], &[], first);
+    huge.splice(38..42, u32::MAX.to_le_bytes());
+    assert!(recurrence(&huge, start).is_none());
+}
+
+/// A named start or end of a type that is not a time leaves the event without one: it does not
+/// fall back to the plain start and end properties.
+#[test]
+fn a_mistyped_named_time_hides_the_fallback() {
+    let ids = HashMap::from([((PSETID_APPOINTMENT, 0x820D), 0x8001), ((PSETID_APPOINTMENT, 0x820E), 0x8002)]);
+    let named = Named { ids, keywords: None };
+    let props = HashMap::from([(0x8001, Val::Other), (0x8002, Val::Time(133_485_408_000_000_000)), (0x0060, Val::Time(133_485_408_000_000_000))]);
+    let x = extract(&|id| props.get(&id).cloned(), &named);
+    assert_eq!((x.start, x.end), (None, Some(1_704_067_200)));
+}
+
+#[test]
+fn contacts_and_appointments_map() {
+    let x = Extra {
+        given: "Ana".into(),
+        family: "Lima".into(),
+        company: "Contoso".into(),
+        emails: vec!["ana@contoso.example".into()],
+        phones: vec![("+1 555 0100".into(), "cell")],
+        ..Default::default()
+    };
+    let c = card_of(&x, "Met at the fair.\r\n", "u1".into());
+    assert_eq!((c.name.as_str(), c.org.as_str(), c.note.as_str()), ("Ana Lima", "Contoso", "Met at the fair."));
+    assert_eq!(c.phones[0], Typed { value: "+1 555 0100".into(), kind: "cell".into() });
+    let day = days_from_civil(2026, 10, 20) * 86_400;
+    // An all-day item stored at local midnight in UTC+6 (18:00Z the day before).
+    let x = Extra { start: Some(day - 6 * 3600), end: Some(day + 86_400 - 6 * 3600), all_day: true, location: "Hall".into(), ..Default::default() };
+    let e = event_of(&x, "Fair", "", &EmailAddress::default(), &[], "u2".into()).unwrap();
+    assert_eq!((e.start, e.end, e.all_day, e.uid.as_str(), e.location.as_str()), (day, day + 86_400, true, "u2", "Hall"));
+    assert!(e.organizer.is_none());
+    let x = Extra { start: Some(day + 3600), end: Some(day), uid: "0400".into(), ..Default::default() };
+    let ana = EmailAddress::new("Ana", "ana@contoso.example");
+    let e = event_of(&x, "Call", "", &EmailAddress::new("Me", "me@x.example"), std::slice::from_ref(&ana), "u3".into()).unwrap();
+    assert_eq!((e.end, e.uid.as_str()), (day + 3600, "0400"));
+    assert_eq!(e.organizer.unwrap().email, "me@x.example");
+    assert!(event_of(&Extra::default(), "", "", &EmailAddress::default(), &[], "u".into()).is_none());
+}
