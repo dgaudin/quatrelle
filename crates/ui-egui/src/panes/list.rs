@@ -15,12 +15,12 @@ use crate::theme;
 use crate::widgets;
 use crate::{Action, Dialog, UiState};
 
-/// The list's rows (date headings and messages) and their tops, made again only when the list
-/// changes (its revision), the day turns or the row height changes: a big folder's hundreds of
-/// thousands of rows, each with its heading's label, were made again every frame.
+/// The tops of the list's rows (date headings and messages), worked out again only when the
+/// engine builds its rows again ([`Session::nav_structure`]: the list changed, the day turned) or
+/// the row height changes. The rows themselves are the engine's, borrowed each frame: a big
+/// folder's hundreds of thousands of rows were made again every frame, then each time it changed.
 pub(crate) struct ListRows {
-    key: (u64, i64, u32),
-    rows: Vec<Row>,
+    key: (u64, u32),
     tops: Vec<f32>,
     total: f32,
 }
@@ -149,20 +149,20 @@ pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) 
     // heights), so the row cache is keyed on it too.
     let mh = if table { table_row_height(s) } else { row_height(s) };
     let hh = if table { TABLE_HEADING_H } else { HEADER_H };
-    let key = (s.revision, dates::today(&s.clock), mh.to_bits());
-    if st.list_rows.as_ref().is_none_or(|c| c.key != key) {
-        let rows = s.rows();
+    let rows = s.rows();
+    let key = (s.nav_structure(), mh.to_bits());
+    if st.list_rows.as_ref().is_none_or(|c| c.key != key || c.tops.len() != rows.len()) {
         let mut tops = Vec::with_capacity(rows.len());
         let mut y = 0.0;
-        for r in &rows {
+        for r in rows {
             tops.push(y);
             y += if matches!(r, Row::Header(_) | Row::Group(_)) { hh } else { mh };
         }
-        st.list_rows = Some(ListRows { key, rows, tops, total: y });
+        st.list_rows = Some(ListRows { key, tops, total: y });
     }
     let Some(cached) = st.list_rows.take() else { return };
-    let ListRows { rows, tops, total, .. } = &cached;
-    let (rows, tops, total) = (rows.as_slice(), tops.as_slice(), *total);
+    let ListRows { tops, total, .. } = &cached;
+    let (tops, total) = (tops.as_slice(), *total);
     if rows.is_empty() {
         ui.vertical_centered(|ui| {
             ui.add_space(60.0);
@@ -186,10 +186,9 @@ pub fn show(s: &Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action>) 
         return;
     }
 
-    let focus_index = s.focus.as_ref().and_then(|k| s.index_of(k));
     let scroll_to = if st.scroll_to_focus {
         st.scroll_to_focus = false;
-        focus_index.and_then(|fi| rows.iter().position(|r| matches!(r, Row::Message { index, .. } if *index == fi)))
+        s.focus.as_ref().and_then(|k| s.row_index_of(k))
     } else {
         None
     };
