@@ -56,7 +56,9 @@ pub(crate) use app::{SearchDrop, junk_menu, meeting_browser, meeting_profile, sc
 pub use app::{WindowPlace, after_open, alt_code_pages, alt_codes};
 pub use dialogs::Dialog;
 use icons::Icon;
-pub use services::{Backend, BrowserProfile, FileAsk, NullBackend, NullServices, ReminderAction, Services, TrayAction, TrayIcon, UpdateState};
+pub use services::{
+    Backend, BrowserProfile, FileAsk, Lane, NullBackend, NullServices, ReminderAction, Services, TrayAction, TrayIcon, UpdateState, Work,
+};
 pub use state::UiState;
 use theme::Tokens;
 

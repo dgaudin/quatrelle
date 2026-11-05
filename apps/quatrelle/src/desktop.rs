@@ -3,7 +3,7 @@
 // Copyright (c) 2026 Didier Gaudin
 //! What the window asks of the desktop (`Services`): the clock and the system's style and fonts,
 //! files and web addresses opened with the system's apps, the clipboard, files dragged out of
-//! the window, notifications, and video frames.
+//! the window, notifications, video frames, and threads for slow work.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -21,6 +21,7 @@ pub(crate) mod appearance;
 pub(crate) mod browsers;
 pub(crate) mod file_dialogs;
 pub(crate) mod keychain;
+mod lanes;
 pub(crate) mod profiles;
 pub(crate) mod state_writer;
 pub(crate) mod tray;
@@ -61,6 +62,8 @@ pub(crate) struct Desktop {
     pub(crate) files: file_dialogs::FileDialogs,
     /// Quatrelle's icon in the notification area, the envelope on it while new mail is unread.
     pub(crate) tray: tray::Tray,
+    /// The threads slow work runs on (decoding pictures).
+    pub(crate) lanes: lanes::Lanes,
 }
 
 impl Desktop {
@@ -364,6 +367,12 @@ impl Services for Desktop {
             return VideoFrame::Unavailable;
         }
         VideoFrame::Pending
+    }
+    fn background(&mut self, lane: quatrelle_ui_egui::Lane, work: quatrelle_ui_egui::Work) -> Result<(), quatrelle_ui_egui::Work> {
+        self.lanes.submit(lane, work)
+    }
+    fn has_background(&self) -> bool {
+        self.lanes.available()
     }
     fn clipboard_picture(&mut self) -> Option<Vec<u8>> {
         let img = read_clipboard(|c| c.get_image().ok())?;
