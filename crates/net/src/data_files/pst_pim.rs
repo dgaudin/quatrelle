@@ -29,7 +29,8 @@ mod sharing;
 pub(crate) use files::{card_file, event_file};
 pub(crate) use groups::group_of;
 pub(crate) use meetings::invitation;
-use recur::recurrence;
+use meetings::{known_zone, uid_of, zone_key_name};
+use recur::recurrence_in;
 pub(crate) use recur::{Own, changed_events};
 pub(crate) use sharing::{put_before, sharing_lines};
 
@@ -178,6 +179,16 @@ pub(crate) struct Extra {
     /// A changed occurrence's item (attached to its series): the start of the occurrence it
     /// replaces (PidLidExceptionReplaceTime).
     pub replaces: Option<i64>,
+    /// The zone an appointment's times were set in, when the time zone database knows it by the
+    /// name the item gives (PidLidTimeZoneDescription, else its time zone definition's key name);
+    /// never UTC, which is no zone.
+    pub tzid: String,
+    /// How each of a meeting's attendees answered (PidTagRecipientTrackStatus), by address in
+    /// lower case; its organizer, when its recipients name one (recipOrganizer, which isn't among
+    /// them then); whether it asks for answers (PidTagResponseRequested).
+    pub answers: Vec<(String, i64)>,
+    pub organizer: Option<EmailAddress>,
+    pub response_requested: bool,
 }
 
 /// Read the contact and appointment properties of an item.
@@ -233,8 +244,15 @@ pub(crate) fn extract<'a>(p: &dyn Fn(u16) -> Option<Val<'a>>, named: &Named) -> 
         x.recurrence = b.get(..MAX_PATTERN).unwrap_or(b).to_vec();
     }
     if let Some(Val::Bin(b)) = n(PSETID_MEETING, 0x0003) {
-        x.uid = b.iter().map(|b| format!("{b:02X}")).collect();
+        x.uid = uid_of(b);
     }
+    x.tzid = known_zone(&ns(PSETID_APPOINTMENT, 0x8234))
+        .or_else(|| match n(PSETID_APPOINTMENT, 0x825E) {
+            Some(Val::Bin(b)) => zone_key_name(b).and_then(|k| known_zone(&k)),
+            _ => None,
+        })
+        .unwrap_or_default();
+    x.response_requested = matches!(p(0x0063), Some(Val::Bool(true)));
     if let Some(Val::Int(c)) = n(PSETID_NOTE, 0x8B00) {
         x.note_color = u8::try_from(c).ok().filter(|c| *c < quatrelle_model::pim::NOTE_COLORS);
     }
@@ -363,23 +381,42 @@ pub(crate) fn event_of(x: &Extra, subject: &str, body: &str, from: &EmailAddress
         start = day(start);
         end = day(end).max(start + 86_400);
     }
-    let (rrule, exdates) = match recurrence(&x.recurrence, x.start.unwrap_or(start)) {
+    let tzid = if x.all_day { String::new() } else { x.tzid.clone() };
+    let (rrule, exdates) = match recurrence_in(&x.recurrence, x.start.unwrap_or(start), &tzid) {
         Some((r, ex)) => (Some(r), ex),
         None => (None, Vec::new()),
     };
-    let person = |a: &EmailAddress| Attendee { email: a.email.clone(), name: a.name.clone(), ..Default::default() };
+    // A name that is only the address (what a recipient without one shows) is none.
+    let person = |a: &EmailAddress| {
+        let name = if a.name.trim().eq_ignore_ascii_case(a.email.trim()) { String::new() } else { a.name.clone() };
+        Attendee { email: a.email.clone(), name, ..Default::default() }
+    };
+    // How each answered, as its recipient says; asked to when the meeting asks and it hasn't.
+    let guest = |a: &EmailAddress| {
+        let answer = x.answers.iter().find(|(e, _)| e.eq_ignore_ascii_case(&a.email)).map(|(_, t)| *t);
+        let partstat = match answer {
+            Some(2) => "TENTATIVE",
+            Some(3) => "ACCEPTED",
+            Some(4) => "DECLINED",
+            Some(5) => "NEEDS-ACTION",
+            _ => "",
+        };
+        Attendee { partstat: partstat.into(), rsvp: x.response_requested && matches!(partstat, "" | "NEEDS-ACTION"), ..person(a) }
+    };
+    let from = if from.email.is_empty() { x.organizer.as_ref().unwrap_or(from) } else { from };
     Some(CalEvent {
         uid: if x.uid.is_empty() { uid } else { x.uid.clone() },
         summary: subject.to_string(),
-        description: body.trim().to_string(),
+        description: body.replace("\r\n", "\n").trim().to_string(),
         location: x.location.clone(),
         start,
         end,
         all_day: x.all_day,
+        tzid,
         rrule,
         exdates,
         organizer: (!from.email.is_empty() && !attendees.is_empty()).then(|| person(from)),
-        attendees: attendees.iter().map(person).collect(),
+        attendees: attendees.iter().map(guest).collect(),
         sequence: x.sequence,
         categories: x.categories.clone(),
         // PidLidBusyStatus: 2 (busy) is the default.

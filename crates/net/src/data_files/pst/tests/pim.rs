@@ -10,6 +10,7 @@ use super::*;
 
 mod files;
 mod kinds;
+mod meetings;
 mod occurrences;
 
 const OLE: [u8; 8] = [0xC0, 0, 0, 0, 0, 0, 0, 0x46];
