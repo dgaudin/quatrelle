@@ -1916,4 +1916,12 @@ folder	Conflicts	Konflikte
 	This account has no outgoing (SMTP) server.	Dieses Konto hat keinen Postausgangsserver (SMTP).
 	Add one in its account settings to send mail.	Fügen Sie in den Kontoeinstellungen einen hinzu, um E-Mails zu senden.
 	{subject}: not sent, this account can't send mail	{subject}: nicht gesendet, dieses Konto kann keine E-Mails senden
+	View message source	Nachrichtenquelle anzeigen
+menu	View	Anzeigen
 	{n} messages selected	{n} Nachrichten ausgewählt
+	{subject} – Message source	{subject} – Nachrichtenquelle
+	Whole message	Ganze Nachricht
+	Header only	Nur Kopfzeilen
+	Copy all	Alles kopieren
+	Only the first {shown} of {size} are shown. Save as email (.eml) keeps all of it.	Nur die ersten {shown} von {size} werden gezeigt. Speichern als E-Mail (.eml) behält alles.
+	The source couldn't be downloaded: {error}	Die Quelle konnte nicht heruntergeladen werden: {error}

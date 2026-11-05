@@ -1912,4 +1912,11 @@ folder	Conflicts	التعارضات
 	This account has no outgoing (SMTP) server.	لا يوجد لهذا الحساب خادم صادر (SMTP).
 	Add one in its account settings to send mail.	أضف خادماً في إعدادات الحساب لإرسال البريد.
 	{subject}: not sent, this account can't send mail	{subject}: لم يُرسل، لا يمكن لهذا الحساب إرسال البريد
+	View message source	عرض مصدر الرسالة
 	{n} messages selected	الرسائل المحددة: {n}
+	{subject} – Message source	{subject} – مصدر الرسالة
+	Whole message	الرسالة كاملة
+	Header only	الترويسة فقط
+	Copy all	نسخ الكل
+	Only the first {shown} of {size} are shown. Save as email (.eml) keeps all of it.	يُعرض أول {shown} فقط من {size}. الحفظ كبريد إلكتروني (.eml) يحتفظ بها كاملة.
+	The source couldn't be downloaded: {error}	تعذّر تنزيل المصدر: {error}

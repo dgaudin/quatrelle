@@ -740,6 +740,13 @@ fn row_input(
             }
         });
         crate::organize::context_items(ui, s, t, acts, flags.pinned());
+        ui.separator();
+        // View › View message source, as the reading pane's ⋯ has it (issue #27).
+        // "View" as a menu says it (in French « Afficher », not the ribbon tab's « Affichage »).
+        let view = crate::i18n::tc("menu", "View");
+        ui.menu_button((widgets::menu_icon(Some(Icon::Bcc)), view), |ui| {
+            item(ui, acts, Icon::File, tl!("View message source"), Action::Run("message.source", json!({"key": key.to_id()})));
+        });
     });
     // Reply actions need the message open; not one of several selected, which the menu acts on
     // all of (opening it selected it alone: Delete took only that one).

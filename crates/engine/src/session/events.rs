@@ -268,14 +268,19 @@ impl Session {
             Event::Older { account, folder, items, more, error } => self.older_from_server(&account, &folder, items, more, error),
             Event::Voted { key, choice, error } => self.voted(&key, &choice, error),
             // Older mail read on the server is shown, not kept (nor indexed).
-            Event::Body { key, raw } if self.is_older(&key) => self.show_body(&key, &raw),
+            Event::Body { key, raw } if self.is_older(&key) => {
+                self.source_arrived(&key, &raw);
+                self.show_body(&key, &raw);
+            }
             Event::Body { key, raw } => {
+                self.source_arrived(&key, &raw);
                 self.show_body(&key, &raw);
                 self.index_body(&key, &raw);
                 self.downloaded(&key, true);
             }
             Event::TextFirst { key, raw } => self.show_text_first(&key, &raw),
             Event::BodyFailed { key, error } => {
+                self.source_failed(&key, &error);
                 for w in self.windows.iter_mut().filter(|w| w.key == key && (w.parsed.is_none() || w.text_first)) {
                     w.error = Some(error.clone());
                 }
