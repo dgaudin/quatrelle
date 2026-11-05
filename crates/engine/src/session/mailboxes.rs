@@ -16,6 +16,7 @@ mod folder_edits;
 mod mailbox_settings;
 mod nav;
 pub(crate) use nav::ListNav;
+mod patch;
 pub(super) mod people;
 mod rows;
 pub use mailbox_settings::{FolderSizes, Sizes};
@@ -330,6 +331,12 @@ impl Session {
             list.retain(|m| self.is_focused(m) != other);
         }
         arrange_list(&mut list, self.prefs.arrange, self.prefs.reverse_sort);
+        self.take_list(list);
+    }
+
+    /// Show `list`, as filtered and arranged: its conversations, its index and its rows built
+    /// with it, and the selection kept where it's still in it.
+    pub(super) fn take_list(&mut self, list: Vec<Arc<Summary>>) {
         // Conversations are worked out once here when the list shows them (arranged by date);
         // arranged otherwise, the reading pane still shows the open message's, worked out once
         // with the first message opened (`thread_at`) rather than with every rebuild.
