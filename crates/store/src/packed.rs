@@ -25,7 +25,12 @@ use redb::{Database, ReadableDatabase, ReadableTable, TableDefinition};
 use crate::{Result, StoreError, io_err, write_atomic};
 
 mod kept;
+mod meta;
+mod recompress;
 use kept::*;
+use meta::*;
+use recompress::Writes;
+pub use recompress::fuzz_data_file;
 
 /// A data file's extension.
 pub const EXTENSION: &str = "quatrelle";
@@ -75,6 +80,10 @@ pub(crate) struct Packs {
     /// wants it waits for `compacted`.
     compacting: Mutex<std::collections::HashSet<String>>,
     compacted: Condvar,
+    /// Accounts whose data file is being compressed again ([`Packs::recompress`]): one at a time.
+    recompressing: Mutex<std::collections::HashSet<String>>,
+    /// The writes to the data files, counted ([`Writes`]).
+    writes: Writes,
 }
 
 impl std::fmt::Debug for Packs {
@@ -95,6 +104,8 @@ impl Packs {
             names: Mutex::new(names),
             compacting: Mutex::default(),
             compacted: Condvar::new(),
+            recompressing: Mutex::default(),
+            writes: Writes::default(),
         };
         p.take_over_old_files();
         p.bring_in_folders()?;
@@ -214,6 +225,8 @@ impl Packs {
         if !create && !path.exists() {
             return Ok(None);
         }
+        // Made new: it says how it's kept (`META`).
+        let mut fresh = !path.exists();
         let db = match builder(&path).create(&path) {
             Ok(db) => db,
             Err(redb::DatabaseError::DatabaseAlreadyOpen) => {
@@ -226,9 +239,13 @@ impl Packs {
                 let aside = path.with_extension(format!("{EXTENSION}.damaged"));
                 log::warn!("{}: {e}; set aside as {}", path.display(), aside.display());
                 fs::rename(&path, &aside)?;
+                fresh = true;
                 builder(&path).create(&path).map_err(other)?
             }
         };
+        if fresh {
+            mark_new(&db, &path);
+        }
         let db = Arc::new(db);
         open.insert(account.to_string(), db.clone());
         Ok(Some(db))
@@ -336,12 +353,26 @@ impl Packs {
     /// 45 GB one was gone through for 72 s first; a commit takes no longer for it (measured on a
     /// 17 GB file: 8.1 ms against 8.4).
     fn change(&self, account: &str, f: impl FnOnce(&mut Tables<'_>) -> io::Result<()>) -> io::Result<()> {
-        let Some(db) = self.db(account, true)? else { return Err(io::Error::from(io::ErrorKind::NotFound)) };
+        self.change_in_tx(account, true, |t, _| f(t))
+    }
+
+    /// [`Packs::change`], `f` also given the transaction (to write `META` in the same commit: a
+    /// recompress's cursor goes in with the batch it's after). The data file is made when the
+    /// account has none only when `create` (a recompress never makes one: its account may have
+    /// been removed meanwhile).
+    fn change_in_tx(
+        &self,
+        account: &str,
+        create: bool,
+        f: impl FnOnce(&mut Tables<'_>, &redb::WriteTransaction) -> io::Result<()>,
+    ) -> io::Result<()> {
+        let Some(db) = self.db(account, create)? else { return Err(io::Error::from(io::ErrorKind::NotFound)) };
         let mut tx = db.begin_write().map_err(other)?;
+        let _writing = self.writes.begin();
         tx.set_quick_repair(true);
         {
             let mut tables = Tables { files: tx.open_table(FILES).map_err(other)?, pieces: tx.open_table(PIECES).map_err(other)? };
-            f(&mut tables)?;
+            f(&mut tables, &tx)?;
         }
         tx.commit().map_err(other)
     }
@@ -391,15 +422,24 @@ impl Packs {
                 if moving.is_empty() {
                     return Err(io::Error::from(io::ErrorKind::NotFound));
                 }
-                self.change(&a, |t| {
+                self.change_in_tx(&a, true, |t, tx| {
+                    // The first key a file kept raw that compresses may have moved to.
+                    let mut raw_to: Option<String> = None;
                     for old in &moving {
                         let new = format!("{k2}{}", old.strip_prefix(k.as_str()).unwrap_or(""));
                         // Moved as kept: not uncompressed and compressed again.
                         if let Some(v) = t.take_kept(old.as_str())? {
                             t.put_kept(new.as_str(), &v)?;
+                            if v.len() >= DEFLATE_MIN && !deflated(&v) && raw_to.as_ref().is_none_or(|r| new < *r) {
+                                raw_to = Some(new);
+                            }
                         }
                     }
-                    Ok(())
+                    // A recompress may have passed where it went: it goes back for it.
+                    match raw_to {
+                        Some(to) => pull_back(tx, &t.files, &to, Packs::lock(&self.recompressing).contains(&a)),
+                        None => Ok(()),
+                    }
                 })
             }
             (Place::Disk, Place::Disk) => crate::atomic::rename(from, to),

@@ -27,7 +27,7 @@ pub(super) const DEFLATED: &[u8] = b"\0Quatrelle:deflate\0";
 /// The same, as the fork wrote it before it took its name (see `legacy`): read too.
 const DEFLATED_OLD: &[u8] = crate::legacy::OLD_DEFLATED;
 /// Files smaller than this aren't worth compressing.
-const DEFLATE_MIN: usize = 1024;
+pub(super) const DEFLATE_MIN: usize = 1024;
 /// The most a compressed file may come to (a crafted data file can't fill the memory).
 pub(super) const INFLATE_MAX: u64 = 1 << 30;
 /// The most set aside at once for a file, before it's read: a file in pieces has a note that says
@@ -53,6 +53,11 @@ pub(super) fn pack(bytes: &[u8]) -> std::borrow::Cow<'_, [u8]> {
     out.extend_from_slice(DEFLATED);
     out.extend_from_slice(&stream);
     out.into()
+}
+
+/// Whether a file as kept (or its first piece) is compressed: it says so in its first bytes.
+pub(super) fn deflated(kept: &[u8]) -> bool {
+    kept.starts_with(DEFLATED) || kept.starts_with(DEFLATED_OLD)
 }
 
 /// A file as kept, back as it was written.
