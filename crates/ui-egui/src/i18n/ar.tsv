@@ -1904,3 +1904,5 @@ folder	Conflicts	التعارضات
 	Calendar and contacts couldn't be read: changes to them won't be saved	تعذّرت قراءة التقويم وجهات الاتصال: لن تُحفظ التغييرات عليها
 	Your rules couldn't be read: changes to them won't be saved	تعذّرت قراءة القواعد: لن تُحفظ التغييرات عليها
 	Snoozed mail couldn't be read: changes to it won't be saved	تعذّرت قراءة البريد المؤجَّل: لن تُحفظ التغييرات عليه
+	{name}: {messages} messages imported, but the last of it could not be saved: {error}	{name}: عدد الرسائل المستوردة: {messages}، لكن تعذّر حفظ آخر جزء منها: {error}
+	{name}: {messages} messages imported, but the last of it could not be saved: {error}. Import the file again to keep it.	{name}: عدد الرسائل المستوردة: {messages}، لكن تعذّر حفظ آخر جزء منها: {error}. استورد الملف مرة أخرى للاحتفاظ به.

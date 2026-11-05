@@ -212,7 +212,8 @@ impl Pool {
                     for folder in paths {
                         sink.emit(Event::FolderChanged { account: account.clone(), folder });
                     }
-                    sink.emit(Event::Imported { account, messages: done.messages, skipped: done.skipped, done: true, error: None });
+                    // A last save that failed is said with what came in (the account stays).
+                    sink.emit(Event::Imported { account, messages: done.messages, skipped: done.skipped, done: true, error: done.last_save });
                 }
                 Err(e) => sink.emit(Event::Imported { account, messages: 0, skipped: 0, done: true, error: Some(e) }),
             }

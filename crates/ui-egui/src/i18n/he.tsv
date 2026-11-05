@@ -1904,3 +1904,5 @@ folder	Conflicts	התנגשויות
 	Calendar and contacts couldn't be read: changes to them won't be saved	לא ניתן היה לקרוא את לוח השנה ואנשי הקשר: שינויים בהם לא יישמרו
 	Your rules couldn't be read: changes to them won't be saved	לא ניתן היה לקרוא את הכללים שלך: שינויים בהם לא יישמרו
 	Snoozed mail couldn't be read: changes to it won't be saved	לא ניתן היה לקרוא את הדואר שנדחה: שינויים בו לא יישמרו
+	{name}: {messages} messages imported, but the last of it could not be saved: {error}	{name}: {messages} הודעות יובאו, אך לא ניתן היה לשמור את החלק האחרון: {error}
+	{name}: {messages} messages imported, but the last of it could not be saved: {error}. Import the file again to keep it.	{name}: {messages} הודעות יובאו, אך לא ניתן היה לשמור את החלק האחרון: {error}. ייבא את הקובץ שוב כדי לשמור אותו.

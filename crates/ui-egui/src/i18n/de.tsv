@@ -1908,3 +1908,5 @@ folder	Conflicts	Konflikte
 	Calendar and contacts couldn't be read: changes to them won't be saved	Kalender und Kontakte konnten nicht gelesen werden: Änderungen daran werden nicht gespeichert
 	Your rules couldn't be read: changes to them won't be saved	Ihre Regeln konnten nicht gelesen werden: Änderungen daran werden nicht gespeichert
 	Snoozed mail couldn't be read: changes to it won't be saved	Zurückgestellte E-Mails konnten nicht gelesen werden: Änderungen daran werden nicht gespeichert
+	{name}: {messages} messages imported, but the last of it could not be saved: {error}	{name}: {messages} Nachrichten importiert, aber der letzte Teil konnte nicht gespeichert werden: {error}
+	{name}: {messages} messages imported, but the last of it could not be saved: {error}. Import the file again to keep it.	{name}: {messages} Nachrichten importiert, aber der letzte Teil konnte nicht gespeichert werden: {error}. Importieren Sie die Datei erneut, um ihn zu behalten.

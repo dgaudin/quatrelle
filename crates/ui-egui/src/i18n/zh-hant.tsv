@@ -1909,3 +1909,5 @@ folder	Conflicts	衝突
 	Calendar and contacts couldn't be read: changes to them won't be saved	無法讀取行事曆和連絡人：對它們的變更不會儲存
 	Your rules couldn't be read: changes to them won't be saved	無法讀取你的規則：對它們的變更不會儲存
 	Snoozed mail couldn't be read: changes to it won't be saved	無法讀取已延後提醒的郵件：對它們的變更不會儲存
+	{name}: {messages} messages imported, but the last of it could not be saved: {error}	{name}: 已匯入 {messages} 封郵件，但最後一部分無法儲存：{error}
+	{name}: {messages} messages imported, but the last of it could not be saved: {error}. Import the file again to keep it.	{name}: 已匯入 {messages} 封郵件，但最後一部分無法儲存：{error}。若要保留，請重新匯入該檔案。
