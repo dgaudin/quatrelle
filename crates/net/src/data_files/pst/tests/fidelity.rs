@@ -45,3 +45,50 @@ fn categories_come_in_as_keywords() {
     let (s, _) = import_one("categories", &[categories]);
     assert_eq!(s.flags.keywords, ["work", "to_do"]);
 }
+
+/// A FILETIME (100 ns since 1601) for Unix seconds.
+fn filetime(unix: i64) -> i64 {
+    (unix + 11_644_473_600) * 10_000_000
+}
+
+/// A follow-up Outlook marked complete (`PidTagFlagStatus` 1) comes in complete, with the time it
+/// was (`PidTagFlagCompleteTime`), as Exchange's does: not flagged, `$FollowUpComplete`.
+#[test]
+fn a_completed_follow_up_comes_in_complete_with_its_time() {
+    let done = 1_762_340_000;
+    let status = UnicodePstProperty::tagged(0x1090, UnicodePstValue::Integer32(1));
+    let at = UnicodePstProperty::tagged(0x1091, UnicodePstValue::Time(filetime(done)));
+    let (s, _) = import_one("complete", &[status, at]);
+    assert!(s.flags.follow_up_complete() && !s.flags.flagged, "{:?}", s.flags);
+    assert_eq!(s.flags.completed, done);
+    // Without its time, complete all the same; a time before 1970 is none.
+    let (s, _) = import_one("complete-no-time", &[status]);
+    assert!(s.flags.follow_up_complete() && s.flags.completed == 0, "{:?}", s.flags);
+    let early = UnicodePstProperty::tagged(0x1091, UnicodePstValue::Time(filetime(-86_400)));
+    let (s, _) = import_one("complete-early", &[status, early]);
+    assert!(s.flags.follow_up_complete() && s.flags.completed == 0, "{:?}", s.flags);
+    // Flagged (2): flagged, no time kept; a time with no complete state is none.
+    let (s, _) = import_one("flagged", &[UnicodePstProperty::tagged(0x1090, UnicodePstValue::Integer32(2)), at]);
+    assert!(s.flags.flagged && !s.flags.follow_up_complete() && s.flags.completed == 0, "{:?}", s.flags);
+}
+
+/// What Outlook did last with a message (`PidTagLastVerbExecuted`: 102 replied, 103 replied to
+/// all, 104 forwarded) and when (`PidTagLastVerbExecutionTime`) come in as its arrow and its time,
+/// as Exchange's do; another verb (a vote) is neither, and MAPI's "none" (4501) is no time.
+#[test]
+fn the_last_reply_or_forward_comes_in_with_its_time() {
+    let when = 1_762_340_000;
+    let at = UnicodePstProperty::tagged(0x1082, UnicodePstValue::Time(filetime(when)));
+    let verb = |n| UnicodePstProperty::tagged(0x1081, UnicodePstValue::Integer32(n));
+    for (name, n, answered, forwarded) in [("reply", 102, true, false), ("reply-all", 103, true, false), ("forward", 104, false, true)] {
+        let (s, _) = import_one(name, &[verb(n), at]);
+        assert_eq!((s.flags.answered, s.flags.forwarded, s.flags.acted), (answered, forwarded, when), "{name}");
+    }
+    let (s, _) = import_one("vote", &[verb(261), at]);
+    assert_eq!((s.flags.answered, s.flags.forwarded, s.flags.acted), (false, false, 0));
+    let none = quatrelle_model::dates::days_from_civil(4501, 1, 1) * 86_400;
+    let (s, _) = import_one("reply-none", &[verb(102), UnicodePstProperty::tagged(0x1082, UnicodePstValue::Time(filetime(none)))]);
+    assert_eq!((s.flags.answered, s.flags.acted), (true, 0));
+    let (s, _) = import_one("reply-no-time", &[verb(102)]);
+    assert_eq!((s.flags.answered, s.flags.acted), (true, 0));
+}

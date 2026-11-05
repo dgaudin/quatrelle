@@ -194,8 +194,25 @@ pub(super) fn item_of<'a>(
     };
     let replied = verb == 0x0066 || verb == 0x0067;
     let forwarded = verb == 0x0068 || (verb == 0 && matches!(p(0x1080), Some(Val::Int(0x0106))));
+    // When it was done (PidTagLastVerbExecutionTime), as Exchange's is read: before 1970 or
+    // MAPI's "none" (4501) is none; kept only beside a reply or a forward.
+    let none = quatrelle_model::dates::days_from_civil(4501, 1, 1).saturating_mul(86_400);
+    let acted = p(0x1082).and_then(|v| v.time()).filter(|t| *t > 0 && *t < none && (replied || forwarded)).unwrap_or(0);
+    // Outlook's Mark Complete (PidTagFlagStatus 1, 2 being flagged), and when it was done
+    // (PidTagFlagCompleteTime): before 1970 is none.
+    let complete = matches!(p(0x1090), Some(Val::Int(1)));
+    let completed = p(0x1091).and_then(|v| v.time()).filter(|t| *t > 0 && complete).unwrap_or(0);
     // MSGFLAG_READ, MSGFLAG_UNSENT.
-    it.flags = Flags { seen: flags & 0x1 != 0, draft: flags & 0x8 != 0, flagged: follow_up, answered: replied, forwarded, ..Default::default() };
+    it.flags = Flags {
+        seen: flags & 0x1 != 0,
+        draft: flags & 0x8 != 0,
+        flagged: follow_up,
+        answered: replied,
+        forwarded,
+        completed,
+        acted,
+        ..Default::default()
+    };
     // Its categories, as the keywords Quatrelle keeps them as, the way Exchange's come in (a
     // name like `$Junk` is `cat_$junk`, never the system's own keyword).
     if let Some(Val::Texts(names)) = named.keywords().and_then(p) {
@@ -205,6 +222,11 @@ pub(super) fn item_of<'a>(
                 it.flags.keywords.push(k);
             }
         }
+    }
+    // A follow-up marked complete, as Exchange's comes in: beside the categories, not counted
+    // among them.
+    if complete && !it.flags.keywords.iter().any(|k| k.eq_ignore_ascii_case(quatrelle_model::FOLLOW_UP_COMPLETE)) {
+        it.flags.keywords.push(quatrelle_model::FOLLOW_UP_COMPLETE.to_string());
     }
     for row in recipients {
         let get = |id: u16| row(id).and_then(Val::into_text).unwrap_or_default();
