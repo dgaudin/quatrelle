@@ -509,3 +509,20 @@ fn a_folder_synced_again_and_again_is_queued_once() {
     assert_eq!(s.list.len(), 36);
     done(s);
 }
+
+/// Searching the whole mailbox from a folder read last in the account's order: its mail is
+/// read first, so what's on screen is found first.
+#[test]
+fn the_folder_on_view_is_read_first() {
+    let store = busy_store("busy-view-first", 12, 1000);
+    let mut s = open(&store);
+    s.open_view(View::Folder { account: "a1".into(), folder: folder_path(11) });
+    let v = s.run("search.run", &json!({"query": "needle", "scope": "mailbox", "index": SLICE})).unwrap();
+    assert_eq!(v["pending"], true);
+    assert!(!s.list.is_empty(), "the first slice finds some");
+    let folders: BTreeSet<&str> = s.list.iter().map(|m| m.key.folder.as_str()).collect();
+    assert_eq!(folders, BTreeSet::from([folder_path(11).as_str()]), "the first finds are the folder's on view");
+    assert!(drive(&mut s, "needle", 1000, |_, _| {}).is_some());
+    assert_eq!(listed(&s), needles(&s));
+    done(s);
+}
