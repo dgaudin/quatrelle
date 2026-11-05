@@ -156,54 +156,93 @@ fn visit(store: &dyn PstStore, folder: &dyn PstFolder, parent: Option<&str>, dep
     if depth >= MAX_DEPTH {
         return;
     }
-    let Some(table) = folder.hierarchy_table() else { return };
-    for row in table.rows_matrix() {
-        let opened = store.properties().make_entry_id(NodeId::from(u32::from(row.id()))).and_then(|e| store.open_folder(&e));
-        let sub = match opened {
-            Ok(f) => f,
-            Err(e) => {
-                log::info!("a folder could not be read: {e}");
-                continue;
-            }
-        };
-        // Mail folders (no class means mail, in old files), contacts and calendars.
-        let class = sub.properties().get(0x3613).and_then(text_of).unwrap_or_default();
-        let mail = (class.is_empty() || class.starts_with("IPF.Note") || class.starts_with("IPF.Imap"))
-            // Outlook's RSS Feeds folder is its own bookkeeping, not mail.
-            && !class.starts_with("IPF.Note.OutlookHomepage");
-        // Outlook's own Outbox, when it has nothing waiting (Quatrelle has an Outbox of its own).
-        let empty = sub.contents_table().is_none_or(|t| t.rows_matrix().next().is_none());
-        if empty && special_folder(store, 0x35E2) == Some(u32::from(row.id())) {
-            continue;
+    // The reader may panic on a damaged table (it runs behind `catch_unwind` in `import`, which
+    // stopped the whole import there): here a panic costs one folder, and the import goes on.
+    let listed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        folder.hierarchy_table().map(|t| t.rows_matrix().map(|row| u32::from(row.id())).collect::<Vec<_>>())
+    }));
+    let nodes = match listed {
+        Ok(nodes) => nodes.unwrap_or_default(),
+        Err(_) => {
+            log::warn!("a folder's subfolders could not be read: the reader failed on them");
+            out.skipped += 1;
+            return;
         }
-        if !mail {
-            if class.starts_with("IPF.Contact")
-                || class.starts_with("IPF.Appointment")
-                || class.starts_with("IPF.Task")
-                || class.starts_with("IPF.StickyNote")
-            {
-                read_items(store, &*sub, read, out);
-                visit(store, &*sub, parent, depth + 1, read, out);
+    };
+    for node in nodes {
+        let mut at = Visited::default();
+        let done = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| visit_one(store, node, parent, read, out, &mut at)));
+        if done.is_err() {
+            // What came in of it stays, in its folder's list; the folders under it are read.
+            log::warn!("a folder could not be read to its end: the reader failed on it");
+            out.skipped += 1;
+            if let Some(path) = &at.path {
+                out.save_folder(path);
             }
-            continue;
         }
-        let name = sub.properties().get(0x3001).and_then(text_of).unwrap_or_default();
-        let path = out.add_folder(parent, &name);
-        if let Some(contents) = sub.contents_table() {
-            for row in contents.rows_matrix() {
-                let item = store.properties().make_entry_id(NodeId::from(u32::from(row.id()))).and_then(|e| read(&e));
-                match item {
-                    Ok(i) => out.add_message(&path, i),
-                    Err(e) => {
-                        log::info!("a message could not be read: {e}");
-                        out.skipped += 1;
-                    }
+        if let Some(sub) = at.sub {
+            let under = if at.mail { at.path.as_deref() } else { parent };
+            visit(store, &*sub, under, depth + 1, read, out);
+        }
+    }
+}
+
+/// How far [`visit_one`] got with a folder, kept when the reader panics part-way.
+#[derive(Default)]
+struct Visited {
+    /// The folder, opened (its subfolders are read next), unless it's left out.
+    sub: Option<Rc<dyn PstFolder>>,
+    /// A mail folder: the subfolders go in it (others' go beside it).
+    mail: bool,
+    /// The folder made for it, once made.
+    path: Option<String>,
+}
+
+/// One folder of the file read in: its mail, or its contacts and calendar items.
+fn visit_one(store: &dyn PstStore, node: u32, parent: Option<&str>, read: &ReadItem<'_>, out: &mut Out<'_>, at: &mut Visited) {
+    let opened = store.properties().make_entry_id(NodeId::from(node)).and_then(|e| store.open_folder(&e));
+    let sub = match opened {
+        Ok(f) => f,
+        Err(e) => {
+            log::info!("a folder could not be read: {e}");
+            return;
+        }
+    };
+    // Mail folders (no class means mail, in old files), contacts and calendars.
+    let class = sub.properties().get(0x3613).and_then(text_of).unwrap_or_default();
+    let mail = (class.is_empty() || class.starts_with("IPF.Note") || class.starts_with("IPF.Imap"))
+        // Outlook's RSS Feeds folder is its own bookkeeping, not mail.
+        && !class.starts_with("IPF.Note.OutlookHomepage");
+    // Outlook's own Outbox, when it has nothing waiting (Quatrelle has an Outbox of its own).
+    let empty = sub.contents_table().is_none_or(|t| t.rows_matrix().next().is_none());
+    if empty && special_folder(store, 0x35E2) == Some(node) {
+        return;
+    }
+    if !mail {
+        if class.starts_with("IPF.Contact") || class.starts_with("IPF.Appointment") || class.starts_with("IPF.Task") || class.starts_with("IPF.StickyNote") {
+            at.sub = Some(sub.clone());
+            read_items(store, &*sub, read, out);
+        }
+        return;
+    }
+    let name = sub.properties().get(0x3001).and_then(text_of).unwrap_or_default();
+    let path = out.add_folder(parent, &name);
+    (at.sub, at.mail, at.path) = (Some(sub.clone()), true, Some(path.clone()));
+    if let Some(contents) = sub.contents_table() {
+        for row in contents.rows_matrix() {
+            #[cfg(test)]
+            tests::fault(&name);
+            let item = store.properties().make_entry_id(NodeId::from(u32::from(row.id()))).and_then(|e| read(&e));
+            match item {
+                Ok(i) => out.add_message(&path, i),
+                Err(e) => {
+                    log::info!("a message could not be read: {e}");
+                    out.skipped += 1;
                 }
             }
         }
-        out.save_folder(&path);
-        visit(store, &*sub, Some(&path), depth + 1, read, out);
     }
+    out.save_folder(&path);
 }
 
 /// The node of one of the store's special folders (`0x35E2`: the Outbox), from its entry id
@@ -741,45 +780,3 @@ impl Out<'_> {
 
 #[cfg(test)]
 mod tests;
-
-#[cfg(test)]
-mod real_files {
-    /// Import a real data file named by `QUATRELLE_PST` (counts only).
-    #[test]
-    #[ignore]
-    fn imports_the_file_in_quatrelle_pst() {
-        let Ok(path) = std::env::var("QUATRELLE_PST") else { return };
-        let dir = std::env::temp_dir().join(format!("quatrelle-real-pst-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        let store = quatrelle_store::Store::open(&dir).unwrap();
-        let t = std::time::Instant::now();
-        let r = super::import(std::path::Path::new(&path), &store, "r1", &mut |_| {});
-        match r {
-            Ok(done) => {
-                eprintln!(
-                    "messages {} contacts {} events {} skipped {} in {:?}",
-                    done.messages,
-                    done.contacts,
-                    done.events,
-                    done.skipped,
-                    t.elapsed()
-                );
-                let (mut parsed, mut html, mut files, mut dated) = (0, 0, 0, 0);
-                for f in &done.folders {
-                    eprintln!("  {:30} {:?} total {} unread {}", f.path, f.role, f.total, f.unread);
-                    for m in store.load_folder("r1", &f.path).unwrap().messages {
-                        dated += usize::from(m.date > 0);
-                        if let Some(p) = store.read_body(&m.key).and_then(|raw| quatrelle_mime::parse(&raw)) {
-                            parsed += 1;
-                            html += usize::from(p.had_html);
-                            files += p.attachments.len();
-                        }
-                    }
-                }
-                eprintln!("parsed {parsed} (html {html}, attachments {files}, dated {dated})");
-            }
-            Err(e) => eprintln!("FAILED: {e}"),
-        }
-        let _ = std::fs::remove_dir_all(dir);
-    }
-}
