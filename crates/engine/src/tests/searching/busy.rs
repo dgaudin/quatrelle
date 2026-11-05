@@ -543,3 +543,28 @@ fn sources_downloaded_ahead_are_searched_once_told() {
     assert_eq!(s.list.iter().map(|m| m.key.clone()).collect::<Vec<_>>(), [key]);
     done(s);
 }
+
+/// A mailbox a little bigger than the list cache, searched again and again: each search after
+/// the first reads from the disk only the lists that don't fit. Each list it read pushed out the
+/// one the next search wanted first, and every search read all of them again (11 of 12 here,
+/// all but the Inbox on screen).
+#[test]
+fn a_search_again_reads_only_the_lists_that_dont_fit() {
+    let (folders, per) = (12, 1200);
+    let store = busy_store("busy-lists", folders, per);
+    let mut s = open(&store);
+    // Room for ten folders of the twelve.
+    s.set_cache_limit(12_000);
+    for q in ["needle", "report", "needle"] {
+        let before = s.lists_read();
+        assert!(drive(&mut s, q, 1000, |_, _| {}).is_some(), "{q}: finished");
+        let read = s.lists_read() - before;
+        // The three that don't fit, read again where the answer goes over them (7 here); the
+        // ten that do stay.
+        if q == "needle" && before > 0 {
+            assert!(read <= 9, "{read} lists read again for a search of everything");
+        }
+    }
+    assert_eq!(listed(&s), needles(&s));
+    done(s);
+}

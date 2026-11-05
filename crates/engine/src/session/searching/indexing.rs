@@ -344,7 +344,7 @@ impl Session {
             // A slice of the folder at once (not the folder looked up again for each message);
             // a message is begun only while the call's time allows one more.
             let take = self.search_pace.left().min(SLICE_MAX);
-            let slice: Vec<Arc<Summary>> = self.folder_state(&a, &f).messages.iter().skip(ix.pos).take(take).cloned().collect();
+            let slice: Vec<Arc<Summary>> = self.scan_state(&a, &f).messages.iter().skip(ix.pos).take(take).cloned().collect();
             let Some(mut b) = ix.building.take() else { break };
             let (mut n, mut indexed) = (0, 0);
             for m in &slice {
@@ -362,7 +362,7 @@ impl Session {
             ix.pos += n;
             // Passing a message over costs a little of what reading one does.
             self.search_pace.spend(indexed + (n - indexed) / 64);
-            if ix.pos < self.folder_state(&a, &f).messages.len() {
+            if ix.pos < self.scan_state(&a, &f).messages.len() {
                 ix.building = Some(b);
                 continue;
             }
@@ -422,7 +422,7 @@ impl Session {
             .collect();
         let budget = self.search_pace.left().max(1);
         let came: Vec<Arc<Summary>> = self
-            .folder_state(&k.0, &k.1)
+            .scan_state(&k.0, &k.1)
             .messages
             .iter()
             .filter(|m| !have.contains(&(m.key.validity, m.key.uid)))
@@ -461,7 +461,7 @@ impl Session {
         if missing.is_empty() {
             return;
         }
-        let validity = self.folder_state(&k.0, &k.1).validity;
+        let validity = self.scan_state(&k.0, &k.1).validity;
         let Some(store) = self.store.as_ref() else { return };
         let cached: HashSet<u32> = store.cached_bodies(&k.0, &k.1, validity).into_iter().collect();
         for d in missing {

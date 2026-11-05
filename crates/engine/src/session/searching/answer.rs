@@ -367,7 +367,7 @@ impl Session {
     /// A message as its folder's list has it now, and where: looked at where it was first, else
     /// found by number (the folder's numbers made once a call).
     fn look_up(&mut self, lists: &mut Lists, key: &MessageKey, hint: usize) -> Option<(Arc<Summary>, usize)> {
-        let st = self.folder_state(&key.account, &key.folder);
+        let st = self.scan_state(&key.account, &key.folder);
         if let Some(m) = st.messages.get(hint).filter(|m| m.key == *key) {
             return Some((m.clone(), hint));
         }

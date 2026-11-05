@@ -212,3 +212,65 @@ fn arrive(store: &Store, n: u32, subject: &str) -> usize {
 fn s_folders(store: &Store) -> Vec<String> {
     store.load_folders(big::ACCOUNT).unwrap_or_default().into_iter().map(|f| f.path).collect()
 }
+
+/// A search over every folder, counting the folders' lists read from the cache on disk (not
+/// found in memory) at each call: the calls, the time in them, the worst call, the lists read
+/// in all and the most in a call.
+fn search_lists(s: &mut Session, q: &str) -> (usize, Duration, Duration, u64, u64) {
+    let call = |s: &mut Session, first: bool| {
+        let read = s.lists_read();
+        let t = Instant::now();
+        if first {
+            s.run_search_budgeted(q, SearchScope::All, SLICE);
+        } else {
+            s.search_more(SLICE);
+        }
+        (t.elapsed(), s.lists_read() - read)
+    };
+    let mut calls = vec![call(s, true)];
+    while s.search_pending && calls.len() < 1_000_000 {
+        calls.push(call(s, false));
+    }
+    let total = calls.iter().map(|c| c.0).sum();
+    let worst = calls.iter().map(|c| c.0).max().unwrap_or_default();
+    (calls.len(), total, worst, calls.iter().map(|c| c.1).sum(), calls.iter().map(|c| c.1).max().unwrap_or(0))
+}
+
+/// A search of everything in a mailbox bigger than the session's cache of folders' lists
+/// (`MC_MESSAGES`, 60,000 by default, in 40 folders): how many lists each call reads again from
+/// the disk, and what it costs, for the first search (the index built) and the ones after.
+///
+/// ```text
+/// cargo test -p quatrelle-engine --release --lib bench::search::lists_read_by_a_search_of_everything -- --ignored --nocapture
+/// ```
+#[test]
+#[ignore]
+fn lists_read_by_a_search_of_everything() {
+    let messages = std::env::var("MC_MESSAGES").ok().and_then(|v| v.parse().ok()).unwrap_or(60_000u32);
+    let dir = std::env::temp_dir().join(format!("mc-search-lists-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let store = Store::open_packed(dir.join("root"), dir.join("files")).unwrap();
+    let shape = big::Shape { messages, inbox: messages / 50 * 12, ..big::Shape::default() };
+    let truth = big::generate(&store, NOW, shape).unwrap();
+    drop(store);
+    let store = Store::open_packed(dir.join("root"), dir.join("files")).unwrap();
+    let mut s = window(&store);
+    let before = rss_mb();
+    println!("{} messages in {} folders; opened: process {before:.0} MB", truth.messages, shape.folders);
+    let accented = big::ACCENTED.to_lowercase().replace('ü', "u");
+    for (i, q) in [big::RARE, accented.as_str(), big::FAR, "is:read", big::RARE].into_iter().enumerate() {
+        let (calls, total, worst, lists, most) = search_lists(&mut s, q);
+        println!(
+            "{}{q}: {calls} calls, {:.2} s in them, worst {:.1} ms; {lists} lists read from the disk, at most {most} in a call; found {}",
+            if i == 0 { "first search (the index built), " } else { "then " },
+            total.as_secs_f64(),
+            worst.as_secs_f64() * 1000.0,
+            s.list.len()
+        );
+    }
+    let cached: usize = s.cached_folders().len();
+    println!("lists in memory: {cached} folders; process {:.0} MB (grew {:.0} MB)", rss_mb(), rss_mb() - before);
+    drop(s);
+    drop(store);
+    let _ = std::fs::remove_dir_all(&dir);
+}
