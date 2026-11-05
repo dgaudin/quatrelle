@@ -2789,6 +2789,134 @@ au fork) : `pst_pim.rs` (500 lignes) donne sa périodicité à `pst_pim/recur.rs
   - la réponse d'un invité ne vient que de `PidTagRecipientTrackStatus` ; une réponse reçue
     par courrier et non reportée sur le rendez-vous n'y est pas.
 
+### Hors relevé : R19, restes de fluidité (2026-11-05)
+
+Un lot propre au fork, en trois parties indépendantes, trois restes notés par les lots
+précédents et non faits (R10, R11b, R17). Pour chacune, la sonde d'abord, lancée contre le code
+d'alors ; aucune copie des données du propriétaire : l'exemple, des boîtes fabriquées
+(`sample/big.rs`) et des bancs ignorés en `--release`, sur ce poste.
+
+| Sonde (`--release`) | avant | après |
+|---|---|---|
+| Bas tenu, 200 messages d'1 Mo, compte local sur disque (`holding_down_frames_stay_under_16_ms`) : pire pas (moyenne) | 33,0 ms (27,0) | 0,9 ms (0,7) |
+| le même, compte local dans un fichier de données (variante ajoutée) | 13,5 ms (9,2) | 0,9 ms (0,7) |
+| marques écrites sur le fil de la fenêtre pendant ces 200 pas | 200 | 0 |
+| 1 000 modifications hors ligne, dossier de 50 000 (`store::tests::journal::a_burst_of_changes_made_offline`, fichier de données) : l'enregistrement de la synchro | 1 556 ms | 52 ms |
+| le même : une liste enregistrée pour quelques messages remplis | 1 503 ms | 15 ms |
+| le même : le fil du compte après la synchro (`reapply_waiting`) | **309 s** | 2,3 ms |
+| le même : la rafale faite dans le cache par l'écrivain | 167 s | 31 s |
+| le même : ajouter la 1 000ᵉ modification | 4,8 ms (110 Ko réécrits) | 4,3 ms (la sienne seule) |
+| recherche dans toute la boîte, 60 000 messages en 40 dossiers, cache de 50 000 (`bench::search::lists_read_by_a_search_of_everything`) : listes relues sur le disque, une recherche après la première | 39 (40 appels, 0,16 s) | 10 (11 appels, 0,05 s) |
+| le même, `is:read` | 78 (82 appels, 0,53 s) | 20 (26 appels, 0,23 s) |
+| le même, mémoire du processus | 200 Mo | 198 Mo |
+
+**Première partie : la marque de lu d'un compte local hors du fil de la fenêtre** (`9d22cf68`,
+`3392fb49`). Sur un compte local ou un fichier de données, une marque écrivait la liste (ou les
+marques) puis `folders.json` sur le fil de la fenêtre : deux commits par pas.
+
+- **Une seule écriture** (`9d22cf68`, idée de upstream `7ab836b` : son `save_marks`, sans sa
+  machinerie ; `d3980fdb`, `ef46a988`, `3957819c`, `05d3944d` restent laissés) :
+  `Store::apply_marks` fait la marque comme `apply_op` (la page du message seule dans un gros
+  dossier) et écrit `folders.json`, quand ses comptes diffèrent, dans la même transaction
+  (`save_list` et `mark_in_pages` prennent des fichiers en plus). Pas de journal : un compte local
+  n'a pas de serveur.
+- **Hors du fil de la fenêtre** (`3392fb49`) : la session met la marque en file avec les comptes
+  des dossiers touchés, pris dans les listes en mémoire, qui ont déjà la marque
+  (`session/changing/marks.rs`) ; les comptes en mémoire sont posés tout de suite. Là où la
+  fenêtre a un fil pour cela (`defer_local_marks`, l'application de bureau), un `MarkWork` les
+  écrit dans l'ordre sur une nouvelle voie, `Lane::Writing` (fil `mail-writing`), une par
+  transaction. Choisi plutôt que l'écrivain du pool : la session doit pouvoir **attendre** ces
+  écritures avant les siennes, ce qu'elle ne peut pas avec le pool. Toute autre commande, une
+  liste lue du cache pour un compte local, un autre changement local, le recompte, un brouillon
+  classé, l'enregistrement des dossiers après un import et ceux de Sync Issues finissent d'abord
+  les marques en attente (en attendant celle en cours d'écriture : un verrou tenu pendant chaque
+  écriture). Seuls se déplacer dans la liste et marquer ne les attendent pas. En quittant
+  (`on_exit`) et quand la session se termine, ce qui attend est écrit. La ligne de commande,
+  `--cmd` et les tests écrivent tout de suite, comme avant ; sans voie (le navigateur), la
+  fenêtre l'écrit elle-même.
+- **Gardé de R10** : le compte de non-lus d'un dossier local réécrit après une marque
+  (`6cd3746b`) ; le test de R10 passe, et le compte est maintenant écrit avec la marque.
+- Tests : `local_marks_are_written_on_their_thread_in_order` (rien d'écrit sur le fil de la
+  session, le travail écrit les deux marques et le compte, une suppression attend la marque en
+  route, une session qui finit écrit ce qui attend, rouverte elle a les comptes) ;
+  `a_local_mark_writes_the_list_and_the_counts_alone`. Le banc tient maintenant l'objectif de
+  16 ms pour les comptes locaux aussi, et vérifie que le cache a toutes les marques à la fin.
+
+**Deuxième partie : `pending_edits` en une passe, le journal par modification** (`4a7be2de`,
+`f1710d90`).
+
+- **Une passe** : `reapply` (`store/src/folders.rs`) fait une table numéro → effets, dans l'ordre
+  des modifications (chaque numéro une fois par modification), puis parcourt la liste une fois ;
+  seuls les messages changés sont copiés (le reste emprunté). Le proptest
+  `one_pass_makes_the_edits_as_one_at_a_time` (200 cas : drapeaux, catégories, déplacements,
+  suppressions, clés d'un autre dossier ou d'une autre numérotation, clés en double) la tient
+  égale à l'ancienne, une modification à la fois, liste et numéros changés compris.
+- **Trouvé en route** : `Store::apply_op` relisait la liste puis l'enregistrait en rejouant tout
+  le journal, alors que la liste lue l'a déjà (le raisonnement de R10 pour les marques, étendu aux
+  déplacements et suppressions) : chaque déplacement fait hors ligne refaisait tous ceux d'avant
+  sur toute la liste (la rafale : 167 → 31 s sur le fil de l'écrivain). Et `reapply_waiting`
+  (après chaque synchro de dossier, sur le fil du compte) refaisait chaque modification en
+  attente par `apply_op`, liste lue et écrite pour chaque déplacement : cinq minutes après une
+  rafale de 1 000. Toute sauvegarde d'une synchro les refait déjà (`save_folder` et
+  `save_folder_changed` passent tous par `save_list`, vérifié) ; il ne fait plus que dire s'il en
+  attend, et vider un dossier encore à vider (ce que la sauvegarde ne refait pas).
+- **Le journal** (`store/src/journal.rs`, déplacé de `bodies.rs`) : `ops/<numéro>.json`, une
+  modification par fichier (une clé dans le fichier de données, chaque ajout un commit scellé),
+  numérotées dans l'ordre ; `add_op` écrit la sienne seule ; `first_op` lit la plus ancienne seule
+  (la boucle d'envoi au serveur relisait toute la file pour chacune). **Un `ops.json` d'avant** est
+  lu d'abord, comme la tête de la file, et se vide à mesure que ses modifications partent : rien
+  n'est recopié, donc rien n'est jamais deux fois ; s'il ne peut être lu, `remove_op` s'arrête
+  (sans l'écraser), alors qu'`add_op` n'a plus rien à relire. Une modification abîmée est mise de
+  côté seule. L'import d'un fichier de données laisse aussi `ops/` derrière lui. Tests :
+  `the_journal_keeps_a_file_a_change_in_order` (la 1 000ᵉ écrit moins d'1 Kio, seule),
+  `an_ops_json_from_before_is_read_first_and_empties` ; le test du cache défaillant est adapté.
+
+**Troisième partie : la recherche dans toute la boîte ne relit plus toutes les listes**
+(`596cd67d`). **La cause exacte** : le cache des listes de la session laisse partir la moins
+récemment servie (LRU). La réponse d'une recherche parcourt les dossiers toujours dans le même
+ordre ; dès que leurs listes dépassent un peu les 50 000 résumés, chaque liste lue chasse celle
+dont la recherche suivante aura besoin en premier, et chaque recherche relit **toutes** les listes
+(39 sur 40 à 60 000 messages ; 11 sur 12 dans le test, tout sauf la Boîte de réception à l'écran),
+une ou deux par appel. Ce n'était pas un artefact du banc de R17 : c'est ce qui arrive à toute
+boîte un peu plus grosse que le cache.
+
+- **Corrigé** sans toucher à la limite : la recherche et son index lisent les listes par
+  `scan_state` ; une liste lue du disque pour elle entre en tête de l'ordre de départ (elle part
+  la première), et une liste trouvée en mémoire ne bouge pas (déplacée en fin, les dossiers que la
+  recherche n'avait pas encore vus passaient devant et partaient : premier essai, 39 → 39). Les
+  listes gardées restent, seules celles qui ne tiennent pas sont relues. Mémoire inchangée (la
+  limite est la même ; 200 → 198 Mo dans le banc). `Session::lists_read` compte les listes lues ;
+  le test `a_search_again_reads_only_the_lists_that_dont_fit` (cache de 12 000 pour 14 400) passe
+  de 11 à 7 (les trois dossiers qui ne tiennent pas, relus à chacun des passages de la réponse).
+- **Ce que cela ne fait pas** : à 150 000 messages (trois fois le cache, la Boîte de réception à
+  l'écran en tenant 36 000), une recherche relit encore 36 listes sur 40 : au-delà de la cause, la
+  taille du cache limite. Chez le propriétaire (550 000), la plupart des listes restent relues à
+  chaque recherche dans toute la boîte ; le gain est d'environ un dossier sur dix.
+
+- **Ce que verra le propriétaire** : tenir Bas dans un compte local ou un `.pst` importé est aussi
+  fluide que sur Exchange (moins d'1 ms par pas au lieu de 10 à 33) ; la marque arrive dans le
+  fichier un instant après, et rien n'est perdu en fermant. Après une période hors ligne (ou des
+  marques faites pendant une longue synchro), le retour en ligne ne fige plus le fil du compte des
+  minutes sur un gros dossier, et chaque dossier synchronisé s'enregistre en dizaines de
+  millisecondes au lieu de secondes. Le premier lancement garde son `ops.json` s'il en a un, qui se
+  vide normalement. Une recherche dans toute la boîte relit un peu moins de listes, sans plus de
+  mémoire.
+- **Vérifié** : chaque sonde avant et après ; les suites de `quatrelle-store`, `quatrelle-engine`,
+  `quatrelle-net`, `quatrelle-jmap` et `quatrelle-ui-egui` ; `cargo xtask ci` (wasm compris).
+- **Reste, remarqué** :
+  - la rafale hors ligne coûte encore 31 s à l'écrivain : chaque déplacement ou suppression d'un
+    message lit et écrit toute la liste de 50 000 (pas de marque légère pour un retrait, comme il y
+    en a une pour un drapeau) ;
+  - ajouter une modification reste un commit (4 ms) : c'est le scellement voulu ;
+  - chez le propriétaire, la recherche dans toute la boîte relit encore la plupart des listes ; lire
+    seulement les pages où sont les candidats (comme une marque ne lit que la page de son message)
+    réduirait ce qui est lu et le pire appel (une liste de 50 000 lue d'un tenant, 100 ms et plus),
+    non fait ;
+  - dans un même passage de la recherche, les dossiers qui ne tiennent pas se chassent entre eux
+    (une seule place pour eux) : relus à chaque passage de la réponse ;
+  - une marque locale sur un dossier qui n'est pas en mémoire s'écrit toujours sur le fil de la
+    fenêtre (cas rare : on marque ce qu'on voit).
+
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
 Quatre chantiers, chacun dans son commit, à la suite d'un audit de l'éditeur HTML.
