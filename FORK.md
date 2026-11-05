@@ -2971,6 +2971,92 @@ quatre lots dans l'ordre ; cette partie se complète à chacun.
   plus `MAX`, mais la copie d'un tampon qui double peut tenir un instant 32 + 64 Mio ; la sauvegarde
   n'a été lue que par GnuPG 2.4.5, pas par un GnuPG 2.2.
 
+### Hors relevé : R20, rechercher dans le message (2026-11-06)
+
+Demandé par le propriétaire le 5 novembre, sa conception validée par lui ; propre au fork. Une
+barre en bas du volet de lecture (et de la fenêtre d'un message ouvert à part), comme dans un
+navigateur : on cherche des mots **dans le message lu**, pas dans la boîte. Les essais d'abord,
+sur des messages fabriqués ; aucune donnée du propriétaire.
+
+| Commit | Ce qu'il fait |
+|---|---|
+| `a6576973` | `reading.rs` (799 lignes) découpé d'abord, pur déplacement : le décodage des images dans `reading/pictures/decode.rs` (682 lignes restent) |
+| `0aa3b663` | `fold_mapped` dans `model/src/search/fold.rs` : le pliage de R14, octet pour octet celui de `fold_word` (proptest), chaque octet plié pointant sur la lettre d'où il vient |
+| `2856d846` | la barre, ses touches, la recherche dans le texte affiché, le surlignage et le défilement ; 7 essais sans tête |
+
+- **Ouvrir** : la touche **`/`** dans le volet de lecture ou la fenêtre d'un message, quand on ne
+  tape pas dans une zone (la zone de recherche, un brouillon, une réponse dans le volet : le `/` y
+  est tapé) ; le texte d'un message en texte brut, qui se sélectionne comme une zone sans pouvoir
+  s'y taper, n'en est pas une (`find::read_only`). Aussi **⋯ › Rechercher dans le message**
+  (icône Fluent `search`, déjà là). **Ctrl+F reste Transférer.** La fenêtre d'un message n'a pas
+  de ⋯ (son ruban a ses boutons) : `/` seulement.
+- **La barre** (`reading/find.rs`, un `Panel::bottom` sous le corps) : la zone de saisie, qui prend
+  le clavier à l'ouverture, ses mots sélectionnés quand on la rouvre ; le compte (« 3 sur 12 »,
+  « Aucun résultat » en rouge, « 3 sur 10 000 ou plus » au plafond) ; ▲ et ▼ ; la croix. Entrée et
+  Maj+Entrée vont au suivant et au précédent en gardant le clavier dans la zone ; F3 et Maj+F3
+  aussi, hors de la zone, tant que la barre est montrée ; Échap la ferme : dans la fenêtre
+  principale par `app/keys.rs`, avant d'effacer la recherche (pas depuis la zone de recherche),
+  et dans la fenêtre d'un message avant de fermer la fenêtre. Ses mots sont gardés pour la fois
+  suivante.
+- **La recherche** (`reading/find/doc.rs`) : sur le texte déjà préparé pour le volet, jamais la
+  source. Le texte brut tel qu'il est, ou, pour un message mis en forme, ses morceaux de texte
+  dans l'ordre où `Body` les dessine (lignes, tableaux du lot 3 ligne par ligne, cellules, boîtes
+  posées dessus, à la même profondeur), un saut de ligne après chaque ligne ; ni les lignes
+  horizontales, ni les images, ni l'en-tête, ni les noms des pièces jointes, ni la conversation
+  repliée ou la carte d'une invitation. Plié une fois par message (`fold_mapped`), puis chaque
+  frappe cherche la requête pliée par `fold_word` : majuscules et accents ignorés, « equipe »
+  trouve « Équipe » et « l'équipe » (et « l’équipe »). Un résultat dans le pli est ramené au texte
+  écrit, accents écrits à part compris ; deux résultats dans une même lettre (« s » dans « ß »)
+  n'en font qu'un. **Plafond : 10 000 résultats comptés.** Hors du champ, comme convenu :
+  remplacer, expressions régulières, mot entier.
+- **L'affichage** (`reading/find/marks.rs`) : les sections des `LayoutJob` coupées aux résultats,
+  sur un ambre pâle, le courant sur un ambre vif dans le texte du thème (en sombre : ambre sombre,
+  et le courant en ambre clair, texte foncé) ; dans le texte brut (sa zone et ses morceaux), les
+  morceaux de texte du HTML (liens compris) et les lignes de droite à gauche du HTML. Le courant
+  est amené au milieu du volet quand il n'est pas visible : sa place mesurée après le dessin, le
+  défilement posé à l'image suivante (`ScrollArea::vertical_scroll_offset`), et suivi six images,
+  le temps que les hauteurs d'un long message se mesurent. Pas `scroll_to_rect` : la
+  `ScrollArea` horizontale d'un tableau large l'avale. Dans un long message (R11b), la partie du
+  courant est mise en page quelle que soit la vue (`parts(…, target)`).
+- **Un autre message** (Bas, un clic) : la barre reste ouverte avec ses mots, recompte et va au
+  premier résultat de celui-ci. Une pièce jointe montrée à la place du texte cache la barre sans
+  la fermer.
+- **Pas de commande du moteur** : ce qui est cherché est ce que la fenêtre met en page, et l'état
+  de la barre est de l'affichage, comme la recherche du calendrier ; la fenêtre la commande comme
+  Ctrl+E la zone de recherche (`app/keys.rs`). Pour la démarrer : `--cmd ui.find`
+  (`={"query":…}` au choix), comme `ui.calendarSearch`.
+- **Essais** (`ui-egui/src/tests/reading/find.rs`) : `/` ouvre et donne le clavier, sans taper le
+  `/` ; tapé dans la zone de recherche ou une réponse dans le volet, il y reste ; depuis le texte
+  d'un message cliqué, il ouvre (sonde : sans `read_only`, échoue) ; « equipe » dans « Équipe » et
+  « l'équipe » : « 1 of 2 », Entrée « 2 of 2 », Maj+Entrée « 1 of 2 », F3 et Maj+F3 hors de la
+  zone, Échap, « No match » ; un message de plus de 300 000 caractères, le mot à la fin : son
+  morceau mis en page et à l'écran (sonde : sans le défilement, échoue) ; un mot dans une cellule
+  d'un tableau HTML, trouvé et surligné ; le passage à un autre message par un clic et par Bas
+  garde la barre et recompte ; la mesure ; les rendus clair et sombre (`QUATRELLE_FRAME_PNG`). Le
+  peintre de la seizième partie prend aussi des événements (`frame_with`). Le modèle : le pli et
+  sa correspondance, et un proptest.
+- **Mesuré** (`--release`, 300 000 caractères) : le pli du message 1,26 ms, deux recherches
+  (un mot, puis « e » jusqu'au plafond) 0,25 ms ; le test vérifie moins de 16 ms chacun en
+  `--release`.
+- **Vu sur les rendus** (`~/.tq/r20-shots/`, hors du dépôt) : la barre sous le message, sur le
+  fond des barres, la zone encadrée de la couleur de l'application quand elle a le clavier, le
+  compte en gris à sa droite, ▲ ▼, la croix au bout ; en clair, le courant en orange et les
+  autres en jaune pâle ; en sombre, le courant ambre clair au texte foncé et les autres ambre
+  sombre au texte clair ; le mot d'une cellule de tableau surligné dans sa cellule.
+- **Vérifié** : les suites de `quatrelle-model` et de `quatrelle-ui-egui` ; `cargo xtask ci`
+  (wasm compris).
+- **Reste, remarqué** :
+  - un court message en texte brut écrit de droite à gauche (ses propres étiquettes) est compté
+    mais ni surligné ni suivi ;
+  - un résultat dans un tableau plus large que le volet n'est pas amené de côté ;
+  - dans un long paragraphe mis en forme, la place du courant est estimée (sa part du texte du
+    morceau), pas mesurée : il peut arriver un peu au-dessus ou au-dessous du milieu ;
+  - dans le navigateur, où les fenêtres sont dans la page, `/` vaut pour le volet et la fenêtre ;
+  - trouvé en route : le test de ⋯ › Afficher › Afficher la source prenait le premier « View »
+    venu, et l'onglet du ruban passait devant celui du menu une fois le menu allongé : il prend
+    celui du menu ; et `a6576973` laissait un avertissement (`color_image` réexporté pour les
+    seuls essais), corrigé dans le commit suivant.
+
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
 Quatre chantiers, chacun dans son commit, à la suite d'un audit de l'éditeur HTML.
