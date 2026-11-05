@@ -4962,6 +4962,7 @@ dependencies = [
  "md-5",
  "md4",
  "outlook-pst-rw",
+ "proptest",
  "quatrelle-jmap",
  "quatrelle-keys",
  "quatrelle-mime",

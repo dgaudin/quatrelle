@@ -43,6 +43,7 @@ mod inline_names;
 mod kept_cid;
 mod one_parse;
 mod report;
+mod report_status;
 mod text_attach;
 
 /// Issue #1: a signature copied from Outlook (Word's HTML on the clipboard, only the copied
