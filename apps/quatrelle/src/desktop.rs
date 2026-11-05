@@ -23,6 +23,7 @@ pub(crate) mod file_dialogs;
 pub(crate) mod keychain;
 mod lanes;
 pub(crate) mod profiles;
+pub(crate) mod start;
 pub(crate) mod state_writer;
 pub(crate) mod tray;
 
