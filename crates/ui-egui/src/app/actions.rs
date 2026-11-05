@@ -213,6 +213,7 @@ impl MailApp {
             Action::Dialog(d) => self.ui.dialog = Some(d),
             Action::Refuse(why) => self.session.notice(why, true),
             Action::FocusSearch => self.ui.focus_search = true,
+            Action::FindInMessage => self.ui.find.pane.open(),
             Action::NewNote => match self.session.run("note.create", &json!({})) {
                 Ok(v) => {
                     if let Some(uid) = v.get("uid").and_then(Value::as_str) {

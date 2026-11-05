@@ -180,6 +180,8 @@ pub enum Action {
     /// Attach Item, open on a kind of item.
     AttachItem(quatrelle_engine::ItemKind),
     FocusSearch,
+    /// Open the reading pane's find bar (More actions › Find in message).
+    FindInMessage,
     /// Make a note and write on it.
     NewNote,
     /// Show a task in Tasks (from its reminder).
@@ -403,6 +405,7 @@ impl MailApp {
                 videos: reading::Videos::default(),
                 bodies: reading::Bodies::default(),
                 long_text: HashMap::new(),
+                find: reading::Finds::default(),
                 backstage: None,
                 mini_month: None,
                 cal_scrolled: [false; 2],

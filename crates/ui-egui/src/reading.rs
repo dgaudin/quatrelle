@@ -21,6 +21,7 @@ mod bodies;
 mod body;
 pub(crate) mod check_names;
 mod compose;
+mod find;
 mod header;
 mod long_text;
 mod people;
@@ -43,11 +44,16 @@ pub(crate) use compose::picture_alone;
 #[cfg(test)]
 pub(crate) use compose::send_block_lines;
 pub(crate) use compose::send_block_text;
+pub(crate) use find::Finds;
+#[cfg(test)]
+pub(crate) use find::{Doc as FindDoc, MOST as FIND_MOST, field_id as find_field_id, fills as find_fills};
 pub(crate) use long_text::LongText;
 #[cfg(test)]
 pub(crate) use long_text::{CHUNK, chunks};
+#[cfg(test)]
+pub(crate) use pictures::color_image;
 use pictures::*;
-pub(crate) use pictures::{Got, Pictures, Want, color_image, decode_pixels, decode_round, png_of};
+pub(crate) use pictures::{Got, Pictures, Want, decode_pixels, decode_round, png_of};
 pub(crate) use sender_check::{external_tag, sender_warning};
 pub(crate) use videos::Videos;
 
@@ -65,7 +71,20 @@ pub fn html_preview(s: &Session, st: &mut UiState, ui: &mut Ui, html: &str, pict
     let mut acts: Vec<Action> = Vec::new();
     let width = ui.available_width();
     let faces = crate::look::typefaces::loaded(ui.ctx());
-    let mut body = Body { s, key: &key, p: &p, allowed: false, shown: &mut shown, acts: &mut acts, faces, zoom: 1.0, inline: pictures, cells: 0 };
+    let mut body = Body {
+        s,
+        key: &key,
+        p: &p,
+        allowed: false,
+        shown: &mut shown,
+        acts: &mut acts,
+        faces,
+        zoom: 1.0,
+        inline: pictures,
+        cells: 0,
+        find: None,
+        hit: None,
+    };
     if p.layout.is_empty() {
         body.lines(st, ui, &p.rich, width, theme::surface_rgb(&t), Align::Min);
     } else {
@@ -229,10 +248,24 @@ fn message(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action
             header::actions(s, t, ui, &r, p, in_window, placed, acts);
         });
     }
+    // The find bar, at the bottom, while the message's text is shown.
+    let locked = r.security.as_ref().is_some_and(security::still_locked);
+    let can = viewing.is_none() && st.dialog.is_none() && r.parsed.is_some() && !locked;
+    find::keys(st, ui, in_window, &r.key, can);
+    let formatted = r.parsed.as_ref().is_some_and(|p| s.prefs.show_html && !p.rich.is_empty());
+    let (lit, offset) = match r.parsed.as_ref().filter(|_| can) {
+        Some(p) => find::bar(st, ui, in_window, &r.key, p, formatted),
+        None => (None, None),
+    };
+    let mut hit: Option<Rect> = None;
     let top = ui.cursor().top();
     // Zoomed in, a picture can be wider than the pane: it scrolls sideways (the text still wraps).
     let zoomed = s.prefs.reading_scale() > 1.0;
-    let scrolled = egui::ScrollArea::new([zoomed, true]).auto_shrink(false).id_salt(("reading", in_window, r.key.to_id(), viewing)).show(ui, |ui| {
+    let mut area = egui::ScrollArea::new([zoomed, true]).auto_shrink(false).id_salt(("reading", in_window, r.key.to_id(), viewing));
+    if let Some(y) = offset {
+        area = area.vertical_scroll_offset(y);
+    }
+    let scrolled = area.show(ui, |ui| {
         egui::Frame::new().inner_margin(Margin { left: 24, right: 24, top: if headed { 8 } else { 18 }, bottom: 24 }).show(ui, |ui| {
             let Some(p) = &r.parsed else {
                 if r.error.is_none() && s.body_waiting(&r.key) {
@@ -376,21 +409,24 @@ fn message(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action
             if han_missing(ui, &p.text) {
                 st.han_missing = true;
             }
-            if s.prefs.show_html && !p.rich.is_empty() {
-                rich_body(s, st, ui, &r.key, p, acts);
+            if formatted {
+                hit = rich_body(s, st, ui, &r.key, p, lit.clone(), acts);
             } else if p.text.len() > long_text::LONG {
                 // Laid out by what's in view: whole, a long one took a frame of its own to lay out.
-                long_text::plain(st, ui, &r.key, &p.text, acts);
+                hit = long_text::plain(st, ui, &r.key, &p.text, lit.as_ref(), acts);
             } else if crate::bidi::has_rtl(&p.text) {
                 // Right-to-left text, against the right edge where it starts; selected with the
                 // pointer as it reads, and right-click copies it as written too.
                 let r = crate::bidi::selectable_label(ui, &p.text, theme::regular(14.5), t.text);
                 rtl_copy_menu(&r, None, &p.text);
             } else {
-                plain::plain_body(&t, ui, &p.text, acts);
+                hit = plain::plain_body(&t, ui, &p.text, lit.as_ref(), acts);
             }
         });
     });
+    if can {
+        find::after_body(st, in_window, &r.key, hit, &scrolled);
+    }
     // Ctrl+wheel (or a pinch) over the message zooms it, as Outlook's.
     if r.parsed.is_some()
         && viewing.is_none()

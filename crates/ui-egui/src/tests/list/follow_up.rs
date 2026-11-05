@@ -14,7 +14,7 @@ use super::*;
 /// The textures a frame's triangles are painted with, kept from frame to frame as a renderer
 /// keeps them (the font's comes once, in the first frame).
 #[derive(Default)]
-pub(super) struct Textures(HashMap<TextureId, ([usize; 2], Vec<egui::Color32>)>);
+pub(in crate::tests) struct Textures(HashMap<TextureId, ([usize; 2], Vec<egui::Color32>)>);
 
 impl Textures {
     fn take(&mut self, delta: &egui::TexturesDelta) {
@@ -94,13 +94,30 @@ fn paint(prims: &[ClippedPrimitive], tex: &Textures, w: usize, h: usize) -> Vec<
 
 /// A frame, its textures kept; with `png`, painted into that picture.
 pub(super) fn frame_kept(ctx: &egui::Context, a: &mut MailApp, tex: &mut Textures, png: Option<std::path::PathBuf>) -> Vec<String> {
+    frame_with(ctx, a, tex, vec![], png).0
+}
+
+/// A frame with `events`, its textures kept; with `png`, painted into that picture. What it said
+/// (its accessible labels and values), and the shapes it drew.
+pub(in crate::tests) fn frame_with(
+    ctx: &egui::Context,
+    a: &mut MailApp,
+    tex: &mut Textures,
+    events: Vec<Event>,
+    png: Option<std::path::PathBuf>,
+) -> (Vec<String>, Vec<egui::Shape>) {
     let (w, h) = (1280usize, 800usize);
-    let input = RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(w as f32, h as f32))), ..Default::default() };
+    let input =
+        RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(w as f32, h as f32))), events, ..Default::default() };
     let mut out = ctx.run_ui(input, |ui| a.ui(ui));
     tex.take(&out.textures_delta);
     // Taken: freed ones are let go after painting.
     let freed: Vec<TextureId> = out.textures_delta.free.iter().copied().collect();
     out.textures_delta.clear();
+    let mut shapes = Vec::new();
+    for s in &out.shapes {
+        flat(s.shape.clone(), &mut shapes);
+    }
     if let Some(path) = png {
         let prims = ctx.tessellate(out.shapes, 1.0);
         let rgba = paint(&prims, tex, w, h);
@@ -112,7 +129,15 @@ pub(super) fn frame_kept(ctx: &egui::Context, a: &mut MailApp, tex: &mut Texture
         tex.0.remove(&id);
     }
     let nodes = out.platform_output.accesskit_update.map(|u| u.nodes).unwrap_or_default();
-    nodes.iter().filter_map(|(_, n)| n.label().or(n.value()).map(str::to_string)).collect()
+    (nodes.iter().filter_map(|(_, n)| n.label().or(n.value()).map(str::to_string)).collect(), shapes)
+}
+
+/// A shape, its groups taken apart.
+fn flat(s: egui::Shape, out: &mut Vec<egui::Shape>) {
+    match s {
+        egui::Shape::Vec(v) => v.into_iter().for_each(|s| flat(s, out)),
+        s => out.push(s),
+    }
 }
 
 /// A follow-up marked complete shows as done: the list row says so (and draws its tick where the

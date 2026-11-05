@@ -135,8 +135,9 @@ fn put_back(st: &mut UiState, id: egui::Id, v: LongText) {
 }
 
 /// A long plain text (`LONG`) of the message `key`, in chunks: its addresses links, as
-/// [`plain::plain_body`] shows them; right-to-left text keeps its own labels.
-pub(super) fn plain(st: &mut UiState, ui: &mut Ui, key: &MessageKey, text: &str, acts: &mut Vec<Action>) {
+/// [`plain::plain_body`] shows them, the find bar's finds (`lit`) lit; right-to-left text keeps
+/// its own labels. Where the current find was drawn (its chunk laid out while it's followed).
+pub(super) fn plain(st: &mut UiState, ui: &mut Ui, key: &MessageKey, text: &str, lit: Option<&find::Lit>, acts: &mut Vec<Action>) -> Option<Rect> {
     let id = ui.scope_id().with(("long-text", key.to_id()));
     // Where the addresses laid out start, for the tests to point at.
     #[cfg(test)]
@@ -152,25 +153,40 @@ pub(super) fn plain(st: &mut UiState, ui: &mut Ui, key: &MessageKey, text: &str,
         let s = ranges.get(i).and_then(|r| text.get(r.clone())).unwrap_or_default();
         rows(s, (width / letter) as usize) as f32 * row
     };
+    let mut hit = None;
+    let target = lit.and_then(|l| l.target);
     ui.scope(|ui| {
         // Chunks one under the other as the lines of one text (and copied so, a line break apart).
         ui.spacing_mut().item_spacing.y = 0.0;
-        parts(ui, &mut v, text, guess, |ui, i, lay| {
-            let Some(s) = ranges.get(i).and_then(|r| text.get(r.clone())).filter(|_| lay) else { return };
+        parts(ui, &mut v, text, target, guess, |ui, i, lay| {
+            let Some(range) = ranges.get(i).filter(|_| lay) else { return };
+            let Some(s) = text.get(range.clone()) else { return };
             if rtl {
                 let r = crate::bidi::selectable_label(ui, s, font.clone(), t.text);
                 rtl_copy_menu(&r, None, text);
             } else {
-                linked_chunk(&t, ui, s, &font, acts);
+                let marks = lit.map(|l| l.marks_in(range.clone())).unwrap_or_default();
+                if let Some(h) = linked_chunk(&t, ui, s, &font, lit.map(|l| (l, marks.as_slice())), acts) {
+                    hit = Some(h);
+                }
             }
         });
     });
     put_back(st, id, v);
+    hit
 }
 
 /// A chunk of plain text, selectable with the rest of it, its web and mail addresses links: a
-/// hand and the address under the pointer, opened on a click (a drag still selects).
-fn linked_chunk(t: &Tokens, ui: &mut Ui, s: &str, font: &egui::FontId, acts: &mut Vec<Action>) {
+/// hand and the address under the pointer, opened on a click (a drag still selects). The find
+/// bar's finds in it (`found`) lit; where the current one was drawn.
+fn linked_chunk(
+    t: &Tokens,
+    ui: &mut Ui,
+    s: &str,
+    font: &egui::FontId,
+    found: Option<(&find::Lit, &[find::Mark])>,
+    acts: &mut Vec<Action>,
+) -> Option<Rect> {
     let links = mime::find_links(s);
     let plain = egui::TextFormat { font_id: font.clone(), color: t.text, ..Default::default() };
     let link = egui::TextFormat { font_id: font.clone(), color: t.accent, underline: egui::Stroke::new(1.0, t.accent), ..Default::default() };
@@ -191,11 +207,18 @@ fn linked_chunk(t: &Tokens, ui: &mut Ui, s: &str, font: &egui::FontId, acts: &mu
         }
     }
     job.append(s.get(at..).unwrap_or(""), 0.0, plain);
+    if let Some((l, marks)) = found {
+        l.light(&mut job, marks);
+    }
     job.wrap.max_width = ui.available_width();
     let galley = ui.fonts_mut(|f| f.layout_job(job));
     let r = ui.add(egui::Label::new(galley.clone()).selectable(true));
+    let hit = found.and_then(|(_, marks)| marks.iter().find(|m| m.current)).and_then(|m| {
+        let at = s.get(..m.range.start)?.chars().count();
+        Some(galley.pos_from_cursor(egui::text::CCursor::new(at)).translate(r.rect.min.to_vec2()))
+    });
     if links.is_empty() {
-        return;
+        return hit;
     }
     #[cfg(test)]
     {
@@ -215,6 +238,7 @@ fn linked_chunk(t: &Tokens, ui: &mut Ui, s: &str, font: &egui::FontId, acts: &mu
     {
         acts.push(Action::OpenUrl(url));
     }
+    hit
 }
 
 /// A part of formatted text: some of its lines, or a table of its layout.
@@ -294,6 +318,7 @@ pub(super) fn rich(body: &mut Body, st: &mut UiState, ui: &mut Ui, width: f32, p
     }
     let mut v = take(st, id);
     v.fit(p.text.len(), parts_of.len());
+    let target = body.find.as_ref().and_then(|l| l.target);
     let (row, letter) = metrics(ui, &theme::regular(14.5 * zoom));
     let gap = ui.spacing().item_spacing.y;
     let guess = |i: usize, width: f32| match parts_of.get(i) {
@@ -308,7 +333,7 @@ pub(super) fn rich(body: &mut Body, st: &mut UiState, ui: &mut Ui, width: f32, p
         Some(Unit::Table(mime::layout::Block::Table(t))) => t.rows.len().min(1_000) as f32 * 3.0 * row,
         _ => 0.0,
     };
-    parts(ui, &mut v, &p.text, guess, |ui, i, lay| {
+    parts(ui, &mut v, &p.text, target, guess, |ui, i, lay| {
         body.cells = first_cell.get(i).copied().unwrap_or(cells);
         match (parts_of.get(i), lay) {
             (Some(Unit::Lines(lines)), true) => body.lines(st, ui, lines, width, page, Align::Min),
@@ -347,10 +372,18 @@ fn pictures_of_blocks(blocks: &[mime::layout::Block], out: &mut Vec<String>, dep
 }
 
 /// Lay out `v`'s parts one under the other: those near the view, those a selection starts or ends
-/// in (and their neighbours), all a copied selection spans, and a few not measured yet.
+/// in (and their neighbours), all a copied selection spans, the find bar's `target` (the part its
+/// current find is in, while it's brought into view), and a few not measured yet.
 /// `draw(ui, i, true)` lays part `i` out; `draw(ui, i, false)` says it's passed over, its room kept
 /// by its height; `guess(i, width)` is that before it's measured. `whole` is what Ctrl+A copies.
-fn parts(ui: &mut Ui, v: &mut LongText, whole: &str, guess: impl Fn(usize, f32) -> f32, mut draw: impl FnMut(&mut Ui, usize, bool)) {
+fn parts(
+    ui: &mut Ui,
+    v: &mut LongText,
+    whole: &str,
+    target: Option<usize>,
+    guess: impl Fn(usize, f32) -> f32,
+    mut draw: impl FnMut(&mut Ui, usize, bool),
+) {
     let n = v.measured.len();
     let width = ui.available_width();
     if v.width_bits != width.to_bits() || v.guessed.len() != n {
@@ -397,7 +430,7 @@ fn parts(ui: &mut Ui, v: &mut LongText, whole: &str, guess: impl Fn(usize, f32) 
         let known = v.measured.get(i).copied().flatten();
         let h = known.or_else(|| v.guessed.get(i).copied()).unwrap_or(0.0);
         let in_view = top <= near.bottom() && top + h >= near.top();
-        let pinned = ends.iter().any(|e| e.abs_diff(i) <= 1) || span.contains(&i);
+        let pinned = ends.iter().any(|e| e.abs_diff(i) <= 1) || span.contains(&i) || target == Some(i);
         let measure = known.is_none() && !in_view && !pinned && budget > 0;
         if measure {
             budget -= 1;

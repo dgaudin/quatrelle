@@ -1933,3 +1933,9 @@ folder	Conflicts	Conflitti
 	Copy all	Copia tutto
 	Only the first {shown} of {size} are shown. Save as email (.eml) keeps all of it.	Sono mostrati solo i primi {shown} di {size}. Salva come e-mail (.eml) conserva tutto.
 	The source couldn't be downloaded: {error}	Impossibile scaricare il sorgente: {error}
+	Find in message	Cerca nel messaggio
+	{i} of {n}	{i} di {n}
+	{i} of {n} or more	{i} di {n} o più
+	No match	Nessun risultato
+	Previous result	Risultato precedente
+	Next result	Risultato successivo

@@ -1932,3 +1932,9 @@ menu	View	查看
 	Copy all	全部复制
 	Only the first {shown} of {size} are shown. Save as email (.eml) keeps all of it.	只显示了 {size} 中的前 {shown}。另存为电子邮件 (.eml) 可保留全部内容。
 	The source couldn't be downloaded: {error}	无法下载源文件：{error}
+	Find in message	在邮件中查找
+	{i} of {n}	第 {i} 个（共 {n} 个）
+	{i} of {n} or more	第 {i} 个（共 {n} 个以上）
+	No match	无匹配项
+	Previous result	上一个结果
+	Next result	下一个结果

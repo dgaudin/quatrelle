@@ -1935,3 +1935,9 @@ menu	View	Ver
 	Copy all	Copiar todo
 	Only the first {shown} of {size} are shown. Save as email (.eml) keeps all of it.	Solo se muestran los primeros {shown} de {size}. Guardar como correo (.eml) lo conserva todo.
 	The source couldn't be downloaded: {error}	No se pudo descargar el código fuente: {error}
+	Find in message	Buscar en el mensaje
+	{i} of {n}	{i} de {n}
+	{i} of {n} or more	{i} de {n} o más
+	No match	Sin resultados
+	Previous result	Resultado anterior
+	Next result	Resultado siguiente

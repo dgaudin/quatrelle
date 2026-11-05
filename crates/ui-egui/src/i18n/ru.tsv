@@ -1934,3 +1934,9 @@ menu	View	Просмотр
 	Copy all	Копировать всё
 	Only the first {shown} of {size} are shown. Save as email (.eml) keeps all of it.	Показаны только первые {shown} из {size}. «Сохранить как письмо (.eml)» сохраняет его целиком.
 	The source couldn't be downloaded: {error}	Не удалось загрузить исходный текст: {error}
+	Find in message	Найти в сообщении
+	{i} of {n}	{i} из {n}
+	{i} of {n} or more	{i} из {n} и более
+	No match	Совпадений нет
+	Previous result	Предыдущее совпадение
+	Next result	Следующее совпадение

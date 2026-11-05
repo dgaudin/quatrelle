@@ -1930,3 +1930,9 @@ folder	Conflicts	התנגשויות
 	Copy all	העתק הכול
 	Only the first {shown} of {size} are shown. Save as email (.eml) keeps all of it.	מוצגים רק {shown} הראשונים מתוך {size}. שמירה כדואר אלקטרוני (.eml) שומרת את כולה.
 	The source couldn't be downloaded: {error}	לא ניתן היה להוריד את המקור: {error}
+	Find in message	חיפוש בהודעה
+	{i} of {n}	{i} מתוך {n}
+	{i} of {n} or more	{i} מתוך {n} ומעלה
+	No match	אין תוצאות
+	Previous result	התוצאה הקודמת
+	Next result	התוצאה הבאה

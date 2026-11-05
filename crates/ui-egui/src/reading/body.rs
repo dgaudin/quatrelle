@@ -98,12 +98,13 @@ pub(super) fn hidden_bar(t: &Tokens, ui: &mut Ui, key: &MessageKey, p: &mime::Pa
                 ui.set_width(ui.available_width());
                 egui::ScrollArea::vertical().id_salt(id).max_height(180.0).show(ui, |ui| {
                     let mut text = p.hidden_text.as_str();
-                    ui.add(
+                    let r = ui.add(
                         egui::TextEdit::multiline(&mut text)
                             .font(egui::FontId::monospace(12.0))
                             .desired_width(f32::INFINITY)
                             .frame(egui::Frame::NONE),
                     );
+                    find::read_only(ui.ctx(), r.id);
                 });
             },
         );
@@ -170,7 +171,16 @@ pub(super) fn unsubscribe_link(address: &str) -> Option<String> {
 /// An HTML message, formatted: emphasis, code, links (opened in the browser on click) and
 /// pictures: those inside the message always, those on the web only once allowed. Mail laid out
 /// with tables keeps its columns ([`mime::layout`]).
-pub(super) fn rich_body(s: &Session, st: &mut UiState, ui: &mut Ui, key: &MessageKey, p: &mime::Parsed, acts: &mut Vec<Action>) {
+/// With the find bar's finds (`lit`) lit; where the current one was drawn.
+pub(super) fn rich_body(
+    s: &Session,
+    st: &mut UiState,
+    ui: &mut Ui,
+    key: &MessageKey,
+    p: &mime::Parsed,
+    lit: Option<find::Lit>,
+    acts: &mut Vec<Action>,
+) -> Option<Rect> {
     let t = st.tokens;
     let allowed = s.pictures_allowed();
     let mut shown: Vec<String> = Vec::new();
@@ -181,7 +191,7 @@ pub(super) fn rich_body(s: &Session, st: &mut UiState, ui: &mut Ui, key: &Messag
     }
     let faces = crate::look::typefaces::loaded(ui.ctx());
     let zoom = s.prefs.reading_scale();
-    let mut body = Body { s, key, p, allowed, shown: &mut shown, acts: &mut *acts, faces, zoom, inline: &[], cells: 0 };
+    let mut body = Body { s, key, p, allowed, shown: &mut shown, acts: &mut *acts, faces, zoom, inline: &[], cells: 0, find: lit, hit: None };
     if long_text::many_lines(p) {
         // Thousands of lines: laid out by what's in view.
         long_text::rich(&mut body, st, ui, width, theme::surface_rgb(&t));
@@ -190,6 +200,7 @@ pub(super) fn rich_body(s: &Session, st: &mut UiState, ui: &mut Ui, key: &Messag
     } else {
         body.blocks(st, ui, &p.layout, width, theme::surface_rgb(&t), mime::layout::Align::Left, 0);
     }
+    let hit = body.hit;
     // Pictures without a description have no place in the text: show them after it.
     if allowed {
         let rest: Vec<&String> = p.images.iter().filter(|u| !shown.contains(u)).collect();
@@ -202,6 +213,7 @@ pub(super) fn rich_body(s: &Session, st: &mut UiState, ui: &mut Ui, key: &Messag
             });
         }
     }
+    hit
 }
 
 /// What drawing a message body needs.
@@ -222,6 +234,9 @@ pub(super) struct Body<'a> {
     /// Table cells drawn so far: each one's number, the same from frame to frame, keys its
     /// height as last drawn ([`CellHeights`]) for its row's alignment.
     pub(super) cells: usize,
+    /// The find bar's finds, lit where they're drawn, and where the current one was.
+    pub(super) find: Option<find::Lit>,
+    pub(super) hit: Option<Rect>,
 }
 
 /// The heights of the table cells of the messages drawn (their content and padding, as last
@@ -358,7 +373,12 @@ impl Body<'_> {
             // show, but as text).
             if line.iter().any(|sp| crate::bidi::has_rtl(&sp.text)) && line.iter().all(|sp| sp.image.is_none()) {
                 let mut job = egui::text::LayoutJob::default();
+                let mut marks: Vec<find::Mark> = Vec::new();
                 for sp in line {
+                    if let Some(f) = &self.find {
+                        let base = job.text.len();
+                        marks.extend(f.marks_of(sp).into_iter().map(|m| find::Mark { range: m.range.start + base..m.range.end + base, ..m }));
+                    }
                     let (fg, bg) = theme::mail_colors_on(sp.color, sp.background, page, &t, if sp.link.is_some() { t.accent } else { t.text });
                     let format = egui::TextFormat {
                         font_id: span_font_in(sp, &self.faces, self.zoom),
@@ -371,12 +391,19 @@ impl Body<'_> {
                     };
                     job.append(&sp.text, 0.0, format);
                 }
+                if let Some(f) = &self.find {
+                    f.light(&mut job, &marks);
+                }
+                let len = job.text.len();
                 let r = ui
                     .scope(|ui| {
                         ui.set_max_width(width);
                         crate::bidi::add_selectable_label(ui, job)
                     })
                     .inner;
+                if let Some(m) = marks.iter().find(|m| m.current) {
+                    self.hit = Some(find::place(r.rect, m.range.start, len, 17.0 * self.zoom));
+                }
                 let written: String = line.iter().map(|sp| sp.text.as_str()).collect();
                 rtl_copy_menu(&r, Some(&written), &self.p.text);
                 continue;
@@ -465,18 +492,26 @@ impl Body<'_> {
         if let Some(bg) = bg {
             rt = rt.background_color(bg);
         }
-        match &sp.link {
+        // The find bar's finds in it, lit.
+        let marks = self.find.as_ref().map(|f| f.marks_of(sp)).unwrap_or_default();
+        let text = match &self.find {
+            Some(f) => f.lit_text(ui, rt.color(fg), &marks),
+            None => rt.color(fg).into(),
+        };
+        let r = match &sp.link {
             Some(link) => {
                 // Hovered, a link says where it will open (cleaned, when links are).
                 let shown = if self.s.prefs.clean_links { mime::clean_link(link) } else { link.clone() };
-                let r = ui.add(egui::Link::new(rt.color(fg))).on_hover_text(shown);
+                let r = ui.add(egui::Link::new(text)).on_hover_text(shown);
                 if r.clicked() {
                     self.acts.push(Action::OpenUrl(link.clone()));
                 }
+                r
             }
-            None => {
-                ui.label(rt.color(fg));
-            }
+            None => ui.label(text),
+        };
+        if let Some(m) = marks.iter().find(|m| m.current) {
+            self.hit = Some(find::place(r.rect, m.range.start, sp.text.len(), 17.0 * self.zoom));
         }
     }
 

@@ -1930,3 +1930,9 @@ folder	Conflicts	التعارضات
 	Copy all	نسخ الكل
 	Only the first {shown} of {size} are shown. Save as email (.eml) keeps all of it.	يُعرض أول {shown} فقط من {size}. الحفظ كبريد إلكتروني (.eml) يحتفظ بها كاملة.
 	The source couldn't be downloaded: {error}	تعذّر تنزيل المصدر: {error}
+	Find in message	البحث في الرسالة
+	{i} of {n}	{i} من {n}
+	{i} of {n} or more	{i} من {n} أو أكثر
+	No match	لا توجد نتائج
+	Previous result	النتيجة السابقة
+	Next result	النتيجة التالية

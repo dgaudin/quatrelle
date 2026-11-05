@@ -1931,3 +1931,9 @@ menu	View	Weergeven
 	Copy all	Alles kopiëren
 	Only the first {shown} of {size} are shown. Save as email (.eml) keeps all of it.	Alleen de eerste {shown} van {size} worden getoond. Opslaan als e-mail (.eml) bewaart alles.
 	The source couldn't be downloaded: {error}	De bron kon niet worden gedownload: {error}
+	Find in message	Zoeken in bericht
+	{i} of {n}	{i} van {n}
+	{i} of {n} or more	{i} van {n} of meer
+	No match	Geen resultaten
+	Previous result	Vorig resultaat
+	Next result	Volgend resultaat

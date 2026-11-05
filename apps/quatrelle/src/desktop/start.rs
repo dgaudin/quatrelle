@@ -83,6 +83,11 @@ pub(crate) fn run_start_commands(app: &mut MailApp, args: &[String]) {
                 }
             }
             "ui.rules" => app.ui.dialog = Some(quatrelle_ui_egui::Dialog::Rules),
+            // Optionally `={"query":…}`.
+            "ui.find" => {
+                let p: serde_json::Value = serde_json::from_str(params).unwrap_or_default();
+                app.find_in_message(p.get("query").and_then(|v| v.as_str()));
+            }
             _ => match serde_json::from_str(params) {
                 Ok(p) => app.run(id, p),
                 Err(e) => say(&format!("--cmd {id}: bad JSON: {e}")),
