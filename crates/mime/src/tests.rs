@@ -39,6 +39,7 @@ use super::*;
 mod importance;
 mod one_parse;
 mod report;
+mod text_attach;
 
 /// Issue #1: a signature copied from Outlook (Word's HTML on the clipboard, only the copied
 /// fragment) keeps its look when pasted.
