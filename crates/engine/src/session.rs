@@ -55,6 +55,7 @@ pub use prefs::{
     ListLayout, MEETINGS_PROFILE, NotesOrder, PictureLoading, Prefs, READING_ZOOM, RECENT_EMOJI, ReadInPane, ReadingPane, SenderAddresses,
     WEBEX_ROOM_LINE_MAX, WEBEX_ROOM_LINES_MAX, WEBEX_ROOM_NAME_MAX, WEBEX_ROOMS_MAX, WebexRoom, is_profile_dir,
 };
+pub use searching::SearchClock;
 use searching::SearchIndex;
 pub use security::{CardSearch, KnownCert, Lock, RevocationCheck, SMIME_DOC, Seal, Security, SignedBy, SmimeSettings};
 use writing::NameCheck;
@@ -291,8 +292,8 @@ pub struct Session {
     /// The search's index is still being built: the results so far are shown while it goes on, a
     /// slice per call, so the window stays responsive.
     pub search_pending: bool,
-    /// Messages the search index adds per call (`usize::MAX`: no limit).
-    search_budget: usize,
+    /// How much of a call the search's work may take: units, and the window's clock.
+    search_pace: searching::Pace,
     /// The messages waiting for a reply, worked out once for a search call and the list it
     /// shows (it walks every folder), forgotten when they're done.
     awaiting_memo: Option<HashSet<MessageKey>>,
@@ -535,7 +536,7 @@ impl Session {
             filter_keep: None,
             search: None,
             search_pending: false,
-            search_budget: usize::MAX,
+            search_pace: searching::Pace::default(),
             awaiting_memo: None,
             found: None,
             older: None,

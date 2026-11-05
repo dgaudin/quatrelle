@@ -491,6 +491,10 @@ impl MailApp {
         let mut session = session;
         // The window reads the address book a slice a frame: the session never reads it whole.
         session.interactive = true;
+        // A search's slices keep to a share of each frame, by the window's clock (the engine
+        // reads none: std's panics in the browser, web-time's runs there too).
+        let started = web_time::Instant::now();
+        session.set_search_clock(Some(quatrelle_engine::SearchClock { budget: SEARCH_FRAME_SHARE, now: Box::new(move || started.elapsed()) }));
         session.set_zone(services.zone().as_deref());
         match services.take_data_moved() {
             Some(Ok(to)) => session.notice(tf!("Your mail is now kept in {folder}", folder = to.display().to_string()), false),
@@ -944,11 +948,15 @@ pub fn trace_window(ui: &Ui, what: &str) {
     }
 }
 
-/// Messages the search index adds per call: the window indexes a slice each frame and draws
-/// between them, so a big mailbox's first search never freezes it (500 messages is a few
-/// milliseconds of indexing; a 800,000-message mailbox then takes a few seconds, drawing all the
-/// while).
-const SEARCH_INDEX_BUDGET: usize = 500;
+/// Messages the search index adds per call at most: the window indexes a slice each frame and
+/// draws between them, so a big mailbox's first search never freezes it. What binds is the time
+/// ([`SEARCH_FRAME_SHARE`]); this only caps a frame of quick ones.
+const SEARCH_INDEX_BUDGET: usize = 4096;
+
+/// The share of a frame a search's work takes (the rest draws it), by the window's clock: a
+/// message is begun only while one as long as the frame's longest so far still fits. Counted in
+/// messages (500 a frame), a frame that met long downloaded bodies took half a second.
+const SEARCH_FRAME_SHARE: web_time::Duration = web_time::Duration::from_millis(6);
 
 /// Messages the address book (recipient suggestions, Select Names, the Focused Inbox) takes in
 /// per frame while it is built, the window drawing between slices: counting a summary is a

@@ -118,14 +118,14 @@ impl Session {
     /// A slice more of the search's index (whatever is left, for a search asked for at once), and
     /// its answer brought up to date. Whether the list should show the answer again now: always
     /// once the index is done; while it's being built, at a pace that keeps a slice's cost flat.
-    pub(super) fn search_step(&mut self, q: &str, scope: SearchScope, budget: usize) -> bool {
+    pub(super) fn search_step(&mut self, q: &str, scope: SearchScope) -> bool {
         let query = self.search_query(q);
         if query.is_empty() {
             self.search_pending = false;
             return true;
         }
         self.ensure_index(scope);
-        self.index_step(budget);
+        self.index_step();
         self.update_answer(&query);
         let done = !self.index.as_ref().is_some_and(SearchIndex::pending);
         self.search_pending = !done;
@@ -145,8 +145,8 @@ impl Session {
         }
         self.ensure_index(scope);
         if self.index.as_ref().is_some_and(|ix| ix.done && !ix.stale.is_empty()) {
-            let budget = self.search_budget;
-            self.index_step(budget);
+            self.search_pace.again();
+            self.index_step();
         }
         self.update_answer(&query);
         self.search_pending = self.index.as_ref().is_some_and(SearchIndex::pending);
@@ -255,10 +255,13 @@ impl Session {
             answer.todo.extend(ix.candidates_in(query, answer.checked..total));
             answer.checked = total;
         }
-        let room = self.search_budget.max(1).saturating_mul(LOOKS_PER_MESSAGE_INDEXED);
+        // A slice's worth, a message begun only while the call's time allows one more (at least
+        // one a call: what's found shows while the index is read).
+        let room = self.search_pace.units.max(1).saturating_mul(LOOKS_PER_MESSAGE_INDEXED);
         let mut looked = 0;
         let mut lists = Lists::new();
         while looked < room
+            && (looked == 0 || self.search_pace.look_more())
             && let Some(d) = answer.todo.pop_first()
         {
             // Found already or gone from the search: nothing to look at (and nothing counted).

@@ -6,6 +6,7 @@
 use super::*;
 
 mod busy;
+mod paced;
 
 #[test]
 fn what_the_server_finds_joins_what_the_index_found() {
