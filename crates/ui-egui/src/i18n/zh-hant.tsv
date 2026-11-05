@@ -682,6 +682,12 @@
 	Follow up. Overdue: it was due {date}.	待處理。已逾期:原定 {date} 到期。
 	Completed.	已完成。
 	Completed on {date}.	已於 {date} 完成。
+	You replied to this message on {date}.	您已於 {date} 回覆此郵件。
+	You forwarded this message on {date}.	您已於 {date} 轉寄此郵件。
+	You replied to this message.	您已回覆此郵件。
+	You forwarded this message.	您已轉寄此郵件。
+	Replied	已回覆
+	Forwarded	已轉寄
 	This message was sent with high importance.	此郵件以高重要性傳送。
 	This message was sent with low importance.	此郵件以低重要性傳送。
 	Delay delivery	延遲傳遞
