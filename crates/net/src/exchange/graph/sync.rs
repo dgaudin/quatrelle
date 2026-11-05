@@ -87,6 +87,9 @@ pub fn sync_folder(c: &Client, st: &mut State, store: &Store, account: &str, fol
             next.seen = f.seen;
             next.flagged = f.flagged;
             next.draft = f.draft;
+            // Graph's one flag status: complete, and when.
+            next.set_keyword(quatrelle_model::FOLLOW_UP_COMPLETE, f.follow_up_complete());
+            next.completed = f.completed;
             if next != m.flags {
                 m.flags = next;
                 report.changed += 1;
@@ -327,10 +330,11 @@ pub fn apply_remote(c: &Client, st: &State, op: &Op) -> Result<()> {
         c.batch_ok(&reqs)
     };
     match op {
-        Op::SetFlag { keys, flag: Flag::Seen, on } => patch_all(keys, json!({"isRead": on})),
-        Op::SetFlag { keys, flag: Flag::Flagged, on } => patch_all(keys, json!({"flag": {"flagStatus": if *on { "flagged" } else { "notFlagged" }}})),
-        // Answered and forwarded are Exchange's to set; categories stay on this computer.
-        Op::SetFlag { .. } | Op::SetKeyword { .. } => Ok(()),
+        Op::SetFlag { keys, .. } | Op::SetKeyword { keys, .. } => match flag_patch(op) {
+            Some(patch) => patch_all(keys, patch),
+            // Answered and forwarded are Exchange's to set; categories stay on this computer.
+            None => Ok(()),
+        },
         Op::Move { keys, to } => {
             let dest = st.mailbox(to)?.to_string();
             let reqs: Vec<(&str, String, Option<Value>)> = ids(keys)

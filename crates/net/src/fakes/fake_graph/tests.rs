@@ -13,6 +13,7 @@ use super::*;
 
 mod cached_mode;
 mod events;
+mod follow_up;
 mod reminders;
 mod teams;
 mod text_first;

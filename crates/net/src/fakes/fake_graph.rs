@@ -30,6 +30,9 @@ pub struct Msg {
     pub raw: Vec<u8>,
     pub read: bool,
     pub flagged: bool,
+    /// Its follow-up marked complete (`flagStatus` "complete"), and when (`completedDateTime`'s
+    /// `dateTime`, in UTC; empty: not said).
+    pub complete: Option<String>,
     pub draft: bool,
     pub received: String,
     /// The voting buttons (`PidLidVerbStream`), when it has some.
@@ -159,6 +162,7 @@ impl Data {
             raw: raw.to_vec(),
             read,
             flagged: false,
+            complete: None,
             draft: false,
             received: received.into(),
             voting: Vec::new(),
@@ -195,7 +199,12 @@ impl Data {
         let addr = |a: &quatrelle_model::EmailAddress| json!({"emailAddress": {"name": a.name, "address": a.email}});
         let mut v = json!({
             "id": if self.asked_immutable { m.id.clone() } else { format!("{REGULAR}{}", m.id) }, "parentFolderId": m.folder, "isRead": m.read, "isDraft": m.draft,
-            "flag": {"flagStatus": if m.flagged { "flagged" } else { "notFlagged" }},
+            "flag": match (&m.complete, m.flagged) {
+                (_, true) => json!({"flagStatus": "flagged"}),
+                (Some(t), false) if !t.is_empty() => json!({"flagStatus": "complete", "completedDateTime": {"dateTime": t, "timeZone": "UTC"}}),
+                (Some(_), false) => json!({"flagStatus": "complete"}),
+                (None, false) => json!({"flagStatus": "notFlagged"}),
+            },
             "subject": p.as_ref().map(|p| p.subject.clone()),
             "from": p.as_ref().map(|p| addr(&p.from)),
             "toRecipients": p.as_ref().map(|p| p.to.iter().map(addr).collect::<Vec<_>>()),

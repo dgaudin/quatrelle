@@ -218,6 +218,8 @@ impl Data {
                     }
                     if let Some(f) = input["flag"]["flagStatus"].as_str() {
                         m.flagged = f == "flagged";
+                        // Exchange notes when it was done (here, a fixed time).
+                        m.complete = (f == "complete").then(|| "2026-11-05T10:00:00.0000000".to_string());
                     }
                     if let Some(subject) = input["subject"].as_str() {
                         let text = String::from_utf8_lossy(&m.raw).into_owned();
