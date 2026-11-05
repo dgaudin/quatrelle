@@ -272,6 +272,8 @@ fn message(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action
     // Voting buttons the sender put on it, the answer sent from here, and one on its way.
     let voting = s.voting(&r.key);
     let vote_sending = s.vote_sending.as_ref().filter(|(k, _)| *k == r.key).map(|(_, c)| c.clone());
+    // A chip clicked a moment ago: its preview, unless that click became a double-click.
+    settle_attachment_click(st, ui);
     // An attachment shown in place of the text (its chip clicked); Escape goes back.
     let viewing = st
         .attachment_view

@@ -273,12 +273,20 @@ pub(super) fn attachment_card(
     if resp.clicked() || resp.secondary_clicked() || more.clicked() {
         st.attachment_selected = Some((key.clone(), picked.clone()));
         st.attachments_active = true;
+        // Another click lets go of a preview still waiting.
+        st.attachment_click = None;
     }
-    // A plain click shows it in place of the message's text, as Outlook previews attachments.
-    if resp.clicked() && !on_more && !ctrl {
+    // A plain click shows it in place of the message's text, as Outlook previews attachments,
+    // once the double-click time is out ([`settle_attachment_click`]): a double-click only opens
+    // the file, and its first click left the preview showing behind the app it opened in.
+    let opened = resp.double_clicked() || resp.triple_clicked();
+    if resp.clicked() && !on_more && !ctrl && !opened {
         match &coming {
             Some(why) => acts.push(Action::Refuse(why.clone())),
-            None => st.attachment_view = Some((key.clone(), a.index)),
+            None => {
+                let (now, wait) = (ui.input(|i| i.time), ui.ctx().options(|o| o.input_options.max_double_click_delay));
+                st.attachment_click = Some((key.clone(), a.index, now + wait));
+            }
         }
     }
     let previewed = st.attachment_view.as_ref().is_some_and(|(k, i)| k == key && *i == a.index);
@@ -336,10 +344,27 @@ pub(super) fn attachment_card(
     }
 }
 
+/// The preview a click on a chip waits to show, shown once the double-click time is out; a
+/// double-click took it back meanwhile.
+pub(super) fn settle_attachment_click(st: &mut UiState, ui: &Ui) {
+    let Some((key, index, due)) = st.attachment_click.clone() else { return };
+    let now = ui.input(|i| i.time);
+    if now >= due {
+        st.attachment_click = None;
+        st.attachment_view = Some((key, index));
+    } else {
+        // A message's own window draws in the main one's frame.
+        let wait = std::time::Duration::try_from_secs_f64(due - now).unwrap_or_default();
+        ui.ctx().request_repaint_after(wait);
+        ui.ctx().request_repaint_after_for(wait, egui::ViewportId::ROOT);
+    }
+}
+
 /// Back to the message from a previewed attachment: the chip clicked to show it isn't left
 /// selected either.
 pub(super) fn close_attachment_view(st: &mut UiState) {
     st.attachment_view = None;
+    st.attachment_click = None;
     st.attachment_selected = None;
     st.attachments_active = false;
 }

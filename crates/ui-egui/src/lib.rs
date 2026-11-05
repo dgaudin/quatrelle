@@ -342,6 +342,9 @@ pub struct UiState {
     /// The attachment shown in place of its message's text (a click on its chip), as Outlook
     /// previews attachments in the reading pane.
     pub attachment_view: Option<(MessageKey, usize)>,
+    /// The preview a plain click on a chip waits to show, and when: once the double-click time
+    /// is out, as a double-click only opens the file (a click's preview showed behind it).
+    pub attachment_click: Option<(MessageKey, usize, f64)>,
     /// The attachments selected in a message's strip (a click picks one, Ctrl+click adds or
     /// removes one, Ctrl+A takes them all), and whether the strip has the keyboard: it was the
     /// last thing clicked, so Ctrl+A selects attachments rather than mail.
@@ -543,6 +546,7 @@ impl MailApp {
                 search_drop: SearchDrop::None,
                 compose_alert: None,
                 attachment_view: None,
+                attachment_click: None,
                 attachment_selected: None,
                 attachments_active: false,
                 attachment_hovered: false,
