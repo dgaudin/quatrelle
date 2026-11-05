@@ -1,15 +1,18 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
+// Copyright (c) 2026 Didier Gaudin
 //! Against real servers on this computer (Dovecot, GreenMail in Docker; never a real account),
 //! run by hand: what the in-memory servers can't prove about a real one's answers.
 //!
 //! ```text
 //! QUATRELLE_REAL_IMAP="127.0.0.1:1143 user password" \
 //! QUATRELLE_REAL_SMTP="127.0.0.1:3025 user password 127.0.0.1:3143" \
+//! QUATRELLE_REAL_CALDAV="http://127.0.0.1:5232/user/ user password" \
 //!   cargo test -p quatrelle-net real_ -- --ignored --nocapture
 //! ```
 //!
-//! The IMAP server's Inbox holds `Message 1`…`Message 3000` (every hundredth's body says
+//! The CalDAV server (Radicale in Docker) is reached at the calendar home given, which holds a
+//! calendar to write to. The IMAP server's Inbox holds `Message 1`…`Message 3000` (every hundredth's body says
 //! "needle"), and one message with a 30 MB attachment, newest.
 
 use std::time::{Duration, Instant};
@@ -166,4 +169,56 @@ fn real_smtp_server() {
         eprintln!("inbox has {}, the sent one: {found:?}", info.exists);
         assert_eq!(found.len(), copies);
     }
+}
+
+/// Issue #40 on a real CalDAV server (`QUATRELLE_REAL_CALDAV`): an event's reminder dismissed
+/// here is stored as its alarm acknowledged (RFC 9074), and read back so, from scratch, as
+/// another program would read it; the alarm itself stays.
+#[test]
+#[ignore]
+fn real_caldav_dismissed_reminder() {
+    use quatrelle_model::ical::{CalEvent, acknowledge, acknowledged, set_reminder};
+    use quatrelle_model::pim::{Pim, StoredEvent};
+    let Ok(v) = std::env::var("QUATRELLE_REAL_CALDAV") else {
+        eprintln!("QUATRELLE_REAL_CALDAV isn't set: skipped");
+        return;
+    };
+    let p: Vec<&str> = v.split_whitespace().collect();
+    let [home, user, password] = p.as_slice() else { panic!("QUATRELLE_REAL_CALDAV: home user password") };
+    let now = 1_793_782_000;
+    let acc = AccountConfig { email: format!("{user}@localhost"), ..Default::default() };
+    // The home given, nothing looked for.
+    let base = Pim { caldav_home: Some(home.to_string()), carddav_home: Some(String::new()), dav_checked: Some(now), ..Default::default() };
+    let dav = crate::dav::Dav::new(user, password, crate::dav::trust_of(&acc, &base));
+    let zone = quatrelle_model::zone::Zone::Fixed(0);
+    let sync = |pim: &Pim| {
+        let s = crate::dav::sync(&dav, &acc.email, "127.0.0.1", pim, now, zone).unwrap();
+        assert!(s.errors.is_empty(), "{:?}", s.errors);
+        s
+    };
+    let first = sync(&base);
+    let cal = first.calendars.as_ref().and_then(|c| c.iter().find(|c| !c.read_only)).map(|c| c.id.clone()).expect("a calendar to write to");
+    let uid = format!("r15-reminder-{}@quatrelle", std::process::id());
+    let mut e = CalEvent { uid: uid.clone(), summary: "Dentist".into(), start: now + 900, end: now + 4500, dtstamp: now, ..Default::default() };
+    set_reminder(&mut e, Some(15));
+    let mut pim = Pim { calendars: first.calendars.clone().unwrap_or_default(), ..base.clone() };
+    pim.events.push(StoredEvent { calendar: cal.clone(), event: e, dirty: true, ..Default::default() });
+    let s = sync(&pim);
+    let mut stored = s.pushed_events.iter().find(|x| x.event.uid == uid).cloned().expect("stored");
+    // Dismissed here, as the engine does: acknowledged now, sent again.
+    acknowledge(&mut stored.event, now);
+    stored.dirty = true;
+    pim.events = vec![stored.clone()];
+    let s = sync(&pim);
+    let stored = s.pushed_events.iter().find(|x| x.event.uid == uid).cloned().expect("sent again");
+    let got = dav.multiget(crate::dav::Kind::Calendars, &cal, std::slice::from_ref(&stored.href)).unwrap();
+    let text = got.first().map(|g| g.2.clone()).unwrap_or_default();
+    eprintln!("--- stored:\n{text}");
+    let alarm = text.split("BEGIN:VALARM").nth(1).and_then(|a| a.split("END:VALARM").next()).unwrap_or_default();
+    assert!(alarm.contains("ACKNOWLEDGED:") && alarm.contains("TRIGGER"), "{text}");
+    // Read back from scratch, as another program reads it.
+    let fresh = sync(&Pim { calendars: pim.calendars.clone(), ..base });
+    let back = fresh.events.iter().find(|x| x.event.uid == uid).expect("read back");
+    assert_eq!((acknowledged(&back.event), back.event.reminder), (Some(now), Some(15)));
+    let _ = dav.delete(&stored.href, "");
 }

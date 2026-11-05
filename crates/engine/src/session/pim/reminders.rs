@@ -71,6 +71,11 @@ impl Session {
                     let (start, end) = if e.all_day { (self.clock.utc(o.start), self.clock.utc(o.end)) } else { (o.start, o.end) };
                     let occurrence = e.recurrence_id.unwrap_or(o.start);
                     let key = format!("{account}|{}|{occurrence}", e.uid);
+                    // Dismissed in another calendar program, which wrote so into the event
+                    // (RFC 9074's `ACKNOWLEDGED`): not due here either, unless snoozed here.
+                    if ical::acknowledged(e).is_some_and(|at| at >= start - minutes * 60) && !self.prefs.reminders.contains_key(&key) {
+                        continue;
+                    }
                     let due = match self.prefs.reminders.get(&key) {
                         Some(0) => continue,
                         Some(until) => *until,
@@ -161,9 +166,10 @@ impl Session {
     /// An appointment that is no part of a series, in one of the user's own calendars, loses its
     /// reminder when it's dismissed, as in Outlook (Exchange's `ReminderIsSet`): it's on the item,
     /// so every device sees it and moving the appointment doesn't bring it back. A personal
-    /// matter: the guests are never told. False for anything else (a series or one of its
-    /// occurrences, an event not found, a calendar that can't be changed): that one is answered
-    /// here, per occurrence.
+    /// matter: the guests are never told, and its `SEQUENCE` isn't raised (a CalDAV server that
+    /// schedules could take it for a change to the meeting). False for anything else (a series
+    /// or one of its occurrences, an event not found, a calendar that can't be changed): that
+    /// one is answered per occurrence.
     fn turn_off_reminder_of_single(&mut self, key: &str) -> bool {
         let mut parts = key.split('|');
         let (Some(account), Some(uid)) = (parts.next(), parts.next()) else { return false };
@@ -175,7 +181,17 @@ impl Session {
         if quatrelle_model::pim::shared_calendar_owner(&stored.calendar).is_some() || quatrelle_model::pim::is_web_calendar(&stored.calendar) {
             return false;
         }
-        self.update_event(uid, |e| ical::set_reminder(e, None)).is_ok()
+        let Some((account, at)) = self.find_event_index(uid).map(|(a, at)| (a.to_string(), at)) else { return false };
+        let p = self.pim_mut(&account);
+        let read_only = |cal: &str| p.calendars.iter().any(|c| c.id == cal && c.read_only);
+        let Some(remote) = p.events.get(at).filter(|e| !read_only(&e.calendar)).map(|e| e.calendar != quatrelle_model::pim::LOCAL) else {
+            return false;
+        };
+        let Some(stored) = p.events.get_mut(at) else { return false };
+        ical::set_reminder(&mut stored.event, None);
+        stored.dirty |= remote;
+        self.after_pim_change(&account, remote);
+        true
     }
 
     /// Snooze a reminder until `until` (Unix seconds).
@@ -242,6 +258,11 @@ impl Session {
                 p.reminder_answers.remove(0);
             }
             p.reminder_answers.push(answer);
+        } else if snooze_until.is_none() {
+            let Some(i) = own.or(series).filter(|&i| p.events.get(i).is_some_and(writable)) else { return };
+            let Some(e) = p.events.get_mut(i) else { return };
+            ical::acknowledge(&mut e.event, now);
+            e.dirty = true;
         } else {
             return;
         }
