@@ -6,7 +6,8 @@
 //!
 //! It needs the file to itself, for as long as it takes (about a minute for 40 GB): from the
 //! start, whatever else wants the account's file waits for the end rather than failing, and the
-//! file is taken once those already using it have let it go.
+//! file is taken once those already using it have let it go. But the window's thread never waits
+//! to read it ([`no_waiting`]): its read fails at once, as the idea of upstream's `0151859a`.
 
 use std::time::{Duration, Instant};
 
@@ -16,6 +17,24 @@ use super::*;
 /// anything else waits for a compaction at most.
 const LET_GO: Duration = Duration::from_secs(30);
 const WAIT_AT_MOST: Duration = Duration::from_secs(30 * 60);
+
+thread_local! {
+    /// This thread mustn't wait for a data file being compacted to read it ([`no_waiting`]).
+    static NO_WAITING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// The calling thread (the window's) is never kept waiting to read a data file being compacted:
+/// the read fails at once ([`io::ErrorKind::WouldBlock`], "being compacted") rather than freezing
+/// the window for as long as that takes. A write still waits its turn: it's never refused for
+/// that.
+pub(crate) fn no_waiting() {
+    NO_WAITING.with(|w| w.set(true));
+}
+
+/// Why a read from a thread that doesn't wait ([`no_waiting`]) is refused.
+fn being_compacted() -> io::Error {
+    io::Error::new(io::ErrorKind::WouldBlock, "this data file is being compacted; it's ready in a moment")
+}
 
 /// Marks an account as being compacted until dropped (a panic on the way included).
 struct Compacting<'a> {
@@ -31,11 +50,16 @@ impl Drop for Compacting<'_> {
 }
 
 impl Packs {
-    /// Wait while the account's data file is being compacted.
-    pub(super) fn wait_while_compacted(&self, account: &str) -> io::Result<()> {
+    /// Wait while the account's data file is being compacted; a read (not `write`) from the
+    /// window's thread is refused at once instead ([`no_waiting`]).
+    pub(super) fn wait_while_compacted(&self, account: &str, write: bool) -> io::Result<()> {
         let began = Instant::now();
+        let refuse = !write && NO_WAITING.with(std::cell::Cell::get);
         let mut busy = Packs::lock(&self.compacting);
         while busy.contains(account) {
+            if refuse {
+                return Err(being_compacted());
+            }
             if began.elapsed() > WAIT_AT_MOST {
                 return Err(other("the data file is still being compacted"));
             }

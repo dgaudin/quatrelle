@@ -209,7 +209,13 @@ impl Packs {
 
     /// An account's open data file; `create` makes it when there's none.
     fn db(&self, account: &str, create: bool) -> io::Result<Option<Arc<Database>>> {
-        self.wait_while_compacted(account)?;
+        self.open_db(account, create, false)
+    }
+
+    /// [`Packs::db`], for a write when `write` (one from the window's thread waits for a
+    /// compaction, where a read is refused: [`crate::no_waiting`]).
+    fn open_db(&self, account: &str, create: bool, write: bool) -> io::Result<Option<Arc<Database>>> {
+        self.wait_while_compacted(account, write)?;
         // Held until the file is open and noted: two threads that both found it not open yet
         // both opened it, and the second heard "open in another copy" (an account's sync
         // connections start at once).
@@ -366,7 +372,7 @@ impl Packs {
         create: bool,
         f: impl FnOnce(&mut Tables<'_>, &redb::WriteTransaction) -> io::Result<()>,
     ) -> io::Result<()> {
-        let Some(db) = self.db(account, create)? else { return Err(io::Error::from(io::ErrorKind::NotFound)) };
+        let Some(db) = self.open_db(account, create, true)? else { return Err(io::Error::from(io::ErrorKind::NotFound)) };
         let mut tx = db.begin_write().map_err(other)?;
         let _writing = self.writes.begin();
         tx.set_quick_repair(true);
@@ -667,5 +673,6 @@ pub(crate) fn read_data_file(path: &Path, tmp: &Path, each: &mut dyn FnMut(Vec<(
 }
 
 mod compact;
+pub(crate) use compact::no_waiting;
 #[cfg(test)]
 mod tests;

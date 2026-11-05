@@ -4,6 +4,7 @@
 //! Compact Now, in place.
 
 use super::*;
+use crate::packed::Packs;
 
 /// Compact Now gives the space mail deleted took back to the disk, and what's left reads back
 /// whole; whatever wants the file meanwhile waits for it rather than failing.
@@ -97,6 +98,68 @@ fn a_data_file_killed_after_compacting_needs_no_repair() {
     }
     drop(store);
     let _ = std::fs::remove_dir_all(&t);
+}
+
+/// A read from the window's thread while Compact Now has the file is refused at once ("being
+/// compacted"), rather than freezing the window until it's done (up to 30 minutes); a read from
+/// another thread, and a write from any, still wait and then go through. Here the compaction
+/// waits 1.5 s for a sync holding the file before it can start.
+#[test]
+fn a_read_from_the_window_never_waits_for_a_compaction() {
+    let root = temp("compact-window");
+    let store = Store::open_packed(root.join("app"), root.join("Quatrelle Files")).unwrap();
+    store.save_accounts(&[account("a1", "ana@example.com")]).unwrap();
+    let key = |uid: u32| MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 1, uid };
+    for uid in 1..=40 {
+        store.write_body(&key(uid), &noise(50_000, u64::from(uid))).unwrap();
+    }
+    let crate::Files::Packed(packs) = &store.files.main else { panic!("packed") };
+    // A sync holding the file: the compaction waits for it to let go.
+    let held = packs.db("a1", false).unwrap().unwrap();
+    let holder = std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(1500));
+        drop(held);
+    });
+    let compacting = {
+        let store = store.clone();
+        std::thread::spawn(move || store.compact_data_file("a1").unwrap().unwrap())
+    };
+    while !Packs::lock(&packs.compacting).contains("a1") {
+        std::thread::yield_now();
+    }
+    let window = {
+        let store = store.clone();
+        std::thread::spawn(move || {
+            crate::no_waiting();
+            let began = std::time::Instant::now();
+            let read = store.read_body(&key(3));
+            (read.is_some(), began.elapsed())
+        })
+    };
+    let (read, waited) = window.join().unwrap();
+    eprintln!("a read from the window's thread during a compaction: {waited:.2?} (read: {read})");
+    assert!(waited < std::time::Duration::from_millis(100), "the window waited {waited:.2?}");
+    assert!(!read, "refused: being compacted");
+    // Another thread waits, then reads; a write from the window's thread waits, then writes.
+    let other = {
+        let store = store.clone();
+        std::thread::spawn(move || store.read_body(&key(4)))
+    };
+    let writer = {
+        let store = store.clone();
+        std::thread::spawn(move || {
+            crate::no_waiting();
+            store.write_body(&key(1), b"Subject: x\r\n\r\nwritten while compacted")
+        })
+    };
+    holder.join().unwrap();
+    compacting.join().unwrap();
+    assert_eq!(other.join().unwrap(), Some(noise(50_000, 4)), "another thread waited, then read");
+    assert!(writer.join().unwrap().is_ok(), "the write waited, then wrote");
+    assert_eq!(store.read_body(&key(1)).as_deref(), Some(&b"Subject: x\r\n\r\nwritten while compacted"[..]));
+    assert_eq!(store.read_body(&key(3)), Some(noise(50_000, 3)), "read once it's done");
+    drop(store);
+    let _ = std::fs::remove_dir_all(&root);
 }
 
 /// Compact Now ends with the file as small as what it keeps, even with nothing to give back:

@@ -546,6 +546,9 @@ fn run(
     #[cfg(target_os = "macos")]
     let (_finder_guard, finder) = apple_events::listen();
     let pacing = graphics::Pacing::new(options.wgpu_options.surface.present_mode);
+    // This thread is the window's: Compact Now never keeps it waiting to read the data file it
+    // has to itself (the read fails at once, "being compacted"); writes still wait.
+    quatrelle_engine::store::no_waiting();
     eframe::run_native(
         "Quatrelle",
         options,

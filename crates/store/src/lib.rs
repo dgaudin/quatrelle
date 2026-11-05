@@ -620,6 +620,14 @@ pub fn clear_scratch() {
     }
 }
 
+/// The calling thread (the window's) is never kept waiting by Compact Now: what it reads of the
+/// data file being compacted fails at once ("being compacted") until it's done, rather than
+/// freezing the window. Writes still wait.
+pub fn no_waiting() {
+    #[cfg(not(target_arch = "wasm32"))]
+    packed::no_waiting();
+}
+
 pub use accounts::{CompactStep, Compacted, Recompressed, Recompressing};
 use atomic::private_dir;
 pub use atomic::write_atomic;
