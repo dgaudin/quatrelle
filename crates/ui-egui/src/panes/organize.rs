@@ -20,7 +20,7 @@ pub fn dot(ui: &mut Ui, color: u8, dark: bool) {
 
 /// The Categorize menu: tick or untick a category on the selection, or make a new one.
 pub fn categorize_menu(ui: &mut Ui, s: &Session, t: &Tokens, acts: &mut Vec<Action>) {
-    let first = s.selected().into_iter().next();
+    let first = s.first_selected();
     for c in &s.prefs.categories {
         let on = first.as_ref().is_some_and(|m| c.marks(&m.flags));
         let clicked = ui
@@ -86,7 +86,7 @@ pub fn follow_up_menu(ui: &mut Ui, s: &Session, t: &Tokens, acts: &mut Vec<Actio
         ui.close();
     }
     ui.separator();
-    let flagged = s.selected().iter().any(|m| m.flags.flagged);
+    let flagged = s.selected_iter().any(|m| m.flags.flagged);
     if ui.add_enabled(flagged, egui::Button::new(tl!("Mark complete"))).clicked() {
         acts.push(Action::Run("mail.flag", json!({"complete": true})));
         ui.close();
@@ -114,7 +114,7 @@ pub fn context_items(ui: &mut Ui, s: &Session, t: &Tokens, acts: &mut Vec<Action
             ui.close();
         }
     }
-    if let Some(m) = s.selected().into_iter().next()
+    if let Some(m) = s.first_selected()
         && ui.button((menu_icon(Some(Icon::MailRules)), tl!("Create rule…"))).clicked()
     {
         // A colleague's address may be Exchange's internal one, kept as a name alone: the rule

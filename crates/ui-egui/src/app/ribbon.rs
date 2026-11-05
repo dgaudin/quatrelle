@@ -243,7 +243,7 @@ impl MailApp {
                         // Ignore the conversation, as Outlook's Delete drop-down.
                         let r = widgets::big_more(ui, "More delete options", &t);
                         egui::Popup::menu(&r).show(|ui| {
-                            let ignoring = !s.selection.is_empty() && s.selected().iter().all(|m| s.is_ignored(m));
+                            let ignoring = !s.selection.is_empty() && s.selected_iter().all(|m| s.is_ignored(m));
                             let label = if ignoring { "Stop ignoring the conversation" } else { "Ignore the conversation" };
                             if ui
                                 .add_enabled(enabled("mail.ignore"), egui::Button::new(tl!(label)))
@@ -301,7 +301,8 @@ impl MailApp {
                         let r = widgets::big_button(ui, Icon::Steps, "Quick steps", &t, true);
                         egui::Popup::menu(&r).show(|ui| quick_steps_menu(ui, s, acts));
                         groups.end(ui, &t, "Quick steps");
-                        let first_unread = s.selected().first().is_some_and(|m| !m.flags.seen);
+                        let first = s.first_selected();
+                        let first_unread = first.is_some_and(|m| !m.flags.seen);
                         let (ricon, rlabel) = if first_unread { (Icon::Read, "Mark read") } else { (Icon::Unread, "Mark unread") };
                         if widgets::big_button(ui, ricon, rlabel, &t, enabled("mail.toggleRead"))
                             .on_hover_text("Read / Unread (Ctrl+Q / Ctrl+U)")
@@ -321,7 +322,7 @@ impl MailApp {
                         let sel = !s.selection.is_empty();
                         let r = widgets::big_button(ui, Icon::Tag, "Categorize", &t, sel);
                         egui::Popup::menu(&r).show(|ui| organize::categorize_menu(ui, s, &t, acts));
-                        let pinned = s.selected().first().is_some_and(|m| m.flags.pinned());
+                        let pinned = first.is_some_and(|m| m.flags.pinned());
                         if widgets::big_button(ui, Icon::Pin, if pinned { "Unpin" } else { "Pin" }, &t, sel).clicked() {
                             acts.push(Action::Run("mail.pin", json!({"on": !pinned})));
                         }
