@@ -188,6 +188,12 @@ pub(super) fn commands() -> Vec<CommandSpec> {
         CommandSpec::new("search.run", "Search", "Search box", search).key("Mod+E").params(
             r#"{"query": string, "scope"?: "current"|"subfolders"|"mailbox"|"all" (kept for the next searches; default: the last one), "index"?: number (messages added to the index this call; the window adds a slice at a time so a big mailbox doesn't freeze it; 0 or absent: no limit), "remember"?: bool (among the recent searches)}"#,
         ),
+        CommandSpec::new("search.more", "Search on", "Search box (a big mailbox's search, a slice a frame)", |s, v| {
+            let budget = p::u64(v, "index").and_then(|n| usize::try_from(n).ok()).unwrap_or(0);
+            let n = s.search_more(budget);
+            Ok(json!({"results": n, "pending": s.search_pending}))
+        })
+        .params(r#"{"index"?: number (messages added to the index this call, in the search's own scope and Search Folder; 0 or absent: no limit)}"#),
         CommandSpec::new("search.remember", "Remember a search", "Search box (left with a search in it)", |s, v| {
             s.remember_search(p::req_str(v, "query")?);
             Ok(json!({"recent": s.recent_searches().len()}))

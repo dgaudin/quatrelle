@@ -5,6 +5,7 @@
 
 use super::*;
 
+mod searching;
 mod selecting;
 
 /// A folder's name too long for the folder pane stays on one line, ending in "…" (its whole name
