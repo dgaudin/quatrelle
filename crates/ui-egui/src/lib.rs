@@ -399,6 +399,7 @@ impl MailApp {
                 video_files: HashMap::new(),
                 video_frames: HashMap::new(),
                 videos: reading::Videos::default(),
+                bodies: reading::Bodies::default(),
                 backstage: None,
                 mini_month: None,
                 cal_scrolled: [false; 2],

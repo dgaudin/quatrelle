@@ -149,6 +149,8 @@ fn bench(lane: bool) {
             }
         });
         a.services = Box::new(OneLane(tx));
+        // The open message read and parsed on the lane too, as in the app.
+        a.defer_bodies();
     }
     eprintln!("{}", if lane { "On a lane:" } else { "In the window:" });
     frame(&ctx, &mut a, vec![]);

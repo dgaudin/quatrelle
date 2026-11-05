@@ -168,6 +168,8 @@ pub struct UiState {
     pub(crate) video_frames: HashMap<PathBuf, VideoFrame>,
     /// The work behind them, on the pictures lane: the files written, the frames decoded.
     pub(crate) videos: reading::Videos,
+    /// The open message's body on its way back from the reading lane.
+    pub(crate) bodies: reading::Bodies,
     /// The File page, while it's open.
     pub backstage: Option<backstage::Backstage>,
     /// The month the calendar's small month shows (`year * 12 + month - 1`; `None`: the day on

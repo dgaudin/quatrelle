@@ -17,6 +17,7 @@ use crate::{Action, UiState, widgets};
 
 mod assistant;
 mod attachments;
+mod bodies;
 mod body;
 pub(crate) mod check_names;
 mod compose;
@@ -32,6 +33,7 @@ pub(crate) use attachments::decode;
 #[cfg(test)]
 pub(crate) use attachments::previewed_text;
 use attachments::*;
+pub(crate) use bodies::Bodies;
 pub(crate) use body::CellHeights;
 use body::*;
 pub use compose::compose_window;
@@ -330,6 +332,10 @@ fn message(s: &mut Session, st: &mut UiState, ui: &mut Ui, acts: &mut Vec<Action
     let scrolled = egui::ScrollArea::new([zoomed, true]).auto_shrink(false).id_salt(("reading", in_window, r.key.to_id(), viewing)).show(ui, |ui| {
         egui::Frame::new().inner_margin(Margin { left: 24, right: 24, top: if headed { 8 } else { 18 }, bottom: 24 }).show(ui, |ui| {
             let Some(p) = &r.parsed else {
+                if r.error.is_none() && s.body_waiting(&r.key) {
+                    bodies::getting_ready(&t, ui, summary.as_ref());
+                    return;
+                }
                 ui.add_space(30.0);
                 match &r.error {
                     Some(e) => {
