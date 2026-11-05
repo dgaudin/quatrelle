@@ -168,14 +168,11 @@ fn a_picture_waits_for_the_whole_message() {
     let picture = mime::InlinePicture { cid: "still@x".into(), name: "still.png".into(), mime: "image/png".into(), data: png };
     let whole = mime::build(&Draft { inline: vec![picture], ..d }, &EmailAddress::new("Sam", "sam@studio.example"), NOW, "<r@x>").unwrap();
     whole_arrives(&mut a, &key, &whole);
-    frame(&ctx, &mut a, vec![]);
-    frame(&ctx, &mut a, vec![]);
-    let id = key.to_id();
-    assert!(
-        a.ui.shown_pictures.iter().any(|(name, t)| name.contains(&id) && t.is_some()),
-        "the picture shows: {:?}",
-        a.ui.shown_pictures.iter().map(|(n, t)| (n, t.is_some())).collect::<Vec<_>>()
-    );
+    // Taken out of the message and decoded a step a frame (no threads here).
+    for _ in 0..4 {
+        frame(&ctx, &mut a, vec![]);
+    }
+    assert_eq!(a.ui.pictures.of(&key).1, 1, "the picture shows");
     let _ = std::fs::remove_dir_all(dir);
 }
 

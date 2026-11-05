@@ -12,68 +12,14 @@ pub(super) fn kind_icon(k: AttachmentKind) -> Icon {
     }
 }
 
-/// Decode an image attachment into a thumbnail texture (cached; `None` if it isn't a picture
-/// we can read). Pictures come from mail, so size is capped before decoding.
-pub(super) fn preview(s: &Session, st: &mut UiState, ctx: &egui::Context, key: &MessageKey, index: usize) -> Option<egui::TextureHandle> {
-    // Its text alone here: nothing of it is read, so no absence is kept for the whole message.
+/// A picture or PDF attachment's thumbnail, once made: taken out of its message with its others,
+/// in one read, and decoded a step at a time (each read the whole message again in the frame
+/// drawing it: upstream 321bef2). Its message's text alone here: none.
+fn thumbnail(s: &Session, st: &mut UiState, key: &MessageKey, index: usize, want: Want) -> Option<egui::TextureHandle> {
     if s.text_first(key) {
         return None;
     }
-    if let Some(t) = kept_preview(st, ctx, &(key.clone(), index)) {
-        return t;
-    }
-    if !room_for_preview(st, ctx) {
-        return None;
-    }
-    let tex = (|| {
-        let raw = s.store.as_ref()?.read_body(key)?;
-        let data = mime::attachment_data(&raw, index)?;
-        decode(ctx, &format!("att-{}-{index}", key.to_id()), &data, 480)
-    })();
-    keep_preview(st, ctx, (key.clone(), index), tex.clone());
-    tex
-}
-
-/// A picture attachment at a size to look at (decoded once and kept by egui while it's shown).
-pub(crate) fn big_picture(s: &Session, ctx: &egui::Context, key: &MessageKey, index: usize) -> Option<egui::TextureHandle> {
-    // Its text alone here: nothing of it is read, so no absence is kept for the whole message.
-    if s.text_first(key) {
-        return None;
-    }
-    let id = egui::Id::unique(("big-picture", key.to_id(), index));
-    if let Some(t) = ctx.data(|d| d.get_temp::<Option<egui::TextureHandle>>(id)) {
-        return t;
-    }
-    let tex = (|| {
-        let raw = s.store.as_ref()?.read_body(key)?;
-        let data = mime::attachment_data(&raw, index)?;
-        decode(ctx, &format!("big-{}-{index}", key.to_id()), &data, 2048)
-    })();
-    ctx.data_mut(|d| d.insert_temp(id, tex.clone()));
-    tex
-}
-
-/// The first page of a PDF attachment (cached like pictures).
-pub(super) fn pdf_preview(s: &Session, st: &mut UiState, ctx: &egui::Context, key: &MessageKey, index: usize) -> Option<egui::TextureHandle> {
-    // Its text alone here: nothing of it is read, so no absence is kept for the whole message.
-    if s.text_first(key) {
-        return None;
-    }
-    if let Some(t) = kept_preview(st, ctx, &(key.clone(), index)) {
-        return t;
-    }
-    if !room_for_preview(st, ctx) {
-        return None;
-    }
-    let tex = (|| {
-        let raw = s.store.as_ref()?.read_body(key)?;
-        let data = mime::attachment_data(&raw, index)?;
-        let limit = ctx.input(|i| i.max_texture_side).try_into().unwrap_or(u32::MAX);
-        let img = crate::thumbs::pdf_page(&data, 0, crate::thumbs::Fit::Longer(260), limit, st.fonts.clone()).map(|(img, _)| img)?;
-        Some(ctx.load_texture(format!("pdf-{}-{index}", key.to_id()), img, egui::TextureOptions::LINEAR))
-    })();
-    keep_preview(st, ctx, (key.clone(), index), tex.clone());
-    tex
+    st.pictures.get(key, index, want).ready()
 }
 
 /// A frame of a video attachment, asked of the platform (which may take a moment).
@@ -138,14 +84,14 @@ pub(super) fn video_preview(
     }
 }
 
-/// Most attachment thumbnails kept: those shown least recently go first, never one shown in
-/// this frame.
+/// Most video thumbnails kept: those shown least recently go first, never one shown in this
+/// frame (pictures' and PDFs' are kept with the message's other pictures, [`Pictures`]).
 const PREVIEWS: usize = 64;
 
-/// A thumbnail kept (`Some(None)`: the attachment has none), marked as shown in this frame.
+/// A video thumbnail kept (`Some(None)`: the attachment has none), marked as shown in this frame.
 fn kept_preview(st: &mut UiState, ctx: &egui::Context, id: &(MessageKey, usize)) -> Option<Option<egui::TextureHandle>> {
     let now = ctx.cumulative_frame_nr();
-    st.previews.get_mut(id).map(|(t, used)| {
+    st.video_thumbs.get_mut(id).map(|(t, used)| {
         *used = now;
         t.clone()
     })
@@ -156,19 +102,19 @@ fn kept_preview(st: &mut UiState, ctx: &egui::Context, id: &(MessageKey, usize))
 /// message's read and decoded again every frame).
 fn room_for_preview(st: &UiState, ctx: &egui::Context) -> bool {
     let now = ctx.cumulative_frame_nr();
-    st.previews.len() < PREVIEWS || st.previews.values().any(|(_, used)| *used < now)
+    st.video_thumbs.len() < PREVIEWS || st.video_thumbs.values().any(|(_, used)| *used < now)
 }
 
 /// Keep a thumbnail made in this frame, letting go of the one shown least recently if need be.
 fn keep_preview(st: &mut UiState, ctx: &egui::Context, id: (MessageKey, usize), tex: Option<egui::TextureHandle>) {
     let now = ctx.cumulative_frame_nr();
-    while st.previews.len() >= PREVIEWS {
-        let oldest = st.previews.iter().filter(|(_, (_, used))| *used < now).min_by_key(|(_, (_, used))| *used).map(|(k, _)| k.clone());
+    while st.video_thumbs.len() >= PREVIEWS {
+        let oldest = st.video_thumbs.iter().filter(|(_, (_, used))| *used < now).min_by_key(|(_, (_, used))| *used).map(|(k, _)| k.clone());
         let Some(oldest) = oldest else { break };
-        st.previews.remove(&oldest);
+        st.video_thumbs.remove(&oldest);
     }
-    if st.previews.len() < PREVIEWS {
-        st.previews.insert(id, (tex, now));
+    if st.video_thumbs.len() < PREVIEWS {
+        st.video_thumbs.insert(id, (tex, now));
     }
 }
 
@@ -194,8 +140,8 @@ pub(super) fn attachment_card(
     let t = st.tokens;
     let kind = a.kind();
     let thumb = match kind {
-        AttachmentKind::Image => preview(s, st, ui.ctx(), key, a.index),
-        AttachmentKind::Pdf => pdf_preview(s, st, ui.ctx(), key, a.index),
+        AttachmentKind::Image => thumbnail(s, st, key, a.index, Want::Thumb),
+        AttachmentKind::Pdf => thumbnail(s, st, key, a.index, Want::PdfFirst),
         AttachmentKind::Video => video_preview(s, st, ui.ctx(), key, a),
         _ => None,
     };
@@ -437,7 +383,11 @@ pub(super) fn attachment_preview(s: &Session, st: &mut UiState, ui: &mut Ui, key
     let shown = match ui.ctx().data(|d| d.get_temp::<std::sync::Arc<Shown>>(id)) {
         Some(x) => x,
         None => {
-            let data = s.store.as_ref().and_then(|st| st.read_body(key)).and_then(|raw| shown_data(&raw, a));
+            // A picture or a PDF is read with the message's others (`Pictures`), not here.
+            let data = match a.kind() {
+                AttachmentKind::Image | AttachmentKind::Pdf => None,
+                _ => s.store.as_ref().and_then(|st| st.read_body(key)).and_then(|raw| shown_data(&raw, a)),
+            };
             let x = std::sync::Arc::new(read_shown(a, data.as_deref()));
             ui.ctx().data_mut(|d| d.insert_temp(id, x.clone()));
             x
@@ -445,15 +395,19 @@ pub(super) fn attachment_preview(s: &Session, st: &mut UiState, ui: &mut Ui, key
     };
     let width = ui.available_width();
     match shown.as_ref() {
-        Shown::Picture => match big_picture(s, ui.ctx(), key, a.index) {
-            Some(tex) => {
+        Shown::Picture => match st.pictures.get(key, a.index, Want::Big) {
+            Got::Ready(tex, _) => {
                 let sz = tex.size_vec2();
                 let scale = (width / sz.x).min(1.0);
                 ui.add(egui::Image::new(&tex).fit_to_exact_size(sz * scale));
             }
-            None => no_preview(&t, ui, a, acts),
+            Got::Pending => {
+                ui.add_space(30.0);
+                ui.vertical_centered(|ui| ui.spinner());
+            }
+            Got::Failed => no_preview(&t, ui, a, acts),
         },
-        Shown::Pdf => pdf_pages(s, st, ui, key, a, width, acts),
+        Shown::Pdf => pdf_pages(st, ui, key, a, width, acts),
         Shown::Text { header, text } => {
             if !header.is_empty() {
                 egui::Grid::new(("att-header", a.index)).num_columns(2).spacing(vec2(10.0, 4.0)).show(ui, |ui| {
@@ -479,9 +433,8 @@ pub(super) fn attachment_preview(s: &Session, st: &mut UiState, ui: &mut Ui, key
     }
 }
 
-/// Read an attachment once for its preview.
+/// Read an attachment once for its preview (a picture or a PDF needs no bytes here).
 pub(super) fn read_shown(a: &mime::AttachmentInfo, data: Option<&[u8]>) -> Shown {
-    let Some(data) = data else { return Shown::Nothing };
     let kind = a.kind();
     if kind == AttachmentKind::Image {
         return Shown::Picture;
@@ -489,6 +442,7 @@ pub(super) fn read_shown(a: &mime::AttachmentInfo, data: Option<&[u8]>) -> Shown
     if kind == AttachmentKind::Pdf {
         return Shown::Pdf;
     }
+    let Some(data) = data else { return Shown::Nothing };
     if let Some(p) = mime::office::preview(&a.name, &a.mime, data) {
         return Shown::Office(p);
     }
@@ -536,57 +490,48 @@ pub(super) fn no_preview(t: &Tokens, ui: &mut Ui, a: &mime::AttachmentInfo, acts
 /// Most pages of a PDF shown in the reading pane (the rest: Open it).
 pub(super) const PDF_PAGES: usize = 60;
 
-/// A PDF's pages one under the other, the pane's width, each drawn as it's first needed (one
-/// a frame, so the pane stays responsive).
-pub(super) fn pdf_pages(s: &Session, st: &UiState, ui: &mut Ui, key: &MessageKey, a: &mime::AttachmentInfo, width: f32, acts: &mut Vec<Action>) {
+/// A PDF's pages one under the other, the pane's width. Only the pages on screen are drawn
+/// (and kept): one not drawn yet takes the room the one before it had (from upstream 321bef2;
+/// each page read the whole message again, one a frame).
+pub(super) fn pdf_pages(st: &mut UiState, ui: &mut Ui, key: &MessageKey, a: &mime::AttachmentInfo, width: f32, acts: &mut Vec<Action>) {
     let t = st.tokens;
-    let px = (width * ui.ctx().pixels_per_point()).clamp(200.0, 2400.0) as u32;
-    let count_id = egui::Id::unique(("pdf-count", key.to_id(), a.index));
-    let mut rendered_one = false;
-    let mut n = 0usize;
-    loop {
-        let count = ui.ctx().data(|d| d.get_temp::<usize>(count_id));
-        if count.is_some_and(|c| n >= c) || n >= PDF_PAGES {
-            break;
+    // Made at the next 100 pixels up and drawn to the width: a window being resized doesn't
+    // make the pages again for each pixel.
+    let px = ((width * ui.ctx().pixels_per_point()).clamp(200.0, 2400.0) / 100.0).ceil() as u32 * 100;
+    let count = st.pictures.pages(key, a.index);
+    // A4's shape until a page is drawn.
+    let mut shape = 297.0 / 210.0;
+    for n in 0..count.unwrap_or(1).min(PDF_PAGES) {
+        let guess = Rect::from_min_size(ui.cursor().min, vec2(width, width * shape));
+        let got = if ui.is_rect_visible(guess) { st.pictures.get(key, a.index, Want::PdfPage { n, px }) } else { Got::Pending };
+        if n == 0 && matches!(got, Got::Failed) {
+            no_preview(&t, ui, a, acts);
+            return;
         }
-        let pid = egui::Id::unique(("pdf-page", key.to_id(), a.index, n, px / 100));
-        let tex = match ui.ctx().data(|d| d.get_temp::<Option<egui::TextureHandle>>(pid)) {
-            Some(t) => t,
-            None if rendered_one => {
-                ui.ctx().request_repaint();
-                ui.horizontal(|ui| {
-                    ui.spinner();
-                    ui.label(RichText::new(tf!("Page {n}", n = n + 1)).color(t.dim).small());
-                });
-                break;
+        let r = match got {
+            Got::Ready(tex, _) => {
+                let sz = tex.size_vec2();
+                if sz.x >= 1.0 {
+                    shape = sz.y / sz.x;
+                }
+                ui.add(egui::Image::new(&tex).fit_to_exact_size(vec2(width, width * shape))).rect
             }
-            None => {
-                rendered_one = true;
-                let data = s.store.as_ref().and_then(|st| st.read_body(key)).and_then(|raw| mime::attachment_data(&raw, a.index));
-                let limit = ui.ctx().input(|i| i.max_texture_side).try_into().unwrap_or(u32::MAX);
-                let page = data.and_then(|d| crate::thumbs::pdf_page(&d, n, crate::thumbs::Fit::Width(px), limit, st.fonts.clone()));
-                let tex = page.map(|(img, total)| {
-                    ui.ctx().data_mut(|d| d.insert_temp(count_id, total));
-                    ui.ctx().load_texture(format!("pdf-{}-{}-{n}", key.to_id(), a.index), img, egui::TextureOptions::LINEAR)
-                });
-                ui.ctx().data_mut(|d| d.insert_temp(pid, tex.clone()));
-                tex
+            Got::Pending | Got::Failed => {
+                let (r, _) = ui.allocate_exact_size(vec2(width, width * shape), Sense::hover());
+                if ui.is_rect_visible(r) {
+                    let label = widgets::one_line(ui, &tf!("Page {n}", n = n + 1), theme::regular(11.5), t.dim, width);
+                    ui.painter().galley(r.center() + vec2(-label.size().x / 2.0, 14.0), label, t.dim);
+                    if matches!(got, Got::Pending) {
+                        egui::Spinner::new().paint_at(ui, Rect::from_center_size(r.center(), vec2(18.0, 18.0)));
+                    }
+                }
+                r
             }
         };
-        let Some(tex) = tex else {
-            if n == 0 {
-                no_preview(&t, ui, a, acts);
-            }
-            break;
-        };
-        let sz = tex.size_vec2();
-        let scale = width / sz.x;
-        let r = ui.add(egui::Image::new(&tex).fit_to_exact_size(sz * scale)).rect;
         ui.painter().rect_stroke(r, 0.0, egui::Stroke::new(1.0, t.border), egui::StrokeKind::Outside);
         ui.add_space(12.0);
-        n += 1;
     }
-    if let Some(c) = ui.ctx().data(|d| d.get_temp::<usize>(count_id)).filter(|c| *c > PDF_PAGES) {
+    if let Some(c) = count.filter(|c| *c > PDF_PAGES) {
         ui.label(
             RichText::new(tf!("The first {shown} of {total} pages: open it to read the rest.", shown = PDF_PAGES, total = c)).color(t.dim).small(),
         );

@@ -2,9 +2,13 @@
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 // Copyright (c) 2026 Didier Gaudin
 //! The pictures of a message: drawn where its HTML puts them, and copied or saved from their
-//! menu.
+//! menu. Those sent with it are taken out of it and decoded with its others ([`Pictures`]).
 
 use super::*;
+
+mod cache;
+
+pub(crate) use cache::{Got, Pictures, Want};
 
 /// Draw one picture of an HTML message at the size the message sets (`size`), in `width`, `zoom`
 /// times (wider than that when zoomed in); `false` when it can't be shown (yet), else with the
@@ -37,7 +41,7 @@ pub(super) fn picture(
     let r = ui.add(egui::Image::new(&tex).fit_to_exact_size(at * zoom).maintain_aspect_ratio(false).sense(Sense::click()));
     r.context_menu(|ui| {
         if ui.button(tl!("Copy picture")).clicked() {
-            if let Some(img) = picture_bytes(s, key, p, src).and_then(|b| color_image(&b)) {
+            if let Some(img) = picture_bytes(s, &st.pictures, key, p, src).and_then(|b| color_image(&b)) {
                 ui.ctx().copy_image(img);
             }
             ui.close();
@@ -62,9 +66,13 @@ fn sent_with(p: &mime::Parsed, src: &str) -> Option<usize> {
     mime::picture_attachment(p, src)
 }
 
-/// A picture's own bytes: as sent with the message, or as downloaded from the web.
-fn picture_bytes(s: &Session, key: &MessageKey, p: &mime::Parsed, src: &str) -> Option<Vec<u8>> {
+/// A picture's own bytes: as sent with the message (as taken out for it while that's kept), or as
+/// downloaded from the web.
+fn picture_bytes(s: &Session, pics: &Pictures, key: &MessageKey, p: &mime::Parsed, src: &str) -> Option<Vec<u8>> {
     if let Some(index) = sent_with(p, src) {
+        if let Some(data) = pics.source(key, index) {
+            return Some(data.to_vec());
+        }
         let raw = s.store.as_ref()?.read_body(key)?;
         return mime::attachment_data(&raw, index);
     }
@@ -157,12 +165,13 @@ pub(super) fn picture_texture(
             return if failed { Pic::Missing } else { Pic::Loading };
         }
         let Some(index) = sent_with(p, src) else { return Pic::Missing };
-        let name = format!("att-{}-{index}-{most}", key.to_id());
-        return shown_picture(st, &name, || {
-            let raw = s.store.as_ref()?.read_body(key)?;
-            let data = mime::attachment_data(&raw, index)?;
-            decode_sized(ctx, &name, &data, most)
-        });
+        // Taken out with the message's others, in one read, and decoded a step at a time (each
+        // read the whole message again, all in the frame that first showed it: upstream 321bef2).
+        return match st.pictures.get(key, index, Want::Body(most)) {
+            Got::Ready(tex, own) => Pic::Ready(tex, own),
+            Got::Pending => Pic::Loading,
+            Got::Failed => Pic::Missing,
+        };
     }
     if !allowed {
         return Pic::Missing;
@@ -202,17 +211,26 @@ pub(super) fn carried_picture(
     }
 }
 
-/// A picture decoded once (`decode`) and kept by `name` while messages are read.
+/// Most web and carried pictures kept decoded.
+const SHOWN_PICTURES: usize = 200;
+
+/// A picture decoded once (`decode`) and kept by `name` while messages are read. Those shown
+/// least recently go (never one shown in this frame: a message with more than were kept decoded
+/// all of them again every frame); past that many shown at once it's kept anyway, and let go
+/// once no longer shown (from upstream 321bef2).
 fn shown_picture(st: &mut UiState, name: &str, decode: impl FnOnce() -> Option<(egui::TextureHandle, Vec2)>) -> Pic {
-    if let Some(t) = st.shown_pictures.get(name) {
+    let now = st.pictures.frame();
+    if let Some((t, used)) = st.shown_pictures.get_mut(name) {
+        *used = now;
         return t.clone().map_or(Pic::Missing, |(tex, own)| Pic::Ready(tex, own));
     }
-    // Each can take a few megabytes of the graphics card's memory.
-    if st.shown_pictures.len() > 48 {
-        st.shown_pictures.clear();
-    }
     let t = decode();
-    st.shown_pictures.insert(name.to_string(), t.clone());
+    while st.shown_pictures.len() >= SHOWN_PICTURES {
+        let oldest = st.shown_pictures.iter().filter(|(_, (_, used))| *used < now).min_by_key(|(_, (_, used))| *used).map(|(k, _)| k.clone());
+        let Some(oldest) = oldest else { break };
+        st.shown_pictures.remove(&oldest);
+    }
+    st.shown_pictures.insert(name.to_string(), (t.clone(), now));
     t.map_or(Pic::Missing, |(tex, own)| Pic::Ready(tex, own))
 }
 
