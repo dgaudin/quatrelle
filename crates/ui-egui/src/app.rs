@@ -15,7 +15,7 @@ mod meetings;
 mod ribbon;
 mod search_box;
 mod sending;
-mod source;
+pub(crate) mod source;
 mod updates;
 mod webex;
 mod windows;

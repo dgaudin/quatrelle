@@ -98,26 +98,33 @@ impl MailApp {
     }
 }
 
-/// The source's lines (or its header's), only those in view laid out.
-fn source_text(ui: &mut Ui, t: &Tokens, v: &quatrelle_engine::SourceView, header_only: bool) {
+/// The source's lines (or its header's), only those in view laid out (which, returned).
+pub(crate) fn source_text(ui: &mut Ui, t: &Tokens, v: &quatrelle_engine::SourceView, header_only: bool) -> std::ops::Range<usize> {
     if let Some(e) = &v.error {
         ui.label(RichText::new(tf!("The source couldn't be downloaded: {error}", error = e)).color(t.danger));
-        return;
+        return 0..0;
     }
     if v.pending {
         ui.horizontal(|ui| {
             ui.add(egui::Spinner::new().size(14.0));
             ui.label(RichText::new(tl!("Downloading the message…")).color(t.dim));
         });
-        return;
+        return 0..0;
     }
     let n = if header_only { v.header_lines.min(v.lines.len()) } else { v.lines.len() };
     let font = egui::FontId::monospace(12.5);
     let row = ui.fonts_mut(|f| f.row_height(&font));
-    egui::ScrollArea::both().auto_shrink(false).id_salt(("source", v.key.to_id())).show_rows(ui, row, n, |ui, rows| {
-        ui.spacing_mut().item_spacing.y = 0.0;
-        for line in v.lines.get(rows).unwrap_or_default() {
-            ui.add(egui::Label::new(RichText::new(line).font(font.clone()).color(t.text)).wrap_mode(egui::TextWrapMode::Extend).selectable(true));
-        }
-    });
+    // The lines touch: set before the rows are counted, which reckons a row with the spacing
+    // under it (set inside, the window's lower part stayed empty).
+    ui.spacing_mut().item_spacing.y = 0.0;
+    egui::ScrollArea::both()
+        .auto_shrink(false)
+        .id_salt(("source", v.key.to_id()))
+        .show_rows(ui, row, n, |ui, rows| {
+            for line in v.lines.get(rows.clone()).unwrap_or_default() {
+                ui.add(egui::Label::new(RichText::new(line).font(font.clone()).color(t.text)).wrap_mode(egui::TextWrapMode::Extend).selectable(true));
+            }
+            rows.start..rows.end.min(n)
+        })
+        .inner
 }
