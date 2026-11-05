@@ -85,6 +85,24 @@ Left whole as well: the Outbox, older mail read online, signed or encrypted mail
 and a message with a protected file. The fuzz target
 `text_first` covers the two builders.
 
+## A message opened while the main connection works (`worker/opening.rs`, issue #24)
+
+The main connection says when it is at work rather than waiting (`Worker::at_work`: a folder's
+sync, the folder list, the calendars' and contacts' sync): it then takes a copy of itself, an EWS
+client's `sibling()` with each folder's server id, or the IMAP account and what it signs in with.
+A message opened meanwhile still goes to the main connection's queue, and to `Opened` too: if
+the main connection hasn't started it 400 ms later (`GRACE`, enough for a short work to end), a
+thread of its own brings it on the copy, the last opened first; whichever starts it first has it
+(`Opened::claim`). On Exchange the copy finds the message's id by its Message-ID in its folder
+(one `FindItem`): the numbering (some 550,000 ids on a big mailbox) stays with the main
+connection and is never read again for this, and the second connection (sending, rooms, without
+the numbering nor the public folders' routes) is not used. A big message's text comes first, as
+above, then its whole on `Rest`; a small one comes whole; only the source is written, never the
+folder's list. A copy refused its sign-in costs one refusal for the session: none is tried again
+(`Rest::refuse`), and the main connection brings the messages after its work. Not found by its
+Message-ID (none in the cache) or any other failure: the main connection brings it. Graph and
+JMAP accounts wait for the main connection as before (their copy would need the numbering).
+
 ## The worker loop
 
 - On start: connect (TLS, or STARTTLS with a fresh capability list), authenticate (`AUTHENTICATE PLAIN`

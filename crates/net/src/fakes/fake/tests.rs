@@ -13,6 +13,7 @@ use crate::worker::apply_remote;
 
 mod hostile;
 mod idle;
+mod opening;
 mod pool;
 mod search;
 mod sent;

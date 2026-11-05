@@ -698,7 +698,8 @@ pub use changes::{append, apply_remote, send, vote};
 pub use listening::{Heard, Listener};
 use sync::restriction;
 pub use sync::{
-    AheadTodo, download_ahead, fetch_body, find_lost, find_on_server, list_folders, older, read_online, search, sync_folder, sync_folder_then,
+    AheadTodo, download_ahead, fetch_body, find_by_message_id, find_lost, find_on_server, list_folders, older, read_online, search, sync_folder,
+    sync_folder_then,
 };
 pub use text_first::{fetch_text, text_first};
 pub use xml::{El, esc, parse, unb64};

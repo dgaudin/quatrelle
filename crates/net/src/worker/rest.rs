@@ -80,13 +80,16 @@ pub(super) struct Rest {
     queue: Arc<Mutex<Queue>>,
     /// The account has stopped: nothing more is written.
     stopped: Arc<AtomicBool>,
+    /// The server refused a message's text for how it was asked: not asked again this session,
+    /// on the main connection or a copy of it.
+    text_refused: AtomicBool,
     store: Store,
     sink: Sink,
 }
 
 impl Rest {
     pub(super) fn new(store: Store, sink: Sink) -> Rest {
-        Rest { queue: Arc::default(), stopped: Arc::default(), store, sink }
+        Rest { queue: Arc::default(), stopped: Arc::default(), text_refused: AtomicBool::new(false), store, sink }
     }
 
     /// Stop on the pool's flag, set as the account stops: the worker ending, which sets this one
@@ -99,6 +102,28 @@ impl Rest {
     /// A poisoned lock says no, as [`Rest::add`] then refuses every key anyway.
     pub(super) fn refused(&self) -> bool {
         self.queue.lock().is_ok_and(|q| q.refused.is_some())
+    }
+
+    /// Another copy of the connection was refused its sign-in (a message opened while the main
+    /// one was at work): none is tried from then on, here either, and the keys waiting are told.
+    pub(super) fn refuse(&self, key: &MessageKey, error: &str) {
+        for e in refused(&self.queue, key, error) {
+            self.sink.emit(e);
+        }
+    }
+
+    /// The account has stopped.
+    pub(super) fn stopped(&self) -> bool {
+        self.stopped.load(Ordering::SeqCst)
+    }
+
+    /// The server refused a message's text for how it was asked: messages come whole.
+    pub(super) fn text_refused(&self) -> bool {
+        self.text_refused.load(Ordering::Relaxed)
+    }
+
+    pub(super) fn refuse_text(&self) {
+        self.text_refused.store(true, Ordering::Relaxed);
     }
 
     /// Bring this message after the others asked for since, starting the thread if it's down.
@@ -201,7 +226,7 @@ fn refused(queue: &Mutex<Queue>, key: &MessageKey, error: &str) -> Vec<Event> {
 
 /// A message as the log names it: account, folder and uid, so that with several big messages on
 /// their way, each one's text and rest can be paired.
-fn named(key: &MessageKey) -> String {
+pub(super) fn named(key: &MessageKey) -> String {
     format!("{}: {} #{}", key.account, quatrelle_model::utf7::decode(&key.folder), key.uid)
 }
 
@@ -249,12 +274,16 @@ impl Worker {
     /// A big message's text on this connection, then the whole of it on a copy. Whatever can't
     /// go that way is brought whole here ([`Worker::fetch`]), which tells of any failure.
     pub(super) fn fetch_text_first(&mut self, key: MessageKey) {
+        // A copy of the connection brings it already (opened during a sync).
+        if !self.claim(&key) {
+            return;
+        }
         if let Some(raw) = self.store.read_body(&key) {
             return self.sink.emit(Event::Body { key, raw });
         }
         // A copy refused its sign-in: this connection, signed in before, brings the message whole,
         // where another copy would cost one more refused sign-in.
-        if self.text_refused || self.rest.refused() {
+        if self.rest.text_refused() || self.rest.refused() {
             return self.fetch(key);
         }
         // Told here, not left to `fetch`, which would connect again: on Active Directory two
@@ -284,7 +313,7 @@ impl Worker {
                 return self.fetch(key);
             }
             Err(NetError::No(e)) if crate::ews_pim::FIELD_REFUSED.iter().any(|r| e.contains(r)) => {
-                self.text_refused = true;
+                self.rest.refuse_text();
                 log::warn!("{}: the server refuses a message's text alone ({e}): messages come whole from now on", self.acc.id);
                 return self.fetch(key);
             }

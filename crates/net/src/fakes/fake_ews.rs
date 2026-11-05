@@ -179,6 +179,9 @@ pub struct Data {
     pub slow_sources: Option<std::time::Duration>,
     /// Answer `GetFolder` (a folder's counts, the first step of reading it) only after this long.
     pub slow_counts: Option<std::time::Duration>,
+    /// Answer the next item search in a calendar or a contact folder only after this long: the
+    /// calendars' and contacts' sync of a big mailbox. Taken by that search.
+    pub slow_pim: Option<std::time::Duration>,
     /// Answer `GetItem` asking for items' properties only after this long (a busy server); how
     /// many are being answered so, and the most at the same time.
     pub slow_items: Option<std::time::Duration>,
@@ -333,6 +336,7 @@ impl Default for Data {
             slow_sync: None,
             slow_sources: None,
             slow_counts: None,
+            slow_pim: None,
             slow_items: None,
             items_in_flight: 0,
             most_items_in_flight: 0,

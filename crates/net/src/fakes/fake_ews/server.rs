@@ -259,7 +259,16 @@ fn serve_connection(mut s: std::net::TcpStream, shared: &Arc<Mutex<Data>>) {
         // Slow answers: the fork holds every mail search (`slow_sync`), the shared version only
         // a mail folder's listing and not a PIM folder's (`hold`); whole messages and `GetFolder` too.
         let hold = {
-            let d = shared.lock().unwrap();
+            let mut d = shared.lock().unwrap();
+            // The calendars' and contacts' sync held once, at its first search.
+            if op.name == "FindItem"
+                && d.pim_folder(op.child("ParentFolderIds").and_then(|p| p.kids.first()))
+                && let Some(h) = d.slow_pim.take()
+            {
+                drop(d);
+                std::thread::sleep(h);
+                d = shared.lock().unwrap();
+            }
             d.hold
                 .filter(|_| op.name == "FindItem" && !d.pim_folder(op.child("ParentFolderIds").and_then(|p| p.kids.first())))
                 .or_else(|| d.slow_sync.filter(|_| op.name == "FindItem"))
