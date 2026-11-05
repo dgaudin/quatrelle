@@ -93,7 +93,20 @@ impl Session {
 
     /// The cached state of a folder, loaded from disk on first use; empty while it can't be read.
     pub fn folder_state(&mut self, account: &str, folder: &str) -> &FolderState<Arc<Summary>> {
-        if let Err(e) = self.load_cached(account, folder) {
+        self.folder_state_as(account, folder, false)
+    }
+
+    /// [`Session::folder_state`] for a look through every folder (a search, its index): a list
+    /// read for it from the disk is the first to go when the cache is full, not the lists kept
+    /// before. Put last like any other, the lists a search of a mailbox bigger than the cache
+    /// read went in turn, each pushing out the one the next search would want first: every
+    /// search of everything read every folder's list again, a list or two a call.
+    pub(crate) fn scan_state(&mut self, account: &str, folder: &str) -> &FolderState<Arc<Summary>> {
+        self.folder_state_as(account, folder, true)
+    }
+
+    fn folder_state_as(&mut self, account: &str, folder: &str, scan: bool) -> &FolderState<Arc<Summary>> {
+        if let Err(e) = self.load_cached_as(account, folder, scan) {
             log::warn!("a folder's list couldn't be read: {e}");
         }
         static EMPTY: std::sync::OnceLock<FolderState<Arc<Summary>>> = std::sync::OnceLock::new();
@@ -103,25 +116,44 @@ impl Session {
     /// Have a folder's list in the cache. One that can't be read is left out, not kept as empty:
     /// a flag changed in it then saved the empty list over the folder's mail.
     pub(super) fn load_cached(&mut self, account: &str, folder: &str) -> Result<(), quatrelle_store::StoreError> {
+        self.load_cached_as(account, folder, false)
+    }
+
+    /// [`Session::load_cached`]; `scan`: read for a look through every folder, a list read from
+    /// the disk goes first in the order the cache lets lists go (see [`Session::scan_state`]).
+    fn load_cached_as(&mut self, account: &str, folder: &str, scan: bool) -> Result<(), quatrelle_store::StoreError> {
         let k = (account.to_string(), folder.to_string());
         if !self.cache.contains_key(&k) {
             // A local account's marks still being written elsewhere are in it first.
             if self.account(account).is_none_or(AccountState::is_local) {
                 self.finish_local_marks();
             }
+            self.lists_read = self.lists_read.wrapping_add(1);
             let st = match &self.store {
                 Some(s) => s.load_folder(account, folder)?.shared(),
                 None => FolderState::default(),
             };
             self.cache.insert(k.clone(), st);
             self.cache_order.retain(|o| *o != k);
-            self.cache_order.push(k.clone());
+            if scan {
+                self.cache_order.insert(0, k.clone());
+            } else {
+                self.cache_order.push(k.clone());
+            }
             self.trim_cache(&k);
-        } else if self.cache_order.last() != Some(&k) {
+        } else if !scan && self.cache_order.last() != Some(&k) {
+            // (One a look through every folder finds stays where it is: moved last, the lists it
+            // hadn't come to yet went first.)
             self.cache_order.retain(|o| *o != k);
             self.cache_order.push(k);
         }
         Ok(())
+    }
+
+    /// How many folders' lists were read from the cache on disk (not found in memory), for the
+    /// tests and benches of what a look through the mailbox costs.
+    pub fn lists_read(&self) -> u64 {
+        self.lists_read
     }
 
     /// The folders whose lists are in memory, the least recently used first (what a look

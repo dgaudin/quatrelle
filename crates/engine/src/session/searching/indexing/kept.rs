@@ -58,7 +58,7 @@ impl Session {
         // Each message as the folder has it now, by its number: one gone, or whose summary says
         // something else, goes (read again if it's still there); each kept once.
         let now: HashMap<(u32, u32), u64> = {
-            let st = self.folder_state(account, folder);
+            let st = self.scan_state(account, folder);
             st.messages.iter().zip(&sums).map(|(m, s)| ((m.key.validity, m.key.uid), *s)).collect()
         };
         let mut have: HashSet<(u32, u32)> = HashSet::with_capacity(now.len());
@@ -117,7 +117,7 @@ impl Session {
     /// [`Session::folder_stamp`], and each message's [`summary_sum`] in the folder's order, in
     /// one pass.
     pub(crate) fn folder_sums(&mut self, account: &str, folder: &str) -> (u64, Vec<u64>) {
-        let st = self.folder_state(account, folder);
+        let st = self.scan_state(account, folder);
         let mut h = 0xcbf29ce484222325u64;
         let mut sums = Vec::with_capacity(st.messages.len());
         fnv(&mut h, &st.validity.to_le_bytes());
