@@ -5,6 +5,7 @@
 
 use super::*;
 
+mod search_big;
 mod searching;
 mod selecting;
 
