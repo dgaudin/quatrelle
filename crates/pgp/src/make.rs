@@ -13,7 +13,7 @@ use pgp::crypto::hash::HashAlgorithm;
 use pgp::crypto::sym::SymmetricKeyAlgorithm;
 use pgp::packet::{PublicKey, PublicSubkey, SecretKey, Signature, SignatureConfig, SignatureType, Subpacket, SubpacketData};
 use pgp::ser::Serialize as _;
-use pgp::types::{CompressionAlgorithm, Duration, KeyDetails as _, KeyVersion, Password, Tag};
+use pgp::types::{CompressionAlgorithm, Duration, KeyDetails as _, KeyVersion, Password, S2kParams, StringToKey, Tag};
 use rand_core::{CryptoRng, RngCore};
 
 use crate::keys::{Unlocked, analyse, email_of};
@@ -29,6 +29,9 @@ pub const EXPIRY_WARNING_SECS: i64 = 2_592_000;
 
 /// The most user IDs and subkeys re-signed in one key.
 const PARTS_MAX: usize = 64;
+
+/// The S2K count a backup is locked with (encoded: 16 MiB hashed per part), as GnuPG reads it.
+const S2K_COUNT: u8 = 224;
 
 /// The user ID for `name` and `email`: `Name <address>`, or `<address>` without a name. The name
 /// loses what could end it early (angle brackets, line breaks and other controls).
@@ -185,4 +188,34 @@ fn resign(mut key: SignedSecretKey, now: i64, rng: &mut (impl RngCore + CryptoRn
         bind(&mut sub.signatures, &public, &mut *rng)?;
     }
     Ok(key)
+}
+
+/// How a backup locks each secret part: S2K usage 254, AES-256, iterated and salted SHA-256
+/// (not Argon2, which GnuPG before 2.4 can't read), a salt and IV of its own.
+fn s2k(rng: &mut (impl RngCore + CryptoRng)) -> S2kParams {
+    let mut iv = vec![0u8; SymmetricKeyAlgorithm::AES256.block_size()];
+    rng.fill_bytes(&mut iv);
+    S2kParams::Cfb {
+        sym_alg: SymmetricKeyAlgorithm::AES256,
+        s2k: StringToKey::new_iterated(&mut *rng, HashAlgorithm::Sha256, S2K_COUNT),
+        iv: iv.into(),
+    }
+}
+
+/// `key` (unlocked) as a backup file: the armored transferable secret key, every secret part
+/// locked with `passphrase` as GnuPG 2.2 reads it. An empty passphrase is refused.
+pub fn backup(key: &Unlocked, passphrase: &str, rng: &mut (impl RngCore + CryptoRng)) -> Result<String, Error> {
+    if passphrase.is_empty() {
+        return Err(Error::Failed("a backup needs a passphrase".into()));
+    }
+    let mut k = secret(&key.secret)?;
+    guard(Error::Failed("the backup can't be made".into()), || {
+        let fail = |_| Error::Failed("the backup can't be made".into());
+        let pw = Password::from(passphrase);
+        k.primary_key.set_password_with_s2k(&pw, s2k(rng)).map_err(fail)?;
+        for sub in k.secret_subkeys.iter_mut() {
+            sub.key.set_password_with_s2k(&pw, s2k(rng)).map_err(fail)?;
+        }
+        k.to_armored_string(Default::default()).map_err(fail)
+    })
 }

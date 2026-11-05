@@ -33,7 +33,7 @@ mod message;
 
 pub use armor::{Inline, inline};
 pub use keys::{KeyInfo, Problem, Unlocked, info, minimal, public_keys, read_secret_key, same_key};
-pub use make::{EXPIRY_WARNING_SECS, VALID_FOR_SECS, extend, generate};
+pub use make::{EXPIRY_WARNING_SECS, VALID_FOR_SECS, backup, extend, generate};
 pub use message::{Check, Decrypted, decrypt, encrypt, is_encrypted, open, recipients, sign, verify, verify_cleartext};
 
 /// Larger OpenPGP input than this isn't read, and nothing decrypts or decompresses to more.

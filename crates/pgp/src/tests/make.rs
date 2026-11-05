@@ -143,3 +143,56 @@ proptest! {
         prop_assert_eq!(d.check, Some(Check::Good { key: 0, at: Some(NOW), weak: false }));
     }
 }
+
+/// The secret scalars of `key` (binary, unprotected): each part's secret MPI, without its length.
+fn scalars(key: &[u8]) -> Vec<Vec<u8>> {
+    let k: pgp::composed::SignedSecretKey = pgp::composed::Deserializable::from_bytes(key).unwrap();
+    let plain = |p: &pgp::types::SecretParams| {
+        let pgp::types::SecretParams::Plain(p) = p else { panic!("locked") };
+        let mut raw = Vec::new();
+        p.to_writer(&mut raw, pgp::types::KeyVersion::V4).unwrap();
+        raw[2..raw.len() - 2].to_vec()
+    };
+    let mut out = vec![plain(k.primary_key.secret_params())];
+    out.extend(k.secret_subkeys.iter().map(|s| plain(s.key.secret_params())));
+    out
+}
+
+#[test]
+fn a_backup_reads_back_with_its_passphrase_only() {
+    let k = riley();
+    let file = backup(k, "correct horse", &mut rand_core::OsRng).unwrap();
+    assert!(file.starts_with("-----BEGIN PGP PRIVATE KEY BLOCK-----"), "{file}");
+    let back = read_secret_key(file.as_bytes(), "correct horse").unwrap();
+    assert_eq!(back.info.fingerprint, k.info.fingerprint);
+    assert_eq!(back.public, k.public);
+    assert_eq!(scalars(&back.secret), scalars(&k.secret));
+    assert_eq!(read_secret_key(file.as_bytes(), "wrong").unwrap_err(), Error::Passphrase);
+    assert_eq!(read_secret_key(file.as_bytes(), "").unwrap_err(), Error::Passphrase);
+    assert!(matches!(backup(k, "", &mut rand_core::OsRng), Err(Error::Failed(_))));
+    // Every secret part locked as GnuPG 2.2 reads it: usage 254, AES-256, iterated and salted
+    // SHA-256, each with a salt of its own.
+    let (locked, _) = <pgp::composed::SignedSecretKey as pgp::composed::Deserializable>::from_string(&file).unwrap();
+    let mut parts = vec![locked.primary_key.secret_params().clone()];
+    parts.extend(locked.secret_subkeys.iter().map(|s| s.key.secret_params().clone()));
+    assert_eq!(parts.len(), 2);
+    let mut salts = Vec::new();
+    for p in &parts {
+        let pgp::types::SecretParams::Encrypted(e) = p else { panic!("a part in the clear") };
+        assert_eq!(e.string_to_key_id(), 254);
+        let pgp::types::S2kParams::Cfb { sym_alg, s2k, .. } = e.string_to_key_params() else { panic!("{:?}", e.string_to_key_params()) };
+        assert_eq!(*sym_alg, pgp::crypto::sym::SymmetricKeyAlgorithm::AES256);
+        let pgp::types::StringToKey::IteratedAndSalted { hash_alg, salt, .. } = s2k else { panic!("{s2k:?}") };
+        assert_eq!(*hash_alg, pgp::crypto::hash::HashAlgorithm::Sha256);
+        salts.push(*salt);
+    }
+    assert_ne!(salts[0], salts[1]);
+    // No secret byte in the clear: no 16 bytes of either scalar anywhere in the packets.
+    let packets = pgp::ser::Serialize::to_bytes(&locked).unwrap();
+    for s in scalars(&k.secret) {
+        assert!(s.len() >= 16);
+        for w in s.windows(16) {
+            assert!(!packets.windows(16).any(|p| p == w), "a secret in the clear");
+        }
+    }
+}
