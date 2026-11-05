@@ -36,9 +36,9 @@ fn a_message_replied_to_or_forwarded_shows_its_arrow_and_when() {
     assert_eq!(shown_rows.len(), 3);
     let date = |t: i64| crate::i18n::date(&quatrelle_engine::model::dates::full_time(t, &a.session.clock));
     let said = [
-        (format!("You replied to this message on {}.", date(when)), "Replied", "replied"),
-        (format!("You forwarded this message on {}.", date(when - 3600)), "Forwarded", "forwarded"),
-        ("You replied to this message.".to_string(), "Replied", "replied-no-day"),
+        (format!("Replied on {}.", date(when)), "Replied", "replied"),
+        (format!("Forwarded on {}.", date(when - 3600)), "Forwarded", "forwarded"),
+        ("Replied".to_string(), "Replied", "replied-no-day"),
     ];
     for (m, (line, word, name)) in shown_rows.iter().zip(said) {
         a.run("list.open", json!({"key": m.key.to_id()}));
@@ -60,6 +60,6 @@ fn a_message_replied_to_or_forwarded_shows_its_arrow_and_when() {
     let plain = a.session.list.iter().find(|m| !m.flags.answered && !m.flags.forwarded).map(|m| m.key.to_id()).unwrap();
     a.run("list.open", json!({"key": plain}));
     let shown = frame_kept(&ctx, &mut a, &mut tex, None);
-    assert!(!shown.iter().any(|l| l.starts_with("You replied") || l.starts_with("You forwarded")), "{shown:?}");
+    assert!(!shown.iter().any(|l| l.starts_with("Replied") || l.starts_with("Forwarded")), "{shown:?}");
     let _ = std::fs::remove_dir_all(dir);
 }

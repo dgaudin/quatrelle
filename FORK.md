@@ -2529,14 +2529,16 @@ lancée contre le code d'alors, sur les seuls faux serveurs du dépôt.
   `SystemTime 0x1082` (un seul `$expand` avec le filtre des boutons de vote, joints par `or`) ;
   écrit par `PATCH` : le verbe, l'heure et `Integer 0x1080`. La liste d'un dossier relit à chaque
   synchro les marques de toute la fenêtre gardée : pas de passe pour Graph.
-- **Interface** (`44d65396`) : au volet, au-dessus du message, avec la flèche, « Vous avez répondu
-  à ce message le jeu. 2026-11-05 10:12. » ou « Vous avez transféré ce message le … » (jour et heure,
-  comme Outlook) ; sans heure connue (IMAP, JMAP, Exchange pas encore relu) « Vous avez répondu à ce
-  message. ». Les deux marques gardées (IMAP) : la réponse, comme la liste. La ligne de la liste dit
+- **Interface** (`44d65396`, textes repris aussitôt après) : au volet, au-dessus du message, avec la
+  flèche, « Répondu le jeu. 2026-11-05 10:12. » ou « Transféré le … » (jour et heure), sur le modèle
+  de « Terminé le … » de R16 ; sans heure connue (IMAP, JMAP, Exchange pas encore relu) « Répondu »
+  ou « Transféré ». Les deux marques gardées (IMAP) : la réponse, comme la liste. La ligne de la liste dit
   « Répondu » ou « Transféré » au lecteur d'écran. **La flèche de la liste passe de `t.faint` à
   `t.dim`** (la teinte du trombone et de la coche de R16) : en sombre, sur la ligne choisie, elle se
   voyait à peine (rendus regardés, gardés hors du dépôt dans `~/.tq/r18-shots/`). Six textes dans
-  les 13 catalogues ; le peintre d'images du test de R16 est partagé dans `tests/list/`.
+  les 13 catalogues au départ, quatre ensuite (`Replied on {date}.`, `Forwarded on {date}.`, et les
+  mots `Replied` et `Forwarded` déjà là) ; le peintre d'images du test de R16 est partagé dans
+  `tests/list/`.
 - **Passe unique** (`d9c1b1db`) : sur le modèle de R17, au premier passage de chaque dossier de
   courrier suivi, un `FindItem` `IdOnly` avec `FLAG_FIELDS` et la restriction `0x1081 ≥ 102` et
   `≤ 104`, paginé par 1 000, limité à la fenêtre et à l'âge gardé (`Client::replied`) ; les
@@ -2547,7 +2549,7 @@ lancée contre le code d'alors, sur les seuls faux serveurs du dépôt.
   Un refus du serveur (`NetError::No`) compte comme fait ; hors ligne, le dossier est repris.
 - **Ce que verra le propriétaire** :
   - **dans Quatrelle** : la flèche à gauche ou à droite dans la liste, de la teinte du trombone ;
-    au volet « Vous avez répondu à ce message le … » ou « Vous avez transféré ce message le … » ;
+    au volet « Répondu le … » ou « Transféré le … » ;
     sur Exchange, la dernière action l'emporte (répondu puis transféré : la flèche de transfert),
     tout de suite après l'envoi ; Gmail et Yahoo (IMAP) gardent les deux marques et montrent la
     réponse, sans heure ;
@@ -2588,10 +2590,10 @@ lancée contre le code d'alors, sur les seuls faux serveurs du dépôt.
   - IMAP n'a pas d'ordre entre `\Answered` et `$Forwarded` : la réponse est montrée ; un message
     voté puis répondu dans Outlook montre la réponse, un message répondu puis voté garde sa flèche
     ici (Outlook dessine alors l'icône de `0x1080`, que le fork ne lit pas) ;
-  - les phrases françaises sont celles d'Outlook, comme demandé : l'en-tête des catalogues dit
-    qu'aucun texte n'est repris d'un autre client, et `CLAUDE.md` limite les mots d'Outlook aux
-    noms de fonctions. Ce sont les tournures les plus simples en français, mais c'est au
-    propriétaire de trancher ;
+  - **textes repris** : la consigne demandait les phrases françaises d'Outlook (« Vous avez répondu
+    à ce message le … ») ; l'en-tête des catalogues dit qu'aucun texte n'est repris d'un autre client,
+    et `CLAUDE.md` limite les mots d'Outlook aux noms de fonctions. Elles sont remplacées, avant
+    l'envoi, par les tournures propres à Quatrelle ci-dessus, dans les 13 langues ;
   - l'import `.pst` ne lit pas `0x1081` (à faire avec P2, comme l'état 1 du drapeau).
 
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)

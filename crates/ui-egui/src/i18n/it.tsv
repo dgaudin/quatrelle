@@ -682,10 +682,8 @@
 	Follow up. Overdue: it was due {date}.	Completamento. In ritardo: scadeva il {date}.
 	Completed.	Completato.
 	Completed on {date}.	Completato il {date}.
-	You replied to this message on {date}.	Hai risposto a questo messaggio il {date}.
-	You forwarded this message on {date}.	Hai inoltrato questo messaggio il {date}.
-	You replied to this message.	Hai risposto a questo messaggio.
-	You forwarded this message.	Hai inoltrato questo messaggio.
+	Replied on {date}.	Risposto il {date}.
+	Forwarded on {date}.	Inoltrato il {date}.
 	Replied	Risposto
 	Forwarded	Inoltrato
 	This message was sent with high importance.	Questo messaggio è stato inviato con priorità alta.

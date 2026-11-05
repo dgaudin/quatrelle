@@ -683,10 +683,8 @@
 	Follow up. Overdue: it was due {date}.	Assurer un suivi. En retard : échéance le {date}.
 	Completed.	Terminé.
 	Completed on {date}.	Terminé le {date}.
-	You replied to this message on {date}.	Vous avez répondu à ce message le {date}.
-	You forwarded this message on {date}.	Vous avez transféré ce message le {date}.
-	You replied to this message.	Vous avez répondu à ce message.
-	You forwarded this message.	Vous avez transféré ce message.
+	Replied on {date}.	Répondu le {date}.
+	Forwarded on {date}.	Transféré le {date}.
 	Replied	Répondu
 	Forwarded	Transféré
 	This message was sent with high importance.	Ce message a été envoyé avec une importance haute.
