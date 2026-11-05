@@ -28,9 +28,10 @@ fn has_reading(s: &Session) -> Option<&'static str> {
     }
 }
 
-/// Commands that only move about the list (or open another message): they leave the open
-/// message's body being got ready on another thread, where every other command waits for it
-/// (from upstream 0995a69).
+/// Commands that only move about the list (or open another message) or change the list or the
+/// view without acting on the open message (a search typed, a filter, the sort, a draft typed
+/// in): they leave its body being got ready on another thread, where every other command waits
+/// for it (from upstream 0995a69 and 4895be7).
 pub(crate) fn leaves_body_waiting(id: &str) -> bool {
     matches!(
         id,
@@ -46,6 +47,15 @@ pub(crate) fn leaves_body_waiting(id: &str) -> bool {
             | "list.pageUp"
             | "folder.open"
             | "folder.unified"
+            | "list.filter"
+            | "list.focusTab"
+            | "list.messages"
+            | "search.run"
+            | "search.clear"
+            | "view.arrange"
+            | "view.reverseSort"
+            | "view.folderPane"
+            | "compose.update"
     ) || id.starts_with("list.extend")
 }
 
