@@ -100,7 +100,7 @@ impl Store {
         self.save_list(account, folder, state, changed, true, &mut Vec::new())
     }
 
-    /// [`Store::save_folder_counted`]; `waiting`: the edits waiting in ops.json made again on
+    /// [`Store::save_folder_counted`]; `waiting`: the edits waiting in the journal made again on
     /// the list first (not for a list just read from here, which has them); `extra`: other files
     /// written in the same transaction (taken from it).
     fn save_list<M: Borrow<Summary>>(
@@ -119,16 +119,15 @@ impl Store {
         // that read the folder before a message was marked read (moved, deleted) and saves after
         // put the server's old state back — bold, normal, bold again until the edit got there.
         let pending = if waiting { self.pending_edits(account, folder) } else { Vec::new() };
-        let mutated;
+        let reapplied;
         let widened;
         let (messages, changed): (Vec<&Summary>, _) = if pending.is_empty() {
             (state.messages.iter().map(M::borrow).collect(), changed)
         } else {
-            let mut st = state.with(state.messages.iter().map(|m| m.borrow().clone()).collect());
-            let touched = reapply(&mut st, account, folder, &pending);
-            mutated = st;
+            let (list, touched) = reapply(state.messages.iter().map(M::borrow), account, folder, state.validity, &pending);
+            reapplied = list;
             widened = changed.map(|c| c.union(&touched).copied().collect::<std::collections::HashSet<u32>>());
-            (mutated.messages.iter().collect(), widened.as_ref())
+            (reapplied.iter().map(|m| &**m).collect(), widened.as_ref())
         };
         let dir = self.folder_dir(account, folder);
         let head = dir.join("state.json");
@@ -215,7 +214,7 @@ impl Store {
         Ok(writes.len())
     }
 
-    /// The edits waiting in ops.json that touch messages of this folder.
+    /// The edits waiting in the journal that touch messages of this folder.
     fn pending_edits(&self, account: &str, folder: &str) -> Vec<Op> {
         let touches = |keys: &[MessageKey]| keys.iter().any(|k| k.account == account && k.folder == folder);
         self.load_ops(account)
@@ -354,10 +353,9 @@ impl Store {
                 }
                 Op::CreateFolder { .. } | Op::RenameFolder { .. } | Op::DeleteFolder { .. } | Op::EmptyFolder { .. } => {}
             }
-            match &marked {
-                Some(uids) => self.save_list(account, folder, &st, Some(uids), false, extra).map(drop)?,
-                None => self.save_folder(account, folder, &st)?,
-            }
+            // The list just read has every edit waiting already: none is made again on it (a
+            // burst of moves made offline made them all again at each one, over the whole list).
+            self.save_list(account, folder, &st, marked.as_ref(), false, extra)?;
             // Once the list no longer has them: one that can't be saved keeps their sources.
             for k in sources_gone {
                 self.remove_body(k);
@@ -421,43 +419,80 @@ impl Store {
     }
 }
 
+/// What an edit waiting does to one message.
+enum Effect<'o> {
+    Flag(&'o quatrelle_model::Flag, bool),
+    Category(&'o str, Option<&'o str>, bool),
+    /// Moved away or deleted.
+    Gone,
+}
+
 /// Edits not yet on the server, made again on a folder's list (they're what the user sees until
-/// the server has them): flags and keywords set, messages moved away or deleted taken out. The
-/// numbers of the messages changed.
-fn reapply(st: &mut FolderState, account: &str, folder: &str, ops: &[Op]) -> HashSet<u32> {
-    let mut touched = HashSet::new();
-    let validity = st.validity;
-    let uids = |keys: &[MessageKey]| -> HashSet<u32> {
-        keys.iter().filter(|k| k.account == account && k.folder == folder && k.validity == validity).map(|k| k.uid).collect()
-    };
+/// the server has them): flags and keywords set, messages moved away or deleted taken out. One
+/// pass over the list, each message's edits in the order made (a table number -> effects):
+/// each edit went over a copy of the whole list, O(edits x messages) at every save of a sync.
+/// Messages no edit changes are borrowed, not copied. The list, and the numbers of the messages
+/// an edit changed (one later taken out or changed back included, as each edit saw it).
+pub(crate) fn reapply<'a>(
+    messages: impl Iterator<Item = &'a Summary>,
+    account: &str,
+    folder: &str,
+    validity: u32,
+    ops: &[Op],
+) -> (Vec<std::borrow::Cow<'a, Summary>>, HashSet<u32>) {
+    let mut effects: HashMap<u32, Vec<Effect<'_>>> = HashMap::new();
     for op in ops {
-        match op {
-            Op::SetFlag { keys, flag, on } => {
-                let wanted = uids(keys);
-                for m in st.messages.iter_mut().filter(|m| wanted.contains(&m.key.uid)) {
-                    let before = m.flags.clone();
-                    flag.set(&mut m.flags, *on);
-                    if m.flags != before {
-                        touched.insert(m.key.uid);
-                    }
-                }
-            }
-            Op::SetKeyword { keys, keyword, on, name } => {
-                let wanted = uids(keys);
-                for m in st.messages.iter_mut().filter(|m| wanted.contains(&m.key.uid)) {
-                    let before = m.flags.clone();
-                    m.flags.set_category(keyword, name.as_deref(), *on);
-                    if m.flags != before {
-                        touched.insert(m.key.uid);
-                    }
-                }
-            }
-            Op::Move { keys, .. } | Op::Expunge { keys } => {
-                let gone = uids(keys);
-                st.messages.retain(|m| !gone.contains(&m.key.uid));
-            }
-            _ => {}
+        let effect = match op {
+            Op::SetFlag { flag, on, .. } => Effect::Flag(flag, *on),
+            Op::SetKeyword { keyword, on, name, .. } => Effect::Category(keyword, name.as_deref(), *on),
+            Op::Move { .. } | Op::Expunge { .. } => Effect::Gone,
+            _ => continue,
+        };
+        // Each message once an edit (a key named twice is changed once).
+        let uids: HashSet<u32> =
+            op.keys().iter().filter(|k| k.account == account && k.folder == folder && k.validity == validity).map(|k| k.uid).collect();
+        for uid in uids {
+            let list = effects.entry(uid).or_default();
+            list.push(match &effect {
+                Effect::Flag(f, on) => Effect::Flag(f, *on),
+                Effect::Category(k, n, on) => Effect::Category(k, *n, *on),
+                Effect::Gone => Effect::Gone,
+            });
         }
     }
-    touched
+    let mut touched = HashSet::new();
+    let mut out = Vec::new();
+    for m in messages {
+        let Some(list) = effects.get(&m.key.uid) else {
+            out.push(std::borrow::Cow::Borrowed(m));
+            continue;
+        };
+        let mut flags = m.flags.clone();
+        let mut gone = false;
+        for e in list {
+            let before = flags.clone();
+            match e {
+                Effect::Flag(f, on) => f.set(&mut flags, *on),
+                Effect::Category(k, n, on) => flags.set_category(k, *n, *on),
+                Effect::Gone => {
+                    gone = true;
+                    break;
+                }
+            }
+            if flags != before {
+                touched.insert(m.key.uid);
+            }
+        }
+        if gone {
+            continue;
+        }
+        if flags == m.flags {
+            out.push(std::borrow::Cow::Borrowed(m));
+        } else {
+            let mut changed = m.clone();
+            changed.flags = flags;
+            out.push(std::borrow::Cow::Owned(changed));
+        }
+    }
+    (out, touched)
 }

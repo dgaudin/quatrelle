@@ -5,6 +5,8 @@ use quatrelle_model::{Flag, Flags};
 
 use super::*;
 
+mod journal;
+
 /// A big folder's list is kept in pages by number: read back newest first as it was; a flag
 /// change writes one page, new mail the last one; shrunk, the pages go; and a list kept whole
 /// (from before) still reads.
@@ -458,15 +460,18 @@ fn a_failing_store_says_so_and_writes_nothing_over() {
     s.fail(Some(".eml"), None);
     assert!(s.load_body(&k9).is_err() && s.load_body(&missing).is_err());
     assert!(s.load_folder("a1", "INBOX").is_ok(), "only what ends so fails");
-    s.fail(Some("ops.json"), None);
-    assert!(s.add_op("a1", Op::Expunge { keys: vec![k9.clone()] }).is_err());
+    // The change waiting can't be read: it isn't taken out (nor written over); one added goes
+    // after it in a file of its own, nothing read or written again.
+    s.fail(Some("00000000000000000001.json"), None);
     assert!(s.remove_op("a1", &waiting[0]).is_err());
+    let added = Op::Expunge { keys: vec![k9.clone()] };
+    s.add_op("a1", added.clone()).unwrap();
     s.fail(None, Some("state.json"));
     assert!(s.save_folder("a1", "INBOX", &FolderState::<Summary>::default()).is_err());
     assert!(s.apply_op("a1", &Op::Expunge { keys: vec![k9.clone()] }).is_err());
 
     s.fail(None, None);
-    assert_eq!(s.load_ops("a1").unwrap(), waiting);
+    assert_eq!(s.load_ops("a1").unwrap(), [waiting[0].clone(), added]);
     assert_eq!(s.load_folder("a1", "INBOX").unwrap(), st);
     assert_eq!(s.load_body(&k9).unwrap().as_deref(), Some(&b"x"[..]));
 }
@@ -628,7 +633,7 @@ fn marks_made_offline_dont_make_the_waiting_ones_again() {
         s.apply_op("a1", &op).unwrap();
     }
     let (names, bytes) = written(&s);
-    assert!(names.iter().all(|n| n == "state-marks.json" || n == "ops.json"), "{names:?}");
+    assert!(names.iter().all(|n| n == "state-marks.json" || n.starts_with("000")), "{names:?}");
     assert!(bytes < 4 << 20, "{bytes}");
     let back = s.load_folder("a1", "INBOX").unwrap();
     assert!((1..=200u32).all(|uid| back.find(uid * 50).is_some_and(|m| m.flags.seen)));

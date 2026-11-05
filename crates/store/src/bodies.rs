@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 // Copyright (c) 2026 Didier Gaudin
-//! The store: message bodies, changes waiting for the server, and the Outbox.
+//! The store: message bodies, kept search indexes, and the Outbox.
 
 use crate::*;
 
@@ -81,42 +81,6 @@ impl Store {
 
     pub fn remove_search_index(&self, account: &str, folder: &str) {
         let _ = self.files.remove_file(&self.search_index_path(account, folder));
-    }
-
-    pub fn load_ops(&self, account: &str) -> Result<Vec<Op>> {
-        self.read_json(&self.account_dir(account).join("ops.json"))
-    }
-
-    /// Append `op` to ops.json (the lock makes a read-modify-write safe between threads). One
-    /// that can't be read stops it: written over, the changes waiting in it would be lost (a
-    /// missing or damaged one reads as empty).
-    pub fn add_op(&self, account: &str, op: Op) -> Result<()> {
-        let _held = self.changes.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-        let mut ops = self.load_ops(account)?;
-        ops.push(op);
-        self.save_ops(account, &ops)
-    }
-
-    /// Take the first entry equal to `op` out of ops.json, if there is one.
-    pub fn remove_op(&self, account: &str, op: &Op) -> Result<()> {
-        let _held = self.changes.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
-        let mut ops = self.load_ops(account)?;
-        if let Some(i) = ops.iter().position(|o| o == op) {
-            ops.remove(i);
-            self.save_ops(account, &ops)?;
-        }
-        Ok(())
-    }
-
-    pub fn save_ops(&self, account: &str, ops: &[Op]) -> Result<()> {
-        let path = self.account_dir(account).join("ops.json");
-        if ops.is_empty() {
-            match self.files.remove_file(&path) {
-                Err(e) if e.kind() != io::ErrorKind::NotFound => return Err(io_err(&path)(e)),
-                _ => return Ok(()),
-            }
-        }
-        self.write_json(&path, ops)
     }
 
     pub(super) fn outbox_dir(&self, account: &str) -> PathBuf {

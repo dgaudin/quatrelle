@@ -5035,6 +5035,7 @@ dependencies = [
  "flate2",
  "log",
  "miniz_oxide 0.9.1",
+ "proptest",
  "quatrelle-model",
  "redb",
  "serde",
