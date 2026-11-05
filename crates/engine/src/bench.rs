@@ -129,3 +129,101 @@ fn real_cache_memory() {
     s.run("folder.open", &json!({"account": acc, "folder": "INBOX"})).unwrap();
     println!("back to the inbox: {}", rss());
 }
+
+/// Down ×20 in a generated folder of 50,000 messages (`MC_PER` for another size), on a server
+/// account, every source kept here: what the window spends on each Down (the
+/// list's share and the read mark's), on the echo of the mark the writer sends back
+/// (`FolderChanged`), and what the writer spends keeping the mark (`Store::apply_op`, on a
+/// thread of its own), online (the server takes each change at once) and offline (they wait in
+/// the journal). No copy of anyone's mail: the folder is made up.
+///
+/// ```text
+/// cargo test -p quatrelle-engine --release --lib bench::down_twenty -- --ignored --nocapture
+/// ```
+#[test]
+#[ignore]
+fn down_twenty() {
+    use crate::model::{Event, Job, MessageKey};
+    const NOW: i64 = 1_800_000_000;
+    let per: u32 = std::env::var("MC_PER").ok().and_then(|v| v.parse().ok()).unwrap_or(50_000);
+    let dir = std::env::temp_dir().join(format!("mc-down-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let store = Store::open_packed(dir.join("root"), dir.join("files")).unwrap();
+    crate::sample::seed_big_mailbox(&store, 1, per, NOW).unwrap();
+    // A server account: marks go to the writer as jobs and come back as `FolderChanged`.
+    let mut config = store.load_accounts().unwrap().remove(0);
+    config.imap.host = "imap.big.example".into();
+    config.smtp.host = "smtp.big.example".into();
+    let account = config.id.clone();
+    store.save_accounts(&[config]).unwrap();
+    let keys: Vec<MessageKey> = store.load_folder(&account, "INBOX").unwrap().messages.into_iter().map(|m| m.key).collect();
+    for chunk in keys.chunks(1000) {
+        let bodies: Vec<(MessageKey, Vec<u8>)> = chunk
+            .iter()
+            .map(|k| (k.clone(), format!("From: p{0}@big.example\r\nSubject: Message {0}\r\n\r\nHello there.\r\n", k.uid).into_bytes()))
+            .collect();
+        store.write_bodies(&bodies).unwrap();
+    }
+    let mut s = Session::open(Some(store.clone()), Clock::new(NOW, 0));
+    s.run("folder.open", &json!({"account": account, "folder": "INBOX"})).unwrap();
+    println!("list: {} messages", s.list.len());
+    let _ = s.take_jobs();
+    let ms = |d: Duration| d.as_secs_f64() * 1000.0;
+    // What the writer does with a job (`net`'s `make_edit`): journaled, kept, its echo told.
+    let write = |s: &mut Session, online: bool, writer: &mut Duration, echo: &mut Duration| {
+        for job in s.take_jobs() {
+            let Job::Apply { account, op } = job else { continue };
+            let t = Instant::now();
+            store.add_op(&account, op.clone()).unwrap();
+            let changed = store.apply_op(&account, &op).unwrap();
+            if online {
+                store.remove_op(&account, &op).unwrap();
+            }
+            *writer += t.elapsed();
+            let t = Instant::now();
+            for folder in changed {
+                s.apply(Event::FolderChanged { account: account.clone(), folder });
+            }
+            *echo += t.elapsed();
+        }
+    };
+    for (conversations, by) in [(false, "date"), (true, "from")] {
+        let _ = s.run("view.conversations", &json!({"on": conversations}));
+        let _ = s.run("view.arrange", &json!({"by": by}));
+        let Some(first) = s.list.first().map(|m| m.key.to_id()) else { continue };
+        let _ = s.run("list.open", &json!({"key": first}));
+        let (mut down, mut echo, mut writer) = (Duration::ZERO, Duration::ZERO, Duration::ZERO);
+        write(&mut s, true, &mut writer, &mut echo);
+        let (mut echo, mut writer) = (Duration::ZERO, Duration::ZERO);
+        for _ in 0..20 {
+            let t = Instant::now();
+            let _ = s.run("list.next", &json!({}));
+            down += t.elapsed();
+            write(&mut s, true, &mut writer, &mut echo);
+        }
+        println!(
+            "Down x20 (conversations {conversations}, by {by}): {:.1} ms a Down, {:.1} ms its echo; the writer {:.1} ms a mark",
+            ms(down) / 20.0,
+            ms(echo) / 20.0,
+            ms(writer) / 20.0
+        );
+    }
+    // Offline: the marks wait in the journal, and each one kept makes them all again.
+    let _ = s.run("view.conversations", &json!({"on": false}));
+    let _ = s.run("view.arrange", &json!({"by": "date"}));
+    let mut costs = Vec::new();
+    for _ in 0..100 {
+        let _ = s.run("list.next", &json!({}));
+        let (mut echo, mut writer) = (Duration::ZERO, Duration::ZERO);
+        write(&mut s, false, &mut writer, &mut echo);
+        costs.push(ms(writer));
+    }
+    let avg = |c: &[f64]| c.iter().sum::<f64>() / c.len().max(1) as f64;
+    println!(
+        "offline, 100 marks: the writer {:.1} ms a mark for the first 10, {:.1} ms for the last 10",
+        avg(costs.get(..10).unwrap_or_default()),
+        avg(costs.get(90..).unwrap_or_default())
+    );
+    drop(s);
+    let _ = std::fs::remove_dir_all(&dir);
+}
