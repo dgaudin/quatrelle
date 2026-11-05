@@ -53,7 +53,8 @@ fuzz_target!(|data: &[u8]| {
     let (item, recipients) = props(data);
     let Ok((raw, summary)) = pst::rebuilt(&item, &recipients) else { return };
     assert!((-1..=1).contains(&summary.importance));
-    assert!(summary.flags.keywords.len() <= 64 && summary.flags.keywords.iter().all(|k| quatrelle_model::is_keyword(k)));
+    // At most 64 categories, and the mark of a follow-up marked complete (0x1090 = 1).
+    assert!(summary.flags.keywords.len() <= 65 && summary.flags.keywords.iter().all(|k| quatrelle_model::is_keyword(k)));
     let end = raw.windows(4).position(|w| w == b"\r\n\r\n").unwrap_or(raw.len());
     let head = String::from_utf8_lossy(&raw[..end]);
     // An original header (0x007D, read as the import reads it: its first value, when it has a
