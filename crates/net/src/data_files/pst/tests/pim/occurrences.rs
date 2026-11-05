@@ -77,3 +77,35 @@ fn changed_occurrences_come_in_and_show_in_the_calendar() {
     assert_eq!(back.iter().map(|e| e.recurrence_id).collect::<Vec<_>>(), [None, Some(at(12, 7)), Some(at(19, 7))]);
     assert_eq!(shown(&back), expected);
 }
+
+/// An appointment attached to a mail keeps its changed occurrences hidden: the mail carries the
+/// appointment, not its calendar bookkeeping as messages inside it.
+#[test]
+fn an_attached_appointment_keeps_its_changed_occurrences_hidden() {
+    let (pattern, start) = crate::pst_pim::tests::series(0x3009);
+    let series = [
+        named(APPOINTMENT, 0x820D, V::Time(filetime(start))),
+        named(APPOINTMENT, 0x820E, V::Time(filetime(start + 3600))),
+        named(APPOINTMENT, 0x8216, V::Binary(&pattern)),
+    ];
+    let quiet = [named(APPOINTMENT, 0x820D, V::Time(filetime(at(19, 8)))), named(APPOINTMENT, 0x8228, V::Time(filetime(at(19, 8))))];
+    let hidden = [UnicodePstProperty::tagged(0x7FFE, V::Boolean(true))];
+    let appointment = UnicodePstAttachment {
+        filename: "Review",
+        content: UnicodePstAttachmentContent::Message(Box::new(UnicodePstEmbeddedMessage {
+            message: item("IPM.Appointment", "Review", "Weekly.", &series),
+            attachments: vec![exception(&quiet, "Bring the proofs.", &hidden)],
+        })),
+        ..Default::default()
+    };
+    let mut put = Put::new(&["Inbox"], "IPF.Note", item("IPM.Note", "Our weekly review", "See the meeting.", &[]));
+    put.files.push(appointment);
+    let b = Brought::of("attached-appointment", &[put]);
+    assert_eq!((b.done.messages, b.done.events), (1, 0), "{:?}", b.done);
+    let (_, raw) = b.messages("INBOX").remove(0);
+    let p = mime::parse(&raw).unwrap();
+    assert_eq!(p.attachments.iter().map(|a| a.name.as_str()).collect::<Vec<_>>(), ["Review.eml"]);
+    let inner = mime::attachment_data(&raw, p.attachments[0].index).unwrap();
+    let inner = mime::parse(&inner).unwrap();
+    assert!(inner.attachments.is_empty(), "{:?}", inner.attachments.iter().map(|a| &a.name).collect::<Vec<_>>());
+}

@@ -8,8 +8,9 @@
 
 use serde::{Deserialize, Serialize};
 
-/// The longest input read.
-const MAX_INPUT: usize = 1 << 20;
+/// The longest input read: as much as an address book file opened is (one written with its cards'
+/// files, as a `.pst` import keeps them, reads back whole).
+const MAX_INPUT: usize = 16 << 20;
 
 /// A typed value (an address or number with its kind: `work`, `home`, `cell`…).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -758,16 +759,16 @@ TITLE:Price=5 not encoded\r\nEND:VCARD\r\n";
         assert_eq!(quoted_printable("=FF=FE", String::new()), "ÿþ");
     }
 
-    /// A quoted-printable line with no colon that goes on for the whole 1 MiB of `=` breaks is
-    /// read in one pass (its head was read again at each break: seconds), and a head folded
-    /// before its encoding still reads.
+    /// A quoted-printable line with no colon that goes on for the whole 16 MiB of `=` breaks is
+    /// read in one pass (its head was read again at each break: seconds for 1 MiB already), and a
+    /// head folded before its encoding still reads.
     #[test]
     fn endless_quoted_printable_breaks_read_quickly() {
         let mut text = "BEGIN:VCARD\nX;ENCODING=QUOTED-PRINTABLE;Y=".to_string();
         text.push_str(&"\nz=".repeat((MAX_INPUT - text.len()) / 3));
         let started = std::time::Instant::now();
         assert!(parse(&text).is_empty());
-        assert!(started.elapsed() < std::time::Duration::from_secs(1), "took {:?}", started.elapsed());
+        assert!(started.elapsed() < std::time::Duration::from_secs(16), "took {:?}", started.elapsed());
         let folded = parse("BEGIN:VCARD\nNOTE;ENCODING=QUOTED-\n PRINTABLE:caf=\n=C3=A9\nEND:VCARD");
         assert_eq!(folded[0].note, "café");
     }

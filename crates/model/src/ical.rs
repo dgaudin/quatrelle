@@ -51,8 +51,9 @@ use zones::*;
 const MAX_OCCURRENCES: usize = 2000;
 /// The most rule iterations tried (rules that rarely match).
 const MAX_STEPS: usize = 50_000;
-/// The longest input read.
-const MAX_INPUT: usize = 4 << 20;
+/// The longest input read: as much as a calendar file opened is (one written with its events'
+/// files, as a `.pst` import keeps them, reads back whole).
+const MAX_INPUT: usize = 16 << 20;
 
 /// Someone taking part in an event.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
