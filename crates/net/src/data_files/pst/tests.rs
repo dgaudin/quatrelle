@@ -802,6 +802,7 @@ fn tasks_come_in_as_tasks() {
 }
 
 mod chunked;
+mod embedded;
 mod fidelity;
 mod files;
 mod losses;
