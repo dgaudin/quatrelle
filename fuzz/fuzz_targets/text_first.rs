@@ -7,7 +7,8 @@
 //! parts it names. Whatever message is built is read the way the engine reads it, with
 //! `parse_text_first`. Each of an EWS answer's response messages is read as a refusal too
 //! (`check_message`, with the fields its `MessageXml` names), as a `GetReminders` answer
-//! (`reminders_listed`) and for the server's version (`server_major`).
+//! (`reminders_listed`), for the server's version (`server_major`) and for each message's marks
+//! (`marks_listed`).
 #![no_main]
 
 use std::io::{self, Read, Write};
@@ -54,8 +55,10 @@ fuzz_target!(|data: &[u8]| {
         for m in quatrelle_net::ews::messages(&root) {
             let _ = quatrelle_net::ews::check_message(m);
         }
-        // Read as a `GetReminders` answer too, and for the server's version.
+        // Read as a `GetReminders` answer too, for the server's version, and for each
+        // message's marks (its follow-up status and the time it was done among them).
         let _ = quatrelle_net::ews::reminders_listed(&root);
+        let _ = quatrelle_net::ews::marks_listed(&root);
         let _ = quatrelle_net::ews::server_major(&root);
         quatrelle_net::ews::text_first(&root)
     } else {

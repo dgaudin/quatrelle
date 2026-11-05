@@ -543,6 +543,31 @@ fn one_mark_in_a_big_folder_writes_under_64_kib_and_survives_a_reopen() {
     let _ = fs::remove_dir_all(root);
 }
 
+/// A follow-up marked complete, with the time Exchange says it was done, keeps both through a
+/// mark kept beside the pages and a reopen; the keyword taken off here goes with its time.
+#[test]
+fn a_completed_follow_up_and_its_time_survive_the_marks() {
+    let d = temp_store("complete-marks");
+    let mut st = big_inbox(&d, 10_941);
+    if let Some(m) = st.messages.iter_mut().find(|m| m.key.uid == 5000) {
+        m.flags.set_keyword(quatrelle_model::FOLLOW_UP_COMPLETE, true);
+        m.flags.completed = 1_793_000_000;
+    }
+    d.save_folder("a1", "INBOX", &st).unwrap();
+    let key = MessageKey { account: "a1".into(), folder: "INBOX".into(), validity: 3, uid: 5000 };
+    d.apply_op("a1", &Op::SetFlag { keys: vec![key.clone()], flag: Flag::Seen, on: true }).unwrap();
+    let root = d.root().to_path_buf();
+    drop(d);
+    let again = Store::open(&root).unwrap();
+    let f = again.load_folder("a1", "INBOX").unwrap().find(5000).unwrap().flags.clone();
+    assert!(f.seen && f.follow_up_complete() && f.completed == 1_793_000_000, "{f:?}");
+    let off = Op::SetKeyword { keys: vec![key], keyword: quatrelle_model::FOLLOW_UP_COMPLETE.into(), on: false, name: None };
+    again.apply_op("a1", &off).unwrap();
+    let f = again.load_folder("a1", "INBOX").unwrap().find(5000).unwrap().flags.clone();
+    assert!(!f.follow_up_complete() && f.completed == 0, "{f:?}");
+    let _ = fs::remove_dir_all(root);
+}
+
 /// Marks kept beside the pages, past the most they hold, go into their pages and are emptied; a
 /// damaged marks file is set aside and the list read as its pages have it; a list written afresh
 /// (an import's) has none of the marks from before; a mark from the window's own save (a local

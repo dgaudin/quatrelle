@@ -15,16 +15,15 @@ struct Marks {
     flagged: bool,
     draft: bool,
     categories: Vec<String>,
+    /// Its follow-up marked complete, and when.
+    complete: bool,
+    complete_time: Option<String>,
 }
 
 impl Marks {
     /// The item as a change carries it.
     fn xml(&self) -> String {
-        let flag = if self.flagged {
-            "<t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"0x1090\" PropertyType=\"Integer\"/><t:Value>2</t:Value></t:ExtendedProperty>"
-        } else {
-            ""
-        };
+        let flag = flag_xml(self.flagged, self.complete, self.complete_time.as_deref());
         format!(
             "<t:Message><t:ItemId Id=\"{}\" ChangeKey=\"ck\"/><t:IsRead>{}</t:IsRead>{flag}<t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"0x0E07\" PropertyType=\"Integer\"/><t:Value>{}</t:Value></t:ExtendedProperty>{}</t:Message>",
             self.id,
@@ -54,13 +53,24 @@ impl Data {
             .items
             .iter()
             .filter(|i| i.folder == folder)
-            .map(|i| Marks { id: i.id.clone(), read: i.read, flagged: i.flagged, draft: i.draft, categories: i.categories.clone() })
+            .map(|i| Marks {
+                id: i.id.clone(),
+                read: i.read,
+                flagged: i.flagged,
+                draft: i.draft,
+                categories: i.categories.clone(),
+                complete: i.complete,
+                complete_time: i.complete_time.clone(),
+            })
             .collect();
         let mut changes = Vec::new();
         for n in &now {
             match was.iter().find(|w| w.id == n.id) {
                 None => changes.push((format!("<t:Create>{}</t:Create>", n.xml()), n.clone(), false)),
-                Some(w) if (w.flagged, w.draft, &w.categories) != (n.flagged, n.draft, &n.categories) => {
+                Some(w)
+                    if (w.flagged, w.draft, &w.categories, w.complete, &w.complete_time)
+                        != (n.flagged, n.draft, &n.categories, n.complete, &n.complete_time) =>
+                {
                     changes.push((format!("<t:Update>{}</t:Update>", n.xml()), n.clone(), false))
                 }
                 Some(w) if w.read != n.read => changes.push((
@@ -101,7 +111,16 @@ fn sync_state(s: &[Marks]) -> String {
         .iter()
         .map(|m| {
             let cats: Vec<&str> = m.categories.iter().map(String::as_str).collect();
-            format!("{}\t{}{}{}\t{}\n", m.id, u8::from(m.read), u8::from(m.flagged), u8::from(m.draft), cats.join(&SEP.to_string()))
+            format!(
+                "{}\t{}{}{}{}\t{}\t{}\n",
+                m.id,
+                u8::from(m.read),
+                u8::from(m.flagged),
+                u8::from(m.draft),
+                u8::from(m.complete),
+                cats.join(&SEP.to_string()),
+                m.complete_time.as_deref().unwrap_or("")
+            )
         })
         .collect();
     format!("v2{}", crate::imap::base64(lines.as_bytes()))
@@ -116,11 +135,20 @@ fn sync_snapshot(state: &str) -> Option<Vec<Marks>> {
     let text = String::from_utf8(bytes).ok()?;
     text.lines()
         .map(|l| {
-            let mut parts = l.splitn(3, '\t');
+            let mut parts = l.splitn(4, '\t');
             let id = parts.next()?.to_string();
             let b: Vec<bool> = parts.next()?.chars().map(|c| c == '1').collect();
             let categories = parts.next().filter(|c| !c.is_empty()).map(|c| c.split(SEP).map(str::to_string).collect()).unwrap_or_default();
-            Some(Marks { id, read: *b.first()?, flagged: *b.get(1)?, draft: *b.get(2)?, categories })
+            let complete_time = parts.next().filter(|t| !t.is_empty()).map(str::to_string);
+            Some(Marks {
+                id,
+                read: *b.first()?,
+                flagged: *b.get(1)?,
+                draft: *b.get(2)?,
+                categories,
+                complete: b.get(3).copied().unwrap_or(false),
+                complete_time,
+            })
         })
         .collect()
 }

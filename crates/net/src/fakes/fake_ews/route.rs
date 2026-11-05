@@ -300,11 +300,7 @@ impl Data {
                             "<t:Message><t:ItemId Id=\"{}\" ChangeKey=\"ck\"/><t:IsRead>{}</t:IsRead>{}{}</t:Message>",
                             i.id,
                             i.read,
-                            if i.flagged {
-                                "<t:ExtendedProperty><t:ExtendedFieldURI PropertyTag=\"0x1090\" PropertyType=\"Integer\"/><t:Value>2</t:Value></t:ExtendedProperty>"
-                            } else {
-                                ""
-                            },
+                            super::flag_xml(i.flagged, i.complete, i.complete_time.as_deref()),
                             super::categories_xml(&i.categories)
                         )
                     })
@@ -461,6 +457,8 @@ impl Data {
                             raw: raw.into_bytes(),
                             read: true,
                             flagged: false,
+                            complete: false,
+                            complete_time: None,
                             draft: true,
                             received: "2026-10-15T12:00:00Z".into(),
                             voting: Vec::new(),
@@ -501,6 +499,8 @@ impl Data {
                         raw,
                         read: true,
                         flagged: false,
+                        complete: false,
+                        complete_time: None,
                         draft,
                         received: "2026-10-15T12:00:00Z".into(),
                         voting: verbs,
@@ -581,9 +581,7 @@ impl Data {
                         if let Some(r) = u.find("IsRead") {
                             it.read = r.text == "true";
                         }
-                        if u.find("ExtendedFieldURI").and_then(|e| e.attr("PropertyTag")) == Some("0x1090") {
-                            it.flagged = u.name == "SetItemField";
-                        }
+                        super::take_flag_update(it, &u);
                         if u.find("FieldURI").and_then(|f| f.attr("FieldURI")) == Some("item:Categories") {
                             let set = u.find("Categories").filter(|_| u.name == "SetItemField");
                             it.categories = set.map(|c| c.children("String").map(|s| s.text.clone()).collect()).unwrap_or_default();

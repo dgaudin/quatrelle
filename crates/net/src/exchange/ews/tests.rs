@@ -8,6 +8,7 @@ use super::rules::{inbox_rule_xml, server_rule};
 use super::sync::aqs_of;
 use super::*;
 
+mod follow_up;
 mod refusals;
 
 #[test]
