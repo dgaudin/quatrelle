@@ -33,6 +33,11 @@ pub(crate) struct Pace {
     longest: Duration,
 }
 
+/// The most messages a call adds to the index when the window asked for no count (a scope picked
+/// from a menu, a Search Folder opened): as many as it asks for when it does; the clock's share
+/// keeps the call to a frame.
+pub(super) const WINDOW_SLICE: usize = 4096;
+
 /// The share of a call the index takes; the answer's looks have the rest (the first finds show
 /// while the index is still being read).
 const INDEX_SHARE: u32 = 3;
@@ -106,13 +111,19 @@ impl Pace {
     pub(super) fn set_clock(&mut self, clock: Option<SearchClock>) {
         self.clock = clock;
     }
+
+    /// Whether the window gave its clock: its searches are never done whole.
+    pub(super) fn has_clock(&self) -> bool {
+        self.clock.is_some()
+    }
 }
 
 impl Session {
-    /// The window's clock: a search's call that asks for a count of messages (a slice, as the
-    /// window asks) then takes `budget` of it at most too, beginning a unit of work only while one
-    /// as long as the longest of the call so far still fits. A search asked for whole still runs
-    /// whole. `None`: counts only, as the command line and the tests run it.
+    /// The window's clock: a search's call then takes `budget` of it at most too, beginning a
+    /// unit of work only while one as long as the longest of the call so far still fits. A search
+    /// asked for whole is a slice too (4096 messages at most), carried on by
+    /// `search.more`. `None`: counts only, and whole when asked, as the command line and the
+    /// tests run it.
     pub fn set_search_clock(&mut self, clock: Option<SearchClock>) {
         self.search_pace.set_clock(clock);
     }

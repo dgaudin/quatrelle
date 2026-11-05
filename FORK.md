@@ -1948,6 +1948,31 @@ Les 400 ms de grâce (ci-dessous) sont comprises dans les chiffres d'après.
     a échoué une fois sous charge et passe seul ;
   - `worker/changes.rs` (827 lignes) n'a pas été touché ; `worker/` a maintenant 15 fichiers.
 
+### Hors relevé : changer la portée de la recherche figeait la fenêtre (2026-11-05)
+
+Signalé par le propriétaire sur la `1.2.0~dev.3` : passer de « Dossier actuel » à « Boîte aux
+lettres actuelle » a figé la fenêtre pendant des minutes. Les piles du processus montraient le fil
+de la fenêtre dans `search_now` → `index_step` → `read_body` / `search_text` / `Index::add` :
+toute la boîte Exchange indexée d'un bloc. Défaut du fork depuis le 22/10 (`6590f6ec`), pas
+de la dev.3 : seule la frappe dans la zone demandait la recherche par tranches (`"index"`) ; le
+menu de portée (zone, onglet Recherche, en-tête de la liste), une recherche récente, la recherche
+avancée et un dossier de recherche ouvert, créé ou modifié la demandaient entière, et R6 n'avait
+réglé que la frappe.
+
+- **Corrigé dans le moteur, à un seul endroit** : une recherche demandée sans tranche à une
+  session qui a l'horloge de la fenêtre (`set_search_clock`) est une tranche aussi
+  (`pace::WINDOW_SLICE`, 4096 messages au plus, la part d'image la tenant à une image) ; la ligne
+  de commande et les tests, sans horloge, la font toujours entière. Un bouton ajouté plus tard ne
+  peut plus l'oublier.
+- **`search.more`** : la fenêtre poursuit la recherche affichée par cette commande, dans sa propre
+  portée et comme son propre dossier de recherche ; poursuivie comme une recherche tapée, celle
+  d'un dossier de recherche aurait pris la portée de la zone et cessé d'en être un.
+- **Sonde** (`ui-egui/src/tests/list/searching.rs`, 1 200 messages dont 600 avec un corps de
+  16 Ko) : l'appel du menu prenait 988 ms et finissait tout ; il prend 3 ms, et la recherche finit
+  en 308 images avec les mêmes 12 trouvés. Un dossier de recherche créé depuis sa boîte de
+  dialogue, la zone étant sur « Dossier actuel », reste lui-même jusqu'au bout et la zone garde sa
+  portée.
+
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
 Quatre chantiers, chacun dans son commit, à la suite d'un audit de l'éditeur HTML.

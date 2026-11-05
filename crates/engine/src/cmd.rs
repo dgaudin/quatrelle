@@ -51,6 +51,7 @@ pub(crate) fn leaves_body_waiting(id: &str) -> bool {
             | "list.focusTab"
             | "list.messages"
             | "search.run"
+            | "search.more"
             | "search.clear"
             | "view.arrange"
             | "view.reverseSort"

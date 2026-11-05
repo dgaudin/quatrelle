@@ -164,7 +164,24 @@ impl Session {
         self.search_now(query, scope, usize::MAX, folder)
     }
 
+    /// The search on screen carried on, a slice more: at most `budget` messages added to the
+    /// index (`0`: no limit), in its own scope and as its own Search Folder (the window's frames,
+    /// while [`Session::search_pending`]). Carried on as a search typed in, a Search Folder's
+    /// would take the box's scope and stop being one.
+    pub fn search_more(&mut self, budget: usize) -> usize {
+        let Some((query, scope)) = self.search.clone() else {
+            self.search_pending = false;
+            return self.list.len();
+        };
+        self.search_now(&query, scope, if budget == 0 { usize::MAX } else { budget }, None)
+    }
+
     pub(super) fn search_now(&mut self, query: &str, scope: SearchScope, budget: usize, folder: Option<String>) -> usize {
+        // The window never has a whole search done in one call: one asked for without a count (a
+        // scope picked from a menu, a recent search picked, a Search Folder opened or made) is a
+        // slice too, its frames carrying it on. Whole, over the owner's Exchange mailbox, it
+        // froze the window for minutes while the index was built.
+        let budget = if budget == usize::MAX && self.search_pace.has_clock() { pace::WINDOW_SLICE } else { budget };
         let q = query.trim();
         // Carrying the same search on (a slice more of the index) leaves the list's selection,
         // focus and the open message as they are; a new query starts them over.

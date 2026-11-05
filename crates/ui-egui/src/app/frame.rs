@@ -597,10 +597,9 @@ impl MailApp {
         }
         // A big mailbox's search index goes on a slice at a time: keep going while there's more,
         // one slice per frame, with the window drawing between them (as Outlook's search does).
-        if self.session.search_pending
-            && let Some((q, _)) = self.session.search.clone()
-        {
-            self.run("search.run", json!({"query": q, "index": SEARCH_INDEX_BUDGET}));
+        // Carried on as itself: in its own scope, a Search Folder's staying one.
+        if self.session.search_pending {
+            self.run("search.more", json!({"index": SEARCH_INDEX_BUDGET}));
             ctx.request_repaint();
         }
         self.build_contacts(&ctx);
