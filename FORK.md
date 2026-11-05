@@ -1644,6 +1644,101 @@ lignes) a d'abord perdu les types des comptes, pur déplacement (`77dd79fe`).
     (`selection.contains`, `panes/list.rs`, `list/table.rs`) ;
   - un `FolderChanged` d'une synchro relit toujours tout le dossier (200 ms sur 50 000).
 
+### État de la récupération : v0.32, dix-huitième partie : les images du volet de lecture sur des fils de fond (2026-11-05)
+
+La première moitié du lot R11 de `merge-tools/survey-v0.32.md` (R11a), sur `main`. Pour chaque
+point, sa sonde d'abord, lancée contre le code d'alors ; quand le test de l'origine ne pouvait
+pas compiler avant la correction, la sonde est une mesure écrite ici. Aucune copie des données
+du propriétaire : un banc ignoré, `ui-egui/src/tests/pictures/bench.rs`, fabrique un message de
+10,4 Mo (36 photos JPEG de 1024 × 768 dans son HTML par `cid:`, et joints trois photos de
+2400 × 1800, un PDF de dix pages et une vidéo de 1,5 Mo), l'ouvre dans une fenêtre sans tête de
+1280 × 800 en `--release` jusqu'à ce que plus aucune image n'arrive pendant une seconde, puis
+prévisualise son PDF ; une fois sans fil (comme le navigateur), une fois avec une voie (un fil
+qui fait dans l'ordre le travail confié, comme celui du bureau). `lib.rs` (983 lignes) a d'abord
+perdu `UiState`, pur déplacement dans `state.rs` (`2d5398fe`).
+
+| Banc, message de 10,4 Mo | avant le lot | après, dans la fenêtre (navigateur) | après, sur une voie (bureau) |
+|---|---|---|---|
+| la première image après l'ouverture | 1 751 ms (tout y est fait) | 87 ms | 48 ms |
+| la plus lente ensuite | — | 30 ms | 7,4 ms |
+| lectures de la source | 42 | 3 | 3 |
+| dernière image montrée | 1,75 s | 1,0 s | 0,9 s |
+| le PDF prévisualisé : la plus lente, lectures | 40 ms, 11 | 1,1 ms, 0 | 0,9 ms, 0 |
+
+`list.open` lui-même prend 45 ms avant et après (le moteur lit et analyse le message) : c'est
+R11b.
+
+- **Les images d'un message extraites en une seule lecture** (`b8addb91`, adapté de
+  `321bef22`). Défaut lu dans le code : `picture_texture` décodait dans l'image de la fenêtre et
+  relisait toute la source pour chaque image (la fermeture passée à `shown_picture`), comme
+  `preview`, `pdf_preview`, `big_picture` et chaque page de `pdf_pages`. (`picture_bytes`, lui,
+  ne relisait la source qu'au clic sur « Copier l'image » ; il prend maintenant le fichier déjà
+  extrait quand il est gardé.) Un cache par message (`reading/pictures/cache.rs`) extrait les
+  fichiers en une analyse, les garde tant que le message est ouvert et décode une image à la
+  fois ; les textures sont bornées (96 Mo, les moins récemment montrées partent d'abord, jamais
+  une montrée dans l'image), comme les fichiers extraits (128 Mo) ; un PDF ne dessine que ses
+  pages à l'écran ; un décodeur qui panique n'arrête que son message. Gardé du fork : les
+  images dessinées là où le HTML les place, à la taille qu'il fixe (le cache rend la taille
+  propre de chaque image avec sa texture, `Got::Ready(texture, taille)`, et décode une image du
+  corps pour l'écran et le zoom, `Want::Body(px)`) ; les vignettes vidéo gardent la LRU de
+  `a5d651de` (`previews` devient `video_thumbs`) ; un message dont le texte seul est là ne
+  demande rien. Les vignettes sont faites à 160 pixels (montrées à 30 points) au lieu de 480. Le
+  cache des images du web et des images portées (une signature) était vidé à la 49ᵉ : il garde
+  maintenant l'image où chacune a été montrée (200 au plus, jamais une de l'image en cours).
+  Sondes : `a_messages_pictures_come_from_one_read` (douze vignettes, douze images `cid:`, la
+  première page d'un PDF) faisait 25 lectures de la source, les 25 décodages dans la même
+  image ; maintenant une lecture, une image décodée par image. `many_web_pictures_are_kept_while_shown`
+  gardait 30 images sur 250 et en refaisait 750 en trois images ; maintenant 250, aucune. Les
+  tests de l'origine viennent ensuite (`tests/pictures/reading.rs`). Deux tests du fork
+  suivent : `pictures_past_those_kept_are_not_decoded_each_frame` attend les 70 vignettes cent
+  images au lieu de dix (une par image sans fil), `a_picture_waits_for_the_whole_message`
+  regarde le cache.
+- **Au-delà d'une lecture, un échec oublié, une image trop grosse** (`7e1f2e24`, reprise de
+  `ee7ee62f`) : ses trois tests, portés d'abord, échouaient : 256 images montrées sur 300, une
+  image en échec jamais réessayée ((2, 2) au lieu de (3, 3) lectures et décodages), les trois
+  vignettes lâchées pour une image trop grosse pour être gardée (0 au lieu de 3).
+- **Des fils pour le travail lent, un par voie** (`b9d4e38c`, reprise de `1d7292af`) :
+  `Services::background(lane, work)` et `has_background`, `Lane::Pictures` et `Lane::Reading`,
+  `Work` (le travail, son drapeau d'annulation, « passe d'abord ») ;
+  `apps/quatrelle/src/desktop/lanes.rs` fait un fil par voie, le travail dans l'ordre, chacun
+  sous `catch_unwind`, et remplace un fil pris 30 s sur un travail annulé. Le `desktop.rs` du
+  fork est gardé, les voies y sont ajoutées. Pas de sonde : rien n'existait avant ; ses cinq
+  tests passent. La voie de lecture vient entière et sans travail encore : R11b s'en servira.
+- **Le décodage sur la voie des images** (`fdb22399`, adapté de `fe861398`) : sonde
+  `work_handed_to_the_lane_is_not_done_in_frames`, avec des services qui gardent le travail
+  confié : soixante images de la fenêtre lisaient la source une fois et décodaient elles-mêmes
+  les 36 images, rien n'allait à la voie ; maintenant (0, 0) dans les images, un travail confié.
+  Chaque image faite demande une image de la fenêtre ; une image ouverte en grand ou une page
+  de PDF à l'écran passe d'abord. Le navigateur et les tests font toujours le travail une étape
+  par image. Tests de l'origine ensuite (`tests/pictures/threads.rs`).
+- **L'image d'une vidéo hors du fil de la fenêtre** (`df9a5ce8`, adapté de `51d1cd09`) : sonde
+  `a_video_is_written_and_decoded_off_the_window` : deux fichiers étaient écrits dans les images
+  de la fenêtre, dont celui d'un message déjà quitté ; maintenant aucun, la vignette vient une
+  fois le travail fait, et celui du message quitté ne fait rien (`reading/videos.rs`). La puce
+  montre l'icône du type en attendant ; rien n'est demandé sans fichiers (le navigateur) ni
+  tant que le texte seul est là. `videos_past_those_kept_make_no_texture_each_frame` (de
+  `b580c87a`) passait déjà grâce à `a5d651de` : gardé comme garde-fou. Banc, sur une voie : la
+  première image 67 → 48 ms.
+- **Pas pris** : `478f363c` (une pièce jointe garde son Content-ID) : aucune sonde ni aucun test
+  de ce lot n'en a besoin.
+- **Docs** : `docs/architecture.md` dit les deux voies et ce que fait celle des images
+  (`17b01e93`).
+- **Ce qui change pour le propriétaire** : ouvrir un gros message plein d'images ne fige plus la
+  fenêtre (1,75 s sur le banc ; moins de 50 ms maintenant, puis des images de moins de 8 ms) :
+  les images arrivent une à une en moins d'une seconde, celle ouverte en grand d'abord ; tenir
+  Bas sur de tels messages n'attend plus leurs images (le travail du message quitté est
+  annulé) ; un PDF prévisualisé ne relit plus la source à chaque page ; les vignettes des
+  pièces jointes prennent un neuvième de la mémoire. Au-delà de 200 pièces jointes images dans
+  un message, les puces suivantes montrent l'icône du type (une image ouverte s'affiche
+  toujours).
+- **Vérifié** : chaque sonde avant et après ; la suite de `quatrelle-ui-egui` et les tests des
+  voies ; `cargo xtask ci` (wasm compris).
+- **Reste, remarqué** :
+  - la première image d'un gros message, sur une voie, prend encore 48 ms, et `list.open` 45 ms
+    avant elle : la lecture et l'analyse du message, et son premier dessin, pour R11b ;
+  - dans le navigateur, la photo de 2400 × 1800 se décode dans une image (30 ms) ;
+  - « Copier l'image » relit la source quand le fichier n'est plus gardé (au clic seulement).
+
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
 Quatre chantiers, chacun dans son commit, à la suite d'un audit de l'éditeur HTML.
