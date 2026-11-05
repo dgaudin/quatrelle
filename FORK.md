@@ -1163,6 +1163,84 @@ pas, ou que le sien ne montrait pas le défaut (la mémoire), une sonde écrite 
   écritures nouvelles sont compressées.
 - **Reste à faire** : la suite du relevé, R5.
 
+### État de la récupération : v0.32, treizième partie : le courrier qui se dit envoyé sans partir, et les fichiers joints altérés (2026-11-05)
+
+Le lot R5 de `merge-tools/survey-v0.32.md`, sur `main`. Pour chaque commit, son test porté seul
+d'abord et lancé contre le code d'alors.
+
+- **Envoyer seulement depuis un compte qui le peut** :
+  - `40f0856d` et `71f43fa5` (`1086c6ea`, adaptés ensemble) : `Session::send_block` dit pourquoi
+    un compte ne peut pas envoyer (aucun compte, un fichier de données, une boîte gardée ici
+    seulement, pas de serveur sortant) ; `compose.send` est éteint avec cette raison, et
+    `deliver`, Envoyer maintenant et la minuterie de la boîte d'envoi, la réponse à une
+    invitation refusent aussi. Un nouveau message, une réponse ou un transfert dans un fichier de
+    données part du premier compte qui peut envoyer ; De ne propose que ceux-là ; un compte
+    ajouté prend les messages en cours d'un compte qui ne peut pas, avec sa signature (la
+    signature unique par compte du fork : `put_signature` remplace l'ancienne là où elle est, ou
+    se place comme au début d'un message). Sondes : les cinq tests de l'origine
+    (`tests/writing/sending.rs`) échouaient ; écrit depuis un `.pst` seul, `compose.send`
+    rendait `{"sent": …, "local": true}`, classait le message dans « Éléments envoyés » et disait
+    « Message sent ». Sans les changements de `71f43fa5`, ses deux tests échouaient aussi. Test
+    de la ligne de commande porté (`apps/quatrelle-cli/tests/sending.rs`).
+  - **La barre** est celle du fork, pas celle de l'origine : le cadre teinté des avertissements
+    du volet de lecture (vérification de l'expéditeur, sécurité ; `t.warn` à 0,12, coins 6),
+    l'icône d'avertissement, ce qui ne va pas en `t.text` (« Impossible d'envoyer du courrier
+    depuis un fichier de données Outlook. »), dessous en petit ce qu'il faut faire (« Ajoutez un
+    compte pour envoyer du courrier. ») et le lien « Ajouter un compte », comme « Afficher les
+    images » de la barre des images. Le bouton Envoyer est dessiné éteint, sa bulle dit pourquoi,
+    un clic l'explique dans l'alerte du message, qui offre aussi Ajouter un compte et ne se
+    ferme plus sous le Ctrl+Entrée qui l'a ouverte. Textes découpés dans ceux de l'origine (cinq
+    chaînes, treize catalogues) ; l'avis de l'invitation non envoyée est un gabarit traduit.
+    Vérifiée sur les images sans écran : `tests/writing/sending.rs` de l'interface (place de la
+    barre au-dessus du formulaire, note et lien sur une ligne, bouton éteint, barre disparue une
+    fois le compte ajouté) et un cas ajouté au tour (`tests.rs::tour`, aussi en pseudo-langue).
+- **Les fichiers joints tels qu'ils sont venus** :
+  - `48279403` (`8271e18e`, repris tel quel) : `attachments_data`, plusieurs pièces d'une seule
+    analyse. Le test ne compilait pas avant (fonction absente). Le volet de lecture analyse encore
+    le message une fois par image (`reading/pictures.rs`) : l'origine ne s'en sert qu'à `321bef22`
+    (lot R11).
+  - `21b6d775` (`945dcd10`, repris tel quel) : un fichier texte est repris de la source, seul
+    l'encodage de transfert défait. Sonde : un fichier en Windows-1252 était enregistré en UTF-8
+    (`c3 a9` pour « é »), un fichier sans `charset` avec `U+FFFD` à la place de ses accents ;
+    l'octet `0x80` devenait « € » (graine proptest gardée). L'aperçu de `attachment.preview` lit
+    le texte dans son jeu de caractères (`attachment_text`).
+  - `c15d330d` (`bfe2b57c`, repris tel quel) : l'invitation lue dans son jeu de caractères.
+    Sonde : après `21b6d775`, « Caf� review » (test dans `tests/invites/charset.rs`).
+  - `9ada36cb` (`ed72d5e4`, repris tel quel) : l'aperçu du volet de lecture, de même. Sonde :
+    « Caf� au lait » (test dans `tests/reading/attachment_text.rs`).
+  - `39f3547e` (`b288b8e8`, adapté) : Transférer et une boîte d'envoi reprise gardent le
+    `charset` (`attachment_out`) ; ici aussi un brouillon rouvert, qui avait le même défaut.
+    Sondes : le transfert et le brouillon partaient en `text/plain` nu.
+- **`86ba6746`** (`8d07a07a`, adapté) : une image en ligne nommée part avec `filename=` et
+  `name=`. Sonde : pas de `filename=`. Ici une partie nommée comptait toujours comme un fichier
+  (la règle de l'origine, qui lit les références du HTML, est celle du lot R6) : nommer nos
+  images aurait mis un trombone sur chaque message envoyé avec l'image d'une signature. Règle
+  étroite à la place : une image envoyée en ligne avec un `Content-ID` que le HTML du message
+  montre par `cid:` est au texte, pas un fichier — **les logos `image001.png` d'Outlook reçus par
+  IMAP perdent donc aussi leur trombone** ; un fichier envoyé en ligne (les PDF d'Apple Mail)
+  reste un fichier. Ni `draft_carries_files` ni `index_doc` ici : le trombone du test se vérifie
+  par `summary_from_full` ; le test `.pst` est écrit sur `to_raw`.
+- **`3aeaae69`** (`9f1e170e`, adapté) : `build` emprunte les pièces du brouillon. Le garde-fou
+  passait avant et après, avec les empreintes de l'origine prises après le nommage des images
+  (les mêmes ici) ; sa longueur laisse de côté la ligne `X-Mailer` comme son empreinte (la
+  version diffère d'un caractère). Mesure (pic de mémoire résidente, compilation optimisée) : un
+  message avec une pièce de 32 Mio montait de **79,3 Mo** avant, **45,9 Mo** après (2,36 puis
+  1,37 fois la pièce ; le reste est le message écrit).
+- **`f1057649`** (`69706264`, adapté) : une synchro IMAP, JMAP, EWS ou Graph qui n'a fait que
+  télécharger d'avance compte ces sources (`SyncReport::fetched`) et signale le dossier changé,
+  ce qui relit l'index de recherche. Sonde : `first_sync_takes_a_window`, avec l'étape de
+  l'origine, échouait (`touched()` faux après deux sources téléchargées).
+- **Vérifié** : chaque sonde avant et après, les suites de `quatrelle-mime`, `quatrelle-engine`,
+  `quatrelle-net`, `quatrelle-jmap`, `quatrelle-ui-egui` (le tour et les tests i18n compris) et
+  `quatrelle-cli`, `cargo xtask ci` (une réexportation pour les seuls tests, que clippy
+  signalait, passée sous `#[cfg(test)]` : `2c446ce1`).
+- **Remarqué, non traité** : le téléchargement d'avance en arrière-plan d'EWS (`worker/ahead.rs`,
+  le mode Exchange mis en cache) n'émet aucun `FolderChanged`, à la différence d'IMAP, JMAP et
+  Graph : les mots des sources qu'il apporte n'entrent dans l'index qu'à sa prochaine relecture du
+  dossier. À sonder à part.
+- **Reste à faire** : la suite du relevé, R6 (où la règle complète du trombone est à signaler au
+  propriétaire).
+
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
 Quatre chantiers, chacun dans son commit, à la suite d'un audit de l'éditeur HTML.
