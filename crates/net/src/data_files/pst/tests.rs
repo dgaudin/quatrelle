@@ -467,6 +467,7 @@ mod files;
 mod headers;
 mod losses;
 mod open;
+mod pim;
 mod protected;
 mod reader;
 mod real_files;

@@ -99,12 +99,26 @@ impl<'a> Out<'a> {
         path
     }
 
-    /// A contact, calendar item or note (anything else in their folders is left out).
+    /// A contact, contact group, calendar item, task, note or journal entry (anything else in
+    /// their folders is left out).
     pub(super) fn add_pim(&mut self, it: Item) {
         let Some(x) = &it.extra else { return };
         let n = self.pim.events.len() + self.pim.cards.len() + self.pim.notes.len() + self.pim.tasks.len();
         let uid = format!("pst-{}-{n}@quatrelle.invalid", self.account);
-        if it.class.to_ascii_lowercase().starts_with("ipm.stickynote") {
+        let class = it.class.to_ascii_lowercase();
+        if class.starts_with("ipm.activity") {
+            // Quatrelle has no journal: an entry is a note, saying when it was.
+            let text = crate::pst_pim::journal_text(x, &it.subject, &it.body);
+            if text.is_empty() {
+                self.skipped += 1;
+                return;
+            }
+            let note = Note { uid, text, color: NOTE_YELLOW, modified: x.modified.unwrap_or(it.date) };
+            self.pim.notes.push(StoredNote { note, ..Default::default() });
+        } else if class.starts_with("ipm.distlist") {
+            let card = crate::pst_pim::group_of(x, &it.subject, &it.body, uid);
+            self.pim.cards.push(StoredCard { book: LOCAL.into(), card, ..Default::default() });
+        } else if class.starts_with("ipm.stickynote") {
             // A note's text is its body (its subject is the first line of it).
             let text = if it.body.trim().is_empty() { it.subject.clone() } else { it.body.replace("\r\n", "\n") };
             if text.trim().is_empty() {
@@ -114,7 +128,7 @@ impl<'a> Out<'a> {
             let note =
                 Note { uid, text: text.trim_end().to_string(), color: x.note_color.unwrap_or(NOTE_YELLOW), modified: x.modified.unwrap_or(it.date) };
             self.pim.notes.push(StoredNote { note, ..Default::default() });
-        } else if it.class.to_ascii_lowercase().starts_with("ipm.task") {
+        } else if class.starts_with("ipm.task") {
             // A task, done or not; its due day stored as local midnight, the nearest UTC midnight.
             let due = x.due.map(|t| (t + 43_200).div_euclid(86_400));
             let mut task = Task {
@@ -127,7 +141,7 @@ impl<'a> Out<'a> {
             };
             task.set_complete(x.done, due.unwrap_or(it.date.div_euclid(86_400)));
             self.pim.tasks.push(StoredTask { task, ..Default::default() });
-        } else if it.class.to_ascii_lowercase().starts_with("ipm.contact") {
+        } else if class.starts_with("ipm.contact") {
             let card = crate::pst_pim::card_of(x, &it.body, uid);
             self.pim.cards.push(StoredCard { book: LOCAL.into(), card, ..Default::default() });
         } else {
@@ -140,10 +154,10 @@ impl<'a> Out<'a> {
     }
 
     pub(super) fn add_message(&mut self, path: &str, mut it: Item) {
-        // Mail only: meeting requests and receipts are mail too; appointments, contacts and
-        // tasks in a mail folder aren't.
-        let class = it.class.to_ascii_lowercase();
-        if !(class.is_empty() || class.starts_with("ipm.note") || class.starts_with("ipm.schedule") || class.starts_with("report.")) {
+        // Mail only: meeting requests and receipts are mail too, and so are a post and a
+        // document; anything else in a mail folder is counted, not dropped unsaid.
+        if !is_mail(&it.class) {
+            self.skipped += 1;
             return;
         }
         let Some(st) = self.states.get_mut(path) else { return };
@@ -295,4 +309,11 @@ impl<'a> Out<'a> {
             reading: self.reading,
         }
     }
+}
+
+/// Whether an item of `class` comes in as mail: meeting requests and receipts are mail too, and so
+/// are a post and a document; appointments, contacts and tasks in a mail folder aren't.
+pub(super) fn is_mail(class: &str) -> bool {
+    let class = class.to_ascii_lowercase();
+    class.is_empty() || ["ipm.note", "ipm.schedule", "report.", "ipm.post", "ipm.document"].iter().any(|c| class.starts_with(c))
 }
