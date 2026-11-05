@@ -2367,6 +2367,121 @@ chaque partie, la sonde d'abord, lancée contre le code d'alors, sur les seuls f
   terminé hors ligne reçoit sur Exchange l'heure de l'envoi du changement, non celle du clic (le jour
   gardé ici reste juste jusqu'à ce que le serveur dise le sien).
 
+### Hors relevé : R17, les coches d'avant et l'index par ajout (2026-11-05)
+
+Un petit lot propre au fork, décidé par le propriétaire le 05/11 (phase 4 de
+`merge-tools/survey-v0.32.md`), en deux parties. Pour chacune, la sonde d'abord, lancée contre le
+code d'alors, sur les seuls faux serveurs et boîtes fabriquées du dépôt.
+
+**Première partie : la coche des suivis terminés avant R16** (`b19e997e`). Un message marqué
+terminé dans Outlook avant cette version restait sans coche : la synchro EWS ne demande que ce qui
+a changé. Décision : une passe ciblée, une seule fois.
+
+| Sonde | avant | après |
+|---|---|---|
+| EWS, faux serveur : cache « de la version d'avant » (coche ôtée, état sans passe), Boîte de réception (1 terminé) et un dossier (3 terminés), synchro ordinaire (`follow_ups_completed_before_this_version_are_ticked_once`) | **aucune coche** | la première synchro met coche et jour d'Outlook ; une requête pour la Boîte de réception, deux pages pour l'autre dossier (page de 2 en test) ; passe coupée après la Boîte de réception puis reprise : elle n'est pas redemandée ; passe finie : plus rien demandé |
+| EWS : dossier d'une boîte partagée et dossier public suivi (`shared_and_public_folders_have_their_ticks_read_where_they_live`) | — | cochés, une requête chacun, là où ils vivent (ancrée à la boîte, routée vers la boîte de contenu public) |
+| Graph : même cache sans coche, synchro ordinaire (`a_follow_up_completed_before_this_version_is_ticked_at_the_next_sync`) | **passait déjà** | garde-fou |
+| État du compte : lecteurs parallèles, fin de passe, `jmap.json` ancien ou abîmé (`the_completed_follow_ups_pass_is_kept_per_account`) | — | dossiers faits rendus par `absorb` ; fin quand tous les dossiers suivis l'ont eue ; un `ticks` illisible refait la passe sans refuser l'état (ni sa numérotation) |
+
+- **EWS** : au premier passage de chaque dossier de courrier suivi dans une synchro (avant même le
+  retour anticipé d'un dossier inchangé), un `FindItem` `IdOnly` avec `FLAG_FIELDS` et la
+  restriction `0x1090 = 1` (celle du drapeau, `= 2`, en modèle), paginé par 1 000, limité à la
+  fenêtre et à l'âge gardé (`Client::completed`, `newest_where` prenant maintenant une condition) ;
+  les messages que le cache connaît prennent les marques du serveur (`take_marks`, le jour
+  `0x1091` compris), rien d'autre n'est lu (`ews/sync/catch_up.rs`, nouveau, avec ce que partage le
+  rattrapage des catégories). Un dossier sans cache n'a rien à cocher (il sera listé en entier) ;
+  un dossier public non suivi n'est pas concerné. Un refus du serveur (`NetError::No`) est consigné
+  et compte comme fait ; hors ligne, l'erreur remonte et le dossier est repris à la synchro suivante.
+- **La marque** est dans l'état du compte (`jmap.json`, champ `ticks` : les dossiers faits, puis
+  `done`), pas dans `ui.json` ; `sync_all` la clôt quand tous les dossiers suivis l'ont eue. Un
+  lecteur parallèle part d'une copie et rend ses dossiers (`absorb`). Le champ est lu à part : abîmé,
+  il est pris pour « passe à faire », sans refuser le reste de l'état.
+- **Graph** : rien à faire. Sa synchro relit à chaque fois les marques (`flag`) de toute la fenêtre
+  gardée, et R16 y lit `complete` : la coche arrive à la première synchro (sonde).
+- **IMAP et JMAP** : rien à faire. Ils gardaient déjà tous les mots-clés tels quels avant R16
+  (`$FollowUpComplete` compris, comparé sans casse) : le cache a la marque, R16 sait la lire (la
+  sonde IMAP de R16 passait déjà).
+- **Le faux EWS** distingue `0x1090 = 1` de `= 2` dans une restriction et compte ces demandes à part.
+
+**Deuxième partie : un message reçu ne fait plus relire tout l'index de son dossier**
+(`998e7e40`). R14 l'avait mesuré : après un relancement, un dossier changé était relu en entier.
+Décision : pas de portage de l'index de l'origine (P3), seulement cela.
+
+| Sonde | avant | après |
+|---|---|---|
+| Moteur, 300 + 10 messages téléchargés, l'index bâti, un message reçu, relancement, recherche (`a_change_reads_the_message_changed_not_its_folder`) | **301 sources relues** | 1 au plus ; puis un retiré, un déplacé, un résumé changé (aperçu rempli) et un corps arrivé : 3 au plus ; la fois d'après : 0 ; mêmes trouvés |
+| Proptest : ajouts, retraits, déplacements, résumés changés, corps arrivés au hasard, puis l'index repris comparé à un index rebâti, et l'index qu'il garde à son tour (`a_kept_index_taken_with_its_changes_finds_what_a_new_one_does`, 40 cas) | — | identiques ; somme ignorée exprès : il échoue |
+| En session, un message reçu puis la recherche suivante (banc) | 1 appel, 0 source relue | inchangé (déjà par ajout, `top_up`) |
+
+Le banc ignoré `bench::search::fifty_thousand` (`--release`, sur ce poste) compte maintenant les
+sources relues et ajoute le cas en session, puis un retrait et un déplacement. Textes longs (600 mots
+sur 60 000, le profil le plus proche du propriétaire) :
+
+| | avant, 50 000 messages | après, 50 000 | après, 45 000 |
+|---|---|---|---|
+| Relancement, rien de changé | 41 appels, 1,62 s, pire 90 ms | 41 appels, 1,57 s, pire 91 ms | 41 appels, 1,39 s, pire 79 ms |
+| Relancement, un message arrivé dans la Boîte de réception | 1 241 appels (≈ 21 s), 6,87 s, pire 152 ms, **12 002 sources relues** | 77 appels, 1,93 s, pire 109 ms, **2 relues** | 43 appels, 1,52 s, pire 94 ms, 2 relues |
+| Relancement, un retiré de la Boîte de réception, un déplacé vers un autre dossier | 1 035 appels, 6,09 s, pire 131 ms, 12 976 relues | 78 appels, 1,96 s, pire 113 ms, 1 relue | 45 appels, 1,57 s, pire 93 ms, 1 relue |
+| Première recherche, pire appel (une fin de dossier) | 132 à 152 ms | 119 à 130 ms | 109 ms |
+
+Textes courts, 50 000 : un message arrivé, 112 appels, 0,53 s, 12 002 relues avant ; 61 appels,
+0,32 s, 2 relues après. **Le banc à 50 000 tout juste** dépasse de deux messages le cache des listes
+de la session (`CACHE_MESSAGES`, 50 000 résumés) : chaque dossier relu en chasse un autre et la
+réponse relit les listes sur le disque (2,6 ms chacune), d'où l'écart avec 45 000. C'est un artefact
+de la taille du banc, pas de la reprise.
+
+- **`search.idx` version 4** (`model/src/search/index.rs`) : chaque message garde sa somme
+  (`summary_sum`, FNV de ce que `summary_text` donne à l'index, numéro compris ; 8 octets de plus
+  par message). `FolderIndex::retain` retire des messages et renumérote en une passe
+  (`Index::renumber`, l'ordre gardé, les listes jamais retriées). Un fichier abîmé ou d'une autre
+  version est reconstruit ; **un fichier de version 3 est encore lu**, mais pris seulement pour un
+  dossier inchangé (ses sommes alors calculées, le fichier réécrit) : la mise à jour ne reconstruit
+  rien de ce qui n'a pas changé.
+- **Au relancement** (`session/searching/indexing/kept.rs`, le code des dossiers gardés déplacé là
+  par sujet) : un dossier changé n'est plus jeté. Les messages disparus ou dont la somme a changé
+  sortent, les autres restent ; ceux qui manquent sont lus comme un dossier en cours, les présents
+  passés (1/64 d'unité chacun), puis le fichier est réécrit à la fin du dossier. Les corps arrivés
+  depuis sont lus comme avant ; le déplacement est un retrait ici et un ajout là-bas.
+- **En session**, rien ne change : un ajout, un corps arrivé (`Event::Body`, les sources de R14
+  `came`) vont déjà par ajout en mémoire ; un message parti ne répond plus (sa place est vérifiée).
+  `search.idx` n'est pas réécrit en cours de session : le relancement suivant reprend ces
+  changements, au prorata (réécrire le fichier d'un dossier demanderait d'extraire ses mots de
+  l'index de toute la boîte).
+- **L'appel qui finit un dossier** écrit son fichier, et la jonction se fait à l'appel suivant
+  (`joining`) ; un dossier repris avec des changements, sans rien à lire, passe aussi par là (sinon
+  lecture, retrait et écriture faisaient 164 ms d'un appel). Un dossier repris entier est joint tout
+  de suite : différé, il doublait les appels d'un relancement (41 → 81) pour 14 ms de moins au pire.
+  Le test `paced` exclut maintenant les deux derniers appels (écriture 21 ms, jonction 1,6 ms en
+  debug, au lieu de 45 ms d'un tenant).
+- **Essayé puis retiré** : garder d'un appel à l'autre la table des places (où est chaque message
+  dans sa liste) : aucun gain mesuré (0,3 ms par appel), et de l'ordre de 20 Mo chez le propriétaire.
+- **Vérifié** : chaque sonde avant (échec) et après ; le proptest échoue si la somme est ignorée ;
+  les suites de `quatrelle-model`, `quatrelle-store`, `quatrelle-engine`, `quatrelle-jmap` et
+  `quatrelle-net` ; la cible de fuzz `search` lit aussi `search.idx` (lecture, retrait, réécriture) ;
+  `cargo xtask ci` (wasm compris).
+- **Ce que verra le propriétaire** au premier démarrage :
+  - **les coches** : à la première synchro complète, chacun de ses dossiers de courrier gardés
+    (110, boîte partagée et dossiers publics suivis compris) reçoit **une requête de plus**, une
+    page de plus par millier de messages terminés dans un dossier ; un dossier public coûte en plus
+    l'essai non routé que fait toute requête de ces dossiers. Soit 110 à 130 petites requêtes
+    `IdOnly`, une fois, mêlées à la synchro. Les messages terminés dans Outlook prennent leur coche
+    et « Terminé le … » ; si Quatrelle est fermée en route, la synchro suivante finit les dossiers
+    restants ;
+  - **la recherche** : ses `search.idx` de version 3 des dossiers inchangés sont repris sans
+    relecture, mais réécrits une fois chacun (≈ 600 Mo en tout, un fichier par appel) ; les
+    dossiers changés depuis leur dernier index (la Boîte de réception, les Éléments envoyés…) sont
+    relus une dernière fois en entier. Ensuite, un relancement ne relit que les messages arrivés,
+    changés ou déplacés : quelques secondes de moins par gros dossier, une minute de moins pour un
+    dossier de 50 000 messages, selon les mesures de R14.
+- **Reste, remarqué** : lire un gros `search.idx` reste un appel d'un tenant (lecture 28 ms et
+  analyse 35 ms pour 10 800 messages longs, de l'ordre de 0,3 s pour 50 000), comme l'écrire
+  (85 ms pour 10 800) et le joindre ; le démarrage (tous les `search.idx` relus, ≈ 1,5 s de calcul
+  pour 50 000) n'est pas raccourci ; chez le propriétaire, une recherche dans toute la boîte dépasse
+  toujours le cache de 50 000 résumés, et la réponse relit alors des listes sur le disque.
+- **Jamais essayé sur un vrai Exchange** : le `FindItem` avec la restriction `0x1090 = 1`, sa
+  pagination, son routage vers les dossiers publics et la boîte partagée.
+
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
 Quatre chantiers, chacun dans son commit, à la suite d'un audit de l'éditeur HTML.
