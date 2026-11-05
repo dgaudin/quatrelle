@@ -92,8 +92,8 @@ impl Session {
                 self.update_event(&real, |e| {
                     e.start = start;
                     e.end = end;
-                    // The days taken out of the series move with it.
-                    for x in &mut e.exdates {
+                    // The days taken out of the series, and those added to it, move with it.
+                    for x in e.exdates.iter_mut().chain(e.rdates.iter_mut()) {
                         *x = x.saturating_add(delta);
                     }
                 })?;
@@ -149,7 +149,15 @@ impl Session {
             Some(x) => x.event.clone(),
             None => {
                 let len = master.event.end - master.event.start;
-                CalEvent { recurrence_id: Some(at), rrule: None, exdates: Vec::new(), start: at, end: at + len, ..master.event.clone() }
+                CalEvent {
+                    recurrence_id: Some(at),
+                    rrule: None,
+                    exdates: Vec::new(),
+                    rdates: Vec::new(),
+                    start: at,
+                    end: at + len,
+                    ..master.event.clone()
+                }
             }
         };
         change(&mut e);
@@ -158,6 +166,7 @@ impl Session {
         e.recurrence_id = Some(at);
         e.rrule = None;
         e.exdates.clear();
+        e.rdates.clear();
         e.sequence = e.sequence.max(master.event.sequence);
         if !others {
             e.sequence = e.sequence.saturating_add(1);

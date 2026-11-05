@@ -500,7 +500,8 @@ pub(super) fn event_from(s: &Session, v: &Value, mut e: quatrelle_model::ical::C
         e.no_new_times = !b;
     }
     match p::str(v, "repeat").map(str::trim) {
-        Some("" | "none" | "never") => e.rrule = None,
+        // No repeat: none of a file's added dates either.
+        Some("" | "none" | "never") => (e.rrule, e.rdates) = (None, Vec::new()),
         Some(r @ ("daily" | "weekly" | "monthly" | "yearly")) => e.rrule = Some(format!("FREQ={}", r.to_ascii_uppercase())),
         Some(r) if r.to_ascii_uppercase().starts_with("FREQ=") && r.len() < 500 => e.rrule = Some(r.to_string()),
         Some(r) => return Err(CmdError::Params(format!("`{r}` is not a repeat"))),
