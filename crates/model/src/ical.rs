@@ -32,6 +32,7 @@ mod notes;
 mod recurrence;
 mod text;
 mod todo;
+mod whole;
 mod zones;
 pub use alarms::*;
 pub use conference::{CONFERENCE_LABEL_MAX, Conference};
@@ -43,6 +44,7 @@ use recurrence::*;
 pub use recurrence::*;
 pub use text::*;
 pub use todo::write_task;
+use whole::*;
 use zones::*;
 
 /// The most occurrences produced for one event in one expansion.
@@ -256,10 +258,11 @@ fn lines(text: &str) -> Vec<Line> {
     let text = text.get(..MAX_INPUT).unwrap_or(text);
     let mut unfolded: Vec<String> = Vec::new();
     for l in text.split('\n') {
-        let l = l.strip_suffix('\r').unwrap_or(l);
+        // A CR inside a line is taken out, as writing takes it out: what's read is what's written.
+        let l = l.replace('\r', "");
         match (l.strip_prefix(' ').or_else(|| l.strip_prefix('\t')), unfolded.last_mut()) {
             (Some(rest), Some(prev)) => prev.push_str(rest),
-            _ => unfolded.push(l.to_string()),
+            _ => unfolded.push(l),
         }
     }
     unfolded
@@ -726,7 +729,7 @@ pub fn write_event(e: &CalEvent, now: i64, out: &mut String) {
     }
     // A kept line with the conference's link isn't written again.
     let repeated = conference::repeats(e);
-    lines.extend(e.extra.iter().enumerate().filter(|(i, _)| !repeated.contains(i)).map(|(_, x)| x.replace(['\r', '\n'], "")));
+    lines.extend(whole(e.extra.iter().enumerate().filter(|(i, _)| !repeated.contains(i)).map(|(_, x)| x), &[]));
     lines.push("END:VEVENT".into());
     for l in lines {
         fold(&l, out);
@@ -760,8 +763,10 @@ pub fn write(events: &[CalEvent], method: Option<&str>, now: i64) -> String {
             None => continue,
         };
         written.push(&e.tzid);
-        for l in definition {
-            fold(&l.replace(['\r', '\n'], ""), &mut out);
+        // Whole, and holding no event, task or calendar: a definition cut short, or with one of
+        // those in it, would swallow what's written after it.
+        for l in whole(&definition, &["VEVENT", "VTODO", "VCALENDAR"]) {
+            fold(&l, &mut out);
         }
     }
     for e in events {
