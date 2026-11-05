@@ -828,6 +828,7 @@ fn a_shown_picture_keeps_its_name() {
 }
 
 mod fidelity;
+mod files;
 mod losses;
 mod reader;
 mod real_files;

@@ -13,13 +13,13 @@
 //! A data file is hostile input like any other: the reader runs behind `catch_unwind`, items that
 //! can't be read are skipped and counted, and sizes are capped.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::io;
 use std::path::Path;
 use std::rc::Rc;
 
 use outlook_pst::ltp::prop_context::PropertyValue;
-use outlook_pst::ltp::table_context::TableContext;
+use outlook_pst::ltp::table_context::{TableContext, TableRowData};
 use outlook_pst::messaging::attachment::{AnsiAttachment, Attachment, AttachmentData, UnicodeAttachment};
 use outlook_pst::messaging::folder::Folder as PstFolder;
 use outlook_pst::messaging::message::{AnsiMessage, Message, UnicodeMessage};
@@ -38,7 +38,7 @@ mod rebuild;
 #[cfg(test)]
 mod tests;
 
-use item::{Item, attachment, item, message_code_page, picture_of};
+use item::{Files, Item, attachment, item, message_code_page, picture_of, unread_attachment};
 use out::Out;
 #[doc(hidden)]
 pub use props::Val;
@@ -92,6 +92,24 @@ pub struct Imported {
     /// Messages whose only body was Rich Text that couldn't be read: imported without a body.
     /// Logged, and not in `skipped`, for the same reason.
     pub body_not_converted: usize,
+    /// The attachments left out of the messages that came in, by reason (`skipped` doesn't count
+    /// them: their messages came in).
+    pub files_left_out: BTreeMap<FileLeftOut, usize>,
+}
+
+/// Why one of a message's attachments didn't come in with it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum FileLeftOut {
+    /// Attached by reference: a path or an address, not the file.
+    Link,
+    /// Larger than the import takes.
+    TooBig,
+    /// A file the reader couldn't read.
+    Unreadable,
+    /// An attached message the reader couldn't read.
+    MessageUnreadable,
+    /// An attached message nested deeper than the import goes.
+    TooDeep,
 }
 
 /// Import the data file at `path` into `account`'s cache (an account with no server). Calls
@@ -158,22 +176,23 @@ macro_rules! reader {
             let read = |entry: &EntryId| -> io::Result<Item> {
                 let m = <$message>::read(store.clone(), entry, None)?;
                 let cp = message_code_page(&*m);
-                let mut files = Vec::new();
+                let mut files = Files::default();
                 let mut photo = None;
                 if let Some(table) = m.attachment_table() {
                     for row in table.rows_matrix() {
                         let node = NodeId::from(u32::from(row.id()));
-                        match <$attachment>::read(m.clone(), node, None) {
+                        // The row itself is read only for an attachment the reader fails on.
+                        files.add(match <$attachment>::read(m.clone(), node, None) {
                             Ok(a) => {
                                 // A contact's picture is one of its attachments, hidden.
                                 photo = photo.or_else(|| picture_of(&*a));
-                                files.extend(attachment(&*a, 0, cp, &named));
+                                attachment(&*a, 0, cp, &named)
                             }
-                            Err(e) => log::info!("an attachment could not be read: {e}"),
-                        }
+                            Err(e) => unread_attachment(&e, &**table, row, cp),
+                        });
                     }
                 }
-                Ok(item(&*m, files, &named, photo))
+                Ok(Item { left_out: files.left_out, ..item(&*m, files.files, &named, photo) })
             };
             walk(&*any, &read, out)
         }

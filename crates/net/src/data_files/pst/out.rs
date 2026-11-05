@@ -32,6 +32,8 @@ pub(super) struct Out<'a> {
     pub(super) skipped: usize,
     pub(super) charset_unsupported: usize,
     pub(super) body_not_converted: usize,
+    /// The files left out of the messages that came in, by reason.
+    pub(super) files_left_out: BTreeMap<FileLeftOut, usize>,
     pub(super) progress: &'a mut dyn FnMut(usize),
     /// Contacts and calendar items read so far.
     pub(super) pim: Pim,
@@ -52,6 +54,7 @@ impl<'a> Out<'a> {
             skipped: 0,
             charset_unsupported: 0,
             body_not_converted: 0,
+            files_left_out: BTreeMap::new(),
             progress,
             pim: Pim::default(),
             pending: Vec::new(),
@@ -157,6 +160,11 @@ impl<'a> Out<'a> {
         if it.body_not_converted {
             self.body_not_converted += 1;
         }
+        // The message came in without these files: counted by reason, not as items skipped.
+        for (reason, n) in &it.left_out {
+            let c = self.files_left_out.entry(*reason).or_default();
+            *c = c.saturating_add(*n);
+        }
         let key = MessageKey { account: self.account.to_string(), folder: path.to_string(), validity: 1, uid };
         st.uid_next = uid.saturating_add(1);
         let size = u32::try_from(raw.len()).unwrap_or(u32::MAX);
@@ -257,6 +265,9 @@ impl<'a> Out<'a> {
         if self.body_not_converted > 0 {
             log::info!("{} messages kept their body only as Rich Text that couldn't be read: they came in without one", self.body_not_converted);
         }
+        if !self.files_left_out.is_empty() {
+            log::info!("attachments left out of the messages that came in: {:?}", self.files_left_out);
+        }
         Imported {
             folders: self.folders,
             messages: self.imported,
@@ -268,6 +279,7 @@ impl<'a> Out<'a> {
             last_save,
             charset_unsupported: self.charset_unsupported,
             body_not_converted: self.body_not_converted,
+            files_left_out: self.files_left_out,
         }
     }
 }
