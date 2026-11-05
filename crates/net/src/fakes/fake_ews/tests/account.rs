@@ -282,7 +282,7 @@ fn automatic_replies_and_sending_go_while_the_mailbox_syncs() {
 }
 
 /// Flag a message while a slow full sync runs, then shut the pool down: the flag is in the
-/// cache and ops.json straight away, and the next session delivers it to the server.
+/// cache and the journal straight away, and the next session delivers it to the server.
 #[test]
 fn a_flag_set_mid_sync_is_not_lost() {
     let mut d = Data::default();
@@ -325,7 +325,7 @@ fn a_flag_set_mid_sync_is_not_lost() {
         std::thread::sleep(Duration::from_millis(10));
     }
     assert!(flagged(), "cache updated at once");
-    assert_eq!(store.load_ops("a1").unwrap(), [op], "ops.json written at once");
+    assert_eq!(store.load_ops("a1").unwrap(), [op], "journaled at once");
     // Shut down mid-sync; a fresh pool must push the flag and keep showing it.
     drop(pool);
     data.lock().unwrap().hold = None;
