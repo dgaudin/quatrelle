@@ -511,7 +511,7 @@ pub struct Summary {
     pub smime: Smime,
 }
 
-/// What a message's header says protects it (S/MIME, RFC 8551 §3.2).
+/// What a message's header says protects it: S/MIME (RFC 8551 §3.2) or OpenPGP (RFC 3156).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Smime {
