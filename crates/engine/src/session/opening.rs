@@ -244,6 +244,9 @@ impl Session {
             r.warning = warning.clone();
             r.text_first = true;
         }
+        if self.reading.as_ref().is_some_and(|r| &r.key == key && r.text_first) {
+            self.text_shown_first(key);
+        }
         self.request_pictures();
     }
 

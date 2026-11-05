@@ -24,6 +24,10 @@ pub(crate) struct BodyLane {
     waiting: Option<BodyWork>,
     /// Messages parsed to be shown on the session's own thread ([`Session::bodies_parsed_here`]).
     pub(crate) parsed_here: u64,
+    /// Bumped for each piece of work waited for: a result is taken only from the latest (one
+    /// for the same message, handed out before its body arrived, is let go; from upstream
+    /// 01e633a).
+    generation: u64,
 }
 
 /// A message's body to get ready to read: read from the cache (or as it arrived), then parsed,
@@ -32,6 +36,7 @@ pub(crate) struct BodyLane {
 #[derive(Clone)]
 pub struct BodyWork {
     key: MessageKey,
+    generation: u64,
     store: Option<Store>,
     /// An Outbox message: its account and Outbox id.
     outbox: Option<(String, u64)>,
@@ -45,6 +50,7 @@ pub struct BodyWork {
 /// What [`BodyWork::run`] made of a body.
 pub struct PreparedBody {
     key: MessageKey,
+    generation: u64,
     /// `None`: not in the cache (it's downloaded).
     raw: Option<Arc<[u8]>>,
     /// `None` with `raw`: it couldn't be read (or wasn't parsed, being protected).
@@ -62,12 +68,12 @@ impl BodyWork {
     /// Read the body (or take the one given), and parse it when it isn't protected. A panic
     /// (hostile mail the parser trips on) comes back as a body that couldn't be read.
     pub fn run(self) -> PreparedBody {
-        let key = self.key.clone();
+        let (key, generation) = (self.key.clone(), self.generation);
         match std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || self.prepare())) {
             Ok(p) => p,
             Err(_) => {
                 log::warn!("a message couldn't be read (the parser failed)");
-                PreparedBody { key, raw: None, parsed: None, protected: false, broken: true }
+                PreparedBody { key, generation, raw: None, parsed: None, protected: false, broken: true }
             }
         }
     }
@@ -80,7 +86,7 @@ impl BodyWork {
             (None, None, _) => None,
         };
         let Some(raw) = raw else {
-            return PreparedBody { key: self.key, raw: None, parsed: None, protected: false, broken: false };
+            return PreparedBody { key: self.key, generation: self.generation, raw: None, parsed: None, protected: false, broken: false };
         };
         #[cfg(test)]
         if self.breaks {
@@ -88,7 +94,7 @@ impl BodyWork {
         }
         let protected = mime::smime::is_protected(&raw);
         let parsed = if protected { None } else { mime::parse(&raw) };
-        PreparedBody { key: self.key, raw: Some(raw), parsed, protected, broken: false }
+        PreparedBody { key: self.key, generation: self.generation, raw: Some(raw), parsed, protected, broken: false }
     }
 }
 
@@ -145,6 +151,7 @@ impl Session {
         };
         self.wait_for_body(BodyWork {
             key: key.clone(),
+            generation: 0,
             store,
             outbox,
             raw: None,
@@ -164,6 +171,7 @@ impl Session {
         }
         self.wait_for_body(BodyWork {
             key: key.clone(),
+            generation: 0,
             store: None,
             outbox: None,
             raw: Some(Arc::from(raw)),
@@ -173,7 +181,9 @@ impl Session {
         true
     }
 
-    fn wait_for_body(&mut self, work: BodyWork) {
+    fn wait_for_body(&mut self, mut work: BodyWork) {
+        self.body.generation = self.body.generation.wrapping_add(1);
+        work.generation = self.body.generation;
         self.body.waiting = Some(work.clone());
         self.body.work = Some(work);
     }
@@ -186,15 +196,26 @@ impl Session {
         }
     }
 
+    /// A message's text ahead of the whole of it was shown in the reading pane (Exchange): a
+    /// cache read still waited for is let go, the whole message being on its way (the read found
+    /// nothing; or it found the whole one, whose arrival follows). Taken, a read that found
+    /// nothing asked for a second download.
+    pub(super) fn text_shown_first(&mut self, key: &MessageKey) {
+        if self.body.waiting.as_ref().is_some_and(|w| w.key == *key && w.raw.is_none()) {
+            self.body.waiting = None;
+            self.body.work = None;
+        }
+    }
+
     /// A body got ready on another thread: shown, when the reading pane still waits for it
-    /// (one it moved on from is let go).
+    /// (one it moved on from, or one overtaken by a body that arrived meanwhile, is let go).
     pub fn finish_body(&mut self, p: PreparedBody) {
-        if !self.body_waiting(&p.key) {
+        if !self.body.waiting.as_ref().is_some_and(|w| w.key == p.key && w.generation == p.generation) {
             return;
         }
         self.body.waiting = None;
         self.body.work = None;
-        if !self.reading.as_ref().is_some_and(|r| r.key == p.key) {
+        if self.reading.as_ref().is_none_or(|r| r.key != p.key) {
             return;
         }
         let key = p.key;

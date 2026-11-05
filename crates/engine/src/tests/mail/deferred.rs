@@ -283,3 +283,51 @@ fn a_text_first_then_whole_reads_the_same_deferred() {
     done(now);
     done(later);
 }
+
+/// A body that arrives while the cache is still being read for it wins: the cache read's
+/// result, handed out before, is let go, so the arrived body isn't downloaded again (from
+/// upstream 01e633a). The fork's own race: a message's text ahead of it (Exchange) arriving
+/// during the cache read is shown, and the read finding nothing then asks for no second download.
+#[test]
+fn a_body_arriving_during_the_cache_read_wins() {
+    let mut s = sample_session("deferred-race");
+    s.defer_bodies(true);
+    let k = s.list[0].key.clone();
+    s.store.as_ref().unwrap().remove_body(&k);
+    s.run("list.open", &json!({"key": k.to_id()})).unwrap();
+    let read = s.take_body_work().unwrap().run();
+    s.apply(Event::Body { key: k.clone(), raw: NO_DATE.to_vec() });
+    let arrived = s.take_body_work().unwrap();
+    s.finish_body(read);
+    assert!(s.take_jobs().is_empty(), "not downloaded again");
+    assert!(s.body_waiting(&k), "still waits for the arrived body");
+    s.finish_body(arrived.run());
+    assert_eq!(s.reading.as_ref().unwrap().parsed.as_ref().unwrap().subject, "Undated");
+    done(s);
+
+    // Its text first arrives while the cache is read, then the whole message.
+    let (mut s, keys) = with_kinds("deferred-race-text-first");
+    s.defer_bodies(true);
+    let k = keys[4].clone();
+    s.run("list.open", &json!({"key": k.to_id()})).unwrap();
+    let read = s.take_body_work().unwrap().run();
+    let text = quatrelle_mime::text_first(
+        &quatrelle_mime::Draft { subject: "Colour notes".into(), body: "The text first.".into(), ..Default::default() },
+        &quatrelle_model::EmailAddress::new("Ana", "ana@posteo.example"),
+        NOW,
+        "<tf@posteo.example>",
+        &[quatrelle_mime::PendingFile { name: "cut.mov".into(), mime: "video/quicktime".into(), size: 9_000_000, ..Default::default() }],
+    )
+    .unwrap();
+    s.apply(Event::TextFirst { key: k.clone(), raw: text });
+    assert!(s.reading.as_ref().unwrap().text_first, "its text shows");
+    s.finish_body(read);
+    assert!(s.take_jobs().is_empty(), "not downloaded again: the whole message is on its way");
+    assert!(s.reading.as_ref().unwrap().text_first, "its text stays");
+    s.apply(Event::Body { key: k.clone(), raw: HTML.to_vec() });
+    let arrived = s.take_body_work().unwrap();
+    s.finish_body(arrived.run());
+    let r = s.reading.as_ref().unwrap();
+    assert!(!r.text_first && r.parsed.as_ref().unwrap().subject == "Colour notes", "the whole body is shown");
+    done(s);
+}
