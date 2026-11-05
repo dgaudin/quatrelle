@@ -37,6 +37,7 @@ fn a_teams_invitations_join_link_survives_as_text() {
 use super::*;
 
 mod importance;
+mod one_parse;
 mod report;
 
 /// Issue #1: a signature copied from Outlook (Word's HTML on the clipboard, only the copied
