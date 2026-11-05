@@ -390,10 +390,43 @@ fn flags(m: &Value) -> Flags {
     if m.get("isDraft").and_then(Value::as_bool) == Some(true) {
         names.push("\\Draft");
     }
-    if m.get("flag").and_then(|f| f.get("flagStatus")).and_then(Value::as_str) == Some("flagged") {
-        names.push("\\Flagged");
+    let flag = m.get("flag");
+    let complete = match flag.and_then(|f| f.get("flagStatus")).and_then(Value::as_str) {
+        Some("flagged") => {
+            names.push("\\Flagged");
+            false
+        }
+        // Marked complete: Graph keeps one status for both.
+        Some("complete") => {
+            names.push(quatrelle_model::FOLLOW_UP_COMPLETE);
+            true
+        }
+        _ => false,
+    };
+    let mut f = Flags::from_imap(names);
+    // When it was done, in UTC (asked so: `PREFER`); a time in another zone is left out.
+    if complete
+        && let Some(done) = flag.and_then(|f| f.get("completedDateTime"))
+        && done.get("timeZone").and_then(Value::as_str).is_none_or(|z| z.eq_ignore_ascii_case("UTC"))
+    {
+        f.completed = done.get("dateTime").and_then(Value::as_str).and_then(jmap::utc_date).filter(|t| *t > 0).unwrap_or(0);
     }
-    Flags::from_imap(names)
+    f
+}
+
+/// The change a flag or follow-up op makes to a message on the server (`None`: nothing Graph
+/// keeps). Graph's one `flagStatus` holds both the flag and the follow-up marked complete: the
+/// engine sends the keyword taken off before the flag is set, and put on after it (adapted from
+/// upstream 39d8684).
+fn flag_patch(op: &Op) -> Option<Value> {
+    match op {
+        Op::SetFlag { flag: Flag::Seen, on, .. } => Some(json!({"isRead": on})),
+        Op::SetFlag { flag: Flag::Flagged, on, .. } => Some(json!({"flag": {"flagStatus": if *on { "flagged" } else { "notFlagged" }}})),
+        Op::SetKeyword { keyword, on, .. } if keyword.eq_ignore_ascii_case(quatrelle_model::FOLLOW_UP_COMPLETE) => {
+            Some(json!({"flag": {"flagStatus": if *on { "complete" } else { "notFlagged" }}}))
+        }
+        _ => None,
+    }
 }
 
 /// `{"emailAddress": {"name", "address"}}` as a header value.
@@ -490,7 +523,31 @@ mod tests {
         let own = json!({"internetMessageHeaders": [{"name": "Subject", "value": "Own"}, {"name": "Bad Name", "value": "x"}]});
         assert_eq!(String::from_utf8(header_block(&own)).unwrap(), "Subject: Own\r\n\r\n");
         let f = flags(&json!({"isRead": true, "flag": {"flagStatus": "flagged"}, "isDraft": false}));
-        assert!(f.seen && f.flagged && !f.draft);
+        assert!(f.seen && f.flagged && !f.draft && !f.follow_up_complete());
+        let f = flags(&json!({"flag": {"flagStatus": "complete", "completedDateTime": {"dateTime": "2026-10-30T00:00:00", "timeZone": "UTC"}}}));
+        assert!(!f.flagged && f.follow_up_complete() && f.completed == jmap::utc_date("2026-10-30T00:00:00Z").unwrap_or(-1), "{f:?}");
+        assert!(!flags(&json!({"flag": {"flagStatus": "notFlagged"}})).has(quatrelle_model::FOLLOW_UP_COMPLETE));
+        // A day in another zone, or not a time: complete, its day not said.
+        for done in [json!({"dateTime": "2026-10-30T00:00:00", "timeZone": "Pacific Standard Time"}), json!({"dateTime": "soon"}), json!(7)] {
+            let f = flags(&json!({"flag": {"flagStatus": "complete", "completedDateTime": done}}));
+            assert!(f.follow_up_complete() && f.completed == 0, "{f:?}");
+        }
+    }
+
+    /// Mark Complete, its Undo and a flag set again reach Graph's one flag status in the order
+    /// the engine sends them; other keywords (categories) stay on this computer.
+    #[test]
+    fn follow_up_changes_as_graph_keeps_them() {
+        let keys = vec![MessageKey::default()];
+        let status = |op: Op| flag_patch(&op).and_then(|p| p["flag"]["flagStatus"].as_str().map(str::to_string));
+        let flag = |on| Op::SetFlag { keys: keys.clone(), flag: Flag::Flagged, on };
+        let complete = |on| Op::SetKeyword { keys: keys.clone(), keyword: quatrelle_model::FOLLOW_UP_COMPLETE.into(), on, name: None };
+        // Mark Complete: the flag off, then complete.
+        assert_eq!([status(flag(false)), status(complete(true))], [Some("notFlagged".into()), Some("complete".into())]);
+        // Its Undo, or flagged again: the keyword off, then the flag on.
+        assert_eq!([status(complete(false)), status(flag(true))], [Some("notFlagged".into()), Some("flagged".into())]);
+        assert_eq!(flag_patch(&Op::SetKeyword { keys: keys.clone(), keyword: "work".into(), on: true, name: None }), None);
+        assert_eq!(flag_patch(&Op::SetFlag { keys, flag: Flag::Seen, on: true }), Some(json!({"isRead": true})));
     }
 
     #[test]
