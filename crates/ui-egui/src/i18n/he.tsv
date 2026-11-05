@@ -684,10 +684,8 @@ month	May	מאי
 	Follow up. Overdue: it was due {date}.	מעקב. באיחור: היעד היה {date}.
 	Completed.	הושלם.
 	Completed on {date}.	הושלם ב-{date}.
-	You replied to this message on {date}.	השבת להודעה זו ב-{date}.
-	You forwarded this message on {date}.	העברת הודעה זו ב-{date}.
-	You replied to this message.	השבת להודעה זו.
-	You forwarded this message.	העברת הודעה זו.
+	Replied on {date}.	נענתה ב-{date}.
+	Forwarded on {date}.	הועברה ב-{date}.
 	Replied	נענתה
 	Forwarded	הועברה
 	This message was sent with high importance.	הודעה זו נשלחה בחשיבות גבוהה.

@@ -685,10 +685,8 @@ month	May	5月
 	Follow up. Overdue: it was due {date}.	フォローアップ。期限切れ: 期限は {date} でした。
 	Completed.	完了しました。
 	Completed on {date}.	{date} に完了しました。
-	You replied to this message on {date}.	このメッセージに {date} に返信しました。
-	You forwarded this message on {date}.	このメッセージを {date} に転送しました。
-	You replied to this message.	このメッセージに返信しました。
-	You forwarded this message.	このメッセージを転送しました。
+	Replied on {date}.	{date} に返信済み。
+	Forwarded on {date}.	{date} に転送済み。
 	Replied	返信済み
 	Forwarded	転送済み
 	This message was sent with high importance.	このメッセージは重要度 - 高で送信されました。
