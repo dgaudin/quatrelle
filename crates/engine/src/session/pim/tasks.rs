@@ -37,17 +37,18 @@ const MAX_SUBJECT: usize = 255;
 const MAX_NOTES: usize = 100_000;
 
 impl Session {
-    /// Every task matching a search (in its subject or notes), in the To-Do List's order; the
-    /// completed ones too when `completed`.
+    /// Every task matching a search (in its subject or notes, accents read away as the mail
+    /// search reads them), in the To-Do List's order; the completed ones too when `completed`.
     pub fn tasks(&self, query: &str, completed: bool) -> Vec<TaskRef> {
-        let q = query.trim().to_lowercase();
+        let q = quatrelle_model::search::fold_word(query.trim());
+        let has = |text: &str| quatrelle_model::search::fold_word(text).contains(q.as_ref());
         let today = quatrelle_model::dates::today(&self.clock);
         let mut list: Vec<TaskRef> = self
             .pim
             .iter()
             .flat_map(|(a, p)| p.tasks.iter().map(move |t| (a, t)))
             .filter(|(_, t)| completed || !t.task.is_complete())
-            .filter(|(_, t)| q.is_empty() || t.task.subject.to_lowercase().contains(&q) || t.task.notes.to_lowercase().contains(&q))
+            .filter(|(_, t)| q.is_empty() || has(&t.task.subject) || has(&t.task.notes))
             .map(|(a, t)| TaskRef { account: a.clone(), task: t.task.clone() })
             .collect();
         list.sort_by_cached_key(|r| {

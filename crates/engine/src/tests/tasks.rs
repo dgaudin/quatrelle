@@ -26,6 +26,7 @@ fn a_task_goes_through_its_life() {
     );
     assert_eq!(s.tasks("", true).len(), before + 1);
     assert_eq!(s.tasks("martin", false).len(), 1, "found by its subject");
+    assert_eq!(s.tasks("MÁRTÍN", false).len(), 1, "accents read away, both ways round");
 
     // A start after the due date moves the due date; a percentage starts it.
     s.run("task.update", &json!({"uid": uid, "start": "2026-10-20", "percent": 40, "notes": "Relancer vendredi"})).unwrap();

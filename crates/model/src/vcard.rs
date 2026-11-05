@@ -265,13 +265,16 @@ impl Card {
         self.emails.first().map(|e| e.value.clone()).unwrap_or_default()
     }
 
-    /// Whether the card matches a search (name, organisation or any address, case-insensitive).
+    /// Whether the card matches a search (name, organisation or any address, case-insensitive,
+    /// accents read away as the mail search reads them).
     pub fn matches(&self, q: &str) -> bool {
-        let q = q.trim().to_lowercase();
+        use crate::search::fold_word;
+        let q = fold_word(q.trim());
+        let has = |text: &str| fold_word(text).contains(q.as_ref());
         q.is_empty()
-            || self.display().to_lowercase().contains(&q)
-            || self.org.to_lowercase().contains(&q)
-            || self.emails.iter().any(|e| e.value.to_lowercase().contains(&q))
+            || has(&self.display())
+            || has(&self.org)
+            || self.emails.iter().any(|e| has(&e.value))
             || self.phones.iter().any(|p| p.value.replace(' ', "").contains(&q.replace(' ', "")))
     }
 }
@@ -784,5 +787,16 @@ TITLE:Price=5 not encoded\r\nEND:VCARD\r\n";
             let _ = parse(junk);
         }
         assert_eq!(parse("BEGIN:VCARD\nEMAIL;TYPE=\"a:b\":x@y\nEND:VCARD")[0].emails[0].value, "x@y", "colons in quoted parameters");
+    }
+
+    /// The people search reads accents away, both ways round, as the mail search does.
+    #[test]
+    fn a_card_is_found_without_its_accents() {
+        let c = Card { name: "Hélène Dupré".into(), org: "Société Générale".into(), ..Default::default() };
+        for q in ["helene", "DUPRE", "societe", "hélène"] {
+            assert!(c.matches(q), "{q}");
+        }
+        let plain = Card { name: "Helene Dupre".into(), ..Default::default() };
+        assert!(plain.matches("Hélène") && !plain.matches("zoé"));
     }
 }
