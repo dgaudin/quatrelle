@@ -760,3 +760,19 @@ fn quoting_a_winmail_dats_pictures_reads_it_once() {
     assert_eq!(used.len(), 3);
     assert_eq!(TNEF_READ.with(|n| n.get()), 1);
 }
+
+/// A `winmail.dat` a message is about to be built with is a file when it holds one, not when it
+/// holds only its body, as the paperclip reads the source back.
+#[test]
+fn a_winmail_dat_in_a_draft_is_a_file_when_it_holds_one() {
+    let dat = |data: Vec<u8>| crate::Draft {
+        subject: "Storyboard".into(),
+        body: "Hi".into(),
+        attachments: vec![crate::OutAttachment { name: "winmail.dat".into(), mime: "application/ms-tnef".into(), data }],
+        ..Default::default()
+    };
+    crate::tests::index_text::assert_built_files(&dat(outlook_stream()), true);
+    let mut a = Vec::new();
+    attr(&mut a, 1, ATT_BODY, b"Only in the winmail.dat\0");
+    crate::tests::index_text::assert_built_files(&dat(stream(&a)), false);
+}

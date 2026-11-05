@@ -146,7 +146,7 @@ impl<'a> Out<'a> {
         let Some(st) = self.states.get_mut(path) else { return };
         let uid = st.uid_next;
         let fallback = format!("pst.{}.{}.{uid}@quatrelle.invalid", self.account, self.imported);
-        let raw = match to_raw(&it, &fallback) {
+        let (raw, files) = match to_raw(&it, &fallback) {
             Ok(r) => r,
             Err(e) => {
                 log::info!("a message could not be rebuilt: {e}");
@@ -168,7 +168,7 @@ impl<'a> Out<'a> {
         let key = MessageKey { account: self.account.to_string(), folder: path.to_string(), validity: 1, uid };
         st.uid_next = uid.saturating_add(1);
         let size = u32::try_from(raw.len()).unwrap_or(u32::MAX);
-        st.waiting.push(summary_of(&raw, &it, key.clone(), size));
+        st.waiting.push(summary_of(&raw, &it, key.clone(), size, files));
         let page_full = st.waiting.len() >= quatrelle_store::PAGE_MESSAGES;
         self.imported += 1;
         self.pending_bytes += raw.len();
