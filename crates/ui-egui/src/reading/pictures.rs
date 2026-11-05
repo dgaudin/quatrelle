@@ -7,8 +7,11 @@
 use super::*;
 
 mod cache;
+mod decode;
 
 pub(crate) use cache::{Got, Pictures, Want};
+pub(super) use decode::decode_with;
+pub(crate) use decode::{color_image, decode_pixels, decode_round, decode_sized, png_of};
 
 /// Draw one picture of an HTML message at the size the message sets (`size`), in `width`, `zoom`
 /// times (wider than that when zoomed in); `false` when it can't be shown (yet), else with the
