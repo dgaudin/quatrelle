@@ -9,6 +9,7 @@ use quatrelle_mime::{self as mime, Draft, OutAttachment};
 use quatrelle_model::{AccountConfig, EmailAddress, Flags, Folder, FolderRole, MessageKey, sort_newest_first};
 use quatrelle_store::{FolderState, Store, StoreError};
 
+pub mod big;
 mod pim;
 pub use pim::sample_pim;
 

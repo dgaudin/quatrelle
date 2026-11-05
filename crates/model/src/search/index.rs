@@ -53,6 +53,14 @@ impl Index {
         }
     }
 
+    /// How big it is: its words, their documents (each counted once per word holding it) and the
+    /// words' bytes. For measuring what an index costs in memory.
+    pub fn sizes(&self) -> (usize, usize, usize) {
+        let postings = self.postings.values().map(Vec::len).sum();
+        let bytes = self.postings.keys().map(String::len).sum();
+        (self.postings.len(), postings, bytes)
+    }
+
     /// Documents containing a word starting with `prefix` (folded, as the index holds it).
     pub fn prefix(&self, prefix: &str) -> BTreeSet<u32> {
         self.prefix_in(prefix, ..)
