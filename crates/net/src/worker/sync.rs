@@ -221,6 +221,7 @@ impl Worker {
         self.read_followed();
         self.let_go_of_online();
         let mut paths = sync_order(&self.folders, |f: &Folder| !self.read_online(&f.path));
+        let followed = paths.clone();
         if self.opts.parallel > 0 && paths.len() > 2 {
             paths = self.sync_parallel(paths, rx);
             if self.closed {
@@ -254,6 +255,12 @@ impl Worker {
         }
         // "Online" is said once the mail is current: the calendars and contacts can take far
         // longer, and shouldn't hold the status bar on the last folder's name.
+        // Every folder followed asked once for its follow-ups marked complete in Outlook before
+        // they were read here: the pass is done (one cut short goes on at the next sync).
+        if matches!(self.conn, Some(Conn::Ews(_))) && self.jstate.finish_ticks(&followed) {
+            log::info!("{}: completed follow-ups read in all {} folders", self.acc.id, followed.len());
+            self.save_jstate();
+        }
         if self.conn.is_some() {
             self.report_quota();
             self.prune_jmap_numbers();

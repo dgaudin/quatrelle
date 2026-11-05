@@ -5,6 +5,14 @@
 
 use super::*;
 
+/// Which of a folder's messages [`Client::newest_where`] lists.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Only {
+    All,
+    Categorized,
+    Completed,
+}
+
 /// The folders Exchange makes itself at the top of a mailbox, by name: some servers don't mark
 /// them hidden.
 pub(super) const SYSTEM_FOLDERS: [&str; 5] = ["Working Set", "Yammer Root", "PersonMetadata", "ExternalContacts", "Social Activity Notifications"];
@@ -124,19 +132,31 @@ impl Client {
     /// pages by offset; it says when the last page is in); with `since`, only those received
     /// since then (Unix seconds), as Outlook keeps mail offline in Cached Exchange Mode.
     pub(super) fn newest(&self, folder: &str, limit: usize, since: Option<i64>) -> Result<Vec<(String, Flags)>> {
-        self.newest_where(folder, limit, since, false)
+        self.newest_where(folder, limit, since, Only::All, 1000)
     }
 
     /// [`Client::newest`], those carrying categories only (what Outlook put on them).
     pub(super) fn categorized(&self, folder: &str, limit: usize, since: Option<i64>) -> Result<Vec<(String, Flags)>> {
-        self.newest_where(folder, limit, since, true)
+        self.newest_where(folder, limit, since, Only::Categorized, 1000)
     }
 
-    fn newest_where(&self, folder: &str, limit: usize, since: Option<i64>, categorized: bool) -> Result<Vec<(String, Flags)>> {
+    /// [`Client::newest`], the follow-ups marked complete only (`PidTagFlagStatus` 1), a page of
+    /// `page` at a time.
+    pub(super) fn completed(&self, folder: &str, limit: usize, since: Option<i64>, page: usize) -> Result<Vec<(String, Flags)>> {
+        self.newest_where(folder, limit, since, Only::Completed, page)
+    }
+
+    fn newest_where(&self, folder: &str, limit: usize, since: Option<i64>, only: Only, page_max: usize) -> Result<Vec<(String, Flags)>> {
         let limit = limit.clamp(1, MAX_KEPT);
+        let page_max = page_max.clamp(1, 1000);
         let mut conditions = String::new();
-        if categorized {
-            conditions.push_str("<t:Exists><t:FieldURI FieldURI=\"item:Categories\"/></t:Exists>");
+        match only {
+            Only::All => {}
+            Only::Categorized => conditions.push_str("<t:Exists><t:FieldURI FieldURI=\"item:Categories\"/></t:Exists>"),
+            Only::Completed => conditions.push_str(
+                "<t:IsEqualTo><t:ExtendedFieldURI PropertyTag=\"0x1090\" PropertyType=\"Integer\"/>\
+                 <t:FieldURIOrConstant><t:Constant Value=\"1\"/></t:FieldURIOrConstant></t:IsEqualTo>",
+            ),
         }
         if let Some(t) = since {
             conditions.push_str(&format!(
@@ -144,14 +164,14 @@ impl Client {
                 crate::ews_pim::utc(t)
             ));
         }
-        let restriction = match (categorized, since.is_some()) {
+        let restriction = match (only != Only::All, since.is_some()) {
             (false, false) => String::new(),
             (true, true) => format!("<m:Restriction><t:And>{conditions}</t:And></m:Restriction>"),
             _ => format!("<m:Restriction>{conditions}</m:Restriction>"),
         };
         let mut out: Vec<(String, Flags)> = Vec::new();
         while out.len() < limit {
-            let page = (limit - out.len()).min(1000);
+            let page = (limit - out.len()).min(page_max);
             let m = self.call_one(&format!(
                 "<m:FindItem Traversal=\"Shallow\"><m:ItemShape><t:BaseShape>IdOnly</t:BaseShape><t:AdditionalProperties>{FLAG_FIELDS}</t:AdditionalProperties></m:ItemShape>\
                  <m:IndexedPageItemView MaxEntriesReturned=\"{}\" Offset=\"{}\" BasePoint=\"Beginning\"/>{restriction}\

@@ -66,3 +66,33 @@ fn a_follow_up_marked_complete_goes_both_ways() {
     assert!(m.flags.flagged && !m.flags.has(FOLLOW_UP_COMPLETE) && m.flags.completed == 0, "{:?}", m.flags);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Marked complete in Outlook before this version read Graph's `complete`: Graph lists every
+/// kept message's flag at each sync, so the next ordinary sync ticks it, with no pass of its own.
+#[test]
+fn a_follow_up_completed_before_this_version_is_ticked_at_the_next_sync() {
+    let mut d = Data::default();
+    let inbox = d.folder("Inbox", None, Some("inbox"));
+    let done = d.deliver(&inbox, b"From: a@x.example\r\nSubject: done\r\n\r\nx\r\n", false, "2024-05-01T09:00:00Z");
+    for m in d.messages.iter_mut().filter(|m| m.id == done) {
+        m.complete = Some("2026-10-30T09:12:00.0000000".into());
+    }
+    let server = serve(d);
+    let store = crate::fake::tests_store("graph-ticks-before");
+    let c = crate::graph::Client::connect(&server.base, TOKEN).unwrap();
+    let mut st = crate::jmap::State::default();
+    crate::graph::list_folders(&c, &mut st, "a1", &[]).unwrap();
+    let opts = crate::sync::SyncOptions { prefetch: 0, ..Default::default() };
+    crate::graph::sync_folder(&c, &mut st, &store, "a1", "INBOX", &opts).unwrap();
+    // As the version before left it.
+    let mut fs = store.load_folder("a1", "INBOX").unwrap();
+    for m in fs.messages.iter_mut() {
+        m.flags.set_keyword(FOLLOW_UP_COMPLETE, false);
+        m.flags.completed = 0;
+    }
+    store.save_folder("a1", "INBOX", &fs).unwrap();
+    let r = crate::graph::sync_folder(&c, &mut st, &store, "a1", "INBOX", &opts).unwrap();
+    let m = store.load_folder("a1", "INBOX").unwrap().messages.remove(0);
+    assert!(m.flags.follow_up_complete() && m.flags.completed > 0 && r.changed == 1, "{:?} {r:?}", m.flags);
+    let _ = std::fs::remove_dir_all(store.root());
+}

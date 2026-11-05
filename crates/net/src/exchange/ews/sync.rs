@@ -5,6 +5,9 @@
 
 use super::*;
 
+mod catch_up;
+use catch_up::{catch_up_completed, take_found};
+
 /// The query in Exchange's own syntax (`QueryString`, its Advanced Query Syntax): the words, and
 /// the fields Quatrelle's queries name that Exchange knows too. A clause it has no word for
 /// (`is:unread`, `keyword:…`) is left to the local index rather than sent as nonsense.
@@ -190,8 +193,17 @@ pub fn sync_folder_then(
             && now - m.at < MARK_TRUSTED
     };
     let kept = store.folder_kept(account, folder, VALIDITY);
+    // Follow-ups marked complete in Outlook before they were read here: asked for once per
+    // folder (a folder with nothing kept yet has nothing to tick: it's listed in full).
+    let mut ticked = 0;
+    if !opts.list_only && st.ticks_wanted(folder) {
+        if kept {
+            ticked = catch_up_completed(c, store, st, account, folder, &id, opts.window, opts.since(now))?;
+        }
+        st.ticks_read(folder);
+    }
     if kept && st.marks.get(folder).is_some_and(same) {
-        return Ok(SyncReport { total, unread, ..Default::default() });
+        return Ok(SyncReport { total, unread, changed: ticked, ..Default::default() });
     }
     let before = st.marks.remove(folder);
     // Its state as last read known: only what changed since is asked (new mail, read marks,
@@ -208,6 +220,7 @@ pub fn sync_folder_then(
     if let Some((since, read)) = before.filter(following).map(|m| (m.sync, m.categories)) {
         match changes(c, st, store, account, folder, &since, opts, listed) {
             Ok((mut report, sync)) => {
+                report.changed += ticked;
                 // Categories Outlook put on before they were read here: asked for once.
                 if !read {
                     report.changed += catch_up_categories(c, store, st, account, folder, &id, opts.window, oldest)?;
@@ -239,7 +252,7 @@ pub fn sync_folder_then(
     }
     let newest = c.newest(&id, opts.window, oldest)?;
     let mut fs = store.load_folder(account, folder)?;
-    let mut report = SyncReport::default();
+    let mut report = SyncReport { changed: ticked, ..Default::default() };
     if fs.validity != VALIDITY && (fs.validity != 0 || !fs.messages.is_empty()) {
         store.clear_folder(account, folder)?;
         fs = FolderState::default();
@@ -344,20 +357,9 @@ fn catch_up_categories(
     if found.is_empty() {
         return Ok(0);
     }
-    let mut fs = store.load_folder(account, folder)?;
-    let mut changed = std::collections::HashSet::new();
-    for (item, f) in &found {
-        if let Some(m) = st.known(item).and_then(|n| fs.find_mut(n))
-            && take_marks(&mut m.flags, f)
-        {
-            changed.insert(m.key.uid);
-        }
-    }
-    if !changed.is_empty() {
-        store.save_folder_changed(account, folder, &fs, &changed)?;
-    }
-    log::info!("{account}: {}: {} messages' categories read", utf7::decode(folder), changed.len());
-    Ok(changed.len())
+    let changed = take_found(store, st, account, folder, &found)?;
+    log::info!("{account}: {}: {changed} messages' categories read", utf7::decode(folder));
+    Ok(changed)
 }
 
 /// What changed in a folder since its state `since`, made on its list: new messages listed
