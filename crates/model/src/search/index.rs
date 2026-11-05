@@ -33,11 +33,12 @@ impl Index {
     }
 
     /// Add a document's text (call again with more text, e.g. the body once fetched). Its words
-    /// are [folded](super::fold_word).
+    /// are [folded](super::fold_word), with their [parts](super::parts).
     pub fn add(&mut self, doc: u32, text: &str) {
         self.docs.insert(doc);
-        // Folded, and long "words" (base64 debris) left out: they only bloat it.
-        for w in tokens(text) {
+        // Folded, with their parts ("site.word" is `site` and `word` too), and long "words"
+        // (base64 debris) left out: they only bloat it.
+        for w in index_tokens(text) {
             let list = self.postings.entry(w.into_owned()).or_default();
             // Documents mostly come in order: appended; one added later goes in its place.
             match list.last() {
