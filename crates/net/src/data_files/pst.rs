@@ -328,6 +328,18 @@ fn search_key(m: &dyn Message) -> Option<Vec<u8>> {
     }
 }
 
+/// A repeating appointment's pattern (PidLidAppointmentRecur) as the import reads it, its first
+/// occurrence starting at `start` (Unix seconds): the series as an event, and its changed
+/// occurrences as events of their own. For the fuzz target.
+#[doc(hidden)]
+pub fn repeating(pattern: &[u8], start: i64) -> Vec<quatrelle_model::ical::CalEvent> {
+    let x = crate::pst_pim::Extra { start: Some(start), end: Some(start.saturating_add(3600)), recurrence: pattern.to_vec(), ..Default::default() };
+    let from = EmailAddress::default();
+    let series = crate::pst_pim::event_of(&x, "Series", "", &from, &[], "u".into());
+    let changed = crate::pst_pim::changed_events(&x, "Series", "", &from, &[], "u", &[]);
+    series.into_iter().chain(changed.into_iter().map(|(e, _)| e)).collect()
+}
+
 /// Bytes from a data file as the import reads them as text: an HTML body (`html`) in its internet
 /// code page, or an 8-bit string in its message's. For the fuzz target.
 #[doc(hidden)]

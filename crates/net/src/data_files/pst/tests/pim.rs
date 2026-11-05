@@ -9,6 +9,7 @@ use outlook_pst::{UnicodePstAttachment, UnicodePstFile as Writer, UnicodePstMess
 use super::*;
 
 mod kinds;
+mod occurrences;
 
 const OLE: [u8; 8] = [0xC0, 0, 0, 0, 0, 0, 0, 0x46];
 pub(super) const APPOINTMENT: GuidValue = GuidValue::new(0x0006_2002, 0, 0, OLE);

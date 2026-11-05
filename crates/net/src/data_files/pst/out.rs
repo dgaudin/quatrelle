@@ -7,6 +7,8 @@ use super::item::Item;
 use super::rebuild::{message, summary_of};
 use super::*;
 
+mod pim;
+
 /// Message sources written to the cache together (one transaction): at most this many…
 const BATCH_MESSAGES: usize = 2000;
 /// …or this many bytes.
@@ -97,60 +99,6 @@ impl<'a> Out<'a> {
         });
         self.states.insert(path.clone(), Open { uid_next: 1, waiting: Vec::new(), list: self.store.list_writer(self.account, &path) });
         path
-    }
-
-    /// A contact, contact group, calendar item, task, note or journal entry (anything else in
-    /// their folders is left out).
-    pub(super) fn add_pim(&mut self, it: Item) {
-        let Some(x) = &it.extra else { return };
-        let n = self.pim.events.len() + self.pim.cards.len() + self.pim.notes.len() + self.pim.tasks.len();
-        let uid = format!("pst-{}-{n}@quatrelle.invalid", self.account);
-        let class = it.class.to_ascii_lowercase();
-        if class.starts_with("ipm.activity") {
-            // Quatrelle has no journal: an entry is a note, saying when it was.
-            let text = crate::pst_pim::journal_text(x, &it.subject, &it.body);
-            if text.is_empty() {
-                self.skipped += 1;
-                return;
-            }
-            let note = Note { uid, text, color: NOTE_YELLOW, modified: x.modified.unwrap_or(it.date) };
-            self.pim.notes.push(StoredNote { note, ..Default::default() });
-        } else if class.starts_with("ipm.distlist") {
-            let card = crate::pst_pim::group_of(x, &it.subject, &it.body, uid);
-            self.pim.cards.push(StoredCard { book: LOCAL.into(), card, ..Default::default() });
-        } else if class.starts_with("ipm.stickynote") {
-            // A note's text is its body (its subject is the first line of it).
-            let text = if it.body.trim().is_empty() { it.subject.clone() } else { it.body.replace("\r\n", "\n") };
-            if text.trim().is_empty() {
-                self.skipped += 1;
-                return;
-            }
-            let note =
-                Note { uid, text: text.trim_end().to_string(), color: x.note_color.unwrap_or(NOTE_YELLOW), modified: x.modified.unwrap_or(it.date) };
-            self.pim.notes.push(StoredNote { note, ..Default::default() });
-        } else if class.starts_with("ipm.task") {
-            // A task, done or not; its due day stored as local midnight, the nearest UTC midnight.
-            let due = x.due.map(|t| (t + 43_200).div_euclid(86_400));
-            let mut task = Task {
-                uid,
-                subject: it.subject.clone(),
-                notes: it.body.trim().to_string(),
-                due,
-                modified: x.modified.unwrap_or(it.date),
-                ..Default::default()
-            };
-            task.set_complete(x.done, due.unwrap_or(it.date.div_euclid(86_400)));
-            self.pim.tasks.push(StoredTask { task, ..Default::default() });
-        } else if class.starts_with("ipm.contact") {
-            let card = crate::pst_pim::card_of(x, &it.body, uid);
-            self.pim.cards.push(StoredCard { book: LOCAL.into(), card, ..Default::default() });
-        } else {
-            let people: Vec<EmailAddress> = it.to.iter().chain(&it.cc).cloned().collect();
-            match crate::pst_pim::event_of(x, &it.subject, &it.body, &it.from, &people, uid) {
-                Some(event) => self.pim.events.push(StoredEvent { calendar: LOCAL.into(), event, ..Default::default() }),
-                None => self.skipped += 1,
-            }
-        }
     }
 
     pub(super) fn add_message(&mut self, path: &str, mut it: Item) {
@@ -269,8 +217,10 @@ impl<'a> Out<'a> {
             self.save_folder(&p);
         }
         let mut last_save = self.store.save_folders(self.account, &self.folders).err().map(|e| format!("the folder list could not be saved ({e})"));
-        let (contacts, events, notes, tasks) = (self.pim.cards.len(), self.pim.events.len(), self.pim.notes.len(), self.pim.tasks.len());
-        if contacts + events + notes + tasks > 0 {
+        // A changed occurrence of a repeating appointment is an event of its own, not another item.
+        let calendar_items = self.pim.events.iter().filter(|e| e.event.recurrence_id.is_none()).count();
+        let (contacts, events, notes, tasks) = (self.pim.cards.len(), calendar_items, self.pim.notes.len(), self.pim.tasks.len());
+        if contacts + self.pim.events.len() + notes + tasks > 0 {
             self.pim.ensure_defaults();
             if let Err(e) = self.store.save_account_doc(self.account, PIM_DOC, &self.pim) {
                 last_save.get_or_insert(format!("the contacts, calendar, notes and tasks could not be saved ({e})"));

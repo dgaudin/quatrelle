@@ -9,7 +9,8 @@ use super::*;
 /// A meeting request, cancellation or answer (of class `class`) as the calendar it carried: its
 /// method and its text, stamped when it was sent (`date`). A request and a cancellation go from
 /// their organizer (`from`) to `guests`; an answer from its guest (`from`) to the organizer (the
-/// first of `guests`). `None` for another kind (a forward's notice) or one with no time.
+/// first of `guests`). A request for a repeating meeting carries its changed occurrences too, as
+/// its pattern has them. `None` for another kind (a forward's notice) or one with no time.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn invitation(
     x: &Extra,
@@ -36,8 +37,15 @@ pub(crate) fn invitation(
     } else {
         return None;
     };
-    let mut e = event_of(x, subject, body, from, guests, uid)?;
+    let mut e = event_of(x, subject, body, from, guests, uid.clone())?;
     e.dtstamp = date;
+    let mut changed: Vec<CalEvent> = match method {
+        "REQUEST" => changed_events(x, subject, body, from, guests, &uid, &[]).into_iter().map(|(e, _)| e).collect(),
+        _ => Vec::new(),
+    };
+    for c in &mut changed {
+        c.dtstamp = date;
+    }
     if let Some(partstat) = answer {
         let person = |a: &EmailAddress| Attendee { email: a.email.clone(), name: a.name.clone(), ..Default::default() };
         e.organizer = guests.first().map(person);
@@ -45,5 +53,5 @@ pub(crate) fn invitation(
     } else if method == "CANCEL" {
         e.status = "CANCELLED".into();
     }
-    Some((method, quatrelle_model::ical::write(&[e], Some(method), date)))
+    Some((method, quatrelle_model::ical::write(&[vec![e], changed].concat(), Some(method), date)))
 }
