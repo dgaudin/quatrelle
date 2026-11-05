@@ -630,3 +630,27 @@ fn a_mark_in_a_list_kept_before_reads_it_whole() {
     let file: serde_json::Value = serde_json::from_slice(&s.files.read(&head).unwrap()).unwrap();
     assert_eq!(file["firsts"], serde_json::json!([1, 4097, 8193]));
 }
+
+/// A memory cache lists a folder from where its files start: only the files directly in it, not
+/// a sibling whose name starts the same, nor what's in a folder inside; and a folder with files
+/// under it exists.
+#[test]
+fn a_memory_folder_lists_only_its_own_files() {
+    let s = Store::memory();
+    let key = |folder: &str, validity: u32, uid: u32| MessageKey { account: "a1".into(), folder: folder.into(), validity, uid };
+    let bodies: Vec<(MessageKey, Vec<u8>)> = [key("INBOX", 7, 1), key("INBOX", 7, 2), key("INBOX", 70, 3), key("INBOX2", 7, 4), key("INB", 7, 5)]
+        .into_iter()
+        .map(|k| (k, b"Subject: x\r\n\r\nx".to_vec()))
+        .collect();
+    s.write_bodies(&bodies).unwrap();
+    let mut cached = s.cached_bodies("a1", "INBOX", 7);
+    cached.sort_unstable();
+    assert_eq!(cached, [1, 2]);
+    assert_eq!(s.cached_bodies("a1", "INBOX", 70), [3]);
+    assert_eq!(s.cached_bodies("a1", "INBOX2", 7), [4]);
+    assert!(s.cached_bodies("a1", "INBOX", 9).is_empty() && s.cached_bodies("a1", "Other", 7).is_empty());
+    let dir = s.folder_dir("a1", "INBOX");
+    assert!(s.files.exists(&dir) && s.files.exists(&dir.join("70")));
+    assert!(!s.files.exists(&dir.join("8")) && !s.files.exists(&s.folder_dir("a1", "Other")));
+    assert_eq!(s.files.main.walk(&dir).len(), 3);
+}
