@@ -339,7 +339,8 @@ pub(crate) fn arrange_menu(ui: &mut Ui, s: &Session, acts: &mut Vec<Action>) {
 }
 
 /// To a screen reader a row is one item of the list: who, the subject, when, and what its
-/// markers show (a sender to check, external, unread, flagged or completed, attachments).
+/// markers show (a sender to check, external, unread, flagged or completed, replied to or
+/// forwarded, attachments).
 fn row_spoken(s: &Session, m: &Summary, marks: &quatrelle_engine::SenderMarks, unread: bool, sent_view: bool) -> String {
     let mut who = if sent_view { m.to.first().map(|a| a.display().to_string()).unwrap_or_default() } else { m.from.display().to_string() };
     if marks.address {
@@ -353,6 +354,8 @@ fn row_spoken(s: &Session, m: &Summary, marks: &quatrelle_engine::SenderMarks, u
         (unread, "Unread"),
         (m.flags.flagged, "Flagged"),
         (m.flags.follow_up_complete(), "Completed"),
+        (m.flags.answered, "Replied"),
+        (!m.flags.answered && m.flags.forwarded, "Forwarded"),
         (m.has_attachments, "Has attachments"),
     ] {
         if on {
@@ -552,10 +555,12 @@ fn message_row(
             let (mark, color) = if m.importance > 0 { ("!", t.danger) } else { ("↓", t.accent) };
             p.text(egui::pos2(right - icons_w + 6.0, line2 + 8.0), egui::Align2::CENTER_CENTER, mark, theme::bold(13.0), color);
         }
+        // Replied to or forwarded (the reply when both are kept), as dim as the paperclip: in
+        // the faint colour it all but went on a selected row in the dark theme.
         if m.flags.answered {
-            marker(Icon::Reply, t.faint, &mut icons_w);
+            marker(Icon::Reply, t.dim, &mut icons_w);
         } else if m.flags.forwarded {
-            marker(Icon::Forward, t.faint, &mut icons_w);
+            marker(Icon::Forward, t.dim, &mut icons_w);
         }
     }
     // Categories: a coloured dot each, before the markers.

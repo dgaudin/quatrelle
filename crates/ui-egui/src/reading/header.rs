@@ -143,15 +143,22 @@ pub(super) fn header(
         }
     });
     ui.add_space(8.0);
-    // What Outlook says above a message: its follow-up date (or the day it was done), its
-    // importance.
+    // What Outlook says above a message: that it was replied to or forwarded (and when), its
+    // follow-up date (or the day it was done), its importance.
     let due = summary.as_ref().and_then(|m| s.follow_up_due(m));
     let flagged = summary.as_ref().is_some_and(|m| m.flags.flagged);
     let complete = summary.as_ref().is_some_and(|m| m.flags.follow_up_complete());
     let importance = summary.as_ref().map_or(0, |m| m.importance);
-    if flagged || complete || importance != 0 {
+    let acted = summary.as_ref().and_then(|m| acted_line(s, &m.flags));
+    if flagged || complete || importance != 0 || acted.is_some() {
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing.x = 4.0;
+            if let Some((icon, text)) = acted {
+                let (ir, _) = ui.allocate_exact_size(vec2(14.0, 14.0), Sense::hover());
+                icons::paint(ui.painter(), ir, icon, t.dim);
+                ui.label(RichText::new(text).color(t.dim).small());
+                ui.add_space(10.0);
+            }
             if complete {
                 let (ir, _) = ui.allocate_exact_size(vec2(14.0, 14.0), Sense::hover());
                 icons::paint(ui.painter(), ir, Icon::Done, t.dim);
@@ -191,6 +198,25 @@ pub(super) fn header(
         security::security_bar(s, &t, ui, sec);
     }
     placed
+}
+
+/// The line saying a message was replied to or forwarded, with its arrow: when, where the server
+/// says (Exchange keeps the time of the last); both kept (IMAP), the reply, as the list shows it.
+fn acted_line(s: &Session, f: &quatrelle_engine::model::Flags) -> Option<(Icon, String)> {
+    let when = (f.acted > 0).then(|| crate::i18n::date(&dates::full_time(f.acted, &s.clock)));
+    if f.answered {
+        Some((
+            Icon::Reply,
+            when.map_or_else(|| tl!("You replied to this message.").to_string(), |date| tf!("You replied to this message on {date}.", date = date)),
+        ))
+    } else if f.forwarded {
+        Some((
+            Icon::Forward,
+            when.map_or_else(|| tl!("You forwarded this message.").to_string(), |date| tf!("You forwarded this message on {date}.", date = date)),
+        ))
+    } else {
+        None
+    }
 }
 
 /// Whether the message has Reply | Reply all | Forward beside it: not in a window (its ribbon

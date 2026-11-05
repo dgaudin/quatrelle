@@ -682,6 +682,12 @@
 	Follow up. Overdue: it was due {date}.	후속 조치. 기한 지남: {date}까지였습니다.
 	Completed.	완료됨.
 	Completed on {date}.	{date}에 완료됨.
+	You replied to this message on {date}.	{date}에 이 메시지에 회신했습니다.
+	You forwarded this message on {date}.	{date}에 이 메시지를 전달했습니다.
+	You replied to this message.	이 메시지에 회신했습니다.
+	You forwarded this message.	이 메시지를 전달했습니다.
+	Replied	회신함
+	Forwarded	전달함
 	This message was sent with high importance.	이 메시지는 높은 중요도로 보낸 것입니다.
 	This message was sent with low importance.	이 메시지는 낮은 중요도로 보낸 것입니다.
 	Delay delivery	배달 지연

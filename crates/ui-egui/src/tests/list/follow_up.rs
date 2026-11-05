@@ -14,7 +14,7 @@ use super::*;
 /// The textures a frame's triangles are painted with, kept from frame to frame as a renderer
 /// keeps them (the font's comes once, in the first frame).
 #[derive(Default)]
-struct Textures(HashMap<TextureId, ([usize; 2], Vec<egui::Color32>)>);
+pub(super) struct Textures(HashMap<TextureId, ([usize; 2], Vec<egui::Color32>)>);
 
 impl Textures {
     fn take(&mut self, delta: &egui::TexturesDelta) {
@@ -93,7 +93,7 @@ fn paint(prims: &[ClippedPrimitive], tex: &Textures, w: usize, h: usize) -> Vec<
 }
 
 /// A frame, its textures kept; with `png`, painted into that picture.
-fn frame_kept(ctx: &egui::Context, a: &mut MailApp, tex: &mut Textures, png: Option<std::path::PathBuf>) -> Vec<String> {
+pub(super) fn frame_kept(ctx: &egui::Context, a: &mut MailApp, tex: &mut Textures, png: Option<std::path::PathBuf>) -> Vec<String> {
     let (w, h) = (1280usize, 800usize);
     let input = RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(w as f32, h as f32))), ..Default::default() };
     let mut out = ctx.run_ui(input, |ui| a.ui(ui));

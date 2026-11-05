@@ -684,6 +684,12 @@ month	May	مايو
 	Follow up. Overdue: it was due {date}.	متابعة. متأخرة: كانت مستحقة في {date}.
 	Completed.	مكتملة.
 	Completed on {date}.	اكتملت في {date}.
+	You replied to this message on {date}.	لقد رددت على هذه الرسالة في {date}.
+	You forwarded this message on {date}.	لقد أعدت توجيه هذه الرسالة في {date}.
+	You replied to this message.	لقد رددت على هذه الرسالة.
+	You forwarded this message.	لقد أعدت توجيه هذه الرسالة.
+	Replied	تم الرد
+	Forwarded	تمت إعادة التوجيه
 	This message was sent with high importance.	أُرسلت هذه الرسالة بأهمية عالية.
 	This message was sent with low importance.	أُرسلت هذه الرسالة بأهمية منخفضة.
 	Delay delivery	تأخير التسليم

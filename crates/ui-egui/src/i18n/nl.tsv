@@ -682,6 +682,12 @@
 	Follow up. Overdue: it was due {date}.	Opvolgen. Te laat: het verviel {date}.
 	Completed.	Voltooid.
 	Completed on {date}.	Voltooid op {date}.
+	You replied to this message on {date}.	U hebt dit bericht beantwoord op {date}.
+	You forwarded this message on {date}.	U hebt dit bericht doorgestuurd op {date}.
+	You replied to this message.	U hebt dit bericht beantwoord.
+	You forwarded this message.	U hebt dit bericht doorgestuurd.
+	Replied	Beantwoord
+	Forwarded	Doorgestuurd
 	This message was sent with high importance.	Dit bericht is verzonden met hoge urgentie.
 	This message was sent with low importance.	Dit bericht is verzonden met lage urgentie.
 	Delay delivery	Bezorging uitstellen

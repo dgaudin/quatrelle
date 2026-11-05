@@ -685,6 +685,12 @@ month	May	5月
 	Follow up. Overdue: it was due {date}.	后续处理。已过期:原定 {date} 到期。
 	Completed.	已完成。
 	Completed on {date}.	已于 {date} 完成。
+	You replied to this message on {date}.	你已于 {date} 答复此邮件。
+	You forwarded this message on {date}.	你已于 {date} 转发此邮件。
+	You replied to this message.	你已答复此邮件。
+	You forwarded this message.	你已转发此邮件。
+	Replied	已答复
+	Forwarded	已转发
 	This message was sent with high importance.	此邮件以高重要性发送。
 	This message was sent with low importance.	此邮件以低重要性发送。
 	Delay delivery	延迟传递

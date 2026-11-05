@@ -682,6 +682,12 @@
 	Follow up. Overdue: it was due {date}.	К исполнению. Просрочено: срок был {date}.
 	Completed.	Выполнено.
 	Completed on {date}.	Выполнено {date}.
+	You replied to this message on {date}.	Вы ответили на это сообщение {date}.
+	You forwarded this message on {date}.	Вы переслали это сообщение {date}.
+	You replied to this message.	Вы ответили на это сообщение.
+	You forwarded this message.	Вы переслали это сообщение.
+	Replied	Отвечено
+	Forwarded	Переслано
 	This message was sent with high importance.	Это сообщение отправлено с высокой важностью.
 	This message was sent with low importance.	Это сообщение отправлено с низкой важностью.
 	Delay delivery	Задержать доставку
