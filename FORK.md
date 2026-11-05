@@ -2280,6 +2280,93 @@ serveurs du dépôt.
   moteur, une session rouverte ne retrouve pas les rappels répondus sur ce poste (les préférences
   sont enregistrées par la fenêtre, non vérifié ici).
 
+### État de la récupération : v0.32, vingt-quatrième partie : un suivi marqué terminé le reste, avec son jour, et va jusqu'à Exchange (2026-11-05)
+
+Le lot R16 de `merge-tools/survey-v0.32.md` (`f1eb8a31`, `39d8684f`, et la correspondance EWS que
+l'origine n'a pas), sur `main` ; il clôt la phase 3. « Marquer comme terminée » retirait le drapeau
+et oubliait le jour d'échéance : le message avait l'air de n'avoir jamais été suivi, et Annuler
+perdait l'échéance. Comme Outlook, il reste maintenant marqué terminé, avec le jour où il l'a été.
+La marque est le mot-clé `$FollowUpComplete` de l'origine ; chaque serveur la garde à sa façon :
+Exchange dans son état de drapeau (EWS `PidTagFlagStatus` = 1, Graph `flagStatus` « complete »),
+IMAP et JMAP comme mot-clé. Le jour est gardé dans les préférences (`followUpDone`, comme chez
+l'origine), sauf qu'Exchange garde le sien (`PidTagFlagCompleteTime`, `completedDateTime`), lu dans
+`Flags::completed` (secondes Unix ; propre au fork), qui l'emporte. Les fichiers de l'origine
+`folder_edits.rs` et `summary.rs` sont chez nous `session/mailboxes/folder_edits.rs` et
+`model/src/lib.rs` ; le code du suivi part dans `session/mailboxes/follow_up.rs` (nouveau). Pour
+chaque partie, la sonde d'abord, lancée contre le code d'alors, sur les seuls faux serveurs du dépôt.
+
+| Sonde | avant | après |
+|---|---|---|
+| Moteur : marquer terminé, `is:complete`, Annuler (`probe_mark_complete_keeps_it_complete`, puis les trois tests de l'origine dans `engine/src/tests/mail/follow_up.rs`) | message sans aucune marque (`keywords: []`) ; à la lecture du code, Annuler remettait le drapeau sans l'échéance | marqué terminé, fait aujourd'hui, trouvé par `is:complete`, rangé sous « Completed » ; Annuler remet drapeau, échéance et jour en un pas |
+| Modèle : `is:complete`, `is:completed`, `-is:complete`, drapeau remis ailleurs (`search::tests::matching`) | rien trouvé (lu comme du texte) | trouvé ; un message de nouveau marqué ailleurs, le mot-clé resté, ne l'est pas |
+| Modèle : `day_label(i64::MAX)` (jour venu d'un fichier abîmé) | **panique** (débordement, en debug) | une étiquette |
+| Moteur : jours lus du disque hors bornes, clés vides ou trop longues (`the_preferences_days_read_from_disk_are_days`) | — (pas de `followUpDone`) | laissés de côté |
+| IMAP et JMAP : la requête envoyée pour `is:complete` | aucune | `KEYWORD $FollowUpComplete UNFLAGGED` ; `hasKeyword` + `notKeyword $flagged` ; nié : laissé à la liste |
+| IMAP, faux serveur : le mot-clé posé puis retiré dans l'ordre du moteur (`keywords_round_trip_with_the_server`) | **passait déjà** (mots-clés génériques) | gardé comme garde-fou |
+| EWS, faux serveur : un message terminé dans Outlook (`0x1090` = 1, `0x1091`), marquer terminé ici, Annuler, retirer, puis changements faits dans Outlook (`a_follow_up_marked_complete_goes_both_ways_with_its_day`) | arrivé **non marqué, sans jour** | lu terminé à son heure ; écrit 1 et l'heure ; 2 sans l'heure ; ni l'un ni l'autre ; la synchro suivante (seulement ce qui a changé) suit Outlook |
+| EWS : réponses hostiles (état 7, heure illisible, avant 1970, heure sans état) (`a_follow_up_read_from_exchange_is_read_with_care`) | non lu | lu avec soin, rien gardé de faux |
+| Cache : marque en place de R10 (`state-marks.json`) et réouverture (`a_completed_follow_up_and_its_time_survive_the_marks`) | **passait déjà** (les marques gardent tout `Flags`) | garde-fou ; le mot-clé retiré ici emporte l'heure |
+| Graph, faux serveur : terminé dans Outlook, marquer terminé ici, Annuler, drapeau remis dans Outlook (`a_follow_up_marked_complete_goes_both_ways`) | arrivé **non marqué** | `complete` dans les deux sens, `completedDateTime` lu |
+
+- **Moteur, modèle, recherche** (`ffa89626`, adapté de `f1eb8a3`) : `FOLLOW_UP_COMPLETE`,
+  `Flags::follow_up_complete()` (le mot-clé et pas de drapeau : un drapeau remis ailleurs l'emporte),
+  `Flags::completed` (remis à zéro dès que le mot-clé change ici), `Term::Complete`, `Undo::FollowUp`
+  (drapeau, mot-clé et les deux jours d'un coup), `Session::complete_selection` et
+  `follow_up_done` ; rangé par drapeau : « Flagged », puis « Completed », puis « Not flagged » ; la
+  ligne de commande montre `✓`. Ordre des changements, qui fait finir juste Exchange : pour terminer,
+  le drapeau ôté puis le mot-clé posé ; pour Annuler ou remettre le drapeau, le mot-clé ôté puis le
+  drapeau posé. Les jours lus du disque sont vérifiés (de 1601 à 9999, 10 000 au plus, clé de 998
+  caractères au plus) ; `day_label` ne déborde plus. Adapté : pas de `MAX_FOLLOW_UP_ID` ni de
+  `merge_follow_up` chez nous (écrits ici), pas de `is_system_keyword` (le fork traite déjà les
+  mots-clés en `$` comme n'étant pas des catégories).
+- **EWS** (`3a262e87`, propre au fork) : chaque demande des marques d'un élément demande aussi
+  `0x1091` (`FLAG_FIELDS`, donc la synchro complète, `SyncFolderItems`, `GetItem` et la recherche) ;
+  l'état 1 est lu `$FollowUpComplete`, l'heure `Flags::completed` (une heure illisible ou d'avant 1970
+  laissée) ; `take_marks` prend les deux du serveur, un mot-clé resté ici compris. Écrit : terminé =
+  état 1, l'heure de maintenant, et l'icône de drapeau d'Outlook (`0x1095`) effacée comme le dit
+  [MS-OXOFLAG] 3.1.4.2 ; drapeau remis = état 2, l'heure effacée ; drapeau ôté ou mot-clé ôté = les
+  deux effacés. Le faux EWS garde l'état et l'heure (et les rend dans ses états de synchro) ; la cible
+  de fuzz `text_first` lit les marques de chaque message (`marks_listed`). Les 190 tests EWS passent.
+- **Graph** (`9752537b`, adapté de `39d8684`) : `flag_patch` de l'origine ; `completedDateTime` lu
+  (demandé en UTC par l'en-tête `Prefer` du fork ; une autre zone est laissée), ce que l'origine ne
+  faisait pas encore. L'écriture reste celle de l'origine : `flagStatus` seul, sans
+  `completedDateTime`.
+- **Interface** (`75d7c1e2`, adapté de `f1eb8a3`) : à la place du drapeau, une coche, l'icône Fluent
+  `checkmark_20_regular.svg` (ajoutée, ligne dans `ATTRIBUTION.md` ; `Icon::Done`, trait de secours
+  dessiné), dans la liste et dans la colonne du drapeau, en couleur atténuée ; cliquer la coche fait
+  ce que fait le clic sur le drapeau du fork, le message redevient marqué (comme Outlook) ; le
+  lecteur d'écran dit « Completed » ; le volet de lecture dit « Terminé le jeu. 2026-11-05. », là où
+  il dit l'échéance. Deux textes nouveaux, dans les 13 catalogues (traductions de l'origine). Le test
+  sans tête `ui-egui/src/tests/list/follow_up.rs` (le dossier `tests/` étant plein) vérifie la ligne,
+  le volet, le titre et « Effacer l'indicateur » ; avec `QUATRELLE_FRAME_PNG` il peint aussi ses
+  images (un petit peintre logiciel des triangles d'egui, pour les regarder sans lancer
+  l'application) : clair, sombre, rangé par drapeau, en colonnes, regardées.
+- **Pas pris** : le CHANGELOG (le fork n'en a pas) ; la recherche serveur EWS et Graph de
+  `is:complete` (laissée à la liste, comme `is:pinned`).
+- **Ce que verra le propriétaire** : « Marquer comme terminée » laisse une coche à la place du
+  drapeau, le volet dit « Terminé le … » ; Annuler remet le drapeau et son échéance ; un clic sur la
+  coche remet le drapeau. Dans Outlook (même compte Exchange sur site), le message marqué terminé
+  ici apparaît terminé (coche) après sa synchro ; un message marqué terminé dans Outlook arrive ici
+  avec sa coche et le jour qu'Outlook a noté. Un drapeau remis dans Outlook efface la coche ici.
+  **Mais** le courrier déjà en cache et terminé dans Outlook avant cette version reste sans coche :
+  la synchro EWS ne demande que ce qui a changé (`SyncFolderItems`) ; il ne la prend qu'au premier
+  changement du message ou quand un dossier est relu en entier (état de synchro refusé, dossier
+  trop changeant). Forcer une relecture complète des marques une fois coûterait, sur 550 000
+  éléments, une lecture entière de chaque dossier : à décider avec le propriétaire.
+- **Jamais essayé sur un vrai Exchange** : l'écriture de `0x1090` = 1 avec `0x1091` en
+  `SystemTime` et l'effacement de `0x1095` (qu'Outlook montre bien la coche et la date sans les
+  propriétés de tâche, `PidLidTaskComplete`, `PidLidPercentComplete`, `PidLidTaskDateCompleted`, que
+  le fork n'écrit pas) ; la forme exacte de l'heure rendue par Exchange ; `flagStatus` « complete »
+  sur Graph, et si Exchange Online remplit seul `completedDateTime`.
+- **Vérifié** : chaque sonde avant et après ; les suites de `quatrelle-model`, `quatrelle-engine`,
+  `quatrelle-store`, `quatrelle-jmap`, `quatrelle-ui-egui` et les tests EWS et Graph de
+  `quatrelle-net` ; `cargo xtask ci` (wasm compris).
+- **Reste, remarqué** : l'import `.pst` ne lit encore que l'état 2 (`data_files/pst.rs`) : un message
+  terminé dans un fichier d'Outlook arrive non marqué (à faire avec P2) ; le fork n'écrit pas
+  non plus l'icône `0x1095` en posant un drapeau, ni les propriétés de tâche d'Outlook ; un message
+  terminé hors ligne reçoit sur Exchange l'heure de l'envoi du changement, non celle du clic (le jour
+  gardé ici reste juste jusqu'à ce que le serveur dise le sien).
+
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
 Quatre chantiers, chacun dans son commit, à la suite d'un audit de l'éditeur HTML.
