@@ -4,7 +4,7 @@
 //! What an import has written so far: folders, their lists, message sources and contacts.
 
 use super::item::Item;
-use super::rebuild::{summary_of, to_raw};
+use super::rebuild::{message, summary_of};
 use super::*;
 
 /// Message sources written to the cache together (one transaction): at most this many…
@@ -136,7 +136,7 @@ impl<'a> Out<'a> {
         }
     }
 
-    pub(super) fn add_message(&mut self, path: &str, it: Item) {
+    pub(super) fn add_message(&mut self, path: &str, mut it: Item) {
         // Mail only: meeting requests and receipts are mail too; appointments, contacts and
         // tasks in a mail folder aren't.
         let class = it.class.to_ascii_lowercase();
@@ -146,7 +146,10 @@ impl<'a> Out<'a> {
         let Some(st) = self.states.get_mut(path) else { return };
         let uid = st.uid_next;
         let fallback = format!("pst.{}.{}.{uid}@quatrelle.invalid", self.account, self.imported);
-        let (raw, files) = match to_raw(&it, &fallback) {
+        // What the import counts, read before the item goes into its message.
+        let (charset_unsupported, body_not_converted) = (it.charset_unsupported, it.body_not_converted);
+        let left_out = std::mem::take(&mut it.left_out);
+        let (raw, glance) = match message(it, &fallback) {
             Ok(r) => r,
             Err(e) => {
                 log::info!("a message could not be rebuilt: {e}");
@@ -154,21 +157,21 @@ impl<'a> Out<'a> {
                 return;
             }
         };
-        if it.charset_unsupported {
+        if charset_unsupported {
             self.charset_unsupported += 1;
         }
-        if it.body_not_converted {
+        if body_not_converted {
             self.body_not_converted += 1;
         }
         // The message came in without these files: counted by reason, not as items skipped.
-        for (reason, n) in &it.left_out {
+        for (reason, n) in &left_out {
             let c = self.files_left_out.entry(*reason).or_default();
             *c = c.saturating_add(*n);
         }
         let key = MessageKey { account: self.account.to_string(), folder: path.to_string(), validity: 1, uid };
         st.uid_next = uid.saturating_add(1);
         let size = u32::try_from(raw.len()).unwrap_or(u32::MAX);
-        st.waiting.push(summary_of(&raw, &it, key.clone(), size, files));
+        st.waiting.push(summary_of(&raw, glance, key.clone(), size));
         let page_full = st.waiting.len() >= quatrelle_store::PAGE_MESSAGES;
         self.imported += 1;
         self.pending_bytes += raw.len();
