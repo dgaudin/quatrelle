@@ -153,8 +153,10 @@ impl MailApp {
                     self.ui.dialog = Some(Dialog::move_to());
                     continue;
                 }
-                // Page Up and Page Down go as many rows as the list shows.
-                let params = if id.ends_with("PageUp") || id.ends_with("PageDown") { json!({"rows": self.ui.list_page}) } else { json!({}) };
+                // Page Up and Page Down go as many rows as the list shows (with Shift too: the
+                // plain ones are `list.pageUp`, a small p, which `ends_with("PageUp")` missed).
+                let page = matches!(id, "list.pageUp" | "list.pageDown" | "list.extendPageUp" | "list.extendPageDown");
+                let params = if page { json!({"rows": self.ui.list_page}) } else { json!({}) };
                 self.run(id, params);
                 if moves_focus(id) {
                     self.ui.scroll_to_focus = true;
