@@ -15,6 +15,7 @@ fn out<'a>(store: &'a Store, account: &'a str, progress: &'a mut dyn FnMut(usize
         imported: 0,
         skipped: 0,
         charset_unsupported: 0,
+        body_not_converted: 0,
         progress,
         pim: Pim::default(),
         pending: Vec::new(),
