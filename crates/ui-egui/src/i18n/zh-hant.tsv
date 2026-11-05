@@ -1917,3 +1917,4 @@ folder	Conflicts	衝突
 	This account has no outgoing (SMTP) server.	此帳戶沒有外寄 (SMTP) 伺服器。
 	Add one in its account settings to send mail.	請在帳戶設定中新增一個以傳送郵件。
 	{subject}: not sent, this account can't send mail	{subject}: 未傳送，此帳戶無法傳送郵件
+	{n} messages selected	已選取 {n} 封郵件

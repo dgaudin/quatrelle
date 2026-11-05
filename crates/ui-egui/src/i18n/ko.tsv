@@ -1915,3 +1915,4 @@ folder	Conflicts	충돌
 	This account has no outgoing (SMTP) server.	이 계정에는 보내는 메일(SMTP) 서버가 없습니다.
 	Add one in its account settings to send mail.	메일을 보내려면 계정 설정에서 추가하세요.
 	{subject}: not sent, this account can't send mail	{subject}: 보내지 않음, 이 계정에서는 메일을 보낼 수 없습니다
+	{n} messages selected	메시지 {n}개 선택됨

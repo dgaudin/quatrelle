@@ -153,8 +153,10 @@ impl MailApp {
                     self.ui.dialog = Some(Dialog::move_to());
                     continue;
                 }
-                self.run(id, json!({}));
-                if matches!(id, "list.next" | "list.prev") {
+                // Page Up and Page Down go as many rows as the list shows.
+                let params = if id.ends_with("PageUp") || id.ends_with("PageDown") { json!({"rows": self.ui.list_page}) } else { json!({}) };
+                self.run(id, params);
+                if moves_focus(id) {
                     self.ui.scroll_to_focus = true;
                 }
             }
@@ -206,4 +208,9 @@ impl MailApp {
 /// previous. New mail, Send / Receive, Undo, Search, the modules and the address book act anywhere.
 fn acts_on_mail(id: &str) -> bool {
     (id.starts_with("mail.") && !matches!(id, "mail.new" | "mail.sync")) || id.starts_with("quickStep.") || id.starts_with("list.")
+}
+
+/// Whether a command moves the list's focus (which is then scrolled into view).
+pub(crate) fn moves_focus(id: &str) -> bool {
+    matches!(id, "list.next" | "list.prev" | "list.first" | "list.last" | "list.pageUp" | "list.pageDown") || id.starts_with("list.extend")
 }

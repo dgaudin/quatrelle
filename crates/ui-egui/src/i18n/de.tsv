@@ -1916,3 +1916,4 @@ folder	Conflicts	Konflikte
 	This account has no outgoing (SMTP) server.	Dieses Konto hat keinen Postausgangsserver (SMTP).
 	Add one in its account settings to send mail.	Fügen Sie in den Kontoeinstellungen einen hinzu, um E-Mails zu senden.
 	{subject}: not sent, this account can't send mail	{subject}: nicht gesendet, dieses Konto kann keine E-Mails senden
+	{n} messages selected	{n} Nachrichten ausgewählt

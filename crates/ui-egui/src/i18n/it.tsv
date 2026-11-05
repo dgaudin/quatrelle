@@ -1915,3 +1915,4 @@ folder	Conflicts	Conflitti
 	This account has no outgoing (SMTP) server.	Questo account non ha un server in uscita (SMTP).
 	Add one in its account settings to send mail.	Aggiungine uno nelle impostazioni dell'account per inviare posta.
 	{subject}: not sent, this account can't send mail	{subject}: non inviato, questo account non può inviare posta
+	{n} messages selected	{n} messaggi selezionati

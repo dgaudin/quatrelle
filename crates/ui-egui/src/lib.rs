@@ -372,6 +372,8 @@ pub struct UiState {
     pub toast: Option<(String, bool, f64)>,
     seen_notices: usize,
     scroll_to_focus: bool,
+    /// How many message rows the list shows at once: a page, for Page Up and Page Down.
+    list_page: u64,
     /// The named font families the UI uses are registered (`install_fonts`).
     fonts_ready: bool,
     /// [`MailApp::logic`] ran for this frame already (the app calls it before each `ui`; a
@@ -560,6 +562,7 @@ impl MailApp {
                 toast: None,
                 seen_notices: seen,
                 scroll_to_focus: false,
+                list_page: 10,
                 fonts_ready: false,
                 logic_ran: false,
                 textures_told: 0,

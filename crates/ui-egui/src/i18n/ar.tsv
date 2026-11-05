@@ -1912,3 +1912,4 @@ folder	Conflicts	التعارضات
 	This account has no outgoing (SMTP) server.	لا يوجد لهذا الحساب خادم صادر (SMTP).
 	Add one in its account settings to send mail.	أضف خادماً في إعدادات الحساب لإرسال البريد.
 	{subject}: not sent, this account can't send mail	{subject}: لم يُرسل، لا يمكن لهذا الحساب إرسال البريد
+	{n} messages selected	الرسائل المحددة: {n}

@@ -1913,3 +1913,4 @@ folder	Conflicts	競合
 	This account has no outgoing (SMTP) server.	このアカウントには送信 (SMTP) サーバーがありません。
 	Add one in its account settings to send mail.	メールを送信するには、アカウント設定で追加してください。
 	{subject}: not sent, this account can't send mail	{subject}: 送信されていません。このアカウントからはメールを送信できません
+	{n} messages selected	{n} 件のメッセージを選択中

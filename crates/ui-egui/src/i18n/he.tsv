@@ -1912,3 +1912,4 @@ folder	Conflicts	התנגשויות
 	This account has no outgoing (SMTP) server.	לחשבון זה אין שרת דואר יוצא (SMTP).
 	Add one in its account settings to send mail.	הוסף שרת בהגדרות החשבון כדי לשלוח דואר.
 	{subject}: not sent, this account can't send mail	{subject}: לא נשלח, חשבון זה אינו יכול לשלוח דואר
+	{n} messages selected	הודעות שנבחרו: {n}

@@ -198,7 +198,7 @@ impl MailApp {
                     self.ui.cal_pick = None;
                 }
                 self.run(id, p);
-                if matches!(id, "list.next" | "list.prev") {
+                if super::keys::moves_focus(id) {
                     self.ui.scroll_to_focus = true;
                 }
             }
