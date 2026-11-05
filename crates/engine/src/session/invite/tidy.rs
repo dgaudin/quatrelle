@@ -123,7 +123,7 @@ impl Session {
 
     /// A message's summary: from the list shown, else from its folder.
     fn summary_of(&mut self, key: &MessageKey) -> Option<Arc<Summary>> {
-        if let Some(m) = self.list.iter().find(|m| &m.key == key) {
+        if let Some(m) = self.index_of(key).and_then(|i| self.list.get(i)) {
             return Some(m.clone());
         }
         self.folder_state(&key.account, &key.folder).messages.iter().find(|m| &m.key == key).cloned()

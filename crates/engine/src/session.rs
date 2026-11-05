@@ -253,6 +253,8 @@ pub struct Session {
     pub list: Vec<Arc<Summary>>,
     /// Conversations over `list` (when [`Prefs::conversations`] is on).
     pub threads: Vec<Thread>,
+    /// Where each message of `list` is (built with it).
+    pub(crate) nav: mailboxes::ListNav,
     pub selection: Vec<MessageKey>,
     pub focus: Option<MessageKey>,
     /// Where a range of selected messages starts (Shift+click, Shift+Down): it stays put while
@@ -471,6 +473,7 @@ impl Session {
             photo_asked: HashSet::new(),
             list: Vec::new(),
             threads: Vec::new(),
+            nav: Default::default(),
             selection: Vec::new(),
             focus: None,
             anchor: None,

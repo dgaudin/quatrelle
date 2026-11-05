@@ -4881,6 +4881,7 @@ version = "1.2.0"
 dependencies = [
  "der",
  "log",
+ "proptest",
  "quatrelle-mime",
  "quatrelle-model",
  "quatrelle-print",

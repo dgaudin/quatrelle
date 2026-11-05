@@ -292,7 +292,7 @@ impl Session {
     /// The other messages of a message's conversation in the list, oldest first, whether the
     /// list shows conversations or not.
     fn conversation_of(&self, key: &MessageKey) -> Vec<MessageKey> {
-        let Some(i) = self.list.iter().position(|m| &m.key == key) else { return Vec::new() };
+        let Some(i) = self.index_of(key) else { return Vec::new() };
         let mut keys: Vec<(i64, MessageKey)> = threads(&self.list)
             .iter()
             .find(|t| t.messages.contains(&i))
