@@ -1973,6 +1973,122 @@ réglé que la frappe.
   dialogue, la zone étant sur « Dossier actuel », reste lui-même jusqu'au bout et la zone garde sa
   portée.
 
+### État de la récupération : v0.32, vingt et unième partie : « Compacter maintenant » rend la place des pièces jointes gardées brutes (2026-11-05)
+
+Le lot R12 de `merge-tools/survey-v0.32.md` (constats n° 1 et 6), sur `main`, selon la décision du
+propriétaire du 05/11 (n° 6) : **rien ne réécrit le cache tout seul**, tout passe par le bouton
+« Compacter maintenant ». Pour chaque partie, sa sonde d'abord, lancée contre le code d'alors, sur
+des fichiers de données fabriqués (aucune copie du cache du propriétaire). D'abord un déplacement
+pur : `packed/tests.rs` (821 lignes) découpé par sujet en `packed/tests/` (`names`, `kept`,
+`opening`, `compaction`, `folders`), comme l'origine l'a fait (`e32a7bd2`).
+
+| Sonde | avant | après |
+|---|---|---|
+| 200 Mo de pièces jointes en base64 gardées brutes (fichier écrit comme avant R3, compacté) | 213 061 632 → 213 061 632 octets, rien de rendu | → 162 304 000 octets (0,762) |
+| 1 Go, même fabrication (banc ignoré, `--release`, cache disque chaud) | — | 1 090 785 280 → 830 345 216 octets (0,761) en 4,7 s |
+| Une lecture du fil de la fenêtre pendant un compactage (retenu 1,5 s par un autre utilisateur du fichier) | 1,58 s d'attente | refusée en 27 µs |
+| Compactage d'un fichier sans rien à rendre (306 Mo gardés dans 539 Mo) | 623 382 528 octets (2,04 fois le contenu) | 311 758 848 octets (1,02) |
+
+- **Défaut du fork trouvé en route : le scellement après compactage doublait le fichier**
+  (`2ee90630`, propre au fork). Le commit scellé que R2 avait ajouté après `db.compact()` (pour
+  qu'un arrêt juste après ne demande pas la vérification complète) avait besoin de quelques pages
+  sur un fichier compacté sans place libre ; redb agrandit alors le fichier en le doublant tant
+  qu'il fait moins de 4 Gio (taille de ses régions). Vu d'abord sur la sonde de 200 Mo
+  (162 271 232 octets avant le scellement, 324 538 368 après), puis reproduit sans recompression
+  à partir d'environ 300 Mo gardés. Le fichier est maintenant fermé puis rouvert : à la fermeture,
+  redb enregistre l'état de l'allocateur depuis ses pages les plus basses et rogne la fin (le cas
+  de leur issue 1165). Un arrêt brutal après le compactage ne demande toujours aucune réparation
+  (`a_data_file_killed_after_compacting_needs_no_repair`).
+- **La recompression** (`86802090`, adapté de `ccf5f42f`, `79de1aa5`, `eac8e93a`, `4f130900`) :
+  `Store::recompress_data_file` (`packed/recompress.rs`) et `Store::compact_now`, qui fait ce que
+  fait le bouton (recompresser, puis compacter en place). Du code de l'origine : lots de 8 Mio au
+  plus, lus dans une transaction de lecture, compressés hors du fichier (quatre fils), écrits dans
+  une transaction courte, **scellée comme toutes celles du fork**, avec le curseur dans une table
+  `META` (`packed/meta.rs`) ; un fichier changé depuis sa lecture est laissé tel qu'écrit, sans
+  refaire les empreintes quand rien n'a été écrit entre-temps (`Writes`) ; plus d'écriture dès que
+  le compte est supprimé (`Store::while_kept`) ; un déplacement derrière le curseur pose un point de
+  retour (`recompress.back`) ; un fichier de plus de 64 Mio est laissé. Adapté : pas de `Commit`
+  ni de `Seals` (le fork scelle chaque commit), pas d'index `search/` à sauter (l'index du fork,
+  `search.idx` par dossier, est un fichier comme un autre), les anciens préfixes du fork
+  (`DEFLATED_OLD`) comptent comme compressés, la progression compte les fichiers (`len()` de la
+  table, sans la parcourir) et reprend au compte noté dans `META` (`recompress.looked`). De
+  `eac8e93a`, seulement `META` : un fichier créé par cette version le dit aussitôt, dans un commit
+  scellé, et n'est jamais parcouru ; **la mesure de santé n'est pas prise**, le bouton n'en a pas
+  besoin (la recompression dit elle-même ce qu'elle a gagné). Une recompression qui échoue (une
+  `META` d'un autre type, le disque) n'empêche pas le compactage. Débit mesuré : 224 Mo/s sur
+  200 Mo, 271 Mo/s sur 1 Go (huit cœurs, cache chaud).
+- **La fenêtre n’attend plus le compactage** (`053ab0ad`, l'idée de `0151859a`) : le fil de la
+  fenêtre est marqué (`quatrelle_store::no_waiting()`, appelé avant `run_native`) ; ses lectures
+  d'un fichier en compactage échouent tout de suite (`WouldBlock`, « being compacted ») ; ses
+  écritures, l'écrivain et les travailleurs attendent comme avant. La copie et l'échange de fichiers
+  de `0151859a` ne sont pas pris : le fork compacte en place.
+- **Le bouton** (`7487b18c`) : le fil `compact` appelle `compact_now`. Phase 1, les pièces jointes
+  sont réduites, la fenêtre restant utilisable : Fichier › Informations dit « Réduction des pièces
+  jointes gardées ici : 42 % (vous pouvez continuer à travailler) », avec une jauge
+  (`Event::CompactProgress`, cinq fois par seconde au plus). Phase 2, le compactage en place, sous
+  le voile que la fenêtre avait déjà et qui ne paraît plus que pour elle ; pendant ce temps la
+  fenêtre ne lit ni aperçus ni recherche pour ce compte (ses lectures seraient refusées, et les
+  messages pris pour absents) ; les deux reprennent ensuite. À la fin, comme avant « Compacté :
+  2,3 Go → 1,8 Go », suivi de « dont 0,4 Go par la réduction des pièces jointes ». Pendant la
+  phase 1, redb peut doubler la taille du fichier avant que la phase 2 ne la rende : sans cette
+  place et 1 Go de marge sur le disque (`fs4::statvfs`), le bouton compacte seulement et le dit.
+  Trois textes nouveaux dans les treize catalogues ; « réduire » plutôt que « recompresser » :
+  plusieurs langues disent déjà « compresser » pour compacter.
+- **La reprise** : les tests de l'origine, portés (avant : l'API n'existait pas, rien ne
+  compilait) : arrêtée après un lot puis reprise d'un magasin rouvert (chaque fichier compressé une
+  fois, la progression repart du compte noté) ; un processus tué après le 1er, le 2e ou le 4e lot
+  (le fichier rouvre **sans réparation**, rien de perdu, la reprise finit) ; un compte supprimé
+  entre la lecture et l'écriture d'un lot ou entre deux lots, aussi par `compact_now` (aucun fichier
+  recréé ni nommé) ; un message déplacé derrière le curseur pendant l'écriture d'un lot, entre deux
+  lots et pendant l'arrêt (compressé quand même) ; des fichiers réécrits pendant un lot (laissés).
+- **Le hostile** : `META` aux valeurs trop courtes, curseur qui n'est pas du texte ou plus long
+  qu'une clé, point de retour trop long : tout se relit, la recompression repart de zéro, puis le
+  compactage. Un curseur après toutes les clés s'arrête proprement (rien de compressé, compacté
+  quand même) ; une `META` d'un autre type de table : compacté quand même. Fuzz : la cible
+  `data_file` de l'origine (`a4b82e81`), sa graine (faite par le test du magasin) et son
+  dictionnaire (préfixes du fork, anciens et nouveaux) ; seulement compilée, `cargo fuzz` n'étant pas
+  installé.
+- **Les bancs** (`e0ff9427`, l'idée de `047809d3`), ignorés, en `--release` : 200 Mo et 1 Go
+  écrits par transactions de 64 Mo et comparés par empreintes (1 Go ne tient jamais en mémoire).
+  Sur 1 Go, la taille apparente du fichier monte à 2,18 Go pendant la phase 1, mais le fichier est
+  creux : 1,10 Go sur le disque. À côté du bouton (200 Mo), les écritures de la fenêtre prennent
+  3,8 ms (médiane), 17,3 ms (p99) pendant la phase 1 ; ses 73 lectures pendant la phase 2 sont
+  toutes refusées, en 0,044 ms au plus.
+- **L'arrêt pendant le compactage en place** : redb fait tout le compactage dans un seul appel,
+  dont les commits sautent l'enregistrement de l'allocateur (son issue 829) ; aucun commit scellé
+  ne peut s'y glisser sans changer redb, donc un arrêt net à ce moment demande toujours la
+  vérification complète au démarrage suivant. Réduit (`4cf77b7f`) : cette phase ne compacte plus que
+  ce que la phase 1 a libéré (0,74 s pour 1 Go ici) ; fermer la fenêtre pendant elle attend sa fin
+  (le voile dit « Quatrelle se fermera dès que ce sera fini »), puis ferme avec les questions
+  habituelles ; fermée pendant la phase 1, elle ferme tout de suite (lots scellés, reprise au
+  prochain clic). La mise en veille ne tue rien. Le fil `compact` rattrape aussi une panique et la
+  dit, pour que le voile, le bouton et cette fermeture n'attendent jamais une réponse qui ne vient
+  pas. Restent la coupure de courant et l'arrêt forcé pendant ces secondes.
+- **Laissés** : l'interface de compactage de l'origine (`6a7ec801`, `1b1f0454`), le compactage au
+  repos ou à la fermeture (`6ed4dccc`, `2c09cf1a`, `f7d188a3`), les écritures non durables
+  (`652ac8f6`, `70ee4080`, `c769fc09`, `6a83e16d`), la mesure de santé, le compactage par copie.
+- **Ce que verra le propriétaire** (cache de 2,3 Go, environ 550 000 éléments, estimations à partir
+  des bancs, la part de pièces jointes brutes de son fichier n'étant pas connue) : phase 1 de
+  l'ordre de 10 à 30 s, la fenêtre utilisable, la jauge dans Fichier › Informations ; phase 2 de
+  quelques secondes sous le voile ; un fichier d'environ 1,8 à 1,9 Go si les trois quarts sont des
+  pièces jointes brutes (un quart de celles-ci rendu), plus la place du courrier supprimé. Il faut
+  environ 3,3 Go libres sur le disque pour la phase 1, sinon compactage seul. Un second clic ne
+  refait pas la phase 1 (`META`).
+- **Vérifié** : chaque sonde avant et après ; les suites de `quatrelle-store`, `quatrelle-engine`,
+  `quatrelle-net` et `quatrelle-ui-egui` (tests i18n compris) ; la cible de fuzz compile ;
+  `cargo xtask ci` (wasm compris : le magasin en mémoire du navigateur n'a pas de fichier de
+  données, le bouton y répond comme avant).
+- **Reste, remarqué** :
+  - après un compactage serré, la première écriture fait doubler la taille *apparente* du fichier
+    (croissance de redb, fichier creux sur Linux) : « Conservé sur cet ordinateur », qui lit cette
+    taille, peut montrer le double de la place réellement prise ; sur Windows (NTFS), la place est
+    réservée pour de bon ;
+  - la vérification de place est prudente (taille apparente + 1 Go) ;
+  - aucun bouton pour arrêter la phase 1 (la décision n'en demande pas) : fermer Quatrelle l'arrête,
+    le clic suivant reprend ;
+  - le doublement à la croissance de redb concerne toutes les écritures, pas seulement le bouton ;
+    il explique sans doute une part de la taille des fichiers des propriétaires.
+
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
 Quatre chantiers, chacun dans son commit, à la suite d'un audit de l'éditeur HTML.
