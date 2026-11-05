@@ -13,7 +13,12 @@ fn with_files(files: &[(String, Vec<u8>)]) -> Vec<u8> {
         body: "Here.".into(),
         attachments: files
             .iter()
-            .map(|(name, data)| OutAttachment { name: name.clone(), mime: "application/octet-stream".into(), data: data.clone() })
+            .map(|(name, data)| OutAttachment {
+                name: name.clone(),
+                mime: "application/octet-stream".into(),
+                data: data.clone(),
+                ..Default::default()
+            })
             .collect(),
         ..Default::default()
     };

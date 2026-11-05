@@ -64,7 +64,7 @@ fn with_files_and_html(
     let d = Draft {
         subject: format!("Files {uid}"),
         body: "Here they are.".into(),
-        attachments: files.into_iter().map(|(name, mime, data)| OutAttachment { name, mime: mime.into(), data }).collect(),
+        attachments: files.into_iter().map(|(name, mime, data)| OutAttachment { name, mime: mime.into(), data, ..Default::default() }).collect(),
         html,
         inline,
         ..Default::default()

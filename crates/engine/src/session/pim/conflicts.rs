@@ -145,6 +145,7 @@ impl Session {
                 name: file_name(&d.name),
                 mime: "text/calendar; method=PUBLISH".into(),
                 data: d.ics.clone().into_bytes(),
+                ..Default::default()
             }],
             html: None,
             inline: Vec::new(),

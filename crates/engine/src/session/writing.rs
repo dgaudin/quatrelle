@@ -281,7 +281,7 @@ impl Session {
         if let Some(c) = self.compose.as_mut() {
             c.set_text(if sig.is_empty() { String::new() } else { format!("\n\n{sig}") });
             c.signature = sig;
-            c.attachments = vec![OutAttachment { name, mime: "message/rfc822".into(), data: raw }];
+            c.attachments = vec![OutAttachment { name, mime: "message/rfc822".into(), data: raw, ..Default::default() }];
         }
         self.style_signature();
         Ok(out)

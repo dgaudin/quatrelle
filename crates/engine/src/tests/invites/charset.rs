@@ -12,7 +12,7 @@ fn deliver_ics(s: &mut Session, n: u32, mime: &str, data: Vec<u8>) {
         to: vec![quatrelle_model::EmailAddress::new("Riley", "riley@studio.example")],
         subject: format!("REQUEST {n}"),
         body: "See the calendar.".into(),
-        attachments: vec![quatrelle_mime::OutAttachment { name: "invite.ics".into(), mime: mime.into(), data }],
+        attachments: vec![quatrelle_mime::OutAttachment { name: "invite.ics".into(), mime: mime.into(), data, ..Default::default() }],
         ..Default::default()
     };
     let raw = quatrelle_mime::build(&d, &quatrelle_model::EmailAddress::new(ANA.0, ANA.1), NOW, &format!("<i{n}@x>")).unwrap();

@@ -186,6 +186,7 @@ fn invitation_answers_arent_sent_from_a_data_file() {
             name: "invite.ics".into(),
             mime: "text/calendar; method=REQUEST".into(),
             data: ics.into_bytes(),
+            ..Default::default()
         }],
         ..Default::default()
     };
