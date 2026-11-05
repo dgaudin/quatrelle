@@ -296,6 +296,7 @@ impl Session {
         };
         self.accounts.retain(|a| a.config.id != id);
         self.cache.retain(|(a, _), _| a != id);
+        self.forget_echoes(id);
         self.pim.remove(id);
         // An account added later under the same id has its own calendar and contacts to save.
         self.pim_unread.remove(id);

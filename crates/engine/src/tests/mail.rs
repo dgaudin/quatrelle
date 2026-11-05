@@ -5,6 +5,7 @@
 
 use super::*;
 
+mod echo;
 mod nav;
 mod selecting;
 mod shown;
