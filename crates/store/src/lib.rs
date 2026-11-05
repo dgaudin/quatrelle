@@ -87,6 +87,10 @@ struct StateFile {
     window: usize,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pages: Vec<u64>,
+    /// The first number in each page (a head from before has none): a mark reads the page its
+    /// message is in alone ([`folders::MARKS`]).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    firsts: Vec<u32>,
     /// How many messages its pages hold.
     #[serde(skip_serializing_if = "is_zero_usize")]
     count: usize,
@@ -102,6 +106,8 @@ pub struct ListWriter {
     folder: String,
     /// Hashes of the pages written.
     pages: Vec<u64>,
+    /// The first number in each page written.
+    firsts: Vec<u32>,
     /// Messages not yet in a page.
     page: Vec<Summary>,
     total: usize,
@@ -130,6 +136,7 @@ impl ListWriter {
         let bytes = serde_json::to_vec(&self.page).map_err(|source| StoreError::Json { path: p, source })?;
         store.files.write(&path, &bytes)?;
         self.pages.push(page_hash(&bytes));
+        self.firsts.push(self.page.first().map_or(0, |m| m.key.uid));
         self.page.clear();
         Ok(())
     }
@@ -158,10 +165,17 @@ impl ListWriter {
             window: head.window,
             count: self.total,
             pages: self.pages,
+            firsts: self.firsts,
         };
         let p = path.display().to_string();
         let bytes = serde_json::to_vec(&file).map_err(|source| StoreError::Json { path: p, source })?;
-        store.files.write(&path, &bytes)?;
+        // A new list: no marks from an old one put on it.
+        let marks = dir.join(folders::MARKS);
+        let mut writes = vec![(path, bytes)];
+        if store.has_marks(&marks) {
+            writes.push((marks, b"[]".to_vec()));
+        }
+        store.write_files(&writes)?;
         for i in file.pages.len()..old.pages.len() {
             let _ = store.files.remove_file(&dir.join(format!("state-{i}.json")));
         }
