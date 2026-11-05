@@ -1547,6 +1547,7 @@ month	May	5월
 	Next Week	다음 주
 	No Date	날짜 없음
 	Compacting the data file…	데이터 파일 압축 중…
+	Quatrelle closes once it's done.	완료되면 Quatrelle이 닫힙니다.
 	The space freed inside it goes back to the disk. It takes about a minute for 40 GB; Quatrelle carries on once it's done.	파일 안에서 비워진 공간을 디스크에 돌려줍니다. 40GB에 약 1분이 걸리며, 끝나면 Quatrelle이 계속됩니다.
 	Compacted from {before} to {after}	{before}에서 {after}(으)로 압축됨
 	{saved} of it from attachments made smaller	그중 {saved}은(는) 첨부 파일을 줄여서 확보

@@ -324,6 +324,7 @@ impl MailApp {
                 tokens: Tokens::light(),
                 closing_anyway: false,
                 close_now: false,
+                close_after_compact: false,
                 quitting: false,
                 put_away: false,
                 close_checked: None,

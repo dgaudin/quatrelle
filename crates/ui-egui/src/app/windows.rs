@@ -133,6 +133,7 @@ impl MailApp {
     pub(crate) fn compacting_window(&mut self, ctx: &egui::Context) {
         let Some(account) = self.session.compacting_in_place().map(str::to_string) else { return };
         let t = self.ui.tokens;
+        let closing = self.ui.close_after_compact;
         let email = self.session.account(&account).map_or(account, |a| a.config.email.clone());
         egui::Modal::new(egui::Id::unique("compacting")).frame(crate::dialogs::dialog_frame(&t)).show(ctx, |ui| {
             ui.set_width(380.0);
@@ -151,6 +152,10 @@ impl MailApp {
                 ))
                 .color(t.dim),
             );
+            if closing {
+                ui.add_space(6.0);
+                ui.label(RichText::new(tl!("Quatrelle closes once it's done.")).color(t.text));
+            }
         });
         ctx.request_repaint_after(std::time::Duration::from_millis(250));
     }

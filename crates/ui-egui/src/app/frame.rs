@@ -107,10 +107,23 @@ impl MailApp {
     /// quit crate found this: a close from the taskbar lost the messages being written).
     fn decide_close(&mut self, ctx: &egui::Context) {
         self.forget_cancelled_close();
+        // Closed while Compact Now had a data file to itself: done now, it closes (as any close,
+        // with its questions).
+        if self.ui.close_after_compact && self.session.compacting_in_place().is_none() {
+            self.ui.close_after_compact = false;
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            return;
+        }
         // Closing with online-only accounts' unsent mail or changes held in memory: ask first.
         if self.ui.close_now {
             self.ui.close_now = false;
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        } else if ctx.input(|i| i.viewport().close_requested()) && self.session.compacting_in_place().is_some() {
+            // Compact Now has the data file to itself, and redb's compaction can't be stopped part
+            // way without the whole file gone through at the next start (72 s for a 45 GB one): the
+            // window closes once it's done, which its veil says.
+            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+            self.ui.close_after_compact = true;
         } else if ctx.input(|i| i.viewport().close_requested()) && self.keeps_running() {
             // The window goes, Quatrelle stays: its icon in the notification area brings it back.
             // Nothing is lost, so nothing is asked.

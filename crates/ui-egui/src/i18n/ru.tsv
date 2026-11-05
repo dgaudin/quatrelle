@@ -1547,6 +1547,7 @@ month	May	Май
 	Next Week	На следующей неделе
 	No Date	Без даты
 	Compacting the data file…	Сжатие файла данных…
+	Quatrelle closes once it's done.	Quatrelle закроется, как только это закончится.
 	The space freed inside it goes back to the disk. It takes about a minute for 40 GB; Quatrelle carries on once it's done.	Освободившееся внутри место возвращается на диск. На 40 ГБ уходит около минуты; Quatrelle продолжит работу, как только всё закончится.
 	Compacted from {before} to {after}	Сжато: {before} → {after}
 	{saved} of it from attachments made smaller	из них {saved} за счёт уменьшения вложений
