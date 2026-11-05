@@ -187,3 +187,28 @@ fn an_event_keeps_its_categories_show_as_privacy_and_reminder() {
     let written = quatrelle_model::ical::write(&[press], None, 0);
     assert!(written.contains("BEGIN:VALARM") && written.contains("CATEGORIES:Print,Studio"), "{written}");
 }
+
+/// A file with a contact in the Inbox and a contact, an appointment, a task and a note in Deleted
+/// Items: the Inbox's comes in to the address book; what was thrown away doesn't come back to the
+/// address book, calendar, tasks or notes, and is counted; the mail beside it comes in.
+#[test]
+fn what_was_thrown_away_stays_out_of_the_address_book_and_calendar() {
+    let when = [named(APPOINTMENT, 0x820D, V::Time(filetime(START))), named(APPOINTMENT, 0x820E, V::Time(filetime(START + 3600)))];
+    let b = Brought::of(
+        "trash",
+        &[
+            Put::new(&["Inbox"], "IPF.Note", item("IPM.Note", "Hello", "Notes", &[])),
+            Put::new(&["Inbox"], "IPF.Note", item("IPM.Contact", "Ana Lima", "Notes", &[])),
+            Put::new(&["Deleted Items"], "IPF.Note", item("IPM.Contact", "Bea Costa", "Notes", &[])),
+            Put::new(&["Deleted Items"], "IPF.Note", item("IPM.Appointment", "Stage call", "Notes", &when)),
+            Put::new(&["Deleted Items"], "IPF.Note", item("IPM.Task", "Book the stage", "Notes", &[])),
+            Put::new(&["Deleted Items"], "IPF.Note", item("IPM.StickyNote", "Door code", "Notes", &[])),
+            Put::new(&["Deleted Items"], "IPF.Note", item("IPM.Note", "Old news", "Notes", &[])),
+        ],
+    );
+    let d = &b.done;
+    assert_eq!((d.messages, d.contacts, d.events, d.tasks, d.notes, d.skipped), (2, 1, 0, 0, 0, 4), "{d:?}");
+    let pim = b.pim();
+    assert_eq!(pim.cards.len(), 1);
+    assert!(pim.events.is_empty() && pim.tasks.is_empty() && pim.notes.is_empty());
+}

@@ -464,7 +464,7 @@ fn a_sharing_invitation_says_what_it_shares() {
         ((SHARING, 0x8A08), 0x8004),
         ((SHARING, 0x8A04), 0x8005),
     ]);
-    let named = Named { ids, keywords: None, ..Default::default() };
+    let named = Named { ids, keywords: None };
     let props = HashMap::from([
         (0x8001, Val::Text("Studio\r\nbookings".into())),
         (0x8002, Val::Text("IPF.Appointment".into())),
