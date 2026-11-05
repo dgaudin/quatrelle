@@ -28,7 +28,7 @@ mod rtf;
 pub use codepage::{byte_code_page, decode_code_page, known_code_page, unsupported_code_page, utf16_code_page};
 // 8-bit strings and RTF are never UTF-16 or UTF-7, whatever page they're labelled with.
 use codepage::{decode_bytes as decode, utf16};
-pub use rtf::{decompress_rtf, rtf_body};
+pub use rtf::{decompress_rtf, rtf_body, rtf_wraps_html};
 use rtf::{decompress_rtf_max, rtf_body_max};
 
 /// The signature a TNEF stream starts with (little-endian `0x223E9F78`).
