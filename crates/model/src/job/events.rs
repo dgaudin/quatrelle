@@ -46,6 +46,12 @@ pub enum Event {
         key: MessageKey,
         raw: Vec<u8>,
     },
+    /// A message downloaded: its summary as the cached folder has it now, filled in from its
+    /// source (its preview, files, conversation). The folder in memory takes it, rather than
+    /// reading all of the folder again.
+    Filled {
+        summary: Box<crate::Summary>,
+    },
     /// A big message's text arrived ahead of the whole message: `raw` is a source holding the
     /// text and the list of files to come, not kept on disk. [`Event::Body`] follows.
     TextFirst {

@@ -79,7 +79,7 @@ fn a_download_url_on_another_site_is_untrusted_then_works_once_trusted() {
     let opts = crate::sync::SyncOptions { window: 100, prefetch: 0, ..Default::default() };
     crate::jmap::sync_folder(&c, &mut st, &store, "a1", "INBOX", &opts).unwrap();
     let key = store.load_folder("a1", "INBOX").unwrap().messages.first().unwrap().key.clone();
-    let raw = crate::jmap::fetch_body(&c, &st, &store, &key).unwrap();
+    let (raw, _) = crate::jmap::fetch_body(&c, &st, &store, &key).unwrap();
     assert!(String::from_utf8_lossy(&raw).contains("Subject: Hello"));
     let seen = seen_on(&server, "localhost");
     assert!(seen.iter().any(|r| r.contains(" /download/")), "{seen:?}");

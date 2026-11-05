@@ -697,20 +697,16 @@ fn id_by_message_id(c: &Client, folder_id: &str, mid: &str) -> Result<Option<Str
     Ok(None)
 }
 
-/// Download one message's source (and cache it).
-pub fn fetch_body(c: &Client, st: &mut State, store: &Store, key: &MessageKey) -> Result<Vec<u8>> {
+/// Download one message's source (and cache it), with its summary as its folder now has it, filled
+/// from it ([`crate::sync::keep_source`]); one cached already comes as it is, with no summary.
+pub fn fetch_body(c: &Client, st: &mut State, store: &Store, key: &MessageKey) -> Result<(Vec<u8>, Option<Summary>)> {
     if let Some(raw) = store.read_body(key) {
-        return Ok(raw);
+        return Ok((raw, None));
     }
     let id = server_id(c, st, store, key)?.ok_or_else(|| NetError::No("the message is no longer on the server".into()))?;
     let raw = c.download(&id)?;
-    store.write_body(key, &raw)?;
-    let mut fs = store.load_folder(&key.account, &key.folder)?;
-    if let Some(m) = fs.find_mut(key.uid) {
-        fill_from_source(m, &raw);
-        store.save_folder(&key.account, &key.folder, &fs)?;
-    }
-    Ok(raw)
+    let filled = crate::sync::keep_source(store, key, &raw)?;
+    Ok((raw, filled))
 }
 
 /// The server's id for a cached message. When the numbering no longer has it (a state reloaded,

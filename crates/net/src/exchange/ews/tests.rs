@@ -192,7 +192,7 @@ fn a_message_the_search_found_can_be_read() {
     assert_eq!(store.load_folder("a1", "INBOX").unwrap().messages.len(), 3, "the old one is out of the window");
     let hits = search(&c, &mut st, "a1", &["INBOX".to_string()], "deepseek", 50).unwrap();
     assert_eq!(hits.len(), 1);
-    let raw = fetch_body(&c, &mut st, &store, &hits[0].key).unwrap();
+    let (raw, _) = fetch_body(&c, &mut st, &store, &hits[0].key).unwrap();
     assert!(String::from_utf8_lossy(&raw).contains("deepseek"), "read from the id the search numbered");
     assert!(store.read_body(&hits[0].key).is_some(), "kept like any other message");
     let _ = std::fs::remove_dir_all(&dir);
@@ -377,7 +377,7 @@ fn a_message_the_numbering_lost_is_found_again_by_its_message_id() {
     // (or one written by another connection) leaves behind. The old message must still open.
     let mut lost = State::default();
     lost.mailboxes = st.mailboxes.clone();
-    let raw = fetch_body(&c, &mut lost, &store, &key).unwrap();
+    let (raw, _) = fetch_body(&c, &mut lost, &store, &key).unwrap();
     assert!(String::from_utf8_lossy(&raw).contains("deepseek"));
     assert!(lost.id(key.uid).is_some(), "and it is numbered again");
     let _ = std::fs::remove_dir_all(&dir);

@@ -113,7 +113,10 @@ written (`Compose`), preferences and status-bar notices.
   source of truth). A flag or category change's own echo doesn't (`session/mailboxes/echo.rs`): the
   changes sent are counted per folder, and a `FolderChanged` while one waits keeps the folder in
   memory (patching in the change if the folder was read again before it reached the cache); one
-  more than were sent, a notice from the account, or a minute's wait reads the folder again.
+  more than were sent, a notice from the account, or a minute's wait reads the folder again. A
+  message downloaded comes back as its summary filled from its source (`Event::Filled`, made by
+  `quatrelle_jmap::keep_source` for every protocol), which the folder in memory and the list's
+  entry take (`patch.rs`), built again only where what changed decides what the list shows.
 - Local-only accounts (the sample mailbox) apply changes to the cache directly, including moves
   (new UIDs in the destination) and, for the sample mailbox alone, sending (filed in Sent).
 - Mail is sent only from an account that can send it (`session/writing/sending.rs`):

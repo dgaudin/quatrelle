@@ -285,20 +285,16 @@ pub(crate) fn download_ahead(c: &Client, st: &State, store: &Store, account: &st
     Ok(fs.messages.iter().filter(|m| to_get(m, &have)).count())
 }
 
-/// Download one message's source (and cache it).
-pub fn fetch_body(c: &Client, st: &State, store: &Store, key: &MessageKey) -> Result<Vec<u8>> {
+/// Download one message's source (and cache it), with its summary as its folder now has it, filled
+/// from it ([`crate::sync::keep_source`]); one cached already comes as it is, with no summary.
+pub fn fetch_body(c: &Client, st: &State, store: &Store, key: &MessageKey) -> Result<(Vec<u8>, Option<Summary>)> {
     if let Some(raw) = store.read_body(key) {
-        return Ok(raw);
+        return Ok((raw, None));
     }
     let id = st.id(key.uid).filter(|_| key.validity == VALIDITY).ok_or_else(|| NetError::No("the message is no longer on the server".into()))?;
     let raw = c.download(&id, st.owner(&key.folder))?;
-    store.write_body(key, &raw)?;
-    let mut fs = store.load_folder(&key.account, &key.folder)?;
-    if let Some(m) = fs.find_mut(key.uid) {
-        fill_from_source(m, &raw);
-        store.save_folder(&key.account, &key.folder, &fs)?;
-    }
-    Ok(raw)
+    let filled = crate::sync::keep_source(store, key, &raw)?;
+    Ok((raw, filled))
 }
 
 /// The voting buttons on a message (its `PidLidVerbStream`, when asked for).

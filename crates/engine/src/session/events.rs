@@ -280,6 +280,7 @@ impl Session {
                 self.index_body(&key, &raw);
                 self.downloaded(&key, true);
             }
+            Event::Filled { summary } => self.filled(*summary),
             Event::TextFirst { key, raw } => self.show_text_first(&key, &raw),
             Event::BodyFailed { key, error } => {
                 self.source_failed(&key, &error);
