@@ -230,7 +230,7 @@ pub struct Pool {
 /// many times the account had been removed when it was made ([`Store::while_kept`]).
 type Edit = (String, Op, Option<Sender<Job>>, u64);
 
-/// Write an edit to the cache and journal it (ops.json), report what changed, then hand it to
+/// Write an edit to the cache and journal it (`Store::add_op`), report what changed, then hand it to
 /// the account's thread, which takes it to the server. Journaled first: a sync saving the folder
 /// meanwhile makes the edit again on what it saves (`Store::save_folder`) rather than putting the
 /// old flags back over it. Nothing, for an account removed since: its files go at once on the

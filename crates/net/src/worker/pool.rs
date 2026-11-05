@@ -500,13 +500,13 @@ impl Pool {
                     .collect();
                 self.sink.emit(Event::Availability { account, from, to, people, error: Some(error) });
             }
-            // The change goes into the cache and ops.json here, on the caller's thread, before
+            // The change goes into the cache and the journal here, on the caller's thread, before
             // the account thread is free: it may be minutes into a full sync. Waiting meant a
             // folder refresh could paint the server's old state over the edit, and closing the
             // app dropped it. A POP account's worker keeps its own bookkeeping, so it still goes
             // that way.
             Job::Apply { account, op } if self.records_edits(&account) => {
-                // Into the cache and ops.json on the edit writer's thread (in order, before the
+                // Into the cache and the journal on the edit writer's thread (in order, before the
                 // account's thread hears of it): not on the window's.
                 let worker = self.workers.get(&account).map(|h| h.tx.clone());
                 // The account's files go at once on the window's thread when it's removed, before
@@ -550,7 +550,7 @@ impl Pool {
         }
     }
 
-    /// Whether this side writes an account's edit to the cache and ops.json: always when no
+    /// Whether this side writes an account's edit to the cache and the journal: always when no
     /// thread runs for it, and for a running one unless it is POP (whose thread does it, with
     /// bookkeeping of its own).
     fn records_edits(&self, account: &str) -> bool {

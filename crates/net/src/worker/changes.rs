@@ -49,7 +49,7 @@ impl Worker {
             Job::Older { folder, offset, .. } => self.older(&folder, offset),
             Job::ReadOnline { key } => self.read_online_body(key),
             Job::Search { query, folder, .. } => self.search(query, folder),
-            // Already in the cache and ops.json (the pool wrote them): push the queue.
+            // Already in the cache and the journal (the pool wrote them): push the queue.
             Job::Apply { op, .. } if self.acc.pop.is_none() => {
                 if op.is_folder_op() {
                     self.folders = self.store.load_folders(&self.acc.id).unwrap_or_default();
@@ -700,13 +700,22 @@ impl Worker {
         self.sink.emit(Event::Vacation { account: self.id(), vacation, error });
     }
 
-    /// Re-apply the edits still waiting that touch `path` to its freshly saved cache; `true` when
-    /// the cache changed as a result.
+    /// The edits still waiting that touch `path`, on its freshly saved cache; `true` when there are
+    /// any (the list shows them). A sync's save made them again on the list already
+    /// (`Store::save_folder`, one pass), all but emptying the folder, made here. Each was made
+    /// again here too, the list read and written whole for each move: five minutes after a
+    /// burst of 1,000 changes on a folder of 50,000.
     pub(super) fn reapply_waiting(&mut self, path: &str) -> bool {
         let mut any = false;
         for op in self.store.load_ops(&self.acc.id).unwrap_or_default() {
-            if touches(&op, path) && self.store.apply_op(&self.acc.id, &op).is_ok_and(|c| !c.is_empty()) {
-                any = true;
+            if !touches(&op, path) {
+                continue;
+            }
+            any = true;
+            if matches!(op, Op::EmptyFolder { .. })
+                && let Err(e) = self.store.apply_op(&self.acc.id, &op)
+            {
+                log::warn!("{}: a folder still to empty wasn't: {e}", self.acc.id);
             }
         }
         any
@@ -724,9 +733,9 @@ impl Worker {
         let trash = self.folders.iter().find(|f| f.role == FolderRole::Trash).map(|f| f.path.clone());
         // A change refused once is tried again after the folders are listed anew (see below).
         let mut retried = false;
-        // The queue is ops.json's: bounded, in case taking an entry out keeps failing.
+        // The queue is the journal's: bounded, in case taking an entry out keeps failing.
         for _ in 0..100_000 {
-            let Some(op) = self.store.load_ops(&self.acc.id).unwrap_or_default().into_iter().next() else { break };
+            let Some(op) = self.store.first_op(&self.acc.id).unwrap_or_default() else { break };
             let r = match self.conn.as_mut() {
                 Some(Conn::Imap(c)) => apply_remote_with(c, &op, trash.as_deref()),
                 Some(Conn::Jmap(c)) => jmap::apply_remote(c, &self.jstate, &op),
