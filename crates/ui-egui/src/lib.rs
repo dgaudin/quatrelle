@@ -398,6 +398,7 @@ impl MailApp {
                 webex_scroll: std::cell::Cell::new(false),
                 video_files: HashMap::new(),
                 video_frames: HashMap::new(),
+                videos: reading::Videos::default(),
                 backstage: None,
                 mini_month: None,
                 cal_scrolled: [false; 2],

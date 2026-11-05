@@ -155,9 +155,16 @@ fn bench(lane: bool) {
     let (k, size) = big_message(&mut a, 9900);
     let store = a.session.store.clone().unwrap();
     let reads = store.reads();
+    let t = Instant::now();
     a.run("list.open", json!({"key": k.to_id()}));
+    let opened = t.elapsed();
     let shown = settle(&ctx, &mut a);
-    eprintln!("message {:.1} MB: {shown}, {} reads of the source", size as f64 / 1e6, store.reads() - reads);
+    eprintln!(
+        "message {:.1} MB: opened in {:.1} ms, then {shown}, {} reads of the source",
+        size as f64 / 1e6,
+        opened.as_secs_f64() * 1e3,
+        store.reads() - reads
+    );
     let pdf = a
         .session
         .reading
