@@ -306,7 +306,7 @@ fn an_offline_copy_is_explained() {
     let dir = std::env::temp_dir().join(format!("quatrelle-ost-{}", std::process::id()));
     let _ = std::fs::create_dir_all(&dir);
     let file = dir.join("me@example.com.ost");
-    std::fs::write(&file, b"!BDN    SO$ rest").unwrap();
+    std::fs::write(&file, b"!BDN\0\0\0\0SO$\0rest").unwrap();
     let store = Store::open(dir.join("cache")).unwrap();
     let e = import(&file, &store, "a1", &mut |_| {}).unwrap_err();
     assert!(e.contains(".ost") && e.contains("add the account"), "{e}");
