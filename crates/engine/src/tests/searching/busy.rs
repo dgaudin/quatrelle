@@ -526,3 +526,20 @@ fn the_folder_on_view_is_read_first() {
     assert_eq!(listed(&s), needles(&s));
     done(s);
 }
+
+/// Sources downloaded ahead in the background (Cached Exchange Mode's offline copy, a sync's
+/// prefetch: written to the cache, no `Event::Body`), then the folder told of as changed: their
+/// words are searched in this run, not only once the folder is read again at the next.
+#[test]
+fn sources_downloaded_ahead_are_searched_once_told() {
+    let store = busy_store("busy-ahead", 3, 400);
+    let mut s = open(&store);
+    assert!(drive(&mut s, "zanzibar", 100, |_, _| {}).is_some());
+    assert!(s.list.is_empty());
+    let key = MessageKey { account: "a1".into(), folder: folder_path(1), validity: 1, uid: 7 };
+    store.write_body(&key, b"From: ann@studio.example\r\nSubject: Report\r\n\r\nThe trip to Zanzibar.\r\n").unwrap();
+    s.apply(Event::FolderChanged { account: "a1".into(), folder: folder_path(1) });
+    assert!(drive(&mut s, "zanzibar", 100, |_, _| {}).is_some());
+    assert_eq!(s.list.iter().map(|m| m.key.clone()).collect::<Vec<_>>(), [key]);
+    done(s);
+}

@@ -662,6 +662,37 @@ fn downloading_ahead_follows_the_list() {
     let _ = std::fs::remove_dir_all(store.root());
 }
 
+/// Cached Exchange Mode's download ahead, in the background after the full sync, tells the
+/// window of the folder once it has its mail (as IMAP's, JMAP's and Graph's do): the search
+/// then reads what came. It told of nothing, so the words came only at the folder's next reading.
+#[test]
+fn downloading_ahead_tells_of_the_folder() {
+    let mut d = Data::default();
+    let inbox = d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    for i in 0..60 {
+        d.deliver(&inbox, &mail(&format!("M{i}"), &format!("m{i}")), false, &format!("2026-10-{:02}T08:{:02}:00Z", 1 + i % 28, i));
+    }
+    let server = serve(d);
+    let store = crate::fake::tests_store("ews-ahead-told");
+    let mut pool = crate::worker::Pool::new(store.clone(), Arc::new(crate::worker::MemoryCredentials::default()));
+    let account = AccountConfig {
+        id: "a1".into(),
+        email: "riley@contoso.example".into(),
+        username: format!("{DOMAIN}\\{USER}"),
+        ews: Some(server.url.clone()),
+        ..Default::default()
+    };
+    // Cached Exchange Mode, as the window asks for it: every message kept is downloaded whole,
+    // the newest 40 with the list, the rest ahead.
+    pool.submit(Job::SetSync { days: 0, messages: 0, full: true });
+    pool.submit(Job::Start { account, password: Some(Secret(PASSWORD.into())) });
+    until(&pool, "online", |e| matches!(e, Event::Status { status: SyncStatus::Online { .. }, .. }));
+    let all = || store.load_folder("a1", "INBOX").is_ok_and(|f| f.messages.len() == 60 && f.messages.iter().all(|m| store.has_body(&m.key)));
+    until(&pool, "the Inbox told of once downloaded ahead", |e| matches!(e, Event::FolderChanged { folder, .. } if folder == "INBOX") && all());
+    drop(pool);
+    let _ = std::fs::remove_dir_all(store.root());
+}
+
 /// Categories as Outlook keeps them: those on a message come with it (by name, read as the
 /// name's keyword); one put on here goes to the server and comes off it again; one taken off in
 /// Outlook goes here too; Quatrelle's own keywords (a pin) stay on this computer; and Outlook's

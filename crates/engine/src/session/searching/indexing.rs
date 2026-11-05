@@ -31,6 +31,10 @@ pub(crate) struct SearchIndex {
     /// ([`Session::top_up`]) before the scan goes on. A busy mailbox's sync tells of changes every
     /// few seconds; when each threw the whole index away, the scan started over and never ended.
     pub(super) stale: Vec<(String, String)>,
+    /// Messages indexed without their source whose source came since without an `Event::Body`
+    /// (downloaded ahead in the background, as Cached Exchange Mode keeps its copy, or by a sync's
+    /// prefetch), found when their folder was told of: their words are read a few a call.
+    pub(super) came: BTreeSet<u32>,
     /// Folders read that are no longer searched (deleted, renamed, out of the scope now): their
     /// messages stay in the index but no longer answer.
     pub(super) gone: HashSet<(String, String)>,
@@ -57,6 +61,7 @@ impl SearchIndex {
     pub(super) fn pending(&self) -> bool {
         !self.done
             || !self.stale.is_empty()
+            || !self.came.is_empty()
             || self.answer.as_ref().is_some_and(|a| a.checked < self.total() || !a.dirty.is_empty() || !a.again.is_empty() || !a.todo.is_empty())
     }
 
@@ -265,6 +270,7 @@ impl Session {
             done: false,
             building: None,
             stale: Vec::new(),
+            came: BTreeSet::new(),
             gone: HashSet::new(),
             ranges: HashMap::new(),
             answer: None,
@@ -279,6 +285,11 @@ impl Session {
     pub(crate) fn index_step(&mut self) -> bool {
         let Some(mut ix) = self.index.take() else { return true };
         while self.search_pace.index_more() {
+            if let Some(d) = ix.came.pop_first() {
+                self.read_came(&mut ix, d);
+                self.search_pace.spend(1);
+                continue;
+            }
             if ix.building.is_none()
                 && ix.pos == 0
                 && let Some(k) = ix.stale.first().cloned()
@@ -399,10 +410,49 @@ impl Session {
         }
         if all {
             ix.stale.retain(|s| s != k);
+            if ix.words {
+                self.sources_came(ix, k);
+            }
         }
         // Looking through what the index has of the folder counts too (a few of its messages
         // cost what one indexed does), so a slice doesn't top up many big folders at once.
         n + have.len() / 8 + 1
+    }
+
+    /// The messages of a folder read already, indexed without their source, whose source is in
+    /// the cache now: queued ([`SearchIndex::came`]). One listing of the folder's sources, when
+    /// it's told of (a sync, a download ahead), only for a folder with messages still without.
+    fn sources_came(&mut self, ix: &mut SearchIndex, k: &(String, String)) {
+        let missing: Vec<u32> =
+            ix.ranges.get(k).into_iter().flatten().flat_map(|r| r.clone()).filter(|&d| ix.has_body.get(d as usize) == Some(&false)).collect();
+        if missing.is_empty() {
+            return;
+        }
+        let validity = self.folder_state(&k.0, &k.1).validity;
+        let Some(store) = self.store.as_ref() else { return };
+        let cached: HashSet<u32> = store.cached_bodies(&k.0, &k.1, validity).into_iter().collect();
+        for d in missing {
+            if ix.keys.get(d as usize).is_some_and(|key| key.validity == validity && cached.contains(&key.uid)) {
+                ix.came.insert(d);
+            }
+        }
+    }
+
+    /// A message's source that came since it was indexed: its words join the index, and the
+    /// search's answer looks at it again.
+    fn read_came(&mut self, ix: &mut SearchIndex, d: u32) {
+        let Some(key) = ix.keys.get(d as usize).cloned() else { return };
+        if ix.has_body.get(d as usize) != Some(&false) {
+            return;
+        }
+        let Some(words) = self.words_of(&key) else { return };
+        ix.index.add(d, &words);
+        if let Some(seen) = ix.has_body.get_mut(d as usize) {
+            *seen = true;
+        }
+        if let Some(a) = ix.answer.as_mut() {
+            a.again.insert(d);
+        }
     }
 
     /// The folders a search covers changed (the folder list came again, a folder was made,
