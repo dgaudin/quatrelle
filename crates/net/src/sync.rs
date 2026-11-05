@@ -206,7 +206,7 @@ pub fn sync_folder<S: Read + Write>(c: &mut Client<S>, store: &Store, account: &
     }
 
     // 5: prefetch the newest sources (in small batches, saving as we go).
-    prefetch(c, store, account, folder, &mut st, opts)?;
+    report.fetched = prefetch(c, store, account, folder, &mut st, opts)?;
 
     report.total = info.exists;
     report.unread = if info.exists == 0 { 0 } else { u32::try_from(c.uid_search("UNSEEN")?.len()).unwrap_or(u32::MAX) };
@@ -493,10 +493,18 @@ fn fetch_headers<S: Read + Write>(
     Ok(())
 }
 
-fn prefetch<S: Read + Write>(c: &mut Client<S>, store: &Store, account: &str, folder: &str, st: &mut FolderState, opts: &SyncOptions) -> Result<()> {
+/// How many sources came in.
+fn prefetch<S: Read + Write>(
+    c: &mut Client<S>,
+    store: &Store,
+    account: &str,
+    folder: &str,
+    st: &mut FolderState,
+    opts: &SyncOptions,
+) -> Result<usize> {
     let wanted: Vec<u32> =
         st.messages.iter().take(opts.prefetch).filter(|m| m.size <= opts.prefetch_max_bytes && !store.has_body(&m.key)).map(|m| m.key.uid).collect();
-    ahead::download(c, store, account, folder, st, &wanted).map(drop)
+    ahead::download(c, store, account, folder, st, &wanted)
 }
 
 /// Prefetch chunks: ten messages at most, and no more than one literal's worth of sources

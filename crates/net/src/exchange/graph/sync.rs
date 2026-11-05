@@ -114,7 +114,7 @@ pub fn sync_folder(c: &Client, st: &mut State, store: &Store, account: &str, fol
     sort_newest_first(&mut fs.messages);
     fs.uid_next = fs.messages.iter().map(|m| m.key.uid).max().unwrap_or(0).saturating_add(1);
     store.save_folder(account, folder, &fs)?;
-    prefetch(c, st, store, account, folder, &mut fs, opts)?;
+    report.fetched = prefetch(c, st, store, account, folder, &mut fs, opts)?;
     report.total = total;
     report.unread = unread;
     Ok(report)
@@ -187,8 +187,8 @@ pub fn find_on_server(
     Ok((numbers.iter().filter_map(|n| fs.find(*n).map(|m| m.key.clone())).collect(), new))
 }
 
-/// The newest sources, downloaded with the folder's list.
-fn prefetch(c: &Client, st: &State, store: &Store, account: &str, folder: &str, fs: &mut FolderState, opts: &SyncOptions) -> Result<()> {
+/// The newest sources, downloaded with the folder's list; how many came.
+fn prefetch(c: &Client, st: &State, store: &Store, account: &str, folder: &str, fs: &mut FolderState, opts: &SyncOptions) -> Result<usize> {
     let cap = ahead_cap(opts);
     let wanted: Vec<(MessageKey, String)> = fs
         .messages
@@ -198,14 +198,14 @@ fn prefetch(c: &Client, st: &State, store: &Store, account: &str, folder: &str, 
         .filter_map(|m| Some((m.key.clone(), st.id(m.key.uid)?)))
         .collect();
     if wanted.is_empty() {
-        return Ok(());
+        return Ok(0);
     }
     let filled = download_into(c, st, store, fs, &wanted, cap)?;
     // The same messages the sync just kept, a few of them filled in.
     if !filled.is_empty() {
         store.save_folder_changed(account, folder, fs, &filled)?;
     }
-    Ok(())
+    Ok(filled.len())
 }
 
 /// The largest source kept ahead of reading: none when every message kept is downloaded whole.
