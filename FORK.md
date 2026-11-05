@@ -2917,6 +2917,60 @@ boîte un peu plus grosse que le cache.
   - une marque locale sur un dossier qui n'est pas en mémoire s'écrit toujours sur le fil de la
     fenêtre (cas rare : on marque ce qu'on voit).
 
+### État de la récupération : v0.32, vingt-septième partie : OpenPGP (2026-11-05)
+
+Le lot P5 de `merge-tools/survey-v0.32.md` (décision n° 7 du propriétaire, sa demande du 1er
+novembre), conçu avec lui le 5 novembre : approche A, l'OpenPGP de l'origine (sur rPGP) mis à la
+place qu'a S/MIME dans le fork, plus la création de clé que l'origine n'a pas. **Rien n'est actif
+tant qu'un compte n'a pas de clé** : rien ne change dans ce qui part. Spécification
+`docs/superpowers/specs/2026-11-05-openpgp-design.md`, plan `docs/superpowers/plans/2026-11-05-openpgp.md`,
+quatre lots dans l'ordre ; cette partie se complète à chacun.
+
+**Lot 1 : le crate `quatrelle-pgp`** (L1, portable, vérifié pour le navigateur), sur rPGP 0.21.
+
+| Commit | Ce qu'il fait | Essais (échoué avant → passé) |
+|---|---|---|
+| `c75f3034` (`576b2770` + `775f386b`, adaptés) | le crate de l'origine : clés lues et vérifiées par leurs auto-signatures, signatures détachées, en clair et intérieures, chiffrement AES-256 SEIPDv1, déchiffrement borné, Autocrypt, blocs PGP dans un texte ; les fichiers d'essai de GnuPG 2.4 gardés octet pour octet (`.gitattributes`) | les 22 de l'origine passent ; bombe de 70 Mio vers la clé GnuPG de Riley, et partie de 70 Mio : `TooBig` (passait d'emblée) ; `reading_stops_at_max_without_growing_past_it` : n'existait pas → passe |
+| `70515be3` (propre au fork) | `generate` et `extend` : clé v4, primaire EdDSA-legacy Ed25519 (algorithme 22), sous-clé ECDH Curve25519-legacy (18), trois ans (`VALID_FOR_SECS` = 94 608 000 s), préférences AES-256, SHA-256, sans compression ou ZLIB | quatre essais et un proptest (24 cas, jusqu'à 64 Kio) : `generate` introuvable → passent |
+| `b31b088f` (propre au fork) | `backup` : la clé secrète armurée, chaque partie en S2K 254, AES-256, SHA-256 itéré et salé ; phrase vide refusée | `a_backup_reads_back_with_its_passphrase_only` : `backup` introuvable → passe ; essai GnuPG ignoré, lancé ici |
+| `f231f580` (propre au fork) | `quatrelle-pgp` dans les couches de `xtask` | sans lui, `cargo xtask wasm` ne le compilait pas pour le navigateur |
+| `e1dfa129` (`896db24a`, adapté) | cible de fuzz `pgp`, son dictionnaire et ses graines | `cargo check --bins` dans `fuzz/` |
+
+- **Adapté** (au nom du propriétaire) : `c75f3034`, parce que la lecture de ce que décompresse
+  un message, plafonnée à `MAX + 1` par `take` puis `read_to_end`, faisait doubler son tampon
+  jusqu'à **128 Mio** de capacité avant de dire `TooBig` (mesuré à part : 64 Mio + 1 lus, 134 217 728
+  réservés). `read_capped` lit par morceaux et ne réserve jamais au-delà de `MAX`. La cible de fuzz
+  sans ses appels PGP/MIME (le module `pgp` de `quatrelle-mime` vient au lot 2), avec `extend` en
+  plus sur toute clé secrète qui s'ouvre (pas `backup` : son S2K hache 16 Mio par partie).
+- **La clé faite ici** : rPGP sait l'écrire (`KeyType::Ed25519Legacy`,
+  `KeyType::ECDH(ECCCurve::Curve25519Legacy)`), mais son constructeur signe la clé à l'heure du
+  système et sans fin. Ses auto-signatures sont donc refaites (`resign`) à l'heure donnée par
+  l'appelant, avec la fin à trois ans, en gardant ce qu'elles disaient d'autre (usages, préférences,
+  identité principale) ; `extend` fait la même chose sur une clé existante : même empreinte, même
+  matière, les anciennes auto-signatures remplacées, une identité ou une sous-clé retirée par son
+  propriétaire laissée telle quelle, les signatures d'autres clés gardées. Le nom ne peut pas
+  sortir de son identité (`<`, `>`, retours à la ligne ôtés) ; une adresse qui n'en est pas une ne
+  fait rien. `EXPIRY_WARNING_SECS` (30 jours) est défini à côté, pour la carte du lot 3.
+- **Vérifié avec GnuPG 2.4.5 sur ce poste** (`gnupg_reads_a_key_and_mail_quatrelle_made`, ignoré,
+  lancé à la main dans un trousseau temporaire de `~/.tq`, supprimé ensuite ; `~/.gnupg` jamais
+  touché) : GnuPG importe la sauvegarde avec sa phrase, déchiffre le courrier chiffré et signé par
+  Quatrelle (bonne signature), vérifie une signature détachée, liste la fin de la clé et de sa
+  sous-clé à trois ans, prend la prolongation ; Quatrelle vérifie une signature et déchiffre un
+  message signé que GnuPG a faits avec la clé.
+- **Licences** : 54 crates nouvelles (rPGP et la famille RustCrypto) ; `cargo deny check` :
+  advisories, bans, licenses et sources ok, sans exception nouvelle.
+- **Pour le lot 2** : l'interface du crate est celle du plan (tâche 1.1), plus `generate`,
+  `extend`, `backup`, `VALID_FOR_SECS`, `EXPIRY_WARNING_SECS` ; la cible `fuzz/fuzz_targets/crypto/pgp.rs`
+  attend ses trois appels PGP/MIME (`protection`, `autocrypt`, `key_parts`) ; les graines de
+  `fuzz/seeds/pgp/` sont en fins de ligne LF, comme chez l'origine (les fichiers d'essai du crate
+  sont en CR LF depuis `775f386b`).
+- **Vérifié** : la suite du crate (30 essais, un ignoré lancé à la main) ; `cargo check --bins` dans
+  `fuzz/` ; `cargo deny check` ; `cargo xtask ci` (wasm compris).
+- **Reste, remarqué** : le constructeur de rPGP lit encore l'heure du système pour des signatures
+  aussitôt jetées (sans effet ; dans le navigateur, rPGP a son horloge) ; `read_capped` réserve au
+  plus `MAX`, mais la copie d'un tampon qui double peut tenir un instant 32 + 64 Mio ; la sauvegarde
+  n'a été lue que par GnuPG 2.4.5, pas par un GnuPG 2.2.
+
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
 Quatre chantiers, chacun dans son commit, à la suite d'un audit de l'éditeur HTML.
