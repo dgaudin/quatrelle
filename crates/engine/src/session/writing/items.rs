@@ -121,7 +121,7 @@ impl Session {
                     .and_then(|s| s.read_body(&key))
                     .ok_or_else(|| CmdError::Failed("this message isn't on this computer yet: open it, then attach it".into()))?;
                 let subject = self.summary(&key).map(|m| m.subject.clone()).unwrap_or_default();
-                Ok(OutAttachment { name: file(&subject, "message", "eml"), mime: "message/rfc822".into(), data: raw })
+                Ok(OutAttachment { name: file(&subject, "message", "eml"), mime: "message/rfc822".into(), data: raw, ..Default::default() })
             }
             ItemKind::Contact => {
                 let p = self.find_person(id).ok_or_else(|| CmdError::Params(format!("no contact `{id}`")))?;
@@ -129,6 +129,7 @@ impl Session {
                     name: file(&p.card.display(), "contact", "vcf"),
                     mime: "text/vcard".into(),
                     data: vcard::write(&p.card).into_bytes(),
+                    ..Default::default()
                 })
             }
             ItemKind::Event => {
@@ -146,7 +147,12 @@ impl Session {
                     })
                     .unwrap_or_default();
                 let data = ical::write(&events, None, self.clock.now).into_bytes();
-                Ok(OutAttachment { name: file(&master.event.summary, "appointment", "ics"), mime: "text/calendar".into(), data })
+                Ok(OutAttachment {
+                    name: file(&master.event.summary, "appointment", "ics"),
+                    mime: "text/calendar".into(),
+                    data,
+                    ..Default::default()
+                })
             }
         }
     }

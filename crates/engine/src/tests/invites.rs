@@ -47,6 +47,7 @@ fn put(
             name: "invite.ics".into(),
             mime: format!("text/calendar; method={method}"),
             data: ics.into_bytes(),
+            ..Default::default()
         }],
         ..Default::default()
     };

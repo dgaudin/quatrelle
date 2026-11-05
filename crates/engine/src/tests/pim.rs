@@ -206,6 +206,7 @@ fn own_events_invite_and_cancel_guests() {
             name: "invite.ics".into(),
             mime: "text/calendar; method=REPLY".into(),
             data: ics.into_bytes(),
+            ..Default::default()
         }],
         ..Default::default()
     };

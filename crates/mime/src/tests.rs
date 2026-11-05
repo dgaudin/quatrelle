@@ -40,6 +40,7 @@ mod build_bytes;
 mod importance;
 pub(crate) mod index_text;
 mod inline_names;
+mod kept_cid;
 mod one_parse;
 mod report;
 mod text_attach;
@@ -311,7 +312,7 @@ fn build_round_trips() {
         body: "Hi Ann,\nhere it is.\n".into(),
         in_reply_to: "m1@studio.example".into(),
         references: vec!["m0@studio.example".into(), "m1@studio.example".into()],
-        attachments: vec![OutAttachment { name: "board.png".into(), mime: String::new(), data: vec![1, 2, 3, 4] }],
+        attachments: vec![OutAttachment { name: "board.png".into(), mime: String::new(), data: vec![1, 2, 3, 4], ..Default::default() }],
         ..Default::default()
     };
     let raw = build(&d, &EmailAddress::new("Zoe Park", "zoe@studio.example"), 1_791_963_000, "x1@studio.example").unwrap();
