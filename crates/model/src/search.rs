@@ -33,7 +33,7 @@ mod parse;
 
 pub use advanced::Advanced;
 pub(crate) use fold::words_and_parts;
-pub use fold::{MAX_TOKEN_CHARS, fold_word, index_tokens, parts, tokens};
+pub use fold::{MAX_TOKEN_CHARS, fold_mapped, fold_word, index_tokens, parts, tokens};
 #[cfg(test)]
 use index::put_varint;
 pub use index::{FolderIndex, Index};
