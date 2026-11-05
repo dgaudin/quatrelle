@@ -157,3 +157,85 @@ fn a_reply_read_from_exchange_is_read_with_care() {
     }
     assert_eq!(marks(&time("2026-10-30T09:12:00Z")), (false, false, 0), "a time without its verb");
 }
+
+/// Replied to or forwarded in Outlook before this version read the verb: the cache has the
+/// message without its arrow, and a sync that asks only what changed never brings it. The first
+/// sync of each folder asks once for its messages replied to or forwarded (one request a folder,
+/// more for more than a page), gives those kept here their arrow, and never asks again; a pass
+/// cut short goes on where it stopped.
+#[test]
+fn replies_made_before_this_version_get_their_arrow_once() {
+    let mut d = Data::default();
+    let inbox = d.folder("Inbox", None, Some("inbox"), "IPF.Note");
+    let projects = d.folder("Projects", None, None, "IPF.Note");
+    let mail = |s: &str| format!("From: a@x.example\r\nSubject: {s}\r\n\r\nx\r\n").into_bytes();
+    let answered = d.deliver(&inbox, &mail("answered"), true, "2024-05-01T09:00:00Z");
+    let voted = d.deliver(&inbox, &mail("voted"), true, "2024-05-02T09:00:00Z");
+    d.deliver(&inbox, &mail("plain"), true, "2024-05-02T10:00:00Z");
+    // Three in a folder (two pages of two, the tests' page): replied, to all, forwarded.
+    let done: Vec<String> =
+        (0..3).map(|n| d.deliver(&projects, &mail(&format!("task {n}")), true, &format!("2024-06-0{}T09:00:00Z", n + 1))).collect();
+    for i in d.items.iter_mut() {
+        if i.id == answered {
+            i.verb = verb("102", "2026-10-30T09:12:00Z");
+        } else if i.id == voted {
+            // A vote is the last thing done: neither arrow, and not asked for.
+            i.verb = verb("261", "2026-10-30T09:12:00Z");
+        } else if let Some(n) = done.iter().position(|d| *d == i.id) {
+            i.verb = verb(["102", "103", "104"][n], "2026-10-31T16:30:00Z");
+        }
+    }
+    let server = fake_ews::serve(d);
+    let store = crate::fake::tests_store("ews-replies-before");
+    let user = format!("{}\\{}", fake_ews::DOMAIN, fake_ews::USER);
+    let c = Client::connect(&server.url, &user, fake_ews::PASSWORD, "riley@contoso.example").unwrap();
+    let mut st = State::default();
+    list_folders(&c, &mut st, "a1").unwrap();
+    let opts = SyncOptions { prefetch: 0, ..Default::default() };
+    let folders = ["INBOX", "Projects"];
+    let asked = || server.data.lock().unwrap().calls.iter().filter(|c| c.as_str() == "FindItem replied").count();
+    let arrows = |folder: &str| {
+        let fs = store.load_folder("a1", folder).unwrap();
+        let n = |f: fn(&quatrelle_model::Flags) -> bool| fs.messages.iter().filter(|m| f(&m.flags) && m.flags.acted > 0).count();
+        (n(|f| f.answered), n(|f| f.forwarded))
+    };
+    for f in folders {
+        sync_folder(&c, &mut st, &store, "a1", f, &opts).unwrap();
+    }
+    assert_eq!(asked(), 0, "nothing kept yet: nothing to read, the folders are listed in full");
+    // As the version before left it: the cache without the arrows, the state without the pass.
+    for f in folders {
+        let mut fs = store.load_folder("a1", f).unwrap();
+        for m in fs.messages.iter_mut() {
+            (m.flags.answered, m.flags.forwarded, m.flags.acted) = (false, false, 0);
+        }
+        store.save_folder("a1", f, &fs).unwrap();
+    }
+    let mut v = serde_json::to_value(&st).unwrap();
+    v.as_object_mut().unwrap().remove("replies");
+    let mut st: State = serde_json::from_value(v).unwrap();
+    assert_eq!((arrows("INBOX"), arrows("Projects")), ((0, 0), (0, 0)));
+
+    // Cut short: the Inbox had it, then the app closed.
+    let r = sync_folder(&c, &mut st, &store, "a1", "INBOX", &opts).unwrap();
+    assert_eq!(arrows("INBOX"), (1, 0), "the first sync gives it its arrow");
+    assert!(r.changed >= 1, "and says the folder changed: {r:?}");
+    assert_eq!(asked(), 1, "one request for the Inbox");
+    let m = store.load_folder("a1", "INBOX").unwrap().messages.into_iter().find(|m| m.subject == "answered").unwrap();
+    assert_eq!(m.flags.acted, jmap::utc_date("2026-10-30T09:12:00Z").unwrap(), "at the time Outlook noted");
+    st.save(&store, "a1").unwrap();
+    let mut st = State::load(&store, "a1");
+
+    // Started again: the Inbox isn't asked again, the other folder is (two pages).
+    for f in folders {
+        sync_folder(&c, &mut st, &store, "a1", f, &opts).unwrap();
+    }
+    assert_eq!((arrows("INBOX"), arrows("Projects")), ((1, 0), (2, 1)));
+    assert_eq!(asked(), 3, "the Inbox once, the other folder's two pages");
+    assert!(st.finish_replies(&folders.map(str::to_string)), "every folder had it: the pass is done");
+    for f in folders {
+        sync_folder(&c, &mut st, &store, "a1", f, &opts).unwrap();
+    }
+    assert_eq!(asked(), 3, "never asked again");
+    let _ = std::fs::remove_dir_all(store.root());
+}

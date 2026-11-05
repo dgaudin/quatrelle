@@ -257,9 +257,19 @@ impl Worker {
         // longer, and shouldn't hold the status bar on the last folder's name.
         // Every folder followed asked once for its follow-ups marked complete in Outlook before
         // they were read here: the pass is done (one cut short goes on at the next sync).
-        if matches!(self.conn, Some(Conn::Ews(_))) && self.jstate.finish_ticks(&followed) {
-            log::info!("{}: completed follow-ups read in all {} folders", self.acc.id, followed.len());
-            self.save_jstate();
+        if matches!(self.conn, Some(Conn::Ews(_))) {
+            let ticks = self.jstate.finish_ticks(&followed);
+            if ticks {
+                log::info!("{}: completed follow-ups read in all {} folders", self.acc.id, followed.len());
+            }
+            // And for the messages replied to or forwarded.
+            let replies = self.jstate.finish_replies(&followed);
+            if replies {
+                log::info!("{}: replies and forwards read in all {} folders", self.acc.id, followed.len());
+            }
+            if ticks || replies {
+                self.save_jstate();
+            }
         }
         if self.conn.is_some() {
             self.report_quota();

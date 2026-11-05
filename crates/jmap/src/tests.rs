@@ -288,4 +288,17 @@ fn the_completed_follow_ups_pass_is_kept_per_account() {
         many.ticks_read(&format!("F{n}"));
     }
     assert!(many.ticks.done && many.ticks.folders.is_empty(), "never grown without end");
+
+    // The pass for replies and forwards is kept alike, on its own: a reader's folders come back,
+    // a damaged one is done again, and the other pass's state stays.
+    let mut main = State::default();
+    main.ticks_read("INBOX");
+    let mut reader = main.reserve(10, &main.numbering());
+    reader.replies_read("Projects");
+    main.absorb(reader);
+    assert!(!main.replies_wanted("Projects") && main.replies_wanted("INBOX") && !main.ticks_wanted("INBOX"));
+    assert!(main.finish_replies(&["Projects".to_string()]) && main.replies.done);
+    assert_eq!(serde_json::to_value(&main).unwrap()["replies"]["done"], true);
+    let damaged: State = serde_json::from_value(json!({ "ticks": { "done": true }, "replies": [1, 2] })).unwrap();
+    assert!(!damaged.ticks_wanted("INBOX") && damaged.replies_wanted("INBOX"));
 }

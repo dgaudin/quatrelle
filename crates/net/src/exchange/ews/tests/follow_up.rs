@@ -197,7 +197,9 @@ fn as_before(store: &Store, st: &State, folders: &[&str]) -> State {
         store.save_folder("a1", f, &fs).unwrap();
     }
     let mut v = serde_json::to_value(st).unwrap();
+    // (Neither pass: the one for replies and forwards came after, R18.)
     v.as_object_mut().unwrap().remove("ticks");
+    v.as_object_mut().unwrap().remove("replies");
     serde_json::from_value::<State>(v).unwrap()
 }
 
@@ -243,5 +245,8 @@ fn shared_and_public_folders_have_their_ticks_read_where_they_live() {
         assert!(fs.messages.iter().all(|m| m.flags.follow_up_complete() && m.flags.completed > 0), "{f}: {:?}", fs.messages);
     }
     assert_eq!(asked(), 2, "once each, where it lives");
+    // The pass for replies and forwards too, there (R18).
+    let replies = server.data.lock().unwrap().calls.iter().filter(|c| c.as_str() == "FindItem replied").count();
+    assert_eq!(replies, 2, "the replies asked for where each lives");
     let _ = std::fs::remove_dir_all(store.root());
 }
