@@ -94,6 +94,15 @@ fn with_raw(a: &mut MailApp, uid: u32, raw: &[u8]) -> MessageKey {
 
 const WINDOW: egui::Vec2 = egui::vec2(1280.0, 800.0);
 
+/// The sample account made a server one, as the owner's (Exchange): a mark as read goes to the
+/// writer (a thread of its own in the app) as a job, where a local account's is written by the
+/// window.
+fn on_a_server(a: &mut MailApp) {
+    for acc in &mut a.session.accounts {
+        acc.config.imap.host = "imap.studio.example".into();
+    }
+}
+
 /// Frames in a window this big until `done` (at most `max`); how many it took, and the most
 /// pictures decoded in one of them.
 fn pump(ctx: &egui::Context, a: &mut MailApp, size: egui::Vec2, max: usize, done: impl Fn(&MailApp) -> bool) -> (usize, usize) {

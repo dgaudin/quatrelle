@@ -132,12 +132,18 @@ impl crate::Services for OneLane {
 #[test]
 #[ignore = "a bench: run it with --release, --ignored and --nocapture"]
 fn slowest_frame_of_a_message_with_many_pictures() {
-    bench(false);
-    bench(true);
+    bench(false, false);
+    bench(true, false);
+    bench(true, true);
 }
 
-fn bench(lane: bool) {
+/// `lane`: with one; `server`: on a server account (a mark as read goes to the writer, where the
+/// sample's local account has the window write it).
+fn bench(lane: bool, server: bool) {
     let (mut a, dir) = app(if lane { "bench-pictures-lane" } else { "bench-pictures" });
+    if server {
+        on_a_server(&mut a);
+    }
     let ctx = egui::Context::default();
     if lane {
         let (tx, rx) = std::sync::mpsc::channel::<crate::Work>();
@@ -152,10 +158,22 @@ fn bench(lane: bool) {
         // The open message read and parsed on the lane too, as in the app.
         a.defer_bodies();
     }
-    eprintln!("{}", if lane { "On a lane:" } else { "In the window:" });
+    eprintln!(
+        "{}",
+        if !lane {
+            "In the window:"
+        } else if server {
+            "On a lane, a server account:"
+        } else {
+            "On a lane:"
+        }
+    );
     frame(&ctx, &mut a, vec![]);
     let (k, size) = big_message(&mut a, 9900);
     let store = a.session.store.clone().unwrap();
+    // The list as it stands drawn first (its first frame isn't the message's).
+    textures_made(&ctx, &mut a, WINDOW);
+    textures_made(&ctx, &mut a, WINDOW);
     let reads = store.reads();
     let t = Instant::now();
     a.run("list.open", json!({"key": k.to_id()}));
