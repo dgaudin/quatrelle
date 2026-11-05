@@ -271,3 +271,20 @@ fn a_calendar_that_cant_be_changed_is_told_nothing() {
     assert!(due(&s, s.clock.now).is_empty(), "answered here all the same");
     done(s);
 }
+
+/// Exchange Online (Graph) is told the same way: the occurrence's answer waits for the sync.
+#[test]
+fn an_answer_on_graph_waits_too() {
+    let (mut s, id) = exchange("rem-tell-graph", Vec::new(), Some("FREQ=WEEKLY"));
+    if let Some(a) = s.accounts.iter_mut().find(|a| a.config.id == id) {
+        a.config.ews = None;
+        a.config.graph = Some("https://graph.microsoft.com/v1.0".into());
+    }
+    s.clock.now = NOW + 3600 - 600;
+    let key = key_for(&s, "m-1");
+    s.run("reminders.snooze", &json!({"key": key, "minutes": 5})).unwrap();
+    let a = &s.pim[&id].reminder_answers;
+    assert_eq!((a.len(), a.first().map(|a| (a.series, a.snooze_until))), (1, Some((true, Some(s.clock.now + 300)))));
+    assert!(s.take_jobs().iter().any(|j| matches!(j, Job::SyncDav { account } if *account == id)));
+    done(s);
+}

@@ -403,6 +403,19 @@ impl Data {
                     _ => not_found(),
                 }
             }
+            // A series' occurrences around a time, and a reminder answered (issue #40).
+            ("GET", ["me", "events", id, "instances"]) if q("startDateTime").is_some() && q("endDateTime").is_some() => {
+                let list = self.instances.iter().find(|(series, _)| series == id).map(|(_, l)| l.clone());
+                list.map_or_else(not_found, |l| ok(json!({ "value": l })))
+            }
+            ("POST", ["me", "events", id, action @ ("dismissReminder" | "snoozeReminder")]) => {
+                let known = self.events.iter().any(|e| e["id"] == *id) || self.instances.iter().flat_map(|(_, l)| l).any(|o| o["id"] == *id);
+                if !known {
+                    return not_found();
+                }
+                self.reminders.push(((*action).to_string(), (*id).to_string(), input.clone()));
+                (202, Vec::new(), "text/plain")
+            }
             // `/me/events` reaches only this mailbox's own events, as Graph's does.
             ("PATCH", ["me", "events", id]) => {
                 match self.events.iter_mut().find(|e| e["id"] == *id && !e["calendar"].as_str().unwrap_or("").starts_with("user:")) {
