@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 Didier Gaudin
-//! Exchange: the one pass that reads the follow-ups marked complete before Quatrelle knew them.
+//! Exchange: the passes, made once, that read marks Outlook set before Quatrelle knew them.
 //!
 //! Until then a message marked complete in Outlook (`PidTagFlagStatus` 1) came in with no mark,
-//! and a sync that asks only what changed never brings it again: each folder is asked once for
-//! its completed messages ([`State::ticks_wanted`]), the folders done kept here, so a pass cut
-//! short (offline, the app closed) goes on at the next sync where it stopped; once every folder
-//! followed has had it, the account's pass is done ([`State::finish_ticks`]).
+//! as did one replied to or forwarded (`PidTagLastVerbExecuted`), and a sync that asks only what
+//! changed never brings them again: each folder is asked once for those messages
+//! ([`State::ticks_wanted`], [`State::replies_wanted`]), the folders done kept here, so a pass
+//! cut short (offline, the app closed) goes on at the next sync where it stopped; once every
+//! folder followed has had it, the account's pass is done ([`State::finish_ticks`],
+//! [`State::finish_replies`]).
 
 use std::collections::BTreeSet;
 
@@ -40,31 +42,70 @@ pub(super) fn lenient<'de, D: serde::Deserializer<'de>>(d: D) -> std::result::Re
 /// made to hold more is taken as the pass done rather than grown without end).
 const TICKS_FOLDERS_MAX: usize = 10_000;
 
+impl Ticks {
+    /// Whether this folder is still to have the pass.
+    pub fn wanted(&self, folder: &str) -> bool {
+        !self.done && !self.folders.contains(folder)
+    }
+
+    /// This folder had the pass (or had nothing to read: nothing kept yet).
+    pub fn read(&mut self, folder: &str) {
+        if self.done {
+            return;
+        }
+        if self.folders.len() >= TICKS_FOLDERS_MAX {
+            *self = Ticks { done: true, folders: BTreeSet::new() };
+            return;
+        }
+        self.folders.insert(folder.to_string());
+    }
+
+    /// Once every folder `followed` had the pass, it's done (and its list of folders let go).
+    /// Whether it was just finished.
+    pub fn finish(&mut self, followed: &[String]) -> bool {
+        if self.done || !followed.iter().all(|f| self.folders.contains(f)) {
+            return false;
+        }
+        *self = Ticks { done: true, folders: BTreeSet::new() };
+        true
+    }
+
+    /// The folders a reader of its own did, taken back.
+    pub(super) fn absorb(&mut self, other: Ticks) {
+        for f in other.folders {
+            self.read(&f);
+        }
+    }
+}
+
 impl State {
     /// Whether this folder is still to be asked for its completed follow-ups.
     pub fn ticks_wanted(&self, folder: &str) -> bool {
-        !self.ticks.done && !self.ticks.folders.contains(folder)
+        self.ticks.wanted(folder)
     }
 
-    /// This folder had the pass (or had nothing to tick: nothing kept yet).
+    /// This folder had the pass for completed follow-ups.
     pub fn ticks_read(&mut self, folder: &str) {
-        if self.ticks.done {
-            return;
-        }
-        if self.ticks.folders.len() >= TICKS_FOLDERS_MAX {
-            self.ticks = Ticks { done: true, folders: BTreeSet::new() };
-            return;
-        }
-        self.ticks.folders.insert(folder.to_string());
+        self.ticks.read(folder);
     }
 
-    /// Once every folder `followed` had the pass, the account's is done (and its list of folders
-    /// let go). Whether it was just finished.
+    /// The pass for completed follow-ups done once every folder `followed` had it.
     pub fn finish_ticks(&mut self, followed: &[String]) -> bool {
-        if self.ticks.done || !followed.iter().all(|f| self.ticks.folders.contains(f)) {
-            return false;
-        }
-        self.ticks = Ticks { done: true, folders: BTreeSet::new() };
-        true
+        self.ticks.finish(followed)
+    }
+
+    /// Whether this folder is still to be asked for its messages replied to or forwarded.
+    pub fn replies_wanted(&self, folder: &str) -> bool {
+        self.replies.wanted(folder)
+    }
+
+    /// This folder had the pass for messages replied to or forwarded.
+    pub fn replies_read(&mut self, folder: &str) {
+        self.replies.read(folder);
+    }
+
+    /// The pass for messages replied to or forwarded done once every folder `followed` had it.
+    pub fn finish_replies(&mut self, followed: &[String]) -> bool {
+        self.replies.finish(followed)
     }
 }

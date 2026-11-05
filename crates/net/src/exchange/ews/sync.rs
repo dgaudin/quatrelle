@@ -6,7 +6,7 @@
 use super::*;
 
 mod catch_up;
-use catch_up::{catch_up_completed, take_found};
+use catch_up::{catch_up_once, take_found};
 
 /// The query in Exchange's own syntax (`QueryString`, its Advanced Query Syntax): the words, and
 /// the fields Quatrelle's queries name that Exchange knows too. A clause it has no word for
@@ -193,15 +193,9 @@ pub fn sync_folder_then(
             && now - m.at < MARK_TRUSTED
     };
     let kept = store.folder_kept(account, folder, VALIDITY);
-    // Follow-ups marked complete in Outlook before they were read here: asked for once per
-    // folder (a folder with nothing kept yet has nothing to tick: it's listed in full).
-    let mut ticked = 0;
-    if !opts.list_only && st.ticks_wanted(folder) {
-        if kept {
-            ticked = catch_up_completed(c, store, st, account, folder, &id, opts.window, opts.since(now))?;
-        }
-        st.ticks_read(folder);
-    }
+    // Follow-ups marked complete, messages replied to or forwarded in Outlook before they were
+    // read here: asked for once per folder.
+    let ticked = if opts.list_only { 0 } else { catch_up_once(c, store, st, account, folder, &id, kept, opts.window, opts.since(now))? };
     if kept && st.marks.get(folder).is_some_and(same) {
         return Ok(SyncReport { total, unread, changed: ticked, ..Default::default() });
     }

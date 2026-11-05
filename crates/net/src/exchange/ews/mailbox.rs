@@ -11,6 +11,7 @@ enum Only {
     All,
     Categorized,
     Completed,
+    Replied,
 }
 
 /// The folders Exchange makes itself at the top of a mailbox, by name: some servers don't mark
@@ -146,6 +147,12 @@ impl Client {
         self.newest_where(folder, limit, since, Only::Completed, page)
     }
 
+    /// [`Client::newest`], those replied to or forwarded only (`PidTagLastVerbExecuted` from 102
+    /// to 104: a reply, to all, a forward), a page of `page` at a time.
+    pub(super) fn replied(&self, folder: &str, limit: usize, since: Option<i64>, page: usize) -> Result<Vec<(String, Flags)>> {
+        self.newest_where(folder, limit, since, Only::Replied, page)
+    }
+
     fn newest_where(&self, folder: &str, limit: usize, since: Option<i64>, only: Only, page_max: usize) -> Result<Vec<(String, Flags)>> {
         let limit = limit.clamp(1, MAX_KEPT);
         let page_max = page_max.clamp(1, 1000);
@@ -157,6 +164,14 @@ impl Client {
                 "<t:IsEqualTo><t:ExtendedFieldURI PropertyTag=\"0x1090\" PropertyType=\"Integer\"/>\
                  <t:FieldURIOrConstant><t:Constant Value=\"1\"/></t:FieldURIOrConstant></t:IsEqualTo>",
             ),
+            Only::Replied => conditions.push_str(&format!(
+                "<t:IsGreaterThanOrEqualTo><t:ExtendedFieldURI PropertyTag=\"0x1081\" PropertyType=\"Integer\"/>\
+                 <t:FieldURIOrConstant><t:Constant Value=\"{}\"/></t:FieldURIOrConstant></t:IsGreaterThanOrEqualTo>\
+                 <t:IsLessThanOrEqualTo><t:ExtendedFieldURI PropertyTag=\"0x1081\" PropertyType=\"Integer\"/>\
+                 <t:FieldURIOrConstant><t:Constant Value=\"{}\"/></t:FieldURIOrConstant></t:IsLessThanOrEqualTo>",
+                super::VERB_REPLY,
+                super::VERB_FORWARD
+            )),
         }
         if let Some(t) = since {
             conditions.push_str(&format!(
@@ -164,10 +179,11 @@ impl Client {
                 crate::ews_pim::utc(t)
             ));
         }
-        let restriction = match (only != Only::All, since.is_some()) {
-            (false, false) => String::new(),
-            (true, true) => format!("<m:Restriction><t:And>{conditions}</t:And></m:Restriction>"),
-            _ => format!("<m:Restriction>{conditions}</m:Restriction>"),
+        // One condition alone, two or more under an `And` (a range is two).
+        let restriction = match (only, since.is_some()) {
+            (Only::All, false) => String::new(),
+            (Only::Categorized | Only::Completed, false) | (Only::All, true) => format!("<m:Restriction>{conditions}</m:Restriction>"),
+            _ => format!("<m:Restriction><t:And>{conditions}</t:And></m:Restriction>"),
         };
         let mut out: Vec<(String, Flags)> = Vec::new();
         while out.len() < limit {

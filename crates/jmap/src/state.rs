@@ -42,6 +42,10 @@ pub struct State {
     /// ([`Ticks`]).
     #[serde(default, skip_serializing_if = "Ticks::is_new", deserialize_with = "ticks::lenient")]
     pub ticks: Ticks,
+    /// Exchange: the one pass reading the messages replied to or forwarded before they were read
+    /// here ([`Ticks`] too).
+    #[serde(default, skip_serializing_if = "Ticks::is_new", deserialize_with = "ticks::lenient")]
+    pub replies: Ticks,
     /// What was last written ([`State::fingerprint`]): the same isn't written again.
     #[serde(skip)]
     saved: std::cell::Cell<u64>,
@@ -123,6 +127,7 @@ impl State {
             (k, &m.stamp, m.total, m.unread, m.window, m.at, m.ahead, &m.sync).hash(&mut h);
         }
         self.ticks.hash(&mut h);
+        self.replies.hash(&mut h);
         h.finish()
     }
 
@@ -206,6 +211,7 @@ impl State {
             found: BTreeMap::new(),
             marks: self.marks.clone(),
             ticks: self.ticks.clone(),
+            replies: self.replies.clone(),
             saved: std::cell::Cell::new(0),
             base: Some(numbering.clone()),
             given: Vec::new(),
@@ -246,12 +252,9 @@ impl State {
                 self.marks.insert(folder, m);
             }
         }
-        // The folders it gave the pass for completed follow-ups.
-        if !self.ticks.done {
-            for f in other.ticks.folders {
-                self.ticks_read(&f);
-            }
-        }
+        // The folders it gave the passes for completed follow-ups, and for replies and forwards.
+        self.ticks.absorb(other.ticks);
+        self.replies.absorb(other.replies);
     }
 
     /// Put the counter back after the numbers kept by [`State::reserve`], so a long run of
