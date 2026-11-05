@@ -2701,6 +2701,94 @@ champs d'`Out` n'étaient plus à répéter dans chaque test.
   - le partage en lecture seule sous Windows (`FILE_SHARE_READ`) n'a été essayé que par son test
     `#[cfg(windows)]`, pas lancé ici.
 
+### État de la récupération : v0.32, vingt-sixième partie : l'import fidèle des fichiers .pst, le calendrier, les contacts et le reste (2026-11-05)
+
+La seconde moitié du lot P2 de `merge-tools/survey-v0.32.md` (P2b, décision n° 7 du propriétaire :
+« en entier »), sur `main`. Le calendrier, les contacts, les tâches et les notes du fork restent
+les siens : l'import y verse ce qu'il lit, dans leurs champs (`show_as`, `private`,
+`private_kind`, `reminder`, `tzid`, `recurrence_id`, `Card::photo`) ou, à défaut, dans leurs
+lignes gardées telles quelles (`extra`). Rien n'est pris de l'import suivi de l'origine (lanes,
+plan, reprise, `SkipReason`) : ses tris vont dans `Out::add_message` et dans le parcours des
+dossiers (`visit`). Même méthode qu'en P2a : chaque sonde lancée d'abord contre le code d'alors,
+sur des fichiers fabriqués par l'écrivain du crate (`outlook-pst-rw` : dossiers typés, propriétés
+nommées, drapeaux et réponses des destinataires, messages joints cachés), aucune donnée du
+propriétaire.
+
+**L'ordre** : celui de l'histoire de l'origine, non celui du relevé. `5d9fbbf3` est le plus
+ancien (1er novembre) et le socle des autres (catégories, version, demandes de réunion) ; puis
+`861800cd`, `9e68749d`, `bbc8f852`, `ee487400`, `1b81e6c3`, `db810e4a`, `ba8627f4`, `0813aab7`
+(3 novembre), dont chaque diff suppose les précédents. **D'abord la découpe** (`6f3dea01`, propre
+au fork) : `pst_pim.rs` (500 lignes) donne sa périodicité à `pst_pim/recur.rs` et ses tests à
+`pst_pim/tests.rs`, pur déplacement.
+
+| Commit de l'origine | Sonde | avant | après |
+|---|---|---|---|
+| `5d9fbbf3` (`7057599c`, adapté) | ses tests, sur fichiers fabriqués (`tests/pim/kinds.rs`) | demande de réunion **sans invitation** ; groupe de contacts et entrée du journal **absents** ; rendez-vous sans catégories, Afficher comme, privé, rappel ni version ; post et document **perdus sans un mot** | `text/calendar` (REQUEST, CANCEL, REPLY) ; carte `KIND:group` ; note datée ; champs du fork ; courrier, le reste compté |
+| `861800cd` (`28abfb7e`, adapté) | sonde : série hebdomadaire, une occurrence supprimée, une déplacée, une modifiée avec son élément joint | **un seul événement** : le 12 disparu, le 19 à l'heure et au texte de la série | trois événements, `RECURRENCE-ID` ; calendrier : 5, 13 (déplacée), 14, 19 (une heure plus tard, son texte), 21, de même relu d'un `.ics` ; cible de fuzz `pst_recurrence` |
+| `9e68749d` (`ed7c087b`, adapté) | sonde | photo marquée `PidTagAttachmentContactPhoto` mais non cachée **perdue** ; fichiers d'un contact et d'un rendez-vous **jetés** | photo dans `Card::photo` ; `ATTACH` sur l'événement, `X-QUATRELLE-ATTACH` sur la carte ; fichier d'une tâche compté (`FileLeftOut::NoPlace`) |
+| `bbc8f852` (`5dc5986d`, adapté) | trois sondes | rendez-vous joint à un courrier : **son occurrence modifiée en `Review.eml`** ; 6 cartes et 6 événements à 0,93 Mo : relus **1 carte, 4 événements** ; occurrence sans `ExceptionInfo` **perdue** | cachée (`top`) ; 8 fichiers gardés, 4 comptés, tout relu ; reprise ou comptée ; lecteurs `.ics` et `.vcf` à 16 Mio ; `occurrences` sur des événements empruntés |
+| `ee487400` (`4686c0f0`, repris) | son test | occurrence restante à **08:00Z** pour une série à 07:00Z : les deux montrées | remplace l'occurrence de la série la plus proche (2 h) |
+| `1b81e6c3` (`ff18ed31`, adapté) | sonde : photo d'un octet au-delà du plafond | contact **sans photo et rien de compté** | comptée trop grosse (plafond du fork, `MAX_PHOTO`, 512 Kio) |
+| `db810e4a` (`52d4096b`, adapté) | ses tests, sur fichiers fabriqués | sur huit genres de courrier, **quatre** entrés ; contact de la Boîte de réception **perdu** ; invitation de partage **écartée** | huit courriers ; contact au carnet ; « Shared calendar: … » en tête du texte |
+| `ba8627f4` (`9099e115`, adapté) | son test, sur fichier fabriqué | contact, rendez-vous, tâche, note **revenus vivants** d'Éléments supprimés (depuis le commit précédent) | laissés et comptés ; le courrier entre |
+| `0813aab7` (`17e4d474`, adapté) | sonde : réunion hebdomadaire à 9 h à Paris qui traverse l'heure d'hiver | **07:00Z** après le 25 octobre (8 h à Paris) ; organisateur **parmi les invités** ; aucune réponse ; UID en hexadécimal | `tzid` « W. Europe Standard Time » : 07:00Z puis 08:00Z, relu d'un `.ics` aussi ; organisateur, `PARTSTAT`, `RSVP` ; UID `vCal-Uid` |
+
+- **Repris tel quel** (au nom de son auteur) : `ee487400`.
+- **Adaptés** (au nom du propriétaire), pour les raisons de P2a (pas de `SkipReason` : les
+  éléments inutilisables vont dans `skipped`, les fichiers dans `files_left_out`), et parce que
+  le modèle du fork a ses propres champs : Afficher comme, privé et rappel vont dans `show_as`,
+  `private`, `private_kind` (lu comme `Sensitivity` d'Exchange : 1 Personnel, 2 Privé, 3
+  Confidentiel) et `reminder` (plafonné à `REMINDER_MAX_MINUTES`), non dans des lignes ; la photo
+  d'un contact dans `Card::photo` (pas de ligne `PHOTO`), plafonnée à `MAX_PHOTO` ; les fichiers
+  d'une carte en `X-QUATRELLE-ATTACH`. Les tâches du fork sont une liste à elles (pas des
+  événements comme chez l'origine d'alors) : leurs fichiers, comme ceux des notes, n'ont pas de
+  place et sont comptés sous une nouvelle raison, `FileLeftOut::NoPlace`. `sharing.rs` est celui
+  de l'origine.
+- **Le journal** : le fork n'en a pas. Un dossier `IPF.Journal` est lu, et chaque entrée
+  (`IPM.Activity`) devient une **note** : son sujet, quand elle a eu lieu (en UTC), son texte ;
+  une entrée vide est comptée (`skipped`) ; ses fichiers sont comptés (`NoPlace`). Aucun module
+  nouveau.
+- **Modèle et moteur** : `ical::occurrences` prend des événements empruntés
+  (`Borrow<CalEvent>`), et l'agenda et les rappels du moteur ne copient plus chaque événement à
+  chaque image (un événement importé peut porter 1 Mo de fichiers) ; `.ics` et `.vcf` lus
+  jusqu'à 16 Mio (coupés à un début de caractère, comme avant) ; le test de vitesse du
+  quoted-printable de vCard passe à 16 s pour 16 Mio.
+- **Vérifié** : chaque sonde avant (échec) et après ; une série répétée avec ses exceptions
+  s'affiche juste dans le calendrier du fork (`ical::occurrences`, la périodicité de R7 dans le
+  fuseau de l'événement), et de même écrite en `.ics` puis relue (lignes refaites par
+  `whole()`, fichiers compris) ; la graine de `pst_recurrence` et celles de `pst_item`
+  (rappel, partage) relues par `tests/seeds.rs` ; les cibles de fuzz par `cargo check --bins`
+  dans `fuzz/` ; `cargo xtask ci` (wasm compris).
+- **Ce que verra le propriétaire** en important un `.pst` : un calendrier fidèle : les séries à
+  la bonne heure toute l'année (fuseau), les occurrences déplacées ou modifiées à leur place avec
+  leur texte, les supprimées absentes, l'organisateur et les réponses de chacun, Afficher comme,
+  privé, rappel, catégories, et les fichiers joints aux rendez-vous gardés avec eux (pas encore
+  montrés : voir plus bas) ; des contacts avec leur photo et leurs fichiers ; des groupes de
+  contacts comme cartes (nom du groupe, membres en note et en `MEMBER`) ; les demandes de
+  réunion, annulations et réponses avec leur invitation (`text/calendar`), que le volet de
+  lecture montre comme toute invitation reçue (le compte d'un `.pst` n'a pas de serveur pour
+  envoyer une réponse) ; les entrées du journal en notes ; les rappels de message, invitations
+  de partage (disant ce qu'elles partagent), posts, documents et demandes de tâche comme
+  courrier ; les contacts ou rendez-vous rangés dans un dossier de courrier à leur place, sauf
+  ceux d'Éléments supprimés. Il faut réimporter un fichier déjà importé.
+- **Reste, remarqué** :
+  - les fichiers gardés sur les événements et les cartes ne se voient pas encore : le calendrier
+    et les contacts du fork n'ont pas d'affichage pour `ATTACH` ni `X-QUATRELLE-ATTACH` ; ils sont
+    gardés et réécrits dans un `.ics` ou `.vcf` ;
+  - les photos ne comptent pas dans le plafond des 8 Mo de fichiers (512 Kio chacune, comme
+    avant P2b) : un carnet de beaucoup de photos peut dépasser les 16 Mio qu'un `.vcf` relit ;
+  - un groupe de plus de 198 membres écrit en `.vcf` ne relit que 200 lignes en plus (le
+    lecteur les plafonne) ; sa note les garde tous ;
+  - les tâches importées ne reprennent toujours ni catégories, ni rappel, ni importance, ni
+    privé, que la tâche du fork sait tenir (hors lot : `712d7336` chez l'origine) ;
+  - comme chez l'origine, un dossier de contacts ou de calendrier déplacé sous Éléments
+    supprimés est encore lu ;
+  - les lignes ajoutées en tête d'une invitation de partage (« Shared calendar: … ») et l'heure
+    d'une entrée du journal (« … UTC ») sont en anglais, comme chez l'origine : ce sont des
+    données du message, hors des catalogues de traduction ;
+  - la réponse d'un invité ne vient que de `PidTagRecipientTrackStatus` ; une réponse reçue
+    par courrier et non reportée sur le rendez-vous n'y est pas.
+
 ## 7. La rédaction des messages, rapprochée d'Outlook (2026-10-22)
 
 Quatre chantiers, chacun dans son commit, à la suite d'un audit de l'éditeur HTML.
