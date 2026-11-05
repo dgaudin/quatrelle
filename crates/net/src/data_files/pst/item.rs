@@ -315,7 +315,18 @@ pub(super) fn attachment(a: &dyn Attachment, code_page: u32, class: &str, top: b
     let props = a.properties();
     let p = |id: u16| props.get(id).map(|v| val(v, code_page));
     let s = |id: u16| p(id).and_then(Val::into_text).unwrap_or_default();
-    if hidden(&p, class, top) || (is_picture(&p) && is(class, "ipm.contact")) {
+    // A contact's picture goes on its card (`picture_of`), not among its files; one past what a
+    // card keeps is counted (it is hidden, so it would otherwise go unsaid).
+    if is_picture(&p) && is(class, "ipm.contact") {
+        return Some(match a.data() {
+            Some(AttachmentData::Binary(b)) if b.buffer().len() > quatrelle_model::vcard::MAX_PHOTO => {
+                log::info!("a contact's picture of {} bytes was left out", b.buffer().len());
+                Got::Left(FileLeftOut::TooBig)
+            }
+            _ => Got::Nothing,
+        });
+    }
+    if hidden(&p, class, top) {
         return Some(Got::Nothing);
     }
     Some(match a.data() {
