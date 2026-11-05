@@ -124,8 +124,8 @@ impl Session {
         }
         // The one kept under the filter while it was read goes, now that another is: marked read
         // as it was left, it stayed under Unread (from upstream aaed8d6).
-        if kept_before.as_ref().and_then(|k| self.summary(k)).is_some_and(|m| !self.filter_keeps(self.filter, m)) {
-            self.refresh_list();
+        if let Some(prev) = kept_before.filter(|k| self.summary(k).is_some_and(|m| !self.filter_keeps(self.filter, m))) {
+            self.drop_from_list(&prev);
         }
     }
 

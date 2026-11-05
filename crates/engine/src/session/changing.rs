@@ -46,12 +46,11 @@ impl Session {
         touched.dedup();
         let keys: Vec<MessageKey> = op.keys().to_vec();
         self.apply_op_memory(account, &op);
-        let done = if local {
-            self.apply_op_local(account, &op)
-        } else {
+        let done = if local { self.apply_op_local(account, &op) } else { Ok(()) };
+        let patched = !folder_op && self.patch_list(&op);
+        if !local {
             self.jobs.push(Job::Apply { account: account.to_string(), op });
-            Ok(())
-        };
+        }
         if folder_op {
             self.rescope_index();
         } else {
@@ -61,7 +60,10 @@ impl Session {
                 }
             }
         }
-        self.refresh_list();
+        // A flag or category is changed in the list as it stands, where that gives the same list.
+        if !patched {
+            self.refresh_list();
+        }
         done
     }
 
