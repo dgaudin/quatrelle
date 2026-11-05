@@ -42,10 +42,13 @@ mod reply;
 pub mod smime;
 mod trackers;
 pub use attachments::{
-    AttachmentInfo, AttachmentKind, MAX_WANTED, MOST_PENDING_FILES, PendingFile, Tnef, TnefBody, TnefFile, attachment_data, attachment_out,
-    attachment_text, attachments_data, byte_code_page, craft_app_for, decode_code_page, decompress_rtf, is_protected_file, kind_of, known_code_page,
-    parse_text_first, quoted_pictures, read_tnef, rtf_body, text_first, text_preview_kind, unsupported_code_page, utf16_code_page,
+    AttachmentInfo, AttachmentKind, IndexDoc, MAX_INDEX_CHARS, MAX_WANTED, MOST_PENDING_FILES, PendingFile, Tnef, TnefBody, TnefFile,
+    attachment_data, attachment_out, attachment_text, attachments_data, byte_code_page, craft_app_for, decode_code_page, decompress_rtf, index_doc,
+    is_protected_file, kind_of, known_code_page, parse_text_first, quoted_pictures, read_tnef, rtf_body, text_first, text_preview_kind,
+    unsupported_code_page, utf16_code_page,
 };
+#[doc(hidden)]
+pub use attachments::{IndexStats, index_doc_stats};
 use attachments::{attached, has_real_attachments};
 use files::attachment_name;
 pub use files::{alt_code_char, alt_code_pages, alt_code_system_pages, mime_from_name, runs_code, sanitize_filename};
@@ -391,25 +394,10 @@ fn parse_as(raw: &[u8], read: fn(Option<&Address<'_>>) -> Vec<EmailAddress>) -> 
     })
 }
 
-/// A message's words for search: its text (HTML as text) and its attachments' names. Lighter
-/// than [`parse`] (no formatting, no layout), for indexing every downloaded message.
+/// A message's words for search: its text (HTML as text) and its files' names, as one text
+/// ([`index_doc`], which never decodes the files themselves).
 pub fn search_text(raw: &[u8]) -> String {
-    let Some(m) = MessageParser::default().parse(raw) else { return String::new() };
-    let mut out: String = m.body_text(0).map(|t| t.chars().take(50_000).collect()).unwrap_or_default();
-    let (attached, tnef_body) = attached(&m);
-    // What Outlook wrapped in a `winmail.dat`, when the message has no text of its own.
-    if out.trim().is_empty() {
-        match tnef_body {
-            TnefBody::Html(h) => out = html_to_text(&h).chars().take(50_000).collect(),
-            TnefBody::Text(t) => out = t.chars().take(50_000).collect(),
-            TnefBody::None => {}
-        }
-    }
-    for a in attached {
-        out.push('\n');
-        out.push_str(&a.info.name);
-    }
-    out
+    index_doc(raw).joined()
 }
 
 /// The summary for a fully downloaded message (preview from the real body, HTML included).
