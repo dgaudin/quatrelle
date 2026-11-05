@@ -106,6 +106,12 @@ pub struct Data {
     pub page_messages: Option<usize>,
     /// Teams (chats, their messages, shared files); `None`: the fake answers no Teams route.
     pub(crate) teams: Option<FakeTeams>,
+    /// A series' occurrences, as `/me/events/{id}/instances` lists them: (series id, its
+    /// occurrences' `{id, start}`).
+    pub instances: Vec<(String, Vec<Value>)>,
+    /// Reminders answered (issue #40): (`dismissReminder` or `snoozeReminder`, the event's or
+    /// occurrence's id, the request's body).
+    pub reminders: Vec<(String, String, Value)>,
     late: Vec<(std::time::Instant, Vec<u8>)>,
     next: u32,
 }
