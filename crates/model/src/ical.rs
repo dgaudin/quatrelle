@@ -255,7 +255,12 @@ impl Line {
 
 /// Unfold (RFC 5545 §3.1) and split into content lines.
 fn lines(text: &str) -> Vec<Line> {
-    let text = text.get(..MAX_INPUT).unwrap_or(text);
+    // Cut at a character's start: a cap falling inside one would otherwise read the whole text.
+    let mut end = MAX_INPUT.min(text.len());
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    let text = text.get(..end).unwrap_or(text);
     let mut unfolded: Vec<String> = Vec::new();
     for l in text.split('\n') {
         // A CR inside a line is taken out, as writing takes it out: what's read is what's written.

@@ -349,6 +349,15 @@ fn all_day_durations_and_junk() {
     }
 }
 
+/// A text cut by the size cap inside a character is still cut (it was read whole).
+#[test]
+fn the_size_cap_holds_inside_a_character() {
+    let mut text = "x".repeat(MAX_INPUT - 1);
+    text.push('é');
+    text.push_str("\nBEGIN:VEVENT\nUID:late\nDTSTART:20261015T090000Z\nEND:VEVENT\n");
+    assert!(parse(&text, 0).events.is_empty());
+}
+
 #[test]
 fn recurrences() {
     let mk = |rrule: &str, start: i64| CalEvent { uid: "r".into(), start, end: start + 3600, rrule: Some(rrule.into()), ..Default::default() };
