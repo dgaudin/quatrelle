@@ -128,7 +128,9 @@ fn the_source_from_more_actions_view_in_the_forks_window() {
     }
     let more = at(&ctx, &mut a, "More actions");
     press(&ctx, &mut a, more);
-    let view = at(&ctx, &mut a, "View");
+    // The menu's View, not the ribbon's tab (the one further right).
+    let views: Vec<egui::Pos2> = nodes(&ctx, &mut a).into_iter().filter(|(l, _)| l == "View").map(|(_, r)| r.center()).collect();
+    let view = views.into_iter().max_by(|a, b| a.x.total_cmp(&b.x)).expect("the menu's View");
     press(&ctx, &mut a, view);
     let item = at(&ctx, &mut a, "View message source");
     press(&ctx, &mut a, item);

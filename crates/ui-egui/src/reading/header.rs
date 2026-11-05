@@ -265,6 +265,10 @@ fn action_row(s: &Session, t: &Tokens, ui: &mut Ui, r: &quatrelle_engine::Readin
             acts.push(Action::Run("mail.forwardAsAttachment", json!({})));
             ui.close();
         }
+        if item(ui, Icon::Search, "Find in message") {
+            acts.push(Action::FindInMessage);
+            ui.close();
+        }
         if item(ui, Icon::Info, "Message headers") {
             acts.push(Action::Run("message.headers", json!({})));
             ui.close();

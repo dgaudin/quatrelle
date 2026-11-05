@@ -8,6 +8,7 @@ use super::*;
 mod attachment_text;
 mod attachments;
 mod bars;
+mod find;
 mod header_actions;
 mod linked_pictures;
 mod long_text;

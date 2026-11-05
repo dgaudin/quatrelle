@@ -1931,3 +1931,9 @@ folder	Conflicts	競合
 	Copy all	すべてコピー
 	Only the first {shown} of {size} are shown. Save as email (.eml) keeps all of it.	{size} のうち最初の {shown} だけを表示しています。メール (.eml) として保存すると全体が残ります。
 	The source couldn't be downloaded: {error}	ソースをダウンロードできませんでした: {error}
+	Find in message	メッセージ内を検索
+	{i} of {n}	{i} / {n}
+	{i} of {n} or more	{i} / {n} 件以上
+	No match	見つかりません
+	Previous result	前の結果
+	Next result	次の結果

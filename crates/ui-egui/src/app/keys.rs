@@ -104,6 +104,11 @@ impl MailApp {
                 continue;
             }
             if combo == "Escape" {
+                // The find bar shown under the message closes first (not from the search box).
+                if self.ui.find.pane.shown(ctx) && !self.ui.search_focused {
+                    self.ui.find.pane.close();
+                    continue;
+                }
                 // Escape lets go of selected attachments first.
                 if self.ui.attachment_selected.as_ref().is_some_and(|(_, v)| !v.is_empty()) {
                     self.ui.attachment_selected = None;

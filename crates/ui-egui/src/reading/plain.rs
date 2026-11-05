@@ -6,8 +6,9 @@
 
 use super::*;
 
-/// A plain-text body, in the reader's font, its addresses as links.
-pub(super) fn plain_body(t: &Tokens, ui: &mut Ui, text: &str, acts: &mut Vec<Action>) {
+/// A plain-text body, in the reader's font, its addresses as links, the find bar's finds (`lit`)
+/// lit; where the current one was drawn.
+pub(super) fn plain_body(t: &Tokens, ui: &mut Ui, text: &str, lit: Option<&find::Lit>, acts: &mut Vec<Action>) -> Option<Rect> {
     let links = mime::find_links(text);
     // The editor counts characters, the text's ranges bytes: each address in characters too.
     let mut chars: Vec<std::ops::Range<usize>> = Vec::with_capacity(links.len());
@@ -22,6 +23,7 @@ pub(super) fn plain_body(t: &Tokens, ui: &mut Ui, text: &str, acts: &mut Vec<Act
     let font = theme::regular(14.5);
     let (fg, accent) = (t.text, t.accent);
     let ranges: Vec<std::ops::Range<usize>> = links.iter().map(|(r, _)| r.clone()).collect();
+    let marks = lit.map(|l| l.marks_in(0..text.len())).unwrap_or_default();
     let mut layouter = |ui: &egui::Ui, buf: &dyn egui::TextBuffer, wrap: f32| {
         let s = buf.as_str();
         let plain = egui::TextFormat { font_id: font.clone(), color: fg, ..Default::default() };
@@ -36,13 +38,22 @@ pub(super) fn plain_body(t: &Tokens, ui: &mut Ui, text: &str, acts: &mut Vec<Act
             }
         }
         job.append(s.get(at..).unwrap_or(""), 0.0, plain);
+        if let Some(l) = lit {
+            l.light(&mut job, &marks);
+        }
         job.wrap.max_width = wrap;
         ui.fonts_mut(|f| f.layout_job(job))
     };
     let mut shown = text;
     let out = egui::TextEdit::multiline(&mut shown).frame(egui::Frame::NONE).desired_width(f32::INFINITY).layouter(&mut layouter).show(ui);
+    // Selected as a box is, but never typed in: `/` there opens the find bar.
+    find::read_only(ui.ctx(), out.response.id);
+    let hit = marks.iter().find(|m| m.current).and_then(|m| {
+        let at = text.get(..m.range.start)?.chars().count();
+        Some(out.galley.pos_from_cursor(egui::text::CCursor::new(at)).translate(out.galley_pos.to_vec2()))
+    });
     if links.is_empty() {
-        return;
+        return hit;
     }
     // Where each address starts, for the tests to point at.
     #[cfg(test)]
@@ -67,4 +78,5 @@ pub(super) fn plain_body(t: &Tokens, ui: &mut Ui, text: &str, acts: &mut Vec<Act
     {
         acts.push(Action::OpenUrl(url));
     }
+    hit
 }

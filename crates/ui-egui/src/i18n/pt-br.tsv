@@ -1934,3 +1934,9 @@ folder	Conflicts	Conflitos
 	Copy all	Copiar tudo
 	Only the first {shown} of {size} are shown. Save as email (.eml) keeps all of it.	Só os primeiros {shown} de {size} são mostrados. Salvar como e-mail (.eml) guarda tudo.
 	The source couldn't be downloaded: {error}	Não foi possível baixar o código-fonte: {error}
+	Find in message	Pesquisar na mensagem
+	{i} of {n}	{i} de {n}
+	{i} of {n} or more	{i} de {n} ou mais
+	No match	Nenhum resultado
+	Previous result	Resultado anterior
+	Next result	Próximo resultado

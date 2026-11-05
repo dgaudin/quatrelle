@@ -1935,3 +1935,9 @@ folder	Conflicts	衝突
 	Copy all	全部複製
 	Only the first {shown} of {size} are shown. Save as email (.eml) keeps all of it.	只顯示了 {size} 中的前 {shown}。另存為電子郵件 (.eml) 可保留全部內容。
 	The source couldn't be downloaded: {error}	無法下載原始檔：{error}
+	Find in message	在郵件中尋找
+	{i} of {n}	第 {i} 個（共 {n} 個）
+	{i} of {n} or more	第 {i} 個（共 {n} 個以上）
+	No match	無相符項目
+	Previous result	上一個結果
+	Next result	下一個結果

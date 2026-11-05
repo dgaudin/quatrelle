@@ -1935,3 +1935,9 @@ menu	View	Anzeigen
 	Copy all	Alles kopieren
 	Only the first {shown} of {size} are shown. Save as email (.eml) keeps all of it.	Nur die ersten {shown} von {size} werden gezeigt. Speichern als E-Mail (.eml) behält alles.
 	The source couldn't be downloaded: {error}	Die Quelle konnte nicht heruntergeladen werden: {error}
+	Find in message	In der Nachricht suchen
+	{i} of {n}	{i} von {n}
+	{i} of {n} or more	{i} von {n} oder mehr
+	No match	Keine Treffer
+	Previous result	Vorheriger Treffer
+	Next result	Nächster Treffer
