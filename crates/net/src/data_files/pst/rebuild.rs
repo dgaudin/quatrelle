@@ -62,6 +62,7 @@ fn build(mut it: Item, text: String, fallback_id: &str) -> Result<(Vec<u8>, bool
     // reading pane matches a picture; a link whose file name is its Content-ID doesn't show it,
     // and it stays a named file.
     let refs = mime::HtmlRefs::new(|| html.clone().unwrap_or_default());
+    let report = super::report::report_type(&it.headers, &mut it.files);
     for f in std::mem::take(&mut it.files) {
         match f {
             File::Data { name, mime, cid, data } => {
@@ -84,7 +85,10 @@ fn build(mut it: Item, text: String, fallback_id: &str) -> Result<(Vec<u8>, bool
     // An id from the file goes into a header line: no spaces or line breaks.
     let id = quatrelle_model::thread::norm_id(&it.message_id);
     let id = if id.is_empty() { fallback_id } else { &id };
-    let built = mime::build(&d, &it.from, it.date, id)?;
+    let mut built = mime::build(&d, &it.from, it.date, id)?;
+    if let Some(kind) = report {
+        built = super::report::as_report(built, &kind);
+    }
     let files = mime::draft_carries_files(&d);
     drop(d);
     Ok((with_headers(built, &it.headers, &it.bcc, &extra_headers(&it)), files))
@@ -146,6 +150,12 @@ fn has_header(head: &str, name: &str) -> bool {
     head.lines().filter(|l| !l.starts_with([' ', '\t'])).any(|l| l.split_once(':').is_some_and(|(n, _)| n.trim_end().eq_ignore_ascii_case(name)))
 }
 
+/// Whether an item's own header (`0x007D`) is one the rebuilt message keeps.
+pub(super) fn usable_headers(original: &str) -> bool {
+    let original = original.trim();
+    !original.is_empty() && original.len() <= MAX_HEADERS && original.contains(':')
+}
+
 /// Keep the item's original headers (when it came in by mail) above the rebuilt body; a sent
 /// item's Bcc goes back in, and the `extra` lines the header lacks are added. The new header
 /// takes the built one's place in `built` itself: the body (attachments and all) is moved along
@@ -159,7 +169,7 @@ fn with_headers(mut built: Vec<u8>, original: &str, bcc: &[EmailAddress], extra:
     };
     let mut out = String::new();
     let original = original.trim();
-    if !original.is_empty() && original.len() <= MAX_HEADERS && original.contains(':') {
+    if usable_headers(original) {
         // The original's own headers except its body's description, then the rebuilt body's.
         let mut keep = false;
         // A blank line would end the header there.
