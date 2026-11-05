@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright (c) 2026 the ArtCraft Team and the MailCraft contributors
 //! A message source as it comes from a server or a file: parsed for reading, for the message
-//! list and for search, and its attachments taken out.
+//! list and for search, and its attachments taken out; told signed or encrypted from its header
+//! alone, never wrongly told it isn't.
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
@@ -15,6 +16,10 @@ fuzz_target!(|raw: &[u8]| {
     let _ = mime::summary_from_full(raw, key, Flags::default(), size, 0);
     let _ = mime::search_text(raw);
     let _ = mime::html_body(raw);
+    // One its header says isn't protected is not, whatever its body.
+    if !mime::smime::is_protected(raw) {
+        assert_eq!(mime::smime::protection(raw), mime::smime::Protection::None);
+    }
     if let Some(p) = mime::parse(raw) {
         for i in 0..p.attachments.len().min(8) {
             let _ = mime::attachment_data(raw, i);
