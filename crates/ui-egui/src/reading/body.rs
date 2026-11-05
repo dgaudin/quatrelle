@@ -182,7 +182,10 @@ pub(super) fn rich_body(s: &Session, st: &mut UiState, ui: &mut Ui, key: &Messag
     let faces = crate::look::typefaces::loaded(ui.ctx());
     let zoom = s.prefs.reading_scale();
     let mut body = Body { s, key, p, allowed, shown: &mut shown, acts: &mut *acts, faces, zoom, inline: &[], cells: 0 };
-    if p.layout.is_empty() {
+    if long_text::many_lines(p) {
+        // Thousands of lines: laid out by what's in view.
+        long_text::rich(&mut body, st, ui, width, theme::surface_rgb(&t));
+    } else if p.layout.is_empty() {
         body.lines(st, ui, &p.rich, width, theme::surface_rgb(&t), Align::Min);
     } else {
         body.blocks(st, ui, &p.layout, width, theme::surface_rgb(&t), mime::layout::Align::Left, 0);
@@ -335,7 +338,7 @@ fn span_font_written(sp: &mime::Span, faces: &std::collections::BTreeSet<String>
 
 impl Body<'_> {
     /// Formatted lines `width` wide, on a background of `page` (for the text's contrast).
-    pub(super) fn lines(&mut self, st: &mut UiState, ui: &mut Ui, lines: &mime::RichText, width: f32, page: [u8; 3], align: Align) {
+    pub(super) fn lines(&mut self, st: &mut UiState, ui: &mut Ui, lines: &[Vec<mime::Span>], width: f32, page: [u8; 3], align: Align) {
         let t = st.tokens;
         for line in lines {
             if line.is_empty() {
