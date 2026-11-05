@@ -4,7 +4,9 @@
 //! The search model's tests: queries, the index, and what's kept of it.
 
 use super::*;
-use crate::{EmailAddress, Flags};
+use std::collections::BTreeSet;
+
+use crate::{EmailAddress, Flags, MessageKey};
 
 fn sample() -> Summary {
     Summary {
