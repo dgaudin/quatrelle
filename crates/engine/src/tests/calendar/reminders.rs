@@ -5,7 +5,7 @@
 //! does (Exchange's `ReminderIsSet`), so moving it doesn't bring it back; a series keeps its
 //! reminder and is answered per occurrence; a reminder is personal, so no guest is told (03/11).
 
-use quatrelle_model::ical::{Attendee, CalEvent};
+use quatrelle_model::ical::{self, Attendee, CalEvent};
 use quatrelle_model::pim::{CalendarInfo, DavSync, ReminderAnswer, StoredEvent};
 
 use super::*;
@@ -286,5 +286,102 @@ fn an_answer_on_graph_waits_too() {
     let a = &s.pim[&id].reminder_answers;
     assert_eq!((a.len(), a.first().map(|a| (a.series, a.snooze_until))), (1, Some((true, Some(s.clock.now + 300)))));
     assert!(s.take_jobs().iter().any(|j| matches!(j, Job::SyncDav { account } if *account == id)));
+    done(s);
+}
+
+const DAV: &str = "https://dav.example.org/cal/work/";
+
+/// An event with a 15-minute reminder an hour after `NOW`, as a CalDAV server gave it; `daily`
+/// makes it a series.
+fn on_caldav(uid: &str, daily: bool) -> StoredEvent {
+    StoredEvent {
+        calendar: DAV.into(),
+        href: format!("{DAV}{uid}.ics"),
+        etag: "\"1\"".into(),
+        event: CalEvent {
+            uid: uid.into(),
+            summary: format!("Event {uid}"),
+            start: NOW + 3600,
+            end: NOW + 7200,
+            rrule: daily.then(|| "FREQ=DAILY;COUNT=5".to_string()),
+            reminder: Some(15),
+            sequence: 2,
+            dtstamp: NOW,
+            ..Default::default()
+        },
+        ..Default::default()
+    }
+}
+
+/// A CalDAV account whose calendar holds `events`, as its server's sync gave them.
+fn caldav(name: &str, events: Vec<StoredEvent>) -> (Session, String) {
+    let mut s = Session::open(Some(temp(name)), quatrelle_model::dates::Clock::new(NOW, 0));
+    let id = s.run("account.add", &json!({"email": "zoe@example.org", "password": "pw"})).unwrap()["account"].as_str().unwrap().to_string();
+    let sync = DavSync {
+        caldav_home: Some("https://dav.example.org/cal/".into()),
+        calendars: Some(vec![CalendarInfo { id: DAV.into(), name: "Work".into(), ctag: "a".into(), ..Default::default() }]),
+        events,
+        synced_calendars: vec![DAV.into()],
+        checked: NOW,
+        ..Default::default()
+    };
+    s.apply(Event::DavSynced { account: id.clone(), sync: Box::new(sync) });
+    s.take_jobs();
+    (s, id)
+}
+
+/// CalDAV (issue #40): an occurrence of a series dismissed here is written into the event as
+/// RFC 9074 says, its alarm `ACKNOWLEDGED`, and the event goes to the server, its `SEQUENCE` as
+/// it was (nothing for a guest to learn); the next occurrence still rings. A snooze stays here.
+#[test]
+fn a_dismissal_on_caldav_acknowledges_the_alarm() {
+    let (mut s, id) = caldav("rem-caldav", vec![on_caldav("daily", true), on_caldav("two", true)]);
+    s.clock.now = NOW + 3600 - 600;
+    let (daily, two) = (key_for(&s, "daily"), key_for(&s, "two"));
+    s.run("reminders.snooze", &json!({"key": two, "minutes": 5})).unwrap();
+    assert!(!s.find_event("two").unwrap().1.dirty, "a snooze isn't the server's");
+    s.run("reminders.dismiss", &json!({"key": daily})).unwrap();
+    let e = s.find_event("daily").unwrap().1.clone();
+    assert!(e.dirty, "the server learns it");
+    assert_eq!(ical::acknowledged(&e.event), Some(s.clock.now));
+    assert_eq!((e.event.sequence, e.event.reminder), (2, Some(15)), "not a change to the meeting");
+    let written = ical::write(std::slice::from_ref(&e.event), None, NOW);
+    let alarm = written.split("BEGIN:VALARM").nth(1).unwrap_or_default();
+    assert!(alarm.contains("TRIGGER:-PT15M") && alarm.contains("ACKNOWLEDGED:"), "{written}");
+    assert_eq!(ical::parse(&written, 0).events.first().and_then(|e| e.acknowledged), Some(s.clock.now), "read back");
+    assert!(s.pim[&id].reminder_answers.is_empty());
+    assert!(s.take_jobs().iter().any(|j| matches!(j, Job::SyncDav { account } if *account == id)));
+    assert!(due(&s, s.clock.now).is_empty() && !s.due_reminders(s.clock.now).iter().any(|r| r.uid == "daily"));
+    let tomorrow = NOW + 3600 + 86_400 - 600;
+    assert!(s.due_reminders(tomorrow).iter().any(|r| r.uid == "daily"), "tomorrow's still rings");
+    done(s);
+}
+
+/// An event another program dismissed that way (acknowledged after its alarm) isn't due here
+/// either; one acknowledged before this alarm still is.
+#[test]
+fn an_alarm_acknowledged_elsewhere_isnt_due() {
+    let mut elsewhere = on_caldav("three", false);
+    ical::acknowledge(&mut elsewhere.event, NOW + 3600 - 14 * 60);
+    let mut early = on_caldav("four", false);
+    ical::acknowledge(&mut early.event, NOW - 86_400);
+    let (s, _) = caldav("rem-caldav-elsewhere", vec![elsewhere, early]);
+    let now_due: Vec<String> = s.due_reminders(NOW + 3600 - 10 * 60).into_iter().map(|r| r.uid).collect();
+    assert!(!now_due.contains(&"three".to_string()), "{now_due:?}");
+    assert!(now_due.contains(&"four".to_string()), "acknowledged before this alarm: still due ({now_due:?})");
+    done(s);
+}
+
+/// A single appointment's reminder dismissed on CalDAV is turned off, as before, without its
+/// `SEQUENCE` raised: a reminder is personal, no guest has anything to learn.
+#[test]
+fn a_single_dismissal_on_caldav_raises_no_sequence() {
+    let (mut s, _) = caldav("rem-caldav-single", vec![on_caldav("one", false)]);
+    s.clock.now = NOW + 3600 - 600;
+    let key = key_for(&s, "one");
+    s.run("reminders.dismiss", &json!({"key": key})).unwrap();
+    let e = s.find_event("one").unwrap().1.clone();
+    assert!(e.dirty && e.event.reminder.is_none());
+    assert_eq!(e.event.sequence, 2, "not a change to the meeting");
     done(s);
 }

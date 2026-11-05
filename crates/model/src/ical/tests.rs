@@ -646,3 +646,60 @@ BEGIN:VEVENT\r\nUID:inside\r\nEND:VEVENT\r\nEND:VTIMEZONE\r\nEND:VCALENDAR\r\n";
     let e = parse(cr, 0).events;
     assert_eq!(parse(&write(&e, None, 0), 0).events[0].summary, e[0].summary);
 }
+
+/// RFC 9074 (issue #40): a dismissal is the alarm's `ACKNOWLEDGED`. The reminder's own alarm
+/// says when, is written out with it and read back; an alarm kept as written (one Quatrelle
+/// can't read) gets it in place of the one it had; a snooze alarm goes; the rest of the event
+/// stays as written; a damaged event survives. A reminder set again rings again.
+#[test]
+fn acknowledging_an_alarm_keeps_the_rest() {
+    let now = 1_793_782_800;
+    let data = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:x\r\nDTSTAMP:20261031T080000Z\r\nDTSTART:20261104T090000Z\r\n\
+                DTEND:20261104T100000Z\r\nSUMMARY:Planning\r\nX-KEPT:yes\r\nBEGIN:VALARM\r\nUID:a1\r\nACTION:DISPLAY\r\nTRIGGER:-PT10M\r\n\
+                ACKNOWLEDGED:20261101T000000Z\r\nEND:VALARM\r\nBEGIN:VALARM\r\nUID:a2\r\nACTION:DISPLAY\r\nRELATED-TO;RELTYPE=SNOOZE:a1\r\n\
+                TRIGGER;VALUE=DATE-TIME:20261104T085500Z\r\nEND:VALARM\r\nBEGIN:VALARM\r\nACTION:AUDIO\r\nTRIGGER;RELATED=END:-PT5M\r\n\
+                ACKNOWLEDGED:20261102T000000Z\r\nEND:VALARM\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+    let mut e = parse(data, 0).events.into_iter().next().unwrap();
+    assert_eq!((e.reminder, e.acknowledged.map(|t| t % 86_400)), (Some(10), Some(0)));
+    assert_eq!(acknowledged(&e).map(|t| crate::dates::day_string(t.div_euclid(86_400))), Some("2026-11-02".into()), "the latest");
+    acknowledge(&mut e, now);
+    assert_eq!((e.acknowledged, acknowledged(&e)), (Some(now), Some(now)));
+    assert_eq!(e.extra.iter().filter(|l| l.starts_with("ACKNOWLEDGED")).count(), 1, "{:?}", e.extra);
+    assert!(e.extra.iter().any(|l| l == "X-KEPT:yes") && !e.extra.iter().any(|l| l.contains("SNOOZE")), "{:?}", e.extra);
+    assert_eq!(reminder_minutes(&e), Some(10));
+    let out = write(std::slice::from_ref(&e), None, now);
+    assert_eq!(out.matches("ACKNOWLEDGED:20261104T090000Z").count(), 2, "{out}");
+    let back = parse(&out, 0).events.into_iter().next().unwrap();
+    assert_eq!((back.reminder, back.acknowledged, acknowledged(&back)), (Some(10), Some(now), Some(now)));
+    // An invitation doesn't say the organizer dismissed their reminder.
+    let mut mine = CalEvent { uid: "m".into(), start: now, end: now + 3600, reminder: Some(10), ..Default::default() };
+    acknowledge(&mut mine, now);
+    assert!(write(std::slice::from_ref(&mine), None, now).contains("ACKNOWLEDGED:"));
+    assert!(!write(std::slice::from_ref(&mine), Some("REQUEST"), now).contains("ACKNOWLEDGED"), "personal");
+    // Set again: no longer dismissed.
+    let mut again = back.clone();
+    set_reminder(&mut again, Some(15));
+    assert_eq!(again.acknowledged, None);
+    // An alarm never closed is kept as it was; no alarm, nothing to do; a time that isn't UTC
+    // isn't taken.
+    let mut broken = CalEvent { extra: vec!["BEGIN:VALARM".into(), "TRIGGER:-PT5M".into()], ..Default::default() };
+    acknowledge(&mut broken, now);
+    assert_eq!(broken.extra, ["BEGIN:VALARM", "TRIGGER:-PT5M"]);
+    let mut none = CalEvent::default();
+    acknowledge(&mut none, now);
+    assert!(none.extra.is_empty() && acknowledged(&none).is_none());
+    let local = parse(&data.replace("ACKNOWLEDGED:20261101T000000Z", "ACKNOWLEDGED:20261101T000000"), 0).events.into_iter().next().unwrap();
+    assert_eq!(local.acknowledged, None);
+}
+
+proptest::proptest! {
+    /// A reminder dismissed at any time is written and read back as it was (past a fortnight,
+    /// the alarm is kept as written, and read from there).
+    #[test]
+    fn an_acknowledged_reminder_is_read_back(at in 0i64..4_102_444_800, minutes in 0i64..=REMINDER_MAX_MINUTES) {
+        let mut e = CalEvent { uid: "p".into(), start: 1_793_782_800, end: 1_793_786_400, reminder: Some(minutes), ..Default::default() };
+        acknowledge(&mut e, at);
+        let back = parse(&write(std::slice::from_ref(&e), None, at), 0).events.into_iter().next();
+        proptest::prop_assert_eq!(back.map(|b| (reminder_minutes(&b), acknowledged(&b))), Some((Some(minutes), Some(at))));
+    }
+}

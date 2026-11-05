@@ -140,6 +140,10 @@ pub struct CalEvent {
     /// `VALARM`, as Outlook's reminder.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reminder: Option<i64>,
+    /// When that reminder was last dismissed in a calendar program, as its alarm says
+    /// (`ACKNOWLEDGED`, RFC 9074; Unix seconds): an occurrence due at or before then is answered.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub acknowledged: Option<i64>,
     /// Properties Quatrelle doesn't read, kept as written (unfolded content lines).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub extra: Vec<String>,
@@ -414,6 +418,7 @@ pub fn parse_in(text: &str, local: crate::zone::Zone) -> ICalendar {
                             Some(m) => {
                                 if let Some((e, _)) = ev.as_mut() {
                                     e.reminder = Some(m);
+                                    e.acknowledged = e.acknowledged.max(alarms::acknowledged_in(&lines));
                                 }
                             }
                             None => {
@@ -724,14 +729,7 @@ pub fn write_event(e: &CalEvent, now: i64, out: &mut String) {
         let a = Attendee { rsvp: a.rsvp && !e.no_responses, ..a.clone() };
         lines.push(mailbox("ATTENDEE", &a));
     }
-    if let Some(m) = e.reminder {
-        // Outlook's reminder: a display alarm, its trigger a plain duration from the start.
-        lines.push("BEGIN:VALARM".into());
-        lines.push("ACTION:DISPLAY".into());
-        lines.push(format!("DESCRIPTION:{}", escape(if e.summary.is_empty() { "Reminder" } else { &e.summary })));
-        lines.push(format!("TRIGGER:{}", trigger(m)));
-        lines.push("END:VALARM".into());
-    }
+    lines.extend(alarms::alarm_lines(e));
     // A kept line with the conference's link isn't written again.
     let repeated = conference::repeats(e);
     lines.extend(whole(e.extra.iter().enumerate().filter(|(i, _)| !repeated.contains(i)).map(|(_, x)| x), &[]));
@@ -775,10 +773,11 @@ pub fn write(events: &[CalEvent], method: Option<&str>, now: i64) -> String {
         }
     }
     for e in events {
-        // An invitation doesn't carry the id of a meeting kept for the organizer's own use.
+        // An invitation doesn't carry the id of a meeting kept for the organizer's own use, nor
+        // when they dismissed their reminder.
         let bare;
-        let e = if method.is_some() && e.webex_id.is_some() {
-            bare = CalEvent { webex_id: None, ..e.clone() };
+        let e = if method.is_some() && (e.webex_id.is_some() || e.acknowledged.is_some()) {
+            bare = CalEvent { webex_id: None, acknowledged: None, ..e.clone() };
             &bare
         } else {
             e
